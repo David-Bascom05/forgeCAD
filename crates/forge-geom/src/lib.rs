@@ -1,0 +1,12 @@
+//! Exact geometry for the ForgeCAD kernel: analytic curves and surfaces, and
+//! their intersections. Each shape is stored by its defining data (a cylinder
+//! is an axis frame and a radius), never as an approximation.
+
+pub mod curve;
+pub mod intersect;
+pub mod surface;
+#[doc(hidden)]
+pub mod testing;
+
+pub use curve::{Circle, Curve, CurveGeom, Domain1, Ellipse, Hyperbola, Line, Parabola};
+pub use surface::{Cone, Cylinder, Domain2, Plane, Sphere, Surface, SurfaceGeom, Torus};

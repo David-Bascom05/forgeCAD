@@ -1,0 +1,17 @@
+# Platform libm differs between native and wasm; use forge_math::dmath instead.
+disallowed-methods = [
+  { path = "f64::mul_add", reason = "fused results differ from separate ops; breaks native/wasm equality" },
+  { path = "f64::sin", reason = "use forge_math::dmath::sin" },
+  { path = "f64::cos", reason = "use forge_math::dmath::cos" },
+  { path = "f64::sin_cos", reason = "use forge_math::dmath::sin_cos" },
+  { path = "f64::tan", reason = "use forge_math::dmath" },
+  { path = "f64::asin", reason = "use forge_math::dmath::asin" },
+  { path = "f64::acos", reason = "use forge_math::dmath::acos" },
+  { path = "f64::atan", reason = "use forge_math::dmath::atan" },
+  { path = "f64::atan2", reason = "use forge_math::dmath::atan2" },
+  { path = "f64::cbrt", reason = "use forge_math::dmath::cbrt" },
+  { path = "f64::hypot", reason = "platform libm" },
+  { path = "f64::exp", reason = "platform libm" },
+  { path = "f64::ln", reason = "platform libm" },
+  { path = "f64::powf", reason = "platform libm" },
+]
