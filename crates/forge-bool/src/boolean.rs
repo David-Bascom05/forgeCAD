@@ -205,6 +205,7 @@ fn plan(a: &Body, b: &Body, op: Op, feature: u64) -> R<Plan> {
     let mut cuts: Vec<Cut> = Vec::new();
     let mut segs: Vec<Seg> = Vec::new();
     let mut coplanar: Vec<(FaceId, FaceId)> = Vec::new();
+    let mut imprints: Vec<Imprint> = Vec::new();
     for fa in a.face_ids() {
         for fb in b.face_ids() {
             if !index[0].boxes[fa.index()].overlaps(&index[1].boxes[fb.index()]) {
@@ -234,13 +235,21 @@ fn plan(a: &Body, b: &Body, op: Op, feature: u64) -> R<Plan> {
                     .with_str("cut")
                     .with_set(vec![a.face(fa).name, b.face(fb).name])
                     .with(ci as u64);
-                trim(&bodies, &index, [fa, fb], curve, pair_name, &mut cuts, &mut segs)?;
+                trim(
+                    &bodies,
+                    &index,
+                    [fa, fb],
+                    curve,
+                    pair_name,
+                    &mut cuts,
+                    &mut segs,
+                    &mut imprints,
+                )?;
             }
         }
     }
 
     // faces on one surface: each imprints the other's boundary
-    let mut imprints: Vec<Imprint> = Vec::new();
     for &(fa, fb) in &coplanar {
         imprint(&bodies, &index, 1, fb, fa, &mut cuts, &mut imprints)?;
         imprint(&bodies, &index, 0, fa, fb, &mut cuts, &mut imprints)?;
@@ -585,6 +594,7 @@ fn apply(a: &mut Body, b: &Body, plan: &Plan, root: Name) {
 
 /// Cuts `curve` (on both faces' surfaces) where it crosses either face's
 /// boundary and records the pieces lying inside both faces.
+#[allow(clippy::too_many_arguments)]
 fn trim(
     bodies: &[&Body; 2],
     index: &[Index; 2],
@@ -593,6 +603,7 @@ fn trim(
     name: Name,
     cuts: &mut Vec<Cut>,
     segs: &mut Vec<Seg>,
+    imprints: &mut Vec<Imprint>,
 ) -> R<()> {
     let domain = curve.domain();
     let closed = domain.period.is_some();
@@ -615,6 +626,7 @@ fn trim(
     };
     let first = cuts.len();
     let mut ts: Vec<(f64, usize)> = Vec::new();
+    let mut seams: Vec<(Side, EdgeId)> = Vec::new();
     // an edge whose box misses the curve's cannot cut it (big faces have hundreds of edges)
     let reach = curve.bbox(range).grow(10.0 * tol::LINEAR);
     for side in 0..2 {
@@ -637,6 +649,9 @@ fn trim(
                     // the edge is boundary, not a new edge (the faces either side of it meet the
                     // other body there, and their own pairs decide what happens)
                     CurveSurface::OnSurface | CurveSurface::Overlap => {
+                        if body.partner(c).map(|o| body.coedge_face(o)) == Some(f) {
+                            seams.push((side, e));
+                        }
                         for (s, v) in [(edge.range.lo, edge.start), (edge.range.hi, edge.end)] {
                             let p = body.vertex(v).point;
                             let t = curve.closest(p, range);
@@ -668,6 +683,48 @@ fn trim(
                 }
             }
         }
+    }
+    // along a seam the curve crosses the other face on an edge that already exists: the seam
+    // is cut where it leaves that face and imprinted into it, and the curve adds no edge
+    if !seams.is_empty() {
+        for (side, e) in seams {
+            let body = bodies[side];
+            let edge = body.edge(e);
+            let mut marks = vec![edge.range.lo, edge.range.hi];
+            for k in first..cuts.len() {
+                if cuts[k].side == side {
+                    continue;
+                }
+                let p = cuts[k].point;
+                let s = edge.curve.closest(p, edge.range);
+                if edge.curve.eval(s).distance(p) <= 10.0 * tol::LINEAR {
+                    cuts.push(Cut {
+                        side,
+                        edge: e,
+                        s,
+                        point: p,
+                    });
+                    marks.push(s);
+                }
+            }
+            marks.sort_by(f64::total_cmp);
+            for w in marks.windows(2) {
+                if w[1] - w[0] <= 1e-12 * (1.0 + edge.range.width()) {
+                    continue;
+                }
+                let into = faces[1 - side];
+                let m = edge.curve.eval(0.5 * (w[0] + w[1]));
+                if index[1 - side].point_in_face(into, m) == Where::Inside {
+                    imprints.push(Imprint {
+                        side,
+                        edge: e,
+                        range: Interval::new(w[0], w[1]),
+                        into,
+                    });
+                }
+            }
+        }
+        return Ok(());
     }
     ts.sort_by(|x, y| x.0.total_cmp(&y.0));
     // the same point found on two edges (a vertex, or both faces' boundaries) is one cut
@@ -1291,10 +1348,15 @@ fn classify_specs(
         }
     }
     // flood across shared native edge pieces between pieces of one body
+    // an edge imprinted into the other body's face lies on that body: no flood across it
     let mut users: Vec<Vec<usize>> = vec![Vec::new(); pieces.len()];
+    let mut imprinted = vec![false; pieces.len()];
+    for &p in specs.iter().flat_map(|s| &s.foreign) {
+        imprinted[p] = true;
+    }
     for (i, s) in specs.iter().enumerate() {
         for &(p, _) in s.loops.iter().flatten() {
-            if pieces[p].seg.is_none() && !s.foreign.contains(&p) {
+            if pieces[p].seg.is_none() && !imprinted[p] {
                 users[p].push(i);
             }
         }
