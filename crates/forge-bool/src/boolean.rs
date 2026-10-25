@@ -241,28 +241,9 @@ fn plan(a: &Body, b: &Body, op: Op, feature: u64) -> R<Plan> {
 
     // faces on one surface: each imprints the other's boundary
     let mut imprints: Vec<Imprint> = Vec::new();
-    let mut overlaps: Vec<(EdgeId, EdgeId)> = Vec::new();
     for &(fa, fb) in &coplanar {
-        imprint(
-            &bodies,
-            &index,
-            1,
-            fb,
-            fa,
-            &mut cuts,
-            &mut imprints,
-            &mut overlaps,
-        )?;
-        imprint(
-            &bodies,
-            &index,
-            0,
-            fa,
-            fb,
-            &mut cuts,
-            &mut imprints,
-            &mut overlaps,
-        )?;
+        imprint(&bodies, &index, 1, fb, fa, &mut cuts, &mut imprints)?;
+        imprint(&bodies, &index, 0, fa, fb, &mut cuts, &mut imprints)?;
     }
 
     // 3: vertices for the cuts, then edge pieces
@@ -800,7 +781,6 @@ fn imprint(
     dst_face: FaceId,
     cuts: &mut Vec<Cut>,
     imprints: &mut Vec<Imprint>,
-    overlaps: &mut Vec<(EdgeId, EdgeId)>,
 ) -> R<()> {
     let dst = 1 - src;
     let (sb, db) = (bodies[src], bodies[dst]);
@@ -821,14 +801,9 @@ fn imprint(
                     let hits = match curve_surface(&edge.curve, edge.range, &across(db, dst_face, c2)?) {
                         CurveSurface::Hits(h) => h,
                         // lying in both the face's plane and the neighbour's surface, the edge runs
-                        // along the same carrier as e2: cut each at the other's ends inside it, and
-                        // remember the pair so the overlapping pieces become one edge
+                        // along the same carrier as e2: cut each at the other's ends inside it
                         _ => {
                             coincide(sb, src, e, db, e2, cuts);
-                            let (ea, eb) = if src == 0 { (e, e2) } else { (e2, e) };
-                            if !overlaps.contains(&(ea, eb)) {
-                                overlaps.push((ea, eb));
-                            }
                             continue;
                         }
                     };
