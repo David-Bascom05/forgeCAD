@@ -46,6 +46,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "forge-gpu"
+version = "0.1.0"
+dependencies = [
+ "forge-bool",
+ "forge-math",
+ "forge-model",
+ "forge-topo",
+]
+
+[[package]]
 name = "forge-math"
 version = "0.1.0"
 

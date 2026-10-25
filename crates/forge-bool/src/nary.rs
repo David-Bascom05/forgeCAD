@@ -18,6 +18,7 @@ use crate::boolean::{
     overlap, split_face, trim,
 };
 use crate::classify::{Index, Where};
+use crate::shape::{Member, Shape};
 use crate::ssi;
 use forge_geom::intersect::{Contact, CurveSurface, SurfaceSurface, curve_surface};
 use forge_geom::{Curve, CurveGeom, SurfaceGeom};
@@ -27,13 +28,13 @@ use std::collections::HashMap;
 use std::sync::atomic::{AtomicUsize, Ordering};
 
 /// Time spent per step of the last n-ary boolean on this thread (ns): intersect, triple
-/// points, vertices and pieces, split, classify, build.
-pub fn nary_phase_times() -> [u64; 6] {
+/// points, vertices and pieces, split, classify, build, (inside classify) choosing points, merging, the batch.
+pub fn nary_phase_times() -> [u64; 9] {
     PHASES.with(|p| *p.borrow())
 }
 
 thread_local! {
-    static PHASES: std::cell::RefCell<[u64; 6]> = const { std::cell::RefCell::new([0; 6]) };
+    static PHASES: std::cell::RefCell<[u64; 9]> = const { std::cell::RefCell::new([0; 9]) };
 }
 
 fn lap(t: &mut std::time::Instant, k: usize) {
@@ -41,6 +42,8 @@ fn lap(t: &mut std::time::Instant, k: usize) {
     PHASES.with(|p| p.borrow_mut()[k] = (now - *t).as_nanos() as u64);
     *t = now;
 }
+
+static PICK: AtomicUsize = AtomicUsize::new(0);
 
 /// `f(0..n)` on up to `threads` threads, each given at least `per` items (a thread costs
 /// tens of microseconds to start); results in index order.
@@ -73,6 +76,9 @@ fn par_map<T: Send>(n: usize, threads: usize, per: usize, f: impl Fn(usize) -> T
     }
     out.into_iter().map(|t| t.expect("every item done")).collect()
 }
+
+/// How far clear of a tool's boundary a point must be for its analytic solid to answer.
+const SHAPE_MARGIN: f64 = 1e-4;
 
 /// Which tools hold a point just inside and just outside a region, and whether a lower tool's
 /// face lies on it.
@@ -184,6 +190,70 @@ fn in_result(ops: &[Op], inside: &[bool], any_intersect: bool) -> bool {
 
 /// The solid `tools[0] ops[0] tools[1] ops[1] tools[2] ...`, folded left, in one pass.
 pub fn nary(tools: &[&Body], ops: &[Op], threads: usize) -> R<Body> {
+    nary_with(tools, ops, None, None, threads)
+}
+
+/// Verdicts for many region points at once (on a GPU, say), given each point's own tool and
+/// every tool's box: 0 dropped, 1 kept, 2 kept flipped, 3 undecided (the full way decides).
+pub trait Batch: Sync {
+    fn verdicts(&self, points: &[Point3], sides: &[u32], boxes: &[forge_math::Box3]) -> Vec<u8>;
+}
+
+/// The batch on the CPU, from the tools' analytic solids: what a GPU batch must match.
+pub struct CpuBatch<'a> {
+    pub shapes: &'a [Shape],
+    pub ops: &'a [Op],
+    pub threads: usize,
+}
+
+impl Batch for CpuBatch<'_> {
+    fn verdicts(&self, points: &[Point3], sides: &[u32], boxes: &[forge_math::Box3]) -> Vec<u8> {
+        par_map(points.len(), self.threads, 256, |i| {
+            let p = points[i];
+            let own = sides[i] as usize;
+            let (mut vin, mut vout) = (false, false);
+            for (k, sh) in self.shapes.iter().enumerate() {
+                let (bin, bout) = if k == own {
+                    (true, false)
+                } else if !boxes[k].contains(p) {
+                    (false, false)
+                } else {
+                    match sh.member(p, SHAPE_MARGIN) {
+                        Member::Near => return 3,
+                        Member::In => (true, true),
+                        Member::Out => (false, false),
+                    }
+                };
+                if k == 0 {
+                    (vin, vout) = (bin, bout);
+                } else {
+                    match self.ops[k - 1] {
+                        Op::Union => (vin, vout) = (vin || bin, vout || bout),
+                        Op::Subtract => (vin, vout) = (vin && !bin, vout && !bout),
+                        Op::Intersect => (vin, vout) = (vin && bin, vout && bout),
+                    }
+                }
+            }
+            if vin == vout {
+                0
+            } else if vin {
+                1
+            } else {
+                2
+            }
+        })
+    }
+}
+
+/// `nary`, with each tool also given as an analytic solid: a point clear of a tool's boundary
+/// is placed from its profile, and only points near it go to the B-rep.
+pub fn nary_with(
+    tools: &[&Body],
+    ops: &[Op],
+    shapes: Option<&[Shape]>,
+    batch: Option<&dyn Batch>,
+    threads: usize,
+) -> R<Body> {
     assert_eq!(ops.len() + 1, tools.len(), "one op per tool after the first");
     let n = tools.len();
     let near = 10.0 * tol::LINEAR;
@@ -719,11 +789,13 @@ pub fn nary(tools: &[&Body], ops: &[Op], threads: usize) -> R<Body> {
         }
         None
     };
-    let class = par_map(regs.len(), threads, 32, |ri| -> R<Option<bool>> {
+    let full = |ri: usize| -> R<Option<bool>> {
         let r = &regs[ri];
         let body = tools[r.side];
         let face = body.face(r.face);
-        let candidates = region_points(body, r.face, &r.loops, list);
+        let t0 = std::time::Instant::now();
+        let mut candidates = region_points(body, r.face, &r.loops, list, 1);
+        PICK.fetch_add(t0.elapsed().as_nanos() as usize, Ordering::Relaxed);
         // which tools hold a point just inside / just outside the region there, and whether a lower
         // tool's face lies on it; Err(k) when the point is on tool k's boundary but not on a face of
         // k lying on this one (a tangency or an edge of k): another point must decide
@@ -738,6 +810,17 @@ pub fn nary(tools: &[&Body], ops: &[Op], threads: usize) -> R<Body> {
             for k in 0..n {
                 if k == r.side || !index[k].bbox.contains(p) {
                     continue;
+                }
+                if let Some(sh) = shapes {
+                    match sh[k].member(p, SHAPE_MARGIN) {
+                        Member::In => {
+                            inner[k] = true;
+                            outer[k] = true;
+                            continue;
+                        }
+                        Member::Out => continue,
+                        Member::Near => {}
+                    }
                 }
                 match index[k].classify(p) {
                     Where::Inside => {
@@ -771,13 +854,22 @@ pub fn nary(tools: &[&Body], ops: &[Op], threads: usize) -> R<Body> {
         };
         let mut found = None;
         let mut stuck: Vec<Side> = Vec::new();
-        for &p in &candidates {
-            match judge(p)? {
-                Ok(v) => {
-                    found = Some((p, v));
-                    break;
+        // the first point nearly always settles it; the rest are worked out only if not
+        for pass in 0..2 {
+            if pass == 1 {
+                candidates = region_points(body, r.face, &r.loops, list, usize::MAX);
+            }
+            for &p in candidates.iter().skip(pass) {
+                match judge(p)? {
+                    Ok(v) => {
+                        found = Some((p, v));
+                        break;
+                    }
+                    Err(k) => stuck.push(k),
                 }
-                Err(k) => stuck.push(k),
+            }
+            if found.is_some() || candidates.is_empty() {
+                break;
             }
         }
         let (p, (inner, outer, shadowed)) = match found {
@@ -867,8 +959,41 @@ pub fn nary(tools: &[&Body], ops: &[Op], threads: usize) -> R<Body> {
             );
         }
         Ok((fin != fout && !shadowed).then_some(!fin))
-    });
+    };
+    let class = match batch {
+        None => par_map(regs.len(), threads, 32, full),
+        Some(batch) => {
+            // one point per region, all placed at once; the rest decided the full way
+            let first: Vec<Option<Point3>> = par_map(regs.len(), threads, 32, |ri| {
+                let r = &regs[ri];
+                region_points(tools[r.side], r.face, &r.loops, list, 1)
+                    .first()
+                    .copied()
+            });
+            let mut pts = Vec::with_capacity(regs.len());
+            let mut sides = Vec::with_capacity(regs.len());
+            let mut at: Vec<Option<usize>> = vec![None; regs.len()];
+            for (ri, p) in first.iter().enumerate() {
+                if let Some(p) = p {
+                    at[ri] = Some(pts.len());
+                    pts.push(*p);
+                    sides.push(regs[ri].side as u32);
+                }
+            }
+            let boxes: Vec<forge_math::Box3> = index.iter().map(|x| x.bbox).collect();
+            let t = std::time::Instant::now();
+            let codes = batch.verdicts(&pts, &sides, &boxes);
+            PHASES.with(|p| p.borrow_mut()[8] = t.elapsed().as_nanos() as u64);
+            par_map(regs.len(), threads, 32, |ri| match at[ri].map(|i| codes[i]) {
+                Some(0) => Ok(None),
+                Some(1) => Ok(Some(false)),
+                Some(2) => Ok(Some(true)),
+                _ => full(ri),
+            })
+        }
+    };
     let mut class: Vec<Option<bool>> = class.into_iter().collect::<R<_>>()?;
+    let merge_start = std::time::Instant::now();
 
     // a new edge with the same verdict on both sides divides nothing: the face is split again
     // without it, each new region taking the verdict of the old ones it is made of
@@ -945,7 +1070,13 @@ pub fn nary(tools: &[&Body], ops: &[Op], threads: usize) -> R<Body> {
             class.push(c);
         }
     }
+    let merge_ns = merge_start.elapsed().as_nanos() as u64;
     lap(&mut clock, 4);
+    PHASES.with(|p| {
+        let mut p = p.borrow_mut();
+        p[6] = PICK.swap(0, Ordering::Relaxed) as u64;
+        p[7] = merge_ns;
+    });
 
     // 6: sew the kept regions; pieces with the same ends along the same curve are one edge
     let mut kept: Vec<(usize, bool)> = Vec::new();
@@ -1070,7 +1201,7 @@ fn step_in(
 /// `loops` is empty), best first: a step in from its longest edges at a few places along
 /// them, each step short enough that no other edge comes nearer than it (so the way in
 /// crosses none).
-fn region_points(body: &Body, f: FaceId, loops: &[Walk], list: &[Piece]) -> Vec<Point3> {
+fn region_points(body: &Body, f: FaceId, loops: &[Walk], list: &[Piece], max: usize) -> Vec<Point3> {
     // (curve, range, forward) of each edge
     let mut edges: Vec<(&Curve, Interval, bool)> = Vec::new();
     if loops.is_empty() {
@@ -1112,6 +1243,9 @@ fn region_points(body: &Body, f: FaceId, loops: &[Walk], list: &[Piece]) -> Vec<
                     && clear(p, step, i)
                 {
                     out.push(p);
+                    if out.len() == max {
+                        return out;
+                    }
                     break;
                 }
                 step *= 0.25;
