@@ -44,6 +44,8 @@ type Region = Vec<Walk>;
 
 /// Which input body: 0 is A, 1 is B.
 type Side = usize;
+/// Splits an edge into its pieces once (later calls give the same range).
+type Ensure<'x> = dyn FnMut(Side, EdgeId, &mut Vec<Piece>) -> std::ops::Range<usize> + 'x;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
 enum VKey {
@@ -95,9 +97,14 @@ struct Spec {
     foreign: Vec<usize>,
     /// The face comes through whole, every edge intact: its cached data carries over.
     whole: bool,
-    /// The face keeps all its loops and gains these (one closed new edge crossed
-    /// it and touched nothing else): kept, it is extended in place, not rebuilt.
+    /// The face keeps its loops (but `remove`) and gains these: kept, it is extended in
+    /// place, not rebuilt (a new loop inside it, or a local split leaving its outer loop).
     extend: bool,
+    /// Loops of `from` an extending spec takes off the face (they were split, or moved into
+    /// a new region).
+    remove: Vec<forge_topo::LoopId>,
+    /// A class known before classification (a face's untouched remainder, decided by one point).
+    preset: Option<Class>,
 }
 
 /// Part of an edge of one body lying inside a coplanar face of the other.
@@ -130,7 +137,9 @@ pub fn boolean(a: &Body, b: &Body, op: Op, feature: u64) -> R<Body> {
 /// as tombstones until `Body::compact`.
 pub fn boolean_into(target: &mut Body, b: &Body, op: Op, feature: u64) -> R<()> {
     let plan = plan(target, b, op, feature)?;
+    let mut clock = phases_on().then(std::time::Instant::now);
     apply(target, b, &plan, Name::feature(feature));
+    lap(&mut clock, 6);
     Ok(())
 }
 
@@ -143,6 +152,8 @@ struct Plan {
     alias: Vec<(VKey, VKey)>,
     /// A's faces that might change; every other face of A comes through as it is.
     involved: Vec<FaceId>,
+    /// Involved faces of A nothing touched, found wholly on the kept side of B.
+    untouched_kept: Vec<FaceId>,
 }
 
 /// The pieces an edge splits into at its cuts (one piece, the whole edge, if none), pushed
@@ -210,7 +221,32 @@ fn edge_split(
 
 const FAST_EXTEND: bool = true;
 
+/// Time spent per phase of the booleans so far (ns), when FORGE_PHASES is set:
+/// intersect, imprint, place cuts and make pieces, split, classify, keep, apply.
+pub fn phase_times() -> [u64; 7] {
+    PHASES.with(|p| *p.borrow())
+}
+
+thread_local! {
+    static PHASES: std::cell::RefCell<[u64; 7]> = const { std::cell::RefCell::new([0; 7]) };
+}
+
+fn phases_on() -> bool {
+    static ON: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
+    *ON.get_or_init(|| std::env::var_os("FORGE_PHASES").is_some())
+}
+
+/// Adds the time since `*t` to phase `k` and restarts the clock.
+fn lap(t: &mut Option<std::time::Instant>, k: usize) {
+    if let Some(t0) = t {
+        let now = std::time::Instant::now();
+        PHASES.with(|p| p.borrow_mut()[k] += (now - *t0).as_nanos() as u64);
+        *t = Some(now);
+    }
+}
+
 fn plan(a: &Body, b: &Body, op: Op, feature: u64) -> R<Plan> {
+    let mut clock = phases_on().then(std::time::Instant::now);
     let bodies = [a, b];
     let index = [Index::new(a), Index::new(b)];
     let root = Name::feature(feature);
@@ -270,6 +306,7 @@ fn plan(a: &Body, b: &Body, op: Op, feature: u64) -> R<Plan> {
         }
     }
 
+    lap(&mut clock, 0);
     // faces on one surface: each imprints the other's boundary
     for &(fa, fb) in &coplanar {
         imprint(&bodies, &index, 1, fb, fa, &mut cuts, &mut imprints)?;
@@ -277,6 +314,7 @@ fn plan(a: &Body, b: &Body, op: Op, feature: u64) -> R<Plan> {
     }
 
     // 3: vertices for the cuts, then edge pieces
+    lap(&mut clock, 1);
     let (cut_vertex, mut new_points, alias) = place_cuts(&bodies, &cuts)?;
     // cut points of one vertex differ by up to 10 LINEAR: a new vertex settles on the point
     // nearest every curve through it (alternating projections), and every curve parameter is
@@ -426,8 +464,10 @@ fn plan(a: &Body, b: &Body, op: Op, feature: u64) -> R<Plan> {
     involved.sort_unstable();
     involved.dedup();
 
+    lap(&mut clock, 2);
     // 4: split faces
     let mut specs: Vec<Spec> = Vec::new();
+    let mut untouched_kept: Vec<FaceId> = Vec::new();
     for (side, &body) in bodies.iter().enumerate() {
         let faces: Vec<FaceId> = if side == 0 {
             involved.clone()
@@ -436,6 +476,30 @@ fn plan(a: &Body, b: &Body, op: Op, feature: u64) -> R<Plan> {
         };
         for f in faces {
             let mine: Vec<usize> = (0..segs.len()).filter(|&i| segs[i].faces[side] == f).collect();
+            // a face of A that no new edge, imprint or split edge touches lies wholly inside or
+            // outside B: one point decides it, and it needs no pieces (a plate face with hundreds
+            // of holes lies under every tool's box)
+            if side == 0
+                && mine.is_empty()
+                && split_faces.binary_search(&f).is_err()
+                && !imprints.iter().any(|im| im.side == 1 && im.into == f)
+                && !coplanar.iter().any(|&(fa, _)| fa == f)
+                && let Some(p) = face_point(body, f)
+            {
+                let kept = match (op, index[1].classify(p)) {
+                    (Op::Intersect, Where::Inside) | (Op::Union | Op::Subtract, Where::Outside) => Some(true),
+                    (_, Where::Inside | Where::Outside) => Some(false),
+                    (_, Where::On) => None,
+                };
+                match kept {
+                    Some(true) => {
+                        untouched_kept.push(f);
+                        continue;
+                    }
+                    Some(false) => continue,
+                    None => {}
+                }
+            }
             // new edges inside a planar face of A closing into one loop that touches neither its
             // boundary nor encloses any of its loops: the face just gains a hole (and a disk fills
             // it), no need to piece its whole boundary (a plate face with hundreds of holes)
@@ -465,15 +529,20 @@ fn plan(a: &Body, b: &Body, op: Op, feature: u64) -> R<Plan> {
                     foreign: Vec::new(),
                     whole: false,
                     extend: true,
+                    remove: Vec::new(),
+                    preset: None,
                 });
                 specs.push(Spec {
                     side,
                     from: f,
                     loops: vec![disk],
-                    name: name.with_str("split").with(1),
+                    // the face keeps its name in place: its pieces carry the feature's too
+                    name: name.with_name(root).with_str("split").with(1),
                     foreign: Vec::new(),
                     whole: false,
                     extend: false,
+                    remove: Vec::new(),
+                    preset: None,
                 });
                 continue;
             }
@@ -485,6 +554,112 @@ fn plan(a: &Body, b: &Body, op: Op, feature: u64) -> R<Plan> {
                         foreign.push(p);
                     }
                 }
+            }
+            // a big plane face whose outer loop the change leaves alone: only the loops it touches
+            // are split with the new edges; the face keeps its id, its other loops and its index,
+            // and the rest of it is decided by one point near that outer loop
+            if side == 0
+                && (!mine.is_empty() || !foreign.is_empty())
+                && body.face(f).loops.len() >= 8
+                && matches!(body.face(f).surface, Surface::Plane(_))
+                && !coplanar.iter().any(|&(fa, _)| fa == f)
+                && let Some(local) = local_split(LocalSplit {
+                    body,
+                    f,
+                    op,
+                    index: &index[1],
+                    by_edge: &by_edge,
+                    alias: &alias,
+                    new_edges: &mine
+                        .iter()
+                        .map(|&i| seg_piece[i])
+                        .chain(foreign.iter().copied())
+                        .collect::<Vec<_>>(),
+                    pieces: &pieces,
+                })
+            {
+                let walk = |l: forge_topo::LoopId, pieces: &mut Vec<Piece>, ensure: &mut Ensure| {
+                    let mut w: Walk = Vec::new();
+                    for &c in &body.lp(l).coedges {
+                        let co = body.coedge(c);
+                        let ps = ensure(0, co.edge, pieces);
+                        if co.forward {
+                            w.extend(ps.map(|p| (p, true)));
+                        } else {
+                            w.extend(ps.rev().map(|p| (p, false)));
+                        }
+                    }
+                    w
+                };
+                let boundary: Vec<Walk> = local
+                    .touched
+                    .iter()
+                    .map(|&l| walk(l, &mut pieces, &mut ensure))
+                    .collect();
+                let mut new_edges: Vec<usize> = mine.iter().map(|&i| seg_piece[i]).collect();
+                new_edges.extend(foreign.iter().copied());
+                let split = split_face(body, f, &pieces, &boundary, &new_edges, false)?;
+                // an untouched hole inside a new region moves into it
+                let face = body.face(f);
+                let mut moved: Vec<(usize, forge_topo::LoopId)> = Vec::new();
+                for &l in face.loops.iter().skip(1) {
+                    if local.touched.contains(&l) {
+                        continue;
+                    }
+                    let v = body.coedge_start(body.lp(l).coedges[0]);
+                    let q = face.surface.project(body.vertex(v).point);
+                    let q = if face.same_sense {
+                        q
+                    } else {
+                        Point2::new(-q.x, q.y)
+                    };
+                    if let Some(r) = split
+                        .outlines
+                        .iter()
+                        .position(|o| o.as_ref().is_some_and(|o| inside_poly(q, o)))
+                    {
+                        moved.push((r, l));
+                    }
+                }
+                let used = |loops: &[Walk]| -> Vec<usize> {
+                    foreign
+                        .iter()
+                        .copied()
+                        .filter(|p| loops.iter().flatten().any(|h| h.0 == *p))
+                        .collect()
+                };
+                let mut remove = local.touched.clone();
+                remove.extend(moved.iter().map(|m| m.1));
+                specs.push(Spec {
+                    side,
+                    from: f,
+                    foreign: used(&split.open),
+                    loops: split.open,
+                    name: face.name,
+                    whole: false,
+                    extend: true,
+                    remove,
+                    preset: Some(local.class),
+                });
+                for (k, mut loops) in split.regions.into_iter().enumerate() {
+                    for &(r, l) in &moved {
+                        if r == k {
+                            loops.push(walk(l, &mut pieces, &mut ensure));
+                        }
+                    }
+                    specs.push(Spec {
+                        side,
+                        from: f,
+                        foreign: used(&loops),
+                        loops,
+                        name: face.name.with_name(root).with_str("split").with(k as u64),
+                        whole: false,
+                        extend: false,
+                        remove: Vec::new(),
+                        preset: None,
+                    });
+                }
+                continue;
             }
             let mut whole = true;
             let mut boundary: Vec<Vec<(usize, bool)>> = Vec::with_capacity(body.face(f).loops.len());
@@ -511,12 +686,14 @@ fn plan(a: &Body, b: &Body, op: Op, feature: u64) -> R<Plan> {
                     foreign,
                     whole,
                     extend: false,
+                    remove: Vec::new(),
+                    preset: None,
                 });
                 continue;
             }
             let mut new_edges: Vec<usize> = mine.iter().map(|&i| seg_piece[i]).collect();
             new_edges.extend(foreign.iter().copied());
-            let regions = split_face(body, f, &pieces, &boundary, &new_edges)?;
+            let regions = split_face(body, f, &pieces, &boundary, &new_edges, true)?.regions;
             for (k, loops) in regions.into_iter().enumerate() {
                 let used: Vec<usize> = foreign
                     .iter()
@@ -531,6 +708,8 @@ fn plan(a: &Body, b: &Body, op: Op, feature: u64) -> R<Plan> {
                     foreign: used,
                     whole: false,
                     extend: false,
+                    remove: Vec::new(),
+                    preset: None,
                 });
             }
         }
@@ -577,6 +756,7 @@ fn plan(a: &Body, b: &Body, op: Op, feature: u64) -> R<Plan> {
         }
     }
 
+    lap(&mut clock, 3);
     // 5: classify
     let class = classify_specs(&bodies, &index, &specs, &pieces, &segs, &coplanar)?;
     if std::env::var_os("FORGE_SPECS").is_some() {
@@ -589,6 +769,7 @@ fn plan(a: &Body, b: &Body, op: Op, feature: u64) -> R<Plan> {
         }
     }
 
+    lap(&mut clock, 4);
     // 6: keep, flip. A shared same-facing region keeps A's copy only.
     let keep = |side: Side, c: Class| match (op, side, c) {
         (Op::Union, _, Class::Out) | (Op::Union, 0, Class::OnSame) => Some(false),
@@ -604,6 +785,7 @@ fn plan(a: &Body, b: &Body, op: Op, feature: u64) -> R<Plan> {
     if op == Op::Intersect {
         involved = a.face_ids().collect();
     }
+    lap(&mut clock, 5);
     Ok(Plan {
         pieces,
         specs,
@@ -611,6 +793,7 @@ fn plan(a: &Body, b: &Body, op: Op, feature: u64) -> R<Plan> {
         points,
         alias,
         involved,
+        untouched_kept,
     })
 }
 
@@ -624,6 +807,7 @@ fn apply(a: &mut Body, b: &Body, plan: &Plan, root: Name) {
         points,
         alias,
         involved,
+        untouched_kept,
     } = plan;
     let mut as_is = vec![false; specs.len()];
     for &(si, flip) in kept {
@@ -642,11 +826,22 @@ fn apply(a: &mut Body, b: &Body, plan: &Plan, root: Name) {
             .filter(|&&(si, flip)| specs[si].extend && !flip)
             .map(|&(si, _)| specs[si].from),
     );
+    staying.extend(untouched_kept.iter().copied());
     staying.sort_unstable();
     staying.dedup();
     for &f in involved {
         if staying.binary_search(&f).is_err() {
             a.kill_face(f);
+        }
+    }
+    // a face split locally gives up the loops it replaces before it gains the new ones
+    for &(si, flip) in kept {
+        let s = &specs[si];
+        if s.extend && !flip && !s.remove.is_empty() {
+            crate::classify::drop_query_loops(a, s.from, &s.remove);
+            for &l in &s.remove {
+                a.remove_loop(s.from, l);
+            }
         }
     }
     let mut b_vertex: Vec<Option<VertexId>> = vec![None; b.vertices.len()];
@@ -1232,6 +1427,90 @@ fn uv_angle(body: &Body, f: FaceId, p: &Piece, forward: bool, at_end: bool) -> R
     Ok(dmath::atan2(b, a))
 }
 
+struct LocalSplit<'a> {
+    body: &'a Body,
+    f: FaceId,
+    op: Op,
+    /// B's index.
+    index: &'a Index<'a>,
+    by_edge: &'a [(Side, EdgeId, usize)],
+    alias: &'a [(VKey, VKey)],
+    /// The new edges in the face (pieces).
+    new_edges: &'a [usize],
+    pieces: &'a [Piece],
+}
+
+struct Local {
+    /// Loops of the face the change touches (an edge cut, or a new edge ending on a vertex).
+    touched: Vec<forge_topo::LoopId>,
+    /// The class of the rest of the face.
+    class: Class,
+}
+
+/// Whether a split of face `f` can stay local: its outer loop untouched and the face near it
+/// kept as it is; then which loops the change touches.
+fn local_split(c: LocalSplit) -> Option<Local> {
+    let resolve = |v: VKey| c.alias.iter().find(|(x, _)| *x == v).map_or(v, |&(_, t)| t);
+    let mut at_a: Vec<VertexId> = c
+        .new_edges
+        .iter()
+        .flat_map(|&p| [c.pieces[p].start, c.pieces[p].end])
+        .filter_map(|v| match resolve(v) {
+            VKey::Old(0, v) => Some(v),
+            _ => None,
+        })
+        .collect();
+    at_a.sort_unstable();
+    at_a.dedup();
+    let cut = |e: EdgeId| {
+        let i = c.by_edge.partition_point(|&(sd, ed, _)| (sd, ed) < (0, e));
+        c.by_edge.get(i).is_some_and(|&(sd, ed, _)| sd == 0 && ed == e)
+    };
+    let body = c.body;
+    let hit = |l: forge_topo::LoopId| {
+        body.lp(l)
+            .coedges
+            .iter()
+            .any(|&co| cut(body.coedge(co).edge) || at_a.binary_search(&body.coedge_start(co)).is_ok())
+    };
+    let loops = &body.face(c.f).loops;
+    if hit(loops[0]) {
+        return None;
+    }
+    let class = match c.index.classify(face_point(body, c.f)?) {
+        Where::Inside => Class::In,
+        Where::Outside => Class::Out,
+        Where::On => return None,
+    };
+    let kept_as_is = match c.op {
+        Op::Union | Op::Subtract => class == Class::Out,
+        Op::Intersect => class == Class::In,
+    };
+    kept_as_is.then(|| Local {
+        touched: loops[1..].iter().copied().filter(|&l| hit(l)).collect(),
+        class,
+    })
+}
+
+/// A point on face `f` a little inside its boundary, beside the middle of its first edge.
+fn face_point(body: &Body, f: FaceId) -> Option<Point3> {
+    let face = body.face(f);
+    let c = *body.lp(*face.loops.first()?).coedges.first()?;
+    let co = body.coedge(c);
+    let edge = body.edge(co.edge);
+    let d = edge.curve.deriv(edge.range.mid());
+    let along = if co.forward { d.d1 } else { -d.d1 };
+    let n = body.face_normal(f, face.surface.project(d.p))?;
+    let inward = n.cross(along).normalize()?;
+    let len = edge
+        .curve
+        .eval(edge.range.lo)
+        .distance(d.p)
+        .max(d.p.distance(edge.curve.eval(edge.range.hi)));
+    let q = d.p + inward * (0.01 * len.max(1e-3)).min(0.05);
+    Some(face.surface.eval(face.surface.project(q)))
+}
+
 /// The pieces chained into one closed loop (in walking order) and its outline in the face's
 /// parameter plane; None if they don't close into exactly one loop, or a vertex of A is on it.
 fn lone_cycle(body: &Body, f: FaceId, ps: &[usize], pieces: &[Piece]) -> Option<(Walk, Vec<Point2>)> {
@@ -1307,13 +1586,23 @@ fn piece_samples(p: &Piece, forward: bool, out: &mut Vec<Point3>) {
 
 /// Regions of face `f` cut by `new_edges` (each usable both ways) together
 /// with its boundary (one way). Returns each region's loops, outer first.
+/// What splitting a face gives: its regions (each region's loops, outer first), and when
+/// the face's outer loop was left out of the split, the hole loops lying in no new region
+/// (they stay with the face itself) and each region's outline (mirrored parameter plane).
+struct Split {
+    regions: Vec<Region>,
+    open: Vec<Walk>,
+    outlines: Vec<Option<Vec<Point2>>>,
+}
+
 fn split_face(
     body: &Body,
     f: FaceId,
     pieces: &[Piece],
     boundary: &[Vec<(usize, bool)>],
     new_edges: &[usize],
-) -> R<Vec<Region>> {
+    outer: bool,
+) -> R<Split> {
     let mut half: Vec<(usize, bool)> = boundary.iter().flatten().copied().collect();
     for &p in new_edges {
         half.push((p, true));
@@ -1395,7 +1684,11 @@ fn split_face(
     }
     let face = body.face(f);
     let nb = boundary.iter().map(|l| l.len()).sum::<usize>();
-    let outer_len = boundary.first().map_or(0, |l| l.len());
+    let outer_len = if outer {
+        boundary.first().map_or(0, |l| l.len())
+    } else {
+        0
+    };
     // on a plane, a cycle made only of original boundary is an original loop, untouched:
     // its orientation is known (the first loop is the outer one) and it needs no outline
     let planar = matches!(face.surface, Surface::Plane(_));
@@ -1467,6 +1760,7 @@ fn split_face(
         })
         .collect();
     let mut regions: Vec<Region> = Vec::new();
+    let mut open: Vec<Walk> = Vec::new();
     let mut outer_of: Vec<usize> = Vec::new();
     for (k, cyc) in cycles.iter().enumerate() {
         if areas[k] > 0.0 {
@@ -1524,6 +1818,10 @@ fn split_face(
             .min_by(|x, y| areas[*x.1].total_cmp(&areas[*y.1]))
             .map(|(r, _)| r);
         let Some(host) = host else {
+            if !outer {
+                open.push(cyc.iter().map(|&i| half[i]).collect());
+                continue;
+            }
             if std::env::var_os("FORGE_DEBUG").is_some() {
                 eprintln!(
                     "hole outside: face {f:?} {:?} sense {} probe {probe:?}",
@@ -1548,7 +1846,12 @@ fn split_face(
         };
         regions[host].push(cyc.iter().map(|&i| half[i]).collect());
     }
-    Ok(regions)
+    let outlines = outer_of.iter().map(|&o| polys[o].clone()).collect();
+    Ok(Split {
+        regions,
+        open,
+        outlines,
+    })
 }
 
 fn inside_poly(p: Point2, poly: &[Point2]) -> bool {
@@ -1572,8 +1875,8 @@ fn classify_specs(
     coplanar: &[(FaceId, FaceId)],
 ) -> R<Vec<Class>> {
     let n = specs.len();
-    let mut class: Vec<Option<Class>> = vec![None; n];
-    let mut fixed = vec![false; n];
+    let mut class: Vec<Option<Class>> = specs.iter().map(|s| s.preset).collect();
+    let mut fixed: Vec<bool> = specs.iter().map(|s| s.preset.is_some()).collect();
     // pieces lying on a coplanar face of the other body
     for (i, s) in specs.iter().enumerate() {
         let partners: Vec<FaceId> = coplanar

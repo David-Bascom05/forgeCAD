@@ -50,6 +50,36 @@ fn edge_entry(body: &Body, c: forge_topo::CoedgeId) -> (f64, Box3) {
     )
 }
 
+/// An index entry whose loop left the face (the entry stays so band rows keep their indices).
+const GONE: forge_topo::CoedgeId = forge_topo::CoedgeId(u32::MAX);
+
+/// Face `f` is about to lose loops `gone` in place: their entries in its kept index (if any)
+/// are marked gone; once most entries are, the index is dropped to be built afresh.
+pub fn drop_query_loops(body: &mut Body, f: FaceId, gone: &[forge_topo::LoopId]) {
+    let mut cs: Vec<forge_topo::CoedgeId> = gone
+        .iter()
+        .flat_map(|&l| body.lp(l).coedges.iter().copied())
+        .collect();
+    cs.sort_unstable();
+    let face = &mut body.faces[f.index()];
+    let Some(q) = face.query.get_mut() else { return };
+    let Some(info) = std::sync::Arc::get_mut(q).and_then(|a| a.downcast_mut::<FaceInfo>()) else {
+        face.query.clear();
+        return;
+    };
+    let mut dead = 0;
+    for e in &mut info.edges {
+        if e.0 != GONE && cs.binary_search(&e.0).is_ok() {
+            *e = (GONE, Box3::EMPTY);
+        }
+        dead += usize::from(e.0 == GONE);
+    }
+    info.drawn = std::sync::OnceLock::new();
+    if 2 * dead > info.edges.len() {
+        face.query.clear();
+    }
+}
+
 /// Face `f` gained the loop `lp` in place: its kept index (if any) takes the loop's edges.
 pub fn extend_query(body: &mut Body, f: FaceId, lp: forge_topo::LoopId) {
     let entries: Vec<_> = body
@@ -263,7 +293,7 @@ impl<'a> Index<'a> {
             None => Box::new(info.edges.iter()),
         };
         for &(c, ref b) in candidates {
-            if box_distance(b, p) > info.reach.min(best.map_or(f64::INFINITY, |x| x.0)) {
+            if c == GONE || box_distance(b, p) > info.reach.min(best.map_or(f64::INFINITY, |x| x.0)) {
                 continue;
             }
             let e = body.edge(body.coedge(c).edge);
@@ -440,7 +470,7 @@ fn planar_parity(
         None => Box::new(edges.iter()),
     };
     for &(c, ref b) in all {
-        if !ray_hits_box(p, d, b) {
+        if c == GONE || !ray_hits_box(p, d, b) {
             continue;
         }
         let e = body.edge(body.coedge(c).edge);

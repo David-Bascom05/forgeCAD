@@ -18,6 +18,20 @@ fn main() {
                     forge_topo::check(&b).len()
                 }
             );
+            if std::env::var_os("FORGE_PHASES").is_some() {
+                let names = [
+                    "intersect",
+                    "imprint",
+                    "place+pieces",
+                    "split",
+                    "classify",
+                    "keep",
+                    "apply",
+                ];
+                for (name, ns) in names.iter().zip(forge_bool::phase_times()) {
+                    println!("  {name:<13} {:8.2} ms", ns as f64 / 1e6);
+                }
+            }
         }
         Err(e) => {
             println!("failed after {:.2} ms: {e:?}", t.elapsed().as_secs_f64() * 1e3);

@@ -350,6 +350,20 @@ impl Body {
     }
 
     /// Adds a loop to `face` made of the given (edge, forward) uses, in order.
+    /// Takes loop `lp` off face `f`: its edges lose those uses (an edge left unused dies);
+    /// the loop and its coedges stay in the arenas until compaction.
+    pub fn remove_loop(&mut self, f: FaceId, lp: LoopId) {
+        self.faces[f.index()].loops.retain(|&l| l != lp);
+        for ci in 0..self.loops[lp.index()].coedges.len() {
+            let c = self.loops[lp.index()].coedges[ci];
+            let edge = &mut self.edges[self.coedges[c.index()].edge.index()];
+            edge.coedges.retain(|&x| x != c);
+            if edge.coedges.is_empty() {
+                edge.alive = false;
+            }
+        }
+    }
+
     pub fn add_loop(&mut self, face: FaceId, uses: &[(EdgeId, bool)]) -> LoopId {
         let lp = LoopId(self.loops.len() as u32);
         let mut coedges = Vec::with_capacity(uses.len());
