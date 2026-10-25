@@ -241,9 +241,28 @@ fn plan(a: &Body, b: &Body, op: Op, feature: u64) -> R<Plan> {
 
     // faces on one surface: each imprints the other's boundary
     let mut imprints: Vec<Imprint> = Vec::new();
+    let mut overlaps: Vec<(EdgeId, EdgeId)> = Vec::new();
     for &(fa, fb) in &coplanar {
-        imprint(&bodies, &index, 1, fb, fa, &mut cuts, &mut imprints)?;
-        imprint(&bodies, &index, 0, fa, fb, &mut cuts, &mut imprints)?;
+        imprint(
+            &bodies,
+            &index,
+            1,
+            fb,
+            fa,
+            &mut cuts,
+            &mut imprints,
+            &mut overlaps,
+        )?;
+        imprint(
+            &bodies,
+            &index,
+            0,
+            fa,
+            fb,
+            &mut cuts,
+            &mut imprints,
+            &mut overlaps,
+        )?;
     }
 
     // 3: vertices for the cuts, then edge pieces
@@ -781,6 +800,7 @@ fn imprint(
     dst_face: FaceId,
     cuts: &mut Vec<Cut>,
     imprints: &mut Vec<Imprint>,
+    overlaps: &mut Vec<(EdgeId, EdgeId)>,
 ) -> R<()> {
     let dst = 1 - src;
     let (sb, db) = (bodies[src], bodies[dst]);
@@ -800,7 +820,17 @@ fn imprint(
                     let edge2 = db.edge(e2);
                     let hits = match curve_surface(&edge.curve, edge.range, &across(db, dst_face, c2)?) {
                         CurveSurface::Hits(h) => h,
-                        _ => return Err(BoolError::Unsupported("coplanar faces share an edge")),
+                        // lying in both the face's plane and the neighbour's surface, the edge runs
+                        // along the same carrier as e2: cut each at the other's ends inside it, and
+                        // remember the pair so the overlapping pieces become one edge
+                        _ => {
+                            coincide(sb, src, e, db, e2, cuts);
+                            let (ea, eb) = if src == 0 { (e, e2) } else { (e2, e) };
+                            if !overlaps.contains(&(ea, eb)) {
+                                overlaps.push((ea, eb));
+                            }
+                            continue;
+                        }
                     };
                     for h in hits {
                         let s2 = edge2.curve.closest(h.point, edge2.range);
@@ -841,8 +871,8 @@ fn imprint(
                         range: Interval::new(w[0], w[1]),
                         into: dst_face,
                     }),
-                    Where::On => return Err(BoolError::Unsupported("coplanar faces share an edge")),
-                    Where::Outside => {}
+                    // along the destination's boundary: the shared part of coincident edges
+                    Where::On | Where::Outside => {}
                 }
             }
         }
@@ -857,6 +887,28 @@ fn overlap(a: &forge_math::Box3, b: &forge_math::Box3) -> forge_math::Box3 {
         y: cut(a.y, b.y),
         z: cut(a.z, b.z),
     }
+}
+
+/// Two edges on the same carrier curve: each is cut where the other's ends lie inside it.
+fn coincide(sb: &Body, src: Side, e: EdgeId, db: &Body, e2: EdgeId, cuts: &mut Vec<Cut>) {
+    let near = 10.0 * tol::LINEAR;
+    let mut ends_into = |from: &Body, fe: EdgeId, to: &Body, te: EdgeId, side: Side| {
+        let (f, t) = (from.edge(fe), to.edge(te));
+        for v in [f.start, f.end] {
+            let p = from.vertex(v).point;
+            let s = t.curve.closest(p, t.range);
+            if t.curve.eval(s).distance(p) <= near {
+                cuts.push(Cut {
+                    side,
+                    edge: te,
+                    s,
+                    point: p,
+                });
+            }
+        }
+    };
+    ends_into(sb, e, db, e2, 1 - src);
+    ends_into(db, e2, sb, e, src);
 }
 
 fn line_box(line: &forge_geom::Line, b: &forge_math::Box3) -> Option<Interval> {
