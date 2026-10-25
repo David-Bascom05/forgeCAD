@@ -39,6 +39,8 @@ pub struct Edge {
     /// face for a seam).
     pub coedges: Vec<CoedgeId>,
     pub name: Name,
+    /// False once no face uses the edge (after an in-place edit).
+    pub alive: bool,
 }
 
 /// One use of an edge by a loop. `forward` means the loop walks the edge from
@@ -69,6 +71,8 @@ pub struct Face {
     pub name: Name,
     /// A box holding the face, worked out on first use.
     pub bbox: Cached<Box3>,
+    /// False once the face is removed by an in-place edit.
+    pub alive: bool,
 }
 
 /// Data derived from an entity and kept with it so it is worked out once.
@@ -115,6 +119,8 @@ pub struct Shell {
 /// A solid: one or more closed shells (an outer skin, plus inner ones for voids).
 #[derive(Clone, Debug, Default, PartialEq)]
 pub struct Body {
+    /// Faces removed by in-place edits and not yet compacted away.
+    pub dead: usize,
     pub vertices: Vec<Vertex>,
     pub edges: Vec<Edge>,
     pub coedges: Vec<Coedge>,
@@ -151,13 +157,132 @@ impl Body {
         (0..self.vertices.len() as u32).map(VertexId)
     }
     pub fn edge_ids(&self) -> impl Iterator<Item = EdgeId> + '_ {
-        (0..self.edges.len() as u32).map(EdgeId)
+        (0..self.edges.len() as u32)
+            .map(EdgeId)
+            .filter(|e| self.edges[e.index()].alive)
     }
     pub fn face_ids(&self) -> impl Iterator<Item = FaceId> + '_ {
-        (0..self.faces.len() as u32).map(FaceId)
+        (0..self.faces.len() as u32)
+            .map(FaceId)
+            .filter(|f| self.faces[f.index()].alive)
     }
     pub fn loop_ids(&self) -> impl Iterator<Item = LoopId> + '_ {
-        (0..self.loops.len() as u32).map(LoopId)
+        (0..self.loops.len() as u32)
+            .map(LoopId)
+            .filter(|l| self.faces[self.loops[l.index()].face.index()].alive)
+    }
+
+    /// Removes a face (and its loops) in place. Edges left with no uses die
+    /// with it; vertices are left for `compact` to drop.
+    pub fn kill_face(&mut self, f: FaceId) {
+        if !self.faces[f.index()].alive {
+            return;
+        }
+        self.faces[f.index()].alive = false;
+        self.dead += 1;
+        let shell = self.faces[f.index()].shell;
+        self.shells[shell.index()].faces.retain(|&x| x != f);
+        for li in 0..self.faces[f.index()].loops.len() {
+            let l = self.faces[f.index()].loops[li];
+            for ci in 0..self.loops[l.index()].coedges.len() {
+                let c = self.loops[l.index()].coedges[ci];
+                let e = self.coedges[c.index()].edge;
+                let edge = &mut self.edges[e.index()];
+                edge.coedges.retain(|&x| x != c);
+                if edge.coedges.is_empty() {
+                    edge.alive = false;
+                }
+            }
+        }
+    }
+
+    /// Regroups live faces into shells by connectivity (after an in-place edit
+    /// joins or separates pieces).
+    pub fn rebuild_shells(&mut self) {
+        let n = self.faces.len();
+        let mut parent: Vec<usize> = (0..n).collect();
+        fn find(p: &mut [usize], mut i: usize) -> usize {
+            while p[i] != i {
+                p[i] = p[p[i]];
+                i = p[i];
+            }
+            i
+        }
+        for e in 0..self.edges.len() {
+            if !self.edges[e].alive {
+                continue;
+            }
+            let faces: Vec<usize> = self.edges[e]
+                .coedges
+                .iter()
+                .map(|&c| self.coedge_face(c).index())
+                .collect();
+            for w in faces.windows(2) {
+                let (x, y) = (find(&mut parent, w[0]), find(&mut parent, w[1]));
+                if x != y {
+                    parent[x.max(y)] = x.min(y);
+                }
+            }
+        }
+        self.shells.clear();
+        let mut shell_of: Vec<Option<ShellId>> = vec![None; n];
+        for f in 0..n {
+            if !self.faces[f].alive {
+                continue;
+            }
+            let r = find(&mut parent, f);
+            let s = match shell_of[r] {
+                Some(s) => s,
+                None => {
+                    self.shells.push(Shell { faces: Vec::new() });
+                    let s = ShellId(self.shells.len() as u32 - 1);
+                    shell_of[r] = Some(s);
+                    s
+                }
+            };
+            self.faces[f].shell = s;
+            self.shells[s.index()].faces.push(FaceId(f as u32));
+        }
+    }
+
+    /// A copy holding only live entities, densely numbered.
+    pub fn compact(&self) -> Body {
+        let mut out = Body::new();
+        let mut vmap: Vec<Option<VertexId>> = vec![None; self.vertices.len()];
+        let mut emap: Vec<Option<EdgeId>> = vec![None; self.edges.len()];
+        let mut smap: Vec<Option<ShellId>> = vec![None; self.shells.len()];
+        for f in self.face_ids() {
+            let face = self.face(f);
+            let shell = *smap[face.shell.index()].get_or_insert_with(|| out.add_shell());
+            let nf = out.add_face(shell, face.surface, face.same_sense, face.name);
+            if let Some(b) = face.bbox.get() {
+                out.faces[nf.index()].bbox.set(*b);
+            }
+            for &l in &face.loops {
+                let mut uses = Vec::with_capacity(self.lp(l).coedges.len());
+                for &c in &self.lp(l).coedges {
+                    let co = self.coedge(c);
+                    let e = match emap[co.edge.index()] {
+                        Some(e) => e,
+                        None => {
+                            let edge = self.edge(co.edge);
+                            let mut vert = |v: VertexId| {
+                                *vmap[v.index()].get_or_insert_with(|| {
+                                    out.add_vertex(self.vertex(v).point, self.vertex(v).name)
+                                })
+                            };
+                            let (a, b) = (vert(edge.start), vert(edge.end));
+                            let e = out.add_edge(edge.curve.clone(), edge.range, a, b, edge.name);
+                            emap[co.edge.index()] = Some(e);
+                            e
+                        }
+                    };
+                    uses.push((e, co.forward));
+                }
+                out.add_loop(nf, &uses);
+            }
+        }
+        out
     }
 
     pub fn add_vertex(&mut self, point: Point3, name: Name) -> VertexId {
@@ -180,6 +305,7 @@ impl Body {
             end,
             coedges: Vec::new(),
             name,
+            alive: true,
         });
         EdgeId(self.edges.len() as u32 - 1)
     }
@@ -198,6 +324,7 @@ impl Body {
             shell,
             name,
             bbox: Cached::default(),
+            alive: true,
         });
         self.shells[shell.index()].faces.push(id);
         id
@@ -211,6 +338,7 @@ impl Body {
             let c = CoedgeId(self.coedges.len() as u32);
             self.coedges.push(Coedge { edge, forward, lp });
             self.edges[edge.index()].coedges.push(c);
+            self.edges[edge.index()].alive = true;
             coedges.push(c);
         }
         self.loops.push(Loop { coedges, face });

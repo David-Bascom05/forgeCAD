@@ -2,7 +2,7 @@
 
 pub mod torture;
 
-use forge_bool::{BoolError, Op, boolean};
+use forge_bool::{BoolError, Op, boolean_into};
 use forge_math::{Frame, Point2, Vec2, dmath};
 use forge_ops::{Axis2, ExtrudeError, Profile, ProfileLoop, RevolveError, Segment, extrude, revolve};
 use forge_topo::Body;
@@ -126,17 +126,20 @@ impl Part {
             body = Some(match (body, op) {
                 (_, Combine::New) => tool,
                 (None, _) => return Err(RegenError::NothingToCombine { feature: i }),
-                (Some(b), op) => {
+                (Some(mut b), op) => {
                     let op = match op {
                         Combine::Add => Op::Union,
                         Combine::Cut => Op::Subtract,
                         _ => Op::Intersect,
                     };
-                    boolean(&b, &tool, op, id + 1_000_000)
-                        .map_err(|error| RegenError::Boolean { feature: i, error })?
+                    // in place: only the faces near the tool change
+                    boolean_into(&mut b, &tool, op, id + 1_000_000)
+                        .map_err(|error| RegenError::Boolean { feature: i, error })?;
+                    b
                 }
             });
         }
-        body.ok_or(RegenError::NothingToCombine { feature: 0 })
+        body.map(|b| b.compact())
+            .ok_or(RegenError::NothingToCombine { feature: 0 })
     }
 }

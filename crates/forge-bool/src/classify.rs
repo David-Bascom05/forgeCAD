@@ -46,7 +46,17 @@ pub fn face_box(body: &Body, f: FaceId) -> Box3 {
 
 impl<'a> Index<'a> {
     pub fn new(body: &'a Body) -> Self {
-        let boxes: Vec<Box3> = body.face_ids().map(|f| face_box(body, f)).collect();
+        // indexed by face id; removed faces get an empty box, which nothing overlaps
+        let boxes: Vec<Box3> = (0..body.faces.len() as u32)
+            .map(FaceId)
+            .map(|f| {
+                if body.face(f).alive {
+                    face_box(body, f)
+                } else {
+                    Box3::EMPTY
+                }
+            })
+            .collect();
         let bbox = boxes.iter().fold(Box3::EMPTY, |a, b| a.hull(b));
         let infos = (0..boxes.len()).map(|_| std::cell::OnceCell::new()).collect();
         Index {

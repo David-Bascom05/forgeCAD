@@ -74,6 +74,9 @@ fn interior_steps(s: &Surface, q: &Quality) -> Option<(f64, f64)> {
 /// A watertight mesh of a body: each edge is cut once and both faces share
 /// those cut points, so neighbouring faces meet exactly.
 pub fn tessellate(body: &Body, q: &Quality) -> Result<TriMesh, TessError> {
+    if body.dead > 0 {
+        return tessellate(&body.compact(), q);
+    }
     let mut mesh = TriMesh::default();
     let vertex_index: Vec<u32> = body.vertices.iter().map(|v| mesh.add_vertex(v.point)).collect();
 

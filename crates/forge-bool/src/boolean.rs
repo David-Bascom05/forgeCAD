@@ -78,6 +78,8 @@ struct Piece {
     name: Name,
     /// The new edge this piece is, if any.
     seg: Option<usize>,
+    /// The original edge this piece is all of, if it was not split.
+    whole: Option<(Side, EdgeId)>,
 }
 
 /// A face of the result before it is built: loops of (piece, forward).
@@ -113,6 +115,83 @@ enum Class {
 }
 
 pub fn boolean(a: &Body, b: &Body, op: Op, feature: u64) -> R<Body> {
+    let mut out = a.clone();
+    boolean_into(&mut out, b, op, feature)?;
+    Ok(out.compact())
+}
+
+/// The boolean done in place on `target`: only faces near `b` are examined,
+/// and only the faces it actually changes are rebuilt. Removed entities stay
+/// as tombstones until `Body::compact`.
+pub fn boolean_into(target: &mut Body, b: &Body, op: Op, feature: u64) -> R<()> {
+    let plan = plan(target, b, op, feature)?;
+    apply(target, b, &plan, Name::feature(feature));
+    Ok(())
+}
+
+/// Everything a boolean decides, worked out without touching A.
+struct Plan {
+    pieces: Vec<Piece>,
+    specs: Vec<Spec>,
+    kept: Vec<(usize, bool)>,
+    points: Vec<Point3>,
+    alias: Vec<(VKey, VKey)>,
+    /// A's faces that might change; every other face of A comes through as it is.
+    involved: Vec<FaceId>,
+}
+
+/// The pieces an edge splits into at its cuts (one piece, the whole edge, if none).
+#[allow(clippy::too_many_arguments)]
+fn edge_split(
+    body: &Body,
+    side: Side,
+    e: EdgeId,
+    cuts: &[Cut],
+    by_edge: &[(Side, EdgeId, usize)],
+    cut_vertex: &[VKey],
+    alias: &[(VKey, VKey)],
+    pieces: &mut Vec<Piece>,
+) -> Vec<usize> {
+    let resolve = |v: VKey| alias.iter().find(|(f, _)| *f == v).map_or(v, |&(_, t)| t);
+    let edge = body.edge(e);
+    let from = by_edge.partition_point(|&(sd, ed, _)| (sd, ed) < (side, e));
+    let mut splits: Vec<(f64, VKey)> = by_edge[from..]
+        .iter()
+        .take_while(|&&(sd, ed, _)| sd == side && ed == e)
+        .map(|&(_, _, i)| (cuts[i].s, cut_vertex[i]))
+        .collect();
+    splits.sort_by(|x, y| x.0.total_cmp(&y.0));
+    splits.dedup_by(|x, y| x.1 == y.1);
+    let (vs, ve) = (
+        resolve(VKey::Old(side, edge.start)),
+        resolve(VKey::Old(side, edge.end)),
+    );
+    splits.retain(|&(_, v)| v != vs && v != ve);
+    let whole = splits.is_empty().then_some((side, e));
+    let mut out = Vec::with_capacity(splits.len() + 1);
+    let mut at = (edge.range.lo, vs);
+    for (k, &(s, v)) in splits.iter().chain([(edge.range.hi, ve)].iter()).enumerate() {
+        let name = if whole.is_some() {
+            edge.name
+        } else {
+            edge.name.with_str("split").with(k as u64)
+        };
+        out.push(pieces.len());
+        pieces.push(Piece {
+            curve: edge.curve.clone(),
+            range: Interval::new(at.0, s),
+            start: at.1,
+            end: v,
+            name,
+            seg: None,
+            whole,
+        });
+        at = (s, v);
+    }
+    out
+}
+
+fn plan(a: &Body, b: &Body, op: Op, feature: u64) -> R<Plan> {
     let bodies = [a, b];
     let index = [Index::new(a), Index::new(b)];
     let root = Name::feature(feature);
@@ -160,54 +239,32 @@ pub fn boolean(a: &Body, b: &Body, op: Op, feature: u64) -> R<Body> {
 
     // 3: vertices for the cuts, then edge pieces
     let (cut_vertex, new_points, alias) = place_cuts(&bodies, &cuts)?;
-    let resolve = |v: VKey| alias.iter().find(|(f, _)| *f == v).map_or(v, |&(_, t)| t);
     let mut pieces: Vec<Piece> = Vec::new();
-    let mut edge_pieces: [Vec<Vec<usize>>; 2] =
-        [vec![Vec::new(); a.edges.len()], vec![Vec::new(); b.edges.len()]];
-    // cuts grouped by edge
     let mut by_edge: Vec<(Side, EdgeId, usize)> = cuts
         .iter()
         .enumerate()
         .map(|(i, c)| (c.side, c.edge, i))
         .collect();
     by_edge.sort_unstable();
-    for side in 0..2 {
-        let body = bodies[side];
-        for e in body.edge_ids() {
-            let edge = body.edge(e);
-            let from = by_edge.partition_point(|&(sd, ed, _)| (sd, ed) < (side, e));
-            let mut splits: Vec<(f64, VKey)> = by_edge[from..]
-                .iter()
-                .take_while(|&&(sd, ed, _)| sd == side && ed == e)
-                .map(|&(_, _, i)| (cuts[i].s, cut_vertex[i]))
-                .collect();
-            splits.sort_by(|x, y| x.0.total_cmp(&y.0));
-            splits.dedup_by(|x, y| x.1 == y.1);
-            let (vs, ve) = (
-                resolve(VKey::Old(side, edge.start)),
-                resolve(VKey::Old(side, edge.end)),
-            );
-            splits.retain(|&(_, v)| v != vs && v != ve);
-            let mut at = (edge.range.lo, vs);
-            for (k, &(s, v)) in splits.iter().chain([(edge.range.hi, ve)].iter()).enumerate() {
-                let name = if splits.is_empty() {
-                    edge.name
-                } else {
-                    edge.name.with_str("split").with(k as u64)
-                };
-                edge_pieces[side][e.index()].push(pieces.len());
-                pieces.push(Piece {
-                    curve: edge.curve.clone(),
-                    range: Interval::new(at.0, s),
-                    start: at.1,
-                    end: v,
-                    name,
-                    seg: None,
-                });
-                at = (s, v);
-            }
-        }
-    }
+    // pieces per edge, made only for edges a spec reaches
+    let mut edge_pieces: [Vec<Option<Vec<usize>>>; 2] =
+        [vec![None; a.edges.len()], vec![None; b.edges.len()]];
+    let mut ensure = |side: Side, e: EdgeId, pieces: &mut Vec<Piece>| -> Vec<usize> {
+        edge_pieces[side][e.index()]
+            .get_or_insert_with(|| {
+                edge_split(
+                    bodies[side],
+                    side,
+                    e,
+                    &cuts,
+                    &by_edge,
+                    &cut_vertex,
+                    &alias,
+                    pieces,
+                )
+            })
+            .clone()
+    };
     let mut seg_piece = Vec::with_capacity(segs.len());
     for (si, s) in segs.iter().enumerate() {
         let (start, end) = match s.ends {
@@ -225,6 +282,7 @@ pub fn boolean(a: &Body, b: &Body, op: Op, feature: u64) -> R<Body> {
             end,
             name: s.name,
             seg: Some(si),
+            whole: None,
         });
     }
     // closed new edges carry their own vertex at the curve start
@@ -233,49 +291,58 @@ pub fn boolean(a: &Body, b: &Body, op: Op, feature: u64) -> R<Body> {
         points.push(s.curve.eval(s.range.lo));
     }
 
+    // A's faces that can change: crossed by new edges, using a split edge, or within B's reach
+    let b_box = index[1].bbox;
+    let mut involved: Vec<FaceId> = segs.iter().map(|s| s.faces[0]).collect();
+    involved.extend(imprints.iter().filter(|im| im.side == 1).map(|im| im.into));
+    for &(sd, e, _) in &by_edge {
+        if sd == 0 {
+            involved.extend(a.edge(e).coedges.iter().map(|&c| a.coedge_face(c)));
+        }
+    }
+    involved.extend(
+        a.face_ids()
+            .filter(|&f| index[0].boxes[f.index()].overlaps(&b_box)),
+    );
+    involved.sort_unstable();
+    involved.dedup();
+
     // 4: split faces
     let mut specs: Vec<Spec> = Vec::new();
-    for side in 0..2 {
-        let body = bodies[side];
-        for f in body.face_ids() {
+    for (side, &body) in bodies.iter().enumerate() {
+        let faces: Vec<FaceId> = if side == 0 {
+            involved.clone()
+        } else {
+            body.face_ids().collect()
+        };
+        for f in faces {
             let mine: Vec<usize> = (0..segs.len()).filter(|&i| segs[i].faces[side] == f).collect();
             let mut foreign: Vec<usize> = Vec::new();
             for im in imprints.iter().filter(|im| im.side != side && im.into == f) {
-                for &p in &edge_pieces[im.side][im.edge.index()] {
+                for p in ensure(im.side, im.edge, &mut pieces) {
                     let m = pieces[p].range.mid();
                     if im.range.contains(m) && !foreign.contains(&p) {
                         foreign.push(p);
                     }
                 }
             }
-            let boundary: Vec<Vec<(usize, bool)>> = body
-                .face(f)
-                .loops
-                .iter()
-                .map(|&l| {
-                    body.lp(l)
-                        .coedges
-                        .iter()
-                        .flat_map(|&c| {
-                            let co = body.coedge(c);
-                            let ps = &edge_pieces[side][co.edge.index()];
-                            let ordered: Vec<(usize, bool)> = if co.forward {
-                                ps.iter().map(|&p| (p, true)).collect()
-                            } else {
-                                ps.iter().rev().map(|&p| (p, false)).collect()
-                            };
-                            ordered
-                        })
-                        .collect()
-                })
-                .collect();
+            let mut whole = true;
+            let mut boundary: Vec<Vec<(usize, bool)>> = Vec::with_capacity(body.face(f).loops.len());
+            for &l in &body.face(f).loops {
+                let mut walk = Vec::with_capacity(body.lp(l).coedges.len());
+                for &c in &body.lp(l).coedges {
+                    let co = body.coedge(c);
+                    let ps = ensure(side, co.edge, &mut pieces);
+                    whole &= ps.len() == 1;
+                    if co.forward {
+                        walk.extend(ps.iter().map(|&p| (p, true)));
+                    } else {
+                        walk.extend(ps.iter().rev().map(|&p| (p, false)));
+                    }
+                }
+                boundary.push(walk);
+            }
             if mine.is_empty() && foreign.is_empty() {
-                let whole = body
-                    .face(f)
-                    .loops
-                    .iter()
-                    .flat_map(|&l| body.lp(l).coedges.iter())
-                    .all(|&c| edge_pieces[side][body.coedge(c).edge.index()].len() == 1);
                 specs.push(Spec {
                     side,
                     from: f,
@@ -310,7 +377,7 @@ pub fn boolean(a: &Body, b: &Body, op: Op, feature: u64) -> R<Body> {
     // 5: classify
     let class = classify_specs(&bodies, &index, &specs, &pieces, &segs, &coplanar)?;
 
-    // 6: keep, flip, sew. A shared same-facing region keeps A's copy only.
+    // 6: keep, flip. A shared same-facing region keeps A's copy only.
     let keep = |side: Side, c: Class| match (op, side, c) {
         (Op::Union, _, Class::Out) | (Op::Union, 0, Class::OnSame) => Some(false),
         (Op::Subtract, 0, Class::Out) | (Op::Subtract, 0, Class::OnOpposite) => Some(false),
@@ -321,7 +388,112 @@ pub fn boolean(a: &Body, b: &Body, op: Op, feature: u64) -> R<Body> {
     let kept: Vec<(usize, bool)> = (0..specs.len())
         .filter_map(|i| keep(specs[i].side, class[i]).map(|flip| (i, flip)))
         .collect();
-    assemble(&bodies, &specs, &kept, &pieces, &points, &alias, root)
+    // faces of A beyond B's reach are outside B: kept by union and subtract, dropped by intersect
+    if op == Op::Intersect {
+        involved = a.face_ids().collect();
+    }
+    Ok(Plan {
+        pieces,
+        specs,
+        kept,
+        points,
+        alias,
+        involved,
+    })
+}
+
+/// Makes the planned changes to A: drops the faces that go, rebuilds the
+/// faces that change, adds the faces that come from B, and regroups shells.
+fn apply(a: &mut Body, b: &Body, plan: &Plan, root: Name) {
+    let Plan {
+        pieces,
+        specs,
+        kept,
+        points,
+        alias,
+        involved,
+    } = plan;
+    let mut as_is = vec![false; specs.len()];
+    for &(si, flip) in kept {
+        if specs[si].side == 0 && specs[si].whole && !flip {
+            as_is[si] = true;
+        }
+    }
+    let staying: Vec<FaceId> = specs
+        .iter()
+        .zip(&as_is)
+        .filter(|(_, k)| **k)
+        .map(|(s, _)| s.from)
+        .collect();
+    for &f in involved {
+        if staying.binary_search(&f).is_err() {
+            a.kill_face(f);
+        }
+    }
+    let mut b_vertex: Vec<Option<VertexId>> = vec![None; b.vertices.len()];
+    let mut new_vertex: Vec<Option<VertexId>> = vec![None; points.len()];
+    let mut emap: Vec<Option<EdgeId>> = vec![None; pieces.len()];
+    let shell = a
+        .shells
+        .first()
+        .map(|_| forge_topo::ShellId(0))
+        .unwrap_or_else(|| a.add_shell());
+    let mut vertex = |a: &mut Body, v: VKey| -> VertexId {
+        let v = alias.iter().find(|(f, _)| *f == v).map_or(v, |&(_, t)| t);
+        match v {
+            VKey::Old(0, id) => id,
+            VKey::Old(_, id) => *b_vertex[id.index()]
+                .get_or_insert_with(|| a.add_vertex(b.vertex(id).point, b.vertex(id).name)),
+            VKey::New(i) => *new_vertex[i as usize].get_or_insert_with(|| {
+                a.add_vertex(points[i as usize], root.with_str("vertex").with(i as u64))
+            }),
+        }
+    };
+    for &(si, flip) in kept {
+        if as_is[si] {
+            continue;
+        }
+        let s = &specs[si];
+        let src = if s.side == 0 {
+            a.face(s.from).clone()
+        } else {
+            b.face(s.from).clone()
+        };
+        let face = a.add_face(shell, src.surface, src.same_sense != flip, s.name);
+        if s.whole
+            && !flip
+            && let Some(bx) = src.bbox.get()
+        {
+            a.faces[face.index()].bbox.set(*bx);
+        }
+        for lp in &s.loops {
+            let mut uses: Vec<(EdgeId, bool)> = Vec::with_capacity(lp.len());
+            for &(p, fwd) in lp {
+                let e = match emap[p] {
+                    Some(e) => e,
+                    None => {
+                        let pc = &pieces[p];
+                        let e = match pc.whole {
+                            // an untouched edge of A keeps its identity
+                            Some((0, e)) => e,
+                            _ => {
+                                let (v0, v1) = (vertex(a, pc.start), vertex(a, pc.end));
+                                a.add_edge(pc.curve.clone(), pc.range, v0, v1, pc.name)
+                            }
+                        };
+                        emap[p] = Some(e);
+                        e
+                    }
+                };
+                uses.push((e, fwd));
+            }
+            if flip {
+                uses = uses.into_iter().rev().map(|(e, f)| (e, !f)).collect();
+            }
+            a.add_loop(face, &uses);
+        }
+    }
+    a.rebuild_shells();
 }
 
 /// Cuts `curve` (on both faces' surfaces) where it crosses either face's
@@ -996,111 +1168,4 @@ fn interior_point(body: &Body, s: &Spec, pieces: &[Piece]) -> Option<Point3> {
         .max(1e-3);
     let q = d.p + inward * (0.01 * len).min(0.05);
     Some(face.surface.eval(face.surface.project(q)))
-}
-
-#[allow(clippy::too_many_arguments)]
-fn assemble(
-    bodies: &[&Body; 2],
-    specs: &[Spec],
-    kept: &[(usize, bool)],
-    pieces: &[Piece],
-    points: &[Point3],
-    alias: &[(VKey, VKey)],
-    root: Name,
-) -> R<Body> {
-    let mut out = Body::new();
-    // shells: kept specs connected through shared pieces
-    let mut parent: Vec<usize> = (0..kept.len()).collect();
-    fn find(p: &mut [usize], mut i: usize) -> usize {
-        while p[i] != i {
-            p[i] = p[p[i]];
-            i = p[i];
-        }
-        i
-    }
-    let mut owner: Vec<Option<usize>> = vec![None; pieces.len()];
-    let mut uses = vec![0u32; pieces.len()];
-    for (k, &(si, _)) in kept.iter().enumerate() {
-        for &(p, _) in specs[si].loops.iter().flatten() {
-            uses[p] += 1;
-            match owner[p] {
-                None => owner[p] = Some(k),
-                Some(o) => {
-                    let (x, y) = (find(&mut parent, o), find(&mut parent, k));
-                    parent[x.max(y)] = x.min(y);
-                }
-            }
-        }
-    }
-    if uses.iter().any(|&u| u != 0 && u != 2) {
-        return Err(BoolError::Internal("result is not closed"));
-    }
-    let mut shell_of = vec![usize::MAX; kept.len()];
-    let mut shells = Vec::new();
-    for k in 0..kept.len() {
-        let r = find(&mut parent, k);
-        if shell_of[r] == usize::MAX {
-            shell_of[r] = shells.len();
-            shells.push(out.add_shell());
-        }
-        shell_of[k] = shell_of[r];
-    }
-    // vertex of the result for each input vertex and each new point, filled as used
-    let mut vmap: [Vec<Option<VertexId>>; 2] = [
-        vec![None; bodies[0].vertices.len()],
-        vec![None; bodies[1].vertices.len()],
-    ];
-    let mut new_map: Vec<Option<VertexId>> = vec![None; points.len()];
-    let mut emap: Vec<Option<EdgeId>> = vec![None; pieces.len()];
-    let mut vertex = |out: &mut Body, v: VKey| -> VertexId {
-        let v = alias.iter().find(|(f, _)| *f == v).map_or(v, |&(_, t)| t);
-        let slot = match v {
-            VKey::Old(side, id) => &mut vmap[side][id.index()],
-            VKey::New(i) => &mut new_map[i as usize],
-        };
-        if let Some(id) = *slot {
-            return id;
-        }
-        let (p, name) = match v {
-            VKey::Old(side, id) => (bodies[side].vertex(id).point, bodies[side].vertex(id).name),
-            VKey::New(i) => (points[i as usize], root.with_str("vertex").with(i as u64)),
-        };
-        let id = out.add_vertex(p, name);
-        *match v {
-            VKey::Old(side, i) => &mut vmap[side][i.index()],
-            VKey::New(i) => &mut new_map[i as usize],
-        } = Some(id);
-        id
-    };
-    for (k, &(si, flip)) in kept.iter().enumerate() {
-        let s = &specs[si];
-        let src = bodies[s.side].face(s.from);
-        let face = out.add_face(shells[shell_of[k]], src.surface, src.same_sense != flip, s.name);
-        if s.whole
-            && let Some(b) = src.bbox.get()
-        {
-            out.faces[face.index()].bbox.set(*b);
-        }
-        for lp in &s.loops {
-            let mut uses: Vec<(EdgeId, bool)> = Vec::with_capacity(lp.len());
-            for &(p, fwd) in lp {
-                let e = match emap[p] {
-                    Some(e) => e,
-                    None => {
-                        let pc = &pieces[p];
-                        let (a, b) = (vertex(&mut out, pc.start), vertex(&mut out, pc.end));
-                        let e = out.add_edge(pc.curve.clone(), pc.range, a, b, pc.name);
-                        emap[p] = Some(e);
-                        e
-                    }
-                };
-                uses.push((e, fwd));
-            }
-            if flip {
-                uses = uses.into_iter().rev().map(|(e, f)| (e, !f)).collect();
-            }
-            out.add_loop(face, &uses);
-        }
-    }
-    Ok(out)
 }

@@ -57,6 +57,9 @@ pub enum Problem {
 /// Everything wrong with a body, in a deterministic order. Empty means it is a
 /// valid closed solid.
 pub fn check(body: &Body) -> Vec<Problem> {
+    if body.dead > 0 {
+        return check(&body.compact());
+    }
     let mut out = Vec::new();
     check_edges(body, &mut out);
     check_loops(body, &mut out);
@@ -243,6 +246,9 @@ fn check_euler(body: &Body, out: &mut Vec<Problem>) {
 
 /// Genus (number of through-holes) of a valid single-shell body.
 pub fn genus(body: &Body) -> i64 {
+    if body.dead > 0 {
+        return genus(&body.compact());
+    }
     let value = body.vertices.len() as i64 - body.edges.len() as i64 + 2 * body.faces.len() as i64
         - body.loops.len() as i64;
     body.shells.len() as i64 - value / 2
