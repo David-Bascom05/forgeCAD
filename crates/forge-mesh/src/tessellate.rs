@@ -1,7 +1,7 @@
 use crate::cdt::{CdtError, triangulate};
 use crate::mesh::TriMesh;
 use forge_geom::{Curve, CurveGeom, Surface, SurfaceGeom};
-use forge_math::{Point2, dmath};
+use forge_math::{Point2, Point3, dmath};
 use forge_topo::uv::{align_loops, draw_loop};
 use forge_topo::{Body, FaceId};
 
@@ -187,7 +187,43 @@ fn tessellate_face(
         }
     }
 
-    let tri = triangulate(&scaled, &loops, &interior)?;
+    let mut tri = triangulate(&scaled, &loops, &interior)?;
+    // chords that stray from the surface by more than the tolerance get a surface point at
+    // their middle (a thin band between two boundary curves has no grid points at all)
+    let at = |p: Point2| surface.eval(Point2::new(p.x / su, p.y / sv));
+    let boundary = |a: u32, b: u32| {
+        loops.iter().any(|l| {
+            let (lo, n) = (l[0], l.len() as u32);
+            let inside = |x: u32| x >= lo && x < lo + n;
+            inside(a) && inside(b) && ((a + 1 - lo) % n == b - lo || (b + 1 - lo) % n == a - lo)
+        })
+    };
+    for _ in 0..3 {
+        let pos: Vec<Point3> = tri.points.iter().map(|&p| at(p)).collect();
+        let mut extra: Vec<Point2> = Vec::new();
+        for t in &tri.triangles {
+            for (a, b) in [(t[0], t[1]), (t[1], t[2]), (t[2], t[0])] {
+                // each interior edge once; a boundary chord is the edge's own sample step, and
+                // splitting it would leave a crack against the neighbouring face
+                if a > b || boundary(a, b) {
+                    continue;
+                }
+                let (pa, pb) = (tri.points[a as usize], tri.points[b as usize]);
+                let mid = pa.lerp(pb, 0.5);
+                let chord_mid = pos[a as usize].lerp(pos[b as usize], 0.5);
+                if at(mid).distance(chord_mid) > q.chord {
+                    extra.push(mid);
+                }
+            }
+        }
+        if extra.is_empty() {
+            break;
+        }
+        let base = scaled.len();
+        interior = tri.points[base..].to_vec();
+        interior.extend(extra);
+        tri = triangulate(&scaled, &loops, &interior)?;
+    }
     let base = global.len();
     let mut index = global;
     for p in &tri.points[base..] {
