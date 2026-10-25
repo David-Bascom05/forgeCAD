@@ -274,9 +274,38 @@ fn plan(a: &Body, b: &Body, op: Op, feature: u64) -> R<Plan> {
     }
 
     // 3: vertices for the cuts, then edge pieces
-    let (cut_vertex, new_points, alias) = place_cuts(&bodies, &cuts)?;
-    // every curve parameter comes from its vertex's final point, so the ends of edges and
-    // new curves land on their vertices (cut points of one vertex differ by up to 10 LINEAR)
+    let (cut_vertex, mut new_points, alias) = place_cuts(&bodies, &cuts)?;
+    // cut points of one vertex differ by up to 10 LINEAR: a new vertex settles on the point
+    // nearest every curve through it (alternating projections), and every curve parameter is
+    // then taken from that point, so edge and curve ends land on their vertices
+    let mut through: Vec<Vec<(&Curve, Interval)>> = vec![Vec::new(); new_points.len()];
+    for (c, &k) in cuts.iter().zip(&cut_vertex) {
+        if let VKey::New(i) = k {
+            let edge = bodies[c.side].edge(c.edge);
+            through[i as usize].push((&edge.curve, edge.range));
+        }
+    }
+    for sg in &segs {
+        let Some((i0, i1)) = sg.ends else { continue };
+        let w = 1e-3 * sg.range.width();
+        for (t, k) in [(sg.range.lo, cut_vertex[i0]), (sg.range.hi, cut_vertex[i1])] {
+            if let VKey::New(i) = k {
+                through[i as usize].push((&sg.curve, Interval::new(t - w, t + w)));
+            }
+        }
+    }
+    for (p, curves) in new_points.iter_mut().zip(&through) {
+        if curves.is_empty() {
+            continue;
+        }
+        for _ in 0..8 {
+            let mut sum = Vec3::ZERO;
+            for &(c, r) in curves {
+                sum += c.eval(c.closest(*p, r)) - Point3::ORIGIN;
+            }
+            *p = Point3::ORIGIN + sum / curves.len() as f64;
+        }
+    }
     let key_point = |k: VKey| match k {
         VKey::Old(sd, v) => bodies[sd].vertex(v).point,
         VKey::New(i) => new_points[i as usize],
@@ -1038,22 +1067,7 @@ fn place_cuts(bodies: &[&Body; 2], cuts: &[Cut]) -> R<Placed> {
         let key = match olds.first() {
             Some(&v) => v,
             None => {
-                // the cut points of a cluster differ by up to `near`: settle on the point
-                // nearest every edge cut there (alternating projections onto their curves)
-                let members: Vec<&Cut> = (0..cuts.len())
-                    .filter(|&i| cluster[i] == k)
-                    .map(|i| &cuts[i])
-                    .collect();
-                let mut p = cuts[heads[k]].point;
-                for _ in 0..4 {
-                    let mut sum = Vec3::ZERO;
-                    for c in &members {
-                        let edge = bodies[c.side].edge(c.edge);
-                        sum = sum + (edge.curve.eval(edge.curve.closest(p, edge.range)) - Point3::ORIGIN);
-                    }
-                    p = Point3::ORIGIN + sum / members.len() as f64;
-                }
-                points.push(p);
+                points.push(cuts[heads[k]].point);
                 VKey::New(points.len() as u32 - 1)
             }
         };
