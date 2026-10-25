@@ -89,6 +89,8 @@ struct Spec {
     /// Pieces of the other body's edges imprinted on this face (a coplanar
     /// face's boundary); classification never floods across them.
     foreign: Vec<usize>,
+    /// The face comes through whole, every edge intact: its cached data carries over.
+    whole: bool,
 }
 
 /// Part of an edge of one body lying inside a coplanar face of the other.
@@ -268,12 +270,19 @@ pub fn boolean(a: &Body, b: &Body, op: Op, feature: u64) -> R<Body> {
                 })
                 .collect();
             if mine.is_empty() && foreign.is_empty() {
+                let whole = body
+                    .face(f)
+                    .loops
+                    .iter()
+                    .flat_map(|&l| body.lp(l).coedges.iter())
+                    .all(|&c| edge_pieces[side][body.coedge(c).edge.index()].len() == 1);
                 specs.push(Spec {
                     side,
                     from: f,
                     loops: boundary,
                     name: body.face(f).name,
                     foreign,
+                    whole,
                 });
                 continue;
             }
@@ -292,6 +301,7 @@ pub fn boolean(a: &Body, b: &Body, op: Op, feature: u64) -> R<Body> {
                     loops,
                     name: body.face(f).name.with_str("split").with(k as u64),
                     foreign: used,
+                    whole: false,
                 });
             }
         }
@@ -1066,6 +1076,11 @@ fn assemble(
         let s = &specs[si];
         let src = bodies[s.side].face(s.from);
         let face = out.add_face(shells[shell_of[k]], src.surface, src.same_sense != flip, s.name);
+        if s.whole
+            && let Some(b) = src.bbox.get()
+        {
+            out.faces[face.index()].bbox.set(*b);
+        }
         for lp in &s.loops {
             let mut uses: Vec<(EdgeId, bool)> = Vec::with_capacity(lp.len());
             for &(p, fwd) in lp {

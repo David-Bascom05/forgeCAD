@@ -12,7 +12,11 @@ fn main() {
                 dt.as_secs_f64() * 1e3,
                 b.faces.len(),
                 b.edges.len(),
-                forge_topo::check(&b).len()
+                if std::env::var("NO_CHECK").is_ok() {
+                    0
+                } else {
+                    forge_topo::check(&b).len()
+                }
             );
         }
         Err(e) => {

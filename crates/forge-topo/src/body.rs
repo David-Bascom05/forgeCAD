@@ -1,6 +1,6 @@
 use crate::name::Name;
 use forge_geom::{Curve, CurveGeom, Surface, SurfaceGeom};
-use forge_math::{Interval, Point2, Point3, UnitVec3};
+use forge_math::{Box3, Interval, Point2, Point3, UnitVec3};
 
 macro_rules! id_type {
     ($name:ident) => {
@@ -67,6 +67,43 @@ pub struct Face {
     pub loops: Vec<LoopId>,
     pub shell: ShellId,
     pub name: Name,
+    /// A box holding the face, worked out on first use.
+    pub bbox: Cached<Box3>,
+}
+
+/// Data derived from an entity and kept with it so it is worked out once.
+/// It takes no part in equality.
+#[derive(Clone)]
+pub struct Cached<T>(std::sync::OnceLock<T>);
+
+impl<T> Default for Cached<T> {
+    fn default() -> Self {
+        Cached(std::sync::OnceLock::new())
+    }
+}
+
+impl<T> Cached<T> {
+    pub fn get_or_init(&self, f: impl FnOnce() -> T) -> &T {
+        self.0.get_or_init(f)
+    }
+    pub fn get(&self) -> Option<&T> {
+        self.0.get()
+    }
+    pub fn set(&self, v: T) {
+        let _ = self.0.set(v);
+    }
+}
+
+impl<T> PartialEq for Cached<T> {
+    fn eq(&self, _: &Self) -> bool {
+        true
+    }
+}
+
+impl<T> std::fmt::Debug for Cached<T> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str("Cached")
+    }
 }
 
 /// A connected, closed set of faces: the boundary between material and space.
@@ -160,6 +197,7 @@ impl Body {
             loops: Vec::new(),
             shell,
             name,
+            bbox: Cached::default(),
         });
         self.shells[shell.index()].faces.push(id);
         id
@@ -216,6 +254,30 @@ impl Body {
                 edge.curve.eval(t.min(edge.range.hi))
             })
             .collect()
+    }
+
+    /// A box holding face `f`, from its edges alone. A face on a plane,
+    /// cylinder or cone lies in the hull of its boundary (through any point of
+    /// it runs a straight line of the surface that meets the boundary on both
+    /// sides); spheres and tori can bulge past their edges, so their whole
+    /// surface box is added. Cached on the face.
+    pub fn face_box(&self, f: FaceId) -> Box3 {
+        let face = self.face(f);
+        *face.bbox.get_or_init(|| {
+            let mut b = Box3::EMPTY;
+            for &l in &face.loops {
+                for &c in &self.lp(l).coedges {
+                    let edge = self.edge(self.coedge(c).edge);
+                    b = b.hull(&edge.curve.bbox(edge.range));
+                }
+            }
+            match &face.surface {
+                Surface::Sphere(sp) => b = b.hull(&Box3::from_point(sp.frame.origin).grow(sp.radius)),
+                Surface::Torus(t) => b = b.hull(&Box3::from_point(t.frame.origin).grow(t.major + t.minor)),
+                _ => {}
+            }
+            b.grow(forge_math::tol::LINEAR)
+        })
     }
 
     pub fn face_by_name(&self, name: Name) -> Option<FaceId> {
