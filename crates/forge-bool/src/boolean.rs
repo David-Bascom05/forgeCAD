@@ -633,15 +633,10 @@ fn trim(
                 let across = across(body, f, c)?;
                 let hits = match curve_surface(&curve, range, &across) {
                     CurveSurface::Hits(h) => h,
-                    // the curve is this edge, between f and a face on the other face's surface:
-                    // that coplanar contact is the imprinting's job, and the curve adds nothing
-                    // the curve runs along this edge, which borders a face on the other face's
-                    // surface (a coplanar contact the imprinting handles): cut the curve at the
-                    // edge's ends; the stretch along the edge is boundary, not a new edge
-                    CurveSurface::OnSurface
-                        if ssi::surfaces(&across, &bodies[1 - side].face(faces[1 - side]).surface)
-                            == SurfaceSurface::Coincident =>
-                    {
+                    // the curve runs along this edge: cut it at the edge's ends; the stretch along
+                    // the edge is boundary, not a new edge (the faces either side of it meet the
+                    // other body there, and their own pairs decide what happens)
+                    CurveSurface::OnSurface | CurveSurface::Overlap => {
                         for (s, v) in [(edge.range.lo, edge.start), (edge.range.hi, edge.end)] {
                             let p = body.vertex(v).point;
                             let t = curve.closest(p, range);
@@ -656,9 +651,6 @@ fn trim(
                             }
                         }
                         continue;
-                    }
-                    CurveSurface::OnSurface | CurveSurface::Overlap => {
-                        return Err(BoolError::Unsupported("intersection curve runs along an edge"));
                     }
                 };
                 // a curve that touches the boundary without crossing it is not cut there
