@@ -17,7 +17,7 @@ use crate::classify::{Index, Where};
 use crate::ssi;
 use forge_geom::intersect::{Contact, CurveSurface, SurfaceSurface, curve_surface};
 use forge_geom::{Curve, CurveGeom, Plane, Surface, SurfaceGeom};
-use forge_math::{Frame, Interval, Point2, Point3, dmath, tol};
+use forge_math::{Frame, Interval, Point2, Point3, Vec3, dmath, tol};
 use forge_topo::{Body, EdgeId, FaceId, Name, VertexId};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -275,6 +275,27 @@ fn plan(a: &Body, b: &Body, op: Op, feature: u64) -> R<Plan> {
 
     // 3: vertices for the cuts, then edge pieces
     let (cut_vertex, new_points, alias) = place_cuts(&bodies, &cuts)?;
+    // every curve parameter comes from its vertex's final point, so the ends of edges and
+    // new curves land on their vertices (cut points of one vertex differ by up to 10 LINEAR)
+    let key_point = |k: VKey| match k {
+        VKey::Old(sd, v) => bodies[sd].vertex(v).point,
+        VKey::New(i) => new_points[i as usize],
+    };
+    for (c, &k) in cuts.iter_mut().zip(&cut_vertex) {
+        let edge = bodies[c.side].edge(c.edge);
+        c.point = key_point(k);
+        c.s = edge.curve.closest(c.point, edge.range);
+    }
+    for sg in &mut segs {
+        let Some((i0, i1)) = sg.ends else { continue };
+        let w = 1e-3 * sg.range.width();
+        let near = |t: f64, k: VKey| sg.curve.closest(key_point(k), Interval::new(t - w, t + w));
+        let (lo, hi) = (
+            near(sg.range.lo, cut_vertex[i0]),
+            near(sg.range.hi, cut_vertex[i1]),
+        );
+        sg.range = Interval::new(lo, hi);
+    }
     if std::env::var_os("FORGE_DEBUG").is_some() {
         for (i, sg) in segs.iter().enumerate() {
             let ends = sg.ends.map(|(x, y)| (cut_vertex[x], cut_vertex[y]));
@@ -1017,7 +1038,22 @@ fn place_cuts(bodies: &[&Body; 2], cuts: &[Cut]) -> R<Placed> {
         let key = match olds.first() {
             Some(&v) => v,
             None => {
-                points.push(cuts[heads[k]].point);
+                // the cut points of a cluster differ by up to `near`: settle on the point
+                // nearest every edge cut there (alternating projections onto their curves)
+                let members: Vec<&Cut> = (0..cuts.len())
+                    .filter(|&i| cluster[i] == k)
+                    .map(|i| &cuts[i])
+                    .collect();
+                let mut p = cuts[heads[k]].point;
+                for _ in 0..4 {
+                    let mut sum = Vec3::ZERO;
+                    for c in &members {
+                        let edge = bodies[c.side].edge(c.edge);
+                        sum = sum + (edge.curve.eval(edge.curve.closest(p, edge.range)) - Point3::ORIGIN);
+                    }
+                    p = Point3::ORIGIN + sum / members.len() as f64;
+                }
+                points.push(p);
                 VKey::New(points.len() as u32 - 1)
             }
         };
