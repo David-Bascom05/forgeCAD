@@ -3,6 +3,16 @@
 version = 4
 
 [[package]]
+name = "forge-cli"
+version = "0.1.0"
+dependencies = [
+ "forge-math",
+ "forge-mesh",
+ "forge-ops",
+ "forge-topo",
+]
+
+[[package]]
 name = "forge-geom"
 version = "0.1.0"
 dependencies = [
@@ -17,7 +27,10 @@ version = "0.1.0"
 name = "forge-mesh"
 version = "0.1.0"
 dependencies = [
+ "forge-geom",
  "forge-math",
+ "forge-ops",
+ "forge-topo",
 ]
 
 [[package]]
