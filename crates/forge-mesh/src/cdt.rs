@@ -5,7 +5,7 @@
 //! even-odd flood fill across constraint edges. All decisions use the exact
 //! predicates, so the result depends only on the input.
 
-use crate::predicates::{incircle, orient2d};
+use crate::predicates::{certainly_in_circle, orient2d};
 use forge_math::Point2;
 use std::collections::VecDeque;
 
@@ -66,6 +66,12 @@ struct Mesh {
     /// Some triangle using each vertex.
     vtri: Vec<u32>,
     last: u32,
+    /// Per triangle, inside the region; filled once the boundary is in, then
+    /// kept up to date as interior points split triangles (a split inherits it;
+    /// flips never cross constraints, so never mix inside with outside).
+    inside: Vec<bool>,
+    /// Reused work list for legalize, so inserting a point allocates nothing.
+    stack: Vec<(u32, usize)>,
 }
 
 enum Location {
@@ -169,6 +175,10 @@ impl Mesh {
         let t2 = t1 + 1;
         self.tris.push(self.tris[t as usize]);
         self.tris.push(self.tris[t as usize]);
+        if !self.inside.is_empty() {
+            let f = self.inside[t as usize];
+            self.inside.extend([f, f]);
+        }
         self.write(
             t,
             Tri {
@@ -196,7 +206,7 @@ impl Mesh {
         self.relink(nb, t, t1);
         self.relink(nc, t, t2);
         self.last = t;
-        self.legalize(vec![(t, 0), (t1, 0), (t2, 0)]);
+        self.legalize(&[(t, 0), (t1, 0), (t2, 0)]);
     }
 
     fn split_edge(&mut self, t: u32, i: usize, p: u32) {
@@ -214,6 +224,10 @@ impl Mesh {
         let u1 = t1 + 1;
         self.tris.push(tt);
         self.tris.push(tt);
+        if !self.inside.is_empty() {
+            let (ft, fu) = (self.inside[t as usize], self.inside[u as usize]);
+            self.inside.extend([ft, fu]);
+        }
         self.write(
             t,
             Tri {
@@ -249,7 +263,7 @@ impl Mesh {
         self.relink(n_ca, t, t1);
         self.relink(n_bd, u, u1);
         self.last = t;
-        self.legalize(vec![(t, 2), (t1, 1), (u, 2), (u1, 1)]);
+        self.legalize(&[(t, 2), (t1, 1), (u, 2), (u1, 1)]);
     }
 
     /// Flips the edge opposite v[i] of t. Afterwards t = [v[i], a, q] and the
@@ -286,7 +300,10 @@ impl Mesh {
         u
     }
 
-    fn legalize(&mut self, mut stack: Vec<(u32, usize)>) {
+    fn legalize(&mut self, start: &[(u32, usize)]) {
+        let mut stack = std::mem::take(&mut self.stack);
+        stack.clear();
+        stack.extend_from_slice(start);
         while let Some((t, i)) = stack.pop() {
             let tt = self.tris[t as usize];
             let u = tt.n[i];
@@ -298,12 +315,13 @@ impl Mesh {
                 continue;
             };
             let q = uu.v[j];
-            if incircle(self.p(tt.v[0]), self.p(tt.v[1]), self.p(tt.v[2]), self.p(q)) > 0.0 {
+            if certainly_in_circle(self.p(tt.v[0]), self.p(tt.v[1]), self.p(tt.v[2]), self.p(q)) {
                 let u = self.flip(t, i);
                 stack.push((t, 0));
                 stack.push((u, 0));
             }
         }
+        self.stack = stack;
     }
 
     /// A triangle holding the directed edge a -> b, and the index of the vertex opposite it.
@@ -470,7 +488,7 @@ impl Mesh {
                     continue;
                 };
                 let r = uu.v[j];
-                if incircle(self.p(tt.v[0]), self.p(tt.v[1]), self.p(tt.v[2]), self.p(r)) > 0.0 {
+                if certainly_in_circle(self.p(tt.v[0]), self.p(tt.v[1]), self.p(tt.v[2]), self.p(r)) {
                     let o = tt.v[i];
                     self.flip(t, i);
                     *edge = (o, r);
@@ -497,29 +515,48 @@ impl Mesh {
     }
 }
 
-/// Even-odd inside test; None when the point is on (or within `eps` of) a loop edge.
-fn inside_loops(p: Point2, points: &[Point2], loops: &[Vec<u32>], eps: f64) -> Option<bool> {
-    let mut inside = false;
-    for lp in loops {
-        for k in 0..lp.len() {
-            let a = points[lp[k] as usize];
-            let b = points[lp[(k + 1) % lp.len()] as usize];
-            if segment_distance_sq(p, a, b) <= eps * eps {
-                return None;
-            }
-            if (a.y > p.y) != (b.y > p.y) {
-                let o = if a.y < b.y {
-                    orient2d(a, b, p)
-                } else {
-                    orient2d(b, a, p)
-                };
-                if o > 0.0 {
-                    inside = !inside;
-                }
-            }
-        }
+/// Insertion order for incremental Delaunay: a fixed-seed shuffle split into
+/// rounds that double in size, each round sorted along a Z-order curve. The
+/// shuffle keeps the expected flips per insertion constant (points arriving in
+/// order along a line otherwise flip the whole fan each time); the curve keeps
+/// consecutive points close, so the location walk stays short.
+fn brio_order(points: &[Point2], lo: Point2, size: f64) -> Vec<usize> {
+    let n = points.len();
+    let mut order: Vec<usize> = (0..n).collect();
+    let mut rng = forge_math::rng::Rng::new(0x5eed_cd71);
+    for i in (1..n).rev() {
+        order.swap(i, rng.below(i + 1));
     }
-    Some(inside)
+    let scale = 65535.0 / size;
+    let q = |v: f64| (v * scale).clamp(0.0, 65535.0) as u32;
+    let keys: Vec<u64> = points
+        .iter()
+        .map(|p| morton(q(p.x - lo.x), q(p.y - lo.y)))
+        .collect();
+    let mut start = 0;
+    let mut round = 16usize;
+    while start < n {
+        let end = (start + round).min(n);
+        // the last round takes everything left so rounds keep doubling
+        let end = if n - end < round { n } else { end };
+        order[start..end].sort_unstable_by_key(|&i| (keys[i], i));
+        start = end;
+        round *= 2;
+    }
+    order
+}
+
+/// Position along a Z-order (Morton) curve: the bits of x and y interleaved.
+#[inline]
+fn morton(x: u32, y: u32) -> u64 {
+    fn spread(v: u32) -> u64 {
+        let mut v = u64::from(v & 0xffff);
+        v = (v | (v << 8)) & 0x00ff_00ff;
+        v = (v | (v << 4)) & 0x0f0f_0f0f;
+        v = (v | (v << 2)) & 0x3333_3333;
+        (v | (v << 1)) & 0x5555_5555
+    }
+    spread(x) | (spread(y) << 1)
 }
 
 fn segment_distance_sq(p: Point2, a: Point2, b: Point2) -> f64 {
@@ -580,7 +617,6 @@ pub fn triangulate(
         .copied()
         .filter(|p| p.x.is_finite() && p.y.is_finite())
         .filter(|&p| p.x >= lo.x && p.x <= hi.x && p.y >= lo.y && p.y <= hi.y)
-        .filter(|&p| inside_loops(p, points, loops, eps) == Some(true))
         .collect();
 
     let mut pts = Vec::with_capacity(SUPER as usize + points.len() + kept.len());
@@ -596,13 +632,16 @@ pub fn triangulate(
         }],
         vtri: vec![0; 3],
         last: 0,
+        inside: Vec::new(),
+        stack: Vec::new(),
     };
     let ext = |v: u32| v.wrapping_sub(SUPER);
 
-    for (i, &p) in points.iter().enumerate() {
-        let v = mesh.pts.len() as u32;
-        mesh.pts.push(p);
-        mesh.vtri.push(0);
+    mesh.pts.extend_from_slice(points);
+    mesh.vtri.resize(mesh.pts.len(), 0);
+    for i in brio_order(points, lo, size) {
+        let p = points[i];
+        let v = SUPER + i as u32;
         match mesh
             .locate(p)
             .ok_or(CdtError::Internal("point location failed"))?
@@ -616,29 +655,6 @@ pub fn triangulate(
             loc => mesh.insert(v, loc),
         }
     }
-    for &p in &kept {
-        let loc = mesh
-            .locate(p)
-            .ok_or(CdtError::Internal("point location failed"))?;
-        let near = |w: u32, mesh: &Mesh| (mesh.p(w) - p).length_sq() <= eps * eps;
-        let skip = match &loc {
-            Location::Vertex(_) => true,
-            Location::Inside(t) => mesh.tris[*t as usize].v.iter().any(|&w| near(w, &mesh)),
-            Location::OnEdge(t, i) => {
-                let tt = mesh.tris[*t as usize];
-                let far = mesh.tris[tt.n[*i] as usize].v;
-                tt.v.iter().chain(far.iter()).any(|&w| near(w, &mesh))
-            }
-        };
-        if skip {
-            continue;
-        }
-        let v = mesh.pts.len() as u32;
-        mesh.pts.push(p);
-        mesh.vtri.push(0);
-        mesh.insert(v, loc);
-    }
-
     for lp in loops {
         for k in 0..lp.len() {
             let a = lp[k] + SUPER;
@@ -665,12 +681,56 @@ pub fn triangulate(
             queue.push_back(u);
         }
     }
+    mesh.inside = parity.iter().map(|p| *p == Some(true)).collect();
+
+    // interior points go in only where they land inside, clear of the boundary
+    let kept: Vec<Point2> = brio_order(&kept, lo, size).into_iter().map(|i| kept[i]).collect();
+    for &p in &kept {
+        let loc = mesh
+            .locate(p)
+            .ok_or(CdtError::Internal("point location failed"))?;
+        let near = |w: u32, mesh: &Mesh| (mesh.p(w) - p).length_sq() <= eps * eps;
+        let near_constraint = |t: u32, mesh: &Mesh| {
+            let tt = mesh.tris[t as usize];
+            (0..3).any(|i| {
+                tt.c[i] && segment_distance_sq(p, mesh.p(tt.v[nx(i)]), mesh.p(tt.v[pv(i)])) <= eps * eps
+            })
+        };
+        let skip = match &loc {
+            Location::Vertex(_) => true,
+            Location::Inside(t) => {
+                !mesh.inside[*t as usize]
+                    || near_constraint(*t, &mesh)
+                    || mesh.tris[*t as usize].v.iter().any(|&w| near(w, &mesh))
+            }
+            Location::OnEdge(t, i) => {
+                let tt = mesh.tris[*t as usize];
+                let u = tt.n[*i];
+                tt.c[*i]
+                    || !mesh.inside[*t as usize]
+                    || near_constraint(*t, &mesh)
+                    || near_constraint(u, &mesh)
+                    || tt
+                        .v
+                        .iter()
+                        .chain(mesh.tris[u as usize].v.iter())
+                        .any(|&w| near(w, &mesh))
+            }
+        };
+        if skip {
+            continue;
+        }
+        let v = mesh.pts.len() as u32;
+        mesh.pts.push(p);
+        mesh.vtri.push(0);
+        mesh.insert(v, loc);
+    }
 
     let triangles = mesh
         .tris
         .iter()
-        .zip(&parity)
-        .filter(|(t, p)| **p == Some(true) && t.v.iter().all(|&v| v >= SUPER))
+        .zip(&mesh.inside)
+        .filter(|(t, inside)| **inside && t.v.iter().all(|&v| v >= SUPER))
         .map(|(t, _)| t.v.map(|v| v - SUPER))
         .collect();
     Ok(Triangulation {
@@ -746,13 +806,14 @@ mod tests {
             }
             let t = tr.triangles[ti];
             let far = *tr.triangles[tj].iter().find(|&&v| v != a && v != b).unwrap();
-            let ic = incircle(
+            // Delaunay up to cases the filter cannot decide (near-cocircular)
+            let inside = certainly_in_circle(
                 p[t[0] as usize],
                 p[t[1] as usize],
                 p[t[2] as usize],
                 p[far as usize],
             );
-            assert!(ic <= 0.0, "edge {a}-{b} not Delaunay");
+            assert!(!inside, "edge {a}-{b} not Delaunay");
         }
         let mut used = vec![false; p.len()];
         for t in &tr.triangles {

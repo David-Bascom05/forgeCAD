@@ -10,6 +10,10 @@ const EPS: f64 = f64::EPSILON * 0.5;
 const SPLITTER: f64 = 134_217_729.0; // 2^27 + 1
 const CCW_BOUND: f64 = (3.0 + 16.0 * EPS) * EPS;
 const ICC_BOUND: f64 = (10.0 + 96.0 * EPS) * EPS;
+// Shewchuk's stage-B bounds: the determinant of the rounded differences,
+// computed exactly, has the right sign when it is at least this times the permanent.
+const CCW_BOUND_B: f64 = (2.0 + 12.0 * EPS) * EPS;
+const ICC_BOUND_B: f64 = (4.0 + 48.0 * EPS) * EPS;
 
 fn two_sum(a: f64, b: f64) -> (f64, f64) {
     let x = a + b;
@@ -39,80 +43,6 @@ fn two_product(a: f64, b: f64) -> (f64, f64) {
     (x, alo * blo - err)
 }
 
-/// Sum of two nonoverlapping expansions (components in increasing magnitude),
-/// zero components removed.
-fn expansion_sum(e: &[f64], f: &[f64]) -> Vec<f64> {
-    let mut h = Vec::with_capacity(e.len() + f.len());
-    let (mut ei, mut fi) = (0, 0);
-    let next = |ei: &mut usize, fi: &mut usize| {
-        if *fi >= f.len() || (*ei < e.len() && e[*ei].abs() < f[*fi].abs()) {
-            *ei += 1;
-            e[*ei - 1]
-        } else {
-            *fi += 1;
-            f[*fi - 1]
-        }
-    };
-    if e.is_empty() && f.is_empty() {
-        return h;
-    }
-    let mut q = next(&mut ei, &mut fi);
-    while ei < e.len() || fi < f.len() {
-        let n = next(&mut ei, &mut fi);
-        let (s, err) = two_sum(q, n);
-        if err != 0.0 {
-            h.push(err);
-        }
-        q = s;
-    }
-    if q != 0.0 || h.is_empty() {
-        h.push(q);
-    }
-    h
-}
-
-fn scale_expansion(e: &[f64], b: f64) -> Vec<f64> {
-    let mut h = Vec::with_capacity(2 * e.len());
-    let Some((&first, rest)) = e.split_first() else {
-        return h;
-    };
-    let (mut q, lo) = two_product(first, b);
-    if lo != 0.0 {
-        h.push(lo);
-    }
-    for &ei in rest {
-        let (p1, p0) = two_product(ei, b);
-        let (s, err) = two_sum(q, p0);
-        if err != 0.0 {
-            h.push(err);
-        }
-        let (s2, err2) = two_sum(p1, s);
-        if err2 != 0.0 {
-            h.push(err2);
-        }
-        q = s2;
-    }
-    if q != 0.0 || h.is_empty() {
-        h.push(q);
-    }
-    h
-}
-
-fn mul(e: &[f64], f: &[f64]) -> Vec<f64> {
-    f.iter().fold(Vec::new(), |acc, &fi| {
-        expansion_sum(&acc, &scale_expansion(e, fi))
-    })
-}
-
-fn neg(e: &[f64]) -> Vec<f64> {
-    e.iter().map(|x| -x).collect()
-}
-
-fn diff(a: f64, b: f64) -> Vec<f64> {
-    let (x, y) = two_diff(a, b);
-    expansion_sum(&[y], &[x])
-}
-
 /// The sign of an expansion is the sign of its largest component.
 fn estimate(e: &[f64]) -> f64 {
     let top = e.last().copied().unwrap_or(0.0);
@@ -124,22 +54,183 @@ fn estimate(e: &[f64]) -> f64 {
     }
 }
 
+/// `e + f` into `h`, both inputs nonoverlapping and in increasing magnitude;
+/// zero components dropped. Returns the length used. No allocation.
+fn sum_into(e: &[f64], f: &[f64], h: &mut [f64]) -> usize {
+    let (mut ei, mut fi, mut n) = (0, 0, 0);
+    let mut next = || {
+        if fi >= f.len() || (ei < e.len() && e[ei].abs() < f[fi].abs()) {
+            ei += 1;
+            e[ei - 1]
+        } else {
+            fi += 1;
+            f[fi - 1]
+        }
+    };
+    let total = e.len() + f.len();
+    if total == 0 {
+        return 0;
+    }
+    let mut q = next();
+    for _ in 1..total {
+        let (s, err) = two_sum(q, next());
+        if err != 0.0 {
+            h[n] = err;
+            n += 1;
+        }
+        q = s;
+    }
+    if q != 0.0 || n == 0 {
+        h[n] = q;
+        n += 1;
+    }
+    n
+}
+
+/// `e * b` into `h` (needs 2 * e.len() slots). No allocation.
+fn scale_into(e: &[f64], b: f64, h: &mut [f64]) -> usize {
+    let Some((&first, rest)) = e.split_first() else {
+        return 0;
+    };
+    let mut n = 0;
+    let (mut q, lo) = two_product(first, b);
+    if lo != 0.0 {
+        h[n] = lo;
+        n += 1;
+    }
+    for &ei in rest {
+        let (p1, p0) = two_product(ei, b);
+        let (s, err) = two_sum(q, p0);
+        if err != 0.0 {
+            h[n] = err;
+            n += 1;
+        }
+        let (s2, err2) = two_sum(p1, s);
+        if err2 != 0.0 {
+            h[n] = err2;
+            n += 1;
+        }
+        q = s2;
+    }
+    if q != 0.0 || n == 0 {
+        h[n] = q;
+        n += 1;
+    }
+    n
+}
+
+/// a*d - b*c exactly, as up to four components.
+fn cross_exact(a: f64, d: f64, b: f64, c: f64, h: &mut [f64; 4]) -> usize {
+    let (x1, y1) = two_product(a, d);
+    let (x2, y2) = two_product(b, c);
+    sum_into(&[y1, x1], &[-y2, -x2], h)
+}
+
+fn exact_diffs<const N: usize>(pairs: [(f64, f64); N]) -> Option<[f64; N]> {
+    let mut out = [0.0; N];
+    for (o, (a, b)) in out.iter_mut().zip(pairs) {
+        let (x, tail) = two_diff(a, b);
+        if tail != 0.0 {
+            return None;
+        }
+        *o = x;
+    }
+    Some(out)
+}
+
 /// Positive if a, b, c run counter-clockwise, negative if clockwise, zero if collinear.
 pub fn orient2d(a: Point2, b: Point2, c: Point2) -> f64 {
     let left = (a.x - c.x) * (b.y - c.y);
     let right = (a.y - c.y) * (b.x - c.x);
     let det = left - right;
-    let bound = CCW_BOUND * (left.abs() + right.abs());
+    let detsum = left.abs() + right.abs();
+    let bound = CCW_BOUND * detsum;
     if det > bound || -det > bound {
+        return det;
+    }
+    orient2d_adapt(a, b, c, detsum)
+}
+
+fn orient2d_adapt(a: Point2, b: Point2, c: Point2, detsum: f64) -> f64 {
+    let (acx, acy, bcx, bcy) = (a.x - c.x, a.y - c.y, b.x - c.x, b.y - c.y);
+    let mut h = [0.0; 4];
+    let n = cross_exact(acx, bcy, acy, bcx, &mut h);
+    let det = estimate(&h[..n]);
+    if det >= CCW_BOUND_B * detsum || -det >= CCW_BOUND_B * detsum {
         return det;
     }
     orient2d_exact(a, b, c)
 }
 
 fn orient2d_exact(a: Point2, b: Point2, c: Point2) -> f64 {
-    let (acx, acy) = (diff(a.x, c.x), diff(a.y, c.y));
-    let (bcx, bcy) = (diff(b.x, c.x), diff(b.y, c.y));
-    estimate(&expansion_sum(&mul(&acx, &bcy), &neg(&mul(&acy, &bcx))))
+    // usual case: the coordinate differences are exact, so four components suffice
+    if let Some([acx, acy, bcx, bcy]) = exact_diffs([(a.x, c.x), (a.y, c.y), (b.x, c.x), (b.y, c.y)]) {
+        let mut h = [0.0; 4];
+        let n = cross_exact(acx, bcy, acy, bcx, &mut h);
+        return estimate(&h[..n]);
+    }
+    let (acx, acy) = (diff2(a.x, c.x), diff2(a.y, c.y));
+    let (bcx, bcy) = (diff2(b.x, c.x), diff2(b.y, c.y));
+    let mut h = [0.0; 16];
+    let n = cross2(&acx, &bcy, &acy, &bcx, &mut h);
+    estimate(&h[..n])
+}
+
+/// a - b as a two-component expansion (zero tail dropped).
+fn diff2(a: f64, b: f64) -> ([f64; 2], usize) {
+    let (x, y) = two_diff(a, b);
+    if y == 0.0 { ([x, 0.0], 1) } else { ([y, x], 2) }
+}
+
+fn mul_small(e: &[f64], f: &[f64], h: &mut [f64; 8]) -> usize {
+    let (mut p, mut q) = ([0.0; 4], [0.0; 4]);
+    let np = scale_into(e, f[0], &mut p);
+    if f.len() == 1 {
+        h[..np].copy_from_slice(&p[..np]);
+        return np;
+    }
+    let nq = scale_into(e, f[1], &mut q);
+    sum_into(&p[..np], &q[..nq], h)
+}
+
+/// x1 * y2 - x2 * y1 for two-component inputs: at most 16 components.
+fn cross2(
+    x1: &([f64; 2], usize),
+    y2: &([f64; 2], usize),
+    x2: &([f64; 2], usize),
+    y1: &([f64; 2], usize),
+    h: &mut [f64; 16],
+) -> usize {
+    let (mut p, mut q) = ([0.0; 8], [0.0; 8]);
+    let np = mul_small(&x1.0[..x1.1], &y2.0[..y2.1], &mut p);
+    let nq = mul_small(&x2.0[..x2.1], &y1.0[..y1.1], &mut q);
+    for v in &mut q[..nq] {
+        *v = -*v;
+    }
+    sum_into(&p[..np], &q[..nq], h)
+}
+
+/// True only when d is certainly strictly inside the circle through a, b, c
+/// (counter-clockwise). Undecided cases, including exactly cocircular points
+/// such as samples of one arc, answer false. For Delaunay flips this is
+/// enough: flipping only on certainty still terminates, and leaving a
+/// near-cocircular edge unflipped changes triangle shape, never validity.
+#[inline]
+pub fn certainly_in_circle(a: Point2, b: Point2, c: Point2, d: Point2) -> bool {
+    let (adx, ady) = (a.x - d.x, a.y - d.y);
+    let (bdx, bdy) = (b.x - d.x, b.y - d.y);
+    let (cdx, cdy) = (c.x - d.x, c.y - d.y);
+    let (bdxcdy, cdxbdy) = (bdx * cdy, cdx * bdy);
+    let (cdxady, adxcdy) = (cdx * ady, adx * cdy);
+    let (adxbdy, bdxady) = (adx * bdy, bdx * ady);
+    let alift = adx * adx + ady * ady;
+    let blift = bdx * bdx + bdy * bdy;
+    let clift = cdx * cdx + cdy * cdy;
+    let det = alift * (bdxcdy - cdxbdy) + blift * (cdxady - adxcdy) + clift * (adxbdy - bdxady);
+    let permanent = (bdxcdy.abs() + cdxbdy.abs()) * alift
+        + (cdxady.abs() + adxcdy.abs()) * blift
+        + (adxbdy.abs() + bdxady.abs()) * clift;
+    det > ICC_BOUND * permanent
 }
 
 /// Positive if d lies inside the circle through a, b, c (taken counter-clockwise),
@@ -162,20 +253,96 @@ pub fn incircle(a: Point2, b: Point2, c: Point2, d: Point2) -> f64 {
     if det > bound || -det > bound {
         return det;
     }
+    // stage B: exact for the rounded differences; their rounding is within the bound
+    let det = incircle_exact_diffs([adx, ady, bdx, bdy, cdx, cdy]);
+    let exact = [
+        (a.x, d.x),
+        (a.y, d.y),
+        (b.x, d.x),
+        (b.y, d.y),
+        (c.x, d.x),
+        (c.y, d.y),
+    ]
+    .iter()
+    .all(|&(p, q)| two_diff(p, q).1 == 0.0);
+    if exact || det >= ICC_BOUND_B * permanent || -det >= ICC_BOUND_B * permanent {
+        return det;
+    }
     incircle_exact(a, b, c, d)
 }
 
 fn incircle_exact(a: Point2, b: Point2, c: Point2, d: Point2) -> f64 {
-    let (adx, ady) = (diff(a.x, d.x), diff(a.y, d.y));
-    let (bdx, bdy) = (diff(b.x, d.x), diff(b.y, d.y));
-    let (cdx, cdy) = (diff(c.x, d.x), diff(c.y, d.y));
-    let lift = |x: &[f64], y: &[f64]| expansion_sum(&mul(x, x), &mul(y, y));
-    let cross =
-        |x1: &[f64], y1: &[f64], x2: &[f64], y2: &[f64]| expansion_sum(&mul(x1, y2), &neg(&mul(x2, y1)));
-    let ta = mul(&lift(&adx, &ady), &cross(&bdx, &bdy, &cdx, &cdy));
-    let tb = mul(&lift(&bdx, &bdy), &cross(&cdx, &cdy, &adx, &ady));
-    let tc = mul(&lift(&cdx, &cdy), &cross(&adx, &ady, &bdx, &bdy));
-    estimate(&expansion_sum(&expansion_sum(&ta, &tb), &tc))
+    if let Some(dx) = exact_diffs([
+        (a.x, d.x),
+        (a.y, d.y),
+        (b.x, d.x),
+        (b.y, d.y),
+        (c.x, d.x),
+        (c.y, d.y),
+    ]) {
+        return incircle_exact_diffs(dx);
+    }
+    incircle_exact_general(a, b, c, d)
+}
+
+/// The full determinant from exact differences, on the stack (at most 96 components).
+fn incircle_exact_diffs([adx, ady, bdx, bdy, cdx, cdy]: [f64; 6]) -> f64 {
+    let term = |x: f64, y: f64, cr: &[f64], out: &mut [f64; 32]| -> usize {
+        let (mut t8, mut t16a, mut t16b) = ([0.0; 8], [0.0; 16], [0.0; 16]);
+        let n8 = scale_into(cr, x, &mut t8);
+        let na = scale_into(&t8[..n8], x, &mut t16a);
+        let n8 = scale_into(cr, y, &mut t8);
+        let nb = scale_into(&t8[..n8], y, &mut t16b);
+        sum_into(&t16a[..na], &t16b[..nb], out)
+    };
+    let (mut bc, mut ca, mut ab) = ([0.0; 4], [0.0; 4], [0.0; 4]);
+    let nbc = cross_exact(bdx, cdy, cdx, bdy, &mut bc);
+    let nca = cross_exact(cdx, ady, adx, cdy, &mut ca);
+    let nab = cross_exact(adx, bdy, bdx, ady, &mut ab);
+    let (mut ta, mut tb, mut tc) = ([0.0; 32], [0.0; 32], [0.0; 32]);
+    let na = term(adx, ady, &bc[..nbc], &mut ta);
+    let nb = term(bdx, bdy, &ca[..nca], &mut tb);
+    let nc = term(cdx, cdy, &ab[..nab], &mut tc);
+    let mut tab = [0.0; 64];
+    let nab2 = sum_into(&ta[..na], &tb[..nb], &mut tab);
+    let mut fin = [0.0; 96];
+    let n = sum_into(&tab[..nab2], &tc[..nc], &mut fin);
+    estimate(&fin[..n])
+}
+
+fn incircle_exact_general(a: Point2, b: Point2, c: Point2, d: Point2) -> f64 {
+    let (adx, ady) = (diff2(a.x, d.x), diff2(a.y, d.y));
+    let (bdx, bdy) = (diff2(b.x, d.x), diff2(b.y, d.y));
+    let (cdx, cdy) = (diff2(c.x, d.x), diff2(c.y, d.y));
+    // lift (16) times cross (16): at most 512 components per term
+    let term = |x: &([f64; 2], usize), y: &([f64; 2], usize), cr: &[f64], out: &mut [f64; 512]| -> usize {
+        let (mut xx, mut yy, mut lift) = ([0.0; 8], [0.0; 8], [0.0; 16]);
+        let nx = mul_small(&x.0[..x.1], &x.0[..x.1], &mut xx);
+        let ny = mul_small(&y.0[..y.1], &y.0[..y.1], &mut yy);
+        let nl = sum_into(&xx[..nx], &yy[..ny], &mut lift);
+        let mut acc = [0.0; 512];
+        let mut na = 0;
+        let mut part = [0.0; 32];
+        for &c in cr {
+            let np = scale_into(&lift[..nl], c, &mut part);
+            na = sum_into(&acc[..na], &part[..np], out);
+            acc[..na].copy_from_slice(&out[..na]);
+        }
+        na
+    };
+    let (mut bc, mut ca, mut ab) = ([0.0; 16], [0.0; 16], [0.0; 16]);
+    let nbc = cross2(&bdx, &cdy, &cdx, &bdy, &mut bc);
+    let nca = cross2(&cdx, &ady, &adx, &cdy, &mut ca);
+    let nab = cross2(&adx, &bdy, &bdx, &ady, &mut ab);
+    let (mut ta, mut tb, mut tc) = ([0.0; 512], [0.0; 512], [0.0; 512]);
+    let na = term(&adx, &ady, &bc[..nbc], &mut ta);
+    let nb = term(&bdx, &bdy, &ca[..nca], &mut tb);
+    let nc = term(&cdx, &cdy, &ab[..nab], &mut tc);
+    let mut tab = [0.0; 1024];
+    let nab2 = sum_into(&ta[..na], &tb[..nb], &mut tab);
+    let mut fin = [0.0; 1536];
+    let n = sum_into(&tab[..nab2], &tc[..nc], &mut fin);
+    estimate(&fin[..n])
 }
 
 #[cfg(test)]
@@ -304,5 +471,188 @@ mod tests {
         assert_eq!(incircle(sq[0], sq[1], sq[2], sq[3]), 0.0);
         let inside = Point2::new(0.0, 1.0f64.next_down());
         assert!(incircle(sq[0], sq[1], sq[2], inside) > 0.0);
+    }
+
+    #[test]
+    fn stack_path_matches_general_path() {
+        let mut r = Rng::new(77);
+        let sign = |v: f64| (v > 0.0) as i32 - (v < 0.0) as i32;
+        for _ in 0..20_000 {
+            // near-cocircular: points on a circle, rounded, with tiny nudges
+            let c = Point2::new(r.range(-10.0, 10.0), r.range(-10.0, 10.0));
+            let rad = r.range(0.1, 10.0);
+            let p: Vec<Point2> = (0..4)
+                .map(|_| {
+                    let a = r.range(0.0, forge_math::dmath::TAU);
+                    let q = crate::predicates::tests::on_circle(c, rad, a);
+                    if r.bool() {
+                        Point2::new(q.x.next_up(), q.y)
+                    } else {
+                        q
+                    }
+                })
+                .collect();
+            let dx = [
+                p[0].x - p[3].x,
+                p[0].y - p[3].y,
+                p[1].x - p[3].x,
+                p[1].y - p[3].y,
+                p[2].x - p[3].x,
+                p[2].y - p[3].y,
+            ];
+            if exact_diffs([
+                (p[0].x, p[3].x),
+                (p[0].y, p[3].y),
+                (p[1].x, p[3].x),
+                (p[1].y, p[3].y),
+                (p[2].x, p[3].x),
+                (p[2].y, p[3].y),
+            ])
+            .is_some()
+            {
+                assert_eq!(
+                    sign(incircle_exact_diffs(dx)),
+                    sign(incircle_exact_general(p[0], p[1], p[2], p[3]))
+                );
+            }
+        }
+    }
+
+    fn on_circle(c: Point2, r: f64, a: f64) -> Point2 {
+        let (s, co) = forge_math::dmath::sin_cos(a);
+        Point2::new(c.x + r * co, c.y + r * s)
+    }
+
+    mod reference {
+        //! The original allocating expansion code, kept as an independent check.
+        use super::super::{estimate, two_diff, two_product, two_sum};
+        use forge_math::Point2;
+
+        /// Sum of two nonoverlapping expansions (components in increasing magnitude),
+        /// zero components removed.
+        fn expansion_sum(e: &[f64], f: &[f64]) -> Vec<f64> {
+            let mut h = Vec::with_capacity(e.len() + f.len());
+            let (mut ei, mut fi) = (0, 0);
+            let next = |ei: &mut usize, fi: &mut usize| {
+                if *fi >= f.len() || (*ei < e.len() && e[*ei].abs() < f[*fi].abs()) {
+                    *ei += 1;
+                    e[*ei - 1]
+                } else {
+                    *fi += 1;
+                    f[*fi - 1]
+                }
+            };
+            if e.is_empty() && f.is_empty() {
+                return h;
+            }
+            let mut q = next(&mut ei, &mut fi);
+            while ei < e.len() || fi < f.len() {
+                let n = next(&mut ei, &mut fi);
+                let (s, err) = two_sum(q, n);
+                if err != 0.0 {
+                    h.push(err);
+                }
+                q = s;
+            }
+            if q != 0.0 || h.is_empty() {
+                h.push(q);
+            }
+            h
+        }
+
+        fn scale_expansion(e: &[f64], b: f64) -> Vec<f64> {
+            let mut h = Vec::with_capacity(2 * e.len());
+            let Some((&first, rest)) = e.split_first() else {
+                return h;
+            };
+            let (mut q, lo) = two_product(first, b);
+            if lo != 0.0 {
+                h.push(lo);
+            }
+            for &ei in rest {
+                let (p1, p0) = two_product(ei, b);
+                let (s, err) = two_sum(q, p0);
+                if err != 0.0 {
+                    h.push(err);
+                }
+                let (s2, err2) = two_sum(p1, s);
+                if err2 != 0.0 {
+                    h.push(err2);
+                }
+                q = s2;
+            }
+            if q != 0.0 || h.is_empty() {
+                h.push(q);
+            }
+            h
+        }
+
+        fn mul(e: &[f64], f: &[f64]) -> Vec<f64> {
+            f.iter().fold(Vec::new(), |acc, &fi| {
+                expansion_sum(&acc, &scale_expansion(e, fi))
+            })
+        }
+
+        fn neg(e: &[f64]) -> Vec<f64> {
+            e.iter().map(|x| -x).collect()
+        }
+
+        fn diff(a: f64, b: f64) -> Vec<f64> {
+            let (x, y) = two_diff(a, b);
+            expansion_sum(&[y], &[x])
+        }
+
+        pub fn orient2d_exact(a: Point2, b: Point2, c: Point2) -> f64 {
+            let (acx, acy) = (diff(a.x, c.x), diff(a.y, c.y));
+            let (bcx, bcy) = (diff(b.x, c.x), diff(b.y, c.y));
+            estimate(&expansion_sum(&mul(&acx, &bcy), &neg(&mul(&acy, &bcx))))
+        }
+
+        pub fn incircle_exact(a: Point2, b: Point2, c: Point2, d: Point2) -> f64 {
+            let (adx, ady) = (diff(a.x, d.x), diff(a.y, d.y));
+            let (bdx, bdy) = (diff(b.x, d.x), diff(b.y, d.y));
+            let (cdx, cdy) = (diff(c.x, d.x), diff(c.y, d.y));
+            let lift = |x: &[f64], y: &[f64]| expansion_sum(&mul(x, x), &mul(y, y));
+            let cross = |x1: &[f64], y1: &[f64], x2: &[f64], y2: &[f64]| {
+                expansion_sum(&mul(x1, y2), &neg(&mul(x2, y1)))
+            };
+            let ta = mul(&lift(&adx, &ady), &cross(&bdx, &bdy, &cdx, &cdy));
+            let tb = mul(&lift(&bdx, &bdy), &cross(&cdx, &cdy, &adx, &ady));
+            let tc = mul(&lift(&cdx, &cdy), &cross(&adx, &ady, &bdx, &bdy));
+            estimate(&expansion_sum(&expansion_sum(&ta, &tb), &tc))
+        }
+    }
+
+    #[test]
+    fn inexact_differences_match_reference() {
+        let mut r = Rng::new(78);
+        let sign = |v: f64| (v > 0.0) as i32 - (v < 0.0) as i32;
+        for _ in 0..20_000 {
+            // coordinates of very different magnitude so differences round, near-degenerate by construction
+            let base = Point2::new(r.range(-1e6, 1e6), r.range(-1e6, 1e6));
+            let rad = r.range(1e-3, 10.0);
+            let p: Vec<Point2> = (0..4)
+                .map(|_| {
+                    let q = on_circle(base, rad, r.range(0.0, forge_math::dmath::TAU));
+                    Point2::new(q.x + r.range(-1e-12, 1e-12), q.y)
+                })
+                .collect();
+            assert_eq!(
+                sign(incircle_exact_general(p[0], p[1], p[2], p[3])),
+                sign(reference::incircle_exact(p[0], p[1], p[2], p[3]))
+            );
+            assert_eq!(
+                sign(incircle(p[0], p[1], p[2], p[3])),
+                sign(reference::incircle_exact(p[0], p[1], p[2], p[3]))
+            );
+            let l = Point2::new(
+                p[0].x + (p[1].x - p[0].x) * 0.37,
+                p[0].y + (p[1].y - p[0].y) * 0.37,
+            );
+            assert_eq!(
+                sign(orient2d(p[0], p[1], l)),
+                sign(reference::orient2d_exact(p[0], p[1], l))
+            );
+        }
     }
 }

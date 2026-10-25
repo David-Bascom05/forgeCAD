@@ -36,40 +36,111 @@ pub struct Analysis {
     pub conflicting: Vec<ConstraintId>,
 }
 
-/// Stacked residuals of all constraints, their Jacobian (row-major m x n) and
-/// which constraint each row came from (None for an arc's own row).
+/// Stacked residuals of all constraints, their sparse Jacobian rows
+/// (parameter, derivative) and which constraint each row came from (None for
+/// an arc's own row).
 struct System {
     r: Vec<f64>,
-    j: Vec<f64>,
+    rows: Vec<Vec<(usize, f64)>>,
     origin: Vec<Option<ConstraintId>>,
+    /// What made each row, so a group can rebuild only its own rows.
+    source: Vec<Source>,
+}
+
+#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+enum Source {
+    /// Index into the sketch's entities (an arc's equal-radius row).
+    Arc(usize),
+    /// Index into the sketch's constraints.
+    Constraint(usize),
+}
+
+impl System {
+    fn dense(&self, n: usize) -> Vec<f64> {
+        let mut j = vec![0.0; self.r.len() * n];
+        for (i, row) in self.rows.iter().enumerate() {
+            for &(v, g) in row {
+                j[i * n + v] += g;
+            }
+        }
+        j
+    }
+}
+
+/// Groups of parameters linked through some constraint. Each group can be
+/// solved on its own, which keeps the dense solves small: a sketch of many
+/// separate features costs the sum of its parts, not the cube of its size.
+fn components(rows: &[Vec<(usize, f64)>], n: usize) -> Vec<Vec<usize>> {
+    let mut parent: Vec<usize> = (0..n).collect();
+    fn find(p: &mut [usize], mut i: usize) -> usize {
+        while p[i] != i {
+            p[i] = p[p[i]];
+            i = p[i];
+        }
+        i
+    }
+    let mut used = vec![false; n];
+    for row in rows {
+        let Some(&(first, _)) = row.first() else { continue };
+        used[first] = true;
+        for &(v, _) in &row[1..] {
+            used[v] = true;
+            let (a, b) = (find(&mut parent, first), find(&mut parent, v));
+            if a != b {
+                parent[a.max(b)] = a.min(b);
+            }
+        }
+    }
+    let mut groups: Vec<Vec<usize>> = Vec::new();
+    let mut slot = vec![usize::MAX; n];
+    for (v, _) in used.iter().enumerate().filter(|(_, u)| **u) {
+        let root = find(&mut parent, v);
+        if slot[root] == usize::MAX {
+            slot[root] = groups.len();
+            groups.push(Vec::new());
+        }
+        groups[slot[root]].push(v);
+    }
+    groups
 }
 
 impl Sketch {
     fn system(&self, x: &[f64]) -> System {
-        let n = x.len();
+        let all: Vec<Source> = (0..self.entities.len())
+            .map(Source::Arc)
+            .chain((0..self.constraints.len()).map(Source::Constraint))
+            .collect();
+        self.system_of(x, &all)
+    }
+
+    fn system_of(&self, x: &[f64], sources: &[Source]) -> System {
         let mut s = System {
             r: Vec::new(),
-            j: Vec::new(),
+            rows: Vec::new(),
             origin: Vec::new(),
+            source: Vec::new(),
         };
-        let mut push = |vars: &[usize], d: crate::dual::D, origin: Option<ConstraintId>| {
-            let mut row = vec![0.0; n];
-            for (k, &v) in vars.iter().enumerate() {
-                row[v] += d.g[k];
-            }
+        let mut push = |vars: &[usize], d: crate::dual::D, origin: Option<ConstraintId>, src: Source| {
+            let row: Vec<(usize, f64)> = vars.iter().enumerate().map(|(k, &v)| (v, d.g[k])).collect();
             s.r.push(d.v);
-            s.j.extend(row);
+            s.rows.push(row);
             s.origin.push(origin);
+            s.source.push(src);
         };
-        for e in &self.entities {
-            if let Some((loc, d)) = self.arc_residual(e.id, x) {
-                push(&loc.vars[..loc.n], d, None);
-            }
-        }
-        for rec in &self.constraints {
-            let (loc, rows) = self.residuals(rec, x);
-            for d in rows {
-                push(&loc.vars[..loc.n], d, Some(rec.id));
+        for &src in sources {
+            match src {
+                Source::Arc(i) => {
+                    if let Some((loc, d)) = self.arc_residual(self.entities[i].id, x) {
+                        push(&loc.vars[..loc.n], d, None, src);
+                    }
+                }
+                Source::Constraint(i) => {
+                    let rec = &self.constraints[i];
+                    let (loc, rows) = self.residuals(rec, x);
+                    for d in rows {
+                        push(&loc.vars[..loc.n], d, Some(rec.id), src);
+                    }
+                }
             }
         }
         s
@@ -115,36 +186,85 @@ impl Sketch {
     /// free geometry stays put.
     fn solve_weighted(&mut self, w: &[f64]) -> SolveReport {
         let n = self.params.len();
+        let max_abs = |r: &[f64]| r.iter().fold(0.0f64, |m, v| m.max(v.abs()));
+        let full = self.system(&self.params);
+        let groups = components(&full.rows, n);
+        let mut iterations = 0;
+        for g in &groups {
+            let mut sources: Vec<Source> = (0..full.r.len())
+                .filter(|&i| {
+                    full.rows[i]
+                        .first()
+                        .is_some_and(|&(v, _)| g.binary_search(&v).is_ok())
+                })
+                .map(|i| full.source[i])
+                .collect();
+            sources.dedup();
+            iterations = iterations.max(self.solve_group(g, &sources, w));
+        }
+        let max_residual = max_abs(&self.system(&self.params).r);
+        let status = if max_residual <= SOLVED {
+            Status::Solved
+        } else {
+            Status::NotConverged
+        };
+        SolveReport {
+            status,
+            iterations,
+            max_residual,
+        }
+    }
+
+    /// Levenberg-Marquardt on one group of linked parameters, everything else
+    /// held still. Returns the iterations used.
+    fn solve_group(&mut self, vars: &[usize], sources: &[Source], w: &[f64]) -> usize {
+        let n = vars.len();
+        let mut col = vec![usize::MAX; self.params.len()];
+        for (k, &v) in vars.iter().enumerate() {
+            col[v] = k;
+        }
+        let max_abs = |r: &[f64]| r.iter().fold(0.0f64, |m, v| m.max(v.abs()));
         let mut x = self.params.clone();
-        let mut sys = self.system(&x);
-        let mut cost: f64 = sys.r.iter().map(|v| v * v).sum();
+        let System {
+            mut r, rows: mut jac, ..
+        } = self.system_of(&x, sources);
+        let mut cost: f64 = r.iter().map(|v| v * v).sum();
         let mut lambda: f64 = 1e-6;
         let mut it = 0;
-        let max_abs = |r: &[f64]| r.iter().fold(0.0f64, |m, v| m.max(v.abs()));
-        while it < MAX_ITERATIONS && max_abs(&sys.r) > SOLVED && n > 0 {
+        while it < MAX_ITERATIONS && max_abs(&r) > SOLVED {
             it += 1;
-            let m = sys.r.len();
-            let mut a = sys.j.clone();
-            a.resize((m + n) * n, 0.0);
-            let sl = lambda.sqrt();
-            for i in 0..n {
-                a[(m + i) * n + i] = sl * w[i];
+            let m = r.len();
+            let mut a = vec![0.0; (m + n) * n];
+            for (i, row) in jac.iter().enumerate() {
+                for &(v, g) in row {
+                    a[i * n + col[v]] += g;
+                }
             }
-            let mut b: Vec<f64> = sys.r.iter().map(|v| -v).collect();
+            let sl = lambda.sqrt();
+            for (k, &v) in vars.iter().enumerate() {
+                a[(m + k) * n + k] = sl * w[v];
+            }
+            let mut b: Vec<f64> = r.iter().map(|v| -v).collect();
             b.resize(m + n, 0.0);
             let step = solve_least_squares(&a, m + n, n, &b).filter(|d| d.iter().all(|v| v.is_finite()));
             let Some(dx) = step else {
                 lambda *= 10.0;
                 continue;
             };
-            let trial: Vec<f64> = x.iter().zip(&dx).map(|(a, d)| a + d).collect();
-            let tsys = self.system(&trial);
-            let tcost: f64 = tsys.r.iter().map(|v| v * v).sum();
+            let mut trial = x.clone();
+            for (k, &v) in vars.iter().enumerate() {
+                trial[v] += dx[k];
+            }
+            let System {
+                r: tr, rows: trows, ..
+            } = self.system_of(&trial, sources);
+            let tcost: f64 = tr.iter().map(|v| v * v).sum();
             if tcost < cost {
                 let tiny = dx.iter().fold(0.0f64, |m, v| m.max(v.abs()))
-                    <= 1e-15 * (1.0 + x.iter().fold(0.0f64, |m, v| m.max(v.abs())));
+                    <= 1e-15 * (1.0 + vars.iter().fold(0.0f64, |m, &v| m.max(x[v].abs())));
+                jac = trows;
                 x = trial;
-                sys = tsys;
+                r = tr;
                 cost = tcost;
                 lambda = (lambda * 0.1).max(1e-12);
                 if tiny {
@@ -158,17 +278,7 @@ impl Sketch {
             }
         }
         self.params = x;
-        let max_residual = max_abs(&sys.r);
-        let status = if max_residual <= SOLVED {
-            Status::Solved
-        } else {
-            Status::NotConverged
-        };
-        SolveReport {
-            status,
-            iterations: it,
-            max_residual,
-        }
+        it
     }
 
     /// Degrees of freedom, fully constrained entities, redundant and
@@ -177,7 +287,8 @@ impl Sketch {
         let n = self.params.len();
         let sys = self.system(&self.params);
         let m = sys.r.len();
-        let base = rank(&sys.j, m, n);
+        let dense = sys.dense(n);
+        let base = rank(&dense, m, n);
 
         let mut fully_constrained = Vec::new();
         for e in &self.entities {
@@ -185,7 +296,7 @@ impl Sketch {
             if ps.is_empty() {
                 continue;
             }
-            let mut a = sys.j.clone();
+            let mut a = dense.clone();
             for &p in &ps {
                 let mut row = vec![0.0; n];
                 row[p] = 1.0;
@@ -204,7 +315,7 @@ impl Sketch {
             }
             let a: Vec<f64> = keep
                 .iter()
-                .flat_map(|&i| sys.j[i * n..(i + 1) * n].iter().copied())
+                .flat_map(|&i| dense[i * n..(i + 1) * n].iter().copied())
                 .collect();
             if rank(&a, keep.len(), n) == base {
                 redundant.push(rec.id);

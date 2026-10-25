@@ -1,0 +1,19 @@
+[package]
+name = "forge-bench"
+description = "Benchmarks for the ForgeCAD kernel (cargo run --release -p forge-bench)"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+publish = false
+
+[dependencies]
+forge-math = { path = "../forge-math" }
+forge-geom = { path = "../forge-geom" }
+forge-topo = { path = "../forge-topo" }
+forge-ops = { path = "../forge-ops" }
+forge-mesh = { path = "../forge-mesh" }
+forge-sketch = { path = "../forge-sketch" }
+
+[lints]
+workspace = true
