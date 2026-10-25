@@ -273,7 +273,30 @@ pub fn trace(a: &Surface, b: &Surface, region: Box3) -> Option<Vec<IntCurve>> {
     }
     let grown = region.grow(step);
     let mut curves: Vec<IntCurve> = Vec::new();
+    // cells (leaf-sized) around every traced point: a seed in one needs no refining, it lies
+    // on a branch already traced (most seeds do, the octree leaves line every branch)
+    let key = |p: Point3| {
+        let f = |x: f64, lo: f64| (((x - lo) / leaf).floor() as i64 + 2) as u64 & 0x1f_ffff;
+        (f(p.x, region.x.lo) << 42) | (f(p.y, region.y.lo) << 21) | f(p.z, region.z.lo)
+    };
+    let mut covered: Vec<u64> = Vec::new();
+    let cover = |c: &IntCurve, covered: &mut Vec<u64>| {
+        for &p in &c.pts {
+            for dx in [-leaf, 0.0, leaf] {
+                for dy in [-leaf, 0.0, leaf] {
+                    for dz in [-leaf, 0.0, leaf] {
+                        covered.push(key(p + Vec3::new(dx, dy, dz)));
+                    }
+                }
+            }
+        }
+        covered.sort_unstable();
+        covered.dedup();
+    };
     for s in seeds {
+        if covered.binary_search(&key(s)).is_ok() {
+            continue;
+        }
         let Some(p0) = refine(a, b, s) else { continue };
         if !grown.contains(p0) {
             continue;
@@ -286,6 +309,7 @@ pub fn trace(a: &Surface, b: &Surface, region: Box3) -> Option<Vec<IntCurve>> {
             let mut pts = forward.0;
             pts.pop(); // the closing point repeats the first
             curves.push(finish(a, b, pts, true, step));
+            cover(curves.last().expect("just pushed"), &mut covered);
             continue;
         }
         let mut back = march(a, b, p0, -1.0, step, &grown)?.0;
@@ -294,6 +318,7 @@ pub fn trace(a: &Surface, b: &Surface, region: Box3) -> Option<Vec<IntCurve>> {
         back.extend(forward.0);
         if back.len() >= 2 {
             curves.push(finish(a, b, back, false, step));
+            cover(curves.last().expect("just pushed"), &mut covered);
         }
     }
     Some(curves)
