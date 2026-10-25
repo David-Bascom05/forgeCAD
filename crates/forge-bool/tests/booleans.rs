@@ -198,3 +198,19 @@ fn random_rotated_blocks_keep_volume_identities() {
     }
     assert!(ran >= 50, "only {ran} of 60 ran");
 }
+
+#[test]
+fn coplanar_boss_bottoms_over_a_pocket() {
+    let plate = block(Point3::ORIGIN, 40.0, 30.0, 10.0, 1);
+    let pocket = rod(Point3::new(15.0, 15.0, 4.0), 6.0, 7.0, 2);
+    let a = boolean(&plate, &pocket, Op::Subtract, 3).unwrap();
+    valid(&a);
+    let boss1 = rod(Point3::new(20.0, 15.0, 8.7), 5.0, 11.3, 4);
+    let b = boolean(&a, &boss1, Op::Union, 5).unwrap();
+    valid(&b);
+    let boss2 = rod(Point3::new(12.0, 15.0, 8.7), 4.0, 9.3, 6);
+    let c = boolean(&b, &boss2, Op::Union, 7).unwrap();
+    valid(&c);
+    let v = volume(&c);
+    assert!(v > volume(&b));
+}

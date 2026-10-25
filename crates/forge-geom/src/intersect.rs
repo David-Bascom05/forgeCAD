@@ -8,6 +8,7 @@
 
 use crate::curve::{Circle, Curve, CurveGeom, Ellipse, Hyperbola, Line, Parabola};
 use crate::surface::{Cone, Cylinder, Plane, Sphere, Surface, SurfaceGeom, Torus};
+use forge_math::dmath;
 use forge_math::{Frame, Interval, Point3, UnitVec3, Vec3, poly, tol};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -254,6 +255,173 @@ fn speed_bound(c: &Curve, range: Interval) -> f64 {
 /// the surface are grouped; a group with an odd number of sign changes is a
 /// crossing (bisected to full precision), an even number or none is a touch.
 pub fn curve_surface(c: &Curve, range: Interval, s: &Surface) -> CurveSurface {
+    match c {
+        Curve::Line(l) => return line_in_range(l, range, s),
+        Curve::Circle(k) => {
+            if let Some(r) = conic_quadric(&k.frame, k.radius, k.radius, range, s) {
+                return r;
+            }
+        }
+        Curve::Ellipse(e) => {
+            if let Some(r) = conic_quadric(&e.frame, e.major, e.minor, range, s) {
+                return r;
+            }
+        }
+        _ => {}
+    }
+    curve_surface_subdivide(c, range, s)
+}
+
+fn line_in_range(l: &Line, range: Interval, s: &Surface) -> CurveSurface {
+    match line_surface(l, s) {
+        LineSurface::OnSurface => CurveSurface::OnSurface,
+        LineSurface::Hits(h) => CurveSurface::Hits(
+            h.into_iter()
+                .filter(|h| range.contains(h.t))
+                .map(|h| CurveHit {
+                    t: h.t,
+                    point: h.point,
+                    contact: h.contact,
+                })
+                .collect(),
+        ),
+    }
+}
+
+/// (frame, A, b, c) of Q(p) = p.A.p + b.p + c.
+type Quadric = (Frame, [[f64; 3]; 3], [f64; 3], f64);
+
+/// A quadric surface as Q(p) = p.A.p + b.p + c in its frame's local
+/// coordinates, or None for surfaces of higher degree.
+fn quadric(s: &Surface) -> Option<Quadric> {
+    match s {
+        Surface::Plane(p) => Some((p.frame, [[0.0; 3]; 3], [0.0, 0.0, 1.0], 0.0)),
+        Surface::Cylinder(c) => Some((
+            c.frame,
+            [[1.0, 0.0, 0.0], [0.0, 1.0, 0.0], [0.0; 3]],
+            [0.0; 3],
+            -c.radius * c.radius,
+        )),
+        Surface::Sphere(sp) => Some((
+            sp.frame,
+            [[1.0, 0.0, 0.0], [0.0, 1.0, 0.0], [0.0, 0.0, 1.0]],
+            [0.0; 3],
+            -sp.radius * sp.radius,
+        )),
+        Surface::Cone(c) => {
+            // x^2 + y^2 - (r + k z)^2 (both nappes; the caller drops the mirror one)
+            let k = c.tan_a();
+            Some((
+                c.frame,
+                [[1.0, 0.0, 0.0], [0.0, 1.0, 0.0], [0.0, 0.0, -k * k]],
+                [0.0, 0.0, -2.0 * c.radius * k],
+                -c.radius * c.radius,
+            ))
+        }
+        Surface::Torus(_) => None,
+    }
+}
+
+/// Conic o + a cos t x + b sin t y against a quadric, exactly: Q along the
+/// conic is a quadratic form in (cos t, sin t), which the half-angle
+/// substitution u = tan(t/2) turns into a quartic in u.
+fn conic_quadric(f: &Frame, a: f64, b: f64, range: Interval, s: &Surface) -> Option<CurveSurface> {
+    let (qf, m, lin, c0) = quadric(s)?;
+    let o = qf.point_to_local(f.origin).to_vec();
+    let ex = qf.vec_to_local(f.x() * a);
+    let ey = qf.vec_to_local(f.y() * b);
+    let mv = |v: Vec3| {
+        Vec3::new(
+            m[0][0] * v.x + m[0][1] * v.y + m[0][2] * v.z,
+            m[1][0] * v.x + m[1][1] * v.y + m[1][2] * v.z,
+            m[2][0] * v.x + m[2][1] * v.y + m[2][2] * v.z,
+        )
+    };
+    let lv = Vec3::new(lin[0], lin[1], lin[2]);
+    let (mo, mx, my) = (mv(o), mv(ex), mv(ey));
+    // Q = k0 + k1 c + k2 s + k3 c^2 + k4 c s + k5 s^2
+    let k0 = o.dot(mo) + lv.dot(o) + c0;
+    let k1 = 2.0 * ex.dot(mo) + lv.dot(ex);
+    let k2 = 2.0 * ey.dot(mo) + lv.dot(ey);
+    let k3 = ex.dot(mx);
+    let k4 = 2.0 * ex.dot(my);
+    let k5 = ey.dot(my);
+    let scale = [k0, k1, k2, k3, k4, k5]
+        .iter()
+        .fold(0.0f64, |acc, v| acc.max(v.abs()));
+    if scale == 0.0 {
+        return Some(CurveSurface::OnSurface);
+    }
+    // c = (1 - u^2) / w, s = 2u / w, w = 1 + u^2; multiply through by w^2
+    let poly = [
+        k0 + k1 + k3,
+        2.0 * k2 + 2.0 * k4,
+        2.0 * k0 - 2.0 * k3 + 4.0 * k5,
+        2.0 * k2 - 2.0 * k4,
+        k0 - k1 + k3,
+    ];
+    let q = |t: f64| {
+        let (sn, cs) = dmath::sin_cos(t);
+        k0 + k1 * cs + k2 * sn + k3 * cs * cs + k4 * cs * sn + k5 * sn * sn
+    };
+    let probes = 9;
+    let curve = Curve::Ellipse(Ellipse {
+        frame: *f,
+        major: a,
+        minor: b,
+    });
+    let on = (0..probes).all(|i| {
+        s.distance(curve.eval(range.lo + range.width() * i as f64 / (probes - 1) as f64)) <= tol::LINEAR
+    });
+    if on {
+        return Some(CurveSurface::OnSurface);
+    }
+    let mut ts: Vec<(f64, Contact)> = poly::all_real_roots(&poly)
+        .into_iter()
+        .map(|r| {
+            (
+                2.0 * dmath::atan(r.x),
+                if r.touching {
+                    Contact::Touching
+                } else {
+                    Contact::Crossing
+                },
+            )
+        })
+        .collect();
+    // u = tan(t/2) cannot reach t = pi; test it directly
+    if q(dmath::PI).abs() <= 1e-12 * scale {
+        ts.push((dmath::PI, Contact::Touching));
+    }
+    let cone_apex = match s {
+        Surface::Cone(c) => Some((c.frame, c.apex_v())),
+        _ => None,
+    };
+    let mut hits: Vec<CurveHit> = Vec::new();
+    for (t0, contact) in ts {
+        // bring into the range (the conic is periodic)
+        let t = range.lo + dmath::wrap_tau(t0 - range.lo);
+        if t > range.hi + 1e-12 {
+            continue;
+        }
+        let t = t.min(range.hi);
+        let p = curve.eval(t);
+        if let Some((cf, apex_v)) = cone_apex
+            && cf.point_to_local(p).z < apex_v - tol::LINEAR
+        {
+            continue;
+        }
+        if s.distance(p) > 100.0 * tol::LINEAR {
+            continue; // a root lost to cancellation; the subdivision finds the truth
+        }
+        hits.push(CurveHit { t, point: p, contact });
+    }
+    hits.sort_by(|x, y| x.t.total_cmp(&y.t));
+    hits.dedup_by(|x, y| x.point.distance(y.point) <= tol::LINEAR);
+    Some(CurveSurface::Hits(hits))
+}
+
+fn curve_surface_subdivide(c: &Curve, range: Interval, s: &Surface) -> CurveSurface {
     let g = |t: f64| s.implicit(c.eval(t));
     let lip = speed_bound(c, range) * (1.0 + 1e-9) + f64::MIN_POSITIVE;
     let probes = 9;

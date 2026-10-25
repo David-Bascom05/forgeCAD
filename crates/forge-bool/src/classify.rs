@@ -1,7 +1,7 @@
 use forge_geom::intersect::{Contact, LineSurface, line_surface};
 use forge_geom::{Curve, CurveGeom, Line, SurfaceGeom};
 use forge_math::{Box2, Box3, Interval, Point2, Point3, Vec3, tol};
-use forge_topo::uv::{UvLoop, face_uv_loops, point_in_loops, unwrap_near};
+use forge_topo::uv::{UvLoop, face_uv_loops, point_in_loops};
 use forge_topo::{Body, FaceId};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -18,6 +18,8 @@ pub struct FaceInfo {
     pub loops: Vec<UvLoop>,
     pub bbox: Box3,
     centre: Point2,
+    /// The parameter window the loops are drawn in.
+    window: Box2,
 }
 
 pub struct Index<'a> {
@@ -56,6 +58,7 @@ impl<'a> Index<'a> {
                     loops,
                     bbox: b,
                     centre,
+                    window: Box2::new(u, v),
                 }
             })
             .collect();
@@ -109,7 +112,7 @@ impl<'a> Index<'a> {
                 }
             }
         }
-        let uv = unwrap_near(body, f, face.surface.project(p), info.centre);
+        let uv = into_window(body, f, face.surface.project(p), info);
         if point_in_loops(uv, &info.loops) {
             Where::Inside
         } else {
@@ -165,6 +168,25 @@ impl<'a> Index<'a> {
         }
         Where::On
     }
+}
+
+/// Shifts parameters by whole periods into the face's drawing window (the
+/// nearest-to-centre shift misplaces points near a window edge when the face
+/// spans most of a period).
+fn into_window(body: &Body, f: FaceId, uv: Point2, info: &FaceInfo) -> Point2 {
+    let d = body.face(f).surface.domain();
+    let fit = |x: f64, w: Interval, c: f64, period: Option<f64>| match period {
+        Some(p) => [0.0, -p, p, -2.0 * p, 2.0 * p]
+            .iter()
+            .map(|k| x + k)
+            .find(|&y| y >= w.lo - 1e-12 && y <= w.hi + 1e-12)
+            .unwrap_or_else(|| x + p * ((c - x) / p).round()),
+        None => x,
+    };
+    Point2::new(
+        fit(uv.x, info.window.u, info.centre.x, d.u.period),
+        fit(uv.y, info.window.v, info.centre.y, d.v.period),
+    )
 }
 
 /// Fixed, deliberately irregular ray directions: a ray along one of these

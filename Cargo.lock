@@ -59,6 +59,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "forge-model"
+version = "0.1.0"
+dependencies = [
+ "forge-bool",
+ "forge-geom",
+ "forge-math",
+ "forge-mesh",
+ "forge-ops",
+ "forge-topo",
+]
+
+[[package]]
 name = "forge-ops"
 version = "0.1.0"
 dependencies = [

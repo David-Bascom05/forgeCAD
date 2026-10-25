@@ -86,6 +86,28 @@ struct Spec {
     from: FaceId,
     loops: Vec<Vec<(usize, bool)>>,
     name: Name,
+    /// Pieces of the other body's edges imprinted on this face (a coplanar
+    /// face's boundary); classification never floods across them.
+    foreign: Vec<usize>,
+}
+
+/// Part of an edge of one body lying inside a coplanar face of the other.
+struct Imprint {
+    side: Side,
+    edge: EdgeId,
+    range: Interval,
+    into: FaceId,
+}
+
+/// Where a face piece lies relative to the other body.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum Class {
+    In,
+    Out,
+    /// On a face of the other body, both facing the same way.
+    OnSame,
+    /// On a face of the other body, facing opposite ways.
+    OnOpposite,
 }
 
 pub fn boolean(a: &Body, b: &Body, op: Op, feature: u64) -> R<Body> {
@@ -96,6 +118,7 @@ pub fn boolean(a: &Body, b: &Body, op: Op, feature: u64) -> R<Body> {
     // 1-2: intersect overlapping face pairs, keep pieces inside both faces
     let mut cuts: Vec<Cut> = Vec::new();
     let mut segs: Vec<Seg> = Vec::new();
+    let mut coplanar: Vec<(FaceId, FaceId)> = Vec::new();
     for fa in a.face_ids() {
         for fb in b.face_ids() {
             if !index[0].faces[fa.index()]
@@ -108,7 +131,8 @@ pub fn boolean(a: &Body, b: &Body, op: Op, feature: u64) -> R<Body> {
             let curves = match ssi::surfaces(sa, sb) {
                 SurfaceSurface::Empty | SurfaceSurface::Points(_) => continue,
                 SurfaceSurface::Coincident => {
-                    return Err(BoolError::Unsupported("faces on the same surface"));
+                    coplanar.push((fa, fb));
+                    continue;
                 }
                 SurfaceSurface::NotAnalytic => {
                     return Err(BoolError::Unsupported("surface pair without a closed form"));
@@ -125,8 +149,16 @@ pub fn boolean(a: &Body, b: &Body, op: Op, feature: u64) -> R<Body> {
         }
     }
 
+    // faces on one surface: each imprints the other's boundary
+    let mut imprints: Vec<Imprint> = Vec::new();
+    for &(fa, fb) in &coplanar {
+        imprint(&bodies, &index, 1, fb, fa, &mut cuts, &mut imprints)?;
+        imprint(&bodies, &index, 0, fa, fb, &mut cuts, &mut imprints)?;
+    }
+
     // 3: vertices for the cuts, then edge pieces
-    let (cut_vertex, new_points) = place_cuts(&bodies, &cuts)?;
+    let (cut_vertex, new_points, alias) = place_cuts(&bodies, &cuts)?;
+    let resolve = |v: VKey| alias.iter().find(|(f, _)| *f == v).map_or(v, |&(_, t)| t);
     let mut pieces: Vec<Piece> = Vec::new();
     let mut edge_pieces: [Vec<Vec<usize>>; 2] =
         [vec![Vec::new(); a.edges.len()], vec![Vec::new(); b.edges.len()]];
@@ -140,13 +172,13 @@ pub fn boolean(a: &Body, b: &Body, op: Op, feature: u64) -> R<Body> {
                 .collect();
             splits.sort_by(|x, y| x.0.total_cmp(&y.0));
             splits.dedup_by(|x, y| x.1 == y.1);
-            splits.retain(|&(_, v)| v != VKey::Old(side, edge.start) && v != VKey::Old(side, edge.end));
-            let mut at = (edge.range.lo, VKey::Old(side, edge.start));
-            for (k, &(s, v)) in splits
-                .iter()
-                .chain([(edge.range.hi, VKey::Old(side, edge.end))].iter())
-                .enumerate()
-            {
+            let (vs, ve) = (
+                resolve(VKey::Old(side, edge.start)),
+                resolve(VKey::Old(side, edge.end)),
+            );
+            splits.retain(|&(_, v)| v != vs && v != ve);
+            let mut at = (edge.range.lo, vs);
+            for (k, &(s, v)) in splits.iter().chain([(edge.range.hi, ve)].iter()).enumerate() {
                 let name = if splits.is_empty() {
                     edge.name
                 } else {
@@ -196,6 +228,15 @@ pub fn boolean(a: &Body, b: &Body, op: Op, feature: u64) -> R<Body> {
         let body = bodies[side];
         for f in body.face_ids() {
             let mine: Vec<usize> = (0..segs.len()).filter(|&i| segs[i].faces[side] == f).collect();
+            let mut foreign: Vec<usize> = Vec::new();
+            for im in imprints.iter().filter(|im| im.side != side && im.into == f) {
+                for &p in &edge_pieces[im.side][im.edge.index()] {
+                    let m = pieces[p].range.mid();
+                    if im.range.contains(m) && !foreign.contains(&p) {
+                        foreign.push(p);
+                    }
+                }
+            }
             let boundary: Vec<Vec<(usize, bool)>> = body
                 .face(f)
                 .loops
@@ -217,43 +258,51 @@ pub fn boolean(a: &Body, b: &Body, op: Op, feature: u64) -> R<Body> {
                         .collect()
                 })
                 .collect();
-            if mine.is_empty() {
+            if mine.is_empty() && foreign.is_empty() {
                 specs.push(Spec {
                     side,
                     from: f,
                     loops: boundary,
                     name: body.face(f).name,
+                    foreign,
                 });
                 continue;
             }
-            let new_edges: Vec<usize> = mine.iter().map(|&i| seg_piece[i]).collect();
+            let mut new_edges: Vec<usize> = mine.iter().map(|&i| seg_piece[i]).collect();
+            new_edges.extend(foreign.iter().copied());
             let regions = split_face(body, f, &pieces, &boundary, &new_edges)?;
             for (k, loops) in regions.into_iter().enumerate() {
+                let used: Vec<usize> = foreign
+                    .iter()
+                    .copied()
+                    .filter(|p| loops.iter().flatten().any(|h| h.0 == *p))
+                    .collect();
                 specs.push(Spec {
                     side,
                     from: f,
                     loops,
                     name: body.face(f).name.with_str("split").with(k as u64),
+                    foreign: used,
                 });
             }
         }
     }
 
     // 5: classify
-    let class = classify_specs(&bodies, &index, &specs, &pieces, &segs)?;
+    let class = classify_specs(&bodies, &index, &specs, &pieces, &segs, &coplanar)?;
 
-    // 6: keep, flip, sew
-    let keep = |side: Side, w: Where| match (op, side, w) {
-        (Op::Union, _, Where::Outside) => Some(false),
-        (Op::Subtract, 0, Where::Outside) => Some(false),
-        (Op::Subtract, 1, Where::Inside) => Some(true),
-        (Op::Intersect, _, Where::Inside) => Some(false),
+    // 6: keep, flip, sew. A shared same-facing region keeps A's copy only.
+    let keep = |side: Side, c: Class| match (op, side, c) {
+        (Op::Union, _, Class::Out) | (Op::Union, 0, Class::OnSame) => Some(false),
+        (Op::Subtract, 0, Class::Out) | (Op::Subtract, 0, Class::OnOpposite) => Some(false),
+        (Op::Subtract, 1, Class::In) => Some(true),
+        (Op::Intersect, _, Class::In) | (Op::Intersect, 0, Class::OnSame) => Some(false),
         _ => None,
     };
     let kept: Vec<(usize, bool)> = (0..specs.len())
         .filter_map(|i| keep(specs[i].side, class[i]).map(|flip| (i, flip)))
         .collect();
-    assemble(&bodies, &specs, &kept, &pieces, &points, root)
+    assemble(&bodies, &specs, &kept, &pieces, &points, &alias, root)
 }
 
 /// Cuts `curve` (on both faces' surfaces) where it crosses either face's
@@ -295,27 +344,33 @@ fn trim(
                     continue; // a seam is visited twice
                 }
                 let edge = body.edge(e);
-                let across = match body.partner(c).map(|o| body.coedge_face(o)) {
-                    Some(g) if g != f && body.face(g).surface != body.face(f).surface => body.face(g).surface,
-                    // a seam, or an edge between two faces of one surface (revolve halves):
-                    // the plane through the edge, across the surface
-                    _ => {
-                        let t = edge.range.mid();
-                        let d = edge.curve.deriv(t);
-                        let n = body
-                            .face(f)
-                            .surface
-                            .normal(body.face(f).surface.project(d.p))
-                            .ok_or(BoolError::Internal("seam at a singular point"))?;
-                        let z =
-                            d.d1.cross(n.get())
-                                .normalize()
-                                .ok_or(BoolError::Internal("degenerate seam"))?;
-                        Surface::Plane(Plane::new(Frame::from_z(d.p, z)))
-                    }
-                };
+                let across = across(body, f, c)?;
                 let hits = match curve_surface(&curve, range, &across) {
                     CurveSurface::Hits(h) => h,
+                    // the curve is this edge, between f and a face on the other face's surface:
+                    // that coplanar contact is the imprinting's job, and the curve adds nothing
+                    // the curve runs along this edge, which borders a face on the other face's
+                    // surface (a coplanar contact the imprinting handles): cut the curve at the
+                    // edge's ends; the stretch along the edge is boundary, not a new edge
+                    CurveSurface::OnSurface
+                        if ssi::surfaces(&across, &bodies[1 - side].face(faces[1 - side]).surface)
+                            == SurfaceSurface::Coincident =>
+                    {
+                        for (s, v) in [(edge.range.lo, edge.start), (edge.range.hi, edge.end)] {
+                            let p = body.vertex(v).point;
+                            let t = curve.closest(p, range);
+                            if curve.eval(t).distance(p) <= 10.0 * tol::LINEAR {
+                                ts.push((t, cuts.len()));
+                                cuts.push(Cut {
+                                    side,
+                                    edge: e,
+                                    s,
+                                    point: p,
+                                });
+                            }
+                        }
+                        continue;
+                    }
                     CurveSurface::OnSurface | CurveSurface::Overlap => {
                         return Err(BoolError::Unsupported("intersection curve runs along an edge"));
                     }
@@ -342,9 +397,7 @@ fn trim(
         let p = curve.eval(t);
         let wa = index[0].point_in_face(faces[0], p);
         let wb = index[1].point_in_face(faces[1], p);
-        if wa == Where::On || wb == Where::On {
-            return Err(BoolError::Unsupported("intersection curve runs along a boundary"));
-        }
+        // a stretch on a boundary is an existing edge, never a new one
         Ok(wa == Where::Inside && wb == Where::Inside)
     };
     if ts.is_empty() {
@@ -383,6 +436,109 @@ fn trim(
     Ok(())
 }
 
+/// The surface that meets face `f`'s surface along the edge of coedge `c`:
+/// the neighbouring face's, or for a seam (or an edge between two faces on
+/// one surface, like revolve halves) the plane through the edge, across it.
+fn across(body: &Body, f: FaceId, c: forge_topo::CoedgeId) -> R<Surface> {
+    let edge = body.edge(body.coedge(c).edge);
+    Ok(match body.partner(c).map(|o| body.coedge_face(o)) {
+        Some(g) if g != f && body.face(g).surface != body.face(f).surface => body.face(g).surface,
+        _ => {
+            let t = edge.range.mid();
+            let d = edge.curve.deriv(t);
+            let s = &body.face(f).surface;
+            let n = s
+                .normal(s.project(d.p))
+                .ok_or(BoolError::Internal("seam at a singular point"))?;
+            let z =
+                d.d1.cross(n.get())
+                    .normalize()
+                    .ok_or(BoolError::Internal("degenerate seam"))?;
+            Surface::Plane(Plane::new(Frame::from_z(d.p, z)))
+        }
+    })
+}
+
+/// Imprints the boundary of `src_face` (of body `src`) onto the coplanar
+/// face `dst_face` of the other body: cuts where its edges cross the
+/// destination's boundary (on both edges), and records the parts lying inside.
+fn imprint(
+    bodies: &[&Body; 2],
+    index: &[Index; 2],
+    src: Side,
+    src_face: FaceId,
+    dst_face: FaceId,
+    cuts: &mut Vec<Cut>,
+    imprints: &mut Vec<Imprint>,
+) -> R<()> {
+    let dst = 1 - src;
+    let (sb, db) = (bodies[src], bodies[dst]);
+    let mut seen: Vec<EdgeId> = Vec::new();
+    for &l in &sb.face(src_face).loops {
+        for &c in &sb.lp(l).coedges {
+            let e = sb.coedge(c).edge;
+            if seen.contains(&e) {
+                continue;
+            }
+            seen.push(e);
+            let edge = sb.edge(e);
+            let mut ts: Vec<f64> = Vec::new();
+            for &l2 in &db.face(dst_face).loops {
+                for &c2 in &db.lp(l2).coedges {
+                    let e2 = db.coedge(c2).edge;
+                    let edge2 = db.edge(e2);
+                    let hits = match curve_surface(&edge.curve, edge.range, &across(db, dst_face, c2)?) {
+                        CurveSurface::Hits(h) => h,
+                        _ => return Err(BoolError::Unsupported("coplanar faces share an edge")),
+                    };
+                    for h in hits {
+                        let s2 = edge2.curve.closest(h.point, edge2.range);
+                        if edge2.curve.eval(s2).distance(h.point) <= 10.0 * tol::LINEAR {
+                            cuts.push(Cut {
+                                side: dst,
+                                edge: e2,
+                                s: s2,
+                                point: h.point,
+                            });
+                            cuts.push(Cut {
+                                side: src,
+                                edge: e,
+                                s: h.t,
+                                point: h.point,
+                            });
+                            ts.push(h.t);
+                        }
+                    }
+                }
+            }
+            ts.sort_by(f64::total_cmp);
+            let mut marks = vec![edge.range.lo];
+            marks.extend(
+                ts.iter()
+                    .copied()
+                    .filter(|&t| t > edge.range.lo && t < edge.range.hi),
+            );
+            marks.push(edge.range.hi);
+            for w in marks.windows(2) {
+                if w[1] - w[0] <= 1e-12 * (1.0 + edge.range.width()) {
+                    continue;
+                }
+                match index[dst].point_in_face(dst_face, edge.curve.eval(0.5 * (w[0] + w[1]))) {
+                    Where::Inside => imprints.push(Imprint {
+                        side: src,
+                        edge: e,
+                        range: Interval::new(w[0], w[1]),
+                        into: dst_face,
+                    }),
+                    Where::On => return Err(BoolError::Unsupported("coplanar faces share an edge")),
+                    Where::Outside => {}
+                }
+            }
+        }
+    }
+    Ok(())
+}
+
 fn line_box(line: &forge_geom::Line, b: &forge_math::Box3) -> Option<Interval> {
     let (mut t0, mut t1) = (f64::NEG_INFINITY, f64::INFINITY);
     let d = line.dir.get();
@@ -401,38 +557,61 @@ fn line_box(line: &forge_geom::Line, b: &forge_math::Box3) -> Option<Interval> {
     (t0 < t1).then(|| Interval::new(t0, t1))
 }
 
-/// One vertex per distinct cut point: an existing vertex when the cut is at
-/// an edge's end, otherwise a new one shared by every cut at that point.
-fn place_cuts(bodies: &[&Body; 2], cuts: &[Cut]) -> R<(Vec<VKey>, Vec<Point3>)> {
+/// Vertices for the cuts (one per distinct point: cuts at one place on edges
+/// of both bodies share it, and it is an existing vertex when any of them
+/// sits at an edge's end), the new points, and aliases from B's existing
+/// vertices to A's where the two coincide.
+type Placed = (Vec<VKey>, Vec<Point3>, Vec<(VKey, VKey)>);
+
+fn place_cuts(bodies: &[&Body; 2], cuts: &[Cut]) -> R<Placed> {
     let near = 10.0 * tol::LINEAR;
-    let mut keys = Vec::with_capacity(cuts.len());
-    let mut points: Vec<Point3> = Vec::new();
-    let mut placed: Vec<(Point3, VKey)> = Vec::new();
-    for c in cuts {
-        let body = bodies[c.side];
-        let edge = body.edge(c.edge);
-        let key = if body.vertex(edge.start).point.distance(c.point) <= near {
-            VKey::Old(c.side, edge.start)
-        } else if body.vertex(edge.end).point.distance(c.point) <= near {
-            VKey::Old(c.side, edge.end)
-        } else if let Some(&(_, k)) = placed.iter().find(|(p, _)| p.distance(c.point) <= near) {
-            k
-        } else {
-            points.push(c.point);
-            VKey::New(points.len() as u32 - 1)
-        };
-        if placed
+    let mut cluster: Vec<usize> = Vec::with_capacity(cuts.len());
+    let mut heads: Vec<usize> = Vec::new();
+    for (i, c) in cuts.iter().enumerate() {
+        match heads
             .iter()
-            .any(|(p, k)| p.distance(c.point) <= near && *k != key)
+            .position(|&h| cuts[h].point.distance(c.point) <= near)
         {
-            return Err(BoolError::Unsupported(
-                "intersection passes through a vertex of the other body",
-            ));
+            Some(k) => cluster.push(k),
+            None => {
+                cluster.push(heads.len());
+                heads.push(i);
+            }
         }
-        placed.push((c.point, key));
-        keys.push(key);
     }
-    Ok((keys, points))
+    let end_vertex = |c: &Cut| {
+        let edge = bodies[c.side].edge(c.edge);
+        [edge.start, edge.end]
+            .into_iter()
+            .find(|&v| bodies[c.side].vertex(v).point.distance(c.point) <= near)
+            .map(|v| VKey::Old(c.side, v))
+    };
+    let mut points: Vec<Point3> = Vec::new();
+    let mut alias: Vec<(VKey, VKey)> = Vec::new();
+    let mut key_of: Vec<VKey> = Vec::with_capacity(heads.len());
+    for k in 0..heads.len() {
+        let mut olds: Vec<VKey> = (0..cuts.len())
+            .filter(|&i| cluster[i] == k)
+            .filter_map(|i| end_vertex(&cuts[i]))
+            .collect();
+        olds.sort();
+        olds.dedup();
+        let key = match olds.first() {
+            Some(&v) => v,
+            None => {
+                points.push(cuts[heads[k]].point);
+                VKey::New(points.len() as u32 - 1)
+            }
+        };
+        for &o in olds.iter().skip(1) {
+            match (key, o) {
+                (VKey::Old(0, _), VKey::Old(1, _)) => alias.push((o, key)),
+                _ => return Err(BoolError::Unsupported("two vertices of one body meet at a cut")),
+            }
+        }
+        key_of.push(key);
+    }
+    Ok((cluster.iter().map(|&k| key_of[k]).collect(), points, alias))
 }
 
 /// Direction of a half-edge in the face's oriented parameter plane, at its
@@ -588,25 +767,65 @@ fn inside_poly(p: Point2, poly: &[Point2]) -> bool {
     c
 }
 
-/// Inside or outside the other body for every spec.
+/// Inside, outside, or on the other body, for every spec.
 fn classify_specs(
     bodies: &[&Body; 2],
     index: &[Index; 2],
     specs: &[Spec],
     pieces: &[Piece],
     segs: &[Seg],
-) -> R<Vec<Where>> {
+    coplanar: &[(FaceId, FaceId)],
+) -> R<Vec<Class>> {
     let n = specs.len();
-    let mut class: Vec<Option<Where>> = vec![None; n];
+    let mut class: Vec<Option<Class>> = vec![None; n];
+    let mut fixed = vec![false; n];
+    // pieces lying on a coplanar face of the other body
+    for (i, s) in specs.iter().enumerate() {
+        let partners: Vec<FaceId> = coplanar
+            .iter()
+            .filter_map(|&(fa, fb)| match s.side {
+                0 if fa == s.from => Some(fb),
+                1 if fb == s.from => Some(fa),
+                _ => None,
+            })
+            .collect();
+        if partners.is_empty() {
+            continue;
+        }
+        let body = bodies[s.side];
+        let other = 1 - s.side;
+        let Some(p) = interior_point(body, s, pieces) else {
+            continue;
+        };
+        for pf in partners {
+            if index[other].point_in_face(pf, p) == Where::Inside {
+                let ob = bodies[other];
+                let here = body.face_normal(s.from, body.face(s.from).surface.project(p));
+                let there = ob.face_normal(pf, ob.face(pf).surface.project(p));
+                let (Some(h), Some(t)) = (here, there) else {
+                    continue;
+                };
+                class[i] = Some(if h.dot(t) > 0.0 {
+                    Class::OnSame
+                } else {
+                    Class::OnOpposite
+                });
+                fixed[i] = true;
+                break;
+            }
+        }
+    }
     // direct: lean of the piece at a new edge
     for (i, s) in specs.iter().enumerate() {
+        if fixed[i] {
+            continue;
+        }
         let body = bodies[s.side];
         let other = 1 - s.side;
         for &(p, fwd) in s.loops.iter().flatten() {
             let Some(si) = pieces[p].seg else { continue };
             let piece = &pieces[p];
-            let t = piece.range.mid();
-            let d = piece.curve.deriv(t);
+            let d = piece.curve.deriv(piece.range.mid());
             let along = if fwd { d.d1 } else { -d.d1 };
             let face = body.face(s.from);
             let Some(n_here) = body.face_normal(s.from, face.surface.project(d.p)) else {
@@ -622,36 +841,49 @@ fn classify_specs(
             if lean.abs() <= 1e-9 * inward.length() {
                 continue;
             }
-            class[i] = Some(if lean < 0.0 { Where::Inside } else { Where::Outside });
+            class[i] = Some(if lean < 0.0 { Class::In } else { Class::Out });
             break;
         }
     }
-    // flood across shared original edge pieces within each side
+    // flood across shared native edge pieces between pieces of one body
     let mut users: Vec<Vec<usize>> = vec![Vec::new(); pieces.len()];
     for (i, s) in specs.iter().enumerate() {
         for &(p, _) in s.loops.iter().flatten() {
-            if pieces[p].seg.is_none() {
+            if pieces[p].seg.is_none() && !s.foreign.contains(&p) {
                 users[p].push(i);
             }
         }
     }
-    let mut queue: Vec<usize> = (0..n).filter(|&i| class[i].is_some()).collect();
-    while let Some(i) = queue.pop() {
-        let c = class[i].expect("queued specs are classified");
-        for &(p, _) in specs[i].loops.iter().flatten() {
-            for &j in &users[p] {
-                match class[j] {
-                    None => {
-                        class[j] = Some(c);
-                        queue.push(j);
+    let spread = |class: &mut Vec<Option<Class>>, start: usize| -> R<()> {
+        let mut queue = vec![start];
+        while let Some(i) = queue.pop() {
+            let c = class[i].expect("queued specs are classified");
+            for &(p, _) in specs[i].loops.iter().flatten() {
+                for &j in &users[p] {
+                    if specs[j].side != specs[i].side || fixed[j] {
+                        continue;
                     }
-                    Some(cj) if cj != c => return Err(BoolError::Internal("inconsistent classification")),
-                    _ => {}
+                    match class[j] {
+                        None => {
+                            class[j] = Some(c);
+                            queue.push(j);
+                        }
+                        Some(cj) if cj != c => {
+                            return Err(BoolError::Internal("inconsistent classification"));
+                        }
+                        _ => {}
+                    }
                 }
             }
         }
+        Ok(())
+    };
+    for i in 0..n {
+        if class[i].is_some() && !fixed[i] {
+            spread(&mut class, i)?;
+        }
     }
-    // regions no new edge reaches: one ray test each, flooded the same way
+    // regions no new edge reaches: one ray test each
     for i in 0..n {
         if class[i].is_some() {
             continue;
@@ -659,22 +891,12 @@ fn classify_specs(
         let s = &specs[i];
         let probe =
             interior_point(bodies[s.side], s, pieces).ok_or(BoolError::Internal("no interior point"))?;
-        let w = index[1 - s.side].classify(probe);
-        if w == Where::On {
-            return Err(BoolError::Unsupported("untouched face lies on the other body"));
-        }
-        class[i] = Some(w);
-        let mut q = vec![i];
-        while let Some(k) = q.pop() {
-            for &(p, _) in specs[k].loops.iter().flatten() {
-                for &j in &users[p] {
-                    if class[j].is_none() {
-                        class[j] = Some(w);
-                        q.push(j);
-                    }
-                }
-            }
-        }
+        class[i] = Some(match index[1 - s.side].classify(probe) {
+            Where::Inside => Class::In,
+            Where::Outside => Class::Out,
+            Where::On => return Err(BoolError::Unsupported("untouched face lies on the other body")),
+        });
+        spread(&mut class, i)?;
     }
     Ok(class
         .into_iter()
@@ -701,12 +923,14 @@ fn interior_point(body: &Body, s: &Spec, pieces: &[Piece]) -> Option<Point3> {
     Some(face.surface.eval(face.surface.project(q)))
 }
 
+#[allow(clippy::too_many_arguments)]
 fn assemble(
     bodies: &[&Body; 2],
     specs: &[Spec],
     kept: &[(usize, bool)],
     pieces: &[Piece],
     points: &[Point3],
+    alias: &[(VKey, VKey)],
     root: Name,
 ) -> R<Body> {
     let mut out = Body::new();
@@ -749,6 +973,7 @@ fn assemble(
     let mut vmap: Vec<(VKey, VertexId)> = Vec::new();
     let mut emap: Vec<Option<EdgeId>> = vec![None; pieces.len()];
     let mut vertex = |out: &mut Body, v: VKey| -> VertexId {
+        let v = alias.iter().find(|(f, _)| *f == v).map_or(v, |&(_, t)| t);
         if let Some(&(_, id)) = vmap.iter().find(|(k, _)| *k == v) {
             return id;
         }
