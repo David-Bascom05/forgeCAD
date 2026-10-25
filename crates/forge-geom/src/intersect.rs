@@ -8,7 +8,7 @@
 
 use crate::curve::{Circle, Curve, CurveGeom, Ellipse, Hyperbola, Line, Parabola};
 use crate::surface::{Cone, Cylinder, Plane, Sphere, Surface, SurfaceGeom, Torus};
-use forge_math::{Frame, Point3, UnitVec3, Vec3, poly, tol};
+use forge_math::{Frame, Interval, Point3, UnitVec3, Vec3, poly, tol};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Contact {
@@ -211,6 +211,131 @@ fn between(x: f64, a: f64, b: f64) -> bool {
 /// The segment from root r to extreme c stays within tolerance (checked at its midpoint and quarter points).
 fn near_between(near: &impl Fn(f64) -> bool, r: f64, c: f64) -> bool {
     [0.25, 0.5, 0.75].iter().all(|&k| near(r + (c - r) * k))
+}
+
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct CurveHit {
+    pub t: f64,
+    pub point: Point3,
+    pub contact: Contact,
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub enum CurveSurface {
+    /// Ordered by t.
+    Hits(Vec<CurveHit>),
+    /// The curve lies in the surface over the whole range.
+    OnSurface,
+    /// The curve runs within tolerance of the surface along part of the range
+    /// (an overlap that needs the caller's coincidence handling).
+    Overlap,
+}
+
+/// An upper bound on |C'(t)| over the range.
+fn speed_bound(c: &Curve, range: Interval) -> f64 {
+    match c {
+        Curve::Line(_) => 1.0,
+        Curve::Circle(k) => k.radius,
+        Curve::Ellipse(e) => e.major,
+        Curve::Parabola(p) => {
+            let t = range.lo.abs().max(range.hi.abs());
+            (t * t / (4.0 * p.focal * p.focal) + 1.0).sqrt()
+        }
+        Curve::Hyperbola(h) => (h.a * h.a + h.b * h.b).sqrt(),
+    }
+}
+
+/// Where a curve meets a surface over a finite parameter range.
+///
+/// The surface's implicit value is 1-Lipschitz and the curve's speed is
+/// bounded, so `|g(t)|` can only reach zero within `|g(m)| / speed` of a
+/// sample m: subdividing until every remaining piece is within tolerance
+/// finds every crossing and every touch, with no initial guess. Pieces near
+/// the surface are grouped; a group with an odd number of sign changes is a
+/// crossing (bisected to full precision), an even number or none is a touch.
+pub fn curve_surface(c: &Curve, range: Interval, s: &Surface) -> CurveSurface {
+    let g = |t: f64| s.implicit(c.eval(t));
+    let lip = speed_bound(c, range) * (1.0 + 1e-9) + f64::MIN_POSITIVE;
+    let probes = 9;
+    if (0..probes).all(|i| g(range.lo + range.width() * i as f64 / (probes - 1) as f64).abs() <= tol::LINEAR)
+    {
+        return CurveSurface::OnSurface;
+    }
+    let leaf = tol::LINEAR / lip;
+    let mut leaves: Vec<(f64, f64)> = Vec::new();
+    let mut stack = vec![(range.lo, range.hi)];
+    while let Some((a, b)) = stack.pop() {
+        let m = 0.5 * (a + b);
+        if g(m).abs() > lip * 0.5 * (b - a) + tol::LINEAR {
+            continue;
+        }
+        if b - a <= leaf {
+            leaves.push((a, b));
+            if leaves.len() > 20_000 {
+                return CurveSurface::Overlap;
+            }
+            continue;
+        }
+        // right half first so the left half pops first: leaves come out in order
+        stack.push((m, b));
+        stack.push((a, m));
+    }
+    let mut hits = Vec::new();
+    let mut i = 0;
+    while i < leaves.len() {
+        let (lo, mut hi) = leaves[i];
+        let mut j = i + 1;
+        while j < leaves.len() && leaves[j].0 <= hi {
+            hi = leaves[j].1;
+            j += 1;
+        }
+        // sign changes across the group's leaf boundaries
+        let mut marks: Vec<f64> = vec![lo];
+        marks.extend(leaves[i..j].iter().map(|l| l.1));
+        let vals: Vec<f64> = marks.iter().map(|&t| g(t)).collect();
+        let changes: Vec<usize> = (1..vals.len())
+            .filter(|&k| (vals[k - 1] < 0.0) != (vals[k] < 0.0))
+            .collect();
+        if changes.len() % 2 == 1 {
+            let k = changes[0];
+            let t = bisect_sign(&g, marks[k - 1], marks[k]);
+            hits.push(CurveHit {
+                t,
+                point: c.eval(t),
+                contact: Contact::Crossing,
+            });
+        } else {
+            let (k, v) = vals.iter().enumerate().fold((0, f64::INFINITY), |b, (k, v)| {
+                if v.abs() < b.1 { (k, v.abs()) } else { b }
+            });
+            if v <= tol::LINEAR {
+                let t = marks[k];
+                hits.push(CurveHit {
+                    t,
+                    point: c.eval(t),
+                    contact: Contact::Touching,
+                });
+            }
+        }
+        i = j;
+    }
+    CurveSurface::Hits(hits)
+}
+
+fn bisect_sign(g: &impl Fn(f64) -> f64, mut a: f64, mut b: f64) -> f64 {
+    let neg_a = g(a) < 0.0;
+    for _ in 0..100 {
+        let m = 0.5 * (a + b);
+        if m <= a || m >= b {
+            break;
+        }
+        if (g(m) < 0.0) == neg_a {
+            a = m;
+        } else {
+            b = m;
+        }
+    }
+    0.5 * (a + b)
 }
 
 pub fn plane_surface(p: &Plane, s: &Surface) -> SurfaceSurface {
@@ -522,7 +647,7 @@ mod tests {
     use super::*;
     use crate::testing::*;
     use forge_math::rng::Rng;
-    use forge_math::{Interval, Point2, dmath};
+    use forge_math::{Point2, dmath};
 
     fn hits(r: LineSurface) -> Vec<LineHit> {
         match r {
@@ -806,5 +931,72 @@ mod tests {
             "{res:?}"
         );
         let _ = Interval::point(0.0);
+    }
+
+    #[test]
+    fn curve_surface_matches_brute_force() {
+        let mut r = Rng::new(310);
+        let mut total = 0;
+        for _ in 0..100 {
+            let f = rand_frame(&mut r);
+            let curves = [
+                Curve::Circle(Circle {
+                    frame: f,
+                    radius: r.range(1.0, 30.0),
+                }),
+                Curve::Ellipse(Ellipse {
+                    frame: f,
+                    major: r.range(10.0, 30.0),
+                    minor: r.range(1.0, 9.0),
+                }),
+                Curve::Line(Line::new(rand_point(&mut r, 30.0), rand_unit(&mut r))),
+            ];
+            for s in rand_surfaces(&mut r) {
+                for c in &curves {
+                    let range = if matches!(c, Curve::Line(_)) {
+                        Interval::new(-60.0, 60.0)
+                    } else {
+                        Interval::new(0.0, dmath::TAU)
+                    };
+                    let CurveSurface::Hits(hits) = curve_surface(c, range, &s) else {
+                        continue;
+                    };
+                    let g = |t: f64| s.implicit(c.eval(t));
+                    let n = 20_000;
+                    let mut changes = 0;
+                    let mut prev = g(range.lo);
+                    for k in 1..=n {
+                        let cur = g(range.lo + range.width() * k as f64 / n as f64);
+                        if (prev < 0.0) != (cur < 0.0) && prev.abs().max(cur.abs()) > 2.0 * tol::LINEAR {
+                            changes += 1;
+                        }
+                        prev = cur;
+                    }
+                    let crossings = hits.iter().filter(|h| h.contact == Contact::Crossing).count();
+                    assert_eq!(crossings, changes, "{c:?} {s:?} {hits:?}");
+                    for h in &hits {
+                        assert!(s.distance(h.point) <= 1.01 * tol::LINEAR, "{h:?} {s:?}");
+                    }
+                    total += hits.len();
+                }
+            }
+        }
+        assert!(total > 300, "too few hits exercised: {total}");
+    }
+
+    #[test]
+    fn curve_on_surface() {
+        let cyl = Surface::Cylinder(Cylinder {
+            frame: Frame::WORLD,
+            radius: 3.0,
+        });
+        let c = Curve::Circle(Circle {
+            frame: Frame::WORLD.with_origin(Point3::new(0.0, 0.0, 5.0)),
+            radius: 3.0,
+        });
+        assert_eq!(
+            curve_surface(&c, Interval::new(0.0, dmath::TAU), &cyl),
+            CurveSurface::OnSurface
+        );
     }
 }

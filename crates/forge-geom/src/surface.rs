@@ -406,6 +406,81 @@ impl SurfaceGeom for Torus {
     }
 }
 
+impl Surface {
+    /// Signed distance-like value: zero on the surface, positive on the side
+    /// of its natural normal, and 1-Lipschitz (it changes no faster than the
+    /// point moves), so a bound on it bounds where the surface can be.
+    pub fn implicit(&self, p: Point3) -> f64 {
+        match self {
+            Surface::Plane(s) => s.signed_distance(p),
+            Surface::Cylinder(c) => {
+                let l = c.frame.point_to_local(p);
+                (l.x * l.x + l.y * l.y).sqrt() - c.radius
+            }
+            Surface::Cone(c) => {
+                let l = c.frame.point_to_local(p);
+                let rho = (l.x * l.x + l.y * l.y).sqrt();
+                (rho - c.radius) * c.cos_a() - l.z * c.sin_a()
+            }
+            Surface::Sphere(s) => p.distance(s.frame.origin) - s.radius,
+            Surface::Torus(t) => {
+                let l = t.frame.point_to_local(p);
+                let d = (l.x * l.x + l.y * l.y).sqrt() - t.major;
+                (d * d + l.z * l.z).sqrt() - t.minor
+            }
+        }
+    }
+}
+
+impl Surface {
+    /// Points at (u0 + k (u1 - u0) / m, v) for k in 1..m: the interior of a
+    /// row at constant v, with one sin_cos for v and stepped angles for u.
+    pub fn eval_row(
+        &self,
+        v: f64,
+        u0: f64,
+        u1: f64,
+        m: usize,
+        trig: &mut Vec<(f64, f64)>,
+        out: &mut Vec<Point3>,
+    ) {
+        out.clear();
+        if m < 2 {
+            return;
+        }
+        let du = (u1 - u0) / m as f64;
+        let radial = |f: &Frame, rho: f64, z: f64, trig: &[(f64, f64)], out: &mut Vec<Point3>| {
+            let (x, y, zz) = (f.x().get(), f.y().get(), f.z().get());
+            let base = f.origin + zz * z;
+            for &(s, c) in trig {
+                out.push(base + (x * c + y * s) * rho);
+            }
+        };
+        match self {
+            Surface::Plane(p) => {
+                for k in 1..m {
+                    out.push(p.frame.plane_point(Point2::new(u0 + du * k as f64, v)));
+                }
+                return;
+            }
+            _ => dmath::sin_cos_steps(u0 + du, du, m - 1, trig),
+        }
+        match self {
+            Surface::Plane(_) => {}
+            Surface::Cylinder(c) => radial(&c.frame, c.radius, v, trig, out),
+            Surface::Cone(c) => radial(&c.frame, c.radius_at(v), v, trig, out),
+            Surface::Sphere(sp) => {
+                let (sv, cv) = dmath::sin_cos(v);
+                radial(&sp.frame, sp.radius * cv, sp.radius * sv, trig, out)
+            }
+            Surface::Torus(t) => {
+                let (sv, cv) = dmath::sin_cos(v);
+                radial(&t.frame, t.major + t.minor * cv, t.minor * sv, trig, out)
+            }
+        }
+    }
+}
+
 macro_rules! dispatch {
     ($self:ident, $s:ident => $e:expr) => {
         match $self {
@@ -533,6 +608,25 @@ mod tests {
             for s in rand_surfaces(&mut r) {
                 let uv = rand_uv(&mut r, &s);
                 assert!(s.transformed(&f).eval(uv).distance(f.point_to_world(s.eval(uv))) < 1e-9);
+            }
+        }
+    }
+
+    #[test]
+    fn rows_match_pointwise_eval() {
+        let mut r = Rng::new(204);
+        let (mut trig, mut out) = (Vec::new(), Vec::new());
+        for _ in 0..200 {
+            for s in rand_surfaces(&mut r) {
+                let a = rand_uv(&mut r, &s);
+                let u1 = a.x + r.range(0.1, 3.0);
+                let m = 2 + r.below(60);
+                s.eval_row(a.y, a.x, u1, m, &mut trig, &mut out);
+                assert_eq!(out.len(), m - 1);
+                for (k, p) in out.iter().enumerate() {
+                    let u = a.x + (u1 - a.x) * (k + 1) as f64 / m as f64;
+                    assert!(p.distance(s.eval(Point2::new(u, a.y))) < 1e-9, "{s:?}");
+                }
             }
         }
     }

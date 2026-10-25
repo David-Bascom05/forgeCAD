@@ -11,7 +11,7 @@ use forge_math::{Point2, dmath, poly};
 use forge_mesh::{Quality, tessellate};
 use forge_ops::{Profile, extrude};
 
-const EXPECTED: u64 = 0xd5d418f889fa981a;
+const EXPECTED: u64 = 0x10f1761217a4be82;
 
 fn sweep() -> u64 {
     let mut h = BitHasher::new();

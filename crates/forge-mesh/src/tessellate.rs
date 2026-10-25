@@ -77,14 +77,16 @@ pub fn tessellate(body: &Body, q: &Quality) -> Result<TriMesh, TessError> {
 
     // per edge: its parameter samples and their mesh indices (ends are the body's vertices)
     let mut edge_samples: Vec<Vec<(f64, u32)>> = Vec::with_capacity(body.edges.len());
+    let (mut trig, mut pts) = (Vec::new(), Vec::new());
     for e in body.edge_ids() {
         let edge = body.edge(e);
         let n = edge_segments(&edge.curve, edge.range.width(), q);
         let mut s = Vec::with_capacity(n + 1);
         s.push((edge.range.lo, vertex_index[edge.start.index()]));
-        for i in 1..n {
-            let t = edge.range.lo + edge.range.width() * (i as f64 / n as f64);
-            s.push((t, mesh.add_vertex(edge.curve.eval(t))));
+        edge.curve.sample_interior(edge.range, n, &mut trig, &mut pts);
+        for (i, &p) in pts.iter().enumerate() {
+            let t = edge.range.lo + edge.range.width() * ((i + 1) as f64 / n as f64);
+            s.push((t, mesh.add_vertex(p)));
         }
         s.push((edge.range.hi, vertex_index[edge.end.index()]));
         edge_samples.push(s);
@@ -141,6 +143,20 @@ fn tessellate_face(
         global.extend(ids);
     }
 
+    if loops.len() == 1
+        && let Some(tris) = strips(surface, &uv, &global, q, mesh)
+    {
+        for [a, b, c] in tris {
+            if a == b || b == c || c == a {
+                continue;
+            }
+            mesh.triangles
+                .push(if face.same_sense { [a, b, c] } else { [a, c, b] });
+            mesh.face_of.push(f.0);
+        }
+        return Ok(());
+    }
+
     let scaled: Vec<Point2> = uv.iter().map(|p| Point2::new(p.x * su, p.y * sv)).collect();
     let mut interior = Vec::new();
     if let Some((du, dv)) = interior_steps(surface, q) {
@@ -182,6 +198,116 @@ fn tessellate_face(
         mesh.face_of.push(f.0);
     }
     Ok(())
+}
+
+/// Faces that are rectangles in parameter space (every revolve face, every
+/// extrude wall) need no Delaunay: rows of points across u at each v sample
+/// of the side edges, stitched strip by strip. Counter-clockwise in (u, v).
+/// None when the face is not such a rectangle, or its two sides are sampled
+/// at different v (stitching rows then would leave T-junctions).
+fn strips(
+    surface: &Surface,
+    uv: &[Point2],
+    global: &[u32],
+    q: &Quality,
+    mesh: &mut TriMesh,
+) -> Option<Vec<[u32; 3]>> {
+    let n = uv.len();
+    let (mut u0, mut u1, mut v0, mut v1) =
+        (f64::INFINITY, f64::NEG_INFINITY, f64::INFINITY, f64::NEG_INFINITY);
+    for p in uv {
+        u0 = u0.min(p.x);
+        u1 = u1.max(p.x);
+        v0 = v0.min(p.y);
+        v1 = v1.max(p.y);
+    }
+    let eps = 1e-9 * (u1 - u0).max(v1 - v0).max(1.0);
+    let near = |a: f64, b: f64| (a - b).abs() <= eps;
+    let start = (0..n).find(|&i| near(uv[i].x, u0) && near(uv[i].y, v0))?;
+    // walk counter-clockwise from the (u0, v0) corner
+    let ccw = forge_topo::uv::signed_area(uv) > 0.0;
+    let at = |k: usize| if ccw { (start + k) % n } else { (start + n - k) % n };
+    let mut sides: [Vec<usize>; 4] = Default::default();
+    let mut side = 0;
+    sides[0].push(at(0));
+    for k in 1..=n {
+        let i = at(k);
+        let p = uv[i];
+        let on = |s: usize| match s {
+            0 => near(p.y, v0),
+            1 => near(p.x, u1),
+            2 => near(p.y, v1),
+            _ => near(p.x, u0),
+        };
+        if !on(side) {
+            return None;
+        }
+        sides[side].push(i);
+        let corner = match side {
+            0 => near(p.x, u1),
+            1 => near(p.y, v1),
+            2 => near(p.x, u0),
+            _ => k == n,
+        };
+        if corner && side < 3 {
+            side += 1;
+            sides[side].push(i);
+        }
+    }
+    if side != 3 {
+        return None;
+    }
+    let [bottom, right, mut top, mut left] = sides;
+    top.reverse();
+    left.reverse();
+    if left.len() != right.len() || left.iter().zip(&right).any(|(&a, &b)| !near(uv[a].y, uv[b].y)) {
+        return None;
+    }
+    let row_count = |v: f64| -> usize {
+        // radius of the circle of constant v, which sets the u spacing
+        let r = match surface {
+            Surface::Plane(_) => return 1,
+            Surface::Cylinder(c) => c.radius,
+            Surface::Cone(c) => c.radius_at(v),
+            Surface::Sphere(sp) => sp.radius * dmath::cos(v),
+            Surface::Torus(t) => t.major + t.minor * dmath::cos(v),
+        };
+        if r <= forge_math::tol::LINEAR {
+            return 1;
+        }
+        ((u1 - u0) * r / (r * arc_step(r, q))).ceil().max(1.0) as usize
+    };
+    // each row: (u, mesh index), increasing u
+    let mut rows: Vec<Vec<(f64, u32)>> = Vec::with_capacity(left.len());
+    let (mut trig, mut pts) = (Vec::new(), Vec::new());
+    rows.push(bottom.iter().map(|&i| (uv[i].x, global[i])).collect());
+    for j in 1..left.len() - 1 {
+        let v = uv[left[j]].y;
+        let m = row_count(v);
+        let mut row = vec![(u0, global[left[j]])];
+        surface.eval_row(v, u0, u1, m, &mut trig, &mut pts);
+        for (k, &p) in pts.iter().enumerate() {
+            row.push((u0 + (u1 - u0) * ((k + 1) as f64 / m as f64), mesh.add_vertex(p)));
+        }
+        row.push((u1, global[right[j]]));
+        rows.push(row);
+    }
+    rows.push(top.iter().map(|&i| (uv[i].x, global[i])).collect());
+    let mut tris = Vec::new();
+    for w in rows.windows(2) {
+        let (a, b) = (&w[0], &w[1]);
+        let (mut i, mut k) = (0, 0);
+        while i + 1 < a.len() || k + 1 < b.len() {
+            if k + 1 >= b.len() || (i + 1 < a.len() && a[i + 1].0 <= b[k + 1].0) {
+                tris.push([a[i].1, a[i + 1].1, b[k].1]);
+                i += 1;
+            } else {
+                tris.push([a[i].1, b[k + 1].1, b[k].1]);
+                k += 1;
+            }
+        }
+    }
+    Some(tris)
 }
 
 #[cfg(test)]

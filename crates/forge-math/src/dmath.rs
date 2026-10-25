@@ -277,6 +277,24 @@ pub fn cbrt(x: f64) -> f64 {
     t + t * r
 }
 
+/// sin and cos of `start + k * step` for k in 0..n, into `out`. Steps by
+/// rotation (two multiplies and adds per angle) and re-seeds from an exact
+/// sin_cos every 32 angles, so the error stays within a few ulps.
+pub fn sin_cos_steps(start: f64, step: f64, n: usize, out: &mut Vec<(f64, f64)>) {
+    out.clear();
+    out.reserve(n);
+    let (sd, cd) = sin_cos(step);
+    let (mut s, mut c) = (0.0, 1.0);
+    for k in 0..n {
+        if k % 32 == 0 {
+            (s, c) = sin_cos(start + step * k as f64);
+        } else {
+            (s, c) = (s * cd + c * sd, c * cd - s * sd);
+        }
+        out.push((s, c));
+    }
+}
+
 /// Angle in [0, 2pi).
 pub fn wrap_tau(a: f64) -> f64 {
     let mut r = a - TAU * (a / TAU).floor();
@@ -375,5 +393,15 @@ mod tests {
         assert!((wrap_tau(-0.5) - (TAU - 0.5)).abs() < 1e-15);
         assert!(wrap_tau(TAU) < 1e-15);
         assert!((wrap_tau(7.0 * TAU + 1.0) - 1.0).abs() < 1e-13);
+    }
+
+    #[test]
+    fn stepped_angles_stay_accurate() {
+        let mut out = Vec::new();
+        sin_cos_steps(0.3, 0.017, 1000, &mut out);
+        for (k, &(s, c)) in out.iter().enumerate() {
+            let a = 0.3 + 0.017 * k as f64;
+            assert!((s - a.sin()).abs() < 1e-14 && (c - a.cos()).abs() < 1e-14, "{k}");
+        }
     }
 }

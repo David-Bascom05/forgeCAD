@@ -408,6 +408,38 @@ impl CurveGeom for Curve {
 }
 
 impl Curve {
+    /// Points at lo + k (hi - lo) / n for k in 1..n (the interior samples of an
+    /// edge cut into n equal parameter steps), with stepped angles for conics.
+    pub fn sample_interior(
+        &self,
+        range: Interval,
+        n: usize,
+        trig: &mut Vec<(f64, f64)>,
+        out: &mut Vec<Point3>,
+    ) {
+        out.clear();
+        if n < 2 {
+            return;
+        }
+        let dt = range.width() / n as f64;
+        let conic = |f: &Frame, a: f64, b: f64, trig: &mut Vec<(f64, f64)>, out: &mut Vec<Point3>| {
+            dmath::sin_cos_steps(range.lo + dt, dt, n - 1, trig);
+            let (x, y) = (f.x().get(), f.y().get());
+            for &(s, c) in trig.iter() {
+                out.push(f.origin + x * (a * c) + y * (b * s));
+            }
+        };
+        match self {
+            Curve::Circle(c) => conic(&c.frame, c.radius, c.radius, trig, out),
+            Curve::Ellipse(e) => conic(&e.frame, e.major, e.minor, trig, out),
+            _ => {
+                for k in 1..n {
+                    out.push(self.eval(range.lo + dt * k as f64));
+                }
+            }
+        }
+    }
+
     /// The whole parameter range, clipped to `bound` where the curve is unbounded.
     pub fn full_range(&self, bound: f64) -> Interval {
         let d = self.domain();
