@@ -11,7 +11,12 @@ jobs:
       CARGO_TERM_COLOR: always
       CARGO_INCREMENTAL: "0"
     steps:
-      - uses: actions/checkout@v4
+      # The members sandbox only reaches the internet, so clone from the public door, not git.<domain>.
+      - name: checkout
+        run: |
+          git init -q .
+          git fetch -q --depth=1 "https://code.commonty.org/${{ github.repository }}.git" "${{ github.sha }}"
+          git checkout -q FETCH_HEAD
       - name: rust
         run: |
           curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --profile minimal --default-toolchain none

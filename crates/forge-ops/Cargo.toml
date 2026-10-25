@@ -1,0 +1,15 @@
+[package]
+name = "forge-ops"
+description = "Modelling operations (extrude, ...) for the ForgeCAD kernel"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[dependencies]
+forge-math = { path = "../forge-math" }
+forge-geom = { path = "../forge-geom" }
+forge-topo = { path = "../forge-topo" }
+
+[lints]
+workspace = true

@@ -12,3 +12,27 @@ dependencies = [
 [[package]]
 name = "forge-math"
 version = "0.1.0"
+
+[[package]]
+name = "forge-mesh"
+version = "0.1.0"
+dependencies = [
+ "forge-math",
+]
+
+[[package]]
+name = "forge-ops"
+version = "0.1.0"
+dependencies = [
+ "forge-geom",
+ "forge-math",
+ "forge-topo",
+]
+
+[[package]]
+name = "forge-topo"
+version = "0.1.0"
+dependencies = [
+ "forge-geom",
+ "forge-math",
+]
