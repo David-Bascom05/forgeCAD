@@ -1,18 +1,25 @@
-//! cargo run --release -p forge-model --example shrink -- <suite part name | fuzz seed>
+//! cargo run --release -p forge-model --example shrink -- <suite part | fuzz seed | adversarial family>
 //! Shrinks a failing history to a minimal one and prints it as a literal.
 use forge_geom::CurveGeom;
 use forge_model::{adversarial, suite};
 fn main() {
     let arg = std::env::args().nth(1).expect("suite part name or fuzz seed");
+    // a fuzz seed, a suite part, or an adversarial family (its first failing seed)
     let part = match arg.parse::<u64>() {
         Ok(seed) => suite::fuzz(seed, 80),
-        Err(_) => {
-            suite::parts()
-                .into_iter()
-                .find(|(n, _)| *n == arg)
-                .expect("no such part")
-                .1
-        }
+        Err(_) => match suite::parts().into_iter().find(|(n, _)| *n == arg) {
+            Some((_, p)) => p,
+            None => {
+                let (_, family) = adversarial::families()
+                    .into_iter()
+                    .find(|(n, _)| *n == arg)
+                    .expect("no such part or family");
+                (0..200)
+                    .map(|s| adversarial::canonical(&family(s)))
+                    .find(|p| adversarial::outcome(p) != adversarial::Outcome::Ok)
+                    .expect("no failing seed")
+            }
+        },
     };
     let small = adversarial::shrink(&part);
     println!("{:?}", adversarial::outcome(&small));
