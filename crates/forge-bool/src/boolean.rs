@@ -80,6 +80,8 @@ struct Piece {
     seg: Option<usize>,
     /// The original edge this piece is all of, if it was not split.
     whole: Option<(Side, EdgeId)>,
+    /// The body whose edge this piece is part of (None for a new edge).
+    side: Option<Side>,
 }
 
 /// A face of the result before it is built: loops of (piece, forward).
@@ -199,6 +201,7 @@ fn edge_split(
             name,
             seg: None,
             whole,
+            side: Some(side),
         });
         at = (s, v);
     }
@@ -389,6 +392,7 @@ fn plan(a: &Body, b: &Body, op: Op, feature: u64) -> R<Plan> {
             name: s.name,
             seg: Some(si),
             whole: None,
+            side: None,
         });
     }
     // closed new edges carry their own vertex at the curve start
@@ -522,6 +526,47 @@ fn plan(a: &Body, b: &Body, op: Op, feature: u64) -> R<Plan> {
                     whole: false,
                     extend: false,
                 });
+            }
+        }
+    }
+
+    // pieces of the two bodies' edges with the same ends along the same curve (coincident walls
+    // meeting a face at one line) are one edge: B's copy gives way to A's
+    let mut by_ends: Vec<((VKey, VKey), usize)> = pieces
+        .iter()
+        .enumerate()
+        .filter(|(_, pc)| pc.side == Some(0))
+        .map(|(i, pc)| ((pc.start.min(pc.end), pc.start.max(pc.end)), i))
+        .collect();
+    by_ends.sort();
+    let mut canon: Vec<(usize, bool)> = (0..pieces.len()).map(|p| (p, false)).collect();
+    for (p, pc) in pieces.iter().enumerate().filter(|(_, pc)| pc.side == Some(1)) {
+        let key = (pc.start.min(pc.end), pc.start.max(pc.end));
+        let from = by_ends.partition_point(|x| x.0 < key);
+        let mid = pc.curve.eval(pc.range.mid());
+        for &(_, a) in by_ends[from..].iter().take_while(|x| x.0 == key) {
+            let other = &pieces[a];
+            if other
+                .curve
+                .eval(other.curve.closest(mid, other.range))
+                .distance(mid)
+                <= 10.0 * tol::LINEAR
+            {
+                canon[p] = (a, pc.start != other.start);
+                break;
+            }
+        }
+    }
+    if canon.iter().enumerate().any(|(p, c)| c.0 != p) {
+        for sp in &mut specs {
+            for l in &mut sp.loops {
+                for h in l.iter_mut() {
+                    let (c, flip) = canon[h.0];
+                    *h = (c, h.1 != flip);
+                }
+            }
+            for f in &mut sp.foreign {
+                *f = canon[*f].0;
             }
         }
     }

@@ -673,7 +673,6 @@ fn coincident_walls_inconsistent_classification() {
 }
 
 #[test]
-#[ignore = "known failure: error: Boolean(Unsupported('coplanar faces share an edge'))"]
 #[allow(
     clippy::approx_constant,
     clippy::excessive_precision,
