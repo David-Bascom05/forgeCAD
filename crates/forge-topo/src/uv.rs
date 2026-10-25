@@ -213,20 +213,32 @@ pub fn face_uv_loops_with(body: &Body, face: FaceId, segments: impl Fn(&Edge) ->
     loops
 }
 
-/// Shifts every loop after the first by whole periods so its centre falls in
-/// the first loop's window.
+/// Shifts every loop after the first by whole periods so the middle of its span
+/// falls in the first loop's span.
 pub fn align_loops<'a>(body: &Body, face: FaceId, mut loops: impl Iterator<Item = &'a mut Vec<Point2>>) {
-    let centre = |pts: &[Point2]| {
-        let n = pts.len().max(1) as f64;
-        let s = pts.iter().fold((0.0, 0.0), |a, p| (a.0 + p.x, a.1 + p.y));
-        Point2::new(s.0 / n, s.1 / n)
+    // spans, not sample centroids: a full-turn loop whose samples bunch near one end
+    // would otherwise pull the others a period away
+    let span = |pts: &[Point2]| {
+        pts.iter().fold(
+            (f64::INFINITY, f64::NEG_INFINITY, f64::INFINITY, f64::NEG_INFINITY),
+            |a, q| (a.0.min(q.x), a.1.max(q.x), a.2.min(q.y), a.3.max(q.y)),
+        )
     };
     let Some(first) = loops.next() else { return };
-    let reference = centre(first);
+    let r = span(first);
+    let d = body.face(face).surface.domain();
+    // the shift that puts `c` inside [lo, hi], else the one nearest its middle
+    let fit = |c: f64, lo: f64, hi: f64, period: Option<f64>| match period {
+        Some(per) => [0.0, -per, per, -2.0 * per, 2.0 * per]
+            .into_iter()
+            .find(|k| c + k >= lo - 1e-9 && c + k <= hi + 1e-9)
+            .unwrap_or_else(|| per * ((0.5 * (lo + hi) - c) / per).round()),
+        None => 0.0,
+    };
     for l in loops {
-        let c = centre(l);
-        let moved = unwrap_near(body, face, c, reference);
-        let (du, dv) = (moved.x - c.x, moved.y - c.y);
+        let s = span(l);
+        let du = fit(0.5 * (s.0 + s.1), r.0, r.1, d.u.period);
+        let dv = fit(0.5 * (s.2 + s.3), r.2, r.3, d.v.period);
         for p in l.iter_mut() {
             *p = Point2::new(p.x + du, p.y + dv);
         }
