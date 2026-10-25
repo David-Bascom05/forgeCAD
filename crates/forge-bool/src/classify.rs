@@ -22,6 +22,80 @@ pub struct FaceInfo {
     /// The loops drawn in parameter space, only when a query needs them
     /// (planar faces are decided exactly without them).
     drawn: std::cell::OnceCell<Drawn>,
+    /// For planar faces with many edges: edges bucketed by position across
+    /// the first ray direction, so a query looks only at nearby edges.
+    bands: Option<Bands>,
+}
+
+const RAY_ANGLES: [f64; 3] = [0.1234, 1.9876, 4.0123];
+
+struct Bands {
+    origin: Point3,
+    /// In-plane unit vector across the first ray direction.
+    across: Vec3,
+    w0: f64,
+    /// Bands per unit of `across`.
+    inv: f64,
+    rows: Vec<Vec<u32>>,
+}
+
+impl Bands {
+    fn build(plane: &forge_geom::Plane, edges: &[(forge_topo::CoedgeId, Box3)]) -> Bands {
+        let (sn, cs) = forge_math::dmath::sin_cos(RAY_ANGLES[0]);
+        let d = plane.frame.x() * cs + plane.frame.y() * sn;
+        let across = plane.frame.z().cross(d);
+        let origin = plane.frame.origin;
+        let span = |b: &Box3| {
+            let mut r = Interval::EMPTY;
+            for &x in &[b.x.lo, b.x.hi] {
+                for &y in &[b.y.lo, b.y.hi] {
+                    for &z in &[b.z.lo, b.z.hi] {
+                        r.include((Point3::new(x, y, z) - origin).dot(across));
+                    }
+                }
+            }
+            r
+        };
+        let spans: Vec<Interval> = edges.iter().map(|(_, b)| span(b)).collect();
+        let all = spans.iter().fold(Interval::EMPTY, |a, s| a.hull(s));
+        let n = (edges.len() / 4).clamp(8, 512);
+        let inv = n as f64 / all.width().max(1e-9);
+        let mut rows = vec![Vec::new(); n];
+        for (i, sp) in spans.iter().enumerate() {
+            let (a, b) = (
+                ((sp.lo - all.lo) * inv) as usize,
+                ((sp.hi - all.lo) * inv) as usize,
+            );
+            for row in rows.iter_mut().take(b.min(n - 1) + 1).skip(a.min(n - 1)) {
+                row.push(i as u32);
+            }
+        }
+        Bands {
+            origin,
+            across,
+            w0: all.lo,
+            inv,
+            rows,
+        }
+    }
+
+    fn row(&self, w: f64) -> Option<usize> {
+        let k = (w - self.w0) * self.inv;
+        (k >= 0.0 && (k as usize) < self.rows.len()).then_some(k as usize)
+    }
+
+    /// Edges whose band range meets [w - r, w + r].
+    fn near(&self, p: Point3, r: f64, out: &mut Vec<u32>) {
+        let w = (p - self.origin).dot(self.across);
+        let lo = ((w - r - self.w0) * self.inv).floor().max(0.0) as usize;
+        let hi = (((w + r - self.w0) * self.inv).floor().max(0.0) as usize).min(self.rows.len() - 1);
+        out.clear();
+        for row in self.rows.iter().take(hi + 1).skip(lo) {
+            out.extend_from_slice(row);
+        }
+        out.sort_unstable();
+        out.dedup();
+    }
 }
 
 pub struct Drawn {
@@ -80,10 +154,15 @@ impl<'a> Index<'a> {
                     reach = reach.max(sag_bound(&e.curve));
                 }
             }
+            let bands = match &self.body.face(f).surface {
+                Surface::Plane(pl) if edges.len() >= 16 => Some(Bands::build(pl, &edges)),
+                _ => None,
+            };
             FaceInfo {
                 edges,
                 reach,
                 drawn: std::cell::OnceCell::new(),
+                bands,
             }
         })
     }
@@ -117,7 +196,15 @@ impl<'a> Index<'a> {
         let info = self.info(f);
         // nearest boundary point, exactly
         let mut best: Option<(f64, forge_topo::CoedgeId, f64)> = None;
-        for &(c, ref b) in &info.edges {
+        let mut near: Vec<u32> = Vec::new();
+        let candidates: Box<dyn Iterator<Item = &(forge_topo::CoedgeId, Box3)>> = match &info.bands {
+            Some(bands) => {
+                bands.near(p, info.reach, &mut near);
+                Box::new(near.iter().map(|&i| &info.edges[i as usize]))
+            }
+            None => Box::new(info.edges.iter()),
+        };
+        for &(c, ref b) in candidates {
             if box_distance(b, p) > info.reach.min(best.map_or(f64::INFINITY, |x| x.0)) {
                 continue;
             }
@@ -158,8 +245,16 @@ impl<'a> Index<'a> {
             }
         }
         if let Surface::Plane(plane) = &face.surface {
-            for angle in [0.1234, 1.9876, 4.0123] {
-                if let Some(inside) = planar_parity(body, plane, p, &info.edges, angle) {
+            for (k, angle) in RAY_ANGLES.into_iter().enumerate() {
+                // the first direction can look at p's band only: an edge the ray meets overlaps it
+                let subset: Option<&[u32]> = match (&info.bands, k) {
+                    (Some(bands), 0) => match bands.row((p - bands.origin).dot(bands.across)) {
+                        Some(r) => Some(&bands.rows[r]),
+                        None => Some(&[]),
+                    },
+                    _ => None,
+                };
+                if let Some(inside) = planar_parity(body, plane, p, &info.edges, subset, angle) {
                     return if inside { Where::Inside } else { Where::Outside };
                 }
             }
@@ -276,12 +371,17 @@ fn planar_parity(
     plane: &forge_geom::Plane,
     p: Point3,
     edges: &[(forge_topo::CoedgeId, Box3)],
+    subset: Option<&[u32]>,
     angle: f64,
 ) -> Option<bool> {
     let (sn, cs) = forge_math::dmath::sin_cos(angle);
     let d = plane.frame.x() * cs + plane.frame.y() * sn;
     let mut inside = false;
-    for &(c, ref b) in edges {
+    let all: Box<dyn Iterator<Item = &(forge_topo::CoedgeId, Box3)>> = match subset {
+        Some(ix) => Box::new(ix.iter().map(|&i| &edges[i as usize])),
+        None => Box::new(edges.iter()),
+    };
+    for &(c, ref b) in all {
         if !ray_hits_box(p, d, b) {
             continue;
         }
@@ -596,7 +696,7 @@ mod planar_vs_polygon {
                 if near {
                     continue;
                 }
-                let Some(fast) = planar_parity(&body, &pl, p, &info.edges, 0.1234) else {
+                let Some(fast) = planar_parity(&body, &pl, p, &info.edges, None, 0.1234) else {
                     continue;
                 };
                 let drawn = ix.drawn(f);

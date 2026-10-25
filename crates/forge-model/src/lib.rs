@@ -1,5 +1,6 @@
 //! A part as a history of features, and regenerating it into a solid.
 
+pub mod suite;
 pub mod torture;
 
 use forge_bool::{BoolError, Op, boolean_into};
@@ -135,7 +136,12 @@ impl Part {
                     // in place: only the faces near the tool change
                     boolean_into(&mut b, &tool, op, id + 1_000_000)
                         .map_err(|error| RegenError::Boolean { feature: i, error })?;
-                    b
+                    // tombstones are cheap until they outnumber the living
+                    if b.dead > b.faces.len() / 2 {
+                        b.compact()
+                    } else {
+                        b
+                    }
                 }
             });
         }

@@ -182,8 +182,7 @@ impl Body {
         }
         self.faces[f.index()].alive = false;
         self.dead += 1;
-        let shell = self.faces[f.index()].shell;
-        self.shells[shell.index()].faces.retain(|&x| x != f);
+        // shell face lists go stale here; compact() regroups shells
         for li in 0..self.faces[f.index()].loops.len() {
             let l = self.faces[f.index()].loops[li];
             for ci in 0..self.loops[l.index()].coedges.len() {
@@ -247,8 +246,15 @@ impl Body {
         }
     }
 
-    /// A copy holding only live entities, densely numbered.
+    /// A copy holding only live entities, densely numbered, with shells
+    /// regrouped by connectivity.
     pub fn compact(&self) -> Body {
+        let mut grouped = self.clone();
+        grouped.rebuild_shells();
+        grouped.compact_grouped()
+    }
+
+    fn compact_grouped(&self) -> Body {
         let mut out = Body::new();
         let mut vmap: Vec<Option<VertexId>> = vec![None; self.vertices.len()];
         let mut emap: Vec<Option<EdgeId>> = vec![None; self.edges.len()];

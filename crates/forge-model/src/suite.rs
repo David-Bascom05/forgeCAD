@@ -1,0 +1,551 @@
+//! A set of benchmark parts unlike one another, so no single shape decides
+//! what "fast" and "robust" mean, plus a random history generator.
+
+use crate::{Combine, Feature, Part, torture};
+use forge_math::rng::Rng;
+use forge_math::{Frame, Point2, Point3, Vec2, Vec3, dmath};
+use forge_ops::{Axis2, Profile, ProfileLoop, Segment};
+
+fn frame(o: Point3, z: Vec3, x: Vec3) -> Frame {
+    let z = z.normalize().expect("nonzero axis");
+    Frame::from_zx(o, z, x).unwrap_or_else(|| Frame::from_z(o, z))
+}
+
+fn up(o: Point3) -> Frame {
+    Frame::WORLD.with_origin(o)
+}
+
+/// Rotated about world z by `a`.
+fn turned(o: Point3, a: f64) -> Frame {
+    let (s, c) = dmath::sin_cos(a);
+    frame(o, Vec3::Z, Vec3::new(c, s, 0.0))
+}
+
+fn block(plane: Frame, corner: Point2, w: f64, h: f64, d: f64, op: Combine) -> Feature {
+    Feature::Extrude {
+        profile: Profile {
+            plane,
+            loops: vec![Profile::rectangle(corner, w, h, 0)],
+        },
+        distance: d,
+        op,
+    }
+}
+
+fn rounded(plane: Frame, corner: Point2, w: f64, h: f64, r: f64, d: f64, op: Combine) -> Feature {
+    Feature::Extrude {
+        profile: Profile {
+            plane,
+            loops: vec![Profile::rounded_rectangle(corner, w, h, r, 0)],
+        },
+        distance: d,
+        op,
+    }
+}
+
+fn rod(plane: Frame, r: f64, len: f64, op: Combine) -> Feature {
+    Feature::Extrude {
+        profile: Profile {
+            plane,
+            loops: vec![Profile::circle(Point2::ORIGIN, r, 0)],
+        },
+        distance: len,
+        op,
+    }
+}
+
+fn ball(c: Point3, r: f64, op: Combine) -> Feature {
+    Feature::Ball {
+        frame: frame(c, Vec3::Y, Vec3::X),
+        radius: r,
+        op,
+    }
+}
+
+/// A closed polygon profile from points (segment ids are positions).
+fn polygon(plane: Frame, pts: &[Point2]) -> Profile {
+    let n = pts.len();
+    let segs = (0..n)
+        .map(|i| {
+            (
+                Segment::Line {
+                    a: pts[i],
+                    b: pts[(i + 1) % n],
+                },
+                i as u64,
+            )
+        })
+        .collect();
+    Profile {
+        plane,
+        loops: vec![ProfileLoop::new(segs)],
+    }
+}
+
+fn revolve(profile: Profile, axis: Axis2, op: Combine) -> Feature {
+    Feature::Revolve {
+        profile,
+        axis,
+        angle: dmath::TAU,
+        op,
+    }
+}
+
+/// Sketch plane standing on (cx, cy, z0): sketch x is world x, sketch y is world -z,
+/// so the sketch's y axis through (0, 0) is the vertical line through (cx, cy).
+fn standing(cx: f64, cy: f64, z0: f64) -> Frame {
+    frame(Point3::new(cx, cy, z0), Vec3::Y, Vec3::X)
+}
+
+const VERTICAL: Axis2 = Axis2 {
+    origin: Point2::ORIGIN,
+    dir: Vec2::Y,
+};
+
+/// Every named benchmark part.
+pub fn parts() -> Vec<(&'static str, Part)> {
+    vec![
+        ("plate", torture::part(usize::MAX)),
+        ("shaft", shaft()),
+        ("housing", housing()),
+        ("coplanar", coplanar()),
+        ("patterns", patterns()),
+        ("mixed", mixed()),
+    ]
+}
+
+/// A stepped shaft along world x: grooves, cross holes, flats, keyways and
+/// rings of radial pin holes.
+pub fn shaft() -> Part {
+    let mut r = Rng::new(0x5_4af7);
+    let steps = 10;
+    let len = 30.0;
+    let radii: Vec<f64> = (0..steps).map(|_| r.range(12.0, 25.0)).collect();
+    let mut pts = vec![Point2::ORIGIN];
+    for (i, &rad) in radii.iter().enumerate() {
+        pts.push(Point2::new(i as f64 * len, rad));
+        pts.push(Point2::new((i + 1) as f64 * len, rad));
+    }
+    pts.push(Point2::new(steps as f64 * len, 0.0));
+    let axis = Axis2 {
+        origin: Point2::ORIGIN,
+        dir: Vec2::X,
+    };
+    let mut f = vec![revolve(polygon(Frame::WORLD, &pts), axis, Combine::New)];
+    let total = steps as f64 * len;
+    let radius_at = |x: f64| radii[((x / len) as usize).min(steps - 1)];
+    for _ in 0..25 {
+        let x = r.range(3.0, total - 6.0);
+        let (w, d) = (r.range(1.0, 3.0), r.range(0.8, 3.0));
+        let rad = radius_at(x).min(radius_at(x + w));
+        let groove = [
+            Point2::new(x, rad - d),
+            Point2::new(x + w, rad - d),
+            Point2::new(x + w, rad + 3.0),
+            Point2::new(x, rad + 3.0),
+        ];
+        f.push(revolve(polygon(Frame::WORLD, &groove), axis, Combine::Cut));
+    }
+    for _ in 0..40 {
+        let x = r.range(5.0, total - 5.0);
+        let a = r.range(0.0, dmath::PI);
+        let (s, c) = dmath::sin_cos(a);
+        let dir = Vec3::new(0.0, c, s);
+        f.push(rod(
+            frame(Point3::new(x, 0.0, 0.0) - dir * 40.0, dir, Vec3::X),
+            r.range(1.0, 4.0),
+            80.0,
+            Combine::Cut,
+        ));
+    }
+    for _ in 0..20 {
+        let x = r.range(0.0, total - 20.0);
+        let depth = radius_at(x) - r.range(1.0, 4.0);
+        let a = r.range(0.0, dmath::TAU);
+        let (s, c) = dmath::sin_cos(a);
+        let n = Vec3::new(0.0, c, s);
+        let plane = frame(Point3::new(x, 0.0, 0.0) + n * depth, n, Vec3::X);
+        f.push(block(
+            plane,
+            Point2::new(0.0, -30.0),
+            r.range(8.0, 20.0),
+            60.0,
+            30.0,
+            Combine::Cut,
+        ));
+    }
+    for _ in 0..25 {
+        let x = r.range(2.0, total - 25.0);
+        let a = r.range(0.0, dmath::TAU);
+        let (s, c) = dmath::sin_cos(a);
+        let n = Vec3::new(0.0, c, s);
+        let d = r.range(1.5, 4.0);
+        let plane = frame(Point3::new(x, 0.0, 0.0) + n * (radius_at(x) - d), n, Vec3::X);
+        let (kl, kw) = (r.range(8.0, 20.0), r.range(3.0, 6.0));
+        f.push(rounded(
+            plane,
+            Point2::new(0.0, -kw / 2.0),
+            kl,
+            kw,
+            kw * 0.49,
+            d + 6.0,
+            Combine::Cut,
+        ));
+    }
+    for station in 0..8 {
+        let x = 15.0 + station as f64 * 36.0 + r.range(-3.0, 3.0);
+        let rad = radius_at(x);
+        let phase = r.range(0.0, 1.0);
+        for k in 0..8 {
+            let a = phase + k as f64 * dmath::TAU / 8.0;
+            let (s, c) = dmath::sin_cos(a);
+            let n = Vec3::new(0.0, c, s);
+            f.push(rod(
+                frame(Point3::new(x, 0.0, 0.0) + n * (rad + 2.0), -n, Vec3::X),
+                r.range(0.8, 1.8),
+                r.range(4.0, 9.0),
+                Combine::Cut,
+            ));
+        }
+    }
+    Part { features: f }
+}
+
+/// A hollow open box with bosses on floor and walls, screw holes in them,
+/// ribs, and windows through the walls.
+pub fn housing() -> Part {
+    let mut r = Rng::new(0x40_051);
+    let (w, h, d, t) = (200.0, 150.0, 80.0, 4.0);
+    let mut f = vec![
+        block(Frame::WORLD, Point2::ORIGIN, w, h, d, Combine::New),
+        block(
+            up(Point3::new(0.0, 0.0, t)),
+            Point2::new(t, t),
+            w - 2.0 * t,
+            h - 2.0 * t,
+            d,
+            Combine::Cut,
+        ),
+    ];
+    for _ in 0..40 {
+        let (x, y) = (r.range(15.0, w - 15.0), r.range(15.0, h - 15.0));
+        let (br, bh) = (r.range(3.0, 7.0), r.range(8.0, 30.0));
+        f.push(rod(up(Point3::new(x, y, t - 1.0)), br, bh + 1.0, Combine::Add));
+        f.push(rod(
+            up(Point3::new(x, y, t + bh * 0.4)),
+            br * 0.45,
+            bh,
+            Combine::Cut,
+        ));
+    }
+    for _ in 0..30 {
+        let (y, z) = (r.range(12.0, h - 12.0), r.range(12.0, d - 12.0));
+        let (br, bl) = (r.range(3.0, 6.0), r.range(8.0, 20.0));
+        f.push(rod(
+            frame(Point3::new(t - 1.0, y, z), Vec3::X, Vec3::Y),
+            br,
+            bl + 1.0,
+            Combine::Add,
+        ));
+        f.push(rod(
+            frame(Point3::new(t + 2.0, y, z), Vec3::X, Vec3::Y),
+            br * 0.45,
+            bl,
+            Combine::Cut,
+        ));
+    }
+    for _ in 0..30 {
+        let (x, y) = (r.range(20.0, w - 20.0), r.range(10.0, h - 10.0));
+        let rh = r.range(5.0, 15.0);
+        f.push(block(
+            up(Point3::new(0.0, y - 0.9, t - 0.5)),
+            Point2::new(t - 0.5, 0.0),
+            x - t,
+            1.8,
+            rh,
+            Combine::Add,
+        ));
+    }
+    for _ in 0..15 {
+        let (x, z) = (r.range(15.0, w - 40.0), r.range(12.0, d - 30.0));
+        let wall = frame(Point3::new(x, -1.0, z), Vec3::Y, Vec3::X);
+        f.push(block(
+            wall,
+            Point2::ORIGIN,
+            r.range(8.0, 25.0),
+            r.range(5.0, 15.0),
+            t + 2.0,
+            Combine::Cut,
+        ));
+    }
+    Part { features: f }
+}
+
+/// Features that share planes on purpose: blocks stacked on the top face,
+/// slots and pockets of equal depth, bosses standing exactly on the top face,
+/// and a regular grid of equal holes.
+pub fn coplanar() -> Part {
+    let mut r = Rng::new(0xc0_91a);
+    let (w, h, t) = (300.0, 200.0, 20.0);
+    let mut f = vec![block(Frame::WORLD, Point2::ORIGIN, w, h, t, Combine::New)];
+    for _ in 0..30 {
+        let (x, y) = (r.range(5.0, w - 45.0), r.range(5.0, h - 45.0));
+        f.push(block(
+            up(Point3::new(x, y, t)),
+            Point2::ORIGIN,
+            r.range(10.0, 40.0),
+            r.range(10.0, 40.0),
+            10.0,
+            Combine::Add,
+        ));
+    }
+    for _ in 0..40 {
+        let (x, y) = (r.range(15.0, w - 15.0), r.range(15.0, h - 15.0));
+        let (sw, sh) = (r.range(10.0, 30.0), r.range(3.0, 7.0));
+        f.push(block(
+            turned(Point3::new(x, y, 12.0), r.range(0.0, 3.1)),
+            Point2::new(-sw / 2.0, -sh / 2.0),
+            sw,
+            sh,
+            20.0,
+            Combine::Cut,
+        ));
+    }
+    for _ in 0..40 {
+        let (x, y) = (r.range(10.0, w - 10.0), r.range(10.0, h - 10.0));
+        f.push(rod(
+            up(Point3::new(x, y, t)),
+            r.range(2.0, 6.0),
+            r.range(4.0, 15.0),
+            Combine::Add,
+        ));
+    }
+    for _ in 0..40 {
+        let (x, y) = (r.range(10.0, w - 10.0), r.range(10.0, h - 10.0));
+        f.push(rod(
+            up(Point3::new(x, y, t - 5.0)),
+            r.range(2.0, 6.0),
+            20.0,
+            Combine::Cut,
+        ));
+    }
+    for i in 0..10 {
+        for j in 0..6 {
+            f.push(rod(
+                up(Point3::new(20.0 + i as f64 * 28.0, 20.0 + j as f64 * 32.0, -1.0)),
+                2.0,
+                t + 30.0,
+                Combine::Cut,
+            ));
+        }
+    }
+    Part { features: f }
+}
+
+/// Rectangular and circular arrays of identical features, some overlapping
+/// their neighbours, some rotated.
+pub fn patterns() -> Part {
+    let (w, t) = (250.0, 15.0);
+    let mut f = vec![block(Frame::WORLD, Point2::ORIGIN, w, w, t, Combine::New)];
+    for i in 0..10 {
+        for j in 0..8 {
+            f.push(rod(
+                up(Point3::new(12.0 + i as f64 * 7.0, 12.0 + j as f64 * 7.0, -1.0)),
+                3.0,
+                t + 2.0,
+                Combine::Cut,
+            ));
+        }
+    }
+    // overlapping neighbours: spacing below the diameter
+    for i in 0..8 {
+        f.push(rod(
+            up(Point3::new(150.0 + i as f64 * 9.0, 30.0, t - 4.0)),
+            4.8,
+            10.0,
+            Combine::Cut,
+        ));
+    }
+    let centre = Point3::new(125.0, 150.0, 0.0);
+    for k in 0..24 {
+        let a = k as f64 * dmath::TAU / 24.0;
+        let (s, c) = dmath::sin_cos(a);
+        f.push(rod(
+            up(centre + Vec3::new(80.0 * c, 80.0 * s, t - 1.0)),
+            6.0,
+            8.0,
+            Combine::Add,
+        ));
+    }
+    // radial slots meeting near the centre
+    for k in 0..36 {
+        let a = k as f64 * dmath::TAU / 36.0 + 0.013;
+        f.push(rounded(
+            turned(centre + Vec3::new(0.0, 0.0, t - 3.0), a),
+            Point2::new(12.0, -2.0),
+            40.0,
+            4.0,
+            1.9,
+            10.0,
+            Combine::Cut,
+        ));
+    }
+    // a tight ring of small bosses that overlap each other
+    for k in 0..30 {
+        let a = k as f64 * dmath::TAU / 30.0 + 0.007;
+        let (s, c) = dmath::sin_cos(a);
+        f.push(rod(
+            up(centre + Vec3::new(62.0 * c, 62.0 * s, t - 1.0)),
+            7.0,
+            5.0,
+            Combine::Add,
+        ));
+    }
+    // rotated slot grid
+    for i in 0..6 {
+        for j in 0..3 {
+            let o = Point3::new(30.0 + i as f64 * 30.0, 210.0 + j as f64 * 12.0, t - 2.5);
+            f.push(block(
+                turned(o, 0.3 + 0.05 * i as f64),
+                Point2::new(-10.0, -2.0),
+                20.0,
+                4.0,
+                10.0,
+                Combine::Cut,
+            ));
+        }
+    }
+    Part { features: f }
+}
+
+/// Revolved and spherical shapes mixed with extrudes: domes, spherical cuts,
+/// rings, cones cut in, stepped revolved bosses, holes.
+pub fn mixed() -> Part {
+    let mut r = Rng::new(0x31_a3d);
+    let (w, t) = (200.0, 20.0);
+    let mut f = vec![block(Frame::WORLD, Point2::ORIGIN, w, w, t, Combine::New)];
+    let spot = |r: &mut Rng, m: f64| (r.range(m, w - m), r.range(m, w - m));
+    for _ in 0..40 {
+        let (x, y) = spot(&mut r, 15.0);
+        let rad = r.range(4.0, 12.0);
+        f.push(ball(
+            Point3::new(x, y, t - rad * r.range(0.1, 0.5)),
+            rad,
+            Combine::Add,
+        ));
+    }
+    for _ in 0..40 {
+        let (x, y) = spot(&mut r, 10.0);
+        let rad = r.range(3.0, 8.0);
+        f.push(ball(
+            Point3::new(x, y, t + rad * r.range(0.2, 0.8)),
+            rad,
+            Combine::Cut,
+        ));
+    }
+    for _ in 0..30 {
+        let (x, y) = spot(&mut r, 25.0);
+        let (big, tube) = (r.range(6.0, 15.0), r.range(1.0, 3.0));
+        let ring = Profile {
+            plane: standing(x, y, t),
+            loops: vec![Profile::circle(Point2::new(big, -tube * 0.5), tube, 0)],
+        };
+        f.push(revolve(ring, VERTICAL, Combine::Add));
+    }
+    for _ in 0..40 {
+        let (x, y) = spot(&mut r, 12.0);
+        let (rb, hd) = (r.range(2.0, 7.0), r.range(4.0, 15.0));
+        let tri = polygon(
+            standing(x, y, t),
+            &[
+                Point2::new(0.0, -2.0),
+                Point2::new(rb, -2.0),
+                Point2::new(0.0, hd),
+            ],
+        );
+        f.push(revolve(tri, VERTICAL, Combine::Cut));
+    }
+    for _ in 0..30 {
+        let (x, y) = spot(&mut r, 15.0);
+        let (r1, r2) = (r.range(5.0, 9.0), r.range(2.0, 4.5));
+        let (h1, h2) = (r.range(3.0, 8.0), r.range(3.0, 10.0));
+        let steps = [
+            Point2::new(0.0, 1.0),
+            Point2::new(r1, 1.0),
+            Point2::new(r1, -h1),
+            Point2::new(r2, -h1),
+            Point2::new(r2, -h1 - h2),
+            Point2::new(0.0, -h1 - h2),
+        ];
+        f.push(revolve(
+            polygon(standing(x, y, t), &steps),
+            VERTICAL,
+            Combine::Add,
+        ));
+    }
+    for _ in 0..20 {
+        let (x, y) = spot(&mut r, 8.0);
+        f.push(rod(
+            up(Point3::new(x, y, -1.0)),
+            r.range(1.5, 4.0),
+            t + 30.0,
+            Combine::Cut,
+        ));
+    }
+    Part { features: f }
+}
+
+/// A random history: a random block, then `count` features of random kind,
+/// placement and orientation (sometimes tilted). Nothing is coincident on purpose.
+pub fn fuzz(seed: u64, count: usize) -> Part {
+    let mut r = Rng::new(seed.wrapping_mul(0x9e37_79b9).wrapping_add(17));
+    let (w, h, t) = (r.range(60.0, 200.0), r.range(60.0, 200.0), r.range(10.0, 40.0));
+    let mut f = vec![block(Frame::WORLD, Point2::ORIGIN, w, h, t, Combine::New)];
+    for _ in 0..count {
+        let (x, y) = (r.range(0.0, w), r.range(0.0, h));
+        let z = r.range(-0.3 * t, 1.1 * t);
+        let o = Point3::new(x, y, z);
+        let op = if r.bool() { Combine::Cut } else { Combine::Add };
+        let plane = if r.below(5) == 0 {
+            let n = Vec3::new(r.range(-0.5, 0.5), r.range(-0.5, 0.5), 1.0);
+            frame(o, n, Vec3::new(r.range(-1.0, 1.0), 1.0, 0.0))
+        } else {
+            turned(o, r.range(0.0, dmath::TAU))
+        };
+        let size = r.range(2.0, 0.25 * w.min(h));
+        let depth = r.range(1.0, t);
+        f.push(match r.below(10) {
+            0..=2 => rod(plane, size * 0.5, depth, op),
+            3..=4 => block(
+                plane,
+                Point2::new(-size / 2.0, -size / 3.0),
+                size,
+                size * 0.66,
+                depth,
+                op,
+            ),
+            5..=6 => {
+                let (a, b) = (size, size * r.range(0.3, 1.0));
+                rounded(
+                    plane,
+                    Point2::new(-a / 2.0, -b / 2.0),
+                    a,
+                    b,
+                    b * r.range(0.1, 0.45),
+                    depth,
+                    op,
+                )
+            }
+            7..=8 => ball(o, size * 0.4, op),
+            _ => {
+                let (big, tube) = (size * 0.5, size * r.range(0.05, 0.2));
+                let ring = Profile {
+                    plane: standing(x, y, z),
+                    loops: vec![Profile::circle(Point2::new(big, 0.0), tube, 0)],
+                };
+                revolve(ring, VERTICAL, op)
+            }
+        });
+    }
+    Part { features: f }
+}

@@ -93,6 +93,9 @@ struct Spec {
     foreign: Vec<usize>,
     /// The face comes through whole, every edge intact: its cached data carries over.
     whole: bool,
+    /// The face keeps all its loops and gains these (one closed new edge crossed
+    /// it and touched nothing else): kept, it is extended in place, not rebuilt.
+    extend: bool,
 }
 
 /// Part of an edge of one body lying inside a coplanar face of the other.
@@ -191,6 +194,8 @@ fn edge_split(
     out
 }
 
+const FAST_EXTEND: bool = false;
+
 fn plan(a: &Body, b: &Body, op: Op, feature: u64) -> R<Plan> {
     let bodies = [a, b];
     let index = [Index::new(a), Index::new(b)];
@@ -247,11 +252,13 @@ fn plan(a: &Body, b: &Body, op: Op, feature: u64) -> R<Plan> {
         .collect();
     by_edge.sort_unstable();
     // pieces per edge, made only for edges a spec reaches
-    let mut edge_pieces: [Vec<Option<Vec<usize>>>; 2] =
-        [vec![None; a.edges.len()], vec![None; b.edges.len()]];
+    // looked up, never iterated, so the map's order cannot reach the result
+    let mut edge_pieces: std::collections::HashMap<(Side, EdgeId), Vec<usize>> =
+        std::collections::HashMap::new();
     let mut ensure = |side: Side, e: EdgeId, pieces: &mut Vec<Piece>| -> Vec<usize> {
-        edge_pieces[side][e.index()]
-            .get_or_insert_with(|| {
+        edge_pieces
+            .entry((side, e))
+            .or_insert_with(|| {
                 edge_split(
                     bodies[side],
                     side,
@@ -300,6 +307,14 @@ fn plan(a: &Body, b: &Body, op: Op, feature: u64) -> R<Plan> {
             involved.extend(a.edge(e).coedges.iter().map(|&c| a.coedge_face(c)));
         }
     }
+    let mut split_faces: Vec<FaceId> = Vec::new();
+    for &(sd, e, _) in &by_edge {
+        if sd == 0 {
+            split_faces.extend(a.edge(e).coedges.iter().map(|&c| a.coedge_face(c)));
+        }
+    }
+    split_faces.sort_unstable();
+    split_faces.dedup();
     involved.extend(
         a.face_ids()
             .filter(|&f| index[0].boxes[f.index()].overlaps(&b_box)),
@@ -317,6 +332,42 @@ fn plan(a: &Body, b: &Body, op: Op, feature: u64) -> R<Plan> {
         };
         for f in faces {
             let mine: Vec<usize> = (0..segs.len()).filter(|&i| segs[i].faces[side] == f).collect();
+            // one closed new edge inside a face of A, its boundary untouched: the face just
+            // gains a hole loop (and a disk inside it), no need to piece its whole boundary
+            if FAST_EXTEND
+                && side == 0
+                && mine.len() == 1
+                && segs[mine[0]].ends.is_none()
+                && split_faces.binary_search(&f).is_err()
+                && !imprints.iter().any(|im| im.side == 1 && im.into == f)
+            {
+                let sp = seg_piece[mine[0]];
+                let (disk, hole) = if encloses_left(body, f, &pieces[sp]) {
+                    ((sp, true), (sp, false))
+                } else {
+                    ((sp, false), (sp, true))
+                };
+                let name = body.face(f).name;
+                specs.push(Spec {
+                    side,
+                    from: f,
+                    loops: vec![vec![hole]],
+                    name,
+                    foreign: Vec::new(),
+                    whole: false,
+                    extend: true,
+                });
+                specs.push(Spec {
+                    side,
+                    from: f,
+                    loops: vec![vec![disk]],
+                    name: name.with_str("split").with(1),
+                    foreign: Vec::new(),
+                    whole: false,
+                    extend: false,
+                });
+                continue;
+            }
             let mut foreign: Vec<usize> = Vec::new();
             for im in imprints.iter().filter(|im| im.side != side && im.into == f) {
                 for p in ensure(im.side, im.edge, &mut pieces) {
@@ -350,6 +401,7 @@ fn plan(a: &Body, b: &Body, op: Op, feature: u64) -> R<Plan> {
                     name: body.face(f).name,
                     foreign,
                     whole,
+                    extend: false,
                 });
                 continue;
             }
@@ -369,6 +421,7 @@ fn plan(a: &Body, b: &Body, op: Op, feature: u64) -> R<Plan> {
                     name: body.face(f).name.with_str("split").with(k as u64),
                     foreign: used,
                     whole: false,
+                    extend: false,
                 });
             }
         }
@@ -419,12 +472,19 @@ fn apply(a: &mut Body, b: &Body, plan: &Plan, root: Name) {
             as_is[si] = true;
         }
     }
-    let staying: Vec<FaceId> = specs
+    let mut staying: Vec<FaceId> = specs
         .iter()
         .zip(&as_is)
         .filter(|(_, k)| **k)
         .map(|(s, _)| s.from)
         .collect();
+    staying.extend(
+        kept.iter()
+            .filter(|&&(si, flip)| specs[si].extend && !flip)
+            .map(|&(si, _)| specs[si].from),
+    );
+    staying.sort_unstable();
+    staying.dedup();
     for &f in involved {
         if staying.binary_search(&f).is_err() {
             a.kill_face(f);
@@ -459,7 +519,12 @@ fn apply(a: &mut Body, b: &Body, plan: &Plan, root: Name) {
         } else {
             b.face(s.from).clone()
         };
-        let face = a.add_face(shell, src.surface, src.same_sense != flip, s.name);
+        let face = if s.extend && !flip {
+            a.faces[s.from.index()].bbox = Default::default();
+            s.from
+        } else {
+            a.add_face(shell, src.surface, src.same_sense != flip, s.name)
+        };
         if s.whole
             && !flip
             && let Some(bx) = src.bbox.get()
@@ -493,7 +558,7 @@ fn apply(a: &mut Body, b: &Body, plan: &Plan, root: Name) {
             a.add_loop(face, &uses);
         }
     }
-    a.rebuild_shells();
+    // shells are regrouped when the body is compacted
 }
 
 /// Cuts `curve` (on both faces' surfaces) where it crosses either face's
@@ -838,6 +903,16 @@ fn uv_angle(body: &Body, f: FaceId, p: &Piece, forward: bool, at_end: bool) -> R
         .ok_or(BoolError::Unsupported("split through a singular point"))?;
     let a = if face.same_sense { a } else { -a };
     Ok(dmath::atan2(b, a))
+}
+
+/// Whether walking a closed piece forward goes counter-clockwise around the
+/// region it encloses (on its left, seen from the face's outside).
+fn encloses_left(body: &Body, f: FaceId, p: &Piece) -> bool {
+    let mut samples = Vec::with_capacity(16);
+    piece_samples(p, true, &mut samples);
+    let (pts, _) = forge_topo::uv::draw_loop(body, f, &samples);
+    let area = forge_topo::uv::signed_area(&pts);
+    (area > 0.0) == body.face(f).same_sense
 }
 
 /// Points along a half-edge in walking order, without its last point.
