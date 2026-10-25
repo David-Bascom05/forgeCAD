@@ -208,7 +208,7 @@ fn edge_split(
     first..pieces.len()
 }
 
-const FAST_EXTEND: bool = false;
+const FAST_EXTEND: bool = true;
 
 fn plan(a: &Body, b: &Body, op: Op, feature: u64) -> R<Plan> {
     let bodies = [a, b];
@@ -436,26 +436,31 @@ fn plan(a: &Body, b: &Body, op: Op, feature: u64) -> R<Plan> {
         };
         for f in faces {
             let mine: Vec<usize> = (0..segs.len()).filter(|&i| segs[i].faces[side] == f).collect();
-            // one closed new edge inside a face of A, its boundary untouched: the face just
-            // gains a hole loop (and a disk inside it), no need to piece its whole boundary
+            // new edges inside a planar face of A closing into one loop that touches neither its
+            // boundary nor encloses any of its loops: the face just gains a hole (and a disk fills
+            // it), no need to piece its whole boundary (a plate face with hundreds of holes)
             if FAST_EXTEND
                 && side == 0
-                && mine.len() == 1
-                && segs[mine[0]].ends.is_none()
+                && !mine.is_empty()
+                && matches!(body.face(f).surface, Surface::Plane(_))
                 && split_faces.binary_search(&f).is_err()
                 && !imprints.iter().any(|im| im.side == 1 && im.into == f)
+                && let Some((cycle, poly)) = lone_cycle(
+                    body,
+                    f,
+                    &mine.iter().map(|&i| seg_piece[i]).collect::<Vec<_>>(),
+                    &pieces,
+                )
+                && !encloses_a_loop(body, f, &poly)
             {
-                let sp = seg_piece[mine[0]];
-                let (disk, hole) = if encloses_left(body, f, &pieces[sp]) {
-                    ((sp, true), (sp, false))
-                } else {
-                    ((sp, false), (sp, true))
-                };
+                let back: Vec<(usize, bool)> = cycle.iter().rev().map(|&(p, d)| (p, !d)).collect();
+                let left = (forge_topo::uv::signed_area(&poly) > 0.0) == body.face(f).same_sense;
+                let (disk, hole) = if left { (cycle, back) } else { (back, cycle) };
                 let name = body.face(f).name;
                 specs.push(Spec {
                     side,
                     from: f,
-                    loops: vec![vec![hole]],
+                    loops: vec![hole],
                     name,
                     foreign: Vec::new(),
                     whole: false,
@@ -464,7 +469,7 @@ fn plan(a: &Body, b: &Body, op: Op, feature: u64) -> R<Plan> {
                 specs.push(Spec {
                     side,
                     from: f,
-                    loops: vec![vec![disk]],
+                    loops: vec![disk],
                     name: name.with_str("split").with(1),
                     foreign: Vec::new(),
                     whole: false,
@@ -673,8 +678,8 @@ fn apply(a: &mut Body, b: &Body, plan: &Plan, root: Name) {
         } else {
             b.face(s.from).clone()
         };
+        // an extended (planar) face only gains holes inside it: its box stays
         let face = if s.extend && !flip {
-            a.faces[s.from.index()].bbox = Default::default();
             s.from
         } else {
             a.add_face(shell, src.surface, src.same_sense != flip, s.name)
@@ -1224,14 +1229,62 @@ fn uv_angle(body: &Body, f: FaceId, p: &Piece, forward: bool, at_end: bool) -> R
     Ok(dmath::atan2(b, a))
 }
 
-/// Whether walking a closed piece forward goes counter-clockwise around the
-/// region it encloses (on its left, seen from the face's outside).
-fn encloses_left(body: &Body, f: FaceId, p: &Piece) -> bool {
-    let mut samples = Vec::with_capacity(16);
-    piece_samples(p, true, &mut samples);
-    let (pts, _) = forge_topo::uv::draw_loop(body, f, &samples);
-    let area = forge_topo::uv::signed_area(&pts);
-    (area > 0.0) == body.face(f).same_sense
+/// The pieces chained into one closed loop (in walking order) and its outline in the face's
+/// parameter plane; None if they don't close into exactly one loop, or a vertex of A is on it.
+fn lone_cycle(body: &Body, f: FaceId, ps: &[usize], pieces: &[Piece]) -> Option<(Walk, Vec<Point2>)> {
+    if ps
+        .iter()
+        .any(|&p| matches!(pieces[p].start, VKey::Old(0, _)) || matches!(pieces[p].end, VKey::Old(0, _)))
+    {
+        return None;
+    }
+    let mut cycle = vec![(ps[0], true)];
+    let mut used = vec![false; ps.len()];
+    used[0] = true;
+    let start = pieces[ps[0]].start;
+    let mut at = pieces[ps[0]].end;
+    while at != start {
+        let k =
+            (0..ps.len()).find(|&k| !used[k] && (pieces[ps[k]].start == at || pieces[ps[k]].end == at))?;
+        used[k] = true;
+        let fwd = pieces[ps[k]].start == at;
+        at = if fwd {
+            pieces[ps[k]].end
+        } else {
+            pieces[ps[k]].start
+        };
+        cycle.push((ps[k], fwd));
+    }
+    if used.iter().any(|u| !u) {
+        return None;
+    }
+    let mut samples = Vec::with_capacity(16 * cycle.len());
+    for &(p, fwd) in &cycle {
+        piece_samples(&pieces[p], fwd, &mut samples);
+    }
+    let (poly, _) = forge_topo::uv::draw_loop(body, f, &samples);
+    Some((cycle, poly))
+}
+
+/// Whether a loop of face `f` might lie inside the outline (in `f`'s parameter plane): any
+/// loop with a vertex in the outline's box, grown a little. Conservative on purpose: the
+/// outline's chords cut inside the true curve, and a loop crossing it would have split edges.
+fn encloses_a_loop(body: &Body, f: FaceId, poly: &[Point2]) -> bool {
+    let (mut lo, mut hi) = (
+        Point2::new(f64::INFINITY, f64::INFINITY),
+        Point2::new(f64::NEG_INFINITY, f64::NEG_INFINITY),
+    );
+    for q in poly {
+        lo = Point2::new(lo.x.min(q.x), lo.y.min(q.y));
+        hi = Point2::new(hi.x.max(q.x), hi.y.max(q.y));
+    }
+    let g = 1e-3 * (hi.x - lo.x + hi.y - lo.y);
+    let face = body.face(f);
+    face.loops.iter().any(|&l| {
+        let v = body.edge(body.coedge(body.lp(l).coedges[0]).edge).start;
+        let q = face.surface.project(body.vertex(v).point);
+        q.x >= lo.x - g && q.x <= hi.x + g && q.y >= lo.y - g && q.y <= hi.y + g
+    })
 }
 
 /// Points along a half-edge in walking order, without its last point.
