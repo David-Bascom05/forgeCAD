@@ -35,55 +35,57 @@ pub enum BoolError {
     Internal(&'static str),
 }
 
-type R<T> = Result<T, BoolError>;
+pub(crate) type R<T> = Result<T, BoolError>;
 
 /// A closed walk of edge pieces: (piece, forward).
-type Walk = Vec<(usize, bool)>;
+pub(crate) type Walk = Vec<(usize, bool)>;
 /// A face region: outer walk first, then holes.
-type Region = Vec<Walk>;
+pub(crate) type Region = Vec<Walk>;
 
 /// Which input body: 0 is A, 1 is B.
-type Side = usize;
+pub(crate) type Side = usize;
 /// Splits an edge into its pieces once (later calls give the same range).
 type Ensure<'x> = dyn FnMut(Side, EdgeId, &mut Vec<Piece>) -> std::ops::Range<usize> + 'x;
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
-enum VKey {
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub(crate) enum VKey {
     Old(Side, VertexId),
     New(u32),
 }
 
 /// A cut of a boundary edge by an intersection curve.
-struct Cut {
-    side: Side,
-    edge: EdgeId,
-    s: f64,
-    point: Point3,
+pub(crate) struct Cut {
+    pub(crate) side: Side,
+    pub(crate) edge: EdgeId,
+    pub(crate) s: f64,
+    pub(crate) point: Point3,
 }
 
-struct Seg {
-    curve: Curve,
-    range: Interval,
+pub(crate) struct Seg {
+    pub(crate) curve: Curve,
+    pub(crate) range: Interval,
     /// Indices into the cuts list; None for a closed curve lying wholly inside both faces.
-    ends: Option<(usize, usize)>,
-    faces: [FaceId; 2],
-    name: Name,
+    pub(crate) ends: Option<(usize, usize)>,
+    pub(crate) faces: [FaceId; 2],
+    /// The bodies the two faces belong to.
+    pub(crate) sides: [Side; 2],
+    pub(crate) name: Name,
 }
 
 /// A piece of an edge in the result: part of an original edge, or a new edge.
 #[derive(Clone)]
-struct Piece {
-    curve: Curve,
-    range: Interval,
-    start: VKey,
-    end: VKey,
-    name: Name,
+pub(crate) struct Piece {
+    pub(crate) curve: Curve,
+    pub(crate) range: Interval,
+    pub(crate) start: VKey,
+    pub(crate) end: VKey,
+    pub(crate) name: Name,
     /// The new edge this piece is, if any.
-    seg: Option<usize>,
+    pub(crate) seg: Option<usize>,
     /// The original edge this piece is all of, if it was not split.
-    whole: Option<(Side, EdgeId)>,
+    pub(crate) whole: Option<(Side, EdgeId)>,
     /// The body whose edge this piece is part of (None for a new edge).
-    side: Option<Side>,
+    pub(crate) side: Option<Side>,
 }
 
 /// A face of the result before it is built: loops of (piece, forward).
@@ -108,11 +110,13 @@ struct Spec {
 }
 
 /// Part of an edge of one body lying inside a coplanar face of the other.
-struct Imprint {
-    side: Side,
-    edge: EdgeId,
-    range: Interval,
-    into: FaceId,
+pub(crate) struct Imprint {
+    pub(crate) side: Side,
+    pub(crate) edge: EdgeId,
+    pub(crate) range: Interval,
+    pub(crate) into: FaceId,
+    /// The body `into` belongs to.
+    pub(crate) into_side: Side,
 }
 
 /// Where a face piece lies relative to the other body.
@@ -159,7 +163,7 @@ struct Plan {
 /// The pieces an edge splits into at its cuts (one piece, the whole edge, if none), pushed
 /// consecutively: their indices are the returned range.
 #[allow(clippy::too_many_arguments)]
-fn edge_split(
+pub(crate) fn edge_split(
     body: &Body,
     side: Side,
     e: EdgeId,
@@ -293,8 +297,9 @@ fn plan(a: &Body, b: &Body, op: Op, feature: u64) -> R<Plan> {
                     .with_set(vec![a.face(fa).name, b.face(fb).name])
                     .with(ci as u64);
                 trim(
-                    &bodies,
-                    &index,
+                    bodies,
+                    [&index[0], &index[1]],
+                    [0, 1],
                     [fa, fb],
                     curve,
                     pair_name,
@@ -309,8 +314,9 @@ fn plan(a: &Body, b: &Body, op: Op, feature: u64) -> R<Plan> {
     lap(&mut clock, 0);
     // faces on one surface: each imprints the other's boundary
     for &(fa, fb) in &coplanar {
-        imprint(&bodies, &index, 1, fb, fa, &mut cuts, &mut imprints)?;
-        imprint(&bodies, &index, 0, fa, fb, &mut cuts, &mut imprints)?;
+        let pair = [&index[0], &index[1]];
+        imprint(bodies, pair, [0, 1], 1, fb, fa, &mut cuts, &mut imprints)?;
+        imprint(bodies, pair, [0, 1], 0, fa, fb, &mut cuts, &mut imprints)?;
     }
 
     // 3: vertices for the cuts, then edge pieces
@@ -921,9 +927,10 @@ fn apply(a: &mut Body, b: &Body, plan: &Plan, root: Name) {
 /// Cuts `curve` (on both faces' surfaces) where it crosses either face's
 /// boundary and records the pieces lying inside both faces.
 #[allow(clippy::too_many_arguments)]
-fn trim(
-    bodies: &[&Body; 2],
-    index: &[Index; 2],
+pub(crate) fn trim(
+    bodies: [&Body; 2],
+    index: [&Index; 2],
+    sides: [Side; 2],
     faces: [FaceId; 2],
     curve: Curve,
     name: Name,
@@ -956,9 +963,8 @@ fn trim(
     let mut along: Vec<(Side, EdgeId, bool)> = Vec::new();
     // an edge whose box misses the curve's cannot cut it (big faces have hundreds of edges)
     let reach = curve.bbox(range).grow(10.0 * tol::LINEAR);
-    for side in 0..2 {
-        let body = bodies[side];
-        let f = faces[side];
+    for k in 0..2 {
+        let (body, f, side) = (bodies[k], faces[k], sides[k]);
         for &l in &body.face(f).loops {
             for &c in &body.lp(l).coedges {
                 let e = body.coedge(c).edge;
@@ -966,7 +972,7 @@ fn trim(
                 if !body.edge_box(e).overlaps(&reach) {
                     continue;
                 }
-                if cuts[first..].iter().any(|k| k.side == side && k.edge == e) {
+                if cuts[first..].iter().any(|x| x.side == side && x.edge == e) {
                     continue; // a seam is visited twice
                 }
                 let across = across(body, f, c)?;
@@ -979,13 +985,13 @@ fn trim(
                         let g = body.partner(c).map(|o| body.coedge_face(o));
                         let seam = g == Some(f);
                         // beside a face on the other face's surface, coplanar imprinting does it
-                        let other = &bodies[1 - side].face(faces[1 - side]).surface;
+                        let other = &bodies[1 - k].face(faces[1 - k]).surface;
                         let coplanar = g.is_some_and(|g| {
                             g != f
                                 && ssi::surfaces(&body.face(g).surface, other) == SurfaceSurface::Coincident
                         });
-                        if !coplanar && !along.iter().any(|a| a.0 == side && a.1 == e) {
-                            along.push((side, e, seam));
+                        if !coplanar && !along.iter().any(|a| a.0 == k && a.1 == e) {
+                            along.push((k, e, seam));
                         }
                         for (s, v) in [(edge.range.lo, edge.start), (edge.range.hi, edge.end)] {
                             let p = body.vertex(v).point;
@@ -1027,15 +1033,15 @@ fn trim(
     // cut where it leaves that face and imprinted into it (splitting that face, and stopping the
     // classification flood across it); along a seam the curve adds no edge at all
     if !along.is_empty() {
-        for &(side, e, _) in &along {
-            let body = bodies[side];
+        for &(k, e, _) in &along {
+            let (body, side) = (bodies[k], sides[k]);
             let edge = body.edge(e);
             let mut marks = vec![edge.range.lo, edge.range.hi];
-            for k in first..cuts.len() {
-                if cuts[k].side == side {
+            for ci in first..cuts.len() {
+                if cuts[ci].side == side {
                     continue;
                 }
-                let p = cuts[k].point;
+                let p = cuts[ci].point;
                 let s = edge.curve.closest(p, edge.range);
                 if edge.curve.eval(s).distance(p) <= 10.0 * tol::LINEAR {
                     cuts.push(Cut {
@@ -1052,14 +1058,15 @@ fn trim(
                 if w[1] - w[0] <= 1e-12 * (1.0 + edge.range.width()) {
                     continue;
                 }
-                let into = faces[1 - side];
+                let into = faces[1 - k];
                 let m = edge.curve.eval(0.5 * (w[0] + w[1]));
-                if index[1 - side].point_in_face(into, m) == Where::Inside {
+                if index[1 - k].point_in_face(into, m) == Where::Inside {
                     imprints.push(Imprint {
                         side,
                         edge: e,
                         range: Interval::new(w[0], w[1]),
                         into,
+                        into_side: sides[1 - k],
                     });
                 }
             }
@@ -1092,6 +1099,7 @@ fn trim(
                 range,
                 ends: None,
                 faces,
+                sides,
                 name,
             });
         }
@@ -1114,6 +1122,7 @@ fn trim(
                 range: Interval::new(t0, t1),
                 ends: Some((i0, i1)),
                 faces,
+                sides,
                 name: name.with(k as u64),
             });
         }
@@ -1124,7 +1133,7 @@ fn trim(
 /// The surface that meets face `f`'s surface along the edge of coedge `c`:
 /// the neighbouring face's, or for a seam (or an edge between two faces on
 /// one surface, like revolve halves) the plane through the edge, across it.
-fn across(body: &Body, f: FaceId, c: forge_topo::CoedgeId) -> R<Surface> {
+pub(crate) fn across(body: &Body, f: FaceId, c: forge_topo::CoedgeId) -> R<Surface> {
     let edge = body.edge(body.coedge(c).edge);
     let t = edge.range.mid();
     let d = edge.curve.deriv(t);
@@ -1177,10 +1186,12 @@ fn across(body: &Body, f: FaceId, c: forge_topo::CoedgeId) -> R<Surface> {
 /// Imprints the boundary of `src_face` (of body `src`) onto the coplanar
 /// face `dst_face` of the other body: cuts where its edges cross the
 /// destination's boundary (on both edges), and records the parts lying inside.
-fn imprint(
-    bodies: &[&Body; 2],
-    index: &[Index; 2],
-    src: Side,
+#[allow(clippy::too_many_arguments)]
+pub(crate) fn imprint(
+    bodies: [&Body; 2],
+    index: [&Index; 2],
+    sides: [Side; 2],
+    src: usize,
     src_face: FaceId,
     dst_face: FaceId,
     cuts: &mut Vec<Cut>,
@@ -1207,7 +1218,7 @@ fn imprint(
                         // lying in both the face's plane and the neighbour's surface, the edge runs
                         // along the same carrier as e2: cut each at the other's ends inside it
                         _ => {
-                            coincide(sb, src, e, db, e2, cuts);
+                            coincide(sb, sides[src], e, db, sides[dst], e2, cuts);
                             continue;
                         }
                     };
@@ -1215,13 +1226,13 @@ fn imprint(
                         let s2 = edge2.curve.closest(h.point, edge2.range);
                         if edge2.curve.eval(s2).distance(h.point) <= 10.0 * tol::LINEAR {
                             cuts.push(Cut {
-                                side: dst,
+                                side: sides[dst],
                                 edge: e2,
                                 s: s2,
                                 point: h.point,
                             });
                             cuts.push(Cut {
-                                side: src,
+                                side: sides[src],
                                 edge: e,
                                 s: h.t,
                                 point: h.point,
@@ -1245,10 +1256,11 @@ fn imprint(
                 }
                 match index[dst].point_in_face(dst_face, edge.curve.eval(0.5 * (w[0] + w[1]))) {
                     Where::Inside => imprints.push(Imprint {
-                        side: src,
+                        side: sides[src],
                         edge: e,
                         range: Interval::new(w[0], w[1]),
                         into: dst_face,
+                        into_side: sides[dst],
                     }),
                     // along the destination's boundary: the shared part of coincident edges
                     Where::On | Where::Outside => {}
@@ -1259,7 +1271,7 @@ fn imprint(
     Ok(())
 }
 
-fn overlap(a: &forge_math::Box3, b: &forge_math::Box3) -> forge_math::Box3 {
+pub(crate) fn overlap(a: &forge_math::Box3, b: &forge_math::Box3) -> forge_math::Box3 {
     let cut = |x: Interval, y: Interval| Interval::new(x.lo.max(y.lo), x.hi.min(y.hi));
     forge_math::Box3 {
         x: cut(a.x, b.x),
@@ -1270,7 +1282,7 @@ fn overlap(a: &forge_math::Box3, b: &forge_math::Box3) -> forge_math::Box3 {
 
 /// A crossing hit as it is; a touching one replaced by the crossings found where the surface's
 /// distance changes sign within a small window around it (none if it truly only touches).
-fn crossings_near(curve: &Curve, range: Interval, s: &Surface, h: CurveHit) -> Vec<CurveHit> {
+pub(crate) fn crossings_near(curve: &Curve, range: Interval, s: &Surface, h: CurveHit) -> Vec<CurveHit> {
     if h.contact == Contact::Crossing {
         return vec![h];
     }
@@ -1313,7 +1325,7 @@ fn crossings_near(curve: &Curve, range: Interval, s: &Surface, h: CurveHit) -> V
 }
 
 /// Two edges on the same carrier curve: each is cut where the other's ends lie inside it.
-fn coincide(sb: &Body, src: Side, e: EdgeId, db: &Body, e2: EdgeId, cuts: &mut Vec<Cut>) {
+fn coincide(sb: &Body, src: Side, e: EdgeId, db: &Body, dst: Side, e2: EdgeId, cuts: &mut Vec<Cut>) {
     let near = 10.0 * tol::LINEAR;
     let mut ends_into = |from: &Body, fe: EdgeId, to: &Body, te: EdgeId, side: Side| {
         let (f, t) = (from.edge(fe), to.edge(te));
@@ -1330,7 +1342,7 @@ fn coincide(sb: &Body, src: Side, e: EdgeId, db: &Body, e2: EdgeId, cuts: &mut V
             }
         }
     };
-    ends_into(sb, e, db, e2, 1 - src);
+    ends_into(sb, e, db, e2, dst);
     ends_into(db, e2, sb, e, src);
 }
 
@@ -1411,7 +1423,7 @@ fn place_cuts(bodies: &[&Body; 2], cuts: &[Cut]) -> R<Placed> {
 
 /// Direction of a half-edge in the face's oriented parameter plane, at its
 /// start (`at_end` false) or pointing back along it from its end.
-fn uv_angle(body: &Body, f: FaceId, p: &Piece, forward: bool, at_end: bool) -> R<f64> {
+pub(crate) fn uv_angle(body: &Body, f: FaceId, p: &Piece, forward: bool, at_end: bool) -> R<f64> {
     let t = if forward != at_end { p.range.lo } else { p.range.hi };
     let d = p.curve.deriv(t);
     let dir = if forward != at_end { d.d1 } else { -d.d1 };
@@ -1493,7 +1505,7 @@ fn local_split(c: LocalSplit) -> Option<Local> {
 }
 
 /// A point on face `f` a little inside its boundary, beside the middle of its first edge.
-fn face_point(body: &Body, f: FaceId) -> Option<Point3> {
+pub(crate) fn face_point(body: &Body, f: FaceId) -> Option<Point3> {
     let face = body.face(f);
     let c = *body.lp(*face.loops.first()?).coedges.first()?;
     let co = body.coedge(c);
@@ -1570,7 +1582,7 @@ fn encloses_a_loop(body: &Body, f: FaceId, poly: &[Point2]) -> bool {
 }
 
 /// Points along a half-edge in walking order, without its last point.
-fn piece_samples(p: &Piece, forward: bool, out: &mut Vec<Point3>) {
+pub(crate) fn piece_samples(p: &Piece, forward: bool, out: &mut Vec<Point3>) {
     let n = match p.curve {
         Curve::Line(_) => 2,
         _ => 16,
@@ -1589,13 +1601,13 @@ fn piece_samples(p: &Piece, forward: bool, out: &mut Vec<Point3>) {
 /// What splitting a face gives: its regions (each region's loops, outer first), and when
 /// the face's outer loop was left out of the split, the hole loops lying in no new region
 /// (they stay with the face itself) and each region's outline (mirrored parameter plane).
-struct Split {
-    regions: Vec<Region>,
-    open: Vec<Walk>,
-    outlines: Vec<Option<Vec<Point2>>>,
+pub(crate) struct Split {
+    pub(crate) regions: Vec<Region>,
+    pub(crate) open: Vec<Walk>,
+    pub(crate) outlines: Vec<Option<Vec<Point2>>>,
 }
 
-fn split_face(
+pub(crate) fn split_face(
     body: &Body,
     f: FaceId,
     pieces: &[Piece],
@@ -1750,6 +1762,18 @@ fn split_face(
             }
         }
     }
+    // each outline's box, a quick rejection before the full containment test
+    let boxes: Vec<Option<(f64, f64, f64, f64)>> = polys
+        .iter()
+        .map(|p| {
+            p.as_ref().map(|p| {
+                p.iter().fold(
+                    (f64::INFINITY, f64::NEG_INFINITY, f64::INFINITY, f64::NEG_INFINITY),
+                    |a, q| (a.0.min(q.x), a.1.max(q.x), a.2.min(q.y), a.3.max(q.y)),
+                )
+            })
+        })
+        .collect();
     let areas: Vec<f64> = cycles
         .iter()
         .zip(&polys)
@@ -1801,20 +1825,25 @@ fn split_face(
         // Outlines of a face spanning more than a period can't all share one window, so the
         // probe is tried a period either way too
         let shifts = |period: Option<f64>| match period {
-            Some(p) => [0.0, -p, p],
-            None => [0.0; 3],
+            Some(p) => vec![0.0, -p, p],
+            None => vec![0.0],
         };
-        let holds = |poly: &Vec<Point2>| {
-            shifts(dom.u.period).iter().any(|&du| {
-                shifts(dom.v.period)
-                    .iter()
-                    .any(|&dv| inside_poly(Point2::new(probe.x + du, probe.y + dv), poly))
+        let (su, sv) = (shifts(dom.u.period), shifts(dom.v.period));
+        let holds = |o: usize| {
+            let (Some(poly), Some(b)) = (&polys[o], &boxes[o]) else {
+                return true;
+            };
+            su.iter().any(|&du| {
+                sv.iter().any(|&dv| {
+                    let q = Point2::new(probe.x + du, probe.y + dv);
+                    q.x >= b.0 && q.x <= b.1 && q.y >= b.2 && q.y <= b.3 && inside_poly(q, poly)
+                })
             })
         };
         let host = outer_of
             .iter()
             .enumerate()
-            .filter(|&(_, &o)| polys[o].as_ref().is_none_or(holds))
+            .filter(|&(_, &o)| holds(o))
             .min_by(|x, y| areas[*x.1].total_cmp(&areas[*y.1]))
             .map(|(r, _)| r);
         let Some(host) = host else {
@@ -1854,7 +1883,7 @@ fn split_face(
     })
 }
 
-fn inside_poly(p: Point2, poly: &[Point2]) -> bool {
+pub(crate) fn inside_poly(p: Point2, poly: &[Point2]) -> bool {
     let mut c = false;
     for i in 0..poly.len() {
         let (a, b) = (poly[i], poly[(i + 1) % poly.len()]);
@@ -2086,20 +2115,42 @@ fn debug_conflict(
 
 /// A point inside a spec's face: a small step inward from its first edge's midpoint.
 fn interior_point(body: &Body, s: &Spec, pieces: &[Piece]) -> Option<Point3> {
-    let face = body.face(s.from);
-    let &(p, fwd) = s.loops.first()?.first()?;
+    probe(body, s.from, *s.loops.first()?.first()?, pieces)
+}
+
+/// A point inside face `f` a small step off the middle of half-edge `(p, fwd)` of one of its
+/// loops, on the face's side.
+pub(crate) fn probe(body: &Body, f: FaceId, h: (usize, bool), pieces: &[Piece]) -> Option<Point3> {
+    probe_at(body, f, h, pieces, None)
+}
+
+/// `probe`, a given distance off the half-edge (by default 1% of its half chord, at most 0.05).
+pub(crate) fn probe_at(
+    body: &Body,
+    f: FaceId,
+    (p, fwd): (usize, bool),
+    pieces: &[Piece],
+    step: Option<f64>,
+) -> Option<Point3> {
+    let face = body.face(f);
     let piece = &pieces[p];
     let t = piece.range.mid();
     let d = piece.curve.deriv(t);
     let along = if fwd { d.d1 } else { -d.d1 };
-    let n = body.face_normal(s.from, face.surface.project(d.p))?;
+    let n = body.face_normal(f, face.surface.project(d.p))?;
     let inward = n.cross(along).normalize()?;
-    // half chords: a closed piece (a whole circle) has no chord end to end
-    let at = |t: f64| piece.curve.eval(t);
-    let len = at(piece.range.lo)
-        .distance(d.p)
-        .max(d.p.distance(at(piece.range.hi)))
-        .max(1e-3);
-    let q = d.p + inward * (0.01 * len).min(0.05);
+    let step = step.unwrap_or_else(|| (0.01 * half_chord(piece)).min(0.05));
+    let q = d.p + inward * step;
     Some(face.surface.eval(face.surface.project(q)))
+}
+
+/// The longer chord from a piece's middle to an end (a closed piece, a whole circle, has no
+/// chord end to end), at least 1e-3.
+pub(crate) fn half_chord(piece: &Piece) -> f64 {
+    let at = |t: f64| piece.curve.eval(t);
+    let m = at(piece.range.mid());
+    at(piece.range.lo)
+        .distance(m)
+        .max(m.distance(at(piece.range.hi)))
+        .max(1e-3)
 }
