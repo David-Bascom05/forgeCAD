@@ -1,10 +1,11 @@
 //! Curves defined as "where surface A meets surface B", for pairs with no
 //! closed form (a sphere and a cylinder meet in a quartic space curve).
 //!
-//! The curve keeps both surfaces and a dense chain of points lying on both.
-//! The parameter runs along the chain (point i at t = i); every evaluation
-//! starts from the chain and is pulled exactly onto both surfaces by Newton,
-//! so the chain only guides — the curve is exact.
+//! The curve keeps both surfaces and a dense chain of points lying on both,
+//! with the curve's direction at each. The parameter runs along the chain
+//! (point i at t = i); an evaluation starts from the cubic through the chain
+//! (Hermite, from those directions: within about 1e-6 mm) and takes one Newton
+//! step onto both surfaces, so the chain only guides — the curve is exact.
 
 use crate::surface::Surface;
 use forge_math::{Box3, Frame, Interval, Point3, Vec3, tol};
@@ -15,6 +16,8 @@ pub struct IntCurve {
     pub b: Surface,
     /// Points on both surfaces, in order along the curve.
     pub pts: Vec<Point3>,
+    /// The curve's unit direction at each point, along increasing t.
+    pub tans: Vec<Vec3>,
     /// The last point connects back to the first.
     pub closed: bool,
     /// Largest distance from a chain segment to the true curve between its ends.
@@ -42,6 +45,18 @@ pub fn refine(a: &Surface, b: &Surface, mut p: Point3) -> Option<Point3> {
     }
     let ok = a.implicit(p).abs() <= tol::LINEAR && b.implicit(p).abs() <= tol::LINEAR;
     ok.then_some(p)
+}
+
+/// One minimum-norm Newton step of `p` towards both surfaces (p itself where they are tangent).
+fn refine_step(a: &Surface, b: &Surface, p: Point3) -> Point3 {
+    let (ga, gb) = (a.implicit(p), b.implicit(p));
+    let (na, nb) = (a.gradient(p), b.gradient(p));
+    let (aa, ab, bb) = (na.dot(na), na.dot(nb), nb.dot(nb));
+    let det = aa * bb - ab * ab;
+    if det <= 1e-12 * aa * bb {
+        return p;
+    }
+    p + na * ((-ga * bb + gb * ab) / det) + nb * ((-gb * aa + ga * ab) / det)
 }
 
 /// Unit direction of the curve at p (na x nb), or None where the surfaces are tangent.
@@ -75,17 +90,46 @@ impl IntCurve {
         self.pts[i].lerp(self.pts[(i + 1) % n], f)
     }
 
-    pub fn eval(&self, t: f64) -> Point3 {
-        let guess = self.chain_point(t);
-        refine(&self.a, &self.b, guess).unwrap_or(guess)
+    /// The cubic through the chain at t: point, first and second derivative.
+    fn hermite(&self, t: f64) -> (Point3, Vec3, Vec3) {
+        let n = self.pts.len();
+        let seg = self.segments();
+        let t = if self.closed {
+            t.rem_euclid(seg as f64)
+        } else {
+            t.clamp(0.0, seg as f64)
+        };
+        let i = (t.floor() as usize).min(seg.saturating_sub(1));
+        let j = (i + 1) % n;
+        let f = t - i as f64;
+        let (p0, p1) = (self.pts[i], self.pts[j]);
+        let chord = p1 - p0;
+        let len = chord.length();
+        let (m0, m1) = (self.tans[i] * len, self.tans[j] * len);
+        let (f2, f3) = (f * f, f * f * f);
+        let p = p0 + chord * (3.0 * f2 - 2.0 * f3) + m0 * (f3 - 2.0 * f2 + f) + m1 * (f3 - f2);
+        let d1 = chord * (6.0 * f - 6.0 * f2) + m0 * (3.0 * f2 - 4.0 * f + 1.0) + m1 * (3.0 * f2 - 2.0 * f);
+        let d2 = chord * (6.0 - 12.0 * f) + m0 * (6.0 * f - 4.0) + m1 * (6.0 * f - 2.0);
+        (p, d1, d2)
     }
 
-    /// First and second derivative with respect to t, by central differences
-    /// of exact points (the chain spacing sets the scale of t).
+    pub fn eval(&self, t: f64) -> Point3 {
+        let q = refine_step(&self.a, &self.b, self.hermite(t).0);
+        // one step lands where the cubic was close; where it wasn't, finish the job
+        let tight = |p: Point3| {
+            self.a.implicit(p).abs() <= 1e-3 * tol::LINEAR && self.b.implicit(p).abs() <= 1e-3 * tol::LINEAR
+        };
+        if tight(q) {
+            q
+        } else {
+            refine(&self.a, &self.b, q).unwrap_or(q)
+        }
+    }
+
+    /// First and second derivative with respect to t (the chain spacing sets its scale).
     pub fn derivs(&self, t: f64) -> (Point3, Vec3, Vec3) {
-        let h = 1e-4;
-        let (p0, p, p1) = (self.eval(t - h), self.eval(t), self.eval(t + h));
-        (p, (p1 - p0) / (2.0 * h), ((p1 - p) - (p - p0)) / (h * h))
+        let (_, d1, d2) = self.hermite(t);
+        (self.eval(t), d1, d2)
     }
 
     /// Bound on |dP/dt| over the curve.
@@ -121,28 +165,45 @@ impl IntCurve {
                 best = (d, t);
             }
         }
-        let (mut a, mut b) = ((best.1 - 1.0).max(lo), (best.1 + 1.0).min(hi));
-        let g = 0.618_033_988_749_895;
-        let f = |t: f64| self.eval(t).distance_sq(p);
-        let (mut c, mut d) = (b - g * (b - a), a + g * (b - a));
-        let (mut fc, mut fd) = (f(c), f(d));
-        for _ in 0..60 {
-            if fc < fd {
-                b = d;
-                d = c;
-                fd = fc;
-                c = b - g * (b - a);
-                fc = f(c);
-            } else {
-                a = c;
-                c = d;
-                fc = fd;
-                d = a + g * (b - a);
-                fd = f(d);
+        // Newton on (C(t) - p) . C'(t) = 0 along the cubic, on the segments either side
+        let near = best.1;
+        let mut out = near;
+        let mut out_d = self.eval(near).distance_sq(p);
+        for (s0, s1) in [((near - 1.0).max(lo), near), (near, (near + 1.0).min(hi))] {
+            if s1 <= s0 {
+                continue;
+            }
+            let mut t = 0.5 * (s0 + s1);
+            for _ in 0..12 {
+                let (c, d1, d2) = self.hermite(t);
+                let g = (c - p).dot(d1);
+                let h = d1.dot(d1) + (c - p).dot(d2);
+                if h <= 0.0 {
+                    break;
+                }
+                let next = (t - g / h).clamp(s0, s1);
+                let done = (next - t).abs() <= 1e-13;
+                t = next;
+                if done {
+                    break;
+                }
+            }
+            // then against the exact curve (the cubic's nearest point sits a hair off it)
+            for _ in 0..3 {
+                let d1 = self.hermite(t).1;
+                let g = (self.eval(t) - p).dot(d1);
+                let h = d1.dot(d1);
+                if h <= 0.0 {
+                    break;
+                }
+                t = (t - g / h).clamp(s0, s1);
+            }
+            let d = self.eval(t).distance_sq(p);
+            if d < out_d {
+                (out, out_d) = (t, d);
             }
         }
-        let t = 0.5 * (a + b);
-        if f(t) <= best.0 { t } else { best.1 }
+        out
     }
 
     pub fn bbox(&self, range: Interval) -> Box3 {
@@ -161,6 +222,7 @@ impl IntCurve {
             a: self.a.transformed(f),
             b: self.b.transformed(f),
             pts: self.pts.iter().map(|&p| f.point_to_world(p)).collect(),
+            tans: self.tans.iter().map(|&v| f.vec_to_world(v)).collect(),
             closed: self.closed,
             sag: self.sag,
         }
@@ -285,10 +347,27 @@ fn finish(a: &Surface, b: &Surface, pts: Vec<Point3>, closed: bool, step: f64) -
             refine(a, b, m).map_or(step, |q| q.distance(m))
         })
         .fold(0.0, f64::max);
+    // directions along the chain (na x nb, turned to follow it)
+    let tans = (0..n)
+        .map(|i| {
+            let along = if closed || (i > 0 && i + 1 < n) {
+                pts[(i + 1) % n] - pts[(i + n - 1) % n]
+            } else if i == 0 {
+                pts[1] - pts[0]
+            } else {
+                pts[i] - pts[i - 1]
+            };
+            let d = direction(a, b, pts[i])
+                .or_else(|| along.normalize().map(|u| u.get()))
+                .unwrap_or(Vec3::ZERO);
+            if d.dot(along) < 0.0 { -d } else { d }
+        })
+        .collect();
     IntCurve {
         a: *a,
         b: *b,
         pts,
+        tans,
         closed,
         sag: 1.5 * sag + tol::LINEAR,
     }
