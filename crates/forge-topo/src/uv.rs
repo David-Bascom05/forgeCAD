@@ -33,6 +33,8 @@ pub fn default_segments(e: &Edge) -> usize {
         Curve::Line(_) => 2,
         Curve::Circle(_) | Curve::Ellipse(_) => (e.range.width() / (dmath::PI / 16.0)).ceil() as usize,
         Curve::Parabola(_) | Curve::Hyperbola(_) => 16,
+        // follow the chain: a sample per chain segment or two
+        Curve::Intersection(_) => (e.range.width().ceil() as usize).clamp(4, 256),
     };
     (n.max(2) + 1) & !1
 }
@@ -82,7 +84,13 @@ pub fn draw_loop(body: &Body, face: FaceId, samples: &[Point3]) -> (Vec<Point2>,
     let n = samples.len();
     let raw: Vec<Point2> = samples.iter().map(|&p| surface.project(p)).collect();
     let singular: Vec<bool> = raw.iter().map(|&uv| surface.normal(uv).is_none()).collect();
-    let Some(start) = (0..n).find(|&i| !singular[i]) else {
+    // begin just after a singular sample when there is one, so each run below is one
+    // whole stretch between singular points (a stretch split at the start would be
+    // unwrapped as two runs and could be shifted apart)
+    let Some(start) = (0..n)
+        .find(|&i| !singular[i] && singular[(i + n - 1) % n])
+        .or_else(|| (0..n).find(|&i| !singular[i]))
+    else {
         return (raw, (0..n).collect());
     };
     let next_regular = |i: usize| (1..=n).map(|k| (i + k) % n).find(|&j| !singular[j]).unwrap_or(i);

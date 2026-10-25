@@ -410,6 +410,33 @@ impl Surface {
     /// Signed distance-like value: zero on the surface, positive on the side
     /// of its natural normal, and 1-Lipschitz (it changes no faster than the
     /// point moves), so a bound on it bounds where the surface can be.
+    /// Gradient of `implicit` at p (unit length away from axes, poles and apexes).
+    pub fn gradient(&self, p: Point3) -> Vec3 {
+        let radial = |f: &Frame, l: Point3| {
+            let rho = (l.x * l.x + l.y * l.y).sqrt();
+            if rho > 0.0 {
+                f.x() * (l.x / rho) + f.y() * (l.y / rho)
+            } else {
+                f.x().get()
+            }
+        };
+        match self {
+            Surface::Plane(s) => s.frame.z().get(),
+            Surface::Cylinder(c) => radial(&c.frame, c.frame.point_to_local(p)),
+            Surface::Cone(c) => {
+                let l = c.frame.point_to_local(p);
+                radial(&c.frame, l) * c.cos_a() - c.frame.z() * c.sin_a()
+            }
+            Surface::Sphere(s) => (p - s.frame.origin).normalize().map_or(Vec3::Z, |u| u.get()),
+            Surface::Torus(t) => {
+                let l = t.frame.point_to_local(p);
+                let r = radial(&t.frame, l);
+                let centre = t.frame.origin + r * t.major;
+                (p - centre).normalize().map_or(r, |u| u.get())
+            }
+        }
+    }
+
     pub fn implicit(&self, p: Point3) -> f64 {
         match self {
             Surface::Plane(s) => s.signed_distance(p),

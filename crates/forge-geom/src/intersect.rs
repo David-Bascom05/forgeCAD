@@ -243,6 +243,7 @@ fn speed_bound(c: &Curve, range: Interval) -> f64 {
             (t * t / (4.0 * p.focal * p.focal) + 1.0).sqrt()
         }
         Curve::Hyperbola(h) => (h.a * h.a + h.b * h.b).sqrt(),
+        Curve::Intersection(c) => c.speed_bound(),
     }
 }
 
@@ -328,8 +329,8 @@ fn quadric(s: &Surface) -> Option<Quadric> {
 fn conic_quadric(f: &Frame, a: f64, b: f64, range: Interval, s: &Surface) -> Option<CurveSurface> {
     let (qf, m, lin, c0) = quadric(s)?;
     let o = qf.point_to_local(f.origin).to_vec();
-    let ex = qf.vec_to_local(f.x() * a);
-    let ey = qf.vec_to_local(f.y() * b);
+    let ex0 = qf.vec_to_local(f.x() * a);
+    let ey0 = qf.vec_to_local(f.y() * b);
     let mv = |v: Vec3| {
         Vec3::new(
             m[0][0] * v.x + m[0][1] * v.y + m[0][2] * v.z,
@@ -338,60 +339,52 @@ fn conic_quadric(f: &Frame, a: f64, b: f64, range: Interval, s: &Surface) -> Opt
         )
     };
     let lv = Vec3::new(lin[0], lin[1], lin[2]);
-    let (mo, mx, my) = (mv(o), mv(ex), mv(ey));
-    // Q = k0 + k1 c + k2 s + k3 c^2 + k4 c s + k5 s^2
-    let k0 = o.dot(mo) + lv.dot(o) + c0;
-    let k1 = 2.0 * ex.dot(mo) + lv.dot(ex);
-    let k2 = 2.0 * ey.dot(mo) + lv.dot(ey);
-    let k3 = ex.dot(mx);
-    let k4 = 2.0 * ex.dot(my);
-    let k5 = ey.dot(my);
-    let scale = [k0, k1, k2, k3, k4, k5]
-        .iter()
-        .fold(0.0f64, |acc, v| acc.max(v.abs()));
-    if scale == 0.0 {
-        return Some(CurveSurface::OnSurface);
-    }
-    // c = (1 - u^2) / w, s = 2u / w, w = 1 + u^2; multiply through by w^2
-    let poly = [
-        k0 + k1 + k3,
-        2.0 * k2 + 2.0 * k4,
-        2.0 * k0 - 2.0 * k3 + 4.0 * k5,
-        2.0 * k2 - 2.0 * k4,
-        k0 - k1 + k3,
-    ];
-    let q = |t: f64| {
-        let (sn, cs) = dmath::sin_cos(t);
-        k0 + k1 * cs + k2 * sn + k3 * cs * cs + k4 * cs * sn + k5 * sn * sn
-    };
-    let probes = 9;
     let curve = Curve::Ellipse(Ellipse {
         frame: *f,
         major: a,
         minor: b,
     });
+    let probes = 9;
     let on = (0..probes).all(|i| {
         s.distance(curve.eval(range.lo + range.width() * i as f64 / (probes - 1) as f64)) <= tol::LINEAR
     });
     if on {
         return Some(CurveSurface::OnSurface);
     }
-    let mut ts: Vec<(f64, Contact)> = poly::all_real_roots(&poly)
-        .into_iter()
-        .map(|r| {
-            (
-                2.0 * dmath::atan(r.x),
-                if r.touching {
-                    Contact::Touching
-                } else {
-                    Contact::Crossing
-                },
-            )
-        })
-        .collect();
-    // u = tan(t/2) cannot reach t = pi; test it directly
-    if q(dmath::PI).abs() <= 1e-12 * scale {
-        ts.push((dmath::PI, Contact::Touching));
+    // u = tan(tau / 2) is well conditioned only for |tau| <= pi/2, so solve
+    // around t = 0 and around t = pi and keep each half's own roots
+    let mut ts: Vec<(f64, Contact)> = Vec::new();
+    for phi in [0.0, dmath::PI] {
+        let (sp, cp) = dmath::sin_cos(phi);
+        let ex = ex0 * cp + ey0 * sp;
+        let ey = ey0 * cp - ex0 * sp;
+        let (mo, mx, my) = (mv(o), mv(ex), mv(ey));
+        // Q = k0 + k1 c + k2 s + k3 c^2 + k4 c s + k5 s^2, in tau
+        let k0 = o.dot(mo) + lv.dot(o) + c0;
+        let k1 = 2.0 * ex.dot(mo) + lv.dot(ex);
+        let k2 = 2.0 * ey.dot(mo) + lv.dot(ey);
+        let k3 = ex.dot(mx);
+        let k4 = 2.0 * ex.dot(my);
+        let k5 = ey.dot(my);
+        if [k0, k1, k2, k3, k4, k5].iter().all(|v| *v == 0.0) {
+            return Some(CurveSurface::OnSurface);
+        }
+        // c = (1 - u^2) / w, s = 2u / w, w = 1 + u^2; multiplied through by w^2
+        let poly = [
+            k0 + k1 + k3,
+            2.0 * k2 + 2.0 * k4,
+            2.0 * k0 - 2.0 * k3 + 4.0 * k5,
+            2.0 * k2 - 2.0 * k4,
+            k0 - k1 + k3,
+        ];
+        for r in poly::real_roots(&poly, -1.0, 1.0) {
+            let contact = if r.touching {
+                Contact::Touching
+            } else {
+                Contact::Crossing
+            };
+            ts.push((phi + 2.0 * dmath::atan(r.x), contact));
+        }
     }
     let cone_apex = match s {
         Surface::Cone(c) => Some((c.frame, c.apex_v())),
@@ -1010,6 +1003,7 @@ mod tests {
                             Curve::Ellipse(_) => "ellipse",
                             Curve::Parabola(_) => "parabola",
                             Curve::Hyperbola(_) => "hyperbola",
+                            Curve::Intersection(_) => "traced",
                         })
                         .collect::<Vec<_>>()
                         .join("+"),
@@ -1166,5 +1160,28 @@ mod tests {
             curve_surface(&c, Interval::new(0.0, dmath::TAU), &cyl),
             CurveSurface::OnSurface
         );
+    }
+
+    #[test]
+    fn conic_crossing_next_to_half_turn() {
+        // a crossing a hair before t = pi, where tan(t/2) runs off to infinity
+        let c = Curve::Circle(Circle {
+            frame: Frame::WORLD,
+            radius: 5.0,
+        });
+        for &t0 in &[
+            dmath::PI - 1e-7,
+            dmath::PI + 1e-9,
+            dmath::PI,
+            1e-8,
+            dmath::FRAC_PI_2,
+        ] {
+            let d = c.deriv(t0);
+            let plane = Surface::Plane(Plane::new(Frame::from_z(d.p, d.d1.normalize().unwrap())));
+            let CurveSurface::Hits(h) = curve_surface(&c, Interval::new(0.0, dmath::TAU), &plane) else {
+                panic!()
+            };
+            assert!(h.iter().any(|h| h.point.distance(d.p) < 1e-9), "t0 {t0}: {h:?}");
+        }
     }
 }

@@ -183,6 +183,21 @@ fn check_sides(body: &Body, out: &mut Vec<Problem>) {
                 let Some(inward) = n.cross(along).normalize() else {
                     continue;
                 };
+                // and well short of any other edge of the face (a hole may pass within a hair)
+                let clearance = loops
+                    .iter()
+                    .flat_map(|l| l.coedges.iter())
+                    .map(|&o| body.coedge(o).edge)
+                    .filter(|&oe| oe != co.edge)
+                    .map(|oe| {
+                        let other = body.edge(oe);
+                        other
+                            .curve
+                            .eval(other.curve.closest(d.p, other.range))
+                            .distance(d.p)
+                    })
+                    .fold(f64::INFINITY, f64::min);
+                let step = step.min(0.25 * clearance).max(10.0 * tol::LINEAR);
                 let probe = surface.project(d.p + inward * step);
                 let probe = unwrap_near(body, f, probe, mid_uv);
                 if !point_in_loops(probe, &loops) {

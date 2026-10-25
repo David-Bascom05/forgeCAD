@@ -128,7 +128,8 @@ pub fn boolean(a: &Body, b: &Body, op: Op, feature: u64) -> R<Body> {
                 continue;
             }
             let (sa, sb) = (&a.face(fa).surface, &b.face(fb).surface);
-            let curves = match ssi::surfaces(sa, sb) {
+            let region = overlap(&index[0].faces[fa.index()].bbox, &index[1].faces[fb.index()].bbox);
+            let curves = match ssi::surfaces_in(sa, sb, region) {
                 SurfaceSurface::Empty | SurfaceSurface::Points(_) => continue,
                 SurfaceSurface::Coincident => {
                     coplanar.push((fa, fb));
@@ -186,7 +187,7 @@ pub fn boolean(a: &Body, b: &Body, op: Op, feature: u64) -> R<Body> {
                 };
                 edge_pieces[side][e.index()].push(pieces.len());
                 pieces.push(Piece {
-                    curve: edge.curve,
+                    curve: edge.curve.clone(),
                     range: Interval::new(at.0, s),
                     start: at.1,
                     end: v,
@@ -208,7 +209,7 @@ pub fn boolean(a: &Body, b: &Body, op: Op, feature: u64) -> R<Body> {
         };
         seg_piece.push(pieces.len());
         pieces.push(Piece {
-            curve: s.curve,
+            curve: s.curve.clone(),
             range: s.range,
             start,
             end,
@@ -316,18 +317,22 @@ fn trim(
     cuts: &mut Vec<Cut>,
     segs: &mut Vec<Seg>,
 ) -> R<()> {
-    let closed = curve.domain().period.is_some();
+    let domain = curve.domain();
+    let closed = domain.period.is_some();
+    let period = domain.period.unwrap_or(0.0);
     let range = if closed {
-        Interval::new(0.0, dmath::TAU)
+        Interval::new(domain.lo, domain.lo + period)
+    } else if domain.lo.is_finite() && domain.hi.is_finite() {
+        Interval::new(domain.lo, domain.hi)
     } else {
-        let Curve::Line(line) = curve else {
+        let Curve::Line(line) = &curve else {
             return Err(BoolError::Unsupported("open conic intersection curve"));
         };
         let both = index[0].faces[faces[0].index()]
             .bbox
             .hull(&index[1].faces[faces[1].index()].bbox)
             .grow(1.0);
-        match line_box(&line, &both) {
+        match line_box(line, &both) {
             Some(r) => r,
             None => return Ok(()),
         }
@@ -403,7 +408,7 @@ fn trim(
     if ts.is_empty() {
         if closed && inside(range.mid())? {
             segs.push(Seg {
-                curve,
+                curve: curve.clone(),
                 range,
                 ends: None,
                 faces,
@@ -418,14 +423,14 @@ fn trim(
         let (t0, i0) = ts[k];
         let (mut t1, i1) = ts[(k + 1) % n];
         if k + 1 == n {
-            t1 += dmath::TAU;
+            t1 += period;
         }
         if t1 - t0 <= 1e-12 {
             continue;
         }
         if inside(0.5 * (t0 + t1))? {
             segs.push(Seg {
-                curve,
+                curve: curve.clone(),
                 range: Interval::new(t0, t1),
                 ends: Some((i0, i1)),
                 faces,
@@ -537,6 +542,15 @@ fn imprint(
         }
     }
     Ok(())
+}
+
+fn overlap(a: &forge_math::Box3, b: &forge_math::Box3) -> forge_math::Box3 {
+    let cut = |x: Interval, y: Interval| Interval::new(x.lo.max(y.lo), x.hi.min(y.hi));
+    forge_math::Box3 {
+        x: cut(a.x, b.x),
+        y: cut(a.y, b.y),
+        z: cut(a.z, b.z),
+    }
 }
 
 fn line_box(line: &forge_geom::Line, b: &forge_math::Box3) -> Option<Interval> {
@@ -997,7 +1011,7 @@ fn assemble(
                     None => {
                         let pc = &pieces[p];
                         let (a, b) = (vertex(&mut out, pc.start), vertex(&mut out, pc.end));
-                        let e = out.add_edge(pc.curve, pc.range, a, b, pc.name);
+                        let e = out.add_edge(pc.curve.clone(), pc.range, a, b, pc.name);
                         emap[p] = Some(e);
                         e
                     }

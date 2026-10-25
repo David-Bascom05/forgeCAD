@@ -1,6 +1,23 @@
 use forge_geom::intersect::{Contact, SurfaceSurface, plane_surface};
 use forge_geom::{Circle, Curve, Cylinder, Line, Sphere, Surface};
-use forge_math::{Frame, tol};
+use forge_math::{Box3, Frame, tol};
+
+/// Intersection of two surfaces within `region`: closed form where the pair
+/// allows, otherwise traced (an exact curve defined by both surfaces).
+pub fn surfaces_in(a: &Surface, b: &Surface, region: Box3) -> SurfaceSurface {
+    match surfaces(a, b) {
+        SurfaceSurface::NotAnalytic => match forge_geom::intcurve::trace(a, b, region) {
+            Some(cs) if cs.is_empty() => SurfaceSurface::Empty,
+            Some(cs) => SurfaceSurface::Curves(
+                cs.into_iter()
+                    .map(|c| (Curve::Intersection(std::sync::Arc::new(c)), Contact::Crossing))
+                    .collect(),
+            ),
+            None => SurfaceSurface::NotAnalytic,
+        },
+        r => r,
+    }
+}
 
 /// Intersection of two whole surfaces, closed form where the pair allows.
 pub fn surfaces(a: &Surface, b: &Surface) -> SurfaceSurface {

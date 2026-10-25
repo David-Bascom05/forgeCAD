@@ -87,13 +87,15 @@ pub struct Hyperbola {
     pub b: f64,
 }
 
-#[derive(Clone, Copy, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq)]
 pub enum Curve {
     Line(Line),
     Circle(Circle),
     Ellipse(Ellipse),
     Parabola(Parabola),
     Hyperbola(Hyperbola),
+    /// Where two surfaces meet, for pairs with no closed form.
+    Intersection(std::sync::Arc<crate::intcurve::IntCurve>),
 }
 
 impl Line {
@@ -379,6 +381,7 @@ macro_rules! dispatch {
             Curve::Ellipse($c) => $e,
             Curve::Parabola($c) => $e,
             Curve::Hyperbola($c) => $e,
+            Curve::Intersection($c) => $e,
         }
     };
 }
@@ -403,6 +406,7 @@ impl CurveGeom for Curve {
             Curve::Ellipse(c) => Curve::Ellipse(c.transformed(f)),
             Curve::Parabola(c) => Curve::Parabola(c.transformed(f)),
             Curve::Hyperbola(c) => Curve::Hyperbola(c.transformed(f)),
+            Curve::Intersection(c) => Curve::Intersection(std::sync::Arc::new(c.as_ref().transformed(f))),
         }
     }
 }

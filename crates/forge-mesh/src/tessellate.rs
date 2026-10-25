@@ -44,6 +44,8 @@ fn edge_segments(curve: &Curve, width: f64, q: &Quality) -> usize {
         Curve::Circle(c) => width / arc_step(c.radius, q),
         Curve::Ellipse(e) => width / arc_step(e.major, q),
         Curve::Parabola(_) | Curve::Hyperbola(_) => 64.0,
+        // the chain already follows the curvature; split each link by the chord its sag allows
+        Curve::Intersection(c) => width * (c.sag / q.chord).sqrt().max(1.0),
     };
     (n.ceil() as usize).max(1)
 }

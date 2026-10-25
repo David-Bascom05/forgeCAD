@@ -210,6 +210,7 @@ fn sag_bound(c: &Curve) -> f64 {
         Curve::Circle(k) => k.radius,
         Curve::Ellipse(e) => e.major * e.major / e.minor.max(tol::LINEAR),
         Curve::Parabola(_) | Curve::Hyperbola(_) => 1e3,
+        Curve::Intersection(k) => return 2.0 * k.sag + 10.0 * tol::LINEAR,
     };
     0.01 * r + 10.0 * tol::LINEAR
 }
