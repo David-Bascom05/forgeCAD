@@ -110,7 +110,9 @@ impl Interval {
     /// cos(x + shift) over the interval: extremes at the endpoints or at
     /// multiples of pi inside it.
     fn shifted_cos(&self, shift: f64) -> Interval {
-        if self.width() >= dmath::TAU {
+        // also covers non-finite bounds and ones so large that k += 1 stops counting
+        let finite = self.lo.is_finite() && self.hi.is_finite();
+        if !finite || self.width() >= dmath::TAU || self.lo.abs().max(self.hi.abs()) > 1e15 {
             return Interval { lo: -1.0, hi: 1.0 };
         }
         let a = self.lo + shift;
@@ -119,7 +121,11 @@ impl Interval {
         let mut lo = ca.min(cb);
         let mut hi = ca.max(cb);
         let mut k = (a / dmath::PI).ceil();
-        while k * dmath::PI <= b {
+        // width < 2pi, so at most three multiples of pi fall inside
+        for _ in 0..3 {
+            if k * dmath::PI > b {
+                break;
+            }
             if (k as i64).rem_euclid(2) == 0 {
                 hi = 1.0;
             } else {
