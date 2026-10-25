@@ -165,8 +165,44 @@ fn b64(bytes: &[u8]) -> String {
     out
 }
 
-fn f32s(v: &[f32]) -> String {
-    b64(&v.iter().flat_map(|x| x.to_le_bytes()).collect::<Vec<u8>>())
+/// Coordinates as 16-bit steps across `bbox` (lo xyz, hi xyz), little endian.
+fn q16(v: &[f32], bbox: &[f32; 6]) -> String {
+    let bytes: Vec<u8> = v
+        .iter()
+        .enumerate()
+        .flat_map(|(i, &x)| {
+            let (lo, hi) = (bbox[i % 3], bbox[3 + i % 3]);
+            let t = if hi > lo { (x - lo) / (hi - lo) } else { 0.0 };
+            ((t.clamp(0.0, 1.0) * 65535.0).round() as u16).to_le_bytes()
+        })
+        .collect();
+    b64(&bytes)
+}
+
+/// Unit vectors as signed bytes.
+fn q8(v: &[f32]) -> String {
+    b64(&v
+        .iter()
+        .map(|&x| (x.clamp(-1.0, 1.0) * 127.0).round() as i8 as u8)
+        .collect::<Vec<u8>>())
+}
+
+fn bbox(sets: &[&[f32]]) -> [f32; 6] {
+    let mut b = [
+        f32::INFINITY,
+        f32::INFINITY,
+        f32::INFINITY,
+        f32::NEG_INFINITY,
+        f32::NEG_INFINITY,
+        f32::NEG_INFINITY,
+    ];
+    for v in sets {
+        for (i, &x) in v.iter().enumerate() {
+            b[i % 3] = b[i % 3].min(x);
+            b[3 + i % 3] = b[3 + i % 3].max(x);
+        }
+    }
+    b
 }
 
 /// Triangles split per face so each face carries its exact surface normals.
@@ -345,13 +381,15 @@ fn preview(path: &str) -> ExitCode {
             }
         };
         let (pos, nrm) = shaded(&body, &mesh);
+        let lines = edges(&body);
+        let bb = bbox(&[&pos, &lines]);
         if k > 0 {
             json.push(',');
         }
         json.push_str(&format!(
             "{{\"name\":\"{}\",\"how\":\"{}\",\"status\":\"{}\",\"features\":{},\"faces\":{},\"edges\":{},\"vertices\":{},\"genus\":{},\"problems\":{},\
              \"triangles\":{},\"open\":{},\"volume\":{:.3},\"build_us\":{:.1},\"mesh_us\":{:.1},\
-             \"pos\":\"{}\",\"nrm\":\"{}\",\"lines\":\"{}\"}}",
+             \"bbox\":{:?},\"pos\":\"{}\",\"nrm\":\"{}\",\"lines\":\"{}\"}}",
             p.name,
             p.how,
             status,
@@ -366,9 +404,10 @@ fn preview(path: &str) -> ExitCode {
             mesh.volume(),
             p.build_us,
             mesh_us,
-            f32s(&pos),
-            f32s(&nrm),
-            f32s(&edges(&body)),
+            bb,
+            q16(&pos, &bb),
+            q8(&nrm),
+            q16(&lines, &bb),
         ));
     }
     json.push_str("]}");
