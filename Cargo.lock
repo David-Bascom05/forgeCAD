@@ -33,6 +33,7 @@ dependencies = [
  "forge-geom",
  "forge-math",
  "forge-mesh",
+ "forge-model",
  "forge-ops",
  "forge-topo",
 ]

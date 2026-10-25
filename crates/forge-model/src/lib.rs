@@ -1,5 +1,6 @@
 //! A part as a history of features, and regenerating it into a solid.
 
+pub mod adversarial;
 pub mod suite;
 pub mod torture;
 

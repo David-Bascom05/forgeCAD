@@ -197,7 +197,7 @@ fn edges(body: &Body) -> Vec<f32> {
         let n = if matches!(edge.curve, forge_geom::Curve::Line(_)) {
             1
         } else {
-            48
+            12
         };
         for i in 0..n {
             for k in [i, i + 1] {
@@ -210,53 +210,152 @@ fn edges(body: &Body) -> Vec<f32> {
     out
 }
 
+/// A part for the preview page: the solid, how long building it took, and
+/// whether its history regenerates.
+struct Shown {
+    name: String,
+    how: String,
+    body: Body,
+    build_us: f64,
+    features: usize,
+    status: String,
+}
+
+fn simple(name: &str, how: &str, build: impl Fn() -> Body) -> Shown {
+    let reps = 200;
+    let t0 = Instant::now();
+    for _ in 0..reps {
+        std::hint::black_box(build());
+    }
+    let build_us = t0.elapsed().as_secs_f64() * 1e6 / reps as f64;
+    Shown {
+        name: name.into(),
+        how: how.into(),
+        body: build(),
+        build_us,
+        features: 1,
+        status: "ok".into(),
+    }
+}
+
+/// Regenerates a history from scratch (best of three). If it fails, shows the
+/// solid up to the last feature that worked and says where it stops.
+fn history(name: &str, how: &str, part: &forge_model::Part) -> Shown {
+    let n = part.features.len();
+    let prefix = |k: usize| forge_model::Part {
+        features: part.features[..k].to_vec(),
+    };
+    let (k, status) = match part.regenerate() {
+        Ok(_) => (n, "ok".to_string()),
+        Err(e) => {
+            let (mut lo, mut hi) = (1, n);
+            while lo < hi {
+                let mid = (lo + hi) / 2;
+                if prefix(mid).regenerate().is_ok() {
+                    lo = mid + 1
+                } else {
+                    hi = mid
+                }
+            }
+            (lo - 1, format!("stops at feature {}: {e:?}", lo - 1))
+        }
+    };
+    let shown = prefix(k.max(1));
+    let mut best = f64::INFINITY;
+    let mut body = None;
+    for _ in 0..3 {
+        let t = Instant::now();
+        let b = shown.regenerate().expect("prefix regenerates");
+        best = best.min(t.elapsed().as_secs_f64() * 1e6);
+        body = Some(b);
+    }
+    Shown {
+        name: name.into(),
+        how: how.into(),
+        body: body.expect("ran"),
+        build_us: best,
+        features: k,
+        status,
+    }
+}
+
 fn preview(path: &str) -> ExitCode {
-    type Build = Box<dyn Fn() -> Body>;
-    let parts: Vec<(&str, &str, Build)> = vec![
-        (
+    let mut parts: Vec<Shown> = vec![
+        simple(
             "Mounting plate",
             "Extrude 6 mm: rounded outline, slot, two bolt holes",
-            Box::new(|| extrude(&plate(), 6.0, 1).unwrap()),
+            || extrude(&plate(), 6.0, 1).unwrap(),
         ),
-        (
-            "Pin",
-            "Revolve 360°: cylinder shank, hemisphere head",
-            Box::new(|| revolve(&pin(), Y, dmath::TAU, 1).unwrap()),
-        ),
-        (
-            "Ring",
-            "Revolve 360°: rounded rectangle, four tori",
-            Box::new(|| revolve(&ring(), Y, dmath::TAU, 1).unwrap()),
-        ),
-        (
+        simple("Pin", "Revolve 360°: cylinder shank, hemisphere head", || {
+            revolve(&pin(), Y, dmath::TAU, 1).unwrap()
+        }),
+        simple("Ring", "Revolve 360°: rounded rectangle, four tori", || {
+            revolve(&ring(), Y, dmath::TAU, 1).unwrap()
+        }),
+        simple(
             "Partial ring",
             "Revolve 270°: rounded section with a hole, planar end caps",
-            Box::new(|| revolve(&holed_ring(), Y, 1.5 * dmath::PI, 1).unwrap()),
+            || revolve(&holed_ring(), Y, 1.5 * dmath::PI, 1).unwrap(),
         ),
     ];
+    let blurb = |n: &str| match n {
+        "plate" => "Torture plate: holes, pockets, bosses on one plane, rotated slots, dimples, counterbores",
+        "shaft" => "Revolved stepped shaft: grooves, cross holes, flats, keyways, radial pin holes",
+        "housing" => "Hollow box: inside bosses, screw holes, ribs, wall windows",
+        "coplanar" => "Features that share planes and faces on purpose",
+        "patterns" => "Arrays of holes, bosses and rotated slots that overlap",
+        "mixed" => "Domes, spherical cuts, revolved rings and cones with extrudes",
+        _ => "",
+    };
+    for (name, part) in forge_model::suite::parts() {
+        parts.push(history(&format!("Suite: {name}"), blurb(name), &part));
+    }
+    for seed in [1u64, 12, 15, 16, 2, 19] {
+        parts.push(history(
+            &format!("Fuzz seed {seed}"),
+            "Random history: blocks, rods, rounded slots, balls, rings, tilted planes",
+            &forge_model::suite::fuzz(seed, 80),
+        ));
+    }
     let mut json = String::from("{\"parts\":[");
-    for (k, (name, how, build)) in parts.iter().enumerate() {
-        let t0 = Instant::now();
-        let reps = 200;
-        for _ in 0..reps {
-            std::hint::black_box(build());
-        }
-        let build_us = t0.elapsed().as_secs_f64() * 1e6 / reps as f64;
-        let body = build();
-        let t1 = Instant::now();
-        for _ in 0..20 {
-            std::hint::black_box(tessellate(&body, &Quality::default()).unwrap());
-        }
-        let mesh_us = t1.elapsed().as_secs_f64() * 1e6 / 20.0;
-        let mesh = tessellate(&body, &Quality::default()).unwrap();
+    for (k, p) in parts.iter().enumerate() {
+        let big = p.body.faces.len() > 50;
+        let q = if big {
+            Quality {
+                chord: 0.25,
+                max_angle: 0.7,
+            }
+        } else {
+            Quality::default()
+        };
+        let body = p.body.compact();
+        let mut status = p.status.replace('"', "'");
+        let (mesh, mesh_us) = match tessellate(&body, &q) {
+            Ok(m) => {
+                let reps = if big { 3 } else { 20 };
+                let t1 = Instant::now();
+                for _ in 0..reps {
+                    std::hint::black_box(tessellate(&body, &q).ok());
+                }
+                (m, t1.elapsed().as_secs_f64() * 1e6 / reps as f64)
+            }
+            Err(e) => {
+                status = format!("{status}; mesh failed: {e:?}").replace('"', "'");
+                (forge_mesh::TriMesh::default(), 0.0)
+            }
+        };
         let (pos, nrm) = shaded(&body, &mesh);
         if k > 0 {
             json.push(',');
         }
         json.push_str(&format!(
-            "{{\"name\":\"{name}\",\"how\":\"{how}\",\"faces\":{},\"edges\":{},\"vertices\":{},\"genus\":{},\"problems\":{},\
+            "{{\"name\":\"{}\",\"how\":\"{}\",\"status\":\"{}\",\"features\":{},\"faces\":{},\"edges\":{},\"vertices\":{},\"genus\":{},\"problems\":{},\
              \"triangles\":{},\"open\":{},\"volume\":{:.3},\"build_us\":{:.1},\"mesh_us\":{:.1},\
              \"pos\":\"{}\",\"nrm\":\"{}\",\"lines\":\"{}\"}}",
+            p.name,
+            p.how,
+            status,
+            p.features,
             body.faces.len(),
             body.edges.len(),
             body.vertices.len(),
@@ -265,7 +364,7 @@ fn preview(path: &str) -> ExitCode {
             mesh.triangles.len(),
             mesh.open_edges().len(),
             mesh.volume(),
-            build_us,
+            p.build_us,
             mesh_us,
             f32s(&pos),
             f32s(&nrm),

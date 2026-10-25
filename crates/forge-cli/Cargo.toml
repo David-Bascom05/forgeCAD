@@ -16,6 +16,7 @@ forge-geom = { path = "../forge-geom" }
 forge-topo = { path = "../forge-topo" }
 forge-ops = { path = "../forge-ops" }
 forge-mesh = { path = "../forge-mesh" }
+forge-model = { path = "../forge-model" }
 
 [lints]
 workspace = true
