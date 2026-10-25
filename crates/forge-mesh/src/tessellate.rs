@@ -47,7 +47,10 @@ fn edge_segments(curve: &Curve, width: f64, q: &Quality) -> usize {
         // the chain already follows the curvature; split each link by the chord its sag allows
         Curve::Intersection(c) => width * (c.sag / q.chord).sqrt().max(1.0),
     };
-    (n.ceil() as usize).max(1)
+    // a curved edge gets two chords at least: a face bounded by a line and a short arc
+    // still has three corners to triangulate
+    let least = if matches!(curve, Curve::Line(_)) { 1 } else { 2 };
+    (n.ceil() as usize).max(least)
 }
 
 /// The surface's parameter scale, so distances in the scaled plane roughly
