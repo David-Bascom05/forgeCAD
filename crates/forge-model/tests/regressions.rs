@@ -1,6 +1,6 @@
 //! Minimal histories the adversarial hunt found breaking regeneration
 //! (cargo run --release -p forge-model --example hunt -- 80 --emit-tests ...).
-//! Each is ignored until the kernel handles it; un-ignore as they are fixed.
+//! Ignored ones still fail; the rest are fixed and guard against coming back.
 
 use forge_math::{Point2, Vec2};
 use forge_model::adversarial::fr;
@@ -14,7 +14,6 @@ fn regenerates_valid(part: Part) {
 }
 
 #[test]
-#[ignore = "known failure: error: Boolean(Internal('inconsistent classification'))"]
 #[allow(
     clippy::approx_constant,
     clippy::excessive_precision,
@@ -278,7 +277,6 @@ fn ball_poles_inconsistent_classification() {
 }
 
 #[test]
-#[ignore = "known failure: error: Boolean(Unsupported('coplanar faces share an edge'))"]
 #[allow(
     clippy::approx_constant,
     clippy::excessive_precision,
@@ -404,7 +402,6 @@ fn coaxial_coplanar_faces_share_an_edge() {
 }
 
 #[test]
-#[ignore = "known failure: error: Boolean(Unsupported('intersection curve runs along an edge'))"]
 #[allow(
     clippy::approx_constant,
     clippy::excessive_precision,
@@ -515,7 +512,6 @@ fn coaxial_intersection_curve_runs_along_an_edge() {
 }
 
 #[test]
-#[ignore = "known failure: error: Boolean(Internal('inconsistent classification'))"]
 #[allow(
     clippy::approx_constant,
     clippy::excessive_precision,
@@ -802,7 +798,6 @@ fn coincident_walls_coplanar_faces_share_an_edge() {
 }
 
 #[test]
-#[ignore = "known failure: error: Boolean(Unsupported('coplanar faces share an edge'))"]
 #[allow(
     clippy::approx_constant,
     clippy::excessive_precision,
@@ -920,7 +915,6 @@ fn coplanar_stack_coplanar_faces_share_an_edge() {
 }
 
 #[test]
-#[ignore = "known failure: error: Boolean(Unsupported('intersection curve runs along an edge'))"]
 #[allow(
     clippy::approx_constant,
     clippy::excessive_precision,
@@ -1060,7 +1054,6 @@ fn coplanar_stack_intersection_curve_runs_along_an_edge() {
 }
 
 #[test]
-#[ignore = "known failure: error: Boolean(Unsupported('untouched face lies on the other body'))"]
 #[allow(
     clippy::approx_constant,
     clippy::excessive_precision,
@@ -1237,7 +1230,6 @@ fn exact_patterns_intersection_curve_runs_along_an_edge() {
 }
 
 #[test]
-#[ignore = "known failure: error: Boolean(Internal('face split crossed itself'))"]
 #[allow(
     clippy::approx_constant,
     clippy::excessive_precision,
@@ -1425,7 +1417,6 @@ fn fuzz_face_split_crossed_itself() {
 }
 
 #[test]
-#[ignore = "known failure: error: Boolean(Internal('inconsistent classification'))"]
 #[allow(
     clippy::approx_constant,
     clippy::excessive_precision,
@@ -2041,7 +2032,6 @@ fn near_tolerance_two_vertices_of_one_body_meet() {
 }
 
 #[test]
-#[ignore = "known failure: error: Boolean(Unsupported('coplanar faces share an edge'))"]
 #[allow(
     clippy::approx_constant,
     clippy::excessive_precision,
@@ -2102,894 +2092,6 @@ fn repeated_coplanar_faces_share_an_edge() {
 }
 
 #[test]
-#[ignore = "known failure: error: Boolean(Internal('face split crossed itself'))"]
-#[allow(
-    clippy::approx_constant,
-    clippy::excessive_precision,
-    clippy::unreadable_literal
-)]
-fn rounded_everywhere_face_split_crossed_itself() {
-    regenerates_valid(Part {
-        features: vec![
-            Feature::Extrude {
-                profile: Profile {
-                    plane: fr([0.0, 0.0, 0.0], [0.0, 0.0, 1.0], [1.0, 0.0, 0.0]),
-                    loops: vec![ProfileLoop::new(vec![
-                        (
-                            Segment::Line {
-                                a: Point2::new(6.0, 0.0),
-                                b: Point2::new(74.0, 0.0),
-                            },
-                            0,
-                        ),
-                        (
-                            Segment::Arc {
-                                center: Point2::new(74.0, 6.0),
-                                radius: 6.0,
-                                start: -1.5707963267948966,
-                                sweep: 1.5707963267948966,
-                            },
-                            1,
-                        ),
-                        (
-                            Segment::Line {
-                                a: Point2::new(80.0, 6.0),
-                                b: Point2::new(80.0, 54.0),
-                            },
-                            2,
-                        ),
-                        (
-                            Segment::Arc {
-                                center: Point2::new(74.0, 54.0),
-                                radius: 6.0,
-                                start: 0.0,
-                                sweep: 1.5707963267948966,
-                            },
-                            3,
-                        ),
-                        (
-                            Segment::Line {
-                                a: Point2::new(74.0, 60.0),
-                                b: Point2::new(6.0, 60.0),
-                            },
-                            4,
-                        ),
-                        (
-                            Segment::Arc {
-                                center: Point2::new(6.0, 54.0),
-                                radius: 6.0,
-                                start: 1.5707963267948966,
-                                sweep: 1.5707963267948966,
-                            },
-                            5,
-                        ),
-                        (
-                            Segment::Line {
-                                a: Point2::new(0.0, 54.0),
-                                b: Point2::new(0.0, 6.0),
-                            },
-                            6,
-                        ),
-                        (
-                            Segment::Arc {
-                                center: Point2::new(6.0, 6.0),
-                                radius: 6.0,
-                                start: 3.141592653589793,
-                                sweep: 1.5707963267948966,
-                            },
-                            7,
-                        ),
-                    ])],
-                },
-                distance: 12.0,
-                op: Combine::New,
-            },
-            Feature::Extrude {
-                profile: Profile {
-                    plane: fr(
-                        [18.71, 37.88, 2.35],
-                        [0.0, 0.0, 1.0],
-                        [0.42245249945100327, -0.9063850648083298, 0.0],
-                    ),
-                    loops: vec![ProfileLoop::new(vec![
-                        (
-                            Segment::Line {
-                                a: Point2::new(-6.567530453970742, -2.3024611545364833),
-                                b: Point2::new(6.567530453970742, -2.3024611545364833),
-                            },
-                            0,
-                        ),
-                        (
-                            Segment::Arc {
-                                center: Point2::new(6.567530453970742, -1.4258751042209699),
-                                radius: 0.8765860503155134,
-                                start: -1.5707963267948966,
-                                sweep: 1.5707963267948966,
-                            },
-                            1,
-                        ),
-                        (
-                            Segment::Line {
-                                a: Point2::new(7.444116504286256, -1.4258751042209699),
-                                b: Point2::new(7.444116504286256, 1.4258751042209699),
-                            },
-                            2,
-                        ),
-                        (
-                            Segment::Arc {
-                                center: Point2::new(6.567530453970742, 1.4258751042209699),
-                                radius: 0.8765860503155134,
-                                start: 0.0,
-                                sweep: 1.5707963267948966,
-                            },
-                            3,
-                        ),
-                        (
-                            Segment::Line {
-                                a: Point2::new(6.567530453970742, 2.3024611545364833),
-                                b: Point2::new(-6.567530453970742, 2.3024611545364833),
-                            },
-                            4,
-                        ),
-                        (
-                            Segment::Arc {
-                                center: Point2::new(-6.567530453970742, 1.4258751042209699),
-                                radius: 0.8765860503155134,
-                                start: 1.5707963267948966,
-                                sweep: 1.5707963267948966,
-                            },
-                            5,
-                        ),
-                        (
-                            Segment::Line {
-                                a: Point2::new(-7.444116504286256, 1.4258751042209699),
-                                b: Point2::new(-7.444116504286256, -1.4258751042209699),
-                            },
-                            6,
-                        ),
-                        (
-                            Segment::Arc {
-                                center: Point2::new(-6.567530453970742, -1.4258751042209699),
-                                radius: 0.8765860503155134,
-                                start: 3.141592653589793,
-                                sweep: 1.5707963267948966,
-                            },
-                            7,
-                        ),
-                    ])],
-                },
-                distance: 12.78,
-                op: Combine::Cut,
-            },
-            Feature::Extrude {
-                profile: Profile {
-                    plane: fr(
-                        [23.69, 29.27, 4.98],
-                        [0.0, 0.0, 1.0],
-                        [0.3922623181076801, 0.9198533979894782, 0.0],
-                    ),
-                    loops: vec![ProfileLoop::new(vec![
-                        (
-                            Segment::Line {
-                                a: Point2::new(0.07050858664883197, -4.698831521399387),
-                                b: Point2::new(-0.07050858664883197, -4.698831521399387),
-                            },
-                            0,
-                        ),
-                        (
-                            Segment::Arc {
-                                center: Point2::new(-0.07050858664883197, -0.8709066113232655),
-                                radius: 3.8279249100761215,
-                                start: -1.5707963267948966,
-                                sweep: 1.5707963267948966,
-                            },
-                            1,
-                        ),
-                        (
-                            Segment::Line {
-                                a: Point2::new(3.7574163234272895, -0.8709066113232655),
-                                b: Point2::new(3.7574163234272895, 0.8709066113232655),
-                            },
-                            2,
-                        ),
-                        (
-                            Segment::Arc {
-                                center: Point2::new(-0.07050858664883197, 0.8709066113232655),
-                                radius: 3.8279249100761215,
-                                start: 0.0,
-                                sweep: 1.5707963267948966,
-                            },
-                            3,
-                        ),
-                        (
-                            Segment::Line {
-                                a: Point2::new(-0.07050858664883197, 4.698831521399387),
-                                b: Point2::new(0.07050858664883197, 4.698831521399387),
-                            },
-                            4,
-                        ),
-                        (
-                            Segment::Arc {
-                                center: Point2::new(0.07050858664883197, 0.8709066113232655),
-                                radius: 3.8279249100761215,
-                                start: 1.5707963267948966,
-                                sweep: 1.5707963267948966,
-                            },
-                            5,
-                        ),
-                        (
-                            Segment::Line {
-                                a: Point2::new(-3.7574163234272895, 0.8709066113232655),
-                                b: Point2::new(-3.7574163234272895, -0.8709066113232655),
-                            },
-                            6,
-                        ),
-                        (
-                            Segment::Arc {
-                                center: Point2::new(0.07050858664883197, -0.8709066113232655),
-                                radius: 3.8279249100761215,
-                                start: 3.141592653589793,
-                                sweep: 1.5707963267948966,
-                            },
-                            7,
-                        ),
-                    ])],
-                },
-                distance: 7.54,
-                op: Combine::Cut,
-            },
-        ],
-    });
-}
-
-#[test]
-#[ignore = "known failure: error: Boolean(Internal('inconsistent classification'))"]
-#[allow(
-    clippy::approx_constant,
-    clippy::excessive_precision,
-    clippy::unreadable_literal
-)]
-fn rounded_everywhere_inconsistent_classification() {
-    regenerates_valid(Part {
-        features: vec![
-            Feature::Extrude {
-                profile: Profile {
-                    plane: fr([0.0, 0.0, 0.0], [0.0, 0.0, 1.0], [1.0, 0.0, 0.0]),
-                    loops: vec![ProfileLoop::new(vec![
-                        (
-                            Segment::Line {
-                                a: Point2::new(6.0, 0.0),
-                                b: Point2::new(74.0, 0.0),
-                            },
-                            0,
-                        ),
-                        (
-                            Segment::Arc {
-                                center: Point2::new(74.0, 6.0),
-                                radius: 6.0,
-                                start: -1.5707963267948966,
-                                sweep: 1.5707963267948966,
-                            },
-                            1,
-                        ),
-                        (
-                            Segment::Line {
-                                a: Point2::new(80.0, 6.0),
-                                b: Point2::new(80.0, 54.0),
-                            },
-                            2,
-                        ),
-                        (
-                            Segment::Arc {
-                                center: Point2::new(74.0, 54.0),
-                                radius: 6.0,
-                                start: 0.0,
-                                sweep: 1.5707963267948966,
-                            },
-                            3,
-                        ),
-                        (
-                            Segment::Line {
-                                a: Point2::new(74.0, 60.0),
-                                b: Point2::new(6.0, 60.0),
-                            },
-                            4,
-                        ),
-                        (
-                            Segment::Arc {
-                                center: Point2::new(6.0, 54.0),
-                                radius: 6.0,
-                                start: 1.5707963267948966,
-                                sweep: 1.5707963267948966,
-                            },
-                            5,
-                        ),
-                        (
-                            Segment::Line {
-                                a: Point2::new(0.0, 54.0),
-                                b: Point2::new(0.0, 6.0),
-                            },
-                            6,
-                        ),
-                        (
-                            Segment::Arc {
-                                center: Point2::new(6.0, 6.0),
-                                radius: 6.0,
-                                start: 3.141592653589793,
-                                sweep: 1.5707963267948966,
-                            },
-                            7,
-                        ),
-                    ])],
-                },
-                distance: 12.0,
-                op: Combine::New,
-            },
-            Feature::Extrude {
-                profile: Profile {
-                    plane: fr(
-                        [34.0, 26.0, 7.0],
-                        [0.0, 0.0, 1.0],
-                        [-0.9521319671532089, 0.3056872864954656, 0.0],
-                    ),
-                    loops: vec![ProfileLoop::new(vec![
-                        (
-                            Segment::Line {
-                                a: Point2::new(0.40292153487629, -5.565636454532244),
-                                b: Point2::new(-0.40292153487629, -5.565636454532244),
-                            },
-                            0,
-                        ),
-                        (
-                            Segment::Arc {
-                                center: Point2::new(-0.40292153487629, -0.17599139667731656),
-                                radius: 5.389645057854928,
-                                start: -1.5707963267948966,
-                                sweep: 1.5707963267948966,
-                            },
-                            1,
-                        ),
-                        (
-                            Segment::Line {
-                                a: Point2::new(4.986723522978638, -0.17599139667731656),
-                                b: Point2::new(4.986723522978638, 0.17599139667731656),
-                            },
-                            2,
-                        ),
-                        (
-                            Segment::Arc {
-                                center: Point2::new(-0.40292153487629, 0.17599139667731656),
-                                radius: 5.389645057854928,
-                                start: 0.0,
-                                sweep: 1.5707963267948966,
-                            },
-                            3,
-                        ),
-                        (
-                            Segment::Line {
-                                a: Point2::new(-0.40292153487629, 5.565636454532244),
-                                b: Point2::new(0.40292153487629, 5.565636454532244),
-                            },
-                            4,
-                        ),
-                        (
-                            Segment::Arc {
-                                center: Point2::new(0.40292153487629, 0.17599139667731656),
-                                radius: 5.389645057854928,
-                                start: 1.5707963267948966,
-                                sweep: 1.5707963267948966,
-                            },
-                            5,
-                        ),
-                        (
-                            Segment::Line {
-                                a: Point2::new(-4.986723522978638, 0.17599139667731656),
-                                b: Point2::new(-4.986723522978638, -0.17599139667731656),
-                            },
-                            6,
-                        ),
-                        (
-                            Segment::Arc {
-                                center: Point2::new(0.40292153487629, -0.17599139667731656),
-                                radius: 5.389645057854928,
-                                start: 3.141592653589793,
-                                sweep: 1.5707963267948966,
-                            },
-                            7,
-                        ),
-                    ])],
-                },
-                distance: 12.0,
-                op: Combine::Add,
-            },
-            Feature::Extrude {
-                profile: Profile {
-                    plane: fr(
-                        [28.0, 29.0, 1.0],
-                        [0.0, 0.0, 1.0],
-                        [0.9989899031849906, 0.0449352126337829, 0.0],
-                    ),
-                    loops: vec![ProfileLoop::new(vec![
-                        (
-                            Segment::Line {
-                                a: Point2::new(0.1930229279739235, -5.296756002138935),
-                                b: Point2::new(-0.1930229279739235, -5.296756002138935),
-                            },
-                            0,
-                        ),
-                        (
-                            Segment::Arc {
-                                center: Point2::new(-0.1930229279739235, -1.032757362060205),
-                                radius: 4.2639986400787295,
-                                start: -1.5707963267948966,
-                                sweep: 1.5707963267948966,
-                            },
-                            1,
-                        ),
-                        (
-                            Segment::Line {
-                                a: Point2::new(4.070975712104806, -1.032757362060205),
-                                b: Point2::new(4.070975712104806, 1.032757362060205),
-                            },
-                            2,
-                        ),
-                        (
-                            Segment::Arc {
-                                center: Point2::new(-0.1930229279739235, 1.032757362060205),
-                                radius: 4.2639986400787295,
-                                start: 0.0,
-                                sweep: 1.5707963267948966,
-                            },
-                            3,
-                        ),
-                        (
-                            Segment::Line {
-                                a: Point2::new(-0.1930229279739235, 5.296756002138935),
-                                b: Point2::new(0.1930229279739235, 5.296756002138935),
-                            },
-                            4,
-                        ),
-                        (
-                            Segment::Arc {
-                                center: Point2::new(0.1930229279739235, 1.032757362060205),
-                                radius: 4.2639986400787295,
-                                start: 1.5707963267948966,
-                                sweep: 1.5707963267948966,
-                            },
-                            5,
-                        ),
-                        (
-                            Segment::Line {
-                                a: Point2::new(-4.070975712104806, 1.032757362060205),
-                                b: Point2::new(-4.070975712104806, -1.032757362060205),
-                            },
-                            6,
-                        ),
-                        (
-                            Segment::Arc {
-                                center: Point2::new(0.1930229279739235, -1.032757362060205),
-                                radius: 4.2639986400787295,
-                                start: 3.141592653589793,
-                                sweep: 1.5707963267948966,
-                            },
-                            7,
-                        ),
-                    ])],
-                },
-                distance: 13.0,
-                op: Combine::Add,
-            },
-        ],
-    });
-}
-
-#[test]
-#[ignore = "known failure: invalid: EdgeUses"]
-#[allow(
-    clippy::approx_constant,
-    clippy::excessive_precision,
-    clippy::unreadable_literal
-)]
-fn rounded_everywhere_invalid_edgeuses() {
-    regenerates_valid(Part {
-        features: vec![
-            Feature::Extrude {
-                profile: Profile {
-                    plane: fr([0.0, 0.0, 0.0], [0.0, 0.0, 1.0], [1.0, 0.0, 0.0]),
-                    loops: vec![ProfileLoop::new(vec![
-                        (
-                            Segment::Line {
-                                a: Point2::new(6.0, 0.0),
-                                b: Point2::new(74.0, 0.0),
-                            },
-                            0,
-                        ),
-                        (
-                            Segment::Arc {
-                                center: Point2::new(74.0, 6.0),
-                                radius: 6.0,
-                                start: -1.5707963267948966,
-                                sweep: 1.5707963267948966,
-                            },
-                            1,
-                        ),
-                        (
-                            Segment::Line {
-                                a: Point2::new(80.0, 6.0),
-                                b: Point2::new(80.0, 54.0),
-                            },
-                            2,
-                        ),
-                        (
-                            Segment::Arc {
-                                center: Point2::new(74.0, 54.0),
-                                radius: 6.0,
-                                start: 0.0,
-                                sweep: 1.5707963267948966,
-                            },
-                            3,
-                        ),
-                        (
-                            Segment::Line {
-                                a: Point2::new(74.0, 60.0),
-                                b: Point2::new(6.0, 60.0),
-                            },
-                            4,
-                        ),
-                        (
-                            Segment::Arc {
-                                center: Point2::new(6.0, 54.0),
-                                radius: 6.0,
-                                start: 1.5707963267948966,
-                                sweep: 1.5707963267948966,
-                            },
-                            5,
-                        ),
-                        (
-                            Segment::Line {
-                                a: Point2::new(0.0, 54.0),
-                                b: Point2::new(0.0, 6.0),
-                            },
-                            6,
-                        ),
-                        (
-                            Segment::Arc {
-                                center: Point2::new(6.0, 6.0),
-                                radius: 6.0,
-                                start: 3.141592653589793,
-                                sweep: 1.5707963267948966,
-                            },
-                            7,
-                        ),
-                    ])],
-                },
-                distance: 12.0,
-                op: Combine::New,
-            },
-            Feature::Extrude {
-                profile: Profile {
-                    plane: fr(
-                        [17.0, 42.0, -0.0],
-                        [0.0, 0.0, 1.0],
-                        [0.22260535238161758, 0.9749086403817826, 0.0],
-                    ),
-                    loops: vec![ProfileLoop::new(vec![
-                        (
-                            Segment::Line {
-                                a: Point2::new(1.8007392575007328, -5.980078017770877),
-                                b: Point2::new(-1.8007392575007328, -5.980078017770877),
-                            },
-                            0,
-                        ),
-                        (
-                            Segment::Arc {
-                                center: Point2::new(-1.8007392575007328, -0.36379013073067235),
-                                radius: 5.616287887040205,
-                                start: -1.5707963267948966,
-                                sweep: 1.5707963267948966,
-                            },
-                            1,
-                        ),
-                        (
-                            Segment::Line {
-                                a: Point2::new(3.815548629539472, -0.36379013073067235),
-                                b: Point2::new(3.815548629539472, 0.36379013073067235),
-                            },
-                            2,
-                        ),
-                        (
-                            Segment::Arc {
-                                center: Point2::new(-1.8007392575007328, 0.36379013073067235),
-                                radius: 5.616287887040205,
-                                start: 0.0,
-                                sweep: 1.5707963267948966,
-                            },
-                            3,
-                        ),
-                        (
-                            Segment::Line {
-                                a: Point2::new(-1.8007392575007328, 5.980078017770877),
-                                b: Point2::new(1.8007392575007328, 5.980078017770877),
-                            },
-                            4,
-                        ),
-                        (
-                            Segment::Arc {
-                                center: Point2::new(1.8007392575007328, 0.36379013073067235),
-                                radius: 5.616287887040205,
-                                start: 1.5707963267948966,
-                                sweep: 1.5707963267948966,
-                            },
-                            5,
-                        ),
-                        (
-                            Segment::Line {
-                                a: Point2::new(-3.815548629539472, 0.36379013073067235),
-                                b: Point2::new(-3.815548629539472, -0.36379013073067235),
-                            },
-                            6,
-                        ),
-                        (
-                            Segment::Arc {
-                                center: Point2::new(1.8007392575007328, -0.36379013073067235),
-                                radius: 5.616287887040205,
-                                start: 3.141592653589793,
-                                sweep: 1.5707963267948966,
-                            },
-                            7,
-                        ),
-                    ])],
-                },
-                distance: 12.0,
-                op: Combine::Cut,
-            },
-        ],
-    });
-}
-
-#[test]
-#[ignore = "known failure: invalid: FaceWrongSide"]
-#[allow(
-    clippy::approx_constant,
-    clippy::excessive_precision,
-    clippy::unreadable_literal
-)]
-fn rounded_everywhere_invalid_facewrongside() {
-    regenerates_valid(Part {
-        features: vec![
-            Feature::Extrude {
-                profile: Profile {
-                    plane: fr([0.0, 0.0, 0.0], [0.0, 0.0, 1.0], [1.0, 0.0, 0.0]),
-                    loops: vec![ProfileLoop::new(vec![
-                        (
-                            Segment::Line {
-                                a: Point2::new(6.0, 0.0),
-                                b: Point2::new(74.0, 0.0),
-                            },
-                            0,
-                        ),
-                        (
-                            Segment::Arc {
-                                center: Point2::new(74.0, 6.0),
-                                radius: 6.0,
-                                start: -1.5707963267948966,
-                                sweep: 1.5707963267948966,
-                            },
-                            1,
-                        ),
-                        (
-                            Segment::Line {
-                                a: Point2::new(80.0, 6.0),
-                                b: Point2::new(80.0, 54.0),
-                            },
-                            2,
-                        ),
-                        (
-                            Segment::Arc {
-                                center: Point2::new(74.0, 54.0),
-                                radius: 6.0,
-                                start: 0.0,
-                                sweep: 1.5707963267948966,
-                            },
-                            3,
-                        ),
-                        (
-                            Segment::Line {
-                                a: Point2::new(74.0, 60.0),
-                                b: Point2::new(6.0, 60.0),
-                            },
-                            4,
-                        ),
-                        (
-                            Segment::Arc {
-                                center: Point2::new(6.0, 54.0),
-                                radius: 6.0,
-                                start: 1.5707963267948966,
-                                sweep: 1.5707963267948966,
-                            },
-                            5,
-                        ),
-                        (
-                            Segment::Line {
-                                a: Point2::new(0.0, 54.0),
-                                b: Point2::new(0.0, 6.0),
-                            },
-                            6,
-                        ),
-                        (
-                            Segment::Arc {
-                                center: Point2::new(6.0, 6.0),
-                                radius: 6.0,
-                                start: 3.141592653589793,
-                                sweep: 1.5707963267948966,
-                            },
-                            7,
-                        ),
-                    ])],
-                },
-                distance: 12.0,
-                op: Combine::New,
-            },
-            Feature::Extrude {
-                profile: Profile {
-                    plane: fr(
-                        [47.0, 27.0, 7.0],
-                        [0.0, 0.0, 1.0],
-                        [-0.48431280537201077, 0.8748949117195121, 0.0],
-                    ),
-                    loops: vec![ProfileLoop::new(vec![
-                        (
-                            Segment::Line {
-                                a: Point2::new(-1.3095064275170074, -5.55697727361044),
-                                b: Point2::new(1.3095064275170074, -5.55697727361044),
-                            },
-                            0,
-                        ),
-                        (
-                            Segment::Arc {
-                                center: Point2::new(1.3095064275170074, -1.9875038072304063),
-                                radius: 3.5694734663800336,
-                                start: -1.5707963267948966,
-                                sweep: 1.5707963267948966,
-                            },
-                            1,
-                        ),
-                        (
-                            Segment::Line {
-                                a: Point2::new(4.878979893897041, -1.9875038072304063),
-                                b: Point2::new(4.878979893897041, 1.9875038072304063),
-                            },
-                            2,
-                        ),
-                        (
-                            Segment::Arc {
-                                center: Point2::new(1.3095064275170074, 1.9875038072304063),
-                                radius: 3.5694734663800336,
-                                start: 0.0,
-                                sweep: 1.5707963267948966,
-                            },
-                            3,
-                        ),
-                        (
-                            Segment::Line {
-                                a: Point2::new(1.3095064275170074, 5.55697727361044),
-                                b: Point2::new(-1.3095064275170074, 5.55697727361044),
-                            },
-                            4,
-                        ),
-                        (
-                            Segment::Arc {
-                                center: Point2::new(-1.3095064275170074, 1.9875038072304063),
-                                radius: 3.5694734663800336,
-                                start: 1.5707963267948966,
-                                sweep: 1.5707963267948966,
-                            },
-                            5,
-                        ),
-                        (
-                            Segment::Line {
-                                a: Point2::new(-4.878979893897041, 1.9875038072304063),
-                                b: Point2::new(-4.878979893897041, -1.9875038072304063),
-                            },
-                            6,
-                        ),
-                        (
-                            Segment::Arc {
-                                center: Point2::new(-1.3095064275170074, -1.9875038072304063),
-                                radius: 3.5694734663800336,
-                                start: 3.141592653589793,
-                                sweep: 1.5707963267948966,
-                            },
-                            7,
-                        ),
-                    ])],
-                },
-                distance: 10.0,
-                op: Combine::Cut,
-            },
-            Feature::Extrude {
-                profile: Profile {
-                    plane: fr(
-                        [41.0, 23.0, 3.0],
-                        [0.0, 0.0, 1.0],
-                        [0.9249382790217371, -0.3801173239939311, 0.0],
-                    ),
-                    loops: vec![ProfileLoop::new(vec![
-                        (
-                            Segment::Line {
-                                a: Point2::new(1.2661551261260833, -5.717127903175577),
-                                b: Point2::new(-1.2661551261260833, -5.717127903175577),
-                            },
-                            0,
-                        ),
-                        (
-                            Segment::Arc {
-                                center: Point2::new(-1.2661551261260833, -1.3617471215866148),
-                                radius: 4.355380781588962,
-                                start: -1.5707963267948966,
-                                sweep: 1.5707963267948966,
-                            },
-                            1,
-                        ),
-                        (
-                            Segment::Line {
-                                a: Point2::new(3.0892256554628785, -1.3617471215866148),
-                                b: Point2::new(3.0892256554628785, 1.3617471215866148),
-                            },
-                            2,
-                        ),
-                        (
-                            Segment::Arc {
-                                center: Point2::new(-1.2661551261260833, 1.3617471215866148),
-                                radius: 4.355380781588962,
-                                start: 0.0,
-                                sweep: 1.5707963267948966,
-                            },
-                            3,
-                        ),
-                        (
-                            Segment::Line {
-                                a: Point2::new(-1.2661551261260833, 5.717127903175577),
-                                b: Point2::new(1.2661551261260833, 5.717127903175577),
-                            },
-                            4,
-                        ),
-                        (
-                            Segment::Arc {
-                                center: Point2::new(1.2661551261260833, 1.3617471215866148),
-                                radius: 4.355380781588962,
-                                start: 1.5707963267948966,
-                                sweep: 1.5707963267948966,
-                            },
-                            5,
-                        ),
-                        (
-                            Segment::Line {
-                                a: Point2::new(-3.0892256554628785, 1.3617471215866148),
-                                b: Point2::new(-3.0892256554628785, -1.3617471215866148),
-                            },
-                            6,
-                        ),
-                        (
-                            Segment::Arc {
-                                center: Point2::new(1.2661551261260833, -1.3617471215866148),
-                                radius: 4.355380781588962,
-                                start: 3.141592653589793,
-                                sweep: 1.5707963267948966,
-                            },
-                            7,
-                        ),
-                    ])],
-                },
-                distance: 9.0,
-                op: Combine::Cut,
-            },
-        ],
-    });
-}
-
-#[test]
-#[ignore = "known failure: invalid: VertexOffEdge"]
 #[allow(
     clippy::approx_constant,
     clippy::excessive_precision,
@@ -3525,7 +2627,6 @@ fn slivers_invalid_edgeuses() {
 }
 
 #[test]
-#[ignore = "known failure: error: Boolean(Unsupported('intersection curve runs along an edge'))"]
 #[allow(
     clippy::approx_constant,
     clippy::excessive_precision,
@@ -3595,7 +2696,6 @@ fn tangent_intersection_curve_runs_along_an_edge() {
 }
 
 #[test]
-#[ignore = "known failure: invalid: EdgeUses"]
 #[allow(
     clippy::approx_constant,
     clippy::excessive_precision,
@@ -3665,7 +2765,6 @@ fn tangent_invalid_edgeuses() {
 }
 
 #[test]
-#[ignore = "known failure: error: Boolean(Internal('inconsistent classification'))"]
 #[allow(
     clippy::approx_constant,
     clippy::excessive_precision,
@@ -3731,7 +2830,6 @@ fn through_vertex_inconsistent_classification() {
 }
 
 #[test]
-#[ignore = "known failure: error: Boolean(Unsupported('coplanar faces share an edge'))"]
 #[allow(
     clippy::approx_constant,
     clippy::excessive_precision,
@@ -3856,7 +2954,6 @@ fn through_vertex_coplanar_faces_share_an_edge() {
 }
 
 #[test]
-#[ignore = "known failure: error: Boolean(Internal('face split crossed itself'))"]
 #[allow(
     clippy::approx_constant,
     clippy::excessive_precision,
@@ -4008,7 +3105,6 @@ fn tilted_face_split_crossed_itself() {
 }
 
 #[test]
-#[ignore = "known failure: error: Boolean(Internal('inconsistent classification'))"]
 #[allow(
     clippy::approx_constant,
     clippy::excessive_precision,
@@ -4097,7 +3193,6 @@ fn tilted_inconsistent_classification() {
 }
 
 #[test]
-#[ignore = "known failure: invalid: VertexOffEdge"]
 #[allow(
     clippy::approx_constant,
     clippy::excessive_precision,
@@ -4205,4 +3300,18 @@ fn tilted_invalid_vertexoffedge() {
             },
         ],
     });
+}
+
+#[test]
+fn self_intersecting_profile_is_rejected() {
+    // a corner radius over half the short side turns the outline inside out
+    let lp = Profile::rounded_rectangle(Point2::new(-3.0, -5.0), 6.0, 10.0, 4.0, 0);
+    let profile = Profile {
+        plane: fr([0.0, 0.0, 0.0], [0.0, 0.0, 1.0], [1.0, 0.0, 0.0]),
+        loops: vec![lp],
+    };
+    assert_eq!(
+        profile.normalized().err(),
+        Some(forge_ops::ProfileError::SelfIntersecting { loop_index: 0 })
+    );
 }
