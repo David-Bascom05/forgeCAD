@@ -1,0 +1,148 @@
+use forge_geom::intersect::{Contact, SurfaceSurface, plane_surface};
+use forge_geom::{Circle, Curve, Cylinder, Line, Sphere, Surface};
+use forge_math::{Frame, tol};
+
+/// Intersection of two whole surfaces, closed form where the pair allows.
+pub fn surfaces(a: &Surface, b: &Surface) -> SurfaceSurface {
+    match (a, b) {
+        (Surface::Plane(p), s) => plane_surface(p, s),
+        (s, Surface::Plane(p)) => plane_surface(p, s),
+        (Surface::Cylinder(c), Surface::Cylinder(d)) => cylinder_cylinder(c, d),
+        (Surface::Sphere(s), Surface::Sphere(t)) => sphere_sphere(s, t),
+        _ => SurfaceSurface::NotAnalytic,
+    }
+}
+
+/// Parallel axes give lines (or the same cylinder); anything else is a
+/// quartic space curve, left to the general path.
+fn cylinder_cylinder(c: &Cylinder, d: &Cylinder) -> SurfaceSurface {
+    let a = c.frame.z();
+    if a.cross(d.frame.z()).length() > tol::ANGULAR {
+        return SurfaceSurface::NotAnalytic;
+    }
+    // work in c's cross-section plane
+    let off = d.frame.origin - c.frame.origin;
+    let off = off - a * a.dot(off);
+    let dist = off.length();
+    let (r1, r2) = (c.radius, d.radius);
+    if dist <= tol::LINEAR {
+        return if (r1 - r2).abs() <= tol::LINEAR {
+            SurfaceSurface::Coincident
+        } else {
+            SurfaceSurface::Empty
+        };
+    }
+    if dist > r1 + r2 + tol::LINEAR || dist < (r1 - r2).abs() - tol::LINEAR {
+        return SurfaceSurface::Empty;
+    }
+    let ex = off / dist;
+    let ey = a.cross(ex);
+    // circle-circle in the section: x along the centre line
+    let x = (dist * dist + r1 * r1 - r2 * r2) / (2.0 * dist);
+    let h2 = r1 * r1 - x * x;
+    let at = |y: f64| c.frame.origin + ex * x + ey * y;
+    let dir = a;
+    if h2 <= (2.0 * tol::LINEAR * r1).max(0.0) {
+        return SurfaceSurface::Curves(vec![(Curve::Line(Line::new(at(0.0), dir)), Contact::Touching)]);
+    }
+    let h = h2.sqrt();
+    SurfaceSurface::Curves(vec![
+        (Curve::Line(Line::new(at(-h), dir)), Contact::Crossing),
+        (Curve::Line(Line::new(at(h), dir)), Contact::Crossing),
+    ])
+}
+
+fn sphere_sphere(s: &Sphere, t: &Sphere) -> SurfaceSurface {
+    let d = t.frame.origin - s.frame.origin;
+    let dist = d.length();
+    let (r1, r2) = (s.radius, t.radius);
+    if dist <= tol::LINEAR {
+        return if (r1 - r2).abs() <= tol::LINEAR {
+            SurfaceSurface::Coincident
+        } else {
+            SurfaceSurface::Empty
+        };
+    }
+    if dist > r1 + r2 + tol::LINEAR || dist < (r1 - r2).abs() - tol::LINEAR {
+        return SurfaceSurface::Empty;
+    }
+    let n = d.normalize().expect("distinct centres");
+    let x = (dist * dist + r1 * r1 - r2 * r2) / (2.0 * dist);
+    let centre = s.frame.origin + n * x;
+    let h2 = r1 * r1 - x * x;
+    if h2 <= 2.0 * tol::LINEAR * r1 {
+        return SurfaceSurface::Points(vec![centre]);
+    }
+    SurfaceSurface::Curves(vec![(
+        Curve::Circle(Circle {
+            frame: Frame::from_z(centre, n),
+            radius: h2.sqrt(),
+        }),
+        Contact::Crossing,
+    )])
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use forge_geom::testing::{rand_frame, rand_unit};
+    use forge_geom::{CurveGeom, SurfaceGeom};
+    use forge_math::rng::Rng;
+
+    fn on_both(a: &Surface, b: &Surface) {
+        if let SurfaceSurface::Curves(cs) = surfaces(a, b) {
+            for (c, contact) in cs {
+                let tolerance = if contact == Contact::Touching {
+                    1.01 * tol::LINEAR
+                } else {
+                    1e-7
+                };
+                let range = c.full_range(20.0);
+                for i in 0..=20 {
+                    let p = c.eval((range.lo + range.width() * i as f64 / 20.0).min(range.hi));
+                    assert!(
+                        a.distance(p) <= tolerance && b.distance(p) <= tolerance,
+                        "{a:?} {b:?} {c:?}"
+                    );
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn parallel_cylinders_and_spheres() {
+        let mut r = Rng::new(900);
+        let mut curves = 0;
+        for _ in 0..2000 {
+            let f = rand_frame(&mut r);
+            let g = f.with_origin(f.origin + f.x() * r.range(0.0, 8.0) + f.z() * r.range(-5.0, 5.0));
+            let c = Surface::Cylinder(Cylinder {
+                frame: f,
+                radius: r.range(1.0, 5.0),
+            });
+            let d = Surface::Cylinder(Cylinder {
+                frame: g,
+                radius: r.range(1.0, 5.0),
+            });
+            on_both(&c, &d);
+            let s = Surface::Sphere(Sphere {
+                frame: f,
+                radius: r.range(1.0, 5.0),
+            });
+            let t = Surface::Sphere(Sphere {
+                frame: g.with_origin(g.origin + rand_unit(&mut r) * 1.0),
+                radius: r.range(1.0, 5.0),
+            });
+            on_both(&s, &t);
+            if matches!(surfaces(&c, &d), SurfaceSurface::Curves(_)) {
+                curves += 1;
+            }
+        }
+        assert!(curves > 500);
+        let c = Surface::Cylinder(Cylinder {
+            frame: Frame::WORLD,
+            radius: 2.0,
+        });
+        assert_eq!(surfaces(&c, &c), SurfaceSurface::Coincident);
+    }
+}

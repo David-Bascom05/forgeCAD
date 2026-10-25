@@ -194,6 +194,40 @@ fn main() {
         black_box(tessellate(black_box(&rbody), &Quality::default()).unwrap());
     });
 
+    let plate_block = extrude(
+        &Profile {
+            plane: Frame::WORLD,
+            loops: vec![Profile::rectangle(Point2::ORIGIN, 30.0, 20.0, 0)],
+        },
+        6.0,
+        1,
+    )
+    .unwrap();
+    let drill = extrude(
+        &Profile {
+            plane: Frame::WORLD.with_origin(forge_math::Point3::new(15.0, 10.0, -1.0)),
+            loops: vec![Profile::circle(Point2::ORIGIN, 4.0, 0)],
+        },
+        8.0,
+        2,
+    )
+    .unwrap();
+    bench(f, "bool: drill a hole through a block", 1, || {
+        black_box(forge_bool::boolean(&plate_block, &drill, forge_bool::Op::Subtract, 3).unwrap());
+    });
+    let other = extrude(
+        &Profile {
+            plane: Frame::WORLD.with_origin(forge_math::Point3::new(4.0, 5.0, 2.0)),
+            loops: vec![Profile::rectangle(Point2::ORIGIN, 30.0, 20.0, 0)],
+        },
+        6.0,
+        2,
+    )
+    .unwrap();
+    bench(f, "bool: union two overlapping blocks", 1, || {
+        black_box(forge_bool::boolean(&plate_block, &other, forge_bool::Op::Union, 3).unwrap());
+    });
+
     for n in [1, 10, 50] {
         let base = rect_sketch(n);
         let mut jitter = Rng::new(9);
