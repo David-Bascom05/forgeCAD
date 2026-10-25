@@ -1,0 +1,14 @@
+[package]
+name = "forge-sketch"
+description = "Parametric 2D sketches and their geometric constraint solver for ForgeCAD"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[dependencies]
+forge-math = { path = "../forge-math" }
+forge-ops = { path = "../forge-ops" }
+
+[lints]
+workspace = true

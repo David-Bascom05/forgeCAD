@@ -3,6 +3,8 @@
 
 pub mod extrude;
 pub mod profile;
+pub mod revolve;
 
 pub use extrude::{ExtrudeError, extrude};
 pub use profile::{Profile, ProfileError, ProfileLoop, Segment};
+pub use revolve::{Axis2, RevolveError, revolve};

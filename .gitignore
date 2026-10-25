@@ -1,3 +1,4 @@
 /target
 *.stl
 /target-mesh
+/target-sketch

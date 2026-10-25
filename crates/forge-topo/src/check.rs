@@ -176,7 +176,7 @@ fn check_sides(body: &Body, out: &mut Vec<Problem>) {
                 let t = e.range.mid();
                 let d = e.curve.deriv(t);
                 let along = if co.forward { d.d1 } else { -d.d1 };
-                let mid_uv = ul.points[ul.coedge_first[k] + crate::uv::default_segments(e) / 2];
+                let mid_uv = ul.point_of_sample(ul.coedge_first[k] + crate::uv::default_segments(e) / 2);
                 let Some(n) = body.face_normal(f, mid_uv) else {
                     continue;
                 };

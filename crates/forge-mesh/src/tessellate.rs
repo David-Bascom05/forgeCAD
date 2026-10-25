@@ -2,7 +2,7 @@ use crate::cdt::{CdtError, triangulate};
 use crate::mesh::TriMesh;
 use forge_geom::{Curve, CurveGeom, Surface, SurfaceGeom};
 use forge_math::{Point2, dmath};
-use forge_topo::uv::unwrap_near;
+use forge_topo::uv::{align_loops, draw_loop};
 use forge_topo::{Body, FaceId};
 
 /// How closely the triangles must follow the exact shape.
@@ -110,36 +110,35 @@ fn tessellate_face(
 
     let mut uv: Vec<Point2> = Vec::new();
     let mut global: Vec<u32> = Vec::new();
-    let mut loops: Vec<Vec<u32>> = Vec::new();
-    let mut window: Option<Point2> = None;
+    let mut rings: Vec<Vec<Point2>> = Vec::new();
+    let mut ring_globals: Vec<Vec<u32>> = Vec::new();
     for &l in &face.loops {
-        let mut ring = Vec::new();
-        let mut prev: Option<Point2> = None;
+        let mut samples = Vec::new();
+        let mut ids = Vec::new();
         for &c in &body.lp(l).coedges {
             let co = body.coedge(c);
-            let samples = &edge_samples[co.edge.index()];
-            let ordered: Vec<(f64, u32)> = if co.forward {
-                samples.clone()
-            } else {
-                samples.iter().rev().copied().collect()
-            };
             let edge = body.edge(co.edge);
+            let s = &edge_samples[co.edge.index()];
+            let ordered: Vec<(f64, u32)> = if co.forward {
+                s.clone()
+            } else {
+                s.iter().rev().copied().collect()
+            };
             for &(t, gi) in &ordered[..ordered.len() - 1] {
-                let p = surface.project(edge.curve.eval(t));
-                let p = match prev.or(window) {
-                    Some(r) => unwrap_near(body, f, p, r),
-                    None => p,
-                };
-                prev = Some(p);
-                ring.push(uv.len() as u32);
-                uv.push(p);
-                global.push(gi);
+                samples.push(edge.curve.eval(t));
+                ids.push(gi);
             }
         }
-        if window.is_none() {
-            window = ring.first().map(|&i| uv[i as usize]);
-        }
-        loops.push(ring);
+        let (pts, sample_of) = draw_loop(body, f, &samples);
+        ring_globals.push(sample_of.iter().map(|&k| ids[k]).collect());
+        rings.push(pts);
+    }
+    align_loops(body, f, rings.iter_mut());
+    let mut loops: Vec<Vec<u32>> = Vec::new();
+    for (pts, ids) in rings.into_iter().zip(ring_globals) {
+        loops.push((uv.len() as u32..(uv.len() + pts.len()) as u32).collect());
+        uv.extend(pts);
+        global.extend(ids);
     }
 
     let scaled: Vec<Point2> = uv.iter().map(|p| Point2::new(p.x * su, p.y * sv)).collect();
@@ -173,6 +172,10 @@ fn tessellate_face(
     }
     for t in &tri.triangles {
         let [a, b, c] = t.map(|k| index[k as usize]);
+        // two corners on one pole: the triangle collapses to the pole and is dropped
+        if a == b || b == c || c == a {
+            continue;
+        }
         // counter-clockwise in (u, v) faces along du x dv, the surface's natural normal
         let t = if face.same_sense { [a, b, c] } else { [a, c, b] };
         mesh.triangles.push(t);
@@ -267,6 +270,139 @@ mod tests {
                 / 3.0;
             let d = b.face(FaceId(f)).surface.distance(Point3::new(c.x, c.y, c.z));
             assert!(d <= q.chord, "{d}");
+        }
+    }
+}
+
+#[cfg(test)]
+mod revolve_tests {
+    use super::*;
+    use forge_math::rng::Rng;
+    use forge_math::{Frame, Vec2};
+    use forge_ops::{Axis2, Profile, ProfileLoop, Segment, revolve};
+
+    const Y: Axis2 = Axis2 {
+        origin: Point2::ORIGIN,
+        dir: Vec2::Y,
+    };
+
+    fn mesh_volume(p: &Profile, angle: f64) -> f64 {
+        let b = revolve(p, Y, angle, 1).unwrap();
+        let m = tessellate(
+            &b,
+            &Quality {
+                chord: 0.002,
+                max_angle: 0.1,
+            },
+        )
+        .unwrap();
+        let open = m.open_edges();
+        assert!(open.is_empty(), "{} open edges", open.len());
+        m.volume()
+    }
+
+    fn rel(a: f64, b: f64) -> f64 {
+        (a - b).abs() / b.abs()
+    }
+
+    #[test]
+    fn exact_volumes() {
+        let q = dmath::FRAC_PI_2;
+        let r = 5.0;
+        let half = ProfileLoop::new(vec![
+            (
+                Segment::Arc {
+                    center: Point2::ORIGIN,
+                    radius: r,
+                    start: -q,
+                    sweep: 2.0 * q,
+                },
+                0,
+            ),
+            (
+                Segment::Line {
+                    a: Point2::new(0.0, r),
+                    b: Point2::new(0.0, -r),
+                },
+                1,
+            ),
+        ]);
+        let sphere = Profile {
+            plane: Frame::WORLD,
+            loops: vec![half],
+        };
+        let v = mesh_volume(&sphere, dmath::TAU);
+        assert!(rel(v, 4.0 / 3.0 * dmath::PI * r * r * r) < 2e-3, "sphere {v}");
+
+        let torus = Profile {
+            plane: Frame::WORLD,
+            loops: vec![Profile::circle(Point2::new(10.0, 0.0), 3.0, 0)],
+        };
+        let v = mesh_volume(&torus, dmath::TAU);
+        assert!(
+            rel(v, 2.0 * dmath::PI * dmath::PI * 10.0 * 9.0) < 2e-3,
+            "torus {v}"
+        );
+
+        let tri = ProfileLoop::new(vec![
+            (
+                Segment::Line {
+                    a: Point2::ORIGIN,
+                    b: Point2::new(4.0, 0.0),
+                },
+                0,
+            ),
+            (
+                Segment::Line {
+                    a: Point2::new(4.0, 0.0),
+                    b: Point2::new(0.0, 7.0),
+                },
+                1,
+            ),
+            (
+                Segment::Line {
+                    a: Point2::new(0.0, 7.0),
+                    b: Point2::ORIGIN,
+                },
+                2,
+            ),
+        ]);
+        let cone = Profile {
+            plane: Frame::WORLD,
+            loops: vec![tri],
+        };
+        let v = mesh_volume(&cone, dmath::TAU);
+        assert!(rel(v, dmath::PI * 16.0 * 7.0 / 3.0) < 2e-3, "cone {v}");
+    }
+
+    #[test]
+    fn pappus_on_random_profiles() {
+        let mut rng = Rng::new(800);
+        for _ in 0..25 {
+            let x0 = rng.range(0.5, 15.0);
+            let (w, h) = (rng.range(3.0, 15.0), rng.range(3.0, 15.0));
+            let rad = rng.range(0.3, w.min(h) * 0.45);
+            let mut loops = vec![Profile::rounded_rectangle(Point2::new(x0, 0.0), w, h, rad, 0)];
+            if rng.bool() {
+                loops.push(Profile::circle(
+                    Point2::new(x0 + w / 2.0, h / 2.0),
+                    w.min(h) * 0.2,
+                    40,
+                ));
+            }
+            let p = Profile {
+                plane: Frame::WORLD,
+                loops,
+            };
+            let angle = if rng.bool() {
+                dmath::TAU
+            } else {
+                rng.range(0.3, 6.0)
+            };
+            // symmetric profile: the centroid is the rectangle's centre
+            let want = angle * (x0 + w / 2.0) * p.normalized().unwrap().area();
+            let v = mesh_volume(&p, angle);
+            assert!(rel(v, want) < 3e-3, "{v} vs {want}");
         }
     }
 }

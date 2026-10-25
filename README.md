@@ -21,6 +21,11 @@ Units are millimetres. Tolerances live in `forge_math::tol`.
 |---|---|
 | `forge-math` | vectors, frames, deterministic trig, intervals, polynomial roots, small linear algebra |
 | `forge-geom` | curves, surfaces, intersections |
+| `forge-topo` | B-rep bodies, stable names, the validity checker |
+| `forge-sketch` | 2D sketches, geometric constraint solver, profile extraction |
+| `forge-ops` | profiles, extrude, revolve |
+| `forge-mesh` | exact predicates, constrained Delaunay, tessellation, STL |
+| `forge-cli` | `forgecad demo out.stl` |
 
 ## Building
 

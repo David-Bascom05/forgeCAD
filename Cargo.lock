@@ -43,6 +43,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "forge-sketch"
+version = "0.1.0"
+dependencies = [
+ "forge-math",
+ "forge-ops",
+]
+
+[[package]]
 name = "forge-topo"
 version = "0.1.0"
 dependencies = [
