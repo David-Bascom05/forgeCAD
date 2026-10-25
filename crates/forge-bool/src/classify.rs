@@ -358,7 +358,12 @@ mod tests {
         .unwrap();
         agree(
             &torus,
-            |p| margin(((p.x * p.x + p.z * p.z).sqrt() - 10.0).hypot(p.y) - 3.0),
+            |p| {
+                margin({
+                    let d = (p.x * p.x + p.z * p.z).sqrt() - 10.0;
+                    (d * d + p.y * p.y).sqrt() - 3.0
+                })
+            },
             15.0,
             4,
         );
