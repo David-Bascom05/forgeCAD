@@ -15,6 +15,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "forge-bool"
+version = "0.1.0"
+dependencies = [
+ "forge-geom",
+ "forge-math",
+ "forge-mesh",
+ "forge-ops",
+ "forge-topo",
+]
+
+[[package]]
 name = "forge-cli"
 version = "0.1.0"
 dependencies = [

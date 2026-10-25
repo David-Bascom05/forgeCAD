@@ -1,0 +1,19 @@
+[package]
+name = "forge-bool"
+description = "Boolean operations (union, subtract, intersect) on ForgeCAD solids"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[dependencies]
+forge-math = { path = "../forge-math" }
+forge-geom = { path = "../forge-geom" }
+forge-topo = { path = "../forge-topo" }
+
+[dev-dependencies]
+forge-ops = { path = "../forge-ops" }
+forge-mesh = { path = "../forge-mesh" }
+
+[lints]
+workspace = true
