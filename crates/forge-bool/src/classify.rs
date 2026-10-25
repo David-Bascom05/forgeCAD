@@ -12,7 +12,8 @@ pub enum Where {
     On,
 }
 
-/// A face's loops in parameter space, built the first time a query needs them.
+/// A face's loops in parameter space, built the first time a query needs them and kept on
+/// the face (`Face::query`) across booleans; a loop added in place is appended.
 pub struct FaceInfo {
     /// Each boundary use with its edge's box.
     edges: Vec<(forge_topo::CoedgeId, Box3)>,
@@ -21,7 +22,7 @@ pub struct FaceInfo {
     reach: f64,
     /// The loops drawn in parameter space, only when a query needs them
     /// (planar faces are decided exactly without them).
-    drawn: std::cell::OnceCell<Drawn>,
+    drawn: std::sync::OnceLock<Drawn>,
     /// For planar faces with many edges: edges bucketed by position across
     /// the first ray direction, so a query looks only at nearby edges.
     bands: Option<Bands>,
@@ -37,6 +38,51 @@ struct Bands {
     /// Bands per unit of `across`.
     inv: f64,
     rows: Vec<Vec<u32>>,
+}
+
+/// A boundary use's sag bound and its edge's box (with margin: an edge in a coordinate plane
+/// has a box a few ulps thin).
+fn edge_entry(body: &Body, c: forge_topo::CoedgeId) -> (f64, Box3) {
+    let id = body.coedge(c).edge;
+    (
+        sag_bound(&body.edge(id).curve),
+        body.edge_box(id).grow(10.0 * tol::LINEAR),
+    )
+}
+
+/// Face `f` gained the loop `lp` in place: its kept index (if any) takes the loop's edges.
+pub fn extend_query(body: &mut Body, f: FaceId, lp: forge_topo::LoopId) {
+    let entries: Vec<_> = body
+        .lp(lp)
+        .coedges
+        .iter()
+        .map(|&c| (c, edge_entry(body, c)))
+        .collect();
+    let plane = match &body.face(f).surface {
+        Surface::Plane(pl) => Some(*pl),
+        _ => None,
+    };
+    let face = &mut body.faces[f.index()];
+    let Some(q) = face.query.get_mut() else { return };
+    let Some(info) = std::sync::Arc::get_mut(q).and_then(|a| a.downcast_mut::<FaceInfo>()) else {
+        // shared with a copy of the body: build afresh when next asked
+        face.query.clear();
+        return;
+    };
+    for (c, (sag, b)) in entries {
+        if let Some(bands) = &mut info.bands {
+            bands.insert(info.edges.len() as u32, &b);
+        }
+        info.edges.push((c, b));
+        info.reach = info.reach.max(sag);
+    }
+    if info.bands.is_none()
+        && info.edges.len() >= 16
+        && let Some(pl) = plane
+    {
+        info.bands = Some(Bands::build(&pl, &info.edges));
+    }
+    info.drawn = std::sync::OnceLock::new();
 }
 
 impl Bands {
@@ -79,6 +125,24 @@ impl Bands {
         }
     }
 
+    /// Adds edge `i` with box `b`; a box past the bands' span lands in the end rows.
+    fn insert(&mut self, i: u32, b: &Box3) {
+        let mut sp = Interval::EMPTY;
+        for &x in &[b.x.lo, b.x.hi] {
+            for &y in &[b.y.lo, b.y.hi] {
+                for &z in &[b.z.lo, b.z.hi] {
+                    sp.include((Point3::new(x, y, z) - self.origin).dot(self.across));
+                }
+            }
+        }
+        let n = self.rows.len();
+        let row = |w: f64| (((w - self.w0) * self.inv).floor().max(0.0) as usize).min(n - 1);
+        let (a, z) = (row(sp.lo), row(sp.hi));
+        for r in &mut self.rows[a..=z] {
+            r.push(i);
+        }
+    }
+
     fn row(&self, w: f64) -> Option<usize> {
         let k = (w - self.w0) * self.inv;
         (k >= 0.0 && (k as usize) < self.rows.len()).then_some(k as usize)
@@ -109,7 +173,6 @@ pub struct Index<'a> {
     pub body: &'a Body,
     /// A box guaranteed to hold each face.
     pub boxes: Vec<Box3>,
-    infos: Vec<std::cell::OnceCell<FaceInfo>>,
     pub bbox: Box3,
 }
 
@@ -132,39 +195,34 @@ impl<'a> Index<'a> {
             })
             .collect();
         let bbox = boxes.iter().fold(Box3::EMPTY, |a, b| a.hull(b));
-        let infos = (0..boxes.len()).map(|_| std::cell::OnceCell::new()).collect();
-        Index {
-            body,
-            boxes,
-            infos,
-            bbox,
-        }
+        Index { body, boxes, bbox }
     }
 
     fn info(&self, f: FaceId) -> &FaceInfo {
-        self.infos[f.index()].get_or_init(|| {
+        let face = self.body.face(f);
+        let q = face.query.get_or_init(|| {
             let mut edges = Vec::new();
             let mut reach = 10.0 * tol::LINEAR;
-            for &l in &self.body.face(f).loops {
+            for &l in &face.loops {
                 for &c in &self.body.lp(l).coedges {
-                    let id = self.body.coedge(c).edge;
-                    let e = self.body.edge(id);
-                    // with margin: an edge in a coordinate plane has a box a few ulps thin
-                    edges.push((c, self.body.edge_box(id).grow(10.0 * tol::LINEAR)));
-                    reach = reach.max(sag_bound(&e.curve));
+                    let (e, b) = edge_entry(self.body, c);
+                    edges.push((c, b));
+                    reach = reach.max(e);
                 }
             }
-            let bands = match &self.body.face(f).surface {
+            let bands = match &face.surface {
                 Surface::Plane(pl) if edges.len() >= 16 => Some(Bands::build(pl, &edges)),
                 _ => None,
             };
-            FaceInfo {
+            std::sync::Arc::new(FaceInfo {
                 edges,
                 reach,
-                drawn: std::cell::OnceCell::new(),
+                drawn: std::sync::OnceLock::new(),
                 bands,
-            }
-        })
+            })
+        });
+        q.downcast_ref::<FaceInfo>()
+            .expect("a face's query is a FaceInfo")
     }
 
     fn drawn(&self, f: FaceId) -> &Drawn {

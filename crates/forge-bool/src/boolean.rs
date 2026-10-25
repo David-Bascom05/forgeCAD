@@ -714,7 +714,10 @@ fn apply(a: &mut Body, b: &Body, plan: &Plan, root: Name) {
             if flip {
                 uses = uses.into_iter().rev().map(|(e, f)| (e, !f)).collect();
             }
-            a.add_loop(face, &uses);
+            let lp = a.add_loop(face, &uses);
+            if s.extend && !flip {
+                crate::classify::extend_query(a, face, lp);
+            }
         }
     }
     // shells are regrouped when the body is compacted

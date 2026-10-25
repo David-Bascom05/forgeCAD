@@ -73,6 +73,9 @@ pub struct Face {
     pub name: Name,
     /// A box holding the face, worked out on first use.
     pub bbox: Cached<Box3>,
+    /// A point-in-face index, kept by whoever built it (the booleans) across edits that leave
+    /// the face alone or only add loops to it; compaction drops it (coedge ids change there).
+    pub query: Cached<std::sync::Arc<dyn std::any::Any + Send + Sync>>,
     /// False once the face is removed by an in-place edit.
     pub alive: bool,
 }
@@ -97,6 +100,12 @@ impl<T> Cached<T> {
     }
     pub fn set(&self, v: T) {
         let _ = self.0.set(v);
+    }
+    pub fn get_mut(&mut self) -> Option<&mut T> {
+        self.0.get_mut()
+    }
+    pub fn clear(&mut self) {
+        self.0.take();
     }
 }
 
@@ -333,6 +342,7 @@ impl Body {
             shell,
             name,
             bbox: Cached::default(),
+            query: Cached::default(),
             alive: true,
         });
         self.shells[shell.index()].faces.push(id);
