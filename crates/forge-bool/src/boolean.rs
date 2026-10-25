@@ -244,6 +244,24 @@ fn plan(a: &Body, b: &Body, op: Op, feature: u64) -> R<Plan> {
 
     // 3: vertices for the cuts, then edge pieces
     let (cut_vertex, new_points, alias) = place_cuts(&bodies, &cuts)?;
+    if std::env::var_os("FORGE_DEBUG").is_some() {
+        for (i, sg) in segs.iter().enumerate() {
+            let ends = sg.ends.map(|(x, y)| (cut_vertex[x], cut_vertex[y]));
+            eprintln!(
+                "seg {i}: faces {:?} ends {:?} range {:?} mid {:?}",
+                sg.faces,
+                ends,
+                sg.range,
+                sg.curve.eval(sg.range.mid())
+            );
+        }
+        for (i, c) in cuts.iter().enumerate() {
+            eprintln!(
+                "cut {i}: side {} edge {:?} s {:.4} -> {:?} at {:?}",
+                c.side, c.edge, c.s, cut_vertex[i], c.point
+            );
+        }
+    }
     let mut pieces: Vec<Piece> = Vec::new();
     let mut by_edge: Vec<(Side, EdgeId, usize)> = cuts
         .iter()
@@ -661,6 +679,9 @@ fn trim(
         let p = curve.eval(t);
         let wa = index[0].point_in_face(faces[0], p);
         let wb = index[1].point_in_face(faces[1], p);
+        if std::env::var_os("FORGE_DEBUG").is_some() && matches!(curve, Curve::Circle(_)) {
+            eprintln!("  trim {:?} t {t:.4} p {p:?}: {wa:?} {wb:?}", faces);
+        }
         // a stretch on a boundary is an existing edge, never a new one
         Ok(wa == Where::Inside && wb == Where::Inside)
     };
@@ -705,22 +726,43 @@ fn trim(
 /// one surface, like revolve halves) the plane through the edge, across it.
 fn across(body: &Body, f: FaceId, c: forge_topo::CoedgeId) -> R<Surface> {
     let edge = body.edge(body.coedge(c).edge);
-    Ok(match body.partner(c).map(|o| body.coedge_face(o)) {
-        Some(g) if g != f && body.face(g).surface != body.face(f).surface => body.face(g).surface,
-        _ => {
-            let t = edge.range.mid();
-            let d = edge.curve.deriv(t);
-            let s = &body.face(f).surface;
-            let n = s
-                .normal(s.project(d.p))
-                .ok_or(BoolError::Internal("seam at a singular point"))?;
-            let z =
-                d.d1.cross(n.get())
-                    .normalize()
-                    .ok_or(BoolError::Internal("degenerate seam"))?;
-            Surface::Plane(Plane::new(Frame::from_z(d.p, z)))
+    let t = edge.range.mid();
+    let d = edge.curve.deriv(t);
+    let s = &body.face(f).surface;
+    let n = s
+        .normal(s.project(d.p))
+        .ok_or(BoolError::Internal("edge at a singular point"))?;
+    // the plane through the edge, across the surface: the edge's own plane for a
+    // conic, or the plane holding a line and the surface normal
+    let edge_plane = || -> R<Surface> {
+        Ok(match &edge.curve {
+            Curve::Circle(k) => Surface::Plane(Plane::new(k.frame)),
+            Curve::Ellipse(e) => Surface::Plane(Plane::new(e.frame)),
+            _ => {
+                let z =
+                    d.d1.cross(n.get())
+                        .normalize()
+                        .ok_or(BoolError::Internal("degenerate edge"))?;
+                Surface::Plane(Plane::new(Frame::from_z(d.p, z)))
+            }
+        })
+    };
+    match body.partner(c).map(|o| body.coedge_face(o)) {
+        Some(g) if g != f && body.face(g).surface != body.face(f).surface => {
+            let other = &body.face(g).surface;
+            // a smooth edge (the faces meet tangentially, as a rounded corner meets its
+            // walls): the neighbour's surface would only touch a crossing curve there
+            let smooth = other
+                .normal(other.project(d.p))
+                .is_some_and(|m| m.cross(n).length() <= 1e-6);
+            if smooth && !matches!(edge.curve, Curve::Intersection(_)) {
+                edge_plane()
+            } else {
+                Ok(*other)
+            }
         }
-    })
+        _ => edge_plane(),
+    }
 }
 
 /// Imprints the boundary of `src_face` (of body `src`) onto the coplanar
@@ -1191,6 +1233,9 @@ fn classify_specs(
                             queue.push(j);
                         }
                         Some(cj) if cj != c => {
+                            if std::env::var_os("FORGE_DEBUG").is_some() {
+                                debug_conflict(bodies, specs, pieces, class, i, j, p);
+                            }
                             return Err(BoolError::Internal("inconsistent classification"));
                         }
                         _ => {}
@@ -1224,6 +1269,49 @@ fn classify_specs(
         .into_iter()
         .map(|c| c.expect("every spec classified"))
         .collect())
+}
+
+/// Error-path diagnostics for a classification conflict (FORGE_DEBUG set).
+fn debug_conflict(
+    bodies: &[&Body; 2],
+    specs: &[Spec],
+    pieces: &[Piece],
+    class: &[Option<Class>],
+    i: usize,
+    j: usize,
+    p: usize,
+) {
+    let show = |k: usize| {
+        let s = &specs[k];
+        let f = bodies[s.side].face(s.from);
+        eprintln!(
+            "  spec {k}: side {} face {:?} {:?} sense {} class {:?} loops {:?}",
+            s.side, s.from, f.surface, f.same_sense, class[k], s.loops
+        );
+    };
+    eprintln!(
+        "conflict across piece {p} ({:?} -> {:?}, seg {:?})",
+        pieces[p].start, pieces[p].end, pieces[p].seg
+    );
+    show(i);
+    show(j);
+    for (k, pc) in pieces.iter().enumerate() {
+        if specs[i]
+            .loops
+            .iter()
+            .flatten()
+            .chain(specs[j].loops.iter().flatten())
+            .any(|h| h.0 == k)
+        {
+            eprintln!(
+                "  piece {k}: {:?} -> {:?} seg {:?} at {:?}",
+                pc.start,
+                pc.end,
+                pc.seg,
+                pc.curve.eval(pc.range.mid())
+            );
+        }
+    }
 }
 
 /// A point inside a spec's face: a small step inward from its first edge's midpoint.
