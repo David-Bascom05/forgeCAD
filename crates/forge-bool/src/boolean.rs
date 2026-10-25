@@ -1350,7 +1350,17 @@ fn classify_specs(
         class[i] = Some(match index[1 - s.side].classify(probe) {
             Where::Inside => Class::In,
             Where::Outside => Class::Out,
-            Where::On => return Err(BoolError::Unsupported("untouched face lies on the other body")),
+            Where::On => {
+                if std::env::var_os("FORGE_DEBUG").is_some() {
+                    eprintln!(
+                        "untouched spec {i}: side {} face {:?} {:?} probe {probe:?} coplanar {coplanar:?}",
+                        s.side,
+                        s.from,
+                        bodies[s.side].face(s.from).surface
+                    );
+                }
+                return Err(BoolError::Unsupported("untouched face lies on the other body"));
+            }
         });
         spread(&mut class, i)?;
     }
@@ -1413,10 +1423,11 @@ fn interior_point(body: &Body, s: &Spec, pieces: &[Piece]) -> Option<Point3> {
     let along = if fwd { d.d1 } else { -d.d1 };
     let n = body.face_normal(s.from, face.surface.project(d.p))?;
     let inward = n.cross(along).normalize()?;
-    let len = piece
-        .curve
-        .eval(piece.range.lo)
-        .distance(piece.curve.eval(piece.range.hi))
+    // half chords: a closed piece (a whole circle) has no chord end to end
+    let at = |t: f64| piece.curve.eval(t);
+    let len = at(piece.range.lo)
+        .distance(d.p)
+        .max(d.p.distance(at(piece.range.hi)))
         .max(1e-3);
     let q = d.p + inward * (0.01 * len).min(0.05);
     Some(face.surface.eval(face.surface.project(q)))
