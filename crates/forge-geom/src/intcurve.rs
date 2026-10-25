@@ -181,7 +181,16 @@ pub fn trace(a: &Surface, b: &Surface, region: Box3) -> Option<Vec<IntCurve>> {
     let leaf = (size / 64.0).max(10.0 * tol::LINEAR);
     let step = leaf * 0.5;
     let mut seeds: Vec<Point3> = Vec::new();
-    let mut stack = vec![(region.center(), 0.5 * size)];
+    // cells are cubes, each held as its circumscribed sphere: the root is the cube on the
+    // region's longest side (the region's own half diagonal leaves its long corners out)
+    let half = 0.5
+        * region
+            .x
+            .width()
+            .max(region.y.width())
+            .max(region.z.width())
+            .max(1e-6);
+    let mut stack = vec![(region.center(), half * 3f64.sqrt())];
     while let Some((c, r)) = stack.pop() {
         if a.implicit(c).abs() > r || b.implicit(c).abs() > r {
             continue;

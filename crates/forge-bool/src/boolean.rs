@@ -212,10 +212,17 @@ fn plan(a: &Body, b: &Body, op: Op, feature: u64) -> R<Plan> {
                 continue;
             }
             let (sa, sb) = (&a.face(fa).surface, &b.face(fb).surface);
-            // traced pairs get margin around the box overlap: tracing in exactly the
-            // overlap lost branch pieces in the torture part (cause not pinned down yet)
-            let region = overlap(&index[0].boxes[fa.index()], &index[1].boxes[fb.index()]).grow(1.0);
-            let curves = match ssi::surfaces_in(sa, sb, region) {
+            let region =
+                overlap(&index[0].boxes[fa.index()], &index[1].boxes[fb.index()]).grow(10.0 * tol::LINEAR);
+            let found = ssi::surfaces_in(sa, sb, region);
+            if std::env::var_os("FORGE_DEBUG").is_some() {
+                let what = match &found {
+                    SurfaceSurface::Curves(cs) => format!("{} curves", cs.len()),
+                    other => format!("{other:?}").chars().take(40).collect(),
+                };
+                eprintln!("  pair {fa:?} {fb:?}: {what}");
+            }
+            let curves = match found {
                 SurfaceSurface::Empty | SurfaceSurface::Points(_) => continue,
                 SurfaceSurface::Coincident => {
                     coplanar.push((fa, fb));
@@ -727,6 +734,10 @@ fn trim(
         return Ok(());
     }
     ts.sort_by(|x, y| x.0.total_cmp(&y.0));
+    if std::env::var_os("FORGE_DEBUG").is_some() && matches!(curve, Curve::Intersection(_)) {
+        let tsp: Vec<_> = ts.iter().map(|&(t, k)| (t, cuts[k].point)).collect();
+        eprintln!("  traced {faces:?} range {range:?} cuts {tsp:?}");
+    }
     // the same point found on two edges (a vertex, or both faces' boundaries) is one cut
     ts.dedup_by(|x, y| cuts[x.1].point.distance(cuts[y.1].point) <= 10.0 * tol::LINEAR);
     let inside = |t: f64| -> R<bool> {
