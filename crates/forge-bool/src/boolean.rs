@@ -1304,11 +1304,24 @@ fn split_face(
                 )
             }
         };
-        // the smallest outline holding it; the untouched outer loop (no outline) holds every hole
+        // the smallest outline holding it; the untouched outer loop (no outline) holds every hole.
+        // Outlines of a face spanning more than a period can't all share one window, so the
+        // probe is tried a period either way too
+        let shifts = |period: Option<f64>| match period {
+            Some(p) => [0.0, -p, p],
+            None => [0.0; 3],
+        };
+        let holds = |poly: &Vec<Point2>| {
+            shifts(dom.u.period).iter().any(|&du| {
+                shifts(dom.v.period)
+                    .iter()
+                    .any(|&dv| inside_poly(Point2::new(probe.x + du, probe.y + dv), poly))
+            })
+        };
         let host = outer_of
             .iter()
             .enumerate()
-            .filter(|&(_, &o)| polys[o].as_ref().is_none_or(|poly| inside_poly(probe, poly)))
+            .filter(|&(_, &o)| polys[o].as_ref().is_none_or(holds))
             .min_by(|x, y| areas[*x.1].total_cmp(&areas[*y.1]))
             .map(|(r, _)| r);
         let Some(host) = host else {
