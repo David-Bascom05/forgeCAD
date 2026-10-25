@@ -1053,7 +1053,7 @@ fn split_face(
             Point2::new(-p.x, p.y)
         }
     };
-    let polys: Vec<Option<Vec<Point2>>> = cycles
+    let mut polys: Vec<Option<Vec<Point2>>> = cycles
         .iter()
         .map(|cyc| {
             if untouched(cyc) {
@@ -1068,6 +1068,41 @@ fn split_face(
             Some(pts.into_iter().map(mirror).collect())
         })
         .collect();
+    // each cycle was unwrapped on its own; shift them all into the window of the
+    // widest one, so containment compares like with like on periodic surfaces
+    let dom = face.surface.domain();
+    if dom.u.period.is_some() || dom.v.period.is_some() {
+        let span = |p: &Vec<Point2>| {
+            p.iter().fold(
+                (f64::INFINITY, f64::NEG_INFINITY, f64::INFINITY, f64::NEG_INFINITY),
+                |a, q| (a.0.min(q.x), a.1.max(q.x), a.2.min(q.y), a.3.max(q.y)),
+            )
+        };
+        let reference = polys
+            .iter()
+            .flatten()
+            .map(span)
+            .max_by(|a, b| ((a.1 - a.0) * (a.3 - a.2)).total_cmp(&((b.1 - b.0) * (b.3 - b.2))));
+        if let Some(r) = reference {
+            let fit = |c: f64, lo: f64, hi: f64, period: Option<f64>| match period {
+                Some(per) => [0.0, -per, per, -2.0 * per, 2.0 * per]
+                    .into_iter()
+                    .find(|k| c + k >= lo - 1e-9 && c + k <= hi + 1e-9)
+                    .unwrap_or_else(|| per * ((0.5 * (lo + hi) - c) / per).round()),
+                None => 0.0,
+            };
+            for p in polys.iter_mut().flatten() {
+                let sp = span(p);
+                let du = fit(0.5 * (sp.0 + sp.1), r.0, r.1, dom.u.period);
+                let dv = fit(0.5 * (sp.2 + sp.3), r.2, r.3, dom.v.period);
+                if du != 0.0 || dv != 0.0 {
+                    for q in p.iter_mut() {
+                        *q = Point2::new(q.x + du, q.y + dv);
+                    }
+                }
+            }
+        }
+    }
     let areas: Vec<f64> = cycles
         .iter()
         .zip(&polys)
@@ -1113,8 +1148,30 @@ fn split_face(
             .enumerate()
             .filter(|&(_, &o)| polys[o].as_ref().is_none_or(|poly| inside_poly(probe, poly)))
             .min_by(|x, y| areas[*x.1].total_cmp(&areas[*y.1]))
-            .map(|(r, _)| r)
-            .ok_or(BoolError::Internal("hole outside every region"))?;
+            .map(|(r, _)| r);
+        let Some(host) = host else {
+            if std::env::var_os("FORGE_DEBUG").is_some() {
+                eprintln!(
+                    "hole outside: face {f:?} {:?} sense {} probe {probe:?}",
+                    face.surface, face.same_sense
+                );
+                for (q, cyc) in cycles.iter().enumerate() {
+                    let pts = polys[q].as_ref().map(|p| {
+                        p.iter()
+                            .map(|v| format!("({:.3},{:.3})", v.x, v.y))
+                            .collect::<Vec<_>>()
+                            .join(" ")
+                    });
+                    eprintln!(
+                        "  cycle {q} area {:.4} halves {:?}\n    {:?}",
+                        areas[q],
+                        cyc.iter().map(|&i| half[i]).collect::<Vec<_>>(),
+                        pts
+                    );
+                }
+            }
+            return Err(BoolError::Internal("hole outside every region"));
+        };
         regions[host].push(cyc.iter().map(|&i| half[i]).collect());
     }
     Ok(regions)
