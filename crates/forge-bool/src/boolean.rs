@@ -15,7 +15,7 @@
 
 use crate::classify::{Index, Where};
 use crate::ssi;
-use forge_geom::intersect::{CurveSurface, SurfaceSurface, curve_surface};
+use forge_geom::intersect::{Contact, CurveSurface, SurfaceSurface, curve_surface};
 use forge_geom::{Curve, CurveGeom, Plane, Surface, SurfaceGeom};
 use forge_math::{Frame, Interval, Point2, Point3, dmath, tol};
 use forge_topo::{Body, EdgeId, FaceId, Name, VertexId};
@@ -225,7 +225,11 @@ fn plan(a: &Body, b: &Body, op: Op, feature: u64) -> R<Plan> {
                 }
                 SurfaceSurface::Curves(cs) => cs,
             };
-            for (ci, (curve, _)) in curves.into_iter().enumerate() {
+            for (ci, (curve, contact)) in curves.into_iter().enumerate() {
+                // surfaces that only touch along a curve cross nowhere: no face splits there
+                if contact == Contact::Touching {
+                    continue;
+                }
                 let pair_name = root
                     .with_str("cut")
                     .with_set(vec![a.face(fa).name, b.face(fb).name])
@@ -657,7 +661,8 @@ fn trim(
                         return Err(BoolError::Unsupported("intersection curve runs along an edge"));
                     }
                 };
-                for h in hits {
+                // a curve that touches the boundary without crossing it is not cut there
+                for h in hits.into_iter().filter(|h| h.contact == Contact::Crossing) {
                     let s = edge.curve.closest(h.point, edge.range);
                     if edge.curve.eval(s).distance(h.point) <= 10.0 * tol::LINEAR {
                         ts.push((h.t, cuts.len()));
