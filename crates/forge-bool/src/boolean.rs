@@ -163,6 +163,17 @@ fn edge_split(
         .take_while(|&&(sd, ed, _)| sd == side && ed == e)
         .map(|&(_, _, i)| (cuts[i].s, cut_vertex[i]))
         .collect();
+    // on a periodic curve a cut may come in another period than the edge's range
+    if let Some(period) = edge.curve.domain().period {
+        for sp in &mut splits {
+            while sp.0 < edge.range.lo {
+                sp.0 += period;
+            }
+            while sp.0 >= edge.range.lo + period {
+                sp.0 -= period;
+            }
+        }
+    }
     splits.sort_by(|x, y| x.0.total_cmp(&y.0));
     splits.dedup_by(|x, y| x.1 == y.1);
     let (vs, ve) = (

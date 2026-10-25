@@ -1,5 +1,6 @@
 //! cargo run --release -p forge-model --example shrink -- <suite part name | fuzz seed>
 //! Shrinks a failing history to a minimal one and prints it as a literal.
+use forge_geom::CurveGeom;
 use forge_model::{adversarial, suite};
 fn main() {
     let arg = std::env::args().nth(1).expect("suite part name or fuzz seed");
@@ -18,5 +19,26 @@ fn main() {
     println!("{}", adversarial::literal(&small));
     // with FORGE_DEBUG set, the diagnostics after this line are the minimal part's
     eprintln!("=== rerun");
-    println!("{:?}", small.regenerate().err());
+    match small.regenerate() {
+        Ok(b) => {
+            let problems = forge_topo::check(&b);
+            println!("{problems:?}");
+            for p in &problems {
+                if let forge_topo::Problem::VertexOffEdge { edge, .. } = p {
+                    let e = b.edge(*edge);
+                    let kind = format!("{:?}", e.curve);
+                    println!(
+                        "edge {edge:?}: {} range {:?} start {:?} -> {:?} end {:?} -> {:?}",
+                        &kind[..kind.len().min(300)],
+                        e.range,
+                        b.vertex(e.start).point,
+                        e.curve.eval(e.range.lo),
+                        b.vertex(e.end).point,
+                        e.curve.eval(e.range.hi)
+                    );
+                }
+            }
+        }
+        Err(e) => println!("{e:?}"),
+    }
 }
