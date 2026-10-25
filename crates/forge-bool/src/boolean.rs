@@ -145,7 +145,8 @@ struct Plan {
     involved: Vec<FaceId>,
 }
 
-/// The pieces an edge splits into at its cuts (one piece, the whole edge, if none).
+/// The pieces an edge splits into at its cuts (one piece, the whole edge, if none), pushed
+/// consecutively: their indices are the returned range.
 #[allow(clippy::too_many_arguments)]
 fn edge_split(
     body: &Body,
@@ -156,7 +157,7 @@ fn edge_split(
     cut_vertex: &[VKey],
     alias: &[(VKey, VKey)],
     pieces: &mut Vec<Piece>,
-) -> Vec<usize> {
+) -> std::ops::Range<usize> {
     let resolve = |v: VKey| alias.iter().find(|(f, _)| *f == v).map_or(v, |&(_, t)| t);
     let edge = body.edge(e);
     let from = by_edge.partition_point(|&(sd, ed, _)| (sd, ed) < (side, e));
@@ -184,7 +185,7 @@ fn edge_split(
     );
     splits.retain(|&(_, v)| v != vs && v != ve);
     let whole = splits.is_empty().then_some((side, e));
-    let mut out = Vec::with_capacity(splits.len() + 1);
+    let first = pieces.len();
     let mut at = (edge.range.lo, vs);
     for (k, &(s, v)) in splits.iter().chain([(edge.range.hi, ve)].iter()).enumerate() {
         let name = if whole.is_some() {
@@ -192,7 +193,6 @@ fn edge_split(
         } else {
             edge.name.with_str("split").with(k as u64)
         };
-        out.push(pieces.len());
         pieces.push(Piece {
             curve: edge.curve.clone(),
             range: Interval::new(at.0, s),
@@ -205,7 +205,7 @@ fn edge_split(
         });
         at = (s, v);
     }
-    out
+    first..pieces.len()
 }
 
 const FAST_EXTEND: bool = false;
@@ -355,24 +355,25 @@ fn plan(a: &Body, b: &Body, op: Op, feature: u64) -> R<Plan> {
     by_edge.sort_unstable();
     // pieces per edge, made only for edges a spec reaches
     // looked up, never iterated, so the map's order cannot reach the result
-    let mut edge_pieces: std::collections::HashMap<(Side, EdgeId), Vec<usize>> =
-        std::collections::HashMap::new();
-    let mut ensure = |side: Side, e: EdgeId, pieces: &mut Vec<Piece>| -> Vec<usize> {
-        edge_pieces
-            .entry((side, e))
-            .or_insert_with(|| {
-                edge_split(
-                    bodies[side],
-                    side,
-                    e,
-                    &cuts,
-                    &by_edge,
-                    &cut_vertex,
-                    &alias,
-                    pieces,
-                )
-            })
-            .clone()
+    // each edge's pieces, split once: (first piece, count) by edge index, count 0 if not yet
+    let mut edge_pieces: [Vec<(u32, u32)>; 2] = [vec![(0, 0); a.edges.len()], vec![(0, 0); b.edges.len()]];
+    let mut ensure = |side: Side, e: EdgeId, pieces: &mut Vec<Piece>| -> std::ops::Range<usize> {
+        let (first, n) = edge_pieces[side][e.index()];
+        if n > 0 {
+            return first as usize..(first + n) as usize;
+        }
+        let r = edge_split(
+            bodies[side],
+            side,
+            e,
+            &cuts,
+            &by_edge,
+            &cut_vertex,
+            &alias,
+            pieces,
+        );
+        edge_pieces[side][e.index()] = (r.start as u32, r.len() as u32);
+        r
     };
     let mut seg_piece = Vec::with_capacity(segs.len());
     for (si, s) in segs.iter().enumerate() {
@@ -489,9 +490,9 @@ fn plan(a: &Body, b: &Body, op: Op, feature: u64) -> R<Plan> {
                     let ps = ensure(side, co.edge, &mut pieces);
                     whole &= ps.len() == 1;
                     if co.forward {
-                        walk.extend(ps.iter().map(|&p| (p, true)));
+                        walk.extend(ps.clone().map(|p| (p, true)));
                     } else {
-                        walk.extend(ps.iter().rev().map(|&p| (p, false)));
+                        walk.extend(ps.clone().rev().map(|p| (p, false)));
                     }
                 }
                 boundary.push(walk);
