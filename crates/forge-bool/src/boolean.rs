@@ -16,7 +16,7 @@
 use crate::classify::{Index, Where};
 use crate::ssi;
 use forge_geom::intersect::{Contact, CurveSurface, SurfaceSurface, curve_surface};
-use forge_geom::{Curve, CurveGeom, Plane, Surface, SurfaceGeom};
+use forge_geom::{Curve, CurveGeom, Cylinder, Plane, Surface, SurfaceGeom};
 use forge_math::{Frame, Interval, Point2, Point3, Vec3, dmath, tol};
 use forge_topo::{Body, EdgeId, FaceId, Name, VertexId};
 
@@ -795,9 +795,9 @@ fn trim(
         return Ok(());
     }
     ts.sort_by(|x, y| x.0.total_cmp(&y.0));
-    if std::env::var_os("FORGE_DEBUG").is_some() && matches!(curve, Curve::Intersection(_)) {
+    if std::env::var_os("FORGE_DEBUG").is_some() {
         let tsp: Vec<_> = ts.iter().map(|&(t, k)| (t, cuts[k].point)).collect();
-        eprintln!("  traced {faces:?} range {range:?} cuts {tsp:?}");
+        eprintln!("  curve {faces:?} range {range:?} cuts {tsp:?}");
     }
     // the same point found on two edges (a vertex, or both faces' boundaries) is one cut
     ts.dedup_by(|x, y| cuts[x.1].point.distance(cuts[y.1].point) <= 10.0 * tol::LINEAR);
@@ -858,10 +858,14 @@ fn across(body: &Body, f: FaceId, c: forge_topo::CoedgeId) -> R<Surface> {
     let n = s
         .normal(s.project(d.p))
         .ok_or(BoolError::Internal("edge at a singular point"))?;
-    // the plane through the edge, across the surface: the edge's own plane for a
-    // conic, or the plane holding a line and the surface normal
+    // a surface through the edge, across this one: the edge's own plane for a conic (the
+    // cylinder on a circle lying in a planar face), or the plane holding a line and the normal
     let edge_plane = || -> R<Surface> {
         Ok(match &edge.curve {
+            Curve::Circle(k) if matches!(s, Surface::Plane(_)) => Surface::Cylinder(Cylinder {
+                frame: k.frame,
+                radius: k.radius,
+            }),
             Curve::Circle(k) => Surface::Plane(Plane::new(k.frame)),
             Curve::Ellipse(e) => Surface::Plane(Plane::new(e.frame)),
             _ => {
@@ -874,7 +878,12 @@ fn across(body: &Body, f: FaceId, c: forge_topo::CoedgeId) -> R<Surface> {
         })
     };
     match body.partner(c).map(|o| body.coedge_face(o)) {
-        Some(g) if g != f && body.face(g).surface != body.face(f).surface => {
+        // a neighbour on this face's surface (coplanar faces framed apart) is not across it
+        Some(g)
+            if g != f
+                && body.face(g).surface != *s
+                && ssi::surfaces(&body.face(g).surface, s) != SurfaceSurface::Coincident =>
+        {
             let other = &body.face(g).surface;
             // a smooth edge (the faces meet tangentially, as a rounded corner meets its
             // walls): the neighbour's surface would only touch a crossing curve there
