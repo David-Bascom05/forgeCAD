@@ -187,7 +187,19 @@ fn tessellate_face(
         }
     }
 
-    let mut tri = triangulate(&scaled, &loops, &interior)?;
+    let mut tri = match triangulate(&scaled, &loops, &interior) {
+        Ok(t) => t,
+        Err(e) => {
+            if let Some(path) = std::env::var_os("FORGE_CDT_DUMP") {
+                let pts: Vec<String> = scaled.iter().map(|p| format!("{:e},{:e}", p.x, p.y)).collect();
+                let ls: Vec<String> = loops.iter().map(|l| format!("{}+{}", l[0], l.len())).collect();
+                let ins: Vec<String> = interior.iter().map(|p| format!("{:e},{:e}", p.x, p.y)).collect();
+                let text = format!("{}\n{}\n{}\n", pts.join(" "), ls.join(" "), ins.join(" "));
+                let _ = std::fs::write(path, text);
+            }
+            return Err(e);
+        }
+    };
     // chords that stray from the surface by more than the tolerance get a surface point at
     // their middle (a thin band between two boundary curves has no grid points at all)
     let at = |p: Point2| surface.eval(Point2::new(p.x / su, p.y / sv));

@@ -15,7 +15,33 @@ fn main() {
         }
     };
     let b = part.regenerate().expect("regenerates").compact();
-    let m = tessellate(&b, &Quality::default()).expect("meshes");
+    let m = match tessellate(&b, &Quality::default()) {
+        Ok(m) => m,
+        Err(forge_mesh::TessError::Face { face, error }) => {
+            let fc = b.face(face);
+            println!(
+                "face {face:?} fails: {error:?}; {:?} sense {}",
+                fc.surface, fc.same_sense
+            );
+            for &l in &fc.loops {
+                for &c in &b.lp(l).coedges {
+                    let co = b.coedge(c);
+                    let e = b.edge(co.edge);
+                    let k = format!("{:?}", e.curve);
+                    println!(
+                        "  {}{} [{:.6}] {:?} -> {:?}",
+                        if co.forward { "+" } else { "-" },
+                        &k[..k.len().min(70)],
+                        e.range.width(),
+                        b.vertex(e.start).point,
+                        b.vertex(e.end).point
+                    );
+                }
+                println!("  --");
+            }
+            return;
+        }
+    };
     let open = m.open_edges();
     let mut per_face: Vec<(u32, usize, usize)> = Vec::new();
     for (t, &f) in m.triangles.iter().zip(&m.face_of) {
