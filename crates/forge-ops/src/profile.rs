@@ -58,6 +58,10 @@ pub enum ProfileError {
     HoleOutside {
         loop_index: usize,
     },
+    /// A loop crosses itself (a corner radius larger than half its side, say).
+    SelfIntersecting {
+        loop_index: usize,
+    },
 }
 
 impl Segment {
@@ -215,6 +219,27 @@ impl ProfileLoop {
     }
 }
 
+/// Whether two edges of the closed polygon cross properly (adjacent edges share a corner).
+fn crosses_itself(poly: &[Point2]) -> bool {
+    let n = poly.len();
+    let cross = |o: Point2, a: Point2, b: Point2| (a.x - o.x) * (b.y - o.y) - (a.y - o.y) * (b.x - o.x);
+    for i in 0..n {
+        let (a, b) = (poly[i], poly[(i + 1) % n]);
+        for j in i + 2..n {
+            if (j + 1) % n == i {
+                continue;
+            }
+            let (c, d) = (poly[j], poly[(j + 1) % n]);
+            let (d1, d2) = (cross(a, b, c), cross(a, b, d));
+            let (d3, d4) = (cross(c, d, a), cross(c, d, b));
+            if d1 * d2 < 0.0 && d3 * d4 < 0.0 {
+                return true;
+            }
+        }
+    }
+    false
+}
+
 fn inside(p: Point2, poly: &[Point2]) -> bool {
     let mut c = false;
     for i in 0..poly.len() {
@@ -256,6 +281,11 @@ impl Profile {
                 if gap > tol::LINEAR {
                     return Err(ProfileError::Open { id, gap });
                 }
+            }
+        }
+        for (i, l) in self.loops.iter().enumerate() {
+            if crosses_itself(&l.polygon()) {
+                return Err(ProfileError::SelfIntersecting { loop_index: i });
             }
         }
         let mut loops = Vec::with_capacity(self.loops.len());

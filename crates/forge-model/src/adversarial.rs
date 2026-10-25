@@ -627,7 +627,8 @@ fn rounded_everywhere(seed: u64) -> Part {
             r.range(-2.0, t + 1.0),
         );
         let (a, b) = (r.range(6.0, 20.0), r.range(4.0, 12.0));
-        let rad = b * r.range(0.1, 0.49);
+        // a corner radius over half the shorter side turns the outline inside out
+        let rad = a.min(b) * r.range(0.1, 0.49);
         f.push(ext(
             turned(o, r.range(0.0, dmath::TAU)),
             vec![Profile::rounded_rectangle(

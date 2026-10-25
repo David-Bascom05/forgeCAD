@@ -58,7 +58,12 @@ fn main() {
             }
         }
     }
-    let (seeds, count) = (20u64, 80usize);
+    // FUZZ_SEEDS widens the run (default 20)
+    let seeds: u64 = std::env::var("FUZZ_SEEDS")
+        .ok()
+        .and_then(|v| v.parse().ok())
+        .unwrap_or(20);
+    let count = 80usize;
     let mut ok = 0;
     let mut failures = Vec::new();
     let t = Instant::now();

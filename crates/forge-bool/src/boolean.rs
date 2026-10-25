@@ -15,7 +15,7 @@
 
 use crate::classify::{Index, Where};
 use crate::ssi;
-use forge_geom::intersect::{Contact, CurveSurface, SurfaceSurface, curve_surface};
+use forge_geom::intersect::{Contact, CurveHit, CurveSurface, SurfaceSurface, curve_surface};
 use forge_geom::{Curve, CurveGeom, Cylinder, Plane, Surface, SurfaceGeom};
 use forge_math::{Frame, Interval, Point2, Point3, Vec3, dmath, tol};
 use forge_topo::{Body, EdgeId, FaceId, Name, VertexId};
@@ -528,6 +528,15 @@ fn plan(a: &Body, b: &Body, op: Op, feature: u64) -> R<Plan> {
 
     // 5: classify
     let class = classify_specs(&bodies, &index, &specs, &pieces, &segs, &coplanar)?;
+    if std::env::var_os("FORGE_SPECS").is_some() {
+        for (i, sp) in specs.iter().enumerate() {
+            let ls: Vec<Vec<usize>> = sp.loops.iter().map(|l| l.iter().map(|h| h.0).collect()).collect();
+            eprintln!(
+                "  SPEC {i}: side {} face {:?} class {:?} loops {ls:?}",
+                sp.side, sp.from, class[i]
+            );
+        }
+    }
 
     // 6: keep, flip. A shared same-facing region keeps A's copy only.
     let keep = |side: Side, c: Class| match (op, side, c) {
@@ -694,7 +703,8 @@ fn trim(
     };
     let first = cuts.len();
     let mut ts: Vec<(f64, usize)> = Vec::new();
-    let mut seams: Vec<(Side, EdgeId)> = Vec::new();
+    // edges the curve runs along: (side, edge, is a seam)
+    let mut along: Vec<(Side, EdgeId, bool)> = Vec::new();
     // an edge whose box misses the curve's cannot cut it (big faces have hundreds of edges)
     let reach = curve.bbox(range).grow(10.0 * tol::LINEAR);
     for side in 0..2 {
@@ -717,8 +727,16 @@ fn trim(
                     // the edge is boundary, not a new edge (the faces either side of it meet the
                     // other body there, and their own pairs decide what happens)
                     CurveSurface::OnSurface | CurveSurface::Overlap => {
-                        if body.partner(c).map(|o| body.coedge_face(o)) == Some(f) {
-                            seams.push((side, e));
+                        let g = body.partner(c).map(|o| body.coedge_face(o));
+                        let seam = g == Some(f);
+                        // beside a face on the other face's surface, coplanar imprinting does it
+                        let other = &bodies[1 - side].face(faces[1 - side]).surface;
+                        let coplanar = g.is_some_and(|g| {
+                            g != f
+                                && ssi::surfaces(&body.face(g).surface, other) == SurfaceSurface::Coincident
+                        });
+                        if !coplanar && !along.iter().any(|a| a.0 == side && a.1 == e) {
+                            along.push((side, e, seam));
                         }
                         for (s, v) in [(edge.range.lo, edge.start), (edge.range.hi, edge.end)] {
                             let p = body.vertex(v).point;
@@ -736,8 +754,12 @@ fn trim(
                         continue;
                     }
                 };
-                // a curve that touches the boundary without crossing it is not cut there
-                for h in hits.into_iter().filter(|h| h.contact == Contact::Crossing) {
+                // a curve that touches the boundary without crossing it is not cut there; a
+                // "touch" may be two crossings a hair apart (near-tangent circles), so look
+                for h in hits
+                    .into_iter()
+                    .flat_map(|h| crossings_near(&curve, range, &across, h))
+                {
                     let s = edge.curve.closest(h.point, edge.range);
                     if edge.curve.eval(s).distance(h.point) <= 10.0 * tol::LINEAR {
                         ts.push((h.t, cuts.len()));
@@ -752,10 +774,11 @@ fn trim(
             }
         }
     }
-    // along a seam the curve crosses the other face on an edge that already exists: the seam
-    // is cut where it leaves that face and imprinted into it, and the curve adds no edge
-    if !seams.is_empty() {
-        for (side, e) in seams {
+    // where the curve runs along an existing edge it crosses the other face there: the edge is
+    // cut where it leaves that face and imprinted into it (splitting that face, and stopping the
+    // classification flood across it); along a seam the curve adds no edge at all
+    if !along.is_empty() {
+        for &(side, e, _) in &along {
             let body = bodies[side];
             let edge = body.edge(e);
             let mut marks = vec![edge.range.lo, edge.range.hi];
@@ -792,7 +815,9 @@ fn trim(
                 }
             }
         }
-        return Ok(());
+        if along.iter().any(|a| a.2) {
+            return Ok(());
+        }
     }
     ts.sort_by(|x, y| x.0.total_cmp(&y.0));
     if std::env::var_os("FORGE_DEBUG").is_some() {
@@ -992,6 +1017,50 @@ fn overlap(a: &forge_math::Box3, b: &forge_math::Box3) -> forge_math::Box3 {
         y: cut(a.y, b.y),
         z: cut(a.z, b.z),
     }
+}
+
+/// A crossing hit as it is; a touching one replaced by the crossings found where the surface's
+/// distance changes sign within a small window around it (none if it truly only touches).
+fn crossings_near(curve: &Curve, range: Interval, s: &Surface, h: CurveHit) -> Vec<CurveHit> {
+    if h.contact == Contact::Crossing {
+        return vec![h];
+    }
+    let w = 1e-2 * range.width().min(1.0);
+    let n = 64;
+    let g = |t: f64| s.implicit(curve.eval(t));
+    let at = |k: usize| (h.t - w + 2.0 * w * k as f64 / n as f64).clamp(range.lo, range.hi);
+    // samples within a hair of the surface carry no sign: a true touch flickers around zero
+    let dead = 1e-9;
+    let mut out = Vec::new();
+    let mut last: Option<(f64, f64)> = None;
+    for k in 0..=n {
+        let t1 = at(k);
+        let g1 = g(t1);
+        if g1.abs() <= dead {
+            continue;
+        }
+        if let Some((t0, g0)) = last
+            && (g0 < 0.0) != (g1 < 0.0)
+        {
+            let (mut lo, mut hi) = (t0, t1);
+            for _ in 0..60 {
+                let mid = 0.5 * (lo + hi);
+                if (g(mid) < 0.0) == (g0 < 0.0) {
+                    lo = mid
+                } else {
+                    hi = mid
+                }
+            }
+            let t = 0.5 * (lo + hi);
+            out.push(CurveHit {
+                t,
+                point: curve.eval(t),
+                contact: Contact::Crossing,
+            });
+        }
+        last = Some((t1, g1));
+    }
+    out
 }
 
 /// Two edges on the same carrier curve: each is cut where the other's ends lie inside it.
@@ -1197,6 +1266,27 @@ fn split_face(
             }
         }
         if i != s {
+            if std::env::var_os("FORGE_DEBUG").is_some() {
+                eprintln!(
+                    "crossed itself: face {f:?} {:?} sense {}",
+                    body.face(f).surface,
+                    body.face(f).same_sense
+                );
+                for (k, &(p, fwd)) in half.iter().enumerate() {
+                    let pc = &pieces[p];
+                    let (a, b) = if fwd {
+                        (pc.start, pc.end)
+                    } else {
+                        (pc.end, pc.start)
+                    };
+                    let mark = if cyc.contains(&k) { "*" } else { " " };
+                    eprintln!(
+                        "  {mark}half {k}: piece {p} {a:?} -> {b:?} seg {:?} mid {:?}",
+                        pc.seg,
+                        pc.curve.eval(pc.range.mid())
+                    );
+                }
+            }
             return Err(BoolError::Internal("face split crossed itself"));
         }
         cycles.push(cyc);
@@ -1287,9 +1377,16 @@ fn split_face(
             continue;
         }
         let probe = match &polys[k] {
-            // a point just off the hole's first segment, on its material side (the left)
+            // a point just off the hole's longest segment, on its material side (the left);
+            // a short first segment put the probe a hair from the outline, on either side
             Some(poly) => {
-                let (p0, p1) = (poly[0], poly[1]);
+                let k = (0..poly.len())
+                    .max_by(|&a, &b| {
+                        let len = |i: usize| (poly[(i + 1) % poly.len()] - poly[i]).length();
+                        len(a).total_cmp(&len(b))
+                    })
+                    .unwrap_or(0);
+                let (p0, p1) = (poly[k], poly[(k + 1) % poly.len()]);
                 p0.lerp(p1, 0.5) + (p1 - p0).perp() * 1e-3
             }
             // an untouched hole touches no new edge, so its first vertex is clear of every new outline
@@ -1393,6 +1490,13 @@ fn classify_specs(
         let Some(p) = interior_point(body, s, pieces) else {
             continue;
         };
+        if std::env::var_os("FORGE_SPECS").is_some() {
+            let w: Vec<_> = partners
+                .iter()
+                .map(|&pf| (pf, index[other].point_in_face(pf, p)))
+                .collect();
+            eprintln!("  COPLANAR spec {i} face {:?} probe {p:?} partners {w:?}", s.from);
+        }
         for pf in partners {
             if index[other].point_in_face(pf, p) == Where::Inside {
                 let ob = bodies[other];
@@ -1466,6 +1570,14 @@ fn classify_specs(
                     }
                     match class[j] {
                         None => {
+                            if std::env::var_os("FORGE_SPECS").is_some() {
+                                eprintln!(
+                                    "  FLOOD spec {j} (face {:?}) <- spec {i} (face {:?} {:?}) ({c:?}) across piece {p}",
+                                    specs[j].from,
+                                    specs[i].from,
+                                    bodies[specs[i].side].face(specs[i].from).surface
+                                );
+                            }
                             class[j] = Some(c);
                             queue.push(j);
                         }
@@ -1495,6 +1607,12 @@ fn classify_specs(
         let s = &specs[i];
         let probe =
             interior_point(bodies[s.side], s, pieces).ok_or(BoolError::Internal("no interior point"))?;
+        if std::env::var_os("FORGE_SPECS").is_some() {
+            eprintln!(
+                "  RAY spec {i} probe {probe:?} -> {:?}",
+                index[1 - s.side].classify(probe)
+            );
+        }
         class[i] = Some(match index[1 - s.side].classify(probe) {
             Where::Inside => Class::In,
             Where::Outside => Class::Out,
