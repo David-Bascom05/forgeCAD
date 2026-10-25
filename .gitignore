@@ -2,3 +2,4 @@
 *.stl
 /target-mesh
 /target-sketch
+/target-prof

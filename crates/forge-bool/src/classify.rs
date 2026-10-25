@@ -1,5 +1,5 @@
 use forge_geom::intersect::{Contact, LineSurface, line_surface};
-use forge_geom::{Curve, CurveGeom, Line, SurfaceGeom};
+use forge_geom::{Curve, CurveGeom, Line, Surface, SurfaceGeom};
 use forge_math::{Box2, Box3, Interval, Point2, Point3, Vec3, tol};
 use forge_topo::uv::{UvLoop, face_uv_loops, point_in_loops};
 use forge_topo::{Body, FaceId};
@@ -12,11 +12,9 @@ pub enum Where {
     On,
 }
 
-/// Per-face data reused across many queries: the loops in parameter space
-/// and a box guaranteed to hold the face.
+/// A face's loops in parameter space, built the first time a query needs them.
 pub struct FaceInfo {
     pub loops: Vec<UvLoop>,
-    pub bbox: Box3,
     centre: Point2,
     /// The parameter window the loops are drawn in.
     window: Box2,
@@ -24,45 +22,68 @@ pub struct FaceInfo {
 
 pub struct Index<'a> {
     pub body: &'a Body,
-    pub faces: Vec<FaceInfo>,
+    /// A box guaranteed to hold each face.
+    pub boxes: Vec<Box3>,
+    infos: Vec<std::cell::OnceCell<FaceInfo>>,
     pub bbox: Box3,
+}
+
+/// A box holding face `f`, from its edges alone. A face on a plane, cylinder
+/// or cone lies in the hull of its boundary (through any point of it runs a
+/// straight line of the surface that meets the boundary on both sides);
+/// spheres and tori can bulge past their edges, so their whole surface box is added.
+pub fn face_box(body: &Body, f: FaceId) -> Box3 {
+    let face = body.face(f);
+    let mut b = Box3::EMPTY;
+    for &l in &face.loops {
+        for &c in &body.lp(l).coedges {
+            let edge = body.edge(body.coedge(c).edge);
+            b = b.hull(&edge.curve.bbox(edge.range));
+        }
+    }
+    let whole = |s: &Surface| match s {
+        Surface::Sphere(sp) => Some(Box3::from_point(sp.frame.origin).grow(sp.radius)),
+        Surface::Torus(t) => Some(Box3::from_point(t.frame.origin).grow(t.major + t.minor)),
+        _ => None,
+    };
+    if let Some(w) = whole(&face.surface) {
+        b = b.hull(&w);
+    }
+    b.grow(tol::LINEAR)
 }
 
 impl<'a> Index<'a> {
     pub fn new(body: &'a Body) -> Self {
-        let mut bbox = Box3::EMPTY;
-        let faces: Vec<FaceInfo> = body
-            .face_ids()
-            .map(|f| {
-                let loops = face_uv_loops(body, f);
-                let (mut u, mut v) = (Interval::EMPTY, Interval::EMPTY);
-                for p in loops.iter().flat_map(|l| l.points.iter()) {
-                    u.include(p.x);
-                    v.include(p.y);
-                }
-                // the polygon cuts corners of curved boundaries; widen a little
-                let uv = Box2::new(u.grow(0.05 * u.width() + 1e-9), v.grow(0.05 * v.width() + 1e-9));
-                let mut b = body.face(f).surface.bbox(clamp_box(body, f, uv));
-                for e in body.face(f).loops.iter().flat_map(|&l| body.lp(l).coedges.iter()) {
-                    let edge = body.edge(body.coedge(*e).edge);
-                    b = b.hull(&edge.curve.bbox(edge.range));
-                }
-                let b = b.grow(tol::LINEAR);
-                bbox = bbox.hull(&b);
-                let centre = loops.first().map_or(Point2::ORIGIN, |l| {
-                    let n = l.points.len().max(1) as f64;
-                    let s = l.points.iter().fold((0.0, 0.0), |a, p| (a.0 + p.x, a.1 + p.y));
-                    Point2::new(s.0 / n, s.1 / n)
-                });
-                FaceInfo {
-                    loops,
-                    bbox: b,
-                    centre,
-                    window: Box2::new(u, v),
-                }
-            })
-            .collect();
-        Index { body, faces, bbox }
+        let boxes: Vec<Box3> = body.face_ids().map(|f| face_box(body, f)).collect();
+        let bbox = boxes.iter().fold(Box3::EMPTY, |a, b| a.hull(b));
+        let infos = (0..boxes.len()).map(|_| std::cell::OnceCell::new()).collect();
+        Index {
+            body,
+            boxes,
+            infos,
+            bbox,
+        }
+    }
+
+    fn info(&self, f: FaceId) -> &FaceInfo {
+        self.infos[f.index()].get_or_init(|| {
+            let loops = face_uv_loops(self.body, f);
+            let (mut u, mut v) = (Interval::EMPTY, Interval::EMPTY);
+            for p in loops.iter().flat_map(|l| l.points.iter()) {
+                u.include(p.x);
+                v.include(p.y);
+            }
+            let centre = loops.first().map_or(Point2::ORIGIN, |l| {
+                let n = l.points.len().max(1) as f64;
+                let s = l.points.iter().fold((0.0, 0.0), |a, p| (a.0 + p.x, a.1 + p.y));
+                Point2::new(s.0 / n, s.1 / n)
+            });
+            FaceInfo {
+                loops,
+                centre,
+                window: Box2::new(u, v),
+            }
+        })
     }
 
     /// Where a point that lies on (or within tolerance of) face `f`'s surface
@@ -70,7 +91,7 @@ impl<'a> Index<'a> {
     pub fn point_in_face(&self, f: FaceId, p: Point3) -> Where {
         let body = self.body;
         let face = body.face(f);
-        let info = &self.faces[f.index()];
+        let info = self.info(f);
         // nearest boundary point, exactly
         let mut best: Option<(f64, forge_topo::CoedgeId, f64)> = None;
         for &l in &face.loops {
@@ -126,8 +147,7 @@ impl<'a> Index<'a> {
             return Where::Outside;
         }
         for f in self.body.face_ids() {
-            let info = &self.faces[f.index()];
-            if info.bbox.contains(p)
+            if self.boxes[f.index()].contains(p)
                 && self.body.face(f).surface.distance(p) <= tol::LINEAR
                 && self.point_in_face(f, p) != Where::Outside
             {
@@ -141,7 +161,7 @@ impl<'a> Index<'a> {
             let line = Line::new(p, dir);
             let mut crossings = 0usize;
             for f in self.body.face_ids() {
-                if !ray_hits_box(p, dir.get(), &self.faces[f.index()].bbox) {
+                if !ray_hits_box(p, dir.get(), &self.boxes[f.index()]) {
                     continue;
                 }
                 match line_surface(&line, &self.body.face(f).surface) {
@@ -213,24 +233,6 @@ fn sag_bound(c: &Curve) -> f64 {
         Curve::Intersection(k) => return 2.0 * k.sag + 10.0 * tol::LINEAR,
     };
     0.01 * r + 10.0 * tol::LINEAR
-}
-
-/// Keeps a parameter box inside the surface's domain (no latitudes past a pole).
-fn clamp_box(body: &Body, f: FaceId, b: Box2) -> Box2 {
-    let d = body.face(f).surface.domain();
-    let clip = |i: Interval, lo: f64, hi: f64| Interval::new(i.lo.max(lo), i.hi.min(hi));
-    Box2::new(
-        if d.u.period.is_some() {
-            b.u
-        } else {
-            clip(b.u, d.u.lo, d.u.hi)
-        },
-        if d.v.period.is_some() {
-            b.v
-        } else {
-            clip(b.v, d.v.lo, d.v.hi)
-        },
-    )
 }
 
 fn ray_hits_box(o: Point3, d: Vec3, b: &Box3) -> bool {

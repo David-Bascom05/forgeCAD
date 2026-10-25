@@ -121,14 +121,13 @@ pub fn boolean(a: &Body, b: &Body, op: Op, feature: u64) -> R<Body> {
     let mut coplanar: Vec<(FaceId, FaceId)> = Vec::new();
     for fa in a.face_ids() {
         for fb in b.face_ids() {
-            if !index[0].faces[fa.index()]
-                .bbox
-                .overlaps(&index[1].faces[fb.index()].bbox)
-            {
+            if !index[0].boxes[fa.index()].overlaps(&index[1].boxes[fb.index()]) {
                 continue;
             }
             let (sa, sb) = (&a.face(fa).surface, &b.face(fb).surface);
-            let region = overlap(&index[0].faces[fa.index()].bbox, &index[1].faces[fb.index()].bbox);
+            // traced pairs get margin around the box overlap: tracing in exactly the
+            // overlap lost branch pieces in the torture part (cause not pinned down yet)
+            let region = overlap(&index[0].boxes[fa.index()], &index[1].boxes[fb.index()]).grow(1.0);
             let curves = match ssi::surfaces_in(sa, sb, region) {
                 SurfaceSurface::Empty | SurfaceSurface::Points(_) => continue,
                 SurfaceSurface::Coincident => {
@@ -163,13 +162,22 @@ pub fn boolean(a: &Body, b: &Body, op: Op, feature: u64) -> R<Body> {
     let mut pieces: Vec<Piece> = Vec::new();
     let mut edge_pieces: [Vec<Vec<usize>>; 2] =
         [vec![Vec::new(); a.edges.len()], vec![Vec::new(); b.edges.len()]];
+    // cuts grouped by edge
+    let mut by_edge: Vec<(Side, EdgeId, usize)> = cuts
+        .iter()
+        .enumerate()
+        .map(|(i, c)| (c.side, c.edge, i))
+        .collect();
+    by_edge.sort_unstable();
     for side in 0..2 {
         let body = bodies[side];
         for e in body.edge_ids() {
             let edge = body.edge(e);
-            let mut splits: Vec<(f64, VKey)> = (0..cuts.len())
-                .filter(|&i| cuts[i].side == side && cuts[i].edge == e)
-                .map(|i| (cuts[i].s, cut_vertex[i]))
+            let from = by_edge.partition_point(|&(sd, ed, _)| (sd, ed) < (side, e));
+            let mut splits: Vec<(f64, VKey)> = by_edge[from..]
+                .iter()
+                .take_while(|&&(sd, ed, _)| sd == side && ed == e)
+                .map(|&(_, _, i)| (cuts[i].s, cut_vertex[i]))
                 .collect();
             splits.sort_by(|x, y| x.0.total_cmp(&y.0));
             splits.dedup_by(|x, y| x.1 == y.1);
@@ -328,9 +336,8 @@ fn trim(
         let Curve::Line(line) = &curve else {
             return Err(BoolError::Unsupported("open conic intersection curve"));
         };
-        let both = index[0].faces[faces[0].index()]
-            .bbox
-            .hull(&index[1].faces[faces[1].index()].bbox)
+        let both = index[0].boxes[faces[0].index()]
+            .hull(&index[1].boxes[faces[1].index()])
             .grow(1.0);
         match line_box(line, &both) {
             Some(r) => r,
@@ -339,16 +346,21 @@ fn trim(
     };
     let first = cuts.len();
     let mut ts: Vec<(f64, usize)> = Vec::new();
+    // an edge whose box misses the curve's cannot cut it (big faces have hundreds of edges)
+    let reach = curve.bbox(range).grow(10.0 * tol::LINEAR);
     for side in 0..2 {
         let body = bodies[side];
         let f = faces[side];
         for &l in &body.face(f).loops {
             for &c in &body.lp(l).coedges {
                 let e = body.coedge(c).edge;
+                let edge = body.edge(e);
+                if !edge.curve.bbox(edge.range).overlaps(&reach) {
+                    continue;
+                }
                 if cuts[first..].iter().any(|k| k.side == side && k.edge == e) {
                     continue; // a seam is visited twice
                 }
-                let edge = body.edge(e);
                 let across = across(body, f, c)?;
                 let hits = match curve_surface(&curve, range, &across) {
                     CurveSurface::Hits(h) => h,
@@ -677,9 +689,17 @@ fn split_face(
     }
     let start_of = |h: (usize, bool)| if h.1 { pieces[h.0].start } else { pieces[h.0].end };
     let end_of = |h: (usize, bool)| if h.1 { pieces[h.0].end } else { pieces[h.0].start };
+    // half-edges by start vertex, for finding the ways on from a vertex
+    let mut by_start: Vec<(VKey, usize)> = (0..half.len()).map(|j| (start_of(half[j]), j)).collect();
+    by_start.sort();
     let next = |i: usize| -> R<usize> {
         let v = end_of(half[i]);
-        let out: Vec<usize> = (0..half.len()).filter(|&j| start_of(half[j]) == v).collect();
+        let from = by_start.partition_point(|&(k, _)| k < v);
+        let out: Vec<usize> = by_start[from..]
+            .iter()
+            .take_while(|&&(k, _)| k == v)
+            .map(|&(_, j)| j)
+            .collect();
         // one way on (always so at a pole, where u is undefined): no angles needed
         if out.len() == 1 {
             return Ok(out[0]);
@@ -721,27 +741,43 @@ fn split_face(
         cycles.push(cyc);
     }
     let face = body.face(f);
-    let polys: Vec<Vec<Point2>> = cycles
+    let nb = boundary.iter().map(|l| l.len()).sum::<usize>();
+    let outer_len = boundary.first().map_or(0, |l| l.len());
+    // on a plane, a cycle made only of original boundary is an original loop, untouched:
+    // its orientation is known (the first loop is the outer one) and it needs no outline
+    let planar = matches!(face.surface, Surface::Plane(_));
+    let untouched = |cyc: &Vec<usize>| planar && cyc.iter().all(|&i| i < nb);
+    let mirror = |p: Point2| {
+        if face.same_sense {
+            p
+        } else {
+            Point2::new(-p.x, p.y)
+        }
+    };
+    let polys: Vec<Option<Vec<Point2>>> = cycles
         .iter()
         .map(|cyc| {
+            if untouched(cyc) {
+                return None;
+            }
             let mut samples = Vec::new();
             for &i in cyc {
                 piece_samples(&pieces[half[i].0], half[i].1, &mut samples);
             }
             // pole-aware drawing, then mirrored so every face's loops run counter-clockwise
             let (pts, _) = forge_topo::uv::draw_loop(body, f, &samples);
-            pts.into_iter()
-                .map(|p| {
-                    if face.same_sense {
-                        p
-                    } else {
-                        Point2::new(-p.x, p.y)
-                    }
-                })
-                .collect()
+            Some(pts.into_iter().map(mirror).collect())
         })
         .collect();
-    let areas: Vec<f64> = polys.iter().map(|p| forge_topo::uv::signed_area(p)).collect();
+    let areas: Vec<f64> = cycles
+        .iter()
+        .zip(&polys)
+        .map(|(cyc, poly)| match poly {
+            Some(p) => forge_topo::uv::signed_area(p),
+            None if cyc[0] < outer_len => f64::INFINITY,
+            None => -1.0,
+        })
+        .collect();
     let mut regions: Vec<Region> = Vec::new();
     let mut outer_of: Vec<usize> = Vec::new();
     for (k, cyc) in cycles.iter().enumerate() {
@@ -754,14 +790,29 @@ fn split_face(
         if areas[k] > 0.0 {
             continue;
         }
-        // a point just off the hole's first segment, on its material side (the left)
-        let (p0, p1) = (polys[k][0], polys[k][1]);
-        let d = p1 - p0;
-        let probe = p0.lerp(p1, 0.5) + d.perp() * 1e-3;
+        let probe = match &polys[k] {
+            // a point just off the hole's first segment, on its material side (the left)
+            Some(poly) => {
+                let (p0, p1) = (poly[0], poly[1]);
+                p0.lerp(p1, 0.5) + (p1 - p0).perp() * 1e-3
+            }
+            // an untouched hole touches no new edge, so its first vertex is clear of every new outline
+            None => {
+                let pc = &pieces[half[cyc[0]].0];
+                mirror(
+                    face.surface.project(pc.curve.eval(if half[cyc[0]].1 {
+                        pc.range.lo
+                    } else {
+                        pc.range.hi
+                    })),
+                )
+            }
+        };
+        // the smallest outline holding it; the untouched outer loop (no outline) holds every hole
         let host = outer_of
             .iter()
             .enumerate()
-            .filter(|&(_, &o)| inside_poly(probe, &polys[o]))
+            .filter(|&(_, &o)| polys[o].as_ref().is_none_or(|poly| inside_poly(probe, poly)))
             .min_by(|x, y| areas[*x.1].total_cmp(&areas[*y.1]))
             .map(|(r, _)| r)
             .ok_or(BoolError::Internal("hole outside every region"))?;
@@ -984,11 +1035,20 @@ fn assemble(
         }
         shell_of[k] = shell_of[r];
     }
-    let mut vmap: Vec<(VKey, VertexId)> = Vec::new();
+    // vertex of the result for each input vertex and each new point, filled as used
+    let mut vmap: [Vec<Option<VertexId>>; 2] = [
+        vec![None; bodies[0].vertices.len()],
+        vec![None; bodies[1].vertices.len()],
+    ];
+    let mut new_map: Vec<Option<VertexId>> = vec![None; points.len()];
     let mut emap: Vec<Option<EdgeId>> = vec![None; pieces.len()];
     let mut vertex = |out: &mut Body, v: VKey| -> VertexId {
         let v = alias.iter().find(|(f, _)| *f == v).map_or(v, |&(_, t)| t);
-        if let Some(&(_, id)) = vmap.iter().find(|(k, _)| *k == v) {
+        let slot = match v {
+            VKey::Old(side, id) => &mut vmap[side][id.index()],
+            VKey::New(i) => &mut new_map[i as usize],
+        };
+        if let Some(id) = *slot {
             return id;
         }
         let (p, name) = match v {
@@ -996,7 +1056,10 @@ fn assemble(
             VKey::New(i) => (points[i as usize], root.with_str("vertex").with(i as u64)),
         };
         let id = out.add_vertex(p, name);
-        vmap.push((v, id));
+        *match v {
+            VKey::Old(side, i) => &mut vmap[side][i.index()],
+            VKey::New(i) => &mut new_map[i as usize],
+        } = Some(id);
         id
     };
     for (k, &(si, flip)) in kept.iter().enumerate() {
