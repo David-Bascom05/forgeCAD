@@ -41,6 +41,8 @@ pub struct Edge {
     pub name: Name,
     /// False once no face uses the edge (after an in-place edit).
     pub alive: bool,
+    /// A box holding the edge, worked out on first use.
+    pub bbox: Cached<Box3>,
 }
 
 /// One use of an edge by a loop. `forward` means the loop walks the edge from
@@ -306,6 +308,7 @@ impl Body {
             coedges: Vec::new(),
             name,
             alive: true,
+            bbox: Cached::default(),
         });
         EdgeId(self.edges.len() as u32 - 1)
     }
@@ -389,14 +392,19 @@ impl Body {
     /// it runs a straight line of the surface that meets the boundary on both
     /// sides); spheres and tori can bulge past their edges, so their whole
     /// surface box is added. Cached on the face.
+    /// A box holding edge `e` (cached on the edge).
+    pub fn edge_box(&self, e: EdgeId) -> Box3 {
+        let edge = self.edge(e);
+        *edge.bbox.get_or_init(|| edge.curve.bbox(edge.range))
+    }
+
     pub fn face_box(&self, f: FaceId) -> Box3 {
         let face = self.face(f);
         *face.bbox.get_or_init(|| {
             let mut b = Box3::EMPTY;
             for &l in &face.loops {
                 for &c in &self.lp(l).coedges {
-                    let edge = self.edge(self.coedge(c).edge);
-                    b = b.hull(&edge.curve.bbox(edge.range));
+                    b = b.hull(&self.edge_box(self.coedge(c).edge));
                 }
             }
             match &face.surface {

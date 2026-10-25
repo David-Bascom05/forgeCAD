@@ -537,7 +537,7 @@ fn trim(
             for &c in &body.lp(l).coedges {
                 let e = body.coedge(c).edge;
                 let edge = body.edge(e);
-                if !edge.curve.bbox(edge.range).overlaps(&reach) {
+                if !body.edge_box(e).overlaps(&reach) {
                     continue;
                 }
                 if cuts[first..].iter().any(|k| k.side == side && k.edge == e) {

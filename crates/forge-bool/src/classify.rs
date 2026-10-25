@@ -73,9 +73,10 @@ impl<'a> Index<'a> {
             let mut reach = 10.0 * tol::LINEAR;
             for &l in &self.body.face(f).loops {
                 for &c in &self.body.lp(l).coedges {
-                    let e = self.body.edge(self.body.coedge(c).edge);
+                    let id = self.body.coedge(c).edge;
+                    let e = self.body.edge(id);
                     // with margin: an edge in a coordinate plane has a box a few ulps thin
-                    edges.push((c, e.curve.bbox(e.range).grow(10.0 * tol::LINEAR)));
+                    edges.push((c, self.body.edge_box(id).grow(10.0 * tol::LINEAR)));
                     reach = reach.max(sag_bound(&e.curve));
                 }
             }
