@@ -822,6 +822,11 @@ pub enum VarBlendError {
     Lost {
         s: f64,
     },
+    /// The radius bends faster than the balls can roll: neighbouring balls cut into the arc
+    /// (the envelope folds over its edge of regression).
+    Folds {
+        s: f64,
+    },
 }
 
 impl std::fmt::Display for VarBlendError {
@@ -837,6 +842,7 @@ impl std::fmt::Display for VarBlendError {
             }
             VarBlendError::Contacts { s } => write!(f, "blend contacts coincide or are opposite at s = {s}"),
             VarBlendError::Lost { s } => write!(f, "ball centre lost at s = {s}"),
+            VarBlendError::Folds { s } => write!(f, "radius bends too sharply, the blend folds at s = {s}"),
         }
     }
 }
@@ -846,6 +852,7 @@ impl std::error::Error for VarBlendError {}
 /// One cross-section, as jets in s.
 struct Section {
     c: V,
+    r: J,
     k: V,
     rho: J,
     e1: V,
@@ -881,8 +888,9 @@ struct Row {
 /// Bounds over the stretch between two rows.
 #[derive(Clone, Copy, Debug, PartialEq)]
 struct Seg {
-    /// Bounds on |c'|, |B_u|, |q'| and |q''|.
+    /// Bounds on |c'|, |c''|, |B_u|, |q'| and |q''|.
     vc: f64,
+    ac: f64,
     vb: f64,
     vq: [f64; 2],
     aq: [f64; 2],
@@ -904,10 +912,9 @@ pub struct VarBlend {
     swap: bool,
     rows: Vec<Row>,
     segs: Vec<Seg>,
+    /// How far the cached rows' Taylor model may stray from the solved centre between rows.
+    predict: f64,
 }
-
-/// Distance at which a spine step is checked against its prediction (mm).
-const PREDICT: f64 = 1e-6;
 
 impl VarBlend {
     /// The blend between `a` and `b`, the balls on the `side_a` (+1 or -1, the sign of a's
@@ -942,6 +949,7 @@ impl VarBlend {
             swap: false,
             rows: Vec::new(),
             segs: Vec::new(),
+            predict: 0.0,
         };
         vb.build()?;
         Ok(Arc::new(vb))
@@ -1069,6 +1077,7 @@ impl VarBlend {
         let phi = J::atan2(b.dot(e2), b.dot(e1));
         Section {
             c,
+            r,
             k,
             rho,
             e1,
@@ -1142,6 +1151,17 @@ impl VarBlend {
             .unwrap_or_else(|| (V::from(self.model(i, s)), self.law.jet(s)))
     }
 
+    /// Jets of the contact at v (0 or 1) at s: only the contact, not the whole section.
+    fn contact_at(&self, s: f64, v: usize) -> V {
+        let (c, r) = self.spine_at(s);
+        let (surf, side) = if (v == 1) != self.swap {
+            (&self.b, self.side[1])
+        } else {
+            (&self.a, self.side[0])
+        };
+        c - dist_grad(surf, c, true).1 * (r * side)
+    }
+
     fn section_at(&self, s: f64) -> Section {
         let (c, r) = self.spine_at(s);
         self.section(c, r)
@@ -1155,6 +1175,22 @@ impl VarBlend {
         let along = (sec.q[1] - sec.k).dot(sec.e2).0[0];
         if (phi * rho).is_nan() || phi * rho <= tol::LINEAR || along.is_nan() || along <= tol::LINEAR {
             return Err(VarBlendError::Contacts { s });
+        }
+        // the envelope is regular where F_ss > 0, F = |x - c|^2 - r^2: on the arc that is
+        // |c'|^2 - r'^2 - r r'' - (x - c).c'' > 0, smallest where x - c leans most along c''
+        let (c1, c2) = (sec.c.at(1), sec.c.at(2) * 2.0);
+        let (r0, r1, r2) = (sec.r.0[0], sec.r.0[1], 2.0 * sec.r.0[2]);
+        let (k, e1, e2) = (sec.k.at(0) - sec.c.at(0), sec.e1.at(0), sec.e2.at(0));
+        let base = c1.length_sq() - r1 * r1 - r0 * r2 - k.dot(c2);
+        let (a, b) = (e1.dot(c2), e2.dot(c2));
+        let (sp, cp) = dmath::sin_cos(phi);
+        let mut lean = a.max(a * cp + b * sp);
+        if dmath::wrap_tau(dmath::atan2(b, a)) <= phi {
+            lean = (a * a + b * b).sqrt();
+        }
+        let g = base - rho * lean;
+        if g.is_nan() || g <= 0.0 {
+            return Err(VarBlendError::Folds { s });
         }
         Ok(())
     }
@@ -1214,6 +1250,8 @@ impl VarBlend {
         }
         self.rows.push(self.make_row(lo, c)?);
         let span = self.hi - self.lo;
+        // rows only seed solves and bound searches; a ten-thousandth of the smallest radius
+        self.predict = (1e-4 * self.law.bounds(self.lo, self.hi).0).max(tol::LINEAR * 0.1);
         let mut h = span / 8.0;
         while self.rows.last().is_some_and(|r| r.s < self.hi) {
             let last = *self.rows.last().expect("rows start non-empty");
@@ -1230,13 +1268,20 @@ impl VarBlend {
             let next = self.solve_centre(s, r, pred);
             let err = next.map_or(f64::INFINITY, |c| c.distance(pred));
             let moved = next.map_or(f64::INFINITY, |c| (c.to_vec() - last.c[0]).length());
-            if err.is_nan() || err > PREDICT || moved > 0.5 * last.r.min(r) {
+            if err.is_nan() || err > self.predict || moved > 2.0 * last.r.min(r) {
                 h *= 0.5;
                 continue;
             }
             let row = self.make_row(s, next.expect("checked above"))?;
+            // the section checks between rows too, where a fold could hide
+            let mid = 0.5 * (last.s + s);
+            let mc = self.solve_centre(mid, self.law.eval(mid), Point3::ORIGIN + self.model(i, mid)[0]);
+            let (cj, rj) = mc
+                .and_then(|c| self.spine(mid, c))
+                .ok_or(VarBlendError::Tangent { s: mid })?;
+            Self::check(&self.section(cj, rj), mid)?;
             self.rows.push(row);
-            if err < PREDICT / 16.0 {
+            if err < self.predict / 16.0 {
                 h = (h * 1.5).min(span / 4.0);
             }
         }
@@ -1249,9 +1294,14 @@ impl VarBlend {
                     .max(r1.c[1].length())
                     .max(self.model(i, mid)[1].length())
                     .max(self.model(i + 1, mid)[1].length());
+                let ac = (r0.c[2].length() * 2.0)
+                    .max(r1.c[2].length() * 2.0)
+                    .max(self.model(i, mid)[2].length() * 2.0)
+                    .max(self.model(i + 1, mid)[2].length() * 2.0);
                 let (rmin, rmax) = self.law.bounds(r0.s, r1.s);
                 Seg {
                     vc: 1.25 * vc,
+                    ac: 1.5 * ac,
                     vb: 1.5 * r0.bu.max(r1.bu),
                     vq: [1.5 * r0.q1[0].max(r1.q1[0]), 1.5 * r0.q1[1].max(r1.q1[1])],
                     aq: [1.5 * r0.q2[0].max(r1.q2[0]), 1.5 * r0.q2[1].max(r1.q2[1])],
@@ -1273,18 +1323,17 @@ impl VarBlend {
         (l - r[0], h1, h2)
     }
 
-    /// Points in segment i where h'(s) = 0: bracketed on the cached model, then polished
-    /// against the exact centre.
-    fn stationary(&self, p: Point3, i: usize) -> Vec<(f64, V, J)> {
+    /// Points in segment i where h'(s) = 0 on the cached model (bracketed), with the model's h
+    /// there, appended to `out`.
+    fn roots(&self, p: Point3, i: usize, out: &mut Vec<(f64, f64)>) {
         let (s0, s1) = (self.rows[i].s, self.rows[i + 1].s);
-        let hp = |s: f64| {
+        let tube = |s: f64| {
             let j = if s - s0 <= s1 - s { i } else { i + 1 };
-            Self::tube(p, &self.model(j, s), &self.law.p.jet(s)).1
+            Self::tube(p, &self.model(j, s), &self.law.p.jet(s))
         };
         const N: usize = 4;
-        let xs: Vec<f64> = (0..=N).map(|k| s0 + (s1 - s0) * k as f64 / N as f64).collect();
-        let ys: Vec<f64> = xs.iter().map(|&s| hp(s)).collect();
-        let mut out = Vec::new();
+        let xs: [f64; N + 1] = std::array::from_fn(|k| s0 + (s1 - s0) * k as f64 / N as f64);
+        let ys: [f64; N + 1] = std::array::from_fn(|k| tube(xs[k]).1);
         for k in 0..N {
             let (mut a, mut b, mut fa, mut fb) = (xs[k], xs[k + 1], ys[k], ys[k + 1]);
             if fa == 0.0 && k > 0 {
@@ -1305,7 +1354,7 @@ impl VarBlend {
                 if !(s > a && s < b) {
                     s = 0.5 * (a + b);
                 }
-                let fs = hp(s);
+                let fs = tube(s).1;
                 if fs == 0.0 || (b - a) <= 1e-15 * (1.0 + s.abs()) {
                     break;
                 }
@@ -1323,38 +1372,55 @@ impl VarBlend {
                     side = -1;
                 }
             }
-            // exact polish: Newton on the solved centre, kept in the segment
-            let mut j = self.spine_at(s);
-            for _ in 0..3 {
-                let (_, h1, h2) = Self::tube(p, &j.0.coefs(), &j.1.0);
-                if h2.abs() < 1e-300 {
-                    break;
-                }
-                let next = (s - h1 / h2).clamp(s0, s1);
-                let done = (next - s).abs() <= 1e-14 * (1.0 + s.abs());
-                if next == s {
-                    break;
-                }
-                s = next;
-                j = self.spine_at(s);
-                if done {
-                    break;
-                }
-            }
-            out.push((s, j.0, j.1));
+            out.push((s, tube(s).0));
         }
-        out
+    }
+
+    /// A model root polished against the exact centre: one solve, then Newton on h'(s) with
+    /// the solved jets carried along (the steps are tiny, so the carried Taylor series is exact
+    /// to rounding); kept inside the range.
+    fn polish(&self, p: Point3, mut s: f64) -> (f64, V, J) {
+        let (c, mut r) = self.spine_at(s);
+        let mut c = c.coefs();
+        let s_at = s;
+        for _ in 0..3 {
+            let (_, h1, h2) = Self::tube(p, &c, &r.0);
+            if h2.abs() < 1e-300 {
+                break;
+            }
+            let next = (s - h1 / h2).clamp(self.lo, self.hi);
+            if next == s {
+                break;
+            }
+            let done = (next - s).abs() <= 1e-14 * (1.0 + s.abs());
+            let h = next - s;
+            c = [
+                c[0] + (c[1] + (c[2] + c[3] * h) * h) * h,
+                c[1] + (c[2] * 2.0 + c[3] * (3.0 * h)) * h,
+                c[2] + c[3] * (3.0 * h),
+                c[3],
+            ];
+            s = next;
+            r = self.law.jet(s);
+            if done {
+                break;
+            }
+        }
+        if (s - s_at).abs() > 1e-4 * (1.0 + s.abs()) {
+            let (c, r) = self.spine_at(s);
+            return (s, c, r);
+        }
+        (s, V::from(c), r)
     }
 
     /// Lower bounds on |p - c(s)| from below and above, over segment i.
     fn seg_dist(&self, p: Point3, i: usize) -> (f64, f64) {
         let (r0, r1) = (&self.rows[i], &self.rows[i + 1]);
-        let (d0, d1) = (
-            p.distance(Point3::ORIGIN + r0.c[0]),
-            p.distance(Point3::ORIGIN + r1.c[0]),
-        );
-        let w = self.segs[i].vc * (r1.s - r0.s);
-        ((d0 + d1 - w) * 0.5, (d0 + d1 + w) * 0.5)
+        let (a, b) = (Point3::ORIGIN + r0.c[0], Point3::ORIGIN + r1.c[0]);
+        // the centre strays from its chord by at most |c''| h^2 / 8
+        let h = r1.s - r0.s;
+        let sag = self.segs[i].ac * h * h * 0.125;
+        (chord_dist(p, a, b) - sag, p.distance(a).max(p.distance(b)) + sag)
     }
 
     /// The smallest h(s) over the range, with its s and centre.
@@ -1367,16 +1433,24 @@ impl VarBlend {
                 best = (h, r.s, c);
             }
         }
+        let mut cands = Vec::new();
         for i in 0..self.segs.len() {
-            if self.seg_dist(p, i).0 - self.segs[i].rmax >= best.0 {
-                continue;
+            if self.seg_dist(p, i).0 - self.segs[i].rmax < best.0 {
+                self.roots(p, i, &mut cands);
             }
-            for (s, c, r) in self.stationary(p, i) {
-                let cp = Point3::ORIGIN + c.at(0);
-                let h = p.distance(cp) - r.0[0];
-                if h < best.0 {
-                    best = (h, s, cp);
-                }
+        }
+        // the model is within `predict` of the solved centre, so only roots it puts near the
+        // best need solving
+        cands.sort_by(|a, b| a.1.total_cmp(&b.1));
+        for (s, hm) in cands {
+            if hm - 2.0 * self.predict >= best.0 {
+                break;
+            }
+            let (s, c, r) = self.polish(p, s);
+            let cp = Point3::ORIGIN + c.at(0);
+            let h = p.distance(cp) - r.0[0];
+            if h < best.0 {
+                best = (h, s, cp);
             }
         }
         best
@@ -1388,22 +1462,30 @@ impl VarBlend {
         dmath::atan2(d.dot(e2), d.dot(e1)) / phi
     }
 
-    /// Parameter of the nearest point on the v = `v` spring over `range`, and its distance.
-    fn spring_closest(&self, v: usize, p: Point3, range: Interval) -> (f64, f64) {
+    /// Parameter of the nearest point on the v = `v` spring over `range`, and its distance;
+    /// None when nothing there is nearer than `bound`.
+    fn spring_closest(&self, v: usize, p: Point3, range: Interval, bound: f64) -> Option<(f64, f64)> {
         let (lo, hi) = (
             range.lo.max(self.lo),
             range.hi.min(self.hi).max(range.lo.max(self.lo)),
         );
-        let q = |s: f64| self.section_at(s).q[v];
-        let mut best = (f64::INFINITY, lo);
+        let q = |s: f64| self.contact_at(s, v);
+        let mut best = (bound, f64::NAN);
         for s in [lo, hi] {
-            let d = p.distance(Point3::ORIGIN + q(s).at(0));
+            // the range ends are usually rows already
+            let i = self.nearest_row(s);
+            let at = if self.rows[i].s == s {
+                self.rows[i].pts[2 * v]
+            } else {
+                Point3::ORIGIN + q(s).at(0)
+            };
+            let d = p.distance(at);
             if d < best.0 {
                 best = (d, s);
             }
         }
-        let dists: Vec<f64> = self.rows.iter().map(|r| p.distance(r.pts[2 * v])).collect();
-        for (r, &d) in self.rows.iter().zip(&dists) {
+        for r in &self.rows {
+            let d = p.distance(r.pts[2 * v]);
             if r.s >= lo && r.s <= hi && d < best.0 {
                 best = (d, r.s);
             }
@@ -1413,8 +1495,9 @@ impl VarBlend {
             if b <= a {
                 continue;
             }
-            let lb =
-                (dists[i] + dists[i + 1] - self.segs[i].vq[v] * (self.rows[i + 1].s - self.rows[i].s)) * 0.5;
+            let h = self.rows[i + 1].s - self.rows[i].s;
+            let lb = chord_dist(p, self.rows[i].pts[2 * v], self.rows[i + 1].pts[2 * v])
+                - self.segs[i].aq[v] * h * h * 0.125;
             if lb >= best.0 {
                 continue;
             }
@@ -1454,7 +1537,7 @@ impl VarBlend {
                 best = (d, s);
             }
         }
-        (best.1, best.0)
+        (!best.1.is_nan()).then_some((best.1, best.0))
     }
 
     /// The parameters of the patch point nearest p.
@@ -1471,25 +1554,33 @@ impl VarBlend {
             }
         }
         // interior: stationary points of h whose circle point lies on the arc
+        let mut cands = Vec::new();
         for i in 0..self.segs.len() {
             let (dlo, dhi) = self.seg_dist(p, i);
             let lb = (dlo - self.segs[i].rmax).max(self.segs[i].rmin - dhi);
-            if lb >= best.0 {
-                continue;
+            if lb < best.0 {
+                self.roots(p, i, &mut cands);
             }
-            for (s, c, r) in self.stationary(p, i) {
-                let sec = self.section(c, r);
-                let v = Self::circle_v(
-                    Point3::ORIGIN + sec.k.at(0),
-                    sec.e1.at(0),
-                    sec.e2.at(0),
-                    sec.phi.0[0],
-                    p,
-                );
-                if (0.0..=1.0).contains(&v) {
-                    let d = (p.distance(Point3::ORIGIN + c.at(0)) - r.0[0]).abs();
-                    take(d, s, v, &mut best);
-                }
+        }
+        cands.sort_by(|a, b| a.1.abs().total_cmp(&b.1.abs()));
+        let mut exact = false;
+        for (s, hm) in cands {
+            if hm.abs() - 2.0 * self.predict >= best.0 {
+                break;
+            }
+            let (s, c, r) = self.polish(p, s);
+            let sec = self.section(c, r);
+            let v = Self::circle_v(
+                Point3::ORIGIN + sec.k.at(0),
+                sec.e1.at(0),
+                sec.e2.at(0),
+                sec.phi.0[0],
+                p,
+            );
+            let d = (p.distance(Point3::ORIGIN + c.at(0)) - r.0[0]).abs();
+            if (0.0..=1.0).contains(&v) && d < best.0 {
+                take(d, s, v, &mut best);
+                exact = true;
             }
         }
         // the end arcs
@@ -1497,20 +1588,28 @@ impl VarBlend {
             let v = Self::circle_v(r.k, r.e1, r.e2, r.phi, p);
             if (0.0..=1.0).contains(&v) {
                 let (sn, cs) = dmath::sin_cos(v * r.phi);
-                let q = r.k + (r.e1 * cs + r.e2 * sn) * r.rho;
-                take(p.distance(q), r.s, v, &mut best);
+                let d = p.distance(r.k + (r.e1 * cs + r.e2 * sn) * r.rho);
+                if d < best.0 {
+                    take(d, r.s, v, &mut best);
+                    exact = true;
+                }
             }
         }
         // the springs
         for v in 0..2 {
-            let (s, d) = self.spring_closest(v, p, Interval::new(self.lo, self.hi));
-            take(d, s, v as f64, &mut best);
+            if let Some((s, d)) = self.spring_closest(v, p, Interval::new(self.lo, self.hi), best.0) {
+                take(d, s, v as f64, &mut best);
+                exact = true;
+            }
         }
-        // polish: Newton on |B - p|^2 inside the domain, kept only while it gets closer
+        if exact {
+            return best.1;
+        }
+        // only a grid point won: Newton on |B - p|^2 inside the domain, while it gets closer
         let mut uv = best.1;
-        let mut d0 = Procedural::deriv(self, uv).p.distance(p);
-        for _ in 0..4 {
-            let d = Procedural::deriv(self, uv);
+        let mut d = Procedural::deriv(self, uv);
+        let mut d0 = d.p.distance(p);
+        for _ in 0..8 {
             let e = d.p - p;
             let (g0, g1) = (d.du.dot(e), d.dv.dot(e));
             let (h00, h01, h11) = (
@@ -1522,11 +1621,12 @@ impl VarBlend {
                 break;
             };
             let next = Point2::new((uv.x + x).clamp(self.lo, self.hi), (uv.y + y).clamp(0.0, 1.0));
-            let dn = Procedural::deriv(self, next).p.distance(p);
-            if dn.is_nan() || dn >= d0 {
+            let dn = Procedural::deriv(self, next);
+            let l = dn.p.distance(p);
+            if l.is_nan() || l >= d0 {
                 break;
             }
-            (uv, d0) = (next, dn);
+            (uv, d, d0) = (next, dn, l);
         }
         uv
     }
@@ -1591,6 +1691,18 @@ impl VarBlend {
         }
         out
     }
+}
+
+/// Distance from p to the segment ab.
+fn chord_dist(p: Point3, a: Point3, b: Point3) -> f64 {
+    let ab = b - a;
+    let l = ab.length_sq();
+    let t = if l > 0.0 {
+        ((p - a).dot(ab) / l).clamp(0.0, 1.0)
+    } else {
+        0.0
+    };
+    p.distance(a + ab * t)
 }
 
 /// Largest principal curvature magnitude from first and second derivatives.
@@ -1730,7 +1842,9 @@ impl ProceduralCurve for Spring {
         }
     }
     fn closest(&self, p: Point3, range: Interval) -> f64 {
-        self.blend.spring_closest(self.v, p, range).0
+        let b = &self.blend;
+        b.spring_closest(self.v, p, range, f64::INFINITY)
+            .map_or(range.lo.clamp(b.lo, b.hi), |r| r.0)
     }
     fn bbox(&self, range: Interval) -> Box3 {
         let b = &self.blend;
@@ -2117,6 +2231,10 @@ mod tests {
         }
     }
 
+    fn scale_of(b: &VarBlend) -> f64 {
+        1.0 + b.rows[0].c[0].abs_max()
+    }
+
     fn grid_nearest(b: &VarBlend, p: Point3, nu: usize, nv: usize) -> f64 {
         (0..=nu)
             .flat_map(|i| (0..=nv).map(move |j| (i, j)))
@@ -2287,6 +2405,154 @@ mod tests {
             ca.at(1),
             cb.at(1)
         );
+    }
+
+    /// A random blend in a random place: plane against plane, cylinder, sphere or cone, with
+    /// a random radius law. Picks with no blend must fail cleanly.
+    fn random_blend(r: &mut Rng) -> (u64, Result<Arc<VarBlend>, VarBlendError>) {
+        let f = crate::testing::rand_frame(r);
+        let floor = plane(Point3::ORIGIN, Vec3::Z);
+        let kind = r.below(4);
+        let (other, side, guide, size) = match kind {
+            0 => {
+                let a = r.range(-1.3, 1.3);
+                let n = Vec3::new(dmath::cos(a), 0.0, dmath::sin(a));
+                (plane(Point3::ORIGIN, n), 1.0, line_y(), 6.0)
+            }
+            1 => {
+                let rad = r.range(3.0, 20.0);
+                let cyl = Surface::Cylinder(Cylinder {
+                    frame: Frame::WORLD,
+                    radius: rad,
+                });
+                let side = if r.bool() { 1.0 } else { -1.0 };
+                (cyl, side, circle(0.0, rad), rad)
+            }
+            2 => {
+                let rho = r.range(3.0, 20.0);
+                let zc = r.range(-0.7, 0.7) * rho;
+                let sph = Surface::Sphere(Sphere {
+                    frame: Frame::WORLD.with_origin(Point3::new(0.0, 0.0, zc)),
+                    radius: rho,
+                });
+                let side = if r.bool() { 1.0 } else { -1.0 };
+                (sph, side, circle(0.0, (rho * rho - zc * zc).sqrt()), rho)
+            }
+            _ => {
+                let rad = r.range(3.0, 15.0);
+                let up = r.bool();
+                let z = if up { UnitVec3::Z } else { -UnitVec3::Z };
+                let cone = Surface::Cone(
+                    Cone::new(Frame::from_z(Point3::ORIGIN, z), rad, r.range(0.2, 1.0)).unwrap(),
+                );
+                (cone, if up { -1.0 } else { 1.0 }, circle(0.0, rad), rad)
+            }
+        };
+        let (lo, hi) = if kind == 0 {
+            (r.range(-10.0, 0.0), r.range(1.0, 10.0))
+        } else {
+            let lo = r.range(0.0, 6.0);
+            (lo, lo + r.range(0.3, 4.0))
+        };
+        let top = 0.3 * size;
+        let k = 2 + r.below(3);
+        let pts: Vec<(f64, f64)> = (0..k)
+            .map(|i| (lo + (hi - lo) * i as f64 / (k - 1) as f64, r.range(0.1, top)))
+            .collect();
+        let law = Arc::new(RadiusLaw::smooth(&pts, None).unwrap());
+        let (a, b) = (floor.transformed(&f), other.transformed(&f));
+        let g = guide.transformed(&f);
+        (
+            kind as u64,
+            VarBlend::new(&a, 1.0, &b, side, g, law, Interval::new(lo, hi)),
+        )
+    }
+
+    #[test]
+    fn random_blends_hold_their_definition() {
+        let mut r = Rng::new(10);
+        let (mut built, mut tried) = (0, 0);
+        for _ in 0..300 {
+            tried += 1;
+            let (kind, res) = random_blend(&mut r);
+            // refusals seen: radius dipping below zero, folds, no room for the ball
+            let Ok(b) = res else {
+                continue;
+            };
+            built += 1;
+            for _ in 0..10 {
+                let uv = rand_uv(&mut r, &b);
+                let s = uv.x;
+                let (rad, ctr) = (b.radius(s), b.centre(s));
+                let scale = 1.0 + ctr.to_vec().abs_max();
+                assert!(
+                    (b.a.implicit(ctr) - b.side[0] * rad).abs() < 1e-9 * scale,
+                    "{b:?}"
+                );
+                assert!((b.b.implicit(ctr) - b.side[1] * rad).abs() < 1e-9 * scale);
+                let d = Procedural::deriv(&*b, uv);
+                assert!((d.p.distance(ctr) - rad).abs() < 1e-9 * scale);
+                for (i, surf) in [&b.a, &b.b].into_iter().enumerate() {
+                    let q = Procedural::deriv(&*b, Point2::new(s, b.v_on(i)));
+                    assert!(surf.implicit(q.p).abs() < 1e-9 * scale);
+                    let nb = q.du.cross(q.dv).normalize().unwrap();
+                    assert!(nb.cross(surf.gradient(q.p)).length() < 1e-8);
+                }
+                let back = Procedural::deriv(&*b, Procedural::project(&*b, d.p)).p;
+                assert!(back.distance(d.p) < 1e-9 * scale, "kind {kind} {uv:?}");
+                assert!(b.implicit(d.p).abs() < 1e-9 * scale);
+                let n = d.du.cross(d.dv).normalize().unwrap();
+                let off = r.range(-0.2, 0.2) * b.min_radius();
+                let p = d.p + n * off;
+                let q = Procedural::deriv(&*b, Procedural::project(&*b, p)).p;
+                assert!(q.distance(p) <= off.abs() + 1e-9 * scale, "kind {kind} off {off}");
+                assert!(
+                    b.implicit(p) * off >= 0.0 || b.implicit(p).abs() < 1e-9 * scale,
+                    "kind {kind}"
+                );
+            }
+            let (p, q) = (rand_uv(&mut r, &b), rand_uv(&mut r, &b));
+            for bx in [
+                Box2::new(Interval::new(b.lo, b.hi), Interval::new(0.0, 1.0)),
+                Box2::new(
+                    Interval::new(p.x.min(q.x), p.x.max(q.x)),
+                    Interval::new(p.y.min(q.y), p.y.max(q.y)),
+                ),
+            ] {
+                let bb = Procedural::bbox(&*b, bx);
+                for i in 0..=8 {
+                    for j in 0..=8 {
+                        let uv = Point2::new(
+                            bx.u.lo + bx.u.width() * i as f64 / 8.0,
+                            bx.v.lo + bx.v.width() * j as f64 / 8.0,
+                        );
+                        assert!(bb.contains(Procedural::deriv(&*b, uv).p), "kind {kind} box");
+                    }
+                }
+            }
+            let uv = Point2::new(0.5 * (b.lo + b.hi), r.unit());
+            let h = 1e-6 * (b.hi - b.lo);
+            let d = Procedural::deriv(&*b, uv);
+            let du = (Procedural::deriv(&*b, Point2::new(uv.x + h, uv.y)).p
+                - Procedural::deriv(&*b, Point2::new(uv.x - h, uv.y)).p)
+                / (2.0 * h);
+            assert!(
+                (du - d.du).length() < 1e-5 * (1.0 + d.du.length()),
+                "kind {kind} du"
+            );
+            let far = d.p
+                + Vec3::new(r.range(-1.0, 1.0), r.range(-1.0, 1.0), r.range(-1.0, 1.0))
+                    * b.radius(uv.x)
+                    * 3.0;
+            let q = Procedural::deriv(&*b, Procedural::project(&*b, far)).p;
+            let best = grid_nearest(&b, far, 80, 16);
+            assert!(
+                q.distance(far) <= best + 1e-9 * scale_of(&b),
+                "kind {kind} far {} vs {best}",
+                q.distance(far)
+            );
+        }
+        assert!(built * 10 >= tried * 7, "{built} of {tried}");
     }
 
     #[test]
