@@ -137,7 +137,7 @@ fn main() {
         .iter()
         .zip(&lines)
         .filter(|(s, _)| matches!(s, Surface::Torus(_)))
-        .map(|(s, l)| (*s, *l))
+        .map(|(s, l)| (s.clone(), *l))
         .collect();
     bench(f, "geom: line x torus", tori.len(), || {
         for (s, l) in &tori {

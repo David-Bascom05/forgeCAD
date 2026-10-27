@@ -389,8 +389,8 @@ fn finish(a: &Surface, b: &Surface, pts: Vec<Point3>, closed: bool, step: f64) -
         })
         .collect();
     IntCurve {
-        a: *a,
-        b: *b,
+        a: a.clone(),
+        b: b.clone(),
         pts,
         tans,
         closed,

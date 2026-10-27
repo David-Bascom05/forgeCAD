@@ -62,6 +62,7 @@ fn uv_scale(s: &Surface) -> (f64, f64) {
         Surface::Cone(c) => (c.radius.max(1.0), 1.0 / c.cos_a()),
         Surface::Sphere(sp) => (sp.radius, sp.radius),
         Surface::Torus(t) => (t.major + t.minor, t.minor),
+        Surface::Procedural(pr) => pr.uv_scale(),
     }
 }
 
@@ -71,6 +72,7 @@ fn interior_steps(s: &Surface, q: &Quality) -> Option<(f64, f64)> {
         Surface::Plane(_) | Surface::Cylinder(_) | Surface::Cone(_) => None,
         Surface::Sphere(sp) => Some((arc_step(sp.radius, q), arc_step(sp.radius, q))),
         Surface::Torus(t) => Some((arc_step(t.major + t.minor, q), arc_step(t.minor, q))),
+        Surface::Procedural(pr) => Some((arc_step(pr.min_radius(), q), arc_step(pr.min_radius(), q))),
     }
 }
 
@@ -327,6 +329,7 @@ fn strips(
             Surface::Cone(c) => c.radius_at(v),
             Surface::Sphere(sp) => sp.radius * dmath::cos(v),
             Surface::Torus(t) => t.major + t.minor * dmath::cos(v),
+            Surface::Procedural(pr) => pr.min_radius(),
         };
         if r <= forge_math::tol::LINEAR {
             return 1;

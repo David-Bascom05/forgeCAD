@@ -353,7 +353,9 @@ impl Revolver<'_> {
         }
 
         for (si, s) in segs.iter().enumerate() {
-            let Some(surface) = surfaces[si] else { continue };
+            let Some(surface) = surfaces[si].clone() else {
+                continue;
+            };
             for k in 0..self.spans() {
                 let k1 = self.next_copy(k);
                 let mut uses: Vec<(EdgeId, bool)> =
@@ -370,7 +372,7 @@ impl Revolver<'_> {
                     uses = uses.into_iter().rev().map(|(e, f)| (e, !f)).collect();
                 }
                 let name = self.root.with_str("side").with(s.id).with(k as u64);
-                let face = self.body.add_face(shell, surface, same_sense, name);
+                let face = self.body.add_face(shell, surface.clone(), same_sense, name);
                 self.body.add_loop(face, &uses);
             }
         }

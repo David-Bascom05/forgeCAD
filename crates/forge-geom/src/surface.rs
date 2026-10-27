@@ -82,13 +82,60 @@ pub struct Torus {
     pub minor: f64,
 }
 
-#[derive(Clone, Copy, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq)]
 pub enum Surface {
     Plane(Plane),
     Cylinder(Cylinder),
     Cone(Cone),
     Sphere(Sphere),
     Torus(Torus),
+    /// Defined by construction (a blend, a pipe along an exact spine, a corner patch).
+    Procedural(Proc),
+}
+
+/// A surface defined by construction rather than by a formula of its own: a rolling-ball blend,
+/// a pipe along an exact spine, a corner patch spanning exact boundary curves. Exact: points are
+/// solved for to full precision from the definition, never read off an approximation.
+pub trait Procedural: Send + Sync + std::fmt::Debug {
+    fn deriv(&self, uv: Point2) -> SurfDeriv;
+    fn normal(&self, uv: Point2) -> Option<UnitVec3> {
+        let d = self.deriv(uv);
+        d.du.cross(d.dv).normalize()
+    }
+    fn domain(&self) -> Domain2;
+    /// Parameters of the point of the surface nearest `p`.
+    fn project(&self, p: Point3) -> Point2;
+    /// A box guaranteed to contain the surface over the parameter box.
+    fn bbox(&self, uv: Box2) -> Box3;
+    /// Zero on the surface, positive on the natural normal's side, 1-Lipschitz (as
+    /// `Surface::implicit`).
+    fn implicit(&self, p: Point3) -> f64;
+    /// Gradient of `implicit` at `p`.
+    fn gradient(&self, p: Point3) -> Vec3;
+    fn transformed(&self, f: &Frame) -> Proc;
+    /// Lengths on the surface per unit of u and of v, roughly (for meshing).
+    fn uv_scale(&self) -> (f64, f64) {
+        (1.0, 1.0)
+    }
+    /// A radius of curvature no larger than the surface's tightest (for meshing).
+    fn min_radius(&self) -> f64;
+}
+
+/// A shared handle to a procedural surface; two handles are equal when they are the same surface.
+#[derive(Clone, Debug)]
+pub struct Proc(pub std::sync::Arc<dyn Procedural>);
+
+impl std::ops::Deref for Proc {
+    type Target = dyn Procedural;
+    fn deref(&self) -> &(dyn Procedural + 'static) {
+        &*self.0
+    }
+}
+
+impl PartialEq for Proc {
+    fn eq(&self, o: &Proc) -> bool {
+        std::sync::Arc::ptr_eq(&self.0, &o.0)
+    }
 }
 
 fn angle_dom() -> Domain1 {
@@ -434,6 +481,7 @@ impl Surface {
                 let centre = t.frame.origin + r * t.major;
                 (p - centre).normalize().map_or(r, |u| u.get())
             }
+            Surface::Procedural(s) => s.gradient(p),
         }
     }
 
@@ -455,6 +503,7 @@ impl Surface {
                 let d = (l.x * l.x + l.y * l.y).sqrt() - t.major;
                 (d * d + l.z * l.z).sqrt() - t.minor
             }
+            Surface::Procedural(s) => s.implicit(p),
         }
     }
 }
@@ -490,10 +539,16 @@ impl Surface {
                 }
                 return;
             }
+            Surface::Procedural(_) => {
+                for k in 1..m {
+                    out.push(self.eval(Point2::new(u0 + du * k as f64, v)));
+                }
+                return;
+            }
             _ => dmath::sin_cos_steps(u0 + du, du, m - 1, trig),
         }
         match self {
-            Surface::Plane(_) => {}
+            Surface::Plane(_) | Surface::Procedural(_) => {}
             Surface::Cylinder(c) => radial(&c.frame, c.radius, v, trig, out),
             Surface::Cone(c) => radial(&c.frame, c.radius_at(v), v, trig, out),
             Surface::Sphere(sp) => {
@@ -516,6 +571,7 @@ macro_rules! dispatch {
             Surface::Cone($s) => $e,
             Surface::Sphere($s) => $e,
             Surface::Torus($s) => $e,
+            Surface::Procedural($s) => $e,
         }
     };
 }
@@ -543,6 +599,7 @@ impl SurfaceGeom for Surface {
             Surface::Cone(s) => Surface::Cone(s.transformed(f)),
             Surface::Sphere(s) => Surface::Sphere(s.transformed(f)),
             Surface::Torus(s) => Surface::Torus(s.transformed(f)),
+            Surface::Procedural(s) => Surface::Procedural(s.0.transformed(f)),
         }
     }
 }

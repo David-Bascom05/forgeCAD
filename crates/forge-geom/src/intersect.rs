@@ -51,6 +51,41 @@ pub fn line_surface(line: &Line, s: &Surface) -> LineSurface {
         Surface::Cone(c) => line_cone(line, c),
         Surface::Sphere(sp) => line_sphere(line, sp),
         Surface::Torus(t) => line_torus(line, t),
+        Surface::Procedural(pr) => line_procedural(line, s, pr),
+    }
+}
+
+/// A line against a procedural surface: clipped to the surface's box, then subdivided.
+fn line_procedural(line: &Line, s: &Surface, pr: &crate::surface::Proc) -> LineSurface {
+    let d = pr.domain();
+    let b = pr.bbox(forge_math::Box2::new(d.u.interval(), d.v.interval()));
+    let (mut lo, mut hi) = (f64::NEG_INFINITY, f64::INFINITY);
+    let (o, dir) = (line.origin, line.dir.get());
+    for (oi, di, iv) in [(o.x, dir.x, b.x), (o.y, dir.y, b.y), (o.z, dir.z, b.z)] {
+        if di.abs() < 1e-300 {
+            if oi < iv.lo || oi > iv.hi {
+                return LineSurface::Hits(Vec::new());
+            }
+            continue;
+        }
+        let (a, c) = ((iv.lo - oi) / di, (iv.hi - oi) / di);
+        lo = lo.max(a.min(c));
+        hi = hi.min(a.max(c));
+    }
+    if lo >= hi {
+        return LineSurface::Hits(Vec::new());
+    }
+    match curve_surface_subdivide(&Curve::Line(*line), Interval::new(lo, hi), s) {
+        CurveSurface::Hits(h) => LineSurface::Hits(
+            h.into_iter()
+                .map(|h| LineHit {
+                    t: h.t,
+                    point: h.point,
+                    contact: h.contact,
+                })
+                .collect(),
+        ),
+        CurveSurface::OnSurface | CurveSurface::Overlap => LineSurface::OnSurface,
     }
 }
 
@@ -257,7 +292,7 @@ fn speed_bound(c: &Curve, range: Interval) -> f64 {
 /// crossing (bisected to full precision), an even number or none is a touch.
 pub fn curve_surface(c: &Curve, range: Interval, s: &Surface) -> CurveSurface {
     match c {
-        Curve::Line(l) => return line_in_range(l, range, s),
+        Curve::Line(l) if !matches!(s, Surface::Procedural(_)) => return line_in_range(l, range, s),
         Curve::Circle(k) => {
             if let Some(r) = conic_quadric(&k.frame, k.radius, k.radius, range, s) {
                 return r;
@@ -319,7 +354,7 @@ fn quadric(s: &Surface) -> Option<Quadric> {
                 -c.radius * c.radius,
             ))
         }
-        Surface::Torus(_) => None,
+        Surface::Torus(_) | Surface::Procedural(_) => None,
     }
 }
 
@@ -506,6 +541,7 @@ pub fn plane_surface(p: &Plane, s: &Surface) -> SurfaceSurface {
         Surface::Cone(c) => plane_cone(p, c),
         Surface::Sphere(sp) => plane_sphere(p, sp),
         Surface::Torus(t) => plane_torus(p, t),
+        Surface::Procedural(_) => SurfaceSurface::NotAnalytic,
     }
 }
 
@@ -986,6 +1022,7 @@ mod tests {
                     Surface::Cone(c) => c.frame,
                     Surface::Sphere(c) => c.frame,
                     Surface::Torus(c) => c.frame,
+                    Surface::Procedural(_) => continue,
                 };
                 let n = match i % 8 {
                     0 => sf.z(),

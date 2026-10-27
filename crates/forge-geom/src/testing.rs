@@ -54,6 +54,11 @@ pub fn rand_uv(r: &mut Rng, s: &Surface) -> Point2 {
         }
         Surface::Sphere(_) => Point2::new(u, r.range(-1.4, 1.4)),
         Surface::Torus(_) => Point2::new(u, r.range(0.0, dmath::TAU)),
+        Surface::Procedural(pr) => {
+            let d = pr.domain();
+            let (a, b) = (d.u.interval(), d.v.interval());
+            Point2::new(r.range(a.lo, a.hi), r.range(b.lo, b.hi))
+        }
     }
 }
 
@@ -65,6 +70,7 @@ pub fn curvature_safe(s: &Surface) -> f64 {
         Surface::Cone(_) => 0.5,
         Surface::Sphere(sp) => sp.radius,
         Surface::Torus(t) => t.minor.min(t.major - t.minor),
+        Surface::Procedural(_) => 0.1,
     }
 }
 

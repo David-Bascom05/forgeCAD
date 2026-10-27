@@ -10,6 +10,10 @@ pub struct Domain1 {
 }
 
 impl Domain1 {
+    /// The parameter range, as an interval (one period for a wrapping parameter).
+    pub fn interval(&self) -> Interval {
+        Interval::new(self.lo, self.hi)
+    }
     pub const LINE: Domain1 = Domain1 {
         lo: f64::NEG_INFINITY,
         hi: f64::INFINITY,

@@ -1109,7 +1109,7 @@ pub fn nary_with(
     for &(ri, flip) in &kept {
         let r = &regs[ri];
         let src = tools[r.side].face(r.face);
-        let face = out.add_face(shell, src.surface, src.same_sense != flip, r.name);
+        let face = out.add_face(shell, src.surface.clone(), src.same_sense != flip, r.name);
         for lp in &r.loops {
             let mut uses: Vec<(EdgeId, bool)> = Vec::with_capacity(lp.len());
             for &(p, fwd) in lp {

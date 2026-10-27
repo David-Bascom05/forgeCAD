@@ -1176,7 +1176,7 @@ pub(crate) fn across(body: &Body, f: FaceId, c: forge_topo::CoedgeId) -> R<Surfa
             if smooth && !matches!(edge.curve, Curve::Intersection(_)) {
                 edge_plane()
             } else {
-                Ok(*other)
+                Ok(other.clone())
             }
         }
         _ => edge_plane(),
