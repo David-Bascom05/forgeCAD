@@ -1,4 +1,5 @@
-use crate::rebuild::{RebuildError, rebuild};
+use crate::rebuild::{RebuildError, reaches_apex, rebuild};
+use crate::selfx::crossing;
 use forge_geom::intersect::{SurfaceSurface, plane_plane};
 use forge_geom::{Cone, Curve, Plane, Surface};
 use forge_math::{Frame, Point3, UnitVec3, dmath, tol};
@@ -22,6 +23,15 @@ pub enum DraftError {
     /// The face's surface has no exact drafted form (a sphere, a torus, a cylinder across the pull).
     NoExactSurface {
         face: Name,
+    },
+    /// The cone this face becomes comes to its point within the face.
+    ThroughApex {
+        face: Name,
+    },
+    /// A tilted face runs through another face.
+    SelfIntersecting {
+        a: Name,
+        b: Name,
     },
     Rebuild(RebuildError),
     Invalid(Vec<Problem>),
@@ -47,9 +57,15 @@ pub fn draft(body: &Body, faces: &[Name], neutral: &Frame, angle: f64) -> Result
         let face = out.face(f);
         out.faces[f.index()].surface = drafted(&face.surface, face.same_sense, &np, pull, angle, name)?;
         changed[f.index()] = true;
+        if reaches_apex(&out, f, 0.0) {
+            return Err(DraftError::ThroughApex { face: name });
+        }
     }
     rebuild(&mut out, &changed).map_err(DraftError::Rebuild)?;
     let problems = check(&out);
+    if let Some((a, b)) = crossing(&out, &changed) {
+        return Err(DraftError::SelfIntersecting { a, b });
+    }
     if !problems.is_empty() {
         return Err(DraftError::Invalid(problems));
     }

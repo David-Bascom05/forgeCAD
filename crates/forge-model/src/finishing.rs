@@ -33,6 +33,57 @@ fn tan(a: f64) -> f64 {
     s / c
 }
 
+/// A random plate (rounded or square corners, maybe holes) finished by a random mix of draft,
+/// chamfer and shell, sizes from small to too large.
+pub fn fuzz(seed: u64) -> Part {
+    let mut r = forge_math::rng::Rng::new(seed);
+    let (w, d) = (r.range(10.0, 60.0), r.range(10.0, 40.0));
+    let h = r.range(3.0, 20.0);
+    let rounded = r.bool();
+    let mut loops = vec![if rounded {
+        Profile::rounded_rectangle(Point2::ORIGIN, w, d, r.range(0.5, w.min(d) * 0.45), 0)
+    } else {
+        Profile::rectangle(Point2::ORIGIN, w, d, 0)
+    }];
+    let sides: u64 = if rounded { 8 } else { 4 };
+    let holes = r.below(3) as u64;
+    for k in 0..holes {
+        let x = w * (k as f64 + 1.0) / (holes as f64 + 1.0);
+        loops.push(Profile::circle(
+            Point2::new(x, d / 2.0),
+            r.range(0.5, (d / 2.0).min(w / (2.0 * holes as f64 + 2.0)) * 0.8),
+            50 + k,
+        ));
+    }
+    let walls: Vec<u64> = (0..sides).chain((0..holes).map(|k| 50 + k)).collect();
+    let mut features = vec![extrude(loops, Frame::WORLD, h, Combine::New)];
+    let (top, bottom) = (face(0, "end"), face(0, "start"));
+    let size = |r: &mut forge_math::rng::Rng| r.range(0.1, 0.4) * h.min(d);
+    for _ in 0..1 + r.below(2) {
+        match r.below(3) {
+            0 => {
+                let pick: Vec<u64> = walls.iter().copied().filter(|_| r.bool()).collect();
+                let cap = if r.bool() { top } else { bottom };
+                features.push(Feature::Chamfer {
+                    edges: pick.iter().map(|&k| edge(cap, side(0, k))).collect(),
+                    size: ChamferSize::Equal(size(&mut r)),
+                });
+            }
+            1 => features.push(Feature::Draft {
+                faces: walls.iter().map(|&k| side(0, k)).collect(),
+                neutral: Frame::WORLD.with_origin(Point3::new(0.0, 0.0, r.range(0.0, h))),
+                angle: r.range(-0.15, 0.15),
+            }),
+            _ => features.push(Feature::Shell {
+                thickness: size(&mut r) * 0.5,
+                outward: r.below(4) == 0,
+                open: if r.bool() { vec![top] } else { vec![] },
+            }),
+        }
+    }
+    Part { features }
+}
+
 /// A named part and its exact volume, when known.
 pub fn parts() -> Vec<(&'static str, Part, Option<f64>)> {
     let pi = dmath::PI;

@@ -7,6 +7,7 @@ pub mod extrude;
 pub mod profile;
 pub mod rebuild;
 pub mod revolve;
+mod selfx;
 pub mod shell;
 
 pub use chamfer::{ChamferError, ChamferSize, chamfer};

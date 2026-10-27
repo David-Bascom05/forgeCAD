@@ -15,6 +15,44 @@ fn volume(b: &Body) -> f64 {
     m.volume()
 }
 
+/// Random finishing either works and gives a valid, watertight solid, or says why it cannot.
+#[test]
+fn fuzz_finishing() {
+    let (mut ok, mut refused) = (0, Vec::new());
+    for seed in 0..300 {
+        let part = finishing::fuzz(seed);
+        match part.regenerate() {
+            Ok(b) => {
+                let problems = check(&b);
+                assert!(problems.is_empty(), "seed {seed}: {problems:?}\n{part:?}");
+                assert!(volume(&b) > 0.0, "seed {seed}");
+                ok += 1;
+            }
+            Err(e) => {
+                let s = format!("{e:?}");
+                assert!(!s.contains("Invalid"), "seed {seed}: {s}\n{part:?}");
+                let what = s.split("error: ").nth(1).unwrap_or(&s);
+                let what: String = what.chars().take_while(|c| c.is_alphanumeric()).collect();
+                let inner = s
+                    .split("what: ")
+                    .nth(1)
+                    .map_or(String::new(), |w| w.chars().take(40).collect());
+                refused.push(format!("{} {what} {inner}", s.split(' ').next().unwrap_or("")));
+            }
+        }
+    }
+    refused.sort();
+    let mut counts: Vec<(usize, String)> = Vec::new();
+    for r in refused {
+        match counts.last_mut() {
+            Some(c) if c.1 == r => c.0 += 1,
+            _ => counts.push((1, r)),
+        }
+    }
+    eprintln!("{ok} of 300 built; refusals: {counts:?}");
+    assert!(ok > 150, "{ok}");
+}
+
 #[test]
 fn finishing_parts() {
     for (name, part, want) in finishing::parts() {

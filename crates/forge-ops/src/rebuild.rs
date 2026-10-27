@@ -32,6 +32,11 @@ pub fn rebuild(body: &mut Body, changed: &[bool]) -> Result<(), RebuildError> {
             verts[edge.end.index()] = true;
         }
     }
+    // edges between unchanged faces still end at the moved vertices
+    for e in body.edge_ids() {
+        let edge = body.edge(e);
+        edges[e.index()] |= verts[edge.start.index()] || verts[edge.end.index()];
+    }
     rebuild_some(body, &verts, &edges)
 }
 
@@ -132,6 +137,22 @@ pub fn rebuild_some(body: &mut Body, verts: &[bool], edges: &[bool]) -> Result<(
         body.faces[f].query.clear();
     }
     Ok(())
+}
+
+/// Whether face `f`'s surface is a cone whose apex lies within the face's height (judged from
+/// the face's current vertices, any of which may yet move `slack` along the axis): the face would
+/// pass through the apex.
+pub(crate) fn reaches_apex(body: &Body, f: FaceId, slack: f64) -> bool {
+    let Surface::Cone(c) = &body.face(f).surface else {
+        return false;
+    };
+    body.face(f).loops.iter().any(|&l| {
+        body.lp(l).coedges.iter().any(|&co| {
+            let p = body.vertex(body.coedge_start(co)).point;
+            let v = c.frame.z().dot(p - c.frame.origin) - slack;
+            c.radius_at(v) <= tol::MIN_LENGTH
+        })
+    })
 }
 
 fn same_surface(a: &Surface, b: &Surface) -> bool {

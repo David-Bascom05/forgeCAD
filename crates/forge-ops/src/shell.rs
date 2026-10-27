@@ -1,4 +1,5 @@
-use crate::rebuild::{RebuildError, rebuild};
+use crate::rebuild::{RebuildError, reaches_apex, rebuild};
+use crate::selfx::crossing;
 use forge_geom::surface::{Proc, Procedural, SurfDeriv};
 use forge_geom::{Cone, Cylinder, Domain2, Plane, Sphere, Surface, Torus};
 use forge_math::{Box2, Box3, Frame, Point2, Point3, UnitVec3, Vec3, dmath, tol};
@@ -20,6 +21,11 @@ pub enum ShellError {
     /// The thickness reaches past this face's centre of curvature: its offset vanishes.
     Collapses {
         face: Name,
+    },
+    /// The walls run through each other here: too thick for the part.
+    SelfIntersecting {
+        a: Name,
+        b: Name,
     },
     Rebuild(RebuildError),
     Invalid(Vec<Problem>),
@@ -66,7 +72,23 @@ pub fn shell(
         let d = if face.same_sense { shift } else { -shift };
         face.surface = offset(&face.surface, d).ok_or(ShellError::Collapses { face: face.name })?;
     }
-    rebuild(&mut moved, &changed).map_err(ShellError::Rebuild)?;
+    // a cone offset towards its apex can close up within the face
+    let apex = |b: &Body, slack: f64| b.face_ids().find(|&f| reaches_apex(b, f, slack));
+    if let Some(f) = apex(&moved, 0.0) {
+        return Err(ShellError::Collapses {
+            face: moved.face(f).name,
+        });
+    }
+    let before = moved.clone();
+    if let Err(e) = rebuild(&mut moved, &changed) {
+        // vertices move up to the thickness along a cone's axis: past its apex, the face is gone
+        return Err(match apex(&before, thickness).or(apex(&before, -thickness)) {
+            Some(f) => ShellError::Collapses {
+                face: before.face(f).name,
+            },
+            None => ShellError::Rebuild(e),
+        });
+    }
     let root = Name::feature(feature);
     let rename = |n: Name| n.with_name(root).with_str("offset");
     let (outer, inner, outer_new, inner_new) = if outward {
@@ -150,6 +172,9 @@ pub fn shell(
     }
     let out = out.compact();
     let problems = check(&out);
+    if let Some((a, b)) = crossing(&out, &vec![true; out.faces.len()]) {
+        return Err(ShellError::SelfIntersecting { a, b });
+    }
     if !problems.is_empty() {
         return Err(ShellError::Invalid(problems));
     }

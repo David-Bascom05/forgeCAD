@@ -1,4 +1,6 @@
 use crate::rebuild::{RebuildError, rebuild_some, solve_point};
+use crate::selfx::crossing;
+use forge_geom::intersect::{CurveSurface, curve_surface};
 use forge_geom::{Cone, Curve, CurveGeom, Cylinder, Line, Plane, Sphere, Surface};
 use forge_math::{Frame, Interval, Point3, UnitVec3, Vec3, dmath, tol};
 use forge_topo::{Body, CoedgeId, EdgeId, FaceId, Name, Problem, VertexId, check};
@@ -33,6 +35,10 @@ pub enum ChamferError {
     /// The chamfer runs past the faces it cuts: this edge would vanish or turn inside out.
     TooLarge {
         edge: Name,
+    },
+    /// The chamfer runs into another part of the face it cuts, or through another face.
+    Overflows {
+        face: Name,
     },
     Unsupported {
         edge: Name,
@@ -102,6 +108,13 @@ pub fn chamfer(body: &Body, edges: &[Name], size: ChamferSize, feature: u64) -> 
         }
     }
     affected.sort();
+    // faces trimmed or cut into, which the crossing check looks at
+    let mut near = vec![false; src.faces.len()];
+    for v in &affected {
+        for c in &corners[v] {
+            near[c.0.index()] = true;
+        }
+    }
 
     let mut out = Body::new();
     for v in &src.vertices {
@@ -171,6 +184,7 @@ pub fn chamfer(body: &Body, edges: &[Name], size: ChamferSize, feature: u64) -> 
             w.out.edges[e.index()].alive = false;
         }
     }
+    let mut used: HashMap<EdgeId, bool> = HashMap::new();
     for f in src.face_ids() {
         for &l in &src.face(f).loops {
             let mut uses: Path = Vec::new();
@@ -185,12 +199,12 @@ pub fn chamfer(body: &Body, edges: &[Name], size: ChamferSize, feature: u64) -> 
                     uses.extend(p.iter().copied());
                 }
             }
+            used.extend(uses.iter().copied());
             w.out.add_loop(f, &uses);
         }
     }
     // a chamfer face: its contact on A walked against A, the cap at that end from A to B, its
     // contact on B walked against B, the cap at the other end from B to A
-    let mut used: HashMap<EdgeId, bool> = HashMap::new();
     for (bi, b) in bevels.iter().enumerate() {
         let mut uses: Path = vec![(contact_edge[&(b.edge, b.a)], !b.fa)];
         uses.extend(w.cap_from(b.edge, b.fa, b.a));
@@ -202,12 +216,24 @@ pub fn chamfer(body: &Body, edges: &[Name], size: ChamferSize, feature: u64) -> 
         w.out.add_loop(cfaces[bi], &uses);
     }
     for (p, ring) in std::mem::take(&mut w.patches) {
-        // against the chamfers' own use of each patch edge
+        // against the other face's use of each patch edge
         let uses: Path = if used.get(&ring[0]) == Some(&true) {
             ring.iter().rev().map(|&e| (e, false)).collect()
         } else {
             ring.iter().map(|&e| (e, true)).collect()
         };
+        // the face lies left of its loop: the plane's normal or its reverse
+        let pts: Vec<Point3> = uses
+            .iter()
+            .map(|&(e, fw)| {
+                let edge = w.out.edge(e);
+                w.out.vertex(if fw { edge.start } else { edge.end }).point
+            })
+            .collect();
+        let turn = (pts[1] - pts[0]).cross(pts[2] - pts[0]);
+        if let Surface::Plane(pl) = &w.out.face(p).surface {
+            w.out.faces[p.index()].same_sense = pl.normal_vec().dot(turn) > 0.0;
+        }
         w.out.add_loop(p, &uses);
     }
 
@@ -231,6 +257,14 @@ pub fn chamfer(body: &Body, edges: &[Name], size: ChamferSize, feature: u64) -> 
     })?;
     let out = out.compact();
     let problems = check(&out);
+    let flagged: Vec<bool> = out
+        .faces
+        .iter()
+        .map(|f| src.face_by_name(f.name).is_none_or(|g| near[g.index()]))
+        .collect();
+    if let Some((a, _)) = crossing(&out, &flagged) {
+        return Err(ChamferError::Overflows { face: a });
+    }
     if !problems.is_empty() {
         return Err(ChamferError::Invalid(problems));
     }
@@ -326,6 +360,20 @@ impl Work {
             let pts = if at_start { b.at_start } else { b.at_end };
             if x == b.a { pts[0] } else { pts[1] }
         };
+        // where an untouched edge leaving the vertex meets a chamfer, nearest the vertex
+        let vp = src.vertex(v).point;
+        let along = |end: End, s: &Surface| -> Result<Point3, ChamferError> {
+            let edge = src.edge(end.0);
+            let too_large = ChamferError::TooLarge { edge: edge.name };
+            match curve_surface(&edge.curve, edge.range, s) {
+                CurveSurface::Hits(h) => h
+                    .iter()
+                    .map(|h| h.point)
+                    .min_by(|a, b| a.distance(vp).total_cmp(&b.distance(vp)))
+                    .ok_or(too_large),
+                _ => Err(too_large),
+            }
+        };
         let mut n = 0;
         let mut name = |kind: &str| {
             n += 1;
@@ -340,12 +388,54 @@ impl Work {
             _ => 0,
         };
         let (i0, i1, i2) = (i, (i + 1) % 3, (i + 2) % 3);
+        let smooth = |a: End, b: End| (end_tangent(src, a) + end_tangent(src, b)).length() <= 1e-6;
+        let smooth_after = k == 1 && smooth(ends[i0], ends[i1]);
+        let smooth_before = k == 1 && smooth(ends[i0], ends[i2]);
         match k {
+            1 if smooth_after || smooth_before => {
+                // the chain runs on unchamfered: the chamfer ends in a flat cap across the edge,
+                // a triangle from the vertex to its two contacts
+                let bi = bev[i0].expect("chamfered");
+                let (e, at) = ends[i0];
+                let (s, o, cont, tan) = if smooth_after {
+                    (f[i1], f[i0], ends[i1], ends[i2])
+                } else {
+                    (f[i0], f[i1], ends[i2], ends[i1])
+                };
+                let pa = self.vertex_at(cg(bi, at, s), name("v"));
+                let pb = self.vertex_at(cg(bi, at, o), name("v"));
+                self.contact.insert((e, at, s), pa);
+                self.contact.insert((e, at, o), pb);
+                self.end_vertex.insert(tan, pb);
+                let x1 = self.edge_between(v, pa, name("e"));
+                let j = self.edge_between(pa, pb, name("e"));
+                let x2 = self.edge_between(pb, v, name("e"));
+                if smooth_after {
+                    self.corner_path.insert(ring[i1].1, vec![(x1, false)]);
+                    self.corner_path.insert(ring[i2].1, vec![(x2, false)]);
+                    self.cap.insert(ends[i0], (o, vec![(j, false)]));
+                } else {
+                    self.corner_path.insert(ring[i0].1, vec![(x1, true)]);
+                    self.corner_path.insert(ring[i2].1, vec![(x2, true)]);
+                    self.cap.insert(ends[i0], (s, vec![(j, true)]));
+                }
+                let normal = (-end_tangent(src, cont))
+                    .normalize()
+                    .ok_or(unsupported("an edge with no direction"))?;
+                let pf = self.out.add_face(
+                    src.face(s).shell,
+                    Surface::Plane(Plane::new(Frame::from_z(vp, normal))),
+                    true,
+                    root.with_str("end").with_name(vname).with_name(src.edge(e).name),
+                );
+                self.patches.push((pf, [x1, j, x2]));
+            }
             1 => {
                 let bi = bev[i0].expect("chamfered");
                 let (e, at) = ends[i0];
-                let p = self.vertex_at(cg(bi, at, f[i1]), name("v"));
-                let q = self.vertex_at(cg(bi, at, f[i0]), name("v"));
+                let c = &bevels[bi].surface;
+                let p = self.vertex_at(along(ends[i1], c)?, name("v"));
+                let q = self.vertex_at(along(ends[i2], c)?, name("v"));
                 self.end_vertex.insert(ends[i1], p);
                 self.end_vertex.insert(ends[i2], q);
                 self.contact.insert((e, at, f[i0]), q);
@@ -359,7 +449,7 @@ impl Work {
                 let (c0, c1) = (bevels[b0].surface.clone(), bevels[b1].surface.clone());
                 let ((e0, at0), (e1, at1)) = (ends[i0], ends[i1]);
                 let qg = cg(b0, at0, f[i1]).lerp(cg(b1, at1, f[i1]), 0.5);
-                let rg = cg(b0, at0, f[i0]).lerp(cg(b1, at1, f[i2]), 0.5);
+                let mut rg = cg(b0, at0, f[i0]).lerp(cg(b1, at1, f[i2]), 0.5);
                 let smooth = b0 == b1 || {
                     let t0 = end_tangent(src, ends[i0]);
                     let t1 = end_tangent(src, ends[i1]);
@@ -375,8 +465,14 @@ impl Work {
                     let rb = solve_point(&[c0.clone(), c1.clone(), surf(f[i0])], rg);
                     match (ra, rb) {
                         (Some(a), Some(b)) if a.distance(b) <= tol::LINEAR => 0,
-                        (Some(a), Some(b)) if a.distance(q) < b.distance(q) => 2,
-                        (Some(_), Some(_)) => 1,
+                        (Some(a), Some(b)) if a.distance(q) < b.distance(q) => {
+                            rg = a;
+                            2
+                        }
+                        (Some(_), Some(b)) => {
+                            rg = b;
+                            1
+                        }
                         _ => return Err(unsupported("a mitre with no end")),
                     }
                 };
@@ -385,7 +481,7 @@ impl Work {
                 self.contact.insert((e1, at1, f[i1]), q);
                 match exit {
                     0 => {
-                        let r = self.vertex_at(rg, name("v"));
+                        let r = self.vertex_at(along(ends[i2], &c0)?, name("v"));
                         self.contact.insert((e0, at0, f[i0]), r);
                         self.contact.insert((e1, at1, f[i2]), r);
                         self.end_vertex.insert(ends[i2], r);
@@ -396,7 +492,7 @@ impl Work {
                     2 => {
                         // through face i2: chamfer 0 cuts it too
                         let r1 = self.vertex_at(rg, name("v"));
-                        let r2 = self.vertex_at(cg(b0, at0, f[i0]), name("v"));
+                        let r2 = self.vertex_at(along(ends[i2], &c0)?, name("v"));
                         self.contact.insert((e1, at1, f[i2]), r1);
                         self.contact.insert((e0, at0, f[i0]), r2);
                         self.end_vertex.insert(ends[i2], r2);
@@ -409,7 +505,7 @@ impl Work {
                     _ => {
                         // through face i0: chamfer 1 cuts it too
                         let r1 = self.vertex_at(rg, name("v"));
-                        let r2 = self.vertex_at(cg(b1, at1, f[i2]), name("v"));
+                        let r2 = self.vertex_at(along(ends[i2], &c1)?, name("v"));
                         self.contact.insert((e0, at0, f[i0]), r1);
                         self.contact.insert((e1, at1, f[i2]), r2);
                         self.end_vertex.insert(ends[i2], r2);
@@ -617,6 +713,14 @@ fn bevel(src: &Body, e: EdgeId, size: ChamferSize, root: Name) -> Result<Bevel, 
             };
             let ((ra, ha), (rb, hb)) = (rh(pa), rh(pb));
             let radial = pa - o - z * z.dot(pa - o);
+            // a contact that reaches the axis (a cut wider than the radius) has nowhere to go
+            let p0 = edge.curve.eval(edge.range.lo);
+            let side = p0 - o - z * z.dot(p0 - o);
+            for (r, q) in [(ra, pa), (rb, pb)] {
+                if r <= tol::MIN_LENGTH || (q - o - z * z.dot(q - o)).dot(side) <= 0.0 {
+                    return Err(lost());
+                }
+            }
             let surface = if (ha - hb).abs() <= tol::LINEAR {
                 Surface::Plane(Plane::new(Frame::from_z(o + z * ha, z)))
             } else if (ra - rb).abs() <= tol::LINEAR {
