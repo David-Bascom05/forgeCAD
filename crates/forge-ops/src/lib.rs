@@ -4,6 +4,7 @@
 pub mod chamfer;
 pub mod draft;
 pub mod extrude;
+pub mod fillet;
 pub mod profile;
 pub mod rebuild;
 pub mod revolve;
@@ -13,6 +14,7 @@ pub mod shell;
 pub use chamfer::{ChamferError, ChamferSize, chamfer};
 pub use draft::{DraftError, draft};
 pub use extrude::{ExtrudeError, extrude};
+pub use fillet::{FilletEdge, FilletError, fillet};
 pub use profile::{Profile, ProfileError, ProfileLoop, Segment};
 pub use rebuild::RebuildError;
 pub use revolve::{Axis2, RevolveError, revolve};

@@ -1,6 +1,7 @@
 //! A part as a history of features, and regenerating it into a solid.
 
 pub mod adversarial;
+pub mod fillets;
 pub mod finishing;
 pub mod suite;
 pub mod torture;
@@ -8,8 +9,8 @@ pub mod torture;
 use forge_bool::{BoolError, Op, Seg2, Shape, boolean_into};
 use forge_math::{Frame, Point2, Vec2, dmath};
 use forge_ops::{
-    Axis2, ChamferError, ChamferSize, DraftError, ExtrudeError, Profile, ProfileLoop, RevolveError, Segment,
-    ShellError, chamfer, draft, extrude, revolve, shell,
+    Axis2, ChamferError, ChamferSize, DraftError, ExtrudeError, FilletEdge, FilletError, Profile, ProfileLoop,
+    RevolveError, Segment, ShellError, chamfer, draft, extrude, fillet, revolve, shell,
 };
 use forge_topo::{Body, Name};
 
@@ -31,6 +32,8 @@ pub enum Feature {
     },
     /// A ball (a shorthand for revolving a half disc).
     Ball { frame: Frame, radius: f64, op: Combine },
+    /// Round the named edges of the part as it stands, each with its own radius, in one go.
+    Fillet { edges: Vec<(Name, f64)> },
     /// Bevel edges of the part.
     Chamfer { edges: Vec<Name>, size: ChamferSize },
     /// Hollow the part to walls `thickness` thick, inside or outside its skin, `open` faces removed.
@@ -69,6 +72,15 @@ pub enum RegenError {
     Boolean {
         feature: usize,
         error: BoolError,
+    },
+    Fillet {
+        feature: usize,
+        error: FilletError,
+    },
+    /// A feature names an edge the part no longer has.
+    MissingEdge {
+        feature: usize,
+        name: Name,
     },
     Chamfer {
         feature: usize,
@@ -273,6 +285,7 @@ fn op_of(c: Combine) -> Op {
 fn modify(i: usize, f: &Feature, body: &Body) -> Result<Body, RegenError> {
     let id = i as u64 + 1;
     match f {
+        Feature::Fillet { edges } => apply_fillet(i, body, edges),
         Feature::Chamfer { edges, size } => {
             chamfer(body, edges, *size, id).map_err(|error| RegenError::Chamfer { feature: i, error })
         }
@@ -289,6 +302,23 @@ fn modify(i: usize, f: &Feature, body: &Body) -> Result<Body, RegenError> {
         } => draft(body, faces, neutral, *angle).map_err(|error| RegenError::Draft { feature: i, error }),
         _ => unreachable!("solid features make tools"),
     }
+}
+
+/// Feature `i`, a fillet of the named edges, applied to `body`.
+fn apply_fillet(i: usize, body: &Body, edges: &[(Name, f64)]) -> Result<Body, RegenError> {
+    let body = if body.dead > 0 {
+        body.compact()
+    } else {
+        body.clone()
+    };
+    let mut want: Vec<FilletEdge> = Vec::with_capacity(edges.len());
+    for &(name, radius) in edges {
+        let edge = body
+            .edge_by_name(name)
+            .ok_or(RegenError::MissingEdge { feature: i, name })?;
+        want.push(FilletEdge { edge, radius });
+    }
+    fillet(&body, &want, i as u64 + 1).map_err(|error| RegenError::Fillet { feature: i, error })
 }
 
 /// The solid feature `i` makes, and how it combines with the part.
@@ -346,7 +376,7 @@ fn tool(i: usize, f: &Feature) -> Result<(Body, Combine), RegenError> {
                 *op,
             )
         }
-        Feature::Chamfer { .. } | Feature::Shell { .. } | Feature::Draft { .. } => {
+        Feature::Fillet { .. } | Feature::Chamfer { .. } | Feature::Shell { .. } | Feature::Draft { .. } => {
             unreachable!("part-changing features are no tool")
         }
     })
@@ -356,7 +386,7 @@ fn tool(i: usize, f: &Feature) -> Result<(Body, Combine), RegenError> {
 fn feature_op(f: &Feature) -> Option<Combine> {
     match f {
         Feature::Extrude { op, .. } | Feature::Revolve { op, .. } | Feature::Ball { op, .. } => Some(*op),
-        Feature::Chamfer { .. } | Feature::Shell { .. } | Feature::Draft { .. } => None,
+        Feature::Fillet { .. } | Feature::Chamfer { .. } | Feature::Shell { .. } | Feature::Draft { .. } => None,
     }
 }
 
@@ -436,7 +466,7 @@ fn shape(f: &Feature) -> Shape {
             center: frame.origin,
             radius: *radius,
         },
-        Feature::Chamfer { .. } | Feature::Shell { .. } | Feature::Draft { .. } => {
+        Feature::Fillet { .. } | Feature::Chamfer { .. } | Feature::Shell { .. } | Feature::Draft { .. } => {
             unreachable!("part-changing features are no tool")
         }
     }

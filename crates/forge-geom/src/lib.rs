@@ -2,6 +2,7 @@
 //! their intersections. Each shape is stored by its defining data (a cylinder
 //! is an axis frame and a radius), never as an approximation.
 
+pub mod blend;
 pub mod curve;
 pub mod intcurve;
 pub mod intersect;

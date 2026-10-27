@@ -689,6 +689,8 @@ fn error_kind(e: &crate::RegenError) -> (String, usize) {
         Chamfer { feature, error } => (format!("Chamfer({error:?})"), *feature),
         Shell { feature, error } => (format!("Shell({error:?})"), *feature),
         Draft { feature, error } => (format!("Draft({error:?})"), *feature),
+        Fillet { feature, error } => (format!("Fillet({error:?})"), *feature),
+        MissingEdge { feature, .. } => ("MissingEdge".to_string(), *feature),
     }
 }
 
@@ -786,6 +788,9 @@ fn rounded_feature(f: &Feature, digits: i32) -> Feature {
             frame: rf(frame),
             radius: rd(*radius),
             op: *op,
+        },
+        Feature::Fillet { edges } => Feature::Fillet {
+            edges: edges.iter().map(|&(n, r)| (n, rd(r))).collect(),
         },
         other => other.clone(),
     }
@@ -984,6 +989,14 @@ pub fn literal(part: &Part) -> String {
                 "        Feature::Ball {{ frame: {}, radius: {}, op: Combine::{op:?} }},",
                 lit_frame(frame),
                 lit_f(*radius)
+            ),
+            Feature::Fillet { edges } => format!(
+                "        Feature::Fillet {{ edges: vec![{}] }},",
+                edges
+                    .iter()
+                    .map(|(n, r)| format!("(Name({}), {})", n.0, lit_f(*r)))
+                    .collect::<Vec<_>>()
+                    .join(", ")
             ),
             other => format!("        {other:?},"),
         })
