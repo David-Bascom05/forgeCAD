@@ -1,7 +1,7 @@
-use crate::cdt::{CdtError, triangulate};
+use crate::cdt::{CdtError, triangulate_refined};
 use crate::mesh::TriMesh;
 use forge_geom::{Curve, CurveGeom, Surface, SurfaceGeom};
-use forge_math::{Point2, Point3, dmath};
+use forge_math::{Point2, dmath};
 use forge_topo::uv::{align_loops, draw_loop};
 use forge_topo::{Body, FaceId};
 
@@ -71,7 +71,13 @@ fn uv_scale(s: &Surface) -> (f64, f64) {
 /// Grid steps for points inside a face, where the surface curves in both directions.
 fn interior_steps(s: &Surface, q: &Quality) -> Option<(f64, f64)> {
     match s {
-        Surface::Plane(_) | Surface::Cylinder(_) | Surface::Cone(_) => None,
+        Surface::Plane(_) => None,
+        // straight along v: columns across u, rows only as far apart as keeps triangles shapely
+        Surface::Cylinder(c) => Some((arc_step(c.radius, q), 4.0 * c.radius * arc_step(c.radius, q))),
+        Surface::Cone(c) => {
+            let r = c.radius.max(1.0);
+            Some((arc_step(r, q), 4.0 * r * arc_step(r, q)))
+        }
         Surface::Sphere(sp) => Some((arc_step(sp.radius, q), arc_step(sp.radius, q))),
         Surface::Torus(t) => Some((arc_step(t.major + t.minor, q), arc_step(t.minor, q))),
         Surface::Procedural(pr) => Some((arc_step(pr.min_radius(), q), arc_step(pr.min_radius(), q))),
@@ -191,7 +197,24 @@ fn tessellate_face(
         }
     }
 
-    let mut tri = match triangulate(&scaled, &loops, &interior) {
+    // chords that stray from the surface by more than the tolerance get a surface point at
+    // their middle, inserted into the same triangulation round after round (a thin band between
+    // two boundary curves has no grid points at all; a chord across a radian of a cylinder needs
+    // several halvings)
+    let at = |p: Point2| surface.eval(Point2::new(p.x / su, p.y / sv));
+    // each point's position is worked out once, however many edges and rounds test it
+    let cache = std::cell::RefCell::new(Vec::<Option<forge_math::Point3>>::new());
+    let pos = |i: u32, p: Point2| {
+        let mut c = cache.borrow_mut();
+        if c.len() <= i as usize {
+            c.resize(i as usize + 1, None);
+        }
+        *c[i as usize].get_or_insert_with(|| at(p))
+    };
+    let strays = |ia: u32, ib: u32, a: Point2, b: Point2| {
+        at(a.lerp(b, 0.5)).distance(pos(ia, a).lerp(pos(ib, b), 0.5)) > q.chord
+    };
+    let tri = match triangulate_refined(&scaled, &loops, &interior, Some(&strays), 24) {
         Ok(t) => t,
         Err(e) => {
             if let Some(path) = std::env::var_os("FORGE_CDT_DUMP") {
@@ -204,42 +227,6 @@ fn tessellate_face(
             return Err(e);
         }
     };
-    // chords that stray from the surface by more than the tolerance get a surface point at
-    // their middle (a thin band between two boundary curves has no grid points at all)
-    let at = |p: Point2| surface.eval(Point2::new(p.x / su, p.y / sv));
-    let boundary = |a: u32, b: u32| {
-        loops.iter().any(|l| {
-            let (lo, n) = (l[0], l.len() as u32);
-            let inside = |x: u32| x >= lo && x < lo + n;
-            inside(a) && inside(b) && ((a + 1 - lo) % n == b - lo || (b + 1 - lo) % n == a - lo)
-        })
-    };
-    for _ in 0..3 {
-        let pos: Vec<Point3> = tri.points.iter().map(|&p| at(p)).collect();
-        let mut extra: Vec<Point2> = Vec::new();
-        for t in &tri.triangles {
-            for (a, b) in [(t[0], t[1]), (t[1], t[2]), (t[2], t[0])] {
-                // each interior edge once; a boundary chord is the edge's own sample step, and
-                // splitting it would leave a crack against the neighbouring face
-                if a > b || boundary(a, b) {
-                    continue;
-                }
-                let (pa, pb) = (tri.points[a as usize], tri.points[b as usize]);
-                let mid = pa.lerp(pb, 0.5);
-                let chord_mid = pos[a as usize].lerp(pos[b as usize], 0.5);
-                if at(mid).distance(chord_mid) > q.chord {
-                    extra.push(mid);
-                }
-            }
-        }
-        if extra.is_empty() {
-            break;
-        }
-        let base = scaled.len();
-        interior = tri.points[base..].to_vec();
-        interior.extend(extra);
-        tri = triangulate(&scaled, &loops, &interior)?;
-    }
     let base = global.len();
     let mut index = global;
     for p in &tri.points[base..] {

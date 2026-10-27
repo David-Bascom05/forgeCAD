@@ -505,6 +505,49 @@ impl Mesh {
         Ok(())
     }
 
+    /// Inserts an interior point where it lands inside the region, clear of the boundary and of
+    /// existing points by `eps`; elsewhere it is skipped.
+    fn insert_interior(&mut self, p: Point2, eps: f64) -> Result<(), CdtError> {
+        let loc = self
+            .locate(p)
+            .ok_or(CdtError::Internal("point location failed"))?;
+        let near = |w: u32, mesh: &Mesh| (mesh.p(w) - p).length_sq() <= eps * eps;
+        let near_constraint = |t: u32, mesh: &Mesh| {
+            let tt = mesh.tris[t as usize];
+            (0..3).any(|i| {
+                tt.c[i] && segment_distance_sq(p, mesh.p(tt.v[nx(i)]), mesh.p(tt.v[pv(i)])) <= eps * eps
+            })
+        };
+        let skip = match &loc {
+            Location::Vertex(_) => true,
+            Location::Inside(t) => {
+                !self.inside[*t as usize]
+                    || near_constraint(*t, self)
+                    || self.tris[*t as usize].v.iter().any(|&w| near(w, self))
+            }
+            Location::OnEdge(t, i) => {
+                let tt = self.tris[*t as usize];
+                let u = tt.n[*i];
+                tt.c[*i]
+                    || !self.inside[*t as usize]
+                    || near_constraint(*t, self)
+                    || near_constraint(u, self)
+                    || tt
+                        .v
+                        .iter()
+                        .chain(self.tris[u as usize].v.iter())
+                        .any(|&w| near(w, self))
+            }
+        };
+        if !skip {
+            let v = self.pts.len() as u32;
+            self.pts.push(p);
+            self.vtri.push(0);
+            self.insert(v, loc);
+        }
+        Ok(())
+    }
+
     fn mark(&mut self, t: u32, i: usize, err: impl Fn() -> CdtError) -> Result<(), CdtError> {
         if self.tris[t as usize].c[i] {
             return Err(err());
@@ -580,6 +623,19 @@ pub fn triangulate(
     points: &[Point2],
     loops: &[Vec<u32>],
     interior: &[Point2],
+) -> Result<Triangulation, CdtError> {
+    triangulate_refined(points, loops, interior, None, 0)
+}
+
+/// `triangulate`, then up to `rounds` rounds of splitting every unconstrained edge for which
+/// `split(a, b, pa, pb)` holds (point indices as in the result, and their positions) at its
+/// midpoint, inserted into the same triangulation.
+pub fn triangulate_refined(
+    points: &[Point2],
+    loops: &[Vec<u32>],
+    interior: &[Point2],
+    refine: Option<&dyn Fn(u32, u32, Point2, Point2) -> bool>,
+    rounds: usize,
 ) -> Result<Triangulation, CdtError> {
     let n = points.len() as u32;
     for (i, p) in points.iter().enumerate() {
@@ -692,44 +748,43 @@ pub fn triangulate(
     // interior points go in only where they land inside, clear of the boundary
     let kept: Vec<Point2> = brio_order(&kept, lo, size).into_iter().map(|i| kept[i]).collect();
     for &p in &kept {
-        let loc = mesh
-            .locate(p)
-            .ok_or(CdtError::Internal("point location failed"))?;
-        let near = |w: u32, mesh: &Mesh| (mesh.p(w) - p).length_sq() <= eps * eps;
-        let near_constraint = |t: u32, mesh: &Mesh| {
-            let tt = mesh.tris[t as usize];
-            (0..3).any(|i| {
-                tt.c[i] && segment_distance_sq(p, mesh.p(tt.v[nx(i)]), mesh.p(tt.v[pv(i)])) <= eps * eps
-            })
-        };
-        let skip = match &loc {
-            Location::Vertex(_) => true,
-            Location::Inside(t) => {
-                !mesh.inside[*t as usize]
-                    || near_constraint(*t, &mesh)
-                    || mesh.tris[*t as usize].v.iter().any(|&w| near(w, &mesh))
+        mesh.insert_interior(p, eps)?;
+    }
+    // then the midpoint of every unconstrained edge the caller rejects, round after round, into
+    // the same triangulation (each round halves the edges still rejected)
+    if let Some(split) = refine {
+        let mut mids: Vec<Point2> = Vec::new();
+        // after the first round only edges at a point the last round added can be new
+        let mut fresh_from = SUPER;
+        for _ in 0..rounds {
+            mids.clear();
+            let first_new = mesh.pts.len() as u32;
+            for (t, tt) in mesh.tris.iter().enumerate() {
+                if !mesh.inside[t] || tt.v.iter().any(|&v| v < SUPER) {
+                    continue;
+                }
+                for i in 0..3 {
+                    let u = tt.n[i];
+                    if tt.c[i] || (u != NONE && (u as usize) < t && mesh.inside[u as usize]) {
+                        continue;
+                    }
+                    let (va, vb) = (tt.v[nx(i)], tt.v[pv(i)]);
+                    if va < fresh_from && vb < fresh_from {
+                        continue;
+                    }
+                    if split(va - SUPER, vb - SUPER, mesh.p(va), mesh.p(vb)) {
+                        mids.push(mesh.p(va).lerp(mesh.p(vb), 0.5));
+                    }
+                }
             }
-            Location::OnEdge(t, i) => {
-                let tt = mesh.tris[*t as usize];
-                let u = tt.n[*i];
-                tt.c[*i]
-                    || !mesh.inside[*t as usize]
-                    || near_constraint(*t, &mesh)
-                    || near_constraint(u, &mesh)
-                    || tt
-                        .v
-                        .iter()
-                        .chain(mesh.tris[u as usize].v.iter())
-                        .any(|&w| near(w, &mesh))
+            if mids.is_empty() {
+                break;
             }
-        };
-        if skip {
-            continue;
+            for &p in &mids {
+                mesh.insert_interior(p, eps)?;
+            }
+            fresh_from = first_new;
         }
-        let v = mesh.pts.len() as u32;
-        mesh.pts.push(p);
-        mesh.vtri.push(0);
-        mesh.insert(v, loc);
     }
 
     let triangles = mesh
