@@ -214,3 +214,33 @@ fn coplanar_boss_bottoms_over_a_pocket() {
     let v = volume(&c);
     assert!(v > volume(&b));
 }
+
+#[test]
+fn check_honours_vertex_tolerance() {
+    let good = block(Point3::ORIGIN, 10.0, 10.0, 10.0, 1);
+    let mut moved = good.clone();
+    moved.vertices[0].point.x += 3e-5;
+    assert!(!check(&moved).is_empty());
+    moved.vertices[0].tol = 4e-5;
+    valid(&moved);
+    // a ball reaching halfway along an edge is no longer a tolerance
+    moved.vertices[0].tol = 6.0;
+    assert!(
+        check(&moved)
+            .iter()
+            .any(|p| matches!(p, forge_topo::Problem::VertexTolerance { .. }))
+    );
+}
+
+#[test]
+fn offsets_just_past_tolerance_are_kept() {
+    // a wall two tolerances thin, and a cut two tolerances past a face: both real
+    for e in [-2e-5, 2e-5] {
+        let base = block(Point3::ORIGIN, 60.0, 40.0, 10.0, 1);
+        let cut = block(Point3::new(50.0 + e, 5.0, -1.0), 10.0, 8.0, 12.0, 2);
+        let r = boolean(&base, &cut, Op::Subtract, 3).unwrap();
+        valid(&r);
+        let want = 60.0 * 40.0 * 10.0 - (10.0 - e.max(0.0)) * 8.0 * 10.0;
+        assert!((volume(&r) - want).abs() < 1e-3, "{e}: {} vs {want}", volume(&r));
+    }
+}

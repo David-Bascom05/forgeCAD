@@ -28,6 +28,12 @@ pub enum Problem {
         vertex: VertexId,
         distance: f64,
     },
+    /// A tolerant vertex whose ball reaches halfway along an edge ending at it: the
+    /// tolerance hides geometry instead of absorbing error.
+    VertexTolerance {
+        vertex: VertexId,
+        tol: f64,
+    },
     EdgeOffFace {
         edge: EdgeId,
         face: FaceId,
@@ -130,13 +136,17 @@ fn check_geometry(body: &Body, out: &mut Vec<Problem>) {
     for e in body.edge_ids() {
         let edge = body.edge(e);
         for (v, t) in [(edge.start, edge.range.lo), (edge.end, edge.range.hi)] {
+            let vtol = body.vertex(v).tol;
             let d = body.vertex(v).point.distance(edge.curve.eval(t));
-            if d > band.max(body.vertex(v).tol) {
+            if d > band.max(vtol) {
                 out.push(Problem::VertexOffEdge {
                     edge: e,
                     vertex: v,
                     distance: d,
                 });
+            }
+            if vtol > band && 2.0 * vtol >= edge_length(body, e) {
+                out.push(Problem::VertexTolerance { vertex: v, tol: vtol });
             }
         }
         let mut faces: Vec<FaceId> = edge.coedges.iter().map(|&c| body.coedge_face(c)).collect();
@@ -171,7 +181,7 @@ fn check_sides(body: &Body, out: &mut Vec<Problem>) {
             .flat_map(|l| l.coedges.iter())
             .map(|&c| edge_length(body, body.coedge(c).edge))
             .fold(f64::INFINITY, f64::min);
-        let step = (0.05 * shortest).clamp(10.0 * tol::LINEAR, 0.1);
+        let step = (0.05 * shortest).min(0.1);
         for ul in &loops {
             for (k, &c) in ul.coedges.iter().enumerate() {
                 let co = body.coedge(c);
@@ -200,7 +210,7 @@ fn check_sides(body: &Body, out: &mut Vec<Problem>) {
                             .distance(d.p)
                     })
                     .fold(f64::INFINITY, f64::min);
-                let step = step.min(0.25 * clearance).max(10.0 * tol::LINEAR);
+                let step = step.min(0.25 * clearance);
                 let probe = surface.project(d.p + inward * step);
                 let probe = unwrap_near(body, f, probe, mid_uv);
                 if !point_in_loops(probe, &loops) {
