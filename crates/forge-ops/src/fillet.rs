@@ -9,9 +9,9 @@
 //! corner the fillet touches is closed by a path of new edges, so a corner
 //! may end in any trim curve.
 
-use forge_geom::blend::{Blend, closed_form, foot, spine_closest};
+use forge_geom::blend::{Blend, closed_form, spine_closest};
 use forge_geom::intersect::{CurveSurface, curve_surface};
-use forge_geom::{Circle, Curve, CurveGeom, Sphere, Surface, SurfaceGeom};
+use forge_geom::{Curve, CurveGeom, Sphere, Surface, SurfaceGeom};
 use forge_math::{Box3, Frame, Interval, Point3, Vec3, dmath, tol};
 use forge_topo::{Body, CoedgeId, EdgeId, FaceId, Name, VertexId};
 use std::collections::{BTreeMap, BTreeSet};
@@ -527,8 +527,7 @@ impl Builder {
                 let i = if hot[1] == hot[0] + 1 { hot[0] } else { 2 };
                 self.joint(v, &ring, i)
             }
-            3 if k == 3 => self.ball(v, &ring),
-            _ => Err(FilletError::Corner { vertex: v }),
+            _ => self.corner(v, &ring),
         }
     }
 
@@ -755,16 +754,73 @@ impl Builder {
         Ok(())
     }
 
-    /// Three blends of one radius and kind meet at `v`: the ball touching all three faces
-    /// closes the corner with a piece of sphere.
-    fn ball(&mut self, v: VertexId, ring: &[Corner]) -> R<()> {
-        let ri: Vec<usize> = ring.iter().map(|k| self.filleted(k.cin).expect("hot")).collect();
+    /// The corner at `v` as the corner solver sees it: faces counter-clockwise
+    /// seen from outside (the ring reversed), the edge between each and the next.
+    /// Also the ring corner of each blend.
+    fn corner_input(&self, v: VertexId, ring: &[Corner]) -> (CornerInput, Vec<usize>) {
+        let k = ring.len();
+        let vp = self.body.vertex(v).point;
+        let mut faces = Vec::with_capacity(k);
+        let mut face_surfaces = Vec::with_capacity(k);
+        let mut edges = Vec::with_capacity(k);
+        let mut blends = Vec::new();
+        let mut blend_ring = Vec::new();
+        for i in 0..k {
+            let j = (k - i) % k;
+            let f = ring[j].face;
+            faces.push(f);
+            face_surfaces.push((self.body.face(f).surface.clone(), self.body.face(f).same_sense));
+            // between faces[i] (ring j) and faces[i + 1] (ring j - 1) lies the edge arriving at ring j
+            let c = ring[j].cin;
+            // its parameter grows away from v unless the coedge arriving here runs with it
+            let away = if self.body.coedge(c).forward { -1.0 } else { 1.0 };
+            match self.filleted(c) {
+                Some(ri) => {
+                    let ro = &self.rolled[ri];
+                    edges.push(CornerEdge::Blend(blends.len()));
+                    blends.push(CornerBlend {
+                        surface: ro.blend.surface.clone(),
+                        same_sense: ro.convex,
+                        radius: ro.blend.radius,
+                        convex: ro.convex,
+                        spine: ro.blend.spine.clone(),
+                        out: if ro.aligned { away } else { -away },
+                        setback: spine_closest(&ro.blend.spine, vp),
+                    });
+                    blend_ring.push(j);
+                }
+                None => edges.push(CornerEdge::Sharp {
+                    curve: self.body.edge(self.body.coedge(c).edge).curve.clone(),
+                    out: away,
+                }),
+            }
+        }
+        (
+            CornerInput {
+                vertex: v,
+                point: vp,
+                blends,
+                faces,
+                face_surfaces,
+                edges,
+            },
+            blend_ring,
+        )
+    }
+
+    /// Where each blend stops (in corner input order) when one ball touches all
+    /// three faces of a corner (equal radii, one kind), and the ball's centre.
+    fn ball_setbacks(&self, v: VertexId, ring: &[Corner]) -> Option<(Vec<f64>, Point3)> {
+        if ring.len() != 3 {
+            return None;
+        }
+        let ri: Vec<usize> = ring.iter().map(|k| self.filleted(k.cin)).collect::<Option<_>>()?;
         let r0 = &self.rolled[ri[0]];
         let (radius, convex) = (r0.blend.radius, r0.convex);
         if ri.iter().any(|&i| {
             (self.rolled[i].blend.radius - radius).abs() > tol::LINEAR || self.rolled[i].convex != convex
         }) {
-            return Err(FilletError::Corner { vertex: v });
+            return None;
         }
         // each face's offset, from the blend arriving at its corner
         let offs: Vec<(Surface, f64)> = ring
@@ -788,72 +844,211 @@ impl Builder {
             })
             .fold(Vec3::ZERO, |a, b| a + b)
             / 3.0;
-        let centre = three_offsets(&offs, Point3::new(guess.x, guess.y, guess.z))
-            .ok_or(FilletError::Corner { vertex: v })?;
+        let centre = three_offsets(&offs, Point3::new(guess.x, guess.y, guess.z))?;
+        // corner input order is ring 0, 2, 1
         let mut ts = Vec::new();
-        for &i in &ri {
-            let s = &self.rolled[i].blend.spine;
+        for j in [0, 2, 1] {
+            let s = &self.rolled[ri[j]].blend.spine;
             let t = spine_closest(s, centre);
             if s.eval(t).distance(centre) > tol::LINEAR {
-                return Err(FilletError::Corner { vertex: v });
+                return None;
             }
             ts.push(t);
         }
-        let sphere_name = self.root.with_str("corner").with_name(self.body.vertex(v).name);
-        // Q[j]: where the ball touches the face of corner j
-        let mut qs = Vec::new();
-        for (j, (s, d)) in offs.iter().enumerate() {
-            let q = foot(s, *d, centre);
-            let name = self.vertex_name(v, &[self.face_name(ring[j].face), sphere_name]);
-            qs.push((q, self.body.add_vertex(q, name)));
+        Some((ts, centre))
+    }
+
+    /// A vertex in `pool` within LINEAR of `p`, or a new one.
+    fn pooled(&mut self, pool: &mut Vec<(Point3, VertexId)>, p: Point3, name: Name) -> VertexId {
+        if let Some(&(_, v)) = pool.iter().find(|q| q.0.distance(p) <= tol::LINEAR) {
+            return v;
         }
-        let mut arcs = Vec::new();
-        for j in 0..3 {
-            // blend j (arriving at corner j) runs between the faces of corners j-1 and j
-            let (a, b) = (qs[(j + 2) % 3], qs[j]);
-            let (wa, wb) = (a.0 - centre, b.0 - centre);
-            let z = wa
-                .cross(wb)
-                .normalize()
-                .ok_or(FilletError::Corner { vertex: v })?;
-            let frame = Frame::from_zx(centre, z, wa).ok_or(FilletError::Corner { vertex: v })?;
-            let l = frame.point_to_local(b.0);
-            let angle = dmath::atan2(l.y, l.x);
-            let ro = &self.rolled[ri[j]];
-            let name = Name::NONE.with_set(vec![ro.name, sphere_name]);
-            let e = self.body.add_edge(
-                Curve::Circle(Circle { frame, radius }),
-                Interval::new(0.0, angle),
-                a.1,
-                b.1,
-                name,
-            );
-            arcs.push(e);
+        let v = self.body.add_vertex(p, name);
+        pool.push((p, v));
+        v
+    }
+
+    /// Several blends meet at `v`, perhaps with sharp edges between them. The
+    /// corner solver says where each blend stops and how each face is trimmed,
+    /// then patches the hole they leave; without one, a single ball closes a
+    /// three-blend corner where it fits.
+    fn corner(&mut self, v: VertexId, ring: &[Corner]) -> R<()> {
+        let k = ring.len();
+        let err = FilletError::Corner { vertex: v };
+        let (input, blend_ring) = self.corner_input(v, ring);
+        let (setbacks, trims, centre) = match crate::corner::setbacks(&input) {
+            Some(s) => {
+                let t = crate::corner::face_curves(&input, &s).map_err(|_| err.clone())?;
+                (s, t, None)
+            }
+            None => {
+                let (s, c) = self.ball_setbacks(v, ring).ok_or(err.clone())?;
+                (s, Vec::new(), Some(c))
+            }
+        };
+        if setbacks.len() != input.blends.len() {
+            return Err(err);
+        }
+        let ccw = |j: usize| (k - j) % k;
+        let vname = self.body.vertex(v).name;
+        let patch_name = self.root.with_str("corner").with_name(vname);
+        let mut pool: Vec<(Point3, VertexId)> = Vec::new();
+        // per ring corner j: where its blend stops (parameter, contact on face j, contact on face j - 1)
+        let mut stops: Vec<Option<(f64, VertexId, VertexId)>> = vec![None; k];
+        for (b, &j) in blend_ring.iter().enumerate() {
+            let ri = self.filleted(ring[j].cin).expect("blend");
             let s_in = self.side(ring[j].cin);
+            let t = setbacks[b];
+            let (pa, pb) = (
+                self.rolled[ri].springs[s_in].eval(t),
+                self.rolled[ri].springs[1 - s_in].eval(t),
+            );
+            let fa = self.face_name(ring[j].face);
+            let fb = self.face_name(ring[(j + k - 1) % k].face);
+            let rn = self.rolled[ri].name;
+            let va = self.pooled(&mut pool, pa, Name::NONE.with_set(vec![fa, rn]).with_name(vname));
+            let vb = self.pooled(&mut pool, pb, Name::NONE.with_set(vec![fb, rn]).with_name(vname));
+            stops[j] = Some((t, va, vb));
+        }
+        // sharp edges are cut where the face trims beside them end
+        let any_blend = self.rolled[self.filleted(ring[blend_ring[0]].cin).expect("blend")].edge;
+        let mut cuts: Vec<Option<VertexId>> = vec![None; k];
+        for j in 0..k {
+            if stops[j].is_some() {
+                continue;
+            }
+            let e = self.body.edge(self.body.coedge(ring[j].cin).edge);
+            let (curve, range) = (e.curve.clone(), e.range);
+            let on_edge = |p: Point3| curve.eval(curve.closest(p, range)).distance(p) <= tol::LINEAR;
+            let m = trims
+                .iter()
+                .filter(|t| t.face == ccw(j) || t.face == ccw((j + k - 1) % k))
+                .flat_map(|t| [t.start, t.end])
+                .find(|&p| on_edge(p) && p.distance(input.point) > tol::LINEAR)
+                .ok_or(err.clone())?;
+            let vm = self.pooled(&mut pool, m, Name::NONE.with_str("cut").with_name(vname));
+            self.trim(ring[j].cin, m, vm, any_blend)?;
+            cuts[j] = Some(vm);
+        }
+        // face corners: from the arriving side's stop to the leaving side's, along the face's trim
+        let mut face_edges: Vec<Option<(EdgeId, bool)>> = vec![None; k];
+        for j in 0..k {
+            let jn = (j + 1) % k;
+            let a = stops[j].map_or(cuts[j], |s| Some(s.1)).ok_or(err.clone())?;
+            let b = stops[jn].map_or(cuts[jn], |s| Some(s.2)).ok_or(err.clone())?;
+            match trims.iter().find(|t| t.face == ccw(j)) {
+                Some(t) => {
+                    let (pa, pb) = (self.body.vertex(a).point, self.body.vertex(b).point);
+                    let (ta, tb) = (t.curve.closest(pa, t.range), t.curve.closest(pb, t.range));
+                    if t.curve.eval(ta).distance(pa) > tol::LINEAR
+                        || t.curve.eval(tb).distance(pb) > tol::LINEAR
+                    {
+                        return Err(err);
+                    }
+                    let name = Name::NONE.with_set(vec![self.face_name(ring[j].face), patch_name]);
+                    let walk = self.edge_between(t.curve.clone(), ta, tb, a, b, name);
+                    self.paths.insert(ring[j].cin, vec![walk]);
+                    face_edges[j] = Some(walk);
+                }
+                None if a == b => {}
+                None => return Err(err),
+            }
+        }
+        // blend sections, walked by the blend from its leaving side to its arriving side
+        let mut sections: Vec<Option<(EdgeId, bool)>> = vec![None; k];
+        for j in 0..k {
+            let Some((t, va, vb)) = stops[j] else { continue };
+            let ri = self.filleted(ring[j].cin).expect("blend");
+            let s_in = self.side(ring[j].cin);
+            let (circle, angle) = self.rolled[ri].blend.section(t).ok_or(err.clone())?;
+            // the section runs from the foot on the blend's side 0
+            let (v0, v1) = if s_in == 0 { (va, vb) } else { (vb, va) };
+            let name = Name::NONE.with_set(vec![self.rolled[ri].name, patch_name]);
+            let e = self
+                .body
+                .add_edge(Curve::Circle(circle), Interval::new(0.0, angle), v0, v1, name);
+            let walk = (e, v0 == vb);
+            sections[j] = Some(walk);
             let mut end = SpringEnd {
                 v: [v; 2],
-                t: [ts[j]; 2],
-                path: vec![(e, true)],
+                t: [t; 2],
+                path: vec![walk],
             };
-            end.v[s_in] = b.1;
-            end.v[1 - s_in] = a.1;
-            self.ends.insert((ro.edge, self.arrives_at_end(ring[j].cin)), end);
+            end.v[s_in] = va;
+            end.v[1 - s_in] = vb;
+            let edge = self.rolled[ri].edge;
+            self.ends.insert((edge, self.arrives_at_end(ring[j].cin)), end);
         }
-        // poles a quarter turn from the patch's middle, which faces the old vertex
-        let mid = (vp - centre)
-            .normalize()
-            .ok_or(FilletError::Corner { vertex: v })?;
-        let sphere = Surface::Sphere(Sphere {
-            frame: Frame::from_zx(centre, mid.any_perpendicular(), mid.get())
-                .ok_or(FilletError::Corner { vertex: v })?,
-            radius,
-        });
-        self.patches.push((
-            sphere,
-            convex,
-            sphere_name,
-            vec![(arcs[0], false), (arcs[2], false), (arcs[1], false)],
-        ));
+        // the hole, walked with the patch on its left: each side the other way to its neighbour
+        let mut hole: Vec<HoleSide> = Vec::new();
+        let mut hole_edges: Vec<(EdgeId, bool)> = Vec::new();
+        for j in std::iter::once(0).chain((1..k).rev()) {
+            let jp = (j + k - 1) % k;
+            let mut sides = Vec::new();
+            if let Some((e, fwd)) = sections[j] {
+                let ro = &self.rolled[self.filleted(ring[j].cin).expect("blend")];
+                let blend = blend_ring.iter().position(|&x| x == j).expect("blend");
+                sides.push((
+                    e,
+                    !fwd,
+                    ro.blend.surface.clone(),
+                    ro.convex,
+                    SideKind::Section { blend },
+                ));
+            }
+            if let Some((e, fwd)) = face_edges[jp] {
+                let face = self.body.face(ring[jp].face);
+                let kind = SideKind::FaceCurve { face: ccw(jp) };
+                sides.push((e, !fwd, face.surface.clone(), face.same_sense, kind));
+            }
+            for (e, fwd, neighbour, neighbour_same_sense, kind) in sides {
+                let edge = self.body.edge(e);
+                let (s, t) = (
+                    self.body.vertex(edge.start).point,
+                    self.body.vertex(edge.end).point,
+                );
+                hole.push(HoleSide {
+                    curve: edge.curve.clone(),
+                    range: edge.range,
+                    forward: fwd,
+                    start: if fwd { s } else { t },
+                    end: if fwd { t } else { s },
+                    neighbour,
+                    neighbour_same_sense,
+                    kind,
+                });
+                hole_edges.push((e, fwd));
+            }
+        }
+        let patch = match centre {
+            None => crate::corner::patch(&input, &hole)
+                .ok_or(err.clone())?
+                .map_err(|_| err.clone())?,
+            Some(c) => ball_patch(&input, &hole, c).ok_or(err.clone())?,
+        };
+        let mut inner = Vec::with_capacity(patch.inner.len());
+        for (n, (curve, range, a, b)) in patch.inner.iter().enumerate() {
+            let name = patch_name.with_str("inner").with(n as u64);
+            let va = self.pooled(&mut pool, *a, name.with_str("start"));
+            let vb = self.pooled(&mut pool, *b, name.with_str("end"));
+            inner.push(self.body.add_edge(curve.clone(), *range, va, vb, name));
+        }
+        for (n, pf) in patch.faces.into_iter().enumerate() {
+            let uses = pf
+                .uses
+                .iter()
+                .map(|u| match *u {
+                    PatchUse::Side(i) => hole_edges[i],
+                    PatchUse::Inner { edge, forward } => (inner[edge], forward),
+                })
+                .collect();
+            let name = if n == 0 {
+                patch_name
+            } else {
+                patch_name.with(n as u64)
+            };
+            self.patches.push((pf.surface, pf.same_sense, name, uses));
+        }
         Ok(())
     }
 
@@ -889,6 +1084,9 @@ impl Builder {
                     return Err(FilletError::Overflow { edge: e });
                 }
                 let name = Name::NONE.with_set(vec![ro.name, self.body.face(ro.faces[side]).name]);
+                if !inside_face(&self.body, ro.faces[side], &curve, Interval::new(t0, t1)) {
+                    return Err(FilletError::Overflow { edge: e });
+                }
                 pair.push(self.body.add_edge(curve, Interval::new(t0, t1), v0, v1, name));
             }
             out.push([pair[0], pair[1]]);
@@ -912,13 +1110,17 @@ impl Builder {
         }
         for &(e, _) in self.trims.keys() {
             let edge = self.body.edge(e);
-            if edge.range.hi <= edge.range.lo
-                || edge
-                    .curve
-                    .eval(edge.range.lo)
-                    .distance(edge.curve.eval(edge.range.hi))
-                    <= tol::LINEAR
+            // cut back from both ends to one point: two blends meet exactly there
+            if self
+                .body
+                .vertex(edge.start)
+                .point
+                .distance(self.body.vertex(edge.end).point)
+                <= tol::LINEAR
             {
+                return Err(FilletError::Tangency { edge: e });
+            }
+            if edge.range.hi <= edge.range.lo {
                 return Err(FilletError::Overflow { edge: e });
             }
         }
@@ -976,6 +1178,27 @@ impl Builder {
             self.body.add_loop(f, &uses);
         }
     }
+}
+
+/// Whether the spring stays on its face (sampled strictly between its ends,
+/// against the face as it was): a ball running off the face overflows.
+fn inside_face(body: &Body, f: FaceId, c: &Curve, range: Interval) -> bool {
+    let loops = forge_topo::uv::face_uv_loops(body, f);
+    let surface = &body.face(f).surface;
+    let d = surface.domain();
+    let shifts = |p: Option<f64>| match p {
+        Some(p) => vec![0.0, -p, p],
+        None => vec![0.0],
+    };
+    let n = 16;
+    (1..n).all(|i| {
+        let uv = surface.project(c.eval(range.lo + range.width() * i as f64 / n as f64));
+        shifts(d.u.period).iter().any(|&du| {
+            shifts(d.v.period).iter().any(|&dv| {
+                forge_topo::uv::point_in_loops(forge_math::Point2::new(uv.x + du, uv.y + dv), &loops)
+            })
+        })
+    })
 }
 
 /// A parameter range of `c` around `t` reaching about `reach` along it.
@@ -1044,6 +1267,141 @@ fn cross_curve(blend: &Blend, s: &Surface, a: Point3, b: Point3) -> Option<(Curv
         }
     }
     None
+}
+
+/// One blend arriving at a corner.
+#[derive(Clone, Debug)]
+pub struct CornerBlend {
+    pub surface: Surface,
+    pub same_sense: bool,
+    pub radius: f64,
+    pub convex: bool,
+    /// The ball-centre curve.
+    pub spine: Curve,
+    /// +1 when the spine parameter grows going away from the vertex, else -1.
+    pub out: f64,
+    /// Where the blend would stop by itself (the section through the vertex).
+    pub setback: f64,
+}
+
+/// What lies between two neighbouring faces of a corner.
+#[derive(Clone, Debug)]
+pub enum CornerEdge {
+    /// A blend (index into `CornerInput::blends`).
+    Blend(usize),
+    /// An edge left sharp; `out` is +1 when its parameter grows away from the vertex.
+    Sharp { curve: Curve, out: f64 },
+}
+
+/// A vertex where several blends meet, as the corner solver sees it.
+#[derive(Clone, Debug)]
+pub struct CornerInput {
+    pub vertex: VertexId,
+    pub point: Point3,
+    pub blends: Vec<CornerBlend>,
+    /// Counter-clockwise seen from outside.
+    pub faces: Vec<FaceId>,
+    /// Parallel to `faces`: (surface, same_sense).
+    pub face_surfaces: Vec<(Surface, bool)>,
+    /// `edges[i]` lies between `faces[i]` and `faces[i + 1]`.
+    pub edges: Vec<CornerEdge>,
+}
+
+/// Where a face ends at a corner: from one neighbour's stop to the next's.
+#[derive(Clone, Debug)]
+pub struct FaceTrim {
+    /// Index into `CornerInput::faces`.
+    pub face: usize,
+    pub curve: Curve,
+    pub range: Interval,
+    pub start: Point3,
+    pub end: Point3,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub enum SideKind {
+    /// A blend's cross-section at its setback.
+    Section { blend: usize },
+    /// A face's trim (index into `CornerInput::faces`).
+    FaceCurve { face: usize },
+    /// A trimmed unfilleted edge.
+    Edge { edge: EdgeId },
+}
+
+/// One side of a corner's hole, in order round it, walked with the patch on
+/// its left seen from outside (the other way to its neighbour).
+#[derive(Clone, Debug)]
+pub struct HoleSide {
+    pub curve: Curve,
+    pub range: Interval,
+    /// The patch walks the curve with its parameter.
+    pub forward: bool,
+    pub start: Point3,
+    pub end: Point3,
+    /// G1: along the side the patch's outward normal is the neighbour's.
+    pub neighbour: Surface,
+    pub neighbour_same_sense: bool,
+    pub kind: SideKind,
+}
+
+/// The direction square to the side, tangent to the neighbour, pointing into the hole at `t`.
+pub fn cross_tangent(side: &HoleSide, t: f64) -> Vec3 {
+    let d = side.curve.deriv(t);
+    let walk = if side.forward { d.d1 } else { -d.d1 };
+    let n = side
+        .neighbour
+        .normal(side.neighbour.project(d.p))
+        .map_or(Vec3::ZERO, |n| {
+            if side.neighbour_same_sense {
+                n.get()
+            } else {
+                -n.get()
+            }
+        });
+    n.cross(walk).normalize().map_or(Vec3::ZERO, |u| u.get())
+}
+
+/// One face of a corner patch.
+#[derive(Clone, Debug)]
+pub struct PatchFace {
+    pub surface: Surface,
+    pub same_sense: bool,
+    pub uses: Vec<PatchUse>,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub enum PatchUse {
+    /// Hole side i, walked as the hole lists it.
+    Side(usize),
+    /// An edge of the patch's own (index into `CornerPatch::inner`).
+    Inner { edge: usize, forward: bool },
+}
+
+/// The faces closing a corner's hole and the edges between them.
+#[derive(Clone, Debug)]
+pub struct CornerPatch {
+    /// (curve, range, start point, end point).
+    pub inner: Vec<(Curve, Interval, Point3, Point3)>,
+    pub faces: Vec<PatchFace>,
+}
+
+/// The ball centred at `centre` closing a hole made only of its own sections.
+fn ball_patch(input: &CornerInput, hole: &[HoleSide], centre: Point3) -> Option<CornerPatch> {
+    let b = input.blends.first()?;
+    // poles a quarter turn from the patch's middle, which faces the old vertex
+    let mid = (input.point - centre).normalize()?;
+    let frame = Frame::from_zx(centre, mid.any_perpendicular(), mid.get())?;
+    Some(CornerPatch {
+        inner: Vec::new(),
+        faces: vec![PatchFace {
+            surface: Surface::Sphere(Sphere {
+                frame,
+                radius: b.radius,
+            }),
+            same_sense: b.convex,
+            uses: (0..hole.len()).map(PatchUse::Side).collect(),
+        }],
+    })
 }
 
 /// The parameter near `t` where curve `a` crosses curve `b` (over `range`),

@@ -2,6 +2,7 @@
 //! history and returns a new solid whose entities are named from that id.
 
 pub mod chamfer;
+pub mod corner;
 pub mod draft;
 pub mod extrude;
 pub mod fillet;

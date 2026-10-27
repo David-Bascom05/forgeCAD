@@ -277,6 +277,64 @@ pub fn cases() -> Vec<(&'static str, Part, Option<f64>)> {
     out
 }
 
+/// Fillets that cannot be built, and the error each must give (by its name).
+pub fn refusals() -> Vec<(&'static str, Part, &'static str)> {
+    let boxed = Part {
+        features: vec![block_at(Point3::ORIGIN, 20.0, 10.0, 8.0, Combine::New)],
+    };
+    let rib = Part {
+        features: vec![block_at(Point3::ORIGIN, 20.0, 4.0, 8.0, Combine::New)],
+    };
+    let rounded = Part {
+        features: vec![Feature::Extrude {
+            profile: Profile {
+                plane: Frame::WORLD,
+                loops: vec![Profile::rounded_rectangle(Point2::ORIGIN, 20.0, 12.0, 3.0, 0)],
+            },
+            distance: 6.0,
+            op: Combine::New,
+        }],
+    };
+    vec![
+        // the ball runs off the bottom of the front face
+        (
+            "radius-past-face",
+            with_fillet(&boxed, &[(Point3::new(10.0, 0.0, 8.0), 9.0)]),
+            "Overflow",
+        ),
+        // two blends meet exactly along the rib's top: the top face shrinks to a line
+        (
+            "rib-full-round",
+            with_fillet(
+                &rib,
+                &[
+                    (Point3::new(10.0, 0.0, 8.0), 2.0),
+                    (Point3::new(10.0, 4.0, 8.0), 2.0),
+                ],
+            ),
+            "Tangency",
+        ),
+        // the seam between a flat side and a rounded corner is already smooth
+        (
+            "smooth-seam",
+            with_fillet(&rounded, &[(Point3::new(17.0, 0.0, 3.0), 1.0)]),
+            "Smooth",
+        ),
+        // two blends and a sharp edge at a corner need a corner patch
+        (
+            "two-blends-sharp-edge",
+            with_fillet(
+                &boxed,
+                &[
+                    (Point3::new(10.0, 0.0, 8.0), 2.0),
+                    (Point3::new(20.0, 5.0, 8.0), 2.0),
+                ],
+            ),
+            "Corner",
+        ),
+    ]
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -311,6 +369,22 @@ mod tests {
             }
         }
         worst
+    }
+
+    #[test]
+    fn refusals_are_clean() {
+        for (name, part, want) in refusals() {
+            match part.regenerate() {
+                Ok(b) => panic!(
+                    "{name}: built ({} problems), want {want}",
+                    forge_topo::check(&b).len()
+                ),
+                Err(e) => {
+                    let got = format!("{e:?}");
+                    assert!(got.contains(want), "{name}: {got}, want {want}");
+                }
+            }
+        }
     }
 
     #[test]
