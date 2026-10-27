@@ -1,7 +1,7 @@
 //! cargo run --release -p forge-model --example hunt -- [seeds per family] [--literals]
 //! Runs every adversarial family (and suite fuzz), shrinks each failure to a
 //! minimal history, dedups by (family, failure kind), and prints a catalogue.
-use forge_model::adversarial::{canonical, families, literal, outcome, shrink};
+use forge_model::adversarial::{canonical, families, handled, literal, outcome, shrink};
 use forge_model::{Part, suite};
 use std::collections::BTreeMap;
 use std::time::Instant;
@@ -33,9 +33,12 @@ fn main() {
             let part = canonical(&g(seed));
             runs += 1;
             let o = outcome(&part);
-            let Some(kind) = o.kind() else {
-                ok += 1;
-                continue;
+            let kind = match o.kind() {
+                Some(k) if !handled(name, &o) => k,
+                _ => {
+                    ok += 1;
+                    continue;
+                }
             };
             let key = (name.clone(), kind);
             match found.get_mut(&key) {
@@ -53,7 +56,7 @@ fn main() {
         }
     }
     println!(
-        "{runs} parts, {ok} regenerate valid, {} distinct (family, failure) pairs, {:.1} s to find",
+        "{runs} parts, {ok} handled (valid, or refused where they touch by design), {} distinct (family, failure) pairs, {:.1} s to find",
         found.len(),
         t0.elapsed().as_secs_f64()
     );

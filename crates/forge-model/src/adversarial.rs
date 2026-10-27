@@ -661,6 +661,10 @@ pub enum Outcome {
     Panic {
         message: String,
     },
+    /// Refused with a clear error: the solids touch exactly, leaving zero-thickness material.
+    Rejected {
+        feature: usize,
+    },
 }
 
 impl Outcome {
@@ -670,6 +674,7 @@ impl Outcome {
             Outcome::Error { kind, .. } => Some(format!("error: {kind}")),
             Outcome::Invalid { kind } => Some(format!("invalid: {kind}")),
             Outcome::Panic { message } => Some(format!("panic: {message}")),
+            Outcome::Rejected { .. } => Some("rejected: zero thickness".to_string()),
         }
     }
 }
@@ -681,6 +686,22 @@ fn error_kind(e: &crate::RegenError) -> (String, usize) {
         Revolve { feature, error } => (format!("Revolve({error:?})"), *feature),
         Boolean { feature, error } => (format!("Boolean({error:?})"), *feature),
         NothingToCombine { feature } => ("NothingToCombine".to_string(), *feature),
+    }
+}
+
+/// Families whose solids touch exactly by design (tangent rods and balls, grids sharing walls
+/// and corners): refusing them with a zero-thickness error is correct handling.
+pub fn touches_by_design(family: &str) -> bool {
+    matches!(family, "tangent" | "ball_poles" | "exact_patterns")
+}
+
+/// Whether a family's part was handled correctly: a valid solid, or a zero-thickness refusal
+/// where the family touches by design.
+pub fn handled(family: &str, o: &Outcome) -> bool {
+    match o {
+        Outcome::Ok => true,
+        Outcome::Rejected { .. } => touches_by_design(family),
+        _ => false,
     }
 }
 
@@ -698,6 +719,10 @@ pub fn outcome(part: &Part) -> Outcome {
                 }
             }
         }
+        Err(crate::RegenError::Boolean {
+            feature,
+            error: forge_bool::BoolError::ZeroThickness { .. },
+        }) => Outcome::Rejected { feature },
         Err(e) => {
             let (kind, feature) = error_kind(&e);
             Outcome::Error { kind, feature }

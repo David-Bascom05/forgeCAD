@@ -244,3 +244,33 @@ fn offsets_just_past_tolerance_are_kept() {
         assert!((volume(&r) - want).abs() < 1e-3, "{e}: {} vs {want}", volume(&r));
     }
 }
+
+fn zero_thickness(r: Result<Body, forge_bool::BoolError>) -> bool {
+    matches!(r, Err(forge_bool::BoolError::ZeroThickness { .. }))
+}
+
+#[test]
+fn exact_touches_are_refused() {
+    let plate = block(Point3::ORIGIN, 40.0, 30.0, 10.0, 1);
+    // a ball resting on the top face, added: material meets at one point
+    let resting = ball(Point3::new(20.0, 15.0, 13.0), 3.0, 2);
+    assert!(zero_thickness(boolean(&plate, &resting, Op::Union, 3)));
+    assert!(zero_thickness(forge_bool::nary(
+        &[&plate, &resting],
+        &[Op::Union],
+        2
+    )));
+    // the same ball cut away touches only air: nothing changes
+    let r = boolean(&plate, &resting, Op::Subtract, 3).unwrap();
+    valid(&r);
+    // a ball cut from inside, touching the top: a skin of zero thickness
+    let inside = ball(Point3::new(20.0, 15.0, 7.0), 3.0, 2);
+    assert!(zero_thickness(boolean(&plate, &inside, Op::Subtract, 3)));
+    // two holes tangent to each other: a wall of zero thickness along a line
+    let first = rod(Point3::new(10.0, 15.0, -1.0), 3.0, 12.0, 2);
+    let holed = boolean(&plate, &first, Op::Subtract, 3).unwrap();
+    let second = rod(Point3::new(16.0, 15.0, -1.0), 3.0, 12.0, 4);
+    assert!(zero_thickness(boolean(&holed, &second, Op::Subtract, 5)));
+    let r = forge_bool::nary(&[&plate, &first, &second], &[Op::Subtract, Op::Subtract], 2);
+    assert!(zero_thickness(r.clone()), "{:?}", r.map(|b| check(&b)));
+}

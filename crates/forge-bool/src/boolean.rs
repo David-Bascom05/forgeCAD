@@ -33,6 +33,25 @@ pub enum BoolError {
     Unsupported(&'static str),
     /// Something that should not happen with valid inputs.
     Internal(&'static str),
+    /// The result would have material of zero thickness at `at`: the solids touch there
+    /// exactly (a ball resting on a face, rods tangent along a line, blocks meeting at an
+    /// edge) and both sides of the touch are kept, so the result is not a manifold solid.
+    ZeroThickness { at: Point3 },
+}
+
+impl std::fmt::Display for BoolError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            BoolError::Unsupported(w) => write!(f, "not supported yet: {w}"),
+            BoolError::Internal(w) => write!(f, "internal error: {w}"),
+            BoolError::ZeroThickness { at } => write!(
+                f,
+                "the solids touch exactly at ({:.6}, {:.6}, {:.6}), leaving material of zero \
+                 thickness there; move one apart or overlap them",
+                at.x, at.y, at.z
+            ),
+        }
+    }
 }
 
 pub(crate) type R<T> = Result<T, BoolError>;
@@ -298,6 +317,7 @@ fn plan(a: &Body, b: &Body, op: Op, feature: u64) -> R<Plan> {
     let mut segs: Vec<Seg> = Vec::new();
     let mut coplanar: Vec<(FaceId, FaceId)> = Vec::new();
     let mut imprints: Vec<Imprint> = Vec::new();
+    let mut touching: Vec<Touch> = Vec::new();
     for fa in a.face_ids() {
         for fb in b.face_ids() {
             if !index[0].boxes[fa.index()].overlaps(&index[1].boxes[fb.index()]) {
@@ -313,6 +333,7 @@ fn plan(a: &Body, b: &Body, op: Op, feature: u64) -> R<Plan> {
                 };
                 eprintln!("  pair {fa:?} {fb:?}: {what}");
             }
+            touching.extend(touches(&found, [&index[0], &index[1]], [0, 1], [fa, fb], region));
             let curves = match found {
                 SurfaceSurface::Empty | SurfaceSurface::Points(_) => continue,
                 SurfaceSurface::Coincident => {
@@ -345,6 +366,43 @@ fn plan(a: &Body, b: &Body, op: Op, feature: u64) -> R<Plan> {
                     &mut imprints,
                 )?;
             }
+        }
+    }
+
+    // where the solids touch, both sides kept would be material meeting itself
+    for t in &touching {
+        let near = |side: Side| {
+            let (body, f) = (bodies[side], t.faces[side]);
+            local_class(body, &index[side], f, t.at, t.dir, |q| {
+                match index[1 - side].classify(q) {
+                    Where::On => None,
+                    w => Some(w),
+                }
+            })
+        };
+        if debug_on() {
+            eprintln!(
+                "touch {:?} at {:?} dir {:?}: {:?} {:?}",
+                t.faces,
+                t.at,
+                t.dir,
+                near(0),
+                near(1)
+            );
+        }
+        let (Some(ca), Some(cb)) = (near(0), near(1)) else {
+            continue;
+        };
+        let kept_a = matches!(
+            (op, ca),
+            (Op::Union | Op::Subtract, Where::Outside) | (Op::Intersect, Where::Inside)
+        );
+        let kept_b = matches!(
+            (op, cb),
+            (Op::Union, Where::Outside) | (Op::Subtract | Op::Intersect, Where::Inside)
+        );
+        if kept_a && kept_b {
+            return Err(BoolError::ZeroThickness { at: t.at });
         }
     }
 
@@ -1016,6 +1074,140 @@ pub(crate) fn grown_tols(
         }
     }
     grown
+}
+
+/// Two faces touching without crossing: a point inside both where their surfaces are tangent,
+/// and the touching curve's direction there (None for an isolated point).
+pub(crate) struct Touch {
+    pub(crate) sides: [Side; 2],
+    pub(crate) faces: [FaceId; 2],
+    pub(crate) at: Point3,
+    pub(crate) dir: Option<Vec3>,
+}
+
+/// Where faces `faces` (of bodies `sides`) touch: an isolated tangent point or points along a
+/// tangent curve, lying in both faces (a ball's pole is on its face's boundary).
+pub(crate) fn touches(
+    found: &SurfaceSurface,
+    index: [&Index; 2],
+    sides: [Side; 2],
+    faces: [FaceId; 2],
+    region: forge_math::Box3,
+) -> Vec<Touch> {
+    let inside = |p: Point3| (0..2).all(|k| index[k].point_in_face(faces[k], p) != Where::Outside);
+    let mut out = Vec::new();
+    match found {
+        SurfaceSurface::Points(ps) => {
+            for &at in ps.iter().filter(|&&p| region.contains(p) && inside(p)) {
+                out.push(Touch {
+                    sides,
+                    faces,
+                    at,
+                    dir: None,
+                });
+            }
+        }
+        SurfaceSurface::Curves(cs) => {
+            for (c, contact) in cs {
+                if *contact != Contact::Touching {
+                    continue;
+                }
+                let d = c.domain();
+                let range = match (c, d.period) {
+                    (_, Some(per)) => Interval::new(d.lo, d.lo + per),
+                    (Curve::Line(l), _) => match line_box(l, &region) {
+                        Some(r) => r,
+                        None => continue,
+                    },
+                    _ if d.lo.is_finite() && d.hi.is_finite() => Interval::new(d.lo, d.hi),
+                    _ => continue,
+                };
+                // points along the curve: other solids decide what is kept at each
+                for k in 0..9 {
+                    let t = range.lo + range.width() * (k as f64 + 0.5) / 9.0;
+                    let dv = c.deriv(t);
+                    if inside(dv.p) {
+                        out.push(Touch {
+                            sides,
+                            faces,
+                            at: dv.p,
+                            dir: Some(dv.d1),
+                        });
+                    }
+                }
+            }
+        }
+        _ => {}
+    }
+    out
+}
+
+/// How face `f` lies around a point `p` of it where it touches another solid: `class` of
+/// points of the face a growing step away from `p` across the touch, the first step at which
+/// every direction landing on the face gives an answer (None from `class` is too close to
+/// call). None if the directions disagree (the face crosses there) or no step decides.
+pub(crate) fn local_class<T: PartialEq>(
+    body: &Body,
+    own: &Index,
+    f: FaceId,
+    p: Point3,
+    dir: Option<Vec3>,
+    class: impl Fn(Point3) -> Option<T>,
+) -> Option<T> {
+    let face = body.face(f);
+    let n = body.face_normal(f, face.surface.project(p))?;
+    let dirs: Vec<Vec3> = match dir {
+        Some(d) => {
+            let w = n.cross(d).normalize()?.get();
+            vec![w, -w]
+        }
+        None => {
+            // turned off the frame's axes, so no probe runs along a seam to a pole
+            let fr = Frame::from_z(p, n);
+            let (sn, cs) = dmath::sin_cos(0.3719);
+            let x = fr.x().get() * cs + fr.y().get() * sn;
+            let y = n.cross(x);
+            vec![x, -x, y, -y]
+        }
+    };
+    let mut step = 1e-3;
+    while step < 0.3 {
+        let mut got: Option<T> = None;
+        let mut undecided = false;
+        for &w in &dirs {
+            let q = face.surface.eval(face.surface.project(p + w * step));
+            // the face, or one beside it on the same surface (a ball's other half)
+            let on_face = own.point_in_face(f, q) == Where::Inside
+                || body.face_ids().any(|g| {
+                    g != f
+                        && own.boxes[g.index()].contains(q)
+                        && body.face(g).surface == face.surface
+                        && body.face(g).same_sense == face.same_sense
+                        && own.point_in_face(g, q) == Where::Inside
+                });
+            // at a touch on the face's boundary only the directions into it say how it lies
+            if !on_face {
+                continue;
+            }
+            match class(q) {
+                None => {
+                    undecided = true;
+                    break;
+                }
+                Some(c) => {
+                    if got.as_ref().is_some_and(|g| *g != c) {
+                        return None;
+                    }
+                    got = Some(c);
+                }
+            }
+        }
+        if !undecided {
+            return got;
+        }
+        step *= 4.0;
+    }
+    None
 }
 
 /// Cuts `curve` (on both faces' surfaces) where it crosses either face's

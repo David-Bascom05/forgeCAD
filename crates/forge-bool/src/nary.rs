@@ -14,8 +14,8 @@
 //! a part grown to thousands of faces.
 
 use crate::boolean::{
-    BoolError, Cut, Imprint, Op, Piece, R, Seg, Side, VKey, Walk, crossings_near, edge_split, grown_tols,
-    imprint, on_edge, overlap, settle, split_face, trim,
+    BoolError, Cut, Imprint, Op, Piece, R, Seg, Side, Touch, VKey, Walk, crossings_near, edge_split,
+    grown_tols, imprint, local_class, on_edge, overlap, settle, split_face, touches, trim,
 };
 use crate::classify::{Index, Where};
 use crate::shape::{Member, Shape};
@@ -113,6 +113,7 @@ struct PairOut {
     segs: Vec<Seg>,
     imprints: Vec<Imprint>,
     coplanar: Vec<[(Side, FaceId); 2]>,
+    touching: Vec<Touch>,
 }
 
 /// A region of a tool face, before classification.
@@ -297,7 +298,10 @@ pub fn nary_with(
                 }
                 let (sa, sb) = (&a.face(fa).surface, &b.face(fb).surface);
                 let region = overlap(&ia.boxes[fa.index()], &ib.boxes[fb.index()]).grow(tol::LINEAR);
-                let curves = match ssi::surfaces_in(sa, sb, region) {
+                let found = ssi::surfaces_in(sa, sb, region);
+                out.touching
+                    .extend(touches(&found, [ia, ib], [i, j], [fa, fb], region));
+                let curves = match found {
                     SurfaceSurface::Empty | SurfaceSurface::Points(_) => continue,
                     SurfaceSurface::Coincident => {
                         out.coplanar.push([(i, fa), (j, fb)]);
@@ -357,6 +361,7 @@ pub fn nary_with(
     let mut segs: Vec<Seg> = Vec::new();
     let mut imprints: Vec<Imprint> = Vec::new();
     let mut coplanar: Vec<[(Side, FaceId); 2]> = Vec::new();
+    let mut touching: Vec<Touch> = Vec::new();
     for out in outs {
         let out = out?;
         let base = cuts.len();
@@ -367,6 +372,47 @@ pub fn nary_with(
         }));
         imprints.extend(out.imprints);
         coplanar.extend(out.coplanar);
+        touching.extend(out.touching);
+    }
+    // where two tools touch, both faces kept would be material meeting itself
+    let any_intersect = ops.contains(&Op::Intersect);
+    let kept_at = |side: Side, q: Point3| -> Option<bool> {
+        let mut inner = vec![false; n];
+        inner[side] = true;
+        for k in 0..n {
+            if k == side || !index[k].bbox.contains(q) {
+                continue;
+            }
+            match index[k].classify(q) {
+                Where::Inside => inner[k] = true,
+                Where::Outside => {}
+                Where::On => return None,
+            }
+        }
+        let mut outer = inner.clone();
+        outer[side] = false;
+        Some(in_result(ops, &inner, any_intersect) != in_result(ops, &outer, any_intersect))
+    };
+    for t in &touching {
+        if debug {
+            let got: Vec<_> = (0..2)
+                .map(|k| {
+                    let (sd, f) = (t.sides[k], t.faces[k]);
+                    local_class(tools[sd], &index[sd], f, t.at, t.dir, |q| kept_at(sd, q))
+                })
+                .collect();
+            eprintln!(
+                "nary: touch {:?} {:?} at {:?}: kept {got:?}",
+                t.sides, t.faces, t.at
+            );
+        }
+        let both = (0..2).all(|k| {
+            let (sd, f) = (t.sides[k], t.faces[k]);
+            local_class(tools[sd], &index[sd], f, t.at, t.dir, |q| kept_at(sd, q)) == Some(true)
+        });
+        if both {
+            return Err(BoolError::ZeroThickness { at: t.at });
+        }
     }
     lap(&mut clock, 0);
 
@@ -784,7 +830,6 @@ pub fn nary_with(
 
     // 5: a point of each region, just outside and just inside its tool: kept where the
     // expression differs between them
-    let any_intersect = ops.contains(&Op::Intersect);
     let mut partners: HashMap<(Side, FaceId), Vec<(Side, FaceId)>> = HashMap::new();
     for &[x, y] in &coplanar {
         partners.entry(x).or_default().push(y);

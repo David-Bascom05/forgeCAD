@@ -13,6 +13,23 @@ fn regenerates_valid(part: Part) {
     assert!(problems.is_empty(), "{problems:?}");
 }
 
+/// The solids touch exactly: both regens refuse with a zero-thickness error.
+fn refused_zero_thickness(part: Part) {
+    for r in [part.regenerate(), part.regenerate_nary(2)] {
+        assert!(
+            matches!(
+                r,
+                Err(forge_model::RegenError::Boolean {
+                    error: forge_bool::BoolError::ZeroThickness { .. },
+                    ..
+                })
+            ),
+            "{:?}",
+            r.map(|b| b.faces.len())
+        );
+    }
+}
+
 #[test]
 #[allow(
     clippy::approx_constant,
@@ -2632,7 +2649,8 @@ fn slivers_invalid_edgeuses() {
     clippy::unreadable_literal
 )]
 fn tangent_intersection_curve_runs_along_an_edge() {
-    regenerates_valid(Part {
+    // a hole tangent to the side face from inside: a wall of zero thickness
+    refused_zero_thickness(Part {
         features: vec![
             Feature::Extrude {
                 profile: Profile {
@@ -2701,7 +2719,8 @@ fn tangent_intersection_curve_runs_along_an_edge() {
     clippy::unreadable_literal
 )]
 fn tangent_invalid_edgeuses() {
-    regenerates_valid(Part {
+    // a rod added tangent to the side face from outside: solids meeting along a line
+    refused_zero_thickness(Part {
         features: vec![
             Feature::Extrude {
                 profile: Profile {
