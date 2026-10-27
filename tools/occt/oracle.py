@@ -2,11 +2,19 @@
 """OpenCascade differential oracle (test only, never a dependency of the workspace).
 
 Rebuilds each part exported by `cargo run --release -p forge-model --example oracle` in OCCT
-(sequential BRepAlgoAPI booleans), measures volume, area, topology counts, BRepCheck validity
-and build time, and diffs them against ForgeCAD's results.
+(sequential BRepAlgoAPI booleans), measures volume, area, area per distinct surface, topology
+counts, BRepCheck validity and build time, and diffs them against ForgeCAD's results.
+
+Ours are measured on a mesh of chord c (the exporter's CHORD, default 0.002), so a difference is
+a disagreement only beyond what the mesh can explain: volume beyond c x area; total area and each
+surface's area beyond 3c x (meshed boundary length + area / smallest radius).
 
   tools/occt/oracle.py parts.json [--jobs 3] [--reps 1] [--timeout 120] [--out results.json]
-                                  [--parallel] [--fuzzy 0] [--only NAME] [--show N]
+                                  [--parallel] [--fuzzy 0] [--only NAME] [--show N] [--surfaces]
+                                  [--gate [--known FILE]] [--save-known FILE]
+
+--gate exits 1 if any part (not listed in --known) fails on our side where OCCT succeeds, or
+disagrees on volume, area or a surface's area.
 
 Needs the OCP bindings (tools/occt/setup.sh puts them in a venv).
 """
@@ -17,6 +25,7 @@ import multiprocessing as mp
 import sys
 import time
 
+from OCP.BRepAdaptor import BRepAdaptor_Surface
 from OCP.BRepAlgoAPI import BRepAlgoAPI_Common, BRepAlgoAPI_Cut, BRepAlgoAPI_Fuse
 from OCP.BRepBuilderAPI import BRepBuilderAPI_MakeEdge, BRepBuilderAPI_MakeFace, BRepBuilderAPI_MakeWire
 from OCP.BRepCheck import BRepCheck_Analyzer
@@ -24,12 +33,14 @@ from OCP.BRepGProp import BRepGProp
 from OCP.BRepPrimAPI import BRepPrimAPI_MakePrism, BRepPrimAPI_MakeRevol, BRepPrimAPI_MakeSphere
 from OCP.GC import GC_MakeArcOfCircle
 from OCP.GProp import GProp_GProps
+from OCP.GeomAbs import GeomAbs_Cone, GeomAbs_Cylinder, GeomAbs_Plane, GeomAbs_Sphere, GeomAbs_Torus
 from OCP.ShapeFix import ShapeFix_Face
 from OCP.ShapeUpgrade import ShapeUpgrade_UnifySameDomain
 from OCP.TopAbs import TopAbs_EDGE, TopAbs_FACE, TopAbs_SHELL, TopAbs_SOLID, TopAbs_VERTEX
 from OCP.TopExp import TopExp
 from OCP.OCP.collections import IndexedMap_TopoDS_Shape_TopTools_ShapeMapHasher as ShapeMap
 from OCP.OCP.collections import List_TopoDS_Shape as ShapeList
+from OCP.TopoDS import TopoDS
 from OCP.gp import gp_Ax1, gp_Ax2, gp_Ax3, gp_Circ, gp_Dir, gp_Pln, gp_Pnt, gp_Vec
 
 
@@ -122,6 +133,44 @@ def count(shape, kind):
     return m.Extent()
 
 
+def xyz(p):
+    return [p.X(), p.Y(), p.Z()]
+
+
+def face_areas(shape):
+    """Each face's surface (in the exporter's terms) and area."""
+    m = ShapeMap()
+    TopExp.MapShapes_s(shape, TopAbs_FACE, m)
+    out = []
+    for i in range(1, m.Extent() + 1):
+        f = TopoDS.Face(m.FindKey(i))
+        g = GProp_GProps()
+        BRepGProp.SurfaceProperties_s(f, g)
+        ad = BRepAdaptor_Surface(f)
+        t = ad.GetType()
+        if t == GeomAbs_Plane:
+            s = ad.Plane()
+            e = {"s": "plane", "p": xyz(s.Location()), "n": xyz(s.Axis().Direction())}
+        elif t == GeomAbs_Cylinder:
+            s = ad.Cylinder()
+            e = {"s": "cylinder", "p": xyz(s.Location()), "n": xyz(s.Axis().Direction()), "r": s.Radius()}
+        elif t == GeomAbs_Cone:
+            s = ad.Cone()
+            e = {"s": "cone", "p": xyz(s.Apex()), "n": xyz(s.Axis().Direction()), "t": math.tan(s.SemiAngle())}
+        elif t == GeomAbs_Sphere:
+            s = ad.Sphere()
+            e = {"s": "sphere", "p": xyz(s.Location()), "r": s.Radius()}
+        elif t == GeomAbs_Torus:
+            s = ad.Torus()
+            e = {"s": "torus", "p": xyz(s.Location()), "n": xyz(s.Axis().Direction()),
+                 "R": s.MajorRadius(), "r": s.MinorRadius()}
+        else:
+            e = {"s": "other"}
+        e["a"] = g.Mass()
+        out.append(e)
+    return out
+
+
 def measure(shape):
     g = GProp_GProps()
     BRepGProp.VolumeProperties_s(shape, g)
@@ -140,6 +189,7 @@ def measure(shape):
         "shells": count(shape, TopAbs_SHELL),
         "solids": count(shape, TopAbs_SOLID),
         "faces_unified": count(unify.Shape(), TopAbs_FACE),
+        "face_areas": face_areas(shape),
     }
 
 
@@ -176,24 +226,104 @@ def occt(part, reps, parallel, fuzzy, timeout):
     return r
 
 
-def rel(a, b):
-    return abs(a - b) / max(abs(b), 1e-9)
+def key(e):
+    """A surface's kind and canonical defining numbers: unsigned axes and normals, points
+    reduced to the axis or plane, so the same surface keys alike in both kernels."""
+    s = e["s"]
+
+    def unsigned(n):
+        k = next((i for i in range(3) if abs(n[i]) > 1e-9), 0)
+        return [-c for c in n] if n[k] < 0 else list(n)
+
+    def on_axis(p, n):
+        d = sum(p[i] * n[i] for i in range(3))
+        return [p[i] - n[i] * d for i in range(3)]
+
+    if s == "plane":
+        n = unsigned(e["n"])
+        return s, n + [sum(e["p"][i] * n[i] for i in range(3))]
+    if s == "cylinder":
+        n = unsigned(e["n"])
+        return s, n + on_axis(e["p"], n) + [e["r"]]
+    if s == "cone":
+        n = e["n"] if e["t"] > 0 else [-c for c in e["n"]]
+        return s, e["p"] + n + [abs(e["t"])]
+    if s == "sphere":
+        return s, e["p"] + [e["r"]]
+    if s == "torus":
+        n = unsigned(e["n"])
+        return s, n + e["p"] + [e["R"], e["r"]]
+    return s, []
 
 
-def verdict(ours, ref, vtol, vabs=0.0):
-    """How a ForgeCAD regen compares with OCCT."""
+def same(a, b):
+    return len(a) == len(b) and all(abs(x - y) <= 1e-6 * max(1.0, abs(x)) for x, y in zip(a, b))
+
+
+def curvature(e):
+    """A bound on 1 / the face's smallest radius of curvature (how far chords sag)."""
+    s = e["s"]
+    if s in ("cylinder", "sphere"):
+        return 1.0 / e["r"]
+    if s == "torus":
+        return 1.0 / min(e["r"], e["R"])
+    if s == "cone":
+        return 4.0 / max(math.sqrt(e["a"]), 1e-3)
+    return 0.0
+
+
+def surfaces(ours, ref):
+    """Area per distinct surface in both kernels, and how far each pair may differ given our
+    mesh's chord: sag on curved faces plus the boundary's chords."""
+    chord = ours.get("chord", 0.002)
+    groups = []
+    for side, faces in ((0, ours.get("face_areas", [])), (1, ref.get("face_areas", []))):
+        for e in faces:
+            k, v = key(e)
+            g = next((g for g in groups if g["s"] == k and same(g["k"], v)), None)
+            if g is None:
+                g = {"s": k, "k": v, "a": [0.0, 0.0], "tol": 0.0}
+                groups.append(g)
+            g["a"][side] += e["a"]
+            if side == 0:
+                g["tol"] += 3.0 * chord * (e.get("l", 0.0) + e["a"] * curvature(e))
+    for g in groups:
+        g["tol"] = max(g["tol"], 1e-6 * max(g["a"]))
+    return groups
+
+
+def compare(ours, ref):
+    """How a ForgeCAD regen compares with OCCT, and the worst ratio of a difference to its bound."""
     s = ours["status"]
     if ref["status"] != "ok":
-        return "occt-" + ref["status"] if s == "ok" else "both-fail"
+        return ("occt-" + ref["status"] if s == "ok" else "both-fail"), 0.0
     if s != "ok":
-        return "ours-" + s
+        # an exact zero-thickness touch rejected clearly, where OCCT's answer is empty
+        if "ZeroThickness" in ours.get("error", "") and abs(ref["volume"]) < 1e-6 * max(ref["area"], 1.0):
+            return "reject-ok", 0.0
+        return "ours-" + s, 0.0
     if "volume" not in ours:
-        return "ours-nomesh"
-    if abs(ours["volume"] - ref["volume"]) > (vabs or vtol * abs(ref["volume"])):
-        return "volume"
+        return "ours-nomesh", 0.0
+    chord = ours.get("chord", 0.002)
+    vtol = max(chord * ref["area"], 1e-9)
+    groups = surfaces(ours, ref)
+    atol = max(sum(g["tol"] for g in groups), 1e-9)
+    rv = abs(ours["volume"] - ref["volume"]) / vtol
+    ra = abs(ours["area"] - ref["area"]) / atol
+    rs = max([abs(g["a"][0] - g["a"][1]) / g["tol"] for g in groups if g["s"] != "other"] or [0.0])
+    worst = max(rv, ra, rs)
+    if rv > 1:
+        return "volume", worst
+    if ra > 1:
+        return "area", worst
+    if rs > 1:
+        return "surface", worst
     if ours["shells"] != ref["shells"]:
-        return "shells"
-    return "agree"
+        return "shells", worst
+    return "agree", worst
+
+
+GOOD = ("agree", "reject-ok", "occt-invalid", "occt-error", "occt-timeout", "occt-crash")
 
 
 def main():
@@ -204,10 +334,13 @@ def main():
     ap.add_argument("--timeout", type=float, default=120)
     ap.add_argument("--parallel", action="store_true", help="OCCT's own threaded booleans")
     ap.add_argument("--fuzzy", type=float, default=0.0)
-    ap.add_argument("--vtol", type=float, default=2e-3, help="relative volume tolerance (ours is from a mesh)")
     ap.add_argument("--only")
     ap.add_argument("--out")
     ap.add_argument("--show", type=int, default=1000, help="rows to print")
+    ap.add_argument("--surfaces", action="store_true", help="print the mismatched surfaces of each part")
+    ap.add_argument("--gate", action="store_true", help="exit 1 on any disagreement or failure of ours")
+    ap.add_argument("--known", help="file of part names whose failures the gate tolerates")
+    ap.add_argument("--save-known", help="write the failing part names to this file")
     a = ap.parse_args()
     data = json.load(open(a.parts))
     parts = [p for p in data["parts"] if not a.only or p["name"] == a.only]
@@ -215,40 +348,57 @@ def main():
 
     with ThreadPoolExecutor(a.jobs) as ex:
         refs = list(ex.map(lambda p: occt(p, a.reps, a.parallel, a.fuzzy, a.timeout), parts))
-    hdr = f"{'part':<26} {'feat':>4} {'occt ms':>9} {'seq ms':>8} {'nary1':>8} {'naryN':>8}  {'occt':<8} {'seq':<10} {'nary':<10} {'dV seq':>8} {'dV nary':>8} {'dA nary':>8}  faces o/u/s/n"
-    print(hdr)
-    tally, times, out = {}, {"occt": 0.0, "seq": 0.0, "nary1": 0.0, "nary": 0.0}, []
+    print(f"{'part':<44} {'feat':>4} {'occt ms':>9} {'seq ms':>8} {'nary1':>8} {'naryN':>8}  {'occt':<8} "
+          f"{'seq':<10} {'nary':<10} {'worst':>6} {'dV seq':>8} {'dA seq':>8}  faces o/u/s/n")
+    tally, times, out, failing = {}, {"occt": 0.0, "seq": 0.0, "nary1": 0.0, "nary": 0.0}, [], []
     for i, (p, ref) in enumerate(zip(parts, refs)):
         f = p["forge"]
-        vs, vn = verdict(f["seq"], ref, a.vtol), verdict(f["nary"], ref, a.vtol)
+        (vs, ws), (vn, wn) = compare(f["seq"], ref), compare(f["nary"], ref)
         for path, v in (("seq", vs), ("nary", vn)):
             tally.setdefault(path, {}).setdefault(v, []).append(p["name"])
-        both = ref["status"] == "ok" and f["seq"]["status"] == "ok" and f["nary"]["status"] == "ok"
-        if both:
+        if vs not in GOOD or vn not in GOOD:
+            failing.append(p["name"])
+        if ref["status"] == "ok" and f["seq"]["status"] == "ok" and f["nary"]["status"] == "ok":
             for k in ("seq", "nary1", "nary"):
                 times[k] += f[k]["ms"]
             times["occt"] += ref["ms"]
 
-        def dv(o, key="volume"):
-            return f"{(o[key] - ref[key]) / max(abs(ref[key]), 1e-9):+.1e}" if key in o and key in ref else "-"
+        def d(o, k):
+            return f"{(o[k] - ref[k]) / max(abs(ref[k]), 1e-9):+.1e}" if k in o and k in ref else "-"
 
         if i < a.show:
             faces = "/".join(str(x) for x in (ref.get("faces", "-"), ref.get("faces_unified", "-"),
                                               f["seq"].get("faces", "-"), f["nary"].get("faces", "-")))
-            print(f"{p['name']:<26} {len(p['features']):>4} {ref.get('ms', math.nan):>9.1f} {f['seq']['ms']:>8.1f} "
-                  f"{f['nary1']['ms']:>8.1f} {f['nary']['ms']:>8.1f}  {ref['status']:<8} {vs:<10} {vn:<10} "
-                  f"{dv(f['seq']):>8} {dv(f['nary']):>8} {dv(f['nary'], 'area'):>8}  {faces}")
+            print(f"{p['name']:<44} {len(p['features']):>4} {ref.get('ms', math.nan):>9.1f} "
+                  f"{f['seq']['ms']:>8.1f} {f['nary1']['ms']:>8.1f} {f['nary']['ms']:>8.1f}  {ref['status']:<8} "
+                  f"{vs:<10} {vn:<10} {max(ws, wn):>6.2f} {d(f['seq'], 'volume'):>8} {d(f['seq'], 'area'):>8}  {faces}")
+            if a.surfaces and ref["status"] == "ok":
+                for path in ("seq", "nary"):
+                    if f[path]["status"] != "ok":
+                        continue
+                    for g in surfaces(f[path], ref):
+                        if abs(g["a"][0] - g["a"][1]) > g["tol"]:
+                            print(f"      {path} {g['s']:<8} {[round(x, 4) for x in g['k']]}  ours {g['a'][0]:.4f} "
+                                  f"occt {g['a'][1]:.4f}  (bound {g['tol']:.2g})")
         out.append({"name": p["name"], "occt": ref, "forge": f, "verdict": {"seq": vs, "nary": vn}})
     print(f"\n{len(parts)} parts. Time where all three succeed (ms, sum): OCCT {times['occt']:.0f}, "
           f"seq {times['seq']:.0f}, nary1 {times['nary1']:.0f}, nary x{data.get('threads')} {times['nary']:.0f}")
     for path in ("seq", "nary"):
         print(f"{path}: " + ", ".join(f"{k} {len(v)}" for k, v in sorted(tally.get(path, {}).items())))
         for k, v in sorted(tally.get(path, {}).items()):
-            if k != "agree":
+            if k not in GOOD:
                 print(f"   {k}: {' '.join(v[:12])}{' ...' if len(v) > 12 else ''}")
     if a.out:
         json.dump(out, open(a.out, "w"), indent=1)
+    if a.save_known:
+        open(a.save_known, "w").write("".join(n + "\n" for n in failing))
+    if a.gate:
+        known = set(open(a.known).read().split()) if a.known else set()
+        new = [n for n in failing if n not in known]
+        print(f"gate: {len(failing)} failing, {len(new)} not known" + (f": {' '.join(new[:20])}" if new else ""))
+        return 1 if new else 0
+    return 0
 
 
 if __name__ == "__main__":
-    main()
+    sys.exit(main())

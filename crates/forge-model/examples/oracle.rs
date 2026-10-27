@@ -128,19 +128,94 @@ fn feature(f: &Feature) -> String {
     }
 }
 
-fn mesh_vol_area(b: &forge_topo::Body, chord: f64) -> Option<(f64, f64)> {
+/// A face's surface as the oracle keys it: kind and defining numbers (frames in world space).
+fn surface_key(f: &forge_geom::Surface) -> String {
+    use forge_geom::Surface::*;
+    let p = |q: forge_math::Point3| v3([q.x, q.y, q.z]);
+    let d = |u: forge_math::UnitVec3| {
+        let u = u.get();
+        v3([u.x, u.y, u.z])
+    };
+    match f {
+        Plane(s) => format!(
+            "\"s\":\"plane\",\"p\":{},\"n\":{}",
+            p(s.frame.origin),
+            d(s.frame.z())
+        ),
+        Cylinder(s) => format!(
+            "\"s\":\"cylinder\",\"p\":{},\"n\":{},\"r\":{}",
+            p(s.frame.origin),
+            d(s.frame.z()),
+            num(s.radius)
+        ),
+        Cone(s) => format!(
+            "\"s\":\"cone\",\"p\":{},\"n\":{},\"t\":{}",
+            p(s.apex()),
+            d(s.frame.z()),
+            num(s.tan_a())
+        ),
+        Sphere(s) => format!(
+            "\"s\":\"sphere\",\"p\":{},\"r\":{}",
+            p(s.frame.origin),
+            num(s.radius)
+        ),
+        Torus(s) => format!(
+            "\"s\":\"torus\",\"p\":{},\"n\":{},\"R\":{},\"r\":{}",
+            p(s.frame.origin),
+            d(s.frame.z()),
+            num(s.major),
+            num(s.minor)
+        ),
+        Procedural(_) => "\"s\":\"procedural\"".into(),
+    }
+}
+
+/// Volume and area of the body's mesh, and each face's surface, meshed area and meshed boundary
+/// length (the length bounds how far a chord-`c` mesh's area can be off).
+fn measure(b: &forge_topo::Body, chord: f64) -> Option<String> {
     let q = Quality {
         chord,
         max_angle: 1.0,
     };
-    catch_unwind(AssertUnwindSafe(|| tessellate(b, &q).ok()))
+    let m = catch_unwind(AssertUnwindSafe(|| tessellate(b, &q).ok()))
         .ok()
-        .flatten()
-        .map(|m| (m.volume(), m.area()))
+        .flatten()?;
+    let n = b.faces.len();
+    let mut area = vec![0.0; n];
+    let mut sides: Vec<std::collections::HashMap<(u32, u32), i32>> = vec![Default::default(); n];
+    for (t, &f) in m.triangles.iter().zip(&m.face_of) {
+        let [a, bb, c] = t.map(|i| m.positions[i as usize]);
+        area[f as usize] += (bb - a).cross(c - a).length() * 0.5;
+        for (i, j) in [(t[0], t[1]), (t[1], t[2]), (t[2], t[0])] {
+            *sides[f as usize].entry((i.min(j), i.max(j))).or_default() += 1;
+        }
+    }
+    let faces: Vec<String> = (0..n)
+        .filter(|&i| b.faces[i].alive)
+        .map(|i| {
+            let perim: f64 = sides[i]
+                .iter()
+                .filter(|e| *e.1 == 1)
+                .map(|(e, _)| (m.positions[e.0 as usize] - m.positions[e.1 as usize]).length())
+                .sum();
+            format!(
+                "{{{},\"a\":{},\"l\":{}}}",
+                surface_key(&b.faces[i].surface),
+                num(area[i]),
+                num(perim)
+            )
+        })
+        .collect();
+    Some(format!(
+        ",\"volume\":{},\"area\":{},\"chord\":{},\"face_areas\":[{}]",
+        num(m.volume()),
+        num(m.area()),
+        num(chord),
+        faces.join(",")
+    ))
 }
 
-/// One regen's result: time (best of `reps`), outcome, sizes, and volume and area from two meshes
-/// extrapolated to zero chord (inscribed polygons err in proportion to the chord).
+/// One regen's result: time (best of `reps`), outcome, sizes, and the mesh's measures.
 fn run(reps: usize, chord: f64, f: impl Fn() -> Result<forge_topo::Body, forge_model::RegenError>) -> String {
     let mut best = f64::INFINITY;
     let mut out = None;
@@ -175,17 +250,8 @@ fn run(reps: usize, chord: f64, f: impl Fn() -> Result<forge_topo::Body, forge_m
                     format!("{p:?}").chars().take(160).collect::<String>()
                 );
             }
-            let coarse = mesh_vol_area(&b, chord * 4.0);
-            let fine = mesh_vol_area(&b, chord);
-            if let (Some((v1, a1)), Some((v2, a2))) = (coarse, fine) {
-                let _ = write!(
-                    s,
-                    ",\"volume\":{},\"area\":{},\"volume_mesh\":{},\"area_mesh\":{}",
-                    num(v2 + (v2 - v1) / 3.0),
-                    num(a2 + (a2 - a1) / 3.0),
-                    num(v2),
-                    num(a2)
-                );
+            if let Some(m) = measure(&b, chord) {
+                s.push_str(&m);
             }
             s.push('}');
             s
@@ -200,7 +266,7 @@ fn main() {
     let env = |k: &str, d: f64| std::env::var(k).ok().and_then(|v| v.parse().ok()).unwrap_or(d);
     let threads = env("THREADS", 4.0) as usize;
     let reps = env("REPS", 3.0) as usize;
-    let chord = env("CHORD", 0.02);
+    let chord = env("CHORD", 0.002);
     let only = std::env::var("ONLY").ok();
     std::panic::set_hook(Box::new(|_| {}));
     let mut parts: Vec<(String, Part)> = Vec::new();
