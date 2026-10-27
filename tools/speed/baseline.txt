@@ -1,0 +1,19 @@
+# part path instructions:u (tools/speed/check.py --save)
+torture seq 684413671
+torture nary1 508433631
+shaft seq 1427969301
+shaft nary1 2090039929
+housing seq 602529436
+housing nary1 500769454
+coplanar seq 2706819258
+coplanar nary1 389280944
+patterns seq 990774252
+patterns nary1 577788206
+mixed seq 10245098642
+mixed nary1 6646876260
+fuzz1 seq 296991437
+fuzz1 nary1 288175988
+fuzz2 seq 735183200
+fuzz2 nary1 670748690
+fuzz5 seq 315310159
+fuzz5 nary1 355074510

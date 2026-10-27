@@ -7,3 +7,4 @@
 /target-hunt
 /crates/forge-model/examples/one.rs
 /.claude/
+__pycache__/
