@@ -80,7 +80,12 @@ fn interior_steps(s: &Surface, q: &Quality) -> Option<(f64, f64)> {
         }
         Surface::Sphere(sp) => Some((arc_step(sp.radius, q), arc_step(sp.radius, q))),
         Surface::Torus(t) => Some((arc_step(t.major + t.minor, q), arc_step(t.minor, q))),
-        Surface::Procedural(pr) => Some((arc_step(pr.min_radius(), q), arc_step(pr.min_radius(), q))),
+        Surface::Procedural(pr) => {
+            // arc steps on the tightest radius, turned into parameter steps by the uv scale
+            let (r, (su, sv)) = (pr.min_radius(), pr.uv_scale());
+            let l = arc_step(r, q) * r;
+            Some((l / su, l / sv))
+        }
     }
 }
 
@@ -357,19 +362,22 @@ fn strips(
         return None;
     }
     let row_count = |v: f64| -> usize {
-        // radius of the circle of constant v, which sets the u spacing
-        let r = match surface {
+        // length per unit u along the row, and the radius that sets the arc step
+        let (len, r) = match surface {
             Surface::Plane(_) => return 1,
-            Surface::Cylinder(c) => c.radius,
-            Surface::Cone(c) => c.radius_at(v),
-            Surface::Sphere(sp) => sp.radius * dmath::cos(v),
-            Surface::Torus(t) => t.major + t.minor * dmath::cos(v),
-            Surface::Procedural(pr) => pr.min_radius(),
+            Surface::Cylinder(c) => (c.radius, c.radius),
+            Surface::Cone(c) => (c.radius_at(v), c.radius_at(v)),
+            Surface::Sphere(sp) => (sp.radius * dmath::cos(v), sp.radius * dmath::cos(v)),
+            Surface::Torus(t) => (
+                t.major + t.minor * dmath::cos(v),
+                t.major + t.minor * dmath::cos(v),
+            ),
+            Surface::Procedural(pr) => (pr.uv_scale().0, pr.min_radius()),
         };
         if r <= forge_math::tol::LINEAR {
             return 1;
         }
-        ((u1 - u0) * r / (r * arc_step(r, q))).ceil().max(1.0) as usize
+        ((u1 - u0) * len / (r * arc_step(r, q))).ceil().max(1.0) as usize
     };
     // each row: (u, mesh index), increasing u
     let mut rows: Vec<Vec<(f64, u32)>> = Vec::with_capacity(left.len());
