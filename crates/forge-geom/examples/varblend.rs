@@ -1,4 +1,4 @@
-//! Instruction counts for variable blends: `varblend <build|eval|project|implicit> [n]`,
+//! Instruction counts for variable blends: `varblend <build|deriv|project|implicit> [n]`,
 //! counted with `perf stat -e instructions:u`. Each mode builds the same two blends, so
 //! subtract the `build` count (n = 0) to get the per-call cost.
 
@@ -10,7 +10,7 @@ use std::sync::Arc;
 
 fn main() {
     let args: Vec<String> = std::env::args().collect();
-    let mode = args.get(1).map_or("eval", |s| s.as_str());
+    let mode = args.get(1).map_or("deriv", |s| s.as_str());
     let n: usize = args.get(2).and_then(|s| s.parse().ok()).unwrap_or(100_000);
     let floor = Surface::Plane(Plane::new(Frame::WORLD));
     let wall = Surface::Plane(Plane::new(Frame::from_z(Point3::ORIGIN, UnitVec3::X)));
@@ -45,7 +45,7 @@ fn main() {
         let range = b.range();
         let uv = Point2::new(r.range(range.lo, range.hi), r.unit());
         match mode {
-            "eval" => acc += s.deriv(uv).du.x,
+            "deriv" => acc += s.deriv(uv).du.x,
             "project" => {
                 let p = s.eval(uv) + Vec3::new(r.range(-0.1, 0.1), r.range(-0.1, 0.1), r.range(-0.1, 0.1));
                 acc += s.project(p).x;

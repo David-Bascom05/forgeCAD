@@ -7,6 +7,16 @@
 //! characteristic circle, in the plane normal to c'(s), offset -r r'/|c'| from c, of radius
 //! r sqrt(1 - r'^2/|c'|^2). The face is the arc of that circle between the two contact points.
 //!
+//! Why the normal plane fixes s: it is the edge's own parameter for a line or circle, so a
+//! law stated on the edge means what it says. It is well posed while the ball is nearer the
+//! edge than the edge's radius of curvature: the plane then meets the offsets' intersection
+//! once, transversally. It is also stable: a small change of edge or law moves c(s) smoothly.
+//! Where the plane turns smoothly (C2 guide), c' is continuous, so the characteristic circles
+//! are too, and blends of a tangent chain share their junction circles.
+//!
+//! Rejected: |r'| reaching |c'| (no envelope), a law bending faster than the balls can roll
+//! (F_ss <= 0 on the arc, F = |x - c|^2 - r^2: the envelope folds), coinciding contacts.
+//!
 //! Parameters: u = s (the guide parameter), v in [0, 1] the fraction of the arc's angle. Points are
 //! solved from the definition (Newton for c, then its Taylor coefficients order by order), never
 //! read off a stored approximation; the cached rows only seed the solve and bound searches.
@@ -315,16 +325,38 @@ fn dist_grad<const N: usize>(s: &Surface, x: Vn<N>, want_grad: bool) -> (Jn<N>, 
 
 /// Solves the rows `a`, `b`, `c` times x = r; None when the rows are nearly dependent.
 fn solve3(a: Vec3, b: Vec3, c: Vec3, r: [f64; 3]) -> Option<Vec3> {
-    let (bc, ca, ab) = (b.cross(c), c.cross(a), a.cross(b));
-    let det = a.dot(bc);
-    if det.is_nan() || det.abs() <= 1e-12 * a.length() * b.length() * c.length() {
-        return None;
+    Some(Rows3::new(a, b, c)?.solve(r))
+}
+
+/// Three rows factored once for several right-hand sides (Cramer, by cross products).
+struct Rows3 {
+    bc: Vec3,
+    ca: Vec3,
+    ab: Vec3,
+    inv: f64,
+}
+
+impl Rows3 {
+    fn new(a: Vec3, b: Vec3, c: Vec3) -> Option<Rows3> {
+        let (bc, ca, ab) = (b.cross(c), c.cross(a), a.cross(b));
+        let det = a.dot(bc);
+        if det.is_nan() || det.abs() <= 1e-12 * (a.length_sq() * b.length_sq() * c.length_sq()).sqrt() {
+            return None;
+        }
+        Some(Rows3 {
+            bc,
+            ca,
+            ab,
+            inv: 1.0 / det,
+        })
     }
-    Some((bc * r[0] + ca * r[1] + ab * r[2]) / det)
+    fn solve(&self, r: [f64; 3]) -> Vec3 {
+        (self.bc * r[0] + self.ca * r[1] + self.ab * r[2]) * self.inv
+    }
 }
 
 /// A C2 piecewise cubic through (x, y) points: natural ends, or the given end slopes.
-/// Beyond the ends it carries on along the end tangent.
+/// Past the end knots the end segments carry on.
 #[derive(Clone, Debug, PartialEq)]
 struct Pieces {
     knots: Vec<f64>,
@@ -394,27 +426,14 @@ impl Pieces {
 
     /// Taylor coefficients at s.
     fn jet(&self, s: f64) -> [f64; 4] {
-        let n = self.coef.len();
         let (i, h) = self.seg(s);
         let [a, b, c, d] = self.coef[i];
-        let at = |h: f64| {
-            [
-                a + h * (b + h * (c + h * d)),
-                b + h * (2.0 * c + 3.0 * h * d),
-                c + 3.0 * h * d,
-                d,
-            ]
-        };
-        if h < 0.0 && i == 0 {
-            [a + b * h, b, 0.0, 0.0]
-        } else if i == n - 1 && s > self.knots[n] {
-            let w = self.knots[n] - self.knots[n - 1];
-            let e = at(w);
-            let t = s - self.knots[n];
-            [e[0] + e[1] * t, e[1], 0.0, 0.0]
-        } else {
-            at(h)
-        }
+        [
+            a + h * (b + h * (c + h * d)),
+            b + h * (2.0 * c + 3.0 * h * d),
+            c + 3.0 * h * d,
+            d,
+        ]
     }
 
     /// Smallest and largest value over [a, b].
@@ -428,8 +447,15 @@ impl Pieces {
         };
         take(a);
         take(b);
+        let n = self.coef.len();
         for (i, &[_, c1, c2, c3]) in self.coef.iter().enumerate() {
-            let (k0, k1) = (self.knots[i], self.knots[i + 1]);
+            // the end segments carry on past the end knots
+            let k0 = if i == 0 { f64::NEG_INFINITY } else { self.knots[i] };
+            let k1 = if i == n - 1 {
+                f64::INFINITY
+            } else {
+                self.knots[i + 1]
+            };
             if k1 < a || k0 > b {
                 continue;
             }
@@ -450,7 +476,7 @@ impl Pieces {
                 }
             };
             for h in roots {
-                let s = k0 + h;
+                let s = self.knots[i] + h;
                 if s > a.max(k0) && s < b.min(k1) {
                     take(s);
                 }
@@ -461,8 +487,8 @@ impl Pieces {
 }
 
 /// How the radius varies along the edge: a function of the guide parameter s. It is design
-/// data (which ball sits where), so a cubic spline is a fine way to state it. Beyond its first and
-/// last control points it continues along the end tangent.
+/// data (which ball sits where), so a cubic spline is a fine way to state it. Past its first and
+/// last control points the end pieces carry on.
 #[derive(Clone, Debug, PartialEq)]
 pub struct RadiusLaw {
     p: Pieces,
@@ -626,35 +652,19 @@ impl Hermite {
         Some(Hermite { knots, coef })
     }
 
-    /// Taylor coefficients (orders 0..3) of g and g' at s; straight along the end tangents
-    /// beyond the ends.
+    /// Taylor coefficients (orders 0..3) of g and g' at s. Past the ends the end segments
+    /// carry on, so a parameter a rounding error outside the range sees the same smooth guide.
     fn jets(&self, s: f64) -> ([Vec3; 4], [Vec3; 4]) {
         let n = self.coef.len();
         let i = self.knots.partition_point(|&k| k <= s).clamp(1, n) - 1;
-        let (k0, k1) = (self.knots[i], self.knots[i + 1]);
-        let at = |c: &[Vec3; 10], h: f64| -> [Vec3; 5] {
-            std::array::from_fn(|k| {
-                let mut acc = Vec3::ZERO;
-                for j in (k..10).rev() {
-                    acc = acc * h + c[j] * binom(j, k);
-                }
-                acc
-            })
-        };
-        let straight = |h: f64, t: f64| {
-            let e = at(&self.coef[i], h);
-            (
-                [e[0] + e[1] * t, e[1], Vec3::ZERO, Vec3::ZERO],
-                [e[1], Vec3::ZERO, Vec3::ZERO, Vec3::ZERO],
-            )
-        };
-        if s < k0 && i == 0 {
-            return straight(0.0, s - k0);
-        }
-        if s > k1 && i == n - 1 {
-            return straight(k1 - k0, s - k1);
-        }
-        let e = at(&self.coef[i], s - k0);
+        let (c, h) = (&self.coef[i], s - self.knots[i]);
+        let e: [Vec3; 5] = std::array::from_fn(|k| {
+            let mut acc = Vec3::ZERO;
+            for j in (k..10).rev() {
+                acc = acc * h + c[j] * binom(j, k);
+            }
+            acc
+        });
         (
             [e[0], e[1], e[2], e[3]],
             [e[1], e[2] * 2.0, e[3] * 3.0, e[4] * 4.0],
@@ -1049,13 +1059,13 @@ impl VarBlend {
     fn spine(&self, s: f64, c0: Point3) -> Option<(V, J)> {
         let r = self.law.jet(s);
         let (g, gp) = self.guide.jets(s);
-        let (na, nb, t) = (self.a.gradient(c0), self.b.gradient(c0), gp.at(0));
+        let rows = Rows3::new(self.a.gradient(c0), self.b.gradient(c0), gp.at(0))?;
         let mut c = V::k(c0.to_vec());
         for i in 1..4 {
             let fa = dist_grad(&self.a, c, false).0 - r * self.side[0];
             let fb = dist_grad(&self.b, c, false).0 - r * self.side[1];
             let fp = (c - g).dot(gp);
-            c.set(i, solve3(na, nb, t, [-fa.0[i], -fb.0[i], -fp.0[i]])?);
+            c.set(i, rows.solve([-fa.0[i], -fb.0[i], -fp.0[i]]));
         }
         Some((c, r))
     }
@@ -2407,17 +2417,24 @@ mod tests {
         );
     }
 
-    /// A random blend in a random place: plane against plane, cylinder, sphere or cone, with
-    /// a random radius law. Picks with no blend must fail cleanly.
+    /// A random blend in a random place: a plane against a plane, cylinder, sphere, cone or
+    /// torus, or two crossing cylinders on a Hermite guide, with a random radius law. Picks
+    /// with no blend must fail cleanly.
     fn random_blend(r: &mut Rng) -> (u64, Result<Arc<VarBlend>, VarBlendError>) {
         let f = crate::testing::rand_frame(r);
         let floor = plane(Point3::ORIGIN, Vec3::Z);
-        let kind = r.below(4);
-        let (other, side, guide, size) = match kind {
+        let kind = r.below(6);
+        let pm = |r: &mut Rng| if r.bool() { 1.0 } else { -1.0 };
+        let arc = |r: &mut Rng| {
+            let lo = r.range(0.0, 6.0);
+            Interval::new(lo, lo + r.range(0.3, 4.0))
+        };
+        let (a, b, side, guide, size, range) = match kind {
             0 => {
-                let a = r.range(-1.3, 1.3);
-                let n = Vec3::new(dmath::cos(a), 0.0, dmath::sin(a));
-                (plane(Point3::ORIGIN, n), 1.0, line_y(), 6.0)
+                let t = r.range(-1.3, 1.3);
+                let n = Vec3::new(dmath::cos(t), 0.0, dmath::sin(t));
+                let range = Interval::new(r.range(-10.0, 0.0), r.range(1.0, 10.0));
+                (floor, plane(Point3::ORIGIN, n), 1.0, line_y(), 6.0, range)
             }
             1 => {
                 let rad = r.range(3.0, 20.0);
@@ -2425,8 +2442,7 @@ mod tests {
                     frame: Frame::WORLD,
                     radius: rad,
                 });
-                let side = if r.bool() { 1.0 } else { -1.0 };
-                (cyl, side, circle(0.0, rad), rad)
+                (floor, cyl, pm(r), circle(0.0, rad), rad, arc(r))
             }
             2 => {
                 let rho = r.range(3.0, 20.0);
@@ -2435,37 +2451,79 @@ mod tests {
                     frame: Frame::WORLD.with_origin(Point3::new(0.0, 0.0, zc)),
                     radius: rho,
                 });
-                let side = if r.bool() { 1.0 } else { -1.0 };
-                (sph, side, circle(0.0, (rho * rho - zc * zc).sqrt()), rho)
+                let g = circle(0.0, (rho * rho - zc * zc).sqrt());
+                (floor, sph, pm(r), g, rho, arc(r))
             }
-            _ => {
+            3 => {
                 let rad = r.range(3.0, 15.0);
                 let up = r.bool();
                 let z = if up { UnitVec3::Z } else { -UnitVec3::Z };
                 let cone = Surface::Cone(
                     Cone::new(Frame::from_z(Point3::ORIGIN, z), rad, r.range(0.2, 1.0)).unwrap(),
                 );
-                (cone, if up { -1.0 } else { 1.0 }, circle(0.0, rad), rad)
+                (
+                    floor,
+                    cone,
+                    if up { -1.0 } else { 1.0 },
+                    circle(0.0, rad),
+                    rad,
+                    arc(r),
+                )
+            }
+            4 => {
+                let major = r.range(6.0, 20.0);
+                let minor = r.range(1.5, 0.8 * major);
+                let zt = r.range(-0.7, 0.7) * minor;
+                let torus = Surface::Torus(
+                    crate::surface::Torus::new(
+                        Frame::WORLD.with_origin(Point3::new(0.0, 0.0, zt)),
+                        major,
+                        minor,
+                    )
+                    .unwrap(),
+                );
+                let g = circle(0.0, major + (minor * minor - zt * zt).sqrt());
+                (floor, torus, 1.0, g, minor, arc(r))
+            }
+            _ => {
+                let ra = r.range(6.0, 15.0);
+                let rb = r.range(1.5, 0.7 * ra);
+                let y0 = r.range(-0.3, 0.3) * (ra - rb);
+                let main = Surface::Cylinder(Cylinder {
+                    frame: Frame::WORLD,
+                    radius: ra,
+                });
+                let branch = Surface::Cylinder(Cylinder {
+                    frame: Frame::from_z(Point3::new(0.0, y0, 0.0), UnitVec3::X),
+                    radius: rb,
+                });
+                let w = 2.0 * ra;
+                let region = Box3::from_points([Point3::new(-w, -w, -w), Point3::new(w, w, w)]);
+                let ic = crate::intcurve::trace(&main, &branch, region)
+                    .unwrap()
+                    .into_iter()
+                    .find(|c| c.pts[0].x > 0.0)
+                    .unwrap();
+                let hi = ic.domain_hi();
+                let t0 = r.range(0.0, 0.6) * hi;
+                let edge = (
+                    Curve::Intersection(Arc::new(ic)),
+                    Interval::new(t0, t0 + r.range(0.1, 0.35) * hi),
+                );
+                let (g, ranges) = Guide::through_edges(&[edge], 8).unwrap();
+                (main, branch, 1.0, g, rb, ranges[0])
             }
         };
-        let (lo, hi) = if kind == 0 {
-            (r.range(-10.0, 0.0), r.range(1.0, 10.0))
-        } else {
-            let lo = r.range(0.0, 6.0);
-            (lo, lo + r.range(0.3, 4.0))
-        };
+        let (lo, hi) = (range.lo, range.hi);
         let top = 0.3 * size;
         let k = 2 + r.below(3);
         let pts: Vec<(f64, f64)> = (0..k)
             .map(|i| (lo + (hi - lo) * i as f64 / (k - 1) as f64, r.range(0.1, top)))
             .collect();
         let law = Arc::new(RadiusLaw::smooth(&pts, None).unwrap());
-        let (a, b) = (floor.transformed(&f), other.transformed(&f));
+        let (a, b) = (a.transformed(&f), b.transformed(&f));
         let g = guide.transformed(&f);
-        (
-            kind as u64,
-            VarBlend::new(&a, 1.0, &b, side, g, law, Interval::new(lo, hi)),
-        )
+        (kind as u64, VarBlend::new(&a, 1.0, &b, side, g, law, range))
     }
 
     #[test]
