@@ -14,15 +14,15 @@
 //! a part grown to thousands of faces.
 
 use crate::boolean::{
-    BoolError, Cut, Imprint, Op, Piece, R, Seg, Side, VKey, Walk, crossings_near, edge_split, imprint,
-    overlap, split_face, trim,
+    BoolError, Cut, Imprint, Op, Piece, R, Seg, Side, VKey, Walk, crossings_near, edge_split, grown_tols,
+    imprint, on_edge, overlap, settle, split_face, trim,
 };
 use crate::classify::{Index, Where};
 use crate::shape::{Member, Shape};
 use crate::ssi;
 use forge_geom::intersect::{Contact, CurveSurface, SurfaceSurface, curve_surface};
 use forge_geom::{Curve, CurveGeom, SurfaceGeom};
-use forge_math::{Interval, Point3, Vec3, tol};
+use forge_math::{Interval, Point3, tol};
 use forge_topo::{Body, EdgeId, FaceId, Name, VertexId};
 use std::collections::HashMap;
 use std::sync::atomic::{AtomicUsize, Ordering};
@@ -78,7 +78,7 @@ fn par_map<T: Send>(n: usize, threads: usize, per: usize, f: impl Fn(usize) -> T
 }
 
 /// How far clear of a tool's boundary a point must be for its analytic solid to answer.
-const SHAPE_MARGIN: f64 = 1e-4;
+const SHAPE_MARGIN: f64 = tol::LINEAR;
 
 /// Which tools hold a point just inside and just outside a region, and whether a lower tool's
 /// face lies on it.
@@ -86,11 +86,24 @@ type Seen = (Vec<bool>, Vec<bool>, bool);
 /// A region's loops and its verdict: None dropped, Some(flip) kept.
 type Judged = (Vec<Walk>, Option<bool>);
 
+/// FORGE_NARY is set (read once).
+fn nary_on() -> bool {
+    static ON: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
+    *ON.get_or_init(|| std::env::var_os("FORGE_NARY").is_some())
+}
+
+/// The region FORGE_NARY_REG asks to show.
+fn nary_reg() -> Option<usize> {
+    static REG: std::sync::OnceLock<Option<usize>> = std::sync::OnceLock::new();
+    *REG.get_or_init(|| std::env::var("FORGE_NARY_REG").ok().and_then(|v| v.parse().ok()))
+}
+
 /// A cut of a new edge by a third tool's face.
 struct SegCut {
     seg: usize,
     t: f64,
     point: Point3,
+    tol: f64,
 }
 
 /// What intersecting one pair of tools gives.
@@ -256,10 +269,9 @@ pub fn nary_with(
 ) -> R<Body> {
     assert_eq!(ops.len() + 1, tools.len(), "one op per tool after the first");
     let n = tools.len();
-    let near = 10.0 * tol::LINEAR;
     let mut clock = std::time::Instant::now();
     let index: Vec<Index> = tools.iter().map(|b| Index::new(b)).collect();
-    let debug = std::env::var_os("FORGE_DEBUG").is_some();
+    let debug = crate::boolean::debug_on();
 
     // 1: pairs of tools whose boxes meet, then their faces
     let mut pairs: Vec<(Side, Side)> = Vec::new();
@@ -284,7 +296,7 @@ pub fn nary_with(
                     continue;
                 }
                 let (sa, sb) = (&a.face(fa).surface, &b.face(fb).surface);
-                let region = overlap(&ia.boxes[fa.index()], &ib.boxes[fb.index()]).grow(near);
+                let region = overlap(&ia.boxes[fa.index()], &ib.boxes[fb.index()]).grow(tol::LINEAR);
                 let curves = match ssi::surfaces_in(sa, sb, region) {
                     SurfaceSurface::Empty | SurfaceSurface::Points(_) => continue,
                     SurfaceSurface::Coincident => {
@@ -359,9 +371,9 @@ pub fn nary_with(
     lap(&mut clock, 0);
 
     // 2: each new edge is cut where a face of a third tool crosses it
-    let seg_cuts: Vec<Vec<(f64, Point3)>> = par_map(segs.len(), threads, 32, |si| {
+    let seg_cuts: Vec<Vec<(f64, Point3, f64)>> = par_map(segs.len(), threads, 32, |si| {
         let sg = &segs[si];
-        let reach = sg.curve.bbox(sg.range).grow(near);
+        let reach = sg.curve.bbox(sg.range).grow(tol::LINEAR);
         let mut got = Vec::new();
         for k in 0..n {
             if sg.sides.contains(&k) || !index[k].bbox.overlaps(&reach) {
@@ -380,7 +392,7 @@ pub fn nary_with(
                             .flat_map(|x| crossings_near(&sg.curve, sg.range, s, x))
                         {
                             if index[k].point_in_face(h, hit.point) != Where::Outside {
-                                got.push((hit.t, hit.point));
+                                got.push((hit.t, hit.point, tol::LINEAR));
                             }
                         }
                     }
@@ -393,16 +405,14 @@ pub fn nary_with(
                                 if !body.edge_box(e).overlaps(&reach) {
                                     continue;
                                 }
-                                let edge = body.edge(e);
                                 let Ok(across) = crate::boolean::across(body, h, c) else {
                                     continue;
                                 };
                                 if let CurveSurface::Hits(hits) = curve_surface(&sg.curve, sg.range, &across)
                                 {
                                     for hit in hits {
-                                        let se = edge.curve.closest(hit.point, edge.range);
-                                        if edge.curve.eval(se).distance(hit.point) <= near {
-                                            got.push((hit.t, hit.point));
+                                        if let Some((_, tol)) = on_edge(body, e, hit.point) {
+                                            got.push((hit.t, hit.point, tol));
                                         }
                                     }
                                 }
@@ -416,7 +426,12 @@ pub fn nary_with(
     });
     let mut triple: Vec<SegCut> = Vec::new();
     for (si, cs) in seg_cuts.into_iter().enumerate() {
-        triple.extend(cs.into_iter().map(|(t, point)| SegCut { seg: si, t, point }));
+        triple.extend(cs.into_iter().map(|(t, point, tol)| SegCut {
+            seg: si,
+            t,
+            point,
+            tol,
+        }));
     }
     lap(&mut clock, 1);
 
@@ -428,6 +443,12 @@ pub fn nary_with(
         .map(|c| c.point)
         .chain(triple.iter().map(|c| c.point))
         .collect();
+    let tols: Vec<f64> = cuts
+        .iter()
+        .map(|c| c.tol)
+        .chain(triple.iter().map(|c| c.tol))
+        .collect();
+    let widest = tols.iter().fold(tol::LINEAR, |a, &b| a.max(b));
     let mut parent: Vec<usize> = (0..pts.len()).collect();
     fn find(p: &mut [usize], mut i: usize) -> usize {
         while p[i] != i {
@@ -441,10 +462,10 @@ pub fn nary_with(
     for a in 0..order.len() {
         let i = order[a];
         for &j in &order[a + 1..] {
-            if pts[j].x - pts[i].x > near {
+            if pts[j].x - pts[i].x > widest {
                 break;
             }
-            if pts[i].distance(pts[j]) <= near {
+            if pts[i].distance(pts[j]) <= tols[i].max(tols[j]) {
                 let (x, y) = (find(&mut parent, i), find(&mut parent, j));
                 if x != y {
                     parent[x.max(y)] = x.min(y);
@@ -468,13 +489,15 @@ pub fn nary_with(
     for (i, c) in cuts.iter().enumerate() {
         let edge = tools[c.side].edge(c.edge);
         for v in [edge.start, edge.end] {
-            if tools[c.side].vertex(v).point.distance(c.point) <= near {
+            let vx = tools[c.side].vertex(v);
+            if vx.point.distance(c.point) <= vx.tol.max(c.tol) {
                 olds[cluster[i]].push(VKey::Old(c.side, v));
                 break;
             }
         }
     }
     let mut points: Vec<Point3> = Vec::new();
+    let mut point_tols: Vec<f64> = Vec::new();
     let mut alias: Vec<(VKey, VKey)> = Vec::new();
     let mut key_of: Vec<VKey> = Vec::with_capacity(heads.len());
     for (k, os) in olds.iter_mut().enumerate() {
@@ -528,21 +551,13 @@ pub fn nary_with(
                 through[i as usize].push((&sg.curve, Interval::new(tc.t - w, tc.t + w)));
             }
         }
-        let settled = par_map(points.len(), threads, 64, |i| {
-            let curves = &through[i];
-            let mut p = points[i];
-            if curves.len() >= 2 {
-                for _ in 0..8 {
-                    let mut sum = Vec3::ZERO;
-                    for &(c, r) in curves {
-                        sum += c.eval(c.closest(p, r)) - Point3::ORIGIN;
-                    }
-                    p = Point3::ORIGIN + sum / curves.len() as f64;
-                }
-            }
-            p
-        });
-        points = settled;
+        let settled = par_map(points.len(), threads, 64, |i| settle(points[i], &through[i]));
+        points.clear();
+        for r in settled {
+            let (p, t) = r?;
+            points.push(p);
+            point_tols.push(t);
+        }
     }
     let key_point = |k: VKey| match k {
         VKey::Old(sd, v) => tools[sd].vertex(v).point,
@@ -571,6 +586,15 @@ pub fn nary_with(
             Interval::new(sg.range.hi - w, sg.range.hi + w),
         );
         sg.range = Interval::new(lo, hi);
+    }
+    let mut grown = grown_tols(tools, &cuts, &cut_vertex, &segs, &alias, key_point);
+    for (tc, &k) in triple.iter().zip(&triple_vertex) {
+        if let VKey::Old(sd, v) = k {
+            let d = segs[tc.seg].curve.eval(tc.t).distance(tc.point);
+            if d > tools[sd].vertex(v).tol {
+                grown.push((k, d));
+            }
+        }
     }
 
     // edge pieces on demand, new-edge pieces now
@@ -643,6 +667,7 @@ pub fn nary_with(
                 if marks.is_empty() {
                     // a closed new edge carries its own vertex
                     points.push(sg.curve.eval(sg.range.lo));
+                    point_tols.push(tol::LINEAR);
                     let v = VKey::New(points.len() as u32 - 1);
                     push(&mut pieces.list, (sg.range.lo, v), (sg.range.hi, v), None);
                 } else {
@@ -718,7 +743,7 @@ pub fn nary_with(
         .collect();
     all.sort_unstable();
     all.dedup();
-    let canon = coincident(&pieces.list, &all, near);
+    let canon = coincident(&pieces.list, &all);
     if !canon.is_empty() {
         for job in &mut jobs {
             for h in job.2.iter_mut().flatten() {
@@ -929,11 +954,7 @@ pub fn nary_with(
             in_result(ops, &inner, any_intersect),
             in_result(ops, &outer, any_intersect),
         );
-        if std::env::var("FORGE_NARY_REG")
-            .ok()
-            .and_then(|v| v.parse::<usize>().ok())
-            == Some(ri)
-        {
+        if nary_reg() == Some(ri) {
             for (li, l) in r.loops.iter().enumerate() {
                 for &(pc, fwd) in l {
                     let q = &list[pc];
@@ -948,7 +969,7 @@ pub fn nary_with(
                 }
             }
         }
-        if std::env::var_os("FORGE_NARY").is_some() {
+        if nary_on() {
             let on = |b: &[bool]| (0..n).filter(|&k| b[k]).collect::<Vec<_>>();
             eprintln!(
                 "REG {ri}: tool {} face {:?} probe {p:?} in {:?} out {:?} -> {fin} {fout} shadowed {shadowed}",
@@ -1082,7 +1103,7 @@ pub fn nary_with(
     let mut kept: Vec<(usize, bool)> = Vec::new();
     for (ri, c) in class.iter().enumerate() {
         if let Some(flip) = *c {
-            if std::env::var_os("FORGE_NARY").is_some() {
+            if nary_on() {
                 eprintln!("KEPT {} = reg {ri} flip {flip}", kept.len());
             }
             kept.push((ri, flip));
@@ -1101,7 +1122,7 @@ pub fn nary_with(
         .collect();
     used.sort_unstable();
     used.dedup();
-    let canon = coincident(&list, &used, near);
+    let canon = coincident(&list, &used);
     let mut out = Body::new();
     let shell = out.add_shell();
     let mut vmap: HashMap<VKey, VertexId> = HashMap::new();
@@ -1124,10 +1145,13 @@ pub fn nary_with(
                         let mut vertex = |out: &mut Body, v: VKey| -> VertexId {
                             *vmap.entry(v).or_insert_with(|| match v {
                                 VKey::Old(sd, id) => {
-                                    out.add_vertex(tools[sd].vertex(id).point, tools[sd].vertex(id).name)
+                                    let x = tools[sd].vertex(id);
+                                    let t = grown.iter().filter(|g| g.0 == v).fold(x.tol, |t, g| t.max(g.1));
+                                    out.add_tolerant_vertex(x.point, t, x.name)
                                 }
-                                VKey::New(i) => out.add_vertex(
+                                VKey::New(i) => out.add_tolerant_vertex(
                                     points[i as usize],
+                                    point_tols[i as usize],
                                     Name::feature(0).with_str("vertex").with(i as u64),
                                 ),
                             })
@@ -1153,7 +1177,7 @@ pub fn nary_with(
 
 /// Pieces among `ps` with the same ends along the same curve as a lower one: piece -> (the
 /// lower one, whether it runs the other way).
-fn coincident(list: &[Piece], ps: &[usize], near: f64) -> HashMap<usize, (usize, bool)> {
+fn coincident(list: &[Piece], ps: &[usize]) -> HashMap<usize, (usize, bool)> {
     let key = |pc: &Piece| (pc.start.min(pc.end), pc.start.max(pc.end));
     let mut by_ends: Vec<((VKey, VKey), usize)> = ps.iter().map(|&p| (key(&list[p]), p)).collect();
     by_ends.sort_unstable();
@@ -1167,7 +1191,7 @@ fn coincident(list: &[Piece], ps: &[usize], near: f64) -> HashMap<usize, (usize,
                     continue;
                 }
                 let o = &list[q];
-                if o.curve.eval(o.curve.closest(mid, o.range)).distance(mid) <= near {
+                if o.curve.eval(o.curve.closest(mid, o.range)).distance(mid) <= tol::LINEAR {
                     canon.insert(p, (q, pc.start != o.start));
                     break;
                 }
@@ -1238,7 +1262,7 @@ fn region_points(body: &Body, f: FaceId, loops: &[Walk], list: &[Piece], max: us
         let (c, r, fwd) = edges[i];
         for frac in [0.5, 0.3, 0.7] {
             let mut step = (0.01 * len).min(0.05);
-            while step >= 1e-4 {
+            while step > tol::LINEAR {
                 if let Some(p) = step_in(body, f, c, r, fwd, frac, step)
                     && clear(p, step, i)
                 {

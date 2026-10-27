@@ -24,6 +24,9 @@ id_type!(ShellId);
 pub struct Vertex {
     pub point: Point3,
     pub name: Name,
+    /// The radius of the ball every curve and surface through the vertex meets: LINEAR, or
+    /// more where a boolean could not settle the vertex within LINEAR of all of them.
+    pub tol: f64,
 }
 
 /// A bounded piece of a curve. `start` is at `range.lo` and `end` at
@@ -285,7 +288,8 @@ impl Body {
                             let edge = self.edge(co.edge);
                             let mut vert = |v: VertexId| {
                                 *vmap[v.index()].get_or_insert_with(|| {
-                                    out.add_vertex(self.vertex(v).point, self.vertex(v).name)
+                                    let x = self.vertex(v);
+                                    out.add_tolerant_vertex(x.point, x.tol, x.name)
                                 })
                             };
                             let (a, b) = (vert(edge.start), vert(edge.end));
@@ -303,7 +307,13 @@ impl Body {
     }
 
     pub fn add_vertex(&mut self, point: Point3, name: Name) -> VertexId {
-        self.vertices.push(Vertex { point, name });
+        self.add_tolerant_vertex(point, forge_math::tol::LINEAR, name)
+    }
+
+    /// A vertex with its own tolerance (at least LINEAR).
+    pub fn add_tolerant_vertex(&mut self, point: Point3, tol: f64, name: Name) -> VertexId {
+        let tol = tol.max(forge_math::tol::LINEAR);
+        self.vertices.push(Vertex { point, name, tol });
         VertexId(self.vertices.len() as u32 - 1)
     }
 

@@ -131,7 +131,7 @@ fn check_geometry(body: &Body, out: &mut Vec<Problem>) {
         let edge = body.edge(e);
         for (v, t) in [(edge.start, edge.range.lo), (edge.end, edge.range.hi)] {
             let d = body.vertex(v).point.distance(edge.curve.eval(t));
-            if d > band {
+            if d > band.max(body.vertex(v).tol) {
                 out.push(Problem::VertexOffEdge {
                     edge: e,
                     vertex: v,

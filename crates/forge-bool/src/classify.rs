@@ -46,7 +46,7 @@ fn edge_entry(body: &Body, c: forge_topo::CoedgeId) -> (f64, Box3) {
     let id = body.coedge(c).edge;
     (
         sag_bound(&body.edge(id).curve),
-        body.edge_box(id).grow(10.0 * tol::LINEAR),
+        body.edge_box(id).grow(tol::LINEAR),
     )
 }
 
@@ -232,7 +232,7 @@ impl<'a> Index<'a> {
         let face = self.body.face(f);
         let q = face.query.get_or_init(|| {
             let mut edges = Vec::new();
-            let mut reach = 10.0 * tol::LINEAR;
+            let mut reach = tol::LINEAR;
             for &l in &face.loops {
                 for &c in &self.body.lp(l).coedges {
                     let (e, b) = edge_entry(self.body, c);
@@ -304,11 +304,19 @@ impl<'a> Index<'a> {
             }
         }
         if let Some((d, c, t)) = best {
-            if d <= tol::LINEAR {
-                return Where::On;
-            }
             let co = body.coedge(c);
             let e = body.edge(co.edge);
+            // within a tolerant vertex's ball counts as on it
+            let reach = if t <= e.range.lo {
+                body.vertex(e.start).tol
+            } else if t >= e.range.hi {
+                body.vertex(e.end).tol
+            } else {
+                tol::LINEAR
+            };
+            if d <= reach {
+                return Where::On;
+            }
             // a seam (an edge the face uses twice) has two sides that are both this face
             let seam = body.partner(c).is_some_and(|o| body.coedge_face(o) == f);
             let interior = !seam
@@ -445,10 +453,10 @@ fn sag_bound(c: &Curve) -> f64 {
         Curve::Circle(k) => k.radius,
         Curve::Ellipse(e) => e.major * e.major / e.minor.max(tol::LINEAR),
         Curve::Parabola(_) | Curve::Hyperbola(_) => 1e3,
-        Curve::Intersection(k) => return 2.0 * k.sag + 10.0 * tol::LINEAR,
-        Curve::Procedural(_) => return forge_topo::uv::PROC_SAG + 10.0 * tol::LINEAR,
+        Curve::Intersection(k) => return 2.0 * k.sag + tol::LINEAR,
+        Curve::Procedural(_) => return forge_topo::uv::PROC_SAG + tol::LINEAR,
     };
-    0.01 * r + 10.0 * tol::LINEAR
+    0.01 * r + tol::LINEAR
 }
 
 /// Exact even-odd test for a point of a planar face: a ray from p in the

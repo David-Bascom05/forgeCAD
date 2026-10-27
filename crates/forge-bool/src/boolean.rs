@@ -59,6 +59,28 @@ pub(crate) struct Cut {
     pub(crate) edge: EdgeId,
     pub(crate) s: f64,
     pub(crate) point: Point3,
+    /// How far the point may be from the edge: LINEAR, or the distance to the end vertex it
+    /// was found beside (within that vertex's tolerance).
+    pub(crate) tol: f64,
+}
+
+/// Where point `p` lies on edge `e`: its parameter and the cut's tolerance, if it is within
+/// LINEAR of the edge, or past an end but within that end vertex's tolerance.
+pub(crate) fn on_edge(body: &Body, e: EdgeId, p: Point3) -> Option<(f64, f64)> {
+    let edge = body.edge(e);
+    let s = edge.curve.closest(p, edge.range);
+    let d = edge.curve.eval(s).distance(p);
+    if d <= tol::LINEAR {
+        return Some((s, tol::LINEAR));
+    }
+    let end = if s <= edge.range.lo {
+        edge.start
+    } else if s >= edge.range.hi {
+        edge.end
+    } else {
+        return None;
+    };
+    (d <= body.vertex(end).tol).then_some((s, d))
 }
 
 pub(crate) struct Seg {
@@ -153,6 +175,10 @@ struct Plan {
     specs: Vec<Spec>,
     kept: Vec<(usize, bool)>,
     points: Vec<Point3>,
+    /// Each new point's tolerance.
+    tols: Vec<f64>,
+    /// Existing vertices whose tolerance grows to hold the curves now ending on them.
+    grown: Vec<(VKey, f64)>,
     alias: Vec<(VKey, VKey)>,
     /// A's faces that might change; every other face of A comes through as it is.
     involved: Vec<FaceId>,
@@ -240,6 +266,18 @@ fn phases_on() -> bool {
     *ON.get_or_init(|| std::env::var_os("FORGE_PHASES").is_some())
 }
 
+/// FORGE_DEBUG is set (read once: hot paths ask).
+pub(crate) fn debug_on() -> bool {
+    static ON: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
+    *ON.get_or_init(|| std::env::var_os("FORGE_DEBUG").is_some())
+}
+
+/// FORGE_SPECS is set.
+fn specs_on() -> bool {
+    static ON: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
+    *ON.get_or_init(|| std::env::var_os("FORGE_SPECS").is_some())
+}
+
 /// Adds the time since `*t` to phase `k` and restarts the clock.
 fn lap(t: &mut Option<std::time::Instant>, k: usize) {
     if let Some(t0) = t {
@@ -266,10 +304,9 @@ fn plan(a: &Body, b: &Body, op: Op, feature: u64) -> R<Plan> {
                 continue;
             }
             let (sa, sb) = (&a.face(fa).surface, &b.face(fb).surface);
-            let region =
-                overlap(&index[0].boxes[fa.index()], &index[1].boxes[fb.index()]).grow(10.0 * tol::LINEAR);
+            let region = overlap(&index[0].boxes[fa.index()], &index[1].boxes[fb.index()]).grow(tol::LINEAR);
             let found = ssi::surfaces_in(sa, sb, region);
-            if std::env::var_os("FORGE_DEBUG").is_some() {
+            if debug_on() {
                 let what = match &found {
                     SurfaceSurface::Curves(cs) => format!("{} curves", cs.len()),
                     other => format!("{other:?}").chars().take(40).collect(),
@@ -322,7 +359,7 @@ fn plan(a: &Body, b: &Body, op: Op, feature: u64) -> R<Plan> {
     // 3: vertices for the cuts, then edge pieces
     lap(&mut clock, 1);
     let (cut_vertex, mut new_points, alias) = place_cuts(&bodies, &cuts)?;
-    // cut points of one vertex differ by up to 10 LINEAR: a new vertex settles on the point
+    // cut points of one vertex differ by up to their tolerance: a new vertex settles on the point
     // nearest every curve through it (alternating projections), and every curve parameter is
     // then taken from that point, so edge and curve ends land on their vertices
     let mut through: Vec<Vec<(&Curve, Interval)>> = vec![Vec::new(); new_points.len()];
@@ -341,17 +378,11 @@ fn plan(a: &Body, b: &Body, op: Op, feature: u64) -> R<Plan> {
             }
         }
     }
+    let mut new_tols = Vec::with_capacity(new_points.len());
     for (p, curves) in new_points.iter_mut().zip(&through) {
-        if curves.is_empty() {
-            continue;
-        }
-        for _ in 0..8 {
-            let mut sum = Vec3::ZERO;
-            for &(c, r) in curves {
-                sum += c.eval(c.closest(*p, r)) - Point3::ORIGIN;
-            }
-            *p = Point3::ORIGIN + sum / curves.len() as f64;
-        }
+        let (q, tol) = settle(*p, curves)?;
+        *p = q;
+        new_tols.push(tol);
     }
     let key_point = |k: VKey| match k {
         VKey::Old(sd, v) => bodies[sd].vertex(v).point,
@@ -372,7 +403,8 @@ fn plan(a: &Body, b: &Body, op: Op, feature: u64) -> R<Plan> {
         );
         sg.range = Interval::new(lo, hi);
     }
-    if std::env::var_os("FORGE_DEBUG").is_some() {
+    let grown = grown_tols(&bodies, &cuts, &cut_vertex, &segs, &alias, key_point);
+    if debug_on() {
         for (i, sg) in segs.iter().enumerate() {
             let ends = sg.ends.map(|(x, y)| (cut_vertex[x], cut_vertex[y]));
             eprintln!(
@@ -442,8 +474,10 @@ fn plan(a: &Body, b: &Body, op: Op, feature: u64) -> R<Plan> {
     }
     // closed new edges carry their own vertex at the curve start
     let mut points = new_points;
+    let mut tols = new_tols;
     for s in &segs {
         points.push(s.curve.eval(s.range.lo));
+        tols.push(tol::LINEAR);
     }
 
     // A's faces that can change: crossed by new edges, using a split edge, or within B's reach
@@ -741,7 +775,7 @@ fn plan(a: &Body, b: &Body, op: Op, feature: u64) -> R<Plan> {
                 .curve
                 .eval(other.curve.closest(mid, other.range))
                 .distance(mid)
-                <= 10.0 * tol::LINEAR
+                <= tol::LINEAR
             {
                 canon[p] = (a, pc.start != other.start);
                 break;
@@ -765,7 +799,7 @@ fn plan(a: &Body, b: &Body, op: Op, feature: u64) -> R<Plan> {
     lap(&mut clock, 3);
     // 5: classify
     let class = classify_specs(&bodies, &index, &specs, &pieces, &segs, &coplanar)?;
-    if std::env::var_os("FORGE_SPECS").is_some() {
+    if specs_on() {
         for (i, sp) in specs.iter().enumerate() {
             let ls: Vec<Vec<usize>> = sp.loops.iter().map(|l| l.iter().map(|h| h.0).collect()).collect();
             eprintln!(
@@ -797,6 +831,8 @@ fn plan(a: &Body, b: &Body, op: Op, feature: u64) -> R<Plan> {
         specs,
         kept,
         points,
+        tols,
+        grown,
         alias,
         involved,
         untouched_kept,
@@ -811,6 +847,8 @@ fn apply(a: &mut Body, b: &Body, plan: &Plan, root: Name) {
         specs,
         kept,
         points,
+        tols,
+        grown,
         alias,
         involved,
         untouched_kept,
@@ -862,10 +900,13 @@ fn apply(a: &mut Body, b: &Body, plan: &Plan, root: Name) {
         let v = alias.iter().find(|(f, _)| *f == v).map_or(v, |&(_, t)| t);
         match v {
             VKey::Old(0, id) => id,
-            VKey::Old(_, id) => *b_vertex[id.index()]
-                .get_or_insert_with(|| a.add_vertex(b.vertex(id).point, b.vertex(id).name)),
+            VKey::Old(_, id) => *b_vertex[id.index()].get_or_insert_with(|| {
+                let x = b.vertex(id);
+                a.add_tolerant_vertex(x.point, grown_tol(grown, v, x.tol), x.name)
+            }),
             VKey::New(i) => *new_vertex[i as usize].get_or_insert_with(|| {
-                a.add_vertex(points[i as usize], root.with_str("vertex").with(i as u64))
+                let i = i as usize;
+                a.add_tolerant_vertex(points[i], tols[i], root.with_str("vertex").with(i as u64))
             }),
         }
     };
@@ -921,7 +962,60 @@ fn apply(a: &mut Body, b: &Body, plan: &Plan, root: Name) {
             }
         }
     }
+    for &(k, t) in grown {
+        if let VKey::Old(0, v) = k {
+            let x = &mut a.vertices[v.index()];
+            x.tol = x.tol.max(t);
+        }
+    }
     // shells are regrouped when the body is compacted
+}
+
+/// `tol` grown to what `grown` asks of vertex `k`.
+fn grown_tol(grown: &[(VKey, f64)], k: VKey, tol: f64) -> f64 {
+    grown.iter().filter(|g| g.0 == k).fold(tol, |t, g| t.max(g.1))
+}
+
+/// Existing vertices that settled cuts and new edges end on, with the distance from each to
+/// the farthest curve now ending there where that is beyond the vertex's tolerance (and, for
+/// a vertex of B merged into one of A, the reach of B's vertex too).
+pub(crate) fn grown_tols(
+    bodies: &[&Body],
+    cuts: &[Cut],
+    cut_vertex: &[VKey],
+    segs: &[Seg],
+    alias: &[(VKey, VKey)],
+    key_point: impl Fn(VKey) -> Point3,
+) -> Vec<(VKey, f64)> {
+    let mut grown: Vec<(VKey, f64)> = Vec::new();
+    let mut grow = |k: VKey, d: f64| {
+        if let VKey::Old(sd, v) = k
+            && d > bodies[sd].vertex(v).tol
+        {
+            grown.push((k, d));
+        }
+    };
+    for (c, &k) in cuts.iter().zip(cut_vertex) {
+        let edge = bodies[c.side].edge(c.edge);
+        // an edge already ends on its own vertex; only a split at another body's vertex is new
+        if k == VKey::Old(c.side, edge.start) || k == VKey::Old(c.side, edge.end) {
+            continue;
+        }
+        grow(k, edge.curve.eval(c.s).distance(key_point(k)));
+    }
+    for sg in segs {
+        let Some((i0, i1)) = sg.ends else { continue };
+        for (t, k) in [(sg.range.lo, cut_vertex[i0]), (sg.range.hi, cut_vertex[i1])] {
+            grow(k, sg.curve.eval(t).distance(key_point(k)));
+        }
+    }
+    for &(from, to) in alias {
+        if let VKey::Old(sd, v) = from {
+            let x = bodies[sd].vertex(v);
+            grow(to, x.point.distance(key_point(to)) + x.tol);
+        }
+    }
+    grown
 }
 
 /// Cuts `curve` (on both faces' surfaces) where it crosses either face's
@@ -962,7 +1056,7 @@ pub(crate) fn trim(
     // edges the curve runs along: (side, edge, is a seam)
     let mut along: Vec<(Side, EdgeId, bool)> = Vec::new();
     // an edge whose box misses the curve's cannot cut it (big faces have hundreds of edges)
-    let reach = curve.bbox(range).grow(10.0 * tol::LINEAR);
+    let reach = curve.bbox(range).grow(tol::LINEAR);
     for k in 0..2 {
         let (body, f, side) = (bodies[k], faces[k], sides[k]);
         for &l in &body.face(f).loops {
@@ -994,15 +1088,16 @@ pub(crate) fn trim(
                             along.push((k, e, seam));
                         }
                         for (s, v) in [(edge.range.lo, edge.start), (edge.range.hi, edge.end)] {
-                            let p = body.vertex(v).point;
-                            let t = curve.closest(p, range);
-                            if curve.eval(t).distance(p) <= 10.0 * tol::LINEAR {
+                            let vx = body.vertex(v);
+                            let t = curve.closest(vx.point, range);
+                            if curve.eval(t).distance(vx.point) <= vx.tol {
                                 ts.push((t, cuts.len()));
                                 cuts.push(Cut {
                                     side,
                                     edge: e,
                                     s,
-                                    point: p,
+                                    point: vx.point,
+                                    tol: vx.tol,
                                 });
                             }
                         }
@@ -1015,14 +1110,14 @@ pub(crate) fn trim(
                     .into_iter()
                     .flat_map(|h| crossings_near(&curve, range, &across, h))
                 {
-                    let s = edge.curve.closest(h.point, edge.range);
-                    if edge.curve.eval(s).distance(h.point) <= 10.0 * tol::LINEAR {
+                    if let Some((s, tol)) = on_edge(body, e, h.point) {
                         ts.push((h.t, cuts.len()));
                         cuts.push(Cut {
                             side,
                             edge: e,
                             s,
                             point: h.point,
+                            tol,
                         });
                     }
                 }
@@ -1042,13 +1137,13 @@ pub(crate) fn trim(
                     continue;
                 }
                 let p = cuts[ci].point;
-                let s = edge.curve.closest(p, edge.range);
-                if edge.curve.eval(s).distance(p) <= 10.0 * tol::LINEAR {
+                if let Some((s, tol)) = on_edge(body, e, p) {
                     cuts.push(Cut {
                         side,
                         edge: e,
                         s,
                         point: p,
+                        tol: tol.max(cuts[ci].tol),
                     });
                     marks.push(s);
                 }
@@ -1076,17 +1171,20 @@ pub(crate) fn trim(
         }
     }
     ts.sort_by(|x, y| x.0.total_cmp(&y.0));
-    if std::env::var_os("FORGE_DEBUG").is_some() {
+    if debug_on() {
         let tsp: Vec<_> = ts.iter().map(|&(t, k)| (t, cuts[k].point)).collect();
         eprintln!("  curve {faces:?} range {range:?} cuts {tsp:?}");
     }
     // the same point found on two edges (a vertex, or both faces' boundaries) is one cut
-    ts.dedup_by(|x, y| cuts[x.1].point.distance(cuts[y.1].point) <= 10.0 * tol::LINEAR);
+    ts.dedup_by(|x, y| {
+        let (a, b) = (&cuts[x.1], &cuts[y.1]);
+        a.point.distance(b.point) <= a.tol.max(b.tol)
+    });
     let inside = |t: f64| -> R<bool> {
         let p = curve.eval(t);
         let wa = index[0].point_in_face(faces[0], p);
         let wb = index[1].point_in_face(faces[1], p);
-        if std::env::var_os("FORGE_DEBUG").is_some() && matches!(curve, Curve::Circle(_)) {
+        if debug_on() && matches!(curve, Curve::Circle(_)) {
             eprintln!("  trim {:?} t {t:.4} p {p:?}: {wa:?} {wb:?}", faces);
         }
         // a stretch on a boundary is an existing edge, never a new one
@@ -1199,20 +1297,31 @@ pub(crate) fn imprint(
 ) -> R<()> {
     let dst = 1 - src;
     let (sb, db) = (bodies[src], bodies[dst]);
-    let mut seen: Vec<EdgeId> = Vec::new();
+    // how far a point an edge reaches may be from its box: its ends' tolerance
+    let slack = |body: &Body, e: EdgeId| {
+        let edge = body.edge(e);
+        body.vertex(edge.start).tol.max(body.vertex(edge.end).tol)
+    };
     for &l in &sb.face(src_face).loops {
         for &c in &sb.lp(l).coedges {
             let e = sb.coedge(c).edge;
-            if seen.contains(&e) {
+            // a seam is used twice by the face: once is enough
+            if sb
+                .partner(c)
+                .is_some_and(|o| o < c && sb.coedge_face(o) == src_face)
+            {
                 continue;
             }
-            seen.push(e);
             let edge = sb.edge(e);
+            let (reach, grow) = (sb.edge_box(e), slack(sb, e));
             let mut ts: Vec<f64> = Vec::new();
             for &l2 in &db.face(dst_face).loops {
                 for &c2 in &db.lp(l2).coedges {
                     let e2 = db.coedge(c2).edge;
-                    let edge2 = db.edge(e2);
+                    // an edge clear of this one's box can neither cross it nor share its carrier
+                    if !db.edge_box(e2).grow(grow + slack(db, e2)).overlaps(&reach) {
+                        continue;
+                    }
                     let hits = match curve_surface(&edge.curve, edge.range, &across(db, dst_face, c2)?) {
                         CurveSurface::Hits(h) => h,
                         // lying in both the face's plane and the neighbour's surface, the edge runs
@@ -1223,19 +1332,20 @@ pub(crate) fn imprint(
                         }
                     };
                     for h in hits {
-                        let s2 = edge2.curve.closest(h.point, edge2.range);
-                        if edge2.curve.eval(s2).distance(h.point) <= 10.0 * tol::LINEAR {
+                        if let Some((s2, tol)) = on_edge(db, e2, h.point) {
                             cuts.push(Cut {
                                 side: sides[dst],
                                 edge: e2,
                                 s: s2,
                                 point: h.point,
+                                tol,
                             });
                             cuts.push(Cut {
                                 side: sides[src],
                                 edge: e,
                                 s: h.t,
                                 point: h.point,
+                                tol,
                             });
                             ts.push(h.t);
                         }
@@ -1326,18 +1436,18 @@ pub(crate) fn crossings_near(curve: &Curve, range: Interval, s: &Surface, h: Cur
 
 /// Two edges on the same carrier curve: each is cut where the other's ends lie inside it.
 fn coincide(sb: &Body, src: Side, e: EdgeId, db: &Body, dst: Side, e2: EdgeId, cuts: &mut Vec<Cut>) {
-    let near = 10.0 * tol::LINEAR;
     let mut ends_into = |from: &Body, fe: EdgeId, to: &Body, te: EdgeId, side: Side| {
         let (f, t) = (from.edge(fe), to.edge(te));
         for v in [f.start, f.end] {
-            let p = from.vertex(v).point;
-            let s = t.curve.closest(p, t.range);
-            if t.curve.eval(s).distance(p) <= near {
+            let vx = from.vertex(v);
+            let s = t.curve.closest(vx.point, t.range);
+            if t.curve.eval(s).distance(vx.point) <= vx.tol {
                 cuts.push(Cut {
                     side,
                     edge: te,
                     s,
-                    point: p,
+                    point: vx.point,
+                    tol: vx.tol,
                 });
             }
         }
@@ -1371,13 +1481,12 @@ fn line_box(line: &forge_geom::Line, b: &forge_math::Box3) -> Option<Interval> {
 type Placed = (Vec<VKey>, Vec<Point3>, Vec<(VKey, VKey)>);
 
 fn place_cuts(bodies: &[&Body; 2], cuts: &[Cut]) -> R<Placed> {
-    let near = 10.0 * tol::LINEAR;
     let mut cluster: Vec<usize> = Vec::with_capacity(cuts.len());
     let mut heads: Vec<usize> = Vec::new();
     for (i, c) in cuts.iter().enumerate() {
         match heads
             .iter()
-            .position(|&h| cuts[h].point.distance(c.point) <= near)
+            .position(|&h| cuts[h].point.distance(c.point) <= cuts[h].tol.max(c.tol))
         {
             Some(k) => cluster.push(k),
             None => {
@@ -1390,7 +1499,10 @@ fn place_cuts(bodies: &[&Body; 2], cuts: &[Cut]) -> R<Placed> {
         let edge = bodies[c.side].edge(c.edge);
         [edge.start, edge.end]
             .into_iter()
-            .find(|&v| bodies[c.side].vertex(v).point.distance(c.point) <= near)
+            .find(|&v| {
+                let vx = bodies[c.side].vertex(v);
+                vx.point.distance(c.point) <= vx.tol.max(c.tol)
+            })
             .map(|v| VKey::Old(c.side, v))
     };
     let mut points: Vec<Point3> = Vec::new();
@@ -1419,6 +1531,39 @@ fn place_cuts(bodies: &[&Body; 2], cuts: &[Cut]) -> R<Placed> {
         key_of.push(key);
     }
     Ok((cluster.iter().map(|&k| key_of[k]).collect(), points, alias))
+}
+
+/// The point nearest every curve through a new vertex (alternating projections from `p`), and
+/// the tolerance it needs: the farthest curve, at least LINEAR.
+pub(crate) fn settle(mut p: Point3, curves: &[(&Curve, Interval)]) -> R<(Point3, f64)> {
+    if curves.is_empty() {
+        return Ok((p, tol::LINEAR));
+    }
+    if let [(c, r)] = curves {
+        return Ok((c.eval(c.closest(p, *r)), tol::LINEAR));
+    }
+    // the last round's projections bound how far the point is from each curve
+    let mut near = [Point3::ORIGIN; 8];
+    for round in 0..8 {
+        let mut sum = Vec3::ZERO;
+        for (k, &(c, r)) in curves.iter().enumerate() {
+            let q = c.eval(c.closest(p, r));
+            if round == 7 && k < near.len() {
+                near[k] = q;
+            }
+            sum += q - Point3::ORIGIN;
+        }
+        p = Point3::ORIGIN + sum / curves.len() as f64;
+    }
+    let mut worst = tol::LINEAR;
+    for (k, &(c, r)) in curves.iter().enumerate() {
+        let d = match near.get(k) {
+            Some(q) => q.distance(p),
+            None => c.eval(c.closest(p, r)).distance(p),
+        };
+        worst = worst.max(d);
+    }
+    Ok((p, worst))
 }
 
 /// Direction of a half-edge in the face's oriented parameter plane, at its
@@ -1669,7 +1814,7 @@ pub(crate) fn split_face(
             }
         }
         if i != s {
-            if std::env::var_os("FORGE_DEBUG").is_some() {
+            if debug_on() {
                 eprintln!(
                     "crossed itself: face {f:?} {:?} sense {}",
                     body.face(f).surface,
@@ -1851,7 +1996,7 @@ pub(crate) fn split_face(
                 open.push(cyc.iter().map(|&i| half[i]).collect());
                 continue;
             }
-            if std::env::var_os("FORGE_DEBUG").is_some() {
+            if debug_on() {
                 eprintln!(
                     "hole outside: face {f:?} {:?} sense {} probe {probe:?}",
                     face.surface, face.same_sense
@@ -1924,7 +2069,7 @@ fn classify_specs(
         let Some(p) = interior_point(body, s, pieces) else {
             continue;
         };
-        if std::env::var_os("FORGE_SPECS").is_some() {
+        if specs_on() {
             let w: Vec<_> = partners
                 .iter()
                 .map(|&pf| (pf, index[other].point_in_face(pf, p)))
@@ -2004,7 +2149,7 @@ fn classify_specs(
                     }
                     match class[j] {
                         None => {
-                            if std::env::var_os("FORGE_SPECS").is_some() {
+                            if specs_on() {
                                 eprintln!(
                                     "  FLOOD spec {j} (face {:?}) <- spec {i} (face {:?} {:?}) ({c:?}) across piece {p}",
                                     specs[j].from,
@@ -2016,7 +2161,7 @@ fn classify_specs(
                             queue.push(j);
                         }
                         Some(cj) if cj != c => {
-                            if std::env::var_os("FORGE_DEBUG").is_some() {
+                            if debug_on() {
                                 debug_conflict(bodies, specs, pieces, class, i, j, p);
                             }
                             return Err(BoolError::Internal("inconsistent classification"));
@@ -2041,7 +2186,7 @@ fn classify_specs(
         let s = &specs[i];
         let probe =
             interior_point(bodies[s.side], s, pieces).ok_or(BoolError::Internal("no interior point"))?;
-        if std::env::var_os("FORGE_SPECS").is_some() {
+        if specs_on() {
             eprintln!(
                 "  RAY spec {i} probe {probe:?} -> {:?}",
                 index[1 - s.side].classify(probe)
@@ -2051,7 +2196,7 @@ fn classify_specs(
             Where::Inside => Class::In,
             Where::Outside => Class::Out,
             Where::On => {
-                if std::env::var_os("FORGE_DEBUG").is_some() {
+                if debug_on() {
                     eprintln!(
                         "untouched spec {i}: side {} face {:?} {:?} probe {probe:?} coplanar {coplanar:?}",
                         s.side,

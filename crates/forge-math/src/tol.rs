@@ -15,8 +15,9 @@ pub const LINEAR: f64 = 1e-5;
 /// the model size, so an angle error never moves a far point more than LINEAR.
 pub const ANGULAR: f64 = 1e-11;
 
-/// Smallest radius or length a feature may have; anything smaller is degenerate.
-pub const MIN_LENGTH: f64 = 10.0 * LINEAR;
+/// Smallest radius or length a feature may have; anything shorter is a point. The same number
+/// as LINEAR: there is one tolerance.
+pub const MIN_LENGTH: f64 = LINEAR;
 
 pub fn same_point(a: crate::Point3, b: crate::Point3) -> bool {
     a.distance_sq(b) <= LINEAR * LINEAR
