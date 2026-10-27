@@ -20,6 +20,7 @@ fn main() {
                 profile.plane, profile.loops
             ),
             Feature::Ball { frame, radius, op } => format!("ball {op:?} r={radius:.3} at {:?}", frame.origin),
+            other => format!("{other:?}"),
         };
         println!("{i}: {}", &d[..d.len().min(600)]);
     }

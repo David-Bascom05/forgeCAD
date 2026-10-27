@@ -686,6 +686,9 @@ fn error_kind(e: &crate::RegenError) -> (String, usize) {
         Revolve { feature, error } => (format!("Revolve({error:?})"), *feature),
         Boolean { feature, error } => (format!("Boolean({error:?})"), *feature),
         NothingToCombine { feature } => ("NothingToCombine".to_string(), *feature),
+        Chamfer { feature, error } => (format!("Chamfer({error:?})"), *feature),
+        Shell { feature, error } => (format!("Shell({error:?})"), *feature),
+        Draft { feature, error } => (format!("Draft({error:?})"), *feature),
     }
 }
 
@@ -784,6 +787,7 @@ fn rounded_feature(f: &Feature, digits: i32) -> Feature {
             radius: rd(*radius),
             op: *op,
         },
+        other => other.clone(),
     }
 }
 
@@ -833,6 +837,7 @@ pub fn canonical(part: &Part) -> Part {
                         radius: *radius,
                         op: *op,
                     },
+                    other => other.clone(),
                 })
                 .collect(),
         };
@@ -980,6 +985,7 @@ pub fn literal(part: &Part) -> String {
                 lit_frame(frame),
                 lit_f(*radius)
             ),
+            other => format!("        {other:?},"),
         })
         .collect();
     format!("Part {{\n    features: vec![\n{}\n    ],\n}}", fs.join("\n"))

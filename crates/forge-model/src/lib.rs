@@ -1,13 +1,17 @@
 //! A part as a history of features, and regenerating it into a solid.
 
 pub mod adversarial;
+pub mod finishing;
 pub mod suite;
 pub mod torture;
 
 use forge_bool::{BoolError, Op, Seg2, Shape, boolean_into};
 use forge_math::{Frame, Point2, Vec2, dmath};
-use forge_ops::{Axis2, ExtrudeError, Profile, ProfileLoop, RevolveError, Segment, extrude, revolve};
-use forge_topo::Body;
+use forge_ops::{
+    Axis2, ChamferError, ChamferSize, DraftError, ExtrudeError, Profile, ProfileLoop, RevolveError, Segment,
+    ShellError, chamfer, draft, extrude, revolve, shell,
+};
+use forge_topo::{Body, Name};
 
 /// One step of a part's history.
 #[derive(Clone, Debug, PartialEq)]
@@ -27,6 +31,20 @@ pub enum Feature {
     },
     /// A ball (a shorthand for revolving a half disc).
     Ball { frame: Frame, radius: f64, op: Combine },
+    /// Bevel edges of the part.
+    Chamfer { edges: Vec<Name>, size: ChamferSize },
+    /// Hollow the part to walls `thickness` thick, inside or outside its skin, `open` faces removed.
+    Shell {
+        thickness: f64,
+        outward: bool,
+        open: Vec<Name>,
+    },
+    /// Taper faces by `angle` from the pull direction (`neutral`'s z) about the neutral plane.
+    Draft {
+        faces: Vec<Name>,
+        neutral: Frame,
+        angle: f64,
+    },
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -52,7 +70,19 @@ pub enum RegenError {
         feature: usize,
         error: BoolError,
     },
-    /// A feature that combines with the part came before any part existed.
+    Chamfer {
+        feature: usize,
+        error: ChamferError,
+    },
+    Shell {
+        feature: usize,
+        error: ShellError,
+    },
+    Draft {
+        feature: usize,
+        error: DraftError,
+    },
+    /// A feature that combines with or changes the part came before any part existed.
     NothingToCombine {
         feature: usize,
     },
@@ -83,14 +113,18 @@ impl Part {
         let start = self
             .features
             .iter()
-            .rposition(|f| feature_op(f) == Combine::New)
+            .rposition(|f| feature_op(f) == Some(Combine::New))
             .unwrap_or(0);
-        let feats = &self.features[start..];
-        let ops = feats[1..]
+        let start = match self.features.iter().rposition(|f| feature_op(f).is_none()) {
+            Some(m) if m >= start => m + 1,
+            _ => start,
+        };
+        let feats = &self.features[start.min(self.features.len())..];
+        let ops = feats[1.min(feats.len())..]
             .iter()
             .map(|f| match feature_op(f) {
-                Combine::Add => Op::Union,
-                Combine::Cut => Op::Subtract,
+                Some(Combine::Add) => Op::Union,
+                Some(Combine::Cut) => Op::Subtract,
                 _ => Op::Intersect,
             })
             .collect();
@@ -104,73 +138,25 @@ impl Part {
         shapes: bool,
         batch: Option<&dyn forge_bool::Batch>,
     ) -> Result<Body, RegenError> {
-        let start = self
-            .features
-            .iter()
-            .rposition(|f| feature_op(f) == Combine::New)
-            .unwrap_or(0);
-        if start == 0
-            && self
-                .features
-                .first()
-                .is_some_and(|f| feature_op(f) != Combine::New)
-        {
-            return Err(RegenError::NothingToCombine { feature: 0 });
-        }
-        let feats = &self.features[start..];
-        let built: Vec<Result<(Body, Combine), RegenError>> = std::thread::scope(|s| {
-            let chunk = feats.len().div_ceil(threads.max(1));
-            let hs: Vec<_> = feats
-                .chunks(chunk.max(1))
-                .enumerate()
-                .map(|(c, fs)| {
-                    s.spawn(move || {
-                        fs.iter()
-                            .enumerate()
-                            .map(|(k, f)| tool(start + c * chunk + k, f))
-                            .collect::<Vec<_>>()
-                    })
-                })
-                .collect();
-            hs.into_iter()
-                .flat_map(|h| h.join().expect("tool builder"))
-                .collect()
-        });
-        let built: Vec<(Body, Combine)> = built.into_iter().collect::<Result<_, _>>()?;
-        let tools: Vec<&Body> = built.iter().map(|t| &t.0).collect();
-        let ops: Vec<Op> = built[1..]
-            .iter()
-            .map(|t| match t.1 {
-                Combine::Add => Op::Union,
-                Combine::Cut => Op::Subtract,
-                _ => Op::Intersect,
-            })
-            .collect();
-        let solids: Vec<Shape> = feats.iter().map(shape).collect();
-        forge_bool::nary_with(&tools, &ops, shapes.then_some(&solids[..]), batch, threads)
-            .map(|b| b.compact())
-            .map_err(|error| RegenError::Boolean {
-                feature: self.features.len() - 1,
-                error,
-            })
+        nary_regen(&self.features, threads, shapes, batch)
     }
 
     pub fn regenerate(&self) -> Result<Body, RegenError> {
         let mut body: Option<Body> = None;
         for (i, f) in self.features.iter().enumerate() {
             let id = i as u64 + 1;
+            if feature_op(f).is_none() {
+                let b = body.ok_or(RegenError::NothingToCombine { feature: i })?;
+                body = Some(modify(i, f, &b)?);
+                continue;
+            }
             let (tool, op) = tool(i, f)?;
             body = Some(match (body, op) {
                 (_, Combine::New) => tool,
                 (None, _) => return Err(RegenError::NothingToCombine { feature: i }),
                 (Some(mut b), op) => {
-                    let op = match op {
-                        Combine::Add => Op::Union,
-                        Combine::Cut => Op::Subtract,
-                        _ => Op::Intersect,
-                    };
                     // in place: only the faces near the tool change
-                    boolean_into(&mut b, &tool, op, id + 1_000_000)
+                    boolean_into(&mut b, &tool, op_of(op), id + 1_000_000)
                         .map_err(|error| RegenError::Boolean { feature: i, error })?;
                     // tombstones are cheap until they outnumber the living
                     if b.dead > b.faces.len() / 2 {
@@ -183,6 +169,116 @@ impl Part {
         }
         body.map(|b| b.compact())
             .ok_or(RegenError::NothingToCombine { feature: 0 })
+    }
+}
+
+/// Builds the tools of `feats` (feature ids from `start`) on up to `threads` threads.
+fn build_tools(feats: &[Feature], start: usize, threads: usize) -> Result<Vec<(Body, Combine)>, RegenError> {
+    let built: Vec<Result<(Body, Combine), RegenError>> = std::thread::scope(|s| {
+        let chunk = feats.len().div_ceil(threads.max(1));
+        let hs: Vec<_> = feats
+            .chunks(chunk.max(1))
+            .enumerate()
+            .map(|(c, fs)| {
+                s.spawn(move || {
+                    fs.iter()
+                        .enumerate()
+                        .map(|(k, f)| tool(start + c * chunk + k, f))
+                        .collect::<Vec<_>>()
+                })
+            })
+            .collect();
+        hs.into_iter()
+            .flat_map(|h| h.join().expect("tool builder"))
+            .collect()
+    });
+    built.into_iter().collect()
+}
+
+/// The n-ary regen of a history: each run of solid features after a part-changing one (chamfer,
+/// shell, draft) is one n-ary boolean starting from the part so far.
+fn nary_regen(
+    features: &[Feature],
+    threads: usize,
+    shapes: bool,
+    batch: Option<&dyn forge_bool::Batch>,
+) -> Result<Body, RegenError> {
+    let start = features
+        .iter()
+        .rposition(|f| feature_op(f) == Some(Combine::New))
+        .unwrap_or(0);
+    if let Some(m) = features.iter().rposition(|f| feature_op(f).is_none())
+        && m >= start
+    {
+        if m == 0 {
+            return Err(RegenError::NothingToCombine { feature: 0 });
+        }
+        let body = modify(
+            m,
+            &features[m],
+            &nary_regen(&features[..m], threads, shapes, batch)?,
+        )?;
+        if m + 1 == features.len() {
+            return Ok(body);
+        }
+        let built = build_tools(&features[m + 1..], m + 1, threads)?;
+        let mut tools: Vec<&Body> = vec![&body];
+        tools.extend(built.iter().map(|t| &t.0));
+        let ops: Vec<Op> = built.iter().map(|t| op_of(t.1)).collect();
+        return forge_bool::nary_with(&tools, &ops, None, None, threads)
+            .map(|b| b.compact())
+            .map_err(|error| RegenError::Boolean {
+                feature: features.len() - 1,
+                error,
+            });
+    }
+    if start == 0
+        && features
+            .first()
+            .is_some_and(|f| feature_op(f) != Some(Combine::New))
+    {
+        return Err(RegenError::NothingToCombine { feature: 0 });
+    }
+    let feats = &features[start..];
+    let built = build_tools(feats, start, threads)?;
+    let tools: Vec<&Body> = built.iter().map(|t| &t.0).collect();
+    let ops: Vec<Op> = built[1..].iter().map(|t| op_of(t.1)).collect();
+    let solids: Vec<Shape> = feats.iter().map(shape).collect();
+    forge_bool::nary_with(&tools, &ops, shapes.then_some(&solids[..]), batch, threads)
+        .map(|b| b.compact())
+        .map_err(|error| RegenError::Boolean {
+            feature: features.len() - 1,
+            error,
+        })
+}
+
+fn op_of(c: Combine) -> Op {
+    match c {
+        Combine::Add => Op::Union,
+        Combine::Cut => Op::Subtract,
+        _ => Op::Intersect,
+    }
+}
+
+/// Applies part-changing feature `i` to `body`.
+fn modify(i: usize, f: &Feature, body: &Body) -> Result<Body, RegenError> {
+    let id = i as u64 + 1;
+    match f {
+        Feature::Chamfer { edges, size } => {
+            chamfer(body, edges, *size, id).map_err(|error| RegenError::Chamfer { feature: i, error })
+        }
+        Feature::Shell {
+            thickness,
+            outward,
+            open,
+        } => shell(body, *thickness, *outward, open, id)
+            .map_err(|error| RegenError::Shell { feature: i, error }),
+        Feature::Draft {
+            faces,
+            neutral,
+            angle,
+        } => draft(body, faces, neutral, *angle).map_err(|error| RegenError::Draft { feature: i, error }),
+        _ => unreachable!("solid features make tools"),
     }
 }
 
@@ -241,12 +337,17 @@ fn tool(i: usize, f: &Feature) -> Result<(Body, Combine), RegenError> {
                 *op,
             )
         }
+        Feature::Chamfer { .. } | Feature::Shell { .. } | Feature::Draft { .. } => {
+            unreachable!("part-changing features are no tool")
+        }
     })
 }
 
-fn feature_op(f: &Feature) -> Combine {
+/// How a solid feature combines with the part; None for one that changes the part itself.
+fn feature_op(f: &Feature) -> Option<Combine> {
     match f {
-        Feature::Extrude { op, .. } | Feature::Revolve { op, .. } | Feature::Ball { op, .. } => *op,
+        Feature::Extrude { op, .. } | Feature::Revolve { op, .. } | Feature::Ball { op, .. } => Some(*op),
+        Feature::Chamfer { .. } | Feature::Shell { .. } | Feature::Draft { .. } => None,
     }
 }
 
@@ -326,6 +427,9 @@ fn shape(f: &Feature) -> Shape {
             center: frame.origin,
             radius: *radius,
         },
+        Feature::Chamfer { .. } | Feature::Shell { .. } | Feature::Draft { .. } => {
+            unreachable!("part-changing features are no tool")
+        }
     }
 }
 

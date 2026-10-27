@@ -61,6 +61,7 @@ fn main() {
                     "ball",
                 )
             }
+            _ => continue,
         };
         let t = Instant::now();
         body = Some(match (body, op) {
