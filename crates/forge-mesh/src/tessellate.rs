@@ -84,6 +84,12 @@ fn interior_steps(s: &Surface, q: &Quality) -> Option<(f64, f64)> {
     }
 }
 
+/// Mesh vertices joined along edges: `nbr[start[v]..start[v + 1]]` are v's neighbours.
+struct Segments {
+    start: Vec<u32>,
+    nbr: Vec<u32>,
+}
+
 /// A watertight mesh of a body: each edge is cut once and both faces share
 /// those cut points, so neighbouring faces meet exactly.
 pub fn tessellate(body: &Body, q: &Quality) -> Result<TriMesh, TessError> {
@@ -110,8 +116,35 @@ pub fn tessellate(body: &Body, q: &Quality) -> Result<TriMesh, TessError> {
         edge_samples.push(s);
     }
 
+    // every mesh segment an edge's own samples make, as each sample's neighbours along its edges
+    // (start offsets, then neighbours): a face's inner chord must never repeat one (four
+    // triangles on one segment), as when a coarse chord across a cylinder lands exactly on an
+    // edge between two other faces
+    let nv = mesh.positions.len();
+    let mut start = vec![0u32; nv + 1];
+    for s in &edge_samples {
+        for w in s.windows(2) {
+            start[w[0].1 as usize + 1] += 1;
+            start[w[1].1 as usize + 1] += 1;
+        }
+    }
+    for i in 0..nv {
+        start[i + 1] += start[i];
+    }
+    let mut fill = start.clone();
+    let mut nbr = vec![0u32; start[nv] as usize];
+    for s in &edge_samples {
+        for w in s.windows(2) {
+            let (a, b) = (w[0].1 as usize, w[1].1 as usize);
+            nbr[fill[a] as usize] = b as u32;
+            fill[a] += 1;
+            nbr[fill[b] as usize] = a as u32;
+            fill[b] += 1;
+        }
+    }
+    let segments = Segments { start, nbr };
     for f in body.face_ids() {
-        tessellate_face(body, f, &edge_samples, q, &mut mesh)
+        tessellate_face(body, f, &edge_samples, &segments, q, &mut mesh)
             .map_err(|error| TessError::Face { face: f, error })?;
     }
     Ok(mesh)
@@ -121,6 +154,7 @@ fn tessellate_face(
     body: &Body,
     f: FaceId,
     edge_samples: &[Vec<(f64, u32)>],
+    segments: &Segments,
     q: &Quality,
     mesh: &mut TriMesh,
 ) -> Result<(), CdtError> {
@@ -211,8 +245,19 @@ fn tessellate_face(
         }
         *c[i as usize].get_or_insert_with(|| at(p))
     };
+    let on_edge = |ia: u32, ib: u32| {
+        let n = global.len() as u32;
+        ia < n && ib < n && {
+            let (x, y) = (global[ia as usize] as usize, global[ib as usize] as usize);
+            x < segments.start.len() - 1
+                && segments.nbr[segments.start[x] as usize..segments.start[x + 1] as usize]
+                    .contains(&(y as u32))
+        }
+    };
+    // a chord of a plane never strays from it
+    let flat = matches!(surface, Surface::Plane(_));
     let strays = |ia: u32, ib: u32, a: Point2, b: Point2| {
-        at(a.lerp(b, 0.5)).distance(pos(ia, a).lerp(pos(ib, b), 0.5)) > q.chord
+        on_edge(ia, ib) || (!flat && at(a.lerp(b, 0.5)).distance(pos(ia, a).lerp(pos(ib, b), 0.5)) > q.chord)
     };
     let tri = match triangulate_refined(&scaled, &loops, &interior, Some(&strays), 24) {
         Ok(t) => t,
@@ -229,9 +274,10 @@ fn tessellate_face(
     };
     let base = global.len();
     let mut index = global;
-    for p in &tri.points[base..] {
-        let uvp = Point2::new(p.x / su, p.y / sv);
-        index.push(mesh.add_vertex(surface.eval(uvp)));
+    let known = cache.into_inner();
+    for (i, p) in tri.points.iter().enumerate().skip(base) {
+        let pos = known.get(i).copied().flatten().unwrap_or_else(|| at(*p));
+        index.push(mesh.add_vertex(pos));
     }
     for t in &tri.triangles {
         let [a, b, c] = t.map(|k| index[k as usize]);
