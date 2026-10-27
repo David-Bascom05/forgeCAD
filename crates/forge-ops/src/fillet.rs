@@ -89,7 +89,11 @@ pub fn fillet(body: &Body, edges: &[FilletEdge], feature: u64) -> R<Body> {
         }
     }
     merge_flush(&mut body, &seen);
+    let edges = tangent_chains(&body, edges);
+    let seen: BTreeSet<EdgeId> = edges.iter().map(|f| f.edge).collect();
+    merge_flush(&mut body, &seen);
     let root = Name::feature(feature);
+    let body = body;
     let rolled: Vec<R<Rolled>> = par_map(edges.len(), |i| roll(&body, edges[i], root));
     let rolled: Vec<Rolled> = rolled.into_iter().collect::<R<_>>()?;
     Builder::new(body, rolled, root).build()
@@ -129,6 +133,83 @@ fn par_map<T: Send>(n: usize, f: impl Fn(usize) -> T + Sync) -> Vec<T> {
     out.into_iter().map(|t| t.expect("every edge done")).collect()
 }
 
+/// The edges with every tangent continuation of each added, at the same
+/// radius: a chain rounds as a whole, as a ball rolling along it would.
+fn tangent_chains(body: &Body, edges: &[FilletEdge]) -> Vec<FilletEdge> {
+    let mut at: BTreeMap<VertexId, Vec<EdgeId>> = BTreeMap::new();
+    for e in body.edge_ids() {
+        let x = body.edge(e);
+        at.entry(x.start).or_default().push(e);
+        if x.end != x.start {
+            at.entry(x.end).or_default().push(e);
+        }
+    }
+    // unit tangent of e at its end v, pointing out of v
+    let out_of = |e: EdgeId, v: VertexId| -> Vec<Vec3> {
+        let x = body.edge(e);
+        let mut t = Vec::new();
+        if x.start == v {
+            t.push(x.curve.deriv(x.range.lo).d1);
+        }
+        if x.end == v {
+            t.push(-x.curve.deriv(x.range.hi).d1);
+        }
+        t.into_iter()
+            .filter_map(|d| d.normalize())
+            .map(|u| u.get())
+            .collect()
+    };
+    let mut out: Vec<FilletEdge> = edges.to_vec();
+    let mut have: BTreeSet<EdgeId> = edges.iter().map(|f| f.edge).collect();
+    let mut i = 0;
+    while i < out.len() {
+        let FilletEdge { edge, radius } = out[i];
+        i += 1;
+        let x = body.edge(edge);
+        for v in [x.start, x.end] {
+            let mine = out_of(edge, v);
+            let next: Vec<EdgeId> = at[&v]
+                .iter()
+                .copied()
+                .filter(|&o| o != edge && !have.contains(&o) && body.edge(o).coedges.len() == 2)
+                .filter(|&o| {
+                    let f = &body.edge(o).coedges;
+                    body.coedge_face(f[0]) != body.coedge_face(f[1])
+                })
+                .filter(|&o| {
+                    // continuing the chain: leaving v the opposite way, within LINEAR over a radius
+                    out_of(o, v)
+                        .iter()
+                        .any(|t| mine.iter().any(|m| (*m + *t).length() * radius <= tol::LINEAR))
+                })
+                .collect();
+            if let [o] = next[..]
+                && !is_smooth(body, o, radius)
+            {
+                have.insert(o);
+                out.push(FilletEdge { edge: o, radius });
+            }
+        }
+    }
+    out
+}
+
+/// Whether the faces either side of `e` meet tangentially at its middle (to within
+/// LINEAR over the radius).
+fn is_smooth(body: &Body, e: EdgeId, radius: f64) -> bool {
+    let x = body.edge(e);
+    let p = x.curve.eval(x.range.mid());
+    let n: Vec<_> = x
+        .coedges
+        .iter()
+        .filter_map(|&c| {
+            let f = body.coedge_face(c);
+            body.face_normal(f, body.face(f).surface.project(p))
+        })
+        .collect();
+    n.len() == 2 && n[0].cross(n[1]).length() * radius <= tol::LINEAR && n[0].dot(n[1]) > 0.0
+}
+
 /// Faces on one surface that meet along an edge at a vertex of a filleted edge
 /// become one face: a boolean leaves such seams, and a blend must run out
 /// across the surface as a whole.
@@ -161,37 +242,17 @@ fn merge_flush(body: &mut Body, filleted: &BTreeSet<EdgeId>) {
     }
 }
 
-/// Whether two faces lie on the same surface with the same outward side.
+/// Whether two faces lie on one plane with the same outward side. (Curved
+/// faces on one surface are left split: their seams keep a periodic face's
+/// boundary drawable.)
 fn same_surface(body: &Body, a: FaceId, b: FaceId) -> bool {
     let (fa, fb) = (body.face(a), body.face(b));
-    let on_axis = |f: &Frame, p: Point3| {
-        let l = f.point_to_local(p);
-        (l.x * l.x + l.y * l.y).sqrt() <= tol::LINEAR
-    };
-    let same_axis =
-        |f: &Frame, g: &Frame| f.z().cross(g.z()).length() <= tol::ANGULAR && on_axis(f, g.origin);
-    let close = |x: f64, y: f64| (x - y).abs() <= tol::LINEAR;
     match (&fa.surface, &fb.surface) {
         (Surface::Plane(p), Surface::Plane(q)) => {
             let sign = if fa.same_sense == fb.same_sense { 1.0 } else { -1.0 };
             p.frame.z().cross(q.frame.z()).length() <= tol::ANGULAR
                 && p.frame.z().dot(q.frame.z()) * sign > 0.0
                 && p.signed_distance(q.frame.origin).abs() <= tol::LINEAR
-        }
-        (Surface::Cylinder(c), Surface::Cylinder(d)) => {
-            fa.same_sense == fb.same_sense && close(c.radius, d.radius) && same_axis(&c.frame, &d.frame)
-        }
-        (Surface::Sphere(c), Surface::Sphere(d)) => {
-            fa.same_sense == fb.same_sense
-                && close(c.radius, d.radius)
-                && c.frame.origin.distance(d.frame.origin) <= tol::LINEAR
-        }
-        (Surface::Torus(c), Surface::Torus(d)) => {
-            fa.same_sense == fb.same_sense
-                && close(c.major, d.major)
-                && close(c.minor, d.minor)
-                && same_axis(&c.frame, &d.frame)
-                && c.frame.origin.distance(d.frame.origin) <= tol::LINEAR
         }
         _ => false,
     }
@@ -617,8 +678,15 @@ impl Builder {
         );
         let vp = self.body.vertex(v).point;
         let ea = self.rolled[ra].edge;
-        let ta = spine_closest(&self.rolled[ra].blend.spine, vp);
-        let tb = spine_closest(&self.rolled[rb].blend.spine, vp);
+        let sa_in = self.side(ka.cin);
+        let mut ta = spine_closest(&self.rolled[ra].blend.spine, vp);
+        if k == 3 {
+            // the shared section is where the spring on the tangent faces crosses the edge between them
+            let em = self.body.edge(self.body.coedge(km.cin).edge);
+            ta = crossing(&self.rolled[ra].springs[1 - sa_in], ta, &em.curve, em.range)
+                .ok_or(FilletError::Corner { vertex: v })?;
+        }
+        let tb = spine_closest(&self.rolled[rb].blend.spine, self.rolled[ra].blend.spine.eval(ta));
         let (ca, cb) = (
             self.rolled[ra].blend.spine.eval(ta),
             self.rolled[rb].blend.spine.eval(tb),
@@ -632,7 +700,6 @@ impl Builder {
             return Err(FilletError::Corner { vertex: v });
         }
         // feet: P on the face both blends share, X on the two tangent faces
-        let sa_in = self.side(ka.cin);
         let p = self.rolled[ra].springs[sa_in].eval(ta);
         let x = self.rolled[ra].springs[1 - sa_in].eval(ta);
         let sb_out = self.side(ka.cout);
@@ -977,6 +1044,22 @@ fn cross_curve(blend: &Blend, s: &Surface, a: Point3, b: Point3) -> Option<(Curv
         }
     }
     None
+}
+
+/// The parameter near `t` where curve `a` crosses curve `b` (over `range`),
+/// both lying on one surface: alternate nearest points until they meet.
+fn crossing(a: &Curve, mut t: f64, b: &Curve, range: Interval) -> Option<f64> {
+    let window = search_window(a, t, 1e3);
+    for _ in 0..100 {
+        let p = a.eval(t);
+        let q = b.eval(b.closest(p, range));
+        if p.distance(q) <= 1e-3 * tol::LINEAR {
+            return Some(t);
+        }
+        t = a.closest(q, window);
+    }
+    let p = a.eval(t);
+    (b.eval(b.closest(p, range)).distance(p) <= tol::LINEAR).then_some(t)
 }
 
 /// The point on all three offset surfaces, by Newton from `p`.

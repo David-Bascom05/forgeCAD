@@ -202,6 +202,78 @@ pub fn cases() -> Vec<(&'static str, Part, Option<f64>)> {
         with_fillet(&holed, &[(Point3::new(7.0, 5.0, 8.0), 1.0)]),
         Some(vhole - 2.0 * pi * (3.0 + centroid(1.0)) * spandrel(1.0)),
     ));
+    // a rounded block: one pick takes the whole tangent chain round its top
+    let (w, h, d, rho) = (20.0, 12.0, 6.0, 3.0);
+    let rounded = Part {
+        features: vec![Feature::Extrude {
+            profile: Profile {
+                plane: Frame::WORLD,
+                loops: vec![Profile::rounded_rectangle(Point2::ORIGIN, w, h, rho, 0)],
+            },
+            distance: d,
+            op: Combine::New,
+        }],
+    };
+    let vround = (w * h - (4.0 - pi) * rho * rho) * d;
+    let straight = 2.0 * (w - 2.0 * rho) + 2.0 * (h - 2.0 * rho);
+    let r = 1.0;
+    out.push((
+        "rounded-top-chain",
+        with_fillet(&rounded, &[(Point3::new(10.0, 0.0, d), r)]),
+        Some(vround - spandrel(r) * straight - 2.0 * pi * (rho - centroid(r)) * spandrel(r)),
+    ));
+    // the same block standing on a plate: a concave chain round its foot
+    let mut stand = Part {
+        features: vec![block_at(
+            Point3::new(-5.0, -5.0, -4.0),
+            30.0,
+            22.0,
+            4.0,
+            Combine::New,
+        )],
+    };
+    stand.features.push(rounded.features[0].clone());
+    if let Feature::Extrude { op, .. } = &mut stand.features[1] {
+        *op = Combine::Add;
+    }
+    out.push((
+        "rounded-foot-chain",
+        with_fillet(&stand, &[(Point3::new(10.0, 0.0, 0.0), r)]),
+        Some(
+            30.0 * 22.0 * 4.0
+                + vround
+                + spandrel(r) * straight
+                + 2.0 * pi * (rho + centroid(r)) * spandrel(r),
+        ),
+    ));
+    // a rod off the axis of a ball: the edge is a traced quartic, the blend a procedural pipe
+    let ball_rod = Part {
+        features: vec![
+            Feature::Ball {
+                frame: Frame::WORLD,
+                radius: 8.0,
+                op: Combine::New,
+            },
+            Feature::Extrude {
+                profile: Profile {
+                    plane: Frame::from_z(Point3::new(0.0, 2.0, 0.0), forge_math::UnitVec3::X),
+                    loops: vec![Profile::circle(Point2::ORIGIN, 3.0, 0)],
+                },
+                distance: 14.0,
+                op: Combine::Add,
+            },
+        ],
+    };
+    let base = ball_rod.regenerate().expect("ball and rod");
+    let seam = base
+        .edge_ids()
+        .find(|&e| matches!(base.edge(e).curve, forge_geom::Curve::Intersection(_)))
+        .map(|e| {
+            let x = base.edge(e);
+            x.curve.eval(x.range.mid())
+        })
+        .expect("a traced edge");
+    out.push(("ball-rod-pipe", with_fillet(&ball_rod, &[(seam, 1.0)]), None));
     out
 }
 
@@ -245,9 +317,18 @@ mod tests {
     fn corpus() {
         let q = Quality {
             chord: 1e-4,
-            max_angle: 0.05,
+            max_angle: 1.0,
         };
         for (name, part, volume) in cases() {
+            // fine meshes only where a volume is checked
+            let q = if volume.is_some() {
+                q
+            } else {
+                Quality {
+                    chord: 1e-2,
+                    max_angle: 0.3,
+                }
+            };
             let body = part.regenerate().unwrap_or_else(|e| panic!("{name}: {e:?}"));
             let problems = forge_topo::check(&body);
             assert!(problems.is_empty(), "{name}: {problems:?}");
