@@ -174,6 +174,138 @@ pub fn parts() -> Vec<(&'static str, Part, Option<f64>)> {
         ),
     ];
     out.push(("tray", Part { features: tray }, None));
-    let _ = (edge, ChamferSize::Equal(1.0));
+
+    let top = face(0, "end");
+    let tops: Vec<Name> = (0..4).map(|k| edge(top, side(0, k))).collect();
+    let bottoms: Vec<Name> = (0..4).map(|k| edge(face(0, "start"), side(0, k))).collect();
+    let uprights: Vec<Name> = (0..4).map(|k| edge(side(0, (k + 3) % 4), side(0, k))).collect();
+    let chamfered = |edges: Vec<Name>, size: ChamferSize| Part {
+        features: vec![block(), Feature::Chamfer { edges, size }],
+    };
+    let d = 2.0;
+    out.push((
+        "chamfer-edge",
+        chamfered(tops[..1].to_vec(), ChamferSize::Equal(d)),
+        Some(a * b * h - d * d / 2.0 * a),
+    ));
+    out.push((
+        "chamfer-top",
+        chamfered(tops.clone(), ChamferSize::Equal(d)),
+        Some(a * b * h - d * d * (a + b) + 4.0 / 3.0 * d * d * d),
+    ));
+    let all: Vec<Name> = tops.iter().chain(&bottoms).chain(&uprights).copied().collect();
+    out.push((
+        "chamfer-all",
+        chamfered(all, ChamferSize::Equal(d)),
+        Some(a * b * h - 2.0 * d * d * (a + b + h) + 16.0 / 3.0 * d * d * d),
+    ));
+    out.push((
+        "chamfer-two",
+        chamfered(
+            tops[..1].to_vec(),
+            ChamferSize::Distances {
+                face: top,
+                d1: 1.0,
+                d2: 3.0,
+            },
+        ),
+        Some(a * b * h - 1.5 * a),
+    ));
+    let angle = dmath::PI / 6.0;
+    let other = 2.0 * dmath::sin(angle) / dmath::sin(dmath::FRAC_PI_2 + angle);
+    out.push((
+        "chamfer-angle",
+        chamfered(
+            tops[..1].to_vec(),
+            ChamferSize::DistanceAngle {
+                face: top,
+                d: 2.0,
+                angle,
+            },
+        ),
+        Some(a * b * h - other * a),
+    ));
+    out.push((
+        "chamfer-mitre",
+        chamfered(
+            tops[..2].to_vec(),
+            ChamferSize::Distances {
+                face: top,
+                d1: 1.0,
+                d2: 2.5,
+            },
+        ),
+        None,
+    ));
+    let (r, dc) = (10.0, 1.5);
+    out.push((
+        "chamfer-rod",
+        Part {
+            features: vec![
+                rod(r),
+                Feature::Chamfer {
+                    edges: vec![edge(top, side(0, 0)), edge(face(0, "start"), side(0, 0))],
+                    size: ChamferSize::Equal(dc),
+                },
+            ],
+        },
+        Some(pi * r * r * h - 2.0 * pi * (r - dc / 3.0) * dc * dc),
+    ));
+    // a rounded plate with a hole: the top's tangent chain and the hole's rim, then shelled
+    let plate = || {
+        extrude(
+            vec![
+                Profile::rounded_rectangle(Point2::ORIGIN, 50.0, 30.0, 5.0, 0),
+                Profile::circle(Point2::new(25.0, 15.0), 4.0, 50),
+            ],
+            Frame::WORLD,
+            10.0,
+            Combine::New,
+        )
+    };
+    let rims: Vec<Name> = (0..8).chain([50]).map(|k| edge(top, side(0, k))).collect();
+    out.push((
+        "chamfer-plate",
+        Part {
+            features: vec![
+                plate(),
+                Feature::Chamfer {
+                    edges: rims.clone(),
+                    size: ChamferSize::Equal(1.0),
+                },
+                Feature::Shell {
+                    thickness: 1.0,
+                    outward: false,
+                    open: vec![face(0, "start")],
+                },
+            ],
+        },
+        None,
+    ));
+    // chamfered uprights, shelled open at the top, a boss added after
+    out.push((
+        "chamfer-box-shell",
+        Part {
+            features: vec![
+                block(),
+                Feature::Chamfer {
+                    edges: uprights.clone(),
+                    size: ChamferSize::Equal(4.0),
+                },
+                Feature::Shell {
+                    thickness: 1.5,
+                    outward: false,
+                    open: vec![top],
+                },
+                extrude(
+                    vec![Profile::circle(Point2::new(20.0, 15.0), 3.0, 0)],
+                    Frame::WORLD,
+                    12.0,
+                    Combine::Add,
+                ),
+            ],
+        },
+        None,
+    ));
     out
 }

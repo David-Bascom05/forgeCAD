@@ -22,6 +22,22 @@ pub enum RebuildError {
 /// Recomputes every vertex and edge touching a face flagged in `changed` (by face index), from
 /// the faces' current surfaces. The old geometry is the starting guess.
 pub fn rebuild(body: &mut Body, changed: &[bool]) -> Result<(), RebuildError> {
+    let mut edges = vec![false; body.edges.len()];
+    let mut verts = vec![false; body.vertices.len()];
+    for e in body.edge_ids() {
+        let edge = body.edge(e);
+        if edge.coedges.iter().any(|&c| changed[body.coedge_face(c).index()]) {
+            edges[e.index()] = true;
+            verts[edge.start.index()] = true;
+            verts[edge.end.index()] = true;
+        }
+    }
+    rebuild_some(body, &verts, &edges)
+}
+
+/// Solves the flagged vertices onto the surfaces around them, then fits the flagged edges between
+/// their vertices. Each one's current geometry is the starting guess.
+pub fn rebuild_some(body: &mut Body, verts: &[bool], edges: &[bool]) -> Result<(), RebuildError> {
     let mut vedges: Vec<Vec<EdgeId>> = vec![Vec::new(); body.vertices.len()];
     for e in body.edge_ids() {
         let edge = body.edge(e);
@@ -36,13 +52,12 @@ pub fn rebuild(body: &mut Body, changed: &[bool]) -> Result<(), RebuildError> {
         fs.dedup();
         fs
     };
-    let touched = |b: &Body, e: EdgeId| faces_of(b, e).iter().any(|f| changed[f.index()]);
     let old: Vec<(Curve, Interval)> = body.edges.iter().map(|e| (e.curve.clone(), e.range)).collect();
     let old_pts: Vec<Point3> = body.vertices.iter().map(|v| v.point).collect();
 
     // vertices
     for v in 0..body.vertices.len() {
-        if !vedges[v].iter().any(|&e| touched(body, e)) {
+        if !verts[v] {
             continue;
         }
         let mut faces: Vec<FaceId> = vedges[v].iter().flat_map(|&e| faces_of(body, e)).collect();
@@ -79,7 +94,7 @@ pub fn rebuild(body: &mut Body, changed: &[bool]) -> Result<(), RebuildError> {
     // edges
     let ids: Vec<EdgeId> = body.edge_ids().collect();
     for e in ids {
-        if !touched(body, e) {
+        if !edges[e.index()] {
             continue;
         }
         let fs = faces_of(body, e);
@@ -94,6 +109,9 @@ pub fn rebuild(body: &mut Body, changed: &[bool]) -> Result<(), RebuildError> {
             Some(&f) => body.face(f).surface.clone(),
             None => meridian(&a, oc.eval(or.mid())).ok_or(RebuildError::Edge { edge: name })?,
         };
+        if !closed && ps.distance(pe) <= tol::LINEAR {
+            return Err(RebuildError::Collapsed { edge: name });
+        }
         let shift = ps
             .distance(old_pts[vs.index()])
             .max(pe.distance(old_pts[ve.index()]));
@@ -356,6 +374,12 @@ fn edge_curve(
     closed: bool,
     shift: f64,
 ) -> Option<(Curve, Interval)> {
+    // the old curve, if it still lies on both (an edge only trimmed)
+    if let Some(r) = fit(oc, ps, pe, closed)
+        && on_both(oc, r, a, b)
+    {
+        return Some((oc.clone(), r));
+    }
     // cheap and exact when they hold (and the only sound answer where the faces are tangent)
     if !closed
         && matches!(oc, Curve::Line(_))
