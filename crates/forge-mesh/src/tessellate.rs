@@ -1,7 +1,7 @@
-use crate::cdt::{CdtError, triangulate};
+use crate::cdt::{CdtError, triangulate_refined};
 use crate::mesh::TriMesh;
 use forge_geom::{Curve, CurveGeom, Surface, SurfaceGeom};
-use forge_math::{Point2, Point3, dmath};
+use forge_math::{Point2, dmath};
 use forge_topo::uv::{align_loops, draw_loop};
 use forge_topo::{Body, FaceId};
 
@@ -71,11 +71,23 @@ fn uv_scale(s: &Surface) -> (f64, f64) {
 /// Grid steps for points inside a face, where the surface curves in both directions.
 fn interior_steps(s: &Surface, q: &Quality) -> Option<(f64, f64)> {
     match s {
-        Surface::Plane(_) | Surface::Cylinder(_) | Surface::Cone(_) => None,
+        Surface::Plane(_) => None,
+        // straight along v: columns across u, rows only as far apart as keeps triangles shapely
+        Surface::Cylinder(c) => Some((arc_step(c.radius, q), 4.0 * c.radius * arc_step(c.radius, q))),
+        Surface::Cone(c) => {
+            let r = c.radius.max(1.0);
+            Some((arc_step(r, q), 4.0 * r * arc_step(r, q)))
+        }
         Surface::Sphere(sp) => Some((arc_step(sp.radius, q), arc_step(sp.radius, q))),
         Surface::Torus(t) => Some((arc_step(t.major + t.minor, q), arc_step(t.minor, q))),
         Surface::Procedural(pr) => Some((arc_step(pr.min_radius(), q), arc_step(pr.min_radius(), q))),
     }
+}
+
+/// Mesh vertices joined along edges: `nbr[start[v]..start[v + 1]]` are v's neighbours.
+struct Segments {
+    start: Vec<u32>,
+    nbr: Vec<u32>,
 }
 
 /// A watertight mesh of a body: each edge is cut once and both faces share
@@ -104,8 +116,35 @@ pub fn tessellate(body: &Body, q: &Quality) -> Result<TriMesh, TessError> {
         edge_samples.push(s);
     }
 
+    // every mesh segment an edge's own samples make, as each sample's neighbours along its edges
+    // (start offsets, then neighbours): a face's inner chord must never repeat one (four
+    // triangles on one segment), as when a coarse chord across a cylinder lands exactly on an
+    // edge between two other faces
+    let nv = mesh.positions.len();
+    let mut start = vec![0u32; nv + 1];
+    for s in &edge_samples {
+        for w in s.windows(2) {
+            start[w[0].1 as usize + 1] += 1;
+            start[w[1].1 as usize + 1] += 1;
+        }
+    }
+    for i in 0..nv {
+        start[i + 1] += start[i];
+    }
+    let mut fill = start.clone();
+    let mut nbr = vec![0u32; start[nv] as usize];
+    for s in &edge_samples {
+        for w in s.windows(2) {
+            let (a, b) = (w[0].1 as usize, w[1].1 as usize);
+            nbr[fill[a] as usize] = b as u32;
+            fill[a] += 1;
+            nbr[fill[b] as usize] = a as u32;
+            fill[b] += 1;
+        }
+    }
+    let segments = Segments { start, nbr };
     for f in body.face_ids() {
-        tessellate_face(body, f, &edge_samples, q, &mut mesh)
+        tessellate_face(body, f, &edge_samples, &segments, q, &mut mesh)
             .map_err(|error| TessError::Face { face: f, error })?;
     }
     Ok(mesh)
@@ -115,6 +154,7 @@ fn tessellate_face(
     body: &Body,
     f: FaceId,
     edge_samples: &[Vec<(f64, u32)>],
+    segments: &Segments,
     q: &Quality,
     mesh: &mut TriMesh,
 ) -> Result<(), CdtError> {
@@ -191,7 +231,35 @@ fn tessellate_face(
         }
     }
 
-    let mut tri = match triangulate(&scaled, &loops, &interior) {
+    // chords that stray from the surface by more than the tolerance get a surface point at
+    // their middle, inserted into the same triangulation round after round (a thin band between
+    // two boundary curves has no grid points at all; a chord across a radian of a cylinder needs
+    // several halvings)
+    let at = |p: Point2| surface.eval(Point2::new(p.x / su, p.y / sv));
+    // each point's position is worked out once, however many edges and rounds test it
+    let cache = std::cell::RefCell::new(Vec::<Option<forge_math::Point3>>::new());
+    let pos = |i: u32, p: Point2| {
+        let mut c = cache.borrow_mut();
+        if c.len() <= i as usize {
+            c.resize(i as usize + 1, None);
+        }
+        *c[i as usize].get_or_insert_with(|| at(p))
+    };
+    let on_edge = |ia: u32, ib: u32| {
+        let n = global.len() as u32;
+        ia < n && ib < n && {
+            let (x, y) = (global[ia as usize] as usize, global[ib as usize] as usize);
+            x < segments.start.len() - 1
+                && segments.nbr[segments.start[x] as usize..segments.start[x + 1] as usize]
+                    .contains(&(y as u32))
+        }
+    };
+    // a chord of a plane never strays from it
+    let flat = matches!(surface, Surface::Plane(_));
+    let strays = |ia: u32, ib: u32, a: Point2, b: Point2| {
+        on_edge(ia, ib) || (!flat && at(a.lerp(b, 0.5)).distance(pos(ia, a).lerp(pos(ib, b), 0.5)) > q.chord)
+    };
+    let tri = match triangulate_refined(&scaled, &loops, &interior, Some(&strays), 24) {
         Ok(t) => t,
         Err(e) => {
             if let Some(path) = std::env::var_os("FORGE_CDT_DUMP") {
@@ -204,47 +272,12 @@ fn tessellate_face(
             return Err(e);
         }
     };
-    // chords that stray from the surface by more than the tolerance get a surface point at
-    // their middle (a thin band between two boundary curves has no grid points at all)
-    let at = |p: Point2| surface.eval(Point2::new(p.x / su, p.y / sv));
-    let boundary = |a: u32, b: u32| {
-        loops.iter().any(|l| {
-            let (lo, n) = (l[0], l.len() as u32);
-            let inside = |x: u32| x >= lo && x < lo + n;
-            inside(a) && inside(b) && ((a + 1 - lo) % n == b - lo || (b + 1 - lo) % n == a - lo)
-        })
-    };
-    for _ in 0..3 {
-        let pos: Vec<Point3> = tri.points.iter().map(|&p| at(p)).collect();
-        let mut extra: Vec<Point2> = Vec::new();
-        for t in &tri.triangles {
-            for (a, b) in [(t[0], t[1]), (t[1], t[2]), (t[2], t[0])] {
-                // each interior edge once; a boundary chord is the edge's own sample step, and
-                // splitting it would leave a crack against the neighbouring face
-                if a > b || boundary(a, b) {
-                    continue;
-                }
-                let (pa, pb) = (tri.points[a as usize], tri.points[b as usize]);
-                let mid = pa.lerp(pb, 0.5);
-                let chord_mid = pos[a as usize].lerp(pos[b as usize], 0.5);
-                if at(mid).distance(chord_mid) > q.chord {
-                    extra.push(mid);
-                }
-            }
-        }
-        if extra.is_empty() {
-            break;
-        }
-        let base = scaled.len();
-        interior = tri.points[base..].to_vec();
-        interior.extend(extra);
-        tri = triangulate(&scaled, &loops, &interior)?;
-    }
     let base = global.len();
     let mut index = global;
-    for p in &tri.points[base..] {
-        let uvp = Point2::new(p.x / su, p.y / sv);
-        index.push(mesh.add_vertex(surface.eval(uvp)));
+    let known = cache.into_inner();
+    for (i, p) in tri.points.iter().enumerate().skip(base) {
+        let pos = known.get(i).copied().flatten().unwrap_or_else(|| at(*p));
+        index.push(mesh.add_vertex(pos));
     }
     for t in &tri.triangles {
         let [a, b, c] = t.map(|k| index[k as usize]);
