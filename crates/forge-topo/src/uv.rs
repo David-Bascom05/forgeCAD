@@ -27,6 +27,9 @@ impl UvLoop {
     }
 }
 
+/// How near the default drawing of a procedural edge stays to the curve.
+pub const PROC_SAG: f64 = 1e-4;
+
 /// An even number of segments, so each edge's parameter midpoint is a sample.
 pub fn default_segments(e: &Edge) -> usize {
     let n = match e.curve {
@@ -35,6 +38,7 @@ pub fn default_segments(e: &Edge) -> usize {
         Curve::Parabola(_) | Curve::Hyperbola(_) => 16,
         // follow the chain: a sample per chain segment or two
         Curve::Intersection(_) => (e.range.width().ceil() as usize).clamp(4, 256),
+        Curve::Procedural(ref c) => c.segments(e.range, PROC_SAG).clamp(4, 256),
     };
     (n.max(2) + 1) & !1
 }

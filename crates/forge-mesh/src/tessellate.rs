@@ -38,7 +38,8 @@ fn arc_step(r: f64, q: &Quality) -> f64 {
     by_chord.min(q.max_angle).max(1e-4)
 }
 
-fn edge_segments(curve: &Curve, width: f64, q: &Quality) -> usize {
+fn edge_segments(curve: &Curve, range: forge_math::Interval, q: &Quality) -> usize {
+    let width = range.width();
     let n = match curve {
         Curve::Line(_) => 1.0,
         Curve::Circle(c) => width / arc_step(c.radius, q),
@@ -46,6 +47,7 @@ fn edge_segments(curve: &Curve, width: f64, q: &Quality) -> usize {
         Curve::Parabola(_) | Curve::Hyperbola(_) => 64.0,
         // the chain already follows the curvature; split each link by the chord its sag allows
         Curve::Intersection(c) => width * (c.sag / q.chord).sqrt().max(1.0),
+        Curve::Procedural(c) => c.segments(range, q.chord) as f64,
     };
     // a curved edge gets two chords at least: a face bounded by a line and a short arc
     // still has three corners to triangulate
@@ -90,7 +92,7 @@ pub fn tessellate(body: &Body, q: &Quality) -> Result<TriMesh, TessError> {
     let (mut trig, mut pts) = (Vec::new(), Vec::new());
     for e in body.edge_ids() {
         let edge = body.edge(e);
-        let n = edge_segments(&edge.curve, edge.range.width(), q);
+        let n = edge_segments(&edge.curve, edge.range, q);
         let mut s = Vec::with_capacity(n + 1);
         s.push((edge.range.lo, vertex_index[edge.start.index()]));
         edge.curve.sample_interior(edge.range, n, &mut trig, &mut pts);

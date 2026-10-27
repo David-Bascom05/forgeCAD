@@ -279,6 +279,7 @@ fn speed_bound(c: &Curve, range: Interval) -> f64 {
         }
         Curve::Hyperbola(h) => (h.a * h.a + h.b * h.b).sqrt(),
         Curve::Intersection(c) => c.speed_bound(),
+        Curve::Procedural(c) => c.speed_bound(range),
     }
 }
 
@@ -1041,6 +1042,7 @@ mod tests {
                             Curve::Parabola(_) => "parabola",
                             Curve::Hyperbola(_) => "hyperbola",
                             Curve::Intersection(_) => "traced",
+                            Curve::Procedural(_) => "procedural",
                         })
                         .collect::<Vec<_>>()
                         .join("+"),

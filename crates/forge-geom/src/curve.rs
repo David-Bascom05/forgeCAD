@@ -100,6 +100,42 @@ pub enum Curve {
     Hyperbola(Hyperbola),
     /// Where two surfaces meet, for pairs with no closed form.
     Intersection(std::sync::Arc<crate::intcurve::IntCurve>),
+    /// Defined by construction (a blend's spring curve, a corner patch's boundary).
+    Procedural(ProcCurve),
+}
+
+/// A curve defined by construction rather than by a formula of its own, such as where a
+/// rolling-ball blend touches a face (tangent there, so not a transversal intersection). Exact:
+/// points are solved for to full precision from the definition.
+pub trait ProceduralCurve: Send + Sync + std::fmt::Debug {
+    fn deriv(&self, t: f64) -> CurveDeriv;
+    fn domain(&self) -> Domain1;
+    /// Parameter of the point nearest `p` with t inside `range`.
+    fn closest(&self, p: Point3, range: Interval) -> f64;
+    /// A box guaranteed to contain the curve over `range`.
+    fn bbox(&self, range: Interval) -> Box3;
+    fn transformed(&self, f: &Frame) -> ProcCurve;
+    /// A bound on the speed |d/dt| over `range` (for subdivision searches).
+    fn speed_bound(&self, range: Interval) -> f64;
+    /// Chords that draw `range` within `chord` of the curve (equal parameter steps).
+    fn segments(&self, range: Interval, chord: f64) -> usize;
+}
+
+/// A shared handle to a procedural curve; two handles are equal when they are the same curve.
+#[derive(Clone, Debug)]
+pub struct ProcCurve(pub std::sync::Arc<dyn ProceduralCurve>);
+
+impl std::ops::Deref for ProcCurve {
+    type Target = dyn ProceduralCurve;
+    fn deref(&self) -> &(dyn ProceduralCurve + 'static) {
+        &*self.0
+    }
+}
+
+impl PartialEq for ProcCurve {
+    fn eq(&self, o: &ProcCurve) -> bool {
+        std::sync::Arc::ptr_eq(&self.0, &o.0)
+    }
 }
 
 impl Line {
@@ -386,6 +422,7 @@ macro_rules! dispatch {
             Curve::Parabola($c) => $e,
             Curve::Hyperbola($c) => $e,
             Curve::Intersection($c) => $e,
+            Curve::Procedural($c) => $e,
         }
     };
 }
@@ -411,6 +448,7 @@ impl CurveGeom for Curve {
             Curve::Parabola(c) => Curve::Parabola(c.transformed(f)),
             Curve::Hyperbola(c) => Curve::Hyperbola(c.transformed(f)),
             Curve::Intersection(c) => Curve::Intersection(std::sync::Arc::new(c.as_ref().transformed(f))),
+            Curve::Procedural(c) => Curve::Procedural(c.0.transformed(f)),
         }
     }
 }
