@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Shrinks a part on which ForgeCAD and OCCT disagree to the fewest features that still disagree.
 
-  tools/occt/shrink.py <set> <part name> [--path seq|nary] [--vtol 2e-4] [--chord 0.005]
+  tools/occt/shrink.py <set> <part name> [--path seq|nary] [--vtol 2e-4 | --vabs 5] [--chord 0.005]
 
 <set> is what the oracle example takes (fuzz:1, suite, adv:8, ...). Feature 0 is always kept.
 """
@@ -25,7 +25,7 @@ def evaluate(a, keep):
                          capture_output=True, text=True, check=True).stdout
     part = json.loads(out)["parts"][0]
     ref = oracle.occt(part, 1, False, 0.0, 120)
-    v = oracle.verdict(part["forge"][a.path], ref, a.vtol)
+    v = oracle.verdict(part["forge"][a.path], ref, a.vtol, a.vabs)
     return v, part, ref
 
 
@@ -35,6 +35,7 @@ def main():
     ap.add_argument("part")
     ap.add_argument("--path", default="seq")
     ap.add_argument("--vtol", type=float, default=2e-4)
+    ap.add_argument("--vabs", type=float, default=0.0, help="absolute volume tolerance (mm^3), instead of --vtol")
     ap.add_argument("--chord", type=float, default=0.005)
     a = ap.parse_args()
     v, part, _ = evaluate(a, range(1000))

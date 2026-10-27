@@ -180,7 +180,7 @@ def rel(a, b):
     return abs(a - b) / max(abs(b), 1e-9)
 
 
-def verdict(ours, ref, vtol):
+def verdict(ours, ref, vtol, vabs=0.0):
     """How a ForgeCAD regen compares with OCCT."""
     s = ours["status"]
     if ref["status"] != "ok":
@@ -189,7 +189,7 @@ def verdict(ours, ref, vtol):
         return "ours-" + s
     if "volume" not in ours:
         return "ours-nomesh"
-    if rel(ours["volume"], ref["volume"]) > vtol:
+    if abs(ours["volume"] - ref["volume"]) > (vabs or vtol * abs(ref["volume"])):
         return "volume"
     if ours["shells"] != ref["shells"]:
         return "shells"
@@ -230,7 +230,7 @@ def main():
             times["occt"] += ref["ms"]
 
         def dv(o, key="volume"):
-            return f"{(o[key] - ref[key]) / ref[key]:+.1e}" if key in o and key in ref else "-"
+            return f"{(o[key] - ref[key]) / max(abs(ref[key]), 1e-9):+.1e}" if key in o and key in ref else "-"
 
         if i < a.show:
             faces = "/".join(str(x) for x in (ref.get("faces", "-"), ref.get("faces_unified", "-"),

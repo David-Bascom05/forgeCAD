@@ -211,8 +211,12 @@ fn main() {
             "suite" => parts.extend(suite::parts().into_iter().map(|(n, p)| (n.to_string(), p))),
             "torture" => parts.push(("torture".into(), torture::part(221))),
             "fuzz" => parts.extend((1..=n).map(|s| (format!("fuzz{s}"), suite::fuzz(s, 80)))),
+            "degen" => parts.extend(adversarial::degenerate_parts()),
             "adv" => {
-                for (fam, g) in adversarial::families() {
+                for (fam, g) in adversarial::families()
+                    .into_iter()
+                    .filter(|f| !f.0.starts_with("degen_"))
+                {
                     parts.extend((0..n).map(|s| (format!("{fam}/{s}"), canonical(&g(s)))));
                 }
             }

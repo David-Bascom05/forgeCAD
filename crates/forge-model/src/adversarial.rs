@@ -94,6 +94,21 @@ pub fn families() -> Vec<(&'static str, Family)> {
         ("disjoint", disjoint),
         ("enclosing", enclosing),
         ("rounded_everywhere", rounded_everywhere),
+        ("degen_plane_plane", degen_plane_plane),
+        ("degen_plane_cylinder", degen_plane_cylinder),
+        ("degen_plane_cone", degen_plane_cone),
+        ("degen_plane_sphere", degen_plane_sphere),
+        ("degen_plane_torus", degen_plane_torus),
+        ("degen_cylinder_cylinder", degen_cylinder_cylinder),
+        ("degen_cylinder_cone", degen_cylinder_cone),
+        ("degen_cylinder_sphere", degen_cylinder_sphere),
+        ("degen_cylinder_torus", degen_cylinder_torus),
+        ("degen_cone_cone", degen_cone_cone),
+        ("degen_cone_sphere", degen_cone_sphere),
+        ("degen_cone_torus", degen_cone_torus),
+        ("degen_sphere_sphere", degen_sphere_sphere),
+        ("degen_sphere_torus", degen_sphere_torus),
+        ("degen_torus_torus", degen_torus_torus),
     ]
 }
 
@@ -1005,4 +1020,608 @@ pub fn literal(part: &Part) -> String {
         })
         .collect();
     format!("Part {{\n    features: vec![\n{}\n    ],\n}}", fs.join("\n"))
+}
+
+/// A tool placed in one exact special relation to a base solid, combined by the op given.
+pub type Tool = fn(Combine) -> Feature;
+
+/// A revolve profile's plane: sketch x along `u`, sketch y along the axis `a`.
+fn axis_frame(o: Point3, a: Vec3, u: Vec3) -> Frame {
+    frame(o, u.cross(a), u)
+}
+
+fn perp(a: Vec3) -> Vec3 {
+    if a.z.abs() < 0.9 {
+        Vec3::new(-a.y, a.x, 0.0)
+    } else {
+        Vec3::new(a.z, 0.0, -a.x)
+    }
+}
+
+fn unit(a: Vec3) -> Vec3 {
+    a.normalize().expect("nonzero axis").get()
+}
+
+/// An extruded cylinder: axis from `o` along `a`.
+fn cyl(o: Point3, a: Vec3, r: f64, h: f64, op: Combine) -> Feature {
+    let a = unit(a);
+    ext(
+        frame(o, a, perp(a)),
+        vec![Profile::circle(Point2::ORIGIN, r, 0)],
+        h,
+        op,
+    )
+}
+
+/// A solid of revolution about the axis from `o` along `a`; points are (radius, height).
+fn spun(o: Point3, a: Vec3, pts: &[(f64, f64)], op: Combine) -> Feature {
+    let a = unit(a);
+    let n = pts.len();
+    let p = |i: usize| Point2::new(pts[i % n].0, pts[i % n].1);
+    let segs = (0..n)
+        .map(|i| (Segment::Line { a: p(i), b: p(i + 1) }, i as u64))
+        .collect();
+    Feature::Revolve {
+        profile: Profile {
+            plane: axis_frame(o, a, perp(a)),
+            loops: vec![ProfileLoop::new(segs)],
+        },
+        axis: Axis2 {
+            origin: Point2::ORIGIN,
+            dir: Vec2::Y,
+        },
+        extent: Turn::Angle(dmath::TAU),
+        op,
+    }
+}
+
+/// A cone or frustum: radius `r0` at `o`, `r1` at `o + a h` (either may be 0, an apex).
+fn cone(o: Point3, a: Vec3, r0: f64, r1: f64, h: f64, op: Combine) -> Feature {
+    let mut pts = vec![(0.0, 0.0)];
+    if r0 > 0.0 {
+        pts.push((r0, 0.0));
+    }
+    if r1 > 0.0 {
+        pts.push((r1, h));
+    }
+    pts.push((0.0, h));
+    spun(o, a, &pts, op)
+}
+
+/// A torus about the axis through `o` along `a`.
+fn torus(o: Point3, a: Vec3, big: f64, tube: f64, op: Combine) -> Feature {
+    let a = unit(a);
+    Feature::Revolve {
+        profile: Profile {
+            plane: axis_frame(o, a, perp(a)),
+            loops: vec![Profile::circle(Point2::new(big, 0.0), tube, 0)],
+        },
+        axis: Axis2 {
+            origin: Point2::ORIGIN,
+            dir: Vec2::Y,
+        },
+        extent: Turn::Angle(dmath::TAU),
+        op,
+    }
+}
+
+fn p3(x: f64, y: f64, z: f64) -> Point3 {
+    Point3::new(x, y, z)
+}
+
+const X: Vec3 = Vec3::X;
+const Y: Vec3 = Vec3::Y;
+const Z: Vec3 = Vec3::Z;
+
+/// The surface types, in the order pairs are listed.
+pub const SURFACES: [&str; 5] = ["plane", "cylinder", "cone", "sphere", "torus"];
+
+/// The base solids, each with its feature of interest at the origin: the box's top face
+/// (z = 0, x and y in -20..20, bottom z = -20), the cylinder's top cap (r 10, z -20..0), the
+/// cone's apex (base r 10 at z = -20), the sphere's north pole (centre z = -10, r 10) and the
+/// torus's centre (axis z, R 10, r 4).
+fn degen_base(kind: &str) -> Feature {
+    match kind {
+        "plane" => block_at(p3(-20.0, -20.0, -20.0), 40.0, 40.0, 20.0, Combine::New),
+        "cylinder" => cyl(p3(0.0, 0.0, -20.0), Z, 10.0, 20.0, Combine::New),
+        "cone" => cone(p3(0.0, 0.0, -20.0), Z, 10.0, 0.0, 20.0, Combine::New),
+        "sphere" => ball_at(p3(0.0, 0.0, -10.0), 10.0, Combine::New),
+        _ => torus(Point3::ORIGIN, Z, 10.0, 4.0, Combine::New),
+    }
+}
+
+/// A square of side `s` centred on the frame's origin.
+fn square(s: f64) -> Vec<ProfileLoop> {
+    vec![Profile::rectangle(Point2::new(-s / 2.0, -s / 2.0), s, s, 0)]
+}
+
+/// The degenerate configurations of one pair of surface types: the base is `base`'s solid,
+/// each tool is made of `tool`'s surface (plus caps). Exact special values only.
+fn degen_tools(base: &str, tool: &str) -> Vec<(&'static str, Tool)> {
+    match (base, tool) {
+        ("plane", "plane") => vec![
+            ("on_top", |op| {
+                block_at(p3(-10.0, -10.0, 0.0), 20.0, 20.0, 10.0, op)
+            }),
+            ("on_top_overhang", |op| {
+                block_at(p3(10.0, -10.0, 0.0), 20.0, 20.0, 10.0, op)
+            }),
+            ("same_footprint", |op| {
+                block_at(p3(-20.0, -20.0, -5.0), 40.0, 40.0, 10.0, op)
+            }),
+            ("one_wall_shared", |op| {
+                block_at(p3(-20.0, -10.0, -5.0), 10.0, 20.0, 10.0, op)
+            }),
+            ("corner_shared", |op| {
+                block_at(p3(-20.0, -20.0, -5.0), 10.0, 10.0, 10.0, op)
+            }),
+            ("identical", |op| {
+                block_at(p3(-20.0, -20.0, -20.0), 40.0, 40.0, 20.0, op)
+            }),
+            ("inside_on_bottom", |op| {
+                block_at(p3(-10.0, -10.0, -20.0), 20.0, 20.0, 10.0, op)
+            }),
+            ("pocket_to_top", |op| {
+                block_at(p3(-10.0, -10.0, -10.0), 20.0, 20.0, 10.0, op)
+            }),
+            ("edge_on_edge", |op| {
+                block_at(p3(20.0, -10.0, 0.0), 10.0, 20.0, 10.0, op)
+            }),
+            ("vertex_on_vertex", |op| {
+                block_at(p3(20.0, 20.0, 0.0), 10.0, 10.0, 10.0, op)
+            }),
+            ("wall_to_wall", |op| {
+                block_at(p3(20.0, -10.0, -20.0), 10.0, 20.0, 20.0, op)
+            }),
+            ("wall_to_wall_flush", |op| {
+                block_at(p3(20.0, -20.0, -20.0), 10.0, 40.0, 20.0, op)
+            }),
+            ("diamond_on_top", |op| {
+                ext(turned(Point3::ORIGIN, dmath::PI / 4.0), square(20.0), 10.0, op)
+            }),
+            ("diamond_corners_on_edges", |op| {
+                // turned 45 degrees, corners on the middles of the top face's edges
+                ext(
+                    turned(p3(0.0, 0.0, -5.0), dmath::PI / 4.0),
+                    square(20.0 * 2f64.sqrt()),
+                    10.0,
+                    op,
+                )
+            }),
+            ("tilted_edge_on_top", |op| {
+                // turned about x, one edge lying in the top face
+                let f = frame(p3(-10.0, 0.0, 0.0), Vec3::new(0.0, -1.0, 1.0), X);
+                ext(
+                    f,
+                    vec![Profile::rectangle(Point2::ORIGIN, 20.0, 10.0, 0)],
+                    10.0,
+                    op,
+                )
+            }),
+        ],
+        ("plane", "cylinder") => vec![
+            ("tangent_wall_outside", |op| {
+                cyl(p3(30.0, 0.0, -20.0), Z, 10.0, 20.0, op)
+            }),
+            ("tangent_wall_inside", |op| {
+                cyl(p3(10.0, 0.0, -25.0), Z, 10.0, 30.0, op)
+            }),
+            ("inscribed_four_walls", |op| {
+                cyl(p3(0.0, 0.0, -25.0), Z, 20.0, 30.0, op)
+            }),
+            ("axis_on_vertical_edge", |op| {
+                cyl(p3(20.0, 20.0, -25.0), Z, 5.0, 30.0, op)
+            }),
+            ("cap_flush_with_top", |op| {
+                cyl(p3(0.0, 0.0, -10.0), Z, 5.0, 10.0, op)
+            }),
+            ("standing_on_top", |op| cyl(Point3::ORIGIN, Z, 5.0, 10.0, op)),
+            ("caps_flush_top_and_bottom", |op| {
+                cyl(p3(0.0, 0.0, -20.0), Z, 5.0, 20.0, op)
+            }),
+            ("lying_on_top", |op| cyl(p3(-30.0, 0.0, 5.0), X, 5.0, 60.0, op)),
+            ("axis_in_top", |op| cyl(p3(-30.0, 0.0, 0.0), X, 5.0, 60.0, op)),
+            ("tangent_top_inside", |op| {
+                cyl(p3(-30.0, 0.0, -5.0), X, 5.0, 60.0, op)
+            }),
+            ("tangent_top_and_wall", |op| {
+                cyl(p3(15.0, -30.0, -5.0), Y, 5.0, 60.0, op)
+            }),
+            ("tangent_top_and_bottom", |op| {
+                cyl(p3(-30.0, 0.0, -10.0), X, 10.0, 60.0, op)
+            }),
+            ("cap_on_wall", |op| cyl(p3(20.0, 0.0, -10.0), X, 5.0, 10.0, op)),
+            ("caps_flush_both_walls", |op| {
+                cyl(p3(-20.0, 0.0, -10.0), X, 5.0, 40.0, op)
+            }),
+            ("axis_on_top_edge", |op| {
+                cyl(p3(20.0, -30.0, 0.0), Y, 5.0, 60.0, op)
+            }),
+            ("lying_on_top_revolved", |op| {
+                spun(
+                    p3(-30.0, 0.0, 5.0),
+                    X,
+                    &[(0.0, 0.0), (5.0, 0.0), (5.0, 60.0), (0.0, 60.0)],
+                    op,
+                )
+            }),
+        ],
+        ("plane", "cone") => vec![
+            ("apex_on_top_from_above", |op| {
+                cone(Point3::ORIGIN, Z, 0.0, 5.0, 10.0, op)
+            }),
+            ("apex_on_top_from_inside", |op| {
+                cone(p3(0.0, 0.0, -10.0), Z, 5.0, 0.0, 10.0, op)
+            }),
+            ("base_on_top", |op| cone(Point3::ORIGIN, Z, 5.0, 0.0, 10.0, op)),
+            ("countersink_rim_in_top", |op| {
+                cone(p3(0.0, 0.0, -5.0), Z, 0.0, 10.0, 5.0, op)
+            }),
+            ("apex_on_vertex", |op| {
+                cone(p3(20.0, 20.0, 0.0), Vec3::new(1.0, 1.0, 1.0), 0.0, 5.0, 10.0, op)
+            }),
+            ("apex_on_edge", |op| {
+                cone(p3(20.0, 0.0, 0.0), Vec3::new(1.0, 0.0, 1.0), 0.0, 5.0, 10.0, op)
+            }),
+            ("axis_in_top", |op| {
+                cone(p3(-10.0, 0.0, 0.0), X, 5.0, 0.0, 20.0, op)
+            }),
+            ("base_tangent_wall_inside", |op| {
+                cone(p3(10.0, 0.0, -25.0), Z, 10.0, 0.0, 30.0, op)
+            }),
+            ("frustum_rims_on_top_and_bottom", |op| {
+                cone(p3(0.0, 0.0, -20.0), Z, 10.0, 5.0, 20.0, op)
+            }),
+            ("lying_on_top", |op| {
+                // half angle atan(1/2) and axis tilted by it: a generator lies in z = 0
+                cone(Point3::ORIGIN, Vec3::new(2.0, 0.0, 1.0), 0.0, 5.0, 10.0, op)
+            }),
+        ],
+        ("plane", "sphere") => vec![
+            ("tangent_top_above", |op| ball_at(p3(0.0, 0.0, 5.0), 5.0, op)),
+            ("tangent_top_inside", |op| ball_at(p3(0.0, 0.0, -5.0), 5.0, op)),
+            ("centre_on_top", |op| ball_at(Point3::ORIGIN, 5.0, op)),
+            ("centre_on_edge", |op| ball_at(p3(20.0, 0.0, 0.0), 5.0, op)),
+            ("centre_on_vertex", |op| ball_at(p3(20.0, 20.0, 0.0), 5.0, op)),
+            ("tangent_two_faces", |op| ball_at(p3(15.0, 0.0, -5.0), 5.0, op)),
+            ("tangent_three_faces", |op| ball_at(p3(15.0, 15.0, -5.0), 5.0, op)),
+            ("tangent_top_and_bottom", |op| {
+                ball_at(p3(0.0, 0.0, -10.0), 10.0, op)
+            }),
+            ("tangent_four_faces", |op| {
+                ball_at(p3(10.0, 10.0, -10.0), 10.0, op)
+            }),
+            ("tangent_wall_outside", |op| {
+                ball_at(p3(25.0, 0.0, -10.0), 5.0, op)
+            }),
+            ("centre_on_wall_tangent_top", |op| {
+                ball_at(p3(20.0, 0.0, -5.0), 5.0, op)
+            }),
+        ],
+        ("plane", "torus") => vec![
+            ("lying_on_top", |op| torus(p3(0.0, 0.0, 4.0), Z, 10.0, 4.0, op)),
+            ("tangent_top_inside", |op| {
+                torus(p3(0.0, 0.0, -4.0), Z, 10.0, 4.0, op)
+            }),
+            ("mid_plane_in_top", |op| torus(Point3::ORIGIN, Z, 10.0, 4.0, op)),
+            ("standing_on_top", |op| {
+                torus(p3(0.0, 0.0, 14.0), Y, 10.0, 4.0, op)
+            }),
+            ("standing_axis_in_top", |op| {
+                torus(Point3::ORIGIN, Y, 10.0, 4.0, op)
+            }),
+            ("tangent_wall_inside", |op| {
+                torus(p3(6.0, 0.0, -10.0), Z, 10.0, 4.0, op)
+            }),
+            ("tangent_top_and_bottom", |op| {
+                torus(p3(0.0, 0.0, -10.0), Z, 12.0, 10.0, op)
+            }),
+            ("standing_tangent_top_inside", |op| {
+                torus(p3(0.0, 0.0, -14.0), Y, 10.0, 4.0, op)
+            }),
+            ("tangent_four_walls", |op| {
+                torus(p3(0.0, 0.0, -10.0), Z, 16.0, 4.0, op)
+            }),
+        ],
+        ("cylinder", "cylinder") => vec![
+            ("coaxial_equal_overlap", |op| {
+                cyl(p3(0.0, 0.0, -10.0), Z, 10.0, 20.0, op)
+            }),
+            ("coaxial_equal_stacked", |op| {
+                cyl(Point3::ORIGIN, Z, 10.0, 10.0, op)
+            }),
+            ("identical", |op| cyl(p3(0.0, 0.0, -20.0), Z, 10.0, 20.0, op)),
+            ("identical_revolved", |op| {
+                spun(
+                    p3(0.0, 0.0, -20.0),
+                    Z,
+                    &[(0.0, 0.0), (10.0, 0.0), (10.0, 20.0), (0.0, 20.0)],
+                    op,
+                )
+            }),
+            ("concentric_through", |op| {
+                cyl(p3(0.0, 0.0, -30.0), Z, 5.0, 40.0, op)
+            }),
+            ("concentric_cap_flush", |op| {
+                cyl(p3(0.0, 0.0, -10.0), Z, 5.0, 10.0, op)
+            }),
+            ("concentric_larger", |op| {
+                cyl(p3(0.0, 0.0, -10.0), Z, 15.0, 20.0, op)
+            }),
+            ("parallel_tangent_outside", |op| {
+                cyl(p3(20.0, 0.0, -20.0), Z, 10.0, 20.0, op)
+            }),
+            ("parallel_tangent_inside", |op| {
+                cyl(p3(5.0, 0.0, -30.0), Z, 5.0, 40.0, op)
+            }),
+            ("perpendicular_equal_radius", |op| {
+                cyl(p3(-20.0, 0.0, -10.0), X, 10.0, 40.0, op)
+            }),
+            ("perpendicular_tangent_point", |op| {
+                cyl(p3(-20.0, 15.0, -10.0), X, 5.0, 40.0, op)
+            }),
+            ("perpendicular_through_axis", |op| {
+                cyl(p3(-20.0, 0.0, -10.0), X, 5.0, 40.0, op)
+            }),
+            ("perpendicular_on_cap", |op| {
+                cyl(p3(-20.0, 0.0, 5.0), X, 5.0, 40.0, op)
+            }),
+            ("perpendicular_axis_in_cap", |op| {
+                cyl(p3(-20.0, 0.0, 0.0), X, 5.0, 40.0, op)
+            }),
+            ("perpendicular_tangent_inside", |op| {
+                cyl(p3(-20.0, 5.0, -10.0), X, 5.0, 40.0, op)
+            }),
+            ("skew_equal_radius", |op| {
+                cyl(p3(-20.0, -20.0, -10.0), Vec3::new(1.0, 1.0, 0.0), 10.0, 60.0, op)
+            }),
+            ("tilted_through_rim", |op| {
+                cyl(p3(-10.0, 0.0, -10.0), Vec3::new(1.0, 0.0, 1.0), 3.0, 30.0, op)
+            }),
+        ],
+        ("cylinder", "cone") => vec![
+            ("pointed_cap", |op| cone(Point3::ORIGIN, Z, 10.0, 0.0, 10.0, op)),
+            ("countersink_full_width", |op| {
+                cone(p3(0.0, 0.0, -10.0), Z, 0.0, 10.0, 10.0, op)
+            }),
+            ("apex_on_cap_centre", |op| {
+                cone(p3(0.0, 0.0, -10.0), Z, 5.0, 0.0, 10.0, op)
+            }),
+            ("frustum_shares_bottom_rim", |op| {
+                cone(p3(0.0, 0.0, -20.0), Z, 10.0, 5.0, 20.0, op)
+            }),
+            ("apex_on_wall", |op| {
+                cone(p3(10.0, 0.0, -10.0), X, 0.0, 5.0, 10.0, op)
+            }),
+            ("base_rim_on_wall", |op| {
+                cone(p3(0.0, 0.0, -10.0), Z, 10.0, 0.0, 20.0, op)
+            }),
+            ("apex_on_axis_perpendicular", |op| {
+                cone(p3(0.0, 0.0, -10.0), X, 0.0, 5.0, 20.0, op)
+            }),
+            ("apex_on_top_rim", |op| {
+                cone(p3(10.0, 0.0, 0.0), Z, 0.0, 5.0, 10.0, op)
+            }),
+        ],
+        ("cylinder", "sphere") => vec![
+            ("dome_on_cap", |op| ball_at(Point3::ORIGIN, 10.0, op)),
+            ("tangent_wall_equator", |op| {
+                ball_at(p3(0.0, 0.0, -10.0), 10.0, op)
+            }),
+            ("pole_on_cap", |op| ball_at(p3(0.0, 0.0, 5.0), 5.0, op)),
+            ("tangent_wall_outside", |op| {
+                ball_at(p3(15.0, 0.0, -10.0), 5.0, op)
+            }),
+            ("centre_on_rim", |op| ball_at(p3(10.0, 0.0, 0.0), 3.0, op)),
+            ("tangent_wall_and_cap_inside", |op| {
+                ball_at(p3(5.0, 0.0, -5.0), 5.0, op)
+            }),
+            ("larger_coaxial", |op| ball_at(p3(0.0, 0.0, -10.0), 15.0, op)),
+            ("pole_on_bottom_inside", |op| {
+                ball_at(p3(0.0, 0.0, -15.0), 5.0, op)
+            }),
+        ],
+        ("cylinder", "torus") => vec![
+            ("ring_tangent_outside", |op| {
+                torus(p3(0.0, 0.0, -10.0), Z, 14.0, 4.0, op)
+            }),
+            ("groove_tube_on_wall", |op| {
+                torus(p3(0.0, 0.0, -10.0), Z, 10.0, 3.0, op)
+            }),
+            ("ring_tangent_inside", |op| {
+                torus(p3(0.0, 0.0, -10.0), Z, 6.0, 4.0, op)
+            }),
+            ("resting_on_cap", |op| torus(p3(0.0, 0.0, 4.0), Z, 5.0, 4.0, op)),
+            ("tube_on_top_rim", |op| torus(Point3::ORIGIN, Z, 10.0, 3.0, op)),
+            ("tangent_wall_and_cap_inside", |op| {
+                torus(p3(0.0, 0.0, -4.0), Z, 6.0, 4.0, op)
+            }),
+            ("standing_through_axis", |op| {
+                torus(p3(0.0, 0.0, -10.0), Y, 10.0, 3.0, op)
+            }),
+        ],
+        ("cone", "cone") => vec![
+            ("identical", |op| {
+                cone(p3(0.0, 0.0, -20.0), Z, 10.0, 0.0, 20.0, op)
+            }),
+            ("tip_shares_surface", |op| {
+                cone(p3(0.0, 0.0, -10.0), Z, 5.0, 0.0, 10.0, op)
+            }),
+            ("apex_to_apex", |op| cone(Point3::ORIGIN, Z, 0.0, 10.0, 20.0, op)),
+            ("inverted_overlap", |op| {
+                cone(p3(0.0, 0.0, -20.0), Z, 0.0, 10.0, 20.0, op)
+            }),
+            ("base_to_base", |op| {
+                cone(
+                    p3(0.0, 0.0, -20.0),
+                    Vec3::new(0.0, 0.0, -1.0),
+                    10.0,
+                    0.0,
+                    20.0,
+                    op,
+                )
+            }),
+            ("same_angle_shifted", |op| {
+                cone(p3(0.0, 0.0, -25.0), Z, 10.0, 0.0, 20.0, op)
+            }),
+            ("apex_on_surface", |op| {
+                cone(p3(5.0, 0.0, -10.0), X, 0.0, 5.0, 10.0, op)
+            }),
+            ("perpendicular_apex_to_apex", |op| {
+                cone(Point3::ORIGIN, X, 0.0, 5.0, 10.0, op)
+            }),
+        ],
+        ("cone", "sphere") => vec![
+            ("inscribed_tangent_circle", |op| {
+                // centre on the axis 10 below the apex: its distance to a generator is 10 / sqrt 5
+                ball_at(p3(0.0, 0.0, -10.0), 10.0 / 5f64.sqrt(), op)
+            }),
+            ("centred_on_apex", |op| ball_at(Point3::ORIGIN, 5.0, op)),
+            ("pole_on_apex", |op| ball_at(p3(0.0, 0.0, 5.0), 5.0, op)),
+            ("equator_on_base_rim", |op| ball_at(p3(0.0, 0.0, -20.0), 10.0, op)),
+            ("pole_on_base_centre", |op| ball_at(p3(0.0, 0.0, -25.0), 5.0, op)),
+        ],
+        ("cone", "torus") => vec![
+            ("ring_on_base_rim", |op| {
+                torus(p3(0.0, 0.0, -20.0), Z, 10.0, 3.0, op)
+            }),
+            ("ring_around_apex", |op| torus(Point3::ORIGIN, Z, 5.0, 2.0, op)),
+            ("ring_under_base", |op| {
+                torus(p3(0.0, 0.0, -23.0), Z, 6.0, 3.0, op)
+            }),
+            ("standing_through_apex", |op| {
+                torus(p3(10.0, 0.0, 0.0), Y, 10.0, 2.0, op)
+            }),
+        ],
+        ("sphere", "sphere") => vec![
+            ("identical", |op| ball_at(p3(0.0, 0.0, -10.0), 10.0, op)),
+            ("concentric_smaller", |op| ball_at(p3(0.0, 0.0, -10.0), 5.0, op)),
+            ("tangent_outside", |op| ball_at(p3(0.0, 0.0, 5.0), 5.0, op)),
+            ("tangent_inside", |op| ball_at(p3(0.0, 0.0, -5.0), 5.0, op)),
+            ("equal_overlap_axial", |op| ball_at(Point3::ORIGIN, 10.0, op)),
+            ("equal_tangent_outside", |op| {
+                ball_at(p3(0.0, 0.0, 10.0), 10.0, op)
+            }),
+            ("through_pole_on_seam", |op| ball_at(p3(10.0, 0.0, 0.0), 10.0, op)),
+            ("equal_overlap_seam_plane", |op| {
+                ball_at(p3(10.0, 0.0, -10.0), 10.0, op)
+            }),
+            ("equal_overlap_across_seam", |op| {
+                ball_at(p3(0.0, 10.0, -10.0), 10.0, op)
+            }),
+            ("tangent_inside_at_equator", |op| {
+                ball_at(p3(5.0, 0.0, -10.0), 5.0, op)
+            }),
+        ],
+        ("sphere", "torus") => vec![
+            ("ring_tangent_equator", |op| {
+                torus(p3(0.0, 0.0, -10.0), Z, 14.0, 4.0, op)
+            }),
+            ("groove_on_equator", |op| {
+                torus(p3(0.0, 0.0, -10.0), Z, 10.0, 2.0, op)
+            }),
+            ("ring_around_pole", |op| torus(Point3::ORIGIN, Z, 5.0, 2.0, op)),
+            ("standing_through_pole", |op| {
+                torus(p3(5.0, 0.0, 0.0), Y, 5.0, 2.0, op)
+            }),
+        ],
+        ("torus", "torus") => vec![
+            ("identical", |op| torus(Point3::ORIGIN, Z, 10.0, 4.0, op)),
+            ("stacked_tangent", |op| torus(p3(0.0, 0.0, 8.0), Z, 10.0, 4.0, op)),
+            ("concentric_tube", |op| torus(Point3::ORIGIN, Z, 10.0, 2.0, op)),
+            ("nested_tangent", |op| torus(Point3::ORIGIN, Z, 18.0, 4.0, op)),
+            ("linked", |op| torus(p3(10.0, 0.0, 0.0), Y, 10.0, 4.0, op)),
+            ("crossed_tangent", |op| torus(Point3::ORIGIN, Y, 6.0, 4.0, op)),
+            ("horn", |op| torus(Point3::ORIGIN, Z, 4.0, 4.0, op)),
+        ],
+        _ => Vec::new(),
+    }
+}
+
+/// A surface pair (base type, tool type) with its named configurations.
+pub type Pair = (&'static str, &'static str, Vec<(&'static str, Tool)>);
+
+/// Every surface pair with its configurations.
+pub fn degenerate_pairs() -> Vec<Pair> {
+    let mut out = Vec::new();
+    for (i, b) in SURFACES.iter().enumerate() {
+        for t in &SURFACES[i..] {
+            out.push((*b, *t, degen_tools(b, t)));
+        }
+    }
+    out
+}
+
+pub const DEGEN_OPS: [Combine; 3] = [Combine::Add, Combine::Cut, Combine::Keep];
+
+/// Every configuration of every pair with every op, named "base_tool/config/op".
+pub fn degenerate_parts() -> Vec<(String, Part)> {
+    let mut out = Vec::new();
+    for (b, t, tools) in degenerate_pairs() {
+        for op in DEGEN_OPS {
+            for (name, tool) in &tools {
+                let part = Part {
+                    features: vec![degen_base(b), tool(op)],
+                };
+                out.push((format!("{b}_{t}/{name}/{op:?}"), part));
+            }
+        }
+    }
+    out
+}
+
+/// Configuration `seed % n` of a pair, with op Add, Cut, Keep in turn (seeds 0..3n cover it).
+fn degenerate(base: &str, tool: &str, seed: u64) -> Part {
+    let tools = degen_tools(base, tool);
+    let n = tools.len() as u64;
+    let op = DEGEN_OPS[((seed / n) % 3) as usize];
+    Part {
+        features: vec![degen_base(base), tools[(seed % n) as usize].1(op)],
+    }
+}
+
+fn degen_plane_plane(seed: u64) -> Part {
+    degenerate("plane", "plane", seed)
+}
+fn degen_plane_cylinder(seed: u64) -> Part {
+    degenerate("plane", "cylinder", seed)
+}
+fn degen_plane_cone(seed: u64) -> Part {
+    degenerate("plane", "cone", seed)
+}
+fn degen_plane_sphere(seed: u64) -> Part {
+    degenerate("plane", "sphere", seed)
+}
+fn degen_plane_torus(seed: u64) -> Part {
+    degenerate("plane", "torus", seed)
+}
+fn degen_cylinder_cylinder(seed: u64) -> Part {
+    degenerate("cylinder", "cylinder", seed)
+}
+fn degen_cylinder_cone(seed: u64) -> Part {
+    degenerate("cylinder", "cone", seed)
+}
+fn degen_cylinder_sphere(seed: u64) -> Part {
+    degenerate("cylinder", "sphere", seed)
+}
+fn degen_cylinder_torus(seed: u64) -> Part {
+    degenerate("cylinder", "torus", seed)
+}
+fn degen_cone_cone(seed: u64) -> Part {
+    degenerate("cone", "cone", seed)
+}
+fn degen_cone_sphere(seed: u64) -> Part {
+    degenerate("cone", "sphere", seed)
+}
+fn degen_cone_torus(seed: u64) -> Part {
+    degenerate("cone", "torus", seed)
+}
+fn degen_sphere_sphere(seed: u64) -> Part {
+    degenerate("sphere", "sphere", seed)
+}
+fn degen_sphere_torus(seed: u64) -> Part {
+    degenerate("sphere", "torus", seed)
+}
+fn degen_torus_torus(seed: u64) -> Part {
+    degenerate("torus", "torus", seed)
 }
