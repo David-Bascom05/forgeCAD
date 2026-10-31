@@ -50,7 +50,7 @@ pub fn flat(s: &GlyphSeg) -> Flat {
             let u = (c - p0) * 2.0;
             let w = (p0 - c) + (p2 - c);
             let wl = w.length();
-            if wl <= 1e-12 * u.length() || u.cross(w).abs() <= 1e-9 * u.length() * wl {
+            if !wl.is_finite() || wl <= 1e-12 * u.length() || u.cross(w).abs() <= 1e-9 * u.length() * wl {
                 return Flat::Line { a: p0, b: p2 };
             }
             // the axis along w; the vertex where the speed is square to it
@@ -61,13 +61,14 @@ pub fn flat(s: &GlyphSeg) -> Flat {
             let tv = -ux / (2.0 * wl);
             let o = p0 + u * tv + w * (tv * tv);
             let z = x.cross(y).signum();
-            let frame = Frame::from_axes(
+            let Some(frame) = Frame::from_axes(
                 Point3::new(o.x, o.y, 0.0),
                 Vec3::new(x.x, x.y, 0.0),
                 Vec3::new(y.x, y.y, 0.0),
                 Vec3::new(0.0, 0.0, z),
-            )
-            .expect("orthonormal");
+            ) else {
+                return Flat::Line { a: p0, b: p2 };
+            };
             Flat::Parabola {
                 curve: Parabola {
                     frame,
@@ -111,18 +112,19 @@ impl Level {
     }
 
     /// The segment's curve here, its range, and whether the outline runs with its parameter.
-    fn curve(&self, f: &Flat) -> (Curve, Interval, bool) {
+    /// None for a piece too short to draw.
+    fn curve(&self, f: &Flat) -> Option<(Curve, Interval, bool)> {
         let (a, b) = (f.at(0.0).0, f.at(1.0).0);
         let line = || {
             let (pa, pb) = (self.point(a), self.point(b));
-            (
-                Curve::Line(Line::through(pa, pb).expect("a piece with length")),
+            Some((
+                Curve::Line(Line::through(pa, pb)?),
                 Interval::new(0.0, pa.distance(pb)),
                 true,
-            )
+            ))
         };
-        match (self.place, *f) {
-            (Place::Flat(_), Flat::Line { .. }) => line(),
+        Some(match (self.place, *f) {
+            (Place::Flat(_), Flat::Line { .. }) => line()?,
             (Place::Flat(fr), Flat::Parabola { curve, range }) => (
                 Curve::Parabola(Parabola {
                     frame: Level::lifted(&fr, self.at).compose(&curve.frame),
@@ -132,7 +134,7 @@ impl Level {
                 true,
             ),
             // along the axis: a line; round it: a circle
-            (Place::Wrapped { .. }, Flat::Line { .. }) if a.x == b.x => line(),
+            (Place::Wrapped { .. }, Flat::Line { .. }) if a.x == b.x => line()?,
             (Place::Wrapped { axis, radius }, Flat::Line { .. }) if a.y == b.y => {
                 let (t0, t1) = (a.x / radius, b.x / radius);
                 (
@@ -147,7 +149,7 @@ impl Level {
             (Place::Wrapped { axis, radius }, _) => {
                 (self.wrap(axis, radius, f).curve(), Interval::new(0.0, 1.0), true)
             }
-        }
+        })
     }
 
     fn wrap(&self, axis: Frame, unroll: f64, f: &Flat) -> Wrap {
@@ -174,11 +176,11 @@ fn wall(lo: &Level, hi: &Level, f: &Flat) -> Option<Surface> {
             )?)))
         }
         (Place::Flat(_), Flat::Parabola { range, .. }) => {
-            let rail = |l: &Level| match l.curve(f).0 {
-                Curve::Parabola(p) => Rail::Parabola { curve: p, range },
-                _ => unreachable!("a parabola draws a parabola"),
+            let rail = |l: &Level| match l.curve(f)?.0 {
+                Curve::Parabola(p) => Some(Rail::Parabola { curve: p, range }),
+                _ => None,
             };
-            Ruled::new(rail(lo), rail(hi)).map(Ruled::surface)
+            Ruled::new(rail(lo)?, rail(hi)?).map(Ruled::surface)
         }
         (Place::Wrapped { axis, radius }, Flat::Line { .. }) if a.x == b.x => {
             // along the axis: the plane through it
@@ -214,6 +216,14 @@ pub fn glyph(
     if !(lo < hi && lo.is_finite() && hi.is_finite()) {
         return Err(GlyphError::BadLevels);
     }
+    let finite = |q: &Point2| q.x.is_finite() && q.y.is_finite();
+    let ok = |s: &GlyphSeg| match s {
+        GlyphSeg::Line(a, b) => finite(a) && finite(b) && a != b,
+        GlyphSeg::Quad(a, c, b) => finite(a) && finite(c) && finite(b) && a != b,
+    };
+    if loops.iter().any(|l| l.len() < 2 || !l.iter().all(ok)) {
+        return Err(GlyphError::Degenerate);
+    }
     if let Place::Wrapped { radius, .. } = place {
         if !(lo > 0.0 && radius > 0.0) {
             return Err(GlyphError::BadLevels);
@@ -226,9 +236,6 @@ pub fn glyph(
         if s1 - s0 >= dmath::TAU * radius {
             return Err(GlyphError::TooLong);
         }
-    }
-    if loops.iter().any(|l| l.len() < 2) {
-        return Err(GlyphError::Degenerate);
     }
     let levels = [Level { place, at: lo }, Level { place, at: hi }];
     let flats: Vec<Vec<Flat>> = loops.iter().map(|l| l.iter().map(flat).collect()).collect();
@@ -260,7 +267,7 @@ pub fn glyph(
             let n = fl.len();
             let mut row = Vec::new();
             for (k, f) in fl.iter().enumerate() {
-                let (curve, range, fw) = level.curve(f);
+                let (curve, range, fw) = level.curve(f).ok_or(GlyphError::Degenerate)?;
                 let (a, b) = (verts[j][l][k], verts[j][l][(k + 1) % n]);
                 let (start, end) = if fw { (a, b) } else { (b, a) };
                 let name = root.with_str("section").with(j as u64).with_name(key(l, k));
@@ -273,22 +280,22 @@ pub fn glyph(
     for (l, fl) in flats.iter().enumerate() {
         let n = fl.len();
         let rails: Vec<EdgeId> = (0..n)
-            .map(|k| {
+            .map(|k| -> Result<EdgeId, GlyphError> {
                 let (p0, p1) = (
                     body.vertex(verts[0][l][k]).point,
                     body.vertex(verts[1][l][k]).point,
                 );
-                let line = Line::through(p0, p1).expect("the levels are apart");
+                let line = Line::through(p0, p1).ok_or(GlyphError::Degenerate)?;
                 let name = root.with_str("rail").with_name(key(l, k));
-                body.add_edge(
+                Ok(body.add_edge(
                     Curve::Line(line),
                     Interval::new(0.0, p0.distance(p1)),
                     verts[0][l][k],
                     verts[1][l][k],
                     name,
-                )
+                ))
             })
-            .collect();
+            .collect::<Result<_, _>>()?;
         for (k, f) in fl.iter().enumerate() {
             let surface = wall(&levels[0], &levels[1], f).ok_or(GlyphError::Degenerate)?;
             // outward: along the outline, crossed with the way up

@@ -121,7 +121,7 @@ impl Font {
         }
         let cmap = read_cmap(d, need("cmap")?.0)?;
         let kern = match find(b"kern") {
-            Some((k, _)) => read_kern(d, k)?,
+            Some((k, len)) => read_kern(d, k, len)?,
             None => Vec::new(),
         };
         Ok(Font {
@@ -173,7 +173,15 @@ impl Font {
     /// The glyph's closed contours, in font units.
     pub fn outline(&self, g: u16) -> Result<Vec<Vec<Seg>>, FontError> {
         let mut out = Vec::new();
-        self.outline_into(g, [1.0, 0.0, 0.0, 1.0], (0.0, 0.0), 0, &mut out)?;
+        let mut budget = BUDGET;
+        self.outline_into(
+            g,
+            [1.0, 0.0, 0.0, 1.0],
+            (0.0, 0.0),
+            &mut Vec::new(),
+            &mut budget,
+            &mut out,
+        )?;
         Ok(out)
     }
 
@@ -202,11 +210,15 @@ impl Font {
         g: u16,
         m: [f64; 4],
         off: (f64, f64),
-        depth: usize,
+        path: &mut Vec<u16>,
+        budget: &mut usize,
         out: &mut Vec<Vec<Seg>>,
     ) -> Result<(), FontError> {
-        if depth > 8 {
+        if path.len() > 8 {
             return Err(FontError::Unsupported("composite glyphs nested too deep"));
+        }
+        if path.contains(&g) {
+            return Err(FontError::Unsupported("a composite glyph holds itself"));
         }
         let (a, b) = self.glyph_range(g)?;
         if a == b {
@@ -222,6 +234,7 @@ impl Font {
                 ends.push(u16_at(d, a + 10 + 2 * k)? as usize);
             }
             let points = ends.last().map_or(0, |e| e + 1);
+            spend(budget, points + 1)?;
             let ins = u16_at(d, a + 10 + 2 * n)? as usize;
             let mut o = a + 12 + 2 * n + ins;
             let mut flags = Vec::with_capacity(points);
@@ -271,7 +284,9 @@ impl Font {
             return Ok(());
         }
         let mut o = a + 10;
+        path.push(g);
         loop {
+            spend(budget, 1)?;
             let flags = u16_at(d, o)?;
             let part = u16_at(d, o + 2)?;
             o += 4;
@@ -308,6 +323,9 @@ impl Font {
             } else {
                 [1.0, 0.0, 0.0, 1.0]
             };
+            if (s[0] * s[3] - s[1] * s[2]).abs() < 1e-6 {
+                return Err(FontError::Unsupported("a composite part flattened to nothing"));
+            }
             // the part's matrix, then its offset, then this glyph's mapping
             let mm = [
                 m[0] * s[0] + m[2] * s[1],
@@ -316,12 +334,23 @@ impl Font {
                 m[1] * s[2] + m[3] * s[3],
             ];
             let at = map(dx, dy);
-            self.outline_into(part, mm, (at.x, at.y), depth + 1, out)?;
+            self.outline_into(part, mm, (at.x, at.y), path, budget, out)?;
             if flags & 0x20 == 0 {
+                path.pop();
                 return Ok(());
             }
         }
     }
+}
+
+/// Points and composite parts one outline may take in all, however its parts nest.
+const BUDGET: usize = 1 << 16;
+
+fn spend(budget: &mut usize, n: usize) -> Result<(), FontError> {
+    *budget = budget
+        .checked_sub(n)
+        .ok_or(FontError::Unsupported("a glyph too large"))?;
+    Ok(())
 }
 
 /// A closed contour from TrueType points (on or off the curve): an off point between two others
@@ -351,14 +380,18 @@ fn contour(pts: &[(Point2, bool)]) -> Vec<Seg> {
                 at = p;
             }
             (true, Some(c)) => {
-                out.push(Seg::Quad(at, c, p));
+                if p != at {
+                    out.push(Seg::Quad(at, c, p));
+                }
                 at = p;
                 ctrl = None;
             }
             (false, None) => ctrl = Some(p),
             (false, Some(c)) => {
                 let m = mid(c, p);
-                out.push(Seg::Quad(at, c, m));
+                if m != at {
+                    out.push(Seg::Quad(at, c, m));
+                }
                 at = m;
                 ctrl = Some(p);
             }
@@ -418,25 +451,43 @@ fn read_cmap(d: &[u8], at: usize) -> Result<Vec<(u32, u32, Map)>, FontError> {
     Ok(out)
 }
 
-fn read_kern(d: &[u8], at: usize) -> Result<Vec<(u16, u16, i16)>, FontError> {
+/// Pair kerning from format 0 subtables. Each subtable must lie inside the table after the one
+/// before, hold the pairs it claims, and all of them together no more than the table could.
+fn read_kern(d: &[u8], at: usize, len: usize) -> Result<Vec<(u16, u16, i16)>, FontError> {
+    let bad = FontError::Unsupported("a kern table that does not hold together");
     let mut out = Vec::new();
     if u16_at(d, at)? != 0 {
         // the Apple version 1 table: not read, no kerning
         return Ok(out);
     }
+    let end = at + len;
+    let cap = 65536.min(len / 6);
     let n = u16_at(d, at + 2)? as usize;
     let mut o = at + 4;
     for _ in 0..n {
-        let (len, coverage) = (u16_at(d, o + 2)? as usize, u16_at(d, o + 4)?);
+        if o + 6 > end {
+            return Err(bad);
+        }
+        let (sub, coverage) = (u16_at(d, o + 2)? as usize, u16_at(d, o + 4)?);
+        if sub < 6 || o + sub > end {
+            return Err(bad);
+        }
         // format 0, horizontal, not cross-stream or a minimum table
         if coverage >> 8 == 0 && coverage & 0b111 == 1 {
-            let pairs = u16_at(d, o + 6)? as usize;
+            let pairs = if sub >= 14 {
+                u16_at(d, o + 6)? as usize
+            } else {
+                return Err(bad);
+            };
+            if 14 + 6 * pairs > sub || out.len() + pairs > cap {
+                return Err(bad);
+            }
             for k in 0..pairs {
                 let p = o + 14 + 6 * k;
                 out.push((u16_at(d, p)?, u16_at(d, p + 2)?, i16_at(d, p + 4)?));
             }
         }
-        o += len.max(6);
+        o += sub;
     }
     out.sort_by_key(|p| (p.0, p.1));
     Ok(out)
@@ -515,5 +566,86 @@ mod tests {
         let mut cut = build(1000, &[('I', TestGlyph::bar(0.0, 0.0, 1.0, 1.0, 2.0))], &[]);
         cut.truncate(cut.len() / 2);
         assert!(Font::parse(cut).is_err());
+    }
+
+    /// A font with composites (plain, self-holding, exponentially nested, flattened) and kerning.
+    fn hostile() -> Vec<u8> {
+        use crate::testing::{composite, simple};
+        let bar = simple(&TestGlyph::bar(0.0, 0.0, 100.0, 700.0, 300.0));
+        let mut glyphs = vec![('0', bar, 300)];
+        // '1'..'8': each 64 copies of the one before, 64^8 parts in all
+        for k in 1..=8u16 {
+            let parts: Vec<(u16, i16, i16)> = (0..64).map(|j| (k, j as i16, 0)).collect();
+            glyphs.push(((b'0' + k as u8) as char, composite(&parts), 300));
+        }
+        glyphs.push(('a', composite(&[(1, 0, 0), (1, 200, 0)]), 500));
+        // 'b' holds itself; 'c' a bar scaled to nothing
+        glyphs.push(('b', composite(&[(1, 0, 0), (11, 0, 0)]), 500));
+        let mut flat = Vec::new();
+        for w in [0xffffu16, 0, 0, 0, 0, 0x1 | 0x2 | 0x8, 1, 0, 0, 0] {
+            flat.extend(w.to_be_bytes());
+        }
+        glyphs.push(('c', flat, 500));
+        let mut kern = Vec::new();
+        for w in [0u16, 1, 0, 14 + 6, 1, 1, 0, 0, 0, 1, 10, (-30i16) as u16] {
+            kern.extend(w.to_be_bytes());
+        }
+        crate::testing::build_raw(1000, &glyphs, Some(kern))
+    }
+
+    #[test]
+    fn hostile_composites_are_refused() {
+        let f = Font::parse(hostile()).expect("parses");
+        assert_eq!(f.kerning(1, 10), -30.0);
+        assert_eq!(f.outline(f.glyph('a')).expect("two bars").len(), 2);
+        assert_eq!(f.outline(f.glyph('1')).expect("64 bars").len(), 64);
+        for c in ['8', 'b', 'c'] {
+            assert!(f.outline(f.glyph(c)).is_err(), "{c}");
+        }
+    }
+
+    #[test]
+    fn lying_kern_tables_are_refused() {
+        let kern = |words: &[u16]| {
+            let k: Vec<u8> = words.iter().flat_map(|w| w.to_be_bytes()).collect();
+            let bar = crate::testing::simple(&TestGlyph::bar(0.0, 0.0, 1.0, 1.0, 2.0));
+            Font::parse(crate::testing::build_raw(1000, &[('I', bar, 2)], Some(k)))
+        };
+        // a subtable claiming 65535 pairs in 20 bytes; one running past the table; two where
+        // the table holds one
+        assert!(kern(&[0, 1, 0, 20, 1, 65535, 0, 0, 0, 1, 1, 5]).is_err());
+        assert!(kern(&[0, 1, 0, 200, 1, 1, 0, 0, 0, 1, 1, 5]).is_err());
+        assert!(kern(&[0, 2, 0, 20, 1, 1, 0, 0, 0, 1, 1, 5]).is_err());
+        assert!(kern(&[0, 1, 0, 20, 1, 1, 0, 0, 0, 1, 1, 5]).is_ok());
+    }
+
+    /// Truncated and scrambled fonts never panic, and never take long or much memory.
+    #[test]
+    fn corrupted_fonts_never_panic() {
+        let base = hostile();
+        let mut r = forge_math::rng::Rng::new(4242);
+        let probe = |d: Vec<u8>| {
+            if let Ok(f) = Font::parse(d) {
+                for g in 0..f.glyphs.min(64) as u16 + 2 {
+                    let _ = f.outline(g);
+                    let _ = f.advance(g);
+                    let _ = f.kerning(g, g.wrapping_add(1));
+                }
+                for c in ['0', '1', 'a', 'b', 'c', 'z', '\u{10FFFF}'] {
+                    let _ = f.glyph(c);
+                }
+            }
+        };
+        for cut in (0..base.len()).step_by(13) {
+            probe(base[..cut].to_vec());
+        }
+        for _ in 0..300 {
+            let mut d = base.clone();
+            for _ in 0..1 + r.below(8) {
+                let k = r.below(d.len());
+                d[k] = if r.bool() { 0xff } else { r.below(256) as u8 };
+            }
+            probe(d);
+        }
     }
 }

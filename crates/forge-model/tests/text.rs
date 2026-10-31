@@ -124,3 +124,42 @@ fn wrapped_text_adds_and_removes_its_area_between_radii() {
         );
     }
 }
+
+/// Scrambled fonts lay out and build into solids or errors, never a panic.
+#[test]
+fn scrambled_fonts_never_panic() {
+    let base = build(
+        1000,
+        &[
+            ('I', TestGlyph::bar(100.0, 0.0, 200.0, 700.0, 300.0)),
+            ('O', square_ring()),
+        ],
+        &[('I', 'O', -50)],
+    );
+    let mut r = forge_math::rng::Rng::new(77);
+    let places = [
+        forge_ops::Place::Flat(Frame::WORLD),
+        forge_ops::Place::Wrapped {
+            axis: Frame::WORLD,
+            radius: 20.0,
+        },
+    ];
+    for _ in 0..200 {
+        let mut d = base.clone();
+        for _ in 0..1 + r.below(6) {
+            let k = r.below(d.len());
+            d[k] = r.below(256) as u8;
+        }
+        let Ok(f) = forge_font::Font::parse(d) else {
+            continue;
+        };
+        let Ok(regions) = forge_model::text::layout(&f, "IO OI", 10.0) else {
+            continue;
+        };
+        for reg in regions.iter().take(8) {
+            for place in places {
+                let _ = forge_ops::glyph(reg, place, 20.0, 21.0, forge_topo::Name::feature(1));
+            }
+        }
+    }
+}

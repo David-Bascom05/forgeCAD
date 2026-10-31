@@ -53,49 +53,94 @@ fn be32(v: &mut Vec<u8>, x: u32) {
     v.extend(x.to_be_bytes());
 }
 
+/// A simple glyph's glyf record.
+pub fn simple(g: &TestGlyph) -> Vec<u8> {
+    let mut v = Vec::new();
+    let pts: Vec<(Vec<(Point2, bool)>, usize)> = g
+        .contours
+        .iter()
+        .map(|c| {
+            let mut pts = Vec::new();
+            for s in c {
+                match *s {
+                    Seg::Line(a, _) => pts.push((a, true)),
+                    Seg::Quad(a, ctrl, _) => pts.extend([(a, true), (ctrl, false)]),
+                }
+            }
+            let len = pts.len();
+            (pts, len)
+        })
+        .collect();
+    be16(&mut v, g.contours.len() as u16);
+    v.extend([0; 8]);
+    let mut end = 0usize;
+    for (_, len) in &pts {
+        end += len;
+        be16(&mut v, (end - 1) as u16);
+    }
+    be16(&mut v, 0);
+    let all: Vec<(Point2, bool)> = pts.into_iter().flat_map(|p| p.0).collect();
+    v.extend(all.iter().map(|p| p.1 as u8));
+    for axis in 0..2 {
+        let mut last = 0i32;
+        for (q, _) in &all {
+            let c = if axis == 0 { q.x } else { q.y } as i32;
+            be16(&mut v, (c - last) as i16 as u16);
+            last = c;
+        }
+    }
+    v
+}
+
+/// A composite glyph's glyf record: parts by glyph id, each offset by whole units.
+pub fn composite(parts: &[(u16, i16, i16)]) -> Vec<u8> {
+    let mut v = Vec::new();
+    be16(&mut v, 0xffff);
+    v.extend([0; 8]);
+    for (k, &(g, dx, dy)) in parts.iter().enumerate() {
+        // word offsets, xy values, more to come but the last
+        be16(&mut v, 0x1 | 0x2 | if k + 1 < parts.len() { 0x20 } else { 0 });
+        be16(&mut v, g);
+        be16(&mut v, dx as u16);
+        be16(&mut v, dy as u16);
+    }
+    v
+}
+
 /// A TrueType font mapping each character to its glyph (sorted by character), with pair kerning.
 pub fn build(units_per_em: u16, glyphs: &[(char, TestGlyph)], kern: &[(char, char, i16)]) -> Vec<u8> {
     let mut glyphs = glyphs.to_vec();
     glyphs.sort_by_key(|g| g.0);
-    let n = glyphs.len() + 1;
     let id = |c: char| glyphs.iter().position(|g| g.0 == c).map_or(0, |k| k as u16 + 1);
+    let table = (!kern.is_empty()).then(|| {
+        let mut k = Vec::new();
+        be16(&mut k, 0);
+        be16(&mut k, 1);
+        be16(&mut k, 0);
+        be16(&mut k, (14 + 6 * kern.len()) as u16);
+        be16(&mut k, 1);
+        be16(&mut k, kern.len() as u16);
+        k.extend([0; 6]);
+        for &(a, b, v) in kern {
+            be16(&mut k, id(a));
+            be16(&mut k, id(b));
+            be16(&mut k, v as u16);
+        }
+        k
+    });
+    let raw: Vec<(char, Vec<u8>, u16)> = glyphs.iter().map(|(c, g)| (*c, simple(g), g.advance)).collect();
+    build_raw(units_per_em, &raw, table)
+}
+
+/// A font of glyf records as given (glyph k + 1 is the k-th character's, sorted), and a kern
+/// table's bytes.
+pub fn build_raw(units_per_em: u16, glyphs: &[(char, Vec<u8>, u16)], kern: Option<Vec<u8>>) -> Vec<u8> {
+    let n = glyphs.len() + 1;
     let mut glyf = Vec::new();
     // glyph 0, the missing glyph, is empty
     let mut loca = vec![0u32, 0];
-    for (_, g) in &glyphs {
-        let pts: Vec<(Vec<(Point2, bool)>, usize)> = g
-            .contours
-            .iter()
-            .map(|c| {
-                let mut pts = Vec::new();
-                for s in c {
-                    match *s {
-                        Seg::Line(a, _) => pts.push((a, true)),
-                        Seg::Quad(a, ctrl, _) => pts.extend([(a, true), (ctrl, false)]),
-                    }
-                }
-                let len = pts.len();
-                (pts, len)
-            })
-            .collect();
-        be16(&mut glyf, g.contours.len() as u16);
-        glyf.extend([0; 8]);
-        let mut end = 0usize;
-        for (_, len) in &pts {
-            end += len;
-            be16(&mut glyf, (end - 1) as u16);
-        }
-        be16(&mut glyf, 0);
-        let all: Vec<(Point2, bool)> = pts.into_iter().flat_map(|p| p.0).collect();
-        glyf.extend(all.iter().map(|p| p.1 as u8));
-        for axis in 0..2 {
-            let mut last = 0i32;
-            for (q, _) in &all {
-                let v = if axis == 0 { q.x } else { q.y } as i32;
-                be16(&mut glyf, (v - last) as i16 as u16);
-                last = v;
-            }
-        }
+    for (_, g, _) in glyphs {
+        glyf.extend(g);
         while glyf.len() % 4 != 0 {
             glyf.push(0);
         }
@@ -115,8 +160,8 @@ pub fn build(units_per_em: u16, glyphs: &[(char, TestGlyph)], kern: &[(char, cha
     be16(&mut maxp, n as u16);
     let mut hmtx = Vec::new();
     be32(&mut hmtx, 0);
-    for (_, g) in &glyphs {
-        be16(&mut hmtx, g.advance);
+    for (_, _, advance) in glyphs {
+        be16(&mut hmtx, *advance);
         be16(&mut hmtx, 0);
     }
     let mut cmap = Vec::new();
@@ -153,20 +198,7 @@ pub fn build(units_per_em: u16, glyphs: &[(char, TestGlyph)], kern: &[(char, cha
         (b"loca", loca.iter().flat_map(|o| o.to_be_bytes()).collect()),
         (b"glyf", glyf),
     ];
-    if !kern.is_empty() {
-        let mut k = Vec::new();
-        be16(&mut k, 0);
-        be16(&mut k, 1);
-        be16(&mut k, 0);
-        be16(&mut k, (14 + 6 * kern.len()) as u16);
-        be16(&mut k, 1);
-        be16(&mut k, kern.len() as u16);
-        k.extend([0; 6]);
-        for &(a, b, v) in kern {
-            be16(&mut k, id(a));
-            be16(&mut k, id(b));
-            be16(&mut k, v as u16);
-        }
+    if let Some(k) = kern {
         tables.push((b"kern", k));
     }
     let mut out = Vec::new();

@@ -92,7 +92,7 @@ pub fn run(mcp: bool, root: &str) -> ExitCode {
             return ExitCode::from(2);
         }
     };
-    let mut session = Session::rooted(root);
+    let mut session = Session::rooted(root.clone());
     let stdin = std::io::stdin();
     let mut out = std::io::stdout().lock();
     for line in stdin.lock().lines() {
@@ -101,7 +101,19 @@ pub fn run(mcp: bool, root: &str) -> ExitCode {
             continue;
         }
         let reply = match Json::parse(&line) {
-            Ok(req) => answer(&mut session, &req, mcp),
+            // a request that panics answers with an error, and the session starts afresh
+            Ok(req) => {
+                std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| answer(&mut session, &req, mcp)))
+                    .unwrap_or_else(|_| {
+                        session = Session::rooted(root.clone());
+                        let id = req.get("id").cloned().unwrap_or(Json::Null);
+                        Some(error(
+                            id,
+                            -32603,
+                            "internal error: the request failed; the session was reset",
+                        ))
+                    })
+            }
             Err(e) => Some(error(Json::Null, -32700, &e)),
         };
         if let Some(r) = reply
