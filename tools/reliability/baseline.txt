@@ -482,7 +482,7 @@ plane_cone/countersink_rim_in_top/Add ok ok
 plane_cone/apex_on_vertex/Add ok ok
 plane_cone/apex_on_edge/Add ok ok
 plane_cone/axis_in_top/Add error error
-plane_cone/base_tangent_wall_inside/Add error error
+plane_cone/base_tangent_wall_inside/Add ok ok
 plane_cone/frustum_rims_on_top_and_bottom/Add ok ok
 plane_cone/lying_on_top/Add reject reject
 plane_cone/apex_on_top_from_above/Cut ok ok
@@ -492,7 +492,7 @@ plane_cone/countersink_rim_in_top/Cut ok ok
 plane_cone/apex_on_vertex/Cut ok ok
 plane_cone/apex_on_edge/Cut ok ok
 plane_cone/axis_in_top/Cut error error
-plane_cone/base_tangent_wall_inside/Cut error error
+plane_cone/base_tangent_wall_inside/Cut ok ok
 plane_cone/frustum_rims_on_top_and_bottom/Cut ok ok
 plane_cone/lying_on_top/Cut ok ok
 plane_cone/apex_on_top_from_above/Keep ok ok
@@ -502,7 +502,7 @@ plane_cone/countersink_rim_in_top/Keep ok ok
 plane_cone/apex_on_vertex/Keep ok ok
 plane_cone/apex_on_edge/Keep ok ok
 plane_cone/axis_in_top/Keep error error
-plane_cone/base_tangent_wall_inside/Keep error error
+plane_cone/base_tangent_wall_inside/Keep ok ok
 plane_cone/frustum_rims_on_top_and_bottom/Keep ok ok
 plane_cone/lying_on_top/Keep ok ok
 plane_sphere/tangent_top_above/Add ok ok
