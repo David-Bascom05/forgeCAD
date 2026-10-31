@@ -666,6 +666,18 @@ pub fn explain(e: &RegenError) -> (String, String) {
             format!("boolean: {error:?}"),
             hint("move or resize the tool so it does not just touch the part"),
         ),
+        Fillet {
+            error: forge_ops::FilletError::TooLarge { max, .. },
+            ..
+        } => (
+            format!(
+                "fillet: the round's ball is wider than the ring it rolls round; it needs a radius under {}",
+                crate::short(*max)
+            ),
+            hint(
+                "a round of this ring works up to that radius; for a full round, make the ring thinner or wider",
+            ),
+        ),
         Fillet { error, .. } => (
             format!("fillet: {error:?}"),
             hint("try a smaller radius, or fewer edges at once"),

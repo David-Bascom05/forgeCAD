@@ -115,6 +115,9 @@ pub enum FilletError {
     Corner { vertex: VertexId },
     /// An edge is listed twice.
     Duplicate { edge: EdgeId },
+    /// A ring's round whose ball is wider than the circle its centre rolls round; `max` is the
+    /// largest radius that rounds it.
+    TooLarge { edge: EdgeId, max: f64 },
 }
 
 type R<T> = Result<T, FilletError>;

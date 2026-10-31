@@ -139,3 +139,15 @@ fn law_direction_does_not_follow_names() {
         }
     }
 }
+
+#[test]
+fn ring_round_wider_than_its_ring_is_refused() {
+    // a conrod (the I-beam shank, pocketed) whose small end, 20 thick and of radius 15, is rounded
+    // over its rim: the full round's ball (radius 10) rolls round a centre circle of radius 5,
+    // which works only up to (5 + 10) / 2
+    let m = Model::new(
+        "c = 150\nrb = 31\nrs = 15\ntb = 22\nts = 20\nside: sketch xz\n  line -14 rb-6 -8 c-rs+5\n  line l1.b 8 c-rs+5\n  line l2.b 14 rb-6\n  line l3.b l1.a\n  line o 0 c cons\n  ver l5\n  sym l1.a l3.b l5\n  sym l1.b l3.a l5\n  vdist o l4.a rb-6\n  vdist o l2.a c-rs+5\n  dist l4 28\n  dist l2 16\nend\nshank: extrude sym ts side\nbig: extrude sym tb xz circle 0 0 rb\nsmall: extrude sym ts xz circle 0 c rs\nbolts: extrude sym tb xz rect 26 -24 16 46\npattern bolts mirror yz\nweb: sketch xz at 0 ts/2 0\n  line -9.5 rb+2 -4.5 c-rs-4\n  line l1.b 4.5 c-rs-4\n  line l2.b 9.5 rb+2\n  line l3.b l1.a\nend\npocket: extrude cut 7.5 web\npattern pocket mirror xz\nfillet 6 (edges between shank big concave line) (edges between shank small concave)\nfullround (faces normal +y near 0 10 165) (faces cyl near 0 0 165) (faces normal -y near 0 -10 165)\n",
+    );
+    let msg = m.error.map(|f| f.msg).unwrap_or_default();
+    assert!(msg.contains("radius under 7.5"), "{msg}");
+}

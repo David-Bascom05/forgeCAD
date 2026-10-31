@@ -757,6 +757,14 @@ fn round_blend(
                         major: k.radius,
                         minor: r,
                     }),
+                    // the centres' circle is smaller than the ball: it shrinks as the ball
+                    // grows (it never gets here growing), k - (r' - r) > r' up to their mean
+                    Curve::Circle(k) => {
+                        return Err(FilletError::TooLarge {
+                            edge: ea,
+                            max: 0.5 * (k.radius + r),
+                        });
+                    }
                     _ => return Err(err),
                 };
                 (
