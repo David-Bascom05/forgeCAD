@@ -54,10 +54,10 @@ fuzz10 seq a5fe5db277480db0
 fuzz10 nary 61e882106cb4924b
 gearbox seq 4a62217aa675e422
 gearbox nary c46bc23bf006a9c1
-volute seq 3b8b7e56ec6e6c2c
-volute nary 96d146039ae5b36b
-crank seq 81ae8ee6fa256fce
-crank nary f96007d9aebe2487
+volute seq 08723bfa5530ddc3
+volute nary 3846e29af2b832e6
+crank seq 52f78da586178b3c
+crank nary 310bf44252f4e34a
 valve seq 76563f91cf8d8bf1
 valve nary 8aaa088ca17bccd6
 heatsink seq 097802f2eff43a8b

@@ -72,3 +72,17 @@ from a checkout of main): 200 random parts with traced-spine fillets cut through
 main's, including the failures (`gen.py DIR 0 200`, `compare.py OLD NEW DIR OUT`). Main fails 158 of the 200
 in its own right (53 at the fillet; 105 at a cut through it: "inconsistent classification", "hole outside
 every region"); this batch neither fixes nor worsens them.
+
+## Newton's last step
+
+`corner::newton` and `screw::polish` (screw, ruled and skinned surfaces) ran until a step fell below 1e-13,
+so the final iteration only confirmed the one before. Newton's next step after one under 1e-7 is about
+1e-14: stop there. Heatsink's bits do not change; volute's and crank's move in the last bits. Regen, seq:
+heatsink 1346M to 1282M, volute 2546M to 2422M, crank 476M to 456M, gearbox 405M to 388M. Mesh: heatsink
+845M to 785M. Not for Gauss-Newton steps (`polish`'s second try), which converge only linearly off the surface.
+
+Tried for these faces and dropped (mesh):
+- First derivatives only near the surface in `corner::newton`: heatsink -1.4%, gearbox regen +4%.
+- A triangle's test skipped by the 4/9 rule from its three chords' stored sags: volute +11%, the hash costs
+  more than it saves.
+- `proc_strips` on all procedural faces, not only swept: volute +16%, the strips fail and the Delaunay runs anyway.

@@ -1136,7 +1136,9 @@ pub(crate) fn polish(
             // done when the step is lost in rounding, or (off the surface) when moving the foot
             // that little changes the distance by a part in 1e12 (the foot's error enters the
             // distance squared, scaled by the curvature); on the surface the first test decides
-            tiny = moves <= 1e-13 * (1.0 + d.p.to_vec().abs_max()) || moves * moves <= 1e-12 * f;
+            // (Newton's next step after one this small is lost in rounding)
+            let scale = 1.0 + d.p.to_vec().abs_max();
+            tiny = moves <= if k == 0 { 1e-7 } else { 1e-13 } * scale || moves * moves <= 1e-12 * f;
             for _ in 0..8 {
                 let next = clamp(Point2::new(uv.x + x, uv.y + y));
                 if next == uv {

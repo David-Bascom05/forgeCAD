@@ -2090,6 +2090,10 @@ fn newton(
         }
         // the full step is evaluated with derivatives, as it is usually the next iterate
         let y = clamp(Point2::new(x.x + a, x.y + b));
+        // Newton's next step would be below rounding: this one is the answer
+        if len <= 1e-7 * size {
+            return y;
+        }
         let dy = deriv(y);
         let next = if dy.p.distance_sq(p) <= f {
             Some((y, dy))
