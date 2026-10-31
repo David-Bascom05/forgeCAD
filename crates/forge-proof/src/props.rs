@@ -324,6 +324,95 @@ fn order_pair(part: &Part, seed: u64) -> Option<(usize, usize)> {
     (!pairs.is_empty()).then(|| (pairs[(seed as usize) % pairs.len()], pairs.len()))
 }
 
+/// Each stage of the history (the body after features `..k`, valid) moved by a few ulps (even
+/// seeds) or up to 1e-12 (odd), then feature `k` applied: a valid body with the same topology as
+/// from the stage unmoved. A kernel with tolerance 1e-5 must not see 1e-14.
+pub fn ulp(part: &Part, seed: u64) -> Option<Finding> {
+    if forge_model::bodies::multi(&part.features) {
+        return None;
+    }
+    let h = forge_model::History::new(&part.features, None);
+    let mut body: Option<Body> = None;
+    for k in 0..part.features.len() {
+        let next = guarded(|| {
+            forge_model::step(h, k, body.clone())
+                .map_err(|e| short(&format!("{e:?}")))?
+                .ok_or_else(|| "no body".to_string())
+        });
+        let Ok(next) = next else { return None };
+        if let Some(b) = &body
+            && forge_topo::check(&next).is_empty()
+        {
+            let moved = nudged(b, seed.wrapping_add(2000 * k as u64));
+            let r = guarded(|| {
+                forge_model::step(h, k, Some(moved.clone()))
+                    .map_err(|e| short(&format!("{e:?}")))?
+                    .ok_or_else(|| "no body".to_string())
+            });
+            let hit = match &r {
+                Err(e) => Some((format!("fails: {e}"), String::new())),
+                Ok(r) => match forge_topo::check(r).first() {
+                    Some(p) => Some((format!("invalid {}", short(&format!("{p:?}"))), String::new())),
+                    None => {
+                        let (a, b) = (sig(&next), sig(r));
+                        (a != b).then(|| ("topology differs".to_string(), format!("{a} vs {b}")))
+                    }
+                },
+            };
+            // a nudge that broke the stage itself says nothing of the feature
+            if let Some((kind, detail)) = hit
+                && forge_topo::check(&moved).is_empty()
+            {
+                return found("ulp", kind, format!("feature {k}, seed {seed}: {detail}"));
+            }
+        }
+        body = Some(next);
+    }
+    None
+}
+
+/// `b` with every vertex, edge range, line origin and circle centre and radius moved: by up to
+/// four ulps for even seeds, by up to 1e-12 for odd ones.
+pub fn nudged(b: &Body, seed: u64) -> Body {
+    let mut r = Rng::new(seed ^ 0x0715);
+    let ulps = seed.is_multiple_of(2);
+    let mut n = |x: f64| {
+        if ulps {
+            let k = r.below(9) as i64 - 4;
+            if x == 0.0 {
+                x
+            } else {
+                f64::from_bits((x.to_bits() as i64 + k) as u64)
+            }
+        } else {
+            x + r.range(-1e-12, 1e-12)
+        }
+    };
+    let p3 = |p: Point3, n: &mut dyn FnMut(f64) -> f64| Point3::new(n(p.x), n(p.y), n(p.z));
+    let mut out = b.clone();
+    out.hulls = Default::default();
+    for v in &mut out.vertices {
+        v.point = p3(v.point, &mut n);
+    }
+    for e in &mut out.edges {
+        e.range = forge_math::Interval::new(n(e.range.lo), n(e.range.hi));
+        match &mut e.curve {
+            forge_geom::Curve::Line(l) => l.origin = p3(l.origin, &mut n),
+            forge_geom::Curve::Circle(c) => {
+                c.frame.origin = p3(c.frame.origin, &mut n);
+                c.radius = n(c.radius);
+            }
+            _ => {}
+        }
+        e.bbox.clear();
+    }
+    for f in &mut out.faces {
+        f.bbox.clear();
+        f.query.clear();
+    }
+    out
+}
+
 /// A random tool for boolean identities, from the fuzz generator.
 pub fn tool(seed: u64) -> Feature {
     let p = suite::fuzz(seed ^ 0xB0, 4);
@@ -621,6 +710,7 @@ pub fn all() -> Vec<(&'static str, Property)> {
         ("backends", backends),
         ("certify", certificate),
         ("membership", membership),
+        ("ulp", ulp),
     ]
 }
 

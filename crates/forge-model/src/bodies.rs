@@ -107,7 +107,7 @@ pub enum BodyError {
 }
 
 /// Whether a history makes or works on more than one body.
-pub(crate) fn multi(features: &[Feature]) -> bool {
+pub fn multi(features: &[Feature]) -> bool {
     features.iter().any(|f| matches!(f, Feature::Body(_)))
         || features
             .iter()

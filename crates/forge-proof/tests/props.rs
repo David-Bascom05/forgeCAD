@@ -71,6 +71,40 @@ fn brep_agrees_with_csg_point_by_point() {
     holds("membership", props::membership, &fuzz());
 }
 
+/// Every stage moved by a few ulps (even seeds) or up to 1e-12 (odd), then its next feature:
+/// valid, with the same topology as from the stage unmoved.
+#[test]
+fn indifferent_to_ulps() {
+    let mut parts = fuzz();
+    parts.push(("housing".into(), suite::housing()));
+    holds("ulp", props::ulp, &parts);
+}
+
+/// The nudge is not vacuous: it moves every vertex off its bits and leaves the body valid.
+#[test]
+fn nudge_moves_every_vertex() {
+    let b = suite::housing().regenerate().expect("builds");
+    for seed in [2, 3] {
+        let m = props::nudged(&b, seed);
+        let moved = b
+            .vertices
+            .iter()
+            .zip(&m.vertices)
+            .filter(|(x, y)| x.point != y.point)
+            .count();
+        assert!(
+            moved * 10 >= b.vertices.len() * 9,
+            "seed {seed}: {moved} of {} moved",
+            b.vertices.len()
+        );
+        assert!(
+            forge_topo::check(&m).is_empty(),
+            "seed {seed}: {:?}",
+            forge_topo::check(&m)
+        );
+    }
+}
+
 /// The oracle is not vacuous: a part's tools against the body without its last cut disagree.
 #[test]
 fn membership_catches_a_missing_cut() {

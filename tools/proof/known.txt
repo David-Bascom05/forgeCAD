@@ -14,6 +14,8 @@ backends: nary 1: fails: Boolean Unsupported "region  # M7
 backends: nary no shapes: fails: Boolean Unsupported "region  # M7: adv near_tolerance 1, a sliver two tolerances tall (was invalid EdgeUses)
 certify: Mesh  # M8
 boolean: A | B fails: invalid FaceWrongSide FaceId  # M9
+ulp: fails: Boolean Internal "face  # U1: a tool face a hair over the tolerance from a coplanar face (adv near_tolerance)
+ulp: fails: Boolean Internal "hole  # U2: a hole loop a tolerance off its plane, classified by 3D box (adv near_tolerance)
 # on the part files in forgecad-gate/repros (not in CI)
 rigid: fails: MissingEdge  # M11
 mirror: fails: MissingEdge  # M11
