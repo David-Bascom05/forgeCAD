@@ -1317,10 +1317,14 @@ fn nary_body(
     // sorted by slabs of x as wide as the widest reach, then by y: a point's partners lie in its
     // slab or the next, within that reach in y (a sweep along x alone met whole planes of points
     // at one x). Pairs join in any order: a cluster's root is its least index
-    // + 0.0: a -0.0 slab sorts apart from 0.0 but compares equal to it, which split the scan
-    let slab = |i: usize| (pts[i].x / widest).floor() + 0.0;
-    let mut order: Vec<(f64, f64, usize)> = (0..pts.len()).map(|i| (slab(i), pts[i].y, i)).collect();
-    order.sort_unstable_by(|a, b| a.0.total_cmp(&b.0).then(a.1.total_cmp(&b.1)));
+    // (sorted as integers: the slab, and y's bits in f64::total_cmp's order)
+    let slab = |i: usize| (pts[i].x / widest).floor() as i64;
+    let ykey = |y: f64| {
+        let b = y.to_bits() as i64;
+        b ^ (((b >> 63) as u64) >> 1) as i64
+    };
+    let mut order: Vec<(i64, i64, usize)> = (0..pts.len()).map(|i| (slab(i), ykey(pts[i].y), i)).collect();
+    order.sort_unstable();
     let mut join = |i: usize, j: usize| {
         if pts[i].distance(pts[j]) <= tols[i].max(tols[j]) {
             let (x, y) = (find(&mut parent, i), find(&mut parent, j));
@@ -1332,20 +1336,21 @@ fn nary_body(
     // the next slab's window starts where the last point's did or later
     let mut from = 0;
     for a in 0..order.len() {
-        let (sx, y, i) = order[a];
-        for &(tx, ty, j) in &order[a + 1..] {
-            if tx != sx || ty - y > widest {
+        let (sx, _, i) = order[a];
+        let y = pts[i].y;
+        for &(tx, _, j) in &order[a + 1..] {
+            if tx != sx || pts[j].y - y > widest {
                 break;
             }
             join(i, j);
         }
         while from < order.len()
-            && (order[from].0 < sx + 1.0 || (order[from].0 == sx + 1.0 && order[from].1 < y - widest))
+            && (order[from].0 < sx + 1 || (order[from].0 == sx + 1 && pts[order[from].2].y < y - widest))
         {
             from += 1;
         }
-        for &(tx, ty, j) in &order[from..] {
-            if tx != sx + 1.0 || ty > y + widest {
+        for &(tx, _, j) in &order[from..] {
+            if tx != sx + 1 || pts[j].y > y + widest {
                 break;
             }
             join(i, j);
@@ -1812,22 +1817,21 @@ fn nary_body(
             }
             // an edge kept where its midpoint was too near a tool to tell may now end in the open:
             // it divides nothing, so it goes, and so may the one it hung from
+            // (counted only at the kept edges' ends)
             let ends = |p: usize| [list[p].start.packed(), list[p].end.packed()];
-            let mut degree: Vec<(u64, u32)> = boundary
+            let mut degree: Vec<(u64, u32)> = keep.iter().flat_map(|&p| ends(p)).map(|v| (v, 0)).collect();
+            degree.sort_unstable_by_key(|x| x.0);
+            degree.dedup_by_key(|x| x.0);
+            for v in boundary
                 .iter()
                 .flatten()
                 .flat_map(|&(p, _)| ends(p))
                 .chain(keep.iter().flat_map(|&p| ends(p)))
-                .map(|v| (v, 1))
-                .collect();
-            degree.sort_unstable_by_key(|x| x.0);
-            degree.dedup_by(|x, y| {
-                let same = x.0 == y.0;
-                if same {
-                    y.1 += x.1;
+            {
+                if let Ok(i) = degree.binary_search_by_key(&v, |x| x.0) {
+                    degree[i].1 += 1;
                 }
-                same
-            });
+            }
             let at = |d: &[(u64, u32)], v: u64| d.binary_search_by_key(&v, |x| x.0).expect("an end");
             loop {
                 let before = keep.len();
