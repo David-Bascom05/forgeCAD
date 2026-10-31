@@ -66,7 +66,7 @@ pub struct Arg {
 }
 
 impl Arg {
-    fn new(text: impl Into<String>) -> Arg {
+    pub fn new(text: impl Into<String>) -> Arg {
         Arg {
             text: text.into(),
             to: None,

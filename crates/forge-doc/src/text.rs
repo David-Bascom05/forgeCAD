@@ -2006,7 +2006,7 @@ pub(crate) fn value(t: &str, features: &[Feature], want: Want) -> R<f64> {
 }
 
 /// `@handle` or a `(selector)`, not a parenthesized expression.
-fn is_ref(t: &str) -> bool {
+pub fn is_ref(t: &str) -> bool {
     t.starts_with('@')
         || t.strip_prefix('(').is_some_and(|r| {
             ["faces", "edges", "verts"]
@@ -2070,8 +2070,8 @@ impl<'a> P<'a> {
     fn num(&mut self) -> R<f64> {
         self.value(Want::Len)
     }
-    /// A fillet radius: constant, linear from the edge's first vertex (by name) to the other, or
-    /// radii at fractions along from that vertex.
+    /// A fillet radius: constant, linear from the edge's start to its other end, or
+    /// radii at fractions along from the start.
     fn radius(&mut self) -> R<Radius> {
         let t = self.next()?.to_string();
         let bad = || format!("expected a radius (3, 2..4 or 0:2,1:4), found '{t}'");

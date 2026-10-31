@@ -20,15 +20,15 @@ use forge_topo::{Body, CoedgeId, EdgeId, FaceId, Name, VertexId};
 use std::collections::{BTreeMap, BTreeSet};
 use std::sync::Arc;
 
-/// How the radius runs along a picked edge. Along means from the edge's first vertex (the
-/// one whose name orders first) to its other, whichever way the edge itself runs, so one
-/// history gives one shape; a closed edge runs from its vertex the way it runs.
+/// How the radius runs along a picked edge. Along means from the edge's start (`law_starts`)
+/// to its other end, whichever way the edge itself runs; a closed edge runs from its vertex the
+/// way it runs.
 #[derive(Clone, Debug, PartialEq)]
 pub enum Radius {
     Constant(f64),
-    /// From the first vertex to the other, linear along the edge.
+    /// From the start to the other end, linear along the edge.
     Linear(f64, f64),
-    /// Radii at fractions of the way along the edge from its first vertex (0 to 1,
+    /// Radii at fractions of the way along the edge from its start (0 to 1,
     /// increasing), with a smooth law through them.
     Points(Vec<(f64, f64)>),
 }
@@ -167,22 +167,97 @@ struct SpringEnd {
 /// Choices beyond the edges and their radii.
 #[derive(Clone, Debug, Default, PartialEq)]
 pub struct FilletOptions {
-    /// The vertex an edge's law runs from, where it is not the edge's first vertex by name.
+    /// The vertex an edge's law runs from: one of its ends, or the end of its run (`law_starts`).
     pub starts: Vec<(EdgeId, VertexId)>,
     /// How far from a corner vertex its blends stop (the length along each edge from the vertex
     /// to where the blend's section crosses it): for one edge there, or all of them.
     pub setbacks: Vec<(VertexId, Option<EdgeId>, f64)>,
 }
 
-/// The vertex a radius law on edge `e` runs from unless told otherwise: the one whose name
-/// orders first.
-pub fn law_start(body: &Body, e: EdgeId) -> VertexId {
-    let x = body.edge(e);
-    if body.vertex(x.start).name <= body.vertex(x.end).name {
-        x.start
-    } else {
-        x.end
+/// The vertex each varying law of `edges` runs from. A run is the edges one varying radius was
+/// given to, side by side in `edges`; it is walked from its start, each edge from the end it is
+/// reached by. An edge given one of its ends starts there; the walk starts at the vertex given
+/// for one of the run's edges, else the end of its first edge not shared with the second, else
+/// (a lone edge) the end lowest in x, then y, then z.
+/// Geometric, never by name: renaming cannot turn a law round. An edge the walk misses starts
+/// at its own lowest end, or is refused where its start was given.
+pub fn law_starts(
+    body: &Body,
+    edges: &[FilletEdge],
+    given: &[(EdgeId, VertexId)],
+) -> R<BTreeMap<EdgeId, VertexId>> {
+    let ends = |e: EdgeId| (body.edge(e).start, body.edge(e).end);
+    let lowest = |e: EdgeId| {
+        let (a, b) = ends(e);
+        let (p, q) = (body.vertex(a).point, body.vertex(b).point);
+        let key = |p: Point3, q: Point3| {
+            [(p.x, q.x), (p.y, q.y), (p.z, q.z)]
+                .into_iter()
+                .find(|(u, w)| (u - w).abs() > tol::LINEAR)
+                .is_none_or(|(u, w)| u < w)
+        };
+        if key(p, q) { a } else { b }
+    };
+    let mut out = BTreeMap::new();
+    let mut i = 0;
+    while i < edges.len() {
+        let r = &edges[i].radius;
+        let mut j = i + 1;
+        while j < edges.len() && r.constant().is_none() && edges[j].radius == *r {
+            j += 1;
+        }
+        let run: Vec<EdgeId> = edges[i..j].iter().map(|f| f.edge).collect();
+        i = j;
+        if r.constant().is_some() {
+            continue;
+        }
+        let from = run
+            .iter()
+            .find_map(|e| given.iter().find(|g| g.0 == *e).map(|g| g.1));
+        let start = from.or_else(|| match run[..] {
+            [a, b, ..] => {
+                let (s, t) = ends(a);
+                let shared = |v: VertexId| ends(b).0 == v || ends(b).1 == v;
+                match (shared(s), shared(t)) {
+                    (false, true) => Some(s),
+                    (true, false) => Some(t),
+                    _ => None,
+                }
+            }
+            _ => None,
+        });
+        let mut reached: Vec<VertexId> = start.into_iter().collect();
+        let mut left = run.clone();
+        // an edge given one of its own ends starts there, and the walk goes on past it
+        left.retain(|&e| {
+            let (a, b) = ends(e);
+            match given.iter().find(|g| g.0 == e && (g.1 == a || g.1 == b)) {
+                Some(&(_, v)) => {
+                    out.insert(e, v);
+                    reached.extend([a, b]);
+                    false
+                }
+                None => true,
+            }
+        });
+        while let Some(k) = left.iter().position(|&e| {
+            let (a, b) = ends(e);
+            reached.contains(&a) || reached.contains(&b)
+        }) {
+            let e = left.remove(k);
+            let (a, b) = ends(e);
+            let (v, w) = if reached.contains(&a) { (a, b) } else { (b, a) };
+            out.insert(e, v);
+            reached.push(w);
+        }
+        for e in left {
+            if from.is_some() {
+                return Err(FilletError::BadRadius { edge: e });
+            }
+            out.insert(e, lowest(e));
+        }
     }
+    Ok(out)
 }
 
 /// Rounds `edges` of `body`, each with its own radius, in one operation.
@@ -221,18 +296,14 @@ pub fn fillet_with(body: &Body, edges: &[FilletEdge], opts: &FilletOptions, feat
     let mut picked: Vec<FilletEdge> = Vec::with_capacity(edges.len());
     // a half with no point of the law on it still rounds, the law running across it
     let mut unpicked: Vec<(EdgeId, f64)> = Vec::new();
+    let starts = law_starts(&body, edges, &opts.starts)?;
     for fe in edges {
         let e = fe.edge;
         let (v0, v1) = (body.edge(e).start, body.edge(e).end);
         if v0 != v1 || fe.radius.constant().is_some() {
             let mut fe = fe.clone();
-            // laws run from the vertex given or the one named first; internally from the edge's start
-            let from = match opts.starts.iter().find(|s| s.0 == e) {
-                Some(&(_, v)) if v == v0 || v == v1 => v,
-                Some(_) => return Err(FilletError::BadRadius { edge: e }),
-                None => law_start(&body, e),
-            };
-            if from != v0 {
+            // internally a law runs from the edge's start
+            if starts.get(&e).is_some_and(|&v| v != v0) {
                 fe.radius = fe.radius.reversed();
             }
             picked.push(fe);

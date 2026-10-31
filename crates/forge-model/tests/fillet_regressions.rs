@@ -66,11 +66,13 @@ fn crossing_springs_on_one_face_are_refused() {
             },
             FilletEdge {
                 edge: top,
+                // found running from its end at (0, y, z)
                 radius: Radius::Points(vec![
                     (0.0, 0.6531669178000771),
                     (0.44452457961533676, 0.29178062703404073),
                     (1.0, 0.39993918839377435),
-                ]),
+                ])
+                .reversed(),
             },
             FilletEdge {
                 edge: rim,

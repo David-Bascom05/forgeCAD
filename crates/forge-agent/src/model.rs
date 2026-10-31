@@ -148,6 +148,96 @@ impl Model {
         Ok(())
     }
 
+    /// Writes `from (verts near X Y Z)` into each built fillet line where a varying radius was
+    /// left to start where the geometry says (`forge_ops::law_starts`): fixed at its first build,
+    /// it never turns round after. Whether a line changed.
+    pub fn fill_law_starts(&mut self) -> bool {
+        let mut edits = Vec::new();
+        for i in 0..self.built().min(self.features.len()) {
+            let Feature::Fillet { edges, starts, .. } = &self.features[i] else {
+                continue;
+            };
+            let Some(body) = self.body_after(i) else {
+                continue;
+            };
+            // the line's radius groups as the parser reads them: R [from VREF] REF..
+            let toks = &self.lines[i].toks;
+            let end = toks.len()
+                - if toks.len() > 2 && toks[toks.len() - 2] == "in" {
+                    2
+                } else {
+                    0
+                };
+            let mut groups: Vec<(usize, bool, Vec<Name>)> = vec![(1, false, Vec::new())];
+            let mut k = 2;
+            while k < end {
+                let t = toks[k].as_str();
+                let last = groups.last_mut().expect("a group");
+                if t == "setback" {
+                    k += 2 + toks.get(k + 2).is_some_and(|t| text::is_ref(t)) as usize + 1;
+                } else if t == "from" {
+                    last.1 = true;
+                    k += 2;
+                } else if !text::is_ref(t) {
+                    groups.push((k, false, Vec::new()));
+                    k += 1;
+                } else {
+                    last.2.extend(self.refs(i, t).unwrap_or_default());
+                    k += 1;
+                }
+            }
+            for (at, from, names) in groups {
+                let picks: Option<Vec<forge_ops::FilletEdge>> = names
+                    .iter()
+                    .map(|n| {
+                        let r = edges.iter().find(|e| e.0 == *n)?.1.clone();
+                        Some(forge_ops::FilletEdge {
+                            edge: body.edge_by_name(*n)?,
+                            radius: r,
+                        })
+                    })
+                    .collect();
+                let Some(picks) = picks else { continue };
+                if from
+                    || picks.is_empty()
+                    || picks[0].radius.constant().is_some()
+                    || names.iter().any(|n| starts.iter().any(|s| s.0 == *n))
+                {
+                    continue;
+                }
+                let Ok(found) = forge_ops::law_starts(body, &picks, &[]) else {
+                    continue;
+                };
+                let v = found[&picks[0].edge];
+                // one vertex must give the whole group's starts back (a chain, or one edge)
+                if forge_ops::law_starts(body, &picks, &[(picks[0].edge, v)]).ok() != Some(found) {
+                    continue;
+                }
+                let p = body.vertex(v).point;
+                let sel = format!("(verts near {} {} {})", near(p.x), near(p.y), near(p.z));
+                if self.refs(i, &sel).ok() != Some(vec![body.vertex(v).name]) {
+                    continue;
+                }
+                if let Some((item, _)) = self.doc.at_line(self.lines[i].no) {
+                    edits.push((item, at, sel));
+                }
+            }
+        }
+        let changed = !edits.is_empty();
+        // a line's later groups first, so the earlier ones' places hold
+        for (item, at, sel) in edits.into_iter().rev() {
+            if let forge_doc::Body::Feature { args, .. } = &mut self.doc.items[item].body {
+                args.splice(at..at, [forge_doc::Arg::new("from"), forge_doc::Arg::new(sel)]);
+            }
+        }
+        if changed {
+            let t0 = Instant::now();
+            self.src = self.doc.print();
+            self.rebuild(self.doc.lines(), t0);
+        }
+        changed
+    }
+
     /// The file as the document prints it.
     pub fn src(&self) -> &str {
         &self.src
@@ -660,6 +750,13 @@ pub fn explain(e: &RegenError) -> (String, String) {
             hint("start with a solid: extrude, revolve or ball (op new)"),
         ),
     }
+}
+
+/// A coordinate as `fill_law_starts` writes it: four decimals, trailing zeros dropped.
+fn near(x: f64) -> String {
+    let s = format!("{x:.4}");
+    let s = s.trim_end_matches('0').trim_end_matches('.');
+    if s == "-0" { "0".into() } else { s.into() }
 }
 
 #[cfg(test)]

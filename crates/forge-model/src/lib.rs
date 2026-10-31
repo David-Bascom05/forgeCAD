@@ -116,8 +116,8 @@ pub enum Feature {
     /// A ball (a shorthand for revolving a half disc).
     Ball { frame: Frame, radius: f64, op: Combine },
     /// Round the named edges of the part as it stands, each with its own radius, in one go.
-    /// `starts`: (edge, vertex) where an edge's law runs from that vertex rather than the one
-    /// named first. `setbacks`: (vertex, one edge there or all, length) how far along
+    /// `starts`: (edge, vertex) where an edge's law runs from that vertex (one of its ends, or
+    /// the end of its run of edges) rather than where `forge_ops::law_starts` puts it. `setbacks`: (vertex, one edge there or all, length) how far along
     /// each edge from a corner its blends stop.
     Fillet {
         edges: Vec<(Name, Radius)>,

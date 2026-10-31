@@ -103,7 +103,9 @@ LOOPS (first is outside, rest holes; X Y a corner): rect X Y W H | rrect X Y W H
   poly X Y X Y .. | loop (line AX AY BX BY | arc CX CY R START SWEEP)..
 `next`: up to the next face met. `to`: a plane or sketch feature, or a feature's face (plane, cylinder..).
 Fillet R: 3 | 2..4 (start to other end) | 0:2,0.5:4,1:2 (fraction along from the start:radius). The start is
-  `from VREF` (a vertex of each edge after it), else the vertex named first; `build` lists those. A constant
+  `from VREF`: the edges after it run from that vertex, a chain of them walked on from it. Left off, `build`
+  writes it in at the first build, as `from (verts near X Y Z)`: the start of the edges in the order picked
+  (the end of the first not on the second), or a lone edge's end lowest in x, then y, then z. A constant
   radius holds along its own edge; a tangent chain changes radius over its variable and unpicked edges.
   `setback VREF [REF] D`: at a corner where blends meet, they stop D along each edge from the vertex (one edge, or all).
 facefillet: rounds between two face sets: their shared edges, or the band of four-sided strip faces joining

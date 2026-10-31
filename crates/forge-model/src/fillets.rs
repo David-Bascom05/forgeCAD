@@ -239,39 +239,16 @@ pub fn with_var_fillet(part: &Part, near: &[(Point3, Radius)]) -> Part {
     out
 }
 
-/// A fillet case's picks: each edge's middle, its first vertex (the one a law runs from)
-/// and its radius.
-pub type Pick = (Point3, Point3, Radius);
-
-/// The point of edge `e`'s first vertex (by name), the one its radius law runs from.
-fn first_vertex(body: &Body, e: forge_topo::EdgeId) -> Point3 {
-    let x = body.edge(e);
-    let v = if body.vertex(x.start).name <= body.vertex(x.end).name {
-        x.start
-    } else {
-        x.end
-    };
-    body.vertex(v).point
-}
+/// A fillet case's picks: each edge's middle and its radius.
+pub type Pick = (Point3, Radius);
 
 /// `part` followed by the fillet of `picks`, the edges picked from `body` (the part as
-/// some regeneration made it, which may name things differently), each law turned round
-/// where its first vertex there is the other end.
+/// some regeneration made it, which may name things differently). Laws start where the
+/// geometry says, so they need no turning round.
 pub fn with_fillet_from(part: &Part, body: &Body, picks: &[Pick]) -> Part {
     let edges = picks
         .iter()
-        .map(|(mid, first, r)| {
-            let n = edge_near(body, *mid);
-            let e = body.edge_by_name(n).expect("named edge");
-            let x = body.edge(e);
-            let other = if first_vertex(body, e) == body.vertex(x.start).point {
-                body.vertex(x.end).point
-            } else {
-                body.vertex(x.start).point
-            };
-            let flip = x.start != x.end && first_vertex(body, e).distance(*first) > other.distance(*first);
-            (n, if flip { r.reversed() } else { r.clone() })
-        })
+        .map(|(mid, r)| (edge_near(body, *mid), r.clone()))
         .collect();
     let mut out = part.clone();
     out.features.push(Feature::Fillet {
@@ -294,7 +271,7 @@ pub fn picks(part: &Part) -> Vec<Pick> {
         .map(|(n, r)| {
             let e = body.edge_by_name(*n).expect("named edge");
             let x = body.edge(e);
-            (x.curve.eval(x.range.mid()), first_vertex(&body, e), r.clone())
+            (x.curve.eval(x.range.mid()), r.clone())
         })
         .collect()
 }
@@ -1373,7 +1350,7 @@ pub fn variable_cases() -> Vec<(&'static str, Part, Option<f64>)> {
             with_var_fillet(
                 &corner,
                 &[
-                    (Point3::new(8.0, 0.0, 8.0), Radius::Linear(0.6, 1.4)),
+                    (Point3::new(8.0, 0.0, 8.0), Radius::Linear(1.4, 0.6)),
                     (Point3::new(20.0, 6.0, 8.0), 1.0.into()),
                 ],
             ),
@@ -1637,8 +1614,13 @@ mod tests {
         let pick = |p: Point3| edge_near(&body, p);
         let front = pick(Point3::new(10.0, 0.0, 8.0));
         let e = body.edge_by_name(front).expect("edge");
-        let first = forge_ops::law_start(&body, e);
         let x = body.edge(e);
+        // the front top edge runs along x: its law starts at its lower x end
+        let first = if body.vertex(x.start).point.x < body.vertex(x.end).point.x {
+            x.start
+        } else {
+            x.end
+        };
         let other = if x.start == first { x.end } else { x.start };
         let fillet = |edges: Vec<(Name, Radius)>, starts, setbacks| {
             let mut p = boxed.clone();
