@@ -202,13 +202,7 @@ impl Part {
 
     /// `regenerate_nary`, the region batch classified on `backend`.
     pub fn regenerate_nary_on(&self, threads: usize, backend: Backend) -> Result<Body, RegenError> {
-        let (shapes, ops) = self.nary_solids()?;
-        let cpu = CpuBatch {
-            shapes: &shapes,
-            ops: &ops,
-            threads: if cfg!(target_family = "wasm") { 1 } else { threads },
-        };
-        self.regenerate_nary_batch(threads, true, Some(&AutoBatch::new(cpu, backend)))
+        nary_regen(&self.features, wasm_one(threads), true, Batching::On(backend))
     }
 
     /// `regenerate_nary`, placing points against the tools' analytic solids first or not.
@@ -236,9 +230,8 @@ impl Part {
         shapes: bool,
         batch: Option<&dyn forge_bool::Batch>,
     ) -> Result<Body, RegenError> {
-        // wasm has no threads
-        let threads = if cfg!(target_family = "wasm") { 1 } else { threads };
-        nary_regen(&self.features, threads, shapes, batch)
+        let batching = batch.map_or(Batching::None, Batching::Given);
+        nary_regen(&self.features, wasm_one(threads), shapes, batching)
     }
 
     /// Rebuilds the solid from the first feature. Feature ids are their
@@ -403,22 +396,49 @@ fn build_tools(
     if threads <= 1 || n <= 1 {
         return some(from..features.len());
     }
-    let chunk = n.div_ceil(threads);
-    let built: Vec<Result<Vec<Tool>, RegenError>> = std::thread::scope(|s| {
-        let hs: Vec<_> = (from..features.len())
-            .step_by(chunk)
-            .map(|a| {
-                let some = &some;
-                s.spawn(move || some(a..(a + chunk).min(features.len())))
+    // one feature at a time from a shared counter: tools differ widely in cost (a hole up to the
+    // next face against a plain extrude), so fixed chunks left threads idle
+    let next = std::sync::atomic::AtomicUsize::new(from);
+    type Built = (usize, Result<Vec<Tool>, RegenError>);
+    let done: Vec<Vec<Built>> = std::thread::scope(|s| {
+        let hs: Vec<_> = (0..threads.min(n))
+            .map(|_| {
+                s.spawn(|| {
+                    let mut got = Vec::new();
+                    loop {
+                        let i = next.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+                        if i >= features.len() {
+                            break got;
+                        }
+                        got.push((i, some(i..i + 1)));
+                    }
+                })
             })
             .collect();
         hs.into_iter().map(|h| h.join().expect("tool builder")).collect()
     });
+    let mut built: Vec<Built> = done.into_iter().flatten().collect();
+    built.sort_unstable_by_key(|b| b.0);
+    let built = built.into_iter().map(|b| b.1);
     let mut out = Vec::new();
     for b in built {
         out.extend(b?);
     }
     Ok(out)
+}
+
+/// wasm has no threads.
+fn wasm_one(threads: usize) -> usize {
+    if cfg!(target_family = "wasm") { 1 } else { threads }
+}
+
+/// How an n-ary regen classifies its regions in one batch.
+#[derive(Clone, Copy)]
+enum Batching<'a> {
+    None,
+    Given(&'a dyn forge_bool::Batch),
+    /// The tools' own solids, on this backend.
+    On(Backend),
 }
 
 /// The n-ary regen of a history: each run of solid features after a part-changing one (chamfer,
@@ -427,7 +447,7 @@ fn nary_regen(
     features: &[Feature],
     threads: usize,
     shapes: bool,
-    batch: Option<&dyn forge_bool::Batch>,
+    batching: Batching,
 ) -> Result<Body, RegenError> {
     let start = features.iter().rposition(starts).unwrap_or(0);
     let err = |error| RegenError::Boolean {
@@ -443,8 +463,16 @@ fn nary_regen(
         let body = modify(
             features,
             m,
-            // the batch holds the tools after the last modifier (nary_solids), not these
-            &nary_regen(&features[..m], threads, shapes, None)?,
+            // a given batch holds the tools after the last modifier (nary_solids), not these
+            &nary_regen(
+                &features[..m],
+                threads,
+                shapes,
+                match batching {
+                    Batching::Given(_) => Batching::None,
+                    b => b,
+                },
+            )?,
             threads,
         )?;
         let built = build_tools(features, m + 1, threads, true)?;
@@ -465,6 +493,22 @@ fn nary_regen(
     let tools: Vec<&Body> = built.iter().map(|t| &t.0).collect();
     let ops: Vec<Op> = built[1..].iter().map(|t| op_of(t.1)).collect();
     let solids: Vec<Shape> = built.iter().map(|t| t.2.clone()).collect();
+    let auto = match batching {
+        Batching::On(backend) => Some(AutoBatch::new(
+            CpuBatch {
+                shapes: &solids,
+                ops: &ops,
+                threads,
+            },
+            backend,
+        )),
+        _ => None,
+    };
+    let batch: Option<&dyn forge_bool::Batch> = match (&auto, batching) {
+        (Some(a), _) => Some(a),
+        (None, Batching::Given(b)) => Some(b),
+        _ => None,
+    };
     forge_bool::nary_with(
         &tools,
         &ops,

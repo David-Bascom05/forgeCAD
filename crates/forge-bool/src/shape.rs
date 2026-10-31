@@ -5,7 +5,7 @@
 //! it is Near and the caller asks the B-rep.
 
 use crate::Op;
-use forge_math::{Box3, Frame, Point2, Point3, Vec2, dmath};
+use forge_math::{Box3, Frame, Point2, Point3, Vec2, Vec3, dmath};
 
 /// A piece of a closed 2D profile.
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -246,7 +246,102 @@ fn combine(prof: Option<(bool, f64)>, z: f64, lo: f64, hi: f64, m: f64) -> Membe
     }
 }
 
+/// The box around a profile (u lo, u hi, v lo, v hi).
+fn profile_box(segs: &[Seg2]) -> (f64, f64, f64, f64) {
+    let mut b = (f64::INFINITY, f64::NEG_INFINITY, f64::INFINITY, f64::NEG_INFINITY);
+    let mut take = |x: f64, y: f64, r: f64| {
+        b = (b.0.min(x - r), b.1.max(x + r), b.2.min(y - r), b.3.max(y + r));
+    };
+    for s in segs {
+        match *s {
+            Seg2::Line { a, b } => {
+                take(a.x, a.y, 0.0);
+                take(b.x, b.y, 0.0);
+            }
+            Seg2::Arc { c, r, .. } => take(c.x, c.y, r),
+        }
+    }
+    b
+}
+
+/// The box `b` in `frame`'s coordinates, as a box there around its corners.
+fn local_box(frame: &Frame, b: &Box3) -> Box3 {
+    let mut l = Box3::EMPTY;
+    for x in [b.x.lo, b.x.hi] {
+        for y in [b.y.lo, b.y.hi] {
+            for z in [b.z.lo, b.z.hi] {
+                l.include(frame.point_to_local(Point3::new(x, y, z)));
+            }
+        }
+    }
+    l
+}
+
 impl Shape {
+    /// Whether no point of `b` lies in the solid or within `m` of it, by bounds: true only when
+    /// that is sure (false says nothing).
+    pub fn box_out(&self, b: &Box3, m: f64) -> bool {
+        // rounding in the bounds below is far under this
+        let m = m + 1e-9 * (1.0 + b.diagonal());
+        let apart = |lo: f64, hi: f64, plo: f64, phi: f64| hi < plo - m || lo > phi + m;
+        match self {
+            Shape::Prism { frame, segs, lo, hi } => {
+                let l = local_box(frame, b);
+                let p = profile_box(segs);
+                apart(l.z.lo, l.z.hi, *lo, *hi)
+                    || apart(l.x.lo, l.x.hi, p.0, p.1)
+                    || apart(l.y.lo, l.y.hi, p.2, p.3)
+            }
+            Shape::Revolved {
+                frame,
+                origin,
+                dir,
+                perp,
+                segs,
+                ..
+            } => {
+                // the box's heights and radii about the axis, then the profile points they map to
+                let l = local_box(frame, b);
+                let gap = |lo: f64, hi: f64| {
+                    if lo > 0.0 {
+                        lo
+                    } else if hi < 0.0 {
+                        -hi
+                    } else {
+                        0.0
+                    }
+                };
+                let (gx, gy) = (gap(l.x.lo, l.x.hi), gap(l.y.lo, l.y.hi));
+                let r_lo = (gx * gx + gy * gy).sqrt();
+                let (ax, ay) = (l.x.lo.abs().max(l.x.hi.abs()), l.y.lo.abs().max(l.y.hi.abs()));
+                let r_hi = (ax * ax + ay * ay).sqrt();
+                let span = |o: f64, d: f64, e: f64| {
+                    let (h0, h1) = (d * l.z.lo, d * l.z.hi);
+                    let (r0, r1) = (e * r_lo, e * r_hi);
+                    (o + h0.min(h1) + r0.min(r1), o + h0.max(h1) + r0.max(r1))
+                };
+                let (u, v) = (span(origin.x, dir.x, perp.x), span(origin.y, dir.y, perp.y));
+                let p = profile_box(segs);
+                apart(u.0, u.1, p.0, p.1) || apart(v.0, v.1, p.2, p.3)
+            }
+            Shape::Ball { center, radius } => {
+                let gap = |c: f64, lo: f64, hi: f64| (lo - c).max(c - hi).max(0.0);
+                let d = Vec3::new(
+                    gap(center.x, b.x.lo, b.x.hi),
+                    gap(center.y, b.y.lo, b.y.hi),
+                    gap(center.z, b.z.lo, b.z.hi),
+                );
+                d.length() > radius + m
+            }
+            // within the first solid or a solid added to it
+            Shape::Csg { first, rest } => {
+                first.box_out(b, m) && rest.iter().all(|(op, s)| *op != Op::Union || s.box_out(b, m))
+            }
+            Shape::Brep(within) => !within.grow(m).overlaps(b),
+            Shape::Coil { .. } => false,
+        }
+    }
+
     /// Where `p` is, clear of the boundary by more than `m`, or Near.
     pub fn member(&self, p: Point3, m: f64) -> Member {
         match self {

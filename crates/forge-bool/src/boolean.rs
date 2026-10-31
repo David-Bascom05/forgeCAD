@@ -1860,16 +1860,21 @@ pub(crate) fn settle(mut p: Point3, curves: &[(&Curve, Interval)]) -> R<(Point3,
     }
     // the last round's projections bound how far the point is from each curve
     let mut near = [Point3::ORIGIN; 8];
-    for round in 0..8 {
+    for _ in 0..8 {
         let mut sum = Vec3::ZERO;
         for (k, &(c, r)) in curves.iter().enumerate() {
             let q = c.eval(c.closest(p, r));
-            if round == 7 && k < near.len() {
+            if k < near.len() {
                 near[k] = q;
             }
             sum += q - Point3::ORIGIN;
         }
+        let was = p;
         p = Point3::ORIGIN + sum / curves.len() as f64;
+        // a fixed point: every later round would give these same bits
+        if p == was {
+            break;
+        }
     }
     let mut worst = tol::LINEAR;
     for (k, &(c, r)) in curves.iter().enumerate() {

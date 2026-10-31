@@ -80,6 +80,143 @@ fn par_map<T: Send>(n: usize, threads: usize, per: usize, f: impl Fn(usize) -> T
 /// How far clear of a tool's boundary a point must be for its analytic solid to answer.
 const SHAPE_MARGIN: f64 = tol::LINEAR;
 
+/// Whether surface `s` may pass through box `b` (false only when the box surely lies on one side
+/// of it, clear by more than a tolerance).
+fn may_meet(s: &forge_geom::Surface, b: &forge_math::Box3) -> bool {
+    use forge_geom::Surface;
+    let m = 10.0 * tol::LINEAR;
+    let corners = || {
+        [b.x.lo, b.x.hi].into_iter().flat_map(move |x| {
+            [b.y.lo, b.y.hi]
+                .into_iter()
+                .flat_map(move |y| [b.z.lo, b.z.hi].into_iter().map(move |z| Point3::new(x, y, z)))
+        })
+    };
+    // the box's radii about a frame's z axis
+    let radii = |f: &forge_math::Frame| {
+        let mut l = forge_math::Box3::EMPTY;
+        for c in corners() {
+            l.include(f.point_to_local(c));
+        }
+        let gap = |lo: f64, hi: f64| {
+            if lo > 0.0 {
+                lo
+            } else if hi < 0.0 {
+                -hi
+            } else {
+                0.0
+            }
+        };
+        let (gx, gy) = (gap(l.x.lo, l.x.hi), gap(l.y.lo, l.y.hi));
+        let (ax, ay) = (l.x.lo.abs().max(l.x.hi.abs()), l.y.lo.abs().max(l.y.hi.abs()));
+        ((gx * gx + gy * gy).sqrt(), (ax * ax + ay * ay).sqrt())
+    };
+    match s {
+        Surface::Plane(p) => {
+            let (o, z) = (p.frame.origin, p.frame.z().get());
+            let (lo, hi) = corners()
+                .map(|c| (c - o).dot(z))
+                .fold((f64::INFINITY, f64::NEG_INFINITY), |a, d| {
+                    (a.0.min(d), a.1.max(d))
+                });
+            lo <= m && hi >= -m
+        }
+        Surface::Cylinder(c) => {
+            let (lo, hi) = radii(&c.frame);
+            lo <= c.radius + m && hi >= c.radius - m
+        }
+        Surface::Sphere(sp) => {
+            let o = sp.frame.origin;
+            let gap = |c: f64, lo: f64, hi: f64| (lo - c).max(c - hi).max(0.0);
+            let near = forge_math::Vec3::new(
+                gap(o.x, b.x.lo, b.x.hi),
+                gap(o.y, b.y.lo, b.y.hi),
+                gap(o.z, b.z.lo, b.z.hi),
+            );
+            let far = corners().map(|c| c.distance(o)).fold(0.0, f64::max);
+            near.length() <= sp.radius + m && far >= sp.radius - m
+        }
+        _ => true,
+    }
+}
+
+/// Tool boxes binned on a coarse grid: for a point, the tools whose boxes might hold it, in
+/// order (every tool whose box holds it is listed).
+struct Grid {
+    all: forge_math::Box3,
+    k: usize,
+    cells: Vec<Vec<u32>>,
+}
+
+impl Grid {
+    fn new(boxes: &[forge_math::Box3]) -> Grid {
+        let all = boxes.iter().fold(forge_math::Box3::EMPTY, |a, b| a.hull(b));
+        // about one tool a cell
+        let k = (1..16).find(|k| k * k * k >= boxes.len()).unwrap_or(16);
+        let mut g = Grid {
+            all,
+            k,
+            cells: vec![Vec::new(); k * k * k],
+        };
+        for (t, b) in boxes.iter().enumerate() {
+            let (lo, hi) = (g.cell([b.x.lo, b.y.lo, b.z.lo]), g.cell([b.x.hi, b.y.hi, b.z.hi]));
+            for x in lo[0]..=hi[0] {
+                for y in lo[1]..=hi[1] {
+                    for z in lo[2]..=hi[2] {
+                        g.cells[(x * k + y) * k + z].push(t as u32);
+                    }
+                }
+            }
+        }
+        g
+    }
+
+    /// The cell of a point, per axis; monotone in each coordinate, so a box's cells hold
+    /// every point of it.
+    fn cell(&self, c: [f64; 3]) -> [usize; 3] {
+        let a = [self.all.x, self.all.y, self.all.z];
+        std::array::from_fn(|i| {
+            let w = a[i].width();
+            let f = if w > 0.0 {
+                (c[i] - a[i].lo) / w * self.k as f64
+            } else {
+                0.0
+            };
+            (f.max(0.0) as usize).min(self.k - 1)
+        })
+    }
+
+    /// The tools whose boxes might meet `b`, in order.
+    fn near(&self, b: &forge_math::Box3) -> Vec<u32> {
+        if !self.all.overlaps(b) {
+            return Vec::new();
+        }
+        let (lo, hi) = (
+            self.cell([b.x.lo, b.y.lo, b.z.lo]),
+            self.cell([b.x.hi, b.y.hi, b.z.hi]),
+        );
+        let mut out = Vec::new();
+        for x in lo[0]..=hi[0] {
+            for y in lo[1]..=hi[1] {
+                for z in lo[2]..=hi[2] {
+                    out.extend_from_slice(&self.cells[(x * self.k + y) * self.k + z]);
+                }
+            }
+        }
+        out.sort_unstable();
+        out.dedup();
+        out
+    }
+
+    fn at(&self, p: Point3) -> &[u32] {
+        if !self.all.contains(p) {
+            return &[];
+        }
+        let [x, y, z] = self.cell([p.x, p.y, p.z]);
+        &self.cells[(x * self.k + y) * self.k + z]
+    }
+}
+
 /// Which tools hold a point just inside and just outside a region, and whether a lower tool's
 /// face lies on it.
 type Seen = (Vec<bool>, Vec<bool>, bool);
@@ -224,18 +361,22 @@ pub struct CpuBatch<'a> {
 
 impl Batch for CpuBatch<'_> {
     fn verdicts(&self, points: &[Point3], sides: &[u32], boxes: &[forge_math::Box3]) -> Vec<u8> {
+        // with no intersect, a tool whose box misses the point changes nothing: only the tools
+        // the grid lists (and the point's own) are walked
+        let grid = (!self.ops.contains(&Op::Intersect)).then(|| Grid::new(boxes));
         par_map(points.len(), self.threads, 256, |i| {
             let p = points[i];
             let own = sides[i] as usize;
             let (mut vin, mut vout) = (false, false);
-            for (k, sh) in self.shapes.iter().enumerate() {
+            // false where tool k's boundary is too near to tell
+            let mut apply = |k: usize| -> bool {
                 let (bin, bout) = if k == own {
                     (true, false)
                 } else if !boxes[k].contains(p) {
                     (false, false)
                 } else {
-                    match sh.member(p, SHAPE_MARGIN) {
-                        Member::Near => return 3,
+                    match self.shapes[k].member(p, SHAPE_MARGIN) {
+                        Member::Near => return false,
                         Member::In => (true, true),
                         Member::Out => (false, false),
                     }
@@ -247,6 +388,35 @@ impl Batch for CpuBatch<'_> {
                         Op::Union => (vin, vout) = (vin || bin, vout || bout),
                         Op::Subtract => (vin, vout) = (vin && !bin, vout && !bout),
                         Op::Intersect => (vin, vout) = (vin && bin, vout && bout),
+                    }
+                }
+                true
+            };
+            match &grid {
+                None => {
+                    for k in 0..self.shapes.len() {
+                        if !apply(k) {
+                            return 3;
+                        }
+                    }
+                }
+                Some(g) => {
+                    // the listed tools with `own` in its place
+                    let mut own_left = own < self.shapes.len();
+                    for &k in g.at(p) {
+                        let k = k as usize;
+                        if own_left && own <= k {
+                            own_left = false;
+                            if own < k && !apply(own) {
+                                return 3;
+                            }
+                        }
+                        if !apply(k) {
+                            return 3;
+                        }
+                    }
+                    if own_left && !apply(own) {
+                        return 3;
                     }
                 }
             }
@@ -275,14 +445,25 @@ pub fn nary_with(
     assert_eq!(ops.len() + 1, tools.len(), "one op per tool after the first");
     let n = tools.len();
     let mut clock = std::time::Instant::now();
-    let index: Vec<Index> = tools.iter().map(|b| Index::new(b)).collect();
+    let index: Vec<Index> = par_map(n, threads, 16, |k| Index::new(tools[k]));
     let debug = crate::boolean::debug_on();
+
+    // the result lies within the first tool and those added to it: what is surely outside all of
+    // them bounds none of it (its regions are all dropped, however they are split)
+    let outside = |b: &forge_math::Box3| -> bool {
+        let Some(sh) = shapes else { return false };
+        (0..n)
+            .filter(|&k| k == 0 || ops[k - 1] == Op::Union)
+            .all(|k| !index[k].bbox.overlaps(b) || sh[k].box_out(b, SHAPE_MARGIN))
+    };
 
     // 1: pairs of tools whose boxes meet, then their faces
     let mut pairs: Vec<(Side, Side)> = Vec::new();
     for i in 0..n {
         for j in i + 1..n {
-            if index[i].bbox.overlaps(&index[j].bbox) {
+            if index[i].bbox.overlaps(&index[j].bbox)
+                && !outside(&overlap(&index[i].bbox, &index[j].bbox).grow(tol::LINEAR))
+            {
                 pairs.push((i, j));
             }
         }
@@ -292,16 +473,26 @@ pub fn nary_with(
         let (a, b) = (tools[i], tools[j]);
         let (ia, ib) = (&index[i], &index[j]);
         let mut out = PairOut::default();
+        // a face surely clear of the other tool's solid meets none of its faces
+        let clear = |f: &forge_math::Box3, k: Side| shapes.is_some_and(|sh| sh[k].box_out(f, SHAPE_MARGIN));
+        let b_clear: Vec<bool> = b
+            .face_ids()
+            .map(|fb| ib.boxes[fb.index()].overlaps(&ia.bbox) && clear(&ib.boxes[fb.index()], i))
+            .collect();
         for fa in a.face_ids() {
-            if !ia.boxes[fa.index()].overlaps(&ib.bbox) {
+            if !ia.boxes[fa.index()].overlaps(&ib.bbox) || clear(&ia.boxes[fa.index()], j) {
                 continue;
             }
             for fb in b.face_ids() {
-                if !ia.boxes[fa.index()].overlaps(&ib.boxes[fb.index()]) {
+                if !ia.boxes[fa.index()].overlaps(&ib.boxes[fb.index()]) || b_clear[fb.index()] {
+                    continue;
+                }
+                let region = overlap(&ia.boxes[fa.index()], &ib.boxes[fb.index()]).grow(tol::LINEAR);
+                // an edge here would be dropped below, with both its sides
+                if outside(&region) {
                     continue;
                 }
                 let (sa, sb) = (&a.face(fa).surface, &b.face(fb).surface);
-                let region = overlap(&ia.boxes[fa.index()], &ib.boxes[fb.index()]).grow(tol::LINEAR);
                 let found = ssi::surfaces_in(sa, sb, region);
                 out.touching
                     .extend(touches(&found, [ia, ib], [i, j], [fa, fb], region));
@@ -378,6 +569,7 @@ pub fn nary_with(
         coplanar.extend(out.coplanar);
         touching.extend(out.touching);
     }
+    segs.retain(|sg| !outside(&sg.curve.bbox(sg.range).grow(tol::LINEAR)));
     // where two tools touch, both faces kept would be material meeting itself
     let any_intersect = ops.contains(&Op::Intersect);
     let kept_at = |side: Side, q: Point3| -> Option<bool> {
@@ -421,12 +613,18 @@ pub fn nary_with(
     lap(&mut clock, 0);
 
     // 2: each new edge is cut where a face of a third tool crosses it
+    let grid = Grid::new(&index.iter().map(|x| x.bbox).collect::<Vec<_>>());
     let seg_cuts: Vec<Vec<(f64, Point3, f64)>> = par_map(segs.len(), threads, 32, |si| {
         let sg = &segs[si];
         let reach = sg.curve.bbox(sg.range).grow(tol::LINEAR);
         let mut got = Vec::new();
-        for k in 0..n {
-            if sg.sides.contains(&k) || !index[k].bbox.overlaps(&reach) {
+        for k in grid.near(&reach) {
+            let k = k as usize;
+            // the edge surely clear of tool k's solid crosses none of its faces
+            if sg.sides.contains(&k)
+                || !index[k].bbox.overlaps(&reach)
+                || shapes.is_some_and(|sh| sh[k].box_out(&reach, SHAPE_MARGIN))
+            {
                 continue;
             }
             let body = tools[k];
@@ -435,6 +633,9 @@ pub fn nary_with(
                     continue;
                 }
                 let s = &body.face(h).surface;
+                if !may_meet(s, &reach) {
+                    continue;
+                }
                 match curve_surface(&sg.curve, sg.range, s) {
                     CurveSurface::Hits(hits) => {
                         for hit in hits
@@ -507,20 +708,34 @@ pub fn nary_with(
         }
         i
     }
-    let mut order: Vec<usize> = (0..pts.len()).collect();
-    order.sort_unstable_by(|&i, &j| pts[i].x.total_cmp(&pts[j].x));
+    // sorted by slabs of x as wide as the widest reach, then by y: a point's partners lie in its
+    // slab or the next, within that reach in y (a sweep along x alone met whole planes of points
+    // at one x). Pairs join in any order: a cluster's root is its least index
+    let slab = |i: usize| (pts[i].x / widest).floor();
+    let mut order: Vec<(f64, f64, usize)> = (0..pts.len()).map(|i| (slab(i), pts[i].y, i)).collect();
+    order.sort_unstable_by(|a, b| a.0.total_cmp(&b.0).then(a.1.total_cmp(&b.1)));
+    let mut join = |i: usize, j: usize| {
+        if pts[i].distance(pts[j]) <= tols[i].max(tols[j]) {
+            let (x, y) = (find(&mut parent, i), find(&mut parent, j));
+            if x != y {
+                parent[x.max(y)] = x.min(y);
+            }
+        }
+    };
     for a in 0..order.len() {
-        let i = order[a];
-        for &j in &order[a + 1..] {
-            if pts[j].x - pts[i].x > widest {
+        let (sx, y, i) = order[a];
+        for &(tx, ty, j) in &order[a + 1..] {
+            if tx != sx || ty - y > widest {
                 break;
             }
-            if pts[i].distance(pts[j]) <= tols[i].max(tols[j]) {
-                let (x, y) = (find(&mut parent, i), find(&mut parent, j));
-                if x != y {
-                    parent[x.max(y)] = x.min(y);
-                }
+            join(i, j);
+        }
+        let from = order.partition_point(|o| o.0 < sx + 1.0 || (o.0 == sx + 1.0 && o.1 < y - widest));
+        for &(tx, ty, j) in &order[from..] {
+            if tx != sx + 1.0 || ty > y + widest {
+                break;
             }
+            join(i, j);
         }
     }
     // clusters numbered in order of their first point; each sits at that point
@@ -613,19 +828,36 @@ pub fn nary_with(
         VKey::Old(sd, v) => tools[sd].vertex(v).point,
         VKey::New(i) => points[i as usize],
     };
-    for (c, &k) in cuts.iter_mut().zip(&cut_vertex) {
-        let edge = tools[c.side].edge(c.edge);
-        c.point = key_point(k);
-        c.s = edge.curve.closest(c.point, edge.range);
+    // parameters follow the settled points (each its own Newton solve: across threads)
+    let at_cut = par_map(cuts.len(), threads, 64, |i| {
+        let c = &cuts[i];
+        let p = key_point(cut_vertex[i]);
+        (
+            p,
+            tools[c.side]
+                .edge(c.edge)
+                .curve
+                .closest(p, tools[c.side].edge(c.edge).range),
+        )
+    });
+    for (c, (p, s)) in cuts.iter_mut().zip(at_cut) {
+        c.point = p;
+        c.s = s;
     }
-    for (tc, &k) in triple.iter_mut().zip(&triple_vertex) {
+    let at_triple = par_map(triple.len(), threads, 64, |i| {
+        let tc = &triple[i];
         let sg = &segs[tc.seg];
         let w = 1e-3 * sg.range.width();
-        tc.point = key_point(k);
-        tc.t = sg.curve.closest(tc.point, Interval::new(tc.t - w, tc.t + w));
+        let p = key_point(triple_vertex[i]);
+        (p, sg.curve.closest(p, Interval::new(tc.t - w, tc.t + w)))
+    });
+    for (tc, (p, t)) in triple.iter_mut().zip(at_triple) {
+        tc.point = p;
+        tc.t = t;
     }
-    for sg in &mut segs {
-        let Some((i0, i1)) = sg.ends else { continue };
+    let ranges = par_map(segs.len(), threads, 64, |si| {
+        let sg = &segs[si];
+        let (i0, i1) = sg.ends?;
         let w = 1e-3 * sg.range.width();
         let lo = sg.curve.closest(
             key_point(cut_vertex[i0]),
@@ -635,7 +867,12 @@ pub fn nary_with(
             key_point(cut_vertex[i1]),
             Interval::new(sg.range.hi - w, sg.range.hi + w),
         );
-        sg.range = Interval::new(lo, hi);
+        Some(Interval::new(lo, hi))
+    });
+    for (sg, r) in segs.iter_mut().zip(ranges) {
+        if let Some(r) = r {
+            sg.range = r;
+        }
     }
     let mut grown = grown_tols(tools, &cuts, &cut_vertex, &segs, &alias, key_point);
     for (tc, &k) in triple.iter().zip(&triple_vertex) {
@@ -646,6 +883,7 @@ pub fn nary_with(
             }
         }
     }
+    grown.sort_unstable_by_key(|g| g.0);
 
     // edge pieces on demand, new-edge pieces now
     let mut by_edge: Vec<(Side, EdgeId, usize)> = cuts
@@ -755,6 +993,44 @@ pub fn nary_with(
             cut_faces[sd][tools[sd].coedge_face(c).index()] = true;
         }
     }
+    // the edges the jobs below walk, split across threads up front, in the order the walk would
+    // first ask for them (so each edge's pieces land where they would have)
+    {
+        let mut seen: Vec<Vec<bool>> = tools.iter().map(|b| vec![false; b.edges.len()]).collect();
+        let mut order: Vec<(Side, EdgeId)> = Vec::new();
+        let mut ask = |sd: Side, e: EdgeId| {
+            if !std::mem::replace(&mut seen[sd][e.index()], true) {
+                order.push((sd, e));
+            }
+        };
+        for (side, &body) in tools.iter().enumerate() {
+            for f in body.face_ids() {
+                let ims = &face_imprints[side][f.index()];
+                if face_segs[side][f.index()].is_empty() && ims.is_empty() && !cut_faces[side][f.index()] {
+                    continue;
+                }
+                for &ii in ims {
+                    ask(imprints[ii].side, imprints[ii].edge);
+                }
+                for &l in &body.face(f).loops {
+                    for &c in &body.lp(l).coedges {
+                        ask(side, body.coedge(c).edge);
+                    }
+                }
+            }
+        }
+        let split = par_map(order.len(), threads, 32, |k| {
+            let (sd, e) = order[k];
+            let mut list = Vec::new();
+            edge_split(tools[sd], sd, e, &cuts, &by_edge, &cut_vertex, &alias, &mut list);
+            list
+        });
+        for ((sd, e), got) in order.into_iter().zip(split) {
+            let first = pieces.list.len();
+            pieces.of_edge[sd][e.index()] = (first as u32, got.len() as u32);
+            pieces.list.extend(got);
+        }
+    }
     // (side, face, boundary, new edges) per touched face
     type Job = (Side, FaceId, Vec<Walk>, Vec<usize>);
     let mut jobs: Vec<Job> = Vec::new();
@@ -808,6 +1084,114 @@ pub fn nary_with(
             job.3.sort_unstable();
             job.3.dedup();
             job.3.retain(|p| !bound.contains(p));
+        }
+    }
+    // a new edge on a face divides it only where the face's verdict differs across it: the
+    // sides differ just in the other tool of the edge, so its midpoint (clear of every other tool)
+    // shows whether it can (the merge below drops what this leaves)
+    if let Some(sh) = shapes {
+        let any_intersect = ops.contains(&Op::Intersect);
+        let list = &pieces.list;
+        let mut shared: Vec<(Side, FaceId)> = coplanar.iter().flatten().copied().collect();
+        shared.sort_unstable();
+        let needed = |side: Side, p: usize| -> bool {
+            let Some(si) = list[p].seg else { return true };
+            let sg = &segs[si];
+            let Some(at) = sg.sides.iter().position(|&s| s == side) else {
+                return true;
+            };
+            let other = sg.sides[1 - at];
+            let m = list[p].curve.eval(list[p].range.mid());
+            // the tools holding m, in order
+            let mut holds: Vec<Side> = Vec::new();
+            for &k in grid.at(m) {
+                let k = k as usize;
+                if k == side || k == other || !index[k].bbox.contains(m) {
+                    continue;
+                }
+                match sh[k].member(m, SHAPE_MARGIN) {
+                    Member::In => holds.push(k),
+                    Member::Out => {}
+                    Member::Near => return true,
+                }
+            }
+            let result = |own: bool, held: bool| -> bool {
+                if any_intersect {
+                    let mut inside = vec![false; n];
+                    for &k in &holds {
+                        inside[k] = true;
+                    }
+                    inside[side] = own;
+                    inside[other] = held;
+                    return in_result(ops, &inside, true);
+                }
+                // as in_result: the last tool holding the point decides
+                let last = holds
+                    .last()
+                    .copied()
+                    .into_iter()
+                    .chain(own.then_some(side))
+                    .chain(held.then_some(other))
+                    .max();
+                match last {
+                    None => false,
+                    Some(0) => true,
+                    Some(k) => ops[k - 1] == Op::Union,
+                }
+            };
+            let verdict = |held: bool| {
+                let (fin, fout) = (result(true, held), result(false, held));
+                (fin != fout).then_some(!fin)
+            };
+            verdict(true) != verdict(false)
+        };
+        let kept: Vec<Vec<usize>> = par_map(jobs.len(), threads, 8, |j| {
+            let (side, f, ref boundary, ref new_edges) = jobs[j];
+            if new_edges.is_empty() || shared.binary_search(&(side, f)).is_ok() {
+                return new_edges.clone();
+            }
+            let mut keep: Vec<usize> = new_edges.iter().copied().filter(|&p| needed(side, p)).collect();
+            if keep.len() == new_edges.len() {
+                return keep;
+            }
+            // an edge kept where its midpoint was too near a tool to tell may now end in the open:
+            // it divides nothing, so it goes, and so may the one it hung from
+            let ends = |p: usize| [list[p].start, list[p].end];
+            let mut degree: Vec<(VKey, u32)> = boundary
+                .iter()
+                .flatten()
+                .flat_map(|&(p, _)| ends(p))
+                .chain(keep.iter().flat_map(|&p| ends(p)))
+                .map(|v| (v, 1))
+                .collect();
+            degree.sort_unstable_by_key(|x| x.0);
+            degree.dedup_by(|x, y| {
+                let same = x.0 == y.0;
+                if same {
+                    y.1 += x.1;
+                }
+                same
+            });
+            let at = |d: &[(VKey, u32)], v: VKey| d.binary_search_by_key(&v, |x| x.0).expect("an end");
+            loop {
+                let before = keep.len();
+                keep.retain(|&p| {
+                    let [a, b] = ends(p);
+                    let (ia, ib) = (at(&degree, a), at(&degree, b));
+                    let dangles = a != b && (degree[ia].1 == 1 || degree[ib].1 == 1);
+                    if dangles {
+                        degree[ia].1 -= 1;
+                        degree[ib].1 -= 1;
+                    }
+                    !dangles
+                });
+                if keep.len() == before {
+                    break keep;
+                }
+            }
+        });
+        for (job, k) in jobs.iter_mut().zip(kept) {
+            job.3 = k;
         }
     }
     let list = &pieces.list;
@@ -873,6 +1257,12 @@ pub fn nary_with(
             Some(p) => vec![p],
             None => region_points(body, r.face, &r.loops, list, 1),
         };
+        if candidates
+            .first()
+            .is_some_and(|&p| outside(&forge_math::Box3::from_point(p)))
+        {
+            return Ok(None);
+        }
         PICK.fetch_add(t0.elapsed().as_nanos() as usize, Ordering::Relaxed);
         // which tools hold a point just inside / just outside the region there, and whether a lower
         // tool's face lies on it; Err(k) when the point is on tool k's boundary but not on a face of
@@ -1074,7 +1464,8 @@ pub fn nary_with(
     // without it, each new region taking the verdict of the old ones it is made of
     let merged = par_map(jobs.len(), threads, 16, |j| -> R<Option<Vec<Judged>>> {
         let rr = job_regs[j].clone();
-        if rr.len() < 2 {
+        // nothing of a face all dropped is sewn, however it is split
+        if rr.len() < 2 || rr.clone().all(|ri| class[ri].is_none()) {
             return Ok(None);
         }
         // the region each half-edge bounds, sorted for lookup
@@ -1088,7 +1479,7 @@ pub fn nary_with(
             .iter()
             .copied()
             .filter(|&p| match (owner((p, true)), owner((p, false))) {
-                (Some(a), Some(b)) => a == b || class[a] != class[b],
+                (Some(a), Some(b)) => a != b && class[a] != class[b],
                 _ => true,
             })
             .collect();
@@ -1212,7 +1603,11 @@ pub fn nary_with(
                             *vmap.entry(v).or_insert_with(|| match v {
                                 VKey::Old(sd, id) => {
                                     let x = tools[sd].vertex(id);
-                                    let t = grown.iter().filter(|g| g.0 == v).fold(x.tol, |t, g| t.max(g.1));
+                                    let from = grown.partition_point(|g| g.0 < v);
+                                    let t = grown[from..]
+                                        .iter()
+                                        .take_while(|g| g.0 == v)
+                                        .fold(x.tol, |t, g| t.max(g.1));
                                     out.add_tolerant_vertex(x.point, t, x.name)
                                 }
                                 VKey::New(i) => out.add_tolerant_vertex(
