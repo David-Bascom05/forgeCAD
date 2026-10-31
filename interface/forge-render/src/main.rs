@@ -1,7 +1,7 @@
 use forge_render::bench::{self, Path};
 use forge_render::camera::Camera;
 use forge_render::mesh::PartMesh;
-use forge_render::render::{self, Offscreen, Renderer, part_info};
+use forge_render::render::{self, Offscreen, Overlay, Renderer, part_info};
 use forge_render::scene::{self, Motion, Placement, Scene};
 use forge_render::viewer::{Bench, Viewer, now_ms};
 use std::fmt::Write;
@@ -12,17 +12,18 @@ use winit::event_loop::{ActiveEventLoop, EventLoop};
 use winit::window::{Window, WindowId};
 
 const USAGE: &str =
-    "forge-render [PART | file.fc] [--stress N] [--moving N] [--bench] [--window] [--frames N]
+    "forge-render [PART | file.fc] [--stress N] [--moving N] [--bench] [--hover] [--window] [--frames N]
   [--size WxH] [--lod-px T] [--no-lines] [--no-cache] [--shot FILE.ppm] [--yaw R --pitch R --dist X]
   [--export FILE] [--levels]
 PART: a bench part (default crank). --stress: all 15 bench parts placed N times. --moving N: N of
-them swing on joints every frame. --bench: a fixed
+them swing on joints every frame. --hover: --bench also picks under a wandering pixel each frame. --bench: a fixed
 orbit, frame times on stdout, headless unless --window. --shot: one headless frame.";
 
 struct Args {
     part: String,
     stress: usize,
     moving: usize,
+    hover: bool,
     bench: bool,
     window: bool,
     frames: usize,
@@ -43,6 +44,7 @@ fn args() -> Result<Args, String> {
         part: "crank".into(),
         stress: 0,
         moving: 0,
+        hover: false,
         bench: false,
         window: false,
         frames: 1200,
@@ -66,6 +68,7 @@ fn args() -> Result<Args, String> {
         match k.as_str() {
             "--stress" => a.stress = num(it.next(), &k)?,
             "--moving" => a.moving = num(it.next(), &k)?,
+            "--hover" => a.hover = true,
             "--bench" => a.bench = true,
             "--window" => a.window = true,
             "--frames" => a.frames = num(it.next(), &k)?,
@@ -164,7 +167,7 @@ fn headless(a: &Args, mut s: Stage) -> Result<(), String> {
         .map(|l| l.vertices.len() + l.indices.len() + l.segments.len())
         .sum();
     let target = Offscreen::new(&r.device, a.size);
-    r.frame(&target.view, &mut s.scene, &s.camera, None);
+    r.frame(&target.view, &mut s.scene, &s.camera, Overlay::default());
     r.wait();
     println!(
         "open: {:.0} ms meshes ({} of {} from cache), {device_ms:.0} ms GPU driver, {:.0} ms upload and first frame, {:.0} MB on the GPU",
@@ -181,7 +184,12 @@ fn headless(a: &Args, mut s: Stage) -> Result<(), String> {
         let mut drawn = Default::default();
         for _ in 0..4 {
             let t = now_ms();
-            drawn = r.frame(&target.view, &mut s.scene, &s.camera, Some(&hud));
+            let (w, side) = (a.size.0 as f32, 120.0);
+            let overlay = Overlay {
+                hud: Some(&hud),
+                cube: Some(((w - side - 12.0, 12.0), side, [0; 3])),
+            };
+            drawn = r.frame(&target.view, &mut s.scene, &s.camera, overlay);
             r.wait();
             hud = format!(
                 "frame {:.1} ms gpu {:.1} ms",
@@ -197,6 +205,7 @@ fn headless(a: &Args, mut s: Stage) -> Result<(), String> {
     if a.bench {
         let motion = (a.moving > 0).then(|| Motion::new(&s.scene, a.moving));
         let (mut times, mut gpu, mut motion_ms, mut all) = (Vec::new(), Vec::new(), vec![0.0], Vec::new());
+        let mut pick_ms = Vec::new();
         let mut heaviest = (0.0f64, 0, Default::default());
         let mut hud = String::new();
         for frame in 0..a.frames {
@@ -206,7 +215,18 @@ fn headless(a: &Args, mut s: Stage) -> Result<(), String> {
                 m.apply(frame, &mut s.scene);
                 motion_ms.push(now_ms() - t);
             }
-            let d = r.frame(&target.view, &mut s.scene, &cam, Some(&hud));
+            let overlay = Overlay {
+                hud: Some(&hud),
+                cube: Some(((a.size.0 as f32 - 132.0, 12.0), 120.0, [0; 3])),
+            };
+            if a.hover {
+                let p = now_ms();
+                r.pick_start(&mut s.scene, &cam, bench::hover_at(frame, a.size));
+                r.wait();
+                r.pick_poll();
+                pick_ms.push(now_ms() - p);
+            }
+            let d = r.frame(&target.view, &mut s.scene, &cam, overlay);
             r.wait();
             let ms = now_ms() - t;
             hud.clear();
@@ -221,6 +241,9 @@ fn headless(a: &Args, mut s: Stage) -> Result<(), String> {
         let mode = format!("headless {}x{}", a.size.0, a.size.1);
         println!("{}", bench::report(&mode, &times, &gpu, &r.adapter));
         println!("{}", bench::report_cpu(a.moving, &motion_ms, &all));
+        if !pick_ms.is_empty() {
+            println!("{}", bench::report_pick(&pick_ms));
+        }
         println!("slowest frame {} of {}: {:?}", heaviest.1, a.frames, heaviest.2);
     }
     Ok(())
@@ -275,6 +298,8 @@ impl ApplicationHandler for App {
                 gpu: Vec::new(),
                 motion_ms: Vec::new(),
                 drawn: Vec::new(),
+                hover: self.args.hover,
+                pick_ms: Vec::new(),
             });
         }
         window.request_redraw();
@@ -284,6 +309,12 @@ impl ApplicationHandler for App {
     fn window_event(&mut self, on_loop: &ActiveEventLoop, _: WindowId, event: WindowEvent) {
         if let Some(v) = &mut self.viewer {
             v.event(event, on_loop);
+        }
+    }
+
+    fn about_to_wait(&mut self, on_loop: &ActiveEventLoop) {
+        if let Some(v) = &mut self.viewer {
+            v.about_to_wait(on_loop);
         }
     }
 }

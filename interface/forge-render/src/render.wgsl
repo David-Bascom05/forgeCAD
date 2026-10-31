@@ -3,6 +3,12 @@ struct Globals {
     eye: vec4f,
     // 2 / width, 2 / height, a line's half width in pixels
     px: vec4f,
+    // the view's axes, for the cube
+    right: vec4f,
+    up: vec4f,
+    forward: vec4f,
+    // the cube's region under the cursor
+    cube_hover: vec4f,
     text: array<vec4u, 16>,
 }
 struct Placement {
@@ -162,4 +168,90 @@ fn hud_fs(@builtin(position) at: vec4f) -> @location(0) vec4f {
         return vec4f(1.0, 1.0, 1.0, 1.0);
     }
     return vec4f(0.0, 0.0, 0.0, 0.6);
+}
+
+// what's under the cursor: a few pixels' worth of the same geometry, with who drew each pixel
+struct Picked {
+    @builtin(position) clip: vec4f,
+    @location(0) @interpolate(flat) at: u32,
+}
+
+@vertex
+fn surface_pick_vs(@location(0) p: vec3f, @location(2) at: u32) -> Picked {
+    return Picked(g.view_proj * vec4f(place(placements[at], p), 1.0), at);
+}
+
+@fragment
+fn pick_fs(in: Picked) -> @location(0) vec2u {
+    return vec2u(in.at + 1u, 0u);
+}
+
+// the view cube: faces with their outward normal and label's right and up
+const CUBE_N = array<vec3f, 6>(
+    vec3f(0.0, 0.0, 1.0), vec3f(0.0, 0.0, -1.0), vec3f(0.0, -1.0, 0.0),
+    vec3f(0.0, 1.0, 0.0), vec3f(1.0, 0.0, 0.0), vec3f(-1.0, 0.0, 0.0),
+);
+const CUBE_U = array<vec3f, 6>(
+    vec3f(1.0, 0.0, 0.0), vec3f(1.0, 0.0, 0.0), vec3f(1.0, 0.0, 0.0),
+    vec3f(-1.0, 0.0, 0.0), vec3f(0.0, 1.0, 0.0), vec3f(0.0, -1.0, 0.0),
+);
+const CUBE_V = array<vec3f, 6>(
+    vec3f(0.0, 1.0, 0.0), vec3f(0.0, -1.0, 0.0), vec3f(0.0, 0.0, 1.0),
+    vec3f(0.0, 0.0, 1.0), vec3f(0.0, 0.0, 1.0), vec3f(0.0, 0.0, 1.0),
+);
+// TOP, BOTTOM, FRONT, BACK, RIGHT, LEFT as glyph numbers
+const CUBE_LABEL = array<array<u32, 6>, 6>(
+    array<u32, 6>(29u, 24u, 25u, 37u, 37u, 37u),
+    array<u32, 6>(11u, 24u, 29u, 29u, 24u, 22u),
+    array<u32, 6>(15u, 27u, 24u, 23u, 29u, 37u),
+    array<u32, 6>(11u, 10u, 12u, 20u, 37u, 37u),
+    array<u32, 6>(27u, 18u, 16u, 17u, 29u, 37u),
+    array<u32, 6>(21u, 14u, 15u, 29u, 37u, 37u),
+);
+const CUBE_LENGTH = array<u32, 6>(3u, 6u, 5u, 4u, 5u, 4u);
+// a corner's reach in the viewport's half (CUBE_SCALE) and a face's rim (CUBE_RIM), as in nav.rs
+const CUBE_SCALE = 1.1;
+const CUBE_RIM = 0.17;
+
+struct CubeFace {
+    @builtin(position) clip: vec4f,
+    @location(0) q: vec3f,
+    @location(1) @interpolate(flat) face: u32,
+    @location(2) uv: vec2f,
+}
+
+@vertex
+fn cube_vs(@builtin(vertex_index) vi: u32) -> CubeFace {
+    let face = vi / 6u;
+    let c = CORNERS[vi % 6u];
+    let uv = vec2f(c.x - 0.5, c.y * 0.5);
+    let q = CUBE_N[face] * 0.5 + CUBE_U[face] * uv.x + CUBE_V[face] * uv.y;
+    let at = vec2f(dot(q, g.right.xyz), dot(q, g.up.xyz)) / CUBE_SCALE;
+    return CubeFace(vec4f(at, 0.5, 1.0), q, face, uv);
+}
+
+@fragment
+fn cube_fs(in: CubeFace) -> @location(0) vec4f {
+    let n = CUBE_N[in.face];
+    let light = 0.65 + 0.35 * max(-dot(n, g.forward.xyz), 0.0);
+    let rim = 0.5 - CUBE_RIM;
+    let region = vec3f(step(rim, in.q.x) - step(rim, -in.q.x), step(rim, in.q.y) - step(rim, -in.q.y), step(rim, in.q.z) - step(rim, -in.q.z));
+    var colour = vec3f(0.80, 0.82, 0.85) * light;
+    if dot(g.cube_hover.xyz, g.cube_hover.xyz) > 0.5 && all(region == g.cube_hover.xyz) {
+        colour = vec3f(0.30, 0.55, 0.90) * light;
+    }
+    if max(abs(in.uv.x), abs(in.uv.y)) > 0.485 {
+        colour = vec3f(0.15, 0.16, 0.18);
+    }
+    let unit = 0.036;
+    let length = CUBE_LENGTH[in.face];
+    let text = vec2f(in.uv.x / unit + f32(length) * 2.0 - 0.5, -in.uv.y / unit + 2.5);
+    if text.x >= 0.0 && text.y >= 0.0 && text.y < 5.0 && u32(text.x) / 4u < length {
+        let x = u32(text.x) % 4u;
+        let code = CUBE_LABEL[in.face][u32(text.x) / 4u];
+        if x < 3u && ((GLYPHS[code] >> (u32(text.y) * 3u + x)) & 1u) == 1u {
+            colour = vec3f(0.10, 0.11, 0.13);
+        }
+    }
+    return vec4f(colour, 1.0);
 }

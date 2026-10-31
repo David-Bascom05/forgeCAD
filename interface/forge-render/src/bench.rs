@@ -78,6 +78,21 @@ pub fn report_cpu(moved: usize, motion_ms: &[f64], drawn: &[crate::render::Drawn
     )
 }
 
+pub fn report_pick(ms: &[f64]) -> String {
+    let p = summary(ms);
+    format!(
+        "pick: mean {:.2} p99 {:.2} worst {:.2} ms",
+        p.mean, p.p99, p.worst
+    )
+}
+
+/// A pixel wandering over the middle of the window, what `--hover` picks at each frame.
+pub fn hover_at(frame: usize, size: (u32, u32)) -> (f32, f32) {
+    let t = frame as f32 * 0.037;
+    let (w, h) = (size.0 as f32, size.1 as f32);
+    (w * (0.5 + 0.3 * t.sin()), h * (0.5 + 0.3 * (t * 1.3).cos()))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

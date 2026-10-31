@@ -1,7 +1,7 @@
 //! The renderer: all meshes in one vertex, index and segment buffer, drawn instanced, part by
 //! part and level by level, from the frame's list of visible placements.
 
-use crate::camera::Camera;
+use crate::camera::{Camera, View};
 use crate::mesh::{PartMesh, SEGMENT, VERTEX};
 use crate::scene::Scene;
 use crate::viewer::now_ms;
@@ -13,7 +13,14 @@ const DEPTH: wgpu::TextureFormat = wgpu::TextureFormat::Depth32Float;
 /// A frame keeps its GPU time this many frames at most before it is read.
 const TIMERS: usize = 4;
 const HUD_CHARS: usize = 256;
-const GLOBALS: usize = 64 + 16 + 16 + HUD_CHARS;
+/// Where the overlay's text starts in the globals (see render.wgsl).
+const TEXT_AT: usize = 64 + 16 + 16 + 3 * 16 + 16;
+const GLOBALS: usize = TEXT_AT + HUD_CHARS;
+/// A pick draws this many pixels around the cursor.
+const PICK_PX: u32 = 11;
+const PICK_ID: wgpu::TextureFormat = wgpu::TextureFormat::Rg32Uint;
+/// Bytes per row of a pick's read-back (WebGPU's alignment).
+const PICK_ROW: u32 = wgpu::COPY_BYTES_PER_ROW_ALIGNMENT;
 const BACKGROUND: wgpu::Color = wgpu::Color {
     r: 0.72,
     g: 0.75,
@@ -43,6 +50,39 @@ pub struct Drawn {
     pub encode_ms: f32,
 }
 
+/// What's on the screen overlay of a frame.
+#[derive(Clone, Copy, Debug, Default)]
+pub struct Overlay<'a> {
+    pub hud: Option<&'a str>,
+    /// The view cube's square (left, top, side in pixels) and its region under the cursor.
+    pub cube: Option<((f32, f32), f32, [i8; 3])>,
+}
+
+/// What was under a pixel.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct PickHit {
+    pub placement: u32,
+    /// The point on the surface.
+    pub point: [f32; 3],
+    /// How far ahead of the eye, along the view.
+    pub depth: f32,
+}
+
+struct PickState {
+    id: wgpu::Texture,
+    id_view: wgpu::TextureView,
+    depth: wgpu::Texture,
+    depth_view: wgpu::TextureView,
+    id_read: wgpu::Buffer,
+    depth_read: wgpu::Buffer,
+    globals: wgpu::Buffer,
+    binds: wgpu::BindGroup,
+    surface: wgpu::RenderPipeline,
+    ready: Arc<AtomicBool>,
+    /// The pixel asked about, the camera it was asked with, when.
+    busy: Option<((f32, f32), Camera, f64)>,
+}
+
 struct Timer {
     read: wgpu::Buffer,
     ready: Arc<AtomicBool>,
@@ -57,6 +97,8 @@ pub struct Renderer {
     surface: wgpu::RenderPipeline,
     line: wgpu::RenderPipeline,
     hud: wgpu::RenderPipeline,
+    cube: wgpu::RenderPipeline,
+    pick: PickState,
     binds: wgpu::BindGroup,
     globals: wgpu::Buffer,
     placements: wgpu::Buffer,
@@ -303,6 +345,73 @@ impl Renderer {
             cache: None,
         });
 
+        let cube = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
+            label: Some("cube"),
+            layout: Some(&layout),
+            vertex: wgpu::VertexState {
+                module: &shader,
+                entry_point: Some("cube_vs"),
+                compilation_options: Default::default(),
+                buffers: &[],
+            },
+            // convex and culled: no depth needed, over everything
+            primitive: wgpu::PrimitiveState {
+                cull_mode: Some(wgpu::Face::Back),
+                ..Default::default()
+            },
+            depth_stencil: Some(wgpu::DepthStencilState {
+                format: DEPTH,
+                depth_write_enabled: Some(false),
+                depth_compare: Some(wgpu::CompareFunction::Always),
+                stencil: wgpu::StencilState::default(),
+                bias: wgpu::DepthBiasState::default(),
+            }),
+            multisample,
+            fragment: Some(wgpu::FragmentState {
+                module: &shader,
+                entry_point: Some("cube_fs"),
+                compilation_options: Default::default(),
+                targets: &target,
+            }),
+            multiview_mask: None,
+            cache: None,
+        });
+        let pick_surface = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
+            label: Some("pick surface"),
+            layout: Some(&layout),
+            vertex: wgpu::VertexState {
+                module: &shader,
+                entry_point: Some("surface_pick_vs"),
+                compilation_options: Default::default(),
+                buffers: &[
+                    Some(wgpu::VertexBufferLayout {
+                        array_stride: VERTEX as u64,
+                        step_mode: wgpu::VertexStepMode::Vertex,
+                        attributes: &wgpu::vertex_attr_array![0 => Float32x3],
+                    }),
+                    Some(instance_at(2)),
+                ],
+            },
+            primitive: wgpu::PrimitiveState {
+                cull_mode: Some(wgpu::Face::Back),
+                ..Default::default()
+            },
+            depth_stencil: depth(true),
+            multisample: wgpu::MultisampleState::default(),
+            fragment: Some(wgpu::FragmentState {
+                module: &shader,
+                entry_point: Some("pick_fs"),
+                compilation_options: Default::default(),
+                targets: &[Some(wgpu::ColorTargetState {
+                    format: PICK_ID,
+                    blend: None,
+                    write_mask: wgpu::ColorWrites::ALL,
+                })],
+            }),
+            multiview_mask: None,
+            cache: None,
+        });
+
         let (mut vbytes, mut ibytes, mut sbytes) = (0u64, 0u64, 0u64);
         let mut lods = Vec::with_capacity(parts.len());
         for p in parts {
@@ -382,6 +491,77 @@ impl Renderer {
             ],
         });
 
+        let pick_target = |format, usage, label| {
+            let t = device.create_texture(&wgpu::TextureDescriptor {
+                label: Some(label),
+                size: wgpu::Extent3d {
+                    width: PICK_PX,
+                    height: PICK_PX,
+                    depth_or_array_layers: 1,
+                },
+                mip_level_count: 1,
+                sample_count: 1,
+                dimension: wgpu::TextureDimension::D2,
+                format,
+                usage,
+                view_formats: &[],
+            });
+            let v = t.create_view(&Default::default());
+            (t, v)
+        };
+        let copied = wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::COPY_SRC;
+        let (pick_id, pick_id_view) = pick_target(PICK_ID, copied, "pick id");
+        let (pick_depth, pick_depth_view) = pick_target(DEPTH, copied, "pick depth");
+        let read_buffer = |label| {
+            device.create_buffer(&wgpu::BufferDescriptor {
+                label: Some(label),
+                size: (PICK_ROW * PICK_PX) as u64,
+                usage: wgpu::BufferUsages::COPY_DST | wgpu::BufferUsages::MAP_READ,
+                mapped_at_creation: false,
+            })
+        };
+        let pick_globals = device.create_buffer(&wgpu::BufferDescriptor {
+            label: Some("pick globals"),
+            size: GLOBALS as u64,
+            usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
+            mapped_at_creation: false,
+        });
+        let pick_binds = device.create_bind_group(&wgpu::BindGroupDescriptor {
+            label: None,
+            layout: &bind_layout,
+            entries: &[
+                wgpu::BindGroupEntry {
+                    binding: 0,
+                    resource: pick_globals.as_entire_binding(),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 1,
+                    resource: placements.as_entire_binding(),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 2,
+                    resource: segments.as_entire_binding(),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 3,
+                    resource: tints.as_entire_binding(),
+                },
+            ],
+        });
+        let pick = PickState {
+            id: pick_id,
+            id_view: pick_id_view,
+            depth: pick_depth,
+            depth_view: pick_depth_view,
+            id_read: read_buffer("pick id read"),
+            depth_read: read_buffer("pick depth read"),
+            globals: pick_globals,
+            binds: pick_binds,
+            surface: pick_surface,
+            ready: Arc::new(AtomicBool::new(false)),
+            busy: None,
+        };
+
         let has_timer = device.features().contains(wgpu::Features::TIMESTAMP_QUERY);
         let timer_set = has_timer.then(|| {
             device.create_query_set(&wgpu::QuerySetDescriptor {
@@ -418,6 +598,8 @@ impl Renderer {
             surface,
             line,
             hud,
+            cube,
+            pick,
             binds,
             globals,
             placements,
@@ -453,6 +635,166 @@ impl Renderer {
             .expect("the GPU answers");
     }
 
+    fn upload_moves(&mut self, scene: &mut Scene) {
+        if let Some((lo, hi)) = scene.take_dirty() {
+            self.queue
+                .write_buffer(&self.placements, lo as u64, &scene.rows_bytes[lo..hi]);
+        }
+    }
+
+    /// Whether a pick is under way: one at a time.
+    pub fn pick_busy(&self) -> bool {
+        self.pick.busy.is_some()
+    }
+
+    /// Draws what's around a pixel, only the placements there, and asks for the answer. It uses
+    /// the frame's list of what's visible, so the frame after culls again.
+    pub fn pick_start(&mut self, scene: &mut Scene, camera: &Camera, px: (f32, f32)) {
+        let size = PICK_PX as f32;
+        let view = camera.view_window(self.size.0, self.size.1, px, (size, size));
+        scene.cull(&view, self.lod_px);
+        self.upload_moves(scene);
+        self.queue
+            .write_buffer(&self.instances, 0, scene.visible.as_flattened());
+        let bytes = globals_bytes(&view, self.size, [0; 3], "");
+        self.queue.write_buffer(&self.pick.globals, 0, &bytes);
+        let mut encoder = self.device.create_command_encoder(&Default::default());
+        {
+            let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+                label: Some("pick"),
+                color_attachments: &[Some(wgpu::RenderPassColorAttachment {
+                    view: &self.pick.id_view,
+                    depth_slice: None,
+                    resolve_target: None,
+                    ops: wgpu::Operations {
+                        load: wgpu::LoadOp::Clear(wgpu::Color::TRANSPARENT),
+                        store: wgpu::StoreOp::Store,
+                    },
+                })],
+                depth_stencil_attachment: Some(wgpu::RenderPassDepthStencilAttachment {
+                    view: &self.pick.depth_view,
+                    depth_ops: Some(wgpu::Operations {
+                        load: wgpu::LoadOp::Clear(0.0),
+                        store: wgpu::StoreOp::Store,
+                    }),
+                    stencil_ops: None,
+                }),
+                timestamp_writes: None,
+                occlusion_query_set: None,
+                multiview_mask: None,
+            });
+            pass.set_bind_group(0, &self.pick.binds, &[]);
+            pass.set_pipeline(&self.pick.surface);
+            pass.set_vertex_buffer(0, self.vertices.slice(..));
+            pass.set_vertex_buffer(1, self.instances.slice(..));
+            pass.set_index_buffer(self.indices.slice(..), wgpu::IndexFormat::Uint32);
+            for d in &scene.draws {
+                let l = self.lods[d.part as usize][d.lod as usize];
+                pass.draw_indexed(
+                    l.first_index..l.first_index + l.indices,
+                    l.base_vertex,
+                    d.first..d.first + d.count,
+                );
+            }
+        }
+        let mut copy = |t: &wgpu::Texture, b: &wgpu::Buffer, aspect| {
+            encoder.copy_texture_to_buffer(
+                wgpu::TexelCopyTextureInfo {
+                    texture: t,
+                    mip_level: 0,
+                    origin: wgpu::Origin3d::ZERO,
+                    aspect,
+                },
+                wgpu::TexelCopyBufferInfo {
+                    buffer: b,
+                    layout: wgpu::TexelCopyBufferLayout {
+                        offset: 0,
+                        bytes_per_row: Some(PICK_ROW),
+                        rows_per_image: None,
+                    },
+                },
+                t.size(),
+            );
+        };
+        copy(&self.pick.id, &self.pick.id_read, wgpu::TextureAspect::All);
+        copy(
+            &self.pick.depth,
+            &self.pick.depth_read,
+            wgpu::TextureAspect::DepthOnly,
+        );
+        self.queue.submit([encoder.finish()]);
+        // the two buffers map together: when the second is ready so is the first
+        self.pick.id_read.slice(..).map_async(wgpu::MapMode::Read, |_| {});
+        self.pick.ready.store(false, Ordering::Release);
+        let ready = self.pick.ready.clone();
+        self.pick
+            .depth_read
+            .slice(..)
+            .map_async(wgpu::MapMode::Read, move |r| {
+                if r.is_ok() {
+                    ready.store(true, Ordering::Release);
+                }
+            });
+        self.pick.busy = Some((px, *camera, now_ms()));
+    }
+
+    /// The answer to the pick under way, once it's back: the pixel asked about, what's there,
+    /// and how long it took in ms.
+    pub fn pick_poll(&mut self) -> Option<((f32, f32), Option<PickHit>, f64)> {
+        self.pick.busy?;
+        let _ = self.device.poll(wgpu::PollType::Poll);
+        if !self.pick.ready.swap(false, Ordering::AcqRel) {
+            return None;
+        }
+        let (px, camera, asked) = self.pick.busy.take()?;
+        let n = PICK_PX as usize;
+        let mid = n as i32 / 2;
+        let ids = self
+            .pick
+            .id_read
+            .slice(..)
+            .get_mapped_range()
+            .expect("it said ready");
+        let depths = self
+            .pick
+            .depth_read
+            .slice(..)
+            .get_mapped_range()
+            .expect("it said ready");
+        // the drawn pixel nearest the middle
+        let mut best: Option<(i32, usize, usize)> = None;
+        for y in 0..n {
+            for x in 0..n {
+                let at = y * PICK_ROW as usize + x * 8;
+                let id = u32::from_le_bytes(ids[at..at + 4].try_into().expect("4 bytes"));
+                let (dx, dy) = (x as i32 - mid, y as i32 - mid);
+                let far = dx * dx + dy * dy;
+                if id != 0 && best.is_none_or(|b| far < b.0) {
+                    best = Some((far, x, y));
+                }
+            }
+        }
+        let hit = best.map(|(_, x, y)| {
+            let at = y * PICK_ROW as usize + x * 8;
+            let id = u32::from_le_bytes(ids[at..at + 4].try_into().expect("4 bytes"));
+            let at = y * PICK_ROW as usize + x * 4;
+            let d = f32::from_le_bytes(depths[at..at + 4].try_into().expect("4 bytes"));
+            // reversed z: depth is near / distance
+            let depth = camera.near() / d;
+            let on = (px.0 + x as f32 - mid as f32, px.1 + y as f32 - mid as f32);
+            PickHit {
+                placement: id - 1,
+                point: camera.point_at(on, depth, self.size.0, self.size.1),
+                depth,
+            }
+        });
+        drop(ids);
+        drop(depths);
+        self.pick.id_read.unmap();
+        self.pick.depth_read.unmap();
+        Some((px, hit, now_ms() - asked))
+    }
+
     /// Reads back any GPU times the GPU has finished.
     fn read_timers(&mut self) {
         for t in &mut self.timers {
@@ -474,41 +816,19 @@ impl Renderer {
         target: &wgpu::TextureView,
         scene: &mut Scene,
         camera: &Camera,
-        hud: Option<&str>,
+        overlay: Overlay,
     ) -> Drawn {
+        let hud = overlay.hud;
         let start = now_ms();
         let view = camera.view(self.size.0, self.size.1);
         scene.cull(&view, self.lod_px);
         let culled = now_ms();
-        if let Some((lo, hi)) = scene.take_dirty() {
-            self.queue
-                .write_buffer(&self.placements, lo as u64, &scene.rows_bytes[lo..hi]);
-        }
+        self.upload_moves(scene);
         self.queue
             .write_buffer(&self.instances, 0, scene.visible.as_flattened());
 
-        let mut bytes = [0u8; GLOBALS];
-        for (k, v) in view.matrix.iter().enumerate() {
-            bytes[k * 4..k * 4 + 4].copy_from_slice(&v.to_le_bytes());
-        }
-        let extra = [
-            view.eye[0],
-            view.eye[1],
-            view.eye[2],
-            0.0,
-            2.0 / self.size.0 as f32,
-            2.0 / self.size.1 as f32,
-            LINE_HALF_PX,
-            0.0,
-        ];
-        for (k, v) in extra.iter().enumerate() {
-            bytes[64 + k * 4..68 + k * 4].copy_from_slice(&v.to_le_bytes());
-        }
-        let text = &mut bytes[96..];
-        text.fill(255);
-        for (c, b) in text.iter_mut().zip(hud.unwrap_or("").bytes()) {
-            *c = glyph(b);
-        }
+        let hover = overlay.cube.map_or([0; 3], |c| c.2);
+        let bytes = globals_bytes(&view, self.size, hover, hud.unwrap_or(""));
         self.queue.write_buffer(&self.globals, 0, &bytes);
 
         let uploaded = now_ms();
@@ -582,6 +902,11 @@ impl Renderer {
                     }
                 }
             }
+            if let Some((at, side, _)) = overlay.cube {
+                pass.set_viewport(at.0, at.1, side, side, 0.0, 1.0);
+                pass.set_pipeline(&self.cube);
+                pass.draw(0..36, 0..1);
+            }
         }
         if hud.is_some() {
             let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
@@ -623,6 +948,30 @@ impl Renderer {
         }
         drawn
     }
+}
+
+/// The shader's uniforms for a view.
+fn globals_bytes(view: &View, size: (u32, u32), hover: [i8; 3], hud: &str) -> [u8; GLOBALS] {
+    let mut bytes = [0u8; GLOBALS];
+    let vec3 = |v: [f32; 3]| [v[0], v[1], v[2], 0.0];
+    let words = view
+        .matrix
+        .into_iter()
+        .chain(vec3(view.eye))
+        .chain([2.0 / size.0 as f32, 2.0 / size.1 as f32, LINE_HALF_PX, 0.0])
+        .chain(vec3(view.right))
+        .chain(vec3(view.up))
+        .chain(vec3(view.forward))
+        .chain(vec3(hover.map(|v| v as f32)));
+    for (out, v) in bytes.as_chunks_mut::<4>().0.iter_mut().zip(words) {
+        *out = v.to_le_bytes();
+    }
+    let text = &mut bytes[TEXT_AT..];
+    text.fill(255);
+    for (c, b) in text.iter_mut().zip(hud.bytes()) {
+        *c = glyph(b);
+    }
+    bytes
 }
 
 /// Somewhere to draw with no window.

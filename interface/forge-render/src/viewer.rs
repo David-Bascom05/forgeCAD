@@ -1,12 +1,14 @@
 //! The window: one renderer, one camera, mouse to move it. The same on both targets.
 
 use crate::camera::Camera;
-use crate::render::Renderer;
+use crate::nav::Nav;
+use crate::render::{Overlay, Renderer};
 use crate::scene::Scene;
 use std::sync::Arc;
 use winit::dpi::PhysicalSize;
-use winit::event::{ElementState, MouseButton, MouseScrollDelta, WindowEvent};
-use winit::event_loop::ActiveEventLoop;
+use winit::event::{ElementState, WindowEvent};
+use winit::event_loop::{ActiveEventLoop, ControlFlow};
+use winit::keyboard::PhysicalKey;
 use winit::window::Window;
 
 /// Milliseconds on a clock that only moves forward.
@@ -39,16 +41,16 @@ pub struct Viewer {
     pub config: wgpu::SurfaceConfiguration,
     pub renderer: Renderer,
     pub scene: Scene,
-    pub camera: Camera,
+    pub nav: Nav,
     /// Runs on its own until this many frames of a fixed path are done, then reports (--bench).
     pub bench: Option<Bench>,
     /// Placements moving on their own: every frame draws them where they've got to.
     pub motion: Option<crate::scene::Motion>,
     motion_frame: usize,
-    held: Option<MouseButton>,
-    last_mouse: Option<(f32, f32)>,
+    pick_ms: f64,
     last_frame: f64,
     frame_ms: f64,
+    parts: u32,
     tris: u64,
 }
 
@@ -59,6 +61,9 @@ pub struct Bench {
     pub gpu: Vec<f64>,
     pub motion_ms: Vec<f64>,
     pub drawn: Vec<crate::render::Drawn>,
+    /// Asks what's under a wandering pixel every frame, as hovering does.
+    pub hover: bool,
+    pub pick_ms: Vec<f64>,
 }
 
 impl Viewer {
@@ -70,20 +75,22 @@ impl Viewer {
         scene: Scene,
         camera: Camera,
     ) -> Viewer {
+        let size = (config.width, config.height);
+        let nav = Nav::new(camera, size, window.scale_factor() as f32);
         Viewer {
             window,
             surface,
             config,
             renderer,
             scene,
-            camera,
+            nav,
             bench: None,
             motion: None,
             motion_frame: 0,
-            held: None,
-            last_mouse: None,
+            pick_ms: 0.0,
             last_frame: now_ms(),
             frame_ms: 0.0,
+            parts: 0,
             tris: 0,
         }
     }
@@ -109,7 +116,17 @@ impl Viewer {
             _ => return,
         };
         if let Some(b) = &self.bench {
-            self.camera = b.path.at(b.frame);
+            self.nav.camera = b.path.at(b.frame);
+        }
+        if self.nav.tick(now_ms()) {
+            self.window.request_redraw();
+        }
+        if let Some(b) = &mut self.bench
+            && b.hover
+            && !self.renderer.pick_busy()
+        {
+            let at = crate::bench::hover_at(b.frame, (self.config.width, self.config.height));
+            self.renderer.pick_start(&mut self.scene, &self.nav.camera, at);
         }
         if let Some(m) = &self.motion {
             let t = now_ms();
@@ -131,15 +148,22 @@ impl Viewer {
         self.last_frame = now;
         let gpu = self.renderer.gpu_ms.unwrap_or(0.0);
         let hud = format!(
-            "frame {:.1} ms gpu {gpu:.1} ms {} parts {:.1}m tris",
+            "frame {:.1} ms gpu {gpu:.1} ms pick {:.1} ms {} parts {:.1}m tris",
             self.frame_ms,
-            self.scene.visible.len(),
+            self.pick_ms,
+            self.parts,
             self.tris as f64 / 1e6
         );
+        let (at, side) = self.nav.cube_box();
+        let overlay = Overlay {
+            hud: Some(&hud),
+            cube: Some((at, side, self.nav.cube_hover)),
+        };
         let drawn = self
             .renderer
-            .frame(&view, &mut self.scene, &self.camera, Some(&hud));
+            .frame(&view, &mut self.scene, &self.nav.camera, overlay);
         self.tris = drawn.tris;
+        self.parts = drawn.placements;
         self.window.pre_present_notify();
         self.renderer.queue.present(frame);
         let _ = self.renderer.device.poll(wgpu::PollType::Poll);
@@ -153,11 +177,21 @@ impl Viewer {
 
     /// What one window event does.
     pub fn event(&mut self, event: WindowEvent, on_loop: &ActiveEventLoop) {
+        if self.bench.is_none() && self.nav.event(&event) {
+            self.window.request_redraw();
+        }
         match event {
             WindowEvent::CloseRequested => on_loop.exit(),
             WindowEvent::Resized(size) => {
                 self.resize(size);
                 self.window.request_redraw();
+            }
+            WindowEvent::KeyboardInput { event, .. } if event.state == ElementState::Pressed => {
+                if let PhysicalKey::Code(code) = event.physical_key
+                    && self.nav.key(code, &self.scene)
+                {
+                    self.window.request_redraw();
+                }
             }
             WindowEvent::RedrawRequested => {
                 self.draw();
@@ -173,6 +207,9 @@ impl Viewer {
                             b.motion_ms.clone()
                         };
                         say(&crate::bench::report_cpu(moved, &times, &b.drawn));
+                        if !b.pick_ms.is_empty() {
+                            say(&crate::bench::report_pick(&b.pick_ms));
+                        }
                         self.bench = None;
                         on_loop.exit();
                         return;
@@ -183,31 +220,28 @@ impl Viewer {
                     self.window.request_redraw();
                 }
             }
-            WindowEvent::MouseInput { state, button, .. } => {
-                self.held = (state == ElementState::Pressed).then_some(button);
-                self.last_mouse = None;
-            }
-            WindowEvent::CursorMoved { position, .. } => {
-                let at = (position.x as f32, position.y as f32);
-                if let (Some(button), Some(last)) = (self.held, self.last_mouse) {
-                    let (dx, dy) = (at.0 - last.0, at.1 - last.1);
-                    match button {
-                        MouseButton::Left => self.camera.orbit(dx, dy),
-                        _ => self.camera.pan(dx, dy, self.config.height),
-                    }
-                    self.window.request_redraw();
-                }
-                self.last_mouse = Some(at);
-            }
-            WindowEvent::MouseWheel { delta, .. } => {
-                let steps = match delta {
-                    MouseScrollDelta::LineDelta(_, y) => y,
-                    MouseScrollDelta::PixelDelta(p) => p.y as f32 / 40.0,
-                };
-                self.camera.zoom(steps);
-                self.window.request_redraw();
-            }
             _ => {}
         }
+    }
+
+    /// Between batches of events: asks what's under the cursor, and takes in the answer.
+    pub fn about_to_wait(&mut self, on_loop: &ActiveEventLoop) {
+        if !self.renderer.pick_busy()
+            && let Some(px) = self.nav.take_pick()
+        {
+            self.renderer.pick_start(&mut self.scene, &self.nav.camera, px);
+        }
+        if let Some((px, hit, ms)) = self.renderer.pick_poll() {
+            self.pick_ms = ms;
+            self.nav.on_pick(px, hit);
+            if let Some(b) = &mut self.bench {
+                b.pick_ms.push(ms);
+            }
+        }
+        on_loop.set_control_flow(if self.renderer.pick_busy() {
+            ControlFlow::Poll
+        } else {
+            ControlFlow::Wait
+        });
     }
 }

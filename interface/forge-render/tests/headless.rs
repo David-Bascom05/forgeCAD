@@ -2,7 +2,7 @@
 
 use forge_render::camera::Camera;
 use forge_render::mesh::PartMesh;
-use forge_render::render::{self, Offscreen, Renderer, part_info};
+use forge_render::render::{self, Offscreen, Overlay, Renderer, part_info};
 use forge_render::scene::{self, Placement, Scene};
 
 fn renderer(parts: &[PartMesh], scene: &Scene, size: (u32, u32)) -> Option<Renderer> {
@@ -39,7 +39,12 @@ fn a_part_fills_part_of_the_frame_with_shades_and_lines() {
     };
     let target = Offscreen::new(&r.device, size);
     let (center, radius) = scene.bounds();
-    let drawn = r.frame(&target.view, &mut scene, &Camera::fit(center, radius), None);
+    let drawn = r.frame(
+        &target.view,
+        &mut scene,
+        &Camera::fit(center, radius),
+        Overlay::default(),
+    );
     r.wait();
     assert_eq!(drawn.placements, 1);
     assert!(drawn.tris > 0 && drawn.segments > 0);
@@ -64,7 +69,7 @@ fn looking_away_draws_nothing() {
     let mut away = Camera::fit([center[0] + 100.0 * radius, center[1], center[2]], radius);
     away.yaw = core::f32::consts::PI;
     away.pitch = 0.0;
-    let drawn = r.frame(&target.view, &mut scene, &away, None);
+    let drawn = r.frame(&target.view, &mut scene, &away, Overlay::default());
     r.wait();
     assert_eq!(drawn.placements, 0);
 }

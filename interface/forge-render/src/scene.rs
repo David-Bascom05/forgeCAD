@@ -115,6 +115,11 @@ impl Scene {
         self.dirty.take()
     }
 
+    /// A placement's sphere.
+    pub fn sphere(&self, i: usize) -> ([f32; 3], f32) {
+        ([self.x[i], self.y[i], self.z[i]], self.r[i])
+    }
+
     /// A sphere holding the whole scene.
     pub fn bounds(&self) -> ([f32; 3], f32) {
         let n = self.x.len().max(1) as f32;

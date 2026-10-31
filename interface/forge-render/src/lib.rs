@@ -4,6 +4,7 @@
 pub mod bench;
 pub mod camera;
 pub mod mesh;
+pub mod nav;
 pub mod render;
 pub mod scene;
 pub mod viewer;

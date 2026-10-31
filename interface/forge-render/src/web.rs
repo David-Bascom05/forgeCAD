@@ -70,6 +70,8 @@ async fn open(window: Arc<Window>, mesh: PartMesh, frames: usize) -> Result<View
             gpu: Vec::new(),
             motion_ms: Vec::new(),
             drawn: Vec::new(),
+            hover: false,
+            pick_ms: Vec::new(),
         });
     }
     Ok(v)
@@ -102,6 +104,12 @@ impl ApplicationHandler<Viewer> for App {
     fn window_event(&mut self, on_loop: &ActiveEventLoop, _: WindowId, event: WindowEvent) {
         if let Some(v) = &mut self.viewer {
             v.event(event, on_loop);
+        }
+    }
+
+    fn about_to_wait(&mut self, on_loop: &ActiveEventLoop) {
+        if let Some(v) = &mut self.viewer {
+            v.about_to_wait(on_loop);
         }
     }
 }
