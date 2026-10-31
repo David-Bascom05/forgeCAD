@@ -28,7 +28,7 @@ Counts: real parts = find-parts, Fusion 360 Gallery, ~8600 parts, main d33b84aa 
 | class | count | root cause | blocks | state |
 |---|---|---|---|---|
 | butted cylinders of one radius | 237 real parts | a closed edge two bodies share: its direction was read from its ends, one vertex, so one use ran the wrong way: open shell, or false ZeroThickness | shafts and tubes built in steps from a joint | fixed (`canon` in boolean.rs, nary.rs) |
-| crossing a traced fillet's spring missed | 97 of 200 pipe parts | `across()` used a plane at the edge's middle for a curved spring, the neighbour being tangent there | any cut through a fillet on a non-circular edge | fixed (`Fence` in blend.rs, plus the spring against the other surface) |
+| crossing a traced fillet's spring missed | 97 of 200 pipe parts; now 140 of 200 valid | `across()` used a plane at the edge's middle for a curved spring, the neighbour being tangent there | any cut through a fillet on a non-circular edge | fixed (`Fence` in blend.rs, plus the spring against the other surface) |
 | lost cut, silent wrong volume | 3 real parts, wrong with no error | a stretch whose middle lands within tolerance of a boundary with its ends on that boundary was taken to run along it, and no edge was made | any model carrying float noise | fixed (`inside` in `trim`: along an edge only if that edge holds its middle and both ends). Noise check, 8188 parts at 3e-7: no volume moved over 0.01% |
 | classification floods across a shared edge | part of 76 real parts | a tool's edge on a part's edge: being inside the tool changes across it | pockets ending on a rib's root | fixed |
 | nearly flush surfaces | part of 76 and 65 real parts | plane on plane or tangent to a cylinder within LINEAR over the faces, tilted past `ANGULAR` (9-digit rounding), crossing in curves the tolerance cannot tell apart | imported or rounded data | fixed (`ssi::nearly_flush`) |
@@ -36,7 +36,7 @@ Counts: real parts = find-parts, Fusion 360 Gallery, ~8600 parts, main d33b84aa 
 | flat ends named alike | 46 real parts | flush vertices were not ranked by place: DuplicateName | a flat by an arc on the rod's own circle | fixed |
 | next face past a part-changing feature | 35 history | refused outright | `next` after any fillet | fixed for one body; multi-body still refused (23): the extent does not see each feature's pick |
 | pinch at a vertex in a face split | 22 scoreboard | own edges tangent at a vertex never counted as a tie | balls touching on a face | fixed; a ulp nudge of it is invalid (tools/proof/known.txt) where it was refused |
-| fillet off over an edge and back | 11 of 200 pipe | the spring leaves its face over one edge and returns over it; the edge's middle goes | a boss near a rim | fixed (`SplitFirst`, `chain_loops`) |
+| fillet off over an edge and back | 11 refusals, 8 valid of 200 pipe | the spring leaves its face over one edge and returns over it; the edge's middle goes | a boss near a rim | fixed (`SplitFirst`, `chain_loops`) |
 | shell towards a cone's point | part of 15 history | a pointed cone was taken to collapse | a pointed boss shelled in, a drill point shelled out | fixed |
 | hair kink in a straight side | noise repro; 162 noise failures carry this signature, how many this root is not known | a neighbour at a shallow angle loses the crossing | noisy imports | fixed for that repro (`across`) |
 | fillet Corner, pipe | 28 of 200 (13 at any radius) | no rule closes the vertex: `ball_setbacks`, a cold edge with no trim point, a seam the spring does not cross | concave chains across a box's convex edge | open |
@@ -48,9 +48,11 @@ Counts: real parts = find-parts, Fusion 360 Gallery, ~8600 parts, main d33b84aa 
 | n-ary refuses several bodies in `finish` | 37 history | the history check called the one-body n-ary regen: a test gap | | fixed: every body on both regens, none differ in 34 seeds |
 | finder's synthetic list | 62 of 69 still fail | threads, coils and lofts against other tools; direct edits; see repros/find-synth | | open |
 
-Fusion rate on 3b1d1c47: 94.7% (8169 of 8625), against 91.2%; the later commits are not yet measured.
-Noise on the same commit: 309 of 8188 built parts stop building at 3e-7 (162 classification, 49
-EdgeUses, 47 ZeroThickness), no volume moved.
+Fusion rate: 95.0% (8194 of 8625, the 2 pinched finals counted correct) on 7bc265a2, against 91.3% on
+main d33b84aa; 36 wrong-volume parts, most multi-body translation, 6 new and unjudged. Top refusal: 113
+ZeroThickness, some of them false (fixes on fusion-1), some true pinches main built unknowingly. Noise on
+3b1d1c47: 309 of 8188 built parts stop building at 3e-7 (162 classification, 49 EdgeUses, 47
+ZeroThickness), no volume moved over 0.01%.
 
 ## Correctly refused
 
