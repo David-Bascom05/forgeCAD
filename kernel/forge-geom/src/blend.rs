@@ -426,11 +426,10 @@ fn local_range(c: &Curve, p: Point3) -> Interval {
 /// its guiding cubic; this finishes on the exact curve, stepping along its
 /// exact direction until p - c(t) is square to it.
 pub fn spine_closest(spine: &Curve, p: Point3) -> f64 {
-    let t = spine.closest(p, spine.full_range(1e6));
     if let Curve::Intersection(ic) = spine {
-        return intersection_refine(ic, spine, p, t).0;
+        return intersection_refine(ic, spine, p, ic.closest_on_cubic(p)).0;
     }
-    t
+    spine.closest(p, spine.full_range(1e6))
 }
 
 /// An intersection spine's parameter from t on, stepped along the exact direction (the chain's
@@ -1045,6 +1044,20 @@ impl Pipe {
         }
     }
 
+    /// The spine's point nearest p: well off the pipe the guiding cubic's is near enough, the
+    /// value serving a Newton step or a cell test.
+    fn nearest_on_spine(&self, p: Point3) -> Point3 {
+        if let Curve::Intersection(ic) = &self.spine {
+            let t = ic.closest_on_cubic(p);
+            let c = ic.guide(t);
+            if (p.distance(c) - self.radius).abs() > 1e-2 {
+                return c;
+            }
+            return self.spine.eval(intersection_refine(ic, &self.spine, p, t).0);
+        }
+        self.spine.eval(spine_closest(&self.spine, p))
+    }
+
     /// The parameters of p, in the normal plane of the spine at u.
     fn across(&self, p: Point3, u: f64) -> Point2 {
         match self.cross(u) {
@@ -1143,15 +1156,29 @@ impl Procedural for Pipe {
         self.spine.bbox(uv.u).grow(self.radius)
     }
     fn implicit(&self, p: Point3) -> f64 {
-        let u = spine_closest(&self.spine, p);
-        p.distance(self.spine.eval(u)) - self.radius
+        p.distance(self.nearest_on_spine(p)) - self.radius
     }
     fn gradient(&self, p: Point3) -> Vec3 {
         let u = spine_closest(&self.spine, p);
         (p - self.spine.eval(u)).normalize().map_or(Vec3::Z, |n| n.get())
     }
+    /// The nearest chain sample puts the spine's distance within the chain's reach; only
+    /// where r falls inside that does it take the search.
+    fn within(&self, p: Point3, r: f64) -> bool {
+        if let Curve::Intersection(ic) = &self.spine {
+            let d = ic.nearest_sample_sq(p).sqrt();
+            let (hi, lo) = (d - self.radius, d - ic.reach() - self.radius);
+            if lo > r || hi < -r {
+                return false;
+            }
+            if lo >= -r && hi <= r {
+                return true;
+            }
+        }
+        self.implicit(p).abs() <= r
+    }
     fn implicit_gradient(&self, p: Point3) -> (f64, Vec3) {
-        let c = self.spine.eval(spine_closest(&self.spine, p));
+        let c = self.nearest_on_spine(p);
         (
             p.distance(c) - self.radius,
             (p - c).normalize().map_or(Vec3::Z, |n| n.get()),
@@ -1257,6 +1284,63 @@ mod tests {
         for c in &cs {
             assert!(on_both(c, Interval::new(0.0, 6.0), &cone, &sphere));
         }
+    }
+
+    /// Distance to the spine by a walk far finer than the chain, the search's oracle.
+    fn spine_distance(spine: &Curve, p: Point3) -> f64 {
+        let d = spine.domain();
+        let n = ((d.hi - d.lo) * 10.0) as usize;
+        (0..=n)
+            .map(|i| spine.eval(d.lo + (d.hi - d.lo) * i as f64 / n as f64).distance(p))
+            .fold(f64::INFINITY, f64::min)
+    }
+
+    #[test]
+    fn a_pipes_value_and_cell_test_agree_with_a_fine_walk_of_its_spine() {
+        let mut rng = forge_math::rng::Rng::new(7);
+        let cyl = Surface::Cylinder(Cylinder {
+            frame: Frame::from_z(Point3::new(0.0, 0.0, 0.0), UnitVec3::X),
+            radius: 3.0,
+        });
+        let sph = Surface::Sphere(Sphere {
+            frame: Frame::WORLD.with_origin(Point3::new(0.0, 1.0, 0.0)),
+            radius: 8.0,
+        });
+        let wide = Box3::from_points([Point3::new(-12.0, -12.0, -12.0), Point3::new(12.0, 12.0, 12.0)]);
+        // closed, and open (the box cuts the spine) so points past its ends come up
+        let part = Box3::from_points([Point3::new(-12.0, 0.0, -12.0), Point3::new(12.0, 12.0, 12.0)]);
+        let near = Point3::new(7.5, 3.0, 0.0);
+        let mut seen = [0; 2];
+        for (region, radius) in [(wide, 1.0), (wide, 0.25), (part, 1.0), (part, 0.25)] {
+            let b = Blend::new(&cyl, &sph, radius, radius, near, region).unwrap();
+            let Surface::Procedural(pipe) = &b.surface else {
+                panic!("expected a pipe")
+            };
+            let Curve::Intersection(ic) = &b.spine else {
+                panic!("expected a traced spine")
+            };
+            seen[usize::from(ic.closed)] += 1;
+            for i in 0..200 {
+                // near the spine, around the pipe, across its medial axis, and far off
+                let at = ic.pts[rng.below(ic.pts.len())];
+                let span = [0.05, 1.0, 3.0, 30.0][i % 4];
+                let mut off = || rng.range(-span, span);
+                let p = at + Vec3::new(off(), off(), off());
+                let truth = spine_distance(&b.spine, p) - radius;
+                let v = pipe.implicit(p);
+                // the walk stands above the truth, by at most half its step
+                assert!(v >= truth - ic.reach() / 5.0, "{p:?}: {v} against {truth}");
+                assert!(v <= truth + 1e-5, "{p:?}: {v} against {truth}");
+                let (vg, g) = pipe.implicit_gradient(p);
+                assert!(vg == v && (g.length() - 1.0).abs() < 1e-12);
+                for r in [0.01, 0.1, 0.5, 2.0] {
+                    if (v.abs() - r).abs() > 1e-3 {
+                        assert_eq!(pipe.within(p, r), v.abs() <= r, "{p:?} {r}: value {v}");
+                    }
+                }
+            }
+        }
+        assert!(seen[0] > 0 && seen[1] > 0, "both kinds of spine: {seen:?}");
     }
 
     #[test]

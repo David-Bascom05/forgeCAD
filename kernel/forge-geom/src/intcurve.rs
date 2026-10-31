@@ -23,6 +23,8 @@ pub struct IntCurve {
     pub closed: bool,
     /// Largest distance from a chain segment to the true curve between its ends.
     pub sag: f64,
+    /// `reach`, found on first use.
+    reach: OnceLock<f64>,
     /// Each chain point's parameters on each surface that can start its value there
     /// (`Procedural::value_near`), found on first use.
     hints: OnceLock<[Option<Vec<Point2>>; 2]>,
@@ -83,6 +85,7 @@ impl IntCurve {
         sag: f64,
     ) -> IntCurve {
         IntCurve {
+            reach: OnceLock::new(),
             a,
             b,
             pts,
@@ -117,11 +120,6 @@ impl IntCurve {
         self.segments() as f64
     }
 
-    fn chain_point(&self, t: f64) -> Point3 {
-        let (i, j, f) = self.locate(t);
-        self.pts[i].lerp(self.pts[j], f)
-    }
-
     /// The chain segment holding t: its end samples' indices and t's fraction along it.
     fn locate(&self, t: f64) -> (usize, usize, f64) {
         let n = self.pts.len();
@@ -146,6 +144,7 @@ impl IntCurve {
     }
 
     /// The cubic's point alone (as `hermite`'s).
+    #[inline(always)]
     fn hermite_point(&self, t: f64) -> Point3 {
         let (i, j, f) = self.locate(t);
         let (p0, p1) = (self.pts[i], self.pts[j]);
@@ -243,6 +242,25 @@ impl IntCurve {
             + 2.0 * self.sag
     }
 
+    /// A point of the curve lies this near a chain sample: half the longest chord and the sag.
+    pub fn reach(&self) -> f64 {
+        *self.reach.get_or_init(|| {
+            let n = self.pts.len();
+            let longest = (0..self.segments())
+                .map(|i| self.pts[i].distance_sq(self.pts[(i + 1) % n]))
+                .fold(0.0, f64::max);
+            0.5 * longest.sqrt() + self.sag
+        })
+    }
+
+    /// The squared distance from p to the nearest chain sample.
+    pub fn nearest_sample_sq(&self, p: Point3) -> f64 {
+        self.pts
+            .iter()
+            .map(|q| q.distance_sq(p))
+            .fold(f64::INFINITY, f64::min)
+    }
+
     pub fn closest(&self, p: Point3, range: Interval) -> f64 {
         let seg = self.segments();
         let (lo, hi) = (
@@ -254,8 +272,9 @@ impl IntCurve {
         let mut best = (f64::INFINITY, lo);
         let start = lo.ceil() as i64;
         let end = hi.floor() as i64;
+        let n = self.pts.len() as i64;
         for k in start..=end {
-            let d = self.chain_point(k as f64).distance_sq(p);
+            let d = self.pts[k.rem_euclid(n) as usize].distance_sq(p);
             if d < best.0 {
                 best = (d, k as f64);
             }
@@ -274,21 +293,7 @@ impl IntCurve {
             if s1 <= s0 {
                 continue;
             }
-            let mut t = 0.5 * (s0 + s1);
-            for _ in 0..12 {
-                let (c, d1, d2) = self.hermite(t);
-                let g = (c - p).dot(d1);
-                let h = d1.dot(d1) + (c - p).dot(d2);
-                if h <= 0.0 {
-                    break;
-                }
-                let next = (t - g / h).clamp(s0, s1);
-                let done = (next - t).abs() <= 1e-13;
-                t = next;
-                if done {
-                    break;
-                }
-            }
+            let mut t = self.on_cubic(p, s0, s1);
             // then against the exact curve (the cubic's nearest point sits a hair off it)
             for _ in 0..3 {
                 let d1 = self.hermite(t).1;
@@ -305,6 +310,54 @@ impl IntCurve {
             }
         }
         out
+    }
+
+    /// The cubic's point nearest p between s0 and s1, by Newton from the middle.
+    fn on_cubic(&self, p: Point3, s0: f64, s1: f64) -> f64 {
+        let mut t = 0.5 * (s0 + s1);
+        for _ in 0..12 {
+            let (c, d1, d2) = self.hermite(t);
+            let g = (c - p).dot(d1);
+            let h = d1.dot(d1) + (c - p).dot(d2);
+            if h <= 0.0 {
+                break;
+            }
+            let next = (t - g / h).clamp(s0, s1);
+            let done = (next - t).abs() <= 1e-13;
+            t = next;
+            if done {
+                break;
+            }
+        }
+        t
+    }
+
+    /// The parameter nearest p along the guiding cubic, for a caller that finishes on the exact
+    /// curve: no evaluation of the surfaces at all. The sample's tangent says which side the
+    /// foot is on.
+    pub fn closest_on_cubic(&self, p: Point3) -> f64 {
+        let (mut best, mut near) = (f64::INFINITY, 0usize);
+        for (k, q) in self.pts.iter().enumerate() {
+            let d = q.distance_sq(p);
+            if d < best {
+                (best, near) = (d, k);
+            }
+        }
+        let k = near as f64;
+        let (s0, s1) = if (p - self.pts[near]).dot(self.tans[near]) >= 0.0 {
+            (k, k + 1.0)
+        } else {
+            (k - 1.0, k)
+        };
+        if !self.closed && (s0 < 0.0 || s1 > self.domain_hi()) {
+            return k;
+        }
+        self.on_cubic(p, s0, s1)
+    }
+
+    /// The guiding cubic's point at t: within about 1e-6 of the curve, no surfaces asked.
+    pub fn guide(&self, t: f64) -> Point3 {
+        self.hermite_point(t)
     }
 
     pub fn bbox(&self, range: Interval) -> Box3 {
@@ -389,11 +442,23 @@ pub fn trace(a: &Surface, b: &Surface, region: Box3) -> Option<Vec<IntCurve>> {
     } else {
         (a, b)
     };
+    // the root cube stands well clear of a flat region; a point of the curve in the region lies
+    // in a cell that touches it
+    let grown = region.grow(step);
+    let touches = |c: Point3, r: f64| {
+        let d = |i: Interval, x: f64| (i.lo - x).max(x - i.hi).max(0.0);
+        let (dx, dy, dz) = (d(grown.x, c.x), d(grown.y, c.y), d(grown.z, c.z));
+        dx * dx + dy * dy + dz * dz <= r * r
+    };
     let mut stack = vec![(region.center(), half * 3f64.sqrt())];
     while let Some((c, r)) = stack.pop() {
-        if (boxed && (!reaches(&pa, c, r) || !reaches(&pb, c, r)))
+        if !touches(c, r)
+            || (boxed && (!reaches(&pa, c, r) || !reaches(&pb, c, r)))
             || first.implicit(c).abs() > r
-            || second.implicit(c).abs() > r
+            || !match second {
+                Surface::Procedural(s) => s.within(c, r),
+                s => s.implicit(c).abs() <= r,
+            }
         {
             continue;
         }
@@ -411,7 +476,6 @@ pub fn trace(a: &Surface, b: &Surface, region: Box3) -> Option<Vec<IntCurve>> {
             }
         }
     }
-    let grown = region.grow(step);
     let mut curves: Vec<IntCurve> = Vec::new();
     // cells (leaf-sized) around every traced point: a seed in one needs no refining, it lies
     // on a branch already traced (most seeds do, the octree leaves line every branch)

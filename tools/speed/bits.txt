@@ -70,8 +70,8 @@ jack seq 106e73f424048555
 jack nary fd28317a492ff5bb
 frame seq d35e157d7e125cfd
 frame nary 740dd70faf1d5a5f
-manifold seq 554a749f08f04e3a
-manifold nary 3c158d0df35e61bc
+manifold seq 85111dbd84def398
+manifold nary 5a2bbfa6801a5df2
 bracket seq 0801da590a898be4
 bracket nary e28c93b6a54485a8
 insert seq 38e900708db4040a

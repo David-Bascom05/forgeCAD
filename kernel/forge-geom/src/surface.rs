@@ -156,6 +156,10 @@ pub trait Procedural: Send + Sync + std::fmt::Debug {
     fn implicit_gradient(&self, p: Point3) -> (f64, Vec3) {
         (self.implicit(p), self.gradient(p))
     }
+    /// Whether |implicit(p)| <= r, for surfaces that can often tell without the value.
+    fn within(&self, p: Point3, r: f64) -> bool {
+        self.implicit(p).abs() <= r
+    }
     fn transformed(&self, f: &Frame) -> Proc;
     /// Lengths on the surface per unit of u and of v, roughly (for meshing).
     fn uv_scale(&self) -> (f64, f64) {

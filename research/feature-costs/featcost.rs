@@ -181,6 +181,19 @@ fn main() {
             }
         }
         "resolve" => std::fs::write(arg(2), text::print(&bench::part(arg(1)))).expect("write"),
+        // a part file with selectors, resolved (a generator's output); prints why not where not
+        "resolve-file" => {
+            let m = bench::model(&std::fs::read_to_string(arg(1)).expect("read"));
+            match &m.error {
+                Some(e) => println!("err {}", e.msg),
+                None => {
+                    let part = Part {
+                        features: m.features.clone(),
+                    };
+                    std::fs::write(arg(2), text::print(&part)).expect("write")
+                }
+            }
+        }
         "list" => {
             for (i, f) in load(arg(1)).features.iter().enumerate() {
                 let (l, n) = label(f);
