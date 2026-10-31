@@ -234,3 +234,40 @@ combine add a b
         forge_topo::check(&body)
     );
 }
+
+fn valid(src: &str) {
+    let body = props::build(&fc(src)).expect("builds");
+    assert!(
+        forge_topo::check(&body).is_empty(),
+        "{:?}",
+        forge_topo::check(&body)
+    );
+}
+
+/// M5: a ball whose poles lie on an edge; with its frame turned over (-xz) it builds.
+#[test]
+#[ignore = "M5: face split crossed itself"]
+fn m5_ball_on_edge_either_frame() {
+    valid("extrude new 20 at -20 -20 -20 rect 0 0 40 40\nball add 5 xz at 20 0 0");
+}
+
+/// M6: n-ary leaves open edges where a pocket's mouth is 0.00001 above the top.
+#[test]
+#[ignore = "M6: n-ary open edges near tolerance"]
+fn m6_nary_near_tolerance_pocket() {
+    let part = fc("extrude new 10 rect 0 0 60 40
+extrude cut 12 at 50 14 -1 rect 0 0 10 8
+extrude add 3 at 43 21 10 rect 0 0 10 8
+extrude cut 3 at 44 16 7 circle 0 0 3
+extrude cut 3.00001 at 13.736063881801726 14.55533748358412 7.00001 circle 0 0 3");
+    assert_eq!(props::backends(&part, 1), None);
+}
+
+/// M9: a tilted pad added across a hole, its side plane cut at the hole's seam.
+#[test]
+#[ignore = "M9: FaceWrongSide on a lens at the hole's seam"]
+fn m9_tilted_pad_over_hole() {
+    valid("extrude new 15 rect 0 0 120 60
+extrude cut 17 at 75 19 -1 circle 0 0 3
+extrude add 8.945478516509796 z -0.061633258296996694 0.2939571355937309 0.9538294102748273 x -0.08391472378619189 0.9507366012975499 -0.29842626239168546 at 89.69521759175012 13.908448595830624 3.4058649537841124 rrect -13.632567574771072 -10.946070359275362 27.265135149542143 21.892140718550724 7.854519259083712");
+}

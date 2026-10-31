@@ -138,20 +138,19 @@ fn guarded(f: impl FnOnce() -> Result<Body, String>) -> Result<Body, String> {
 /// An error's variant names down to the first value: `Boolean { feature: 3, error:
 /// Internal("x") }` is `Boolean Internal("x")`.
 fn short(e: &str) -> String {
+    let number = |w: &str| w.starts_with(|c: char| c.is_ascii_digit() || c == '-' || c == '#');
     let mut out = Vec::new();
     for w in e.split([' ', '{', '}', ',']).filter(|w| !w.is_empty()) {
-        if w.ends_with(':') || w.chars().next().is_some_and(|c| c.is_ascii_digit() || c == '-') {
+        if w.ends_with(':') || number(w) {
             continue;
         }
-        out.push(w.split('(').next().unwrap_or(w).to_string());
+        let (head, inner) = w.split_once('(').unwrap_or((w, ""));
+        out.push(head.to_string());
         if w.contains('(') {
-            out.push(
-                w.split('(')
-                    .nth(1)
-                    .unwrap_or("")
-                    .trim_end_matches(')')
-                    .to_string(),
-            );
+            let inner = inner.trim_end_matches(')');
+            if !inner.is_empty() && !number(inner) {
+                out.push(inner.to_string());
+            }
             break;
         }
     }
@@ -561,6 +560,22 @@ fn sample(r: &mut Rng, b: &Box3) -> Point3 {
 
 pub type Property = fn(&Part, u64) -> Option<Finding>;
 
+/// `prop` on `part`, a panic anywhere in it (a mesh, a classifier) a finding of its own.
+pub fn run(name: &'static str, prop: Property, part: &Part, seed: u64) -> Option<Finding> {
+    std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| prop(part, seed))).unwrap_or_else(|p| {
+        let m = p
+            .downcast_ref::<&str>()
+            .map(|s| s.to_string())
+            .or_else(|| p.downcast_ref::<String>().cloned())
+            .unwrap_or_default();
+        found(
+            name,
+            format!("panic {}", m.chars().take(60).collect::<String>()),
+            "",
+        )
+    })
+}
+
 /// The other history a failure compares against, if it has one: the part mapped or reordered,
 /// or with the boolean's tool cut from it.
 pub fn witness(prop: &str, part: &Part, seed: u64) -> Option<Part> {
@@ -599,11 +614,11 @@ pub fn all() -> Vec<(&'static str, Property)> {
 
 /// The smallest history found that still fails `prop` with the same kind at `seed`: features
 /// dropped one at a time, then numbers rounded.
-pub fn shrink(part: &Part, prop: Property, seed: u64) -> Part {
-    let Some(f0) = prop(part, seed) else {
+pub fn shrink(name: &'static str, part: &Part, prop: Property, seed: u64) -> Part {
+    let Some(f0) = run(name, prop, part, seed) else {
         return part.clone();
     };
-    let fails = |p: &Part| prop(p, seed).is_some_and(|f| f.kind == f0.kind);
+    let fails = |p: &Part| run(name, prop, p, seed).is_some_and(|f| f.kind == f0.kind);
     let mut cur = part.clone();
     // runs of features dropped, halving the run each pass down to one at a time
     let mut run = (cur.features.len() / 2).max(1);
@@ -611,8 +626,7 @@ pub fn shrink(part: &Part, prop: Property, seed: u64) -> Part {
         let mut end = cur.features.len();
         while end > 1 {
             let start = end.saturating_sub(run).max(1);
-            let mut t = cur.clone();
-            t.features.drain(start..end);
+            let t = without(&cur, start..end);
             if fails(&t) {
                 cur = t;
             }
@@ -643,6 +657,25 @@ pub fn shrink(part: &Part, prop: Property, seed: u64) -> Part {
         }
     }
     cur
+}
+
+/// The part without features `gone`, patterns' sources renumbered to match.
+fn without(part: &Part, gone: std::ops::Range<usize>) -> Part {
+    let mut t = part.clone();
+    t.features.drain(gone.clone());
+    for f in &mut t.features {
+        if let Feature::Pattern {
+            of: forge_model::Source::Features(src),
+            ..
+        } = f
+        {
+            src.retain(|i| !gone.contains(i));
+            for i in src.iter_mut().filter(|i| **i >= gone.end) {
+                *i -= gone.len();
+            }
+        }
+    }
+    t
 }
 
 /// Lengths and coordinates to `digits` decimals, directions to two more.

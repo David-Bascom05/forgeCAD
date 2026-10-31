@@ -103,6 +103,10 @@ fn orientation(body: &Body, index: &Index, mesh: &TriMesh, out: &mut Vec<Flaw>) 
         if near == right || far == right || near != far || near.0 == Where::On || near.1 == Where::On {
             continue;
         }
+        // another face within the far step: a wall thinner than the steps, nothing to say
+        if crowded(body, index, f, p, 0.05) {
+            continue;
+        }
         // the winding number of a fine mesh at a step well past its chord says which it is
         let fine = fine.get_or_insert_with(|| {
             tessellate(
@@ -139,6 +143,17 @@ fn orientation(body: &Body, index: &Index, mesh: &TriMesh, out: &mut Vec<Flaw>) 
             });
         }
     }
+}
+
+/// Whether a face other than `f` passes within `r` of `p`.
+fn crowded(body: &Body, index: &Index, f: FaceId, p: Point3, r: f64) -> bool {
+    body.face_ids().filter(|&g| g != f).any(|g| {
+        let s = &body.face(g).surface;
+        if !body.face_box(g).grow(r).contains(p) || s.distance(p) > r {
+            return false;
+        }
+        index.point_in_face(g, s.eval(s.project(p))) != Where::Outside
+    })
 }
 
 /// The generalised winding number of a closed mesh about `p` (1 inside, 0 outside), from the

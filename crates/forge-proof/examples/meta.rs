@@ -76,12 +76,18 @@ fn main() {
         let t = Instant::now();
         let mut fails = 0;
         for (i, (pname, part)) in parts.iter().enumerate() {
+            // a near-tolerance gap scaled up is no longer under the tolerance
+            if *name == "scale" && pname.contains("near_tolerance") {
+                continue;
+            }
             let seed = if pname.starts_with("adv") {
                 2 * (i as u64 + 1)
             } else {
                 i as u64 + 1
             };
-            let Some(hit) = f(part, seed) else { continue };
+            let Some(hit) = props::run(name, *f, part, seed) else {
+                continue;
+            };
             fails += 1;
             let key = (name.to_string(), hit.kind.clone());
             match found.get_mut(&key) {
@@ -114,9 +120,10 @@ fn main() {
             continue;
         }
         new += 1;
-        let f = props.iter().find(|(n, _)| n == prop).expect("a property").1;
-        let small = props::shrink(part, f, *seed);
-        let again = f(&small, *seed).unwrap_or_else(|| hit.clone());
+        let (name, f) = *props.iter().find(|(n, _)| n == prop).expect("a property");
+        eprintln!("shrinking {prop}: {kind} from {from}");
+        let small = props::shrink(name, part, f, *seed);
+        let again = props::run(name, f, &small, *seed).unwrap_or_else(|| hit.clone());
         let text = forge_doc::text::print(&small);
         let w = props::witness(prop, &small, *seed).map(|w| forge_doc::text::print(&w));
         println!(
