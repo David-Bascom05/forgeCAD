@@ -602,3 +602,174 @@ pattern csb ssb mirror xz\n",
         false,
     );
 }
+
+/// boolean Unsupported(surface pair without a closed form): a tube swept along an arc and its mirror, 12
+/// apart, never touching; a torus face's box is its whole torus, and torus/torus with parallel
+/// axes has no closed form; 20 apart builds
+#[test]
+#[ignore = "B1: kernel failure, see the comment"]
+fn disjoint_swept_arcs() {
+    holds(
+        "\
+s: sweep z 0 1 0 at 0 10 0 circle 0 0 4 path arc yz at 0 10 -100 100 90 -40
+pattern s mirror xz\n",
+        false,
+    );
+}
+
+/// HANGS: a tube swept along a line and a 2.4 degree arc in a general plane, bored by a sweep cut of a
+/// smaller circle along the same path; the same in a world plane builds in 20 ms
+#[test]
+#[ignore = "B2: kernel failure, see the comment"]
+fn bent_tube_bore_hangs() {
+    holds(
+        "\
+sweep z -0.59048313866411 0.10148065235589 -0.800644328120049 at -130.647058563804 10 441.057078039369 circle 0 0 7 path line -130.647058563804 10 441.057078039369 -313.740381258896 41.4664866995883 192.798286663673 arc z 0.804799093005477 -6.93889390390723e-18 -0.593547319004611 x -0.58966414290279 0.114200861333259 -0.799533840337893 at -306.512352962495 160.846988255089 202.598871100508 120 -90.7330947118864 2.44323436805379
+sweep cut z -0.59048313866411 0.10148065235589 -0.800644328120049 at -130.647058563804 10 441.057078039369 circle 0 0 6 path line -130.647058563804 10 441.057078039369 -313.740381258896 41.4664866995883 192.798286663673 arc z 0.804799093005477 -6.93889390390723e-18 -0.593547319004611 x -0.58966414290279 0.114200861333259 -0.799533840337893 at -306.512352962495 160.846988255089 202.598871100508 120 -90.7330947118864 2.44323436805379\n",
+        false,
+    );
+}
+
+/// fillet NoBlend: facefillet between an upright unioned onto a plate and the plate's top; a plain
+/// fillet of the same edge builds. face_fillet compacts the body, then uses the FaceIds it was given
+#[test]
+#[ignore = "B3: kernel failure, see the comment"]
+fn facefillet_after_union() {
+    holds(
+        "\
+base: extrude 10 rect -40 -30 80 60
+up: extrude 50 xy at 0 0 10 rect -40 -30 12 60
+facefillet 6 (faces of up normal +x) to (faces of base normal +z)\n",
+        false,
+    );
+}
+
+/// fillet Overflow: fullround of a rib unioned onto a plate; the rib alone builds (stale FaceIds, as B3)
+#[test]
+#[ignore = "B4: kernel failure, see the comment"]
+fn fullround_after_union() {
+    holds(
+        "\
+base: extrude 10 rect -40 -30 80 60
+rib: extrude 40 xy at 0 0 10 rect -30 -4 60 8
+fullround (faces of rib normal -y) (faces of rib normal +z) (faces of rib normal +y)\n",
+        false,
+    );
+}
+
+/// HANGS: thicken a flange face after a line-arc-line runner swept out of it and bored by a sweep
+/// cut; thicken first, or a straight runner, builds
+#[test]
+#[ignore = "B5: kernel failure, see the comment"]
+fn thicken_after_bent_bore() {
+    holds(
+        "\
+flange: extrude 12 yz at -12 0 0 rrect -60 -30 120 60 8
+runner: sweep yz at -12 0 0 circle 0 0 19 path line -12 0 0 30 0 0 arc xz at 30 0 -60 60 90 -90 line 90 0 -60 90 0 -115
+sweep cut yz at -12 0 0 circle 0 0 15.5 path line -12 0 0 30 0 0 arc xz at 30 0 -60 60 90 -90 line 90 0 -60 90 0 -130
+thicken 1.5 (faces of flange normal -x)\n",
+        false,
+    );
+}
+
+/// edit Rebuild(Vertex): replace the top face of a block whose pocket rim is rounded; without the
+/// round it builds
+#[test]
+#[ignore = "B6: kernel failure, see the comment"]
+fn replace_face_by_round() {
+    holds(
+        "\
+blk: extrude 40 rect -60 -40 120 80
+cav: extrude cut 14 -xy at 0 0 40 rect -40 -25 80 50
+fillet 2 (edges of cav top)
+part: plane at 0 0 36
+replace (faces of blk normal +z) with part\n",
+        false,
+    );
+}
+
+/// edit Rebuild(Vertex): move a pocket floor up 1 after its edges are filleted; before, it builds
+#[test]
+#[ignore = "B7: kernel failure, see the comment"]
+fn move_face_by_blend() {
+    holds(
+        "\
+blk: extrude 40 rect -60 -40 120 80
+cav: extrude cut 14 -xy at 0 0 40 rrect -40 -25 80 50 8
+fillet 2 (edges of cav bottom)
+move (faces of cav normal +z) by 0 0 1\n",
+        false,
+    );
+}
+
+/// edit Rebuild(Edge): offset a rect pocket's walls, floor and floor fillet; a rounded-rect
+/// pocket builds
+#[test]
+#[ignore = "B8: kernel failure, see the comment"]
+fn offset_pocket_with_floor_round() {
+    holds(
+        "\
+blk: extrude 40 rect -60 -40 120 80
+cav: extrude cut 14 -xy at 0 0 40 rect -40 -25 80 50
+fl: fillet 2 (edges of cav bottom)
+offset -0.3 (faces of cav) (faces of fl)\n",
+        false,
+    );
+}
+
+/// invalid, EdgeUses 1: revolve cut of a cap screw whose head shoulder lies on the top face; the
+/// screw from two extrudes cuts valid
+#[test]
+#[ignore = "B9: kernel failure, see the comment"]
+fn revolve_cut_shoulder_on_face() {
+    holds(
+        "\
+u: extrude sym 30 xz rect -50 1 100 28
+revolve cut xz at -37 0 29 axis 0 0 0 1 poly 0 0 8 0 8 10 5 10 5 -50 0 -50\n",
+        false,
+    );
+}
+
+/// chamfer Unsupported(a vertex where other than three faces meet): a revolved hub's bore rim, its
+/// round faces in halves meeting at the seam
+#[test]
+#[ignore = "B10: kernel failure, see the comment"]
+fn chamfer_revolved_bore_rim() {
+    holds(
+        "\
+hub: revolve xz axis y poly 20 0 70 0 70 12 36 12 36 42 20 42
+chamfer 1 (edges of hub circle r=20 top)\n",
+        false,
+    );
+}
+
+/// fillet Overflow: fillet 1 at the root of a 1.5 tab on a 1.5 ring wall; 0.5 builds, a 7 wall
+/// builds
+#[test]
+#[ignore = "B11: kernel failure, see the comment"]
+fn tab_root_fillet_on_thin_wall() {
+    holds(
+        "\
+ring: extrude 50 circle 0 0 69.5 circle 0 0 68
+tab: extrude 1.5 rect -88 -10 19.25 20
+fillet 1 (edges between tab ring concave circle)\n",
+        false,
+    );
+}
+
+/// seq valid; n-ary fails Fillet Corner: two mirrored gussets in a face-filleted corner, their tops
+/// filleted, then their roots
+#[test]
+#[ignore = "B12: kernel failure, see the comment"]
+fn nary_fillet_two_gussets() {
+    holds(
+        "\
+l: extrude sym 80 xz poly -60 0 60 0 60 12 -46 12 -46 90 -60 90
+corner: facefillet 8 (faces normal +x left) to (faces normal +z bottom)
+gus: extrude sym 10 xz at 0 28 0 poly -47 11 20 11 -47 60
+pattern gus mirror xz
+fillet 2 (edges of gus convex)
+fillet 3 (edges between gus l concave) (edges between gus corner concave)\n",
+        true,
+    );
+}

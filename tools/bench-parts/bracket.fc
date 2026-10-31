@@ -1,0 +1,30 @@
+# Cast pillow-block bracket: an L of base and upright in one casting, the upright's top
+# full round, a face fillet in the corner, a bearing boss with a seat bored from the back on
+# its work axis, two gussets, mounting holes from a hole table, a cored lightening pocket.
+w = 80
+t = 12
+ut = 14
+h = 90
+bz = 60
+br = 20
+l: extrude sym w xz poly -60 0 60 0 60 t -60+ut t -60+ut h -60 h
+fullround (faces normal -x) (faces normal +z top) (faces normal +x left)
+corner: facefillet 8 (faces normal +x left) to (faces normal +z bottom)
+boss: extrude 30 yz at -60 0 bz circle 0 0 br
+bax: axis boss (faces of boss cyl)
+bp: point meet bax l (faces normal -x near -60 0 60)
+bore: hole 22 -yz at -30 0 bz thru
+seat: hole 28 yz at bp 8
+# two gussets (TODO: fillet 3 (edges between gus l concave) (edges between gus corner concave) once regression nary_fillet_two_gussets holds: seq builds it, n-ary fails Corner)
+# TODO: fullround (faces of gus normal -y) (faces of gus near -14 28 36) (faces of gus normal +y) once regression fullround_after_union holds
+gus: extrude sym 10 xz at 0 28 0 poly -60+ut-1 t-1 20 t-1 -60+ut-1 bz
+pattern gus mirror xz
+fillet 2 (edges of gus convex)
+holes: sketch xy at 0 0 t
+  pt 40 25
+  pt 40 -25
+  pt 0 0
+end
+mh: hole M10 cbore -on holes p1 thru
+pattern mh pts holes
+chamfer 1 (edges of bore circle right) (edges of seat circle left)

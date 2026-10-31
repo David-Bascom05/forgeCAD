@@ -9,8 +9,9 @@ use forge_model::Part;
 use std::sync::Arc;
 
 /// The part names, each a file `tools/bench-parts/NAME.fc`.
-pub const NAMES: [&str; 9] = [
-    "gearbox", "volute", "crank", "valve", "heatsink", "quadarm", "conrod", "jack", "frame",
+pub const NAMES: [&str; 15] = [
+    "gearbox", "volute", "crank", "valve", "heatsink", "quadarm", "conrod", "jack", "frame", "manifold",
+    "bracket", "insert", "clamp", "hub", "guard",
 ];
 
 /// The part file of that name.
@@ -25,6 +26,12 @@ pub fn src(name: &str) -> Option<&'static str> {
         "conrod" => include_str!("../../../tools/bench-parts/conrod.fc"),
         "jack" => include_str!("../../../tools/bench-parts/jack.fc"),
         "frame" => include_str!("../../../tools/bench-parts/frame.fc"),
+        "manifold" => include_str!("../../../tools/bench-parts/manifold.fc"),
+        "bracket" => include_str!("../../../tools/bench-parts/bracket.fc"),
+        "insert" => include_str!("../../../tools/bench-parts/insert.fc"),
+        "clamp" => include_str!("../../../tools/bench-parts/clamp.fc"),
+        "hub" => include_str!("../../../tools/bench-parts/hub.fc"),
+        "guard" => include_str!("../../../tools/bench-parts/guard.fc"),
         _ => return None,
     })
 }

@@ -18,7 +18,7 @@ for p in torture plate shaft housing coplanar patterns mixed hole-grid tour upto
   done
 done
 # the real parts (tools/bench-parts): selectors resolved first, uncounted
-for p in gearbox volute crank valve heatsink quadarm conrod jack frame; do
+for p in gearbox volute crank valve heatsink quadarm conrod jack frame manifold bracket insert clamp hub guard; do
   "$bin/benchparts" resolve $p "$fcs/$p.fc"
   for m in seq nary1; do
     n=$(perf stat -x, -e instructions:u "$bin/benchparts" run "$fcs/$p.fc" $m 2>&1 >/dev/null | awk -F, '/instructions/{print $1}')

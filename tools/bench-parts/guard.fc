@@ -1,0 +1,25 @@
+# Belt guard: the belt's envelope round two pulleys drawn as a solid (its tangent lines by
+# asin), grown by the running clearance with offset, the sheet thickened off its top and sides
+# as a body of its own, open at the back, louvres and a sight hole, tabs with screw holes.
+r1 = 62
+r2 = 38
+d = 240
+h = 50
+gap = 6
+t = 1.5
+# the outer tangents leave the circles phi off square to the centre line
+phi = asin((r1 - r2)/d)
+env: extrude h loop line r1*sin(phi) r1*cos(phi) d+r2*sin(phi) r2*cos(phi) arc d 0 r2 90-phi -180+2*phi line d+r2*sin(phi) -r2*cos(phi) r1*sin(phi) -r1*cos(phi) arc 0 0 r1 phi-90 -180-2*phi
+offset gap (faces of env)
+# the sheet's bend round the top
+bend: fillet 5 (edges of env convex top)
+guard: thicken new t (faces of env normal +z) (faces of env cyl) (faces of env plane near 120 60 25) (faces of env plane near 120 -60 25) (faces of bend)
+louvre: extrude cut 10 -xy at 70 0 h+gap+5 rrect -4 -25 8 50 3 in guard
+pattern louvre lin 1 0 0 4 30
+sight: hole 30 -xy at d 0 h+gap+5 10 in guard
+# mounting tabs at the open back, one off each pulley's end
+tab: extrude t xy at 0 0 -gap rect -r1-gap-20 -10 20-t/2 20 in guard
+tab2: extrude t xy at 0 0 -gap rect d+r2+gap+t/2 -10 20 20 in guard
+th: hole 5.5 -xy at -r1-gap-10 0 -gap+t thru in guard
+pattern th pts -r1-gap-10 0 -gap+t d+r2+gap+10 0 -gap+t
+# TODO: fillet 1 (edges between tab guard concave circle) once regression tab_root_fillet_on_thin_wall holds

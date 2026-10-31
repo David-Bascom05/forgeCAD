@@ -1,0 +1,32 @@
+# Cavity insert for an injection mould: a block with a filleted pocket for a lid, its walls
+# offset for shrink, the floor moved up after a wall-thickness change, the top face put on the
+# parting plane, a core pin deleted with its faces, a vent, ejector pins from a hole
+# table, cooling channels across, a pry slot and chamfered edges.
+pl = 36
+shrink = 0.3
+blk: extrude 40 rect -60 -40 120 80
+cav: extrude cut 14 -xy at 0 0 40 rrect -40 -25 80 50 8
+part: plane at 0 0 pl
+replace (faces of blk normal +z) with part
+# the floor up 1 for a thicker lid (TODO: after the fillet, as the change came, once regression move_face_by_blend holds)
+move (faces of cav normal +z) by 0 0 1
+fl: fillet 2 (edges of cav bottom)
+offset -shrink (faces of cav) (faces of fl)
+core: extrude 8 xy at 20 0 26 circle 0 0 4
+# the cored hole in the lid dropped: its core pin goes, the floor healed
+delete (faces of core)
+vent: extrude cut 0.05 -xy at 0 0 pl rect 39 -3 21 6
+pins: sketch xy
+  pt -28 -14
+  pt -28 14
+  pt 0 -14
+  pt 0 14
+  pt 28 -14
+  pt 28 14
+end
+ej: hole 4 on pins p1 thru
+pattern ej pts pins
+cool: hole 8 yz at -60 -30 12 thru
+pattern cool lin 0 1 0 2 60
+pry: extrude cut 3 -xy at -60 0 pl rect 0 -8 6 16
+chamfer 2 (edges of blk along +z longer 30)

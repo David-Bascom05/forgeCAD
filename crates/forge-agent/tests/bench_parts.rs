@@ -80,3 +80,33 @@ fn jack() {
 fn frame() {
     builds("frame");
 }
+
+#[test]
+fn manifold() {
+    builds("manifold");
+}
+
+#[test]
+fn bracket() {
+    builds("bracket");
+}
+
+#[test]
+fn insert() {
+    builds("insert");
+}
+
+#[test]
+fn clamp() {
+    builds("clamp");
+}
+
+#[test]
+fn hub() {
+    builds("hub");
+}
+
+#[test]
+fn guard() {
+    builds("guard");
+}

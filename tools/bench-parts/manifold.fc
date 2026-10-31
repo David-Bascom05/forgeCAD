@@ -1,0 +1,41 @@
+# Cast iron 4-cylinder log exhaust manifold: a head flange with a raised gasket face, four
+# swept runners bent down into a collector log, bored through to the ports, an outlet flange
+# with a sealing land, stud holes from hole tables.
+pitch = 90
+pr = 19
+wall = 3.5
+bend = 60
+rise = 30
+drop = 50
+cz = -130
+cr = 30
+flange: extrude 12 yz at -12 0 0 rrect -175 -30 350 60 8
+# the gasket face, raised 1.5 (TODO: thicken it last, after the bores, once regression thicken_after_bent_bore holds)
+thicken 1.5 (faces of flange normal -x)
+runner: sweep yz at -12 -1.5*pitch 0 circle 0 0 pr path line -12 -1.5*pitch 0 rise -1.5*pitch 0 arc xz at rise -1.5*pitch -bend bend 90 -90 line rise+bend -1.5*pitch -bend rise+bend -1.5*pitch cz+cr/2
+pattern runner lin 0 1 0 4 pitch
+col: extrude 370 z 0 1 0 x 1 0 0 at rise+bend -170 cz circle 0 0 cr
+oflange: extrude 12 z 0 1 0 x 1 0 0 at rise+bend 188 cz rrect -50 -50 100 100 12
+thicken 1 (faces normal +y near 90 200 -130)
+fillet 5 (edges between runner flange concave)
+fillet 6 (edges between runner col concave)
+fillet 4 (edges between col oflange concave)
+bore: sweep cut yz at -13.5 -1.5*pitch 0 circle 0 0 pr-wall path line -13.5 -1.5*pitch 0 rise -1.5*pitch 0 arc xz at rise -1.5*pitch -bend bend 90 -90 line rise+bend -1.5*pitch -bend rise+bend -1.5*pitch cz
+pattern bore lin 0 1 0 4 pitch
+extrude cut 360 z 0 1 0 x 1 0 0 at rise+bend -160 cz circle 0 0 cr-wall-1
+studs: sketch yz
+  pt -165 0
+  pt -90 0
+  pt 0 0
+  pt 90 0
+  pt 165 0
+end
+stud: hole 10.5 -on studs p1 thru
+pattern stud pts studs
+osk: sketch z 0 1 0 x 1 0 0 at rise+bend 201 cz
+  pt 38 0
+  pt -19 38*sin(60)
+  pt -19 -38*sin(60)
+end
+ostud: hole M8 tap -on osk p1 16
+pattern ostud pts osk

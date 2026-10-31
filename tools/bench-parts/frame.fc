@@ -29,38 +29,106 @@ s1z = (stl-45)*sin(sta)
 h1x = reach + 25*hdx
 h1z = stack + 25*hdz
 ttl = sqrt((h1x-s1x)^2 + (h1z-s1z)^2)
-# chainstays: from inside the shell wall, clear of the bore (TODO: from the bore once regression bsa_thread_with_chainstay holds), to the dropout
+# chainstays: from inside the shell wall, clear of the bore (TODO: from the bore once regression bsa_thread_with_chainstay holds), straight back, then bent out round the tyre to the dropout: two straights through a knee, the knee rounded cr. The knee sits inside the chord, so the bend turns out: a bow the other way puts its centre inside, and the two sides fail (regression disjoint_swept_arcs)
 c0x = -17.5
 c0y = 22
 c1x = ax + 6
 c1y = sp/2 - 4
-csx = c1x - c0x
-csy = c1y - c0y
-csz = az
-cl = sqrt(csx^2 + csy^2 + csz^2)
-# seatstays: from the seat tube, 80 below its top, to the dropout
+cl = sqrt((c1x - c0x)^2 + (c1y - c0y)^2 + az^2)
+cf = 0.6
+cdent = 5
+cr = 150
+# its plane: u along the chord, v square to it towards +y, n = u x v
+cux = (c1x - c0x)/cl
+cuy = (c1y - c0y)/cl
+cuz = (az - 0)/cl
+cvx = -cuy*cux/sqrt(1 - cuy^2)
+cvy = sqrt(1 - cuy^2)
+cvz = -cuy*cuz/sqrt(1 - cuy^2)
+cnx = cuy*cvz - cuz*cvy
+cny = cuz*cvx - cux*cvz
+cnz = cux*cvy - cuy*cvx
+# the knee k, cdent inside the chord at cf along it; the two straights' angles from the chord, the turn between
+ca1 = atan2(-cdent, cf*cl)
+ca2 = atan2(cdent, (1 - cf)*cl)
+ctn = ca2 - ca1
+ctg = cr*tan(ctn/2)
+cdx = cos(ca1)*cux + sin(ca1)*cvx
+cdy = cos(ca1)*cuy + sin(ca1)*cvy
+cdz = cos(ca1)*cuz + sin(ca1)*cvz
+cex = cos(ca2)*cux + sin(ca2)*cvx
+cey = cos(ca2)*cuy + sin(ca2)*cvy
+cez = cos(ca2)*cuz + sin(ca2)*cvz
+# where the bend starts and ends, its centre
+ckx = c0x + cf*cl*cux - cdent*cvx
+cky = c0y + cf*cl*cuy - cdent*cvy
+ckz = 0 + cf*cl*cuz - cdent*cvz
+csx = ckx - ctg*cdx
+csy = cky - ctg*cdy
+csz = ckz - ctg*cdz
+ctx = ckx + ctg*cex
+cty = cky + ctg*cey
+ctz = ckz + ctg*cez
+ccx = csx + cr*(cos(ca1)*cvx - sin(ca1)*cux)
+ccy = csy + cr*(cos(ca1)*cvy - sin(ca1)*cuy)
+ccz = csz + cr*(cos(ca1)*cvz - sin(ca1)*cuz)
+# seatstays: from the seat tube, 80 below its top, to the dropout, bent out as the chainstays
 q0x = -(stl-80)*cos(sta)
 q0z = (stl-80)*sin(sta)
 q0y = 10
 q1x = ax + 10
 q1z = az + 14
 q1y = sp/2 - 4
-ssx = q1x - q0x
-ssy = q1y - q0y
-ssz = q1z - q0z
-sl = sqrt(ssx^2 + ssy^2 + ssz^2)
+sl = sqrt((q1x - q0x)^2 + (q1y - q0y)^2 + (q1z - q0z)^2)
+sf = 0.7
+sdent = 4
+sr = 120
+# its plane: u along the chord, v square to it towards +y, n = u x v
+sux = (q1x - q0x)/sl
+suy = (q1y - q0y)/sl
+suz = (q1z - q0z)/sl
+svx = -suy*sux/sqrt(1 - suy^2)
+svy = sqrt(1 - suy^2)
+svz = -suy*suz/sqrt(1 - suy^2)
+snx = suy*svz - suz*svy
+sny = suz*svx - sux*svz
+snz = sux*svy - suy*svx
+# the knee k, sdent inside the chord at sf along it; the two straights' angles from the chord, the turn between
+sa1 = atan2(-sdent, sf*sl)
+sa2 = atan2(sdent, (1 - sf)*sl)
+stn = sa2 - sa1
+stg = sr*tan(stn/2)
+sdx = cos(sa1)*sux + sin(sa1)*svx
+sdy = cos(sa1)*suy + sin(sa1)*svy
+sdz = cos(sa1)*suz + sin(sa1)*svz
+sex = cos(sa2)*sux + sin(sa2)*svx
+sey = cos(sa2)*suy + sin(sa2)*svy
+sez = cos(sa2)*suz + sin(sa2)*svz
+# where the bend starts and ends, its centre
+skx = q0x + sf*sl*sux - sdent*svx
+sky = q0y + sf*sl*suy - sdent*svy
+skz = q0z + sf*sl*suz - sdent*svz
+ssx = skx - stg*sdx
+ssy = sky - stg*sdy
+ssz = skz - stg*sdz
+stx = skx + stg*sex
+sty = sky + stg*sey
+stz = skz + stg*sez
+scx = ssx + sr*(cos(sa1)*svx - sin(sa1)*sux)
+scy = ssy + sr*(cos(sa1)*svy - sin(sa1)*suy)
+scz = ssz + sr*(cos(sa1)*svz - sin(sa1)*suz)
 # tubes, outside first; the booleans mitre them
 bb: extrude sym 68 -xz circle 0 0 21
 st: extrude stl z -cos(sta) 0 sin(sta) circle 0 0 15.9
 ht: revolve xz at reach 0 stack axis 0 0 hdx hdz poly 0 0 25*sin(hta) 25*cos(hta) htl*hdx+30*sin(hta) -htl*sin(hta)+30*cos(hta) htl*hdx -htl*sin(hta)
 tt: extrude ttl z (h1x-s1x)/ttl 0 (h1z-s1z)/ttl at s1x 0 s1z circle 0 0 14.3
-cs: loft profile z csx/cl csy/cl csz/cl at c0x c0y 0 circle 0 0 11 profile z csx/cl csy/cl csz/cl at c1x c1y az circle 0 0 6.5
-ss: loft profile z ssx/sl ssy/sl ssz/sl at q0x q0y q0z circle 0 0 8 profile z ssx/sl ssy/sl ssz/sl at q1x q1y q1z circle 0 0 6
+cs: sweep z cdx cdy cdz at c0x c0y 0 circle 0 0 8 path line c0x c0y 0 csx csy csz arc z cnx cny cnz x cux cuy cuz at ccx ccy ccz cr ca1-90 ctn line ctx cty ctz c1x c1y az
+ss: sweep z sdx sdy sdz at q0x q0y q0z circle 0 0 7 path line q0x q0y q0z ssx ssy ssz arc z snx sny snz x sux suy suz at scx scy scz sr sa1-90 stn line stx sty stz q1x q1y q1z
 drop: extrude 6 xz at 0 sp/2+2 0 poly ax-14 az-12 ax+34 az-16 ax+38 az-4 ax+24 az+34 ax+8 az+34 ax-14 az+12
 stays: pattern cs ss drop mirror xz
 # bridges, the drive-side hanger, the seat clamp and bottle bosses
-bbr: extrude sym 2*(q0y+0.22*ssy) -xz at q0x+0.22*ssx 0 q0z+0.22*ssz circle 0 0 5
-cbr: extrude sym 2*(c0y+0.25*csy) -xz at c0x+0.25*csx 0 0.25*csz circle 0 0 6
+bbr: extrude sym 2*(q0y+110*sdy) -xz at q0x+110*sdx 0 q0z+110*sdz circle 0 0 5
+cbr: extrude sym 2*(c0y+100*cdy) -xz at c0x+100*cdx 0 100*cdz circle 0 0 6
 hanger: extrude 6 xz at 0 -sp/2+4 0 poly ax-6 az-14 ax-12 az+6 ax-32 az-10 ax-30 az-32 ax-14 az-34
 collar: extrude 16 z -cos(sta) 0 sin(sta) at -(stl-16)*cos(sta) 0 (stl-16)*sin(sta) circle 0 0 18.5
 lug: extrude sym 14 xz poly -(stl-3)*cos(sta)-15*sin(sta) (stl-3)*sin(sta)-15*cos(sta) -(stl-3)*cos(sta)-27*sin(sta) (stl-3)*sin(sta)-27*cos(sta) -(stl-15)*cos(sta)-27*sin(sta) (stl-15)*sin(sta)-27*cos(sta) -(stl-15)*cos(sta)-15*sin(sta) (stl-15)*sin(sta)-15*cos(sta)
@@ -89,9 +157,9 @@ htb: revolve cut xz at reach 0 stack axis 0 0 hdx hdz poly 0 0 23.5*sin(hta) 23.
 # headset bearing seats, 11 deep at each end
 extrude cut 11 z hdx 0 hdz at reach 0 stack circle 0 0 24
 extrude cut 11 z -hdx 0 -hdz at hbx 0 hbz circle 0 0 29
-csb: loft cut profile z csx/cl csy/cl csz/cl at c0x+12*csx/cl c0y+12*csy/cl 12*csz/cl circle 0 0 9.9 profile z csx/cl csy/cl csz/cl at c1x c1y az circle 0 0 5.5
-ssb: loft cut profile z ssx/sl ssy/sl ssz/sl at q0x q0y q0z circle 0 0 7 profile z ssx/sl ssy/sl ssz/sl at q1x q1y q1z circle 0 0 5
-pattern csb ssb mirror xz
+csb: sweep cut z cdx cdy cdz at c0x+12*cdx c0y+12*cdy 12*cdz circle 0 0 8-wall path line c0x+12*cdx c0y+12*cdy 12*cdz csx csy csz arc z cnx cny cnz x cux cuy cuz at ccx ccy ccz cr ca1-90 ctn line ctx cty ctz c1x c1y az
+# TODO: bore the seatstays (sweep cut circle 0 0 7-wall along their path) once regression bent_tube_bore_hangs holds; solid until then
+pattern csb mirror xz
 # axle slots, the hanger's M10x1 thread
 slot: extrude cut thru both xz loop line ax-5 az-40 ax+5 az-40 line ax+5 az-40 ax+5 az arc ax az 5 0 180 line ax-5 az ax-5 az-40
 hhole: hole 9 -xz at ax-22 -sp/2-2 az-20 6 thread 10 1

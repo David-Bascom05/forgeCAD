@@ -1,0 +1,38 @@
+# Wheel hub: a turned flange and spigot, its work axis and the point where it meets the back
+# face, five stud holes from a hole table on the bolt circle there, cooling scallops patterned
+# round the rim edge, two circlip grooves patterned along the axis, lightening holes at the
+# table's other points.
+pcd = 114.3
+n = 5
+rf = 70
+rb = 20
+ns = 10
+clock = 180/ns deg
+# flange and spigot extruded, the bore a hole (TODO: one revolve of the section once regression chamfer_revolved_bore_rim holds)
+hub: extrude 12 circle 0 0 rf
+spigot: extrude 30 xy at 0 0 12 circle 0 0 36
+fillet 3 (edges between hub spigot concave)
+bore: hole 2*rb xy at 0 0 0 thru
+hax: axis bore (faces of bore cyl near 20 0 20)
+back: point meet hax hub (faces normal -z near 40 0 0)
+studs: sketch xy at back
+  pt pcd/2*cos(clock+0*360/n) pcd/2*sin(clock+0*360/n)
+  pt pcd/2*cos(clock+1*360/n) pcd/2*sin(clock+1*360/n)
+  pt pcd/2*cos(clock+2*360/n) pcd/2*sin(clock+2*360/n)
+  pt pcd/2*cos(clock+3*360/n) pcd/2*sin(clock+3*360/n)
+  pt pcd/2*cos(clock+4*360/n) pcd/2*sin(clock+4*360/n)
+  pt 45*cos(clock+(1)*180/n) 45*sin(clock+(1)*180/n)
+  pt 45*cos(clock+(3)*180/n) 45*sin(clock+(3)*180/n)
+  pt 45*cos(clock+(5)*180/n) 45*sin(clock+(5)*180/n)
+  pt 45*cos(clock+(7)*180/n) 45*sin(clock+(7)*180/n)
+  pt 45*cos(clock+(9)*180/n) 45*sin(clock+(9)*180/n)
+end
+stud: hole 14.2 on studs p1 thru
+pattern stud pts studs p1 p2 p3 p4 p5
+lh: hole 10 on studs p6 thru
+pattern lh pts studs p6 p7 p8 p9 p10
+sc: extrude cut 12 xy at rf 0 0 circle 0 0 6
+pattern sc path hub (edges of hub circle r=70 bottom) ns fit
+groove: revolve cut xz axis y poly rb-1 6 rb+1.2 6 rb+1.2 7.6 rb-1 7.6
+pattern groove path hax 2 28
+chamfer 1 (edges of bore circle top) (edges of bore circle bottom)
