@@ -1798,6 +1798,8 @@ pub(crate) fn trim(
     let mut ts: Vec<(f64, usize)> = Vec::new();
     // edges the curve runs along: (side, edge, is a seam)
     let mut along: Vec<(Side, EdgeId, bool)> = Vec::new();
+    // springs crossed by the spring against the other surface
+    let mut fenced: Vec<(usize, EdgeId, forge_topo::CoedgeId)> = Vec::new();
     // a traced branch's ends, where it may stop on an edge
     let ends = (!closed && domain.lo.is_finite() && domain.hi.is_finite())
         .then(|| [range.lo, range.hi].map(|t| (t, curve.eval(t))));
@@ -1856,23 +1858,29 @@ pub(crate) fn trim(
                 let on_spring = matches!(&edge.curve, Curve::Procedural(_))
                     && matches!(across, Surface::Procedural(_))
                     && !matches!(other_surface, Surface::Procedural(_));
-                let mut found = curve_surface_in(&curve, range, &across, near);
-                if on_spring
-                    && let (CurveSurface::Hits(hs), CurveSurface::Hits(more)) =
-                        (&mut found, curve_surface(&edge.curve, edge.range, other_surface))
-                {
-                    for h in more {
-                        let t = curve.closest(h.point, range);
-                        if curve.eval(t).distance(h.point) > tol::LINEAR {
-                            continue;
-                        }
-                        // the one point both faces of the spring take, so their curves meet there
-                        match hs.iter_mut().find(|x| x.point.distance(h.point) <= 1e-2) {
-                            Some(x) => *x = CurveHit { t, ..h },
-                            None => hs.push(CurveHit { t, ..h }),
-                        }
+                let found = if on_spring {
+                    fenced.push((k, e, c));
+                    // (a crossing lies on the other face too: in its box)
+                    let other_box = index[1 - k].face_box(faces[1 - k]).grow(tol::LINEAR);
+                    if !other_box.overlaps(&reach) {
+                        continue;
                     }
-                }
+                    let within = overlap(&other_box, &reach);
+                    match curve_surface_in(&edge.curve, edge.range, other_surface, || Some(within)) {
+                        CurveSurface::Hits(more) => CurveSurface::Hits(
+                            more.into_iter()
+                                .filter_map(|h| {
+                                    let t = curve.closest(h.point, range);
+                                    (curve.eval(t).distance(h.point) <= tol::LINEAR)
+                                        .then_some(CurveHit { t, ..h })
+                                })
+                                .collect(),
+                        ),
+                        other => other,
+                    }
+                } else {
+                    curve_surface_in(&curve, range, &across, near)
+                };
                 let hits = match found {
                     CurveSurface::Hits(h) => h,
                     // the curve runs along this edge: cut it at the edge's ends; the stretch along
@@ -2018,6 +2026,33 @@ pub(crate) fn trim(
                             on: CutOn::Edge(side, e),
                             s,
                             point: q,
+                            tol,
+                            touch: branches[1],
+                        });
+                    }
+                }
+            }
+        }
+    }
+    // a closed curve crosses a face's boundary an even number of times: one found odd has missed a
+    // shallow crossing of a spring, which the fence across it can still find
+    if closed && ts.len() % 2 == 1 {
+        for &(k, e, c) in &fenced {
+            let (body, f, side) = (bodies[k], faces[k], sides[k]);
+            let across = across(body, f, c)?;
+            let box_e = Some(body.edge_box(e).grow(2.0 * tol::LINEAR));
+            if let CurveSurface::Hits(hs) = curve_surface_in(&curve, range, &across, || box_e) {
+                for h in hs {
+                    if let Some((s, tol)) = on_edge(body, e, h.point)
+                        && !cuts[first..].iter().any(|x| x.point.distance(h.point) <= 1e-2)
+                        && index[1 - k].point_in_face(faces[1 - k], h.point) != Where::Outside
+                    {
+                        ts.push((h.t, cuts.len()));
+                        cuts.push(Cut {
+                            pair: Name::NONE,
+                            on: CutOn::Edge(side, e),
+                            s,
+                            point: h.point,
                             tol,
                             touch: branches[1],
                         });
