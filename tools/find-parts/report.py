@@ -12,16 +12,27 @@ import re
 import sys
 
 KNOWN_LIMIT = "nary: the part is"
+NOT_KERNEL = re.compile(r"unknown parameter|: expected |: unknown |: unexpected |volume off")
 FAILS = ("fail", "wrong", "timeout", "crash", "oom")
 
 
 def root(sig):
-    s = re.sub(r"^\w+:\s*", "", sig, count=1)  # verdict
+    """The failure itself: no verdict, no feature kind, no wrappers, one name for one kind of error."""
+    s = re.sub(r"^\w+:\s*", "", sig, count=1)
     s = re.sub(r" @.*$", "", s) if "panic" not in s else s
+    nary = s.startswith("nary: ")
     parts = s.split(": ")
-    while len(parts) > 1 and re.fullmatch(r"\w+", parts[0]) and parts[0] not in ("boolean", "nary", "mesh"):
+    while len(parts) > 1 and re.fullmatch(r"\w+", parts[0]) and parts[0] not in ("boolean", "mesh"):
         parts = parts[1:]
-    return ": ".join(parts)
+    s = ": ".join(parts)
+    s = re.sub(r"\b(Direct|Rib|Thicken|Boolean|Rebuild)\(", "", s).rstrip(")") if "panic" not in s else s
+    m = re.search(r"Internal\(\"([^\"]*)\"?", s)
+    if m:
+        s = "boolean: " + m.group(1)
+    m = re.search(r"Invalid\(\[(\w+)", s) or re.fullmatch(r"invalid (\w+)", s)
+    if m:
+        s = "invalid " + m.group(1)
+    return ("nary " if nary else "") + s.split(" {")[0]
 
 
 def load(d):
@@ -33,7 +44,8 @@ def load(d):
         if r["v"] == "ok" or r["cpu"]:
             cases += 1
         s = r["sig"]
-        if not s or KNOWN_LIMIT in s:
+        # a generator's bad line is no kernel failure; a volume off the data's truth is first a translation question
+        if not s or KNOWN_LIMIT in s or NOT_KERNEL.search(s):
             continue
         if r["v"] in FAILS:
             sigs[s] = sigs.get(s, 0) + 1

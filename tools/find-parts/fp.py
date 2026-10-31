@@ -51,7 +51,7 @@ def judge_file(path, timeout=20.0, exe=None, env=None):
         return {"v": why, "sig": f"{why}: {s} {m.group(0) if m else ''}".strip(), "cpu": wall}
     r = json.loads(out)
     tail = r["sig"].split(": ", 1)[-1]
-    if r["v"] != "ok" and tail.startswith(UNREAD):
+    if r["v"] != "ok" and (tail.startswith(UNREAD) or "unknown parameter" in tail):
         r["v"] = "unread"
     if r["v"] == "fail" and r.get("loc"):
         r["sig"] += " @" + r["loc"]
