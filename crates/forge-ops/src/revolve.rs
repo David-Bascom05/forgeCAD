@@ -30,8 +30,10 @@ impl From<ProfileError> for RevolveError {
 
 /// Spins a profile about an axis in its plane by `angle` (2pi for a whole
 /// turn). Lines become planes, cylinders or cones and arcs become spheres or
-/// tori. A whole turn is built from two half-turn faces per segment, so no
-/// face wraps all the way round and no seam edges are needed.
+/// tori. A whole turn of a profile that makes only planes and cylinders gives one face per
+/// segment with the profile's copy at angle 0 as its seam (as an extrude's round walls; the names
+/// the second half-turn had stay as aliases); a profile with a cone, sphere or torus in it gives
+/// two half-turn faces per segment.
 pub fn revolve(profile: &Profile, axis: Axis2, angle: f64, feature: u64) -> Result<Body, RevolveError> {
     if !(angle > tol::ANGULAR && angle <= dmath::TAU + tol::ANGULAR) {
         return Err(RevolveError::BadAngle);
@@ -64,15 +66,26 @@ pub fn revolve(profile: &Profile, axis: Axis2, angle: f64, feature: u64) -> Resu
         dir2,
         perp2: perp2 * side,
         rf,
-        angles: if full {
-            vec![0.0, dmath::PI]
-        } else {
-            vec![0.0, angle]
-        },
+        angles: vec![0.0, if full { dmath::PI } else { angle }],
         full,
         root: Name::feature(feature),
         body: Body::new(),
     };
+    let mut b = b;
+    let flat_or_round = |s: &Segment| {
+        matches!(
+            b.surface_of(s),
+            Ok(None | Some(Surface::Plane(_) | Surface::Cylinder(_)))
+        )
+    };
+    if full
+        && profile
+            .loops
+            .iter()
+            .all(|l| l.segments.iter().all(|(s, _)| flat_or_round(s)))
+    {
+        b.angles = vec![0.0];
+    }
     for l in &profile.loops {
         for (s, _) in &l.segments {
             for p in s.samples(32) {
@@ -153,7 +166,7 @@ impl Revolver<'_> {
         if k + 1 < self.angles.len() {
             self.angles[k + 1]
         } else {
-            dmath::TAU
+            self.angles[0] + dmath::TAU
         }
     }
     fn next_copy(&self, k: usize) -> usize {
@@ -281,7 +294,10 @@ impl Revolver<'_> {
         // vertices per copy; a vertex on the axis is one vertex for every copy
         let mut vid: Vec<Vec<VertexId>> = vec![Vec::new(); copies];
         for (i, &p) in pverts.iter().enumerate() {
-            if self.on_axis(p) {
+            if self.on_axis(p) && copies == 1 {
+                // a whole-turn disc has no seam to end there: nothing uses the vertex
+                vid[0].push(VertexId(u32::MAX));
+            } else if self.on_axis(p) {
                 let v = self
                     .body
                     .add_vertex(self.point3(p), self.root.with_str("pole").with(pvert_name[i]));
@@ -305,8 +321,10 @@ impl Revolver<'_> {
         for s in &segs {
             let surface = self.surface_of(&s.seg)?;
             let mut shared: Option<EdgeId> = None;
+            // a whole-turn disc or ring has no seam: just its circles
+            let seamless = copies == 1 && matches!(surface, Some(Surface::Plane(_)));
             for k in 0..copies {
-                if surface.is_none() && self.full {
+                if (surface.is_none() && self.full) || seamless {
                     eid[k].push(None);
                     continue;
                 }
@@ -358,8 +376,24 @@ impl Revolver<'_> {
             };
             for k in 0..self.spans() {
                 let k1 = self.next_copy(k);
-                let mut uses: Vec<(EdgeId, bool)> =
-                    vec![(eid[k][si].expect("segment has a face"), s.forward)];
+                let (same_sense, flip) = self.orientation(&s.seg, &surface, self.angles[k], self.span_end(k));
+                let name = self.root.with_str("side").with(s.id).with(k as u64);
+                let face = self.body.add_face(shell, surface.clone(), same_sense, name);
+                let Some(first) = eid[k][si] else {
+                    // a whole-turn disc or ring: each circle a loop of its own, the outer first
+                    let mut rims = [
+                        (sid[k][s.end], true, pverts[s.end]),
+                        (sid[k][s.start], false, pverts[s.start]),
+                    ];
+                    rims.sort_by(|a, b| self.hr(b.2).1.total_cmp(&self.hr(a.2).1));
+                    for (e, fwd, _) in rims {
+                        if let Some(e) = e {
+                            self.body.add_loop(face, &[(e, fwd != flip)]);
+                        }
+                    }
+                    continue;
+                };
+                let mut uses: Vec<(EdgeId, bool)> = vec![(first, s.forward)];
                 if let Some(e) = sid[k][s.end] {
                     uses.push((e, true));
                 }
@@ -367,12 +401,9 @@ impl Revolver<'_> {
                 if let Some(e) = sid[k][s.start] {
                     uses.push((e, false));
                 }
-                let (same_sense, flip) = self.orientation(&s.seg, &surface, self.angles[k], self.span_end(k));
                 if flip {
                     uses = uses.into_iter().rev().map(|(e, f)| (e, !f)).collect();
                 }
-                let name = self.root.with_str("side").with(s.id).with(k as u64);
-                let face = self.body.add_face(shell, surface.clone(), same_sense, name);
                 self.body.add_loop(face, &uses);
             }
         }
@@ -380,6 +411,20 @@ impl Revolver<'_> {
         if !self.full {
             self.add_cap(shell, 0, &segs, &eid, &loop_ranges);
             self.add_cap(shell, 1, &segs, &eid, &loop_ranges);
+        }
+        if copies == 1 {
+            // what the second half-turn was named finds the whole
+            let root = self.root;
+            for s in &segs {
+                let side = root.with_str("side").with(s.id);
+                let copy = |k: u64| root.with_str("copy").with(k).with(s.id);
+                let sweep = |k: u64| root.with_str("sweep").with(k).with(s.id);
+                self.body.joins.aliases.extend([
+                    (side.with(1), side.with(0)),
+                    (copy(1), copy(0)),
+                    (sweep(1), sweep(0)),
+                ]);
+            }
         }
         Ok(self.body)
     }
@@ -524,6 +569,11 @@ mod tests {
         let b = revolve(&profile(vec![rect]), Y_AXIS, dmath::TAU, 1).unwrap();
         valid(&b);
         assert_eq!(genus(&b), 0);
+        // whole faces with a seam: two discs and a wall; the second half's name finds the wall
+        assert_eq!(b.faces.len(), 3);
+        let wall = Name::feature(1).with_str("side").with(1);
+        assert!(b.face_by_name(wall.with(0)).is_some());
+        assert_eq!(b.face_by_name(wall.with(1)), b.face_by_name(wall.with(0)));
         let tri = ProfileLoop::new(vec![
             (
                 Segment::Line {

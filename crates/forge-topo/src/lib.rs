@@ -10,8 +10,8 @@ pub mod small;
 pub mod uv;
 
 pub use body::{
-    Body, Coedge, CoedgeId, Coedges, Edge, EdgeId, Face, FaceId, Loop, LoopId, Shell, ShellId, Unlinked,
-    Vertex, VertexId,
+    Body, Coedge, CoedgeId, Coedges, Edge, EdgeId, Face, FaceId, Joins, Loop, LoopId, Shell, ShellId,
+    Unlinked, Vertex, VertexId,
 };
 pub use check::{Problem, certify, check, genus};
 pub use name::Name;

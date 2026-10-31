@@ -2228,12 +2228,15 @@ fn nary_body(
         .filter_map(|&p| Some((p, (list[p].side?, list[p].of?))))
         .collect();
     let keys: Vec<(Side, EdgeId)> = split.iter().map(|x| x.1).collect();
+    let mut wholes = Vec::new();
     for (&(p, (sd, e)), sole) in split.iter().zip(crate::boolean::alone(&keys)) {
         let edge = tools[sd].edge(e).name;
         list[p].name = if sole {
             edge
         } else {
-            crate::boolean::piece_name(edge, &list[p], &vname)
+            let n = crate::boolean::piece_name(edge, &list[p], &vname);
+            wholes.push((n, edge));
+            n
         };
     }
     let split: Vec<usize> = kept
@@ -2247,7 +2250,9 @@ fn nary_body(
         regs[ri].name = if sole {
             face
         } else {
-            crate::boolean::region_name(face, &regs[ri].loops, &list)
+            let n = crate::boolean::region_name(face, &regs[ri].loops, &list);
+            wholes.push((n, face));
+            n
         };
     }
     let mut out = Body::new();
@@ -2261,6 +2266,10 @@ fn nary_body(
     out.coedges.reserve_exact(uses);
     out.edges.reserve_exact(uses / 2);
     out.vertices.reserve_exact(uses / 2);
+    for t in tools {
+        out.joins.extend(&t.joins);
+    }
+    out.joins.pieces.extend(wholes);
     let shell = out.add_shell();
     // the body's vertex of each tool vertex (per tool, made on first use) and each new one
     let mut old_v: Vec<Vec<Option<VertexId>>> = vec![Vec::new(); n];

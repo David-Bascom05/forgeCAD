@@ -729,7 +729,10 @@ fn a_deleted_id_is_never_used_again() {
     let block =
         "extrude 5 rect 0 0 20 10\nextrude 5 at 0 0 5 rect 0 0 5 5\nextrude 5 at 10 0 5 rect 0 0 5 5\n";
     let mut m = built(block);
-    let (b, ents) = m.select("edges of f3 along +z", None).expect("selects");
+    // a wall edge of f3's own (its front is joined with the base's, whose edges count as f3's too)
+    let (b, ents) = m
+        .select("edges of f3 along +z near 15 5 7.5", None)
+        .expect("selects");
     let old = format!("@{:016x}", select::name(b, ents[0]).0);
     let last = m.doc.features().nth(2).expect("a line").id;
     m.edit(Edit::Delete { item: last }).expect("delete");

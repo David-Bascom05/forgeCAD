@@ -179,11 +179,45 @@ pub struct Shell {
     pub faces: Vec<FaceId>,
 }
 
+/// Names of faces and edges merged into another (alias, the name it went to), so a reference to
+/// a merged piece still finds the whole; the face or edge each piece a boolean split off came
+/// from (piece, whole), so pieces joined again take the whole's name; and edges between faces on
+/// one surface that a feature made on purpose (a split face), which unifying leaves.
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct Joins {
+    pub aliases: Vec<(Name, Name)>,
+    pub pieces: Vec<(Name, Name)>,
+    pub kept: Vec<Name>,
+}
+
+impl Joins {
+    pub fn extend(&mut self, other: &Joins) {
+        self.aliases.extend_from_slice(&other.aliases);
+        self.pieces.extend_from_slice(&other.pieces);
+        self.kept.extend_from_slice(&other.kept);
+    }
+
+    /// Every name passed through `rename`.
+    pub fn renamed(&self, rename: impl Fn(Name) -> Name) -> Joins {
+        Joins {
+            aliases: self
+                .aliases
+                .iter()
+                .map(|&(x, y)| (rename(x), rename(y)))
+                .collect(),
+            pieces: self.pieces.iter().map(|&(x, y)| (rename(x), rename(y))).collect(),
+            kept: self.kept.iter().map(|&n| rename(n)).collect(),
+        }
+    }
+}
+
 /// A solid: one or more closed shells (an outer skin, plus inner ones for voids).
 #[derive(Clone, Debug, Default, PartialEq)]
 pub struct Body {
-    /// Faces removed by in-place edits and not yet compacted away.
+    /// Faces (and edges) removed by in-place edits and not yet compacted away.
     pub dead: usize,
+    /// What `forge_bool::unify` must know beyond the entities: merged names and kept edges.
+    pub joins: Joins,
     pub vertices: Vec<Vertex>,
     pub edges: Vec<Edge>,
     pub coedges: Vec<Coedge>,
@@ -253,6 +287,17 @@ impl Body {
         (0..self.loops.len() as u32)
             .map(LoopId)
             .filter(|l| self.faces[self.loops[l.index()].face.index()].alive)
+    }
+
+    /// Drops what is cached of a face whose loops changed: its box, its queries and its run's hulls.
+    pub fn face_changed(&mut self, f: FaceId) {
+        let face = &mut self.faces[f.index()];
+        face.bbox.clear();
+        face.query.clear();
+        if let Some(h) = self.hulls.get_mut() {
+            h.chunks[f.index() / RUN].clear();
+            h.blocks[f.index() / (RUN * RUN)].clear();
+        }
     }
 
     /// Removes a face (and its loops) in place. Edges left with no uses die
@@ -334,11 +379,119 @@ impl Body {
     /// A copy holding only live entities, densely numbered, with shells
     /// regrouped by connectivity.
     pub fn compact(&self) -> Body {
+        self.compact_by(&self.connected())
+    }
+
+    /// `compact` of a body no longer needed: the arenas' lists are reused, not copied.
+    pub fn into_compact(self) -> Body {
         let group = self.connected();
+        self.compact_owned(|f, _| group[f], group.len())
+    }
+
+    /// `into_compact`, each face kept in its shell, for edits that join faces of one shell but
+    /// never part or join shells.
+    pub fn compact_in_shells(self) -> Body {
+        let n = self.shells.len();
+        self.compact_owned(|_, s| s, n)
+    }
+
+    /// The live entities densely numbered, faces with one `group` value (of `groups`, from a
+    /// face's index and its shell's) in one shell, made from this body's own lists.
+    fn compact_owned(mut self, group: impl Fn(usize, usize) -> usize, groups: usize) -> Body {
+        const NONE: u32 = u32::MAX;
+        let mut vmap = vec![NONE; self.vertices.len()];
+        let mut emap = vec![NONE; self.edges.len()];
+        let mut smap = vec![NONE; groups];
+        let mut out = Body {
+            dead: 0,
+            joins: std::mem::take(&mut self.joins),
+            vertices: Vec::with_capacity(self.vertices.len()),
+            edges: Vec::with_capacity(self.edges.len()),
+            coedges: Vec::with_capacity(self.coedges.len()),
+            loops: Vec::with_capacity(self.loops.len()),
+            faces: Vec::with_capacity(self.faces.len()),
+            shells: Vec::new(),
+            hulls: Cached::default(),
+        };
+        for (i, mut face) in std::mem::take(&mut self.faces).into_iter().enumerate() {
+            if !face.alive {
+                continue;
+            }
+            let nf = FaceId(out.faces.len() as u32);
+            let g = group(i, face.shell.index());
+            if smap[g] == NONE {
+                smap[g] = out.shells.len() as u32;
+                out.shells.push(Shell { faces: Vec::new() });
+            }
+            out.shells[smap[g] as usize].faces.push(nf);
+            face.shell = ShellId(smap[g]);
+            face.query = Cached::default();
+            for l in face.loops.iter_mut() {
+                let cs = self.loops[l.index()].coedges();
+                let nl = LoopId(out.loops.len() as u32);
+                let first = out.coedges.len() as u32;
+                for c in cs {
+                    let Coedge { edge, forward, .. } = self.coedges[c.index()];
+                    let oe = edge.index();
+                    if emap[oe] == NONE {
+                        emap[oe] = out.edges.len() as u32;
+                        let x = &mut self.edges[oe];
+                        let mut vert = |v: VertexId| {
+                            if vmap[v.index()] == NONE {
+                                vmap[v.index()] = out.vertices.len() as u32;
+                                let w = &self.vertices[v.index()];
+                                out.vertices.push(Vertex {
+                                    tol: w.tol.max(forge_math::tol::LINEAR),
+                                    ..w.clone()
+                                });
+                            }
+                            VertexId(vmap[v.index()])
+                        };
+                        let (start, end) = (vert(x.start), vert(x.end));
+                        out.edges.push(Edge {
+                            curve: x.curve.clone(),
+                            range: x.range,
+                            start,
+                            end,
+                            coedges: Small::default(),
+                            name: x.name,
+                            alive: true,
+                            bbox: Cached::default(),
+                        });
+                    }
+                    let nc = CoedgeId(out.coedges.len() as u32);
+                    out.coedges.push(Coedge {
+                        edge: EdgeId(emap[oe]),
+                        forward,
+                        lp: nl,
+                    });
+                    out.edges[emap[oe] as usize].coedges.push(nc);
+                }
+                out.loops.push(Loop {
+                    first,
+                    len: cs.len() as u32,
+                    face: nf,
+                });
+                *l = nl;
+            }
+            out.faces.push(face);
+        }
+        out
+    }
+
+    /// A compacted copy, faces with one `group` value in one shell.
+    fn compact_by(&self, group: &[usize]) -> Body {
         let mut out = Body::new();
+        out.joins = self.joins.clone();
+        out.vertices.reserve(self.vertices.len());
+        out.edges.reserve(self.edges.len());
+        out.coedges.reserve(self.coedges.len());
+        out.loops.reserve(self.loops.len());
+        out.faces.reserve(self.faces.len());
+        let mut uses = Vec::new();
         let mut vmap: Vec<Option<VertexId>> = vec![None; self.vertices.len()];
         let mut emap: Vec<Option<EdgeId>> = vec![None; self.edges.len()];
-        let mut smap: Vec<Option<ShellId>> = vec![None; self.faces.len()];
+        let mut smap: Vec<Option<ShellId>> = vec![None; self.faces.len().max(self.shells.len())];
         for f in self.face_ids() {
             let face = self.face(f);
             let shell = *smap[group[f.index()]].get_or_insert_with(|| out.add_shell());
@@ -347,7 +500,7 @@ impl Body {
                 out.faces[nf.index()].bbox.set(*b);
             }
             for &l in &face.loops {
-                let mut uses = Vec::with_capacity(self.lp(l).coedges().len());
+                uses.clear();
                 for c in self.lp(l).coedges() {
                     let co = self.coedge(c);
                     let e = match emap[co.edge.index()] {
@@ -416,6 +569,7 @@ impl Body {
             faces: x.faces.iter().map(|k| FaceId(k.0 + f)).collect(),
         }));
         self.dead += other.dead;
+        self.joins.extend(&other.joins);
     }
 
     pub fn add_vertex(&mut self, point: Point3, name: Name) -> VertexId {
@@ -477,6 +631,62 @@ impl Body {
             h.blocks[id.index() / (RUN * RUN)].clear();
         }
         id
+    }
+
+    /// Loop `lp` (or, with None, a new loop of face `f` the caller puts on it) made of coedges
+    /// `cs`, each now in some loop being remade or this one, as a new run of coedges: each edge's
+    /// use moves to the copy. The old run stays in the arena until compaction.
+    pub fn relink_loop(&mut self, lp: Option<LoopId>, f: FaceId, cs: &[CoedgeId]) -> LoopId {
+        let l = lp.unwrap_or_else(|| {
+            self.loops.push(Loop {
+                first: 0,
+                len: 0,
+                face: f,
+            });
+            LoopId(self.loops.len() as u32 - 1)
+        });
+        let first = self.coedges.len() as u32;
+        for &c in cs {
+            let n = CoedgeId(self.coedges.len() as u32);
+            let Coedge { edge, forward, .. } = self.coedges[c.index()];
+            self.coedges.push(Coedge { edge, forward, lp: l });
+            for x in self.edges[edge.index()].coedges.iter_mut() {
+                if *x == c {
+                    *x = n;
+                }
+            }
+        }
+        self.loops[l.index()] = Loop {
+            first,
+            len: cs.len() as u32,
+            face: f,
+        };
+        l
+    }
+
+    /// Keeps only the coedges of loop `lp` that `keep` says, in order, in place: those after a
+    /// dropped one move down its run (their edges told), the dropped ones leave their edges.
+    pub fn retain_loop(&mut self, lp: LoopId, keep: impl Fn(&Body, CoedgeId) -> bool) {
+        let Loop { first, len, .. } = self.loops[lp.index()];
+        let mut to = first;
+        for at in first..first + len {
+            let c = CoedgeId(at);
+            let e = self.coedges[at as usize].edge.index();
+            if !keep(self, c) {
+                self.edges[e].coedges.retain(|&x| x != c);
+                continue;
+            }
+            if to != at {
+                self.coedges[to as usize] = self.coedges[at as usize].clone();
+                for x in self.edges[e].coedges.iter_mut() {
+                    if *x == c {
+                        *x = CoedgeId(to);
+                    }
+                }
+            }
+            to += 1;
+        }
+        self.loops[lp.index()].len = to - first;
     }
 
     /// Adds a loop to `face` made of the given (edge, forward) uses, in order.
@@ -716,10 +926,26 @@ impl Body {
     }
 
     pub fn face_by_name(&self, name: Name) -> Option<FaceId> {
-        self.face_ids().find(|&f| self.face(f).name == name)
+        self.by_name(name, |n| self.face_ids().find(|&f| self.face(f).name == n))
     }
     pub fn edge_by_name(&self, name: Name) -> Option<EdgeId> {
-        self.edge_ids().find(|&e| self.edge(e).name == name)
+        self.by_name(name, |n| self.edge_ids().find(|&e| self.edge(e).name == n))
+    }
+
+    /// `find` of `name`, else of the names it went to, in turn.
+    fn by_name<T>(&self, mut name: Name, find: impl Fn(Name) -> Option<T>) -> Option<T> {
+        for _ in 0..=self.joins.aliases.len() {
+            if let Some(x) = find(name) {
+                return Some(x);
+            }
+            name = self.alias(name)?;
+        }
+        None
+    }
+
+    /// The name a merged entity's `name` went to.
+    pub fn alias(&self, name: Name) -> Option<Name> {
+        self.joins.aliases.iter().rev().find(|a| a.0 == name).map(|a| a.1)
     }
 }
 

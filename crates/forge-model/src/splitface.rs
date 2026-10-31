@@ -18,7 +18,7 @@ pub(crate) fn split(body: &Body, faces: &[Name], by: &Surface, id: u64) -> Resul
         let f = b.face_by_name(name).ok_or(BodyError::NoFace { name })?;
         split_one(&mut b, f, by, root.with(k as u64))?;
     }
-    Ok(b.compact())
+    Ok(b.into_compact())
 }
 
 /// Where the cutter crosses the face's boundary: at a vertex, or inside an edge.
@@ -226,6 +226,8 @@ fn split_one(b: &mut Body, f: FaceId, by: &Surface, root: Name) -> Result<(), Bo
     let mut ring: Option<EdgeId> = None;
     for (k, &(ci, range, ends)) in chords.iter().enumerate() {
         let n = root.with_str("edge").with(k as u64);
+        // a split on purpose: unifying leaves it (and its pieces)
+        b.joins.kept.push(n);
         match ends {
             Some((s, t)) => {
                 let (vs, vt) = (vert[&s], vert[&t]);

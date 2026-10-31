@@ -70,7 +70,14 @@ fn work_features_follow_their_ids() {
 fn names(b: &Body) -> Vec<Name> {
     let mut out: Vec<Name> = b.face_ids().map(|f| b.face(f).name).collect();
     out.extend(b.edge_ids().map(|e| b.edge(e).name));
-    out.extend(b.vertex_ids().map(|v| b.vertex(v).name));
+    // (vertices that still end a live edge: the n-ary result keeps tombstones until compacted)
+    let mut vs: Vec<_> = b
+        .edge_ids()
+        .flat_map(|e| [b.edge(e).start, b.edge(e).end])
+        .collect();
+    vs.sort_unstable_by_key(|v| v.index());
+    vs.dedup();
+    out.extend(vs.into_iter().map(|v| b.vertex(v).name));
     out.sort();
     out
 }

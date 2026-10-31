@@ -50,10 +50,12 @@ pub struct Model {
 /// From a font's name in the part file to the font.
 pub type Fonts = dyn Fn(&str) -> Result<Arc<forge_font::Font>, String>;
 
-/// The bodies after a line, and (with more than one) all of them as one body to look at.
+/// The bodies after a line, as the next line builds on them; all of them as one body to look at
+/// (finished: faces on one surface joined); and as one body unfinished, to trace faces through.
 struct Stage {
     solids: Vec<Solid>,
     view: OnceCell<Joined>,
+    work: OnceCell<Body>,
 }
 
 /// Bodies as one, with each body's id and where its faces, edges and vertices end in it.
@@ -63,22 +65,49 @@ fn stage_body(stages: &[Stage], n: usize) -> Option<&Body> {
     let s = stages.get(n.checked_sub(1)?)?;
     match &s.solids[..] {
         [] => None,
-        [one] => Some(&one.body),
         _ => Some(&s.view().0),
     }
 }
 
 impl Stage {
+    fn new(solids: Vec<Solid>) -> Stage {
+        Stage {
+            solids,
+            view: OnceCell::new(),
+            work: OnceCell::new(),
+        }
+    }
+
     fn view(&self) -> &Joined {
         self.view.get_or_init(|| {
+            if let [one] = &self.solids[..] {
+                let b = forge_model::finish(one.body.clone());
+                let ends = vec![(one.id, [b.faces.len(), b.edges.len(), b.vertices.len()])];
+                return (b, ends);
+            }
             let mut all = Body::new();
             let mut ends = Vec::new();
             for s in &self.solids {
-                all.append(&s.body.compact());
+                all.append(&forge_model::finish(s.body.clone()));
                 ends.push((s.id, [all.faces.len(), all.edges.len(), all.vertices.len()]));
             }
             (all, ends)
         })
+    }
+
+    /// The bodies as one, unfinished: the pieces each feature made, for tracing them.
+    fn work(&self) -> Option<&Body> {
+        match &self.solids[..] {
+            [] => None,
+            [one] => Some(&one.body),
+            _ => Some(self.work.get_or_init(|| {
+                let mut all = Body::new();
+                for s in &self.solids {
+                    all.append(&s.body.compact());
+                }
+                all
+            })),
+        }
     }
 }
 
@@ -361,17 +390,10 @@ impl Model {
                 self.stages[i - 1].solids.clone()
             };
             match step_solids(History::new(&self.features, Some(&ids[..=i])), i, before) {
-                Ok(solids) => self.stages.push(Stage {
-                    solids,
-                    view: OnceCell::new(),
-                }),
+                Ok(solids) => self.stages.push(Stage::new(solids)),
                 Err(e) => {
                     let (msg, hint) = explain(&e);
                     let msg = match self.body_after(i) {
-                        // a fillet works on the part compacted
-                        Some(b) if b.dead > 0 && matches!(e, RegenError::Fillet { .. }) => {
-                            with_handles(&msg, &b.compact())
-                        }
                         Some(b) => with_handles(&msg, b),
                         None => msg,
                     };
@@ -551,8 +573,9 @@ impl Model {
         let mut origins = self.origins.borrow_mut();
         while origins.len() < n {
             let k = origins.len();
-            let prev = self.body_after(k);
-            let copied = match (&self.features[k], self.body_after(k + 1), prev) {
+            let work = |n: usize| self.stages.get(n.checked_sub(1)?)?.work();
+            let prev = work(k);
+            let copied = match (&self.features[k], work(k + 1), prev) {
                 (Feature::Pattern { of, layout }, Some(b), Some(pb)) => {
                     let from = |c: &Vec<usize>| match of {
                         Source::Body => true,
@@ -564,7 +587,7 @@ impl Model {
                 }
                 _ => HashMap::new(),
             };
-            let o = match self.body_after(k + 1) {
+            let o = match work(k + 1) {
                 None => HashMap::new(),
                 Some(b) => select::lineage(b, prev.map(|p| (p, &origins[k - 1])), k, &copied),
             };
@@ -611,7 +634,17 @@ impl Model {
     pub fn select(&self, sel: &str, n: Option<usize>) -> Result<(&Body, Vec<Ent>), String> {
         let n = n.unwrap_or(self.built()).min(self.built());
         let body = self.body_after(n).ok_or("no part yet")?;
-        let origin = self.origin(n);
+        // a joined face was made by every feature that made one of its pieces
+        let mut origin = self.origin(n);
+        for &(piece, whole) in &body.joins.aliases {
+            if let Some(mut o) = origin.get(&piece).cloned() {
+                let w = origin.entry(whole).or_default();
+                o.append(w);
+                o.sort_unstable();
+                o.dedup();
+                *w = o;
+            }
+        }
         let feat = |r: &str| self.feat(n, r);
         let body_of = |e: Ent| self.body_of(n, e);
         let ents = select::select(
@@ -827,6 +860,91 @@ mod tests {
 
     fn finished(m: &Model) -> Body {
         m.body().expect("built").compact()
+    }
+
+    /// A boss on a block, and the same moved by an inexact rotation: a boolean leaves a vertex
+    /// between two pieces of one line in one and not the other; unify takes it out on every face,
+    /// so both have the same vertices and edges (forgecad-gate/repros M1).
+    #[test]
+    fn no_vertex_left_between_pieces_of_one_line() {
+        let counts = |src: &str| {
+            let m = Model::new(src);
+            assert!(m.error.is_none(), "{:?}", m.error);
+            let b = finished(&m);
+            (b.vertices.len(), b.edge_ids().count())
+        };
+        let placed = counts(
+            "extrude new 17 rect 0 0 82 138\n\
+         extrude add 15.625457658136117 axes 0.6111332437811676 0.7772515422987627 -0.14965359447638588 -0.7694654469826927 0.6277120352052737 0.11790049515662869 0.18557770406283436 0.04310035791786255 0.9816838976483822 at 76.92553480349156 114.11085208111551 9.80044547195848 rrect -7.706843451315201 -3.8327248781946053 15.413686902630403 7.665449756389211 2.6191965533564114\n",
+        );
+        let moved = counts(
+            "extrude new 17 axes 0.49940546967895366 0.5243757431629014 0.6896551724137931 -0.8149821640903687 0.014268727705112894 0.5793103448275863 0.29393579072532705 -0.8513674197384067 0.43448275862068964 at 4 65 93 rect 0 0 82 138\n\
+         extrude add 15.625457658136117 axes -0.3722314069655698 0.4589640340786829 0.8067191550289692 -0.8611941905585102 -0.49490900383953673 -0.11580001755971503 0.3461045301880708 -0.7378462531861086 0.5794778346429791 at -47.70057464716051 98.62232118358013 216.4158146199741 rrect -7.706843451315201 -3.8327248781946053 15.413686902630403 7.665449756389211 2.6191965533564114\n",
+        );
+        assert_eq!(placed, moved);
+        assert_eq!(placed, (28, 42));
+    }
+
+    /// Two blocks joined into an L: faces on one plane are one face, as in the agents' trial
+    /// (forgecad-gate/repros/union-coplanar-faces-unmerged.fc).
+    #[test]
+    fn an_l_of_two_blocks_has_eight_faces() {
+        let src = "extrude 5 rect 0 0 60 40\nextrude 5 xz at 0 5 0 rect 0 0 60 40\n";
+        let m = Model::new(src);
+        let b = finished(&m);
+        assert!(forge_topo::check(&b).is_empty(), "{:?}", forge_topo::check(&b));
+        assert_eq!((b.face_ids().count(), b.edge_ids().count()), (8, 18));
+    }
+
+    /// A block flush with both faces of a disc (a conrod's bolt boss), two blind cuts ending on
+    /// one plane, and two pads flush with a box: the sequential and n-ary regens give the same
+    /// faces, the flush ends one face each, and a chamfer there builds (forgecad-gate/repros
+    /// R36, R26, M3, R30).
+    #[test]
+    fn flush_ends_are_one_face_both_ways() {
+        let disc = "big: extrude sym 22 xz circle 0 0 31\nb: extrude sym 22 xz rect 26 -24 16 46\n";
+        let cases = [
+            (disc.to_string(), 8),
+            (
+                "big: extrude sym 22 xz circle 0 0 31\nbx: extrude sym 22 xz rect 20 -10 30 20\n\
+                 bigbore: hole 48 xz at 0 11 0 thru\nchamfer 1 (edges of bigbore circle)\n"
+                    .to_string(),
+                0,
+            ),
+            (
+                "extrude new 80 rect 0 0 200 150\nextrude cut 13 yz at 6 28 45 circle 0 0 2\n\
+                 extrude cut 9 yz at 6 26 45 circle 0 0 1\n"
+                    .to_string(),
+                11,
+            ),
+            // the box's bottom split twice in seq, once in n-ary: one original either way (R30)
+            (
+                "box: extrude 95 rect -120 -65 240 130\na: extrude 16 rect -96 -93 44 34\n\
+                 b: extrude 16 rect 52 -93 44 34\n"
+                    .to_string(),
+                14,
+            ),
+        ];
+        for (src, faces) in cases {
+            let m = Model::new(&src);
+            assert!(m.error.is_none(), "{src}: {:?}", m.error);
+            let seq = finished(&m);
+            let part = Part {
+                features: m.features.clone(),
+            };
+            let nary = part.regenerate_nary(1).expect("n-ary").compact();
+            assert!(forge_topo::check(&nary).is_empty(), "{src}");
+            // the same faces, by name
+            let names = |b: &Body| {
+                let mut n: Vec<Name> = b.face_ids().map(|f| b.face(f).name).collect();
+                n.sort();
+                n
+            };
+            assert_eq!(names(&seq), names(&nary), "{src}");
+            if faces > 0 {
+                assert_eq!(seq.face_ids().count(), faces, "{src}");
+            }
+        }
     }
 
     /// The part file's ribs, offsets, thickenings and direct edits, picked by selectors.

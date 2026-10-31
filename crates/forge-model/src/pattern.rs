@@ -363,6 +363,7 @@ fn surface(m: &Motion, s: &Surface) -> Result<Surface, PatternError> {
 /// solid inside out, so its loops are walked the other way.
 pub(crate) fn moved(b: &Body, m: &Motion, rename: impl Fn(Name) -> Name) -> Result<Body, PatternError> {
     let mut out = Body::new();
+    out.joins = b.joins.renamed(&rename);
     let mut vmap: Vec<Option<VertexId>> = vec![None; b.vertices.len()];
     let mut emap: Vec<Option<EdgeId>> = vec![None; b.edges.len()];
     let mut smap: Vec<Option<ShellId>> = vec![None; b.shells.len()];

@@ -127,7 +127,8 @@ top bottom left right front back   near X Y Z              keep the extreme ones
 Commands (a few lines of text; `--json` for JSON):
 ```
 forgecad build F                    ok, or error at file line N + hint; exact volume, area; bbox; bodies
-forgecad query F SEL [--at FEAT]    @d644 line -x len=60 at 0,20,40  (round: axis, centre; halves share a line; body=FEAT)
+forgecad query F SEL [--at FEAT]    @d644 line -x len=60 at 0,20,40   (round: axis, centre; body=FEAT;
+                                    faces on one surface are one face; alike ones share a line)
 forgecad measure F REF [REF]        area|length radius centre; two: closest distance, angle, axes
 forgecad measure F mass|wall        exact volume area centroid inertia (+ principal); thinnest wall anywhere
 forgecad render F [VIEW] [--labels SEL] [--px 400] [-o F.png]   VIEW: iso (default) front top right.. px: long side

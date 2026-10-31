@@ -421,7 +421,7 @@ fn up_to_surfaces_by_hand() {
         assert!((v - want).abs() <= 1e-9 * want, "{name}: volume {v} want {want}");
         let nary = last(part.regenerate_nary_solids(4)).unwrap_or_else(|e| panic!("{name} nary: {e:?}"));
         assert!(check(&nary).is_empty(), "{name} nary");
-        assert_eq!(nary.faces.len(), seq.faces.len(), "{name}");
+        assert_eq!(nary.face_ids().count(), seq.faces.len(), "{name}");
         assert!((volume(&nary) - v).abs() <= 1e-9 * v, "{name} nary volume");
     }
 }

@@ -323,14 +323,16 @@ fn check_sides(body: &Body, out: &mut Vec<Problem>) {
                     })
                     .fold(f64::INFINITY, f64::min);
                 let step = step.min(0.25 * clearance);
-                let probe = surface.project(d.p + inward * step);
-                let probe = unwrap_near(body, f, probe, mid_uv);
-                if !point_in_loops(probe, &loops)
-                    && !point_in_loops(
-                        probe,
-                        fine.get_or_init(|| face_uv_loops_with(body, f, |e| 8 * default_segments(e))),
-                    )
-                {
+                let inside = |step: f64| {
+                    let probe = surface.project(d.p + inward * step);
+                    let probe = unwrap_near(body, f, probe, mid_uv);
+                    point_in_loops(probe, &loops)
+                        || point_in_loops(
+                            probe,
+                            fine.get_or_init(|| face_uv_loops_with(body, f, |e| 8 * default_segments(e))),
+                        )
+                };
+                if ![1.0, 0.1, 0.01].iter().any(|&k| inside(k * step)) {
                     out.push(Problem::FaceWrongSide { face: f, coedge: c });
                 }
             }

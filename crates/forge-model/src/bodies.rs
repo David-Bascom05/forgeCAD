@@ -216,7 +216,7 @@ fn finish(mut solids: Vec<Solid>) -> Result<Vec<Solid>, RegenError> {
         return Err(RegenError::NothingToCombine { feature: 0 });
     }
     for s in &mut solids {
-        s.body = s.body.compact();
+        s.body = crate::finish(std::mem::take(&mut s.body));
     }
     Ok(solids)
 }
@@ -427,14 +427,14 @@ fn add_tools(mut b: Body, ts: &[Tool], (i, id): (usize, u64), salt: Option<u64>)
     if let [tool] = &bodies[..] {
         boolean_into(&mut b, tool, op_of(ts[0].1), bool_id(id, n)).map_err(err)?;
         if b.dead > b.faces.len() / 2 {
-            b = b.compact();
+            b = b.into_compact();
         }
         return Ok(b);
     }
     if bodies.is_empty() {
         return Ok(b);
     }
-    let base = if b.dead > 0 { b.compact() } else { b };
+    let base = if b.dead > 0 { b.into_compact() } else { b };
     let mut all = vec![&base];
     all.extend(bodies);
     let ops: Vec<Op> = ts.iter().map(|t| op_of(t.1)).collect();

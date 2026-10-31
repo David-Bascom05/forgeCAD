@@ -738,6 +738,7 @@ fn heal(base: &Body, gone: &[bool], dropped: &[LoopId], strips: &[Strip]) -> R<H
         joined.push(s1);
     }
     let mut out = Body::new();
+    out.joins = base.joins.clone();
     for v in &base.vertices {
         out.add_vertex(v.point, v.name);
     }
@@ -803,7 +804,7 @@ fn heal(base: &Body, gone: &[bool], dropped: &[LoopId], strips: &[Strip]) -> R<H
         }
     }
     rebuild_some(&mut out, &verts, &edges).map_err(DirectError::Rebuild)?;
-    let out = out.compact();
+    let out = out.into_compact();
     let changed: Vec<bool> = out
         .faces
         .iter()

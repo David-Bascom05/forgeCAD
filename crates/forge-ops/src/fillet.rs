@@ -1655,7 +1655,7 @@ impl Builder {
         if let Some(s) = self.setbacks.iter().find(|s| !self.set_back.contains(&s.0)) {
             return Err(FilletError::Corner { vertex: s.0 });
         }
-        Ok(self.body.compact())
+        Ok(self.body.into_compact())
     }
 
     fn next_in_loop(&self, c: CoedgeId) -> CoedgeId {

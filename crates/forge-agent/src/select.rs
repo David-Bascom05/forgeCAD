@@ -142,10 +142,22 @@ pub fn handles(body: &Body) -> HashMap<Name, String> {
 /// The entity a handle (`@` and a unique prefix of its name's hex) names.
 pub fn by_handle(body: &Body, h: &str) -> Result<Ent, String> {
     let p = h.strip_prefix('@').unwrap_or(h).to_ascii_lowercase();
-    let hits: Vec<Ent> = all(body)
+    let mut hits: Vec<Ent> = all(body)
         .into_iter()
         .filter(|&e| format!("{:016x}", name(body, e).0).starts_with(&p))
         .collect();
+    if hits.is_empty() {
+        // a piece since joined into a whole
+        for &(piece, _) in &body.joins.aliases {
+            if format!("{:016x}", piece.0).starts_with(&p) {
+                let e = match body.face_by_name(piece) {
+                    Some(f) => Some(Ent::Face(f)),
+                    None => body.edge_by_name(piece).map(Ent::Edge),
+                };
+                hits.extend(e.filter(|e| !hits.contains(e)));
+            }
+        }
+    }
     match hits[..] {
         [e] => Ok(e),
         [] => Err(format!("no entity {h} on the part here")),

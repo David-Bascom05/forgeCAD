@@ -488,7 +488,7 @@ fn strip(body: &Body, fa: FaceId, band: &[FaceId], fb: FaceId, radius: Option<f6
         }
         _ => return Err(err),
     }
-    Ok(out.compact())
+    Ok(out.into_compact())
 }
 
 /// A strip closing round on itself (a ring's top between two coaxial walls): each of its two
@@ -672,7 +672,7 @@ fn closed_strip(
     uses.extend(b_chain(!db, false));
     uses.push((bseam, false));
     out.add_loop(f, &uses);
-    Ok(out.compact())
+    Ok(out.into_compact())
 }
 
 /// The ball rolling between faces `fa` and `fb` over the strip `m` between their edges `ea`

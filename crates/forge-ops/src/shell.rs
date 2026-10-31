@@ -113,6 +113,7 @@ pub fn shell(
     };
     let skip_of = |b: &Body| -> Vec<bool> { b.faces.iter().map(|f| open.contains(&f.name)).collect() };
     let mut out = Body::new();
+    out.joins = base.joins.clone();
     let shell = out.add_shell();
     let copy = |src: &Body, flip: bool, renamed: bool, out: &mut Body| -> Vec<Option<EdgeId>> {
         let name = |n: Name| if renamed { rename(n) } else { n };
@@ -193,7 +194,7 @@ pub fn shell(
             out.add_loop(rim, &back);
         }
     }
-    let out = out.compact();
+    let out = out.into_compact();
     let problems = check(&out);
     if let Some((a, b)) = crossing(&out, &vec![true; out.faces.len()]) {
         return Err(ShellError::SelfIntersecting { a, b });
@@ -284,6 +285,7 @@ fn collapse(body: &Body, gone: &[bool]) -> Result<Body, ShellError> {
         sub.insert(s1, Some((s1, false)));
     }
     let mut out = Body::new();
+    out.joins = body.joins.clone();
     for v in &body.vertices {
         out.add_vertex(v.point, v.name);
     }
@@ -323,7 +325,7 @@ fn collapse(body: &Body, gone: &[bool]) -> Result<Body, ShellError> {
             }
         }
     }
-    Ok(out.compact())
+    Ok(out.into_compact())
 }
 
 /// The surface `d` away along `s`'s natural normal, or None where it vanishes (a radius reaches

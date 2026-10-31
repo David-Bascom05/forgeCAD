@@ -323,7 +323,7 @@ fn volumes_by_hand() {
                 .regenerate_nary(threads)
                 .unwrap_or_else(|e| panic!("{name} nary: {e:?}"));
             assert!(check(&nary).is_empty(), "{name} nary: {:?}", check(&nary));
-            assert_eq!(nary.faces.len(), seq.faces.len(), "{name}");
+            assert_eq!(nary.face_ids().count(), seq.faces.len(), "{name}");
             let vn = volume(&nary);
             assert!((vn - v).abs() <= 1e-9 * v, "{name}: nary volume {vn} vs {v}");
         }
@@ -342,7 +342,7 @@ fn suite_pattern_parts() {
         let seq = part.regenerate().expect("seq");
         let nary = part.regenerate_nary(4).expect("nary");
         assert!(check(&seq).is_empty() && check(&nary).is_empty(), "{name}");
-        assert_eq!(seq.faces.len(), nary.faces.len(), "{name}");
+        assert_eq!(seq.faces.len(), nary.face_ids().count(), "{name}");
     }
     let grid = suite::hole_grid().regenerate_nary(4).expect("grid");
     let (w, t) = (400.0, 12.0);

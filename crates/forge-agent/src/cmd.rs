@@ -414,7 +414,7 @@ impl Session {
         let several = m.solids_after(n).len() > 1;
         let handles = select::handles(body);
         let mut list = Vec::new();
-        // pieces alike (a hole's two half faces) share a line
+        // entities described alike share a line
         let mut lines: Vec<(Vec<String>, String)> = Vec::new();
         for &e in &ents {
             let h = handles[&select::name(body, e)].clone();
@@ -1360,7 +1360,8 @@ combine cut base lid keep
         let mut s = Session::default();
         assert!(s.run("build", &args(&a, &[])).ok);
         let q = s.run("query", &args(&a, &["faces cyl r=4 of hole2"]));
-        assert!(q.text.starts_with("2 found"), "{}", q.text);
+        // the hole's wall is one face, not two half-turns
+        assert!(q.text.starts_with("1 found"), "{}", q.text);
         let h = q
             .text
             .lines()

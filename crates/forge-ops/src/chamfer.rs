@@ -117,6 +117,7 @@ pub fn chamfer(body: &Body, edges: &[Name], size: ChamferSize, feature: u64) -> 
     }
 
     let mut out = Body::new();
+    out.joins = src.joins.clone();
     for v in &src.vertices {
         out.add_vertex(v.point, v.name);
     }
@@ -259,7 +260,7 @@ pub fn chamfer(body: &Body, edges: &[Name], size: ChamferSize, feature: u64) -> 
         RebuildError::Collapsed { edge } => ChamferError::TooLarge { edge },
         e => ChamferError::Rebuild(e),
     })?;
-    let out = out.compact();
+    let out = out.into_compact();
     let problems = check(&out);
     let flagged: Vec<bool> = out
         .faces

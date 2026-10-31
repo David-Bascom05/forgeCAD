@@ -94,7 +94,14 @@ fn crossing_springs_on_one_face_are_refused() {
 #[test]
 #[allow(clippy::excessive_precision, clippy::unreadable_literal)]
 fn run_outs_do_not_wrap_round_a_circle() {
-    let body = forge_model::suite::fuzz(95, 4).regenerate().expect("regenerates");
+    // the part as its booleans leave it (unjoined), where this arc is an edge of its own
+    let part = forge_model::suite::fuzz(95, 4);
+    let mut body = None;
+    for i in 0..part.features.len() {
+        body =
+            forge_model::step(forge_model::History::new(&part.features, None), i, body).expect("regenerates");
+    }
+    let body = body.expect("a part").compact();
     let edge_from = |a: Point3, b: Point3| {
         body.edge_ids()
             .find(|&e| {

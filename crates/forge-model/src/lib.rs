@@ -397,7 +397,7 @@ impl Part {
         for i in 0..self.features.len() {
             body = step(h, i, body)?;
         }
-        body.map(|b| b.compact())
+        body.map(finish)
             .ok_or(RegenError::NothingToCombine { feature: 0 })
     }
 
@@ -463,13 +463,15 @@ impl Part {
 }
 
 /// Applies feature `i` to the part as features `..i` left it: `regenerate` one feature at a
-/// time, for callers that keep every stage. Only `features[..=i]` is read.
+/// time, for callers that keep every stage (each as the next step needs it; `finish` one to
+/// show it). Only `features[..=i]` is read.
 pub fn step(features: History<'_>, i: usize, mut body: Option<Body>) -> Result<Option<Body>, RegenError> {
     let f = &features[i];
     let id = features.id(i);
     if modifies(f) {
         let b = body.ok_or(RegenError::NothingToCombine { feature: i })?;
-        let b = modify(features, f, i, &b, 1)?;
+        // a part-changing feature works on the finished part
+        let b = modify(features, f, i, &finish(b), 1)?;
         if trace::on() {
             trace::step(i, &b, None);
         }
@@ -506,11 +508,11 @@ pub fn step(features: History<'_>, i: usize, mut body: Option<Body>) -> Result<O
         boolean_into(&mut b, tool, op_of(*op), id + 1_000_000).map_err(err)?;
         // tombstones are cheap until they outnumber the living
         if b.dead > b.faces.len() / 2 {
-            b = b.compact();
+            b = b.into_compact();
         }
     } else if !tools.is_empty() {
         // a pattern's copies all in one pass
-        let base = if b.dead > 0 { b.compact() } else { b };
+        let base = if b.dead > 0 { b.into_compact() } else { b };
         let mut all = vec![&base];
         all.extend(tools.iter().map(|t| &t.0));
         let ops: Vec<Op> = tools.iter().map(|t| op_of(t.1)).collect();
@@ -629,6 +631,16 @@ fn nary_regen(
     shapes: bool,
     batching: Batching,
 ) -> Result<Body, RegenError> {
+    nary_run(features, threads, shapes, batching).map(unified)
+}
+
+/// `nary_regen`, its result not yet unified.
+fn nary_run(
+    features: History<'_>,
+    threads: usize,
+    shapes: bool,
+    batching: Batching,
+) -> Result<Body, RegenError> {
     let start = features.iter().rposition(starts).unwrap_or(0);
     let err = |error| RegenError::Boolean {
         feature: features.len() - 1,
@@ -654,7 +666,8 @@ fn nary_regen(
                         Batching::Given(_) => Batching::None,
                         b => b,
                     },
-                )?,
+                )
+                .map(|b| if b.dead > 0 { b.compact_in_shells() } else { b })?,
                 threads,
             )
         };
@@ -722,8 +735,28 @@ fn single(body: &mut Body, tool: &Body, c: Combine) -> bool {
     if boolean_into(body, tool, op_of(c), 0).is_err() {
         return false;
     }
-    *body = body.compact();
+    *body = std::mem::take(body).into_compact();
     true
+}
+
+/// The part as regeneration hands it out: faces on one surface and edges on one curve joined
+/// (`forge_bool::unify`), compacted. `step` leaves this to its caller, so the next step builds
+/// on the pieces the n-ary regen also sees.
+pub fn finish(mut b: Body) -> Body {
+    forge_bool::unify(&mut b);
+    b.into_compact()
+}
+
+/// `b` unified; compacted only once most of it is dead, as after a boolean (a feature that
+/// changes the part compacts its own input).
+fn unified(mut b: Body) -> Body {
+    forge_bool::unify(&mut b);
+    // joining faces leaves shells as they were
+    if b.dead > b.faces.len() / 2 {
+        b.compact_in_shells()
+    } else {
+        b
+    }
 }
 
 /// The root of the names a boolean gives the vertices it makes: the same for every boolean, so

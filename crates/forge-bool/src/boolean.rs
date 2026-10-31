@@ -212,7 +212,7 @@ enum Class {
 pub fn boolean(a: &Body, b: &Body, op: Op, feature: u64) -> R<Body> {
     let mut out = a.clone();
     boolean_into(&mut out, b, op, feature)?;
-    Ok(out.compact())
+    Ok(out.into_compact())
 }
 
 /// The boolean done in place on `target`: only faces near `b` are examined,
@@ -269,6 +269,8 @@ fn general(target: &mut Body, b: &Body, op: Op) -> R<()> {
     let (loops, verts) = (target.loops.len(), target.vertices.len());
     apply(target, b, &plan);
     split_new_pinches(target, loops, verts);
+    target.joins.extend(&b.joins);
+    target.joins.pieces.extend_from_slice(&plan.wholes);
     lap(&mut clock, 6);
     scratch.keep(plan);
     SCRATCH.with(|s| s.replace(scratch));
@@ -360,6 +362,8 @@ struct Plan {
     /// Existing vertices whose tolerance grows to hold the curves now ending on them.
     grown: Vec<(VKey, f64)>,
     alias: Vec<(VKey, VKey)>,
+    /// Each piece of a face or edge split into several kept ones, and its whole's name.
+    wholes: Vec<(Name, Name)>,
     /// A's faces that might change; every other face of A comes through as it is.
     involved: Vec<FaceId>,
     /// Involved faces of A nothing touched, found wholly on the kept side of B.
@@ -1170,7 +1174,7 @@ fn plan(a: &Body, b: &Body, op: Op, scratch: &mut Scratch) -> R<Plan> {
         VKey::Old(sd, id) => bodies[sd].vertex(id).name,
         VKey::New(i) => vnames[i as usize],
     };
-    sole_pieces_keep_names(
+    let wholes = sole_pieces_keep_names(
         &bodies,
         &mut specs,
         &kept,
@@ -1189,6 +1193,7 @@ fn plan(a: &Body, b: &Body, op: Op, scratch: &mut Scratch) -> R<Plan> {
         tols,
         grown,
         alias,
+        wholes,
         involved,
         untouched_kept,
     })
@@ -1208,6 +1213,7 @@ fn apply(a: &mut Body, b: &Body, plan: &Plan) {
         alias,
         involved,
         untouched_kept,
+        ..
     } = plan;
     let mut as_is = vec![false; specs.len()];
     for &(si, flip) in kept {
@@ -2138,7 +2144,8 @@ fn sole_pieces_keep_names(
     uses: &[u8],
     split_runs: &[(Side, EdgeId, std::ops::Range<usize>)],
     vname: &dyn Fn(VKey) -> Name,
-) {
+) -> Vec<(Name, Name)> {
+    let mut wholes = Vec::new();
     for (side, e, run) in split_runs {
         let edge = bodies[*side].edge(*e).name;
         let used: Vec<usize> = run.clone().filter(|&p| uses[p] > 0).collect();
@@ -2146,7 +2153,9 @@ fn sole_pieces_keep_names(
             pieces[p].name = if used.len() == 1 {
                 edge
             } else {
-                piece_name(edge, &pieces[p], vname)
+                let n = piece_name(edge, &pieces[p], vname);
+                wholes.push((n, edge));
+                n
             };
         }
     }
@@ -2163,11 +2172,14 @@ fn sole_pieces_keep_names(
             if end == at + 1 && !s.whole {
                 s.name = bodies[s.side].face(s.from).name;
             } else if s.name == Name::NONE {
-                s.name = region_name(bodies[s.side].face(s.from).name, &s.loops, pieces);
+                let whole = bodies[s.side].face(s.from).name;
+                s.name = region_name(whole, &s.loops, pieces);
+                wholes.push((s.name, whole));
             }
         }
         at = end;
     }
+    wholes
 }
 
 /// A piece of edge `edge` named by its ends, not its place in the order along the edge.
