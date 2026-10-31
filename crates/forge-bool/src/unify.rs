@@ -126,7 +126,7 @@ fn rename_wholes(body: &mut Body, faces: &[(u32, u32)], edges: &[(u32, u32)]) {
                   n: usize,
                   name: &dyn Fn(u32) -> Name,
                   other: &dyn Fn(u32) -> Option<Name>,
-                  live: &dyn Fn(&mut dyn FnMut(u32))|
+                  alive: &dyn Fn(u32) -> bool|
      -> Renamed {
         const NONE: u32 = u32::MAX;
         let mut parent = vec![NONE; n];
@@ -175,12 +175,11 @@ fn rename_wholes(body: &mut Body, faces: &[(u32, u32)], edges: &[(u32, u32)]) {
         let mut taken: Vec<Name> = to.iter().map(|t| t.1).collect();
         taken.sort_unstable();
         let twice: Vec<Name> = taken.windows(2).filter(|w| w[0] == w[1]).map(|w| w[0]).collect();
-        let mut held: Vec<Name> = Vec::new();
-        live(&mut |x| {
-            if slot[x as usize] == NONE && taken.binary_search(&name(x)).is_ok() {
-                held.push(name(x));
-            }
-        });
+        let mut held: Vec<Name> = (0..n as u32)
+            .filter(|&x| slot[x as usize] == NONE && alive(x))
+            .map(name)
+            .filter(|m| taken.binary_search(m).is_ok())
+            .collect();
         held.sort_unstable();
         for t in &mut to {
             if twice.binary_search(&t.1).is_ok() || held.binary_search(&t.1).is_ok() {
@@ -204,7 +203,7 @@ fn rename_wholes(body: &mut Body, faces: &[(u32, u32)], edges: &[(u32, u32)]) {
         body.faces.len(),
         &|f| body.faces[f as usize].name,
         &|_| None,
-        &|f| body.face_ids().for_each(|x| f(x.0)),
+        &|f| body.faces[f as usize].alive,
     );
     apply(body, r, true);
     // an edge named from its faces takes their new names
@@ -220,7 +219,7 @@ fn rename_wholes(body: &mut Body, faces: &[(u32, u32)], edges: &[(u32, u32)]) {
         body.edges.len(),
         &|e| body.edges[e as usize].name,
         &sides,
-        &|f| body.edge_ids().for_each(|x| f(x.0)),
+        &|e| body.edges[e as usize].alive,
     );
     apply(body, r, false);
 }
