@@ -1911,7 +1911,7 @@ const FITS: [(&str, Fit); 4] = [
     ("tap", Fit::Tap),
 ];
 
-const OPS: [(&str, Combine); 4] = [
+pub(crate) const OPS: [(&str, Combine); 4] = [
     ("new", Combine::New),
     ("add", Combine::Add),
     ("cut", Combine::Cut),
@@ -2799,10 +2799,9 @@ impl<'a> W<'a> {
     fn names(&mut self, ns: &[Name]) {
         ns.iter().for_each(|&n| self.name(n));
     }
+    /// Always written, so moving lines never changes which bodies there are.
     fn op(&mut self, op: Combine) {
-        if op != default_op(self.before) {
-            self.word(OPS.iter().find(|o| o.1 == op).expect("every op is named").0);
-        }
+        self.word(OPS.iter().find(|o| o.1 == op).expect("every op is named").0);
     }
     fn side(&mut self, side: Side, default: Side) {
         if side != default {
@@ -4009,7 +4008,7 @@ mod tests {
         };
         assert_eq!(
             print(&part),
-            "extrude 6 rect -30 -20 60 40\nhole 5 -xy at -20 -10 6 thru\npattern hole1 lin 1 0 0 3 20\n"
+            "extrude new 6 rect -30 -20 60 40\nhole 5 -xy at -20 -10 6 thru\npattern hole1 lin 1 0 0 3 20\n"
         );
     }
 }

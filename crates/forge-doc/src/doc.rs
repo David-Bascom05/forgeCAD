@@ -5,6 +5,9 @@
 use crate::text::{self, Line};
 use forge_model::Unit;
 
+/// The solid features whose op, unwritten, is `new` on the first of them and `add` after.
+const SOLIDS: [&str; 6] = ["extrude", "revolve", "ball", "sweep", "coil", "loft"];
+
 /// An item's identity, kept through edits that move it.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub struct ItemId(pub u64);
@@ -386,6 +389,36 @@ impl Document {
             .ok_or_else(|| format!("no item {}", id.0))
     }
 
+    /// The first solid feature line and whether its op is written (unwritten, it is `new` by
+    /// its place alone).
+    fn first_solid(&self) -> Option<(ItemId, bool)> {
+        self.items.iter().find_map(|it| match &it.body {
+            Body::Feature { kind, args } if SOLIDS.contains(&kind.as_str()) => Some((
+                it.id,
+                args.first()
+                    .is_some_and(|a| text::OPS.iter().any(|o| o.0 == a.text)),
+            )),
+            _ => None,
+        })
+    }
+
+    /// A first solid line whose op was unwritten, moved off first place by an edit, keeps
+    /// making a new body: its `new` is written.
+    fn keep_new(&mut self, was: Option<(ItemId, bool)>) {
+        let Some((id, false)) = was else { return };
+        if self.first_solid().is_some_and(|f| f.0 == id) {
+            return;
+        }
+        if let Some(Body::Feature { args, .. }) = self
+            .items
+            .iter_mut()
+            .find(|it| it.id == id)
+            .map(|it| &mut it.body)
+        {
+            args.insert(0, Arg::new("new"));
+        }
+    }
+
     /// Applies an edit.
     pub fn apply(&mut self, e: Edit) -> Result<(), String> {
         match e {
@@ -422,18 +455,22 @@ impl Document {
                 *args.get_mut(arg).ok_or_else(|| format!("no argument {arg}"))? = Arg::new(text);
             }
             Edit::Insert { at, text } => {
+                let first = self.first_solid();
                 let new = self.read(&text);
                 let at = at.min(self.items.len());
                 self.items.splice(at..at, new);
+                self.keep_new(first);
             }
             Edit::Delete { item } => {
                 let k = self.index(item)?;
                 self.items.remove(k);
             }
             Edit::Move { item, to } => {
+                let first = self.first_solid();
                 let k = self.index(item)?;
                 let it = self.items.remove(k);
                 self.items.insert(to.min(self.items.len()), it);
+                self.keep_new(first);
             }
         }
         Ok(())
@@ -531,5 +568,17 @@ mod tests {
         assert!(d.print().contains("hole 4 on sketch2"), "{}", d.print());
         d.apply(Edit::Delete { item: hole }).expect("delete");
         assert!(!d.print().contains("hole"));
+    }
+
+    /// A solid moved above the first leaves the first making a new body, its `new` written.
+    #[test]
+    fn moves_keep_the_bodies() {
+        let mut d = Document::parse("extrude 1 rect 0 0 1 1\nball new 2 at 5 0 0\n");
+        let ball = d.items[1].id;
+        d.apply(Edit::Move { item: ball, to: 0 }).expect("move");
+        assert_eq!(d.print(), "ball new 2 at 5 0 0\nextrude new 1 rect 0 0 1 1\n");
+        // written ops are left as they are
+        d.apply(Edit::Move { item: ball, to: 1 }).expect("move back");
+        assert_eq!(d.print(), "extrude new 1 rect 0 0 1 1\nball new 2 at 5 0 0\n");
     }
 }

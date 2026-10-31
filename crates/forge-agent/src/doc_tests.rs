@@ -444,7 +444,7 @@ fn sketches_and_parameters_print_back() {
         "{printed}"
     );
     assert!(
-        printed.contains("\n  vdist l1.a c1 h/2\nend\nextrude 6 "),
+        printed.contains("\n  vdist l1.a c1 h/2\nend\nextrude new 6 "),
         "{printed}"
     );
     assert_eq!(crate::text::parse(&printed).expect("parses"), part);

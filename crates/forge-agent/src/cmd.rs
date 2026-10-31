@@ -1137,30 +1137,32 @@ combine cut base lid keep
         );
     }
 
-    /// A line's `in` body follows its line when an edit renumbers the lines above.
+    /// An edit never changes which bodies there are: a solid inserted above the first keeps that
+    /// line a new body (its `new` written), and its `in` follows it to its new number.
     #[cfg(unix)]
     #[test]
-    fn body_references_follow_edits() {
+    fn inserts_keep_the_bodies() {
         let dir = Dir::new("edit-in");
         let f = dir.file(
             "e.fc",
-            "extrude new 10 rect 0 0 10 10\nextrude new 4 at 20 0 0 rect 0 0 10 10\nextrude cut 12 at 5 5 -1 circle 0 0 2 in extrude1\n",
+            "extrude 10 rect 0 0 10 10\nextrude new 4 at 20 0 0 rect 0 0 10 10\nextrude cut 12 at 5 5 -1 circle 0 0 2 in extrude1\n",
         );
         let mut s = Session::default().writable(true);
-        assert!(s.run("build", &args(&f, &[])).ok);
-        let r = s.run(
-            "edit",
-            &args(
-                &f,
-                &[
-                    "insert", "1", "extrude", "new", "3", "at", "-30", "0", "0", "rect", "0", "0", "5", "5",
-                ],
-            ),
-        );
-        assert!(r.ok, "{}", r.text);
+        let before = s.run("build", &args(&f, &[]));
+        assert!(before.text.contains("bodies 2"), "{}", before.text);
+        let solid = [
+            "insert", "1", "extrude", "3", "at", "-30", "0", "0", "rect", "0", "0", "5", "5",
+        ];
+        let r = s.run("edit", &args(&f, &solid));
+        assert!(r.ok && r.text.contains("bodies 3"), "{}", r.text);
         let text = std::fs::read_to_string(&f).expect("written");
-        assert!(text.ends_with("circle 0 0 2 in extrude2\n"), "{text}");
-        assert!(r.text.contains("bodies 3"), "{}", r.text);
+        assert_eq!(
+            text,
+            "extrude 3 at -30 0 0 rect 0 0 5 5\nextrude new 10 rect 0 0 10 10\nextrude new 4 at 20 0 0 rect 0 0 10 10\nextrude cut 12 at 5 5 -1 circle 0 0 2 in extrude2\n"
+        );
+        // the bodies before are as they were, the new one beside them
+        let volume = |r: &Reply| r.json.get("volume").and_then(Json::num).expect("volume");
+        assert!((volume(&r) - volume(&before) - 75.0).abs() < 1e-6, "{}", r.text);
     }
 
     /// Under a root, an edit never writes through a link to a file outside it.
