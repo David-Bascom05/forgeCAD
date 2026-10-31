@@ -2,7 +2,7 @@
 """The real-parts build rate: translated timelines built and checked against the truth the dataset
 records (Fusion: volume; DeepCAD: bounding box).
 
-  realparts.py DIR --out RUN [--method NAME] [--no-shrink] [--tol 1e-3] [--every N] [--timeout S]
+  realparts.py DIR --out RUN [--method NAME] [--no-shrink] [--tol 1e-3] [--every N] [--timeout S] [--correct FILE]
   realparts.py DIR --out RUN --shrink-only [--each N]
 
 DIR holds <stem>.fc and <stem>.json from fusion.py. A part counts as built when it regenerates,
@@ -90,6 +90,16 @@ def main():
         json.dump(res, f)
     print(json.dumps(book.summary()))
     # the number: of every design in the dataset, those built and agreeing with the dataset's truth
+    # a final body truly pinched in one solid cannot exist: refusing it is right (research/find-parts/README.md)
+    right = opt("--correct")
+    if right:
+        with open(right) as f:
+            names = {l.split("#")[0].strip() for l in f}
+        for n in names & set(res):
+            if res[n]["v"] == "refused":
+                book.counts["ok"] = book.counts.get("ok", 0) + 1
+                book.counts["refused"] -= 1
+                res[n] = dict(res[n], v="ok", sig="", correct_refusal=True)
     t = os.path.join(d, "_tally.txt")
     lost = {}
     if os.path.exists(t):

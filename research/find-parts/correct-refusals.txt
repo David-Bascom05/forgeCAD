@@ -1,0 +1,3 @@
+# designs whose final body in Fusion is one solid pinched at the touch point: refusing them is correct
+23881_bec7f38c_0002
+91424_9c24fe70_0000

@@ -53,15 +53,18 @@ def cases(method, a):
     raise SystemExit(f"unknown method {method}")
 
 
+def built(r):
+    """Built, with a volume to compare. (n-ary regeneration is single-body by design.)"""
+    return (r["v"] == "ok" or r["sig"].startswith("nary: the part is")) and bool(r.get("vol"))
+
+
 def jump(src, seed):
     """Does a hair of noise change the part's volume? (base result, noisy result, jumped?)"""
     a = fp.judge_text(src)
-    if a["v"] != "ok" or not a.get("vol"):
+    if not built(a):
         return a, None, False
     b = fp.judge_text(gens.perturb(src, seed))
-    if b["v"] != "ok":
-        return a, b, False
-    return a, b, abs(b["vol"] - a["vol"]) > 1e-4 * abs(a["vol"])
+    return a, b, built(b) and abs(b["vol"] - a["vol"]) > 1e-4 * abs(a["vol"])
 
 
 def noise_run(book, parts, cpu, seed, jobs, out, shrink):

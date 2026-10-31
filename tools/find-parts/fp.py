@@ -22,23 +22,28 @@ MEM = int(os.environ.get("FP_MEM_MB", "700")) * 1 << 20
 UNREAD = ("expected", "unexpected", "unknown", "no feature", "too soon", "a word the file uses")
 
 
-def limits():
+def limits(cpu=None):
     os.nice(15)
     resource.setrlimit(resource.RLIMIT_AS, (MEM, MEM))
     resource.setrlimit(resource.RLIMIT_CORE, (0, 0))
+    if cpu:
+        resource.setrlimit(resource.RLIMIT_CPU, (int(cpu), int(cpu) + 5))
 
 
 def judge_file(path, timeout=20.0, exe=None, env=None):
     """One part file's result as a dict with v, sig, cpu, and when it built vol, bodies, faces."""
     t = time.monotonic()
-    p = subprocess.Popen([exe or JUDGE, path], stdout=subprocess.PIPE, stderr=subprocess.PIPE, preexec_fn=limits, text=True, env=env)
+    # the limit is CPU time: at nice 15 on a busy machine wall time says nothing about the part
+    p = subprocess.Popen([exe or JUDGE, path], stdout=subprocess.PIPE, stderr=subprocess.PIPE, preexec_fn=lambda: limits(timeout), text=True, env=env)
     try:
-        out, err = p.communicate(timeout=timeout)
+        out, err = p.communicate(timeout=timeout * 20)
     except subprocess.TimeoutExpired:
         p.kill()
         p.communicate()
         return {"v": "timeout", "sig": "timeout", "cpu": timeout}
     wall = time.monotonic() - t
+    if p.returncode in (-signal.SIGXCPU, -signal.SIGKILL):
+        return {"v": "timeout", "sig": "timeout", "cpu": timeout}
     if p.returncode != 0 or not out.strip():
         why = "oom" if "memory allocation" in err or "alloc" in err else "crash"
         s = f"signal {-p.returncode}" if p.returncode < 0 else f"exit {p.returncode}"
