@@ -161,13 +161,15 @@ impl Segment {
     }
     fn degenerate(&self) -> bool {
         match *self {
-            Segment::Line { a, b } => a.distance(b) <= tol::MIN_LENGTH,
+            // written to be true for NaN or infinite sizes too
+            Segment::Line { a, b } => !(a.distance(b) > tol::MIN_LENGTH && a.distance(b) < f64::INFINITY),
             Segment::Arc { radius, sweep, .. } => {
-                radius <= tol::MIN_LENGTH
-                    || (radius * sweep).abs() <= tol::MIN_LENGTH
-                    || sweep.abs() >= dmath::TAU - tol::ANGULAR
+                !(radius > tol::MIN_LENGTH
+                    && radius < f64::INFINITY
+                    && (radius * sweep).abs() > tol::MIN_LENGTH
+                    && sweep.abs() < dmath::TAU - tol::ANGULAR)
             }
-            Segment::Circle { radius, .. } => radius <= tol::MIN_LENGTH,
+            Segment::Circle { radius, .. } => !(radius > tol::MIN_LENGTH && radius < f64::INFINITY),
         }
     }
     /// Points along the segment, for inside/outside tests.

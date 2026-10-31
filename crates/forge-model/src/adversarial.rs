@@ -701,6 +701,7 @@ fn error_kind(e: &crate::RegenError) -> (String, usize) {
         Revolve { feature, error } => (format!("Revolve({error:?})"), *feature),
         Boolean { feature, error } => (format!("Boolean({error:?})"), *feature),
         NothingToCombine { feature } => ("NothingToCombine".to_string(), *feature),
+        Empty { feature } => ("Empty".to_string(), *feature),
         Chamfer { feature, error } => (format!("Chamfer({error:?})"), *feature),
         Shell { feature, error } => (format!("Shell({error:?})"), *feature),
         Draft { feature, error } => (format!("Draft({error:?})"), *feature),

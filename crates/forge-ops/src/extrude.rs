@@ -43,7 +43,7 @@ pub fn extrude_unlinked(profile: &Profile, distance: f64, feature: u64) -> Resul
 
 /// The profile to sweep forwards by `distance.abs()`, normalized.
 fn prepared(profile: &Profile, distance: f64) -> Result<Profile, ExtrudeError> {
-    if distance.abs() <= tol::MIN_LENGTH {
+    if !(distance.abs() > tol::MIN_LENGTH && distance.abs() < f64::INFINITY) {
         return Err(ExtrudeError::TooShort);
     }
     // Going backwards is going forwards from the flipped plane with the profile mirrored to match.
@@ -498,6 +498,15 @@ mod tests {
     fn rejects_bad_input() {
         let p = profile(vec![Profile::rectangle(Point2::ORIGIN, 10.0, 20.0, 0)]);
         assert_eq!(extrude(&p, 0.0, 1), Err(ExtrudeError::TooShort));
+        assert_eq!(extrude(&p, f64::NAN, 1), Err(ExtrudeError::TooShort));
+        // the box of an empty body: refused, not a panic
+        let inf = profile(vec![Profile::rectangle(
+            Point2::new(f64::INFINITY, 0.0),
+            f64::NEG_INFINITY,
+            20.0,
+            0,
+        )]);
+        assert!(extrude(&inf, 1.0, 1).is_err());
         let open = profile(vec![ProfileLoop::new(vec![(
             Segment::Line {
                 a: Point2::ORIGIN,

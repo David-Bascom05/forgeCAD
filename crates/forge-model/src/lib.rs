@@ -263,6 +263,10 @@ pub enum RegenError {
     NothingToCombine {
         feature: usize,
     },
+    /// A cut or keep leaves nothing of the part.
+    Empty {
+        feature: usize,
+    },
     Body {
         feature: usize,
         error: BodyError,
@@ -513,6 +517,7 @@ pub fn step(features: History<'_>, i: usize, mut body: Option<Body>) -> Result<O
     if let [(tool, op, _)] = &tools[..] {
         // in place: only the faces near the tool change
         boolean_into(&mut b, tool, op_of(*op), id + 1_000_000).map_err(err)?;
+        b = not_empty(b, i)?;
         // tombstones are cheap until they outnumber the living
         if b.dead > b.faces.len() / 2 {
             b = b.into_compact();
@@ -525,7 +530,10 @@ pub fn step(features: History<'_>, i: usize, mut body: Option<Body>) -> Result<O
         let ops: Vec<Op> = tools.iter().map(|t| op_of(t.1)).collect();
         let mut solids = vec![part_shape(&base)];
         solids.extend(tools.iter().map(|t| t.2.clone()));
-        b = forge_bool::nary_with(&all, &ops, Some(&solids), None, 1, cut_root(i)).map_err(err)?;
+        b = not_empty(
+            forge_bool::nary_with(&all, &ops, Some(&solids), None, 1, cut_root(i)).map_err(err)?,
+            i,
+        )?;
     }
     if trace::on() {
         trace::step(i, &b, tools.first().map(|t| &t.0));
@@ -540,6 +548,14 @@ pub fn tool_shapes(features: History<'_>, i: usize) -> Result<Vec<(Shape, Combin
         .into_iter()
         .map(|t| (t.2, t.1))
         .collect())
+}
+
+/// `b`, unless feature `i` left nothing of it.
+pub(crate) fn not_empty(b: Body, i: usize) -> Result<Body, RegenError> {
+    if b.face_ids().next().is_none() {
+        return Err(RegenError::Empty { feature: i });
+    }
+    Ok(b)
 }
 
 /// Whether a feature makes a new body.
@@ -670,7 +686,10 @@ fn nary_regen(
     shapes: bool,
     batching: Batching,
 ) -> Result<Body, RegenError> {
-    nary_run(features, threads, shapes, batching).map(unified)
+    not_empty(
+        nary_run(features, threads, shapes, batching).map(unified)?,
+        features.len() - 1,
+    )
 }
 
 /// `nary_regen`, its result not yet unified.

@@ -843,6 +843,10 @@ pub fn explain(e: &RegenError) -> (String, String) {
             "nothing to combine with yet".into(),
             hint("start with a solid: extrude, revolve or ball (op new)"),
         ),
+        Empty { .. } => (
+            "this leaves nothing of the part".into(),
+            hint("a cut or keep must leave some of the part"),
+        ),
     }
 }
 

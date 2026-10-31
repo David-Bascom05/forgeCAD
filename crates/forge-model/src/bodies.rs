@@ -483,6 +483,7 @@ fn combine(
     let n = salt.map_or(0, |s| s + 1);
     if let [tool] = bodies {
         boolean_into(&mut b, tool, ops[0], bool_id(id, n)).map_err(err)?;
+        b = crate::not_empty(b, i)?;
         if b.dead > b.faces.len() / 2 {
             b = b.into_compact();
         }
@@ -497,7 +498,7 @@ fn combine(
     let root = salt.map_or(cut_root(i), |s| salted(cut_root(i), "body", s));
     let mut sh = vec![part_shape(&base)];
     sh.extend(shapes.iter().map(|&s| s.clone()));
-    nary_with(&all, ops, Some(&sh), None, 1, root).map_err(err)
+    crate::not_empty(nary_with(&all, ops, Some(&sh), None, 1, root).map_err(err)?, i)
 }
 
 fn bad(i: usize) -> impl Fn(BodyError) -> RegenError {
@@ -671,6 +672,13 @@ fn cutter(plain: History<'_>, i: usize, by: &Cutter) -> Result<Surface, RegenErr
 /// the plus one (where the surface's normal points).
 fn half(s: &Surface, b: &Box3, (i, id): (usize, u64)) -> Result<(Body, bool), RegenError> {
     let ee = |error| RegenError::Extrude { feature: i, error };
+    // an empty body has an empty box: nothing for the cutter to miss or cross
+    if !b.diagonal().is_finite() {
+        return Err(RegenError::Body {
+            feature: i,
+            error: BodyError::Misses,
+        });
+    }
     let b = b.grow(1.0 + 0.01 * b.diagonal());
     let local = |f: &Frame| Box3::from_points(corners(&b).map(|p| f.point_to_local(p)));
     match s {
