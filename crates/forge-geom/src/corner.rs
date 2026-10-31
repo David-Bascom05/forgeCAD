@@ -10,7 +10,7 @@ use std::ops::{Add, Mul, Sub};
 use std::sync::Arc;
 
 mod rational;
-pub use rational::Proof as RationalProof;
+pub use rational::{Proof as RationalProof, clear_proof_cache};
 
 /// A boundary point, the outward normal of the surface beyond it, and their t derivatives.
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -49,6 +49,9 @@ pub trait Rail: Send + Sync + std::fmt::Debug {
     fn bound(&self, t: Interval) -> RailBound;
     fn transformed(&self, f: &Frame) -> Arc<dyn Rail>;
     fn surface_rail(&self) -> Option<&SurfaceRail> {
+        None
+    }
+    fn spoke(&self) -> Option<&SpokeRail> {
         None
     }
 }
@@ -451,7 +454,7 @@ pub enum CornerError {
 }
 
 /// Most sides a hole may have.
-pub const MAX_SIDES: usize = 12;
+pub const MAX_SIDES: usize = 20;
 
 /// How a hole closes.
 #[derive(Clone, Debug)]
@@ -535,16 +538,20 @@ pub fn audit_hole(
 }
 
 /// A spoke of a split hole: a curve from a hole vertex to the centre, with the outward normal
-/// w / |w|, w = m (p'.p') - p' (p'.m), square to the curve and turning with m, which runs
-/// linearly from the vertex's normal to the centre's. The curve is a parabola (or a line), so
-/// p' = a + b t and w is a cubic in t.
+/// w / |w|. For a parabola (or a line), w = m (p'.p') - p' (p'.m), square to the curve and
+/// turning with m, which runs linearly from the vertex's normal to the centre's. For a cubic
+/// Bezier (`Cubic`), w = p' x f with f linear across the curve, in the vertex's tangent plane at
+/// the start and the centre's at the end. p' = a + b t + c t^2, and w is a polynomial in t.
 #[derive(Clone, Debug)]
-struct SpokeRail {
+pub struct SpokeRail {
     curve: Curve,
     a: Vec3,
     b: Vec3,
+    c: Vec3,
     m0: Vec3,
     m1: Vec3,
+    /// The control points and f at the ends, for a cubic.
+    cubic: Option<([Point3; 4], Vec3, Vec3)>,
 }
 
 impl SpokeRail {
@@ -554,39 +561,95 @@ impl SpokeRail {
         SpokeRail {
             a: d.d1 - d.d2 * range.lo,
             b: d.d2,
+            c: Vec3::ZERO,
             m0: n0 - m1 * range.lo,
             m1,
             curve,
+            cubic: None,
         }
+    }
+    /// A cubic spoke over t in [0, 1].
+    fn cubic(p: [Point3; 4], n0: Vec3, n1: Vec3) -> SpokeRail {
+        let (d0, d1, d2) = (p[1] - p[0], p[2] - p[1], p[3] - p[2]);
+        SpokeRail {
+            curve: Curve::Procedural(crate::curve::ProcCurve(Arc::new(Cubic(p)))),
+            a: d0 * 3.0,
+            b: (d1 - d0) * 6.0,
+            c: (d0 - d1 * 2.0 + d2) * 3.0,
+            m0: n0,
+            m1: n1 - n0,
+            cubic: Some((p, n0.cross(d0 * 3.0), n1.cross(d2 * 3.0))),
+        }
+    }
+    /// w and its first two t derivatives at t, given p' and its derivatives there.
+    fn w(&self, t: f64, p1: Vec3, p2: Vec3, p3: Vec3) -> [Vec3; 3] {
+        if let Some((_, f0, f1)) = self.cubic {
+            let (f, df) = (f0 + (f1 - f0) * t, f1 - f0);
+            return [
+                p1.cross(f),
+                p2.cross(f) + p1.cross(df),
+                p3.cross(f) + p2.cross(df) * 2.0,
+            ];
+        }
+        let m = self.m0 + self.m1 * t;
+        let (s, s1, s2) = (p1.dot(p1), 2.0 * p1.dot(p2), 2.0 * (p2.dot(p2) + p1.dot(p3)));
+        let (k, k1, k2) = (
+            p1.dot(m),
+            p2.dot(m) + p1.dot(self.m1),
+            p3.dot(m) + 2.0 * p2.dot(self.m1),
+        );
+        [
+            m * s - p1 * k,
+            self.m1 * s + m * s1 - p2 * k - p1 * k1,
+            self.m1 * (2.0 * s1) + m * s2 - p3 * k - p2 * (2.0 * k1) - p1 * k2,
+        ]
     }
 }
 
 impl Rail for SpokeRail {
+    fn spoke(&self) -> Option<&SpokeRail> {
+        Some(self)
+    }
     fn jet(&self, t: f64) -> RailJet {
         let c = self.curve.deriv(t);
-        let (p1, p2) = (c.d1, c.d2);
-        let m = self.m0 + self.m1 * t;
-        let (s, s1, s2) = (p1.dot(p1), 2.0 * p1.dot(p2), 2.0 * p2.dot(p2));
-        let (k, k1, k2) = (p1.dot(m), p2.dot(m) + p1.dot(self.m1), 2.0 * p2.dot(self.m1));
-        let w = m * s - p1 * k;
-        let w1 = self.m1 * s + m * s1 - p2 * k - p1 * k1;
-        let w2 = self.m1 * (2.0 * s1) + m * s2 - p2 * (2.0 * k1) - p1 * k2;
+        let (p1, p2, p3) = (c.d1, c.d2, self.c * 2.0);
+        let [w, w1, w2] = self.w(t, p1, p2, p3);
         let (n, dn, ddn) = unit_jet(w, w1, w2);
         RailJet {
             p: c.p,
             dp: p1,
             ddp: p2,
-            dddp: Vec3::ZERO,
+            dddp: p3,
             n,
             dn,
             ddn,
         }
     }
     fn bound(&self, t: Interval) -> RailBound {
-        let lin = |a: Vec3, b: Vec3| [t * b.x + a.x, t * b.y + a.y, t * b.z + a.z];
-        let (p1, m) = (lin(self.a, self.b), lin(self.m0, self.m1));
-        let (s, k) = (idot(p1, p1), idot(p1, m));
-        let w: IVec = std::array::from_fn(|i| m[i] * s - p1[i] * k);
+        let quad = |a: Vec3, b: Vec3, c: Vec3| {
+            let t2 = t.sqr();
+            [
+                t2 * c.x + t * b.x + a.x,
+                t2 * c.y + t * b.y + a.y,
+                t2 * c.z + t * b.z + a.z,
+            ]
+        };
+        let p1 = quad(self.a, self.b, self.c);
+        let w: IVec = match self.cubic {
+            Some((_, f0, f1)) => {
+                let f = quad(f0, f1 - f0, Vec3::ZERO);
+                [
+                    p1[1] * f[2] - p1[2] * f[1],
+                    p1[2] * f[0] - p1[0] * f[2],
+                    p1[0] * f[1] - p1[1] * f[0],
+                ]
+            }
+            None => {
+                let m = quad(self.m0, self.m1, Vec3::ZERO);
+                let (s, k) = (idot(p1, p1), idot(p1, m));
+                std::array::from_fn(|i| m[i] * s - p1[i] * k)
+            }
+        };
         let len = (w[0].sqr() + w[1].sqr() + w[2].sqr()).sqrt();
         let n = if len.lo > 0.0 {
             w.map(|c| meet(c.div(&len), UNIT))
@@ -605,9 +668,119 @@ impl Rail for SpokeRail {
             curve: self.curve.transformed(f),
             a: v(self.a),
             b: v(self.b),
+            c: v(self.c),
             m0: v(self.m0),
             m1: v(self.m1),
+            cubic: self
+                .cubic
+                .map(|(p, f0, f1)| (p.map(|x| f.point_to_world(x)), v(f0), v(f1))),
         })
+    }
+}
+
+/// A cubic Bezier curve, t in [0, 1].
+#[derive(Clone, Debug)]
+pub struct Cubic(pub [Point3; 4]);
+
+impl Cubic {
+    /// The control points of the piece over `r`.
+    fn sub(&self, r: Interval) -> [Point3; 4] {
+        let split = |p: [Point3; 4], t: f64| {
+            let a = [p[0].lerp(p[1], t), p[1].lerp(p[2], t), p[2].lerp(p[3], t)];
+            let b = [a[0].lerp(a[1], t), a[1].lerp(a[2], t)];
+            let c = b[0].lerp(b[1], t);
+            ([p[0], a[0], b[0], c], [c, b[1], a[2], p[3]])
+        };
+        let left = if r.hi < 1.0 { split(self.0, r.hi).0 } else { self.0 };
+        if r.lo > 0.0 {
+            split(left, r.lo / r.hi).1
+        } else {
+            left
+        }
+    }
+}
+
+impl crate::curve::ProceduralCurve for Cubic {
+    fn deriv(&self, t: f64) -> CurveDeriv {
+        let [p0, p1, p2, p3] = self.0;
+        let (d0, d1, d2) = (p1 - p0, p2 - p1, p3 - p2);
+        let s = 1.0 - t;
+        let (b0, b1) = (
+            p0.lerp(p1, t).lerp(p1.lerp(p2, t), t),
+            p1.lerp(p2, t).lerp(p2.lerp(p3, t), t),
+        );
+        CurveDeriv {
+            p: b0.lerp(b1, t),
+            d1: (d0 * (s * s) + d1 * (2.0 * s * t) + d2 * (t * t)) * 3.0,
+            d2: ((d1 - d0) * s + (d2 - d1) * t) * 6.0,
+        }
+    }
+    fn domain(&self) -> Domain1 {
+        Domain1 {
+            lo: 0.0,
+            hi: 1.0,
+            period: None,
+        }
+    }
+    fn closest(&self, p: Point3, range: Interval) -> f64 {
+        let mut best = (f64::INFINITY, range.lo);
+        for k in 0..=32 {
+            let t = (range.lo + range.width() * k as f64 / 32.0).min(range.hi);
+            let d = self.deriv(t).p.distance_sq(p);
+            if d < best.0 {
+                best = (d, t);
+            }
+        }
+        let mut t = best.1;
+        for _ in 0..30 {
+            let d = self.deriv(t);
+            let r = d.p - p;
+            let g = r.dot(d.d1);
+            let h = d.d1.dot(d.d1) + r.dot(d.d2);
+            let h = if h > 0.0 { h } else { d.d1.dot(d.d1) };
+            if h.is_nan() || h <= 0.0 {
+                break;
+            }
+            let next = (t - g / h).clamp(range.lo, range.hi);
+            if self.deriv(next).p.distance_sq(p) > r.length_sq() {
+                break;
+            }
+            let moved = (next - t).abs();
+            t = next;
+            if moved <= 1e-16 {
+                break;
+            }
+        }
+        t
+    }
+    fn bbox(&self, range: Interval) -> Box3 {
+        let c = self.sub(range);
+        let b = Box3::from_points(c);
+        let m = [b.x, b.y, b.z]
+            .iter()
+            .fold(0.0f64, |a, i| a.max(i.lo.abs()).max(i.hi.abs()));
+        b.grow(16.0 * f64::EPSILON * m)
+    }
+    fn transformed(&self, f: &Frame) -> crate::curve::ProcCurve {
+        crate::curve::ProcCurve(Arc::new(Cubic(self.0.map(|p| f.point_to_world(p)))))
+    }
+    fn speed_bound(&self, range: Interval) -> f64 {
+        let c = self.sub(range);
+        let w = range.width().max(f64::MIN_POSITIVE);
+        // the derivative's control points, per unit of t
+        (0..3)
+            .map(|i| (c[i + 1] - c[i]).length() * 3.0 / w)
+            .fold(0.0, f64::max)
+            * (1.0 + 1e-12)
+    }
+    fn segments(&self, range: Interval, chord: f64) -> usize {
+        let mut acc: f64 = 0.0;
+        for k in 0..=8 {
+            acc = acc.max(self.deriv(range.lo + range.width() * k as f64 / 8.0).d2.length());
+        }
+        // a chord of parameter length h strays by about |P''| h^2 / 8
+        let n = (range.width() * (acc / (8.0 * chord)).sqrt()).ceil();
+        (n as usize).max(1)
     }
 }
 
@@ -644,38 +817,110 @@ fn centre(sides: &[Side]) -> Option<(Point3, Vec3)> {
     (wsum > 0.0).then(|| (c0 + nc * (h / wsum), nc))
 }
 
+/// At hole vertex k (where side k starts): the point, the outward normal, and the direction
+/// halving the hole's angle; None where the sides' normals differ.
+fn vertex(sides: &[Side], k: usize) -> Option<(Point3, Vec3, Vec3)> {
+    let m = sides.len();
+    let s = &sides[k % m];
+    let (j, dt) = (s.rail.jet(s.t0), s.t1 - s.t0);
+    let prev = &sides[(k + m - 1) % m];
+    let pj = prev.rail.jet(prev.t1);
+    let n = j.n.normalize()?.get();
+    if pj.n.normalize()?.get().dot(n) < 1.0 - 1e-9 {
+        return None;
+    }
+    let ahead = (j.dp * dt).normalize()?.get();
+    let back = (pj.dp * (prev.t0 - prev.t1)).normalize()?.get();
+    let left = n.cross(ahead);
+    // the hole's angle at the vertex, from `ahead` round to `back` about n
+    let mut angle = dmath::atan2(back.dot(left), back.dot(ahead));
+    if angle <= 0.0 {
+        angle += dmath::TAU;
+    }
+    let (sn, cs) = dmath::sin_cos(0.5 * angle);
+    Some((j.p, n, ahead * cs + left * sn))
+}
+
+/// Spokes from these (smooth) vertices to a centre: the centre, the spokes, and their rails.
+/// With `like`, a patch over the hole, the centre is its middle and the spokes are cubics
+/// leaving along the halving directions; else parabolas.
+#[allow(clippy::type_complexity)]
+fn spokes(
+    sides: &[Side],
+    at: &[usize],
+    like: Option<&HolePatch>,
+) -> Result<(Point3, Vec<Spoke>, Vec<(Arc<dyn Rail>, Interval)>), CornerError> {
+    let m = sides.len();
+    let (c, nc) = match like {
+        Some(p) => {
+            let x = Point2::ORIGIN + p.corners.iter().fold(Vec2::ZERO, |a, x| a + x.to_vec()) / m as f64;
+            let d = p.deriv(x);
+            (
+                d.p,
+                d.du.cross(d.dv).normalize().ok_or(CornerError::Folded)?.get(),
+            )
+        }
+        _ => centre(sides).ok_or(CornerError::Folded)?,
+    };
+    let mut spokes = Vec::with_capacity(at.len());
+    let mut rails: Vec<(Arc<dyn Rail>, Interval)> = Vec::with_capacity(at.len());
+    for &k in at {
+        let (v, nv, dir) = vertex(sides, k % m).ok_or(CornerError::Orientation(k % m))?;
+        let l = v.distance(c);
+        let toward = (v - c) - nc * (v - c).dot(nc);
+        if like.is_some() {
+            // a third of the way along the halving direction, and straight toward the vertex
+            let e = toward.normalize().ok_or(CornerError::Folded)?.get();
+            let ctrl = [v, v + dir * (l / 3.0), c + e * (l / 3.0), c];
+            let curve = Curve::Procedural(crate::curve::ProcCurve(Arc::new(Cubic(ctrl))));
+            rails.push((Arc::new(SpokeRail::cubic(ctrl, nv, nc)), Interval::new(0.0, 1.0)));
+            spokes.push((k % m, curve, Interval::new(0.0, 1.0)));
+            continue;
+        }
+        // the control point in both tangent planes, nearest halfway along the halving direction
+        // and leaving the centre straight toward the vertex
+        let target = (v + dir * (l / 3.0)).lerp(c + toward * (1.0 / 3.0), 0.5);
+        let (g, h) = (nv.dot(nc), 1.0 - nv.dot(nc) * nv.dot(nc));
+        let (ra, rb) = ((target - v).dot(nv), (target - c).dot(nc));
+        let q = if h > 1e-12 {
+            // target - a nv - b nc, with [1 g; g 1] [a b] = [ra rb]
+            let (a, b) = ((ra - g * rb) / h, (rb - g * ra) / h);
+            target - nv * a - nc * b
+        } else {
+            target - nv * ra
+        };
+        let (curve, range) = bezier_parabola(v, q, c).ok_or(CornerError::Orientation(k % m))?;
+        rails.push((Arc::new(SpokeRail::new(curve.clone(), range, nv, nc)), range));
+        spokes.push((k % m, curve, range));
+    }
+    Ok((c, spokes, rails))
+}
+
+/// The sides of piece i of a hole split at vertices `at`: sides at[i] .. at[i + 1], the spoke out
+/// to the centre and the spoke back.
+fn piece_sides(
+    sides: &[Side],
+    at: &[usize],
+    rails: &[(Arc<dyn Rail>, Interval)],
+    i: usize,
+) -> (Vec<Side>, usize, usize) {
+    let m = sides.len();
+    let (first, next) = (at[i], if i + 1 < at.len() { at[i + 1] } else { at[0] + m });
+    let mut ps: Vec<Side> = (first..next).map(|k| sides[k % m].clone()).collect();
+    let (out, back) = (&rails[(i + 1) % at.len()], &rails[i]);
+    ps.push(Side::new(out.0.clone(), out.1.lo, out.1.hi));
+    ps.push(Side::new(back.0.clone(), back.1.hi, back.1.lo));
+    (ps, first % m, next - first)
+}
+
 /// The hole split into patches round a centre point. Spokes leave smooth vertices only, splitting the angle there; pieces take two sides each
 /// (one each for a hole of under six).
 fn split(sides: &[Side]) -> Result<Patches, CornerError> {
     let m = sides.len();
-    let jet_at = |k: usize| {
-        let s = &sides[k % m];
-        (s.rail.jet(s.t0), s.t1 - s.t0)
-    };
-    // at vertex k: the point, the outward normal, and the direction halving the hole's angle
-    let vertex = |k: usize| -> Option<(Point3, Vec3, Vec3)> {
-        let (j, dt) = jet_at(k);
-        let prev = &sides[(k + m - 1) % m];
-        let pj = prev.rail.jet(prev.t1);
-        let n = j.n.normalize()?.get();
-        if pj.n.normalize()?.get().dot(n) < 1.0 - 1e-9 {
-            return None;
-        }
-        let ahead = (j.dp * dt).normalize()?.get();
-        let back = (pj.dp * (prev.t0 - prev.t1)).normalize()?.get();
-        let left = n.cross(ahead);
-        // the hole's angle at the vertex, from `ahead` round to `back` about n
-        let mut angle = dmath::atan2(back.dot(left), back.dot(ahead));
-        if angle <= 0.0 {
-            angle += dmath::TAU;
-        }
-        let (sn, cs) = dmath::sin_cos(0.5 * angle);
-        Some((j.p, n, ahead * cs + left * sn))
-    };
     let step = if m >= 6 { 2 } else { 1 };
     // spoke vertices every `step` sides from some smooth start; a non-smooth one is skipped to
     // the next smooth vertex
-    let smooth: Vec<bool> = (0..m).map(|k| vertex(k).is_some()).collect();
+    let smooth: Vec<bool> = (0..m).map(|k| vertex(sides, k).is_some()).collect();
     let start = (0..m).find(|&k| smooth[k]).ok_or(CornerError::Orientation(0))?;
     let mut at = vec![start];
     loop {
@@ -691,44 +936,104 @@ fn split(sides: &[Side]) -> Result<Patches, CornerError> {
     if at.len() < 3 {
         return Err(CornerError::Orientation(start));
     }
-    let (c, nc) = centre(sides).ok_or(CornerError::Folded)?;
-    let mut spokes = Vec::with_capacity(at.len());
-    let mut rails: Vec<(Arc<dyn Rail>, Interval)> = Vec::with_capacity(at.len());
-    for &k in &at {
-        let (v, nv, dir) = vertex(k % m).expect("smooth vertex");
-        // the control point in both tangent planes, nearest halfway along the halving direction
-        // and leaving the centre straight toward the vertex
-        let l = v.distance(c);
-        let toward = (v - c) - nc * (v - c).dot(nc);
-        let target = (v + dir * (l / 3.0)).lerp(c + toward * (1.0 / 3.0), 0.5);
-        let (g, h) = (nv.dot(nc), 1.0 - nv.dot(nc) * nv.dot(nc));
-        let (ra, rb) = ((target - v).dot(nv), (target - c).dot(nc));
-        let q = if h > 1e-12 {
-            // target - a nv - b nc, with [1 g; g 1] [a b] = [ra rb]
-            let (a, b) = ((ra - g * rb) / h, (rb - g * ra) / h);
-            target - nv * a - nc * b
-        } else {
-            target - nv * ra
-        };
-        let (curve, range) = bezier_parabola(v, q, c).ok_or(CornerError::Orientation(k % m))?;
-        rails.push((Arc::new(SpokeRail::new(curve.clone(), range, nv, nc)), range));
-        spokes.push((k % m, curve, range));
-    }
+    let (c, spokes, rails) = spokes(sides, &at, None)?;
     let mut pieces = Vec::with_capacity(at.len());
     for i in 0..at.len() {
-        let (first, next) = (at[i], if i + 1 < at.len() { at[i + 1] } else { at[0] + m });
-        let mut ps: Vec<Side> = (first..next).map(|k| sides[k % m].clone()).collect();
-        let (out, back) = (&rails[(i + 1) % at.len()], &rails[i]);
-        ps.push(Side::new(out.0.clone(), out.1.lo, out.1.hi));
-        ps.push(Side::new(back.0.clone(), back.1.hi, back.1.lo));
+        let (ps, first, count) = piece_sides(sides, &at, &rails, i);
         // a split is the last resort: look four times as closely
         let p = HolePatch::new(ps)?;
         if p.folded() || p.scan(64, &mut |_| {}) {
             return Err(CornerError::Folded);
         }
-        pieces.push((p, first % m, next - first));
+        pieces.push((p, first, count));
     }
     Ok(Patches::Split(c, spokes, pieces))
+}
+
+/// The hole closed by rational quads, each proven never to fold: one quad for four sides, else
+/// two sides per quad round a centre, the spokes leaving every other vertex. None when the
+/// hole has an odd number of sides, is the wrong way round, a side is not a line or conic on a
+/// plane, cylinder or sphere, or a proof fails.
+fn rational_patches(sides: &[Side], parity: usize) -> Option<(Patches, RationalProof)> {
+    let m = sides.len();
+    if m < 4 || m > MAX_SIDES || m % 2 == 1 {
+        return None;
+    }
+    let mut proof = RationalProof {
+        proved: true,
+        ..RationalProof::default()
+    };
+    let mut take = |p: &HolePatch| -> bool {
+        let q = p.prove_rational().unwrap_or_default();
+        proof.proved &= q.proved;
+        proof.regions += q.regions;
+        proof.tests += q.tests;
+        proof.depth = proof.depth.max(q.depth);
+        proof.cached |= q.cached;
+        q.proved
+    };
+    if m == 4 {
+        let p = HolePatch::quad(sides.to_vec())?;
+        return take(&p).then_some((Patches::One(p), proof));
+    }
+    let at: Vec<usize> = (0..m / 2).map(|i| 2 * i + parity).collect();
+    let like = HolePatch::with_domain(sides.to_vec(), 1.0);
+    let (c, spokes, rails) = spokes(sides, &at, Some(&like)).ok()?;
+    let mut pieces = Vec::with_capacity(at.len());
+    for i in 0..at.len() {
+        let (ps, first, count) = piece_sides(sides, &at, &rails, i);
+        let p = HolePatch::quad(ps)?;
+        if !take(&p) {
+            return None;
+        }
+        pieces.push((p, first, count));
+    }
+    Some((Patches::Split(c, spokes, pieces), proof))
+}
+
+/// The rational closing of a hole (see `rational_patches`), and its proof.
+pub fn close_hole_rational(sides: Vec<Side>) -> Option<(Closing, RationalProof)> {
+    if let Some((s, same)) = fit_sphere(&sides) {
+        return Some((Closing::One(Surface::Sphere(s), same), RationalProof::default()));
+    }
+    let proc = |p: HolePatch| Surface::Procedural(Proc(Arc::new(p)));
+    let (found, proof) = rational_patches(&sides, 0)?;
+    Some((
+        match found {
+            Patches::One(p) => Closing::One(proc(p), true),
+            Patches::Split(centre, spokes, pieces) => Closing::Split {
+                centre,
+                spokes,
+                pieces: pieces.into_iter().map(|(p, a, b)| (proc(p), a, b)).collect(),
+            },
+        },
+        proof,
+    ))
+}
+
+/// The rational quads of a hole, proven or not, for measurements.
+#[doc(hidden)]
+pub fn rational_quads(sides: &[Side], parity: usize) -> Option<Vec<HolePatch>> {
+    let m = sides.len();
+    let at: Vec<usize> = (0..m / 2).map(|i| 2 * i + parity).collect();
+    let like = HolePatch::with_domain(sides.to_vec(), 1.0);
+    let (_, _, rails) = spokes(sides, &at, Some(&like)).ok()?;
+    (0..at.len())
+        .map(|i| HolePatch::quad(piece_sides(sides, &at, &rails, i).0))
+        .collect()
+}
+
+/// The rational pieces of a hole and its proof, for measurements.
+#[doc(hidden)]
+pub fn rational_pieces(sides: &[Side], parity: usize) -> Option<(Vec<HolePatch>, RationalProof)> {
+    let (found, proof) = rational_patches(sides, parity)?;
+    Some((
+        match found {
+            Patches::One(p) => vec![p],
+            Patches::Split(_, _, pieces) => pieces.into_iter().map(|x| x.0).collect(),
+        },
+        proof,
+    ))
 }
 
 /// The sphere every side lies on with the sphere's normals, if there is one: the rolling
@@ -817,7 +1122,7 @@ pub struct HolePatch {
     min_radius: f64,
     fold: bool,
     /// The rational form, when it replaces the ribbons.
-    rational: Option<Arc<rational::Rational>>,
+    rational: Option<Arc<rational::Quad>>,
 }
 
 impl HolePatch {
@@ -868,6 +1173,11 @@ impl HolePatch {
         let lengths: Vec<f64> = sides.iter().map(|s| s.chord_length().sqrt().sqrt()).collect();
         let mean = lengths.iter().sum::<f64>() / n as f64;
         let corners = cyclic_polygon(&lengths.iter().map(|l| l / mean * side_len).collect::<Vec<_>>());
+        HolePatch::with_corners(sides, corners, side_len)
+    }
+
+    fn with_corners(sides: Vec<Side>, corners: Vec<Point2>, side_len: f64) -> HolePatch {
+        let n = sides.len();
         let lines: Vec<(Vec2, f64)> = (0..n)
             .map(|i| {
                 let (a, b) = (corners[i], corners[(i + 1) % n]);
@@ -940,11 +1250,11 @@ impl HolePatch {
 
     /// The domain point of side i at s in [0, 1] (where the patch is C_i(s)).
     pub fn side_uv(&self, i: usize, s: f64) -> Point2 {
-        if let Some(r) = &self.rational {
-            return r.side_uv(i, s);
-        }
         let n = self.sides.len();
         let (a, b) = (self.corners[i], self.corners[(i + 1) % n]);
+        if self.rational.is_some() {
+            return a.lerp(b, s);
+        }
         let dist = |k: usize, p: Point2| {
             let (g, h) = self.lines[k];
             g.dot(p.to_vec()) + h
@@ -972,19 +1282,44 @@ impl HolePatch {
         self.side_uv(i, (t - s.t0) / (s.t1 - s.t0))
     }
 
-    /// The patch in rational form (lines and conics on planes, cylinders and spheres), None
-    /// when a side is of another kind or does not turn into the hole.
-    pub fn new_rational(sides: Vec<Side>) -> Option<HolePatch> {
-        let mut p = HolePatch::new(sides).ok()?;
-        p.rational = Some(Arc::new(rational::Rational::build(&p)?));
-        p.measure();
-        p.seed();
-        Some(p)
+    /// A rational quad over four sides in order round it (lines and conics on planes,
+    /// cylinders and spheres, and spokes), on a square domain; None when a side is of another
+    /// kind or does not turn into the hole.
+    fn quad(sides: Vec<Side>) -> Option<HolePatch> {
+        let q = Arc::new(rational::Quad::build(&sides)?);
+        // lengths per unit of u and v, and points to start projections from: the control net
+        let (scale, net) = q.net();
+        let square = |k: f64| {
+            [(0.0, 0.0), (k, 0.0), (k, k), (0.0, k)]
+                .map(|(x, y)| Point2::new(x, y))
+                .to_vec()
+        };
+        let mut p = HolePatch::with_corners(sides.clone(), square(1.0), 1.0);
+        p.rational = Some(q.clone());
+        let mut kmax: f64 = 0.0;
+        for i in 1..6 {
+            for j in 1..6 {
+                kmax = kmax.max(max_curvature(
+                    &p.deriv(Point2::new(i as f64 / 6.0, j as f64 / 6.0)),
+                ));
+            }
+        }
+        let size = p.sides.iter().map(|s| s.chord_length()).fold(0.0, f64::max);
+        let rmin = if kmax > 0.0 { (1.0 / kmax).min(size) } else { size };
+        let k = (0.5 * (scale.0 + scale.1) / rmin).clamp(1e-3, 1e3);
+        let mut out = HolePatch::with_corners(sides, square(k), k);
+        out.rational = Some(q);
+        (out.scale, out.min_radius) = ((scale.0 / k, scale.1 / k), rmin);
+        out.seeds = net
+            .into_iter()
+            .map(|(x, p)| (Point2::new(x.x * k, x.y * k), p))
+            .collect();
+        Some(out)
     }
 
-    /// The Bernstein proof that the rational form never folds (None for the ribbon form).
+    /// The proof that the rational form never folds (None for the ribbon form).
     pub fn prove_rational(&self) -> Option<RationalProof> {
-        Some(self.rational.as_ref()?.prove(self))
+        Some(self.rational.as_ref()?.prove())
     }
 
     fn inside(&self, x: Point2) -> bool {
@@ -1064,7 +1399,7 @@ impl HolePatch {
         let n = self.sides.len();
         let x = self.clamp(x);
         if let Some(r) = &self.rational {
-            return r.eval::<S>(x);
+            return r.eval::<S>(x, self.side);
         }
         let mut d = [S::konst(0.0); MAX_SIDES];
         let (mut k, mut second) = (0, f64::INFINITY);
@@ -1455,32 +1790,8 @@ impl Procedural for HolePatch {
             d[i] = Interval::new(di.lo.max(0.0), di.hi.max(0.0));
         }
         if let Some(r) = &self.rational {
-            let corners = [
-                Point2::new(b.u.lo, b.v.lo),
-                Point2::new(b.u.hi, b.v.lo),
-                Point2::new(b.u.lo, b.v.hi),
-                Point2::new(b.u.hi, b.v.hi),
-            ];
-            let dr: Vec<Interval> = (0..n)
-                .map(|i| {
-                    let mut iv = Interval::EMPTY;
-                    for &c in &corners {
-                        iv.include(r.dist(i, c).0);
-                    }
-                    let m = iv.lo.abs().max(iv.hi.abs()) + 1.0;
-                    Interval::new((iv.lo - 1e-12 * m).max(0.0), (iv.hi + 1e-12 * m).max(0.0))
-                })
-                .collect();
-            let sr: Vec<Interval> = (0..n)
-                .map(|i| {
-                    let mut iv = Interval::EMPTY;
-                    for &c in &corners {
-                        iv.include(r.param(i, c).0);
-                    }
-                    iv.grow(1e-12 * (1.0 + iv.lo.abs().max(iv.hi.abs())))
-                })
-                .collect();
-            return r.bbox(&dr, &sr);
+            let k = self.side;
+            return r.bbox(b.u * (1.0 / k), b.v * (1.0 / k));
         }
         let mut sq = [Interval::point(0.0); MAX_SIDES];
         for i in 0..n {
@@ -2226,5 +2537,53 @@ mod tests {
                 assert!((d - r).abs() < 0.2 * r, "{d} {r}");
             }
         }
+    }
+
+    /// A square's sides in the plane z = 0, the top one the cubic `top` (from (1, 1) to
+    /// (0, 1)) as a spoke.
+    fn plane_quad(top: [Point3; 4]) -> Vec<Side> {
+        let plane = Surface::Plane(crate::surface::Plane::new(Frame::WORLD));
+        let line = |a: Point3, b: Point3| {
+            let rail = Arc::new(SurfaceRail::new(
+                Curve::Line(crate::curve::Line::through(a, b).unwrap()),
+                plane.clone(),
+                true,
+            ));
+            Side::new(rail, 0.0, a.distance(b))
+        };
+        let p = |x: f64, y: f64| Point3::new(x, y, 0.0);
+        vec![
+            line(p(0.0, 0.0), p(1.0, 0.0)),
+            line(p(1.0, 0.0), p(1.0, 1.0)),
+            Side::new(Arc::new(SpokeRail::cubic(top, Vec3::Z, Vec3::Z)), 0.0, 1.0),
+            line(p(0.0, 1.0), p(0.0, 0.0)),
+        ]
+    }
+
+    #[test]
+    fn rational_quad_proof_refuses_a_fold() {
+        let p = |x: f64, y: f64| Point3::new(x, y, 0.0);
+        // a straight top proves; one swinging down across the bottom side folds the patch over
+        let flat = HolePatch::quad(plane_quad([p(1.0, 1.0), p(0.7, 1.0), p(0.3, 1.0), p(0.0, 1.0)])).unwrap();
+        assert!(flat.prove_rational().unwrap().proved);
+        let folded =
+            HolePatch::quad(plane_quad([p(1.0, 1.0), p(0.2, 1.0), p(0.8, -1.5), p(0.0, 1.0)])).unwrap();
+        assert!(!folded.prove_rational().unwrap().proved);
+        // and it really does fold: the Jacobian takes both signs
+        let k = folded.side;
+        let (mut pos, mut neg) = (false, false);
+        for i in 1..40 {
+            for j in 1..40 {
+                let d = folded.deriv(Point2::new(k * i as f64 / 40.0, k * j as f64 / 40.0));
+                let z = d.du.cross(d.dv).z;
+                (pos, neg) = (pos || z > 0.0, neg || z < 0.0);
+            }
+        }
+        assert!(pos && neg);
+        // a second proof of the same quad comes from the cache
+        let again =
+            HolePatch::quad(plane_quad([p(1.0, 1.0), p(0.7, 1.0), p(0.3, 1.0), p(0.0, 1.0)])).unwrap();
+        let pr = again.prove_rational().unwrap();
+        assert!(pr.proved && pr.cached);
     }
 }

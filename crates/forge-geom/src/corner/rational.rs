@@ -1,31 +1,40 @@
-//! The hole patch in rational form, for holes whose sides are lines and conics on planes,
-//! cylinders and spheres. The same side-based blend as `HolePatch`, but every piece is a
-//! polynomial: each side is its exact rational quadratic, the cross tangent a C' + b (n x C')
-//! with n the neighbour's (rational) normal field, the blend homogeneous
-//! (P = sum B_i Num_i / sum B_i Den_i with B_i = prod_(j != i) d_j^2), and the domain
-//! distances d_i exact affine functions vanishing exactly at the polygon's corners. So over any
-//! region of the domain, n . (P_u x P_v) W^3 is a polynomial, and its Bernstein coefficients
-//! prove it positive: the patch cannot fold. See docs/fold-proof.md.
+//! Rational four-sided hole patches, for sides that are lines and conics on planes, cylinders
+//! and spheres (and the spokes of a split hole). The domain is the unit square; side i has a
+//! position s and a distance d (side 0: s = u, d = v, then counter-clockwise). Its ribbon is
+//! R_i = (A + d B + d^2 C) / E: A / E the side's exact rational curve, B / E a cross tangent
+//! in the neighbour's tangent plane (a polynomial combination of C' and a polynomial normal
+//! field crossed with C'), C / E a bend matching the neighbouring sides to second order at the
+//! corners. The blend is homogeneous, P = sum B_i A_i.. / sum B_i E_i with
+//! B_i = prod_(j != i) d_j^2, so N and W are tensor polynomials of degree (7, 7) whatever the
+//! hole. The fold proof bounds the directions of P_u and P_v by the Bernstein coefficients of
+//! N and W (a cone test), each corner's quarter in Duffy coordinates where the weights' common
+//! factor is divided out exactly. See docs/fold-proof.md.
 
 // polynomial coefficient loops read best indexed
 #![allow(clippy::needless_range_loop)]
 
-use super::{HolePatch, MAX_SIDES, Scalar, Side, SurfaceRail};
+use super::{Scalar, Side, SurfaceRail};
 use crate::curve::{Curve, CurveGeom};
 use crate::surface::Surface;
-use forge_math::{Box3, Frame, Interval, Point2, Point3, Vec2, Vec3, dmath};
-use std::sync::OnceLock;
+use forge_math::{Box3, Frame, Interval, Point2, Point3, Vec3, dmath};
+use std::collections::HashMap;
+use std::sync::{Mutex, OnceLock};
 
 const U: f64 = f64::EPSILON * 0.5;
-/// The ribbons' damping h = d / (1 + d / H) uses H = DAMP times the side's height: with the
-/// homogeneous blend, a little more damping than the ribbon form keeps the shape the same.
-const DAMP: f64 = 0.7;
+/// The blend's degree in u and in v.
+const DEG: usize = SDEG + 4;
+/// The ribbons' degree in s.
+const SDEG: usize = 3;
+/// Within this of a corner (both distances) the nearest ribbon is the patch.
+const CUT: f64 = 1e-6;
+/// A power of two at least CUT: the corner zones the ribbons alone are proven over.
+const ZONE: f64 = 1.0 / 524_288.0;
 
 fn binom(n: usize, k: usize) -> f64 {
     static T: OnceLock<Vec<Vec<f64>>> = OnceLock::new();
     let t = T.get_or_init(|| {
         let mut t = vec![vec![1.0]];
-        for n in 1..=128 {
+        for n in 1..=32 {
             let p: &Vec<f64> = &t[n - 1];
             let mut r = vec![1.0; n + 1];
             for k in 1..n {
@@ -40,7 +49,7 @@ fn binom(n: usize, k: usize) -> f64 {
 
 /// A polynomial on [0, 1] in Bernstein form.
 #[derive(Clone, Debug, PartialEq)]
-pub struct B1(pub Vec<f64>);
+struct B1(Vec<f64>);
 
 impl B1 {
     fn konst(v: f64) -> B1 {
@@ -89,7 +98,7 @@ impl B1 {
         }
         B1((0..m).map(|i| m as f64 * (self.0[i + 1] - self.0[i])).collect())
     }
-    pub fn eval(&self, s: f64) -> f64 {
+    fn eval(&self, s: f64) -> f64 {
         let mut c = [0.0; 16];
         let m = self.0.len();
         c[..m].copy_from_slice(&self.0);
@@ -99,44 +108,6 @@ impl B1 {
             }
         }
         c[0]
-    }
-    /// The range over [lo, hi] (any interval) from the Bernstein coefficients there.
-    fn range(&self, lo: f64, hi: f64) -> Interval {
-        let m = self.deg();
-        // monomial coefficients, then s = lo + (hi - lo) t, then back to Bernstein in t
-        let mut mono = vec![0.0; m + 1];
-        for (k, mk) in mono.iter_mut().enumerate() {
-            for i in 0..=k {
-                let sign = if (k - i) % 2 == 0 { 1.0 } else { -1.0 };
-                *mk += self.0[i] * binom(m, k) * binom(k, i) * sign;
-            }
-        }
-        let w = hi - lo;
-        let mut sub = vec![0.0; m + 1];
-        for (k, &mk) in mono.iter().enumerate() {
-            // (lo + w t)^k
-            for j in 0..=k {
-                sub[j] += mk * binom(k, j) * lo.powi((k - j) as i32) * w.powi(j as i32);
-            }
-        }
-        let (mut a, mut b) = (f64::INFINITY, f64::NEG_INFINITY);
-        let mut big: f64 = 0.0;
-        for i in 0..=m {
-            let mut c = 0.0;
-            for j in 0..=i {
-                c += sub[j] * binom(i, j) / binom(m, j);
-            }
-            a = a.min(c);
-            b = b.max(c);
-            big = big.max(c.abs());
-        }
-        let scale: f64 = mono
-            .iter()
-            .enumerate()
-            .map(|(k, c)| c.abs() * lo.abs().max(hi.abs()).max(1.0).powi(k as i32))
-            .sum();
-        let e = 1e-12 * (scale + big) + f64::MIN_POSITIVE;
-        Interval::new(a - e, b + e)
     }
 }
 
@@ -158,6 +129,20 @@ fn cross1(a: &V1, b: &V1) -> V1 {
 fn veval(a: &V1, s: f64) -> Vec3 {
     Vec3::new(a[0].eval(s), a[1].eval(s), a[2].eval(s))
 }
+fn vderiv(a: &V1) -> V1 {
+    std::array::from_fn(|k| a[k].deriv())
+}
+fn velevate(a: &V1, q: usize) -> V1 {
+    std::array::from_fn(|k| a[k].elevate(q))
+}
+/// The quadratic through these values at s = 0, 1/2, 1.
+fn quad_through(v: [Vec3; 3]) -> V1 {
+    let mid = v[1] * 2.0 - (v[0] + v[2]) * 0.5;
+    std::array::from_fn(|k| {
+        let g = |x: Vec3| [x.x, x.y, x.z][k];
+        B1(vec![g(v[0]), g(mid), g(v[2])])
+    })
+}
 
 /// A side as a rational curve in s in [0, 1]: Cw / D, and how the rail's parameter maps to s.
 #[derive(Clone, Debug)]
@@ -171,10 +156,8 @@ struct Arc3 {
 }
 
 impl Arc3 {
-    fn of(side: &Side) -> Option<(Arc3, &SurfaceRail)> {
-        let sr = side.rail.surface_rail()?;
-        let (t0, t1) = (side.t0, side.t1);
-        let p = |t: f64| sr.curve.deriv(t);
+    fn of(curve: &Curve, t0: f64, t1: f64) -> Option<Arc3> {
+        let p = |t: f64| curve.deriv(t);
         let pt = |q: Point3| q - Point3::ORIGIN;
         let quad = |c: [Vec3; 3], w: [f64; 3]| -> V1 {
             std::array::from_fn(|k| {
@@ -182,7 +165,7 @@ impl Arc3 {
                 B1(vec![g(c[0]) * w[0], g(c[1]) * w[1], g(c[2]) * w[2]])
             })
         };
-        let (cw, d, arc) = match &sr.curve {
+        let (cw, d, arc) = match curve {
             Curve::Line(_) => {
                 let (a, b) = (pt(p(t0).p), pt(p(t1).p));
                 let cw = std::array::from_fn(|k| {
@@ -206,34 +189,30 @@ impl Arc3 {
                 let f = &c.frame;
                 let (s, co) = dmath::sin_cos(tm);
                 let mid = pt(f.origin) + (f.x().get() * co + f.y().get() * s) * (c.radius / w1);
+                let (sn, cs) = dmath::sin_cos(0.25 * delta);
                 (
                     quad([pt(p(t0).p), mid, pt(p(t1).p)], [1.0, w1, 1.0]),
                     B1(vec![1.0, w1, 1.0]),
-                    Some((tm, {
-                        let (sn, cs) = dmath::sin_cos(0.25 * delta);
-                        sn / cs
-                    })),
+                    Some((tm, sn / cs)),
                 )
             }
             _ => return None,
         };
-        Some((Arc3 { cw, d, arc, t0, t1 }, sr))
+        Some(Arc3 { cw, d, arc, t0, t1 })
     }
     fn s_of_t(&self, t: f64) -> f64 {
         match self.arc {
             None => (t - self.t0) / (self.t1 - self.t0),
             Some((tm, k)) => {
-                0.5 * (1.0 + {
-                    let (sn, cs) = dmath::sin_cos(0.5 * (t - tm));
-                    sn / cs
-                } / k)
+                let (sn, cs) = dmath::sin_cos(0.5 * (t - tm));
+                0.5 * (1.0 + sn / cs / k)
             }
         }
     }
     /// D^2 C' = Cw' D - Cw D', of degree 2 for a rational quadratic (1 for a parabola).
     fn q(&self) -> V1 {
         if self.d.deg() == 0 {
-            return std::array::from_fn(|i| self.cw[i].deriv());
+            return vderiv(&self.cw);
         }
         let w = &self.d.0;
         let p: Vec<Vec3> = (0..3)
@@ -248,59 +227,21 @@ impl Arc3 {
     }
     /// Point, first and second s derivatives.
     fn jet(&self, s: f64) -> (Vec3, Vec3, Vec3) {
-        let (c, c1, c2) = (
-            veval(&self.cw, s),
-            Vec3::new(
-                self.cw[0].deriv().eval(s),
-                self.cw[1].deriv().eval(s),
-                self.cw[2].deriv().eval(s),
-            ),
-            Vec3::new(
-                self.cw[0].deriv().deriv().eval(s),
-                self.cw[1].deriv().deriv().eval(s),
-                self.cw[2].deriv().deriv().eval(s),
-            ),
-        );
-        let (d, d1, d2) = (
+        let d1 = vderiv(&self.cw);
+        let (c, c1, c2) = (veval(&self.cw, s), veval(&d1, s), veval(&vderiv(&d1), s));
+        let (d, dd1, dd2) = (
             self.d.eval(s),
             self.d.deriv().eval(s),
             self.d.deriv().deriv().eval(s),
         );
         let p = c / d;
-        let p1 = (c1 - p * d1) / d;
-        let p2 = (c2 - p1 * (2.0 * d1) - p * d2) / d;
+        let p1 = (c1 - p * dd1) / d;
+        let p2 = (c2 - p1 * (2.0 * dd1) - p * dd2) / d;
         (p, p1, p2)
     }
 }
 
-/// A ribbon: R(s, h) = (A + h B + h^2 C) / E, all of degree q in s.
-#[derive(Clone, Debug)]
-struct RSide {
-    a: V1,
-    b: V1,
-    c: V1,
-    e: B1,
-    /// First and second s derivatives of a, b, c, e, for evaluation.
-    da: [V1; 2],
-    db: [V1; 2],
-    dc: [V1; 2],
-    de: [B1; 2],
-    q: usize,
-    arc: Arc3,
-}
-
-/// The rational patch data (the domain is the `HolePatch`'s).
-#[derive(Clone, Debug)]
-pub struct Rational {
-    sides: Vec<RSide>,
-    corners: Vec<Point2>,
-    lam: Vec<f64>,
-    heights: Vec<f64>,
-    /// Where both distances of a corner are under this, the nearest ribbon is the patch.
-    cut: f64,
-}
-
-/// The neighbour's outward normal along a side, times D for a sphere or cylinder (a polynomial
+/// The neighbour's outward normal along a side times D for a sphere or cylinder (a polynomial
 /// vector), or None when it is not rational.
 fn normal_d(sr: &SurfaceRail, arc: &Arc3) -> Option<V1> {
     let sg = sr.sign;
@@ -315,7 +256,6 @@ fn normal_d(sr: &SurfaceRail, arc: &Arc3) -> Option<V1> {
             let o = cy.frame.origin - Point3::ORIGIN;
             let z = cy.frame.z().get();
             let v = vadd1(&arc.cw, &vmul1(&vk1(-o), &arc.d));
-            // v - z (z . v)
             let along = v[0].scale(z.x).add(&v[1].scale(z.y)).add(&v[2].scale(z.z));
             let f = vadd1(&v, &vmul1(&vk1(-z), &along));
             Some(std::array::from_fn(|i| f[i].scale(sg / cy.radius)))
@@ -324,41 +264,145 @@ fn normal_d(sr: &SurfaceRail, arc: &Arc3) -> Option<V1> {
     }
 }
 
-impl Rational {
-    pub fn build(p: &HolePatch) -> Option<Rational> {
-        let n = p.sides.len();
-        let mut arcs = Vec::with_capacity(n);
-        let mut rails = Vec::with_capacity(n);
-        for s in &p.sides {
-            let (a, r) = Arc3::of(s)?;
-            arcs.push(a);
-            rails.push(r);
+/// A side's rational curve and a polynomial field F across it in the neighbour's tangent
+/// plane, pointing the way n x C' does (into the hole), of degree at most 2.
+fn side_data(side: &Side) -> Option<(Arc3, V1)> {
+    let (t0, t1) = (side.t0, side.t1);
+    if let Some(sp) = side.rail.spoke() {
+        // a cubic spoke's normal is w / |w|, w = p' x f: the plane is spanned by C' and f, which
+        // points into the hole on either side of the spoke (so turns with the direction of travel)
+        let (p, f0, f1) = sp.cubic?;
+        if (t0.min(t1), t0.max(t1)) != (0.0, 1.0) {
+            return None;
         }
-        // the hole's corners exactly shared: each side starts where the one before ends
-        for i in 0..n {
-            let prev = (i + n - 1) % n;
-            let (w_end, w_start) = (*arcs[prev].d.0.last().unwrap(), arcs[i].d.0[0]);
-            for k in 0..3 {
-                let e = *arcs[prev].cw[k].0.last().unwrap() / w_end;
-                arcs[i].cw[k].0[0] = e * w_start;
+        let (p, f0, f1) = if t0 < t1 {
+            (p, f0, f1)
+        } else {
+            ([p[3], p[2], p[1], p[0]], -f1, -f0)
+        };
+        let g = |v: Vec3, k: usize| [v.x, v.y, v.z][k];
+        let arc = Arc3 {
+            cw: std::array::from_fn(|k| B1(p.iter().map(|x| g(*x - Point3::ORIGIN, k)).collect())),
+            d: B1::konst(1.0),
+            arc: None,
+            t0,
+            t1,
+        };
+        return Some((arc, std::array::from_fn(|k| B1(vec![g(f0, k), g(f1, k)]))));
+    }
+    let sr = side.rail.surface_rail()?;
+    let arc = Arc3::of(&sr.curve, t0, t1)?;
+    let q = arc.q();
+    let f = cross1(&normal_d(sr, &arc)?, &q);
+    if matches!(sr.surface, Surface::Plane(_)) || arc.d.deg() == 0 {
+        return Some((arc, f));
+    }
+    // (n D) x Q is D times a quadratic for a circle on a sphere or cylinder
+    let at = |s: f64| veval(&f, s) / arc.d.eval(s);
+    let g = quad_through([at(0.0), at(0.5), at(1.0)]);
+    Some((arc, g))
+}
+
+/// A ribbon (A + d B + d^2 C) / E, all of degree SDEG in s.
+#[derive(Clone, Debug)]
+struct RSide {
+    abc: [V1; 3],
+    e: B1,
+    /// The coefficients by Bernstein index: A, B, C and E (with E as the fourth of A's).
+    flat: [[Vec3; 3]; SDEG + 1],
+    ew: [f64; SDEG + 1],
+    arc: Arc3,
+}
+
+impl RSide {
+    fn new(abc: [V1; 3], e: B1, arc: Arc3) -> RSide {
+        let flat = std::array::from_fn(|a| {
+            std::array::from_fn(|v| Vec3::new(abc[v][0].0[a], abc[v][1].0[a], abc[v][2].0[a]))
+        });
+        let ew = std::array::from_fn(|a| e.0[a]);
+        RSide {
+            abc,
+            e,
+            flat,
+            ew,
+            arc,
+        }
+    }
+    /// A, B, C and E at s with their first and second s derivatives (when `jet`).
+    fn at(&self, s: f64, jet: bool) -> ([[Vec3; 3]; 3], [f64; 3]) {
+        // the Bernstein basis of degree SDEG and its derivatives, from those of lower degree:
+        // B_k^n' = n (B_(k-1)^(n-1) - B_k^(n-1)), B_k^n'' = n (n - 1) (B_(k-2) - 2 B_(k-1) + B_k)
+        let n = SDEG;
+        let basis = |deg: usize| {
+            let mut c = [0.0; SDEG + 3];
+            c[2] = 1.0;
+            for d in 1..=deg {
+                for k in (0..=d).rev() {
+                    c[k + 2] = c[k + 1] * s + c[k + 2] * (1.0 - s);
+                }
+            }
+            // c[k + 2] is B_k; c[0], c[1] and past deg stay zero
+            c
+        };
+        let mut b = [[0.0; SDEG + 1]; 3];
+        let b0 = basis(n);
+        b[0].copy_from_slice(&b0[2..]);
+        if jet {
+            let (b1, b2) = (basis(n - 1), basis(n - 2));
+            let nf = n as f64;
+            for k in 0..=n {
+                b[1][k] = nf * (b1[k + 1] - b1[k + 2]);
+                b[2][k] = nf * (nf - 1.0) * (b2[k] - 2.0 * b2[k + 1] + b2[k + 2]);
             }
         }
-        let corners = p.corners.clone();
-        let lam: Vec<f64> = (0..n)
-            .map(|i| 1.0 / (corners[(i + 1) % n] - corners[i]).length())
-            .collect();
-        let edge = |i: usize| corners[(i + 1) % n] - corners[i];
-        let cr = |a: Vec2, b: Vec2| a.x * b.y - a.y * b.x;
-        let mut sides = Vec::with_capacity(n);
-        for i in 0..n {
-            let arc = &arcs[i];
+        let mut v = [[Vec3::ZERO; 3]; 3];
+        let mut e = [0.0; 3];
+        for o in 0..if jet { 3 } else { 1 } {
+            for a in 0..=n {
+                let w = b[o][a];
+                for q in 0..3 {
+                    v[q][o] += self.flat[a][q] * w;
+                }
+                e[o] += self.ew[a] * w;
+            }
+        }
+        (v, e)
+    }
+}
+
+/// The rational quad.
+#[derive(Clone, Debug)]
+pub struct Quad {
+    sides: Vec<RSide>,
+    /// N (x, y, z) and W over the unit square.
+    num: [Bp; 3],
+    den: Bp,
+}
+
+impl Quad {
+    /// The quad over four sides in order round it, None when a side is of another kind or
+    /// its cross tangent would not turn into the hole.
+    pub fn build(sides: &[Side]) -> Option<Quad> {
+        if sides.len() != 4 {
+            return None;
+        }
+        let mut data: Vec<(Arc3, V1)> = sides.iter().map(side_data).collect::<Option<_>>()?;
+        // the corners exactly shared: each side starts where the one before ends
+        for i in 0..4 {
+            let prev = (i + 3) % 4;
+            for k in 0..3 {
+                let e = *data[prev].0.cw[k].0.last().unwrap();
+                data[i].0.cw[k].0[0] = e;
+            }
+        }
+        let mut out = Vec::with_capacity(4);
+        for i in 0..4 {
+            let (arc, f) = &data[i];
+            let (prev, next) = (&data[(i + 3) % 4].0, &data[(i + 1) % 4].0);
             let q = arc.q();
-            // T = (a Q + b E) / D^2 = a C' + b D^k (n x C'), E = (n D^k) x Q, inward for b > 0
-            let e = cross1(&normal_d(rails[i], arc)?, &q);
-            let dd = arc.d.mul(&arc.d);
-            let tq = |s: f64| (veval(&q, s) / dd.eval(s), veval(&e, s) / dd.eval(s));
+            // T = (a Q + b F) / D: at the ends, the neighbouring sides' tangents
             let solve = |s: f64, target: Vec3| -> Option<(f64, f64)> {
-                let (u, v) = tq(s);
+                let (u, v) = (veval(&q, s), veval(f, s));
                 forge_math::linalg::solve2(
                     u.dot(u),
                     u.dot(v),
@@ -368,236 +412,149 @@ impl Rational {
                     target.dot(v),
                 )
             };
-            let (prev, next) = (&arcs[(i + n - 1) % n], &arcs[(i + 1) % n]);
-            let (lp, li, ln) = (edge((i + n - 1) % n), edge(i), edge((i + 1) % n));
-            let (c0, c1) = (arc.jet(0.0), arc.jet(1.0));
-            // s along side i is affine (x - c_i) . L_i / |L_i|^2; the ribbons of neighbouring sides
-            // agree to first order at the corner, and to second along the neighbour's curve
-            let (sg0, dl0) = (-lp.dot(li) / li.length_sq(), lam[i] * cr(lp, li));
-            let (sg1, dl1) = (ln.dot(li) / li.length_sq(), lam[i] * cr(li, ln));
-            let t0 = (-prev.jet(1.0).1 - c0.1 * sg0) / dl0;
-            let t1 = (next.jet(0.0).1 - c1.1 * sg1) / dl1;
-            let (a0, b0) = solve(0.0, t0)?;
-            let (a1, b1) = solve(1.0, t1)?;
+            let (pj, nj) = (prev.jet(1.0), next.jet(0.0));
+            let (a0, b0) = solve(0.0, -pj.1 * arc.d.eval(0.0))?;
+            let (a1, b1) = solve(1.0, nj.1 * arc.d.eval(1.0))?;
             if !(b0 > 0.0 && b1 > 0.0) {
                 return None;
             }
-            // a C' and b D^k (n x C'): through the middle, the frame components |C'| a and
-            // D^k |C'| b interpolate linearly between the ends (as the ribbon form's do)
-            let k = if matches!(rails[i].surface, Surface::Plane(_)) {
-                0
-            } else {
-                1
-            };
-            let speed = |s: f64| arc.jet(s).1.length();
-            let dk = |s: f64| arc.d.eval(s).powi(k);
-            let (al0, al1) = (a0 * speed(0.0), a1 * speed(1.0));
-            let (be0, be1) = (b0 * dk(0.0) * speed(0.0), b1 * dk(1.0) * speed(1.0));
-            let am = 0.5 * (al0 + al1) / speed(0.5);
-            let bm = 0.5 * (be0 + be1) / (dk(0.5) * speed(0.5));
-            let quad = |e0: f64, m: f64, e1: f64| B1(vec![e0, 2.0 * m - 0.5 * (e0 + e1), e1]);
-            let (la, lb) = (quad(a0, am, a1), quad(b0, bm, b1));
-            if lb.0.iter().any(|&x| x <= 0.0) {
-                return None;
-            }
-            let bv: V1 = std::array::from_fn(|k| la.mul(&q[k]).add(&lb.mul(&e[k])));
-            // T' at the ends, from T = B / D^2
-            let tdot = |s: f64| {
-                let bd: Vec3 = Vec3::new(
-                    bv[0].deriv().eval(s),
-                    bv[1].deriv().eval(s),
-                    bv[2].deriv().eval(s),
-                );
-                let (b0, d2, d2d) = (veval(&bv, s), dd.eval(s), dd.deriv().eval(s));
-                (bd - b0 * (d2d / d2)) / d2
-            };
-            let hh = p.heights[i];
-            // R = C + h T + h^2 K: along the neighbour, d = tau dl, s = end + tau sg, h = d - d^2 / H ..
-            let kend = |target2: Vec3, c2: Vec3, sg: f64, dl: f64, t: Vec3, td: Vec3| {
-                (target2 - c2 * (sg * sg) - td * (2.0 * dl * sg) + t * (2.0 * dl * dl / hh)) / (2.0 * dl * dl)
-            };
-            let k0 = kend(prev.jet(1.0).2, c0.2, sg0, dl0, t0, tdot(0.0));
-            let k1 = kend(next.jet(0.0).2, c1.2, sg1, dl1, t1, tdot(1.0));
-            // K / D linear in s (times D: of degree 1 + deg D)
-            let kp: V1 = std::array::from_fn(|k| {
-                B1(vec![
-                    [k0.x, k0.y, k0.z][k] * arc.d.eval(0.0),
-                    [k1.x, k1.y, k1.z][k] * arc.d.eval(1.0),
-                ])
+            let b: V1 =
+                std::array::from_fn(|k| B1(vec![a0, a1]).mul(&q[k]).add(&B1(vec![b0, b1]).mul(&f[k])));
+            // the bend: half the neighbours' second derivatives, linear in s, over D
+            let (k0, k1) = (pj.2 * 0.5, nj.2 * 0.5);
+            let kd: V1 = std::array::from_fn(|k| {
+                let g = |v: Vec3| [v.x, v.y, v.z][k];
+                B1(vec![g(k0), g(k1)]).mul(&arc.d)
             });
-            let av: V1 = std::array::from_fn(|k| arc.cw[k].mul(&arc.d));
-            let cv: V1 = std::array::from_fn(|k| kp[k].mul(&arc.d));
-            let q = [&av, &bv, &cv]
-                .iter()
-                .flat_map(|v| v.iter().map(|b| b.deg()))
-                .max()
-                .unwrap()
-                .max(dd.deg());
-            let el = |v: &V1| -> V1 { std::array::from_fn(|k| v[k].elevate(q)) };
-            let dv = |v: &V1| -> [V1; 2] {
-                let d1: V1 = std::array::from_fn(|k| v[k].deriv());
-                let d2: V1 = std::array::from_fn(|k| d1[k].deriv());
-                [d1, d2]
-            };
-            let (a, b, c, e) = (el(&av), el(&bv), el(&cv), dd.elevate(q));
-            sides.push(RSide {
-                da: dv(&a),
-                db: dv(&b),
-                dc: dv(&c),
-                de: [e.deriv(), e.deriv().deriv()],
-                a,
-                b,
-                c,
-                e,
-                q,
-                arc: arc.clone(),
-            });
+            out.push(RSide::new(
+                [velevate(&arc.cw, SDEG), velevate(&b, SDEG), velevate(&kd, SDEG)],
+                arc.d.elevate(SDEG),
+                arc.clone(),
+            ));
         }
-        Some(Rational {
-            sides,
-            corners,
-            lam,
-            heights: p.heights.iter().map(|h| h * DAMP).collect(),
-            cut: 1e-6 * p.side,
-        })
+        let (num, den) = tensor(&out);
+        Some(Quad { sides: out, num, den })
+    }
+
+    /// The mean lengths per unit of u and of v, and the control points with their places in
+    /// the unit square (the corners' own points where the weights vanish).
+    pub(super) fn net(&self) -> ((f64, f64), Vec<(Point2, Point3)>) {
+        let n1 = DEG + 1;
+        let pt = |k: usize| {
+            let w = self.den.c[k];
+            (w > 0.0)
+                .then(|| Point3::new(self.num[0].c[k], self.num[1].c[k], self.num[2].c[k]) - Point3::ORIGIN)
+                .map(|v| Point3::ORIGIN + v / w)
+        };
+        let mut net = Vec::with_capacity(n1 * n1);
+        let (mut su, mut sv, mut nu, mut nv) = (0.0, 0.0, 0, 0);
+        for i in 0..n1 {
+            for j in 0..n1 {
+                let Some(p) = pt(i * n1 + j) else { continue };
+                net.push((Point2::new(i as f64 / DEG as f64, j as f64 / DEG as f64), p));
+                if let Some(q) = (i < DEG).then(|| pt((i + 1) * n1 + j)).flatten() {
+                    su += q.distance(p) * DEG as f64;
+                    nu += 1;
+                }
+                if let Some(q) = (j < DEG).then(|| pt(i * n1 + j + 1)).flatten() {
+                    sv += q.distance(p) * DEG as f64;
+                    nv += 1;
+                }
+            }
+        }
+        for c in 0..4 {
+            let v = self.corner(c);
+            net.push((
+                Point2::new([0.0, 1.0, 1.0, 0.0][c], [0.0, 0.0, 1.0, 1.0][c]),
+                Point3::new(v.x, v.y, v.z),
+            ));
+        }
+        ((su / nu.max(1) as f64, sv / nv.max(1) as f64), net)
     }
 
     pub fn side_s(&self, i: usize, t: f64) -> f64 {
         self.sides[i].arc.s_of_t(t)
     }
 
-    /// s_i = (x - c_i) . L_i / |L_i|^2 and its gradient.
-    pub(super) fn param(&self, i: usize, x: Point2) -> (f64, Vec2) {
-        let n = self.corners.len();
-        let (a, b) = (self.corners[i], self.corners[(i + 1) % n]);
-        let e = b - a;
-        let g = e / e.length_sq();
-        ((x - a).dot(g), g)
-    }
-
-    /// The domain point of side i at s.
-    pub(super) fn side_uv(&self, i: usize, s: f64) -> Point2 {
-        let n = self.corners.len();
-        self.corners[i].lerp(self.corners[(i + 1) % n], s)
-    }
-
-    pub(super) fn dist(&self, i: usize, x: Point2) -> (f64, Vec2) {
-        let n = self.corners.len();
-        let (a, b) = (self.corners[i], self.corners[(i + 1) % n]);
-        let e = b - a;
-        let l = self.lam[i];
-        (
-            l * (e.x * (x - a).y - e.y * (x - a).x),
-            Vec2::new(-e.y * l, e.x * l),
-        )
-    }
-
-    pub(super) fn eval<S: Scalar>(&self, x: Point2) -> S::V {
-        let n = self.corners.len();
-        let mut d = [S::konst(0.0); MAX_SIDES];
-        let (mut k, mut second) = (0, f64::INFINITY);
-        for i in 0..n {
-            let (v, g) = self.dist(i, x);
-            d[i] = S::affine(v.max(0.0), g.x, g.y);
-            if i > 0 && v < d[k].value() {
-                second = d[k].value();
-                k = i;
-            } else if i > 0 {
-                second = second.min(v);
+    /// The patch at (u, v) in the unit square, with derivatives in the domain's (x, y) =
+    /// (u, v) times `k`.
+    pub(super) fn eval<S: Scalar>(&self, x: Point2, k: f64) -> S::V {
+        let (uv, vv) = ((x.x / k).clamp(0.0, 1.0), (x.y / k).clamp(0.0, 1.0));
+        let g = 1.0 / k;
+        let u = S::affine(uv, g, 0.0);
+        let v = S::affine(vv, 0.0, g);
+        let one = S::konst(1.0);
+        let s = [u, v, one - u, one - v];
+        let d = [v, one - u, one - v, u];
+        let (mut kk, mut second) = (0, f64::INFINITY);
+        for i in 1..4 {
+            if d[i].value() < d[kk].value() {
+                second = d[kk].value();
+                kk = i;
+            } else {
+                second = second.min(d[i].value());
             }
         }
-        let mut r = [S::zero_v(); MAX_SIDES];
-        let mut om = [S::konst(0.0); MAX_SIDES];
-        for i in 0..n {
-            let (sv0, sg) = self.param(i, x);
-            let s = S::affine(sv0, sg.x, sg.y);
-            let sd = &self.sides[i];
-            let hh = self.heights[i];
-            let hp = d[i] + S::konst(hh);
-            let h = d[i] * S::konst(hh) * hp.inv();
-            let sv = sv0;
-            let ds = s - S::konst(sv);
-            let along = |v: &V1, d: &[V1; 2]| -> S::V {
-                if S::JET {
-                    s.along(veval(v, sv), veval(&d[0], sv), veval(&d[1], sv))
-                } else {
-                    s.along(veval(v, sv), Vec3::ZERO, Vec3::ZERO)
-                }
-            };
-            let e = if S::JET {
-                S::konst(sd.e.eval(sv))
-                    + ds * S::konst(sd.de[0].eval(sv))
-                    + ds * ds * S::konst(0.5 * sd.de[1].eval(sv))
-            } else {
-                S::konst(sd.e.eval(sv))
-            };
-            let num = along(&sd.a, &sd.da) + along(&sd.b, &sd.db) * h + along(&sd.c, &sd.dc) * (h * h);
+        let mut r = [S::zero_v(); 4];
+        let mut om = [S::konst(0.0); 4];
+        for i in 0..4 {
+            let sv = s[i].value();
+            let (v, e) = self.sides[i].at(sv, S::JET);
+            let ds = s[i] - S::konst(sv);
+            let e = S::konst(e[0]) + ds * S::konst(e[1]) + ds * ds * S::konst(0.5 * e[2]);
+            let num = s[i].along(v[0][0], v[0][1], v[0][2])
+                + s[i].along(v[1][0], v[1][1], v[1][2]) * d[i]
+                + s[i].along(v[2][0], v[2][1], v[2][2]) * (d[i] * d[i]);
             r[i] = num * e.inv();
-            // Den = E(s) (H + d)^2, the ribbon's share of the homogeneous blend
-            // Den = E(s) (H + d)^2 (2H - d)^2: the last factor cancels most of (H + d)^2's growth
-            // across the domain, so the blend's weights stay close to d^-2
-            let m = S::konst(2.0 * hh) - d[i];
-            om[i] = e * hp * hp * m * m;
+            om[i] = e;
         }
-        if second <= self.cut {
-            return r[k];
+        if second <= CUT {
+            return r[kk];
         }
-        // B_i Den_i relative to the nearest side's
-        let mut w = [S::konst(0.0); MAX_SIDES];
+        // B_i E_i relative to the nearest side's: (d_k / d_i)^2 E_i
+        let mut w = [S::konst(0.0); 4];
         let mut sum = S::konst(0.0);
-        for i in 0..n {
-            let q = d[k] * d[i].inv();
-            w[i] = if i == k { om[i] } else { q * q * om[i] };
+        for i in 0..4 {
+            let q = d[kk] * d[i].inv();
+            w[i] = if i == kk { om[i] } else { q * q * om[i] };
             sum = sum + w[i];
         }
         let inv = sum.inv();
-        let mut out = r[k];
-        for i in 0..n {
-            if i != k {
-                out = out + (r[i] - r[k]) * (w[i] * inv);
+        let mut out = r[kk];
+        for i in 0..4 {
+            if i != kk {
+                out = out + (r[i] - r[kk]) * (w[i] * inv);
             }
         }
         out
     }
 
-    /// A box holding the patch over the domain points with distances in `d` (the patch is a
-    /// convex combination of its ribbons there).
-    pub(super) fn bbox(&self, d: &[Interval], sr: &[Interval]) -> Box3 {
-        let n = self.corners.len();
+    /// A box holding the patch over [u0, u1] x [v0, v1] of the unit square: the hull of the
+    /// control points there (the weights are non-negative).
+    pub(super) fn bbox(&self, u: Interval, v: Interval) -> Box3 {
+        let cl = |i: Interval| {
+            let w = 4.0 * f64::EPSILON;
+            Interval::new((i.lo - w).max(0.0), (i.hi + w).min(1.0))
+        };
+        let (u, v) = (cl(u), cl(v));
+        let part = |p: &Bp| p.restrict(true, u.lo, u.hi).restrict(false, v.lo, v.hi);
+        let (n, w) = (self.num.clone().map(|p| part(&p)), part(&self.den));
         let mut hull = Box3::EMPTY;
-        for i in 0..n {
-            let s = sr[i];
-            let hh = self.heights[i];
-            let damp = |x: f64| x / (1.0 + x / hh);
-            let h = Interval::new(
-                damp(d[i].lo.max(0.0)).next_down().max(0.0),
-                damp(d[i].hi.max(0.0)).next_up().next_up(),
-            );
-            let sd = &self.sides[i];
-            let e = sd.e.range(s.lo, s.hi);
-            let rib: [Interval; 3] = std::array::from_fn(|k| {
-                let num = sd.a[k].range(s.lo, s.hi)
-                    + h * sd.b[k].range(s.lo, s.hi)
-                    + h.sqr() * sd.c[k].range(s.lo, s.hi);
-                num.div(&e)
-            });
-            hull = hull.hull(&Box3 {
-                x: rib[0],
-                y: rib[1],
-                z: rib[2],
-            });
+        let mut big: f64 = 0.0;
+        for k in 0..w.c.len() {
+            if w.c[k] > 0.0 {
+                let q = Point3::new(n[0].c[k], n[1].c[k], n[2].c[k]) - Point3::ORIGIN;
+                let q = Point3::ORIGIN + q / w.c[k];
+                hull.include(q);
+                big = big.max(q.x.abs()).max(q.y.abs()).max(q.z.abs());
+            }
         }
-        let m = hull
-            .x
-            .lo
-            .abs()
-            .max(hull.x.hi.abs())
-            .max(hull.y.lo.abs().max(hull.y.hi.abs()))
-            .max(hull.z.lo.abs().max(hull.z.hi.abs()));
-        hull.grow(64.0 * f64::EPSILON * m)
+        // the coefficients' rounding, and the corner zones, where the nearest ribbon stands in
+        // for the blend (within about CUT^2 of it)
+        hull.grow(1e-11 * big)
     }
 
-    pub(super) fn transformed(&self, f: &Frame) -> Rational {
+    pub(super) fn transformed(&self, f: &Frame) -> Quad {
         let mut out = self.clone();
         let o = f.point_to_world(Point3::ORIGIN) - Point3::ORIGIN;
         let tv = |v: &V1, w: &B1, affine: bool| -> V1 {
@@ -615,703 +572,669 @@ impl Rational {
             out
         };
         for s in &mut out.sides {
-            s.a = tv(&s.a, &s.e, true);
-            s.b = tv(&s.b, &s.e, false);
-            s.c = tv(&s.c, &s.e, false);
-            s.arc.cw = tv(&s.arc.cw, &s.arc.d, true);
-            let dv = |v: &V1| -> [V1; 2] {
-                let d1: V1 = std::array::from_fn(|k| v[k].deriv());
-                let d2: V1 = std::array::from_fn(|k| d1[k].deriv());
-                [d1, d2]
-            };
-            (s.da, s.db, s.dc) = (dv(&s.a), dv(&s.b), dv(&s.c));
+            let abc = [
+                tv(&s.abc[0], &s.e, true),
+                tv(&s.abc[1], &s.e, false),
+                tv(&s.abc[2], &s.e, false),
+            ];
+            let mut arc = s.arc.clone();
+            arc.cw = tv(&s.arc.cw, &s.arc.d, true);
+            *s = RSide::new(abc, s.e.clone(), arc);
         }
+        (out.num, out.den) = tensor(&out.sides);
         out
     }
 }
 
+/// N and W over the unit square: each side's weighted ribbon in its (s, d), turned into (u, v).
+fn tensor(sides: &[RSide]) -> ([Bp; 3], Bp) {
+    let n1 = DEG + 1;
+    let mut out = [Bp::zero(DEG, DEG); 4];
+    for (i, sd) in sides.iter().enumerate() {
+        // the ribbon in Bernstein form of degree (SDEG, 2) in (s, d), the weight's factor
+        // s^2 (1 - s)^2 (1 - d)^2 = B_2^4(s) B_0^2(d) / 6 multiplied in, d elevated to DEG
+        let mut g = [[[0.0; 4]; DEG + 1]; DEG + 1];
+        for a in 0..=SDEG {
+            let fs = binom(SDEG, a) * binom(4, 2) / binom(DEG, a + 2);
+            for b in 0..3 {
+                let x: [f64; 4] = std::array::from_fn(|k| match (k, b) {
+                    (3, _) => sd.e.0[a],
+                    (_, 0) => sd.abc[0][k].0[a],
+                    (_, 1) => sd.abc[0][k].0[a] + 0.5 * sd.abc[1][k].0[a],
+                    _ => sd.abc[0][k].0[a] + sd.abc[1][k].0[a] + sd.abc[2][k].0[a],
+                });
+                let fd = binom(2, b) / binom(4, b);
+                // B_b^4 elevated to degree DEG
+                for l in b..=b + DEG - 4 {
+                    let el = binom(4, b) * binom(DEG - 4, l - b) / binom(DEG, l);
+                    for k in 0..4 {
+                        g[a + 2][l][k] += x[k] * fs * fd * el;
+                    }
+                }
+            }
+        }
+        for al in 0..=DEG {
+            for be in 0..=DEG {
+                let (iu, iv) = match i {
+                    0 => (al, be),
+                    1 => (DEG - be, al),
+                    2 => (DEG - al, DEG - be),
+                    _ => (be, DEG - al),
+                };
+                for k in 0..4 {
+                    out[k].c[iu * n1 + iv] += g[al][be][k];
+                }
+            }
+        }
+    }
+    // a few roundings per term, a handful of terms per coefficient
+    for p in &mut out {
+        p.e = 64.0 * U * p.big();
+    }
+    ([out[0], out[1], out[2]], out[3])
+}
+
+/// Room for the coefficients of a Duffy triangle's polynomials.
+const CAP: usize = (2 * DEG + 1) * (DEG + 2);
+
 /// A polynomial over [0, 1]^2 in tensor Bernstein form, each coefficient within `e` of the true
-/// one (rounding of its construction).
-#[derive(Clone, Debug)]
+/// one (the rounding of its construction).
+#[derive(Clone, Copy, Debug)]
 struct Bp {
     m: usize,
     n: usize,
-    c: Vec<f64>,
     e: f64,
+    c: [f64; CAP],
 }
 
 impl Bp {
-    fn konst(v: f64) -> Bp {
+    fn zero(m: usize, n: usize) -> Bp {
         Bp {
-            m: 0,
-            n: 0,
-            c: vec![v],
+            m,
+            n,
             e: 0.0,
+            c: [0.0; CAP],
         }
     }
-    /// The bilinear polynomial with these corner values: (u, v) = (0,0), (0,1), (1,0), (1,1).
-    fn bilinear(v: [Interval; 4]) -> Bp {
-        let mut e: f64 = 0.0;
-        let c: Vec<f64> = v
-            .iter()
-            .map(|i| {
-                let m = i.mid();
-                e = e.max((i.hi - m).max(m - i.lo));
-                m
-            })
-            .collect();
-        Bp { m: 1, n: 1, c, e }
+    fn len(&self) -> usize {
+        (self.m + 1) * (self.n + 1)
     }
     fn at(&self, i: usize, j: usize) -> f64 {
         self.c[i * (self.n + 1) + j]
     }
     fn big(&self) -> f64 {
-        self.c.iter().fold(0.0f64, |a, &x| a.max(x.abs()))
+        self.c[..self.len()].iter().fold(0.0f64, |a, &x| a.max(x.abs()))
     }
-    fn mul(&self, o: &Bp) -> Bp {
-        let (m, n) = (self.m + o.m, self.n + o.n);
-        // in the scaled basis (coefficients times binomials) a product is a plain convolution
-        let scaled = |p: &Bp| -> Vec<f64> {
-            let mut c = p.c.clone();
-            for i in 0..=p.m {
-                for j in 0..=p.n {
-                    c[i * (p.n + 1) + j] *= binom(p.m, i) * binom(p.n, j);
-                }
-            }
-            c
-        };
-        let (a, b) = (scaled(self), scaled(o));
-        let mut c = vec![0.0; (m + 1) * (n + 1)];
-        for i in 0..=self.m {
-            for j in 0..=self.n {
-                let x = a[i * (self.n + 1) + j];
-                if x == 0.0 {
-                    continue;
-                }
-                for k in 0..=o.m {
-                    let row = (i + k) * (n + 1) + j;
-                    let orow = &b[k * (o.n + 1)..(k + 1) * (o.n + 1)];
-                    let out = &mut c[row..row + o.n + 1];
-                    for l in 0..=o.n {
-                        out[l] += x * orow[l];
-                    }
-                }
-            }
-        }
-        for i in 0..=m {
-            for j in 0..=n {
-                c[i * (n + 1) + j] /= binom(m, i) * binom(n, j);
-            }
-        }
-        // each scaled term carries a few roundings; the unscaled sum of weights is 1
-        let terms = ((self.m.min(o.m) + 1) * (self.n.min(o.n) + 1)) as f64;
-        let (ba, bb) = (self.big(), o.big());
-        let e = self.e * bb + o.e * ba + self.e * o.e + (terms + 16.0) * U * ba * bb;
-        Bp {
-            m,
-            n,
-            c,
-            e: e * (1.0 + 1e-12),
-        }
-    }
-    fn elevate(&self, m: usize, n: usize) -> Bp {
-        let mut p = self.clone();
-        while p.m < m {
-            let (pm, pn) = (p.m, p.n);
-            let mut c = vec![0.0; (pm + 2) * (pn + 1)];
-            for i in 0..=pm + 1 {
-                let t = i as f64 / (pm + 1) as f64;
-                for j in 0..=pn {
-                    let a = if i > 0 { p.at(i - 1, j) } else { 0.0 };
-                    let b = if i <= pm { p.at(i, j) } else { 0.0 };
-                    c[i * (pn + 1) + j] = t * a + (1.0 - t) * b;
-                }
-            }
-            p = Bp {
-                m: pm + 1,
-                n: pn,
-                e: p.e + 2.0 * U * p.big(),
-                c,
-            };
-        }
-        while p.n < n {
-            let (pm, pn) = (p.m, p.n);
-            let mut c = vec![0.0; (pm + 1) * (pn + 2)];
-            for i in 0..=pm {
-                for j in 0..=pn + 1 {
-                    let t = j as f64 / (pn + 1) as f64;
-                    let a = if j > 0 { p.at(i, j - 1) } else { 0.0 };
-                    let b = if j <= pn { p.at(i, j) } else { 0.0 };
-                    c[i * (pn + 2) + j] = t * a + (1.0 - t) * b;
-                }
-            }
-            p = Bp {
-                m: pm,
-                n: pn + 1,
-                e: p.e + 2.0 * U * p.big(),
-                c,
-            };
-        }
-        p
-    }
-    fn lin(&self, s: f64, o: &Bp, t: f64) -> Bp {
-        let (m, n) = (self.m.max(o.m), self.n.max(o.n));
-        let (a, b) = (self.elevate(m, n), o.elevate(m, n));
-        let c: Vec<f64> = a.c.iter().zip(&b.c).map(|(x, y)| s * x + t * y).collect();
-        let big = c.iter().fold(0.0f64, |a, &x| a.max(x.abs()));
-        Bp {
-            m,
-            n,
-            e: (a.e * s.abs() + b.e * t.abs() + 2.0 * U * (big + s.abs() * a.big() + t.abs() * b.big()))
-                * (1.0 + 1e-12),
-            c,
-        }
-    }
-    fn add(&self, o: &Bp) -> Bp {
-        self.lin(1.0, o, 1.0)
-    }
-    fn sub(&self, o: &Bp) -> Bp {
-        self.lin(1.0, o, -1.0)
-    }
-    fn scale(&self, s: f64) -> Bp {
-        let c: Vec<f64> = self.c.iter().map(|x| x * s).collect();
-        Bp {
-            m: self.m,
-            n: self.n,
-            e: (self.e * s.abs() + U * self.big() * s.abs()) * (1.0 + 1e-12),
-            c,
-        }
-    }
-    fn du(&self) -> Bp {
+    /// The two parts either side of tau along u (or v): de Casteljau.
+    fn split(&self, along_u: bool, tau: f64) -> (Bp, Bp) {
         let (m, n) = (self.m, self.n);
-        if m == 0 {
-            return Bp::konst(0.0);
-        }
-        let mut c = vec![0.0; m * (n + 1)];
-        for i in 0..m {
-            for j in 0..=n {
-                c[i * (n + 1) + j] = m as f64 * (self.at(i + 1, j) - self.at(i, j));
-            }
-        }
-        Bp {
-            m: m - 1,
-            n,
-            e: (2.0 * m as f64 * self.e + 4.0 * m as f64 * U * self.big()) * (1.0 + 1e-12),
-            c,
-        }
-    }
-    fn dv(&self) -> Bp {
-        let (m, n) = (self.m, self.n);
-        if n == 0 {
-            return Bp::konst(0.0);
-        }
-        let mut c = vec![0.0; (m + 1) * n];
-        for i in 0..=m {
-            for j in 0..n {
-                c[i * n + j] = n as f64 * (self.at(i, j + 1) - self.at(i, j));
-            }
-        }
-        Bp {
-            m,
-            n: n - 1,
-            e: (2.0 * n as f64 * self.e + 4.0 * n as f64 * U * self.big()) * (1.0 + 1e-12),
-            c,
-        }
-    }
-    /// The two halves along u (at 1/2) or v.
-    fn halves(&self, along_u: bool) -> (Bp, Bp) {
-        let (m, n) = (self.m, self.n);
-        let mut l = self.clone();
-        let mut r = self.clone();
-        if along_u {
-            for j in 0..=n {
-                let mut col: Vec<f64> = (0..=m).map(|i| self.at(i, j)).collect();
-                l.c[j] = col[0];
-                r.c[m * (n + 1) + j] = col[m];
-                for k in 1..=m {
-                    for i in 0..=m - k {
-                        col[i] = 0.5 * (col[i] + col[i + 1]);
-                    }
-                    l.c[k * (n + 1) + j] = col[0];
-                    r.c[(m - k) * (n + 1) + j] = col[m - k];
-                }
-            }
+        let (mut l, mut r) = (*self, *self);
+        let (deg, lines, step, stride) = if along_u {
+            (m, n + 1, n + 1, 1)
         } else {
-            for i in 0..=m {
-                let mut row: Vec<f64> = (0..=n).map(|j| self.at(i, j)).collect();
-                l.c[i * (n + 1)] = row[0];
-                r.c[i * (n + 1) + n] = row[n];
-                for k in 1..=n {
-                    for j in 0..=n - k {
-                        row[j] = 0.5 * (row[j] + row[j + 1]);
-                    }
-                    l.c[i * (n + 1) + k] = row[0];
-                    r.c[i * (n + 1) + n - k] = row[n - k];
+            (n, m + 1, 1, n + 1)
+        };
+        let mut col = [0.0; 2 * DEG + 2];
+        let om = 1.0 - tau;
+        for line in 0..lines {
+            let base = line * stride;
+            for k in 0..=deg {
+                col[k] = self.c[base + k * step];
+            }
+            l.c[base] = col[0];
+            r.c[base + deg * step] = col[deg];
+            for lev in 1..=deg {
+                for i in 0..=deg - lev {
+                    col[i] = om * col[i] + tau * col[i + 1];
                 }
+                l.c[base + lev * step] = col[0];
+                r.c[base + (deg - lev) * step] = col[deg - lev];
             }
         }
-        // averaging is exact up to one rounding per level
-        let e = self.e + ((m.max(n) + 1) as f64) * 2.0 * U * self.big();
-        l.e = e;
-        r.e = e;
+        // convex combinations: a few roundings per level
+        let e = self.e + (deg as f64 + 1.0) * 4.0 * U * self.big();
+        (l.e, r.e) = (e, e);
         (l, r)
     }
-    fn lower(&self) -> f64 {
-        self.c.iter().fold(f64::INFINITY, |a, &x| a.min(x)) - self.e
+    /// One half along u (or v): the first (0) or the second (1).
+    fn half(&self, along_u: bool, which: usize) -> Bp {
+        let (m, n) = (self.m, self.n);
+        let mut out = *self;
+        let (deg, lines, step, stride) = if along_u {
+            (m, n + 1, n + 1, 1)
+        } else {
+            (n, m + 1, 1, n + 1)
+        };
+        let mut col = [0.0; 2 * DEG + 2];
+        for line in 0..lines {
+            let base = line * stride;
+            for k in 0..=deg {
+                col[k] = self.c[base + k * step];
+            }
+            if which == 0 {
+                for lev in 1..=deg {
+                    for i in 0..=deg - lev {
+                        col[i] = 0.5 * (col[i] + col[i + 1]);
+                    }
+                    out.c[base + lev * step] = col[0];
+                }
+            } else {
+                for lev in 1..=deg {
+                    for i in 0..=deg - lev {
+                        col[i] = 0.5 * (col[i] + col[i + 1]);
+                    }
+                    out.c[base + (deg - lev) * step] = col[deg - lev];
+                }
+            }
+        }
+        out.e = self.e + (deg as f64 + 1.0) * 2.0 * U * self.big();
+        out
     }
-    fn upper(&self) -> f64 {
-        self.c.iter().fold(f64::NEG_INFINITY, |a, &x| a.max(x)) + self.e
+    /// The polynomial over [lo, hi] along u (or v), rescaled to [0, 1]; the part covered is
+    /// at least [lo, hi].
+    fn restrict(&self, along_u: bool, lo: f64, hi: f64) -> Bp {
+        let p = if hi < 1.0 {
+            self.split(along_u, hi).0
+        } else {
+            *self
+        };
+        if lo > 0.0 {
+            // the split point lo / hi, rounded down so the part only grows
+            p.split(along_u, (lo / hi).next_down()).1
+        } else {
+            p
+        }
+    }
+    /// Reversed along u (or v), exactly.
+    fn flip(&self, along_u: bool) -> Bp {
+        let mut out = *self;
+        for i in 0..=self.m {
+            for j in 0..=self.n {
+                let (a, b) = if along_u { (self.m - i, j) } else { (i, self.n - j) };
+                out.c[i * (self.n + 1) + j] = self.at(a, b);
+            }
+        }
+        out
+    }
+    /// u and v swapped, exactly.
+    fn transpose(&self) -> Bp {
+        let mut out = Bp::zero(self.n, self.m);
+        out.e = self.e;
+        for i in 0..=self.m {
+            for j in 0..=self.n {
+                out.c[j * (self.m + 1) + i] = self.at(i, j);
+            }
+        }
+        out
+    }
+    /// self - k o (same degrees).
+    fn sub_scaled(&self, o: &Bp, k: f64) -> Bp {
+        let mut out = *self;
+        for i in 0..self.len() {
+            out.c[i] = self.c[i] - k * o.c[i];
+        }
+        out.e = self.e + k.abs() * o.e + 3.0 * U * (self.big() + k.abs() * o.big());
+        out
+    }
+    /// g(sigma, t) = f(sigma, sigma t), of degree (m + n, n): with
+    /// B_j^n(sigma t) = sum_(k >= j) B_k^n(sigma) B_j^k(t), a map with non-negative weights
+    /// summing to one for every output coefficient.
+    fn duffy(&self) -> Bp {
+        let (m, n) = (self.m, self.n);
+        debug_assert!(m == DEG && n == DEG);
+        static T: OnceLock<Vec<(u16, u16, f64)>> = OnceLock::new();
+        let table = T.get_or_init(|| {
+            let mut t = Vec::new();
+            for i in 0..=DEG {
+                for j in 0..=DEG {
+                    for k in j..=DEG {
+                        let a = binom(DEG, i) * binom(DEG, k) / binom(2 * DEG, i + k) * binom(k, j);
+                        for l in j..=j + DEG - k {
+                            let w = a * binom(DEG - k, l - j) / binom(DEG, l);
+                            t.push(((i * (DEG + 1) + j) as u16, ((i + k) * (DEG + 1) + l) as u16, w));
+                        }
+                    }
+                }
+            }
+            t
+        });
+        let mut out = Bp::zero(m + n, n);
+        for &(src, dst, w) in table {
+            out.c[dst as usize] += self.c[src as usize] * w;
+        }
+        out.e = self.e + ((m + 1) * (n + 1) + 8) as f64 * 4.0 * U * self.big();
+        out
+    }
+    /// self / sigma^k (sigma along u), where the first k rows vanish in exact arithmetic.
+    fn div_rows(&self, k: usize) -> Bp {
+        let (mm, n) = (self.m, self.n);
+        let m = mm - k;
+        let mut out = Bp::zero(m, n);
+        let mut amp: f64 = 0.0;
+        for j in 0..=m {
+            let f = binom(mm, j + k) / binom(m, j);
+            amp = amp.max(f);
+            for l in 0..=n {
+                out.c[j * (n + 1) + l] = self.at(j + k, l) * f;
+            }
+        }
+        out.e = amp * (self.e + 2.0 * U * self.big());
+        out
+    }
+    /// (a + b u) times self: of one degree more in u.
+    fn mul_affine(&self, a: f64, b: f64) -> Bp {
+        let (m, n) = (self.m, self.n);
+        let mut out = Bp::zero(m + 1, n);
+        let (s0, s1) = (a, a + b);
+        let k = 1.0 / (m + 1) as f64;
+        for i in 0..=m + 1 {
+            let (f0, f1) = ((m + 1 - i) as f64 * s0 * k, i as f64 * s1 * k);
+            for l in 0..=n {
+                let g0 = if i <= m { self.at(i, l) } else { 0.0 };
+                let g1 = if i > 0 { self.at(i - 1, l) } else { 0.0 };
+                out.c[i * (n + 1) + l] = f0 * g0 + f1 * g1;
+            }
+        }
+        out.e = (self.e + 4.0 * U * self.big()) * (s0.abs().max(s1.abs()));
+        out
+    }
+    /// Raised by one degree along u.
+    fn elevate_u(&self) -> Bp {
+        let (m, n) = (self.m, self.n);
+        let mut out = Bp::zero(m + 1, n);
+        for i in 0..=m + 1 {
+            let t = i as f64 / (m + 1) as f64;
+            for j in 0..=n {
+                let a = if i > 0 { self.at(i - 1, j) } else { 0.0 };
+                let b = if i <= m { self.at(i, j) } else { 0.0 };
+                out.c[i * (n + 1) + j] = t * a + (1.0 - t) * b;
+            }
+        }
+        out.e = self.e + 3.0 * U * self.big();
+        out
+    }
+    /// self times the bilinear polynomial with these corner values ((0,0), (0,1), (1,0), (1,1)):
+    /// B_i^m B_a^1 = ((i + a) / (m + 1) or (m + 1 - i) / (m + 1)) B_(i+a)^(m+1), each way.
+    fn mul_bilinear(&self, f: [f64; 4]) -> Bp {
+        let (m, n) = (self.m, self.n);
+        let mut out = Bp::zero(m + 1, n + 1);
+        let (km, kn) = (1.0 / (m + 1) as f64, 1.0 / (n + 1) as f64);
+        let w = n + 2;
+        for i in 0..=m {
+            let (u0, u1) = ((m + 1 - i) as f64 * km, (i + 1) as f64 * km);
+            for j in 0..=n {
+                let c = self.c[i * (n + 1) + j];
+                let (v0, v1) = ((n + 1 - j) as f64 * kn * c, (j + 1) as f64 * kn * c);
+                let (r0, r1) = (i * w + j, (i + 1) * w + j);
+                out.c[r0] += u0 * v0 * f[0];
+                out.c[r0 + 1] += u0 * v1 * f[1];
+                out.c[r1] += u1 * v0 * f[2];
+                out.c[r1 + 1] += u1 * v1 * f[3];
+            }
+        }
+        let fm = f.iter().fold(0.0f64, |a, &x| a.max(x.abs()));
+        out.e = (self.e + 8.0 * U * self.big()) * fm;
+        out
+    }
+    fn lower(&self) -> f64 {
+        self.c[..self.len()].iter().fold(f64::INFINITY, |a, &x| a.min(x)) - self.e
     }
 }
 
-/// An exact real point c + t e, as intervals.
-fn ipt(c: Point2, t: f64, e: [Interval; 2]) -> [Interval; 2] {
-    [Interval::point(c.x) + e[0] * t, Interval::point(c.y) + e[1] * t]
+/// Y = X - q W, q the ratio of the coefficient sums (near the box's middle), with how far the
+/// control points Y_ij / W_ij reach from the origin and a bound on their rounding: P - q lies
+/// in their hull. All W_ij must be positive.
+struct About {
+    y: [Bp; 3],
+    reach: f64,
+    blur: f64,
+}
+
+impl About {
+    fn of(x: &[Bp; 3], w: &Bp) -> About {
+        let len = w.len();
+        let sw: f64 = w.c[..len].iter().sum();
+        let mut y = *x;
+        for k in 0..3 {
+            let q = x[k].c[..len].iter().sum::<f64>() / sw;
+            y[k] = x[k].sub_scaled(w, q);
+        }
+        let ey = y.iter().map(|p| p.e).fold(0.0, f64::max) * 1.8;
+        let (mut r2, mut wmin) = (0.0f64, f64::INFINITY);
+        for k in 0..len {
+            let v = Vec3::new(y[0].c[k], y[1].c[k], y[2].c[k]) / w.c[k];
+            r2 = r2.max(v.length_sq());
+            wmin = wmin.min(w.c[k]);
+        }
+        let reach = r2.sqrt() * (1.0 + 4.0 * U);
+        // v / w against the true ratio: v and w each off by their rounding
+        let blur = (ey + reach * (w.e + 2.0 * U * wmin)) / (wmin - w.e);
+        About { y, reach, blur }
+    }
+
+    /// The sum of the coefficients of d/du (or d/dv) of Y: the rows' (columns') ends.
+    fn axis(&self, along_u: bool) -> Vec3 {
+        let y = &self.y;
+        let (m, n) = (y[0].m, y[0].n);
+        let mut s = Vec3::ZERO;
+        let at = |i: usize, j: usize| Vec3::new(y[0].at(i, j), y[1].at(i, j), y[2].at(i, j));
+        if along_u {
+            for j in 0..=n {
+                s += at(m, j) - at(0, j);
+            }
+        } else {
+            for i in 0..=m {
+                s += at(i, n) - at(i, 0);
+            }
+        }
+        s
+    }
+
+    /// W P_u (or W P_v) is a Bernstein combination of K_ij - w_ij (P - q), the coefficients of
+    /// d/du of Y and of W (the same basis), with P - q in the control points' hull: the tangents
+    /// of the angles from `axis` (unit, across n0) it can make, None when it may not be within a
+    /// quarter turn of the axis.
+    fn sector(&self, w: &Bp, along_u: bool, n0: Vec3, axis: Vec3) -> Option<(f64, f64)> {
+        let (y, len) = (&self.y, w.len());
+        let side = n0.cross(axis);
+        let pt = |k: usize| Vec3::new(y[0].c[k], y[1].c[k], y[2].c[k]);
+        // the control points along the axis and across it
+        let (mut pl, mut ph, mut ql, mut qh) = (0.0f64, 0.0f64, 0.0f64, 0.0f64);
+        for k in 0..len {
+            let v = pt(k) / w.c[k];
+            let (p, q) = (axis.dot(v), side.dot(v));
+            (pl, ph, ql, qh) = (pl.min(p), ph.max(p), ql.min(q), qh.max(q));
+        }
+        let (m, n) = (w.m, w.n);
+        let deg = if along_u { m } else { n } as f64;
+        // each difference of two coefficients, times the degree; the weights' rounding times
+        // the points' reach; the points' rounding times the weights
+        let e = y.iter().map(|p| p.e + U * p.big()).fold(0.0, f64::max) * 2.0 * deg * 1.8
+            + (w.e + U * w.big()) * 2.0 * deg * (self.reach + self.blur)
+            + self.blur * w.big() * 2.0 * deg;
+        let (ri, rj, step) = if along_u { (m, n + 1, n + 1) } else { (m + 1, n, 1) };
+        let (mut lo, mut hi) = (f64::INFINITY, f64::NEG_INFINITY);
+        for i in 0..ri {
+            for j in 0..rj {
+                let t = i * (n + 1) + j;
+                let a = (pt(t + step) - pt(t)) * deg;
+                let wd = (w.c[t + step] - w.c[t]) * deg;
+                // a - wd y: the part along the axis stays positive, the ratio across it is bounded
+                let (c, s) = (axis.dot(a), side.dot(a));
+                let ((wl, wh), (vl, vh)) = if wd >= 0.0 {
+                    ((wd * pl, wd * ph), (wd * ql, wd * qh))
+                } else {
+                    ((wd * ph, wd * pl), (wd * qh, wd * ql))
+                };
+                let (cl, ch) = (c - wh - e, c - wl + e);
+                let (sl, sh) = (s - vh - e, s - vl + e);
+                if cl <= 0.0 {
+                    return None;
+                }
+                lo = lo.min(sl / if sl >= 0.0 { ch } else { cl });
+                hi = hi.max(sh / if sh >= 0.0 { cl } else { ch });
+            }
+        }
+        // the divisions' rounding
+        Some((lo - 4.0 * U * lo.abs(), hi + 4.0 * U * hi.abs()))
+    }
 }
 
 /// The outcome of a proof.
 #[derive(Clone, Copy, Debug, Default)]
 pub struct Proof {
     pub proved: bool,
+    /// Regions tried, cone tests run, and the deepest split.
     pub regions: usize,
-    pub pieces: usize,
-    pub max_degree: usize,
+    pub tests: usize,
+    pub depth: u32,
+    /// Whether it came from the cache.
+    pub cached: bool,
 }
 
-/// One region: d_j as polynomials over [0, 1]^2, and where the sides a, b of a corner were
-/// factored out (the weights over sigma^2).
-struct Reg {
-    d: Vec<Bp>,
-    /// s_i as polynomials.
-    s: Vec<Bp>,
-    corner: Option<(usize, Bp)>,
-    /// The map's Jacobian sign (from a sample), and the normal to measure against.
-    sign: f64,
-    n0: Vec3,
-}
+/// Deepest split of a region.
+const MAX_DEPTH: u32 = 12;
+/// The size of the box round a corner of the square proven in Duffy triangles.
+const CORNER_BOX: f64 = 0.25;
 
-impl Rational {
-    /// d_j at an exact real point.
-    fn idist(&self, j: usize, x: [Interval; 2]) -> Interval {
-        let n = self.corners.len();
-        let (a, b) = (self.corners[j], self.corners[(j + 1) % n]);
-        let ex = Interval::point(b.x) + Interval::point(-a.x);
-        let ey = Interval::point(b.y) + Interval::point(-a.y);
-        let rx = x[0] + Interval::point(-a.x);
-        let ry = x[1] + Interval::point(-a.y);
-        (ex * ry + -(ey * rx)) * self.lam[j]
-    }
-
-    /// s_i at an exact real point.
-    fn iparam(&self, j: usize, x: [Interval; 2]) -> Interval {
-        let n = self.corners.len();
-        let (a, b) = (self.corners[j], self.corners[(j + 1) % n]);
-        let ex = Interval::point(b.x) + Interval::point(-a.x);
-        let ey = Interval::point(b.y) + Interval::point(-a.y);
-        let rx = x[0] + Interval::point(-a.x);
-        let ry = x[1] + Interval::point(-a.y);
-        (ex * rx + ey * ry).div(&(ex.sqr() + ey.sqr()))
-    }
-
-    /// The homogeneous ribbon over a region: (Num, Den), with s_i and d_i as polynomials there.
-    fn ribbon_poly(&self, i: usize, sp: &Bp, di: &Bp) -> ([Bp; 3], Bp) {
-        let sd = &self.sides[i];
-        let q = sd.q;
-        let one_minus = Bp::konst(1.0).sub(sp);
-        let mut ap = vec![Bp::konst(1.0)];
-        let mut bp = vec![Bp::konst(1.0)];
-        for k in 1..=q {
-            ap.push(ap[k - 1].mul(sp));
-            bp.push(bp[k - 1].mul(&one_minus));
+impl Quad {
+    /// Proves the patch is regular (P_u x P_v never zero) over the unit square: boxes of the
+    /// blend, the boxes round its corners in Duffy triangles, and each corner's zone, where the
+    /// nearest ribbon is the patch, by that ribbon.
+    pub fn prove(&self) -> Proof {
+        let key = self.key();
+        if let Some(&ok) = cache().lock().unwrap().get(&key) {
+            return Proof {
+                proved: ok,
+                cached: true,
+                ..Proof::default()
+            };
         }
-        let mono: Vec<Bp> = (0..=q)
-            .map(|k| ap[k].mul(&bp[q - k]).scale(binom(q, k)))
-            .collect();
-        let hom = |f: &B1| -> Bp {
-            let mut acc = mono[0].scale(f.0[0]);
-            for k in 1..=q {
-                acc = acc.add(&mono[k].scale(f.0[k]));
-            }
-            acc
-        };
-        let hh = self.heights[i];
-        let hp = di.add(&Bp::konst(hh));
-        let hp2 = hp.mul(&hp);
-        let mid = di.mul(&hp).scale(hh);
-        let end = di.mul(di).scale(hh * hh);
-        let m = Bp::konst(2.0 * hh).sub(di);
-        let m2 = m.mul(&m);
-        let num = std::array::from_fn(|k| {
-            hom(&sd.a[k])
-                .mul(&hp2)
-                .add(&hom(&sd.b[k]).mul(&mid))
-                .add(&hom(&sd.c[k]).mul(&end))
-                .mul(&m2)
-        });
-        (num, hom(&sd.e).mul(&hp2).mul(&m2))
-    }
-
-    /// N and W over a region.
-    fn blend_poly(&self, reg: &Reg) -> ([Bp; 3], Bp) {
-        let n = self.corners.len();
-        let sq: Vec<Bp> = reg.d.iter().map(|x| x.mul(x)).collect();
-        let weights: Vec<Bp> = match &reg.corner {
-            None => products_but_one(&sq),
-            Some((c, sigma)) => {
-                let (a, b) = ((c + n - 1) % n, *c);
-                // d_a = sigma alpha, d_b = sigma beta: divide every weight by sigma^2
-                let far: Vec<usize> = (0..n).filter(|&j| j != a && j != b).collect();
-                let fsq: Vec<Bp> = far.iter().map(|&j| sq[j].clone()).collect();
-                let fprod = products_but_one(&fsq);
-                let mut all = Bp::konst(1.0);
-                for s in &fsq {
-                    all = all.mul(s);
-                }
-                let (al, be) = (reg.d[a].clone(), reg.d[b].clone());
-                // alpha = d_a / sigma etc. are given by the caller through `sigma`: d = sigma x
-                let al2 = al.mul(&al);
-                let be2 = be.mul(&be);
-                let ss = sigma.mul(sigma);
-                // with d_a = sigma alpha: B_a / sigma^2 = beta^2 prod, B_far / sigma^2 = sigma^2 alpha^2 beta^2 prod'
-                let mut w: Vec<Bp> = vec![Bp::konst(0.0); n];
-                // here reg.d[a], reg.d[b] hold alpha and beta (not d_a, d_b)
-                w[a] = be2.mul(&all);
-                w[b] = al2.mul(&all);
-                let ab2 = al2.mul(&be2).mul(&ss);
-                for (q, &j) in far.iter().enumerate() {
-                    w[j] = ab2.mul(&fprod[q]);
-                }
-                w
-            }
-        };
-        // the ribbons see the true distances
-        let dtrue: Vec<Bp> = match &reg.corner {
-            None => reg.d.clone(),
-            Some((c, sigma)) => {
-                let (a, b) = ((c + n - 1) % n, *c);
-                let mut d = reg.d.clone();
-                d[a] = reg.d[a].mul(sigma);
-                d[b] = reg.d[b].mul(sigma);
-                d
-            }
-        };
-        let mut num: [Bp; 3] = std::array::from_fn(|_| Bp::konst(0.0));
-        let mut den = Bp::konst(0.0);
-        for i in 0..n {
-            let (rn, rd) = self.ribbon_poly(i, &reg.s[i], &dtrue[i]);
-            for k in 0..3 {
-                num[k] = num[k].add(&weights[i].mul(&rn[k]));
-            }
-            den = den.add(&weights[i].mul(&rd));
-        }
-        (num, den)
-    }
-
-    /// Whether n0 . (P_u x P_v) has the region's sign everywhere: Some(true) proven,
-    /// Some(false) a sub-box surely of the wrong sign (folds), None undecided.
-    fn prove_poly(num: &[Bp; 3], den: &Bp, reg: &Reg, stats: &mut Proof) -> bool {
-        Self::prove_poly_in(num, den, reg, stats) == Some(true)
-    }
-
-    fn prove_poly_in(num: &[Bp; 3], den: &Bp, reg: &Reg, stats: &mut Proof) -> Option<bool> {
-        if den.lower() <= 0.0 {
-            return None;
-        }
-        // J is the same about any origin: about a point of the region, N is small and the
-        // rounding bounds (relative to the operands' size) with it
-        let mid = den.c.len() / 2;
-        let num: [Bp; 3] = std::array::from_fn(|k| num[k].sub(&den.scale(num[k].c[mid] / den.c[mid])));
-        let n0 = reg.n0;
-        let e1 = if n0.x.abs() < 0.9 { Vec3::X } else { Vec3::Y };
-        let e1 = (e1 - n0 * n0.dot(e1)).normalize().map_or(Vec3::Z, |u| u.get());
-        let e2 = n0.cross(e1);
-        let proj = |v: Vec3| num[0].scale(v.x).add(&num[1].scale(v.y)).add(&num[2].scale(v.z));
-        let (n1, n2) = (proj(e1), proj(e2));
-        let (n1u, n1v, n2u, n2v) = (n1.du(), n1.dv(), n2.du(), n2.dv());
-        let (wu, wv) = (den.du(), den.dv());
-        let x = n1u.mul(&n2v).sub(&n2u.mul(&n1v));
-        let y = n1.mul(&n2v).sub(&n2.mul(&n1v));
-        let z = n1u.mul(&n2).sub(&n2u.mul(&n1));
-        let q = den.mul(&x).sub(&wu.mul(&y)).sub(&wv.mul(&z)).scale(reg.sign);
-        stats.max_degree = stats.max_degree.max(q.m.max(q.n));
-        let mut todo = vec![(q, 0u32)];
-        while let Some((p, depth)) = todo.pop() {
-            stats.pieces += 1;
-            if p.lower() > 0.0 {
-                continue;
-            }
-            // n0 . J < 0 somewhere is not a fold (the normal may have turned past 90 degrees):
-            // the caller splits the region and measures against nearer normals
-            if p.upper() < 0.0
-                || [p.at(0, 0), p.at(p.m, 0), p.at(0, p.n), p.at(p.m, p.n)]
-                    .iter()
-                    .any(|&v| v < -p.e)
-            {
-                return Some(false);
-            }
-            if depth >= 8 {
-                return None;
-            }
-            let (a, b) = p.halves(depth % 2 == 0);
-            todo.push((a, depth + 1));
-            todo.push((b, depth + 1));
-        }
-        Some(true)
-    }
-
-    /// Proves the patch never folds over the domain, region by region.
-    pub fn prove(&self, patch: &HolePatch) -> Proof {
-        let n = self.corners.len();
         let mut st = Proof::default();
-        let normal_at = |x: Point2| -> Option<Vec3> {
-            let d = <HolePatch as crate::surface::Procedural>::deriv(patch, x);
-            d.du.cross(d.dv).normalize().map(|u| u.get())
-        };
-        let ie = |a: Point2, b: Point2| {
-            [
-                Interval::point(b.x) + Interval::point(-a.x),
-                Interval::point(b.y) + Interval::point(-a.y),
-            ]
-        };
-        let reach: f64 = 0.4;
-        let mut cut_pts: Vec<[[Interval; 2]; 2]> = Vec::with_capacity(n);
-        for c in 0..n {
-            let (a, b) = ((c + n - 1) % n, c);
-            let cp = self.corners[c];
-            // e_a runs along side b to the next corner, e_b along side a back
-            let ea = ie(cp, self.corners[(c + 1) % n]);
-            let eb = ie(cp, self.corners[(c + n - 1) % n]);
-            let ka = self.idist(a, ipt(cp, 1.0, ea));
-            let kb = self.idist(b, ipt(cp, 1.0, eb));
-            let kmax = ka.hi.max(kb.hi);
-            // the evaluation takes the nearest ribbon where d_a, d_b <= cut: sigma < cut / kmax
-            let s0 = self.cut / kmax * (1.0 - 1e-9);
-            // the zone d_a, d_b <= cut: p e_a + q e_b with p <= cut / ka, q <= cut / kb
-            let (pa, pb) = (self.cut / ka.lo * (1.0 + 1e-9), self.cut / kb.lo * (1.0 + 1e-9));
-            // (u, v) -> c + u pb e_b + v pa e_a
-            let zone = [
-                ipt(cp, 0.0, ea),
-                ipt(cp, pa, ea),
-                ipt(cp, pb, eb),
-                [ipt(cp, pa, ea)[0] + eb[0] * pb, ipt(cp, pa, ea)[1] + eb[1] * pb],
-            ];
-            let dz: Vec<Bp> = (0..n)
-                .map(|j| Bp::bilinear(zone.map(|x| self.idist(j, x))))
-                .collect();
-            let sz: Vec<Bp> = (0..n)
-                .map(|j| Bp::bilinear(zone.map(|x| self.iparam(j, x))))
-                .collect();
-            let mid = Point2::new(
-                cp.x + 1e-3 * (self.corners[(c + 1) % n].x - cp.x),
-                cp.y + 1e-3 * (self.corners[(c + 1) % n].y - cp.y),
-            );
-            let Some(n0) = normal_at(mid) else {
-                return st;
-            };
-            // the map (u, v) -> c + u pb e_b + v pa e_a: Jacobian sign of (e_b, e_a)
-            let s_zone = (eb[0].mid() * ea[1].mid() - eb[1].mid() * ea[0].mid()).signum();
-            for i in [a, b] {
-                let (rn, rd) = self.ribbon_poly(i, &sz[i], &dz[i]);
-                let reg = Reg {
-                    d: Vec::new(),
-                    s: Vec::new(),
-                    corner: None,
-                    sign: s_zone,
-                    n0,
-                };
-                st.regions += 1;
-                if !Self::prove_poly(&rn, &rd, &reg, &mut st) {
-                    return st;
-                }
-            }
-            // the corner: x = c + sigma (w e_a + (1 - w) e_b), in shells so the polynomials'
-            // range (which sets their rounding bound) stays small in each
-            let at = |sg: f64, w: f64| {
-                [
-                    ipt(cp, sg * w, ea)[0] + eb[0] * (sg * (1.0 - w)),
-                    ipt(cp, sg * w, ea)[1] + eb[1] * (sg * (1.0 - w)),
-                ]
-            };
-            let s1 = (1e-3 * reach).max(4.0 * s0);
-            for (lo, hi) in [(s0, s1), (s1, reach)] {
-                if !self.prove_corner(c, (lo, hi), (0.0, 1.0), (ea, eb, ka, kb), &normal_at, 0, &mut st) {
-                    return st;
-                }
-            }
-            cut_pts.push([at(reach, 0.0), at(reach, 1.0)]);
+        st.proved = self.prove_all(&mut st);
+        let mut c = cache().lock().unwrap();
+        if c.len() > 20_000 {
+            c.clear();
         }
-        // the middle: the polygon with the corners' triangles cut off, as quads round a centre
-        let mut ring: Vec<[Interval; 2]> = Vec::with_capacity(2 * n);
-        for c in 0..n {
-            ring.push(cut_pts[c][0]);
-            ring.push(cut_pts[c][1]);
-        }
-        let mut cx = 0.0;
-        let mut cy = 0.0;
-        for p in &ring {
-            cx += p[0].mid();
-            cy += p[1].mid();
-        }
-        let o = [
-            Interval::point(cx / ring.len() as f64),
-            Interval::point(cy / ring.len() as f64),
-        ];
-        let m = ring.len();
-        for k in (0..m).step_by(2) {
-            // bilinear over (o, p0, p2, p1): u from o toward p0..p1, v across
-            if !self.prove_quad(
-                [o, ring[k], ring[(k + 2) % m], ring[(k + 1) % m]],
-                &normal_at,
-                0,
-                &mut st,
-            ) {
-                return st;
-            }
-        }
-        st.proved = true;
+        c.insert(key, st.proved);
         st
     }
 
-    /// A quad (vertices at (u, v) = (0,0), (0,1), (1,0), (1,1)), split in four where its
-    /// normal turns too far for one direction to measure against.
-    fn prove_quad(
-        &self,
-        q: [[Interval; 2]; 4],
-        normal_at: &dyn Fn(Point2) -> Option<Vec3>,
-        depth: u32,
-        st: &mut Proof,
-    ) -> bool {
-        let n = self.corners.len();
-        let mx = |p: [Interval; 2]| Vec2::new(p[0].mid(), p[1].mid());
-        let ctr = Point2::ORIGIN + (mx(q[0]) + mx(q[1]) + mx(q[2]) + mx(q[3])) * 0.25;
-        let xu = (mx(q[2]) - mx(q[0]) + mx(q[3]) - mx(q[1])) * 0.5;
-        let xv = (mx(q[1]) - mx(q[0]) + mx(q[3]) - mx(q[2])) * 0.5;
-        let Some(n0) = normal_at(ctr) else {
-            return false;
-        };
-        let reg = Reg {
-            d: (0..n)
-                .map(|j| Bp::bilinear(q.map(|x| self.idist(j, x))))
-                .collect(),
-            s: (0..n)
-                .map(|j| Bp::bilinear(q.map(|x| self.iparam(j, x))))
-                .collect(),
-            corner: None,
-            sign: (xu.x * xv.y - xu.y * xv.x).signum(),
-            n0,
-        };
-        let (num, den) = self.blend_poly(&reg);
-        st.regions += 1;
-        if Self::prove_poly(&num, &den, &reg, st) {
-            return true;
-        }
-        if depth >= 3 {
-            return false;
-        }
-        let at = |u: f64, v: f64| -> [Interval; 2] {
-            std::array::from_fn(|k| {
-                q[0][k] * ((1.0 - u) * (1.0 - v))
-                    + q[1][k] * ((1.0 - u) * v)
-                    + q[2][k] * (u * (1.0 - v))
-                    + q[3][k] * (u * v)
-            })
-        };
-        [(0.0, 0.0), (0.0, 0.5), (0.5, 0.0), (0.5, 0.5)]
-            .into_iter()
-            .all(|(u, v)| {
-                let sub = [at(u, v), at(u, v + 0.5), at(u + 0.5, v), at(u + 0.5, v + 0.5)];
-                self.prove_quad(sub, normal_at, depth + 1, st)
-            })
+    fn prove_all(&self, st: &mut Proof) -> bool {
+        self.prove_zones(st) && self.blend_box(&self.num, &self.den, (0.0, 0.0, 1.0), st)
     }
 
-    /// The corner region sigma in `sg`, w in `w`, split likewise.
-    #[allow(clippy::too_many_arguments)]
-    fn prove_corner(
-        &self,
-        c: usize,
-        sg: (f64, f64),
-        w: (f64, f64),
-        frame: ([Interval; 2], [Interval; 2], Interval, Interval),
-        normal_at: &dyn Fn(Point2) -> Option<Vec3>,
-        depth: u32,
-        st: &mut Proof,
-    ) -> bool {
-        let n = self.corners.len();
-        let (a, b) = ((c + n - 1) % n, c);
-        let (ea, eb, ka, kb) = frame;
-        let cp = self.corners[c];
-        let at = |s: f64, w: f64| {
-            [
-                ipt(cp, s * w, ea)[0] + eb[0] * (s * (1.0 - w)),
-                ipt(cp, s * w, ea)[1] + eb[1] * (s * (1.0 - w)),
-            ]
-        };
-        let quad = [at(sg.0, w.0), at(sg.0, w.1), at(sg.1, w.0), at(sg.1, w.1)];
-        let mut d: Vec<Bp> = (0..n)
-            .map(|j| Bp::bilinear(quad.map(|x| self.idist(j, x))))
-            .collect();
-        let rad = |k: Interval| (k.hi - k.mid()).max(k.mid() - k.lo);
-        // alpha = d_a / sigma = w ka, beta = (1 - w) kb, exactly
-        d[a] = Bp {
-            m: 0,
-            n: 1,
-            c: vec![w.0 * ka.mid(), w.1 * ka.mid()],
-            e: rad(ka) * 1.01,
-        };
-        d[b] = Bp {
-            m: 0,
-            n: 1,
-            c: vec![(1.0 - w.0) * kb.mid(), (1.0 - w.1) * kb.mid()],
-            e: rad(kb) * 1.01,
-        };
-        let sigma = Bp {
-            m: 1,
-            n: 0,
-            c: vec![sg.0, sg.1],
-            e: 0.0,
-        };
-        let (sm, wm) = (0.5 * (sg.0 + sg.1), 0.5 * (w.0 + w.1));
-        let p = at(sm, wm);
-        let Some(n0) = normal_at(Point2::new(p[0].mid(), p[1].mid())) else {
-            return false;
-        };
-        // dx/du = (s1 - s0) q, dx/dw = sigma (e_a - e_b): det = -(..) sigma det[e_a, e_b]
-        let reg = Reg {
-            d,
-            s: (0..n)
-                .map(|j| Bp::bilinear(quad.map(|x| self.iparam(j, x))))
-                .collect(),
-            corner: Some((c, sigma)),
-            sign: -(ea[0].mid() * eb[1].mid() - ea[1].mid() * eb[0].mid()).signum(),
-            n0,
-        };
-        let (num, den) = self.blend_poly(&reg);
-        st.regions += 1;
-        if Self::prove_poly(&num, &den, &reg, st) {
-            return true;
+    fn prove_zones(&self, st: &mut Proof) -> bool {
+        for c in 0..4 {
+            let pc = self.corner(c);
+            // the zone: sides c (at its start) and c - 1 (at its end), alone
+            for (i, at_start) in [(c, true), ((c + 3) % 4, false)] {
+                let (rn, rw) = ribbon_tensor(&self.sides[i]);
+                let part = |p: &Bp| {
+                    let p = if at_start {
+                        p.split(true, ZONE).0
+                    } else {
+                        p.split(true, 1.0 - ZONE).1
+                    };
+                    p.split(false, ZONE).0
+                };
+                let w = part(&rw);
+                let n: [Bp; 3] = std::array::from_fn(|k| part(&rn[k].sub_scaled(&rw, [pc.x, pc.y, pc.z][k])));
+                st.regions += 1;
+                if !plain_box(&n, &w, st) {
+                    return false;
+                }
+            }
         }
-        if depth >= 3 {
-            return false;
+        true
+    }
+
+    /// The corner point, exactly as the sides share it.
+    fn corner(&self, c: usize) -> Vec3 {
+        let a = &self.sides[c].abc[0];
+        Vec3::new(a[0].0[0], a[1].0[0], a[2].0[0])
+    }
+
+    /// The blend over the box at (u0, v0) of this size: quarters while it holds a corner of
+    /// the square, until the corner's box is small enough for two Duffy triangles.
+    fn blend_box(&self, n: &[Bp; 3], w: &Bp, (u0, v0, size): (f64, f64, f64), st: &mut Proof) -> bool {
+        let holds = |c: usize| {
+            let (cu, cv) = ([0.0, 1.0, 1.0, 0.0][c], [0.0, 0.0, 1.0, 1.0][c]);
+            (u0..=u0 + size).contains(&cu) && (v0..=v0 + size).contains(&cv)
+        };
+        let corner = (0..4).find(|&c| holds(c));
+        if corner.is_none() {
+            st.regions += 1;
+            return plain_box(n, w, st);
         }
-        [(sg.0, sm), (sm, sg.1)].into_iter().all(|s2| {
-            [(w.0, wm), (wm, w.1)]
-                .into_iter()
-                .all(|w2| self.prove_corner(c, s2, w2, frame, normal_at, depth + 1, st))
+        if size > CORNER_BOX {
+            let h = 0.5 * size;
+            return (0..4).all(|q| {
+                let part = |p: &Bp| p.half(true, q / 2).half(false, q % 2);
+                let at = (u0 + h * (q / 2) as f64, v0 + h * (q % 2) as f64, h);
+                self.blend_box(&[part(&n[0]), part(&n[1]), part(&n[2])], &part(w), at, st)
+            });
+        }
+        let c = corner.unwrap();
+        // the corner to the origin, N about it: N - p_c W = sigma^3 G and W = sigma^2 W~ in
+        // either triangle (every weight has u^2 or v^2, and the ribbons meet at p_c)
+        let pc = self.corner(c);
+        let (fu, fv) = (c == 1 || c == 2, c >= 2);
+        let turn = |p: &Bp| {
+            let p = if fu { p.flip(true) } else { *p };
+            if fv { p.flip(false) } else { p }
+        };
+        let w = turn(w);
+        let n: [Bp; 3] = std::array::from_fn(|k| turn(&n[k]).sub_scaled(&w, [pc.x, pc.y, pc.z][k]));
+        (0..2).all(|tri| {
+            let t = |p: &Bp| if tri == 0 { *p } else { p.transpose() };
+            let g: [Bp; 3] = std::array::from_fn(|k| t(&n[k]).duffy().div_rows(3));
+            let wt = t(&w).duffy().div_rows(2);
+            st.regions += 1;
+            let Some(phi) = normal_phi(&wt) else {
+                return false;
+            };
+            duffy_region(
+                &g.map(|p| p.mul_bilinear(phi)),
+                &wt.mul_bilinear(phi),
+                (0.0, 1.0),
+                0,
+                st,
+            )
         })
+    }
+
+    /// The exact inputs of the proof: every coefficient of every ribbon.
+    fn key(&self) -> Vec<u64> {
+        let mut k = Vec::with_capacity(160);
+        for s in &self.sides {
+            for v in &s.abc {
+                for b in v {
+                    k.extend(b.0.iter().map(|x| x.to_bits()));
+                }
+            }
+            k.extend(s.e.0.iter().map(|x| x.to_bits()));
+        }
+        k
     }
 }
 
-fn products_but_one(x: &[Bp]) -> Vec<Bp> {
-    let n = x.len();
-    let mut pre = vec![Bp::konst(1.0); n + 1];
-    for i in 0..n {
-        pre[i + 1] = pre[i].mul(&x[i]);
+/// Forgets every proof (for timing).
+#[doc(hidden)]
+pub fn clear_proof_cache() {
+    cache().lock().unwrap().clear();
+}
+
+fn cache() -> &'static Mutex<HashMap<Vec<u64>, bool>> {
+    static C: OnceLock<Mutex<HashMap<Vec<u64>, bool>>> = OnceLock::new();
+    C.get_or_init(|| Mutex::new(HashMap::new()))
+}
+
+/// A ribbon alone as a tensor polynomial of degree (SDEG, 2) in (s, d): numerator and weight.
+fn ribbon_tensor(sd: &RSide) -> ([Bp; 3], Bp) {
+    let mut out = [Bp::zero(SDEG, 2); 4];
+    for a in 0..=SDEG {
+        for b in 0..3 {
+            for k in 0..3 {
+                let (av, bv, cv) = (sd.abc[0][k].0[a], sd.abc[1][k].0[a], sd.abc[2][k].0[a]);
+                out[k].c[a * 3 + b] = match b {
+                    0 => av,
+                    1 => av + 0.5 * bv,
+                    _ => av + bv + cv,
+                };
+            }
+            out[3].c[a * 3 + b] = sd.e.0[a];
+        }
     }
-    let mut out = vec![Bp::konst(1.0); n];
-    let mut suf = Bp::konst(1.0);
-    for i in (0..n).rev() {
-        out[i] = pre[i].mul(&suf);
-        suf = suf.mul(&x[i]);
+    for p in &mut out {
+        p.e = 4.0 * U * p.big();
     }
-    out
+    ([out[0], out[1], out[2]], out[3])
+}
+
+/// Whether W P_u (from X1) and W P_v (from X2) lie in angular sectors of the plane across some
+/// n0 that are ordered and less than a half turn apart, P = X1 / W + const = X2 / W + const':
+/// then n0 . (P_u x P_v) > 0 over the box.
+fn separated(x1: &[Bp; 3], x2: Option<&[Bp; 3]>, w: &Bp) -> bool {
+    if w.lower() <= 0.0 {
+        return false;
+    }
+    let a1 = About::of(x1, w);
+    let a2 = x2.map(|x2| About::of(x2, w));
+    let a2 = a2.as_ref().unwrap_or(&a1);
+    let (sx, sy) = (a1.axis(true), a2.axis(false));
+    let Some(n0) = sx.cross(sy).normalize() else {
+        return false;
+    };
+    let n0 = n0.get();
+    let flat = |v: Vec3| (v - n0 * n0.dot(v)).normalize().map(|u| u.get());
+    let (Some(ua), Some(va)) = (flat(sx), flat(sy)) else {
+        return false;
+    };
+    let (Some(a), Some(b)) = (a1.sector(w, true, n0, ua), a2.sector(w, false, n0, va)) else {
+        return false;
+    };
+    let beta = dmath::atan2(n0.dot(ua.cross(va)), ua.dot(va));
+    // room for the rounding of the angles and tangents
+    let slack = 1e-9;
+    beta + dmath::atan(b.0) - dmath::atan(a.1) > slack
+        && beta + dmath::atan(b.1) - dmath::atan(a.0) < dmath::PI - slack
+}
+
+/// Phi, bilinear with 1 / W at the box's corners: W phi is nearly constant over the box and its
+/// parts, so the shift (P - q) (W phi)_u is of second order in a part's size. P = X phi / W phi.
+fn normal_phi(w: &Bp) -> Option<[f64; 4]> {
+    let (m, n) = (w.m, w.n);
+    let corners = [w.at(0, 0), w.at(0, n), w.at(m, 0), w.at(m, n)];
+    corners.iter().all(|&c| c > 0.0).then(|| corners.map(|c| 1.0 / c))
+}
+
+/// P = N / W regular over the box; boxes that fail are split in four.
+fn plain_box(n: &[Bp; 3], w: &Bp, st: &mut Proof) -> bool {
+    let Some(phi) = normal_phi(w) else {
+        return false;
+    };
+    plain_region(&n.map(|p| p.mul_bilinear(phi)), &w.mul_bilinear(phi), 0, st)
+}
+
+fn plain_region(n: &[Bp; 3], w: &Bp, depth: u32, st: &mut Proof) -> bool {
+    st.tests += 1;
+    st.depth = st.depth.max(depth);
+    if separated(n, None, w) {
+        return true;
+    }
+    // halves, along u and v in turn
+    depth < MAX_DEPTH
+        && (0..2).all(|h| {
+            let p = |x: &Bp| x.half(depth % 2 == 0, h);
+            plain_region(&n.map(|x| p(&x)), &p(w), depth + 1, st)
+        })
+}
+
+/// A corner's Duffy triangle (x = sigma, y = sigma t, sigma in `sig`, start and width) where
+/// N - p_c W = sigma^3 G and W = sigma^2 W~: P - p_c = sigma G / W~ and
+/// (P - p_c) / sigma = G / W~, so the cones are of W~ P_sigma (from sigma G) and
+/// W~ P_t / sigma (from G), both finite at the corner.
+fn duffy_region(g: &[Bp; 3], w: &Bp, sig: (f64, f64), depth: u32, st: &mut Proof) -> bool {
+    // the whole triangle rarely passes: start from its halves
+    if depth > 0 {
+        st.tests += 1;
+        st.depth = st.depth.max(depth);
+        let h = g.map(|p| p.mul_affine(sig.0, sig.1));
+        if separated(&h, Some(&g.map(|p| p.elevate_u())), w) {
+            return true;
+        }
+    }
+    // halves, along sigma and t in turn
+    let u = depth % 2 == 0;
+    depth < MAX_DEPTH
+        && (0..2).all(|q| {
+            let p = |x: &Bp| x.half(u, q);
+            let s = if u {
+                (sig.0 + 0.5 * sig.1 * q as f64, 0.5 * sig.1)
+            } else {
+                sig
+            };
+            duffy_region(&g.map(|x| p(&x)), &p(w), s, depth + 1, st)
+        })
 }

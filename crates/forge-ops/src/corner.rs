@@ -512,7 +512,7 @@ mod tests {
 
     #[test]
     fn rational_corner_patches_are_proven_and_meet_their_sides() {
-        use forge_geom::corner::{HolePatch, audit};
+        use forge_geom::corner::{audit, rational_pieces};
         let mut rng = Rng::new(79);
         let mut cases = vec![box_corner([
             Some((1.0, true)),
@@ -528,17 +528,31 @@ mod tests {
             let r: Vec<Option<(f64, bool)>> = (0..3).map(|_| Some((rng.range(0.5, 4.0), true))).collect();
             cases.push(corner(Point3::new(5.0, -3.0, 2.0), &dirs, &normals, &r));
         }
+        // and a four-edge pyramid apex: an eight-sided hole
+        let dirs = [
+            Vec3::new(1.0, 0.1, -1.0),
+            Vec3::new(-0.1, 1.0, -0.8),
+            Vec3::new(-1.0, -0.1, -1.2),
+            Vec3::new(0.2, -1.0, -0.9),
+        ];
+        let normals = convex_normals(&dirs);
+        let r = [1.0, 1.5, 0.8, 2.0].map(|x| Some((x, true)));
+        cases.push(corner(Point3::new(1.0, 2.0, -1.0), &dirs, &normals, &r));
         for (k, c) in cases.iter().enumerate() {
-            let sides = planned_hole(c);
-            let p = HolePatch::new_rational(sides.iter().map(hole_side).collect()).expect("rational form");
-            let proof = p.prove_rational().unwrap();
-            assert!(proof.proved, "case {k}: {proof:?}");
-            let a = audit(&p, 40 + k as u64);
-            assert!(a.boundary <= 1e-9 && a.normal <= 1e-9, "case {k}: {a:?}");
+            let sides: Vec<_> = planned_hole(c).iter().map(hole_side).collect();
+            let (pieces, proof) = rational_pieces(&sides, 0).expect("rational form");
             assert!(
-                a.derivs <= 1e-4 && a.bbox_misses == 0 && a.fold > 0.0,
-                "case {k}: {a:?}"
+                proof.proved && pieces.len() == sides.len() / 2,
+                "case {k}: {proof:?}"
             );
+            for p in &pieces {
+                let a = audit(p, 40 + k as u64);
+                assert!(a.boundary <= 1e-9 && a.normal <= 1e-9, "case {k}: {a:?}");
+                assert!(
+                    a.derivs <= 1e-4 && a.bbox_misses == 0 && a.fold > 0.0,
+                    "case {k}: {a:?}"
+                );
+            }
         }
     }
 
