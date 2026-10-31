@@ -13,7 +13,7 @@ use std::time::Instant;
 fn usage() -> ExitCode {
     eprintln!(
         "usage: forgecad build|query|measure|render|check|diff|edit FILE [ARGS] [--json] [--at FEAT] [--labels SEL] [--px N] [-o OUT]\n       \
-         forgecad serve | mcp [--root DIR]   (JSON-RPC / MCP on stdio, .fc files under DIR, default .)\n       \
+         forgecad serve | mcp [--root DIR] [--writable]   (JSON-RPC / MCP on stdio, .fc files under DIR, default .; edit only if --writable)\n       \
          forgecad demo <out.stl> [chord-mm] | preview <out.json>\nformat and selectors: AGENTS.md"
     );
     ExitCode::from(2)
@@ -105,11 +105,19 @@ fn main() -> ExitCode {
     match args.get(1).map(String::as_str) {
         Some("demo") if args.len() >= 3 => demo(&args),
         Some("preview") if args.len() >= 3 => preview(&args[2]),
-        Some(m @ ("serve" | "mcp")) => match &args[2..] {
-            [] => serve::run(m == "mcp", "."),
-            [flag, root] if flag == "--root" => serve::run(m == "mcp", root),
-            _ => usage(),
-        },
+        Some(m @ ("serve" | "mcp")) => {
+            let writable = args[2..].iter().any(|a| a == "--writable");
+            let rest: Vec<&str> = args[2..]
+                .iter()
+                .map(String::as_str)
+                .filter(|a| *a != "--writable")
+                .collect();
+            match rest[..] {
+                [] => serve::run(m == "mcp", ".", writable),
+                ["--root", root] => serve::run(m == "mcp", root, writable),
+                _ => usage(),
+            }
+        }
         Some(c) if COMMANDS.contains(&c) && args.len() >= 3 => command(c, &args[2..]),
         _ => usage(),
     }
@@ -136,7 +144,7 @@ fn command(cmd: &str, argv: &[String]) -> ExitCode {
             _ => a.words.push(w.clone()),
         }
     }
-    let r = Session::default().run(cmd, &a);
+    let r = Session::default().writable(true).run(cmd, &a);
     let mut text = if json { r.json.to_string() } else { r.text };
     if let Some(png) = &r.png {
         let path = out.unwrap_or_else(|| format!("{}.png", a.file.trim_end_matches(".fc")));

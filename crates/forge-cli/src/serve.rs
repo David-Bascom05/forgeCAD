@@ -92,8 +92,8 @@ fn args(p: &Json) -> Args {
     a
 }
 
-/// Serves files under `root` only.
-pub fn run(mcp: bool, root: &str) -> ExitCode {
+/// Serves files under `root` only, writing them (edits) only if `writable`.
+pub fn run(mcp: bool, root: &str, writable: bool) -> ExitCode {
     let root = match std::fs::canonicalize(root) {
         Ok(r) => r,
         Err(e) => {
@@ -101,7 +101,7 @@ pub fn run(mcp: bool, root: &str) -> ExitCode {
             return ExitCode::from(2);
         }
     };
-    let mut session = Session::rooted(root.clone());
+    let mut session = Session::rooted(root.clone()).writable(writable);
     let stdin = std::io::stdin();
     let mut out = std::io::stdout().lock();
     for line in stdin.lock().lines() {

@@ -43,6 +43,8 @@ pub struct Session {
     models: HashMap<String, Model>,
     /// Where files may be read from (serve and mcp); any `.fc` file when `None`.
     root: Option<std::path::PathBuf>,
+    /// Whether `edit` may write files (off unless asked for).
+    writable: bool,
 }
 
 /// Fonts larger than this are refused unread.
@@ -102,6 +104,12 @@ impl Session {
         }
     }
 
+    /// The session, letting `edit` write the files it changes or not.
+    pub fn writable(mut self, on: bool) -> Session {
+        self.writable = on;
+        self
+    }
+
     /// The file's model, brought up to date with what is on disk.
     pub fn model(&mut self, file: &str) -> Result<&mut Model, String> {
         self.model_at(file).map(|m| m.0)
@@ -145,6 +153,9 @@ impl Session {
     /// Changes the file through its document, writes it back and builds it.
     fn edit(&mut self, a: &Args) -> Result<Reply, String> {
         use forge_doc::Edit;
+        if !self.writable {
+            return Err("this session does not write files (serve and mcp take --writable)".into());
+        }
         let (m, path) = self.model_at(&a.file)?;
         let w = &a.words;
         let word = |k: usize| {
@@ -200,7 +211,8 @@ impl Session {
             op => return Err(format!("unknown edit '{op}' (param dim arg insert delete move)")),
         };
         m.edit(e)?;
-        std::fs::write(&path, m.src()).map_err(|_| format!("{}: cannot write", a.file))?;
+        let src = m.src().to_string();
+        replace(&path, &src).map_err(|e| format!("{}: {e}", a.file))?;
         self.build(a)
     }
 
@@ -650,6 +662,58 @@ fn law_starts(m: &Model) -> Vec<(usize, String, String)> {
     out
 }
 
+/// O_NOFOLLOW: open fails on a symbolic link (the value differs by platform).
+#[cfg(unix)]
+const NOFOLLOW: i32 = if cfg!(any(target_os = "macos", target_os = "ios", target_os = "freebsd")) {
+    0x100
+} else if cfg!(any(target_arch = "aarch64", target_arch = "arm")) {
+    0o100000
+} else {
+    0o400000
+};
+
+/// Writes `src` over the part file at `path` (canonical, checked against the root): only if
+/// the name is still that file, a regular file with no other names (not a link swapped in
+/// since the check, nor a hard link to a file elsewhere), and through a new file in the same
+/// directory renamed into place.
+#[cfg(unix)]
+fn replace(path: &std::path::Path, src: &str) -> Result<(), String> {
+    use std::os::unix::fs::{MetadataExt, OpenOptionsExt};
+    let checked = std::fs::metadata(path).map_err(|_| "cannot write".to_string())?;
+    let f = std::fs::OpenOptions::new()
+        .read(true)
+        .custom_flags(NOFOLLOW)
+        .open(path)
+        .map_err(|_| "not a plain file with one name; not written".to_string())?;
+    let held = f.metadata().map_err(|_| "cannot write".to_string())?;
+    if !held.file_type().is_file()
+        || held.nlink() != 1
+        || (held.dev(), held.ino()) != (checked.dev(), checked.ino())
+    {
+        return Err("not a plain file with one name; not written".into());
+    }
+    let dir = path.parent().ok_or("cannot write")?;
+    let name = path.file_name().ok_or("cannot write")?.to_string_lossy();
+    let tmp = dir.join(format!(".{name}.{}.tmp", std::process::id()));
+    let written = std::fs::OpenOptions::new()
+        .write(true)
+        .create_new(true)
+        .mode(held.mode() & 0o777)
+        .open(&tmp)
+        .and_then(|mut t| std::io::Write::write_all(&mut t, src.as_bytes()).and_then(|_| t.sync_all()))
+        .and_then(|_| std::fs::rename(&tmp, path));
+    if written.is_err() {
+        let _ = std::fs::remove_file(&tmp);
+        return Err("cannot write".into());
+    }
+    Ok(())
+}
+
+#[cfg(not(unix))]
+fn replace(_: &std::path::Path, _: &str) -> Result<(), String> {
+    Err("writing part files needs a unix system".into())
+}
+
 fn counts(b: &Body) -> (usize, usize, usize) {
     (b.face_ids().count(), b.edge_ids().count(), b.vertices.len())
 }
@@ -974,11 +1038,14 @@ fillet 4 (edges between base wall concave)
         }
     }
 
+    #[cfg(unix)]
     #[test]
     fn edits_write_the_file() {
         let dir = Dir::new("edit");
         let f = dir.file("e.fc", "w = 4\nextrude w rect 0 0 1 1  # a block\n");
-        let mut s = Session::default();
+        let r = Session::default().run("edit", &args(&f, &["param", "w", "5"]));
+        assert!(r.text.contains("does not write files"), "{}", r.text);
+        let mut s = Session::default().writable(true);
         let r = s.run("edit", &args(&f, &["param", "w", "5"]));
         assert!(r.ok && r.text.contains("bbox 0 0 0 1 1 5"), "{}", r.text);
         let r = s.run("edit", &args(&f, &["insert", "2", "h", "=", "2\\nd", "=", "h"]));
@@ -990,6 +1057,38 @@ fillet 4 (edges between base wall concave)
         assert_eq!(
             s.run("edit", &args(&f, &["dim", "1", "3"])).text,
             "error: that line is not a sketch row"
+        );
+    }
+
+    /// Under a root, an edit never writes through a link to a file outside it.
+    #[cfg(unix)]
+    #[test]
+    fn edits_refuse_links_out_of_the_root() {
+        let dir = Dir::new("wroot");
+        let outside = Dir::new("woutside");
+        let away = outside.file("q.fc", "w = 4\nextrude w rect 0 0 1 1\n");
+        let mut s = Session::rooted(std::fs::canonicalize(&dir.0).expect("root")).writable(true);
+        let soft = dir.0.join("soft.fc");
+        let hard = dir.0.join("hard.fc");
+        std::os::unix::fs::symlink(&away, &soft).expect("link");
+        std::fs::hard_link(&away, &hard).expect("link");
+        for (l, why) in [
+            (&soft, "not a part file under the root"),
+            (&hard, "not a plain file with one name"),
+        ] {
+            let r = s.run("edit", &args(&l.to_string_lossy(), &["param", "w", "9"]));
+            assert!(!r.ok && r.text.contains(why), "{}", r.text);
+        }
+        assert_eq!(
+            std::fs::read_to_string(&away).expect("read"),
+            "w = 4\nextrude w rect 0 0 1 1\n"
+        );
+        let plain = dir.file("p.fc", "w = 4\nextrude w rect 0 0 1 1\n");
+        assert!(s.run("edit", &args(&plain, &["param", "w", "9"])).ok);
+        assert_eq!(
+            std::fs::read_dir(&dir.0).expect("dir").count(),
+            3,
+            "no temporary file left"
         );
     }
 

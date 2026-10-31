@@ -116,7 +116,7 @@ forgecad render F [VIEW] [--labels SEL] [--px 400] [-o F.png]   VIEW: iso front 
 forgecad check F | diff A B         validity after each line | what B changed from A
 forgecad edit F param NAME EXPR | dim LINE V | arg LINE K TEXT | insert LINE|end TEXT | delete LINE |
   move LINE LINE|end                rewrite F through its document (references follow), then build
-forgecad serve|mcp [--root DIR]     stdio JSON-RPC / MCP, .fc files under DIR (default .) only
+forgecad serve|mcp [--root DIR] [--writable]   stdio JSON-RPC / MCP, .fc files under DIR (default .) only; edit needs --writable
 ```
 `serve` takes one JSON object per line, `{"id":1,"method":"build","params":{"file":"b.fc"}}`;
 params: file sel at what to view labels px other. Rendered labels are handles without `@`.
