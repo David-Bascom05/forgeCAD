@@ -1,5 +1,5 @@
 //! One full regen of a part, for instruction counting: `regen1 <part> <seq|nary1|naryN>`.
-//! Parts: a suite name, torture, or fuzzN.
+//! Parts: a suite name, torture, or fuzzN. The n-ary batch runs where FORGE_BATCH says.
 use forge_model::{suite, torture};
 
 fn main() {

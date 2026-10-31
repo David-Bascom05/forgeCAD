@@ -51,8 +51,6 @@ version = "0.1.0"
 dependencies = [
  "forge-bool",
  "forge-math",
- "forge-model",
- "forge-topo",
 ]
 
 [[package]]
@@ -75,6 +73,7 @@ version = "0.1.0"
 dependencies = [
  "forge-bool",
  "forge-geom",
+ "forge-gpu",
  "forge-math",
  "forge-mesh",
  "forge-ops",

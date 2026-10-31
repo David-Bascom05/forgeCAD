@@ -18,6 +18,3 @@ unsafe_code = "allow"
 float_cmp = "allow"
 many_single_char_names = "allow"
 
-[dev-dependencies]
-forge-model = { path = "../forge-model" }
-forge-topo = { path = "../forge-topo" }

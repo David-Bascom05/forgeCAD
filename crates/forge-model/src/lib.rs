@@ -6,7 +6,9 @@ pub mod finishing;
 pub mod suite;
 pub mod torture;
 
-use forge_bool::{BoolError, Op, Seg2, Shape, boolean_into};
+use forge_bool::{BoolError, CpuBatch, Op, Seg2, Shape, boolean_into};
+use forge_gpu::AutoBatch;
+pub use forge_gpu::Backend;
 use forge_math::{Frame, Point2, Vec2, dmath};
 use forge_ops::{
     Axis2, ChamferError, ChamferSize, DraftError, ExtrudeError, FilletEdge, FilletError, Profile,
@@ -110,8 +112,20 @@ impl Part {
     /// positions, so entity names stay stable when nothing upstream changes.
     /// Rebuilds the solid in one n-ary boolean over every feature's tool (built in parallel),
     /// on up to `threads` threads.
+    /// The region batch is classified on the backend FORGE_BATCH names (default Auto).
     pub fn regenerate_nary(&self, threads: usize) -> Result<Body, RegenError> {
-        self.regenerate_nary_with(threads, true)
+        self.regenerate_nary_on(threads, Backend::from_env())
+    }
+
+    /// `regenerate_nary`, the region batch classified on `backend`.
+    pub fn regenerate_nary_on(&self, threads: usize, backend: Backend) -> Result<Body, RegenError> {
+        let (shapes, ops) = self.nary_solids();
+        let cpu = CpuBatch {
+            shapes: &shapes,
+            ops: &ops,
+            threads: if cfg!(target_family = "wasm") { 1 } else { threads },
+        };
+        self.regenerate_nary_batch(threads, true, Some(&AutoBatch::new(cpu, backend)))
     }
 
     /// `regenerate_nary`, placing points against the tools' analytic solids first or not.
@@ -237,7 +251,8 @@ fn nary_regen(
         let body = modify(
             m,
             &features[m],
-            &nary_regen(&features[..m], threads, shapes, batch)?,
+            // the batch holds the tools after the last modifier (nary_solids), not these
+            &nary_regen(&features[..m], threads, shapes, None)?,
         )?;
         if m + 1 == features.len() {
             return Ok(body);

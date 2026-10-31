@@ -1,11 +1,11 @@
 //! The GPU batch against the CPU batch on every suite part (skipped where there is no CUDA GPU,
-//! and on wasm): every verdict the GPU gives is the CPU's, and a regen through the auto batch
-//! has the CPU batch's exact result.
+//! and on wasm): every verdict the GPU gives is the CPU's, and a regen on the GPU backend has
+//! the CPU batch's exact result.
 use forge_bool::{Batch, CpuBatch};
-use forge_gpu::{AutoBatch, Gpu, Packed};
+use forge_gpu::Packed;
 use forge_math::rng::Rng;
 use forge_math::{Box3, Point3};
-use forge_model::{suite, torture};
+use forge_model::{Backend, suite, torture};
 use std::sync::Mutex;
 
 /// Points, sides and boxes.
@@ -26,7 +26,7 @@ impl Batch for Record<'_> {
 
 #[test]
 fn gpu_verdicts_are_the_cpus() {
-    let Ok(gpu) = Gpu::new() else {
+    let Some(gpu) = forge_gpu::gpu() else {
         eprintln!("no CUDA GPU: skipped");
         return;
     };
@@ -73,9 +73,7 @@ fn gpu_verdicts_are_the_cpus() {
         assert_eq!(wrong, 0, "{name}: GPU verdicts differ from the CPU's");
         assert_eq!(wary, 0, "{name}: GPU undecided where the CPU decides");
 
-        let mut auto = AutoBatch::new(CpuBatch { ..cpu }, Some(&gpu));
-        auto.crossover = 0;
-        let got = part.regenerate_nary_batch(4, true, Some(&auto));
+        let got = part.regenerate_nary_on(4, Backend::Gpu);
         match (want, got) {
             (Ok(w), Ok(g)) => {
                 assert_eq!(w.vertices.len(), g.vertices.len(), "{name}");
@@ -84,7 +82,7 @@ fn gpu_verdicts_are_the_cpus() {
                 }
             }
             (Err(_), Err(_)) => {}
-            _ => panic!("{name}: the auto batch changed whether the regen succeeds"),
+            _ => panic!("{name}: the GPU changed whether the regen succeeds"),
         }
     }
 }

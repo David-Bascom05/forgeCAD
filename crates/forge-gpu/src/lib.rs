@@ -13,8 +13,9 @@
 use forge_bool::{Batch, CpuBatch, Op, Seg2, Shape};
 use forge_math::{Box3, Point3, tol};
 use std::ffi::{CString, c_char, c_int, c_uint, c_void};
-use std::sync::Mutex;
 use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::{Mutex, Once, OnceLock};
+use std::time::{Duration, Instant};
 
 const PTX: &str = include_str!("../kernels/classify.ptx");
 /// Values per tool and per profile segment (as the kernel reads them).
@@ -34,9 +35,6 @@ const BLOCK: u32 = 128;
 const FILL: usize = 1 << 16;
 /// Points sent at a time (~120 MB on the device).
 const CHUNK: usize = 1 << 22;
-/// Batches below this many points stay on the CPU, where the GPU's round trip cannot win
-/// (measured by examples/bench.rs: see its doc).
-pub const CROSSOVER: usize = 256;
 
 #[cfg(not(target_arch = "wasm32"))]
 unsafe extern "C" {
@@ -566,29 +564,131 @@ impl Packed {
     }
 }
 
-/// The CPU batch, or the GPU's from `crossover` points up, where it is the faster. A GPU error
-/// falls back to the CPU.
+/// What classifies a regen's region batch.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum Backend {
+    /// The GPU where it measurably beats the CPU (see `crossover`), else the CPU: the CPU too
+    /// until the GPU has opened in the background.
+    #[default]
+    Auto,
+    Cpu,
+    /// The GPU for every batch; the CPU if there is no GPU.
+    Gpu,
+}
+
+impl Backend {
+    /// From FORGE_BATCH (auto, cpu or gpu), read once; Auto when unset.
+    pub fn from_env() -> Backend {
+        static ENV: OnceLock<Backend> = OnceLock::new();
+        *ENV.get_or_init(|| match std::env::var("FORGE_BATCH").as_deref() {
+            Err(_) | Ok("auto") => Backend::Auto,
+            Ok("cpu") => Backend::Cpu,
+            Ok("gpu") => Backend::Gpu,
+            Ok(v) => panic!("FORGE_BATCH={v}: expected auto, cpu or gpu"),
+        })
+    }
+}
+
+static GPU: OnceLock<Option<Gpu>> = OnceLock::new();
+
+/// The process's GPU, opened at first use (~0.3 s); None where there is none.
+pub fn gpu() -> Option<&'static Gpu> {
+    GPU.get_or_init(|| Gpu::new().ok()).as_ref()
+}
+
+/// The process's GPU if it is open; the first call starts opening it on another thread.
+fn gpu_ready() -> Option<&'static Gpu> {
+    if cfg!(target_family = "wasm") {
+        return None;
+    }
+    static OPEN: Once = Once::new();
+    OPEN.call_once(|| {
+        std::thread::spawn(gpu);
+    });
+    GPU.get().and_then(Option::as_ref)
+}
+
+static CROSSOVER: OnceLock<usize> = OnceLock::new();
+
+/// The batch size from which the GPU beat the CPU in this process's probe (usize::MAX: never),
+/// once a batch has been run with Backend::Auto on a GPU.
+pub fn crossover() -> Option<usize> {
+    CROSSOVER.get().copied()
+}
+
+/// The batch size from which the GPU beats `cpu`: both timed (median of 3) on a batch's points
+/// repeated to sizes doubling from 32, the GPU woken first as in a regen. A few ms, once.
+fn probe(
+    gpu: &Gpu,
+    packed: &Packed,
+    cpu: &CpuBatch,
+    points: &[Point3],
+    sides: &[u32],
+    boxes: &[Box3],
+) -> usize {
+    let median = |f: &mut dyn FnMut()| {
+        let mut t: Vec<Duration> = (0..3)
+            .map(|_| {
+                let s = Instant::now();
+                f();
+                s.elapsed()
+            })
+            .collect();
+        t.sort();
+        t[1]
+    };
+    // puts the tools on the device
+    if gpu.run(packed, &points[..1], &sides[..1], boxes).is_err() {
+        return usize::MAX;
+    }
+    let mut n = 32;
+    while n <= 1 << 14 {
+        let p: Vec<Point3> = (0..n).map(|i| points[i % points.len()]).collect();
+        let s: Vec<u32> = (0..n).map(|i| sides[i % sides.len()]).collect();
+        let c = median(&mut || drop(cpu.verdicts(&p, &s, boxes)));
+        let g = median(&mut || {
+            gpu.wake();
+            let _ = gpu.run(packed, &p, &s, boxes);
+        });
+        if g < c {
+            return n;
+        }
+        n *= 2;
+    }
+    usize::MAX
+}
+
+/// The CPU batch, or the GPU's where the backend picks it. A GPU error falls back to the CPU.
 pub struct AutoBatch<'a> {
     pub cpu: CpuBatch<'a>,
-    pub gpu: Option<(&'a Gpu, Packed)>,
-    pub crossover: usize,
+    gpu: Option<(&'static Gpu, Packed)>,
+    backend: Backend,
 }
 
 impl<'a> AutoBatch<'a> {
-    pub fn new(cpu: CpuBatch<'a>, gpu: Option<&'a Gpu>) -> AutoBatch<'a> {
-        let gpu = gpu.map(|g| (g, Packed::new(cpu.shapes, cpu.ops)));
-        AutoBatch {
-            cpu,
-            gpu,
-            crossover: CROSSOVER,
+    pub fn new(cpu: CpuBatch<'a>, backend: Backend) -> AutoBatch<'a> {
+        // Auto runs on the CPU while the GPU opens
+        let gpu = match backend {
+            Backend::Cpu => None,
+            Backend::Auto => gpu_ready(),
+            Backend::Gpu => gpu(),
+        };
+        if backend == Backend::Gpu && gpu.is_none() {
+            static SAID: Once = Once::new();
+            SAID.call_once(|| eprintln!("FORGE_BATCH=gpu: no CUDA GPU here, the CPU classifies"));
         }
+        let gpu = gpu.map(|g| (g, Packed::new(cpu.shapes, cpu.ops)));
+        AutoBatch { cpu, gpu, backend }
     }
 }
 
 impl Batch for AutoBatch<'_> {
     fn verdicts(&self, points: &[Point3], sides: &[u32], boxes: &[Box3]) -> Vec<u8> {
         if let Some((gpu, packed)) = &self.gpu
-            && points.len() >= self.crossover
+            && !points.is_empty()
+            && (self.backend == Backend::Gpu
+                || points.len()
+                    >= *CROSSOVER.get_or_init(|| probe(gpu, packed, &self.cpu, points, sides, boxes)))
         {
             let mut out = Vec::with_capacity(points.len());
             for (p, s) in points.chunks(CHUNK).zip(sides.chunks(CHUNK)) {

@@ -861,12 +861,16 @@ pub fn nary_with(
         }
         None
     };
-    let full = |ri: usize| -> R<Option<bool>> {
+    // `first`: the region's first point, if already placed
+    let full = |ri: usize, first: Option<Point3>| -> R<Option<bool>> {
         let r = &regs[ri];
         let body = tools[r.side];
         let face = body.face(r.face);
         let t0 = std::time::Instant::now();
-        let mut candidates = region_points(body, r.face, &r.loops, list, 1);
+        let mut candidates = match first {
+            Some(p) => vec![p],
+            None => region_points(body, r.face, &r.loops, list, 1),
+        };
         PICK.fetch_add(t0.elapsed().as_nanos() as usize, Ordering::Relaxed);
         // which tools hold a point just inside / just outside the region there, and whether a lower
         // tool's face lies on it; Err(k) when the point is on tool k's boundary but not on a face of
@@ -1029,7 +1033,7 @@ pub fn nary_with(
         Ok((fin != fout && !shadowed).then_some(!fin))
     };
     let class = match batch {
-        None => par_map(regs.len(), threads, 32, full),
+        None => par_map(regs.len(), threads, 32, |ri| full(ri, None)),
         Some(batch) => {
             // one point per region, all placed at once; the rest decided the full way
             batch.warm();
@@ -1057,7 +1061,7 @@ pub fn nary_with(
                 Some(0) => Ok(None),
                 Some(1) => Ok(Some(false)),
                 Some(2) => Ok(Some(true)),
-                _ => full(ri),
+                _ => full(ri, first[ri]),
             })
         }
     };
