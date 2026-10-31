@@ -45,7 +45,7 @@ from OCP.GProp import GProp_GProps
 from OCP.GeomAbs import GeomAbs_Cone, GeomAbs_Cylinder, GeomAbs_Plane, GeomAbs_Sphere, GeomAbs_Torus
 from OCP.ShapeUpgrade import ShapeUpgrade_UnifySameDomain
 from OCP.TopAbs import TopAbs_EDGE, TopAbs_FACE, TopAbs_SHELL, TopAbs_SOLID, TopAbs_VERTEX
-from OCP.TopExp import TopExp
+from OCP.TopExp import TopExp, TopExp_Explorer
 from OCP.OCP.collections import IndexedMap_TopoDS_Shape_TopTools_ShapeMapHasher as ShapeMap
 from OCP.TopoDS import TopoDS
 
@@ -64,11 +64,13 @@ def xyz(p):
 
 def face_areas(shape):
     """Each face's surface (in the exporter's terms) and area."""
-    m = ShapeMap()
-    TopExp.MapShapes_s(shape, TopAbs_FACE, m)
+    # each use, not a map of the shapes: a body's boolean with another that stays shares its faces
+    # with it (a screw's end and its blind hole's floor), and each body has that face
     out = []
-    for i in range(1, m.Extent() + 1):
-        f = TopoDS.Face(m.FindKey(i))
+    ex = TopExp_Explorer(shape, TopAbs_FACE)
+    while ex.More():
+        f = TopoDS.Face(ex.Current())
+        ex.Next()
         g = GProp_GProps()
         BRepGProp.SurfaceProperties_s(f, g)
         ad = BRepAdaptor_Surface(f)

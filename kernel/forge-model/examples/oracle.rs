@@ -1103,6 +1103,9 @@ fn run(reps: usize, chord: f64, f: impl Fn() -> Result<Vec<forge_model::Solid>, 
             for s in &solids {
                 b.append(&s.body);
             }
+            // tessellate compacts a body with dead entities: `measure` reads its faces by the
+            // mesh's face numbers, which must be these
+            let b = b.compact();
             let mut s = format!(
                 "{{\"ms\":{},\"status\":\"{}\",\"faces\":{},\"edges\":{},\"vertices\":{},\"shells\":{}",
                 num(best),
