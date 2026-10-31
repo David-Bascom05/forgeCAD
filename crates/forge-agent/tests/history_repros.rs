@@ -243,3 +243,16 @@ L3: pattern L2 L1 lin 0.11 0.99 0 2 9.35
         "L0: extrude 29.9 rect 0 0 74.83 101.22\nL1: ball cut 3.11 at 57.27 50.61 29.62\nL3: pattern L1 L1 lin 0.11 0.99 0 2 9.35\n",
     );
 }
+
+/// A round tube swept on past a bend in a square one it crosses (r28): the round tube's bend
+/// (a torus) against the square tube's bend (a cylinder square to the torus's axis) came out
+/// Empty, the pieces of the cylinder face were not split, and the classification flooded
+/// across. The closed form now finds where two pairs of roots meet at once.
+#[test]
+fn tube_bend_across_a_square_bend() {
+    builds_valid("L0: extrude 34.57 rect 0 0 127.51 107.86
+L4: extrude cut thru z 0 0 1 at 61.39 24.53 -0.61 poly 15.26 2.4 5.49 12.01 -6.61 11.1 -18.54 2.18 -6.26 -16.88 9.22 -9.43
+L6: sweep add z 0 -1 0 x 0 0 -1 at 60.44 47.57 17.29 rrect -6.63 -6.63 13.26 13.26 1.99 path line 60.44 47.57 17.29 60.44 19.68 17.29 arc z 1 0 0 x 0 0 1 at 60.44 19.68 -2.289999999999999 19.58 0 30 line 60.44 9.890000000000002 14.66677740609931 60.44 -8.357155257738123 4.131777406099312
+L11: sweep add z 0 1 0 x 1 0 0 at 60.44 -13.66 26.6 circle 0 0 5.35 path line 60.44 -13.66 26.6 60.44 16.46 26.6 arc z 0 0 -1 x -1 0 0 at 85.87 16.46 26.6 25.43 0 45 line 67.8882745544261 34.4417254455739 26.6 84.75984235353712 51.31329324468493 26.6 extend 1.84 3.22
+");
+}

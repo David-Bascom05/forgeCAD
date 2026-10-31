@@ -526,9 +526,16 @@ impl Eqn {
                             if v.abs() < q.1 { (u, v.abs()) } else { q }
                         },
                     );
-                // a real double root there, not a near pair of complex ones
-                if self.double_root(u.0) && out.last().is_none_or(|l| !l.1 || u.0 - l.0 > 1e-6) {
-                    out.push((u.0, true));
+                // a real double root there, not a near pair of complex ones; the least sample
+                // only brackets it (two pairs of roots meeting at once, as on a tube square
+                // to a torus's axis, keep the discriminant above zero on both sides), so it is
+                // polished onto the turn first
+                let u = self
+                    .polish_turn(u.0, b - a)
+                    .filter(|x| (a..=b).contains(x))
+                    .unwrap_or(u.0);
+                if self.double_root(u) && out.last().is_none_or(|l| !l.1 || u - l.0 > 1e-6) {
+                    out.push((u, true));
                 }
             }
         }

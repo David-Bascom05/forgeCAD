@@ -1,4 +1,5 @@
 use super::*;
+use crate::CurveGeom;
 use crate::testing::*;
 use crate::{Cone, Cylinder, Plane, Sphere};
 use forge_math::rng::Rng;
@@ -175,4 +176,37 @@ fn tangent_tubes_end_quickly() {
     let at = std::time::Instant::now();
     assert!(intersect(&c, &t, region).is_none());
     assert!(at.elapsed().as_secs_f64() < 5.0);
+}
+
+/// A tube square to a torus's axis (a bored sweep across a bent one): the reflection across
+/// the plane through the torus's axis and square to the tube maps both to themselves, so the
+/// two pairs of roots meet at once and the discriminant only touches zero. The least sample
+/// missed the touch, no event was found, and the pair came out Empty.
+#[test]
+fn tube_square_to_a_torus_axis() {
+    let tf = Frame::from_zx(
+        Point3::new(85.87, 16.46, 26.6),
+        UnitVec3::new_unchecked(Vec3::new(0.0, 0.0, -1.0)),
+        Vec3::new(-1.0, 0.0, 0.0),
+    )
+    .unwrap();
+    let t = Surface::Torus(Torus::new(tf, 25.43, 5.35).unwrap());
+    let cf = Frame::from_zx(Point3::new(60.44, 19.68, -2.29), UnitVec3::X, Vec3::Z).unwrap();
+    let c = Surface::Cylinder(Cylinder {
+        frame: cf,
+        radius: 26.21,
+    });
+    let region = Box3::from_points([Point3::new(50.0, 0.0, 15.0), Point3::new(120.0, 40.0, 35.0)]);
+    let res = intersect(&c, &t, region).expect("a closed form");
+    let SurfaceSurface::Curves(cs) = &res else {
+        panic!("curves, not {res:?}")
+    };
+    // through a point on both
+    let p = Point3::new(55.93040261348267, 16.46, 23.721453246598887);
+    assert!(
+        cs.iter()
+            .any(|(k, _)| k.eval(k.closest(p, k.full_range(100.0))).distance(p) < 1e-6)
+    );
+    let mut worst = 0.0;
+    check(&c, &t, &res, 0.5 * region.diagonal() / 64.0, &mut worst).unwrap();
 }
