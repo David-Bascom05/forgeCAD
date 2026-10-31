@@ -421,11 +421,12 @@ pub fn identities_with(part: &Part, b: &Feature, seed: u64) -> Option<Finding> {
     }
 }
 
-/// Feature by feature, n-ary on one and two threads, n-ary placing no points by the tools'
-/// shapes, and n-ary with the region batch on the GPU (or the CPU without one): one solid.
+/// Feature by feature against n-ary on one thread; that against n-ary on two threads, placing
+/// no points by the tools' shapes, and with the region batch on the GPU (the CPU without one).
+/// Each n-ary path is held to the first, so a difference names the path that makes it.
 pub fn backends(part: &Part, _seed: u64) -> Option<Finding> {
-    let a = good(part).ok()?;
-    for name in ["nary 1", "nary 2", "nary no shapes", "nary gpu"] {
+    let seq = good(part).ok()?;
+    let nary = |name: &str| {
         let body = guarded(|| {
             err(match name {
                 "nary 1" => part.regenerate_nary_on(1, Backend::Cpu),
@@ -434,12 +435,23 @@ pub fn backends(part: &Part, _seed: u64) -> Option<Finding> {
                 _ => part.regenerate_nary_on(1, Backend::Gpu),
             })
         });
-        if let Some(mut f) = same("backends", &a, &good_from(body, CHORD), 1.0, 1.0) {
-            f.kind = format!("{name}: {}", f.kind);
-            return Some(f);
+        good_from(body, CHORD)
+    };
+    let one = nary("nary 1");
+    let named = |name: &str, f: Finding| Finding {
+        kind: format!("{name}: {}", f.kind),
+        ..f
+    };
+    // the n-ary paths first: they should agree even where feature by feature does not
+    if let Ok(one) = &one {
+        let other = ["nary 2", "nary no shapes", "nary gpu"]
+            .into_iter()
+            .find_map(|name| same("backends", one, &nary(name), 1.0, 1.0).map(|f| named(name, f)));
+        if other.is_some() {
+            return other;
         }
     }
-    None
+    same("backends", &seq, &one, 1.0, 1.0).map(|f| named("nary 1", f))
 }
 
 fn err(r: Result<Body, forge_model::RegenError>) -> Result<Body, String> {

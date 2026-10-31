@@ -13,3 +13,10 @@ backends: nary 1: fails: invalid EdgeUses EdgeId  # M6
 backends: nary 1: fails: Boolean Unsupported "region  # M7
 certify: Mesh  # M8
 boolean: A | B fails: invalid FaceWrongSide FaceId  # M9
+# on the part files in forgecad-gate/repros (not in CI)
+rigid: fails: MissingEdge  # M11
+mirror: fails: MissingEdge  # M11
+backends: nary 1: fails: Boolean Unsupported "surface  # M10
+backends: nary 1: fails: MissingEdge  # nary-fillet-after-*-pattern.fc, nary-bb-cluster-fillet.fc
+backends: nary 1: fails: Chamfer NoSuchEdge  # nary-chamfer-after-fillet-conrod.fc
+backends: nary no shapes: fails: Boolean Internal "face  # test-gen/r14.fc
