@@ -37,7 +37,15 @@ pub fn meet(a: &Surface, b: &Surface, region: Box3) -> Option<SurfaceSurface> {
     let leaf = (region.diagonal() / 64.0).max(10.0 * tol::LINEAR);
     // as the tracer: curves a step outside the region still count, for the trims that meet them
     let seeds = pair.seeds(region.grow(leaf * 0.5), leaf)?;
-    let curves = pair.follow(&seeds, region, leaf * 0.5)?;
+    // two branches within a step and a half are marched again finer; still that close, the tracer
+    let mut step = leaf * 0.5;
+    let curves = loop {
+        match pair.follow(&seeds, region, step) {
+            Ok(c) => break c,
+            Err(Stop::Finer) if step > leaf / 16.0 => step *= 0.5,
+            Err(_) => return None,
+        }
+    };
     // a span first, as the pair came
     let flip = matches!(pair, Pair::Quad(..)) && skinned(a).is_none();
     let (sa, sb) = if flip { (b, a) } else { (a, b) };
@@ -61,6 +69,11 @@ fn quadric(s: &Surface) -> Option<Alg> {
         q @ Alg::Quadric { .. } => Some(q),
         Alg::Torus { .. } => None,
     }
+}
+
+enum Stop {
+    Fail,
+    Finer,
 }
 
 enum Pair<'a> {
@@ -274,40 +287,67 @@ impl Pair<'_> {
         n1.cross(n2).normalize().map(|u| u.get())
     }
 
-    /// Each branch through the seeds: its points, directions, whether it closes, and its sag. None
-    /// where a step fails.
+    /// Each branch through the seeds: its points, directions, whether it closes, and its sag. Fail
+    /// where a step fails, Finer where two branches come within a step and a half.
     #[allow(clippy::type_complexity)]
     fn follow(
         &self,
         seeds: &[[f64; 4]],
         region: Box3,
         step: f64,
-    ) -> Option<Vec<(Vec<Point3>, Vec<Vec3>, bool, f64)>> {
+    ) -> Result<Vec<(Vec<Point3>, Vec<Vec3>, bool, f64)>, Stop> {
         let grown = region.grow(step);
         let mut out: Vec<(Vec<Point3>, Vec<Vec3>, bool, f64)> = Vec::new();
         for &s in seeds {
-            let (x0, p0) = self.newton(s)?;
+            let (x0, p0) = self.newton(s).ok_or(Stop::Fail)?;
             if !self.inside(&x0) || !grown.contains(p0) {
                 continue;
             }
-            if out
-                .iter()
-                .any(|c| c.0.iter().any(|q| q.distance(p0) <= 1.5 * step))
-            {
+            // a seed on a traced branch (on its chords, running along them) repeats it; one merely
+            // near a branch is another branch close by
+            let d0 = self.direction(&x0);
+            let mut seen = false;
+            for c in &out {
+                let n = c.0.len();
+                let segs = if c.2 { n } else { n - 1 };
+                let (dist, ab) = (0..segs)
+                    .map(|i| {
+                        let (a, b) = (c.0[i], c.0[(i + 1) % n]);
+                        let ab = b - a;
+                        let t = ((p0 - a).dot(ab) / ab.dot(ab)).clamp(0.0, 1.0);
+                        (p0.distance(a + ab * t), ab)
+                    })
+                    .fold((f64::MAX, Vec3::ZERO), |m, x| if x.0 < m.0 { x } else { m });
+                if dist > 1.5 * step {
+                    continue;
+                }
+                let along = d0.is_some_and(|d| d.dot(ab).abs() >= 0.9 * ab.length());
+                if !along || dist > 2.0 * c.3 + 1e-3 * step + tol::LINEAR {
+                    return Err(Stop::Finer);
+                }
+                seen = true;
+            }
+            if seen {
                 continue;
             }
-            let walk = |sign: f64| -> Option<(Vec<[f64; 4]>, Vec<Point3>, bool)> {
+            let walk = |sign: f64| -> Result<(Vec<[f64; 4]>, Vec<Point3>, bool), Stop> {
                 let (mut xs, mut ps) = (vec![x0], vec![p0]);
                 let max = (64.0 * grown.diagonal() / step) as usize + 16;
                 for k in 0..max {
                     let x = xs[xs.len() - 1];
-                    let d = self.direction(&x)? * sign;
-                    let (nx, q) = self.newton(self.ahead(&x, d, step))?;
-                    if (q - ps[ps.len() - 1]).dot(d) <= 0.0 {
-                        return None;
+                    let d = self.direction(&x).ok_or(Stop::Fail)? * sign;
+                    let (nx, q) = self.newton(self.ahead(&x, d, step)).ok_or(Stop::Fail)?;
+                    let last = ps[ps.len() - 1];
+                    if (q - last).dot(d) <= 0.0 {
+                        return Err(Stop::Fail);
+                    }
+                    // Newton pulled far off the tangent: the curve turns within a step, or another
+                    // branch runs close enough to land on
+                    if q.distance(last + d * step) > 0.5 * step {
+                        return Err(Stop::Finer);
                     }
                     if k > 2 && q.distance(p0) <= 0.75 * step {
-                        return Some((xs, ps, true));
+                        return Ok((xs, ps, true));
                     }
                     // the spans end where they stop being carried on: the curve ends there too
                     if !self.inside(&nx) {
@@ -324,15 +364,15 @@ impl Pair<'_> {
                             xs.push(y);
                             ps.push(q);
                         }
-                        return Some((xs, ps, false));
+                        return Ok((xs, ps, false));
                     }
                     xs.push(nx);
                     ps.push(q);
                     if !grown.contains(q) {
-                        return Some((xs, ps, false));
+                        return Ok((xs, ps, false));
                     }
                 }
-                None
+                Err(Stop::Fail)
             };
             let (fx, fp, closed) = walk(1.0)?;
             let (xs, pts) = if closed {
@@ -375,7 +415,7 @@ impl Pair<'_> {
                 .collect();
             out.push((pts, tans, closed, sag));
         }
-        Some(out)
+        Ok(out)
     }
 }
 
@@ -487,7 +527,6 @@ mod tests {
     }
 
     #[test]
-    #[ignore = "soundness gap: follow() drops a branch within 1.5 steps of one already traced"]
     fn close_parallel_branches_are_both_found() {
         let region = Box3::from_points([Point3::new(-50.0, -50.0, -20.0), Point3::new(50.0, 50.0, 20.0)]);
         // the top half of a tube of radius 8 (top at z = 8 all along), cut by z = 7.98: two curves
