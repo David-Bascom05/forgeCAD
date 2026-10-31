@@ -270,11 +270,6 @@ fn close(a: &str, b: &str) -> usize {
     row[b.len()]
 }
 
-/// A value as written into the file.
-pub fn number(v: f64) -> String {
-    short(v)
-}
-
 /// A commit's op as a line of text, as this document names things.
 fn describe(doc: &Document, op: &Op) -> String {
     let name = |id: ItemId| doc.name(id).unwrap_or(format!("#{}", id.0));

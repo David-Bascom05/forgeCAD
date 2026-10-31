@@ -21,20 +21,31 @@ const ENOUGH_FRAMES: usize = 8;
 /// Numbers tried for each kind of drag before giving up on it.
 const TRIES: usize = 12;
 
-/// Whether a part still builds with this number moved both ways by the swing; and whether
-/// anything but its own line was rebuilt, for a parameter (one nothing uses is no drag).
+/// What the part's faces are, as one number.
+fn shape(p: &Part) -> u64 {
+    let Some(b) = p.model.body() else { return 0 };
+    b.face_ids()
+        .fold(0, |h, f| h ^ forge_agent::facemesh::key(b, f).0)
+}
+
+/// Whether a part still builds with this number moved both ways by the swing, and changes shape
+/// each way (some numbers round to themselves, or are only a sketch's construction). How many
+/// lines it rebuilt: for a parameter, one nothing uses rebuilds only its own.
 fn drags(p: &mut Part, d: &Dim) -> Option<usize> {
+    let was = shape(p);
     let mut most = 0;
+    let mut fine = true;
     for k in [1.0 + SWING, 1.0 - SWING] {
-        let built = p.drag(d.at.op(forge_agent::short(d.value * k))).is_ok() && p.model.error.is_none();
+        fine &= p.drag(d.at.op(forge_agent::short(d.value * k))).is_ok()
+            && p.model.error.is_none()
+            && shape(p) != was;
         most = most.max(p.model.rebuilt);
-        if !built {
-            p.drag_cancel();
-            return None;
+        if !fine {
+            break;
         }
     }
     p.drag_cancel();
-    Some(most)
+    fine.then_some(most)
 }
 
 /// The numbers to drag: the first parameter used below, one halfway down the history, the last.

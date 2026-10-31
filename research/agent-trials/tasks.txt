@@ -1,0 +1,27 @@
+## bracket
+Make bracket.fc: an L mounting bracket. Base plate 80 x 50 x 6 mm lying on xy, centred on the origin
+in x and y, its bottom at z=0. An upright wall 6 thick along the base's back edge (y = +25 side,
+inside the base's outline), 80 wide, reaching z=50 at its top. Four 6.6 mm through holes in the base,
+10 mm in from each corner in x and y, drilled down. Two 6.6 mm through holes in the wall, 15 mm in
+from each end in x, at z=35, drilled through in y. A 4 mm fillet on the inside corner where wall meets
+base. A 1 mm chamfer on the four vertical outside corners of the base. Then: the customer wants the
+wall holes at z=30 and the wall 8 thick. Make that change. Report the final exact volume and the
+number of faces.
+
+## flange
+Make flange.fc: a pipe flange about the z axis. Disc 120 mm diameter, 12 thick, bottom at z=0. Hub 60
+diameter rising from the disc to z=40. Bore 40 diameter through everything. Six 9 mm bolt holes evenly
+spaced on a 90 mm bolt circle, through the disc only, one of them on the +x side. 3 mm fillet where
+hub meets disc. 1.5 mm chamfer on both ends of the bore. Then: change the bolt circle to 95 mm and the
+number of bolts to eight, and make the hub fillet 4 mm. Report the final exact volume, the number of
+faces, and the distance between the centres of two neighbouring bolt holes as measured from the part.
+
+## clamp
+Make clamp.fc: a split shaft clamp. Block 60 wide (x), 40 deep (y), 50 tall (z), centred on the origin
+in x and y, bottom at z=0. A 25 mm bore along y through the block, its axis at z=30, x=0. A 2 mm wide
+slot from the bore up through the top of the block, through the whole depth, centred on x=0. An M6
+clamping screw across the slot along x: at y=0, z=42, a 6.6 clearance hole through the -x half (from
+the -x side to the slot) with a 12 mm counterbore 4 deep on the -x face, and in the +x half a tapped
+M6 hole (5 mm tap drill, thread recorded, not modelled) from the slot 15 deep. 2 mm fillets on the four
+vertical corners of the block. Then: make the bore 30 mm, keeping everything else. Report the final
+exact volume, the number of faces, and the thinnest wall in the part.
