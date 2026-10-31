@@ -442,8 +442,7 @@ fn cut_at(
         1,
         cut_root(i + 2_000_000),
     )
-    .map_err(|error| RegenError::Boolean { feature: i, error })?
-    .compact();
+    .map_err(|error| RegenError::Boolean { feature: i, error })?;
     Ok((body, base.1, shape))
 }
 

@@ -667,8 +667,7 @@ pub(crate) fn build(
         1,
         crate::cut_root(i + 2_000_000),
     )
-    .map_err(|error| RegenError::Boolean { feature: i, error })?
-    .compact();
+    .map_err(|error| RegenError::Boolean { feature: i, error })?;
     for f in body.face_ids() {
         let s = &body.face(f).surface;
         if on_plane(s, far.0, far.1) || bounds.contains(&s) {
@@ -1404,7 +1403,6 @@ pub(crate) fn verify_next(
             1,
             crate::cut_root(i + 4_000_000),
         )
-        .map(|b| b.compact())
         .map_err(|error| RegenError::Boolean { feature: i, error })
     };
     let inner = with(Op::Intersect)?;

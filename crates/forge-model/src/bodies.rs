@@ -439,7 +439,7 @@ fn add_tools(mut b: Body, ts: &[Tool], (i, id): (usize, u64), salt: Option<u64>)
     all.extend(bodies);
     let ops: Vec<Op> = ts.iter().map(|t| op_of(t.1)).collect();
     let root = salt.map_or(cut_root(i), |s| salted(cut_root(i), "body", s));
-    Ok(nary_with(&all, &ops, None, None, 1, root).map_err(err)?.compact())
+    nary_with(&all, &ops, None, None, 1, root).map_err(err)
 }
 
 fn bad(i: usize) -> impl Fn(BodyError) -> RegenError {
@@ -689,18 +689,14 @@ impl Run {
             Ok(b) => {
                 let mut all = vec![&b];
                 all.extend(self.tools.iter().map(|t| &t.0));
-                nary_with(&all, &ops, None, None, threads, root)
-                    .map_err(err)?
-                    .compact()
+                nary_with(&all, &ops, None, None, threads, root).map_err(err)?
             }
             Err(t) => {
                 let mut all = vec![&t.0];
                 all.extend(self.tools.iter().map(|t| &t.0));
                 let mut shapes = vec![t.2.clone()];
                 shapes.extend(self.tools.iter().map(|t| t.2.clone()));
-                nary_with(&all, &ops, Some(&shapes), None, threads, root)
-                    .map_err(err)?
-                    .compact()
+                nary_with(&all, &ops, Some(&shapes), None, threads, root).map_err(err)?
             }
         };
         Ok(Solid { id: self.id, body })

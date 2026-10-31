@@ -467,7 +467,7 @@ impl Batch for CpuBatch<'_> {
 
 /// `nary`, with each tool also given as an analytic solid: a point clear of a tool's boundary
 /// is placed from its profile, and only points near it go to the B-rep. New vertices are named
-/// from `root`.
+/// from `root`. The body comes out compact (as `Body::compact` leaves it).
 pub fn nary_with(
     tools: &[&Body],
     ops: &[Op],
@@ -1819,7 +1819,11 @@ pub fn nary_with(
         let face = out.add_face(shell, src.surface.clone(), src.same_sense != flip, r.name);
         for lp in &r.loops {
             let mut uses: Vec<(EdgeId, bool)> = Vec::with_capacity(lp.len());
-            for &(p, fwd) in lp {
+            // a flipped face walks its loops backwards; entities are made in the order they are
+            // used, so the body comes out compact
+            for k in 0..lp.len() {
+                let (p, fwd) = lp[if flip { lp.len() - 1 - k } else { k }];
+                let fwd = fwd != flip;
                 let (p, fwd) = match canon.get(&p) {
                     Some(&(q, f)) => (q, fwd != f),
                     None => (p, fwd),
@@ -1856,9 +1860,6 @@ pub fn nary_with(
                     }
                 };
                 uses.push((e, fwd));
-            }
-            if flip {
-                uses = uses.into_iter().rev().map(|(e, f)| (e, !f)).collect();
             }
             out.add_loop(face, &uses);
         }

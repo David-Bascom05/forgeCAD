@@ -500,9 +500,7 @@ pub fn step(features: History<'_>, i: usize, body: Option<Body>) -> Result<Optio
         let mut all = vec![&base];
         all.extend(tools.iter().map(|t| &t.0));
         let ops: Vec<Op> = tools.iter().map(|t| op_of(t.1)).collect();
-        b = forge_bool::nary_with(&all, &ops, None, None, 1, cut_root(i))
-            .map_err(err)?
-            .compact();
+        b = forge_bool::nary_with(&all, &ops, None, None, 1, cut_root(i)).map_err(err)?;
     }
     if trace::on() {
         trace::step(i, &b, tools.first().map(|t| &t.0));
@@ -643,7 +641,6 @@ fn nary_regen(
         tools.extend(built.iter().map(|t| &t.0));
         let ops: Vec<Op> = built.iter().map(|t| op_of(t.1)).collect();
         return forge_bool::nary_with(&tools, &ops, None, None, threads, cut_root(features.len() - 1))
-            .map(|b| b.compact())
             .map_err(err);
     }
     if features.get(start).is_none_or(|f| !starts(f)) {
@@ -677,7 +674,6 @@ fn nary_regen(
         threads,
         cut_root(features.len() - 1),
     )
-    .map(|b| b.compact())
     .map_err(err)
 }
 
@@ -766,7 +762,6 @@ fn modify(
                 threads,
                 cut_root(i),
             )
-            .map(|b| b.compact())
             .map_err(|error| RegenError::Boolean { feature: i, error })
         }
         Feature::Edit(e) => edit::apply(features, i, e, body),
