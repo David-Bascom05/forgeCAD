@@ -370,6 +370,12 @@ pub fn select(v: &View, sel: &str) -> Result<Vec<Ent>, String> {
         Some("faces") => body.face_ids().map(Ent::Face).collect(),
         Some("edges") => body.edge_ids().map(Ent::Edge).collect(),
         Some("verts") => verts(body).into_iter().map(Ent::Vert).collect(),
+        // a feature named alone: say how to reach what it made
+        Some(t) if (v.feat)(t).is_ok() => {
+            return Err(format!(
+                "'{t}' is a feature; select what it made: (faces of {t} cyl)"
+            ));
+        }
         t => {
             return Err(format!(
                 "a selector starts with faces, edges or verts, not '{}'",

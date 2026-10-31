@@ -40,7 +40,8 @@ construction). P: `X Y` or `p1`, `l2.a`|`.b`, `c1` (centre), `o`. Entities count
 A row the rows above imply is an error; `ref dist l1` (no value) is driven. `check` shows driven
 values, each sketch's freedom and conflicting rows. A sketch `on` something follows edits above it.
 
-Features (`[op]` is new for the first solid, add after; a later `new` makes another body):
+Features (`[op]` is new for the first solid, add after; a later `new` makes another body). Solids
+added together keep faces that lie in one plane split (a known gap): one profile, `near` or handles pick one.
 ```
 extrude [op] EXT (FRAME LOOPS | SKETCH [E]) EXT: N | sym N | two N M | thru [back|both] | next [back] | to FEAT [@face] [off N]
 revolve [op] [TURN] (FRAME [axis x|y|OX OY DX DY] LOOPS | SKETCH [axis L] [E]) TURN: like EXT, in degrees; default 360
@@ -51,7 +52,8 @@ chamfer D REF.. | chamfer D D2 face REF REF.. | chamfer D ang A face REF REF..
 hole (D | SIZE [iso|ansi] [close|normal|loose|tap] [cbore|csink]) FRAME [cb D2 DEPTH | cs D2 A] (N | thru | next | to FEAT [@face] [off N]) [pt A] [thread SPEC]
   N: depth, flat bottom unless `pt 118`; thru: through the whole part. SIZE: M6 M8x1 (ISO), 1/4-20 10-32
   (UTS) from the tables (iso: DIN 336 tap drills, DIN 974-1 seats; ansi: tap D-P, ASME B18.3); fit normal
-  clearance, or tap (tap drill, thread recorded); cbore|csink seat a head. Others: `hole 34 .. thread M36x2`.
+  clearance, or tap (tap drill, thread recorded); cbore|csink seat a head. Other sizes: `hole D .. thread M36x2`.
+  A hole's thread is recorded only; `thread hole FEAT N` models it (bore it to the minor, below).
 pattern (body | FEAT..) (lin DX DY DZ N STEP [DX DY DZ N STEP] | circ OX OY OZ AX AY AZ N [A] [step] | mirror FRAME
   | path REF.. N (STEP|fit) [fixed] [rev] | pts (X Y Z | REF | SKETCH [P.. | centers])..)
   N counts the original; body: the whole part. lin: STEP mm apart along DIR; circ: N over A (default
