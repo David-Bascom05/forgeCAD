@@ -12,6 +12,7 @@ OpenCascade) never become build dependencies; run them through `fbuild`.
 - `predicate-bounds/`: the float filters' error bounds in forge-math's exact predicates.
 - `mesh-bounds/`: chord-sag step sizes and the measured mesh layout choices.
 - `upto-proofs/`: the exact arguments that prove an end on a surface and the next face.
+- `build-failures/`: the census of what will not build, ranked, and which refusals are right.
 - `gpu-auto/`: the GPU crossover, the 128-point floor and the cost of opening the GPU.
 - `tolerance/`: LINEAR, ANGULAR and the one-tolerance decision.
 - `blend-rows/`: how close a variable blend's rows are kept.
