@@ -65,13 +65,13 @@ heatsink nary a233f35f232cb766
 quadarm seq 819f0bc71b5d7112
 quadarm nary 5608470297ef5d6e
 conrod seq ffd143d6cc7b8880
-conrod nary 4f2a8dd30bae9199
+conrod nary 1b8c3a6226bc3914
 jack seq 9a558a38cd1243b0
 jack nary 47695ac9c6d5599d
 frame seq 0e18d9121df20e21
 frame nary 3784d2a7c30535a0
 manifold seq c0128ad7342b4fd6
-manifold nary 25627558d8f9022d
+manifold nary ca44fdca422aee21
 bracket seq 21209687f108a94d
 bracket nary 3c8614269dc28035
 insert seq b0ac55f670207c06

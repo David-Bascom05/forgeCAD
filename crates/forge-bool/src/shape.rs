@@ -229,6 +229,32 @@ fn segment_distance(q: Point2, a: Point2, b: Point2) -> f64 {
     q.distance(a + ab * t)
 }
 
+/// Whether segment `a`-`b` lies in a revolved solid's closed profile clear of its boundary by
+/// more than `m` (true only when that is sure: an arc is taken as its whole circle). Lines on
+/// the axis (through `axis.0`, square to `axis.1`) bound nothing.
+fn segment_in(segs: &[Seg2], axis: (Point2, Vec2), a: Point2, b: Point2, m: f64) -> bool {
+    let cross = |o: Point2, p: Point2, q: Point2| (p - o).x * (q - o).y - (p - o).y * (q - o).x;
+    let on_axis = |p: Point2| (p - axis.0).dot(axis.1).abs() <= 1e-12;
+    matches!(in_profile(segs, a), Some((true, _)))
+        && segs.iter().all(|s| match *s {
+            Seg2::Line { a: p, b: q } if on_axis(p) && on_axis(q) => true,
+            Seg2::Line { a: p, b: q } => {
+                let crosses =
+                    cross(a, b, p) * cross(a, b, q) <= 0.0 && cross(p, q, a) * cross(p, q, b) <= 0.0;
+                !crosses
+                    && segment_distance(p, a, b)
+                        .min(segment_distance(q, a, b))
+                        .min(segment_distance(a, p, q))
+                        .min(segment_distance(b, p, q))
+                        > m
+            }
+            Seg2::Arc { c, r, .. } => {
+                let far = c.distance(a).max(c.distance(b));
+                far < r - m || segment_distance(c, a, b) > r + m
+            }
+        })
+}
+
 /// In, Out, or Near from a profile test and how far along an extent (`z` against `lo..hi`) the
 /// point lies.
 fn combine(prof: Option<(bool, f64)>, z: f64, lo: f64, hi: f64, m: f64) -> Member {
@@ -471,6 +497,31 @@ impl Shape {
         }
     }
 
+    /// Whether the points of the plane through `at` square to `normal` lying within
+    /// `reach(axis)` of a whole-turn revolved solid's axis all lie in it clear of its boundary by
+    /// more than `m` (true only when that is sure; false for other solids, or the plane not
+    /// square to the axis).
+    pub fn plane_in(&self, at: Point3, normal: Vec3, reach: impl Fn(&Frame) -> f64, m: f64) -> bool {
+        let Shape::Revolved {
+            frame,
+            origin,
+            dir,
+            perp,
+            segs,
+            angle: None,
+        } = self
+        else {
+            return false;
+        };
+        if normal.cross(frame.z().get()).length() > 1e-12 {
+            return false;
+        }
+        let h = frame.point_to_local(at).z;
+        let r = reach(frame);
+        let at = |r: f64| *origin + *dir * h + *perp * r;
+        r.is_finite() && segment_in(segs, (*origin, *perp), at(0.0), at(r), m + 1e-9 * (1.0 + r))
+    }
+
     /// Where `p` is, clear of the boundary by more than `m`, or Near.
     pub fn member(&self, p: Point3, m: f64) -> Member {
         match self {
@@ -581,6 +632,33 @@ impl Shape {
 mod tests {
     use super::*;
     use forge_geom::{Cylinder, Surface};
+
+    #[test]
+    fn a_disc_on_a_bores_bottom_is_in_it_on_the_bores_side_within_its_radius() {
+        // a bore of radius 4.6 from height 0 to 24 about the world z, its profile closed on the axis
+        let p = |h: f64, r: f64| Point2::new(h, r);
+        let corners = [p(0.0, 0.0), p(0.0, 4.6), p(24.0, 4.6), p(24.0, 0.0)];
+        let bore = Shape::Revolved {
+            frame: Frame::WORLD,
+            origin: Point2::ORIGIN,
+            dir: Vec2::new(1.0, 0.0),
+            perp: Vec2::new(0.0, 1.0),
+            segs: (0..4)
+                .map(|i| Seg2::Line {
+                    a: corners[i],
+                    b: corners[(i + 1) % 4],
+                })
+                .collect(),
+            angle: None,
+        };
+        let z = Vec3::new(0.0, 0.0, 1.0);
+        let at = |h: f64| Point3::new(1.0, 2.0, h);
+        assert!(bore.plane_in(at(24.0 - 1e-4), z, |_| 4.0, 1e-5));
+        assert!(!bore.plane_in(at(24.0 - 1e-4), z, |_| 4.6, 1e-5));
+        assert!(!bore.plane_in(at(24.0 + 1e-4), z, |_| 4.0, 1e-5));
+        assert!(!bore.plane_in(at(24.0 - 1e-6), z, |_| 4.0, 1e-5));
+        assert!(!bore.plane_in(at(12.0), Vec3::new(0.0, 0.1, 1.0), |_| 1.0, 1e-5));
+    }
 
     #[test]
     fn a_cylinder_about_a_revolved_axis_is_out_where_the_profile_is_narrower() {

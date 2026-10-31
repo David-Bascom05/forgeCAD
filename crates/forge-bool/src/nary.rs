@@ -637,10 +637,12 @@ fn nary_body(
     // whether a tool face surely bounds nothing in the result (whatever it meets is dropped
     // with both its sides), once a face: it lies outside the first tool and those added to it,
     // which only a cylinder about a revolved one's axis is told beyond the boxes tested below;
-    // or, with no intersect, it is a cut's plane whose outer side lies outside them, with no
-    // later tool adding material near it (a hole's mouth on the part's face)
+    // or, with no intersect, it is a cut's plane whose outer side lies outside them, or inside
+    // another cut that no tool after it adds to there, with no later tool adding material near it
+    // (a hole's mouth on the part's face, or on the bottom of the hole it goes on from)
     let holders: Vec<Side> = (0..n).filter(|&t| t == 0 || ops[t - 1] == Op::Union).collect();
     let revolved = shapes.is_some_and(|sh| holders.iter().any(|&t| sh[t].revolved()));
+    let grid = Grid::new(&index.iter().map(|x| x.bbox).collect::<Vec<_>>());
     let inert_at: Vec<Vec<std::sync::OnceLock<bool>>> = (0..n)
         .map(|k| match shapes {
             Some(_) => (0..tools[k].faces.len())
@@ -677,12 +679,58 @@ fn nary_body(
                 z: forge_math::Interval::new(b.z.lo + out.z, b.z.hi + out.z),
             };
             let near = b.grow(tol::LINEAR);
-            holders
+            let after = |t: Side| &holders[holders.partition_point(|&h| h <= t)..];
+            // how far the face reaches from an axis
+            let body = tools[k];
+            let reach = |fr: &forge_math::Frame| {
+                let radius = |p: Point3| {
+                    let l = fr.point_to_local(p);
+                    (l.x * l.x + l.y * l.y).sqrt()
+                };
+                let mut r: f64 = 0.0;
+                for &l in &face.loops {
+                    for c in body.lp(l).coedges() {
+                        let e = body.coedge(c).edge;
+                        let ed = body.edge(e);
+                        r = r.max(match &ed.curve {
+                            Curve::Line(_) => {
+                                radius(body.vertex(ed.start).point).max(radius(body.vertex(ed.end).point))
+                            }
+                            Curve::Circle(ci) if ci.frame.z().cross(fr.z()).length() <= 1e-12 => {
+                                ci.radius + radius(ci.frame.origin)
+                            }
+                            _ => {
+                                let eb = body.edge_box(e);
+                                let mut far: f64 = 0.0;
+                                for x in [eb.x.lo, eb.x.hi] {
+                                    for y in [eb.y.lo, eb.y.hi] {
+                                        for z in [eb.z.lo, eb.z.hi] {
+                                            far = far.max(radius(Point3::new(x, y, z)));
+                                        }
+                                    }
+                                }
+                                far
+                            }
+                        });
+                    }
+                }
+                r + tol::LINEAR
+            };
+            (holders
                 .iter()
                 .all(|&t| !index[t].bbox.overlaps(&off) || sh[t].box_out(&off, SHAPE_MARGIN))
-                && holders[holders.partition_point(|&t| t <= k)..]
-                    .iter()
-                    .all(|&t| !index[t].bbox.overlaps(&near))
+                || grid.at(off.center()).iter().any(|&t| {
+                    let t = t as usize;
+                    t != k
+                        && t > 0
+                        && ops[t - 1] == Op::Subtract
+                        && index[t].bbox.contains(Point3::new(off.x.lo, off.y.lo, off.z.lo))
+                        && index[t].bbox.contains(Point3::new(off.x.hi, off.y.hi, off.z.hi))
+                        && after(t).iter().all(|&h| !index[h].bbox.overlaps(&off))
+                        && (sh[t].box_in(&off, SHAPE_MARGIN)
+                            || sh[t].plane_in(pl.frame.origin + out, pl.frame.z().get(), reach, SHAPE_MARGIN))
+                }))
+                && after(k).iter().all(|&t| !index[t].bbox.overlaps(&near))
         })
     };
 
