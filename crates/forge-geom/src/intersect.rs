@@ -482,6 +482,7 @@ fn parabola_quadric(par: &Parabola, range: Interval, s: &Surface) -> Option<Curv
     };
     let lv = Vec3::new(lin[0], lin[1], lin[2]);
     let (mo, mx, my) = (mv(o), mv(x), mv(y));
+    // coefficients: research/closed-forms/
     let poly = [
         o.dot(mo) + lv.dot(o) + c0,
         2.0 * y.dot(mo) + lv.dot(y),

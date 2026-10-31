@@ -15,6 +15,7 @@ const ICC_BOUND: f64 = (10.0 + 96.0 * EPS) * EPS;
 // computed exactly, has the right sign when it is at least this times the permanent.
 const CCW_BOUND_B: f64 = (2.0 + 12.0 * EPS) * EPS;
 const ICC_BOUND_B: f64 = (4.0 + 48.0 * EPS) * EPS;
+// derived and tested in research/predicate-bounds/
 /// a*b - c*d evaluated in f64 is within this times |a*b| + |c*d| (as evaluated) of the truth.
 const CROSS_BOUND: f64 = (2.0 + 8.0 * EPS) * EPS;
 /// The same for a 3-term dot product, relative to the sum of the products' magnitudes.

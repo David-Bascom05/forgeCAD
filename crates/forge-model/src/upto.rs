@@ -15,6 +15,7 @@
 //!
 //! The next face is picked by rays against the earlier tools' exact solids, then proved for the
 //! whole sweep by two booleans with the earlier tools near it (`verify_next`).
+//! The arguments in one place: research/upto-proofs/.
 
 use crate::{Combine, ExtentError, Feature, History, RegenError, Tool, Turn, tool};
 use forge_bool::{Member, Op, Seg2, Shape};
@@ -516,6 +517,7 @@ fn ray_torus(tr: &Torus, o: Point3, d: Vec3) -> Vec<f64> {
         s2[1] + 2.0 * l.z * v.z,
         s2[2] + v.z * v.z,
     ];
+    // coefficients: research/upto-proofs/
     let c4 = [
         f[0] * f[0] - 4.0 * rc * rc * s2[0],
         2.0 * f[0] * f[1] - 4.0 * rc * rc * s2[1],
@@ -541,6 +543,7 @@ fn faces_ahead(b: &Body, tr: &Torus, d: Vec3, sweep: &forge_math::Box3) -> bool 
     let f = tr.frame;
     let v = f.vec_to_local(d);
     // the normal's part along d, up to a positive factor, over a box: in the torus's frame
+    // derivation: research/upto-proofs/
     let along = |bx: &forge_math::Box3| -> forge_math::Interval {
         let local =
             |e: Vec3| (bx.x + -f.origin.x) * e.x + (bx.y + -f.origin.y) * e.y + (bx.z + -f.origin.z) * e.z;

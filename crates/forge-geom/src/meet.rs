@@ -665,6 +665,7 @@ impl Eqn {
                     return 2;
                 }
                 let [e, dd, cc, b, a] = q;
+                // Rees invariants: research/closed-forms/
                 let p = 8.0 * a * cc - 3.0 * b * b;
                 let dq = 64.0 * a * a * a * e - 16.0 * a * a * cc * cc + 16.0 * a * b * b * cc
                     - 16.0 * a * a * b * dd

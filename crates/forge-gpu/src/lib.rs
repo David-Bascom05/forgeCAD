@@ -731,6 +731,7 @@ pub fn open_in_background() {
 /// GPU once they reach OPEN_COST (break-even: never more than twice the best choice's time).
 static RENT: AtomicU64 = AtomicU64::new(0);
 /// What opening the GPU costs a process (~0.3 s, and an exit that waits while it is in flight).
+/// Measured: research/gpu-auto/.
 const OPEN_COST: u64 = 300_000_000;
 
 static CROSSOVER: OnceLock<usize> = OnceLock::new();
@@ -824,6 +825,7 @@ impl Batch for AutoBatch<'_> {
             }
             return out;
         }
+        // the CPU won below 128 points: research/gpu-auto/
         if self.backend == Backend::Auto && points.len() >= crossover().unwrap_or(128) {
             let t = Instant::now();
             let v = self.cpu.verdicts(points, sides, boxes);

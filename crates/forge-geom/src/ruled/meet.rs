@@ -107,6 +107,7 @@ pub fn parabola_wall(par: &Parabola, range: Interval, s: &Surface) -> Option<Cur
     // X(t) - ka Y(t)^2 with X = o.x + kp x.x t^2 + y.x t, Y = o.y + kp x.y t^2 + y.y t
     let (x0, x1, x2) = (o.x, y.x, kp * x.x);
     let (y0, y1, y2) = (o.y, y.y, kp * x.y);
+    // coefficients: research/closed-forms/
     let quartic = [
         x0 - ka * y0 * y0,
         x1 - ka * 2.0 * y0 * y1,

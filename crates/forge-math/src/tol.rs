@@ -8,7 +8,7 @@
 /// Half the side of the cube every model must fit in: 1 km across, centred on the origin.
 pub const MODEL_HALF_SIZE: f64 = 500_000.0;
 
-/// Two points closer than this are the same point (10 nm).
+/// Two points closer than this are the same point (10 nm). Why: research/tolerance/.
 pub const LINEAR: f64 = 1e-5;
 
 /// Two directions closer than this (radians) are the same direction. LINEAR over

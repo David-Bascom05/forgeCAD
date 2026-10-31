@@ -40,7 +40,7 @@ fn arc_step(r: f64, q: &Quality) -> f64 {
 
 /// Chords along an edge. On a face curved both ways a chord along the edge and one across
 /// it make a triangle that sags by both their sags: there each gets half of the tolerance,
-/// a step shorter by sqrt 2 (`fine`).
+/// a step shorter by sqrt 2 (`fine`; research/mesh-bounds/).
 fn edge_segments(curve: &Curve, range: forge_math::Interval, q: &Quality, fine: bool) -> usize {
     let width = range.width();
     let n = match curve {
@@ -87,7 +87,8 @@ fn interior_steps(s: &Surface, q: &Quality) -> Option<(f64, f64)> {
         Surface::Plane(_) => None,
         // straight along v: columns across u, rows only as far apart as keeps triangles shapely
         // (rows four columns apart let refinement near a boundary run on, splitting edges
-        // into ones as long, and leave triangles across two columns: 3.5 chords deep)
+        // into ones as long, and leave triangles across two columns: 3.5 chords deep;
+        // research/mesh-bounds/)
         Surface::Cylinder(c) => Some((arc_step(c.radius, q), 2.0 * c.radius * arc_step(c.radius, q))),
         Surface::Cone(c) => {
             let r = c.radius.max(1.0);
@@ -991,7 +992,7 @@ fn tessellate_face(
     // their middle, inserted into the same triangulation round after round (a thin band between
     // two boundary curves has no grid points at all; a chord across a radian of a cylinder needs
     // several halvings); on a surface curved both ways a triangle's middle sags further than its
-    // sides' (by up to a third), so triangles there are looked at too
+    // sides' (by up to a third; research/mesh-bounds/), so triangles there are looked at too
     let at = |p: Point2| surface.eval(layout.uv(p));
     // each point's position is worked out once, however many edges and rounds test it (the
     // boundary's and the grid's are known already)

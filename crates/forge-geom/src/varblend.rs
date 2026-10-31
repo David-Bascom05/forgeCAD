@@ -1927,6 +1927,7 @@ impl VarBlend {
         self.rows.push(self.make_row(lo, c, r)?);
         let span = self.hi - self.lo;
         // rows only seed solves and bound searches; a thousandth of the smallest radius
+        // (research/blend-rows/)
         self.predict = (1e-3 * self.radii().0).max(tol::LINEAR * 0.1);
         let mut h = span / 8.0;
         while self.rows.last().is_some_and(|r| r.s < self.hi) {

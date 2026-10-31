@@ -320,6 +320,7 @@ fn parabola_nearest(par: &Parabola, q: Point3, range: Interval) -> f64 {
     use forge_math::dmath;
     let l = par.frame.point_to_local(q);
     let k = 1.0 / (4.0 * par.focal);
+    // derivation: research/closed-forms/
     let (a, b, c) = (2.0 * k * k, 1.0 - 2.0 * k * l.x, -l.y);
     let (pp, qq) = (b / a, c / a);
     let disc = qq * qq / 4.0 + pp * pp * pp / 27.0;
