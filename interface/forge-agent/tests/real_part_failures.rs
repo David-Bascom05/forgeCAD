@@ -328,19 +328,22 @@ shell 1.6 (faces bottom)\n",
     );
 }
 
-/// a disc (axis y) and a block flush with both its faces (a conrod bolt boss), fillet 3 on the two
-/// concave lines where they meet: fillet Overflow; the flush end faces stay as three unmerged
-/// coplanar faces (see union-coplanar-faces-unmerged), likely why the blend cannot end on them
+/// A disc (axis y) and a block flush with both its faces (a conrod bolt boss), the concave lines
+/// where the block's side leaves the disc. A ball of radius r between them touches the side at
+/// height sqrt(285 + 114 r); the side stops at 22, so up to r = 1.745 the fillet fits and past it
+/// the refusal is the right answer.
 #[test]
-#[ignore = "R24: kernel failure, see the comment"]
 fn fillet_block_on_cylinder_flush() {
-    holds(
-        "\
-big: extrude sym 22 xz circle 0 0 31
+    let part = |r: f64| {
+        format!(
+            "big: extrude sym 22 xz circle 0 0 31
 b: extrude sym 22 xz rect 26 -24 16 46
-fillet 3 (edges between b big concave)\n",
-        false,
-    );
+fillet {r} (edges between b big concave)\n"
+        )
+    };
+    holds(&part(1.7), true);
+    let m = bench::model(&part(1.8));
+    assert!(m.error.as_ref().is_some_and(|e| e.msg.contains("Overflow")));
 }
 
 /// a rod r6 and a coil (wire r1.2 on radius 9) round it, coaxial, not touching: boolean
