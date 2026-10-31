@@ -1413,7 +1413,12 @@ impl Builder {
             && let Some(f) = extend
         {
             let v = if at_end { e.range.hi } else { e.range.lo };
-            let w = window.width();
+            // as far past v as p is from it: the edge may be shorter than the blend's radius
+            let speed = e.curve.deriv(v).d1.length().max(1e-12);
+            let mut w = window.width().max(2.0 * e.curve.eval(v).distance(p) / speed);
+            if let Some(period) = e.curve.domain().period {
+                w = w.min(0.5 * period);
+            }
             let past = if at_end {
                 Interval::new(v, v + w)
             } else {

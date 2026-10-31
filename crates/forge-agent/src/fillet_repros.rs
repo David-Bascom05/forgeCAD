@@ -79,3 +79,12 @@ fn face_fillet_and_full_round_after_a_union() {
         "base: extrude 10 rect -40 -30 80 60\nrib: extrude 40 xy at 0 0 10 rect -30 -4 60 8\nfullround (faces of rib normal -y) (faces of rib normal +z) (faces of rib normal +y)\n",
     );
 }
+
+#[test]
+fn tab_root_fillet_on_a_thin_wall() {
+    // the run-out on the cylinder sits a radius above the tab's top, past the end of its 1.5 high
+    // side edge: the edge is carried on as far as that, not only half its own length
+    valid(
+        "ring: extrude 50 circle 0 0 69.5 circle 0 0 68\ntab: extrude 1.5 rect -88 -10 19.25 20\nfillet 1 (edges between tab ring concave circle)\n",
+    );
+}
