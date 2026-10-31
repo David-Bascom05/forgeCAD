@@ -3385,6 +3385,24 @@ pub(crate) fn uv_dir(body: &Body, f: FaceId, p: &Piece, forward: bool, at_end: b
     let face = body.face(f);
     let uv = face.surface.project(d.p);
     let sd = face.surface.deriv(uv);
+    if sd.du.dot(sd.du) <= 1e-18 * sd.dv.dot(sd.dv) {
+        // at a pole u says nothing: the ways are told apart in the tangent plane, turned as the
+        // parameter plane is (its normal du x dv, taken a hair off the pole)
+        let v = face.surface.domain().v;
+        let step = if uv.y > 0.5 * (v.lo + v.hi) { -1e-6 } else { 1e-6 } * (v.hi - v.lo);
+        let n = face
+            .surface
+            .normal(Point2::new(uv.x, uv.y + step))
+            .ok_or(BoolError::Unsupported("split through a singular point"))?
+            .get();
+        let helper = if n.x.abs() < 0.9 { Vec3::X } else { Vec3::Y };
+        let e1 = (helper - n * helper.dot(n))
+            .normalize()
+            .ok_or(BoolError::Unsupported("split through a singular point"))?
+            .get();
+        let (a, b) = (dir.dot(e1), dir.dot(n.cross(e1)));
+        return Ok(Vec2::new(if face.same_sense { a } else { -a }, b));
+    }
     // least squares for (a, b) with a du + b dv = dir
     let (uu, uv2, vv) = (sd.du.dot(sd.du), sd.du.dot(sd.dv), sd.dv.dot(sd.dv));
     let (ru, rv) = (sd.du.dot(dir), sd.dv.dot(dir));

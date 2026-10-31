@@ -154,3 +154,15 @@ extrude cut 17 at 75 19 -1 circle 0 0 3
 extrude add 8.945478516509796 z -0.061633258296996694 0.2939571355937309 0.9538294102748273 x -0.08391472378619189 0.9507366012975499 -0.29842626239168546 at 89.69521759175012 13.908448595830624 3.4058649537841124 rrect -13.632567574771072 -10.946070359275362 27.265135149542143 21.892140718550724 7.854519259083712
 ");
 }
+
+/// A ball centred on a block's edge with its poles on the edge (M5): the cuts on the sphere run
+/// through a pole, where u says nothing, and the ways out were ordered by garbage directions.
+/// They are ordered in the tangent plane there; both frames build valid alike.
+#[test]
+fn ball_with_its_poles_on_an_edge() {
+    for frame in ["xz", "-xz"] {
+        builds_valid(&format!(
+            "extrude new 20 at -20 -20 -20 rect 0 0 40 40\nball add 5 {frame} at 20 0 0\n"
+        ));
+    }
+}
