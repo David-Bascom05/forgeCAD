@@ -75,7 +75,7 @@ What the table shows, and what it cannot:
 - Signatures are coarse. One root can hide several bugs, so counts are a lower bound, and one seed range does not give error bars.
 
 Failures go to the reliability agent as shrunk repros in `forgecad-gate/repros/` (`find-*`, `find-synth/`, `find-noise/`). The CI tier
-is 40 parts picked by branch coverage per CPU-second, covering 14435 of the 15275 counters the 2000-part sample reached, about 6 s in the test
+is 39 parts picked by branch coverage per CPU-second, covering 14435 of the 15275 counters the 2000-part sample reached, about 6 s in the test
 profile: no part may do worse than recorded.
 
 Next: HistCAD's full set if it becomes reachable, then CADFS, for real fillets, shells and sweeps. All numbers above are sketch and extrude

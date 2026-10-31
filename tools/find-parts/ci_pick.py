@@ -32,6 +32,9 @@ def main():
     cands += pick(gens.matrix(), n)
     cands += pick(gens.sweep(literals=False), n // 2)
 
+    # a text line depends on the font the harness finds: not the kernel's verdict
+    cands = [x for x in cands if "\ntext " not in x[1]]
+
     def one(x):
         return x[0], x[1], cover.run(exe, x[1], tmp)
 
