@@ -67,3 +67,15 @@ fn concave_pad_fillet_ending_on_a_drafted_tube() {
         "tube: extrude 60 circle 0 5 14\ndraft -8 xy at 0 0 0 (faces cyl)\npad: extrude 5 yz at 8 -40 10 rect 0 0 80 40\nfillet 2 (edges between pad tube concave)\n",
     );
 }
+
+#[test]
+fn face_fillet_and_full_round_after_a_union() {
+    // the union leaves dead entities: the strip compacts the body, and the faces it was given are
+    // found again after compacting, not read by their old ids
+    valid(
+        "base: extrude 10 rect -40 -30 80 60\nup: extrude 50 xy at 0 0 10 rect -40 -30 12 60\nfacefillet 6 (faces of up normal +x) to (faces of base normal +z)\n",
+    );
+    valid(
+        "base: extrude 10 rect -40 -30 80 60\nrib: extrude 40 xy at 0 0 10 rect -30 -4 60 8\nfullround (faces of rib normal -y) (faces of rib normal +z) (faces of rib normal +y)\n",
+    );
+}
