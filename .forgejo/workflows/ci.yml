@@ -82,7 +82,8 @@ jobs:
       # OpenCascade is a test oracle only: a venv outside the checkout, never a Cargo dependency
       - name: opencascade
         run: |
-          python3 -m venv --help > /dev/null 2>&1 || { apt-get update -qq && apt-get install -y -qq python3-venv; }
+          # OCP's module loads libGL even headless
+          apt-get update -qq && apt-get install -y -qq python3-venv libgl1
           VENV="$HOME/occt" sh tools/occt/setup.sh
       - name: export parts
         run: |
