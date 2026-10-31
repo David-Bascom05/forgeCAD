@@ -7,6 +7,7 @@ use forge_agent::text::KINDS;
 use std::collections::BTreeMap;
 
 const LEN: usize = 12;
+const RELY_ON_NAME_FALLBACK: &[u64] = &[27];
 
 #[test]
 fn every_kind_has_a_maker() {
@@ -86,6 +87,19 @@ fn random_histories() {
          cargo run --release -p forge-model --example shrink -- F.fc):\n{}",
         new.len(),
         new.join("\n")
+    );
+    // seeds whose finished part the n-ary regen builds only through the sequential one (a later
+    // feature's reference named as only that one names it, docs/naming.md): the list only shrinks
+    let relying: Vec<u64> = runs
+        .iter()
+        .filter(|(_, r)| r.name_fallbacks > 0)
+        .map(|(s, _)| *s)
+        .collect();
+    let mut relying = relying;
+    relying.sort_unstable();
+    assert_eq!(
+        relying, RELY_ON_NAME_FALLBACK,
+        "seeds relying on the n-ary name fallback"
     );
     let gone: Vec<&str> = known
         .iter()

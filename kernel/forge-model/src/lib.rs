@@ -782,6 +782,46 @@ enum Batching<'a> {
     On(Backend),
 }
 
+thread_local! {
+    static NAME_FALLBACKS: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
+}
+
+/// How many n-ary regens on this thread have been rebuilt feature by feature because a later
+/// feature's reference was named as only the sequential regen names it (docs/naming.md: a face
+/// split into several kept pieces). A part that relies on this costs a sequential regen on top.
+pub fn nary_name_fallbacks() -> usize {
+    NAME_FALLBACKS.with(std::cell::Cell::get)
+}
+
+pub(crate) fn count_name_fallback() {
+    NAME_FALLBACKS.with(|c| c.set(c.get() + 1));
+}
+
+/// Whether a regen failed because a feature's reference names nothing on the part.
+pub(crate) fn names_missing(e: &RegenError) -> bool {
+    use forge_ops::DirectError;
+    matches!(
+        e,
+        RegenError::MissingEdge { .. }
+            | RegenError::Chamfer {
+                error: ChamferError::NoSuchEdge { .. },
+                ..
+            }
+            | RegenError::Shell {
+                error: ShellError::NoSuchFace { .. },
+                ..
+            }
+            | RegenError::Draft {
+                error: DraftError::NoSuchFace { .. },
+                ..
+            }
+            | RegenError::Edit {
+                error: EditError::Direct(DirectError::NoSuchFace { .. }),
+                ..
+            }
+    )
+}
+
 /// The n-ary regen of a history: each run of solid features after a part-changing one (chamfer,
 /// shell, draft, body pattern) is one n-ary boolean starting from the part so far.
 fn nary_regen(
@@ -797,6 +837,10 @@ fn nary_regen(
             error: BoolError::Unsupported("region probe on another tool's edge"),
             ..
         }) => one_at_a_time(features),
+        Err(e) if names_missing(&e) => {
+            count_name_fallback();
+            one_at_a_time(features)
+        }
         r => r,
     };
     not_empty(r.map(unified)?, features.len() - 1)

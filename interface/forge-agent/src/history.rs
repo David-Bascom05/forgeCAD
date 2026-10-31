@@ -1585,6 +1585,9 @@ pub enum Verdict {
 /// A generated history: its lines, each tried line's fate, and each failure with the history
 /// that shows it.
 pub struct Run {
+    /// How many times the finished part's n-ary regen took the sequential one for a reference it
+    /// names otherwise.
+    pub name_fallbacks: usize,
     pub src: String,
     /// Per tried line: its kind, and None if it built, else the refusal or failure.
     pub tried: Vec<(&'static str, Option<String>)>,
@@ -1833,10 +1836,13 @@ pub fn run(seed: u64, len: usize) -> Run {
             }
         }
     }
+    let before = forge_model::nary_name_fallbacks();
     if let Verdict::Fail(what) = finish(&m) {
         fails.push((what, src.clone()));
     }
+    let name_fallbacks = forge_model::nary_name_fallbacks() - before;
     Run {
+        name_fallbacks,
         src,
         tried,
         fails,

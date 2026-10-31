@@ -17,9 +17,15 @@ fn builds(name: &str) {
     let seq = part
         .regenerate_solids()
         .unwrap_or_else(|e| panic!("{name} seq: {e:?}"));
+    let before = forge_model::nary_name_fallbacks();
     let nary = part
         .regenerate_nary_solids(4)
         .unwrap_or_else(|e| panic!("{name} nary: {e:?}"));
+    assert_eq!(
+        forge_model::nary_name_fallbacks(),
+        before,
+        "{name} nary relies on the sequential regen for a name"
+    );
     for (path, b) in seq
         .iter()
         .map(|s| ("seq", &s.body))

@@ -841,3 +841,28 @@ fillet 1.22 (edges near 39.04 46.25 21.74)
     let nary = part.regenerate_nary_solids(1).expect("n-ary solids");
     assert_eq!(nary[0].body.compact().faces.len(), seq.faces.len());
 }
+
+/// A chamfer naming an edge as only the sequential regen names it (a long n-ary run with text):
+/// the n-ary regen rebuilds feature by feature, the same solid, and the fallback is counted
+/// (the naming gap of docs/naming.md, history seed 27).
+#[test]
+fn nary_takes_the_sequential_regen_for_a_name_and_counts_it() {
+    let src = "\
+L0: extrude 32.31 rrect 0 0 99.32 87.16 13.8
+L1: revolve cut sym 82.88 xz at 49.66 20.05 35 axis 0 0 0 -1 circle 26.29 -8.46 9.57
+L7: text add \"DO\" font \"forgecad-test.ttf\" 25.81 3.44 z -1 0 0 at 0 63.47 16.16
+L8: movebody rot 47.94 49.8 9.69 0 0 1 -23.29
+L18: chamfer 3.22 ang 49.43 face (faces near 47.06 43.41 32.31) (edges near 16.16 9.26 32.31)
+";
+    let m = forge_agent::history::model(src);
+    assert!(m.error.is_none());
+    let part = Part {
+        features: m.features.clone(),
+    };
+    let before = forge_model::nary_name_fallbacks();
+    let nary = part.regenerate_nary(1).expect("n-ary");
+    assert_eq!(forge_model::nary_name_fallbacks(), before + 1);
+    let seq = part.regenerate().expect("seq");
+    assert_eq!(nary.face_ids().count(), seq.face_ids().count());
+    assert!(forge_topo::check::check(&nary).is_empty());
+}
