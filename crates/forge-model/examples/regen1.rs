@@ -8,6 +8,7 @@ fn main() {
     let path = args.get(2).map_or("seq", |s| s.as_str());
     let part = match name {
         "torture" => torture::part(221),
+        "torture-2" => suite::torture2(),
         n if n.starts_with("torture") => torture::part(n[7..].parse().expect("torture count")),
         n if n.starts_with("fuzz") => suite::fuzz(n[4..].parse().expect("fuzz seed"), 80),
         // only this part is built: the count is its regen's

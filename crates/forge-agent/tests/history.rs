@@ -1,0 +1,85 @@
+//! Random whole-kernel histories (`forge_agent::history`): every line builds a valid part or is
+//! refused with a clear error, and every finished part meshes closed and regenerates the same
+//! n-ary. Failures the kernel still has are listed by kind in history_known.txt; any other kind
+//! fails here. Hunt and shrink: cargo run --release -p forge-model --example shrink -- gen 0 200
+use forge_agent::history::{MAKERS, SEEDS, run};
+use forge_agent::text::KINDS;
+use std::collections::BTreeMap;
+
+const LEN: usize = 12;
+
+#[test]
+fn every_kind_has_a_maker() {
+    for k in KINDS {
+        assert!(
+            MAKERS.iter().any(|m| m.name == k.name),
+            "no history maker for '{}': add a row to forge_agent::history::MAKERS",
+            k.name
+        );
+    }
+}
+
+/// Every seed in `seeds` fails only in kinds history_known.txt lists (a line there matches any
+/// failure whose kind holds it).
+fn histories(seeds: &[u64]) {
+    let known: Vec<&str> = include_str!("history_known.txt")
+        .lines()
+        .map(|l| l.split(" #").next().unwrap_or("").trim())
+        .filter(|l| !l.is_empty() && !l.starts_with('#'))
+        .collect();
+    let mut kinds: BTreeMap<&str, (usize, usize)> = BTreeMap::new();
+    let mut new = Vec::new();
+    for &seed in seeds {
+        let t = std::time::Instant::now();
+        let r = run(seed, LEN);
+        eprintln!(
+            "seed {seed}: {:.1} s, {} lines",
+            t.elapsed().as_secs_f64(),
+            r.src.lines().count()
+        );
+        for (k, why) in &r.tried {
+            let e = kinds.entry(k).or_default();
+            e.0 += 1;
+            e.1 += why.is_none() as usize;
+        }
+        for (what, src) in r.fails {
+            if !known.iter().any(|k| what.contains(k)) {
+                new.push(format!("seed {seed}: {what}\n{src}"));
+            }
+        }
+    }
+    eprintln!("kind (tried, built): {kinds:?}");
+    assert!(
+        new.is_empty(),
+        "{} failures of a kind not in history_known.txt (save one as F.fc and shrink it: \
+         cargo run --release -p forge-model --example shrink -- F.fc):\n{}",
+        new.len(),
+        new.join("\n")
+    );
+}
+
+// four runs, so the test harness spreads them over threads; native only, since wasm aborts
+// on a panic where native catches it and goes on (the arithmetic is the same either way)
+#[test]
+#[cfg_attr(target_family = "wasm", ignore = "a kernel panic aborts the wasm run")]
+fn random_histories_0() {
+    histories(&SEEDS[..8]);
+}
+
+#[test]
+#[cfg_attr(target_family = "wasm", ignore = "a kernel panic aborts the wasm run")]
+fn random_histories_1() {
+    histories(&SEEDS[8..16]);
+}
+
+#[test]
+#[cfg_attr(target_family = "wasm", ignore = "a kernel panic aborts the wasm run")]
+fn random_histories_2() {
+    histories(&SEEDS[16..24]);
+}
+
+#[test]
+#[cfg_attr(target_family = "wasm", ignore = "a kernel panic aborts the wasm run")]
+fn random_histories_3() {
+    histories(&SEEDS[24..]);
+}

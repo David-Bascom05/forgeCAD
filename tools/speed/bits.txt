@@ -28,6 +28,8 @@ thread seq 436eeaf5c1531a01
 thread nary 35095fdb9f47309b
 text seq 69b3f83e0ef4f192
 text nary 95601e8437543f72
+torture-2 seq 67e54a7ace5b1ef9
+torture-2 nary 4768c9197b3d1328
 torture seq d01fb5b7398337f5
 torture nary 1ae52aa4f9928fc6
 fuzz1 seq bd75e7c657f87cda

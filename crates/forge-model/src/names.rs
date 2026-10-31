@@ -961,7 +961,7 @@ pub fn check(
 pub fn corpus() -> Vec<(String, Part)> {
     let mut out: Vec<(String, Part)> = crate::suite::parts()
         .into_iter()
-        .filter(|(n, _)| !matches!(*n, "plate" | "hole-grid" | "shaft" | "coil"))
+        .filter(|(n, _)| !matches!(*n, "plate" | "hole-grid" | "shaft" | "coil" | "torture-2"))
         .map(|(n, p)| (n.to_string(), p))
         .collect();
     out.extend((1..=8).map(|s| (format!("fuzz{s}"), crate::suite::fuzz(s, 12))));

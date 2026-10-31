@@ -11,7 +11,7 @@ use forge_font::testing::{TestGlyph, build, square_ring};
 use forge_geom::Circle;
 use forge_math::rng::Rng;
 use forge_math::{Frame, Point2, Point3, Vec2, Vec3, dmath};
-use forge_ops::{Axis2, Handed, LoftGuides, LoftKind, PathSeg, Profile, ProfileLoop, Segment};
+use forge_ops::{Axis2, ChamferSize, Handed, LoftGuides, LoftKind, PathSeg, Profile, ProfileLoop, Segment};
 use forge_topo::Name;
 
 fn frame(o: Point3, z: Vec3, x: Vec3) -> Frame {
@@ -119,7 +119,7 @@ pub fn parts() -> Vec<(&'static str, Part)> {
 }
 
 /// The names of the benchmark parts.
-pub const NAMES: [&str; 15] = [
+pub const NAMES: [&str; 16] = [
     "plate",
     "shaft",
     "housing",
@@ -135,6 +135,7 @@ pub const NAMES: [&str; 15] = [
     "loft",
     "thread",
     "text",
+    "torture-2",
 ];
 
 /// The benchmark part of that name, built alone.
@@ -155,6 +156,7 @@ pub fn part(name: &str) -> Option<Part> {
         "loft" => loft(),
         "thread" => thread(),
         "text" => text(),
+        "torture-2" => torture2(),
         _ => return None,
     })
 }
@@ -1244,4 +1246,271 @@ pub fn text() -> Part {
             ),
         ],
     }
+}
+
+/// A face of feature `i` (its position in the history) by role.
+fn face(i: usize, role: &str) -> Name {
+    Name::feature(i as u64 + 1).with_str(role)
+}
+
+fn side(i: usize, k: u64) -> Name {
+    face(i, "side").with(k)
+}
+
+/// The edge an extrude makes between two of its faces.
+fn edge(a: Name, b: Name) -> Name {
+    Name::NONE.with_set(&mut [a, b])
+}
+
+/// The second torture part: every feature kind in combination, as a machined housing. A
+/// drafted, filleted, shelled box; bosses with counterbored holes patterned on its top, their
+/// rims rounded; a drafted pocket with a variable fillet round its floor; a channel swept
+/// round a bend into it; a threaded spigot (coil) with a chamfered rim, a flange and a ring
+/// of tapped holes; a lofted port drilled through to the inside; a rib up to a work plane;
+/// mirrored dimples, a slot across the spigot.
+pub fn torture2() -> Part {
+    let (w, d, h, t) = (160.0, 110.0, 40.0, 3.0);
+    let (sx, sy) = (132.0, 55.0);
+    let mut f: Vec<Feature> = Vec::new();
+    let rims = |i: usize, copies: &[[u64; 2]], p: usize| {
+        let rim = edge(face(i, "end"), side(i, 0));
+        let mut out = vec![rim];
+        out.extend(copies.iter().map(|&k| crate::instance_name(p as u64 + 1, k, rim)));
+        out
+    };
+    // the box, its walls drafted, its top edge rounded, its foot bevelled, hollowed from below
+    f.push(rounded(Frame::WORLD, Point2::ORIGIN, w, d, 12.0, h, Combine::New));
+    f.push(Feature::Draft {
+        faces: (0..8).map(|k| side(0, k)).collect(),
+        neutral: Frame::WORLD,
+        angle: 0.05,
+    });
+    f.push(Feature::Fillet {
+        starts: vec![],
+        setbacks: vec![],
+        edges: (0..8)
+            .map(|k| (edge(face(0, "end"), side(0, k)), 4.0.into()))
+            .collect(),
+    });
+    f.push(Feature::Chamfer {
+        edges: (0..8).map(|k| edge(face(0, "start"), side(0, k))).collect(),
+        size: ChamferSize::Equal(1.5),
+    });
+    f.push(Feature::Shell {
+        thickness: t,
+        outward: false,
+        open: vec![face(0, "start")],
+    });
+    // a boss and its counterbored hole, patterned 3 x 2, rims rounded
+    let boss = f.len();
+    f.push(rod(up(Point3::new(25.0, 25.0, h - 1.0)), 9.0, 12.0, Combine::Add));
+    f.push(Feature::Hole(Box::new(hole(
+        Point3::new(25.0, 25.0, h + 11.0),
+        6.6,
+        Head::Counterbore {
+            diameter: 11.0,
+            depth: 6.0,
+        },
+        End::Through,
+    ))));
+    f.push(Feature::Pattern {
+        of: Source::Features(vec![boss, boss + 1]),
+        layout: Layout::Linear {
+            first: Row {
+                dir: Vec3::X,
+                count: 3,
+                spacing: 55.0,
+            },
+            second: Some(Row {
+                dir: Vec3::Y,
+                count: 2,
+                spacing: 60.0,
+            }),
+        },
+    });
+    let copies = [[1, 0], [2, 0], [0, 1], [1, 1], [2, 1]];
+    f.push(Feature::Fillet {
+        starts: vec![],
+        setbacks: vec![],
+        edges: rims(boss, &copies, boss + 2)
+            .into_iter()
+            .map(|e| (e, 1.5.into()))
+            .collect(),
+    });
+    // a pocket sketched on the top
+    let pocket = f.len();
+    f.push(Feature::Extrude {
+        profile: Profile {
+            plane: frame(Point3::new(80.0, 55.0, h), -Vec3::Z, Vec3::X),
+            loops: vec![Profile::rounded_rectangle(
+                Point2::new(-30.0, -7.0),
+                60.0,
+                14.0,
+                4.0,
+                0,
+            )],
+        },
+        extent: Extent::Distance(2.0),
+        op: Combine::Cut,
+    });
+    // its floor rounded by a radius varying round it
+    f.push(Feature::Fillet {
+        starts: vec![],
+        setbacks: vec![],
+        edges: (0..8)
+            .map(|k| {
+                // growing along the sides, shrinking round the corners: one law all round
+                let law = if k % 2 == 0 { (0.6, 0.9) } else { (0.9, 0.6) };
+                let r = forge_ops::Radius::Linear(law.0, law.1);
+                (edge(face(pocket, "end"), side(pocket, k)), r)
+            })
+            .collect(),
+    });
+    // a channel swept in over the edge and round a bend between the bosses
+    let a = Point3::new(-10.0, 39.5, h + 0.5);
+    let b = Point3::new(40.0, 39.5, h + 0.5);
+    let (arc, c) = bend(b, Vec3::X, -Vec3::Y, 8.0);
+    f.push(swept(
+        vec![Profile::circle(Point2::ORIGIN, 2.0, 0)],
+        Vec3::Y,
+        vec![
+            PathSeg::Line { a, b },
+            arc,
+            PathSeg::Line {
+                a: c,
+                b: c - Vec3::Y * 20.0,
+            },
+        ],
+        PathEnds::Path,
+        Combine::Cut,
+    ));
+    // a spigot with a thread cut round it, its rim chamfered, a flange at its foot
+    let spigot = f.len();
+    f.push(rod(up(Point3::new(sx, sy, h - 1.0)), 10.0, 25.0, Combine::Add));
+    f.push(Feature::Coil(Box::new(Coil {
+        profile: Profile {
+            plane: standing(sx, sy, h + 8.0),
+            loops: vec![Profile::rectangle(Point2::new(9.2, -0.6), 1.6, 1.2, 0)],
+        },
+        axis: Axis2 {
+            origin: Point2::ORIGIN,
+            dir: Vec2::new(0.0, -1.0),
+        },
+        size: CoilSize::TurnsHeight {
+            turns: 4.0,
+            height: 12.0,
+        },
+        taper: 0.0,
+        handed: Handed::Right,
+        op: Combine::Cut,
+    })));
+    f.push(Feature::Chamfer {
+        edges: vec![edge(face(spigot, "end"), side(spigot, 0))],
+        size: ChamferSize::DistanceAngle {
+            face: face(spigot, "end"),
+            d: 1.0,
+            angle: 0.6,
+        },
+    });
+    f.push(revolve(
+        polygon(
+            standing(sx, sy, h),
+            &[
+                Point2::new(9.0, 1.0),
+                Point2::new(14.0, 1.0),
+                Point2::new(14.0, -2.0),
+                Point2::new(9.0, -3.0),
+            ],
+        ),
+        VERTICAL,
+        Combine::Add,
+    ));
+    // the spigot drilled down to the inside, a ring of tapped blind holes round it
+    f.push(Feature::Hole(Box::new(hole(
+        Point3::new(sx, sy, h + 24.0),
+        8.0,
+        Head::Plain,
+        End::Through,
+    ))));
+    let tapped = f.len();
+    f.push(Feature::Hole(Box::new(Hole {
+        point: Some(118.0 / 180.0 * dmath::PI),
+        thread: Some(Thread {
+            size: 3.0,
+            pitch: 0.5,
+        }),
+        ..hole(Point3::new(sx + 18.0, sy, h), 2.5, Head::Plain, End::Depth(2.5))
+    })));
+    f.push(Feature::Pattern {
+        of: Source::Features(vec![tapped]),
+        layout: Layout::Circular {
+            origin: Point3::new(sx, sy, 0.0),
+            axis: Vec3::Z,
+            count: 6,
+            angle: dmath::TAU,
+            incremental: false,
+        },
+    });
+    // a port lofted out of the left wall, drilled through
+    let square = |x: f64, s: f64| Profile {
+        plane: frame(Point3::new(x, 55.0, 20.0), -Vec3::X, Vec3::Y),
+        loops: vec![Profile::rectangle(Point2::new(-s, -s), 2.0 * s, 2.0 * s, 0)],
+    };
+    f.push(Feature::Loft(Box::new(Loft {
+        profiles: vec![square(4.0, 11.0), square(-18.0, 6.0)],
+        kind: LoftKind::Ruled,
+        guides: LoftGuides::None,
+        op: Combine::Add,
+    })));
+    f.push(Feature::Hole(Box::new(Hole {
+        at: frame(Point3::new(-18.0, 55.0, 20.0), Vec3::X, Vec3::Y),
+        ..hole(Point3::ORIGIN, 7.0, Head::Plain, End::Depth(30.0))
+    })));
+    // a rib up to a tilted work plane
+    let plane = f.len();
+    f.push(Feature::Plane(frame(
+        Point3::new(107.0, 85.0, h + 9.0),
+        Vec3::new(0.05, 0.0, 1.0),
+        Vec3::X,
+    )));
+    f.push(Feature::Extrude {
+        profile: Profile {
+            plane: up(Point3::new(92.0, 83.5, h)),
+            loops: vec![Profile::rectangle(Point2::ORIGIN, 30.0, 3.0, 0)],
+        },
+        extent: Extent::To {
+            target: Target::Plane(plane),
+            offset: 0.0,
+        },
+        op: Combine::Add,
+    });
+    // a countersunk hole between the bosses
+    f.push(Feature::Hole(Box::new(hole(
+        Point3::new(52.5, 85.0, h),
+        4.5,
+        Head::Countersink {
+            diameter: 9.0,
+            angle: dmath::FRAC_PI_2,
+        },
+        End::Through,
+    ))));
+    // a dimple, mirrored across the middle
+    let dimple = f.len();
+    f.push(ball(Point3::new(100.0, 15.0, h + 3.0), 5.0, Combine::Cut));
+    f.push(Feature::Pattern {
+        of: Source::Features(vec![dimple]),
+        layout: Layout::Mirror {
+            plane: frame(Point3::new(80.0, 0.0, 0.0), Vec3::X, Vec3::Y),
+        },
+    });
+    // a slot across the spigot's top
+    f.push(Feature::Extrude {
+        profile: Profile {
+            plane: frame(Point3::new(sx, sy, h + 21.0), -Vec3::Y, Vec3::X),
+            loops: vec![Profile::rectangle(Point2::new(-6.0, 0.0), 12.0, 6.0, 0)],
+        },
+        extent: Extent::Symmetric(3.0),
+        op: Combine::Cut,
+    });
+    Part { features: f }
 }

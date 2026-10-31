@@ -8,6 +8,7 @@ mod doc_tests;
 pub mod facemesh;
 #[cfg(test)]
 mod fillet_repros;
+pub mod history;
 pub mod json;
 pub mod measure;
 pub mod model;

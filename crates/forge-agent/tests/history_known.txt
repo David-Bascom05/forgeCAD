@@ -1,0 +1,35 @@
+# Failures the history generator still finds: a failure whose kind holds one of these lines is
+# known. Each has a shrunk part file in the report that added it; remove its line once fixed.
+# booleans losing their way (after fillets, on lofts, sweeps, coils, holes)
+boolean: Internal("face split crossed itself")
+boolean: Internal("inconsistent classification")
+boolean: Internal("hole outside every region")
+Boolean(Internal(  # the same inside ribs and thickened faces
+# booleans and finishing ops leaving an invalid solid
+invalid DuplicateName  # extrude sym of a line+arc loop onto a block
+invalid Euler  # a disjoint add (no multi-body parts yet), lofts, sketches, patterns
+invalid EdgeUses  # patterns of patterns, balls, sketches
+invalid EdgeOffFace  # fillets, adds onto filleted parts
+invalid ShellsOverlap  # the checker now refuses overlapping shells, though bodies may overlap (copybody, new)
+invalid FaceWrongSide  # fillets and face fillets
+draft: Invalid(  # draft after fillets catches its own bad body
+Direct(Invalid(  # delete leaves a face with no loops
+split: panic: profile rejects degenerate lines  # P1: a split plane through the part panics
+panic: no entry found for key  # fillet or draft on a swept and patterned part
+# the n-ary regen names split faces and edges unlike the sequential one, so later references miss
+nary: no edge * on the part here
+nary: chamfer: NoSuchEdge
+nary: chamfer: NotOnFace
+nary: draft: NoSuchFace
+nary: edit: Thicken(NoSuchFace
+nary: invalid EdgeUses
+nary: boolean: Unsupported(  # the n-ary regen refuses what the sequential one builds
+nary: chamfer: Unsupported
+nary: body: NoFace
+nary: the part is 9 bodies, not one  # the sequential regen keeps a disjoint add (invalid Euler) the n-ary refuses
+# a keep that leaves nothing is accepted as an empty part
+seq mesh: volume <= 0
+# tessellation of a face cut by a slanted hole and a revolve
+seq mesh: Face { face: FaceId(9), error: ConstraintsIntersect
+seq mesh: Face { face: FaceId(9), error: DuplicatePoint
+seq mesh: open edges
