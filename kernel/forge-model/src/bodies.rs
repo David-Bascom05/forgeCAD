@@ -291,7 +291,16 @@ fn targets(ids: &[usize], p: Option<&Pick>, i: usize) -> Result<Vec<usize>, Rege
 /// The names a feature works on (edges, faces), which say which bodies it is on.
 fn names(f: &Feature) -> Vec<Name> {
     match f {
-        Feature::Fillet { edges, .. } => edges.iter().map(|e| e.0).collect(),
+        Feature::Fillet {
+            edges,
+            starts,
+            setbacks,
+        } => edges
+            .iter()
+            .map(|e| e.0)
+            .chain(starts.iter().flat_map(|s| [s.0, s.1]))
+            .chain(setbacks.iter().flat_map(|s| [s.0].into_iter().chain(s.1)))
+            .collect(),
         Feature::FaceFillet { first, second, .. } => first.iter().chain(second).copied().collect(),
         Feature::FullRound { side, middle, other } => vec![*side, *middle, *other],
         Feature::Chamfer { edges, .. } => edges.clone(),
@@ -310,7 +319,7 @@ fn names(f: &Feature) -> Vec<Name> {
 }
 
 fn holds(b: &Body, n: Name) -> bool {
-    b.face_by_name(n).is_some() || b.edge_by_name(n).is_some()
+    b.face_by_name(n).is_some() || b.edge_by_name(n).is_some() || b.vertices.iter().any(|v| v.name == n)
 }
 
 /// The bodies a feature naming `names` is on: its pick, else those holding any of them, else
@@ -341,10 +350,9 @@ fn only(f: &Feature, b: &Body) -> Feature {
             starts,
             setbacks,
         } => {
-            let vertex = |n: Name| b.vertices.iter().any(|v| v.name == n);
             edges.retain(|e| holds(b, e.0));
-            starts.retain(|s| vertex(s.0));
-            setbacks.retain(|s| vertex(s.0));
+            starts.retain(|s| holds(b, s.0));
+            setbacks.retain(|s| holds(b, s.0));
         }
         Feature::Chamfer { edges, .. } => edges.retain(|&n| holds(b, n)),
         Feature::Shell { open, .. } => open.retain(|&n| holds(b, n)),
@@ -370,8 +378,28 @@ fn modify_on(
 ) -> Result<(), RegenError> {
     let f = &plain[i];
     let all = names(f);
+    // finished, as `step` hands a part-changing feature its part: finishing renames what it joins,
+    // and the feature's names are those, so one not found yet may be on any body
+    let missing = |solids: &[Solid], on: &[usize]| {
+        all.iter()
+            .find(|&&n| !on.iter().any(|&k| holds(&solids[k].body, n)))
+            .copied()
+    };
+    let mut on = named_targets(solids, p, &all, i)?;
+    let finishing: Vec<usize> = match missing(solids, &on) {
+        Some(_) => (0..solids.len()).collect(),
+        None => on.clone(),
+    };
+    for k in finishing {
+        solids[k].body = crate::finish(std::mem::take(&mut solids[k].body));
+    }
+    on = named_targets(solids, p, &all, i)?;
+    // a name on no body this feature works on is an error, never a step left out
+    if let Some(name) = missing(solids, &on) {
+        return Err(RegenError::MissingEdge { feature: i, name });
+    }
     let mut new = Vec::new();
-    for k in named_targets(solids, p, &all, i)? {
+    for k in on {
         let g = if all.is_empty() {
             Cow::Borrowed(f)
         } else {

@@ -835,3 +835,34 @@ fillet 3 (edges between gus l concave) (edges between gus corner concave)\n",
         true,
     );
 }
+
+/// The hole rim's fillet, made on the finished part, named an edge only the finished part has:
+/// `regenerate_solids` worked on an unfinished one, missed it and left the fillet out, while
+/// `regenerate` and the n-ary regens rounded it.
+#[test]
+fn fillet_on_hole_rim_across_dimple_on_every_path() {
+    let src = "\
+extrude 21.74 rect 0 0 120.4 91.68
+ball cut 21.73 at 34 24.53 11.77
+hole 6.9 -xy at 41.73 44.09 21.74 thru pt 118
+fillet 1.22 (edges near 39.04 46.25 21.74)
+";
+    holds(src, true);
+    let part = Part {
+        features: bench::model(src).features.clone(),
+    };
+    let unrounded = Part {
+        features: part.features[..3].to_vec(),
+    }
+    .regenerate()
+    .expect("three lines");
+    let seq = part.regenerate().expect("seq");
+    assert!(
+        seq.faces.len() > unrounded.compact().faces.len(),
+        "seq left the fillet out"
+    );
+    let solids = part.regenerate_solids().expect("seq solids");
+    assert_eq!(solids[0].body.compact().faces.len(), seq.faces.len());
+    let nary = part.regenerate_nary_solids(1).expect("n-ary solids");
+    assert_eq!(nary[0].body.compact().faces.len(), seq.faces.len());
+}

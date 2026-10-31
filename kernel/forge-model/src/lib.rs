@@ -1177,6 +1177,12 @@ fn tools(features: History<'_>, i: usize, build: bool) -> Result<Vec<Tool>, Rege
             for s in reached {
                 base.extend(tools(features, s, build)?);
             }
+            // a sketch or a parameter makes nothing to copy: refused, not a pattern left out
+            if base.is_empty() {
+                return Err(pe(PatternError::BadSource {
+                    feature: src.first().copied().unwrap_or(i),
+                }));
+            }
             let mut out = Vec::with_capacity(copies.len() * base.len());
             for (key, m) in &copies {
                 for (b, op, sh) in &base {
