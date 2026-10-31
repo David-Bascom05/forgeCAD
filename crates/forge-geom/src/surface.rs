@@ -206,6 +206,11 @@ pub trait Procedural: Send + Sync + std::fmt::Debug {
     fn v_degree(&self) -> Option<usize> {
         None
     }
+    /// The same surface with a smooth parametrisation where this one's is only once
+    /// differentiable (a pipe round a traced spine), for integrators that find their loops on it.
+    fn smooth(&self) -> Option<&Surface> {
+        None
+    }
 }
 
 /// Bounds over a parameter box: `k` on |n.S_uu|, |n.S_uv| and |n.S_vv| (n the unit normal at the
@@ -661,58 +666,6 @@ impl Surface {
                 (p - centre).normalize().map_or(r, |u| u.get())
             }
             Surface::Procedural(s) => s.gradient(p),
-        }
-    }
-
-    /// The derivative of `gradient` at p along v (the unit normal field's turn, the implicit's
-    /// Hessian times v); a difference of gradients on a procedural surface.
-    pub fn gradient_deriv(&self, p: Point3, v: Vec3) -> Vec3 {
-        // the turn of the unit vector from the axis, square to it, at distance rho
-        let radial = |f: &Frame, l: Point3| {
-            let rho = (l.x * l.x + l.y * l.y).sqrt();
-            let r = if rho > 0.0 {
-                f.x() * (l.x / rho) + f.y() * (l.y / rho)
-            } else {
-                f.x().get()
-            };
-            let w = v - f.z() * f.z().dot(v);
-            (
-                r,
-                if rho > 0.0 {
-                    (w - r * r.dot(w)) / rho
-                } else {
-                    Vec3::ZERO
-                },
-            )
-        };
-        let unit = |n: Vec3, w: Vec3, len: f64| {
-            if len > 0.0 {
-                (w - n * n.dot(w)) / len
-            } else {
-                Vec3::ZERO
-            }
-        };
-        match self {
-            Surface::Plane(_) => Vec3::ZERO,
-            Surface::Cylinder(c) => radial(&c.frame, c.frame.point_to_local(p)).1,
-            Surface::Cone(c) => radial(&c.frame, c.frame.point_to_local(p)).1 * c.cos_a(),
-            Surface::Sphere(sp) => {
-                let d = p - sp.frame.origin;
-                unit(self.gradient(p), v, d.length())
-            }
-            Surface::Torus(t) => {
-                let (r, dr) = radial(&t.frame, t.frame.point_to_local(p));
-                let d = p - (t.frame.origin + r * t.major);
-                unit(self.gradient(p), v - dr * t.major, d.length())
-            }
-            Surface::Procedural(s) => {
-                let (len, h) = (v.length(), 1e-6 * (1.0 + (p - Point3::ORIGIN).abs_max()));
-                if len == 0.0 {
-                    return Vec3::ZERO;
-                }
-                let w = v * (h / len);
-                (s.gradient(p + w) - s.gradient(p - w)) * (len / (2.0 * h))
-            }
         }
     }
 

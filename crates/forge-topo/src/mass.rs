@@ -390,7 +390,7 @@ fn exact(s: &Surface, way: &Way) -> bool {
             // the tangent is exact where both gradients are, or one gradient and the other's
             // own normal
             Way::Chord { c, on, .. } => match on {
-                Some((k, _)) => match [&c.a, &c.b][*k] {
+                Some((k, _)) => match [&c.a, &c.b][*k].smooth() {
                     Surface::Procedural(p) => p.exact_d1(),
                     _ => true,
                 },
@@ -435,6 +435,7 @@ impl Way<'_> {
             } => {
                 if let Some((k, last)) = on {
                     let (ps, other) = if *k == 0 { (&c.a, &c.b) } else { (&c.b, &c.a) };
+                    let ps = ps.smooth();
                     let seed = last.get().unwrap_or_else(|| ps.project(self.chord_point(s)));
                     match chord_on(ps, other, *anchor, *dir, s, seed) {
                         Some((p, t, uv)) => {
@@ -824,11 +825,13 @@ fn coedge_pieces<'a>(
 ) -> Result<Vec<Piece<'a>>, &'static str> {
     let co = body.coedge(c);
     let e = body.edge(co.edge);
-    let (lo, hi) = (e.range.lo, e.range.hi);
+    // a spring round a traced spine is walked round the spine walked by chord distance
+    let (curve, range) = e.curve.smooth(e.range).unwrap_or((&e.curve, e.range));
+    let (lo, hi) = (range.lo, range.hi);
     let rev = !co.forward;
     // stretches of a smooth way, in the edge's order
     let mut ways: Vec<(Rc<Way<'a>>, f64, f64, bool)> = Vec::new();
-    match &e.curve {
+    match curve {
         Curve::Intersection(ic) => {
             let n = ic.pts.len() as i64;
             let idx = |t: f64| {
@@ -892,16 +895,16 @@ fn coedge_pieces<'a>(
         curve => {
             // a whole circle or ellipse: one piece round its period
             let whole = matches!(curve, Curve::Circle(_) | Curve::Ellipse(_))
-                && e.range.width() >= dmath::TAU * (1.0 - 1e-12);
+                && range.width() >= dmath::TAU * (1.0 - 1e-12);
             let k = match curve {
                 _ if whole => 1.0,
-                Curve::Circle(_) | Curve::Ellipse(_) => (e.range.width() / dmath::FRAC_PI_2).ceil().max(1.0),
+                Curve::Circle(_) | Curve::Ellipse(_) => (range.width() / dmath::FRAC_PI_2).ceil().max(1.0),
                 // pieces bending about as much as a quarter of a circle: a chord of length l
                 // sags 0.19 l there, and a curve's chord count goes as the root of 1 / sag
                 // (research/mass-props)
                 Curve::Procedural(pc) => {
-                    let l = pc.speed_bound(e.range) * e.range.width();
-                    let n = pc.segments(e.range, 1e-4 * l) as f64;
+                    let l = pc.speed_bound(range) * range.width();
+                    let n = pc.segments(range, 1e-4 * l) as f64;
                     (n * n * 1e-4 / 0.19).ceil().clamp(1.0, 256.0)
                 }
                 _ => 1.0,
@@ -909,7 +912,7 @@ fn coedge_pieces<'a>(
             let way = Rc::new(Way::Curve(curve));
             // even steps, and every point where the curve's parameter is not smooth
             let mut cuts: Vec<f64> = (1..k as usize).map(|i| lo + (hi - lo) * (i as f64 / k)).collect();
-            cuts.extend(curve.kinks(e.range));
+            cuts.extend(curve.kinks(range));
             cuts.sort_by(f64::total_cmp);
             let mut a = lo;
             for b in cuts.into_iter().chain([hi]) {
@@ -1827,7 +1830,8 @@ fn integrate(cx: &Ctx, pc: &Piece, u: &mut Acc, last: bool) -> Option<()> {
 /// `size` sets the scale below which a piece's share is negligible.
 fn face_integrals(body: &Body, f: FaceId, c: Point3, size: f64, rel: f64) -> Result<(F, F), &'static str> {
     let face = body.face(f);
-    let s = &face.surface;
+    // a pipe round a traced spine is integrated round the spine walked by chord distance
+    let s = face.surface.smooth();
     let sigma = if face.same_sense { 1.0 } else { -1.0 };
     if let Some(r) = whole_patch(body, f, c, size, rel) {
         return Ok(r);

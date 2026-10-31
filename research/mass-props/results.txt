@@ -147,3 +147,69 @@ l-bar-roll-over-linear            860        401    2.14x        240   1.67  1.3
 box-linear-over-pocket           1053        413    2.55x        214   1.93  1.566960225132e3 2.6e-15 | 1.566960225132e3 1.2e-15
 box-corner-variable            792554       3112  254.68x       1504   2.07  1.585780873331e3 5.7e-6 | 1.585780724940e3 1.4e-13
 apex-variable                 1540173      14694  104.82x       2680   5.48  3.619694525979e3 9.0e-6 | 3.619694810772e3 3.1e-15
+
+# After the chord spine was made internal to mass integration (Pipe::smooth, Spring::smooth),
+# against main b624bf5: regeneration instructions (fgate), seq and nary1
+torture   seq    main      132189105  new      132094995   -0.07%
+torture   nary1  main      124420514  new      124251508   -0.14%
+plate     seq    main      132189097  new      132094479   -0.07%
+plate     nary1  main      124420386  new      124251967   -0.14%
+shaft     seq    main      446634923  new      446333982   -0.07%
+shaft     nary1  main      485920494  new      485556126   -0.07%
+housing   seq    main      129368028  new      129279653   -0.07%
+housing   nary1  main      145804762  new      145517038   -0.20%
+coplanar  seq    main      197162261  new      196938256   -0.11%
+coplanar  nary1  main      164220179  new      163974520   -0.15%
+patterns  seq    main      186343517  new      186088210   -0.14%
+patterns  nary1  main      145943347  new      145604229   -0.23%
+mixed     seq    main     2849834369  new     2848822149   -0.04%
+mixed     nary1  main     1748024994  new     1746989384   -0.06%
+hole-grid seq    main      321973028  new      321061205   -0.28%
+hole-grid nary1  main      285686746  new      284307500   -0.48%
+tour      seq    main       19580985  new       19532815   -0.25%
+tour      nary1  main       17686888  new       17643646   -0.24%
+upto      seq    main       41979958  new       41950627   -0.07%
+upto      nary1  main       29857087  new       29831702   -0.09%
+upto-flat seq    main       16265620  new       16239420   -0.16%
+upto-flat nary1  main       12853254  new       12834414   -0.15%
+bracket   seq    main       17394677  new       17329310   -0.38%
+bracket   nary1  main       17970018  new       17895218   -0.42%
+clamp     seq    main       15285503  new       15263799   -0.14%
+clamp     nary1  main       15394633  new       15373776   -0.14%
+conrod    seq    main      616962718  new      597171387   -3.21%
+conrod    nary1  main      745989876  new      721056057   -3.34%
+crank     seq    main     1596414561  new     1557447287   -2.44%
+crank     nary1  main     1457274967  new     1415424274   -2.87%
+frame     seq    main     9796211765  new     9622717070   -1.77%
+frame     nary1  main     9040943098  new     8858669030   -2.02%
+gearbox   seq    main     1650465726  new     1616750220   -2.04%
+gearbox   nary1  main     1932204689  new     1884099569   -2.49%
+guard     seq    main       83589773  new       83548166   -0.05%
+guard     nary1  main       83707412  new       83680141   -0.03%
+heatsink  seq    main     2505125326  new     2498559886   -0.26%
+heatsink  nary1  main     2024475834  new     2018525756   -0.29%
+hub       seq    main       55004855  new       54917337   -0.16%
+hub       nary1  main       52910238  new       52817966   -0.17%
+insert    seq    main       34429395  new       34408576   -0.06%
+insert    nary1  main       35105028  new       35108886   +0.01%
+jack      seq    main      992247560  new      967993930   -2.44%
+jack      nary1  main      803010101  new      780854894   -2.76%
+manifold  seq    main     4033886446  new     4008748281   -0.62%
+manifold  nary1  main     4013468136  new     3995110711   -0.46%
+quadarm   seq    main       73783694  new       73419957   -0.49%
+quadarm   nary1  main       72783692  new       72394056   -0.54%
+valve     seq    main     2327299518  new     2222576934   -4.50%
+valve     nary1  main     2987716605  new     2866982273   -4.04%
+volute    seq    main     2910792674  new     2909245372   -0.05%
+volute    nary1  main     2646052907  new     2644783203   -0.05%
+
+# and instructions per exact mass call against the branch before it (f605e88), counted as count.sh
+# does (R=2, a run with none subtracted); the volumes agree to 2e-15 (the bodies are main's now).
+# manifold's first call works out main's face boxes for `size` on its traced-spine pipes (77M, 41M
+# on the chord pipes); its later calls cost what they did (57.7M against 57.4M)
+torture  74.32M -> 74.36M   shaft  275.28M -> 274.62M   mixed   595.97M -> 595.17M
+coil    141.80M -> 141.85M  loft    62.86M ->  62.86M   thread   68.54M ->  68.64M
+text     31.67M ->  31.69M  gearbox 258.79M -> 258.88M  volute  169.93M -> 168.95M
+crank   123.43M -> 123.41M  valve  385.54M -> 386.11M   heatsink 1061.94M -> 1062.37M
+conrod   92.54M ->  92.55M  jack   241.06M -> 241.30M   frame   199.12M -> 198.82M
+manifold 78.30M ->  94.12M  insert   5.25M ->   5.27M

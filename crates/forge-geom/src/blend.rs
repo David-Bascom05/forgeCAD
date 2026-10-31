@@ -7,10 +7,11 @@
 
 use crate::curve::{Circle, Curve, CurveDeriv, CurveGeom, Domain1, Line, ProcCurve, ProceduralCurve};
 use crate::intersect::{SurfaceSurface, plane_surface};
+use crate::smooth::ChordCurve;
 use crate::surface::{Cylinder, Domain2, Plane, Proc, Procedural, SurfDeriv, Surface, SurfaceGeom, Torus};
 use crate::varblend::VarBlend;
 use forge_math::{Box2, Box3, Frame, Interval, Point2, Point3, UnitVec3, Vec2, Vec3, dmath, tol};
-use std::sync::Arc;
+use std::sync::{Arc, OnceLock};
 
 /// The surface moved by `d` along its natural normal, where that is the same
 /// kind of surface (None where the offset collapses or self-intersects).
@@ -400,19 +401,12 @@ pub fn spine(a: &Surface, b: &Surface, near: Point3, region: Box3) -> Option<Cur
         return Some(c);
     }
     let traced = crate::intcurve::trace(a, b, region)?;
-    // walked by chord distance: the chain's own parameter is only once differentiable, and
-    // everything a pipe evaluates (its springs, its derivatives along u) takes the spine's
-    let picked = pick(
+    pick(
         traced
             .into_iter()
             .map(|c| Curve::Intersection(Arc::new(c)))
             .collect(),
-    )?;
-    Some(match picked {
-        Curve::Intersection(ic) => crate::intcurve::ChordCurve::new(ic.as_ref().clone())
-            .map_or(Curve::Intersection(ic), crate::intcurve::ChordCurve::curve),
-        c => c,
-    })
+    )
 }
 
 /// A short parameter range around the point of `c` nearest `p` (for checks).
@@ -643,6 +637,7 @@ impl Blend {
             surface: s.clone(),
             d,
             on,
+            smooth: OnceLock::new(),
         })))
     }
 }
@@ -696,6 +691,8 @@ pub struct Spring {
     pub d: f64,
     /// The pipe whose v line this is, and its v.
     pub on: Option<(Surface, f64)>,
+    /// `smooth`'s spring and its spine, made on first use.
+    smooth: OnceLock<Option<(Curve, Arc<ChordCurve>)>>,
 }
 
 impl Spring {
@@ -711,10 +708,7 @@ impl Spring {
         };
         1e-5 * w.clamp(1e-3, 1e3)
     }
-}
-
-impl Spring {
-    /// The foot and its exact derivative: foot = c - d grad(c).
+    /// The foot and its exact derivative where the spine's is exact: foot = c - d grad(c).
     fn at1(&self, t: f64) -> (Point3, Vec3) {
         let (c, c1) = self.spine.deriv1(t);
         (
@@ -729,20 +723,44 @@ impl ProceduralCurve for Spring {
         self.at(t)
     }
     fn deriv1(&self, t: f64) -> (Point3, Vec3) {
-        self.at1(t)
+        if self.spine.exact_d1() {
+            return self.at1(t);
+        }
+        let d = self.deriv(t);
+        (d.p, d.d1)
     }
-    /// d2 a difference of exact first derivatives.
     fn deriv(&self, t: f64) -> CurveDeriv {
         let h = self.step();
-        let ((p, d1), (_, a), (_, b)) = (self.at1(t), self.at1(t + h), self.at1(t - h));
+        let (p, a, b) = (self.at(t), self.at(t + h), self.at(t - h));
         CurveDeriv {
             p,
-            d1,
-            d2: (a - b) / (2.0 * h),
+            d1: (a - b) / (2.0 * h),
+            d2: (a.to_vec() + b.to_vec() - p.to_vec() * 2.0) / (h * h),
         }
     }
     fn exact_d1(&self) -> bool {
-        true
+        self.spine.exact_d1()
+    }
+    /// Round a traced spine: the spring round its chord-walked spine, on the pipe's smooth twin.
+    fn smooth(&self, range: Interval) -> Option<(&Curve, Interval)> {
+        let (twin, c) = self
+            .smooth
+            .get_or_init(|| {
+                let Curve::Intersection(ic) = &self.spine else {
+                    return None;
+                };
+                let c = Arc::new(ChordCurve::new(ic.as_ref().clone())?);
+                let twin = Curve::Procedural(ProcCurve(Arc::new(Spring {
+                    spine: Curve::Procedural(ProcCurve(c.clone())),
+                    surface: self.surface.clone(),
+                    d: self.d,
+                    on: self.on.as_ref().map(|(s, v)| (s.smooth().clone(), *v)),
+                    smooth: OnceLock::new(),
+                })));
+                Some((twin, c))
+            })
+            .as_ref()?;
+        Some((twin, Interval::new(c.u_of(range.lo), c.u_of(range.hi))))
     }
     fn on_surface(&self, t: f64) -> Option<(Surface, Point2, Vec2)> {
         self.on
@@ -796,6 +814,7 @@ impl ProceduralCurve for Spring {
             surface: self.surface.transformed(f),
             d: self.d,
             on: None,
+            smooth: OnceLock::new(),
         }))
     }
     fn speed_bound(&self, range: Interval) -> f64 {
@@ -847,6 +866,8 @@ pub struct Pipe {
     pub d_first: f64,
     pub d_second: f64,
     pub radius: f64,
+    /// `smooth`'s pipe, made on first use.
+    smooth: OnceLock<Option<Surface>>,
 }
 
 impl Pipe {
@@ -859,6 +880,7 @@ impl Pipe {
             d_first: da,
             d_second: db,
             radius: da.abs(),
+            smooth: OnceLock::new(),
         };
         let t = p.spine.closest(near, p.spine.full_range(1e6));
         let (_, e1, e2, _) = p.cross(t)?;
@@ -939,9 +961,13 @@ impl Pipe {
         }
     }
 
-    /// The derivatives at u and each of `vs`: exact first derivatives, d2/du2 a difference of
+    /// The derivatives at u and each of `vs`: along u differences of the exact surface, or,
+    /// where the spine's derivative is exact, exact first derivatives and d2/du2 a difference of
     /// them.
     fn derivs(&self, u: f64, vs: &[f64], mut put: impl FnMut(SurfDeriv)) {
+        if !self.spine.exact_d1() {
+            return self.differences(u, vs, put);
+        }
         let Some(x) = self.moving(u) else {
             let p = self.spine.eval(u);
             for _ in vs {
@@ -969,9 +995,53 @@ impl Pipe {
 
     /// The first derivatives alone at u and each of `vs`.
     fn derivs1(&self, u: f64, vs: &[f64], out: &mut Vec<SurfDeriv>) {
-        match self.moving(u) {
+        match self.spine.exact_d1().then(|| self.moving(u)).flatten() {
             Some(x) => out.extend(vs.iter().map(|&v| self.first(&x, v))),
             None => self.derivs(u, vs, |d| out.push(d)),
+        }
+    }
+
+    /// `derivs` by central differences of the exact surface along the spine.
+    fn differences(&self, u: f64, vs: &[f64], mut put: impl FnMut(SurfDeriv)) {
+        let r = self.radius;
+        let Some((c, e1, e2, th)) = self.cross(u) else {
+            let p = self.spine.eval(u);
+            for _ in vs {
+                put(SurfDeriv {
+                    p,
+                    du: Vec3::ZERO,
+                    dv: Vec3::ZERO,
+                    duu: Vec3::ZERO,
+                    duv: Vec3::ZERO,
+                    dvv: Vec3::ZERO,
+                });
+            }
+            return;
+        };
+        let h = 1e-4 * self.spine.deriv(u).d1.length().max(1e-9).recip().min(1.0);
+        let (xp, xm) = (self.cross(u + h), self.cross(u - h));
+        // the point and its v-derivative at u + h or u - h
+        let at = |x: Option<(Point3, Vec3, Vec3, f64)>, u: f64, v: f64| match x {
+            Some(x @ (_, e1, e2, th)) => {
+                let (s, k) = dmath::sin_cos(v * th);
+                (self.on(x, v), (e2 * k - e1 * s) * (r * th))
+            }
+            None => (self.spine.eval(u), Vec3::ZERO),
+        };
+        for &v in vs {
+            let (s, k) = dmath::sin_cos(v * th);
+            let p = c + (e1 * k + e2 * s) * r;
+            let dv = (e2 * k - e1 * s) * (r * th);
+            let dvv = (e1 * k + e2 * s) * (-r * th * th);
+            let ((pp, vp), (pm, vm)) = (at(xp, u + h, v), at(xm, u - h, v));
+            put(SurfDeriv {
+                p,
+                du: (pp - pm) / (2.0 * h),
+                dv,
+                duu: (pp + pm.to_vec() - p.to_vec() * 2.0).to_vec() / (h * h),
+                duv: (vp - vm) / (2.0 * h),
+                dvv,
+            });
         }
     }
 
@@ -1019,7 +1089,26 @@ impl Procedural for Pipe {
         self.derivs1(u, vs, out)
     }
     fn exact_d1(&self) -> bool {
-        true
+        self.spine.exact_d1()
+    }
+    /// Round a traced spine: the same pipe round the spine walked by chord distance.
+    fn smooth(&self) -> Option<&Surface> {
+        self.smooth
+            .get_or_init(|| {
+                let Curve::Intersection(ic) = &self.spine else {
+                    return None;
+                };
+                Some(Surface::Procedural(Proc(Arc::new(Pipe {
+                    spine: ChordCurve::new(ic.as_ref().clone())?.curve(),
+                    first: self.first.clone(),
+                    second: self.second.clone(),
+                    d_first: self.d_first,
+                    d_second: self.d_second,
+                    radius: self.radius,
+                    smooth: OnceLock::new(),
+                }))))
+            })
+            .as_ref()
     }
     /// Exactly away from the spine (the contact order makes du x dv point that way).
     fn normal(&self, uv: Point2) -> Option<UnitVec3> {
@@ -1069,6 +1158,7 @@ impl Procedural for Pipe {
             d_first: self.d_first,
             d_second: self.d_second,
             radius: self.radius,
+            smooth: OnceLock::new(),
         }))
     }
     fn uv_scale(&self) -> (f64, f64) {

@@ -41,10 +41,13 @@ by tens of percent from run to run; `count.sh` counts instructions instead (dete
   then 33 points, one section per column: on the variable-blend cases a section is about 15k
   instructions and a point on it a few hundred, so per-node columns beat a Chebyshev fit's
   sections (each fit point along u is a section).
-- Pipe spines walk by chord distance in stretches turning under 30 degrees (as the intersection
+- Pipes round a traced spine are integrated round the spine walked by chord distance in
+  stretches turning under 30 degrees (`forge_geom::smooth::ChordCurve`, as the intersection
   edges in mass.rs already did): within a stretch the parametrisation is as smooth as the
   surfaces, so Chebyshev tiles and Gauss-Kronrod pieces no longer break at every chain point
-  (46 to 82 per pipe face before).
+  (46 to 82 per pipe face before). Only mass integration sees it (`Pipe::smooth`,
+  `Spring::smooth`, made on first use): with the chord spine on the body itself, the booleans'
+  closest-point searches on pipes cost the manifold part's regeneration 5-7% more instructions.
 
 ## Results
 

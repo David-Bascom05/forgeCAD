@@ -154,6 +154,12 @@ pub trait ProceduralCurve: Send + Sync + std::fmt::Debug {
         let _ = t;
         None
     }
+    /// The same curve with a smooth parameter where this one's is only once differentiable (a
+    /// spring round a traced spine), for integrators, and `range` in its parameter.
+    fn smooth(&self, range: Interval) -> Option<(&Curve, Interval)> {
+        let _ = range;
+        None
+    }
 }
 
 /// A shared handle to a procedural curve; two handles are equal when they are the same curve.
@@ -481,8 +487,7 @@ impl CurveGeom for Curve {
             Curve::Line(c) => c.eval(t),
             Curve::Circle(c) => c.eval(t),
             Curve::Intersection(c) => c.eval(t),
-            Curve::Procedural(c) => c.point(t),
-            _ => self.deriv(t).p,
+            _ => self.eval_rest(t),
         }
     }
     fn domain(&self) -> Domain1 {
@@ -558,17 +563,6 @@ impl Curve {
     }
 
     /// The whole parameter range, clipped to `bound` where the curve is unbounded.
-    /// The point and first derivative (a procedural curve may skip the second).
-    pub fn deriv1(&self, t: f64) -> (Point3, Vec3) {
-        match self {
-            Curve::Procedural(c) => c.deriv1(t),
-            _ => {
-                let d = self.deriv(t);
-                (d.p, d.d1)
-            }
-        }
-    }
-
     pub fn full_range(&self, bound: f64) -> Interval {
         let d = self.domain();
         Interval::new(d.lo.max(-bound), d.hi.min(bound))

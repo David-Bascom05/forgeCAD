@@ -13,6 +13,7 @@ mod meet_gen;
 pub mod ruled;
 pub mod screw;
 pub mod skinned;
+pub mod smooth;
 pub mod surface;
 #[doc(hidden)]
 pub mod testing;
