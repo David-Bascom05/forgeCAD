@@ -646,6 +646,33 @@ impl Procedural for Screw {
     fn project(&self, p: Point3) -> Point2 {
         self.nearest(p)
     }
+    fn curve_uv(&self, c: &ProcCurve) -> Option<(Point2, Vec2)> {
+        // a helix about the same axis is the section point moving along the face's section by
+        // the difference of the two motions per radian: in closed form where that keeps to the
+        // section (along a straight one, or not at all)
+        let h = c.as_any()?.downcast_ref::<Helix>()?;
+        if h.m.frame != self.m.frame {
+            return None;
+        }
+        let sec = self.ring.pieces[0].s;
+        let v0 = sec.frac(h.p);
+        if sec.at(v0).0.distance(h.p) > 1e-3 * tol::LINEAR {
+            return None;
+        }
+        let slide = Vec2::new(h.m.a - self.m.a, h.m.b - self.m.b);
+        let dv = match sec {
+            _ if slide == Vec2::ZERO => 0.0,
+            Section::Line { a, b } => {
+                let d = b - a;
+                if d.cross(slide).abs() > 1e-12 * d.length() * slide.length() {
+                    return None;
+                }
+                slide.dot(d) / d.length_sq()
+            }
+            Section::Arc { .. } => return None,
+        };
+        Some((Point2::new(0.0, v0), Vec2::new(1.0, dv)))
+    }
     fn bbox(&self, uv: Box2) -> Box3 {
         // piece by piece over the track parameters the box spans
         let mut b = Box3::EMPTY;
@@ -776,6 +803,9 @@ impl Helix {
 }
 
 impl ProceduralCurve for Helix {
+    fn as_any(&self) -> Option<&dyn std::any::Any> {
+        Some(self)
+    }
     fn deriv(&self, t: f64) -> CurveDeriv {
         let (e, ep, z) = self.m.axes(t);
         let r = self.p.x + self.m.a * t;

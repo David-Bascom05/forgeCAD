@@ -1,5 +1,5 @@
 use crate::curve::Domain1;
-use forge_math::{Box2, Box3, Frame, Interval, Point2, Point3, UnitVec3, Vec3, dmath, tol};
+use forge_math::{Box2, Box3, Frame, Interval, Point2, Point3, UnitVec3, Vec2, Vec3, dmath, tol};
 
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct Domain2 {
@@ -122,6 +122,12 @@ pub trait Procedural: Send + Sync + std::fmt::Debug {
     fn domain(&self) -> Domain2;
     /// Parameters of the point of the surface nearest `p`.
     fn project(&self, p: Point3) -> Point2;
+    /// Where curve `c`, lying on the surface, is in its parameters, if in closed form: at the
+    /// curve's t, `base + dir * t`. None where only projecting its points finds it.
+    fn curve_uv(&self, c: &crate::curve::ProcCurve) -> Option<(Point2, Vec2)> {
+        let _ = c;
+        None
+    }
     /// `project` for a point of the surface near the one at `near` (a loop's next sample), where
     /// the construction can start from there instead of searching.
     fn project_near(&self, p: Point3, near: Point2) -> Point2 {

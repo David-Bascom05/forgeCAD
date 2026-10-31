@@ -200,8 +200,40 @@ fn draw(body: &Body, face: FaceId, mut raw: Vec<Point2>) -> (Vec<Point2>, Vec<us
 
 pub fn uv_loop(body: &Body, lp: LoopId, segments: impl Fn(&Edge) -> usize) -> UvLoop {
     let face = body.lp(lp).face;
-    let (samples, coedge_first) = loop_samples(body, lp, segments);
-    let (points, sample_of) = draw_loop(body, face, &samples);
+    let (samples, coedge_first) = loop_samples(body, lp, &segments);
+    let (points, sample_of) = match &body.face(face).surface {
+        forge_geom::Surface::Procedural(s) => {
+            // an edge whose parameters on the surface are in closed form (a thread's helix)
+            // is drawn from them; the others' samples are projected, each from the one before
+            let mut raw: Vec<Point2> = Vec::with_capacity(samples.len());
+            for (k, c) in body.lp(lp).coedges().enumerate() {
+                let co = body.coedge(c);
+                let e = body.edge(co.edge);
+                let at = coedge_first[k];
+                let end = coedge_first.get(k + 1).copied().unwrap_or(samples.len());
+                let closed = match &e.curve {
+                    Curve::Procedural(pc) => s.0.curve_uv(pc),
+                    _ => None,
+                };
+                for (i, &p) in samples[at..end].iter().enumerate() {
+                    raw.push(match closed {
+                        Some((base, dir)) => {
+                            let n = end - at;
+                            let kk = if co.forward { i } else { n - i };
+                            let t = (e.range.lo + e.range.width() * (kk as f64 / n as f64)).min(e.range.hi);
+                            base + dir * t
+                        }
+                        None => match raw.last() {
+                            Some(&near) => s.0.project_near(p, near),
+                            None => s.0.project(p),
+                        },
+                    });
+                }
+            }
+            draw(body, face, raw)
+        }
+        _ => draw_loop(body, face, &samples),
+    };
     UvLoop {
         points,
         sample_of,
