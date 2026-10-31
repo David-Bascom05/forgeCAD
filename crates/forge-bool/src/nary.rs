@@ -1676,8 +1676,8 @@ fn nary_body(
             }
             // an edge kept where its midpoint was too near a tool to tell may now end in the open:
             // it divides nothing, so it goes, and so may the one it hung from
-            let ends = |p: usize| [list[p].start, list[p].end];
-            let mut degree: Vec<(VKey, u32)> = boundary
+            let ends = |p: usize| [list[p].start.packed(), list[p].end.packed()];
+            let mut degree: Vec<(u64, u32)> = boundary
                 .iter()
                 .flatten()
                 .flat_map(|&(p, _)| ends(p))
@@ -1692,7 +1692,7 @@ fn nary_body(
                 }
                 same
             });
-            let at = |d: &[(VKey, u32)], v: VKey| d.binary_search_by_key(&v, |x| x.0).expect("an end");
+            let at = |d: &[(u64, u32)], v: u64| d.binary_search_by_key(&v, |x| x.0).expect("an end");
             loop {
                 let before = keep.len();
                 keep.retain(|&p| {
@@ -2561,8 +2561,8 @@ fn holes_only(
 /// Pieces among `ps` with the same ends along the same curve as a lower one: by piece, (the
 /// lower one, whether it runs the other way).
 fn coincident(list: &[Piece], ps: &[usize]) -> Vec<Option<(usize, bool)>> {
-    let key = |pc: &Piece| (pc.start.min(pc.end), pc.start.max(pc.end));
-    let mut by_ends: Vec<((VKey, VKey), usize)> = ps.iter().map(|&p| (key(&list[p]), p)).collect();
+    let key = |pc: &Piece| (pc.start.min(pc.end).packed(), pc.start.max(pc.end).packed());
+    let mut by_ends: Vec<((u64, u64), usize)> = ps.iter().map(|&p| (key(&list[p]), p)).collect();
     by_ends.sort_unstable();
     let mut canon = vec![None; list.len()];
     for g in by_ends.chunk_by(|x, y| x.0 == y.0) {

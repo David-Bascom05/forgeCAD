@@ -74,6 +74,16 @@ pub(crate) enum VKey {
     New(u32),
 }
 
+impl VKey {
+    /// The key as one number, in the same order (sorting by it is cheaper).
+    pub(crate) fn packed(self) -> u64 {
+        match self {
+            VKey::Old(s, v) => (s as u64) << 32 | v.0 as u64,
+            VKey::New(n) => 1 << 63 | n as u64,
+        }
+    }
+}
+
 /// What a cut lies on: a boundary edge of one side, or no edge.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) enum CutOn {
