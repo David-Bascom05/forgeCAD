@@ -401,6 +401,16 @@ impl<'a> Index<'a> {
                 }
             }
         }
+        let ruling = match &face.surface {
+            Surface::Cylinder(c) => Some((c.frame, None)),
+            Surface::Cone(k) => Some((k.frame, Some(k.apex()))),
+            _ => None,
+        };
+        if let Some((frame, apex)) = ruling
+            && let Some(inside) = ruling_parity(body, &frame, apex, p, &info.edges)
+        {
+            return if inside { Where::Inside } else { Where::Outside };
+        }
         let drawn = self.drawn(f);
         let uv = into_window(body, f, face.surface.project(p), drawn);
         if point_in_loops(uv, &drawn.loops) {
@@ -531,46 +541,131 @@ fn planar_parity(
         }
         let e = body.edge(body.coedge(c).edge);
         // a seam cannot occur on a plane; each use of an edge here is one crossing set
-        let hits: Vec<(f64, f64)> = match &e.curve {
+        if plane_ray_crossings(plane.frame.z().get(), p, d, &e.curve, e.range)? % 2 == 1 {
+            inside = !inside;
+        }
+    }
+    Some(inside)
+}
+
+/// How many times the ray p + s d (s > 0), in the plane with normal `n`, crosses a line or conic
+/// of that plane over `range`, in closed form. None when it passes through an end, runs along
+/// the curve, or the curve is of another kind.
+pub(crate) fn plane_ray_crossings(
+    n: Vec3,
+    p: Point3,
+    d: Vec3,
+    curve: &Curve,
+    range: Interval,
+) -> Option<usize> {
+    let hits: Vec<(f64, f64)> = match curve {
+        Curve::Line(l) => {
+            // ray p + s d against segment o + t dir, t in range
+            let w = l.origin - p;
+            // which way along the ray the line lies decides parity: its sign is exact
+            let den = triple(n, d, l.dir.get());
+            if den == 0.0 {
+                if l.dir.cross(w).dot(n).abs() <= tol::LINEAR {
+                    return None; // the ray runs along this edge
+                }
+                return Some(0);
+            }
+            let along = triple(n, l.dir.get(), w);
+            let s = if along != 0.0 && (along > 0.0) == (den < 0.0) {
+                1.0
+            } else {
+                -1.0
+            };
+            let t = d.cross(w).dot(n) / -den;
+            if !t.is_finite() {
+                return None;
+            }
+            vec![(s, t)]
+        }
+        Curve::Circle(k) => conic_ray(&k.frame, k.radius, k.radius, p, d),
+        Curve::Ellipse(el) => conic_ray(&el.frame, el.major, el.minor, p, d),
+        _ => return None,
+    };
+    let periodic = curve.domain().period;
+    let mut n = 0;
+    for (s, t) in hits {
+        if s <= 0.0 {
+            continue;
+        }
+        let t = match periodic {
+            Some(per) => range.lo + (t - range.lo).rem_euclid(per),
+            None => t,
+        };
+        let span = range.width().max(1e-300);
+        let margin = 1e-9 * (1.0 + span);
+        if (t - range.lo).abs() <= margin || (t - range.hi).abs() <= margin {
+            return None; // through a vertex
+        }
+        if t > range.lo && t < range.hi {
+            n += 1;
+        }
+    }
+    Some(n)
+}
+
+/// Exact even-odd test for a point of a cylinder or cone face (axis the frame's z): the ruling
+/// from p away from the apex (up the axis on a cylinder) leaves the bounded face, so the edges it
+/// crosses decide; an edge crosses it where it meets the plane of the axis and p on p's side, in
+/// closed form for lines and conics. None when the ruling meets a vertex, runs along an edge,
+/// passes within a tolerance of p, or meets an edge the closed forms do not cover.
+fn ruling_parity(
+    body: &Body,
+    frame: &forge_math::Frame,
+    apex: Option<Point3>,
+    p: Point3,
+    edges: &[(forge_topo::CoedgeId, Box3)],
+) -> Option<bool> {
+    let z = frame.z().get();
+    let rel = p - frame.origin;
+    let radial = (rel - z * rel.dot(z)).normalize()?.get();
+    let w = match apex {
+        Some(a) => (p - a).normalize()?.get(),
+        None => z,
+    };
+    // normal of the plane holding the axis and p
+    let m = z.cross(radial);
+    let mut inside = false;
+    for &(c, ref b) in edges {
+        if c == GONE || !ray_hits_box(p, w, b) {
+            continue;
+        }
+        let e = body.edge(body.coedge(c).edge);
+        let ts: Vec<f64> = match &e.curve {
             Curve::Line(l) => {
-                // ray p + s d against segment o + t dir, t in range
-                let w = l.origin - p;
-                let n = plane.frame.z().get();
-                // which way along the ray the line lies decides parity: its sign is exact
-                let den = triple(n, d, l.dir.get());
-                if den == 0.0 {
-                    if l.dir.cross(w).dot(n).abs() <= tol::LINEAR {
-                        return None; // the ray runs along this edge
+                let (den, at) = (l.dir.get().dot(m), (l.origin - frame.origin).dot(m));
+                if den.abs() <= 1e-12 {
+                    // in the plane on p's side: along the ruling
+                    if at.abs() <= tol::LINEAR && (l.origin - frame.origin).dot(radial) > 0.0 {
+                        return None;
                     }
                     continue;
                 }
-                let along = triple(n, l.dir.get(), w);
-                let s = if along != 0.0 && (along > 0.0) == (den < 0.0) {
-                    1.0
-                } else {
-                    -1.0
-                };
-                let t = d.cross(w).dot(n) / -den;
-                if !t.is_finite() {
-                    return None;
-                }
-                vec![(s, t)]
+                vec![-at / den]
             }
-            Curve::Circle(k) => conic_ray(&k.frame, k.radius, k.radius, p, d),
-            Curve::Ellipse(el) => conic_ray(&el.frame, el.major, el.minor, p, d),
+            Curve::Circle(k) => conic_plane(&k.frame, k.radius, k.radius, frame.origin, m)?,
+            Curve::Ellipse(el) => conic_plane(&el.frame, el.major, el.minor, frame.origin, m)?,
             _ => return None,
         };
         let periodic = e.curve.domain().period;
-        for (s, t) in hits {
-            if s <= 0.0 {
+        for t in ts {
+            let h = e.curve.eval(t);
+            let (side, along) = ((h - frame.origin).dot(radial), (h - p).dot(w));
+            if side.abs() <= tol::LINEAR || along.abs() <= 10.0 * tol::LINEAR {
+                return None;
+            }
+            if side < 0.0 || along < 0.0 {
                 continue;
             }
             let t = match periodic {
                 Some(per) => e.range.lo + (t - e.range.lo).rem_euclid(per),
                 None => t,
             };
-            let span = e.range.width().max(1e-300);
-            let margin = 1e-9 * (1.0 + span);
+            let margin = 1e-9 * (1.0 + e.range.width());
             if (t - e.range.lo).abs() <= margin || (t - e.range.hi).abs() <= margin {
                 return None; // through a vertex
             }
@@ -580,6 +675,25 @@ fn planar_parity(
         }
     }
     Some(inside)
+}
+
+/// Where a conic o + a cos t x + b sin t y crosses the plane through `at` with normal `m`: its
+/// parameters (none if it misses). None when it touches the plane or lies in it.
+fn conic_plane(f: &forge_math::Frame, a: f64, b: f64, at: Point3, m: Vec3) -> Option<Vec<f64>> {
+    let (ca, cb, cc) = (a * f.x().dot(m), b * f.y().dot(m), (f.origin - at).dot(m));
+    let r = (ca * ca + cb * cb).sqrt();
+    if r <= 1e-12 * (a + b) {
+        return (cc.abs() > tol::LINEAR).then(Vec::new);
+    }
+    let k = -cc / r;
+    if k.abs() > 1.0 + 1e-9 {
+        return Some(Vec::new());
+    }
+    if k.abs() >= 1.0 - 1e-9 {
+        return None;
+    }
+    let (phi, d) = (forge_math::dmath::atan2(cb, ca), forge_math::dmath::acos(k));
+    Some(vec![phi - d, phi + d])
 }
 
 /// Where the ray p + s d (s any sign) meets a conic o + a cos t x + b sin t y
@@ -613,7 +727,7 @@ fn box_distance(b: &Box3, p: Point3) -> f64 {
     (dx * dx + dy * dy + dz * dz).sqrt()
 }
 
-fn ray_hits_box(o: Point3, d: Vec3, b: &Box3) -> bool {
+pub(crate) fn ray_hits_box(o: Point3, d: Vec3, b: &Box3) -> bool {
     let (mut t0, mut t1) = (0.0f64, f64::INFINITY);
     for (oi, di, iv) in [(o.x, d.x, b.x), (o.y, d.y, b.y), (o.z, d.z, b.z)] {
         if di.abs() < 1e-300 {

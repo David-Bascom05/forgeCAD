@@ -792,6 +792,8 @@ fn plan(a: &Body, b: &Body, op: Op) -> R<Plan> {
                 // an untouched hole inside a new region moves into it
                 let face = body.face(f);
                 let mut moved: Vec<(usize, forge_topo::LoopId)> = Vec::new();
+                let drawn = std::cell::OnceCell::<Vec<Option<Vec<Point2>>>>::new();
+                let region_boxes = std::cell::OnceCell::<Vec<(Box3, Vec<Box3>)>>::new();
                 let outlines = std::cell::OnceCell::<Vec<Outline>>::new();
                 for &l in face.loops.iter().skip(1) {
                     if local.touched.contains(&l) {
@@ -805,9 +807,35 @@ fn plan(a: &Body, b: &Body, op: Op) -> R<Plan> {
                             Point2::new(-q.x, q.y)
                         }
                     });
+                    // exactly, on a plane split exactly: by one of the hole's vertices, as it
+                    // touches no new edge
+                    if split.outlines.is_none() {
+                        let q = body.vertex(body.coedge_start(body.lp(l).coedges[0])).point;
+                        let boxes = region_boxes.get_or_init(|| {
+                            split.regions.iter().map(|r| walk_boxes(&r[0], &pieces)).collect()
+                        });
+                        let held: Option<Vec<bool>> = split
+                            .regions
+                            .iter()
+                            .zip(boxes)
+                            .map(|(r, (hull, each))| match hull.contains(q) {
+                                true => region_holds(body, f, r, &pieces, q, each),
+                                false => Some(false),
+                            })
+                            .collect();
+                        if let Some(held) = held {
+                            if let Some(r) = held.iter().position(|&h| h) {
+                                moved.push((r, l));
+                            }
+                            continue;
+                        }
+                    }
+                    let drawn = drawn.get_or_init(|| match &split.outlines {
+                        Some(o) => o.clone(),
+                        None => plane_outlines(body, f, &split.regions, &pieces),
+                    });
                     let outlines = outlines.get_or_init(|| {
-                        split
-                            .outlines
+                        drawn
                             .iter()
                             .flatten()
                             .map(|o| {
@@ -822,8 +850,7 @@ fn plan(a: &Body, b: &Body, op: Op) -> R<Plan> {
                     let Some(q) = clear_point(cands, outlines) else {
                         continue;
                     };
-                    if let Some(r) = split
-                        .outlines
+                    if let Some(r) = drawn
                         .iter()
                         .position(|o| o.as_ref().is_some_and(|o| inside_poly(q, o)))
                     {
@@ -2735,7 +2762,9 @@ pub(crate) fn piece_samples(p: &Piece, forward: bool, out: &mut Vec<Point3>) {
 pub(crate) struct Split {
     pub(crate) regions: Vec<Region>,
     pub(crate) open: Vec<Walk>,
-    pub(crate) outlines: Vec<Option<Vec<Point2>>>,
+    /// None when the face is planar and was split exactly: `region_holds` decides then, and the
+    /// outlines are drawn only where it cannot (`plane_outlines`).
+    pub(crate) outlines: Option<Vec<Option<Vec<Point2>>>>,
 }
 
 pub(crate) fn split_face(
@@ -2830,6 +2859,24 @@ pub(crate) fn split_face(
     // its orientation is known (the first loop is the outer one) and it needs no outline
     let planar = matches!(face.surface, Surface::Plane(_));
     let untouched = |cyc: &Vec<usize>| planar && cyc.iter().all(|&i| i < nb);
+    if let Surface::Plane(pl) = &face.surface {
+        let walks: Vec<Walk> = cycles
+            .iter()
+            .map(|cyc| cyc.iter().map(|&i| half[i]).collect())
+            .collect();
+        let kind = |k: usize| match untouched(&cycles[k]) {
+            true if cycles[k][0] < outer_len => Some(Cycle::Outer),
+            true => Some(Cycle::Hole),
+            false => None,
+        };
+        if let Some((regions, open)) = plane_split(pl, face.same_sense, &walks, kind, pieces, outer)? {
+            return Ok(Split {
+                regions,
+                open,
+                outlines: None,
+            });
+        }
+    }
     let mirror = |p: Point2| {
         if face.same_sense {
             p
@@ -2843,12 +2890,20 @@ pub(crate) fn split_face(
             if untouched(cyc) {
                 return None;
             }
-            let mut samples = Vec::new();
-            for &i in cyc {
-                piece_samples(&pieces[half[i].0], half[i].1, &mut samples);
-            }
-            // pole-aware drawing, then mirrored so every face's loops run counter-clockwise
-            let (pts, _) = forge_topo::uv::draw_loop(body, f, &samples);
+            let walk = cyc.iter().map(|&i| half[i]);
+            let pts = match &face.surface {
+                Surface::Cylinder(c) => cylinder_outline(c, walk, pieces),
+                _ => None,
+            };
+            let pts = pts.unwrap_or_else(|| {
+                let mut samples = Vec::new();
+                for &i in cyc {
+                    piece_samples(&pieces[half[i].0], half[i].1, &mut samples);
+                }
+                // pole-aware drawing
+                forge_topo::uv::draw_loop(body, f, &samples).0
+            });
+            // mirrored so every face's loops run counter-clockwise
             Some(pts.into_iter().map(mirror).collect())
         })
         .collect();
@@ -3012,8 +3067,243 @@ pub(crate) fn split_face(
     Ok(Split {
         regions,
         open,
-        outlines,
+        outlines: Some(outlines),
     })
+}
+
+/// A walk on a cylinder made of rulings and circles about its axis, drawn exactly in (u, v): a
+/// ruling keeps u, a circle keeps v and turns u by its own angle, so its corners are the outline.
+/// None for any other piece.
+fn cylinder_outline(
+    c: &Cylinder,
+    walk: impl Iterator<Item = (usize, bool)>,
+    pieces: &[Piece],
+) -> Option<Vec<Point2>> {
+    let z = c.frame.z();
+    let mut pts: Vec<Point2> = Vec::new();
+    let mut at: Option<Point2> = None;
+    for (p, fwd) in walk {
+        let pc = &pieces[p];
+        let a = match at {
+            Some(a) => a,
+            None => c.project(piece_end(pc, fwd)),
+        };
+        pts.push(a);
+        let b = match &pc.curve {
+            Curve::Line(l) if l.dir.cross(z).length() <= 1e-12 => {
+                Point2::new(a.x, c.project(piece_end(pc, !fwd)).y)
+            }
+            Curve::Circle(k)
+                if k.frame.z().cross(z).length() <= 1e-12 && (k.radius - c.radius).abs() <= tol::LINEAR =>
+            {
+                let turn = pc.range.width() * k.frame.z().dot(z).signum();
+                Point2::new(a.x + if fwd { turn } else { -turn }, a.y)
+            }
+            _ => return None,
+        };
+        at = Some(b);
+    }
+    Some(pts)
+}
+
+/// A cycle of original boundary only, untouched: the face's outer loop or one of its holes.
+#[derive(Clone, Copy, PartialEq)]
+enum Cycle {
+    Outer,
+    Hole,
+}
+
+/// `split_face` on a plane, exactly: each cycle's signed area and where each hole lies from the
+/// pieces' own lines and conics, no outline drawn. None when a piece is another curve or a test
+/// is undecided (a ray through a vertex at every angle tried), for the drawn split to do.
+#[allow(clippy::type_complexity)]
+fn plane_split(
+    pl: &Plane,
+    same_sense: bool,
+    walks: &[Walk],
+    kind: impl Fn(usize) -> Option<Cycle>,
+    pieces: &[Piece],
+    outer: bool,
+) -> R<Option<(Vec<Region>, Vec<Walk>)>> {
+    let n = pl.frame.z().get() * if same_sense { 1.0 } else { -1.0 };
+    let mut areas: Vec<f64> = Vec::with_capacity(walks.len());
+    for (k, w) in walks.iter().enumerate() {
+        areas.push(match kind(k) {
+            Some(Cycle::Outer) => f64::INFINITY,
+            Some(Cycle::Hole) => -1.0,
+            None => match plane_area(n, w, pieces) {
+                Some(a) => a,
+                None => return Ok(None),
+            },
+        });
+    }
+    let outer_of: Vec<usize> = (0..walks.len()).filter(|&k| areas[k] > 0.0).collect();
+    let mut regions: Vec<Region> = outer_of.iter().map(|&k| vec![walks[k].clone()]).collect();
+    let boxes = std::cell::OnceCell::<Vec<(Box3, Vec<Box3>)>>::new();
+    let mut open: Vec<Walk> = Vec::new();
+    for (k, w) in walks.iter().enumerate() {
+        if areas[k] > 0.0 {
+            continue;
+        }
+        // a point of the hole: just off its longest piece on its material side (the left), or an
+        // untouched hole's own vertex, as it touches no new edge
+        let probe = match kind(k) {
+            Some(_) => piece_end(&pieces[w[0].0], w[0].1),
+            None => {
+                let size = |h: &(usize, bool)| {
+                    let pc = &pieces[h.0];
+                    let m = pc.curve.eval(pc.range.mid());
+                    m.distance(pc.curve.eval(pc.range.lo)) + m.distance(pc.curve.eval(pc.range.hi))
+                };
+                let h = w
+                    .iter()
+                    .copied()
+                    .max_by(|a, b| size(a).total_cmp(&size(b)))
+                    .ok_or(BoolError::Internal("empty cycle"))?;
+                let pc = &pieces[h.0];
+                let d = pc.curve.deriv(pc.range.mid());
+                let along = if h.1 { d.d1 } else { -d.d1 };
+                let Some(left) = n.cross(along).normalize() else {
+                    return Ok(None);
+                };
+                d.p + left * (1e-3 * size(&h))
+            }
+        };
+        // the smallest outer cycle holding it; the untouched outer loop holds every hole
+        let mut host: Option<usize> = None;
+        for (r, &o) in outer_of.iter().enumerate() {
+            let holds = match kind(o) {
+                Some(Cycle::Outer) => true,
+                _ => {
+                    let (hull, each) = &boxes
+                        .get_or_init(|| outer_of.iter().map(|&o| walk_boxes(&walks[o], pieces)).collect())[r];
+                    hull.contains(probe)
+                        && match plane_inside(pl, probe, &walks[o], pieces, each) {
+                            Some(b) => b,
+                            None => return Ok(None),
+                        }
+                }
+            };
+            if holds && host.is_none_or(|h| areas[o] < areas[outer_of[h]]) {
+                host = Some(r);
+            }
+        }
+        match host {
+            Some(r) => regions[r].push(w.clone()),
+            None if !outer => open.push(w.clone()),
+            None => return Err(BoolError::Internal("hole outside every region")),
+        }
+    }
+    Ok(Some((regions, open)))
+}
+
+/// Twice the area a closed walk on a plane bounds about normal `n` (positive counter-clockwise),
+/// exactly: half the integral of p x dp, in closed form for lines and conics. None for another curve.
+fn plane_area(n: Vec3, walk: &[(usize, bool)], pieces: &[Piece]) -> Option<f64> {
+    let r = piece_end(&pieces[walk.first()?.0], walk[0].1);
+    let mut a = Vec3::new(0.0, 0.0, 0.0);
+    for &(p, fwd) in walk {
+        let pc = &pieces[p];
+        let (t0, t1) = (pc.range.lo, pc.range.hi);
+        let (p0, p1) = (pc.curve.eval(t0) - r, pc.curve.eval(t1) - r);
+        let c = match &pc.curve {
+            Curve::Line(_) => p0.cross(p1),
+            // o + a cos t x + b sin t y: (o - r) x (p1 - p0) + a b (t1 - t0) x X y
+            Curve::Circle(k) => {
+                (k.frame.origin - r).cross(p1 - p0) + k.frame.z().get() * (k.radius * k.radius * (t1 - t0))
+            }
+            Curve::Ellipse(e) => {
+                (e.frame.origin - r).cross(p1 - p0) + e.frame.z().get() * (e.major * e.minor * (t1 - t0))
+            }
+            _ => return None,
+        };
+        a = if fwd { a + c } else { a - c };
+    }
+    Some(a.dot(n))
+}
+
+/// Where a walk of pieces starts along half-edge (p, forward).
+fn piece_end(p: &Piece, forward: bool) -> Point3 {
+    p.curve.eval(if forward { p.range.lo } else { p.range.hi })
+}
+
+/// Boxes holding a walk of pieces: all of it, and each piece (grown by a tolerance).
+fn walk_boxes(walk: &[(usize, bool)], pieces: &[Piece]) -> (Box3, Vec<Box3>) {
+    let each: Vec<Box3> = walk
+        .iter()
+        .map(|&(p, _)| pieces[p].curve.bbox(pieces[p].range).grow(tol::LINEAR))
+        .collect();
+    (each.iter().fold(Box3::EMPTY, |a, b| a.hull(b)), each)
+}
+
+/// Whether point `q` of plane `pl` lies inside the closed walk, by the parity of a ray's crossings
+/// in closed form, at up to three angles. None when every ray meets a vertex or runs along a piece.
+fn plane_inside(
+    pl: &Plane,
+    q: Point3,
+    walk: &[(usize, bool)],
+    pieces: &[Piece],
+    boxes: &[Box3],
+) -> Option<bool> {
+    let n = pl.frame.z().get();
+    'ray: for angle in [0.1234, 1.9876, 4.0123] {
+        let (sn, cs) = dmath::sin_cos(angle);
+        let d = pl.frame.x() * cs + pl.frame.y() * sn;
+        let mut crossings = 0;
+        for (&(p, _), b) in walk.iter().zip(boxes) {
+            if !crate::classify::ray_hits_box(q, d, b) {
+                continue;
+            }
+            match crate::classify::plane_ray_crossings(n, q, d, &pieces[p].curve, pieces[p].range) {
+                Some(k) => crossings += k,
+                None => continue 'ray,
+            }
+        }
+        return Some(crossings % 2 == 1);
+    }
+    None
+}
+
+/// Whether point `q` of planar face `f` lies inside a region's outer walk (of a split made by
+/// `plane_split`); None when undecided.
+fn region_holds(
+    body: &Body,
+    f: FaceId,
+    region: &Region,
+    pieces: &[Piece],
+    q: Point3,
+    boxes: &[Box3],
+) -> Option<bool> {
+    let Surface::Plane(pl) = &body.face(f).surface else {
+        return None;
+    };
+    plane_inside(pl, q, region.first()?, pieces, boxes)
+}
+
+/// The outlines `split_face` draws for a planar face's regions (mirrored parameter plane).
+fn plane_outlines(body: &Body, f: FaceId, regions: &[Region], pieces: &[Piece]) -> Vec<Option<Vec<Point2>>> {
+    let face = body.face(f);
+    regions
+        .iter()
+        .map(|r| {
+            let mut samples = Vec::new();
+            for &(p, fwd) in &r[0] {
+                piece_samples(&pieces[p], fwd, &mut samples);
+            }
+            let (pts, _) = forge_topo::uv::draw_loop(body, f, &samples);
+            Some(
+                pts.into_iter()
+                    .map(|p| {
+                        if face.same_sense {
+                            p
+                        } else {
+                            Point2::new(-p.x, p.y)
+                        }
+                    })
+                    .collect(),
+            )
+        })
+        .collect()
 }
 
 pub(crate) fn inside_poly(p: Point2, poly: &[Point2]) -> bool {
