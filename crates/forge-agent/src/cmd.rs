@@ -319,8 +319,13 @@ impl Session {
             let bbox = [bb.x.lo, bb.y.lo, bb.z.lo, bb.x.hi, bb.y.hi, bb.z.hi];
             let (f, e, v) = counts(body);
             // a failed build's numbers are in the JSON; the text keeps to the error
-            let ids: Vec<usize> = m.solids_after(m.built()).iter().map(|s| s.id).collect();
-            // each body's share of the volume, from the faces' cached triangles
+            let solids = m.solids_after(m.built());
+            let ids: Vec<usize> = solids.iter().map(|s| s.id).collect();
+            // each body's exact volume, else its share from the faces' cached triangles
+            let exact: Vec<Option<f64>> = solids
+                .iter()
+                .map(|s| forge_topo::mass::mass(&s.body).ok().map(|p| p.volume))
+                .collect();
             let mut vols = vec![0.0; ids.len()];
             let n = m.built();
             let faces = m.faces().to_vec();
@@ -330,6 +335,9 @@ impl Session {
                 {
                     vols[k] += fm.volume;
                 }
+            }
+            for (v, x) in vols.iter_mut().zip(exact) {
+                *v = x.unwrap_or(*v);
             }
             if ok {
                 text.push_str(&format!(
