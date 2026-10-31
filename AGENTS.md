@@ -32,6 +32,16 @@ coil [op] FRAME [axis ..] LOOPS (pitch P turns N | turns N height H | pitch P he
 loft [op] [smooth [start W] [end W]] (profile FRAME LOOPS).. [rail I PATH.. | centre PATH]     I: vertex (where segment I starts)
 PATH: (line AX AY AZ BX BY BZ | arc FRAME R START SWEEP)..     tangent-continuous; an arc's FRAME is its circle's, centre at `at`
 plane FRAME                      a work plane, for `to FEAT` and `on FEAT`
+rib T [pos|neg] [web] [flip] [draft A] FRAME (line AX AY BX BY | arc CX CY R START SWEEP)..
+  a wall along an open path, ends run on until they meet the part. Default: fills across the path
+  to its left (flip: right), T thick along the frame's z (sym; pos/neg: one side). web: fills along
+  -z (flip: +z), T thick across the path (pos: to its left). draft A >= 0: thicker towards the part
+offset D REF..                   faces moved D along their outward normals, neighbours re-met
+thicken [op] T [neg|sym] REF..   a slab T thick on the faces, outward (neg: inward); op new = slab alone
+delete REF..                     faces removed, the gap closed by the faces around it: a hole, boss or
+                                 pocket (its rim a whole loop of a face), or a chamfer/fillet strip
+replace REF with FEAT [@face]    a face put on a work plane or an earlier feature's face
+move REF.. (by DX DY DZ | turn A OX OY OZ AX AY AZ)   faces moved or turned, neighbours re-met
 FRAME: [xy|xz|yz|-xy|-xz|-yz | z A B C [x A B C] | on FEAT] [at X Y Z]     default: xy at 0 0 0
   xy: normal +z; xz: sketch x,y = world x,z, normal -y; yz: world y,z, normal +x;
   -xy: sketch y = world -y, normal -z (drill down); -xz: normal +y; -yz: normal -x

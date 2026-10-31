@@ -1,17 +1,21 @@
 //! A part as a history of features, and regenerating it into a solid.
 
 pub mod adversarial;
+mod edit;
+pub mod edits;
 pub mod extent;
 pub mod fillets;
 pub mod finishing;
 pub mod hole;
 pub mod pattern;
+mod rib;
 pub mod suite;
 pub mod swept;
 pub mod torture;
 mod trace;
 mod upto;
 
+pub use edit::{Edit, EditError, Motion, Side};
 pub use extent::{Extent, ExtentError, Target, Toward, Turn};
 use forge_bool::{BoolError, CpuBatch, Op, Seg2, Shape, boolean_into};
 use forge_gpu::AutoBatch;
@@ -25,6 +29,7 @@ use forge_topo::{Body, Name};
 pub use hole::{End, Head, Hole, HoleError, Thread};
 pub use pattern::{Layout, PatternError, Row, Source, copy_sources, instance_name};
 use pattern::{instances, moved, moved_shape};
+pub use rib::{Rib, RibError};
 pub use swept::{Coil, CoilSize, Loft, PathEnds, Sweep};
 
 /// One step of a part's history.
@@ -73,6 +78,8 @@ pub enum Feature {
     Coil(Box<Coil>),
     /// Ruled walls through two or more profiles.
     Loft(Box<Loft>),
+    /// A rib, offset or thickened faces, or a direct edit of the part's faces.
+    Edit(Edit),
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -142,6 +149,10 @@ pub enum RegenError {
     Loft {
         feature: usize,
         error: forge_ops::LoftError,
+    },
+    Edit {
+        feature: usize,
+        error: EditError,
     },
     /// A feature that combines with or changes the part came before any part existed.
     NothingToCombine {
@@ -344,6 +355,7 @@ fn modifies(f: &Feature) -> bool {
             | Feature::Shell { .. }
             | Feature::Draft { .. }
             | Feature::Pattern { of: Source::Body, .. }
+            | Feature::Edit(_)
     )
 }
 
@@ -496,6 +508,7 @@ fn modify(features: &[Feature], i: usize, body: &Body, threads: usize) -> Result
             .map(|b| b.compact())
             .map_err(|error| RegenError::Boolean { feature: i, error })
         }
+        Feature::Edit(e) => edit::apply(features, i, e, body),
         _ => unreachable!("solid features make tools"),
     }
 }

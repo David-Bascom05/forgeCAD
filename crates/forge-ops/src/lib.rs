@@ -3,6 +3,7 @@
 
 pub mod chamfer;
 pub mod corner;
+pub mod direct;
 pub mod draft;
 pub mod extrude;
 pub mod fillet;
@@ -14,8 +15,10 @@ mod selfx;
 pub mod shell;
 mod skin;
 pub mod sweep;
+pub mod thicken;
 
 pub use chamfer::{ChamferError, ChamferSize, chamfer};
+pub use direct::{DirectError, delete_faces, move_faces, offset_faces, replace_face};
 pub use draft::{DraftError, draft};
 pub use extrude::{ExtrudeError, extrude};
 pub use fillet::{FilletEdge, FilletError, Radius, fillet};
@@ -28,3 +31,4 @@ pub use sweep::{
     CoilError, Handed, PathSeg, Stretch, SweepError, Winding, Wound, coil, coil_motion, sweep,
     sweep_stretches,
 };
+pub use thicken::{ThickenError, thicken};

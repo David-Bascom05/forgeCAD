@@ -129,7 +129,7 @@ fn bad(feature: usize) -> impl Fn(ExtentError) -> RegenError {
 }
 
 /// The surface a target names.
-fn surface(features: &[Feature], i: usize, t: &Target) -> Result<Surface, RegenError> {
+pub(crate) fn surface(features: &[Feature], i: usize, t: &Target) -> Result<Surface, RegenError> {
     let (k, name) = match *t {
         Target::Plane(k) => {
             return match features.get(k) {

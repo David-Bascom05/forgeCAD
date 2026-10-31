@@ -456,7 +456,12 @@ fn edge_curve(
             let Some(r) = fit(&c, ps, pe, closed) else {
                 continue;
             };
-            if closed && c.deriv(r.lo).d1.dot(oc.deriv(or.lo).d1) <= 0.0 {
+            // a closed edge keeps its turn: a circle its axis, else its tangent where it was
+            let turn = match (&c, oc) {
+                (Curve::Circle(k), Curve::Circle(o)) => k.frame.z().dot(o.frame.z()),
+                _ => c.deriv(r.lo).d1.dot(oc.deriv(oc.closest(ps, or)).d1),
+            };
+            if closed && turn <= 0.0 {
                 continue;
             }
             let score = c.eval(r.mid()).distance(guess);

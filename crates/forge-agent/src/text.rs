@@ -5,8 +5,8 @@
 use forge_geom::Circle;
 use forge_math::{Frame, Point2, Point3, Vec2, Vec3, dmath};
 use forge_model::{
-    Coil, CoilSize, Combine, End, Extent, Feature, Head, Hole, Layout, Loft, Part, PathEnds, Row, Source,
-    Sweep, Target, Thread, Toward, Turn,
+    Coil, CoilSize, Combine, Edit, End, Extent, Feature, Head, Hole, Layout, Loft, Motion, Part, PathEnds,
+    Rib, Row, Side, Source, Sweep, Target, Thread, Toward, Turn,
 };
 use forge_ops::{
     Axis2, ChamferSize, Handed, LoftGuides, LoftKind, PathSeg, Profile, ProfileLoop, Radius, Segment,
@@ -629,6 +629,199 @@ pub const KINDS: &[Kind] = &[
             true
         },
     },
+    Kind {
+        name: "rib",
+        syntax: "rib T [pos|neg] [web] [flip] [draft A] FRAME (line AX AY BX BY | arc CX CY R START SWEEP)..",
+        parse: |p| {
+            let thickness = p.num()?;
+            let side = p.side(Side::Both);
+            let web = p.eat("web");
+            let flip = p.eat("flip");
+            let draft = if p.eat("draft") { p.angle()? } else { 0.0 };
+            let plane = p.frame()?;
+            let mut path = Vec::new();
+            while !p.done() {
+                path.push(match p.next()? {
+                    "line" => Segment::Line {
+                        a: p.p2()?,
+                        b: p.p2()?,
+                    },
+                    "arc" => Segment::Arc {
+                        center: p.p2()?,
+                        radius: p.num()?,
+                        start: p.angle()?,
+                        sweep: p.angle()?,
+                    },
+                    t => return Err(format!("expected line or arc, found '{t}'")),
+                });
+            }
+            Ok(Feature::Edit(Edit::Rib(Box::new(Rib {
+                plane,
+                path,
+                thickness,
+                side,
+                web,
+                flip,
+                draft,
+            }))))
+        },
+        print: |f, w| {
+            let Feature::Edit(Edit::Rib(r)) = f else {
+                return false;
+            };
+            w.num(r.thickness);
+            w.side(r.side, Side::Both);
+            for (on, word) in [(r.web, "web"), (r.flip, "flip")] {
+                if on {
+                    w.word(word);
+                }
+            }
+            if r.draft.to_bits() != 0 {
+                w.word("draft");
+                w.angle(r.draft);
+            }
+            w.frame(&r.plane);
+            for s in &r.path {
+                match *s {
+                    Segment::Line { a, b } => {
+                        w.word("line");
+                        w.nums(&[a.x, a.y, b.x, b.y]);
+                    }
+                    Segment::Arc {
+                        center,
+                        radius,
+                        start,
+                        sweep,
+                    } => {
+                        w.word("arc");
+                        w.nums(&[center.x, center.y, radius]);
+                        w.angle(start);
+                        w.angle(sweep);
+                    }
+                    Segment::Circle { .. } => unreachable!("a rib's path has no whole circles"),
+                }
+            }
+            true
+        },
+    },
+    Kind {
+        name: "offset",
+        syntax: "offset D REF..",
+        parse: |p| {
+            let distance = p.num()?;
+            Ok(Feature::Edit(Edit::Offset {
+                faces: p.refs()?,
+                distance,
+            }))
+        },
+        print: |f, w| {
+            let Feature::Edit(Edit::Offset { faces, distance }) = f else {
+                return false;
+            };
+            w.num(*distance);
+            w.names(faces);
+            true
+        },
+    },
+    Kind {
+        name: "thicken",
+        syntax: "thicken [op] T [neg|sym] REF..",
+        parse: |p| {
+            let op = p.op()?;
+            let thickness = p.num()?;
+            let side = p.side(Side::Pos);
+            Ok(Feature::Edit(Edit::Thicken {
+                faces: p.refs()?,
+                thickness,
+                side,
+                op,
+            }))
+        },
+        print: |f, w| {
+            let Feature::Edit(Edit::Thicken {
+                faces,
+                thickness,
+                side,
+                op,
+            }) = f
+            else {
+                return false;
+            };
+            w.op(*op);
+            w.num(*thickness);
+            w.side(*side, Side::Pos);
+            w.names(faces);
+            true
+        },
+    },
+    Kind {
+        name: "delete",
+        syntax: "delete REF..",
+        parse: |p| Ok(Feature::Edit(Edit::Delete { faces: p.refs()? })),
+        print: |f, w| {
+            let Feature::Edit(Edit::Delete { faces }) = f else {
+                return false;
+            };
+            w.names(faces);
+            true
+        },
+    },
+    Kind {
+        name: "replace",
+        syntax: "replace REF with FEAT [@face]",
+        parse: |p| {
+            let face = p.one_ref()?;
+            p.expect("with")?;
+            Ok(Feature::Edit(Edit::Replace {
+                face,
+                with: p.target()?,
+            }))
+        },
+        print: |f, w| {
+            let Feature::Edit(Edit::Replace { face, with }) = f else {
+                return false;
+            };
+            w.name(*face);
+            w.word("with");
+            w.target(with);
+            true
+        },
+    },
+    Kind {
+        name: "move",
+        syntax: "move REF.. (by DX DY DZ | turn A OX OY OZ AX AY AZ)",
+        parse: |p| {
+            let faces = p.refs()?;
+            let motion = match p.next()? {
+                "by" => Motion::Translate(p.vec3()?),
+                "turn" => Motion::Rotate {
+                    angle: p.angle()?,
+                    origin: p.point3()?,
+                    axis: p.vec3()?,
+                },
+                t => return Err(format!("expected by or turn, found '{t}'")),
+            };
+            Ok(Feature::Edit(Edit::Move { faces, motion }))
+        },
+        print: |f, w| {
+            let Feature::Edit(Edit::Move { faces, motion }) = f else {
+                return false;
+            };
+            w.names(faces);
+            match *motion {
+                Motion::Translate(d) => {
+                    w.word("by");
+                    w.nums(&[d.x, d.y, d.z]);
+                }
+                Motion::Rotate { origin, axis, angle } => {
+                    w.word("turn");
+                    w.angle(angle);
+                    w.nums(&[origin.x, origin.y, origin.z, axis.x, axis.y, axis.z]);
+                }
+            }
+            true
+        },
+    },
 ];
 
 type R<T> = Result<T, String>;
@@ -803,6 +996,8 @@ const OPS: [(&str, Combine); 4] = [
     ("keep", Combine::Keep),
 ];
 
+const SIDES: [(&str, Side); 3] = [("sym", Side::Both), ("pos", Side::Pos), ("neg", Side::Neg)];
+
 /// Named orientations: x, y, z axes.
 const ORIENT: [(&str, [Vec3; 3]); 6] = [
     ("xy", [Vec3::X, Vec3::Y, Vec3::Z]),
@@ -921,6 +1116,16 @@ impl P<'_> {
                 .parse()
                 .map(deg)
                 .map_err(|_| format!("expected an angle, found '{t}'")),
+        }
+    }
+    /// Which way a thickness goes: `pos`, `neg` or `sym`, else `default`.
+    fn side(&mut self, default: Side) -> Side {
+        match SIDES.iter().find(|s| s.0 == self.peek()) {
+            Some(s) => {
+                self.k += 1;
+                s.1
+            }
+            None => default,
         }
     }
     fn count(&mut self) -> R<usize> {
@@ -1331,6 +1536,11 @@ impl<'a> W<'a> {
             self.word(OPS.iter().find(|o| o.1 == op).expect("every op is named").0);
         }
     }
+    fn side(&mut self, side: Side, default: Side) {
+        if side != default {
+            self.word(SIDES.iter().find(|s| s.1 == side).expect("every side is named").0);
+        }
+    }
     fn feat(&mut self, i: usize) {
         if i < self.before.len() {
             let k = self.kinds[i];
@@ -1583,7 +1793,7 @@ impl<'a> W<'a> {
 mod tests {
     use super::*;
     use forge_math::rng::Rng;
-    use forge_model::{adversarial, fillets, finishing, suite, torture};
+    use forge_model::{adversarial, edits, fillets, finishing, suite, torture};
 
     fn round_trip(what: &str, part: &Part) {
         let text = print(part);
@@ -1966,6 +2176,56 @@ mod tests {
                 },
                 op: op(r),
             })),
+            13 => Feature::Plane(frame(r)),
+            14 => Feature::Edit(Edit::Rib(Box::new(Rib {
+                plane: frame(r),
+                path: (0..1 + r.below(3))
+                    .map(|_| {
+                        if r.bool() {
+                            Segment::Line { a: p2(r), b: p2(r) }
+                        } else {
+                            Segment::Arc {
+                                center: p2(r),
+                                radius: num(r),
+                                start: angle(r),
+                                sweep: angle(r),
+                            }
+                        }
+                    })
+                    .collect(),
+                thickness: num(r),
+                side: SIDES[r.below(3)].1,
+                web: r.bool(),
+                flip: r.bool(),
+                draft: if r.bool() { 0.0 } else { angle(r) },
+            }))),
+            15 => Feature::Edit(Edit::Offset {
+                faces: names(r),
+                distance: num(r),
+            }),
+            16 => Feature::Edit(Edit::Thicken {
+                faces: names(r),
+                thickness: num(r),
+                side: SIDES[r.below(3)].1,
+                op: op(r),
+            }),
+            17 => Feature::Edit(Edit::Delete { faces: names(r) }),
+            18 => Feature::Edit(Edit::Replace {
+                face: Name(r.next_u64()),
+                with: target(r, i),
+            }),
+            9 => Feature::Edit(Edit::Move {
+                faces: names(r),
+                motion: if r.bool() {
+                    Motion::Translate(Vec3::new(num(r), num(r), num(r)))
+                } else {
+                    Motion::Rotate {
+                        origin: Point3::new(num(r), num(r), num(r)),
+                        axis: Vec3::new(num(r), num(r), num(r)),
+                        angle: angle(r),
+                    }
+                },
+            }),
             _ => Feature::Plane(frame(r)),
         }
     }
@@ -2012,9 +2272,14 @@ mod tests {
         for seed in 1..=20 {
             round_trip("fuzz", &suite::fuzz(seed, 80));
             round_trip("finishing fuzz", &finishing::fuzz(seed));
+            round_trip("edits fuzz", &edits::fuzz(seed));
         }
         round_trip("torture", &torture::part(300));
-        for (name, part, _) in fillets::cases().into_iter().chain(finishing::parts()) {
+        for (name, part, _) in fillets::cases()
+            .into_iter()
+            .chain(finishing::parts())
+            .chain(edits::parts())
+        {
             round_trip(name, &part);
         }
         for (name, part, _) in fillets::refusals() {

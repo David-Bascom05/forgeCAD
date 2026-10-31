@@ -429,6 +429,18 @@ pub fn explain(e: &RegenError) -> (String, String) {
             format!("loft: {error:?}"),
             hint("give every profile the same loops and segment counts, in one plane each, apart"),
         ),
+        Edit { error, .. } => (
+            format!("edit: {error:?}"),
+            hint(match error {
+                forge_model::EditError::Rib(_) => {
+                    "the rib must meet the part on its fill side (try flip) and run into it at both ends"
+                }
+                forge_model::EditError::Direct(forge_ops::DirectError::CannotHeal { .. }) => {
+                    "delete whole holes or bosses, or single chamfer and fillet strips"
+                }
+                _ => "try a smaller distance or angle; the faces' neighbours must still meet",
+            }),
+        ),
         NothingToCombine { .. } => (
             "nothing to combine with yet".into(),
             hint("start with a solid: extrude, revolve or ball (op new)"),
@@ -443,6 +455,31 @@ mod tests {
 
     fn finished(m: &Model) -> Body {
         m.body().expect("built").compact()
+    }
+
+    /// The part file's ribs, offsets, thickenings and direct edits, picked by selectors.
+    #[test]
+    fn edits_from_text() {
+        let src = "extrude 20 rect 0 0 40 30 circle 20 15 4
+offset 1 (faces cyl)
+move (faces normal +x) by 2 0 0
+top: plane at 0 0 24
+replace (faces normal +z) with top
+delete (faces cyl)
+shell 2 (faces normal +z)
+rib 2 web draft 1 at 0 0 24 line 10 15 30 15
+thicken 1 (faces normal -z)
+";
+        let m = Model::new(src);
+        assert!(m.error.is_none(), "{:?}", m.error);
+        let gusset = "extrude 5 rect 0 0 30 40
+extrude -5 xz rect 0 0 30 40
+rib 2 flip yz at 15 0 0 line 5 25 25 5
+";
+        let m = Model::new(gusset);
+        assert!(m.error.is_none(), "{:?}", m.error);
+        let m = Model::new("extrude 5 rect 0 0 10 10\ndelete (faces normal +z)\n");
+        assert!(m.error.is_some());
     }
 
     /// Built line by line, a part is the part `regenerate` makes.
