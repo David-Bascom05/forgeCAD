@@ -437,6 +437,16 @@ fn chains(body: &Body, all: &[(EdgeId, f64)]) -> Vec<Chain> {
             } else {
                 x.curve.deriv(x.range.lo).d1
             };
+            // a traced curve's end tangent is only as good as its trace: the surfaces' normals
+            // there give the exact one
+            if let (Curve::Intersection(_), [c0, c1]) = (&x.curve, &x.coedges[..]) {
+                let p = body.vertex(v).point;
+                let n = |c: CoedgeId| body.face(body.coedge_face(c)).surface.gradient(p);
+                if let Some(u) = n(*c0).cross(n(*c1)).normalize() {
+                    let u = u.get();
+                    return Some(if u.dot(d) < 0.0 { -u } else { u });
+                }
+            }
             d.normalize().map(|u| u.get())
         };
         let (Some(ta), Some(tb)) = (tan(a), tan(b)) else {
