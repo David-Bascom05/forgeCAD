@@ -3714,3 +3714,27 @@ fn equal_rods_crossing_end_pieces_at_free_vertices() {
         }
     }
 }
+
+/// A cone whose apex sits on a cylinder's top rim: the traced curve runs into the apex, a branch
+/// point where a forward step makes little headway. Requiring half a step of it (meant only for
+/// stepping over a touch) stopped the chain there: Unsupported for the cut and keep.
+#[test]
+fn cone_apex_on_a_cylinder_rim() {
+    let mut seen = 0;
+    for (name, part) in forge_model::adversarial::degenerate_parts() {
+        if !name.starts_with("cylinder_cone/apex_on_top_rim/") || name.ends_with("/Add") {
+            continue;
+        }
+        seen += 1;
+        let part = forge_model::adversarial::canonical(&part);
+        for b in [part.regenerate(), part.regenerate_nary(1)] {
+            let b = b.unwrap_or_else(|e| panic!("{name}: {e:?}"));
+            assert!(
+                forge_topo::check(&b).is_empty(),
+                "{name}: {:?}",
+                forge_topo::check(&b)
+            );
+        }
+    }
+    assert_eq!(seen, 2);
+}

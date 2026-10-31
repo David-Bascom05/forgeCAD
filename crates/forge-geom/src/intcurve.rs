@@ -494,20 +494,21 @@ fn march(
         // a step that lands behind, short or far from its guess jumped (a corner of a surface's
         // projection, another sheet) or stalled, and is retried shorter; at a touch, it steps
         // over along the chain
-        let ahead = |d: Vec3, h: f64| {
+        let ahead = |d: Vec3, h: f64, least: f64| {
             let guess = p + d * h;
-            refine(a, b, guess).filter(|&q| (q - p).dot(d) > 0.5 * h && q.distance(guess) <= h)
+            refine(a, b, guess).filter(|&q| (q - p).dot(d) > least * h && q.distance(guess) <= h)
         };
         let mut h = step;
         let q = loop {
-            if let Some(q) = ahead(d, h) {
+            if let Some(q) = ahead(d, h, 0.5) {
                 break q;
             }
             if h > step / 64.0 {
                 h *= 0.5;
                 continue;
             }
-            if let Some(q) = along.and_then(|u| [1.0, 2.0, 4.0].into_iter().find_map(|m| ahead(u, step * m)))
+            if let Some(q) =
+                along.and_then(|u| [1.0, 2.0, 4.0].into_iter().find_map(|m| ahead(u, step * m, 0.5)))
             {
                 break q;
             }
@@ -515,6 +516,14 @@ fn march(
             // of it back on the face is seeded and traced from there)
             if ends(a, p, d, h) || ends(b, p, d, h) {
                 return Some((pts, false));
+            }
+            // last, any forward step at all: near a branch point (a cone's apex on the other
+            // surface) every step makes little headway, and asking half a step stalled the chain
+            if let Some(q) = [1.0, 0.25, 1.0 / 16.0, 1.0 / 64.0]
+                .into_iter()
+                .find_map(|m| ahead(d, step * m, 0.0))
+            {
+                break q;
             }
             return None;
         };
