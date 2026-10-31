@@ -325,10 +325,10 @@ impl Session {
             let n = m.built();
             let faces = m.faces().to_vec();
             for (f, fm) in &faces {
-                if let (Some(fm), Some(b)) = (fm, m.body_of(n, Ent::Face(*f))) {
-                    if let Some(k) = ids.iter().position(|&i| i == b) {
-                        vols[k] += fm.volume;
-                    }
+                if let (Some(fm), Some(b)) = (fm, m.body_of(n, Ent::Face(*f)))
+                    && let Some(k) = ids.iter().position(|&i| i == b)
+                {
+                    vols[k] += fm.volume;
                 }
             }
             if ok {
