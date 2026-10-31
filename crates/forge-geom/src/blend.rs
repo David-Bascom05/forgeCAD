@@ -717,9 +717,17 @@ impl ProceduralCurve for Spring {
         }))
     }
     fn speed_bound(&self, range: Interval) -> f64 {
-        // foot = c - d grad(c): its speed is at most |c'| (1 + |d| L), L the gradient's turn rate
-        let b = self.spine.bbox(range);
-        curve_speed(&self.spine, range) * (1.0 + self.d.abs() * gradient_turn(&self.surface, &b))
+        // foot = c - d grad(c): its speed is at most |c'| (1 + |d| L), L the gradient's turn rate,
+        // bounded piece by piece: one box round a whole turn about an axis would hold the axis
+        let n = 16;
+        let w = range.width() / n as f64;
+        (0..n)
+            .map(|i| {
+                let r = Interval::new(range.lo + w * i as f64, range.lo + w * (i + 1) as f64);
+                let b = self.spine.bbox(r);
+                curve_speed(&self.spine, r) * (1.0 + self.d.abs() * gradient_turn(&self.surface, &b))
+            })
+            .fold(0.0, f64::max)
     }
     fn segments(&self, range: Interval, chord: f64) -> usize {
         // a chord of parameter length h sags at most h^2 max|P''| / 8

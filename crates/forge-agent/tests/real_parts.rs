@@ -105,3 +105,16 @@ extrude 40 at 0 15 60 circle 0 0 18
 ",
     );
 }
+
+/// A fillet where a half-round boss meets a 2 degree drafted wall: the springs are ellipses'
+/// feet, and their speed bound held a whole turn's box, which holds the boss's axis (R5).
+#[test]
+fn fillet_boss_on_drafted_wall() {
+    builds_valid(
+        "box: extrude 95 rect -120 -65 240 130
+draft -2 xy at 0 0 95 (faces of box normal +y)
+boss: extrude 36 xz at -72 87 95 loop line -33.5 0 33.5 0 arc 0 0 33.5 0 -90 arc 0 0 33.5 -90 -90
+fillet 2 (edges between boss box concave)
+",
+    );
+}
