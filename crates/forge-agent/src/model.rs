@@ -351,22 +351,6 @@ impl Model {
         Ok((body, ents))
     }
 
-    /// Resolves a line's `@handle` or `(selector)` against the part before line `i`.
-    fn refs(&self, i: usize, r: &str) -> Result<Vec<Name>, String> {
-        if let Some(n) = text::full_name(r) {
-            return Ok(vec![n]);
-        }
-        if r.starts_with('@') {
-            let body = self.body_after(i).ok_or("nothing is built above this line")?;
-            return Ok(vec![select::name(body, select::by_handle(body, r)?)]);
-        }
-        let (body, ents) = self.select(r, Some(i))?;
-        self.picks.borrow_mut().push((i, ents.len()));
-        Ok(ents.into_iter().map(|e| select::name(body, e)).collect())
-    }
-}
-
-impl Model {
     /// The planar face a reference names before line `i`: its name and its plane, z outward.
     fn face(&self, i: usize, r: &str) -> Result<(Name, forge_math::Frame), String> {
         let names = self.refs(i, r)?;
@@ -382,6 +366,20 @@ impl Model {
             forge_geom::Surface::Plane(p) => Ok((name, p.frame.flipped())),
             _ => Err(format!("{r} is not a planar face")),
         }
+    }
+
+    /// Resolves a line's `@handle` or `(selector)` against the part before line `i`.
+    fn refs(&self, i: usize, r: &str) -> Result<Vec<Name>, String> {
+        if let Some(n) = text::full_name(r) {
+            return Ok(vec![n]);
+        }
+        if r.starts_with('@') {
+            let body = self.body_after(i).ok_or("nothing is built above this line")?;
+            return Ok(vec![select::name(body, select::by_handle(body, r)?)]);
+        }
+        let (body, ents) = self.select(r, Some(i))?;
+        self.picks.borrow_mut().push((i, ents.len()));
+        Ok(ents.into_iter().map(|e| select::name(body, e)).collect())
     }
 }
 

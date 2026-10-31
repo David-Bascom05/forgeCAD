@@ -48,19 +48,7 @@ pub const KINDS: &[Kind] = &[
         parse: |p| {
             let op = p.op()?;
             let extent = p.turn()?;
-            let sk = p.sketch();
-            let plane = match sk {
-                Some(s) => s.plane,
-                None => p.frame()?,
-            };
-            let axis = p.axis(sk)?;
-            let profile = match sk {
-                Some(s) => p.region(s)?,
-                None => Profile {
-                    plane,
-                    loops: p.loops()?,
-                },
-            };
+            let (profile, axis) = p.axial()?;
             Ok(Feature::Revolve {
                 profile,
                 axis,
@@ -460,12 +448,10 @@ pub const KINDS: &[Kind] = &[
     },
     Kind {
         name: "coil",
-        syntax: "coil [op] FRAME [axis x|y|OX OY DX DY] LOOPS (pitch P turns N | turns N height H | pitch P height H | pitch P to FEAT [@face] [off N]) [taper A] [left]",
+        syntax: "coil [op] (FRAME [axis x|y|OX OY DX DY] LOOPS | SKETCH [axis L] [E]) (pitch P turns N | turns N height H | pitch P height H | pitch P to FEAT [@face] [off N]) [taper A] [left]",
         parse: |p| {
             let op = p.op()?;
-            let plane = p.frame()?;
-            let axis = p.axis(None)?;
-            let loops = p.loops()?;
+            let (profile, axis) = p.axial()?;
             let size = if p.eat("pitch") {
                 let pitch = p.num()?;
                 if p.eat("turns") {
@@ -503,7 +489,7 @@ pub const KINDS: &[Kind] = &[
                 Handed::Right
             };
             Ok(Feature::Coil(Box::new(Coil {
-                profile: Profile { plane, loops },
+                profile,
                 axis,
                 size,
                 taper,
@@ -672,7 +658,8 @@ pub const KINDS: &[Kind] = &[
                 return Err("a sketch goes on a face's outside: `on REF`, not `-on`".into());
             }
             let plane = p.frame()?;
-            let on = p.on;
+            let on = p.on.take();
+            let at = p.at.filter(|_| on.is_some());
             let mut rows = Vec::new();
             while p.eat(";") {
                 let start = p.k;
@@ -683,20 +670,32 @@ pub const KINDS: &[Kind] = &[
             }
             let fs = p.b.features;
             let mut s = sketch::build(plane, rows, &|t, want| value(t, fs, want))?;
-            s.on = on;
+            (s.on, s.at) = (on, at);
             Ok(Feature::Sketch(Box::new(s)))
         },
         print: |f, w| {
             let Feature::Sketch(s) = f else { return false };
-            match s.on {
-                Some(n) => {
-                    w.word("on");
-                    w.name(n);
-                    let o = s.plane.origin;
-                    w.word("at");
-                    w.nums(&[o.x, o.y, o.z]);
-                }
+            match &s.on {
                 None => w.frame(&s.plane),
+                Some(on) => {
+                    match on {
+                        forge_model::On::Face(n) => {
+                            w.word("on");
+                            w.name(*n);
+                        }
+                        forge_model::On::Feature { feature, point, flip } => {
+                            w.word(if *flip { "-on" } else { "on" });
+                            w.feat(*feature);
+                            if let Some(pt) = point {
+                                w.word(pt);
+                            }
+                        }
+                    }
+                    if let Some(o) = s.at {
+                        w.word("at");
+                        w.nums(&[o.x, o.y, o.z]);
+                    }
+                }
             }
             for r in &s.rows {
                 w.s.push_str("\n ");
@@ -1055,6 +1054,7 @@ pub fn parse_line(line: &Line, before: &Before) -> R<Feature> {
         k: if param { 0 } else { 1 },
         b: before,
         on: None,
+        at: None,
     };
     let f = (k.parse)(&mut p)?;
     match p.t.get(p.k) {
@@ -1202,8 +1202,9 @@ pub(crate) struct P<'a> {
     t: &'a [String],
     k: usize,
     b: &'a Before<'a>,
-    /// The face the last frame was placed on, if it was.
-    on: Option<Name>,
+    /// What the last frame was read from, if a reference, and the origin written after it.
+    on: Option<forge_model::On>,
+    at: Option<Point3>,
 }
 
 /// What a number slot holds: a length (or plain number), an angle, or a count.
@@ -1489,6 +1490,7 @@ impl<'a> P<'a> {
     }
     fn frame(&mut self) -> R<Frame> {
         let t = self.peek().to_string();
+        self.on = None;
         let mut f = if let Some((_, [x, y, z])) = ORIENT.iter().find(|o| o.0 == t) {
             self.k += 1;
             Frame::from_axes(Point3::ORIGIN, *x, *y, *z).expect("named orientations are orthonormal")
@@ -1508,17 +1510,25 @@ impl<'a> P<'a> {
             self.k += 1;
             let f = if is_ref(self.peek()) {
                 let (name, f) = (self.b.face)(self.next()?)?;
-                self.on = Some(name);
+                self.on = Some(forge_model::On::Face(name));
                 f
             } else {
                 let i = self.feat()?;
+                let point = match &self.b.features[i] {
+                    Feature::Sketch(_) if sketch::is_ref(self.peek()) => Some(self.next()?.to_string()),
+                    _ => None,
+                };
+                self.on = Some(forge_model::On::Feature {
+                    feature: i,
+                    point: point.clone(),
+                    flip: t == "-on",
+                });
                 match &self.b.features[i] {
                     Feature::Plane(f) => *f,
-                    Feature::Sketch(s) if sketch::is_ref(self.peek()) => {
-                        let at = sketch::point(s, self.next()?)?;
-                        s.plane.with_origin(s.plane.plane_point(at))
-                    }
-                    Feature::Sketch(s) => s.plane,
+                    Feature::Sketch(s) => match &point {
+                        Some(pt) => s.plane.with_origin(s.plane.plane_point(sketch::point(s, pt)?)),
+                        None => s.plane,
+                    },
                     _ => {
                         return Err(format!(
                             "'on' needs a plane or sketch feature, or a face; line {} is neither",
@@ -1531,8 +1541,11 @@ impl<'a> P<'a> {
         } else {
             Frame::WORLD
         };
+        self.at = None;
         if self.eat("at") {
-            f = f.with_origin(self.point3()?);
+            let at = self.point3()?;
+            self.at = Some(at);
+            f = f.with_origin(at);
         }
         Ok(f)
     }
@@ -1546,6 +1559,22 @@ impl<'a> P<'a> {
                 None
             }
         }
+    }
+    /// A profile and an axis in its plane: `FRAME [axis ..] LOOPS | SKETCH [axis L] [E]`.
+    fn axial(&mut self) -> R<(Profile, Axis2)> {
+        if let Some(s) = self.sketch() {
+            let axis = self.axis(Some(s))?;
+            return Ok((self.region(s)?, axis));
+        }
+        let plane = self.frame()?;
+        let axis = self.axis(None)?;
+        Ok((
+            Profile {
+                plane,
+                loops: self.loops()?,
+            },
+            axis,
+        ))
     }
     fn axis(&mut self, sk: Option<&forge_model::Sketch>) -> R<Axis2> {
         if !self.eat("axis") {
@@ -1694,6 +1723,14 @@ impl<'a> P<'a> {
     }
     /// A path: lines and arcs, each from where the one before ends.
     fn path(&mut self) -> R<Vec<PathSeg>> {
+        if let Some(s) = self.sketch() {
+            let through = if sketch::is_ref(self.peek()) {
+                Some(self.next()?)
+            } else {
+                None
+            };
+            return sketch::path(s, through);
+        }
         let mut out = Vec::new();
         loop {
             out.push(match self.peek() {
@@ -2270,8 +2307,35 @@ mod tests {
             rows.push("rad c1 (1 + 1)/4".into());
         }
         let rows = rows.iter().map(|row| tokens(row)).collect();
-        let mut s = sketch::build(frame(r), rows, &|t, want| value(t, before, want)).expect("a good sketch");
-        s.on = None;
+        // on a plane or sketch above, flipped or not, or on a frame of its own
+        let on = before
+            .iter()
+            .rposition(|f| matches!(f, Feature::Plane(_) | Feature::Sketch(_)))
+            .filter(|_| r.bool())
+            .map(|feature| (feature, r.bool()));
+        let plane = match on.map(|(i, flip)| (&before[i], flip)) {
+            Some((Feature::Plane(f), flip)) => {
+                if flip {
+                    f.flipped()
+                } else {
+                    *f
+                }
+            }
+            Some((Feature::Sketch(s), flip)) => {
+                if flip {
+                    s.plane.flipped()
+                } else {
+                    s.plane
+                }
+            }
+            _ => frame(r),
+        };
+        let mut s = sketch::build(plane, rows, &|t, want| value(t, before, want)).expect("a good sketch");
+        s.on = on.map(|(feature, flip)| forge_model::On::Feature {
+            feature,
+            point: None,
+            flip,
+        });
         Feature::Sketch(Box::new(s))
     }
 

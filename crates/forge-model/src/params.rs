@@ -1,7 +1,7 @@
 //! Parameters and sketches: history steps that make nothing themselves. The part file
 //! evaluates them as it reads each line (forge-agent), so later features hold plain values.
 
-use forge_math::Frame;
+use forge_math::{Frame, Point3};
 use forge_topo::Name;
 
 /// What a value measures: units are checked where a value is used, never converted.
@@ -27,10 +27,27 @@ pub struct Param {
 #[derive(Clone, Debug, PartialEq)]
 pub struct Sketch {
     pub plane: Frame,
-    /// The planar face the sketch was placed on, if it was.
-    pub on: Option<Name>,
+    /// What the plane was read from, if not a frame written out: kept so the file says it
+    /// again, and read afresh each time the sketch's line is.
+    pub on: Option<On>,
+    /// The origin written after it (`at X Y Z`), if one was.
+    pub at: Option<Point3>,
     pub rows: Vec<Vec<String>>,
     pub solved: forge_sketch::Sketch,
     /// Each named entity (`l3`, `c1`, `o`) and its id in `solved`.
     pub names: Vec<(String, forge_sketch::EntityId)>,
+}
+
+/// A plane given by reference.
+#[derive(Clone, Debug, PartialEq)]
+pub enum On {
+    /// A planar face, its outside.
+    Face(Name),
+    /// An earlier feature's plane (a work plane or a sketch), flipped or not, its origin at one
+    /// of a sketch's points if one is named.
+    Feature {
+        feature: usize,
+        point: Option<String>,
+        flip: bool,
+    },
 }

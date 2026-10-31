@@ -34,7 +34,8 @@ hole 3 on plate p1 thru     # FRAME on a sketch's plane (-on: flipped), at its p
 Rows: `pt P`, `line P P`, `poly P P.. [open]`, `rect X Y W H`, `circle P R`, `arc C S E [cw]`
 (append `cons` for construction). P: `X Y`, or a point: `p1`, `l2.a`|`.b`, `c1` (centre), `o`
 (origin). Entities count by kind: p l c a. Under-constrained solves from the coordinates
-written; `check` reports each sketch's freedom; conflicts name their rows.
+written; `check` reports each sketch's freedom; conflicts name their rows. A sketch `on` a
+plane, sketch or face is placed afresh whenever a line above it changes.
 
 Features (`[op]` is new for the first solid, add after):
 ```
@@ -51,7 +52,8 @@ pattern (body | FEAT..) (lin DX DY DZ N STEP [DX DY DZ N STEP] | circ OX OY OZ A
 sweep [op] FRAME LOOPS path PATH [extend N M | to FEAT [@face] [off N]]     profile square to the path's start
 coil [op] FRAME [axis ..] LOOPS (pitch P turns N | turns N height H | pitch P height H | pitch P to FEAT [@face] [off N]) [taper A] [left]
 loft [op] [smooth [start W] [end W]] (profile FRAME LOOPS).. [rail I PATH.. | centre PATH]     I: vertex (where segment I starts)
-PATH: (line AX AY AZ BX BY BZ | arc FRAME R START SWEEP)..     tangent-continuous; an arc's FRAME is its circle's, centre at `at`
+PATH: (line AX AY AZ BX BY BZ | arc FRAME R START SWEEP).. | SKETCH [E]     tangent-continuous; an arc's FRAME is its circle's, centre at `at`
+Wherever LOOPS go (sweep, coil, loft profiles too), `SKETCH [E]` may stand instead, as for extrude.
 plane FRAME                      a work plane, for `to FEAT` and `on FEAT`
 rib T [pos|neg] [web] [flip] [draft A] FRAME (line AX AY BX BY | arc CX CY R START SWEEP)..
   a wall along an open path, ends run on until they meet the part. Default: fills across the path

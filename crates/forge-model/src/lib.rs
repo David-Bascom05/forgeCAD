@@ -28,7 +28,7 @@ use forge_ops::{
 };
 use forge_topo::{Body, Name};
 pub use hole::{End, Head, Hole, HoleError, Thread};
-pub use params::{Param, Sketch, Unit};
+pub use params::{On, Param, Sketch, Unit};
 pub use pattern::{Layout, PatternError, Row, Source, copy_sources, instance_name};
 use pattern::{instances, moved, moved_shape};
 pub use rib::{Rib, RibError};

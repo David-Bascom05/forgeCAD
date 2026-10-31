@@ -51,6 +51,9 @@ end
     or the region whose outside loop runs through entity E.
   - FRAME `on sk [P]` / `-on sk [P]`: the sketch's plane (flipped), origin at point P; so
     `hole 5 -on sk c1 thru` drills at a sketch circle's centre.
+  - PATH `sk [E]` (sweep, loft rails): the sketch's one chain of lines and arcs, or E's.
+- A sketch placed `on` a plane, sketch or face keeps that reference (`Sketch.on`), printed
+  back as written and re-resolved every time the line is read, so it follows its plane.
 
 ## References
 

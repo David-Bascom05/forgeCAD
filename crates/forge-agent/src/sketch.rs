@@ -3,9 +3,10 @@
 //! from it. Grammar in AGENTS.md.
 
 use crate::text::Want;
-use forge_math::{Frame, Point2};
+use forge_geom::Circle;
+use forge_math::{Frame, Point2, dmath, tol};
 use forge_model::Sketch;
-use forge_ops::Profile;
+use forge_ops::{PathSeg, Profile};
 use forge_sketch::{Constraint as C, ConstraintId, Entity, EntityId, ExtractError, SketchError, Status};
 
 type R<T> = Result<T, String>;
@@ -52,6 +53,7 @@ pub fn build(plane: Frame, rows: Vec<Vec<String>>, num: &Num) -> R<Sketch> {
     Ok(Sketch {
         plane,
         on: None,
+        at: None,
         rows,
         solved: b.s,
         names: b.names,
@@ -512,6 +514,125 @@ pub fn profile(s: &Sketch, through: Option<&str>) -> R<Profile> {
     Ok(p)
 }
 
+/// The sketch's one chain of lines and arcs, or the one through `through`, end to end in 3D:
+/// a path to sweep along.
+pub fn path(s: &Sketch, through: Option<&str>) -> R<Vec<PathSeg>> {
+    let q = &s.solved;
+    // each line or arc: its id and its ends
+    let mut segs: Vec<(EntityId, Point2, Point2)> = Vec::new();
+    for id in q.entity_ids().filter(|&id| !q.is_construction(id)) {
+        match q.entity(id) {
+            Some(Entity::Line { a, b }) => segs.push((id, q.point(a), q.point(b))),
+            Some(Entity::Arc { start, end, .. }) => segs.push((id, q.point(start), q.point(end))),
+            _ => {}
+        }
+    }
+    let meets = |p: Point2, q: Point2| p.distance(q) <= tol::LINEAR;
+    // the chain through the first segment, or through the one named
+    let first = match through {
+        Some(t) => {
+            let id = id_of(s, t)?;
+            segs.iter()
+                .position(|g| g.0 == id)
+                .ok_or_else(|| format!("{t} is not a line or arc of the sketch"))?
+        }
+        None if segs.is_empty() => return Err("the sketch has no lines or arcs".into()),
+        None => 0,
+    };
+    let mut chain = vec![first];
+    // grow from the first piece's end, then from its start
+    for (at_end, mut free) in [(true, segs[first].2), (false, segs[first].1)] {
+        loop {
+            let next: Vec<usize> = (0..segs.len())
+                .filter(|j| !chain.contains(j) && (meets(segs[*j].1, free) || meets(segs[*j].2, free)))
+                .collect();
+            let &[j] = &next[..] else {
+                if next.len() > 1 {
+                    return Err(format!(
+                        "the path branches at an end of {}",
+                        name_of(s, segs[next[0]].0.0)
+                    ));
+                }
+                break;
+            };
+            free = if meets(segs[j].1, free) {
+                segs[j].2
+            } else {
+                segs[j].1
+            };
+            if at_end {
+                chain.push(j);
+            } else {
+                chain.insert(0, j);
+            }
+        }
+    }
+    if through.is_none() && chain.len() < segs.len() {
+        let other = (0..segs.len())
+            .find(|j| !chain.contains(j))
+            .expect("one left out");
+        return Err(format!(
+            "the sketch has more than one chain; name one by an entity on it: {} or {}",
+            name_of(s, segs[first].0.0),
+            name_of(s, segs[other].0.0)
+        ));
+    }
+    // walk the chain from the end the first piece does not share
+    let mut at = match chain.get(1) {
+        Some(&n) if meets(segs[chain[0]].2, segs[n].1) || meets(segs[chain[0]].2, segs[n].2) => {
+            segs[chain[0]].1
+        }
+        Some(_) => segs[chain[0]].2,
+        None => segs[chain[0]].1,
+    };
+    let plane = s.plane;
+    let mut out = Vec::new();
+    for &k in &chain {
+        let (id, a, b) = segs[k];
+        let forward = meets(a, at);
+        at = if forward { b } else { a };
+        out.push(match q.entity(id).expect("a segment") {
+            Entity::Arc { center, ccw, .. } => {
+                let c = q.point(center);
+                let (a0, a1) = (
+                    dmath::atan2(a.y - c.y, a.x - c.x),
+                    dmath::atan2(b.y - c.y, b.x - c.x),
+                );
+                let sweep = if ccw {
+                    dmath::wrap_tau(a1 - a0)
+                } else {
+                    -dmath::wrap_tau(a0 - a1)
+                };
+                let circle = Circle {
+                    frame: plane.with_origin(plane.plane_point(c)),
+                    radius: a.distance(c),
+                };
+                if forward {
+                    PathSeg::Arc {
+                        circle,
+                        start: a0,
+                        sweep,
+                    }
+                } else {
+                    PathSeg::Arc {
+                        circle,
+                        start: a0 + sweep,
+                        sweep: -sweep,
+                    }
+                }
+            }
+            _ => {
+                let (p, q) = if forward { (a, b) } else { (b, a) };
+                PathSeg::Line {
+                    a: plane.plane_point(p),
+                    b: plane.plane_point(q),
+                }
+            }
+        });
+    }
+    Ok(out)
+}
+
 /// A point of the sketch (`p1`, `l2.b`, `c1` for its centre), in its plane.
 pub fn point(s: &Sketch, t: &str) -> R<Point2> {
     let (base, part) = t.split_once('.').unwrap_or((t, ""));
@@ -682,7 +803,7 @@ mod tests {
         // as much as the same plate typed in
         let typed = "extrude 6 rect 0 0 40 25 circle 20 12.5 4 cw\n";
         let (mut a, mut b) = (built(PLATE), built(typed));
-        assert!((a.volume_area().0 - b.volume_area().0).abs() < 1e-6);
+        assert!((a.stats().0 - b.stats().0).abs() < 1e-6);
     }
 
     /// Fillets named by handle survive a dimension change and a new circle in the sketch.
@@ -727,14 +848,77 @@ mod tests {
         assert_eq!(msg, "(faces cyl) is not a planar face");
     }
 
+    /// A sketch on a work plane follows it, and the file keeps saying where it is.
+    #[test]
+    fn a_sketch_follows_its_plane() {
+        let src = |z: f64| {
+            format!(
+                "h = {z}\nextrude 20 rect 0 0 30 30\nplane at 0 0 h\nsk: sketch -on plane1 at 0 0 h\n  pt 10 -10\n\
+                 end\nsketch on sk p1\n  circle 0 0 3\nend\nhole 6 on sketch2 c1 4\n"
+            )
+        };
+        let mut m = built(&src(12.0));
+        m.update(&src(20.0));
+        assert_eq!(at(&m, "faces cyl r=3"), [10.0, 10.0, 18.0]);
+        let printed = crate::text::print(&crate::text::parse(&src(20.0)).expect("parses"));
+        assert!(
+            printed.contains("\nsketch -on plane1 at 0 0 20\n  pt 10 -10\nend\nsketch on sketch1 p1\n"),
+            "{printed}"
+        );
+    }
+
     #[test]
     fn a_revolve_about_a_sketch_line() {
         let src = "sketch xz\n  line 0 -5 0 25 cons\n  rect 10 0 5 20\n  fix l2.a\n  dist l2 5\n  dist l3 20\n\
                    end\nrevolve sketch1 axis l1\n";
         let typed = "revolve xz rect 10 0 5 20\n";
         let (mut a, mut b) = (built(src), built(typed));
-        assert!((a.volume_area().0 - b.volume_area().0).abs() < 1e-6);
+        assert!((a.stats().0 - b.stats().0).abs() < 1e-6);
         assert_eq!(a.body().map(|b| b.faces.len()), b.body().map(|b| b.faces.len()));
+    }
+
+    /// As much solid as the same shapes typed in.
+    fn same_volume(src: &str, typed: &str) {
+        let (mut a, mut b) = (built(src), built(typed));
+        let (va, vb) = (a.stats().0, b.stats().0);
+        assert!(va > 0.0 && (va - vb).abs() < 1e-6 * vb, "{va} {vb}");
+    }
+
+    #[test]
+    fn sweeps_lofts_and_coils_from_sketches() {
+        same_volume(
+            "sketch xz\n  line 0 0 0 30\n  arc 10 30 l1.b 10 40 cw\n  line a1.b 25 40\nend\n\
+             sweep circle 0 0 2 path sketch1\n",
+            "sweep circle 0 0 2 path line 0 0 0 0 0 30 arc xz at 10 0 30 10 180 -90 line 10 0 40 25 0 40\n",
+        );
+        // the same path named by a piece, drawn back to front
+        same_volume(
+            "sketch xz\n  line 25 40 10 40\n  arc 10 30 10 40 0 30\n  line 0 30 0 0\n  circle 50 50 3\nend\n\
+             sweep z -1 0 0 at 25 0 40 circle 0 0 2 path sketch1 a1\n",
+            "sweep z -1 0 0 at 25 0 40 circle 0 0 2 path line 25 0 40 10 0 40 arc xz at 10 0 30 10 90 90 line 0 0 30 0 0 0\n",
+        );
+        same_volume(
+            "sketch\n  rect 0 0 10 10\nend\nsketch at 0 0 20\n  rect 2 2 6 6\nend\nloft profile sketch1 profile sketch2\n",
+            "loft profile rect 0 0 10 10 profile at 0 0 20 rect 2 2 6 6\n",
+        );
+        same_volume(
+            "sketch xz\n  circle 10 0 1\nend\ncoil sketch1 pitch 5 turns 2\n",
+            "coil xz circle 10 0 1 pitch 5 turns 2\n",
+        );
+        let e = |rows: &str| {
+            error(&format!(
+                "sketch xz\n{rows}end\nsweep circle 0 0 1 path sketch1\n"
+            ))
+            .1
+        };
+        assert_eq!(
+            e("  line 0 0 0 10\n  line 0 10 5 10\n  line 0 10 -5 10\n"),
+            "the path branches at an end of l2"
+        );
+        assert_eq!(
+            e("  line 0 0 0 10\n  line 5 0 5 10\n"),
+            "the sketch has more than one chain; name one by an entity on it: l1 or l2"
+        );
     }
 
     #[test]
