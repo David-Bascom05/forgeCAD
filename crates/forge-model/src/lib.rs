@@ -117,8 +117,8 @@ pub enum Feature {
     Ball { frame: Frame, radius: f64, op: Combine },
     /// Round the named edges of the part as it stands, each with its own radius, in one go.
     /// `starts`: (edge, vertex) where an edge's law runs from that vertex rather than the one
-    /// named first. `setbacks`: (vertex, one edge there or all, distance) how far from a
-    /// corner its blends stop.
+    /// named first. `setbacks`: (vertex, one edge there or all, length) how far along
+    /// each edge from a corner its blends stop.
     Fillet {
         edges: Vec<(Name, Radius)>,
         starts: Vec<(Name, Name)>,

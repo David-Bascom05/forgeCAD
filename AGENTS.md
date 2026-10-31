@@ -105,7 +105,7 @@ LOOPS (first is outside, rest holes; X Y a corner): rect X Y W H | rrect X Y W H
 Fillet R: 3 | 2..4 (start to other end) | 0:2,0.5:4,1:2 (fraction along from the start:radius). The start is
   `from VREF` (a vertex of each edge after it), else the vertex named first; `build` lists those. A constant
   radius holds along its own edge; a tangent chain changes radius over its variable and unpicked edges.
-  `setback VREF [REF] D`: at a corner where blends meet, they stop D from the vertex (one edge, or all).
+  `setback VREF [REF] D`: at a corner where blends meet, they stop D along each edge from the vertex (one edge, or all).
 facefillet: rounds between two face sets: their shared edges, or the one four-sided strip face joining them
   (a chamfer, a land), which goes. fullround: the ball touching both sides and the middle face takes the
   middle away (the sides parallel, so the radius holds along it).

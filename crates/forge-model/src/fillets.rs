@@ -1531,6 +1531,81 @@ mod tests {
     }
 
     #[test]
+    fn setbacks_measure_along_curved_edges() {
+        // a quarter disc of radius 10, 6 thick: at (10, 0, 6) the top's arc meets a line and the side
+        let slice = Part {
+            features: vec![Feature::Extrude {
+                profile: Profile {
+                    plane: Frame::WORLD,
+                    loops: vec![ProfileLoop::new(vec![
+                        (
+                            Segment::Line {
+                                a: Point2::ORIGIN,
+                                b: Point2::new(10.0, 0.0),
+                            },
+                            0,
+                        ),
+                        (
+                            Segment::Arc {
+                                center: Point2::ORIGIN,
+                                radius: 10.0,
+                                start: 0.0,
+                                sweep: dmath::FRAC_PI_2,
+                            },
+                            1,
+                        ),
+                        (
+                            Segment::Line {
+                                a: Point2::new(0.0, 10.0),
+                                b: Point2::ORIGIN,
+                            },
+                            2,
+                        ),
+                    ])],
+                },
+                extent: Extent::Distance(6.0),
+                op: Combine::New,
+            }],
+        };
+        let body = slice.regenerate().expect("slice");
+        let arc = edge_near(&body, Point3::new(7.07, 7.07, 6.0));
+        let edges = [
+            arc,
+            edge_near(&body, Point3::new(5.0, 0.0, 6.0)),
+            edge_near(&body, Point3::new(10.0, 0.0, 3.0)),
+        ]
+        .map(|e| (e, Radius::Constant(1.5)))
+        .to_vec();
+        let corner = body
+            .vertex_ids()
+            .find(|&v| body.vertex(v).point.distance(Point3::new(10.0, 0.0, 6.0)) < 1e-9)
+            .expect("corner");
+        let mut p = slice.clone();
+        p.features.push(Feature::Fillet {
+            edges,
+            starts: vec![],
+            setbacks: vec![
+                (body.vertex(corner).name, None, 3.0),
+                (body.vertex(corner).name, Some(arc), 6.0),
+            ],
+        });
+        let b = p.regenerate().expect("set back");
+        assert!(forge_topo::check(&b).is_empty());
+        // the arc's blend ends in the plane 6 along the arc (0.6 rad), not 6 straight (0.609 rad)
+        let angles: Vec<f64> = b
+            .vertex_ids()
+            .map(|v| b.vertex(v).point)
+            .filter(|p| p.z > 4.0 && (p.x * p.x + p.y * p.y) > 64.0 && p.y > 1.0 && p.y < 7.0)
+            .map(|p| dmath::atan2(p.y, p.x))
+            .collect();
+        assert!(angles.iter().any(|a| (a - 0.6).abs() < 1e-7), "{angles:?}");
+        assert!(
+            angles.iter().all(|a| (a - 2.0 * dmath::asin(0.3)).abs() > 1e-3),
+            "{angles:?}"
+        );
+    }
+
+    #[test]
     fn refusals_are_clean() {
         for (name, part, want) in refusals() {
             match part.regenerate() {

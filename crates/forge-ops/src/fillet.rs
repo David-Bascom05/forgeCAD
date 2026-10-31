@@ -169,8 +169,8 @@ struct SpringEnd {
 pub struct FilletOptions {
     /// The vertex an edge's law runs from, where it is not the edge's first vertex by name.
     pub starts: Vec<(EdgeId, VertexId)>,
-    /// How far from a corner vertex its blends stop (the straight distance from the vertex to
-    /// where each blend's section crosses its edge): for one edge there, or all of them.
+    /// How far from a corner vertex its blends stop (the length along each edge from the vertex
+    /// to where the blend's section crosses it): for one edge there, or all of them.
     pub setbacks: Vec<(VertexId, Option<EdgeId>, f64)>,
 }
 
@@ -2016,10 +2016,9 @@ impl Builder {
     }
 
     /// The spine parameter each blend at corner `v` (in corner input order) was asked to stop
-    /// at: where its section crosses its edge the asked distance from the vertex.
+    /// at: where its section crosses its edge the asked length along it from the vertex.
     fn asked_setbacks(&mut self, v: VertexId, ring: &[Corner], blend_ring: &[usize]) -> R<Vec<Option<f64>>> {
         let mut out = vec![None; blend_ring.len()];
-        let vp = self.body.vertex(v).point;
         for (b, &j) in blend_ring.iter().enumerate() {
             let ri = self.filleted(ring[j].cin).expect("blend");
             let e = self.rolled[ri].edge;
@@ -2034,25 +2033,15 @@ impl Builder {
             self.set_back.insert(v);
             let x = self.body.edge(e);
             let at_end = self.arrives_at_end(ring[j].cin);
-            // along the edge from the vertex to the straight distance d (bisection: the
-            // distance grows from zero there over the near half of the edge)
-            let (mut near, mut far) = if at_end {
+            let (from, mid) = if at_end {
                 (x.range.hi, x.range.mid())
             } else {
                 (x.range.lo, x.range.mid())
             };
-            if d.is_nan() || d <= 0.0 || x.curve.eval(far).distance(vp) < d {
+            let Some(t) = at_length(&x.curve, from, mid, d) else {
                 return Err(FilletError::Overflow { edge: e });
-            }
-            for _ in 0..100 {
-                let m = 0.5 * (near + far);
-                if x.curve.eval(m).distance(vp) < d {
-                    near = m;
-                } else {
-                    far = m;
-                }
-            }
-            let p = x.curve.eval(0.5 * (near + far));
+            };
+            let p = x.curve.eval(t);
             out[b] = Some(spine_closest(&self.rolled[ri].blend.spine, p));
         }
         Ok(out)
@@ -3022,9 +3011,108 @@ fn three_offsets(offs: &[(Surface, f64)], mut p: Point3) -> Option<Point3> {
     ok.then_some(p)
 }
 
+/// The parameter `d` along `c` from `from` toward `to` (arc length), or None past `to`.
+fn at_length(c: &Curve, from: f64, to: f64, d: f64) -> Option<f64> {
+    let sign = if to < from { -1.0 } else { 1.0 };
+    let speed = match c {
+        Curve::Line(_) => Some(1.0),
+        Curve::Circle(k) => Some(k.radius),
+        _ => None,
+    };
+    if !(d > 0.0) {
+        return None;
+    }
+    if let Some(v) = speed {
+        return ((to - from).abs() * v >= d).then_some(from + sign * d / v);
+    }
+    if arc_length(c, from, to) < d {
+        return None;
+    }
+    // safeguarded Newton on the length from `from`
+    let (mut lo, mut hi) = (from, to);
+    let mut t = from + (to - from) * 0.5;
+    for _ in 0..60 {
+        let f = arc_length(c, from, t) - d;
+        if f.abs() <= 1e-13 * d {
+            break;
+        }
+        if f < 0.0 {
+            lo = t;
+        } else {
+            hi = t;
+        }
+        let v = c.deriv(t).d1.length();
+        let n = t - sign * f / v;
+        t = if v > 0.0 && (n - lo) * (n - hi) < 0.0 {
+            n
+        } else {
+            0.5 * (lo + hi)
+        };
+    }
+    Some(t)
+}
+
+/// The length of `c` between parameters `a` and `b`: 8-point Gauss-Legendre on panels doubled
+/// until two passes agree.
+fn arc_length(c: &Curve, a: f64, b: f64) -> f64 {
+    const X: [f64; 4] = [
+        0.1834346424956498,
+        0.525532409916329,
+        0.7966664774136267,
+        0.9602898564975363,
+    ];
+    const W: [f64; 4] = [
+        0.362683783378362,
+        0.3137066458778873,
+        0.2223810344533745,
+        0.1012285362903763,
+    ];
+    let pass = |n: usize| {
+        let h = (b - a) / n as f64;
+        let mut s = 0.0;
+        for i in 0..n {
+            let m = a + h * (i as f64 + 0.5);
+            for (x, w) in X.iter().zip(W) {
+                let o = 0.5 * h * x;
+                s += w * (c.deriv(m - o).d1.length() + c.deriv(m + o).d1.length());
+            }
+        }
+        0.5 * h.abs() * s
+    };
+    let mut n = 2;
+    let mut l = pass(n);
+    while n < 512 {
+        n *= 2;
+        let next = pass(n);
+        let done = (next - l).abs() <= 1e-13 * next.max(tol::LINEAR);
+        l = next;
+        if done {
+            break;
+        }
+    }
+    l
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn lengths_along_curves() {
+        let e = Curve::Ellipse(forge_geom::curve::Ellipse {
+            frame: Frame::WORLD,
+            major: 2.0,
+            minor: 1.0,
+        });
+        // a quarter of the ellipse: 2 E(sqrt(3)/2)
+        let q = 2.422112055136919;
+        assert!((arc_length(&e, 0.0, dmath::FRAC_PI_2) - q).abs() < 1e-12);
+        let t = at_length(&e, dmath::FRAC_PI_2, 0.0, q).expect("on the edge");
+        assert!(t.abs() < 1e-9, "{t}");
+        let t = at_length(&e, 0.0, 1.0, 0.7).expect("on the edge");
+        assert!((arc_length(&e, 0.0, t) - 0.7).abs() < 1e-12);
+        assert!(at_length(&e, 0.0, 1.0, 5.0).is_none());
+    }
 
     fn law(
         members: &[(u32, bool)],
