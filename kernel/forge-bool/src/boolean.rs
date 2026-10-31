@@ -302,8 +302,10 @@ fn general(target: &mut Body, b: &Body, op: Op) -> R<()> {
     let plan = plan(target, b, op, &mut scratch)?;
     let mut clock = phases_on().then(std::time::Instant::now);
     let (loops, verts) = (target.loops.len(), target.vertices.len());
+    let touched = touched_old(&plan);
     apply(target, b, &plan);
     split_new_pinches(target, loops, verts);
+    split_old_pinches(target, &touched);
     target.joins.extend(&b.joins);
     target.joins.pieces.extend_from_slice(&plan.wholes);
     for &w in b.split.iter().chain(&plan.split) {
@@ -316,6 +318,54 @@ fn general(target: &mut Body, b: &Body, op: Op) -> R<()> {
     scratch.keep(plan);
     SCRATCH.with(|s| s.replace(scratch));
     Ok(())
+}
+
+/// The target's vertices where something of this boolean meets them: a new curve's end, or a
+/// vertex of the tool lying on one (two blocks touching at a corner). Only there can a boolean
+/// pinch a vertex the target already had.
+fn touched_old(plan: &Plan) -> Vec<VertexId> {
+    let mut out: Vec<VertexId> = plan
+        .alias
+        .iter()
+        .map(|a| a.1)
+        .chain(
+            plan.pieces
+                .iter()
+                .filter(|p| p.seg.is_some())
+                .flat_map(|p| [p.start, p.end]),
+        )
+        .filter_map(|k| match k {
+            VKey::Old(0, v) => Some(v),
+            _ => None,
+        })
+        .collect();
+    out.sort_unstable();
+    out.dedup();
+    out
+}
+
+/// `split_new_pinches` at the target's own vertices `at`: the faces the boolean left alone may
+/// make a fan of their own there, so every use leaving the vertex is gathered.
+fn split_old_pinches(target: &mut Body, at: &[VertexId]) {
+    if at.is_empty() {
+        return;
+    }
+    // (each use of each loop is dear on a big part: only faces about those vertices)
+    let reach = forge_math::Box3::from_points(at.iter().map(|&v| target.vertex(v).point)).grow(tol::LINEAR);
+    let mut runs: Vec<(VertexId, forge_topo::CoedgeId)> = target
+        .face_ids()
+        .filter(|&f| target.face_box(f).overlaps(&reach))
+        .flat_map(|f| target.face(f).loops.iter().copied())
+        .flat_map(|l| target.lp(l).coedges())
+        .map(|c| (target.coedge_start(c), c))
+        .filter(|(v, _)| at.binary_search(v).is_ok())
+        .collect();
+    runs.sort_unstable();
+    let mut prev = Vec::new();
+    for run in runs.chunk_by(|x, y| x.0 == y.0).filter(|run| run.len() > 1) {
+        let cs: Vec<_> = run.iter().map(|x| x.1).collect();
+        target.split_pinched(run[0].0, &cs, &mut prev);
+    }
 }
 
 /// Pieces left touching at a point keep a vertex each: looked for at the vertices a boolean
