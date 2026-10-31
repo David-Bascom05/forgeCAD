@@ -184,11 +184,15 @@ pub(crate) fn motion(steps: &[Step]) -> Motion {
 
 /// Feature `i` of a history applied to the bodies features `..i` left: `regenerate_solids`
 /// one feature at a time. Only `features[..=i]` is read.
-pub fn step_solids(
-    features: History<'_>,
-    i: usize,
-    mut solids: Vec<Solid>,
-) -> Result<Vec<Solid>, RegenError> {
+pub fn step_solids(features: History<'_>, i: usize, solids: Vec<Solid>) -> Result<Vec<Solid>, RegenError> {
+    let solids = step_unchecked(features, i, solids)?;
+    match solids.iter().find_map(|s| forge_topo::check::open_at(&s.body)) {
+        Some(what) => Err(RegenError::NotClosed { feature: i, what }),
+        None => Ok(solids),
+    }
+}
+
+fn step_unchecked(features: History<'_>, i: usize, mut solids: Vec<Solid>) -> Result<Vec<Solid>, RegenError> {
     let upto = features.upto(i + 1);
     if !multi(&upto) {
         let id = upto.iter().rposition(starts).unwrap_or(0);

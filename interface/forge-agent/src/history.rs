@@ -1626,7 +1626,9 @@ fn kind_of_msg(msg: &str) -> String {
 /// its way) or Invalid (an operation made a bad body and caught it); a line the parser cannot
 /// read is the generator's bug.
 fn classify(kind: &str, msg: &str) -> Verdict {
-    let bug = ["Internal", "Invalid("].iter().any(|w| msg.contains(w));
+    let bug = ["Internal", "Invalid(", "no closed solid"]
+        .iter()
+        .any(|w| msg.contains(w));
     let unread = [
         "expected",
         "unexpected",

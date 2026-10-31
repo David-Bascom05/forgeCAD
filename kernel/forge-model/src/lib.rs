@@ -203,6 +203,11 @@ pub enum RegenError {
         error: FilletError,
     },
     /// A feature names an edge (or face, or vertex) the part no longer has.
+    /// The result is no closed solid, first from this feature on: a boolean lost a face.
+    NotClosed {
+        feature: usize,
+        what: String,
+    },
     /// A feature that works on what it names was given nothing to work on.
     NoReferences {
         feature: usize,
@@ -313,7 +318,9 @@ impl Part {
         if bodies::multi(&self.features) {
             return bodies::one(self.regenerate_nary_solids(threads)?);
         }
-        nary_regen(self.history(), wasm_one(threads), true, Batching::On(backend))
+        closed_body(self, None, &|p, _| {
+            nary_regen(p.history(), wasm_one(threads), true, Batching::On(backend))
+        })
     }
 
     /// `regenerate_nary`, placing points against the tools' analytic solids first or not.
@@ -358,10 +365,12 @@ impl Part {
         batch: Option<&dyn forge_bool::Batch>,
     ) -> Result<Body, RegenError> {
         if bodies::multi(&self.features) {
-            return bodies::one(bodies::nary(self.history(), wasm_one(threads))?);
+            return bodies::one(self.regenerate_nary_solids(threads)?);
         }
         let batching = batch.map_or(Batching::None, Batching::Given);
-        nary_regen(self.history(), wasm_one(threads), shapes, batching)
+        closed_body(self, None, &|p, _| {
+            nary_regen(p.history(), wasm_one(threads), shapes, batching)
+        })
     }
 
     /// Every body the part ends with, rebuilt feature by feature.
@@ -371,7 +380,9 @@ impl Part {
 
     /// `regenerate_solids`, each feature named from its id in `ids` (as `regenerate_ids`).
     pub fn regenerate_solids_ids(&self, ids: Option<&[u64]>) -> Result<Vec<Solid>, RegenError> {
-        bodies::sequential(History::new(&self.features, ids))
+        closed_solids(self, ids, &|p, ids| {
+            bodies::sequential(History::new(&p.features, ids))
+        })
     }
 
     /// `regenerate_solids` in n-ary booleans, one per run of each body's tools.
@@ -385,14 +396,16 @@ impl Part {
         threads: usize,
         ids: Option<&[u64]>,
     ) -> Result<Vec<Solid>, RegenError> {
-        let h = History::new(&self.features, ids);
-        if bodies::multi(&self.features) {
-            return bodies::nary(h, wasm_one(threads));
-        }
-        // one body: the same regen as `regenerate_nary`, so the names are its names
-        let id = self.features.iter().position(starts).unwrap_or(0);
-        let body = nary_regen(h, wasm_one(threads), true, Batching::On(Backend::from_env()))?;
-        Ok(vec![Solid { id, body }])
+        closed_solids(self, ids, &|p, ids| {
+            let h = History::new(&p.features, ids);
+            if bodies::multi(&p.features) {
+                return bodies::nary(h, wasm_one(threads));
+            }
+            // one body: the same regen as `regenerate_nary`, so the names are its names
+            let id = p.features.iter().position(starts).unwrap_or(0);
+            let body = nary_regen(h, wasm_one(threads), true, Batching::On(Backend::from_env()))?;
+            Ok(vec![Solid { id, body }])
+        })
     }
 
     /// Rebuilds the solid from the first feature. Feature ids are their
@@ -404,16 +417,18 @@ impl Part {
     /// `regenerate`, each feature named from its id in `ids` (one per feature, nonzero,
     /// distinct): ids kept through inserts, deletes and moves keep every name below.
     pub fn regenerate_ids(&self, ids: Option<&[u64]>) -> Result<Body, RegenError> {
-        let h = History::new(&self.features, ids);
         if bodies::multi(&self.features) {
-            return bodies::one(bodies::sequential(h)?);
+            return bodies::one(self.regenerate_solids_ids(ids)?);
         }
-        let mut body = None;
-        for i in 0..self.features.len() {
-            body = step(h, i, body)?;
-        }
-        body.map(finish)
-            .ok_or(RegenError::NothingToCombine { feature: 0 })
+        closed_body(self, ids, &|p, ids| {
+            let h = History::new(&p.features, ids);
+            let mut body = None;
+            for i in 0..p.features.len() {
+                body = step(h, i, body)?;
+            }
+            body.map(finish)
+                .ok_or(RegenError::NothingToCombine { feature: 0 })
+        })
     }
 
     /// Every cosmetic thread (each copy of a patterned hole has its own): the thread, the hole's
@@ -475,6 +490,46 @@ impl Part {
             })
             .collect()
     }
+}
+
+/// A regen of a part, each feature named from its id in the ids given.
+type Regen<'a, T> = &'a dyn Fn(&Part, Option<&[u64]>) -> Result<T, RegenError>;
+
+/// `regen`'s result if it is closed; else NotClosed, naming the first feature from which it is not
+/// (found by regenerating shorter histories: only on the way to an error).
+fn closed_result<T>(
+    part: &Part,
+    ids: Option<&[u64]>,
+    regen: Regen<'_, T>,
+    open: &dyn Fn(&T) -> Option<String>,
+) -> Result<T, RegenError> {
+    let made = regen(part, ids)?;
+    let Some(what) = open(&made) else {
+        return Ok(made);
+    };
+    let feature = (0..part.features.len().saturating_sub(1))
+        .find(|&k| {
+            let shorter = Part {
+                features: part.features[..=k].to_vec(),
+            };
+            regen(&shorter, ids.map(|d| &d[..=k])).is_ok_and(|m| open(&m).is_some())
+        })
+        .unwrap_or(part.features.len().saturating_sub(1));
+    Err(RegenError::NotClosed { feature, what })
+}
+
+fn closed_body(part: &Part, ids: Option<&[u64]>, regen: Regen<'_, Body>) -> Result<Body, RegenError> {
+    closed_result(part, ids, regen, &forge_topo::check::open_at)
+}
+
+fn closed_solids(
+    part: &Part,
+    ids: Option<&[u64]>,
+    regen: Regen<'_, Vec<Solid>>,
+) -> Result<Vec<Solid>, RegenError> {
+    closed_result(part, ids, regen, &|solids: &Vec<Solid>| {
+        solids.iter().find_map(|s| forge_topo::check::open_at(&s.body))
+    })
 }
 
 /// Applies feature `i` to the part as features `..i` left it: `regenerate` one feature at a

@@ -197,3 +197,43 @@ fn a_feature_naming_nothing_is_an_error() {
         }
     }
 }
+
+/// A body with an open edge is what `open_at` names, with where the edge is.
+#[test]
+fn an_open_edge_is_named() {
+    let mut b = Part {
+        features: vec![block(0.0, Combine::New)],
+    }
+    .regenerate()
+    .expect("a block");
+    assert_eq!(forge_topo::check::open_at(&b), None);
+    let e = b.edge_ids().next().expect("an edge");
+    let first = b.edge(e).coedges[0];
+    b.edges[e.index()].coedges.retain(|c| *c == first);
+    let what = forge_topo::check::open_at(&b).expect("open");
+    assert!(what.contains("is on 1 face(s), not 2"), "{what}");
+}
+
+/// No entry point hands back a solid that is not closed: the torus standing on a block's bottom,
+/// kept, loses a face on both paths. It may build one day; it may not come out open.
+#[test]
+fn a_result_that_is_not_closed_is_refused() {
+    let (_, part) = forge_model::adversarial::degenerate_parts()
+        .into_iter()
+        .find(|p| p.0 == "plane_torus/standing_tangent_top_inside/Keep")
+        .expect("the part");
+    for (entry, r) in every_regen(&part.features) {
+        match r {
+            Err(RegenError::NotClosed { feature, what }) => {
+                assert_eq!(feature, 1, "{entry}");
+                assert!(what.contains("face(s), not 2"), "{entry}: {what}");
+            }
+            Err(e) => panic!("{entry}: {e:?}"),
+            Ok(bodies) => {
+                for b in &bodies {
+                    assert!(forge_topo::check::open_at(b).is_none(), "{entry}");
+                }
+            }
+        }
+    }
+}

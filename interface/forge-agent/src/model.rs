@@ -875,6 +875,10 @@ pub fn explain(e: &RegenError) -> (String, String) {
             format!("fillet: {error:?}"),
             hint("try a smaller radius, or fewer edges at once"),
         ),
+        NotClosed { feature, what } => (
+            format!("this leaves no closed solid (feature {feature}): {what}"),
+            hint("a boolean lost a face there; a kernel bug: nudge a dimension and report the part"),
+        ),
         NoReferences { .. } => (
             "names nothing to work on".to_string(),
             hint("give it @handles or a (selector)"),

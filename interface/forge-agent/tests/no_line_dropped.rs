@@ -54,3 +54,18 @@ fn a_line_that_changes_nothing_is_named() {
     let no = |i: usize| m.lines[i].no;
     assert_eq!(m.no_effect(), vec![no(2), no(3), no(4)]);
 }
+
+/// The error says what is open and which feature made it; the line is the one to blame.
+#[test]
+fn a_line_leaving_no_closed_solid_is_refused() {
+    let m = model(
+        "extrude new 20 at -20 -20 -20 rect 0 0 40 40\nrevolve keep z 0 0 -1 x -1 0 0 at 0 0 -14 circle 10 0 4\n",
+    );
+    if let Some(e) = &m.error {
+        assert_eq!(e.at, 1);
+        assert!(e.msg.contains("no closed solid (feature 1)"), "{}", e.msg);
+        assert!(e.msg.contains("not 2"), "{}", e.msg);
+    } else {
+        assert!(forge_topo::check::check(m.body().expect("a part")).is_empty());
+    }
+}
