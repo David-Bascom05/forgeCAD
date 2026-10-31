@@ -13,10 +13,8 @@ fhole: hole 9 -xy at -60 -15 -28 thru in foot
 pattern fhole lin 1 0 0 2 120 0 1 0 2 30
 combine add lower foot
 fillet 3 (edges between lower foot concave)
-# the screw from head and shank (TODO: one revolve, revolve new xz at -37 0 gap+28 axis 0 0 0 1 poly 0 0 8 0 8 10 5 10 5 -50 0 -50, once regression revolve_cut_shoulder_on_face holds)
-bolt: extrude new 10 xy at -37 0 gap+28 circle 0 0 8
-shank: extrude new 50 xy at -37 0 gap+28-50 circle 0 0 5
-combine add bolt shank
+# the screw turned in one: shank, then head on its shoulder
+bolt: revolve new xz at -37 0 gap+28 axis 0 0 0 1 poly 0 -50 5 -50 5 0 8 0 8 10 0 10
 bolt2: copybody by 74 0 0 in bolt
 combine cut upper bolt bolt2 keep
 combine cut lower bolt bolt2 keep

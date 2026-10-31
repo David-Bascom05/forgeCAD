@@ -227,7 +227,8 @@ impl ProfileLoop {
     }
 }
 
-/// Whether two edges of the closed polygon cross properly (adjacent edges share a corner).
+/// Whether two edges of the closed polygon cross or touch (adjacent edges share a corner): an
+/// edge through another's corner counts, as a crossing there has no proper one to show.
 /// Edges are swept by their x extent, so only edges whose boxes overlap are tested, exactly.
 fn crosses_itself(poly: &[Point2]) -> bool {
     let n = poly.len();
@@ -254,7 +255,23 @@ fn crosses_itself(poly: &[Point2]) -> bool {
             {
                 continue;
             }
-            if apart(orient2d(a, b, c), orient2d(a, b, d)) && apart(orient2d(c, d, a), orient2d(c, d, b)) {
+            let (o1, o2, o3, o4) = (
+                orient2d(a, b, c),
+                orient2d(a, b, d),
+                orient2d(c, d, a),
+                orient2d(c, d, b),
+            );
+            if apart(o1, o2) && apart(o3, o4) {
+                return true;
+            }
+            let on = |p: Point2, q: Point2, x: Point2| {
+                x.x >= p.x.min(q.x) && x.x <= p.x.max(q.x) && x.y >= p.y.min(q.y) && x.y <= p.y.max(q.y)
+            };
+            if (o1 == 0.0 && on(a, b, c))
+                || (o2 == 0.0 && on(a, b, d))
+                || (o3 == 0.0 && on(c, d, a))
+                || (o4 == 0.0 && on(c, d, b))
+            {
                 return true;
             }
         }
@@ -268,7 +285,7 @@ fn inside(p: Point2, poly: &[Point2]) -> bool {
 
 impl Profile {
     /// Checks the profile and returns it with the outer loop counter-clockwise
-    /// and every hole clockwise. Self-intersection is not detected yet.
+    /// and every hole clockwise; a loop that crosses or touches itself is refused.
     pub fn normalized(&self) -> Result<Profile, ProfileError> {
         if self.loops.is_empty() || self.loops.iter().any(|l| l.segments.is_empty()) {
             return Err(ProfileError::Empty);

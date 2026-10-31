@@ -717,17 +717,20 @@ offset -0.3 (faces of cav) (faces of fl)\n",
     );
 }
 
-/// invalid, EdgeUses 1: revolve cut of a cap screw whose head shoulder lies on the top face; the
-/// screw from two extrudes cuts valid
+/// a revolve cut of a cap screw whose head shoulder lies on the top face. It was found as
+/// invalid (EdgeUses 1) from a profile that ran the shank up through the head's base line,
+/// crossing itself exactly at a sample corner: that profile is now refused
 #[test]
-#[ignore = "B9: kernel failure, see the comment"]
 fn revolve_cut_shoulder_on_face() {
+    let block = "u: extrude sym 30 xz rect -50 1 100 28\n";
     holds(
-        "\
-u: extrude sym 30 xz rect -50 1 100 28
-revolve cut xz at -37 0 29 axis 0 0 0 1 poly 0 0 8 0 8 10 5 10 5 -50 0 -50\n",
-        false,
+        &format!("{block}revolve cut xz at -37 0 29 axis 0 0 0 1 poly 0 -50 5 -50 5 0 8 0 8 10 0 10\n"),
+        true,
     );
+    let m = bench::model(&format!(
+        "{block}revolve cut xz at -37 0 29 axis 0 0 0 1 poly 0 0 8 0 8 10 5 10 5 -50 0 -50\n"
+    ));
+    assert!(m.error.is_some_and(|e| e.msg.contains("SelfIntersecting")));
 }
 
 /// chamfer Unsupported(a vertex where other than three faces meet): a revolved hub's bore rim, its
