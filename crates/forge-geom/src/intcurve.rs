@@ -28,11 +28,10 @@ pub struct IntCurve {
 /// implicit equations, repeated. None when the surfaces are tangent there.
 pub fn refine(a: &Surface, b: &Surface, mut p: Point3) -> Option<Point3> {
     for _ in 0..40 {
-        let (ga, gb) = (a.implicit(p), b.implicit(p));
+        let ((ga, na), (gb, nb)) = (a.implicit_gradient(p), b.implicit_gradient(p));
         if ga.abs() <= 1e-3 * tol::LINEAR && gb.abs() <= 1e-3 * tol::LINEAR {
             return Some(p);
         }
-        let (na, nb) = (a.gradient(p), b.gradient(p));
         // dp = J^T (J J^T)^-1 (-g) with J = [na; nb]
         let (aa, ab, bb) = (na.dot(na), na.dot(nb), nb.dot(nb));
         let det = aa * bb - ab * ab;
@@ -49,8 +48,7 @@ pub fn refine(a: &Surface, b: &Surface, mut p: Point3) -> Option<Point3> {
 
 /// One minimum-norm Newton step of `p` towards both surfaces (p itself where they are tangent).
 fn refine_step(a: &Surface, b: &Surface, p: Point3) -> Point3 {
-    let (ga, gb) = (a.implicit(p), b.implicit(p));
-    let (na, nb) = (a.gradient(p), b.gradient(p));
+    let ((ga, na), (gb, nb)) = (a.implicit_gradient(p), b.implicit_gradient(p));
     let (aa, ab, bb) = (na.dot(na), na.dot(nb), nb.dot(nb));
     let det = aa * bb - ab * ab;
     if det <= 1e-12 * aa * bb {

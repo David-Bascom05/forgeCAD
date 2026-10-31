@@ -515,6 +515,45 @@ impl Surface {
 }
 
 impl Surface {
+    /// `implicit` and `gradient` at p together (one change of frame), equal to each.
+    #[inline]
+    pub fn implicit_gradient(&self, p: Point3) -> (f64, Vec3) {
+        let radial = |f: &Frame, l: Point3, rho: f64| {
+            if rho > 0.0 {
+                f.x() * (l.x / rho) + f.y() * (l.y / rho)
+            } else {
+                f.x().get()
+            }
+        };
+        match self {
+            Surface::Cylinder(c) => {
+                let l = c.frame.point_to_local(p);
+                let rho = (l.x * l.x + l.y * l.y).sqrt();
+                (rho - c.radius, radial(&c.frame, l, rho))
+            }
+            Surface::Cone(c) => {
+                let l = c.frame.point_to_local(p);
+                let rho = (l.x * l.x + l.y * l.y).sqrt();
+                (
+                    (rho - c.radius) * c.cos_a() - l.z * c.sin_a(),
+                    radial(&c.frame, l, rho) * c.cos_a() - c.frame.z() * c.sin_a(),
+                )
+            }
+            Surface::Torus(t) => {
+                let l = t.frame.point_to_local(p);
+                let rho = (l.x * l.x + l.y * l.y).sqrt();
+                let d = rho - t.major;
+                let r = radial(&t.frame, l, rho);
+                let centre = t.frame.origin + r * t.major;
+                (
+                    (d * d + l.z * l.z).sqrt() - t.minor,
+                    (p - centre).normalize().map_or(r, |u| u.get()),
+                )
+            }
+            _ => (self.implicit(p), self.gradient(p)),
+        }
+    }
+
     /// Points at (u0 + k (u1 - u0) / m, v) for k in 1..m: the interior of a
     /// row at constant v, with one sin_cos for v and stepped angles for u.
     pub fn eval_row(
