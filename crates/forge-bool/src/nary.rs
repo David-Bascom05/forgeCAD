@@ -1317,43 +1317,62 @@ fn nary_body(
     // sorted by slabs of x as wide as the widest reach, then by y: a point's partners lie in its
     // slab or the next, within that reach in y (a sweep along x alone met whole planes of points
     // at one x). Pairs join in any order: a cluster's root is its least index
-    // (sorted as integers: the slab, and y's bits in f64::total_cmp's order)
+    // (sorted as integers: the slab, and y's then z's bits in f64::total_cmp's order)
     let slab = |i: usize| (pts[i].x / widest).floor() as i64;
-    let ykey = |y: f64| {
-        let b = y.to_bits() as i64;
+    let key = |v: f64| {
+        let b = v.to_bits() as i64;
         b ^ (((b >> 63) as u64) >> 1) as i64
     };
-    let mut order: Vec<(i64, i64, usize)> = (0..pts.len()).map(|i| (slab(i), ykey(pts[i].y), i)).collect();
+    let mut order: Vec<(i64, i64, i64, usize)> = (0..pts.len())
+        .map(|i| (slab(i), key(pts[i].y), key(pts[i].z), i))
+        .collect();
     order.sort_unstable();
-    let mut join = |i: usize, j: usize| {
-        if pts[i].distance(pts[j]) <= tols[i].max(tols[j]) {
-            let (x, y) = (find(&mut parent, i), find(&mut parent, j));
-            if x != y {
-                parent[x.max(y)] = x.min(y);
-            }
+    let join = |parent: &mut Vec<usize>, i: usize, j: usize| {
+        let (x, y) = (find(parent, i), find(parent, j));
+        if x != y {
+            parent[x.max(y)] = x.min(y);
         }
     };
+    // a point found again (the same bits as the one before it) is one with it, and the sweep asks
+    // only the first, within the widest reach of the two
+    let mut reach = tols.clone();
+    let mut firsts: Vec<(i64, usize)> = Vec::with_capacity(order.len());
+    for &(sx, _, _, i) in &order {
+        if let Some(&(_, f)) = firsts.last()
+            && pts[f] == pts[i]
+        {
+            join(&mut parent, f, i);
+            reach[f] = reach[f].max(tols[i]);
+            continue;
+        }
+        firsts.push((sx, i));
+    }
     // the next slab's window starts where the last point's did or later
     let mut from = 0;
-    for a in 0..order.len() {
-        let (sx, _, i) = order[a];
+    for a in 0..firsts.len() {
+        let (sx, i) = firsts[a];
         let y = pts[i].y;
-        for &(tx, _, j) in &order[a + 1..] {
+        let mut near = |j: usize| {
+            if pts[i].distance(pts[j]) <= reach[i].max(reach[j]) {
+                join(&mut parent, i, j);
+            }
+        };
+        for &(tx, j) in &firsts[a + 1..] {
             if tx != sx || pts[j].y - y > widest {
                 break;
             }
-            join(i, j);
+            near(j);
         }
-        while from < order.len()
-            && (order[from].0 < sx + 1 || (order[from].0 == sx + 1 && pts[order[from].2].y < y - widest))
+        while from < firsts.len()
+            && (firsts[from].0 < sx + 1 || (firsts[from].0 == sx + 1 && pts[firsts[from].1].y < y - widest))
         {
             from += 1;
         }
-        for &(tx, _, j) in &order[from..] {
+        for &(tx, j) in &firsts[from..] {
             if tx != sx + 1 || pts[j].y > y + widest {
                 break;
             }
-            join(i, j);
+            near(j);
         }
     }
     // clusters numbered in order of their first point; each sits at that point
