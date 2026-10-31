@@ -237,6 +237,10 @@ impl Grid {
             self.cell([b.x.lo, b.y.lo, b.z.lo]),
             self.cell([b.x.hi, b.y.hi, b.z.hi]),
         );
+        // one cell's list is in order already
+        if lo == hi {
+            return self.cells[(lo[0] * self.k + lo[1]) * self.k + lo[2]].clone();
+        }
         let mut out = Vec::new();
         for x in lo[0]..=hi[0] {
             for y in lo[1]..=hi[1] {
