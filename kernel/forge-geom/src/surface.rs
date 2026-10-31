@@ -34,6 +34,10 @@ pub trait SurfaceGeom {
     fn project(&self, p: Point3) -> Point2;
     /// A box guaranteed to contain the surface over the parameter box.
     fn bbox(&self, uv: Box2) -> Box3;
+    /// Whether a face's box may be `bbox` of the whole domain, no look at its loops.
+    fn whole_box(&self) -> bool {
+        false
+    }
     fn transformed(&self, f: &Frame) -> Self
     where
         Self: Sized;
@@ -147,6 +151,10 @@ pub trait Procedural: Send + Sync + std::fmt::Debug {
     }
     /// A box guaranteed to contain the surface over the parameter box.
     fn bbox(&self, uv: Box2) -> Box3;
+    /// Whether a face's box may be `bbox` of the whole domain, no look at its loops.
+    fn whole_box(&self) -> bool {
+        false
+    }
     /// Zero on the surface, positive on the natural normal's side, 1-Lipschitz (as
     /// `Surface::implicit`).
     fn implicit(&self, p: Point3) -> f64;

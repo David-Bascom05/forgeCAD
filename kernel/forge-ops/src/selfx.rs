@@ -8,42 +8,44 @@ use forge_math::predicates::orient2d;
 use forge_math::{Box3, Interval, Point2, Point3, tol};
 use forge_topo::uv::{UvLoop, face_uv_loops, point_in_loops, unwrap_near};
 use forge_topo::{Body, FaceId, Name, VertexId};
+use std::cell::OnceCell;
 
 /// The first two faces found crossing, at least one of them flagged (by face index): faces that
 /// share no vertex yet meet, or a flagged face whose own loops cross.
 pub(crate) fn crossing(body: &Body, flagged: &[bool]) -> Option<(Name, Name)> {
     let n = body.faces.len();
-    let mut verts: Vec<Vec<VertexId>> = vec![Vec::new(); n];
-    for f in body.face_ids() {
+    // all three are worked out for the faces it comes to: most pairs have no need of them
+    let verts_of = |f: FaceId| {
+        let mut v: Vec<VertexId> = Vec::new();
         for &l in &body.face(f).loops {
-            for c in body.lp(l).coedges() {
-                verts[f.index()].push(body.coedge_start(c));
-            }
+            v.extend(body.lp(l).coedges().map(|c| body.coedge_start(c)));
         }
-        verts[f.index()].sort();
-        verts[f.index()].dedup();
-    }
-    let loops: Vec<Vec<UvLoop>> = (0..n as u32)
-        .map(FaceId)
-        .map(|f| {
+        v.sort();
+        v.dedup();
+        v
+    };
+    let verts: Vec<OnceCell<Vec<VertexId>>> = vec![OnceCell::new(); n];
+    let loops: Vec<OnceCell<Vec<UvLoop>>> = vec![OnceCell::new(); n];
+    let loops_of = |f: FaceId| {
+        loops[f.index()].get_or_init(|| {
             if body.face(f).alive {
                 face_uv_loops(body, f)
             } else {
                 Vec::new()
             }
         })
-        .collect();
+    };
     for f in body.face_ids() {
-        if flagged[f.index()] && loops_cross(&loops[f.index()]) {
+        if flagged[f.index()] && loops_cross(loops_of(f)) {
             let name = body.face(f).name;
             return Some((name, name));
         }
     }
     // a surface defined by construction is held far tighter by the boxes of an 8 x 8 grid of its
     // parameters than by one box: faces whose pieces' boxes all miss each other can't meet
-    let pieces: Vec<Vec<Box3>> = (0..n as u32)
-        .map(FaceId)
-        .map(|f| {
+    let pieces: Vec<OnceCell<Vec<Box3>>> = vec![OnceCell::new(); n];
+    let pieces_of = |f: FaceId| {
+        pieces[f.index()].get_or_init(|| {
             let face = body.face(f);
             match &face.surface {
                 Surface::Procedural(pr) if face.alive => {
@@ -68,11 +70,11 @@ pub(crate) fn crossing(body: &Body, flagged: &[bool]) -> Option<(Name, Name)> {
                 _ => vec![body.face_box(f)],
             }
         })
-        .collect();
+    };
     let apart = |f: FaceId, g: FaceId| {
-        !pieces[f.index()]
+        !pieces_of(f)
             .iter()
-            .any(|a| pieces[g.index()].iter().any(|b| a.overlaps(b)))
+            .any(|a| pieces_of(g).iter().any(|b| a.overlaps(b)))
     };
     let ids: Vec<FaceId> = body.face_ids().collect();
     for (k, &f) in ids.iter().enumerate() {
@@ -84,7 +86,10 @@ pub(crate) fn crossing(body: &Body, flagged: &[bool]) -> Option<(Name, Name)> {
             if !bf.overlaps(&bg) {
                 continue;
             }
-            let (vf, vg) = (&verts[f.index()], &verts[g.index()]);
+            let (vf, vg) = (
+                verts[f.index()].get_or_init(|| verts_of(f)),
+                verts[g.index()].get_or_init(|| verts_of(g)),
+            );
             if vf.iter().any(|v| vg.binary_search(v).is_ok()) || apart(f, g) {
                 continue;
             }
@@ -95,9 +100,7 @@ pub(crate) fn crossing(body: &Body, flagged: &[bool]) -> Option<(Name, Name)> {
             };
             let spacing = (bf.diagonal().min(bg.diagonal()) / 32.0).max(10.0 * tol::LINEAR);
             let inside = |p: Point3| {
-                region.contains(p)
-                    && in_face(body, f, &loops[f.index()], p)
-                    && in_face(body, g, &loops[g.index()], p)
+                region.contains(p) && in_face(body, f, loops_of(f), p) && in_face(body, g, loops_of(g), p)
             };
             if surfaces_meet(
                 &body.face(f).surface,
@@ -146,13 +149,22 @@ fn surfaces_meet(
     let curves: Vec<Curve> = match ss {
         SurfaceSurface::Curves(cs) => cs.into_iter().map(|c| c.0).collect(),
         SurfaceSurface::Points(ps) => return ps.into_iter().any(inside),
-        SurfaceSurface::NotAnalytic => match trace(a, b, region.grow(tol::LINEAR)) {
-            Some(cs) => cs
-                .into_iter()
-                .map(|c| Curve::Intersection(std::sync::Arc::new(c)))
-                .collect(),
-            None => return false,
-        },
+        SurfaceSurface::NotAnalytic => {
+            let grown = region.grow(tol::LINEAR);
+            // a loft's own marcher before the tracer
+            match forge_geom::loftmeet::meet(a, b, grown) {
+                Some(SurfaceSurface::Curves(cs)) => cs.into_iter().map(|c| c.0).collect(),
+                Some(SurfaceSurface::Points(ps)) => return ps.into_iter().any(inside),
+                Some(SurfaceSurface::Empty | SurfaceSurface::Coincident) => return false,
+                _ => match trace(a, b, grown) {
+                    Some(cs) => cs
+                        .into_iter()
+                        .map(|c| Curve::Intersection(std::sync::Arc::new(c)))
+                        .collect(),
+                    None => return false,
+                },
+            }
+        }
         SurfaceSurface::Empty | SurfaceSurface::Coincident => return false,
     };
     curves.iter().any(|c| {
@@ -231,11 +243,8 @@ fn loops_cross(loops: &[UvLoop]) -> bool {
                 break;
             }
             let ((a, b), (c, d)) = (segs[i], segs[j]);
-            if a == c || a == d || b == c || b == d {
-                continue;
-            }
             let apart = |p: f64, q: f64, r: f64, t: f64| p.max(q) < r.min(t) || r.max(t) < p.min(q);
-            if apart(a.x, b.x, c.x, d.x) || apart(a.y, b.y, c.y, d.y) {
+            if apart(a.y, b.y, c.y, d.y) || a == c || a == d || b == c || b == d {
                 continue;
             }
             if opposite(orient2d(a, b, c), orient2d(a, b, d))

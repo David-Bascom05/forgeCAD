@@ -141,6 +141,8 @@ pub struct Ruled {
     ext: Box2,
     /// Rulings (t, A(t), B(t) - A(t)) at even steps over `ext.u`, seeding nearest-point searches.
     rows: Vec<(f64, Point3, Vec3)>,
+    /// How far a point of the carried-on surface can lie from the nearest of `rows`.
+    reach: f64,
     scale: (f64, f64),
     radius: f64,
     /// Which surface this is, for remembering its last query.
@@ -176,6 +178,7 @@ impl Ruled {
             b,
             ext: Box2::new(Interval::new(-te, 1.0 + te), Interval::new(-1.0, 2.0)),
             rows: Vec::new(),
+            reach: 0.0,
             scale: (a.length().max(b.length()), 0.0),
             radius: f64::INFINITY,
             id: fresh_id(),
@@ -249,6 +252,20 @@ impl Ruled {
                 (t, pa, b.at(t).0 - pa)
             })
             .collect();
+        // between two rows a point at s moves (1 - s) of one rail's step and s of the other's,
+        // at most half of it to the nearer row (0.75: a step's arc, not its chord)
+        let carried =
+            (1.0 - r.ext.v.lo).abs().max(r.ext.v.hi.abs()) + r.ext.v.lo.abs().max((1.0 - r.ext.v.hi).abs());
+        r.reach = 0.75
+            * carried
+            * r.rows
+                .windows(2)
+                .map(|w| {
+                    (w[1].1 - w[0].1)
+                        .length()
+                        .max(((w[1].1 + w[1].2) - (w[0].1 + w[0].2)).length())
+                })
+                .fold(0.0, f64::max);
         let mut kmax: f64 = 0.0;
         let mut ruling: f64 = 0.0;
         for i in 0..=8 {
@@ -454,6 +471,26 @@ impl Procedural for Ruled {
             .hull(&lerp_box(&ba, &bb, uv.v.hi))
             .grow(tol::LINEAR)
     }
+    /// The nearest ruling among `rows` puts the surface's distance within the rows' spacing; only
+    /// where r falls inside that does it take the search.
+    fn within(&self, p: Point3, r: f64) -> bool {
+        if !self.extruded {
+            let mut near = f64::INFINITY;
+            for &(_, pa, d) in &self.rows {
+                let w = p - pa;
+                let s = (w.dot(d) / d.length_sq()).clamp(self.ext.v.lo, self.ext.v.hi);
+                near = near.min((w - d * s).length_sq());
+            }
+            let hi = near.sqrt();
+            if hi - self.reach > r {
+                return false;
+            }
+            if hi <= r {
+                return true;
+            }
+        }
+        self.implicit(p).abs() <= r
+    }
     fn implicit(&self, p: Point3) -> f64 {
         self.value(p).0
     }
@@ -624,6 +661,22 @@ mod tests {
             let (f, g) = s.value(d.p + n * t);
             assert!((f - t).abs() < 1e-9, "{f} {t}");
             assert!(g.dot(n.get()) > 1.0 - 1e-6);
+        }
+    }
+
+    #[test]
+    fn a_cell_holding_the_surface_is_never_ruled_out() {
+        let mut r = Rng::new(524);
+        for _ in 0..200 {
+            let s = random_ruled(&mut r);
+            for _ in 0..40 {
+                let (u, v) = (r.range(s.ext.u.lo, s.ext.u.hi), r.range(s.ext.v.lo, s.ext.v.hi));
+                let q = s.point(Point2::new(u, v)).p;
+                let cell = r.range(0.001, 3.0);
+                let off = Vec3::new(r.range(-1.0, 1.0), r.range(-1.0, 1.0), r.range(-1.0, 1.0));
+                let p = q + off.normalize().map_or(Vec3::ZERO, |n| n.get()) * (cell * r.range(0.0, 0.999));
+                assert!(s.within(p, cell), "{s:?} {q:?} {p:?} {cell}");
+            }
         }
     }
 

@@ -318,6 +318,9 @@ pub fn align_loops<'a>(body: &Body, face: FaceId, mut loops: impl Iterator<Item 
 pub(crate) fn procedural_box(body: &Body, f: FaceId, pr: &forge_geom::surface::Proc) -> Box3 {
     let d = pr.domain();
     let whole = forge_math::Box2::new(d.u.interval(), d.v.interval());
+    if pr.whole_box() {
+        return pr.bbox(whole);
+    }
     let loops = if d.u.period.is_none() && d.v.period.is_none() {
         face_uv_loops(body, f)
     } else {

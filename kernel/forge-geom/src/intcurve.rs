@@ -70,6 +70,12 @@ fn newton_step(p: Point3, (ga, na): (f64, Vec3), (gb, nb): (f64, Vec3)) -> Point
     p + na * ((-ga * bb + gb * ab) / det) + nb * ((-gb * aa + ga * ab) / det)
 }
 
+/// Whether a Newton step from values this small lands within `refine`'s 1e-8: what it leaves is
+/// about the curvature times their square, 1e-12 times a curvature of up to 1e4.
+fn settled(a: f64, b: f64) -> bool {
+    a.abs() <= 1e-6 && b.abs() <= 1e-6
+}
+
 /// Unit direction of the curve at p (na x nb), or None where the surfaces are tangent.
 pub fn direction(a: &Surface, b: &Surface, p: Point3) -> Option<Vec3> {
     a.gradient(p).cross(b.gradient(p)).normalize().map(|u| u.get())
@@ -196,7 +202,11 @@ impl IntCurve {
         {
             return self.onto_from_chain(p, t);
         }
-        let q = newton_step(p, self.a.implicit_gradient(p), self.b.implicit_gradient(p));
+        let (va, vb) = (self.a.implicit_gradient(p), self.b.implicit_gradient(p));
+        let q = newton_step(p, va, vb);
+        if settled(va.0, vb.0) {
+            return q;
+        }
         // one step lands where the cubic was close; where it wasn't, finish the job
         let tight = |p: Point3| {
             self.a.implicit(p).abs() <= 1e-3 * tol::LINEAR && self.b.implicit(p).abs() <= 1e-3 * tol::LINEAR
@@ -214,6 +224,9 @@ impl IntCurve {
         let [ha, hb] = self.hint(t);
         let ((va, ua), (vb, ub)) = (self.side(0, p, ha), self.side(1, p, hb));
         let q = newton_step(p, va, vb);
+        if settled(va.0, vb.0) {
+            return q;
+        }
         // and from where p's search ended for q
         let level = |k: usize, uv: Option<Point2>| match uv {
             Some(_) => self.side(k, q, uv).0.0,

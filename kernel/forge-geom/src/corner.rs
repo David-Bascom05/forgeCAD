@@ -2147,6 +2147,9 @@ fn meets(b: &Box2, p: Point2, q: Point2) -> bool {
 }
 
 impl Procedural for HolePatch {
+    fn whole_box(&self) -> bool {
+        true
+    }
     fn point(&self, uv: Point2) -> Point3 {
         HolePatch::point(self, uv)
     }

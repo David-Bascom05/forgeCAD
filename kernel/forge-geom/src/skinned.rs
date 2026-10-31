@@ -873,14 +873,34 @@ impl Hull {
         } else {
             (&[1.0, 1.0], &[1.0, 2.0, 1.0])
         };
-        let h = |i: usize, j: usize| (self.pts[i * n + j] - o) * self.w[j];
+        let mut h = [[Vec3::ZERO; 3]; 4];
+        for (i, row) in h.iter_mut().enumerate() {
+            for (j, x) in row.iter_mut().enumerate().take(n) {
+                *x = (self.pts[i * n + j] - o) * self.w[j];
+            }
+        }
+        // at the piece's corners the coefficients are the quadric's own values: two of opposite
+        // signs settle it
+        let corner = |i: usize, j: usize| {
+            h[i][j].dot(crate::meet::mul(&a, h[i][j]))
+                + 2.0 * b.dot(h[i][j]) * self.w[j]
+                + c * self.w[j] * self.w[j]
+        };
+        let first = corner(0, 0);
+        if [corner(3, 0), corner(0, n - 1), corner(3, n - 1)]
+            .iter()
+            .any(|x| x * first < 0.0)
+        {
+            return false;
+        }
         let mut coef = [[0.0; 5]; 7];
         for i in 0..4 {
             for j in 0..n {
-                let (hij, ah) = (h(i, j), crate::meet::mul(&a, h(i, j)));
+                let (ah, bh) = (crate::meet::mul(&a, h[i][j]), 2.0 * b.dot(h[i][j]));
+                let wj = c * self.w[j];
                 for k in 0..4 {
                     for l in 0..n {
-                        let v = h(k, l).dot(ah) + 2.0 * b.dot(hij) * self.w[l] + c * self.w[j] * self.w[l];
+                        let v = h[k][l].dot(ah) + bh * self.w[l] + wj * self.w[l];
                         coef[i + k][j + l] += v * C3[i] * C3[k] * cn[j] * cn[l] / (C6[i + k] * c2n[j + l]);
                     }
                 }
@@ -1176,6 +1196,22 @@ impl Procedural for Skinned {
     fn project(&self, p: Point3) -> Point2 {
         self.nearest(p)
     }
+    /// A rail between two walls is a side of each, at the same s: u fixed, v its parameter.
+    fn curve_uv(&self, c: &ProcCurve) -> Option<(Point2, forge_math::Vec2)> {
+        let r = c.as_any()?.downcast_ref::<SplineRail>()?;
+        if r.data.spline.knots != self.data.spline.knots {
+            return None;
+        }
+        let on = |u: f64| {
+            [r.span.lo, r.span.mid(), r.span.hi]
+                .iter()
+                .all(|&s| self.point(Point2::new(u, s)).p.distance(r.at(s).p) <= 1e-3 * tol::LINEAR)
+        };
+        [0.0, 1.0]
+            .into_iter()
+            .find(|&u| on(u))
+            .map(|u| (Point2::new(u, 0.0), forge_math::Vec2::Y))
+    }
     fn value_near(&self, p: Point3, uv: Option<Point2>) -> Option<(f64, Vec3, Point2)> {
         let near = uv
             .map(|uv| polish(&|uv| self.point(uv), p, uv, self.ext, None))
@@ -1368,6 +1404,9 @@ impl SplineRail {
 }
 
 impl ProceduralCurve for SplineRail {
+    fn as_any(&self) -> Option<&dyn std::any::Any> {
+        Some(self)
+    }
     fn exact_d1(&self) -> bool {
         true
     }
@@ -1619,10 +1658,17 @@ mod tests {
             };
             let range = Interval::new(d.v.lo, d.v.hi);
             let b = rail.bbox(range);
+            let (base, dir) = s
+                .curve_uv(&rail)
+                .expect("a rail reads its parameters on its wall");
             for i in 0..=20 {
                 let x = range.lo + range.width() * i as f64 / 20.0;
                 let c = rail.deriv(x);
                 let on = s.point(Point2::new(0.0, x)).p;
+                assert!(
+                    s.point(base + dir * x).p.distance(c.p) < 1e-9,
+                    "rail's parameters at {x}"
+                );
                 assert!(on.distance(c.p) < 1e-9, "rail off its surface: {on:?} {:?}", c.p);
                 assert!(surf.distance(c.p) < 1e-9);
                 assert!(b.contains(c.p));

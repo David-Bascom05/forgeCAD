@@ -86,3 +86,37 @@ Tried for these faces and dropped (mesh):
 - A triangle's test skipped by the 4/9 rule from its three chords' stored sags: volute +11%, the hash costs
   more than it saves.
 - `proc_strips` on all procedural faces, not only swept: volute +16%, the strips fail and the Delaunay runs anyway.
+
+## Regen after the fillets: chamfer's check, corner boxes, loft boundaries
+
+Profiled over the bench (`research/feature-costs/centres.py`); each measured alone, seq, bits unchanged throughout.
+
+- `selfx::crossing`: chamfer flags a handful of faces, but it drew every face's uv loops, took 64 boxes of every
+  procedural face and listed every face's vertices first. All three now wait for a pair that needs them: volute
+  2422M to 2219M, heatsink 1282M to 1093M.
+- A loft against a plane or quadric in `crossing`: `loftmeet::meet` before the tracer, volute 2219M to 2017M.
+  `meet::intersect` there as well made guard and quadarm 130% slower, so it is left out: the gate found that.
+- `loops_cross`: the y test before the shared-end test, which ran on nearly every pair: volute 2017M to 1942M.
+- `HolePatch::whole_box`: a corner patch's face box is its surface's over the whole domain. `procedural_box` drew
+  its uv loops by projection, then boxed columns: 42% of heatsink. Heatsink 1093M to 655M, gearbox 388M to 312M. A
+  patch that has been cut gets a looser box: a superset, so it can cost time but drops nothing.
+- `Hull::misses`: each control point's terms worked out once in the Bernstein sign test: volute 1942M to 1839M.
+- `Skinned::curve_uv`: a `SplineRail` between two walls is a side of each, at u = 0 or 1 with v its parameter. Its
+  samples (96.6k of volute's 110k boundary samples on loft faces) read their parameters instead of being projected:
+  volute 1839M to 1509M. It holds only where the rail's knots are the wall's and rail and wall agree at the rail's
+  ends and middle within 1e-8.
+
+Tried and dropped:
+- Taking `Screw::project_near` out once helix edges read theirs directly: valve regen +5%.
+- The closed form per edge sample in the mesher: volute mesh -1.8%, valve -3%, but history seed 30 failed to mesh
+  (`ConstraintsIntersect` on a run-out thread's face). Not worth finding out why for that gain.
+
+Then, also with bits unchanged:
+- `IntCurve::onto`, `onto_from_chain`: after a Newton step from values under 1e-6 what is left is about the curvature
+  times 1e-12, below `refine`'s 1e-8 up to a curvature of 1e4, so the second look at both surfaces goes: volute 1509M
+  to 1418M, frame 404M to 397M, manifold 233M to 223M.
+- `Hull::misses` stops at two corner coefficients of opposite signs (they are the quadric's own values there): volute
+  1418M to 1372M, crank 454M to 414M.
+- `Ruled::within`: as `Pipe::within`, from the nearest of its rows. `reach` bounds how far the carried-on surface
+  lies from a row; a cell further off than that is out, one nearer than r to a ruling is in. `ruled.rs` test: a cell
+  holding a surface point is never ruled out. Crank 414M to 393M, jack 354M to 331M.
