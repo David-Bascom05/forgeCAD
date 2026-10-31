@@ -3717,7 +3717,8 @@ fn equal_rods_crossing_end_pieces_at_free_vertices() {
 
 /// A cone whose apex sits on a cylinder's top rim: the traced curve runs into the apex, a branch
 /// point where a forward step makes little headway. Requiring half a step of it (meant only for
-/// stepping over a touch) stopped the chain there: Unsupported for the cut and keep.
+/// stepping over a touch) stopped the chain there: Unsupported for the cut and keep. The two
+/// meet only at the apex, so the keep leaves nothing: refused as Empty, both ways.
 #[test]
 fn cone_apex_on_a_cylinder_rim() {
     let mut seen = 0;
@@ -3728,6 +3729,14 @@ fn cone_apex_on_a_cylinder_rim() {
         seen += 1;
         let part = forge_model::adversarial::canonical(&part);
         for b in [part.regenerate(), part.regenerate_nary(1)] {
+            if name.ends_with("/Keep") {
+                assert!(
+                    matches!(b, Err(forge_model::RegenError::Empty { .. })),
+                    "{name}: {:?}",
+                    b.err()
+                );
+                continue;
+            }
             let b = b.unwrap_or_else(|e| panic!("{name}: {e:?}"));
             assert!(
                 forge_topo::check(&b).is_empty(),
@@ -3737,4 +3746,25 @@ fn cone_apex_on_a_cylinder_rim() {
         }
     }
     assert_eq!(seen, 2);
+}
+
+/// A cut that takes the whole part, then a block added back (remove_all): feature by feature the
+/// cut is refused as leaving nothing, and the n-ary regen, which never sees the part between,
+/// rebuilds feature by feature where a cut's box holds all before it, and refuses alike.
+#[test]
+fn a_cut_that_takes_everything_is_refused_both_ways() {
+    let (_, g) = forge_model::adversarial::families()
+        .into_iter()
+        .find(|(f, _)| *f == "remove_all")
+        .expect("the family");
+    for s in 0..4 {
+        let part = forge_model::adversarial::canonical(&g(s));
+        for r in [part.regenerate(), part.regenerate_nary(1)] {
+            assert!(
+                matches!(r, Err(forge_model::RegenError::Empty { .. })),
+                "seed {s}: {:?}",
+                r.map(|b| b.face_ids().count())
+            );
+        }
+    }
 }

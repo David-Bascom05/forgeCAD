@@ -550,6 +550,57 @@ pub fn tool_shapes(features: History<'_>, i: usize) -> Result<Vec<(Shape, Combin
         .collect())
 }
 
+/// Whether a cut or keep among `tools`, applied in turn after `first`, may leave nothing: a cut
+/// whose solid's box holds the box of all before it, or a keep whose box misses it. The n-ary
+/// pass never sees the part in between, where the feature-by-feature regen refuses an empty
+/// one however later tools add to it; such histories are rebuilt feature by feature instead.
+fn may_empty(first: &Body, tools: &[Tool]) -> bool {
+    let bx = |b: &Body| {
+        b.face_ids()
+            .fold(forge_math::Box3::EMPTY, |a, f| a.hull(&b.face_box(f)))
+    };
+    let holds = |a: &forge_math::Box3, b: &forge_math::Box3| {
+        let h = a.grow(forge_math::tol::LINEAR);
+        h.x.lo <= b.x.lo
+            && h.x.hi >= b.x.hi
+            && h.y.lo <= b.y.lo
+            && h.y.hi >= b.y.hi
+            && h.z.lo <= b.z.lo
+            && h.z.hi >= b.z.hi
+    };
+    let mut so_far = bx(first);
+    for (b, op, _) in tools {
+        let t = bx(b);
+        match op {
+            Combine::Cut if holds(&t, &so_far) => return true,
+            Combine::Keep if !t.grow(forge_math::tol::LINEAR).overlaps(&so_far) => return true,
+            Combine::Keep => {
+                let cut = |a: forge_math::Interval, b: forge_math::Interval| {
+                    forge_math::Interval::new(a.lo.max(b.lo), a.hi.min(b.hi).max(a.lo.max(b.lo)))
+                };
+                so_far = forge_math::Box3 {
+                    x: cut(so_far.x, t.x),
+                    y: cut(so_far.y, t.y),
+                    z: cut(so_far.z, t.z),
+                };
+            }
+            Combine::Add | Combine::New => so_far = so_far.hull(&t),
+            Combine::Cut => {}
+        }
+    }
+    false
+}
+
+/// Features `..` rebuilt one at a time (the part between them seen, an empty one refused).
+fn one_at_a_time(features: History<'_>) -> Result<Body, RegenError> {
+    let mut body = None;
+    for i in 0..features.len() {
+        body = step(features, i, body)?;
+    }
+    body.map(Body::into_compact)
+        .ok_or(RegenError::NothingToCombine { feature: 0 })
+}
+
 /// `b`, unless feature `i` left nothing of it.
 pub(crate) fn not_empty(b: Body, i: usize) -> Result<Body, RegenError> {
     if b.face_ids().next().is_none() {
@@ -788,6 +839,9 @@ fn nary_run(
             body = modified()?;
         }
         let built = build_tools(features, m + 1, threads, true)?;
+        if may_empty(&body, &built) {
+            return one_at_a_time(features);
+        }
         let mut tools: Vec<&Body> = vec![&body];
         tools.extend(built.iter().map(|t| &t.0));
         let ops: Vec<Op> = built.iter().map(|t| op_of(t.1)).collect();
@@ -813,6 +867,9 @@ fn nary_run(
         }
     }
     let built = build_tools(features, start, threads, true)?;
+    if built.len() > 1 && may_empty(&built[0].0, &built[1..]) {
+        return one_at_a_time(features);
+    }
     let tools: Vec<&Body> = built.iter().map(|t| &t.0).collect();
     let ops: Vec<Op> = built[1..].iter().map(|t| op_of(t.1)).collect();
     let solids: Vec<Shape> = built.iter().map(|t| t.2.clone()).collect();
