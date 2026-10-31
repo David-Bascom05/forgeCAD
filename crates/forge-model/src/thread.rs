@@ -235,7 +235,21 @@ pub(crate) fn tools(features: History<'_>, i: usize, build: bool) -> Result<Vec<
                 return Err(e(ThreadError::BadSize));
             }
             let mut out = cut(i, features.id(i), &p, t, build)?;
-            // copies by the patterns after the hole that hold it, as `Part::threads` finds them
+            // at the hole's other places, then copies by the patterns after it that hold it, as
+            // `Part::threads` finds them
+            let mut placed = Vec::new();
+            for (key, m) in h.copies() {
+                for (b, op, sh) in &out {
+                    let b = if build {
+                        moved(b, &m, |n| instance_name(features.id(k), key, n))
+                            .map_err(|error| RegenError::Pattern { feature: i, error })?
+                    } else {
+                        Body::new()
+                    };
+                    placed.push((b, *op, moved_shape(sh, &m)));
+                }
+            }
+            out.extend(placed);
             let mut held = vec![k];
             for (j, f) in features.iter().enumerate().take(i).skip(k + 1) {
                 let Feature::Pattern { of, layout } = f else {

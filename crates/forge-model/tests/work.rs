@@ -476,6 +476,7 @@ fn straight_path_is_linear() {
         point: None,
         thread: None,
         standard: None,
+        places: None,
     }));
     let path = Layout::Path {
         along: vec![r(0, x_edge)],
@@ -541,6 +542,7 @@ fn standard_holes() {
         point: None,
         thread: s.thread(),
         standard: Some(s),
+        places: None,
     };
     let tapped = hole(tap, Head::Plain);
     assert_eq!(tapped.diameter, 5.0);
@@ -559,7 +561,7 @@ fn standard_holes() {
     ] {
         let mut fs = base(10.0);
         fs.truncate(1);
-        fs.push(Feature::Hole(Box::new(h)));
+        fs.push(Feature::Hole(Box::new(h.clone())));
         let part = Part { features: fs };
         let b = part.regenerate_nary(1).expect("standard hole");
         assert!((volume(&b) - (8000.0 - cut)).abs() < 0.1, "{}", volume(&b));

@@ -352,6 +352,7 @@ fn parts() -> Vec<(&'static str, Part, f64)> {
                         point: None,
                         thread: None,
                         standard: None,
+                        places: None,
                     })),
                 ],
             },

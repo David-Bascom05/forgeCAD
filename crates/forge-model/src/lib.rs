@@ -411,6 +411,9 @@ impl Part {
                 Feature::Hole(h) => {
                     if let Some(t) = h.thread {
                         out.push((t, h.at, h.diameter / 2.0, vec![i]));
+                        for (_, m) in h.copies() {
+                            out.push((t, m.frame(&h.at, true), h.diameter / 2.0, vec![i]));
+                        }
                     }
                 }
                 Feature::Pattern { of, layout } => {
@@ -881,7 +884,18 @@ fn tools(features: History<'_>, i: usize, build: bool) -> Result<Vec<Tool>, Rege
                     &m,
                 )?;
             }
-            Ok(vec![t])
+            let pe = |error| RegenError::Pattern { feature: i, error };
+            let mut out = Vec::new();
+            for (key, m) in h.copies() {
+                let body = if build {
+                    moved(&t.0, &m, |n| instance_name(i, key, n)).map_err(pe)?
+                } else {
+                    Body::new()
+                };
+                out.push((body, t.1, moved_shape(&t.2, &m)));
+            }
+            out.insert(0, t);
+            Ok(out)
         }
         Feature::Pattern {
             of: Source::Features(src),

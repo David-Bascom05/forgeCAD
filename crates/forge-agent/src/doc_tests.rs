@@ -801,3 +801,48 @@ fn sketch_points_everywhere() {
         round_trip(&part);
     }
 }
+
+/// A hole at a sketch's points is one feature: the same part as a hole and a pattern of it,
+/// each place's thread recorded, its copies named under the hole.
+#[test]
+fn one_hole_at_many_sketch_points() {
+    let sk =
+        "sk: sketch xy at 0 0 10\n  pt 10 10\n  pt 30 10\n  circle 45 25 3\nend\nextrude 10 rect 0 0 60 40\n";
+    let one = built(&format!("{sk}hole M4 iso tap -on sk pts centers thru\n"));
+    let two = built(&format!(
+        "{sk}h: hole M4 iso tap -on sk p1 thru\npattern h pts sk centers\n"
+    ));
+    let vol = |m: &Model| {
+        let b = m.body().expect("built").compact();
+        assert!(forge_topo::check(&b).is_empty());
+        forge_mesh::tessellate(&b, &forge_mesh::Quality::default())
+            .expect("meshes")
+            .volume()
+    };
+    let (a, b) = (vol(&one), vol(&two));
+    assert!((a - b).abs() < 1e-9 * a, "{a} vs {b}");
+    let part = Part {
+        features: one.features.clone(),
+    };
+    assert_eq!(part.threads().len(), 3);
+    let Feature::Hole(h) = &one.features[2] else {
+        panic!("a hole")
+    };
+    assert_eq!(h.at.origin, forge_math::Point3::new(10.0, 10.0, 10.0));
+    let printed = text::print(&part);
+    assert!(
+        printed.contains("hole M4 iso tap -on sketch1 pts centers thru\n"),
+        "{printed}"
+    );
+    round_trip(&part);
+    let body = one.body().expect("built");
+    let copy = forge_model::instance_name(
+        2,
+        [2, 0],
+        forge_topo::Name::feature(3).with_str("side").with(4).with(0),
+    );
+    assert!(
+        body.face_ids().any(|f| body.face(f).name == copy),
+        "the third place's wall"
+    );
+}

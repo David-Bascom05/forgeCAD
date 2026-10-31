@@ -327,7 +327,7 @@ pub const KINDS: &[Kind] = &[
     },
     Kind {
         name: "hole",
-        syntax: "hole (D | SIZE [iso|ansi] [close|normal|loose|tap] [cbore|csink]) FRAME [cb D2 DEPTH | cs D2 A] (N | thru | next | to FEAT [@face] [off N]) [pt A] [thread SIZE PITCH]",
+        syntax: "hole (D | SIZE [iso|ansi] [close|normal|loose|tap] [cbore|csink]) (FRAME | [-]on SK pts [P.. | centers]) [cb D2 DEPTH | cs D2 A] (N | thru | next | to FEAT [@face] [off N]) [pt A] [thread SIZE PITCH]",
         parse: |p| {
             let std = p.standard()?;
             let diameter = match std {
@@ -342,7 +342,10 @@ pub const KINDS: &[Kind] = &[
                 ),
                 _ => None,
             };
-            let at = p.frame()?;
+            let (at, places) = match p.hole_places()? {
+                Some((at, places)) => (at, Some(places)),
+                None => (p.frame()?, None),
+            };
             let head = if let Some(h) = std_head {
                 h
             } else if p.eat("cb") {
@@ -398,6 +401,7 @@ pub const KINDS: &[Kind] = &[
                 point,
                 thread,
                 standard: std,
+                places,
             })))
         },
         print: |f, w| {
@@ -428,7 +432,27 @@ pub const KINDS: &[Kind] = &[
             if let Some(k) = std_head {
                 w.word(k);
             }
-            w.frame(&h.at);
+            match &h.places {
+                Some(At::Sketch {
+                    feature,
+                    points,
+                    centers,
+                    ..
+                }) => {
+                    let flip = match w.before.get(*feature) {
+                        Some(Feature::Sketch(s)) => s.plane.z().dot(h.at.z().get()) < 0.0,
+                        _ => false,
+                    };
+                    w.word(if flip { "-on" } else { "on" });
+                    w.feat(*feature);
+                    w.word("pts");
+                    points.iter().for_each(|t| w.word(t));
+                    if *centers {
+                        w.word("centers");
+                    }
+                }
+                _ => w.frame(&h.at),
+            }
             match h.head {
                 _ if std_head.is_some() => {}
                 Head::Plain => {}
@@ -2496,6 +2520,11 @@ impl<'a> P<'a> {
             self.feats.truncate(n);
             return Ok(None);
         };
+        self.points_of(feature, s).map(Some)
+    }
+    /// The points of sketch `feature` named next (none: all its `pt`s, and with `centers` its
+    /// circles' and arcs' centres too), where they are.
+    fn points_of(&mut self, feature: usize, s: &forge_model::Sketch) -> R<At> {
         let mut points = Vec::new();
         while sketch::is_ref(self.peek()) {
             points.push(self.next()?.to_string());
@@ -2520,12 +2549,32 @@ impl<'a> P<'a> {
             .iter()
             .map(|n| Ok(s.plane.plane_point(sketch::point(s, n)?)))
             .collect::<R<Vec<_>>>()?;
-        Ok(Some(At::Sketch {
+        Ok(At::Sketch {
             feature,
             points,
             centers,
             at,
-        }))
+        })
+    }
+    /// A hole's places at a sketch's points, `[-]on SK pts [P.. | centers]`: the frame on the
+    /// sketch's plane (flipped) at the first, and the points.
+    fn hole_places(&mut self) -> R<Option<(Frame, At)>> {
+        let flip = self.peek() == "-on";
+        if !(flip || self.peek() == "on") || self.t.get(self.k + 2).map(String::as_str) != Some("pts") {
+            return Ok(None);
+        }
+        self.k += 1;
+        let feature = self.feat()?;
+        let Some(Feature::Sketch(s)) = self.b.features.get(feature) else {
+            return Err(format!("'pts' needs a sketch; line {} is not one", feature + 1));
+        };
+        self.k += 1;
+        let at = self.points_of(feature, s)?;
+        let At::Sketch { at: pts, .. } = &at else {
+            unreachable!("a sketch's points")
+        };
+        let plane = if flip { s.plane.flipped() } else { s.plane };
+        Ok(Some((plane.with_origin(pts[0]), at)))
     }
     /// The sketch a line names here, if it names one.
     fn sketch(&mut self) -> Option<&'a forge_model::Sketch> {
@@ -3600,6 +3649,7 @@ mod tests {
                     point: r.bool().then(|| angle(r)),
                     thread: std.thread(),
                     standard: Some(std),
+                    places: None,
                 }))
             }
             7 => Feature::Hole(Box::new(Hole {
@@ -3631,6 +3681,7 @@ mod tests {
                     pitch: num(r),
                 }),
                 standard: None,
+                places: None,
             })),
             8 => Feature::Pattern {
                 of: if r.bool() {
@@ -4016,6 +4067,7 @@ mod tests {
                     point: None,
                     thread: None,
                     standard: None,
+                    places: None,
                 })),
                 Feature::Pattern {
                     of: Source::Features(vec![1]),

@@ -6,7 +6,7 @@ use crate::{Combine, Extent, Feature, Turn};
 use forge_math::{Box3, Frame, Point2, Vec2, dmath};
 use forge_ops::{Axis2, Profile, ProfileLoop, Segment};
 
-#[derive(Clone, Copy, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct Hole {
     /// The mouth: origin at its centre, z the drilling direction (into the material).
     pub at: Frame,
@@ -20,6 +20,29 @@ pub struct Hole {
     pub thread: Option<Thread>,
     /// The screw and fit the diameter (and a tapped hole's thread) came from, if a standard's.
     pub standard: Option<crate::Standard>,
+    /// Drilled at each of a sketch's points (`At::Sketch`, the first `at`'s origin), as one
+    /// feature: the rest are copies of the first, named as a pattern names them.
+    pub places: Option<crate::At>,
+}
+
+impl Hole {
+    /// The moves from the first place to each other one, keyed as a pattern's copies.
+    pub(crate) fn copies(&self) -> Vec<([u64; 2], crate::pattern::Motion)> {
+        let Some(crate::At::Sketch { at, .. }) = &self.places else {
+            return vec![];
+        };
+        at.iter()
+            .enumerate()
+            .skip(1)
+            .map(|(k, &p)| {
+                let o = forge_math::Point3::ORIGIN + (p - at[0]);
+                (
+                    [k as u64, 0],
+                    crate::pattern::Motion::Rigid(Frame::WORLD.with_origin(o)),
+                )
+            })
+            .collect()
+    }
 }
 
 #[derive(Clone, Copy, Debug, PartialEq)]

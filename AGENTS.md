@@ -50,11 +50,12 @@ ball [op] R FRAME     fillet R [from VREF] REF.. [R ..] [setback VREF [REF] D]..
 facefillet R REF.. to REF..      fullround SIDE MIDDLE SIDE
 shell T [out] REF..              hollow to walls T thick (out: outside the skin), REF faces open
 chamfer D REF.. | chamfer D D2 face REF REF.. | chamfer D ang A face REF REF..
-hole (D | SIZE [iso|ansi] [close|normal|loose|tap] [cbore|csink]) FRAME [cb D2 DEPTH | cs D2 A] (N | thru | next | to FEAT [@face] [off N]) [pt A] [thread SPEC]
+hole (D | SIZE [iso|ansi] [close|normal|loose|tap] [cbore|csink]) (FRAME | [-]on SK pts [P.. | centers]) [cb D2 DEPTH | cs D2 A] (N | thru | next | to FEAT [@face] [off N]) [pt A] [thread SPEC]
   N: depth, flat bottom unless `pt 118`; thru: through the whole part. SIZE: M6 M8x1 (ISO), 1/4-20 10-32
   (UTS) from the tables (iso: DIN 336 tap drills, DIN 974-1 seats; ansi: tap D-P, ASME B18.3); fit normal
   clearance, or tap (tap drill, thread recorded); cbore|csink seat a head. Other sizes: `hole D .. thread M36x2`.
   A hole's thread is recorded only; `thread hole FEAT N` models it (bore it to the minor, below).
+  `on SK pts`: one hole at each of a sketch's points (as pattern pts), the first where the frame is.
 pattern (body | FEAT..) (lin DX DY DZ N STEP [DX DY DZ N STEP] | circ OX OY OZ AX AY AZ N [A] [step] | mirror FRAME
   | path REF.. N (STEP|fit) [fixed] [rev] | pts (X Y Z | REF | SKETCH [P.. | centers])..)
   N counts the original; body: the whole part. lin: STEP mm apart along DIR; circ: N over A (default

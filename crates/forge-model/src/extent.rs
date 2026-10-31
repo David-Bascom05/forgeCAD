@@ -495,7 +495,7 @@ pub(crate) fn hole_end(
             material = Some(m);
             s
         }
-        _ => return Ok((*h, None, None)),
+        _ => return Ok((h.clone(), None, None)),
     };
     let offset = if let End::To { offset, .. } = h.end {
         offset
@@ -510,7 +510,7 @@ pub(crate) fn hole_end(
         return Ok((
             Hole {
                 end: End::Depth(depth),
-                ..*h
+                ..h.clone()
             },
             None,
             material,
@@ -527,7 +527,7 @@ pub(crate) fn hole_end(
     let long = Hole {
         end: End::Depth(t),
         point: None,
-        ..*h
+        ..h.clone()
     };
     let side = Name::feature(features.id(i)).with_str("side").with(0);
     let up = UpTo {
