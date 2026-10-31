@@ -1,4 +1,5 @@
-//! Copies of features or of the whole part: rectangular and circular patterns and mirrors.
+//! Copies of features or of the whole part: rectangular and circular patterns, mirrors, along a
+//! path and at points.
 //! A copy is the built solid moved by a rigid motion or reflected, never rebuilt.
 
 use forge_bool::{Seg2, Shape};
@@ -6,6 +7,9 @@ use forge_geom::intcurve::IntCurve;
 use forge_geom::{Curve, CurveGeom, Line, Surface, SurfaceGeom};
 use forge_math::{Box3, Frame, Point2, Point3, Vec3, dmath, tol};
 use forge_topo::{Body, EdgeId, Name, ShellId, VertexId};
+
+use crate::work::Ref;
+use crate::{Feature, RegenError};
 
 /// What a pattern or mirror copies.
 #[derive(Clone, Debug, PartialEq)]
@@ -24,7 +28,7 @@ pub struct Row {
     pub spacing: f64,
 }
 
-#[derive(Clone, Copy, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq)]
 pub enum Layout {
     /// Along one or two directions.
     Linear { first: Row, second: Option<Row> },
@@ -40,6 +44,35 @@ pub enum Layout {
     },
     /// Reflected in the plane's xy.
     Mirror { plane: Frame },
+    /// `count` places along a chain of edges or an axis, the original at its start: `spacing`
+    /// apart, or (None) spread over its whole length. `turn`: each copy turned as the path's
+    /// tangent turns, else only moved. `reverse`: the chain walked the other way.
+    Path {
+        along: Vec<Ref>,
+        count: usize,
+        spacing: Option<f64>,
+        turn: bool,
+        reverse: bool,
+    },
+    /// The original at the first point, a copy moved to each of the others.
+    Points(Vec<At>),
+}
+
+/// A point to place a copy at.
+#[derive(Clone, Debug, PartialEq)]
+pub enum At {
+    Xyz(Point3),
+    /// A work point or vertex.
+    Ref(Ref),
+    /// A sketch's points: those named, or (none named) all its `pt` points, and with `centers`
+    /// its circles' and arcs' centres too. Kept by name so the file says them again; `at` is
+    /// where they were solved when the line was read, in the sketch's order.
+    Sketch {
+        feature: usize,
+        points: Vec<String>,
+        centers: bool,
+        at: Vec<Point3>,
+    },
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -129,9 +162,15 @@ pub(crate) fn corners(b: &Box3) -> [Point3; 8] {
     })
 }
 
-/// For each copy a layout makes (the original left out), the point it carries onto `p`.
-pub fn copy_sources(layout: &Layout, p: Point3) -> Result<Vec<Point3>, PatternError> {
-    Ok(instances(layout)?
+/// For each copy pattern `i`'s layout makes (the original left out), the point it carries
+/// onto `p`.
+pub fn copy_sources(
+    features: &[Feature],
+    i: usize,
+    layout: &Layout,
+    p: Point3,
+) -> Result<Vec<Point3>, RegenError> {
+    Ok(instances(features, i, layout)?
         .into_iter()
         .map(|(_, m)| match m {
             Motion::Rigid(f) => f.point_to_local(p),
@@ -141,8 +180,27 @@ pub fn copy_sources(layout: &Layout, p: Point3) -> Result<Vec<Point3>, PatternEr
         .collect())
 }
 
-/// Every copy a layout makes (the original left out), keyed by its place in the layout.
-pub(crate) fn instances(layout: &Layout) -> Result<Vec<([u64; 2], Motion)>, PatternError> {
+/// Every copy pattern `i`'s layout makes (the original left out), keyed by its place in it.
+pub(crate) fn instances(
+    features: &[Feature],
+    i: usize,
+    layout: &Layout,
+) -> Result<Vec<([u64; 2], Motion)>, RegenError> {
+    let pe = |error| RegenError::Pattern { feature: i, error };
+    match layout {
+        Layout::Path {
+            along,
+            count,
+            spacing,
+            turn,
+            reverse,
+        } => crate::path::along(features, i, along, *count, *spacing, *turn, *reverse),
+        Layout::Points(at) => crate::path::at_points(features, i, at),
+        l => fixed(l).map_err(pe),
+    }
+}
+
+fn fixed(layout: &Layout) -> Result<Vec<([u64; 2], Motion)>, PatternError> {
     match *layout {
         Layout::Linear { first, second } => {
             let row = |r: Row| -> Result<(Vec3, usize), PatternError> {
@@ -198,6 +256,7 @@ pub(crate) fn instances(layout: &Layout) -> Result<Vec<([u64; 2], Motion)>, Patt
                 .collect())
         }
         Layout::Mirror { plane } => Ok(vec![([1, 0], Motion::Mirror(plane))]),
+        Layout::Path { .. } | Layout::Points(_) => unreachable!("placed from the features"),
     }
 }
 
@@ -540,7 +599,11 @@ mod tests {
                 angle,
                 incremental,
             };
-            let last = instances(&layout).expect("layout").pop().expect("copies").1;
+            let last = instances(&[], 0, &layout)
+                .expect("layout")
+                .pop()
+                .expect("copies")
+                .1;
             let p = last.point(Point3::new(1.0, 0.0, 0.0));
             dmath::atan2(p.y, p.x)
         };

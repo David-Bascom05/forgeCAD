@@ -54,6 +54,7 @@ pub fn copies(
     prev: &Body,
     po: &Lineage,
     k: usize,
+    features: &[forge_model::Feature],
     layout: &forge_model::Layout,
     from: &dyn Fn(&Vec<usize>) -> bool,
 ) -> Lineage {
@@ -70,7 +71,7 @@ pub fn copies(
         // a point on the face's surface, near its middle
         let c = centre(body, Ent::Face(f));
         let p = face.surface.eval(face.surface.project(c));
-        let back = forge_model::copy_sources(layout, p).unwrap_or_default();
+        let back = forge_model::copy_sources(features, k, layout, p).unwrap_or_default();
         let hit = sources.iter().find(|&&g| {
             let s = &prev.face(g).surface;
             surface_kind(s) == surface_kind(&face.surface)

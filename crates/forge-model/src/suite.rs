@@ -548,6 +548,7 @@ fn hole(at: Point3, diameter: f64, head: Head, end: End) -> Hole {
         end,
         point: None,
         thread: None,
+        standard: None,
     }
 }
 
@@ -1148,6 +1149,7 @@ pub fn thread() -> Part {
                     size: 10.0,
                     pitch: 1.5,
                 }),
+                standard: None,
             })),
             threaded(ThreadOn::Hole(3), ThreadLength::Full, Handed::Left),
         ],

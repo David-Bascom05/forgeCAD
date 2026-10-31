@@ -148,6 +148,11 @@ impl Model {
                 let refs = |r: &str| self.refs(i, r);
                 let face = |r: &str| self.face(i, r);
                 let fonts = |n: &str| self.fonts.as_ref().map(|f| f(n)).transpose();
+                let own = |k: usize, n: Name| {
+                    self.body_after(i)
+                        .and_then(|b| forge_model::work::own_name(&self.features, k, b, n))
+                        .unwrap_or(n)
+                };
                 let b = Before {
                     features: &self.features,
                     labels: &self.labels[..i],
@@ -156,6 +161,7 @@ impl Model {
                     face: &face,
                     fonts: &fonts,
                     was: old_features.get(i - keep),
+                    own: &own,
                 };
                 text::parse_line_refs(&line, &b)
             };
@@ -344,7 +350,7 @@ impl Model {
                         Source::Body => true,
                         Source::Features(src) => c.iter().any(|x| src.contains(x)),
                     };
-                    select::copies(b, pb, &origins[k - 1], k, layout, &from)
+                    select::copies(b, pb, &origins[k - 1], k, &self.features, layout, &from)
                 }
                 _ => HashMap::new(),
             };
@@ -550,6 +556,10 @@ pub fn explain(e: &RegenError) -> (String, String) {
                 "a TrueType (glyf) font file, a positive size and depth; wrapped text shorter than the cylinder's round",
             ),
         ),
+        Work { error, .. } => (
+            format!("work feature: {error:?}"),
+            hint("REF is a work feature, or FEAT @h: a face, edge or vertex of FEAT's own solid"),
+        ),
         NothingToCombine { .. } => (
             "nothing to combine with yet".into(),
             hint("start with a solid: extrude, revolve or ball (op new)"),
@@ -661,7 +671,7 @@ pattern boss bhole pattern1 mirror xz
         let f = m.error.expect("fails");
         assert_eq!(m.lines[f.at].no, 4);
         assert!(f.msg.contains("thrue"), "{}", f.msg);
-        assert!(f.hint.starts_with("hole D FRAME"), "{}", f.hint);
+        assert!(f.hint.starts_with("hole (D | SIZE"), "{}", f.hint);
         let m = Model::new("extrude 5 rect 0 0 10 10\nfillet 50 (edges along +z)\n");
         let f = m.error.expect("too big a radius");
         assert!(f.msg.starts_with("fillet:"), "{}", f.msg);

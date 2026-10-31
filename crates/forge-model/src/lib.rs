@@ -9,8 +9,10 @@ pub mod finishing;
 pub mod hole;
 pub mod names;
 pub mod params;
+mod path;
 pub mod pattern;
 mod rib;
+pub mod standard;
 pub mod suite;
 pub mod swept;
 pub mod text;
@@ -18,6 +20,7 @@ pub mod thread;
 pub mod torture;
 mod trace;
 mod upto;
+pub mod work;
 
 pub use edit::{Edit, EditError, Motion, Side};
 pub use extent::{Extent, ExtentError, Target, Toward, Turn};
@@ -33,12 +36,14 @@ use forge_ops::{
 use forge_topo::{Body, Name};
 pub use hole::{End, Head, Hole, HoleError, Thread};
 pub use params::{On, Param, Sketch, Unit};
-pub use pattern::{Layout, PatternError, Row, Source, copy_sources, instance_name};
+pub use pattern::{At, Layout, PatternError, Row, Source, copy_sources, instance_name};
 use pattern::{instances, moved, moved_shape};
 pub use rib::{Rib, RibError};
+pub use standard::{Convention, Fit, Screw, Standard};
 pub use swept::{Coil, CoilSize, Loft, PathEnds, Sweep};
 pub use text::{FontRef, Text, TextError, TextOn};
 pub use thread::{Length as ThreadLength, On as ThreadOn, ScrewThread, Spec as ThreadSpec, ThreadError};
+pub use work::{AxisBy, Datum, PlaneBy, PointBy, Ref, UcsBy, Work, WorkError};
 
 /// One step of a part's history.
 #[derive(Clone, Debug, PartialEq)]
@@ -112,6 +117,8 @@ pub enum Feature {
     Thread(Box<ScrewThread>),
     /// Text embossed on or engraved into a plane or a cylinder.
     Text(Box<Text>),
+    /// A work plane, axis, point or UCS defined by references; it makes nothing.
+    Work(Work),
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -194,6 +201,10 @@ pub enum RegenError {
         feature: usize,
         error: TextError,
     },
+    Work {
+        feature: usize,
+        error: WorkError,
+    },
     /// A feature that combines with or changes the part came before any part existed.
     NothingToCombine {
         feature: usize,
@@ -275,7 +286,7 @@ impl Part {
                     }
                 }
                 Feature::Pattern { of, layout } => {
-                    let Ok(copies) = instances(layout) else {
+                    let Ok(copies) = instances(&self.features, i, layout) else {
                         continue;
                     };
                     let mut added = Vec::new();
@@ -342,6 +353,10 @@ pub fn step(features: &[Feature], i: usize, body: Option<Body>) -> Result<Option
         return Ok(Some(b));
     }
     if matches!(f, Feature::Plane(_) | Feature::Param(_) | Feature::Sketch(_)) {
+        return Ok(body);
+    }
+    if let Feature::Work(_) = f {
+        work::datum(features, i)?;
         return Ok(body);
     }
     let mut b = body.ok_or(RegenError::NothingToCombine { feature: i })?;
@@ -603,7 +618,7 @@ fn modify(features: &[Feature], i: usize, body: &Body, threads: usize) -> Result
         } => draft(body, faces, neutral, *angle).map_err(|error| RegenError::Draft { feature: i, error }),
         Feature::Pattern { layout, .. } => {
             let pe = |error| RegenError::Pattern { feature: i, error };
-            let copies = instances(layout).map_err(pe)?;
+            let copies = instances(features, i, layout)?;
             let copies = copies
                 .iter()
                 .map(|(key, m)| moved(body, m, |n| instance_name(i, *key, n)))
@@ -711,7 +726,7 @@ fn tools(features: &[Feature], i: usize, build: bool) -> Result<Vec<Tool>, Regen
             layout,
         } => {
             let pe = |error| RegenError::Pattern { feature: i, error };
-            let copies = instances(layout).map_err(pe)?;
+            let copies = instances(features, i, layout)?;
             let mut base = Vec::new();
             for &s in src {
                 if s >= i || modifies(&features[s]) {
@@ -752,7 +767,7 @@ fn tools(features: &[Feature], i: usize, build: bool) -> Result<Vec<Tool>, Regen
             }
             Ok(vec![t])
         }
-        Feature::Plane(_) | Feature::Param(_) | Feature::Sketch(_) => Ok(vec![]),
+        Feature::Plane(_) | Feature::Param(_) | Feature::Sketch(_) | Feature::Work(_) => Ok(vec![]),
         Feature::Sweep(_) | Feature::Coil(_) | Feature::Loft(_) => {
             Ok(vec![swept::tool_of(features, i, build)?])
         }

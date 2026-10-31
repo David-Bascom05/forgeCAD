@@ -13,6 +13,8 @@ pattern hole1 lin 1 0 0 3 20                # copy hole1: dir, count, step
 extrude cut 2 -xy at 0 5 6 circle 0 0 4     # op: new add cut keep (default add)
 fillet 3 (edges between base wall concave)  # radius, then refs; a new radius applies onward
 chamfer 1 @d644 @b2e4                       # @handles come from `query`
+hole M6 iso tap -xy at 20 10 6 thru         # tap drill 5, thread M6x1 recorded
+pattern hole2 pts 20 10 6  20 0 6           # the source at the first point, copies at the rest
 ```
 
 Parameters and sketches (each makes nothing; lines below use them):
@@ -46,17 +48,23 @@ ball [op] R FRAME     fillet R [from VREF] REF.. [R ..] [setback VREF [REF] D]..
 facefillet R REF.. to REF..      fullround SIDE MIDDLE SIDE
 shell T [out] REF..              hollow to walls T thick (out: outside the skin), REF faces open
 chamfer D REF.. | chamfer D D2 face REF REF.. | chamfer D ang A face REF REF..
-hole D FRAME [cb D2 DEPTH | cs D2 A] (N | thru | next | to FEAT [@face] [off N]) [pt A] [thread SIZE PITCH]
+hole (D | SIZE [iso|ansi] [close|normal|loose|tap] [cbore|csink]) FRAME [cb D2 DEPTH | cs D2 A] (N | thru | next | to FEAT [@face] [off N]) [pt A] [thread SIZE PITCH]
+  SIZE: M6 M8x1 (ISO metric), 1/4-20 10-32 (UTS). iso (metric default): DIN 336 tap drills, DIN 974-1
+  counterbores; ansi (inch: always): tap drill D-P (inch: 75% thread), ASME B18.3(.1M) counterbores.
+  Clearance fit normal by default; tap: tap drill + thread; cbore|csink: seat for a socket or flat head
   N: depth, flat bottom unless `pt 118` (drill point angle)
-pattern (body | FEAT..) (lin DX DY DZ N STEP [DX DY DZ N STEP] | circ OX OY OZ AX AY AZ N [A] [step] | mirror FRAME)
+pattern (body | FEAT..) (lin DX DY DZ N STEP [DX DY DZ N STEP] | circ OX OY OZ AX AY AZ N [A] [step] | mirror FRAME
+  | path REF.. N (STEP|fit) [fixed] [rev] | pts (X Y Z | REF | SKETCH [P.. | centers])..)
   N counts the original; lin: STEP mm apart along DIR; circ: N spread over A (default 360),
   or A apart with `step`; mirror: in the frame's xy plane (`mirror yz` is across x=0)
+  path: edges end to end (FEAT @e @e..) or an axis; the source at its start, turned with it unless fixed
+  pts: the source at the first point; SKETCH: its points P, or all its `pt`s (`hole .. -on sk p1` + `pts sk`),
+  `centers`: and its circles' and arcs' centres, in sketch order
 sweep [op] FRAME LOOPS path PATH [extend N M | to FEAT [@face] [off N]]     profile square to the path's start
 coil [op] FRAME [axis ..] LOOPS (pitch P turns N | turns N height H | pitch P height H | pitch P to FEAT [@face] [off N]) [taper A] [left]
 loft [op] [smooth [start W] [end W]] (profile FRAME LOOPS).. [rail I PATH.. | centre PATH]     I: vertex (where segment I starts)
 PATH: (line AX AY AZ BX BY BZ | arc FRAME R START SWEEP).. | SKETCH [E]     tangent-continuous; an arc's FRAME is its circle's, centre at `at`
 Wherever LOOPS go (sweep, coil, loft profiles too), `SKETCH [E]` may stand instead, as for extrude.
-plane FRAME                      a work plane, for `to FEAT` and `on FEAT`
 thread (SPEC FRAME ext|int | SPEC face FEAT REF [flip] | hole FEAT) (N | full | to FEAT [@face] [off N]) [left] [chamfer] [runout]
   a modeled 60 degree ISO / UTS thread. SPEC: M6 (coarse) | M6x0.75 | 1/4-20 | 0.19-24 (inch, TPI).
   FRAME: origin on the axis where it starts, z along it into the part; ext round a rod of the major
@@ -77,7 +85,12 @@ delete REF..                     faces removed, the gap closed by the faces arou
                                  pocket (its rim a whole loop of a face), or a chamfer/fillet strip
 replace REF with FEAT [@face]    a face put on a work plane or an earlier feature's face
 move REF.. (by DX DY DZ | turn A OX OY OZ AX AY AZ)   faces moved or turned, neighbours re-met
-FRAME: [xy|xz|yz|-xy|-xz|-yz | z A B C [x A B C] | [-]on FEAT [P] | on REF] [at X Y Z]     default: xy at 0 0 0
+Work features (make nothing; for `to`, `on`, `at`, path and pts). REF: FEAT (a work feature), or
+FEAT @h|(sel): a face, edge or vertex FEAT made. They follow upstream edits.
+plane FRAME | off FACE D | ang PLANE AXIS A | tan CYL PLANE | pts P P P | mid PLANE PLANE | norm CURVE P
+axis EDGE|CYL|CONE | pts P P | meet PLANE PLANE | norm PLANE P
+point VERTEX|CIRCLE|SPHERE | mid EDGE | meet EDGE|AXIS FACE|PLANE        ucs FRAME | ucs pts O X XY
+FRAME: [xy|xz|yz|-xy|-xz|-yz | z A B C [x A B C] | [-]on FEAT [P] | on REF] [at X Y Z | at POINT]     default: xy at 0 0 0
   xy: normal +z; xz: sketch x,y = world x,z, normal -y; yz: world y,z, normal +x;
   -xy: sketch y = world -y, normal -z (drill down); -xz: normal +y; -yz: normal -x
 LOOPS (first is outside, rest holes; X Y a corner): rect X Y W H | rrect X Y W H CORNER_R | circle CX CY R |

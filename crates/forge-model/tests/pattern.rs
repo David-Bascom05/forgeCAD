@@ -57,6 +57,7 @@ fn drill(at: Point3, diameter: f64, head: Head, end: End) -> Hole {
         end,
         point: None,
         thread: None,
+        standard: None,
     }
 }
 

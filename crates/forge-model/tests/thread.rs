@@ -141,6 +141,7 @@ fn a_cosmetic_thread_is_modeled() {
             size: 8.0,
             pitch: 1.25,
         }),
+        standard: None,
     }));
     let block = Feature::Extrude {
         profile: Profile {
@@ -271,6 +272,7 @@ fn face_and_patterned_hole_threads() {
             size: 6.0,
             pitch: 1.0,
         }),
+        standard: None,
     }));
     let pattern = Feature::Pattern {
         of: forge_model::Source::Features(vec![1]),

@@ -247,7 +247,7 @@ pub(crate) fn tools(features: &[Feature], i: usize, build: bool) -> Result<Vec<T
                     continue;
                 }
                 held.push(j);
-                let copies = instances(layout).map_err(|error| RegenError::Pattern { feature: i, error })?;
+                let copies = instances(features, j, layout)?;
                 let mut added = Vec::new();
                 for (key, m) in &copies {
                     for (b, op, sh) in &out {

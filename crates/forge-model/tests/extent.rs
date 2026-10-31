@@ -249,6 +249,7 @@ fn parts() -> Vec<(&'static str, Part, f64)> {
                     },
                     point: None,
                     thread: None,
+                    standard: None,
                 })),
             ]),
             slab - PI * 9.0 * 6.0,

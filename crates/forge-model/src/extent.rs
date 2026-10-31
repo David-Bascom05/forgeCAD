@@ -135,6 +135,9 @@ pub(crate) fn surface(features: &[Feature], i: usize, t: &Target) -> Result<Surf
             return match features.get(k) {
                 Some(Feature::Plane(f)) if k < i => Ok(Surface::Plane(Plane { frame: *f })),
                 Some(Feature::Sketch(s)) if k < i => Ok(Surface::Plane(Plane { frame: s.plane })),
+                Some(Feature::Work(_)) if k < i => {
+                    crate::work::plane_of(features, i, k).map(|frame| Surface::Plane(Plane { frame }))
+                }
                 _ => Err(bad(i)(ExtentError::NoFace)),
             };
         }

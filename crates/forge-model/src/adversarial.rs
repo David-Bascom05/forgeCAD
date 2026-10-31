@@ -715,6 +715,7 @@ fn error_kind(e: &crate::RegenError) -> (String, usize) {
         Edit { feature, error } => (format!("Edit({error:?})"), *feature),
         Thread { feature, error } => (format!("Thread({error:?})"), *feature),
         Text { feature, error } => (format!("Text({error:?})"), *feature),
+        Work { feature, error } => (format!("Work({error:?})"), *feature),
     }
 }
 

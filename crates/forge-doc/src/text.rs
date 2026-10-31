@@ -6,9 +6,10 @@ use crate::{expr, sketch};
 use forge_geom::Circle;
 use forge_math::{Frame, Point2, Point3, Vec2, Vec3, dmath};
 use forge_model::{
-    Coil, CoilSize, Combine, Edit, End, Extent, Feature, FontRef, Head, Hole, Layout, Loft, Motion, Param,
-    Part, PathEnds, Rib, Row, ScrewThread, Side, Source, Sweep, Target, Text, TextOn, Thread, ThreadLength,
-    ThreadOn, ThreadSpec, Toward, Turn, Unit,
+    At, AxisBy, Coil, CoilSize, Combine, Convention, Datum, Edit, End, Extent, Feature, Fit, FontRef, Head,
+    Hole, Layout, Loft, Motion, Param, Part, PathEnds, PlaneBy, PointBy, Ref, Rib, Row, ScrewThread, Side,
+    Source, Standard, Sweep, Target, Text, TextOn, Thread, ThreadLength, ThreadOn, ThreadSpec, Toward, Turn,
+    UcsBy, Unit, Work, standard, work,
 };
 use forge_ops::{
     Axis2, ChamferSize, Handed, LoftGuides, LoftKind, PathSeg, Profile, ProfileLoop, Radius, Segment,
@@ -326,11 +327,25 @@ pub const KINDS: &[Kind] = &[
     },
     Kind {
         name: "hole",
-        syntax: "hole D FRAME [cb D2 DEPTH | cs D2 A] (N | thru | next | to FEAT [@face] [off N]) [pt A] [thread SIZE PITCH]",
+        syntax: "hole (D | SIZE [iso|ansi] [close|normal|loose|tap] [cbore|csink]) FRAME [cb D2 DEPTH | cs D2 A] (N | thru | next | to FEAT [@face] [off N]) [pt A] [thread SIZE PITCH]",
         parse: |p| {
-            let diameter = p.num()?;
+            let std = p.standard()?;
+            let diameter = match std {
+                Some(s) => s.diameter(),
+                None => p.num()?,
+            };
+            let std_head = match std {
+                Some(s) if p.eat("cbore") => Some(s.counterbore()),
+                Some(s) if p.eat("csink") => Some(
+                    s.countersink()
+                        .ok_or_else(|| format!("no standard countersink for {}", s.screw.name))?,
+                ),
+                _ => None,
+            };
             let at = p.frame()?;
-            let head = if p.eat("cb") {
+            let head = if let Some(h) = std_head {
+                h
+            } else if p.eat("cb") {
                 Head::Counterbore {
                     diameter: p.num()?,
                     depth: p.num()?,
@@ -363,7 +378,7 @@ pub const KINDS: &[Kind] = &[
                     pitch: p.num()?,
                 })
             } else {
-                None
+                std.and_then(|s| s.thread())
             };
             Ok(Feature::Hole(Box::new(Hole {
                 at,
@@ -372,13 +387,40 @@ pub const KINDS: &[Kind] = &[
                 end,
                 point,
                 thread,
+                standard: std,
             })))
         },
         print: |f, w| {
             let Feature::Hole(h) = f else { return false };
-            w.num(h.diameter);
+            // the standard, while the numbers are still its
+            let std = h
+                .standard
+                .filter(|s| s.diameter().to_bits() == h.diameter.to_bits() && s.thread() == h.thread);
+            let std_head = std.and_then(|s| {
+                if h.head == s.counterbore() {
+                    Some("cbore")
+                } else if Some(h.head) == s.countersink() {
+                    Some("csink")
+                } else {
+                    None
+                }
+            });
+            match std {
+                Some(s) => {
+                    w.word(s.screw.name);
+                    w.word(CONVENTIONS.iter().find(|c| c.1 == s.convention).expect("named").0);
+                    if s.fit != Fit::Normal {
+                        w.word(FITS.iter().find(|f| f.1 == s.fit).expect("every fit is named").0);
+                    }
+                }
+                None => w.num(h.diameter),
+            }
+            if let Some(k) = std_head {
+                w.word(k);
+            }
             w.frame(&h.at);
             match h.head {
+                _ if std_head.is_some() => {}
                 Head::Plain => {}
                 Head::Counterbore { diameter, depth } => {
                     w.word("cb");
@@ -405,7 +447,7 @@ pub const KINDS: &[Kind] = &[
                 w.word("pt");
                 w.angle(a);
             }
-            if let Some(t) = h.thread {
+            if let (None, Some(t)) = (std, h.thread) {
                 w.word("thread");
                 w.num(t.size);
                 w.num(t.pitch);
@@ -415,13 +457,13 @@ pub const KINDS: &[Kind] = &[
     },
     Kind {
         name: "pattern",
-        syntax: "pattern (body | FEAT..) (lin DX DY DZ N STEP [DX DY DZ N STEP] | circ OX OY OZ AX AY AZ N [A] [step] | mirror FRAME)",
+        syntax: "pattern (body | FEAT..) (lin DX DY DZ N STEP [DX DY DZ N STEP] | circ OX OY OZ AX AY AZ N [A] [step] | mirror FRAME | path REF.. N (STEP|fit) [fixed] [rev] | pts (X Y Z | REF | SKETCH [P.. | centers])..)",
         parse: |p| {
             let of = if p.eat("body") {
                 Source::Body
             } else {
                 let mut src = Vec::new();
-                while !p.done() && !["lin", "circ", "mirror"].contains(&p.peek()) {
+                while !p.done() && !["lin", "circ", "mirror", "path", "pts"].contains(&p.peek()) {
                     src.push(p.feat()?);
                 }
                 Source::Features(src)
@@ -440,7 +482,42 @@ pub const KINDS: &[Kind] = &[
                     incremental: p.eat("step"),
                 },
                 "mirror" => Layout::Mirror { plane: p.frame()? },
-                t => return Err(format!("expected lin, circ or mirror, found '{t}'")),
+                "path" => {
+                    let mut along = Vec::new();
+                    while !p.done() && !p.is_num() {
+                        let feature = p.feat()?;
+                        if p.peek().starts_with(['@', '(']) {
+                            let names = p.refs()?;
+                            along.extend(names.into_iter().map(|n| Ref {
+                                feature,
+                                name: Some((p.b.own)(feature, n)),
+                            }));
+                        } else {
+                            along.push(Ref { feature, name: None });
+                        }
+                    }
+                    Layout::Path {
+                        along,
+                        count: p.count()?,
+                        spacing: if p.eat("fit") { None } else { Some(p.num()?) },
+                        turn: !p.eat("fixed"),
+                        reverse: p.eat("rev"),
+                    }
+                }
+                "pts" => {
+                    let mut at = Vec::new();
+                    while !p.done() {
+                        at.push(if p.is_num() {
+                            At::Xyz(p.point3()?)
+                        } else if let Some(a) = p.sketch_points()? {
+                            a
+                        } else {
+                            At::Ref(p.wref()?)
+                        });
+                    }
+                    Layout::Points(at)
+                }
+                t => return Err(format!("expected lin, circ, mirror, path or pts, found '{t}'")),
             };
             Ok(Feature::Pattern { of, layout })
         },
@@ -480,6 +557,57 @@ pub const KINDS: &[Kind] = &[
                 Layout::Mirror { plane } => {
                     w.word("mirror");
                     w.frame(plane);
+                }
+                Layout::Path {
+                    along,
+                    count,
+                    spacing,
+                    turn,
+                    reverse,
+                } => {
+                    w.word("path");
+                    let mut last = None;
+                    for r in along {
+                        if r.name.is_none() || last != Some(r.feature) {
+                            w.feat(r.feature);
+                        }
+                        if let Some(n) = r.name {
+                            w.name(n);
+                        }
+                        last = r.name.map(|_| r.feature);
+                    }
+                    w.word(&count.to_string());
+                    match spacing {
+                        Some(s) => w.num(*s),
+                        None => w.word("fit"),
+                    }
+                    if !turn {
+                        w.word("fixed");
+                    }
+                    if *reverse {
+                        w.word("rev");
+                    }
+                }
+                Layout::Points(at) => {
+                    w.word("pts");
+                    for a in at {
+                        match a {
+                            At::Xyz(p) => w.nums(&[p.x, p.y, p.z]),
+                            At::Ref(r) => w.wref(r),
+                            At::Sketch {
+                                feature,
+                                points,
+                                centers,
+                                ..
+                            } => {
+                                w.feat(*feature);
+                                points.iter().for_each(|t| w.word(t));
+                                if *centers {
+                                    w.word("centers");
+                                }
+                            }
+                        }
+                    }
                 }
             }
             true
@@ -800,11 +928,154 @@ pub const KINDS: &[Kind] = &[
     },
     Kind {
         name: "plane",
-        syntax: "plane FRAME",
-        parse: |p| Ok(Feature::Plane(p.frame()?)),
+        syntax: "plane FRAME | off REF D | ang REF REF A | tan REF REF | pts REF REF REF | mid REF REF | norm REF REF",
+        parse: |p| {
+            let by = match p.next_of(&["off", "ang", "tan", "pts", "mid", "norm"]) {
+                Some("off") => PlaneBy::Offset(p.wref()?, p.num()?),
+                Some("ang") => PlaneBy::Angle {
+                    plane: p.wref()?,
+                    axis: p.wref()?,
+                    angle: p.angle()?,
+                },
+                Some("tan") => PlaneBy::Tangent {
+                    face: p.wref()?,
+                    plane: p.wref()?,
+                },
+                Some("pts") => PlaneBy::Points(p.wref3()?),
+                Some("mid") => PlaneBy::Mid(p.wref()?, p.wref()?),
+                Some(_) => PlaneBy::Normal {
+                    curve: p.wref()?,
+                    at: p.wref()?,
+                },
+                None => return Ok(Feature::Plane(p.frame()?)),
+            };
+            Ok(Feature::Work(Work::Plane(by)))
+        },
         print: |f, w| {
-            let Feature::Plane(frame) = f else { return false };
-            w.frame(frame);
+            let by = match f {
+                Feature::Plane(frame) => {
+                    w.frame(frame);
+                    return true;
+                }
+                Feature::Work(Work::Plane(by)) => by,
+                _ => return false,
+            };
+            match *by {
+                PlaneBy::Offset(r, d) => {
+                    w.word("off");
+                    w.wref(&r);
+                    w.num(d);
+                }
+                PlaneBy::Angle { plane, axis, angle } => {
+                    w.word("ang");
+                    w.wrefs(&[plane, axis]);
+                    w.angle(angle);
+                }
+                PlaneBy::Tangent { face, plane } => {
+                    w.word("tan");
+                    w.wrefs(&[face, plane]);
+                }
+                PlaneBy::Points(rs) => {
+                    w.word("pts");
+                    w.wrefs(&rs);
+                }
+                PlaneBy::Mid(a, b) => {
+                    w.word("mid");
+                    w.wrefs(&[a, b]);
+                }
+                PlaneBy::Normal { curve, at } => {
+                    w.word("norm");
+                    w.wrefs(&[curve, at]);
+                }
+            }
+            true
+        },
+    },
+    Kind {
+        name: "axis",
+        syntax: "axis REF | pts REF REF | meet REF REF | norm REF REF   REF: FEAT [@h|(sel)]",
+        parse: |p| {
+            Ok(Feature::Work(Work::Axis(
+                match p.next_of(&["pts", "meet", "norm"]) {
+                    Some("pts") => AxisBy::Points(p.wref()?, p.wref()?),
+                    Some("meet") => AxisBy::Meet(p.wref()?, p.wref()?),
+                    Some(_) => AxisBy::Normal {
+                        plane: p.wref()?,
+                        at: p.wref()?,
+                    },
+                    None => AxisBy::Along(p.wref()?),
+                },
+            )))
+        },
+        print: |f, w| {
+            let Feature::Work(Work::Axis(by)) = f else {
+                return false;
+            };
+            match *by {
+                AxisBy::Points(a, b) => {
+                    w.word("pts");
+                    w.wrefs(&[a, b]);
+                }
+                AxisBy::Along(r) => w.wref(&r),
+                AxisBy::Meet(a, b) => {
+                    w.word("meet");
+                    w.wrefs(&[a, b]);
+                }
+                AxisBy::Normal { plane, at } => {
+                    w.word("norm");
+                    w.wrefs(&[plane, at]);
+                }
+            }
+            true
+        },
+    },
+    Kind {
+        name: "point",
+        syntax: "point REF | mid REF | meet REF REF   REF: FEAT [@h|(sel)]",
+        parse: |p| {
+            Ok(Feature::Work(Work::Point(match p.next_of(&["mid", "meet"]) {
+                Some("mid") => PointBy::Mid(p.wref()?),
+                Some(_) => PointBy::Meet(p.wref()?, p.wref()?),
+                None => PointBy::At(p.wref()?),
+            })))
+        },
+        print: |f, w| {
+            let Feature::Work(Work::Point(by)) = f else {
+                return false;
+            };
+            match *by {
+                PointBy::At(r) => w.wref(&r),
+                PointBy::Mid(r) => {
+                    w.word("mid");
+                    w.wref(&r);
+                }
+                PointBy::Meet(a, b) => {
+                    w.word("meet");
+                    w.wrefs(&[a, b]);
+                }
+            }
+            true
+        },
+    },
+    Kind {
+        name: "ucs",
+        syntax: "ucs FRAME | ucs pts REF REF REF",
+        parse: |p| {
+            Ok(Feature::Work(Work::Ucs(if p.eat("pts") {
+                UcsBy::Points(p.wref3()?)
+            } else {
+                UcsBy::Frame(p.frame()?)
+            })))
+        },
+        print: |f, w| {
+            match f {
+                Feature::Work(Work::Ucs(UcsBy::Frame(frame))) => w.frame(frame),
+                Feature::Work(Work::Ucs(UcsBy::Points(rs))) => {
+                    w.word("pts");
+                    w.wrefs(rs);
+                }
+                _ => return false,
+            }
             true
         },
     },
@@ -1308,6 +1579,9 @@ pub struct Before<'a> {
     pub fonts: &'a dyn Fn(&str) -> R<Option<std::sync::Arc<forge_font::Font>>>,
     /// What this line read as last time, if known: a sketch takes its unchanged parts.
     pub was: Option<&'a Feature>,
+    /// The name feature `k`'s own solid gives an entity of the part named `n` (a boolean renames
+    /// what it splits); `n` itself where nothing is built to look at.
+    pub own: &'a dyn Fn(usize, Name) -> Name,
 }
 
 pub fn kind(name: &str) -> Option<&'static Kind> {
@@ -1399,6 +1673,7 @@ pub fn parse(src: &str) -> Result<Part, (usize, String)> {
             face: &face,
             fonts: &|_| Ok(None),
             was: None,
+            own: &|_, n| n,
         };
         let f = parse_line(l, &b).map_err(|e| (l.no, e))?;
         kinds.push(kind_of(&f).name);
@@ -1432,6 +1707,15 @@ fn default_op(before: &[Feature]) -> Combine {
         Combine::New
     }
 }
+
+const CONVENTIONS: [(&str, Convention); 2] = [("iso", Convention::Iso), ("ansi", Convention::Ansi)];
+
+const FITS: [(&str, Fit); 4] = [
+    ("close", Fit::Close),
+    ("normal", Fit::Normal),
+    ("loose", Fit::Loose),
+    ("tap", Fit::Tap),
+];
 
 const OPS: [(&str, Combine); 4] = [
     ("new", Combine::New),
@@ -1697,12 +1981,66 @@ impl<'a> P<'a> {
         };
         i.ok_or_else(|| format!("no feature '{t}' above this line"))
     }
+    /// The word if it is one of `words`.
+    fn next_of(&mut self, words: &[&'static str]) -> Option<&'static str> {
+        let w = *words.iter().find(|w| **w == self.peek())?;
+        self.k += 1;
+        Some(w)
+    }
+    /// A work feature or plane, or an entity of an earlier feature's solid.
+    fn wref(&mut self) -> R<Ref> {
+        let feature = self.feat()?;
+        let name = if self.peek().starts_with(['@', '(']) {
+            Some((self.b.own)(feature, self.one_ref()?))
+        } else {
+            None
+        };
+        Ok(Ref { feature, name })
+    }
+    fn wref3(&mut self) -> R<[Ref; 3]> {
+        Ok([self.wref()?, self.wref()?, self.wref()?])
+    }
+    /// A screw size and fit, or None for a plain diameter.
+    fn standard(&mut self) -> R<Option<Standard>> {
+        let Some(screw) = standard::screw(self.peek()) else {
+            return Ok(None);
+        };
+        self.k += 1;
+        let convention = match CONVENTIONS.iter().find(|c| c.0 == self.peek()) {
+            Some(c) => {
+                self.k += 1;
+                c.1
+            }
+            None => screw.default_convention(),
+        };
+        if screw.inch() && convention != Convention::Ansi {
+            return Err(format!("{} is an inch size: its tables are ANSI's", screw.name));
+        }
+        self.eat("clearance");
+        let fit = match FITS.iter().find(|f| f.0 == self.peek()) {
+            Some(f) => {
+                self.k += 1;
+                f.1
+            }
+            None => Fit::Normal,
+        };
+        Ok(Some(Standard {
+            screw,
+            convention,
+            fit,
+        }))
+    }
+    /// What work feature `i` comes to.
+    fn datum(&self, i: usize, what: &str) -> R<Datum> {
+        work::datum(self.b.features, i)
+            .map_err(|e| format!("'{what}' needs a work feature that builds; line {}: {e:?}", i + 1))
+    }
     fn target(&mut self) -> R<Target> {
         let feature = self.feat()?;
         if is_ref(self.peek()) {
             Ok(Target::Face {
                 feature,
-                name: self.one_ref()?,
+                name: (self.b.own)(feature, self.one_ref()?),
             })
         } else {
             Ok(Target::Plane(feature))
@@ -1843,9 +2181,14 @@ impl<'a> P<'a> {
                         Some(pt) => s.plane.with_origin(s.plane.plane_point(sketch::point(s, pt)?)),
                         None => s.plane,
                     },
+                    Feature::Work(_) => match self.datum(i, "on")? {
+                        Datum::Plane(f) | Datum::Frame(f) => f,
+                        Datum::Axis(l) => Frame::from_z(l.origin, l.dir),
+                        Datum::Point(p) => Frame::WORLD.with_origin(p),
+                    },
                     _ => {
                         return Err(format!(
-                            "'on' needs a plane or sketch feature, or a face; line {} is neither",
+                            "'on' needs a plane, sketch or work feature, or a face; line {} is none",
                             i + 1
                         ));
                     }
@@ -1857,11 +2200,65 @@ impl<'a> P<'a> {
         };
         self.at = None;
         if self.eat("at") {
-            let at = self.point3()?;
+            let at = if self.is_num() {
+                self.point3()?
+            } else {
+                let i = self.feat()?;
+                match self.datum(i, "at")? {
+                    Datum::Point(p) => p,
+                    Datum::Frame(f) => f.origin,
+                    _ => return Err(format!("'at' needs a point or ucs; line {} is not one", i + 1)),
+                }
+            };
             self.at = Some(at);
             f = f.with_origin(at);
         }
         Ok(f)
+    }
+    /// A sketch and the points of it named after it (none: all its `pt` points), if the line
+    /// names a sketch here.
+    fn sketch_points(&mut self) -> R<Option<At>> {
+        let k = self.k;
+        let Ok(feature) = self.feat() else {
+            self.k = k;
+            return Ok(None);
+        };
+        let (Some(Feature::Sketch(s)), false) =
+            (self.b.features.get(feature), self.peek().starts_with(['@', '(']))
+        else {
+            self.k = k;
+            return Ok(None);
+        };
+        let mut points = Vec::new();
+        while sketch::is_ref(self.peek()) {
+            points.push(self.next()?.to_string());
+        }
+        let centers = points.is_empty() && self.eat("centers");
+        let kind = |n: &str, k: &[char]| {
+            n.len() > 1 && n.starts_with(k) && n[1..].bytes().all(|c| c.is_ascii_digit())
+        };
+        let names: Vec<&str> = if points.is_empty() {
+            s.names
+                .iter()
+                .map(|(n, _)| n.as_str())
+                .filter(|n| kind(n, &['p']) || centers && kind(n, &['c', 'a']))
+                .collect()
+        } else {
+            points.iter().map(String::as_str).collect()
+        };
+        if names.is_empty() {
+            return Err(format!("sketch on line {} has no points", feature + 1));
+        }
+        let at = names
+            .iter()
+            .map(|n| Ok(s.plane.plane_point(sketch::point(s, n)?)))
+            .collect::<R<Vec<_>>>()?;
+        Ok(Some(At::Sketch {
+            feature,
+            points,
+            centers,
+            at,
+        }))
     }
     /// The sketch a line names here, if it names one.
     fn sketch(&mut self) -> Option<&'a forge_model::Sketch> {
@@ -2171,6 +2568,15 @@ impl<'a> W<'a> {
         } else {
             self.word(&format!("f{}", i + 1));
         }
+    }
+    fn wref(&mut self, r: &Ref) {
+        self.feat(r.feature);
+        if let Some(n) = r.name {
+            self.name(n);
+        }
+    }
+    fn wrefs(&mut self, rs: &[Ref]) {
+        rs.iter().for_each(|r| self.wref(r));
     }
     fn target(&mut self, t: &Target) {
         match *t {
@@ -2779,6 +3185,35 @@ mod tests {
                 neutral: frame(r),
                 angle: angle(r),
             },
+            7 if r.below(3) == 0 => {
+                let screw = &standard::SCREWS[r.below(standard::SCREWS.len())];
+                let std = Standard {
+                    screw,
+                    convention: if screw.inch() {
+                        Convention::Ansi
+                    } else {
+                        CONVENTIONS[r.below(2)].1
+                    },
+                    fit: FITS[r.below(4)].1,
+                };
+                Feature::Hole(Box::new(Hole {
+                    at: frame(r),
+                    diameter: std.diameter(),
+                    head: match r.below(4) {
+                        0 => std.counterbore(),
+                        1 => std.countersink().unwrap_or(Head::Plain),
+                        2 => Head::Counterbore {
+                            diameter: num(r),
+                            depth: num(r),
+                        },
+                        _ => Head::Plain,
+                    },
+                    end: End::Depth(num(r)),
+                    point: r.bool().then(|| angle(r)),
+                    thread: std.thread(),
+                    standard: Some(std),
+                }))
+            }
             7 => Feature::Hole(Box::new(Hole {
                 at: frame(r),
                 diameter: num(r),
@@ -2807,6 +3242,7 @@ mod tests {
                     size: num(r),
                     pitch: num(r),
                 }),
+                standard: None,
             })),
             8 => Feature::Pattern {
                 of: if r.bool() {
@@ -2814,7 +3250,30 @@ mod tests {
                 } else {
                     Source::Features((0..r.below(4)).map(|_| r.below(i + 3)).collect())
                 },
-                layout: match r.below(3) {
+                layout: match r.below(5) {
+                    3 => Layout::Path {
+                        along: (0..1 + r.below(4)).map(|_| wref(r, i)).collect(),
+                        count: r.below(30),
+                        spacing: r.bool().then(|| num(r)),
+                        turn: r.bool(),
+                        reverse: r.bool(),
+                    },
+                    4 => Layout::Points(
+                        (0..r.below(5))
+                            .map(|_| {
+                                if r.bool() {
+                                    At::Xyz(Point3::new(num(r), num(r), num(r)))
+                                } else {
+                                    // a sketch named alone stands for its points
+                                    let mut w = wref(r, i);
+                                    if matches!(before.get(w.feature), Some(Feature::Sketch(_))) {
+                                        w.name = Some(Name(r.next_u64()));
+                                    }
+                                    At::Ref(w)
+                                }
+                            })
+                            .collect(),
+                    ),
                     0 => Layout::Linear {
                         first: row(r),
                         second: r.bool().then(|| row(r)),
@@ -2891,7 +3350,6 @@ mod tests {
                 },
                 op: op(r),
             })),
-            13 => Feature::Plane(frame(r)),
             14 => Feature::Edit(Edit::Rib(Box::new(Rib {
                 plane: frame(r),
                 path: (0..1 + r.below(3))
@@ -2929,7 +3387,7 @@ mod tests {
                 face: Name(r.next_u64()),
                 with: target(r, i),
             }),
-            9 => Feature::Edit(Edit::Move {
+            13 => Feature::Edit(Edit::Move {
                 faces: names(r),
                 motion: if r.bool() {
                     Motion::Translate(Vec3::new(num(r), num(r), num(r)))
@@ -3007,7 +3465,52 @@ mod tests {
                     op: if r.bool() { Combine::Add } else { Combine::Cut },
                 }))
             }
-            _ => Feature::Plane(frame(r)),
+            23 => Feature::Work(Work::Plane(match r.below(7) {
+                0 => PlaneBy::Offset(wref(r, i), num(r)),
+                1 => PlaneBy::Angle {
+                    plane: wref(r, i),
+                    axis: wref(r, i),
+                    angle: angle(r),
+                },
+                2 => PlaneBy::Tangent {
+                    face: wref(r, i),
+                    plane: wref(r, i),
+                },
+                3 => PlaneBy::Points([wref(r, i), wref(r, i), wref(r, i)]),
+                4 => PlaneBy::Mid(wref(r, i), wref(r, i)),
+                5 => PlaneBy::Normal {
+                    curve: wref(r, i),
+                    at: wref(r, i),
+                },
+                _ => return Feature::Plane(frame(r)),
+            })),
+            24 => Feature::Work(Work::Axis(match r.below(4) {
+                0 => AxisBy::Points(wref(r, i), wref(r, i)),
+                1 => AxisBy::Along(wref(r, i)),
+                2 => AxisBy::Meet(wref(r, i), wref(r, i)),
+                _ => AxisBy::Normal {
+                    plane: wref(r, i),
+                    at: wref(r, i),
+                },
+            })),
+            25 => Feature::Work(Work::Point(match r.below(3) {
+                0 => PointBy::At(wref(r, i)),
+                1 => PointBy::Mid(wref(r, i)),
+                _ => PointBy::Meet(wref(r, i), wref(r, i)),
+            })),
+            _ => Feature::Work(Work::Ucs(if r.bool() {
+                UcsBy::Frame(frame(r))
+            } else {
+                UcsBy::Points([wref(r, i), wref(r, i), wref(r, i)])
+            })),
+        }
+    }
+
+    /// A reference to a feature near `i`, or to an entity of its solid.
+    fn wref(r: &mut Rng, i: usize) -> Ref {
+        Ref {
+            feature: r.below(i + 3),
+            name: r.bool().then(|| Name(r.next_u64())),
         }
     }
 
@@ -3106,6 +3609,7 @@ mod tests {
                     end: End::Through,
                     point: None,
                     thread: None,
+                    standard: None,
                 })),
                 Feature::Pattern {
                     of: Source::Features(vec![1]),

@@ -18,6 +18,8 @@ pub struct Hole {
     pub point: Option<f64>,
     /// A cosmetic thread on the wall: recorded for drawings and lookups, not modelled.
     pub thread: Option<Thread>,
+    /// The screw and fit the diameter (and a tapped hole's thread) came from, if a standard's.
+    pub standard: Option<crate::Standard>,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -235,7 +237,7 @@ fn adds(features: &[Feature], i: usize) -> Vec<Box3> {
                 .filter(|&&s| s < i)
                 .flat_map(|&s| adds(features, s))
                 .collect();
-            let copies = instances(layout).unwrap_or_default();
+            let copies = instances(features, i, layout).unwrap_or_default();
             let moved: Vec<Box3> = copies
                 .iter()
                 .flat_map(|(_, m)| base.iter().map(|b| m.bbox(b)))
@@ -263,7 +265,7 @@ pub(crate) fn reach(features: &[Feature]) -> Box3 {
                 of: Source::Body,
                 layout,
             } => {
-                for (_, m) in instances(layout).unwrap_or_default() {
+                for (_, m) in instances(features, i, layout).unwrap_or_default() {
                     b = b.hull(&m.bbox(&b));
                 }
             }

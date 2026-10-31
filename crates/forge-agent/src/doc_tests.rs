@@ -2,6 +2,8 @@
 
 use crate::model::Model;
 use crate::select;
+use forge_doc::text;
+use forge_model::{At, Feature, Head, Layout, Part, Thread};
 
 fn built(src: &str) -> Model {
     let m = Model::new(src);
@@ -542,4 +544,161 @@ fn a_dimension_changed_alone_reads_as_afresh() {
         let fresh = built(&src(d, x));
         assert_eq!(m.features, fresh.features, "{d} {x}");
     }
+}
+
+/// Printed and read back, a part is the same part.
+fn round_trip(part: &forge_model::Part) {
+    let text = text::print(part);
+    let back = text::parse(&text).unwrap_or_else(|(l, e)| panic!("line {l}: {e}\n{text}"));
+    assert_eq!(back.features, part.features, "{text}");
+}
+
+/// Work features, patterns along a path and at points, and standard holes, written as an
+/// agent would, build and print back to the same features.
+#[test]
+fn work_features_and_standards() {
+    let src = "base: extrude 10 rect 0 0 60 40\n\
+        boss: extrude 8 at 50 30 10 circle 0 0 4\n\
+        top: plane off base (faces of base normal +z) 5\n\
+        ax: axis boss (faces cyl)\n\
+        c: point meet ax top\n\
+        mid: point mid base (edges of base along +x front top)\n\
+        ucs pts base (verts near 0 0 10) base (verts near 60 0 10) base (verts near 0 40 10)\n\
+        plane ang base (faces of base normal +z) base (edges of base along +x front top) 30\n\
+        extrude cut 2 on top at c circle 0 0 2\n\
+        h: hole M6 tap -xy at 10 10 10 thru\n\
+        hole M5 ansi close cbore -xy at 30 30 10 12\n\
+        pattern h pts 10 10 10 10 20 10 10 30 10\n\
+        pattern h path base (edges of base along +x front top) 3 15\n\
+        pattern hole2 path base (edges of base line top) 6 fit fixed\n";
+    let m = Model::new(src);
+    assert!(m.error.is_none(), "{:?}", m.error);
+    let Feature::Hole(h) = &m.features[9] else {
+        panic!("a hole")
+    };
+    assert_eq!(
+        (h.diameter, h.thread),
+        (
+            5.0,
+            Some(Thread {
+                size: 6.0,
+                pitch: 1.0
+            })
+        )
+    );
+    let Feature::Hole(h) = &m.features[10] else {
+        panic!("a hole")
+    };
+    assert_eq!(
+        (h.diameter, h.head),
+        (
+            5.3,
+            Head::Counterbore {
+                diameter: 9.75,
+                depth: 5.0
+            }
+        )
+    );
+    let part = Part {
+        features: m.features.clone(),
+    };
+    let text = text::print(&part);
+    assert!(
+        text.contains("hole M6 iso tap -xy") && text.contains("hole M5 ansi close cbore -xy"),
+        "{text}"
+    );
+    round_trip(&part);
+    let vol = |b: &forge_topo::Body| {
+        assert!(forge_topo::check(b).is_empty());
+        forge_mesh::tessellate(b, &forge_mesh::Quality::default())
+            .expect("meshes")
+            .volume()
+    };
+    let (a, b) = (
+        vol(&part.regenerate_nary(1).expect("nary")),
+        vol(&part.regenerate().expect("regen")),
+    );
+    assert!((a - b).abs() < 1e-6 * a, "{a} vs {b}");
+    assert_eq!(*m.body().expect("built"), part.regenerate().expect("regen"));
+}
+
+/// A hole copied to a sketch's points follows them when the sketch changes.
+#[test]
+fn holes_at_sketch_points() {
+    let src = |x: &str| {
+        format!(
+            "sk: sketch xy at 0 0 10\n  pt 10 10\n  pt 30 10\n  pt {x} 25\nend\n\
+             extrude 10 rect 0 0 60 40\n\
+             h: hole M4 iso tap -on sk p1 thru\n\
+             pattern h pts sk\n\
+             pattern h pts sk p2 p1\n"
+        )
+    };
+    for x in ["50", "45"] {
+        let m = Model::new(&src(x));
+        assert!(m.error.is_none(), "{:?}", m.error);
+        let Feature::Pattern {
+            layout: Layout::Points(at),
+            ..
+        } = &m.features[3]
+        else {
+            panic!("a points pattern")
+        };
+        let want = [(10.0, 10.0), (30.0, 10.0), (x.parse::<f64>().expect("x"), 25.0)];
+        let At::Sketch { points, at, .. } = &at[0] else {
+            panic!("sketch points")
+        };
+        assert!(points.is_empty());
+        for (p, (x, y)) in at.iter().zip(want) {
+            assert!(
+                (p.x - x).abs() < 1e-9 && (p.y - y).abs() < 1e-9 && p.z == 10.0,
+                "{p:?}"
+            );
+        }
+        let part = Part {
+            features: m.features.clone(),
+        };
+        let text = text::print(&part);
+        assert!(
+            text.contains("pattern hole1 pts sketch1\n") && text.contains("pts sketch1 p2 p1"),
+            "{text}"
+        );
+        round_trip(&part);
+        // the second pattern copies onto p1 again from p2: the third hole lands at p1 + (p1 - p2)
+        let b = part.regenerate_nary(1).expect("regen");
+        assert!(forge_topo::check(&b).is_empty());
+    }
+}
+
+/// `centers` adds a sketch's circle and arc centres, in sketch order, to its points.
+#[test]
+fn holes_at_sketch_centers() {
+    let src = "sk: sketch xy at 0 0 10\n  pt 10 10\n  circle 30 10 3\n  arc 50 25 53 25 47 25\nend\n\
+               extrude 10 rect 0 0 60 40\n\
+               h: hole 4 -on sk p1 thru\n\
+               pattern h pts sk centers\n";
+    let m = Model::new(src);
+    assert!(m.error.is_none(), "{:?}", m.error);
+    let Feature::Pattern {
+        layout: Layout::Points(at),
+        ..
+    } = &m.features[3]
+    else {
+        panic!("a points pattern")
+    };
+    let At::Sketch { centers, at, .. } = &at[0] else {
+        panic!("sketch points")
+    };
+    let got: Vec<(f64, f64)> = at.iter().map(|p| (p.x, p.y)).collect();
+    assert!(
+        *centers && got == [(10.0, 10.0), (30.0, 10.0), (50.0, 25.0)],
+        "{got:?}"
+    );
+    let part = Part {
+        features: m.features.clone(),
+    };
+    assert!(text::print(&part).contains("pattern hole1 pts sketch1 centers\n"));
+    round_trip(&part);
+    let b = part.regenerate_nary(1).expect("regen");
+    assert!(forge_topo::check(&b).is_empty());
 }
