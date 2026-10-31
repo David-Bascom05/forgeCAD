@@ -1994,13 +1994,16 @@ fn nary_body(
         if rr.len() < 2 || rr.clone().all(|ri| class[ri].is_none()) {
             return Ok(None);
         }
-        // the region each half-edge bounds, sorted for lookup
+        let (side, f, ref boundary, ref new_edges) = jobs[j];
+        // the region each new edge's half bounds (and each half of the face's edges not of its
+        // tool), sorted for lookup
         let mut owners: Vec<((usize, bool), usize)> = rr
+            .clone()
             .flat_map(|ri| regs[ri].loops.iter().flatten().map(move |&h| (h, ri)))
+            .filter(|(h, _)| list[h.0].seg.is_some() || list[h.0].side != Some(side))
             .collect();
         owners.sort_unstable();
         let owner = |h: (usize, bool)| owners.binary_search_by(|x| x.0.cmp(&h)).ok().map(|i| owners[i].1);
-        let (side, f, ref boundary, ref new_edges) = jobs[j];
         let keep: Vec<usize> = new_edges
             .iter()
             .copied()
@@ -2032,7 +2035,12 @@ fn nary_body(
                     .first()
                     .and_then(|l| l.first())
                     .ok_or(BoolError::Internal("empty region"))?;
-                let old = owner(first).ok_or(BoolError::Internal("merged region of no old one"))?;
+                let old = owner(first)
+                    .or_else(|| {
+                        rr.clone()
+                            .find(|&ri| regs[ri].loops.iter().flatten().any(|&h| h == first))
+                    })
+                    .ok_or(BoolError::Internal("merged region of no old one"))?;
                 Ok((loops, class[old]))
             })
             .collect::<R<Vec<_>>>()
