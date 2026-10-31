@@ -531,6 +531,9 @@ fn plan(a: &Body, b: &Body, op: Op, scratch: &mut Scratch) -> R<Plan> {
                 continue;
             }
             let (sa, sb) = (&a.face(fa).surface, &b.face(fb).surface);
+            if rolls_off(a, fa, sb) || rolls_off(b, fb, sa) {
+                continue;
+            }
             let region = overlap(&ba, &b_boxes[fb.index()]).grow(tol::LINEAR);
             let found = ssi::surfaces_in(sa, sb, region);
             if debug_on() {
@@ -2775,6 +2778,32 @@ fn plane_meet(pl: &Plane, curve: &Curve, range: Interval, edge: &Curve) -> Optio
     hits.sort_by(|x, y| x.t.total_cmp(&y.t));
     hits.dedup_by(|x, y| x.point.distance(y.point) <= tol::LINEAR);
     Some(hits)
+}
+
+/// Whether face `f` rolls off plane `other` along one of its edges: a blend meeting a face on
+/// that plane tangentially. The plane only touches the blend there (an arc stays to one side of
+/// its tangent), and that touch is the edge; traced, it would come out a hair off it.
+pub(crate) fn rolls_off(body: &Body, f: FaceId, other: &Surface) -> bool {
+    if !matches!(other, Surface::Plane(_)) || matches!(body.face(f).surface, Surface::Plane(_)) {
+        return false;
+    }
+    body.face(f)
+        .loops
+        .iter()
+        .flat_map(|&l| body.lp(l).coedges())
+        .any(|c| {
+            let Some(g) = body.partner(c).map(|o| body.coedge_face(o)) else {
+                return false;
+            };
+            let s = &body.face(g).surface;
+            if g == f || !matches!(s, Surface::Plane(_)) || !ssi::coincident(s, other) {
+                return false;
+            }
+            let e = body.edge(body.coedge(c).edge);
+            let p = e.curve.eval(e.range.mid());
+            let normal = |h: FaceId| body.face_normal(h, body.face(h).surface.project(p));
+            matches!((normal(f), normal(g)), (Some(x), Some(y)) if x.cross(y).length() <= 1e-6)
+        })
 }
 
 /// The surface that meets face `f`'s surface along the edge of coedge `c`:

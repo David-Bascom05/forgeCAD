@@ -805,6 +805,9 @@ fn nary_body(
                     continue;
                 }
                 let (sa, sb) = (&a.face(fa).surface, &b.face(fb).surface);
+                if crate::boolean::rolls_off(a, fa, sb) || crate::boolean::rolls_off(b, fb, sa) {
+                    continue;
+                }
                 // (planes on one plane still imprint each other, below)
                 let planes = matches!(
                     (sa, sb),

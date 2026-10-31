@@ -256,3 +256,17 @@ L6: sweep add z 0 -1 0 x 0 0 -1 at 60.44 47.57 17.29 rrect -6.63 -6.63 13.26 13.
 L11: sweep add z 0 1 0 x 1 0 0 at 60.44 -13.66 26.6 circle 0 0 5.35 path line 60.44 -13.66 26.6 60.44 16.46 26.6 arc z 0 0 -1 x -1 0 0 at 85.87 16.46 26.6 25.43 0 45 line 67.8882745544261 34.4417254455739 26.6 84.75984235353712 51.31329324468493 26.6 extend 1.84 3.22
 ");
 }
+
+/// A countersunk hole on a face its edge's variable fillet rolls off (r10): the hole's top plane,
+/// on that face, was traced against the blend, which only touches it along the spring curve; the
+/// traced touch came out 1e-4 off the edge, a sliver piece split the face, and the flood failed.
+/// A plane a blend rolls off along an edge only touches it there: the pair is skipped.
+#[test]
+fn countersink_beside_a_variable_fillet() {
+    builds_valid(
+        "L0: extrude 12.43 rect 0 0 69.44 92.38
+L1: fillet 1.99..3.51 (edges line of L0)
+L3: hole 8.39 z 0 -1 0 at 34.85 92.38 3.5 cs 15.68 82 thru pt 118 thread 10.07 1.46
+",
+    );
+}
