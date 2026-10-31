@@ -1352,6 +1352,7 @@ pub fn intersect(a: &Surface, b: &Surface, region: Box3) -> Option<SurfaceSurfac
             continue;
         }
         let mut chain: Vec<Point3> = Vec::new();
+        let mut joins: Vec<usize> = Vec::new();
         let (mut cur, mut fwd) = (start, true);
         loop {
             if done[cur] {
@@ -1374,6 +1375,7 @@ pub fn intersect(a: &Surface, b: &Surface, region: Box3) -> Option<SurfaceSurfac
             };
             let pts = piece.march(&eq, t, t.ends[if fwd { 0 } else { 1 }], step, (lo, hi), &region)?;
             // each piece starts where the last one ended
+            joins.push(chain.len());
             chain.extend(&pts[..pts.len() - 1]);
             let (next, _) = link[exit].expect("every end linked");
             cur = next / 2;
@@ -1383,6 +1385,22 @@ pub fn intersect(a: &Surface, b: &Surface, region: Box3) -> Option<SurfaceSurfac
                     return None;
                 }
                 break;
+            }
+        }
+        // beside a turn the two roots are so close that a piece's last point can fall beyond the
+        // next piece's first: the two change places, or the chain folds over itself there
+        let n = chain.len();
+        for &j in joins.iter().filter(|_| n >= 4) {
+            for i in [j + n - 2, j + n - 1, j, j + 1] {
+                let [a, b, c] = [i + n - 1, i, i + 1].map(|k| chain[k % n]);
+                let (ab, bc) = (b - a, c - b);
+                if ab.dot(bc) >= 0.0 {
+                    continue;
+                }
+                let cd = chain[(i + 2) % n] - c;
+                if bc.dot(cd) < 0.0 && ab.dot(cd) > 0.0 {
+                    chain.swap(i % n, (i + 1) % n);
+                }
             }
         }
         // links much shorter than the step (where u eases into a turn) would only make

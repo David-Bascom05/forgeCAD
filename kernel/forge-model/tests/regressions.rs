@@ -3859,3 +3859,19 @@ fn a_stuck_region_probe_answers_as_the_sequential_regen() {
         .expect("the family");
     refused_zero_thickness(forge_model::adversarial::canonical(&g(1)));
 }
+
+/// A plane meeting a torus: beside the turn where the curve runs back in the torus's u the two
+/// pieces' end points changed places, the chain folded over itself by 0.02, and the n-ary part's
+/// face would not mesh (fuzz seed 26).
+#[test]
+fn a_plane_torus_curve_does_not_fold_at_a_turn() {
+    let part = forge_model::suite::fuzz(26, 80);
+    let q = forge_mesh::Quality {
+        chord: 0.25,
+        ..forge_mesh::Quality::default()
+    };
+    for b in [part.regenerate(), part.regenerate_nary(1)] {
+        let m = forge_mesh::tessellate(&b.expect("regenerates"), &q).expect("meshes");
+        assert!(m.open_edges().is_empty());
+    }
+}
