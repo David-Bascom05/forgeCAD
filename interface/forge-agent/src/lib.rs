@@ -8,6 +8,7 @@ mod doc_tests;
 pub mod facemesh;
 #[cfg(test)]
 mod fillet_repros;
+pub mod help;
 pub mod history;
 pub mod json;
 pub mod measure;
@@ -15,6 +16,7 @@ pub mod model;
 pub mod png;
 pub mod render;
 pub mod select;
+pub mod tools;
 pub use forge_doc::{expr, sketch, text};
 
 /// A number for people: a few decimals, trailing zeros dropped.

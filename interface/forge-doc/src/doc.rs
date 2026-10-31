@@ -74,12 +74,13 @@ impl Arg {
     }
 }
 
-/// A change to a document.
+/// A change to a document, by stable id: what a tool produces, what the log records and what
+/// the protocol will carry (`wire` is its binary form).
 #[derive(Clone, Debug, PartialEq)]
-pub enum Edit {
+pub enum Op {
     /// Sets a parameter's expression.
     SetParam {
-        name: String,
+        item: ItemId,
         expr: String,
     },
     /// Sets a dimension: the value at the end of a sketch row.
@@ -94,19 +95,53 @@ pub enum Edit {
         arg: usize,
         text: String,
     },
-    /// Inserts the item (or items) a text reads as, before the item at `at` (or at the end).
+    /// Replaces the item with this id, whole.
+    SetItem {
+        item: Item,
+    },
+    /// Inserts items, ids already given, before `before` (or at the end).
     Insert {
-        at: usize,
-        text: String,
+        before: Option<ItemId>,
+        items: Vec<Item>,
     },
     Delete {
         item: ItemId,
     },
-    /// Moves an item to position `to`.
+    /// Moves an item before `before` (or to the end).
     Move {
         item: ItemId,
-        to: usize,
+        before: Option<ItemId>,
     },
+    /// The whole file, as read: where a log starts, and an edit made by hand.
+    Text {
+        src: String,
+    },
+}
+
+/// The words of a selector that could name a feature: a name with a number on its end.
+fn selector_words(text: &str) -> impl Iterator<Item = &str> {
+    text.split(|c: char| c == ' ' || c == '(' || c == ')')
+        .filter(|w| {
+            let name = w.trim_end_matches(|c: char| c.is_ascii_digit());
+            name.len() < w.len() && name.bytes().next().is_some_and(|c| c.is_ascii_alphabetic())
+        })
+}
+
+/// `text` with the whole word `from` as `to`, where it stands alone between spaces and brackets.
+fn rename_word(text: &str, from: &str, to: &str) -> String {
+    let mut out = String::with_capacity(text.len());
+    let mut word = String::new();
+    for c in text.chars().chain(std::iter::once(' ')) {
+        if c == ' ' || c == '(' || c == ')' {
+            out.push_str(if word == from { to } else { &word });
+            word.clear();
+            out.push(c);
+        } else {
+            word.push(c);
+        }
+    }
+    out.pop();
+    out
 }
 
 /// A line's code and its comment (a `#` outside a quoted string on).
@@ -278,39 +313,44 @@ impl Document {
         if let Some(n) = self.next_line() {
             out.push_str(&format!("next {n}\n"));
         }
-        for (k, it) in self.items.iter().enumerate() {
-            let note = |out: &mut String, note: &Option<String>, code: bool| {
-                if let Some(n) = note {
-                    out.push_str(if code { "  # " } else { "# " });
-                    out.push_str(n);
-                }
-            };
-            if let Some(l) = &it.label {
-                out.push_str(l);
-                out.push_str(": ");
-            }
-            if let Some(n) = self.written_id(k) {
-                out.push_str(&format!("id {n} "));
-            }
-            out.push_str(&self.code(k).join(" "));
-            note(&mut out, &it.note, !matches!(it.body, Body::Blank));
-            if let Body::Sketch { rows, .. } = &it.body {
-                for r in rows {
-                    out.push_str("\n ");
-                    for a in &r.args {
-                        out.push(' ');
-                        out.push_str(a);
-                    }
-                    if r.args.is_empty() {
-                        out.push(' ');
-                    }
-                    note(&mut out, &r.note, !r.args.is_empty());
-                }
-                out.push_str("\nend");
-            }
-            out.push('\n');
+        for k in 0..self.items.len() {
+            self.print_item(&mut out, k, true);
         }
         out
+    }
+
+    fn print_item(&self, out: &mut String, k: usize, ids: bool) {
+        let it = &self.items[k];
+        let note = |out: &mut String, note: &Option<String>, code: bool| {
+            if let Some(n) = note {
+                out.push_str(if code { "  # " } else { "# " });
+                out.push_str(n);
+            }
+        };
+        if let Some(l) = &it.label {
+            out.push_str(l);
+            out.push_str(": ");
+        }
+        if let Some(n) = self.written_id(k).filter(|_| ids) {
+            out.push_str(&format!("id {n} "));
+        }
+        out.push_str(&self.code(k).join(" "));
+        note(out, &it.note, !matches!(it.body, Body::Blank));
+        if let Body::Sketch { rows, .. } = &it.body {
+            for r in rows {
+                out.push_str("\n ");
+                for a in &r.args {
+                    out.push(' ');
+                    out.push_str(a);
+                }
+                if r.args.is_empty() {
+                    out.push(' ');
+                }
+                note(out, &r.note, !r.args.is_empty());
+            }
+            out.push_str("\nend");
+        }
+        out.push('\n');
     }
 
     /// An item's first line as tokens: its kind and arguments (references by the places of
@@ -499,33 +539,160 @@ impl Document {
     }
 
     /// A first solid line whose op was unwritten, moved off first place by an edit, keeps
-    /// making a new body: its `new` is written.
-    fn keep_new(&mut self, was: Option<(ItemId, bool)>) {
-        let Some((id, false)) = was else { return };
+    /// making a new body: its `new` is written. The op that undoes that, if it did.
+    fn keep_new(&mut self, was: Option<(ItemId, bool)>) -> Option<Op> {
+        let (id, false) = was? else { return None };
         if self.first_solid().is_some_and(|f| f.0 == id) {
-            return;
+            return None;
         }
-        if let Some(Body::Feature { args, .. }) = self
-            .items
-            .iter_mut()
-            .find(|it| it.id == id)
-            .map(|it| &mut it.body)
-        {
+        let it = self.items.iter_mut().find(|it| it.id == id)?;
+        let before = it.clone();
+        if let Body::Feature { args, .. } = &mut it.body {
             args.insert(0, Arg::new("new"));
+        }
+        Some(Op::SetItem { item: before })
+    }
+
+    /// The id of the item after position `k`, the place to come back to.
+    fn after(&self, k: usize) -> Option<ItemId> {
+        self.items.get(k).map(|it| it.id)
+    }
+
+    /// The position of `before`, or the end.
+    fn place(&self, before: Option<ItemId>) -> Result<usize, String> {
+        before.map_or(Ok(self.items.len()), |id| self.index(id))
+    }
+
+    /// New items from text, with ids of their own: the items of an `Op::Insert`.
+    pub fn read_items(&mut self, text: &str) -> Vec<Item> {
+        self.read(text, false)
+    }
+
+    /// The parameter of that name.
+    pub fn param(&self, name: &str) -> Option<ItemId> {
+        self.items.iter().find_map(|it| match &it.body {
+            Body::Param { name: n, .. } if n == name => Some(it.id),
+            _ => None,
+        })
+    }
+
+    /// The item a feature reference names: `#ID`, a label, `fN`, or kind and count (`hole2`).
+    pub fn find(&self, name: &str) -> Option<ItemId> {
+        if let Some(id) = name.strip_prefix('#').and_then(|n| n.parse().ok()) {
+            return self.items.iter().find(|it| it.id == ItemId(id)).map(|it| it.id);
+        }
+        let lines = || self.items.iter().filter(|it| !matches!(it.body, Body::Blank));
+        if let Some(it) = lines().find(|it| it.label.as_deref() == Some(name)) {
+            return Some(it.id);
+        }
+        if let Some(id) = self.param(name) {
+            return Some(id);
+        }
+        let kind = name.trim_end_matches(|c: char| c.is_ascii_digit());
+        let n: usize = name[kind.len()..].parse().ok()?;
+        let n = n.checked_sub(1)?;
+        if kind == "f" {
+            return lines().nth(n).map(|it| it.id);
+        }
+        lines()
+            .filter(|it| match &it.body {
+                Body::Feature { kind: k, .. } => k == kind,
+                Body::Sketch { .. } => kind == "sketch",
+                Body::Param { .. } => kind == "param",
+                Body::Blank => false,
+            })
+            .nth(n)
+            .map(|it| it.id)
+    }
+
+    /// The name an item goes by here: its label, else kind and count.
+    pub fn name(&self, id: ItemId) -> Option<String> {
+        let it = self.items.iter().find(|it| it.id == id)?;
+        if let Body::Param { name, .. } = &it.body {
+            return Some(name.clone());
+        }
+        match &it.label {
+            Some(l) => Some(l.clone()),
+            None => self.name_of(id, ""),
         }
     }
 
-    /// Applies an edit.
-    pub fn apply(&mut self, e: Edit) -> Result<(), String> {
-        match e {
-            Edit::SetParam { name, expr } => {
-                let p = self.items.iter_mut().find_map(|it| match &mut it.body {
-                    Body::Param { name: n, expr, .. } if *n == name => Some(expr),
-                    _ => None,
-                });
-                *p.ok_or_else(|| format!("no parameter '{name}'"))? = expr;
+    /// An item as it prints, label and sketch rows and all, its id left off.
+    pub fn text_of(&self, id: ItemId) -> Option<String> {
+        let k = self.index(id).ok()?;
+        let mut one = String::new();
+        self.print_item(&mut one, k, false);
+        Some(one.trim_end().to_string())
+    }
+
+    /// Which features each selector in the file names by their place (`of hole1`): the places
+    /// change when lines go in, out or move, and these must follow.
+    fn selector_refs(&self) -> Vec<(ItemId, usize, String, ItemId)> {
+        let mut out = Vec::new();
+        for it in &self.items {
+            for (k, a) in it.args().iter().enumerate() {
+                if a.text.starts_with('(') {
+                    for w in selector_words(&a.text) {
+                        if let Some(to) = self.find(w) {
+                            out.push((it.id, k, w.to_string(), to));
+                        }
+                    }
+                }
             }
-            Edit::SetDimension { item, row, value } => {
+        }
+        out
+    }
+
+    /// The feature lines whose selectors name this item.
+    pub fn named_by(&self, id: ItemId) -> Option<ItemId> {
+        let mut refs = self.selector_refs().into_iter();
+        refs.find(|r| r.3 == id && r.0 != id).map(|r| r.0)
+    }
+
+    /// Selectors that named a feature by its place name it by its new place.
+    fn rename_selectors(&mut self, was: Vec<(ItemId, usize, String, ItemId)>) {
+        for (item, k, word, to) in was {
+            let Some(new) = self.name_of(to, &word).filter(|n| *n != word) else {
+                continue;
+            };
+            let Some(it) = self.items.iter_mut().find(|it| it.id == item) else {
+                continue;
+            };
+            let args = match &mut it.body {
+                Body::Sketch { head, .. } => head,
+                Body::Feature { args, .. } => args,
+                _ => continue,
+            };
+            let text = &mut args[k].text;
+            *text = rename_word(text, &word, &new);
+        }
+    }
+
+    /// Applies an op. What comes back undoes it, applied in order (and what undoing gives back,
+    /// last first, redoes it).
+    pub fn apply(&mut self, op: Op) -> Result<Vec<Op>, String> {
+        // lines going in, out or moving change places; a value never does
+        let places = matches!(op, Op::Insert { .. } | Op::Delete { .. } | Op::Move { .. });
+        let was = if places { self.selector_refs() } else { Vec::new() };
+        let undo = self.apply_op(op)?;
+        self.rename_selectors(was);
+        Ok(undo)
+    }
+
+    fn apply_op(&mut self, op: Op) -> Result<Vec<Op>, String> {
+        let mut undo = Vec::new();
+        match op {
+            Op::SetParam { item, expr } => {
+                let k = self.index(item)?;
+                let Body::Param { expr: e, .. } = &mut self.items[k].body else {
+                    return Err(format!("item {} is not a parameter", item.0));
+                };
+                undo.push(Op::SetParam {
+                    item,
+                    expr: std::mem::replace(e, expr),
+                });
+            }
+            Op::SetDimension { item, row, value } => {
                 let k = self.index(item)?;
                 let Body::Sketch { rows, .. } = &mut self.items[k].body else {
                     return Err(format!("item {} is not a sketch", item.0));
@@ -539,42 +706,81 @@ impl Document {
                 ) {
                     return Err(format!("row {row} is not a dimension"));
                 }
-                *r.args.last_mut().expect("a dimension has a value") = value;
+                let last = r.args.last_mut().expect("a dimension has a value");
+                undo.push(Op::SetDimension {
+                    item,
+                    row,
+                    value: std::mem::replace(last, value),
+                });
             }
-            Edit::SetArg { item, arg, text } => {
+            Op::SetArg { item, arg, text } => {
                 let k = self.index(item)?;
+                let before = self.items[k].clone();
                 let args = match &mut self.items[k].body {
                     Body::Sketch { head, .. } => head,
                     Body::Feature { args, .. } => args,
                     _ => return Err(format!("item {} has no arguments", item.0)),
                 };
                 *args.get_mut(arg).ok_or_else(|| format!("no argument {arg}"))? = Arg::new(text);
+                undo.push(Op::SetItem { item: before });
             }
-            Edit::Insert { at, text } => {
+            Op::SetItem { item } => {
+                let k = self.index(item.id)?;
                 let first = self.first_solid();
-                let new = self.read(&text, false);
-                self.high = new
-                    .iter()
-                    .map(|it| it.id.0)
-                    .filter(|&i| i < BLANK)
-                    .fold(self.high, u64::max);
-                let at = at.min(self.items.len());
-                self.items.splice(at..at, new);
-                self.keep_new(first);
+                self.high = self.high.max(item.id.0 * (item.id.0 < BLANK) as u64);
+                undo.push(Op::SetItem {
+                    item: std::mem::replace(&mut self.items[k], item),
+                });
+                undo.extend(self.keep_new(first));
             }
-            Edit::Delete { item } => {
-                let k = self.index(item)?;
-                self.items.remove(k);
-            }
-            Edit::Move { item, to } => {
+            Op::Insert { before, items } => {
                 let first = self.first_solid();
+                let k = self.place(before)?;
+                for it in &items {
+                    if it.id.0 < BLANK {
+                        self.high = self.high.max(it.id.0);
+                    } else {
+                        self.next = self.next.max(it.id.0 + 1);
+                    }
+                }
+                undo.extend(items.iter().map(|it| Op::Delete { item: it.id }));
+                self.items.splice(k..k, items);
+                undo.extend(self.keep_new(first));
+            }
+            Op::Delete { item } => {
                 let k = self.index(item)?;
                 let it = self.items.remove(k);
-                self.items.insert(to.min(self.items.len()), it);
-                self.keep_new(first);
+                undo.push(Op::Insert {
+                    before: self.after(k),
+                    items: vec![it],
+                });
+            }
+            Op::Move { item, before } => {
+                let first = self.first_solid();
+                let k = self.index(item)?;
+                self.place(before)?;
+                let it = self.items.remove(k);
+                undo.push(Op::Move {
+                    item,
+                    before: self.after(k),
+                });
+                let to = if before == Some(item) {
+                    k
+                } else {
+                    self.place(before)?
+                };
+                self.items.insert(to, it);
+                undo.extend(self.keep_new(first));
+            }
+            Op::Text { src } => {
+                undo.push(Op::Text { src: self.print() });
+                let mut d = Document::parse(&src);
+                d.next = d.next.max(self.next);
+                d.high = d.high.max(self.high);
+                *self = d;
             }
         }
-        Ok(())
+        Ok(undo)
     }
 }
 
@@ -609,24 +815,47 @@ mod tests {
         assert_eq!(lines[1].toks.join(" "), "d = w*3 + 1 mm");
     }
 
+    /// The op's undo gives back the document, and undoing that gives the op's result.
+    fn undone(d: &mut Document, op: Op) {
+        // ids handed out stay taken, so the `next` line may stay
+        let text = |d: &Document| {
+            let p = d.print();
+            p.strip_prefix("next ")
+                .and_then(|r| r.split_once('\n'))
+                .map_or(p.clone(), |r| r.1.to_string())
+        };
+        let before = text(d);
+        let undo = d.apply(op).expect("applies");
+        let after = text(d);
+        let mut redo = Vec::new();
+        for u in undo {
+            redo.splice(0..0, d.apply(u).expect("undoes"));
+        }
+        assert_eq!(text(d), before);
+        redo.into_iter().for_each(|r| drop(d.apply(r).expect("redoes")));
+        assert_eq!(text(d), after);
+    }
+
     #[test]
     fn edits() {
         let mut d = Document::parse(SRC);
         let id = |d: &Document, k: usize| d.items[k].id;
-        d.apply(Edit::SetParam {
-            name: "w".into(),
+        let w = d.param("w").expect("w");
+        d.apply(Op::SetParam {
+            item: w,
             expr: "50".into(),
         })
         .expect("w");
         assert!(d.print().contains("\nw = 50  # mm\n"));
+        assert!(d.param("q").is_none());
         assert!(
-            d.apply(Edit::SetParam {
-                name: "q".into(),
+            d.apply(Op::SetParam {
+                item: id(&d, 4),
                 expr: "1".into()
             })
             .is_err()
         );
-        d.apply(Edit::SetDimension {
+        d.apply(Op::SetDimension {
             item: id(&d, 4),
             row: 2,
             value: "w/2".into(),
@@ -634,7 +863,7 @@ mod tests {
         .expect("dist");
         assert!(d.print().contains("  dist l1 w/2\n"));
         assert!(
-            d.apply(Edit::SetDimension {
+            d.apply(Op::SetDimension {
                 item: id(&d, 4),
                 row: 0,
                 value: "1".into()
@@ -643,9 +872,10 @@ mod tests {
         );
         // the hole names the sketch: it follows when a line goes in above
         d.link(4, &[(3, 2)]);
-        d.apply(Edit::Insert {
-            at: 4,
-            text: "sketch\n  rect 0 0 1 1\nend".into(),
+        let items = d.read_items("sketch\n  rect 0 0 1 1\nend");
+        d.apply(Op::Insert {
+            before: Some(id(&d, 4)),
+            items,
         })
         .expect("insert");
         assert!(
@@ -654,14 +884,18 @@ mod tests {
             d.print()
         );
         let hole = id(&d, 7);
-        d.apply(Edit::Move { item: hole, to: 5 }).expect("move");
+        d.apply(Op::Move {
+            item: hole,
+            before: Some(id(&d, 5)),
+        })
+        .expect("move");
         assert!(
             d.print()
                 .contains("id 5 hole 3 on sketch2 l1.a thru\nsk: id 3 sketch"),
             "{}",
             d.print()
         );
-        d.apply(Edit::SetArg {
+        d.apply(Op::SetArg {
             item: hole,
             arg: 0,
             text: "4".into(),
@@ -673,15 +907,127 @@ mod tests {
         assert_eq!(back.print(), d.print());
         let ids = |d: &Document| d.features().map(|it| it.id).collect::<Vec<_>>();
         assert_eq!(ids(&back), ids(&d));
-        d.apply(Edit::Delete { item: hole }).expect("delete");
+        d.apply(Op::Delete { item: hole }).expect("delete");
         assert!(!d.print().contains("hole"));
         // the hole's id is not handed out again
-        d.apply(Edit::Insert {
-            at: usize::MAX,
-            text: "ball 1".into(),
-        })
-        .expect("insert");
+        let items = d.read_items("ball 1");
+        d.apply(Op::Insert { before: None, items }).expect("insert");
         assert!(d.print().ends_with("id 7 ball 1\n"), "{}", d.print());
+    }
+
+    #[test]
+    fn every_op_undoes() {
+        let mut d = Document::parse(SRC);
+        let id = |d: &Document, k: usize| d.items[k].id;
+        let w = d.param("w").expect("w");
+        let [a, b, c, e, f] = [1, 2, 4, 5, 6].map(|k| id(&d, k));
+        undone(
+            &mut d,
+            Op::SetParam {
+                item: w,
+                expr: "7".into(),
+            },
+        );
+        undone(
+            &mut d,
+            Op::SetDimension {
+                item: c,
+                row: 2,
+                value: "9".into(),
+            },
+        );
+        undone(
+            &mut d,
+            Op::SetArg {
+                item: e,
+                arg: 0,
+                text: "9".into(),
+            },
+        );
+        let mut item = d.items[5].clone();
+        item.label = Some("b".into());
+        undone(&mut d, Op::SetItem { item });
+        let items = d.read_items("h = 3\nball 2");
+        undone(
+            &mut d,
+            Op::Insert {
+                before: Some(b),
+                items,
+            },
+        );
+        undone(&mut d, Op::Delete { item: e });
+        undone(
+            &mut d,
+            Op::Move {
+                item: f,
+                before: Some(a),
+            },
+        );
+        undone(
+            &mut d,
+            Op::Move {
+                item: a,
+                before: None,
+            },
+        );
+        undone(
+            &mut d,
+            Op::Text {
+                src: "ball 1\n".into(),
+            },
+        );
+        // refused moves leave it as it was
+        let before = d.clone();
+        assert!(
+            d.apply(Op::Move {
+                item: a,
+                before: Some(ItemId(99))
+            })
+            .is_err()
+        );
+        assert_eq!(d, before);
+    }
+
+    /// A selector names a feature by its place: when the place changes the selector follows, so
+    /// it never finds another feature that came to stand there.
+    #[test]
+    fn selectors_follow_their_features() {
+        let mut d =
+            Document::parse("extrude 9 rect 0 0 9 9\nhole 3 at 1 1 9 thru\nfillet 1 (edges of hole1 top)\n");
+        let [first, hole, fillet] = [0, 1, 2].map(|k| d.items[k].id);
+        let items = d.read_items("hole 2 at 5 5 9 thru");
+        let undo = d
+            .apply(Op::Insert {
+                before: Some(hole),
+                items,
+            })
+            .expect("insert");
+        assert!(d.print().contains("(edges of hole2 top)"), "{}", d.print());
+        undo.into_iter().for_each(|u| drop(d.apply(u).expect("undoes")));
+        assert!(d.print().contains("(edges of hole1 top)"), "{}", d.print());
+        assert_eq!(d.named_by(hole), Some(fillet));
+        assert_eq!(d.named_by(first), None);
+        assert_eq!(
+            rename_word("(a hole1 hole11)", "hole1", "hole2"),
+            "(a hole2 hole11)"
+        );
+    }
+
+    #[test]
+    fn names_find_their_items() {
+        let d = Document::parse(SRC);
+        let sk = d.find("sk").expect("label");
+        assert_eq!(d.find("sketch1"), Some(sk));
+        assert_eq!(d.find("f3"), Some(sk));
+        assert_eq!(d.find(&format!("#{}", sk.0)), Some(sk));
+        assert_eq!(d.find("hole1"), Some(d.items[6].id));
+        assert_eq!(d.find("hole2"), None);
+        assert_eq!(d.name(sk).as_deref(), Some("sk"));
+        assert_eq!(d.name(d.items[6].id).as_deref(), Some("hole1"));
+        assert_eq!(
+            d.text_of(sk).expect("sk").lines().next(),
+            Some("sk: sketch on plane1 at 0 0 6")
+        );
     }
 
     /// A solid moved above the first leaves the first making a new body, its `new` written.
@@ -689,13 +1035,22 @@ mod tests {
     fn moves_keep_the_bodies() {
         let mut d = Document::parse("extrude 1 rect 0 0 1 1\nball new 2 at 5 0 0\n");
         let ball = d.items[1].id;
-        d.apply(Edit::Move { item: ball, to: 0 }).expect("move");
+        let first = d.items[0].id;
+        d.apply(Op::Move {
+            item: ball,
+            before: Some(first),
+        })
+        .expect("move");
         assert_eq!(
             d.print(),
             "id 2 ball new 2 at 5 0 0\nid 1 extrude new 1 rect 0 0 1 1\n"
         );
         // written ops are left as they are
-        d.apply(Edit::Move { item: ball, to: 1 }).expect("move back");
+        d.apply(Op::Move {
+            item: ball,
+            before: None,
+        })
+        .expect("move back");
         assert_eq!(d.print(), "extrude new 1 rect 0 0 1 1\nball new 2 at 5 0 0\n");
     }
 }

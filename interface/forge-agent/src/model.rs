@@ -4,15 +4,15 @@
 use crate::facemesh::{self, FaceMesh};
 use crate::select::{self, Ent, View};
 use crate::text::{self, Before, Line};
-use forge_doc::{Document, Edit};
+use forge_doc::{Document, Op};
 use forge_math::Box3;
 use forge_mesh::TriMesh;
 use forge_model::{Feature, History, RegenError, Solid, Source, step_solids};
 use forge_topo::mass::MassProps;
 use forge_topo::{Body, Name};
-use std::cell::{OnceCell, RefCell};
+use std::cell::RefCell;
 use std::collections::HashMap;
-use std::sync::Arc;
+use std::sync::{Arc, OnceLock};
 use std::time::Instant;
 
 pub struct Model {
@@ -24,7 +24,7 @@ pub struct Model {
     pub labels: Vec<Option<String>>,
     pub kinds: Vec<&'static str>,
     /// The part after each built feature.
-    stages: Vec<Stage>,
+    stages: Vec<Arc<Stage>>,
     /// Each stage's faces' making features, filled as asked for.
     origins: RefCell<Vec<select::Lineage>>,
     /// How many entities each inline selector picked: (line index, count).
@@ -48,20 +48,20 @@ pub struct Model {
 }
 
 /// From a font's name in the part file to the font.
-pub type Fonts = dyn Fn(&str) -> Result<Arc<forge_font::Font>, String>;
+pub type Fonts = dyn Fn(&str) -> Result<Arc<forge_font::Font>, String> + Send + Sync;
 
 /// The bodies after a line, as the next line builds on them; all of them as one body to look at
 /// (finished: faces on one surface joined); and as one body unfinished, to trace faces through.
 struct Stage {
     solids: Vec<Solid>,
-    view: OnceCell<Joined>,
-    work: OnceCell<Body>,
+    view: OnceLock<Joined>,
+    work: OnceLock<Body>,
 }
 
 /// Bodies as one, with each body's id and where its faces, edges and vertices end in it.
 type Joined = (Body, Vec<(usize, [usize; 3])>);
 
-fn stage_body(stages: &[Stage], n: usize) -> Option<&Body> {
+fn stage_body(stages: &[Arc<Stage>], n: usize) -> Option<&Body> {
     let s = stages.get(n.checked_sub(1)?)?;
     match &s.solids[..] {
         [] => None,
@@ -73,8 +73,8 @@ impl Stage {
     fn new(solids: Vec<Solid>) -> Stage {
         Stage {
             solids,
-            view: OnceCell::new(),
-            work: OnceCell::new(),
+            view: OnceLock::new(),
+            work: OnceLock::new(),
         }
     }
 
@@ -109,6 +109,19 @@ impl Stage {
             })),
         }
     }
+}
+
+/// A model as it was: see `Model::save`.
+pub struct Saved {
+    src: String,
+    doc: Document,
+    lines: Vec<Line>,
+    features: Vec<Feature>,
+    labels: Vec<Option<String>>,
+    kinds: Vec<&'static str>,
+    stages: Vec<Arc<Stage>>,
+    picks: Vec<(usize, usize)>,
+    error: Option<Failure>,
 }
 
 #[derive(Clone, Debug)]
@@ -180,14 +193,56 @@ impl Model {
         self.rebuild(new, t0);
     }
 
-    /// Applies an edit to the document and rebuilds from the first line it changed.
-    pub fn edit(&mut self, e: Edit) -> Result<(), String> {
+    /// Applies an op to the document and rebuilds from the first line it changed. What comes
+    /// back undoes it.
+    pub fn edit(&mut self, op: Op) -> Result<Vec<Op>, String> {
         let t0 = Instant::now();
-        self.doc.apply(e)?;
+        let undo = self.doc.apply(op)?;
+        self.commit_doc(t0);
+        Ok(undo)
+    }
+
+    /// Rebuilds after ops applied to `doc` directly: several at once cost one rebuild.
+    pub fn sync_doc(&mut self) {
+        self.commit_doc(Instant::now());
+    }
+
+    fn commit_doc(&mut self, t0: Instant) {
         self.src = self.doc.print();
         self.rebuild(self.doc.lines(), t0);
         self.edited = true;
-        Ok(())
+    }
+
+    /// What `restore` goes back to. Stages are shared, so this costs little beside the text.
+    pub fn save(&self) -> Saved {
+        Saved {
+            src: self.src.clone(),
+            doc: self.doc.clone(),
+            lines: self.lines.clone(),
+            features: self.features.clone(),
+            labels: self.labels.clone(),
+            kinds: self.kinds.clone(),
+            stages: self.stages.clone(),
+            picks: self.picks.borrow().clone(),
+            error: self.error.clone(),
+        }
+    }
+
+    /// Back to as it was at `save`, nothing rebuilt.
+    pub fn restore(&mut self, s: Saved) {
+        self.src = s.src;
+        self.doc = s.doc;
+        self.lines = s.lines;
+        self.features = s.features;
+        self.labels = s.labels;
+        self.kinds = s.kinds;
+        self.stages = s.stages;
+        *self.picks.get_mut() = s.picks;
+        self.error = s.error;
+        self.origins.get_mut().clear();
+        self.faces = None;
+        self.mesh = None;
+        self.mass = None;
     }
 
     /// Writes `from (verts near X Y Z)` into each built fillet line where a varying radius was
@@ -353,7 +408,7 @@ impl Model {
                 // until a line has parsed, this may not be a part file: echo none of it
                 Err(_) if i == 0 && !param && text::kind(&line.toks[0]).is_none() => {
                     let msg = "the first line is not a feature; is this a .fc part file?".into();
-                    self.fail(i, msg, "see AGENTS.md for the feature kinds".into());
+                    self.fail(i, msg, "`help` lists the feature kinds".into());
                     break;
                 }
                 Err(msg) => {
@@ -365,7 +420,7 @@ impl Model {
                             "change or remove one of those rows; a sketch may be under-constrained".into()
                         }
                         Some(k) => k.syntax.to_string(),
-                        None => "see AGENTS.md for the feature kinds".into(),
+                        None => "`help` lists the feature kinds".into(),
                     };
                     let hint = self.defined_below(i, &msg).unwrap_or(hint);
                     self.fail(i, msg, hint);
@@ -390,7 +445,7 @@ impl Model {
                 self.stages[i - 1].solids.clone()
             };
             match step_solids(History::new(&self.features, Some(&ids[..=i])), i, before) {
-                Ok(solids) => self.stages.push(Stage::new(solids)),
+                Ok(solids) => self.stages.push(Arc::new(Stage::new(solids))),
                 Err(e) => {
                     let (msg, hint) = explain(&e);
                     let msg = match self.body_after(i) {
@@ -657,6 +712,19 @@ impl Model {
             sel,
         )?;
         Ok((body, ents))
+    }
+
+    /// The entities a handle or selector names on the finished part.
+    pub fn select_ref(&self, r: &str) -> Result<Vec<Name>, String> {
+        if let Some(n) = text::full_name(r) {
+            return Ok(vec![n]);
+        }
+        if r.starts_with('@') {
+            let body = self.body().ok_or("no part yet")?;
+            return Ok(vec![select::name(body, select::by_handle(body, r)?)]);
+        }
+        let (body, ents) = self.select(r, None)?;
+        Ok(ents.into_iter().map(|e| select::name(body, e)).collect())
     }
 
     /// The planar face a reference names before line `i`: its name and its plane, z outward.

@@ -462,7 +462,7 @@ fn sketches_and_parameters_print_back() {
 /// build of the file they print does; references follow the items they name.
 #[test]
 fn edits_rebuild_like_the_file_they_print() {
-    use forge_doc::Edit;
+    use forge_doc::Op;
     let src = "w = 40\nsketch\n  rect 0 0 w 25\n  fix l1.a\n  dist l1 w\n  dist l2 25\nend\n\
                extrude 6 sketch1\nsketch on sketch1\n  circle 10 10 2\nend\nhole 3 on sketch2 c1 thru\n";
     let mut m = built(src);
@@ -471,14 +471,15 @@ fn edits_rebuild_like_the_file_they_print() {
         assert_eq!(format!("{:?}", m.body().expect("built").compact()), body(m.src()));
     };
     let item = |m: &Model, k: usize| m.doc.features().nth(k).expect("a line").id;
-    m.edit(Edit::SetParam {
-        name: "w".into(),
+    let w = m.doc.param("w").expect("w");
+    m.edit(Op::SetParam {
+        item: w,
         expr: "55".into(),
     })
     .expect("set");
     assert_eq!(m.rebuilt, 3, "from the extrude on");
     fresh(&m);
-    m.edit(Edit::SetDimension {
+    m.edit(Op::SetDimension {
         item: item(&m, 1),
         row: 3,
         value: "30".into(),
@@ -488,9 +489,11 @@ fn edits_rebuild_like_the_file_they_print() {
     // a line in above: the hole still drills at the second sketch, now the third, and every
     // line keeps its id, so the part's names are what they were
     let before = format!("{:?}", m.body().expect("built").compact());
-    m.edit(Edit::Insert {
-        at: 1,
-        text: "sketch xz\n  circle 0 0 1\nend".into(),
+    let items = m.doc.read_items("sketch xz\n  circle 0 0 1\nend");
+    let second = item(&m, 1);
+    m.edit(Op::Insert {
+        before: Some(second),
+        items,
     })
     .expect("insert");
     assert!(
@@ -503,7 +506,7 @@ fn edits_rebuild_like_the_file_they_print() {
     fresh(&m);
     assert_eq!(format!("{:?}", m.body().expect("built").compact()), before);
     let hole = item(&m, 5);
-    m.edit(Edit::SetArg {
+    m.edit(Op::SetArg {
         item: hole,
         arg: 0,
         text: "w/10".into(),
@@ -511,7 +514,7 @@ fn edits_rebuild_like_the_file_they_print() {
     .expect("arg");
     assert_eq!(m.rebuilt, 1);
     fresh(&m);
-    m.edit(Edit::Delete { item: item(&m, 1) }).expect("delete");
+    m.edit(Op::Delete { item: item(&m, 1) }).expect("delete");
     // every line back at the place its id names: no ids written
     assert!(
         m.src().ends_with("\nhole w/10 on sketch2 c1 thru\n") && !m.src().contains("id "),
@@ -519,19 +522,12 @@ fn edits_rebuild_like_the_file_they_print() {
         m.src()
     );
     fresh(&m);
-    assert!(
-        m.edit(Edit::SetParam {
-            name: "nope".into(),
-            expr: "1".into()
-        })
-        .is_err()
-    );
     // a re-read file keeps the links of the lines it kept
     let src = m.src().to_string();
     m.update(&src.replace("hole w/10", "hole w/11"));
-    m.edit(Edit::Move {
+    m.edit(Op::Move {
         item: item(&m, 0),
-        to: 0,
+        before: Some(item(&m, 1)),
     })
     .expect("move");
     assert!(m.src().contains("hole w/11 on sketch2 c1 thru"), "{}", m.src());
@@ -725,7 +721,7 @@ fn an_id_used_twice_is_an_error() {
 /// handle to the line taken out fails rather than find the new line's entities.
 #[test]
 fn a_deleted_id_is_never_used_again() {
-    use forge_doc::Edit;
+    use forge_doc::Op;
     let block =
         "extrude 5 rect 0 0 20 10\nextrude 5 at 0 0 5 rect 0 0 5 5\nextrude 5 at 10 0 5 rect 0 0 5 5\n";
     let mut m = built(block);
@@ -735,15 +731,12 @@ fn a_deleted_id_is_never_used_again() {
         .expect("selects");
     let old = format!("@{:016x}", select::name(b, ents[0]).0);
     let last = m.doc.features().nth(2).expect("a line").id;
-    m.edit(Edit::Delete { item: last }).expect("delete");
+    m.edit(Op::Delete { item: last }).expect("delete");
     assert!(m.src().starts_with("next 4\n"), "{}", m.src());
     // saved and read back: the new line takes 4, not 3
     let mut m = built(m.src());
-    m.edit(Edit::Insert {
-        at: usize::MAX,
-        text: "extrude 5 at 10 0 5 rect 0 0 5 5".into(),
-    })
-    .expect("insert");
+    let items = m.doc.read_items("extrude 5 at 10 0 5 rect 0 0 5 5");
+    m.edit(Op::Insert { before: None, items }).expect("insert");
     assert!(
         m.src().ends_with("id 4 extrude 5 at 10 0 5 rect 0 0 5 5\n") && !m.src().contains("next"),
         "{}",

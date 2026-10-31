@@ -6,5 +6,6 @@ pub mod doc;
 pub mod expr;
 pub mod sketch;
 pub mod text;
+pub mod wire;
 
-pub use doc::{Arg, Body, Document, Edit, Item, ItemId, Row};
+pub use doc::{Arg, Body, Document, Item, ItemId, Op, Row};

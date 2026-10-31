@@ -7,7 +7,8 @@ use forge_agent::json::Json;
 use std::io::{BufRead, Write};
 use std::process::ExitCode;
 
-/// Each tool: name, description, how many of its parameters are required, its parameters.
+/// Each tool: name, description, how many of its parameters are required, its parameters. Five,
+/// and kept short: a client sends these with every request.
 type Tool = (
     &'static str,
     &'static str,
@@ -15,61 +16,49 @@ type Tool = (
     &'static [(&'static str, &'static str)],
 );
 
-const TOOLS: [Tool; 7] = [
+const TOOLS: [Tool; 5] = [
     (
-        "build",
-        "Regenerate a .fc part file. Returns ok or the failing line with a fix hint, then volume, area, bbox, counts.",
-        1,
-        &[("file", "path to the .fc file")],
-    ),
-    (
-        "query",
-        "Find faces/edges/verts; returns @handles usable in the file. e.g. `edges of hole1`, `faces plane normal +z top`, `edges circle r=3`.",
+        "act",
+        "Change a .fc part: newline-separated lines, all applied or none.",
         2,
         &[
             ("file", "path"),
-            ("sel", "selector"),
-            ("at", "ask about the part after this feature"),
+            ("lines", "the lines"),
+            ("base", "refuse if not this version"),
+        ],
+    ),
+    (
+        "query",
+        "selector -> @handles; or stat, file, check, dims, since N",
+        2,
+        &[
+            ("file", "path"),
+            ("sel", "what to ask"),
+            ("at", "after this feature"),
         ],
     ),
     (
         "measure",
-        "`mass`, `wall` (min thickness), one @handle/(selector) (area|length, radius, centre) or two (distance, angle).",
+        "mass, wall, or one or two refs",
         2,
-        &[
-            ("file", "path"),
-            ("what", "mass | wall | @handle | (selector)"),
-            ("to", "second @handle or (selector)"),
-        ],
+        &[("file", "path"), ("what", "mass|wall|ref"), ("to", "second ref")],
     ),
     (
         "render",
-        "PNG of the part. Labels show handles (without @).",
+        "PNG of the part",
         1,
         &[
             ("file", "path"),
             ("view", "iso front top right back left bottom"),
-            ("labels", "selector of entities to label"),
-            ("px", "long side in pixels, default 400"),
+            ("labels", "selector to label"),
+            ("px", "long side"),
         ],
     ),
     (
-        "check",
-        "Validity of the part after every line.",
-        1,
-        &[("file", "path")],
-    ),
-    (
-        "diff",
-        "What changed between two versions of a part: first changed line, volume, faces added/removed.",
-        2,
-        &[("file", "path of version a"), ("other", "path of version b")],
-    ),
-    (
-        "edit",
-        "Change the file through its document and rebuild: `param NAME EXPR`, `dim LINE VALUE` (a sketch dimension row), `arg LINE K TEXT`, `insert LINE|end TEXT` (\\n between lines), `delete LINE`, `move LINE LINE|end`. Line numbers are the file's.",
-        2,
-        &[("file", "path"), ("edit", "the edit")],
+        "help",
+        "The grammar of a feature or topic; none: the topics",
+        0,
+        &[("topic", "a feature or topic")],
     ),
 ];
 
@@ -80,19 +69,26 @@ fn args(p: &Json) -> Args {
         at: s("at"),
         labels: s("labels"),
         px: p.get("px").and_then(Json::num).map(|n| n as usize),
+        base: p.get("base").and_then(Json::num).map(|n| n as u64),
         ..Args::default()
     };
-    a.words = ["sel", "what", "to", "view", "other"]
+    a.words = ["sel", "what", "to", "view", "other", "lines"]
         .iter()
         .filter_map(|k| s(k))
         .collect();
-    if let Some(e) = s("edit") {
-        a.words = e.split_whitespace().map(str::to_string).collect();
+    // a question's words apart: `since 4`
+    if let [one] = &a.words[..]
+        && (one == "since" || one.starts_with("since "))
+    {
+        a.words = one.split_whitespace().map(str::to_string).collect();
+    }
+    if let Some(t) = s("topic") {
+        a.file = t;
     }
     a
 }
 
-/// Serves files under `root` only, writing them (edits) only if `writable`.
+/// Serves files under `root` only, writing them (act) only if `writable`.
 pub fn run(mcp: bool, root: &str, writable: bool) -> ExitCode {
     let root = match std::fs::canonicalize(root) {
         Ok(r) => r,

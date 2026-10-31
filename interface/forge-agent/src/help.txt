@@ -1,0 +1,175 @@
+## act lines add param before edit set dim rm mv undo redo select
+act F 'LINE' 'LINE'..  (or lines on stdin): all apply or none, one reply.
+LINE                   any .fc line goes on the end; a sketch runs to its `end`
+NAME = EXPR [mm|deg]   sets the parameter, or adds it on the end
+before FEAT LINE       a line put in above FEAT
+edit FEAT LINE         FEAT's line replaced; its id and label stay, so references hold
+set FEAT K TEXT        FEAT's Kth word after the kind
+dim SKETCH ROW VALUE   a dimension: `dim plate dist l1 50` (the row less its value, or its number)
+rm FEAT                the line out; refused while another line names it
+mv FEAT FEAT2|end      FEAT above FEAT2; ids and names stay
+undo | redo | select REF..   each alone in its act (`measure F sel` reads the selection)
+--base N: refused with a short diff if the part is no longer version N (`query F since N`).
+Reply: `ok v7; +4 faces, volume -120.4 mm3, valid; picked fillet1:4`, or the line, the reason and
+`try:` a replacement that builds; a selector that picks nothing refuses too.
+FEAT: a label, kind+count (`hole2` the 2nd hole), `fN` (the Nth line), or `#ID` (`id N` in the file).
+
+## file id next comment label
+Units mm, angles degrees (`1.2r` is radians). `#` starts a comment. `name:` labels a line.
+`id N` before a line (written by `act`) is the id its names come from, kept when lines move;
+leave it off new lines. A first line `next N` keeps ids of deleted lines from coming back.
+A part may hold several bodies; see `help bodies`.
+
+## params param expr expression
+w = 40                      NAME = EXPR [mm|deg], defined above its use; any number below
+d = w*3 + 1 mm              may be an expression: w/2, (h + 2), sqrt(a), min(a,b)
+EXPR: + - * / ^ ( ) sqrt min max abs pi sin cos tan asin acos atan atan2(y,x) (degrees)
+
+## sketch rows constraints
+plate: sketch xy            sketch FRAME | sketch on REF (a planar face); rows to `end`
+  rect 0 0 38 27            l1..l4 (corners shared, kept square)
+  circle 20 12 4            c1
+  pt 6 6                    p1
+  fix l1.a                  constraints and dimensions, valued by EXPR:
+  dist l1 w                   fix E.. | co A B | hor|ver E.. | par|perp|tan|conc A B
+  dia c1 8                    eq A B.. | mid P L | sym P Q L | dist A B V | dist L V
+  hdist l1.a c1 w/2           hdist|vdist P Q V | rad|dia C V | ang L M V
+end
+extrude 6 plate             its one region; `plate E`: the region E bounds outside
+hole 3 on plate p1 thru     FRAME on a sketch's plane (-on: flipped), at its point
+Rows: `pt P` `line P P` `poly P P.. [open]` `rect X Y W H` `circle P R` `arc C S E [cw]` (+`cons`:
+construction). P: `X Y` or `p1`, `l2.a`|`.b`, `c1` (centre), `o`. Entities count by kind: p l c a.
+A row the rows above imply is an error; `ref dist l1` (no value) is driven. `query F check` shows
+driven values, each sketch's freedom and conflicting rows. A sketch `on` something follows edits above it.
+
+## extrude revolve ball ops op
+[op] is add (default) cut keep (intersect) new (body); `new` for the first solid.
+extrude [op] EXT (FRAME LOOPS | SKETCH [E])    EXT: N | sym N | two N M | thru [back|both] | next [back] | to FEAT [@face] [off N]
+revolve [op] [TURN] (FRAME [axis x|y|OX OY DX DY] LOOPS | SKETCH [axis L] [E])    TURN: like EXT, in degrees; default 360
+ball [op] R FRAME
+`next`: up to the next face met. `to`: a plane or sketch feature, or a feature's face (plane, cylinder..).
+Solids added together keep faces that lie in one plane split (a known gap): one profile, `near` or handles pick one.
+
+## frame xy xz yz at on
+FRAME: [xy|xz|yz|-xy|-xz|-yz | z A B C [x A B C] | [-]on FEAT [P] | on REF] [at X Y Z | at POINT]     default: xy at 0 0 0
+`at` is its origin in world coordinates, its z the extrude or drill direction; a hole's mouth is at the origin.
+xy: normal +z; xz: sketch x,y = world x,z, normal -y; yz: world y,z, normal +x;
+-xy: sketch y = world -y, normal -z (drill down); -xz: normal +y; -yz: normal -x
+
+## loops rect rrect circle poly loop
+LOOPS (first is outside, rest holes; X Y a corner): rect X Y W H | rrect X Y W H CORNER_R | circle CX CY R |
+poly X Y X Y .. | loop (line AX AY BX BY | arc CX CY R START SWEEP)..
+Wherever LOOPS go (sweep, coil, loft profiles too), `SKETCH [E]` may stand instead.
+
+## fillet radius setback from
+fillet R [from VREF] REF.. [R ..] [setback VREF [REF] D]..    a new radius applies onward
+R: 3 | 2..4 (start to end) | 0:2,0.5:4,1:2 (fraction:radius); the start is `from VREF`, else it is written in
+(`from (verts near X Y Z)`); a constant radius holds along its own edge, a tangent chain varies over its
+variable and unpicked edges; `setback VREF [REF] D`: blends meeting at a corner stop D from it.
+
+## facefillet fullround
+facefillet R REF.. to REF..   between two face sets (their edges, or the band of four-sided strip faces joining them goes)
+fullround SIDE MIDDLE SIDE    the ball touching both sides and the middle takes the middle away, its radius
+following the sides; a ring's top rounds all the way round.
+
+## chamfer
+chamfer D REF.. | chamfer D D2 face REF REF.. | chamfer D ang A face REF REF..
+
+## shell hollow draft
+shell T [out] REF..    hollow to walls T thick (out: outside the skin), REF faces open
+draft A FRAME REF..    faces planar and meeting the neutral plane; draft before rounding their edges
+
+## hole
+hole (D | SIZE [iso|ansi] [close|normal|loose|tap] [cbore|csink]) (FRAME | [-]on SK pts [P.. | centers]) [cb D2 DEPTH | cs D2 A] (N | thru | next | to FEAT [@face] [off N]) [pt A] [thread SPEC]
+N: depth, flat bottom unless `pt 118`; thru: through the whole part. SIZE: M6 M8x1 (ISO), 1/4-20 10-32
+(UTS) from the tables (iso: DIN 336 tap drills, DIN 974-1 seats; ansi: tap D-P, ASME B18.3); fit normal
+clearance, or tap (tap drill, thread recorded); cbore|csink seat a head. Other sizes: `hole D .. thread M36x2`.
+A hole's thread is recorded only; `thread hole FEAT N` models it (bore it to the minor).
+`on SK pts`: one hole at each of a sketch's points (as pattern pts), the first where the frame is.
+
+## pattern lin circ mirror
+pattern (body | FEAT..) (lin DX DY DZ N STEP [DX DY DZ N STEP] | circ OX OY OZ AX AY AZ N [A] [step] | mirror FRAME
+  | path REF.. N (STEP|fit) [fixed] [rev] | pts (X Y Z | REF | SKETCH [P.. | centers])..)
+N counts the original; body: the whole part. lin: STEP mm apart along DIR; circ: N over A (default
+360) or A apart (`step`); mirror: in the frame's xy plane (`mirror yz`: across x=0). path: edges end
+to end (FEAT @e @e..) or an axis, turned along it unless fixed. pts: the source at the first point;
+SKETCH: its points P, or all its `pt`s (+ arc and circle `centers`), in order (`hole .. -on sk p1`)
+
+## sweep coil loft path
+sweep [op] FRAME LOOPS path PATH [extend N M | to FEAT [@face] [off N]]     profile square to the path's start
+coil [op] FRAME [axis ..] LOOPS (pitch P turns N | turns N height H | pitch P height H | pitch P to FEAT [@face] [off N]) [taper A] [left]
+loft [op] [smooth [start W] [end W]] (profile FRAME LOOPS).. [rail I PATH.. | centre PATH]     I: vertex (where segment I starts)
+PATH: (line AX AY AZ BX BY BZ | arc FRAME R START SWEEP).. | SKETCH [E]     tangent-continuous; an arc's FRAME is its circle's, centre at `at`
+
+## thread
+thread (SPEC FRAME ext|int | SPEC face FEAT REF [flip] | hole FEAT) (N | full | to FEAT [@face] [off N]) [left] [chamfer] [runout]
+modeled 60 deg ISO/UTS. SPEC: M6 (coarse) | M6x0.75 | 1/4-20 | 0.19-24 (inch, TPI). FRAME: origin on
+the axis at the start, z into the part; ext round a rod of the major, int in a bore of the minor
+(major - 1.0825 P; a tap drill, major - P, is close). face: from the cylinder face's end furthest
+along its axis (flip: other); hole: a hole's recorded thread from its mouth, copies too. runout: past the end
+
+## text
+text [add|cut] STRING font PATH SIZE DEPTH FRAME [wrap R]
+quoted STRING and PATH (a .ttf/.otf beside the file); SIZE the em (capitals ~0.73 em); baseline from
+the origin along x, letters up y, DEPTH along z (cut: into the part). wrap R: round a cylinder about z
+
+## rib web
+rib T [pos|neg] [web] [flip] [draft A] FRAME (line AX AY BX BY | arc CX CY R START SWEEP)..
+a wall along an open path, ends run on to the part, filling to the path's left (flip: right), T thick
+along z (sym; pos|neg one side); web: fills along -z (flip +z), T across the path; draft: thicker inward
+
+## offset thicken delete replace move
+offset D REF..                   faces moved D along their outward normals, neighbours re-met
+thicken [op] T [neg|sym] REF..   a slab T thick on the faces, outward (neg: inward); op new = the slab as a new body
+delete REF..                     a hole, boss, pocket or chamfer/fillet strip removed, the gap closed
+replace REF with FEAT [@face]    a face put on a work plane or an earlier feature's face
+move REF.. (by DX DY DZ | turn A OX OY OZ AX AY AZ)   faces moved or turned, neighbours re-met
+
+## bodies combine split splitface movebody copybody in
+`new` (after the first), `split` (both sides kept unless `+` or `-`; `+` is the cutter's normal side, a new
+body) and `copybody` make bodies; a body is named by the line that made it. Any line may end `in FEAT[,FEAT..]`
+or `in all`; otherwise it acts on the last body made, and fillet, chamfer, draft, shell and splitface on the
+bodies holding their refs. Bodies may overlap. `query F stat` lists each body's volume.
+combine (add|cut|keep) TARGET TOOL.. [keep]      bodies; keep: the tool bodies stay
+split BY [+|-]     splitface REF.. by BY     movebody MOTION..     copybody MOTION..
+BY: FEAT [@face] | plane FRAME | curve FRAME (line AX AY BX BY | arc CX CY R A0 SWEEP | circle CX CY R)
+MOTION: by DX DY DZ | rot OX OY OZ AX AY AZ A | frame FRAME      (applied in order)
+
+## plane axis point ucs work
+Work features (for to, on, at, path, pts; follow edits).
+plane FRAME | off FACE D | ang PLANE AXIS A | tan CYL PLANE | pts P P P | mid PLANE PLANE | norm CURVE P
+axis EDGE|CYL|CONE | pts P P | meet PLANE PLANE | norm PLANE P
+point VERTEX|CIRCLE|SPHERE | mid EDGE | meet EDGE|AXIS FACE|PLANE        ucs FRAME | ucs pts O X XY
+
+## ref refs feat handles
+REF: @handle | (selector), found on the part as it stands above that line; FEAT, a sketch's plane, FEAT @h|(sel)
+(an entity it made), or SKETCH P: a sketch's point (`p1`, `l2.b`, `c1`); `at REF` puts an origin on any point.
+Handles (`@`, f/e/v for face/edge/vertex, 8+ hex digits of the name) survive edits below their feature; one
+whose entity an upstream edit took away fails, never finds another. Selectors survive more.
+
+## selectors selector query
+`faces|edges|verts`, then filters in order; inline in parentheses, or `query F SEL [--at FEAT]`.
+plane cyl cone sphere torus blend | line circle curve      kind (fillets: cyl, or torus round a circle)
+convex concave smooth                                      how an edge's faces meet
+normal +z | normal A B C | along +x                        plane normal; line direction
+r=3 r<3 r>3   longer 5   shorter 5                         radius; edge length
+of FEAT..   between FEAT FEAT   on @h   body FEAT          made by (copies too); joining; touching; in body
+top bottom left right front back   near X Y Z              keep the extreme ones (ties too); nearest
+query answers `@e78d2213f line -x len=60 at 0,20,40` (round: axis, centre; body=FEAT; faces on one surface
+are one face; alike ones share a line). Also: query F stat | file | check | since N | dims.
+
+## measure mass wall
+measure F REF [REF]        area|length radius centre; two: closest distance, angle, axes
+measure F mass|wall        exact volume area centroid inertia (+ principal); thinnest wall anywhere
+
+## render labels
+render F [VIEW] [--labels SEL] [--px 400] [-o F.png]   VIEW: iso (default) front top right back left bottom. px: long side
+Rendered labels are handles without `@`.
+
+## commands build check diff serve mcp
+forgecad act|query|measure|render|help as above; also
+forgecad build F     ok, or error at file line N + hint; exact volume, area; bbox; bodies (`query F stat`)
+forgecad check F     each body's validity after each line (`query F check`)
+forgecad diff A B    what B changed from A
+forgecad serve|mcp [--root DIR] [--writable]   stdio JSON-RPC / MCP, .fc files under DIR (default .) only; act needs --writable
+`serve` takes one JSON object per line, `{"id":1,"method":"build","params":{"file":"b.fc"}}`; params: file sel at what to view labels px other lines base.

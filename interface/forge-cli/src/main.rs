@@ -12,9 +12,10 @@ use std::time::Instant;
 
 fn usage() -> ExitCode {
     eprintln!(
-        "usage: forgecad build|query|measure|render|check|diff|edit FILE [ARGS] [--json] [--at FEAT] [--labels SEL] [--px N] [-o OUT]\n       \
-         forgecad serve | mcp [--root DIR] [--writable]   (JSON-RPC / MCP on stdio, .fc files under DIR, default .; edit only if --writable)\n       \
-         forgecad demo <out.stl> [chord-mm] | preview <out.json>\nformat and selectors: AGENTS.md"
+        "usage: forgecad act|query|measure|render|build|check|diff FILE [ARGS] [--json] [--base N] [--at FEAT] [--labels SEL] [--px N] [-o OUT]\n       \
+         forgecad help [TOPIC]\n       \
+         forgecad serve | mcp [--root DIR] [--writable]   (JSON-RPC / MCP on stdio, .fc files under DIR, default .; act only if --writable)\n       \
+         forgecad demo <out.stl> [chord-mm] | preview <out.json>\nformat and selectors: AGENTS.md, forgecad help"
     );
     ExitCode::from(2)
 }
@@ -118,6 +119,10 @@ fn main() -> ExitCode {
                 _ => usage(),
             }
         }
+        Some("help") => {
+            println!("{}", forge_agent::help::help(&args[2..].join(" ")));
+            ExitCode::SUCCESS
+        }
         Some(c) if COMMANDS.contains(&c) && args.len() >= 3 => command(c, &args[2..]),
         _ => usage(),
     }
@@ -136,12 +141,19 @@ fn command(cmd: &str, argv: &[String]) -> ExitCode {
             "--at" => a.at = it.next().cloned(),
             "--labels" => a.labels = it.next().cloned(),
             "--px" => a.px = it.next().and_then(|p| p.parse().ok()),
+            "--base" => a.base = it.next().and_then(|p| p.parse().ok()),
             "-o" => out = it.next().cloned(),
             w if w.starts_with("--") => {
-                eprintln!("unknown option {w} (--json --at --labels --px -o)");
+                eprintln!("unknown option {w} (--json --base --at --labels --px -o)");
                 return ExitCode::from(2);
             }
             _ => a.words.push(w.clone()),
+        }
+    }
+    if cmd == "act" && a.words.is_empty() {
+        let mut lines = String::new();
+        if std::io::Read::read_to_string(&mut std::io::stdin(), &mut lines).is_ok() {
+            a.words.push(lines);
         }
     }
     let r = Session::default().writable(true).run(cmd, &a);

@@ -4,6 +4,7 @@
 use crate::json::Json;
 use crate::model::Model;
 use crate::select::{self, Ent};
+use crate::tools::Part;
 use crate::{measure, render, short};
 use forge_topo::{Body, check};
 use std::collections::HashMap;
@@ -17,6 +18,8 @@ pub struct Args {
     pub at: Option<String>,
     pub labels: Option<String>,
     pub px: Option<usize>,
+    /// `act`: refused if the part has moved on from this version.
+    pub base: Option<u64>,
 }
 
 pub struct Reply {
@@ -36,14 +39,16 @@ fn fail(msg: impl Into<String>) -> Reply {
     }
 }
 
-pub const COMMANDS: [&str; 7] = ["build", "query", "measure", "render", "check", "diff", "edit"];
+pub const COMMANDS: [&str; 8] = [
+    "act", "build", "query", "measure", "render", "check", "diff", "help",
+];
 
 #[derive(Default)]
 pub struct Session {
-    models: HashMap<String, Model>,
+    parts: HashMap<String, Part>,
     /// Where files may be read from (serve and mcp); any `.fc` file when `None`.
     root: Option<std::path::PathBuf>,
-    /// Whether `edit` may write files (off unless asked for).
+    /// Whether `act` may write files (off unless asked for).
     writable: bool,
 }
 
@@ -104,7 +109,7 @@ impl Session {
         }
     }
 
-    /// The session, letting `edit` write the files it changes or not.
+    /// The session, letting `act` write the files it changes or not.
     pub fn writable(mut self, on: bool) -> Session {
         self.writable = on;
         self
@@ -112,11 +117,15 @@ impl Session {
 
     /// The file's model, brought up to date with what is on disk.
     pub fn model(&mut self, file: &str) -> Result<&mut Model, String> {
-        self.model_at(file).map(|m| m.0)
+        self.part_at(file).map(|p| &mut p.0.model)
     }
 
-    /// `model`, and the file's real path.
     fn model_at(&mut self, file: &str) -> Result<(&mut Model, std::path::PathBuf), String> {
+        self.part_at(file).map(|p| (&mut p.0.model, p.1))
+    }
+
+    /// The file's part, brought up to date, and its real path.
+    fn part_at(&mut self, file: &str) -> Result<(&mut Part, std::path::PathBuf), String> {
         // every check, and the read, on the one path with links resolved. A directory on it
         // swapped for a link between the check and the read still escapes the root; closing
         // that needs openat with O_NOFOLLOW per component, which std does not offer.
@@ -142,92 +151,98 @@ impl Session {
             .and_then(|r| r.parent().map(|d| d.to_path_buf()))
             .unwrap_or_default();
         let root = self.root.clone();
-        let m = self.models.entry(file.to_string()).or_default();
+        let part = self.parts.entry(file.to_string()).or_default();
+        let m = &mut part.model;
         m.fonts = Some(std::sync::Arc::new(move |name: &str| {
             font_file(&dir, root.as_deref(), name)
         }));
         m.update(&src);
-        Ok((m, real))
+        Ok((part, real))
     }
 
-    /// Changes the file through its document, writes it back and builds it.
-    fn edit(&mut self, a: &Args) -> Result<Reply, String> {
-        use forge_doc::Edit;
+    /// Commits lines to the part: all of them or none.
+    fn act(&mut self, a: &Args) -> Result<Reply, String> {
         if !self.writable {
             return Err("this session does not write files (serve and mcp take --writable)".into());
         }
-        let (m, path) = self.model_at(&a.file)?;
+        self.create(&a.file);
+        let (p, path) = self.part_at(&a.file)?;
         // a file whose first line is no feature may not be a part file: neither change nor echo it
-        if m.error.as_ref().is_some_and(|f| f.at == 0) {
-            return Err(format!(
-                "{}: line 1 is not a feature; edit changes part files only",
-                a.file
-            ));
-        }
-        let w = &a.words;
-        let word = |k: usize| {
-            w.get(k)
-                .map(String::as_str)
-                .ok_or("edit needs more words (see AGENTS.md)")
-        };
-        let rest = |k: usize| {
-            w.get(k..)
-                .filter(|r| !r.is_empty())
-                .map(|r| r.join(" "))
-                .ok_or("edit needs a value")
-        };
-        let at = |k: usize| -> Result<(usize, Option<usize>), String> {
-            let no: usize = word(k)?
-                .parse()
-                .map_err(|_| format!("'{}' is not a line number", word(k).unwrap_or("")))?;
-            m.doc
-                .at_line(no)
-                .ok_or_else(|| format!("the file has no line {no}"))
-        };
-        let id = |k: usize| at(k).map(|(i, _)| m.doc.items[i].id);
-        let e = match word(0)? {
-            "param" => Edit::SetParam {
-                name: word(1)?.to_string(),
-                expr: rest(2)?,
-            },
-            "dim" => {
-                let (i, row) = at(1)?;
-                Edit::SetDimension {
-                    item: m.doc.items[i].id,
-                    row: row.ok_or("that line is not a sketch row")?,
-                    value: rest(2)?,
-                }
+        if p.model.error.as_ref().is_some_and(|f| f.at == 0)
+            && p.model.built() == 0
+            && !p.model.lines.is_empty()
+        {
+            let first = p.model.lines[0].toks.first().map(String::as_str).unwrap_or("");
+            if crate::text::kind(first).is_none() && p.model.lines[0].toks.get(1).is_none_or(|t| t != "=") {
+                return Err(format!(
+                    "{}: line 1 is not a feature; act changes part files only",
+                    a.file
+                ));
             }
-            "arg" => Edit::SetArg {
-                item: id(1)?,
-                arg: word(2)?
-                    .parse::<usize>()
-                    .map_err(|_| "arg LINE K TEXT: K counts from 1")?
-                    .wrapping_sub(1),
-                text: rest(3)?,
-            },
-            "insert" => Edit::Insert {
-                at: if word(1)? == "end" { usize::MAX } else { at(1)?.0 },
-                text: rest(2)?.replace("\\n", "\n"),
-            },
-            "delete" => Edit::Delete { item: id(1)? },
-            "move" => Edit::Move {
-                item: id(1)?,
-                to: if word(2)? == "end" { usize::MAX } else { at(2)?.0 },
-            },
-            op => return Err(format!("unknown edit '{op}' (param dim arg insert delete move)")),
-        };
-        let old = m.src().to_string();
-        m.edit(e)?;
-        let src = m.src().to_string();
-        replace(&path, &src).map_err(|e| format!("{}: {e}", a.file))?;
-        let mut r = self.build(a)?;
-        // echo the changed lines only while the file still reads as a part file
-        let (m, _) = self.model_at(&a.file)?;
-        if m.error.as_ref().is_none_or(|f| f.at > 0) {
-            r.text = format!("{}\n{}", changed(&old, &src), r.text);
         }
-        Ok(r)
+        p.open(&path);
+        let d = p.act(&a.words.join("\n"), a.base);
+        Ok(Reply {
+            ok: d.ok,
+            text: d.text.clone(),
+            json: d.json(),
+            png: None,
+        })
+    }
+
+    /// A part file that isn't there yet, made empty: under the root, if there is one.
+    fn create(&self, file: &str) {
+        let path = std::path::Path::new(file);
+        if path.exists() || path.extension().is_none_or(|x| x != "fc") {
+            return;
+        }
+        let dir = match path.parent() {
+            Some(d) if !d.as_os_str().is_empty() => d,
+            _ => std::path::Path::new("."),
+        };
+        let inside = std::fs::canonicalize(dir)
+            .is_ok_and(|d| self.root.as_ref().is_none_or(|root| d.starts_with(root)));
+        if inside {
+            let _ = std::fs::OpenOptions::new()
+                .write(true)
+                .create_new(true)
+                .open(path);
+        }
+    }
+
+    /// What `query` answers beside selectors: the file, numbers, history, what can be dragged.
+    fn query_more(&mut self, a: &Args, what: &str) -> Result<Reply, String> {
+        if what == "stat" {
+            return self.build(a);
+        }
+        if what == "check" {
+            return self.check(a);
+        }
+        let (p, path) = self.part_at(&a.file)?;
+        p.open(&path);
+        let text = match what {
+            "file" => format!("v{}\n{}", p.version(), p.model.src()),
+            "since" => {
+                let n = a
+                    .words
+                    .get(1)
+                    .and_then(|n| n.parse().ok())
+                    .ok_or("query F since VERSION")?;
+                p.since(n)
+            }
+            _ => p
+                .dims()
+                .iter()
+                .map(|d| format!("{} = {}", d.name, short(d.value)))
+                .collect::<Vec<_>>()
+                .join("\n"),
+        };
+        Ok(Reply {
+            ok: true,
+            json: Json::obj(vec![("ok", true.into()), ("text", text.clone().into())]),
+            text,
+            png: None,
+        })
     }
 
     pub fn run(&mut self, cmd: &str, a: &Args) -> Reply {
@@ -237,6 +252,9 @@ impl Session {
         if (a.labels.is_some() || a.px.is_some()) && cmd != "render" {
             return fail("--labels and --px go with render only");
         }
+        if a.base.is_some() && cmd != "act" {
+            return fail("--base goes with act only");
+        }
         let r = match cmd {
             "build" => self.build(a),
             "query" => self.query(a),
@@ -244,7 +262,8 @@ impl Session {
             "render" => self.render(a),
             "check" => self.check(a),
             "diff" => self.diff(a),
-            "edit" => self.edit(a),
+            "act" => self.act(a),
+            "help" => Ok(help_reply(&a.file, a)),
             _ => Err(format!(
                 "unknown command '{cmd}' (one of: {})",
                 COMMANDS.join(" ")
@@ -406,6 +425,12 @@ impl Session {
     }
 
     fn query(&mut self, a: &Args) -> Result<Reply, String> {
+        if let Some(w) = a.words.first()
+            && matches!(w.as_str(), "file" | "stat" | "check" | "since" | "dims")
+        {
+            let w = w.clone();
+            return self.query_more(a, &w);
+        }
         let m = self.model(&a.file)?;
         let sel = a.words.join(" ");
         let at = Self::upto(m, a)?;
@@ -748,7 +773,7 @@ const NOFOLLOW: i32 = if cfg!(any(target_os = "macos", target_os = "ios", target
 /// since the check, nor a hard link to a file elsewhere), and through a new file in the same
 /// directory renamed into place.
 #[cfg(unix)]
-fn replace(path: &std::path::Path, src: &str) -> Result<(), String> {
+pub(crate) fn replace(path: &std::path::Path, src: &str) -> Result<(), String> {
     use std::os::unix::fs::{MetadataExt, OpenOptionsExt};
     let checked = std::fs::metadata(path).map_err(|_| "cannot write".to_string())?;
     let f = std::fs::OpenOptions::new()
@@ -781,38 +806,24 @@ fn replace(path: &std::path::Path, src: &str) -> Result<(), String> {
 }
 
 #[cfg(not(unix))]
-fn replace(_: &std::path::Path, _: &str) -> Result<(), String> {
+pub(crate) fn replace(_: &std::path::Path, _: &str) -> Result<(), String> {
     Err("writing part files needs a unix system".into())
+}
+
+fn help_reply(topic: &str, a: &Args) -> Reply {
+    let mut words = vec![topic];
+    words.extend(a.words.iter().map(String::as_str));
+    let text = crate::help::help(&words.join(" "));
+    Reply {
+        ok: true,
+        json: Json::obj(vec![("ok", true.into()), ("text", text.clone().into())]),
+        text,
+        png: None,
+    }
 }
 
 fn counts(b: &Body) -> (usize, usize, usize) {
     (b.face_ids().count(), b.edge_ids().count(), b.vertices.len())
-}
-
-/// The lines an edit changed, as the file now has them (a few at most).
-fn changed(old: &str, new: &str) -> String {
-    let (o, n): (Vec<&str>, Vec<&str>) = (old.lines().collect(), new.lines().collect());
-    let top = o.iter().zip(&n).take_while(|(a, b)| a == b).count();
-    let tail = o[top..]
-        .iter()
-        .rev()
-        .zip(n[top..].iter().rev())
-        .take_while(|(a, b)| a == b)
-        .count();
-    let span = &n[top..n.len() - tail];
-    if span.is_empty() {
-        return format!("removed line {}", top + 1);
-    }
-    let mut out: Vec<String> = span
-        .iter()
-        .take(3)
-        .enumerate()
-        .map(|(k, l)| format!("line {}: {}", top + k + 1, l.trim()))
-        .collect();
-    if span.len() > 3 {
-        out.push(format!("... {} more lines", span.len() - 3));
-    }
-    out.join("\n")
 }
 
 /// The one entity of the finished part a handle or selector names.
@@ -978,9 +989,11 @@ combine cut base lid keep
         use forge_model::Solid;
         use forge_topo::Name;
         let mut m = Model::new(BODIES);
-        m.edit(forge_doc::Edit::Insert {
-            at: 0,
-            text: "t = 1".into(),
+        let items = m.doc.read_items("t = 1");
+        let first = m.doc.items[0].id;
+        m.edit(forge_doc::Op::Insert {
+            before: Some(first),
+            items,
         })
         .expect("insert");
         let src = m.src().to_string();
@@ -1162,7 +1175,7 @@ combine cut base lid keep
         );
         // nor changed, nor echoed by an edit, even in a session that writes
         let mut w = Session::rooted(std::fs::canonicalize(&dir.0).expect("root")).writable(true);
-        let r = w.run("edit", &args(&secret, &["move", "1", "end"]));
+        let r = w.run("act", &args(&secret, &["mv f1 end"]));
         assert!(
             !r.ok && !r.text.contains("hunter2") && !r.json.to_string().contains("hunter2"),
             "{}",
@@ -1295,35 +1308,33 @@ combine cut base lid keep
     fn the_agents_example_builds() {
         let doc = include_str!("../../../AGENTS.md");
         let dir = Dir::new("example");
-        // the first part, and the parameters and sketch
-        for k in [1, 3] {
-            let example = doc.split("```").nth(k).expect("an example block");
-            let f = dir.file("e.fc", example);
-            let r = Session::default().run("build", &args(&f, &[]));
-            assert!(r.ok, "{}", r.text);
-        }
+        let example = doc.split("```").nth(1).expect("an example block");
+        let f = dir.file("e.fc", example);
+        let r = Session::default().run("build", &args(&f, &[]));
+        assert!(r.ok, "{}", r.text);
     }
 
     #[cfg(unix)]
     #[test]
-    fn edits_write_the_file() {
+    fn acts_write_the_file() {
         let dir = Dir::new("edit");
         let f = dir.file("e.fc", "w = 4\nextrude w rect 0 0 1 1  # a block\n");
-        let r = Session::default().run("edit", &args(&f, &["param", "w", "5"]));
+        let r = Session::default().run("act", &args(&f, &["w = 5"]));
         assert!(r.text.contains("does not write files"), "{}", r.text);
         let mut s = Session::default().writable(true);
-        let r = s.run("edit", &args(&f, &["param", "w", "5"]));
-        assert!(r.ok && r.text.contains("bbox 0 0 0 1 1 5"), "{}", r.text);
-        let r = s.run("edit", &args(&f, &["insert", "2", "h", "=", "2\\nd", "=", "h"]));
+        let r = s.run("act", &args(&f, &["w = 5"]));
+        assert_eq!(r.text, "ok v2; volume +1 mm3, valid");
+        let r = s.run(
+            "act",
+            &args(&f, &["before extrude1 h = 2", "before extrude1 d = h"]),
+        );
         assert!(r.ok, "{}", r.text);
         assert_eq!(
             std::fs::read_to_string(&f).expect("written"),
             "w = 5\nid 3 h = 2\nid 4 d = h\nid 2 extrude w rect 0 0 1 1  # a block\n"
         );
-        assert_eq!(
-            s.run("edit", &args(&f, &["dim", "1", "3"])).text,
-            "error: that line is not a sketch row"
-        );
+        let r = s.run("act", &args(&f, &["dim extrude1 x 3"]));
+        assert!(r.text.contains("extrude1 is not a sketch"), "{}", r.text);
     }
 
     /// An edit never changes which bodies there are: a solid inserted above the first keeps that
@@ -1339,19 +1350,19 @@ combine cut base lid keep
         let mut s = Session::default().writable(true);
         let before = s.run("build", &args(&f, &[]));
         assert!(before.text.contains("bodies 2"), "{}", before.text);
-        let solid = [
-            "insert", "1", "extrude", "3", "at", "-30", "0", "0", "rect", "0", "0", "5", "5",
-        ];
-        let r = s.run("edit", &args(&f, &solid));
-        assert!(r.ok && r.text.contains("bodies 3"), "{}", r.text);
+        let r = s.run(
+            "act",
+            &args(&f, &["before extrude1 extrude 3 at -30 0 0 rect 0 0 5 5"]),
+        );
+        assert!(r.ok && r.text.contains("3 bodies"), "{}", r.text);
         let text = std::fs::read_to_string(&f).expect("written");
         assert_eq!(
             text,
             "id 4 extrude 3 at -30 0 0 rect 0 0 5 5\nid 1 extrude new 10 rect 0 0 10 10\nid 2 extrude new 4 at 20 0 0 rect 0 0 10 10\nid 3 extrude cut 12 at 5 5 -1 circle 0 0 2 in extrude2\n"
         );
         // the bodies before are as they were, the new one beside them
-        let volume = |r: &Reply| r.json.get("volume").and_then(Json::num).expect("volume");
-        assert!((volume(&r) - volume(&before) - 75.0).abs() < 1e-6, "{}", r.text);
+        assert!(r.text.contains("volume +75 mm3"), "{}", r.text);
+        let _ = before;
     }
 
     /// Under a root, an edit never writes through a link to a file outside it.
@@ -1370,7 +1381,7 @@ combine cut base lid keep
             (&soft, "not a part file under the root"),
             (&hard, "not a plain file with one name"),
         ] {
-            let r = s.run("edit", &args(&l.to_string_lossy(), &["param", "w", "9"]));
+            let r = s.run("act", &args(&l.to_string_lossy(), &["w = 9"]));
             assert!(!r.ok && r.text.contains(why), "{}", r.text);
         }
         assert_eq!(
@@ -1378,11 +1389,11 @@ combine cut base lid keep
             "w = 4\nextrude w rect 0 0 1 1\n"
         );
         let plain = dir.file("p.fc", "w = 4\nextrude w rect 0 0 1 1\n");
-        assert!(s.run("edit", &args(&plain, &["param", "w", "9"])).ok);
+        assert!(s.run("act", &args(&plain, &["w = 9"])).ok);
         assert_eq!(
             std::fs::read_dir(&dir.0).expect("dir").count(),
-            3,
-            "no temporary file left"
+            5,
+            "no temporary file left: the two links and their logs' absence, the part and its log"
         );
     }
 

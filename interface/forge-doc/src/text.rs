@@ -1703,7 +1703,7 @@ pub fn tokens(text: &str) -> Vec<String> {
 }
 
 /// The line up to its comment: a `#` outside a quoted string.
-pub(crate) fn uncommented(raw: &str) -> &str {
+pub fn uncommented(raw: &str) -> &str {
     let (mut quoted, mut escaped) = (false, false);
     for (k, c) in raw.char_indices() {
         if quoted {
