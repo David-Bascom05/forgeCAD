@@ -274,11 +274,10 @@ pub fn random_edit(part: &Part, before: usize, body: &Body, big: bool, r: &mut R
     };
     let sign = if r.bool() { 1.0 } else { -1.0 };
     match r.below(10) {
-        0..=3 => Some(Edit::Resize {
+        0..=3 => resized(&fs[pick], 1.0).map(|_| Edit::Resize {
             feature: pick,
             by: 1.0 + sign * mag,
-        })
-        .filter(|_| resized(&fs[pick], 1.0).is_some()),
+        }),
         4..=6 => {
             let dir = Vec3::new(r.range(-1.0, 1.0), r.range(-1.0, 1.0), r.range(-1.0, 1.0));
             let size = if big { 0.1 * body_box(body).diagonal() } else { 1.0 };
@@ -438,7 +437,7 @@ fn geo(b: &Body, e: Ent) -> Geo {
             for &l in &face.loops {
                 for &c in &b.lp(l).coedges {
                     for p in b.edge_points(b.coedge(c).edge, 4) {
-                        sum = sum + p.to_vec();
+                        sum += p.to_vec();
                         n += 1.0;
                     }
                 }

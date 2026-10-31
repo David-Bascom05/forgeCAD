@@ -380,11 +380,8 @@ pub fn parts() -> Vec<(&'static str, Part, Option<f64>)> {
                     Combine::Cut,
                 ),
                 edit(Edit::Delete {
-                    // the walls were cut down to the top: pieces of the tool's faces
-                    faces: (0..4)
-                        .map(|k| side(1, k).with_str("split").with(0))
-                        .chain([face(1, "start")])
-                        .collect(),
+                    // the walls were cut down to the top: each keeps its name, one piece kept
+                    faces: (0..4).map(|k| side(1, k)).chain([face(1, "start")]).collect(),
                 }),
             ]),
             Some(a * b * h),

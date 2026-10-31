@@ -57,8 +57,6 @@ fn fuzz_edits() {
     assert!(ok > n / 2, "{ok}");
 }
 
-const SEQ_ONLY: [&str; 1] = ["delete-boss"];
-
 #[test]
 fn edit_parts() {
     for (name, part, want) in edits::parts() {
@@ -68,11 +66,6 @@ fn edit_parts() {
         let v = volume(&seq);
         if let Some(w) = want {
             assert!((v - w).abs() <= 1e-4 * w, "{name}: volume {v} want {w}");
-        }
-        // the n-ary boolean names every face it splits "split k", so a later feature naming a
-        // tool's face cut by the part only finds it in the sequential regen
-        if SEQ_ONLY.contains(&name) {
-            continue;
         }
         for threads in [1, 4] {
             let nary = part

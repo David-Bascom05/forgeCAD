@@ -1607,7 +1607,7 @@ pub(crate) fn vertex_names(through: Vec<Vec<(Name, Option<f64>)>>, root: Name) -
     let keys: Vec<(Vec<Name>, f64)> = through
         .into_iter()
         .map(|mut t| {
-            t.sort_unstable_by(|a, b| a.0.cmp(&b.0));
+            t.sort_by_key(|x| x.0);
             let s = t.iter().find_map(|x| x.1).unwrap_or(0.0);
             let mut names: Vec<Name> = t.into_iter().map(|x| x.0).collect();
             names.dedup();
