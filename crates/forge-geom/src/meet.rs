@@ -398,7 +398,16 @@ impl Eqn {
     /// taken with v scaled to put its roots within about 1, and the coefficients scaled to
     /// at most 1: its size then says how near two roots are next to their spread.
     fn disc(&self, u: f64) -> f64 {
-        let c = self.coeffs(u);
+        let c = self.scaled(self.coeffs(u));
+        match self.form {
+            Form::Poly2 => c[1] * c[1] - 4.0 * c[2] * c[0],
+            Form::Poly4 | Form::Trig2 => quartic_disc(&c),
+            Form::Trig1 => c[1] * c[1] + c[2] * c[2] - c[0] * c[0],
+        }
+    }
+
+    /// F(u, .) as the polynomial whose discriminant `disc` takes, scaled as it says.
+    fn scaled(&self, c: [f64; 5]) -> [f64; 5] {
         let c = match self.form {
             Form::Trig2 => trig2_quartic(c[0], c[1], c[2], c[3], c[4]),
             Form::Poly2 | Form::Poly4 => {
@@ -429,12 +438,7 @@ impl Eqn {
             Form::Trig1 => c,
         };
         let k = 1.0 / c.iter().fold(f64::MIN_POSITIVE, |m, x| m.max(x.abs()));
-        let c = c.map(|x| x * k);
-        match self.form {
-            Form::Poly2 => c[1] * c[1] - 4.0 * c[2] * c[0],
-            Form::Poly4 | Form::Trig2 => quartic_disc(&c),
-            Form::Trig1 => c[1] * c[1] + c[2] * c[2] - c[0] * c[0],
-        }
+        c.map(|x| x * k)
     }
 
     /// Where the discriminant vanishes over a turn of u: crossings of zero to full
@@ -648,9 +652,28 @@ impl Eqn {
         None
     }
 
+    /// How many roots F(u, .) has. A quartic's count follows from its discriminant and
+    /// two more invariants, unless it is near a double root or a root at infinity (a
+    /// tube angle of pi), where the roots are found to count them.
     fn count(&self, u: f64) -> usize {
+        let c = self.coeffs(u);
+        if matches!(self.form, Form::Poly4 | Form::Trig2) {
+            let q = self.scaled(c);
+            let d = quartic_disc(&q);
+            if q[4].abs() > 1e-6 && d.abs() > 1e-9 {
+                if d < 0.0 {
+                    return 2;
+                }
+                let [e, dd, cc, b, a] = q;
+                let p = 8.0 * a * cc - 3.0 * b * b;
+                let dq = 64.0 * a * a * a * e - 16.0 * a * a * cc * cc + 16.0 * a * b * b * cc
+                    - 16.0 * a * a * b * dd
+                    - 3.0 * b * b * b * b;
+                return if p < 0.0 && dq < 0.0 { 4 } else { 0 };
+            }
+        }
         let mut r: Roots = [(0.0, 0.0); MAX_ROOTS];
-        self.roots(&self.coeffs(u), &mut r)
+        self.roots(&c, &mut r)
     }
 
     /// Host derivatives at (u, s) and F_u, F_s, F_uu, F_us, F_ss there.
