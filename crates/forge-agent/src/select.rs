@@ -16,32 +16,78 @@ pub enum Ent {
 /// A body ready to be asked about: compacted, with every face's making feature.
 pub struct View<'a> {
     pub body: &'a Body,
-    /// The feature (index) each face's surface first appeared in.
-    pub origin: &'a HashMap<Name, usize>,
-    /// Resolves a feature reference (label, `hole2`, `fN`) to its index and those of the
-    /// patterns that copy it.
-    pub feat: &'a dyn Fn(&str) -> Result<Vec<usize>, String>,
+    /// Each face's making feature and the patterns that copied it there.
+    pub origin: &'a Lineage,
+    /// Resolves a feature reference (label, `hole2`, `fN`) to its index.
+    pub feat: &'a dyn Fn(&str) -> Result<usize, String>,
 }
 
 /// Each face's making feature after feature `i` built `body`, given those before (`prev`, `None`
 /// for the first). A face keeps its origin while its name lives, and a renamed piece of a face
 /// (split by a later boolean) keeps the origin of the face whose surface it lies on.
-pub fn lineage(body: &Body, prev: Option<(&Body, &HashMap<Name, usize>)>, i: usize) -> HashMap<Name, usize> {
+/// `copied` names the faces a pattern at `i` copied: their source's lineage, then `i`.
+pub fn lineage(body: &Body, prev: Option<(&Body, &Lineage)>, i: usize, copied: &Lineage) -> Lineage {
     let mut out = HashMap::with_capacity(body.faces.len());
     for f in body.face_ids() {
         let face = body.face(f);
         let o = prev.and_then(|(pb, po)| {
-            po.get(&face.name).copied().or_else(|| {
-                pb.face_ids()
-                    .map(|g| pb.face(g))
-                    .find(|g| g.surface == face.surface)
-                    .and_then(|g| po.get(&g.name).copied())
-            })
+            po.get(&face.name)
+                .cloned()
+                .or_else(|| copied.get(&face.name).cloned())
+                .or_else(|| {
+                    pb.face_ids()
+                        .map(|g| pb.face(g))
+                        .find(|g| g.surface == face.surface)
+                        .and_then(|g| po.get(&g.name).cloned())
+                })
         });
-        out.insert(face.name, o.unwrap_or(i));
+        out.insert(face.name, o.unwrap_or_else(|| vec![i]));
     }
     out
 }
+
+/// The faces a pattern at `k` copied, from the part before it (`prev`, `po`): each new face is
+/// carried back by every copy's motion onto the surface of a source face `from` accepts, and
+/// gets that face's lineage and `k`. Geometric, so faces split by the copy still trace back.
+pub fn copies(
+    body: &Body,
+    prev: &Body,
+    po: &Lineage,
+    k: usize,
+    layout: &forge_model::Layout,
+    from: &dyn Fn(&Vec<usize>) -> bool,
+) -> Lineage {
+    let sources: Vec<FaceId> = prev
+        .face_ids()
+        .filter(|&g| po.get(&prev.face(g).name).is_some_and(from))
+        .collect();
+    let mut out = HashMap::new();
+    for f in body.face_ids() {
+        let face = body.face(f);
+        if po.contains_key(&face.name) {
+            continue;
+        }
+        // a point on the face's surface, near its middle
+        let c = centre(body, Ent::Face(f));
+        let p = face.surface.eval(face.surface.project(c));
+        let back = forge_model::copy_sources(layout, p).unwrap_or_default();
+        let hit = sources.iter().find(|&&g| {
+            let s = &prev.face(g).surface;
+            surface_kind(s) == surface_kind(&face.surface)
+                && radius(prev, Ent::Face(g)) == radius(body, Ent::Face(f))
+                && back.iter().any(|q| s.eval(s.project(*q)).distance(*q) < 1e-6)
+        });
+        if let Some(g) = hit {
+            let mut c = po[&prev.face(*g).name].clone();
+            c.push(k);
+            out.insert(face.name, c);
+        }
+    }
+    out
+}
+
+/// Each face's making feature, then the patterns that copied it (by feature index).
+pub type Lineage = HashMap<Name, Vec<usize>>;
 
 pub fn name(body: &Body, e: Ent) -> Name {
     match e {
@@ -329,8 +375,8 @@ pub fn select(v: &View, sel: &str) -> Result<Vec<Ent>, String> {
         t.parse()
             .map_err(|_| format!("expected a number after '{}', found '{t}'", toks[k - 1]))
     };
-    let origin = |f: FaceId| v.origin.get(&body.face(f).name).copied();
-    let face_origins = |e: Ent| -> Vec<usize> {
+    let origin = |f: FaceId| v.origin.get(&body.face(f).name).cloned();
+    let face_origins = |e: Ent| -> Vec<Vec<usize>> {
         match e {
             Ent::Face(f) => origin(f).into_iter().collect(),
             Ent::Edge(x) => faces_of_edge(body, x).into_iter().filter_map(origin).collect(),
@@ -411,22 +457,33 @@ pub fn select(v: &View, sel: &str) -> Result<Vec<Ent>, String> {
                 })
             }
             "of" => {
-                let mut name = toks.get(k).copied().unwrap_or("").to_string();
-                k += 1;
-                if name == "feature" {
-                    name = format!("f{}", toks.get(k).copied().unwrap_or(""));
-                    k += 1;
+                // one feature or more: `of boss`, `of feature 4`, `of boss hole1`
+                let mut set = Vec::new();
+                loop {
+                    let mut name = toks.get(k).copied().unwrap_or("").to_string();
+                    let mut used = 1;
+                    if name == "feature" {
+                        name = format!("f{}", toks.get(k + 1).copied().unwrap_or(""));
+                        used = 2;
+                    }
+                    match (v.feat)(&name) {
+                        Ok(i) => {
+                            set.push(i);
+                            k += used;
+                        }
+                        Err(e) if set.is_empty() => return Err(e),
+                        Err(_) => break,
+                    }
                 }
-                let set = (v.feat)(&name)?;
-                Box::new(move |e| face_origins(*e).iter().any(|o| set.contains(o)))
+                Box::new(move |e| face_origins(*e).iter().any(|c| c.iter().any(|o| set.contains(o))))
             }
             "between" => {
                 let a = (v.feat)(toks.get(k).copied().unwrap_or(""))?;
                 let b = (v.feat)(toks.get(k + 1).copied().unwrap_or(""))?;
                 k += 2;
-                Box::new(move |e| match face_origins(*e)[..] {
+                Box::new(move |e| match &face_origins(*e)[..] {
                     [x, y] if matches!(e, Ent::Edge(_)) => {
-                        (a.contains(&x) && b.contains(&y)) || (a.contains(&y) && b.contains(&x))
+                        (x.contains(&a) && y.contains(&b)) || (x.contains(&b) && y.contains(&a))
                     }
                     _ => false,
                 })

@@ -6,6 +6,7 @@ use forge_math::{Frame, Point2, Vec2, dmath};
 use forge_mesh::{Quality, TriMesh, tessellate, to_binary_stl};
 use forge_ops::{Axis2, Profile, ProfileLoop, Segment, extrude, revolve};
 use forge_topo::{Body, FaceId, check, genus};
+use std::io::Write;
 use std::process::ExitCode;
 use std::time::Instant;
 
@@ -147,7 +148,8 @@ fn command(cmd: &str, argv: &[String]) -> ExitCode {
             text = format!("wrote {path} {text}");
         }
     }
-    println!("{text}");
+    // a closed pipe (`| head`) is not an error worth a panic
+    let _ = writeln!(std::io::stdout(), "{text}");
     if r.ok {
         ExitCode::SUCCESS
     } else {

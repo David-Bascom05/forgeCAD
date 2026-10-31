@@ -23,7 +23,7 @@ use forge_ops::{
 };
 use forge_topo::{Body, Name};
 pub use hole::{End, Head, Hole, HoleError, Thread};
-pub use pattern::{Layout, PatternError, Row, Source, instance_name};
+pub use pattern::{Layout, PatternError, Row, Source, copy_sources, instance_name};
 use pattern::{instances, moved, moved_shape};
 pub use swept::{Coil, CoilSize, Loft, PathEnds, Sweep};
 

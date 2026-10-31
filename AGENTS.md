@@ -23,6 +23,7 @@ ball [op] R FRAME     fillet R REF.. [R REF..]     draft A FRAME REF..
 shell T [out] REF..              hollow to walls T thick (out: outside the skin), REF faces open
 chamfer D REF.. | chamfer D D2 face REF REF.. | chamfer D ang A face REF REF..
 hole D FRAME [cb D2 DEPTH | cs D2 A] (N | thru | next | to FEAT [@face] [off N]) [pt A] [thread SIZE PITCH]
+  N: depth, flat bottom unless `pt 118` (drill point angle)
 pattern (body | FEAT..) (lin DX DY DZ N STEP [DX DY DZ N STEP] | circ OX OY OZ AX AY AZ N [A] [step] | mirror FRAME)
   N counts the original; lin: STEP mm apart along DIR; circ: N spread over A (default 360),
   or A apart with `step`; mirror: in the frame's xy plane (`mirror yz` is across x=0)
@@ -46,11 +47,11 @@ Selectors (`query`, or inline in parentheses): `faces|edges|verts`, then filters
 `query` asks the finished part, or the part after a line with `--at FEAT`; `build` says how
 many entities each inline selector picked, so check those counts.
 ```
-plane cyl cone sphere torus blend | line circle curve      kind (a straight edge's fillet: cyl)
+plane cyl cone sphere torus blend | line circle curve      kind (fillets: cyl, or torus round a circle)
 convex concave smooth                                      how an edge's faces meet
 normal +z | normal A B C | along +x                        plane normal; line direction
 r=3 r<3 r>3   longer 5   shorter 5                         radius; edge length
-of FEAT   between FEAT FEAT   on @h                        made by (copies too); joining; touching
+of FEAT..   between FEAT FEAT   on @h                      made by (copies too); joining; touching
 top bottom left right front back   near X Y Z              keep the extreme ones (ties too); nearest
 ```
 

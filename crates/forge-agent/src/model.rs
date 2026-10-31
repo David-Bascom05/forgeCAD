@@ -21,7 +21,7 @@ pub struct Model {
     /// The part after each built feature.
     stages: Vec<Option<Body>>,
     /// Each stage's faces' making features, filled as asked for.
-    origins: RefCell<Vec<HashMap<Name, usize>>>,
+    origins: RefCell<Vec<select::Lineage>>,
     /// How many entities each inline selector picked: (line index, count).
     picks: RefCell<Vec<(usize, usize)>>,
     /// The first line that failed, if one did.
@@ -253,14 +253,24 @@ impl Model {
     }
 
     /// Which feature made each face of the part after `n` lines.
-    fn origin(&self, n: usize) -> HashMap<Name, usize> {
+    fn origin(&self, n: usize) -> select::Lineage {
         let mut origins = self.origins.borrow_mut();
         while origins.len() < n {
             let k = origins.len();
             let prev = (k > 0).then(|| self.stages[k - 1].as_ref()).flatten();
+            let copied = match (&self.features[k], &self.stages[k], prev) {
+                (Feature::Pattern { of, layout }, Some(b), Some(pb)) => {
+                    let from = |c: &Vec<usize>| match of {
+                        Source::Body => true,
+                        Source::Features(src) => c.iter().any(|x| src.contains(x)),
+                    };
+                    select::copies(b, pb, &origins[k - 1], k, layout, &from)
+                }
+                _ => HashMap::new(),
+            };
             let o = match &self.stages[k] {
                 None => HashMap::new(),
-                Some(b) => select::lineage(b, prev.map(|p| (p, &origins[k - 1])), k),
+                Some(b) => select::lineage(b, prev.map(|p| (p, &origins[k - 1])), k, &copied),
             };
             origins.push(o);
         }
@@ -292,28 +302,12 @@ impl Model {
         found.ok_or_else(|| format!("no feature '{r}'"))
     }
 
-    /// Feature `i` and the patterns among the first `n` features that copy it, or copy a copy.
-    fn copies(&self, n: usize, i: usize) -> Vec<usize> {
-        let mut out = vec![i];
-        for (j, f) in self.features.iter().enumerate().take(n).skip(i + 1) {
-            if let Feature::Pattern {
-                of: Source::Features(src),
-                ..
-            } = f
-                && src.iter().any(|s| out.contains(s))
-            {
-                out.push(j);
-            }
-        }
-        out
-    }
-
     /// Runs a selector on the part after `n` lines (all that built if `None`).
     pub fn select(&self, sel: &str, n: Option<usize>) -> Result<(&Body, Vec<Ent>), String> {
         let n = n.unwrap_or(self.built()).min(self.built());
         let body = self.body_after(n).ok_or("no part yet")?;
         let origin = self.origin(n);
-        let feat = |r: &str| self.feat(n, r).map(|i| self.copies(n, i));
+        let feat = |r: &str| self.feat(n, r);
         let ents = select::select(
             &View {
                 body,
@@ -489,6 +483,27 @@ mod tests {
         }
         m.update(&src);
         assert_eq!(m.rebuilt, 0);
+    }
+
+    /// Pattern copies count as made by what they copy, however booleans split them.
+    #[test]
+    fn copies_trace_back_to_their_source() {
+        let m = Model::new(
+            "body: extrude 30 rrect -50 -30 100 60 6
+shell 2 (faces normal +z top)
+boss: extrude 25 at 0 0 2 circle 42 22 3.5
+bhole: hole 2.5 -xy at 42 22 27 15
+pattern boss bhole mirror yz
+pattern boss bhole pattern1 mirror xz
+",
+        );
+        assert!(m.error.is_none(), "{:?}", m.error);
+        let count = |sel: &str| m.select(sel, None).expect("selects").1.len();
+        assert_eq!(count("edges of boss concave"), 4);
+        assert_eq!(count("edges between boss shell1 concave"), 4);
+        assert_eq!(count("faces cyl r=1.25 of bhole"), count("faces cyl r=1.25"));
+        assert_eq!(count("faces cyl r=3.5 of bhole"), 0);
+        assert!(count("faces of pattern1") < count("faces of boss bhole"));
     }
 
     #[test]

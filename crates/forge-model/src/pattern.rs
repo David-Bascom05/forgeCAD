@@ -129,6 +129,18 @@ pub(crate) fn corners(b: &Box3) -> [Point3; 8] {
     })
 }
 
+/// For each copy a layout makes (the original left out), the point it carries onto `p`.
+pub fn copy_sources(layout: &Layout, p: Point3) -> Result<Vec<Point3>, PatternError> {
+    Ok(instances(layout)?
+        .into_iter()
+        .map(|(_, m)| match m {
+            Motion::Rigid(f) => f.point_to_local(p),
+            // a reflection undoes itself
+            Motion::Mirror(_) => m.point(p),
+        })
+        .collect())
+}
+
 /// Every copy a layout makes (the original left out), keyed by its place in the layout.
 pub(crate) fn instances(layout: &Layout) -> Result<Vec<([u64; 2], Motion)>, PatternError> {
     match *layout {
