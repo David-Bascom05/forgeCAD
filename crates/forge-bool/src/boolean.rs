@@ -220,10 +220,27 @@ pub fn boolean(a: &Body, b: &Body, op: Op, feature: u64) -> R<Body> {
 /// as tombstones until `Body::compact`. Names do not depend on `_feature`: what the boolean makes
 /// is named by what meets there, as the n-ary boolean names it.
 pub fn boolean_into(target: &mut Body, b: &Body, op: Op, _feature: u64) -> R<()> {
+    with_imprint(target, b, || std::borrow::Cow::Borrowed(b), op)
+}
+
+/// `boolean_into` with the tool as its entities (`forge_ops::extrude_unlinked`): the Body is
+/// built only if the general boolean has to run.
+pub fn boolean_unlinked(target: &mut Body, b: &forge_topo::Unlinked, op: Op) -> R<()> {
+    with_imprint(target, b, || std::borrow::Cow::Owned(b.clone().into_body()), op)
+}
+
+/// The local-imprint path where the mode lets it run and it covers the tool, else the general
+/// boolean on the tool's Body.
+fn with_imprint<'b, S: crate::imprint::Src>(
+    target: &mut Body,
+    src: &S,
+    body: impl FnOnce() -> std::borrow::Cow<'b, Body>,
+    op: Op,
+) -> R<()> {
     match crate::imprint::mode() {
         crate::imprint::Mode::Off => {}
         crate::imprint::Mode::On => {
-            if crate::imprint::column(target, b, op) {
+            if crate::imprint::column(target, src, op) {
                 return Ok(());
             }
         }
@@ -231,8 +248,8 @@ pub fn boolean_into(target: &mut Body, b: &Body, op: Op, _feature: u64) -> R<()>
             // the general boolean on a copy; the part goes on from this path's result, so the
             // check follows what `on` would make
             let mut slow = target.clone();
-            if crate::imprint::column(target, b, op) {
-                if let Err(e) = general(&mut slow, b, op) {
+            if crate::imprint::column(target, src, op) {
+                if let Err(e) = general(&mut slow, &body(), op) {
                     panic!("imprint made a body where the general boolean failed: {e}");
                 }
                 if let Some(d) = crate::imprint::diff(target, &slow) {
@@ -242,7 +259,7 @@ pub fn boolean_into(target: &mut Body, b: &Body, op: Op, _feature: u64) -> R<()>
             }
         }
     }
-    general(target, b, op)
+    general(target, &body(), op)
 }
 
 fn general(target: &mut Body, b: &Body, op: Op) -> R<()> {
@@ -2629,7 +2646,7 @@ fn coincide(sb: &Body, src: Side, e: EdgeId, db: &Body, dst: Side, e2: EdgeId, c
     ends_into(db, e2, sb, e, src);
 }
 
-pub(crate) fn line_box(line: &forge_geom::Line, b: &forge_math::Box3) -> Option<Interval> {
+fn line_box(line: &forge_geom::Line, b: &forge_math::Box3) -> Option<Interval> {
     let (mut t0, mut t1) = (f64::NEG_INFINITY, f64::INFINITY);
     let d = line.dir.get();
     let o = line.origin;

@@ -1,7 +1,7 @@
 use crate::profile::{Profile, ProfileError, Segment};
 use forge_geom::{Circle, Curve, CurveGeom, Cylinder, Line, Plane, Surface};
 use forge_math::{Frame, Interval, Point2, Point3, UnitVec3, dmath, tol};
-use forge_topo::{Body, EdgeId, Name, VertexId};
+use forge_topo::{Body, EdgeId, Name, Unlinked, VertexId};
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum ExtrudeError {
@@ -21,6 +21,11 @@ impl From<ProfileError> for ExtrudeError {
 /// the caps are "start" and "end", each segment's wall is "side" + its id,
 /// edges and vertices are named by the faces that meet there.
 pub fn extrude(profile: &Profile, distance: f64, feature: u64) -> Result<Body, ExtrudeError> {
+    Ok(extrude_unlinked(profile, distance, feature)?.into_body())
+}
+
+/// `extrude`'s entities without the Body.
+pub fn extrude_unlinked(profile: &Profile, distance: f64, feature: u64) -> Result<Unlinked, ExtrudeError> {
     if distance.abs() <= tol::MIN_LENGTH {
         return Err(ExtrudeError::TooShort);
     }
@@ -46,7 +51,7 @@ pub fn extrude(profile: &Profile, distance: f64, feature: u64) -> Result<Body, E
 struct Builder<'a> {
     profile: &'a Profile,
     d: f64,
-    body: Body,
+    body: Unlinked,
     start_name: Name,
     end_name: Name,
     root: Name,
@@ -65,7 +70,7 @@ impl<'a> Builder<'a> {
         Builder {
             profile,
             d,
-            body: Body::new(),
+            body: Unlinked::default(),
             start_name: root.with_str("start"),
             end_name: root.with_str("end"),
             root,
@@ -85,23 +90,20 @@ impl<'a> Builder<'a> {
         self.root.with_str("side").with(id)
     }
 
-    fn build(mut self) -> Body {
-        let shell = self.body.add_shell();
+    fn build(mut self) -> Unlinked {
         let bottom_plane = Plane::new(*self.frame());
         let top_plane = Plane::new(self.frame().with_origin(self.at(Point2::ORIGIN, self.d)));
         let bottom = self
             .body
-            .add_face(shell, Surface::Plane(bottom_plane), false, self.start_name);
-        let top = self
-            .body
-            .add_face(shell, Surface::Plane(top_plane), true, self.end_name);
+            .add_face(Surface::Plane(bottom_plane), false, self.start_name);
+        let top = self.body.add_face(Surface::Plane(top_plane), true, self.end_name);
 
         for li in 0..self.profile.loops.len() {
             let segs = self.profile.loops[li].segments.clone();
             let walls = if let [(Segment::Circle { center, radius, ccw }, id)] = segs[..] {
-                vec![self.circle_wall(shell, center, radius, ccw, id)]
+                vec![self.circle_wall(center, radius, ccw, id)]
             } else {
-                self.chain_walls(shell, &segs)
+                self.chain_walls(&segs)
             };
             let top_uses: Vec<(EdgeId, bool)> = walls.iter().map(|w| (w.top, w.forward)).collect();
             let bottom_uses: Vec<(EdgeId, bool)> =
@@ -117,7 +119,7 @@ impl<'a> Builder<'a> {
     }
 
     /// Walls for a loop of lines and arcs: one vertical edge at each joint.
-    fn chain_walls(&mut self, shell: forge_topo::ShellId, segs: &[(Segment, u64)]) -> Vec<Wall> {
+    fn chain_walls(&mut self, segs: &[(Segment, u64)]) -> Vec<Wall> {
         let n = segs.len();
         let names: Vec<Name> = segs.iter().map(|&(_, id)| self.side_name(id)).collect();
         // vertex i is where segment i starts (between wall i-1 and wall i)
@@ -156,7 +158,7 @@ impl<'a> Builder<'a> {
                 let name = Name::NONE.with_set(&mut [self.cap_name(k == 1), names[i]]);
                 edges[k] = self.body.add_edge(curve, range, start, end, name);
             }
-            let face = self.body.add_face(shell, surface, same_sense, names[i]);
+            let face = self.body.add_face(surface, same_sense, names[i]);
             self.body.add_loop(
                 face,
                 &[
@@ -221,14 +223,7 @@ impl<'a> Builder<'a> {
 
     /// A whole circle: one vertex at angle 0 on each cap, a closed edge on
     /// each cap, and a seam edge the wall uses twice.
-    fn circle_wall(
-        &mut self,
-        shell: forge_topo::ShellId,
-        center: Point2,
-        radius: f64,
-        ccw: bool,
-        id: u64,
-    ) -> Wall {
+    fn circle_wall(&mut self, center: Point2, radius: f64, ccw: bool, id: u64) -> Wall {
         let name = self.side_name(id);
         let axis = self.frame().with_origin(self.at(center, 0.0));
         let start = Point2::new(center.x + radius, center.y);
@@ -265,12 +260,9 @@ impl<'a> Builder<'a> {
             vt,
             name.with_str("seam"),
         );
-        let face = self.body.add_face(
-            shell,
-            Surface::Cylinder(Cylinder { frame: axis, radius }),
-            ccw,
-            name,
-        );
+        let face = self
+            .body
+            .add_face(Surface::Cylinder(Cylinder { frame: axis, radius }), ccw, name);
         self.body
             .add_loop(face, &[(bottom, ccw), (seam, true), (top, !ccw), (seam, false)]);
         Wall {

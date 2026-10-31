@@ -22,7 +22,7 @@ pub mod thicken;
 pub use chamfer::{ChamferError, ChamferSize, chamfer};
 pub use direct::{DirectError, Rounded, delete_faces, move_faces, offset_faces, replace_face};
 pub use draft::{DraftError, draft};
-pub use extrude::{ExtrudeError, extrude};
+pub use extrude::{ExtrudeError, extrude, extrude_unlinked};
 pub use fillet::{FilletEdge, FilletError, FilletOptions, Radius, fillet, fillet_with, law_starts};
 pub use glyph::{GlyphError, GlyphSeg, Place, glyph};
 pub use loft::{LoftError, LoftGuides, LoftKind, loft, loft_bounds};

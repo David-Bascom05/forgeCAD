@@ -10,12 +10,12 @@
 //! of slabs between those faces, so the faces the tool passes gain a hole, the wall stands where
 //! the material changes, and a cap closes a wall that ends inside the tool.
 
-use crate::boolean::{Op, across, line_box, on_edge, settle, vertex_names};
+use crate::boolean::{Op, vertex_names};
 use crate::classify::{circle_in_face, extend_query, loop_in_face};
-use forge_geom::intersect::{Contact, CurveSurface, SurfaceSurface, curve_surface, plane_cylinder};
+use forge_geom::intersect::{SurfaceSurface, plane_cylinder};
 use forge_geom::{Curve, CurveGeom, Cylinder, Surface};
 use forge_math::{Box3, Interval, Point3, UnitVec3, tol};
-use forge_topo::{Body, CoedgeId, EdgeId, FaceId, Name, ShellId, VertexId};
+use forge_topo::{Body, EdgeId, FaceId, Name, ShellId, Unlinked, VertexId};
 
 /// How far apart things must be for this path to decide them; anything nearer goes to the
 /// general boolean.
@@ -60,6 +60,81 @@ pub fn taken() -> usize {
     TAKEN.load(std::sync::atomic::Ordering::Relaxed)
 }
 
+/// What this path reads of a tool: a Body, or an extrude's entities before they are one.
+pub(crate) trait Src {
+    fn face_count(&self) -> usize;
+    fn face(&self, f: FaceId) -> (&Surface, bool, Name);
+    /// Face `f`'s uses when it has one loop.
+    fn lone_loop(&self, f: FaceId) -> Option<Vec<(EdgeId, bool)>>;
+    fn vertex_count(&self) -> usize;
+    fn vertex(&self, v: VertexId) -> (Point3, f64, Name);
+    fn edge_count(&self) -> usize;
+    fn edge(&self, e: EdgeId) -> (&Curve, Interval, VertexId, VertexId, Name);
+}
+
+impl Src for Body {
+    fn face_count(&self) -> usize {
+        self.faces.len()
+    }
+    fn face(&self, f: FaceId) -> (&Surface, bool, Name) {
+        let face = Body::face(self, f);
+        (&face.surface, face.same_sense, face.name)
+    }
+    fn lone_loop(&self, f: FaceId) -> Option<Vec<(EdgeId, bool)>> {
+        let face = Body::face(self, f);
+        let [l] = face.loops[..] else { return None };
+        Some(
+            self.lp(l)
+                .coedges()
+                .map(|c| (self.coedge(c).edge, self.coedge(c).forward))
+                .collect(),
+        )
+    }
+    fn vertex_count(&self) -> usize {
+        self.vertices.len()
+    }
+    fn vertex(&self, v: VertexId) -> (Point3, f64, Name) {
+        let x = Body::vertex(self, v);
+        (x.point, x.tol, x.name)
+    }
+    fn edge_count(&self) -> usize {
+        self.edges.len()
+    }
+    fn edge(&self, e: EdgeId) -> (&Curve, Interval, VertexId, VertexId, Name) {
+        let x = Body::edge(self, e);
+        (&x.curve, x.range, x.start, x.end, x.name)
+    }
+}
+
+impl Src for Unlinked {
+    fn face_count(&self) -> usize {
+        self.faces.len()
+    }
+    fn face(&self, f: FaceId) -> (&Surface, bool, Name) {
+        let x = &self.faces[f.index()];
+        (&x.0, x.1, x.2)
+    }
+    fn lone_loop(&self, f: FaceId) -> Option<Vec<(EdgeId, bool)>> {
+        let mut ls = self.loops_of(f);
+        let l = ls.next()?;
+        ls.next().is_none().then(|| l.to_vec())
+    }
+    fn vertex_count(&self) -> usize {
+        self.vertices.len()
+    }
+    fn vertex(&self, v: VertexId) -> (Point3, f64, Name) {
+        let x = &self.vertices[v.index()];
+        (x.0, tol::LINEAR, x.1)
+    }
+    fn edge_count(&self) -> usize {
+        self.edges.len()
+    }
+    fn edge(&self, e: EdgeId) -> (&Curve, Interval, VertexId, VertexId, Name) {
+        let x = &self.edges[e.index()];
+        (&x.0, x.1, x.2, x.3, x.4)
+    }
+}
+
 /// A tool as `forge_ops::extrude` builds it: one profile loop swept straight along `z`, its
 /// walls in profile order (a whole circle is one wall, its seam both of the wall's sides).
 struct Tool {
@@ -67,10 +142,12 @@ struct Tool {
     origin: Point3,
     /// Heights of the bottom and top caps above `origin`.
     h: [f64; 2],
-    caps: [FaceId; 2],
+    caps: [(FaceId, Vec<(EdgeId, bool)>); 2],
     walls: Vec<Wall>,
     /// The one wall's cylinder, for a whole circle.
     round: Option<Cylinder>,
+    /// A box round the tool.
+    bbox: Box3,
 }
 
 struct Wall {
@@ -79,57 +156,48 @@ struct Wall {
     top: EdgeId,
     /// Whether the bottom edge runs along the profile.
     fwd: bool,
-    /// The upright edges at the wall's start and end along the profile, and their coedges in
-    /// the wall's loop.
+    /// The upright edges at the wall's start and end along the profile.
     sides: [EdgeId; 2],
-    side_uses: [CoedgeId; 2],
 }
 
-fn tool(b: &Body) -> Option<Tool> {
+fn tool<S: Src>(b: &S) -> Option<Tool> {
     let mut walls = Vec::new();
     let mut caps = Vec::new();
-    for f in b.face_ids() {
-        let face = b.face(f);
-        let [l] = face.loops[..] else { return None };
-        let lp = b.lp(l);
-        if lp.coedges().len() != 4 {
-            caps.push(f);
-            continue;
-        }
-        let u = |i: usize| (b.coedge(lp.coedge(i)).edge, b.coedge(lp.coedge(i)).forward);
-        let ((bottom, fwd), (end, true), (top, back), (start, false)) = (u(0), u(1), u(2), u(3)) else {
-            caps.push(f);
-            continue;
+    for f in (0..b.face_count() as u32).map(FaceId) {
+        let cs = b.lone_loop(f)?;
+        let wall = match cs[..] {
+            [(bottom, fwd), (end, true), (top, back), (start, false)] if back != fwd => {
+                let upright = |e: EdgeId| matches!(b.edge(e).0, Curve::Line(_));
+                (upright(start) && upright(end)).then_some(Wall {
+                    face: f,
+                    bottom,
+                    top,
+                    fwd,
+                    sides: [start, end],
+                })
+            }
+            _ => None,
         };
-        let upright = |e: EdgeId| matches!(b.edge(e).curve, Curve::Line(_));
-        if back == fwd || !upright(start) || !upright(end) {
-            caps.push(f);
-            continue;
+        match wall {
+            Some(w) => walls.push(w),
+            None => caps.push((f, cs)),
         }
-        walls.push(Wall {
-            face: f,
-            bottom,
-            top,
-            fwd,
-            sides: [start, end],
-            side_uses: [lp.coedge(3), lp.coedge(1)],
-        });
     }
     let n = walls.len();
     if n == 0 || caps.len() != 2 || (0..n).any(|k| walls[k].sides[1] != walls[(k + 1) % n].sides[0]) {
         return None;
     }
-    let Curve::Line(l) = &b.edge(walls[0].sides[0]).curve else {
+    let Curve::Line(l) = b.edge(walls[0].sides[0]).0 else {
         return None;
     };
     let z = l.dir;
     for w in &walls {
-        let ok = match &b.face(w.face).surface {
+        let ok = match b.face(w.face).0 {
             Surface::Plane(p) => p.normal_vec().dot(z.get()).abs() <= 1e-12,
             Surface::Cylinder(c) => c.frame.z().dot(z.get()).abs() >= 1.0 - 1e-12,
             _ => false,
         };
-        let Curve::Line(s) = &b.edge(w.sides[0]).curve else {
+        let Curve::Line(s) = b.edge(w.sides[0]).0 else {
             return None;
         };
         if !ok || s.dir.dot(z.get()) < 1.0 - 1e-12 {
@@ -137,32 +205,53 @@ fn tool(b: &Body) -> Option<Tool> {
         }
     }
     // caps square to the axis, facing out of the tool: the bottom one down
-    let mut ends = [None; 2];
-    for &f in &caps {
-        let face = b.face(f);
-        let Surface::Plane(pl) = &face.surface else {
+    let mut ends = [None, None];
+    for (f, cs) in caps {
+        let (Surface::Plane(pl), same, _) = b.face(f) else {
             return None;
         };
-        let out = pl.normal_vec().dot(z.get()) * if face.same_sense { 1.0 } else { -1.0 };
+        let out = pl.normal_vec().dot(z.get()) * if same { 1.0 } else { -1.0 };
         if out.abs() < 1.0 - 1e-12 {
             return None;
         }
-        ends[usize::from(out > 0.0)] = Some((f, pl.frame.origin));
+        ends[usize::from(out > 0.0)] = Some((f, cs, pl.frame.origin));
     }
-    let [Some((bottom, origin)), Some((top, at))] = ends else {
+    let [Some((bottom, b_uses, origin)), Some((top, t_uses, at))] = ends else {
         return None;
     };
-    let round = match (&walls[..], &b.face(walls[0].face).surface) {
-        ([w], Surface::Cylinder(c)) if w.fwd && b.face(w.face).same_sense => Some(*c),
+    let h = [0.0, (at - origin).dot(z.get())];
+    let round = match (&walls[..], b.face(walls[0].face)) {
+        ([w], (Surface::Cylinder(c), true, _)) if w.fwd => Some(*c),
         _ => None,
+    };
+    let bbox = match &round {
+        // the two end disks'
+        Some(cyl) => {
+            let (r, z) = (cyl.radius, z.get());
+            let reach = |a: f64| r * (1.0 - a * a).max(0.0).sqrt() + tol::LINEAR;
+            let half = Point3::new(reach(z.x), reach(z.y), reach(z.z)) - Point3::ORIGIN;
+            let mut bb = Box3::EMPTY;
+            for h in h {
+                let c = cyl.frame.origin + z * ((origin - cyl.frame.origin).dot(z) + h);
+                bb.include(c - half);
+                bb.include(c + half);
+            }
+            bb
+        }
+        None => walls.iter().fold(Box3::EMPTY, |bb, w| {
+            let (c0, r0, ..) = b.edge(w.bottom);
+            let (c1, r1, ..) = b.edge(w.top);
+            bb.hull(&c0.bbox(r0)).hull(&c1.bbox(r1))
+        }),
     };
     Some(Tool {
         z,
         origin,
-        h: [0.0, (at - origin).dot(z.get())],
-        caps: [bottom, top],
+        h,
+        caps: [(bottom, b_uses), (top, t_uses)],
         walls,
         round,
+        bbox,
     })
 }
 
@@ -175,13 +264,13 @@ struct Hit {
     up: bool,
     /// Per wall: its curve, that curve's range, and whether it starts at the wall's start side.
     segs: Vec<(Curve, Interval, bool)>,
-    /// Per upright (wall k's start side): the vertex there and its tolerance.
-    corners: Vec<(Point3, f64)>,
+    /// Per upright (wall k's start side): where it crosses the face.
+    corners: Vec<Point3>,
 }
 
 /// Whether face `f` stays clear of the tool (swept both ways along its axis), judged by the
-/// face's surface or its box against the profile's.
-fn clear_of(a: &Body, b: &Body, f: FaceId, t: &Tool) -> bool {
+/// face's surface or its box against the tool's.
+fn clear_of(a: &Body, f: FaceId, t: &Tool) -> bool {
     let z = t.z.get();
     if let Some(cyl) = &t.round {
         let (fr, r) = (&cyl.frame, cyl.radius);
@@ -227,13 +316,13 @@ fn clear_of(a: &Body, b: &Body, f: FaceId, t: &Tool) -> bool {
         let dy = l.y.lo.max(-l.y.hi).max(0.0);
         return dx * dx + dy * dy > (cyl.radius + CLEAR) * (cyl.radius + CLEAR);
     }
-    let p = local(&b.face_box(t.caps[0])).grow(CLEAR);
+    let p = local(&t.bbox).grow(CLEAR);
     !l.x.overlaps(&p.x) || !l.y.overlaps(&p.y)
 }
 
 /// The boolean of `a` with `b` done in place when `b` is a tool this path covers; false, with
 /// `a` untouched, otherwise.
-pub(crate) fn column(a: &mut Body, b: &Body, op: Op) -> bool {
+pub(crate) fn column<S: Src>(a: &mut Body, b: &S, op: Op) -> bool {
     match plan(a, b, op) {
         Ok((t, hits, wall_at)) => {
             build(a, b, &t, &hits, &wall_at, op == Op::Subtract);
@@ -255,35 +344,19 @@ pub(crate) fn column(a: &mut Body, b: &Body, op: Op) -> bool {
 type Plan = (Tool, Vec<Hit>, Vec<bool>);
 
 /// What the tool does to `a`, or why this path leaves it to the general boolean.
-fn plan(a: &Body, b: &Body, op: Op) -> Result<Plan, &'static str> {
+fn plan<S: Src>(a: &Body, b: &S, op: Op) -> Result<Plan, &'static str> {
     if op == Op::Intersect {
         return Err("intersect");
     }
     let t = tool(b).ok_or("not an extruded profile")?;
     let z = t.z.get();
-    let bb = match &t.round {
-        // the tool's box: its two end disks'
-        Some(cyl) => {
-            let r = cyl.radius;
-            let reach = |a: f64| r * (1.0 - a * a).max(0.0).sqrt() + tol::LINEAR;
-            let half = Point3::new(reach(z.x), reach(z.y), reach(z.z)) - Point3::ORIGIN;
-            let mut bb = Box3::EMPTY;
-            for h in t.h {
-                let c = cyl.frame.origin + z * ((t.origin - cyl.frame.origin).dot(z) + h);
-                bb.include(c - half);
-                bb.include(c + half);
-            }
-            bb
-        }
-        None => b.face_box(t.caps[0]).hull(&b.face_box(t.caps[1])),
-    };
     let mut hits: Vec<Hit> = Vec::new();
-    for f in a.faces_where(|x| x.overlaps(&bb)) {
+    for f in a.faces_where(|x| x.overlaps(&t.bbox)) {
         let face = a.face(f);
         let pl = match &face.surface {
             Surface::Plane(pl) if pl.normal_vec().dot(z).abs() >= 1.0 - 1e-12 => pl,
             _ => {
-                if clear_of(a, b, f, &t) {
+                if clear_of(a, f, &t) {
                     continue;
                 }
                 return Err("a face not square to the axis comes near");
@@ -297,16 +370,20 @@ fn plan(a: &Body, b: &Body, op: Op) -> Result<Plan, &'static str> {
             return Err("a face on a cap's plane");
         }
         // where the uprights cross the face's plane
-        let crossing = |e: EdgeId| {
-            let Curve::Line(l) = &b.edge(e).curve else {
-                unreachable!("uprights are lines")
-            };
-            l.eval(-pl.signed_distance(l.origin) / pl.normal_vec().dot(l.dir.get()))
-        };
+        let corners: Vec<Point3> = t
+            .walls
+            .iter()
+            .map(|w| {
+                let Curve::Line(l) = b.edge(w.sides[0]).0 else {
+                    unreachable!("uprights are lines")
+                };
+                l.eval(-pl.signed_distance(l.origin) / pl.normal_vec().dot(l.dir.get()))
+            })
+            .collect();
         // each wall's curve in the plane (one, a line or a circle, square to the axis)
         let mut curves: Vec<Curve> = Vec::with_capacity(t.walls.len());
         for w in &t.walls {
-            let cs = match (&t.round, &b.face(w.face).surface) {
+            let cs = match (&t.round, b.face(w.face).0) {
                 (Some(cyl), _) => plane_cylinder(pl, cyl),
                 (None, s) => crate::ssi::closed_form(&Surface::Plane(*pl), s),
             };
@@ -325,7 +402,10 @@ fn plan(a: &Body, b: &Body, op: Op) -> Result<Plan, &'static str> {
                 let pieces: Vec<(Curve, Interval)> = t
                     .walls
                     .iter()
-                    .map(|w| (b.edge(w.bottom).curve.transformed(&up), b.edge(w.bottom).range))
+                    .map(|w| {
+                        let (c, r, ..) = b.edge(w.bottom);
+                        (c.transformed(&up), r)
+                    })
                     .collect();
                 loop_in_face(a, f, &pieces, CLEAR)
             }
@@ -337,14 +417,14 @@ fn plan(a: &Body, b: &Body, op: Op) -> Result<Plan, &'static str> {
                 // the general boolean cuts an upright where the face's box holds the crossing,
                 // even off the face: a vertex this path would not make
                 let bx = a.face_box(f).grow(CLEAR);
-                if t.walls.iter().any(|w| bx.contains(crossing(w.sides[0]))) {
+                if corners.iter().any(|&c| bx.contains(c)) {
                     return Err("an upright crosses a face's box off the face");
                 }
                 continue;
             }
         }
         let up = (pl.normal_vec().dot(z) > 0.0) == face.same_sense;
-        let (segs, corners) = section(a, b, &t, f, pl, curves).ok_or("no section")?;
+        let segs = section(b, &t, h, curves, &corners);
         hits.push(Hit {
             f,
             h,
@@ -382,169 +462,86 @@ fn ends(n: usize, k: usize, starts: bool) -> (usize, usize) {
     }
 }
 
-/// The tool's section by planar face `f` as the general boolean finds it: each wall's curve
-/// with the plane, cut where it meets the uprights (the curve against the surface across each
-/// upright), each corner settled on the curves through it, in the order that boolean meets them.
-type Section = (Vec<(Curve, Interval, bool)>, Vec<(Point3, f64)>);
-
-fn section(
-    a: &Body,
-    b: &Body,
+/// The tool's section at height `h`: each wall's curve between the corners where the uprights
+/// at its ends cross the plane, and whether it runs from the wall's start side.
+fn section<S: Src>(
+    b: &S,
     t: &Tool,
-    f: FaceId,
-    pl: &forge_geom::Plane,
+    h: f64,
     curves: Vec<Curve>,
-) -> Option<Section> {
+    corners: &[Point3],
+) -> Vec<(Curve, Interval, bool)> {
     let n = t.walls.len();
-    let a_box = a.face_box(f);
-    // per wall: the curve, the trim's range for it, and its hits on the start and end sides
-    let mut found: Vec<(Curve, [(f64, Point3); 2])> = Vec::with_capacity(n);
-    // per corner: the first cut found there
-    let mut first: Vec<Option<Point3>> = vec![None; n];
-    for (k, (w, curve)) in t.walls.iter().zip(&curves).enumerate() {
-        let range = match curve.domain().period {
-            Some(p) => Interval::new(curve.domain().lo, curve.domain().lo + p),
-            None => {
-                let Curve::Line(line) = curve else { return None };
-                line_box(line, &a_box.hull(&b.face_box(w.face)).grow(1.0))?
-            }
-        };
-        let mut at = [(0.0, Point3::ORIGIN); 2];
-        // the loop meets its end side first, then its start side (once, for a seam)
-        for (i, side) in [(1, w.sides[1]), (0, w.sides[0])] {
-            if i == 0 && n == 1 {
-                at[0] = at[1];
-                break;
-            }
-            let Curve::Line(l) = &b.edge(side).curve else {
-                return None;
-            };
-            let hit = if n == 1 {
-                // where the seam crosses the plane, in closed form: settled below, it lands
-                // where the general boolean's cut against the plane across the seam lands
-                let p = l.eval(-pl.signed_distance(l.origin) / pl.normal_vec().dot(l.dir.get()));
-                (curve.closest(p, range), p)
-            } else {
-                // the curve against the surface across the upright, as the general boolean cuts
-                let across = across(b, w.face, w.side_uses[i]).ok()?;
-                let CurveSurface::Hits(hs) = curve_surface(curve, range, &across) else {
-                    return None;
-                };
-                let h = hs.into_iter().find(|h| on_edge(b, side, h.point).is_some())?;
-                if h.contact != Contact::Crossing {
-                    return None;
-                }
-                (h.t, h.point)
-            };
-            if on_edge(b, side, hit.1).is_none() || !a_box.contains(hit.1) {
-                return None;
-            }
-            at[i] = hit;
-            first[(k + i) % n].get_or_insert(hit.1);
-        }
-        found.push((curve.clone(), at));
-    }
-    // each curve's stretch over its wall: from the side met at the lower parameter
     let mut segs = Vec::with_capacity(n);
-    for (k, (curve, at)) in found.iter().enumerate() {
-        let w = &t.walls[k];
-        let span = match curve.domain().period {
-            Some(p) if n == 1 => (Interval::new(at[0].0, at[0].0 + p), true),
-            Some(p) => {
-                let (lo, hi) = (at[0].0.min(at[1].0), at[0].0.max(at[1].0));
-                // the stretch whose middle lies over the wall's bottom edge
-                let bottom = b.edge(w.bottom);
-                let drop = t.z.get() * ((pl.frame.origin - t.origin).dot(t.z.get()) - t.h[0]);
-                let over = |s: Interval| {
-                    let q = curve.eval(s.mid()) - drop;
-                    bottom
-                        .curve
-                        .eval(bottom.curve.closest(q, bottom.range))
-                        .distance(q)
-                        <= 1e-6
-                };
-                let inner = Interval::new(lo, hi);
-                let span = if over(inner) {
-                    inner
+    for (k, curve) in curves.into_iter().enumerate() {
+        let (p0, p1) = (corners[k], corners[(k + 1) % n]);
+        let (span, starts) = match (&curve, curve.domain().period) {
+            (Curve::Line(l), _) => {
+                let (s0, s1) = ((p0 - l.origin).dot(l.dir.get()), (p1 - l.origin).dot(l.dir.get()));
+                (Interval::new(s0.min(s1), s0.max(s1)), s0 <= s1)
+            }
+            (_, Some(p)) => {
+                let full = Interval::new(curve.domain().lo, curve.domain().lo + p);
+                let s0 = curve.closest(p0, full);
+                if n == 1 {
+                    (Interval::new(s0, s0 + p), true)
                 } else {
-                    Interval::new(hi, lo + p)
-                };
-                (
-                    span,
-                    at[0].0 == span.lo || (at[0].0 + p == span.hi && at[0].0 != span.lo),
-                )
-            }
-            None => {
-                let starts = at[0].0 <= at[1].0;
-                (Interval::new(at[0].0.min(at[1].0), at[0].0.max(at[1].0)), starts)
-            }
-        };
-        segs.push((curve.clone(), span.0, span.1));
-    }
-    // corners settled on the uprights (once per cut there) and on the curves ending there
-    let mut corners = Vec::with_capacity(n);
-    for (c, p0) in first.iter().enumerate() {
-        let side = b.edge(t.walls[c].sides[0]);
-        let cuts = if n == 1 { 1 } else { 2 };
-        // at most two cuts and two curve ends
-        let mut through = [(&side.curve, side.range); 4];
-        let mut at = cuts;
-        // the curves' ends here, in wall order
-        for (k, (curve, r, starts)) in segs.iter().enumerate() {
-            let (c0, c1) = ends(n, k, *starts);
-            let w = 1e-3 * r.width();
-            for (corner, t0) in [(c0, r.lo), (c1, r.hi)] {
-                if corner == c {
-                    through[at] = (curve, Interval::new(t0 - w, t0 + w));
-                    at += 1;
+                    let s1 = curve.closest(p1, full);
+                    let (lo, hi) = (s0.min(s1), s0.max(s1));
+                    // the stretch whose middle lies over the wall's bottom edge
+                    let (bc, br, ..) = b.edge(t.walls[k].bottom);
+                    let drop = t.z.get() * (h - t.h[0]);
+                    let over = |s: Interval| {
+                        let q = curve.eval(s.mid()) - drop;
+                        bc.eval(bc.closest(q, br)).distance(q) <= 1e-6
+                    };
+                    let inner = Interval::new(lo, hi);
+                    if over(inner) {
+                        (inner, s0 == lo)
+                    } else {
+                        (Interval::new(hi, lo + p), s0 == hi)
+                    }
                 }
             }
-        }
-        corners.push(settle((*p0)?, &through[..at]).ok()?);
+            _ => unreachable!("a plane meets a wall in a line or a circle"),
+        };
+        segs.push((curve, span, starts));
     }
-    // each curve's range from its settled ends
-    for (k, s) in segs.iter_mut().enumerate() {
-        let w = 1e-3 * s.1.width();
-        let (c0, c1) = ends(n, k, s.2);
-        let lo = s.0.closest(corners[c0].0, Interval::new(s.1.lo - w, s.1.lo + w));
-        let hi = s.0.closest(corners[c1].0, Interval::new(s.1.hi - w, s.1.hi + w));
-        s.1 = Interval::new(lo, hi);
-    }
-    Some((segs, corners))
+    segs
 }
 
-/// The vertices and edges `build` has made so far, made on first use as the general boolean
-/// makes them: B's by their ids, new vertices by number.
-struct Made<'x> {
-    b: &'x Body,
+/// The vertices and edges `build` has made so far, made on first use: B's by their ids, new
+/// vertices by number.
+struct Made<'x, S> {
+    b: &'x S,
     /// B's vertices, then B's edges, then the new vertices.
     ids: Vec<Option<u32>>,
 }
 
-impl Made<'_> {
+impl<S: Src> Made<'_, S> {
     fn b_vertex(&mut self, a: &mut Body, v: VertexId) -> VertexId {
-        let x = self.b.vertex(v);
-        VertexId(*self.ids[v.index()].get_or_insert_with(|| a.add_tolerant_vertex(x.point, x.tol, x.name).0))
+        let (p, tol, name) = self.b.vertex(v);
+        VertexId(*self.ids[v.index()].get_or_insert_with(|| a.add_tolerant_vertex(p, tol, name).0))
     }
     /// A whole edge of B.
     fn b_edge(&mut self, a: &mut Body, e: EdgeId) -> EdgeId {
-        let k = self.b.vertices.len() + e.index();
+        let k = self.b.vertex_count() + e.index();
         if let Some(x) = self.ids[k] {
             return EdgeId(x);
         }
-        let edge = self.b.edge(e);
-        let (v0, v1) = (self.b_vertex(a, edge.start), self.b_vertex(a, edge.end));
-        let x = a.add_edge(edge.curve.clone(), edge.range, v0, v1, edge.name);
+        let (curve, range, s, t, name) = self.b.edge(e);
+        let (v0, v1) = (self.b_vertex(a, s), self.b_vertex(a, t));
+        let x = a.add_edge(curve.clone(), range, v0, v1, name);
         self.ids[k] = Some(x.0);
         x
     }
-    fn new_vertex(&mut self, a: &mut Body, i: usize, at: (Point3, f64), name: Name) -> VertexId {
-        let k = self.b.vertices.len() + self.b.edges.len() + i;
-        VertexId(*self.ids[k].get_or_insert_with(|| a.add_tolerant_vertex(at.0, at.1, name).0))
+    fn new_vertex(&mut self, a: &mut Body, i: usize, at: Point3, name: Name) -> VertexId {
+        let k = self.b.vertex_count() + self.b.edge_count() + i;
+        VertexId(*self.ids[k].get_or_insert_with(|| a.add_vertex(at, name).0))
     }
 }
 
-fn build(a: &mut Body, b: &Body, t: &Tool, hits: &[Hit], wall_at: &[bool], flip: bool) {
+fn build<S: Src>(a: &mut Body, b: &S, t: &Tool, hits: &[Hit], wall_at: &[bool], flip: bool) {
     let root = Name::feature(0);
     static CUT: std::sync::OnceLock<Name> = std::sync::OnceLock::new();
     let cut = *CUT.get_or_init(|| root.with_str("cut"));
@@ -553,14 +550,14 @@ fn build(a: &mut Body, b: &Body, t: &Tool, hits: &[Hit], wall_at: &[bool], flip:
     let z = t.z.get();
     let ends = |k: usize, starts: bool| ends(nw, k, starts);
     // named as the general boolean names a curve's piece: by the faces, then the edges it ends on
-    let side_name = |c: usize| b.edge(t.walls[c].sides[0]).name;
+    let side_name = |c: usize| b.edge(t.walls[c].sides[0]).4;
     // hit i's wall-k curve is name i * nw + k
     let mut names: Vec<Name> = Vec::with_capacity(nh * nw);
     for h in hits {
         for (k, w) in t.walls.iter().enumerate() {
             let (c0, c1) = ends(k, h.segs[k].2);
             names.push(
-                cut.with_set(&mut [a.face(h.f).name, b.face(w.face).name])
+                cut.with_set(&mut [a.face(h.f).name, b.face(w.face).2])
                     .with(0)
                     .with_name(side_name(c0))
                     .with_name(side_name(c1))
@@ -569,7 +566,7 @@ fn build(a: &mut Body, b: &Body, t: &Tool, hits: &[Hit], wall_at: &[bool], flip:
         }
     }
     // new vertices: hit i's corner c is point i * nw + c
-    let points: Vec<Point3> = hits.iter().flat_map(|h| h.corners.iter().map(|c| c.0)).collect();
+    let points: Vec<Point3> = hits.iter().flat_map(|h| h.corners.iter().copied()).collect();
     let mut marks = Vec::with_capacity(2 * nw * nh);
     for (i, h) in hits.iter().enumerate() {
         for (k, name) in names[i * nw..(i + 1) * nw].iter().enumerate() {
@@ -582,15 +579,11 @@ fn build(a: &mut Body, b: &Body, t: &Tool, hits: &[Hit], wall_at: &[bool], flip:
     let shell = ShellId(0);
     let mut made = Made {
         b,
-        ids: vec![None; b.vertices.len() + b.edges.len() + points.len()],
+        ids: vec![None; b.vertex_count() + b.edge_count() + points.len()],
     };
-    let corner = |i: usize| hits[i / nw].corners[i % nw];
-    // each hit face gains a hole, in face order, walked as the general boolean walks it
-    let mut order: Vec<usize> = (0..nh).collect();
-    order.sort_by_key(|&i| hits[i].f);
+    // each hit face gains a hole
     let mut seg_edge = vec![None; nh * nw];
-    for &i in &order {
-        let h = &hits[i];
+    for (i, h) in hits.iter().enumerate() {
         let mut cycle = vec![(0, true)];
         let mut at = ends(0, h.segs[0].2).1;
         while cycle.len() < nw {
@@ -616,8 +609,9 @@ fn build(a: &mut Body, b: &Body, t: &Tool, hits: &[Hit], wall_at: &[bool], flip:
         let mut uses = Vec::with_capacity(nw);
         for (k, d) in hole {
             let (c0, c1) = ends(k, h.segs[k].2);
-            let v0 = made.new_vertex(a, i * nw + c0, corner(i * nw + c0), vnames[i * nw + c0]);
-            let v1 = made.new_vertex(a, i * nw + c1, corner(i * nw + c1), vnames[i * nw + c1]);
+            let (p0, p1) = (i * nw + c0, i * nw + c1);
+            let v0 = made.new_vertex(a, p0, points[p0], vnames[p0]);
+            let v1 = made.new_vertex(a, p1, points[p1], vnames[p1]);
             let e = a.add_edge(h.segs[k].0.clone(), h.segs[k].1, v0, v1, names[i * nw + k]);
             seg_edge[i * nw + k] = Some(e);
             uses.push((e, d));
@@ -637,18 +631,15 @@ fn build(a: &mut Body, b: &Body, t: &Tool, hits: &[Hit], wall_at: &[bool], flip:
     let walls = wall_at.iter().filter(|&&w| w).count();
     // the uprights' pieces between events (the caps, then each hit), made on first use
     let mut side_piece: Vec<Option<EdgeId>> = vec![None; (nh + 1) * nw];
-    for f in b.face_ids() {
-        let src = b.face(f);
-        if let Some(k) = t.caps.iter().position(|&c| c == f) {
+    for f in (0..b.face_count() as u32).map(FaceId) {
+        let (surface, same_sense, src_name) = b.face(f);
+        if let Some(k) = t.caps.iter().position(|c| c.0 == f) {
             if !wall_at[if k == 0 { 0 } else { nh }] {
                 continue;
             }
-            let face = a.add_face(shell, src.surface.clone(), src.same_sense != flip, src.name);
-            let mut uses: Vec<(EdgeId, bool)> = b
-                .lp(src.loops[0])
-                .coedges()
-                .map(|c| (made.b_edge(a, b.coedge(c).edge), b.coedge(c).forward))
-                .collect();
+            let face = a.add_face(shell, surface.clone(), same_sense != flip, src_name);
+            let mut uses: Vec<(EdgeId, bool)> =
+                t.caps[k].1.iter().map(|&(e, d)| (made.b_edge(a, e), d)).collect();
             flipped(&mut uses);
             a.add_loop(face, &uses);
             continue;
@@ -676,39 +667,39 @@ fn build(a: &mut Body, b: &Body, t: &Tool, hits: &[Hit], wall_at: &[bool], flip:
             };
             let (lo, d_lo) = along(i);
             let (hi, d_hi) = along(i + 1);
-            let mut piece = |a: &mut Body, made: &mut Made, j: usize| -> EdgeId {
+            let mut piece = |a: &mut Body, made: &mut Made<S>, j: usize| -> EdgeId {
                 let c = (k + j) % nw;
                 if let Some(e) = side_piece[c * (nh + 1) + i] {
                     return e;
                 }
-                let side = b.edge(t.walls[c].sides[0]);
-                let mut end = |a: &mut Body, i: usize| -> (VertexId, f64, Name) {
+                let (curve, range, start, end, name) = b.edge(t.walls[c].sides[0]);
+                let mut end_at = |a: &mut Body, i: usize| -> (VertexId, f64, Name) {
                     if i == 0 || i == nh + 1 {
-                        let v = if i == 0 { side.start } else { side.end };
-                        let s = if i == 0 { side.range.lo } else { side.range.hi };
-                        (made.b_vertex(a, v), s, b.vertex(v).name)
+                        let (v, s) = if i == 0 {
+                            (start, range.lo)
+                        } else {
+                            (end, range.hi)
+                        };
+                        (made.b_vertex(a, v), s, b.vertex(v).2)
                     } else {
                         let p = (i - 1) * nw + c;
-                        let id = made.new_vertex(a, p, corner(p), vnames[p]);
-                        (id, side.curve.closest(points[p], side.range), vnames[p])
+                        let id = made.new_vertex(a, p, points[p], vnames[p]);
+                        (id, curve.closest(points[p], range), vnames[p])
                     }
                 };
-                let (v0, s0, n0) = end(a, i);
-                let (v1, s1, n1) = end(a, i + 1);
+                let (v0, s0, n0) = end_at(a, i);
+                let (v1, s1, n1) = end_at(a, i + 1);
                 let name = if walls == 1 {
-                    side.name
+                    name
                 } else {
-                    side.name.piece(n0.with_name(n1))
+                    name.piece(n0.with_name(n1))
                 };
-                let e = a.add_edge(side.curve.clone(), Interval::new(s0, s1), v0, v1, name);
+                let e = a.add_edge(curve.clone(), Interval::new(s0, s1), v0, v1, name);
                 side_piece[c * (nh + 1) + i] = Some(e);
                 e
             };
-            // the general boolean's walk round this stretch, from the first of its half-edges in
-            // B's loop order: the bottom edge, else the end side going up
             let mut walk: Vec<(EdgeId, bool)> = Vec::with_capacity(4);
             for j in 0..4 {
-                let j = if i > 0 { (j + 1) % 4 } else { j };
                 walk.push(match j {
                     0 => match lo {
                         None => (made.b_edge(a, w.bottom), d_lo),
@@ -724,17 +715,17 @@ fn build(a: &mut Body, b: &Body, t: &Tool, hits: &[Hit], wall_at: &[bool], flip:
             }
             let kept = (0..=nh).filter(|&x| wall_at[x]).count();
             let name = if kept == 1 {
-                src.name
+                src_name
             } else {
                 let least = walk
                     .iter()
                     .map(|&(e, d)| (a.edge(e).name, d))
                     .min()
                     .expect("four uses");
-                src.name.piece(least.0.with(least.1 as u64))
+                src_name.piece(least.0.with(least.1 as u64))
             };
             flipped(&mut walk);
-            let face = a.add_face(shell, src.surface.clone(), src.same_sense != flip, name);
+            let face = a.add_face(shell, surface.clone(), same_sense != flip, name);
             a.add_loop(face, &walk);
         }
     }

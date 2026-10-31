@@ -27,7 +27,7 @@ pub mod work;
 pub use bodies::{BodyError, BodyFeature, Cutter, Keep, Pick, Solid, Step, step_solids};
 pub use edit::{Edit, EditError, Motion, Side};
 pub use extent::{Extent, ExtentError, Target, Toward, Turn};
-use forge_bool::{BoolError, CpuBatch, Op, Seg2, Shape, boolean_into};
+use forge_bool::{BoolError, CpuBatch, Op, Seg2, Shape, boolean_into, boolean_unlinked};
 use forge_gpu::AutoBatch;
 pub use forge_gpu::{Backend, open_in_background as open_gpu};
 use forge_math::{Frame, Point2, Vec2, dmath};
@@ -464,7 +464,7 @@ impl Part {
 
 /// Applies feature `i` to the part as features `..i` left it: `regenerate` one feature at a
 /// time, for callers that keep every stage. Only `features[..=i]` is read.
-pub fn step(features: History<'_>, i: usize, body: Option<Body>) -> Result<Option<Body>, RegenError> {
+pub fn step(features: History<'_>, i: usize, mut body: Option<Body>) -> Result<Option<Body>, RegenError> {
     let f = &features[i];
     let id = features.id(i);
     if modifies(f) {
@@ -472,6 +472,17 @@ pub fn step(features: History<'_>, i: usize, body: Option<Body>) -> Result<Optio
         let b = modify(features, f, i, &b, 1)?;
         if trace::on() {
             trace::step(i, &b, None);
+        }
+        return Ok(Some(b));
+    }
+    let err = |error| RegenError::Boolean { feature: i, error };
+    if let Some((tool, op)) = unlinked(features, i)
+        && let Some(mut b) = body.take()
+    {
+        boolean_unlinked(&mut b, &tool, op_of(op)).map_err(err)?;
+        b = not_empty(b, i)?;
+        if b.dead > b.faces.len() / 2 {
+            b = b.compact();
         }
         return Ok(Some(b));
     }
@@ -491,7 +502,6 @@ pub fn step(features: History<'_>, i: usize, body: Option<Body>) -> Result<Optio
         return Ok(body);
     }
     let mut b = body.ok_or(RegenError::NothingToCombine { feature: i })?;
-    let err = |error| RegenError::Boolean { feature: i, error };
     if let [(tool, op, _)] = &tools[..] {
         // in place: only the faces near the tool change
         boolean_into(&mut b, tool, op_of(*op), id + 1_000_000).map_err(err)?;
@@ -856,6 +866,37 @@ fn apply_fillet(
             .collect::<Result<_, RegenError>>()?,
     };
     fillet_with(&body, &want, &opts, id).map_err(|error| RegenError::Fillet { feature: i, error })
+}
+
+/// A plain extrude's tool as its entities, for the local imprint, which may need no Body of it.
+/// None where the imprint is off, or the extrude is not one tool of its own.
+fn unlinked(features: History<'_>, i: usize) -> Option<(forge_topo::Unlinked, Combine)> {
+    if forge_bool::imprint::mode() == forge_bool::imprint::Mode::Off || trace::on() {
+        return None;
+    }
+    let Feature::Extrude {
+        extent: Extent::Distance(_) | Extent::Through(_) | Extent::Symmetric(_) | Extent::TwoSided { .. },
+        op: op @ (Combine::Cut | Combine::Add),
+        ..
+    } = &features[i]
+    else {
+        return None;
+    };
+    let extent::Resolved::Plain(f, None) = extent::resolve(features, i).ok()? else {
+        return None;
+    };
+    let Feature::Extrude {
+        profile,
+        extent: Extent::Distance(d),
+        ..
+    } = &*f
+    else {
+        return None;
+    };
+    Some((
+        forge_ops::extrude_unlinked(profile, *d, features.id(i)).ok()?,
+        *op,
+    ))
 }
 
 /// The tools feature `i` makes: one, or a pattern's copies (each named after its place).

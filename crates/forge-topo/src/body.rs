@@ -722,3 +722,71 @@ impl Body {
         self.edge_ids().find(|&e| self.edge(e).name == name)
     }
 }
+
+/// A body's entities in the order they are made, its loops not yet linked to their edges: what
+/// a boolean can read of a tool without building the Body (`forge_ops::extrude_unlinked`).
+#[derive(Clone, Debug, Default)]
+pub struct Unlinked {
+    pub vertices: Vec<(Point3, Name)>,
+    pub edges: Vec<(Curve, Interval, VertexId, VertexId, Name)>,
+    pub faces: Vec<(Surface, bool, Name)>,
+    /// Each loop's face and the end of its uses in `uses` (they start at the previous loop's end).
+    pub loops: Vec<(FaceId, u32)>,
+    pub uses: Vec<(EdgeId, bool)>,
+}
+
+impl Unlinked {
+    pub fn add_vertex(&mut self, p: Point3, name: Name) -> VertexId {
+        self.vertices.push((p, name));
+        VertexId(self.vertices.len() as u32 - 1)
+    }
+    pub fn add_edge(
+        &mut self,
+        curve: Curve,
+        range: Interval,
+        start: VertexId,
+        end: VertexId,
+        name: Name,
+    ) -> EdgeId {
+        self.edges.push((curve, range, start, end, name));
+        EdgeId(self.edges.len() as u32 - 1)
+    }
+    pub fn add_face(&mut self, surface: Surface, same_sense: bool, name: Name) -> FaceId {
+        self.faces.push((surface, same_sense, name));
+        FaceId(self.faces.len() as u32 - 1)
+    }
+    pub fn add_loop(&mut self, face: FaceId, uses: &[(EdgeId, bool)]) {
+        self.uses.extend_from_slice(uses);
+        self.loops.push((face, self.uses.len() as u32));
+    }
+
+    /// The loops of face `f`, each as its uses.
+    pub fn loops_of(&self, f: FaceId) -> impl Iterator<Item = &[(EdgeId, bool)]> {
+        let starts = std::iter::once(0).chain(self.loops.iter().map(|l| l.1));
+        self.loops
+            .iter()
+            .zip(starts)
+            .filter(move |(l, _)| l.0 == f)
+            .map(|(l, at)| &self.uses[at as usize..l.1 as usize])
+    }
+
+    pub fn into_body(self) -> Body {
+        let mut body = Body::new();
+        let shell = body.add_shell();
+        for (p, name) in self.vertices {
+            body.add_vertex(p, name);
+        }
+        for (curve, range, start, end, name) in self.edges {
+            body.add_edge(curve, range, start, end, name);
+        }
+        for (surface, same_sense, name) in self.faces {
+            body.add_face(shell, surface, same_sense, name);
+        }
+        let mut at = 0;
+        for (f, end) in self.loops {
+            body.add_loop(f, &self.uses[at..end as usize]);
+            at = end as usize;
+        }
+        body
+    }
+}
