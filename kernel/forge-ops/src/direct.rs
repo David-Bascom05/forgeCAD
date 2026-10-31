@@ -619,6 +619,14 @@ pub fn delete_faces(body: &Body, faces: &[Name]) -> R<Body> {
             }
         }
     }
+    // a kept face with no loop left: the gap has nothing to close it (every wall of a disc)
+    for f in base.face_ids().filter(|f| !gone[f.index()]) {
+        if base.face(f).loops.iter().all(|l| dropped.contains(l)) {
+            return Err(DirectError::CannotHeal {
+                face: base.face(f).name,
+            });
+        }
+    }
     // the rest must be strips or corners whose every neighbour stays
     let mut strips: Vec<Strip> = Vec::new();
     for f in base.face_ids().filter(|f| gone[f.index()]) {

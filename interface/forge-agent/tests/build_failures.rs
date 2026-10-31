@@ -343,3 +343,23 @@ fillet 2.13853177 (edges concave)
         .volume;
     assert!((v - 58260.8).abs() < 2.0, "{v}");
 }
+
+/// Taking every wall of a disc leaves its ends bounding nothing: refused, not a body of faces with
+/// no loops.
+#[test]
+fn deleting_every_wall_is_refused() {
+    let e = Model::new("extrude 20 circle 0 0 20 circle 0 0 12\ndelete (faces cyl)\n").error;
+    assert!(e.is_some_and(|e| e.msg.contains("CannotHeal")));
+}
+
+/// A cone with a hexagon cut through it, its top edges rounded: a clear refusal, not a panic.
+#[test]
+fn rounding_a_hex_cut_cone_top_does_not_panic() {
+    let m = Model::new(
+        "revolve xz axis y poly 0 0 20 0 10 20 0 20
+extrude cut thru -xy at 0 0 200 poly 20 0 10 17.320508 -10 17.320508 -20 0 -10 -17.320508 10 -17.320508
+fillet 0.5 (edges top)
+",
+    );
+    assert!(m.error.is_some_and(|e| e.msg.contains("fillet")));
+}

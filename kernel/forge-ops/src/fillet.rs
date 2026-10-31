@@ -3356,7 +3356,10 @@ impl Builder {
             let closed = self.body.edge(e).start == self.body.edge(e).end;
             let mut pair = Vec::with_capacity(2);
             for side in 0..2 {
-                let (s, t) = (&self.ends[&(e, false)], &self.ends[&(e, true)]);
+                // a vertex no corner rule closed leaves the edge without an end
+                let (Some(s), Some(t)) = (self.ends.get(&(e, false)), self.ends.get(&(e, true))) else {
+                    return Err(FilletError::Overflow { edge: e });
+                };
                 let ro = &self.rolled[i];
                 let curve = ro.springs[side].clone();
                 // the spring runs with the spine: from the edge's start when aligned
