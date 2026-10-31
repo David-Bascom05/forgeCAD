@@ -2,6 +2,9 @@
 //! printed losslessly as the `.fc` part file, edited through an API, and evaluated into the
 //! plain-number part history the kernel regenerates.
 
+pub mod doc;
 pub mod expr;
 pub mod sketch;
 pub mod text;
+
+pub use doc::{Arg, Body, Document, Edit, Item, ItemId, Row};

@@ -113,6 +113,8 @@ forgecad measure F REF [REF]        area|length radius centre; two: closest dist
 forgecad measure F mass|wall        volume area centroid inertia; thinnest wall anywhere
 forgecad render F [VIEW] [--labels SEL] [--px 400] [-o F.png]   VIEW: iso front top right.. px: long side
 forgecad check F | diff A B         validity after each line | what B changed from A
+forgecad edit F param NAME EXPR | dim LINE V | arg LINE K TEXT | insert LINE|end TEXT | delete LINE |
+  move LINE LINE|end                rewrite F through its document (references follow), then build
 forgecad serve|mcp [--root DIR]     stdio JSON-RPC / MCP, .fc files under DIR (default .) only
 ```
 `serve` takes one JSON object per line, `{"id":1,"method":"build","params":{"file":"b.fc"}}`;

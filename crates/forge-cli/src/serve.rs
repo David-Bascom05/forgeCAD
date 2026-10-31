@@ -15,7 +15,7 @@ type Tool = (
     &'static [(&'static str, &'static str)],
 );
 
-const TOOLS: [Tool; 6] = [
+const TOOLS: [Tool; 7] = [
     (
         "build",
         "Regenerate a .fc part file. Returns ok or the failing line with a fix hint, then volume, area, bbox, counts.",
@@ -65,6 +65,12 @@ const TOOLS: [Tool; 6] = [
         2,
         &[("file", "path of version a"), ("other", "path of version b")],
     ),
+    (
+        "edit",
+        "Change the file through its document and rebuild: `param NAME EXPR`, `dim LINE VALUE` (a sketch dimension row), `arg LINE K TEXT`, `insert LINE|end TEXT` (\\n between lines), `delete LINE`, `move LINE LINE|end`. Line numbers are the file's.",
+        2,
+        &[("file", "path"), ("edit", "the edit")],
+    ),
 ];
 
 fn args(p: &Json) -> Args {
@@ -80,6 +86,9 @@ fn args(p: &Json) -> Args {
         .iter()
         .filter_map(|k| s(k))
         .collect();
+    if let Some(e) = s("edit") {
+        a.words = e.split_whitespace().map(str::to_string).collect();
+    }
     a
 }
 

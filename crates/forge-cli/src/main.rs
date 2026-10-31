@@ -12,7 +12,7 @@ use std::time::Instant;
 
 fn usage() -> ExitCode {
     eprintln!(
-        "usage: forgecad build|query|measure|render|check|diff FILE [ARGS] [--json] [--at FEAT] [--labels SEL] [--px N] [-o OUT]\n       \
+        "usage: forgecad build|query|measure|render|check|diff|edit FILE [ARGS] [--json] [--at FEAT] [--labels SEL] [--px N] [-o OUT]\n       \
          forgecad serve | mcp [--root DIR]   (JSON-RPC / MCP on stdio, .fc files under DIR, default .)\n       \
          forgecad demo <out.stl> [chord-mm] | preview <out.json>\nformat and selectors: AGENTS.md"
     );

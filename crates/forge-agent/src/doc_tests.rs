@@ -414,3 +414,73 @@ fn sketches_and_parameters_print_back() {
         "the sketch reads the same, so nothing below rebuilds"
     );
 }
+
+/// Edits through the document rebuild from the first line they change, and end where a fresh
+/// build of the file they print does; references follow the items they name.
+#[test]
+fn edits_rebuild_like_the_file_they_print() {
+    use forge_doc::Edit;
+    let src = "w = 40\nsketch\n  rect 0 0 w 25\n  fix l1.a\n  dist l1 w\n  dist l2 25\nend\n\
+               extrude 6 sketch1\nsketch on sketch1\n  circle 10 10 2\nend\nhole 3 on sketch2 c1 thru\n";
+    let mut m = built(src);
+    let fresh = |m: &Model| {
+        assert!(m.error.is_none(), "{:?}\n{}", m.error, m.src());
+        assert_eq!(format!("{:?}", m.body().expect("built").compact()), body(m.src()));
+    };
+    let item = |m: &Model, k: usize| m.doc.features().nth(k).expect("a line").id;
+    m.edit(Edit::SetParam {
+        name: "w".into(),
+        expr: "55".into(),
+    })
+    .expect("set");
+    assert_eq!(m.rebuilt, 3, "from the extrude on");
+    fresh(&m);
+    m.edit(Edit::SetDimension {
+        item: item(&m, 1),
+        row: 3,
+        value: "30".into(),
+    })
+    .expect("dimension");
+    fresh(&m);
+    // a line in above: the hole still drills at the second sketch, now the third
+    m.edit(Edit::Insert {
+        at: 1,
+        text: "sketch xz\n  circle 0 0 1\nend".into(),
+    })
+    .expect("insert");
+    assert!(
+        m.src()
+            .ends_with("sketch on sketch2\n  circle 10 10 2\nend\nhole 3 on sketch3 c1 thru\n"),
+        "{}",
+        m.src()
+    );
+    fresh(&m);
+    let hole = item(&m, 5);
+    m.edit(Edit::SetArg {
+        item: hole,
+        arg: 0,
+        text: "w/10".into(),
+    })
+    .expect("arg");
+    assert_eq!(m.rebuilt, 1);
+    fresh(&m);
+    m.edit(Edit::Delete { item: item(&m, 1) }).expect("delete");
+    assert!(m.src().contains("hole w/10 on sketch2 c1 thru"), "{}", m.src());
+    fresh(&m);
+    assert!(
+        m.edit(Edit::SetParam {
+            name: "nope".into(),
+            expr: "1".into()
+        })
+        .is_err()
+    );
+    // a re-read file keeps the links of the lines it kept
+    let src = m.src().to_string();
+    m.update(&src.replace("hole w/10", "hole w/11"));
+    m.edit(Edit::Move {
+        item: item(&m, 0),
+        to: 0,
+    })
+    .expect("move");
+    assert!(m.src().contains("hole w/11 on sketch2 c1 thru"), "{}", m.src());
+}

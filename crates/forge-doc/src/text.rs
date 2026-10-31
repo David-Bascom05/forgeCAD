@@ -1208,7 +1208,7 @@ pub struct Line {
 
 /// A line's tokens: a parenthesized selector is one token, and so is an expression whose
 /// parentheses touch its other characters (`(w+2)/2`, `sqrt(a)`).
-fn tokens(text: &str) -> Vec<String> {
+pub fn tokens(text: &str) -> Vec<String> {
     let mut toks: Vec<String> = Vec::new();
     let mut start = None;
     let mut depth = 0;
@@ -1306,6 +1306,12 @@ pub fn kind(name: &str) -> Option<&'static Kind> {
 
 /// Parses one feature line.
 pub fn parse_line(line: &Line, before: &Before) -> R<Feature> {
+    parse_line_refs(line, before).map(|f| f.0)
+}
+
+/// Parses one feature line, and says which of its tokens name an earlier feature (the token's
+/// index and the feature's).
+pub fn parse_line_refs(line: &Line, before: &Before) -> R<(Feature, Vec<(usize, usize)>)> {
     let param = line.toks.get(1).is_some_and(|t| t == "=");
     let k = if param { kind("param") } else { kind(&line.toks[0]) }.ok_or_else(|| {
         let names: Vec<&str> = KINDS.iter().map(|k| k.name).collect();
@@ -1321,11 +1327,12 @@ pub fn parse_line(line: &Line, before: &Before) -> R<Feature> {
         b: before,
         on: None,
         at: None,
+        feats: Vec::new(),
     };
     let f = (k.parse)(&mut p)?;
     match p.t.get(p.k) {
         Some(t) => Err(format!("unexpected '{t}'")),
-        None => Ok(f),
+        None => Ok((f, p.feats)),
     }
 }
 
@@ -1472,6 +1479,8 @@ pub(crate) struct P<'a> {
     /// What the last frame was read from, if a reference, and the origin written after it.
     on: Option<forge_model::On>,
     at: Option<Point3>,
+    /// Each token read as an earlier feature, and that feature.
+    feats: Vec<(usize, usize)>,
 }
 
 /// What a number slot holds: a length (or plain number), an angle, or a count.
@@ -1650,6 +1659,11 @@ impl<'a> P<'a> {
     }
     /// An earlier feature: a label, kind and count (`hole2`), or `fN`.
     fn feat(&mut self) -> R<usize> {
+        let i = self.feat_named()?;
+        self.feats.push((self.k - 1, i));
+        Ok(i)
+    }
+    fn feat_named(&mut self) -> R<usize> {
         let t = self.next()?.to_string();
         let t = t.as_str();
         if let Some(i) = self.b.labels.iter().position(|l| l.as_deref() == Some(t)) {
@@ -1840,11 +1854,12 @@ impl<'a> P<'a> {
     }
     /// The sketch a line names here, if it names one.
     fn sketch(&mut self) -> Option<&'a forge_model::Sketch> {
-        let k = self.k;
+        let (k, n) = (self.k, self.feats.len());
         match self.feat().map(|i| &self.b.features[i]) {
             Ok(Feature::Sketch(s)) => Some(s),
             _ => {
                 self.k = k;
+                self.feats.truncate(n);
                 None
             }
         }

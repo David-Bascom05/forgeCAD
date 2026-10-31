@@ -4,6 +4,7 @@
 use crate::facemesh::{self, FaceMesh};
 use crate::select::{self, Ent, View};
 use crate::text::{self, Before, Line};
+use forge_doc::{Document, Edit};
 use forge_mesh::TriMesh;
 use forge_model::{Feature, RegenError, Source, step};
 use forge_topo::{Body, Name};
@@ -14,6 +15,8 @@ use std::time::Instant;
 
 pub struct Model {
     src: String,
+    /// The part as a document: what the lines are printed from, and what edits change.
+    pub doc: Document,
     pub lines: Vec<Line>,
     pub features: Vec<Feature>,
     pub labels: Vec<Option<String>>,
@@ -53,6 +56,7 @@ impl Default for Model {
     fn default() -> Self {
         Model {
             src: String::new(),
+            doc: Document::parse(""),
             lines: vec![],
             features: vec![],
             labels: vec![],
@@ -89,7 +93,35 @@ impl Model {
             return;
         }
         self.src = src.to_string();
-        let new = text::lines(src);
+        let mut doc = Document::parse(src);
+        let new = doc.lines();
+        let same = |a: &Line, b: &Line| a.label == b.label && a.toks == b.toks;
+        let keep = self
+            .lines
+            .iter()
+            .zip(&new)
+            .take_while(|(a, b)| same(a, b))
+            .count();
+        doc.adopt(&self.doc, keep);
+        self.doc = doc;
+        self.rebuild(new, t0);
+    }
+
+    /// Applies an edit to the document and rebuilds from the first line it changed.
+    pub fn edit(&mut self, e: Edit) -> Result<(), String> {
+        let t0 = Instant::now();
+        self.doc.apply(e)?;
+        self.src = self.doc.print();
+        self.rebuild(self.doc.lines(), t0);
+        Ok(())
+    }
+
+    /// The file as the document prints it.
+    pub fn src(&self) -> &str {
+        &self.src
+    }
+
+    fn rebuild(&mut self, new: Vec<Line>, t0: Instant) {
         let same = |a: &Line, b: &Line| a.label == b.label && a.toks == b.toks;
         let keep = self
             .lines
@@ -124,8 +156,12 @@ impl Model {
                     face: &face,
                     fonts: &fonts,
                 };
-                text::parse_line(&line, &b)
+                text::parse_line_refs(&line, &b)
             };
+            let parsed = parsed.map(|(f, refs)| {
+                self.doc.link(i, &refs);
+                f
+            });
             let param = line.toks.get(1).is_some_and(|t| t == "=");
             let f = match parsed {
                 Ok(f) => f,

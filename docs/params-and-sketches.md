@@ -76,3 +76,15 @@ the same as for features today.
 A session reparses every line after a changed one; a line whose result equals the old one
 keeps its built stage as long as everything changed above it makes no solid (parameters,
 sketches). Changing `wall` rebuilds from the first line whose numbers change.
+
+## The document (forge-doc)
+
+The source of truth is `forge_doc::Document`: one item per line (parameters, sketches with
+their rows, feature lines with their arguments as written, blank and comment lines), each
+with an identity kept through edits. The `.fc` file is its print, and reads back to it. A
+feature reference (`sketch2`, `f4`, a label) records the item it named when the line was
+first evaluated and prints by that item's place, so it follows the item when lines are
+inserted, deleted or moved. Edits: set a parameter, set a dimension, set an argument (a value
+or reference), insert, delete, move. Evaluation is the part-file parser, line by line: the
+session rebuilds from the first line an edit changes, keeping later stages while lines read
+the same. The kernel still sees only `Feature`s of plain numbers.

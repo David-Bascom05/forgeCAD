@@ -36,7 +36,7 @@ fn fail(msg: impl Into<String>) -> Reply {
     }
 }
 
-pub const COMMANDS: [&str; 6] = ["build", "query", "measure", "render", "check", "diff"];
+pub const COMMANDS: [&str; 7] = ["build", "query", "measure", "render", "check", "diff", "edit"];
 
 #[derive(Default)]
 pub struct Session {
@@ -104,20 +104,29 @@ impl Session {
 
     /// The file's model, brought up to date with what is on disk.
     pub fn model(&mut self, file: &str) -> Result<&mut Model, String> {
+        self.model_at(file).map(|m| m.0)
+    }
+
+    /// `model`, and the file's real path.
+    fn model_at(&mut self, file: &str) -> Result<(&mut Model, std::path::PathBuf), String> {
         // every check, and the read, on the one path with links resolved. A directory on it
         // swapped for a link between the check and the read still escapes the root; closing
         // that needs openat with O_NOFOLLOW per component, which std does not offer.
         let real = std::fs::canonicalize(file)
             .ok()
             .filter(|r| r.extension().is_some_and(|x| x == "fc"));
-        let src = match (&self.root, real) {
+        let (src, real) = match (&self.root, real) {
             // rooted, every refusal reads the same and no OS error goes back: a client learns
             // nothing about paths outside the root
-            (Some(root), Some(r)) if r.starts_with(root) => {
-                std::fs::read_to_string(&r).map_err(|_| format!("{file}: cannot read"))?
-            }
+            (Some(root), Some(r)) if r.starts_with(root) => (
+                std::fs::read_to_string(&r).map_err(|_| format!("{file}: cannot read"))?,
+                r,
+            ),
             (Some(_), _) => return Err(format!("{file}: not a part file under the root")),
-            (None, Some(r)) => std::fs::read_to_string(&r).map_err(|e| format!("{file}: {e}"))?,
+            (None, Some(r)) => (
+                std::fs::read_to_string(&r).map_err(|e| format!("{file}: {e}"))?,
+                r,
+            ),
             (None, None) => return Err(format!("{file}: no such .fc part file")),
         };
         let dir = std::fs::canonicalize(file)
@@ -130,7 +139,69 @@ impl Session {
             font_file(&dir, root.as_deref(), name)
         }));
         m.update(&src);
-        Ok(m)
+        Ok((m, real))
+    }
+
+    /// Changes the file through its document, writes it back and builds it.
+    fn edit(&mut self, a: &Args) -> Result<Reply, String> {
+        use forge_doc::Edit;
+        let (m, path) = self.model_at(&a.file)?;
+        let w = &a.words;
+        let word = |k: usize| {
+            w.get(k)
+                .map(String::as_str)
+                .ok_or("edit needs more words (see AGENTS.md)")
+        };
+        let rest = |k: usize| {
+            w.get(k..)
+                .filter(|r| !r.is_empty())
+                .map(|r| r.join(" "))
+                .ok_or("edit needs a value")
+        };
+        let at = |k: usize| -> Result<(usize, Option<usize>), String> {
+            let no: usize = word(k)?
+                .parse()
+                .map_err(|_| format!("'{}' is not a line number", word(k).unwrap_or("")))?;
+            m.doc
+                .at_line(no)
+                .ok_or_else(|| format!("the file has no line {no}"))
+        };
+        let id = |k: usize| at(k).map(|(i, _)| m.doc.items[i].id);
+        let e = match word(0)? {
+            "param" => Edit::SetParam {
+                name: word(1)?.to_string(),
+                expr: rest(2)?,
+            },
+            "dim" => {
+                let (i, row) = at(1)?;
+                Edit::SetDimension {
+                    item: m.doc.items[i].id,
+                    row: row.ok_or("that line is not a sketch row")?,
+                    value: rest(2)?,
+                }
+            }
+            "arg" => Edit::SetArg {
+                item: id(1)?,
+                arg: word(2)?
+                    .parse::<usize>()
+                    .map_err(|_| "arg LINE K TEXT: K counts from 1")?
+                    .wrapping_sub(1),
+                text: rest(3)?,
+            },
+            "insert" => Edit::Insert {
+                at: if word(1)? == "end" { usize::MAX } else { at(1)?.0 },
+                text: rest(2)?.replace("\\n", "\n"),
+            },
+            "delete" => Edit::Delete { item: id(1)? },
+            "move" => Edit::Move {
+                item: id(1)?,
+                to: if word(2)? == "end" { usize::MAX } else { at(2)?.0 },
+            },
+            op => return Err(format!("unknown edit '{op}' (param dim arg insert delete move)")),
+        };
+        m.edit(e)?;
+        std::fs::write(&path, m.src()).map_err(|_| format!("{}: cannot write", a.file))?;
+        self.build(a)
     }
 
     pub fn run(&mut self, cmd: &str, a: &Args) -> Reply {
@@ -147,6 +218,7 @@ impl Session {
             "render" => self.render(a),
             "check" => self.check(a),
             "diff" => self.diff(a),
+            "edit" => self.edit(a),
             _ => Err(format!(
                 "unknown command '{cmd}' (one of: {})",
                 COMMANDS.join(" ")
@@ -888,6 +960,25 @@ fillet 4 (edges between base wall concave)
             let r = Session::default().run("build", &args(&f, &[]));
             assert!(r.ok, "{}", r.text);
         }
+    }
+
+    #[test]
+    fn edits_write_the_file() {
+        let dir = Dir::new("edit");
+        let f = dir.file("e.fc", "w = 4\nextrude w rect 0 0 1 1  # a block\n");
+        let mut s = Session::default();
+        let r = s.run("edit", &args(&f, &["param", "w", "5"]));
+        assert!(r.ok && r.text.contains("bbox 0 0 0 1 1 5"), "{}", r.text);
+        let r = s.run("edit", &args(&f, &["insert", "2", "h", "=", "2\\nd", "=", "h"]));
+        assert!(r.ok, "{}", r.text);
+        assert_eq!(
+            std::fs::read_to_string(&f).expect("written"),
+            "w = 5\nh = 2\nd = h\nextrude w rect 0 0 1 1  # a block\n"
+        );
+        assert_eq!(
+            s.run("edit", &args(&f, &["dim", "1", "3"])).text,
+            "error: that line is not a sketch row"
+        );
     }
 
     #[test]
