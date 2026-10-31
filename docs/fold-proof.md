@@ -728,6 +728,37 @@ None is worth its cost. What would move it: corners at hole vertices are intrins
 spoke vertices are where the gain is, and a fit of the spoke's turning to both sides at once
 needs a cubic f (degree 4 ribbons, a dearer proof).
 
+### Switching builds: what whole parts would pay
+
+`research/corner-patch/switch.sh`: every fillet-corpus case (cases, variant and variable) with
+a corner hole, regenerated with builds on today's patch and on `close_hole_rational` (falling
+back to today's on refusal), instructions per regen (millions, the runner's start-up taken
+off; cold, nothing cached):
+
+```
+case                     today  switched        holes
+box-corner-unequal        3.41    9.66  2.84x   rational 6 sides
+two-blends-sharp-edge     2.70    9.38  3.48x   rational 5
+step-mixed-corner         4.53   11.28  2.49x   rational 6
+pocket-unequal-corners   13.00   38.24  2.94x   rational 6 x4
+box-corner-variable       9.04   13.61  1.50x   rational 6 x2
+apex-four-unequal         7.41   14.94  2.02x   rational 8
+apex-variable            16.79   22.58  1.34x   rational 8 x2
+pit-four                 13.93   21.50  1.54x   rational 8
+roof-boss-on-ridge        6.59   16.04  2.43x   rational 8
+roof-slot-on-ridge        6.55   14.61  2.23x   rational 8
+apex-five-unequal         9.43   18.85  2.00x   rational 10
+pit-five                 19.89   29.00  1.46x   rational 10
+roof-diamond-on-ridge     8.17   35.00  4.29x   rational 10
+box-ball-corner, box-all-edges, pocket-ball-corners, apex-four-ball: spheres, 1.00x
+```
+
+Every hole of the corpus proves (no fallback). The gate's parts (torture, plate, shaft,
+housing, coplanar, patterns, mixed, hole-grid, tour, upto, upto-flat) close no corner hole,
+so they would not move; but where a part has corners, the corner is most of its regen and the
+switch costs 1.3x to 4.3x the whole part, far past the gate's 0.5%. Builds stay on today's
+patch until the proof is cheaper.
+
 ### Also done here
 
 - **Boxes**: the quad's box over a parameter box is the hull of the control points there (all

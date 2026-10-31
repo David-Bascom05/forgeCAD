@@ -1,0 +1,43 @@
+diff --git a/crates/forge-ops/src/corner.rs b/crates/forge-ops/src/corner.rs
+index 16b3143..d655224 100644
+--- a/crates/forge-ops/src/corner.rs
++++ b/crates/forge-ops/src/corner.rs
+@@ -1,7 +1,7 @@
+ //! Vertex blends where blends meet at a vertex: where each blend stops (its setback), the
+ //! trim curve that ends each face there, and the surface that closes the remaining hole.
+ 
+-use forge_geom::corner::{Closing, Side, SurfaceRail, close_hole, foot_velocity, trim_curve};
++use forge_geom::corner::{Closing, Side, SurfaceRail, close_hole, close_hole_rational, foot_velocity, trim_curve};
+ use forge_geom::{Curve, CurveGeom, Surface};
+ use forge_math::{Interval, Point3, Vec3, dmath, tol};
+ use std::sync::Arc;
+@@ -237,7 +237,28 @@ fn plan(c: &CornerInput) -> Result<Plan, String> {
+ /// patch, or patches round a centre point where that would fold.
+ pub fn patch(_c: &CornerInput, hole: &[HoleSide]) -> Option<Result<CornerPatch, String>> {
+     let sides: Vec<Side> = hole.iter().map(hole_side).collect();
+-    Some(match close_hole(sides) {
++    let n = sides.len();
++    let log = |what: &str| {
++        if std::env::var_os("CORNER_LOG").is_some() {
++            eprintln!("corner {what} {n}");
++        }
++    };
++    let closing = if std::env::var_os("CORNER_RATIONAL").is_some() {
++        match close_hole_rational(sides.clone()) {
++            Some((c, _)) => {
++                log(if matches!(c, Closing::One(Surface::Sphere(_), _)) { "sphere" } else { "rational" });
++                Ok(c)
++            }
++            None => {
++                log("fallback");
++                close_hole(sides)
++            }
++        }
++    } else {
++        log("today");
++        close_hole(sides)
++    };
++    Some(match closing {
+         Ok(Closing::One(surface, same_sense)) => Ok(CornerPatch {
+             inner: Vec::new(),
+             faces: vec![PatchFace {

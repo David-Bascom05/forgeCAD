@@ -31,6 +31,10 @@ in `docs/fold-proof.md` (stages 0 to 4); this folder holds the code that produce
   (docs/fold-proof.md stage 4 lists the ones dropped).
 - **`HolePatch::min_radius` is zero round a kinked corner**: `kmin.rs` (dense 300 x 300
   curvature sampling of the fillet corpus' corner patches).
+- **What switching builds would cost whole parts** (docs/fold-proof.md stage 4 "Switching
+  builds"): `switch.patch` routes `forge_ops::corner::patch` through `close_hole_rational`
+  when CORNER_RATIONAL is set (falling back to `close_hole`) and logs each hole's path with
+  CORNER_LOG; `corpus.rs` regenerates one fillet-corpus case; `switch.sh` counts both.
 - **The stage 1 n-gon rational patch** (superseded by the quads, kept in the record):
   `rational_compare.rs`, the stage 1 table in `docs/fold-proof.md`.
 
@@ -57,6 +61,15 @@ fbuild cargo build --release -p forge-ops --example sharp
 cp research/corner-patch/kmin.rs crates/forge-model/examples/
 fbuild cargo build --release -p forge-model --example kmin
 ./target/release/examples/kmin two-blends-sharp-edge
+```
+
+```
+git apply research/corner-patch/switch.patch
+cp research/corner-patch/corpus.rs crates/forge-model/examples/
+fbuild cargo build --release -p forge-model --example corpus --example regen1
+sh research/corner-patch/switch.sh      # per case: regen M instructions today, switched, ratio, paths
+for p in torture plate shaft housing coplanar patterns mixed hole-grid tour upto upto-flat; do
+  CORNER_LOG=1 ./target/release/examples/regen1 $p seq 2>&1 | grep -c '^corner today'; done
 ```
 
 `rational_compare.rs` ran on `refs/experiments/corner-rational-stage1` (4b81f12); check that
