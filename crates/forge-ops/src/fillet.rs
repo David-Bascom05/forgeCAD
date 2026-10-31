@@ -932,7 +932,9 @@ fn roll(body: &Body, e: EdgeId, r: f64, root: Name) -> R<Rolled> {
         blend.spring(true).ok_or(FilletError::NoBlend { edge: e })?,
         blend.spring(false).ok_or(FilletError::NoBlend { edge: e })?,
     ];
-    let (blend, springs, over) = switch_support(body, &l, r, blend, springs, region);
+    let (blend, springs, over) = switch_support(body, &l, blend, springs, |faces, sign| {
+        blend_of(body, faces, [sign[0] * r, sign[1] * r], l.p, near, region)
+    });
     let split = switch_split(body, e, &l, &blend, &springs, &over);
     let tm = spine_closest(&blend.spine, l.p);
     let aligned = blend.spine.deriv(tm).d1.dot(l.tangent.get()) > 0.0;
@@ -982,52 +984,50 @@ fn blend_of(
 }
 
 /// Where a spring of the blend between the edge's faces lies off its face, across a smooth
-/// edge of it, the ball rests on the face beyond: the blend rolled on that face instead.
+/// edge of it, the ball rests on the face beyond: the blend rolled on that face instead
+/// (`make`, from the faces and the sides of their surfaces the ball is on).
 fn switch_support(
     body: &Body,
     l: &Local,
-    r: f64,
     blend: Blend,
     springs: [Curve; 2],
-    region: Box3,
+    make: impl Fn([FaceId; 2], [f64; 2]) -> Option<Blend>,
 ) -> (Blend, [Curve; 2], Over) {
     let mid = |b: &Blend, c: &Curve| c.eval(spine_closest(&b.spine, l.p));
     let sense = |f: FaceId| if body.face(f).same_sense { 1.0 } else { -1.0 };
+    let plane = |f: FaceId| matches!(body.face(f).surface, Surface::Plane(_));
     for s in 0..2 {
         let b = l.faces[s];
-        if on_face(body, b, mid(&blend, &springs[s])) {
-            continue;
-        }
-        let around: Vec<CoedgeId> = body
+        // the faces beyond b's smooth edges: tangent along them, their normals agreeing at the
+        // edge's middle (two planes never are)
+        let beyond: Vec<(FaceId, EdgeId)> = body
             .face(b)
             .loops
             .iter()
             .flat_map(|&lp| body.lp(lp).coedges())
+            .filter_map(|c| {
+                let g = body.coedge(c).edge;
+                let cf = body.coedge_face(body.partner(c)?);
+                if cf == b || cf == l.faces[1 - s] || (plane(b) && plane(cf)) {
+                    return None;
+                }
+                let x = body.edge(g);
+                let q = x.curve.eval(x.range.mid());
+                let n = |f: FaceId| body.face_normal(f, body.face(f).surface.project(q));
+                n(b).zip(n(cf))
+                    .is_some_and(|(nb, nc)| nb.dot(nc.get()) >= 1.0 - 1e-9)
+                    .then_some((cf, g))
+            })
             .collect();
-        for c in around {
-            let g = body.coedge(c).edge;
-            let Some(cf) = body.partner(c).map(|p| body.coedge_face(p)) else {
-                continue;
-            };
-            if cf == b || cf == l.faces[1 - s] {
-                continue;
-            }
-            // tangent along g: the faces' normals agree at its middle
-            let x = body.edge(g);
-            let q = x.curve.eval(x.range.mid());
-            let n = |f: FaceId| body.face_normal(f, body.face(f).surface.project(q));
-            let (Some(nb), Some(nc)) = (n(b), n(cf)) else {
-                continue;
-            };
-            if nb.dot(nc.get()) < 1.0 - 1e-9 {
-                continue;
-            }
+        if beyond.is_empty() || on_face(body, b, mid(&blend, &springs[s])) {
+            continue;
+        }
+        for (cf, g) in beyond {
             let mut faces = l.faces;
             faces[s] = cf;
             let mut sign = l.sign;
             sign[s] *= sense(b) * sense(cf);
-            let near = l.p + l.toward * r;
-            let Some(nb) = blend_of(body, faces, [sign[0] * r, sign[1] * r], l.p, near, region) else {
+            let Some(nb) = make(faces, sign) else {
                 continue;
             };
             let (Some(s0), Some(s1)) = (nb.spring(true), nb.spring(false)) else {
@@ -1288,6 +1288,11 @@ fn roll_chain(
                 blend.spring(true).ok_or(FilletError::NoBlend { edge: e })?,
                 blend.spring(false).ok_or(FilletError::NoBlend { edge: e })?,
             ];
+            let (blend, springs, over) = switch_support(body, &l, blend, springs, |faces, sign| {
+                let (a, b) = (&body.face(faces[0]).surface, &body.face(faces[1]).surface);
+                let vb = VarBlend::new(a, sign[0], b, sign[1], guide.clone(), law.clone(), range).ok()?;
+                Some(Blend::variable(a, b, vb))
+            });
             out.push(Rolled {
                 edge: e,
                 convex: l.convex,
@@ -1305,7 +1310,7 @@ fn roll_chain(
                     closed: chain.closed,
                     own,
                 }),
-                over: [None, None],
+                over,
                 split: None,
             });
         }

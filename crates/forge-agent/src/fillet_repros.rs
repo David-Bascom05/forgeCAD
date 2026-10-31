@@ -233,6 +233,26 @@ fn fillet_moving_onto_a_corner_round_partway() {
     assert_eq!(walls, 2);
 }
 
+#[test]
+fn variable_fillet_rolling_onto_a_corner_round() {
+    // a radius from 2 to 4 up the pad's side: the ball rests on the round all along, the
+    // variable blend rolled on the round as the constant one is; alone and meeting the pad
+    // top's blend, walls drafted or not
+    for (draft, x) in [
+        ("", -107.69),
+        (
+            "draft -2 xy at 0 0 95 (faces of box normal -x) (faces of box normal -y)\n",
+            -104.0,
+        ),
+    ] {
+        for which in [format!(" near {x} -65 8"), String::new()] {
+            valid(&format!(
+                "box: extrude 95 rect -120 -65 240 130\n{draft}fillet 12 (edges of box shorter 100 near -120 -65 50)\nextrude 16 rect {x} -93 44 40\nfillet 2..4 (edges concave{which})\n"
+            ));
+        }
+    }
+}
+
 /// `b` with every list stored the other way round: vertices, edges, faces, each face's loops, and
 /// each loop starting at its middle coedge.
 fn reversed_storage(b: &forge_topo::Body) -> forge_topo::Body {
