@@ -44,6 +44,50 @@ pub fn rod_at(o: Point3, axis: UnitVec3, r: f64, len: f64, op: Combine) -> Featu
     }
 }
 
+/// A 20 x 20 x 20 post cut to an apex at (10, 10, 16) by one plane per (azimuth, slope): the
+/// plane's outward normal leans from z toward that azimuth. Also the middle of each edge
+/// down from the apex, between plane i and plane i + 1.
+pub fn apex_post(planes: &[(f64, f64)]) -> (Part, Vec<Point3>) {
+    let apex = Point3::new(10.0, 10.0, 16.0);
+    let normals: Vec<Vec3> = planes
+        .iter()
+        .map(|&(az, slope)| {
+            let (s, c) = dmath::sin_cos(az);
+            Vec3::new(c * slope, s * slope, 1.0)
+        })
+        .collect();
+    let mut part = Part {
+        features: vec![block_at(Point3::ORIGIN, 20.0, 20.0, 20.0, Combine::New)],
+    };
+    for n in &normals {
+        part.features.push(Feature::Extrude {
+            profile: Profile {
+                plane: Frame::from_z(apex, n.normalize().expect("normal")),
+                loops: vec![Profile::rectangle(Point2::new(-60.0, -60.0), 120.0, 120.0, 0)],
+            },
+            distance: 60.0,
+            op: Combine::Cut,
+        });
+    }
+    let k = normals.len();
+    let mids = (0..k)
+        .map(|i| {
+            let mut d = normals[i].cross(normals[(i + 1) % k]);
+            if d.z > 0.0 {
+                d = -d;
+            }
+            // to where the edge leaves the post's sides
+            let t = [d.x, d.y]
+                .iter()
+                .zip([apex.x, apex.y])
+                .map(|(&v, a)| if v > 0.0 { (20.0 - a) / v } else { -a / v })
+                .fold(f64::INFINITY, f64::min);
+            apex + d * (0.5 * t)
+        })
+        .collect();
+    (part, mids)
+}
+
 /// The name of the edge of `body` whose middle is nearest `p`.
 pub fn edge_near(body: &Body, p: Point3) -> Name {
     let mid = |e| {
@@ -434,6 +478,77 @@ pub fn cases() -> Vec<(&'static str, Part, Option<f64>)> {
         ),
         None,
     ));
+    // corner patches: three blends of three radii at a box corner (a six-sided hole)
+    out.push((
+        "box-corner-unequal",
+        with_fillet(
+            &boxed,
+            &[
+                (Point3::new(10.0, 0.0, 8.0), 1.0),
+                (Point3::new(0.0, 5.0, 8.0), 2.0),
+                (Point3::new(0.0, 0.0, 4.0), 3.0),
+            ],
+        ),
+        None,
+    ));
+    // two blends and a sharp edge at a box corner: the edge is cut back and the faces trimmed
+    out.push((
+        "two-blends-sharp-edge",
+        with_fillet(
+            &boxed,
+            &[
+                (Point3::new(10.0, 0.0, 8.0), 2.0),
+                (Point3::new(20.0, 5.0, 8.0), 2.0),
+            ],
+        ),
+        None,
+    ));
+    // the pocket with a larger floor radius: four concave six-sided holes
+    let floor =
+        [(10.0, 2.0), (10.0, 8.0), (5.0, 5.0), (15.0, 5.0)].map(|(x, y)| (Point3::new(x, y, 4.0), 1.25));
+    out.push((
+        "pocket-unequal-corners",
+        with_fillet(&pocket, &[walls, floor].concat()),
+        None,
+    ));
+    // the step's concave edge and the two convex edges at its front end: a mixed corner
+    out.push((
+        "step-mixed-corner",
+        with_fillet(
+            &step,
+            &[
+                (Point3::new(10.0, 5.0, 8.0), 1.0),
+                (Point3::new(15.0, 0.0, 8.0), 1.5),
+                (Point3::new(10.0, 0.0, 11.0), 2.0),
+            ],
+        ),
+        None,
+    ));
+    // pyramid apexes: four and five convex blends of different radii, and a regular
+    // four-sided one whose equal blends meet on a ball
+    let q = pi / 2.0;
+    let around = |n: usize, slopes: &[f64]| -> Vec<(f64, f64)> {
+        (0..n)
+            .map(|i| ((i as f64 + 0.5) * 4.0 * q / n as f64, slopes[i % slopes.len()]))
+            .collect()
+    };
+    for (name, planes, radii) in [
+        ("apex-four-ball", around(4, &[1.0]), vec![1.5; 4]),
+        (
+            "apex-four-unequal",
+            around(4, &[1.0, 0.8, 1.2, 0.9]),
+            vec![1.0, 1.5, 0.8, 1.2],
+        ),
+        (
+            "apex-five-unequal",
+            around(5, &[0.9, 1.0, 1.1, 1.2, 1.3]),
+            vec![1.0, 1.4, 0.8, 1.2, 1.1],
+        ),
+    ] {
+        let (part, mids) = apex_post(&planes);
+        let picks: Vec<(Point3, f64)> = mids.into_iter().zip(radii).collect();
+        out.push((name, with_fillet(&part, &picks), None));
+    }
     out
 }
 
@@ -479,18 +594,6 @@ pub fn refusals() -> Vec<(&'static str, Part, &'static str)> {
             "smooth-seam",
             with_fillet(&rounded, &[(Point3::new(17.0, 0.0, 3.0), 1.0)]),
             "Smooth",
-        ),
-        // two blends and a sharp edge at a corner need a corner patch
-        (
-            "two-blends-sharp-edge",
-            with_fillet(
-                &boxed,
-                &[
-                    (Point3::new(10.0, 0.0, 8.0), 2.0),
-                    (Point3::new(20.0, 5.0, 8.0), 2.0),
-                ],
-            ),
-            "Corner",
         ),
     ]
 }

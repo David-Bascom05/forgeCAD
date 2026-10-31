@@ -3,6 +3,7 @@
 //! is an axis frame and a radius), never as an approximation.
 
 pub mod blend;
+pub mod corner;
 pub mod curve;
 pub mod intcurve;
 pub mod intersect;
