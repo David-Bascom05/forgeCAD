@@ -533,3 +533,114 @@ one third building N and W. Ways down, none tried yet:
 
 Four- to six-edge corners (8-12-sided holes) would raise the degree further (B_i is degree
 2(n - 1)) and the cost with it.
+
+## Stage 4: rational quads for 4 to 20 sides, and a faster proof
+
+`crates/forge-geom/src/corner/rational.rs` (`Quad`) and `close_hole_rational` /
+`rational_pieces` in `corner.rs`. Still not used in builds.
+
+### Construction
+
+- **Quads round a centre.** A hole of four sides is one quad; an even number of sides from 6 to
+  20 is split by spokes from every other vertex to a centre, two hole sides per quad. The degree
+  no longer grows with the sides: every quad's blend is a tensor polynomial of degree (7, 7).
+  An odd number of sides would need a spoke from the middle of a side, which the B-rep handover
+  (`Closing::Split`) cannot express: those holes keep today's patch.
+- **The domain is the unit square**, with s and d per side (side 0: s = u, d = v). Ribbons are
+  (A + d B + d^2 C) / E of degree 3 in s and 2 in d, undamped (a Coons-like quad needs no
+  damping: linear ribbons of a bilinear surface reproduce it). Weights B_i = prod_(j != i) d_j^2
+  are of degree (2, 4).
+- **The cross tangent** is T = (a Q + b F) / D with a, b linear, Q = D^2 C', and F a field
+  across the side in the neighbour's tangent plane of degree at most 2: n x Q for a plane, the
+  quadratic (n D x Q) / D for a circle on a cylinder or sphere (|Q| is proportional to D for a
+  circle), and for a spoke a linear F of its own.
+- **Spokes are cubic Beziers** leaving their vertex along the hole's halving direction and the
+  centre straight toward the vertex, control lengths a third of the way. Parabolic spokes
+  (today's split) cannot leave in a chosen direction: their control point is pinned to the line
+  where the vertex's and the centre's tangent planes meet, and for 8 or more sides it often
+  left nearly along a side. The spoke's normal is w / |w|, w = p' x F, F linear from
+  n_v x p'(0) to n_c x p'(1): both quads along a spoke use the same plane span(p', F), so they
+  meet with G1 by construction (measured 1e-14 rad). Fitting the control lengths to today's
+  patch made speeds uneven and folded a third of the 8-sided holes; equal lengths fold none.
+- **The centre** is today's ribbon patch at its domain's middle (one evaluation), or the old
+  heuristic beyond 12 sides, where the ribbon patch has no form.
+
+### The proof: a cone test
+
+Instead of the Jacobian's Bernstein coefficients (degree ~3x, products dominate), the proof
+bounds the directions of W P_u and W P_v. With Y = N - q W for a constant q near a box's
+middle, W P_u = Y_u - (P - q) W_u = sum_ij b_ij (Y_u,ij - (P - q) W_u,ij) for the common basis
+values b_ij, and P - q lies in the hull of the control points Y_kl / W_kl (all W_kl > 0). So
+W P_u lies in the union of the coefficients shifted by W_u,ij times that hull. If both sets lie
+in angular sectors (of the plane across some n0) that are ordered and less than a half turn
+apart, n0 . (P_u x P_v) > 0 over the box: the patch is regular there. Everything is in
+tangents of angles, with every coefficient's rounding carried.
+
+- **Normalised weights.** P = (N phi) / (W phi) for any positive phi; each region root is
+  multiplied by phi fitted to 1 / W (biquadratic through 9 values, bilinear in Duffy
+  triangles), so W phi is nearly constant and the shift term small. Children inherit it.
+  This halved the tests.
+- **Corners** (W vanishes there to second order): the box round each corner, a quarter of the
+  square's side, in two Duffy triangles x = sigma, y = sigma t. Every weight has u^2 or v^2 and
+  the ribbons meet at the corner point p_c, so N - p_c W = sigma^3 G and W = sigma^2 W~ with the
+  vanishing rows known exactly; the cones are of W~ P_sigma (from sigma G) and W~ P_t / sigma
+  (from G), both finite at the corner.
+- **Corner zones**, where evaluation takes the nearest ribbon (both distances under 1e-6): each
+  ribbon alone over a power-of-two box holding the zone.
+- Regions that fail are split in halves along u and v in turn (Duffy triangles start from their
+  halves). Taking P_x = P_sigma - t P_t / sigma instead cancels badly coefficient-wise (wider
+  cones); boxes round the corners larger than a quarter need more tests, not fewer.
+- **Cache**: results keyed on the bits of every ribbon coefficient (what the proof reads), kept
+  up to 20000 entries.
+
+A test builds a quad whose top side swings across its bottom: the proof refuses it, and a
+sampled Jacobian changes sign. On the survey every refusal checked was a real fold (dense
+sampling: normals of neighbouring samples reversed); every proven quad sampled densely had
+neighbouring-normal cosines of 0.98 or more.
+
+### Results (survey: the stage 1 generator's 3-, 4- and 5-edge corners, both orientations)
+
+```
+sides                         6            8            10
+holes proven                  120 / 120    120 / 120    117 / 120
+cone tests per hole           116 (154)    168 (238)    252 (1060)
+instructions per hole:
+  today's patch (build)       2.8 M        4.2 M        5.4 M
+  rational build              1.9 M        2.5 M        3.1 M
+  rational proof              13.6 M       18.5 M       27.1 M
+build ms, median (load ~20):  today 0.31   0.50         0.42-0.6
+  rational, proof cached      0.22         0.29         0.24
+  rational, cold              1.4          2.0          2.0
+boundary (worst)              3.7e-15      2.9e-15      3.0e-15
+G1 normal (worst, rad)        3.7e-15      1.6e-14      9.4e-14
+projection (worst)            4.0e-13      3.9e-13      5.9e-13
+bbox misses                   0            0            0
+gap to today's / hole size    2.1% (7.2%)  3.2% (20%)   8.0% (68%)
+bulge rational / today        1.00         1.04         1.18
+max curvature rational/today  1.67 (5.7)   1.64 (4.4)   2.6 (147)
+```
+
+(median, max in brackets.) Beyond the survey, corners of 6 to 10 edges (12 to 20 sides, where
+today's patch has no form at all): 12 sides 38 / 40, 16 sides 30 / 40, 20 sides 22 / 40 proven;
+the rest really fold (long thin quads round one centre) and would need a second ring of quads.
+
+- **Speed.** Cold, build plus proof is 5.5x today's instructions; with the proof cached it is
+  0.65x. The proof went from ~40 ms to ~1.3 ms (6 sides): degree 59 to 7, products to cone
+  tests, allocation-free arrays, normalised weights. The rest is per-test cost (~100 k
+  instructions: shifts, sectors and halving of 4 polynomials of ~100 coefficients each) times
+  ~40 tests per quad, half of them in the boxes next to the corner boxes, where the corner's
+  scale-free weights make the shift large.
+- **Shape.** Within a few per cent of today's patch on 6 and 8 sides, but the maximum curvature
+  is ~1.65x today's (peaks near the vertices the spokes leave and along the spokes). For 10
+  sides today's own patch is poor (fold cosine 0.79), so the comparison is loose.
+
+### Also done here
+
+- **Boxes**: the quad's box over a parameter box is the hull of the control points there (all
+  weights non-negative), grown for rounding; no misses.
+- **min_radius of today's patch**: dense sampling (300 x 300) of two-blends-sharp-edge finds a
+  radius of 0.028 near the corner where the sharp edge ends, against 0.53 reported; at such a
+  corner the sides' normals differ and the patch's normal turns in no distance, so there is no
+  bound. `min_radius` now returns 0 there (callers read that as unbounded curvature); the
+  sampled value still sizes the domain. Smooth patches still report a sample, 25-40% over the
+  dense one (box-corner-unequal 0.585 against 0.446, peaks on the sides).

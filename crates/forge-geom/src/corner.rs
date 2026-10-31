@@ -960,7 +960,7 @@ fn split(sides: &[Side]) -> Result<Patches, CornerError> {
 /// plane, cylinder or sphere, or a proof fails.
 fn rational_patches(sides: &[Side], parity: usize) -> Option<(Patches, RationalProof)> {
     let m = sides.len();
-    if m < 4 || m > MAX_RATIONAL_SIDES || m % 2 == 1 {
+    if !(4..=MAX_RATIONAL_SIDES).contains(&m) || m % 2 == 1 {
         return None;
     }
     let mut proof = RationalProof {
@@ -1300,7 +1300,7 @@ impl HolePatch {
     fn quad(sides: Vec<Side>) -> Option<HolePatch> {
         let q = Arc::new(rational::Quad::build(&sides)?);
         // lengths per unit of u and v, and points to start projections from: the control net
-        let (scale, net) = q.net();
+        let scale = q.net();
         let square = |k: f64| {
             [(0.0, 0.0), (k, 0.0), (k, k), (0.0, k)]
                 .map(|(x, y)| Point2::new(x, y))
@@ -1322,10 +1322,7 @@ impl HolePatch {
         let mut out = HolePatch::with_corners(sides, square(k), k);
         out.rational = Some(q);
         (out.scale, out.min_radius) = ((scale.0 / k, scale.1 / k), rmin);
-        out.seeds = net
-            .into_iter()
-            .map(|(x, p)| (Point2::new(x.x * k, x.y * k), p))
-            .collect();
+        out.seed();
         Some(out)
     }
 

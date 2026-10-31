@@ -438,40 +438,28 @@ impl Quad {
         Some(Quad { sides: out, num, den })
     }
 
-    /// The mean lengths per unit of u and of v, and the control points with their places in
-    /// the unit square (the corners' own points where the weights vanish).
-    pub(super) fn net(&self) -> ((f64, f64), Vec<(Point2, Point3)>) {
+    /// The mean lengths per unit of u and of v, from the control net.
+    pub(super) fn net(&self) -> (f64, f64) {
         let n1 = DEG + 1;
         let pt = |k: usize| {
             let w = self.den.c[k];
-            (w > 0.0)
-                .then(|| Point3::new(self.num[0].c[k], self.num[1].c[k], self.num[2].c[k]) - Point3::ORIGIN)
-                .map(|v| Point3::ORIGIN + v / w)
+            (w > 0.0).then(|| Vec3::new(self.num[0].c[k], self.num[1].c[k], self.num[2].c[k]) / w)
         };
-        let mut net = Vec::with_capacity(n1 * n1);
         let (mut su, mut sv, mut nu, mut nv) = (0.0, 0.0, 0, 0);
         for i in 0..n1 {
             for j in 0..n1 {
                 let Some(p) = pt(i * n1 + j) else { continue };
-                net.push((Point2::new(i as f64 / DEG as f64, j as f64 / DEG as f64), p));
                 if let Some(q) = (i < DEG).then(|| pt((i + 1) * n1 + j)).flatten() {
-                    su += q.distance(p) * DEG as f64;
+                    su += (q - p).length() * DEG as f64;
                     nu += 1;
                 }
                 if let Some(q) = (j < DEG).then(|| pt(i * n1 + j + 1)).flatten() {
-                    sv += q.distance(p) * DEG as f64;
+                    sv += (q - p).length() * DEG as f64;
                     nv += 1;
                 }
             }
         }
-        for c in 0..4 {
-            let v = self.corner(c);
-            net.push((
-                Point2::new([0.0, 1.0, 1.0, 0.0][c], [0.0, 0.0, 1.0, 1.0][c]),
-                Point3::new(v.x, v.y, v.z),
-            ));
-        }
-        ((su / nu.max(1) as f64, sv / nv.max(1) as f64), net)
+        (su / nu.max(1) as f64, sv / nv.max(1) as f64)
     }
 
     pub fn side_s(&self, i: usize, t: f64) -> f64 {
@@ -540,7 +528,7 @@ impl Quad {
         };
         let (u, v) = (cl(u), cl(v));
         let part = |p: &Bp| p.restrict(true, u.lo, u.hi).restrict(false, v.lo, v.hi);
-        let (n, w) = (self.num.clone().map(|p| part(&p)), part(&self.den));
+        let (n, w) = (self.num.map(|p| part(&p)), part(&self.den));
         let mut hull = Box3::EMPTY;
         let mut big: f64 = 0.0;
         for k in 0..w.c.len() {
@@ -1261,7 +1249,7 @@ fn plain_region(n: &[Bp; 3], w: &Bp, depth: u32, st: &mut Proof) -> bool {
     // halves, along u and v in turn
     depth < MAX_DEPTH
         && (0..2).all(|h| {
-            let p = |x: &Bp| x.half(depth % 2 == 0, h);
+            let p = |x: &Bp| x.half(depth.is_multiple_of(2), h);
             plain_region(&n.map(|x| p(&x)), &p(w), depth + 1, st)
         })
 }
@@ -1281,7 +1269,7 @@ fn duffy_region(g: &[Bp; 3], w: &Bp, sig: (f64, f64), depth: u32, st: &mut Proof
         }
     }
     // halves, along sigma and t in turn
-    let u = depth % 2 == 0;
+    let u = depth.is_multiple_of(2);
     depth < MAX_DEPTH
         && (0..2).all(|q| {
             let p = |x: &Bp| x.half(u, q);
