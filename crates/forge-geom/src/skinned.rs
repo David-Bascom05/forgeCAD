@@ -728,6 +728,7 @@ impl Data {
 
 /// Steps of the seed grid over the carried-on surface, in t and in s.
 const GRID: (usize, usize) = (16, 8);
+const ROWS: usize = (GRID.0 + 1) * (GRID.1 + 1);
 
 /// One span (between two neighbouring sections) of a smooth loft's wall.
 #[derive(Clone, Debug)]
@@ -738,6 +739,8 @@ pub struct Skinned {
     ext: Box2,
     /// Points on a grid over `ext`, seeding nearest-point searches.
     rows: Vec<(Point2, SurfDeriv)>,
+    /// The rows' points alone (the seed scan reads only these).
+    pts: Vec<Point3>,
     scale: (f64, f64),
     radius: f64,
     /// The surface bends tighter than its seed grid is fine: its nearest points are sought from
@@ -767,6 +770,7 @@ impl Skinned {
             span,
             ext: Box2::new(Interval::new(0.0, 1.0), span),
             rows: Vec::new(),
+            pts: Vec::new(),
             scale: (0.0, 0.0),
             radius: f64::INFINITY,
             sharp: false,
@@ -827,6 +831,7 @@ impl Skinned {
                 s.rows.push((uv, s.data.point(uv)));
             }
         }
+        s.pts = s.rows.iter().map(|r| r.1.p).collect();
         let (mut kmax, mut su, mut sv) = (0.0f64, 0.0f64, 0.0f64);
         for i in 0..=8 {
             for j in 0..=4 {
@@ -856,19 +861,20 @@ impl Skinned {
         self.data.point(uv)
     }
 
-    /// The row point nearest p: its index and squared distance.
-    fn seed(&self, p: Point3) -> (usize, f64) {
-        self.rows
-            .iter()
-            .enumerate()
-            .map(|(k, r)| (k, r.1.p.distance_sq(p)))
-            .fold((0, f64::INFINITY), |b, x| if x.1 < b.1 { x } else { b })
-    }
-
     /// The nearest point of the carried-on surface, from the nearest grid point, and on a sharp
     /// surface also from the nearest grid point away from that one's neighbours.
     fn solve(&self, p: Point3) -> (Point2, SurfDeriv) {
-        let (k, _) = self.seed(p);
+        let mut dist = [0.0; ROWS];
+        for (d, q) in dist.iter_mut().zip(&self.pts) {
+            *d = q.distance_sq(p);
+        }
+        let nearest = |keep: &dyn Fn(usize) -> bool, none: usize| {
+            (0..ROWS)
+                .filter(|&m| keep(m))
+                .map(|m| (m, dist[m]))
+                .fold((none, f64::INFINITY), |b, x| if x.1 < b.1 { x } else { b })
+        };
+        let (k, _) = nearest(&|_| true, 0);
         let from = |k: usize| {
             polish(
                 &|uv| self.point(uv),
@@ -884,10 +890,10 @@ impl Skinned {
         }
         let w = GRID.1 + 1;
         let (i0, j0) = ((k / w) as i64, (k % w) as i64);
-        let other = (0..self.rows.len())
-            .filter(|&m| ((m / w) as i64 - i0).abs() > 1 || ((m % w) as i64 - j0).abs() > 1)
-            .map(|m| (m, self.rows[m].1.p.distance_sq(p)))
-            .fold((k, f64::INFINITY), |b, x| if x.1 < b.1 { x } else { b });
+        let other = nearest(
+            &|m| ((m / w) as i64 - i0).abs() > 1 || ((m % w) as i64 - j0).abs() > 1,
+            k,
+        );
         if other.1.is_infinite() {
             return best;
         }
@@ -1003,6 +1009,7 @@ impl Procedural for Skinned {
                 (uv, moved)
             })
             .collect();
+        s.pts = s.rows.iter().map(|r| r.1.p).collect();
         Proc(Arc::new(s))
     }
     fn uv_scale(&self) -> (f64, f64) {
