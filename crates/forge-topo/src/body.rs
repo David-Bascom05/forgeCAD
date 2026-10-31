@@ -589,27 +589,42 @@ impl Body {
                 Surface::Sphere(sp) => b = b.hull(&Box3::from_point(sp.frame.origin).grow(sp.radius)),
                 Surface::Torus(t) => b = b.hull(&Box3::from_point(t.frame.origin).grow(t.major + t.minor)),
                 Surface::Procedural(pr) => {
-                    // over the stretch of the domain the face's loops span (padded), not all of it
+                    // over the stretch of the domain the face's loops span, not all of it: column
+                    // by column in u, over only the v the face holds there (a cut askew across a
+                    // blend's end leaves the end columns part of the arc)
                     let d = pr.domain();
-                    let (mut u, mut v) = (d.u.interval(), d.v.interval());
-                    if d.u.period.is_none() && d.v.period.is_none() {
-                        let (mut su, mut sv) = (Interval::EMPTY, Interval::EMPTY);
-                        for l in crate::uv::face_uv_loops(self, f) {
-                            for &p in &l.points {
-                                su.include(p.x);
-                                sv.include(p.y);
+                    let whole = forge_math::Box2::new(d.u.interval(), d.v.interval());
+                    let loops = if d.u.period.is_none() && d.v.period.is_none() {
+                        crate::uv::face_uv_loops(self, f)
+                    } else {
+                        Vec::new()
+                    };
+                    let mut su = Interval::EMPTY;
+                    loops.iter().flat_map(|l| &l.points).for_each(|p| su.include(p.x));
+                    if su.is_empty() || su.width() <= 0.0 {
+                        b = b.hull(&pr.bbox(whole));
+                    } else {
+                        let pad = |i: Interval, w: Interval| {
+                            let g = 0.05 * i.width() + 1e-9 * (1.0 + i.lo.abs().max(i.hi.abs()));
+                            Interval::new((i.lo - g).max(w.lo), (i.hi + g).min(w.hi))
+                        };
+                        // eight columns; one the boundary crosses askew (a run-out's cut) in eight
+                        // more, twice
+                        const G: usize = 8;
+                        let mut todo = vec![(su.lo, su.hi, 0)];
+                        while let Some((lo, hi, depth)) = todo.pop() {
+                            let (runs, askew) = column_runs(&loops, lo, hi);
+                            if depth == 0 || (depth < 3 && askew) {
+                                let at = |k: usize| lo + (hi - lo) * k as f64 / G as f64;
+                                todo.extend((0..G).map(|k| (at(k), at(k + 1), depth + 1)));
+                                continue;
+                            }
+                            let u = pad(Interval::new(lo, hi), whole.u);
+                            for v in runs {
+                                b = b.hull(&pr.bbox(forge_math::Box2::new(u, pad(v, whole.v))));
                             }
                         }
-                        let span = forge_math::Box2::new(su, sv);
-                        if !su.is_empty() && !sv.is_empty() {
-                            let pad = |i: Interval, w: Interval| {
-                                let g = 0.05 * i.width() + 1e-9 * (1.0 + i.lo.abs().max(i.hi.abs()));
-                                Interval::new((i.lo - g).max(w.lo), (i.hi + g).min(w.hi))
-                            };
-                            (u, v) = (pad(span.u, u), pad(span.v, v));
-                        }
                     }
-                    b = b.hull(&pr.bbox(forge_math::Box2::new(u, v)));
                 }
                 _ => {}
             }
@@ -623,4 +638,56 @@ impl Body {
     pub fn edge_by_name(&self, name: Name) -> Option<EdgeId> {
         self.edge_ids().find(|&e| self.edge(e).name == name)
     }
+}
+
+/// The v a face holds over u in [lo, hi], as runs, from its uv loops: each stretch of boundary
+/// inside the column, and between the boundary's crossings of the column's middle; and whether
+/// the boundary moves much in v while moving in u there (a cut askew).
+fn column_runs(loops: &[crate::uv::UvLoop], lo: f64, hi: f64) -> (Vec<Interval>, bool) {
+    let mid = 0.5 * (lo + hi);
+    let mut runs: Vec<Interval> = Vec::new();
+    let mut cross: Vec<f64> = Vec::new();
+    let (mut moves, mut span) = (0.0f64, Interval::EMPTY);
+    for l in loops {
+        let n = l.points.len();
+        let mut piece = Interval::EMPTY;
+        for i in 0..n {
+            let (p, q) = (l.points[i], l.points[(i + 1) % n]);
+            if (p.x <= mid) != (q.x <= mid) {
+                cross.push(p.y + (q.y - p.y) * (mid - p.x) / (q.x - p.x));
+            }
+            let (a, c) = (p.x.min(q.x).max(lo), p.x.max(q.x).min(hi));
+            if a > c {
+                if !piece.is_empty() {
+                    runs.push(piece);
+                    piece = Interval::EMPTY;
+                }
+                continue;
+            }
+            let at = |u: f64| p.y + (q.y - p.y) * ((u - p.x) / (q.x - p.x)).clamp(0.0, 1.0);
+            let (va, vc) = if q.x == p.x { (p.y, q.y) } else { (at(a), at(c)) };
+            if q.x != p.x {
+                moves += (va - vc).abs();
+            }
+            piece.include(va);
+            piece.include(vc);
+            span.include(va);
+            span.include(vc);
+        }
+        if !piece.is_empty() {
+            runs.push(piece);
+        }
+    }
+    cross.sort_by(f64::total_cmp);
+    runs.extend(cross.as_chunks::<2>().0.iter().map(|&[a, b]| Interval::new(a, b)));
+    // merged where they touch or overlap
+    runs.sort_by(|x, y| x.lo.total_cmp(&y.lo));
+    let mut out: Vec<Interval> = Vec::new();
+    for r in runs {
+        match out.last_mut() {
+            Some(last) if r.lo <= last.hi => last.hi = last.hi.max(r.hi),
+            _ => out.push(r),
+        }
+    }
+    (out, moves > 0.05 * span.width())
 }

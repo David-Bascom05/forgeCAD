@@ -1749,6 +1749,52 @@ mod tests {
     }
 
     #[test]
+    fn variable_blend_boxes_hug_their_faces() {
+        // run-out cuts askew across the blends' ends: each face's box holds its mesh, and
+        // reaches no more than a tenth past it
+        let all = cases();
+        for name in [
+            "box-linear-edge",
+            "box-points-edge",
+            "full-round-narrowing-rib",
+            "l-bar-roll-over-linear",
+        ] {
+            let part = &all.iter().find(|c| c.0 == name).expect("a case").1;
+            let b = part.regenerate().expect("builds");
+            let m = tessellate(
+                &b,
+                &Quality {
+                    chord: 1e-3,
+                    max_angle: 0.3,
+                },
+            )
+            .expect("meshes");
+            for f in b.face_ids() {
+                if !format!("{:?}", b.face(f).surface).contains("VarBlend") {
+                    continue;
+                }
+                let mut mb = forge_math::Box3::EMPTY;
+                for (t, _) in m
+                    .triangles
+                    .iter()
+                    .zip(&m.face_of)
+                    .filter(|x| *x.1 as usize == f.index())
+                {
+                    t.iter().for_each(|&i| mb.include(m.positions[i as usize]));
+                }
+                let fb = b.face_box(f);
+                for (a, c) in [(fb.x, mb.x), (fb.y, mb.y), (fb.z, mb.z)] {
+                    assert!(a.lo <= c.lo && c.hi <= a.hi, "{name}: box {fb:?} misses {mb:?}");
+                    assert!(
+                        c.lo - a.lo < 0.1 && a.hi - c.hi < 0.1,
+                        "{name}: box {fb:?} loose on {mb:?}"
+                    );
+                }
+            }
+        }
+    }
+
+    #[test]
     fn refusals_are_clean() {
         for (name, part, want) in refusals() {
             match part.regenerate() {
