@@ -428,6 +428,41 @@ impl RadiusLaw {
         })
     }
 
+    /// `smooth` with each end's slope given or left natural.
+    pub fn smooth_ends(points: &[(f64, f64)], start: Option<f64>, end: Option<f64>) -> Option<RadiusLaw> {
+        if points.len() < 2
+            || points
+                .windows(2)
+                .any(|w| w[1].0.partial_cmp(&w[0].0) != Some(std::cmp::Ordering::Greater))
+        {
+            return None;
+        }
+        let (x, y): (Vec<f64>, Vec<f64>) = points.iter().copied().unzip();
+        Some(RadiusLaw::fit_ends(&x, &y, start, end))
+    }
+
+    /// One law made of others: law i from `parts[i].0` to the next part's start (the last to
+    /// `end`), the first and last carried on past the ends; with `period`, repeating from the
+    /// first start (then `end` is a period on).
+    pub fn concat(parts: &[(f64, &RadiusLaw)], end: f64, period: Option<f64>) -> Option<RadiusLaw> {
+        let mut knots = Vec::new();
+        let mut coef = Vec::new();
+        for (i, &(a, law)) in parts.iter().enumerate() {
+            let b = parts.get(i + 1).map_or(end, |p| p.0);
+            if b <= a {
+                return None;
+            }
+            knots.push(a);
+            coef.push(law.coefs(a));
+            for &k in law.knots.iter().filter(|&&k| k > a && k < b) {
+                knots.push(k);
+                coef.push(law.coefs(k));
+            }
+        }
+        knots.push(end);
+        Some(RadiusLaw { knots, coef, period })
+    }
+
     /// The C2 periodic cubic spline through (s, r) control points (s increasing, all within one
     /// period of the first), for a closed edge whose s runs over `period`.
     pub fn periodic(points: &[(f64, f64)], period: f64) -> Option<RadiusLaw> {
@@ -475,6 +510,10 @@ impl RadiusLaw {
     }
 
     fn fit(x: &[f64], y: &[f64], ends: Option<(f64, f64)>) -> RadiusLaw {
+        RadiusLaw::fit_ends(x, y, ends.map(|e| e.0), ends.map(|e| e.1))
+    }
+
+    fn fit_ends(x: &[f64], y: &[f64], start: Option<f64>, end: Option<f64>) -> RadiusLaw {
         let n = x.len() - 1;
         let h: Vec<f64> = (0..n).map(|i| x[i + 1] - x[i]).collect();
         let slope: Vec<f64> = (0..n).map(|i| (y[i + 1] - y[i]) / h[i]).collect();
@@ -491,10 +530,12 @@ impl RadiusLaw {
             up[i] = h[i];
             rhs[i] = 6.0 * (slope[i] - slope[i - 1]);
         }
-        if let Some((s0, s1)) = ends {
+        if let Some(s0) = start {
             di[0] = 2.0 * h[0];
             up[0] = h[0];
             rhs[0] = 6.0 * (slope[0] - s0);
+        }
+        if let Some(s1) = end {
             lo[n] = h[n - 1];
             di[n] = 2.0 * h[n - 1];
             rhs[n] = 6.0 * (s1 - slope[n - 1]);
@@ -1143,6 +1184,18 @@ struct Seg {
     rmax: f64,
 }
 
+/// A run of segments inside one ball about the centre at its first row.
+#[derive(Clone, Copy, Debug, PartialEq)]
+struct Block {
+    lo: usize,
+    hi: usize,
+    c: Point3,
+    /// Every centre in the run lies within this of `c`, every point of the blend within this
+    /// plus `rmax`.
+    reach: f64,
+    rmax: f64,
+}
+
 /// A variable-radius rolling-ball blend between two analytic surfaces (see the module docs).
 #[derive(Clone, Debug)]
 pub struct VarBlend {
@@ -1157,6 +1210,8 @@ pub struct VarBlend {
     swap: bool,
     rows: Vec<Row>,
     segs: Vec<Seg>,
+    /// Runs of segments under one ball, so searches skip what is far.
+    blocks: Vec<Block>,
     /// How far the cached rows' Taylor model may stray from the solved centre between rows.
     predict: f64,
 }
@@ -1194,6 +1249,7 @@ impl VarBlend {
             swap: false,
             rows: Vec::new(),
             segs: Vec::new(),
+            blocks: Vec::new(),
             predict: 0.0,
         };
         vb.build()?;
@@ -1309,17 +1365,69 @@ impl VarBlend {
 
     /// The centre's Taylor coefficients at s from the centre c0, solved order by order.
     fn centre_jets(&self, s: f64, c0: Point3) -> Option<(V, J)> {
-        let r = self.law.jet(s);
-        let (g, gp) = self.guide.jets(s);
+        self.centre_jets_n(s, c0)
+    }
+
+    /// `centre_jets` to order N - 1 only.
+    fn centre_jets_n<const N: usize>(&self, s: f64, c0: Point3) -> Option<(Vn<N>, Jn<N>)> {
+        let rj = self.law.jet(s);
+        let r = Jn::<N>(std::array::from_fn(|k| rj.0[k]));
+        let (g4, gp4) = self.guide.jets(s);
+        let (g, gp) = (
+            Vn::<N>::from(std::array::from_fn(|k| g4.at(k))),
+            Vn::<N>::from(std::array::from_fn(|k| gp4.at(k))),
+        );
         let rows = Rows3::new(self.a.gradient(c0), self.b.gradient(c0), gp.at(0))?;
-        let mut c = V::k(c0.to_vec());
-        for i in 1..4 {
+        let mut c = Vn::<N>::k(c0.to_vec());
+        for i in 1..N {
             let fa = dist_grad(&self.a, c, false).0 - r * self.side[0];
             let fb = dist_grad(&self.b, c, false).0 - r * self.side[1];
             let fp = (c - g).dot(gp);
             c.set(i, rows.solve([-fa.0[i], -fb.0[i], -fp.0[i]]));
         }
         Some((c, r))
+    }
+
+    /// The section's arc alone, from centre and radius jets of any order past the first.
+    fn arc_of<const N: usize>(&self, c: Vn<N>, r: Jn<N>) -> SecArc {
+        let cp = c.d();
+        let rp = r.d();
+        let g = cp.dot(cp).recip();
+        let k = c - cp * (r * rp * g);
+        let rho = r * (Jn::<N>::k(1.0) - rp * rp * g).sqrt();
+        let qa = c - dist_grad(&self.a, c, true).1 * (r * self.side[0]);
+        let qb = c - dist_grad(&self.b, c, true).1 * (r * self.side[1]);
+        let q = if self.swap { [qb, qa] } else { [qa, qb] };
+        let a = q[0] - k;
+        let e1 = a * a.norm().recip();
+        let b = q[1] - k;
+        let bp = b - e1 * b.dot(e1);
+        let e2 = bp * bp.norm().recip();
+        let phi = Jn::<N>::atan2(b.dot(e2), b.dot(e1));
+        SecArc {
+            k: Point3::ORIGIN + k.at(0),
+            rho: rho.0[0],
+            e1: e1.at(0),
+            e2: e2.at(0),
+            phi: phi.0[0],
+        }
+    }
+
+    /// The section's arc at s, solved to first order only (a point of the blend needs no more).
+    fn arc_at(&self, s: f64) -> SecArc {
+        let i = self.nearest_row(s);
+        if self.rows[i].s == s {
+            let (c, r) = (self.rows[i].c, self.law.jet(s));
+            return self.arc_of(Vn::<2>::from([c[0], c[1]]), Jn::<2>([r.0[0], r.0[1]]));
+        }
+        let seed = Point3::ORIGIN + self.model(i, s)[0];
+        match self
+            .solve_centre(s, self.law.eval(s), seed)
+            .and_then(|c| self.centre_jets_n::<2>(s, c))
+        {
+            Some((c, r)) => self.arc_of(c, r),
+            None => self.section_at(s).arc(),
+        }
     }
 
     fn section_of(&self, c: V, r: J) -> Section {
@@ -1394,6 +1502,10 @@ impl VarBlend {
     /// row in small steps if the direct solve fails.
     fn spine_at(&self, s: f64) -> (V, J) {
         let i = self.nearest_row(s);
+        // a row holds the solved jets at its own s
+        if self.rows[i].s == s {
+            return (V::from(self.rows[i].c), self.law.jet(s));
+        }
         let seed = Point3::ORIGIN + self.model(i, s)[0];
         if let Some(c) = self.solve_centre(s, self.law.eval(s), seed)
             && let Some(j) = self.centre_jets(s, c)
@@ -1416,6 +1528,11 @@ impl VarBlend {
     /// Jets of track k at s: the contact at v = k (0 or 1), or the centre (2).
     fn track_at(&self, s: f64, k: usize) -> V {
         let (c, r) = self.spine_at(s);
+        self.track_of(c, r, k)
+    }
+
+    /// Track k's jets from centre and radius jets.
+    fn track_of(&self, c: V, r: J, k: usize) -> V {
         if k == 2 {
             return c;
         }
@@ -1511,8 +1628,8 @@ impl VarBlend {
         }
         self.rows.push(self.make_row(lo, c)?);
         let span = self.hi - self.lo;
-        // rows only seed solves and bound searches; a ten-thousandth of the smallest radius
-        self.predict = (1e-4 * self.radii().0).max(tol::LINEAR * 0.1);
+        // rows only seed solves and bound searches; a thousandth of the smallest radius
+        self.predict = (1e-3 * self.radii().0).max(tol::LINEAR * 0.1);
         let mut h = span / 8.0;
         while self.rows.last().is_some_and(|r| r.s < self.hi) {
             let last = *self.rows.last().expect("rows start non-empty");
@@ -1577,6 +1694,7 @@ impl VarBlend {
                 }
             })
             .collect();
+        self.blocks = self.make_blocks();
         Ok(())
     }
 
@@ -1703,7 +1821,7 @@ impl VarBlend {
             }
         }
         let mut cands = Vec::new();
-        for i in 0..self.segs.len() {
+        for i in self.near_segs(p, best.0) {
             if self.seg_dist(p, i).0 - self.segs[i].rmax < best.0 {
                 self.roots(p, i, &mut cands);
             }
@@ -1753,22 +1871,38 @@ impl VarBlend {
                 best = (d, r.s);
             }
         }
-        for i in 0..self.segs.len() {
+        // segments nearest first, so the best so far prunes the rest
+        let mut order: Vec<(f64, usize)> = self
+            .near_segs(p, best.0)
+            .filter(|&i| self.rows[i + 1].s.min(hi) > self.rows[i].s.max(lo))
+            .map(|i| {
+                let h = self.rows[i + 1].s - self.rows[i].s;
+                let lb = chord_dist(p, self.rows[i].on(k), self.rows[i + 1].on(k))
+                    - self.segs[i].aq[k] * h * h * 0.125;
+                (lb, i)
+            })
+            .filter(|x| x.0 < best.0)
+            .collect();
+        order.sort_by(|x, y| x.0.total_cmp(&y.0));
+        for (lb, i) in order {
             let (a, b) = (self.rows[i].s.max(lo), self.rows[i + 1].s.min(hi));
-            if b <= a {
-                continue;
-            }
-            let h = self.rows[i + 1].s - self.rows[i].s;
-            let lb = chord_dist(p, self.rows[i].on(k), self.rows[i + 1].on(k))
-                - self.segs[i].aq[k] * h * h * 0.125;
             if lb >= best.0 {
-                continue;
+                break;
             }
-            // g(s) = (q - p) . q', a minimum where g goes from - to +
-            let g = |s: f64| {
-                let j = q(s);
+            // g(s) = (q - p) . q', a minimum where g goes from - to +; first on the rows'
+            // model of the centre (within `predict` of it), then on the solved track
+            let g_of = |j: V| {
                 let (d, q1, q2) = (Point3::ORIGIN + j.at(0) - p, j.at(1), j.at(2) * 2.0);
                 (d.dot(q1), q1.length_sq() + d.dot(q2), d.length())
+            };
+            let g = |s: f64| g_of(q(s));
+            let gm = |s: f64| {
+                let j = if s - self.rows[i].s <= self.rows[i + 1].s - s {
+                    i
+                } else {
+                    i + 1
+                };
+                g_of(self.track_of(V::from(self.model(j, s)), self.law.jet(s), k))
             };
             let (mut a, mut b) = (a, b);
             let (ga, gb) = (g(a).0, g(b).0);
@@ -1776,20 +1910,38 @@ impl VarBlend {
                 continue;
             }
             let mut s = 0.5 * (a + b);
+            let (ma, mb) = (a, b);
+            for _ in 0..60 {
+                let (gs, dg, _) = gm(s);
+                let n = s - gs / dg;
+                if !(dg > 0.0 && n > ma && n < mb) {
+                    break;
+                }
+                let done = (n - s).abs() <= 1e-12 * (1.0 + s.abs());
+                s = n;
+                if done {
+                    break;
+                }
+            }
             for _ in 0..60 {
                 let (gs, dg, _) = g(s);
+                let n = s - gs / dg;
+                // converged: a step at rounding (gs may be exactly zero)
+                if dg > 0.0 && (n - s).abs() <= 1e-12 * (1.0 + s.abs()) {
+                    s = n.clamp(a, b);
+                    break;
+                }
                 if gs < 0.0 {
                     a = s;
                 } else {
                     b = s;
                 }
-                let n = s - gs / dg;
                 let next = if dg > 0.0 && n > a && n < b {
                     n
                 } else {
                     0.5 * (a + b)
                 };
-                if (next - s).abs() <= 1e-14 * (1.0 + s.abs()) || b - a <= 1e-15 * (1.0 + s.abs()) {
+                if b - a <= 1e-15 * (1.0 + s.abs()) {
                     s = next;
                     break;
                 }
@@ -1818,7 +1970,7 @@ impl VarBlend {
         }
         // interior: stationary points of h whose circle point lies on the arc
         let mut cands = Vec::new();
-        for i in 0..self.segs.len() {
+        for i in self.near_segs(p, best.0) {
             let (dlo, dhi) = self.seg_dist(p, i);
             let lb = (dlo - self.segs[i].rmax).max(self.segs[i].rmin - dhi);
             if lb < best.0 {
@@ -1909,13 +2061,51 @@ impl VarBlend {
                 ..*r
             })
             .collect();
-        VarBlend {
+        let mut out = VarBlend {
             a: self.a.transformed(f),
             b: self.b.transformed(f),
             guide: self.guide.transformed(f),
             rows,
             ..self.clone()
-        }
+        };
+        out.blocks = out.make_blocks();
+        out
+    }
+
+    /// Blocks of eight segments, each a ball holding its centres and its largest radius.
+    fn make_blocks(&self) -> Vec<Block> {
+        (0..self.segs.len())
+            .step_by(8)
+            .map(|lo| {
+                let hi = (lo + 8).min(self.segs.len());
+                let c = Point3::ORIGIN + self.rows[lo].c[0];
+                let mut reach = 0.0f64;
+                let mut rmax = 0.0f64;
+                for i in lo..hi {
+                    let h = self.rows[i + 1].s - self.rows[i].s;
+                    let sag = self.segs[i].aq[2] * h * h * 0.125;
+                    let far = (Point3::ORIGIN + self.rows[i + 1].c[0]).distance(c);
+                    reach = reach.max(far + sag);
+                    rmax = rmax.max(self.segs[i].rmax);
+                }
+                Block {
+                    lo,
+                    hi,
+                    c,
+                    reach: reach * (1.0 + 1e-12) + tol::LINEAR,
+                    rmax,
+                }
+            })
+            .collect()
+    }
+
+    /// The segments that may hold a point of the blend, a spring or the centre within `bound`
+    /// of p, block by block.
+    fn near_segs(&self, p: Point3, bound: f64) -> impl Iterator<Item = usize> + '_ {
+        self.blocks
+            .iter()
+            .filter(move |b| p.distance(b.c) - b.reach - b.rmax < bound)
+            .flat_map(|b| b.lo..b.hi)
     }
 
     /// Arcs bounding [s0, s1], each with its s and segment: exact sections at the ends, cached
@@ -1970,6 +2160,9 @@ fn principal_max(d: &SurfDeriv) -> f64 {
 impl Procedural for VarBlend {
     fn deriv(&self, uv: Point2) -> SurfDeriv {
         VarBlend::point(&self.section_at(uv.x), uv.y)
+    }
+    fn point(&self, uv: Point2) -> Point3 {
+        self.arc_at(uv.x).point(uv.y)
     }
     fn domain(&self) -> Domain2 {
         Domain2 {
@@ -2115,6 +2308,216 @@ impl ProceduralCurve for Track {
             .fold(0.0, f64::max);
         let n = range.width() * (a / (8.0 * chord.max(tol::LINEAR))).sqrt();
         (n.ceil() as usize).max(1)
+    }
+}
+
+/// Where a variable blend meets an analytic surface across its arc, as a curve of v (the
+/// fraction of the arc): at each v the s putting B(s, v) on the surface is solved by Newton
+/// along u, so points are exact. A cut that doubles back in v is not one of these.
+#[derive(Debug)]
+pub struct Cut {
+    blend: Arc<VarBlend>,
+    surface: Surface,
+    /// (v, s) along the cut, increasing in v: seeds for the solves and bounds for boxes.
+    knots: Vec<(f64, f64)>,
+    /// Largest |ds/dv| seen between knots, padded.
+    slope: f64,
+}
+
+impl VarBlend {
+    /// The point of the blend at v on `surface` near s: (s, the blend's derivatives there).
+    fn cut_at(&self, surface: &Surface, v: f64, mut s: f64) -> Option<(f64, SurfDeriv)> {
+        let scale = 1.0 + self.radii().1;
+        for _ in 0..40 {
+            let d = Procedural::deriv(self, Point2::new(s, v));
+            let g = surface.implicit(d.p);
+            let gu = surface.gradient(d.p).dot(d.du);
+            if g.abs() <= 1e-13 * scale {
+                return Some((s, d));
+            }
+            if gu.abs() <= 1e-12 * d.du.length().max(1e-300) {
+                return None;
+            }
+            let next = (s - g / gu).clamp(self.lo, self.hi);
+            if next == s {
+                return (g.abs() <= 1e-3 * tol::LINEAR).then_some((s, d));
+            }
+            s = next;
+        }
+        let d = Procedural::deriv(self, Point2::new(s, v));
+        (surface.implicit(d.p).abs() <= 1e-3 * tol::LINEAR).then_some((s, d))
+    }
+
+    /// The cut of the blend by analytic `surface` from `a` to `b` (both on it), with the
+    /// parameters (v) of a and b; None where it is not a function of v between them.
+    pub fn cut(
+        self: &Arc<Self>,
+        surface: &Surface,
+        a: Point3,
+        b: Point3,
+    ) -> Option<(crate::Curve, f64, f64)> {
+        if matches!(surface, Surface::Procedural(_)) {
+            return None;
+        }
+        let (ua, ub) = (self.nearest(a), self.nearest(b));
+        let n = 16;
+        let mut knots = Vec::with_capacity(n + 1);
+        let mut s = ua.x;
+        for i in 0..=n {
+            let v = ua.y + (ub.y - ua.y) * i as f64 / n as f64;
+            let (si, d) = self.cut_at(surface, v, s)?;
+            // a function of v: the surface crosses the blend's u lines transversally
+            let n_s = surface.gradient(d.p);
+            if n_s.dot(d.du).abs() <= 1e-3 * d.du.length() {
+                return None;
+            }
+            s = si;
+            knots.push((v, s));
+        }
+        let ends = |p: Point3, k: (f64, f64)| {
+            Procedural::deriv(&**self, Point2::new(k.1, k.0)).p.distance(p) <= tol::LINEAR
+        };
+        if !ends(a, knots[0]) || !ends(b, knots[n]) {
+            return None;
+        }
+        if ub.y < ua.y {
+            knots.reverse();
+        }
+        let slope = knots
+            .windows(2)
+            .map(|w| ((w[1].1 - w[0].1) / (w[1].0 - w[0].0)).abs())
+            .fold(0.0, f64::max);
+        let cut = Cut {
+            blend: self.clone(),
+            surface: surface.clone(),
+            knots,
+            slope: 2.0 * slope + 1e-9,
+        };
+        Some((crate::Curve::Procedural(ProcCurve(Arc::new(cut))), ua.y, ub.y))
+    }
+}
+
+impl Cut {
+    /// s at v, interpolated between the knots (a seed).
+    fn seed(&self, v: f64) -> f64 {
+        let k = &self.knots;
+        let i = k.partition_point(|x| x.0 <= v).clamp(1, k.len() - 1);
+        let (a, b) = (k[i - 1], k[i]);
+        a.1 + (b.1 - a.1) * (v - a.0) / (b.0 - a.0)
+    }
+
+    /// The s range the cut covers over v in `range`.
+    fn s_span(&self, range: Interval) -> Interval {
+        let mut lo = self.seed(range.lo).min(self.seed(range.hi));
+        let mut hi = self.seed(range.lo).max(self.seed(range.hi));
+        for k in &self.knots {
+            if k.0 > range.lo && k.0 < range.hi {
+                lo = lo.min(k.1);
+                hi = hi.max(k.1);
+            }
+        }
+        let gap = self.knots.windows(2).map(|w| w[1].0 - w[0].0).fold(0.0, f64::max);
+        Interval::new(lo - self.slope * gap, hi + self.slope * gap)
+    }
+}
+
+impl ProceduralCurve for Cut {
+    fn deriv(&self, t: f64) -> CurveDeriv {
+        let b = &self.blend;
+        let Some((_, d)) = b.cut_at(&self.surface, t, self.seed(t)) else {
+            let d = Procedural::deriv(&**b, Point2::new(self.seed(t), t));
+            return CurveDeriv {
+                p: d.p,
+                d1: d.dv,
+                d2: d.dvv,
+            };
+        };
+        // g(B(s(v), v)) = 0: s' from the gradient; s'' leaving out the surface's own curvature
+        let n = self.surface.gradient(d.p);
+        let nu = n.dot(d.du);
+        let sp = -n.dot(d.dv) / nu;
+        let rest = d.duu * (sp * sp) + d.duv * (2.0 * sp) + d.dvv;
+        let spp = -n.dot(rest) / nu;
+        CurveDeriv {
+            p: d.p,
+            d1: d.du * sp + d.dv,
+            d2: rest + d.du * spp,
+        }
+    }
+    fn domain(&self) -> Domain1 {
+        Domain1 {
+            lo: self.knots[0].0,
+            hi: self.knots[self.knots.len() - 1].0,
+            period: None,
+        }
+    }
+    fn closest(&self, p: Point3, range: Interval) -> f64 {
+        let m = 16;
+        let at = |i: usize| (range.lo + range.width() * i as f64 / m as f64).min(range.hi);
+        let mut best = (f64::INFINITY, 0);
+        for i in 0..=m {
+            let d = self.deriv(at(i)).p.distance_sq(p);
+            if d < best.0 {
+                best = (d, i);
+            }
+        }
+        let (lo, hi) = (at(best.1.saturating_sub(1)), at((best.1 + 1).min(m)));
+        let mut t = at(best.1);
+        for _ in 0..30 {
+            let d = self.deriv(t);
+            let g = (d.p - p).dot(d.d1);
+            let h = d.d1.dot(d.d1) + (d.p - p).dot(d.d2);
+            if h <= 0.0 {
+                break;
+            }
+            let next = (t - g / h).clamp(lo, hi);
+            let done = (next - t).abs() <= 1e-14 * (1.0 + t.abs());
+            t = next;
+            if done {
+                break;
+            }
+        }
+        if self.deriv(t).p.distance_sq(p) <= best.0 {
+            t
+        } else {
+            at(best.1)
+        }
+    }
+    fn bbox(&self, range: Interval) -> Box3 {
+        let s = self.s_span(range);
+        Procedural::bbox(
+            &*self.blend,
+            Box2 {
+                u: s,
+                v: Interval::new(range.lo.max(0.0), range.hi.min(1.0)),
+            },
+        )
+    }
+    fn transformed(&self, f: &Frame) -> ProcCurve {
+        ProcCurve(Arc::new(Cut {
+            blend: Arc::new(self.blend.transformed_blend(f)),
+            surface: self.surface.transformed(f),
+            knots: self.knots.clone(),
+            slope: self.slope,
+        }))
+    }
+    fn speed_bound(&self, range: Interval) -> f64 {
+        // the rows' largest |B_u| and |B_v|, padded as the tracks pad theirs
+        let _ = range;
+        let (bu, bv) = Procedural::uv_scale(&*self.blend);
+        1.5 * (bu * self.slope + bv)
+    }
+    fn segments(&self, range: Interval, chord: f64) -> usize {
+        // a chord of parameter length h sags at most h^2 max|P''| / 8
+        let m = 16;
+        let mut acc = 0.0f64;
+        for i in 0..=m {
+            let t = (range.lo + range.width() * i as f64 / m as f64).min(range.hi);
+            acc = acc.max(self.deriv(t).d2.length());
+        }
+        let acc = acc * 1.5 + f64::MIN_POSITIVE;
+        let h = (8.0 * chord / acc).sqrt();
+        ((range.width() / h).ceil() as usize).max(1)
     }
 }
 

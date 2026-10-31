@@ -113,18 +113,19 @@ fn interior_steps(s: &Surface, q: &Quality) -> Option<(f64, f64)> {
     }
 }
 
-/// Largest absolute principal curvature at a regular point (zero at a singular one).
-fn max_curvature(d: &forge_geom::surface::SurfDeriv) -> f64 {
+/// Bounds on the normal curvature of chords running mostly along u and mostly along v at a
+/// regular point (zero at a singular one): each line's own, plus the twist between them.
+fn line_curvatures(d: &forge_geom::surface::SurfDeriv) -> (f64, f64) {
     let Some(n) = d.du.cross(d.dv).normalize() else {
-        return 0.0;
+        return (0.0, 0.0);
     };
     let n = n.get();
-    let (e, f, g) = (d.du.dot(d.du), d.du.dot(d.dv), d.dv.dot(d.dv));
-    let (l, m, nn) = (d.duu.dot(n), d.duv.dot(n), d.dvv.dot(n));
-    let det = e * g - f * f;
-    let h = (e * nn - 2.0 * f * m + g * l) / (2.0 * det);
-    let k = (l * nn - m * m) / det;
-    h.abs() + (h * h - k).max(0.0).sqrt()
+    let (e, g) = (d.du.dot(d.du), d.dv.dot(d.dv));
+    if e <= 0.0 || g <= 0.0 {
+        return (0.0, 0.0);
+    }
+    let twist = (d.duv.dot(n) / (e * g).sqrt()).abs();
+    ((d.duu.dot(n) / e).abs() + twist, (d.dvv.dot(n) / g).abs() + twist)
 }
 
 /// Grid points inside a procedural face's parameter box, each cell of an 8 x 8 split of the
@@ -146,38 +147,40 @@ fn adaptive_grid(
             lo.y + (hi.y - lo.y) * j as f64 / G as f64,
         )
     };
-    // per node: the tightest radius
-    let mut node = [[f64::INFINITY; G + 1]; G + 1];
+    // per node: the tightest radius along u and along v (a blend bends across, hardly along)
+    let mut node = [[(f64::INFINITY, f64::INFINITY); G + 1]; G + 1];
     for (i, row) in node.iter_mut().enumerate() {
         for (j, n) in row.iter_mut().enumerate() {
-            let k = max_curvature(&s.deriv(at(i, j)));
-            if k > 0.0 {
-                *n = 1.0 / k;
-            }
+            let (ku, kv) = line_curvatures(&s.deriv(at(i, j)));
+            *n = (1.0 / ku, 1.0 / kv);
         }
     }
     let r0 = match s {
         Surface::Procedural(pr) => pr.min_radius(),
         _ => f64::INFINITY,
     };
+    let step = |r: f64| {
+        let r = r.max(r0);
+        if r.is_finite() {
+            arc_step(r, q) * r
+        } else {
+            f64::INFINITY
+        }
+    };
     for ci in 0..G {
         for cj in 0..G {
             // the nodes of this cell and its neighbours
-            let mut r = f64::INFINITY;
+            let (mut ru, mut rv) = (f64::INFINITY, f64::INFINITY);
             for row in &node[ci.saturating_sub(1)..(ci + 3).min(G + 1)] {
                 for &n in &row[cj.saturating_sub(1)..(cj + 3).min(G + 1)] {
-                    r = r.min(n);
+                    ru = ru.min(n.0);
+                    rv = rv.min(n.1);
                 }
             }
-            let r = r.max(r0);
-            let l = if r.is_finite() {
-                arc_step(r, q) * r
-            } else {
-                f64::INFINITY
-            };
+            let (lu, lv) = (step(ru), step(rv));
             let (a, b) = (at(ci, cj), at(ci + 1, cj + 1));
-            let nu = ((b.x - a.x) * su / l).ceil().max(1.0) as usize;
-            let nv = ((b.y - a.y) * sv / l).ceil().max(1.0) as usize;
+            let nu = ((b.x - a.x) * su / lu).ceil().max(1.0) as usize;
+            let nv = ((b.y - a.y) * sv / lv).ceil().max(1.0) as usize;
             // each cell owns its low sides; the box's own low sides are boundary
             for i in usize::from(ci == 0)..nu {
                 for j in usize::from(cj == 0)..nv {

@@ -99,7 +99,7 @@ pub const KINDS: &[Kind] = &[
     },
     Kind {
         name: "fillet",
-        syntax: "fillet R REF.. [R REF..]   R: 3 | 2..4 (start..end) | 0:2,0.5:4,1:2 (at:radius)",
+        syntax: "fillet R REF.. [R REF..]   R: 3 | 2..4 (first vertex..other) | 0:2,0.5:4,1:2 (at:radius)",
         parse: |p| {
             let mut edges = Vec::new();
             let mut r = p.radius()?;
@@ -893,7 +893,8 @@ impl P<'_> {
             format!("expected a number, found '{t}'{orient}")
         })
     }
-    /// A fillet radius: constant, linear from start to end, or radii at fractions along.
+    /// A fillet radius: constant, linear from the edge's first vertex (by name) to the other, or
+    /// radii at fractions along from that vertex.
     fn radius(&mut self) -> R<Radius> {
         let t = self.next()?.to_string();
         let bad = || format!("expected a radius (3, 2..4 or 0:2,1:4), found '{t}'");

@@ -220,9 +220,16 @@ fn loops_cross(loops: &[UvLoop]) -> bool {
         })
         .filter(|s| s.0 != s.1)
         .collect();
+    // swept along u: only segments whose u spans overlap are compared
+    let mut segs = segs;
+    segs.sort_by(|p, q| p.0.x.min(p.1.x).total_cmp(&q.0.x.min(q.1.x)));
     let opposite = |p: f64, q: f64| (p < 0.0 && q > 0.0) || (p > 0.0 && q < 0.0);
     for i in 0..segs.len() {
+        let reach = segs[i].0.x.max(segs[i].1.x);
         for j in i + 1..segs.len() {
+            if segs[j].0.x.min(segs[j].1.x) > reach {
+                break;
+            }
             let ((a, b), (c, d)) = (segs[i], segs[j]);
             if a == c || a == d || b == c || b == d {
                 continue;

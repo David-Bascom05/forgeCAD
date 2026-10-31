@@ -196,19 +196,37 @@ pub fn with_var_fillet(part: &Part, near: &[(Point3, Radius)]) -> Part {
     out
 }
 
-/// A fillet case's picks: each edge's middle and start, and its radius.
+/// A fillet case's picks: each edge's middle, its first vertex (the one a law runs from)
+/// and its radius.
 pub type Pick = (Point3, Point3, Radius);
 
+/// The point of edge `e`'s first vertex (by name), the one its radius law runs from.
+fn first_vertex(body: &Body, e: forge_topo::EdgeId) -> Point3 {
+    let x = body.edge(e);
+    let v = if body.vertex(x.start).name <= body.vertex(x.end).name {
+        x.start
+    } else {
+        x.end
+    };
+    body.vertex(v).point
+}
+
 /// `part` followed by the fillet of `picks`, the edges picked from `body` (the part as
-/// some regeneration made it) and each law turned round where that body runs the edge
-/// the other way.
+/// some regeneration made it, which may name things differently), each law turned round
+/// where its first vertex there is the other end.
 pub fn with_fillet_from(part: &Part, body: &Body, picks: &[Pick]) -> Part {
     let edges = picks
         .iter()
-        .map(|(mid, start, r)| {
+        .map(|(mid, first, r)| {
             let n = edge_near(body, *mid);
-            let e = body.edge(body.edge_by_name(n).expect("named edge"));
-            let flip = e.curve.eval(e.range.lo).distance(*start) > e.curve.eval(e.range.hi).distance(*start);
+            let e = body.edge_by_name(n).expect("named edge");
+            let x = body.edge(e);
+            let other = if first_vertex(body, e) == body.vertex(x.start).point {
+                body.vertex(x.end).point
+            } else {
+                body.vertex(x.start).point
+            };
+            let flip = x.start != x.end && first_vertex(body, e).distance(*first) > other.distance(*first);
             (n, if flip { r.reversed() } else { r.clone() })
         })
         .collect();
@@ -227,8 +245,9 @@ pub fn picks(part: &Part) -> Vec<Pick> {
     edges
         .iter()
         .map(|(n, r)| {
-            let e = body.edge(body.edge_by_name(*n).expect("named edge"));
-            (e.curve.eval(e.range.mid()), e.curve.eval(e.range.lo), r.clone())
+            let e = body.edge_by_name(*n).expect("named edge");
+            let x = body.edge(e);
+            (x.curve.eval(x.range.mid()), first_vertex(&body, e), r.clone())
         })
         .collect()
 }
@@ -786,6 +805,21 @@ pub fn cases() -> Vec<(&'static str, Part, Option<f64>)> {
         with_fillet(&l_bar(), &[(Point3::new(0.0, 6.0, 8.0), r)]),
         Some(20.0 * 66.0 - spandrel(r) * 8.0 - ledge * 2.0),
     ));
+    // a pocket in the front face just under the top edge: the ball rolls over it partway
+    // along, cutting its walls and roof (the roof's front edge lies in the round and goes);
+    // over the pocket only the corner left of the round outside the pocket is cut away
+    let r = 2.0;
+    let mut pocketed = boxed.clone();
+    pocketed
+        .features
+        .push(block_at(Point3::new(8.0, -1.0, 3.0), 4.0, 2.0, 4.0, Combine::Cut));
+    let y0 = 2.0 - 3f64.sqrt();
+    let lens = y0 - (pi - 0.75f64.sqrt() - 2.0 * pi / 3.0);
+    out.push((
+        "box-edge-over-pocket",
+        with_fillet(&pocketed, &[(Point3::new(10.0, 0.0, 8.0), r)]),
+        Some(1600.0 - 16.0 - 20.0 * spandrel(r) + 4.0 * lens),
+    ));
     out.extend(variable_cases());
     out
 }
@@ -1003,7 +1037,7 @@ pub fn variable_cases() -> Vec<(&'static str, Part, Option<f64>)> {
                 &rounded,
                 &[
                     (Point3::new(10.0, 0.0, 6.0), 1.0.into()),
-                    (Point3::new(20.0, 6.0, 6.0), 1.6.into()),
+                    (Point3::new(20.0, 6.0, 6.0), 1.3.into()),
                 ],
             ),
             None,
@@ -1019,7 +1053,7 @@ pub fn variable_cases() -> Vec<(&'static str, Part, Option<f64>)> {
                 &corner,
                 &[
                     (Point3::new(8.0, 0.0, 8.0), 1.0.into()),
-                    (Point3::new(20.0, 6.0, 8.0), 1.6.into()),
+                    (Point3::new(20.0, 6.0, 8.0), 1.3.into()),
                 ],
             ),
             None,
@@ -1049,6 +1083,17 @@ pub fn variable_cases() -> Vec<(&'static str, Part, Option<f64>)> {
                 &l_bar(),
                 &[(Point3::new(0.0, 6.0, 8.0), Radius::Linear(1.6, 2.4))],
             ),
+            None,
+        ),
+        (
+            "box-linear-over-pocket",
+            {
+                let mut pocketed = boxed.clone();
+                pocketed
+                    .features
+                    .push(block_at(Point3::new(8.0, -1.0, 3.0), 4.0, 2.0, 4.0, Combine::Cut));
+                with_var_fillet(&pocketed, &[(front, Radius::Linear(1.6, 2.4))])
+            },
             None,
         ),
         (
