@@ -299,9 +299,13 @@ pub fn trace(a: &Surface, b: &Surface, region: Box3) -> Option<Vec<IntCurve>> {
             })
         })
     };
+    let boxed = pa.is_some() || pb.is_some();
     let mut stack = vec![(region.center(), half * 3f64.sqrt())];
     while let Some((c, r)) = stack.pop() {
-        if !reaches(&pa, c, r) || !reaches(&pb, c, r) || a.implicit(c).abs() > r || b.implicit(c).abs() > r {
+        if (boxed && (!reaches(&pa, c, r) || !reaches(&pb, c, r)))
+            || a.implicit(c).abs() > r
+            || b.implicit(c).abs() > r
+        {
             continue;
         }
         if 2.0 * r <= leaf {

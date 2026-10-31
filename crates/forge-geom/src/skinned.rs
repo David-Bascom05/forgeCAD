@@ -532,6 +532,49 @@ impl Poly {
     }
 }
 
+impl Poly {
+    /// A box holding the points over `uv`, span by span.
+    fn bbox(&self, spline: &Spline, uv: Box2) -> Box3 {
+        let k = &spline.knots;
+        let mut out = Box3::EMPTY;
+        let mut lo = uv.v.lo;
+        loop {
+            let i = spline.span(lo);
+            let hi = if i + 2 < k.len() {
+                uv.v.hi.min(k[i + 1])
+            } else {
+                uv.v.hi
+            };
+            let h = k[i + 1] - k[i];
+            let b = (Interval::new(lo, hi.max(lo)) + (-k[i])) * (1.0 / h);
+            let cubic = |c: &[Vec3; 4]| {
+                let f = |x: fn(&Vec3) -> f64| ((b * x(&c[3]) + x(&c[2])) * b + x(&c[1])) * b + x(&c[0]);
+                [f(|v| v.x), f(|v| v.y), f(|v| v.z)]
+            };
+            let sp = &self.spans[i];
+            let (a, e) = (cubic(&sp[0]), cubic(&sp[3]));
+            let mut p = [0, 1, 2].map(|j| a[j] + e[j] * uv.u);
+            if self.arcs {
+                let ang = uv.u * self.sweep + self.start;
+                let (cs, sn) = (ang.cos(), ang.sin());
+                let (bb, dd) = (cubic(&sp[1]), cubic(&sp[2]));
+                for j in 0..3 {
+                    p[j] = p[j] + bb[j] * cs + dd[j] * sn;
+                }
+            }
+            out = out.hull(&Box3 {
+                x: p[0],
+                y: p[1],
+                z: p[2],
+            });
+            if hi >= uv.v.hi {
+                return out.grow(tol::LINEAR);
+            }
+            lo = hi;
+        }
+    }
+}
+
 impl Data {
     fn new(rails: Vec<Rail>, slopes: Vec<Vec3>, spline: Arc<Spline>, shifts: Vec<Shift>) -> Data {
         let poly = Poly::new(&rails, &slopes, &spline, &shifts);
@@ -633,6 +676,9 @@ impl Data {
     }
 
     fn piece_box(&self, uv: Box2) -> Box3 {
+        if let Some(p) = &self.poly {
+            return p.bbox(&self.spline, uv);
+        }
         let w = self.spline.weight_box(uv.v, 0);
         // the values' weights sum to one: measured from a point of the piece, the sum stays
         // as small as the piece
@@ -1223,7 +1269,7 @@ mod tests {
     }
 
     #[test]
-    fn per_span_form_matches_the_sum() {
+    fn per_span_form_matches_the_sum_and_boxes_it() {
         let mut r = Rng::new(11);
         for _ in 0..40 {
             let (rails, spline, slopes) = random(&mut r);
@@ -1246,6 +1292,23 @@ mod tests {
                     (fast.dvv, sum.dvv),
                 ] {
                     assert!((a - b).length() <= 1e-12 * scale, "{uv:?}: {a:?} vs {b:?}");
+                }
+            }
+            for _ in 0..20 {
+                let (u0, v0) = (r.range(-0.25, 1.0), r.range(k[0] - 2.0, k[k.len() - 1]));
+                let uv = Box2::new(
+                    Interval::new(u0, u0 + r.range(0.0, 0.5)),
+                    Interval::new(v0, v0 + r.range(0.0, 8.0)),
+                );
+                let b = d.piece_box(uv);
+                for i in 0..=6 {
+                    for j in 0..=6 {
+                        let q = Point2::new(
+                            uv.u.lo + uv.u.width() * i as f64 / 6.0,
+                            uv.v.lo + uv.v.width() * j as f64 / 6.0,
+                        );
+                        assert!(b.contains(d.point(q).p), "{uv:?} {q:?}");
+                    }
                 }
             }
         }
