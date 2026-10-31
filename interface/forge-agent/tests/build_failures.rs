@@ -375,3 +375,31 @@ extrude cut 12 z 0 -1 0 x 1 0 0 at 0 -1 0 loop line 2.5 -34 2.499985 -21.5 line 
 ",
     );
 }
+
+/// A tube with a triangular prism cut, its slanted face passing exactly through the tube's far rim:
+/// the ellipse where it meets the wall only touches the rim there, one cut on a closed curve, and
+/// the whole loop was taken to run along the boundary. The cut lost a tenth of itself, silently.
+#[test]
+fn an_ellipse_touching_a_rim_still_cuts() {
+    let src = "extrude 150 z 0 1 0 x 1 0 0 circle 0 0 8 circle 0 0 6
+extrude cut two 9 9 z 0 0 1 x 1 0 0 poly 8 150 -8 150 8 135
+";
+    let v = builds(src);
+    let exact = forge_topo::mass::mass(Model::new(src).body().expect("a body"))
+        .expect("mass")
+        .volume;
+    assert!((v - exact).abs() < 1e-2 * exact, "{v} {exact}");
+    // the same a hair off, where the ellipse crosses the rim
+    let near = forge_topo::mass::mass(
+        Model::new(
+            "extrude 150 z 0 1 0 x 1 0 0 circle 0 0 8 circle 0 0 6
+extrude cut two 9 9 z 0 0 1 x 1 0 0 poly 8.0000002 150.0000002 -8.0000002 150.0000002 8.0000002 135
+",
+        )
+        .body()
+        .expect("a body"),
+    )
+    .expect("mass")
+    .volume;
+    assert!((near - exact).abs() < 1e-3 * exact, "{near} {exact}");
+}

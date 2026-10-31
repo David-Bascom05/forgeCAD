@@ -1821,7 +1821,7 @@ pub(crate) fn trim(
     // edges the curve runs along: (side, edge, is a seam)
     let mut along: Vec<(Side, EdgeId, bool)> = Vec::new();
     // springs crossed by the spring against the other surface
-    let mut fenced: Vec<(usize, EdgeId, forge_topo::CoedgeId)> = Vec::new();
+    let mut fenced: Vec<(usize, EdgeId)> = Vec::new();
     // a traced branch's ends, where it may stop on an edge
     let ends = (!closed && domain.lo.is_finite() && domain.hi.is_finite())
         .then(|| [range.lo, range.hi].map(|t| (t, curve.eval(t))));
@@ -1879,28 +1879,38 @@ pub(crate) fn trim(
                 let other_surface = &bodies[1 - k].face(faces[1 - k]).surface;
                 let on_spring = matches!(&edge.curve, Curve::Procedural(pc)
                         if pc.0.as_any().is_some_and(|a| a.is::<forge_geom::blend::Spring>()))
-                    && matches!(across, Surface::Procedural(_))
                     && !matches!(other_surface, Surface::Procedural(_));
                 let found = if on_spring {
-                    fenced.push((k, e, c));
+                    fenced.push((k, e));
                     // (a crossing lies on the other face too: in its box)
                     let other_box = index[1 - k].face_box(faces[1 - k]).grow(tol::LINEAR);
                     if !other_box.overlaps(&reach) {
                         continue;
                     }
                     let within = overlap(&other_box, &reach);
-                    match curve_surface_in(&edge.curve, edge.range, other_surface, || Some(within)) {
-                        CurveSurface::Hits(more) => CurveSurface::Hits(
-                            more.into_iter()
-                                .filter_map(|h| {
-                                    let t = curve.closest(h.point, range);
-                                    (curve.eval(t).distance(h.point) <= tol::LINEAR)
-                                        .then_some(CurveHit { t, ..h })
-                                })
-                                .collect(),
-                        ),
-                        other => other,
+                    let spring = match &edge.curve {
+                        Curve::Procedural(pc) => {
+                            pc.0.as_any()
+                                .and_then(|a| a.downcast_ref::<forge_geom::blend::Spring>())
+                        }
+                        _ => None,
+                    };
+                    let stretches = spring.map_or(vec![edge.range], |sp| {
+                        sp.crossing_stretches(edge.range, other_surface, &within)
+                    });
+                    let mut hs = Vec::new();
+                    let mut other = None;
+                    for r in stretches {
+                        match curve_surface_in(&edge.curve, r, other_surface, || Some(within)) {
+                            CurveSurface::Hits(more) => hs.extend(more.into_iter().filter_map(|h| {
+                                let t = curve.closest(h.point, range);
+                                (curve.eval(t).distance(h.point) <= tol::LINEAR)
+                                    .then_some(CurveHit { t, ..h })
+                            })),
+                            o => other = Some(o),
+                        }
                     }
+                    other.unwrap_or(CurveSurface::Hits(hs))
                 } else {
                     curve_surface_in(&curve, range, &across, near)
                 };
@@ -2078,9 +2088,18 @@ pub(crate) fn trim(
         at.len() % 2 == 1
     };
     if closed && FENCES.with(|f| f.get()) && fenced.iter().any(|x| odd(x.0)) {
-        for &(k, e, c) in &fenced {
-            let (body, f, side) = (bodies[k], faces[k], sides[k]);
-            let across = across(body, f, c)?;
+        for &(k, e) in &fenced {
+            let (body, side) = (bodies[k], sides[k]);
+            let Curve::Procedural(pc) = &body.edge(e).curve else {
+                continue;
+            };
+            let Some(spring) =
+                pc.0.as_any()
+                    .and_then(|a| a.downcast_ref::<forge_geom::blend::Spring>())
+            else {
+                continue;
+            };
+            let across = spring.fence();
             let box_e = Some(body.edge_box(e).grow(2.0 * tol::LINEAR));
             if let CurveSurface::Hits(hs) = curve_surface_in(&curve, range, &across, || box_e) {
                 for h in hs {
@@ -2242,6 +2261,24 @@ pub(crate) fn trim(
                 .then_some(mid)
         })
         .collect();
+    // a closed curve with no second cut whose far point touches a boundary (an ellipse's top on the
+    // rim its plane passes through), inside both faces elsewhere: a vertex there, or no sample of
+    // the whole loop says it is a new edge and the cut is lost
+    let mut loops = loops;
+    if closed && ts.len() <= 1 {
+        let (t0, t1) = ts.first().map_or((range.lo, range.hi), |&(t, _)| (t, t + period));
+        let mid = 0.5 * (t0 + t1);
+        let at = |t: f64| {
+            let p = curve.eval(t);
+            (0..2).map(move |k| (k, p))
+        };
+        let touches = at(mid).any(|(k, p)| index[k].point_in_face(faces[k], p) == Where::On);
+        let inside_else = at(t0 + 0.381_966_011_250_105_1 * (t1 - t0))
+            .all(|(k, p)| index[k].point_in_face(faces[k], p) == Where::Inside);
+        if touches && inside_else {
+            loops.push(mid);
+        }
+    }
     for t in loops {
         let t = if closed && t >= range.hi { t - period } else { t };
         ts.push((t, cuts.len()));
@@ -2315,8 +2352,8 @@ pub(crate) fn trim(
             if f != 0.5 && curve.eval(t0).distance(p).min(curve.eval(t1).distance(p)) <= 4.0 * tol::LINEAR {
                 break;
             }
-            // only a closed curve whole (no cut, or one) touching a boundary would need a vertex
-            // there, which no sample gives. Between two cuts, a stretch from one edge back to the
+            // a closed curve whole (no cut, or one) that touches a boundary has a vertex there by now
+            // (above). Between two cuts, a stretch from one edge back to the
             // same edge, with its middle on that edge, runs along it; one whose middle is on
             // another edge only passes it within tolerance (a tool's edge a hair clear of the
             // surface makes no cut there) and is a new edge if it is inside elsewhere

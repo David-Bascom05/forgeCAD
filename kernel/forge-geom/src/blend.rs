@@ -637,6 +637,7 @@ impl Blend {
             d,
             on,
             smooth: OnceLock::new(),
+            samples: OnceLock::new(),
         })))
     }
 }
@@ -692,9 +693,72 @@ pub struct Spring {
     pub on: Option<(Surface, f64)>,
     /// `smooth`'s spring and its spine, made on first use.
     smooth: OnceLock<Option<(Curve, Arc<ChordCurve>)>>,
+    /// Points along the whole spring with their parameters, made on first use (`can_cross`).
+    samples: OnceLock<Vec<(f64, Point3)>>,
 }
 
 impl Spring {
+    /// The surface standing across the spring: the rays from the spine through it. Slow: only
+    /// for a crossing the spring against the other face's surface has missed.
+    pub fn fence(&self) -> Surface {
+        Surface::Procedural(Proc(Arc::new(Fence {
+            spring: Spring {
+                spine: self.spine.clone(),
+                surface: self.surface.clone(),
+                d: self.d,
+                on: None,
+                smooth: OnceLock::new(),
+                samples: OnceLock::new(),
+            },
+        })))
+    }
+
+    /// The stretches of `range` where the spring can meet `s` inside `within`: all but those whose
+    /// every stretch between samples stays clear, by the distance to `s` at its ends against its
+    /// length. Cheap beside a search: an edge of a filleted part meets many tools' faces it never
+    /// reaches, and reaches few of the rest along all its length.
+    /// `s` must be analytic (its implicit a distance, within the factor allowed here).
+    pub fn crossing_stretches(&self, range: Interval, s: &Surface, within: &Box3) -> Vec<Interval> {
+        let d = self.spine.domain();
+        let whole = || vec![range];
+        // a range past the first period, or a spine with no finite domain: searched whole
+        if !(d.lo.is_finite() && d.hi.is_finite()) || range.lo < d.lo || range.hi > d.hi {
+            return whole();
+        }
+        let pts = self.samples.get_or_init(|| {
+            let n = 64;
+            (0..=n)
+                .map(|i| {
+                    let t = d.lo + (d.hi - d.lo) * i as f64 / n as f64;
+                    (t, self.at(t))
+                })
+                .collect()
+        });
+        let mut out: Vec<Interval> = Vec::new();
+        for pair in pts.windows(2) {
+            let ((ta, a), (tb, b)) = (pair[0], pair[1]);
+            let (lo, hi) = (ta.max(range.lo), tb.min(range.hi));
+            if lo >= hi {
+                continue;
+            }
+            // the curve between samples: twice the chord bounds it where a sample step turns little
+            let len = 2.0 * a.distance(b) + tol::LINEAR;
+            let mid = Point3::new(0.5 * (a.x + b.x), 0.5 * (a.y + b.y), 0.5 * (a.z + b.z));
+            if !within.grow(len).contains(mid) {
+                continue;
+            }
+            let (ga, gb) = (s.implicit(a), s.implicit(b));
+            if ga * gb > 0.0 && 0.5 * (ga.abs() + gb.abs()) > len {
+                continue;
+            }
+            match out.last_mut() {
+                Some(l) if l.hi >= lo => l.hi = hi,
+                _ => out.push(Interval::new(lo, hi)),
+            }
+        }
+        out
+    }
+
     fn at(&self, t: f64) -> Point3 {
         foot(&self.surface, self.d, self.spine.eval(t))
     }
@@ -755,6 +819,7 @@ impl ProceduralCurve for Spring {
                     d: self.d,
                     on: self.on.as_ref().map(|(s, v)| (s.smooth().clone(), *v)),
                     smooth: OnceLock::new(),
+                    samples: OnceLock::new(),
                 })));
                 Some((twin, c))
             })
@@ -810,17 +875,6 @@ impl ProceduralCurve for Spring {
     fn as_any(&self) -> Option<&dyn std::any::Any> {
         Some(self)
     }
-    fn across(&self) -> Option<Surface> {
-        Some(Surface::Procedural(Proc(Arc::new(Fence {
-            spring: Spring {
-                spine: self.spine.clone(),
-                surface: self.surface.clone(),
-                d: self.d,
-                on: None,
-                smooth: OnceLock::new(),
-            },
-        }))))
-    }
     fn transformed(&self, f: &Frame) -> ProcCurve {
         ProcCurve(Arc::new(Spring {
             spine: self.spine.transformed(f),
@@ -828,6 +882,7 @@ impl ProceduralCurve for Spring {
             d: self.d,
             on: None,
             smooth: OnceLock::new(),
+            samples: OnceLock::new(),
         }))
     }
     fn speed_bound(&self, range: Interval) -> f64 {
@@ -927,6 +982,7 @@ impl Procedural for Fence {
                 d: self.spring.d,
                 on: None,
                 smooth: OnceLock::new(),
+                samples: OnceLock::new(),
             },
         }))
     }
