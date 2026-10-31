@@ -65,12 +65,12 @@ pub enum Problem {
     ShellsOverlap {
         face: FaceId,
     },
-    /// One shell's V - E + 2F - L is odd or above 2 (`certify`).
+    /// One shell's V - E + 2F - L is odd or above 2.
     ShellEuler {
         shell: crate::body::ShellId,
         value: i64,
     },
-    /// The faces round a vertex form more than one fan: the surface is pinched there (`certify`).
+    /// The faces round a vertex form more than one fan: the surface is pinched there.
     VertexFans {
         vertex: VertexId,
         fans: usize,
@@ -95,11 +95,18 @@ pub fn check(body: &Body) -> Vec<Problem> {
     }
     check_names(body, &mut out);
     check_euler(body, &mut out);
+    // per shell and per vertex only once every edge has its two uses and every loop closes
+    if !out
+        .iter()
+        .any(|p| matches!(p, Problem::EdgeUses { .. } | Problem::LoopBroken { .. }))
+    {
+        check_shell_euler(body, &mut out);
+        check_fans(body, &mut out);
+    }
     out
 }
 
-/// `check`, then what it does not look at: each shell's Euler-Poincare count, one fan of faces
-/// round every vertex (a closed 2-manifold), and every edge on its faces at 256 samples.
+/// `check`, then every edge on its faces at 256 samples rather than 16.
 pub fn certify(body: &Body) -> Vec<Problem> {
     if body.dead > 0 {
         return certify(&body.compact());
@@ -111,8 +118,6 @@ pub fn certify(body: &Body) -> Vec<Problem> {
     {
         return out;
     }
-    certify_shells(body, &mut out);
-    certify_fans(body, &mut out);
     for e in body.edge_ids() {
         let mut faces: Vec<FaceId> = body
             .edge(e)
@@ -138,7 +143,7 @@ pub fn certify(body: &Body) -> Vec<Problem> {
     out
 }
 
-fn certify_shells(body: &Body, out: &mut Vec<Problem>) {
+fn check_shell_euler(body: &Body, out: &mut Vec<Problem>) {
     for (si, shell) in body.shells.iter().enumerate() {
         let (mut f, mut l) = (0i64, 0i64);
         let (mut edges, mut verts) = (Vec::new(), Vec::new());
@@ -169,7 +174,7 @@ fn certify_shells(body: &Body, out: &mut Vec<Problem>) {
 
 /// Round each vertex, coedge to coedge: from one leaving it, back along its loop to the one
 /// arriving, then across to that one's partner, which leaves it again. One cycle is one fan.
-fn certify_fans(body: &Body, out: &mut Vec<Problem>) {
+fn check_fans(body: &Body, out: &mut Vec<Problem>) {
     let mut prev = vec![CoedgeId(0); body.coedges.len()];
     let mut leaving: Vec<Vec<CoedgeId>> = vec![Vec::new(); body.vertices.len()];
     for l in body.loop_ids() {
