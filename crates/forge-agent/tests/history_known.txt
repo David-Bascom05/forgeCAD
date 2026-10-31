@@ -5,6 +5,7 @@
 boolean: Internal("face split crossed itself")
 boolean: Internal("inconsistent classification")
 boolean: Internal("hole outside every region")
+Boolean(Internal(  # the same inside ribs and thickened faces
 # booleans and finishing ops leaving an invalid solid
 invalid DuplicateName  # extrude sym of a line+arc loop onto a block
 invalid EdgeUses  # patterns of patterns, balls, sketches

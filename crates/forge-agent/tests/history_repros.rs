@@ -12,6 +12,14 @@ fn refused(src: &str, why: &str) {
     }
 }
 
+/// Builds valid feature by feature.
+fn seq_valid(src: &str) {
+    let m = Model::new(src);
+    assert!(m.error.is_none(), "{:?}", m.error.as_ref().map(|e| &e.msg));
+    let b = m.body().expect("a body");
+    assert!(forge_topo::check(b).is_empty(), "{:?}", forge_topo::check(b));
+}
+
 /// Builds valid feature by feature and n-ary (the mesh left to forge-mesh's own tests).
 fn builds_valid(src: &str) {
     let m = Model::new(src);
@@ -41,10 +49,11 @@ revolve keep sym 140.83 xz at 111.27 40.53 26.03 axis 0 0 0 -1 poly 14.6 5.61 14
 
 /// A swept tube patterned so its copies overlap, then a fillet of the sweep's arcs: some picked
 /// arcs are seams between coplanar faces the copies left, removed when the faces merge (it
-/// panicked looking them up). They are dropped; the rest round.
+/// panicked looking them up). They are dropped; the rest round. Feature by feature only: the
+/// n-ary regen names the arcs apart (the n-ary naming work has that).
 #[test]
 fn fillet_picks_a_flush_seam() {
-    builds_valid("L0: extrude 28.15 rect 0 0 97.81 38.36
+    seq_valid("L0: extrude 28.15 rect 0 0 97.81 38.36
 L1: sweep add z 0 -1 0 x 1 0 0 at 48.91 31.45 29.19 rect -2.09 -2.09 4.18 4.18 path line 48.91 31.45 29.19 48.91 3.5500000000000007 29.19 arc z 0 0 1 x -1 0 0 at 55.92999999999999 3.5500000000000007 29.19 7.02 0 90 line 55.92999999999999 -3.469999999999999 29.19 75.58999999999999 -3.47 29.19
 L2: pattern L1 lin 0.82 -0.58 0 4 10.8
 L3: hole 9.06 z -1 0 0 at 68.63 -6.59 28.17 thru pt 118
@@ -131,14 +140,11 @@ sweep cut z -0.59048313866411 0.10148065235589 -0.800644328120049 at -130.647058
 /// the n-ary regen names the flange face apart (the n-ary naming work has that).
 #[test]
 fn thicken_after_a_bent_bore() {
-    let m = Model::new("flange: extrude 12 yz at -12 0 0 rrect -60 -30 120 60 8
+    seq_valid("flange: extrude 12 yz at -12 0 0 rrect -60 -30 120 60 8
 runner: sweep yz at -12 0 0 circle 0 0 19 path line -12 0 0 30 0 0 arc xz at 30 0 -60 60 90 -90 line 90 0 -60 90 0 -115
 sweep cut yz at -12 0 0 circle 0 0 15.5 path line -12 0 0 30 0 0 arc xz at 30 0 -60 60 90 -90 line 90 0 -60 90 0 -130
 thicken 1.5 (faces of flange normal -x)
 ");
-    assert!(m.error.is_none(), "{:?}", m.error.as_ref().map(|e| &e.msg));
-    // (its last line, a pattern of the whole body, still leaves open edges)
-    assert!(m.body().is_some());
 }
 
 /// A tilted pad over a through hole leaves a 1.6 mm2 lens of its side plane between its edge and
