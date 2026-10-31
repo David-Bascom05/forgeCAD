@@ -1,5 +1,5 @@
 use crate::body::{Body, CoedgeId, Edge, FaceId, LoopId};
-use forge_geom::{Curve, CurveGeom, Domain2, Surface, SurfaceGeom};
+use forge_geom::{Curve, CurveGeom, Domain2, SurfaceGeom};
 use forge_math::{Box3, Interval, Point2, Point3, dmath};
 
 /// A face loop drawn in its surface's parameter plane, with periodic
