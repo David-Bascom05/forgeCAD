@@ -2236,22 +2236,52 @@ fn nary_body(
     // without it, each new region taking the verdict of the old ones it is made of. The edge of
     // a later tool's coincident face imprinted between two kept regions stays, as in the
     // sequential regen (the face was there first and took the imprint)
+    // nothing of a face all dropped is sewn, however it is split
+    let live: Vec<bool> = job_regs
+        .iter()
+        .map(|rr| rr.len() >= 2 && rr.clone().any(|ri| class[ri].is_some()))
+        .collect();
+    // the region each half of a new edge (or of an edge of another tool) bounds on a live face:
+    // by piece, its (half, region) on each face it lies on
+    let (regs_at, list_at) = (&regs, &list);
+    let halves = |j: usize| {
+        let side = jobs[j].0;
+        job_regs[j]
+            .clone()
+            .flat_map(move |ri| regs_at[ri].loops.iter().flatten().map(move |&h| (h, ri)))
+            .filter(move |(h, _)| list_at[h.0].seg.is_some() || list_at[h.0].side != Some(side))
+    };
+    let mut at = vec![0u32; list.len() + 1];
+    for j in (0..jobs.len()).filter(|&j| live[j]) {
+        for (h, _) in halves(j) {
+            at[h.0 + 1] += 1;
+        }
+    }
+    for i in 1..at.len() {
+        at[i] += at[i - 1];
+    }
+    let mut owners: Vec<(bool, u32)> = vec![(false, 0); at[list.len()] as usize];
+    {
+        let mut next = at.clone();
+        for j in (0..jobs.len()).filter(|&j| live[j]) {
+            for (h, ri) in halves(j) {
+                owners[next[h.0] as usize] = (h.1, ri as u32);
+                next[h.0] += 1;
+            }
+        }
+    }
     let merged = par_map(jobs.len(), threads, 16, |j| -> R<Option<Vec<Judged>>> {
-        let rr = job_regs[j].clone();
-        // nothing of a face all dropped is sewn, however it is split
-        if rr.len() < 2 || rr.clone().all(|ri| class[ri].is_none()) {
+        if !live[j] {
             return Ok(None);
         }
+        let rr = job_regs[j].clone();
         let (side, f, ref boundary, ref new_edges) = jobs[j];
-        // the region each new edge's half bounds (and each half of the face's edges not of its
-        // tool), sorted for lookup
-        let mut owners: Vec<((usize, bool), usize)> = rr
-            .clone()
-            .flat_map(|ri| regs[ri].loops.iter().flatten().map(move |&h| (h, ri)))
-            .filter(|(h, _)| list[h.0].seg.is_some() || list[h.0].side != Some(side))
-            .collect();
-        owners.sort_unstable();
-        let owner = |h: (usize, bool)| owners.binary_search_by(|x| x.0.cmp(&h)).ok().map(|i| owners[i].1);
+        let owner = |h: (usize, bool)| {
+            owners[at[h.0] as usize..at[h.0 + 1] as usize]
+                .iter()
+                .find(|x| x.0 == h.1 && rr.contains(&(x.1 as usize)))
+                .map(|x| x.1 as usize)
+        };
         let keep: Vec<usize> = new_edges
             .iter()
             .copied()
