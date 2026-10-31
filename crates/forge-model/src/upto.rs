@@ -826,8 +826,13 @@ pub(crate) fn named_surface(f: &Feature, k: usize, name: Name) -> Option<Surface
 /// Where a plain solid's boundary may cross the line `o + t d`: each t with the surface there.
 fn hits(sh: &Shape, o: Point3, d: Vec3, out: &mut Vec<(f64, Option<Surface>)>) {
     match sh {
-        // no closed form to cross: next_face refuses rays through these
-        Shape::Brep(_) | Shape::Coil { .. } => {}
+        // no closed form to cross: a mark, and next_face refuses rays through these
+        Shape::Brep(b) => {
+            if ray_meets(b, o, d) {
+                out.push((f64::NAN, None));
+            }
+        }
+        Shape::Coil { .. } => out.push((f64::NAN, None)),
         Shape::Csg { first, rest } => {
             hits(first, o, d, out);
             for (_, p) in rest {
@@ -1000,32 +1005,21 @@ fn on_sweep(a: f64, start: f64, sweep: f64) -> bool {
     (a - lo).rem_euclid(dmath::TAU) <= w
 }
 
-/// Whether the ray from `o` along `d` passes a part with no closed-form faces (a coil, or a
-/// loft's box).
-fn opaque_on_ray(sh: &Shape, o: Point3, d: Vec3) -> bool {
-    let through = |b: &forge_math::Box3| {
-        let (mut lo, mut hi) = (0.0f64, f64::INFINITY);
-        for (oi, di, iv) in [(o.x, d.x, b.x), (o.y, d.y, b.y), (o.z, d.z, b.z)] {
-            if di == 0.0 {
-                if oi < iv.lo || oi > iv.hi {
-                    return false;
-                }
-                continue;
+/// Whether the ray from `o` along `d` meets box `b`.
+fn ray_meets(b: &forge_math::Box3, o: Point3, d: Vec3) -> bool {
+    let (mut lo, mut hi) = (0.0f64, f64::INFINITY);
+    for (oi, di, iv) in [(o.x, d.x, b.x), (o.y, d.y, b.y), (o.z, d.z, b.z)] {
+        if di == 0.0 {
+            if oi < iv.lo || oi > iv.hi {
+                return false;
             }
-            let (t0, t1) = ((iv.lo - oi) / di, (iv.hi - oi) / di);
-            lo = lo.max(t0.min(t1));
-            hi = hi.min(t0.max(t1));
+            continue;
         }
-        lo <= hi
-    };
-    match sh {
-        Shape::Brep(b) => through(b),
-        Shape::Coil { .. } => true,
-        Shape::Csg { first, rest } => {
-            opaque_on_ray(first, o, d) || rest.iter().any(|(_, p)| opaque_on_ray(p, o, d))
-        }
-        _ => false,
+        let (t0, t1) = ((iv.lo - oi) / di, (iv.hi - oi) / di);
+        lo = lo.max(t0.min(t1));
+        hi = hi.min(t0.max(t1));
     }
+    lo <= hi
 }
 
 /// Whether the part the tools make holds `p` (None: on a boundary).
@@ -1051,10 +1045,11 @@ fn holds(tools: &[(Shape, Op)], p: Point3) -> Option<bool> {
 pub(crate) fn next_face(tools: &[(Shape, Op)], o: Point3, d: Vec3) -> Result<(Surface, bool), ExtentError> {
     let mut cand = Vec::new();
     for (sh, _) in tools {
-        if opaque_on_ray(sh, o, d) {
-            return Err(ExtentError::Unsupported("the next face past a coil or loft"));
-        }
         hits(sh, o, d, &mut cand);
+    }
+    // a part with no closed-form faces on the ray leaves a mark (NaN) instead of hits
+    if cand.iter().any(|c| c.0.is_nan()) {
+        return Err(ExtentError::Unsupported("the next face past a coil or loft"));
     }
     let eps = tol::LINEAR;
     cand.retain(|c| c.0 > eps);
