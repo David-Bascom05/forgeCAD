@@ -815,7 +815,13 @@ fn rounded_feature(f: &Feature, digits: i32) -> Feature {
             radius: rd(*radius),
             op: *op,
         },
-        Feature::Fillet { edges } => Feature::Fillet {
+        Feature::Fillet {
+            edges,
+            starts,
+            setbacks,
+        } => Feature::Fillet {
+            starts: starts.clone(),
+            setbacks: setbacks.iter().map(|&(v, e, d)| (v, e, rd(d))).collect(),
             edges: edges
                 .iter()
                 .map(|(n, r)| {
@@ -1026,11 +1032,25 @@ pub fn literal(part: &Part) -> String {
                 lit_frame(frame),
                 lit_f(*radius)
             ),
-            Feature::Fillet { edges } => format!(
-                "        Feature::Fillet {{ edges: vec![{}] }},",
+            Feature::Fillet {
+                edges,
+                starts,
+                setbacks,
+            } => format!(
+                "        Feature::Fillet {{ edges: vec![{}], starts: vec![{}], setbacks: vec![{}] }},",
                 edges
                     .iter()
                     .map(|(n, r)| format!("(Name({}), Radius::{r:?})", n.0))
+                    .collect::<Vec<_>>()
+                    .join(", "),
+                starts
+                    .iter()
+                    .map(|(e, v)| format!("(Name({}), Name({}))", e.0, v.0))
+                    .collect::<Vec<_>>()
+                    .join(", "),
+                setbacks
+                    .iter()
+                    .map(|(v, e, d)| format!("(Name({}), {}, {})", v.0, e.map_or("None".into(), |e| format!("Some(Name({}))", e.0)), lit_f(*d)))
                     .collect::<Vec<_>>()
                     .join(", ")
             ),

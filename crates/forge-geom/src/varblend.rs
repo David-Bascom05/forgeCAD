@@ -2197,14 +2197,27 @@ impl Procedural for VarBlend {
         );
         let arcs = self.arcs_over(s0, s1);
         let mut b = arcs[0].1.bbox(v0, v1);
+        // the slack allowed between exact sections: a hundredth of the smallest radius
+        let slack = 1e-2 * self.radii().0;
         for w in arcs.windows(2) {
-            // a point between two rows is within half the gap times |B_u| of one of them
-            let grow = self.segs[w[0].2.max(w[1].2.saturating_sub(1))]
+            // a point between two sections is within half the gap times |B_u| of one of them;
+            // where that is loose, more exact sections close it up
+            let vb = self.segs[w[0].2.max(w[1].2.saturating_sub(1))]
                 .vb
-                .max(self.segs[w[0].2].vb)
-                * (w[1].0 - w[0].0)
-                * 0.5;
-            b = b.hull(&w[0].1.bbox(v0, v1).hull(&w[1].1.bbox(v0, v1)).grow(grow));
+                .max(self.segs[w[0].2].vb);
+            let gap = w[1].0 - w[0].0;
+            let m = ((vb * gap * 0.5 / slack).ceil() as usize).clamp(1, 64);
+            let mut prev = w[0].1;
+            for k in 1..=m {
+                let next = if k == m {
+                    w[1].1
+                } else {
+                    self.arc_at(w[0].0 + gap * k as f64 / m as f64)
+                };
+                let grow = vb * gap / m as f64 * 0.5;
+                b = b.hull(&prev.bbox(v0, v1).hull(&next.bbox(v0, v1)).grow(grow));
+                prev = next;
+            }
         }
         b.grow(tol::LINEAR)
     }
@@ -2284,6 +2297,9 @@ impl ProceduralCurve for Track {
         if s1 > s0 {
             pts.push((s1, q(s1)));
         }
+        // between points, within half the gap times the speed bound; where that is loose,
+        // more exact points close it up to a hundredth of the radius
+        let slack = 1e-2 * b.radii().0;
         let mut out = Box3::from_point(pts[0].1);
         for w in pts.windows(2) {
             let i = b
@@ -2291,8 +2307,19 @@ impl ProceduralCurve for Track {
                 .partition_point(|r| r.s <= 0.5 * (w[0].0 + w[1].0))
                 .clamp(1, b.segs.len())
                 - 1;
-            let grow = b.segs[i].vq[self.k] * (w[1].0 - w[0].0) * 0.5;
-            out = out.hull(&Box3::from_points([w[0].1, w[1].1]).grow(grow));
+            let gap = w[1].0 - w[0].0;
+            let v = b.segs[i].vq[self.k];
+            let m = ((v * gap * 0.5 / slack).ceil() as usize).clamp(1, 64);
+            let mut prev = w[0].1;
+            for j in 1..=m {
+                let next = if j == m {
+                    w[1].1
+                } else {
+                    q(w[0].0 + gap * j as f64 / m as f64)
+                };
+                out = out.hull(&Box3::from_points([prev, next]).grow(v * gap / m as f64 * 0.5));
+                prev = next;
+            }
         }
         out.grow(tol::LINEAR)
     }
@@ -2412,20 +2439,6 @@ impl Cut {
         let (a, b) = (k[i - 1], k[i]);
         a.1 + (b.1 - a.1) * (v - a.0) / (b.0 - a.0)
     }
-
-    /// The s range the cut covers over v in `range`.
-    fn s_span(&self, range: Interval) -> Interval {
-        let mut lo = self.seed(range.lo).min(self.seed(range.hi));
-        let mut hi = self.seed(range.lo).max(self.seed(range.hi));
-        for k in &self.knots {
-            if k.0 > range.lo && k.0 < range.hi {
-                lo = lo.min(k.1);
-                hi = hi.max(k.1);
-            }
-        }
-        let gap = self.knots.windows(2).map(|w| w[1].0 - w[0].0).fold(0.0, f64::max);
-        Interval::new(lo - self.slope * gap, hi + self.slope * gap)
-    }
 }
 
 impl ProceduralCurve for Cut {
@@ -2491,14 +2504,13 @@ impl ProceduralCurve for Cut {
         }
     }
     fn bbox(&self, range: Interval) -> Box3 {
-        let s = self.s_span(range);
-        Procedural::bbox(
-            &*self.blend,
-            Box2 {
-                u: s,
-                v: Interval::new(range.lo.max(0.0), range.hi.min(1.0)),
-            },
-        )
+        // exact points, close enough that the speed bound leaves a hundredth of the radius
+        let v = self.speed_bound(range);
+        let slack = 1e-2 * self.blend.radii().0;
+        let n = ((v * range.width() / (2.0 * slack)).ceil() as usize).clamp(1, 256);
+        let at = |i: usize| (range.lo + range.width() * i as f64 / n as f64).min(range.hi);
+        let b = (0..=n).fold(Box3::EMPTY, |b, i| b.hull(&Box3::from_point(self.deriv(at(i)).p)));
+        b.grow(v * range.width() / n as f64 * 0.5 + tol::LINEAR)
     }
     fn transformed(&self, f: &Frame) -> ProcCurve {
         ProcCurve(Arc::new(Cut {

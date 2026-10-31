@@ -23,8 +23,9 @@ use forge_gpu::AutoBatch;
 pub use forge_gpu::{Backend, open_in_background as open_gpu};
 use forge_math::{Frame, Point2, Vec2, dmath};
 use forge_ops::{
-    Axis2, ChamferError, ChamferSize, DraftError, ExtrudeError, FilletEdge, FilletError, Profile,
-    ProfileLoop, Radius, RevolveError, Segment, ShellError, chamfer, draft, extrude, fillet, revolve, shell,
+    Axis2, ChamferError, ChamferSize, DraftError, ExtrudeError, FilletEdge, FilletError, FilletOptions,
+    Profile, ProfileLoop, Radius, RevolveError, Segment, ShellError, chamfer, draft, extrude, face_fillet,
+    fillet_with, full_round, revolve, shell,
 };
 use forge_topo::{Body, Name};
 pub use hole::{End, Head, Hole, HoleError, Thread};
@@ -53,7 +54,23 @@ pub enum Feature {
     /// A ball (a shorthand for revolving a half disc).
     Ball { frame: Frame, radius: f64, op: Combine },
     /// Round the named edges of the part as it stands, each with its own radius, in one go.
-    Fillet { edges: Vec<(Name, Radius)> },
+    /// `starts`: (edge, vertex) where an edge's law runs from that vertex rather than the one
+    /// named first. `setbacks`: (vertex, one edge there or all, distance) how far from a
+    /// corner its blends stop.
+    Fillet {
+        edges: Vec<(Name, Radius)>,
+        starts: Vec<(Name, Name)>,
+        setbacks: Vec<(Name, Option<Name>, f64)>,
+    },
+    /// Round between two sets of faces: the edges where they meet, or the one strip face
+    /// joining them, taken away.
+    FaceFillet {
+        first: Vec<Name>,
+        second: Vec<Name>,
+        radius: f64,
+    },
+    /// Take face `middle` away between faces `side` and `other` with the ball touching all three.
+    FullRound { side: Name, middle: Name, other: Name },
     /// Bevel edges of the part.
     Chamfer { edges: Vec<Name>, size: ChamferSize },
     /// Hollow the part to walls `thickness` thick, inside or outside its skin, `open` faces removed.
@@ -115,7 +132,7 @@ pub enum RegenError {
         feature: usize,
         error: FilletError,
     },
-    /// A feature names an edge the part no longer has.
+    /// A feature names an edge (or face, or vertex) the part no longer has.
     MissingEdge {
         feature: usize,
         name: Name,
@@ -357,6 +374,8 @@ fn modifies(f: &Feature) -> bool {
     matches!(
         f,
         Feature::Fillet { .. }
+            | Feature::FaceFillet { .. }
+            | Feature::FullRound { .. }
             | Feature::Chamfer { .. }
             | Feature::Shell { .. }
             | Feature::Draft { .. }
@@ -475,7 +494,32 @@ fn op_of(c: Combine) -> Op {
 fn modify(features: &[Feature], i: usize, body: &Body, threads: usize) -> Result<Body, RegenError> {
     let id = i as u64 + 1;
     match &features[i] {
-        Feature::Fillet { edges } => apply_fillet(i, body, edges),
+        Feature::Fillet {
+            edges,
+            starts,
+            setbacks,
+        } => apply_fillet(i, body, edges, starts, setbacks),
+        Feature::FaceFillet {
+            first,
+            second,
+            radius,
+        } => {
+            let faces = |ns: &[Name]| {
+                ns.iter()
+                    .map(|&n| face_of(i, body, n))
+                    .collect::<Result<Vec<_>, _>>()
+            };
+            face_fillet(body, &faces(first)?, &faces(second)?, *radius, id)
+                .map_err(|error| RegenError::Fillet { feature: i, error })
+        }
+        Feature::FullRound { side, middle, other } => full_round(
+            body,
+            face_of(i, body, *side)?,
+            face_of(i, body, *middle)?,
+            face_of(i, body, *other)?,
+            id,
+        )
+        .map_err(|error| RegenError::Fillet { feature: i, error }),
         Feature::Chamfer { edges, size } => {
             chamfer(body, edges, *size, id).map_err(|error| RegenError::Chamfer { feature: i, error })
         }
@@ -519,25 +563,52 @@ fn modify(features: &[Feature], i: usize, body: &Body, threads: usize) -> Result
     }
 }
 
+/// The face named `n` on `body`.
+fn face_of(i: usize, body: &Body, name: Name) -> Result<forge_topo::FaceId, RegenError> {
+    body.face_by_name(name)
+        .ok_or(RegenError::MissingEdge { feature: i, name })
+}
+
 /// Feature `i`, a fillet of the named edges, applied to `body`.
-fn apply_fillet(i: usize, body: &Body, edges: &[(Name, Radius)]) -> Result<Body, RegenError> {
+fn apply_fillet(
+    i: usize,
+    body: &Body,
+    edges: &[(Name, Radius)],
+    starts: &[(Name, Name)],
+    setbacks: &[(Name, Option<Name>, f64)],
+) -> Result<Body, RegenError> {
     let body = if body.dead > 0 {
         body.compact()
     } else {
         body.clone()
     };
+    let edge = |name: Name| {
+        body.edge_by_name(name)
+            .ok_or(RegenError::MissingEdge { feature: i, name })
+    };
+    let vertex = |name: Name| {
+        body.vertex_ids()
+            .find(|&v| body.vertex(v).name == name)
+            .ok_or(RegenError::MissingEdge { feature: i, name })
+    };
     let mut want: Vec<FilletEdge> = Vec::with_capacity(edges.len());
     for (name, radius) in edges {
-        let name = *name;
-        let edge = body
-            .edge_by_name(name)
-            .ok_or(RegenError::MissingEdge { feature: i, name })?;
         want.push(FilletEdge {
-            edge,
+            edge: edge(*name)?,
             radius: radius.clone(),
         });
     }
-    fillet(&body, &want, i as u64 + 1).map_err(|error| RegenError::Fillet { feature: i, error })
+    let opts = FilletOptions {
+        starts: starts
+            .iter()
+            .map(|&(e, v)| Ok((edge(e)?, vertex(v)?)))
+            .collect::<Result<_, RegenError>>()?,
+        setbacks: setbacks
+            .iter()
+            .map(|&(v, e, d)| Ok((vertex(v)?, e.map(edge).transpose()?, d)))
+            .collect::<Result<_, RegenError>>()?,
+    };
+    fillet_with(&body, &want, &opts, i as u64 + 1).map_err(|error| RegenError::Fillet { feature: i, error })
 }
 
 /// The tools feature `i` makes: one, or a pattern's copies (each named after its place).

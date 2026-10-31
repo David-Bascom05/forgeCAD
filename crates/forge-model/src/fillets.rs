@@ -178,6 +178,45 @@ pub fn edge_near(body: &Body, p: Point3) -> Name {
         .expect("a body has edges")
 }
 
+/// The name of the face of `body` nearest `p`.
+pub fn face_near(body: &Body, p: Point3) -> Name {
+    use forge_geom::SurfaceGeom;
+    let d = |f: forge_topo::FaceId| {
+        let s = &body.face(f).surface;
+        let on = s.eval(s.project(p)).distance(p);
+        on + body.face_box(f).grow(0.0).center().distance(p) * 1e-6
+    };
+    body.face_ids()
+        .min_by(|&a, &b| d(a).total_cmp(&d(b)))
+        .map(|f| body.face(f).name)
+        .expect("a body has faces")
+}
+
+/// `part` followed by a face fillet between the faces nearest `first` and those nearest `second`.
+pub fn with_face_fillet(part: &Part, first: &[Point3], second: &[Point3], radius: f64) -> Part {
+    let body = part.regenerate().expect("base part regenerates");
+    let names = |ps: &[Point3]| ps.iter().map(|&p| face_near(&body, p)).collect();
+    let mut out = part.clone();
+    out.features.push(Feature::FaceFillet {
+        first: names(first),
+        second: names(second),
+        radius,
+    });
+    out
+}
+
+/// `part` followed by a full round of the face nearest `middle` between those nearest `side`, `other`.
+pub fn with_full_round(part: &Part, side: Point3, middle: Point3, other: Point3) -> Part {
+    let body = part.regenerate().expect("base part regenerates");
+    let mut out = part.clone();
+    out.features.push(Feature::FullRound {
+        side: face_near(&body, side),
+        middle: face_near(&body, middle),
+        other: face_near(&body, other),
+    });
+    out
+}
+
 /// `part` followed by a fillet of the edges nearest each point, each with its radius.
 pub fn with_fillet(part: &Part, near: &[(Point3, f64)]) -> Part {
     let near: Vec<(Point3, Radius)> = near.iter().map(|&(p, r)| (p, r.into())).collect();
@@ -192,7 +231,11 @@ pub fn with_var_fillet(part: &Part, near: &[(Point3, Radius)]) -> Part {
         .map(|(p, r)| (edge_near(&body, *p), r.clone()))
         .collect();
     let mut out = part.clone();
-    out.features.push(Feature::Fillet { edges });
+    out.features.push(Feature::Fillet {
+        edges,
+        starts: Vec::new(),
+        setbacks: Vec::new(),
+    });
     out
 }
 
@@ -231,14 +274,18 @@ pub fn with_fillet_from(part: &Part, body: &Body, picks: &[Pick]) -> Part {
         })
         .collect();
     let mut out = part.clone();
-    out.features.push(Feature::Fillet { edges });
+    out.features.push(Feature::Fillet {
+        edges,
+        starts: Vec::new(),
+        setbacks: Vec::new(),
+    });
     out
 }
 
 /// The picks a fillet case holds (from its names).
 pub fn picks(part: &Part) -> Vec<Pick> {
     let mut base = part.clone();
-    let Some(Feature::Fillet { edges }) = base.features.pop() else {
+    let Some(Feature::Fillet { edges, .. }) = base.features.pop() else {
         return Vec::new();
     };
     let body = base.regenerate().expect("base part regenerates");
@@ -821,7 +868,86 @@ pub fn cases() -> Vec<(&'static str, Part, Option<f64>)> {
         Some(1600.0 - 16.0 - 20.0 * spandrel(r) + 4.0 * lens),
     ));
     out.extend(variable_cases());
+    out.extend(variant_cases());
     out
+}
+
+/// Face fillets and full rounds.
+pub fn variant_cases() -> Vec<(&'static str, Part, Option<f64>)> {
+    let pi = dmath::PI;
+    let spandrel = |r: f64| (1.0 - pi / 4.0) * r * r;
+    let boxed = Part {
+        features: vec![block_at(Point3::ORIGIN, 20.0, 10.0, 8.0, Combine::New)],
+    };
+    let (top, front) = (Point3::new(10.0, 5.0, 8.0), Point3::new(10.0, 0.0, 4.0));
+    let mut chamfered = boxed.clone();
+    chamfered.features.push(Feature::Chamfer {
+        edges: vec![edge_near(
+            &boxed.regenerate().expect("box"),
+            Point3::new(10.0, 0.0, 8.0),
+        )],
+        size: forge_ops::ChamferSize::Equal(1.0),
+    });
+    let rib = Part {
+        features: vec![block_at(Point3::ORIGIN, 20.0, 4.0, 8.0, Combine::New)],
+    };
+    let pts = [(0.0, 0.0), (4.0, 0.0), (3.5, 8.0), (0.5, 8.0)];
+    let drafted = Part {
+        features: vec![Feature::Extrude {
+            profile: Profile {
+                plane: Frame::from_zx(Point3::ORIGIN, UnitVec3::X, Vec3::Y).expect("frame"),
+                loops: vec![ProfileLoop::new(
+                    (0..4)
+                        .map(|i| {
+                            let (a, b) = (pts[i], pts[(i + 1) % 4]);
+                            (
+                                Segment::Line {
+                                    a: Point2::new(a.0, a.1),
+                                    b: Point2::new(b.0, b.1),
+                                },
+                                i as u64,
+                            )
+                        })
+                        .collect(),
+                )],
+            },
+            extent: Extent::Distance(20.0),
+            op: Combine::New,
+        }],
+    };
+    let full_round_drafted = with_full_round(
+        &drafted,
+        Point3::new(10.0, 0.25, 4.0),
+        Point3::new(10.0, 2.0, 8.0),
+        Point3::new(10.0, 3.75, 4.0),
+    );
+    vec![
+        // a rib drafted across: the ball touches both sides and the top, its radius the same along
+        ("full-round-drafted-rib", full_round_drafted, None),
+        // the two faces meet: their edge rounds
+        (
+            "face-fillet-adjacent",
+            with_face_fillet(&boxed, &[top], &[front], 2.0),
+            Some(1600.0 - spandrel(2.0) * 20.0),
+        ),
+        // a chamfer joins them: the ball rolls across it and it goes
+        (
+            "face-fillet-over-chamfer",
+            with_face_fillet(&chamfered, &[top], &[Point3::new(10.0, 0.0, 3.0)], 3.0),
+            Some(1600.0 - spandrel(3.0) * 20.0),
+        ),
+        // a rib's top taken away by the ball touching both sides and the top
+        (
+            "full-round-rib",
+            with_full_round(
+                &rib,
+                Point3::new(10.0, 0.0, 4.0),
+                Point3::new(10.0, 2.0, 8.0),
+                Point3::new(10.0, 4.0, 4.0),
+            ),
+            Some(640.0 - 20.0 * (8.0 - 2.0 * pi)),
+        ),
+    ]
 }
 
 /// A 20 long bar along x of L section in yz: 10 wide, 8 high, with a 2 x 7 notch under its
@@ -1126,6 +1252,38 @@ pub fn variable_cases() -> Vec<(&'static str, Part, Option<f64>)> {
 
 /// Fillets that cannot be built, and the error each must give (by its name).
 pub fn refusals() -> Vec<(&'static str, Part, &'static str)> {
+    // a rib narrowing along its length: no one ball touches both sides and the top all along
+    let wedge = Part {
+        features: vec![Feature::Extrude {
+            profile: Profile {
+                plane: Frame::WORLD,
+                loops: vec![ProfileLoop::new(
+                    [(0.0, 0.0), (20.0, 1.0), (20.0, 3.0), (0.0, 4.0)]
+                        .iter()
+                        .enumerate()
+                        .map(|(i, &a)| {
+                            let b = [(0.0, 0.0), (20.0, 1.0), (20.0, 3.0), (0.0, 4.0)][(i + 1) % 4];
+                            (
+                                Segment::Line {
+                                    a: Point2::new(a.0, a.1),
+                                    b: Point2::new(b.0, b.1),
+                                },
+                                i as u64,
+                            )
+                        })
+                        .collect(),
+                )],
+            },
+            extent: Extent::Distance(8.0),
+            op: Combine::New,
+        }],
+    };
+    let full_round_tapered = with_full_round(
+        &wedge,
+        Point3::new(10.0, 0.5, 4.0),
+        Point3::new(10.0, 2.0, 8.0),
+        Point3::new(10.0, 3.5, 4.0),
+    );
     let boxed = Part {
         features: vec![block_at(Point3::ORIGIN, 20.0, 10.0, 8.0, Combine::New)],
     };
@@ -1143,6 +1301,7 @@ pub fn refusals() -> Vec<(&'static str, Part, &'static str)> {
         }],
     };
     vec![
+        ("full-round-tapered", full_round_tapered, "BadRadius"),
         // the ball runs off the bottom of the front face
         (
             "radius-past-face",
@@ -1303,6 +1462,74 @@ mod tests {
         assert!((v13 - want).abs() < 0.01 * (1600.0 - want), "{v13} {want}");
     }
 
+    /// A law started at the edge's other vertex is the law turned round; corners set back by
+    /// given distances build, and a setback where no corner is refuses.
+    #[test]
+    fn law_starts_and_setbacks() {
+        let boxed = Part {
+            features: vec![block_at(Point3::ORIGIN, 20.0, 10.0, 8.0, Combine::New)],
+        };
+        let body = boxed.regenerate().expect("box");
+        let pick = |p: Point3| edge_near(&body, p);
+        let front = pick(Point3::new(10.0, 0.0, 8.0));
+        let e = body.edge_by_name(front).expect("edge");
+        let first = forge_ops::law_start(&body, e);
+        let x = body.edge(e);
+        let other = if x.start == first { x.end } else { x.start };
+        let fillet = |edges: Vec<(Name, Radius)>, starts, setbacks| {
+            let mut p = boxed.clone();
+            p.features.push(Feature::Fillet {
+                edges,
+                starts,
+                setbacks,
+            });
+            p.regenerate()
+        };
+        let q = Quality {
+            chord: 1e-3,
+            max_angle: 0.5,
+        };
+        let vol = |b: &Body| tessellate(b, &q).expect("meshes").volume();
+        let a = fillet(
+            vec![(front, Radius::Linear(1.0, 3.0))],
+            vec![(front, body.vertex(other).name)],
+            vec![],
+        )
+        .expect("from the other vertex");
+        let b = fillet(vec![(front, Radius::Linear(3.0, 1.0))], vec![], vec![]).expect("turned round");
+        assert!((vol(&a) - vol(&b)).abs() < 1e-9 * vol(&a));
+        // the three edges at a corner, set back further than their ball would stop
+        let corner = body
+            .vertex_ids()
+            .find(|&v| body.vertex(v).point.distance(Point3::new(0.0, 0.0, 8.0)) < 1e-9)
+            .expect("corner");
+        let cn = body.vertex(corner).name;
+        let three = [(10.0, 0.0, 8.0), (0.0, 5.0, 8.0), (0.0, 0.0, 4.0)]
+            .map(|(x, y, z)| (pick(Point3::new(x, y, z)), Radius::Constant(2.0)))
+            .to_vec();
+        let ball = fillet(three.clone(), vec![], vec![]).expect("ball corner");
+        for setbacks in [
+            vec![(cn, None, 3.5)],
+            vec![(cn, None, 3.0), (cn, Some(three[0].0), 4.5)],
+        ] {
+            let b = fillet(three.clone(), vec![], setbacks).expect("set back");
+            assert!(forge_topo::check(&b).is_empty());
+            let m = tessellate(&b, &q).expect("meshes");
+            assert!(m.open_edges().is_empty());
+            assert!(
+                (m.volume() - vol(&ball)).abs() > 1e-6,
+                "the setback changes the corner"
+            );
+        }
+        let far = body
+            .vertex_ids()
+            .find(|&v| body.vertex(v).point.distance(Point3::new(20.0, 0.0, 8.0)) < 1e-9)
+            .expect("far end");
+        let err =
+            fillet(three, vec![], vec![(body.vertex(far).name, None, 3.0)]).expect_err("no corner there");
+        assert!(format!("{err:?}").contains("Corner"), "{err:?}");
+    }
+
     #[test]
     fn refusals_are_clean() {
         for (name, part, want) in refusals() {
@@ -1365,7 +1592,11 @@ mod tests {
             let mut base = part.clone();
             base.features.pop();
             let nbase = base.regenerate_nary(2).expect("base regenerates n-ary");
-            let npart = with_fillet_from(&base, &nbase, &picks(&part));
+            // (face fillets and full rounds name faces, which both builds name alike)
+            let npart = match part.features.last() {
+                Some(Feature::Fillet { .. }) => with_fillet_from(&base, &nbase, &picks(&part)),
+                _ => part.clone(),
+            };
             let nary = npart
                 .regenerate_nary(2)
                 .unwrap_or_else(|e| panic!("{name} nary: {e:?}"));

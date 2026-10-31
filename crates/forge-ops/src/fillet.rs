@@ -73,7 +73,7 @@ impl Radius {
     }
 
     /// The radius, where it is the same all along.
-    fn constant(&self) -> Option<f64> {
+    pub fn constant(&self) -> Option<f64> {
         let p = self.points();
         p.iter().all(|q| q.1 == p[0].1).then_some(p[0].1)
     }
@@ -164,9 +164,41 @@ struct SpringEnd {
     path: Vec<(EdgeId, bool)>,
 }
 
+/// Choices beyond the edges and their radii.
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct FilletOptions {
+    /// The vertex an edge's law runs from, where it is not the edge's first vertex by name.
+    pub starts: Vec<(EdgeId, VertexId)>,
+    /// How far from a corner vertex its blends stop (the straight distance from the vertex to
+    /// where each blend's section crosses its edge): for one edge there, or all of them.
+    pub setbacks: Vec<(VertexId, Option<EdgeId>, f64)>,
+}
+
+/// The vertex a radius law on edge `e` runs from unless told otherwise: the one whose name
+/// orders first.
+pub fn law_start(body: &Body, e: EdgeId) -> VertexId {
+    let x = body.edge(e);
+    if body.vertex(x.start).name <= body.vertex(x.end).name {
+        x.start
+    } else {
+        x.end
+    }
+}
+
 /// Rounds `edges` of `body`, each with its own radius, in one operation.
 /// `feature` is the history id the new faces, edges and vertices are named from.
 pub fn fillet(body: &Body, edges: &[FilletEdge], feature: u64) -> R<Body> {
+    fillet_with(body, edges, &FilletOptions::default(), feature)
+}
+
+/// `fillet` with laws started at given vertices and corners set back by given distances.
+pub fn fillet_with(body: &Body, edges: &[FilletEdge], opts: &FilletOptions, feature: u64) -> R<Body> {
+    if body.dead > 0 && (!opts.starts.is_empty() || !opts.setbacks.is_empty()) {
+        // the options name this body's entities
+        return Err(FilletError::NotAnEdge {
+            edge: edges.first().map_or(EdgeId(0), |f| f.edge),
+        });
+    }
     let mut body = if body.dead > 0 {
         body.compact()
     } else {
@@ -194,8 +226,13 @@ pub fn fillet(body: &Body, edges: &[FilletEdge], feature: u64) -> R<Body> {
         let (v0, v1) = (body.edge(e).start, body.edge(e).end);
         if v0 != v1 || fe.radius.constant().is_some() {
             let mut fe = fe.clone();
-            // laws run from the vertex named first; internally from the edge's start
-            if body.vertex(v0).name > body.vertex(v1).name {
+            // laws run from the vertex given or the one named first; internally from the edge's start
+            let from = match opts.starts.iter().find(|s| s.0 == e) {
+                Some(&(_, v)) if v == v0 || v == v1 => v,
+                Some(_) => return Err(FilletError::BadRadius { edge: e }),
+                None => law_start(&body, e),
+            };
+            if from != v0 {
                 fe.radius = fe.radius.reversed();
             }
             picked.push(fe);
@@ -256,7 +293,9 @@ pub fn fillet(body: &Body, edges: &[FilletEdge], feature: u64) -> R<Body> {
         .iter()
         .map(|f| by_edge.remove(&f.0).expect("every edge rolled"))
         .collect();
-    Builder::new(body, rolled, root).build()
+    let mut b = Builder::new(body, rolled, root);
+    b.setbacks = opts.setbacks.clone();
+    b.build()
 }
 
 /// Runs `f` over 0..n on the machine's threads, results in order.
@@ -1122,6 +1161,9 @@ struct Builder {
     dropped: BTreeSet<CoedgeId>,
     /// Faces whose loops are joined up again from their pieces (a spring left them and came back).
     rechain: BTreeSet<FaceId>,
+    /// Asked-for setbacks (vertex, edge or all there, distance), and those a corner took.
+    setbacks: Vec<(VertexId, Option<EdgeId>, f64)>,
+    set_back: BTreeSet<VertexId>,
     /// New faces other than the blends (corner patches).
     patches: Vec<Patch>,
 }
@@ -1147,6 +1189,8 @@ impl Builder {
             touched: BTreeSet::new(),
             dropped: BTreeSet::new(),
             rechain: BTreeSet::new(),
+            setbacks: Vec::new(),
+            set_back: BTreeSet::new(),
             patches: Vec::new(),
         }
     }
@@ -1191,6 +1235,9 @@ impl Builder {
             let shell = self.body.faces[0].shell;
             let f = self.body.add_face(shell, surface, same_sense, name);
             self.body.add_loop(f, &uses);
+        }
+        if let Some(s) = self.setbacks.iter().find(|s| !self.set_back.contains(&s.0)) {
+            return Err(FilletError::Corner { vertex: s.0 });
         }
         Ok(self.body.compact())
     }
@@ -1968,6 +2015,49 @@ impl Builder {
         )
     }
 
+    /// The spine parameter each blend at corner `v` (in corner input order) was asked to stop
+    /// at: where its section crosses its edge the asked distance from the vertex.
+    fn asked_setbacks(&mut self, v: VertexId, ring: &[Corner], blend_ring: &[usize]) -> R<Vec<Option<f64>>> {
+        let mut out = vec![None; blend_ring.len()];
+        let vp = self.body.vertex(v).point;
+        for (b, &j) in blend_ring.iter().enumerate() {
+            let ri = self.filleted(ring[j].cin).expect("blend");
+            let e = self.rolled[ri].edge;
+            let Some(&(_, _, d)) = self
+                .setbacks
+                .iter()
+                .find(|s| s.0 == v && s.1 == Some(e))
+                .or_else(|| self.setbacks.iter().find(|s| s.0 == v && s.1.is_none()))
+            else {
+                continue;
+            };
+            self.set_back.insert(v);
+            let x = self.body.edge(e);
+            let at_end = self.arrives_at_end(ring[j].cin);
+            // along the edge from the vertex to the straight distance d (bisection: the
+            // distance grows from zero there over the near half of the edge)
+            let (mut near, mut far) = if at_end {
+                (x.range.hi, x.range.mid())
+            } else {
+                (x.range.lo, x.range.mid())
+            };
+            if d.is_nan() || d <= 0.0 || x.curve.eval(far).distance(vp) < d {
+                return Err(FilletError::Overflow { edge: e });
+            }
+            for _ in 0..100 {
+                let m = 0.5 * (near + far);
+                if x.curve.eval(m).distance(vp) < d {
+                    near = m;
+                } else {
+                    far = m;
+                }
+            }
+            let p = x.curve.eval(0.5 * (near + far));
+            out[b] = Some(spine_closest(&self.rolled[ri].blend.spine, p));
+        }
+        Ok(out)
+    }
+
     /// Where each blend stops (in corner input order) when one ball touches all
     /// three faces of a corner (equal radii, one kind), and the ball's centre.
     fn ball_setbacks(&self, v: VertexId, ring: &[Corner]) -> Option<(Vec<f64>, Point3)> {
@@ -2039,11 +2129,18 @@ impl Builder {
         let k = ring.len();
         let err = FilletError::Corner { vertex: v };
         let (input, blend_ring) = self.corner_input(v, ring);
+        let asked = self.asked_setbacks(v, ring, &blend_ring)?;
         let (setbacks, trims, centre) = match crate::corner::setbacks(&input) {
-            Some(s) => {
+            Some(mut s) => {
+                for (b, t) in asked.iter().enumerate() {
+                    if let Some(t) = *t {
+                        s[b] = t;
+                    }
+                }
                 let t = crate::corner::face_curves(&input, &s).map_err(|_| err.clone())?;
                 (s, t, None)
             }
+            None if asked.iter().any(|t| t.is_some()) => return Err(err),
             None => {
                 let (s, c) = self.ball_setbacks(v, ring).ok_or(err.clone())?;
                 (s, Vec::new(), Some(c))
@@ -2617,7 +2714,7 @@ fn walk(edges: &[EdgeId], forward: bool) -> Vec<(EdgeId, bool)> {
 
 /// Uses joined into loops end to start, each next taken in the order given from where the
 /// last one was.
-fn chain_loops(body: &Body, uses: &[(EdgeId, bool)]) -> Vec<Vec<(EdgeId, bool)>> {
+pub(crate) fn chain_loops(body: &Body, uses: &[(EdgeId, bool)]) -> Vec<Vec<(EdgeId, bool)>> {
     let ends = |&(e, f): &(EdgeId, bool)| {
         let x = body.edge(e);
         if f { (x.start, x.end) } else { (x.end, x.start) }
@@ -2660,7 +2757,7 @@ fn along(d: f64, period: Option<f64>) -> f64 {
 
 /// Whether the spring stays on its face (sampled strictly between its ends,
 /// against the face as it was): a ball running off the face overflows.
-fn inside_face(body: &Body, f: FaceId, c: &Curve, range: Interval) -> bool {
+pub(crate) fn inside_face(body: &Body, f: FaceId, c: &Curve, range: Interval) -> bool {
     let loops = forge_topo::uv::face_uv_loops(body, f);
     let surface = &body.face(f).surface;
     let d = surface.domain();
@@ -2691,7 +2788,7 @@ fn search_window(c: &Curve, t: f64, reach: f64) -> Interval {
 }
 
 /// The point where `c` (over `range`) meets `s` nearest `near`, with its parameter.
-fn nearest_hit(c: &Curve, range: Interval, s: &Surface, near: Point3) -> Option<(f64, Point3)> {
+pub(crate) fn nearest_hit(c: &Curve, range: Interval, s: &Surface, near: Point3) -> Option<(f64, Point3)> {
     match curve_surface(c, range, s) {
         CurveSurface::Hits(h) => h
             .into_iter()

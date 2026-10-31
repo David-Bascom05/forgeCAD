@@ -161,6 +161,20 @@ impl Session {
                     "\n({unmeshed} faces would not mesh: volume, area approximate)"
                 ));
             }
+            let laws = law_starts(m);
+            for (no, e, v) in &laws {
+                text.push_str(&format!("\nline {no}: the law on {e} runs from {v}"));
+            }
+            j.push((
+                "laws",
+                Json::Arr(
+                    laws.into_iter()
+                        .map(|(no, e, v)| {
+                            Json::obj(vec![("line", no.into()), ("edge", e.into()), ("from", v.into())])
+                        })
+                        .collect(),
+                ),
+            ));
             j.extend([
                 ("volume", volume.into()),
                 ("area", area.into()),
@@ -468,6 +482,34 @@ impl Session {
     }
 }
 
+/// Every built fillet's varying law whose start vertex was left to the default (the one
+/// named first): its line, the edge's handle and the vertex's, on the part before that line.
+fn law_starts(m: &Model) -> Vec<(usize, String, String)> {
+    let mut out = Vec::new();
+    for i in 0..m.built().min(m.features.len()) {
+        let forge_model::Feature::Fillet { edges, starts, .. } = &m.features[i] else {
+            continue;
+        };
+        let Some(body) = m.body_after(i) else {
+            continue;
+        };
+        let handles = select::handles(body);
+        for (n, r) in edges {
+            if r.constant().is_some() || starts.iter().any(|s| s.0 == *n) {
+                continue;
+            }
+            let Some(e) = body.edge_by_name(*n) else {
+                continue;
+            };
+            let v = body.vertex(forge_ops::law_start(body, e)).name;
+            if let (Some(eh), Some(vh)) = (handles.get(n), handles.get(&v)) {
+                out.push((m.lines[i].no, eh.clone(), vh.clone()));
+            }
+        }
+    }
+    out
+}
+
 fn counts(b: &Body) -> (usize, usize, usize) {
     (b.face_ids().count(), b.edge_ids().count(), b.vertices.len())
 }
@@ -536,6 +578,35 @@ pattern hole1 lin 1 0 0 3 28
 hole 8 -y at 0 25 30 thru
 fillet 4 (edges between base wall concave)
 ";
+
+    /// A varying fillet law left to its default start is reported with the vertex it runs
+    /// from; naming that start in the file builds the same part and is not reported.
+    #[test]
+    fn law_starts_are_reported() {
+        let dir = Dir::new("laws");
+        let src = "base: extrude 8 rect 0 0 20 10\nfillet 1..3 (edges front top)\n";
+        let f = dir.file("a.fc", src);
+        let mut s = Session::default();
+        let r = s.run("build", &args(&f, &[]));
+        assert!(r.ok, "{}", r.text);
+        let line = r
+            .text
+            .lines()
+            .find(|l| l.contains("runs from"))
+            .expect("reported")
+            .to_string();
+        let v = line.rsplit(' ').next().expect("vertex").to_string();
+        let volume = |t: &str| {
+            t.split_whitespace()
+                .skip_while(|w| *w != "volume")
+                .nth(1)
+                .map(String::from)
+        };
+        let named = dir.file("b.fc", &src.replace("1..3 ", &format!("1..3 from {v} ")));
+        let r2 = s.run("build", &args(&named, &[]));
+        assert!(r2.ok && !r2.text.contains("runs from"), "{}", r2.text);
+        assert_eq!(volume(&r.text), volume(&r2.text));
+    }
 
     /// The loop an agent runs: write a bracket, build, fix an error, query an edge, fillet
     /// it, render. Everything it writes and reads is counted.

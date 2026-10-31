@@ -10,7 +10,7 @@ fn main() {
             continue;
         }
         let edges = match part.features.last() {
-            Some(Feature::Fillet { edges }) => edges.len(),
+            Some(Feature::Fillet { edges, .. }) => edges.len(),
             _ => 0,
         };
         if mode == "base" {

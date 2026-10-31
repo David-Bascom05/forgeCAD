@@ -41,7 +41,8 @@ Features (`[op]` is new for the first solid, add after):
 ```
 extrude [op] EXT (FRAME LOOPS | SKETCH [E]) EXT: N | sym N | two N M | thru [back|both] | next [back] | to FEAT [@face] [off N]
 revolve [op] [TURN] (FRAME [axis x|y|OX OY DX DY] LOOPS | SKETCH [axis L] [E]) TURN: like EXT, in degrees; default 360
-ball [op] R FRAME     fillet R REF.. [R REF..]     draft A FRAME REF..
+ball [op] R FRAME     fillet R [from VREF] REF.. [R ..] [setback VREF [REF] D]..     draft A FRAME REF..
+facefillet R REF.. to REF..      fullround SIDE MIDDLE SIDE
 shell T [out] REF..              hollow to walls T thick (out: outside the skin), REF faces open
 chamfer D REF.. | chamfer D D2 face REF REF.. | chamfer D ang A face REF REF..
 hole D FRAME [cb D2 DEPTH | cs D2 A] (N | thru | next | to FEAT [@face] [off N]) [pt A] [thread SIZE PITCH]
@@ -71,7 +72,13 @@ FRAME: [xy|xz|yz|-xy|-xz|-yz | z A B C [x A B C] | [-]on FEAT [P] | on REF] [at 
 LOOPS (first is outside, rest holes; X Y a corner): rect X Y W H | rrect X Y W H CORNER_R | circle CX CY R |
   poly X Y X Y .. | loop (line AX AY BX BY | arc CX CY R START SWEEP)..
 `next`: up to the next face met. `to`: a plane or sketch feature, or a feature's face (plane, cylinder..).
-Fillet R: 3 | 2..4 (from the edge's first vertex, by name, to the other) | 0:2,0.5:4,1:2 (fraction along from that vertex:radius). A constant radius holds along its own edge; a tangent chain changes radius over its variable and unpicked edges.
+Fillet R: 3 | 2..4 (start to other end) | 0:2,0.5:4,1:2 (fraction along from the start:radius). The start is
+  `from VREF` (a vertex of each edge after it), else the vertex named first; `build` lists those. A constant
+  radius holds along its own edge; a tangent chain changes radius over its variable and unpicked edges.
+  `setback VREF [REF] D`: at a corner where blends meet, they stop D from the vertex (one edge, or all).
+facefillet: rounds between two face sets: their shared edges, or the one four-sided strip face joining them
+  (a chamfer, a land), which goes. fullround: the ball touching both sides and the middle face takes the
+  middle away (the sides parallel, so the radius holds along it).
 FEAT: a label, kind+count (`hole2` the 2nd hole, `pattern1`..), or `fN` (the Nth feature line)
 REF: @handle | (selector), found on the part as it stands above that line
 ```

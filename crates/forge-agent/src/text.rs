@@ -98,31 +98,119 @@ pub const KINDS: &[Kind] = &[
     },
     Kind {
         name: "fillet",
-        syntax: "fillet R REF.. [R REF..]   R: 3 | 2..4 (first vertex..other) | 0:2,0.5:4,1:2 (at:radius)",
+        syntax: "fillet R [from REF] REF.. [R [from REF] REF..] [setback VREF [REF] D]..   R: 3 | 2..4 | 0:2,0.5:4,1:2 (at:radius)",
         parse: |p| {
-            let mut edges = Vec::new();
+            let (mut edges, mut starts, mut setbacks) = (Vec::new(), Vec::new(), Vec::new());
             let mut r = p.radius()?;
+            let mut from = None;
             while !p.done() {
-                if !is_ref(p.peek()) {
+                if p.eat("setback") {
+                    let v = p.one_ref()?;
+                    let e = if is_ref(p.peek()) {
+                        Some(p.one_ref()?)
+                    } else {
+                        None
+                    };
+                    setbacks.push((v, e, p.num()?));
+                } else if p.eat("from") {
+                    from = Some(p.one_ref()?);
+                } else if !is_ref(p.peek()) {
                     r = p.radius()?;
+                    from = None;
                 } else {
-                    edges.extend(p.one_or_more_refs()?.into_iter().map(|n| (n, r.clone())));
+                    for n in p.one_or_more_refs()? {
+                        edges.push((n, r.clone()));
+                        if let Some(v) = from {
+                            starts.push((n, v));
+                        }
+                    }
                 }
             }
-            Ok(Feature::Fillet { edges })
+            Ok(Feature::Fillet {
+                edges,
+                starts,
+                setbacks,
+            })
         },
         print: |f, w| {
-            let Feature::Fillet { edges } = f else {
+            let Feature::Fillet {
+                edges,
+                starts,
+                setbacks,
+            } = f
+            else {
                 return false;
             };
-            let mut r = None;
+            let mut at = None;
             for (n, er) in edges {
-                if r != Some(er) {
+                let from = starts.iter().find(|s| s.0 == *n).map(|s| s.1);
+                if at != Some((er, from)) {
                     w.radius(er);
-                    r = Some(er);
+                    if let Some(v) = from {
+                        w.word("from");
+                        w.name(v);
+                    }
+                    at = Some((er, from));
                 }
                 w.name(*n);
             }
+            for &(v, e, d) in setbacks {
+                w.word("setback");
+                w.name(v);
+                if let Some(e) = e {
+                    w.name(e);
+                }
+                w.num(d);
+            }
+            true
+        },
+    },
+    Kind {
+        name: "facefillet",
+        syntax: "facefillet R REF.. to REF..",
+        parse: |p| {
+            let radius = p.num()?;
+            let first = p.refs()?;
+            p.expect("to")?;
+            Ok(Feature::FaceFillet {
+                first,
+                second: p.refs()?,
+                radius,
+            })
+        },
+        print: |f, w| {
+            let Feature::FaceFillet {
+                first,
+                second,
+                radius,
+            } = f
+            else {
+                return false;
+            };
+            w.num(*radius);
+            w.names(first);
+            w.word("to");
+            w.names(second);
+            true
+        },
+    },
+    Kind {
+        name: "fullround",
+        syntax: "fullround SIDE MIDDLE SIDE",
+        parse: |p| {
+            Ok(Feature::FullRound {
+                side: p.one_ref()?,
+                middle: p.one_ref()?,
+                other: p.one_ref()?,
+            })
+        },
+        print: |f, w| {
+            let Feature::FullRound { side, middle, other } = f else {
+                return false;
+            };
+            w.name(*side);
+            w.name(*middle);
+            w.name(*other);
             true
         },
     },
@@ -2409,7 +2497,20 @@ mod tests {
                         if r.below(3) == 0 { law(r) } else { rad.clone() },
                     ));
                 }
-                Feature::Fillet { edges }
+                let mut starts = Vec::new();
+                for e in &edges {
+                    if r.below(4) == 0 {
+                        starts.push((e.0, Name(r.next_u64())));
+                    }
+                }
+                let setbacks = (0..r.below(3))
+                    .map(|_| (Name(r.next_u64()), r.bool().then(|| Name(r.next_u64())), num(r)))
+                    .collect();
+                Feature::Fillet {
+                    edges,
+                    starts,
+                    setbacks,
+                }
             }
             4 => Feature::Chamfer {
                 edges: names(r),

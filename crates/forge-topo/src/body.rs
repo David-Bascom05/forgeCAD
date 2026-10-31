@@ -447,8 +447,27 @@ impl Body {
                 Surface::Sphere(sp) => b = b.hull(&Box3::from_point(sp.frame.origin).grow(sp.radius)),
                 Surface::Torus(t) => b = b.hull(&Box3::from_point(t.frame.origin).grow(t.major + t.minor)),
                 Surface::Procedural(pr) => {
+                    // over the stretch of the domain the face's loops span (padded), not all of it
                     let d = pr.domain();
-                    b = b.hull(&pr.bbox(forge_math::Box2::new(d.u.interval(), d.v.interval())));
+                    let (mut u, mut v) = (d.u.interval(), d.v.interval());
+                    if d.u.period.is_none() && d.v.period.is_none() {
+                        let (mut su, mut sv) = (Interval::EMPTY, Interval::EMPTY);
+                        for l in crate::uv::face_uv_loops(self, f) {
+                            for &p in &l.points {
+                                su.include(p.x);
+                                sv.include(p.y);
+                            }
+                        }
+                        let span = forge_math::Box2::new(su, sv);
+                        if !su.is_empty() && !sv.is_empty() {
+                            let pad = |i: Interval, w: Interval| {
+                                let g = 0.05 * i.width() + 1e-9 * (1.0 + i.lo.abs().max(i.hi.abs()));
+                                Interval::new((i.lo - g).max(w.lo), (i.hi + g).min(w.hi))
+                            };
+                            (u, v) = (pad(span.u, u), pad(span.v, v));
+                        }
+                    }
+                    b = b.hull(&pr.bbox(forge_math::Box2::new(u, v)));
                 }
                 _ => {}
             }
