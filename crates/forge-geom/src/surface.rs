@@ -146,16 +146,23 @@ pub trait Procedural: Send + Sync + std::fmt::Debug {
     fn uv_scale(&self) -> (f64, f64) {
         (1.0, 1.0)
     }
-    /// A radius of curvature no larger than the surface's tightest (for meshing).
-    fn min_radius(&self) -> f64;
+    /// About the tightest radius of curvature, for meshing sizes and for callers that need a
+    /// radius until a bound is proven (their results are checked for self-intersection): not
+    /// a bound.
+    fn mesh_radius(&self) -> f64;
+    /// A radius of curvature no larger than the surface's tightest anywhere, proven; None when
+    /// none is known.
+    fn min_radius(&self) -> Option<f64> {
+        None
+    }
     /// The size of the smallest feature of the implicit's zero set off the face (a turn of a
     /// carried-on track, the gap between two sheets): tracing steps stay well below it.
     fn feature(&self) -> f64 {
         f64::INFINITY
     }
-    /// `min_radius` over the parameter box only (a face on part of the surface).
-    fn min_radius_over(&self, _uv: Box2) -> f64 {
-        self.min_radius()
+    /// `mesh_radius` over the parameter box only (a face on part of the surface).
+    fn mesh_radius_over(&self, _uv: Box2) -> f64 {
+        self.mesh_radius()
     }
     /// Bounds on the surface's bending over the parameter box, where the construction gives them
     /// (None where it does not): with them a chord's gap from the surface is bounded without

@@ -379,7 +379,7 @@ fn face_offset(body: &Body, f: FaceId, d: f64) -> Option<Surface> {
             uv = Box2::new(su, sv);
         }
     }
-    forge_geom::blend::Offset::surface_over(p, d, p.min_radius_over(uv))
+    forge_geom::blend::Offset::surface_over(p, d, p.mesh_radius_over(uv))
 }
 
 #[cfg(test)]

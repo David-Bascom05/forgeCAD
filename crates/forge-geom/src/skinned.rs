@@ -1255,7 +1255,7 @@ impl Procedural for Skinned {
     fn as_any(&self) -> Option<&dyn std::any::Any> {
         Some(self)
     }
-    fn min_radius(&self) -> f64 {
+    fn mesh_radius(&self) -> f64 {
         let arcs = self
             .data
             .rails

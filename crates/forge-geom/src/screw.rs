@@ -739,7 +739,7 @@ impl Procedural for Screw {
             area,
         })
     }
-    fn min_radius(&self) -> f64 {
+    fn mesh_radius(&self) -> f64 {
         let r = match self.ring.pieces[0].s {
             Section::Line { .. } => f64::INFINITY,
             Section::Arc { r, .. } => r,
@@ -968,7 +968,7 @@ impl Procedural for Fence {
         s.m.frame = f.compose(&self.m.frame);
         Proc(Arc::new(s))
     }
-    fn min_radius(&self) -> f64 {
+    fn mesh_radius(&self) -> f64 {
         0.8 * (self.p.x - self.half).max(tol::LINEAR)
     }
 }

@@ -216,7 +216,7 @@ impl Nodes {
     /// no more than the largest angle.
     fn want(&self, s: &Surface, q: &Quality, shared: bool) -> [[(f64, f64); G]; G] {
         let r0 = match s {
-            Surface::Procedural(pr) => pr.min_radius(),
+            Surface::Procedural(pr) => pr.mesh_radius(),
             _ => f64::INFINITY,
         };
         let step = |r: f64| {
@@ -1784,7 +1784,7 @@ fn strips(
                 t.major + t.minor * dmath::cos(v),
                 t.major + t.minor * dmath::cos(v),
             ),
-            Surface::Procedural(pr) => (pr.uv_scale().0, pr.min_radius()),
+            Surface::Procedural(pr) => (pr.uv_scale().0, pr.mesh_radius()),
         };
         if r <= forge_math::tol::LINEAR {
             return 1;

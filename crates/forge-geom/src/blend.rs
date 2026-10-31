@@ -74,10 +74,11 @@ pub struct Offset {
 impl Offset {
     /// `base` moved `d` along its normal, or None where that passes its tightest curvature.
     pub fn surface(base: &Proc, d: f64) -> Option<Surface> {
-        Self::surface_over(base, d, base.min_radius())
+        Self::surface_over(base, d, base.mesh_radius())
     }
 
-    /// `surface`, refused only where it passes `min_radius` (the tightest over a face's stretch).
+    /// `surface`, refused only where it passes `min_radius` (the tightest over a face's stretch,
+    /// `mesh_radius_over`).
     pub fn surface_over(base: &Proc, d: f64, min_radius: f64) -> Option<Surface> {
         if min_radius <= -d + tol::MIN_LENGTH {
             return None;
@@ -159,8 +160,8 @@ impl Procedural for Offset {
     fn uv_scale(&self) -> (f64, f64) {
         self.base.uv_scale()
     }
-    fn min_radius(&self) -> f64 {
-        (self.base.min_radius() + self.d).max(10.0 * tol::MIN_LENGTH)
+    fn mesh_radius(&self) -> f64 {
+        (self.base.mesh_radius() + self.d).max(10.0 * tol::MIN_LENGTH)
     }
 }
 
@@ -663,7 +664,7 @@ fn gradient_turn(s: &Surface, b: &Box3) -> f64 {
             let core = Vec2::new(rz.x - t.major, rz.y).length();
             core.min(rz.x) - half
         }
-        Surface::Procedural(p) => p.min_radius() * 0.5,
+        Surface::Procedural(p) => p.mesh_radius() * 0.5,
     };
     if room > 0.0 { 1.0 / room } else { f64::INFINITY }
 }
@@ -981,7 +982,7 @@ impl Procedural for Pipe {
         let th = self.cross(t).map_or(1.0, |x| x.3.abs());
         (self.spine.deriv(t).d1.length().max(1e-9), self.radius * th)
     }
-    fn min_radius(&self) -> f64 {
+    fn mesh_radius(&self) -> f64 {
         self.radius
     }
     fn u_kinks(&self, u: Interval) -> Vec<f64> {

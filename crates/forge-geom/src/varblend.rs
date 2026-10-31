@@ -2557,10 +2557,10 @@ impl Procedural for VarBlend {
         let v = self.rows.iter().map(|r| r.bv).fold(0.0, f64::max);
         (u.max(tol::LINEAR), v.max(tol::LINEAR))
     }
-    fn min_radius(&self) -> f64 {
-        self.min_radius_over(Box2::new(self.range(), Interval::new(0.0, 1.0)))
+    fn mesh_radius(&self) -> f64 {
+        self.mesh_radius_over(Box2::new(self.range(), Interval::new(0.0, 1.0)))
     }
-    fn min_radius_over(&self, uv: Box2) -> f64 {
+    fn mesh_radius_over(&self, uv: Box2) -> f64 {
         // the rows round the stretch, and the law over it
         let (a, b) = (uv.u.lo.max(self.lo), uv.u.hi.min(self.hi));
         let (a, b) = if a <= b { (a, b) } else { (self.lo, self.hi) };
@@ -3253,7 +3253,7 @@ mod tests {
         let mut r = Rng::new(6);
         for c in cases() {
             let b = &*c.blend;
-            let off = 0.2 * b.min_radius();
+            let off = 0.2 * b.mesh_radius();
             for _ in 0..60 {
                 let uv = rand_uv(&mut r, b);
                 let d = Procedural::deriv(b, uv);
@@ -3292,7 +3292,7 @@ mod tests {
                 let d = Procedural::deriv(b, rand_uv(&mut r, b));
                 assert!(b.implicit(d.p).abs() < 1e-9, "{}", c.name);
                 let n = d.du.cross(d.dv).normalize().unwrap();
-                let e = 0.1 * b.min_radius();
+                let e = 0.1 * b.mesh_radius();
                 assert!(
                     b.implicit(d.p + n * e) > 0.0 && b.implicit(d.p - n * e) < 0.0,
                     "{} sign",
@@ -3581,7 +3581,7 @@ mod tests {
                 assert!(back.distance(d.p) < 1e-9 * scale, "kind {kind} {uv:?}");
                 assert!(b.implicit(d.p).abs() < 1e-9 * scale);
                 let n = d.du.cross(d.dv).normalize().unwrap();
-                let off = r.range(-0.2, 0.2) * b.min_radius();
+                let off = r.range(-0.2, 0.2) * b.mesh_radius();
                 let p = d.p + n * off;
                 let q = Procedural::deriv(&*b, Procedural::project(&*b, p)).p;
                 assert!(q.distance(p) <= off.abs() + 1e-9 * scale, "kind {kind} off {off}");

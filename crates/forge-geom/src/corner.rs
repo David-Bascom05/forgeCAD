@@ -136,7 +136,7 @@ impl SurfaceRail {
                     f64::INFINITY
                 }
             }
-            Surface::Procedural(p) => 1.0 / p.min_radius(),
+            Surface::Procedural(p) => 1.0 / p.mesh_radius(),
         }
     }
 }
@@ -1185,9 +1185,8 @@ pub struct HolePatch {
     heights: Vec<f64>,
     seeds: Vec<(Point2, Point3)>,
     scale: (f64, f64),
-    min_radius: f64,
-    /// Whether at some corner the sides' normals differ.
-    kinked: bool,
+    /// The sampled tightest radius of curvature: it sizes the domain and the mesh.
+    radius: f64,
     fold: bool,
     /// The rational quads, when they replace the ribbons.
     rational: Option<Arc<Cells>>,
@@ -1323,13 +1322,13 @@ impl HolePatch {
         if let Some(i) = (0..n).find(|&i| !p.turns_in(i)) {
             return Err(CornerError::Orientation(i));
         }
-        // size the domain so a unit of u or v is about one min_radius on the surface: the
+        // size the domain so a unit of u or v is about one sampled radius on the surface: the
         // mesher steps the parameters by angles of that radius
         // (scaling the domain leaves the surface as it is)
         p.measure();
-        let k = (0.5 * (p.scale.0 + p.scale.1) / p.min_radius).clamp(1e-3, 1e3);
+        let k = (0.5 * (p.scale.0 + p.scale.1) / p.radius).clamp(1e-3, 1e3);
         let mut q = HolePatch::with_domain(sides, k);
-        (q.scale, q.min_radius, q.fold) = ((p.scale.0 / k, p.scale.1 / k), p.min_radius, p.fold);
+        (q.scale, q.radius, q.fold) = ((p.scale.0 / k, p.scale.1 / k), p.radius, p.fold);
         q.seed();
         Ok(q)
     }
@@ -1346,7 +1345,6 @@ impl HolePatch {
 
     fn with_corners(sides: Vec<Side>, corners: Vec<Point2>, side_len: f64) -> HolePatch {
         let n = sides.len();
-        let kinked = kinked(&sides);
         let lines: Vec<(Vec2, f64)> = (0..n)
             .map(|i| {
                 let (a, b) = (corners[i], corners[(i + 1) % n]);
@@ -1407,8 +1405,7 @@ impl HolePatch {
             heights,
             seeds: Vec::new(),
             scale: (1.0, 1.0),
-            min_radius: 1.0,
-            kinked,
+            radius: 1.0,
             fold: false,
             rational: None,
         }
@@ -1466,7 +1463,7 @@ impl HolePatch {
     /// the domain; m >= 3 are parallelograms round the origin, cell i with corners A_i,
     /// A_i + A_(i+1), A_(i+1) and the origin (A_i of length k at the angle 2 pi i / m): quad
     /// sides 0 and 1 on the domain's outline, 2 and 3 the spokes. The domain is sized so a unit
-    /// is about the sampled min_radius, as `new` does.
+    /// is about the sampled radius, as `new` does.
     fn from_quads(sides: Vec<Side>, quads: Vec<rational::Quad>, pieces: Vec<Vec<Piece>>) -> HolePatch {
         let m = quads.len();
         let (mut scale, mut kmax) = (0.0, 0.0f64);
@@ -1531,7 +1528,6 @@ impl HolePatch {
             rect.v.include(c.y);
         }
         let mut p = HolePatch {
-            kinked: kinked(&sides),
             sides,
             corners: outline,
             lines,
@@ -1542,7 +1538,7 @@ impl HolePatch {
             heights: Vec::new(),
             seeds: Vec::new(),
             scale: (scale / k, scale / k),
-            min_radius: rmin,
+            radius: rmin,
             fold: false,
             rational: Some(Arc::new(Cells { cells, pieces })),
         };
@@ -1741,7 +1737,7 @@ impl HolePatch {
             }
         }
         self.scale = (su / count as f64, sv / count as f64);
-        self.min_radius = sampled_radius(kmax, &self.sides);
+        self.radius = sampled_radius(kmax, &self.sides);
         self.fold = fold;
     }
 
@@ -1836,16 +1832,6 @@ impl HolePatch {
         };
         self.seeds = xs.into_iter().map(|x| (x, self.point(x))).collect();
     }
-}
-
-/// Whether at some corner of the hole the sides' normals differ.
-fn kinked(sides: &[Side]) -> bool {
-    let n = sides.len();
-    (0..n).any(|i| {
-        let (a, b) = (&sides[(i + n - 1) % n], &sides[i]);
-        let (na, nb) = (a.rail.point(a.t1).1, b.rail.point(b.t0).1);
-        na.dot(nb) < (1.0 - 1e-9) * na.length() * nb.length()
-    })
 }
 
 /// A convex polygon with these side lengths, its corners on a circle, counter-clockwise.
@@ -2299,8 +2285,7 @@ impl Procedural for HolePatch {
                 .map(|&(x, p)| (x, f.point_to_world(p)))
                 .collect(),
             scale: self.scale,
-            min_radius: self.min_radius,
-            kinked: self.kinked,
+            radius: self.radius,
             fold: self.fold,
             rational: self.rational.as_ref().map(|r| {
                 Arc::new(Cells {
@@ -2317,10 +2302,12 @@ impl Procedural for HolePatch {
     fn uv_scale(&self) -> (f64, f64) {
         self.scale
     }
-    /// None (zero) round a corner where the sides' normals differ: the normal turns there in no
-    /// distance (research/corner-patch/kmin.rs). Elsewhere sampled, as the domain is sized by it.
-    fn min_radius(&self) -> f64 {
-        if self.kinked { 0.0 } else { self.min_radius }
+    /// The sample; min_radius is unknown. Round a corner where the sides' normals differ the
+    /// normal turns in no distance (research/corner-patch/kmin.rs); elsewhere the ribbon form
+    /// has no cheap bound and the rational quads' is not proven yet (a sample runs 25-40% over
+    /// the dense one).
+    fn mesh_radius(&self) -> f64 {
+        self.radius
     }
 }
 
@@ -2997,7 +2984,7 @@ mod tests {
         let n = Vec3::new(0.0, 0.3, 1.0);
         sides[2] = Side::new(Arc::new(SpokeRail::cubic(top, n, n)), 0.0, 1.0);
         let patch = HolePatch::new(sides).unwrap();
-        assert!(patch.kinked && patch.min_radius() == 0.0 && patch.min_radius > 0.0);
+        assert!(patch.min_radius().is_none() && patch.radius > 0.0);
         for x in patch.grid(6) {
             assert!(patch.implicit(patch.point(x)).abs() < 1e-9);
         }

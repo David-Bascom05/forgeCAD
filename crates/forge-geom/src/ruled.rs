@@ -491,7 +491,7 @@ impl Procedural for Ruled {
             [wa * a3 + wb * b3, bend, 0.0, 0.0],
         ))
     }
-    fn min_radius(&self) -> f64 {
+    fn mesh_radius(&self) -> f64 {
         let arc = |r: &Rail| match *r {
             Rail::Line { .. } => f64::INFINITY,
             Rail::Arc { circle, .. } => circle.radius,
