@@ -33,7 +33,8 @@ hole 3 on plate p1 thru     # FRAME on a sketch's plane (-on: flipped), at its p
 ```
 Rows: `pt P`, `line P P`, `poly P P.. [open]`, `rect X Y W H`, `circle P R`, `arc C S E [cw]`
 (append `cons` for construction). P: `X Y`, or a point: `p1`, `l2.a`|`.b`, `c1` (centre), `o`
-(origin). Entities count by kind: p l c a. Under-constrained solves from the coordinates
+(origin). Entities count by kind: p l c a. A row the rows above already imply is an error
+(over-constrained); `ref dist l1` (any dimension, no value) is driven: `check` shows its value. Under-constrained solves from the coordinates
 written; `check` reports each sketch's freedom; conflicts name their rows. A sketch `on` a
 plane, sketch or face is placed afresh whenever a line above it changes.
 

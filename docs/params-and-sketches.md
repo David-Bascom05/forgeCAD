@@ -88,3 +88,10 @@ inserted, deleted or moved. Edits: set a parameter, set a dimension, set an argu
 or reference), insert, delete, move. Evaluation is the part-file parser, line by line: the
 session rebuilds from the first line an edit changes, keeping later stages while lines read
 the same. The kernel still sees only `Feature`s of plain numbers.
+
+## Over-constrained
+
+As in Inventor, a constraint or dimension the rows above it already imply is an error, even
+when consistent: the solver finds it (ties met twice, or a row adding no rank to its group's
+Jacobian at the solution) and the message names the row and offers `ref`, a driven dimension
+that constrains nothing and shows its measured value in `check`.

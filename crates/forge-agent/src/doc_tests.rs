@@ -265,16 +265,15 @@ fn every_constraint_and_dimension() {
         circle 40 22 3\n\
         circle 45 15 5 cons\n\
         arc 25 40 15 40 35 40 cw cons\n\
-        fix o l1.a\n\
+        pt 60 60\n\
+        fix p3\n\
         co l1.a o\n\
         hor l1 l3\n\
         ver l2 l4\n\
         hdist o l2.a 50\n\
         vdist l1.a l3.a 30\n\
         mid p1 l3\n\
-        hor l5\n\
         par l5 l6\n\
-        hor l5.a l6.a\n\
         dist l5 10\n\
         eq l5 l6\n\
         dist l5.a l1 10\n\
@@ -296,10 +295,10 @@ fn every_constraint_and_dimension() {
         tan l2 c4\n\
         rad c4 2\n\
         vdist o c4 15\n\
-        co a1.c l7\n\
         sym a1.a a1.b l7\n\
         dist a1.a a1.b 20\n\
-        ang l1 l7 90\n\
+        ref ang l1 l7\n\
+        ref dist l5.a l1\n\
         end\nextrude 4 sketch1 l1\n";
     let m = built(src);
     let forge_model::Feature::Sketch(s) = &m.features[1] else {
@@ -319,7 +318,59 @@ fn every_constraint_and_dimension() {
         crate::sketch::freedom(s),
         (4, ["p2", "l7", "a1"].map(String::from).to_vec())
     );
+    // driven: the angle the others make, and a distance shown, not held
+    let shown: Vec<f64> = s.driven.iter().map(|d| (d.1 * 1e9).round() / 1e9).collect();
+    assert_eq!(shown, [(forge_math::dmath::FRAC_PI_2 * 1e9).round() / 1e9, 10.0]);
     assert_eq!(m.select("faces cyl r=3", None).expect("selects").1.len(), 2);
+}
+
+#[test]
+fn over_constrained_names_the_row_and_the_fix() {
+    let e = |rows: &str| {
+        error(&format!(
+            "sketch\n  rect 0 0 10 10\n  fix l1.a\n  dist l1 10\n{rows}end\n"
+        ))
+        .1
+    };
+    assert_eq!(
+        e("  dist l3 10\n"),
+        "`dist l3 10` is implied by the rows above it (over-constrained): remove it, or make it driven (it then shows its value): `ref dist l3`"
+    );
+    assert_eq!(
+        e("  hor l3\n"),
+        "`hor l3` is implied by the rows above it (over-constrained): remove it"
+    );
+    assert_eq!(
+        e("  ref rad l1\n"),
+        "`ref rad l1`: rad and dia need a circle or arc"
+    );
+    assert_eq!(e("  ref dist l1 4\n").split(':').next(), Some("`ref dist l1 4`"));
+    assert_eq!(
+        e("  ref par l1 l3\n"),
+        "`ref par l1 l3`: ref goes before a dimension (dist hdist vdist rad dia ang)"
+    );
+    let dir = std::env::temp_dir().join(format!("forgecad-ref-{}", std::process::id()));
+    std::fs::create_dir_all(&dir).expect("dir");
+    let f = dir.join("r.fc");
+    std::fs::write(
+        &f,
+        "sketch\n  rect 0 0 10 10\n  fix l1.a\n  dist l1 10\n  ref dist l3\n  ref hdist l1.a l2.b\nend\n",
+    )
+    .expect("write");
+    let r = crate::cmd::Session::default().run(
+        "check",
+        &crate::cmd::Args {
+            file: f.to_string_lossy().into(),
+            ..Default::default()
+        },
+    );
+    std::fs::remove_dir_all(&dir).expect("clean");
+    assert!(
+        r.text
+            .contains("\n  `ref dist l3` = 10\n  `ref hdist l1.a l2.b` = 10"),
+        "{}",
+        r.text
+    );
 }
 
 #[test]

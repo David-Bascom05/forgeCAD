@@ -19,6 +19,7 @@ pub fn build(plane: Frame, rows: Vec<Vec<String>>, num: &Num) -> R<Sketch> {
         s: forge_sketch::Sketch::new(plane),
         names: Vec::new(),
         made: Vec::new(),
+        driven: Vec::new(),
         num,
     };
     for (k, row) in rows.iter().enumerate() {
@@ -50,21 +51,59 @@ pub fn build(plane: Frame, rows: Vec<Vec<String>>, num: &Num) -> R<Sketch> {
         }
         return Err(msg);
     }
+    let implied: Vec<usize> =
+        b.s.implied()
+            .iter()
+            .filter_map(|c| b.made.iter().find(|m| m.0 == *c).map(|m| m.1))
+            .collect();
+    if let Some(&k) = implied.first() {
+        let row = rows[k].join(" ");
+        let fix = if DIMENSIONS.contains(&rows[k][0].as_str()) {
+            let mut r = rows[k].clone();
+            r.pop();
+            format!(
+                "remove it, or make it driven (it then shows its value): `ref {}`",
+                r.join(" ")
+            )
+        } else {
+            "remove it".to_string()
+        };
+        return Err(format!(
+            "`{row}` is implied by the rows above it (over-constrained): {fix}"
+        ));
+    }
+    let driven = b
+        .driven
+        .iter()
+        .map(|(k, kw, es)| {
+            Ok((
+                *k,
+                b.measure(kw, es)
+                    .map_err(|e| format!("`{}`: {e}", rows[*k].join(" ")))?,
+            ))
+        })
+        .collect::<R<_>>()?;
     Ok(Sketch {
         plane,
         on: None,
         at: None,
         rows,
         solved: b.s,
+        driven,
         names: b.names,
     })
 }
+
+/// The rows that dimension, and which take `ref`.
+pub const DIMENSIONS: [&str; 6] = ["dist", "hdist", "vdist", "rad", "dia", "ang"];
 
 struct B<'a, 'n> {
     s: forge_sketch::Sketch,
     names: Vec<(String, EntityId)>,
     /// Each constraint and the row that made it.
     made: Vec<(ConstraintId, usize)>,
+    /// Each driven dimension: its row, kind and entities.
+    driven: Vec<(usize, String, Vec<EntityId>)>,
     num: &'a Num<'n>,
 }
 
@@ -140,6 +179,36 @@ impl B<'_, '_> {
             c.t = &row[..row.len() - 1];
         }
         let made = self.names.len();
+        if row[0] == "ref" {
+            let kw = row.get(1).map_or("", |s| s.as_str());
+            if !DIMENSIONS.contains(&kw) {
+                return Err(format!("ref goes before a dimension ({})", DIMENSIONS.join(" ")));
+            }
+            c.k = 2;
+            let mut es = Vec::new();
+            while !c.done() {
+                es.push(self.any(&mut c)?);
+            }
+            let want = if matches!(kw, "dist" | "ang") {
+                1..=2
+            } else if kw == "rad" || kw == "dia" {
+                1..=1
+            } else {
+                2..=2
+            };
+            if !want.contains(&es.len()) {
+                return Err(format!(
+                    "ref {kw} names {} entities, no value",
+                    if want.start() == want.end() {
+                        want.start().to_string()
+                    } else {
+                        "1 or 2".into()
+                    }
+                ));
+            }
+            self.driven.push((k, kw.to_string(), es));
+            return Ok(());
+        }
         match row[0].as_str() {
             "pt" => {
                 let p = self.point(&mut c)?;
@@ -368,6 +437,45 @@ impl B<'_, '_> {
             }
         }
         c.end()
+    }
+
+    /// What a driven dimension measures on the solved sketch.
+    fn measure(&self, kw: &str, es: &[EntityId]) -> R<f64> {
+        let q = &self.s;
+        let pt = |e: EntityId| self.as_point(e).map(|p| q.point(p));
+        let line = |e: EntityId| match q.entity(e) {
+            Some(Entity::Line { a, b }) => Some((q.point(a), q.point(b))),
+            _ => None,
+        };
+        let need_line = |e: EntityId| line(e).ok_or_else(|| "a line is needed".to_string());
+        Ok(match (kw, es) {
+            ("dist", [l]) => {
+                let (a, b) = need_line(*l)?;
+                a.distance(b)
+            }
+            ("dist", [x, y]) => match (line(*x), line(*y)) {
+                (None, None) => pt(*x)?.distance(pt(*y)?),
+                (Some((a, b)), None) | (None, Some((a, b))) => {
+                    let p = if line(*x).is_some() { pt(*y)? } else { pt(*x)? };
+                    ((b - a).cross(p - a) / a.distance(b)).abs()
+                }
+                _ => return Err("dist between two lines: use par and a point to line dist".into()),
+            },
+            ("hdist", [x, y]) => pt(*y)?.x - pt(*x)?.x,
+            ("vdist", [x, y]) => pt(*y)?.y - pt(*x)?.y,
+            ("rad" | "dia", [c]) => {
+                if !matches!(q.entity(*c), Some(Entity::Circle { .. } | Entity::Arc { .. })) {
+                    return Err("rad and dia need a circle or arc".into());
+                }
+                q.radius(*c) * if kw == "dia" { 2.0 } else { 1.0 }
+            }
+            ("ang", [x, y]) => {
+                let ((a, b), (c, d)) = (need_line(*x)?, need_line(*y)?);
+                let (u, v) = (b - a, d - c);
+                dmath::atan2(u.cross(v), u.dot(v))
+            }
+            _ => return Err(format!("ref {kw}: wrong entities")),
+        })
     }
 
     /// A point named, or a new one at X Y.

@@ -490,11 +490,23 @@ impl Session {
                         free.join(" ")
                     ),
                 });
+                let mut driven = Vec::new();
+                for &(k, v) in &s.driven {
+                    let row = s.rows[k].join(" ");
+                    let v = if s.rows[k][1] == "ang" {
+                        v / forge_math::dmath::PI * 180.0
+                    } else {
+                        v
+                    };
+                    text.push_str(&format!("\n  `{row}` = {}", short(v)));
+                    driven.push(Json::obj(vec![("row", row.into()), ("value", v.into())]));
+                }
                 let free = Json::Arr(free.into_iter().map(Json::from).collect());
                 sketches.push(Json::obj(vec![
                     ("line", no.into()),
                     ("dof", dof.into()),
                     ("free", free),
+                    ("driven", Json::Arr(driven)),
                 ]));
             }
         }

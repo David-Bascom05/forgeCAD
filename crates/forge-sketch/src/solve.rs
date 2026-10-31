@@ -78,6 +78,8 @@ struct Ties {
     up: Vec<usize>,
     off: Vec<f64>,
     pin: Vec<Option<f64>>,
+    /// Ties already implied by the ones before, so far.
+    implied: usize,
 }
 
 /// How far apart two values meant to be equal may be and still count as one.
@@ -111,12 +113,14 @@ impl Ties {
     fn tie(&mut self, i: usize, j: usize, d: f64) -> bool {
         let ((ri, oi), (rj, oj)) = (self.find(i), self.find(j));
         if ri == rj {
+            self.implied += same(oj - oi, d) as usize;
             return same(oj - oi, d);
         }
         // x_rj = x_ri + oi + d - oj
         let o = oi + d - oj;
         match (self.pin[ri], self.pin[rj]) {
             (Some(a), Some(b)) if !same(a + o, b) => return false,
+            (Some(_), Some(_)) => self.implied += 1,
             (None, Some(b)) => self.pin[ri] = Some(b - o),
             _ => {}
         }
@@ -129,7 +133,10 @@ impl Ties {
     fn fix(&mut self, i: usize, v: f64) -> bool {
         let (r, o) = self.find(i);
         match self.pin[r] {
-            Some(p) => same(p + o, v),
+            Some(p) => {
+                self.implied += same(p + o, v) as usize;
+                same(p + o, v)
+            }
             None => {
                 self.pin[r] = Some(v - o);
                 true
@@ -267,13 +274,15 @@ impl Sketch {
     /// Fixed, coincident, concentric, horizontal, vertical and axis-distance constraints tie
     /// parameters linearly; they are met exactly by tying, and only the free roots move.
     /// Returns the ties and which constraints are left as residual rows.
-    fn ties(&self) -> (Ties, Vec<Source>) {
+    fn ties(&self) -> (Ties, Vec<Source>, Vec<usize>) {
         let n = self.params.len();
         let mut t = Ties {
             up: (0..n).collect(),
             off: vec![0.0; n],
             pin: vec![None; n],
+            implied: 0,
         };
+        let mut implied = Vec::new();
         let mut rows: Vec<Source> = (0..self.entities.len())
             .filter(|&i| matches!(self.entities[i].kind, Entity::Arc { .. }))
             .map(Source::Arc)
@@ -288,6 +297,7 @@ impl Sketch {
             _ => unreachable!("validated line"),
         };
         for (k, rec) in self.constraints.iter().enumerate() {
+            let before = t.implied;
             let ok = match rec.c {
                 Constraint::Fixed(p) => {
                     let (x, y) = xy(p);
@@ -315,9 +325,65 @@ impl Sketch {
             };
             if !ok {
                 rows.push(Source::Constraint(k));
+            } else if t.implied > before {
+                implied.push(k);
             }
         }
-        (t, rows)
+        (t, rows, implied)
+    }
+
+    /// Constraints the ones before them already imply, at the current parameters: each
+    /// adds nothing, so the sketch is over-constrained (in order, so the later of two is named).
+    pub fn implied(&self) -> Vec<ConstraintId> {
+        let (mut ties, sources, mut out) = self.ties();
+        let n = self.params.len();
+        let mut col = vec![usize::MAX; n];
+        let mut free = 0;
+        for i in 0..n {
+            let (r, _) = ties.find(i);
+            if ties.pin[r].is_none() {
+                if col[r] == usize::MAX {
+                    col[r] = free;
+                    free += 1;
+                }
+                col[i] = col[r];
+            }
+        }
+        let sys = self.system_of(&self.params, &sources);
+        // rows reduced against the independent ones before them, by their pivot columns
+        let mut basis: Vec<(usize, Vec<f64>)> = Vec::new();
+        for i in 0..sys.r.len() {
+            let mut v = vec![0.0; free];
+            for &(p, g) in sys.row(i) {
+                if col[p] != usize::MAX {
+                    v[col[p]] += g;
+                }
+            }
+            let scale = v.iter().fold(0.0f64, |m, x| m.max(x.abs()));
+            for (pc, b) in &basis {
+                let f = v[*pc];
+                if f != 0.0 {
+                    v.iter_mut().zip(b).for_each(|(x, y)| *x -= f * y);
+                }
+            }
+            let (pc, big) =
+                v.iter().enumerate().fold(
+                    (0, 0.0f64),
+                    |m, (k, x)| if x.abs() > m.1 { (k, x.abs()) } else { m },
+                );
+            if big <= 1e-9 * scale.max(1e-300) {
+                if let Source::Constraint(k) = sys.source[i] {
+                    out.push(k);
+                }
+                continue;
+            }
+            let p = v[pc];
+            v.iter_mut().for_each(|x| *x /= p);
+            basis.push((pc, v));
+        }
+        out.sort_unstable();
+        out.dedup();
+        out.into_iter().map(|k| self.constraints[k].id).collect()
     }
 
     /// Levenberg-Marquardt with per-parameter damping weights, over the parameters left free
@@ -326,7 +392,7 @@ impl Sketch {
     /// that meets the constraints, and free geometry stays put.
     fn solve_weighted(&mut self, w: &[f64]) -> SolveReport {
         let n = self.params.len();
-        let (mut ties, sources) = self.ties();
+        let (mut ties, sources, _) = self.ties();
         // each parameter's root, and the roots that still move
         let mut col = vec![usize::MAX; n];
         let mut members: Vec<Vec<usize>> = Vec::new();

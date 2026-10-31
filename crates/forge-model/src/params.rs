@@ -34,6 +34,9 @@ pub struct Sketch {
     pub at: Option<Point3>,
     pub rows: Vec<Vec<String>>,
     pub solved: forge_sketch::Sketch,
+    /// Each driven dimension (`ref dist l1`): its row and the value it measures (mm, or radians
+    /// for an angle).
+    pub driven: Vec<(usize, f64)>,
     /// Each named entity (`l3`, `c1`, `o`) and its id in `solved`.
     pub names: Vec<(String, forge_sketch::EntityId)>,
 }

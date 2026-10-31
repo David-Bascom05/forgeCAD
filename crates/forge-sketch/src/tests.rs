@@ -334,3 +334,19 @@ fn rejects_bad_constraints() {
     s.remove_constraint(c).unwrap();
     assert_eq!(s.remove_constraint(c), Err(SketchError::UnknownConstraint(c)));
 }
+
+#[test]
+fn implied_constraints_are_named_in_order() {
+    let mut s = Sketch::new(Frame::WORLD);
+    let l = rectangle(&mut s, 20.0, 10.0, true);
+    let corner = line_ends(&s, l[0]).0;
+    s.add_constraint(Constraint::Fixed(corner)).unwrap();
+    assert_eq!(s.solve().status, Status::Solved);
+    assert!(s.implied().is_empty());
+    let par = s.add_constraint(Constraint::Parallel(l[0], l[2])).unwrap();
+    let len = s.add_constraint(Constraint::Length(l[2], 20.0)).unwrap();
+    let hor = s.add_constraint(Constraint::Horizontal(l[0])).unwrap();
+    let fix = s.add_constraint(Constraint::Fixed(corner)).unwrap();
+    assert_eq!(s.solve().status, Status::Solved);
+    assert_eq!(s.implied(), vec![par, len, hor, fix]);
+}
