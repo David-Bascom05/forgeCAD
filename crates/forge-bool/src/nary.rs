@@ -1326,7 +1326,7 @@ fn nary_body(
             marks.push((i, n, n));
         }
     }
-    let vnames = crate::boolean::vertex_names(&points, marks, root);
+    let vnames = crate::boolean::vertex_names(&points, marks, root, &crate::boolean::part_frame(tools[0]));
     // closed new edges' own vertices, added after those
     let mut seams: Vec<Name> = Vec::new();
     // a new vertex settles on the point nearest every curve through it; parameters follow it

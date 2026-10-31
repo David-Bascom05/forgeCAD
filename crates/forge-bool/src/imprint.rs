@@ -10,7 +10,7 @@
 //! of slabs between those faces, so the faces the tool passes gain a hole, the wall stands where
 //! the material changes, and a cap closes a wall that ends inside the tool.
 
-use crate::boolean::{Op, vertex_names};
+use crate::boolean::{Op, part_frame, vertex_names};
 use crate::classify::{circle_in_face, extend_query, loop_in_face};
 use forge_geom::intersect::{SurfaceSurface, plane_cylinder};
 use forge_geom::{Curve, CurveGeom, Cylinder, Surface};
@@ -568,7 +568,7 @@ fn build<S: Src>(a: &mut Body, b: &S, t: &Tool, hits: &[Hit], wall_at: &[bool], 
             marks.push(((i * nw + c1) as u32, pair.with_name(n1), name.with(1)));
         }
     }
-    let vnames = vertex_names(&points, marks, root);
+    let vnames = vertex_names(&points, marks, root, &part_frame(a));
     let shell = ShellId(0);
     let mut made = Made {
         b,

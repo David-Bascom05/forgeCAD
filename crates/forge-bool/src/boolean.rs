@@ -648,7 +648,7 @@ fn plan(a: &Body, b: &Body, op: Op, scratch: &mut Scratch) -> R<Plan> {
             marks.push((i, n, n));
         }
     }
-    let mut vnames = vertex_names(&new_points, marks, root);
+    let mut vnames = vertex_names(&new_points, marks, root, &part_frame(a));
     // closed new edges' own vertices (added after the cuts' below)
     vnames.extend(segs.iter().map(|s| s.name.with_str("seam")));
     // cut points of one vertex differ by up to their tolerance: a new vertex settles on the point
@@ -2233,6 +2233,14 @@ pub fn ranked(pts: &[Point3]) -> Vec<u64> {
         .collect()
 }
 
+/// The part's own frame, where ties among new vertices are broken: its first face's surface's,
+/// so it turns and moves with the part.
+pub(crate) fn part_frame(b: &Body) -> forge_math::Frame {
+    b.face_ids()
+        .next()
+        .map_or(forge_math::Frame::WORLD, |f| surface_frame(&b.face(f).surface))
+}
+
 /// The surface's own frame: where ties among what it holds are broken.
 pub fn surface_frame(s: &Surface) -> forge_math::Frame {
     match s {
@@ -2264,7 +2272,12 @@ pub(crate) fn curve_ends(segs: &[Seg], cut_vertex: &[VKey]) -> Vec<(u32, Name, N
 /// Names for new vertices from what meets there (`marks`: point and name: the curve pieces
 /// ending there, else the edges cut), not from the order they were found in. Points where the
 /// same ones meet are told apart by where they lie.
-pub(crate) fn vertex_names(points: &[Point3], marks: Vec<(u32, Name, Name)>, root: Name) -> Vec<Name> {
+pub(crate) fn vertex_names(
+    points: &[Point3],
+    marks: Vec<(u32, Name, Name)>,
+    root: Name,
+    frame: &forge_math::Frame,
+) -> Vec<Name> {
     let n = points.len();
     // grouped by point (a counting sort), each group's names in order
     let mut start = vec![0usize; n + 1];
@@ -2296,8 +2309,11 @@ pub(crate) fn vertex_names(points: &[Point3], marks: Vec<(u32, Name, Name)>, roo
     let keys: Vec<Name> = (0..n)
         .map(|i| {
             let group = &mut by_point[start[i]..start[i + 1]];
+            // the least of what meets there: a curve piece that rounding leaves out at the
+            // point (where coplanar faces touch) does not change it; vertices it leaves alike
+            // are told apart below
             group.sort_unstable_by_key(|g| g.0);
-            mix(&mut group.iter().map(|g| g.0))
+            mix(&mut group.iter().map(|g| g.0).take(1))
         })
         .collect();
     let mut order: Vec<usize> = (0..n).collect();
@@ -2320,7 +2336,7 @@ pub(crate) fn vertex_names(points: &[Point3], marks: Vec<(u32, Name, Name)>, roo
             let first = if a != b {
                 a < b
             } else {
-                !ranked_pair(points[j], points[i])
+                !ranked_pair(frame.point_to_local(points[j]), frame.point_to_local(points[i]))
             };
             let (lo, hi) = if first { (i, j) } else { (j, i) };
             out[lo] = keys[lo].with(0);
@@ -2331,7 +2347,7 @@ pub(crate) fn vertex_names(points: &[Point3], marks: Vec<(u32, Name, Name)>, roo
         by_second.sort_unstable();
         let mut rank = 0u64;
         for sub in by_second.chunk_by(|a, b| a.0 == b.0) {
-            let pts: Vec<Point3> = sub.iter().map(|x| points[x.1]).collect();
+            let pts: Vec<Point3> = sub.iter().map(|x| frame.point_to_local(points[x.1])).collect();
             for (x, r) in sub.iter().zip(ranked(&pts)) {
                 out[x.1] = keys[x.1].with(rank + r);
             }
