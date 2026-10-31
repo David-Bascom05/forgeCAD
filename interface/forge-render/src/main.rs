@@ -14,7 +14,7 @@ use winit::window::{Window, WindowId};
 const USAGE: &str =
     "forge-render [PART | file.fc] [--stress N] [--moving N] [--bench] [--hover] [--window] [--frames N]
   [--size WxH] [--lod-px T] [--lines near|far|none] [--no-ao] [--section x|y|z] [--explode T] [--no-cache] [--shot FILE.ppm [--select X Y]..] [--yaw R --pitch R --dist X]
-  [--export FILE] [--levels] [--dims] [--drag NAME] [--drag-bench [--drag-parts A,B] [--ticks N]]
+  [--export FILE] [--levels] [--dims] [--drag NAME [--drag-demo]] [--drag-bench [--drag-parts A,B] [--ticks N]]
 PART: a bench part (default crank). --stress: all 15 bench parts placed N times. --moving N: N of
 them swing on joints every frame. --hover: --bench also picks under a wandering pixel each frame. --bench: a fixed
 orbit, frame times on stdout, headless unless --window. --shot: one headless frame.
@@ -26,7 +26,7 @@ orbit. L lines near, far, none. O occlusion. S section x, y, z, off; ctrl + whee
 
 --dims lists the numbers a part has. --drag NAME: left drag changes that number live, release commits
 it (a file is rewritten; the line prints), Esc cancels, D swaps the left button back to orbiting.
---drag-bench: drags over every bench part, value change to frame, headless.";
+--drag-demo: the same with no mouse, there and back, then exits. --drag-bench: drags over every bench part, value change to frame, headless.";
 
 struct Args {
     part: String,
@@ -52,6 +52,7 @@ struct Args {
     dist: Option<f32>,
     dims: bool,
     drag: Option<String>,
+    drag_demo: bool,
     drag_bench: bool,
     drag_parts: Vec<String>,
     ticks: usize,
@@ -82,6 +83,7 @@ fn args() -> Result<Args, String> {
         dist: None,
         dims: false,
         drag: None,
+        drag_demo: false,
         drag_bench: false,
         drag_parts: Vec::new(),
         ticks: 180,
@@ -116,6 +118,7 @@ fn args() -> Result<Args, String> {
             "--no-cache" => a.cache = false,
             "--dims" => a.dims = true,
             "--drag" => a.drag = it.next(),
+            "--drag-demo" => a.drag_demo = true,
             "--drag-bench" => a.drag_bench = true,
             "--drag-parts" => {
                 a.drag_parts = it
@@ -385,6 +388,8 @@ impl ApplicationHandler for App {
                 from_x: 0.0,
                 waiting: 0,
                 last_seq: 0,
+                demo: self.args.drag_demo.then_some(120),
+                demo_done: false,
             });
         }
         let (c, _) = v.scene.bounds();

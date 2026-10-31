@@ -120,11 +120,10 @@ pub enum Op {
 
 /// The words of a selector that could name a feature: a name with a number on its end.
 fn selector_words(text: &str) -> impl Iterator<Item = &str> {
-    text.split(|c: char| c == ' ' || c == '(' || c == ')')
-        .filter(|w| {
-            let name = w.trim_end_matches(|c: char| c.is_ascii_digit());
-            name.len() < w.len() && name.bytes().next().is_some_and(|c| c.is_ascii_alphabetic())
-        })
+    text.split([' ', '(', ')']).filter(|w| {
+        let name = w.trim_end_matches(|c: char| c.is_ascii_digit());
+        name.len() < w.len() && name.bytes().next().is_some_and(|c| c.is_ascii_alphabetic())
+    })
 }
 
 /// `text` with the whole word `from` as `to`, where it stands alone between spaces and brackets.
@@ -132,7 +131,7 @@ fn rename_word(text: &str, from: &str, to: &str) -> String {
     let mut out = String::with_capacity(text.len());
     let mut word = String::new();
     for c in text.chars().chain(std::iter::once(' ')) {
-        if c == ' ' || c == '(' || c == ')' {
+        if matches!(c, ' ' | '(' | ')') {
             out.push_str(if word == from { to } else { &word });
             word.clear();
             out.push(c);

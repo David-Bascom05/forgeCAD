@@ -177,8 +177,6 @@ pub struct Drag {
     /// Value per pixel.
     pub per_px: f64,
     pub dragging: bool,
-    /// The last value that built.
-    pub good: f64,
     /// The newest frame's numbers, for the HUD.
     pub rebuild_ms: f64,
     pub mesh_ms: f64,
@@ -200,7 +198,6 @@ impl Drag {
             value: d.value,
             per_px: radius as f64 / 500.0,
             dragging: false,
-            good: d.value,
             rebuild_ms: 0.0,
             mesh_ms: 0.0,
             upload_ms: 0.0,

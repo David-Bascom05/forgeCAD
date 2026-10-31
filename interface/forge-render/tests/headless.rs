@@ -74,9 +74,10 @@ fn looking_away_draws_nothing() {
     assert_eq!(drawn.placements, 0);
 }
 
-fn off_background(rgb: &[u8]) -> usize {
-    let px = rgb.as_chunks::<3>().0;
-    px.iter().filter(|p| **p != px[0]).count()
+/// How many pixels differ between two pictures.
+fn differ(a: &[u8], b: &[u8]) -> usize {
+    let (a, b) = (a.as_chunks::<3>().0, b.as_chunks::<3>().0);
+    a.iter().zip(b).filter(|(x, y)| x != y).count()
 }
 
 /// A part dragged is drawn from its faces in their own slots: about what its mesh draws, and a
@@ -99,6 +100,12 @@ fn a_dragged_part_draws_from_its_faces_and_follows_the_value() {
     let target = Offscreen::new(&r.device, size);
     let (center, radius) = scene.bounds();
     let cam = Camera::fit(center, radius * 1.5);
+    let mut away = Camera::fit([center[0] + 100.0 * radius, center[1], center[2]], radius);
+    away.yaw = core::f32::consts::PI;
+    away.pitch = 0.0;
+    r.frame(&target.view, &mut scene, &away, Overlay::default());
+    r.wait();
+    let blank = target.read_rgb(&r);
     r.frame(&target.view, &mut scene, &cam, Overlay::default());
     r.wait();
     let whole = target.read_rgb(&r);
@@ -128,9 +135,9 @@ fn a_dragged_part_draws_from_its_faces_and_follows_the_value() {
     r.frame(&target.view, &mut scene, &cam, Overlay::default());
     r.wait();
     let faces = target.read_rgb(&r);
-    let (a, b) = (off_background(&whole) as f64, off_background(&faces) as f64);
+    let (a, b) = (differ(&whole, &blank) as f64, differ(&faces, &blank) as f64);
     assert!(
-        (a - b).abs() / a < 0.02,
+        a > 2000.0 && (a - b).abs() / a < 0.03,
         "{a} pixels from the mesh, {b} from the faces"
     );
 
@@ -141,13 +148,6 @@ fn a_dragged_part_draws_from_its_faces_and_follows_the_value() {
     r.frame(&target.view, &mut scene, &cam, Overlay::default());
     r.wait();
     let after = target.read_rgb(&r);
-    assert!(off_background(&after) as f64 > b * 1.05);
-    let differ = after
-        .as_chunks::<3>()
-        .0
-        .iter()
-        .zip(faces.as_chunks::<3>().0)
-        .filter(|(x, y)| x != y)
-        .count();
-    assert!(differ > 500, "{differ} pixels changed");
+    let c = differ(&after, &blank) as f64;
+    assert!(c > b * 1.1, "{c} pixels of part, from {b}");
 }

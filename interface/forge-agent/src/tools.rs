@@ -942,20 +942,26 @@ impl Part {
         Ok(())
     }
 
-    /// The drag ends on this value: one commit, one line. A value that does not build ends it
-    /// where it started.
-    pub fn drag_commit(&mut self, op: Op) -> Done {
+    /// The drag ends on this value, or on `fallback` (the last that built) if it doesn't build:
+    /// one commit, one line. If neither does it ends where it started.
+    pub fn drag_commit(&mut self, op: Op, fallback: Option<Op>) -> Done {
         let Some(undo) = self.live.take() else {
             return self.refused("error: nothing is being dragged".into());
         };
-        let built = self.model.edit(op.clone());
-        if built.is_err() || self.model.error.is_some() {
+        let mut chosen = None;
+        for o in std::iter::once(op).chain(fallback) {
+            if self.model.edit(o.clone()).is_ok() && self.model.error.is_none() {
+                chosen = Some(o);
+                break;
+            }
+        }
+        let Some(op) = chosen else {
             for u in undo {
                 let _ = self.model.doc.apply(u);
             }
             self.model.sync_doc();
             return self.refused("that value does not build; back as it was".into());
-        }
+        };
         let was = self.log.last().map(|e| (e.faces as i64, e.volume));
         let now = self.stat();
         let src = self.model.src().to_string();
@@ -1553,7 +1559,7 @@ mod tests {
             assert!(p.model.error.is_none());
         }
         assert_eq!(p.version(), v, "nothing logged until it ends");
-        let d = p.drag_commit(w.op("44".into()));
+        let d = p.drag_commit(w.op("44".into()), None);
         assert_eq!(d.lines, ["w = 44"]);
         assert_eq!(p.version(), v + 1);
         ok(&mut p, "undo");

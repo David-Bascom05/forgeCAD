@@ -169,6 +169,8 @@ fn run<T>(mut part: Part, mesher: &mut impl FnMut(&Body, Stage) -> T, shared: &S
     let say = |e: Event<T>| shared.slot.lock().expect("the UI is alive").ready.push_back(e);
     // the last text that built, to go back to if the kernel panics on a value
     let mut good = part.model.src().to_string();
+    // the last value that built, for a drag that ends on one that doesn't
+    let mut last_good: Option<Op> = None;
     let t = Instant::now();
     if let Some(b) = part.model.body() {
         let out = mesher(b, Stage::Warm);
@@ -203,8 +205,9 @@ fn run<T>(mut part: Part, mesher: &mut impl FnMut(&Body, Stage) -> T, shared: &S
             Next::Stop => return,
             Next::Job(j) => {
                 let d = match j {
-                    Job::Commit(op) => part.drag_commit(op),
+                    Job::Commit(op) => part.drag_commit(op, last_good.take()),
                     Job::Cancel => {
+                        last_good = None;
                         part.drag_cancel();
                         Done {
                             ok: true,
@@ -223,7 +226,7 @@ fn run<T>(mut part: Part, mesher: &mut impl FnMut(&Body, Stage) -> T, shared: &S
             }
             Next::Value(seq, op) => {
                 let t = Instant::now();
-                let built = catch_unwind(AssertUnwindSafe(|| part.drag(op)));
+                let built = catch_unwind(AssertUnwindSafe(|| part.drag(op.clone())));
                 let rebuild_ms = t.elapsed().as_secs_f64() * 1e3;
                 let failure = match built {
                     Ok(Ok(())) => part.model.error.as_ref().map(|f| f.msg.clone()),
@@ -248,6 +251,7 @@ fn run<T>(mut part: Part, mesher: &mut impl FnMut(&Body, Stage) -> T, shared: &S
                     mesh_ms: 0.0,
                 };
                 if frame.failure.is_none() {
+                    last_good = Some(op);
                     good = part.model.src().to_string();
                     let t = Instant::now();
                     if let Some(b) = part.model.body() {
@@ -345,13 +349,20 @@ mod tests {
     }
 
     #[test]
-    fn a_commit_that_cannot_build_goes_back() {
+    fn a_commit_that_cannot_build_takes_the_last_that_did() {
         let (mut l, w) = start();
         let s = l.drag(w.op("55".into()));
         wait(&mut l, |e| matches!(e, Event::Frame(f) if f.seq == s));
         l.commit(w.op("nope".into()));
         let got = wait(&mut l, |e| matches!(e, Event::Final(_)));
         let last = got.last().expect("final");
-        assert!(matches!(last, Event::Final(v) if *v == 12000.0), "{last:?}");
+        assert!(matches!(last, Event::Final(v) if *v == 16500.0), "{last:?}");
+        // none did: where it started
+        let s = l.drag(w.op("nope".into()));
+        wait(&mut l, |e| matches!(e, Event::Frame(f) if f.seq == s));
+        l.commit(w.op("nope".into()));
+        let got = wait(&mut l, |e| matches!(e, Event::Final(_)));
+        let last = got.last().expect("final");
+        assert!(matches!(last, Event::Final(v) if *v == 16500.0), "{last:?}");
     }
 }

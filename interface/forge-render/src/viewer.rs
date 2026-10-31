@@ -77,6 +77,10 @@ pub struct LiveDrag {
     /// Frames asked for and not yet back.
     pub waiting: u64,
     pub last_seq: u64,
+    /// `--drag-demo`: this many values to go, driven as a mouse would, then it reports and exits.
+    pub demo: Option<usize>,
+    /// The commit's full mesh has come.
+    pub demo_done: bool,
 }
 
 pub struct Bench {
@@ -219,6 +223,13 @@ impl Viewer {
         }
     }
 
+    fn drag_demo_running(&self) -> bool {
+        #[cfg(not(target_arch = "wasm32"))]
+        return self.drag.as_ref().is_some_and(|l| l.demo.is_some());
+        #[cfg(target_arch = "wasm32")]
+        false
+    }
+
     /// After a commit, until the full mesh has come.
     fn drag_waiting_final(&self) -> bool {
         #[cfg(not(target_arch = "wasm32"))]
@@ -255,6 +266,45 @@ impl Viewer {
         Some(t)
     }
 
+    /// The left button goes down on a dragged value.
+    #[cfg(not(target_arch = "wasm32"))]
+    pub fn drag_press(&mut self) {
+        let Some(l) = &mut self.drag else { return };
+        l.from_x = l.cursor_x;
+        l.drag.start = l.drag.value;
+        l.drag.dragging = true;
+        self.nav.selected.clear();
+    }
+
+    /// The cursor moves: while dragging, a new value goes to the worker. Never waits.
+    #[cfg(not(target_arch = "wasm32"))]
+    pub fn drag_move(&mut self, x: f64) {
+        let Some(l) = &mut self.drag else { return };
+        l.cursor_x = x;
+        if l.drag.dragging {
+            let v = l.drag.at_pixels(l.cursor_x - l.from_x);
+            if v != l.drag.value {
+                l.drag.value = v;
+                l.last_seq = l.live.drag(l.drag.at.op(forge_agent::short(v)));
+                l.waiting += 1;
+                self.window.request_redraw();
+            }
+        }
+    }
+
+    /// The button comes up: the value is committed (the worker falls back on the last that
+    /// built, if this one doesn't).
+    #[cfg(not(target_arch = "wasm32"))]
+    pub fn drag_release(&mut self) {
+        let Some(l) = &mut self.drag else { return };
+        if l.drag.dragging {
+            l.drag.dragging = false;
+            l.drag.failure = None;
+            l.live.commit(l.drag.at.op(forge_agent::short(l.drag.value)));
+            l.waiting += 1;
+        }
+    }
+
     /// The mouse on a dragged value. True if the event was its.
     #[cfg(not(target_arch = "wasm32"))]
     fn drag_event(&mut self, event: &WindowEvent) -> bool {
@@ -263,17 +313,9 @@ impl Viewer {
         };
         match event {
             WindowEvent::CursorMoved { position, .. } => {
-                l.cursor_x = position.x;
-                if l.drag.dragging {
-                    let v = l.drag.at_pixels(l.cursor_x - l.from_x);
-                    if v != l.drag.value {
-                        l.drag.value = v;
-                        l.last_seq = l.live.drag(l.drag.at.op(forge_agent::short(v)));
-                        l.waiting += 1;
-                        self.window.request_redraw();
-                    }
-                }
-                l.drag.dragging
+                let dragging = l.drag.dragging;
+                self.drag_move(position.x);
+                dragging
             }
             WindowEvent::MouseInput {
                 state,
@@ -281,22 +323,9 @@ impl Viewer {
                 ..
             } if l.on => {
                 if *state == ElementState::Pressed {
-                    l.from_x = l.cursor_x;
-                    l.drag.start = l.drag.value;
-                    l.drag.dragging = true;
-                    self.nav.selected.clear();
-                } else if l.drag.dragging {
-                    l.drag.dragging = false;
-                    // the last value that built, if the mouse stopped on one that doesn't
-                    let v = if l.drag.failure.is_some() {
-                        l.drag.good
-                    } else {
-                        l.drag.value
-                    };
-                    l.drag.value = v;
-                    l.drag.failure = None;
-                    l.live.commit(l.drag.at.op(forge_agent::short(v)));
-                    l.waiting += 1;
+                    self.drag_press();
+                } else {
+                    self.drag_release();
                 }
                 true
             }
@@ -341,9 +370,6 @@ impl Viewer {
                         l.drag.rebuild_ms = f.rebuild_ms + f.finish_ms;
                         l.drag.mesh_ms = f.mesh_ms;
                         l.drag.failure = f.failure.clone();
-                        if f.failure.is_none() {
-                            l.drag.good = l.drag.value;
-                        }
                     }
                     if let Some(Out::Delta(d)) = f.out {
                         let t = now_ms();
@@ -361,6 +387,10 @@ impl Viewer {
                         say(line);
                     }
                     say(&d.text);
+                    // what it settled on: the committed line's value
+                    if let Some(v) = d.lines.last().and_then(|x| x.rsplit(' ').next()?.parse().ok()) {
+                        l.drag.value = v;
+                    }
                 }
                 Event::Final(out) => {
                     if let Out::Whole(m) = out {
@@ -369,6 +399,7 @@ impl Viewer {
                         self.scene.set_part(part, m.center, m.radius, chords);
                     }
                     self.renderer.live_show(false);
+                    l.demo_done = true;
                 }
             }
         }
@@ -462,8 +493,43 @@ impl Viewer {
         }
     }
 
+    /// `--drag-demo`: one more value, a frame apart, as a mouse would give them.
+    #[cfg(not(target_arch = "wasm32"))]
+    fn drag_demo(&mut self, on_loop: &ActiveEventLoop) {
+        let Some(l) = &mut self.drag else { return };
+        let Some(left) = l.demo else { return };
+        let total = 120.0;
+        if left > 0 {
+            if now_ms() - self.last_frame < 16.0 {
+                return;
+            }
+            let x = 40.0 * forge_math::dmath::sin((total - left as f64) / total * core::f64::consts::TAU);
+            l.demo = Some(left - 1);
+            if !l.drag.dragging {
+                self.drag_press();
+            }
+            self.drag_move(x);
+            self.window.request_redraw();
+        } else if l.drag.dragging {
+            self.drag_release();
+        } else if l.demo_done {
+            say(&format!(
+                "demo done: {} values, {} dropped, last frame rebuild {:.1} mesh {:.1} upload {:.1} ms, {:.0} ms in all",
+                l.last_seq,
+                l.live.dropped(),
+                l.drag.rebuild_ms,
+                l.drag.mesh_ms,
+                l.drag.upload_ms,
+                now_ms()
+            ));
+            on_loop.exit();
+        }
+    }
+
     /// Between batches of events: asks what's under the cursor, and takes in the answer.
     pub fn about_to_wait(&mut self, on_loop: &ActiveEventLoop) {
+        #[cfg(not(target_arch = "wasm32"))]
+        self.drag_demo(on_loop);
         #[cfg(not(target_arch = "wasm32"))]
         self.drag_poll();
         // what a pick would read is the mesh from before the drag
@@ -492,7 +558,7 @@ impl Viewer {
         }
         on_loop.set_control_flow(if self.renderer.pick_busy() {
             ControlFlow::Poll
-        } else if dragged || self.drag_waiting_final() {
+        } else if dragged || self.drag_waiting_final() || self.drag_demo_running() {
             // the worker has no way to wake the loop: look again very soon
             ControlFlow::wait_duration(std::time::Duration::from_millis(1))
         } else {
