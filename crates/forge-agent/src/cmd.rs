@@ -441,7 +441,16 @@ mod tests {
 
     impl Dir {
         fn new(name: &str) -> Dir {
-            let d = std::env::temp_dir().join(format!("forge-agent-{}-{name}", std::process::id()));
+            // wasi has no temp_dir or pid; its runner opens the whole filesystem
+            let (base, id) = if cfg!(target_os = "wasi") {
+                let t = std::time::SystemTime::now()
+                    .duration_since(std::time::UNIX_EPOCH)
+                    .expect("clock");
+                (std::path::PathBuf::from("/tmp"), t.as_nanos() as u64)
+            } else {
+                (std::env::temp_dir(), std::process::id() as u64)
+            };
+            let d = base.join(format!("forge-agent-{id}-{name}"));
             std::fs::create_dir_all(&d).expect("temp dir");
             Dir(d)
         }
