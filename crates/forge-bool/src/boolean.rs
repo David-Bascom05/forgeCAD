@@ -535,7 +535,7 @@ fn plan(a: &Body, b: &Body, op: Op, scratch: &mut Scratch) -> R<Plan> {
                 continue;
             }
             let region = overlap(&ba, &b_boxes[fb.index()]).grow(tol::LINEAR);
-            let found = ssi::surfaces_in(sa, sb, region);
+            let found = ssi::surfaces_in(sa, sb, meet_region(&ba, &b_boxes[fb.index()], sa, sb));
             if debug_on() {
                 let what = match &found {
                     SurfaceSurface::Curves(cs) => format!("{} curves", cs.len()),
@@ -4761,4 +4761,15 @@ pub(crate) fn half_chord(piece: &Piece) -> f64 {
         .distance(m)
         .max(m.distance(at(piece.range.hi)))
         .max(1e-3)
+}
+
+/// The box a pair's meet is sought in: the face boxes' overlap, but a torus's whole box where a
+/// face is a piece of one (its tight box only says whether the pair can meet; marching a meet
+/// clipped to it costs more pieces).
+pub(crate) fn meet_region(ba: &Box3, bb: &Box3, sa: &Surface, sb: &Surface) -> Box3 {
+    let whole = |s: &Surface, b: &Box3| match s {
+        Surface::Torus(t) => Box3::from_point(t.frame.origin).grow(t.major + t.minor),
+        _ => *b,
+    };
+    overlap(&whole(sa, ba), &whole(sb, bb)).grow(tol::LINEAR)
 }
