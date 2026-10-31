@@ -45,8 +45,9 @@ fn lap(t: &mut std::time::Instant, k: usize) {
 
 static PICK: AtomicUsize = AtomicUsize::new(0);
 
-/// `f(0..n)` on up to `threads` threads, each given at least `per` items (a thread costs
-/// tens of microseconds to start); results in index order.
+/// `f(0..n)` on up to `threads` threads, each given at least `per` items; results in index
+/// order. The calling thread starts alone and the others join only once the work has run long
+/// enough to pay for starting them (tens of microseconds each).
 fn par_map<T: Send>(n: usize, threads: usize, per: usize, f: impl Fn(usize) -> T + Sync) -> Vec<T> {
     let threads = threads.min(n / per.max(1));
     if threads <= 1 || n < 2 {
@@ -63,11 +64,25 @@ fn par_map<T: Send>(n: usize, threads: usize, per: usize, f: impl Fn(usize) -> T
             got.push((i, f(i)));
         }
     };
-    // the calling thread is one of the workers: one spawn fewer per call
     let parts: Vec<Vec<(usize, T)>> = std::thread::scope(|s| {
-        let workers: Vec<_> = (1..threads.min(n)).map(|_| s.spawn(work)).collect();
-        let mut parts = vec![work()];
-        parts.extend(workers.into_iter().map(|w| w.join().expect("worker")));
+        let start = std::time::Instant::now();
+        let mut mine = Vec::new();
+        let mut helpers = Vec::new();
+        loop {
+            let i = next.fetch_add(1, Ordering::Relaxed);
+            if i >= n {
+                break;
+            }
+            mine.push((i, f(i)));
+            if helpers.is_empty()
+                && next.load(Ordering::Relaxed) < n
+                && start.elapsed() > std::time::Duration::from_micros(200)
+            {
+                helpers = (1..threads).map(|_| s.spawn(work)).collect();
+            }
+        }
+        let mut parts = vec![mine];
+        parts.extend(helpers.into_iter().map(|w| w.join().expect("worker")));
         parts
     });
     let mut out: Vec<Option<T>> = (0..n).map(|_| None).collect();
