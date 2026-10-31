@@ -68,6 +68,7 @@ fn main() {
                 vec![],
                 spline.clone(),
                 0,
+                vec![],
             )
             .unwrap()
             .surface(),
@@ -76,6 +77,7 @@ fn main() {
                 vec![],
                 spline,
                 1,
+                vec![],
             )
             .unwrap()
             .surface(),

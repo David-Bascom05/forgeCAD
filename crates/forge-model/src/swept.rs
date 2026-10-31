@@ -8,8 +8,8 @@ use forge_geom::CurveGeom;
 use forge_geom::screw::Section;
 use forge_math::{Box3, Point2, Point3, UnitVec3, Vec3, dmath, tol};
 use forge_ops::{
-    Axis2, Handed, LoftKind, PathSeg, Profile, Stretch, Winding, coil, coil_motion, loft, loft_bounds, sweep,
-    sweep_stretches,
+    Axis2, Handed, LoftGuides, LoftKind, PathSeg, Profile, Stretch, Winding, coil, coil_motion, loft,
+    loft_bounds, sweep, sweep_stretches,
 };
 use forge_topo::Body;
 
@@ -76,6 +76,8 @@ pub enum CoilSize {
 pub struct Loft {
     pub profiles: Vec<Profile>,
     pub kind: LoftKind,
+    /// Rails or a centre line shaping a smooth loft.
+    pub guides: LoftGuides,
     pub op: Combine,
 }
 
@@ -156,9 +158,9 @@ pub(crate) fn tool_of(features: &[Feature], i: usize, build: bool) -> Result<Too
         }
         Feature::Loft(l) => {
             let err = |error| RegenError::Loft { feature: i, error };
-            let shape = Shape::Brep(loft_bounds(&l.profiles, l.kind).map_err(err)?);
+            let shape = Shape::Brep(loft_bounds(&l.profiles, l.kind, &l.guides).map_err(err)?);
             let body = if build {
-                loft(&l.profiles, l.kind, id).map_err(err)?
+                loft(&l.profiles, l.kind, &l.guides, id).map_err(err)?
             } else {
                 Body::new()
             };

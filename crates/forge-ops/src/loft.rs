@@ -8,7 +8,7 @@
 use crate::profile::{Profile, ProfileError, Segment};
 use crate::skin::{Skin, prepare, section_curve};
 use forge_geom::ruled::{Rail, Ruled};
-use forge_geom::skinned::{Skinned, Spline};
+use forge_geom::skinned::{Along, GuidePath, Shift, Skinned, Spline};
 use forge_geom::{Circle, Cone, Curve, CurveGeom, Cylinder, Line, Plane, Surface};
 use forge_math::{Frame, Interval, Point3, Vec3, dmath, tol};
 use forge_topo::{Body, Name};
@@ -41,6 +41,34 @@ pub enum LoftError {
     },
     /// The walls run into each other.
     SelfIntersecting,
+    /// Guide rails and centre lines shape only a smooth loft.
+    GuidesNeedSmooth,
+    /// Guide `guide` is not a tangent-continuous chain of lines and arcs.
+    GuideBroken {
+        guide: usize,
+        error: crate::SweepError,
+    },
+    /// Guide `guide` misses profile `profile` (a rail its vertex, a centre line its plane), or
+    /// meets them out of order.
+    GuideMisses {
+        guide: usize,
+        profile: usize,
+    },
+    /// A rail names a vertex the profiles don't have.
+    NoVertex {
+        guide: usize,
+    },
+}
+
+/// What shapes a smooth loft between its profiles, besides them.
+#[derive(Clone, Debug, PartialEq)]
+pub enum LoftGuides {
+    None,
+    /// Rails the loft's edges follow: each through one vertex of every profile (vertex i is
+    /// where segment i starts, counting through the first profile's loops in order).
+    Rails(Vec<(usize, Vec<crate::PathSeg>)>),
+    /// A path the loft follows between the profiles, crossing each profile's plane in turn.
+    CentreLine(Vec<crate::PathSeg>),
 }
 
 /// How a loft runs between its profiles.
@@ -56,8 +84,13 @@ pub enum LoftKind {
 
 /// Lofts through `profiles` in order. `feature` is the history id the names derive from (see
 /// `skin`; walls are named by the first profile's segment ids).
-pub fn loft(profiles: &[Profile], kind: LoftKind, feature: u64) -> Result<Body, LoftError> {
-    let body = plan(profiles, kind)?.build(Name::feature(feature));
+pub fn loft(
+    profiles: &[Profile],
+    kind: LoftKind,
+    guides: &LoftGuides,
+    feature: u64,
+) -> Result<Body, LoftError> {
+    let body = plan(profiles, kind, guides)?.build(Name::feature(feature));
     if crate::selfx::crossing(&body, &vec![true; body.faces.len()]).is_some() {
         return Err(LoftError::SelfIntersecting);
     }
@@ -65,8 +98,12 @@ pub fn loft(profiles: &[Profile], kind: LoftKind, feature: u64) -> Result<Body, 
 }
 
 /// A box holding the loft through `profiles`, without building it.
-pub fn loft_bounds(profiles: &[Profile], kind: LoftKind) -> Result<forge_math::Box3, LoftError> {
-    let skin = plan(profiles, kind)?;
+pub fn loft_bounds(
+    profiles: &[Profile],
+    kind: LoftKind,
+    guides: &LoftGuides,
+) -> Result<forge_math::Box3, LoftError> {
+    let skin = plan(profiles, kind, guides)?;
     let mut b = forge_math::Box3::EMPTY;
     for c in skin.curves.iter().flatten() {
         b = b.hull(&c.curve.bbox(c.range));
@@ -81,7 +118,7 @@ pub fn loft_bounds(profiles: &[Profile], kind: LoftKind) -> Result<forge_math::B
     Ok(b.grow(tol::LINEAR))
 }
 
-fn plan(profiles: &[Profile], kind: LoftKind) -> Result<Skin, LoftError> {
+fn plan(profiles: &[Profile], kind: LoftKind, guides: &LoftGuides) -> Result<Skin, LoftError> {
     let n = profiles.len();
     if n < 2 {
         return Err(LoftError::TooFew);
@@ -147,12 +184,15 @@ fn plan(profiles: &[Profile], kind: LoftKind) -> Result<Skin, LoftError> {
             }
         }
     }
+    let guided = *guides != LoftGuides::None;
     let (rails, walls) = match kind {
-        // through two profiles with free ends a spline is a straight line: ruled
-        LoftKind::Smooth { start, end } if n > 2 || start.is_some() || end.is_some() => {
-            smooth(&segs, &planes, &centres, &sizes, start, end)?
+        // through two profiles with free ends and nothing guiding, a spline is a straight line
+        LoftKind::Smooth { start, end } if n > 2 || start.is_some() || end.is_some() || guided => {
+            smooth(&segs, &planes, &centres, &sizes, start, end, guides)?
         }
-        _ => ruled(&segs, &planes)?,
+        LoftKind::Smooth { .. } => ruled(&segs, &planes)?,
+        LoftKind::Ruled if guided => return Err(LoftError::GuidesNeedSmooth),
+        LoftKind::Ruled => ruled(&segs, &planes)?,
     };
     let curves = planes
         .iter()
@@ -170,6 +210,9 @@ fn plan(profiles: &[Profile], kind: LoftKind) -> Result<Skin, LoftError> {
 }
 
 type Walls = (Vec<Vec<(Curve, Interval)>>, Vec<Vec<Surface>>);
+
+/// A guide's path, where it crosses each profile, and the points there it pulls from.
+type Pull = (Arc<GuidePath>, Vec<f64>, Vec<Point3>);
 
 /// Straight rails and ruled walls between each pair of neighbouring profiles.
 fn ruled(segs: &[Vec<Segment>], planes: &[Frame]) -> Result<Walls, LoftError> {
@@ -203,6 +246,7 @@ fn smooth(
     sizes: &[usize],
     start: Option<f64>,
     end: Option<f64>,
+    guides: &LoftGuides,
 ) -> Result<Walls, LoftError> {
     let n = planes.len();
     let mut knots = vec![0.0];
@@ -210,21 +254,84 @@ fn smooth(
         knots.push(knots[knots.len() - 1] + w[0].distance(w[1]));
     }
     let spline = Arc::new(
-        Spline::new(knots, start.is_some(), end.is_some()).ok_or(LoftError::Degenerate { index: 0 })?,
+        Spline::new(knots.clone(), start.is_some(), end.is_some())
+            .ok_or(LoftError::Degenerate { index: 0 })?,
     );
     let slopes: Vec<Vec3> = [(start, 0), (end, n - 1)]
         .iter()
         .filter_map(|&(w, k)| w.map(|w| planes[k].z() * w))
         .collect();
     let nseg = segs[0].len();
+    // each guide: its path, where it crosses the profiles, and the points there it pulls from
+    let vertex = |k: usize, i: usize| planes[k].plane_point(segs[k][i].start());
+    let pulls = |g: usize, path: &[crate::PathSeg], at: Option<usize>| -> Result<Pull, LoftError> {
+        crate::sweep::check_path(path).map_err(|error| LoftError::GuideBroken { guide: g, error })?;
+        let pieces: Vec<Rail> = path
+            .iter()
+            .map(|s| match *s {
+                crate::PathSeg::Line { a, b } => Rail::Line { a, b },
+                crate::PathSeg::Arc { circle, start, sweep } => Rail::Arc { circle, start, sweep },
+            })
+            .collect();
+        let gp = Arc::new(GuidePath::new(&pieces));
+        let (mut ps, mut vals) = (Vec::with_capacity(n), Vec::with_capacity(n));
+        let mut last = f64::NEG_INFINITY;
+        for (k, f) in planes.iter().enumerate() {
+            let miss = LoftError::GuideMisses { guide: g, profile: k };
+            let p = gp
+                .crossings(f.origin, f.z().get())
+                .into_iter()
+                .filter(|&p| p > last + tol::LINEAR)
+                .find(|&p| at.is_none_or(|i| gp.at(p).0.distance(vertex(k, i)) <= tol::LINEAR))
+                .ok_or(miss)?;
+            last = p;
+            ps.push(p);
+            vals.push(at.map_or(gp.at(p).0, |i| vertex(k, i)));
+        }
+        Ok((gp, ps, vals))
+    };
+    // per vertex, the pull a rail there makes; and the centre line's
+    let mut at_vertex: Vec<Option<Pull>> = vec![None; nseg];
+    let mut whole = None;
+    match guides {
+        LoftGuides::None => {}
+        LoftGuides::Rails(rails) => {
+            for (g, (i, path)) in rails.iter().enumerate() {
+                if *i >= nseg {
+                    return Err(LoftError::NoVertex { guide: g });
+                }
+                at_vertex[*i] = Some(pulls(g, path, Some(*i))?);
+            }
+        }
+        LoftGuides::CentreLine(path) => whole = Some(pulls(0, path, None)?),
+    }
+    let shift = |(gp, ps, vals): &Pull, along: Along| {
+        Shift::new(gp.clone(), ps.clone(), vals.clone(), &knots, along)
+            .ok_or(LoftError::Degenerate { index: 0 })
+    };
     // the segment before each in its loop
-    let mut prev = vec![0; nseg];
+    let (mut prev, mut next) = (vec![0; nseg], vec![0; nseg]);
     let mut first = 0;
     for &len in sizes {
         for i in 0..len {
             prev[first + i] = first + (i + len - 1) % len;
+            next[first + i] = first + (i + 1) % len;
         }
         first += len;
+    }
+    let mut shifts: Vec<Vec<Shift>> = Vec::with_capacity(nseg);
+    for j in 0..nseg {
+        let mut sj = Vec::new();
+        if let Some(pull) = &at_vertex[j] {
+            sj.push(shift(pull, Along::Start)?);
+        }
+        if let Some(pull) = &at_vertex[next[j]] {
+            sj.push(shift(pull, Along::End)?);
+        }
+        if let Some(pull) = &whole {
+            sj.push(shift(pull, Along::Whole)?);
+        }
+        shifts.push(sj);
     }
     // across profile k at vertex i: between the normals of the two segments meeting there
     let across = |k: usize, i: usize| {
@@ -260,14 +367,11 @@ fn smooth(
         let wk = (0..nseg)
             .map(|j| {
                 let rs: Vec<Rail> = segs.iter().zip(planes).map(|(sg, f)| rail(&sg[j], f)).collect();
-                Skinned::new(rs, slopes.clone(), spline.clone(), k).ok_or(LoftError::Twisted { index: k })
+                Skinned::new(rs, slopes.clone(), spline.clone(), k, shifts[j].clone())
+                    .ok_or(LoftError::Twisted { index: k })
             })
             .collect::<Result<Vec<_>, _>>()?;
-        rails.push(
-            (0..nseg)
-                .map(|i| (wk[i].rail(0.0, &dirs[i], size), span))
-                .collect(),
-        );
+        rails.push((0..nseg).map(|i| (wk[i].rail(&dirs[i], size), span)).collect());
         walls.push(wk.into_iter().map(Skinned::surface).collect());
     }
     Ok((rails, walls))
@@ -370,6 +474,7 @@ fn wall(ra: Rail, rb: Rail) -> Option<Surface> {
 mod tests {
     use super::*;
     use crate::profile::ProfileLoop;
+    use forge_geom::CurveGeom;
     use forge_math::Point2;
     use forge_topo::check;
 
@@ -398,14 +503,26 @@ mod tests {
             plane: at(z),
             loops: vec![Profile::rectangle(Point2::new(-s, -s), 2.0 * s, 2.0 * s, 0)],
         };
-        let b = loft(&[sq(0.0, 4.0), sq(5.0, 2.0), sq(9.0, 3.0)], LoftKind::Ruled, 1).unwrap();
+        let b = loft(
+            &[sq(0.0, 4.0), sq(5.0, 2.0), sq(9.0, 3.0)],
+            LoftKind::Ruled,
+            &LoftGuides::None,
+            1,
+        )
+        .unwrap();
         valid(&b);
         assert_eq!(kinds(&b), (10, 0));
         let ci = |z: f64, r: f64| Profile {
             plane: at(z),
             loops: vec![Profile::circle(Point2::ORIGIN, r, 0)],
         };
-        let b = loft(&[ci(0.0, 4.0), ci(6.0, 2.0)], LoftKind::Ruled, 1).unwrap();
+        let b = loft(
+            &[ci(0.0, 4.0), ci(6.0, 2.0)],
+            LoftKind::Ruled,
+            &LoftGuides::None,
+            1,
+        )
+        .unwrap();
         valid(&b);
         assert!(b.faces.iter().any(|f| matches!(f.surface, Surface::Cone(_))));
         assert_eq!(kinds(&b).1, 0);
@@ -421,7 +538,7 @@ mod tests {
             plane: at(8.0).rotated_about_z(0.4),
             loops: vec![Profile::rectangle(Point2::new(-2.0, -2.0), 4.0, 4.0, 0)],
         };
-        let b = loft(&[sq.clone(), turned], LoftKind::Ruled, 1).unwrap();
+        let b = loft(&[sq.clone(), turned], LoftKind::Ruled, &LoftGuides::None, 1).unwrap();
         valid(&b);
         assert_eq!(kinds(&b), (6, 4));
         // a circle to a shifted circle: an oblique cone, ruled
@@ -432,6 +549,7 @@ mod tests {
         let b = loft(
             &[ci(Point3::ORIGIN, 4.0), ci(Point3::new(2.0, 0.0, 6.0), 2.0)],
             LoftKind::Ruled,
+            &LoftGuides::None,
             1,
         )
         .unwrap();
@@ -466,16 +584,97 @@ mod tests {
                 vec![sq(0.0, 4.0, 0.0), sq(5.0, 2.0, 0.2), sq(9.0, 3.0, 0.3)],
                 vec![ci(0.0, 4.0), ci(5.0, 6.0), ci(10.0, 3.0), ci(14.0, 4.0)],
             ] {
-                let b = loft(&profiles, kind, 1).unwrap();
+                let b = loft(&profiles, kind, &LoftGuides::None, 1).unwrap();
                 valid(&b);
                 let walls = b.faces.len() - 2;
                 assert_eq!(kinds(&b).1, walls);
-                let bx = loft_bounds(&profiles, kind).unwrap();
+                let bx = loft_bounds(&profiles, kind, &LoftGuides::None).unwrap();
                 for v in &b.vertices {
                     assert!(bx.contains(v.point));
                 }
             }
         }
+    }
+
+    #[test]
+    fn guides_shape_smooth_lofts() {
+        use crate::PathSeg;
+        use forge_math::UnitVec3;
+        let sq = |z: f64, h: f64| Profile {
+            plane: at(z),
+            loops: vec![Profile::rectangle(Point2::new(-h, -h), 2.0 * h, 2.0 * h, 0)],
+        };
+        let free = LoftKind::Smooth {
+            start: None,
+            end: None,
+        };
+        // a centre line straight up, then bending off towards +x
+        let bend = Circle {
+            frame: Frame::from_zx(
+                Point3::new(20.0, 0.0, 4.0),
+                UnitVec3::Y,
+                Vec3::new(-1.0, 0.0, 0.0),
+            )
+            .unwrap(),
+            radius: 20.0,
+        };
+        let centre = vec![
+            PathSeg::Line {
+                a: Point3::new(0.0, 0.0, -2.0),
+                b: Point3::new(0.0, 0.0, 4.0),
+            },
+            PathSeg::Arc {
+                circle: bend,
+                start: 0.0,
+                sweep: 0.6,
+            },
+        ];
+        let profiles = [sq(0.0, 4.0), sq(5.0, 2.0), sq(9.0, 3.0)];
+        let plain = loft(&profiles, free, &LoftGuides::None, 1).unwrap();
+        let guided = loft(&profiles, free, &LoftGuides::CentreLine(centre), 1).unwrap();
+        valid(&guided);
+        assert_eq!(kinds(&guided), kinds(&plain));
+        // a rail through the first corner of two squares, bowed out sideways by an arc
+        let (a, b) = (Point3::new(-4.0, -4.0, 0.0), Point3::new(-3.0, -3.0, 9.0));
+        let c = b - a;
+        let u = c.normalize().unwrap();
+        let side = (Vec3::new(-1.0, 1.0, 0.0) - u.get() * u.dot(Vec3::new(-1.0, 1.0, 0.0)))
+            .normalize()
+            .unwrap();
+        let o = a + c * 0.5 - side * 15.0;
+        let r = o.distance(a);
+        let frame = Frame::from_zx(o, side.cross(u.get()).normalize().unwrap(), a - o).unwrap();
+        let sweep = forge_math::dmath::atan2(frame.vec_to_local(b - o).y, frame.vec_to_local(b - o).x);
+        let rail = PathSeg::Arc {
+            circle: Circle { frame, radius: r },
+            start: 0.0,
+            sweep,
+        };
+        let two = [sq(0.0, 4.0), sq(9.0, 3.0)];
+        let railed = loft(&two, free, &LoftGuides::Rails(vec![(0, vec![rail])]), 1).unwrap();
+        valid(&railed);
+        // the edge at that corner runs along the rail
+        let on_rail =
+            |p: Point3| (p.distance(o) - r).abs() < 1e-9 && frame.vec_to_local(p - o).z.abs() < 1e-9;
+        let corner = railed
+            .edges
+            .iter()
+            .find(|e| matches!(e.curve, Curve::Procedural(_)) && on_rail(e.curve.eval(e.range.mid())));
+        assert!(corner.is_some(), "no edge along the rail");
+        assert_eq!(
+            loft(
+                &two,
+                LoftKind::Ruled,
+                &LoftGuides::Rails(vec![(0, vec![rail])]),
+                1
+            )
+            .unwrap_err(),
+            LoftError::GuidesNeedSmooth
+        );
+        assert_eq!(
+            loft(&two, free, &LoftGuides::Rails(vec![(1, vec![rail])]), 1).unwrap_err(),
+            LoftError::GuideMisses { guide: 0, profile: 0 }
+        );
     }
 
     #[test]
@@ -511,7 +710,7 @@ mod tests {
             ])],
         };
         assert_eq!(
-            loft(&[sq.clone(), tri], LoftKind::Ruled, 1).unwrap_err(),
+            loft(&[sq.clone(), tri], LoftKind::Ruled, &LoftGuides::None, 1).unwrap_err(),
             LoftError::Mismatch {
                 index: 1,
                 loop_index: Some(0),
@@ -520,7 +719,7 @@ mod tests {
             }
         );
         assert_eq!(
-            loft(std::slice::from_ref(&sq), LoftKind::Ruled, 1).unwrap_err(),
+            loft(std::slice::from_ref(&sq), LoftKind::Ruled, &LoftGuides::None, 1).unwrap_err(),
             LoftError::TooFew
         );
         // the far square turned half way round: every wall's rulings meet in the middle
@@ -529,7 +728,7 @@ mod tests {
             loops: sq.loops.clone(),
         };
         assert_eq!(
-            loft(&[sq, half], LoftKind::Ruled, 1).unwrap_err(),
+            loft(&[sq, half], LoftKind::Ruled, &LoftGuides::None, 1).unwrap_err(),
             LoftError::Twisted { index: 0 }
         );
     }

@@ -900,6 +900,31 @@ impl Procedural for Fence {
     }
 }
 
+/// A fresh id for a surface the last query is remembered against.
+pub(crate) fn fresh_id() -> u64 {
+    static NEXT: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(1);
+    NEXT.fetch_add(1, std::sync::atomic::Ordering::Relaxed)
+}
+
+/// The implicit value and gradient of surface `id` at p, solved by `solve` unless this thread
+/// just asked for the same (tracing asks for both, one after the other).
+pub(crate) fn remembered(id: u64, p: Point3, solve: impl FnOnce() -> (f64, Vec3)) -> (f64, Vec3) {
+    thread_local! {
+        static LAST: std::cell::Cell<(u64, Point3, f64, Vec3)> = const {
+            std::cell::Cell::new((0, Point3::ORIGIN, 0.0, Vec3::ZERO))
+        };
+    }
+    LAST.with(|last| {
+        let (k, q, f, g) = last.get();
+        if k == id && q == p {
+            return (f, g);
+        }
+        let (f, g) = solve();
+        last.set((id, p, f, g));
+        (f, g)
+    })
+}
+
 /// Parameters of the point of a patch nearest p, and the point, by Newton steps on |S - p|^2
 /// from `uv` (whose point `at` may already be known), kept inside `dom` (at a side, only along
 /// it) and taken only while they get closer.

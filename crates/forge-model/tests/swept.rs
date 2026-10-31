@@ -103,6 +103,7 @@ fn loft_volume_is_a_frustum() {
                 square(Point3::new(0.0, 0.0, 10.0), 2.0),
             ],
             LoftKind::Ruled,
+            &forge_ops::LoftGuides::None,
             1,
         )
         .expect("loft"),
@@ -119,6 +120,7 @@ fn loft_volume_is_a_frustum() {
                 round(Point3::new(3.0, 0.0, 10.0), 2.0),
             ],
             LoftKind::Ruled,
+            &forge_ops::LoftGuides::None,
             1,
         )
         .expect("loft"),
@@ -137,6 +139,7 @@ fn loft_volume_is_a_frustum() {
                 start: None,
                 end: None,
             },
+            &forge_ops::LoftGuides::None,
             1,
         )
         .expect("loft"),

@@ -213,11 +213,11 @@ pub fn sweep_stretches(
     stretches(profile, path).map(|(p, s)| (p.profile, s))
 }
 
-fn stretches(
-    profile: &crate::Profile,
-    path: &[PathSeg],
-) -> Result<(crate::skin::Prepared, Vec<Stretch>), SweepError> {
-    let first = path.first().ok_or(SweepError::EmptyPath)?;
+/// Each piece's start and end tangents, once the path is found tangent-continuous.
+pub(crate) fn check_path(path: &[PathSeg]) -> Result<Vec<(UnitVec3, UnitVec3)>, SweepError> {
+    if path.is_empty() {
+        return Err(SweepError::EmptyPath);
+    }
     let mut tangents = Vec::with_capacity(path.len());
     for (i, s) in path.iter().enumerate() {
         if s.degenerate() {
@@ -232,6 +232,15 @@ fn stretches(
             }
         }
     }
+    Ok(tangents)
+}
+
+fn stretches(
+    profile: &crate::Profile,
+    path: &[PathSeg],
+) -> Result<(crate::skin::Prepared, Vec<Stretch>), SweepError> {
+    let first = path.first().ok_or(SweepError::EmptyPath)?;
+    let tangents = check_path(path)?;
     let t0 = tangents[0].0;
     let start = first.ends().0;
     let z = profile.plane.z();

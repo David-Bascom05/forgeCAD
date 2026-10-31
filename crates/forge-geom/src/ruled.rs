@@ -9,7 +9,7 @@
 //! off the face projects to parameters off the face.
 
 use crate::curve::{Circle, CurveGeom, Domain1};
-use crate::screw::polish;
+use crate::screw::{fresh_id, polish, remembered};
 use crate::surface::{Domain2, Proc, Procedural, SurfDeriv, Surface};
 use forge_math::{Box2, Box3, Frame, Interval, Point2, Point3, Vec3, tol};
 use std::sync::Arc;
@@ -90,6 +90,8 @@ pub struct Ruled {
     rows: Vec<(f64, Point3, Vec3)>,
     scale: (f64, f64),
     radius: f64,
+    /// Which surface this is, for remembering its last query.
+    id: u64,
 }
 
 /// Largest principal curvature magnitude from first and second derivatives.
@@ -120,6 +122,7 @@ impl Ruled {
             rows: Vec::new(),
             scale: (a.length().max(b.length()), 0.0),
             radius: f64::INFINITY,
+            id: fresh_id(),
         };
         // the normal is linear in s along each ruling: it vanishes (the surface folds) between
         // s0 and s1 where the segment between its values there passes the origin
@@ -224,9 +227,11 @@ impl Ruled {
 
     /// Signed distance to the carried-on surface and its gradient.
     fn value(&self, p: Point3) -> (f64, Vec3) {
-        let d = self.point(self.nearest(p, self.ext));
-        let n = d.du.cross(d.dv).normalize().map_or(Vec3::Z, |u| u.get());
-        ((p - d.p).dot(n), n)
+        remembered(self.id, p, || {
+            let d = self.point(self.nearest(p, self.ext));
+            let n = d.du.cross(d.dv).normalize().map_or(Vec3::Z, |u| u.get());
+            ((p - d.p).dot(n), n)
+        })
     }
 }
 
@@ -269,6 +274,7 @@ impl Procedural for Ruled {
     }
     fn transformed(&self, f: &Frame) -> Proc {
         let mut r = self.clone();
+        r.id = fresh_id();
         r.a = self.a.transformed(f);
         r.b = self.b.transformed(f);
         r.rows = self

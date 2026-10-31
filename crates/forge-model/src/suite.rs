@@ -8,7 +8,7 @@ use crate::{
 use forge_geom::Circle;
 use forge_math::rng::Rng;
 use forge_math::{Frame, Point2, Point3, Vec2, Vec3, dmath};
-use forge_ops::{Axis2, Handed, LoftKind, PathSeg, Profile, ProfileLoop, Segment};
+use forge_ops::{Axis2, Handed, LoftGuides, LoftKind, PathSeg, Profile, ProfileLoop, Segment};
 use forge_topo::Name;
 
 fn frame(o: Point3, z: Vec3, x: Vec3) -> Frame {
@@ -958,11 +958,16 @@ pub fn coil() -> Part {
 }
 
 fn lofted(profiles: Vec<Profile>, kind: LoftKind, op: Combine) -> Feature {
-    Feature::Loft(Box::new(Loft { profiles, kind, op }))
+    Feature::Loft(Box::new(Loft {
+        profiles,
+        kind,
+        guides: LoftGuides::None,
+        op,
+    }))
 }
 
 /// A block with a twisted square loft standing out of it, an offset round loft cut through it,
-/// and a smooth loft through three squares.
+/// a smooth loft through three squares, and a smooth round one following a bending centre line.
 pub fn loft() -> Part {
     let square = |o: Point3, s: f64, turn: f64| Profile {
         plane: turned(o, turn),
@@ -1003,6 +1008,33 @@ pub fn loft() -> Part {
                 },
                 Combine::Add,
             ),
+            // a smooth round loft leaning off along a centre line that bends away
+            Feature::Loft(Box::new(Loft {
+                profiles: vec![
+                    round(Point3::new(10.0, 45.0, 10.0), 4.0),
+                    round(Point3::new(10.0, 45.0, 22.0), 3.0),
+                    round(Point3::new(10.0, 45.0, 32.0), 3.5),
+                ],
+                kind: LoftKind::Smooth {
+                    start: None,
+                    end: Some(1.0),
+                },
+                guides: LoftGuides::CentreLine(vec![
+                    PathSeg::Line {
+                        a: Point3::new(10.0, 45.0, 8.0),
+                        b: Point3::new(10.0, 45.0, 14.0),
+                    },
+                    PathSeg::Arc {
+                        circle: Circle {
+                            frame: frame(Point3::new(50.0, 45.0, 14.0), Vec3::Y, -Vec3::X),
+                            radius: 40.0,
+                        },
+                        start: 0.0,
+                        sweep: 0.6,
+                    },
+                ]),
+                op: Combine::Add,
+            })),
         ],
     }
 }

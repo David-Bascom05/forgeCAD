@@ -10,7 +10,7 @@
 
 use crate::curve::{CurveDeriv, Domain1, ProcCurve, ProceduralCurve};
 use crate::ruled::{Rail, principal_max};
-use crate::screw::polish;
+use crate::screw::{fresh_id, polish, remembered};
 use crate::surface::{Domain2, Proc, Procedural, SurfDeriv, Surface};
 use forge_math::{Box2, Box3, Frame, Interval, Point2, Point3, Vec3, tol};
 use std::sync::Arc;
@@ -169,12 +169,249 @@ fn thomas(rows: &[(f64, f64, f64)], mut r: Vec<f64>) -> Vec<f64> {
     r
 }
 
-/// The data a skinned surface or rail sums: section curves (or points) and end slopes.
+/// A guide curve: a chain of lines and arcs, by arc length from its start (carried straight
+/// on past its ends).
+#[derive(Clone, Debug)]
+pub struct GuidePath {
+    /// Each piece, where it starts along the guide, and its length.
+    pieces: Vec<(Rail, f64, f64)>,
+}
+
+impl GuidePath {
+    /// The chain of `pieces` (each from where the one before ends).
+    pub fn new(pieces: &[Rail]) -> GuidePath {
+        let mut at = 0.0;
+        GuidePath {
+            pieces: pieces
+                .iter()
+                .map(|&r| {
+                    let len = r.length();
+                    at += len;
+                    (r, at - len, len)
+                })
+                .collect(),
+        }
+    }
+
+    pub fn length(&self) -> f64 {
+        self.pieces.last().map_or(0.0, |p| p.1 + p.2)
+    }
+
+    fn piece(&self, p: f64) -> &(Rail, f64, f64) {
+        let i = self
+            .pieces
+            .partition_point(|x| x.1 <= p)
+            .clamp(1, self.pieces.len())
+            - 1;
+        &self.pieces[i]
+    }
+
+    /// Point and first two derivatives at arc length p.
+    pub fn at(&self, p: f64) -> (Point3, Vec3, Vec3) {
+        let &(r, s0, len) = self.piece(p);
+        let (q, d1, d2) = r.at((p - s0) / len);
+        (q, d1 / len, d2 / (len * len))
+    }
+
+    fn bbox(&self, p: Interval) -> Box3 {
+        let mut b = Box3::EMPTY;
+        let n = self.pieces.len();
+        for (i, &(r, s0, len)) in self.pieces.iter().enumerate() {
+            // the end pieces carry on past the guide's ends
+            let lo = if i == 0 { p.lo } else { p.lo.max(s0) };
+            let hi = if i + 1 == n { p.hi } else { p.hi.min(s0 + len) };
+            if lo <= hi {
+                b = b.hull(&r.bbox(Interval::new((lo - s0) / len, (hi - s0) / len)));
+            }
+        }
+        b
+    }
+
+    /// The arc lengths where the guide crosses the plane through `o` square to unit `n`.
+    pub fn crossings(&self, o: Point3, n: Vec3) -> Vec<f64> {
+        let mut out = Vec::new();
+        for &(r, s0, len) in &self.pieces {
+            let ts: Vec<f64> = match r {
+                Rail::Line { a, b } => {
+                    let (da, db) = (n.dot(a - o), n.dot(b - o));
+                    if da == db { vec![] } else { vec![da / (da - db)] }
+                }
+                Rail::Arc { circle, start, sweep } => {
+                    // n.(c + r cos a x + r sin a y - o) = 0: A cos a + B sin a = C
+                    let f = &circle.frame;
+                    let (ca, cb, cc) = (
+                        circle.radius * n.dot(f.x().get()),
+                        circle.radius * n.dot(f.y().get()),
+                        -n.dot(f.origin - o),
+                    );
+                    let m = (ca * ca + cb * cb).sqrt();
+                    if m <= 0.0 || cc.abs() > m {
+                        vec![]
+                    } else {
+                        let base = forge_math::dmath::atan2(cb, ca);
+                        let off = forge_math::dmath::acos_clamped(cc / m);
+                        let per = forge_math::dmath::TAU / sweep.abs();
+                        [base + off, base - off]
+                            .into_iter()
+                            .map(|a| {
+                                // the turn of the angle that falls on the arc, if any
+                                let t = (a - start) / sweep;
+                                t - per * (t / per).floor()
+                            })
+                            .collect()
+                    }
+                }
+            };
+            out.extend(
+                ts.into_iter()
+                    .filter(|t| (-1e-12..=1.0 + 1e-12).contains(t))
+                    .map(|t| s0 + t.clamp(0.0, 1.0) * len),
+            );
+        }
+        out.sort_by(f64::total_cmp);
+        out.dedup_by(|a, b| (*a - *b).abs() <= 1e-9);
+        out
+    }
+
+    fn transformed(&self, f: &Frame) -> GuidePath {
+        GuidePath {
+            pieces: self
+                .pieces
+                .iter()
+                .map(|&(r, s0, len)| (r.transformed(f), s0, len))
+                .collect(),
+        }
+    }
+}
+
+/// How much of a guide's pull a wall takes across it: all of it along its start (t = 0), along
+/// its end (t = 1), or everywhere.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Along {
+    Start,
+    End,
+    Whole,
+}
+
+/// A guide's pull on a skinned surface: E(s) = G(p(s)) - (the spline through `vals` and the end
+/// slopes), p(s) the spline through the arc lengths `p` where the guide crosses the sections. It
+/// vanishes at every section, so a wall edge carrying the whole of it runs along the guide.
+#[derive(Clone, Debug)]
+pub struct Shift {
+    path: Arc<GuidePath>,
+    p: Vec<f64>,
+    vals: Vec<Point3>,
+    map: Arc<Spline>,
+    along: Along,
+}
+
+impl Shift {
+    /// The pull of `path` (crossing the sections at arc lengths `p`, where the surface's own
+    /// spline has the points `vals`).
+    pub fn new(
+        path: Arc<GuidePath>,
+        p: Vec<f64>,
+        vals: Vec<Point3>,
+        knots: &[f64],
+        along: Along,
+    ) -> Option<Shift> {
+        Some(Shift {
+            path,
+            p,
+            vals,
+            map: Arc::new(Spline::new(knots.to_vec(), false, false)?),
+            along,
+        })
+    }
+
+    fn with(&self, along: Along) -> Shift {
+        Shift {
+            along,
+            ..self.clone()
+        }
+    }
+
+    /// The weight across the wall at t, and its derivative.
+    fn beta(&self, t: f64) -> (f64, f64) {
+        match self.along {
+            Along::Start => (1.0 - t, -1.0),
+            Along::End => (t, 1.0),
+            Along::Whole => (1.0, 0.0),
+        }
+    }
+
+    /// E and its first two derivatives, given the surface's weights `w` and the map's `m` there
+    /// (every guide of a loft shares the map's knots), and the end slopes.
+    fn at(&self, w: &Weights, m: &Weights, slopes: &[Vec3]) -> [Vec3; 3] {
+        let n = self.p.len();
+        let (mut p, mut p1, mut p2) = (0.0, 0.0, 0.0);
+        for (mk, &pk) in m.iter().zip(&self.p) {
+            p += mk[0] * pk;
+            p1 += mk[1] * pk;
+            p2 += mk[2] * pk;
+        }
+        let (g, g1, g2) = self.path.at(p);
+        let mut e = [g.to_vec(), g1 * p1, g2 * (p1 * p1) + g1 * p2];
+        for (wk, v) in w.iter().zip(&self.vals) {
+            for (i, ei) in e.iter_mut().enumerate() {
+                *ei -= v.to_vec() * wk[i];
+            }
+        }
+        for (j, &d) in slopes.iter().enumerate() {
+            for (i, ei) in e.iter_mut().enumerate() {
+                *ei -= d * w[n + j][i];
+            }
+        }
+        e
+    }
+
+    /// A box holding E over s, from the values' weights `w` there.
+    fn bbox(&self, s: Interval, w: &[Interval], slopes: &[Vec3]) -> Box3 {
+        let m = self.map.weight_box(s, 0);
+        let n = self.p.len();
+        let mut p = Interval::point(self.p[0]);
+        for (mk, &pk) in m.iter().zip(&self.p) {
+            p = p + *mk * (pk - self.p[0]);
+        }
+        // measured from the first section's point: the weights sum to one
+        let g0 = self.vals[0];
+        let gb = self.path.bbox(p);
+        let mut b = Box3 {
+            x: gb.x - Interval::point(g0.x),
+            y: gb.y - Interval::point(g0.y),
+            z: gb.z - Interval::point(g0.z),
+        };
+        for (wk, v) in w.iter().zip(&self.vals) {
+            let v = *v - g0;
+            b.x = b.x - *wk * v.x;
+            b.y = b.y - *wk * v.y;
+            b.z = b.z - *wk * v.z;
+        }
+        for (j, &d) in slopes.iter().enumerate() {
+            b.x = b.x - w[n + j] * d.x;
+            b.y = b.y - w[n + j] * d.y;
+            b.z = b.z - w[n + j] * d.z;
+        }
+        b
+    }
+
+    fn transformed(&self, f: &Frame) -> Shift {
+        Shift {
+            path: Arc::new(self.path.transformed(f)),
+            vals: self.vals.iter().map(|&v| f.point_to_world(v)).collect(),
+            ..self.clone()
+        }
+    }
+}
+
+/// The data a skinned surface or rail sums: section curves (or points), end slopes, and guides'
+/// pulls.
 #[derive(Clone, Debug)]
 struct Data {
     rails: Vec<Rail>,
     slopes: Vec<Vec3>,
     spline: Arc<Spline>,
+    shifts: Vec<Shift>,
 }
 
 impl Data {
@@ -230,6 +467,16 @@ impl Data {
             d.dv += s * w1;
             d.dvv += s * w2;
         }
+        let m = self.shifts.first().map(|sh| sh.map.weights(uv.y));
+        for sh in &self.shifts {
+            let [e0, e1, e2] = sh.at(&w, m.as_ref().expect("a guide's map"), &self.slopes);
+            let (b0, b1) = sh.beta(uv.x);
+            p += e0 * b0;
+            d.du += e0 * b1;
+            d.dv += e1 * b0;
+            d.duv += e1 * b1;
+            d.dvv += e2 * b0;
+        }
         d.p = Point3::ORIGIN + p;
         d
     }
@@ -280,6 +527,14 @@ impl Data {
         for (j, &s) in self.slopes.iter().enumerate() {
             add(w[n + j], Box3::from_point(Point3::ORIGIN + s));
         }
+        for sh in &self.shifts {
+            let beta = match sh.along {
+                Along::Start => Interval::point(1.0) - uv.u,
+                Along::End => uv.u,
+                Along::Whole => Interval::point(1.0),
+            };
+            add(beta, sh.bbox(uv.v, &w, &self.slopes));
+        }
         b.grow(tol::LINEAR)
     }
 
@@ -288,6 +543,7 @@ impl Data {
             rails: self.rails.iter().map(|r| r.transformed(f)).collect(),
             slopes: self.slopes.iter().map(|&s| f.vec_to_world(s)).collect(),
             spline: self.spline.clone(),
+            shifts: self.shifts.iter().map(|sh| sh.transformed(f)).collect(),
         }
     }
 }
@@ -309,13 +565,21 @@ pub struct Skinned {
     /// The surface bends tighter than its seed grid is fine: its nearest points are sought from
     /// two seeds in different places.
     sharp: bool,
+    /// Which surface this is, for remembering its last query.
+    id: u64,
 }
 
 impl Skinned {
     /// The span of the surface through `rails` (matched section curves, one per knot) between
     /// knots `k` and `k + 1`, with end slopes `slopes` (as the spline takes them). None where
     /// it folds over or pinches.
-    pub fn new(rails: Vec<Rail>, slopes: Vec<Vec3>, spline: Arc<Spline>, k: usize) -> Option<Skinned> {
+    pub fn new(
+        rails: Vec<Rail>,
+        slopes: Vec<Vec3>,
+        spline: Arc<Spline>,
+        k: usize,
+        shifts: Vec<Shift>,
+    ) -> Option<Skinned> {
         let knots = spline.knots().to_vec();
         let span = Interval::new(knots[k], knots[k + 1]);
         let te = rails.iter().map(Rail::reach).fold(0.25, f64::min);
@@ -324,6 +588,7 @@ impl Skinned {
                 rails,
                 slopes,
                 spline,
+                shifts,
             },
             span,
             ext: Box2::new(Interval::new(0.0, 1.0), span),
@@ -331,6 +596,7 @@ impl Skinned {
             scale: (0.0, 0.0),
             radius: f64::INFINITY,
             sharp: false,
+            id: fresh_id(),
         };
         let regular = |s: &Skinned, b: Box2| {
             let (nu, nv) = (32, 32);
@@ -403,7 +669,7 @@ impl Skinned {
             .map(|k| s.rows[k].1.p.distance(s.rows[k + nv + 1].1.p))
             .chain((0..s.rows.len() - 1).map(|k| s.rows[k].1.p.distance(s.rows[k + 1].1.p)))
             .fold(0.0, f64::max);
-        s.sharp = s.radius < 2.0 * cell;
+        s.sharp = s.radius < 0.5 * cell;
         Some(s)
     }
 
@@ -463,16 +729,26 @@ impl Skinned {
     }
 
     fn value(&self, p: Point3) -> (f64, Vec3) {
-        let (_, d) = self.solve(p);
-        let n = d.du.cross(d.dv).normalize().map_or(Vec3::Z, |u| u.get());
-        ((p - d.p).dot(n), n)
+        remembered(self.id, p, || {
+            let (_, d) = self.solve(p);
+            let n = d.du.cross(d.dv).normalize().map_or(Vec3::Z, |u| u.get());
+            ((p - d.p).dot(n), n)
+        })
     }
 
     /// The rail through the sections' points at fraction t of each, over the face's span, and a
     /// fence through it across the faces it bounds: lines `across[k]` (unit, in section k's
     /// plane) `half` long either way of each point, skinned the same way.
-    pub fn rail(&self, t: f64, across: &[Vec3], half: f64) -> crate::Curve {
-        let points: Vec<Point3> = self.data.rails.iter().map(|r| r.at(t).0).collect();
+    pub fn rail(&self, across: &[Vec3], half: f64) -> crate::Curve {
+        let points: Vec<Point3> = self.data.rails.iter().map(|r| r.at(0.0).0).collect();
+        // along the wall's start it takes the whole of the guides' pulls there
+        let shifts: Vec<Shift> = self
+            .data
+            .shifts
+            .iter()
+            .filter(|sh| sh.along != Along::End)
+            .map(|sh| sh.with(Along::Whole))
+            .collect();
         let fence = Data {
             rails: points
                 .iter()
@@ -484,12 +760,14 @@ impl Skinned {
                 .collect(),
             slopes: self.data.slopes.clone(),
             spline: self.data.spline.clone(),
+            shifts: shifts.clone(),
         };
         let fence = Skinned::new(
             fence.rails,
             fence.slopes,
             fence.spline,
             self.data.spline.span(self.span.mid()),
+            fence.shifts,
         )
         .map(Skinned::surface);
         crate::Curve::Procedural(ProcCurve(Arc::new(SplineRail {
@@ -497,6 +775,7 @@ impl Skinned {
                 rails: points.iter().map(|&p| Rail::Line { a: p, b: p }).collect(),
                 slopes: self.data.slopes.clone(),
                 spline: self.data.spline.clone(),
+                shifts,
             },
             span: self.span,
             fence,
@@ -536,6 +815,7 @@ impl Procedural for Skinned {
     }
     fn transformed(&self, f: &Frame) -> Proc {
         let mut s = self.clone();
+        s.id = fresh_id();
         s.data = self.data.transformed(f);
         s.rows = self
             .rows
@@ -761,7 +1041,7 @@ mod tests {
         for _ in 0..80 {
             let (rails, sp, slopes) = random(&mut r);
             let k = r.below(sp.knots().len() - 1);
-            let Some(s) = Skinned::new(rails, slopes, sp, k) else {
+            let Some(s) = Skinned::new(rails, slopes, sp, k, vec![]) else {
                 continue;
             };
             made += 1;
@@ -794,7 +1074,7 @@ mod tests {
                 );
                 assert!(bx.contains(q.p));
             }
-            let crate::Curve::Procedural(rail) = s.rail(0.0, &vec![Vec3::X; s.data.rails.len()], 1.0) else {
+            let crate::Curve::Procedural(rail) = s.rail(&vec![Vec3::X; s.data.rails.len()], 1.0) else {
                 unreachable!()
             };
             let range = Interval::new(d.v.lo, d.v.hi);
@@ -811,5 +1091,69 @@ mod tests {
             }
         }
         assert!(made > 20, "{made}");
+    }
+
+    #[test]
+    fn guided_derivatives_match_finite_differences() {
+        let line = |z: f64, h: f64| Rail::Line {
+            a: Point3::new(-h, -h, z),
+            b: Point3::new(h, -h, z),
+        };
+        let knots = vec![0.0, 5.0, 9.0];
+        let sp = Arc::new(Spline::new(knots.clone(), true, false).unwrap());
+        // a guide up z, then bending towards +x
+        let bend = Rail::Arc {
+            circle: Circle {
+                frame: Frame::from_zx(
+                    Point3::new(20.0, 0.0, 3.0),
+                    forge_math::UnitVec3::Y,
+                    Vec3::new(-1.0, 0.0, 0.0),
+                )
+                .unwrap(),
+                radius: 20.0,
+            },
+            start: 0.0,
+            sweep: 0.7,
+        };
+        let g = Arc::new(GuidePath::new(&[
+            Rail::Line {
+                a: Point3::new(0.0, 0.0, -2.0),
+                b: Point3::new(0.0, 0.0, 3.0),
+            },
+            bend,
+        ]));
+        let ps: Vec<f64> = [0.0, 5.0, 9.0]
+            .iter()
+            .map(|&z| g.crossings(Point3::new(0.0, 0.0, z), Vec3::Z)[0])
+            .collect();
+        let vals: Vec<Point3> = ps.iter().map(|&p| g.at(p).0).collect();
+        for along in [Along::Start, Along::End, Along::Whole] {
+            let shift = Shift::new(g.clone(), ps.clone(), vals.clone(), &knots, along).unwrap();
+            let s = Skinned::new(
+                vec![line(0.0, 4.0), line(5.0, 2.0), line(9.0, 3.0)],
+                vec![Vec3::Z],
+                sp.clone(),
+                1,
+                vec![shift],
+            )
+            .unwrap();
+            for &uv in &[Point2::new(0.3, 6.0), Point2::new(0.8, 8.1)] {
+                let q = s.point(uv);
+                let h = 1e-6;
+                let at = |du: f64, dv: f64| s.point(Point2::new(uv.x + du, uv.y + dv));
+                let close =
+                    |a: Vec3, b: Vec3| assert!((a - b).length() < 1e-4 * (1.0 + b.length()), "{a:?} {b:?}");
+                close((at(h, 0.0).p - at(-h, 0.0).p) / (2.0 * h), q.du);
+                close((at(0.0, h).p - at(0.0, -h).p) / (2.0 * h), q.dv);
+                close((at(0.0, h).dv - at(0.0, -h).dv) / (2.0 * h), q.dvv);
+                close((at(0.0, h).du - at(0.0, -h).du) / (2.0 * h), q.duv);
+                let b = Procedural::bbox(&s, Box2::new(Interval::new(0.0, 1.0), Interval::new(5.0, 9.0)));
+                assert!(b.contains(q.p));
+            }
+            // the guide's pull vanishes at the sections
+            let sh = &s.data.shifts[0];
+            let (w, m) = (s.data.spline.weights(5.0), sh.map.weights(5.0));
+            assert!(sh.at(&w, &m, &s.data.slopes)[0].length() < 1e-12);
+        }
     }
 }

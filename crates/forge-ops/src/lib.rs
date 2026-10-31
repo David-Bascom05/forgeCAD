@@ -19,7 +19,7 @@ pub use chamfer::{ChamferError, ChamferSize, chamfer};
 pub use draft::{DraftError, draft};
 pub use extrude::{ExtrudeError, extrude};
 pub use fillet::{FilletEdge, FilletError, Radius, fillet};
-pub use loft::{LoftError, LoftKind, loft, loft_bounds};
+pub use loft::{LoftError, LoftGuides, LoftKind, loft, loft_bounds};
 pub use profile::{Profile, ProfileError, ProfileLoop, Segment};
 pub use rebuild::RebuildError;
 pub use revolve::{Axis2, RevolveError, revolve};
