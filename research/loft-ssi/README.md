@@ -4,6 +4,8 @@
 - `novel/`: what ships. Hull separation and Bernstein sign tests on the exact rational Bezier form of a
   circle-section span, and marching in the surfaces' own parameters (`crates/forge-geom/src/loftmeet.rs`
   cites `novel/README.md`).
+- `shipped/`: Lean proofs of what loftmeet.rs certifies (exact patch form, hull, separating axis,
+  Bernstein sign test), the assumptions each needs, and its f64 tolerances (`shipped/README.md`).
 
 ## Proven alternative, not built: lean-derive's certificate (BOARD R2, R3)
 For two circle-section walls whose section frames share one axis (the volute and its core), the walls meet

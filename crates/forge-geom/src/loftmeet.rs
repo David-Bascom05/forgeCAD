@@ -5,6 +5,7 @@
 //! Pieces neither test clears are split down to a fraction of the region. Seeded from what is left,
 //! the curve is followed with Newton steps in the surfaces' own parameters: closed-form points, no
 //! nearest-point searches. Derivation and measurements: research/loft-ssi/novel/README.md.
+//! Lean proofs of the patch form, hull, separation and sign tests: research/loft-ssi/shipped/README.md.
 
 use crate::Curve;
 use crate::intcurve::IntCurve;
@@ -483,6 +484,23 @@ mod tests {
             }
             assert!(!(neg && pos) || !h.misses(&q));
         }
+    }
+
+    #[test]
+    #[ignore = "soundness gap: follow() drops a branch within 1.5 steps of one already traced"]
+    fn close_parallel_branches_are_both_found() {
+        let region = Box3::from_points([Point3::new(-50.0, -50.0, -20.0), Point3::new(50.0, 50.0, 20.0)]);
+        // the top half of a tube of radius 8 (top at z = 8 all along), cut by z = 7.98: two curves
+        // about 1.13 apart, closer than 1.5 steps (1.72 for this region)
+        let a = tube([8.0; 4], 1, 1, 0.0);
+        let plane = Surface::Plane(Plane {
+            frame: Frame::WORLD.with_origin(Point3::new(0.0, 0.0, 7.98)),
+        });
+        let Some(SurfaceSurface::Curves(cs)) = meet(&a, &plane, region) else {
+            panic!("it cuts")
+        };
+        cs.iter().for_each(|c| on_both(&c.0, &a, &plane));
+        assert_eq!(cs.len(), 2);
     }
 
     #[test]
