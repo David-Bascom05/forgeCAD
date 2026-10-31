@@ -232,15 +232,23 @@ chamber: extrude cut 37 at 0 0 -15 circle 0 0 78\n",
 /// a flat pad standing into a smooth three-circle loft, fillet 2 round the junction: fillet
 /// NoBlend; a plain loft too. Same family as R14: no fillet holds on any loft face
 #[test]
-#[ignore = "R18: kernel failure, see the comment"]
+#[ignore = "R18: at r = 2 the blend reaches the loft's end rim and would roll over it: refused as Corner, not supported"]
 fn fillet_pad_into_smooth_loft() {
-    holds(
-        "\
-tube: loft smooth profile at 0 0 0 circle 0 0 10 profile at 0 5 30 circle 0 0 14 profile at 0 15 60 circle 0 0 18
+    holds(&pad_into_smooth_loft(2.0), true);
+}
+
+fn pad_into_smooth_loft(r: f64) -> String {
+    format!(
+        "tube: loft smooth profile at 0 0 0 circle 0 0 10 profile at 0 5 30 circle 0 0 14 profile at 0 15 60 circle 0 0 18
 pad: extrude 5 yz at 8 -30 -10 rect 0 0 60 80
-fillet 2 (edges between pad tube concave)\n",
-        false,
-    );
+fillet {r} (edges between pad tube concave)\n"
+    )
+}
+
+/// R18 at a radius whose blend stays on its faces: fillets hold on a smooth loft's faces.
+#[test]
+fn fillet_pad_into_smooth_loft_small() {
+    holds(&pad_into_smooth_loft(0.5), true);
 }
 
 /// a 28.6 top tube into a revolved tapered head tube (cone), fillet 4..2.5 round the joint: builds
