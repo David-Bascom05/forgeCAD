@@ -187,25 +187,25 @@ pub(crate) struct Piece {
 }
 
 /// A face of the result before it is built: loops of (piece, forward).
-struct Spec {
-    side: Side,
-    from: FaceId,
-    loops: Vec<Vec<(usize, bool)>>,
+pub(crate) struct Spec {
+    pub(crate) side: Side,
+    pub(crate) from: FaceId,
+    pub(crate) loops: Vec<Vec<(usize, bool)>>,
     /// NONE for a piece of a split face: named only if kept (`sole_pieces_keep_names`).
-    name: Name,
+    pub(crate) name: Name,
     /// Pieces of the other body's edges imprinted on this face (a coplanar
     /// face's boundary); classification never floods across them.
-    foreign: Vec<usize>,
+    pub(crate) foreign: Vec<usize>,
     /// The face comes through whole, every edge intact: its cached data carries over.
-    whole: bool,
+    pub(crate) whole: bool,
     /// The face keeps its loops (but `remove`) and gains these: kept, it is extended in
     /// place, not rebuilt (a new loop inside it, or a local split leaving its outer loop).
-    extend: bool,
+    pub(crate) extend: bool,
     /// Loops of `from` an extending spec takes off the face (they were split, or moved into
     /// a new region).
-    remove: Vec<forge_topo::LoopId>,
+    pub(crate) remove: Vec<forge_topo::LoopId>,
     /// A class known before classification (a face's untouched remainder, decided by one point).
-    preset: Option<Class>,
+    pub(crate) preset: Option<Class>,
 }
 
 /// Part of an edge of one body lying inside a coplanar face of the other.
@@ -220,7 +220,7 @@ pub(crate) struct Imprint {
 
 /// Where a face piece lies relative to the other body.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-enum Class {
+pub(crate) enum Class {
     In,
     Out,
     /// On a face of the other body, both facing the same way.
@@ -376,31 +376,31 @@ thread_local! {
 }
 
 /// Everything a boolean decides, worked out without touching A.
-struct Plan {
-    pieces: Vec<Piece>,
+pub(crate) struct Plan {
+    pub(crate) pieces: Vec<Piece>,
     /// Edges split into several kept pieces, as wholes.
-    split: Vec<Name>,
+    pub(crate) split: Vec<Name>,
     /// Wholes of edges split before that this boolean trimmed to one piece: that piece may be
     /// all that is left of them (sorted).
-    survivors: Vec<Name>,
-    specs: Vec<Spec>,
-    kept: Vec<(usize, bool)>,
-    points: Vec<Point3>,
+    pub(crate) survivors: Vec<Name>,
+    pub(crate) specs: Vec<Spec>,
+    pub(crate) kept: Vec<(usize, bool)>,
+    pub(crate) points: Vec<Point3>,
     /// Each new point's name.
-    vnames: Vec<Name>,
+    pub(crate) vnames: Vec<Name>,
     /// Existing vertices renamed (`flush_edges_as_cuts`).
-    flush: Vec<(VKey, Name)>,
+    pub(crate) flush: Vec<(VKey, Name)>,
     /// Each new point's tolerance.
-    tols: Vec<f64>,
+    pub(crate) tols: Vec<f64>,
     /// Existing vertices whose tolerance grows to hold the curves now ending on them.
-    grown: Vec<(VKey, f64)>,
-    alias: Vec<(VKey, VKey)>,
+    pub(crate) grown: Vec<(VKey, f64)>,
+    pub(crate) alias: Vec<(VKey, VKey)>,
     /// Each piece of a face or edge split into several kept ones, and its whole's name.
-    wholes: Vec<(Name, Name)>,
+    pub(crate) wholes: Vec<(Name, Name)>,
     /// A's faces that might change; every other face of A comes through as it is.
-    involved: Vec<FaceId>,
+    pub(crate) involved: Vec<FaceId>,
     /// Involved faces of A nothing touched, found wholly on the kept side of B.
-    untouched_kept: Vec<FaceId>,
+    pub(crate) untouched_kept: Vec<FaceId>,
 }
 
 /// The pieces an edge splits into at its cuts (one piece, the whole edge, if none), pushed
@@ -1277,7 +1277,7 @@ fn plan(a: &Body, b: &Body, op: Op, scratch: &mut Scratch) -> R<Plan> {
 
 /// Makes the planned changes to A: drops the faces that go, rebuilds the
 /// faces that change, adds the faces that come from B, and regroups shells.
-fn apply(a: &mut Body, b: &Body, plan: &Plan) {
+pub(crate) fn apply<S: crate::imprint::Src>(a: &mut Body, b: &S, plan: &Plan) {
     let Plan {
         pieces,
         split: _,
@@ -1336,7 +1336,7 @@ fn apply(a: &mut Body, b: &Body, plan: &Plan) {
             }
         }
     }
-    let mut b_vertex: Vec<Option<VertexId>> = vec![None; b.vertices.len()];
+    let mut b_vertex: Vec<Option<VertexId>> = vec![None; b.vertex_count()];
     let mut new_vertex: Vec<Option<VertexId>> = vec![None; points.len()];
     let mut emap: Vec<Option<EdgeId>> = vec![None; pieces.len()];
     let shell = a
@@ -1349,8 +1349,8 @@ fn apply(a: &mut Body, b: &Body, plan: &Plan) {
         match v {
             VKey::Old(0, id) => id,
             VKey::Old(_, id) => *b_vertex[id.index()].get_or_insert_with(|| {
-                let x = b.vertex(id);
-                a.add_tolerant_vertex(x.point, grown_tol(grown, v, x.tol), renamed(v, x.name))
+                let (point, tol, name) = b.vertex(id);
+                a.add_tolerant_vertex(point, grown_tol(grown, v, tol), renamed(v, name))
             }),
             VKey::New(i) => *new_vertex[i as usize].get_or_insert_with(|| {
                 let i = i as usize;
@@ -1365,17 +1365,20 @@ fn apply(a: &mut Body, b: &Body, plan: &Plan) {
         let s = &specs[si];
         // (read by reference: a clone of the face would share its point-in-face index, which
         // the next boolean then finds shared and rebuilds)
-        let src = if s.side == 0 {
-            a.face(s.from)
+        let (sense, bx) = if s.side == 0 {
+            (a.face(s.from).same_sense, a.face(s.from).bbox.get().copied())
         } else {
-            b.face(s.from)
+            (b.face(s.from).1, b.bbox(s.from))
         };
-        let (sense, bx) = (src.same_sense, src.bbox.get().copied());
         // an extended (planar) face only gains holes inside it: its box stays
         let face = if s.extend && !flip {
             s.from
         } else {
-            let surface = src.surface.clone();
+            let surface = if s.side == 0 {
+                a.face(s.from).surface.clone()
+            } else {
+                b.face(s.from).0.clone()
+            };
             a.add_face(shell, surface, sense != flip, s.name)
         };
         if s.whole

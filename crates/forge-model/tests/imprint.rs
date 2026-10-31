@@ -104,7 +104,7 @@ fn imprint_matches_the_general_boolean() {
     set_mode(Mode::Off);
     assert_eq!(on_tools, 9, "the tools part's booleans not all taken");
     assert!(
-        on_torture >= 100,
+        on_torture >= 150,
         "only {on_torture} booleans took the imprint path"
     );
 }

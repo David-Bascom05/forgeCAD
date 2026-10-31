@@ -688,111 +688,28 @@ impl<'a> Index<'a> {
     }
 }
 
-/// Whether a circle in planar face `f`'s plane lies inside the face (true) or outside it, every
-/// boundary edge more than `clear` from the circle and none inside it; None when an edge comes
-/// nearer, may lie inside, or the parity ray grazes. Only edges near the circle and in the
-/// centre's band are looked at.
-pub(crate) fn circle_in_face(
-    body: &Body,
-    f: FaceId,
-    circle: &forge_geom::Circle,
-    clear: f64,
-) -> Option<bool> {
-    let Surface::Plane(plane) = &body.face(f).surface else {
-        return None;
-    };
+/// The uses of face `f`'s boundary whose edges' boxes meet `bx` (only the bands near it, where
+/// the face keeps bands).
+pub(crate) fn edges_near(body: &Body, f: FaceId, bx: &Box3, out: &mut Vec<forge_topo::CoedgeId>) {
     let info = info(body, f);
-    let (c, r) = (circle.frame.origin, circle.radius);
-    let n = circle.frame.z().get();
-    let reach = Box3::from_point(c).grow(r + clear);
     let mut near: Vec<u32> = Vec::new();
-    let candidates: Box<dyn Iterator<Item = &(forge_topo::CoedgeId, Box3)>> = match &info.bands {
+    let all: Box<dyn Iterator<Item = &(forge_topo::CoedgeId, Box3)>> = match &info.bands {
         Some(bands) => {
-            bands.near(c, r + clear, &mut near);
+            bands.near(bx.center(), bx.diagonal() / 2.0, &mut near);
             Box::new(near.iter().map(|&i| &info.edges[i as usize]))
         }
         None => Box::new(info.edges.iter()),
     };
-    for &(co, ref b) in candidates {
-        if co == GONE || !b.overlaps(&reach) {
-            continue;
-        }
-        let e = body.edge(body.coedge(co).edge);
-        let clear = match &e.curve {
-            Curve::Line(l) => l.eval(l.closest(c, e.range)).distance(c) > r + clear,
-            Curve::Circle(k) if k.frame.z().dot(n).abs() >= 1.0 - 1e-12 => {
-                let d = k.frame.origin.distance(c);
-                d > r + k.radius + clear || d + r < k.radius - clear
-            }
-            _ => false,
-        };
-        if !clear {
-            return None;
-        }
-    }
-    // no edge inside the disk or on the circle: the centre is where the circle is
-    for (k, angle) in RAY_ANGLES.into_iter().enumerate() {
-        let subset: Option<&[u32]> = match (&info.bands, k) {
-            (Some(bands), 0) => match bands.row((c - bands.origin).dot(bands.across)) {
-                Some(r) => Some(&bands.rows[r]),
-                None => Some(&[]),
-            },
-            _ => None,
-        };
-        if let Some(inside) = planar_parity(body, plane, c, &info.edges, subset, angle) {
-            return Some(inside);
-        }
-    }
-    None
+    out.extend(all.filter(|e| e.0 != GONE && e.1.overlaps(bx)).map(|e| e.0));
 }
 
-/// Whether a closed loop of lines and arcs (`pieces`, end to end) in planar face `f`'s plane
-/// lies inside the face (true) or outside it, no boundary edge within `clear` of it or inside
-/// it; None when that is not shown simply (an edge nearer, a curve of another kind, a grazing
-/// parity ray).
-pub(crate) fn loop_in_face(body: &Body, f: FaceId, pieces: &[(Curve, Interval)], clear: f64) -> Option<bool> {
+/// Whether point `p` of planar face `f`'s plane lies inside the face: ray parity over its
+/// boundary (the band holding `p` first, where the face keeps bands); None if every ray grazes.
+pub(crate) fn in_planar_face(body: &Body, f: FaceId, p: Point3) -> Option<bool> {
     let Surface::Plane(plane) = &body.face(f).surface else {
         return None;
     };
     let info = info(body, f);
-    let n = plane.normal_vec().get();
-    // whole circles: an edge anywhere on an arc's circle is followed by the general boolean
-    let reach = pieces
-        .iter()
-        .fold(Box3::EMPTY, |b, (c, r)| {
-            let r = match c {
-                Curve::Circle(_) => Interval::new(0.0, forge_math::dmath::TAU),
-                _ => *r,
-            };
-            b.hull(&c.bbox(r))
-        })
-        .grow(clear);
-    let mut near: Vec<u32> = Vec::new();
-    let candidates: Box<dyn Iterator<Item = &(forge_topo::CoedgeId, Box3)>> = match &info.bands {
-        Some(bands) => {
-            bands.near(reach.center(), reach.diagonal() / 2.0, &mut near);
-            Box::new(near.iter().map(|&i| &info.edges[i as usize]))
-        }
-        None => Box::new(info.edges.iter()),
-    };
-    for &(co, ref b) in candidates {
-        if co == GONE || !b.overlaps(&reach) {
-            continue;
-        }
-        let e = body.edge(body.coedge(co).edge);
-        if !pieces
-            .iter()
-            .all(|(c, r)| apart(&e.curve, e.range, c, *r, n, clear))
-        {
-            return None;
-        }
-        // clear of the loop: wholly inside it or wholly outside, as its start is
-        if in_loop(e.curve.eval(e.range.lo), pieces, plane)? {
-            return None;
-        }
-    }
-    let (c, r) = &pieces[0];
-    let p = c.eval(r.mid());
     for (k, angle) in RAY_ANGLES.into_iter().enumerate() {
         let subset: Option<&[u32]> = match (&info.bands, k) {
             (Some(bands), 0) => match bands.row((p - bands.origin).dot(bands.across)) {
@@ -808,58 +725,9 @@ pub(crate) fn loop_in_face(body: &Body, f: FaceId, pieces: &[(Curve, Interval)],
     None
 }
 
-/// Whether two lines or arcs of a plane (normal `n`) are certainly more than `d` apart (arcs
-/// judged as their whole circles).
-fn apart(a: &Curve, ra: Interval, b: &Curve, rb: Interval, n: Vec3, d: f64) -> bool {
-    let round = |c: &forge_geom::Circle| c.frame.z().dot(n).abs() >= 1.0 - 1e-12;
-    match (a, b) {
-        (Curve::Line(l), Curve::Line(m)) => {
-            segment_gap(l.eval(ra.lo), l.eval(ra.hi), m.eval(rb.lo), m.eval(rb.hi)) > d
-        }
-        (Curve::Line(l), Curve::Circle(k)) | (Curve::Circle(k), Curve::Line(l)) if round(k) => {
-            let r = if matches!(a, Curve::Line(_)) { ra } else { rb };
-            let c = k.frame.origin;
-            let (p, q) = (l.eval(r.lo), l.eval(r.hi));
-            l.eval(l.closest(c, r)).distance(c) > k.radius + d
-                || p.distance(c).max(q.distance(c)) < k.radius - d
-        }
-        (Curve::Circle(k), Curve::Circle(m)) if round(k) && round(m) => {
-            let g = k.frame.origin.distance(m.frame.origin);
-            g > k.radius + m.radius + d || g + k.radius < m.radius - d || g + m.radius < k.radius - d
-        }
-        _ => false,
-    }
-}
-
-/// The least distance between segments pq and uv.
-fn segment_gap(p: Point3, q: Point3, u: Point3, v: Point3) -> f64 {
-    let at = |a: Point3, b: Point3, x: Point3| {
-        let ab = b - a;
-        let l = ab.dot(ab);
-        let t = if l > 0.0 {
-            ((x - a).dot(ab) / l).clamp(0.0, 1.0)
-        } else {
-            0.0
-        };
-        (a + ab * t).distance(x)
-    };
-    let ends = at(p, q, u).min(at(p, q, v)).min(at(u, v, p)).min(at(u, v, q));
-    // crossing segments meet inside both: the ends' distances miss that
-    let (d1, d2) = (q - p, v - u);
-    let m = d1.cross(d2);
-    if m.length() > 0.0 {
-        let s = (u - p).cross(d2).dot(m) / m.dot(m);
-        let t = (u - p).cross(d1).dot(m) / m.dot(m);
-        if (0.0..=1.0).contains(&s) && (0.0..=1.0).contains(&t) {
-            return 0.0;
-        }
-    }
-    ends
-}
-
 /// Whether point `p` of the plane lies inside the loop: ray parity over its pieces; None if
 /// the ray grazes one.
-fn in_loop(p: Point3, pieces: &[(Curve, Interval)], plane: &forge_geom::Plane) -> Option<bool> {
+pub(crate) fn in_loop(p: Point3, pieces: &[(Curve, Interval)], plane: &forge_geom::Plane) -> Option<bool> {
     let n = plane.normal_vec().get();
     'ray: for angle in RAY_ANGLES {
         let (sn, cs) = forge_math::dmath::sin_cos(angle);
