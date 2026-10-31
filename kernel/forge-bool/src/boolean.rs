@@ -1042,7 +1042,7 @@ fn plan(a: &Body, b: &Body, op: Op, scratch: &mut Scratch) -> R<Plan> {
                             })
                             .collect();
                         if let Some(held) = held {
-                            if let Some(r) = held.iter().position(|&h| h) {
+                            if let Some(r) = innermost(&held, boxes) {
                                 moved.push((r, l));
                             }
                             continue;
@@ -4449,6 +4449,16 @@ fn plane_inside(
         return Some(crossings % 2 == 1);
     }
     None
+}
+
+/// Of the regions holding a point (they may nest: a ring round a disc), the innermost: the one
+/// with the smallest box.
+#[inline(never)]
+fn innermost(held: &[bool], boxes: &[(Box3, Vec<Box3>)]) -> Option<usize> {
+    let size = |r: usize| boxes[r].0.diagonal();
+    (0..held.len())
+        .filter(|&r| held[r])
+        .min_by(|&a, &b| size(a).total_cmp(&size(b)))
 }
 
 /// Whether point `q` of planar face `f` lies inside a region's outer walk (of a split made by
