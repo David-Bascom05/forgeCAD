@@ -994,6 +994,8 @@ fn setup(a: &Surface, b: &Surface) -> Option<(Surface, Surface, Form)> {
                 ruled_quadric(b, a)
             }
         }
+        // a cone whose apex lies on the other would have a root there at every u
+        (Cone(c), Cone(_)) if b.implicit(c.apex()).abs() <= tol::LINEAR => ruled_quadric(b, a),
         (Cylinder(_), Cone(_) | Sphere(_)) | (Cone(_), Sphere(_) | Cone(_)) => ruled_quadric(a, b),
         (Cone(_) | Sphere(_), Cylinder(_)) | (Sphere(_), Cone(_)) => ruled_quadric(b, a),
         (Cylinder(_) | Cone(_), Torus(_)) => Some((a.clone(), b.clone(), Form::Poly4)),
@@ -1056,6 +1058,21 @@ pub fn intersect(a: &Surface, b: &Surface, region: Box3) -> Option<SurfaceSurfac
         }
     }
     events.sort_by(|p, q| p.0.total_cmp(&q.0));
+    // events a hair apart (across u = 0 too) are one place where roots meet: a tangency
+    // the rounding has split, kept as one multiple root
+    let near = |x: f64, y: f64| wrap_pi(x - y).abs() <= 1e-7;
+    let mut merged: Vec<(f64, bool)> = Vec::with_capacity(events.len());
+    for e in events {
+        match merged.last_mut() {
+            Some(l) if near(l.0, e.0) => l.1 = true,
+            _ => merged.push(e),
+        }
+    }
+    if merged.len() > 1 && near(merged[0].0, merged[merged.len() - 1].0) {
+        let l = merged.pop().expect("two or more");
+        merged[0] = (if merged[0].1 { merged[0].0 } else { l.0 }, true);
+    }
+    let mut events = merged;
     // a simple event that changes no root count is a sign flicker of the rounding; one
     // that changes it by other than two is a pair of events seen as one
     loop {
@@ -1221,6 +1238,19 @@ pub fn intersect(a: &Surface, b: &Surface, region: Box3) -> Option<SurfaceSurfac
             link[ends[y].0] = Some((ends[x].0, turn));
         }
         if used.iter().any(|u| !u) {
+            return None;
+        }
+        // branches crossing where the surfaces are tangent: left to the tracer, which
+        // declines them too (the boolean has no contact for such a point yet)
+        if multiple
+            && ends.iter().any(|end| {
+                let p = eq.host.eval(Point2::new(ue, end.1));
+                // (the ends sit a step off the crossing; a cone's apex has no normal)
+                let (na, nb) = (eq.host.gradient(p), other.gradient(p));
+                let (la, lb) = (na.length(), nb.length());
+                la > 1e-3 && lb > 1e-3 && na.cross(nb).length() <= 1e-2 * la * lb
+            })
+        {
             return None;
         }
         if multiple && ends.is_empty() {
