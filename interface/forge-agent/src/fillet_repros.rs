@@ -292,8 +292,9 @@ fn reversed_storage(b: &forge_topo::Body) -> forge_topo::Body {
 fn fillet_does_not_follow_storage_order() {
     // a gearbox foot on a drafted wall: the same body stored the other way round must round to
     // the same faces and vertices (the blends' surfaces once took their frames from the order an
-    // edge's two coedges were stored in, which seq and n-ary builds store differently). Corner
-    // patches are left out: their sides' order still follows storage (corner.rs)
+    // edge's two coedges were stored in, which seq and n-ary builds store differently), and to the
+    // same corner patches with the edges listed the other way round too (their sides once started
+    // at the corner of the edge listed or stored first)
     let m = Model::new(
         "box: extrude 95 rect -120 -65 240 130\ndraft -2 xy at 0 0 95 (faces of box normal -y)\nfoot: extrude 16 loop line -96 -55 -96 -85 arc -88 -85 8 180 90 line -88 -93 -60 -93 arc -60 -85 8 270 90 line -52 -85 -52 -55 line -52 -55 -96 -55\nfillet 5 (edges between foot box concave)\n",
     );
@@ -303,19 +304,26 @@ fn fillet_does_not_follow_storage_order() {
         panic!("a fillet");
     };
     let base = m.body_after(i).expect("built").compact();
-    let shape = |b: &forge_topo::Body| {
-        let fe: Vec<_> = edges
+    let shape = |b: &forge_topo::Body, flip: bool| {
+        let mut fe: Vec<_> = edges
             .iter()
             .map(|(n, r)| forge_ops::FilletEdge {
                 edge: b.edge_by_name(*n).expect("edge"),
                 radius: r.clone(),
             })
             .collect();
+        if flip {
+            fe.reverse();
+        }
         let out = forge_ops::fillet(b, &fe, 99).expect("rounds");
         let mut faces: Vec<String> = out
             .face_ids()
-            .map(|f| format!("{:?}", out.face(f).surface))
-            .filter(|s| !s.contains("HolePatch"))
+            // a zero's sign may follow the order a cross product took its factors in
+            .map(|f| {
+                format!("{:?}", out.face(f).surface)
+                    .replace("-0.0,", "0.0,")
+                    .replace("-0.0 ", "0.0 ")
+            })
             .collect();
         faces.sort();
         let mut verts: Vec<[i64; 3]> = out
@@ -326,5 +334,5 @@ fn fillet_does_not_follow_storage_order() {
         verts.sort();
         (faces, verts)
     };
-    assert!(shape(&base) == shape(&reversed_storage(&base)));
+    assert!(shape(&base, false) == shape(&reversed_storage(&base), true));
 }

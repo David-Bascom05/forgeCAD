@@ -132,6 +132,11 @@ pub(crate) struct Cut {
     pub(crate) pair: Name,
 }
 
+/// How near a traced branch may stop to the rim edge it ends on (where it meets that edge's
+/// face tangentially, a step along the rim changes its distance from both surfaces only
+/// quadratically).
+const RIM: f64 = 10.0 * tol::LINEAR;
+
 /// Where point `p` lies on edge `e`: its parameter and the cut's tolerance, if it is within
 /// LINEAR of the edge, or past an end but within that end vertex's tolerance.
 pub(crate) fn on_edge(body: &Body, e: EdgeId, p: Point3) -> Option<(f64, f64)> {
@@ -1928,23 +1933,40 @@ pub(crate) fn trim(
                 // which that surface's implicit no longer vanishes) crosses nothing there: it is
                 // cut where it ends
                 for &(t, p) in ends.iter().flatten() {
-                    if !body.edge_box(e).grow(tol::LINEAR).contains(p)
+                    if !body.edge_box(e).grow(RIM).contains(p)
                         || cuts[first..].iter().any(|x| {
                             x.on == CutOn::Edge(side, e) && x.point.distance(p) <= x.tol.max(tol::LINEAR)
                         })
                     {
                         continue;
                     }
-                    if let Some((s, tol)) = on_edge(body, e, p)
-                        && index[1 - k].face_box(faces[1 - k]).grow(tol::LINEAR).contains(p)
-                        && index[1 - k].point_in_face(faces[1 - k], p) != Where::Outside
+                    // one running onto the rim tangentially (a blend on its plane) is fixed along it
+                    // only loosely and stops near it: it ends where the edge meets the other surface
+                    let at = on_edge(body, e, p).map(|(s, tol)| (s, p, tol)).or_else(|| {
+                        // (the box is no test on a diagonal edge: asking the other surface is dear)
+                        if edge.curve.eval(edge.curve.closest(p, edge.range)).distance(p) > RIM {
+                            return None;
+                        }
+                        let other = &bodies[1 - k].face(faces[1 - k]).surface;
+                        let CurveSurface::Hits(hits) = curve_surface(&edge.curve, edge.range, other) else {
+                            return None;
+                        };
+                        let h = hits
+                            .into_iter()
+                            .min_by(|a, b| a.point.distance(p).total_cmp(&b.point.distance(p)))?;
+                        let d = h.point.distance(p);
+                        (d <= RIM).then_some((h.t, h.point, d.max(tol::LINEAR)))
+                    });
+                    if let Some((s, q, tol)) = at
+                        && index[1 - k].face_box(faces[1 - k]).grow(tol::LINEAR).contains(q)
+                        && index[1 - k].point_in_face(faces[1 - k], q) != Where::Outside
                     {
                         ts.push((t, cuts.len()));
                         cuts.push(Cut {
                             pair: Name::NONE,
                             on: CutOn::Edge(side, e),
                             s,
-                            point: p,
+                            point: q,
                             tol,
                             touch: branches[1],
                         });

@@ -1732,7 +1732,30 @@ impl Builder {
     }
 
     fn resolve(&mut self, v: VertexId, start: CoedgeId) -> R<()> {
-        let ring = self.corners(start).ok_or(FilletError::Corner { vertex: v })?;
+        let mut ring = self.corners(start).ok_or(FilletError::Corner { vertex: v })?;
+        // the ring starts where the geometry says, not where storage does: at the corner whose
+        // arriving edge leaves v first in (x, y, z), then whose face's normal there does
+        let key = |k: &Corner| {
+            let b = &self.body;
+            let (co, p) = (b.coedge(k.cin), b.vertex(v).point);
+            let e = b.edge(co.edge);
+            let d = e.curve.deriv(if co.forward { e.range.hi } else { e.range.lo }).d1;
+            let d = (if co.forward { -d } else { d })
+                .normalize()
+                .map_or(Vec3::ZERO, |u| u.get());
+            let n = b
+                .face_normal(k.face, b.face(k.face).surface.project(p))
+                .map_or(Vec3::ZERO, |u| u.get());
+            [d.x, d.y, d.z, n.x, n.y, n.z]
+        };
+        let first = |a: &[f64; 6], b: &[f64; 6]| {
+            (0..6)
+                .find(|&i| (a[i] - b[i]).abs() > 1e-9)
+                .is_some_and(|i| a[i] < b[i])
+        };
+        let keys: Vec<[f64; 6]> = ring.iter().map(key).collect();
+        let lead = (1..ring.len()).fold(0, |m, i| if first(&keys[i], &keys[m]) { i } else { m });
+        ring.rotate_left(lead);
         for k in &ring {
             self.touched.insert(k.face);
         }
@@ -3066,8 +3089,19 @@ impl Builder {
             let ri = self.filleted(ring[j].cin).expect("blend");
             let s_in = self.side(ring[j].cin);
             let (circle, angle) = self.rolled[ri].blend.section(t).ok_or(err.clone())?;
-            // the section runs from the foot on the blend's side 0
+            // the section runs from the foot on the blend's side 0, or the other way round from
+            // the other foot when that one comes first in (x, y, z): storage does not choose
             let (v0, v1) = if s_in == 0 { (va, vb) } else { (vb, va) };
+            let (q0, q1) = (self.body.vertex(v0).point, self.body.vertex(v1).point);
+            let (circle, v0, v1) = match (0..3).find(|&i| (q0[i] - q1[i]).abs() > 1e-9) {
+                Some(i) if q1[i] < q0[i] => {
+                    let f = &circle.frame;
+                    let x = q1 - f.origin;
+                    let frame = Frame::from_zx(f.origin, -f.z(), x).ok_or(err.clone())?;
+                    (forge_geom::Circle { frame, ..circle }, v1, v0)
+                }
+                _ => (circle, v0, v1),
+            };
             let name = Name::NONE.with_set(&[self.rolled[ri].name, patch_name]);
             let e = self
                 .body

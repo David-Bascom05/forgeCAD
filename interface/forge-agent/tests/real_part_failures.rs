@@ -84,7 +84,6 @@ fillet 3 (edges concave)\n",
 /// rib draft 1 whose end runs into a foot's corner fillet blend: Rib(Boolean(Unsupported(surface
 /// pair without a closed form))); ok without draft
 #[test]
-#[ignore = "R3: kernel failure, see the comment"]
 fn drafted_rib_into_blend() {
     holds(
         "\
