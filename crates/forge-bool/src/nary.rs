@@ -1581,6 +1581,10 @@ fn nary_body(
         let list = &pieces.list;
         let mut shared: Vec<(Side, FaceId)> = coplanar.iter().flatten().copied().collect();
         shared.sort_unstable();
+        // the tools other than the edge's own two holding the middle of piece p, in order (with
+        // no intersect only the last matters; None: one is too near to tell), once a piece
+        let held: Vec<std::sync::OnceLock<Option<Vec<Side>>>> =
+            (0..list.len()).map(|_| std::sync::OnceLock::new()).collect();
         let needed = |side: Side, p: usize| -> bool {
             let Some(si) = list[p].seg else { return true };
             let sg = &segs[si];
@@ -1588,29 +1592,26 @@ fn nary_body(
                 return true;
             };
             let other = sg.sides[1 - at];
-            let m = list[p].curve.eval(list[p].range.mid());
-            // the tools holding m, in order (with no intersect only the last matters)
-            let mut holds: Vec<Side> = Vec::new();
-            let mut last: Option<Side> = None;
-            for &k in grid.at(m) {
-                let k = k as usize;
-                if k == side || k == other || !index[k].bbox.contains(m) {
-                    continue;
+            let holds = held[p].get_or_init(|| {
+                let m = list[p].curve.eval(list[p].range.mid());
+                let mut holds: Vec<Side> = Vec::new();
+                for &k in grid.at(m) {
+                    let k = k as usize;
+                    if sg.sides.contains(&k) || !index[k].bbox.contains(m) {
+                        continue;
+                    }
+                    match sh[k].member(m, SHAPE_MARGIN) {
+                        Member::In if any_intersect || holds.is_empty() => holds.push(k),
+                        Member::In => holds[0] = k,
+                        Member::Out => {}
+                        Member::Near => return None,
+                    }
                 }
-                match sh[k].member(m, SHAPE_MARGIN) {
-                    Member::In if any_intersect => holds.push(k),
-                    Member::In => last = Some(k),
-                    Member::Out => {}
-                    Member::Near => return true,
-                }
-            }
-            divides(
-                ops,
-                any_intersect,
-                if any_intersect { &holds } else { last.as_slice() },
-                side,
-                other,
-            )
+                Some(holds)
+            });
+            holds
+                .as_ref()
+                .is_none_or(|h| divides(ops, any_intersect, h, side, other))
         };
         let kept: Vec<Vec<usize>> = par_map(jobs.len(), threads, 8, |j| {
             let (side, f, ref boundary, ref new_edges) = jobs[j];
