@@ -203,7 +203,7 @@ fn reversed_storage(b: &forge_topo::Body) -> forge_topo::Body {
         let shell = *smap[face.shell.index()].get_or_insert_with(|| out.add_shell());
         let nf = out.add_face(shell, face.surface.clone(), face.same_sense, face.name);
         for &l in face.loops.iter().rev() {
-            let cs = &b.lp(l).coedges;
+            let cs: Vec<_> = b.lp(l).coedges().collect();
             let k = cs.len() / 2;
             let uses: Vec<_> = cs[k..]
                 .iter()
