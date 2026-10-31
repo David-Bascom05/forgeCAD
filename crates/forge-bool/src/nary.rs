@@ -2006,7 +2006,9 @@ fn nary_body(
             let mut outer = vec![false; n];
             inner[r.side] = true;
             let mut on_face = false;
-            for k in 0..n {
+            // (the tools whose boxes hold p are listed in its grid cell, in order)
+            for &k in grid.at(p) {
+                let k = k as usize;
                 if k == r.side || !index[k].bbox.contains(p) {
                     continue;
                 }
