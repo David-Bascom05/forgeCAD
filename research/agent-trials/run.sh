@@ -11,7 +11,7 @@ cp "$2" "$1/forgecad.bin"
 cat > "$1/forgecad" <<'WRAP'
 #!/bin/sh
 here=$(dirname "$0")
-out=$("$here/forgecad.bin" "$@" 2>&1 </dev/stdin); code=$?
+out=$("$here/forgecad.bin" "$@" 2>&1); code=$?
 printf '$ forgecad %s\n[exit %s]\n%s\n' "$*" "$code" "$out" >> "$here/calls.log"
 printf '%s\n' "$out"
 exit $code

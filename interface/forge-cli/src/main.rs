@@ -119,7 +119,7 @@ fn main() -> ExitCode {
                 _ => usage(),
             }
         }
-        Some("help") => {
+        Some("help" | "--help" | "-h") => {
             println!("{}", forge_agent::help::help(&args[2..].join(" ")));
             ExitCode::SUCCESS
         }
