@@ -18,6 +18,10 @@ dependencies = [
 ]
 
 [[package]]
+name = "forge-alloc"
+version = "0.1.0"
+
+[[package]]
 name = "forge-bench"
 version = "0.1.0"
 dependencies = [
@@ -92,6 +96,9 @@ dependencies = [
 [[package]]
 name = "forge-math"
 version = "0.1.0"
+dependencies = [
+ "forge-alloc",
+]
 
 [[package]]
 name = "forge-mesh"

@@ -2,6 +2,10 @@
 //! results on every target: plain IEEE arithmetic, no fused multiply-add, no
 //! platform math library (see `dmath`).
 
+// the wasm heap
+#[cfg(target_family = "wasm")]
+use forge_alloc as _;
+
 pub mod dmath;
 pub mod frame;
 pub mod hash;

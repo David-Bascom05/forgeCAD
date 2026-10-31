@@ -1,0 +1,15 @@
+[package]
+name = "forge-alloc"
+description = "The wasm heap: a size-class allocator, faster than std's dlmalloc for the kernel's many small blocks"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+
+# the second crate allowed unsafe code: a global allocator is unsafe by definition
+[lints.rust]
+unsafe_code = "allow"
+
+[lints.clippy]
+float_cmp = "allow"
+many_single_char_names = "allow"
