@@ -222,9 +222,35 @@ pub fn boolean(a: &Body, b: &Body, op: Op, feature: u64) -> R<Body> {
 pub fn boolean_into(target: &mut Body, b: &Body, op: Op, _feature: u64) -> R<()> {
     let plan = plan(target, b, op)?;
     let mut clock = phases_on().then(std::time::Instant::now);
+    let (loops, verts) = (target.loops.len(), target.vertices.len());
     apply(target, b, &plan);
+    split_new_pinches(target, loops, verts);
     lap(&mut clock, 6);
     Ok(())
+}
+
+/// Pieces left touching at a point keep a vertex each: looked for at the vertices a boolean
+/// made (from `verts` on, where its curves meet), from its new loops (from `loops` on).
+fn split_new_pinches(target: &mut Body, loops: usize, verts: usize) {
+    if target.vertices.len() == verts {
+        return;
+    }
+    let t: &Body = target;
+    let mut from: Vec<(VertexId, forge_topo::CoedgeId)> = (loops..t.loops.len())
+        .filter(|&l| {
+            t.face(t.loops[l].face)
+                .loops
+                .contains(&forge_topo::LoopId(l as u32))
+        })
+        .flat_map(|l| t.loops[l].coedges.iter().map(|&c| (t.coedge_start(c), c)))
+        .filter(|(v, _)| v.index() >= verts)
+        .collect();
+    from.sort_unstable();
+    let mut prev = Vec::new();
+    for run in from.chunk_by(|x, y| x.0 == y.0).filter(|run| run.len() > 1) {
+        let cs: Vec<_> = run.iter().map(|x| x.1).collect();
+        target.split_pinched(run[0].0, &cs, &mut prev);
+    }
 }
 
 /// Everything a boolean decides, worked out without touching A.

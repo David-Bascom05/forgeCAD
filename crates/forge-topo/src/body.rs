@@ -474,6 +474,74 @@ impl Body {
         self.lp(self.coedge(c).lp).face
     }
 
+    /// The live coedges leaving each vertex.
+    pub fn leaving(&self) -> Vec<Vec<CoedgeId>> {
+        let mut out = vec![Vec::new(); self.vertices.len()];
+        // the edges' own coedges are the live ones (a loop taken off a face drops its own)
+        for e in self.edge_ids() {
+            for &c in &self.edge(e).coedges {
+                out[self.coedge_start(c).index()].push(c);
+            }
+        }
+        out
+    }
+
+    /// The fans of faces round a vertex that coedges `from` (all leaving it) lie in: from one
+    /// leaving it, back along its loop to the one arriving, then across to that one's partner,
+    /// which leaves it again. A closed 2-manifold has one fan at every vertex. `prev` caches each
+    /// coedge's predecessor in its loop (filled a loop at a time, as loops are reached).
+    pub fn fans(&self, from: &[CoedgeId], prev: &mut Vec<CoedgeId>) -> Vec<Vec<CoedgeId>> {
+        const NONE: CoedgeId = CoedgeId(u32::MAX);
+        prev.resize(self.coedges.len(), NONE);
+        let mut before = |c: CoedgeId| {
+            if prev[c.index()] == NONE {
+                let cs = &self.lp(self.coedge(c).lp).coedges;
+                for (i, &x) in cs.iter().enumerate() {
+                    prev[x.index()] = cs[(i + cs.len() - 1) % cs.len()];
+                }
+            }
+            prev[c.index()]
+        };
+        let mut seen: Vec<CoedgeId> = Vec::new();
+        let mut fans = Vec::new();
+        for &c0 in from {
+            if seen.contains(&c0) {
+                continue;
+            }
+            let mut fan = Vec::new();
+            let mut c = c0;
+            while !seen.contains(&c) {
+                seen.push(c);
+                fan.push(c);
+                match self.partner(before(c)) {
+                    Some(n) => c = n,
+                    None => break,
+                }
+            }
+            fans.push(fan);
+        }
+        fans
+    }
+
+    /// Gives each fan past the first of those coedges `from` (all leaving vertex `v`) lie in a
+    /// vertex of its own at the same point: solids touching at a point stay manifold, as
+    /// Parasolid and ACIS keep them.
+    pub fn split_pinched(&mut self, v: VertexId, from: &[CoedgeId], prev: &mut Vec<CoedgeId>) {
+        for (k, fan) in self.fans(from, prev).iter().enumerate().skip(1) {
+            let old = self.vertices[v.index()].clone();
+            let nv = self.add_tolerant_vertex(old.point, old.tol, old.name.with(k as u64));
+            for &c in fan {
+                let (edge, forward) = (self.coedge(c).edge, self.coedge(c).forward);
+                let e = &mut self.edges[edge.index()];
+                if forward {
+                    e.start = nv;
+                } else {
+                    e.end = nv;
+                }
+            }
+        }
+    }
+
     /// The other use of the same edge.
     pub fn partner(&self, c: CoedgeId) -> Option<CoedgeId> {
         let e = self.edge(self.coedge(c).edge);

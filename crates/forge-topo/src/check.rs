@@ -175,36 +175,13 @@ fn check_shell_euler(body: &Body, out: &mut Vec<Problem>) {
 /// Round each vertex, coedge to coedge: from one leaving it, back along its loop to the one
 /// arriving, then across to that one's partner, which leaves it again. One cycle is one fan.
 fn check_fans(body: &Body, out: &mut Vec<Problem>) {
-    let mut prev = vec![CoedgeId(0); body.coedges.len()];
-    let mut leaving: Vec<Vec<CoedgeId>> = vec![Vec::new(); body.vertices.len()];
-    for l in body.loop_ids() {
-        let cs = &body.lp(l).coedges;
-        for (i, &c) in cs.iter().enumerate() {
-            prev[c.index()] = cs[(i + cs.len() - 1) % cs.len()];
-            leaving[body.coedge_start(c).index()].push(c);
-        }
-    }
-    for (v, cs) in leaving.iter().enumerate() {
-        let mut seen: Vec<CoedgeId> = Vec::new();
-        let mut fans = 0;
-        for &c0 in cs {
-            if seen.contains(&c0) {
-                continue;
-            }
-            fans += 1;
-            let mut c = c0;
-            while !seen.contains(&c) {
-                seen.push(c);
-                match body.partner(prev[c.index()]) {
-                    Some(n) => c = n,
-                    None => break,
-                }
-            }
-        }
-        if fans > 1 {
+    let mut prev = Vec::new();
+    for (v, cs) in body.leaving().iter().enumerate() {
+        let fans = body.fans(cs, &mut prev);
+        if fans.len() > 1 {
             out.push(Problem::VertexFans {
                 vertex: VertexId(v as u32),
-                fans,
+                fans: fans.len(),
             });
         }
     }

@@ -548,6 +548,23 @@ pub fn nary_with(
     threads: usize,
     root: Name,
 ) -> R<Body> {
+    let mut out = nary_body(tools, ops, shapes, batch, threads, root)?;
+    // pieces left touching at a point keep a vertex each
+    let mut prev = Vec::new();
+    for (v, cs) in out.leaving().into_iter().enumerate() {
+        out.split_pinched(forge_topo::VertexId(v as u32), &cs, &mut prev);
+    }
+    Ok(out)
+}
+
+fn nary_body(
+    tools: &[&Body],
+    ops: &[Op],
+    shapes: Option<&[Shape]>,
+    batch: Option<&dyn Batch>,
+    threads: usize,
+    root: Name,
+) -> R<Body> {
     assert_eq!(ops.len() + 1, tools.len(), "one op per tool after the first");
     let n = tools.len();
     let mut clock = std::time::Instant::now();
