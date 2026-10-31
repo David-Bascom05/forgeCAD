@@ -23,7 +23,7 @@ use crate::shape::{Member, Shape};
 use crate::ssi;
 use forge_geom::intersect::{Contact, CurveSurface, SurfaceSurface, curve_surface};
 use forge_geom::{Curve, CurveGeom, SurfaceGeom};
-use forge_math::{Interval, Point3, tol};
+use forge_math::{Interval, Point2, Point3, tol};
 use forge_topo::{Body, EdgeId, FaceId, Name, VertexId};
 use std::sync::atomic::{AtomicUsize, Ordering};
 
@@ -1489,16 +1489,23 @@ fn nary_body(
                 }
             }
         }
-        let split = par_map(order.len(), threads, 32, |k| {
-            let (sd, e) = order[k];
-            let mut list = Vec::new();
-            edge_split(tools[sd], sd, e, &cuts, &by_edge, &cut_vertex, &alias, &mut list);
-            list
-        });
-        for ((sd, e), got) in order.into_iter().zip(split) {
-            let first = pieces.list.len();
-            pieces.of_edge[sd][e.index()] = (first as u32, got.len() as u32);
-            pieces.list.extend(got);
+        // on one thread, straight into the list
+        if threads.min(order.len() / 32) <= 1 {
+            for (sd, e) in order {
+                pieces.ensure(sd, e);
+            }
+        } else {
+            let split = par_map(order.len(), threads, 32, |k| {
+                let (sd, e) = order[k];
+                let mut list = Vec::new();
+                edge_split(tools[sd], sd, e, &cuts, &by_edge, &cut_vertex, &alias, &mut list);
+                list
+            });
+            for ((sd, e), got) in order.into_iter().zip(split) {
+                let first = pieces.list.len();
+                pieces.of_edge[sd][e.index()] = (first as u32, got.len() as u32);
+                pieces.list.extend(got);
+            }
         }
     }
     // (side, face, boundary, new edges) per touched face
@@ -1638,7 +1645,13 @@ fn nary_body(
     let list = &pieces.list;
     let splits = par_map(jobs.len(), threads, 8, |j| {
         let (side, f, ref boundary, ref new_edges) = jobs[j];
-        split_face(tools[side], f, list, boundary, new_edges, true, &ties).map(|s| s.regions)
+        match (!cut_faces[side][f.index()])
+            .then(|| holes_only(tools[side], side, f, list, boundary, new_edges, &ties))
+            .flatten()
+        {
+            Some(regions) => Ok(regions),
+            None => split_face(tools[side], f, list, boundary, new_edges, true, &ties).map(|s| s.regions),
+        }
     });
     let mut job_regs: Vec<std::ops::Range<usize>> = Vec::with_capacity(jobs.len());
     for (j, ((side, f, _, _), split)) in jobs.iter().zip(splits).enumerate() {
@@ -1663,6 +1676,8 @@ fn nary_body(
     let mut partners: Vec<FacePair> = coplanar.iter().flat_map(|&[x, y]| [(x, y), (y, x)]).collect();
     partners.sort_by_key(|x| x.0);
     // whether a region lies inside tool k, by how it leans off k's face along a new edge they share
+    let geom: Vec<std::sync::OnceLock<(f64, forge_math::Box3)>> =
+        (0..list.len()).map(|_| std::sync::OnceLock::new()).collect();
     let lean = |r: &Reg, k: Side| -> Option<bool> {
         let body = tools[r.side];
         for &(p, fwd) in r.loops.iter().flatten() {
@@ -1694,7 +1709,7 @@ fn nary_body(
         let t0 = std::time::Instant::now();
         let mut candidates = match first {
             Some(p) => vec![p],
-            None => region_points(body, r.face, &r.loops, list, 1),
+            None => region_points(body, r.face, &r.loops, list, &geom, 1),
         };
         if candidates
             .first()
@@ -1766,7 +1781,7 @@ fn nary_body(
         // the first point nearly always settles it; the rest are worked out only if not
         for pass in 0..2 {
             if pass == 1 {
-                candidates = region_points(body, r.face, &r.loops, list, usize::MAX);
+                candidates = region_points(body, r.face, &r.loops, list, &geom, usize::MAX);
             }
             for &p in candidates.iter().skip(pass) {
                 match judge(p)? {
@@ -1936,7 +1951,7 @@ fn nary_body(
                     return None;
                 }
                 let r = &regs[ri];
-                region_points(tools[r.side], r.face, &r.loops, list, 1)
+                region_points(tools[r.side], r.face, &r.loops, list, &geom, 1)
                     .first()
                     .copied()
             });
@@ -2003,7 +2018,13 @@ fn nary_body(
         if keep.len() == new_edges.len() {
             return Ok(None);
         }
-        let regions = split_face(tools[side], f, list, boundary, &keep, true, &ties)?.regions;
+        let regions = match (!cut_faces[side][f.index()])
+            .then(|| holes_only(tools[side], side, f, list, boundary, &keep, &ties))
+            .flatten()
+        {
+            Some(regions) => regions,
+            None => split_face(tools[side], f, list, boundary, &keep, true, &ties)?.regions,
+        };
         regions
             .into_iter()
             .map(|loops| {
@@ -2133,6 +2154,16 @@ fn nary_body(
         };
     }
     let mut out = Body::new();
+    // sized up front: the body grows by pushes alone
+    let (loops, uses): (usize, usize) = kept.iter().fold((0, 0), |a, &(ri, _)| {
+        let ls = &regs[ri].loops;
+        (a.0 + ls.len(), a.1 + ls.iter().map(Vec::len).sum::<usize>())
+    });
+    out.faces.reserve_exact(kept.len());
+    out.loops.reserve_exact(loops);
+    out.coedges.reserve_exact(uses);
+    out.edges.reserve_exact(uses / 2);
+    out.vertices.reserve_exact(uses / 2);
     let shell = out.add_shell();
     // the body's vertex of each tool vertex (per tool, made on first use) and each new one
     let mut old_v: Vec<Vec<Option<VertexId>>> = vec![Vec::new(); n];
@@ -2228,6 +2259,196 @@ fn meet3(s: [&forge_geom::Surface; 3], p: Point3) -> Option<Point3> {
     None
 }
 
+/// The regions `split_face` gives a planar face, none of whose edges is cut, whose new edges
+/// close into loops clear of each other and of the face's own loops (no shared vertex, no box of
+/// one holding another or a vertex of the face): the face with each as a hole, then each as a
+/// disk (None otherwise).
+fn holes_only(
+    body: &Body,
+    side: Side,
+    f: FaceId,
+    list: &[Piece],
+    boundary: &[Walk],
+    new_edges: &[usize],
+    ties: &[VKey],
+) -> Option<Vec<Vec<Walk>>> {
+    let face = body.face(f);
+    if new_edges.is_empty() || !matches!(face.surface, forge_geom::Surface::Plane(_)) {
+        return None;
+    }
+    // each end of a new edge by vertex: every vertex two of them, none the face's tool's or a tie
+    let mut ends: Vec<(VKey, usize)> = new_edges
+        .iter()
+        .enumerate()
+        .flat_map(|(k, &p)| [(list[p].start, k), (list[p].end, k)])
+        .collect();
+    ends.sort_unstable();
+    if !ends.chunks(2).all(|c| c[0].0 == c[1].0)
+        || ends.windows(3).any(|w| w[0].0 == w[2].0)
+        || ends
+            .iter()
+            .any(|(v, _)| matches!(v, VKey::Old(sd, _) if *sd == side) || ties.binary_search(v).is_ok())
+    {
+        return None;
+    }
+    // the other new edge at v
+    let other = |v: VKey, k: usize| {
+        let i = ends.partition_point(|e| e.0 < v);
+        if ends[i].1 == k { ends[i + 1].1 } else { ends[i].1 }
+    };
+    // the loops as split_face walks them (each from its first edge forwards)
+    let mut used = vec![false; new_edges.len()];
+    let mut cycles: Vec<Walk> = Vec::new();
+    for k in 0..new_edges.len() {
+        if used[k] {
+            continue;
+        }
+        used[k] = true;
+        let p = new_edges[k];
+        let mut cyc = vec![(p, true)];
+        let (mut at, mut j) = (list[p].end, k);
+        while at != list[p].start {
+            j = other(at, j);
+            if std::mem::replace(&mut used[j], true) {
+                return None;
+            }
+            let q = new_edges[j];
+            let fwd = list[q].start == at;
+            at = if fwd { list[q].end } else { list[q].start };
+            cyc.push((q, fwd));
+        }
+        cycles.push(cyc);
+    }
+    // each loop's box in the plane (from its edges' boxes, grown a little): none may meet another
+    // or hold a vertex of the face (a sweep along u)
+    let mirror = |p: Point2| {
+        if face.same_sense {
+            p
+        } else {
+            Point2::new(-p.x, p.y)
+        }
+    };
+    let forge_geom::Surface::Plane(plane) = &face.surface else {
+        return None;
+    };
+    let (eu, ev) = (plane.frame.x().get(), plane.frame.y().get());
+    let boxes: Vec<(f64, f64, f64, f64)> = cycles
+        .iter()
+        .map(|cyc| {
+            let (mut lo, mut hi) = (
+                Point2::new(f64::INFINITY, f64::INFINITY),
+                Point2::new(f64::NEG_INFINITY, f64::NEG_INFINITY),
+            );
+            let mut add = |c: Point2, du: f64, dv: f64| {
+                lo = Point2::new(lo.x.min(c.x - du), lo.y.min(c.y - dv));
+                hi = Point2::new(hi.x.max(c.x + du), hi.y.max(c.y + dv));
+            };
+            for &(q, _) in cyc {
+                let pc = &list[q];
+                // a conic by its whole outline (o + a cos t x + b sin t y reaches |a x.e| + ..
+                // along e, at most), a line by its ends, else by its box's corners
+                let conic = |f: &forge_math::Frame, a: f64, b: f64| {
+                    let (x, y) = (f.x().get(), f.y().get());
+                    let r = |e: forge_math::Vec3| ((a * x.dot(e)).powi(2) + (b * y.dot(e)).powi(2)).sqrt();
+                    (mirror(face.surface.project(f.origin)), r(eu), r(ev))
+                };
+                match &pc.curve {
+                    Curve::Circle(k) => {
+                        let (c, du, dv) = conic(&k.frame, k.radius, k.radius);
+                        add(c, du, dv);
+                    }
+                    Curve::Ellipse(e) => {
+                        let (c, du, dv) = conic(&e.frame, e.major, e.minor);
+                        add(c, du, dv);
+                    }
+                    Curve::Line(_) => {
+                        for t in [pc.range.lo, pc.range.hi] {
+                            add(mirror(face.surface.project(pc.curve.eval(t))), 0.0, 0.0);
+                        }
+                    }
+                    c => {
+                        let b = c.bbox(pc.range);
+                        for x in [b.x.lo, b.x.hi] {
+                            for y in [b.y.lo, b.y.hi] {
+                                for z in [b.z.lo, b.z.hi] {
+                                    add(mirror(face.surface.project(Point3::new(x, y, z))), 0.0, 0.0);
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            let g = 1e-3 * (hi.x - lo.x + hi.y - lo.y);
+            (lo.x - g, hi.x + g, lo.y - g, hi.y + g)
+        })
+        .collect();
+    let corners: Vec<Point2> = face
+        .loops
+        .iter()
+        .map(|&l| {
+            let v = body.edge(body.coedge(body.lp(l).coedges[0]).edge).start;
+            mirror(face.surface.project(body.vertex(v).point))
+        })
+        .collect();
+    // boxes before corners at one u
+    let mut marks: Vec<(f64, usize)> = boxes.iter().enumerate().map(|(i, b)| (b.0, i)).collect();
+    marks.extend(corners.iter().enumerate().map(|(i, q)| (q.x, boxes.len() + i)));
+    marks.sort_unstable_by(|a, b| a.0.total_cmp(&b.0).then(a.1.cmp(&b.1)));
+    let mut open: Vec<usize> = Vec::new();
+    for &(x, i) in &marks {
+        open.retain(|&o| boxes[o].1 >= x);
+        let (lo, hi) = match boxes.get(i) {
+            Some(b) => (b.2, b.3),
+            None => (corners[i - boxes.len()].y, corners[i - boxes.len()].y),
+        };
+        if open.iter().any(|&o| boxes[o].2 <= hi && lo <= boxes[o].3) {
+            return None;
+        }
+        if i < boxes.len() {
+            open.push(i);
+        }
+    }
+    // which way round each runs, drawn as split_face draws it
+    let mut samples = Vec::new();
+    let mut disks: Vec<Walk> = Vec::with_capacity(cycles.len());
+    for cyc in cycles {
+        samples.clear();
+        for &(q, fwd) in &cyc {
+            crate::boolean::piece_samples(&list[q], fwd, &mut samples);
+        }
+        let poly: Vec<Point2> = forge_topo::uv::draw_loop(body, f, &samples)
+            .0
+            .into_iter()
+            .map(mirror)
+            .collect();
+        let area = forge_topo::uv::signed_area(&poly);
+        if area.abs() <= 1e-12 {
+            return None;
+        }
+        disks.push(if area > 0.0 {
+            cyc
+        } else {
+            std::iter::once((cyc[0].0, false))
+                .chain(cyc[1..].iter().rev().map(|&(q, fwd)| (q, !fwd)))
+                .collect()
+        });
+    }
+    let mut outer: Vec<Walk> = boundary.to_vec();
+    let mut regions = Vec::with_capacity(disks.len() + 1);
+    regions.push(Vec::new());
+    for disk in disks {
+        // the hole is the loop walked the other way: its first edge, then the rest backwards
+        outer.push(
+            std::iter::once((disk[0].0, !disk[0].1))
+                .chain(disk[1..].iter().rev().map(|&(q, fwd)| (q, !fwd)))
+                .collect(),
+        );
+        regions.push(vec![disk]);
+    }
+    regions[0] = outer;
+    Some(regions)
+}
+
 /// Pieces among `ps` with the same ends along the same curve as a lower one: by piece, (the
 /// lower one, whether it runs the other way).
 fn coincident(list: &[Piece], ps: &[usize]) -> Vec<Option<(usize, bool)>> {
@@ -2274,45 +2495,59 @@ fn step_in(
     Some(face.surface.eval(face.surface.project(q)))
 }
 
+/// Each piece's chord (the longer half of it, at least 1e-3) and box, worked out once.
+type Geom = [std::sync::OnceLock<(f64, forge_math::Box3)>];
+
+fn chord_of(c: &Curve, r: Interval) -> f64 {
+    let m = c.eval(r.mid());
+    c.eval(r.lo).distance(m).max(m.distance(c.eval(r.hi))).max(1e-3)
+}
+
 /// Points inside a region of face `f` (its loops of pieces, or the face's own loops when
 /// `loops` is empty), best first: a step in from its longest edges at a few places along
 /// them, each step short enough that no other edge comes nearer than it (so the way in
 /// crosses none).
-fn region_points(body: &Body, f: FaceId, loops: &[Walk], list: &[Piece], max: usize) -> Vec<Point3> {
-    // (curve, range, forward) of each edge
-    let mut edges: Vec<(&Curve, Interval, bool)> = Vec::new();
+fn region_points(
+    body: &Body,
+    f: FaceId,
+    loops: &[Walk],
+    list: &[Piece],
+    geom: &Geom,
+    max: usize,
+) -> Vec<Point3> {
+    // (curve, range, forward, chord, box) of each edge
+    let mut edges: Vec<(&Curve, Interval, bool, f64, forge_math::Box3)> = Vec::new();
     if loops.is_empty() {
         for &l in &body.face(f).loops {
             for &c in &body.lp(l).coedges {
                 let co = body.coedge(c);
                 let e = body.edge(co.edge);
-                edges.push((&e.curve, e.range, co.forward));
+                edges.push((
+                    &e.curve,
+                    e.range,
+                    co.forward,
+                    chord_of(&e.curve, e.range),
+                    body.edge_box(co.edge),
+                ));
             }
         }
     } else {
         for &(p, fwd) in loops.iter().flatten() {
-            edges.push((&list[p].curve, list[p].range, fwd));
+            let pc = &list[p];
+            let &(len, b) = geom[p].get_or_init(|| (chord_of(&pc.curve, pc.range), pc.curve.bbox(pc.range)));
+            edges.push((&pc.curve, pc.range, fwd, len, b));
         }
     }
-    let chord = |e: &(&Curve, Interval, bool)| {
-        let m = e.0.eval(e.1.mid());
-        e.0.eval(e.1.lo)
-            .distance(m)
-            .max(m.distance(e.0.eval(e.1.hi)))
-            .max(1e-3)
-    };
-    let mut order: Vec<(f64, usize)> = edges.iter().enumerate().map(|(i, e)| (chord(e), i)).collect();
+    let mut order: Vec<(f64, usize)> = edges.iter().enumerate().map(|(i, e)| (e.3, i)).collect();
     order.sort_by(|a, b| b.0.total_cmp(&a.0));
     let clear = |p: Point3, step: f64, own: usize| {
-        edges.iter().enumerate().all(|(i, &(c, r, _))| {
-            i == own
-                || !c.bbox(r).grow(step).contains(p)
-                || c.eval(c.closest(p, r)).distance(p) >= 0.999 * step
+        edges.iter().enumerate().all(|(i, &(c, r, _, _, b))| {
+            i == own || !b.grow(step).contains(p) || c.eval(c.closest(p, r)).distance(p) >= 0.999 * step
         })
     };
     let mut out = Vec::new();
     for &(len, i) in order.iter().take(4) {
-        let (c, r, fwd) = edges[i];
+        let (c, r, fwd, _, _) = edges[i];
         for frac in [0.5, 0.3, 0.7] {
             let mut step = (0.01 * len).min(0.05);
             while step > tol::LINEAR {
@@ -2332,7 +2567,7 @@ fn region_points(body: &Body, f: FaceId, loops: &[Walk], list: &[Piece], max: us
     if out.is_empty()
         && let Some(&(len, i)) = order.first()
     {
-        let (c, r, fwd) = edges[i];
+        let (c, r, fwd, _, _) = edges[i];
         out.extend(step_in(body, f, c, r, fwd, 0.5, (0.01 * len).min(0.05)));
     }
     out
