@@ -218,6 +218,13 @@ impl ProfileLoop {
     fn polygon(&self) -> Vec<Point2> {
         self.segments.iter().flat_map(|(s, _)| s.samples(16)).collect()
     }
+    /// The polygon a crossing is looked for on: a line needs only its start.
+    fn outline(&self) -> Vec<Point2> {
+        self.segments
+            .iter()
+            .flat_map(|(s, _)| s.samples(if matches!(s, Segment::Line { .. }) { 1 } else { 16 }))
+            .collect()
+    }
 }
 
 /// Whether two edges of the closed polygon cross properly (adjacent edges share a corner).
@@ -294,7 +301,7 @@ impl Profile {
         for (i, l) in self.loops.iter().enumerate() {
             // a lone circle is drawn as a convex polygon: it cannot cross itself
             let circle = matches!(l.segments[..], [(Segment::Circle { .. }, _)]);
-            if !circle && crosses_itself(&l.polygon()) {
+            if !circle && crosses_itself(&l.outline()) {
                 return Err(ProfileError::SelfIntersecting { loop_index: i });
             }
         }
