@@ -221,6 +221,11 @@ fn earlier(features: &[Feature], i: usize) -> Result<Vec<(usize, Shape, Op)>, Re
             "the next face after a part-changing feature",
         )));
     }
+    if crate::bodies::multi(&features[..i]) {
+        return Err(bad(ExtentError::Unsupported(
+            "the next face in a multi-body part",
+        )));
+    }
     let mut out = Vec::new();
     for k in start..i {
         out.extend(

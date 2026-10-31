@@ -269,6 +269,12 @@ pub(crate) fn reach(features: &[Feature]) -> Box3 {
                     b = b.hull(&m.bbox(&b));
                 }
             }
+            Feature::Body(bf) => {
+                if let crate::BodyFeature::Move { steps, .. } = &**bf {
+                    let m = crate::bodies::motion(steps);
+                    b = b.hull(&m.bbox(&b));
+                }
+            }
             _ => {
                 for a in adds(features, i) {
                     b = b.hull(&a);

@@ -6,10 +6,10 @@ use crate::{expr, sketch};
 use forge_geom::Circle;
 use forge_math::{Frame, Point2, Point3, Vec2, Vec3, dmath};
 use forge_model::{
-    At, AxisBy, Coil, CoilSize, Combine, Convention, Datum, Edit, End, Extent, Feature, Fit, FontRef, Head,
-    Hole, Layout, Loft, Motion, Param, Part, PathEnds, PlaneBy, PointBy, Ref, Rib, Row, ScrewThread, Side,
-    Source, Standard, Sweep, Target, Text, TextOn, Thread, ThreadLength, ThreadOn, ThreadSpec, Toward, Turn,
-    UcsBy, Unit, Work, standard, work,
+    At, AxisBy, BodyFeature, Coil, CoilSize, Combine, Convention, Cutter, Datum, Edit, End, Extent, Feature,
+    Fit, FontRef, Head, Hole, Keep, Layout, Loft, Motion, Param, Part, PathEnds, Pick, PlaneBy, PointBy, Ref,
+    Rib, Row, ScrewThread, Side, Source, Standard, Step, Sweep, Target, Text, TextOn, Thread, ThreadLength,
+    ThreadOn, ThreadSpec, Toward, Turn, UcsBy, Unit, Work, standard, work,
 };
 use forge_ops::{
     Axis2, ChamferSize, Handed, LoftGuides, LoftKind, PathSeg, Profile, ProfileLoop, Radius, Segment,
@@ -1429,7 +1429,157 @@ pub const KINDS: &[Kind] = &[
             true
         },
     },
+    Kind {
+        name: "combine",
+        syntax: "combine (add|cut|keep) TARGET TOOL.. [keep]   bodies by the lines that made them",
+        parse: |p| {
+            let op = match p.next()? {
+                "add" => Combine::Add,
+                "cut" => Combine::Cut,
+                "keep" => Combine::Keep,
+                t => return Err(format!("expected add, cut or keep, found '{t}'")),
+            };
+            let target = p.feat()?;
+            let (mut tools, mut keep) = (vec![], false);
+            while !p.done() {
+                if p.peek() == "keep" && p.k + 1 == p.t.len() {
+                    keep = p.eat("keep");
+                } else {
+                    tools.push(p.feat()?);
+                }
+            }
+            if tools.is_empty() {
+                return Err("combine needs a tool body".into());
+            }
+            Ok(body(BodyFeature::Combine {
+                op,
+                target,
+                tools,
+                keep,
+            }))
+        },
+        print: |f, w| {
+            let Some(BodyFeature::Combine {
+                op,
+                target,
+                tools,
+                keep,
+            }) = body_of(f)
+            else {
+                return false;
+            };
+            w.word(OPS.iter().find(|o| o.1 == *op).expect("every op is named").0);
+            w.feat(*target);
+            tools.iter().for_each(|&t| w.feat(t));
+            if *keep {
+                w.word("keep");
+            }
+            true
+        },
+    },
+    Kind {
+        name: "split",
+        syntax: "split BY [+|-]   BY: FEAT [@face] | plane FRAME | curve FRAME (line AX AY BX BY | arc CX CY R A0 SWEEP | circle CX CY R)",
+        parse: |p| {
+            let by = p.cutter()?;
+            let keep = if p.eat("+") {
+                Keep::Plus
+            } else if p.eat("-") {
+                Keep::Minus
+            } else {
+                Keep::Both
+            };
+            Ok(body(BodyFeature::Split { by, keep }))
+        },
+        print: |f, w| {
+            let Some(BodyFeature::Split { by, keep }) = body_of(f) else {
+                return false;
+            };
+            w.cutter(by);
+            match keep {
+                Keep::Plus => w.word("+"),
+                Keep::Minus => w.word("-"),
+                Keep::Both => {}
+            }
+            true
+        },
+    },
+    Kind {
+        name: "splitface",
+        syntax: "splitface REF.. by BY",
+        parse: |p| {
+            let mut faces = p.one_or_more_refs()?;
+            faces.extend(p.refs()?);
+            p.expect("by")?;
+            Ok(body(BodyFeature::SplitFace {
+                faces,
+                by: p.cutter()?,
+            }))
+        },
+        print: |f, w| {
+            let Some(BodyFeature::SplitFace { faces, by }) = body_of(f) else {
+                return false;
+            };
+            w.names(faces);
+            w.word("by");
+            w.cutter(by);
+            true
+        },
+    },
+    Kind {
+        name: "movebody",
+        syntax: "movebody (by DX DY DZ | rot OX OY OZ AX AY AZ A | frame FRAME)..",
+        parse: |p| {
+            Ok(body(BodyFeature::Move {
+                steps: p.steps()?,
+                copy: false,
+            }))
+        },
+        print: |f, w| match body_of(f) {
+            Some(BodyFeature::Move { steps, copy: false }) => {
+                w.steps(steps);
+                true
+            }
+            _ => false,
+        },
+    },
+    Kind {
+        name: "copybody",
+        syntax: "copybody (by DX DY DZ | rot OX OY OZ AX AY AZ A | frame FRAME)..",
+        parse: |p| {
+            Ok(body(BodyFeature::Move {
+                steps: p.steps()?,
+                copy: true,
+            }))
+        },
+        print: |f, w| match body_of(f) {
+            Some(BodyFeature::Move { steps, copy: true }) => {
+                w.steps(steps);
+                true
+            }
+            _ => false,
+        },
+    },
 ];
+
+fn body(b: BodyFeature) -> Feature {
+    Feature::Body(Box::new(b))
+}
+
+fn body_of(f: &Feature) -> Option<&BodyFeature> {
+    match f {
+        Feature::Body(b) => Some(b),
+        _ => None,
+    }
+}
+
+/// A feature without its `in` bodies, and those.
+fn unwrap_in(f: &Feature) -> (&Feature, Option<&Pick>) {
+    match body_of(f) {
+        Some(BodyFeature::In { bodies, feature }) => (feature, Some(bodies)),
+        _ => (f, None),
+    }
+}
 
 type R<T> = Result<T, String>;
 
@@ -1605,8 +1755,14 @@ pub fn parse_line_refs(line: &Line, before: &Before) -> R<(Feature, Vec<(usize, 
             names.join(" ")
         )
     })?;
+    // `in FEAT[,FEAT..]` or `in all` ends any line
+    let n = line.toks.len();
+    let (toks, pick) = match !param && n >= 3 && line.toks[n - 2] == "in" {
+        true => (&line.toks[..n - 2], Some(line.toks[n - 1].as_str())),
+        false => (&line.toks[..], None),
+    };
     let mut p = P {
-        t: &line.toks,
+        t: toks,
         k: if param { 0 } else { 1 },
         b: before,
         on: None,
@@ -1614,14 +1770,42 @@ pub fn parse_line_refs(line: &Line, before: &Before) -> R<(Feature, Vec<(usize, 
         feats: Vec::new(),
     };
     let f = (k.parse)(&mut p)?;
-    match p.t.get(p.k) {
-        Some(t) => Err(format!("unexpected '{t}'")),
-        None => Ok((f, p.feats)),
+    if let Some(t) = p.t.get(p.k) {
+        return Err(format!("unexpected '{t}'"));
     }
+    let mut feats = p.feats;
+    let bodies = match pick {
+        None => return Ok((f, feats)),
+        Some("all") => Pick::All,
+        Some(w) => {
+            let ids = w
+                .split(',')
+                .map(|x| {
+                    let one = [x.to_string()];
+                    P {
+                        t: &one,
+                        k: 0,
+                        b: before,
+                        on: None,
+                        at: None,
+                        feats: Vec::new(),
+                    }
+                    .feat_named()
+                })
+                .collect::<R<Vec<usize>>>()?;
+            // one body named: the reference follows its line through edits
+            if let [id] = ids[..] {
+                feats.push((n - 1, id));
+            }
+            Pick::Some(ids)
+        }
+    };
+    Ok((body(BodyFeature::In { bodies, feature: f }), feats))
 }
 
 /// The kind of a feature.
 pub fn kind_of(f: &Feature) -> &'static Kind {
+    let f = unwrap_in(f).0;
     // rows without printing them
     match f {
         Feature::Param(_) => return kind("param").expect("a row"),
@@ -1644,7 +1828,17 @@ pub fn print(part: &Part) -> String {
         if !matches!(f, Feature::Param(_)) {
             w.s.push_str(kinds[i]);
         }
+        let (f, pick) = unwrap_in(f);
         (kind_of(f).print)(f, &mut w);
+        match pick {
+            None => {}
+            Some(Pick::All) => w.word("in all"),
+            Some(Pick::Some(ids)) => {
+                let list: Vec<String> = ids.iter().map(|&i| w.feat_name(i)).collect();
+                w.word("in");
+                w.word(&list.join(","));
+            }
+        }
         out.push_str(&w.s);
         out.push('\n');
     }
@@ -1692,7 +1886,7 @@ pub fn full_name(r: &str) -> Option<Name> {
 fn default_op(before: &[Feature]) -> Combine {
     let solid = |f: &Feature| {
         matches!(
-            f,
+            unwrap_in(f).0,
             Feature::Extrude { .. }
                 | Feature::Revolve { .. }
                 | Feature::Ball { .. }
@@ -2034,6 +2228,61 @@ impl<'a> P<'a> {
     fn datum(&self, i: usize, what: &str) -> R<Datum> {
         work::datum(self.b.features, i)
             .map_err(|e| format!("'{what}' needs a work feature that builds; line {}: {e:?}", i + 1))
+    }
+    fn cutter(&mut self) -> R<Cutter> {
+        if self.eat("plane") {
+            return Ok(Cutter::Plane(self.frame()?));
+        }
+        if !self.eat("curve") {
+            return Ok(Cutter::Target(self.target()?));
+        }
+        let frame = self.frame()?;
+        let seg = match self.next()? {
+            "line" => Segment::Line {
+                a: self.p2()?,
+                b: self.p2()?,
+            },
+            "arc" => Segment::Arc {
+                center: self.p2()?,
+                radius: self.num()?,
+                start: self.angle()?,
+                sweep: self.angle()?,
+            },
+            "circle" => Segment::Circle {
+                center: self.p2()?,
+                radius: self.num()?,
+                ccw: true,
+            },
+            t => return Err(format!("expected line, arc or circle, found '{t}'")),
+        };
+        Ok(Cutter::Curve(frame, seg))
+    }
+    fn steps(&mut self) -> R<Vec<Step>> {
+        let mut out = Vec::new();
+        loop {
+            out.push(match self.peek() {
+                "by" => {
+                    self.k += 1;
+                    Step::Translate(self.vec3()?)
+                }
+                "rot" => {
+                    self.k += 1;
+                    Step::Rotate {
+                        origin: self.point3()?,
+                        axis: self.vec3()?,
+                        angle: self.angle()?,
+                    }
+                }
+                "frame" => {
+                    self.k += 1;
+                    Step::Frame(self.frame()?)
+                }
+                _ if out.is_empty() => {
+                    return Err(format!("expected by, rot or frame, found '{}'", self.peek()));
+                }
+                _ => return Ok(out),
+            });
+        }
     }
     fn target(&mut self) -> R<Target> {
         let feature = self.feat()?;
@@ -2561,12 +2810,69 @@ impl<'a> W<'a> {
         }
     }
     fn feat(&mut self, i: usize) {
+        let w = self.feat_name(i);
+        self.word(&w);
+    }
+    fn feat_name(&self, i: usize) -> String {
         if i < self.before.len() {
             let k = self.kinds[i];
             let n = self.kinds[..=i].iter().filter(|x| **x == k).count();
-            self.word(&format!("{k}{n}"));
+            format!("{k}{n}")
         } else {
-            self.word(&format!("f{}", i + 1));
+            format!("f{}", i + 1)
+        }
+    }
+    fn cutter(&mut self, c: &Cutter) {
+        match c {
+            Cutter::Target(t) => self.target(t),
+            Cutter::Plane(f) => {
+                self.word("plane");
+                self.frame(f);
+            }
+            Cutter::Curve(f, s) => {
+                self.word("curve");
+                self.frame(f);
+                match *s {
+                    Segment::Line { a, b } => {
+                        self.word("line");
+                        self.nums(&[a.x, a.y, b.x, b.y]);
+                    }
+                    Segment::Arc {
+                        center,
+                        radius,
+                        start,
+                        sweep,
+                    } => {
+                        self.word("arc");
+                        self.nums(&[center.x, center.y, radius]);
+                        self.angle(start);
+                        self.angle(sweep);
+                    }
+                    Segment::Circle { center, radius, .. } => {
+                        self.word("circle");
+                        self.nums(&[center.x, center.y, radius]);
+                    }
+                }
+            }
+        }
+    }
+    fn steps(&mut self, steps: &[Step]) {
+        for s in steps {
+            match s {
+                Step::Translate(v) => {
+                    self.word("by");
+                    self.nums(&[v.x, v.y, v.z]);
+                }
+                Step::Rotate { origin, axis, angle } => {
+                    self.word("rot");
+                    self.nums(&[origin.x, origin.y, origin.z, axis.x, axis.y, axis.z]);
+                    self.angle(*angle);
+                }
+                Step::Frame(f) => {
+                    self.word("frame");
+                    self.frame(f);
+                }
+            }
         }
     }
     fn wref(&mut self, r: &Ref) {
@@ -2984,7 +3290,46 @@ mod tests {
     }
 
     fn op(r: &mut Rng) -> Combine {
-        OPS[r.below(4)].1
+        OPS[r.below(OPS.len())].1
+    }
+
+    fn cutter(r: &mut Rng, i: usize) -> Cutter {
+        match r.below(5) {
+            0 => Cutter::Plane(frame(r)),
+            1 => Cutter::Curve(frame(r), Segment::Line { a: p2(r), b: p2(r) }),
+            2 => Cutter::Curve(
+                frame(r),
+                Segment::Arc {
+                    center: p2(r),
+                    radius: num(r),
+                    start: angle(r),
+                    sweep: angle(r),
+                },
+            ),
+            3 => Cutter::Curve(
+                frame(r),
+                Segment::Circle {
+                    center: p2(r),
+                    radius: num(r),
+                    ccw: true,
+                },
+            ),
+            _ => Cutter::Target(target(r, i)),
+        }
+    }
+
+    fn steps(r: &mut Rng) -> Vec<Step> {
+        (0..1 + r.below(3))
+            .map(|_| match r.below(3) {
+                0 => Step::Translate(Vec3::new(num(r), num(r), num(r))),
+                1 => Step::Rotate {
+                    origin: Point3::new(num(r), num(r), num(r)),
+                    axis: Vec3::new(num(r), num(r), num(r)),
+                    angle: angle(r),
+                },
+                _ => Step::Frame(frame(r)),
+            })
+            .collect()
     }
 
     fn target(r: &mut Rng, i: usize) -> Target {
@@ -3075,7 +3420,27 @@ mod tests {
     }
 
     /// One random feature of every kind there is, every field drawn at random.
+    /// One random feature of every kind there is, every field drawn at random, sometimes on
+    /// chosen bodies.
     fn feature(r: &mut Rng, i: usize, before: &[Feature]) -> Feature {
+        let f = bare(r, i, before);
+        if matches!(f, Feature::Param(_) | Feature::Sketch(_)) {
+            return f;
+        }
+        match r.below(6) {
+            0 => body(BodyFeature::In {
+                bodies: Pick::All,
+                feature: f,
+            }),
+            1 => body(BodyFeature::In {
+                bodies: Pick::Some((0..1 + r.below(3)).map(|_| r.below(i + 3)).collect()),
+                feature: f,
+            }),
+            _ => f,
+        }
+    }
+
+    fn bare(r: &mut Rng, i: usize, before: &[Feature]) -> Feature {
         match r.below(KINDS.len()) {
             0 => Feature::Extrude {
                 profile: profile(r),
@@ -3498,11 +3863,29 @@ mod tests {
                 1 => PointBy::Mid(wref(r, i)),
                 _ => PointBy::Meet(wref(r, i), wref(r, i)),
             })),
-            _ => Feature::Work(Work::Ucs(if r.bool() {
+            26 => Feature::Work(Work::Ucs(if r.bool() {
                 UcsBy::Frame(frame(r))
             } else {
                 UcsBy::Points([wref(r, i), wref(r, i), wref(r, i)])
             })),
+            27 => body(BodyFeature::Combine {
+                op: [Combine::Add, Combine::Cut, Combine::Keep][r.below(3)],
+                target: r.below(i + 3),
+                tools: (0..1 + r.below(3)).map(|_| r.below(i + 3)).collect(),
+                keep: r.bool(),
+            }),
+            28 => body(BodyFeature::Split {
+                by: cutter(r, i),
+                keep: [Keep::Plus, Keep::Minus, Keep::Both][r.below(3)],
+            }),
+            29 => body(BodyFeature::SplitFace {
+                faces: (0..1 + r.below(3)).map(|_| Name(r.next_u64())).collect(),
+                by: cutter(r, i),
+            }),
+            _ => body(BodyFeature::Move {
+                steps: steps(r),
+                copy: r.bool(),
+            }),
         }
     }
 

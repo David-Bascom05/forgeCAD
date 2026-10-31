@@ -298,6 +298,7 @@ impl Session {
             let bbox = [bb.x.lo, bb.y.lo, bb.z.lo, bb.x.hi, bb.y.hi, bb.z.hi];
             let (f, e, v) = counts(body);
             // a failed build's numbers are in the JSON; the text keeps to the error
+            let bodies = m.solids_after(m.built()).len();
             if ok {
                 text.push_str(&format!(
                     "\nvolume {} area {} (approx) bbox {}\nfaces {f} edges {e} verts {v}",
@@ -305,6 +306,9 @@ impl Session {
                     short(area),
                     bbox.map(short).join(" ")
                 ));
+                if bodies > 1 {
+                    text.push_str(&format!(" bodies {bodies}"));
+                }
             }
             if unmeshed > 0 {
                 text.push_str(&format!(
@@ -332,6 +336,7 @@ impl Session {
                 ("faces", f.into()),
                 ("edges", e.into()),
                 ("verts", v.into()),
+                ("bodies", bodies.into()),
             ]);
         }
         j.insert(0, ("ok", ok.into()));
@@ -353,14 +358,20 @@ impl Session {
     fn query(&mut self, a: &Args) -> Result<Reply, String> {
         let m = self.model(&a.file)?;
         let sel = a.words.join(" ");
-        let (body, ents) = m.select(&sel, Self::upto(m, a)?)?;
+        let at = Self::upto(m, a)?;
+        let (body, ents) = m.select(&sel, at)?;
+        let n = at.unwrap_or(m.built()).min(m.built());
+        let several = m.solids_after(n).len() > 1;
         let handles = select::handles(body);
         let mut list = Vec::new();
         // pieces alike (a hole's two half faces) share a line
         let mut lines: Vec<(Vec<String>, String)> = Vec::new();
         for &e in &ents {
             let h = handles[&select::name(body, e)].clone();
-            let d = select::describe(body, e);
+            let mut d = select::describe(body, e);
+            if let Some(b) = m.body_of(n, e).filter(|_| several) {
+                d.push_str(&format!(" body={}", m.feat_name(b)));
+            }
             list.push(Json::obj(vec![
                 ("h", h.as_str().into()),
                 ("d", d.as_str().into()),
@@ -480,11 +491,13 @@ impl Session {
     fn check(&mut self, a: &Args) -> Result<Reply, String> {
         let m = self.model(&a.file)?;
         let mut bad = Vec::new();
+        // each body on its own: separate bodies may overlap, one body's shells may not
         for i in 0..m.built() {
-            if let Some(b) = m.body_after(i + 1) {
-                let p = check(b);
+            for s in m.solids_after(i + 1) {
+                let p = check(&s.body);
                 if !p.is_empty() {
                     bad.push((m.lines[i].no, p.len(), format!("{:?}", p[0])));
+                    break;
                 }
             }
         }
@@ -820,6 +833,60 @@ fillet 4 (edges between base wall concave)
         let r2 = s.run("build", &args(&named, &[]));
         assert!(r2.ok && !r2.text.contains("runs from"), "{}", r2.text);
         assert_eq!(volume(&r.text), volume(&r2.text));
+    }
+
+    const BODIES: &str = "base: extrude 10 rect 0 0 10 10
+lid: extrude new 4 at 0 0 8 rect 0 0 10 10
+extrude cut 12 at 5 5 -1 circle 0 0 2 in base
+fillet 1 (edges body lid top along +x)
+split plane at 0 0 10 in lid
+splitface (faces body base normal -y) by plane z 1 0 0 at 5 0 0
+spare: copybody by 30 0 0 in base
+movebody rot 0 0 0 0 0 1 90 in spare
+combine cut base lid keep
+";
+
+    /// A part of several bodies: built, checked body by body, queried by body, and the same
+    /// as the part regenerated whole.
+    #[test]
+    fn several_bodies() {
+        let dir = Dir::new("bodies");
+        let f = dir.file("b.fc", BODIES);
+        let mut s = Session::default();
+        let r = s.run("build", &args(&f, &[]));
+        assert!(r.ok, "{}", r.text);
+        assert!(r.text.ends_with("bodies 4"), "{}", r.text);
+        let r = s.run("check", &args(&f, &[]));
+        assert!(r.ok, "{}", r.text);
+        let r = s.run("query", &args(&f, &["faces body spare"]));
+        assert!(r.text.starts_with("8 found"), "{}", r.text);
+        assert!(
+            r.text.lines().skip(1).all(|l| l.ends_with("body=spare")),
+            "{}",
+            r.text
+        );
+        let r = s.run("query", &args(&f, &["faces body lid"]));
+        let lid = r.text.lines().skip(1).count();
+        let r = s.run("query", &args(&f, &["faces body split1"]));
+        let upper = r.text.lines().skip(1).count();
+        assert!(lid > 0 && upper > 0, "{}", r.text);
+        // the file is what the part regenerates
+        let m = s.model(&f).expect("model");
+        let part = forge_model::Part {
+            features: m.features.clone(),
+        };
+        let whole = part.regenerate_solids().expect("regenerates");
+        let built = m.solids_after(m.built());
+        assert_eq!(whole.len(), built.len());
+        for (a, b) in whole.iter().zip(built) {
+            assert_eq!(a.id, b.id);
+            assert_eq!(a.body, b.body.compact());
+        }
+        let nary = part.regenerate_nary_solids(2).expect("n-ary");
+        assert_eq!(nary.iter().map(|s| s.id).collect::<Vec<_>>(), [0, 1, 4, 6]);
+        // and prints back as it reads
+        let back = crate::text::parse(&crate::text::print(&part)).expect("parses");
+        assert_eq!(back, part);
     }
 
     /// The loop an agent runs: write a bracket, build, fix an error, query an edge, fillet

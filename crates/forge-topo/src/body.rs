@@ -302,6 +302,49 @@ impl Body {
         out
     }
 
+    /// Adds `other`'s entities after this body's, renumbered, its shells kept apart.
+    pub fn append(&mut self, other: &Body) {
+        let n = |x: usize| x as u32;
+        let (v, e, c, l, f, s) = (
+            n(self.vertices.len()),
+            n(self.edges.len()),
+            n(self.coedges.len()),
+            n(self.loops.len()),
+            n(self.faces.len()),
+            n(self.shells.len()),
+        );
+        self.vertices.extend(other.vertices.iter().cloned());
+        self.edges.extend(other.edges.iter().map(|x| Edge {
+            start: VertexId(x.start.0 + v),
+            end: VertexId(x.end.0 + v),
+            coedges: x.coedges.iter().map(|k| CoedgeId(k.0 + c)).collect(),
+            ..x.clone()
+        }));
+        self.coedges.extend(other.coedges.iter().map(|x| Coedge {
+            edge: EdgeId(x.edge.0 + e),
+            forward: x.forward,
+            lp: LoopId(x.lp.0 + l),
+        }));
+        self.loops.extend(other.loops.iter().map(|x| Loop {
+            coedges: x.coedges.iter().map(|k| CoedgeId(k.0 + c)).collect(),
+            face: FaceId(x.face.0 + f),
+        }));
+        self.faces.extend(other.faces.iter().map(|x| Face {
+            surface: x.surface.clone(),
+            same_sense: x.same_sense,
+            loops: x.loops.iter().map(|k| LoopId(k.0 + l)).collect(),
+            shell: ShellId(x.shell.0 + s),
+            name: x.name,
+            bbox: x.bbox.clone(),
+            query: Cached::default(),
+            alive: x.alive,
+        }));
+        self.shells.extend(other.shells.iter().map(|x| Shell {
+            faces: x.faces.iter().map(|k| FaceId(k.0 + f)).collect(),
+        }));
+        self.dead += other.dead;
+    }
+
     pub fn add_vertex(&mut self, point: Point3, name: Name) -> VertexId {
         self.add_tolerant_vertex(point, forge_math::tol::LINEAR, name)
     }

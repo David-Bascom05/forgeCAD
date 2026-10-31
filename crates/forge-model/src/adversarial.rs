@@ -716,6 +716,8 @@ fn error_kind(e: &crate::RegenError) -> (String, usize) {
         Thread { feature, error } => (format!("Thread({error:?})"), *feature),
         Text { feature, error } => (format!("Text({error:?})"), *feature),
         Work { feature, error } => (format!("Work({error:?})"), *feature),
+        Body { feature, error } => (format!("Body({error:?})"), *feature),
+        Bodies { .. } => ("Bodies".to_string(), 0),
     }
 }
 

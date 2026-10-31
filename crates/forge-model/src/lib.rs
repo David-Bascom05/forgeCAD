@@ -1,6 +1,7 @@
 //! A part as a history of features, and regenerating it into a solid.
 
 pub mod adversarial;
+pub mod bodies;
 mod edit;
 pub mod edits;
 pub mod extent;
@@ -12,6 +13,7 @@ pub mod params;
 mod path;
 pub mod pattern;
 mod rib;
+mod splitface;
 pub mod standard;
 pub mod suite;
 pub mod swept;
@@ -22,6 +24,7 @@ mod trace;
 mod upto;
 pub mod work;
 
+pub use bodies::{BodyError, BodyFeature, Cutter, Keep, Pick, Solid, Step, step_solids};
 pub use edit::{Edit, EditError, Motion, Side};
 pub use extent::{Extent, ExtentError, Target, Toward, Turn};
 use forge_bool::{BoolError, CpuBatch, Op, Seg2, Shape, boolean_into};
@@ -119,11 +122,13 @@ pub enum Feature {
     Text(Box<Text>),
     /// A work plane, axis, point or UCS defined by references; it makes nothing.
     Work(Work),
+    /// A feature on chosen bodies, or one that combines, splits or moves bodies (bodies.rs).
+    Body(Box<BodyFeature>),
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Combine {
-    /// Start the part (only valid as the first feature).
+    /// A new body beside any others (Inventor's new solid).
     New,
     Add,
     Cut,
@@ -209,6 +214,14 @@ pub enum RegenError {
     NothingToCombine {
         feature: usize,
     },
+    Body {
+        feature: usize,
+        error: BodyError,
+    },
+    /// The part ends as several bodies, asked for as one.
+    Bodies {
+        count: usize,
+    },
 }
 
 #[derive(Clone, Debug, Default, PartialEq)]
@@ -230,6 +243,9 @@ impl Part {
 
     /// `regenerate_nary`, the region batch classified on `backend`.
     pub fn regenerate_nary_on(&self, threads: usize, backend: Backend) -> Result<Body, RegenError> {
+        if bodies::multi(&self.features) {
+            return bodies::one(self.regenerate_nary_solids(threads)?);
+        }
         nary_regen(&self.features, wasm_one(threads), true, Batching::On(backend))
     }
 
@@ -258,13 +274,29 @@ impl Part {
         shapes: bool,
         batch: Option<&dyn forge_bool::Batch>,
     ) -> Result<Body, RegenError> {
+        if bodies::multi(&self.features) {
+            return bodies::one(bodies::nary(&self.features, wasm_one(threads))?);
+        }
         let batching = batch.map_or(Batching::None, Batching::Given);
         nary_regen(&self.features, wasm_one(threads), shapes, batching)
+    }
+
+    /// Every body the part ends with, rebuilt feature by feature.
+    pub fn regenerate_solids(&self) -> Result<Vec<Solid>, RegenError> {
+        bodies::sequential(&self.features)
+    }
+
+    /// `regenerate_solids` in n-ary booleans, one per run of each body's tools.
+    pub fn regenerate_nary_solids(&self, threads: usize) -> Result<Vec<Solid>, RegenError> {
+        bodies::nary(&self.features, wasm_one(threads))
     }
 
     /// Rebuilds the solid from the first feature. Feature ids are their
     /// positions, so entity names stay stable when nothing upstream changes.
     pub fn regenerate(&self) -> Result<Body, RegenError> {
+        if bodies::multi(&self.features) {
+            return bodies::one(bodies::sequential(&self.features)?);
+        }
         let mut body = None;
         for i in 0..self.features.len() {
             body = step(&self.features, i, body)?;
@@ -278,7 +310,7 @@ impl Part {
     pub fn threads(&self) -> Vec<(Thread, Frame, f64)> {
         // each thread and the features whose solids hold it
         let mut out: Vec<(Thread, Frame, f64, Vec<usize>)> = Vec::new();
-        for (i, f) in self.features.iter().enumerate() {
+        for (i, f) in bodies::strip(&self.features).0.iter().enumerate() {
             match f {
                 Feature::Hole(h) => {
                     if let Some(t) = h.thread {
@@ -338,7 +370,7 @@ pub fn step(features: &[Feature], i: usize, body: Option<Body>) -> Result<Option
     let id = i as u64 + 1;
     if modifies(f) {
         let b = body.ok_or(RegenError::NothingToCombine { feature: i })?;
-        let b = modify(features, i, &b, 1)?;
+        let b = modify(features, f, i, &b, 1)?;
         if trace::on() {
             trace::step(i, &b, None);
         }
@@ -389,7 +421,7 @@ pub fn step(features: &[Feature], i: usize, body: Option<Body>) -> Result<Option
     Ok(Some(b))
 }
 
-/// Whether a feature starts the part afresh.
+/// Whether a feature makes a new body.
 fn starts(f: &Feature) -> bool {
     matches!(
         f,
@@ -411,6 +443,7 @@ fn modifies(f: &Feature) -> bool {
             | Feature::Draft { .. }
             | Feature::Pattern { of: Source::Body, .. }
             | Feature::Edit(_)
+            | Feature::Body(_)
     )
 }
 
@@ -499,6 +532,7 @@ fn nary_regen(
         }
         let body = modify(
             features,
+            &features[m],
             m,
             // a given batch holds the tools after the last modifier (nary_solids), not these
             &nary_regen(
@@ -573,9 +607,15 @@ fn op_of(c: Combine) -> Op {
 }
 
 /// Applies part-changing feature `i` to `body`.
-fn modify(features: &[Feature], i: usize, body: &Body, threads: usize) -> Result<Body, RegenError> {
+fn modify(
+    features: &[Feature],
+    f: &Feature,
+    i: usize,
+    body: &Body,
+    threads: usize,
+) -> Result<Body, RegenError> {
     let id = i as u64 + 1;
-    match &features[i] {
+    match f {
         Feature::Fillet {
             edges,
             starts,

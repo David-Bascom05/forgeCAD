@@ -6,9 +6,9 @@ use crate::select::{self, Ent, View};
 use crate::text::{self, Before, Line};
 use forge_doc::{Document, Edit};
 use forge_mesh::TriMesh;
-use forge_model::{Feature, RegenError, Source, step};
+use forge_model::{Feature, RegenError, Solid, Source, step_solids};
 use forge_topo::{Body, Name};
-use std::cell::RefCell;
+use std::cell::{OnceCell, RefCell};
 use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::Instant;
@@ -22,7 +22,7 @@ pub struct Model {
     pub labels: Vec<Option<String>>,
     pub kinds: Vec<&'static str>,
     /// The part after each built feature.
-    stages: Vec<Option<Body>>,
+    stages: Vec<Stage>,
     /// Each stage's faces' making features, filled as asked for.
     origins: RefCell<Vec<select::Lineage>>,
     /// How many entities each inline selector picked: (line index, count).
@@ -43,6 +43,38 @@ pub struct Model {
 
 /// From a font's name in the part file to the font.
 pub type Fonts = dyn Fn(&str) -> Result<Arc<forge_font::Font>, String>;
+
+/// The bodies after a line, and (with more than one) all of them as one body to look at.
+struct Stage {
+    solids: Vec<Solid>,
+    view: OnceCell<Joined>,
+}
+
+/// Bodies as one, with each body's id and where its faces, edges and vertices end in it.
+type Joined = (Body, Vec<(usize, [usize; 3])>);
+
+fn stage_body(stages: &[Stage], n: usize) -> Option<&Body> {
+    let s = stages.get(n.checked_sub(1)?)?;
+    match &s.solids[..] {
+        [] => None,
+        [one] => Some(&one.body),
+        _ => Some(&s.view().0),
+    }
+}
+
+impl Stage {
+    fn view(&self) -> &Joined {
+        self.view.get_or_init(|| {
+            let mut all = Body::new();
+            let mut ends = Vec::new();
+            for s in &self.solids {
+                all.append(&s.body.compact());
+                ends.push((s.id, [all.faces.len(), all.edges.len(), all.vertices.len()]));
+            }
+            (all, ends)
+        })
+    }
+}
 
 #[derive(Clone, Debug)]
 pub struct Failure {
@@ -206,9 +238,16 @@ impl Model {
             }
             reuse = false;
             self.origins.get_mut().truncate(i);
-            let before = if i == 0 { None } else { self.stages[i - 1].clone() };
-            match step(&self.features, i, before) {
-                Ok(b) => self.stages.push(b),
+            let before = if i == 0 {
+                vec![]
+            } else {
+                self.stages[i - 1].solids.clone()
+            };
+            match step_solids(&self.features, i, before) {
+                Ok(solids) => self.stages.push(Stage {
+                    solids,
+                    view: OnceCell::new(),
+                }),
                 Err(e) => {
                     let (msg, hint) = explain(&e);
                     let msg = match self.body_after(i) {
@@ -270,17 +309,38 @@ impl Model {
         self.body_after(self.built())
     }
 
-    /// The part after `n` lines.
+    /// The part after `n` lines (several bodies as one, to look at).
     pub fn body_after(&self, n: usize) -> Option<&Body> {
-        self.stages.get(n.checked_sub(1)?)?.as_ref()
+        stage_body(&self.stages, n)
+    }
+
+    /// The bodies after `n` lines.
+    pub fn solids_after(&self, n: usize) -> &[Solid] {
+        n.checked_sub(1)
+            .and_then(|i| self.stages.get(i))
+            .map_or(&[], |s| &s.solids[..])
+    }
+
+    /// The body (the feature that made it) an entity of `body_after(n)` belongs to.
+    pub fn body_of(&self, n: usize, e: Ent) -> Option<usize> {
+        let s = self.stages.get(n.checked_sub(1)?)?;
+        if let [one] = &s.solids[..] {
+            return Some(one.id);
+        }
+        let at = match e {
+            Ent::Face(f) => (0, f.index()),
+            Ent::Edge(x) => (1, x.index()),
+            Ent::Vert(v) => (2, v.index()),
+        };
+        s.view().1.iter().find(|(_, end)| at.1 < end[at.0]).map(|b| b.0)
     }
 
     /// The finished part's faces' triangles (None where a face would not mesh).
     pub fn faces(&mut self) -> &[(forge_topo::FaceId, Option<Arc<FaceMesh>>)] {
         if self.faces.is_none() {
-            let fs = match self.stages.last() {
-                Some(Some(b)) => self.meshes.faces(b),
-                _ => vec![],
+            let fs = match stage_body(&self.stages, self.stages.len()) {
+                Some(b) => self.meshes.faces(b),
+                None => vec![],
             };
             self.faces = Some(fs);
         }
@@ -343,8 +403,8 @@ impl Model {
         let mut origins = self.origins.borrow_mut();
         while origins.len() < n {
             let k = origins.len();
-            let prev = (k > 0).then(|| self.stages[k - 1].as_ref()).flatten();
-            let copied = match (&self.features[k], &self.stages[k], prev) {
+            let prev = self.body_after(k);
+            let copied = match (&self.features[k], self.body_after(k + 1), prev) {
                 (Feature::Pattern { of, layout }, Some(b), Some(pb)) => {
                     let from = |c: &Vec<usize>| match of {
                         Source::Body => true,
@@ -354,7 +414,7 @@ impl Model {
                 }
                 _ => HashMap::new(),
             };
-            let o = match &self.stages[k] {
+            let o = match self.body_after(k + 1) {
                 None => HashMap::new(),
                 Some(b) => select::lineage(b, prev.map(|p| (p, &origins[k - 1])), k, &copied),
             };
@@ -388,17 +448,28 @@ impl Model {
         found.ok_or_else(|| format!("no feature '{r}'"))
     }
 
+    /// How a line is referred to: its label, else its kind and count (`hole2`).
+    pub fn feat_name(&self, i: usize) -> String {
+        if let Some(l) = &self.labels[i] {
+            return l.clone();
+        }
+        let k = self.kinds[i];
+        format!("{k}{}", self.kinds[..=i].iter().filter(|x| **x == k).count())
+    }
+
     /// Runs a selector on the part after `n` lines (all that built if `None`).
     pub fn select(&self, sel: &str, n: Option<usize>) -> Result<(&Body, Vec<Ent>), String> {
         let n = n.unwrap_or(self.built()).min(self.built());
         let body = self.body_after(n).ok_or("no part yet")?;
         let origin = self.origin(n);
         let feat = |r: &str| self.feat(n, r);
+        let body_of = |e: Ent| self.body_of(n, e);
         let ents = select::select(
             &View {
                 body,
                 origin: &origin,
                 feat: &feat,
+                body_of: &body_of,
             },
             sel,
         )?;
@@ -559,6 +630,14 @@ pub fn explain(e: &RegenError) -> (String, String) {
         Work { error, .. } => (
             format!("work feature: {error:?}"),
             hint("REF is a work feature, or FEAT @h: a face, edge or vertex of FEAT's own solid"),
+        ),
+        Body { error, .. } => (
+            format!("body: {error:?}"),
+            hint("`in FEAT` names the line that made a body; split and splitface need a cutter that crosses"),
+        ),
+        Bodies { count } => (
+            format!("the part is {count} bodies, not one"),
+            hint("combine them, or ask for every body"),
         ),
         NothingToCombine { .. } => (
             "nothing to combine with yet".into(),

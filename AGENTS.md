@@ -40,7 +40,7 @@ Rows: `pt P`, `line P P`, `poly P P.. [open]`, `rect X Y W H`, `circle P R`, `ar
 written; `check` reports each sketch's freedom; conflicts name their rows. A sketch `on` a
 plane, sketch or face is placed afresh whenever a line above it changes.
 
-Features (`[op]` is new for the first solid, add after):
+Features (`[op]` is new for the first solid, add after; a later `new` makes another body):
 ```
 extrude [op] EXT (FRAME LOOPS | SKETCH [E]) EXT: N | sym N | two N M | thru [back|both] | next [back] | to FEAT [@face] [off N]
 revolve [op] [TURN] (FRAME [axis x|y|OX OY DX DY] LOOPS | SKETCH [axis L] [E]) TURN: like EXT, in degrees; default 360
@@ -80,11 +80,15 @@ rib T [pos|neg] [web] [flip] [draft A] FRAME (line AX AY BX BY | arc CX CY R STA
   to its left (flip: right), T thick along the frame's z (sym; pos/neg: one side). web: fills along
   -z (flip: +z), T thick across the path (pos: to its left). draft A >= 0: thicker towards the part
 offset D REF..                   faces moved D along their outward normals, neighbours re-met
-thicken [op] T [neg|sym] REF..   a slab T thick on the faces, outward (neg: inward); op new = slab alone
+thicken [op] T [neg|sym] REF..   a slab T thick on the faces, outward (neg: inward); op new = the slab as a new body
 delete REF..                     faces removed, the gap closed by the faces around it: a hole, boss or
                                  pocket (its rim a whole loop of a face), or a chamfer/fillet strip
 replace REF with FEAT [@face]    a face put on a work plane or an earlier feature's face
 move REF.. (by DX DY DZ | turn A OX OY OZ AX AY AZ)   faces moved or turned, neighbours re-met
+combine (add|cut|keep) TARGET TOOL.. [keep]      bodies; keep: the tool bodies stay
+split BY [+|-]     splitface REF.. by BY     movebody MOTION..     copybody MOTION..
+BY: FEAT [@face] | plane FRAME | curve FRAME (line AX AY BX BY | arc CX CY R A0 SWEEP | circle CX CY R)
+MOTION: by DX DY DZ | rot OX OY OZ AX AY AZ A | frame FRAME      (applied in order)
 Work features (make nothing; for `to`, `on`, `at`, path and pts). REF: FEAT (a work feature), or
 FEAT @h|(sel): a face, edge or vertex FEAT made. They follow upstream edits.
 plane FRAME | off FACE D | ang PLANE AXIS A | tan CYL PLANE | pts P P P | mid PLANE PLANE | norm CURVE P
@@ -106,6 +110,10 @@ facefillet: rounds between two face sets: their shared edges, or the one four-si
 FEAT: a label, kind+count (`hole2` the 2nd hole, `pattern1`..), or `fN` (the Nth feature line)
 REF: @handle | (selector), found on the part as it stands above that line
 ```
+Bodies: `new` (after the first), `split` (both sides kept unless `+` or `-`; `+` is the cutter's
+normal side, a new body) and `copybody` make bodies; a body is named by the line that made it.
+Any line may end `in FEAT[,FEAT..]` or `in all`; otherwise it acts on the last body made, and
+fillet, chamfer, draft, shell and splitface on the bodies holding their refs. Bodies may overlap.
 
 Selectors (`query`, or inline in parentheses): `faces|edges|verts`, then filters in order.
 `query` asks the finished part, or the part after a line with `--at FEAT`; `build` says how
@@ -115,19 +123,19 @@ plane cyl cone sphere torus blend | line circle curve      kind (fillets: cyl, o
 convex concave smooth                                      how an edge's faces meet
 normal +z | normal A B C | along +x                        plane normal; line direction
 r=3 r<3 r>3   longer 5   shorter 5                         radius; edge length
-of FEAT..   between FEAT FEAT   on @h                      made by (copies too); joining; touching
+of FEAT..   between FEAT FEAT   on @h   body FEAT          made by (copies too); joining; touching; in body
 top bottom left right front back   near X Y Z              keep the extreme ones (ties too); nearest
 ```
 
 Commands (a few lines of text; `--json` for JSON):
 ```
 forgecad build F                    ok, or error at file line N + hint; approx volume, area; bbox
-forgecad query F SEL [--at FEAT]    @d644 line -x len=60 at 0,20,40   (round: axis and centre;
+forgecad query F SEL [--at FEAT]    @d644 line -x len=60 at 0,20,40   (round: axis and centre; body=FEAT;
                                     a round face may be two halves, two handles on one line)
 forgecad measure F REF [REF]        area|length radius centre; two: closest distance, angle, axes
 forgecad measure F mass|wall        volume area centroid inertia; thinnest wall anywhere
 forgecad render F [VIEW] [--labels SEL] [--px 400] [-o F.png]   VIEW: iso front top right.. px: long side
-forgecad check F | diff A B         validity after each line | what B changed from A
+forgecad check F | diff A B         each body's validity after each line | what B changed from A
 forgecad edit F param NAME EXPR | dim LINE V | arg LINE K TEXT | insert LINE|end TEXT | delete LINE |
   move LINE LINE|end                rewrite F through its document (references follow), then build
 forgecad serve|mcp [--root DIR] [--writable]   stdio JSON-RPC / MCP, .fc files under DIR (default .) only; edit needs --writable

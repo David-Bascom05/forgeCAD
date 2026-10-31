@@ -20,6 +20,8 @@ pub struct View<'a> {
     pub origin: &'a Lineage,
     /// Resolves a feature reference (label, `hole2`, `fN`) to its index.
     pub feat: &'a dyn Fn(&str) -> Result<usize, String>,
+    /// The body (the feature that made it) an entity belongs to.
+    pub body_of: &'a dyn Fn(Ent) -> Option<usize>,
 }
 
 /// Each face's making feature after feature `i` built `body`, given those before (`prev`, `None`
@@ -477,6 +479,11 @@ pub fn select(v: &View, sel: &str) -> Result<Vec<Ent>, String> {
                     }
                 }
                 Box::new(move |e| face_origins(*e).iter().any(|c| c.iter().any(|o| set.contains(o))))
+            }
+            "body" => {
+                let i = (v.feat)(toks.get(k).copied().unwrap_or(""))?;
+                k += 1;
+                Box::new(move |e| (v.body_of)(*e) == Some(i))
             }
             "between" => {
                 let a = (v.feat)(toks.get(k).copied().unwrap_or(""))?;
