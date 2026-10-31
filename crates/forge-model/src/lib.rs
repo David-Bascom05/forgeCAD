@@ -377,7 +377,14 @@ impl Part {
         threads: usize,
         ids: Option<&[u64]>,
     ) -> Result<Vec<Solid>, RegenError> {
-        bodies::nary(History::new(&self.features, ids), wasm_one(threads))
+        let h = History::new(&self.features, ids);
+        if bodies::multi(&self.features) {
+            return bodies::nary(h, wasm_one(threads));
+        }
+        // one body: the same regen as `regenerate_nary`, so the names are its names
+        let id = self.features.iter().position(starts).unwrap_or(0);
+        let body = nary_regen(h, wasm_one(threads), true, Batching::On(Backend::from_env()))?;
+        Ok(vec![Solid { id, body }])
     }
 
     /// Rebuilds the solid from the first feature. Feature ids are their

@@ -207,3 +207,38 @@ fn taking_a_feature_out_never_hands_its_names_to_the_next() {
 fn face(b: &Body, n: Name) -> Option<String> {
     b.face_by_name(n).map(|f| format!("{:?}", b.face_box(f)))
 }
+
+/// On a one-body part every regen entry point names alike: seq whole, as solids or a feature at a
+/// time; n-ary whole, as solids or with the shapes given; and seq and n-ary alike where they agree
+/// (as above).
+#[test]
+fn every_regen_entry_point_names_alike() {
+    for (name, part) in suite::parts() {
+        let one = |s: Vec<forge_model::Solid>| {
+            assert_eq!(s.len(), 1, "{name}");
+            names(&s[0].body.compact())
+        };
+        let seq = names(&part.regenerate().expect("sequential regen"));
+        assert_eq!(seq, one(part.regenerate_solids().expect("seq solids")), "{name}");
+        let h = forge_model::History::new(&part.features, None);
+        let mut solids = Vec::new();
+        for i in 0..part.features.len() {
+            solids = forge_model::step_solids(h, i, solids).expect("a step");
+        }
+        assert_eq!(seq, one(solids), "{name}");
+        let nary = names(&part.regenerate_nary(1).expect("n-ary regen"));
+        assert_eq!(
+            nary,
+            one(part.regenerate_nary_solids(1).expect("n-ary solids")),
+            "{name}"
+        );
+        assert_eq!(
+            nary,
+            names(&part.regenerate_nary_with(1, true).expect("n-ary")),
+            "{name}"
+        );
+        if ["sweep", "loft"].contains(&name) {
+            assert_eq!(seq, nary, "{name}");
+        }
+    }
+}
