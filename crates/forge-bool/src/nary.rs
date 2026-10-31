@@ -1676,7 +1676,7 @@ fn nary_body(
     let mut partners: Vec<FacePair> = coplanar.iter().flat_map(|&[x, y]| [(x, y), (y, x)]).collect();
     partners.sort_by_key(|x| x.0);
     // whether a region lies inside tool k, by how it leans off k's face along a new edge they share
-    let geom: Vec<std::sync::OnceLock<(f64, forge_math::Box3)>> =
+    let geom: Vec<std::sync::OnceLock<(f64, Reach)>> =
         (0..list.len()).map(|_| std::sync::OnceLock::new()).collect();
     let lean = |r: &Reg, k: Side| -> Option<bool> {
         let body = tools[r.side];
@@ -2503,12 +2503,27 @@ fn step_in(
     Some(face.surface.eval(face.surface.project(q)))
 }
 
-/// Each piece's chord (the longer half of it, at least 1e-3) and box, worked out once.
-type Geom = [std::sync::OnceLock<(f64, forge_math::Box3)>];
+/// Each piece's chord and reach (as `chord_of`), worked out once.
+type Geom = [std::sync::OnceLock<(f64, Reach)>];
 
-fn chord_of(c: &Curve, r: Interval) -> f64 {
+/// Where a piece may come near a point: within a distance of a point, or in a box.
+#[derive(Clone, Copy)]
+enum Reach {
+    Ball(Point3, f64),
+    Box(forge_math::Box3),
+}
+
+/// The curve's chord over `r` (the longer half of it, at least 1e-3) and where it reaches: a
+/// line or circle arc lies within its chord of its middle (no point of it is farther than its
+/// ends), any other curve in its box.
+fn chord_of(c: &Curve, r: Interval) -> (f64, Reach) {
     let m = c.eval(r.mid());
-    c.eval(r.lo).distance(m).max(m.distance(c.eval(r.hi))).max(1e-3)
+    let d = c.eval(r.lo).distance(m).max(m.distance(c.eval(r.hi)));
+    let reach = match c {
+        Curve::Line(_) | Curve::Circle(_) => Reach::Ball(m, d),
+        _ => Reach::Box(c.bbox(r)),
+    };
+    (d.max(1e-3), reach)
 }
 
 /// Points inside a region of face `f` (its loops of pieces, or the face's own loops when
@@ -2523,34 +2538,39 @@ fn region_points(
     geom: &Geom,
     max: usize,
 ) -> Vec<Point3> {
-    // (curve, range, forward, chord, box) of each edge
-    let mut edges: Vec<(&Curve, Interval, bool, f64, forge_math::Box3)> = Vec::new();
+    // (curve, range, forward, chord, reach) of each edge
+    let mut edges: Vec<(&Curve, Interval, bool, f64, Reach)> = Vec::new();
     if loops.is_empty() {
         for &l in &body.face(f).loops {
             for &c in &body.lp(l).coedges {
                 let co = body.coedge(c);
                 let e = body.edge(co.edge);
+                let (len, _) = chord_of(&e.curve, e.range);
                 edges.push((
                     &e.curve,
                     e.range,
                     co.forward,
-                    chord_of(&e.curve, e.range),
-                    body.edge_box(co.edge),
+                    len,
+                    Reach::Box(body.edge_box(co.edge)),
                 ));
             }
         }
     } else {
         for &(p, fwd) in loops.iter().flatten() {
             let pc = &list[p];
-            let &(len, b) = geom[p].get_or_init(|| (chord_of(&pc.curve, pc.range), pc.curve.bbox(pc.range)));
-            edges.push((&pc.curve, pc.range, fwd, len, b));
+            let &(len, reach) = geom[p].get_or_init(|| chord_of(&pc.curve, pc.range));
+            edges.push((&pc.curve, pc.range, fwd, len, reach));
         }
     }
     let mut order: Vec<(f64, usize)> = edges.iter().enumerate().map(|(i, e)| (e.3, i)).collect();
     order.sort_by(|a, b| b.0.total_cmp(&a.0));
     let clear = |p: Point3, step: f64, own: usize| {
-        edges.iter().enumerate().all(|(i, &(c, r, _, _, b))| {
-            i == own || !b.grow(step).contains(p) || c.eval(c.closest(p, r)).distance(p) >= 0.999 * step
+        edges.iter().enumerate().all(|(i, &(c, r, _, _, reach))| {
+            let far = match reach {
+                Reach::Ball(m, d) => m.distance(p) > d + step,
+                Reach::Box(b) => !b.grow(step).contains(p),
+            };
+            i == own || far || c.eval(c.closest(p, r)).distance(p) >= 0.999 * step
         })
     };
     let mut out = Vec::new();
