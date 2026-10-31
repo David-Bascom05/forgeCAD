@@ -71,6 +71,7 @@ pub fn searched(a: &Surface, b: &Surface, region: Box3) -> SurfaceSurface {
 /// Whether two surfaces are the same surface.
 pub fn coincident(a: &Surface, b: &Surface) -> bool {
     match (a, b) {
+        (Surface::Plane(p), Surface::Plane(q)) => forge_geom::intersect::planes_coincident(p, q),
         (Surface::Plane(p), s) | (s, Surface::Plane(p)) => plane_surface(p, s) == SurfaceSurface::Coincident,
         (Surface::Cylinder(c), Surface::Cylinder(d)) => cylinder_cylinder(c, d) == SurfaceSurface::Coincident,
         (Surface::Sphere(s), Surface::Sphere(t)) => sphere_sphere(s, t) == SurfaceSurface::Coincident,

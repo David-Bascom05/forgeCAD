@@ -703,6 +703,13 @@ pub fn plane_surface(p: &Plane, s: &Surface) -> SurfaceSurface {
     }
 }
 
+/// Whether two planes are one: `plane_plane` is Coincident, without making the line of two
+/// that are not.
+pub fn planes_coincident(p: &Plane, q: &Plane) -> bool {
+    p.normal_vec().cross(q.normal_vec()).length() <= tol::ANGULAR
+        && p.signed_distance(q.frame.origin).abs() <= tol::LINEAR
+}
+
 pub fn plane_plane(p: &Plane, q: &Plane) -> SurfaceSurface {
     let (n1, n2) = (p.normal_vec(), q.normal_vec());
     let u = n1.cross(n2);
@@ -1340,6 +1347,30 @@ mod tests {
             }
         }
         assert!(total > 300, "too few hits exercised: {total}");
+    }
+
+    #[test]
+    fn planes_coincident_is_plane_plane_coincident() {
+        // planes a hair apart in angle or offset, either side of the tolerances
+        let mut r = Rng::new(312);
+        let mut both = [0, 0];
+        for _ in 0..2000 {
+            let p = Plane::new(rand_frame(&mut r));
+            let tilt = [0.0, 0.5, 2.0, 1e3][r.below(4)] * tol::ANGULAR;
+            let shift = [0.0, 0.5, 2.0, 1e3][r.below(4)] * tol::LINEAR;
+            let n = (p.normal_vec().get() + p.frame.x().get() * tilt)
+                .normalize()
+                .unwrap();
+            let q = Plane::new(Frame::from_z(p.frame.origin + p.normal_vec().get() * shift, n));
+            let one = planes_coincident(&p, &q);
+            assert_eq!(
+                one,
+                plane_plane(&p, &q) == SurfaceSurface::Coincident,
+                "{p:?} {q:?}"
+            );
+            both[one as usize] += 1;
+        }
+        assert!(both[0] > 100 && both[1] > 100, "{both:?}");
     }
 
     #[test]
