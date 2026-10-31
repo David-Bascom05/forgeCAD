@@ -371,6 +371,20 @@ pub fn explain(e: &RegenError) -> (String, String) {
             format!("pattern: {error:?}"),
             hint("counts > 0, nonzero directions; copy earlier solid features"),
         ),
+        Sweep { error, .. } => (
+            format!("sweep: {error:?}"),
+            hint(
+                "start the path on the profile's plane, square to it; join lines and arcs without corners; ease tight bends",
+            ),
+        ),
+        Coil { error, .. } => (
+            format!("coil: {error:?}"),
+            hint("keep the profile off the axis; pitch more than the profile's height; less taper"),
+        ),
+        Loft { error, .. } => (
+            format!("loft: {error:?}"),
+            hint("give every profile the same loops and segment counts, in one plane each, apart"),
+        ),
         NothingToCombine { .. } => (
             "nothing to combine with yet".into(),
             hint("start with a solid: extrude, revolve or ball (op new)"),

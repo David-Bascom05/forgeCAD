@@ -21,6 +21,10 @@ ball [op] R FRAME     fillet R REF.. [R REF..]     shell T [out] REF..     draft
 chamfer D REF.. | chamfer D D2 face REF REF.. | chamfer D ang A face REF REF..
 hole D FRAME [cb D2 DEPTH | cs D2 A] (N | thru | next | to FEAT [@face] [off N]) [pt A] [thread SIZE PITCH]
 pattern (body | FEAT..) (lin DX DY DZ N STEP [DX DY DZ N STEP] | circ OX OY OZ AX AY AZ N [A] [step] | mirror FRAME)
+sweep [op] FRAME LOOPS path PATH [extend N M | to FEAT [@face] [off N]]     profile square to the path's start
+coil [op] FRAME [axis ..] LOOPS (pitch P turns N | turns N height H | pitch P height H | pitch P to FEAT [@face] [off N]) [taper A] [left]
+loft [op] [smooth [start W] [end W]] (profile FRAME LOOPS).. [rail I PATH.. | centre PATH]     I: vertex (where segment I starts)
+PATH: (line AX AY AZ BX BY BZ | arc FRAME R START SWEEP)..     tangent-continuous; an arc's FRAME is its circle's, centre at `at`
 plane FRAME                      a work plane, for `to FEAT` and `on FEAT`
 FRAME: [xy|xz|yz|-xy|-xz|-yz | z A B C [x A B C] | on FEAT] [at X Y Z]     default: xy at 0 0 0
   xy: normal +z; xz: sketch x,y = world x,z, normal -y; yz: world y,z, normal +x; -: flipped

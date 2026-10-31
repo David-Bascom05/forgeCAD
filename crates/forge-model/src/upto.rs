@@ -819,7 +819,7 @@ pub(crate) fn named_surface(f: &Feature, k: usize, name: Name) -> Option<Surface
         Shape::Ball { center, radius } => (0..2)
             .any(|h| name == root.with_str("side").with(0).with(h))
             .then(|| sphere(center, radius)),
-        Shape::Csg { .. } => None,
+        Shape::Csg { .. } | Shape::Coil { .. } | Shape::Brep(_) => None,
     }
 }
 
@@ -1202,6 +1202,25 @@ fn shape_box(sh: &Shape) -> forge_math::Box3 {
         Seg2::Arc { c, r, .. } => vec![c + Vec2::new(-r, -r), c + Vec2::new(r, r)],
     };
     match sh {
+        Shape::Brep(b) => *b,
+        Shape::Coil {
+            frame,
+            a,
+            b,
+            angle,
+            r,
+            h,
+            ..
+        } => {
+            let out = r.1 + (a * angle).max(0.0);
+            let rise = b * angle;
+            let (lo, hi) = (h.0 + rise.min(0.0), h.1 + rise.max(0.0));
+            forge_math::Box3::from_points([
+                frame.point_to_world(Point3::new(0.0, 0.0, lo)),
+                frame.point_to_world(Point3::new(0.0, 0.0, hi)),
+            ])
+            .grow(out)
+        }
         Shape::Csg { first, .. } => shape_box(first),
         Shape::Ball { center, radius } => forge_math::Box3::from_point(*center).grow(*radius),
         Shape::Prism { frame, segs, lo, hi } => forge_math::Box3::from_points(

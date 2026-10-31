@@ -2,11 +2,15 @@
 //! Each feature kind is one row of `KINDS`: its keyword, its syntax (shown as a hint on
 //! errors), a parser and a printer built from the shared helpers below.
 
+use forge_geom::Circle;
 use forge_math::{Frame, Point2, Point3, Vec2, Vec3, dmath};
 use forge_model::{
-    Combine, End, Extent, Feature, Head, Hole, Layout, Part, Row, Source, Target, Thread, Toward, Turn,
+    Coil, CoilSize, Combine, End, Extent, Feature, Head, Hole, Layout, Loft, Part, PathEnds, Row, Source,
+    Sweep, Target, Thread, Toward, Turn,
 };
-use forge_ops::{Axis2, ChamferSize, Profile, ProfileLoop, Radius, Segment};
+use forge_ops::{
+    Axis2, ChamferSize, Handed, LoftGuides, LoftKind, PathSeg, Profile, ProfileLoop, Radius, Segment,
+};
 use forge_topo::Name;
 
 pub struct Kind {
@@ -394,6 +398,228 @@ pub const KINDS: &[Kind] = &[
         },
     },
     Kind {
+        name: "sweep",
+        syntax: "sweep [op] FRAME LOOPS path PATH [extend N M | to FEAT [@face] [off N]]",
+        parse: |p| {
+            let op = p.op()?;
+            let profile = p.profile()?;
+            p.expect("path")?;
+            let path = p.path()?;
+            let ends = if p.eat("extend") {
+                PathEnds::Extended {
+                    start: p.num()?,
+                    end: p.num()?,
+                }
+            } else if p.eat("to") {
+                let target = p.target()?;
+                PathEnds::To {
+                    target,
+                    offset: p.off(false)?,
+                }
+            } else {
+                PathEnds::Path
+            };
+            Ok(Feature::Sweep(Box::new(Sweep {
+                profile,
+                path,
+                ends,
+                op,
+            })))
+        },
+        print: |f, w| {
+            let Feature::Sweep(s) = f else { return false };
+            w.op(s.op);
+            w.profile(&s.profile);
+            w.word("path");
+            w.path(&s.path);
+            match &s.ends {
+                PathEnds::Path => {}
+                PathEnds::Extended { start, end } => {
+                    w.word("extend");
+                    w.nums(&[*start, *end]);
+                }
+                PathEnds::To { target, offset } => {
+                    w.word("to");
+                    w.target(target);
+                    w.off(*offset, false);
+                }
+            }
+            true
+        },
+    },
+    Kind {
+        name: "coil",
+        syntax: "coil [op] FRAME [axis x|y|OX OY DX DY] LOOPS (pitch P turns N | turns N height H | pitch P height H | pitch P to FEAT [@face] [off N]) [taper A] [left]",
+        parse: |p| {
+            let op = p.op()?;
+            let plane = p.frame()?;
+            let axis = p.axis()?;
+            let loops = p.loops()?;
+            let size = if p.eat("pitch") {
+                let pitch = p.num()?;
+                if p.eat("turns") {
+                    CoilSize::PitchTurns {
+                        pitch,
+                        turns: p.num()?,
+                    }
+                } else if p.eat("height") {
+                    CoilSize::PitchHeight {
+                        pitch,
+                        height: p.num()?,
+                    }
+                } else {
+                    p.expect("to")?;
+                    let target = p.target()?;
+                    CoilSize::To {
+                        pitch,
+                        target,
+                        offset: p.off(false)?,
+                    }
+                }
+            } else {
+                p.expect("turns")?;
+                let turns = p.num()?;
+                p.expect("height")?;
+                CoilSize::TurnsHeight {
+                    turns,
+                    height: p.num()?,
+                }
+            };
+            let taper = if p.eat("taper") { p.angle()? } else { 0.0 };
+            let handed = if p.eat("left") {
+                Handed::Left
+            } else {
+                Handed::Right
+            };
+            Ok(Feature::Coil(Box::new(Coil {
+                profile: Profile { plane, loops },
+                axis,
+                size,
+                taper,
+                handed,
+                op,
+            })))
+        },
+        print: |f, w| {
+            let Feature::Coil(c) = f else { return false };
+            w.op(c.op);
+            w.frame(&c.profile.plane);
+            w.axis(&c.axis);
+            w.loops(&c.profile.loops);
+            match &c.size {
+                CoilSize::PitchTurns { pitch, turns } => {
+                    w.word("pitch");
+                    w.num(*pitch);
+                    w.word("turns");
+                    w.num(*turns);
+                }
+                CoilSize::TurnsHeight { turns, height } => {
+                    w.word("turns");
+                    w.num(*turns);
+                    w.word("height");
+                    w.num(*height);
+                }
+                CoilSize::PitchHeight { pitch, height } => {
+                    w.word("pitch");
+                    w.num(*pitch);
+                    w.word("height");
+                    w.num(*height);
+                }
+                CoilSize::To {
+                    pitch,
+                    target,
+                    offset,
+                } => {
+                    w.word("pitch");
+                    w.num(*pitch);
+                    w.word("to");
+                    w.target(target);
+                    w.off(*offset, false);
+                }
+            }
+            if c.taper.to_bits() != 0 {
+                w.word("taper");
+                w.angle(c.taper);
+            }
+            if c.handed == Handed::Left {
+                w.word("left");
+            }
+            true
+        },
+    },
+    Kind {
+        name: "loft",
+        syntax: "loft [op] [smooth [start W] [end W]] (profile FRAME LOOPS).. [rail I PATH.. | centre PATH]",
+        parse: |p| {
+            let op = p.op()?;
+            let kind = if p.eat("smooth") {
+                let start = if p.eat("start") { Some(p.num()?) } else { None };
+                let end = if p.eat("end") { Some(p.num()?) } else { None };
+                LoftKind::Smooth { start, end }
+            } else {
+                LoftKind::Ruled
+            };
+            let mut profiles = Vec::new();
+            while p.eat("profile") {
+                profiles.push(p.profile()?);
+            }
+            if profiles.is_empty() {
+                return Err(format!("expected 'profile', found '{}'", p.peek()));
+            }
+            let guides = if p.peek() == "rail" {
+                let mut rails = Vec::new();
+                while p.eat("rail") {
+                    rails.push((p.count()?, p.path()?));
+                }
+                LoftGuides::Rails(rails)
+            } else if p.eat("centre") {
+                LoftGuides::CentreLine(p.path()?)
+            } else {
+                LoftGuides::None
+            };
+            Ok(Feature::Loft(Box::new(Loft {
+                profiles,
+                kind,
+                guides,
+                op,
+            })))
+        },
+        print: |f, w| {
+            let Feature::Loft(l) = f else { return false };
+            w.op(l.op);
+            if let LoftKind::Smooth { start, end } = l.kind {
+                w.word("smooth");
+                if let Some(x) = start {
+                    w.word("start");
+                    w.num(x);
+                }
+                if let Some(x) = end {
+                    w.word("end");
+                    w.num(x);
+                }
+            }
+            for p in &l.profiles {
+                w.word("profile");
+                w.profile(p);
+            }
+            match &l.guides {
+                LoftGuides::None => {}
+                LoftGuides::Rails(rails) => {
+                    for (i, path) in rails {
+                        w.word("rail");
+                        w.word(&i.to_string());
+                        w.path(path);
+                    }
+                }
+                LoftGuides::CentreLine(path) => {
+                    w.word("centre");
+                    w.path(path);
+                }
+            }
+            true
+        },
+    },
+    Kind {
         name: "plane",
         syntax: "plane FRAME",
         parse: |p| Ok(Feature::Plane(p.frame()?)),
@@ -555,7 +781,12 @@ fn default_op(before: &[Feature]) -> Combine {
     let solid = |f: &Feature| {
         matches!(
             f,
-            Feature::Extrude { .. } | Feature::Revolve { .. } | Feature::Ball { .. }
+            Feature::Extrude { .. }
+                | Feature::Revolve { .. }
+                | Feature::Ball { .. }
+                | Feature::Sweep(_)
+                | Feature::Coil(_)
+                | Feature::Loft(_)
         )
     };
     if before.iter().any(solid) {
@@ -985,6 +1216,41 @@ impl P<'_> {
         }
         Ok(out)
     }
+    /// A path: lines and arcs, each from where the one before ends.
+    fn path(&mut self) -> R<Vec<PathSeg>> {
+        let mut out = Vec::new();
+        loop {
+            out.push(match self.peek() {
+                "line" => {
+                    self.k += 1;
+                    PathSeg::Line {
+                        a: self.point3()?,
+                        b: self.point3()?,
+                    }
+                }
+                "arc" => {
+                    self.k += 1;
+                    let frame = self.frame()?;
+                    PathSeg::Arc {
+                        circle: Circle {
+                            frame,
+                            radius: self.num()?,
+                        },
+                        start: self.angle()?,
+                        sweep: self.angle()?,
+                    }
+                }
+                _ => break,
+            });
+        }
+        if out.is_empty() {
+            return Err(format!(
+                "expected a path (line AX AY AZ BX BY BZ | arc FRAME R START SWEEP), found '{}'",
+                self.peek()
+            ));
+        }
+        Ok(out)
+    }
     fn refs(&mut self) -> R<Vec<Name>> {
         let mut out = Vec::new();
         while self.peek().starts_with(['@', '(']) {
@@ -1187,6 +1453,23 @@ impl<'a> W<'a> {
     fn profile(&mut self, p: &Profile) {
         self.frame(&p.plane);
         self.loops(&p.loops);
+    }
+    fn path(&mut self, path: &[PathSeg]) {
+        for s in path {
+            match *s {
+                PathSeg::Line { a, b } => {
+                    self.word("line");
+                    self.nums(&[a.x, a.y, a.z, b.x, b.y, b.z]);
+                }
+                PathSeg::Arc { circle, start, sweep } => {
+                    self.word("arc");
+                    self.frame(&circle.frame);
+                    self.num(circle.radius);
+                    self.angle(start);
+                    self.angle(sweep);
+                }
+            }
+        }
     }
     fn loops(&mut self, loops: &[ProfileLoop]) {
         let mut next = 0u64;
@@ -1620,8 +1903,92 @@ mod tests {
                     _ => Layout::Mirror { plane: frame(r) },
                 },
             },
+            10 => Feature::Sweep(Box::new(Sweep {
+                profile: profile(r),
+                path: path(r),
+                ends: match r.below(3) {
+                    0 => PathEnds::Path,
+                    1 => PathEnds::Extended {
+                        start: num(r),
+                        end: num(r),
+                    },
+                    _ => PathEnds::To {
+                        target: target(r, i),
+                        offset: num(r),
+                    },
+                },
+                op: op(r),
+            })),
+            11 => Feature::Coil(Box::new(Coil {
+                profile: profile(r),
+                axis: Axis2 {
+                    origin: p2(r),
+                    dir: p2(r).to_vec(),
+                },
+                size: match r.below(4) {
+                    0 => CoilSize::PitchTurns {
+                        pitch: num(r),
+                        turns: num(r),
+                    },
+                    1 => CoilSize::TurnsHeight {
+                        turns: num(r),
+                        height: num(r),
+                    },
+                    2 => CoilSize::PitchHeight {
+                        pitch: num(r),
+                        height: num(r),
+                    },
+                    _ => CoilSize::To {
+                        pitch: num(r),
+                        target: target(r, i),
+                        offset: num(r),
+                    },
+                },
+                taper: if r.bool() { 0.0 } else { angle(r) },
+                handed: if r.bool() { Handed::Right } else { Handed::Left },
+                op: op(r),
+            })),
+            12 => Feature::Loft(Box::new(Loft {
+                profiles: (0..1 + r.below(4)).map(|_| profile(r)).collect(),
+                kind: if r.bool() {
+                    LoftKind::Ruled
+                } else {
+                    LoftKind::Smooth {
+                        start: r.bool().then(|| num(r)),
+                        end: r.bool().then(|| num(r)),
+                    }
+                },
+                guides: match r.below(3) {
+                    0 => LoftGuides::None,
+                    1 => LoftGuides::Rails((0..1 + r.below(3)).map(|_| (r.below(8), path(r))).collect()),
+                    _ => LoftGuides::CentreLine(path(r)),
+                },
+                op: op(r),
+            })),
             _ => Feature::Plane(frame(r)),
         }
+    }
+
+    fn path(r: &mut Rng) -> Vec<PathSeg> {
+        (0..1 + r.below(4))
+            .map(|_| {
+                if r.bool() {
+                    PathSeg::Line {
+                        a: Point3::new(num(r), num(r), num(r)),
+                        b: Point3::new(num(r), num(r), num(r)),
+                    }
+                } else {
+                    PathSeg::Arc {
+                        circle: Circle {
+                            frame: frame(r),
+                            radius: num(r),
+                        },
+                        start: angle(r),
+                        sweep: angle(r),
+                    }
+                }
+            })
+            .collect()
     }
 
     #[test]
