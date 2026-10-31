@@ -19,31 +19,62 @@ fn every_kind_has_a_maker() {
     }
 }
 
-/// Every seed in `seeds` fails only in kinds history_known.txt lists (a line there matches any
-/// failure whose kind holds it).
-fn histories(seeds: &[u64]) {
+/// Every seed fails only in kinds history_known.txt lists (a line there matches any failure
+/// whose kind holds it), and every line there still matches a failure: the list only shrinks.
+/// The seeds run on four threads.
+#[test]
+#[cfg_attr(target_family = "wasm", ignore = "a kernel panic aborts the wasm run")]
+fn random_histories() {
     let known: Vec<&str> = include_str!("history_known.txt")
         .lines()
         .map(|l| l.split(" #").next().unwrap_or("").trim())
         .filter(|l| !l.is_empty() && !l.starts_with('#'))
         .collect();
+    let next = std::sync::atomic::AtomicUsize::new(0);
+    let runs: Vec<(u64, forge_agent::history::Run)> = std::thread::scope(|s| {
+        let workers: Vec<_> = (0..4)
+            .map(|_| {
+                s.spawn(|| {
+                    let mut out = Vec::new();
+                    loop {
+                        let i = next.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+                        let Some(&seed) = SEEDS.get(i) else { break };
+                        let t = std::time::Instant::now();
+                        let r = run(seed, LEN);
+                        eprintln!(
+                            "seed {seed}: {:.1} s, {} lines",
+                            t.elapsed().as_secs_f64(),
+                            r.src.lines().count()
+                        );
+                        out.push((seed, r));
+                    }
+                    out
+                })
+            })
+            .collect();
+        workers
+            .into_iter()
+            .flat_map(|w| w.join().expect("history worker"))
+            .collect()
+    });
     let mut kinds: BTreeMap<&str, (usize, usize)> = BTreeMap::new();
     let mut new = Vec::new();
-    for &seed in seeds {
-        let t = std::time::Instant::now();
-        let r = run(seed, LEN);
-        eprintln!(
-            "seed {seed}: {:.1} s, {} lines",
-            t.elapsed().as_secs_f64(),
-            r.src.lines().count()
-        );
+    let mut seen = vec![false; known.len()];
+    for (seed, r) in &runs {
         for (k, why) in &r.tried {
             let e = kinds.entry(k).or_default();
             e.0 += 1;
             e.1 += why.is_none() as usize;
         }
-        for (what, src) in r.fails {
-            if !known.iter().any(|k| what.contains(k)) {
+        for (what, src) in &r.fails {
+            let mut hit = false;
+            for (i, k) in known.iter().enumerate() {
+                if what.contains(k) {
+                    seen[i] = true;
+                    hit = true;
+                }
+            }
+            if !hit {
                 new.push(format!("seed {seed}: {what}\n{src}"));
             }
         }
@@ -56,30 +87,15 @@ fn histories(seeds: &[u64]) {
         new.len(),
         new.join("\n")
     );
-}
-
-// four runs, so the test harness spreads them over threads; native only, since wasm aborts
-// on a panic where native catches it and goes on (the arithmetic is the same either way)
-#[test]
-#[cfg_attr(target_family = "wasm", ignore = "a kernel panic aborts the wasm run")]
-fn random_histories_0() {
-    histories(&SEEDS[..8]);
-}
-
-#[test]
-#[cfg_attr(target_family = "wasm", ignore = "a kernel panic aborts the wasm run")]
-fn random_histories_1() {
-    histories(&SEEDS[8..16]);
-}
-
-#[test]
-#[cfg_attr(target_family = "wasm", ignore = "a kernel panic aborts the wasm run")]
-fn random_histories_2() {
-    histories(&SEEDS[16..24]);
-}
-
-#[test]
-#[cfg_attr(target_family = "wasm", ignore = "a kernel panic aborts the wasm run")]
-fn random_histories_3() {
-    histories(&SEEDS[24..]);
+    let gone: Vec<&str> = known
+        .iter()
+        .zip(&seen)
+        .filter(|(_, s)| !**s)
+        .map(|(k, _)| *k)
+        .collect();
+    assert!(
+        gone.is_empty(),
+        "no seed fails as these any more: remove them from history_known.txt\n{}",
+        gone.join("\n")
+    );
 }

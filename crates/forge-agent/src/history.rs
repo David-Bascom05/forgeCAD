@@ -1660,6 +1660,15 @@ fn bbox(b: &Body) -> Box3 {
     fs.fold(first, |a, f| a.hull(&b.face_box(f)))
 }
 
+/// Each body after `n` lines valid on its own (separate bodies may overlap).
+fn valid_after(kind: &str, m: &Model, n: usize) -> Verdict {
+    m.solids_after(n)
+        .iter()
+        .map(|s| valid(kind, &s.body))
+        .find(|v| *v != Verdict::Ok)
+        .unwrap_or(Verdict::Ok)
+}
+
 /// The checks after a history built: its part's validity at line `i` (kind `kind`).
 fn valid(kind: &str, b: &Body) -> Verdict {
     match catch_unwind(AssertUnwindSafe(|| forge_topo::check(b))) {
@@ -1730,9 +1739,7 @@ pub fn judge(src: &str) -> Verdict {
         let m = model(src);
         for i in 0..m.built() {
             let kind = m.kinds[i];
-            if let Some(b) = m.body_after(i + 1)
-                && let f @ Verdict::Fail(_) = valid(kind, b)
-            {
+            if let f @ Verdict::Fail(_) = valid_after(kind, &m, i + 1) {
                 return f;
             }
         }
@@ -1802,7 +1809,7 @@ pub fn run(seed: u64, len: usize) -> Run {
             }
             Ok(()) => match &m.error {
                 Some(f) => classify(&m.lines[f.at].toks[0], &f.msg),
-                None => m.body().map_or(Verdict::Ok, |b| valid(maker.name, b)),
+                None => valid_after(maker.name, &m, m.built()),
             },
         };
         let secs = t.elapsed().as_secs_f64();
