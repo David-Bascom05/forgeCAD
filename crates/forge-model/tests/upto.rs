@@ -405,18 +405,23 @@ fn parts() -> Vec<(&'static str, Part, f64)> {
     ]
 }
 
+/// The body the last `new` made (earlier ones are bodies of their own).
+fn last(
+    r: Result<Vec<forge_model::Solid>, forge_model::RegenError>,
+) -> Result<Body, forge_model::RegenError> {
+    r.map(|mut s| s.pop().expect("a body").body)
+}
+
 #[test]
 fn up_to_surfaces_by_hand() {
     for (name, part, want) in parts() {
-        let seq = part.regenerate().unwrap_or_else(|e| panic!("{name}: {e:?}"));
+        let seq = last(part.regenerate_solids()).unwrap_or_else(|e| panic!("{name}: {e:?}"));
         assert!(check(&seq).is_empty(), "{name}: {:?}", check(&seq));
         let v = volume(&seq);
         // a torus meshes coarser at this chord: its volume converges from below (1e-5 at 1e-5)
         let tol = if name.starts_with("torus") { 5e-4 } else { 1e-4 };
         assert!((v - want).abs() <= tol * want, "{name}: volume {v} want {want}");
-        let nary = part
-            .regenerate_nary(4)
-            .unwrap_or_else(|e| panic!("{name} nary: {e:?}"));
+        let nary = last(part.regenerate_nary_solids(4)).unwrap_or_else(|e| panic!("{name} nary: {e:?}"));
         assert!(check(&nary).is_empty(), "{name} nary");
         assert_eq!(nary.faces.len(), seq.faces.len(), "{name}");
         assert!((volume(&nary) - v).abs() <= 1e-6 * v, "{name} nary volume");

@@ -6,6 +6,13 @@ use forge_mesh::{Quality, tessellate};
 use forge_model::edits;
 use forge_topo::{Body, check};
 
+/// The body the last `new` made (earlier ones are bodies of their own).
+fn last(
+    r: Result<Vec<forge_model::Solid>, forge_model::RegenError>,
+) -> Result<Body, forge_model::RegenError> {
+    r.map(|mut s| s.pop().expect("a body").body)
+}
+
 fn volume(b: &Body) -> f64 {
     mesh_volume(b).unwrap()
 }
@@ -29,7 +36,7 @@ fn fuzz_edits() {
     let n = 300;
     for seed in 0..n {
         let part = edits::fuzz(seed);
-        match part.regenerate() {
+        match last(part.regenerate_solids()) {
             Ok(b) => {
                 let problems = check(&b);
                 assert!(problems.is_empty(), "seed {seed}: {problems:?}\n{part:?}");
@@ -60,7 +67,7 @@ fn fuzz_edits() {
 #[test]
 fn edit_parts() {
     for (name, part, want) in edits::parts() {
-        let seq = part.regenerate().unwrap_or_else(|e| panic!("{name}: {e:?}"));
+        let seq = last(part.regenerate_solids()).unwrap_or_else(|e| panic!("{name}: {e:?}"));
         let problems = check(&seq);
         assert!(problems.is_empty(), "{name}: {problems:?}");
         let v = volume(&seq);
@@ -68,9 +75,8 @@ fn edit_parts() {
             assert!((v - w).abs() <= 1e-4 * w, "{name}: volume {v} want {w}");
         }
         for threads in [1, 4] {
-            let nary = part
-                .regenerate_nary(threads)
-                .unwrap_or_else(|e| panic!("{name} nary: {e:?}"));
+            let nary =
+                last(part.regenerate_nary_solids(threads)).unwrap_or_else(|e| panic!("{name} nary: {e:?}"));
             assert!(check(&nary).is_empty(), "{name} nary");
             let vn = volume(&nary);
             assert!((vn - v).abs() <= 1e-6 * v, "{name}: nary volume {vn} vs {v}");

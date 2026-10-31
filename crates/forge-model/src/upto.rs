@@ -1468,11 +1468,15 @@ mod tests {
             },
             op: Combine::New,
         };
+        // the rod is a body of its own beside the torus
         let b = Part {
             features: vec![torus, rod],
         }
-        .regenerate()
-        .expect("slanted end");
+        .regenerate_solids()
+        .expect("slanted end")
+        .pop()
+        .expect("the rod")
+        .body;
         let tr = b
             .face_ids()
             .find_map(|f| match &b.face(f).surface {
