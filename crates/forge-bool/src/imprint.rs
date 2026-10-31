@@ -11,7 +11,7 @@
 //! ends inside the tool.
 
 use crate::boolean::{Op, settle, vertex_names};
-use crate::classify::{Index, Where, extend_query};
+use crate::classify::{circle_in_face, extend_query};
 use forge_geom::intersect::{SurfaceSurface, plane_cylinder};
 use forge_geom::{Curve, CurveGeom, Cylinder, Surface};
 use forge_math::{Box3, Interval, Point3, tol};
@@ -198,37 +198,6 @@ fn clear_of(a: &Body, f: FaceId, t: &Tool, lohi: [f64; 2]) -> bool {
     dx * dx + dy * dy > (r + CLEAR) * (r + CLEAR)
 }
 
-/// Whether every edge of planar face `f` stays clear of `circle` (in the face's plane), none of
-/// them inside it.
-fn edges_clear(a: &Body, f: FaceId, circle: &forge_geom::Circle) -> bool {
-    let (c, r) = (circle.frame.origin, circle.radius);
-    let near = Box3::from_point(c).grow(r + CLEAR);
-    for &l in &a.face(f).loops {
-        for &co in &a.lp(l).coedges {
-            let e = a.coedge(co).edge;
-            if !a.edge_box(e).overlaps(&near) {
-                continue;
-            }
-            let edge = a.edge(e);
-            let ok = match &edge.curve {
-                Curve::Line(line) => {
-                    let q = line.eval(line.closest(c, edge.range));
-                    q.distance(c) > r + CLEAR
-                }
-                Curve::Circle(k) if k.frame.z().dot(circle.frame.z().get()).abs() >= 1.0 - 1e-12 => {
-                    let d = k.frame.origin.distance(c);
-                    d > r + k.radius + CLEAR || d + r < k.radius - CLEAR
-                }
-                _ => false,
-            };
-            if !ok {
-                return false;
-            }
-        }
-    }
-    true
-}
-
 /// The boolean of `a` with `b` done in place when `b` is a round tool this path covers; false,
 /// with `a` untouched, otherwise.
 pub(crate) fn column(a: &mut Body, b: &Body, op: Op) -> bool {
@@ -259,70 +228,71 @@ fn plan(a: &Body, b: &Body, op: Op) -> Result<Plan, &'static str> {
     }
     let t = tool(b).ok_or("not a round tool")?;
     let z = t.cyl.frame.z();
-    let bb = t
-        .caps
-        .iter()
-        .chain([&t.wall])
-        .fold(Box3::EMPTY, |x, &f| x.hull(&b.face_box(f)));
+    // the tool's box: its two end disks'
+    let bb = {
+        let (o, r) = (t.cyl.frame.origin, t.cyl.radius);
+        let reach = |a: f64| r * (1.0 - a * a).max(0.0).sqrt() + tol::LINEAR;
+        let half = Point3::new(reach(z.get().x), reach(z.get().y), reach(z.get().z)) - Point3::ORIGIN;
+        let mut bb = Box3::EMPTY;
+        for h in t.h {
+            let c = o + z.get() * h;
+            bb.include(c - half);
+            bb.include(c + half);
+        }
+        bb
+    };
     let mut hits: Vec<Hit> = Vec::new();
-    {
-        let index = Index::new(a);
-        let near: Vec<FaceId> = a.faces_where(|x| x.overlaps(&bb)).collect();
-        for f in near {
-            let face = a.face(f);
-            let pl = match &face.surface {
-                Surface::Plane(pl) if pl.normal_vec().dot(z.get()).abs() >= 1.0 - 1e-12 => pl,
-                _ => {
-                    if clear_of(a, f, &t, t.h) {
-                        continue;
-                    }
-                    return Err("a face not square to the axis comes near");
-                }
-            };
-            let h = (pl.frame.origin - t.cyl.frame.origin).dot(z.get());
-            if h < t.h[0] - CLEAR || h > t.h[1] + CLEAR {
-                continue;
-            }
-            if h < t.h[0] + CLEAR || h > t.h[1] - CLEAR {
-                return Err("a face on a cap's plane");
-            }
-            let SurfaceSurface::Curves(cs) = plane_cylinder(pl, &t.cyl) else {
-                return Err("no circle");
-            };
-            let [(Curve::Circle(circle), _)] = &cs[..] else {
-                return Err("no circle");
-            };
-            if !edges_clear(a, f, circle) {
-                return Err("a face's boundary comes near the circle");
-            }
-            match index.point_in_face(f, circle.eval(0.0)) {
-                Where::Inside => {}
-                Where::Outside => {
-                    // the general boolean cuts the tool's seam where the face's box holds the
-                    // crossing, even off the face: a vertex this path would not make
-                    let Curve::Line(seam) = &b.edge(t.seam).curve else {
-                        return Err("seam");
-                    };
-                    let s = -pl.signed_distance(seam.origin) / pl.normal_vec().dot(seam.dir.get());
-                    if a.face_box(f).grow(CLEAR).contains(seam.eval(s)) {
-                        return Err("the seam crosses a face's box off the face");
-                    }
+    for f in a.faces_where(|x| x.overlaps(&bb)) {
+        let face = a.face(f);
+        let pl = match &face.surface {
+            Surface::Plane(pl) if pl.normal_vec().dot(z.get()).abs() >= 1.0 - 1e-12 => pl,
+            _ => {
+                if clear_of(a, f, &t, t.h) {
                     continue;
                 }
-                Where::On => return Err("the circle on a face's boundary"),
+                return Err("a face not square to the axis comes near");
             }
-            let up = (pl.normal_vec().dot(z.get()) > 0.0) == face.same_sense;
-            let (point, tol, range) = seam_point(b, &t, pl, &Curve::Circle(*circle)).ok_or("seam point")?;
-            hits.push(Hit {
-                f,
-                h,
-                up,
-                circle: *circle,
-                point,
-                tol,
-                range,
-            });
+        };
+        let h = (pl.frame.origin - t.cyl.frame.origin).dot(z.get());
+        if h < t.h[0] - CLEAR || h > t.h[1] + CLEAR {
+            continue;
         }
+        if h < t.h[0] + CLEAR || h > t.h[1] - CLEAR {
+            return Err("a face on a cap's plane");
+        }
+        let SurfaceSurface::Curves(cs) = plane_cylinder(pl, &t.cyl) else {
+            return Err("no circle");
+        };
+        let [(Curve::Circle(circle), _)] = &cs[..] else {
+            return Err("no circle");
+        };
+        match circle_in_face(a, f, circle, CLEAR) {
+            None => return Err("a face's boundary comes near the circle"),
+            Some(true) => {}
+            Some(false) => {
+                // the general boolean cuts the tool's seam where the face's box holds the
+                // crossing, even off the face: a vertex this path would not make
+                let Curve::Line(seam) = &b.edge(t.seam).curve else {
+                    return Err("seam");
+                };
+                let s = -pl.signed_distance(seam.origin) / pl.normal_vec().dot(seam.dir.get());
+                if a.face_box(f).grow(CLEAR).contains(seam.eval(s)) {
+                    return Err("the seam crosses a face's box off the face");
+                }
+                continue;
+            }
+        }
+        let up = (pl.normal_vec().dot(z.get()) > 0.0) == face.same_sense;
+        let (point, tol, range) = seam_point(b, &t, pl, &Curve::Circle(*circle)).ok_or("seam point")?;
+        hits.push(Hit {
+            f,
+            h,
+            up,
+            circle: *circle,
+            point,
+            tol,
+            range,
+        });
     }
     if hits.is_empty() {
         return Err("no face crossed");
@@ -368,6 +338,8 @@ fn seam_point(b: &Body, t: &Tool, pl: &forge_geom::Plane, circle: &Curve) -> Opt
 
 fn build(a: &mut Body, b: &Body, t: &Tool, hits: &[Hit], wall_at: &[bool], flip: bool) {
     let root = Name::feature(0);
+    static CUT: std::sync::OnceLock<Name> = std::sync::OnceLock::new();
+    let cut = *CUT.get_or_init(|| root.with_str("cut"));
     let wall_name = b.face(t.wall).name;
     let circles: Vec<Curve> = hits.iter().map(|h| Curve::Circle(h.circle)).collect();
     // named as the general boolean names a curve's piece: by the faces, then the edges it ends on
@@ -375,8 +347,7 @@ fn build(a: &mut Body, b: &Body, t: &Tool, hits: &[Hit], wall_at: &[bool], flip:
     let names: Vec<Name> = hits
         .iter()
         .map(|h| {
-            root.with_str("cut")
-                .with_set(vec![a.face(h.f).name, wall_name])
+            cut.with_set(vec![a.face(h.f).name, wall_name])
                 .with(0)
                 .with_name(seam_name)
                 .with_name(seam_name)

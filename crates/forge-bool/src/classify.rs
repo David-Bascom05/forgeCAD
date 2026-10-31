@@ -399,6 +399,35 @@ pub fn face_box(body: &Body, f: FaceId) -> Box3 {
     body.face_box(f)
 }
 
+/// Face `f`'s point-in-face index: built on first use, kept on the face.
+fn info(body: &Body, f: FaceId) -> &FaceInfo {
+    let face = body.face(f);
+    let q = face.query.get_or_init(|| {
+        let mut edges = Vec::new();
+        let mut reach = tol::LINEAR;
+        for &l in &face.loops {
+            for c in body.lp(l).coedges() {
+                let (e, b) = edge_entry(body, c);
+                edges.push((c, b));
+                reach = reach.max(e);
+            }
+        }
+        let bands = match &face.surface {
+            Surface::Plane(pl) if edges.len() >= 16 => Some(Bands::build(pl, &edges)),
+            _ => None,
+        };
+        std::sync::Arc::new(FaceInfo {
+            edges,
+            reach,
+            drawn: std::sync::OnceLock::new(),
+            bands,
+            simple: std::sync::OnceLock::new(),
+        })
+    });
+    q.downcast_ref::<FaceInfo>()
+        .expect("a face's query is a FaceInfo")
+}
+
 impl<'a> Index<'a> {
     pub fn new(body: &'a Body) -> Self {
         let ix = Index {
@@ -437,31 +466,7 @@ impl<'a> Index<'a> {
     }
 
     fn info(&self, f: FaceId) -> &FaceInfo {
-        let face = self.body.face(f);
-        let q = face.query.get_or_init(|| {
-            let mut edges = Vec::new();
-            let mut reach = tol::LINEAR;
-            for &l in &face.loops {
-                for c in self.body.lp(l).coedges() {
-                    let (e, b) = edge_entry(self.body, c);
-                    edges.push((c, b));
-                    reach = reach.max(e);
-                }
-            }
-            let bands = match &face.surface {
-                Surface::Plane(pl) if edges.len() >= 16 => Some(Bands::build(pl, &edges)),
-                _ => None,
-            };
-            std::sync::Arc::new(FaceInfo {
-                edges,
-                reach,
-                drawn: std::sync::OnceLock::new(),
-                bands,
-                simple: std::sync::OnceLock::new(),
-            })
-        });
-        q.downcast_ref::<FaceInfo>()
-            .expect("a face's query is a FaceInfo")
+        info(self.body, f)
     }
 
     fn drawn(&self, f: FaceId) -> &Drawn {
@@ -681,6 +686,64 @@ impl<'a> Index<'a> {
         }
         Where::On
     }
+}
+
+/// Whether a circle in planar face `f`'s plane lies inside the face (true) or outside it, every
+/// boundary edge more than `clear` from the circle and none inside it; None when an edge comes
+/// nearer, may lie inside, or the parity ray grazes. Only edges near the circle and in the
+/// centre's band are looked at.
+pub(crate) fn circle_in_face(
+    body: &Body,
+    f: FaceId,
+    circle: &forge_geom::Circle,
+    clear: f64,
+) -> Option<bool> {
+    let Surface::Plane(plane) = &body.face(f).surface else {
+        return None;
+    };
+    let info = info(body, f);
+    let (c, r) = (circle.frame.origin, circle.radius);
+    let n = circle.frame.z().get();
+    let reach = Box3::from_point(c).grow(r + clear);
+    let mut near: Vec<u32> = Vec::new();
+    let candidates: Box<dyn Iterator<Item = &(forge_topo::CoedgeId, Box3)>> = match &info.bands {
+        Some(bands) => {
+            bands.near(c, r + clear, &mut near);
+            Box::new(near.iter().map(|&i| &info.edges[i as usize]))
+        }
+        None => Box::new(info.edges.iter()),
+    };
+    for &(co, ref b) in candidates {
+        if co == GONE || !b.overlaps(&reach) {
+            continue;
+        }
+        let e = body.edge(body.coedge(co).edge);
+        let clear = match &e.curve {
+            Curve::Line(l) => l.eval(l.closest(c, e.range)).distance(c) > r + clear,
+            Curve::Circle(k) if k.frame.z().dot(n).abs() >= 1.0 - 1e-12 => {
+                let d = k.frame.origin.distance(c);
+                d > r + k.radius + clear || d + r < k.radius - clear
+            }
+            _ => false,
+        };
+        if !clear {
+            return None;
+        }
+    }
+    // no edge inside the disk or on the circle: the centre is where the circle is
+    for (k, angle) in RAY_ANGLES.into_iter().enumerate() {
+        let subset: Option<&[u32]> = match (&info.bands, k) {
+            (Some(bands), 0) => match bands.row((c - bands.origin).dot(bands.across)) {
+                Some(r) => Some(&bands.rows[r]),
+                None => Some(&[]),
+            },
+            _ => None,
+        };
+        if let Some(inside) = planar_parity(body, plane, c, &info.edges, subset, angle) {
+            return Some(inside);
+        }
+    }
+    None
 }
 
 /// Shifts parameters by whole periods into the face's drawing window (the
