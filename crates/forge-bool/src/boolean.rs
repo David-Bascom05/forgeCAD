@@ -855,7 +855,7 @@ fn plan(a: &Body, b: &Body, op: Op, scratch: &mut Scratch) -> R<Plan> {
                     .collect();
                 let mut new_edges: Vec<usize> = mine.iter().map(|&i| seg_piece[i]).collect();
                 new_edges.extend(foreign.iter().copied());
-                let split = split_face(body, f, &pieces, &boundary, &new_edges, false, &ties)?;
+                let split = split_face(body, f, &pieces, &boundary, &new_edges, false, &ties, &|_| None)?;
                 // an untouched hole inside a new region moves into it
                 let face = body.face(f);
                 let mut moved: Vec<(usize, forge_topo::LoopId)> = Vec::new();
@@ -996,7 +996,13 @@ fn plan(a: &Body, b: &Body, op: Op, scratch: &mut Scratch) -> R<Plan> {
             }
             let mut new_edges: Vec<usize> = mine.iter().map(|&i| seg_piece[i]).collect();
             new_edges.extend(foreign.iter().copied());
-            let regions = split_face(body, f, &pieces, &boundary, &new_edges, true, &ties)?.regions;
+            // a cycle a new edge shows to be dropped is not drawn (`split_face`)
+            let gone = |h: (usize, bool)| {
+                let (_, l) = lean(&bodies, &segs, &pieces, side, f, h)?;
+                let class = if l < 0.0 { Class::In } else { Class::Out };
+                (l.abs() > 1e-3).then(|| keep_of(op, side, class).is_none())
+            };
+            let regions = split_face(body, f, &pieces, &boundary, &new_edges, true, &ties, &gone)?.regions;
             for loops in regions {
                 let used: Vec<usize> = foreign
                     .iter()
@@ -1074,15 +1080,8 @@ fn plan(a: &Body, b: &Body, op: Op, scratch: &mut Scratch) -> R<Plan> {
 
     lap(&mut clock, 4);
     // 6: keep, flip. A shared same-facing region keeps A's copy only.
-    let keep = |side: Side, c: Class| match (op, side, c) {
-        (Op::Union, _, Class::Out) | (Op::Union, 0, Class::OnSame) => Some(false),
-        (Op::Subtract, 0, Class::Out) | (Op::Subtract, 0, Class::OnOpposite) => Some(false),
-        (Op::Subtract, 1, Class::In) => Some(true),
-        (Op::Intersect, _, Class::In) | (Op::Intersect, 0, Class::OnSame) => Some(false),
-        _ => None,
-    };
     let kept: Vec<(usize, bool)> = (0..specs.len())
-        .filter_map(|i| keep(specs[i].side, class[i]).map(|flip| (i, flip)))
+        .filter_map(|i| keep_of(op, specs[i].side, class[i]).map(|flip| (i, flip)))
         .collect();
     // an edge four kept faces meet at is where the two solids' material touches along a line
     let mut uses = vec![0u8; pieces.len()];
@@ -2973,6 +2972,7 @@ pub(crate) struct Split {
     pub(crate) outlines: Option<Vec<Option<Vec<Point2>>>>,
 }
 
+#[allow(clippy::too_many_arguments)]
 pub(crate) fn split_face(
     body: &Body,
     f: FaceId,
@@ -2983,6 +2983,9 @@ pub(crate) fn split_face(
     // the vertices where a cut met its edge without crossing it: two ways out may share a
     // tangent there
     ties: &[VKey],
+    // of a half-edge, whether the region on its left is surely dropped (Some(true)) or kept
+    // (Some(false)): a cycle dropped by its first answer is not drawn but made a region alone
+    gone: &dyn Fn((usize, bool)) -> Option<bool>,
 ) -> R<Split> {
     let mut half: Vec<(usize, bool)> =
         Vec::with_capacity(boundary.iter().map(|l| l.len()).sum::<usize>() + 2 * new_edges.len());
@@ -3102,32 +3105,44 @@ pub(crate) fn split_face(
             Point2::new(-p.x, p.y)
         }
     };
-    let mut polys: Vec<Option<Vec<Point2>>> = cycles
-        .iter()
-        .map(|cyc| {
-            if untouched(cyc) {
-                return None;
+    // a cycle not drawn exactly is sampled, unless it is surely dropped: then it is made a region
+    // alone, undrawn (only where every region is wanted whole, `outer`: a local split's outlines
+    // must all be drawn)
+    let mut skip = vec![false; cycles.len()];
+    let mut polys: Vec<Option<Vec<Point2>>> = Vec::with_capacity(cycles.len());
+    for (k, cyc) in cycles.iter().enumerate() {
+        if untouched(cyc) {
+            polys.push(None);
+            continue;
+        }
+        let walk = cyc.iter().map(|&i| half[i]);
+        let pts = match &face.surface {
+            Surface::Cylinder(c) => cylinder_outline(c, walk, pieces),
+            _ => None,
+        };
+        // (a cycle using the face's outer loop is no hole: a hole needs drawing to find its region)
+        if pts.is_none()
+            && cyc.iter().any(|&i| i < outer_len)
+            && cyc.iter().find_map(|&i| gone(half[i])) == Some(true)
+        {
+            skip[k] = true;
+            polys.push(None);
+            continue;
+        }
+        let mut pts = pts.unwrap_or_else(|| {
+            let mut samples = Vec::new();
+            for &i in cyc {
+                piece_samples(&pieces[half[i].0], half[i].1, &mut samples);
             }
-            let walk = cyc.iter().map(|&i| half[i]);
-            let pts = match &face.surface {
-                Surface::Cylinder(c) => cylinder_outline(c, walk, pieces),
-                _ => None,
-            };
-            let mut pts = pts.unwrap_or_else(|| {
-                let mut samples = Vec::new();
-                for &i in cyc {
-                    piece_samples(&pieces[half[i].0], half[i].1, &mut samples);
-                }
-                // pole-aware drawing
-                forge_topo::uv::draw_loop(body, f, &samples).0
-            });
-            // mirrored so every face's loops run counter-clockwise
-            for p in &mut pts {
-                *p = mirror(*p);
-            }
-            Some(pts)
-        })
-        .collect();
+            // pole-aware drawing
+            forge_topo::uv::draw_loop(body, f, &samples).0
+        });
+        // mirrored so every face's loops run counter-clockwise
+        for p in &mut pts {
+            *p = mirror(*p);
+        }
+        polys.push(Some(pts));
+    }
     // each cycle was unwrapped on its own; shift them all into the window of the
     // widest one, so containment compares like with like on periodic surfaces
     let dom = face.surface.domain();
@@ -3186,16 +3201,23 @@ pub(crate) fn split_face(
         .collect();
     let mut regions: Vec<Region> = Vec::new();
     let mut open: Vec<Walk> = Vec::new();
+    // each outer cycle and its region (an undrawn cycle is a region alone, in its place)
     let mut outer_of: Vec<usize> = Vec::new();
+    let mut region_of: Vec<usize> = Vec::new();
+    let mut drawn: Vec<Option<Vec<Point2>>> = Vec::new();
     for (k, cyc) in cycles.iter().enumerate() {
-        if areas[k] > 0.0 {
+        if areas[k] > 0.0 && !skip[k] {
             outer_of.push(k);
+            region_of.push(regions.len());
+        }
+        if areas[k] > 0.0 || skip[k] {
             regions.push(vec![cyc.iter().map(|&i| half[i]).collect()]);
+            drawn.push(polys[k].clone());
         }
     }
     let outlines = std::cell::OnceCell::<Vec<Outline>>::new();
     for (k, cyc) in cycles.iter().enumerate() {
-        if areas[k] > 0.0 {
+        if areas[k] > 0.0 || skip[k] {
             continue;
         }
         let probe = match &polys[k] {
@@ -3256,6 +3278,10 @@ pub(crate) fn split_face(
             .min_by(|x, y| areas[*x.1].total_cmp(&areas[*y.1]))
             .map(|(r, _)| r);
         let Some(host) = host else {
+            // its host may be a cycle not drawn: draw them all
+            if skip.contains(&true) {
+                return split_face(body, f, pieces, boundary, new_edges, outer, ties, &|_| None);
+            }
             if !outer {
                 open.push(cyc.iter().map(|&i| half[i]).collect());
                 continue;
@@ -3282,13 +3308,12 @@ pub(crate) fn split_face(
             }
             return Err(BoolError::Internal("hole outside every region"));
         };
-        regions[host].push(cyc.iter().map(|&i| half[i]).collect());
+        regions[region_of[host]].push(cyc.iter().map(|&i| half[i]).collect());
     }
-    let outlines = outer_of.iter().map(|&o| polys[o].clone()).collect();
     Ok(Split {
         regions,
         open,
-        outlines: Some(outlines),
+        outlines: Some(drawn),
     })
 }
 
@@ -3645,25 +3670,11 @@ fn classify_specs(
         if fixed[i] {
             continue;
         }
-        let body = bodies[s.side];
-        let other = 1 - s.side;
         for &(p, fwd) in s.loops.iter().flatten() {
-            let Some(si) = pieces[p].seg else { continue };
-            let piece = &pieces[p];
-            let d = piece.curve.deriv(piece.range.mid());
-            let along = if fwd { d.d1 } else { -d.d1 };
-            let face = body.face(s.from);
-            let Some(n_here) = body.face_normal(s.from, face.surface.project(d.p)) else {
+            let Some((_, lean)) = lean(bodies, segs, pieces, s.side, s.from, (p, fwd)) else {
                 continue;
             };
-            let inward = n_here.cross(along);
-            let of = segs[si].faces[other];
-            let ob = bodies[other];
-            let Some(n_other) = ob.face_normal(of, ob.face(of).surface.project(d.p)) else {
-                continue;
-            };
-            let lean = inward.dot(n_other.get());
-            if lean.abs() <= 1e-9 * inward.length() {
+            if lean.abs() <= 1e-9 {
                 continue;
             }
             class[i] = Some(if lean < 0.0 { Class::In } else { Class::Out });
@@ -3759,6 +3770,43 @@ fn classify_specs(
         .into_iter()
         .map(|c| c.expect("every spec classified"))
         .collect())
+}
+
+/// How the region on the left of half-edge `h` of face `f` (of body `side`) leans into the other
+/// body at a new edge: that body, and the sine of the angle between the way into the region and
+/// the other face's outward normal, negative inside the other body. None for an old edge or at a
+/// singular point.
+pub(crate) fn lean(
+    bodies: &[&Body],
+    segs: &[Seg],
+    pieces: &[Piece],
+    side: Side,
+    f: FaceId,
+    h: (usize, bool),
+) -> Option<(Side, f64)> {
+    let (p, fwd) = h;
+    let sg = &segs[pieces[p].seg?];
+    let k = (sg.sides[0] == side) as usize;
+    let (other, of) = (sg.sides[k], sg.faces[k]);
+    let (body, ob) = (bodies[side], bodies[other]);
+    let piece = &pieces[p];
+    let d = piece.curve.deriv(piece.range.mid());
+    let along = if fwd { d.d1 } else { -d.d1 };
+    let n_here = body.face_normal(f, body.face(f).surface.project(d.p))?;
+    let inward = n_here.cross(along);
+    let n_other = ob.face_normal(of, ob.face(of).surface.project(d.p))?;
+    Some((other, inward.dot(n_other.get()) / inward.length()))
+}
+
+/// Whether the boolean keeps a piece of `side` of class `c`, and if so whether it flips.
+fn keep_of(op: Op, side: Side, c: Class) -> Option<bool> {
+    match (op, side, c) {
+        (Op::Union, _, Class::Out) | (Op::Union, 0, Class::OnSame) => Some(false),
+        (Op::Subtract, 0, Class::Out) | (Op::Subtract, 0, Class::OnOpposite) => Some(false),
+        (Op::Subtract, 1, Class::In) => Some(true),
+        (Op::Intersect, _, Class::In) | (Op::Intersect, 0, Class::OnSame) => Some(false),
+        _ => None,
+    }
 }
 
 /// Error-path diagnostics for a classification conflict (FORGE_DEBUG set).

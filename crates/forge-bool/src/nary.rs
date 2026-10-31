@@ -15,7 +15,7 @@
 
 use crate::boolean::{
     BoolError, Cut, CutOn, Imprint, Op, Piece, R, Seg, Side, Touch, VKey, Walk, branches_meet,
-    crossings_near, edge_split, grown_tols, imprint, local_class, on_edge, overlap, settle, split_face,
+    crossings_near, edge_split, grown_tols, imprint, lean, local_class, on_edge, overlap, settle, split_face,
     touches, trim,
 };
 use crate::classify::{Index, Where};
@@ -1663,6 +1663,16 @@ fn nary_body(
         }
     }
     let list = &pieces.list;
+    // with no intersect, a face's region inside a later tool is dropped whatever the ops: that
+    // tool's material (or its absence) lies on both sides of it
+    let any_intersect = ops.contains(&Op::Intersect);
+    let seg_list = &segs;
+    let gone = move |side: Side, f: FaceId| {
+        move |h: (usize, bool)| {
+            let (other, l) = lean(tools, seg_list, list, side, f, h)?;
+            (!any_intersect && other > side && l < -1e-3).then_some(true)
+        }
+    };
     let splits = par_map(jobs.len(), threads, 8, |j| {
         let (side, f, ref boundary, ref new_edges) = jobs[j];
         match (!cut_faces[side][f.index()])
@@ -1670,7 +1680,17 @@ fn nary_body(
             .flatten()
         {
             Some(regions) => Ok(regions),
-            None => split_face(tools[side], f, list, boundary, new_edges, true, &ties).map(|s| s.regions),
+            None => split_face(
+                tools[side],
+                f,
+                list,
+                boundary,
+                new_edges,
+                true,
+                &ties,
+                &gone(side, f),
+            )
+            .map(|s| s.regions),
         }
     });
     let mut job_regs: Vec<std::ops::Range<usize>> = Vec::with_capacity(jobs.len());
@@ -2046,7 +2066,7 @@ fn nary_body(
             .flatten()
         {
             Some(regions) => regions,
-            None => split_face(tools[side], f, list, boundary, &keep, true, &ties)?.regions,
+            None => split_face(tools[side], f, list, boundary, &keep, true, &ties, &gone(side, f))?.regions,
         };
         regions
             .into_iter()
