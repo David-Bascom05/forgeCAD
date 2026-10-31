@@ -5,7 +5,8 @@
 use crate::extent::Target;
 use crate::pattern::{Motion, PatternError, corners, moved};
 use crate::{
-    Combine, Edit, Feature, History, RegenError, Tool, cut_root, modifies, modify, op_of, starts, step, tools,
+    Combine, Edit, Feature, History, RegenError, SHORT_RUN, Tool, cut_root, modifies, modify, op_of, starts,
+    step, tools,
 };
 use forge_bool::{BoolError, Op, Shape, boolean, boolean_into, nary_with};
 use forge_geom::{Cylinder, Plane, Surface};
@@ -410,8 +411,7 @@ fn bool_id(id: u64, n: u64) -> u64 {
 
 /// A feature's tools (feature `i`, of id `id`) combined into `b`; `salt`, the tools' names
 /// moved off the ones they left in another body.
-fn add_tools(mut b: Body, ts: &[Tool], (i, id): (usize, u64), salt: Option<u64>) -> Result<Body, RegenError> {
-    let err = |error| RegenError::Boolean { feature: i, error };
+fn add_tools(b: Body, ts: &[Tool], (i, id): (usize, u64), salt: Option<u64>) -> Result<Body, RegenError> {
     let moved_off: Vec<Body>;
     let bodies: Vec<&Body> = match salt {
         None => ts.iter().map(|t| &t.0).collect(),
@@ -423,9 +423,22 @@ fn add_tools(mut b: Body, ts: &[Tool], (i, id): (usize, u64), salt: Option<u64>)
             moved_off.iter().collect()
         }
     };
+    let ops: Vec<Op> = ts.iter().map(|t| op_of(t.1)).collect();
+    combine(b, &bodies, &ops, (i, id), salt)
+}
+
+/// `add_tools` with the tools' names already moved off.
+fn combine(
+    mut b: Body,
+    bodies: &[&Body],
+    ops: &[Op],
+    (i, id): (usize, u64),
+    salt: Option<u64>,
+) -> Result<Body, RegenError> {
+    let err = |error| RegenError::Boolean { feature: i, error };
     let n = salt.map_or(0, |s| s + 1);
-    if let [tool] = &bodies[..] {
-        boolean_into(&mut b, tool, op_of(ts[0].1), bool_id(id, n)).map_err(err)?;
+    if let [tool] = bodies {
+        boolean_into(&mut b, tool, ops[0], bool_id(id, n)).map_err(err)?;
         if b.dead > b.faces.len() / 2 {
             b = b.into_compact();
         }
@@ -437,9 +450,8 @@ fn add_tools(mut b: Body, ts: &[Tool], (i, id): (usize, u64), salt: Option<u64>)
     let base = if b.dead > 0 { b.into_compact() } else { b };
     let mut all = vec![&base];
     all.extend(bodies);
-    let ops: Vec<Op> = ts.iter().map(|t| op_of(t.1)).collect();
     let root = salt.map_or(cut_root(i), |s| salted(cut_root(i), "body", s));
-    nary_with(&all, &ops, None, None, 1, root).map_err(err)
+    nary_with(&all, ops, None, None, 1, root).map_err(err)
 }
 
 fn bad(i: usize) -> impl Fn(BodyError) -> RegenError {
@@ -674,32 +686,56 @@ struct Run {
     id: usize,
     base: Result<Body, Tool>,
     tools: Vec<(Body, Op, Shape)>,
+    /// Each feature the tools came from, in order: its index, the salt its tools' names were
+    /// moved off with (on a body other than the feature's first), and how many tools it gave.
+    feats: Vec<(usize, Option<u64>, usize)>,
     /// The last feature it took a tool from.
     last: usize,
 }
 
 impl Run {
     fn flush(self, plain: History<'_>, threads: usize) -> Result<Solid, RegenError> {
-        let err = boolean_err(self.last);
-        let root = salted(cut_root(self.last), "body", plain.id(self.id));
-        let ops: Vec<Op> = self.tools.iter().map(|t| t.1).collect();
-        let body = match self.base {
-            Ok(b) if self.tools.is_empty() => b,
-            Err(t) if self.tools.is_empty() => t.0,
-            Ok(b) => {
-                let mut all = vec![&b];
-                all.extend(self.tools.iter().map(|t| &t.0));
-                nary_with(&all, &ops, None, None, threads, root).map_err(err)?
-            }
-            Err(t) => {
-                let mut all = vec![&t.0];
-                all.extend(self.tools.iter().map(|t| &t.0));
-                let mut shapes = vec![t.2.clone()];
-                shapes.extend(self.tools.iter().map(|t| t.2.clone()));
-                nary_with(&all, &ops, Some(&shapes), None, threads, root).map_err(err)?
-            }
+        let id = self.id;
+        if self.tools.is_empty() {
+            let body = self.base.unwrap_or_else(|t| t.0);
+            return Ok(Solid { id, body });
+        }
+        let base = match &self.base {
+            Ok(b) => b,
+            Err(t) => &t.0,
         };
-        Ok(Solid { id: self.id, body })
+        if self.tools.len() <= SHORT_RUN
+            && self.feats.iter().all(|f| f.2 == 1)
+            && let Some(body) = self.sequential(base.clone(), plain)
+        {
+            return Ok(Solid { id, body });
+        }
+        let root = salted(cut_root(self.last), "body", plain.id(id));
+        let ops: Vec<Op> = self.tools.iter().map(|t| t.1).collect();
+        let mut all = vec![base];
+        all.extend(self.tools.iter().map(|t| &t.0));
+        let shapes: Option<Vec<Shape>> = self.base.as_ref().err().map(|t| {
+            let mut shapes = vec![t.2.clone()];
+            shapes.extend(self.tools.iter().map(|t| t.2.clone()));
+            shapes
+        });
+        let body =
+            nary_with(&all, &ops, shapes.as_deref(), None, threads, root).map_err(boolean_err(self.last))?;
+        Ok(Solid { id, body })
+    }
+
+    /// The tools combined into `b` one feature at a time, as the sequential regen does: the same
+    /// body for less work on a short run. None where a boolean refuses.
+    fn sequential(&self, mut b: Body, plain: History<'_>) -> Option<Body> {
+        let mut at = 0;
+        for &(i, salt, n) in &self.feats {
+            let ts = &self.tools[at..at + n];
+            let bodies: Vec<&Body> = ts.iter().map(|t| &t.0).collect();
+            let ops: Vec<Op> = ts.iter().map(|t| t.1).collect();
+            b = combine(b, &bodies, &ops, (i, plain.id(i)), salt).ok()?;
+            at += n;
+        }
+        Some(b)
     }
 }
 
@@ -714,6 +750,7 @@ fn unflush(solids: Vec<Solid>, last: usize) -> Vec<Run> {
             id: s.id,
             base: Ok(s.body),
             tools: vec![],
+            feats: vec![],
             last,
         })
         .collect()
@@ -771,6 +808,7 @@ pub(crate) fn nary(features: History<'_>, threads: usize) -> Result<Vec<Solid>, 
                 id: i,
                 base: Err(ts.swap_remove(0)),
                 tools: vec![],
+                feats: vec![],
                 last: i,
             });
             continue;
@@ -797,13 +835,16 @@ pub(crate) fn nary(features: History<'_>, threads: usize) -> Result<Vec<Solid>, 
                 // the first body takes the tools themselves, the others copies named apart
                 for &k in on.iter().skip(1) {
                     let run = &mut runs[k];
+                    let salt = plain.id(run.id);
                     for t in &ts {
-                        let body = renamed(&t.0, |x| salted(x, "body", plain.id(run.id)));
+                        let body = renamed(&t.0, |x| salted(x, "body", salt));
                         run.tools.push((body, op_of(t.1), t.2.clone()));
                     }
+                    run.feats.push((i, Some(salt), ts.len()));
                     run.last = i;
                 }
                 let run = &mut runs[on[0]];
+                run.feats.push((i, None, ts.len()));
                 run.tools.extend(ts.into_iter().map(|t| (t.0, op_of(t.1), t.2)));
                 run.last = i;
             }

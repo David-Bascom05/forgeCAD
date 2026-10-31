@@ -19,11 +19,11 @@ upto nary 9fd12c2894b58008
 upto-flat seq 129adba965452ff6
 upto-flat nary 01600ec881b15a30
 sweep seq 33ccb91e6dda3b42
-sweep nary d895b1ef520face5
+sweep nary 33ccb91e6dda3b42
 coil seq 33abfef05694b575
-coil nary ffbc742743c5038d
+coil nary 33abfef05694b575
 loft seq 7d7446f280234175
-loft nary ab473ca80f8c5c11
+loft nary 7d7446f280234175
 thread seq 4ba82c07d4279a51
 thread nary 35095fdb9f47309b
 text seq 69b3f83e0ef4f192
@@ -51,7 +51,7 @@ fuzz9 nary f5e3c9945b60a0d7
 fuzz10 seq cb07c3129896269c
 fuzz10 nary 3960d9644434b3a8
 gearbox seq 32d1b21bf5b59208
-gearbox nary c5a2f66a4eb5c432
+gearbox nary e510ea25212216ca
 volute seq bd0fdb9b74f243cc
 volute nary f753540eafe5718e
 crank seq ea7c0ab9b8d241f8
@@ -63,7 +63,7 @@ heatsink nary a233f35f232cb766
 quadarm seq 819f0bc71b5d7112
 quadarm nary 5608470297ef5d6e
 conrod seq ffd143d6cc7b8880
-conrod nary 251a93e1efb18ab1
+conrod nary d4c9c8568bdfbd3d
 jack seq 88c50ef4c9ec7e8c
 jack nary 47695ac9c6d5599d
 frame seq 1e98f2ca4deb71a5
@@ -71,9 +71,9 @@ frame nary a57a640e65219a60
 manifold seq c0128ad7342b4fd6
 manifold nary 25627558d8f9022d
 bracket seq 21209687f108a94d
-bracket nary 61cc4915f928a70d
+bracket nary 3c8614269dc28035
 insert seq b0ac55f670207c06
-insert nary d59c95c0871fcb32
+insert nary d2250f33f79846f2
 clamp seq 024e6561aa8fee7b
 clamp nary af1143843275085b
 hub seq 4af8d394d8afcccf

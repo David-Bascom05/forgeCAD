@@ -15,6 +15,8 @@ OpenCascade) never become build dependencies; run them through `fbuild`.
 - `gpu-auto/`: the GPU crossover, the 128-point floor and the cost of opening the GPU.
 - `tolerance/`: LINEAR, ANGULAR and the one-tolerance decision.
 - `blend-rows/`: how close a variable blend's rows are kept.
+- `nary-short-runs/`: the n-ary regen's hand-off of short runs to the sequential booleans, and the
+  fuzz crossover by run length it was measured with.
 - `corner-patch/`: the rational corner quads and their fold proof, from branch `fold-research`
   (not yet on main when this index was written). Its README also covers the four
   `refs/experiments/corner-*` refs.

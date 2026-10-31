@@ -609,6 +609,36 @@ fn build_tools(
     Ok(out)
 }
 
+/// Tools after the part so far up to which a run takes the sequential regen's booleans, one
+/// feature at a time: below it the n-ary pass costs more (research/nary-short-runs).
+pub(crate) const SHORT_RUN: usize = 8;
+
+/// Whether features `from..` are a run short enough for the sequential booleans: a few features
+/// of one tool each (a pattern's copies, a thread's or a text's tools take an n-ary pass over the
+/// whole part in the sequential regen too).
+fn short(features: History<'_>, from: usize) -> bool {
+    let mut n = 0;
+    for f in features.iter().skip(from) {
+        match f {
+            Feature::Pattern { .. } | Feature::Thread(_) | Feature::Text(_) => return false,
+            Feature::Plane(_) | Feature::Param(_) | Feature::Sketch(_) | Feature::Work(_) => {}
+            _ => n += 1,
+        }
+    }
+    n <= SHORT_RUN
+}
+
+/// Features `from..` applied to `b` one at a time, exactly as the sequential regen applies them:
+/// the same body as the n-ary pass, for less work on a short run. None where one refuses (the
+/// caller takes the n-ary pass from the start).
+fn sequential(features: History<'_>, from: usize, b: Body) -> Option<Body> {
+    let mut b = Some(b);
+    for i in from..features.len() {
+        b = step(features, i, b).ok()?;
+    }
+    b.map(Body::into_compact)
+}
+
 /// wasm has no threads.
 fn wasm_one(threads: usize) -> usize {
     if cfg!(target_family = "wasm") { 1 } else { threads }
@@ -672,17 +702,14 @@ fn nary_run(
             )
         };
         let mut body = modified()?;
-        let built = build_tools(features, m + 1, threads, true)?;
-        if built.is_empty() {
-            return Ok(body);
-        }
-        if let [(tool, c, _)] = &built[..] {
-            if single(&mut body, tool, *c) {
-                return Ok(body);
+        if short(features, m + 1) {
+            if let Some(b) = sequential(features, m + 1, body) {
+                return Ok(b);
             }
-            // the boolean refused, perhaps halfway: the n-ary pass from the part as it was
+            // one refused: the n-ary pass from the part as it was
             body = modified()?;
         }
+        let built = build_tools(features, m + 1, threads, true)?;
         let mut tools: Vec<&Body> = vec![&body];
         tools.extend(built.iter().map(|t| &t.0));
         let ops: Vec<Op> = built.iter().map(|t| op_of(t.1)).collect();
@@ -692,13 +719,13 @@ fn nary_run(
     if features.get(start).is_none_or(|f| !starts(f)) {
         return Err(RegenError::NothingToCombine { feature: 0 });
     }
-    let mut built = build_tools(features, start, threads, true)?;
-    if let [(base, _, _), (tool, c, _)] = &mut built[..] {
-        if single(base, tool, *c) {
-            return Ok(built.swap_remove(0).0);
+    if short(features, start + 1) {
+        let base = tools(features, start, true)?.swap_remove(0).0;
+        if let Some(b) = sequential(features, start + 1, base) {
+            return Ok(b);
         }
-        built = build_tools(features, start, threads, true)?;
     }
+    let built = build_tools(features, start, threads, true)?;
     let tools: Vec<&Body> = built.iter().map(|t| &t.0).collect();
     let ops: Vec<Op> = built[1..].iter().map(|t| op_of(t.1)).collect();
     let solids: Vec<Shape> = built.iter().map(|t| t.2.clone()).collect();
@@ -727,16 +754,6 @@ fn nary_run(
         cut_root(features.len() - 1),
     )
     .map_err(err)
-}
-
-/// A run of one tool: the sequential regen's boolean, the same body for less work. False where
-/// that fails (`body` may be left halfway; the caller takes the n-ary pass from the start).
-fn single(body: &mut Body, tool: &Body, c: Combine) -> bool {
-    if boolean_into(body, tool, op_of(c), 0).is_err() {
-        return false;
-    }
-    *body = std::mem::take(body).into_compact();
-    true
 }
 
 /// The part as regeneration hands it out: faces on one surface and edges on one curve joined
