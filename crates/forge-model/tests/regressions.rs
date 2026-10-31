@@ -3604,3 +3604,37 @@ fn self_intersecting_profile_is_rejected() {
         Some(forge_ops::ProfileError::SelfIntersecting { loop_index: 0 })
     );
 }
+
+/// A wall flush with a rounded base's back edge, ending where the corner arcs start. As a part
+/// file:
+///     extrude 8 rrect -40 -25 80 50 6
+///     extrude 8 xz at 0 25 0 rect -40 0 80 45
+/// The boolean fails: Internal("face split crossed itself").
+#[test]
+#[ignore = "boolean: face split crossed itself"]
+fn wall_flush_with_rounded_base_edge() {
+    let block = |plane, l: ProfileLoop| Feature::Extrude {
+        profile: Profile {
+            plane,
+            loops: vec![l],
+        },
+        extent: Extent::Distance(8.0),
+        op: Combine::New,
+    };
+    let mut wall = block(
+        fr([0.0, 25.0, 0.0], [0.0, -1.0, 0.0], [1.0, 0.0, 0.0]),
+        Profile::rectangle(Point2::new(-40.0, 0.0), 80.0, 45.0, 0),
+    );
+    if let Feature::Extrude { op, .. } = &mut wall {
+        *op = Combine::Add;
+    }
+    regenerates_valid(Part {
+        features: vec![
+            block(
+                forge_math::Frame::WORLD,
+                Profile::rounded_rectangle(Point2::new(-40.0, -25.0), 80.0, 50.0, 6.0, 0),
+            ),
+            wall,
+        ],
+    });
+}

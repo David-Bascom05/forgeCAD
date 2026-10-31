@@ -56,17 +56,22 @@ impl Session {
 
     /// The file's model, brought up to date with what is on disk.
     pub fn model(&mut self, file: &str) -> Result<&mut Model, String> {
-        // every check, and the read, on the one path with links resolved
-        let real = std::fs::canonicalize(file).map_err(|e| format!("{file}: {e}"))?;
-        if real.extension().is_none_or(|x| x != "fc") {
-            return Err(format!("{file}: not a .fc part file"));
-        }
-        if let Some(root) = &self.root
-            && !real.starts_with(root)
-        {
-            return Err(format!("{file}: outside {}", root.display()));
-        }
-        let src = std::fs::read_to_string(&real).map_err(|e| format!("{file}: {e}"))?;
+        // every check, and the read, on the one path with links resolved. A directory on it
+        // swapped for a link between the check and the read still escapes the root; closing
+        // that needs openat with O_NOFOLLOW per component, which std does not offer.
+        let real = std::fs::canonicalize(file)
+            .ok()
+            .filter(|r| r.extension().is_some_and(|x| x == "fc"));
+        let src = match (&self.root, real) {
+            // rooted, every refusal reads the same and no OS error goes back: a client learns
+            // nothing about paths outside the root
+            (Some(root), Some(r)) if r.starts_with(root) => {
+                std::fs::read_to_string(&r).map_err(|_| format!("{file}: cannot read"))?
+            }
+            (Some(_), _) => return Err(format!("{file}: not a part file under the root")),
+            (None, Some(r)) => std::fs::read_to_string(&r).map_err(|e| format!("{file}: {e}"))?,
+            (None, None) => return Err(format!("{file}: no such .fc part file")),
+        };
         let m = self.models.entry(file.to_string()).or_default();
         m.update(&src);
         Ok(m)
@@ -133,7 +138,7 @@ impl Session {
             // a failed build's numbers are in the JSON; the text keeps to the error
             if ok {
                 text.push_str(&format!(
-                    "\nvolume {} area {} bbox {}\nfaces {f} edges {e} verts {v}",
+                    "\nvolume {} area {} (approx) bbox {}\nfaces {f} edges {e} verts {v}",
                     short(volume),
                     short(area),
                     bbox.map(short).join(" ")
@@ -561,12 +566,24 @@ fillet 4 (edges between base wall concave)
         assert!(s.run("build", &args(&inside, &[])).ok);
         let r = s.run("build", &args(&key, &[]));
         assert!(
-            !r.ok && r.text.contains("not a .fc part file") && !r.text.contains("BEGIN"),
+            !r.ok && r.text.contains("not a part file under the root") && !r.text.contains("BEGIN"),
             "{}",
             r.text
         );
         let r = s.run("build", &args(&away, &[]));
-        assert!(!r.ok && r.text.contains("outside"), "{}", r.text);
+        assert!(
+            !r.ok && r.text.contains("not a part file under the root"),
+            "{}",
+            r.text
+        );
+        // outside the root, a file that exists and one that does not read the same
+        let gone = format!("{}/nothing.fc", outside.0.display());
+        let (a, b) = (
+            s.run("build", &args(&away, &[])),
+            s.run("build", &args(&gone, &[])),
+        );
+        assert_eq!(a.text.replace(&away, "F"), b.text.replace(&gone, "F"));
+        assert!(!b.text.contains("os error"), "{}", b.text);
         let sneaky = format!(
             "{}/../{}/q.fc",
             dir.0.display(),
@@ -581,9 +598,17 @@ fillet 4 (edges between base wall concave)
             std::os::unix::fs::symlink(&away, &out_link).expect("link");
             std::os::unix::fs::symlink(&key, &key_link).expect("link");
             let r = s.run("build", &args(&out_link.to_string_lossy(), &[]));
-            assert!(!r.ok && r.text.contains("outside"), "{}", r.text);
+            assert!(
+                !r.ok && r.text.contains("not a part file under the root"),
+                "{}",
+                r.text
+            );
             let r = s.run("build", &args(&key_link.to_string_lossy(), &[]));
-            assert!(!r.ok && r.text.contains("not a .fc"), "{}", r.text);
+            assert!(
+                !r.ok && r.text.contains("not a part file under the root"),
+                "{}",
+                r.text
+            );
             let r = Session::default().run("build", &args(&key_link.to_string_lossy(), &[]));
             assert!(!r.ok && !r.text.contains("BEGIN"), "{}", r.text);
         }

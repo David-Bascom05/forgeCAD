@@ -43,7 +43,7 @@ top bottom left right front back   near X Y Z              keep the extreme ones
 
 Commands (a few lines of text; `--json` for JSON):
 ```
-forgecad build F                    ok, or error line N + hint; volume area bbox counts
+forgecad build F                    ok, or error line N + hint; approx volume, area; bbox, counts
 forgecad query F SEL [--at FEAT]    @d644 line -x len=60 at 0,20,40   (one per hit)
 forgecad measure F REF [REF]        area|length radius centre; two: distance angle
 forgecad measure F mass|wall        volume area centroid inertia; thinnest wall
