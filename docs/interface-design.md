@@ -1,8 +1,9 @@
 # Interface design
 
 The kernel can build real parts. This is the plan for what sits on top of it: the app, the
-browser client, the host and the protocol between them. Status: agreed design; only the renderer is built
-(`interface/forge-render`).
+browser client, the host and the protocol between them. Status: agreed design; the renderer
+(`interface/forge-render`), the tools and op log (`forge_agent::tools`, `forge_doc::wire`) and the live
+loop (`forge_agent::live`, `forge_render::live`) are built.
 
 The one rule: **no lag.** Where a choice trades anything against speed, speed wins. If an
 existing tool is too slow, we write our own, as we did with the kernel.
@@ -46,6 +47,22 @@ and so on.
 
 Agents join a live session as ordinary clients, so you watch their edits appear. Talking to an
 agent from inside the UI comes later.
+
+As built: `tools::Call` is the typed call; `Part::call` commits calls, `Part::act` commits the same
+calls as text lines, all or none. A commit appends one `wire::Entry` to `PART.fc.log`, the ops by
+stable id (with what undoes them, the file's hash, its face count and volume) and rewrites the `.fc`
+file; each op prints back as a text line. The first entry holds the file's text, as does an entry for
+a hand edit, where undo stops. The agent surface is five MCP tools (`act query measure render help`),
+replies are diffs, and the grammar is behind `help TOPIC`, so AGENTS.md stays short.
+
+## Live loop
+
+A worker thread owns the part. The UI thread swaps the newest value into a slot and takes what is
+ready, and so never waits on the kernel; a value overtaken before it started is dropped. The worker
+rebuilds from the changed feature and meshes only the faces whose key changed (their name, surface
+and boundary: `facemesh::key`), at a level coarse enough for a drag. Each face has its own span of the
+GPU buffers, so an edit writes only its faces. Releasing commits one line and brings the full mesh back.
+`forge-render --drag-bench` is the 16 ms benchmark: value set to frame done, for each bench part.
 
 ## Protocol
 

@@ -201,6 +201,10 @@ pub struct Renderer {
     binds: wgpu::BindGroup,
     globals: wgpu::Buffer,
     placements: wgpu::Buffer,
+    tints: wgpu::Buffer,
+    bind_layout: wgpu::BindGroupLayout,
+    /// A part being dragged, drawn from these faces instead of its mesh: which part, and them.
+    live: Option<(u32, crate::livegpu::LiveGpu)>,
     vertices: wgpu::Buffer,
     indices: wgpu::Buffer,
     instances: wgpu::Buffer,
@@ -309,6 +313,143 @@ pub async fn open_device(
         .await
         .map_err(|e| format!("no device: {e}"))?;
     Ok((device, queue, adapter))
+}
+
+/// A parts' meshes on the GPU.
+struct Geometry {
+    lods: Vec<Vec<LodDraw>>,
+    index: Vec<Vec<PickIndex>>,
+    vertices: wgpu::Buffer,
+    indices: wgpu::Buffer,
+    vertex_faces: wgpu::Buffer,
+    line_indices: wgpu::Buffer,
+    segments: wgpu::Buffer,
+}
+
+fn geometry(device: &wgpu::Device, parts: &[PartMesh]) -> Geometry {
+    let (mut vbytes, mut ibytes, mut sbytes) = (0u64, 0u64, 0u64);
+    let mut lods = Vec::with_capacity(parts.len());
+    for p in parts {
+        let mut row = Vec::with_capacity(p.lods.len());
+        for l in &p.lods {
+            row.push(LodDraw {
+                first_index: (ibytes / 4) as u32,
+                indices: (l.indices.len() / 4) as u32,
+                base_vertex: (vbytes / VERTEX as u64) as i32,
+                first_segment: (sbytes / SEGMENT as u64) as u32,
+                segments: (l.segments.len() / SEGMENT) as u32,
+                edges: l.fins,
+                far_segments: 0,
+            });
+            vbytes += l.vertices.len() as u64;
+            ibytes += l.indices.len() as u64;
+            sbytes += l.segments.len() as u64;
+        }
+        // a clustered level is drawn where its chord is about a pixel
+        if let Some(known) = p.lods.iter().rposition(|l| !l.segments.is_empty()) {
+            let source = &p.lods[known];
+            let lengths: Vec<(f32, u32)> = source
+                .edges
+                .iter()
+                .map(|e| (edge_length(source, e), e.count))
+                .collect();
+            for (k, l) in p.lods.iter().enumerate().skip(known + 1) {
+                row[k].far_segments = lengths
+                    .iter()
+                    .take_while(|(length, _)| *length >= FAR_EDGE_PX * l.chord)
+                    .map(|(_, count)| count)
+                    .sum();
+            }
+        }
+        lods.push(row);
+    }
+    let all_lods = || parts.iter().flat_map(|p| &p.lods);
+    let v: Vec<&[u8]> = all_lods().map(|l| &l.vertices[..]).collect();
+    let i: Vec<&[u8]> = all_lods().map(|l| &l.indices[..]).collect();
+    let s: Vec<&[u8]> = all_lods().map(|l| &l.segments[..]).collect();
+    // which face each vertex is on, for picks: whole buffers line up with the vertices
+    let mut face_bytes = vec![0u8; (vbytes / VERTEX as u64) as usize * 4];
+    let mut base = 0usize;
+    for l in all_lods() {
+        for f in &l.faces {
+            let from = (base + f.first_vertex as usize) * 4;
+            let to = from + f.vertices as usize * 4;
+            for out in face_bytes[from..to].as_chunks_mut::<4>().0 {
+                *out = f.face.to_le_bytes();
+            }
+        }
+        base += l.vertices.len() / VERTEX;
+    }
+    let vertex_faces = filled(
+        device,
+        "vertex faces",
+        face_bytes.len() as u64,
+        wgpu::BufferUsages::VERTEX,
+        vec![&face_bytes],
+    );
+    // one pattern of two triangles per segment, as long as the longest level needs; a level
+    // starts at its first segment's vertices
+    let most = all_lods().map(|l| l.segments.len() / SEGMENT).max().unwrap_or(0) as u32;
+    let mut pattern = Vec::with_capacity(most as usize * 24);
+    for k in 0..most {
+        for v in [0, 1, 2, 2, 1, 3] {
+            pattern.extend_from_slice(&(k * 4 + v).to_le_bytes());
+        }
+    }
+    let line_indices = filled(
+        device,
+        "line indices",
+        pattern.len() as u64,
+        wgpu::BufferUsages::INDEX,
+        vec![&pattern],
+    );
+    let index: Vec<Vec<PickIndex>> = parts
+        .iter()
+        .zip(&lods)
+        .map(|(p, row)| {
+            p.lods
+                .iter()
+                .zip(row)
+                .map(|(l, d)| PickIndex {
+                    faces: l.faces.clone(),
+                    edges: l.edges.clone(),
+                    first_segment: d.first_segment,
+                })
+                .collect()
+        })
+        .collect();
+    let vertices = filled(device, "vertices", vbytes, wgpu::BufferUsages::VERTEX, v);
+    let indices = filled(device, "indices", ibytes, wgpu::BufferUsages::INDEX, i);
+    let segments = filled(device, "segments", sbytes, wgpu::BufferUsages::STORAGE, s);
+    Geometry {
+        lods,
+        index,
+        vertices,
+        indices,
+        vertex_faces,
+        line_indices,
+        segments,
+    }
+}
+
+fn bind_all(
+    device: &wgpu::Device,
+    layout: &wgpu::BindGroupLayout,
+    buffers: [&wgpu::Buffer; 4],
+) -> wgpu::BindGroup {
+    let entries: Vec<wgpu::BindGroupEntry> = buffers
+        .iter()
+        .enumerate()
+        .map(|(k, b)| wgpu::BindGroupEntry {
+            binding: k as u32,
+            resource: b.as_entire_binding(),
+        })
+        .collect();
+    device.create_bind_group(&wgpu::BindGroupDescriptor {
+        label: None,
+        layout,
+        entries: &entries,
+    })
 }
 
 impl Renderer {
@@ -514,100 +655,15 @@ impl Renderer {
         let dot = pipeline(("dot_vs", "dot_fs"), &[], None, &tests, msaa, &over);
         let back = pipeline(("hud_vs", "back_fs"), &[], None, &always, msaa, &opaque);
 
-        let (mut vbytes, mut ibytes, mut sbytes) = (0u64, 0u64, 0u64);
-        let mut lods = Vec::with_capacity(parts.len());
-        for p in parts {
-            let mut row = Vec::with_capacity(p.lods.len());
-            for l in &p.lods {
-                row.push(LodDraw {
-                    first_index: (ibytes / 4) as u32,
-                    indices: (l.indices.len() / 4) as u32,
-                    base_vertex: (vbytes / VERTEX as u64) as i32,
-                    first_segment: (sbytes / SEGMENT as u64) as u32,
-                    segments: (l.segments.len() / SEGMENT) as u32,
-                    edges: l.fins,
-                    far_segments: 0,
-                });
-                vbytes += l.vertices.len() as u64;
-                ibytes += l.indices.len() as u64;
-                sbytes += l.segments.len() as u64;
-            }
-            // a clustered level is drawn where its chord is about a pixel
-            if let Some(known) = p.lods.iter().rposition(|l| !l.segments.is_empty()) {
-                let source = &p.lods[known];
-                let lengths: Vec<(f32, u32)> = source
-                    .edges
-                    .iter()
-                    .map(|e| (edge_length(source, e), e.count))
-                    .collect();
-                for (k, l) in p.lods.iter().enumerate().skip(known + 1) {
-                    row[k].far_segments = lengths
-                        .iter()
-                        .take_while(|(length, _)| *length >= FAR_EDGE_PX * l.chord)
-                        .map(|(_, count)| count)
-                        .sum();
-                }
-            }
-            lods.push(row);
-        }
-        let all_lods = || parts.iter().flat_map(|p| &p.lods);
-        let v: Vec<&[u8]> = all_lods().map(|l| &l.vertices[..]).collect();
-        let i: Vec<&[u8]> = all_lods().map(|l| &l.indices[..]).collect();
-        let s: Vec<&[u8]> = all_lods().map(|l| &l.segments[..]).collect();
-        // which face each vertex is on, for picks: whole buffers line up with the vertices
-        let mut face_bytes = vec![0u8; (vbytes / VERTEX as u64) as usize * 4];
-        let mut base = 0usize;
-        for l in all_lods() {
-            for f in &l.faces {
-                let from = (base + f.first_vertex as usize) * 4;
-                let to = from + f.vertices as usize * 4;
-                for out in face_bytes[from..to].as_chunks_mut::<4>().0 {
-                    *out = f.face.to_le_bytes();
-                }
-            }
-            base += l.vertices.len() / VERTEX;
-        }
-        let vertex_faces = filled(
-            &device,
-            "vertex faces",
-            face_bytes.len() as u64,
-            wgpu::BufferUsages::VERTEX,
-            vec![&face_bytes],
-        );
-        // one pattern of two triangles per segment, as long as the longest level needs; a level
-        // starts at its first segment's vertices
-        let most = all_lods().map(|l| l.segments.len() / SEGMENT).max().unwrap_or(0) as u32;
-        let mut pattern = Vec::with_capacity(most as usize * 24);
-        for k in 0..most {
-            for v in [0, 1, 2, 2, 1, 3] {
-                pattern.extend_from_slice(&(k * 4 + v).to_le_bytes());
-            }
-        }
-        let line_indices = filled(
-            &device,
-            "line indices",
-            pattern.len() as u64,
-            wgpu::BufferUsages::INDEX,
-            vec![&pattern],
-        );
-        let index: Vec<Vec<PickIndex>> = parts
-            .iter()
-            .zip(&lods)
-            .map(|(p, row)| {
-                p.lods
-                    .iter()
-                    .zip(row)
-                    .map(|(l, d)| PickIndex {
-                        faces: l.faces.clone(),
-                        edges: l.edges.clone(),
-                        first_segment: d.first_segment,
-                    })
-                    .collect()
-            })
-            .collect();
-        let vertices = filled(&device, "vertices", vbytes, wgpu::BufferUsages::VERTEX, v);
-        let indices = filled(&device, "indices", ibytes, wgpu::BufferUsages::INDEX, i);
-        let segments = filled(&device, "segments", sbytes, wgpu::BufferUsages::STORAGE, s);
+        let Geometry {
+            lods,
+            index,
+            vertices,
+            indices,
+            vertex_faces,
+            line_indices,
+            segments,
+        } = geometry(&device, parts);
 
         let placements = filled(
             &device,
@@ -646,28 +702,7 @@ impl Renderer {
             usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
             mapped_at_creation: false,
         });
-        let binds = device.create_bind_group(&wgpu::BindGroupDescriptor {
-            label: None,
-            layout: &bind_layout,
-            entries: &[
-                wgpu::BindGroupEntry {
-                    binding: 0,
-                    resource: globals.as_entire_binding(),
-                },
-                wgpu::BindGroupEntry {
-                    binding: 1,
-                    resource: placements.as_entire_binding(),
-                },
-                wgpu::BindGroupEntry {
-                    binding: 2,
-                    resource: segments.as_entire_binding(),
-                },
-                wgpu::BindGroupEntry {
-                    binding: 3,
-                    resource: tints.as_entire_binding(),
-                },
-            ],
-        });
+        let binds = bind_all(&device, &bind_layout, [&globals, &placements, &segments, &tints]);
 
         let pick_target = |format, usage, label| {
             let t = device.create_texture(&wgpu::TextureDescriptor {
@@ -704,28 +739,11 @@ impl Renderer {
             usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
             mapped_at_creation: false,
         });
-        let pick_binds = device.create_bind_group(&wgpu::BindGroupDescriptor {
-            label: None,
-            layout: &bind_layout,
-            entries: &[
-                wgpu::BindGroupEntry {
-                    binding: 0,
-                    resource: pick_globals.as_entire_binding(),
-                },
-                wgpu::BindGroupEntry {
-                    binding: 1,
-                    resource: placements.as_entire_binding(),
-                },
-                wgpu::BindGroupEntry {
-                    binding: 2,
-                    resource: segments.as_entire_binding(),
-                },
-                wgpu::BindGroupEntry {
-                    binding: 3,
-                    resource: tints.as_entire_binding(),
-                },
-            ],
-        });
+        let pick_binds = bind_all(
+            &device,
+            &bind_layout,
+            [&pick_globals, &placements, &segments, &tints],
+        );
         let pick = PickState {
             id: pick_id,
             id_view: pick_id_view,
@@ -862,6 +880,9 @@ impl Renderer {
             binds,
             globals,
             placements,
+            tints,
+            bind_layout,
+            live: None,
             vertices,
             indices,
             instances,
@@ -898,6 +919,58 @@ impl Renderer {
                 size,
             );
         }
+    }
+
+    /// New meshes for the parts, the same parts in the same places.
+    pub fn set_parts(&mut self, parts: &[PartMesh]) {
+        let g = geometry(&self.device, parts);
+        let layout = &self.bind_layout;
+        let all = |globals| [globals, &self.placements, &g.segments, &self.tints];
+        self.binds = bind_all(&self.device, layout, all(&self.globals));
+        self.pick.binds = bind_all(&self.device, layout, all(&self.pick.globals));
+        self.lods = g.lods;
+        self.index = g.index;
+        self.vertices = g.vertices;
+        self.indices = g.indices;
+        self.vertex_faces = g.vertex_faces;
+        self.line_indices = g.line_indices;
+    }
+
+    /// Takes in a dragged part's changed faces, uploading those only: the bytes it wrote.
+    pub fn live_apply(&mut self, part: u32, delta: &crate::livegpu::Delta) -> u64 {
+        let (globals, placements, tints) = (&self.globals, &self.placements, &self.tints);
+        let (_, gpu) = self.live.get_or_insert_with(|| {
+            let layout = &self.bind_layout;
+            let bind = |segments: &wgpu::Buffer| {
+                bind_all(&self.device, layout, [globals, placements, segments, tints])
+            };
+            (part, crate::livegpu::LiveGpu::new(&self.device, &bind))
+        });
+        let layout = &self.bind_layout;
+        let bind =
+            |segments: &wgpu::Buffer| bind_all(&self.device, layout, [globals, placements, segments, tints]);
+        gpu.apply(&self.device, &self.queue, delta, &bind)
+    }
+
+    /// Draws the dragged part from its faces (`on`) or its mesh again.
+    pub fn live_show(&mut self, on: bool) {
+        if let Some((_, gpu)) = &mut self.live {
+            gpu.shown = on;
+        }
+    }
+
+    /// Triangles the dragged part has on the GPU.
+    pub fn live_tris(&self) -> u64 {
+        self.live.as_ref().map_or(0, |l| l.1.tris())
+    }
+
+    pub fn live_shown(&self) -> bool {
+        self.live_part().is_some()
+    }
+
+    /// The part drawn from its faces at the moment, if one is.
+    fn live_part(&self) -> Option<u32> {
+        self.live.as_ref().filter(|l| l.1.shown).map(|l| l.0)
     }
 
     /// Waits for the GPU to finish what it was given.
@@ -1319,7 +1392,8 @@ impl Renderer {
             pass.set_vertex_buffer(0, self.vertices.slice(..));
             pass.set_vertex_buffer(1, self.instances.slice(..));
             pass.set_index_buffer(self.indices.slice(..), wgpu::IndexFormat::Uint32);
-            for d in &scene.draws {
+            let live = self.live_part();
+            for d in scene.draws.iter().filter(|d| Some(d.part) != live) {
                 let l = self.lods[d.part as usize][d.lod as usize];
                 pass.draw_indexed(
                     l.first_index..l.first_index + l.indices,
@@ -1331,7 +1405,7 @@ impl Renderer {
             }
             if cut {
                 pass.set_pipeline(&self.cap);
-                for d in &scene.cut_draws {
+                for d in scene.cut_draws.iter().filter(|d| Some(d.part) != live) {
                     let l = self.lods[d.part as usize][d.lod as usize];
                     pass.draw_indexed(
                         l.first_index..l.first_index + l.indices,
@@ -1346,7 +1420,7 @@ impl Renderer {
                 pass.set_pipeline(if cut { &self.line_cut } else { &self.line });
                 pass.set_vertex_buffer(0, self.instances.slice(..));
                 pass.set_index_buffer(self.line_indices.slice(..), wgpu::IndexFormat::Uint32);
-                for d in &scene.draws {
+                for d in scene.draws.iter().filter(|d| Some(d.part) != live) {
                     let mut l = self.lods[d.part as usize][d.lod as usize];
                     if l.segments == 0 && self.line_mode == LineMode::Far {
                         let far = l.far_segments;
@@ -1363,6 +1437,31 @@ impl Renderer {
                         drawn.draws += 1;
                     }
                 }
+            }
+            if let Some((_, gpu)) = self.live.as_ref().filter(|_| live.is_some()) {
+                let surface = if cut { &self.surface_cut } else { &self.surface };
+                let line = if cut { &self.line_cut } else { &self.line };
+                let lines = self.line_mode != LineMode::None;
+                let cap = cut.then_some(&self.cap);
+                for d in scene.draws.iter().filter(|d| Some(d.part) == live) {
+                    let lined = lines.then_some(line);
+                    gpu.draw(
+                        &mut pass,
+                        surface,
+                        lined,
+                        d.first..d.first + d.count,
+                        &self.instances,
+                    );
+                    drawn.tris += gpu.tris() * d.count as u64;
+                    drawn.segments += gpu.segments() * d.count as u64;
+                    drawn.draws += 1;
+                }
+                if let Some(cap) = cap {
+                    for d in scene.cut_draws.iter().filter(|d| Some(d.part) == live) {
+                        gpu.draw(&mut pass, cap, None, d.first..d.first + d.count, &self.instances);
+                    }
+                }
+                pass.set_bind_group(0, &self.binds, &[]);
             }
             self.draw_marks(&mut pass, scene, overlay.marks);
             if let Some((at, side, _)) = overlay.cube {

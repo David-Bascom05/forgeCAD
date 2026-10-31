@@ -11,6 +11,7 @@ mod fillet_repros;
 pub mod help;
 pub mod history;
 pub mod json;
+pub mod live;
 pub mod measure;
 pub mod model;
 pub mod png;

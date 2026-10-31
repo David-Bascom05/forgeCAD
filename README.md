@@ -42,9 +42,9 @@ The repository is split by what a thing is:
 
 | `interface/` | what |
 |---|---|
-| `forge-doc` | the document model behind part files |
-| `forge-agent` | the `.fc` part file, selectors, measuring, rendering, incremental sessions |
-| `forge-cli` | `forgecad build/query/measure/render/check/diff`, `serve`, `mcp` (see AGENTS.md) |
+| `forge-doc` | the document model behind part files, its ops and their binary form |
+| `forge-agent` | the `.fc` part file, the tools, selectors, measuring, rendering, incremental sessions, the live loop |
+| `forge-cli` | `forgecad act/query/measure/render/help`, `build/check/diff`, `serve`, `mcp` (see AGENTS.md) |
 | `forge-render` | the renderer, wgpu native and in the browser; its own workspace, built apart from the kernel |
 
 | `verify/` | what |
@@ -73,6 +73,9 @@ The toolchain is pinned in `rust-toolchain.toml`; rustup installs it on first us
 cargo run --release -- gearbox                      # a bench part or a .fc path (`--help` lists keys and mouse)
 cargo run --release -- --stress 5000                # the 15 bench parts placed 5,000 times
 cargo run --release -- --stress 5000 --bench        # a fixed orbit, frame times on stdout, no window (--window: with one)
+cargo run --release -- crank --dims                 # the numbers a part has
+cargo run --release -- crank --drag len             # left drag changes one live, release commits it
+cargo run --release -- --drag-bench                 # value change to frame, each bench part, no window
 cargo test                                          # GPU tests skip where there is no GPU
 sh web/build.sh OUT                                 # the browser page and the bench parts' meshes
 ```

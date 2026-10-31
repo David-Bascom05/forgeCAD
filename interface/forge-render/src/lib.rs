@@ -3,6 +3,7 @@
 
 pub mod bench;
 pub mod camera;
+pub mod livegpu;
 pub mod mesh;
 pub mod nav;
 pub mod render;
@@ -11,6 +12,10 @@ pub mod viewer;
 
 #[cfg(not(target_arch = "wasm32"))]
 pub mod cache;
+#[cfg(not(target_arch = "wasm32"))]
+pub mod dragbench;
+#[cfg(not(target_arch = "wasm32"))]
+pub mod live;
 #[cfg(not(target_arch = "wasm32"))]
 pub mod load;
 #[cfg(not(target_arch = "wasm32"))]

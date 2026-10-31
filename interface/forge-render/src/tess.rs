@@ -2,7 +2,7 @@
 //! farthest by clustering a coarse one (a part's topology floors its tessellation: research/render).
 
 use crate::mesh::{ALWAYS, EdgeRange, FaceRange, Lod, PartMesh, SEGMENT, VERTEX};
-use forge_geom::SurfaceGeom;
+use forge_geom::{CurveGeom, SurfaceGeom};
 use forge_math::{Point3, Vec3};
 use forge_mesh::{Quality, TessError, tessellate};
 use forge_topo::{Body, EdgeId, FaceId};
@@ -19,6 +19,55 @@ const CLUSTER_STEP: f32 = 3.0;
 const CLUSTER_END: f32 = 0.5;
 /// How far a vertex can move in a cluster, in cells (a cell's diagonal).
 const CELL_REACH: f32 = 1.75;
+
+/// The (chord mm, largest chord turn in degrees) of the tessellated levels, finest first.
+pub fn chords() -> &'static [(f64, f64)] {
+    &CHORDS
+}
+
+/// A level of one face made alone: its line segments as the whole part would draw them. Each
+/// edge comes from one of its two faces only, the one whose name is lower, so it isn't drawn
+/// twice whichever faces an edit re-meshes; an edge between faces meeting smoothly is faint.
+pub fn keep_own_edges(body: &Body, f: FaceId, alone: &Body, lod: &Lod) -> Vec<u8> {
+    let own = body.face(f).name;
+    let mut out = Vec::with_capacity(lod.segments.len());
+    for r in &lod.edges {
+        let name = alone.edge(EdgeId(r.edge)).name;
+        let (mut keep, mut tangent) = (true, false);
+        if let Some(e) = body.edge_by_name(name) {
+            let faces: Vec<FaceId> = body
+                .edge(e)
+                .coedges
+                .iter()
+                .map(|&c| body.coedge_face(c))
+                .collect();
+            if let [a, b] = faces[..] {
+                let other = if a == f { b } else { a };
+                keep = own.0 <= body.face(other).name.0;
+                if keep {
+                    let at = body
+                        .edge(e)
+                        .curve
+                        .eval((body.edge(e).range.lo + body.edge(e).range.hi) * 0.5);
+                    let up = Vec3::new(0.0, 0.0, 1.0);
+                    let (x, y) = (exact_normal(body, a, at, up), exact_normal(body, b, at, up));
+                    tangent = x.dot(y) > TANGENT_COS;
+                }
+            }
+        }
+        if keep {
+            let (from, to) = (r.first as usize * SEGMENT, (r.first + r.count) as usize * SEGMENT);
+            let at = out.len();
+            out.extend_from_slice(&lod.segments[from..to]);
+            for s in out[at..].as_chunks_mut::<SEGMENT>().0 {
+                s[28..30].copy_from_slice(&(tangent as i16).to_le_bytes());
+            }
+        }
+    }
+    let fins = lod.fins as usize * SEGMENT;
+    out.extend_from_slice(&lod.segments[fins..]);
+    out
+}
 
 /// What a level's numbers depend on, for the build cache's key.
 pub fn ladder_key() -> String {

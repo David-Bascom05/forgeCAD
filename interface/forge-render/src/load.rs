@@ -33,6 +33,18 @@ pub fn body(part: &str) -> Result<forge_topo::Body, String> {
     model.body().cloned().ok_or(format!("{part}: nothing built"))
 }
 
+/// The part as tools act on it: a bench part in memory, a file with its commits going to the file.
+pub fn tool_part(part: &str) -> Result<forge_agent::tools::Part, String> {
+    let p = match bench::src(part) {
+        Some(src) => forge_agent::tools::Part::of(bench::model(src)),
+        None => Session::default().take_part(part)?,
+    };
+    if let Some(e) = &p.model.error {
+        return Err(format!("{part}: line {}: {}", p.model.lines[e.at].no, e.msg));
+    }
+    Ok(p)
+}
+
 fn build(part: &str) -> Result<PartMesh, String> {
     tess::build_part(&body(part)?).map_err(|e| format!("{part}: {e:?}"))
 }

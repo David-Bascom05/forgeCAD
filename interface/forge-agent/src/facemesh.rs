@@ -24,7 +24,7 @@ pub struct Cache {
 
 /// What a face's triangles depend on: its name, sense, surface (when it has a formula), and
 /// every boundary edge's name, direction, range and ends.
-fn key(body: &Body, f: FaceId) -> Name {
+pub fn key(body: &Body, f: FaceId) -> Name {
     let face = body.face(f);
     let mut k = face.name.with(face.same_sense as u64);
     if !matches!(face.surface, Surface::Procedural(_)) {
@@ -58,7 +58,7 @@ fn key(body: &Body, f: FaceId) -> Name {
 }
 
 /// The face alone, as a body of its own (its edges and vertices copied), to be meshed.
-fn alone(body: &Body, f: FaceId) -> Body {
+pub fn alone(body: &Body, f: FaceId) -> Body {
     let face = body.face(f);
     let mut b = Body::new();
     let shell = b.add_shell();

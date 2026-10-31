@@ -73,3 +73,81 @@ fn looking_away_draws_nothing() {
     r.wait();
     assert_eq!(drawn.placements, 0);
 }
+
+fn off_background(rgb: &[u8]) -> usize {
+    let px = rgb.as_chunks::<3>().0;
+    px.iter().filter(|p| **p != px[0]).count()
+}
+
+/// A part dragged is drawn from its faces in their own slots: about what its mesh draws, and a
+/// new value changes the picture, the worker's numbers coming back on the frame.
+#[test]
+fn a_dragged_part_draws_from_its_faces_and_follows_the_value() {
+    use forge_agent::live::Event;
+    use forge_agent::tools::Part;
+    use forge_render::live::{self, Out};
+    let src = "w = 60\nbase: extrude 10 rect 0 0 w 40\nhole 8 -xy at 15 20 10 thru\nfillet 2 (edges of base along +z)\n";
+    let part = Part::new(src);
+    let dim = part.dims().into_iter().find(|d| d.name == "w").unwrap();
+    let mesh = forge_render::tess::build_part(part.model.body().unwrap()).unwrap();
+    let parts = [mesh];
+    let mut scene = Scene::new(&part_info(&parts), vec![Placement::at(0, [0.0; 3])]);
+    let size = (320, 200);
+    let Some(mut r) = renderer(&parts, &scene, size) else {
+        return;
+    };
+    let target = Offscreen::new(&r.device, size);
+    let (center, radius) = scene.bounds();
+    let cam = Camera::fit(center, radius * 1.5);
+    r.frame(&target.view, &mut scene, &cam, Overlay::default());
+    r.wait();
+    let whole = target.read_rgb(&r);
+
+    let mut l = live::start(part);
+    let next = |l: &mut forge_agent::live::Live<Out>, r: &mut Renderer, scene: &mut Scene, seq: u64| {
+        for _ in 0..20_000 {
+            for e in l.poll() {
+                if let Event::Frame(f) = e {
+                    assert!(f.failure.is_none(), "{:?}", f.failure);
+                    if let Some(Out::Delta(d)) = f.out {
+                        r.live_apply(0, &d);
+                        scene.set_part(0, d.center, d.radius, vec![d.chord]);
+                        if f.seq == seq {
+                            return d;
+                        }
+                    }
+                }
+            }
+            std::thread::sleep(std::time::Duration::from_millis(1));
+        }
+        panic!("the worker never answered");
+    };
+    let warm = next(&mut l, &mut r, &mut scene, 0);
+    assert_eq!(warm.added.len(), warm.faces);
+    r.live_show(true);
+    r.frame(&target.view, &mut scene, &cam, Overlay::default());
+    r.wait();
+    let faces = target.read_rgb(&r);
+    let (a, b) = (off_background(&whole) as f64, off_background(&faces) as f64);
+    assert!(
+        (a - b).abs() / a < 0.02,
+        "{a} pixels from the mesh, {b} from the faces"
+    );
+
+    let seq = l.drag(dim.at.op("90".into()));
+    let moved = next(&mut l, &mut r, &mut scene, seq);
+    assert!(moved.meshed < moved.faces, "{} of {}", moved.meshed, moved.faces);
+    assert!(moved.radius > warm.radius);
+    r.frame(&target.view, &mut scene, &cam, Overlay::default());
+    r.wait();
+    let after = target.read_rgb(&r);
+    assert!(off_background(&after) as f64 > b * 1.05);
+    let differ = after
+        .as_chunks::<3>()
+        .0
+        .iter()
+        .zip(faces.as_chunks::<3>().0)
+        .filter(|(x, y)| x != y)
+        .count();
+    assert!(differ > 500, "{differ} pixels changed");
+}

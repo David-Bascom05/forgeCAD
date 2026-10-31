@@ -320,6 +320,14 @@ impl Part {
         }
     }
 
+    /// A part in memory on a model already made.
+    pub fn of(model: Model) -> Part {
+        Part {
+            model,
+            ..Part::default()
+        }
+    }
+
     /// The version a client is looking at: entries committed. Zero until the first commit.
     pub fn version(&self) -> u64 {
         self.log.len() as u64

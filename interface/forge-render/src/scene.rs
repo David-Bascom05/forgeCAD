@@ -134,6 +134,23 @@ impl Scene {
         self.place(i);
     }
 
+    /// A part changed shape: its middle, its reach and its levels' chords, finest first.
+    pub fn set_part(&mut self, part: u32, center: [f32; 3], radius: f32, chords: Vec<f32>) {
+        self.centers[part as usize] = center;
+        self.chords[part as usize] = chords;
+        for i in 0..self.placements.len() {
+            if self.placements[i].part == part {
+                let rows = self.placements[i].rows;
+                let at =
+                    |row: [f32; 4]| row[0] * center[0] + row[1] * center[1] + row[2] * center[2] + row[3];
+                self.x[i] = at(rows[0]);
+                self.y[i] = at(rows[1]);
+                self.z[i] = at(rows[2]);
+                self.r[i] = radius;
+            }
+        }
+    }
+
     /// Moves every placement out from the scene's middle: 0 home, 1 fully apart.
     pub fn set_explode(&mut self, t: f32) {
         self.explode = t;

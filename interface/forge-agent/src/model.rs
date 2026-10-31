@@ -35,6 +35,8 @@ pub struct Model {
     pub ms: f64,
     /// Lines the last update rebuilt.
     pub rebuilt: usize,
+    /// Of `ms`, how much the kernel took (the rest read the lines and resolved their references).
+    pub kernel_ms: f64,
     meshes: facemesh::Cache,
     /// The finished part's faces' triangles, and all of them as one mesh, made as asked for.
     faces: Option<Vec<(forge_topo::FaceId, Option<Arc<FaceMesh>>)>>,
@@ -147,6 +149,7 @@ impl Default for Model {
             error: None,
             ms: 0.0,
             rebuilt: 0,
+            kernel_ms: 0.0,
             meshes: facemesh::Cache::default(),
             faces: None,
             mesh: None,
@@ -358,6 +361,7 @@ impl Model {
         self.lines = new;
         self.error = None;
         self.rebuilt = 0;
+        self.kernel_ms = 0.0;
         let mut reuse = true;
         let ids: Vec<u64> = self.lines.iter().map(|l| l.id).collect();
         for i in keep..self.lines.len() {
@@ -444,7 +448,10 @@ impl Model {
             } else {
                 self.stages[i - 1].solids.clone()
             };
-            match step_solids(History::new(&self.features, Some(&ids[..=i])), i, before) {
+            let t = Instant::now();
+            let stepped = step_solids(History::new(&self.features, Some(&ids[..=i])), i, before);
+            self.kernel_ms += t.elapsed().as_secs_f64() * 1e3;
+            match stepped {
                 Ok(solids) => self.stages.push(Arc::new(Stage::new(solids))),
                 Err(e) => {
                     let (msg, hint) = explain(&e);

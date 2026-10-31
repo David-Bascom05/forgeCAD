@@ -124,6 +124,13 @@ impl Session {
         self.part_at(file).map(|p| (&mut p.0.model, p.1))
     }
 
+    /// The file's part for its own use (a live session), its commits going to the file.
+    pub fn take_part(&mut self, file: &str) -> Result<Part, String> {
+        let (p, path) = self.part_file(file)?;
+        p.open(&path);
+        Ok(self.parts.remove(file).expect("just opened"))
+    }
+
     /// `part_at`, for what would change the file or show what is in it: only a file that has
     /// shown itself a part file, and nothing of any other in the refusal.
     fn part_file(&mut self, file: &str) -> Result<(&mut Part, std::path::PathBuf), String> {
