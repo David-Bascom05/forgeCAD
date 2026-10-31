@@ -32,7 +32,7 @@ enum BodyFeature {
     Combine { op: Combine, target: usize, tools: Vec<usize>, keep: bool },
     Split { by: Cutter, keep: Keep },                   // Keep: Plus | Minus | Both
     SplitFace { faces: Vec<Name>, by: Cutter },
-    Move { motion: Vec<Step>, copy: bool },             // Step: Translate | Rotate | Frame
+    Move { steps: Vec<Step>, copy: bool },              // Step: Translate | Rotate | Frame
 }
 enum Pick { All, Some(Vec<usize>) }
 enum Cutter { Target(Target), Plane(Frame), Curve(Frame, Segment) }
@@ -67,6 +67,10 @@ for single-body parts.
 `next` extents in a history that has made more than one body are Unsupported for now (the
 pick would have to follow one body's tools).
 
+Names: the n-ary regen names a face a boolean only adds a loop to differently from the
+sequential one (a single-body limit too: a shell or chamfer naming such a face fails n-ary).
+A body feature naming faces inherits it.
+
 `regenerate()` and `regenerate_nary()` keep returning one `Body`; on a part that ends with
 several they fail with `RegenError::Bodies`. `regenerate_solids()` and
 `regenerate_nary_solids()` return them all.
@@ -78,7 +82,7 @@ extrude solid 10 rect 0 0 5 5                 # a new body
 extrude cut 2 circle 0 0 1 in base,f4         # any line: `in FEAT[,FEAT..]` or `in all`
 combine (add|cut|keep) TARGET TOOL.. [keep]   # keep: the tool bodies stay
 split BY [+|-]                                # keep one side; default both
-splitface BY REF..                            # each face becomes pieces, the solid unchanged
+splitface REF.. by BY                         # each face becomes pieces, the solid unchanged
 move MOTION..  |  copy MOTION..               # applied in order
 BY:     FEAT [@face] | plane FRAME | curve FRAME (line AX AY BX BY | arc CX CY R A0 SWEEP | circle CX CY R)
 MOTION: by DX DY DZ | rot OX OY OZ AX AY AZ A | frame FRAME
