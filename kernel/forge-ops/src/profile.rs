@@ -172,6 +172,12 @@ fn loops_touch(x: &ProfileLoop, y: &ProfileLoop) -> Vec<Point2> {
     let mut out: Vec<Point2> = Vec::new();
     for (s, _) in &x.segments {
         for (t, _) in &y.segments {
+            // a round hole clear of a piece by its centre needs no more
+            if let Segment::Circle { center, radius, .. } = *s
+                && piece(t).nearest(center).distance(center) > radius + tol::LINEAR
+            {
+                continue;
+            }
             let (q, d) = nearest_touch(piece(s), piece(t));
             if d <= tol::LINEAR && out.iter().all(|o| o.distance(q) > 10.0 * tol::LINEAR) {
                 out.push(q);

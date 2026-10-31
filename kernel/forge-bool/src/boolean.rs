@@ -1209,7 +1209,8 @@ fn plan_once(a: &Body, b: &Body, op: Op, scratch: &mut Scratch) -> R<Plan> {
             }
             // an imprint a hair from the boundary, between the same two vertices, is the boundary
             // (a tool's side all but tangent to a round face's edge)
-            if !foreign.is_empty() {
+            // (a chord that near a curve is short)
+            if foreign.iter().any(|&p| half_chord(&pieces[p]) <= 0.5) {
                 let key = |p: &Piece| (p.start.min(p.end), p.start.max(p.end));
                 let mut ends: Vec<_> = boundary
                     .iter()
@@ -2329,7 +2330,11 @@ pub(crate) fn trim(
                             body.face(faces[k]).loops.iter().any(|&l| {
                                 body.lp(l).coedges().any(|c| {
                                     let e = body.coedge(c).edge;
-                                    on_edge(body, e, m).is_some()
+                                    let eb = body.edge_box(e).grow(tol::LINEAR);
+                                    eb.contains(m)
+                                        && eb.contains(a)
+                                        && eb.contains(b)
+                                        && on_edge(body, e, m).is_some()
                                         && on_edge(body, e, a).is_some()
                                         && on_edge(body, e, b).is_some()
                                 })
