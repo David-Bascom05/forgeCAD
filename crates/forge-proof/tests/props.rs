@@ -143,13 +143,17 @@ fn certify_catches_an_inside_out_solid() {
     );
 }
 
-/// Two overlapping blocks in one body: each shell is closed and valid, but their faces cross.
+/// Two overlapping blocks in one body: each shell is closed, but their faces cross (check's
+/// ShellsOverlap says so too).
 #[test]
 fn certify_catches_crossing_shells() {
     let mut b = block(0.0, 0.0, 0.0);
     b.append(&block(4.3, 3.7, 5.9));
-    assert!(forge_topo::check(&b).is_empty(), "{:?}", forge_topo::check(&b));
-    let k = kinds(&b);
+    assert!(kinds(&b).iter().any(|k| k == "ShellsOverlap"), "{:?}", kinds(&b));
+    let k: Vec<String> = forge_proof::cert::geometric(&b, 0.05)
+        .iter()
+        .map(|f| f.kind())
+        .collect();
     assert!(
         k.iter().any(|k| k == "Crossing") && k.iter().any(|k| k == "NotBounding"),
         "{k:?}"

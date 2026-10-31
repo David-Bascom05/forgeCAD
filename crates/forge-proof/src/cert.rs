@@ -42,13 +42,20 @@ impl Flaw {
 /// orientation and crossings.
 pub fn certify(body: &Body, chord: f64) -> Vec<Flaw> {
     let body = body.compact();
-    let mut out: Vec<Flaw> = forge_topo::certify(&body)
+    let out: Vec<Flaw> = forge_topo::certify(&body)
         .into_iter()
         .map(|p| Flaw::Topo(format!("{p:?}")))
         .collect();
     if !out.is_empty() {
         return out;
     }
+    geometric(&body, chord)
+}
+
+/// Orientation and crossings alone, on a body whatever `forge_topo::certify` says of it.
+pub fn geometric(body: &Body, chord: f64) -> Vec<Flaw> {
+    let body = body.compact();
+    let mut out = Vec::new();
     let mesh = match tessellate(
         &body,
         &Quality {
