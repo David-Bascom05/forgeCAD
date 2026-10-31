@@ -52,3 +52,10 @@ fn cross_drill_tangent_to_floor_pointed() {
         "extrude 55 rect -45 -35 90 70\nhole 8 -xy at 0 -12 55 35 pt 118\nyP: plane -xz at 0 -12 0\nhole 10 -xz at 0 -35 25 to yP pt 118\n",
     );
 }
+
+/// A blind hole whose rim circle just touches a chamfer's top boundary line (the curve touching
+/// an edge from inside, which gets a vertex on both since the touch vertices went in).
+#[test]
+fn hole_tangent_to_chamfer_edge() {
+    builds_valid("extrude 55 rect -45 -35 90 70\nchamfer 1.5 (edges)\nhole 15 -xy at -36 -27 55 9\n");
+}
