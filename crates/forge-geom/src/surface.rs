@@ -102,6 +102,10 @@ pub trait Procedural: Send + Sync + std::fmt::Debug {
     fn point(&self, uv: Point2) -> Point3 {
         self.deriv(uv).p
     }
+    /// The derivatives at u and each v of `vs`, onto `out`, each exactly `deriv`'s.
+    fn column_derivs(&self, u: f64, vs: &[f64], out: &mut Vec<SurfDeriv>) {
+        out.extend(vs.iter().map(|&v| self.deriv(Point2::new(u, v))));
+    }
     fn normal(&self, uv: Point2) -> Option<UnitVec3> {
         let d = self.deriv(uv);
         d.du.cross(d.dv).normalize()

@@ -797,11 +797,59 @@ impl Pipe {
 
     fn point(&self, uv: Point2) -> Point3 {
         match self.cross(uv.x) {
-            Some((c, e1, e2, th)) => {
-                let (s, k) = dmath::sin_cos(uv.y * th);
-                c + (e1 * k + e2 * s) * self.radius
-            }
+            Some(x) => self.on(x, uv.y),
             None => self.spine.eval(uv.x),
+        }
+    }
+
+    /// The point at v of the section `cross` gives.
+    fn on(&self, (c, e1, e2, th): (Point3, Vec3, Vec3, f64), v: f64) -> Point3 {
+        let (s, k) = dmath::sin_cos(v * th);
+        c + (e1 * k + e2 * s) * self.radius
+    }
+
+    /// The derivatives at u and each of `vs`, the sections at u and either side worked out once.
+    fn derivs(&self, u: f64, vs: &[f64], mut put: impl FnMut(SurfDeriv)) {
+        let r = self.radius;
+        let Some((c, e1, e2, th)) = self.cross(u) else {
+            let p = self.spine.eval(u);
+            for _ in vs {
+                put(SurfDeriv {
+                    p,
+                    du: Vec3::ZERO,
+                    dv: Vec3::ZERO,
+                    duu: Vec3::ZERO,
+                    duv: Vec3::ZERO,
+                    dvv: Vec3::ZERO,
+                });
+            }
+            return;
+        };
+        // along the spine: central differences of the exact surface
+        let h = 1e-4 * self.spine.deriv(u).d1.length().max(1e-9).recip().min(1.0);
+        let (xp, xm) = (self.cross(u + h), self.cross(u - h));
+        // the point and its v-derivative at u + h or u - h
+        let at = |x: Option<(Point3, Vec3, Vec3, f64)>, u: f64, v: f64| match x {
+            Some(x @ (_, e1, e2, th)) => {
+                let (s, k) = dmath::sin_cos(v * th);
+                (self.on(x, v), (e2 * k - e1 * s) * (r * th))
+            }
+            None => (self.spine.eval(u), Vec3::ZERO),
+        };
+        for &v in vs {
+            let (s, k) = dmath::sin_cos(v * th);
+            let p = c + (e1 * k + e2 * s) * r;
+            let dv = (e2 * k - e1 * s) * (r * th);
+            let dvv = (e1 * k + e2 * s) * (-r * th * th);
+            let ((pp, vp), (pm, vm)) = (at(xp, u + h, v), at(xm, u - h, v));
+            put(SurfDeriv {
+                p,
+                du: (pp - pm) / (2.0 * h),
+                dv,
+                duu: (pp + pm.to_vec() - p.to_vec() * 2.0).to_vec() / (h * h),
+                duv: (vp - vm) / (2.0 * h),
+                dvv,
+            });
         }
     }
 }
@@ -811,43 +859,12 @@ impl Procedural for Pipe {
         Pipe::point(self, uv)
     }
     fn deriv(&self, uv: Point2) -> SurfDeriv {
-        let r = self.radius;
-        let Some((c, e1, e2, th)) = self.cross(uv.x) else {
-            let p = self.spine.eval(uv.x);
-            return SurfDeriv {
-                p,
-                du: Vec3::ZERO,
-                dv: Vec3::ZERO,
-                duu: Vec3::ZERO,
-                duv: Vec3::ZERO,
-                dvv: Vec3::ZERO,
-            };
-        };
-        let (s, k) = dmath::sin_cos(uv.y * th);
-        let p = c + (e1 * k + e2 * s) * r;
-        let dv = (e2 * k - e1 * s) * (r * th);
-        let dvv = (e1 * k + e2 * s) * (-r * th * th);
-        // along the spine: central differences of the exact surface
-        let h = 1e-4 * self.spine.deriv(uv.x).d1.length().max(1e-9).recip().min(1.0);
-        let (pp, pm) = (
-            self.point(Point2::new(uv.x + h, uv.y)),
-            self.point(Point2::new(uv.x - h, uv.y)),
-        );
-        let dvp = |u: f64| match self.cross(u) {
-            Some((_, e1, e2, th)) => {
-                let (s, k) = dmath::sin_cos(uv.y * th);
-                (e2 * k - e1 * s) * (r * th)
-            }
-            None => Vec3::ZERO,
-        };
-        SurfDeriv {
-            p,
-            du: (pp - pm) / (2.0 * h),
-            dv,
-            duu: (pp + pm.to_vec() - p.to_vec() * 2.0).to_vec() / (h * h),
-            duv: (dvp(uv.x + h) - dvp(uv.x - h)) / (2.0 * h),
-            dvv,
-        }
+        let mut d = None;
+        self.derivs(uv.x, &[uv.y], |x| d = Some(x));
+        d.expect("one derivative")
+    }
+    fn column_derivs(&self, u: f64, vs: &[f64], out: &mut Vec<SurfDeriv>) {
+        self.derivs(u, vs, |d| out.push(d))
     }
     /// Exactly away from the spine (the contact order makes du x dv point that way).
     fn normal(&self, uv: Point2) -> Option<UnitVec3> {

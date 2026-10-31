@@ -136,12 +136,15 @@ struct Nodes {
 const G: usize = 8;
 
 impl Nodes {
-    fn new(s: &Surface, lo: Point2, hi: Point2) -> Nodes {
+    fn new(pr: &forge_geom::surface::Proc, lo: Point2, hi: Point2) -> Nodes {
         let mut at = [[(0.0, 0.0, f64::INFINITY, f64::INFINITY); G + 1]; G + 1];
+        let vs: [f64; G + 1] = std::array::from_fn(|j| Nodes::node(lo, hi, 0, j).y);
+        let mut col = Vec::with_capacity(G + 1);
         for (i, row) in at.iter_mut().enumerate() {
-            for (j, n) in row.iter_mut().enumerate() {
-                let d = s.deriv(Nodes::node(lo, hi, i, j));
-                let (ku, kv) = line_curvatures(&d);
+            col.clear();
+            pr.column_derivs(Nodes::node(lo, hi, i, 0).x, &vs, &mut col);
+            for (n, d) in row.iter_mut().zip(&col) {
+                let (ku, kv) = line_curvatures(d);
                 *n = (d.du.length(), d.dv.length(), 1.0 / ku, 1.0 / kv);
             }
         }
@@ -198,15 +201,17 @@ impl Nodes {
             (self.hi.x - self.lo.x) / G as f64,
             (self.hi.y - self.lo.y) / G as f64,
         );
+        // per node, the steps per unit u and v it needs
+        let per = self.at.map(|row| row.map(|n| (n.0 / step(n.2), n.1 / step(n.3))));
         // the steps each cell needs, the densest any node of it or its neighbours needs
         let mut want = [[(0.0, 0.0); G]; G];
         for (ci, row) in want.iter_mut().enumerate() {
             for (cj, c) in row.iter_mut().enumerate() {
                 let (mut du, mut dv) = (0.0f64, 0.0f64);
-                for row in &self.at[ci.saturating_sub(1)..(ci + 3).min(G + 1)] {
+                for row in &per[ci.saturating_sub(1)..(ci + 3).min(G + 1)] {
                     for &n in &row[cj.saturating_sub(1)..(cj + 3).min(G + 1)] {
-                        du = du.max(n.0 / step(n.2));
-                        dv = dv.max(n.1 / step(n.3));
+                        du = du.max(n.0);
+                        dv = dv.max(n.1);
                     }
                 }
                 *c = ((cw * du).min(1e6), (ch * dv).min(1e6));
@@ -768,11 +773,11 @@ fn tessellate_face(
             sin_a: c.sin_a(),
             cos_a: c.cos_a(),
         },
-        Surface::Procedural(_) => {
+        Surface::Procedural(pr) => {
             // the grid from curvatures sampled at the nodes, or where the bounds' grids (whose
             // chords and triangles need no look) have no more points, theirs: from the whole box's
             // bounds, or on a face of many points the cells'
-            let n = Nodes::new(surface, lo, hi);
+            let n = Nodes::new(pr, lo, hi);
             let mut c = n.counts(surface, q);
             let size = |c: &Counts| c.iter().flatten().map(|&(a, b)| a * b).sum::<usize>();
             if let (Some(b), Surface::Procedural(pr)) = (cells.as_mut(), surface) {
@@ -798,13 +803,14 @@ fn tessellate_face(
     let mut loops: Vec<Vec<u32>> = Vec::new();
     let mut seen: Vec<u32> = ring_globals.iter().flatten().copied().collect();
     seen.sort_unstable();
-    let repeats = seen.windows(2).any(|w| w[0] == w[1]);
+    let mut twice: Vec<u32> = seen.windows(2).filter(|w| w[0] == w[1]).map(|w| w[0]).collect();
+    twice.dedup();
     for (pts, ids) in rings.into_iter().zip(ring_globals) {
         // a loop through one vertex twice (a face pinched where a curve touches its boundary):
         // one point, met twice
         let mut lp = Vec::with_capacity(pts.len());
         for (p, id) in pts.into_iter().zip(ids) {
-            match repeats
+            match (twice.binary_search(&id).is_ok())
                 .then(|| (0..uv.len()).find(|&k| global[k] == id && uv[k] == p))
                 .flatten()
             {

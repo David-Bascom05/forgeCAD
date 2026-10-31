@@ -870,28 +870,54 @@ impl Hermite {
     /// Taylor coefficients (orders 0..3) of g and g' at s. Past the ends the end segments
     /// carry on, so a parameter a rounding error outside the range sees the same smooth guide.
     fn jets(&self, s: f64) -> ([Vec3; 4], [Vec3; 4]) {
-        let n = self.coef.len();
-        let i = self.knots.partition_point(|&k| k <= s).clamp(1, n) - 1;
-        let (c, h) = (&self.coef[i], s - self.knots[i]);
-        let e: [Vec3; 5] = std::array::from_fn(|k| {
-            let mut acc = Vec3::ZERO;
-            for j in (k..10).rev() {
-                acc = acc * h + c[j] * binom(j, k);
-            }
-            acc
-        });
+        let (c, h) = self.at(s);
+        let e: [Vec3; 5] = std::array::from_fn(|k| Hermite::order(c, h, k));
         (
             [e[0], e[1], e[2], e[3]],
             [e[1], e[2] * 2.0, e[3] * 3.0, e[4] * 4.0],
         )
     }
+
+    /// The point and first derivative at s alone.
+    fn point_tan(&self, s: f64) -> (Vec3, Vec3) {
+        let (c, h) = self.at(s);
+        (Hermite::order(c, h, 0), Hermite::order(c, h, 1))
+    }
+
+    /// The segment holding s, and s from its first knot.
+    fn at(&self, s: f64) -> (&[Vec3; 10], f64) {
+        let n = self.coef.len();
+        let i = self.knots.partition_point(|&k| k <= s).clamp(1, n) - 1;
+        (&self.coef[i], s - self.knots[i])
+    }
+
+    /// The k-th Taylor coefficient at h into the segment with coefficients c.
+    fn order(c: &[Vec3; 10], h: f64, k: usize) -> Vec3 {
+        let mut acc = Vec3::ZERO;
+        for j in (k..10).rev() {
+            acc = acc * h + c[j] * binom(j, k);
+        }
+        acc
+    }
 }
 
+/// n choose k for n < 10, k < 5 (zero past n), exact.
 fn binom(n: usize, k: usize) -> f64 {
-    if k > n {
-        return 0.0;
-    }
-    (1..=k).fold(1.0, |acc, i| acc * (n + 1 - i) as f64 / i as f64)
+    const B: [[f64; 5]; 10] = {
+        let mut b = [[0.0; 5]; 10];
+        let mut n = 0;
+        while n < 10 {
+            let (mut k, mut c) = (0, 1u64);
+            while k < 5 && k <= n {
+                b[n][k] = c as f64;
+                c = c * (n - k) as u64 / (k + 1) as u64;
+                k += 1;
+            }
+            n += 1;
+        }
+        b
+    };
+    B[n][k]
 }
 
 /// Inverse of a 5x5 matrix by Gauss-Jordan with partial pivoting.
@@ -1049,8 +1075,8 @@ impl Guide {
                 (d.p, d.d1)
             }
             Guide::Hermite(h) => {
-                let (g, gp) = h.jets(s);
-                (Point3::ORIGIN + g[0], gp[0])
+                let (g, gp) = h.point_tan(s);
+                (Point3::ORIGIN + g, gp)
             }
         }
     }
@@ -2453,6 +2479,10 @@ impl Procedural for VarBlend {
     }
     fn point(&self, uv: Point2) -> Point3 {
         self.arc_at(uv.x).point(uv.y)
+    }
+    fn column_derivs(&self, u: f64, vs: &[f64], out: &mut Vec<SurfDeriv>) {
+        let sec = self.section_at(u);
+        out.extend(vs.iter().map(|&v| VarBlend::point(&sec, v)));
     }
     fn domain(&self) -> Domain2 {
         Domain2 {
