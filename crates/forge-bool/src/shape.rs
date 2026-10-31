@@ -342,6 +342,77 @@ impl Shape {
         }
     }
 
+    /// Whether every point of `b` lies in the solid clear of its boundary by more than `m`, by
+    /// bounds: true only when that is sure (false says nothing).
+    pub fn box_in(&self, b: &Box3, m: f64) -> bool {
+        let m = m + 1e-9 * (1.0 + b.diagonal());
+        // the profile holds a disc of radius `r` about `c` clear by m
+        let holds =
+            |segs: &[Seg2], c: Point2, r: f64| matches!(in_profile(segs, c), Some((true, d)) if d > r + m);
+        match self {
+            Shape::Prism { frame, segs, lo, hi } => {
+                let l = local_box(frame, b);
+                let (w, h) = (l.x.hi - l.x.lo, l.y.hi - l.y.lo);
+                l.z.lo > lo + m
+                    && l.z.hi < hi - m
+                    && holds(
+                        segs,
+                        Point2::new(0.5 * (l.x.lo + l.x.hi), 0.5 * (l.y.lo + l.y.hi)),
+                        0.5 * (w * w + h * h).sqrt(),
+                    )
+            }
+            Shape::Revolved {
+                frame,
+                origin,
+                dir,
+                perp,
+                segs,
+                angle: None,
+            } => {
+                // the box's heights and radii about the axis map onto a parallelogram of the profile
+                let l = local_box(frame, b);
+                let gap = |lo: f64, hi: f64| {
+                    if lo > 0.0 {
+                        lo
+                    } else if hi < 0.0 {
+                        -hi
+                    } else {
+                        0.0
+                    }
+                };
+                let (gx, gy) = (gap(l.x.lo, l.x.hi), gap(l.y.lo, l.y.hi));
+                let r_lo = (gx * gx + gy * gy).sqrt();
+                let (ax, ay) = (l.x.lo.abs().max(l.x.hi.abs()), l.y.lo.abs().max(l.y.hi.abs()));
+                let r_hi = (ax * ax + ay * ay).sqrt();
+                let at = |h: f64, r: f64| *origin + *dir * h + *perp * r;
+                let c = at(0.5 * (l.z.lo + l.z.hi), 0.5 * (r_lo + r_hi));
+                let reach = [(l.z.lo, r_lo), (l.z.lo, r_hi), (l.z.hi, r_lo), (l.z.hi, r_hi)]
+                    .iter()
+                    .map(|&(h, r)| at(h, r).distance(c))
+                    .fold(0.0, f64::max);
+                holds(segs, c, reach)
+            }
+            Shape::Ball { center, radius } => {
+                let far = |c: f64, lo: f64, hi: f64| (c - lo).abs().max((hi - c).abs());
+                let d = Vec3::new(
+                    far(center.x, b.x.lo, b.x.hi),
+                    far(center.y, b.y.lo, b.y.hi),
+                    far(center.z, b.z.lo, b.z.hi),
+                );
+                d.length() < radius - m
+            }
+            Shape::Csg { first, rest } => {
+                first.box_in(b, m)
+                    && rest.iter().all(|(op, s)| match op {
+                        Op::Union => true,
+                        Op::Subtract => s.box_out(b, m),
+                        Op::Intersect => s.box_in(b, m),
+                    })
+            }
+            _ => false,
+        }
+    }
+
     /// Where `p` is, clear of the boundary by more than `m`, or Near.
     pub fn member(&self, p: Point3, m: f64) -> Member {
         match self {

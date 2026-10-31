@@ -294,7 +294,7 @@ struct PairOut {
     coplanar: Vec<[(Side, FaceId); 2]>,
     touching: Vec<Touch>,
     /// Face pairs whose meeting is not wholly in the new edges (points, coincident, touches,
-    /// curves along an edge, left out as outside the result).
+    /// curves along an edge, left out as outside the result or dividing neither face).
     loose: Vec<FacePair>,
 }
 
@@ -408,6 +408,41 @@ fn owned(ops: &[Op], inner: &[bool], outer: &[bool], side: Side) -> bool {
         was = now;
     }
     owner == side
+}
+
+/// Whether the verdict on tool `side`'s face differs across tool `other`'s surface, at a place
+/// held by the tools `holds` (in order) and no others: whether a new edge of the two divides it.
+fn divides(ops: &[Op], any_intersect: bool, holds: &[Side], side: Side, other: Side) -> bool {
+    let n = ops.len() + 1;
+    let result = |own: bool, held: bool| -> bool {
+        if any_intersect {
+            let mut inside = vec![false; n];
+            for &k in holds {
+                inside[k] = true;
+            }
+            inside[side] = own;
+            inside[other] = held;
+            return in_result(ops, &inside, true);
+        }
+        // as in_result: the last tool holding the point decides
+        let last = holds
+            .last()
+            .copied()
+            .into_iter()
+            .chain(own.then_some(side))
+            .chain(held.then_some(other))
+            .max();
+        match last {
+            None => false,
+            Some(0) => true,
+            Some(k) => ops[k - 1] == Op::Union,
+        }
+    };
+    let verdict = |held: bool| {
+        let (fin, fout) = (result(true, held), result(false, held));
+        (fin != fout).then_some(!fin)
+    };
+    verdict(true) != verdict(false)
 }
 
 /// The solid `tools[0] ops[0] tools[1] ops[1] tools[2] ...`, folded left, in one pass.
@@ -528,6 +563,29 @@ pub fn nary_with(
             .all(|k| !index[k].bbox.overlaps(b) || sh[k].box_out(b, SHAPE_MARGIN))
     };
 
+    let any_intersect = ops.contains(&Op::Intersect);
+    // whether a new edge of tools i and j in box b could divide a face of either: false only
+    // when every other tool surely holds all of b or none of it
+    let meets_matter = |b: &forge_math::Box3, i: Side, j: Side| -> bool {
+        let Some(sh) = shapes else { return true };
+        let (lo, hi) = (
+            Point3::new(b.x.lo, b.y.lo, b.z.lo),
+            Point3::new(b.x.hi, b.y.hi, b.z.hi),
+        );
+        let mut holds: Vec<Side> = Vec::new();
+        for k in 0..n {
+            if k == i || k == j || !index[k].bbox.overlaps(b) || sh[k].box_out(b, SHAPE_MARGIN) {
+                continue;
+            }
+            if index[k].bbox.contains(lo) && index[k].bbox.contains(hi) && sh[k].box_in(b, SHAPE_MARGIN) {
+                holds.push(k);
+            } else {
+                return true;
+            }
+        }
+        divides(ops, any_intersect, &holds, i, j) || divides(ops, any_intersect, &holds, j, i)
+    };
+
     // 1: pairs of tools whose boxes meet, then their faces
     let mut pairs: Vec<(Side, Side)> = Vec::new();
     // tool pairs whose boxes meet but were left out as surely outside the result: whether their
@@ -571,7 +629,16 @@ pub fn nary_with(
                     continue;
                 }
                 let (sa, sb) = (&a.face(fa).surface, &b.face(fb).surface);
-                let found = ssi::surfaces_in(sa, sb, region);
+                // a pair with no closed form is searched, at a cost: not where the tools holding all
+                // of the region (by bounds) say its curves would divide neither face
+                let found = match ssi::closed_form(sa, sb) {
+                    SurfaceSurface::NotAnalytic if !meets_matter(&region, i, j) => {
+                        out.loose.push(((i, fa), (j, fb)));
+                        continue;
+                    }
+                    SurfaceSurface::NotAnalytic => ssi::searched(sa, sb, region),
+                    r => r,
+                };
                 out.touching
                     .extend(touches(&found, [ia, ib], [i, j], [fa, fb], region));
                 let curves = match found {
@@ -707,7 +774,6 @@ pub fn nary_with(
         seg_box.retain(|_| *flags.next().expect("a flag a seg"));
     }
     // where two tools touch, both faces kept would be material meeting itself
-    let any_intersect = ops.contains(&Op::Intersect);
     let kept_at = |side: Side, q: Point3| -> Option<bool> {
         let mut inner = vec![false; n];
         inner[side] = true;
@@ -1321,7 +1387,6 @@ pub fn nary_with(
     // sides differ just in the other tool of the edge, so its midpoint (clear of every other tool)
     // shows whether it can (the merge below drops what this leaves)
     if let Some(sh) = shapes {
-        let any_intersect = ops.contains(&Op::Intersect);
         let list = &pieces.list;
         let mut shared: Vec<(Side, FaceId)> = coplanar.iter().flatten().copied().collect();
         shared.sort_unstable();
@@ -1346,35 +1411,7 @@ pub fn nary_with(
                     Member::Near => return true,
                 }
             }
-            let result = |own: bool, held: bool| -> bool {
-                if any_intersect {
-                    let mut inside = vec![false; n];
-                    for &k in &holds {
-                        inside[k] = true;
-                    }
-                    inside[side] = own;
-                    inside[other] = held;
-                    return in_result(ops, &inside, true);
-                }
-                // as in_result: the last tool holding the point decides
-                let last = holds
-                    .last()
-                    .copied()
-                    .into_iter()
-                    .chain(own.then_some(side))
-                    .chain(held.then_some(other))
-                    .max();
-                match last {
-                    None => false,
-                    Some(0) => true,
-                    Some(k) => ops[k - 1] == Op::Union,
-                }
-            };
-            let verdict = |held: bool| {
-                let (fin, fout) = (result(true, held), result(false, held));
-                (fin != fout).then_some(!fin)
-            };
-            verdict(true) != verdict(false)
+            divides(ops, any_intersect, &holds, side, other)
         };
         let kept: Vec<Vec<usize>> = par_map(jobs.len(), threads, 8, |j| {
             let (side, f, ref boundary, ref new_edges) = jobs[j];

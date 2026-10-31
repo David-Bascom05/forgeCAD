@@ -5,6 +5,15 @@ use forge_math::{Box3, Frame, tol};
 /// Intersection of two surfaces within `region`: closed form where the pair
 /// allows, otherwise traced (an exact curve defined by both surfaces).
 pub fn surfaces_in(a: &Surface, b: &Surface, region: Box3) -> SurfaceSurface {
+    match closed_form(a, b) {
+        SurfaceSurface::NotAnalytic => searched(a, b, region),
+        r => r,
+    }
+}
+
+/// Where two surfaces meet, when that has a closed form (NotAnalytic otherwise): cheap, unlike
+/// `searched`.
+pub fn closed_form(a: &Surface, b: &Surface) -> SurfaceSurface {
     let closed = match (a, b) {
         (Surface::Plane(p), s) => plane_surface(p, s),
         (s, Surface::Plane(p)) => plane_surface(p, s),
@@ -12,13 +21,17 @@ pub fn surfaces_in(a: &Surface, b: &Surface, region: Box3) -> SurfaceSurface {
         (Surface::Sphere(s), Surface::Sphere(t)) => sphere_sphere(s, t),
         _ => SurfaceSurface::NotAnalytic,
     };
-    let closed = match closed {
+    match closed {
         SurfaceSurface::NotAnalytic => forge_geom::screw::meet_coaxial(a, b)
             .or_else(|| forge_geom::ruled::meet_ruled(a, b))
-            .or_else(|| forge_geom::meet::intersect(a, b, region))
             .unwrap_or(SurfaceSurface::NotAnalytic),
         r => r,
-    };
+    }
+}
+
+/// Where two surfaces with no closed form meet in `region`: by marching or tracing.
+pub fn searched(a: &Surface, b: &Surface, region: Box3) -> SurfaceSurface {
+    let closed = forge_geom::meet::intersect(a, b, region).unwrap_or(SurfaceSurface::NotAnalytic);
     match closed {
         SurfaceSurface::NotAnalytic => match forge_geom::intcurve::trace(a, b, region) {
             Some(cs) if cs.is_empty() => SurfaceSurface::Empty,
