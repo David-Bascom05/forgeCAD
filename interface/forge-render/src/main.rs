@@ -1,7 +1,7 @@
 use forge_render::bench::{self, Path};
 use forge_render::camera::Camera;
 use forge_render::mesh::PartMesh;
-use forge_render::render::{self, Offscreen, Overlay, Renderer, part_info};
+use forge_render::render::{self, Mark, Offscreen, Overlay, Renderer, part_info};
 use forge_render::scene::{self, Motion, Placement, Scene};
 use forge_render::viewer::{Bench, Viewer, now_ms};
 use std::fmt::Write;
@@ -13,7 +13,7 @@ use winit::window::{Window, WindowId};
 
 const USAGE: &str =
     "forge-render [PART | file.fc] [--stress N] [--moving N] [--bench] [--hover] [--window] [--frames N]
-  [--size WxH] [--lod-px T] [--no-lines] [--no-cache] [--shot FILE.ppm] [--yaw R --pitch R --dist X]
+  [--size WxH] [--lod-px T] [--no-lines] [--no-cache] [--shot FILE.ppm [--select X Y]..] [--yaw R --pitch R --dist X]
   [--export FILE] [--levels]
 PART: a bench part (default crank). --stress: all 15 bench parts placed N times. --moving N: N of
 them swing on joints every frame. --hover: --bench also picks under a wandering pixel each frame. --bench: a fixed
@@ -32,6 +32,7 @@ struct Args {
     lines: bool,
     cache: bool,
     shot: Option<String>,
+    select: Vec<(f32, f32)>,
     export: Option<String>,
     levels: bool,
     yaw: Option<f32>,
@@ -53,6 +54,7 @@ fn args() -> Result<Args, String> {
         lines: true,
         cache: true,
         shot: None,
+        select: Vec::new(),
         export: None,
         levels: false,
         yaw: None,
@@ -76,6 +78,10 @@ fn args() -> Result<Args, String> {
             "--no-lines" => a.lines = false,
             "--no-cache" => a.cache = false,
             "--shot" => a.shot = it.next(),
+            "--select" => {
+                let at = (num(it.next(), &k)?, num(it.next(), &k)?);
+                a.select.push(at);
+            }
             "--export" => a.export = it.next(),
             "--levels" => a.levels = true,
             "--yaw" => a.yaw = Some(num(it.next(), &k)?),
@@ -179,6 +185,22 @@ fn headless(a: &Args, mut s: Stage) -> Result<(), String> {
     );
 
     if let Some(path) = &a.shot {
+        let mut marks = Vec::new();
+        for &px in &a.select {
+            r.pick_start(&mut s.scene, &s.camera, px);
+            r.wait();
+            if let Some((_, Some(h), ms)) = r.pick_poll(&s.scene) {
+                println!(
+                    "pick at {px:?} in {ms:.2} ms: {:?} of placement {}",
+                    h.entity, h.placement
+                );
+                marks.push(Mark {
+                    placement: h.placement,
+                    entity: h.entity,
+                    selected: true,
+                });
+            }
+        }
         // a few frames, so the overlay shows real numbers
         let mut hud = String::new();
         let mut drawn = Default::default();
@@ -188,6 +210,7 @@ fn headless(a: &Args, mut s: Stage) -> Result<(), String> {
             let overlay = Overlay {
                 hud: Some(&hud),
                 cube: Some(((w - side - 12.0, 12.0), side, [0; 3])),
+                marks: &marks,
             };
             drawn = r.frame(&target.view, &mut s.scene, &s.camera, overlay);
             r.wait();
@@ -218,12 +241,13 @@ fn headless(a: &Args, mut s: Stage) -> Result<(), String> {
             let overlay = Overlay {
                 hud: Some(&hud),
                 cube: Some(((a.size.0 as f32 - 132.0, 12.0), 120.0, [0; 3])),
+                marks: &[],
             };
             if a.hover {
                 let p = now_ms();
                 r.pick_start(&mut s.scene, &cam, bench::hover_at(frame, a.size));
                 r.wait();
-                r.pick_poll();
+                r.pick_poll(&s.scene);
                 pick_ms.push(now_ms() - p);
             }
             let d = r.frame(&target.view, &mut s.scene, &cam, overlay);

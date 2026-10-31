@@ -148,16 +148,19 @@ impl Viewer {
         self.last_frame = now;
         let gpu = self.renderer.gpu_ms.unwrap_or(0.0);
         let hud = format!(
-            "frame {:.1} ms gpu {gpu:.1} ms pick {:.1} ms {} parts {:.1}m tris",
+            "frame {:.1} ms gpu {gpu:.1} ms pick {:.1} ms {} parts {:.1}m tris {}",
             self.frame_ms,
             self.pick_ms,
             self.parts,
-            self.tris as f64 / 1e6
+            self.tris as f64 / 1e6,
+            self.nav.marked_text()
         );
         let (at, side) = self.nav.cube_box();
+        let marks = self.nav.marks();
         let overlay = Overlay {
             hud: Some(&hud),
             cube: Some((at, side, self.nav.cube_hover)),
+            marks: &marks,
         };
         let drawn = self
             .renderer
@@ -231,9 +234,11 @@ impl Viewer {
         {
             self.renderer.pick_start(&mut self.scene, &self.nav.camera, px);
         }
-        if let Some((px, hit, ms)) = self.renderer.pick_poll() {
+        if let Some((px, hit, ms)) = self.renderer.pick_poll(&self.scene) {
             self.pick_ms = ms;
-            self.nav.on_pick(px, hit);
+            if self.nav.on_pick(px, hit) {
+                self.window.request_redraw();
+            }
             if let Some(b) = &mut self.bench {
                 b.pick_ms.push(ms);
             }

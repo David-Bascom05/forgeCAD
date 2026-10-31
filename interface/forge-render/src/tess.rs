@@ -114,6 +114,7 @@ pub fn build_lod(body: &Body, q: &Quality) -> Result<Lod, TessError> {
             let n = m.triangle_normal(tri);
             tri.iter().for_each(|&v| near[v as usize] += n);
         }
+        let first_vertex = vertices;
         for &t in tris {
             for v in m.triangles[t as usize] {
                 let (idx, _) = *normals.entry((f as u32, v)).or_insert_with(|| {
@@ -137,6 +138,8 @@ pub fn build_lod(body: &Body, q: &Quality) -> Result<Lod, TessError> {
             face: f as u32,
             first_tri: starts[f],
             tris: tris.len() as u32,
+            first_vertex,
+            vertices: vertices - first_vertex,
         });
     }
 
@@ -167,10 +170,18 @@ pub fn build_lod(body: &Body, q: &Quality) -> Result<Lod, TessError> {
                 sharp.push((w[0].min(w[1]), w[0].max(w[1])));
             }
         }
+        let at = |v: forge_topo::VertexId| {
+            let p = body.vertex(v).point;
+            [p.x as f32, p.y as f32, p.z as f32]
+        };
         lod.edges.push(EdgeRange {
             edge: e as u32,
             first,
             count: chain.len() as u32 - 1,
+            start: edge.start.0,
+            end: edge.end.0,
+            start_at: at(edge.start),
+            end_at: at(edge.end),
         });
     }
     sharp.sort_unstable();
@@ -290,11 +301,8 @@ pub fn cluster(src: &Lod, center: [f32; 3], chord: f32) -> Lod {
                 .for_each(|i| out.indices.extend_from_slice(&i.to_le_bytes()));
         }
         if out.tris() > first_tri {
-            out.faces.push(FaceRange {
-                face: f.face,
-                first_tri,
-                tris: out.tris() - first_tri,
-            });
+            out.faces
+                .push(FaceRange::of(f.face, first_tri, out.tris() - first_tri));
         }
     }
     out

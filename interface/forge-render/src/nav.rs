@@ -4,7 +4,7 @@
 //! touches the window or the GPU: what's under the cursor comes back through `on_pick`.
 
 use crate::camera::{Camera, PITCH_END};
-use crate::render::PickHit;
+use crate::render::{Entity, Mark, PickHit};
 use crate::scene::Scene;
 use winit::event::{ElementState, MouseButton, MouseScrollDelta, WindowEvent};
 use winit::keyboard::{KeyCode, ModifiersState};
@@ -52,8 +52,8 @@ pub struct Nav {
     transition: Option<Transition>,
     /// The cube's region under the cursor: each axis -1, 0 or 1; all zero is none.
     pub cube_hover: [i8; 3],
-    /// The placement last clicked.
-    pub selected: Option<u32>,
+    /// What's been clicked, in order.
+    pub selected: Vec<(u32, Entity)>,
 }
 
 /// Where a pixel falls on the view cube, as a region; None if off it.
@@ -127,7 +127,7 @@ impl Nav {
             want_pick: None,
             transition: None,
             cube_hover: [0; 3],
-            selected: None,
+            selected: Vec::new(),
         }
     }
 
@@ -153,8 +153,48 @@ impl Nav {
         self.want_pick.take()
     }
 
-    /// What's under the pixel a pick was made for.
-    pub fn on_pick(&mut self, px: (f32, f32), hit: Option<PickHit>) {
+    /// What's marked this frame: the selection, and what's under the cursor unless dragging.
+    pub fn marks(&self) -> Vec<Mark> {
+        let mut out: Vec<Mark> = self
+            .selected
+            .iter()
+            .map(|&(placement, entity)| Mark {
+                placement,
+                entity,
+                selected: true,
+            })
+            .collect();
+        if self.drag.is_none()
+            && let Some(h) = self.hit.filter(|_| self.hit_at == Some(self.cursor))
+            && !self.selected.contains(&(h.placement, h.entity))
+        {
+            out.push(Mark {
+                placement: h.placement,
+                entity: h.entity,
+                selected: false,
+            });
+        }
+        out
+    }
+
+    /// What's marked, in words for the overlay.
+    pub fn marked_text(&self) -> String {
+        let marks = self.marks();
+        let Some(m) = marks.iter().rfind(|m| !m.selected).or(marks.last()) else {
+            return String::new();
+        };
+        let (kind, id) = match m.entity {
+            Entity::Face(i) => ("face", i),
+            Entity::Edge(i) => ("edge", i),
+            Entity::Vertex(i) => ("vertex", i),
+        };
+        let chosen = marks.iter().filter(|m| m.selected).count();
+        format!("{kind} {id} of part {} {chosen} selected", m.placement)
+    }
+
+    /// What's under the pixel a pick was made for; true if that changes what's drawn.
+    pub fn on_pick(&mut self, px: (f32, f32), hit: Option<PickHit>) -> bool {
+        let before = self.marks();
         self.hit = hit;
         self.hit_at = Some(px);
         // the answer for this drag's press, even if the drag has moved on since
@@ -162,6 +202,7 @@ impl Nav {
             self.pivot = hit.map(|h| h.point);
             self.pan_depth = hit.map(|h| h.depth);
         }
+        self.marks() != before
     }
 
     fn known_hit(&self) -> Option<PickHit> {
@@ -184,8 +225,9 @@ impl Nav {
                 true
             }
             WindowEvent::MouseInput { state, button, .. } => match state {
-                ElementState::Pressed => self.press(*button),
-                ElementState::Released => self.release(),
+                // a held button hides the hover mark, so these redraw
+                ElementState::Pressed => self.press(*button) || self.known_hit().is_some(),
+                ElementState::Released => self.release() || self.known_hit().is_some(),
             },
             WindowEvent::CursorMoved { position, .. } => {
                 self.moved_to((position.x as f32, position.y as f32))
@@ -249,9 +291,21 @@ impl Nav {
                 false
             }
             Some(Drag::Orbit) => {
-                let was = self.selected;
-                self.selected = self.known_hit().map(|h| h.placement);
-                was != self.selected
+                let got = self.known_hit().map(|h| (h.placement, h.entity));
+                if self.modifiers.control_key() || self.modifiers.shift_key() {
+                    // adds to the selection, or takes off what's in it
+                    if let Some(g) = got {
+                        match self.selected.iter().position(|s| *s == g) {
+                            Some(at) => {
+                                self.selected.remove(at);
+                            }
+                            None => self.selected.push(g),
+                        }
+                    }
+                } else {
+                    self.selected = got.into_iter().collect();
+                }
+                true
             }
             _ => false,
         }
@@ -267,7 +321,8 @@ impl Nav {
             if hover == [0; 3] {
                 self.want_pick = Some(at);
             }
-            return changed;
+            // what's marked was for the pixel left behind
+            return changed || self.hit.is_some();
         };
         if !self.moved {
             let (px, py) = (at.0 - self.press_at.0, at.1 - self.press_at.1);
@@ -344,13 +399,16 @@ impl Nav {
             KeyCode::Home | KeyCode::F6 => self.home(scene),
             KeyCode::KeyA => self.fit_all(scene),
             KeyCode::KeyF => {
-                let Some(s) = self.selected else { return false };
+                let Some(&(s, _)) = self.selected.last() else {
+                    return false;
+                };
                 let (c, r) = scene.sphere(s as usize);
                 self.fit_sphere(c, r);
             }
             KeyCode::Escape => {
-                let was = self.selected.take();
-                return was.is_some();
+                let had = !self.selected.is_empty();
+                self.selected.clear();
+                return had;
             }
             _ => return false,
         }

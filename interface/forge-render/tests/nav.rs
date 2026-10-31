@@ -181,7 +181,7 @@ fn answer(n: &mut Nav, r: &mut Renderer, scene: &mut Scene) {
     if let Some(px) = n.take_pick() {
         r.pick_start(scene, &n.camera, px);
         r.wait();
-        let (at, hit, _) = r.pick_poll().expect("it was waited for");
+        let (at, hit, _) = r.pick_poll(scene).expect("it was waited for");
         n.on_pick(at, hit);
     }
 }
@@ -253,7 +253,7 @@ fn a_click_selects_and_the_selection_can_be_zoomed_to() {
     answer(&mut n, &mut r, &mut scene);
     n.event(&button(ElementState::Pressed, MouseButton::Left));
     n.event(&button(ElementState::Released, MouseButton::Left));
-    assert_eq!(n.selected, Some(1));
+    assert_eq!(n.selected.first().map(|s| s.0), Some(1));
 
     assert!(n.key(KeyCode::KeyF, &scene));
     n.tick(0.0);
@@ -267,12 +267,12 @@ fn a_click_selects_and_the_selection_can_be_zoomed_to() {
     n.tick(3000.0);
     assert_eq!(n.camera.target, c);
     assert!(n.key(KeyCode::Escape, &scene));
-    assert_eq!(n.selected, None);
+    assert!(n.selected.is_empty());
 
     // nothing under the cursor: the click selects nothing
     n.event(&moved(5.0, 590.0));
     answer(&mut n, &mut r, &mut scene);
     n.event(&button(ElementState::Pressed, MouseButton::Left));
     n.event(&button(ElementState::Released, MouseButton::Left));
-    assert_eq!(n.selected, None);
+    assert!(n.selected.is_empty());
 }

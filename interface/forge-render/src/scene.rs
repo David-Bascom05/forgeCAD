@@ -56,7 +56,11 @@ pub struct Scene {
     pub draws: Vec<Draw>,
     picked: Vec<(u32, u32)>,
     counts: Vec<u32>,
+    /// Each placement's level as of the last `cull`; `HIDDEN` if culled.
+    level: Vec<u8>,
 }
+
+const HIDDEN: u8 = u8::MAX;
 
 /// A level per part at most (tessellated and clustered).
 pub const LODS: usize = 8;
@@ -72,7 +76,8 @@ impl Scene {
             z.push(at(p.rows[2]));
             r.push(*radius);
         }
-        let mut rows_bytes = vec![0; placements.len() * ROWS];
+        let n = placements.len();
+        let mut rows_bytes = vec![0; n * ROWS];
         for (p, out) in placements.iter().zip(rows_bytes.as_chunks_mut::<ROWS>().0) {
             write_rows(&p.rows, out);
         }
@@ -90,6 +95,7 @@ impl Scene {
             draws: Vec::new(),
             picked: Vec::new(),
             counts: vec![0; parts.len() * LODS],
+            level: vec![HIDDEN; n],
         }
     }
 
@@ -113,6 +119,12 @@ impl Scene {
     /// The span of `rows_bytes` to upload, once.
     pub fn take_dirty(&mut self) -> Option<(usize, usize)> {
         self.dirty.take()
+    }
+
+    /// The level a placement drew at in the last `cull`, if it wasn't culled.
+    pub fn lod_on_screen(&self, i: u32) -> Option<u32> {
+        let l = self.level[i as usize];
+        (l != HIDDEN).then_some(l as u32)
     }
 
     /// A placement's sphere.
@@ -142,6 +154,7 @@ impl Scene {
         let parts = self.chords.len();
         self.picked.clear();
         self.counts.fill(0);
+        self.level.fill(HIDDEN);
         let [a, b, c, d, e] = v.planes;
         for i in 0..self.x.len() {
             let (x, y, z, r) = (self.x[i], self.y[i], self.z[i], -self.r[i]);
@@ -155,6 +168,7 @@ impl Scene {
             let part = self.placements[i].part as usize;
             let chords = &self.chords[part];
             let lod = chords.partition_point(|&c| c <= allowed).saturating_sub(1);
+            self.level[i] = lod as u8;
             let bin = lod * parts + part;
             self.counts[bin] += 1;
             self.picked.push((bin as u32, i as u32));

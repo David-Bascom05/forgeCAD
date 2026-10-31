@@ -9,7 +9,7 @@ pub const VERTEX: usize = 16;
 pub const SEGMENT: usize = 32;
 pub const ALWAYS: i16 = i16::MIN;
 /// A file's first bytes; bump with any change to this layout.
-const MAGIC: &[u8; 8] = b"FCMESH01";
+const MAGIC: &[u8; 8] = b"FCMESH02";
 
 /// A B-rep face's triangles.
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -17,6 +17,9 @@ pub struct FaceRange {
     pub face: u32,
     pub first_tri: u32,
     pub tris: u32,
+    /// Its own vertices, on a tessellated level (clustered levels share them: both zero).
+    pub first_vertex: u32,
+    pub vertices: u32,
 }
 
 /// A B-rep edge's polyline in `Lod::segments`.
@@ -25,6 +28,11 @@ pub struct EdgeRange {
     pub edge: u32,
     pub first: u32,
     pub count: u32,
+    /// The B-rep vertices at its ends, and where they are.
+    pub start: u32,
+    pub end: u32,
+    pub start_at: [f32; 3],
+    pub end_at: [f32; 3],
 }
 
 /// One level of detail.
@@ -42,7 +50,24 @@ pub struct Lod {
     pub edges: Vec<EdgeRange>,
 }
 
+impl FaceRange {
+    pub fn of(face: u32, first_tri: u32, tris: u32) -> FaceRange {
+        FaceRange {
+            face,
+            first_tri,
+            tris,
+            first_vertex: 0,
+            vertices: 0,
+        }
+    }
+}
+
 impl Lod {
+    /// Where a B-rep face's triangles are, if it has any here.
+    pub fn face(&self, face: u32) -> Option<&FaceRange> {
+        self.faces.iter().find(|f| f.face == face)
+    }
+
     pub fn tris(&self) -> u32 {
         (self.indices.len() / 12) as u32
     }
@@ -79,10 +104,16 @@ impl Reader<'_> {
         self.0 = b;
         Some(a.to_vec())
     }
-    fn triples(&mut self) -> Option<Vec<[u32; 3]>> {
+    fn rows<const N: usize>(&mut self) -> Option<Vec<[u32; N]>> {
         let n = self.u32()? as usize;
         (0..n)
-            .map(|_| Some([self.u32()?, self.u32()?, self.u32()?]))
+            .map(|_| {
+                let mut row = [0; N];
+                for v in &mut row {
+                    *v = self.u32()?;
+                }
+                Some(row)
+            })
             .collect()
     }
 }
@@ -92,7 +123,7 @@ fn put_bytes(out: &mut Vec<u8>, b: &[u8]) {
     out.extend_from_slice(b);
 }
 
-fn put_triples(out: &mut Vec<u8>, t: impl ExactSizeIterator<Item = [u32; 3]>) {
+fn put_rows<const N: usize>(out: &mut Vec<u8>, t: impl ExactSizeIterator<Item = [u32; N]>) {
     out.extend_from_slice(&(t.len() as u32).to_le_bytes());
     t.for_each(|x| x.iter().for_each(|v| out.extend_from_slice(&v.to_le_bytes())));
 }
@@ -110,8 +141,20 @@ impl PartMesh {
             put_bytes(&mut out, &l.vertices);
             put_bytes(&mut out, &l.indices);
             put_bytes(&mut out, &l.segments);
-            put_triples(&mut out, l.faces.iter().map(|f| [f.face, f.first_tri, f.tris]));
-            put_triples(&mut out, l.edges.iter().map(|e| [e.edge, e.first, e.count]));
+            put_rows(
+                &mut out,
+                l.faces
+                    .iter()
+                    .map(|f| [f.face, f.first_tri, f.tris, f.first_vertex, f.vertices]),
+            );
+            put_rows(
+                &mut out,
+                l.edges.iter().map(|e| {
+                    let [a, b, c] = e.start_at.map(f32::to_bits);
+                    let [d, f, g] = e.end_at.map(f32::to_bits);
+                    [e.edge, e.first, e.count, e.start, e.end, a, b, c, d, f, g]
+                }),
+            );
         }
         out
     }
@@ -131,18 +174,28 @@ impl PartMesh {
                 indices: r.bytes()?,
                 segments: r.bytes()?,
                 faces: r
-                    .triples()?
+                    .rows::<5>()?
                     .into_iter()
-                    .map(|[face, first_tri, tris]| FaceRange {
+                    .map(|[face, first_tri, tris, first_vertex, vertices]| FaceRange {
                         face,
                         first_tri,
                         tris,
+                        first_vertex,
+                        vertices,
                     })
                     .collect(),
                 edges: r
-                    .triples()?
+                    .rows::<11>()?
                     .into_iter()
-                    .map(|[edge, first, count]| EdgeRange { edge, first, count })
+                    .map(|[edge, first, count, start, end, a, b, c, d, f, g]| EdgeRange {
+                        edge,
+                        first,
+                        count,
+                        start,
+                        end,
+                        start_at: [a, b, c].map(f32::from_bits),
+                        end_at: [d, f, g].map(f32::from_bits),
+                    })
                     .collect(),
             });
         }
@@ -166,14 +219,17 @@ mod tests {
                 segments: vec![2; SEGMENT],
                 fins: 1,
                 faces: vec![FaceRange {
-                    face: 7,
-                    first_tri: 0,
-                    tris: 1,
+                    vertices: 1,
+                    ..FaceRange::of(7, 0, 1)
                 }],
                 edges: vec![EdgeRange {
                     edge: 9,
                     first: 0,
                     count: 1,
+                    start: 2,
+                    end: 3,
+                    start_at: [1.0, 2.0, 3.0],
+                    end_at: [4.0, 5.0, 6.0],
                 }],
             }],
         };
@@ -186,20 +242,10 @@ mod tests {
     #[test]
     fn a_triangle_finds_its_face() {
         let l = Lod {
-            faces: vec![
-                FaceRange {
-                    face: 5,
-                    first_tri: 0,
-                    tris: 2,
-                },
-                FaceRange {
-                    face: 3,
-                    first_tri: 2,
-                    tris: 1,
-                },
-            ],
+            faces: vec![FaceRange::of(5, 0, 2), FaceRange::of(3, 2, 1)],
             ..Lod::default()
         };
         assert_eq!([l.face_of(0), l.face_of(1), l.face_of(2)], [5, 5, 3]);
+        assert_eq!(l.face(3).map(|f| f.first_tri), Some(2));
     }
 }

@@ -2,7 +2,7 @@
 //! part and level by level, from the frame's list of visible placements.
 
 use crate::camera::{Camera, View};
-use crate::mesh::{PartMesh, SEGMENT, VERTEX};
+use crate::mesh::{EdgeRange, FaceRange, PartMesh, SEGMENT, VERTEX};
 use crate::scene::Scene;
 use crate::viewer::now_ms;
 use std::sync::Arc;
@@ -14,7 +14,12 @@ const DEPTH: wgpu::TextureFormat = wgpu::TextureFormat::Depth32Float;
 const TIMERS: usize = 4;
 const HUD_CHARS: usize = 256;
 /// Where the overlay's text starts in the globals (see render.wgsl).
-const TEXT_AT: usize = 64 + 16 + 16 + 3 * 16 + 16;
+const TEXT_AT: usize = 64 + 16 + 16 + 3 * 16 + 16 + DOTS * 16;
+/// Picked vertices a frame can mark.
+const DOTS: usize = 8;
+/// Picked faces and edges a frame can mark.
+const MARKS: usize = 32;
+const SELECTED_BIT: u32 = 1 << 31;
 const GLOBALS: usize = TEXT_AT + HUD_CHARS;
 /// A pick draws this many pixels around the cursor.
 const PICK_PX: u32 = 11;
@@ -35,6 +40,15 @@ struct LodDraw {
     base_vertex: i32,
     first_segment: u32,
     segments: u32,
+    /// How many of the segments are B-rep edges.
+    edges: u32,
+}
+
+/// Where a level's B-rep entities are.
+struct PickIndex {
+    faces: Vec<FaceRange>,
+    edges: Vec<EdgeRange>,
+    first_segment: u32,
 }
 
 /// What a frame drew.
@@ -56,12 +70,31 @@ pub struct Overlay<'a> {
     pub hud: Option<&'a str>,
     /// The view cube's square (left, top, side in pixels) and its region under the cursor.
     pub cube: Option<((f32, f32), f32, [i8; 3])>,
+    /// What's hovered or selected, at most `MARKS` of them.
+    pub marks: &'a [Mark],
+}
+
+/// A B-rep entity of a part.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub enum Entity {
+    Face(u32),
+    Edge(u32),
+    Vertex(u32),
+}
+
+/// An entity of a placement drawn marked.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct Mark {
+    pub placement: u32,
+    pub entity: Entity,
+    pub selected: bool,
 }
 
 /// What was under a pixel.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct PickHit {
     pub placement: u32,
+    pub entity: Entity,
     /// The point on the surface.
     pub point: [f32; 3],
     /// How far ahead of the eye, along the view.
@@ -78,6 +111,7 @@ struct PickState {
     globals: wgpu::Buffer,
     binds: wgpu::BindGroup,
     surface: wgpu::RenderPipeline,
+    line: wgpu::RenderPipeline,
     ready: Arc<AtomicBool>,
     /// The pixel asked about, the camera it was asked with, when.
     busy: Option<((f32, f32), Camera, f64)>,
@@ -98,6 +132,10 @@ pub struct Renderer {
     line: wgpu::RenderPipeline,
     hud: wgpu::RenderPipeline,
     cube: wgpu::RenderPipeline,
+    face_mark: wgpu::RenderPipeline,
+    edge_mark: wgpu::RenderPipeline,
+    dot: wgpu::RenderPipeline,
+    marks: wgpu::Buffer,
     pick: PickState,
     binds: wgpu::BindGroup,
     globals: wgpu::Buffer,
@@ -106,6 +144,9 @@ pub struct Renderer {
     indices: wgpu::Buffer,
     instances: wgpu::Buffer,
     lods: Vec<Vec<LodDraw>>,
+    /// Each part's faces and edges, by level, for telling what a pick hit.
+    index: Vec<Vec<PickIndex>>,
+    vertex_faces: wgpu::Buffer,
     size: (u32, u32),
     colour: wgpu::TextureView,
     depth: wgpu::TextureView,
@@ -390,6 +431,11 @@ impl Renderer {
                         attributes: &wgpu::vertex_attr_array![0 => Float32x3],
                     }),
                     Some(instance_at(2)),
+                    Some(wgpu::VertexBufferLayout {
+                        array_stride: 4,
+                        step_mode: wgpu::VertexStepMode::Vertex,
+                        attributes: &wgpu::vertex_attr_array![3 => Uint32],
+                    }),
                 ],
             },
             primitive: wgpu::PrimitiveState {
@@ -412,6 +458,111 @@ impl Renderer {
             cache: None,
         });
 
+        let pick_target_state = [Some(wgpu::ColorTargetState {
+            format: PICK_ID,
+            blend: None,
+            write_mask: wgpu::ColorWrites::ALL,
+        })];
+        let pick_line = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
+            label: Some("pick line"),
+            layout: Some(&layout),
+            vertex: wgpu::VertexState {
+                module: &shader,
+                entry_point: Some("line_pick_vs"),
+                compilation_options: Default::default(),
+                buffers: &[Some(instance_at(0))],
+            },
+            primitive: wgpu::PrimitiveState::default(),
+            depth_stencil: depth(true),
+            multisample: wgpu::MultisampleState::default(),
+            fragment: Some(wgpu::FragmentState {
+                module: &shader,
+                entry_point: Some("pick_fs"),
+                compilation_options: Default::default(),
+                targets: &pick_target_state,
+            }),
+            multiview_mask: None,
+            cache: None,
+        });
+        let over = [Some(wgpu::ColorTargetState {
+            format,
+            blend: Some(wgpu::BlendState::ALPHA_BLENDING),
+            write_mask: wgpu::ColorWrites::ALL,
+        })];
+        let face_mark = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
+            label: Some("face mark"),
+            layout: Some(&layout),
+            vertex: wgpu::VertexState {
+                module: &shader,
+                entry_point: Some("face_mark_vs"),
+                compilation_options: Default::default(),
+                buffers: &[
+                    Some(wgpu::VertexBufferLayout {
+                        array_stride: VERTEX as u64,
+                        step_mode: wgpu::VertexStepMode::Vertex,
+                        attributes: &wgpu::vertex_attr_array![0 => Float32x3],
+                    }),
+                    Some(instance_at(2)),
+                ],
+            },
+            primitive: wgpu::PrimitiveState {
+                cull_mode: Some(wgpu::Face::Back),
+                ..Default::default()
+            },
+            depth_stencil: depth(false),
+            multisample,
+            fragment: Some(wgpu::FragmentState {
+                module: &shader,
+                entry_point: Some("mark_fs"),
+                compilation_options: Default::default(),
+                targets: &over,
+            }),
+            multiview_mask: None,
+            cache: None,
+        });
+        let edge_mark = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
+            label: Some("edge mark"),
+            layout: Some(&layout),
+            vertex: wgpu::VertexState {
+                module: &shader,
+                entry_point: Some("edge_mark_vs"),
+                compilation_options: Default::default(),
+                buffers: &[Some(instance_at(0))],
+            },
+            primitive: wgpu::PrimitiveState::default(),
+            depth_stencil: depth(false),
+            multisample,
+            fragment: Some(wgpu::FragmentState {
+                module: &shader,
+                entry_point: Some("mark_fs"),
+                compilation_options: Default::default(),
+                targets: &over,
+            }),
+            multiview_mask: None,
+            cache: None,
+        });
+        let dot = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
+            label: Some("dot"),
+            layout: Some(&layout),
+            vertex: wgpu::VertexState {
+                module: &shader,
+                entry_point: Some("dot_vs"),
+                compilation_options: Default::default(),
+                buffers: &[],
+            },
+            primitive: wgpu::PrimitiveState::default(),
+            depth_stencil: depth(false),
+            multisample,
+            fragment: Some(wgpu::FragmentState {
+                module: &shader,
+                entry_point: Some("dot_fs"),
+                compilation_options: Default::default(),
+                targets: &over,
+            }),
+            multiview_mask: None,
+            cache: None,
+        });
+
         let (mut vbytes, mut ibytes, mut sbytes) = (0u64, 0u64, 0u64);
         let mut lods = Vec::with_capacity(parts.len());
         for p in parts {
@@ -423,6 +574,7 @@ impl Renderer {
                     base_vertex: (vbytes / VERTEX as u64) as i32,
                     first_segment: (sbytes / SEGMENT as u64) as u32,
                     segments: (l.segments.len() / SEGMENT) as u32,
+                    edges: l.fins,
                 });
                 vbytes += l.vertices.len() as u64;
                 ibytes += l.indices.len() as u64;
@@ -434,6 +586,41 @@ impl Renderer {
         let v: Vec<&[u8]> = all_lods().map(|l| &l.vertices[..]).collect();
         let i: Vec<&[u8]> = all_lods().map(|l| &l.indices[..]).collect();
         let s: Vec<&[u8]> = all_lods().map(|l| &l.segments[..]).collect();
+        // which face each vertex is on, for picks: whole buffers line up with the vertices
+        let mut face_bytes = vec![0u8; (vbytes / VERTEX as u64) as usize * 4];
+        let mut base = 0usize;
+        for l in all_lods() {
+            for f in &l.faces {
+                let from = (base + f.first_vertex as usize) * 4;
+                let to = from + f.vertices as usize * 4;
+                for out in face_bytes[from..to].as_chunks_mut::<4>().0 {
+                    *out = f.face.to_le_bytes();
+                }
+            }
+            base += l.vertices.len() / VERTEX;
+        }
+        let vertex_faces = filled(
+            &device,
+            "vertex faces",
+            face_bytes.len() as u64,
+            wgpu::BufferUsages::VERTEX,
+            vec![&face_bytes],
+        );
+        let index: Vec<Vec<PickIndex>> = parts
+            .iter()
+            .zip(&lods)
+            .map(|(p, row)| {
+                p.lods
+                    .iter()
+                    .zip(row)
+                    .map(|(l, d)| PickIndex {
+                        faces: l.faces.clone(),
+                        edges: l.edges.clone(),
+                        first_segment: d.first_segment,
+                    })
+                    .collect()
+            })
+            .collect();
         let vertices = filled(&device, "vertices", vbytes, wgpu::BufferUsages::VERTEX, v);
         let indices = filled(&device, "indices", ibytes, wgpu::BufferUsages::INDEX, i);
         let segments = filled(&device, "segments", sbytes, wgpu::BufferUsages::STORAGE, s);
@@ -459,6 +646,12 @@ impl Renderer {
         let instances = device.create_buffer(&wgpu::BufferDescriptor {
             label: Some("visible"),
             size: scene.placements.len().max(1) as u64 * 4,
+            usage: wgpu::BufferUsages::VERTEX | wgpu::BufferUsages::COPY_DST,
+            mapped_at_creation: false,
+        });
+        let marks = device.create_buffer(&wgpu::BufferDescriptor {
+            label: Some("marks"),
+            size: MARKS as u64 * 4,
             usage: wgpu::BufferUsages::VERTEX | wgpu::BufferUsages::COPY_DST,
             mapped_at_creation: false,
         });
@@ -558,6 +751,7 @@ impl Renderer {
             globals: pick_globals,
             binds: pick_binds,
             surface: pick_surface,
+            line: pick_line,
             ready: Arc::new(AtomicBool::new(false)),
             busy: None,
         };
@@ -599,6 +793,10 @@ impl Renderer {
             line,
             hud,
             cube,
+            face_mark,
+            edge_mark,
+            dot,
+            marks,
             pick,
             binds,
             globals,
@@ -607,6 +805,8 @@ impl Renderer {
             indices,
             instances,
             lods,
+            index,
+            vertex_faces,
             size,
             colour,
             depth: depth_view,
@@ -656,7 +856,9 @@ impl Renderer {
         self.upload_moves(scene);
         self.queue
             .write_buffer(&self.instances, 0, scene.visible.as_flattened());
-        let bytes = globals_bytes(&view, self.size, [0; 3], "");
+        // the window is PICK_PX pixels across, a pixel of it one of the screen's
+        let mut bytes = globals_bytes(&view, (PICK_PX, PICK_PX), [0; 3], "");
+        bytes[88..92].copy_from_slice(&PICK_EDGE_PX.to_le_bytes());
         self.queue.write_buffer(&self.pick.globals, 0, &bytes);
         let mut encoder = self.device.create_command_encoder(&Default::default());
         {
@@ -687,12 +889,22 @@ impl Renderer {
             pass.set_pipeline(&self.pick.surface);
             pass.set_vertex_buffer(0, self.vertices.slice(..));
             pass.set_vertex_buffer(1, self.instances.slice(..));
+            pass.set_vertex_buffer(2, self.vertex_faces.slice(..));
             pass.set_index_buffer(self.indices.slice(..), wgpu::IndexFormat::Uint32);
             for d in &scene.draws {
-                let l = self.lods[d.part as usize][d.lod as usize];
+                let l = self.lods[d.part as usize][self.pick_lod(d.part, d.lod)];
                 pass.draw_indexed(
                     l.first_index..l.first_index + l.indices,
                     l.base_vertex,
+                    d.first..d.first + d.count,
+                );
+            }
+            pass.set_pipeline(&self.pick.line);
+            pass.set_vertex_buffer(0, self.instances.slice(..));
+            for d in &scene.draws {
+                let l = self.lods[d.part as usize][self.pick_lod(d.part, d.lod)];
+                pass.draw(
+                    l.first_segment * 6..(l.first_segment + l.edges) * 6,
                     d.first..d.first + d.count,
                 );
             }
@@ -740,7 +952,7 @@ impl Renderer {
 
     /// The answer to the pick under way, once it's back: the pixel asked about, what's there,
     /// and how long it took in ms.
-    pub fn pick_poll(&mut self) -> Option<((f32, f32), Option<PickHit>, f64)> {
+    pub fn pick_poll(&mut self, scene: &Scene) -> Option<((f32, f32), Option<PickHit>, f64)> {
         self.pick.busy?;
         let _ = self.device.poll(wgpu::PollType::Poll);
         if !self.pick.ready.swap(false, Ordering::AcqRel) {
@@ -761,29 +973,39 @@ impl Renderer {
             .slice(..)
             .get_mapped_range()
             .expect("it said ready");
-        // the drawn pixel nearest the middle
-        let mut best: Option<(i32, usize, usize)> = None;
+        let word = |b: &[u8], at: usize| u32::from_le_bytes(b[at..at + 4].try_into().expect("4 bytes"));
+        // the nearest edge to the middle, or else the nearest of anything
+        let mut best: Option<(bool, i32, usize, usize)> = None;
         for y in 0..n {
             for x in 0..n {
                 let at = y * PICK_ROW as usize + x * 8;
-                let id = u32::from_le_bytes(ids[at..at + 4].try_into().expect("4 bytes"));
+                if word(&ids, at) == 0 {
+                    continue;
+                }
+                let edge = word(&ids, at + 4) & SELECTED_BIT != 0;
                 let (dx, dy) = (x as i32 - mid, y as i32 - mid);
                 let far = dx * dx + dy * dy;
-                if id != 0 && best.is_none_or(|b| far < b.0) {
-                    best = Some((far, x, y));
+                if best.is_none_or(|b| (!edge, far) < (!b.0, b.1)) {
+                    best = Some((edge, far, x, y));
                 }
             }
         }
-        let hit = best.map(|(_, x, y)| {
+        let hit = best.map(|(edge, _, x, y)| {
             let at = y * PICK_ROW as usize + x * 8;
-            let id = u32::from_le_bytes(ids[at..at + 4].try_into().expect("4 bytes"));
-            let at = y * PICK_ROW as usize + x * 4;
-            let d = f32::from_le_bytes(depths[at..at + 4].try_into().expect("4 bytes"));
+            let placement = word(&ids, at) - 1;
+            let id = word(&ids, at + 4);
             // reversed z: depth is near / distance
+            let d = f32::from_bits(word(&depths, y * PICK_ROW as usize + x * 4));
             let depth = camera.near() / d;
             let on = (px.0 + x as f32 - mid as f32, px.1 + y as f32 - mid as f32);
+            let entity = if edge {
+                self.edge_or_vertex(scene, placement, id & !SELECTED_BIT, &camera, px)
+            } else {
+                Entity::Face(id)
+            };
             PickHit {
-                placement: id - 1,
+                placement,
+                entity,
                 point: camera.point_at(on, depth, self.size.0, self.size.1),
                 depth,
             }
@@ -793,6 +1015,115 @@ impl Renderer {
         self.pick.id_read.unmap();
         self.pick.depth_read.unmap();
         Some((px, hit, now_ms() - asked))
+    }
+
+    /// The level a pick and a mark use for a level on screen: one that knows its faces and edges.
+    fn pick_lod(&self, part: u32, lod: u32) -> usize {
+        let row = &self.lods[part as usize];
+        let known = row.iter().rposition(|l| l.segments > 0).unwrap_or(0);
+        (lod as usize).min(known)
+    }
+
+    /// A segment drawn at a pick, as what it belongs to: its B-rep edge, or the vertex at the end
+    /// of it if the cursor is that close.
+    fn edge_or_vertex(
+        &self,
+        scene: &Scene,
+        placement: u32,
+        segment: u32,
+        camera: &Camera,
+        px: (f32, f32),
+    ) -> Entity {
+        let p = &scene.placements[placement as usize];
+        let levels = &self.index[p.part as usize];
+        let level = levels
+            .iter()
+            .rfind(|l| l.first_segment <= segment && !l.edges.is_empty())
+            .expect("a segment is on a level");
+        let local = segment - level.first_segment;
+        let i = level.edges.partition_point(|e| e.first + e.count <= local);
+        let e = &level.edges[i];
+        let to_px = |q: [f32; 3]| camera.pixel_of(place(&p.rows, q), self.size.0, self.size.1);
+        for (v, at) in [(e.start, e.start_at), (e.end, e.end_at)] {
+            if let Some(o) = to_px(at) {
+                let (dx, dy) = (o.0 - px.0, o.1 - px.1);
+                if dx * dx + dy * dy <= PICK_VERTEX_PX * PICK_VERTEX_PX {
+                    return Entity::Vertex(v);
+                }
+            }
+        }
+        Entity::Edge(e.edge)
+    }
+
+    /// Where picked vertices are this frame, into the uniforms.
+    fn write_dots(&self, bytes: &mut [u8; GLOBALS], scene: &Scene, marks: &[Mark]) {
+        let mut k = 0;
+        for m in marks {
+            let Entity::Vertex(v) = m.entity else { continue };
+            let p = &scene.placements[m.placement as usize];
+            let found = self.index[p.part as usize][0].edges.iter().find_map(|e| {
+                (e.start == v)
+                    .then_some(e.start_at)
+                    .or((e.end == v).then_some(e.end_at))
+            });
+            if let Some(at) = found
+                && k < DOTS
+            {
+                let [x, y, z] = place(&p.rows, at);
+                let w = if m.selected { 2.0f32 } else { 1.0 };
+                for (j, value) in [x, y, z, w].iter().enumerate() {
+                    let o = DOTS_AT + k * 16 + j * 4;
+                    bytes[o..o + 4].copy_from_slice(&value.to_le_bytes());
+                }
+                k += 1;
+            }
+        }
+    }
+
+    /// Draws what's hovered and selected, over what's there.
+    fn draw_marks(&self, pass: &mut wgpu::RenderPass<'_>, scene: &Scene, marks: &[Mark]) {
+        if marks.is_empty() {
+            return;
+        }
+        pass.set_vertex_buffer(1, self.marks.slice(..));
+        pass.set_pipeline(&self.face_mark);
+        pass.set_vertex_buffer(0, self.vertices.slice(..));
+        for (k, m) in marks.iter().take(MARKS).enumerate() {
+            let k = k as u32;
+            let part = scene.placements[m.placement as usize].part;
+            let Some(lod) = scene.lod_on_screen(m.placement) else {
+                continue;
+            };
+            let lod = self.pick_lod(part, lod);
+            if let Entity::Face(f) = m.entity
+                && let Some(r) = self.index[part as usize][lod].faces.iter().find(|r| r.face == f)
+            {
+                let l = self.lods[part as usize][lod];
+                pass.draw_indexed(
+                    l.first_index + r.first_tri * 3..l.first_index + (r.first_tri + r.tris) * 3,
+                    l.base_vertex,
+                    k..k + 1,
+                );
+            }
+        }
+        pass.set_pipeline(&self.edge_mark);
+        pass.set_vertex_buffer(0, self.marks.slice(..));
+        for (k, m) in marks.iter().take(MARKS).enumerate() {
+            let k = k as u32;
+            let part = scene.placements[m.placement as usize].part;
+            let Some(lod) = scene.lod_on_screen(m.placement) else {
+                continue;
+            };
+            let lod = self.pick_lod(part, lod);
+            if let Entity::Edge(e) = m.entity
+                && let Some(r) = self.index[part as usize][lod].edges.iter().find(|r| r.edge == e)
+            {
+                let first = self.lods[part as usize][lod].first_segment + r.first;
+                pass.draw(first * 6..(first + r.count) * 6, k..k + 1);
+            }
+        }
+        pass.set_pipeline(&self.dot);
+        pass.draw(0..DOTS as u32 * 6, 0..1);
     }
 
     /// Reads back any GPU times the GPU has finished.
@@ -828,7 +1159,17 @@ impl Renderer {
             .write_buffer(&self.instances, 0, scene.visible.as_flattened());
 
         let hover = overlay.cube.map_or([0; 3], |c| c.2);
-        let bytes = globals_bytes(&view, self.size, hover, hud.unwrap_or(""));
+        let mut bytes = globals_bytes(&view, self.size, hover, hud.unwrap_or(""));
+        self.write_dots(&mut bytes, scene, overlay.marks);
+        let marked: Vec<[u8; 4]> = overlay
+            .marks
+            .iter()
+            .take(MARKS)
+            .map(|m| (m.placement | if m.selected { SELECTED_BIT } else { 0 }).to_le_bytes())
+            .collect();
+        if !marked.is_empty() {
+            self.queue.write_buffer(&self.marks, 0, marked.as_flattened());
+        }
         self.queue.write_buffer(&self.globals, 0, &bytes);
 
         let uploaded = now_ms();
@@ -902,6 +1243,7 @@ impl Renderer {
                     }
                 }
             }
+            self.draw_marks(&mut pass, scene, overlay.marks);
             if let Some((at, side, _)) = overlay.cube {
                 pass.set_viewport(at.0, at.1, side, side, 0.0, 1.0);
                 pass.set_pipeline(&self.cube);
@@ -950,6 +1292,10 @@ impl Renderer {
     }
 }
 
+fn place(rows: &crate::scene::Rows, q: [f32; 3]) -> [f32; 3] {
+    rows.map(|r| r[0] * q[0] + r[1] * q[1] + r[2] * q[2] + r[3])
+}
+
 /// The shader's uniforms for a view.
 fn globals_bytes(view: &View, size: (u32, u32), hover: [i8; 3], hud: &str) -> [u8; GLOBALS] {
     let mut bytes = [0u8; GLOBALS];
@@ -958,7 +1304,12 @@ fn globals_bytes(view: &View, size: (u32, u32), hover: [i8; 3], hud: &str) -> [u
         .matrix
         .into_iter()
         .chain(vec3(view.eye))
-        .chain([2.0 / size.0 as f32, 2.0 / size.1 as f32, LINE_HALF_PX, 0.0])
+        .chain([
+            2.0 / size.0 as f32,
+            2.0 / size.1 as f32,
+            LINE_HALF_PX,
+            MARK_HALF_PX,
+        ])
         .chain(vec3(view.right))
         .chain(vec3(view.up))
         .chain(vec3(view.forward))
@@ -1040,6 +1391,13 @@ impl Offscreen {
     }
 }
 
+/// Half a marked edge's width in pixels.
+const MARK_HALF_PX: f32 = 1.5;
+/// How far from a pixel an edge is picked, and a vertex at its end (pixels).
+const PICK_EDGE_PX: f32 = 4.0;
+const PICK_VERTEX_PX: f32 = 7.0;
+/// Where the picked vertices start in the globals.
+const DOTS_AT: usize = TEXT_AT - DOTS * 16;
 /// Half a line's width in pixels.
 const LINE_HALF_PX: f32 = 0.7;
 /// A level's chord may be this many pixels on screen (research/render).
