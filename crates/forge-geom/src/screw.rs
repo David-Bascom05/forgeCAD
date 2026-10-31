@@ -682,6 +682,31 @@ impl Procedural for Screw {
             self.ring.pieces[0].s.length().max(tol::LINEAR),
         )
     }
+    fn second_bounds(&self, uv: Box2) -> Option<[f64; 3]> {
+        // S = O + e(u) r + z h, r = x(v) + a u, h = y(v) + b u for section point (x, y)(v):
+        // S_uu = 2 a e' - r e, S_uv = x'(v) e', S_vv = x''(v) e + y''(v) z
+        let (mut r, mut d1, mut d2) = (0.0f64, 0.0f64, 0.0f64);
+        let n = self.ring.pieces.len() as i64;
+        let mut v = uv.v.lo;
+        loop {
+            let (j, t0) = ((v.floor() as i64).rem_euclid(n) as usize, v - v.floor());
+            let end = (v.floor() + 1.0).min(uv.v.hi);
+            let s = self.ring.pieces[j].s;
+            let rr = s.bbox(Interval::new(t0, (t0 + (end - v)).min(1.0))).0 + uv.u * self.m.a;
+            r = r.max(rr.lo.abs()).max(rr.hi.abs());
+            let (l1, l2) = match s {
+                Section::Line { a, b } => (a.distance(b), 0.0),
+                Section::Arc { r, sweep, .. } => (r * sweep.abs(), r * sweep * sweep),
+            };
+            (d1, d2) = (d1.max(l1), d2.max(l2));
+            if end >= uv.v.hi {
+                break;
+            }
+            v = end;
+        }
+        let a = self.m.a;
+        Some([(4.0 * a * a + r * r).sqrt(), d1, d2])
+    }
     fn min_radius(&self) -> f64 {
         let r = match self.ring.pieces[0].s {
             Section::Line { .. } => f64::INFINITY,

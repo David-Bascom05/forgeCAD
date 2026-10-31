@@ -2,9 +2,11 @@
 //! and every triangle within the chord of its face's surface at its centroid and at its edge
 //! midpoints, on every kind of face.
 use forge_geom::{Surface, SurfaceGeom};
+use forge_math::{Box2, Interval};
 use forge_math::{Point2, Point3, dmath};
 use forge_mesh::{Quality, TriMesh, tessellate};
 use forge_model::{Part, fillets, suite};
+use forge_topo::uv::{draw_loop, loop_samples};
 use forge_topo::{Body, FaceId};
 
 /// The distance from `x` to the surface nearest it about `uv`: Newton on the squared distance
@@ -175,4 +177,52 @@ fn fillet_cases() {
         }
     }
     check(parts, &[0.002, 0.01, 0.25]);
+}
+
+/// A procedural surface's bounds on its second derivatives hold over its faces' parameter boxes:
+/// meshing takes chords and triangles within them as within the chord without a look.
+#[test]
+fn second_derivative_bounds_hold() {
+    let mut parts: Vec<Part> = suite::parts().into_iter().map(|(_, p)| p).collect();
+    parts.extend(fillets::cases().into_iter().map(|c| c.1));
+    let mut checked = 0;
+    for part in parts {
+        let b = part.regenerate().expect("regenerates");
+        for f in b.face_ids() {
+            let Surface::Procedural(pr) = &b.face(f).surface else {
+                continue;
+            };
+            let s = &b.face(f).surface;
+            let (pts, _) = loop_samples(&b, b.face(f).loops[0], |_| 16);
+            let (uvs, _) = draw_loop(&b, f, &pts);
+            let (mut lo, mut hi) = (uvs[0], uvs[0]);
+            for p in &uvs {
+                lo = Point2::new(lo.x.min(p.x), lo.y.min(p.y));
+                hi = Point2::new(hi.x.max(p.x), hi.y.max(p.y));
+            }
+            let bx = Box2::new(Interval::new(lo.x, hi.x), Interval::new(lo.y, hi.y));
+            let Some([uu, uv, vv]) = pr.second_bounds(bx) else {
+                continue;
+            };
+            checked += 1;
+            for i in 0..=8 {
+                for j in 0..=8 {
+                    let p = Point2::new(
+                        lo.x + (hi.x - lo.x) * i as f64 / 8.0,
+                        lo.y + (hi.y - lo.y) * j as f64 / 8.0,
+                    );
+                    let d = s.deriv(p);
+                    let ok = |x: f64, m: f64| x <= m * (1.0 + 1e-9) + 1e-9;
+                    assert!(
+                        ok(d.duu.length(), uu) && ok(d.duv.length(), uv) && ok(d.dvv.length(), vv),
+                        "face {f:?} at {p:?}: {:?} over {:?}",
+                        (d.duu.length(), d.duv.length(), d.dvv.length()),
+                        (uu, uv, vv)
+                    );
+                }
+            }
+        }
+    }
+    assert!(checked > 0);
+    println!("{checked} faces");
 }

@@ -132,6 +132,13 @@ pub trait Procedural: Send + Sync + std::fmt::Debug {
     fn min_radius_over(&self, _uv: Box2) -> f64 {
         self.min_radius()
     }
+    /// Bounds on |S_uu|, |S_uv| and |S_vv| over the parameter box, where the construction gives
+    /// them (None where it does not): with them a chord's gap from the surface is bounded without
+    /// evaluating it (meshing).
+    fn second_bounds(&self, uv: Box2) -> Option<[f64; 3]> {
+        let _ = uv;
+        None
+    }
     /// The surface itself, for closed forms that know its kind.
     fn as_any(&self) -> Option<&dyn std::any::Any> {
         None

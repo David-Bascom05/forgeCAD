@@ -58,6 +58,23 @@ impl Rail {
         }
     }
 
+    /// Bounds on |C'| and |C''| over the fractions `t` (None for a wrapped curve).
+    pub(crate) fn derivative_bounds(&self, t: Interval) -> Option<(f64, f64)> {
+        match *self {
+            Rail::Line { a, b } => Some((a.distance(b), 0.0)),
+            Rail::Arc { circle, sweep, .. } => {
+                Some((circle.radius * sweep.abs(), circle.radius * sweep * sweep))
+            }
+            Rail::Parabola { curve, range } => {
+                // C' = w (2 k x, 1) in the parabola's frame, C'' = w^2 (2 k, 0)
+                let (w, k2) = (range.width(), 0.5 / curve.focal.abs());
+                let x = (range.lo + w * t.lo).abs().max((range.lo + w * t.hi).abs());
+                Some((w * (1.0 + (k2 * x) * (k2 * x)).sqrt(), w * w * k2))
+            }
+            Rail::Wrap(_) => None,
+        }
+    }
+
     pub(crate) fn bbox(&self, t: Interval) -> Box3 {
         match *self {
             Rail::Line { .. } => Box3::from_points([self.at(t.lo).0, self.at(t.hi).0]),
@@ -388,6 +405,16 @@ impl Procedural for Ruled {
     }
     fn uv_scale(&self) -> (f64, f64) {
         (self.scale.0.max(tol::LINEAR), self.scale.1.max(tol::LINEAR))
+    }
+    fn second_bounds(&self, uv: Box2) -> Option<[f64; 3]> {
+        // S = (1 - v) A(u) + v B(u): S_uu = (1 - v) A'' + v B'', S_uv = B' - A', S_vv = 0
+        let (a1, a2) = self.a.derivative_bounds(uv.u)?;
+        let (b1, b2) = self.b.derivative_bounds(uv.u)?;
+        let (wa, wb) = (
+            (1.0 - uv.v.lo).abs().max((1.0 - uv.v.hi).abs()),
+            uv.v.lo.abs().max(uv.v.hi.abs()),
+        );
+        Some([wa * a2 + wb * b2, a1 + b1, 0.0])
     }
     fn min_radius(&self) -> f64 {
         let arc = |r: &Rail| match *r {

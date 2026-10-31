@@ -148,6 +148,29 @@ impl Nodes {
         Nodes { lo, hi, at }
     }
 
+    /// Steps from bounds on the second derivatives: a little under half the tolerance along u,
+    /// the rest of it on a cell's diagonal, so the grid's triangles need no look.
+    fn bounded_counts(&self, [uu, uv, vv]: [f64; 3], q: &Quality) -> Counts {
+        let c = 0.9 * 8.0 * q.chord;
+        let du = if uu > 0.0 {
+            (0.5 * c / uu).sqrt()
+        } else {
+            f64::INFINITY
+        };
+        let du = du.min(self.hi.x - self.lo.x);
+        // vv dv^2 + 2 uv du dv = c - uu du^2
+        let room = c - uu * du * du;
+        let dv = if vv > 0.0 {
+            (-uv * du + ((uv * du) * (uv * du) + vv * room).sqrt()) / vv
+        } else if uv > 0.0 {
+            room / (2.0 * uv * du)
+        } else {
+            f64::INFINITY
+        };
+        let k = |w: f64, d: f64| (w / G as f64 / d).ceil().clamp(1.0, 1e6) as usize;
+        [[(k(self.hi.x - self.lo.x, du), k(self.hi.y - self.lo.y, dv)); G]; G]
+    }
+
     fn node(lo: Point2, hi: Point2, i: usize, j: usize) -> Point2 {
         Point2::new(
             lo.x + (hi.x - lo.x) * i as f64 / G as f64,
@@ -380,6 +403,14 @@ fn tessellate_face(
         lo = Point2::new(lo.x.min(p.x), lo.y.min(p.y));
         hi = Point2::new(hi.x.max(p.x), hi.y.max(p.y));
     }
+    // a procedural surface's second derivatives bounded by its construction, where it can
+    let bounds = match surface {
+        Surface::Procedural(pr) => pr.second_bounds(forge_math::Box2::new(
+            forge_math::Interval::new(lo.x, hi.x),
+            forge_math::Interval::new(lo.y, hi.y),
+        )),
+        _ => None,
+    };
     let mut nodes = None;
     let layout = match surface {
         // unrolled where the face reaches the apex: there its rulings meet, and a triangle with a
@@ -392,7 +423,16 @@ fn tessellate_face(
         },
         Surface::Procedural(_) => {
             let n = Nodes::new(surface, lo, hi);
-            let c = n.counts(surface, q);
+            let mut c = n.counts(surface, q);
+            // the bounds' grid needs no look at its triangles; where it has no more points than
+            // the sampled curvatures' grid it is the one
+            if let Some(b) = bounds {
+                let tight = n.bounded_counts(b, q);
+                let size = |c: &Counts| c.iter().flatten().map(|&(a, b)| a * b).sum::<usize>();
+                if size(&tight) <= size(&c) {
+                    c = tight;
+                }
+            }
             let (a, b) = n.scale(&c);
             nodes = Some((n, c));
             Layout::Scaled(a, b)
@@ -604,22 +644,31 @@ fn tessellate_face(
         Surface::Procedural(_) => strays_from(surface, x, layout.uv(p), q.chord),
         _ => surface.implicit(x).abs() > q.chord,
     };
+    // within the chord by the bounds on a procedural surface's second derivatives
+    let bounded = |a: Point2, b: Point2| {
+        let (a, b) = (layout.uv(a), layout.uv(b));
+        bounds.is_some_and(|m| sag(m, b.x - a.x, b.y - a.y) <= 0.98 * q.chord)
+    };
     let edge = |ia: u32, ib: u32, a: Point2, b: Point2| {
         if ia >= nb && ib >= nb && within(a, b) {
             return false;
         }
         on_edge(ia, ib)
-            || (!flat && (shared(ia, ib) || off(pos(ia, a).lerp(pos(ib, b), 0.5), a.lerp(b, 0.5))))
+            || (!flat
+                && (shared(ia, ib)
+                    || (!bounded(a, b) && off(pos(ia, a).lerp(pos(ib, b), 0.5), a.lerp(b, 0.5)))))
     };
     // (a long triangle on a cone, between rulings at its two ends, can sag in its middle past
     // its sides too)
     let both_ways = doubly_curved(surface) || matches!(surface, Surface::Procedural(_) | Surface::Cone(_));
     let triangle = |v: [u32; 3], p: [Point2; 3]| {
         let m = Point2::new((p[0].x + p[1].x + p[2].x) / 3.0, (p[0].y + p[1].y + p[2].y) / 3.0);
-        !(v.iter().all(|&k| k >= nb) && (0..3).all(|k| within(p[k], p[(k + 1) % 3]))) && {
-            let x = [0, 1, 2].map(|k| pos(v[k], p[k]));
-            off(x[0].lerp(x[1], 0.5).lerp(x[2], 1.0 / 3.0), m)
-        }
+        !(v.iter().all(|&k| k >= nb) && (0..3).all(|k| within(p[k], p[(k + 1) % 3])))
+            && !bounds.is_some_and(|b| middle_sag(b, p.map(|x| layout.uv(x))) <= 0.98 * q.chord)
+            && {
+                let x = [0, 1, 2].map(|k| pos(v[k], p[k]));
+                off(x[0].lerp(x[1], 0.5).lerp(x[2], 1.0 / 3.0), m)
+            }
     };
     let strays = Tests(edge, triangle, both_ways);
     let tri = match triangulate_refined(&scaled, &loops, &interior, Some(&strays)) {
@@ -756,6 +805,20 @@ fn strays_from(s: &Surface, x: forge_math::Point3, uv: Point2, c: f64) -> bool {
         }
     }
     true
+}
+
+/// The most a chord across `d` in parameters sags from the surface, given bounds `b` on its
+/// second derivatives' sizes: an eighth of the second derivative along it.
+fn sag(b: [f64; 3], du: f64, dv: f64) -> f64 {
+    (b[0] * du * du + 2.0 * b[1] * (du * dv).abs() + b[2] * dv * dv) / 8.0
+}
+
+/// The most a triangle's centroid (corners at parameters `p`) lies off the surface: the
+/// surface less its linear interpolation there is half the mean of the second derivative along
+/// each corner's offset (Taylor with the integral remainder, the linear terms cancelling).
+fn middle_sag(b: [f64; 3], p: [Point2; 3]) -> f64 {
+    let c = Point2::new((p[0].x + p[1].x + p[2].x) / 3.0, (p[0].y + p[1].y + p[2].y) / 3.0);
+    p.iter().map(|&x| sag(b, x.x - c.x, x.y - c.y)).sum::<f64>() * 8.0 / 6.0
 }
 
 /// A refinement's tests: edges, triangles, and whether triangles are looked at.
