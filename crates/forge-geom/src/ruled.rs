@@ -16,7 +16,7 @@ use forge_math::{Box2, Box3, Frame, Interval, Point2, Point3, Vec3, tol};
 use std::sync::Arc;
 
 mod meet;
-pub use meet::{meet_ruled, parabola_wall};
+pub use meet::{line_wall, meet_ruled, parabola_wall, wrap_wall};
 
 /// One of the two curves a ruled face spans, by the fraction t along it.
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -205,24 +205,36 @@ impl Ruled {
                 (m0 + d * l).length() > 1e-6 * m0.length().max(m1.length()).max(1e-6)
             })
         };
-        let face = Interval::new(0.0, 1.0);
-        if !regular(face, 0.0, 1.0) {
-            return None;
-        }
-        // carried on only as far as it stays regular
-        let te = [te, 0.5 * te, 0.25 * te]
-            .into_iter()
-            .find(|&e| regular(Interval::new(-e, 1.0 + e), 0.0, 1.0))
-            .unwrap_or(0.0);
+        let (te, lo, hi) = if let Some((ra, rb)) = r.radii() {
+            // a wall of rays from the axis folds only where it reaches the axis
+            let keeps = |s: f64| (ra + (rb - ra) * s) * ra > 0.0;
+            if !(keeps(0.0) && keeps(1.0)) {
+                return None;
+            }
+            let lo = [-1.0, -0.5, -0.25].into_iter().find(|&s| keeps(s)).unwrap_or(0.0);
+            let hi = [2.0, 1.5, 1.25].into_iter().find(|&s| keeps(s)).unwrap_or(1.0);
+            (te, lo, hi)
+        } else {
+            if !regular(Interval::new(0.0, 1.0), 0.0, 1.0) {
+                return None;
+            }
+            // carried on only as far as it stays regular
+            let te = [te, 0.5 * te, 0.25 * te]
+                .into_iter()
+                .find(|&e| regular(Interval::new(-e, 1.0 + e), 0.0, 1.0))
+                .unwrap_or(0.0);
+            let t = Interval::new(-te, 1.0 + te);
+            let lo = [-1.0, -0.5, -0.25]
+                .into_iter()
+                .find(|&s| regular(t, s, 1.0))
+                .unwrap_or(0.0);
+            let hi = [2.0, 1.5, 1.25]
+                .into_iter()
+                .find(|&s| regular(t, 0.0, s))
+                .unwrap_or(1.0);
+            (te, lo, hi)
+        };
         let t = Interval::new(-te, 1.0 + te);
-        let lo = [-1.0, -0.5, -0.25]
-            .into_iter()
-            .find(|&s| regular(t, s, 1.0))
-            .unwrap_or(0.0);
-        let hi = [2.0, 1.5, 1.25]
-            .into_iter()
-            .find(|&s| regular(t, 0.0, s))
-            .unwrap_or(1.0);
         r.ext = Box2::new(t, Interval::new(lo, hi));
         let sweep = |rail: &Rail| match *rail {
             Rail::Line { .. } => 0.0,
@@ -249,6 +261,14 @@ impl Ruled {
         r.scale.1 = ruling;
         r.radius = if kmax > 0.0 { 1.0 / kmax } else { f64::INFINITY };
         Some(r)
+    }
+
+    /// The two radii of a wall between one wrapped curve at two radii about one axis.
+    fn radii(&self) -> Option<(f64, f64)> {
+        let (Rail::Wrap(wa), Rail::Wrap(wb)) = (self.a, self.b) else {
+            return None;
+        };
+        (wa.flat == wb.flat && wa.axis == wb.axis && wa.unroll == wb.unroll).then_some((wa.radius, wb.radius))
     }
 
     pub fn surface(self) -> Surface {
@@ -284,6 +304,12 @@ impl Ruled {
             return Point2::new(t, s);
         }
         let mut best = (f64::INFINITY, Point2::new(dom.u.mid(), dom.v.mid()));
+        if let Some((uv, on)) = self.unwrapped(p, dom) {
+            if on {
+                return uv;
+            }
+            best = (self.point(uv).p.distance_sq(p), uv);
+        }
         let mut take = |t: f64, pa: Point3, d: Vec3| {
             let w = p - pa;
             let s = (w.dot(d) / d.length_sq()).clamp(dom.v.lo, dom.v.hi);
@@ -302,6 +328,32 @@ impl Ruled {
             take(t, pa, self.b.at(t).0 - pa);
         }
         polish(&|uv| self.point(uv), p, best.1, dom, None).0
+    }
+
+    /// A wrapped wall's parameters of a point, read straight off its turn, height and radius
+    /// (for a point on it, exact), kept in `dom`; None for any other wall.
+    fn unwrapped(&self, p: Point3, dom: Box2) -> Option<(Point2, bool)> {
+        let (ra, rb) = self.radii()?;
+        let Rail::Wrap(wa) = self.a else {
+            return None;
+        };
+        let l = wa.axis.point_to_local(p);
+        let (sr, _) = wa.flat.bbox(dom.u);
+        // the turn nearest the flat curve's
+        let turn = forge_math::dmath::TAU * wa.unroll;
+        let mut sv = forge_math::dmath::atan2(l.y, l.x) * wa.unroll;
+        sv += turn * ((sr.mid() - sv) / turn).round();
+        let q = Point2::new(sv, l.z);
+        let t = wa.flat.param(q);
+        let rho = (l.x * l.x + l.y * l.y).sqrt();
+        let s = (rho - ra) / (rb - ra);
+        // off the flat curve by this much, as far round as the point is out
+        let off = wa.flat.at(t).0.distance(q) * (rho / wa.unroll).max(1.0);
+        let on = off <= 1e-12 * (1.0 + rho + l.z.abs()) && dom.u.contains(t) && dom.v.contains(s);
+        Some((
+            Point2::new(t.clamp(dom.u.lo, dom.u.hi), s.clamp(dom.v.lo, dom.v.hi)),
+            on,
+        ))
     }
 
     /// Signed distance to the carried-on surface and its gradient.

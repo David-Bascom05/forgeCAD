@@ -5,6 +5,8 @@
 //! between two of them.
 
 use crate::curve::{CurveDeriv, CurveGeom, Domain1, Parabola, ProcCurve, ProceduralCurve};
+use crate::intersect::{Contact, CurveHit, CurveSurface};
+use crate::surface::Surface;
 use forge_math::{Box3, Frame, Interval, Point2, Point3, Vec2, Vec3, dmath, tol};
 use std::sync::Arc;
 
@@ -47,6 +49,76 @@ impl Flat {
                 let w = range.width();
                 let b = curve.bbox(Interval::new(range.lo + w * t.lo, range.lo + w * t.hi));
                 (b.x, b.y)
+            }
+        }
+    }
+
+    /// Coordinate `c` (0: s, 1: h) as a polynomial in t, lowest power first.
+    pub fn poly(&self, c: usize) -> [f64; 3] {
+        let pick = |v: Point2| if c == 0 { v.x } else { v.y };
+        match *self {
+            Flat::Line { a, b } => [pick(a), pick(b) - pick(a), 0.0],
+            Flat::Parabola { curve, range } => {
+                // o + x k u^2 + y u, u = lo + w t
+                let f = &curve.frame;
+                let at = |v: Vec3| if c == 0 { v.x } else { v.y };
+                let (o, x, y) = (
+                    at(f.origin.to_vec()),
+                    at(f.x().get()) / (4.0 * curve.focal),
+                    at(f.y().get()),
+                );
+                let (lo, w) = (range.lo, range.width());
+                [o + y * lo + x * lo * lo, (y + 2.0 * x * lo) * w, x * w * w]
+            }
+        }
+    }
+
+    /// The curve's implicit value along the curve whose coordinates are the polynomials `g`
+    /// (as `poly` gives them): zero where the two meet.
+    pub fn meet_poly(&self, g: [[f64; 3]; 2]) -> [f64; 5] {
+        let mut out = [0.0; 5];
+        match *self {
+            Flat::Line { a, b } => {
+                // (q - a) x (b - a)
+                let (ds, dh) = (b.x - a.x, b.y - a.y);
+                for i in 0..3 {
+                    out[i] = g[0][i] * dh - g[1][i] * ds;
+                }
+                out[0] -= a.x * dh - a.y * ds;
+            }
+            Flat::Parabola { curve, .. } => {
+                // X - k Y^2 in the parabola's frame
+                let f = &curve.frame;
+                let local = |e: Vec3| {
+                    let mut p = [0.0; 3];
+                    for i in 0..3 {
+                        p[i] = g[0][i] * e.x + g[1][i] * e.y;
+                    }
+                    p[0] -= f.origin.x * e.x + f.origin.y * e.y;
+                    p
+                };
+                let (x, y) = (local(f.x().get()), local(f.y().get()));
+                let k = 1.0 / (4.0 * curve.focal);
+                for i in 0..3 {
+                    out[i] += x[i];
+                    for j in 0..3 {
+                        out[i + j] -= k * y[i] * y[j];
+                    }
+                }
+            }
+        }
+        out
+    }
+
+    /// The fraction t of a point on the curve.
+    pub fn param(&self, q: Point2) -> f64 {
+        match *self {
+            Flat::Line { a, b } => (q - a).dot(b - a) / (b - a).length_sq(),
+            Flat::Parabola { curve, range } => {
+                let f = &curve.frame;
+                let y = f.y().get();
+                let u = (q.x - f.origin.x) * y.x + (q.y - f.origin.y) * y.y;
+                (u - range.lo) / range.width()
             }
         }
     }
@@ -114,10 +186,115 @@ impl Wrap {
         crate::Curve::Procedural(ProcCurve(Arc::new(self)))
     }
 
+    /// Whether `f` has the same axis (origin, x and z) as this curve's.
+    pub(crate) fn coaxial(&self, f: &Frame) -> bool {
+        let a = &self.axis;
+        a.origin.distance(f.origin) <= tol::LINEAR
+            && (a.x().get() - f.x().get()).length() <= tol::ANGULAR
+            && (a.z().get() - f.z().get()).length() <= tol::ANGULAR
+    }
+
+    /// The fractions over `range` where coordinate `c` of the flat curve is `v`.
+    fn level(&self, c: usize, v: f64, range: Interval) -> Vec<forge_math::poly::Root> {
+        let mut p = self.flat.poly(c);
+        p[0] -= v;
+        roots(&p, range)
+    }
+
     fn bounds(&self, t: Interval) -> (f64, f64) {
         let (v, a) = self.flat.bounds(t);
         let k = self.radius / self.unroll;
         (v * (k + 1.0), k * v * v / self.unroll + a * (k + 1.0))
+    }
+}
+
+/// Roots of a polynomial over `range`; none for one that is zero throughout.
+pub(crate) fn roots(p: &[f64], range: Interval) -> Vec<forge_math::poly::Root> {
+    let n = p.iter().rposition(|c| *c != 0.0).map_or(0, |n| n + 1);
+    if n <= 1 {
+        return vec![];
+    }
+    forge_math::poly::real_roots(&p[..n], range.lo, range.hi)
+}
+
+/// Hits at fractions `ts` of a wrapped curve, in order.
+fn hits(w: &Wrap, ts: impl IntoIterator<Item = (f64, bool)>) -> CurveSurface {
+    let mut out: Vec<CurveHit> = ts
+        .into_iter()
+        .map(|(t, touching)| CurveHit {
+            t,
+            point: w.at(t).0,
+            contact: if touching {
+                Contact::Touching
+            } else {
+                Contact::Crossing
+            },
+        })
+        .collect();
+    out.sort_by(|a, b| a.t.total_cmp(&b.t));
+    CurveSurface::Hits(out)
+}
+
+/// Where a wrapped curve meets a cylinder about its axis (on it, or nowhere) or a plane square
+/// to its axis or along it (where the flat curve's height, or its turn, has a value), in closed
+/// form; None for any other surface.
+pub fn wrap_surface(w: &Wrap, range: Interval, s: &Surface) -> Option<CurveSurface> {
+    let z = w.axis.z();
+    match s {
+        Surface::Cylinder(c) => {
+            let off = c.frame.origin - w.axis.origin;
+            if c.frame.z().cross(z.get()).length() > tol::ANGULAR
+                || (off - z * z.dot(off)).length() > tol::LINEAR
+            {
+                return None;
+            }
+            Some(if (c.radius - w.radius).abs() <= tol::LINEAR {
+                CurveSurface::OnSurface
+            } else {
+                CurveSurface::Hits(vec![])
+            })
+        }
+        Surface::Plane(p) => {
+            let n = p.frame.z().get();
+            let n = (n.dot(w.axis.x().get()), n.dot(w.axis.y().get()), n.dot(z.get()));
+            let c0 = p.frame.z().dot(w.axis.origin - p.frame.origin);
+            if (n.0 * n.0 + n.1 * n.1).sqrt() <= tol::ANGULAR {
+                // square to the axis: at height -c0 / nz
+                let ts = w.level(1, -c0 / n.2, range);
+                return Some(hits(w, ts.into_iter().map(|r| (r.x, r.touching))));
+            }
+            if n.2.abs() > tol::ANGULAR {
+                return None;
+            }
+            // along the axis: r m cos(theta - phi) = -c0
+            let m = (n.0 * n.0 + n.1 * n.1).sqrt();
+            let c = -c0 / (w.radius * m);
+            if c.abs() > 1.0 + tol::ANGULAR {
+                return Some(CurveSurface::Hits(vec![]));
+            }
+            let phi = dmath::atan2(n.1, n.0);
+            let a = dmath::acos_clamped(c);
+            let touching = (c.abs() - 1.0).abs() <= tol::ANGULAR;
+            let turn = dmath::TAU * w.unroll;
+            let (sr, _) = w.flat.bbox(range);
+            let mut ts = Vec::new();
+            for theta in if touching {
+                vec![phi]
+            } else {
+                vec![phi - a, phi + a]
+            } {
+                let s0 = theta * w.unroll;
+                let k0 = ((sr.lo - s0) / turn).floor() as i64;
+                let k1 = ((sr.hi - s0) / turn).ceil() as i64;
+                for k in k0..=k1 {
+                    for r in w.level(0, s0 + turn * k as f64, range) {
+                        ts.push((r.x, touching || r.touching));
+                    }
+                }
+            }
+            Some(hits(w, ts))
+        }
+        _ => None,
     }
 }
 
@@ -171,6 +348,9 @@ impl ProceduralCurve for Wrap {
     }
     fn speed_bound(&self, range: Interval) -> f64 {
         self.bounds(range).0 * (1.0 + 1e-12)
+    }
+    fn as_any(&self) -> Option<&dyn std::any::Any> {
+        Some(self)
     }
     fn segments(&self, range: Interval, chord: f64) -> usize {
         // equal steps h keep each chord within |C''| h^2 / 8 of the curve

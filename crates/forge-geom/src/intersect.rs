@@ -75,7 +75,10 @@ fn line_procedural(line: &Line, s: &Surface, pr: &crate::surface::Proc) -> LineS
     if lo >= hi {
         return LineSurface::Hits(Vec::new());
     }
-    match curve_surface_subdivide(&Curve::Line(*line), Interval::new(lo, hi), s) {
+    let range = Interval::new(lo, hi);
+    let found = crate::ruled::line_wall(line, range, s)
+        .unwrap_or_else(|| curve_surface_subdivide(&Curve::Line(*line), range, s));
+    match found {
         // the implicit holds more than the patch (a blend's: its balls whole), so only points
         // of the patch are hits
         CurveSurface::Hits(h) => LineSurface::Hits(
@@ -314,6 +317,19 @@ pub fn curve_surface(c: &Curve, range: Interval, s: &Surface) -> CurveSurface {
                 return r;
             }
         }
+        Curve::Line(l) => {
+            if let Some(r) = crate::ruled::line_wall(l, range, s) {
+                return r;
+            }
+        }
+        Curve::Procedural(p) => {
+            if let Some(w) = p.as_any().and_then(|a| a.downcast_ref::<crate::wrap::Wrap>())
+                && let Some(r) =
+                    crate::wrap::wrap_surface(w, range, s).or_else(|| crate::ruled::wrap_wall(w, range, s))
+            {
+                return r;
+            }
+        }
         _ => {}
     }
     curve_surface_subdivide(c, range, s)
@@ -517,7 +533,7 @@ fn parabola_quadric(par: &Parabola, range: Interval, s: &Surface) -> Option<Curv
     Some(CurveSurface::Hits(hits))
 }
 
-fn curve_surface_subdivide(c: &Curve, range: Interval, s: &Surface) -> CurveSurface {
+pub(crate) fn curve_surface_subdivide(c: &Curve, range: Interval, s: &Surface) -> CurveSurface {
     let g = |t: f64| s.implicit(c.eval(t));
     let lip = speed_bound(c, range) * (1.0 + 1e-9) + f64::MIN_POSITIVE;
     let probes = 9;
