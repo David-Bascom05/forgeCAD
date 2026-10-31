@@ -687,6 +687,11 @@ fn join(body: &mut Body, c: CoedgeId, n: CoedgeId) -> bool {
         return false;
     }
     let other = if x1.end == v { x1.start } else { x1.end };
+    // nor an edge from a point back to it through two vertices there (a pinch's)
+    let pinch = body.vertex(far).tol.max(body.vertex(other).tol).max(tol::LINEAR);
+    if far != other && body.vertex(far).point.distance(body.vertex(other).point) <= pinch {
+        return false;
+    }
     if far == other
         && x1
             .curve
