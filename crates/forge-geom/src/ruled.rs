@@ -10,7 +10,7 @@
 
 use crate::curve::{Circle, CurveGeom, Domain1, Parabola};
 use crate::screw::{fresh_id, polish, remembered};
-use crate::surface::{Domain2, Proc, Procedural, SurfDeriv, Surface};
+use crate::surface::{Domain2, Proc, Procedural, ShapeBounds, SurfDeriv, Surface};
 use crate::wrap::Wrap;
 use forge_math::{Box2, Box3, Frame, Interval, Point2, Point3, Vec3, tol};
 use std::sync::Arc;
@@ -55,6 +55,24 @@ impl Rail {
                 (d.p, d.d1 * w, d.d2 * (w * w))
             }
             Rail::Wrap(w) => w.at(t),
+        }
+    }
+
+    /// Bounds on |C'|, |C''| and |C'''| over the fractions `t` (None for a wrapped curve).
+    pub(crate) fn derivative_bounds(&self, t: Interval) -> Option<[f64; 3]> {
+        match *self {
+            Rail::Line { a, b } => Some([a.distance(b), 0.0, 0.0]),
+            Rail::Arc { circle, sweep, .. } => {
+                let k = circle.radius * sweep.abs();
+                Some([k, k * sweep.abs(), k * sweep * sweep])
+            }
+            Rail::Parabola { curve, range } => {
+                // C' = w (2 k x, 1) in the parabola's frame, C'' = w^2 (2 k, 0), C''' = 0
+                let (w, k2) = (range.width(), 0.5 / curve.focal.abs());
+                let x = (range.lo + w * t.lo).abs().max((range.lo + w * t.hi).abs());
+                Some([w * (1.0 + (k2 * x) * (k2 * x)).sqrt(), w * w * k2, 0.0])
+            }
+            Rail::Wrap(_) => None,
         }
     }
 
@@ -388,6 +406,28 @@ impl Procedural for Ruled {
     }
     fn uv_scale(&self) -> (f64, f64) {
         (self.scale.0.max(tol::LINEAR), self.scale.1.max(tol::LINEAR))
+    }
+    fn shape_bounds(&self, uv: Box2) -> Option<ShapeBounds> {
+        // S = (1 - v) A(u) + v B(u): S_uu = (1 - v) A'' + v B'', S_uv = B' - A', S_vv = 0, and of
+        // the third derivatives only S_uuu = (1 - v) A''' + v B''' and S_uuv = B'' - A''; B' - A'
+        // and B'' - A'' stray from the middle's by at most their next derivatives' bounds (they
+        // vanish between matched rails)
+        let [a1, a2, a3] = self.a.derivative_bounds(uv.u)?;
+        let [b1, b2, b3] = self.b.derivative_bounds(uv.u)?;
+        let (wa, wb) = (
+            (1.0 - uv.v.lo).abs().max((1.0 - uv.v.hi).abs()),
+            uv.v.lo.abs().max(uv.v.hi.abs()),
+        );
+        let (u, hu) = (uv.u.mid(), 0.5 * uv.u.width());
+        let ((_, da, dda), (_, db, ddb)) = (self.a.at(u), self.b.at(u));
+        let twist = (a1 + b1).min((db - da).length() + (a2 + b2) * hu);
+        let bend = (ddb - dda).length() + (a3 + b3) * hu;
+        Some(ShapeBounds::taylor(
+            &self.point(Point2::new(u, uv.v.mid())),
+            (hu, 0.5 * uv.v.width()),
+            [wa * a2 + wb * b2, twist, 0.0],
+            [wa * a3 + wb * b3, bend, 0.0, 0.0],
+        ))
     }
     fn min_radius(&self) -> f64 {
         let arc = |r: &Rail| match *r {
