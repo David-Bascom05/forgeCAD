@@ -519,16 +519,31 @@ impl Builder {
         let hot: Vec<usize> = (0..ring.len())
             .filter(|&i| self.filleted(ring[i].cin).is_some())
             .collect();
-        let k = ring.len();
-        match hot.len() {
-            1 => self.run_out(v, &ring, hot[0]),
-            2 if k == 2 => self.joint(v, &ring, 0),
-            2 if k == 3 && (hot[1] == hot[0] + 1 || (hot[0] == 0 && hot[1] == 2)) => {
-                let i = if hot[1] == hot[0] + 1 { hot[0] } else { 2 };
-                self.joint(v, &ring, i)
-            }
+        match hot[..] {
+            [h] => self.run_out(v, &ring, h),
+            [a, b] if self.is_joint(&ring, a, b) => self.joint(v, &ring, a, b),
             _ => self.corner(v, &ring),
         }
+    }
+
+    /// Whether the blends arriving at ring corners `a` and `b` continue each other
+    /// through the vertex: same radius, and every other edge there smooth.
+    fn is_joint(&self, ring: &[Corner], a: usize, b: usize) -> bool {
+        let k = ring.len();
+        let (ra, rb) = (
+            &self.rolled[self.filleted(ring[a].cin).expect("hot")],
+            &self.rolled[self.filleted(ring[b].cin).expect("hot")],
+        );
+        if (ra.blend.radius - rb.blend.radius).abs() > tol::LINEAR || ra.convex != rb.convex {
+            return false;
+        }
+        (0..k).filter(|&j| j != a && j != b).all(|j| {
+            let c = ring[j].cin;
+            let e = self.body.coedge(c).edge;
+            let x = self.body.edge(e);
+            self.body.coedge_face(x.coedges[0]) == self.body.coedge_face(x.coedges[1])
+                || is_smooth(&self.body, e, ra.blend.radius)
+        })
     }
 
     fn vertex_name(&self, v: VertexId, faces: &[Name]) -> Name {
@@ -666,61 +681,185 @@ impl Builder {
         self.body.coedge(c).forward
     }
 
-    /// Two blends of a tangent chain meet at `v` (corner i holds both), the third edge is smooth:
-    /// they share the ball's cross-section there.
-    fn joint(&mut self, v: VertexId, ring: &[Corner], i: usize) -> R<()> {
+    /// Two blends of a tangent chain meet at `v` (arriving at ring corners `ia` and
+    /// `ib`), every other edge there smooth: they share the ball's cross-section.
+    /// It lies where a spring crosses an edge between faces on different surfaces;
+    /// other smooth edges (seams) are cut where the springs cross them, and the
+    /// springs between are walked by both the blend and the face corner.
+    fn joint(&mut self, v: VertexId, ring: &[Corner], ia: usize, ib: usize) -> R<()> {
         let k = ring.len();
-        let (ka, kb, km) = (ring[i], ring[(i + 1) % k], ring[(i + 2) % k]);
+        let err = FilletError::Corner { vertex: v };
         let (ra, rb) = (
-            self.filleted(ka.cin).expect("hot"),
-            self.filleted(kb.cin).expect("hot"),
+            self.filleted(ring[ia].cin).expect("hot"),
+            self.filleted(ring[ib].cin).expect("hot"),
         );
         let vp = self.body.vertex(v).point;
         let ea = self.rolled[ra].edge;
-        let sa_in = self.side(ka.cin);
-        let mut ta = spine_closest(&self.rolled[ra].blend.spine, vp);
-        if k == 3 {
-            // the shared section is where the spring on the tangent faces crosses the edge between them
-            let em = self.body.edge(self.body.coedge(km.cin).edge);
-            ta = crossing(&self.rolled[ra].springs[1 - sa_in], ta, &em.curve, em.range)
-                .ok_or(FilletError::Corner { vertex: v })?;
+        // blend a's and b's spring sides on the P faces (ring ia..ib); the X faces are the rest
+        let (sa, sb) = (self.side(ring[ia].cin), self.side(ring[(ib + k - 1) % k].cout));
+        let span = (ib + k - ia) % k;
+        // the smooth edges on each side, from a's end to b's
+        let p_edges: Vec<CoedgeId> = (1..span).map(|d| ring[(ia + d) % k].cin).collect();
+        let x_edges: Vec<CoedgeId> = (span + 1..k).rev().map(|d| ring[(ia + d) % k].cin).collect();
+        // the section: where a spring crosses an edge between two surfaces, else any smooth edge
+        let t0 = spine_closest(&self.rolled[ra].blend.spine, vp);
+        let mut ta = None;
+        let mut any = None;
+        for (edges, s) in [(&p_edges, sa), (&x_edges, 1 - sa)] {
+            for &c in edges.iter() {
+                let e = self.body.edge(self.body.coedge(c).edge);
+                let (f0, f1) = (
+                    self.body.coedge_face(e.coedges[0]),
+                    self.body.coedge_face(e.coedges[1]),
+                );
+                let change = f0 != f1 && self.body.face(f0).surface != self.body.face(f1).surface;
+                if !change && any.is_some() {
+                    continue;
+                }
+                let t = crossing(&self.rolled[ra].springs[s], t0, &e.curve, e.range).ok_or(err.clone())?;
+                if !change {
+                    any = Some(t);
+                    continue;
+                }
+                let spine = &self.rolled[ra].blend.spine;
+                match ta {
+                    Some(u) if spine.eval(u).distance(spine.eval(t)) > tol::LINEAR => return Err(err),
+                    Some(_) => {}
+                    None => ta = Some(t),
+                }
+            }
         }
-        let tb = spine_closest(&self.rolled[rb].blend.spine, self.rolled[ra].blend.spine.eval(ta));
-        let (ca, cb) = (
-            self.rolled[ra].blend.spine.eval(ta),
-            self.rolled[rb].blend.spine.eval(tb),
-        );
-        if ca.distance(cb) > tol::LINEAR {
-            return Err(FilletError::Corner { vertex: v });
+        let ta = ta.or(any).unwrap_or(t0);
+        let ca = self.rolled[ra].blend.spine.eval(ta);
+        let tb = spine_closest(&self.rolled[rb].blend.spine, ca);
+        if ca.distance(self.rolled[rb].blend.spine.eval(tb)) > tol::LINEAR {
+            return Err(err);
         }
-        // with a third edge, it runs between the two faces off the chain
-        let em = self.body.coedge(km.cin).edge;
-        if k == 3 && self.which.contains_key(&em) {
-            return Err(FilletError::Corner { vertex: v });
-        }
-        // feet: P on the face both blends share, X on the two tangent faces
-        let p = self.rolled[ra].springs[sa_in].eval(ta);
-        let x = self.rolled[ra].springs[1 - sa_in].eval(ta);
-        let sb_out = self.side(ka.cout);
-        let p_b = self.rolled[rb].springs[sb_out].eval(tb);
-        let x_b = self.rolled[rb].springs[1 - sb_out].eval(tb);
-        if p.distance(p_b) > tol::LINEAR || x.distance(x_b) > tol::LINEAR {
-            return Err(FilletError::Corner { vertex: v });
+        let p = self.rolled[ra].springs[sa].eval(ta);
+        let x = self.rolled[ra].springs[1 - sa].eval(ta);
+        if p.distance(self.rolled[rb].springs[sb].eval(tb)) > tol::LINEAR
+            || x.distance(self.rolled[rb].springs[1 - sb].eval(tb)) > tol::LINEAR
+        {
+            return Err(err);
         }
         let (na, nb) = (self.rolled[ra].name, self.rolled[rb].name);
-        let vp_name = self.vertex_name(v, &[self.face_name(ka.face), na, nb]);
-        let vx_name = self.vertex_name(v, &[self.face_name(kb.face), self.face_name(km.face), na, nb]);
+        let fname = |j: usize| self.face_name(ring[j % k].face);
+        let vp_name = self.vertex_name(v, &[fname(ia), fname(ib + k - 1), na, nb]);
+        let vx_name = self.vertex_name(v, &[fname(ib), fname(ia + k - 1), na, nb]);
         let pv = self.body.add_vertex(p, vp_name);
         let xv = self.body.add_vertex(x, vx_name);
-        if k == 3 {
-            self.trim(km.cin, x, xv, ea)?;
+        let mid = |b: &Builder, ri: usize| {
+            let e = b.body.edge(b.rolled[ri].edge);
+            spine_closest(&b.rolled[ri].blend.spine, e.curve.eval(e.range.mid()))
+        };
+        let (mid_a, mid_b) = (mid(self, ra), mid(self, rb));
+        let ahead = |b: &Builder, ri: usize, t: f64, from: f64, mid: f64| {
+            let period = b.rolled[ri].blend.spine.domain().period;
+            along(t - from, period) * along(mid - from, period) > 0.0
+        };
+        // per side: the spring pieces from a's end to b's, the section foot's place among
+        // them, and each smooth edge's
+        let mut sides = Vec::with_capacity(2);
+        for (edges, s_a, s_b, foot, fv) in [(&p_edges, sa, sb, p, pv), (&x_edges, 1 - sa, 1 - sb, x, xv)] {
+            // landings: (blend, side, parameter, vertex); the foot is (None, ..)
+            let mut on_a: Vec<(f64, VertexId, usize)> = Vec::new();
+            let mut on_b: Vec<(f64, VertexId, usize)> = Vec::new();
+            let mut at_foot: Vec<usize> = Vec::new();
+            for (m, &c) in edges.iter().enumerate() {
+                let e = self.body.edge(self.body.coedge(c).edge);
+                let (curve, range, ename) = (e.curve.clone(), e.range, e.name);
+                let t = crossing(&self.rolled[ra].springs[s_a], ta, &curve, range).ok_or(err.clone())?;
+                let q = self.rolled[ra].springs[s_a].eval(t);
+                let name = Name::NONE.with_set(vec![na, nb]).with_name(ename);
+                if q.distance(foot) <= tol::LINEAR {
+                    self.trim(c, foot, fv, ea)?;
+                    at_foot.push(m);
+                } else if ahead(self, ra, t, ta, mid_a) {
+                    let qv = self.body.add_vertex(q, name);
+                    self.trim(c, q, qv, ea)?;
+                    on_a.push((t, qv, m));
+                } else {
+                    let u = crossing(&self.rolled[rb].springs[s_b], tb, &curve, range).ok_or(err.clone())?;
+                    if !ahead(self, rb, u, tb, mid_b) {
+                        return Err(err);
+                    }
+                    let q = self.rolled[rb].springs[s_b].eval(u);
+                    let qv = self.body.add_vertex(q, name);
+                    self.trim(c, q, qv, ea)?;
+                    on_b.push((u, qv, m));
+                }
+            }
+            // in ring order the landings must run from a's far end to b's
+            let pa = self.rolled[ra].blend.spine.domain().period;
+            let pb = self.rolled[rb].blend.spine.domain().period;
+            let order: Vec<usize> = on_a.iter().chain(on_b.iter()).map(|l| l.2).collect();
+            let dist_a: Vec<f64> = on_a.iter().map(|l| along(l.0 - ta, pa).abs()).collect();
+            let dist_b: Vec<f64> = on_b.iter().map(|l| along(l.0 - tb, pb).abs()).collect();
+            let a_end = on_a.len();
+            let mut placed = order.clone();
+            placed.splice(a_end..a_end, at_foot.iter().copied());
+            if at_foot.len() > 1
+                || !placed.windows(2).all(|w| w[0] < w[1])
+                || !dist_a.windows(2).all(|w| w[0] > w[1])
+                || !dist_b.windows(2).all(|w| w[0] < w[1])
+            {
+                return Err(err);
+            }
+            // nodes from a's end to b's: a's landings, the foot, b's landings
+            let mut nodes: Vec<(VertexId, Option<(usize, f64)>)> =
+                on_a.iter().map(|l| (l.1, Some((ra, l.0)))).collect();
+            nodes.push((fv, None));
+            nodes.extend(on_b.iter().map(|l| (l.1, Some((rb, l.0)))));
+            let foot_at = a_end;
+            let mut segs = Vec::with_capacity(nodes.len() - 1);
+            for w in 0..nodes.len() - 1 {
+                let (ri, s, tf) = if w < foot_at { (ra, s_a, ta) } else { (rb, s_b, tb) };
+                let t_of = |n: &(VertexId, Option<(usize, f64)>)| n.1.map_or(tf, |x| x.1);
+                let (t0, t1) = (t_of(&nodes[w]), t_of(&nodes[w + 1]));
+                let curve = self.rolled[ri].springs[s].clone();
+                let name = Name::NONE
+                    .with_set(vec![self.rolled[ri].name])
+                    .with_name(self.body.vertex(nodes[w + 1].0).name)
+                    .with(w as u64);
+                segs.push(self.edge_between(curve, t0, t1, nodes[w].0, nodes[w + 1].0, name));
+            }
+            // node of each boundary in a-to-b order: a's end, the smooth edges, b's end
+            let mut bounds = vec![0usize; edges.len() + 2];
+            for (n, l) in on_a.iter().enumerate() {
+                bounds[l.2 + 1] = n;
+            }
+            for &m in &at_foot {
+                bounds[m + 1] = foot_at;
+            }
+            for (n, l) in on_b.iter().enumerate() {
+                bounds[l.2 + 1] = foot_at + 1 + n;
+            }
+            bounds[edges.len() + 1] = nodes.len() - 1;
+            let ends = (nodes[0], nodes[nodes.len() - 1]);
+            sides.push((segs, bounds, foot_at, ends));
         }
-        let (circle, angle) = self.rolled[ra]
-            .blend
-            .section(ta)
-            .ok_or(FilletError::Corner { vertex: v })?;
+        let rev = |segs: &[(EdgeId, bool)]| -> Vec<(EdgeId, bool)> {
+            segs.iter().rev().map(|&(e, f)| (e, !f)).collect()
+        };
+        // face corners: P ones walk from a to b, X ones from b to a
+        for d in 0..span {
+            let (segs, bounds, _, _) = &sides[0];
+            let path = segs[bounds[d]..bounds[d + 1]].to_vec();
+            if !path.is_empty() {
+                self.paths.insert(ring[(ia + d) % k].cin, path);
+            }
+        }
+        for d in 0..k - span {
+            let (segs, bounds, _, _) = &sides[1];
+            let n = bounds.len();
+            let path = rev(&segs[bounds[n - 2 - d]..bounds[n - 1 - d]]);
+            if !path.is_empty() {
+                self.paths.insert(ring[(ib + d) % k].cin, path);
+            }
+        }
+        let (circle, angle) = self.rolled[ra].blend.section(ta).ok_or(err.clone())?;
         // the section runs from the foot on the blend's first surface (its side 0)
-        let (from_v, to_v) = if sa_in == 0 { (pv, xv) } else { (xv, pv) };
+        let (from_v, to_v) = if sa == 0 { (pv, xv) } else { (xv, pv) };
         let name = Name::NONE
             .with_set(vec![na, nb])
             .with_str("section")
@@ -732,25 +871,34 @@ impl Builder {
             to_v,
             name,
         );
-        // blend a: from its leaving side (X) to its arriving side (P)
-        let a_fwd = from_v == xv;
+        let x_to_p = from_v == xv;
+        let ((p_segs, _, p_foot, p_ends), (x_segs, _, x_foot, x_ends)) = (&sides[0], &sides[1]);
+        let t_end = |n: &(VertexId, Option<(usize, f64)>), t: f64| n.1.map_or(t, |x| x.1);
+        // blend a, from its X end round through the section to its P end
+        let mut path = x_segs[..*x_foot].to_vec();
+        path.push((s, x_to_p));
+        path.extend(rev(&p_segs[..*p_foot]));
         let mut end_a = SpringEnd {
             v: [v; 2],
             t: [ta; 2],
-            path: vec![(s, a_fwd)],
+            path,
         };
-        end_a.v[sa_in] = pv;
-        end_a.v[1 - sa_in] = xv;
-        self.ends.insert((ea, self.arrives_at_end(ka.cin)), end_a);
-        let eb = self.rolled[rb].edge;
+        (end_a.v[sa], end_a.t[sa]) = (p_ends.0.0, t_end(&p_ends.0, ta));
+        (end_a.v[1 - sa], end_a.t[1 - sa]) = (x_ends.0.0, t_end(&x_ends.0, ta));
+        // blend b, from its P end round to its X end
+        let mut path = rev(&p_segs[*p_foot..]);
+        path.push((s, !x_to_p));
+        path.extend(x_segs[*x_foot..].iter().copied());
         let mut end_b = SpringEnd {
             v: [v; 2],
             t: [tb; 2],
-            path: vec![(s, !a_fwd)],
+            path,
         };
-        end_b.v[sb_out] = pv;
-        end_b.v[1 - sb_out] = xv;
-        self.ends.insert((eb, self.arrives_at_end(kb.cin)), end_b);
+        (end_b.v[sb], end_b.t[sb]) = (p_ends.1.0, t_end(&p_ends.1, tb));
+        (end_b.v[1 - sb], end_b.t[1 - sb]) = (x_ends.1.0, t_end(&x_ends.1, tb));
+        let eb = self.rolled[rb].edge;
+        self.ends.insert((ea, self.arrives_at_end(ring[ia].cin)), end_a);
+        self.ends.insert((eb, self.arrives_at_end(ring[ib].cin)), end_b);
         Ok(())
     }
 
@@ -1177,6 +1325,17 @@ impl Builder {
                 .add_face(shell, ro.blend.surface.clone(), ro.convex, ro.name);
             self.body.add_loop(f, &uses);
         }
+    }
+}
+
+/// A parameter step, the short way round when the curve is periodic.
+fn along(d: f64, period: Option<f64>) -> f64 {
+    match period {
+        Some(p) => {
+            let w = d.rem_euclid(p);
+            if w > 0.5 * p { w - p } else { w }
+        }
+        None => d,
     }
 }
 
