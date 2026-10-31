@@ -1008,7 +1008,9 @@ fn switch_support(
             .filter_map(|c| {
                 let g = body.coedge(c).edge;
                 let cf = body.coedge_face(body.partner(c)?);
-                if cf == b || cf == l.faces[1 - s] || (plane(b) && plane(cf)) {
+                // a seam between two pieces of one surface is no other face to rest on
+                let seam = body.face(b).surface == body.face(cf).surface;
+                if cf == b || cf == l.faces[1 - s] || seam || (plane(b) && plane(cf)) {
                     return None;
                 }
                 let x = body.edge(g);
@@ -1092,6 +1094,10 @@ fn switch_split(
         let ends = [springs[s].eval(t0), springs[s].eval(t1)];
         for g in around {
             let gx = body.edge(g);
+            // one leaving the edge's own vertex: the joint there finds where the spring crosses it
+            if [gx.start, gx.end].iter().any(|&w| w == x.start || w == x.end) {
+                continue;
+            }
             // which side of g a spring point is on, across the face's tangent plane
             let side = |p: Point3| {
                 let u = gx.curve.closest(p, gx.range);
@@ -1112,6 +1118,7 @@ fn switch_split(
             let q = gx.curve.eval(gx.range.mid());
             let n = |f: FaceId| body.face_normal(f, body.face(f).surface.project(q));
             if f0 == f1
+                || body.face(f0).surface == body.face(f1).surface
                 || !n(f0)
                     .zip(n(f1))
                     .is_some_and(|(a, b)| a.dot(b.get()) >= 1.0 - 1e-9)
