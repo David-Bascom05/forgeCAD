@@ -707,6 +707,7 @@ fn error_kind(e: &crate::RegenError) -> (String, usize) {
         Draft { feature, error } => (format!("Draft({error:?})"), *feature),
         Fillet { feature, error } => (format!("Fillet({error:?})"), *feature),
         MissingEdge { feature, .. } => ("MissingEdge".to_string(), *feature),
+        NoReferences { feature } => ("NoReferences".to_string(), *feature),
         Hole { feature, error } => (format!("Hole({error:?})"), *feature),
         Extent { feature, error } => (format!("Extent({error:?})"), *feature),
         Pattern { feature, error } => (format!("Pattern({error:?})"), *feature),

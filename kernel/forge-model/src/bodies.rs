@@ -405,6 +405,10 @@ fn modify_on(
         } else {
             Cow::Owned(only(f, &solids[k].body))
         };
+        // on every body picked, none of the names on this one: nothing to do here
+        if crate::names_nothing(&g) && !crate::names_nothing(f) {
+            continue;
+        }
         let out = modify(plain, &g, i, &solids[k].body, threads)?;
         if op(f) == Some(Combine::New) {
             // a slab thickened as a new body

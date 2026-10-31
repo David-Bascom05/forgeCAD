@@ -203,6 +203,10 @@ pub enum RegenError {
         error: FilletError,
     },
     /// A feature names an edge (or face, or vertex) the part no longer has.
+    /// A feature that works on what it names was given nothing to work on.
+    NoReferences {
+        feature: usize,
+    },
     MissingEdge {
         feature: usize,
         name: Name,
@@ -797,6 +801,23 @@ pub(crate) fn count_name_fallback() {
     NAME_FALLBACKS.with(|c| c.set(c.get() + 1));
 }
 
+/// Whether a feature that works on what it names names nothing (a shell's open faces may be none).
+pub(crate) fn names_nothing(f: &Feature) -> bool {
+    match f {
+        Feature::Fillet { edges, .. } => edges.is_empty(),
+        Feature::Chamfer { edges, .. } => edges.is_empty(),
+        Feature::FaceFillet { first, second, .. } => first.is_empty() || second.is_empty(),
+        Feature::Draft { faces, .. } => faces.is_empty(),
+        Feature::Edit(
+            Edit::Offset { faces, .. }
+            | Edit::Thicken { faces, .. }
+            | Edit::Delete { faces }
+            | Edit::Move { faces, .. },
+        ) => faces.is_empty(),
+        _ => false,
+    }
+}
+
 /// Whether a regen failed because a feature's reference names nothing on the part.
 pub(crate) fn names_missing(e: &RegenError) -> bool {
     use forge_ops::DirectError;
@@ -1002,6 +1023,9 @@ fn modify(
     threads: usize,
 ) -> Result<Body, RegenError> {
     let id = features.id(i);
+    if names_nothing(f) {
+        return Err(RegenError::NoReferences { feature: i });
+    }
     match f {
         Feature::Fillet {
             edges,

@@ -516,6 +516,43 @@ impl Model {
         stage_body(&self.stages, n)
     }
 
+    /// The lines (their numbers) that built and left the part as it was: a tool that misses, or
+    /// lies wholly inside what it adds to. Lines that only define something are not among them.
+    pub fn no_effect(&self) -> Vec<usize> {
+        let shape = |n: usize| {
+            let mut out: Vec<(Vec<Name>, Vec<[u64; 3]>)> = self
+                .solids_after(n)
+                .iter()
+                .map(|s| {
+                    let b = &s.body;
+                    let mut faces: Vec<Name> = b.face_ids().map(|f| b.face(f).name).collect();
+                    let mut verts: Vec<[u64; 3]> = b
+                        .vertex_ids()
+                        .map(|v| {
+                            let p = b.vertex(v).point;
+                            [p.x.to_bits(), p.y.to_bits(), p.z.to_bits()]
+                        })
+                        .collect();
+                    faces.sort_unstable();
+                    verts.sort_unstable();
+                    (faces, verts)
+                })
+                .collect();
+            out.sort();
+            out
+        };
+        (1..self.built())
+            .filter(|&i| {
+                !matches!(
+                    self.features[i],
+                    Feature::Param(_) | Feature::Sketch(_) | Feature::Plane(_) | Feature::Work(_)
+                ) && !self.solids_after(i).is_empty()
+                    && shape(i) == shape(i + 1)
+            })
+            .map(|i| self.lines[i].no)
+            .collect()
+    }
+
     /// The bodies after `n` lines.
     pub fn solids_after(&self, n: usize) -> &[Solid] {
         n.checked_sub(1)
@@ -837,6 +874,10 @@ pub fn explain(e: &RegenError) -> (String, String) {
         Fillet { error, .. } => (
             format!("fillet: {error:?}"),
             hint("try a smaller radius, or fewer edges at once"),
+        ),
+        NoReferences { .. } => (
+            "names nothing to work on".to_string(),
+            hint("give it @handles or a (selector)"),
         ),
         MissingEdge { name, .. } => (
             format!("no edge {name:?} on the part here"),

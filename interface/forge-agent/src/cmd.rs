@@ -299,6 +299,16 @@ impl Session {
                     let p: Vec<String> = picks.iter().map(|(l, c)| format!("line {l}: {c}")).collect();
                     text.push_str(&format!("\nselectors picked: {}", p.join(", ")));
                 }
+                // asked for, built, and it changed nothing: say so
+                let idle = m.no_effect();
+                if !idle.is_empty() {
+                    let l: Vec<String> = idle.iter().map(|n| n.to_string()).collect();
+                    text.push_str(&format!(
+                        "\nchanged nothing (a tool that misses, or inside what it adds to): line {}",
+                        l.join(", ")
+                    ));
+                    j.push(("no_effect", Json::Arr(idle.iter().map(|&n| n.into()).collect())));
+                }
                 // what a font left out (its kerning, say)
                 for (line, f) in m.lines.iter().zip(&m.features) {
                     if let forge_model::Feature::Text(t) = f

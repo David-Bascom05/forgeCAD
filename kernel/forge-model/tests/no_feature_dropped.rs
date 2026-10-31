@@ -156,3 +156,44 @@ fn a_pattern_of_nothing_is_an_error() {
         assert!(r.is_err(), "{entry} left out the pattern");
     }
 }
+
+/// A feature that works on what it names, given nothing: refused, not a step that does nothing.
+#[test]
+fn a_feature_naming_nothing_is_an_error() {
+    let cases = [
+        Feature::Fillet {
+            edges: vec![],
+            starts: vec![],
+            setbacks: vec![],
+        },
+        Feature::Chamfer {
+            edges: vec![],
+            size: ChamferSize::Equal(1.0),
+        },
+        Feature::Draft {
+            faces: vec![],
+            neutral: Frame::WORLD,
+            angle: 0.1,
+        },
+        Feature::Edit(Edit::Offset {
+            faces: vec![],
+            distance: 1.0,
+        }),
+        Feature::Edit(Edit::Delete { faces: vec![] }),
+    ];
+    for m in &cases {
+        for mut part in [
+            vec![block(0.0, Combine::New)],
+            vec![block(0.0, Combine::New), block(50.0, Combine::New)],
+        ] {
+            part.push(m.clone());
+            for (entry, r) in every_regen(&part) {
+                assert!(
+                    matches!(r, Err(RegenError::NoReferences { .. })),
+                    "{entry}: {m:?}: {:?}",
+                    r.map(|b| b.len())
+                );
+            }
+        }
+    }
+}

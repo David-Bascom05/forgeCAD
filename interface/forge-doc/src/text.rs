@@ -128,6 +128,9 @@ pub const KINDS: &[Kind] = &[
                     }
                 }
             }
+            if edges.is_empty() {
+                return Err(format!("expected @handle or (selector), found '{}'", p.peek()));
+            }
             Ok(Feature::Fillet {
                 edges,
                 starts,
@@ -172,11 +175,11 @@ pub const KINDS: &[Kind] = &[
         syntax: "facefillet R REF.. to REF..",
         parse: |p| {
             let radius = p.num()?;
-            let first = p.refs()?;
+            let first = p.some_refs()?;
             p.expect("to")?;
             Ok(Feature::FaceFillet {
                 first,
-                second: p.refs()?,
+                second: p.some_refs()?,
                 radius,
             })
         },
@@ -241,7 +244,7 @@ pub const KINDS: &[Kind] = &[
                 ChamferSize::Equal(d)
             };
             Ok(Feature::Chamfer {
-                edges: p.refs()?,
+                edges: p.some_refs()?,
                 size,
             })
         },
@@ -305,7 +308,7 @@ pub const KINDS: &[Kind] = &[
             let angle = p.angle()?;
             let neutral = p.frame()?;
             Ok(Feature::Draft {
-                faces: p.refs()?,
+                faces: p.some_refs()?,
                 neutral,
                 angle,
             })
@@ -1194,7 +1197,7 @@ pub const KINDS: &[Kind] = &[
         parse: |p| {
             let distance = p.num()?;
             Ok(Feature::Edit(Edit::Offset {
-                faces: p.refs()?,
+                faces: p.some_refs()?,
                 distance,
             }))
         },
@@ -1215,7 +1218,7 @@ pub const KINDS: &[Kind] = &[
             let thickness = p.num()?;
             let side = p.side(Side::Pos);
             Ok(Feature::Edit(Edit::Thicken {
-                faces: p.refs()?,
+                faces: p.some_refs()?,
                 thickness,
                 side,
                 op,
@@ -1241,7 +1244,11 @@ pub const KINDS: &[Kind] = &[
     Kind {
         name: "delete",
         syntax: "delete REF..",
-        parse: |p| Ok(Feature::Edit(Edit::Delete { faces: p.refs()? })),
+        parse: |p| {
+            Ok(Feature::Edit(Edit::Delete {
+                faces: p.some_refs()?,
+            }))
+        },
         print: |f, w| {
             let Feature::Edit(Edit::Delete { faces }) = f else {
                 return false;
@@ -1275,7 +1282,7 @@ pub const KINDS: &[Kind] = &[
         name: "move",
         syntax: "move REF.. (by DX DY DZ | turn A OX OY OZ AX AY AZ)",
         parse: |p| {
-            let faces = p.refs()?;
+            let faces = p.some_refs()?;
             let motion = match p.next()? {
                 "by" => Motion::Translate(p.vec3()?),
                 "turn" => Motion::Rotate {
@@ -2796,7 +2803,21 @@ impl<'a> P<'a> {
         let mut out = Vec::new();
         while is_ref(self.peek()) {
             let t = self.next()?.to_string();
-            out.extend((self.b.refs)(&t)?);
+            let names = (self.b.refs)(&t)?;
+            // what a selector was asked for is never quietly nothing: a shell with an empty
+            // selector would close, a bevel of nothing would do nothing
+            if names.is_empty() {
+                return Err(format!("{t} selects nothing"));
+            }
+            out.extend(names);
+        }
+        Ok(out)
+    }
+    /// `refs`, at least one: a line that works on what it names has to name something.
+    fn some_refs(&mut self) -> R<Vec<Name>> {
+        let out = self.refs()?;
+        if out.is_empty() {
+            return Err(format!("expected @handle or (selector), found '{}'", self.peek()));
         }
         Ok(out)
     }
@@ -3358,7 +3379,7 @@ mod tests {
     }
 
     fn names(r: &mut Rng) -> Vec<Name> {
-        (0..r.below(4)).map(|_| Name(r.next_u64())).collect()
+        (0..1 + r.below(3)).map(|_| Name(r.next_u64())).collect()
     }
 
     fn op(r: &mut Rng) -> Combine {

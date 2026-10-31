@@ -67,6 +67,8 @@ pub enum TextError {
     BadSize,
     /// No character of the text has an outline.
     Empty,
+    /// The font has no glyph for this character: the text would come out without it.
+    NoGlyph(char),
     Glyph(GlyphError),
 }
 
@@ -83,6 +85,9 @@ pub fn layout(font: &Font, text: &str, size: f64) -> Result<Vec<Vec<Vec<GlyphSeg
             continue;
         }
         let g = font.glyph(c);
+        if g == 0 && !c.is_whitespace() {
+            return Err(TextError::NoGlyph(c));
+        }
         if let Some(p) = prev {
             x += font.kerning(p, g) * k;
         }
