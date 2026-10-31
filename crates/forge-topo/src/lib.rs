@@ -10,5 +10,5 @@ pub mod uv;
 pub use body::{
     Body, Coedge, CoedgeId, Edge, EdgeId, Face, FaceId, Loop, LoopId, Shell, ShellId, Vertex, VertexId,
 };
-pub use check::{Problem, check, genus};
+pub use check::{Problem, certify, check, genus};
 pub use name::Name;

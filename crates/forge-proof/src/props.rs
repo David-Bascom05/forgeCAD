@@ -1,0 +1,707 @@
+//! Relations between results that must hold whatever the part: the same history moved, mirrored
+//! or scaled; boolean identities; independent features in either order; every regen path; and
+//! the B-rep against its CSG tree point by point. Each property takes a part and a seed (which
+//! picks its transform or tool) and returns its first failure, so a failure shrinks against the
+//! same transform.
+
+use crate::cert::certify;
+use crate::map::{self, Map};
+use forge_bool::{Index, Member, Op, Shape, Where};
+use forge_geom::Surface;
+use forge_math::rng::Rng;
+use forge_math::{Box3, Point3};
+use forge_mesh::{Quality, tessellate};
+use forge_model::{Backend, Combine, Extent, Feature, Part, Turn, suite};
+use forge_ops::{Profile, ProfileLoop, Segment};
+use forge_topo::Body;
+
+/// Chord of the meshes volumes and areas are measured on.
+pub const CHORD: f64 = 0.02;
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Sig {
+    pub verts: usize,
+    pub edges: usize,
+    pub faces: usize,
+    pub shells: usize,
+    /// Vertices with two edges between the same two faces: nothing is lost merging those edges.
+    pub redundant: usize,
+    /// Faces on planes, cylinders, cones, spheres, tori and procedural surfaces.
+    pub kinds: [usize; 6],
+}
+
+pub fn sig(b: &Body) -> Sig {
+    let b = b.compact();
+    let mut kinds = [0; 6];
+    for f in b.face_ids() {
+        kinds[match b.face(f).surface {
+            Surface::Plane(_) => 0,
+            Surface::Cylinder(_) => 1,
+            Surface::Cone(_) => 2,
+            Surface::Sphere(_) => 3,
+            Surface::Torus(_) => 4,
+            Surface::Procedural(_) => 5,
+        }] += 1;
+    }
+    let mut edges_at: Vec<Vec<forge_topo::EdgeId>> = vec![Vec::new(); b.vertices.len()];
+    for e in b.edge_ids() {
+        let ed = b.edge(e);
+        edges_at[ed.start.index()].push(e);
+        if ed.end != ed.start {
+            edges_at[ed.end.index()].push(e);
+        }
+    }
+    let faces_of = |e: forge_topo::EdgeId| {
+        let mut f: Vec<u32> = b.edge(e).coedges.iter().map(|&c| b.coedge_face(c).0).collect();
+        f.sort_unstable();
+        f
+    };
+    let redundant = edges_at
+        .iter()
+        .filter(|es| es.len() == 2 && es[0] != es[1] && faces_of(es[0]) == faces_of(es[1]))
+        .count();
+    Sig {
+        redundant,
+        verts: b.vertices.len(),
+        edges: b.edges.len(),
+        faces: b.faces.len(),
+        shells: b.shells.len(),
+        kinds,
+    }
+}
+
+impl Sig {
+    /// The counts with every redundant vertex merged away.
+    fn merged(&self) -> Sig {
+        Sig {
+            verts: self.verts - self.redundant,
+            edges: self.edges - self.redundant,
+            redundant: 0,
+            ..self.clone()
+        }
+    }
+}
+
+impl std::fmt::Display for Sig {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        let k = self.kinds;
+        write!(
+            f,
+            "V{} E{} F{} S{} R{} [pl{} cy{} co{} sp{} to{} pr{}]",
+            self.verts,
+            self.edges,
+            self.faces,
+            self.shells,
+            self.redundant,
+            k[0],
+            k[1],
+            k[2],
+            k[3],
+            k[4],
+            k[5]
+        )
+    }
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub struct Finding {
+    pub prop: &'static str,
+    /// What went wrong, without numbers: failures of one kind are one bug.
+    pub kind: String,
+    pub detail: String,
+}
+
+fn found(prop: &'static str, kind: impl Into<String>, detail: impl Into<String>) -> Option<Finding> {
+    Some(Finding {
+        prop,
+        kind: kind.into(),
+        detail: detail.into(),
+    })
+}
+
+/// The part regenerated feature by feature, a regen error or panic as its short kind.
+pub fn build(part: &Part) -> Result<Body, String> {
+    guarded(|| part.regenerate().map_err(|e| short(&format!("{e:?}"))))
+}
+
+fn guarded(f: impl FnOnce() -> Result<Body, String>) -> Result<Body, String> {
+    std::panic::catch_unwind(std::panic::AssertUnwindSafe(f)).unwrap_or_else(|p| {
+        let m = p
+            .downcast_ref::<&str>()
+            .map(|s| s.to_string())
+            .or_else(|| p.downcast_ref::<String>().cloned())
+            .unwrap_or_default();
+        Err(format!("panic {}", m.chars().take(60).collect::<String>()))
+    })
+}
+
+/// An error's variant names down to the first value: `Boolean { feature: 3, error:
+/// Internal("x") }` is `Boolean Internal("x")`.
+fn short(e: &str) -> String {
+    let mut out = Vec::new();
+    for w in e.split([' ', '{', '}', ',']).filter(|w| !w.is_empty()) {
+        if w.ends_with(':') || w.chars().next().is_some_and(|c| c.is_ascii_digit() || c == '-') {
+            continue;
+        }
+        out.push(w.split('(').next().unwrap_or(w).to_string());
+        if w.contains('(') {
+            out.push(
+                w.split('(')
+                    .nth(1)
+                    .unwrap_or("")
+                    .trim_end_matches(')')
+                    .to_string(),
+            );
+            break;
+        }
+    }
+    out.join(" ")
+}
+
+/// Volume and area of a mesh of the body, and the most either can be off by (the chord times
+/// the area).
+pub fn measure(b: &Body, chord: f64) -> Option<(f64, f64, f64)> {
+    let m = tessellate(
+        b,
+        &Quality {
+            chord,
+            max_angle: 0.5,
+        },
+    )
+    .ok()?;
+    let a = m.area();
+    Some((m.volume(), a, chord * a))
+}
+
+/// A body that builds and certifies, with its signature and measures.
+struct Good {
+    body: Body,
+    sig: Sig,
+    vol: f64,
+    area: f64,
+    slack: f64,
+}
+
+fn good(part: &Part) -> Result<Good, String> {
+    good_at(part, CHORD)
+}
+
+/// `good`, measured on a mesh of this chord (a scaled part's chord scaled with it meshes alike).
+fn good_at(part: &Part, chord: f64) -> Result<Good, String> {
+    good_from(build(part), chord)
+}
+
+fn good_from(body: Result<Body, String>, chord: f64) -> Result<Good, String> {
+    let body = body?;
+    if let Some(p) = forge_topo::check(&body).first() {
+        return Err(format!("invalid {}", short(&format!("{p:?}"))));
+    }
+    let (vol, area, slack) = measure(&body, chord).ok_or("does not mesh")?;
+    Ok(Good {
+        sig: sig(&body),
+        body,
+        vol,
+        area,
+        slack,
+    })
+}
+
+/// `b` is `a` mapped: the same topology, volume times `k3`, area times `k2`.
+fn same(prop: &'static str, a: &Good, b: &Result<Good, String>, k3: f64, k2: f64) -> Option<Finding> {
+    let b = match b {
+        Ok(b) => b,
+        Err(e) => return found(prop, format!("fails: {e}"), "the original builds valid"),
+    };
+    if a.sig.merged() != b.sig.merged() {
+        return found(prop, "topology differs", format!("{} vs {}", a.sig, b.sig));
+    }
+    let dv = (b.vol - a.vol * k3).abs();
+    if dv > a.slack * k3 + b.slack {
+        return found(
+            prop,
+            "volume differs",
+            format!("{} vs {} (x{k3}), slack {}", a.vol, b.vol, a.slack * k3 + b.slack),
+        );
+    }
+    let da = (b.area - a.area * k2).abs();
+    if da > 1e-3 * a.area * k2 {
+        return found(prop, "area differs", format!("{} vs {} (x{k2})", a.area, b.area));
+    }
+    if a.sig != b.sig {
+        return found(
+            prop,
+            "redundant vertices differ",
+            format!("{} vs {}", a.sig, b.sig),
+        );
+    }
+    None
+}
+
+fn mapped(prop: &'static str, part: &Part, m: &Map, k: f64) -> Option<Finding> {
+    let a = good(part).ok()?;
+    let moved = m.part(part)?;
+    same(prop, &a, &good_at(&moved, CHORD * k), k * k * k, k * k)
+}
+
+/// The history moved by a rigid motion: a quarter turn (exact) or a Pythagorean rotation.
+pub fn rigid(part: &Part, seed: u64) -> Option<Finding> {
+    mapped("rigid", part, &rigid_map(seed), 1.0)
+}
+
+pub fn rigid_map(seed: u64) -> Map {
+    let mut r = Rng::new(seed ^ 0x51);
+    if seed.is_multiple_of(2) {
+        map::quarter(&mut r)
+    } else {
+        map::rigid(&mut r)
+    }
+}
+
+/// The history reflected in a coordinate plane (exact) or a tilted one.
+pub fn mirror(part: &Part, seed: u64) -> Option<Finding> {
+    mapped("mirror", part, &mirror_map(seed), 1.0)
+}
+
+pub fn mirror_map(seed: u64) -> Map {
+    map::mirror(&mut Rng::new(seed ^ 0x52), seed % 2 == 1)
+}
+
+/// The history scaled by a power of two: every coordinate scales exactly, so only absolute
+/// tolerances can tell the copies apart.
+pub fn scale(part: &Part, seed: u64) -> Option<Finding> {
+    let k = scale_factor(seed);
+    mapped("scale", part, &Map::Scale(k), k)
+}
+
+pub fn scale_factor(seed: u64) -> f64 {
+    [2.0, 0.5, 4.0, 0.25][(seed % 4) as usize]
+}
+
+/// How a feature combines, if it is a plain tool (an extrude, revolve or ball).
+fn tool_op(f: &Feature) -> Option<Combine> {
+    match f {
+        Feature::Extrude { op, .. } | Feature::Revolve { op, .. } | Feature::Ball { op, .. } => Some(*op),
+        _ => None,
+    }
+}
+
+fn with_op(f: &Feature, to: Combine) -> Feature {
+    let mut f = f.clone();
+    if let Feature::Extrude { op, .. } | Feature::Revolve { op, .. } | Feature::Ball { op, .. } = &mut f {
+        *op = to;
+    }
+    f
+}
+
+/// Whether every feature is a plain tool, the first making the part and none another body.
+pub fn plain(part: &Part) -> bool {
+    part.features.iter().enumerate().all(|(i, f)| match tool_op(f) {
+        Some(Combine::New) => i == 0,
+        Some(_) => i > 0,
+        None => false,
+    })
+}
+
+/// Two neighbouring tools that both add or both cut, swapped: the same solid.
+pub fn order(part: &Part, seed: u64) -> Option<Finding> {
+    let (i, _) = order_pair(part, seed)?;
+    let a = good(part).ok()?;
+    let mut swapped = part.clone();
+    swapped.features.swap(i, i + 1);
+    same("order", &a, &good(&swapped), 1.0, 1.0).map(|mut f| {
+        f.detail = format!("features {i} and {} swapped: {}", i + 1, f.detail);
+        f
+    })
+}
+
+/// Which neighbouring pair `order` swaps, and how many there were to pick from.
+fn order_pair(part: &Part, seed: u64) -> Option<(usize, usize)> {
+    if !plain(part) {
+        return None;
+    }
+    let pairs: Vec<usize> = (1..part.features.len().saturating_sub(1))
+        .filter(|&i| tool_op(&part.features[i]) == tool_op(&part.features[i + 1]))
+        .collect();
+    (!pairs.is_empty()).then(|| (pairs[(seed as usize) % pairs.len()], pairs.len()))
+}
+
+/// A random tool for boolean identities, from the fuzz generator.
+pub fn tool(seed: u64) -> Feature {
+    let p = suite::fuzz(seed ^ 0xB0, 4);
+    let n = p.features.len() - 1;
+    with_op(&p.features[1 + (seed as usize) % n], Combine::Add)
+}
+
+/// With B a random tool: A - B and A & B partition A point by point, their volumes add to A's,
+/// vol(A | B) + vol(A & B) = vol(A) + vol(B), and (A - B) | (A & B) is A again.
+pub fn identities(part: &Part, seed: u64) -> Option<Finding> {
+    identities_with(part, &tool(seed), seed)
+}
+
+pub fn identities_with(part: &Part, b: &Feature, seed: u64) -> Option<Finding> {
+    const P: &str = "boolean";
+    let a = good(part).ok()?;
+    let with = |op| {
+        let mut p = part.clone();
+        p.features.push(with_op(b, op));
+        good(&p)
+    };
+    let alone = good(&Part {
+        features: vec![with_op(b, Combine::New)],
+    })
+    .ok()?;
+    let (u, i, d) = (with(Combine::Add), with(Combine::Keep), with(Combine::Cut));
+    // an empty intersection or difference is an error, not a body: leave those cases
+    let (u, i, d) = match (u, i, d) {
+        (Ok(u), Ok(i), Ok(d)) => (u, i, d),
+        (u, i, d) => {
+            for (name, r) in [("A | B", &u), ("A & B", &i), ("A - B", &d)] {
+                if let Err(e) = r
+                    && !e.contains("Empty")
+                    && !e.contains("ZeroThickness")
+                {
+                    return found(P, format!("{name} fails: {e}"), "A and B build valid alone");
+                }
+            }
+            return None;
+        }
+    };
+    let slack = u.slack + i.slack + a.slack + alone.slack;
+    let lhs = u.vol + i.vol;
+    let rhs = a.vol + alone.vol;
+    if (lhs - rhs).abs() > slack {
+        return found(
+            P,
+            "vol(A|B) + vol(A&B) != vol(A) + vol(B)",
+            format!("{lhs} vs {rhs}, slack {slack}"),
+        );
+    }
+    if (d.vol + i.vol - a.vol).abs() > d.slack + i.slack + a.slack {
+        return found(
+            P,
+            "vol(A-B) + vol(A&B) != vol(A)",
+            format!("{} + {} vs {}", d.vol, i.vol, a.vol),
+        );
+    }
+    // point by point: inside A is inside exactly one of A - B and A & B; outside A, in neither
+    let (ia, id, ii) = (Index::new(&a.body), Index::new(&d.body), Index::new(&i.body));
+    let mut r = Rng::new(seed ^ 0xB1);
+    let bb = bbox(&a.body).grow(1.0);
+    for _ in 0..400 {
+        let p = sample(&mut r, &bb);
+        let (wa, wd, wi) = (ia.classify(p), id.classify(p), ii.classify(p));
+        if [wa, wd, wi].contains(&Where::On) {
+            continue;
+        }
+        let ins = [wd, wi].iter().filter(|w| **w == Where::Inside).count();
+        if (wa == Where::Inside && ins != 1) || (wa == Where::Outside && ins != 0) {
+            return found(
+                P,
+                "A-B and A&B do not partition A",
+                format!("at {p:?}: A {wa:?}, A-B {wd:?}, A&B {wi:?}"),
+            );
+        }
+    }
+    let joined = guarded(|| {
+        forge_bool::boolean(&d.body, &i.body, Op::Union, 999).map_err(|e| short(&format!("{e:?}")))
+    });
+    match joined {
+        Err(e) => found(P, format!("(A-B) | (A&B) fails: {e}"), ""),
+        Ok(j) => {
+            // both pieces carry names from the same features: only the shape is asked of the join
+            let shape = |p: &&forge_topo::Problem| !matches!(p, forge_topo::Problem::DuplicateName { .. });
+            if let Some(p) = forge_topo::check(&j).iter().find(shape) {
+                return found(P, "(A-B) | (A&B) invalid", format!("{p:?}"));
+            }
+            let (v, _, s) = measure(&j, CHORD)?;
+            if (v - a.vol).abs() > s + a.slack {
+                return found(P, "(A-B) | (A&B) != A", format!("volume {v} vs {}", a.vol));
+            }
+            None
+        }
+    }
+}
+
+/// Feature by feature, n-ary on one and two threads, n-ary placing no points by the tools'
+/// shapes, and n-ary with the region batch on the GPU (or the CPU without one): one solid.
+pub fn backends(part: &Part, _seed: u64) -> Option<Finding> {
+    let a = good(part).ok()?;
+    for name in ["nary 1", "nary 2", "nary no shapes", "nary gpu"] {
+        let body = guarded(|| {
+            err(match name {
+                "nary 1" => part.regenerate_nary_on(1, Backend::Cpu),
+                "nary 2" => part.regenerate_nary_on(2, Backend::Cpu),
+                "nary no shapes" => part.regenerate_nary_with(1, false),
+                _ => part.regenerate_nary_on(1, Backend::Gpu),
+            })
+        });
+        if let Some(mut f) = same("backends", &a, &good_from(body, CHORD), 1.0, 1.0) {
+            f.kind = format!("{name}: {}", f.kind);
+            return Some(f);
+        }
+    }
+    None
+}
+
+fn err(r: Result<Body, forge_model::RegenError>) -> Result<Body, String> {
+    r.map_err(|e| short(&format!("{e:?}")))
+}
+
+/// The certificates of `cert::certify` on the part as built.
+pub fn certificate(part: &Part, _seed: u64) -> Option<Finding> {
+    let body = build(part).ok()?;
+    if !forge_topo::check(&body).is_empty() {
+        return None;
+    }
+    let flaws = certify(&body, CHORD * 2.5);
+    let first = flaws.first()?;
+    found(
+        "certify",
+        first.kind(),
+        format!("{first:?} ({} flaws)", flaws.len()),
+    )
+}
+
+/// Random points classified against the B-rep and against the tools' solids combined in
+/// order: wherever the tools say clearly in or out, the B-rep must agree.
+pub fn membership(part: &Part, seed: u64) -> Option<Finding> {
+    if !plain(part) {
+        return None;
+    }
+    let body = build(part).ok()?;
+    let (shapes, ops) = part.nary_solids().ok()?;
+    let index = Index::new(&body);
+    let mut r = Rng::new(seed ^ 0x3E);
+    let bb = bbox(&body).grow(2.0);
+    for _ in 0..2000 {
+        let p = sample(&mut r, &bb);
+        let tree = csg(&shapes, &ops, p, 1e-3);
+        let brep = index.classify(p);
+        let bad = matches!(
+            (tree, brep),
+            (Member::In, Where::Outside) | (Member::Out, Where::Inside)
+        );
+        if bad {
+            return found(
+                "membership",
+                format!("CSG {tree:?}, B-rep {brep:?}"),
+                format!("at {p:?}"),
+            );
+        }
+    }
+    None
+}
+
+/// Where `p` is in the tools combined in turn, clear of every boundary by `m`, or Near.
+fn csg(shapes: &[Shape], ops: &[Op], p: Point3, m: f64) -> Member {
+    let mut v = shapes[0].member(p, m);
+    for (s, op) in shapes[1..].iter().zip(ops) {
+        let w = s.member(p, m);
+        v = match (op, v, w) {
+            (_, Member::Near, _) | (_, _, Member::Near) => Member::Near,
+            (Op::Union, a, b) => {
+                if a == Member::In || b == Member::In {
+                    Member::In
+                } else {
+                    Member::Out
+                }
+            }
+            (Op::Subtract, a, b) => {
+                if a == Member::In && b == Member::Out {
+                    Member::In
+                } else {
+                    Member::Out
+                }
+            }
+            (Op::Intersect, a, b) => {
+                if a == Member::In && b == Member::In {
+                    Member::In
+                } else {
+                    Member::Out
+                }
+            }
+        };
+    }
+    v
+}
+
+fn bbox(b: &Body) -> Box3 {
+    Box3::from_points(b.vertices.iter().map(|v| v.point)).hull(
+        &b.face_ids()
+            .fold(Box3::from_points([]), |acc, f| acc.hull(&b.face_box(f))),
+    )
+}
+
+fn sample(r: &mut Rng, b: &Box3) -> Point3 {
+    Point3::new(
+        r.range(b.x.lo, b.x.hi),
+        r.range(b.y.lo, b.y.hi),
+        r.range(b.z.lo, b.z.hi),
+    )
+}
+
+pub type Property = fn(&Part, u64) -> Option<Finding>;
+
+/// The other history a failure compares against, if it has one: the part mapped or reordered,
+/// or with the boolean's tool cut from it.
+pub fn witness(prop: &str, part: &Part, seed: u64) -> Option<Part> {
+    match prop {
+        "rigid" => rigid_map(seed).part(part),
+        "mirror" => mirror_map(seed).part(part),
+        "scale" => Map::Scale(scale_factor(seed)).part(part),
+        "boolean" => {
+            let mut p = part.clone();
+            p.features.push(with_op(&tool(seed), Combine::Cut));
+            Some(p)
+        }
+        "order" => {
+            let (f, _) = order_pair(part, seed)?;
+            let mut p = part.clone();
+            p.features.swap(f, f + 1);
+            Some(p)
+        }
+        _ => None,
+    }
+}
+
+/// Every property, by name.
+pub fn all() -> Vec<(&'static str, Property)> {
+    vec![
+        ("rigid", rigid),
+        ("mirror", mirror),
+        ("scale", scale),
+        ("order", order),
+        ("boolean", identities),
+        ("backends", backends),
+        ("certify", certificate),
+        ("membership", membership),
+    ]
+}
+
+/// The smallest history found that still fails `prop` with the same kind at `seed`: features
+/// dropped one at a time, then numbers rounded.
+pub fn shrink(part: &Part, prop: Property, seed: u64) -> Part {
+    let Some(f0) = prop(part, seed) else {
+        return part.clone();
+    };
+    let fails = |p: &Part| prop(p, seed).is_some_and(|f| f.kind == f0.kind);
+    let mut cur = part.clone();
+    // runs of features dropped, halving the run each pass down to one at a time
+    let mut run = (cur.features.len() / 2).max(1);
+    loop {
+        let mut end = cur.features.len();
+        while end > 1 {
+            let start = end.saturating_sub(run).max(1);
+            let mut t = cur.clone();
+            t.features.drain(start..end);
+            if fails(&t) {
+                cur = t;
+            }
+            end = start;
+        }
+        if run == 1 {
+            break;
+        }
+        run /= 2;
+    }
+    for digits in [0, 1, 2, 3] {
+        let t = Part {
+            features: cur.features.iter().map(|f| rounded(f, digits)).collect(),
+        };
+        if fails(&t) {
+            cur = t;
+            break;
+        }
+    }
+    for i in 0..cur.features.len() {
+        for digits in [0, 1, 2] {
+            let mut t = cur.clone();
+            t.features[i] = rounded(&cur.features[i], digits);
+            if t != cur && fails(&t) {
+                cur = t;
+                break;
+            }
+        }
+    }
+    cur
+}
+
+/// Lengths and coordinates to `digits` decimals, directions to two more.
+fn rounded(f: &Feature, digits: i32) -> Feature {
+    let k = 10f64.powi(digits);
+    let rd = |v: f64| (v * k).round() / k;
+    let rdir = |v: f64| (v * k * 100.0).round() / (k * 100.0);
+    let p2 = |p: forge_math::Point2| forge_math::Point2::new(rd(p.x), rd(p.y));
+    let rf = |f: &forge_math::Frame| {
+        let (o, z, x) = (f.origin, f.z().get(), f.x().get());
+        forge_model::adversarial::fr(
+            [rd(o.x), rd(o.y), rd(o.z)],
+            [rdir(z.x), rdir(z.y), rdir(z.z)],
+            [rdir(x.x), rdir(x.y), rdir(x.z)],
+        )
+    };
+    let prof = |p: &Profile| Profile {
+        plane: rf(&p.plane),
+        loops: p
+            .loops
+            .iter()
+            .map(|l| {
+                ProfileLoop::new(
+                    l.segments
+                        .iter()
+                        .map(|&(s, id)| {
+                            let s = match s {
+                                Segment::Line { a, b } => Segment::Line { a: p2(a), b: p2(b) },
+                                Segment::Arc {
+                                    center,
+                                    radius,
+                                    start,
+                                    sweep,
+                                } => Segment::Arc {
+                                    center: p2(center),
+                                    radius: rd(radius),
+                                    start,
+                                    sweep,
+                                },
+                                Segment::Circle { center, radius, ccw } => Segment::Circle {
+                                    center: p2(center),
+                                    radius: rd(radius),
+                                    ccw,
+                                },
+                            };
+                            (s, id)
+                        })
+                        .collect(),
+                )
+            })
+            .collect(),
+    };
+    match f {
+        Feature::Extrude {
+            profile,
+            extent: Extent::Distance(d),
+            op,
+        } => Feature::Extrude {
+            profile: prof(profile),
+            extent: Extent::Distance(rd(*d)),
+            op: *op,
+        },
+        Feature::Revolve {
+            profile,
+            axis,
+            extent: Turn::Angle(a),
+            op,
+        } => Feature::Revolve {
+            profile: prof(profile),
+            axis: *axis,
+            extent: Turn::Angle(*a),
+            op: *op,
+        },
+        Feature::Ball { frame, radius, op } => Feature::Ball {
+            frame: rf(frame),
+            radius: rd(*radius),
+            op: *op,
+        },
+        other => other.clone(),
+    }
+}

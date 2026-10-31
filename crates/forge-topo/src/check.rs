@@ -65,6 +65,16 @@ pub enum Problem {
     ShellsOverlap {
         face: FaceId,
     },
+    /// One shell's V - E + 2F - L is odd or above 2 (`certify`).
+    ShellEuler {
+        shell: crate::body::ShellId,
+        value: i64,
+    },
+    /// The faces round a vertex form more than one fan: the surface is pinched there (`certify`).
+    VertexFans {
+        vertex: VertexId,
+        fans: usize,
+    },
 }
 
 /// Everything wrong with a body, in a deterministic order. Empty means it is a
@@ -86,6 +96,113 @@ pub fn check(body: &Body) -> Vec<Problem> {
     check_names(body, &mut out);
     check_euler(body, &mut out);
     out
+}
+
+/// `check`, then what it does not look at: each shell's Euler-Poincare count, one fan of faces
+/// round every vertex (a closed 2-manifold), and every edge on its faces at 256 samples.
+pub fn certify(body: &Body) -> Vec<Problem> {
+    if body.dead > 0 {
+        return certify(&body.compact());
+    }
+    let mut out = check(body);
+    if out
+        .iter()
+        .any(|p| matches!(p, Problem::EdgeUses { .. } | Problem::LoopBroken { .. }))
+    {
+        return out;
+    }
+    certify_shells(body, &mut out);
+    certify_fans(body, &mut out);
+    for e in body.edge_ids() {
+        let mut faces: Vec<FaceId> = body
+            .edge(e)
+            .coedges
+            .iter()
+            .map(|&c| body.coedge_face(c))
+            .collect();
+        faces.dedup();
+        let pts = body.edge_points(e, 256);
+        for f in faces {
+            let s = &body.face(f).surface;
+            let worst = pts.iter().map(|&p| s.distance(p)).fold(0.0, f64::max);
+            let known = |p: &Problem| matches!(p, Problem::EdgeOffFace { edge, face, .. } if *edge == e && *face == f);
+            if worst > tol::LINEAR && !out.iter().any(known) {
+                out.push(Problem::EdgeOffFace {
+                    edge: e,
+                    face: f,
+                    distance: worst,
+                });
+            }
+        }
+    }
+    out
+}
+
+fn certify_shells(body: &Body, out: &mut Vec<Problem>) {
+    for (si, shell) in body.shells.iter().enumerate() {
+        let (mut f, mut l) = (0i64, 0i64);
+        let (mut edges, mut verts) = (Vec::new(), Vec::new());
+        for &face in &shell.faces {
+            f += 1;
+            for &lp in &body.face(face).loops {
+                l += 1;
+                for &c in &body.lp(lp).coedges {
+                    let e = body.coedge(c).edge;
+                    edges.push(e);
+                    verts.extend([body.edge(e).start, body.edge(e).end]);
+                }
+            }
+        }
+        edges.sort();
+        edges.dedup();
+        verts.sort();
+        verts.dedup();
+        let value = verts.len() as i64 - edges.len() as i64 + 2 * f - l;
+        if value % 2 != 0 || value > 2 {
+            out.push(Problem::ShellEuler {
+                shell: crate::body::ShellId(si as u32),
+                value,
+            });
+        }
+    }
+}
+
+/// Round each vertex, coedge to coedge: from one leaving it, back along its loop to the one
+/// arriving, then across to that one's partner, which leaves it again. One cycle is one fan.
+fn certify_fans(body: &Body, out: &mut Vec<Problem>) {
+    let mut prev = vec![CoedgeId(0); body.coedges.len()];
+    let mut leaving: Vec<Vec<CoedgeId>> = vec![Vec::new(); body.vertices.len()];
+    for l in body.loop_ids() {
+        let cs = &body.lp(l).coedges;
+        for (i, &c) in cs.iter().enumerate() {
+            prev[c.index()] = cs[(i + cs.len() - 1) % cs.len()];
+            leaving[body.coedge_start(c).index()].push(c);
+        }
+    }
+    for (v, cs) in leaving.iter().enumerate() {
+        let mut seen: Vec<CoedgeId> = Vec::new();
+        let mut fans = 0;
+        for &c0 in cs {
+            if seen.contains(&c0) {
+                continue;
+            }
+            fans += 1;
+            let mut c = c0;
+            while !seen.contains(&c) {
+                seen.push(c);
+                match body.partner(prev[c.index()]) {
+                    Some(n) => c = n,
+                    None => break,
+                }
+            }
+        }
+        if fans > 1 {
+            out.push(Problem::VertexFans {
+                vertex: VertexId(v as u32),
+                fans,
+            });
+        }
+    }
 }
 
 fn check_edges(body: &Body, out: &mut Vec<Problem>) {

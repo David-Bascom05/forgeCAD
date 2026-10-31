@@ -136,6 +136,20 @@ dependencies = [
 ]
 
 [[package]]
+name = "forge-proof"
+version = "0.1.0"
+dependencies = [
+ "forge-bool",
+ "forge-doc",
+ "forge-geom",
+ "forge-math",
+ "forge-mesh",
+ "forge-model",
+ "forge-ops",
+ "forge-topo",
+]
+
+[[package]]
 name = "forge-sketch"
 version = "0.1.0"
 dependencies = [
