@@ -3768,3 +3768,32 @@ fn a_cut_that_takes_everything_is_refused_both_ways() {
         }
     }
 }
+
+/// A cone's axis in a block's top: the plane meets it in two rulings, one on the seam, which end at
+/// the apex. An apex has no tangent plane, so its rulings are told by their u (the split crossed
+/// itself when they were projected on a plane through one of them).
+#[test]
+fn cone_axis_in_a_block_top() {
+    let half = 25.0 * forge_math::dmath::PI * 20.0 / 3.0 / 2.0;
+    let block = 40.0 * 40.0 * 20.0;
+    for (op, want) in [("Add", block + half), ("Cut", block - half), ("Keep", half)] {
+        let (_, part) = forge_model::adversarial::degenerate_parts()
+            .into_iter()
+            .find(|p| p.0 == format!("plane_cone/axis_in_top/{op}"))
+            .expect("the part");
+        for b in [part.regenerate(), part.regenerate_nary(1)] {
+            let b = b.unwrap_or_else(|e| panic!("{op}: {e:?}"));
+            assert!(
+                forge_topo::check(&b).is_empty(),
+                "{op}: {:?}",
+                forge_topo::check(&b)
+            );
+            let q = forge_mesh::Quality {
+                chord: 0.002,
+                ..forge_mesh::Quality::default()
+            };
+            let v = forge_mesh::tessellate(&b, &q).expect("meshes").volume();
+            assert!((v - want).abs() < 0.5, "{op}: {v} not {want}");
+        }
+    }
+}

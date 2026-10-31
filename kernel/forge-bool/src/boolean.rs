@@ -3472,6 +3472,12 @@ pub(crate) fn uv_dir(body: &Body, f: FaceId, p: &Piece, forward: bool, at_end: b
     let face = body.face(f);
     let uv = face.surface.project(d.p);
     let sd = face.surface.deriv(uv);
+    if let Surface::Cone(_) = face.surface
+        && sd.du.dot(sd.du) <= 1e-18 * sd.dv.dot(sd.dv)
+    {
+        // an apex has no tangent plane: its rulings are told by their u
+        return round_point(face, p, t, uv, forward != at_end);
+    }
     if sd.du.dot(sd.du) <= 1e-18 * sd.dv.dot(sd.dv) {
         // at a pole u says nothing: the ways are told apart in the tangent plane, turned as the
         // parameter plane is (its normal du x dv, taken a hair off the pole)
