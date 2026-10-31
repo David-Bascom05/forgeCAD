@@ -1189,17 +1189,26 @@ fn plan(a: &Body, b: &Body, op: Op, scratch: &mut Scratch) -> R<Plan> {
             // an imprint a hair from the boundary, between the same two vertices, is the boundary
             // (a tool's side all but tangent to a round face's edge)
             if !foreign.is_empty() {
-                foreign.retain(|&p| {
-                    let pc = &pieces[p];
-                    let mid = pc.curve.eval(pc.range.mid());
-                    !boundary.iter().flatten().any(|&(b, _)| {
-                        let o = &pieces[b];
-                        b != p
-                            && (o.start == pc.start && o.end == pc.end
-                                || o.start == pc.end && o.end == pc.start)
-                            && o.curve.eval(o.curve.closest(mid, o.range)).distance(mid) <= tol::LINEAR
-                    })
-                });
+                let key = |p: &Piece| (p.start.min(p.end), p.start.max(p.end));
+                let mut ends: Vec<_> = boundary
+                    .iter()
+                    .flatten()
+                    .filter(|h| !matches!(pieces[h.0].curve, Curve::Line(_)))
+                    .map(|h| (key(&pieces[h.0]), h.0))
+                    .collect();
+                ends.sort_unstable();
+                if !ends.is_empty() {
+                    foreign.retain(|&p| {
+                        let pc = &pieces[p];
+                        let k = key(pc);
+                        let from = ends.partition_point(|x| x.0 < k);
+                        !ends[from..].iter().take_while(|x| x.0 == k).any(|&(_, b)| {
+                            let o = &pieces[b];
+                            let mid = pc.curve.eval(pc.range.mid());
+                            b != p && o.curve.eval(o.curve.closest(mid, o.range)).distance(mid) <= tol::LINEAR
+                        })
+                    });
+                }
             }
             if mine.is_empty() && foreign.is_empty() {
                 specs.push(Spec {
@@ -2208,10 +2217,29 @@ pub(crate) fn trim(
                 break;
             }
             // only a closed curve whole (no cut, or one) touching a boundary would need a vertex
-            // there, which no sample gives. Between two cuts, a stretch running along the boundary
-            // it is on stays on it at every sample; one inside elsewhere only passes a boundary
-            // within tolerance (a tool's edge a hair clear of the surface makes no cut there)
-            if f != 0.5 && (ends.is_empty() || ends[0] == ends[1]) {
+            // there, which no sample gives. Between two cuts, a stretch from one edge back to the
+            // same edge, with its middle on that edge, runs along it; one whose middle is on
+            // another edge only passes it within tolerance (a tool's edge a hair clear of the
+            // surface makes no cut there) and is a new edge if it is inside elsewhere
+            if f != 0.5
+                && (ends.is_empty()
+                    || ends[0] == ends[1]
+                    || (0..2).any(|k| {
+                        let mid = curve.eval(0.5 * (t0 + t1));
+                        let holds =
+                            |c: &Cut, i: usize| cuts[i].point.distance(c.point) <= cuts[i].tol.max(c.tol);
+                        w[k] == Where::On
+                            && cuts[first..].iter().any(|c| match c.on.edge() {
+                                Some((sd, e)) if sd == sides[k] && holds(c, ends[0]) => {
+                                    cuts[first..]
+                                        .iter()
+                                        .any(|d| d.on.edge() == Some((sd, e)) && holds(d, ends[1]))
+                                        && on_edge(bodies[k], e, mid).is_some()
+                                }
+                                _ => false,
+                            })
+                    }))
+            {
                 break;
             }
             if off(p) {
@@ -2758,13 +2786,7 @@ pub(crate) fn flush_edges_as_cuts(
             x.0 = n;
         }
     }
-    let mut lying: Vec<(VKey, Point3)> = Vec::new();
     for &(name, p, ends, _) in &named {
-        let pc = &pieces[p];
-        lying.extend(ends.map(|(v, _)| {
-            let t = if v == pc.start { pc.range.lo } else { pc.range.hi };
-            (v, pc.curve.eval(t))
-        }));
         pieces[p].name = name;
         at_vertex.extend(ends.map(|(v, m)| (v, m.0)));
     }
@@ -2781,15 +2803,24 @@ pub(crate) fn flush_edges_as_cuts(
         o.1 = vertex.with(o.1.0).with(0);
     }
     // vertices their marks do not tell apart (a flat's two ends on a rod), by where they lie
-    if let Some(&(_, _, _, (sd, f))) = named.first() {
+    let mut sorted: Vec<Name> = out.iter().map(|x| x.1).collect();
+    sorted.sort_unstable();
+    if sorted.windows(2).any(|w| w[0] == w[1])
+        && let Some(&(_, _, _, (sd, f))) = named.first()
+    {
         let frame = surface_frame(&bodies[sd].face(f).surface);
+        let lie = |v: VKey| {
+            named.iter().find_map(|&(_, p, ends, _)| {
+                let pc = &pieces[p];
+                ends.iter().any(|e| e.0 == v).then(|| {
+                    let t = if v == pc.start { pc.range.lo } else { pc.range.hi };
+                    pc.curve.eval(t)
+                })
+            })
+        };
         let mut names: Vec<Name> = out.iter().map(|x| x.1).collect();
         rank_names(&mut names, &|k| {
-            let at = lying
-                .iter()
-                .find(|x| x.0 == out[k].0)
-                .map_or(Point3::ORIGIN, |x| x.1);
-            frame.point_to_local(at)
+            frame.point_to_local(lie(out[k].0).unwrap_or(Point3::ORIGIN))
         });
         for (o, n) in out.iter_mut().zip(names) {
             o.1 = n;
@@ -3508,10 +3539,7 @@ fn place_cuts(bodies: &[&Body; 2], cuts: &[Cut]) -> R<Placed> {
             }
         };
         for &o in olds.iter().skip(1) {
-            match (key, o) {
-                (VKey::Old(0, _), VKey::Old(1, _)) => alias.push((o, key)),
-                _ => return Err(BoolError::Unsupported("two vertices of one body meet at a cut")),
-            }
+            alias.push((o, key));
         }
         key_of.push(key);
     }

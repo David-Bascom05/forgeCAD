@@ -588,6 +588,15 @@ pub(crate) fn no_pinch(features: History<'_>, i: usize, body: &Body) -> Result<(
     let Some((profile, touches, lo, hi)) = touching_extrude(features, i) else {
         return Ok(());
     };
+    // a body the loops leave unsound (meeting twice, they divide the profile into solids one body's
+    // faces cannot hold) is refused like the pinch
+    if !forge_topo::check(body).is_empty() {
+        let at = profile.plane.plane_point(touches[0].at) + profile.plane.z() * (0.5 * (lo + hi));
+        return Err(RegenError::Boolean {
+            feature: i,
+            error: forge_bool::BoolError::ZeroThickness { at },
+        });
+    }
     let ix = forge_bool::Index::new(body);
     for t in &touches {
         for h in [0.25, 0.5, 0.75] {
@@ -595,7 +604,6 @@ pub(crate) fn no_pinch(features: History<'_>, i: usize, body: &Body) -> Result<(
             let at = |q: Point2| profile.plane.plane_point(q) + profile.plane.z() * z;
             // along the tangent the two wedges between the loops, across it the two sides
             let (holes, other) = (&profile.loops[t.hole], &profile.loops[t.other]);
-            let across = Vec2::new(-t.tangent.y, t.tangent.x);
             let wedge = |sign: f64| {
                 let mut r = 0.01;
                 loop {
@@ -607,46 +615,70 @@ pub(crate) fn no_pinch(features: History<'_>, i: usize, body: &Body) -> Result<(
                     r *= 2.0;
                 }
             };
-            let r = 0.5
-                * wedge(1.0)
-                    .distance(t.at)
-                    .min(wedge(-1.0).distance(t.at))
-                    .max(0.01);
-            let in_at = |q: Point2| match ix.classify(at(q)) {
-                forge_bool::Where::On => None,
-                w => Some(w == forge_bool::Where::Inside),
-            };
-            let sides = [wedge(1.0), wedge(-1.0), t.at + across * r, t.at + across * -r].map(in_at);
-            if let [Some(a), Some(b), Some(c), Some(d)] = sides
-                && a == b
-                && c == d
-                && a != c
-            {
-                // material on both of one pair: one solid across the line, or separate solids meeting?
-                if connected_through(body, &ix, at(t.at)) {
-                    return Err(RegenError::Boolean {
-                        feature: i,
-                        error: forge_bool::BoolError::ZeroThickness { at: at(t.at) },
-                    });
-                }
+            let (w0, w1) = (wedge(1.0), wedge(-1.0));
+            // round the point: a ring, and the two wedges a ring that size would pass between
+            let r = 0.5 * w0.distance(t.at).min(w1.distance(t.at)).max(0.04);
+            let mut round: Vec<(f64, Point2)> = (0..24)
+                .map(|k| {
+                    let a = dmath::TAU * k as f64 / 24.0;
+                    (a, t.at + Vec2::new(dmath::cos(a), dmath::sin(a)) * r)
+                })
+                .collect();
+            for w in [w0, w1] {
+                let d = w - t.at;
+                round.push((dmath::atan2(d.y, d.x).rem_euclid(dmath::TAU), w));
+            }
+            round.sort_by(|x, y| x.0.total_cmp(&y.0));
+            let states: Vec<bool> = round
+                .iter()
+                .filter_map(|&(_, q)| match ix.classify(at(q)) {
+                    forge_bool::Where::On => None,
+                    w => Some(w == forge_bool::Where::Inside),
+                })
+                .collect();
+            let changes = (0..states.len())
+                .filter(|&k| states[k] != states[(k + 1) % states.len()])
+                .count();
+            // material comes and goes twice round the line: it meets itself there
+            if changes >= 4 && connected_through(body, &ix, at(t.at)) {
+                return Err(RegenError::Boolean {
+                    feature: i,
+                    error: forge_bool::BoolError::ZeroThickness { at: at(t.at) },
+                });
             }
         }
     }
     Ok(())
 }
 
-/// Whether the faces of one shell meet at `p` from both sides: separate shells only touching there
-/// are separate solids, and sound.
+/// Whether the faces at `p` are all one solid, joined by edges: separate solids only touching
+/// there are sound.
 fn connected_through(body: &Body, ix: &forge_bool::Index<'_>, p: forge_math::Point3) -> bool {
+    let mut lump: Vec<usize> = (0..body.faces.len()).collect();
+    fn root(l: &mut [usize], mut i: usize) -> usize {
+        while l[i] != i {
+            l[i] = l[l[i]];
+            i = l[i];
+        }
+        i
+    }
+    for e in body.edge_ids() {
+        let cs = &body.edge(e).coedges;
+        if let [a, b, ..] = cs[..] {
+            let (x, y) = (body.coedge_face(a).index(), body.coedge_face(b).index());
+            let (x, y) = (root(&mut lump, x), root(&mut lump, y));
+            lump[x] = y;
+        }
+    }
     let mut first = None;
     for f in body.face_ids() {
         if ix.face_box(f).grow(forge_math::tol::LINEAR).contains(p)
             && ix.point_in_face(f, p) != forge_bool::Where::Outside
         {
-            let s = body.face(f).shell;
+            let l = root(&mut lump, f.index());
             match first {
-                None => first = Some(s),
-                Some(o) if o != s => return false,
+                None => first = Some(l),
+                Some(o) if o != l => return false,
                 _ => {}
             }
         }

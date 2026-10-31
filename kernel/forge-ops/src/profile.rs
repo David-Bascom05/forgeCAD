@@ -167,18 +167,18 @@ fn nearest_touch(a: Piece, b: Piece) -> (Point2, f64) {
     best
 }
 
-/// Where two loops touch, within tolerance, if they do.
-fn loops_touch(x: &ProfileLoop, y: &ProfileLoop) -> Option<Point2> {
-    let mut best: Option<(Point2, f64)> = None;
+/// Where two loops touch, within tolerance: each distinct point.
+fn loops_touch(x: &ProfileLoop, y: &ProfileLoop) -> Vec<Point2> {
+    let mut out: Vec<Point2> = Vec::new();
     for (s, _) in &x.segments {
         for (t, _) in &y.segments {
             let (q, d) = nearest_touch(piece(s), piece(t));
-            if d <= tol::LINEAR && best.is_none_or(|b| d < b.1) {
-                best = Some((q, d));
+            if d <= tol::LINEAR && out.iter().all(|o| o.distance(q) > 10.0 * tol::LINEAR) {
+                out.push(q);
             }
         }
     }
-    best.map(|b| b.0)
+    out
 }
 
 /// Two loops of a profile touching at a point.
@@ -507,7 +507,7 @@ impl Profile {
                 if j > 0 && (a.0 > b.1 + slack || b.0 > a.1 + slack) {
                     continue;
                 }
-                if let Some(at) = loops_touch(&self.loops[i], &self.loops[j]) {
+                for at in loops_touch(&self.loops[i], &self.loops[j]) {
                     out.push(Touch {
                         hole: i,
                         at,
@@ -570,7 +570,7 @@ impl Profile {
                 // the sampled outline cuts its own curves' corners: a point it leaves out is asked
                 // of the exact loop, so only a real stray makes the hole lie outside
                 let out = |p: Point2| !inside(p, &outer) && !loop_holds(&loops[0], p);
-                if l.polygon().into_iter().any(out) && loops_touch(l, &loops[0]).is_none() {
+                if l.polygon().into_iter().any(out) && loops_touch(l, &loops[0]).is_empty() {
                     return Err(ProfileError::HoleOutside { loop_index: i });
                 }
             }
