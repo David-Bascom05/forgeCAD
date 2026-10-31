@@ -753,11 +753,14 @@ fn same_surface(body: &Body, a: FaceId, b: FaceId) -> bool {
     }
 }
 
-/// Joins the two faces either side of `e` into the first: their loops through
-/// `e` become one, the second face's other loops move over, and edges the
-/// joined loop walks there and straight back are dropped.
+/// Joins the two faces either side of `e` into the one of the lesser name (so the order the
+/// boolean left them in names nothing): their loops through `e` become one, the other face's
+/// loops move over, and edges the joined loop walks there and straight back are dropped.
 fn merge_faces(body: &mut Body, e: EdgeId) {
-    let (ca, cb) = (body.edge(e).coedges[0], body.edge(e).coedges[1]);
+    let (mut ca, mut cb) = (body.edge(e).coedges[0], body.edge(e).coedges[1]);
+    if body.face(body.coedge_face(cb)).name < body.face(body.coedge_face(ca)).name {
+        (ca, cb) = (cb, ca);
+    }
     let (a, b) = (body.coedge_face(ca), body.coedge_face(cb));
     let (la, lb) = (body.coedge(ca).lp, body.coedge(cb).lp);
     let uses = |body: &Body, l: forge_topo::LoopId| -> Vec<(EdgeId, bool)> {
@@ -1961,9 +1964,7 @@ impl Builder {
     }
 
     fn vertex_name(&self, v: VertexId, faces: &[Name]) -> Name {
-        Name::NONE
-            .with_set(faces)
-            .with_name(self.body.vertex(v).name)
+        Name::NONE.with_set(faces).with_name(self.body.vertex(v).name)
     }
 
     fn face_name(&self, f: FaceId) -> Name {

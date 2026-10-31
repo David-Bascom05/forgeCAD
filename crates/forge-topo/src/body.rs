@@ -548,21 +548,31 @@ impl Body {
     /// so the name does not depend on whether the edge was ever split; wholes with nothing
     /// left are forgotten. `only`: the wholes to look at (sorted).
     pub fn sole_survivors(&mut self, only: &[Name]) {
-        let look: Vec<usize> = (0..self.split.len())
-            .filter(|&k| only.binary_search(&self.split[k]).is_ok())
+        let look: Vec<usize> = only
+            .iter()
+            .filter_map(|w| self.split.binary_search(w).ok())
             .collect();
         if look.is_empty() {
             return;
         }
-        // per whole looked at: how many live edges are pieces of it, and the last one
+        // per whole looked at: how many live edges are pieces of it (counted to two: the scan
+        // stops once every whole has two), and the last one
         let wholes: Vec<u64> = look.iter().map(|&k| self.split[k].whole().0).collect();
         let mut left: Vec<(u32, Option<EdgeId>)> = vec![(0, None); look.len()];
-        for (i, edge) in self.edges.iter().enumerate() {
+        let mut open = look.len();
+        // newest first: a recent split's pieces are found soonest
+        for (i, edge) in self.edges.iter().enumerate().rev() {
             let w = edge.name.whole().0;
             if edge.alive
                 && let Some(j) = wholes.iter().position(|&x| x == w)
             {
                 left[j] = (left[j].0 + 1, Some(EdgeId(i as u32)));
+                if left[j].0 == 2 {
+                    open -= 1;
+                    if open == 0 {
+                        return;
+                    }
+                }
             }
         }
         for (j, &(n, e)) in left.iter().enumerate() {

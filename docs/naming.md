@@ -93,6 +93,18 @@ new B-rep against the old one after the fact (matching: Agbodan et al.).
   so it turns and moves with the part), along the axis on which they spread most, coordinates
   within rounding counting as equal: nearly level points are never ordered by noise. A vertex
   that ties on what meets at it is first told apart by the whole curve pieces ending there.
+- **Where three tools meet, and flush crossings** (since 2026-11-01). The n-ary regen cuts each
+  new edge into spans where tools older than its own later tool cross it, as the sequential
+  regen meets the point (the older curve is an edge by then, the newer curves end on it), and
+  names spans, their pieces and the vertices as that regen does (R34); a span lying inside an
+  older tool is one the sequential regen never makes and marks nothing. Pieces of one pair of
+  faces as wholes are ranked together wherever the faces were split, and new vertices tie only
+  with vertices the result keeps (n-ary). A flush edge is named exactly as the cut it becomes
+  (its faces as wholes and the edges it runs between, either way round); flush edges still
+  alike (a revolve's two seams) are ranked by where they lie. A vertex where only imprints of
+  flush faces cross is marked by the imprinted edges together, so crossings of one edge by
+  several features' imprints are told apart, whichever regen made them. Faces a fillet joins
+  across a flush seam keep the lesser name.
 - Body splits name what the cut trimmed on both sides as pieces by their ends, split faces
   name pieces by their boundaries and new vertices by the edge they cut, and names moved off
   another body's (copies, splits, tools of several bodies) keep their lineage (`Name::salted`).

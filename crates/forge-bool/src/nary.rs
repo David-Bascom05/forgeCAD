@@ -736,12 +736,30 @@ fn nary_body(
         })
     };
 
-    // each tool's faces wholly buried so
-    let dead: Vec<Vec<bool>> = par_map(n, threads, 4, |t| {
-        let boxes = index[t].boxes();
-        let none = shapes.is_none() || t + 1 == n;
-        (0..boxes.len()).map(|f| !none && buried(t, &boxes[f])).collect()
-    });
+    // each tool's faces wholly buried so (none where no later tool reaches the tool: the box
+    // round all later tools that are not intersected misses it)
+    let mut later = vec![forge_math::Box3::EMPTY; n];
+    for t in (0..n.saturating_sub(1)).rev() {
+        later[t] = match ops[t] {
+            Op::Intersect => later[t + 1],
+            _ => later[t + 1].hull(&index[t + 1].bbox),
+        };
+    }
+    // (one list, each tool's from `at[t]`, a part per thread)
+    let reached = |t: usize| shapes.is_some() && later[t].overlaps(&index[t].bbox);
+    let mut at = vec![0usize; n + 1];
+    for t in 0..n {
+        at[t + 1] = at[t] + if reached(t) { tools[t].faces.len() } else { 0 };
+    }
+    let parts = threads.clamp(1, n.max(1));
+    let dead: Vec<bool> = par_map(parts, threads, 1, |k| {
+        (n * k / parts..n * (k + 1) / parts)
+            .filter(|&t| reached(t))
+            .flat_map(|t| index[t].boxes().iter().map(move |b| buried(t, b)))
+            .collect::<Vec<bool>>()
+    })
+    .concat();
+    let dead = |t: Side, f: FaceId| at[t] + f.index() < at[t + 1] && dead[at[t] + f.index()];
 
     // 1: pairs of tools whose boxes meet, then their faces
     let mut pairs: Vec<(Side, Side)> = Vec::new();
@@ -769,10 +787,10 @@ fn nary_body(
         let (ba, bb) = (ia.boxes(), ib.boxes());
         let b_clear: Vec<bool> = b
             .face_ids()
-            .map(|fb| bb[fb.index()].overlaps(&ia.bbox) && (clear(&bb[fb.index()], i) || dead[j][fb.index()]))
+            .map(|fb| bb[fb.index()].overlaps(&ia.bbox) && (clear(&bb[fb.index()], i) || dead(j, fb)))
             .collect();
         for fa in a.face_ids() {
-            if !ba[fa.index()].overlaps(&ib.bbox) || clear(&ba[fa.index()], j) || dead[i][fa.index()] {
+            if !ba[fa.index()].overlaps(&ib.bbox) || clear(&ba[fa.index()], j) || dead(i, fa) {
                 continue;
             }
             for fb in b.face_ids() {
@@ -860,7 +878,6 @@ fn nary_body(
                 // out lies outside a face, where no triple point of the two faces can be
                 let imprints_before = out.imprints.len();
                 let mut whole = true;
-                let pair_first = out.segs.len();
                 for (curve, contact) in curves {
                     if contact == Contact::Touching {
                         whole = false;
@@ -885,15 +902,6 @@ fn nary_body(
                 if !whole || out.imprints.len() > imprints_before {
                     out.loose.push(((i, fa), (j, fb)));
                 }
-                // the first face by whole, so either order of the pair ranks alike
-                let first = if a.face(fa).name.whole() <= b.face(fb).name.whole() {
-                    &a.face(fa).surface
-                } else {
-                    &b.face(fb).surface
-                };
-                crate::boolean::rank_pair(&mut out.segs[pair_first..], &|| {
-                    crate::boolean::surface_frame(first)
-                });
             }
         }
         Ok(out)
@@ -917,6 +925,7 @@ fn nary_body(
         coplanar.extend(out.coplanar);
         touching.extend(out.touching);
     }
+    crate::boolean::rank_pairs(&mut segs, tools);
     // every new edge's box by its face pair (before those outside the result go): a triple point
     // on an edge and a third tool's face h lies on the edge of the edge's face and h
     let key = |x: (Side, FaceId), y: (Side, FaceId)| if x.0 < y.0 { (x, y) } else { (y, x) };
@@ -1022,7 +1031,7 @@ fn nary_body(
                 // a buried face is no one's boundary; a face bounding nothing crosses the edge only
                 // where it is dropped
                 if index[k].boxes()[h.index()].overlaps(&reach)
-                    && !dead[k][h.index()]
+                    && !dead(k, h)
                     && may_meet(&tools[k].face(h).surface, &reach)
                     && !inert(k, h)
                 {
@@ -1339,7 +1348,6 @@ fn nary_body(
     alias.sort();
     let cut_vertex: Vec<VKey> = cluster[..cuts.len()].iter().map(|&k| key_of[k]).collect();
     let triple_vertex: Vec<VKey> = cluster[cuts.len()..].iter().map(|&k| key_of[k]).collect();
-    let (mut spans, span_first) = spans(&segs, &triple, &triple_vertex, &cut_vertex);
     // the new points as found, before they settle: what their names rank by
     let found = points.clone();
     // a new vertex settles on the point nearest every curve through it; parameters follow it
@@ -1475,6 +1483,7 @@ fn nary_body(
     }
     grown.sort_unstable_by_key(|g| g.0);
 
+    let (mut spans, span_first) = spans(&segs, &triple, &triple_vertex, &cut_vertex);
     // edge pieces on demand, new-edge pieces now
     // ways out of a vertex share a tangent only where a curve met an edge without crossing it
     let mut ties: Vec<VKey> = cuts
@@ -1509,10 +1518,8 @@ fn nary_body(
         of_edge: tools.iter().map(|b| vec![(0, 0); b.edges.len()]).collect(),
     };
     let mut seg_pieces: Vec<std::ops::Range<usize>> = Vec::with_capacity(segs.len());
-    // each span's pieces, each piece's span, and closed spans' own vertices: named once what
-    // is kept is known
+    // each span's pieces and closed spans' own vertices: named once what is kept is known
     let mut span_pieces: Vec<std::ops::Range<usize>> = Vec::with_capacity(spans.len());
-    let mut piece_span: Vec<usize> = Vec::new();
     let mut seam_spans: Vec<usize> = Vec::new();
     for (si, sg) in segs.iter().enumerate() {
         let first = pieces.list.len();
@@ -1536,32 +1543,29 @@ fn nary_body(
             if let (Some([lo, hi]), true) = (sp.ends, sp.inner.is_empty()) {
                 span_pieces.push(pieces.list.len()..pieces.list.len() + 1);
                 pieces.list.push(piece(lo, hi));
-                piece_span.push(k);
                 continue;
             }
-            let pts: Vec<(f64, VKey)> = match sp.ends {
-                Some([lo, hi]) => std::iter::once(lo)
-                    .chain(sp.inner.iter().copied())
-                    .chain(std::iter::once(hi))
-                    .collect(),
+            // its ends and where later tools cross it, in order
+            let (lo, hi, inner) = match sp.ends {
+                Some([lo, hi]) => (lo, hi, &sp.inner[..]),
                 None if sp.inner.is_empty() => {
                     // a closed new edge carries its own vertex
                     points.push(sg.curve.eval(sg.range.lo));
                     point_tols.push(tol::LINEAR);
                     seam_spans.push(k);
                     let v = VKey::New(points.len() as u32 - 1);
-                    vec![(sg.range.lo, v), (sg.range.hi, v)]
+                    ((sg.range.lo, v), (sg.range.hi, v), &[][..])
                 }
                 None => {
-                    let mut v = sp.inner.clone();
-                    v.push((sp.inner[0].0 + sg.range.width(), sp.inner[0].1));
-                    v
+                    let (t, v) = sp.inner[0];
+                    ((t, v), (t + sg.range.width(), v), &sp.inner[1..])
                 }
             };
             let from = pieces.list.len();
-            for w in pts.windows(2) {
-                pieces.list.push(piece(w[0], w[1]));
-                piece_span.push(k);
+            let mut at = lo;
+            for &x in inner.iter().chain(std::iter::once(&hi)) {
+                pieces.list.push(piece(at, x));
+                at = x;
             }
             span_pieces.push(from..pieces.list.len());
         }
@@ -2284,17 +2288,58 @@ fn nary_body(
     // names, now what is kept is known: spans (as the sequential regen names the edges they are,
     // among those it makes: a span an earlier tool's crossing made, with a piece kept), then the
     // new vertices, then the spans' pieces
-    let live: Vec<bool> = spans
-        .iter()
-        .zip(&span_pieces)
-        .map(|(sp, r)| sp.keys.is_none() || r.clone().any(|p| used.binary_search(&p).is_ok()))
+    let mut on = vec![false; list.len()];
+    // the new vertices the result keeps
+    let mut held = vec![false; found.len()];
+    for &p in &used {
+        on[p] = true;
+        for v in [list[p].start, list[p].end] {
+            if let VKey::New(i) = v
+                && let Some(h) = held.get_mut(i as usize)
+            {
+                *h = true;
+            }
+        }
+    }
+    // a span no older tool crosses lying inside an older one: the sequential regen never makes
+    // it, its faces are buried there by then (looked at only where it ends at a kept vertex, and
+    // for unions, where buried is inside)
+    let unions = ops.iter().all(|&o| o == Op::Union);
+    let buried_older = |k: usize| -> bool {
+        let sp = &spans[k];
+        if !unions
+            || !sp
+                .ends
+                .iter()
+                .flatten()
+                .any(|&(_, v)| matches!(v, VKey::New(i) if held.get(i as usize) == Some(&true)))
+        {
+            return false;
+        }
+        let sg = &segs[span_first.partition_point(|&f| f <= k) - 1];
+        let p = match sp.ends {
+            Some([lo, hi]) => sg.curve.eval(0.5 * (lo.0 + hi.0)),
+            None => sg.curve.eval(sg.range.mid()),
+        };
+        (0..latest(sg)).filter(|k| !sg.sides.contains(k)).any(|k| {
+            index[k].bbox.contains(p)
+                && match shapes.map(|sh| sh[k].member(p, SHAPE_MARGIN)) {
+                    Some(Member::In) => true,
+                    Some(Member::Out) => false,
+                    _ => index[k].classify(p) == Where::Inside,
+                }
+        })
+    };
+    let live: Vec<bool> = (0..spans.len())
+        .map(|k| span_pieces[k].clone().any(|p| on[p]) || (spans[k].keys.is_none() && !buried_older(k)))
         .collect();
     name_spans(
         &mut spans,
         &span_first,
         &segs,
         &triple,
-        &triple_vertex,
+        &cluster[cuts.len()..],
+        heads.len(),
         tools,
         &live,
     );
@@ -2310,15 +2355,13 @@ fn nary_body(
     for m in &marks {
         ended[m.0 as usize] = true;
     }
-    for (c, &k) in cuts.iter().zip(&cut_vertex) {
-        if let VKey::New(i) = k
-            && !ended[i as usize]
-            && let Some((sd, e)) = c.on.edge()
-        {
-            let n = c.pair.with_name(tools[sd].edge(e).name.whole());
-            marks.push((i, n, n));
-        }
-    }
+    crate::boolean::cut_marks(
+        &cuts,
+        &cut_vertex,
+        &ended,
+        &|sd, e| tools[sd].edge(e).name,
+        &mut marks,
+    );
     // where only later tools cross a span, it is an edge cut there
     for sp in &spans {
         for &(_, v) in &sp.inner {
@@ -2330,7 +2373,13 @@ fn nary_body(
             }
         }
     }
-    let vnames = crate::boolean::vertex_names(&found, marks, root, &crate::boolean::part_frame(tools[0]));
+    let vnames = crate::boolean::vertex_names(
+        &found,
+        marks,
+        root,
+        &crate::boolean::part_frame(tools[0]),
+        Some(&held),
+    );
     let seams: Vec<Name> = seam_spans
         .iter()
         .map(|&k| spans[k].name.with_str("seam"))
@@ -2377,18 +2426,12 @@ fn nary_body(
         };
     }
     // a span of a new edge later tools split, only one piece of which is kept, keeps its name
-    let split: Vec<(usize, usize)> = used
-        .iter()
-        .filter_map(|&p| Some((p, *piece_span.get(p)?)))
-        .filter(|&(_, k)| span_pieces[k].len() > 1)
-        .collect();
-    let keys: Vec<usize> = split.iter().map(|x| x.1).collect();
-    for (&(p, k), sole) in split.iter().zip(crate::boolean::alone(&keys)) {
-        let name = spans[k].name;
-        if sole {
-            list[p].name = name;
-        } else {
-            wholes.push(name);
+    for (k, r) in span_pieces.iter().enumerate().filter(|x| x.1.len() > 1) {
+        let mut kept = r.clone().filter(|&p| on[p]);
+        match (kept.next(), kept.next()) {
+            (Some(p), None) => list[p].name = spans[k].name,
+            (Some(_), Some(_)) => wholes.push(spans[k].name),
+            _ => {}
         }
     }
     let split: Vec<usize> = kept
@@ -2728,12 +2771,12 @@ fn holes_only(
     Some(regions)
 }
 
-/// What a span's end cuts: a name, or an earlier tool's face crossing it at a vertex (the
-/// whole of the span of the edge it crosses there, known once that span is named).
+/// What a span's end cuts: a name, or an earlier tool's face crossing it at the vertex of a
+/// triple cut (the whole of the span of the edge it crosses there, known once that span is named).
 #[derive(Clone, Copy)]
 enum Key {
     Name(Name),
-    Cross(VKey, Side),
+    Cross(usize, Side),
 }
 
 /// A stretch of a new edge between its ends and where tools earlier than its own two cross it:
@@ -2772,14 +2815,15 @@ fn spans(
         at_first[i + 1] += at_first[i];
     }
     let mut fill = at_first.clone();
-    let mut at = vec![(0.0, VKey::New(0), 0); triple.len()];
-    for (tc, &v) in triple.iter().zip(triple_vertex) {
-        at[fill[tc.seg]] = (tc.t, v, tc.tool);
+    let mut at = vec![(0.0, VKey::New(0), 0, 0); triple.len()];
+    for (j, (tc, &v)) in triple.iter().zip(triple_vertex).enumerate() {
+        at[fill[tc.seg]] = (tc.t, v, tc.tool, j);
         fill[tc.seg] += 1;
     }
     let mut out: Vec<Span> = Vec::with_capacity(segs.len());
     let mut first = Vec::with_capacity(segs.len() + 1);
-    let mut ms: Vec<(f64, VKey, Side)> = Vec::new();
+    let mut ms: Vec<(f64, VKey, Side, usize)> = Vec::new();
+    let mut bounds: Vec<usize> = Vec::new();
     for (si, sg) in segs.iter().enumerate() {
         first.push(out.len());
         let whole = |inner: Vec<(f64, VKey)>| Span {
@@ -2802,7 +2846,7 @@ fn spans(
             Some((i0, i1)) => {
                 let (v0, v1) = (cut_vertex[i0], cut_vertex[i1]);
                 let w = 1e-9 * period;
-                ms.retain(|&(t, v, _)| v != v0 && v != v1 && t > sg.range.lo + w && t < sg.range.hi - w);
+                ms.retain(|&(t, v, _, _)| v != v0 && v != v1 && t > sg.range.lo + w && t < sg.range.hi - w);
             }
             None => {
                 for x in &mut ms {
@@ -2823,37 +2867,44 @@ fn spans(
             ms[0].2 = ms[0].2.min(last.2);
         }
         let m = latest(sg);
-        let mut bounds: Vec<(f64, VKey, Key)> = ms
-            .iter()
-            .filter(|x| x.2 < m)
-            .map(|x| (x.0, x.1, Key::Cross(x.1, x.2)))
-            .collect();
+        // where older tools cross it: its spans' ends (all others are newer tools, inside them)
+        bounds.clear();
+        bounds.extend((0..ms.len()).filter(|&k| ms[k].2 < m));
         if bounds.is_empty() {
             out.push(whole(ms.iter().map(|x| (x.0, x.1)).collect()));
             continue;
         }
-        match sg.ends {
-            Some((i0, i1)) => {
-                bounds.insert(0, (sg.range.lo, cut_vertex[i0], Key::Name(sg.end_keys[0])));
-                bounds.push((sg.range.hi, cut_vertex[i1], Key::Name(sg.end_keys[1])));
-            }
-            None => bounds.push((bounds[0].0 + period, bounds[0].1, bounds[0].2)),
-        }
-        for w in bounds.windows(2) {
-            let (lo, hi) = (w[0], w[1]);
-            let inner = ms
-                .iter()
-                .filter(|x| x.2 > m)
-                .map(|x| (if x.0 < lo.0 { x.0 + period } else { x.0 }, x.1))
-                .filter(|x| x.0 > lo.0 && x.0 < hi.0)
-                .collect();
+        let cross = |k: usize| (ms[k].0, ms[k].1, Key::Cross(ms[k].3, ms[k].2));
+        let inner = |r: std::ops::Range<usize>, shift: f64| ms[r].iter().map(move |x| (x.0 + shift, x.1));
+        let mut span = |lo: (f64, VKey, Key), hi: (f64, VKey, Key), inner: Vec<(f64, VKey)>| {
             out.push(Span {
                 ends: Some([(lo.0, lo.1), (hi.0, hi.1)]),
                 inner,
                 keys: Some([lo.2, hi.2]),
                 name: Name::NONE,
                 end_names: [Name::NONE; 2],
-            });
+            })
+        };
+        let (first_b, last_b) = (bounds[0], bounds[bounds.len() - 1]);
+        if let Some((i0, _)) = sg.ends {
+            let start = (sg.range.lo, cut_vertex[i0], Key::Name(sg.end_keys[0]));
+            span(start, cross(first_b), inner(0..first_b, 0.0).collect());
+        }
+        for w in bounds.windows(2) {
+            span(cross(w[0]), cross(w[1]), inner(w[0] + 1..w[1], 0.0).collect());
+        }
+        let tail = inner(last_b + 1..ms.len(), 0.0);
+        match sg.ends {
+            Some((_, i1)) => {
+                let end = (sg.range.hi, cut_vertex[i1], Key::Name(sg.end_keys[1]));
+                span(cross(last_b), end, tail.collect());
+            }
+            None => {
+                // round past the start to the first
+                let hi = cross(first_b);
+                let inner = tail.chain(inner(0..first_b, period)).collect();
+                span(cross(last_b), (hi.0 + period, hi.1, hi.2), inner);
+            }
         }
     }
     first.push(out.len());
@@ -2862,65 +2913,76 @@ fn spans(
 
 /// Names the spans an earlier tool's crossing made as the sequential regen names the edges
 /// they are: by the faces and what each end cuts (a crossing by the whole of the crossed edge's
-/// span there), those of one face pair alike ranked as the pair's curves are (`rank_pair`),
+/// span there), those of one face pair alike ranked as the pair's curves are (`rank_pairs`),
 /// among the spans the sequential regen makes (`live`). Edges by their later tool, so a crossed
-/// span is named before the spans ending on it.
+/// span is named before the spans ending on it. `cluster`: each triple cut's vertex cluster, of
+/// `clusters`.
+#[allow(clippy::too_many_arguments)]
 fn name_spans(
     spans: &mut [Span],
     first: &[usize],
     segs: &[Seg],
     triple: &[SegCut],
-    triple_vertex: &[VKey],
+    cluster: &[usize],
+    clusters: usize,
     tools: &[&Body],
     live: &[bool],
 ) {
     let split: Vec<bool> = (0..segs.len())
         .map(|si| spans[first[si]].keys.is_some())
         .collect();
-    // edges by their later tool, then face pair: a pair any span is of is ranked afresh
-    let mut order: Vec<(Side, Side, FaceId, Side, FaceId, usize)> = (0..segs.len())
-        .filter(|&si| split[si])
-        .map(|si| {
-            let sg = &segs[si];
-            (latest(sg), sg.sides[0], sg.faces[0], sg.sides[1], sg.faces[1], si)
-        })
-        .collect();
-    if order.is_empty() {
+    // a face pair's edges come one after another: the runs holding an edge an older tool split,
+    // by their later tool
+    let mut runs: Vec<(Side, usize, usize)> = Vec::new();
+    let mut from = 0;
+    while from < segs.len() {
+        let (sides, faces) = (segs[from].sides, segs[from].faces);
+        let to = from
+            + segs[from..]
+                .iter()
+                .take_while(|sg| sg.sides == sides && sg.faces == faces)
+                .count();
+        if split[from..to].contains(&true) {
+            runs.push((latest(&segs[from]), from, to));
+        }
+        from = to;
+    }
+    if runs.is_empty() {
         return;
     }
-    order.sort_unstable();
-    order.dedup_by_key(|x| (x.0, x.1, x.2, x.3, x.4));
-    let pair_of = |si: usize| {
-        let sg = &segs[si];
-        (latest(sg), sg.sides[0], sg.faces[0], sg.sides[1], sg.faces[1])
-    };
-    let mut members: Vec<(Side, Side, FaceId, Side, FaceId, usize)> = (0..segs.len())
-        .filter_map(|si| {
-            let k = pair_of(si);
-            order
-                .binary_search_by(|x| (x.0, x.1, x.2, x.3, x.4).cmp(&k))
-                .ok()
-                .map(|_| (k.0, k.1, k.2, k.3, k.4, si))
-        })
-        .collect();
-    members.sort_unstable();
-    let mut by_vertex: Vec<(VKey, usize)> = triple_vertex.iter().copied().zip(0..).collect();
-    by_vertex.sort_unstable();
-    for run in members.chunk_by(|a, b| a.0 == b.0) {
-        for &(.., si) in run.iter().filter(|x| split[x.5]) {
+    runs.sort_unstable();
+    // the triple cuts by vertex (a counting sort)
+    let mut at_first = vec![0usize; clusters + 1];
+    for &c in cluster {
+        at_first[c + 1] += 1;
+    }
+    for c in 0..clusters {
+        at_first[c + 1] += at_first[c];
+    }
+    let mut fill = at_first.clone();
+    let mut by_vertex = vec![0usize; cluster.len()];
+    for (j, &c) in cluster.iter().enumerate() {
+        by_vertex[fill[c]] = j;
+        fill[c] += 1;
+    }
+    let mut keys: Vec<[Name; 2]> = Vec::new();
+    let mut whose: Vec<(usize, usize, Name)> = Vec::new();
+    let mut names: Vec<Name> = Vec::new();
+    for chunk in runs.chunk_by(|a, b| a.0 == b.0) {
+        for si in chunk.iter().flat_map(|r| r.1..r.2).filter(|&si| split[si]) {
             let sg = &segs[si];
             let other = sg.sides[0].min(sg.sides[1]);
-            // the span of the edge of tool `k` and our other tool through vertex `v`, by its whole
+            // the span of the edge of tool `k` and our other tool through triple cut j's vertex,
+            // by its whole
             let key = |k: Key| -> Name {
-                let (v, k) = match k {
+                let (j, k) = match k {
                     Key::Name(n) => return n,
-                    Key::Cross(v, k) => (v, k),
+                    Key::Cross(j, k) => (j, k),
                 };
-                let from = by_vertex.partition_point(|x| x.0 < v);
-                by_vertex[from..]
+                let c = cluster[j];
+                by_vertex[at_first[c]..at_first[c + 1]]
                     .iter()
-                    .take_while(|x| x.0 == v)
-                    .find_map(|&(_, j)| {
+                    .find_map(|&j| {
                         let s2 = triple[j].seg;
                         let (sides, t) = (segs[s2].sides, triple[j].t);
                         if !(sides.contains(&k) && sides.contains(&other) && k != other) {
@@ -2940,17 +3002,19 @@ fn name_spans(
                     })
                     .map_or(sg.pair.with_str("triple").with(k as u64), |sp| sp.name.whole())
             };
-            let keys: Vec<[Name; 2]> = (first[si]..first[si + 1])
-                .map(|i| spans[i].keys.expect("a span of a split edge").map(key))
-                .collect();
-            for (i, [a, b]) in (first[si]..).zip(keys) {
+            // (a crossed span is another edge's, named before)
+            keys.clear();
+            keys.extend(
+                (first[si]..first[si + 1]).map(|i| spans[i].keys.expect("a span of a split edge").map(key)),
+            );
+            for (i, &[a, b]) in (first[si]..).zip(&keys) {
                 spans[i].name = sg.pair.with(0x5e7).with_name(a.min(b)).with_name(a.max(b));
                 spans[i].end_names = [sg.pair.with_name(a), sg.pair.with_name(b)];
             }
         }
-        for g in run.chunk_by(|a, b| (a.1, a.2, a.3, a.4) == (b.1, b.2, b.3, b.4)) {
-            let mut whose: Vec<(usize, Name)> = Vec::new();
-            for &(.., si) in g {
+        for &(_, from, to) in chunk {
+            whose.clear();
+            for si in from..to {
                 let sg = &segs[si];
                 for i in (first[si]..first[si + 1]).filter(|&i| live[i]) {
                     let name = if split[si] {
@@ -2961,25 +3025,28 @@ fn name_spans(
                     } else {
                         sg.pair
                     };
-                    whose.push((i, name));
+                    whose.push((i, si, name));
                 }
             }
-            let seg_of = |i: usize| first.partition_point(|&f| f <= i) - 1;
-            let (s0, f0, s1, f1) = (g[0].1, g[0].2, g[0].3, g[0].4);
-            let (n0, n1) = (tools[s0].face(f0).name.whole(), tools[s1].face(f1).name.whole());
-            let frame = crate::boolean::surface_frame(if n0 <= n1 {
-                &tools[s0].face(f0).surface
+            let sg = &segs[from];
+            let (fa, fb) = (
+                tools[sg.sides[0]].face(sg.faces[0]),
+                tools[sg.sides[1]].face(sg.faces[1]),
+            );
+            let frame = crate::boolean::surface_frame(if fa.name.whole() <= fb.name.whole() {
+                &fa.surface
             } else {
-                &tools[s1].face(f1).surface
+                &fb.surface
             });
-            let mut names: Vec<Name> = whose.iter().map(|w| w.1).collect();
+            names.clear();
+            names.extend(whose.iter().map(|w| w.2));
             crate::boolean::rank_names(&mut names, &|w| {
-                let i = whose[w].0;
-                let (sg, sp) = (&segs[seg_of(i)], &spans[i]);
+                let (i, si, _) = whose[w];
+                let (sg, sp) = (&segs[si], &spans[i]);
                 let range = sp.ends.map_or(sg.range, |[lo, hi]| Interval::new(lo.0, hi.0));
                 frame.point_to_local(crate::boolean::curve_at(&sg.curve, range, sp.ends.is_some()))
             });
-            for ((i, _), n) in whose.into_iter().zip(names) {
+            for (&(i, ..), &n) in whose.iter().zip(&names) {
                 spans[i].name = n;
             }
         }

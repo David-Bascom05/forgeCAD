@@ -568,7 +568,7 @@ fn build<S: Src>(a: &mut Body, b: &S, t: &Tool, hits: &[Hit], wall_at: &[bool], 
             marks.push(((i * nw + c1) as u32, pair.with_name(n1), name.with(1)));
         }
     }
-    let vnames = vertex_names(&points, marks, root, &part_frame(a));
+    let vnames = vertex_names(&points, marks, root, &part_frame(a), None);
     let shell = ShellId(0);
     let mut made = Made {
         b,
@@ -622,6 +622,12 @@ fn build<S: Src>(a: &mut Body, b: &S, t: &Tool, hits: &[Hit], wall_at: &[bool], 
         }
     };
     let walls = wall_at.iter().filter(|&&w| w).count();
+    // uprights left in several pieces, as the general boolean notes them (`Body::split`)
+    if walls > 1 {
+        for w in &t.walls {
+            a.note_split(b.edge(w.sides[0]).4);
+        }
+    }
     // the uprights' pieces between events (the caps, then each hit), made on first use
     let mut side_piece: Vec<Option<EdgeId>> = vec![None; (nh + 1) * nw];
     for f in (0..b.face_count() as u32).map(FaceId) {

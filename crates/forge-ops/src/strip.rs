@@ -338,13 +338,21 @@ fn strip(body: &Body, fa: FaceId, band: &[FaceId], fb: FaceId, radius: Option<f6
     let mut out = body.clone();
     let mark = match band {
         [m] => body.face(*m).name.whole(),
-        _ => Name::NONE.with_set(&band.iter().map(|&f| body.face(f).name.whole()).collect::<Vec<_>>()),
+        _ => Name::NONE.with_set(
+            &band
+                .iter()
+                .map(|&f| body.face(f).name.whole())
+                .collect::<Vec<_>>(),
+        ),
     };
     let name = Name::feature(feature).with_str("round").with_name(mark);
     let overflow = FilletError::Overflow { edge: ea };
     // named from the faces as wholes: a split elsewhere on one renames nothing here
     let whole = |f: FaceId| body.face(f).name.whole();
-    let alike = ends[0].faces.iter().any(|a| ends[1].faces.iter().any(|b| whole(a.0) == whole(b.0)));
+    let alike = ends[0]
+        .faces
+        .iter()
+        .any(|a| ends[1].faces.iter().any(|b| whole(a.0) == whole(b.0)));
     let reach = region.diagonal() + 4.0 * radius;
     // an edge's end at v moved to where the blend crosses it, and the band's corner v with it
     let mut moved: BTreeMap<VertexId, VertexId> = BTreeMap::new();
@@ -563,7 +571,9 @@ fn closed_strip(
         }
         let q = out.add_vertex(
             p,
-            Name::NONE.with_set(&[name, body.face(f).name.whole()]).with_str("at"),
+            Name::NONE
+                .with_set(&[name, body.face(f).name.whole()])
+                .with_str("at"),
         );
         let edge = &mut out.edges[s.index()];
         if edge.start == v {
