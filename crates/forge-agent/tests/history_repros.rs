@@ -212,3 +212,18 @@ L12: pattern body lin 0.98 0.19 0 2 13.21
     // (its last line, a pattern of the whole body, still leaves open edges)
     assert!(m.body().is_some());
 }
+
+/// A draft of a face a variable fillet rounds into (r03): tilting it tore the tangent join and
+/// the draft caught its own invalid body. It is refused: draft before rounding.
+#[test]
+fn draft_of_a_filleted_face() {
+    refused(
+        "L0: extrude 30.98 rect 0 0 146.94 108.69
+L1: fillet 8.41..7.56 (edges near 73.47 0 0) (edges convex near 146.94 54.35 30.98)
+L2: hole 8.1 z 0 -1 0 at 70.26 108.69 28.63 cb 13.51 6.07 thru pt 118
+L3: fillet 1.24 (edges convex near 66.96 51.31 30.98) (edges near 73.56 51.31 30.98) (edges near 64.71 108.69 24.77)
+L7: draft 1.57 xy at 0 0 -9.27 (faces plane near 146.94 54 16.7)
+",
+        "Tangent",
+    );
+}

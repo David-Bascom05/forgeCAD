@@ -1,9 +1,9 @@
 use crate::rebuild::{RebuildError, reaches_apex, rebuild};
 use crate::selfx::crossing;
 use forge_geom::intersect::{SurfaceSurface, plane_plane};
-use forge_geom::{Cone, Curve, Plane, Surface};
+use forge_geom::{Cone, Curve, CurveGeom, Plane, Surface, SurfaceGeom};
 use forge_math::{Frame, Point3, UnitVec3, dmath, tol};
-use forge_topo::{Body, Name, Problem, check};
+use forge_topo::{Body, FaceId, Name, Problem, check};
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum DraftError {
@@ -33,6 +33,11 @@ pub enum DraftError {
         a: Name,
         b: Name,
     },
+    /// The face meets a face it is not drafted with tangentially (a fillet): tilting it would
+    /// tear that join. Draft before rounding.
+    Tangent {
+        face: Name,
+    },
     Rebuild(RebuildError),
     Invalid(Vec<Problem>),
 }
@@ -54,6 +59,20 @@ pub fn draft(body: &Body, faces: &[Name], neutral: &Frame, angle: f64) -> Result
         let f = out
             .face_by_name(name)
             .ok_or(DraftError::NoSuchFace { face: name })?;
+        changed[f.index()] = true;
+    }
+    for &name in faces {
+        let f = out
+            .face_by_name(name)
+            .ok_or(DraftError::NoSuchFace { face: name })?;
+        if tangent_neighbour(&out, f, &changed) {
+            return Err(DraftError::Tangent { face: name });
+        }
+    }
+    for &name in faces {
+        let f = out
+            .face_by_name(name)
+            .ok_or(DraftError::NoSuchFace { face: name })?;
         let face = out.face(f);
         out.faces[f.index()].surface = drafted(&face.surface, face.same_sense, &np, pull, angle, name)?;
         changed[f.index()] = true;
@@ -70,6 +89,31 @@ pub fn draft(body: &Body, faces: &[Name], neutral: &Frame, angle: f64) -> Result
         return Err(DraftError::Invalid(problems));
     }
     Ok(out)
+}
+
+/// Whether face `f` meets a face not in `changed` tangentially along an edge.
+fn tangent_neighbour(body: &Body, f: FaceId, changed: &[bool]) -> bool {
+    body.face(f)
+        .loops
+        .iter()
+        .flat_map(|&l| body.lp(l).coedges())
+        .any(|c| {
+            let Some(g) = body.partner(c).map(|o| body.coedge_face(o)) else {
+                return false;
+            };
+            // two planes meeting smoothly are one plane split: tilting one only makes a crease
+            let planes = matches!(
+                (&body.face(f).surface, &body.face(g).surface),
+                (Surface::Plane(_), Surface::Plane(_))
+            );
+            if g == f || changed[g.index()] || planes {
+                return false;
+            }
+            let e = body.edge(body.coedge(c).edge);
+            let p = e.curve.eval(e.range.mid());
+            let normal = |h: FaceId| body.face_normal(h, body.face(h).surface.project(p));
+            matches!((normal(f), normal(g)), (Some(a), Some(b)) if a.cross(b).length() <= 1e-6)
+        })
 }
 
 fn drafted(

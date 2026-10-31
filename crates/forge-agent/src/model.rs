@@ -774,7 +774,7 @@ pub fn explain(e: &RegenError) -> (String, String) {
         Shell { error, .. } => (format!("shell: {error:?}"), hint("try a thinner wall")),
         Draft { error, .. } => (
             format!("draft: {error:?}"),
-            hint("the faces must be planar and meet the neutral plane"),
+            hint("the faces must be planar and meet the neutral plane; draft before rounding their edges"),
         ),
         Hole { error, .. } => (
             format!("hole: {error:?}"),
