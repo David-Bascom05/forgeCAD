@@ -4,6 +4,7 @@
 use forge_geom::intcurve::trace;
 use forge_geom::intersect::{SurfaceSurface, plane_surface};
 use forge_geom::{Curve, CurveGeom, Surface, SurfaceGeom};
+use forge_math::predicates::orient2d;
 use forge_math::{Box3, Interval, Point2, Point3, tol};
 use forge_topo::uv::{UvLoop, face_uv_loops, point_in_loops, unwrap_near};
 use forge_topo::{Body, FaceId, Name, VertexId};
@@ -179,16 +180,20 @@ fn loops_cross(loops: &[UvLoop]) -> bool {
         })
         .filter(|s| s.0 != s.1)
         .collect();
-    let orient = |a: Point2, b: Point2, c: Point2| (b - a).cross(c - a);
+    let opposite = |p: f64, q: f64| (p < 0.0 && q > 0.0) || (p > 0.0 && q < 0.0);
     for i in 0..segs.len() {
         for j in i + 1..segs.len() {
             let ((a, b), (c, d)) = (segs[i], segs[j]);
             if a == c || a == d || b == c || b == d {
                 continue;
             }
-            let (o1, o2) = (orient(a, b, c), orient(a, b, d));
-            let (o3, o4) = (orient(c, d, a), orient(c, d, b));
-            if o1 * o2 < 0.0 && o3 * o4 < 0.0 {
+            let apart = |p: f64, q: f64, r: f64, t: f64| p.max(q) < r.min(t) || r.max(t) < p.min(q);
+            if apart(a.x, b.x, c.x, d.x) || apart(a.y, b.y, c.y, d.y) {
+                continue;
+            }
+            if opposite(orient2d(a, b, c), orient2d(a, b, d))
+                && opposite(orient2d(c, d, a), orient2d(c, d, b))
+            {
                 return true;
             }
         }
