@@ -91,12 +91,12 @@ fn tool(b: &Body) -> Option<Tool> {
     for f in b.face_ids() {
         let face = b.face(f);
         let [l] = face.loops[..] else { return None };
-        let cs = &b.lp(l).coedges;
-        if cs.len() != 4 {
+        let lp = b.lp(l);
+        if lp.coedges().len() != 4 {
             caps.push(f);
             continue;
         }
-        let u = |i: usize| (b.coedge(cs[i]).edge, b.coedge(cs[i]).forward);
+        let u = |i: usize| (b.coedge(lp.coedge(i)).edge, b.coedge(lp.coedge(i)).forward);
         let ((bottom, fwd), (end, true), (top, back), (start, false)) = (u(0), u(1), u(2), u(3)) else {
             caps.push(f);
             continue;
@@ -112,7 +112,7 @@ fn tool(b: &Body) -> Option<Tool> {
             top,
             fwd,
             sides: [start, end],
-            side_uses: [cs[3], cs[1]],
+            side_uses: [lp.coedge(3), lp.coedge(1)],
         });
     }
     let n = walls.len();
@@ -560,7 +560,7 @@ fn build(a: &mut Body, b: &Body, t: &Tool, hits: &[Hit], wall_at: &[bool], flip:
         for (k, w) in t.walls.iter().enumerate() {
             let (c0, c1) = ends(k, h.segs[k].2);
             names.push(
-                cut.with_set(vec![a.face(h.f).name, b.face(w.face).name])
+                cut.with_set(&mut [a.face(h.f).name, b.face(w.face).name])
                     .with(0)
                     .with_name(side_name(c0))
                     .with_name(side_name(c1))
@@ -646,9 +646,8 @@ fn build(a: &mut Body, b: &Body, t: &Tool, hits: &[Hit], wall_at: &[bool], flip:
             let face = a.add_face(shell, src.surface.clone(), src.same_sense != flip, src.name);
             let mut uses: Vec<(EdgeId, bool)> = b
                 .lp(src.loops[0])
-                .coedges
-                .iter()
-                .map(|&c| (made.b_edge(a, b.coedge(c).edge), b.coedge(c).forward))
+                .coedges()
+                .map(|c| (made.b_edge(a, b.coedge(c).edge), b.coedge(c).forward))
                 .collect();
             flipped(&mut uses);
             a.add_loop(face, &uses);
@@ -758,9 +757,8 @@ pub(crate) fn diff(x: &Body, y: &Body) -> Option<String> {
                     .map(|&l| {
                         let mut c: Loop = b
                             .lp(l)
-                            .coedges
-                            .iter()
-                            .map(|&c| (b.edge(b.coedge(c).edge).name, b.coedge(c).forward))
+                            .coedges()
+                            .map(|c| (b.edge(b.coedge(c).edge).name, b.coedge(c).forward))
                             .collect();
                         let k = (0..c.len()).min_by_key(|&k| c[k]).unwrap_or(0);
                         c.rotate_left(k);
