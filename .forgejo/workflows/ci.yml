@@ -15,7 +15,8 @@ jobs:
       - name: checkout
         run: |
           git init -q .
-          git fetch -q --depth=1 "https://code.commonty.org/${{ github.repository }}.git" "${{ github.sha }}"
+          # the public door rate-limits (HTTP 429) when the jobs clone at once: back off and retry
+          for i in 1 2 3 4 5; do git fetch -q --depth=1 "https://code.commonty.org/${{ github.repository }}.git" "${{ github.sha }}" && break; sleep $((i * 15)); done
           git checkout -q FETCH_HEAD
       - name: rust
         run: |
@@ -39,7 +40,8 @@ jobs:
       - name: checkout
         run: |
           git init -q .
-          git fetch -q --depth=1 "https://code.commonty.org/${{ github.repository }}.git" "${{ github.sha }}"
+          # the public door rate-limits (HTTP 429) when the jobs clone at once: back off and retry
+          for i in 1 2 3 4 5; do git fetch -q --depth=1 "https://code.commonty.org/${{ github.repository }}.git" "${{ github.sha }}" && break; sleep $((i * 15)); done
           git checkout -q FETCH_HEAD
       - name: rust
         run: |
@@ -73,7 +75,8 @@ jobs:
       - name: checkout
         run: |
           git init -q .
-          git fetch -q --depth=1 "https://code.commonty.org/${{ github.repository }}.git" "${{ github.sha }}"
+          # the public door rate-limits (HTTP 429) when the jobs clone at once: back off and retry
+          for i in 1 2 3 4 5; do git fetch -q --depth=1 "https://code.commonty.org/${{ github.repository }}.git" "${{ github.sha }}" && break; sleep $((i * 15)); done
           git checkout -q FETCH_HEAD
       - name: rust
         run: |
