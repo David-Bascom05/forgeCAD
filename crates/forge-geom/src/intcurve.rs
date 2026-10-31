@@ -277,9 +277,31 @@ pub fn trace(a: &Surface, b: &Surface, region: Box3) -> Option<Vec<IntCurve>> {
             .max(region.y.width())
             .max(region.z.width())
             .max(1e-6);
+    // a point on both faces lies in a patch of each that overlaps one of the other's
+    let near = |own: Option<&[Box3]>, other: Option<&[Box3]>| {
+        own.map(|ps| {
+            ps.iter()
+                .filter(|p| p.overlaps(&region) && other.is_none_or(|qs| qs.iter().any(|q| q.overlaps(p))))
+                .copied()
+                .collect::<Vec<Box3>>()
+        })
+    };
+    let (pa, pb) = (near(a.patches(), b.patches()), near(b.patches(), a.patches()));
+    if pa.as_ref().is_some_and(Vec::is_empty) || pb.as_ref().is_some_and(Vec::is_empty) {
+        return Some(Vec::new());
+    }
+    let reaches = |ps: &Option<Vec<Box3>>, c: Point3, r: f64| {
+        ps.as_ref().is_none_or(|ps| {
+            ps.iter().any(|p| {
+                let d = |i: Interval, x: f64| (i.lo - x).max(x - i.hi).max(0.0);
+                let (dx, dy, dz) = (d(p.x, c.x), d(p.y, c.y), d(p.z, c.z));
+                dx * dx + dy * dy + dz * dz <= r * r
+            })
+        })
+    };
     let mut stack = vec![(region.center(), half * 3f64.sqrt())];
     while let Some((c, r)) = stack.pop() {
-        if a.implicit(c).abs() > r || b.implicit(c).abs() > r {
+        if !reaches(&pa, c, r) || !reaches(&pb, c, r) || a.implicit(c).abs() > r || b.implicit(c).abs() > r {
             continue;
         }
         if 2.0 * r <= leaf {

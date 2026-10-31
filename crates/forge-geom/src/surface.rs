@@ -167,6 +167,11 @@ pub trait Procedural: Send + Sync + std::fmt::Debug {
     fn u_kinks(&self, _u: Interval) -> Vec<f64> {
         Vec::new()
     }
+    /// Boxes that together hold every face this surface carries (None: unknown, the surface
+    /// may be used anywhere it reaches).
+    fn patches(&self) -> Option<&[Box3]> {
+        None
+    }
 }
 
 /// Bounds over a parameter box: `k` on |n.S_uu|, |n.S_uv| and |n.S_vv| (n the unit normal at the
@@ -580,6 +585,14 @@ impl Surface {
             Surface::Plane(_) | Surface::Cylinder(_) | Surface::Torus(_) => false,
             Surface::Cone(c) => c.radius_at(uv.y) <= tol::LINEAR,
             _ => self.normal(uv).is_none(),
+        }
+    }
+
+    /// Boxes holding every face on the surface, where it knows them (`Procedural::patches`).
+    pub fn patches(&self) -> Option<&[Box3]> {
+        match self {
+            Surface::Procedural(s) => s.patches(),
+            _ => None,
         }
     }
 }

@@ -569,6 +569,7 @@ pub struct Skinned {
     sharp: bool,
     /// Which surface this is, for remembering its last query.
     id: u64,
+    patches: std::sync::OnceLock<Vec<Box3>>,
 }
 
 impl Skinned {
@@ -599,6 +600,7 @@ impl Skinned {
             radius: f64::INFINITY,
             sharp: false,
             id: fresh_id(),
+            patches: std::sync::OnceLock::new(),
         };
         let regular = |s: &Skinned, b: Box2| {
             let (nu, nv) = (32, 32);
@@ -818,6 +820,7 @@ impl Procedural for Skinned {
     fn transformed(&self, f: &Frame) -> Proc {
         let mut s = self.clone();
         s.id = fresh_id();
+        s.patches = std::sync::OnceLock::new();
         s.data = self.data.transformed(f);
         s.rows = self
             .rows
@@ -909,6 +912,31 @@ impl Procedural for Skinned {
             })
             .fold(f64::INFINITY, f64::min);
         0.8 * self.radius.min(arcs)
+    }
+    fn patches(&self) -> Option<&[Box3]> {
+        // faces lie on the span itself, never on the carried-on part
+        Some(self.patches.get_or_init(|| {
+            let (nu, nv) = GRID;
+            let cell = |x: Interval, k: usize, n: usize| {
+                let w = x.width() / n as f64;
+                Interval::new(
+                    x.lo + w * k as f64,
+                    if k + 1 == n {
+                        x.hi
+                    } else {
+                        x.lo + w * (k + 1) as f64
+                    },
+                )
+            };
+            let whole = Interval::new(0.0, 1.0);
+            (0..nu)
+                .flat_map(|i| (0..nv).map(move |j| (i, j)))
+                .map(|(i, j)| {
+                    self.data
+                        .bbox(Box2::new(cell(whole, i, nu), cell(self.span, j, nv)))
+                })
+                .collect()
+        }))
     }
 }
 
