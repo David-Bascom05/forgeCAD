@@ -1850,7 +1850,27 @@ pub(crate) fn trim(
                         .max(tol::LINEAR);
                     Some(body.edge_box(e).grow(2.0 * slack))
                 };
-                let hits = match curve_surface_in(&curve, range, &across, near) {
+                // a fence stands only near its spring: where the other face's surface is analytic,
+                // the spring itself against that surface finds the same points, and shallow ones
+                let other_surface = &bodies[1 - k].face(faces[1 - k]).surface;
+                let on_spring = matches!(&edge.curve, Curve::Procedural(_))
+                    && matches!(across, Surface::Procedural(_))
+                    && !matches!(other_surface, Surface::Procedural(_));
+                let mut found = curve_surface_in(&curve, range, &across, near);
+                if on_spring
+                    && let (CurveSurface::Hits(hs), CurveSurface::Hits(more)) =
+                        (&mut found, curve_surface(&edge.curve, edge.range, other_surface))
+                {
+                    for h in more {
+                        let t = curve.closest(h.point, range);
+                        if curve.eval(t).distance(h.point) <= tol::LINEAR
+                            && hs.iter().all(|x| x.point.distance(h.point) > 10.0 * tol::LINEAR)
+                        {
+                            hs.push(CurveHit { t, ..h });
+                        }
+                    }
+                }
+                let hits = match found {
                     CurveSurface::Hits(h) => h,
                     // the curve runs along this edge: cut it at the edge's ends; the stretch along
                     // the edge is boundary, not a new edge (the faces either side of it meet the
