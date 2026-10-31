@@ -326,15 +326,14 @@ pub fn rigid(r: &mut forge_math::rng::Rng) -> Map {
     Map::Rigid(m.with_origin(t))
 }
 
-/// A quarter turn about a world axis and a whole-millimetre move: every coordinate maps exactly.
+/// A quarter turn about a world axis: every coordinate maps exactly (a move would round).
 pub fn quarter(r: &mut forge_math::rng::Rng) -> Map {
     let (x, y, z) = match r.below(3) {
         0 => (Vec3::X, Vec3::Z, -Vec3::Y),
         1 => (-Vec3::Z, Vec3::Y, Vec3::X),
         _ => (Vec3::Y, -Vec3::X, Vec3::Z),
     };
-    let o = Point3::new(r.below(41) as f64 - 20.0, r.below(41) as f64 - 20.0, 0.0);
-    Map::Rigid(Frame::from_axes(o, x, y, z).expect("a rotation"))
+    Map::Rigid(Frame::from_axes(Point3::ORIGIN, x, y, z).expect("a rotation"))
 }
 
 /// A reflection in a world coordinate plane through the origin (exact) or, `tilted`, in a

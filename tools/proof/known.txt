@@ -1,0 +1,15 @@
+# Failures of the forge-proof properties already filed in forgecad-gate/repros/FINDINGS.txt,
+# one `property: kind` per line (what follows two spaces and # is a note). The CI job fails on
+# any failure not listed here; remove a line once its bug is fixed.
+rigid: redundant vertices differ  # M1
+mirror: redundant vertices differ  # M1
+order: redundant vertices differ  # M1
+backends: nary 1: redundant vertices differ  # M1, M2
+backends: nary no shapes: redundant vertices differ  # M1, M2
+backends: nary 1: topology differs  # M3
+boolean: (A-B) | (A&B) invalid  # M4
+mirror: fails: Boolean Internal "face  # M5
+backends: nary 1: fails: invalid EdgeUses EdgeId  # M6
+backends: nary 1: fails: Boolean Unsupported "region  # M7
+certify: Mesh  # M8
+boolean: A | B fails: invalid FaceWrongSide FaceId  # M9

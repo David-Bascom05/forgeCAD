@@ -32,7 +32,7 @@ fn main() {
         .map(|f| std::fs::read_to_string(f).expect("read known failures"))
         .unwrap_or_default()
         .lines()
-        .map(|l| l.trim().to_string())
+        .map(|l| l.split("  #").next().unwrap_or("").trim().to_string())
         .filter(|l| !l.is_empty() && !l.starts_with('#'))
         .collect();
     let files: Vec<&String> = args.iter().filter(|a| a.ends_with(".fc")).collect();

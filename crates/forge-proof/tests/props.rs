@@ -256,10 +256,7 @@ fn m5_ball_on_edge_either_frame() {
 #[ignore = "M6: n-ary open edges near tolerance"]
 fn m6_nary_near_tolerance_pocket() {
     let part = fc("extrude new 10 rect 0 0 60 40
-extrude cut 12 at 50 14 -1 rect 0 0 10 8
-extrude add 3 at 43 21 10 rect 0 0 10 8
-extrude cut 3 at 44 16 7 circle 0 0 3
-extrude cut 3.00001 at 13.736063881801726 14.55533748358412 7.00001 circle 0 0 3");
+extrude cut 3.00001 at 20.829744830901628 31.98774163479715 7.00001 circle 0 0 3");
     assert_eq!(props::backends(&part, 1), None);
 }
 
