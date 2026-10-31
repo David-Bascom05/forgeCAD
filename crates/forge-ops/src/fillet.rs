@@ -887,10 +887,9 @@ fn roll(body: &Body, e: EdgeId, r: f64, root: Name) -> R<Rolled> {
         return Err(FilletError::NotAnEdge { edge: e });
     }
     let l = local(body, e, r, body.edge(e).range.mid())?;
-    let (s0, s1) = (&body.face(l.faces[0]).surface, &body.face(l.faces[1]).surface);
     let near = l.p + l.toward * r;
     let region = body.edge_box(e).grow(4.0 * r + tol::LINEAR);
-    let blend = Blend::new(s0, s1, l.sign[0] * r, l.sign[1] * r, near, region)
+    let blend = blend_of(body, l.faces, [l.sign[0] * r, l.sign[1] * r], l.p, near, region)
         .ok_or(FilletError::NoBlend { edge: e })?;
     let tm = spine_closest(&blend.spine, l.p);
     if blend.spine.eval(tm).distance(near) > r {
@@ -916,6 +915,35 @@ fn roll(body: &Body, e: EdgeId, r: f64, root: Name) -> R<Rolled> {
         var: None,
         over,
     })
+}
+
+/// The blend between faces `f` (offset by `d`), its spine passing nearest `near`: built with the
+/// faces in an order the geometry fixes (their normals at `p`), so its spine's direction and its
+/// surface's frame do not depend on which way round the body stores the edge; `a` stays `f[0]`.
+fn blend_of(
+    body: &Body,
+    f: [FaceId; 2],
+    d: [f64; 2],
+    p: Point3,
+    near: Point3,
+    region: Box3,
+) -> Option<Blend> {
+    let n = |f: FaceId| {
+        body.face_normal(f, body.face(f).surface.project(p))
+            .map_or([0.0; 3], |n| [n.get().x, n.get().y, n.get().z])
+    };
+    let (n0, n1) = (n(f[0]), n(f[1]));
+    let swap = (0..3)
+        .find(|&k| (n0[k] - n1[k]).abs() > 1e-9)
+        .is_some_and(|k| n0[k] > n1[k]);
+    let s = |i: usize| &body.face(f[i]).surface;
+    if !swap {
+        return Blend::new(s(0), s(1), d[0], d[1], near, region);
+    }
+    let mut b = Blend::new(s(1), s(0), d[1], d[0], near, region)?;
+    std::mem::swap(&mut b.a, &mut b.b);
+    std::mem::swap(&mut b.da, &mut b.db);
+    Some(b)
 }
 
 /// Where a spring of the blend between the edge's faces lies off its face, across a smooth
@@ -964,14 +992,7 @@ fn switch_support(
             let mut sign = l.sign;
             sign[s] *= sense(b) * sense(cf);
             let near = l.p + l.toward * r;
-            let Some(nb) = Blend::new(
-                &body.face(faces[0]).surface,
-                &body.face(faces[1]).surface,
-                sign[0] * r,
-                sign[1] * r,
-                near,
-                region,
-            ) else {
+            let Some(nb) = blend_of(body, faces, [sign[0] * r, sign[1] * r], l.p, near, region) else {
                 continue;
             };
             let (Some(s0), Some(s1)) = (nb.spring(true), nb.spring(false)) else {

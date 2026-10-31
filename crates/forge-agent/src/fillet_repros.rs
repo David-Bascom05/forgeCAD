@@ -180,3 +180,79 @@ fn fillet_rolling_onto_a_corner_round() {
         "box: extrude 95 rect -120 -65 240 130\ndraft -2 xy at 0 0 95 (faces of box normal -x) (faces of box normal -y)\nfillet 12 (edges of box shorter 100 near -120 -65 50)\nextrude 16 rect -104 -93 44 40\nfillet 3 (edges concave near -104 -65 8)\n",
     );
 }
+
+/// `b` with every list stored the other way round: vertices, edges, faces, each face's loops, and
+/// each loop starting at its middle coedge.
+fn reversed_storage(b: &forge_topo::Body) -> forge_topo::Body {
+    let b = b.compact();
+    let mut out = forge_topo::Body::new();
+    let mut vmap = vec![None; b.vertices.len()];
+    for v in b.vertex_ids().collect::<Vec<_>>().into_iter().rev() {
+        let x = b.vertex(v);
+        vmap[v.index()] = Some(out.add_tolerant_vertex(x.point, x.tol, x.name));
+    }
+    let mut emap = vec![None; b.edges.len()];
+    for e in b.edge_ids().collect::<Vec<_>>().into_iter().rev() {
+        let x = b.edge(e);
+        let (s, t) = (vmap[x.start.index()].unwrap(), vmap[x.end.index()].unwrap());
+        emap[e.index()] = Some(out.add_edge(x.curve.clone(), x.range, s, t, x.name));
+    }
+    let mut smap = vec![None; b.shells.len()];
+    for f in b.face_ids().collect::<Vec<_>>().into_iter().rev() {
+        let face = b.face(f);
+        let shell = *smap[face.shell.index()].get_or_insert_with(|| out.add_shell());
+        let nf = out.add_face(shell, face.surface.clone(), face.same_sense, face.name);
+        for &l in face.loops.iter().rev() {
+            let cs = &b.lp(l).coedges;
+            let k = cs.len() / 2;
+            let uses: Vec<_> = cs[k..]
+                .iter()
+                .chain(&cs[..k])
+                .map(|&c| (emap[b.coedge(c).edge.index()].unwrap(), b.coedge(c).forward))
+                .collect();
+            out.add_loop(nf, &uses);
+        }
+    }
+    out
+}
+
+#[test]
+fn fillet_does_not_follow_storage_order() {
+    // a gearbox foot on a drafted wall: the same body stored the other way round must round to
+    // the same faces and vertices (the blends' surfaces once took their frames from the order an
+    // edge's two coedges were stored in, which seq and n-ary builds store differently). Corner
+    // patches are left out: their sides' order still follows storage (corner.rs)
+    let m = Model::new(
+        "box: extrude 95 rect -120 -65 240 130\ndraft -2 xy at 0 0 95 (faces of box normal -y)\nfoot: extrude 16 loop line -96 -55 -96 -85 arc -88 -85 8 180 90 line -88 -93 -60 -93 arc -60 -85 8 270 90 line -52 -85 -52 -55 line -52 -55 -96 -55\nfillet 5 (edges between foot box concave)\n",
+    );
+    assert!(m.error.is_none(), "{:?}", m.error.map(|f| f.msg));
+    let i = m.features.len() - 1;
+    let forge_model::Feature::Fillet { edges, .. } = &m.features[i] else {
+        panic!("a fillet");
+    };
+    let base = m.body_after(i).expect("built").compact();
+    let shape = |b: &forge_topo::Body| {
+        let fe: Vec<_> = edges
+            .iter()
+            .map(|(n, r)| forge_ops::FilletEdge {
+                edge: b.edge_by_name(*n).expect("edge"),
+                radius: r.clone(),
+            })
+            .collect();
+        let out = forge_ops::fillet(b, &fe, 99).expect("rounds");
+        let mut faces: Vec<String> = out
+            .face_ids()
+            .map(|f| format!("{:?}", out.face(f).surface))
+            .filter(|s| !s.contains("HolePatch"))
+            .collect();
+        faces.sort();
+        let mut verts: Vec<[i64; 3]> = out
+            .vertex_ids()
+            .map(|v| out.vertex(v).point)
+            .map(|p| [p.x, p.y, p.z].map(|x| (x * 1e9).round() as i64))
+            .collect();
+        verts.sort();
+        (faces, verts)
+    };
+    assert!(shape(&base) == shape(&reversed_storage(&base)));
+}
