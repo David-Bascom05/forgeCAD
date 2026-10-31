@@ -2177,10 +2177,18 @@ impl<'a> P<'a> {
         Some(w)
     }
     /// A work feature or plane, or an entity of an earlier feature's solid.
+    /// A work feature, plane or sketch; an entity of an earlier feature's solid; or a sketch's
+    /// point (`sk l2.b`).
     fn wref(&mut self) -> R<Ref> {
         let feature = self.feat()?;
         let name = if self.peek().starts_with(['@', '(']) {
             Some((self.b.own)(feature, self.one_ref()?))
+        } else if let Some(Feature::Sketch(s)) = self.b.features.get(feature)
+            && sketch::is_ref(self.peek())
+        {
+            let t = self.next()?;
+            sketch::point(s, t)?;
+            Some(forge_model::params::point_name(t))
         } else {
             None
         };
@@ -2462,12 +2470,10 @@ impl<'a> P<'a> {
             let at = if self.is_num() {
                 self.point3()?
             } else {
-                let i = self.feat()?;
-                match self.datum(i, "at")? {
-                    Datum::Point(p) => p,
-                    Datum::Frame(f) => f.origin,
-                    _ => return Err(format!("'at' needs a point or ucs; line {} is not one", i + 1)),
-                }
+                let r = self.wref()?;
+                work::locate(self.b.features, r).map_err(|e| {
+                    format!("'at' needs a point (a work point, vertex, sketch point or ucs): {e:?}")
+                })?
             };
             self.at = Some(at);
             f = f.with_origin(at);
@@ -2477,15 +2483,17 @@ impl<'a> P<'a> {
     /// A sketch and the points of it named after it (none: all its `pt` points), if the line
     /// names a sketch here.
     fn sketch_points(&mut self) -> R<Option<At>> {
-        let k = self.k;
+        let (k, n) = (self.k, self.feats.len());
         let Ok(feature) = self.feat() else {
             self.k = k;
+            self.feats.truncate(n);
             return Ok(None);
         };
         let (Some(Feature::Sketch(s)), false) =
             (self.b.features.get(feature), self.peek().starts_with(['@', '(']))
         else {
             self.k = k;
+            self.feats.truncate(n);
             return Ok(None);
         };
         let mut points = Vec::new();
@@ -2886,8 +2894,14 @@ impl<'a> W<'a> {
     }
     fn wref(&mut self, r: &Ref) {
         self.feat(r.feature);
-        if let Some(n) = r.name {
-            self.name(n);
+        let point = match (self.before.get(r.feature), r.name) {
+            (Some(Feature::Sketch(s)), Some(n)) => s.point_by(n).map(|p| p.0),
+            _ => None,
+        };
+        match (point, r.name) {
+            (Some(t), _) => self.word(&t),
+            (None, Some(n)) => self.name(n),
+            (None, None) => {}
         }
     }
     fn wrefs(&mut self, rs: &[Ref]) {

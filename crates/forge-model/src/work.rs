@@ -112,10 +112,14 @@ fn geo(features: History<'_>, i: usize, r: Ref) -> Result<Geo, RegenError> {
     let Some(name) = r.name else {
         return match &features[k] {
             Feature::Plane(f) => Ok(Geo::Datum(Datum::Plane(*f))),
+            Feature::Sketch(s) => Ok(Geo::Datum(Datum::Plane(s.plane))),
             Feature::Work(_) => datum(features, k).map(Geo::Datum),
             _ => Err(none()),
         };
     };
+    if let Feature::Sketch(s) = &features[k] {
+        return s.point_by(name).map(|p| Geo::Vertex(p.1)).ok_or_else(none);
+    }
     if crate::modifies(&features[k]) {
         return Err(none());
     }
@@ -420,6 +424,12 @@ pub fn own_name(features: History<'_>, k: usize, part: &Body, name: Name) -> Opt
         });
     }
     found
+}
+
+/// Where a reference to a point (a work point, a vertex, a sketch's point, a UCS's origin..)
+/// is, as the line after `features` sees it.
+pub fn locate(features: &[Feature], r: Ref) -> Result<Point3, RegenError> {
+    point(features, features.len(), r)
 }
 
 /// The plane work feature or plane `k` stands for (a UCS: its xy), as seen from feature `i`.

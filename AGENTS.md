@@ -86,7 +86,8 @@ combine (add|cut|keep) TARGET TOOL.. [keep]      bodies; keep: the tool bodies s
 split BY [+|-]     splitface REF.. by BY     movebody MOTION..     copybody MOTION..
 BY: FEAT [@face] | plane FRAME | curve FRAME (line AX AY BX BY | arc CX CY R A0 SWEEP | circle CX CY R)
 MOTION: by DX DY DZ | rot OX OY OZ AX AY AZ A | frame FRAME      (applied in order)
-Work features (for to, on, at, path, pts; follow edits). REF: FEAT, or FEAT @h|(sel) (an entity it made)
+Work features (for to, on, at, path, pts; follow edits). REF: FEAT (or a sketch's plane), FEAT @h|(sel)
+(an entity it made), or SKETCH P: a sketch's point (`p1`, `l2.b`, `c1`); `at REF` puts an origin on any point.
 plane FRAME | off FACE D | ang PLANE AXIS A | tan CYL PLANE | pts P P P | mid PLANE PLANE | norm CURVE P
 axis EDGE|CYL|CONE | pts P P | meet PLANE PLANE | norm PLANE P
 point VERTEX|CIRCLE|SPHERE | mid EDGE | meet EDGE|AXIS FACE|PLANE        ucs FRAME | ucs pts O X XY

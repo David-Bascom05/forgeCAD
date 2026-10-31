@@ -1,7 +1,8 @@
 //! Parameters and sketches: history steps that make nothing themselves. The part file
 //! evaluates them as it reads each line (forge-agent), so later features hold plain values.
 
-use forge_math::{Frame, Point3};
+use forge_math::{Frame, Point2, Point3};
+use forge_sketch::{Entity, EntityId};
 use forge_topo::Name;
 
 /// What a value measures: units are checked where a value is used, never converted.
@@ -58,4 +59,38 @@ pub enum On {
         point: Option<String>,
         flip: bool,
     },
+}
+
+impl Sketch {
+    /// A point by its name in the block: `p1`, a line's or arc's end `l2.a` `a1.b`, a circle's
+    /// or arc's centre `c1` `a1.c`; in the sketch's plane.
+    pub fn point(&self, t: &str) -> Option<Point2> {
+        let (base, part) = t.split_once('.').unwrap_or((t, ""));
+        let e = self.names.iter().find(|(n, _)| n == base)?.1;
+        let q = &self.solved;
+        let at = |p: EntityId| Some(q.point(p));
+        match (q.entity(e)?, part) {
+            (Entity::Point { .. }, "") => at(e),
+            (Entity::Line { a, .. } | Entity::Arc { start: a, .. }, "a") => at(a),
+            (Entity::Line { b, .. } | Entity::Arc { end: b, .. }, "b") => at(b),
+            (Entity::Circle { center, .. } | Entity::Arc { center, .. }, "" | "c") => at(center),
+            _ => None,
+        }
+    }
+
+    /// The point a reference's name stands for (`point_name`), its name and where it is.
+    pub fn point_by(&self, n: Name) -> Option<(String, Point3)> {
+        let t = self
+            .names
+            .iter()
+            .flat_map(|(b, _)| ["", ".a", ".b", ".c"].map(|p| format!("{b}{p}")))
+            .find(|t| point_name(t) == n)?;
+        let p = self.plane.plane_point(self.point(&t)?);
+        Some((t, p))
+    }
+}
+
+/// The name a reference to a sketch's point (`l2.b`) carries.
+pub fn point_name(t: &str) -> Name {
+    Name::NONE.with_str("sketch point").with_str(t)
 }

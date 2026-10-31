@@ -751,3 +751,53 @@ fn a_deleted_id_is_never_used_again() {
     // with the old line back as it was, the handle finds its edge
     built(&format!("{block}fillet 1 {old}\n"));
 }
+
+/// A sketch's points serve as work points, axis ends and origins, and its plane as a plane;
+/// all follow the sketch.
+#[test]
+fn sketch_points_everywhere() {
+    let src = |x: f64| {
+        format!(
+            "sk: sketch xy at 0 0 10\n  pt 10 10\n  pt {x} 10\n  circle 30 25 4\nend\n\
+             extrude 10 rect 0 0 60 40\n\
+             p: point sk p2\n\
+             ax: axis pts sk p1 sk c1\n\
+             top: plane off sk 5\n\
+             extrude 3 xy at sk c1 circle 0 0 2\n\
+             extrude 2 on top at p circle 0 0 1\n"
+        )
+    };
+    for x in [40.0, 45.0] {
+        let m = built(&src(x));
+        let d = |i: usize| forge_model::work::datum(&m.features, i).expect("datum");
+        assert_eq!(
+            d(2),
+            forge_model::Datum::Point(forge_math::Point3::new(x, 10.0, 10.0))
+        );
+        let forge_model::Datum::Axis(a) = d(3) else {
+            panic!("an axis")
+        };
+        assert_eq!(a.origin, forge_math::Point3::new(10.0, 10.0, 10.0));
+        let forge_model::Datum::Plane(f) = d(4) else {
+            panic!("a plane")
+        };
+        assert_eq!(f.origin.z, 15.0);
+        let Feature::Extrude { profile, .. } = &m.features[5] else {
+            panic!("an extrude")
+        };
+        assert_eq!(profile.plane.origin, forge_math::Point3::new(30.0, 25.0, 10.0));
+        let Feature::Extrude { profile, .. } = &m.features[6] else {
+            panic!("an extrude")
+        };
+        assert_eq!(profile.plane.origin, forge_math::Point3::new(x, 10.0, 10.0));
+        let part = Part {
+            features: m.features.clone(),
+        };
+        let printed = text::print(&part);
+        assert!(
+            printed.contains("point sketch1 p2\n") && printed.contains("axis pts sketch1 p1 sketch1 c1\n"),
+            "{printed}"
+        );
+        round_trip(&part);
+    }
+}

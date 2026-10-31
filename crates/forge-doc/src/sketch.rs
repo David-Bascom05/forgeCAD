@@ -816,17 +816,8 @@ pub fn path(s: &Sketch, through: Option<&str>) -> R<Vec<PathSeg>> {
 
 /// A point of the sketch (`p1`, `l2.b`, `c1` for its centre), in its plane.
 pub fn point(s: &Sketch, t: &str) -> R<Point2> {
-    let (base, part) = t.split_once('.').unwrap_or((t, ""));
-    let e = id_of(s, base)?;
-    let q = &s.solved;
-    let at = |p: EntityId| q.point(p);
-    Ok(match (q.entity(e).expect("named"), part) {
-        (Entity::Point { .. }, "") => at(e),
-        (Entity::Line { a, .. } | Entity::Arc { start: a, .. }, "a") => at(a),
-        (Entity::Line { b, .. } | Entity::Arc { end: b, .. }, "b") => at(b),
-        (Entity::Circle { center, .. } | Entity::Arc { center, .. }, "" | "c") => at(center),
-        _ => return Err(format!("'{t}' is not a point")),
-    })
+    id_of(s, t.split_once('.').map_or(t, |p| p.0))?;
+    s.point(t).ok_or_else(|| format!("'{t}' is not a point"))
 }
 
 /// A line of the sketch: its ends, in its plane.
