@@ -1317,8 +1317,7 @@ impl HolePatch {
                 ));
             }
         }
-        let size = p.sides.iter().map(|s| s.chord_length()).fold(0.0, f64::max);
-        let rmin = if kmax > 0.0 { (1.0 / kmax).min(size) } else { size };
+        let rmin = sampled_radius(kmax, &p.sides);
         let k = (0.5 * (scale.0 + scale.1) / rmin).clamp(1e-3, 1e3);
         let mut out = HolePatch::with_corners(sides, square(k), k);
         out.rational = Some(q);
@@ -1498,9 +1497,8 @@ impl HolePatch {
                 take(&self.deriv(self.side_uv(i, k as f64 / 9.0)));
             }
         }
-        let size = self.sides.iter().map(|s| s.chord_length()).fold(0.0, f64::max);
         self.scale = (su / count as f64, sv / count as f64);
-        self.min_radius = if kmax > 0.0 { (1.0 / kmax).min(size) } else { size };
+        self.min_radius = sampled_radius(kmax, &self.sides);
         self.fold = fold;
     }
 
@@ -1631,6 +1629,13 @@ fn frame_at(side: &Side, j: &RailJet) -> (Vec3, Vec3) {
     (e1, j.n.cross(e1))
 }
 
+/// The radius of the sharpest sampled curvature `kmax`, between a thousandth of the longest
+/// side and the longest side: positive and finite even where a sample sits on a kinked corner.
+fn sampled_radius(kmax: f64, sides: &[Side]) -> f64 {
+    let size = sides.iter().map(|s| s.chord_length()).fold(0.0, f64::max);
+    (1.0 / kmax).clamp(1e-3 * size, size)
+}
+
 /// Largest absolute principal curvature at a regular point.
 fn max_curvature(d: &SurfDeriv) -> f64 {
     let Some(n) = d.du.cross(d.dv).normalize() else {
@@ -1662,6 +1667,8 @@ impl HolePatch {
         let bend = linalg::solve2(e, f, f, g, t.dot(d.du), t.dot(d.dv)).map_or(0.0, |(a, b)| {
             n.dot(d.duu * (a * a) + d.duv * (2.0 * a * b) + d.dvv * (b * b))
         });
+        // the sampled radius, not min_radius(): that is zero round a kinked corner, and the
+        // carried-on part only needs a positive bend of the patch's own size
         let k = if bend > 0.0 { 1.0 } else { -1.0 } / self.min_radius;
         let gr = n + t * k;
         let l = gr.length();
@@ -2571,6 +2578,29 @@ mod tests {
             Side::new(Arc::new(SpokeRail::cubic(top, Vec3::Z, Vec3::Z)), 0.0, 1.0),
             line(p(0.0, 1.0), p(0.0, 0.0)),
         ]
+    }
+
+    #[test]
+    fn kinked_patch_is_carried_past_its_rim() {
+        // the top spoke's normal tilts at its ends, so the corners there are kinked
+        let p = |x: f64, y: f64| Point3::new(x, y, 0.0);
+        let top = [p(1.0, 1.0), p(0.7, 1.0), p(0.3, 1.0), p(0.0, 1.0)];
+        let mut sides = plane_quad(top);
+        let n = Vec3::new(0.0, 0.3, 1.0);
+        sides[2] = Side::new(Arc::new(SpokeRail::cubic(top, n, n)), 0.0, 1.0);
+        let patch = HolePatch::new(sides).unwrap();
+        assert!(patch.kinked && patch.min_radius() == 0.0 && patch.min_radius > 0.0);
+        for x in patch.grid(6) {
+            assert!(patch.implicit(patch.point(x)).abs() < 1e-9);
+        }
+        // past every side and above and below the patch: finite, the gradient a unit vector
+        for q in [p(0.5, -0.5), p(1.5, 0.5), p(0.5, 1.5), p(-0.5, 0.5), p(1.5, 1.5)] {
+            for z in [-0.3, 0.0, 0.3] {
+                let r = q + Vec3::new(0.0, 0.0, z);
+                let (f, g) = (patch.implicit(r), patch.gradient(r));
+                assert!(f.is_finite() && (g.length() - 1.0).abs() < 1e-12, "{r:?}");
+            }
+        }
     }
 
     #[test]
