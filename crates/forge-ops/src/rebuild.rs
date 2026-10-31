@@ -347,14 +347,14 @@ pub(crate) fn reversed(c: &Curve) -> Curve {
             let mut tans: Vec<Vec3> = k.tans.iter().map(|&t| -t).collect();
             pts.reverse();
             tans.reverse();
-            Curve::Intersection(std::sync::Arc::new(IntCurve {
-                a: k.a.clone(),
-                b: k.b.clone(),
+            Curve::Intersection(std::sync::Arc::new(IntCurve::new(
+                k.a.clone(),
+                k.b.clone(),
                 pts,
                 tans,
-                closed: k.closed,
-                sag: k.sag,
-            }))
+                k.closed,
+                k.sag,
+            )))
         }
         Curve::Procedural(k) => Curve::Procedural(ProcCurve(std::sync::Arc::new(Backwards(k.clone())))),
     }

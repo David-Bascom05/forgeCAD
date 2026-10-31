@@ -8,9 +8,10 @@
 //! step onto both surfaces, so the chain only guides — the curve is exact.
 
 use crate::surface::Surface;
-use forge_math::{Box3, Frame, Interval, Point3, Vec3, tol};
+use forge_math::{Box3, Frame, Interval, Point2, Point3, Vec3, tol};
+use std::sync::OnceLock;
 
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug)]
 pub struct IntCurve {
     pub a: Surface,
     pub b: Surface,
@@ -22,6 +23,16 @@ pub struct IntCurve {
     pub closed: bool,
     /// Largest distance from a chain segment to the true curve between its ends.
     pub sag: f64,
+    /// Each chain point's parameters on each surface that can start its value there
+    /// (`Procedural::value_near`), found on first use.
+    hints: OnceLock<[Option<Vec<Point2>>; 2]>,
+}
+
+impl PartialEq for IntCurve {
+    fn eq(&self, o: &IntCurve) -> bool {
+        (&self.a, &self.b, &self.pts, &self.tans, self.closed, self.sag)
+            == (&o.a, &o.b, &o.pts, &o.tans, o.closed, o.sag)
+    }
 }
 
 /// Pulls `p` onto both surfaces: the minimum-norm Newton step for the two
@@ -46,9 +57,9 @@ pub fn refine(a: &Surface, b: &Surface, mut p: Point3) -> Option<Point3> {
     ok.then_some(p)
 }
 
-/// One minimum-norm Newton step of `p` towards both surfaces (p itself where they are tangent).
-fn refine_step(a: &Surface, b: &Surface, p: Point3) -> Point3 {
-    let ((ga, na), (gb, nb)) = (a.implicit_gradient(p), b.implicit_gradient(p));
+/// One minimum-norm Newton step of `p` towards both surfaces, from their values and gradients
+/// there (p itself where they are tangent).
+fn newton_step(p: Point3, (ga, na): (f64, Vec3), (gb, nb): (f64, Vec3)) -> Point3 {
     let (aa, ab, bb) = (na.dot(na), na.dot(nb), nb.dot(nb));
     let det = aa * bb - ab * ab;
     if det <= 1e-12 * aa * bb {
@@ -63,6 +74,25 @@ pub fn direction(a: &Surface, b: &Surface, p: Point3) -> Option<Vec3> {
 }
 
 impl IntCurve {
+    pub fn new(
+        a: Surface,
+        b: Surface,
+        pts: Vec<Point3>,
+        tans: Vec<Vec3>,
+        closed: bool,
+        sag: f64,
+    ) -> IntCurve {
+        IntCurve {
+            a,
+            b,
+            pts,
+            tans,
+            closed,
+            sag,
+            hints: OnceLock::new(),
+        }
+    }
+
     pub fn segments(&self) -> usize {
         if self.closed {
             self.pts.len()
@@ -127,12 +157,47 @@ impl IntCurve {
     }
 
     pub fn eval(&self, t: f64) -> Point3 {
-        self.onto(self.hermite_point(t))
+        self.onto(self.hermite_point(t), t)
     }
 
-    /// A point of the cubic taken onto both surfaces.
-    fn onto(&self, p: Point3) -> Point3 {
-        let q = refine_step(&self.a, &self.b, p);
+    /// Each surface's value and gradient at p, and its parameters there where it was started
+    /// from `uv`.
+    fn side(&self, k: usize, p: Point3, uv: Option<Point2>) -> ((f64, Vec3), Option<Point2>) {
+        let s = if k == 0 { &self.a } else { &self.b };
+        if let (Surface::Procedural(pr), Some(uv)) = (s, uv)
+            && let Some((f, g, at)) = pr.value_near(p, Some(uv))
+        {
+            return ((f, g), Some(at));
+        }
+        (s.implicit_gradient(p), None)
+    }
+
+    /// Where each surface that can start from them has parameters near chain point t.
+    fn hint(&self, t: f64) -> [Option<Point2>; 2] {
+        let near = |s: &Surface| match s {
+            Surface::Procedural(pr) => self
+                .pts
+                .iter()
+                .map(|&p| pr.value_near(p, None).map(|v| v.2))
+                .collect::<Option<Vec<Point2>>>(),
+            _ => None,
+        };
+        let [ha, hb] = self.hints.get_or_init(|| [near(&self.a), near(&self.b)]);
+        let (i, j, f) = self.locate(t);
+        let at = |h: &Option<Vec<Point2>>| h.as_ref().map(|h| h[i].lerp(h[j], f));
+        [at(ha), at(hb)]
+    }
+
+    /// The cubic's point at t taken onto both surfaces.
+    #[inline(always)]
+    fn onto(&self, p: Point3, t: f64) -> Point3 {
+        let unhinted = |h: &[Option<Vec<Point2>>; 2]| h[0].is_none() && h[1].is_none();
+        if (matches!(self.a, Surface::Procedural(_)) || matches!(self.b, Surface::Procedural(_)))
+            && !self.hints.get().is_some_and(unhinted)
+        {
+            return self.onto_from_chain(p, t);
+        }
+        let q = newton_step(p, self.a.implicit_gradient(p), self.b.implicit_gradient(p));
         // one step lands where the cubic was close; where it wasn't, finish the job
         let tight = |p: Point3| {
             self.a.implicit(p).abs() <= 1e-3 * tol::LINEAR && self.b.implicit(p).abs() <= 1e-3 * tol::LINEAR
@@ -144,10 +209,28 @@ impl IntCurve {
         }
     }
 
+    /// `onto`, each procedural surface that can searching from the chain's parameters there.
+    #[inline(never)]
+    fn onto_from_chain(&self, p: Point3, t: f64) -> Point3 {
+        let [ha, hb] = self.hint(t);
+        let ((va, ua), (vb, ub)) = (self.side(0, p, ha), self.side(1, p, hb));
+        let q = newton_step(p, va, vb);
+        // and from where p's search ended for q
+        let level = |k: usize, uv: Option<Point2>| match uv {
+            Some(_) => self.side(k, q, uv).0.0,
+            None => [&self.a, &self.b][k].implicit(q),
+        };
+        if level(0, ua).abs() <= 1e-3 * tol::LINEAR && level(1, ub).abs() <= 1e-3 * tol::LINEAR {
+            q
+        } else {
+            refine(&self.a, &self.b, q).unwrap_or(q)
+        }
+    }
+
     /// First and second derivative with respect to t (the chain spacing sets its scale).
     pub fn derivs(&self, t: f64) -> (Point3, Vec3, Vec3) {
         let (p, d1, d2) = self.hermite(t);
-        (self.onto(p), d1, d2)
+        (self.onto(p, t), d1, d2)
     }
 
     /// Bound on |dP/dt| over the curve.
@@ -236,14 +319,14 @@ impl IntCurve {
 
     pub fn transformed(&self, f: &Frame) -> IntCurve {
         use crate::surface::SurfaceGeom;
-        IntCurve {
-            a: self.a.transformed(f),
-            b: self.b.transformed(f),
-            pts: self.pts.iter().map(|&p| f.point_to_world(p)).collect(),
-            tans: self.tans.iter().map(|&v| f.vec_to_world(v)).collect(),
-            closed: self.closed,
-            sag: self.sag,
-        }
+        IntCurve::new(
+            self.a.transformed(f),
+            self.b.transformed(f),
+            self.pts.iter().map(|&p| f.point_to_world(p)).collect(),
+            self.tans.iter().map(|&v| f.vec_to_world(v)).collect(),
+            self.closed,
+            self.sag,
+        )
     }
 }
 
@@ -482,14 +565,7 @@ pub(crate) fn finish(a: &Surface, b: &Surface, pts: Vec<Point3>, closed: bool, s
             if d.dot(along) < 0.0 { -d } else { d }
         })
         .collect();
-    IntCurve {
-        a: a.clone(),
-        b: b.clone(),
-        pts,
-        tans,
-        closed,
-        sag: 1.5 * sag + tol::LINEAR,
-    }
+    IntCurve::new(a.clone(), b.clone(), pts, tans, closed, 1.5 * sag + tol::LINEAR)
 }
 
 impl crate::curve::CurveGeom for IntCurve {

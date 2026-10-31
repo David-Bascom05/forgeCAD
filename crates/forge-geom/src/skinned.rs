@@ -1141,6 +1141,14 @@ impl Procedural for Skinned {
     fn project(&self, p: Point3) -> Point2 {
         self.nearest(p)
     }
+    fn value_near(&self, p: Point3, uv: Option<Point2>) -> Option<(f64, Vec3, Point2)> {
+        let near = uv
+            .map(|uv| polish(&|uv| self.point(uv), p, uv, self.ext, None))
+            .filter(|(_, d)| d.p.distance(p) <= tol::LINEAR);
+        let (q, d) = near.unwrap_or_else(|| self.solve(p));
+        let n = d.du.cross(d.dv).normalize().map_or(Vec3::Z, |u| u.get());
+        Some(((p - d.p).dot(n), n, q))
+    }
     fn project_near(&self, p: Point3, uv: Point2) -> Point2 {
         // a point lying on the surface is its own nearest point: Newton from nearby finds it
         let (q, d) = polish(&|uv| self.point(uv), p, uv, self.ext, None);

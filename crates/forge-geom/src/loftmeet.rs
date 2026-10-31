@@ -47,14 +47,7 @@ pub fn meet(a: &Surface, b: &Surface, region: Box3) -> Option<SurfaceSurface> {
             curves
                 .into_iter()
                 .map(|(pts, tans, closed, sag)| {
-                    let c = IntCurve {
-                        a: sa.clone(),
-                        b: sb.clone(),
-                        pts,
-                        tans,
-                        closed,
-                        sag: 1.5 * sag + tol::LINEAR,
-                    };
+                    let c = IntCurve::new(sa.clone(), sb.clone(), pts, tans, closed, 1.5 * sag + tol::LINEAR);
                     (Curve::Intersection(std::sync::Arc::new(c)), Contact::Crossing)
                 })
                 .collect(),

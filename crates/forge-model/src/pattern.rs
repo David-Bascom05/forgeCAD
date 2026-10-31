@@ -306,14 +306,14 @@ fn curve(m: &Motion, c: &Curve) -> Result<Curve, PatternError> {
             frame: m.frame(&c.frame, false),
             ..*c
         }),
-        Curve::Intersection(c) => Curve::Intersection(std::sync::Arc::new(IntCurve {
-            a: surface(m, &c.a)?,
-            b: surface(m, &c.b)?,
-            pts: c.pts.iter().map(|&p| m.point(p)).collect(),
-            tans: c.tans.iter().map(|&v| m.vec(v)).collect(),
-            closed: c.closed,
-            sag: c.sag,
-        })),
+        Curve::Intersection(c) => Curve::Intersection(std::sync::Arc::new(IntCurve::new(
+            surface(m, &c.a)?,
+            surface(m, &c.b)?,
+            c.pts.iter().map(|&p| m.point(p)).collect(),
+            c.tans.iter().map(|&v| m.vec(v)).collect(),
+            c.closed,
+            c.sag,
+        ))),
         Curve::Procedural(_) => {
             return Err(PatternError::Unsupported(
                 "mirroring a curve built by construction",

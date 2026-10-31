@@ -128,6 +128,12 @@ pub trait Procedural: Send + Sync + std::fmt::Debug {
         let _ = near;
         self.project(p)
     }
+    /// `implicit`, `gradient` and the nearest point's parameters, found by Newton from `uv` where
+    /// p lies on the surface near it (else as `project`); None where the surface has no faster
+    /// way than `implicit` and `gradient`.
+    fn value_near(&self, _p: Point3, _uv: Option<Point2>) -> Option<(f64, Vec3, Point2)> {
+        None
+    }
     /// A box guaranteed to contain the surface over the parameter box.
     fn bbox(&self, uv: Box2) -> Box3;
     /// Zero on the surface, positive on the natural normal's side, 1-Lipschitz (as
