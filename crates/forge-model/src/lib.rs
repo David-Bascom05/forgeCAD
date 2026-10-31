@@ -646,9 +646,11 @@ fn build_tools(
     Ok(distinct(build_each(features, from, threads, build)?))
 }
 
-/// `tools` without a tool equal to an earlier one combined the same way (the same feature
-/// twice, say): two equal solids in one n-ary pass meet everywhere, and the second changes
-/// nothing. Equal means the same analytic shape; a shape known only by its B-rep is kept.
+/// `tools` without a tool equal to an earlier one combined the same way with only tools
+/// combined that way between them (the same feature twice, say): two equal solids in one n-ary
+/// pass meet everywhere, and the second changes nothing. A tool combined otherwise between
+/// them (a ball cut, added back, cut again) makes the second count. Equal means the same
+/// analytic shape; a shape known only by its B-rep is kept.
 fn distinct(tools: Vec<Tool>) -> Vec<Tool> {
     let how = |c: Combine| if c == Combine::New { Combine::Add } else { c };
     // a cheap key first: only tools that share it are compared whole
@@ -672,10 +674,11 @@ fn distinct(tools: Vec<Tool>) -> Vec<Tool> {
     let mut drop = vec![false; tools.len()];
     for run in keyed.chunk_by(|a, b| a.0 == b.0) {
         for (n, &(_, i)) in run.iter().enumerate() {
-            if run[..n]
-                .iter()
-                .any(|&(_, j)| !drop[j] && how(tools[j].1) == how(tools[i].1) && tools[j].2 == tools[i].2)
-            {
+            if run[..n].iter().any(|&(_, j)| {
+                !drop[j]
+                    && tools[j].2 == tools[i].2
+                    && tools[j..i].iter().all(|t| how(t.1) == how(tools[i].1))
+            }) {
                 drop[i] = true;
             }
         }

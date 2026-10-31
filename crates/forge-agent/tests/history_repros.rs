@@ -289,6 +289,38 @@ fn the_same_cut_twice() {
     );
 }
 
+/// The same ball cut, added back and cut again (or added, cut and added): the third is no
+/// repeat of the first, as the second undid it between them. The n-ary pass left it out and
+/// built the block with the ball's other half; equal tools are left out only with nothing
+/// combined otherwise between them. Also tools equal but for a hair, and the same loft or sweep
+/// twice (known by their B-rep), regenerate as feature by feature.
+#[test]
+fn the_same_tool_after_its_undoing() {
+    let same = |src: &str| {
+        let part = Part {
+            features: Model::new(src).features.clone(),
+        };
+        let volume = |b: forge_topo::Body| forge_topo::mass::mass(&b).expect("mass").volume;
+        let (seq, nary) = (
+            volume(part.regenerate().expect("seq")),
+            volume(part.regenerate_nary(1).expect("nary")),
+        );
+        assert!((seq - nary).abs() <= 1e-9 * seq, "{src}: seq {seq} nary {nary}");
+    };
+    same(
+        "extrude 20 rect 0 0 40 30\nball cut 6 at 20 15 20\nball add 6 at 20 15 20\nball cut 6 at 20 15 20\n",
+    );
+    same(
+        "extrude 20 rect 0 0 40 30\nball add 6 at 20 15 20\nball cut 6 at 20 15 20\nball add 6 at 20 15 20\n",
+    );
+    same("extrude 20 rect 0 0 40 30\nball cut 6 at 20 15 20\nball cut 6.0000001 at 20 15 20\n");
+    same("extrude 20 rect 0 0 40 30\nball cut 6 at 20 15 20\nball cut 6 at 20.0000001 15 20\n");
+    let loft = "loft cut profile xy at 20 15 14 rect -3 -3 6 6 profile xy at 20 15 22 rect -5 -5 10 10\n";
+    same(&format!("extrude 20 rect 0 0 40 30\n{loft}{loft}"));
+    let sweep = "sweep cut z 1 0 0 x 0 0 -1 at 5 15 18 circle 0 0 3 path line 5 15 18 35 15 18\n";
+    same(&format!("extrude 20 rect 0 0 40 30\n{sweep}{sweep}"));
+}
+
 /// Two pads on a block meeting along a vertical line, then a tilted rod added across that line
 /// (forge-proof boolean on coplanar_stack 3): the rod cut the line's edge where the pads' boolean
 /// had already named its end vertex from the same mark, and the new vertex took the same name
