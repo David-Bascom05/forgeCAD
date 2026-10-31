@@ -1281,10 +1281,8 @@ pub(crate) fn trim(
                         let seam = g == Some(f);
                         // beside a face on the other face's surface, coplanar imprinting does it
                         let other = &bodies[1 - k].face(faces[1 - k]).surface;
-                        let coplanar = g.is_some_and(|g| {
-                            g != f
-                                && ssi::surfaces(&body.face(g).surface, other) == SurfaceSurface::Coincident
-                        });
+                        let coplanar =
+                            g.is_some_and(|g| g != f && ssi::coincident(&body.face(g).surface, other));
                         if !coplanar && !along.iter().any(|a| a.0 == k && a.1 == e) {
                             along.push((k, e, seam));
                         }
@@ -1461,11 +1459,7 @@ pub(crate) fn across(body: &Body, f: FaceId, c: forge_topo::CoedgeId) -> R<Surfa
     };
     match body.partner(c).map(|o| body.coedge_face(o)) {
         // a neighbour on this face's surface (coplanar faces framed apart) is not across it
-        Some(g)
-            if g != f
-                && body.face(g).surface != *s
-                && ssi::surfaces(&body.face(g).surface, s) != SurfaceSurface::Coincident =>
-        {
+        Some(g) if g != f && body.face(g).surface != *s && !ssi::coincident(&body.face(g).surface, s) => {
             let other = &body.face(g).surface;
             // a smooth edge (the faces meet tangentially, as a rounded corner meets its
             // walls): the neighbour's surface would only touch a crossing curve there

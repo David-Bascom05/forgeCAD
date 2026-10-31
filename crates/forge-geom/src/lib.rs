@@ -7,6 +7,8 @@ pub mod corner;
 pub mod curve;
 pub mod intcurve;
 pub mod intersect;
+pub mod meet;
+mod meet_gen;
 pub mod surface;
 #[doc(hidden)]
 pub mod testing;

@@ -362,7 +362,7 @@ fn march(
     None
 }
 
-fn finish(a: &Surface, b: &Surface, pts: Vec<Point3>, closed: bool, step: f64) -> IntCurve {
+pub(crate) fn finish(a: &Surface, b: &Surface, pts: Vec<Point3>, closed: bool, step: f64) -> IntCurve {
     // measured: how far each chord's midpoint sits from the curve
     let n = pts.len();
     let segs = if closed { n } else { n - 1 };

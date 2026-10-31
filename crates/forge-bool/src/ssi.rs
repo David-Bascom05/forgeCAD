@@ -5,7 +5,20 @@ use forge_math::{Box3, Frame, tol};
 /// Intersection of two surfaces within `region`: closed form where the pair
 /// allows, otherwise traced (an exact curve defined by both surfaces).
 pub fn surfaces_in(a: &Surface, b: &Surface, region: Box3) -> SurfaceSurface {
-    match surfaces(a, b) {
+    let closed = match (a, b) {
+        (Surface::Plane(p), s) => plane_surface(p, s),
+        (s, Surface::Plane(p)) => plane_surface(p, s),
+        (Surface::Cylinder(c), Surface::Cylinder(d)) => cylinder_cylinder(c, d),
+        (Surface::Sphere(s), Surface::Sphere(t)) => sphere_sphere(s, t),
+        _ => SurfaceSurface::NotAnalytic,
+    };
+    let closed = match closed {
+        SurfaceSurface::NotAnalytic => {
+            forge_geom::meet::intersect(a, b, region).unwrap_or(SurfaceSurface::NotAnalytic)
+        }
+        r => r,
+    };
+    match closed {
         SurfaceSurface::NotAnalytic => match forge_geom::intcurve::trace(a, b, region) {
             Some(cs) if cs.is_empty() => SurfaceSurface::Empty,
             Some(cs) => SurfaceSurface::Curves(
@@ -19,14 +32,13 @@ pub fn surfaces_in(a: &Surface, b: &Surface, region: Box3) -> SurfaceSurface {
     }
 }
 
-/// Intersection of two whole surfaces, closed form where the pair allows.
-pub fn surfaces(a: &Surface, b: &Surface) -> SurfaceSurface {
+/// Whether two surfaces are the same surface.
+pub fn coincident(a: &Surface, b: &Surface) -> bool {
     match (a, b) {
-        (Surface::Plane(p), s) => plane_surface(p, s),
-        (s, Surface::Plane(p)) => plane_surface(p, s),
-        (Surface::Cylinder(c), Surface::Cylinder(d)) => cylinder_cylinder(c, d),
-        (Surface::Sphere(s), Surface::Sphere(t)) => sphere_sphere(s, t),
-        _ => SurfaceSurface::NotAnalytic,
+        (Surface::Plane(p), s) | (s, Surface::Plane(p)) => plane_surface(p, s) == SurfaceSurface::Coincident,
+        (Surface::Cylinder(c), Surface::Cylinder(d)) => cylinder_cylinder(c, d) == SurfaceSurface::Coincident,
+        (Surface::Sphere(s), Surface::Sphere(t)) => sphere_sphere(s, t) == SurfaceSurface::Coincident,
+        _ => forge_geom::meet::coaxial(a, b) == Some(SurfaceSurface::Coincident),
     }
 }
 
@@ -105,6 +117,15 @@ mod tests {
     use forge_geom::testing::{rand_frame, rand_unit};
     use forge_geom::{CurveGeom, SurfaceGeom};
     use forge_math::rng::Rng;
+
+    fn surfaces(a: &Surface, b: &Surface) -> SurfaceSurface {
+        let far = forge_math::Point3::new(100.0, 100.0, 100.0);
+        surfaces_in(
+            a,
+            b,
+            Box3::from_points([far, forge_math::Point3::ORIGIN - far.to_vec()]),
+        )
+    }
 
     fn on_both(a: &Surface, b: &Surface) {
         if let SurfaceSurface::Curves(cs) = surfaces(a, b) {
