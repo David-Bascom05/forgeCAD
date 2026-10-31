@@ -86,9 +86,48 @@ coaxial circle x screw 11.9%, helix x plane/cylinder/cone 13.5%, off-axis plane 
    the box's sides, so `meet_region` grows the tracer's region by 0.2% for these faces (`fuzz` t00001).
 7. `Screw::nearest`: a point of the surface reads its parameters straight off the turn's half plane.
 
-Tried and dropped: a ray along the thread's axis in `classify` (no win once the rest was in; the
-rays were not the cost). The swept section (`meet_general`) before the tracer failed with
-"inconsistent classification" on cross holes; see below.
+8. `Procedural::implicit_gradient`: one screw `value` for both (the tracer asked twice); the tracer's
+   octree tests the cheap surface first.
+
+Tried and dropped:
+- A ray along the thread's axis in `classify`: no win once the rest was in, the rays were not the cost.
+- The swept section (`meet_general`) before the tracer: "inconsistent classification" on cross holes.
+  Roots moving fast along a section are born and die between rows (on a radial flat near the angle
+  where the section runs along the cross hole's axis), so whole branches are missed.
+- Closed-form seeds for the tracer instead of its octree (rows of section lines, the two rim helices):
+  a further 30% on cross holes, but 35 of 400 fuzz runs got worse. The curves it did not seed near were
+  on the carried-on track at a turn past the face, off the face; the failure itself was not found.
+- A strip mesher for screw faces: the twist of a straight-section flank leaves a gap |dr| du / 4 in a
+  quad, above the chord at default quality at the edges' spacing, and the side edges fix the rows.
+
+Where the limit is: a cross hole through a thread still costs what tracing a screw face costs, about
+1000 instructions per screw evaluation; 1.6x so far. After the regen, on threaded parts mesh is now
+5x the regen. Both are the next things to attack, and neither is a thread feature's own cost.
+
+## Results
+
+Against main ad33439 (`bench-baseline-seq.tsv`), instructions:u, thread feature alone:
+```
+part#feature     seq old     new
+conrod#22            79.5    14.4
+crank#13            252.1    10.7
+frame#126           698.4    17.2
+frame#127           706.2    14.5
+frame#138            27.4     3.4
+gearbox#33           95.6    22.2
+gearbox#53           28.5     3.6
+jack#11             158.5    32.2
+valve#14            128.0    28.1
+valve#30            121.1    12.0
+valve#31            174.7    11.7
+valve#32            103.1     4.1
+valve#33             48.2     4.1
+sum                  2621     177   (14.8x)
+```
+Bench of 15 parts: 13607M to 8240M. Long fine threads (200 turns) 73-77x, and cost per turn is now
+flat where it was quadratic. `volume_check.py`: two more turns remove two turns of the form by the
+exact mass properties, rel error at most 3.5e-7 on every size (printed volumes have 6 decimals),
+which also says OCCT, not us, is off on `fine-long-ext`.
 
 ## How it is checked
 
@@ -100,7 +139,32 @@ rays were not the cost). The swept section (`meet_general`) before the tracer fa
 - `oracle_patch.py`: applied temporarily, compares every closed-form answer inside real regens.
 - `fuzz/gen.py`, `fuzz/compare.py`: random threaded parts on main's binary and this one, seq and
   n-ary 2. Found a real bug in the first version (the edge box `near` lost when a closed form
-  declined) that no unit test had.
+  declined) that no unit test had. Final: 1000 parts, 2000 runs, 0 worse; 11 runs fail on both.
+- `forge-proof`'s `meta` on 120 of those parts, each: main fails `ulp` on one, this on none; the first
+  version of the box change failed a boolean identity (a screw face against itself reached the tracer,
+  whose answer depended on whether a seed landed exactly on it: `meet_screw` now says Empty).
+
+## Lean (`lean/`, no sorry, standard axioms only)
+
+Theorem by theorem, what the code does, and what was not needed:
+- `section_along_line`, `own_motion_is_flat`: the reading is linear in t with a fixed step per turn.
+- `linear_skip` (needs the same side at both ends; not b != 0, not m >= 0), `linear_root`: the skip
+  and the clear crossing in `linear`.
+- `miss_margin`, `margin_budget`: a computed value past 1.6 tolerances means the exact one is past the
+  search's 1.5, given error at most tol / 10, and what `coaxial` admits plus rounding fits at model
+  size. That budget is why `coaxial` tightened from 1e-12 rad to 1e-13: 1e-12 over 1e6 mm does not fit.
+- `arc_square`, `arc_skip`, `arc_roots`: the arc pieces.
+- `slab`, `helix_plane_deriv`, `one_root_between` (needs only f' != 0 inside; not A > 0, not |G| < A),
+  `turning_points`: the helix against any plane.
+- `turns_covered` (needs step != 0): no turn left out. `nearest_turn`, `nearest_turn_clamped` (needs
+  step != 0): the fence's two candidates, as clamped in the code.
+- `between_boundary`, `column_ends`, `face_in_hull_of_boundary`: the face box. Needs only a compact
+  uv region and affinity in v: not connectedness, not simple connectivity, not a screw at all.
+- `bessel_two`, `shell_reading`: the plain miss. Needs e square to z and g > 0.
+- `Counter.lean`: why the needed ones are needed.
+
+Not proved: that the search and the closed form agree inside a stretch (they run the same search),
+and the first `misses` test's triangle bound (one line of triangle inequality).
 
 ## Rerun
 
@@ -111,4 +175,5 @@ fbuild cargo build --release -p forge-agent --example featcost
 python3 research/thread-math/fuzz/gen.py DIR 1 200
 python3 research/thread-math/fuzz/compare.py OLD_BIN NEW_BIN DIR
 python3 research/feature-costs/measure.py BIN research/thread-math/stress out.tsv seq 4 '^bench/'
+cd research/thread-math/lean; ln -s .../packages .lake/packages; lake build    # mathlib as in loft-ssi/shipped
 ```

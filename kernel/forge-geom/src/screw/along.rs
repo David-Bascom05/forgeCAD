@@ -6,6 +6,7 @@
 //! motion none. A meeting clear of everything decides the answer here; anything within a few
 //! tolerances of a section's end, a turn's end, the range's end, or another meeting, or that
 //! grazes, is searched for in just that stretch, so a touch stays what the search calls a touch.
+//! The solves and skips are proved in research/thread-math/lean.
 
 use super::{Fence, Helix, Screw};
 use crate::curve::Curve;
@@ -40,7 +41,8 @@ fn coaxial(g: &Frame, f: &Frame) -> Option<f64> {
     let z = f.z();
     let off = g.origin - f.origin;
     let s = z.dot(g.z().get());
-    (z.cross(g.z().get()).length() <= 1e-12 && (off - z * z.dot(off)).length() <= 1e-9).then_some(s.signum())
+    // what this lets through fits in `MISS`'s margin (lean: margin_budget)
+    (z.cross(g.z().get()).length() <= 1e-13 && (off - z * z.dot(off)).length() <= 1e-9).then_some(s.signum())
 }
 
 fn moving(c: &Curve, range: Interval, f: &Frame) -> Option<Moving> {
@@ -70,7 +72,7 @@ fn moving(c: &Curve, range: Interval, f: &Frame) -> Option<Moving> {
                 return None;
             }
             let (ex, ey) = (mx / r, my / r);
-            if (o.y * ex - o.x * ey).abs() > 1e-10 || (d.y * ex - d.x * ey).abs() > tol::ANGULAR {
+            if (o.y * ex - o.x * ey).abs() > 1e-9 || (d.y * ex - d.x * ey).abs() > 1e-13 {
                 return None;
             }
             Some(Moving {

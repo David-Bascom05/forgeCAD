@@ -60,9 +60,10 @@ impl Screw {
                 let n = Vec2::new(-d1.y, d1.x) / d1.length();
                 let (c, m) = (n.dot(w0), n.dot(wu));
                 if m.abs() <= 1e-12 {
-                    // the same surface: left to the general path
+                    // the same surface crosses itself nowhere (the tracer's seeds only found that
+                    // when none landed exactly on it)
                     if c.abs() <= tol::LINEAR {
-                        return None;
+                        return Some(SurfaceSurface::Empty);
                     }
                     continue;
                 }

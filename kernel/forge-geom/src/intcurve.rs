@@ -383,11 +383,17 @@ pub fn trace(a: &Surface, b: &Surface, region: Box3) -> Option<Vec<IntCurve>> {
         })
     };
     let boxed = pa.is_some() || pb.is_some();
+    // the cheap surface first: most cells are off it
+    let (first, second) = if matches!(a, Surface::Procedural(_)) {
+        (b, a)
+    } else {
+        (a, b)
+    };
     let mut stack = vec![(region.center(), half * 3f64.sqrt())];
     while let Some((c, r)) = stack.pop() {
         if (boxed && (!reaches(&pa, c, r) || !reaches(&pb, c, r)))
-            || a.implicit(c).abs() > r
-            || b.implicit(c).abs() > r
+            || first.implicit(c).abs() > r
+            || second.implicit(c).abs() > r
         {
             continue;
         }

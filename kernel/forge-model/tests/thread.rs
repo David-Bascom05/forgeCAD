@@ -553,3 +553,38 @@ fn straight_faces_lie_in_their_boxes() {
         }
     }
 }
+
+/// By the exact mass properties two more turns remove two turns of the form to a part in 1e6,
+/// outside and in, long fine pitches among them.
+#[test]
+fn a_turn_removes_exactly_the_form() {
+    let exact = |p: &Part| {
+        let s = p.regenerate_solids().expect("regen");
+        forge_topo::mass::mass(&s[0].body).expect("mass").volume
+    };
+    for (major, pitch) in [(6.0, 1.0), (12.0, 1.75), (20.0, 0.5)] {
+        let spec = ThreadSpec::Iso { major, pitch };
+        let h = 20.0 * pitch + 10.0;
+        let at = |len: f64| Part {
+            features: vec![
+                rod(major / 2.0, h),
+                thread(
+                    ThreadOn::Axis {
+                        at: top(h),
+                        spec,
+                        internal: false,
+                    },
+                    len,
+                    Handed::Right,
+                    false,
+                ),
+            ],
+        };
+        let got = exact(&at(8.0 * pitch)) - exact(&at(10.0 * pitch));
+        let want = 2.0 * dmath::TAU * groove_moment(major, pitch, false);
+        assert!(
+            (got - want).abs() < 1e-6 * want,
+            "M{major}x{pitch}: {got} vs {want}"
+        );
+    }
+}

@@ -531,11 +531,13 @@ impl Screw {
         let Some(Near { u, q, j, d, .. }) = self.nearest_turn(p).1 else {
             return Point2::new(self.u.mid(), 0.5);
         };
-        // a point of the surface reads its parameters straight off the turn's half plane
-        if d <= 1e-13 * (1.0 + q.x.abs() + q.y.abs()) && j == 0 {
-            let t = self.ring.pieces[0].s.frac(q);
-            if t > 0.0 && t < 1.0 {
-                return Point2::new(u, t);
+        // a point of the face reads its parameters straight off the turn's half plane
+        let exact = 1e-13 * (1.0 + q.x.abs() + q.y.abs());
+        if d <= exact {
+            let piece = &self.ring.pieces[0];
+            let (d0, np, _) = piece.dist(q);
+            if d0 <= exact * exact {
+                return Point2::new(u, piece.s.frac(np).clamp(0.0, 1.0));
             }
         }
         let solve = |j: usize, t: f64| {
@@ -715,6 +717,9 @@ impl Procedural for Screw {
     }
     fn gradient(&self, p: Point3) -> Vec3 {
         self.value(p).1
+    }
+    fn implicit_gradient(&self, p: Point3) -> (f64, Vec3) {
+        self.value(p)
     }
     fn transformed(&self, f: &Frame) -> Proc {
         let mut s = self.clone();
