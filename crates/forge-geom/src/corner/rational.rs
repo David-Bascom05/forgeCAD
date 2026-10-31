@@ -30,21 +30,23 @@ const CUT: f64 = 1e-6;
 /// A power of two at least CUT: the corner zones the ribbons alone are proven over.
 const ZONE: f64 = 1.0 / 524_288.0;
 
-fn binom(n: usize, k: usize) -> f64 {
-    static T: OnceLock<Vec<Vec<f64>>> = OnceLock::new();
-    let t = T.get_or_init(|| {
-        let mut t = vec![vec![1.0]];
-        for n in 1..=32 {
-            let p: &Vec<f64> = &t[n - 1];
-            let mut r = vec![1.0; n + 1];
-            for k in 1..n {
-                r[k] = p[k - 1] + p[k];
-            }
-            t.push(r);
+const BINOM: [[f64; 33]; 33] = {
+    let mut t = [[0.0; 33]; 33];
+    let mut n = 0;
+    while n < 33 {
+        t[n][0] = 1.0;
+        let mut k = 1;
+        while k <= n {
+            t[n][k] = t[n - 1][k - 1] + t[n - 1][k];
+            k += 1;
         }
-        t
-    });
-    t[n][k]
+        n += 1;
+    }
+    t
+};
+
+fn binom(n: usize, k: usize) -> f64 {
+    BINOM[n][k]
 }
 
 /// A polynomial on [0, 1] in Bernstein form.
@@ -635,7 +637,7 @@ fn tensor(sides: &[RSide]) -> ([Bp; 3], Bp) {
 }
 
 /// Room for the coefficients of a Duffy triangle's polynomials.
-const CAP: usize = (2 * DEG + 1) * (DEG + 2);
+const CAP: usize = (2 * DEG + 1) * (DEG + 3);
 
 /// A polynomial over [0, 1]^2 in tensor Bernstein form, each coefficient within `e` of the true
 /// one (the rounding of its construction).
@@ -853,27 +855,40 @@ impl Bp {
         out.e = self.e + 3.0 * U * self.big();
         out
     }
-    /// self times the bilinear polynomial with these corner values ((0,0), (0,1), (1,0), (1,1)):
-    /// B_i^m B_a^1 = ((i + a) / (m + 1) or (m + 1 - i) / (m + 1)) B_(i+a)^(m+1), each way.
-    fn mul_bilinear(&self, f: [f64; 4]) -> Bp {
+    /// self times a polynomial of degree (a, b) given by its coefficients, row by row: in the
+    /// scaled basis (coefficients times binomials) a product is a plain convolution.
+    fn mul_small(&self, a: usize, b: usize, f: &[f64]) -> Bp {
         let (m, n) = (self.m, self.n);
-        let mut out = Bp::zero(m + 1, n + 1);
-        let (km, kn) = (1.0 / (m + 1) as f64, 1.0 / (n + 1) as f64);
-        let w = n + 2;
-        for i in 0..=m {
-            let (u0, u1) = ((m + 1 - i) as f64 * km, (i + 1) as f64 * km);
-            for j in 0..=n {
-                let c = self.c[i * (n + 1) + j];
-                let (v0, v1) = ((n + 1 - j) as f64 * kn * c, (j + 1) as f64 * kn * c);
-                let (r0, r1) = (i * w + j, (i + 1) * w + j);
-                out.c[r0] += u0 * v0 * f[0];
-                out.c[r0 + 1] += u0 * v1 * f[1];
-                out.c[r1] += u1 * v0 * f[2];
-                out.c[r1 + 1] += u1 * v1 * f[3];
+        let (mo, no) = (m + a, n + b);
+        let mut out = Bp::zero(mo, no);
+        let w = no + 1;
+        let mut fs = [0.0; 9];
+        for p in 0..=a {
+            for q in 0..=b {
+                fs[p * (b + 1) + q] = f[p * (b + 1) + q] * BINOM[a][p] * BINOM[b][q];
             }
         }
-        let fm = f.iter().fold(0.0f64, |a, &x| a.max(x.abs()));
-        out.e = (self.e + 8.0 * U * self.big()) * fm;
+        for i in 0..=m {
+            let ri = BINOM[m][i];
+            for j in 0..=n {
+                let c = self.c[i * (n + 1) + j] * ri * BINOM[n][j];
+                for p in 0..=a {
+                    let row = (i + p) * w + j;
+                    let fr = &fs[p * (b + 1)..(p + 1) * (b + 1)];
+                    for (q, &fq) in fr.iter().enumerate() {
+                        out.c[row + q] += c * fq;
+                    }
+                }
+            }
+        }
+        for i in 0..=mo {
+            let ri = 1.0 / BINOM[mo][i];
+            for j in 0..=no {
+                out.c[i * w + j] *= ri / BINOM[no][j];
+            }
+        }
+        let fm = f.iter().fold(0.0f64, |acc, &x| acc.max(x.abs()));
+        out.e = (self.e + ((a + 1) * (b + 1) + 8) as f64 * 4.0 * U * self.big()) * fm;
         out
     }
     fn lower(&self) -> f64 {
@@ -1041,7 +1056,7 @@ impl Quad {
                 let w = part(&rw);
                 let n: [Bp; 3] = std::array::from_fn(|k| part(&rn[k].sub_scaled(&rw, [pc.x, pc.y, pc.z][k])));
                 st.regions += 1;
-                if !plain_box(&n, &w, st) {
+                if !plain_region(&n, &w, 0, st) {
                     return false;
                 }
             }
@@ -1091,16 +1106,10 @@ impl Quad {
             let g: [Bp; 3] = std::array::from_fn(|k| t(&n[k]).duffy().div_rows(3));
             let wt = t(&w).duffy().div_rows(2);
             st.regions += 1;
-            let Some(phi) = normal_phi(&wt) else {
+            let Some(phi) = normal_phi(&wt, 1) else {
                 return false;
             };
-            duffy_region(
-                &g.map(|p| p.mul_bilinear(phi)),
-                &wt.mul_bilinear(phi),
-                (0.0, 1.0),
-                0,
-                st,
-            )
+            duffy_region(&g.map(|p| times(&p, &phi)), &times(&wt, &phi), (0.0, 1.0), 0, st)
         })
     }
 
@@ -1181,20 +1190,66 @@ fn separated(x1: &[Bp; 3], x2: Option<&[Bp; 3]>, w: &Bp) -> bool {
         && beta + dmath::atan(b.1) - dmath::atan(a.0) < dmath::PI - slack
 }
 
-/// Phi, bilinear with 1 / W at the box's corners: W phi is nearly constant over the box and its
-/// parts, so the shift (P - q) (W phi)_u is of second order in a part's size. P = X phi / W phi.
-fn normal_phi(w: &Bp) -> Option<[f64; 4]> {
+/// Phi, biquadratic with 1 / W at the box's corners, edges' middles and middle (or bilinear
+/// through the corners when that is not positive): W phi is nearly constant over the box and its
+/// parts, so the shift (P - q) (W phi)_u is small. P = X phi / W phi.
+fn normal_phi(w: &Bp, order: usize) -> Option<(usize, Vec<f64>)> {
     let (m, n) = (w.m, w.n);
-    let corners = [w.at(0, 0), w.at(0, n), w.at(m, 0), w.at(m, n)];
-    corners.iter().all(|&c| c > 0.0).then(|| corners.map(|c| 1.0 / c))
+    // W at u = 0, 1/2, 1 (rows of coefficients in v), each at v = 0, 1/2, 1
+    let mid = w.half(true, 0);
+    let mut f = [[0.0; 3]; 3];
+    for (i, row) in [
+        &w.c[..=n],
+        &mid.c[m * (n + 1)..=m * (n + 1) + n],
+        &w.c[m * (n + 1)..=m * (n + 1) + n],
+    ]
+    .into_iter()
+    .enumerate()
+    {
+        let mut c = [0.0; 2 * DEG + 2];
+        c[..=n].copy_from_slice(row);
+        for r in 1..=n {
+            for k in 0..=n - r {
+                c[k] = 0.5 * (c[k] + c[k + 1]);
+            }
+        }
+        f[i] = [row[0], c[0], row[n]];
+    }
+    if f.iter().flatten().any(|&v| v <= 0.0) {
+        return None;
+    }
+    let f = f.map(|r| r.map(|v| 1.0 / v));
+    // the quadratic through f0, f1/2, f1 has the middle coefficient 2 f1/2 - (f0 + f1) / 2
+    let mid = |a: f64, m: f64, b: f64| 2.0 * m - 0.5 * (a + b);
+    let rows: Vec<[f64; 3]> = f.iter().map(|r| [r[0], mid(r[0], r[1], r[2]), r[2]]).collect();
+    let c: Vec<f64> = (0..3)
+        .flat_map(|i| (0..3).map(move |j| (i, j)))
+        .map(|(i, j)| {
+            if i == 1 {
+                mid(rows[0][j], rows[1][j], rows[2][j])
+            } else {
+                rows[i][j]
+            }
+        })
+        .collect();
+    if order == 2 && c.iter().all(|&x| x > 0.0) {
+        Some((2, c))
+    } else {
+        Some((1, vec![f[0][0], f[0][2], f[2][0], f[2][2]]))
+    }
+}
+
+/// X times phi.
+fn times(x: &Bp, phi: &(usize, Vec<f64>)) -> Bp {
+    x.mul_small(phi.0, phi.0, &phi.1)
 }
 
 /// P = N / W regular over the box; boxes that fail are split in four.
 fn plain_box(n: &[Bp; 3], w: &Bp, st: &mut Proof) -> bool {
-    let Some(phi) = normal_phi(w) else {
+    let Some(phi) = normal_phi(w, 2) else {
         return false;
     };
-    plain_region(&n.map(|p| p.mul_bilinear(phi)), &w.mul_bilinear(phi), 0, st)
+    plain_region(&n.map(|p| times(&p, &phi)), &times(w, &phi), 0, st)
 }
 
 fn plain_region(n: &[Bp; 3], w: &Bp, depth: u32, st: &mut Proof) -> bool {

@@ -454,7 +454,10 @@ pub enum CornerError {
 }
 
 /// Most sides a hole may have.
-pub const MAX_SIDES: usize = 20;
+pub const MAX_SIDES: usize = 12;
+
+/// Most sides a hole closed by rational quads may have.
+pub const MAX_RATIONAL_SIDES: usize = 20;
 
 /// How a hole closes.
 #[derive(Clone, Debug)]
@@ -842,12 +845,13 @@ fn vertex(sides: &[Side], k: usize) -> Option<(Point3, Vec3, Vec3)> {
 }
 
 /// Spokes from these (smooth) vertices to a centre: the centre, the spokes, and their rails.
-/// With `like`, a patch over the hole, the centre is its middle and the spokes are cubics
-/// leaving along the halving directions; else parabolas.
+/// With `like`, a patch over the hole, the centre is its middle. `cubic` spokes leave along the
+/// halving directions; the others are parabolas.
 #[allow(clippy::type_complexity)]
 fn spokes(
     sides: &[Side],
     at: &[usize],
+    cubic: bool,
     like: Option<&HolePatch>,
 ) -> Result<(Point3, Vec<Spoke>, Vec<(Arc<dyn Rail>, Interval)>), CornerError> {
     let m = sides.len();
@@ -868,7 +872,7 @@ fn spokes(
         let (v, nv, dir) = vertex(sides, k % m).ok_or(CornerError::Orientation(k % m))?;
         let l = v.distance(c);
         let toward = (v - c) - nc * (v - c).dot(nc);
-        if like.is_some() {
+        if cubic {
             // a third of the way along the halving direction, and straight toward the vertex
             let e = toward.normalize().ok_or(CornerError::Folded)?.get();
             let ctrl = [v, v + dir * (l / 3.0), c + e * (l / 3.0), c];
@@ -936,7 +940,7 @@ fn split(sides: &[Side]) -> Result<Patches, CornerError> {
     if at.len() < 3 {
         return Err(CornerError::Orientation(start));
     }
-    let (c, spokes, rails) = spokes(sides, &at, None)?;
+    let (c, spokes, rails) = spokes(sides, &at, false, None)?;
     let mut pieces = Vec::with_capacity(at.len());
     for i in 0..at.len() {
         let (ps, first, count) = piece_sides(sides, &at, &rails, i);
@@ -956,7 +960,7 @@ fn split(sides: &[Side]) -> Result<Patches, CornerError> {
 /// plane, cylinder or sphere, or a proof fails.
 fn rational_patches(sides: &[Side], parity: usize) -> Option<(Patches, RationalProof)> {
     let m = sides.len();
-    if m < 4 || m > MAX_SIDES || m % 2 == 1 {
+    if m < 4 || m > MAX_RATIONAL_SIDES || m % 2 == 1 {
         return None;
     }
     let mut proof = RationalProof {
@@ -977,8 +981,8 @@ fn rational_patches(sides: &[Side], parity: usize) -> Option<(Patches, RationalP
         return take(&p).then_some((Patches::One(p), proof));
     }
     let at: Vec<usize> = (0..m / 2).map(|i| 2 * i + parity).collect();
-    let like = HolePatch::with_domain(sides.to_vec(), 1.0);
-    let (c, spokes, rails) = spokes(sides, &at, Some(&like)).ok()?;
+    let like = (m <= MAX_SIDES).then(|| HolePatch::with_domain(sides.to_vec(), 1.0));
+    let (c, spokes, rails) = spokes(sides, &at, true, like.as_ref()).ok()?;
     let mut pieces = Vec::with_capacity(at.len());
     for i in 0..at.len() {
         let (ps, first, count) = piece_sides(sides, &at, &rails, i);
@@ -1016,8 +1020,8 @@ pub fn close_hole_rational(sides: Vec<Side>) -> Option<(Closing, RationalProof)>
 pub fn rational_quads(sides: &[Side], parity: usize) -> Option<Vec<HolePatch>> {
     let m = sides.len();
     let at: Vec<usize> = (0..m / 2).map(|i| 2 * i + parity).collect();
-    let like = HolePatch::with_domain(sides.to_vec(), 1.0);
-    let (_, _, rails) = spokes(sides, &at, Some(&like)).ok()?;
+    let like = (m <= MAX_SIDES).then(|| HolePatch::with_domain(sides.to_vec(), 1.0));
+    let (_, _, rails) = spokes(sides, &at, true, like.as_ref()).ok()?;
     (0..at.len())
         .map(|i| HolePatch::quad(piece_sides(sides, &at, &rails, i).0))
         .collect()
@@ -1120,6 +1124,8 @@ pub struct HolePatch {
     seeds: Vec<(Point2, Point3)>,
     scale: (f64, f64),
     min_radius: f64,
+    /// Whether at some corner the sides' normals differ.
+    kinked: bool,
     fold: bool,
     /// The rational form, when it replaces the ribbons.
     rational: Option<Arc<rational::Quad>>,
@@ -1178,6 +1184,11 @@ impl HolePatch {
 
     fn with_corners(sides: Vec<Side>, corners: Vec<Point2>, side_len: f64) -> HolePatch {
         let n = sides.len();
+        let kinked = (0..n).any(|i| {
+            let (a, b) = (&sides[(i + n - 1) % n], &sides[i]);
+            let (na, nb) = (a.rail.point(a.t1).1, b.rail.point(b.t0).1);
+            na.dot(nb) < (1.0 - 1e-9) * na.length() * nb.length()
+        });
         let lines: Vec<(Vec2, f64)> = (0..n)
             .map(|i| {
                 let (a, b) = (corners[i], corners[(i + 1) % n]);
@@ -1239,6 +1250,7 @@ impl HolePatch {
             seeds: Vec::new(),
             scale: (1.0, 1.0),
             min_radius: 1.0,
+            kinked,
             fold: false,
             rational: None,
         }
@@ -1900,6 +1912,7 @@ impl Procedural for HolePatch {
                 .collect(),
             scale: self.scale,
             min_radius: self.min_radius,
+            kinked: self.kinked,
             fold: self.fold,
             rational: self.rational.as_ref().map(|r| Arc::new(r.transformed(f))),
         }))
@@ -1907,8 +1920,10 @@ impl Procedural for HolePatch {
     fn uv_scale(&self) -> (f64, f64) {
         self.scale
     }
+    /// None (zero) round a corner where the sides' normals differ: the normal turns there in no
+    /// distance. Elsewhere sampled, as the domain is sized by it.
     fn min_radius(&self) -> f64 {
-        self.min_radius
+        if self.kinked { 0.0 } else { self.min_radius }
     }
 }
 
