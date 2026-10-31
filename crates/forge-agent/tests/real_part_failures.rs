@@ -675,7 +675,6 @@ thicken 1.5 (faces of flange normal -x)\n",
 /// edit Rebuild(Vertex): replace the top face of a block whose pocket rim is rounded; without the
 /// round it builds
 #[test]
-#[ignore = "B6: kernel failure, see the comment"]
 fn replace_face_by_round() {
     holds(
         "\
@@ -684,13 +683,12 @@ cav: extrude cut 14 -xy at 0 0 40 rect -40 -25 80 50
 fillet 2 (edges of cav top)
 part: plane at 0 0 36
 replace (faces of blk normal +z) with part\n",
-        false,
+        true,
     );
 }
 
 /// edit Rebuild(Vertex): move a pocket floor up 1 after its edges are filleted; before, it builds
 #[test]
-#[ignore = "B7: kernel failure, see the comment"]
 fn move_face_by_blend() {
     holds(
         "\
@@ -698,14 +696,13 @@ blk: extrude 40 rect -60 -40 120 80
 cav: extrude cut 14 -xy at 0 0 40 rrect -40 -25 80 50 8
 fillet 2 (edges of cav bottom)
 move (faces of cav normal +z) by 0 0 1\n",
-        false,
+        true,
     );
 }
 
 /// edit Rebuild(Edge): offset a rect pocket's walls, floor and floor fillet; a rounded-rect
 /// pocket builds
 #[test]
-#[ignore = "B8: kernel failure, see the comment"]
 fn offset_pocket_with_floor_round() {
     holds(
         "\
@@ -713,7 +710,7 @@ blk: extrude 40 rect -60 -40 120 80
 cav: extrude cut 14 -xy at 0 0 40 rect -40 -25 80 50
 fl: fillet 2 (edges of cav bottom)
 offset -0.3 (faces of cav) (faces of fl)\n",
-        false,
+        true,
     );
 }
 

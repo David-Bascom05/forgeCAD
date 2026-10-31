@@ -8,9 +8,9 @@ blk: extrude 40 rect -60 -40 120 80
 cav: extrude cut 14 -xy at 0 0 40 rrect -40 -25 80 50 8
 part: plane at 0 0 pl
 replace (faces of blk normal +z) with part
-# the floor up 1 for a thicker lid (TODO: after the fillet, as the change came, once regression move_face_by_blend holds)
-move (faces of cav normal +z) by 0 0 1
 fl: fillet 2 (edges of cav bottom)
+# the floor up 1 for a thicker lid, after the fillet, as the change came
+move (faces of cav normal +z) by 0 0 1
 offset -shrink (faces of cav) (faces of fl)
 core: extrude 8 xy at 20 0 26 circle 0 0 4
 # the cored hole in the lid dropped: its core pin goes, the floor healed
