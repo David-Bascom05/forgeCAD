@@ -14,8 +14,9 @@
 //! a part grown to thousands of faces.
 
 use crate::boolean::{
-    BoolError, Cut, FREE, Imprint, Op, Piece, R, Seg, Side, Touch, VKey, Walk, branches_meet, crossings_near,
-    edge_split, grown_tols, imprint, local_class, on_edge, overlap, settle, split_face, touches, trim,
+    BoolError, Cut, CutOn, Imprint, Op, Piece, R, Seg, Side, Touch, VKey, Walk, branches_meet,
+    crossings_near, edge_split, grown_tols, imprint, local_class, on_edge, overlap, settle, split_face,
+    touches, trim,
 };
 use crate::classify::{Index, Where};
 use crate::shape::{Member, Shape};
@@ -758,12 +759,13 @@ pub fn nary_with(
         cluster.push(id_of_root[r]);
     }
     let mut olds: Vec<Vec<VKey>> = vec![Vec::new(); heads.len()];
-    for (i, c) in cuts.iter().enumerate().filter(|(_, c)| c.side != FREE) {
-        let edge = tools[c.side].edge(c.edge);
+    for (i, c) in cuts.iter().enumerate() {
+        let Some((sd, e)) = c.on.edge() else { continue };
+        let edge = tools[sd].edge(e);
         for v in [edge.start, edge.end] {
-            let vx = tools[c.side].vertex(v);
+            let vx = tools[sd].vertex(v);
             if vx.point.distance(c.point) <= vx.tol.max(c.tol) {
-                olds[cluster[i]].push(VKey::Old(c.side, v));
+                olds[cluster[i]].push(VKey::Old(sd, v));
                 break;
             }
         }
@@ -811,9 +813,9 @@ pub fn nary_with(
     for (c, &k) in cuts.iter().zip(&cut_vertex) {
         if let VKey::New(i) = k
             && !ended[i as usize]
-            && c.side != FREE
+            && let Some((sd, e)) = c.on.edge()
         {
-            marks.push((i, tools[c.side].edge(c.edge).name));
+            marks.push((i, tools[sd].edge(e).name));
         }
     }
     let vnames = crate::boolean::vertex_names(&points, marks, root);
@@ -824,9 +826,9 @@ pub fn nary_with(
         let mut through: Vec<Vec<(&Curve, Interval)>> = vec![Vec::new(); points.len()];
         for (c, &k) in cuts.iter().zip(&cut_vertex) {
             if let VKey::New(i) = k
-                && c.side != FREE
+                && let Some((sd, e)) = c.on.edge()
             {
-                let edge = tools[c.side].edge(c.edge);
+                let edge = tools[sd].edge(e);
                 through[i as usize].push((&edge.curve, edge.range));
             }
         }
@@ -862,11 +864,12 @@ pub fn nary_with(
     let at_cut = par_map(cuts.len(), threads, 64, |i| {
         let c = &cuts[i];
         let p = key_point(cut_vertex[i]);
-        let s = if c.side == FREE {
-            c.s
-        } else {
-            let edge = tools[c.side].edge(c.edge);
-            edge.curve.closest(p, edge.range)
+        let s = match c.on {
+            CutOn::Free => c.s,
+            CutOn::Edge(sd, e) => {
+                let edge = tools[sd].edge(e);
+                edge.curve.closest(p, edge.range)
+            }
         };
         (p, s)
     });
@@ -936,8 +939,7 @@ pub fn nary_with(
     let mut by_edge: Vec<(Side, EdgeId, usize)> = cuts
         .iter()
         .enumerate()
-        .filter(|(_, c)| c.side != FREE)
-        .map(|(i, c)| (c.side, c.edge, i))
+        .filter_map(|(i, c)| c.on.edge().map(|(sd, e)| (sd, e, i)))
         .collect();
     by_edge.sort_unstable();
     let mut pieces = Pieces {

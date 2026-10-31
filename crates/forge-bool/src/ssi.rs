@@ -1,5 +1,5 @@
 use forge_geom::intersect::{Contact, SurfaceSurface, plane_surface};
-use forge_geom::{Circle, Curve, Cylinder, Line, Sphere, Surface};
+use forge_geom::{Circle, Curve, Cylinder, Ellipse, Line, Sphere, Surface};
 use forge_math::{Box3, Frame, tol};
 
 /// Intersection of two surfaces within `region`: closed form where the pair
@@ -43,12 +43,12 @@ pub fn coincident(a: &Surface, b: &Surface) -> bool {
     }
 }
 
-/// Parallel axes give lines (or the same cylinder); anything else is a
-/// quartic space curve, left to the general path.
+/// Parallel axes give lines (or the same cylinder), equal ones with crossing axes two
+/// ellipses; anything else is a quartic space curve, left to the general path.
 fn cylinder_cylinder(c: &Cylinder, d: &Cylinder) -> SurfaceSurface {
     let a = c.frame.z();
     if a.cross(d.frame.z()).length() > tol::ANGULAR {
-        return SurfaceSurface::NotAnalytic;
+        return equal_crossing(c, d).unwrap_or(SurfaceSurface::NotAnalytic);
     }
     // work in c's cross-section plane
     let off = d.frame.origin - c.frame.origin;
@@ -80,6 +80,38 @@ fn cylinder_cylinder(c: &Cylinder, d: &Cylinder) -> SurfaceSurface {
         (Curve::Line(Line::new(at(-h), dir)), Contact::Crossing),
         (Curve::Line(Line::new(at(h), dir)), Contact::Crossing),
     ])
+}
+
+/// Equal cylinders whose axes cross (a T or + drilling) meet in two ellipses, in the planes
+/// through the crossing that bisect the axes, centred on it: each plane holds the common
+/// perpendicular, along which both ellipses reach r, where they cross and the cylinders touch.
+fn equal_crossing(c: &Cylinder, d: &Cylinder) -> Option<SurfaceSurface> {
+    let r = c.radius;
+    let (a, b) = (c.frame.z().get(), d.frame.z().get());
+    let n = a.cross(b);
+    let w = d.frame.origin - c.frame.origin;
+    let len = n.length();
+    if (r - d.radius).abs() > tol::LINEAR || (w.dot(n) / len).abs() > tol::LINEAR {
+        return None;
+    }
+    let o = c.frame.origin + a * (w.cross(b).dot(n) / (len * len));
+    let m = n / len;
+    let mut out = Vec::with_capacity(2);
+    for u in [a + b, a - b] {
+        let x = u.normalize()?.get();
+        // a point x t from the crossing is t |x × a| from either axis
+        let frame = Frame::from_axes(o, x, m, x.cross(m))?;
+        let major = r / x.cross(a).length();
+        out.push((
+            Curve::Ellipse(Ellipse {
+                frame,
+                major,
+                minor: r,
+            }),
+            Contact::Crossing,
+        ));
+    }
+    Some(SurfaceSurface::Curves(out))
 }
 
 fn sphere_sphere(s: &Sphere, t: &Sphere) -> SurfaceSurface {

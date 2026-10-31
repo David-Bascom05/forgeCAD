@@ -3665,3 +3665,52 @@ fn cylinder_tangent_to_top_and_wall_inside() {
     }
     assert!((volume(&keep) - 40.0 * r2).abs() < 5.0);
 }
+
+/// Equal rods whose axes cross meet in two ellipses that cross where the rods touch. With the
+/// rods' seams away from there, kept curve pieces end at free vertices (on no edge), whose
+/// naming once panicked. The common part is the Steinmetz solid, 16 r^3 / 3.
+#[test]
+fn equal_rods_crossing_end_pieces_at_free_vertices() {
+    use forge_math::{Frame, Point3, Vec3};
+    let rod = |dir: Vec3, op: Combine| Feature::Extrude {
+        profile: Profile {
+            plane: Frame::from_zx(
+                Point3::ORIGIN - dir * 20.0,
+                dir.normalize().unwrap(),
+                Vec3::new(0.3, -0.2, 0.9),
+            )
+            .unwrap(),
+            loops: vec![Profile::circle(Point2::ORIGIN, 3.0, 0)],
+        },
+        extent: Extent::Distance(40.0),
+        op,
+    };
+    let (v, common) = (forge_math::dmath::PI * 9.0 * 40.0, 16.0 * 27.0 / 3.0);
+    for (op, want) in [
+        (Combine::Add, 2.0 * v - common),
+        (Combine::Cut, v - common),
+        (Combine::Keep, common),
+    ] {
+        let part = Part {
+            features: vec![rod(Vec3::X, Combine::New), rod(Vec3::new(0.0, 0.6, 0.8), op)],
+        };
+        for b in [
+            part.regenerate(),
+            part.regenerate_nary(1),
+            part.regenerate_nary(2),
+        ] {
+            let b = b.expect("regenerates");
+            assert!(
+                forge_topo::check(&b).is_empty(),
+                "{op:?}: {:?}",
+                forge_topo::check(&b)
+            );
+            let q = forge_mesh::Quality {
+                chord: 0.001,
+                max_angle: 0.05,
+            };
+            let got = forge_mesh::tessellate(&b, &q).expect("meshes").volume();
+            assert!((got - want).abs() < 1e-3 * want, "{op:?}: {got} vs {want}");
+        }
+    }
+}

@@ -335,3 +335,56 @@ fn overlapping_shells_are_invalid() {
     assert_eq!(void.shells.len(), 2);
     valid(&void);
 }
+
+/// Equal cylinders whose axes cross meet in two ellipses crossing where the cylinders touch.
+/// Their common part is the Steinmetz solid, 16 r^3 / (3 sin a) for axes at angle a.
+#[test]
+fn equal_cylinders_crossing() {
+    let (r, len) = (3.0, 40.0);
+    let rod_along = |o: Point3, dir: Vec3, feature: u64| {
+        let plane = Frame::from_zx(
+            o - dir * (len / 2.0),
+            dir.normalize().unwrap(),
+            Vec3::new(0.3, -0.2, 0.9),
+        )
+        .unwrap();
+        extrude(
+            &Profile {
+                plane,
+                loops: vec![Profile::circle(Point2::ORIGIN, r, 0)],
+            },
+            len,
+            feature,
+        )
+        .unwrap()
+    };
+    let v = dmath::PI * r * r * len;
+    for deg in [90.0, 60.0, 35.0, 120.0] {
+        let a = deg * dmath::PI / 180.0;
+        let o = Point3::new(1.0, -2.0, 0.5);
+        let first = rod_along(o, Vec3::new(1.0, 0.0, 0.0), 1);
+        let (s, c) = dmath::sin_cos(a);
+        let second = rod_along(o, Vec3::new(c, s * 0.6, s * 0.8), 2);
+        let common = 16.0 * r * r * r / (3.0 * s);
+        for (op, want) in [
+            (Op::Union, 2.0 * v - common),
+            (Op::Subtract, v - common),
+            (Op::Intersect, common),
+        ] {
+            for nary in [false, true] {
+                let b = if nary {
+                    forge_bool::nary(&[&first, &second], &[op], 1)
+                } else {
+                    boolean(&first, &second, op, 3)
+                }
+                .unwrap_or_else(|e| panic!("{deg} {op:?} nary {nary}: {e:?}"));
+                valid(&b);
+                let got = volume(&b);
+                assert!(
+                    (got - want).abs() / want < 1e-3,
+                    "{deg} {op:?} nary {nary}: {got} vs {want}"
+                );
+            }
+        }
+    }
+}
