@@ -7,7 +7,7 @@ use crate::curve::{Curve, CurveDeriv, CurveGeom, Domain1};
 use crate::surface::{Domain2, Proc, Procedural, Sphere, SurfDeriv, Surface, SurfaceGeom};
 use forge_math::{Box2, Box3, Frame, Interval, Point2, Point3, Vec2, Vec3, dmath, linalg, tol};
 use std::ops::{Add, Mul, Sub};
-use std::sync::Arc;
+use std::sync::{Arc, OnceLock};
 
 mod rational;
 pub use rational::{Proof as RationalProof, clear_proof_cache};
@@ -1198,7 +1198,8 @@ pub struct HolePatch {
     side: f64,
     /// The largest distance from each side within the polygon.
     heights: Vec<f64>,
-    seeds: Vec<(Point2, Point3)>,
+    /// Points to start projection from, made on the first projection.
+    seeds: OnceLock<Vec<(Point2, Point3)>>,
     scale: (f64, f64),
     /// The sampled tightest radius of curvature: it sizes the domain and the mesh.
     radius: f64,
@@ -1394,7 +1395,6 @@ impl HolePatch {
         let k = (0.5 * (p.scale.0 + p.scale.1) / p.radius).clamp(1e-3, 1e3);
         let mut q = HolePatch::with_domain(sides, k);
         (q.scale, q.radius, q.fold) = ((p.scale.0 / k, p.scale.1 / k), p.radius, p.fold);
-        q.seed();
         Ok(q)
     }
 
@@ -1468,7 +1468,7 @@ impl HolePatch {
             rect,
             side: side_len,
             heights,
-            seeds: Vec::new(),
+            seeds: OnceLock::new(),
             scale: (1.0, 1.0),
             radius: 1.0,
             fold: false,
@@ -1592,7 +1592,7 @@ impl HolePatch {
             rect.u.include(c.x);
             rect.v.include(c.y);
         }
-        let mut p = HolePatch {
+        HolePatch {
             sides,
             corners: outline,
             lines,
@@ -1601,14 +1601,12 @@ impl HolePatch {
             rect,
             side: k,
             heights: Vec::new(),
-            seeds: Vec::new(),
+            seeds: OnceLock::new(),
             scale: (scale / k, scale / k),
             radius: rmin,
             fold: false,
             rational: Some(Arc::new(Cells { cells, pieces })),
-        };
-        p.seed();
-        p
+        }
     }
 
     /// The proof that the rational form never folds (None for the ribbon form).
@@ -1878,7 +1876,11 @@ impl HolePatch {
         self.fold
     }
 
-    fn seed(&mut self) {
+    fn seeds(&self) -> &[(Point2, Point3)] {
+        self.seeds.get_or_init(|| self.seed())
+    }
+
+    fn seed(&self) -> Vec<(Point2, Point3)> {
         let xs = match &self.rational {
             // each cell its own grid (the outline's rectangle leaves cells of a star thin)
             Some(r) => {
@@ -1895,7 +1897,7 @@ impl HolePatch {
             }
             _ => self.grid(12),
         };
-        self.seeds = xs.into_iter().map(|x| (x, self.point(x))).collect();
+        xs.into_iter().map(|x| (x, self.point(x))).collect()
     }
 }
 
@@ -2168,8 +2170,9 @@ impl Procedural for HolePatch {
         }
     }
     fn project(&self, p: Point3) -> Point2 {
-        let (mut x, mut f) = (self.seeds[0].0, f64::INFINITY);
-        for &(uv, q) in &self.seeds {
+        let seeds = self.seeds();
+        let (mut x, mut f) = (seeds[0].0, f64::INFINITY);
+        for &(uv, q) in seeds {
             let d = q.distance_sq(p);
             if d < f {
                 (x, f) = (uv, d);
@@ -2179,10 +2182,10 @@ impl Procedural for HolePatch {
             // the nearest seed may be across a seam from p's cell, where a tight quad can hold
             // a false minimum: from every cell's nearest seed within twice the nearest's distance
             let m = r.cells.len();
-            let per = self.seeds.len() / m;
+            let per = seeds.len() / m;
             let mut best = (f64::INFINITY, x);
             for c in 0..m {
-                let near = self.seeds[c * per..(c + 1) * per]
+                let near = seeds[c * per..(c + 1) * per]
                     .iter()
                     .map(|&(uv, q)| (q.distance_sq(p), uv))
                     .min_by(|a, b| a.0.total_cmp(&b.0))
@@ -2352,11 +2355,12 @@ impl Procedural for HolePatch {
             rect: self.rect,
             side: self.side,
             heights: self.heights.clone(),
-            seeds: self
-                .seeds
-                .iter()
-                .map(|&(x, p)| (x, f.point_to_world(p)))
-                .collect(),
+            seeds: OnceLock::from(
+                self.seeds()
+                    .iter()
+                    .map(|&(x, p)| (x, f.point_to_world(p)))
+                    .collect::<Vec<_>>(),
+            ),
             scale: self.scale,
             radius: self.radius,
             fold: self.fold,
