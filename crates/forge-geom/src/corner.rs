@@ -428,19 +428,288 @@ pub enum CornerError {
     /// Along side i the patch would not turn into the hole: the sides are not in order around
     /// it, or two neighbouring sides meet tangentially.
     Orientation(usize),
+    /// Every way of closing the hole folds.
+    Folded,
 }
 
 /// Most sides a hole may have.
 pub const MAX_SIDES: usize = 12;
 
-/// The surface for a hole: the sphere when a single ball fits it, else a `HolePatch`. The
-/// flag is whether the surface's natural normal is the outward one.
-pub fn corner_surface(sides: Vec<Side>) -> Result<(Surface, bool), CornerError> {
+/// How a hole closes.
+#[derive(Clone, Debug)]
+pub enum Closing {
+    /// One surface; the flag is whether its natural normal is the outward one.
+    One(Surface, bool),
+    /// Patches round a centre point. `spokes` run from hole vertices (vertex k starts side k)
+    /// to the centre; piece (surface, first, count) is bounded by sides first .. first + count
+    /// (cyclic), the spoke from the vertex after them and the spoke back to vertex `first`.
+    /// Each surface's natural normal is the outward one.
+    Split {
+        centre: Point3,
+        spokes: Vec<(usize, Curve, Interval)>,
+        pieces: Vec<(Surface, usize, usize)>,
+    },
+}
+
+/// The surfaces for a hole: the sphere when a single ball fits it, else one `HolePatch`, or
+/// when that would fold, `HolePatch`es round a centre point. All meet the sides and each
+/// other with G1 by construction.
+pub fn close_hole(sides: Vec<Side>) -> Result<Closing, CornerError> {
     if let Some((s, same)) = fit_sphere(&sides) {
-        return Ok((Surface::Sphere(s), same));
+        return Ok(Closing::One(Surface::Sphere(s), same));
     }
-    let p = HolePatch::new(sides)?;
-    Ok((Surface::Procedural(Proc(Arc::new(p))), true))
+    let proc = |p: HolePatch| Surface::Procedural(Proc(Arc::new(p)));
+    Ok(match patches(sides)? {
+        Patches::One(p) => Closing::One(proc(p), true),
+        Patches::Split(centre, spokes, pieces) => Closing::Split {
+            centre,
+            spokes,
+            pieces: pieces.into_iter().map(|(p, a, b)| (proc(p), a, b)).collect(),
+        },
+    })
+}
+
+type Spoke = (usize, Curve, Interval);
+
+enum Patches {
+    One(HolePatch),
+    Split(Point3, Vec<Spoke>, Vec<(HolePatch, usize, usize)>),
+}
+
+fn patches(sides: Vec<Side>) -> Result<Patches, CornerError> {
+    let p = HolePatch::new(sides.clone())?;
+    if !p.folded() {
+        return Ok(Patches::One(p));
+    }
+    split(&sides)
+}
+
+/// The audit of every patch closing a hole (worst of each measure), and how many there are;
+/// None for the sphere. `split` splits it whether or not one patch would do.
+#[doc(hidden)]
+pub fn audit_hole(
+    sides: Vec<Side>,
+    seed: u64,
+    split_it: bool,
+) -> Result<Option<(Audit, usize)>, CornerError> {
+    if fit_sphere(&sides).is_some() {
+        return Ok(None);
+    }
+    let found = if split_it { split(&sides)? } else { patches(sides)? };
+    let list = match found {
+        Patches::One(p) => vec![p],
+        Patches::Split(_, _, pieces) => pieces.into_iter().map(|x| x.0).collect(),
+    };
+    let mut w = Audit {
+        fold: f64::INFINITY,
+        ..Audit::default()
+    };
+    for p in &list {
+        let a = audit(p, seed);
+        w.boundary = w.boundary.max(a.boundary);
+        w.normal = w.normal.max(a.normal);
+        w.derivs = w.derivs.max(a.derivs);
+        w.project = w.project.max(a.project);
+        w.bbox_misses += a.bbox_misses;
+        w.fold = w.fold.min(a.fold);
+    }
+    Ok(Some((w, list.len())))
+}
+
+/// A spoke of a split hole: a curve from a hole vertex to the centre, with the outward normal
+/// w / |w|, w = m (p'.p') - p' (p'.m), square to the curve and turning with m, which runs
+/// linearly from the vertex's normal to the centre's. The curve is a parabola (or a line), so
+/// p' = a + b t and w is a cubic in t.
+#[derive(Clone, Debug)]
+struct SpokeRail {
+    curve: Curve,
+    a: Vec3,
+    b: Vec3,
+    m0: Vec3,
+    m1: Vec3,
+}
+
+impl SpokeRail {
+    fn new(curve: Curve, range: Interval, n0: Vec3, n1: Vec3) -> SpokeRail {
+        let d = curve.deriv(range.lo);
+        let m1 = (n1 - n0) / range.width();
+        SpokeRail {
+            a: d.d1 - d.d2 * range.lo,
+            b: d.d2,
+            m0: n0 - m1 * range.lo,
+            m1,
+            curve,
+        }
+    }
+}
+
+impl Rail for SpokeRail {
+    fn jet(&self, t: f64) -> RailJet {
+        let c = self.curve.deriv(t);
+        let (p1, p2) = (c.d1, c.d2);
+        let m = self.m0 + self.m1 * t;
+        let (s, s1, s2) = (p1.dot(p1), 2.0 * p1.dot(p2), 2.0 * p2.dot(p2));
+        let (k, k1, k2) = (p1.dot(m), p2.dot(m) + p1.dot(self.m1), 2.0 * p2.dot(self.m1));
+        let w = m * s - p1 * k;
+        let w1 = self.m1 * s + m * s1 - p2 * k - p1 * k1;
+        let w2 = self.m1 * (2.0 * s1) + m * s2 - p2 * (2.0 * k1) - p1 * k2;
+        let (n, dn, ddn) = unit_jet(w, w1, w2);
+        RailJet {
+            p: c.p,
+            dp: p1,
+            ddp: p2,
+            dddp: Vec3::ZERO,
+            n,
+            dn,
+            ddn,
+        }
+    }
+    fn bound(&self, t: Interval) -> RailBound {
+        let lin = |a: Vec3, b: Vec3| [t * b.x + a.x, t * b.y + a.y, t * b.z + a.z];
+        let (p1, m) = (lin(self.a, self.b), lin(self.m0, self.m1));
+        let (s, k) = (idot(p1, p1), idot(p1, m));
+        let w: IVec = std::array::from_fn(|i| m[i] * s - p1[i] * k);
+        let len = (w[0].sqr() + w[1].sqr() + w[2].sqr()).sqrt();
+        let n = if len.lo > 0.0 {
+            w.map(|c| meet(c.div(&len), UNIT))
+        } else {
+            [UNIT; 3]
+        };
+        RailBound {
+            p: self.curve.bbox(t),
+            n: ibox(n),
+            dp: ibox(p1),
+        }
+    }
+    fn transformed(&self, f: &Frame) -> Arc<dyn Rail> {
+        let v = |x: Vec3| f.vec_to_world(x);
+        Arc::new(SpokeRail {
+            curve: self.curve.transformed(f),
+            a: v(self.a),
+            b: v(self.b),
+            m0: v(self.m0),
+            m1: v(self.m1),
+        })
+    }
+}
+
+/// A centre for a hole and its outward normal: along the mean normal from the mean boundary
+/// point, at the mean of each boundary sample's height and the height its tangent plane gives
+/// there (exact for a paraboloid).
+fn centre(sides: &[Side]) -> Option<(Point3, Vec3)> {
+    let mut samples = Vec::with_capacity(16 * sides.len());
+    for s in sides {
+        let w = s.chord_length() / 16.0;
+        for k in 0..16 {
+            let (p, n) = s.rail.point(s.at((k as f64 + 0.5) / 16.0));
+            samples.push((p, n, w));
+        }
+    }
+    let total: f64 = samples.iter().map(|x| x.2).sum();
+    let c0 = samples
+        .iter()
+        .fold(Point3::ORIGIN, |a, &(p, _, w)| a + p.to_vec() * (w / total));
+    let nc = samples
+        .iter()
+        .fold(Vec3::ZERO, |a, &(_, n, w)| a + n * w)
+        .normalize()?
+        .get();
+    let (mut h, mut wsum) = (0.0, 0.0);
+    for &(p, n, w) in &samples {
+        let cos = n.dot(nc);
+        if cos > 0.2 {
+            let (z, plane) = ((p - c0).dot(nc), (p - c0).dot(n) / cos);
+            h += 0.5 * (z + plane) * w * cos;
+            wsum += w * cos;
+        }
+    }
+    (wsum > 0.0).then(|| (c0 + nc * (h / wsum), nc))
+}
+
+/// The hole split into patches round a centre point. Spokes leave smooth vertices only, splitting the angle there; pieces take two sides each
+/// (one each for a hole of under six).
+fn split(sides: &[Side]) -> Result<Patches, CornerError> {
+    let m = sides.len();
+    let jet_at = |k: usize| {
+        let s = &sides[k % m];
+        (s.rail.jet(s.t0), s.t1 - s.t0)
+    };
+    // at vertex k: the point, the outward normal, and the direction halving the hole's angle
+    let vertex = |k: usize| -> Option<(Point3, Vec3, Vec3)> {
+        let (j, dt) = jet_at(k);
+        let prev = &sides[(k + m - 1) % m];
+        let pj = prev.rail.jet(prev.t1);
+        let n = j.n.normalize()?.get();
+        if pj.n.normalize()?.get().dot(n) < 1.0 - 1e-9 {
+            return None;
+        }
+        let ahead = (j.dp * dt).normalize()?.get();
+        let back = (pj.dp * (prev.t0 - prev.t1)).normalize()?.get();
+        let left = n.cross(ahead);
+        // the hole's angle at the vertex, from `ahead` round to `back` about n
+        let mut angle = dmath::atan2(back.dot(left), back.dot(ahead));
+        if angle <= 0.0 {
+            angle += dmath::TAU;
+        }
+        let (sn, cs) = dmath::sin_cos(0.5 * angle);
+        Some((j.p, n, ahead * cs + left * sn))
+    };
+    let step = if m >= 6 { 2 } else { 1 };
+    // spoke vertices every `step` sides from some smooth start; a non-smooth one is skipped to
+    // the next smooth vertex
+    let smooth: Vec<bool> = (0..m).map(|k| vertex(k).is_some()).collect();
+    let start = (0..m).find(|&k| smooth[k]).ok_or(CornerError::Orientation(0))?;
+    let mut at = vec![start];
+    loop {
+        let mut k = at[at.len() - 1] + step;
+        while k < start + m && !smooth[k % m] {
+            k += 1;
+        }
+        if k >= start + m {
+            break;
+        }
+        at.push(k);
+    }
+    if at.len() < 3 {
+        return Err(CornerError::Orientation(start));
+    }
+    let (c, nc) = centre(sides).ok_or(CornerError::Folded)?;
+    let mut spokes = Vec::with_capacity(at.len());
+    let mut rails: Vec<(Arc<dyn Rail>, Interval)> = Vec::with_capacity(at.len());
+    for &k in &at {
+        let (v, nv, dir) = vertex(k % m).expect("smooth vertex");
+        // the control point in both tangent planes, nearest halfway along the halving direction
+        // and leaving the centre straight toward the vertex
+        let l = v.distance(c);
+        let toward = (v - c) - nc * (v - c).dot(nc);
+        let target = (v + dir * (l / 3.0)).lerp(c + toward * (1.0 / 3.0), 0.5);
+        let (g, h) = (nv.dot(nc), 1.0 - nv.dot(nc) * nv.dot(nc));
+        let (ra, rb) = ((target - v).dot(nv), (target - c).dot(nc));
+        let q = if h > 1e-12 {
+            // target - a nv - b nc, with [1 g; g 1] [a b] = [ra rb]
+            let (a, b) = ((ra - g * rb) / h, (rb - g * ra) / h);
+            target - nv * a - nc * b
+        } else {
+            target - nv * ra
+        };
+        let (curve, range) = bezier_parabola(v, q, c).ok_or(CornerError::Orientation(k % m))?;
+        rails.push((Arc::new(SpokeRail::new(curve.clone(), range, nv, nc)), range));
+        spokes.push((k % m, curve, range));
+    }
+    let mut pieces = Vec::with_capacity(at.len());
+    for i in 0..at.len() {
+        let (first, next) = (at[i], if i + 1 < at.len() { at[i + 1] } else { at[0] + m });
+        let mut ps: Vec<Side> = (first..next).map(|k| sides[k % m].clone()).collect();
+        let (out, back) = (&rails[(i + 1) % at.len()], &rails[i]);
+        ps.push(Side::new(out.0.clone(), out.1.lo, out.1.hi));
+        ps.push(Side::new(back.0.clone(), back.1.hi, back.1.lo));
+        let p = HolePatch::new(ps)?;
+        if p.folded() {
+            return Err(CornerError::Folded);
+        }
+        pieces.push((p, first % m, next - first));
+    }
+    Ok(Patches::Split(c, spokes, pieces))
 }
 
 /// The sphere every side lies on with the sphere's normals, if there is one: the rolling
@@ -853,6 +1122,49 @@ impl HolePatch {
             }
         }
         out
+    }
+
+    /// Whether the patch folds over or creases: on a 16 x 16 grid over the domain, the normals
+    /// of neighbouring points turn by more than 60 degrees, away from corners where the sides'
+    /// normals differ (a cut edge's end), round which the normal turns by design.
+    fn folded(&self) -> bool {
+        let (m, n) = (16, self.sides.len());
+        let cell = self.rect.u.width().max(self.rect.v.width()) / m as f64;
+        let kinks: Vec<Point2> = (0..n)
+            .filter(|&i| {
+                let a = self.sides[(i + n - 1) % n]
+                    .rail
+                    .point(self.sides[(i + n - 1) % n].t1)
+                    .1;
+                let b = self.sides[i].rail.point(self.sides[i].t0).1;
+                a.dot(b) < (1.0 - 1e-9) * a.length() * b.length()
+            })
+            .map(|i| self.corners[i])
+            .collect();
+        let mut prev: Vec<Option<Vec3>> = vec![None; m + 1];
+        for i in 0..=m {
+            let mut left = None;
+            for (j, above) in prev.iter_mut().enumerate() {
+                let x = Point2::new(
+                    self.rect.u.lo + self.rect.u.width() * i as f64 / m as f64,
+                    self.rect.v.lo + self.rect.v.width() * j as f64 / m as f64,
+                );
+                let n = if self.inside(x) && kinks.iter().all(|k| k.distance(x) > 2.0 * cell) {
+                    let d = self.deriv(x);
+                    d.du.cross(d.dv).normalize().map(|u| u.get())
+                } else {
+                    None
+                };
+                if let Some(a) = n
+                    && [left, *above].into_iter().flatten().any(|b: Vec3| a.dot(b) < 0.5)
+                {
+                    return true;
+                }
+                *above = n;
+                left = n;
+            }
+        }
+        false
     }
 
     fn seed(&mut self) {
@@ -1772,13 +2084,12 @@ mod tests {
         for _ in 0..50 {
             let f = rand_frame(&mut rng);
             let r = rng.range(0.5, 20.0);
-            let (s, same) = corner_surface(octant(&f, r, true)).unwrap();
-            let Surface::Sphere(sp) = s else {
+            let Closing::One(Surface::Sphere(sp), same) = close_hole(octant(&f, r, true)).unwrap() else {
                 panic!("not a sphere")
             };
             assert!(same && (sp.radius - r).abs() < 1e-9 && sp.frame.origin.distance(f.origin) < 1e-9);
-            let (s, same) = corner_surface(octant(&f, r, false)).unwrap();
-            assert!(matches!(s, Surface::Sphere(_)) && !same);
+            let c = close_hole(octant(&f, r, false)).unwrap();
+            assert!(matches!(c, Closing::One(Surface::Sphere(_), false)));
         }
     }
 

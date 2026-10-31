@@ -88,6 +88,84 @@ pub fn apex_post(planes: &[(f64, f64)]) -> (Part, Vec<Point3>) {
     (part, mids)
 }
 
+/// A pit: a 20 x 20 column whose floor is the highest of planes through (10, 10, 4), one per
+/// (azimuth, slope), each rising toward its azimuth, so they meet in a concave point at the
+/// bottom. Also the middle of each edge up from it, between plane i and plane i + 1.
+pub fn pit(planes: &[(f64, f64)]) -> (Part, Vec<Point3>) {
+    let low = Point3::new(10.0, 10.0, 4.0);
+    let normals: Vec<Vec3> = planes
+        .iter()
+        .map(|&(az, slope)| {
+            let (s, c) = dmath::sin_cos(az);
+            Vec3::new(-c * slope, -s * slope, 1.0)
+        })
+        .collect();
+    // the union of the slabs under each plane, cut to the column
+    let mut features: Vec<Feature> = normals
+        .iter()
+        .enumerate()
+        .map(|(i, n)| Feature::Extrude {
+            profile: Profile {
+                plane: Frame::from_z(low, (-*n).normalize().expect("normal")),
+                loops: vec![Profile::rectangle(Point2::new(-60.0, -60.0), 120.0, 120.0, 0)],
+            },
+            extent: Extent::Distance(40.0),
+            op: if i == 0 { Combine::New } else { Combine::Add },
+        })
+        .collect();
+    features.push(block_at(
+        Point3::new(0.0, 0.0, -10.0),
+        20.0,
+        20.0,
+        26.0,
+        Combine::Keep,
+    ));
+    let k = normals.len();
+    let mids = (0..k)
+        .map(|i| {
+            let mut d = normals[i].cross(normals[(i + 1) % k]);
+            if d.z < 0.0 {
+                d = -d;
+            }
+            // to where the edge leaves the column's sides or top
+            let t = [(d.x, low.x, 20.0), (d.y, low.y, 20.0), (d.z, low.z, 16.0)]
+                .iter()
+                .map(|&(v, a, hi)| {
+                    if v > 0.0 {
+                        (hi - a) / v
+                    } else if v < 0.0 {
+                        -a / v
+                    } else {
+                        f64::INFINITY
+                    }
+                })
+                .fold(f64::INFINITY, f64::min);
+            low + d * (0.5 * t)
+        })
+        .collect();
+    (Part { features }, mids)
+}
+
+/// A 20 x 10 block with a gable roof: its ridge runs along x at y = 5, z = 8, the roof falling
+/// 1 in 1 to either side.
+pub fn roofed() -> Part {
+    let ridge = Point3::new(10.0, 5.0, 8.0);
+    let mut part = Part {
+        features: vec![block_at(Point3::ORIGIN, 20.0, 10.0, 12.0, Combine::New)],
+    };
+    for n in [Vec3::new(0.0, -1.0, 1.0), Vec3::new(0.0, 1.0, 1.0)] {
+        part.features.push(Feature::Extrude {
+            profile: Profile {
+                plane: Frame::from_z(ridge, n.normalize().expect("normal")),
+                loops: vec![Profile::rectangle(Point2::new(-60.0, -60.0), 120.0, 120.0, 0)],
+            },
+            extent: Extent::Distance(40.0),
+            op: Combine::Cut,
+        });
+    }
+    part
+}
+
 /// The name of the edge of `body` whose middle is nearest `p`.
 pub fn edge_near(body: &Body, p: Point3) -> Name {
     let mid = |e| {
@@ -505,7 +583,7 @@ pub fn cases() -> Vec<(&'static str, Part, Option<f64>)> {
     ));
     // the pocket with a larger floor radius: four concave six-sided holes
     let floor =
-        [(10.0, 2.0), (10.0, 8.0), (5.0, 5.0), (15.0, 5.0)].map(|(x, y)| (Point3::new(x, y, 4.0), 1.25));
+        [(10.0, 2.0), (10.0, 8.0), (5.0, 5.0), (15.0, 5.0)].map(|(x, y)| (Point3::new(x, y, 4.0), 1.5));
     out.push((
         "pocket-unequal-corners",
         with_fillet(&pocket, &[walls, floor].concat()),
@@ -549,6 +627,129 @@ pub fn cases() -> Vec<(&'static str, Part, Option<f64>)> {
         let picks: Vec<(Point3, f64)> = mids.into_iter().zip(radii).collect();
         out.push((name, with_fillet(&part, &picks), None));
     }
+    // pits: four and five concave blends meeting at the bottom
+    for (name, planes, radii) in [
+        (
+            "pit-four",
+            around(4, &[1.0, 0.8, 1.2, 0.9]),
+            vec![1.0, 1.5, 0.8, 1.2],
+        ),
+        (
+            "pit-five",
+            (0..5)
+                .map(|i| (i as f64 * 0.8 * q + 0.25, [0.5, 0.6, 0.7, 0.55, 0.65][i]))
+                .collect(),
+            vec![0.8, 1.0, 0.6, 0.9, 0.7],
+        ),
+    ] {
+        let (part, mids) = pit(&planes);
+        let picks: Vec<(Point3, f64)> = mids.into_iter().zip(radii).collect();
+        out.push((name, with_fillet(&part, &picks), None));
+    }
+    // a boss and a slot whose corner sits on a roof's ridge, their sides running along it to
+    // the block's end: four edges there, two convex and two concave for the boss, three
+    // convex and one concave for the slot
+    let mut boss = roofed();
+    boss.features.push(block_at(
+        Point3::new(8.0, 5.0, 2.0),
+        17.0,
+        4.0,
+        12.0,
+        Combine::Add,
+    ));
+    let mut slot = roofed();
+    slot.features.push(block_at(
+        Point3::new(8.0, 5.0, 2.0),
+        17.0,
+        4.0,
+        20.0,
+        Combine::Cut,
+    ));
+    let at = |pts: &[(f64, f64, f64)], r: &[f64]| -> Vec<(Point3, f64)> {
+        pts.iter()
+            .zip(r)
+            .map(|(&(x, y, z), &r)| (Point3::new(x, y, z), r))
+            .collect()
+    };
+    out.push((
+        "roof-boss-on-ridge",
+        with_fillet(
+            &boss,
+            &at(
+                &[
+                    (4.0, 5.0, 8.0),
+                    (8.0, 5.0, 11.0),
+                    (14.0, 5.0, 8.0),
+                    (8.0, 7.0, 6.0),
+                ],
+                &[1.0, 0.8, 0.6, 0.7],
+            ),
+        ),
+        None,
+    ));
+    out.push((
+        "roof-slot-on-ridge",
+        with_fillet(
+            &slot,
+            &at(
+                &[
+                    (4.0, 5.0, 8.0),
+                    (8.0, 5.0, 5.0),
+                    (14.0, 5.0, 8.0),
+                    (8.0, 7.0, 6.0),
+                ],
+                &[1.0, 0.8, 0.6, 0.7],
+            ),
+        ),
+        None,
+    ));
+    // a square boss turned 45 degrees, one corner on the ridge: five edges there, the ridge
+    // either side and the boss's edge convex, its two feet concave
+    let mut diamond = roofed();
+    let d = 4.0 / f64::sqrt(2.0);
+    let corners = [
+        (10.0, 5.0),
+        (10.0 + d, 5.0 + d),
+        (10.0, 5.0 + 2.0 * d),
+        (10.0 - d, 5.0 + d),
+    ]
+    .map(|(x, y)| Point2::new(x, y));
+    diamond.features.push(Feature::Extrude {
+        profile: Profile {
+            plane: Frame::WORLD.with_origin(Point3::new(0.0, 0.0, 2.0)),
+            loops: vec![forge_ops::ProfileLoop::new(
+                (0..4)
+                    .map(|i| {
+                        let seg = forge_ops::Segment::Line {
+                            a: corners[i],
+                            b: corners[(i + 1) % 4],
+                        };
+                        (seg, i as u64)
+                    })
+                    .collect(),
+            )],
+        },
+        extent: Extent::Distance(12.0),
+        op: Combine::Add,
+    });
+    let h = 2.0 / f64::sqrt(2.0);
+    out.push((
+        "roof-diamond-on-ridge",
+        with_fillet(
+            &diamond,
+            &at(
+                &[
+                    (5.0, 5.0, 8.0),
+                    (15.0, 5.0, 8.0),
+                    (10.0, 5.0, 11.0),
+                    (10.0 + h, 5.0 + h, 8.0 - h),
+                    (10.0 - h, 5.0 + h, 8.0 - h),
+                ],
+                &[1.0, 0.9, 0.6, 0.7, 0.8],
+            ),
+        ),
+        None,
+    ));
     out
 }
 
@@ -632,6 +833,35 @@ mod tests {
             }
         }
         worst
+    }
+
+    /// How far points of `a`'s procedural faces lie from `b`'s, or None when it has none.
+    fn procedural_gap(a: &Body, b: &Body) -> Option<f64> {
+        use forge_geom::Surface;
+        let procs = |b: &Body| -> Vec<Surface> {
+            b.face_ids()
+                .map(|f| b.face(f).surface.clone())
+                .filter(|s| matches!(s, Surface::Procedural(_)))
+                .collect()
+        };
+        let (pa, pb) = (procs(a), procs(b));
+        if pa.is_empty() {
+            return None;
+        }
+        let mut worst = 0.0f64;
+        for sa in &pa {
+            let (u, v) = (sa.domain().u.interval(), sa.domain().v.interval());
+            for i in 0..=6 {
+                for j in 0..=6 {
+                    let p = sa.eval(Point2::new(
+                        u.lo + u.width() * i as f64 / 6.0,
+                        v.lo + v.width() * j as f64 / 6.0,
+                    ));
+                    worst = worst.max(pb.iter().map(|s| s.distance(p)).fold(f64::INFINITY, f64::min));
+                }
+            }
+        }
+        Some(worst)
     }
 
     /// One to three random edges of random parts, random radii: every result is a
@@ -735,8 +965,16 @@ mod tests {
                 .unwrap_or_else(|e| panic!("{name} nary: {e:?}"));
             assert!(forge_topo::check(&nary).is_empty(), "{name}: nary result invalid");
             let m2 = tessellate(&nary, &q).expect("nary meshes");
+            // the same surfaces (traced ones to a few 1e-9); a procedural face's mesh can
+            // differ with rounding in its edges, so then the volume only to the chord
+            let gap = procedural_gap(&body, &nary);
             assert!(
-                (m2.volume() - mesh.volume()).abs() < 1e-9 * mesh.volume(),
+                gap.is_none_or(|g| g < 1e-8),
+                "{name}: nary surfaces differ by {gap:?}"
+            );
+            let rel = if gap.is_some() { 1e-6 } else { 1e-9 };
+            assert!(
+                (m2.volume() - mesh.volume()).abs() < rel * mesh.volume(),
                 "{name}: nary volume"
             );
         }

@@ -942,6 +942,44 @@ impl Builder {
         Ok(())
     }
 
+    /// The ball's centre halfway from `v` to the far end of the filleted tangent chain that
+    /// leaves it along `e`, or None when the chain comes back to `v`.
+    fn chain_middle(&self, v: VertexId, e: EdgeId, spine: &Curve) -> Option<Point3> {
+        let blended: BTreeSet<EdgeId> = self.rolled.iter().map(|r| r.edge).collect();
+        let other = |e: EdgeId, w: VertexId| {
+            let x = self.body.edge(e);
+            if x.start == w { x.end } else { x.start }
+        };
+        // unit tangent of e leaving its end w
+        let leaving = |e: EdgeId, w: VertexId| {
+            let x = self.body.edge(e);
+            let d = if x.start == w {
+                x.curve.deriv(x.range.lo).d1
+            } else {
+                -x.curve.deriv(x.range.hi).d1
+            };
+            d.normalize().map_or(Vec3::ZERO, |u| u.get())
+        };
+        let (mut e, mut w) = (e, other(e, v));
+        for _ in 0..self.rolled.len() {
+            if w == v {
+                return None;
+            }
+            let back = leaving(e, w);
+            let next = blended.iter().copied().find(|&o| {
+                let x = self.body.edge(o);
+                o != e && (x.start == w || x.end == w) && leaving(o, w).dot(back) < -1.0 + 1e-9
+            });
+            let Some(o) = next else { break };
+            (e, w) = (o, other(o, w));
+        }
+        if w == v {
+            return None;
+        }
+        let half = self.body.vertex(v).point.lerp(self.body.vertex(w).point, 0.5);
+        Some(spine.eval(spine_closest(spine, half)))
+    }
+
     /// The corner at `v` as the corner solver sees it: faces counter-clockwise
     /// seen from outside (the ring reversed), the edge between each and the next.
     /// Also the ring corner of each blend.
@@ -965,6 +1003,7 @@ impl Builder {
             match self.filleted(c) {
                 Some(ri) => {
                     let ro = &self.rolled[ri];
+                    let middle = self.chain_middle(v, self.body.coedge(c).edge, &ro.blend.spine);
                     edges.push(CornerEdge::Blend(blends.len()));
                     blends.push(CornerBlend {
                         surface: ro.blend.surface.clone(),
@@ -974,6 +1013,7 @@ impl Builder {
                         spine: ro.blend.spine.clone(),
                         out: if ro.aligned { away } else { -away },
                         setback: spine_closest(&ro.blend.spine, vp),
+                        middle,
                     });
                     blend_ring.push(j);
                 }
@@ -1481,6 +1521,9 @@ pub struct CornerBlend {
     pub out: f64,
     /// Where the blend would stop by itself (the section through the vertex).
     pub setback: f64,
+    /// The ball's centre halfway along the edge's tangent chain: a stop goes no farther, so
+    /// the stops at its two ends never cross. None for a closed chain.
+    pub middle: Option<Point3>,
 }
 
 /// What lies between two neighbouring faces of a corner.

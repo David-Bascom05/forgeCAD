@@ -1,7 +1,7 @@
 //! Vertex blends where blends meet at a vertex: where each blend stops (its setback), the
 //! trim curve that ends each face there, and the surface that closes the remaining hole.
 
-use forge_geom::corner::{Side, SurfaceRail, corner_surface, foot_velocity, trim_curve};
+use forge_geom::corner::{Closing, Side, SurfaceRail, close_hole, foot_velocity, trim_curve};
 use forge_geom::{Curve, CurveGeom, Surface};
 use forge_math::{Interval, Point3, Vec3, dmath, tol};
 use std::sync::Arc;
@@ -50,12 +50,19 @@ pub fn face_curves(c: &CornerInput, setbacks: &[f64]) -> Result<Vec<FaceTrim>, S
         if p0.distance(p1) <= tol::LINEAR {
             continue;
         }
-        // leaving a spring toward the vertex and arriving on the next one going away from it;
-        // from or to a cut edge, through a control point halfway along the spring from where
-        // the spring meets that edge (or inside the face between two cut edges)
+        // from one spring to the next; from or to a cut edge, through a control point halfway
+        // along the spring from where the spring meets that edge (or inside the face between
+        // two cut edges)
         let q0 = plan.corner[i];
         let (t0, t1) = match (sharp0, sharp1) {
-            (false, false) => (-away0, away1),
+            // halfway between the spring and the chord: along the springs, a short section
+            // would end a narrow slot and two converging springs a hairpin, and either folds
+            // the patch
+            (false, false) => {
+                let u = |v: Vec3| v.normalize().map_or(Vec3::ZERO, |x| x.get());
+                let ch = u(p1 - p0);
+                (u(-away0) + ch, u(away1) + ch)
+            }
             (true, false) => (q0.lerp(p1, 0.5) - p0, away1),
             (false, true) => (-away0, p1 - q0.lerp(p0, 0.5)),
             (true, true) => {
@@ -67,7 +74,9 @@ pub fn face_curves(c: &CornerInput, setbacks: &[f64]) -> Result<Vec<FaceTrim>, S
                 (q - p0, p1 - q)
             }
         };
+        // straight across where the springs run side by side
         let (curve, range) = trim_curve(surface, p0, t0, p1, t1)
+            .or_else(|| trim_curve(surface, p0, p1 - p0, p1, p1 - p0))
             .ok_or_else(|| format!("face {i}: no trim curve fits between the springs"))?;
         out.push(FaceTrim {
             face: i,
@@ -88,8 +97,8 @@ fn foot(c: &CornerInput, b: usize, face: usize, s: f64) -> (Point3, Vec3) {
 
 /// Spine parameters (a, b) where the two curves a(s) and b(t) meet, by Gauss-Newton.
 fn meet(
-    a: impl Fn(f64) -> (Point3, Vec3),
-    b: impl Fn(f64) -> (Point3, Vec3),
+    a: &impl Fn(f64) -> (Point3, Vec3),
+    b: &impl Fn(f64) -> (Point3, Vec3),
     mut s: f64,
     mut t: f64,
 ) -> Option<(f64, f64)> {
@@ -146,6 +155,7 @@ fn plan(c: &CornerInput) -> Result<Plan, String> {
         CornerEdge::Sharp { curve, .. } => curve.closest(c.point, Interval::new(-1e6, 1e6)),
     };
     let seeds: Vec<f64> = c.edges.iter().map(near).collect();
+    let rmax = c.blends.iter().map(|b| b.radius).fold(0.0, f64::max);
     // q[j] = (param where edge j meets its neighbour on face j, on face j + 1)
     let mut q = seeds.iter().map(|&s| (s, s)).collect::<Vec<_>>();
     let mut corner = vec![c.point; n];
@@ -157,16 +167,15 @@ fn plan(c: &CornerInput) -> Result<Plan, String> {
         ) {
             continue;
         }
-        let (a, b) = meet(
-            edge_curve(c, &c.edges[l], i),
-            edge_curve(c, &c.edges[r], i),
-            seeds[l],
-            seeds[r],
-        )
-        .ok_or_else(|| format!("face {i}: the springs do not meet"))?;
+        let (fl, fr) = (edge_curve(c, &c.edges[l], i), edge_curve(c, &c.edges[r], i));
+        // edges running on through the vertex in line have parallel springs, which never meet
+        // (or meet far off): both then start from the section through the vertex
+        let (a, b) = meet(&fl, &fr, seeds[l], seeds[r])
+            .filter(|&(a, _)| fl(a).0.distance(c.point) <= 10.0 * rmax)
+            .unwrap_or((seeds[l], seeds[r]));
         q[l].1 = a;
         q[r].0 = b;
-        *at = edge_curve(c, &c.edges[l], i)(a).0;
+        *at = fl(a).0.lerp(fr(b).0, 0.5);
     }
     let out_of = |e: &CornerEdge| match e {
         CornerEdge::Blend(b) => c.blends[*b].out,
@@ -180,7 +189,6 @@ fn plan(c: &CornerInput) -> Result<Plan, String> {
     let one_ball = c.edges.iter().zip(&q).all(|(e, &(a, b))| {
         matches!(e, CornerEdge::Blend(_)) && point_of(e, a).p.distance(point_of(e, b).p) <= tol::LINEAR
     });
-    let rmax = c.blends.iter().map(|b| b.radius).fold(0.0, f64::max);
     let mut blend = c.blends.iter().map(|b| b.setback).collect::<Vec<_>>();
     let mut edge = vec![0.0; n];
     for (j, e) in c.edges.iter().enumerate() {
@@ -199,7 +207,24 @@ fn plan(c: &CornerInput) -> Result<Plan, String> {
             CornerEdge::Sharp { .. } => rmax,
         };
         let step = if one_ball { 0.0 } else { reach / d.d1.length() };
-        let s = far + o * step;
+        let mut s = far + o * step;
+        // a short edge: no farther than nine tenths of the way to its middle
+        if let CornerEdge::Blend(b) = e
+            && let Some(middle) = c.blends[*b].middle
+        {
+            let b = &c.blends[*b];
+            let span = 1e3 * b.radius.max(1.0);
+            let mid = b.spine.closest(
+                middle,
+                Interval::new(far.min(far + o * span), far.max(far + o * span)),
+            );
+            if o * (mid - far) <= 0.0 {
+                return Err(format!("edge {j}: too short for the corner"));
+            }
+            if o * (s - mid) > -0.1 * o * (mid - far) {
+                s = far + 0.9 * (mid - far);
+            }
+        }
         match e {
             CornerEdge::Blend(b) => blend[*b] = s,
             CornerEdge::Sharp { .. } => edge[j] = s,
@@ -208,11 +233,12 @@ fn plan(c: &CornerInput) -> Result<Plan, String> {
     Ok(Plan { blend, edge, corner })
 }
 
-/// The surface closing the hole: the exact sphere where one ball fits, else the n-sided patch.
+/// The surfaces closing the hole: the exact sphere where one ball fits, else the n-sided
+/// patch, or patches round a centre point where that would fold.
 pub fn patch(_c: &CornerInput, hole: &[HoleSide]) -> Option<Result<CornerPatch, String>> {
     let sides: Vec<Side> = hole.iter().map(hole_side).collect();
-    Some(match corner_surface(sides) {
-        Ok((surface, same_sense)) => Ok(CornerPatch {
+    Some(match close_hole(sides) {
+        Ok(Closing::One(surface, same_sense)) => Ok(CornerPatch {
             inner: Vec::new(),
             faces: vec![PatchFace {
                 surface,
@@ -220,6 +246,40 @@ pub fn patch(_c: &CornerInput, hole: &[HoleSide]) -> Option<Result<CornerPatch, 
                 uses: (0..hole.len()).map(PatchUse::Side).collect(),
             }],
         }),
+        Ok(Closing::Split {
+            centre,
+            spokes,
+            pieces,
+        }) => {
+            let n = hole.len();
+            let spoke_at = |v: usize| spokes.iter().position(|s| s.0 == v % n).expect("a spoke");
+            Ok(CornerPatch {
+                inner: spokes
+                    .iter()
+                    .map(|(v, curve, range)| (curve.clone(), *range, hole[*v].start, centre))
+                    .collect(),
+                faces: pieces
+                    .into_iter()
+                    .map(|(surface, first, count)| {
+                        let mut uses: Vec<PatchUse> =
+                            (first..first + count).map(|k| PatchUse::Side(k % n)).collect();
+                        uses.push(PatchUse::Inner {
+                            edge: spoke_at(first + count),
+                            forward: true,
+                        });
+                        uses.push(PatchUse::Inner {
+                            edge: spoke_at(first),
+                            forward: false,
+                        });
+                        PatchFace {
+                            surface,
+                            same_sense: true,
+                            uses,
+                        }
+                    })
+                    .collect(),
+            })
+        }
         Err(e) => Err(format!("corner patch: {e:?}")),
     })
 }
@@ -277,6 +337,7 @@ pub mod synthetic {
                         spine: Curve::Line(Line::new(o, e)),
                         out: 1.0,
                         setback: 0.0,
+                        middle: None,
                     });
                 }
                 None => edges.push(CornerEdge::Sharp {
@@ -366,7 +427,7 @@ pub mod synthetic {
 mod tests {
     use super::synthetic::*;
     use super::*;
-    use forge_geom::corner::{Audit, HolePatch, audit};
+    use forge_geom::corner::{Audit, audit_hole};
     use forge_math::rng::Rng;
 
     struct Built {
@@ -383,20 +444,7 @@ mod tests {
     }
 
     fn check_patch(sides: &[HoleSide], what: &str) {
-        check_patch_seeded(sides, what, 7);
-    }
-
-    fn check_patch_seeded(sides: &[HoleSide], what: &str, seed: u64) -> Audit {
-        let p = HolePatch::new(sides.iter().map(hole_side).collect()).unwrap();
-        let a = audit(&p, seed);
-        let size = sides.iter().map(|s| s.start.distance(s.end)).fold(0.0, f64::max);
-        assert!(a.boundary <= 1e-9, "{what} {a:?}");
-        assert!(a.normal <= 1e-9, "{what} {a:?}");
-        assert!(a.derivs <= 1e-4, "{what} {a:?}");
-        assert!(a.project <= 1e-9 * size.max(1.0), "{what} {a:?}");
-        assert_eq!(a.bbox_misses, 0, "{what}");
-        assert!(a.fold > 0.0, "{what} {a:?}");
-        a
+        check_hole(sides, what, 7, false);
     }
 
     fn box_corner(r: [Option<(f64, bool)>; 3]) -> CornerInput {
@@ -458,7 +506,7 @@ mod tests {
             let r: Vec<Option<(f64, bool)>> = (0..3).map(|_| Some((rng.range(0.5, 4.0), true))).collect();
             let c = corner(Point3::new(5.0, -3.0, 2.0), &dirs, &normals, &r);
             let b = build(&c);
-            check_patch_seeded(&b.sides, &format!("case {case}"), 1000 + case);
+            check_hole(&b.sides, &format!("case {case}"), 1000 + case, false);
         }
     }
 
@@ -531,6 +579,24 @@ mod tests {
         c.blends.iter().map(|b| b.convex).collect()
     }
 
+    /// Every patch closing the hole meets its sides and its neighbours exactly and G1, and
+    /// nowhere folds; for a split hole, None when it could not be split.
+    fn check_hole(sides: &[HoleSide], what: &str, seed: u64, split: bool) -> Option<(Audit, usize)> {
+        let size = sides.iter().map(|s| s.start.distance(s.end)).fold(0.0, f64::max);
+        let (a, k) = match audit_hole(sides.iter().map(hole_side).collect(), seed, split) {
+            Ok(r) => r.expect("not a sphere"),
+            Err(_) if split => return None,
+            Err(e) => panic!("{what}: {e:?}"),
+        };
+        assert!(a.boundary <= 1e-9, "{what} {a:?}");
+        assert!(a.normal <= 1e-9, "{what} {a:?}");
+        assert!(a.derivs <= 1e-4, "{what} {a:?}");
+        assert!(a.project <= 1e-9 * size.max(1.0), "{what} {a:?}");
+        assert_eq!(a.bbox_misses, 0, "{what}");
+        assert!(a.fold > 0.0, "{what} {a:?}");
+        Some((a, k))
+    }
+
     #[test]
     fn four_and_five_sided_corners() {
         use forge_math::dmath::TAU;
@@ -540,8 +606,8 @@ mod tests {
             fold: 1.0,
             ..Audit::default()
         };
-        let (mut checked, mut thin) = (0, 0);
-        for case in 0..120u64 {
+        let (mut cases, mut thin, mut split_ok) = (0, 0, 0);
+        for case in 0..100u64 {
             let n = 3 + (case % 3) as usize;
             let az: Vec<f64> = (0..n)
                 .map(|i| (i as f64 + rng.range(-0.15, 0.15)) * TAU / n as f64)
@@ -563,25 +629,34 @@ mod tests {
                 let what = format!("case {case} n {n} convex {k:?}");
                 let b = build(&c);
                 assert_eq!(b.sides.len(), 2 * n, "{what}");
-                // a side under 1/20 of the longest (a nearly flat edge's section) may fold
                 let len: Vec<f64> = b.sides.iter().map(|s| s.start.distance(s.end)).collect();
                 let (lo, hi) = len
                     .iter()
                     .fold((f64::INFINITY, 0.0f64), |(a, b), &l| (a.min(l), b.max(l)));
+                // a nearly flat edge's section
                 if lo < 0.05 * hi {
                     thin += 1;
-                    continue;
                 }
-                let a = check_patch_seeded(&b.sides, &what, 2000 + case);
+                // one patch does
+                let (a, pieces) = check_hole(&b.sides, &what, 2000 + case, false).expect("built");
+                assert_eq!(pieces, 1, "{what}");
                 worst.boundary = worst.boundary.max(a.boundary);
                 worst.normal = worst.normal.max(a.normal);
                 worst.fold = worst.fold.min(a.fold);
-                checked += 1;
+                // and so do the pieces of the split it falls back to
+                if let Some((a, _)) = check_hole(&b.sides, &what, 2000 + case, true) {
+                    worst.normal = worst.normal.max(a.normal);
+                    split_ok += 1;
+                }
+                cases += 1;
                 seen.insert((n, k.iter().filter(|&&x| x).count()));
             }
         }
-        eprintln!("checked {checked} thin {thin} worst {worst:?}");
-        assert!(thin * 10 < checked, "{thin} thin of {checked}");
+        eprintln!("{cases} cases, {thin} thin, {split_ok} split, worst {worst:?}");
+        assert!(
+            thin > 0 && split_ok * 100 >= cases * 95,
+            "{split_ok} of {cases} split"
+        );
         // convex, concave and mixed corners of every size
         for n in 3..=5 {
             assert!(seen.contains(&(n, n)) && seen.contains(&(n, 0)), "{seen:?}");
