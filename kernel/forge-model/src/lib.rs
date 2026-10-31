@@ -790,10 +790,16 @@ fn nary_regen(
     shapes: bool,
     batching: Batching,
 ) -> Result<Body, RegenError> {
-    not_empty(
-        nary_run(features, threads, shapes, batching).map(unified)?,
-        features.len() - 1,
-    )
+    let r = match nary_run(features, threads, shapes, batching) {
+        // every point the pass could probe a region at lies on another tool's edge: the tools one
+        // at a time never have that question, and answer the same way (or refuse more clearly)
+        Err(RegenError::Boolean {
+            error: BoolError::Unsupported("region probe on another tool's edge"),
+            ..
+        }) => one_at_a_time(features),
+        r => r,
+    };
+    not_empty(r.map(unified)?, features.len() - 1)
 }
 
 /// `nary_regen`, its result not yet unified.

@@ -3848,3 +3848,14 @@ fn refilled_pockets() -> Part {
         ],
     }
 }
+
+/// Where every point an n-ary pass could probe a region at lies on another tool's edge, the regen
+/// gives the sequential answer, here its clear refusal of an exact touch (coincident_walls/1).
+#[test]
+fn a_stuck_region_probe_answers_as_the_sequential_regen() {
+    let (_, g) = forge_model::adversarial::families()
+        .into_iter()
+        .find(|(f, _)| *f == "coincident_walls")
+        .expect("the family");
+    refused_zero_thickness(forge_model::adversarial::canonical(&g(1)));
+}
