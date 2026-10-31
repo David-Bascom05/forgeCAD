@@ -226,9 +226,49 @@ pub fn all_real_roots(c: &[f64]) -> Vec<Root> {
     real_roots(c, -b, b)
 }
 
+/// The n-point Gauss-Legendre rule on [-1, 1]: nodes (increasing) and weights, each node by
+/// Newton on the Legendre polynomial P_n from the asymptotic guess cos(pi (i - 1/4) / (n + 1/2)).
+pub fn gauss_legendre(n: usize) -> Vec<(f64, f64)> {
+    let mut out: Vec<(f64, f64)> = (1..=n)
+        .map(|i| {
+            let mut x = crate::dmath::cos(crate::dmath::PI * (i as f64 - 0.25) / (n as f64 + 0.5));
+            let mut dp = 1.0;
+            for _ in 0..100 {
+                // P_n(x) and P_n'(x) by the three-term recurrence
+                let (mut p0, mut p1) = (1.0, x);
+                for k in 2..=n {
+                    (p0, p1) = (p1, ((2 * k - 1) as f64 * x * p1 - (k - 1) as f64 * p0) / k as f64);
+                }
+                let p = if n == 0 { 1.0 } else { p1 };
+                dp = n as f64 * (x * p - p0) / (x * x - 1.0);
+                let dx = p / dp;
+                x -= dx;
+                if dx.abs() <= 1e-16 {
+                    break;
+                }
+            }
+            (-x, 2.0 / ((1.0 - x * x) * dp * dp))
+        })
+        .collect();
+    out.sort_by(|a, b| a.0.total_cmp(&b.0));
+    out
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn gauss_legendre_integrates_to_its_degree() {
+        for n in [1, 3, 8, 16, 32] {
+            let r = gauss_legendre(n);
+            for d in 0..2 * n {
+                let got: f64 = r.iter().map(|&(x, w)| w * x.powi(d as i32)).sum();
+                let want = if d % 2 == 0 { 2.0 / (d + 1) as f64 } else { 0.0 };
+                assert!((got - want).abs() < 1e-14, "{n} {d} {got}");
+            }
+        }
+    }
     use crate::rng::Rng;
 
     fn from_roots(rs: &[f64]) -> Vec<f64> {

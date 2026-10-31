@@ -6,16 +6,23 @@
 //! inner parameter a from a fixed a0, the face integral is the loop integral of G db.
 //!
 //! G is exact for the analytic surfaces: F is a polynomial (Gauss-Legendre) or a trigonometric
-//! polynomial of known degree along a, fitted once per face. On a procedural surface F is fitted
-//! by Chebyshev tiles where it is smooth enough, else integrated by adaptive Gauss-Kronrod.
+//! polynomial of known degree along a, fitted once per face; so it is along v on a surface
+//! straight in v (ruled, a screw's straight section). A swept surface (pipe, variable blend)
+//! works out its section once per node and integrates the column along v by Clenshaw-Curtis.
+//! Other procedural surfaces fit F by Chebyshev tiles, laid out by lines across the face first,
+//! where it is smooth enough, else integrate by adaptive Gauss-Kronrod. A corner patch's face
+//! that is its whole domain polygon is integrated over the polygon directly instead.
 //!
-//! The loop integrals run along the edges. An analytic curve on an analytic surface, or an
-//! intersection curve walked by the distance along its chord (its own parameter is only once
-//! differentiable at its chain points), gives uv' exactly: Gauss-Kronrod 7-15 there, the two
-//! rules' difference the error. Elsewhere uv' comes from the interpolant of the uv samples on
-//! nested Fejer rules (4, 12, 36 points), the last Chebyshev coefficients the error. Pieces are
-//! halved until the error is below the tolerance, within a budget per face; what is left over
-//! is in the reported error, as is any gap between an edge and its face's surface.
+//! The loop integrals run along the edges. A curve with an exact derivative on a surface with
+//! exact ones (analytic, or procedural ones that say so), or an intersection curve walked by the
+//! distance along its chord (its own parameter is only once differentiable at its chain points),
+//! gives uv' exactly: Gauss-Kronrod 7-15 there, the two rules' difference the error; Gauss on 3
+//! points on a line where G is a polynomial, the trapezoid round a whole circle. A curve made on
+//! its surface (a blend's spring) gives its uv directly, others are found by Newton from the
+//! last point's. Elsewhere uv' comes from the interpolant of the uv samples on nested Fejer
+//! rules (4, 12, 36 points), the last Chebyshev coefficients the error. Pieces are halved until
+//! the error is below the tolerance, within a budget per face; what is left over is in the
+//! reported error, as is any gap between an edge and its face's surface.
 
 use crate::body::{Body, CoedgeId, FaceId, LoopId};
 use forge_geom::intcurve::IntCurve;
@@ -222,19 +229,44 @@ struct Piece<'a> {
     way: Rc<Way<'a>>,
     lo: f64,
     hi: f64,
-    /// Gauss-Kronrod (derivatives from the curve's own) rather than Fejer (derivatives from
-    /// the interpolant).
-    kronrod: bool,
+    /// A rule with an embedded one (derivatives from the curve's own), rather than Fejer
+    /// (derivatives from the interpolant).
+    kr: Option<&'static Kronrod>,
 }
 
-/// Gauss-Kronrod rules on 7 and 15 points (increasing x): weights, and the embedded Gauss
-/// rule's weights (zero off its points).
+/// A rule on [-1, 1] (increasing x): weights, and an embedded rule's weights (zero off its
+/// points) whose difference bounds the error.
 struct Kronrod {
     x: Vec<f64>,
     w: Vec<f64>,
     g: Vec<f64>,
 }
 
+/// Gauss-Legendre on 3 points, exact for the polynomials of degree 5 a line on a plane or along
+/// a cylinder's axis gives (its embedded rule is itself).
+fn gauss3() -> &'static Kronrod {
+    static R: OnceLock<Kronrod> = OnceLock::new();
+    R.get_or_init(|| Kronrod {
+        x: GL3.iter().map(|g| g.0).collect(),
+        w: GL3.iter().map(|g| g.1).collect(),
+        g: GL3.iter().map(|g| g.1).collect(),
+    })
+}
+
+/// The trapezoid rule on 12 even steps round a whole period, starting at x = -1 (exact for
+/// trigonometric polynomials of degree 11; its every other point, of degree 5).
+fn periodic() -> &'static Kronrod {
+    static R: OnceLock<Kronrod> = OnceLock::new();
+    R.get_or_init(|| Kronrod {
+        x: (0..12).map(|k| -1.0 + k as f64 / 6.0).collect(),
+        w: vec![1.0 / 6.0; 12],
+        g: (0..12)
+            .map(|k| if k % 2 == 0 { 1.0 / 3.0 } else { 0.0 })
+            .collect(),
+    })
+}
+
+/// Gauss-Kronrod rules on 7 and 15 points.
 fn kronrod(n: usize) -> &'static Kronrod {
     static R: OnceLock<[Kronrod; 2]> = OnceLock::new();
     let r = R.get_or_init(|| {
@@ -277,21 +309,50 @@ fn kronrod(n: usize) -> &'static Kronrod {
 }
 
 /// A piece of an analytic curve on an analytic surface, on Gauss-Kronrod points: uv' from the
-/// curve's exact derivative. None where the surface's parameters are singular.
-fn kronrod_piece<'a>(s: &Surface, way: &Rc<Way<'a>>, lo: f64, hi: f64, n: usize) -> Option<Piece<'a>> {
+/// curve's exact derivative. None where the surface's parameters are singular. The surface's
+/// parameters are found from `seed` on, walking the piece backwards if `rev`.
+fn kronrod_piece<'a>(
+    s: &Surface,
+    way: &Rc<Way<'a>>,
+    (lo, hi): (f64, f64),
+    rule: &'static Kronrod,
+    seed: Option<Point2>,
+    rev: bool,
+) -> Option<Piece<'a>> {
     let per = periods(s);
     let (mid, half) = (0.5 * (lo + hi), 0.5 * (hi - lo));
+    let (xs, n) = (&rule.x, rule.x.len());
     let mut nodes: Vec<Node> = Vec::with_capacity(n);
-    for &x in &kronrod(n).x {
-        let (cp, cd1) = way.deriv(mid + half * x);
-        let q = s.project(cp);
+    // a curve lying on the surface by construction gives its parameters there
+    let on = match **way {
+        Way::Curve(Curve::Procedural(pc)) if pc.on_surface(mid).is_some_and(|o| o.0 == *s) => Some(pc),
+        _ => None,
+    };
+    for k in 0..n {
+        let x = xs[if rev { n - 1 - k } else { k }];
+        if let Some((_, uv, d)) = on.and_then(|pc| pc.on_surface(mid + half * x)) {
+            // no gap between edge and surface, so the edge point is not needed
+            nodes.push(Node {
+                uv: [uv.x, uv.y],
+                d: [d.x * half, d.y * half],
+                ..Node::default()
+            });
+            continue;
+        }
+        let (cp, cd1, known) = way.deriv_on(mid + half * x);
+        let prev = nodes.last().map(|q| Point2::new(q.uv[0], q.uv[1])).or(seed);
+        let q = match (known, s) {
+            (Some((on, uv)), _) if on == s => uv,
+            (_, Surface::Procedural(_)) => foot(s, cp, prev).0,
+            _ => s.project(cp),
+        };
         let mut uv = [q.x, q.y];
-        if let Some(prev) = nodes.last() {
+        if let Some(prev) = prev {
             for a in 0..2 {
-                uv[a] = near(uv[a], prev.uv[a], per[a]);
+                uv[a] = near(uv[a], [prev.x, prev.y][a], per[a]);
             }
         }
-        let sd = s.deriv(Point2::new(uv[0], uv[1]));
+        let sd = d1(s, Point2::new(uv[0], uv[1]));
         let (e, f, g) = (sd.du.dot(sd.du), sd.du.dot(sd.dv), sd.dv.dot(sd.dv));
         let (du, dv) = forge_math::linalg::solve2(e, f, f, g, sd.du.dot(cd1), sd.dv.dot(cd1))?;
         nodes.push(Node {
@@ -302,24 +363,39 @@ fn kronrod_piece<'a>(s: &Surface, way: &Rc<Way<'a>>, lo: f64, hi: f64, n: usize)
             gap: sd.p.distance(cp),
         });
     }
+    if rev {
+        nodes.reverse();
+    }
     Some(Piece {
         n: nodes,
         sign: 1.0,
         way: way.clone(),
         lo,
         hi,
-        kronrod: true,
+        kr: Some(rule),
     })
 }
 
 /// Whether the way's own derivative is exact and the surface's too, so uv' follows from them.
 fn exact(s: &Surface, way: &Way) -> bool {
     let analytic = |s: &Surface| !matches!(s, Surface::Procedural(_));
-    analytic(s)
+    let surface = match s {
+        Surface::Procedural(p) => p.exact_d1(),
+        _ => true,
+    };
+    surface
         && match way {
-            Way::Curve(c) => !matches!(c, Curve::Procedural(_)),
-            // the tangent is exact where both gradients are
-            Way::Chord { c, .. } => analytic(&c.a) && analytic(&c.b),
+            Way::Curve(Curve::Procedural(c)) => c.exact_d1(),
+            Way::Curve(_) => true,
+            // the tangent is exact where both gradients are, or one gradient and the other's
+            // own normal
+            Way::Chord { c, on, .. } => match on {
+                Some((k, _)) => match [&c.a, &c.b][*k] {
+                    Surface::Procedural(p) => p.exact_d1(),
+                    _ => true,
+                },
+                None => analytic(&c.a) && analytic(&c.b),
+            },
         }
 }
 
@@ -333,6 +409,9 @@ enum Way<'a> {
         anchor: Point3,
         dir: Vec3,
         knots: Vec<(f64, f64)>,
+        /// Where one of the surfaces is procedural (0: a, 1: b), the point is solved in its
+        /// parameters (its own implicit value is a search), from the last point's.
+        on: Option<(usize, std::cell::Cell<Option<Point2>>)>,
     },
 }
 
@@ -340,22 +419,49 @@ impl Way<'_> {
     fn at(&self, s: f64) -> Point3 {
         match self {
             Way::Curve(c) => c.eval(s),
-            Way::Chord { .. } => self.deriv(s).0,
+            Way::Chord { .. } => self.deriv_on(s).0,
         }
     }
 
-    /// The point and its derivative.
-    fn deriv(&self, s: f64) -> (Point3, Vec3) {
+    /// The point, its derivative, and its parameters on a surface where the way knows them.
+    fn deriv_on(&self, s: f64) -> (Point3, Vec3, Option<(&Surface, Point2)>) {
         match self {
             Way::Curve(c) => {
-                let d = c.deriv(s);
-                (d.p, d.d1)
+                let (p, d) = c.deriv1(s);
+                (p, d, None)
             }
+            Way::Chord {
+                c, anchor, dir, on, ..
+            } => {
+                if let Some((k, last)) = on {
+                    let (ps, other) = if *k == 0 { (&c.a, &c.b) } else { (&c.b, &c.a) };
+                    let seed = last.get().unwrap_or_else(|| ps.project(self.chord_point(s)));
+                    match chord_on(ps, other, *anchor, *dir, s, seed) {
+                        Some((p, t, uv)) => {
+                            last.set(Some(uv));
+                            return (p, t, Some((ps, uv)));
+                        }
+                        None => last.set(None),
+                    }
+                }
+                let p = self.chord_point(s);
+                // along the curve, at unit speed along dir
+                let t = c.a.gradient(p).cross(c.b.gradient(p));
+                (p, t / t.dot(*dir), None)
+            }
+        }
+    }
+
+    /// A chord way's point at s, solved onto both surfaces' implicit values.
+    fn chord_point(&self, s: f64) -> Point3 {
+        match self {
+            Way::Curve(c) => c.eval(s),
             Way::Chord {
                 c,
                 anchor,
                 dir,
                 knots,
+                ..
             } => {
                 let i = knots.partition_point(|k| k.1 <= s).clamp(1, knots.len() - 1);
                 let ((t0, s0), (t1, s1)) = (knots[i - 1], knots[i]);
@@ -375,12 +481,46 @@ impl Way<'_> {
                     }
                     p += (bc * -fa + ca * -fb + ab * -fs) / det;
                 }
-                // along the curve, at unit speed along dir
-                let t = c.a.gradient(p).cross(c.b.gradient(p));
-                (p, t / t.dot(*dir))
+                p
             }
         }
     }
+}
+
+/// The point of procedural `ps` meeting analytic `other` at distance s along `dir` from
+/// `anchor`, by Newton in ps's parameters from `seed`: the point, the curve's derivative at unit
+/// speed along dir, and its parameters. None where Newton strays off ps's domain or stalls.
+fn chord_on(
+    ps: &Surface,
+    other: &Surface,
+    anchor: Point3,
+    dir: Vec3,
+    s: f64,
+    seed: Point2,
+) -> Option<(Point3, Vec3, Point2)> {
+    let dom = ps.domain();
+    let mut uv = seed;
+    for _ in 0..12 {
+        let d = ps.deriv(uv);
+        let (fa, ga) = other.implicit_gradient(d.p);
+        let fs = dir.dot(d.p - anchor) - s;
+        let tight = 4.0 * f64::EPSILON * (1.0 + (d.p - Point3::ORIGIN).abs_max());
+        if fa.abs().max(fs.abs()) <= tight {
+            let t = ga.cross(d.du.cross(d.dv));
+            return Some((d.p, t / t.dot(dir), uv));
+        }
+        let (x, y) =
+            forge_math::linalg::solve2(ga.dot(d.du), ga.dot(d.dv), dir.dot(d.du), dir.dot(d.dv), -fa, -fs)?;
+        uv = Point2::new(uv.x + x, uv.y + y);
+        let inside = [(uv.x, dom.u), (uv.y, dom.v)].iter().all(|&(x, d)| {
+            let slack = 0.1 * (d.hi - d.lo);
+            d.period.is_some() || !slack.is_finite() || (d.lo - slack..=d.hi + slack).contains(&x)
+        });
+        if !inside {
+            return None;
+        }
+    }
+    None
 }
 
 fn near(x: f64, r: f64, period: Option<f64>) -> f64 {
@@ -395,11 +535,19 @@ fn periods(s: &Surface) -> [Option<f64>; 2] {
     [d.u.period, d.v.period]
 }
 
-/// The edge points of a way at the rule's points on [lo, hi], with the surface's uv of each.
-fn points(s: &Surface, way: &Way, lo: f64, hi: f64, xs: impl Iterator<Item = f64>) -> Vec<Node> {
+/// The edge points of a way at points xs (increasing) of [lo, hi], with the surface's uv of
+/// each, found from `seed` on (walking backwards if `rev`).
+fn points(
+    s: &Surface,
+    way: &Way,
+    (lo, hi): (f64, f64),
+    xs: &[f64],
+    seed: Option<Point2>,
+    rev: bool,
+) -> Vec<Node> {
     let (mid, half) = (0.5 * (lo + hi), 0.5 * (hi - lo));
-    let mut prev: Option<Point2> = None;
-    xs.map(|x| {
+    let mut prev = seed;
+    let node = |&x: &f64| {
         let p = way.at(mid + half * x);
         let (q, gap) = foot(s, p, prev);
         prev = Some(q);
@@ -409,8 +557,30 @@ fn points(s: &Surface, way: &Way, lo: f64, hi: f64, xs: impl Iterator<Item = f64
             gap,
             ..Node::default()
         }
-    })
-    .collect()
+    };
+    if rev {
+        let mut out: Vec<Node> = xs.iter().rev().map(node).collect();
+        out.reverse();
+        out
+    } else {
+        xs.iter().map(node).collect()
+    }
+}
+
+fn uv(q: &Node) -> Point2 {
+    Point2::new(q.uv[0], q.uv[1])
+}
+
+/// The point and first derivatives (a procedural surface may skip the second).
+fn d1(s: &Surface, uv: Point2) -> forge_geom::surface::SurfDeriv {
+    match s {
+        Surface::Procedural(p) => {
+            let mut d = Vec::with_capacity(1);
+            p.column_d1(uv.x, &[uv.y], &mut d);
+            d[0]
+        }
+        _ => s.deriv(uv),
+    }
 }
 
 /// Where `p` (on or by the surface) lies on it, and how far off it is. A procedural surface's
@@ -423,14 +593,21 @@ fn foot(s: &Surface, p: Point3, near: Option<Point2>) -> (Point2, f64) {
     };
     let newton = |mut uv: Point2| -> Option<(Point2, f64)> {
         for _ in 0..12 {
-            let d = s.deriv(uv);
+            let d = d1(s, uv);
             let r = d.p - p;
             let (e, f, g) = (d.du.dot(d.du), d.du.dot(d.dv), d.dv.dot(d.dv));
             let (x, y) = forge_math::linalg::solve2(e, f, f, g, -r.dot(d.du), -r.dot(d.dv))?;
             uv = Point2::new(uv.x + x, uv.y + y);
             if (d.du * x + d.dv * y).length() <= 1e-15 * (1.0 + (p - Point3::ORIGIN).abs_max()) {
+                // within the surface's own parameters: past them a surface may meet itself again
+                // (a screw's straight profile run on along its axis)
+                let dom = s.domain();
+                let inside = [(uv.x, dom.u), (uv.y, dom.v)].iter().all(|&(x, d)| {
+                    let slack = 0.1 * (d.hi - d.lo);
+                    d.period.is_some() || !slack.is_finite() || (d.lo - slack..=d.hi + slack).contains(&x)
+                });
                 let gap = s.eval(uv).distance(p);
-                return (gap <= 10.0 * forge_math::tol::LINEAR).then_some((uv, gap));
+                return (inside && gap <= 10.0 * forge_math::tol::LINEAR).then_some((uv, gap));
             }
         }
         None
@@ -476,7 +653,7 @@ fn finish<'a>(mut n: Vec<Node>, per: [Option<f64>; 2], way: &Rc<Way<'a>>, lo: f6
         way: way.clone(),
         lo,
         hi,
-        kronrod: false,
+        kr: None,
     }
 }
 
@@ -489,20 +666,29 @@ fn finer<'a>(s: &Surface, pc: &Piece<'a>) -> Vec<Piece<'a>> {
     if pc.sign < 0.0 {
         old.reverse();
     }
-    let mut out = if pc.kronrod {
-        let k15 = |a: f64, b: f64| {
-            kronrod_piece(s, way, a, b, 15)
-                .unwrap_or_else(|| finish(points(s, way, a, b, rule(12).x.iter().copied()), per, way, a, b))
+    // each new stretch's surface parameters found from the old node at its start
+    let (first, middle) = (Some(uv(&old[0])), Some(uv(&old[old.len() / 2])));
+    let mut out = if let Some(kr) = pc.kr {
+        let k15 = |a: f64, b: f64, seed| {
+            kronrod_piece(s, way, (a, b), kronrod(15), seed, false)
+                .unwrap_or_else(|| finish(points(s, way, (a, b), &rule(12).x, seed, false), per, way, a, b))
         };
-        if old.len() == 7 {
-            vec![k15(lo, hi)]
+        if std::ptr::eq(kr, periodic()) {
+            // a whole period not drawn by 12 points: quarters
+            let q = 0.25 * (hi - lo);
+            (0..4)
+                .map(|i| k15(lo + q * i as f64, lo + q * (i + 1) as f64, Some(uv(&old[3 * i]))))
+                .collect()
+        } else if old.len() < 15 {
+            vec![k15(lo, hi, first)]
         } else {
             let mid = 0.5 * (lo + hi);
-            vec![k15(lo, mid), k15(mid, hi)]
+            vec![k15(lo, mid, first), k15(mid, hi, middle)]
         }
     } else if old.len() == 12 {
         let x36 = &rule(36).x;
-        let mut rest = points(s, way, lo, hi, (0..36).filter(|j| j % 3 != 1).map(|j| x36[j])).into_iter();
+        let xs: Vec<f64> = (0..36).filter(|j| j % 3 != 1).map(|j| x36[j]).collect();
+        let mut rest = points(s, way, (lo, hi), &xs, first, false).into_iter();
         let n36 = (0..36)
             .map(|j| {
                 if j % 3 == 1 {
@@ -515,8 +701,8 @@ fn finer<'a>(s: &Surface, pc: &Piece<'a>) -> Vec<Piece<'a>> {
         vec![finish(n36, per, way, lo, hi)]
     } else {
         let mid = 0.5 * (lo + hi);
-        [(lo, mid), (mid, hi)]
-            .map(|(a, b)| finish(points(s, way, a, b, rule(12).x.iter().copied()), per, way, a, b))
+        [(lo, mid, first), (mid, hi, middle)]
+            .map(|(a, b, seed)| finish(points(s, way, (a, b), &rule(12).x, seed, false), per, way, a, b))
             .into()
     };
     if pc.sign < 0.0 {
@@ -565,51 +751,67 @@ fn resolved(pc: &Piece, rel: f64) -> bool {
     })
 }
 
-/// [lo, hi] on 12 points if 4 already draw it, else on 36 if 12 do, else in halves.
+/// [lo, hi] on 12 points if 4 already draw it, else on 36 if 12 do, else in halves. Pieces go
+/// out in the order the loop walks them (backwards if `rev`), each one's surface parameters
+/// found from where the last one ended (`seed`).
+#[allow(clippy::too_many_arguments)]
 fn refine<'a>(
     s: &Surface,
     way: &Rc<Way<'a>>,
-    lo: f64,
-    hi: f64,
+    (lo, hi): (f64, f64),
+    whole: bool,
     rel: f64,
     depth: u32,
+    seed: &mut Option<Point2>,
+    rev: bool,
     out: &mut Vec<Piece<'a>>,
 ) {
-    if exact(s, way)
-        && let Some(pc) = kronrod_piece(
-            s,
-            way,
-            lo,
-            hi,
-            if matches!(**way, Way::Curve(Curve::Line(_))) {
-                7
-            } else {
-                15
-            },
-        )
-    {
+    let mut push = |pc: Piece<'a>, seed: &mut Option<Point2>| {
+        *seed = Some(uv(if rev { &pc.n[0] } else { &pc.n[pc.n.len() - 1] }));
         out.push(pc);
+    };
+    // a line's uv runs linearly on a plane or along a cylinder's axis, where G is a polynomial
+    // of degree 4 along it; a whole circle or ellipse goes round a period
+    let kr = match **way {
+        Way::Curve(Curve::Line(l)) => match s {
+            Surface::Plane(_) => gauss3(),
+            Surface::Cylinder(c) if l.dir.get().cross(c.frame.z().get()).length() <= 1e-14 => gauss3(),
+            _ => kronrod(7),
+        },
+        _ if whole => periodic(),
+        _ => kronrod(15),
+    };
+    if exact(s, way)
+        && let Some(pc) = kronrod_piece(s, way, (lo, hi), kr, *seed, rev)
+    {
+        push(pc, seed);
         return;
     }
     let pc = finish(
-        points(s, way, lo, hi, rule(12).x.iter().copied()),
+        points(s, way, (lo, hi), &rule(12).x, *seed, rev),
         periods(s),
         way,
         lo,
         hi,
     );
     if resolved(&pc, rel) {
-        out.push(pc);
+        push(pc, seed);
         return;
     }
     let pc = finer(s, &pc).pop().expect("one piece");
     if depth == 0 || resolved(&pc, rel) {
-        out.push(pc);
+        push(pc, seed);
         return;
     }
     let mid = 0.5 * (lo + hi);
-    refine(s, way, lo, mid, rel, depth - 1, out);
-    refine(s, way, mid, hi, rel, depth - 1, out);
+    let halves = if rev {
+        [(mid, hi), (lo, mid)]
+    } else {
+        [(lo, mid), (mid, hi)]
+    };
+    for h in halves {
+        refine(s, way, h, false, rel, depth - 1, seed, rev, out);
+    }
 }
 
 /// A coedge's pieces in the order its loop walks them.
@@ -618,11 +820,14 @@ fn coedge_pieces<'a>(
     s: &Surface,
     c: CoedgeId,
     rel: f64,
+    seed: &mut Option<Point2>,
 ) -> Result<Vec<Piece<'a>>, &'static str> {
     let co = body.coedge(c);
     let e = body.edge(co.edge);
     let (lo, hi) = (e.range.lo, e.range.hi);
-    let mut out = Vec::new();
+    let rev = !co.forward;
+    // stretches of a smooth way, in the edge's order
+    let mut ways: Vec<(Rc<Way<'a>>, f64, f64, bool)> = Vec::new();
     match &e.curve {
         Curve::Intersection(ic) => {
             let n = ic.pts.len() as i64;
@@ -667,19 +872,38 @@ fn coedge_pieces<'a>(
                     return Err("an intersection edge doubles back");
                 }
                 let s1 = knots[knots.len() - 1].1;
+                let on = match (&ic.a, &ic.b) {
+                    (Surface::Procedural(_), Surface::Procedural(_)) => None,
+                    (Surface::Procedural(_), _) => Some((0, Default::default())),
+                    (_, Surface::Procedural(_)) => Some((1, Default::default())),
+                    _ => None,
+                };
                 let way = Rc::new(Way::Chord {
                     c: ic,
                     anchor,
                     dir,
                     knots,
+                    on,
                 });
-                refine(s, &way, 0.0, s1, rel, 8, &mut out);
+                ways.push((way, 0.0, s1, false));
                 t0 = t1;
             }
         }
         curve => {
+            // a whole circle or ellipse: one piece round its period
+            let whole = matches!(curve, Curve::Circle(_) | Curve::Ellipse(_))
+                && e.range.width() >= dmath::TAU * (1.0 - 1e-12);
             let k = match curve {
+                _ if whole => 1.0,
                 Curve::Circle(_) | Curve::Ellipse(_) => (e.range.width() / dmath::FRAC_PI_2).ceil().max(1.0),
+                // pieces bending about as much as a quarter of a circle: a chord of length l
+                // sags 0.19 l there, and a curve's chord count goes as the root of 1 / sag
+                // (research/mass-props)
+                Curve::Procedural(pc) => {
+                    let l = pc.speed_bound(e.range) * e.range.width();
+                    let n = pc.segments(e.range, 1e-4 * l) as f64;
+                    (n * n * 1e-4 / 0.19).ceil().clamp(1.0, 256.0)
+                }
                 _ => 1.0,
             };
             let way = Rc::new(Way::Curve(curve));
@@ -690,14 +914,20 @@ fn coedge_pieces<'a>(
             let mut a = lo;
             for b in cuts.into_iter().chain([hi]) {
                 if b > a {
-                    refine(s, &way, a, b, rel, 8, &mut out);
+                    ways.push((way.clone(), a, b, whole));
                     a = b;
                 }
             }
         }
     }
-    if !co.forward {
-        out.reverse();
+    if rev {
+        ways.reverse();
+    }
+    let mut out = Vec::new();
+    for (way, a, b, whole) in ways {
+        refine(s, &way, (a, b), whole, rel, 8, seed, rev, &mut out);
+    }
+    if rev {
         for p in &mut out {
             p.n.reverse();
             p.sign = -1.0;
@@ -729,6 +959,7 @@ fn trace_loop<'a>(body: &'a Body, s: &Surface, lp: LoopId, rel: f64) -> Result<L
     let mut runs: Vec<Vec<Piece<'a>>> = Vec::new();
     let mut jumps = Vec::new();
     let mut prev: Option<[f64; 2]> = None;
+    let mut seed: Option<Point2> = None;
     let jump = |a: [f64; 2], b: [f64; 2]| {
         let d = [
             (near(b[0], a[0], per[0]) - a[0]).abs(),
@@ -742,7 +973,10 @@ fn trace_loop<'a>(body: &'a Body, s: &Surface, lp: LoopId, rel: f64) -> Result<L
         if fresh {
             runs.push(Vec::new());
         }
-        for (j, mut pc) in coedge_pieces(body, s, cos[k], rel)?.into_iter().enumerate() {
+        for (j, mut pc) in coedge_pieces(body, s, cos[k], rel, &mut seed)?
+            .into_iter()
+            .enumerate()
+        {
             if let Some(r) = prev {
                 if fresh && j == 0 && sing[k] {
                     jumps.extend(jump(r, pc.n[0].uv));
@@ -825,33 +1059,175 @@ fn chebyshev_integrals(x: f64, n: usize) -> Vec<f64> {
         .collect()
 }
 
+/// Clenshaw-Curtis weights on the n + 1 Lobatto points of [-1, 1], and the interpolant's last
+/// two Chebyshev coefficients as weights on the values.
+struct Curtis {
+    w: Vec<f64>,
+    tail: [Vec<f64>; 2],
+}
+
+fn curtis_rule(n: usize) -> &'static Curtis {
+    static R: OnceLock<[Curtis; 2]> = OnceLock::new();
+    let make = |n: usize| {
+        let m = coefficient_matrix(n);
+        // the integral of T_j over [-1, 1]
+        let it = |j: usize| {
+            if j.is_multiple_of(2) {
+                2.0 / (1.0 - (j * j) as f64)
+            } else {
+                0.0
+            }
+        };
+        Curtis {
+            w: (0..=n)
+                .map(|k| (0..=n).map(|j| m[j * (n + 1) + k] * it(j)).sum())
+                .collect(),
+            tail: [n - 1, n].map(|j| (0..=n).map(|k| m[j * (n + 1) + k]).collect()),
+        }
+    };
+    &R.get_or_init(|| [make(16), make(32)])[usize::from(n == 32)]
+}
+
+/// Lobatto points over (lo, hi) for degree n: -cos(k pi / n) mapped, k = 0..=n.
+fn lobatto(n: usize, (lo, hi): (f64, f64)) -> Vec<f64> {
+    (0..=n)
+        .map(|k| 0.5 * (lo + hi) - 0.5 * (hi - lo) * dmath::cos(k as f64 * dmath::PI / n as f64))
+        .collect()
+}
+
+/// Whether Chebyshev coefficients' last two (`tail`) are negligible against all of them
+/// (`scale`) or over a uv area `area` against the face's floor, or stuck at the surface's own
+/// rounding (no smaller than `was`, with half the points).
+fn settled(cx: &Ctx, area: f64, tail: &F, scale: &F, was: &F) -> bool {
+    (0..NF).all(|m| {
+        tail[m] <= 1e-2 * cx.rel * scale[m] + 1e-2 * cx.floor[m] / area
+            || (tail[m] <= cx.rel * scale[m] && tail[m] >= 0.3 * was[m])
+    })
+}
+
 impl Cheb {
-    /// Interpolants over tiles of the box: a tile that 64 degrees along a, or 32 along b, cannot
-    /// draw is halved that way; None once `left` evaluations are spent.
-    fn tiles(
+    /// Interpolants over tiles of the box. Lines across it lay the tiles out first, at a few
+    /// evaluations each: along b, pieces 32 degrees draw; along a, the degree each piece needs.
+    /// None once `left` evaluations are spent.
+    fn tiles(cx: &Ctx, a: (f64, f64), b: (f64, f64), left: &mut usize, out: &mut Vec<Cheb>) -> Option<()> {
+        let mid = |r: (f64, f64)| 0.5 * (r.0 + r.1);
+        let lines = |r: (f64, f64)| [r.0, mid(r), r.1];
+        let area = (a.1 - a.0) * (b.1 - b.0);
+        let mut pieces = Vec::new();
+        let mut todo = vec![(b, 6u32)];
+        while let Some((bi, depth)) = todo.pop() {
+            let nb = lines(a).iter().try_fold(8, |n, &x| {
+                Some(n.max(Cheb::line(cx, bi, area, 32, left, |ys| {
+                    ys.iter().map(|&y| cx.f(x, y)).collect()
+                })?))
+            });
+            match nb {
+                Some(nb) => pieces.push((bi, nb)),
+                None if depth > 0 && *left > 0 => {
+                    todo.push(((mid(bi), bi.1), depth - 1));
+                    todo.push(((bi.0, mid(bi)), depth - 1));
+                }
+                None => return None,
+            }
+        }
+        for (bi, nb) in pieces {
+            let na = lines(bi)
+                .iter()
+                .try_fold(16, |n, &y| {
+                    Some(n.max(Cheb::line(cx, a, area, 64, left, |xs| cx.column(xs, y))?))
+                })
+                .unwrap_or(64);
+            Cheb::grow(cx, a, bi, (na, nb), 4, left, out)?;
+        }
+        Some(())
+    }
+
+    /// The degree (a power of two from 8, at most `max`) a Chebyshev interpolant of g over r
+    /// needs; None past `max` (or g not finite, or `left` spent).
+    fn line(
+        cx: &Ctx,
+        r: (f64, f64),
+        area: f64,
+        max: usize,
+        left: &mut usize,
+        g: impl Fn(&[f64]) -> Vec<F>,
+    ) -> Option<usize> {
+        let mut vals: Vec<F> = Vec::new();
+        let mut was = [f64::INFINITY; NF];
+        let mut n = 8;
+        loop {
+            let xs = lobatto(n, r);
+            *left = left.checked_sub(n + 1 - vals.len())?;
+            // the new points: all of them at first, then the odd ones
+            let new: Vec<f64> = xs
+                .iter()
+                .enumerate()
+                .filter(|(k, _)| vals.is_empty() || k % 2 == 1)
+                .map(|(_, &x)| x)
+                .collect();
+            let mut fresh = g(&new).into_iter();
+            let v: Vec<F> = (0..=n)
+                .map(|k| {
+                    if !vals.is_empty() && k % 2 == 0 {
+                        vals[k / 2]
+                    } else {
+                        fresh.next().expect("a value")
+                    }
+                })
+                .collect();
+            if v.iter().flatten().any(|x| !x.is_finite()) {
+                return None;
+            }
+            vals = v;
+            let c = coefficients(&vals, n, 0);
+            let (mut tail, mut scale) = ([0.0; NF], [0.0; NF]);
+            for (i, ci) in c.iter().enumerate() {
+                for m in 0..NF {
+                    scale[m] += ci[m].abs();
+                    if i + 2 > n {
+                        tail[m] += ci[m].abs();
+                    }
+                }
+            }
+            if settled(cx, area, &tail, &scale, &was) {
+                return Some(n);
+            }
+            was = tail;
+            n *= 2;
+            if n > max {
+                return None;
+            }
+        }
+    }
+
+    /// The tile's interpolant from degrees (na, nb) up; a tile 64 degrees along a, or 32 along
+    /// b, cannot draw is halved that way.
+    fn grow(
         cx: &Ctx,
         a: (f64, f64),
         b: (f64, f64),
+        start: (usize, usize),
         depth: u32,
         left: &mut usize,
         out: &mut Vec<Cheb>,
     ) -> Option<()> {
-        match Cheb::fit(cx, a, b, left) {
+        match Cheb::fit(cx, a, b, start, left) {
             Ok(c) => out.push(c),
             Err((sa, sb)) if depth > 0 && (sa || sb) => {
-                let ha = if sa {
-                    vec![(a.0, 0.5 * (a.0 + a.1)), (0.5 * (a.0 + a.1), a.1)]
-                } else {
-                    vec![a]
+                let half = |r: (f64, f64), s: bool| {
+                    if s {
+                        vec![(r.0, 0.5 * (r.0 + r.1)), (0.5 * (r.0 + r.1), r.1)]
+                    } else {
+                        vec![r]
+                    }
                 };
-                let hb = if sb {
-                    vec![(b.0, 0.5 * (b.0 + b.1)), (0.5 * (b.0 + b.1), b.1)]
-                } else {
-                    vec![b]
-                };
-                for &x in &ha {
-                    for &y in &hb {
-                        Cheb::tiles(cx, x, y, depth - 1, left, out)?;
+                let next = (
+                    if sa { start.0 / 2 } else { start.0 }.max(16),
+                    if sb { start.1 / 2 } else { start.1 }.max(8),
+                );
+                for &x in &half(a, sa) {
+                    for &y in &half(b, sb) {
+                        Cheb::grow(cx, x, y, next, depth - 1, left, out)?;
                     }
                 }
             }
@@ -860,16 +1236,17 @@ impl Cheb {
         Some(())
     }
 
-    /// Interpolates F at Chebyshev-Lobatto points, doubling the degree along a or b while its
-    /// last coefficients there are not negligible. Err: which ways it needs more than 64 along a
-    /// or 32 along b (neither when F is not finite or `left` runs out).
-    fn fit(cx: &Ctx, a: (f64, f64), b: (f64, f64), left: &mut usize) -> Result<Cheb, (bool, bool)> {
-        let lobatto = |n: usize, (lo, hi): (f64, f64)| -> Vec<f64> {
-            (0..=n)
-                .map(|k| 0.5 * (lo + hi) - 0.5 * (hi - lo) * dmath::cos(k as f64 * dmath::PI / n as f64))
-                .collect()
-        };
-        let (mut na, mut nb) = (16, 8);
+    /// Interpolates F at Chebyshev-Lobatto points from degrees `start`, doubling the degree along
+    /// a or b while its last coefficients there are not negligible. Err: which ways it needs
+    /// more than 64 along a or 32 along b (neither when F is not finite or `left` runs out).
+    fn fit(
+        cx: &Ctx,
+        a: (f64, f64),
+        b: (f64, f64),
+        start: (usize, usize),
+        left: &mut usize,
+    ) -> Result<Cheb, (bool, bool)> {
+        let (mut na, mut nb) = start;
         let mut last = ([f64::INFINITY; NF], [f64::INFINITY; NF]);
         let mut vals: Vec<F> = Vec::new();
         let (mut xa, mut xb) = (Vec::new(), Vec::new());
@@ -878,27 +1255,36 @@ impl Cheb {
             let (ya, yb) = (lobatto(na, a), lobatto(nb, b));
             let (oa, ob) = (xa.len().saturating_sub(1), xb.len().saturating_sub(1));
             *left = left.checked_sub((na + 1) * (nb + 1)).ok_or((false, false))?;
-            let mut v = Vec::with_capacity((na + 1) * (nb + 1));
-            for (i, &u) in ya.iter().enumerate() {
-                for (j, &w) in yb.iter().enumerate() {
-                    let old = |n: usize, o: usize, k: usize| {
-                        if o == n {
-                            Some(k)
-                        } else if o > 0 && 2 * o == n && k.is_multiple_of(2) {
-                            Some(k / 2)
-                        } else {
-                            None
-                        }
-                    };
-                    let f = match (old(na, oa, i), old(nb, ob, j)) {
-                        (Some(p), Some(q)) => vals[p * (ob + 1) + q],
-                        _ => cx.f(u, w),
-                    };
-                    if f.iter().any(|x| !x.is_finite()) {
-                        return Err((false, false));
-                    }
-                    v.push(f);
+            let old = |n: usize, o: usize, k: usize| {
+                if o == n {
+                    Some(k)
+                } else if o > 0 && 2 * o == n && k.is_multiple_of(2) {
+                    Some(k / 2)
+                } else {
+                    None
                 }
+            };
+            // column by column along a (a swept surface's section once per column)
+            let mut v = vec![[0.0; NF]; (na + 1) * (nb + 1)];
+            for (j, &w) in yb.iter().enumerate() {
+                let q = old(nb, ob, j);
+                let new: Vec<usize> = (0..=na)
+                    .filter(|&i| q.is_none() || old(na, oa, i).is_none())
+                    .collect();
+                let fresh = cx.column(&new.iter().map(|&i| ya[i]).collect::<Vec<_>>(), w);
+                for (i, f) in new.into_iter().zip(fresh) {
+                    v[i * (nb + 1) + j] = f;
+                }
+                if let Some(q) = q {
+                    for i in 0..=na {
+                        if let Some(p) = old(na, oa, i) {
+                            v[i * (nb + 1) + j] = vals[p * (ob + 1) + q];
+                        }
+                    }
+                }
+            }
+            if v.iter().flatten().any(|x| !x.is_finite()) {
+                return Err((false, false));
             }
             (vals, xa, xb) = (v, ya, yb);
             let c = coefficients(&vals, na, nb);
@@ -918,14 +1304,11 @@ impl Cheb {
                     }
                 }
             }
-            // converged, or stuck at the surface's own rounding (no smaller for twice the points)
-            let ok = |t: &F, was: &F| {
-                (0..NF).all(|m| {
-                    t[m] <= 1e-2 * cx.rel * scale[m] + 1e-300
-                        || (t[m] <= cx.rel * scale[m] && t[m] >= 0.3 * was[m])
-                })
-            };
-            let (oka, okb) = (ok(&ta, &last.0), ok(&tb, &last.1));
+            let area = (a.1 - a.0) * (b.1 - b.0);
+            let (oka, okb) = (
+                settled(cx, area, &ta, &scale, &last.0),
+                settled(cx, area, &tb, &scale, &last.1),
+            );
             last = (ta, tb);
             if oka && okb {
                 let tail = std::array::from_fn(|m| ta[m] + tb[m]);
@@ -987,19 +1370,25 @@ impl Cheb {
 }
 
 /// Chebyshev coefficients of values at Lobatto points (x_k = -cos(k pi / n)).
-fn coefficients(vals: &[F], na: usize, nb: usize) -> Vec<F> {
-    let matrix = |n: usize| -> Vec<f64> {
-        let mut m = vec![0.0; (n + 1) * (n + 1)];
-        for k in 0..=n {
-            let t = chebyshev(-dmath::cos(k as f64 * dmath::PI / n as f64), n);
-            for (j, tj) in t.iter().enumerate() {
-                let half = |i: usize| if i == 0 || i == n { 0.5 } else { 1.0 };
-                m[j * (n + 1) + k] = 2.0 / n as f64 * tj * half(k) * half(j);
-            }
+/// The matrix taking values at the n + 1 Lobatto points to Chebyshev coefficients: row j,
+/// column k.
+fn coefficient_matrix(n: usize) -> Vec<f64> {
+    if n == 0 {
+        return vec![1.0];
+    }
+    let mut m = vec![0.0; (n + 1) * (n + 1)];
+    for k in 0..=n {
+        let t = chebyshev(-dmath::cos(k as f64 * dmath::PI / n as f64), n);
+        for (j, tj) in t.iter().enumerate() {
+            let half = |i: usize| if i == 0 || i == n { 0.5 } else { 1.0 };
+            m[j * (n + 1) + k] = 2.0 / n as f64 * tj * half(k) * half(j);
         }
-        m
-    };
-    let (ma, mb) = (matrix(na), matrix(nb));
+    }
+    m
+}
+
+fn coefficients(vals: &[F], na: usize, nb: usize) -> Vec<F> {
+    let (ma, mb) = (coefficient_matrix(na), coefficient_matrix(nb));
     // along b for each a sample, then along a
     let mut rows = vec![[0.0; NF]; (na + 1) * (nb + 1)];
     for i in 0..=na {
@@ -1149,7 +1538,10 @@ impl Ctx<'_> {
         } else {
             Point2::new(b, a)
         };
-        let d = self.s.deriv(uv);
+        self.of(&self.s.deriv(uv))
+    }
+
+    fn of(&self, d: &forge_geom::surface::SurfDeriv) -> F {
         let n = d.du.cross(d.dv);
         let mut f = integrand(d.p - self.c, n);
         if let Surface::Sphere(sp) = self.s {
@@ -1157,6 +1549,19 @@ impl Ctx<'_> {
             f[10] = n.dot(d.p - sp.frame.origin) / sp.radius;
         }
         f
+    }
+
+    /// F at each of `aa` at b: a swept surface works out its section at u once for a column
+    /// along v.
+    fn column(&self, aa: &[f64], b: f64) -> Vec<F> {
+        match self.s {
+            Surface::Procedural(p) if self.ax == 1 && p.swept() => {
+                let mut d = Vec::with_capacity(aa.len());
+                p.column_d1(b, aa, &mut d);
+                d.iter().map(|d| self.of(d)).collect()
+            }
+            _ => aa.iter().map(|&a| self.f(a, b)).collect(),
+        }
     }
 
     /// G at (a, b), the integral of F over a whole period of a (for a periodic a), and G's error.
@@ -1228,14 +1633,67 @@ impl Ctx<'_> {
         }
     }
 
+    /// Clenshaw-Curtis on 17, then 33, points of [lo, hi] (one column each), the interpolant's
+    /// last Chebyshev coefficients bounding the error; None where 33 do not settle it.
+    fn curtis(&self, lo: f64, hi: f64, b: f64) -> Option<(F, F)> {
+        self.panels.set(self.panels.get().saturating_sub(1));
+        let h = 0.5 * (hi - lo);
+        let mut vals: Vec<F> = Vec::new();
+        for n in [16, 32] {
+            let xs = lobatto(n, (lo, hi));
+            let new: Vec<f64> = xs
+                .iter()
+                .enumerate()
+                .filter(|(k, _)| vals.is_empty() || k % 2 == 1)
+                .map(|(_, &x)| x)
+                .collect();
+            let mut fresh = self.column(&new, b).into_iter();
+            vals = (0..=n)
+                .map(|k| {
+                    if !vals.is_empty() && k % 2 == 0 {
+                        vals[k / 2]
+                    } else {
+                        fresh.next().expect("a value")
+                    }
+                })
+                .collect();
+            let r = curtis_rule(n);
+            let (mut sum, mut abs, mut tail) = ([0.0; NF], [0.0; NF], [[0.0; NF]; 2]);
+            for (k, f) in vals.iter().enumerate() {
+                axpy(&mut sum, h * r.w[k], f);
+                for m in 0..NF {
+                    abs[m] += (h * r.w[k] * f[m]).abs();
+                }
+                for (t, row) in tail.iter_mut().zip(&r.tail) {
+                    axpy(t, row[k], f);
+                }
+            }
+            if sum.iter().any(|x| !x.is_finite()) {
+                return None;
+            }
+            let e: F =
+                std::array::from_fn(|m| 2.0 * h * (tail[0][m].abs() + tail[1][m].abs()) + 1e-15 * abs[m]);
+            if (0..NF).all(|m| e[m] <= 0.1 * self.rel * abs[m] + self.floor[m]) {
+                return Some((sum, e));
+            }
+        }
+        None
+    }
+
     /// Gauss-Kronrod 7-15 on [lo, hi]: the Kronrod sum, the error estimate, and the sum of |F|.
     fn gk(&self, lo: f64, hi: f64, b: f64) -> (F, F, F) {
         self.panels.set(self.panels.get().saturating_sub(1));
         let (c, h) = (0.5 * (lo + hi), 0.5 * (hi - lo));
         let (mut k, mut g, mut abs) = ([0.0; NF], [0.0; NF], [0.0; NF]);
-        for i in 0..15 {
-            let (j, sgn) = if i < 8 { (i, -1.0) } else { (14 - i, 1.0) };
-            let fx = self.f(c + sgn * h * XGK[j], b);
+        let at = |i: usize| if i < 8 { (i, -1.0) } else { (14 - i, 1.0) };
+        let xs: Vec<f64> = (0..15)
+            .map(|i| {
+                let (j, sgn) = at(i);
+                c + sgn * h * XGK[j]
+            })
+            .collect();
+        for (i, fx) in self.column(&xs, b).into_iter().enumerate() {
+            let (j, _) = at(i);
             axpy(&mut k, h * WGK[j], &fx);
             if j % 2 == 1 || j == 7 {
                 axpy(&mut g, h * WG[j / 2], &fx);
@@ -1251,6 +1709,12 @@ impl Ctx<'_> {
     /// Bisects while the halves' error falls; where it stops falling it is the surface's own
     /// rounding (a derivative found by differences), and that is the error reported.
     fn adapt(&self, lo: f64, hi: f64, b: f64, depth: u32) -> (F, F) {
+        // a swept surface's column costs one section, however many points
+        if matches!(self.s, Surface::Procedural(p) if self.ax == 1 && p.swept())
+            && let Some(r) = self.curtis(lo, hi, b)
+        {
+            return r;
+        }
         let (k, e, abs) = self.gk(lo, hi, b);
         let (k, e, _) = self.split(lo, hi, b, depth, (k, e, abs));
         (k, e)
@@ -1298,7 +1762,7 @@ struct Acc {
 fn integrate(cx: &Ctx, pc: &Piece, u: &mut Acc, last: bool) -> Option<()> {
     let (ax, c) = (cx.ax, cx.c);
     let r = rule(pc.n.len());
-    let kr = pc.kronrod.then(|| kronrod(pc.n.len()));
+    let kr = pc.kr;
     let big = pc.n.iter().fold(0.0f64, |m, q| m.max(q.uv[1 - ax].abs()));
     let flat = pc.n.iter().all(|q| q.d[1 - ax].abs() <= 1e-12 * (1.0 + big));
     let (mut sum, mut phis, mut abs) = ([0.0; NF], [0.0; NF], [0.0; NF]);
@@ -1365,6 +1829,9 @@ fn face_integrals(body: &Body, f: FaceId, c: Point3, size: f64, rel: f64) -> Res
     let face = body.face(f);
     let s = &face.surface;
     let sigma = if face.same_sense { 1.0 } else { -1.0 };
+    if let Some(r) = whole_patch(body, f, c, size, rel) {
+        return Ok(r);
+    }
     let loops: Vec<LoopTrace> = face
         .loops
         .iter()
@@ -1387,7 +1854,8 @@ fn face_integrals(body: &Body, f: FaceId, c: Point3, size: f64, rel: f64) -> Res
     } else if let Some(j) = jump_ax {
         j
     } else if let Surface::Procedural(p) = s {
-        // across any u where the surface is not smooth, else the shorter way across
+        // along v where the surface is a polynomial there (a closed rule), else across any u
+        // where it is not smooth, else the shorter way across
         let (su, sv) = p.uv_scale();
         let w = |a: usize| {
             let (lo, hi) = span(&loops, a);
@@ -1395,7 +1863,19 @@ fn face_integrals(body: &Body, f: FaceId, c: Point3, size: f64, rel: f64) -> Res
         };
         let (ulo, uhi) = span(&loops, 0);
         let kinked = ulo < uhi && !p.u_kinks(forge_math::Interval::new(ulo, uhi)).is_empty();
-        usize::from(kinked || w(1) * sv < w(0) * su)
+        usize::from(p.v_degree().is_some() || kinked || w(1) * sv < w(0) * su)
+    } else if let Surface::Cylinder(_) | Surface::Cone(_) = s {
+        // along the axis by Gauss-Legendre (2 or 3 points per node where u moves), or round it
+        // by a fit (9 points at each of 4 or 5 v) and a Fourier sum where v moves
+        let gl = if matches!(s, Surface::Cylinder(_)) { 2 } else { 3 };
+        let moving = |a: usize| -> usize {
+            let pieces = loops.iter().flat_map(|l| l.runs.iter().flatten());
+            pieces
+                .filter(|pc| pc.n.iter().any(|q| q.d[a].abs() > 1e-12))
+                .map(|pc| pc.n.len())
+                .sum()
+        };
+        usize::from(gl * moving(0) < 9 * (gl + 2) + 2 * moving(1))
     } else {
         0
     };
@@ -1452,6 +1932,11 @@ fn face_integrals(body: &Body, f: FaceId, c: Point3, size: f64, rel: f64) -> Res
         (Surface::Cone(_), _) => Some((4, Some(4))),
         (Surface::Sphere(_) | Surface::Torus(_), 0) => Some((4, None)),
         (Surface::Sphere(_) | Surface::Torus(_), _) => Some((5, None)),
+        (Surface::Procedural(p), 1) if p.v_degree() == Some(1) => {
+            // F is of degree 5d - 1 = 4 in v
+            cx.inner = Inner::Poly(&GL3);
+            None
+        }
         (Surface::Procedural(_), _) => None,
     };
     if let Some((k, deg)) = fourier {
@@ -1491,7 +1976,13 @@ fn face_integrals(body: &Body, f: FaceId, c: Point3, size: f64, rel: f64) -> Res
             }
         };
         cx.inner = Inner::Fourier { k, along };
-    } else if matches!(s, Surface::Procedural(_)) && !loops.is_empty() {
+    } else if let Surface::Procedural(p) = s
+        && !(ax == 1 && p.swept())
+        && matches!(cx.inner, Inner::Adapt)
+        && !loops.is_empty()
+    {
+        // (a swept surface's sections are dear and its columns along v cheap: Gauss-Kronrod
+        // there needs a section per node, fewer than a fit's)
         let (alo, ahi) = span(&loops, ax);
         let (blo, bhi) = span(&loops, 1 - ax);
         // inside the surface's domain: past its ends a procedural surface may take another branch
@@ -1506,7 +1997,6 @@ fn face_integrals(body: &Body, f: FaceId, c: Point3, size: f64, rel: f64) -> Res
         let (a0c, bl, bh) = (inside(a0, ax), inside(blo, 1 - ax), inside(bhi, 1 - ax));
         let all = ((a0c, inside(ahi, ax).max(a0c + 1e-12)), (bl, bh.max(bl + 1e-12)));
         // tiles start split where the surface is not smooth along u
-        let Surface::Procedural(p) = s else { unreachable!() };
         let u = if ax == 0 { all.0 } else { all.1 };
         let mut cuts = p.u_kinks(forge_math::Interval::new(u.0, u.1));
         cuts.insert(0, u.0);
@@ -1521,7 +2011,7 @@ fn face_integrals(body: &Body, f: FaceId, c: Point3, size: f64, rel: f64) -> Res
                 } else {
                     (all.0, (w[0], w[1]))
                 };
-                Cheb::tiles(&cx, a, b, 6, &mut left, &mut tiles).is_some()
+                Cheb::tiles(&cx, a, b, &mut left, &mut tiles).is_some()
             });
         if fit {
             cx.inner = Inner::Cheb(tiles, all);
@@ -1616,6 +2106,76 @@ fn face_integrals(body: &Body, f: FaceId, c: Point3, size: f64, rel: f64) -> Res
         }
     }
     Ok((out, err))
+}
+
+/// A corner patch's face that is its whole domain polygon (its vertices on the polygon's
+/// corners, its edges along the sides): the integrals over the polygon directly, by the patch's
+/// own rule at 12, 16 and 32 points, the last two's difference the error.
+fn whole_patch(body: &Body, f: FaceId, c: Point3, size: f64, rel: f64) -> Option<(F, F)> {
+    let face = body.face(f);
+    let Surface::Procedural(p) = &face.surface else {
+        return None;
+    };
+    let hp = p.as_any()?.downcast_ref::<forge_geom::corner::HolePatch>()?;
+    let [lp] = face.loops[..] else {
+        return None;
+    };
+    let corners = hp.domain_corners();
+    let n = corners.len();
+    let side = corners[0].distance(corners[1]);
+    let off = |x: Point2| {
+        (0..n)
+            .map(|i| {
+                let (a, b) = (corners[i], corners[(i + 1) % n]);
+                let t = ((x - a).dot(b - a) / (b - a).length_sq()).clamp(0.0, 1.0);
+                x.distance(a.lerp(b, t))
+            })
+            .fold(f64::INFINITY, f64::min)
+    };
+    let mut hit = vec![false; n];
+    for co in body.lp(lp).coedges() {
+        let e = body.edge(body.coedge(co).edge);
+        let start = p.project(body.vertex(body.coedge_start(co)).point);
+        let mid = p.project(e.curve.eval(e.range.mid()));
+        if off(start) > 1e-6 * side || off(mid) > 1e-6 * side {
+            return None;
+        }
+        for (k, h) in hit.iter_mut().enumerate() {
+            *h |= start.distance(corners[k]) <= 1e-6 * side;
+        }
+    }
+    if !hit.iter().all(|&h| h) {
+        return None;
+    }
+    let sum = |m: usize| {
+        let (mut v, mut abs) = ([0.0; NF], [0.0; NF]);
+        let mut d = Vec::with_capacity(1);
+        for (x, w) in hp.domain_rule(m) {
+            d.clear();
+            p.column_d1(x.x, &[x.y], &mut d);
+            let fx = integrand(d[0].p - c, d[0].du.cross(d[0].dv));
+            axpy(&mut v, w, &fx);
+            for k in 0..NF {
+                abs[k] += (w * fx[k]).abs();
+            }
+        }
+        (v, abs)
+    };
+    let floor: F = std::array::from_fn(|m| 1e-6 * rel * size.powi([3, 4, 4, 4, 5, 5, 5, 5, 5, 5, 2][m]));
+    // the rule converges geometrically: 12 points draw it to about 2e-11, 16 to rounding
+    // (measured: research/mass-props)
+    let (mut was, _) = sum(12);
+    for m in [16, 32] {
+        let (v, abs) = sum(m);
+        let e: F = std::array::from_fn(|k| (v[k] - was[k]).abs() + 1e-15 * abs[k]);
+        if m == 32 || (0..NF).all(|k| e[k] <= 0.1 * rel * abs[k] + floor[k]) {
+            let sigma = if face.same_sense { 1.0 } else { -1.0 };
+            let out = std::array::from_fn(|k| if k < 10 { sigma * v[k] } else { v[k] });
+            return Some((out, e));
+        }
+        was = v;
+    }
+    None
 }
 
 /// The range of parameter `a` over the loops' samples.

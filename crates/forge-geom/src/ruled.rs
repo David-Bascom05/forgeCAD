@@ -415,6 +415,12 @@ fn lerp_box(a: &Box3, b: &Box3, s: f64) -> Box3 {
 }
 
 impl Procedural for Ruled {
+    fn exact_d1(&self) -> bool {
+        true
+    }
+    fn v_degree(&self) -> Option<usize> {
+        Some(1)
+    }
     fn deriv(&self, uv: Point2) -> SurfDeriv {
         self.point(uv)
     }

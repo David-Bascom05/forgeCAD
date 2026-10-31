@@ -400,12 +400,19 @@ pub fn spine(a: &Surface, b: &Surface, near: Point3, region: Box3) -> Option<Cur
         return Some(c);
     }
     let traced = crate::intcurve::trace(a, b, region)?;
-    pick(
+    // walked by chord distance: the chain's own parameter is only once differentiable, and
+    // everything a pipe evaluates (its springs, its derivatives along u) takes the spine's
+    let picked = pick(
         traced
             .into_iter()
             .map(|c| Curve::Intersection(Arc::new(c)))
             .collect(),
-    )
+    )?;
+    Some(match picked {
+        Curve::Intersection(ic) => crate::intcurve::ChordCurve::new(ic.as_ref().clone())
+            .map_or(Curve::Intersection(ic), crate::intcurve::ChordCurve::curve),
+        c => c,
+    })
 }
 
 /// A short parameter range around the point of `c` nearest `p` (for checks).
@@ -623,10 +630,19 @@ impl Blend {
         } else {
             (&self.b, self.db)
         };
+        // on a pipe, the v = 0 or 1 line (the first contact at 0)
+        let on = match &self.surface {
+            Surface::Procedural(p) => p
+                .as_any()
+                .and_then(|x| x.downcast_ref::<Pipe>())
+                .map(|pipe| (self.surface.clone(), if pipe.first == *s { 0.0 } else { 1.0 })),
+            _ => None,
+        };
         Curve::Procedural(ProcCurve(Arc::new(Spring {
             spine: self.spine.clone(),
             surface: s.clone(),
             d,
+            on,
         })))
     }
 }
@@ -678,6 +694,8 @@ pub struct Spring {
     pub surface: Surface,
     /// The spine lies on the surface offset by `d` along its natural normal.
     pub d: f64,
+    /// The pipe whose v line this is, and its v.
+    pub on: Option<(Surface, f64)>,
 }
 
 impl Spring {
@@ -695,15 +713,41 @@ impl Spring {
     }
 }
 
+impl Spring {
+    /// The foot and its exact derivative: foot = c - d grad(c).
+    fn at1(&self, t: f64) -> (Point3, Vec3) {
+        let (c, c1) = self.spine.deriv1(t);
+        (
+            foot(&self.surface, self.d, c),
+            c1 - self.surface.gradient_deriv(c, c1) * self.d,
+        )
+    }
+}
+
 impl ProceduralCurve for Spring {
+    fn point(&self, t: f64) -> Point3 {
+        self.at(t)
+    }
+    fn deriv1(&self, t: f64) -> (Point3, Vec3) {
+        self.at1(t)
+    }
+    /// d2 a difference of exact first derivatives.
     fn deriv(&self, t: f64) -> CurveDeriv {
         let h = self.step();
-        let (p, a, b) = (self.at(t), self.at(t + h), self.at(t - h));
+        let ((p, d1), (_, a), (_, b)) = (self.at1(t), self.at1(t + h), self.at1(t - h));
         CurveDeriv {
             p,
-            d1: (a - b) / (2.0 * h),
-            d2: (a.to_vec() + b.to_vec() - p.to_vec() * 2.0) / (h * h),
+            d1,
+            d2: (a - b) / (2.0 * h),
         }
+    }
+    fn exact_d1(&self) -> bool {
+        true
+    }
+    fn on_surface(&self, t: f64) -> Option<(Surface, Point2, Vec2)> {
+        self.on
+            .as_ref()
+            .map(|(s, v)| (s.clone(), Point2::new(t, *v), Vec2::new(1.0, 0.0)))
     }
     fn domain(&self) -> Domain1 {
         self.spine.domain()
@@ -751,6 +795,7 @@ impl ProceduralCurve for Spring {
             spine: self.spine.transformed(f),
             surface: self.surface.transformed(f),
             d: self.d,
+            on: None,
         }))
     }
     fn speed_bound(&self, range: Interval) -> f64 {
@@ -778,6 +823,17 @@ impl ProceduralCurve for Spring {
         let h = (8.0 * chord / acc).sqrt();
         ((range.width() / h).ceil() as usize).max(1)
     }
+}
+
+/// A pipe's section at u and its rate of change along u ([value, d/du]): centre and its
+/// derivative, unit direction to the first contact, unit perpendicular towards the second, and
+/// the angle between the contacts.
+struct Moving {
+    c: Point3,
+    dc: Vec3,
+    e1: [Vec3; 2],
+    e2: [Vec3; 2],
+    th: [f64; 2],
 }
 
 /// A pipe of radius r around an exact spine, spanning the arc between the
@@ -816,7 +872,11 @@ impl Pipe {
     /// Centre, unit direction to the first contact, the unit perpendicular in
     /// the section towards the second, and the angle between the contacts.
     fn cross(&self, t: f64) -> Option<(Point3, Vec3, Vec3, f64)> {
-        let c = self.spine.eval(t);
+        self.cross_at(self.spine.eval(t))
+    }
+
+    /// `cross` at the spine point c.
+    fn cross_at(&self, c: Point3) -> Option<(Point3, Vec3, Vec3, f64)> {
         let wa = (foot(&self.first, self.d_first, c) - c).normalize()?.get();
         let wb = (foot(&self.second, self.d_second, c) - c).normalize()?.get();
         let e2 = (wb - wa * wa.dot(wb)).normalize()?.get();
@@ -837,10 +897,52 @@ impl Pipe {
         c + (e1 * k + e2 * s) * self.radius
     }
 
-    /// The derivatives at u and each of `vs`, the sections at u and either side worked out once.
+    /// The section at u and its rate of change along u: centre, unit direction to the first
+    /// contact, unit perpendicular towards the second, angle between them, then the same
+    /// differentiated (each contact direction is a unit gradient of its surface at the centre).
+    fn moving(&self, u: f64) -> Option<Moving> {
+        let (c, d1) = self.spine.deriv1(u);
+        let (c, e1, e2, th) = self.cross_at(c)?;
+        let turn = |s: &Surface, dist: f64| s.gradient_deriv(c, d1) * -dist.signum();
+        let (wa, wb) = (e1, (self.on((c, e1, e2, th), 1.0) - c) / self.radius);
+        let (wa1, wb1) = (turn(&self.first, self.d_first), turn(&self.second, self.d_second));
+        // e2 = q / |q|, q = wb - wa (wa . wb); th = atan2(|q|, wa . wb)
+        let k = wa.dot(wb);
+        let k1 = wa1.dot(wb) + wa.dot(wb1);
+        let q1 = wb1 - wa1 * k - wa * k1;
+        let sl = (wb - wa * k).length();
+        let s1 = e2.dot(q1);
+        let e21 = (q1 - e2 * s1) / sl;
+        Some(Moving {
+            c,
+            dc: d1,
+            e1: [e1, wa1],
+            e2: [e2, e21],
+            th: [th, k * s1 - sl * k1],
+        })
+    }
+
+    /// Point, first derivatives and dv, dvv, duv at v of the section `moving` gives.
+    fn first(&self, m: &Moving, v: f64) -> SurfDeriv {
+        let (r, e1, e2, th) = (self.radius, m.e1, m.e2, m.th);
+        let (s, k) = dmath::sin_cos(v * th[0]);
+        let out = e1[0] * k + e2[0] * s;
+        let along = e2[0] * k - e1[0] * s;
+        let turn = e2[1] * k - e1[1] * s;
+        SurfDeriv {
+            p: m.c + out * r,
+            du: m.dc + (e1[1] * k + e2[1] * s) * r + along * (r * v * th[1]),
+            dv: along * (r * th[0]),
+            duu: Vec3::ZERO,
+            duv: along * (r * th[1]) + turn * (r * th[0]) - out * (r * th[0] * v * th[1]),
+            dvv: out * (-r * th[0] * th[0]),
+        }
+    }
+
+    /// The derivatives at u and each of `vs`: exact first derivatives, d2/du2 a difference of
+    /// them.
     fn derivs(&self, u: f64, vs: &[f64], mut put: impl FnMut(SurfDeriv)) {
-        let r = self.radius;
-        let Some((c, e1, e2, th)) = self.cross(u) else {
+        let Some(x) = self.moving(u) else {
             let p = self.spine.eval(u);
             for _ in vs {
                 put(SurfDeriv {
@@ -854,31 +956,22 @@ impl Pipe {
             }
             return;
         };
-        // along the spine: central differences of the exact surface
-        let h = 1e-4 * self.spine.deriv(u).d1.length().max(1e-9).recip().min(1.0);
-        let (xp, xm) = (self.cross(u + h), self.cross(u - h));
-        // the point and its v-derivative at u + h or u - h
-        let at = |x: Option<(Point3, Vec3, Vec3, f64)>, u: f64, v: f64| match x {
-            Some(x @ (_, e1, e2, th)) => {
-                let (s, k) = dmath::sin_cos(v * th);
-                (self.on(x, v), (e2 * k - e1 * s) * (r * th))
-            }
-            None => (self.spine.eval(u), Vec3::ZERO),
-        };
+        let h = 1e-5 * x.dc.length().max(1e-9).recip().min(1.0);
+        let (xp, xm) = (self.moving(u + h), self.moving(u - h));
         for &v in vs {
-            let (s, k) = dmath::sin_cos(v * th);
-            let p = c + (e1 * k + e2 * s) * r;
-            let dv = (e2 * k - e1 * s) * (r * th);
-            let dvv = (e1 * k + e2 * s) * (-r * th * th);
-            let ((pp, vp), (pm, vm)) = (at(xp, u + h, v), at(xm, u - h, v));
-            put(SurfDeriv {
-                p,
-                du: (pp - pm) / (2.0 * h),
-                dv,
-                duu: (pp + pm.to_vec() - p.to_vec() * 2.0).to_vec() / (h * h),
-                duv: (vp - vm) / (2.0 * h),
-                dvv,
-            });
+            let mut d = self.first(&x, v);
+            if let (Some(xp), Some(xm)) = (&xp, &xm) {
+                d.duu = (self.first(xp, v).du - self.first(xm, v).du) / (2.0 * h);
+            }
+            put(d);
+        }
+    }
+
+    /// The first derivatives alone at u and each of `vs`.
+    fn derivs1(&self, u: f64, vs: &[f64], out: &mut Vec<SurfDeriv>) {
+        match self.moving(u) {
+            Some(x) => out.extend(vs.iter().map(|&v| self.first(&x, v))),
+            None => self.derivs(u, vs, |d| out.push(d)),
         }
     }
 
@@ -921,6 +1014,12 @@ impl Procedural for Pipe {
     }
     fn column_derivs(&self, u: f64, vs: &[f64], out: &mut Vec<SurfDeriv>) {
         self.derivs(u, vs, |d| out.push(d))
+    }
+    fn column_d1(&self, u: f64, vs: &[f64], out: &mut Vec<SurfDeriv>) {
+        self.derivs1(u, vs, out)
+    }
+    fn exact_d1(&self) -> bool {
+        true
     }
     /// Exactly away from the spine (the contact order makes du x dv point that way).
     fn normal(&self, uv: Point2) -> Option<UnitVec3> {

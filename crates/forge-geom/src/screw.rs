@@ -623,6 +623,13 @@ impl Screw {
 }
 
 impl Procedural for Screw {
+    fn exact_d1(&self) -> bool {
+        true
+    }
+    /// A straight section moves linearly in v.
+    fn v_degree(&self) -> Option<usize> {
+        matches!(self.ring.pieces[0].s, Section::Line { .. }).then_some(1)
+    }
     fn deriv(&self, uv: Point2) -> SurfDeriv {
         self.point(uv)
     }
@@ -806,6 +813,9 @@ impl ProceduralCurve for Helix {
     fn as_any(&self) -> Option<&dyn std::any::Any> {
         Some(self)
     }
+    fn exact_d1(&self) -> bool {
+        true
+    }
     fn deriv(&self, t: f64) -> CurveDeriv {
         let (e, ep, z) = self.m.axes(t);
         let r = self.p.x + self.m.a * t;
@@ -960,6 +970,9 @@ impl Fence {
 }
 
 impl Procedural for Fence {
+    fn exact_d1(&self) -> bool {
+        true
+    }
     fn deriv(&self, uv: Point2) -> SurfDeriv {
         self.point(uv)
     }

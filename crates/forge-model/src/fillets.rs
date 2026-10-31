@@ -1818,11 +1818,9 @@ mod tests {
             assert!(problems.is_empty(), "{name}: {problems:?}");
             let mesh = tessellate(&body, &q).unwrap_or_else(|e| panic!("{name}: {e:?}"));
             assert!(mesh.open_edges().is_empty(), "{name}: open mesh");
-            // corner patches stop short of the default accuracy within their budget (their
-            // derivatives are costly and steep near the corners); the bound says by how much
             let exact = mass(&body).unwrap_or_else(|e| panic!("{name}: {e}"));
             assert!(
-                exact.err[0] <= 1e-3 * exact.volume,
+                exact.err[0] <= 1e-9 * exact.volume,
                 "{name}: error bound {}",
                 exact.err[0]
             );

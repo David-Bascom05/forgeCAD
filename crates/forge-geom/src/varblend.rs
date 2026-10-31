@@ -27,7 +27,7 @@
 
 use crate::curve::{Circle, CurveDeriv, CurveGeom, Domain1, Line, ProcCurve, ProceduralCurve};
 use crate::surface::{Domain2, Proc, Procedural, SurfDeriv, Surface, SurfaceGeom};
-use forge_math::{Box2, Box3, Frame, Interval, Point2, Point3, UnitVec3, Vec3, dmath, tol};
+use forge_math::{Box2, Box3, Frame, Interval, Point2, Point3, UnitVec3, Vec2, Vec3, dmath, tol};
 use std::ops::{Add, Mul, Neg, Sub};
 use std::sync::Arc;
 
@@ -737,6 +737,28 @@ impl RadiusLaw {
 
     pub fn eval(&self, s: f64) -> f64 {
         self.coefs(s)[0]
+    }
+    /// The knots strictly inside `r`, where the law is only C2 (a smooth law) or C0 (pieces).
+    fn knots_in(&self, r: Interval) -> Vec<f64> {
+        let (k, n) = (&self.knots, self.knots.len());
+        let inner = &k[1..n - 1];
+        match self.period {
+            Some(p) => {
+                let mut out = Vec::new();
+                let mut base = k[0] + p * ((r.lo - k[0]) / p).floor();
+                while base < r.hi {
+                    out.extend(
+                        k[..n - 1]
+                            .iter()
+                            .map(|x| base + (x - k[0]))
+                            .filter(|&x| x > r.lo && x < r.hi),
+                    );
+                    base += p;
+                }
+                out
+            }
+            None => inner.iter().copied().filter(|&x| x > r.lo && x < r.hi).collect(),
+        }
     }
     /// dr/ds.
     pub fn slope(&self, s: f64) -> f64 {
@@ -2475,6 +2497,9 @@ fn principal_max(d: &SurfDeriv) -> f64 {
 }
 
 impl Procedural for VarBlend {
+    fn exact_d1(&self) -> bool {
+        true
+    }
     fn deriv(&self, uv: Point2) -> SurfDeriv {
         VarBlend::point(&self.section_at(uv.x), uv.y)
     }
@@ -2560,6 +2585,17 @@ impl Procedural for VarBlend {
     fn mesh_radius(&self) -> f64 {
         self.mesh_radius_over(Box2::new(self.range(), Interval::new(0.0, 1.0)))
     }
+    /// Where the law or the guide is only finitely differentiable: the blend is as smooth as
+    /// they are, and integrators want pieces between.
+    fn u_kinks(&self, u: Interval) -> Vec<f64> {
+        let mut out = self.law.knots_in(u);
+        if let Guide::Hermite(h) = &self.guide {
+            out.extend(h.knots.iter().copied().filter(|&x| x > u.lo && x < u.hi));
+        }
+        out.sort_by(f64::total_cmp);
+        out.dedup_by(|a, b| (*a - *b).abs() <= 1e-12 * (1.0 + b.abs()));
+        out
+    }
     fn mesh_radius_over(&self, uv: Box2) -> f64 {
         // the rows round the stretch, and the law over it
         let (a, b) = (uv.u.lo.max(self.lo), uv.u.hi.min(self.hi));
@@ -2597,6 +2633,19 @@ impl Track {
 }
 
 impl ProceduralCurve for Track {
+    fn exact_d1(&self) -> bool {
+        true
+    }
+    /// A spring is the blend's v = k line, s its u.
+    fn on_surface(&self, t: f64) -> Option<(Surface, Point2, Vec2)> {
+        (self.k < 2).then(|| {
+            (
+                self.blend.surface(),
+                Point2::new(t, self.k as f64),
+                Vec2::new(1.0, 0.0),
+            )
+        })
+    }
     fn deriv(&self, t: f64) -> CurveDeriv {
         let q = self.blend.track_at(t, self.k);
         CurveDeriv {
@@ -2663,6 +2712,9 @@ impl ProceduralCurve for Track {
             blend: Arc::new(self.blend.transformed_blend(f)),
             k: self.k,
         }))
+    }
+    fn kinks(&self, range: Interval) -> Vec<f64> {
+        Procedural::u_kinks(&*self.blend, range)
     }
     fn speed_bound(&self, range: Interval) -> f64 {
         self.segs_over(range)
@@ -2880,6 +2932,20 @@ impl Cut {
 }
 
 impl ProceduralCurve for Cut {
+    fn exact_d1(&self) -> bool {
+        true
+    }
+    /// The cut's v is the blend's, its s solved there.
+    fn on_surface(&self, t: f64) -> Option<(Surface, Point2, Vec2)> {
+        let b = &self.blend;
+        let (s, d) = b.cut_at(&self.surface, t, self.seed(t))?;
+        let n = self.surface.gradient(d.p);
+        Some((
+            b.surface(),
+            Point2::new(s, t),
+            Vec2::new(-n.dot(d.dv) / n.dot(d.du), 1.0),
+        ))
+    }
     fn deriv(&self, t: f64) -> CurveDeriv {
         let b = &self.blend;
         let Some((_, d)) = b.cut_at(&self.surface, t, self.seed(t)) else {

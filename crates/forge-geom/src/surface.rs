@@ -115,6 +115,11 @@ pub trait Procedural: Send + Sync + std::fmt::Debug {
     fn column_derivs(&self, u: f64, vs: &[f64], out: &mut Vec<SurfDeriv>) {
         out.extend(vs.iter().map(|&v| self.deriv(Point2::new(u, v))));
     }
+    /// `column_derivs` where only the point and first derivatives need be right (the second
+    /// may be left out).
+    fn column_d1(&self, u: f64, vs: &[f64], out: &mut Vec<SurfDeriv>) {
+        self.column_derivs(u, vs, out)
+    }
     fn normal(&self, uv: Point2) -> Option<UnitVec3> {
         let d = self.deriv(uv);
         d.du.cross(d.dv).normalize()
@@ -189,6 +194,16 @@ pub trait Procedural: Send + Sync + std::fmt::Debug {
     /// Boxes that together hold every face this surface carries (None: unknown, the surface
     /// may be used anywhere it reaches).
     fn patches(&self) -> Option<&[Box3]> {
+        None
+    }
+    /// Whether `deriv`'s first derivatives are exact (not differences), for integrators that
+    /// take them as they are.
+    fn exact_d1(&self) -> bool {
+        false
+    }
+    /// Some(d) where the surface is a polynomial of degree d in v at each u over v in [0, 1] (a
+    /// ruled surface: 1), so integrals along v have closed rules.
+    fn v_degree(&self) -> Option<usize> {
         None
     }
 }
@@ -646,6 +661,58 @@ impl Surface {
                 (p - centre).normalize().map_or(r, |u| u.get())
             }
             Surface::Procedural(s) => s.gradient(p),
+        }
+    }
+
+    /// The derivative of `gradient` at p along v (the unit normal field's turn, the implicit's
+    /// Hessian times v); a difference of gradients on a procedural surface.
+    pub fn gradient_deriv(&self, p: Point3, v: Vec3) -> Vec3 {
+        // the turn of the unit vector from the axis, square to it, at distance rho
+        let radial = |f: &Frame, l: Point3| {
+            let rho = (l.x * l.x + l.y * l.y).sqrt();
+            let r = if rho > 0.0 {
+                f.x() * (l.x / rho) + f.y() * (l.y / rho)
+            } else {
+                f.x().get()
+            };
+            let w = v - f.z() * f.z().dot(v);
+            (
+                r,
+                if rho > 0.0 {
+                    (w - r * r.dot(w)) / rho
+                } else {
+                    Vec3::ZERO
+                },
+            )
+        };
+        let unit = |n: Vec3, w: Vec3, len: f64| {
+            if len > 0.0 {
+                (w - n * n.dot(w)) / len
+            } else {
+                Vec3::ZERO
+            }
+        };
+        match self {
+            Surface::Plane(_) => Vec3::ZERO,
+            Surface::Cylinder(c) => radial(&c.frame, c.frame.point_to_local(p)).1,
+            Surface::Cone(c) => radial(&c.frame, c.frame.point_to_local(p)).1 * c.cos_a(),
+            Surface::Sphere(sp) => {
+                let d = p - sp.frame.origin;
+                unit(self.gradient(p), v, d.length())
+            }
+            Surface::Torus(t) => {
+                let (r, dr) = radial(&t.frame, t.frame.point_to_local(p));
+                let d = p - (t.frame.origin + r * t.major);
+                unit(self.gradient(p), v - dr * t.major, d.length())
+            }
+            Surface::Procedural(s) => {
+                let (len, h) = (v.length(), 1e-6 * (1.0 + (p - Point3::ORIGIN).abs_max()));
+                if len == 0.0 {
+                    return Vec3::ZERO;
+                }
+                let w = v * (h / len);
+                (s.gradient(p + w) - s.gradient(p - w)) * (len / (2.0 * h))
+            }
         }
     }
 

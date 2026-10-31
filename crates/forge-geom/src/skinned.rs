@@ -1136,6 +1136,9 @@ impl Skinned {
 }
 
 impl Procedural for Skinned {
+    fn exact_d1(&self) -> bool {
+        true
+    }
     fn deriv(&self, uv: Point2) -> SurfDeriv {
         self.point(uv)
     }
@@ -1348,6 +1351,9 @@ impl SplineRail {
 }
 
 impl ProceduralCurve for SplineRail {
+    fn exact_d1(&self) -> bool {
+        true
+    }
     fn deriv(&self, t: f64) -> CurveDeriv {
         let d = self.at(t);
         CurveDeriv {

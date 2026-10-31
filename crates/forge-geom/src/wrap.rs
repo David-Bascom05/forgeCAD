@@ -299,6 +299,9 @@ pub fn wrap_surface(w: &Wrap, range: Interval, s: &Surface) -> Option<CurveSurfa
 }
 
 impl ProceduralCurve for Wrap {
+    fn exact_d1(&self) -> bool {
+        true
+    }
     fn deriv(&self, t: f64) -> CurveDeriv {
         let (p, d1, d2) = self.at(t);
         CurveDeriv { p, d1, d2 }

@@ -704,6 +704,9 @@ impl Cubic {
 }
 
 impl crate::curve::ProceduralCurve for Cubic {
+    fn exact_d1(&self) -> bool {
+        true
+    }
     fn deriv(&self, t: f64) -> CurveDeriv {
         let [p0, p1, p2, p3] = self.0;
         let (d0, d1, d2) = (p1 - p0, p2 - p1, p3 - p2);
@@ -1304,6 +1307,57 @@ impl Cells {
 }
 
 impl HolePatch {
+    /// The domain polygon's corners, counter-clockwise.
+    pub fn domain_corners(&self) -> &[Point2] {
+        &self.corners
+    }
+
+    /// Points and weights of a rule over the domain polygon, m Gauss-Legendre points each way
+    /// on each piece of it. The rational quads' cells are smooth inside; the ribbons' blend turns
+    /// with direction at each corner (smooth in angle and distance from it), so each side's
+    /// triangle to the centre is halved at the side's middle and each half collapsed onto its
+    /// corner (Duffy).
+    pub fn domain_rule(&self, m: usize) -> Vec<(Point2, f64)> {
+        let g: Vec<(f64, f64)> = forge_math::poly::gauss_legendre(m)
+            .into_iter()
+            .map(|(x, w)| (0.5 * (x + 1.0), 0.5 * w))
+            .collect();
+        let mut out = Vec::new();
+        match &self.rational {
+            Some(cells) => {
+                for (_, o, a, b) in &cells.cells {
+                    let j = a.cross(*b).abs();
+                    for &(u, wu) in &g {
+                        for &(v, wv) in &g {
+                            out.push((*o + *a * u + *b * v, wu * wv * j));
+                        }
+                    }
+                }
+            }
+            None => {
+                let n = self.corners.len();
+                let c = self
+                    .corners
+                    .iter()
+                    .fold(Point2::ORIGIN, |a, p| a + (*p - Point2::ORIGIN) / n as f64);
+                for i in 0..n {
+                    let (p, q) = (self.corners[i], self.corners[(i + 1) % n]);
+                    let mid = p.lerp(q, 0.5);
+                    for (apex, e0, e1) in [(p, mid, c), (q, c, mid)] {
+                        let (a, b) = (e0 - apex, e1 - apex);
+                        let det = a.cross(b).abs();
+                        for &(s, ws) in &g {
+                            for &(t, wt) in &g {
+                                out.push((apex + (a * (1.0 - t) + b * t) * s, ws * wt * s * det));
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        out
+    }
+
     /// Sides in order around the hole. Zero-length sides (a zero setback) are dropped. Either
     /// orientation is accepted; the patch's natural normal is the outward one.
     pub fn new(sides: Vec<Side>) -> Result<HolePatch, CornerError> {
@@ -2321,6 +2375,23 @@ impl Procedural for HolePatch {
     fn mesh_radius(&self) -> f64 {
         self.radius
     }
+    fn as_any(&self) -> Option<&dyn std::any::Any> {
+        Some(self)
+    }
+    /// First derivatives by first-order jets (the second left zero).
+    fn column_d1(&self, u: f64, vs: &[f64], out: &mut Vec<SurfDeriv>) {
+        out.extend(vs.iter().map(|&v| {
+            let j = self.eval::<J1>(Point2::new(u, v));
+            SurfDeriv {
+                p: Point3::ORIGIN + j.v,
+                du: j.u,
+                dv: j.w,
+                duu: Vec3::ZERO,
+                duv: Vec3::ZERO,
+                dvv: Vec3::ZERO,
+            }
+        }))
+    }
 }
 
 /// A curve on `surface` from `p0` leaving along `t0` to `p1` arriving along `t1`, tangent to
@@ -2452,6 +2523,9 @@ impl SurfaceBezier {
 }
 
 impl crate::curve::ProceduralCurve for SurfaceBezier {
+    fn exact_d1(&self) -> bool {
+        true
+    }
     fn deriv(&self, t: f64) -> CurveDeriv {
         let (x, x1, x2) = self.uv(t);
         let d = self.surface.deriv(x);
@@ -2834,6 +2908,123 @@ impl Mul<J> for JV {
             uu: a.uu * b.v + a.u * (2.0 * b.u) + a.v * b.uu,
             uw: a.uw * b.v + a.u * b.w + a.w * b.u + a.v * b.uw,
             ww: a.ww * b.v + a.w * (2.0 * b.w) + a.v * b.ww,
+        }
+    }
+}
+
+/// A first-order jet: value and its u and v derivatives.
+#[derive(Clone, Copy, Debug)]
+struct J1 {
+    v: f64,
+    u: f64,
+    w: f64,
+}
+
+#[derive(Clone, Copy, Debug)]
+struct JV1 {
+    v: Vec3,
+    u: Vec3,
+    w: Vec3,
+}
+
+impl Add for J1 {
+    type Output = J1;
+    fn add(self, o: J1) -> J1 {
+        J1 {
+            v: self.v + o.v,
+            u: self.u + o.u,
+            w: self.w + o.w,
+        }
+    }
+}
+
+impl Sub for J1 {
+    type Output = J1;
+    fn sub(self, o: J1) -> J1 {
+        J1 {
+            v: self.v - o.v,
+            u: self.u - o.u,
+            w: self.w - o.w,
+        }
+    }
+}
+
+impl Mul for J1 {
+    type Output = J1;
+    fn mul(self, b: J1) -> J1 {
+        J1 {
+            v: self.v * b.v,
+            u: self.u * b.v + self.v * b.u,
+            w: self.w * b.v + self.v * b.w,
+        }
+    }
+}
+
+impl Add for JV1 {
+    type Output = JV1;
+    fn add(self, o: JV1) -> JV1 {
+        JV1 {
+            v: self.v + o.v,
+            u: self.u + o.u,
+            w: self.w + o.w,
+        }
+    }
+}
+
+impl Sub for JV1 {
+    type Output = JV1;
+    fn sub(self, o: JV1) -> JV1 {
+        JV1 {
+            v: self.v - o.v,
+            u: self.u - o.u,
+            w: self.w - o.w,
+        }
+    }
+}
+
+impl Mul<J1> for JV1 {
+    type Output = JV1;
+    fn mul(self, b: J1) -> JV1 {
+        JV1 {
+            v: self.v * b.v,
+            u: self.u * b.v + self.v * b.u,
+            w: self.w * b.v + self.v * b.w,
+        }
+    }
+}
+
+impl Scalar for J1 {
+    type V = JV1;
+    const JET: bool = true;
+    fn konst(v: f64) -> J1 {
+        J1 { v, u: 0.0, w: 0.0 }
+    }
+    fn affine(v: f64, gu: f64, gv: f64) -> J1 {
+        J1 { v, u: gu, w: gv }
+    }
+    fn value(self) -> f64 {
+        self.v
+    }
+    fn inv(self) -> J1 {
+        let f = 1.0 / self.v;
+        J1 {
+            v: f,
+            u: -f * f * self.u,
+            w: -f * f * self.w,
+        }
+    }
+    fn zero_v() -> JV1 {
+        JV1 {
+            v: Vec3::ZERO,
+            u: Vec3::ZERO,
+            w: Vec3::ZERO,
+        }
+    }
+    fn along(self, c: Vec3, c1: Vec3, _: Vec3) -> JV1 {
+        JV1 {
+            v: c,
+            u: c1 * self.u,
+            w: c1 * self.w,
         }
     }
 }

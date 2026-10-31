@@ -617,6 +617,73 @@ mod tests {
     }
 
     #[test]
+    fn corner_patch_areas_by_their_domain_rule() {
+        use forge_geom::corner::{HolePatch, rational_pieces};
+        use forge_geom::surface::Procedural;
+        use forge_math::Point2;
+        let c = box_corner([Some((1.0, true)), Some((2.0, true)), Some((3.0, true))]);
+        let sides: Vec<_> = planned_hole(&c).iter().map(hole_side).collect();
+        let today = HolePatch::new(sides.clone()).expect("today's patch");
+        let (mut rational, _) = rational_pieces(&sides).expect("rational form");
+        for (k, p) in [today, rational.remove(0)].iter().enumerate() {
+            let area = |m: usize| -> f64 {
+                p.domain_rule(m)
+                    .iter()
+                    .map(|&(x, w)| {
+                        let d = p.deriv(x);
+                        w * d.du.cross(d.dv).length()
+                    })
+                    .sum()
+            };
+            // the rule covers the domain polygon
+            let q = p.domain_corners();
+            let poly: f64 = (0..q.len())
+                .map(|i| 0.5 * (q[i] - Point2::ORIGIN).cross(q[(i + 1) % q.len()] - Point2::ORIGIN))
+                .sum();
+            let cover: f64 = p.domain_rule(5).iter().map(|x| x.1).sum();
+            assert!(
+                (cover - poly).abs() < 1e-12 * poly,
+                "patch {k}: {cover} vs {poly}"
+            );
+            let (a12, a20, a32) = (area(12), area(20), area(32));
+            // (the ribbons converge geometrically; the rational quads more slowly, smooth to a
+            // few orders within a cell)
+            let tight = [1e-12, 1e-8][k];
+            assert!(
+                (a20 - a32).abs() < tight * a32 && (a12 - a32).abs() < 1e3 * tight * a32,
+                "patch {k}: {a12} {a20} {a32}"
+            );
+            // against flat triangles on a grid over each triangle of the fan, two grids
+            // extrapolated (flat triangles miss the area by h^2)
+            let n = q.len();
+            let centre = q
+                .iter()
+                .fold(Point2::ORIGIN, |a, x| a + (*x - Point2::ORIGIN) / n as f64);
+            let flat = |g: usize| -> f64 {
+                let mut sum = 0.0;
+                for i in 0..n {
+                    let (a, b) = (q[i] - centre, q[(i + 1) % n] - centre);
+                    let at = |x: usize, y: usize| {
+                        p.point(centre + a * (x as f64 / g as f64) + b * (y as f64 / g as f64))
+                    };
+                    let tri = |x: Point3, y: Point3, z: Point3| 0.5 * (y - x).cross(z - x).length();
+                    for x in 0..g {
+                        for y in 0..g - x {
+                            sum += tri(at(x, y), at(x + 1, y), at(x, y + 1));
+                            if x + y + 1 < g {
+                                sum += tri(at(x + 1, y), at(x + 1, y + 1), at(x, y + 1));
+                            }
+                        }
+                    }
+                }
+                sum
+            };
+            let rich = (4.0 * flat(128) - flat(64)) / 3.0;
+            assert!((rich - a32).abs() < 1e-6 * a32, "patch {k}: {rich} vs {a32}");
+        }
+    }
+
+    #[test]
     fn rational_corner_patches_are_proven_and_meet_their_sides() {
         use forge_geom::corner::{audit, rational_pieces};
         let mut rng = Rng::new(79);

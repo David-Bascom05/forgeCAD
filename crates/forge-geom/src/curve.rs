@@ -1,4 +1,4 @@
-use forge_math::{Box3, Frame, Interval, Point3, UnitVec3, Vec3, dmath};
+use forge_math::{Box3, Frame, Interval, Point2, Point3, UnitVec3, Vec2, Vec3, dmath};
 
 /// The parameter range a curve or surface direction is defined on.
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -109,6 +109,15 @@ pub enum Curve {
 /// points are solved for to full precision from the definition.
 pub trait ProceduralCurve: Send + Sync + std::fmt::Debug {
     fn deriv(&self, t: f64) -> CurveDeriv;
+    /// The point alone (as `deriv`'s).
+    fn point(&self, t: f64) -> Point3 {
+        self.deriv(t).p
+    }
+    /// The point and first derivative alone (as `deriv`'s).
+    fn deriv1(&self, t: f64) -> (Point3, Vec3) {
+        let d = self.deriv(t);
+        (d.p, d.d1)
+    }
     fn domain(&self) -> Domain1;
     /// Parameter of the point nearest `p` with t inside `range`.
     fn closest(&self, p: Point3, range: Interval) -> f64;
@@ -132,6 +141,17 @@ pub trait ProceduralCurve: Send + Sync + std::fmt::Debug {
     }
     /// The curve as itself, for closed forms that know its kind.
     fn as_any(&self) -> Option<&dyn std::any::Any> {
+        None
+    }
+    /// Whether `deriv`'s first derivative is exact (not a difference), for integrators that
+    /// take it as it is.
+    fn exact_d1(&self) -> bool {
+        false
+    }
+    /// The surface the curve lies on by construction, with its parameters there at t and their
+    /// derivative (a blend's spring or cut), so integrators need not search for them.
+    fn on_surface(&self, t: f64) -> Option<(crate::Surface, Point2, Vec2)> {
+        let _ = t;
         None
     }
 }
@@ -461,6 +481,7 @@ impl CurveGeom for Curve {
             Curve::Line(c) => c.eval(t),
             Curve::Circle(c) => c.eval(t),
             Curve::Intersection(c) => c.eval(t),
+            Curve::Procedural(c) => c.point(t),
             _ => self.deriv(t).p,
         }
     }
@@ -537,6 +558,17 @@ impl Curve {
     }
 
     /// The whole parameter range, clipped to `bound` where the curve is unbounded.
+    /// The point and first derivative (a procedural curve may skip the second).
+    pub fn deriv1(&self, t: f64) -> (Point3, Vec3) {
+        match self {
+            Curve::Procedural(c) => c.deriv1(t),
+            _ => {
+                let d = self.deriv(t);
+                (d.p, d.d1)
+            }
+        }
+    }
+
     pub fn full_range(&self, bound: f64) -> Interval {
         let d = self.domain();
         Interval::new(d.lo.max(-bound), d.hi.min(bound))

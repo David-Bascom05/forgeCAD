@@ -17,6 +17,8 @@ OpenCascade) never become build dependencies; run them through `fbuild`.
 - `blend-rows/`: how close a variable blend's rows are kept.
 - `nary-short-runs/`: the n-ary regen's hand-off of short runs to the sequential booleans, and the
   fuzz crossover by run length it was measured with.
+- `mass-props/`: exact mass properties' speed choices (corner patches' domain rule, procedural
+  edge pieces, swept surfaces' columns, chord-walked pipe spines) and the timing harness.
 - `corner-patch/`: the rational corner quads and their fold proof, from branch `fold-research`
   (not yet on main when this index was written). Its README also covers the four
   `refs/experiments/corner-*` refs.
