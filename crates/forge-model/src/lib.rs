@@ -638,7 +638,7 @@ fn nary_regen(
             return Ok(body);
         }
         if let [(tool, c, _)] = &built[..] {
-            return single(body, tool, *c).map_err(err);
+            return single(&body, tool, *c, None, threads).map_err(err);
         }
         let mut tools: Vec<&Body> = vec![&body];
         tools.extend(built.iter().map(|t| &t.0));
@@ -649,11 +649,10 @@ fn nary_regen(
     if features.get(start).is_none_or(|f| !starts(f)) {
         return Err(RegenError::NothingToCombine { feature: 0 });
     }
-    let mut built = build_tools(features, start, threads, true)?;
-    if built.len() == 2 {
-        let (tool, c, _) = built.pop().expect("two tools");
-        let (base, _, _) = built.pop().expect("two tools");
-        return single(base, &tool, c).map_err(err);
+    let built = build_tools(features, start, threads, true)?;
+    if let [(base, _, s0), (tool, c, s1)] = &built[..] {
+        let solids = [s0.clone(), s1.clone()];
+        return single(base, tool, *c, shapes.then_some(&solids[..]), threads).map_err(err);
     }
     let tools: Vec<&Body> = built.iter().map(|t| &t.0).collect();
     let ops: Vec<Op> = built[1..].iter().map(|t| op_of(t.1)).collect();
@@ -685,10 +684,20 @@ fn nary_regen(
     .map_err(err)
 }
 
-/// A run of one tool: the sequential regen's boolean, the same body for less work.
-fn single(mut body: Body, tool: &Body, c: Combine) -> Result<Body, BoolError> {
-    boolean_into(&mut body, tool, op_of(c), 0)?;
-    Ok(body.compact())
+/// A run of one tool: the sequential regen's boolean, the same body for less work; where that
+/// fails, the n-ary pass.
+fn single(
+    body: &Body,
+    tool: &Body,
+    c: Combine,
+    shapes: Option<&[Shape]>,
+    threads: usize,
+) -> Result<Body, BoolError> {
+    let mut b = body.clone();
+    match boolean_into(&mut b, tool, op_of(c), 0) {
+        Ok(()) => Ok(b.compact()),
+        Err(_) => forge_bool::nary_with(&[body, tool], &[op_of(c)], shapes, None, threads, cut_root(0)),
+    }
 }
 
 /// The root of the names a boolean gives the vertices it makes: the same for every boolean, so
