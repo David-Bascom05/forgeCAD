@@ -4,7 +4,7 @@
 //! sets: comma separated from suite, torture, fuzz:N, adv:N (seeds per family), degen; default suite,torture,fuzz:20
 use forge_mesh::{Quality, tessellate};
 use forge_model::adversarial::{self, canonical};
-use forge_model::{Combine, Feature, Part, suite, torture};
+use forge_model::{Combine, Extent, Feature, Part, Turn, suite, torture};
 use forge_ops::{Profile, Segment};
 use std::fmt::Write;
 use std::panic::{AssertUnwindSafe, catch_unwind};
@@ -88,11 +88,13 @@ fn op(c: Combine) -> &'static str {
     }
 }
 
-fn feature(f: &Feature) -> String {
-    match f {
+/// None for anything but plain extrudes, revolves and balls (finishing ops name edges and faces,
+/// which the oracle cannot replay).
+fn feature(f: &Feature) -> Option<String> {
+    Some(match f {
         Feature::Extrude {
             profile: p,
-            distance,
+            extent: Extent::Distance(distance),
             op: c,
         } => format!(
             "{{\"kind\":\"extrude\",\"op\":\"{}\",{},\"distance\":{}}}",
@@ -103,7 +105,7 @@ fn feature(f: &Feature) -> String {
         Feature::Revolve {
             profile: p,
             axis,
-            angle,
+            extent: Turn::Angle(angle),
             op: c,
         } => format!(
             "{{\"kind\":\"revolve\",\"op\":\"{}\",{},\"axis\":[{},{},{},{}],\"angle\":{}}}",
@@ -125,7 +127,8 @@ fn feature(f: &Feature) -> String {
             v3([f.origin.x, f.origin.y, f.origin.z]),
             num(*radius)
         ),
-    }
+        _ => return None,
+    })
 }
 
 /// A face's surface as the oracle keys it: kind and defining numbers (frames in world space).
@@ -318,6 +321,10 @@ fn main() {
         if step == 0 && only.as_deref().is_some_and(|o| o != name) {
             continue;
         }
+        let Some(fs) = part.features.iter().map(feature).collect::<Option<Vec<String>>>() else {
+            eprintln!("{name}: skipped, has a finishing op");
+            continue;
+        };
         eprintln!("{name}");
         if std::env::var_os("LITERAL").is_some() {
             eprintln!("{}", adversarial::literal(&canonical(&part)));
@@ -325,7 +332,6 @@ fn main() {
         let seq = run(reps, chord, || part.regenerate());
         let nary1 = run(1, chord, || part.regenerate_nary(1));
         let nary = run(reps, chord, || part.regenerate_nary(threads));
-        let fs: Vec<String> = part.features.iter().map(feature).collect();
         println!(
             "{}{{\"name\":{name:?},\"features\":[\n{}\n],\"forge\":{{\"seq\":{seq},\"nary1\":{nary1},\"nary\":{nary}}}}}",
             if first { "" } else { "," },
