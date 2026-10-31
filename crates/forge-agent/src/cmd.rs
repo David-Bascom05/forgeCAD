@@ -157,6 +157,13 @@ impl Session {
             return Err("this session does not write files (serve and mcp take --writable)".into());
         }
         let (m, path) = self.model_at(&a.file)?;
+        // a file whose first line is no feature may not be a part file: neither change nor echo it
+        if m.error.as_ref().is_some_and(|f| f.at == 0) {
+            return Err(format!(
+                "{}: line 1 is not a feature; edit changes part files only",
+                a.file
+            ));
+        }
         let w = &a.words;
         let word = |k: usize| {
             w.get(k)
@@ -215,7 +222,11 @@ impl Session {
         let src = m.src().to_string();
         replace(&path, &src).map_err(|e| format!("{}: {e}", a.file))?;
         let mut r = self.build(a)?;
-        r.text = format!("{}\n{}", changed(&old, &src), r.text);
+        // echo the changed lines only while the file still reads as a part file
+        let (m, _) = self.model_at(&a.file)?;
+        if m.error.as_ref().is_none_or(|f| f.at > 0) {
+            r.text = format!("{}\n{}", changed(&old, &src), r.text);
+        }
         Ok(r)
     }
 
@@ -1140,6 +1151,18 @@ combine cut base lid keep
             !r.ok && !r.text.contains("hunter2") && !r.json.to_string().contains("hunter2"),
             "{}",
             r.text
+        );
+        // nor changed, nor echoed by an edit, even in a session that writes
+        let mut w = Session::rooted(std::fs::canonicalize(&dir.0).expect("root")).writable(true);
+        let r = w.run("edit", &args(&secret, &["move", "1", "end"]));
+        assert!(
+            !r.ok && !r.text.contains("hunter2") && !r.json.to_string().contains("hunter2"),
+            "{}",
+            r.text
+        );
+        assert_eq!(
+            std::fs::read_to_string(&secret).expect("read"),
+            "hunter2 swordfish\nmore\n"
         );
     }
 
