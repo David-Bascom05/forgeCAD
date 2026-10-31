@@ -8,15 +8,25 @@ use forge_model::Unit;
 /// The solid features whose op, unwritten, is `new` on the first of them and `add` after.
 const SOLIDS: [&str; 6] = ["extrude", "revolve", "ball", "sweep", "coil", "loft"];
 
-/// An item's identity, kept through edits that move it.
+/// An item's identity, kept through edits that move it. A feature line's is also the id its
+/// faces, edges and vertices are named from, kept in the file (`id N` where it is not the
+/// line's place among the feature lines), so inserting, deleting or moving lines renames
+/// nothing. Blank and comment lines have ids from `BLANK` up, never written.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub struct ItemId(pub u64);
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct Document {
     pub items: Vec<Item>,
+    /// The next blank line's id.
     next: u64,
+    /// The highest feature id this document has held, so an id taken out is not handed out
+    /// again while it is open.
+    high: u64,
 }
+
+/// Where blank lines' ids start.
+pub const BLANK: u64 = 1 << 63;
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct Item {
@@ -99,11 +109,11 @@ pub enum Edit {
     },
 }
 
+/// A line's code and its comment (a `#` outside a quoted string on).
 fn split_note(raw: &str) -> (&str, Option<String>) {
-    match raw.split_once('#') {
-        Some((a, b)) => (a, Some(b.trim().to_string())),
-        None => (raw, None),
-    }
+    let code = text::uncommented(raw);
+    let note = raw[code.len()..].strip_prefix('#').map(|n| n.trim().to_string());
+    (code, note)
 }
 
 impl Item {
@@ -123,14 +133,25 @@ impl Document {
     pub fn parse(src: &str) -> Document {
         let mut d = Document {
             items: Vec::new(),
-            next: 1,
+            next: BLANK,
+            high: 0,
         };
-        d.items = d.read(src);
+        d.items = d.read(src, true);
+        d.high = d
+            .items
+            .iter()
+            .map(|it| it.id.0)
+            .filter(|&i| i < BLANK)
+            .max()
+            .unwrap_or(0);
         d
     }
 
-    fn read(&mut self, src: &str) -> Vec<Item> {
+    /// The items a text reads as. A feature line without an `id` takes its place among the
+    /// feature lines (`placed`, a whole file) or the next id unused (lines inserted).
+    fn read(&mut self, src: &str, placed: bool) -> Vec<Item> {
         let mut out: Vec<Item> = Vec::new();
+        let mut fresh = self.high + 1;
         let mut block = false;
         for raw in src.lines() {
             let (code, note) = split_note(raw);
@@ -153,6 +174,16 @@ impl Document {
             let label = match toks.first() {
                 Some(t) if t.len() > 1 && t.ends_with(':') => {
                     Some(toks.remove(0).trim_end_matches(':').to_string())
+                }
+                _ => None,
+            };
+            let given = match (
+                toks.first().map(String::as_str),
+                toks.get(1).and_then(|t| t.parse::<u64>().ok()),
+            ) {
+                (Some("id"), Some(n)) if n > 0 && n < BLANK && toks.len() > 2 => {
+                    toks.drain(..2);
+                    Some(n)
                 }
                 _ => None,
             };
@@ -186,8 +217,19 @@ impl Document {
                     args: toks.into_iter().map(Arg::new).collect(),
                 }
             };
-            let id = ItemId(self.next);
-            self.next += 1;
+            let id = match (&body, given) {
+                (Body::Blank, _) => {
+                    self.next += 1;
+                    self.next - 1
+                }
+                (_, Some(n)) => n,
+                (_, None) if placed => out.iter().filter(|it| it.id.0 < BLANK).count() as u64 + 1,
+                _ => {
+                    fresh += 1;
+                    fresh - 1
+                }
+            };
+            let id = ItemId(id);
             out.push(Item {
                 id,
                 label,
@@ -211,6 +253,9 @@ impl Document {
             if let Some(l) = &it.label {
                 out.push_str(l);
                 out.push_str(": ");
+            }
+            if let Some(n) = self.written_id(k) {
+                out.push_str(&format!("id {n} "));
             }
             out.push_str(&self.code(k).join(" "));
             note(&mut out, &it.note, !matches!(it.body, Body::Blank));
@@ -286,6 +331,13 @@ impl Document {
         Some(format!("{kd}{n}"))
     }
 
+    /// Item `k`'s id when the file must say it: a feature line not at the place its id names.
+    fn written_id(&self, k: usize) -> Option<u64> {
+        let id = self.items[k].id.0;
+        let place = self.items[..k].iter().filter(|it| it.id.0 < BLANK).count() as u64 + 1;
+        (id < BLANK && id != place).then_some(id)
+    }
+
     /// The lines a part history is read from, one per item that is not blank, numbered by
     /// where they print.
     pub fn lines(&self) -> Vec<Line> {
@@ -301,6 +353,7 @@ impl Document {
             }
             if !toks.is_empty() {
                 out.push(Line {
+                    id: it.id.0,
                     no,
                     label: it.label.clone(),
                     toks,
@@ -341,22 +394,17 @@ impl Document {
     /// Takes the identities and links of `old`'s first `lines` feature lines, which read the
     /// same as this document's (a re-read of an edited file keeps what it can).
     pub fn adopt(&mut self, old: &Document, lines: usize) {
-        for it in &mut self.items {
-            it.id = ItemId(old.next + it.id.0);
-        }
-        self.next += old.next;
+        self.next = self.next.max(old.next);
+        self.high = self.high.max(old.high);
         let olds: Vec<(ItemId, Vec<Option<ItemId>>)> = old
             .features()
             .take(lines)
             .map(|it| (it.id, it.args().iter().map(|a| a.to).collect()))
             .collect();
-        for (it, (id, tos)) in self
-            .items
-            .iter_mut()
-            .filter(|it| !matches!(it.body, Body::Blank))
-            .zip(olds)
-        {
-            it.id = id;
+        for (it, (id, tos)) in self.items.iter_mut().filter(|it| it.id.0 < BLANK).zip(olds) {
+            if it.id != id {
+                continue;
+            }
             if let Body::Sketch { head: args, .. } | Body::Feature { args, .. } = &mut it.body {
                 for (a, to) in args.iter_mut().zip(tos) {
                     a.to = to;
@@ -456,7 +504,12 @@ impl Document {
             }
             Edit::Insert { at, text } => {
                 let first = self.first_solid();
-                let new = self.read(&text);
+                let new = self.read(&text, false);
+                self.high = new
+                    .iter()
+                    .map(|it| it.id.0)
+                    .filter(|&i| i < BLANK)
+                    .fold(self.high, u64::max);
                 let at = at.min(self.items.len());
                 self.items.splice(at..at, new);
                 self.keep_new(first);
@@ -555,7 +608,8 @@ mod tests {
         let hole = id(&d, 7);
         d.apply(Edit::Move { item: hole, to: 5 }).expect("move");
         assert!(
-            d.print().contains("hole 3 on sketch2 l1.a thru\nsk: sketch"),
+            d.print()
+                .contains("id 5 hole 3 on sketch2 l1.a thru\nsk: id 3 sketch"),
             "{}",
             d.print()
         );
@@ -566,8 +620,20 @@ mod tests {
         })
         .expect("arg");
         assert!(d.print().contains("hole 4 on sketch2"), "{}", d.print());
+        // ids read back as written; the rest take their places
+        let back = Document::parse(&d.print());
+        assert_eq!(back.print(), d.print());
+        let ids = |d: &Document| d.features().map(|it| it.id).collect::<Vec<_>>();
+        assert_eq!(ids(&back), ids(&d));
         d.apply(Edit::Delete { item: hole }).expect("delete");
         assert!(!d.print().contains("hole"));
+        // the hole's id is not handed out again
+        d.apply(Edit::Insert {
+            at: usize::MAX,
+            text: "ball 1".into(),
+        })
+        .expect("insert");
+        assert!(d.print().ends_with("id 7 ball 1\n"), "{}", d.print());
     }
 
     /// A solid moved above the first leaves the first making a new body, its `new` written.

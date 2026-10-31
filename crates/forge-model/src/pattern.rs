@@ -87,8 +87,8 @@ pub enum PatternError {
 
 /// The name an entity gets in copy `key` of pattern `pattern` (a feature position): stable
 /// across regens, so later features can refer to one copy's faces and edges.
-pub fn instance_name(pattern: usize, key: [u64; 2], name: Name) -> Name {
-    Name::feature(pattern as u64 + 1)
+pub fn instance_name(id: u64, key: [u64; 2], name: Name) -> Name {
+    Name::feature(id)
         .with_str("instance")
         .with(key[0])
         .with(key[1])
@@ -558,7 +558,7 @@ mod tests {
             extent: crate::Turn::Angle(2.0),
             op: crate::Combine::Add,
         };
-        let (body, _, shape) = crate::tool(0, &turn, true).expect("tool");
+        let (body, _, shape) = crate::tool(0, 1, &turn, true).expect("tool");
         let plane = Frame::from_zx(
             Point3::new(1.0, 2.0, 0.0),
             Vec3::new(1.0, 0.5, 0.2).normalize().expect("n"),

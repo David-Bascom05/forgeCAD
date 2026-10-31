@@ -1,7 +1,7 @@
-//! cargo run --release -p forge-model --example namehunt -- [cases] [seed] [--big] [--shifts]
-//! Random upstream edits of the corpus, each reference judged by geometry; prints every
-//! finding by class, then the tally. Edits that renumber features are left out unless
-//! `--shifts` (feature ids are positions, so those rename everything below them).
+//! cargo run --release -p forge-model --example namehunt -- [cases] [seed] [--big]
+//! Random upstream edits of the corpus (inserts, deletes and swaps among them: features keep
+//! their ids through those), each reference judged by geometry; prints every finding by
+//! class, then the tally.
 use forge_model::names::{Class, Edit, corpus, run};
 use std::collections::BTreeMap;
 
@@ -11,16 +11,12 @@ fn main() {
     let cases = nums.first().copied().unwrap_or(100) as usize;
     let seed = nums.get(1).copied().unwrap_or(1);
     let big = args.iter().any(|a| a == "--big");
-    let shifts = args.iter().any(|a| a == "--shifts");
     let corpus = corpus();
     let t0 = std::time::Instant::now();
     let all = run(&corpus, seed, cases, big, if big { 8 } else { 1 }, 60);
     let mut tally: BTreeMap<(String, Class), usize> = BTreeMap::new();
     let (mut kept, mut gone, mut piece, mut unjudged, mut used) = (0, 0, 0, 0, 0);
     for c in &all {
-        if !shifts && c.edit.shifts(c.before) {
-            continue;
-        }
         used += 1;
         kept += c.outcome.kept;
         gone += c.outcome.gone;

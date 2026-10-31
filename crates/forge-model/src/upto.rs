@@ -16,7 +16,7 @@
 //! The next face is picked by rays against the earlier tools' exact solids, then proved for the
 //! whole sweep by two booleans with the earlier tools near it (`verify_next`).
 
-use crate::{Combine, ExtentError, Feature, RegenError, Tool, Turn, tool};
+use crate::{Combine, ExtentError, Feature, History, RegenError, Tool, Turn, tool};
 use forge_bool::{Member, Op, Seg2, Shape};
 use forge_geom::{Cone, CurveGeom, Cylinder, Plane, Sphere, Surface, SurfaceGeom, Torus};
 use forge_math::{Frame, Point2, Point3, UnitVec3, Vec2, Vec3, dmath, poly, tol};
@@ -620,6 +620,7 @@ fn on_plane(s: &Surface, at: Point3, n: UnitVec3) -> bool {
 /// through `far` square to the travel) cut off as `plan` says.
 pub(crate) fn build(
     i: usize,
+    id: u64,
     base: Tool,
     plan: &Plan,
     start: &[Name],
@@ -631,7 +632,7 @@ pub(crate) fn build(
         .aux
         .iter()
         .enumerate()
-        .map(|(k, (_, f, _))| tool(i + 2_000_000 + k * 1_000_000, f, build))
+        .map(|(k, (_, f, _))| tool(i, id + 2_000_000 + k as u64 * 1_000_000, f, build))
         .collect::<Result<_, _>>()?;
     let shape = Shape::Csg {
         first: Box::new(base.2.clone()),
@@ -788,8 +789,8 @@ fn sector(frame: &Frame, th: f64) -> Surface {
 
 /// The surface of the face `name` of feature `k`'s tool (`f`, an extrude, revolve or ball with
 /// a plain extent), from its definition alone; None where it takes building the tool.
-pub(crate) fn named_surface(f: &Feature, k: usize, name: Name) -> Option<Surface> {
-    let root = Name::feature(k as u64 + 1);
+pub(crate) fn named_surface(f: &Feature, id: u64, name: Name) -> Option<Surface> {
+    let root = Name::feature(id);
     let ids: Vec<u64> = match f {
         Feature::Extrude { profile, .. } | Feature::Revolve { profile, .. } => profile
             .loops
@@ -1312,7 +1313,7 @@ fn same_surface(a: &Surface, b: &Surface) -> bool {
 /// the part's skin lies under all of its end (the end, `end` or what a cut-off made, vanishes
 /// into the part, or out of it for a cut). Both are exact booleans, not samples.
 pub(crate) fn verify_next(
-    features: &[Feature],
+    features: History<'_>,
     i: usize,
     (t, shape): (&Body, &Shape),
     base: &[Name],

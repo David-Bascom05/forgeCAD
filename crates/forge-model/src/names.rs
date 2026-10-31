@@ -45,10 +45,13 @@ impl Edit {
         (0..before).any(|i| self.moves(i) != i)
     }
 
-    /// Applied to `part`; None where the feature takes no such edit. A resize or move is made
-    /// `t` of the way (0 to 1); `reach` is how far any point of it moves at most.
-    pub fn apply(&self, part: &Part, t: f64) -> Option<(Part, f64)> {
+    /// Applied to `part` (its features named by their places): the edited part, the ids that
+    /// keep every feature its own (a new one takes the next id), and how far any point moves
+    /// at most; None where the feature takes no such edit. A resize or move is made `t` of
+    /// the way (0 to 1).
+    pub fn apply(&self, part: &Part, t: f64) -> Option<(Part, Vec<u64>, f64)> {
         let mut fs = part.features.clone();
+        let mut ids: Vec<u64> = (1..=fs.len() as u64).collect();
         let mut reach = 0.0;
         match self {
             Edit::Resize { feature, by } => {
@@ -60,11 +63,18 @@ impl Edit {
                 fs[*feature] = moved(&fs[*feature], *by * t)?;
                 reach = by.length() * t;
             }
-            Edit::Insert { at, feature } => fs.insert(*at, (**feature).clone()),
+            Edit::Insert { at, feature } => {
+                fs.insert(*at, (**feature).clone());
+                ids.insert(*at, ids.len() as u64 + 1);
+            }
             Edit::Delete { at } => {
                 fs.remove(*at);
+                ids.remove(*at);
             }
-            Edit::Swap { at } => fs.swap(*at, at + 1),
+            Edit::Swap { at } => {
+                fs.swap(*at, at + 1);
+                ids.swap(*at, at + 1);
+            }
         }
         if self.shifts(fs.len() + 1) {
             for f in &mut fs {
@@ -73,7 +83,7 @@ impl Edit {
                 }
             }
         }
-        Some((Part { features: fs }, reach))
+        Some((Part { features: fs }, ids, reach))
     }
 }
 
@@ -608,8 +618,8 @@ pub fn check(
     let mut bodies = vec![b0.clone()];
     let mut reaches = vec![0.0];
     for s in 1..=steps {
-        let (p, reach) = edit.apply(&prefix, s as f64 / steps as f64)?;
-        let b = p.regenerate().ok()?;
+        let (p, ids, reach) = edit.apply(&prefix, s as f64 / steps as f64)?;
+        let b = p.regenerate_ids(Some(&ids)).ok()?;
         // an edit that parts the solid in two (or joins it) leaves no part to name things on
         if b.shells.len() != b0.shells.len() {
             return None;

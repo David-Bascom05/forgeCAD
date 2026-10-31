@@ -221,7 +221,7 @@ fn adds(features: &[Feature], i: usize) -> Vec<Box3> {
             match &features[i] {
                 Feature::Ball { .. } => vec![tool_box(&features[i])],
                 // a part it cannot be built is no part of the reach
-                _ => match crate::extent::resolve(features, i) {
+                _ => match crate::extent::resolve(crate::History::new(features, None), i) {
                     Ok(crate::extent::Resolved::Plain(f, _)) => vec![tool_box(&f)],
                     Ok(crate::extent::Resolved::UpTo(f, _)) => vec![tool_box(&f)],
                     Err(_) => vec![],

@@ -6,7 +6,7 @@ use crate::select::{self, Ent, View};
 use crate::text::{self, Before, Line};
 use forge_doc::{Document, Edit};
 use forge_mesh::TriMesh;
-use forge_model::{Feature, RegenError, Solid, Source, step_solids};
+use forge_model::{Feature, History, RegenError, Solid, Source, step_solids};
 use forge_topo::{Body, Name};
 use std::cell::{OnceCell, RefCell};
 use std::collections::HashMap;
@@ -127,7 +127,7 @@ impl Model {
         self.src = src.to_string();
         let mut doc = Document::parse(src);
         let new = doc.lines();
-        let same = |a: &Line, b: &Line| a.label == b.label && a.toks == b.toks;
+        let same = |a: &Line, b: &Line| a.id == b.id && a.label == b.label && a.toks == b.toks;
         let keep = self
             .lines
             .iter()
@@ -154,7 +154,7 @@ impl Model {
     }
 
     fn rebuild(&mut self, new: Vec<Line>, t0: Instant) {
-        let same = |a: &Line, b: &Line| a.label == b.label && a.toks == b.toks;
+        let same = |a: &Line, b: &Line| a.id == b.id && a.label == b.label && a.toks == b.toks;
         let keep = self
             .lines
             .iter()
@@ -172,10 +172,16 @@ impl Model {
         self.error = None;
         self.rebuilt = 0;
         let mut reuse = true;
+        let ids: Vec<u64> = self.lines.iter().map(|l| l.id).collect();
         for i in keep..self.lines.len() {
             self.rebuilt += 1;
             let line = self.lines[i].clone();
             self.labels.push(line.label.clone());
+            if let Some(k) = ids[..i].iter().position(|&d| d == line.id) {
+                let msg = format!("id {} is line {}'s too", line.id, self.lines[k].no);
+                self.fail(i, msg, "each line's id is its own; leave a new line's off".into());
+                break;
+            }
             let parsed = {
                 let refs = |r: &str| self.refs(i, r);
                 let face = |r: &str| self.face(i, r);
@@ -243,7 +249,7 @@ impl Model {
             } else {
                 self.stages[i - 1].solids.clone()
             };
-            match step_solids(&self.features, i, before) {
+            match step_solids(History::new(&self.features, Some(&ids[..=i])), i, before) {
                 Ok(solids) => self.stages.push(Stage {
                     solids,
                     view: OnceCell::new(),

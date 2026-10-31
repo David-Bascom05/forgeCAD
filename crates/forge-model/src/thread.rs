@@ -5,7 +5,7 @@
 //! groove a turn on, a tapered coil that draws it out of the material.
 
 use crate::pattern::{instance_name, instances, moved, moved_shape};
-use crate::{Combine, Feature, Hole, RegenError, Source, Target, Tool, Turn};
+use crate::{Combine, Feature, History, Hole, RegenError, Source, Target, Tool, Turn};
 use forge_geom::{CurveGeom, Surface};
 use forge_math::{Frame, Point2, Vec2, dmath};
 use forge_ops::{Axis2, CoilError, Handed, Profile, ProfileLoop, Segment, Winding, coil, coil_motion};
@@ -167,7 +167,7 @@ fn err(i: usize) -> impl Fn(ThreadError) -> RegenError {
 
 /// The tools thread feature `i` cuts with: a coil and a chamfer cone per
 /// thread, a pattern's copies of a hole's included.
-pub(crate) fn tools(features: &[Feature], i: usize, build: bool) -> Result<Vec<Tool>, RegenError> {
+pub(crate) fn tools(features: History<'_>, i: usize, build: bool) -> Result<Vec<Tool>, RegenError> {
     let Feature::Thread(t) = &features[i] else {
         unreachable!("only threads")
     };
@@ -198,7 +198,9 @@ pub(crate) fn tools(features: &[Feature], i: usize, build: bool) -> Result<Vec<T
         })
     };
     match t.on {
-        On::Axis { at, spec, internal } => cut(i, &place(at, internal, spec, f64::NAN)?, t, build),
+        On::Axis { at, spec, internal } => {
+            cut(i, features.id(i), &place(at, internal, spec, f64::NAN)?, t, build)
+        }
         On::Face {
             feature,
             name,
@@ -211,7 +213,7 @@ pub(crate) fn tools(features: &[Feature], i: usize, build: bool) -> Result<Vec<T
             if !(radius > rmin + 1e-6 && radius < rmax - 1e-6) {
                 return Err(e(ThreadError::BadSize));
             }
-            cut(i, &p, t, build)
+            cut(i, features.id(i), &p, t, build)
         }
         On::Hole(k) => {
             let Some(Feature::Hole(h)) = features.get(k).filter(|_| k < i) else {
@@ -232,7 +234,7 @@ pub(crate) fn tools(features: &[Feature], i: usize, build: bool) -> Result<Vec<T
             if !(h.diameter / 2.0 > rmin + 1e-6 && h.diameter / 2.0 < rmax - 1e-6) {
                 return Err(e(ThreadError::BadSize));
             }
-            let mut out = cut(i, &p, t, build)?;
+            let mut out = cut(i, features.id(i), &p, t, build)?;
             // copies by the patterns after the hole that hold it, as `Part::threads` finds them
             let mut held = vec![k];
             for (j, f) in features.iter().enumerate().take(i).skip(k + 1) {
@@ -252,7 +254,7 @@ pub(crate) fn tools(features: &[Feature], i: usize, build: bool) -> Result<Vec<T
                 for (key, m) in &copies {
                     for (b, op, sh) in &out {
                         let b = if build {
-                            moved(b, m, |n| instance_name(j, *key, n))
+                            moved(b, m, |n| instance_name(features.id(j), *key, n))
                                 .map_err(|error| RegenError::Pattern { feature: i, error })?
                         } else {
                             Body::new()
@@ -269,7 +271,7 @@ pub(crate) fn tools(features: &[Feature], i: usize, build: bool) -> Result<Vec<T
 
 /// The depth a hole's wall runs, through the part for a through hole; None if it ends at a
 /// surface that is not a plane square to it.
-fn hole_depth(features: &[Feature], k: usize, h: &Hole) -> Result<Option<f64>, RegenError> {
+fn hole_depth(features: History<'_>, k: usize, h: &Hole) -> Result<Option<f64>, RegenError> {
     let (h, up, _) = crate::extent::hole_end(features, k, h)?;
     Ok(match (h.end, up) {
         (crate::End::Depth(d), None) => Some(d),
@@ -290,7 +292,7 @@ fn hole_depth(features: &[Feature], k: usize, h: &Hole) -> Result<Option<f64>, R
 /// A cylinder face's thread axis (origin at the starting end, z along the face), whether it is
 /// inside a bore, its radius and its length.
 fn face_axis(
-    features: &[Feature],
+    features: History<'_>,
     i: usize,
     k: usize,
     name: Name,
@@ -406,9 +408,8 @@ const GROOVE: u64 = 0;
 const CHAMFER: u64 = 10;
 const RUNOUT: u64 = 20;
 
-fn cut(i: usize, p: &Placed, t: &ScrewThread, build: bool) -> Result<Vec<Tool>, RegenError> {
+fn cut(i: usize, id: u64, p: &Placed, t: &ScrewThread, build: bool) -> Result<Vec<Tool>, RegenError> {
     let e = err(i);
-    let id = i as u64 + 1;
     let f = form(p.major, p.pitch, p.internal);
     let pitch = p.pitch;
     // the sketch: x out from the axis, y along it
@@ -501,7 +502,7 @@ fn cut(i: usize, p: &Placed, t: &ScrewThread, build: bool) -> Result<Vec<Tool>, 
             op: Combine::Cut,
         };
         // first: the groove then cuts the cone, not the cone the groove
-        out.insert(0, crate::tool(i, &cone, build)?);
+        out.insert(0, crate::tool(i, id, &cone, build)?);
     }
     Ok(out)
 }

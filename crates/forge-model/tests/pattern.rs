@@ -371,7 +371,7 @@ fn copies_have_stable_names() {
         let rim = Name::NONE.with_set(vec![boss.with_str("end"), boss.with_str("side").with(0)]);
         if chamfer {
             features.push(Feature::Chamfer {
-                edges: vec![instance_name(2, [2, 0], rim)],
+                edges: vec![instance_name(3, [2, 0], rim)],
                 size: ChamferSize::Equal(1.0),
             });
         }
@@ -384,7 +384,7 @@ fn copies_have_stable_names() {
         names(&part(14.0, false).regenerate_nary(1).expect("14")),
     );
     for k in 1..4 {
-        let copy = instance_name(2, [k, 0], cap);
+        let copy = instance_name(3, [k, 0], cap);
         assert!(n1.contains(&copy) && n2.contains(&copy), "copy {k}");
     }
     let plain = volume(&part(12.0, false).regenerate().expect("plain"));

@@ -48,6 +48,45 @@ pub use text::{FontRef, Text, TextError, TextOn};
 pub use thread::{Length as ThreadLength, On as ThreadOn, ScrewThread, Spec as ThreadSpec, ThreadError};
 pub use work::{AxisBy, Datum, PlaneBy, PointBy, Ref, UcsBy, Work, WorkError};
 
+/// A part's history as the regen reads it: its features, and the id each is named by (its
+/// place from 1, unless the document that holds the part gives ids that stay put when
+/// features are inserted, deleted or moved).
+#[derive(Clone, Copy, Debug)]
+pub struct History<'a> {
+    features: &'a [Feature],
+    ids: Option<&'a [u64]>,
+}
+
+impl<'a> History<'a> {
+    /// `ids`, one per feature, nonzero and distinct; None: each feature's place from 1.
+    pub fn new(features: &'a [Feature], ids: Option<&'a [u64]>) -> History<'a> {
+        if let Some(ids) = ids {
+            assert_eq!(ids.len(), features.len(), "one id per feature");
+        }
+        History { features, ids }
+    }
+
+    /// The id feature `i`'s names derive from.
+    pub fn id(&self, i: usize) -> u64 {
+        self.ids.map_or(i as u64 + 1, |ids| ids[i])
+    }
+
+    /// The first `n` features.
+    pub fn upto(&self, n: usize) -> History<'a> {
+        History {
+            features: &self.features[..n],
+            ids: self.ids.map(|ids| &ids[..n]),
+        }
+    }
+}
+
+impl std::ops::Deref for History<'_> {
+    type Target = [Feature];
+    fn deref(&self) -> &[Feature] {
+        self.features
+    }
+}
+
 /// One step of a part's history.
 #[derive(Clone, Debug, PartialEq)]
 pub enum Feature {
@@ -233,6 +272,10 @@ pub struct Part {
 type Tool = (Body, Combine, Shape);
 
 impl Part {
+    fn history(&self) -> History<'_> {
+        History::new(&self.features, None)
+    }
+
     /// Rebuilds the solid in one n-ary boolean over every feature's tool (built in parallel),
     /// on up to `threads` threads.
     /// The region batch is classified on the backend FORGE_BATCH names (default Auto). A
@@ -246,7 +289,7 @@ impl Part {
         if bodies::multi(&self.features) {
             return bodies::one(self.regenerate_nary_solids(threads)?);
         }
-        nary_regen(&self.features, wasm_one(threads), true, Batching::On(backend))
+        nary_regen(self.history(), wasm_one(threads), true, Batching::On(backend))
     }
 
     /// `regenerate_nary`, placing points against the tools' analytic solids first or not.
@@ -262,7 +305,7 @@ impl Part {
             Some(m) if m >= start => m + 1,
             _ => start,
         };
-        let built = build_tools(&self.features, start, 1, false)?;
+        let built = build_tools(self.history(), start, 1, false)?;
         let ops = built.iter().skip(1).map(|t| op_of(t.1)).collect();
         Ok((built.into_iter().map(|t| t.2).collect(), ops))
     }
@@ -278,7 +321,7 @@ impl Part {
             return bodies::one(bodies::nary(&self.features, wasm_one(threads))?);
         }
         let batching = batch.map_or(Batching::None, Batching::Given);
-        nary_regen(&self.features, wasm_one(threads), shapes, batching)
+        nary_regen(self.history(), wasm_one(threads), shapes, batching)
     }
 
     /// Every body the part ends with, rebuilt feature by feature.
@@ -294,12 +337,19 @@ impl Part {
     /// Rebuilds the solid from the first feature. Feature ids are their
     /// positions, so entity names stay stable when nothing upstream changes.
     pub fn regenerate(&self) -> Result<Body, RegenError> {
+        self.regenerate_ids(None)
+    }
+
+    /// `regenerate`, each feature named from its id in `ids` (one per feature, nonzero,
+    /// distinct): ids kept through inserts, deletes and moves keep every name below.
+    pub fn regenerate_ids(&self, ids: Option<&[u64]>) -> Result<Body, RegenError> {
+        let h = History::new(&self.features, ids);
         if bodies::multi(&self.features) {
-            return bodies::one(bodies::sequential(&self.features)?);
+            return bodies::one(bodies::sequential(h)?);
         }
         let mut body = None;
         for i in 0..self.features.len() {
-            body = step(&self.features, i, body)?;
+            body = step(h, i, body)?;
         }
         body.map(|b| b.compact())
             .ok_or(RegenError::NothingToCombine { feature: 0 })
@@ -365,9 +415,9 @@ impl Part {
 
 /// Applies feature `i` to the part as features `..i` left it: `regenerate` one feature at a
 /// time, for callers that keep every stage. Only `features[..=i]` is read.
-pub fn step(features: &[Feature], i: usize, body: Option<Body>) -> Result<Option<Body>, RegenError> {
+pub fn step(features: History<'_>, i: usize, body: Option<Body>) -> Result<Option<Body>, RegenError> {
     let f = &features[i];
-    let id = i as u64 + 1;
+    let id = features.id(i);
     if modifies(f) {
         let b = body.ok_or(RegenError::NothingToCombine { feature: i })?;
         let b = modify(features, f, i, &b, 1)?;
@@ -445,7 +495,7 @@ fn modifies(f: &Feature) -> bool {
 /// The tools of features `from..` on up to `threads` threads, in order (only their shapes,
 /// solids left empty, unless `build`).
 fn build_tools(
-    features: &[Feature],
+    features: History<'_>,
     from: usize,
     threads: usize,
     build: bool,
@@ -509,7 +559,7 @@ enum Batching<'a> {
 /// The n-ary regen of a history: each run of solid features after a part-changing one (chamfer,
 /// shell, draft, body pattern) is one n-ary boolean starting from the part so far.
 fn nary_regen(
-    features: &[Feature],
+    features: History<'_>,
     threads: usize,
     shapes: bool,
     batching: Batching,
@@ -531,7 +581,7 @@ fn nary_regen(
             m,
             // a given batch holds the tools after the last modifier (nary_solids), not these
             &nary_regen(
-                &features[..m],
+                features.upto(m),
                 threads,
                 shapes,
                 match batching {
@@ -603,7 +653,7 @@ fn op_of(c: Combine) -> Op {
 
 /// Applies part-changing feature `i` to `body`.
 fn modify(
-    features: &[Feature],
+    features: History<'_>,
     f: &Feature,
     i: usize,
     body: &Body,
@@ -615,7 +665,7 @@ fn modify(
             edges,
             starts,
             setbacks,
-        } => apply_fillet(i, body, edges, starts, setbacks),
+        } => apply_fillet(i, features.id(i), body, edges, starts, setbacks),
         Feature::FaceFillet {
             first,
             second,
@@ -656,7 +706,7 @@ fn modify(
             let copies = instances(features, i, layout)?;
             let copies = copies
                 .iter()
-                .map(|(key, m)| moved(body, m, |n| instance_name(i, *key, n)))
+                .map(|(key, m)| moved(body, m, |n| instance_name(features.id(i), *key, n)))
                 .collect::<Result<Vec<Body>, _>>()
                 .map_err(pe)?;
             if copies.is_empty() {
@@ -689,6 +739,7 @@ fn face_of(i: usize, body: &Body, name: Name) -> Result<forge_topo::FaceId, Rege
 /// Feature `i`, a fillet of the named edges, applied to `body`.
 fn apply_fillet(
     i: usize,
+    id: u64,
     body: &Body,
     edges: &[(Name, Radius)],
     starts: &[(Name, Name)],
@@ -725,26 +776,26 @@ fn apply_fillet(
             .map(|&(v, e, d)| Ok((vertex(v)?, e.map(edge).transpose()?, d)))
             .collect::<Result<_, RegenError>>()?,
     };
-    fillet_with(&body, &want, &opts, i as u64 + 1).map_err(|error| RegenError::Fillet { feature: i, error })
+    fillet_with(&body, &want, &opts, id).map_err(|error| RegenError::Fillet { feature: i, error })
 }
 
 /// The tools feature `i` makes: one, or a pattern's copies (each named after its place).
-fn tools(features: &[Feature], i: usize, build: bool) -> Result<Vec<Tool>, RegenError> {
+fn tools(features: History<'_>, i: usize, build: bool) -> Result<Vec<Tool>, RegenError> {
     match &features[i] {
         Feature::Hole(h) => {
             let (h, up, next) = extent::hole_end(features, i, h)?;
             let cut = h
                 .revolve(&hole::reach(&features[..i]))
                 .map_err(|error| RegenError::Hole { feature: i, error })?;
-            let base = tool(i, &cut, build)?;
+            let base = tool(i, features.id(i), &cut, build)?;
             let names = upto::names(&base.0);
             let t = match up {
                 None => base,
-                Some(u) => upto::build(i, base, &u.plan, &u.start, u.far, build)?,
+                Some(u) => upto::build(i, features.id(i), base, &u.plan, &u.start, u.far, build)?,
             };
             if let (true, Some(m)) = (build, next) {
                 // the flat bottom (or drill point) is the end
-                let bottom = Name::feature(i as u64 + 1).with_str("side").with(hole::BOTTOM);
+                let bottom = Name::feature(features.id(i)).with_str("side").with(hole::BOTTOM);
                 upto::verify_next(
                     features,
                     i,
@@ -772,7 +823,7 @@ fn tools(features: &[Feature], i: usize, build: bool) -> Result<Vec<Tool>, Regen
             let mut out = Vec::with_capacity(copies.len() * base.len());
             for (key, m) in &copies {
                 for (b, op, sh) in &base {
-                    let body = moved(b, m, |n| instance_name(i, *key, n)).map_err(pe)?;
+                    let body = moved(b, m, |n| instance_name(features.id(i), *key, n)).map_err(pe)?;
                     let op = if *op == Combine::New { Combine::Add } else { *op };
                     out.push((body, op, moved_shape(sh, m)));
                 }
@@ -782,22 +833,22 @@ fn tools(features: &[Feature], i: usize, build: bool) -> Result<Vec<Tool>, Regen
         Feature::Extrude { .. } | Feature::Revolve { .. } => {
             let (t, names, next) = match extent::resolve(features, i)? {
                 extent::Resolved::Plain(f, next) => {
-                    let t = tool(i, &f, build)?;
+                    let t = tool(i, features.id(i), &f, build)?;
                     let names = upto::names(&t.0);
                     (t, names, next)
                 }
                 extent::Resolved::UpTo(f, u) => {
-                    let base = tool(i, &f, build)?;
+                    let base = tool(i, features.id(i), &f, build)?;
                     let names = upto::names(&base.0);
                     (
-                        upto::build(i, base, &u.plan, &u.start, u.far, build)?,
+                        upto::build(i, features.id(i), base, &u.plan, &u.start, u.far, build)?,
                         names,
                         u.next,
                     )
                 }
             };
             if let (true, Some(m)) = (build, next) {
-                let end = Name::feature(i as u64 + 1).with_str("end");
+                let end = Name::feature(features.id(i)).with_str("end");
                 upto::verify_next(features, i, (&t.0, &t.2), &names, &[end], &m)?;
             }
             Ok(vec![t])
@@ -808,12 +859,12 @@ fn tools(features: &[Feature], i: usize, build: bool) -> Result<Vec<Tool>, Regen
         }
         Feature::Thread(_) => thread::tools(features, i, build),
         Feature::Text(_) => text::tools(features, i),
-        f => Ok(vec![tool(i, f, build)?]),
+        f => Ok(vec![tool(i, features.id(i), f, build)?]),
     }
 }
 
 /// The solids feature `s` stands for: its tool, or a pattern's sources' and its copies.
-fn solids_of(features: &[Feature], s: usize, build: bool) -> Result<Vec<Tool>, RegenError> {
+fn solids_of(features: History<'_>, s: usize, build: bool) -> Result<Vec<Tool>, RegenError> {
     let mut out = Vec::new();
     if let Feature::Pattern {
         of: Source::Features(src),
@@ -832,8 +883,7 @@ fn solids_of(features: &[Feature], s: usize, build: bool) -> Result<Vec<Tool>, R
 
 /// The solid an extrude, revolve or ball makes (empty unless `build`), and how it combines
 /// with the part.
-fn tool(i: usize, f: &Feature, build: bool) -> Result<Tool, RegenError> {
-    let id = i as u64 + 1;
+fn tool(i: usize, id: u64, f: &Feature, build: bool) -> Result<Tool, RegenError> {
     if !build {
         let (Feature::Extrude { op, .. } | Feature::Revolve { op, .. } | Feature::Ball { op, .. }) = f else {
             unreachable!("only extrudes, revolves and balls are built directly")
@@ -1002,7 +1052,7 @@ mod tests {
             let solid = part.features.iter().enumerate().filter(|f| !modifies(f.1));
             // a few copies of each pattern, mirrored ones among them
             for ((i, f), (body, _, sh)) in solid.flat_map(|(i, f)| {
-                let ts = tools(&part.features, i, true).expect("tools build");
+                let ts = tools(History::new(&part.features, None), i, true).expect("tools build");
                 ts.into_iter().take(6).map(move |t| ((i, f), t))
             }) {
                 if matches!(sh, Shape::Brep(_)) {

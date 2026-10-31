@@ -485,7 +485,9 @@ fn edits_rebuild_like_the_file_they_print() {
     })
     .expect("dimension");
     fresh(&m);
-    // a line in above: the hole still drills at the second sketch, now the third
+    // a line in above: the hole still drills at the second sketch, now the third, and every
+    // line keeps its id, so the part's names are what they were
+    let before = format!("{:?}", m.body().expect("built").compact());
     m.edit(Edit::Insert {
         at: 1,
         text: "sketch xz\n  circle 0 0 1\nend".into(),
@@ -493,11 +495,13 @@ fn edits_rebuild_like_the_file_they_print() {
     .expect("insert");
     assert!(
         m.src()
-            .ends_with("sketch on sketch2\n  circle 10 10 2\nend\nhole 3 on sketch3 c1 thru\n"),
+            .ends_with("id 4 sketch on sketch2\n  circle 10 10 2\nend\nid 5 hole 3 on sketch3 c1 thru\n"),
         "{}",
         m.src()
     );
+    assert!(m.src().starts_with("w = 55\nid 6 sketch xz\n"), "{}", m.src());
     fresh(&m);
+    assert_eq!(format!("{:?}", m.body().expect("built").compact()), before);
     let hole = item(&m, 5);
     m.edit(Edit::SetArg {
         item: hole,
@@ -508,7 +512,12 @@ fn edits_rebuild_like_the_file_they_print() {
     assert_eq!(m.rebuilt, 1);
     fresh(&m);
     m.edit(Edit::Delete { item: item(&m, 1) }).expect("delete");
-    assert!(m.src().contains("hole w/10 on sketch2 c1 thru"), "{}", m.src());
+    // every line back at the place its id names: no ids written
+    assert!(
+        m.src().ends_with("\nhole w/10 on sketch2 c1 thru\n") && !m.src().contains("id "),
+        "{}",
+        m.src()
+    );
     fresh(&m);
     assert!(
         m.edit(Edit::SetParam {
@@ -701,4 +710,9 @@ fn holes_at_sketch_centers() {
     round_trip(&part);
     let b = part.regenerate_nary(1).expect("regen");
     assert!(forge_topo::check(&b).is_empty());
+
+#[test]
+fn an_id_used_twice_is_an_error() {
+    let (line, msg, _) = error("id 2 extrude 1 rect 0 0 1 1\nextrude add 1 rect 0 0 2 2\n");
+    assert_eq!((line, msg.as_str()), (2, "id 2 is line 1's too"));
 }

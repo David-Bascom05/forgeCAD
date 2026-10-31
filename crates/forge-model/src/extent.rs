@@ -6,7 +6,7 @@
 
 use crate::pattern::corners;
 use crate::upto::{Plan, next_face, plan, samples};
-use crate::{End, Feature, Head, Hole, RegenError, hole, shape, tools};
+use crate::{End, Feature, Head, History, Hole, RegenError, hole, shape, tools};
 use forge_bool::{Op, Shape};
 use forge_geom::{Plane, Surface};
 use forge_math::{Frame, Point2, Point3, UnitVec3, dmath, tol};
@@ -129,7 +129,7 @@ fn bad(feature: usize) -> impl Fn(ExtentError) -> RegenError {
 }
 
 /// The surface a target names.
-pub(crate) fn surface(features: &[Feature], i: usize, t: &Target) -> Result<Surface, RegenError> {
+pub(crate) fn surface(features: History<'_>, i: usize, t: &Target) -> Result<Surface, RegenError> {
     let (k, name) = match *t {
         Target::Plane(k) => {
             return match features.get(k) {
@@ -155,7 +155,7 @@ pub(crate) fn surface(features: &[Feature], i: usize, t: &Target) -> Result<Surf
         Feature::Ball { .. } => Some(features[k].clone()),
         _ => None,
     };
-    if let Some(s) = plain.and_then(|f| crate::upto::named_surface(&f, k, name)) {
+    if let Some(s) = plain.and_then(|f| crate::upto::named_surface(&f, features.id(k), name)) {
         return Ok(s);
     }
     for (body, ..) in tools(features, k, true)? {
@@ -167,7 +167,7 @@ pub(crate) fn surface(features: &[Feature], i: usize, t: &Target) -> Result<Surf
 }
 
 /// The plane a target names.
-pub(crate) fn plane(features: &[Feature], i: usize, t: &Target) -> Result<Frame, RegenError> {
+pub(crate) fn plane(features: History<'_>, i: usize, t: &Target) -> Result<Frame, RegenError> {
     match surface(features, i, t)? {
         Surface::Plane(p) => Ok(p.frame),
         _ => Err(bad(i)(ExtentError::NotPlanar)),
@@ -210,7 +210,7 @@ fn toward(s: &Surface, p: Point3, z: UnitVec3) -> f64 {
 
 /// The solids of the tools before feature `i`, with how each combines (for finding the next
 /// face): from the last new solid, with no part-changing feature since.
-fn earlier(features: &[Feature], i: usize) -> Result<Vec<(usize, Shape, Op)>, RegenError> {
+fn earlier(features: History<'_>, i: usize) -> Result<Vec<(usize, Shape, Op)>, RegenError> {
     let bad = bad(i);
     let start = features[..i]
         .iter()
@@ -239,7 +239,12 @@ fn earlier(features: &[Feature], i: usize) -> Result<Vec<(usize, Shape, Op)>, Re
 
 /// The one surface every ray from `from` along `d` meets first, and whether they start in the
 /// part's material (the pick; `upto::verify_next` proves it for the whole sweep).
-fn next(features: &[Feature], i: usize, from: &[Point3], d: UnitVec3) -> Result<(Surface, Next), RegenError> {
+fn next(
+    features: History<'_>,
+    i: usize,
+    from: &[Point3],
+    d: UnitVec3,
+) -> Result<(Surface, Next), RegenError> {
     let all = earlier(features, i)?;
     let tools: Vec<(Shape, Op)> = all.iter().map(|t| (t.1.clone(), t.2)).collect();
     let mut found: Option<(Surface, bool)> = None;
@@ -299,7 +304,7 @@ fn positive(v: f64) -> bool {
 
 /// Feature `i` (an extrude or revolve with any extent) as the plain extrude or revolve it
 /// comes to: a distance from a moved sketch, or an angle from a turned one.
-pub(crate) fn resolve(features: &[Feature], i: usize) -> Result<Resolved<'_>, RegenError> {
+pub(crate) fn resolve<'a>(features: History<'a>, i: usize) -> Result<Resolved<'a>, RegenError> {
     let err = bad(i);
     match &features[i] {
         Feature::Extrude {
@@ -309,7 +314,7 @@ pub(crate) fn resolve(features: &[Feature], i: usize) -> Result<Resolved<'_>, Re
         | Feature::Revolve {
             extent: Turn::Angle(_),
             ..
-        } => Ok(Resolved::Plain(Cow::Borrowed(&features[i]), None)),
+        } => Ok(Resolved::Plain(Cow::Borrowed(&features.features[i]), None)),
         Feature::Extrude { profile, extent, op } => {
             let at = profile.plane;
             let mut material = None;
@@ -342,7 +347,7 @@ pub(crate) fn resolve(features: &[Feature], i: usize) -> Result<Resolved<'_>, Re
                             (end.min(0.0), end.max(0.0))
                         }
                         None => {
-                            return up_to(i, profile, *op, &s, offset, None)
+                            return up_to(i, features.id(i), profile, *op, &s, offset, None)
                                 .map(|(f, u)| Resolved::UpTo(f, Box::new(u)));
                         }
                     }
@@ -359,7 +364,7 @@ pub(crate) fn resolve(features: &[Feature], i: usize) -> Result<Resolved<'_>, Re
                         }
                         (end.min(0.0), end.max(0.0))
                     } else {
-                        return up_to(i, profile, *op, &s, 0.0, Some(z))
+                        return up_to(i, features.id(i), profile, *op, &s, 0.0, Some(z))
                             .map(|(f, u)| Resolved::UpTo(f, Box::new(UpTo { next: material, ..u })));
                     }
                 }
@@ -437,6 +442,7 @@ pub(crate) fn resolve(features: &[Feature], i: usize) -> Result<Resolved<'_>, Re
 /// Extrude `i` of `profile` cut off at `s`: along `z` if given, else toward the surface.
 fn up_to(
     i: usize,
+    id: u64,
     profile: &forge_ops::Profile,
     op: crate::Combine,
     s: &Surface,
@@ -464,7 +470,7 @@ fn up_to(
         UpTo {
             plan,
             next: None,
-            start: vec![Name::feature(i as u64 + 1).with_str("start")],
+            start: vec![Name::feature(id).with_str("start")],
             far: (at.origin + z * t, z),
         },
     ))
@@ -473,7 +479,7 @@ fn up_to(
 /// Hole `i` with an end at a plane square to it turned into one at a depth; with any other end
 /// surface, or up to the next face, a long hole (flat bottom) to cut off there.
 pub(crate) fn hole_end(
-    features: &[Feature],
+    features: History<'_>,
     i: usize,
     h: &Hole,
 ) -> Result<(Hole, Option<UpTo>, Option<Next>), RegenError> {
@@ -523,7 +529,7 @@ pub(crate) fn hole_end(
         point: None,
         ..*h
     };
-    let side = Name::feature(i as u64 + 1).with_str("side").with(0);
+    let side = Name::feature(features.id(i)).with_str("side").with(0);
     let up = UpTo {
         plan,
         next: None,

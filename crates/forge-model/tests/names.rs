@@ -23,10 +23,11 @@ fn small_edits_never_move_a_name_to_another_entity() {
         .filter(|c| !SEAMED.contains(&c.0.as_str()))
         .collect();
     let cases = run(&parts, 11, 80, false, 1, 30);
-    let (mut kept, mut lost, mut used) = (0, 0, 0);
+    let (mut kept, mut lost, mut used, mut shifted) = (0, 0, 0, 0);
     let mut bad = Vec::new();
-    // edits that renumber features rename everything below them (ids are positions)
-    for c in cases.iter().filter(|c| !c.edit.shifts(c.before)) {
+    // inserts, deletes and swaps too: features keep their ids, so nothing renumbers
+    for c in &cases {
+        shifted += c.edit.shifts(c.before) as usize;
         used += 1;
         kept += c.outcome.kept;
         for f in &c.outcome.findings {
@@ -37,7 +38,10 @@ fn small_edits_never_move_a_name_to_another_entity() {
             }
         }
     }
-    assert!(used >= 50, "only {used} edits judged");
+    assert!(
+        used >= 50 && shifted >= 10,
+        "only {used} edits judged, {shifted} shifting"
+    );
     assert!(bad.is_empty(), "{bad:#?}");
     // names lost though their entity lives: where flush faces part or meet (docs/naming.md)
     assert!(lost * 25 <= kept, "{lost} lost, {kept} kept");
@@ -103,7 +107,6 @@ fn both_regen_paths_name_alike() {
 }
 
 #[test]
-#[ignore = "feature ids are their positions: taking one out hands its names to the next (a proposal)"]
 fn taking_a_feature_out_never_hands_its_names_to_the_next() {
     let block = |x: f64, w: f64, z: f64, h: f64, op| Feature::Extrude {
         profile: Profile {
@@ -120,9 +123,22 @@ fn taking_a_feature_out_never_hands_its_names_to_the_next() {
             block(25.0, 5.0, 5.0, 8.0, Combine::Add),
         ],
     };
-    let top = Name::feature(2).with_str("end");
-    assert!(part.regenerate().expect("regen").face_by_name(top).is_some());
+    let (top, other) = (Name::feature(2).with_str("end"), Name::feature(3).with_str("end"));
+    let both = part.regenerate().expect("regen");
+    assert!(both.face_by_name(top).is_some() && both.face_by_name(other).is_some());
     part.features.remove(1);
-    // the second boss's top now carries the first's name
-    assert!(part.regenerate().expect("regen").face_by_name(top).is_none());
+    // the second boss keeps its id, 3: its top keeps its name, and the first's is gone
+    let one = part.regenerate_ids(Some(&[1, 3])).expect("regen");
+    assert!(one.face_by_name(top).is_none());
+    assert_eq!(face(&one, other), face(&both, other));
+    // put back in, after the other: every name where it was
+    part.features.push(block(5.0, 5.0, 5.0, 5.0, Combine::Add));
+    let moved = part.regenerate_ids(Some(&[1, 3, 2])).expect("regen");
+    assert_eq!(face(&moved, top), face(&both, top));
+    assert_eq!(face(&moved, other), face(&both, other));
+}
+
+/// Where a named face lies: its box.
+fn face(b: &Body, n: Name) -> Option<String> {
+    b.face_by_name(n).map(|f| format!("{:?}", b.face_box(f)))
 }

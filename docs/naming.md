@@ -45,8 +45,10 @@ new B-rep against the old one after the fact (matching: Agbodan et al.).
 
 - An extruded, revolved or swept face is named from its feature and its profile segment's id;
   an edge between two such faces from the set of the two (Capoyleas' second mechanism).
-- **Feature ids are positions in the history.** Inserting, deleting or reordering a feature
-  renames everything after it (see below).
+- **Feature ids are stable.** Each feature line has an id from when it was made, kept in the
+  part file (`id N` before the line where it is not the line's place among the features) and
+  passed by forge-doc to the regen (`forge_model::History`), so inserting, deleting or moving
+  lines renames nothing. A file written by hand without ids gets each line's place.
 - Booleans (sequential and n-ary alike, since 2026-10-31):
   - a new edge, a piece of the curve where faces `a` and `b` meet, is named from the pair, the
     branch of the intersection, and the two edges its ends cut (not its place along the curve);
@@ -76,7 +78,7 @@ went to something that is not a piece of it); *duplicate*.
 | order/index names (FreeCAD `FaceN`, [6]) | boolean vertices, curve pieces, edge pieces and face regions numbered by discovery order: wrong matches under small edits | none from booleans; small-edit hunts (900 edits) show wrong matches only in the seam class below |
 | split and merge [1, 6] | a face trimmed to one piece renamed `split k`; seq and n-ary disagreed | trimmed faces and edges keep their names on both paths |
 | ambiguity among pieces [2] | by order | by boundary; ties by position |
-| history change (insert, delete, reorder) [3, 6] | everything after renamed; deletes hand names to the next feature | unchanged: needs stable feature ids (open) |
+| history change (insert, delete, reorder) [3, 6] | everything after renamed; deletes hand names to the next feature | stable ids: inserts rename nothing; a delete hands nothing on. Open: swapping two features that overlap reorders the booleans, and faces split by both are named from the pieces the earlier one left (fillet:pit-four, pit-five: 49 of 200 hunt edits, seed 3) |
 | seams of periodic surfaces | n/a | open: a closed intersection curve is cut where a cylinder's seam lies, so a tiny move can swap the halves' names (shaft-post, shaft-cross-hole) |
 | flush faces parting or meeting | n/a | open: a block standing flush on a plate names its foot edges as its own; sunk 0.01 mm in, they become intersection edges with new names (lost, never wrong) |
 | fillet faces on closed edges | n/a | open: fillet piece names follow the edge's seam (boss-foot-periodic) |

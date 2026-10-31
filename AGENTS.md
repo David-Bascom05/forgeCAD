@@ -2,6 +2,8 @@
 
 A part is a `.fc` text file: its feature history, one feature per line, rebuilt top to bottom.
 Units mm, angles degrees (`1.2r` is radians). `#` starts a comment. `name:` labels a line.
+`id N` before a line (written by `edit`) is the id its names come from, kept when lines move;
+leave it off new lines.
 A FRAME places a sketch or hole: `at` is its origin in world coordinates, its z the extrude or
 drill direction. A hole's mouth is at the origin.
 

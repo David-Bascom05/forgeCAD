@@ -1628,6 +1628,8 @@ fn new_param(above: &[Feature], name: String, expr: String, unit: Unit) -> R<Par
 /// One line of a part file that holds a feature.
 #[derive(Clone, Debug, PartialEq)]
 pub struct Line {
+    /// The id its feature's names derive from: given in the file, or its place from 1.
+    pub id: u64,
     /// 1-based, in the file.
     pub no: usize,
     pub label: Option<String>,
@@ -1667,7 +1669,7 @@ pub fn tokens(text: &str) -> Vec<String> {
 }
 
 /// The line up to its comment: a `#` outside a quoted string.
-fn uncommented(raw: &str) -> &str {
+pub(crate) fn uncommented(raw: &str) -> &str {
     let (mut quoted, mut escaped) = (false, false);
     for (k, c) in raw.char_indices() {
         if quoted {
@@ -1684,36 +1686,7 @@ fn uncommented(raw: &str) -> &str {
 /// The feature lines of a file (blank and comment-only lines skipped). A sketch block is one
 /// line: its header, then each row after a `;` token, up to `end`.
 pub fn lines(src: &str) -> Vec<Line> {
-    let mut out: Vec<Line> = Vec::new();
-    let mut block = false;
-    for (k, raw) in src.lines().enumerate() {
-        let mut toks = tokens(uncommented(raw));
-        if block {
-            let last = out.last_mut().expect("a block has its header");
-            if toks.len() == 1 && toks[0] == "end" {
-                block = false;
-            } else if !toks.is_empty() {
-                last.toks.push(";".into());
-                last.toks.extend(toks);
-            }
-            continue;
-        }
-        let label = match toks.first() {
-            Some(t) if t.len() > 1 && t.ends_with(':') => {
-                Some(toks.remove(0).trim_end_matches(':').to_string())
-            }
-            _ => None,
-        };
-        if !toks.is_empty() {
-            block = toks[0] == "sketch";
-            out.push(Line {
-                no: k + 1,
-                label,
-                toks,
-            });
-        }
-    }
-    out
+    crate::doc::Document::parse(src).lines()
 }
 
 /// What a line may refer to: the features before it, their labels and kinds, and a resolver

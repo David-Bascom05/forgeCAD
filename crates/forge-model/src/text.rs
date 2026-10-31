@@ -5,7 +5,7 @@
 //! The kernel reads no files: the host finds the font the feature names (a path, say) and hands
 //! it over parsed, in the feature's `FontRef`.
 
-use crate::{Combine, Feature, RegenError, Tool};
+use crate::{Combine, Feature, History, RegenError, Tool};
 use forge_bool::Shape;
 use forge_font::{Font, FontError, Seg};
 use forge_math::{Frame, Point2};
@@ -193,7 +193,7 @@ fn nest(contours: Vec<Vec<GlyphSeg>>) -> Vec<Vec<Vec<GlyphSeg>>> {
 }
 
 /// The solids text feature `i` combines with the part: one per glyph region.
-pub(crate) fn tools(features: &[Feature], i: usize) -> Result<Vec<Tool>, RegenError> {
+pub(crate) fn tools(features: History<'_>, i: usize) -> Result<Vec<Tool>, RegenError> {
     let Feature::Text(t) = &features[i] else {
         unreachable!("only text")
     };
@@ -219,7 +219,7 @@ pub(crate) fn tools(features: &[Feature], i: usize) -> Result<Vec<Tool>, RegenEr
             (Place::Wrapped { axis, radius }, lo, radius + d)
         }
     };
-    let root = Name::feature(i as u64 + 1);
+    let root = Name::feature(features.id(i));
     regions
         .iter()
         .enumerate()

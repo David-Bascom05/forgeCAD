@@ -2,7 +2,7 @@
 //! analytic solids (a sweep's stretches are prisms and solids of revolution; a coil is tested
 //! turn by turn; a loft only by its box).
 
-use crate::{Combine, ExtentError, Feature, RegenError, Target, Tool, cut_root, seg2, tool};
+use crate::{Combine, ExtentError, Feature, History, RegenError, Target, Tool, cut_root, seg2, tool};
 use forge_bool::{Op, Seg2, Shape};
 use forge_geom::CurveGeom;
 use forge_geom::screw::Section;
@@ -92,8 +92,8 @@ pub(crate) fn op(f: &Feature) -> Option<Combine> {
 }
 
 /// The tool of sweep, coil or loft `i` (its solid empty unless `build`).
-pub(crate) fn tool_of(features: &[Feature], i: usize, build: bool) -> Result<Tool, RegenError> {
-    let id = i as u64 + 1;
+pub(crate) fn tool_of(features: History<'_>, i: usize, build: bool) -> Result<Tool, RegenError> {
+    let id = features.id(i);
     match &features[i] {
         Feature::Sweep(s) => {
             let err = |error| RegenError::Sweep { feature: i, error };
@@ -151,7 +151,7 @@ pub(crate) fn tool_of(features: &[Feature], i: usize, build: bool) -> Result<Too
                 Some((at, z)) => {
                     let reach = coil_box(&m);
                     let start = m.frame.origin;
-                    cut_at(i, base, at, z, start, reach, build)
+                    cut_at((i, features.id(i)), base, at, z, start, reach, build)
                 }
                 None => Ok(base),
             }
@@ -354,7 +354,7 @@ fn coil_box(m: &forge_ops::Wound) -> Box3 {
 
 /// The plane a target names, its normal turned away from `from`, moved `offset` on along it.
 fn target_plane(
-    features: &[Feature],
+    features: History<'_>,
     i: usize,
     target: &Target,
     offset: f64,
@@ -378,7 +378,7 @@ fn target_plane(
 
 #[allow(clippy::too_many_arguments)]
 fn trim(
-    features: &[Feature],
+    features: History<'_>,
     i: usize,
     base: Tool,
     target: &Target,
@@ -388,13 +388,14 @@ fn trim(
     build: bool,
 ) -> Result<Tool, RegenError> {
     let (at, z) = target_plane(features, i, target, offset, start)?;
-    cut_at(i, base, at, z, start, reach, build)
+    cut_at((i, features.id(i)), base, at, z, start, reach, build)
 }
 
 /// The tool `base` (lying in `reach`) kept on the near side of the plane through `at` square to
 /// `z`.
+/// `(i, id)`: the feature's place and its id.
 fn cut_at(
-    i: usize,
+    (i, id): (usize, u64),
     base: Tool,
     at: Point3,
     z: UnitVec3,
@@ -419,7 +420,7 @@ fn cut_at(
     let mut pts = corners;
     pts.push(start);
     let keep = crate::upto::near_box(at, z, &pts);
-    let (kb, _, ks) = tool(i + 2_000_000, &keep, build)?;
+    let (kb, _, ks) = tool(i, id + 2_000_000, &keep, build)?;
     let shape = match base.2.clone() {
         Shape::Csg { first, mut rest } => {
             rest.push((Op::Intersect, ks.clone()));
@@ -448,7 +449,7 @@ fn cut_at(
 
 /// Turns enough for a coil to pass wholly beyond the target plane, and that plane.
 fn turns_to(
-    features: &[Feature],
+    features: History<'_>,
     i: usize,
     c: &Coil,
     w: &Winding,
@@ -503,7 +504,8 @@ mod tests {
                 if op(&part.features[i]).is_none() {
                     continue;
                 }
-                let (body, _, sh) = tool_of(&part.features, i, true).expect("builds");
+                let (body, _, sh) =
+                    tool_of(crate::History::new(&part.features, None), i, true).expect("builds");
                 let index = Index::new(&body);
                 let b = index.bbox.grow(1.0);
                 for _ in 0..3000 {

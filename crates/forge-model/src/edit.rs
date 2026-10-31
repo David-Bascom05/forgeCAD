@@ -2,7 +2,7 @@
 //! direct edits (delete, replace, move).
 
 use crate::rib::{Rib, RibError, rib};
-use crate::{Combine, Feature, RegenError, Target, op_of};
+use crate::{Combine, History, RegenError, Target, op_of};
 use forge_bool::{BoolError, boolean};
 use forge_math::{Frame, Point3, Vec3};
 use forge_ops::{DirectError, ThickenError, delete_faces, move_faces, offset_faces, replace_face, thicken};
@@ -84,8 +84,8 @@ pub enum EditError {
 }
 
 /// Edit feature `i` applied to `body`.
-pub(crate) fn apply(features: &[Feature], i: usize, edit: &Edit, body: &Body) -> Result<Body, RegenError> {
-    let id = i as u64 + 1;
+pub(crate) fn apply(features: History<'_>, i: usize, edit: &Edit, body: &Body) -> Result<Body, RegenError> {
+    let id = features.id(i);
     let err = |error| RegenError::Edit { feature: i, error };
     let direct = |e| err(EditError::Direct(e));
     let sizes = match *edit {

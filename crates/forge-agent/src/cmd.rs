@@ -1129,7 +1129,7 @@ combine cut base lid keep
         assert!(r.ok, "{}", r.text);
         assert_eq!(
             std::fs::read_to_string(&f).expect("written"),
-            "w = 5\nh = 2\nd = h\nextrude w rect 0 0 1 1  # a block\n"
+            "w = 5\nid 3 h = 2\nid 4 d = h\nid 2 extrude w rect 0 0 1 1  # a block\n"
         );
         assert_eq!(
             s.run("edit", &args(&f, &["dim", "1", "3"])).text,
