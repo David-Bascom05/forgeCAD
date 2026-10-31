@@ -1,7 +1,7 @@
 //! A set of benchmark parts unlike one another, so no single shape decides
 //! what "fast" and "robust" mean, plus a random history generator.
 
-use crate::{Combine, End, Feature, Head, Hole, Layout, Part, Row, Source, Thread, torture};
+use crate::{Combine, End, Extent, Feature, Head, Hole, Layout, Part, Row, Source, Thread, Turn, torture};
 use forge_math::rng::Rng;
 use forge_math::{Frame, Point2, Point3, Vec2, Vec3, dmath};
 use forge_ops::{Axis2, Profile, ProfileLoop, Segment};
@@ -27,7 +27,7 @@ fn block(plane: Frame, corner: Point2, w: f64, h: f64, d: f64, op: Combine) -> F
             plane,
             loops: vec![Profile::rectangle(corner, w, h, 0)],
         },
-        distance: d,
+        extent: Extent::Distance(d),
         op,
     }
 }
@@ -38,7 +38,7 @@ fn rounded(plane: Frame, corner: Point2, w: f64, h: f64, r: f64, d: f64, op: Com
             plane,
             loops: vec![Profile::rounded_rectangle(corner, w, h, r, 0)],
         },
-        distance: d,
+        extent: Extent::Distance(d),
         op,
     }
 }
@@ -49,7 +49,7 @@ fn rod(plane: Frame, r: f64, len: f64, op: Combine) -> Feature {
             plane,
             loops: vec![Profile::circle(Point2::ORIGIN, r, 0)],
         },
-        distance: len,
+        extent: Extent::Distance(len),
         op,
     }
 }
@@ -86,7 +86,7 @@ fn revolve(profile: Profile, axis: Axis2, op: Combine) -> Feature {
     Feature::Revolve {
         profile,
         axis,
-        angle: dmath::TAU,
+        extent: Turn::Angle(dmath::TAU),
         op,
     }
 }
@@ -516,7 +516,7 @@ pub fn tour() -> Part {
     let features = vec![
         block(Frame::WORLD, Point2::ORIGIN, w, h, t, Combine::New),
         rod(up(Point3::new(20.0, 20.0, t - 1.0)), 6.0, 11.0, Combine::Add),
-        Feature::Hole(Hole {
+        Feature::Hole(Box::new(Hole {
             point: Some(118.0 / 180.0 * dmath::PI),
             thread: Some(Thread {
                 size: 5.0,
@@ -528,7 +528,7 @@ pub fn tour() -> Part {
                 Head::Plain,
                 End::Depth(12.0),
             )
-        }),
+        })),
         Feature::Pattern {
             of: Source::Features(vec![1, 2]),
             layout: Layout::Linear {
@@ -536,7 +536,7 @@ pub fn tour() -> Part {
                 second: None,
             },
         },
-        Feature::Hole(hole(
+        Feature::Hole(Box::new(hole(
             Point3::new(123.0, 55.0, t),
             5.0,
             Head::Countersink {
@@ -544,7 +544,7 @@ pub fn tour() -> Part {
                 angle: dmath::FRAC_PI_2,
             },
             End::Through,
-        )),
+        ))),
         Feature::Pattern {
             of: Source::Features(vec![4]),
             layout: Layout::Circular {
@@ -552,6 +552,7 @@ pub fn tour() -> Part {
                 axis: Vec3::Z,
                 count: 6,
                 angle: dmath::TAU,
+                incremental: false,
             },
         },
         Feature::Pattern {
@@ -566,7 +567,7 @@ pub fn tour() -> Part {
                 plane: frame(Point3::new(w, 0.0, 0.0), Vec3::X, Vec3::Y),
             },
         },
-        Feature::Hole(hole(
+        Feature::Hole(Box::new(hole(
             Point3::new(w, h / 2.0, t),
             8.0,
             Head::Counterbore {
@@ -574,7 +575,7 @@ pub fn tour() -> Part {
                 depth: 5.0,
             },
             End::Through,
-        )),
+        ))),
     ];
     Part { features }
 }
@@ -594,12 +595,12 @@ pub fn hole_grid() -> Part {
     };
     let features = vec![
         block(Frame::WORLD, Point2::ORIGIN, w, w, t, Combine::New),
-        Feature::Hole(hole(
+        Feature::Hole(Box::new(hole(
             Point3::new(pitch / 2.0, pitch / 2.0, t),
             6.6,
             counterbore,
             End::Through,
-        )),
+        ))),
         Feature::Pattern {
             of: Source::Features(vec![1]),
             layout: Layout::Linear {

@@ -4,7 +4,7 @@
 
 use forge_math::{Point2, Vec2};
 use forge_model::adversarial::fr;
-use forge_model::{Combine, Feature, Part};
+use forge_model::{Combine, Extent, Feature, Part, Turn};
 use forge_ops::{Axis2, Profile, ProfileLoop, Segment};
 
 fn regenerates_valid(part: Part) {
@@ -73,7 +73,7 @@ fn axis_revolve_inconsistent_classification() {
                         ),
                     ])],
                 },
-                distance: 10.0,
+                extent: Extent::Distance(10.0),
                 op: Combine::New,
             },
             Feature::Revolve {
@@ -114,7 +114,7 @@ fn axis_revolve_inconsistent_classification() {
                     origin: Point2::new(0.0, 0.0),
                     dir: Vec2::new(0.0, 1.0),
                 },
-                angle: 6.283185307179586,
+                extent: Turn::Angle(6.283185307179586),
                 op: Combine::Add,
             },
             Feature::Revolve {
@@ -148,7 +148,7 @@ fn axis_revolve_inconsistent_classification() {
                     origin: Point2::new(0.0, 0.0),
                     dir: Vec2::new(0.0, 1.0),
                 },
-                angle: 6.283185307179586,
+                extent: Turn::Angle(6.283185307179586),
                 op: Combine::Add,
             },
         ],
@@ -199,7 +199,7 @@ fn ball_poles_face_split_crossed_itself() {
                         ),
                     ])],
                 },
-                distance: 10.0,
+                extent: Extent::Distance(10.0),
                 op: Combine::New,
             },
             Feature::Ball {
@@ -268,7 +268,7 @@ fn ball_poles_inconsistent_classification() {
                         ),
                     ])],
                 },
-                distance: 10.0,
+                extent: Extent::Distance(10.0),
                 op: Combine::New,
             },
             Feature::Ball {
@@ -336,7 +336,7 @@ fn coaxial_coplanar_faces_share_an_edge() {
                         ),
                     ])],
                 },
-                distance: 10.0,
+                extent: Extent::Distance(10.0),
                 op: Combine::New,
             },
             Feature::Extrude {
@@ -351,7 +351,7 @@ fn coaxial_coplanar_faces_share_an_edge() {
                         0,
                     )])],
                 },
-                distance: 22.0,
+                extent: Extent::Distance(22.0),
                 op: Combine::Cut,
             },
             Feature::Extrude {
@@ -366,7 +366,7 @@ fn coaxial_coplanar_faces_share_an_edge() {
                         0,
                     )])],
                 },
-                distance: 3.0,
+                extent: Extent::Distance(3.0),
                 op: Combine::Add,
             },
             Feature::Extrude {
@@ -381,7 +381,7 @@ fn coaxial_coplanar_faces_share_an_edge() {
                         0,
                     )])],
                 },
-                distance: 22.0,
+                extent: Extent::Distance(22.0),
                 op: Combine::Cut,
             },
             Feature::Extrude {
@@ -396,7 +396,7 @@ fn coaxial_coplanar_faces_share_an_edge() {
                         0,
                     )])],
                 },
-                distance: 8.0,
+                extent: Extent::Distance(8.0),
                 op: Combine::Add,
             },
             Feature::Extrude {
@@ -411,7 +411,7 @@ fn coaxial_coplanar_faces_share_an_edge() {
                         0,
                     )])],
                 },
-                distance: 8.0,
+                extent: Extent::Distance(8.0),
                 op: Combine::Add,
             },
         ],
@@ -461,7 +461,7 @@ fn coaxial_intersection_curve_runs_along_an_edge() {
                         ),
                     ])],
                 },
-                distance: 10.0,
+                extent: Extent::Distance(10.0),
                 op: Combine::New,
             },
             Feature::Extrude {
@@ -476,7 +476,7 @@ fn coaxial_intersection_curve_runs_along_an_edge() {
                         0,
                     )])],
                 },
-                distance: 22.0,
+                extent: Extent::Distance(22.0),
                 op: Combine::Cut,
             },
             Feature::Extrude {
@@ -491,7 +491,7 @@ fn coaxial_intersection_curve_runs_along_an_edge() {
                         0,
                     )])],
                 },
-                distance: 6.0,
+                extent: Extent::Distance(6.0),
                 op: Combine::Add,
             },
             Feature::Extrude {
@@ -506,7 +506,7 @@ fn coaxial_intersection_curve_runs_along_an_edge() {
                         0,
                     )])],
                 },
-                distance: 4.0,
+                extent: Extent::Distance(4.0),
                 op: Combine::Add,
             },
             Feature::Extrude {
@@ -521,7 +521,7 @@ fn coaxial_intersection_curve_runs_along_an_edge() {
                         0,
                     )])],
                 },
-                distance: 22.0,
+                extent: Extent::Distance(22.0),
                 op: Combine::Cut,
             },
         ],
@@ -571,7 +571,7 @@ fn coincident_walls_inconsistent_classification() {
                         ),
                     ])],
                 },
-                distance: 10.0,
+                extent: Extent::Distance(10.0),
                 op: Combine::New,
             },
             Feature::Extrude {
@@ -608,7 +608,7 @@ fn coincident_walls_inconsistent_classification() {
                         ),
                     ])],
                 },
-                distance: 4.0,
+                extent: Extent::Distance(4.0),
                 op: Combine::Cut,
             },
             Feature::Extrude {
@@ -645,7 +645,7 @@ fn coincident_walls_inconsistent_classification() {
                         ),
                     ])],
                 },
-                distance: 4.0,
+                extent: Extent::Distance(4.0),
                 op: Combine::Cut,
             },
             Feature::Extrude {
@@ -682,7 +682,7 @@ fn coincident_walls_inconsistent_classification() {
                         ),
                     ])],
                 },
-                distance: 6.0,
+                extent: Extent::Distance(6.0),
                 op: Combine::Cut,
             },
         ],
@@ -732,7 +732,7 @@ fn coincident_walls_coplanar_faces_share_an_edge() {
                         ),
                     ])],
                 },
-                distance: 10.0,
+                extent: Extent::Distance(10.0),
                 op: Combine::New,
             },
             Feature::Extrude {
@@ -769,7 +769,7 @@ fn coincident_walls_coplanar_faces_share_an_edge() {
                         ),
                     ])],
                 },
-                distance: 6.0,
+                extent: Extent::Distance(6.0),
                 op: Combine::Cut,
             },
             Feature::Extrude {
@@ -806,7 +806,7 @@ fn coincident_walls_coplanar_faces_share_an_edge() {
                         ),
                     ])],
                 },
-                distance: 3.0,
+                extent: Extent::Distance(3.0),
                 op: Combine::Add,
             },
         ],
@@ -856,7 +856,7 @@ fn coplanar_stack_coplanar_faces_share_an_edge() {
                         ),
                     ])],
                 },
-                distance: 10.0,
+                extent: Extent::Distance(10.0),
                 op: Combine::New,
             },
             Feature::Extrude {
@@ -893,7 +893,7 @@ fn coplanar_stack_coplanar_faces_share_an_edge() {
                         ),
                     ])],
                 },
-                distance: 5.0,
+                extent: Extent::Distance(5.0),
                 op: Combine::Cut,
             },
             Feature::Extrude {
@@ -908,7 +908,7 @@ fn coplanar_stack_coplanar_faces_share_an_edge() {
                         0,
                     )])],
                 },
-                distance: 5.0,
+                extent: Extent::Distance(5.0),
                 op: Combine::Cut,
             },
             Feature::Extrude {
@@ -923,7 +923,7 @@ fn coplanar_stack_coplanar_faces_share_an_edge() {
                         0,
                     )])],
                 },
-                distance: 5.0,
+                extent: Extent::Distance(5.0),
                 op: Combine::Cut,
             },
         ],
@@ -973,7 +973,7 @@ fn coplanar_stack_intersection_curve_runs_along_an_edge() {
                         ),
                     ])],
                 },
-                distance: 10.0,
+                extent: Extent::Distance(10.0),
                 op: Combine::New,
             },
             Feature::Extrude {
@@ -1010,7 +1010,7 @@ fn coplanar_stack_intersection_curve_runs_along_an_edge() {
                         ),
                     ])],
                 },
-                distance: 5.0,
+                extent: Extent::Distance(5.0),
                 op: Combine::Cut,
             },
             Feature::Extrude {
@@ -1025,7 +1025,7 @@ fn coplanar_stack_intersection_curve_runs_along_an_edge() {
                         0,
                     )])],
                 },
-                distance: 5.0,
+                extent: Extent::Distance(5.0),
                 op: Combine::Cut,
             },
             Feature::Extrude {
@@ -1062,7 +1062,7 @@ fn coplanar_stack_intersection_curve_runs_along_an_edge() {
                         ),
                     ])],
                 },
-                distance: 5.0,
+                extent: Extent::Distance(5.0),
                 op: Combine::Cut,
             },
         ],
@@ -1112,7 +1112,7 @@ fn coplanar_stack_untouched_face_lies_on_the_other() {
                         ),
                     ])],
                 },
-                distance: 10.0,
+                extent: Extent::Distance(10.0),
                 op: Combine::New,
             },
             Feature::Extrude {
@@ -1127,7 +1127,7 @@ fn coplanar_stack_untouched_face_lies_on_the_other() {
                         0,
                     )])],
                 },
-                distance: 5.0,
+                extent: Extent::Distance(5.0),
                 op: Combine::Add,
             },
         ],
@@ -1177,7 +1177,7 @@ fn exact_patterns_touch_refused_zero_thickness() {
                         ),
                     ])],
                 },
-                distance: 10.0,
+                extent: Extent::Distance(10.0),
                 op: Combine::New,
             },
             Feature::Extrude {
@@ -1218,7 +1218,7 @@ fn exact_patterns_touch_refused_zero_thickness() {
                         ),
                     ])],
                 },
-                distance: 4.0,
+                extent: Extent::Distance(4.0),
                 op: Combine::Cut,
             },
             Feature::Extrude {
@@ -1237,7 +1237,7 @@ fn exact_patterns_touch_refused_zero_thickness() {
                         0,
                     )])],
                 },
-                distance: 4.0,
+                extent: Extent::Distance(4.0),
                 op: Combine::Cut,
             },
         ],
@@ -1287,7 +1287,7 @@ fn fuzz_face_split_crossed_itself() {
                         ),
                     ])],
                 },
-                distance: 34.0,
+                extent: Extent::Distance(34.0),
                 op: Combine::New,
             },
             Feature::Extrude {
@@ -1306,7 +1306,7 @@ fn fuzz_face_split_crossed_itself() {
                         0,
                     )])],
                 },
-                distance: 26.0,
+                extent: Extent::Distance(26.0),
                 op: Combine::Add,
             },
             Feature::Extrude {
@@ -1347,7 +1347,7 @@ fn fuzz_face_split_crossed_itself() {
                         ),
                     ])],
                 },
-                distance: 27.0,
+                extent: Extent::Distance(27.0),
                 op: Combine::Cut,
             },
             Feature::Extrude {
@@ -1424,7 +1424,7 @@ fn fuzz_face_split_crossed_itself() {
                         ),
                     ])],
                 },
-                distance: 20.0,
+                extent: Extent::Distance(20.0),
                 op: Combine::Cut,
             },
         ],
@@ -1474,7 +1474,7 @@ fn fuzz_inconsistent_classification() {
                         ),
                     ])],
                 },
-                distance: 19.8,
+                extent: Extent::Distance(19.8),
                 op: Combine::New,
             },
             Feature::Ball {
@@ -1498,7 +1498,7 @@ fn fuzz_inconsistent_classification() {
                         0,
                     )])],
                 },
-                distance: 8.9,
+                extent: Extent::Distance(8.9),
                 op: Combine::Add,
             },
         ],
@@ -1548,7 +1548,7 @@ fn fuzz_invalid_vertexoffedge() {
                         ),
                     ])],
                 },
-                distance: 13.076,
+                extent: Extent::Distance(13.076),
                 op: Combine::New,
             },
             Feature::Extrude {
@@ -1625,7 +1625,7 @@ fn fuzz_invalid_vertexoffedge() {
                         ),
                     ])],
                 },
-                distance: 9.718,
+                extent: Extent::Distance(9.718),
                 op: Combine::Cut,
             },
             Feature::Extrude {
@@ -1644,7 +1644,7 @@ fn fuzz_invalid_vertexoffedge() {
                         0,
                     )])],
                 },
-                distance: 4.074,
+                extent: Extent::Distance(4.074),
                 op: Combine::Cut,
             },
         ],
@@ -1694,7 +1694,7 @@ fn near_tolerance_face_split_crossed_itself() {
                         ),
                     ])],
                 },
-                distance: 10.0,
+                extent: Extent::Distance(10.0),
                 op: Combine::New,
             },
             Feature::Extrude {
@@ -1713,7 +1713,7 @@ fn near_tolerance_face_split_crossed_itself() {
                         0,
                     )])],
                 },
-                distance: 3.00001,
+                extent: Extent::Distance(3.00001),
                 op: Combine::Cut,
             },
         ],
@@ -1763,7 +1763,7 @@ fn near_tolerance_coplanar_faces_share_an_edge() {
                         ),
                     ])],
                 },
-                distance: 10.0,
+                extent: Extent::Distance(10.0),
                 op: Combine::New,
             },
             Feature::Extrude {
@@ -1800,7 +1800,7 @@ fn near_tolerance_coplanar_faces_share_an_edge() {
                         ),
                     ])],
                 },
-                distance: 3.0,
+                extent: Extent::Distance(3.0),
                 op: Combine::Add,
             },
             Feature::Extrude {
@@ -1837,7 +1837,7 @@ fn near_tolerance_coplanar_faces_share_an_edge() {
                         ),
                     ])],
                 },
-                distance: 12.0,
+                extent: Extent::Distance(12.0),
                 op: Combine::Cut,
             },
             Feature::Extrude {
@@ -1874,7 +1874,7 @@ fn near_tolerance_coplanar_faces_share_an_edge() {
                         ),
                     ])],
                 },
-                distance: 12.0,
+                extent: Extent::Distance(12.0),
                 op: Combine::Cut,
             },
         ],
@@ -1924,7 +1924,7 @@ fn near_tolerance_two_vertices_of_one_body_meet() {
                         ),
                     ])],
                 },
-                distance: 10.0,
+                extent: Extent::Distance(10.0),
                 op: Combine::New,
             },
             Feature::Extrude {
@@ -1961,7 +1961,7 @@ fn near_tolerance_two_vertices_of_one_body_meet() {
                         ),
                     ])],
                 },
-                distance: 12.0,
+                extent: Extent::Distance(12.0),
                 op: Combine::Cut,
             },
             Feature::Extrude {
@@ -1998,7 +1998,7 @@ fn near_tolerance_two_vertices_of_one_body_meet() {
                         ),
                     ])],
                 },
-                distance: 12.0,
+                extent: Extent::Distance(12.0),
                 op: Combine::Cut,
             },
             Feature::Extrude {
@@ -2035,7 +2035,7 @@ fn near_tolerance_two_vertices_of_one_body_meet() {
                         ),
                     ])],
                 },
-                distance: 12.0,
+                extent: Extent::Distance(12.0),
                 op: Combine::Cut,
             },
         ],
@@ -2085,7 +2085,7 @@ fn repeated_coplanar_faces_share_an_edge() {
                         ),
                     ])],
                 },
-                distance: 10.0,
+                extent: Extent::Distance(10.0),
                 op: Combine::New,
             },
             Feature::Ball {
@@ -2181,7 +2181,7 @@ fn rounded_everywhere_invalid_vertexoffedge() {
                         ),
                     ])],
                 },
-                distance: 12.0,
+                extent: Extent::Distance(12.0),
                 op: Combine::New,
             },
             Feature::Extrude {
@@ -2258,7 +2258,7 @@ fn rounded_everywhere_invalid_vertexoffedge() {
                         ),
                     ])],
                 },
-                distance: 5.38,
+                extent: Extent::Distance(5.38),
                 op: Combine::Cut,
             },
             Feature::Extrude {
@@ -2335,7 +2335,7 @@ fn rounded_everywhere_invalid_vertexoffedge() {
                         ),
                     ])],
                 },
-                distance: 14.76,
+                extent: Extent::Distance(14.76),
                 op: Combine::Cut,
             },
         ],
@@ -2385,7 +2385,7 @@ fn slivers_face_split_crossed_itself() {
                         ),
                     ])],
                 },
-                distance: 10.0,
+                extent: Extent::Distance(10.0),
                 op: Combine::New,
             },
             Feature::Extrude {
@@ -2426,7 +2426,7 @@ fn slivers_face_split_crossed_itself() {
                         ),
                     ])],
                 },
-                distance: 2.0237624046081395,
+                extent: Extent::Distance(2.0237624046081395),
                 op: Combine::Cut,
             },
             Feature::Extrude {
@@ -2467,7 +2467,7 @@ fn slivers_face_split_crossed_itself() {
                         ),
                     ])],
                 },
-                distance: 2.023688703318309,
+                extent: Extent::Distance(2.023688703318309),
                 op: Combine::Cut,
             },
         ],
@@ -2518,7 +2518,7 @@ fn slivers_invalid_edgeuses() {
                         ),
                     ])],
                 },
-                distance: 10.0,
+                extent: Extent::Distance(10.0),
                 op: Combine::New,
             },
             Feature::Extrude {
@@ -2555,7 +2555,7 @@ fn slivers_invalid_edgeuses() {
                         ),
                     ])],
                 },
-                distance: 12.0,
+                extent: Extent::Distance(12.0),
                 op: Combine::Add,
             },
             Feature::Extrude {
@@ -2592,7 +2592,7 @@ fn slivers_invalid_edgeuses() {
                         ),
                     ])],
                 },
-                distance: 12.0,
+                extent: Extent::Distance(12.0),
                 op: Combine::Add,
             },
             Feature::Extrude {
@@ -2629,7 +2629,7 @@ fn slivers_invalid_edgeuses() {
                         ),
                     ])],
                 },
-                distance: 12.0,
+                extent: Extent::Distance(12.0),
                 op: Combine::Cut,
             },
         ],
@@ -2680,7 +2680,7 @@ fn tangent_intersection_curve_runs_along_an_edge() {
                         ),
                     ])],
                 },
-                distance: 10.0,
+                extent: Extent::Distance(10.0),
                 op: Combine::New,
             },
             Feature::Extrude {
@@ -2699,7 +2699,7 @@ fn tangent_intersection_curve_runs_along_an_edge() {
                         0,
                     )])],
                 },
-                distance: 12.0,
+                extent: Extent::Distance(12.0),
                 op: Combine::Cut,
             },
         ],
@@ -2750,7 +2750,7 @@ fn tangent_invalid_edgeuses() {
                         ),
                     ])],
                 },
-                distance: 10.0,
+                extent: Extent::Distance(10.0),
                 op: Combine::New,
             },
             Feature::Extrude {
@@ -2769,7 +2769,7 @@ fn tangent_invalid_edgeuses() {
                         0,
                     )])],
                 },
-                distance: 12.0,
+                extent: Extent::Distance(12.0),
                 op: Combine::Add,
             },
         ],
@@ -2819,7 +2819,7 @@ fn through_vertex_inconsistent_classification() {
                         ),
                     ])],
                 },
-                distance: 10.0,
+                extent: Extent::Distance(10.0),
                 op: Combine::New,
             },
             Feature::Extrude {
@@ -2834,7 +2834,7 @@ fn through_vertex_inconsistent_classification() {
                         0,
                     )])],
                 },
-                distance: 12.0,
+                extent: Extent::Distance(12.0),
                 op: Combine::Cut,
             },
         ],
@@ -2884,7 +2884,7 @@ fn through_vertex_coplanar_faces_share_an_edge() {
                         ),
                     ])],
                 },
-                distance: 10.0,
+                extent: Extent::Distance(10.0),
                 op: Combine::New,
             },
             Feature::Extrude {
@@ -2921,7 +2921,7 @@ fn through_vertex_coplanar_faces_share_an_edge() {
                         ),
                     ])],
                 },
-                distance: 12.0,
+                extent: Extent::Distance(12.0),
                 op: Combine::Cut,
             },
             Feature::Extrude {
@@ -2958,7 +2958,7 @@ fn through_vertex_coplanar_faces_share_an_edge() {
                         ),
                     ])],
                 },
-                distance: 12.0,
+                extent: Extent::Distance(12.0),
                 op: Combine::Cut,
             },
         ],
@@ -3008,7 +3008,7 @@ fn tilted_face_split_crossed_itself() {
                         ),
                     ])],
                 },
-                distance: 10.0,
+                extent: Extent::Distance(10.0),
                 op: Combine::New,
             },
             Feature::Extrude {
@@ -3027,7 +3027,7 @@ fn tilted_face_split_crossed_itself() {
                         0,
                     )])],
                 },
-                distance: 10.0,
+                extent: Extent::Distance(10.0),
                 op: Combine::Add,
             },
             Feature::Extrude {
@@ -3068,7 +3068,7 @@ fn tilted_face_split_crossed_itself() {
                         ),
                     ])],
                 },
-                distance: 13.0,
+                extent: Extent::Distance(13.0),
                 op: Combine::Add,
             },
             Feature::Extrude {
@@ -3109,7 +3109,7 @@ fn tilted_face_split_crossed_itself() {
                         ),
                     ])],
                 },
-                distance: 8.0,
+                extent: Extent::Distance(8.0),
                 op: Combine::Cut,
             },
         ],
@@ -3159,7 +3159,7 @@ fn tilted_inconsistent_classification() {
                         ),
                     ])],
                 },
-                distance: 10.0,
+                extent: Extent::Distance(10.0),
                 op: Combine::New,
             },
             Feature::Extrude {
@@ -3178,7 +3178,7 @@ fn tilted_inconsistent_classification() {
                         0,
                     )])],
                 },
-                distance: 9.0,
+                extent: Extent::Distance(9.0),
                 op: Combine::Cut,
             },
             Feature::Extrude {
@@ -3197,7 +3197,7 @@ fn tilted_inconsistent_classification() {
                         0,
                     )])],
                 },
-                distance: 12.0,
+                extent: Extent::Distance(12.0),
                 op: Combine::Cut,
             },
         ],
@@ -3247,7 +3247,7 @@ fn tilted_invalid_vertexoffedge() {
                         ),
                     ])],
                 },
-                distance: 10.0,
+                extent: Extent::Distance(10.0),
                 op: Combine::New,
             },
             Feature::Extrude {
@@ -3266,7 +3266,7 @@ fn tilted_invalid_vertexoffedge() {
                         0,
                     )])],
                 },
-                distance: 13.0,
+                extent: Extent::Distance(13.0),
                 op: Combine::Add,
             },
             Feature::Extrude {
@@ -3307,7 +3307,7 @@ fn tilted_invalid_vertexoffedge() {
                         ),
                     ])],
                 },
-                distance: 10.0,
+                extent: Extent::Distance(10.0),
                 op: Combine::Cut,
             },
         ],

@@ -4,8 +4,8 @@
 use forge_math::{Frame, Point2, Point3, Vec3, dmath};
 use forge_mesh::{Quality, tessellate};
 use forge_model::{
-    Combine, End, Feature, Head, Hole, HoleError, Layout, Part, PatternError, RegenError, Row, Source,
-    Thread, instance_name, suite,
+    Combine, End, Extent, Feature, Head, Hole, HoleError, Layout, Part, PatternError, RegenError, Row,
+    Source, Thread, instance_name, suite,
 };
 use forge_ops::{ChamferSize, Profile};
 use forge_topo::{Body, Name, check};
@@ -32,7 +32,7 @@ fn block(corner: Point3, w: f64, d: f64, h: f64, op: Combine) -> Feature {
             plane: Frame::WORLD.with_origin(corner),
             loops: vec![Profile::rectangle(Point2::ORIGIN, w, d, 0)],
         },
-        distance: h,
+        extent: Extent::Distance(h),
         op,
     }
 }
@@ -43,7 +43,7 @@ fn rod(base: Point3, r: f64, h: f64, op: Combine) -> Feature {
             plane: Frame::WORLD.with_origin(base),
             loops: vec![Profile::circle(Point2::ORIGIN, r, 0)],
         },
-        distance: h,
+        extent: Extent::Distance(h),
         op,
     }
 }
@@ -89,7 +89,7 @@ fn parts() -> Vec<(&'static str, Part, f64)> {
     let plate = || block(Point3::ORIGIN, a, b, t, Combine::New);
     let top = Point3::new(20.0, 15.0, t);
     let one = |h: Hole| Part {
-        features: vec![plate(), Feature::Hole(h)],
+        features: vec![plate(), Feature::Hole(Box::new(h))],
     };
     let slab = a * b * t;
     let point = 118.0 / 180.0 * PI;
@@ -159,7 +159,12 @@ fn parts() -> Vec<(&'static str, Part, f64)> {
             Part {
                 features: vec![
                     plate(),
-                    Feature::Hole(drill(Point3::new(8.0, 8.0, t), 4.0, Head::Plain, End::Through)),
+                    Feature::Hole(Box::new(drill(
+                        Point3::new(8.0, 8.0, t),
+                        4.0,
+                        Head::Plain,
+                        End::Through,
+                    ))),
                     linear(
                         Source::Features(vec![1]),
                         row(Vec3::X, 4, 8.0),
@@ -182,6 +187,7 @@ fn parts() -> Vec<(&'static str, Part, f64)> {
                             axis: Vec3::Z,
                             count: 6,
                             angle: dmath::TAU,
+                            incremental: false,
                         },
                     },
                 ],
@@ -202,6 +208,7 @@ fn parts() -> Vec<(&'static str, Part, f64)> {
                             axis: Vec3::Z,
                             count: 3,
                             angle: PI / 2.0,
+                            incremental: false,
                         },
                     },
                 ],
@@ -215,12 +222,12 @@ fn parts() -> Vec<(&'static str, Part, f64)> {
                 features: vec![
                     plate(),
                     rod(Point3::new(8.0, 8.0, t), 4.0, 5.0, Combine::Add),
-                    Feature::Hole(drill(
+                    Feature::Hole(Box::new(drill(
                         Point3::new(8.0, 8.0, t + 5.0),
                         3.0,
                         Head::Plain,
                         End::Depth(8.0),
-                    )),
+                    ))),
                     linear(Source::Features(vec![1, 2]), row(Vec3::X, 2, 12.0), None),
                     mirror(
                         Source::Features(vec![3]),
@@ -236,7 +243,12 @@ fn parts() -> Vec<(&'static str, Part, f64)> {
             Part {
                 features: vec![
                     plate(),
-                    Feature::Hole(drill(Point3::new(10.0, 10.0, t), 6.0, Head::Plain, End::Through)),
+                    Feature::Hole(Box::new(drill(
+                        Point3::new(10.0, 10.0, t),
+                        6.0,
+                        Head::Plain,
+                        End::Through,
+                    ))),
                     mirror(Source::Body, frame(Point3::new(a, 0.0, 0.0), Vec3::X, Vec3::Y)),
                 ],
             },
@@ -249,12 +261,12 @@ fn parts() -> Vec<(&'static str, Part, f64)> {
                 features: vec![
                     block(Point3::ORIGIN, 10.0, 10.0, 10.0, Combine::New),
                     linear(Source::Body, row(Vec3::X, 3, 10.0), None),
-                    Feature::Hole(drill(
+                    Feature::Hole(Box::new(drill(
                         Point3::new(15.0, 5.0, 10.0),
                         4.0,
                         Head::Plain,
                         End::Through,
-                    )),
+                    ))),
                 ],
             },
             3000.0 - PI * 4.0 * 10.0,
@@ -274,7 +286,7 @@ fn parts() -> Vec<(&'static str, Part, f64)> {
                             ),
                             loops: vec![Profile::rectangle(Point2::ORIGIN, 4.0, 3.0, 0)],
                         },
-                        distance: 6.0,
+                        extent: Extent::Distance(6.0),
                         op: Combine::Add,
                     },
                     mirror(
@@ -450,7 +462,7 @@ fn refusals() {
         },
     ] {
         assert_eq!(
-            refused(Feature::Hole(h)),
+            refused(Feature::Hole(Box::new(h))),
             RegenError::Hole {
                 feature: 1,
                 error: HoleError::BadSize

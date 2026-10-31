@@ -2,7 +2,7 @@
 use forge_math::{Point2, dmath};
 use forge_mesh::{Quality, tessellate};
 use forge_model::adversarial::fr;
-use forge_model::{Combine, Feature, Part};
+use forge_model::{Combine, Extent, Feature, Part};
 use forge_ops::Profile;
 
 fn meshed_volume(part: &Part, chord: f64) -> f64 {
@@ -31,7 +31,7 @@ fn blind_pocket_volume_is_exact() {
                     plane: fr([0.0, 0.0, 0.0], [0.0, 0.0, 1.0], [1.0, 0.0, 0.0]),
                     loops: vec![Profile::rectangle(Point2::ORIGIN, w, h, 0)],
                 },
-                distance: t,
+                extent: Extent::Distance(t),
                 op: Combine::New,
             },
             Feature::Extrude {
@@ -39,7 +39,7 @@ fn blind_pocket_volume_is_exact() {
                     plane: fr([30.0, 20.0, t - depth], [0.0, 0.0, 1.0], [1.0, 0.0, 0.0]),
                     loops: vec![Profile::circle(Point2::ORIGIN, r, 0)],
                 },
-                distance: depth + 1.0,
+                extent: Extent::Distance(depth + 1.0),
                 op: Combine::Cut,
             },
         ],
@@ -73,7 +73,7 @@ fn tilted_cut_and_pocket_volume_matches_occt() {
                         0,
                     )],
                 },
-                distance: 37.56688330880711,
+                extent: Extent::Distance(37.56688330880711),
                 op: Combine::New,
             },
             Feature::Extrude {
@@ -85,7 +85,7 @@ fn tilted_cut_and_pocket_volume_matches_occt() {
                     ),
                     loops: vec![Profile::circle(Point2::ORIGIN, 13.232964346192585, 0)],
                 },
-                distance: 36.7207502682546,
+                extent: Extent::Distance(36.7207502682546),
                 op: Combine::Cut,
             },
             Feature::Extrude {
@@ -97,7 +97,7 @@ fn tilted_cut_and_pocket_volume_matches_occt() {
                     ),
                     loops: vec![Profile::circle(Point2::ORIGIN, 9.979993718994757, 0)],
                 },
-                distance: 19.364888029871924,
+                extent: Extent::Distance(19.364888029871924),
                 op: Combine::Cut,
             },
         ],

@@ -2,7 +2,7 @@
 //! closed, match its exact volume where there is a closed form, and be
 //! tangent continuous wherever a blend meets its neighbours.
 
-use crate::{Combine, Feature, Part};
+use crate::{Combine, Extent, Feature, Part};
 use forge_geom::CurveGeom;
 use forge_math::{Frame, Point2, Point3, UnitVec3, Vec3, dmath};
 use forge_ops::Profile;
@@ -15,7 +15,7 @@ pub fn block_at(o: Point3, w: f64, h: f64, d: f64, op: Combine) -> Feature {
             plane: Frame::WORLD.with_origin(o),
             loops: vec![Profile::rectangle(Point2::ORIGIN, w, h, 0)],
         },
-        distance: d,
+        extent: Extent::Distance(d),
         op,
     }
 }
@@ -27,7 +27,7 @@ pub fn post_at(o: Point3, r: f64, h: f64, op: Combine) -> Feature {
             plane: Frame::WORLD.with_origin(o),
             loops: vec![Profile::circle(Point2::ORIGIN, r, 0)],
         },
-        distance: h,
+        extent: Extent::Distance(h),
         op,
     }
 }
@@ -39,7 +39,7 @@ pub fn rod_at(o: Point3, axis: UnitVec3, r: f64, len: f64, op: Combine) -> Featu
             plane: Frame::from_z(o, axis),
             loops: vec![Profile::circle(Point2::ORIGIN, r, 0)],
         },
-        distance: len,
+        extent: Extent::Distance(len),
         op,
     }
 }
@@ -65,7 +65,7 @@ pub fn apex_post(planes: &[(f64, f64)]) -> (Part, Vec<Point3>) {
                 plane: Frame::from_z(apex, n.normalize().expect("normal")),
                 loops: vec![Profile::rectangle(Point2::new(-60.0, -60.0), 120.0, 120.0, 0)],
             },
-            distance: 60.0,
+            extent: Extent::Distance(60.0),
             op: Combine::Cut,
         });
     }
@@ -276,7 +276,7 @@ pub fn cases() -> Vec<(&'static str, Part, Option<f64>)> {
                 plane: Frame::WORLD,
                 loops: vec![Profile::rounded_rectangle(Point2::ORIGIN, w, h, rho, 0)],
             },
-            distance: d,
+            extent: Extent::Distance(d),
             op: Combine::New,
         }],
     };
@@ -325,7 +325,7 @@ pub fn cases() -> Vec<(&'static str, Part, Option<f64>)> {
                     plane: Frame::from_z(Point3::new(0.0, 2.0, 0.0), forge_math::UnitVec3::X),
                     loops: vec![Profile::circle(Point2::ORIGIN, 3.0, 0)],
                 },
-                distance: 14.0,
+                extent: Extent::Distance(14.0),
                 op: Combine::Add,
             },
         ],
@@ -425,7 +425,7 @@ pub fn cases() -> Vec<(&'static str, Part, Option<f64>)> {
             plane: Frame::from_zx(Point3::new(0.0, 0.5, -8.0), UnitVec3::Z, seam_dir).expect("frame"),
             loops: vec![Profile::circle(Point2::ORIGIN, 2.0, 0)],
         },
-        distance: 16.0,
+        extent: Extent::Distance(16.0),
         op: Combine::Cut,
     });
     out.push((
@@ -566,7 +566,7 @@ pub fn refusals() -> Vec<(&'static str, Part, &'static str)> {
                 plane: Frame::WORLD,
                 loops: vec![Profile::rounded_rectangle(Point2::ORIGIN, 20.0, 12.0, 3.0, 0)],
             },
-            distance: 6.0,
+            extent: Extent::Distance(6.0),
             op: Combine::New,
         }],
     };

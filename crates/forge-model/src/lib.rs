@@ -1,6 +1,7 @@
 //! A part as a history of features, and regenerating it into a solid.
 
 pub mod adversarial;
+pub mod extent;
 pub mod fillets;
 pub mod finishing;
 pub mod hole;
@@ -8,6 +9,7 @@ pub mod pattern;
 pub mod suite;
 pub mod torture;
 
+pub use extent::{Extent, ExtentError, Target, Toward, Turn};
 use forge_bool::{BoolError, CpuBatch, Op, Seg2, Shape, boolean_into};
 use forge_gpu::AutoBatch;
 pub use forge_gpu::{Backend, open_in_background as open_gpu};
@@ -27,14 +29,14 @@ pub enum Feature {
     /// Extrude a profile into a new solid, or add it to / cut it from the part.
     Extrude {
         profile: Profile,
-        distance: f64,
+        extent: Extent,
         op: Combine,
     },
     /// Revolve a profile about an axis in its plane.
     Revolve {
         profile: Profile,
         axis: Axis2,
-        angle: f64,
+        extent: Turn,
         op: Combine,
     },
     /// A ball (a shorthand for revolving a half disc).
@@ -56,9 +58,11 @@ pub enum Feature {
         angle: f64,
     },
     /// A drilled hole, cut from the part.
-    Hole(Hole),
+    Hole(Box<Hole>),
     /// Copies of earlier features, or of the whole part, in rows, round an axis, or mirrored.
     Pattern { of: Source, layout: Layout },
+    /// A work plane (the frame's xy) for later extents to end at; it makes nothing.
+    Plane(Frame),
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -108,6 +112,10 @@ pub enum RegenError {
     Hole {
         feature: usize,
         error: HoleError,
+    },
+    Extent {
+        feature: usize,
+        error: ExtentError,
     },
     Pattern {
         feature: usize,
@@ -191,6 +199,9 @@ impl Part {
             let mut tools = tools(&self.features, i, true)?;
             if starts(f) {
                 body = Some(tools.swap_remove(0).0);
+                continue;
+            }
+            if matches!(f, Feature::Plane(_)) {
                 continue;
             }
             let mut b = body.ok_or(RegenError::NothingToCombine { feature: i })?;
@@ -472,7 +483,7 @@ fn apply_fillet(i: usize, body: &Body, edges: &[(Name, f64)]) -> Result<Body, Re
 fn tools(features: &[Feature], i: usize, build: bool) -> Result<Vec<Tool>, RegenError> {
     match &features[i] {
         Feature::Hole(h) => {
-            let cut = h
+            let cut = extent::hole_end(features, i, h)?
                 .revolve(&hole::reach(&features[..i]))
                 .map_err(|error| RegenError::Hole { feature: i, error })?;
             Ok(vec![tool(i, &cut, build)?])
@@ -500,6 +511,10 @@ fn tools(features: &[Feature], i: usize, build: bool) -> Result<Vec<Tool>, Regen
             }
             Ok(out)
         }
+        Feature::Extrude { .. } | Feature::Revolve { .. } => {
+            Ok(vec![tool(i, &*extent::resolve(features, i)?, build)?])
+        }
+        Feature::Plane(_) => Ok(vec![]),
         f => Ok(vec![tool(i, f, build)?]),
     }
 }
@@ -535,7 +550,7 @@ fn tool(i: usize, f: &Feature, build: bool) -> Result<Tool, RegenError> {
     Ok(match f {
         Feature::Extrude {
             profile,
-            distance,
+            extent: Extent::Distance(distance),
             op,
         } => (
             extrude(profile, *distance, id).map_err(|error| RegenError::Extrude { feature: i, error })?,
@@ -545,7 +560,7 @@ fn tool(i: usize, f: &Feature, build: bool) -> Result<Tool, RegenError> {
         Feature::Revolve {
             profile,
             axis,
-            angle,
+            extent: Turn::Angle(angle),
             op,
         } => (
             revolve(profile, *axis, *angle, id).map_err(|error| RegenError::Revolve { feature: i, error })?,
@@ -626,7 +641,9 @@ fn segs(profile: &Profile) -> Vec<Seg2> {
 fn shape(f: &Feature) -> Shape {
     match f {
         Feature::Extrude {
-            profile, distance, ..
+            profile,
+            extent: Extent::Distance(distance),
+            ..
         } => Shape::Prism {
             frame: profile.plane,
             segs: segs(profile),
@@ -634,7 +651,10 @@ fn shape(f: &Feature) -> Shape {
             hi: distance.max(0.0),
         },
         Feature::Revolve {
-            profile, axis, angle, ..
+            profile,
+            axis,
+            extent: Turn::Angle(angle),
+            ..
         } => {
             let dir = axis.dir.normalize().unwrap_or(Vec2::Y);
             let perp = dir.perp();

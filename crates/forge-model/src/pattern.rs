@@ -28,13 +28,15 @@ pub struct Row {
 pub enum Layout {
     /// Along one or two directions.
     Linear { first: Row, second: Option<Row> },
-    /// `count` places about the line through `origin` along `axis`, filling `angle` (a whole
-    /// turn spaces them evenly round; less puts the first and last `angle` apart).
+    /// `count` places about the line through `origin` along `axis`. Fitted, they fill `angle`
+    /// (a whole turn spaces them evenly round; less puts the first and last `angle` apart);
+    /// `incremental`, `angle` is the step from one to the next.
     Circular {
         origin: Point3,
         axis: Vec3,
         count: usize,
         angle: f64,
+        incremental: bool,
     },
     /// Reflected in the plane's xy.
     Mirror { plane: Frame },
@@ -159,12 +161,15 @@ pub(crate) fn instances(layout: &Layout) -> Result<Vec<([u64; 2], Motion)>, Patt
             axis,
             count,
             angle,
+            incremental,
         } => {
             let z = axis.normalize().ok_or(PatternError::BadLayout)?;
             if count == 0 || !angle.is_finite() || angle.abs() <= tol::ANGULAR || !origin.is_finite() {
                 return Err(PatternError::BadLayout);
             }
-            let step = if angle.abs() >= dmath::TAU - tol::ANGULAR {
+            let step = if incremental {
+                angle
+            } else if angle.abs() >= dmath::TAU - tol::ANGULAR {
                 angle.signum() * dmath::TAU / count as f64
             } else if count > 1 {
                 angle / (count - 1) as f64
@@ -437,7 +442,7 @@ mod tests {
                 origin: Point2::ORIGIN,
                 dir: forge_math::Vec2::Y,
             },
-            angle: 2.0,
+            extent: crate::Turn::Angle(2.0),
             op: crate::Combine::Add,
         };
         let (body, _, shape) = crate::tool(0, &turn, true).expect("tool");
@@ -468,5 +473,26 @@ mod tests {
             assert_eq!(index.classify(p), want, "at {p:?}");
         }
         assert!(answered > 1900);
+    }
+
+    /// Fitted copies fill the angle; incremental ones step by it.
+    #[test]
+    fn circular_spacing() {
+        let place = |angle: f64, incremental: bool| {
+            let layout = Layout::Circular {
+                origin: Point3::ORIGIN,
+                axis: Vec3::Z,
+                count: 4,
+                angle,
+                incremental,
+            };
+            let last = instances(&layout).expect("layout").pop().expect("copies").1;
+            let p = last.point(Point3::new(1.0, 0.0, 0.0));
+            dmath::atan2(p.y, p.x)
+        };
+        assert!((place(0.9, false) - 0.9).abs() < 1e-12);
+        assert!((place(0.3, true) - 0.9).abs() < 1e-12);
+        assert!((place(dmath::TAU, false) - 1.5 * dmath::PI + dmath::TAU).abs() < 1e-12);
+        assert!((place(-0.3, true) + 0.9).abs() < 1e-12);
     }
 }

@@ -1,7 +1,7 @@
 //! Parts that end in finishing features (chamfer, shell, draft), each with its volume worked
 //! out by hand where the shape allows.
 
-use crate::{Combine, Feature, Part};
+use crate::{Combine, Extent, Feature, Part};
 use forge_math::{Frame, Point2, Point3, dmath};
 use forge_ops::{ChamferSize, Profile, ProfileLoop};
 use forge_topo::Name;
@@ -9,7 +9,7 @@ use forge_topo::Name;
 fn extrude(loops: Vec<ProfileLoop>, plane: Frame, d: f64, op: Combine) -> Feature {
     Feature::Extrude {
         profile: Profile { plane, loops },
-        distance: d,
+        extent: Extent::Distance(d),
         op,
     }
 }

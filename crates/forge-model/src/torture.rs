@@ -2,7 +2,7 @@
 //! one another, placed by a fixed-seed generator so it is the same part
 //! every time.
 
-use crate::{Combine, Feature, Part};
+use crate::{Combine, Extent, Feature, Part};
 use forge_math::rng::Rng;
 use forge_math::{Frame, Point2, Point3, Vec3};
 use forge_ops::Profile;
@@ -26,7 +26,7 @@ pub fn part(count: usize) -> Part {
             plane: Frame::WORLD,
             loops: vec![Profile::rectangle(Point2::ORIGIN, w, h, 0)],
         },
-        distance: t,
+        extent: Extent::Distance(t),
         op: Combine::New,
     }];
     let spot = |r: &mut Rng, m: f64| (r.range(m, w - m), r.range(m, h - m));
@@ -34,7 +34,7 @@ pub fn part(count: usize) -> Part {
         let (x, y) = spot(&mut r, 8.0);
         features.push(Feature::Extrude {
             profile: circle_at(x, y, -1.0, r.range(1.5, 5.0)),
-            distance: t + 2.0,
+            extent: Extent::Distance(t + 2.0),
             op: Combine::Cut,
         });
     }
@@ -43,7 +43,7 @@ pub fn part(count: usize) -> Part {
         let depth = r.range(4.0, 15.0);
         features.push(Feature::Extrude {
             profile: circle_at(x, y, t - depth, r.range(3.0, 8.0)),
-            distance: depth + 1.0,
+            extent: Extent::Distance(depth + 1.0),
             op: Combine::Cut,
         });
     }
@@ -51,7 +51,7 @@ pub fn part(count: usize) -> Part {
         let (x, y) = spot(&mut r, 10.0);
         features.push(Feature::Extrude {
             profile: circle_at(x, y, t - 1.3, r.range(2.0, 6.0)),
-            distance: r.range(5.0, 20.0),
+            extent: Extent::Distance(r.range(5.0, 20.0)),
             op: Combine::Add,
         });
     }
@@ -71,7 +71,7 @@ pub fn part(count: usize) -> Part {
                 plane,
                 loops: vec![Profile::rectangle(Point2::new(-sw / 2.0, -sh / 2.0), sw, sh, 0)],
             },
-            distance: 20.0,
+            extent: Extent::Distance(20.0),
             op: Combine::Cut,
         });
     }
@@ -95,13 +95,13 @@ pub fn part(count: usize) -> Part {
         let hole = r.range(2.0, 4.0);
         features.push(Feature::Extrude {
             profile: circle_at(x, y, -1.0, hole),
-            distance: t + 2.0,
+            extent: Extent::Distance(t + 2.0),
             op: Combine::Cut,
         });
         let depth = r.range(3.0, 6.0);
         features.push(Feature::Extrude {
             profile: circle_at(x, y, t - depth, hole * 1.8),
-            distance: depth + 1.0,
+            extent: Extent::Distance(depth + 1.0),
             op: Combine::Cut,
         });
     }

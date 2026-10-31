@@ -2,7 +2,7 @@
 //! each made as one revolved cut.
 
 use crate::pattern::{Source, corners, instances};
-use crate::{Combine, Feature};
+use crate::{Combine, Extent, Feature, Turn};
 use forge_math::{Box3, Frame, Point2, Vec2, dmath};
 use forge_ops::{Axis2, Profile, ProfileLoop, Segment};
 
@@ -40,6 +40,8 @@ pub enum End {
     Through,
     /// The wall's depth below the mouth (the drill point goes further).
     Depth(f64),
+    /// The wall down to a plane square to the hole, then `offset` further.
+    To { target: crate::Target, offset: f64 },
 }
 
 /// Nominal (major) diameter and pitch.
@@ -85,6 +87,7 @@ impl Hole {
         let depth = match self.end {
             End::Depth(d) if pos(d) => d,
             End::Depth(_) => return Err(HoleError::BadSize),
+            End::To { .. } => unreachable!("resolved to a depth first"),
             End::Through => {
                 // the part's whole width along the axis, from wherever the mouth is on it
                 let z = self.at.z();
@@ -153,7 +156,7 @@ impl Hole {
                 origin: Point2::ORIGIN,
                 dir: Vec2::Y,
             },
-            angle: dmath::TAU,
+            extent: Turn::Angle(dmath::TAU),
             op: Combine::Cut,
         })
     }
@@ -180,7 +183,9 @@ fn profile_points(p: &Profile) -> impl Iterator<Item = Point2> + '_ {
 fn tool_box(f: &Feature) -> Box3 {
     match f {
         Feature::Extrude {
-            profile, distance, ..
+            profile,
+            extent: Extent::Distance(distance),
+            ..
         } => Box3::from_points(profile_points(profile).flat_map(|q| {
             let p = profile.plane.plane_point(q);
             [p, p + profile.plane.z() * *distance]
@@ -208,7 +213,11 @@ fn adds(features: &[Feature], i: usize) -> Vec<Box3> {
         Feature::Extrude { op, .. } | Feature::Revolve { op, .. } | Feature::Ball { op, .. }
             if matches!(op, Combine::New | Combine::Add) =>
         {
-            vec![tool_box(&features[i])]
+            match &features[i] {
+                Feature::Ball { .. } => vec![tool_box(&features[i])],
+                // a part it cannot be built is no part of the reach
+                _ => crate::extent::resolve(features, i).map_or(vec![], |f| vec![tool_box(&f)]),
+            }
         }
         Feature::Pattern {
             of: Source::Features(src),

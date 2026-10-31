@@ -1,7 +1,7 @@
 //! Time each feature of the torture part: build the history up to n, take the difference.
 use forge_bool::{Op, boolean_into};
 use forge_math::{Point2, Vec2, dmath};
-use forge_model::{Combine, Feature, torture};
+use forge_model::{Combine, Extent, Feature, Turn, torture};
 use forge_ops::{Axis2, Profile, ProfileLoop, Segment, extrude, revolve};
 use std::time::Instant;
 fn main() {
@@ -13,13 +13,13 @@ fn main() {
         let (tool, op, kind) = match f {
             Feature::Extrude {
                 profile,
-                distance,
+                extent: Extent::Distance(distance),
                 op,
             } => (extrude(profile, *distance, id).unwrap(), *op, "extrude"),
             Feature::Revolve {
                 profile,
                 axis,
-                angle,
+                extent: Turn::Angle(angle),
                 op,
             } => (revolve(profile, *axis, *angle, id).unwrap(), *op, "revolve"),
             Feature::Ball { frame, radius, op } => {

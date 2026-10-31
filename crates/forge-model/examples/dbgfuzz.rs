@@ -1,6 +1,6 @@
 //! cargo run --release -p forge-model --example dbgfuzz -- <seed> <failing feature index>
 //! Prints the history up to the failing feature and reruns that boolean with diagnostics.
-use forge_model::{Feature, Part, suite};
+use forge_model::{Extent, Feature, Part, suite};
 fn main() {
     let a: Vec<u64> = std::env::args().skip(1).map(|x| x.parse().unwrap()).collect();
     let part = suite::fuzz(a[0], 200);
@@ -9,7 +9,7 @@ fn main() {
         let d = match f {
             Feature::Extrude {
                 profile,
-                distance,
+                extent: Extent::Distance(distance),
                 op,
             } => format!(
                 "extrude {op:?} d={distance:.3} plane {:?} loops {:?}",

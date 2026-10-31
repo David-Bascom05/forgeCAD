@@ -4,7 +4,7 @@
 //! invalid solid, or panic) and `shrink` reduces a failing part to a minimal
 //! history that fails the same way.
 
-use crate::{Combine, Feature, Part};
+use crate::{Combine, Extent, Feature, Part, Turn};
 use forge_math::rng::Rng;
 use forge_math::{Frame, Point2, Point3, UnitVec3, Vec2, Vec3, dmath};
 use forge_ops::{Axis2, Profile, ProfileLoop, Segment};
@@ -35,7 +35,7 @@ fn turned(o: Point3, a: f64) -> Frame {
 fn ext(plane: Frame, loops: Vec<ProfileLoop>, d: f64, op: Combine) -> Feature {
     Feature::Extrude {
         profile: Profile { plane, loops },
-        distance: d,
+        extent: Extent::Distance(d),
         op,
     }
 }
@@ -427,7 +427,7 @@ fn axis_revolve(seed: u64) -> Part {
                 loops,
             },
             axis: VERTICAL,
-            angle: dmath::TAU,
+            extent: Turn::Angle(dmath::TAU),
             op: op_of(&mut r),
         });
     }
@@ -692,6 +692,7 @@ fn error_kind(e: &crate::RegenError) -> (String, usize) {
         Fillet { feature, error } => (format!("Fillet({error:?})"), *feature),
         MissingEdge { feature, .. } => ("MissingEdge".to_string(), *feature),
         Hole { feature, error } => (format!("Hole({error:?})"), *feature),
+        Extent { feature, error } => (format!("Extent({error:?})"), *feature),
         Pattern { feature, error } => (format!("Pattern({error:?})"), *feature),
     }
 }
@@ -762,20 +763,20 @@ fn rounded_feature(f: &Feature, digits: i32) -> Feature {
     match f {
         Feature::Extrude {
             profile,
-            distance,
+            extent: Extent::Distance(distance),
             op,
         } => Feature::Extrude {
             profile: Profile {
                 plane: rf(&profile.plane),
                 loops: profile.loops.clone(),
             },
-            distance: rd(*distance),
+            extent: Extent::Distance(rd(*distance)),
             op: *op,
         },
         Feature::Revolve {
             profile,
             axis,
-            angle,
+            extent: Turn::Angle(angle),
             op,
         } => Feature::Revolve {
             profile: Profile {
@@ -783,7 +784,7 @@ fn rounded_feature(f: &Feature, digits: i32) -> Feature {
                 loops: profile.loops.clone(),
             },
             axis: *axis,
-            angle: *angle,
+            extent: Turn::Angle(*angle),
             op: *op,
         },
         Feature::Ball { frame, radius, op } => Feature::Ball {
@@ -815,20 +816,20 @@ pub fn canonical(part: &Part) -> Part {
                 .map(|f| match f {
                     Feature::Extrude {
                         profile,
-                        distance,
+                        extent: Extent::Distance(distance),
                         op,
                     } => Feature::Extrude {
                         profile: Profile {
                             plane: reframe(&profile.plane),
                             loops: profile.loops.clone(),
                         },
-                        distance: *distance,
+                        extent: Extent::Distance(*distance),
                         op: *op,
                     },
                     Feature::Revolve {
                         profile,
                         axis,
-                        angle,
+                        extent: Turn::Angle(angle),
                         op,
                     } => Feature::Revolve {
                         profile: Profile {
@@ -836,7 +837,7 @@ pub fn canonical(part: &Part) -> Part {
                             loops: profile.loops.clone(),
                         },
                         axis: *axis,
-                        angle: *angle,
+                        extent: Turn::Angle(*angle),
                         op: *op,
                     },
                     Feature::Ball { frame, radius, op } => Feature::Ball {
@@ -972,14 +973,14 @@ pub fn literal(part: &Part) -> String {
         .features
         .iter()
         .map(|f| match f {
-            Feature::Extrude { profile, distance, op } => format!(
-                "        Feature::Extrude {{ profile: Profile {{ plane: {}, loops: {} }}, distance: {}, op: Combine::{op:?} }},",
+            Feature::Extrude { profile, extent: Extent::Distance(distance), op } => format!(
+                "        Feature::Extrude {{ profile: Profile {{ plane: {}, loops: {} }}, extent: Extent::Distance({}), op: Combine::{op:?} }},",
                 lit_frame(&profile.plane),
                 lit_loops(&profile.loops),
                 lit_f(*distance)
             ),
-            Feature::Revolve { profile, axis, angle, op } => format!(
-                "        Feature::Revolve {{ profile: Profile {{ plane: {}, loops: {} }}, axis: Axis2 {{ origin: {}, dir: Vec2::new({}, {}) }}, angle: {}, op: Combine::{op:?} }},",
+            Feature::Revolve { profile, axis, extent: Turn::Angle(angle), op } => format!(
+                "        Feature::Revolve {{ profile: Profile {{ plane: {}, loops: {} }}, axis: Axis2 {{ origin: {}, dir: Vec2::new({}, {}) }}, extent: Turn::Angle({}), op: Combine::{op:?} }},",
                 lit_frame(&profile.plane),
                 lit_loops(&profile.loops),
                 lit_p2(axis.origin),
