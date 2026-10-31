@@ -571,7 +571,28 @@ fn lap(t: &mut Option<std::time::Instant>, k: usize) {
     }
 }
 
+thread_local! {
+    /// Springs a closed curve crossed an odd number of times are looked at again by their fences.
+    static FENCES: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
+}
+
+/// `plan_once`; lost its way, once more with the slow search for shallow crossings of springs.
 fn plan(a: &Body, b: &Body, op: Op, scratch: &mut Scratch) -> R<Plan> {
+    match plan_once(a, b, op, scratch) {
+        Err(BoolError::Internal(w)) => {
+            FENCES.with(|f| f.set(true));
+            let r = plan_once(a, b, op, scratch);
+            FENCES.with(|f| f.set(false));
+            r.map_err(|e| match e {
+                BoolError::Internal(_) => BoolError::Internal(w),
+                e => e,
+            })
+        }
+        r => r,
+    }
+}
+
+fn plan_once(a: &Body, b: &Body, op: Op, scratch: &mut Scratch) -> R<Plan> {
     let mut clock = phases_on().then(std::time::Instant::now);
     let bodies = [a, b];
     let index = [Index::new(a), Index::new(b)];
@@ -1855,7 +1876,8 @@ pub(crate) fn trim(
                 // a fence stands only near its spring: where the other face's surface is analytic,
                 // the spring itself against that surface finds the same points, and shallow ones
                 let other_surface = &bodies[1 - k].face(faces[1 - k]).surface;
-                let on_spring = matches!(&edge.curve, Curve::Procedural(_))
+                let on_spring = matches!(&edge.curve, Curve::Procedural(pc)
+                        if pc.0.as_any().is_some_and(|a| a.is::<forge_geom::blend::Spring>()))
                     && matches!(across, Surface::Procedural(_))
                     && !matches!(other_surface, Surface::Procedural(_));
                 let found = if on_spring {
@@ -2036,7 +2058,25 @@ pub(crate) fn trim(
     }
     // a closed curve crosses a face's boundary an even number of times: one found odd has missed a
     // shallow crossing of a spring, which the fence across it can still find
-    if closed && ts.len() % 2 == 1 {
+    // (seams are no boundary: crossing one leaves nothing)
+    let odd = |k: usize| {
+        let mut at: Vec<Point3> = Vec::with_capacity(ts.len());
+        for &(_, i) in &ts {
+            let Some((sd, e)) = cuts[i].on.edge() else {
+                continue;
+            };
+            let seam = || {
+                let cs = &bodies[k].edge(e).coedges;
+                cs.iter().all(|&c| bodies[k].coedge_face(c) == faces[k])
+            };
+            if sd == sides[k] && !seam() && at.iter().all(|p| p.distance(cuts[i].point) > 10.0 * tol::LINEAR)
+            {
+                at.push(cuts[i].point);
+            }
+        }
+        at.len() % 2 == 1
+    };
+    if closed && FENCES.with(|f| f.get()) && fenced.iter().any(|x| odd(x.0)) {
         for &(k, e, c) in &fenced {
             let (body, f, side) = (bodies[k], faces[k], sides[k]);
             let across = across(body, f, c)?;

@@ -807,6 +807,9 @@ impl ProceduralCurve for Spring {
     fn kinks(&self, range: Interval) -> Vec<f64> {
         self.spine.kinks(range)
     }
+    fn as_any(&self) -> Option<&dyn std::any::Any> {
+        Some(self)
+    }
     fn across(&self) -> Option<Surface> {
         Some(Surface::Procedural(Proc(Arc::new(Fence {
             spring: Spring {

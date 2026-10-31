@@ -1074,7 +1074,7 @@ fn nary_regen(
         // every point the pass could probe a region at lies on another tool's edge: the tools one
         // at a time never have that question, and answer the same way (or refuse more clearly)
         Err(RegenError::Boolean {
-            error: BoolError::Unsupported("region probe on another tool's edge"),
+            error: BoolError::Unsupported("region probe on another tool's edge") | BoolError::Internal(_),
             ..
         }) => one_at_a_time(features),
         Err(e) if names_missing(&e) => {
