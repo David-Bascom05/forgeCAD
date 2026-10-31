@@ -888,7 +888,7 @@ fn tools(features: History<'_>, i: usize, build: bool) -> Result<Vec<Tool>, Rege
             let mut out = Vec::new();
             for (key, m) in h.copies() {
                 let body = if build {
-                    moved(&t.0, &m, |n| instance_name(i, key, n)).map_err(pe)?
+                    moved(&t.0, &m, |n| instance_name(features.id(i), key, n)).map_err(pe)?
                 } else {
                     Body::new()
                 };

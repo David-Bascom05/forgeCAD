@@ -769,7 +769,9 @@ fn sketch_points_everywhere() {
     };
     for x in [40.0, 45.0] {
         let m = built(&src(x));
-        let d = |i: usize| forge_model::work::datum(&m.features, i).expect("datum");
+        let d = |i: usize| {
+            forge_model::work::datum(forge_model::History::new(&m.features, None), i).expect("datum")
+        };
         assert_eq!(
             d(2),
             forge_model::Datum::Point(forge_math::Point3::new(x, 10.0, 10.0))
@@ -836,8 +838,9 @@ fn one_hole_at_many_sketch_points() {
     );
     round_trip(&part);
     let body = one.body().expect("built");
+    // copies are named from the hole's id (3, its place in a file with no ids)
     let copy = forge_model::instance_name(
-        2,
+        3,
         [2, 0],
         forge_topo::Name::feature(3).with_str("side").with(4).with(0),
     );

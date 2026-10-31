@@ -2495,9 +2495,9 @@ impl<'a> P<'a> {
                 self.point3()?
             } else {
                 let r = self.wref()?;
-                work::locate(self.b.features, r).map_err(|e| {
-                    format!("'at' needs a point (a work point, vertex, sketch point or ucs): {e:?}")
-                })?
+                work::locate(forge_model::History::new(self.b.features, Some(self.b.ids)), r).map_err(
+                    |e| format!("'at' needs a point (a work point, vertex, sketch point or ucs): {e:?}"),
+                )?
             };
             self.at = Some(at);
             f = f.with_origin(at);

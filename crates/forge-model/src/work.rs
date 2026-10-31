@@ -428,7 +428,7 @@ pub fn own_name(features: History<'_>, k: usize, part: &Body, name: Name) -> Opt
 
 /// Where a reference to a point (a work point, a vertex, a sketch's point, a UCS's origin..)
 /// is, as the line after `features` sees it.
-pub fn locate(features: &[Feature], r: Ref) -> Result<Point3, RegenError> {
+pub fn locate(features: History<'_>, r: Ref) -> Result<Point3, RegenError> {
     point(features, features.len(), r)
 }
 
