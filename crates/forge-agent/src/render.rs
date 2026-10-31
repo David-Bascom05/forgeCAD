@@ -8,7 +8,7 @@ use forge_topo::Body;
 const BG: u8 = 0;
 const INK: u8 = 1;
 const LABEL: u8 = 2;
-const SHADES: u8 = 32;
+const SHADES: u8 = 240;
 const FIRST_SHADE: u8 = 3;
 
 pub const VIEWS: [&str; 7] = ["iso", "front", "top", "right", "back", "left", "bottom"];
@@ -88,7 +88,15 @@ pub fn render(
     let mut px = vec![BG; w * h];
     let mut depth = vec![f64::NEG_INFINITY; w * h];
     let light = (e + v * 0.6 + u * 0.3).normalize().ok_or("light")?.get();
-    for t in &mesh.triangles {
+    // vertex normals averaged over one face's triangles only, so curved faces shade smoothly and edges stay sharp
+    let mut smooth: std::collections::HashMap<(u32, u32), Vec3> = std::collections::HashMap::new();
+    for (k, t) in mesh.triangles.iter().enumerate() {
+        let n = mesh.triangle_normal(*t);
+        for i in t {
+            *smooth.entry((*i, mesh.face_of[k])).or_insert(Vec3::ZERO) += n;
+        }
+    }
+    for (k, t) in mesh.triangles.iter().enumerate() {
         let n = match mesh.triangle_normal(*t).normalize() {
             Some(n) => n.get(),
             None => continue,
@@ -96,7 +104,7 @@ pub fn render(
         if n.dot(e) <= 0.0 {
             continue;
         }
-        let shade = FIRST_SHADE + ((0.15 + 0.85 * n.dot(light).max(0.0)) * (SHADES - 1) as f64).round() as u8;
+        let ns = t.map(|i| smooth[&(i, mesh.face_of[k])].normalize().map_or(n, |m| m.get()));
         let [a, b, c] = t.map(|i| screen(pts[i as usize]));
         let area = (b.0 - a.0) * (c.1 - a.1) - (b.1 - a.1) * (c.0 - a.0);
         if area.abs() < 1e-12 {
@@ -119,7 +127,9 @@ pub fn render(
                 let k = y * w + x;
                 if z > depth[k] {
                     depth[k] = z;
-                    px[k] = shade;
+                    let m = ns[0] * w0 + ns[1] * w1 + ns[2] * w2;
+                    let l = m.normalize().map_or(n, |m| m.get()).dot(light).max(0.0);
+                    px[k] = FIRST_SHADE + ((0.15 + 0.85 * l) * (SHADES - 1) as f64).round() as u8;
                 }
             }
         }
