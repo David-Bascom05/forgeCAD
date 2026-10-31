@@ -60,7 +60,7 @@ impl Screw {
     }
 }
 
-fn screw(s: &Surface) -> Option<&Screw> {
+pub(super) fn screw(s: &Surface) -> Option<&Screw> {
     match s {
         Surface::Procedural(p) => p.as_any().and_then(|x| x.downcast_ref::<Screw>()),
         _ => None,
@@ -69,9 +69,6 @@ fn screw(s: &Surface) -> Option<&Screw> {
 
 impl Screw {
     fn meet_coaxial(&self, other: &Surface) -> Option<SurfaceSurface> {
-        let Section::Line { a: p0, b: p1 } = self.ring.pieces[0].s else {
-            return None;
-        };
         let f = &self.m.frame;
         let z = f.z();
         let h = |p: Point3| z.dot(p - f.origin);
@@ -95,9 +92,23 @@ impl Screw {
             Surface::Plane(p)
                 if coaxial(p.frame.origin, p.frame.x()) || coaxial(p.frame.origin, p.frame.y()) =>
             {
+                let Section::Line { a: p0, b: p1 } = self.ring.pieces[0].s else {
+                    return None;
+                };
                 return self.meet_axial_plane(p, p0, p1);
             }
             _ => return None,
+        };
+        // the section's box carried over the face's angles: a profile clear of it is never met
+        // (a coil round a rod it does not touch, whatever its section)
+        let piece = &self.ring.pieces[0];
+        let (rr, hh) = (piece.rr + self.u * self.m.a, piece.hh + self.u * self.m.b);
+        let reach = rr * n.x + hh * n.y;
+        if c < reach.lo - tol::LINEAR || c > reach.hi + tol::LINEAR {
+            return Some(SurfaceSurface::Empty);
+        }
+        let Section::Line { a: p0, b: p1 } = piece.s else {
+            return None;
         };
         let p0 = Vec2::new(p0.x, p0.y);
         let d = Vec2::new(p1.x, p1.y) - p0;
