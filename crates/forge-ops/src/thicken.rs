@@ -53,7 +53,7 @@ pub fn thicken(body: &Body, faces: &[Name], lo: f64, hi: f64, feature: u64) -> R
     let mut smooth = vec![true; base.vertices.len()];
     for &f in &set {
         for &l in &base.face(f).loops {
-            for &c in &base.lp(l).coedges {
+            for c in base.lp(l).coedges() {
                 let v = base.coedge_start(c);
                 let n = outward(&base, f, base.vertex(v).point).ok_or(ThickenError::Crease {
                     vertex: base.vertex(v).name,
@@ -105,7 +105,7 @@ pub fn thicken(body: &Body, faces: &[Name], lo: f64, hi: f64, feature: u64) -> R
             let nf = out.add_face(shell, s, face.same_sense == far, tag.with_name(face.name));
             for &l in &face.loops {
                 let mut uses = Vec::new();
-                for &c in &base.lp(l).coedges {
+                for c in base.lp(l).coedges() {
                     let co = base.coedge(c);
                     let edge = base.edge(co.edge);
                     for v in [edge.start, edge.end] {
@@ -163,7 +163,7 @@ pub fn thicken(body: &Body, faces: &[Name], lo: f64, hi: f64, feature: u64) -> R
     };
     for &f in &set {
         for &l in &base.face(f).loops {
-            for &c in &base.lp(l).coedges {
+            for c in base.lp(l).coedges() {
                 let co = base.coedge(c);
                 if !rim(co.edge) {
                     continue;

@@ -376,8 +376,8 @@ pub(crate) fn moved(b: &Body, m: &Motion, rename: impl Fn(Name) -> Name) -> Resu
             rename(face.name),
         );
         for &l in &face.loops {
-            let mut uses = Vec::with_capacity(b.lp(l).coedges.len());
-            for &c in &b.lp(l).coedges {
+            let mut uses = Vec::with_capacity(b.lp(l).coedges().len());
+            for c in b.lp(l).coedges() {
                 let co = b.coedge(c);
                 let e = match emap[co.edge.index()] {
                     Some(e) => e,

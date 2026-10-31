@@ -659,7 +659,7 @@ pub fn tessellate(body: &Body, q: &Quality) -> Result<TriMesh, TessError> {
                 error: CdtError::ConstraintsIntersect { .. },
             }) if rounds < 6 => {
                 for &l in &body.face(face).loops {
-                    for &c in &body.lp(l).coedges {
+                    for c in body.lp(l).coedges() {
                         finer[body.coedge(c).edge.index()] *= 2;
                     }
                 }
@@ -780,7 +780,7 @@ fn tessellate_face(
     for &l in &face.loops {
         let mut samples = Vec::new();
         let mut ids = Vec::new();
-        for &c in &body.lp(l).coedges {
+        for c in body.lp(l).coedges() {
             let co = body.coedge(c);
             let s = &edge_samples[co.edge.index()];
             // the edge's samples are already mesh vertices: their points, not evaluated again

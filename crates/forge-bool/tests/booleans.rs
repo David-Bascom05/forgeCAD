@@ -298,9 +298,8 @@ fn side_by_side(a: &Body, b: &Body) -> Body {
         for &l in &face.loops {
             let uses: Vec<_> = b
                 .lp(l)
-                .coedges
-                .iter()
-                .map(|&c| (e[b.coedge(c).edge.index()], b.coedge(c).forward))
+                .coedges()
+                .map(|c| (e[b.coedge(c).edge.index()], b.coedge(c).forward))
                 .collect();
             out.add_loop(g, &uses);
         }

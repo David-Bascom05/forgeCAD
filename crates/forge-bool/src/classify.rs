@@ -57,10 +57,7 @@ const GONE: forge_topo::CoedgeId = forge_topo::CoedgeId(u32::MAX);
 /// Face `f` is about to lose loops `gone` in place: their entries in its kept index (if any)
 /// are marked gone; once most entries are, the index is dropped to be built afresh.
 pub fn drop_query_loops(body: &mut Body, f: FaceId, gone: &[forge_topo::LoopId]) {
-    let mut cs: Vec<forge_topo::CoedgeId> = gone
-        .iter()
-        .flat_map(|&l| body.lp(l).coedges.iter().copied())
-        .collect();
+    let mut cs: Vec<forge_topo::CoedgeId> = gone.iter().flat_map(|&l| body.lp(l).coedges()).collect();
     cs.sort_unstable();
     let face = &mut body.faces[f.index()];
     let Some(q) = face.query.get_mut() else { return };
@@ -83,12 +80,7 @@ pub fn drop_query_loops(body: &mut Body, f: FaceId, gone: &[forge_topo::LoopId])
 
 /// Face `f` gained the loop `lp` in place: its kept index (if any) takes the loop's edges.
 pub fn extend_query(body: &mut Body, f: FaceId, lp: forge_topo::LoopId) {
-    let entries: Vec<_> = body
-        .lp(lp)
-        .coedges
-        .iter()
-        .map(|&c| (c, edge_entry(body, c)))
-        .collect();
+    let entries: Vec<_> = body.lp(lp).coedges().map(|c| (c, edge_entry(body, c))).collect();
     let plane = match &body.face(f).surface {
         Surface::Plane(pl) => Some(*pl),
         _ => None,
@@ -256,7 +248,7 @@ impl<'a> Index<'a> {
             let mut edges = Vec::new();
             let mut reach = tol::LINEAR;
             for &l in &face.loops {
-                for &c in &self.body.lp(l).coedges {
+                for c in self.body.lp(l).coedges() {
                     let (e, b) = edge_entry(self.body, c);
                     edges.push((c, b));
                     reach = reach.max(e);

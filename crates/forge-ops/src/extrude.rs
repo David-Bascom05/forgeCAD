@@ -401,7 +401,11 @@ mod tests {
 
         let mut broken = good.clone();
         let l = broken.faces[2].loops[0];
-        broken.loops[l.index()].coedges.swap(0, 1);
+        let (c0, c1) = (broken.lp(l).coedge(0).index(), broken.lp(l).coedge(1).index());
+        let e0 = (broken.coedges[c0].edge, broken.coedges[c0].forward);
+        (broken.coedges[c0].edge, broken.coedges[c0].forward) =
+            (broken.coedges[c1].edge, broken.coedges[c1].forward);
+        (broken.coedges[c1].edge, broken.coedges[c1].forward) = e0;
         assert!(
             check(&broken)
                 .iter()

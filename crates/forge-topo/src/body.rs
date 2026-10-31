@@ -1,10 +1,11 @@
 use crate::name::Name;
+use crate::small::Small;
 use forge_geom::{Curve, CurveGeom, Surface, SurfaceGeom};
 use forge_math::{Box3, Interval, Point2, Point3, UnitVec3};
 
 macro_rules! id_type {
     ($name:ident) => {
-        #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
+        #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, PartialOrd, Ord, Hash)]
         pub struct $name(pub u32);
         impl $name {
             pub fn index(self) -> usize {
@@ -40,7 +41,7 @@ pub struct Edge {
     pub end: VertexId,
     /// The two uses of this edge, one by each face it bounds (both by the same
     /// face for a seam).
-    pub coedges: Vec<CoedgeId>,
+    pub coedges: Small<CoedgeId, 2>,
     pub name: Name,
     /// False once no face uses the edge (after an in-place edit).
     pub alive: bool,
@@ -58,11 +59,59 @@ pub struct Coedge {
 }
 
 /// A closed chain of coedges bounding a face. Walking it with the face's
-/// outward normal pointing at you, the face is on the left.
+/// outward normal pointing at you, the face is on the left. A loop's coedges are numbered
+/// consecutively, so it holds only the first and the count.
 #[derive(Clone, Debug, PartialEq)]
 pub struct Loop {
-    pub coedges: Vec<CoedgeId>,
+    first: u32,
+    len: u32,
     pub face: FaceId,
+}
+
+impl Loop {
+    pub fn coedges(&self) -> Coedges {
+        Coedges {
+            at: self.first,
+            end: self.first + self.len,
+        }
+    }
+    /// The loop's `i`th coedge.
+    pub fn coedge(&self, i: usize) -> CoedgeId {
+        assert!(i < self.len as usize);
+        CoedgeId(self.first + i as u32)
+    }
+}
+
+/// A loop's coedges, in order.
+#[derive(Clone, Copy, Debug)]
+pub struct Coedges {
+    at: u32,
+    end: u32,
+}
+
+impl Iterator for Coedges {
+    type Item = CoedgeId;
+    fn next(&mut self) -> Option<CoedgeId> {
+        (self.at < self.end).then(|| {
+            self.at += 1;
+            CoedgeId(self.at - 1)
+        })
+    }
+    fn size_hint(&self) -> (usize, Option<usize>) {
+        let n = (self.end - self.at) as usize;
+        (n, Some(n))
+    }
+}
+
+impl ExactSizeIterator for Coedges {}
+
+impl DoubleEndedIterator for Coedges {
+    fn next_back(&mut self) -> Option<CoedgeId> {
+        (self.at < self.end).then(|| {
+            self.end -= 1;
+            CoedgeId(self.end)
+        })
+    }
 }
 
 /// A bounded region of a surface. `same_sense` says whether the face's outward
@@ -71,7 +120,7 @@ pub struct Loop {
 pub struct Face {
     pub surface: Surface,
     pub same_sense: bool,
-    pub loops: Vec<LoopId>,
+    pub loops: Small<LoopId, 2>,
     pub shell: ShellId,
     pub name: Name,
     /// A box holding the face, worked out on first use.
@@ -221,8 +270,7 @@ impl Body {
         // shell face lists go stale here; compact() regroups shells
         for li in 0..self.faces[f.index()].loops.len() {
             let l = self.faces[f.index()].loops[li];
-            for ci in 0..self.loops[l.index()].coedges.len() {
-                let c = self.loops[l.index()].coedges[ci];
+            for c in self.loops[l.index()].coedges() {
                 let e = self.coedges[c.index()].edge;
                 let edge = &mut self.edges[e.index()];
                 edge.coedges.retain(|&x| x != c);
@@ -299,8 +347,8 @@ impl Body {
                 out.faces[nf.index()].bbox.set(*b);
             }
             for &l in &face.loops {
-                let mut uses = Vec::with_capacity(self.lp(l).coedges.len());
-                for &c in &self.lp(l).coedges {
+                let mut uses = Vec::with_capacity(self.lp(l).coedges().len());
+                for c in self.lp(l).coedges() {
                     let co = self.coedge(c);
                     let e = match emap[co.edge.index()] {
                         Some(e) => e,
@@ -350,7 +398,8 @@ impl Body {
             lp: LoopId(x.lp.0 + l),
         }));
         self.loops.extend(other.loops.iter().map(|x| Loop {
-            coedges: x.coedges.iter().map(|k| CoedgeId(k.0 + c)).collect(),
+            first: x.first + c,
+            len: x.len,
             face: FaceId(x.face.0 + f),
         }));
         self.faces.extend(other.faces.iter().map(|x| Face {
@@ -393,7 +442,7 @@ impl Body {
             range,
             start,
             end,
-            coedges: Vec::new(),
+            coedges: Small::default(),
             name,
             alive: true,
             bbox: Cached::default(),
@@ -411,7 +460,7 @@ impl Body {
         self.faces.push(Face {
             surface,
             same_sense,
-            loops: Vec::new(),
+            loops: Small::default(),
             shell,
             name,
             bbox: Cached::default(),
@@ -435,8 +484,7 @@ impl Body {
     /// the loop and its coedges stay in the arenas until compaction.
     pub fn remove_loop(&mut self, f: FaceId, lp: LoopId) {
         self.faces[f.index()].loops.retain(|&l| l != lp);
-        for ci in 0..self.loops[lp.index()].coedges.len() {
-            let c = self.loops[lp.index()].coedges[ci];
+        for c in self.loops[lp.index()].coedges() {
             let edge = &mut self.edges[self.coedges[c.index()].edge.index()];
             edge.coedges.retain(|&x| x != c);
             if edge.coedges.is_empty() {
@@ -447,15 +495,18 @@ impl Body {
 
     pub fn add_loop(&mut self, face: FaceId, uses: &[(EdgeId, bool)]) -> LoopId {
         let lp = LoopId(self.loops.len() as u32);
-        let mut coedges = Vec::with_capacity(uses.len());
+        let first = self.coedges.len() as u32;
         for &(edge, forward) in uses {
             let c = CoedgeId(self.coedges.len() as u32);
             self.coedges.push(Coedge { edge, forward, lp });
             self.edges[edge.index()].coedges.push(c);
             self.edges[edge.index()].alive = true;
-            coedges.push(c);
         }
-        self.loops.push(Loop { coedges, face });
+        self.loops.push(Loop {
+            first,
+            len: uses.len() as u32,
+            face,
+        });
         self.faces[face.index()].loops.push(lp);
         lp
     }
@@ -495,9 +546,10 @@ impl Body {
         prev.resize(self.coedges.len(), NONE);
         let mut before = |c: CoedgeId| {
             if prev[c.index()] == NONE {
-                let cs = &self.lp(self.coedge(c).lp).coedges;
-                for (i, &x) in cs.iter().enumerate() {
-                    prev[x.index()] = cs[(i + cs.len() - 1) % cs.len()];
+                let lp = self.lp(self.coedge(c).lp);
+                let n = lp.coedges().len();
+                for (i, x) in lp.coedges().enumerate() {
+                    prev[x.index()] = lp.coedge((i + n - 1) % n);
                 }
             }
             prev[c.index()]
@@ -649,7 +701,7 @@ impl Body {
         *face.bbox.get_or_init(|| {
             let mut b = Box3::EMPTY;
             for &l in &face.loops {
-                for &c in &self.lp(l).coedges {
+                for c in self.lp(l).coedges() {
                     b = b.hull(&self.edge_box(self.coedge(c).edge));
                 }
             }

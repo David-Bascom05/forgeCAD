@@ -40,7 +40,7 @@ fn key(body: &Body, f: FaceId) -> Name {
     }
     for &l in &face.loops {
         k = k.with(0x100);
-        for &c in &body.lp(l).coedges {
+        for c in body.lp(l).coedges() {
             let co = body.coedge(c);
             let e = body.edge(co.edge);
             k = k
@@ -66,7 +66,7 @@ fn alone(body: &Body, f: FaceId) -> Body {
     let (mut vs, mut es) = (HashMap::new(), HashMap::new());
     for &l in &face.loops {
         let mut uses = Vec::new();
-        for &c in &body.lp(l).coedges {
+        for c in body.lp(l).coedges() {
             let co = body.coedge(c);
             let e = body.edge(co.edge);
             let mut vert = |v: forge_topo::VertexId, b: &mut Body| {

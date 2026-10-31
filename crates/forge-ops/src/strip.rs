@@ -49,10 +49,10 @@ pub fn face_fillet(body: &Body, first: &[FaceId], second: &[FaceId], radius: f64
     }
     // the band joining them: four-sided faces in neither set, in a row from a across to b
     // (a chamfer and a land, a bevel of several facets) or side by side along between them
-    let sides = |f: FaceId| -> Option<&[CoedgeId]> {
+    let sides = |f: FaceId| -> Option<Vec<CoedgeId>> {
         let l = &body.face(f).loops;
-        (!a.contains(&f) && !b.contains(&f) && l.len() == 1 && body.lp(l[0]).coedges.len() == 4)
-            .then(|| &body.lp(l[0]).coedges[..])
+        (!a.contains(&f) && !b.contains(&f) && l.len() == 1 && body.lp(l[0]).coedges().len() == 4)
+            .then(|| body.lp(l[0]).coedges().collect())
     };
     let across = |c: CoedgeId| body.partner(c);
     let face_of = |c: CoedgeId| body.coedge_face(c);
@@ -139,8 +139,8 @@ pub fn face_fillet(body: &Body, first: &[FaceId], second: &[FaceId], radius: f64
     // the faces of each set along it
     let side = |set: &BTreeSet<FaceId>| {
         band.iter()
-            .flat_map(|&f| body.lp(body.face(f).loops[0]).coedges.iter())
-            .filter_map(|&c| across(c).map(face_of))
+            .flat_map(|&f| body.lp(body.face(f).loops[0]).coedges())
+            .filter_map(|c| across(c).map(face_of))
             .find(|f| set.contains(f))
     };
     let (Some(fa), Some(fb)) = (side(&a), side(&b)) else {
@@ -215,7 +215,7 @@ fn strip(body: &Body, fa: FaceId, band: &[FaceId], fb: FaceId, radius: Option<f6
     // the band's border, chained round
     let border: Vec<CoedgeId> = band
         .iter()
-        .flat_map(|&f| body.lp(body.face(f).loops[0]).coedges.iter().copied())
+        .flat_map(|&f| body.lp(body.face(f).loops[0]).coedges())
         .filter(|&c| !across(c).is_some_and(|g| inside.contains(&g)))
         .collect();
     let mut order = vec![border[0]];
@@ -260,11 +260,11 @@ fn strip(body: &Body, fa: FaceId, band: &[FaceId], fb: FaceId, radius: Option<f6
     let pick = |r: &[CoedgeId]| body.coedge(r[r.len() / 2]).edge;
     let (ea, eb) = (pick(&runs[0].1), pick(&runs[2].1));
     let err = FilletError::NoBlend { edge: ea };
-    let lp_of = |c: CoedgeId| &body.lp(body.coedge(c).lp).coedges;
+    let lp_of = |c: CoedgeId| body.lp(body.coedge(c).lp).coedges();
     let step = |c: CoedgeId, by: usize| {
-        let lp = lp_of(c);
-        let k = lp.iter().position(|&x| x == c).expect("in its loop");
-        lp[(k + by) % lp.len()]
+        let lp = body.lp(body.coedge(c).lp);
+        let k = lp.coedges().position(|x| x == c).expect("in its loop");
+        lp.coedge((k + by) % lp.coedges().len())
     };
     let partner = |c: CoedgeId| body.partner(c).ok_or(err.clone());
     // each end walked from the side it leaves to the side it reaches, then put a to b
@@ -452,7 +452,7 @@ fn strip(body: &Body, fa: FaceId, band: &[FaceId], fb: FaceId, radius: Option<f6
     let mut blend_uses = Vec::new();
     for (f, run, new) in &spliced {
         let l = body.coedge(run[0]).lp;
-        let lp = &body.lp(l).coedges;
+        let lp: Vec<CoedgeId> = body.lp(l).coedges().collect();
         // the run's first coedge round the loop: walk the new edge from where its start moved
         let first = *run
             .iter()
@@ -505,7 +505,7 @@ fn closed_strip(
 ) -> R<Body> {
     let ml = &body.face(m).loops;
     // M's coedge on each loop, the loop's edge closed and to one side
-    let lone = |l: LoopId| match body.lp(l).coedges[..] {
+    let lone = |l: LoopId| match body.lp(l).coedges().collect::<Vec<_>>()[..] {
         [c] if body.edge(body.coedge(c).edge).start == body.edge(body.coedge(c).edge).end => {
             body.partner(c).map(|p| (c, body.coedge_face(p)))
         }
@@ -538,7 +538,7 @@ fn closed_strip(
             .face(f)
             .loops
             .iter()
-            .flat_map(|&l| body.lp(l).coedges.iter().map(|&c| body.coedge(c).edge))
+            .flat_map(|&l| body.lp(l).coedges().map(|c| body.coedge(c).edge))
             .filter(|&x| x != e && (body.edge(x).start == v || body.edge(x).end == v))
             .collect();
         match at.iter().collect::<Vec<_>>()[..] {
@@ -648,9 +648,8 @@ fn closed_strip(
         let l = body.coedge(c).lp;
         let uses: Vec<(EdgeId, bool)> = body
             .lp(l)
-            .coedges
-            .iter()
-            .flat_map(|&x| {
+            .coedges()
+            .flat_map(|x| {
                 if x == c {
                     chain.clone()
                 } else {

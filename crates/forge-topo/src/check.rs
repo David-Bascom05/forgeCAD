@@ -151,7 +151,7 @@ fn check_shell_euler(body: &Body, out: &mut Vec<Problem>) {
             f += 1;
             for &lp in &body.face(face).loops {
                 l += 1;
-                for &c in &body.lp(lp).coedges {
+                for c in body.lp(lp).coedges() {
                     let e = body.coedge(c).edge;
                     edges.push(e);
                     verts.extend([body.edge(e).start, body.edge(e).end]);
@@ -226,13 +226,14 @@ fn check_loops(body: &Body, out: &mut Vec<Problem>) {
         }
     }
     for l in body.loop_ids() {
-        let cs = &body.lp(l).coedges;
-        if cs.is_empty() {
+        let lp = body.lp(l);
+        let n = lp.coedges().len();
+        if n == 0 {
             out.push(Problem::LoopEmpty { lp: l });
             continue;
         }
-        for (i, &c) in cs.iter().enumerate() {
-            let next = cs[(i + 1) % cs.len()];
+        for (i, c) in lp.coedges().enumerate() {
+            let next = lp.coedge((i + 1) % n);
             if body.coedge_end(c) != body.coedge_start(next) {
                 out.push(Problem::LoopBroken { lp: l, after: c });
             }

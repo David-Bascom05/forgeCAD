@@ -580,7 +580,7 @@ fn faces_ahead(b: &Body, tr: &Torus, d: Vec3, sweep: &forge_math::Box3) -> bool 
         }
         // the sign the normal's part along d must keep: from the outward normal at a corner
         let lp = face.loops[0];
-        let c0 = b.lp(lp).coedges[0];
+        let c0 = b.lp(lp).coedge(0);
         let p = b.vertex(b.coedge_start(c0)).point;
         let Some(out) = b.face_normal(fid, face.surface.project(p)) else {
             return false;
@@ -591,7 +591,7 @@ fn faces_ahead(b: &Body, tr: &Torus, d: Vec3, sweep: &forge_math::Box3) -> bool 
         }
         let natural = along(&forge_math::Box3::from_point(p)).mid().signum();
         for &l in &face.loops {
-            for &c in &b.lp(l).coedges {
+            for c in b.lp(l).coedges() {
                 let e = b.edge(b.coedge(c).edge);
                 let mut todo = vec![(e.range, 0)];
                 while let Some((r, depth)) = todo.pop() {
@@ -682,7 +682,7 @@ pub(crate) fn build(
         let loops = &b.face(f).loops;
         (
             loops.len(),
-            loops.iter().map(|&l| b.lp(l).coedges.len()).sum::<usize>(),
+            loops.iter().map(|&l| b.lp(l).coedges().len()).sum::<usize>(),
         )
     };
     let close = |a: forge_math::Interval, b: forge_math::Interval| {

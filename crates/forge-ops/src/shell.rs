@@ -132,7 +132,7 @@ pub fn shell(
             );
             for &l in &face.loops {
                 let mut uses = Vec::new();
-                for &c in &src.lp(l).coedges {
+                for c in src.lp(l).coedges() {
                     let co = src.coedge(c);
                     let e = *emap[co.edge.index()].get_or_insert_with(|| {
                         let edge = src.edge(co.edge);
@@ -177,9 +177,8 @@ pub fn shell(
             );
             let uses = |b: &Body, l, map: &[Option<EdgeId>]| -> Vec<(EdgeId, bool)> {
                 b.lp(l)
-                    .coedges
-                    .iter()
-                    .map(|&c| {
+                    .coedges()
+                    .map(|c| {
                         let co = b.coedge(c);
                         (map[co.edge.index()].expect("shared with a kept face"), co.forward)
                     })
@@ -232,7 +231,7 @@ fn collapse(body: &Body, gone: &[bool]) -> Result<Body, ShellError> {
         let face = body.face(f);
         let fail = ShellError::Collapses { face: face.name };
         let [l] = face.loops[..] else { return Err(fail) };
-        let es: Vec<EdgeId> = body.lp(l).coedges.iter().map(|&c| body.coedge(c).edge).collect();
+        let es: Vec<EdgeId> = body.lp(l).coedges().map(|c| body.coedge(c).edge).collect();
         let Surface::Cylinder(cyl) = &face.surface else {
             return Err(fail);
         };
@@ -255,7 +254,12 @@ fn collapse(body: &Body, gone: &[bool]) -> Result<Body, ShellError> {
             // a closed band (a hole's wall): its end circles close up
             for &e in &ends {
                 let g = other_face(e, f).ok_or(fail.clone())?;
-                if !body.face(g).loops.iter().any(|&l| body.lp(l).coedges.len() == 1) {
+                if !body
+                    .face(g)
+                    .loops
+                    .iter()
+                    .any(|&l| body.lp(l).coedges().len() == 1)
+                {
                     return Err(fail);
                 }
                 sub.insert(e, None);
@@ -304,9 +308,8 @@ fn collapse(body: &Body, gone: &[bool]) -> Result<Body, ShellError> {
         for &l in &face.loops {
             let uses: Vec<(EdgeId, bool)> = body
                 .lp(l)
-                .coedges
-                .iter()
-                .filter_map(|&c| {
+                .coedges()
+                .filter_map(|c| {
                     let co = body.coedge(c);
                     match sub.get(&co.edge) {
                         None => Some((co.edge, co.forward)),

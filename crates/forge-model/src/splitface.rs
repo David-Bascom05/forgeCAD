@@ -47,7 +47,7 @@ fn split_one(b: &mut Body, f: FaceId, by: &Surface, root: Name) -> Result<(), Bo
     {
         let mut seen = std::collections::HashSet::new();
         for &l in &b.face(f).loops {
-            for &c in &b.lp(l).coedges {
+            for c in b.lp(l).coedges() {
                 if !seen.insert(b.coedge(c).edge) {
                     seams.push(b.coedge(c).edge);
                 }
@@ -57,7 +57,7 @@ fn split_one(b: &mut Body, f: FaceId, by: &Surface, root: Name) -> Result<(), Bo
     // where the cutter crosses the boundary
     let mut cross: Vec<(Point3, At)> = Vec::new();
     for &l in &b.face(f).loops {
-        for &c in &b.lp(l).coedges {
+        for c in b.lp(l).coedges() {
             let e = b.coedge(c).edge;
             let edge = b.edge(e);
             let hits = match curve_surface(&edge.curve, edge.range, by) {
@@ -200,7 +200,7 @@ fn split_one(b: &mut Body, f: FaceId, by: &Surface, root: Name) -> Result<(), Bo
     for l in loops {
         let face = b.lp(l).face;
         let mut uses: Vec<Use> = Vec::new();
-        for &c in &b.lp(l).coedges {
+        for c in b.lp(l).coedges() {
             let co = b.coedge(c);
             match pieces.get(&co.edge) {
                 Some(ps) if co.forward => uses.extend(ps.iter().map(|&p| (p, true))),
@@ -217,8 +217,7 @@ fn split_one(b: &mut Body, f: FaceId, by: &Surface, root: Name) -> Result<(), Bo
         b.remove_loop(face, l);
         let nl = b.add_loop(face, &uses);
         let ls = &mut b.faces[face.index()].loops;
-        ls.pop();
-        ls.insert(at, nl);
+        ls[at..].rotate_right(1);
         debug_assert_eq!(ls[at], nl);
     }
     // the new edges
@@ -255,8 +254,8 @@ fn split_one(b: &mut Body, f: FaceId, by: &Surface, root: Name) -> Result<(), Bo
     // each use's successor round its loop
     let mut succ: Vec<usize> = Vec::new();
     for &l in &b.face(f).loops {
-        let (first, n) = (boundary.len(), b.lp(l).coedges.len());
-        for (j, &c) in b.lp(l).coedges.iter().enumerate() {
+        let (first, n) = (boundary.len(), b.lp(l).coedges().len());
+        for (j, c) in b.lp(l).coedges().enumerate() {
             boundary.push((b.coedge(c).edge, b.coedge(c).forward));
             succ.push(first + (j + 1) % n);
         }

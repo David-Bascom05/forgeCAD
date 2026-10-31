@@ -717,7 +717,7 @@ struct LoopTrace<'a> {
 
 fn trace_loop<'a>(body: &'a Body, s: &Surface, lp: LoopId, rel: f64) -> Result<LoopTrace<'a>, &'static str> {
     let per = periods(s);
-    let cos = &body.lp(lp).coedges;
+    let cos: Vec<CoedgeId> = body.lp(lp).coedges().collect();
     let sing: Vec<bool> = cos
         .iter()
         .map(|&c| {

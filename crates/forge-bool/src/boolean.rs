@@ -242,7 +242,7 @@ fn split_new_pinches(target: &mut Body, loops: usize, verts: usize) {
                 .loops
                 .contains(&forge_topo::LoopId(l as u32))
         })
-        .flat_map(|l| t.loops[l].coedges.iter().map(|&c| (t.coedge_start(c), c)))
+        .flat_map(|l| t.loops[l].coedges().map(|c| (t.coedge_start(c), c)))
         .filter(|(v, _)| v.index() >= verts)
         .collect();
     from.sort_unstable();
@@ -796,7 +796,7 @@ fn plan(a: &Body, b: &Body, op: Op) -> R<Plan> {
             {
                 let walk = |l: forge_topo::LoopId, pieces: &mut Vec<Piece>, ensure: &mut Ensure| {
                     let mut w: Walk = Vec::new();
-                    for &c in &body.lp(l).coedges {
+                    for c in body.lp(l).coedges() {
                         let co = body.coedge(c);
                         let ps = ensure(0, co.edge, pieces);
                         if co.forward {
@@ -825,7 +825,7 @@ fn plan(a: &Body, b: &Body, op: Op) -> R<Plan> {
                     if local.touched.contains(&l) {
                         continue;
                     }
-                    let cands = body.lp(l).coedges.iter().map(|&c| {
+                    let cands = body.lp(l).coedges().map(|c| {
                         let q = face.surface.project(body.vertex(body.coedge_start(c)).point);
                         if face.same_sense {
                             q
@@ -836,7 +836,7 @@ fn plan(a: &Body, b: &Body, op: Op) -> R<Plan> {
                     // exactly, on a plane split exactly: by one of the hole's vertices, as it
                     // touches no new edge
                     if split.outlines.is_none() {
-                        let q = body.vertex(body.coedge_start(body.lp(l).coedges[0])).point;
+                        let q = body.vertex(body.coedge_start(body.lp(l).coedge(0))).point;
                         let boxes = region_boxes.get_or_init(|| {
                             split.regions.iter().map(|r| walk_boxes(&r[0], &pieces)).collect()
                         });
@@ -926,8 +926,8 @@ fn plan(a: &Body, b: &Body, op: Op) -> R<Plan> {
             let mut whole = true;
             let mut boundary: Vec<Vec<(usize, bool)>> = Vec::with_capacity(body.face(f).loops.len());
             for &l in &body.face(f).loops {
-                let mut walk = Vec::with_capacity(body.lp(l).coedges.len());
-                for &c in &body.lp(l).coedges {
+                let mut walk = Vec::with_capacity(body.lp(l).coedges().len());
+                for c in body.lp(l).coedges() {
                     let co = body.coedge(c);
                     let ps = ensure(side, co.edge, &mut pieces);
                     whole &= ps.len() == 1;
@@ -1464,7 +1464,7 @@ pub(crate) fn trim(
     for k in 0..2 {
         let (body, f, side) = (bodies[k], faces[k], sides[k]);
         for &l in &body.face(f).loops {
-            for &c in &body.lp(l).coedges {
+            for c in body.lp(l).coedges() {
                 let e = body.coedge(c).edge;
                 let edge = body.edge(e);
                 if !body.edge_box(e).overlaps(&reach) {
@@ -2264,7 +2264,7 @@ pub(crate) fn imprint(
         body.vertex(edge.start).tol.max(body.vertex(edge.end).tol)
     };
     for &l in &sb.face(src_face).loops {
-        for &c in &sb.lp(l).coedges {
+        for c in sb.lp(l).coedges() {
             let e = sb.coedge(c).edge;
             // a seam is used twice by the face: once is enough
             if sb
@@ -2277,7 +2277,7 @@ pub(crate) fn imprint(
             let (reach, grow) = (sb.edge_box(e), slack(sb, e));
             let mut ts: Vec<f64> = Vec::new();
             for &l2 in &db.face(dst_face).loops {
-                for &c2 in &db.lp(l2).coedges {
+                for c2 in db.lp(l2).coedges() {
                     let e2 = db.coedge(c2).edge;
                     // an edge clear of this one's box can neither cross it nor share its carrier
                     if !db.edge_box(e2).grow(grow + slack(db, e2)).overlaps(&reach) {
@@ -2804,9 +2804,8 @@ fn local_split(c: LocalSplit) -> Option<Local> {
     let body = c.body;
     let hit = |l: forge_topo::LoopId| {
         body.lp(l)
-            .coedges
-            .iter()
-            .any(|&co| cut(body.coedge(co).edge) || at_a.binary_search(&body.coedge_start(co)).is_ok())
+            .coedges()
+            .any(|co| cut(body.coedge(co).edge) || at_a.binary_search(&body.coedge_start(co)).is_ok())
     };
     let loops = &body.face(c.f).loops;
     if hit(loops[0]) {
@@ -2830,7 +2829,7 @@ fn local_split(c: LocalSplit) -> Option<Local> {
 /// A point on face `f` a little inside its boundary, beside the middle of its first edge.
 pub(crate) fn face_point(body: &Body, f: FaceId) -> Option<Point3> {
     let face = body.face(f);
-    let c = *body.lp(*face.loops.first()?).coedges.first()?;
+    let c = body.lp(*face.loops.first()?).coedges().next()?;
     let co = body.coedge(c);
     let edge = body.edge(co.edge);
     let d = edge.curve.deriv(edge.range.mid());
@@ -2898,7 +2897,7 @@ fn encloses_a_loop(body: &Body, f: FaceId, poly: &[Point2]) -> bool {
     let g = 1e-3 * (hi.x - lo.x + hi.y - lo.y);
     let face = body.face(f);
     face.loops.iter().any(|&l| {
-        let v = body.edge(body.coedge(body.lp(l).coedges[0]).edge).start;
+        let v = body.edge(body.coedge(body.lp(l).coedge(0)).edge).start;
         let q = face.surface.project(body.vertex(v).point);
         q.x >= lo.x - g && q.x <= hi.x + g && q.y >= lo.y - g && q.y <= hi.y + g
     })

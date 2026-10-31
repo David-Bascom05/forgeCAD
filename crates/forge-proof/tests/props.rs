@@ -123,17 +123,29 @@ fn kinds(b: &forge_topo::Body) -> Vec<String> {
 /// probes are local, but not ray parity.
 #[test]
 fn certify_catches_an_inside_out_solid() {
-    let mut b = block(0.0, 0.0, 0.0);
-    assert!(kinds(&b).is_empty(), "{:?}", kinds(&b));
-    for f in &mut b.faces {
-        f.same_sense = !f.same_sense;
-        f.query.clear();
+    let a = block(0.0, 0.0, 0.0);
+    assert!(kinds(&a).is_empty(), "{:?}", kinds(&a));
+    // rebuilt with each face's sense and each loop's way round reversed
+    let mut b = forge_topo::Body::new();
+    for v in &a.vertices {
+        b.add_tolerant_vertex(v.point, v.tol, v.name);
     }
-    for l in &mut b.loops {
-        l.coedges.reverse();
+    for e in &a.edges {
+        b.add_edge(e.curve.clone(), e.range, e.start, e.end, e.name);
     }
-    for c in &mut b.coedges {
-        c.forward = !c.forward;
+    let shell = b.add_shell();
+    for f in a.face_ids() {
+        let face = a.face(f);
+        let g = b.add_face(shell, face.surface.clone(), !face.same_sense, face.name);
+        for &l in &face.loops {
+            let uses: Vec<_> = a
+                .lp(l)
+                .coedges()
+                .rev()
+                .map(|c| (a.coedge(c).edge, !a.coedge(c).forward))
+                .collect();
+            b.add_loop(g, &uses);
+        }
     }
     assert!(forge_topo::check(&b).is_empty(), "{:?}", forge_topo::check(&b));
     assert!(

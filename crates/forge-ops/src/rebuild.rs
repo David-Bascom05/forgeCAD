@@ -183,7 +183,7 @@ pub(crate) fn reaches_apex(body: &Body, f: FaceId, slack: f64) -> bool {
         return false;
     };
     body.face(f).loops.iter().any(|&l| {
-        body.lp(l).coedges.iter().any(|&co| {
+        body.lp(l).coedges().any(|co| {
             let p = body.vertex(body.coedge_start(co)).point;
             let v = c.frame.z().dot(p - c.frame.origin) - slack;
             c.radius_at(v) <= tol::MIN_LENGTH

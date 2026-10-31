@@ -170,7 +170,7 @@ mod tests {
         let k = 8.0 * dmath::sin(0.1) / dmath::cos(0.1);
         let mut xs: Vec<f64> = Vec::new();
         for &l in &t.loops {
-            for &c in &d.lp(l).coedges {
+            for c in d.lp(l).coedges() {
                 xs.push(d.vertex(d.coedge_start(c)).point.x);
             }
         }

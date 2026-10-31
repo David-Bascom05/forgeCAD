@@ -62,14 +62,13 @@ fn unwrap_in(d: &Domain2, uv: Point2, reference: Point2) -> Point2 {
 /// Points of a loop in traversal order, each coedge contributing its samples
 /// minus its last point (the next coedge starts there).
 pub fn loop_samples(body: &Body, lp: LoopId, segments: impl Fn(&Edge) -> usize) -> (Vec<Point3>, Vec<usize>) {
-    let coedges = &body.lp(lp).coedges;
+    let coedges = body.lp(lp).coedges();
     let ns: Vec<usize> = coedges
-        .iter()
-        .map(|&c| segments(body.edge(body.coedge(c).edge)))
+        .map(|c| segments(body.edge(body.coedge(c).edge)))
         .collect();
     let mut pts = Vec::with_capacity(ns.iter().sum());
     let mut first = Vec::with_capacity(coedges.len());
-    for (&c, &n) in coedges.iter().zip(&ns) {
+    for (c, &n) in coedges.zip(&ns) {
         first.push(pts.len());
         let co = body.coedge(c);
         let e = body.edge(co.edge);
@@ -207,7 +206,7 @@ pub fn uv_loop(body: &Body, lp: LoopId, segments: impl Fn(&Edge) -> usize) -> Uv
         points,
         sample_of,
         coedge_first,
-        coedges: body.lp(lp).coedges.clone(),
+        coedges: body.lp(lp).coedges().collect(),
     }
 }
 

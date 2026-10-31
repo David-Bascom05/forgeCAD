@@ -13,7 +13,7 @@ fn main() {
     );
     for &l in &face.loops {
         println!(" loop:");
-        for &c in &body.lp(l).coedges {
+        for c in body.lp(l).coedges() {
             let co = body.coedge(c);
             let e = body.edge(co.edge);
             let kind = match &e.curve {

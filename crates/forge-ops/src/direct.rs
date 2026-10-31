@@ -71,7 +71,7 @@ pub fn replace_face(body: &Body, face: Name, surface: &Surface) -> R<Body> {
     let b = body.compact();
     let f = b.face(find(&b, face)?);
     // the side is judged at a point of the face: one of its edges' middles
-    let e = b.edge(b.coedge(b.lp(f.loops[0]).coedges[0]).edge);
+    let e = b.edge(b.coedge(b.lp(f.loops[0]).coedge(0)).edge);
     let p = e.curve.eval(e.range.mid());
     let dot = match (
         f.surface.normal(f.surface.project(p)),
@@ -150,7 +150,7 @@ pub fn delete_faces(body: &Body, faces: &[Name]) -> R<Body> {
     let mut healed = vec![false; base.edges.len()];
     for f in base.face_ids().filter(|f| !gone[f.index()]) {
         for &l in &base.face(f).loops {
-            let es: Vec<EdgeId> = base.lp(l).coedges.iter().map(|&c| base.coedge(c).edge).collect();
+            let es: Vec<EdgeId> = base.lp(l).coedges().map(|c| base.coedge(c).edge).collect();
             if es.iter().all(|&e| other(e, f).is_some_and(|g| gone[g.index()])) {
                 dropped.push(l);
                 es.iter().for_each(|&e| healed[e.index()] = true);
@@ -164,7 +164,7 @@ pub fn delete_faces(body: &Body, faces: &[Name]) -> R<Body> {
         let border: Vec<EdgeId> = face
             .loops
             .iter()
-            .flat_map(|&l| base.lp(l).coedges.iter().map(|&c| base.coedge(c).edge))
+            .flat_map(|&l| base.lp(l).coedges().map(|c| base.coedge(c).edge))
             .filter(|&e| other(e, f).is_some_and(|g| !gone[g.index()]))
             .collect();
         if border.iter().all(|&e| healed[e.index()]) {
@@ -172,7 +172,7 @@ pub fn delete_faces(body: &Body, faces: &[Name]) -> R<Body> {
         }
         let fail = DirectError::CannotHeal { face: face.name };
         let [l] = face.loops[..] else { return Err(fail) };
-        let es: Vec<EdgeId> = base.lp(l).coedges.iter().map(|&c| base.coedge(c).edge).collect();
+        let es: Vec<EdgeId> = base.lp(l).coedges().map(|c| base.coedge(c).edge).collect();
         let mut around: Vec<FaceId> = Vec::new();
         for &e in &es {
             match other(e, f) {
@@ -306,9 +306,8 @@ fn heal(
             }
             let uses: Vec<(EdgeId, bool)> = base
                 .lp(l)
-                .coedges
-                .iter()
-                .filter_map(|&c| {
+                .coedges()
+                .filter_map(|c| {
                     let co = base.coedge(c);
                     match sub.get(&co.edge) {
                         None => Some((co.edge, co.forward)),
@@ -317,7 +316,7 @@ fn heal(
                     }
                 })
                 .collect();
-            if uses.len() != base.lp(l).coedges.len() {
+            if uses.len() != base.lp(l).coedges().len() {
                 touched[nf.index()] = true;
             }
             if uses.is_empty() {

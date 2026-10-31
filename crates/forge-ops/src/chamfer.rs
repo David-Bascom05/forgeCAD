@@ -89,9 +89,9 @@ pub fn chamfer(body: &Body, edges: &[Name], size: ChamferSize, feature: u64) -> 
     // corners: per vertex, (face, coedge arriving, coedge leaving) for each loop passing through it
     let mut corners: HashMap<VertexId, Vec<(FaceId, CoedgeId, CoedgeId)>> = HashMap::new();
     for l in src.loop_ids() {
-        let cs = &src.lp(l).coedges;
-        for (i, &c) in cs.iter().enumerate() {
-            let next = cs[(i + 1) % cs.len()];
+        let lp = src.lp(l);
+        for (i, c) in lp.coedges().enumerate() {
+            let next = lp.coedge((i + 1) % lp.coedges().len());
             corners
                 .entry(src.coedge_end(c))
                 .or_default()
@@ -188,7 +188,7 @@ pub fn chamfer(body: &Body, edges: &[Name], size: ChamferSize, feature: u64) -> 
     for f in src.face_ids() {
         for &l in &src.face(f).loops {
             let mut uses: Path = Vec::new();
-            for &c in &src.lp(l).coedges {
+            for c in src.lp(l).coedges() {
                 let co = src.coedge(c);
                 let e = match contact_edge.get(&(co.edge, f)) {
                     Some(&ce) => ce,

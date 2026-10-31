@@ -6,10 +6,12 @@ pub mod body;
 pub mod check;
 pub mod mass;
 pub mod name;
+pub mod small;
 pub mod uv;
 
 pub use body::{
-    Body, Coedge, CoedgeId, Edge, EdgeId, Face, FaceId, Loop, LoopId, Shell, ShellId, Vertex, VertexId,
+    Body, Coedge, CoedgeId, Coedges, Edge, EdgeId, Face, FaceId, Loop, LoopId, Shell, ShellId, Vertex,
+    VertexId,
 };
 pub use check::{Problem, certify, check, genus};
 pub use name::Name;

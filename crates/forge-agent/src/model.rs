@@ -507,7 +507,7 @@ impl Model {
                     bb = bb.hull(&m.bbox);
                     if let Some(b) = body {
                         for &l in &b.face(*f).loops {
-                            for &c in &b.lp(l).coedges {
+                            for c in b.lp(l).coedges() {
                                 bb = bb.hull(&b.edge_box(b.coedge(c).edge));
                             }
                         }

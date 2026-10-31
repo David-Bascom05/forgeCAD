@@ -351,8 +351,8 @@ impl Pieces<'_> {
         let body = self.tools[side];
         let mut out = Vec::with_capacity(body.face(f).loops.len());
         for &l in &body.face(f).loops {
-            let mut w = Vec::with_capacity(body.lp(l).coedges.len());
-            for &c in &body.lp(l).coedges {
+            let mut w = Vec::with_capacity(body.lp(l).coedges().len());
+            for c in body.lp(l).coedges() {
                 let co = body.coedge(c);
                 let ps = self.ensure(side, co.edge);
                 if co.forward {
@@ -900,7 +900,7 @@ fn nary_body(
         let body = tools[k];
         let reach = seg_box[si].grow(tol::LINEAR);
         for &l in &body.face(h).loops {
-            for &c in &body.lp(l).coedges {
+            for c in body.lp(l).coedges() {
                 let e = body.coedge(c).edge;
                 if !body.edge_box(e).overlaps(&reach) {
                     continue;
@@ -1494,7 +1494,7 @@ fn nary_body(
                     ask(imprints[ii].side, imprints[ii].edge);
                 }
                 for &l in &body.face(f).loops {
-                    for &c in &body.lp(l).coedges {
+                    for c in body.lp(l).coedges() {
                         ask(side, body.coedge(c).edge);
                     }
                 }
@@ -1932,7 +1932,7 @@ fn nary_body(
         if r.loops.is_empty() {
             // an untouched face's edges are uncut: one piece each
             for &l in &body.face(r.face).loops {
-                for &c in &body.lp(l).coedges {
+                for c in body.lp(l).coedges() {
                     links.push(((r.side, body.coedge(c).edge, 0), ri));
                 }
             }
@@ -2414,7 +2414,7 @@ fn holes_only(
         .loops
         .iter()
         .map(|&l| {
-            let v = body.edge(body.coedge(body.lp(l).coedges[0]).edge).start;
+            let v = body.edge(body.coedge(body.lp(l).coedge(0)).edge).start;
             mirror(face.surface.project(body.vertex(v).point))
         })
         .collect();
@@ -2562,7 +2562,7 @@ fn region_points(
     let mut edges: Vec<(&Curve, Interval, bool, f64, Reach)> = Vec::new();
     if loops.is_empty() {
         for &l in &body.face(f).loops {
-            for &c in &body.lp(l).coedges {
+            for c in body.lp(l).coedges() {
                 let co = body.coedge(c);
                 let e = body.edge(co.edge);
                 let (len, _) = chord_of(&e.curve, e.range);

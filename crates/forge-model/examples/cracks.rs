@@ -24,7 +24,7 @@ fn main() {
                 fc.surface, fc.same_sense
             );
             for &l in &fc.loops {
-                for &c in &b.lp(l).coedges {
+                for c in b.lp(l).coedges() {
                     let co = b.coedge(c);
                     let e = b.edge(co.edge);
                     let k = format!("{:?}", e.curve);
@@ -67,8 +67,8 @@ fn main() {
         let edges: Vec<String> = face
             .loops
             .iter()
-            .flat_map(|&l| b.lp(l).coedges.iter())
-            .map(|&c| {
+            .flat_map(|&l| b.lp(l).coedges())
+            .map(|c| {
                 let e = b.edge(b.coedge(c).edge);
                 let k = format!("{:?}", e.curve);
                 format!("{}[{:.4}]", &k[..k.find('(').unwrap_or(k.len())], e.range.width())

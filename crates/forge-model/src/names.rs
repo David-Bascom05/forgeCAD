@@ -516,7 +516,7 @@ fn geo(b: &Body, e: Ent) -> Geo {
             let mut pts = corners(b.face_box(f)).to_vec();
             let (mut sum, mut n) = (Vec3::ZERO, 0.0f64);
             for &l in &face.loops {
-                for &c in &b.lp(l).coedges {
+                for c in b.lp(l).coedges() {
                     for p in b.edge_points(b.coedge(c).edge, 4) {
                         sum += p.to_vec();
                         n += 1.0;
@@ -608,7 +608,7 @@ fn piece_of(ob: &Body, e: Ent, nb: &Body, r: Ent, tol: f64) -> bool {
             let s = &ob.face(f).surface;
             ob.face_box(f).grow(tol).overlaps(&nb.face_box(g))
                 && nb.face(g).loops.iter().all(|&l| {
-                    nb.lp(l).coedges.iter().all(|&c| {
+                    nb.lp(l).coedges().all(|c| {
                         nb.edge_points(nb.coedge(c).edge, 2)
                             .iter()
                             .all(|p| s.distance(*p) <= tol.max(1e-6))

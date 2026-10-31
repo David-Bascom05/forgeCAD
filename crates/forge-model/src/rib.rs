@@ -158,7 +158,7 @@ fn shell_body(b: &Body, s: ShellId) -> Body {
         let nf = out.add_face(sh, face.surface.clone(), face.same_sense, face.name);
         for &l in &face.loops {
             let mut uses = Vec::new();
-            for &c in &b.lp(l).coedges {
+            for c in b.lp(l).coedges() {
                 let co = b.coedge(c);
                 let e = *emap[co.edge.index()].get_or_insert_with(|| {
                     let edge = b.edge(co.edge);

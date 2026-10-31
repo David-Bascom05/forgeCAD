@@ -184,7 +184,7 @@ fn crossings(body: &Body, index: &Index, mesh: &TriMesh, chord: f64, out: &mut V
     let mut verts: Vec<Vec<u32>> = vec![Vec::new(); n];
     for f in body.face_ids() {
         for &l in &body.face(f).loops {
-            for &c in &body.lp(l).coedges {
+            for c in body.lp(l).coedges() {
                 verts[f.index()].push(body.coedge_start(c).0);
             }
         }

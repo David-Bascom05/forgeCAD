@@ -645,7 +645,7 @@ fn split_edge(body: &mut Body, e: EdgeId) -> EdgeId {
     loops.dedup();
     for (f, l) in loops {
         let mut uses: Vec<(EdgeId, bool)> = Vec::new();
-        for &d in &body.lp(l).coedges {
+        for d in body.lp(l).coedges() {
             let co = body.coedge(d);
             match (co.edge == e, co.forward) {
                 (true, true) => uses.extend([(e, true), (other, true)]),
@@ -716,24 +716,13 @@ fn merge_faces(body: &mut Body, e: EdgeId) {
     let (la, lb) = (body.coedge(ca).lp, body.coedge(cb).lp);
     let uses = |body: &Body, l: forge_topo::LoopId| -> Vec<(EdgeId, bool)> {
         body.lp(l)
-            .coedges
-            .iter()
-            .map(|&c| (body.coedge(c).edge, body.coedge(c).forward))
+            .coedges()
+            .map(|c| (body.coedge(c).edge, body.coedge(c).forward))
             .collect()
     };
     let (ua, ub) = (uses(body, la), uses(body, lb));
-    let ia = body
-        .lp(la)
-        .coedges
-        .iter()
-        .position(|&c| c == ca)
-        .expect("in its loop");
-    let ib = body
-        .lp(lb)
-        .coedges
-        .iter()
-        .position(|&c| c == cb)
-        .expect("in its loop");
+    let ia = body.lp(la).coedges().position(|c| c == ca).expect("in its loop");
+    let ib = body.lp(lb).coedges().position(|c| c == cb).expect("in its loop");
     let mut joined: Vec<(EdgeId, bool)> = ua[..ia].to_vec();
     joined.extend_from_slice(&ub[ib + 1..]);
     joined.extend_from_slice(&ub[..ib]);
@@ -762,7 +751,8 @@ fn merge_faces(body: &mut Body, e: EdgeId) {
         .map(|&l| uses(body, l))
         .collect();
     body.remove_loop(a, la);
-    for l in body.face(b).loops.clone() {
+    let lbs = body.face(b).loops.clone();
+    for &l in &lbs {
         body.remove_loop(b, l);
     }
     body.kill_face(b);
@@ -1257,7 +1247,7 @@ impl Builder {
         let which = rolled.iter().enumerate().map(|(i, r)| (r.edge, i)).collect();
         let mut pos = vec![0u32; body.coedges.len()];
         for l in body.loop_ids() {
-            for (k, &c) in body.lp(l).coedges.iter().enumerate() {
+            for (k, c) in body.lp(l).coedges().enumerate() {
                 pos[c.index()] = k as u32;
             }
         }
@@ -1328,7 +1318,7 @@ impl Builder {
 
     fn next_in_loop(&self, c: CoedgeId) -> CoedgeId {
         let l = self.body.lp(self.body.coedge(c).lp);
-        l.coedges[(self.pos[c.index()] as usize + 1) % l.coedges.len()]
+        l.coedge((self.pos[c.index()] as usize + 1) % l.coedges().len())
     }
 
     /// The face corners around `v`, in order: each one's leaving edge is the next one's arriving edge.
@@ -2509,7 +2499,7 @@ impl Builder {
         // every crossing of the spring with an edge of its face
         let mut hits: Vec<(f64, CoedgeId, Point3)> = Vec::new();
         for &l in &self.body.face(home).loops {
-            for &c in &self.body.lp(l).coedges {
+            for c in self.body.lp(l).coedges() {
                 let x = self.body.coedge(c).edge;
                 if x == edge || self.dropped.contains(&c) {
                     continue;
@@ -2721,11 +2711,11 @@ impl Builder {
         }
         let faces: Vec<FaceId> = self.touched.iter().copied().collect();
         for f in faces {
-            let loops = self.body.face(f).loops.clone();
+            let loops = self.body.face(f).loops.to_vec();
             let mut pending: Vec<(EdgeId, bool)> = Vec::new();
             for l in loops {
                 let mut uses = Vec::new();
-                for &c in &self.body.lp(l).coedges {
+                for c in self.body.lp(l).coedges() {
                     if self.dropped.contains(&c) {
                         continue;
                     }

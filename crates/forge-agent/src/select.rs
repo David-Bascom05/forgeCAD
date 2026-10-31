@@ -170,7 +170,7 @@ pub fn faces_of_edge(body: &Body, e: EdgeId) -> Vec<FaceId> {
 pub fn edges_of_face(body: &Body, f: FaceId) -> Vec<EdgeId> {
     let mut out = Vec::new();
     for &l in &body.face(f).loops {
-        for &c in &body.lp(l).coedges {
+        for c in body.lp(l).coedges() {
             out.push(body.coedge(c).edge);
         }
     }

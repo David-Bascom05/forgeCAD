@@ -16,7 +16,7 @@ pub(crate) fn crossing(body: &Body, flagged: &[bool]) -> Option<(Name, Name)> {
     let mut verts: Vec<Vec<VertexId>> = vec![Vec::new(); n];
     for f in body.face_ids() {
         for &l in &body.face(f).loops {
-            for &c in &body.lp(l).coedges {
+            for c in body.lp(l).coedges() {
                 verts[f.index()].push(body.coedge_start(c));
             }
         }

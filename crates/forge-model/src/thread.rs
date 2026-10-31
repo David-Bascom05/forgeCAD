@@ -313,7 +313,7 @@ fn face_axis(
         let z = c.frame.z();
         let (mut lo, mut hi) = (f64::INFINITY, f64::NEG_INFINITY);
         for &l in &face.loops {
-            for &ce in &body.lp(l).coedges {
+            for ce in body.lp(l).coedges() {
                 let ed = body.edge(body.coedge(ce).edge);
                 for s in 0..=8 {
                     let p = ed.curve.eval(ed.range.lo + ed.range.width() * s as f64 / 8.0);
