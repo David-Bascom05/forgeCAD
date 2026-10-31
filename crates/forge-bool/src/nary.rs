@@ -591,18 +591,28 @@ fn nary_body(
             Point3::new(b.x.lo, b.y.lo, b.z.lo),
             Point3::new(b.x.hi, b.y.hi, b.z.hi),
         );
+        // (with no intersect only the last holder matters)
         let mut holds: Vec<Side> = Vec::new();
+        let mut last: Option<Side> = None;
         for k in 0..n {
             if k == i || k == j || !index[k].bbox.overlaps(b) || sh[k].box_out(b, SHAPE_MARGIN) {
                 continue;
             }
             if index[k].bbox.contains(lo) && index[k].bbox.contains(hi) && sh[k].box_in(b, SHAPE_MARGIN) {
-                holds.push(k);
+                if any_intersect {
+                    holds.push(k);
+                }
+                last = Some(k);
             } else {
                 return true;
             }
         }
-        divides(ops, any_intersect, &holds, i, j) || divides(ops, any_intersect, &holds, j, i)
+        let holds = if any_intersect {
+            &holds[..]
+        } else {
+            last.as_slice()
+        };
+        divides(ops, any_intersect, holds, i, j) || divides(ops, any_intersect, holds, j, i)
     };
 
     // 1: pairs of tools whose boxes meet, then their faces
@@ -858,7 +868,8 @@ fn nary_body(
                 continue;
             }
             for h in tools[k].face_ids() {
-                if index[k].boxes()[h.index()].overlaps(&reach) && may_meet(&tools[k].face(h).surface, &reach) {
+                if index[k].boxes()[h.index()].overlaps(&reach) && may_meet(&tools[k].face(h).surface, &reach)
+                {
                     f((k, h));
                 }
             }
@@ -1578,20 +1589,28 @@ fn nary_body(
             };
             let other = sg.sides[1 - at];
             let m = list[p].curve.eval(list[p].range.mid());
-            // the tools holding m, in order
+            // the tools holding m, in order (with no intersect only the last matters)
             let mut holds: Vec<Side> = Vec::new();
+            let mut last: Option<Side> = None;
             for &k in grid.at(m) {
                 let k = k as usize;
                 if k == side || k == other || !index[k].bbox.contains(m) {
                     continue;
                 }
                 match sh[k].member(m, SHAPE_MARGIN) {
-                    Member::In => holds.push(k),
+                    Member::In if any_intersect => holds.push(k),
+                    Member::In => last = Some(k),
                     Member::Out => {}
                     Member::Near => return true,
                 }
             }
-            divides(ops, any_intersect, &holds, side, other)
+            divides(
+                ops,
+                any_intersect,
+                if any_intersect { &holds } else { last.as_slice() },
+                side,
+                other,
+            )
         };
         let kept: Vec<Vec<usize>> = par_map(jobs.len(), threads, 8, |j| {
             let (side, f, ref boundary, ref new_edges) = jobs[j];
