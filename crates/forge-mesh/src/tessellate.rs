@@ -86,10 +86,12 @@ fn interior_steps(s: &Surface, q: &Quality) -> Option<(f64, f64)> {
     match s {
         Surface::Plane(_) => None,
         // straight along v: columns across u, rows only as far apart as keeps triangles shapely
-        Surface::Cylinder(c) => Some((arc_step(c.radius, q), 4.0 * c.radius * arc_step(c.radius, q))),
+        // (rows four columns apart let refinement near a boundary run on, splitting edges
+        // into ones as long, and leave triangles across two columns: 3.5 chords deep)
+        Surface::Cylinder(c) => Some((arc_step(c.radius, q), 2.0 * c.radius * arc_step(c.radius, q))),
         Surface::Cone(c) => {
             let r = c.radius.max(1.0);
-            Some((arc_step(r, q), 4.0 * r * arc_step(r, q)))
+            Some((arc_step(r, q), 2.0 * r * arc_step(r, q)))
         }
         // curved both ways: half the tolerance each way (see edge_segments), and a little
         // under, so a cell's diagonal does not sag by just about the whole tolerance and get
