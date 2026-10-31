@@ -2225,19 +2225,18 @@ pub(crate) fn trim(
                 && (ends.is_empty()
                     || ends[0] == ends[1]
                     || (0..2).any(|k| {
-                        let mid = curve.eval(0.5 * (t0 + t1));
-                        let holds =
-                            |c: &Cut, i: usize| cuts[i].point.distance(c.point) <= cuts[i].tol.max(c.tol);
-                        w[k] == Where::On
-                            && cuts[first..].iter().any(|c| match c.on.edge() {
-                                Some((sd, e)) if sd == sides[k] && holds(c, ends[0]) => {
-                                    cuts[first..]
-                                        .iter()
-                                        .any(|d| d.on.edge() == Some((sd, e)) && holds(d, ends[1]))
-                                        && on_edge(bodies[k], e, mid).is_some()
-                                }
-                                _ => false,
+                        w[k] == Where::On && {
+                            let body = bodies[k];
+                            let (m, a, b) = (curve.eval(0.5 * (t0 + t1)), curve.eval(t0), curve.eval(t1));
+                            body.face(faces[k]).loops.iter().any(|&l| {
+                                body.lp(l).coedges().any(|c| {
+                                    let e = body.coedge(c).edge;
+                                    on_edge(body, e, m).is_some()
+                                        && on_edge(body, e, a).is_some()
+                                        && on_edge(body, e, b).is_some()
+                                })
                             })
+                        }
                     }))
             {
                 break;
