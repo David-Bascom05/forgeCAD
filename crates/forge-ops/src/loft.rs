@@ -8,9 +8,11 @@
 use crate::profile::{Profile, ProfileError, Segment};
 use crate::skin::{Skin, prepare, section_curve};
 use forge_geom::ruled::{Rail, Ruled};
+use forge_geom::skinned::{Skinned, Spline};
 use forge_geom::{Circle, Cone, Curve, CurveGeom, Cylinder, Line, Plane, Surface};
 use forge_math::{Frame, Interval, Point3, Vec3, dmath, tol};
 use forge_topo::{Body, Name};
+use std::sync::Arc;
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum LoftError {
@@ -41,9 +43,45 @@ pub enum LoftError {
     SelfIntersecting,
 }
 
-/// Lofts through `profiles` in order with ruled walls. `feature` is the history id the names
-/// derive from (see `skin`; walls are named by the first profile's segment ids).
-pub fn loft(profiles: &[Profile], feature: u64) -> Result<Body, LoftError> {
+/// How a loft runs between its profiles.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub enum LoftKind {
+    /// Straight lines from each profile to the next.
+    Ruled,
+    /// A curvature-continuous blend through all the profiles (a cubic spline at each matched
+    /// point, knots spaced by the distances between the profiles' centres). Free at an end, or
+    /// leaving square to the end profile at `weight` times unit speed.
+    Smooth { start: Option<f64>, end: Option<f64> },
+}
+
+/// Lofts through `profiles` in order. `feature` is the history id the names derive from (see
+/// `skin`; walls are named by the first profile's segment ids).
+pub fn loft(profiles: &[Profile], kind: LoftKind, feature: u64) -> Result<Body, LoftError> {
+    let body = plan(profiles, kind)?.build(Name::feature(feature));
+    if crate::selfx::crossing(&body, &vec![true; body.faces.len()]).is_some() {
+        return Err(LoftError::SelfIntersecting);
+    }
+    Ok(body)
+}
+
+/// A box holding the loft through `profiles`, without building it.
+pub fn loft_bounds(profiles: &[Profile], kind: LoftKind) -> Result<forge_math::Box3, LoftError> {
+    let skin = plan(profiles, kind)?;
+    let mut b = forge_math::Box3::EMPTY;
+    for c in skin.curves.iter().flatten() {
+        b = b.hull(&c.curve.bbox(c.range));
+    }
+    // a ruled wall lies in the hull of its two sections; a smooth one can bulge past them
+    for w in skin.walls.iter().flatten() {
+        if let Surface::Procedural(pr) = w {
+            let d = pr.domain();
+            b = b.hull(&pr.bbox(forge_math::Box2::new(d.u.interval(), d.v.interval())));
+        }
+    }
+    Ok(b.grow(tol::LINEAR))
+}
+
+fn plan(profiles: &[Profile], kind: LoftKind) -> Result<Skin, LoftError> {
     let n = profiles.len();
     if n < 2 {
         return Err(LoftError::TooFew);
@@ -59,6 +97,7 @@ pub fn loft(profiles: &[Profile], feature: u64) -> Result<Body, LoftError> {
         Point3::ORIGIN + sum / pts.len().max(1) as f64
     };
     let mut preps = Vec::with_capacity(n);
+    let mut centres = Vec::with_capacity(n);
     for (i, p) in profiles.iter().enumerate() {
         if p.loops.is_empty() {
             return Err(LoftError::Profile {
@@ -72,6 +111,7 @@ pub fn loft(profiles: &[Profile], feature: u64) -> Result<Body, LoftError> {
         if ahead.length() <= tol::LINEAR {
             return Err(LoftError::Degenerate { index: a });
         }
+        centres.push(centre(p));
         preps.push(prepare(p, ahead).map_err(|error| LoftError::Profile { index: i, error })?);
     }
     let sizes = preps[0].loop_sizes();
@@ -96,17 +136,51 @@ pub fn loft(profiles: &[Profile], feature: u64) -> Result<Body, LoftError> {
     }
     let segs: Vec<Vec<Segment>> = preps.iter().map(|p| p.segments().copied().collect()).collect();
     let planes: Vec<Frame> = preps.iter().map(|p| p.profile.plane).collect();
-    let mut rails = Vec::with_capacity(n - 1);
-    let mut walls = Vec::with_capacity(n - 1);
     for k in 0..n - 1 {
+        for (sa, sb) in segs[k].iter().zip(&segs[k + 1]) {
+            let (pa, pb) = (
+                planes[k].plane_point(sa.start()),
+                planes[k + 1].plane_point(sb.start()),
+            );
+            if pa.distance(pb) <= tol::MIN_LENGTH {
+                return Err(LoftError::Degenerate { index: k });
+            }
+        }
+    }
+    let (rails, walls) = match kind {
+        // through two profiles with free ends a spline is a straight line: ruled
+        LoftKind::Smooth { start, end } if n > 2 || start.is_some() || end.is_some() => {
+            smooth(&segs, &planes, &centres, &sizes, start, end)?
+        }
+        _ => ruled(&segs, &planes)?,
+    };
+    let curves = planes
+        .iter()
+        .zip(&segs)
+        .map(|(f, ss)| ss.iter().map(|s| section_curve(s, f)).collect())
+        .collect();
+    Ok(Skin {
+        keys: preps[0].keys.clone(),
+        loops: sizes,
+        planes,
+        curves,
+        rails,
+        walls,
+    })
+}
+
+type Walls = (Vec<Vec<(Curve, Interval)>>, Vec<Vec<Surface>>);
+
+/// Straight rails and ruled walls between each pair of neighbouring profiles.
+fn ruled(segs: &[Vec<Segment>], planes: &[Frame]) -> Result<Walls, LoftError> {
+    let mut rails = Vec::with_capacity(planes.len() - 1);
+    let mut walls = Vec::with_capacity(planes.len() - 1);
+    for k in 0..planes.len() - 1 {
         let (fa, fb) = (&planes[k], &planes[k + 1]);
         let mut rk = Vec::new();
         for (sa, sb) in segs[k].iter().zip(&segs[k + 1]) {
             let (pa, pb) = (fa.plane_point(sa.start()), fb.plane_point(sb.start()));
             let line = Line::through(pa, pb).ok_or(LoftError::Degenerate { index: k })?;
-            if pa.distance(pb) <= tol::MIN_LENGTH {
-                return Err(LoftError::Degenerate { index: k });
-            }
             rk.push((Curve::Line(line), Interval::new(0.0, pa.distance(pb))));
         }
         rails.push(rk);
@@ -118,53 +192,85 @@ pub fn loft(profiles: &[Profile], feature: u64) -> Result<Body, LoftError> {
                 .collect::<Result<Vec<_>, _>>()?,
         );
     }
-    let curves = planes
-        .iter()
-        .zip(&segs)
-        .map(|(f, ss)| ss.iter().map(|s| section_curve(s, f)).collect())
-        .collect();
-    let first = &preps[0];
-    let body = Skin {
-        keys: first.keys.clone(),
-        loops: sizes,
-        planes,
-        curves,
-        rails,
-        walls,
-    }
-    .build(Name::feature(feature));
-    if crate::selfx::crossing(&body, &vec![true; body.faces.len()]).is_some() {
-        return Err(LoftError::SelfIntersecting);
-    }
-    Ok(body)
+    Ok((rails, walls))
 }
 
-/// A box holding the loft through `profiles`: a ruled wall lies in the hull of its two sections.
-pub fn loft_bounds(profiles: &[Profile]) -> Result<forge_math::Box3, LoftError> {
-    if profiles.len() < 2 {
-        return Err(LoftError::TooFew);
+/// Spline rails and skinned walls through all the profiles.
+fn smooth(
+    segs: &[Vec<Segment>],
+    planes: &[Frame],
+    centres: &[Point3],
+    sizes: &[usize],
+    start: Option<f64>,
+    end: Option<f64>,
+) -> Result<Walls, LoftError> {
+    let n = planes.len();
+    let mut knots = vec![0.0];
+    for w in centres.windows(2) {
+        knots.push(knots[knots.len() - 1] + w[0].distance(w[1]));
     }
-    let mut b = forge_math::Box3::EMPTY;
-    for p in profiles {
-        for l in &p.loops {
-            for (s, _) in &l.segments {
-                let curve = match *s {
-                    Segment::Circle { center, radius, .. } => section_curve(
-                        &Segment::Arc {
-                            center,
-                            radius,
-                            start: 0.0,
-                            sweep: dmath::TAU - 1e-9,
-                        },
-                        &p.plane,
-                    ),
-                    _ => section_curve(s, &p.plane),
-                };
-                b = b.hull(&curve.curve.bbox(curve.range));
-            }
+    let spline = Arc::new(
+        Spline::new(knots, start.is_some(), end.is_some()).ok_or(LoftError::Degenerate { index: 0 })?,
+    );
+    let slopes: Vec<Vec3> = [(start, 0), (end, n - 1)]
+        .iter()
+        .filter_map(|&(w, k)| w.map(|w| planes[k].z() * w))
+        .collect();
+    let nseg = segs[0].len();
+    // the segment before each in its loop
+    let mut prev = vec![0; nseg];
+    let mut first = 0;
+    for &len in sizes {
+        for i in 0..len {
+            prev[first + i] = first + (i + len - 1) % len;
         }
+        first += len;
     }
-    Ok(b.grow(tol::LINEAR))
+    // across profile k at vertex i: between the normals of the two segments meeting there
+    let across = |k: usize, i: usize| {
+        let f = &planes[k];
+        let right = |s: &Segment, at_end: bool| {
+            let c = section_curve(s, f);
+            let t = if c.forward == at_end {
+                c.range.hi
+            } else {
+                c.range.lo
+            };
+            let d = c.curve.deriv(t).d1 * if c.forward { 1.0 } else { -1.0 };
+            d.cross(f.z().get()).normalize().map_or(Vec3::ZERO, |u| u.get())
+        };
+        (right(&segs[k][prev[i]], true) + right(&segs[k][i], false))
+            .normalize()
+            .map_or(f.x().get(), |u| u.get())
+    };
+    let size = (0..n)
+        .flat_map(|k| {
+            segs[k]
+                .iter()
+                .map(move |s| planes[k].plane_point(s.start()).distance(centres[k]))
+        })
+        .fold(tol::LINEAR, f64::max);
+    let dirs: Vec<Vec<Vec3>> = (0..nseg)
+        .map(|i| (0..n).map(|m| across(m, i)).collect())
+        .collect();
+    let mut rails = Vec::with_capacity(n - 1);
+    let mut walls = Vec::with_capacity(n - 1);
+    for k in 0..n - 1 {
+        let span = Interval::new(spline.knots()[k], spline.knots()[k + 1]);
+        let wk = (0..nseg)
+            .map(|j| {
+                let rs: Vec<Rail> = segs.iter().zip(planes).map(|(sg, f)| rail(&sg[j], f)).collect();
+                Skinned::new(rs, slopes.clone(), spline.clone(), k).ok_or(LoftError::Twisted { index: k })
+            })
+            .collect::<Result<Vec<_>, _>>()?;
+        rails.push(
+            (0..nseg)
+                .map(|i| (wk[i].rail(0.0, &dirs[i], size), span))
+                .collect(),
+        );
+        walls.push(wk.into_iter().map(Skinned::surface).collect());
+    }
+    Ok((rails, walls))
 }
 
 /// A segment drawn in plane `f`, by the fraction along it.
@@ -292,14 +398,14 @@ mod tests {
             plane: at(z),
             loops: vec![Profile::rectangle(Point2::new(-s, -s), 2.0 * s, 2.0 * s, 0)],
         };
-        let b = loft(&[sq(0.0, 4.0), sq(5.0, 2.0), sq(9.0, 3.0)], 1).unwrap();
+        let b = loft(&[sq(0.0, 4.0), sq(5.0, 2.0), sq(9.0, 3.0)], LoftKind::Ruled, 1).unwrap();
         valid(&b);
         assert_eq!(kinds(&b), (10, 0));
         let ci = |z: f64, r: f64| Profile {
             plane: at(z),
             loops: vec![Profile::circle(Point2::ORIGIN, r, 0)],
         };
-        let b = loft(&[ci(0.0, 4.0), ci(6.0, 2.0)], 1).unwrap();
+        let b = loft(&[ci(0.0, 4.0), ci(6.0, 2.0)], LoftKind::Ruled, 1).unwrap();
         valid(&b);
         assert!(b.faces.iter().any(|f| matches!(f.surface, Surface::Cone(_))));
         assert_eq!(kinds(&b).1, 0);
@@ -315,7 +421,7 @@ mod tests {
             plane: at(8.0).rotated_about_z(0.4),
             loops: vec![Profile::rectangle(Point2::new(-2.0, -2.0), 4.0, 4.0, 0)],
         };
-        let b = loft(&[sq.clone(), turned], 1).unwrap();
+        let b = loft(&[sq.clone(), turned], LoftKind::Ruled, 1).unwrap();
         valid(&b);
         assert_eq!(kinds(&b), (6, 4));
         // a circle to a shifted circle: an oblique cone, ruled
@@ -323,9 +429,49 @@ mod tests {
             plane: Frame::WORLD.with_origin(o),
             loops: vec![Profile::circle(Point2::ORIGIN, r, 0)],
         };
-        let b = loft(&[ci(Point3::ORIGIN, 4.0), ci(Point3::new(2.0, 0.0, 6.0), 2.0)], 1).unwrap();
+        let b = loft(
+            &[ci(Point3::ORIGIN, 4.0), ci(Point3::new(2.0, 0.0, 6.0), 2.0)],
+            LoftKind::Ruled,
+            1,
+        )
+        .unwrap();
         valid(&b);
         assert_eq!(kinds(&b), (4, 2));
+    }
+
+    #[test]
+    fn smooth_lofts_are_valid() {
+        let sq = |z: f64, s: f64, turn: f64| Profile {
+            plane: at(z).rotated_about_z(turn),
+            loops: vec![Profile::rectangle(Point2::new(-s, -s), 2.0 * s, 2.0 * s, 0)],
+        };
+        let ci = |z: f64, r: f64| Profile {
+            plane: at(z),
+            loops: vec![Profile::circle(Point2::ORIGIN, r, 0)],
+        };
+        let free = LoftKind::Smooth {
+            start: None,
+            end: None,
+        };
+        let square_ends = LoftKind::Smooth {
+            start: Some(1.0),
+            end: Some(0.5),
+        };
+        for kind in [free, square_ends] {
+            for profiles in [
+                vec![sq(0.0, 4.0, 0.0), sq(5.0, 2.0, 0.2), sq(9.0, 3.0, 0.3)],
+                vec![ci(0.0, 4.0), ci(5.0, 6.0), ci(10.0, 3.0), ci(14.0, 4.0)],
+            ] {
+                let b = loft(&profiles, kind, 1).unwrap();
+                valid(&b);
+                let walls = b.faces.len() - 2;
+                assert_eq!(kinds(&b).1, walls);
+                let bx = loft_bounds(&profiles, kind).unwrap();
+                for v in &b.vertices {
+                    assert!(bx.contains(v.point));
+                }
+            }
+        }
     }
 
     #[test]
@@ -361,7 +507,7 @@ mod tests {
             ])],
         };
         assert_eq!(
-            loft(&[sq.clone(), tri], 1).unwrap_err(),
+            loft(&[sq.clone(), tri], LoftKind::Ruled, 1).unwrap_err(),
             LoftError::Mismatch {
                 index: 1,
                 loop_index: Some(0),
@@ -369,12 +515,18 @@ mod tests {
                 got: 3
             }
         );
-        assert_eq!(loft(std::slice::from_ref(&sq), 1).unwrap_err(), LoftError::TooFew);
+        assert_eq!(
+            loft(std::slice::from_ref(&sq), LoftKind::Ruled, 1).unwrap_err(),
+            LoftError::TooFew
+        );
         // the far square turned half way round: every wall's rulings meet in the middle
         let half = Profile {
             plane: at(5.0).rotated_about_z(dmath::PI),
             loops: sq.loops.clone(),
         };
-        assert_eq!(loft(&[sq, half], 1).unwrap_err(), LoftError::Twisted { index: 0 });
+        assert_eq!(
+            loft(&[sq, half], LoftKind::Ruled, 1).unwrap_err(),
+            LoftError::Twisted { index: 0 }
+        );
     }
 }

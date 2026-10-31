@@ -3,7 +3,7 @@ use forge_geom::Circle;
 use forge_math::{Frame, Point2, Point3, UnitVec3, Vec2, Vec3, dmath};
 use forge_mesh::{Quality, tessellate};
 use forge_model::suite;
-use forge_ops::{Axis2, Handed, PathSeg, Profile, Winding, coil, loft, sweep};
+use forge_ops::{Axis2, Handed, LoftKind, PathSeg, Profile, Winding, coil, loft, sweep};
 use forge_topo::Body;
 
 fn volume(b: &Body) -> f64 {
@@ -102,6 +102,7 @@ fn loft_volume_is_a_frustum() {
                 square(Point3::ORIGIN, 4.0),
                 square(Point3::new(0.0, 0.0, 10.0), 2.0),
             ],
+            LoftKind::Ruled,
             1,
         )
         .expect("loft"),
@@ -117,6 +118,25 @@ fn loft_volume_is_a_frustum() {
                 round(Point3::ORIGIN, 4.0),
                 round(Point3::new(3.0, 0.0, 10.0), 2.0),
             ],
+            LoftKind::Ruled,
+            1,
+        )
+        .expect("loft"),
+    );
+    close(v, frustum(10.0, dmath::PI * 16.0, dmath::PI * 4.0));
+    // a smooth loft through coaxial circles whose radii grow evenly: the spline through
+    // evenly growing points is the straight line, so a cone frustum again
+    let v = volume(
+        &loft(
+            &[
+                round(Point3::ORIGIN, 4.0),
+                round(Point3::new(0.0, 0.0, 4.0), 3.2),
+                round(Point3::new(0.0, 0.0, 10.0), 2.0),
+            ],
+            LoftKind::Smooth {
+                start: None,
+                end: None,
+            },
             1,
         )
         .expect("loft"),

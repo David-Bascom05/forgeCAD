@@ -1,12 +1,14 @@
 //! Instruction counts for screw (coil) and ruled (loft) surfaces:
-//! `swept <screw|ruled> <build|deriv|project|implicit> [n]`, counted with
+//! `swept <screw|ruled|skinned> <build|deriv|project|implicit> [n]`, counted with
 //! `perf stat -e instructions:u`. Subtract the `build` count (n = 0) for the per-call cost.
 
 use forge_geom::ruled::{Rail, Ruled};
 use forge_geom::screw::{Screw, Section};
+use forge_geom::skinned::{Skinned, Spline};
 use forge_geom::{Circle, Surface, SurfaceGeom};
 use forge_math::rng::Rng;
 use forge_math::{Frame, Interval, Point2, Point3, Vec3, dmath};
+use std::sync::Arc;
 
 fn main() {
     let args: Vec<String> = std::env::args().collect();
@@ -44,6 +46,39 @@ fn main() {
             Screw::loop_faces(f, &wire, 0.0, b, turns).unwrap()[0]
                 .clone()
                 .surface(),
+        ]
+    } else if kind == "skinned" {
+        // a smooth loft through three squares' sides and through three half circles
+        let line = |z: f64, h: f64| Rail::Line {
+            a: Point3::new(-h, -h, z),
+            b: Point3::new(h, -h, z),
+        };
+        let half = |z: f64, r: f64| Rail::Arc {
+            circle: Circle {
+                frame: Frame::WORLD.with_origin(Point3::new(0.0, 0.0, z)),
+                radius: r,
+            },
+            start: 0.0,
+            sweep: dmath::PI,
+        };
+        let spline = Arc::new(Spline::new(vec![0.0, 15.0, 25.0], false, false).unwrap());
+        vec![
+            Skinned::new(
+                vec![line(0.0, 4.0), line(15.0, 6.0), line(25.0, 2.5)],
+                vec![],
+                spline.clone(),
+                0,
+            )
+            .unwrap()
+            .surface(),
+            Skinned::new(
+                vec![half(0.0, 4.0), half(15.0, 6.0), half(25.0, 3.0)],
+                vec![],
+                spline,
+                1,
+            )
+            .unwrap()
+            .surface(),
         ]
     } else {
         let line = |a: [f64; 3], b: [f64; 3]| Rail::Line {

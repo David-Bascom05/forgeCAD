@@ -8,7 +8,7 @@ use forge_geom::CurveGeom;
 use forge_geom::screw::Section;
 use forge_math::{Box3, Point2, Point3, UnitVec3, Vec3, dmath, tol};
 use forge_ops::{
-    Axis2, Handed, PathSeg, Profile, Stretch, Winding, coil, coil_motion, loft, loft_bounds, sweep,
+    Axis2, Handed, LoftKind, PathSeg, Profile, Stretch, Winding, coil, coil_motion, loft, loft_bounds, sweep,
     sweep_stretches,
 };
 use forge_topo::Body;
@@ -70,10 +70,12 @@ pub enum CoilSize {
     },
 }
 
-/// Ruled walls through two or more profiles, matched loop by loop and segment by segment.
+/// Walls through two or more profiles, matched loop by loop and segment by segment: ruled, or
+/// a curvature-continuous blend.
 #[derive(Clone, Debug, PartialEq)]
 pub struct Loft {
     pub profiles: Vec<Profile>,
+    pub kind: LoftKind,
     pub op: Combine,
 }
 
@@ -154,9 +156,9 @@ pub(crate) fn tool_of(features: &[Feature], i: usize, build: bool) -> Result<Too
         }
         Feature::Loft(l) => {
             let err = |error| RegenError::Loft { feature: i, error };
-            let shape = Shape::Brep(loft_bounds(&l.profiles).map_err(err)?);
+            let shape = Shape::Brep(loft_bounds(&l.profiles, l.kind).map_err(err)?);
             let body = if build {
-                loft(&l.profiles, id).map_err(err)?
+                loft(&l.profiles, l.kind, id).map_err(err)?
             } else {
                 Body::new()
             };

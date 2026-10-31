@@ -41,7 +41,7 @@ impl Rail {
         }
     }
 
-    fn bbox(&self, t: Interval) -> Box3 {
+    pub(crate) fn bbox(&self, t: Interval) -> Box3 {
         match *self {
             Rail::Line { .. } => Box3::from_points([self.at(t.lo).0, self.at(t.hi).0]),
             Rail::Arc { circle, start, sweep } => {
@@ -50,7 +50,7 @@ impl Rail {
         }
     }
 
-    fn transformed(&self, f: &Frame) -> Rail {
+    pub(crate) fn transformed(&self, f: &Frame) -> Rail {
         match *self {
             Rail::Line { a, b } => Rail::Line {
                 a: f.point_to_world(a),
@@ -64,7 +64,7 @@ impl Rail {
         }
     }
 
-    fn length(&self) -> f64 {
+    pub(crate) fn length(&self) -> f64 {
         match *self {
             Rail::Line { a, b } => a.distance(b),
             Rail::Arc { circle, sweep, .. } => circle.radius * sweep.abs(),
@@ -72,7 +72,7 @@ impl Rail {
     }
 
     /// How far past each end the curve can be carried and stay one turn at most.
-    fn reach(&self) -> f64 {
+    pub(crate) fn reach(&self) -> f64 {
         match *self {
             Rail::Line { .. } => 0.25,
             Rail::Arc { sweep, .. } => (0.5 * (forge_math::dmath::TAU / sweep.abs() - 1.0)).clamp(0.0, 0.25),
@@ -93,7 +93,7 @@ pub struct Ruled {
 }
 
 /// Largest principal curvature magnitude from first and second derivatives.
-fn principal_max(d: &SurfDeriv) -> f64 {
+pub(crate) fn principal_max(d: &SurfDeriv) -> f64 {
     let Some(n) = d.du.cross(d.dv).normalize().map(|u| u.get()) else {
         return 0.0;
     };

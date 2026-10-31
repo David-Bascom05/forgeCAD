@@ -906,44 +906,53 @@ pub(crate) fn polish(s: &impl Fn(Point2) -> SurfDeriv, p: Point3, uv: Point2, do
     let mut uv = clamp(uv);
     let mut d = s(uv);
     let mut f = (d.p - p).length_sq();
-    for _ in 0..24 {
+    for _ in 0..32 {
         let e = d.p - p;
         let (gu, gv) = (d.du.dot(e), d.dv.dot(e));
         let (a, b, c) = (d.du.length_sq(), d.du.dot(d.dv), d.dv.length_sq());
         let (huu, huv, hvv) = (a + d.duu.dot(e), b + d.duv.dot(e), c + d.dvv.dot(e));
-        // Newton where the Hessian is positive definite, Gauss-Newton elsewhere
-        let (huu, huv, hvv) = if huu > 0.0 && huu * hvv > huv * huv {
-            (huu, huv, hvv)
-        } else {
-            (a, b, c)
-        };
-        let Some((mut x, mut y)) = solve2(huu, huv, huv, hvv, -gu, -gv) else {
-            break;
-        };
-        // held at a side, move along it only
-        if (uv.x <= dom.u.lo && x < 0.0) || (uv.x >= dom.u.hi && x > 0.0) {
-            (x, y) = (0.0, -gv / hvv);
-        } else if (uv.y <= dom.v.lo && y < 0.0) || (uv.y >= dom.v.hi && y > 0.0) {
-            (x, y) = (-gu / huu, 0.0);
-        }
-        if !(x.is_finite() && y.is_finite()) {
-            break;
-        }
-        let moves = (a * x * x + 2.0 * b * x * y + c * y * y).max(0.0).sqrt();
-        let tiny = moves <= 1e-13 * (1.0 + d.p.to_vec().abs_max());
+        // Newton where the Hessian is positive definite, then Gauss-Newton where Newton's step
+        // overshoots (the Hessian nearly vanishing)
+        let newton = huu > 0.0 && huu * hvv > huv * huv;
         let mut taken = false;
-        for _ in 0..6 {
-            let next = clamp(Point2::new(uv.x + x, uv.y + y));
-            if next == uv {
+        let mut tiny = false;
+        for (k, (h00, h01, h11)) in [(huu, huv, hvv), (a, b, c)].into_iter().enumerate() {
+            if k == 0 && !newton {
+                continue;
+            }
+            let Some((mut x, mut y)) = solve2(h00, h01, h01, h11, -gu, -gv) else {
+                continue;
+            };
+            // held at a side, move along it only
+            if (uv.x <= dom.u.lo && x < 0.0) || (uv.x >= dom.u.hi && x > 0.0) {
+                (x, y) = (0.0, -gv / h11);
+            } else if (uv.y <= dom.v.lo && y < 0.0) || (uv.y >= dom.v.hi && y > 0.0) {
+                (x, y) = (-gu / h00, 0.0);
+            }
+            if !(x.is_finite() && y.is_finite()) {
+                continue;
+            }
+            let moves = (a * x * x + 2.0 * b * x * y + c * y * y).max(0.0).sqrt();
+            let overshoots = k == 0 && moves > 2.0 * f.sqrt();
+            // done when the step is lost in rounding, or (far off) when moving the foot that
+            // little changes the distance by a part in 1e18
+            tiny = moves <= 1e-13 * (1.0 + d.p.to_vec().abs_max()) || moves * moves <= 1e-18 * f;
+            for _ in 0..8 {
+                let next = clamp(Point2::new(uv.x + x, uv.y + y));
+                if next == uv {
+                    break;
+                }
+                let dn = s(next);
+                let fnext = (dn.p - p).length_sq();
+                if fnext < f || (tiny && fnext <= f) {
+                    (uv, d, f, taken) = (next, dn, fnext, true);
+                    break;
+                }
+                (x, y) = (0.5 * x, 0.5 * y);
+            }
+            if taken || tiny || !overshoots {
                 break;
             }
-            let dn = s(next);
-            let fnext = (dn.p - p).length_sq();
-            if fnext < f || (tiny && fnext <= f) {
-                (uv, d, f, taken) = (next, dn, fnext, true);
-                break;
-            }
-            (x, y) = (0.5 * x, 0.5 * y);
         }
         if !taken || tiny {
             break;

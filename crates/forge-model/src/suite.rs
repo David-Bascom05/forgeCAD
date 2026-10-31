@@ -8,7 +8,7 @@ use crate::{
 use forge_geom::Circle;
 use forge_math::rng::Rng;
 use forge_math::{Frame, Point2, Point3, Vec2, Vec3, dmath};
-use forge_ops::{Axis2, Handed, PathSeg, Profile, ProfileLoop, Segment};
+use forge_ops::{Axis2, Handed, LoftKind, PathSeg, Profile, ProfileLoop, Segment};
 use forge_topo::Name;
 
 fn frame(o: Point3, z: Vec3, x: Vec3) -> Frame {
@@ -957,12 +957,12 @@ pub fn coil() -> Part {
     }
 }
 
-fn lofted(profiles: Vec<Profile>, op: Combine) -> Feature {
-    Feature::Loft(Box::new(Loft { profiles, op }))
+fn lofted(profiles: Vec<Profile>, kind: LoftKind, op: Combine) -> Feature {
+    Feature::Loft(Box::new(Loft { profiles, kind, op }))
 }
 
 /// A block with a twisted square loft standing out of it, an offset round loft cut through it,
-/// and a three-section frustum.
+/// and a smooth loft through three squares.
 pub fn loft() -> Part {
     let square = |o: Point3, s: f64, turn: f64| Profile {
         plane: turned(o, turn),
@@ -980,6 +980,7 @@ pub fn loft() -> Part {
                     square(Point3::new(30.0, 30.0, 10.0), 15.0, 0.0),
                     square(Point3::new(30.0, 30.0, 40.0), 8.0, 0.5),
                 ],
+                LoftKind::Ruled,
                 Combine::Add,
             ),
             lofted(
@@ -987,6 +988,7 @@ pub fn loft() -> Part {
                     round(Point3::new(75.0, 30.0, -1.0), 8.0),
                     round(Point3::new(80.0, 30.0, 16.0), 4.0),
                 ],
+                LoftKind::Ruled,
                 Combine::Cut,
             ),
             lofted(
@@ -995,6 +997,10 @@ pub fn loft() -> Part {
                     square(Point3::new(75.0, 50.0, 25.0), 6.0, 0.0),
                     square(Point3::new(75.0, 50.0, 35.0), 2.5, 0.0),
                 ],
+                LoftKind::Smooth {
+                    start: None,
+                    end: None,
+                },
                 Combine::Add,
             ),
         ],
