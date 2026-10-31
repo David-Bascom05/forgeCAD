@@ -1444,7 +1444,28 @@ pub fn refusals() -> Vec<(&'static str, Part, &'static str)> {
             op: Combine::New,
         }],
     };
+    // a ring whose hole is off centre: its top narrows round it, and a ring's round holds one radius
+    let eccentric = Part {
+        features: vec![Feature::Extrude {
+            profile: Profile {
+                plane: Frame::WORLD,
+                loops: vec![
+                    Profile::circle(Point2::ORIGIN, 10.0, 0),
+                    Profile::circle(Point2::new(1.0, 0.0), 5.0, 1),
+                ],
+            },
+            extent: Extent::Distance(8.0),
+            op: Combine::New,
+        }],
+    };
+    let eccentric_round = with_full_round(
+        &eccentric,
+        Point3::new(-10.0, 0.0, 4.0),
+        Point3::new(-7.0, 0.0, 8.0),
+        Point3::new(-4.0, 0.0, 4.0),
+    );
     vec![
+        ("full-round-eccentric-ring", eccentric_round, "BadRadius"),
         // the ball runs off the bottom of the front face
         (
             "radius-past-face",
