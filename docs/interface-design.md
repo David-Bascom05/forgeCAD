@@ -1,7 +1,8 @@
 # Interface design
 
 The kernel can build real parts. This is the plan for what sits on top of it: the app, the
-browser client, the host and the protocol between them. Status: agreed design, nothing built.
+browser client, the host and the protocol between them. Status: agreed design; only the renderer is built
+(`interface/forge-render`).
 
 The one rule: **no lag.** Where a choice trades anything against speed, speed wins. If an
 existing tool is too slow, we write our own, as we did with the kernel.

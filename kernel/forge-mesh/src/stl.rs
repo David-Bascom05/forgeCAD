@@ -45,6 +45,7 @@ mod tests {
             ],
             triangles: vec![[0, 1, 2]],
             face_of: vec![0],
+            edges: Vec::new(),
         };
         let b = to_binary_stl(&m, "forgecad");
         assert_eq!(b.len(), 84 + 50);

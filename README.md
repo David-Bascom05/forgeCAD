@@ -45,6 +45,7 @@ The repository is split by what a thing is:
 | `forge-doc` | the document model behind part files |
 | `forge-agent` | the `.fc` part file, selectors, measuring, rendering, incremental sessions |
 | `forge-cli` | `forgecad build/query/measure/render/check/diff`, `serve`, `mcp` (see AGENTS.md) |
+| `forge-render` | the renderer, wgpu native and in the browser; its own workspace, built apart from the kernel |
 
 | `verify/` | what |
 |---|---|
@@ -65,6 +66,19 @@ wasm is single-threaded (wasm32-wasip1 has no threads), so the n-ary regen runs 
 there.
 
 The toolchain is pinned in `rust-toolchain.toml`; rustup installs it on first use.
+
+`interface/forge-render` is its own workspace, so wgpu never enters the commands above. From there:
+
+```
+cargo run --release -- gearbox                      # a bench part or a .fc path; left drag orbits, other buttons pan, wheel zooms
+cargo run --release -- --stress 5000                # the 15 bench parts placed 5,000 times
+cargo run --release -- --stress 5000 --bench        # a fixed orbit, frame times on stdout, no window (--window: with one)
+cargo test                                          # GPU tests skip where there is no GPU
+sh web/build.sh OUT gearbox                         # the browser page and one part's mesh
+```
+
+Built meshes are cached in `~/.cache/forgecad/mesh`, by content hash of the part file and the
+kernel's sources. Nothing else reads that cache; kernel benchmarks never see it.
 
 ## License
 

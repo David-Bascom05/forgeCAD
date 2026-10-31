@@ -1,4 +1,5 @@
 /target
+/interface/forge-render/target
 *.stl
 /target-mesh
 /target-sketch

@@ -39,6 +39,35 @@ jobs:
           node --no-turbo-fast-api-calls tools/wasi-run.mjs target/wasm32-wasip1/wasm/examples/bits.wasm > bits-wasm.txt
           diff bits-native.txt bits-wasm.txt
 
+  # forge-render is its own workspace: wgpu stays out of every job above. The GPU tests skip on a runner with no GPU.
+  render:
+    runs-on: members
+    env:
+      CARGO_TERM_COLOR: always
+      CARGO_INCREMENTAL: "0"
+    steps:
+      - name: checkout
+        run: |
+          git init -q .
+          # the public door rate-limits (HTTP 429) when the jobs clone at once: back off and retry
+          for i in 1 2 3 4 5; do git fetch -q --depth=1 "https://code.commonty.org/${{ github.repository }}.git" "${{ github.sha }}" && break; sleep $((i * 15)); done
+          git checkout -q FETCH_HEAD
+      - name: rust
+        run: |
+          curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --profile minimal --default-toolchain none
+          echo "$HOME/.cargo/bin" >> "$GITHUB_PATH"
+      - name: fmt, clippy, test
+        working-directory: interface/forge-render
+        run: |
+          cargo fmt --check
+          cargo clippy --all-targets -- -D warnings
+          cargo test
+      - name: browser build
+        working-directory: interface/forge-render
+        run: |
+          rustup target add wasm32-unknown-unknown
+          cargo clippy --lib --target wasm32-unknown-unknown -- -D warnings
+
   scoreboard:
     runs-on: members
     env:

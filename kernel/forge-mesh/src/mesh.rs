@@ -7,6 +7,9 @@ pub struct TriMesh {
     pub triangles: Vec<[u32; 3]>,
     /// Which body face each triangle came from (index into the body's faces).
     pub face_of: Vec<u32>,
+    /// Each body edge's cut points as vertex indices, start to end (index into the body's edges;
+    /// empty where the mesh wasn't made from a whole body).
+    pub edges: Vec<Vec<u32>>,
 }
 
 impl TriMesh {

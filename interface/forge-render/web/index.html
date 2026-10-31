@@ -1,0 +1,14 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>ForgeCAD</title>
+<style>
+  html, body { margin: 0; height: 100%; background: #dfe2e6; }
+  canvas { width: 100%; height: 100%; display: block; outline: none; }
+</style>
+<script type="module">
+  import init, { start } from "./forge_render.js";
+  await init();
+  const q = new URLSearchParams(location.search);
+  const file = await fetch(q.get("mesh") ?? "part.mesh");
+  start(new Uint8Array(await file.arrayBuffer()), Number(q.get("bench") ?? 0));
+</script>

@@ -757,6 +757,10 @@ fn tessellate_with(body: &Body, q: &Quality, finer: &[usize]) -> Result<TriMesh,
         }
         .map_err(|error| TessError::Face { face: f, error })?;
     }
+    mesh.edges = edge_samples
+        .iter()
+        .map(|s| s.iter().map(|&(_, v)| v).collect())
+        .collect();
     Ok(mesh)
 }
 
@@ -1887,6 +1891,30 @@ mod tests {
         closed(&m);
         assert_eq!(m.triangles.len(), 12);
         assert!((m.volume() - 1000.0).abs() < 1e-9, "{}", m.volume());
+    }
+
+    #[test]
+    fn each_edge_is_a_chain_of_mesh_segments() {
+        let p = Profile {
+            plane: Frame::WORLD,
+            loops: vec![Profile::rectangle(Point2::ORIGIN, 10.0, 20.0, 0)],
+        };
+        let b = extrude(&p, 5.0, 1).unwrap();
+        let m = tessellate(&b, &Quality::default()).unwrap();
+        assert_eq!(m.edges.len(), b.edges.len());
+        let sides: Vec<(u32, u32)> = m
+            .triangles
+            .iter()
+            .flat_map(|&[a, b, c]| [(a, b), (b, c), (c, a)])
+            .collect();
+        for (e, chain) in m.edges.iter().enumerate() {
+            let edge = &b.edges[e];
+            let ends = (chain[0], *chain.last().unwrap());
+            assert_eq!(ends, (edge.start.0, edge.end.0));
+            for w in chain.windows(2) {
+                assert!(sides.contains(&(w[0], w[1])) && sides.contains(&(w[1], w[0])));
+            }
+        }
     }
 
     #[test]

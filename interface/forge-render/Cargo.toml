@@ -1,0 +1,37 @@
+[package]
+name = "forge-render"
+description = "The ForgeCAD renderer: wgpu, native and in the browser"
+version = "0.1.0"
+edition = "2024"
+license = "MPL-2.0"
+repository = "https://code.commonty.org/david/ForgeCAD"
+
+# its own workspace (the root excludes it), so wgpu never enters a kernel build
+[workspace]
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+wgpu = { version = "=30.0.1", default-features = false, features = ["std", "parking_lot", "wgsl", "vulkan", "webgpu"] }
+winit = { version = "=0.30.13", default-features = false, features = ["rwh_06", "wayland", "wayland-dlopen", "x11"] }
+
+# the kernel builds meshes natively; the browser loads them (see README)
+[target.'cfg(not(target_arch = "wasm32"))'.dependencies]
+forge-agent = { path = "../forge-agent" }
+forge-mesh = { path = "../../kernel/forge-mesh" }
+forge-geom = { path = "../../kernel/forge-geom" }
+forge-math = { path = "../../kernel/forge-math" }
+forge-topo = { path = "../../kernel/forge-topo" }
+
+# already in wgpu's tree on this target: only the entry point names them
+[target.'cfg(target_arch = "wasm32")'.dependencies]
+wasm-bindgen = "=0.2.130"
+wasm-bindgen-futures = "=0.4.80"
+js-sys = "=0.3.107"
+
+[lints.rust]
+unsafe_code = "forbid"
+
+[profile.dev.package."*"]
+opt-level = 2
