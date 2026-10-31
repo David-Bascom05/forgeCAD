@@ -301,9 +301,9 @@ fn general(target: &mut Body, b: &Body, op: Op) -> R<()> {
     let mut scratch = SCRATCH.with(|s| s.take());
     let plan = plan(target, b, op, &mut scratch)?;
     let mut clock = phases_on().then(std::time::Instant::now);
-    let (loops, verts) = (target.loops.len(), target.vertices.len());
+    let (loops, verts, edges) = (target.loops.len(), target.vertices.len(), target.edges.len());
     apply(target, b, &plan);
-    split_new_pinches(target, loops, verts);
+    split_new_pinches(target, loops, verts, edges);
     target.joins.extend(&b.joins);
     target.joins.pieces.extend_from_slice(&plan.wholes);
     for &w in b.split.iter().chain(&plan.split) {
@@ -318,13 +318,28 @@ fn general(target: &mut Body, b: &Body, op: Op) -> R<()> {
     Ok(())
 }
 
-/// Pieces left touching at a point keep a vertex each: looked for at the vertices a boolean
-/// made (from `verts` on, where its curves meet), from its new loops (from `loops` on).
-fn split_new_pinches(target: &mut Body, loops: usize, verts: usize) {
-    if target.vertices.len() == verts {
+/// Pieces left touching at a point keep a vertex each. A pinch needs a new edge at the vertex,
+/// so it is looked for at the ends of the edges a boolean made (from `edges` on): at the
+/// vertices it made (from `verts` on) all ways out are its new loops' (from `loops` on); at an
+/// existing vertex the faces it left alone may make a fan of their own, so all the coedges
+/// leaving it are gathered.
+fn split_new_pinches(target: &mut Body, loops: usize, verts: usize, edges: usize) {
+    let t: &Body = target;
+    let mut at: Vec<VertexId> = (edges..t.edges.len())
+        .filter(|&e| t.edges[e].alive)
+        .flat_map(|e| [t.edges[e].start, t.edges[e].end])
+        .collect();
+    at.sort_unstable();
+    at.dedup();
+    if at.is_empty() {
         return;
     }
-    let t: &Body = target;
+    let mut prev = Vec::new();
+    let old: Vec<VertexId> = at.iter().copied().filter(|v| v.index() < verts).collect();
+    let mut runs: Vec<(VertexId, Vec<forge_topo::CoedgeId>)> = Vec::new();
+    if !old.is_empty() {
+        runs.extend(old.iter().copied().zip(t.leaving_at(&old)));
+    }
     let mut from: Vec<(VertexId, forge_topo::CoedgeId)> = (loops..t.loops.len())
         .filter(|&l| {
             t.face(t.loops[l].face)
@@ -332,13 +347,16 @@ fn split_new_pinches(target: &mut Body, loops: usize, verts: usize) {
                 .contains(&forge_topo::LoopId(l as u32))
         })
         .flat_map(|l| t.loops[l].coedges().map(|c| (t.coedge_start(c), c)))
-        .filter(|(v, _)| v.index() >= verts)
+        .filter(|(v, _)| v.index() >= verts && at.binary_search(v).is_ok())
         .collect();
     from.sort_unstable();
+    for run in from.chunk_by(|x, y| x.0 == y.0) {
+        runs.push((run[0].0, run.iter().map(|x| x.1).collect()));
+    }
     // round the vertex from the first (back along its loop, across to the partner): one fan
     // when that comes back having passed all the others
-    let one_fan = |t: &Body, run: &[(VertexId, forge_topo::CoedgeId)]| {
-        let c0 = run[0].1;
+    let one_fan = |t: &Body, run: &[forge_topo::CoedgeId]| {
+        let c0 = run[0];
         let (mut c, mut seen) = (c0, 1);
         for _ in 0..t.coedges.len() {
             let l = t.lp(t.coedge(c).lp);
@@ -349,18 +367,15 @@ fn split_new_pinches(target: &mut Body, loops: usize, verts: usize) {
             if next == c0 {
                 return seen == run.len();
             }
-            seen += run[1..].iter().filter(|x| x.1 == next).count();
+            seen += run[1..].iter().filter(|&&x| x == next).count();
             c = next;
         }
         false
     };
-    let mut prev = Vec::new();
-    for run in from.chunk_by(|x, y| x.0 == y.0).filter(|run| run.len() > 1) {
-        if one_fan(target, run) {
-            continue;
+    for (v, cs) in runs.into_iter().filter(|r| r.1.len() > 1) {
+        if !one_fan(target, &cs) {
+            target.split_pinched(v, &cs, &mut prev);
         }
-        let cs: Vec<_> = run.iter().map(|x| x.1).collect();
-        target.split_pinched(run[0].0, &cs, &mut prev);
     }
 }
 
