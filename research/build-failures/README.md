@@ -21,47 +21,59 @@ date as classes are fixed.
 
 ## Should have built, ranked
 
-Counts: real parts = find-parts, 8409 parts, on main d33b84aa; history = 100 seeds, 1685 lines
-tried; scoreboard = 841 parts.
+Counts: real parts = find-parts, Fusion 360 Gallery, ~8600 parts, main d33b84aa built 91.2%; history
+= 100 seeds, 1685 lines tried; scoreboard = 841 parts; pipe = 200 traced-spine fillets cut through
+(research/pipe-speed/fuzz/gen.py), 33 valid before the fence.
 
 | class | count | root cause | blocks | state |
 |---|---|---|---|---|
 | butted cylinders of one radius | 237 real parts | a closed edge two bodies share: its direction was read from its ends, one vertex, so one use ran the wrong way: open shell, or false ZeroThickness | shafts and tubes built in steps from a joint | fixed (`canon` in boolean.rs, nary.rs) |
-| lost cut, silent wrong volume | 2 real parts, wrong with no error | a stretch whose middle lands within tolerance of a boundary with its ends on that boundary was taken to run along it, and no edge was made | any model carrying float noise | fixed (`inside` in `trim` samples on) |
-| classification floods across a shared edge | 76 real parts (one signature, 2 of 3 repros traced to this and near-flush below) | a tool's edge on a part's edge: being inside the tool changes across it | pockets ending on a rib's root | fixed |
-| nearly flush surfaces | part of the 76 and of the 65 below | plane on plane or tangent to a cylinder within LINEAR over the faces, tilted past `ANGULAR` (9-digit rounding), crossing in curves the tolerance cannot tell apart | imported or rounded data | fixed (`ssi::nearly_flush`) |
-| probe on a touch | 65 real parts (2 of 3 repros), 6 scoreboard | the one probe of an untouched face lands on a tangent line; also a whole edge imprinted because its middle touched | cross holes ending on a tangent plane | fixed, except a tool's corners touching a circle (repro e6ca2) |
+| crossing a traced fillet's spring missed | 97 of 200 pipe parts | `across()` used a plane at the edge's middle for a curved spring, the neighbour being tangent there | any cut through a fillet on a non-circular edge | fixed (`Fence` in blend.rs, plus the spring against the other surface) |
+| lost cut, silent wrong volume | 3 real parts, wrong with no error | a stretch whose middle lands within tolerance of a boundary with its ends on that boundary was taken to run along it, and no edge was made | any model carrying float noise | fixed (`inside` in `trim`: along an edge only if that edge holds its middle and both ends). Noise check, 8188 parts at 3e-7: no volume moved over 0.01% |
+| classification floods across a shared edge | part of 76 real parts | a tool's edge on a part's edge: being inside the tool changes across it | pockets ending on a rib's root | fixed |
+| nearly flush surfaces | part of 76 and 65 real parts | plane on plane or tangent to a cylinder within LINEAR over the faces, tilted past `ANGULAR` (9-digit rounding), crossing in curves the tolerance cannot tell apart | imported or rounded data | fixed (`ssi::nearly_flush`) |
+| probe on a touch | part of 65 real parts, 6 scoreboard | the one probe of an untouched face lands on a tangent line; also a whole edge imprinted because its middle touched | cross holes ending on a tangent plane | fixed, except a tool's corners touching a circle (repro e6ca2) |
 | flat ends named alike | 46 real parts | flush vertices were not ranked by place: DuplicateName | a flat by an arc on the rod's own circle | fixed |
-| pinch at a vertex in a face split | 22 scoreboard (ball_poles) | own edges tangent at a vertex never counted as a tie | balls touching on a face | fixed |
-| next face past a part-changing feature | 35 history | refused outright | `next` after any fillet | fixed one-body; multi-body still refused (23, needs each feature's pick where the extent is resolved) |
-| crossed split, hair imprint | 16 real parts (1 of 3 repros) | imprint between the same vertices a hair from the boundary | near tangent tool sides | fixed for that repro |
-| fillet at any radius: NoBlend 28, Overflow 18, Corner 20 | 66 history, of 202 fillets tried | to trace: variable blends next to variable blends, faces of coils, sweeps and lofts; setbacks where one blend ends | filleting anything but plain edges | open, next |
-| shell at any thickness: Collapses 15, Rebuild 8 | 23 history, of 39 shells | to trace: a drill point's cone apex; concave faces offset outward | shelling drilled parts | open |
-| chamfer at any size: TooLarge 12 | 12 history | to trace | | open |
-| chamfer Unsupported: curved non-circle 6, vertex of other than 3 faces 3, straight on a curved face 4 | 13 history | no such chamfer written | chamfering a tilted hole's rim | open |
-| n-ary refuses several bodies in `finish` | 37 history | the history check calls the one-body n-ary regen: a test gap, the n-ary path goes unchecked on those | | open |
+| next face past a part-changing feature | 35 history | refused outright | `next` after any fillet | fixed for one body; multi-body still refused (23): the extent does not see each feature's pick |
+| pinch at a vertex in a face split | 22 scoreboard | own edges tangent at a vertex never counted as a tie | balls touching on a face | fixed; a ulp nudge of it is invalid (tools/proof/known.txt) where it was refused |
+| fillet off over an edge and back | 11 of 200 pipe | the spring leaves its face over one edge and returns over it; the edge's middle goes | a boss near a rim | fixed (`SplitFirst`, `chain_loops`) |
+| shell towards a cone's point | part of 15 history | a pointed cone was taken to collapse | a pointed boss shelled in, a drill point shelled out | fixed |
+| hair kink in a straight side | noise repro; 162 noise failures carry this signature, how many this root is not known | a neighbour at a shallow angle loses the crossing | noisy imports | fixed for that repro (`across`) |
+| fillet Corner, pipe | 28 of 200 (13 at any radius) | no rule closes the vertex: `ball_setbacks`, a cold edge with no trim point, a seam the spring does not cross | concave chains across a box's convex edge | open |
+| fillet Overflow, pipe | 14 of 200 | odd crossings of the body's edges (a chain across a convex edge) and others | same | open |
+| classification, pipe | 11 of 200 | a curve's crossing of a spring or rim still missed | flats lying along a contact | open |
+| fillet at any radius, history: NoBlend 28 (mostly variable radius), Overflow 18, Corner 20 | 66 of 202 | a variable law through a line and an arc: the guide (a spline) bends on the line's long step | variable fillets past a filleted corner | open: drawing knots in moved NoBlend to BadRadius only, dropped |
+| chamfer at any size: TooLarge 12; Unsupported 13 | history | not traced | chamfering a tilted hole's rim | open |
+| shell at any thickness, other: Rebuild 8 | history | not traced | | open |
+| n-ary refuses several bodies in `finish` | 37 history | the history check calls the one-body n-ary regen: a test gap | | open |
+| finder's synthetic list | 62 of 69 still fail | threads, coils and lofts against other tools; direct edits; see repros/find-synth | | open |
 
-Remaining real-part signatures not yet traced: invalid FaceWrongSide 4, VertexFans 3, EdgeOffFace
-n-ary 7, Euler 1, VertexTolerance 1, EdgeDegenerate 2, DuplicatePoint mesh 6, `two vertices of one
-body meet at a cut` 3, `hole outside every region` 1.
+Fusion rate on 3b1d1c47: 94.7% (8169 of 8625), against 91.2%; the later commits are not yet measured.
+Noise on the same commit: 309 of 8188 built parts stop building at 3e-7 (162 classification, 49
+EdgeUses, 47 ZeroThickness), no volume moved.
 
 ## Correctly refused
 
+David's rule: what cannot exist is the solid, not the sketch. A profile's loops may touch; the
+result decides.
+
 | refusal | count | why it is right | message |
 |---|---|---|---|
-| Empty | 76 scoreboard | nothing left: OCCT's volume is 0 on all 76. The scoreboard counted these as failures | clear |
-| ZeroThickness | 102 scoreboard | material meets itself along a line or at a point; OCCT returns a non-manifold body. Whether to allow such bodies is a design decision (below) | says where |
-| fillet Overflow, chamfer TooLarge, shell Rebuild, when smaller builds | 23 + 6 + some history | the size does not fit | now gives the size that builds |
+| Empty, whole part | 76 scoreboard | nothing left: OCCT's volume is 0 on all 76. The scoreboard counted these as failures | clear |
+| ZeroThickness, one solid pinched | 2 real finals; 102 scoreboard | material meets itself along a line or at a point. Some real-part refusals are false (same-facing faces, on fusion-1) | says where, and the line |
+| fillet Overflow, chamfer TooLarge, shell Rebuild, when smaller builds | history, pipe | the size does not fit, or a rule above is missing; OCCT builds some | gives the size that builds |
 | generator misses: `NotOnFace`, `NoEntity`, `NotCrossed`, `NeverHits`, `BadSource` | ~75 history | the random line asked for something absent | could say more |
 
-## Open questions for David
+A cut taking one whole body of several deletes it (David); `build` names the body and the line.
 
-- Should a profile whose hole touches its outline (21 real parts: `circle 0 0 40 circle 0 -30 10`)
-  build? It pinches along a line: non-manifold, Fusion keeps it. So should ZeroThickness results.
-- `this leaves nothing of the part` where a cut removes one whole body of several (3 real parts):
-  delete the body as Fusion does, or refuse?
+## Open
+
+- A profile whose loops touch twice divides into separate solids: one body's faces cannot hold that
+  (6 real parts, with afd074a3fe89393ef). Refused with the point until then.
+- Pinched only at an intermediate step (147009_977ee378_0000): refused; raised with David.
 
 ## Not done
 
-The OCCT replay of all 495 refused histories did not finish, so "any size" above is measured by
-trying smaller, not yet by OCCT.
+The OCCT replay of all 495 refused histories did not finish, so "any size" for the history classes is
+measured by trying smaller, not yet by OCCT. On the pipe set OCCT did run: 142 agree, 3 differ in one
+surface's area, 23 OCCT fails too or is invalid, 31 we fail and it builds, 1 does not mesh (138 valid then; 139 now).
