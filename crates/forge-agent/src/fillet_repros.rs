@@ -199,6 +199,40 @@ fn fillet_rolling_onto_a_corner_round_meets_the_pad_top_blend() {
     }
 }
 
+#[test]
+fn fillet_moving_onto_a_corner_round_partway() {
+    // the pad's side drafted 10 degrees: along the edge the ball's contact with the wall crosses
+    // the round's tangent line, so the edge is split there and its pieces' blends (on the wall,
+    // on the round) share the section through the crossing. Ball on the round above: the strip
+    // left below between the round and the wall's blend is a face of its own. Below: the round's
+    // tangent line ends at the section
+    let part = |x: f64, draft: i32, which: &str| {
+        format!(
+            "box: extrude 95 rect -120 -65 240 130\nfillet 12 (edges of box shorter 100 near -120 -65 50)\npad: extrude 16 rect {x} -93 44 40\ndraft {draft} xy at 0 0 0 (faces of pad normal -x)\nfillet 3 (edges concave{which})\n"
+        )
+    };
+    for (x, draft) in [(-104.0, -10), (-106.0, 10)] {
+        for which in [" near -105 -65 8", ""] {
+            valid(&part(x, draft, which));
+        }
+    }
+    let b = Model::new(&part(-104.0, -10, " near -105 -65 8"))
+        .body()
+        .expect("built")
+        .clone();
+    let walls = b
+        .faces
+        .iter()
+        .filter(|f| {
+            f.alive
+                && matches!(&f.surface, forge_geom::Surface::Plane(p)
+                    if p.frame.z().get().y.abs() > 0.99 && (p.frame.origin.y + 65.0).abs() < 1e-9)
+        })
+        .count();
+    // the wall and the sliver
+    assert_eq!(walls, 2);
+}
+
 /// `b` with every list stored the other way round: vertices, edges, faces, each face's loops, and
 /// each loop starting at its middle coedge.
 fn reversed_storage(b: &forge_topo::Body) -> forge_topo::Body {

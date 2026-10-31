@@ -185,8 +185,7 @@ fn plan(c: &CornerInput) -> Result<Plan, String> {
     // q[j] = (param where edge j meets its neighbour on face j, on face j + 1)
     let mut q = seeds.iter().map(|&s| (s, s)).collect::<Vec<_>>();
     let mut corner = vec![c.point; n];
-    // faces where a smooth edge's neighbour runs beside it, never meeting it
-    let mut beside = Vec::new();
+    let mut met = vec![false; n];
     for (i, at) in corner.iter_mut().enumerate() {
         let (l, r) = ((i + n - 1) % n, i);
         if matches!(
@@ -198,37 +197,41 @@ fn plan(c: &CornerInput) -> Result<Plan, String> {
         let (fl, fr) = (edge_curve(c, &c.edges[l], i), edge_curve(c, &c.edges[r], i));
         // edges running on through the vertex in line have parallel springs, which never meet
         // (or meet far off): both then start from the section through the vertex
-        let met =
-            meet(&fl, &fr, seeds[l], seeds[r]).filter(|&(a, _)| fl(a).0.distance(c.point) <= 10.0 * rmax);
-        if met.is_none() && (smooth[l] || smooth[r]) {
-            beside.push(i);
-        }
-        let (a, b) = met.unwrap_or((seeds[l], seeds[r]));
+        let m = meet(&fl, &fr, seeds[l], seeds[r]).filter(|&(a, _)| fl(a).0.distance(c.point) <= 10.0 * rmax);
+        met[i] = m.is_some();
+        let (a, b) = m.unwrap_or((seeds[l], seeds[r]));
         q[l].1 = a;
         q[r].0 = b;
         *at = fl(a).0.lerp(fr(b).0, 0.5);
     }
-    // a smooth edge is cut where the blend on its other face meets it; on this face the trim
-    // aims at the blend's foot level with that cut
-    for i in beside {
-        let (l, r) = ((i + n - 1) % n, i);
-        let (j, b, x) = if smooth[l] { (l, r, q[l].0) } else { (r, l, q[r].1) };
-        let (CornerEdge::Sharp { curve, .. }, CornerEdge::Blend(bi)) = (&c.edges[j], &c.edges[b]) else {
+    // a smooth edge is cut where the nearer of the blends either side meets it (the other may
+    // meet it only far off, where its ball came over it); on the other face the trim aims at
+    // that blend's foot level with the cut
+    for j in (0..n).filter(|&j| smooth[j]) {
+        let CornerEdge::Sharp { curve, .. } = &c.edges[j] else {
+            continue;
+        };
+        let k = (j + 1) % n;
+        let dist = |t: f64| curve.eval(t).distance(c.point);
+        let (i, b, x) = match (met[j], met[k]) {
+            (true, false) => (k, k, q[j].0),
+            (true, true) if dist(q[j].0) <= dist(q[j].1) => (k, k, q[j].0),
+            (_, true) => (j, (j + n - 1) % n, q[j].1),
+            (false, false) => return Err(format!("edge {j}: smooth, meeting neither blend beside it")),
+        };
+        let CornerEdge::Blend(bi) = &c.edges[b] else {
             return Err("a smooth edge between blends".into());
         };
-        if x == seeds[j] {
-            return Err(format!("edge {j}: smooth, meeting neither blend beside it"));
-        }
         let p = curve.eval(x);
         let bl = &c.blends[*bi];
         let span = 1e3 * bl.radius.max(1.0);
         let s = bl
             .spine
             .closest(p, Interval::new(seeds[b] - span, seeds[b] + span));
-        if smooth[l] {
-            (q[l].1, q[r].0) = (x, s);
+        if i == k {
+            (q[j].1, q[b].0) = (x, s);
         } else {
-            (q[l].1, q[r].0) = (s, x);
+            (q[j].0, q[b].1) = (x, s);
         }
         corner[i] = p.lerp(foot(c, *bi, i, s).0, 0.5);
     }
