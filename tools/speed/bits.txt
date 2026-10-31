@@ -18,6 +18,12 @@ upto seq fc4ac7c7444bb4b1
 upto nary 885a4dbcef8c0b64
 upto-flat seq 129adba965452ff6
 upto-flat nary 01600ec881b15a30
+sweep seq 33ccb91e6dda3b42
+sweep nary d895b1ef520face5
+coil seq fd7f617241cd81e1
+coil nary 1550b88d119ffa84
+loft seq 17c4ccd975a9a141
+loft nary 7fc600f521756bdd
 torture seq c825d2ed0aaaa1c4
 torture nary f2f4bf5ddba11f7b
 fuzz1 seq 251f1a4d27340757
