@@ -45,6 +45,12 @@ fn blind_pocket_volume_is_exact() {
         ],
     };
     let exact = w * h * t - dmath::PI * r * r * depth;
+    let m = forge_topo::mass::mass(&part.regenerate().expect("regenerates")).expect("mass properties");
+    assert!(
+        (m.volume - exact).abs() <= 1e-12 * exact,
+        "exact {} vs {exact}",
+        m.volume
+    );
     for chord in [0.25, 0.01, 0.002] {
         let v = meshed_volume(&part, chord);
         // chords lie within `chord` of the surface: the error is at most chord times the

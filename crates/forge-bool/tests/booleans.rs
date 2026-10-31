@@ -68,18 +68,13 @@ fn ball(centre: Point3, r: f64, feature: u64) -> Body {
     .unwrap()
 }
 
+/// The exact volume, from the surfaces; the mesh only shows the solid is closed.
 fn volume(b: &Body) -> f64 {
-    let m = tessellate(
-        b,
-        &Quality {
-            chord: 0.001,
-            max_angle: 0.05,
-        },
-    )
-    .unwrap();
-    let open = m.open_edges();
+    let open = tessellate(b, &Quality::default()).unwrap().open_edges();
     assert!(open.is_empty(), "{} open mesh edges", open.len());
-    m.volume()
+    let m = forge_topo::mass::mass(b).unwrap();
+    assert!(m.err[0] <= 1e-9 * m.volume.abs(), "error bound {}", m.err[0]);
+    m.volume
 }
 
 fn valid(b: &Body) {
@@ -96,7 +91,7 @@ fn drill_a_hole() {
     assert_eq!(genus(&r), 1);
     let want = 30.0 * 20.0 * 6.0 - dmath::PI * 16.0 * 6.0;
     assert!(
-        (volume(&r) - want).abs() / want < 1e-4,
+        (volume(&r) - want).abs() / want < 1e-12,
         "{} vs {want}",
         volume(&r)
     );
@@ -110,12 +105,12 @@ fn blind_pocket_and_boss() {
     valid(&r);
     assert_eq!(genus(&r), 0);
     let want = 30.0 * 20.0 * 6.0 - dmath::PI * 16.0 * 3.0;
-    assert!((volume(&r) - want).abs() / want < 1e-4);
+    assert!((volume(&r) - want).abs() / want < 1e-12);
     let boss = rod(Point3::new(8.0, 8.0, 4.0), 3.0, 6.0, 4);
     let r = boolean(&plate, &boss, Op::Union, 5).unwrap();
     valid(&r);
     let want = 30.0 * 20.0 * 6.0 + dmath::PI * 9.0 * 4.0;
-    assert!((volume(&r) - want).abs() / want < 1e-4);
+    assert!((volume(&r) - want).abs() / want < 1e-12);
 }
 
 #[test]
@@ -132,7 +127,7 @@ fn overlapping_blocks_all_ops() {
         let r = boolean(&a, &b, op, 3).unwrap();
         valid(&r);
         assert!(
-            (volume(&r) - want).abs() < 1e-6,
+            (volume(&r) - want).abs() < 1e-10,
             "{op:?}: {} vs {want}",
             volume(&r)
         );
@@ -147,14 +142,14 @@ fn ball_in_a_block() {
     let r = boolean(&a, &b, Op::Subtract, 3).unwrap();
     valid(&r);
     assert!(
-        (volume(&r) - (1000.0 - half_ball)).abs() / 1000.0 < 1e-4,
+        (volume(&r) - (1000.0 - half_ball)).abs() / 1000.0 < 1e-12,
         "{}",
         volume(&r)
     );
     let r = boolean(&a, &b, Op::Union, 3).unwrap();
     valid(&r);
     assert!(
-        (volume(&r) - (1000.0 + half_ball)).abs() / 1000.0 < 1e-4,
+        (volume(&r) - (1000.0 + half_ball)).abs() / 1000.0 < 1e-12,
         "{}",
         volume(&r)
     );
@@ -192,8 +187,8 @@ fn random_rotated_blocks_keep_volume_identities() {
         valid(&s);
         let (vu, vi, vs) = (volume(&u), volume(&i), volume(&s));
         let vb = 6.0 * 8.0 * 7.0;
-        assert!((vu + vi - (1000.0 + vb)).abs() < 1e-6, "{vu} + {vi}");
-        assert!((vs + vi - 1000.0).abs() < 1e-6, "{vs} + {vi}");
+        assert!((vu + vi - (1000.0 + vb)).abs() < 1e-9, "{vu} + {vi}");
+        assert!((vs + vi - 1000.0).abs() < 1e-9, "{vs} + {vi}");
         ran += 1;
     }
     assert!(ran >= 50, "only {ran} of 60 ran");
@@ -241,7 +236,7 @@ fn offsets_just_past_tolerance_are_kept() {
         let r = boolean(&base, &cut, Op::Subtract, 3).unwrap();
         valid(&r);
         let want = 60.0 * 40.0 * 10.0 - (10.0 - e.max(0.0)) * 8.0 * 10.0;
-        assert!((volume(&r) - want).abs() < 1e-3, "{e}: {} vs {want}", volume(&r));
+        assert!((volume(&r) - want).abs() < 1e-9, "{e}: {} vs {want}", volume(&r));
     }
 }
 

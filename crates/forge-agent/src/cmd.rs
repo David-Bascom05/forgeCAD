@@ -300,7 +300,7 @@ impl Session {
         j.push(("ms", m.ms.into()));
         j.push(("rebuilt", m.rebuilt.into()));
         if m.body().is_some() {
-            let (volume, area, bb, unmeshed) = m.stats();
+            let (volume, area, bb, unmeshed, approx) = m.stats();
             let body = m.body().expect("built");
             let bbox = [bb.x.lo, bb.y.lo, bb.z.lo, bb.x.hi, bb.y.hi, bb.z.hi];
             let (f, e, v) = counts(body);
@@ -308,9 +308,12 @@ impl Session {
             let bodies = m.solids_after(m.built()).len();
             if ok {
                 text.push_str(&format!(
-                    "\nvolume {} area {} (approx) bbox {}\nfaces {f} edges {e} verts {v}",
+                    "\nvolume {} area {}{} bbox {}\nfaces {f} edges {e} verts {v}",
                     short(volume),
                     short(area),
+                    approx
+                        .as_ref()
+                        .map_or(String::new(), |why| format!(" (approx: {why})")),
                     bbox.map(short).join(" ")
                 ));
                 if bodies > 1 {
@@ -318,9 +321,7 @@ impl Session {
                 }
             }
             if unmeshed > 0 {
-                text.push_str(&format!(
-                    "\n({unmeshed} faces would not mesh: volume, area approximate)"
-                ));
+                text.push_str(&format!("\n({unmeshed} faces would not mesh: bbox approximate)"));
             }
             for (no, sel) in &unwritten {
                 text.push_str(&format!(
@@ -416,21 +417,41 @@ impl Session {
                 .map(|w| one(m, w))
                 .collect::<Result<Vec<Ent>, String>>()?,
         };
+        let exact = m.mass().ok().cloned();
         let (body, mesh) = m.ready()?;
-        let pairs: Vec<(&str, f64)> = match words[..] {
-            ["mass"] => {
-                let ms = measure::mass(mesh);
-                vec![
+        let mut pairs: Vec<(&str, f64)> = match words[..] {
+            ["mass"] => match &exact {
+                Some(ms) => vec![
                     ("volume", ms.volume),
                     ("area", ms.area),
                     ("cx", ms.centroid.x),
                     ("cy", ms.centroid.y),
                     ("cz", ms.centroid.z),
-                    ("ixx", ms.inertia[0]),
-                    ("iyy", ms.inertia[1]),
-                    ("izz", ms.inertia[2]),
-                ]
-            }
+                    ("ixx", ms.inertia[0][0]),
+                    ("iyy", ms.inertia[1][1]),
+                    ("izz", ms.inertia[2][2]),
+                    ("ixy", ms.inertia[0][1]),
+                    ("iyz", ms.inertia[1][2]),
+                    ("izx", ms.inertia[2][0]),
+                    ("i1", ms.principal[0]),
+                    ("i2", ms.principal[1]),
+                    ("i3", ms.principal[2]),
+                ],
+                None => {
+                    let ms = measure::mass(mesh);
+                    vec![
+                        ("volume", ms.volume),
+                        ("area", ms.area),
+                        ("cx", ms.centroid.x),
+                        ("cy", ms.centroid.y),
+                        ("cz", ms.centroid.z),
+                        ("ixx", ms.inertia[0]),
+                        ("iyy", ms.inertia[1]),
+                        ("izz", ms.inertia[2]),
+                        ("approx", 1.0),
+                    ]
+                }
+            },
             ["wall"] => match measure::wall(body, mesh) {
                 Some((t, p)) => vec![("wall", t), ("x", p.x), ("y", p.y), ("z", p.z)],
                 None => return Err("no wall found".into()),
@@ -439,6 +460,12 @@ impl Session {
             [_, _] => measure::between(body, mesh, ents[0], ents[1]),
             _ => return Err("measure takes mass, wall, or one or two @handles / (selectors)".into()),
         };
+        // a face's area from its surface
+        if let ([Ent::Face(f)], Some(ms)) = (&ents[..], &exact)
+            && let Some(&(_, a)) = ms.faces.iter().find(|x| x.0 == *f)
+        {
+            pairs.iter_mut().filter(|p| p.0 == "area").for_each(|p| p.1 = a);
+        }
         let text = pairs
             .iter()
             .map(|(k, v)| format!("{k} {}", short(*v)))

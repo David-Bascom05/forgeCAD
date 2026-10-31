@@ -1122,6 +1122,10 @@ fn run(reps: usize, chord: f64, f: impl Fn() -> Result<Vec<forge_model::Solid>, 
             if let Some(m) = measure(&b, chord) {
                 s.push_str(&m);
             }
+            // from the surfaces: the cross-check of OCCT's own integration
+            if let Ok(m) = forge_topo::mass::mass(&b) {
+                let _ = write!(s, ",\"exact\":{},\"exact_err\":{}", num(m.volume), num(m.err[0]));
+            }
             s.push('}');
             s
         }

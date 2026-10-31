@@ -6,22 +6,18 @@ use forge_model::suite;
 use forge_ops::{Axis2, Handed, LoftKind, PathSeg, Profile, Winding, coil, loft, sweep};
 use forge_topo::Body;
 
+/// The exact volume, from the surfaces; the mesh only shows the solid is closed.
 fn volume(b: &Body) -> f64 {
     assert!(forge_topo::check(b).is_empty(), "{:?}", forge_topo::check(b));
-    let m = tessellate(
-        b,
-        &Quality {
-            chord: 0.002,
-            ..Quality::default()
-        },
-    )
-    .expect("meshes");
+    let m = tessellate(b, &Quality::default()).expect("meshes");
     assert!(m.open_edges().is_empty(), "closed mesh");
-    m.volume()
+    let m = forge_topo::mass::mass(b).expect("mass properties");
+    assert!(m.err[0] <= 1e-9 * m.volume.abs(), "error bound {}", m.err[0]);
+    m.volume
 }
 
 fn close(got: f64, want: f64) {
-    assert!((got - want).abs() <= 2e-3 * want, "{got} vs {want}");
+    assert!((got - want).abs() <= 1e-9 * want, "{got} vs {want}");
 }
 
 /// A helical sweep of a section in the axis's plane encloses its area times the path its

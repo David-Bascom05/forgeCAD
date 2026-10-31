@@ -400,6 +400,9 @@ impl ProceduralCurve for Backwards {
     fn segments(&self, range: Interval, chord: f64) -> usize {
         self.0.segments(flip(range), chord)
     }
+    fn kinks(&self, range: Interval) -> Vec<f64> {
+        self.0.kinks(flip(range)).into_iter().rev().map(|t| -t).collect()
+    }
 }
 
 /// Whether the curve over `range` lies on both surfaces.

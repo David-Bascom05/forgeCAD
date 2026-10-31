@@ -7,6 +7,7 @@ use crate::text::{self, Before, Line};
 use forge_doc::{Document, Edit};
 use forge_mesh::TriMesh;
 use forge_model::{Feature, History, RegenError, Solid, Source, step_solids};
+use forge_topo::mass::MassProps;
 use forge_topo::{Body, Name};
 use std::cell::{OnceCell, RefCell};
 use std::collections::HashMap;
@@ -39,6 +40,8 @@ pub struct Model {
     mesh: Option<TriMesh>,
     /// Finds the font a text line names; text finds none without it.
     pub fonts: Option<Arc<Fonts>>,
+    /// The finished part's exact mass properties, worked out as asked for.
+    mass: Option<Result<MassProps, String>>,
 }
 
 /// From a font's name in the part file to the font.
@@ -103,6 +106,7 @@ impl Default for Model {
             faces: None,
             mesh: None,
             fonts: None,
+            mass: None,
         }
     }
 }
@@ -370,6 +374,7 @@ impl Model {
         if self.stages.len() != old || !reuse {
             self.faces = None;
             self.mesh = None;
+            self.mass = None;
         }
         self.origins.get_mut().truncate(self.stages.len());
         self.ms = t0.elapsed().as_secs_f64() * 1e3;
@@ -470,9 +475,26 @@ impl Model {
         Ok((m.body().ok_or("no part yet")?, m.mesh.as_ref().ok_or("no mesh")?))
     }
 
-    /// The finished part's volume, area and box (from each face's cached triangles and its
-    /// edges), and how many faces would not mesh (their own, looser, boxes stand in).
-    pub fn stats(&mut self) -> (f64, f64, forge_math::Box3, usize) {
+    /// The finished part's exact mass properties (from its surfaces, not triangles).
+    pub fn mass(&mut self) -> Result<&MassProps, String> {
+        if self.mass.is_none() {
+            let m = match self.body() {
+                Some(b) => forge_topo::mass::mass(b).map_err(|e| e.to_string()),
+                None => Err("no part yet".into()),
+            };
+            self.mass = Some(m);
+        }
+        self.mass
+            .as_ref()
+            .expect("just made")
+            .as_ref()
+            .map_err(|e| e.clone())
+    }
+
+    /// The finished part's volume and area (exact, or from the triangles where that fails, with
+    /// why), its box (from each face's cached triangles and its edges), and how many faces
+    /// would not mesh (their own, looser, boxes stand in).
+    pub fn stats(&mut self) -> (f64, f64, forge_math::Box3, usize, Option<String>) {
         let fs = self.faces().to_vec();
         let body = self.body();
         let (mut v, mut a, mut bb, mut bad) = (0.0, 0.0, forge_math::Box3::EMPTY, 0);
@@ -499,7 +521,10 @@ impl Model {
                 }
             }
         }
-        (v, a, bb, bad)
+        match self.mass() {
+            Ok(m) => (m.volume, m.area, bb, bad, None),
+            Err(e) => (v, a, bb, bad, Some(e)),
+        }
     }
 
     /// Which feature made each face of the part after `n` lines.

@@ -5,14 +5,13 @@ use forge_mesh::{Quality, tessellate};
 use forge_model::finishing;
 use forge_topo::{Body, check};
 
+/// The exact volume, from the surfaces; the mesh only shows the solid is closed.
 fn volume(b: &Body) -> f64 {
-    let q = Quality {
-        chord: 1e-4,
-        ..Quality::default()
-    };
-    let m = tessellate(b, &q).expect("tessellates");
+    let m = tessellate(b, &Quality::default()).expect("tessellates");
     assert!(m.open_edges().is_empty(), "mesh has open edges");
-    m.volume()
+    let m = forge_topo::mass::mass(b).expect("mass properties");
+    assert!(m.err[0] <= 1e-9 * m.volume.abs(), "error bound {}", m.err[0]);
+    m.volume
 }
 
 /// Random finishing either works and gives a valid, watertight solid, or says why it cannot.
@@ -61,7 +60,7 @@ fn finishing_parts() {
         assert!(problems.is_empty(), "{name}: {problems:?}");
         let v = volume(&seq);
         if let Some(w) = want {
-            assert!((v - w).abs() <= 1e-4 * w, "{name}: volume {v} want {w}");
+            assert!((v - w).abs() <= 1e-9 * w, "{name}: volume {v} want {w}");
         }
         for threads in [1, 4] {
             let nary = part
@@ -69,7 +68,7 @@ fn finishing_parts() {
                 .unwrap_or_else(|e| panic!("{name} nary: {e:?}"));
             assert!(check(&nary).is_empty(), "{name} nary");
             let vn = volume(&nary);
-            assert!((vn - v).abs() <= 1e-6 * v, "{name}: nary volume {vn} vs {v}");
+            assert!((vn - v).abs() <= 1e-9 * v, "{name}: nary volume {vn} vs {v}");
         }
         eprintln!("{name}: {} faces, volume {v:.4}", seq.faces.len());
     }

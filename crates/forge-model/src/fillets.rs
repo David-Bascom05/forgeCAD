@@ -1475,6 +1475,7 @@ mod tests {
     use super::*;
     use forge_geom::SurfaceGeom;
     use forge_mesh::{Quality, tessellate};
+    use forge_topo::mass::mass;
 
     /// The worst normal mismatch over edges that are meant to be smooth (those
     /// not visibly sharp): zero up to rounding when every blend is G1.
@@ -1585,16 +1586,12 @@ mod tests {
         let boxed = Part {
             features: vec![block_at(Point3::ORIGIN, 20.0, 10.0, 8.0, Combine::New)],
         };
-        let q = Quality {
-            chord: 1e-3,
-            max_angle: 0.5,
-        };
         let front = Point3::new(10.0, 0.0, 8.0);
         let vol = |r: Radius| {
             let body = with_var_fillet(&boxed, &[(front, r)])
                 .regenerate()
                 .expect("builds");
-            tessellate(&body, &q).expect("meshes").volume()
+            mass(&body).expect("mass properties").volume
         };
         let (v1, v13, v3) = (vol(1.0.into()), vol(Radius::Linear(1.0, 3.0)), vol(3.0.into()));
         assert!(v3 < v13 && v13 < v1, "{v3} {v13} {v1}");
@@ -1631,11 +1628,7 @@ mod tests {
             });
             p.regenerate()
         };
-        let q = Quality {
-            chord: 1e-3,
-            max_angle: 0.5,
-        };
-        let vol = |b: &Body| tessellate(b, &q).expect("meshes").volume();
+        let vol = |b: &Body| mass(b).expect("mass properties").volume;
         let a = fillet(
             vec![(front, Radius::Linear(1.0, 3.0))],
             vec![(front, body.vertex(other).name)],
@@ -1660,10 +1653,10 @@ mod tests {
         ] {
             let b = fillet(three.clone(), vec![], setbacks).expect("set back");
             assert!(forge_topo::check(&b).is_empty());
-            let m = tessellate(&b, &q).expect("meshes");
+            let m = tessellate(&b, &Quality::default()).expect("meshes");
             assert!(m.open_edges().is_empty());
             assert!(
-                (m.volume() - vol(&ball)).abs() > 1e-6,
+                (vol(&b) - vol(&ball)).abs() > 1e-6,
                 "the setback changes the corner"
             );
         }
@@ -1816,40 +1809,28 @@ mod tests {
     #[test]
     fn corpus() {
         let q = Quality {
-            chord: 1e-4,
-            max_angle: 1.0,
+            chord: 1e-2,
+            max_angle: 0.3,
         };
         for (name, part, volume) in cases() {
-            // fine meshes only where a volume is checked
-            let q = if volume.is_some() {
-                q
-            } else {
-                Quality {
-                    chord: 1e-2,
-                    max_angle: 0.3,
-                }
-            };
             let body = part.regenerate().unwrap_or_else(|e| panic!("{name}: {e:?}"));
             let problems = forge_topo::check(&body);
             assert!(problems.is_empty(), "{name}: {problems:?}");
             let mesh = tessellate(&body, &q).unwrap_or_else(|e| panic!("{name}: {e:?}"));
             assert!(mesh.open_edges().is_empty(), "{name}: open mesh");
+            // corner patches stop short of the default accuracy within their budget (their
+            // derivatives are costly and steep near the corners); the bound says by how much
+            let exact = mass(&body).unwrap_or_else(|e| panic!("{name}: {e}"));
+            assert!(
+                exact.err[0] <= 1e-3 * exact.volume,
+                "{name}: error bound {}",
+                exact.err[0]
+            );
             if let Some(v) = volume {
-                // inscribed chords lose volume in proportion to the chord: extrapolate to zero
-                let coarse = tessellate(
-                    &body,
-                    &Quality {
-                        chord: 4.0 * q.chord,
-                        ..q
-                    },
-                )
-                .expect("meshes")
-                .volume();
-                let fine = mesh.volume();
-                let got = fine + (fine - coarse) / 3.0;
                 assert!(
-                    (got - v).abs() < 1e-6 * v,
-                    "{name}: volume {got} want {v} (mesh {fine})"
+                    (exact.volume - v).abs() <= exact.err[0] + 1e-9 * v,
+                    "{name}: volume {} want {v}",
+                    exact.volume
                 );
             }
             // traced spines hold a pipe's normals to a few 1e-9
@@ -1868,19 +1849,20 @@ mod tests {
                 .regenerate_nary(2)
                 .unwrap_or_else(|e| panic!("{name} nary: {e:?}"));
             assert!(forge_topo::check(&nary).is_empty(), "{name}: nary result invalid");
-            let m2 = tessellate(&nary, &q).expect("nary meshes");
-            // the same surfaces (traced ones to a few 1e-9); the meshes agree to rounding in
-            // the edges handed over, which can turn a tie in a face's Delaunay grid the other
-            // way (a procedural face's grid shifts with it too)
+            // the same surfaces (traced ones to a few 1e-9)
             let gap = procedural_gap(&body, &nary);
             assert!(
                 gap.is_none_or(|g| g < 1e-8),
                 "{name}: nary surfaces differ by {gap:?}"
             );
-            let rel = if gap.is_some() { 1e-6 } else { 1e-7 };
+            let m2 = mass(&nary).unwrap_or_else(|e| panic!("{name} nary: {e}"));
+            // traced surfaces apart by g move the boundary by about g over the area
+            let bound = exact.err[0] + m2.err[0] + gap.unwrap_or(0.0) * exact.area + 1e-12 * exact.volume;
             assert!(
-                (m2.volume() - mesh.volume()).abs() < rel * mesh.volume(),
-                "{name}: nary volume"
+                (m2.volume - exact.volume).abs() <= bound,
+                "{name}: nary volume {} vs {} (bound {bound})",
+                m2.volume,
+                exact.volume
             );
         }
     }

@@ -134,11 +134,11 @@ top bottom left right front back   near X Y Z              keep the extreme ones
 
 Commands (a few lines of text; `--json` for JSON):
 ```
-forgecad build F                    ok, or error at file line N + hint; approx volume, area; bbox
+forgecad build F                    ok, or error at file line N + hint; exact volume, area; bbox
 forgecad query F SEL [--at FEAT]    @d644 line -x len=60 at 0,20,40   (round: axis and centre; body=FEAT;
                                     a round face may be two halves, two handles on one line)
 forgecad measure F REF [REF]        area|length radius centre; two: closest distance, angle, axes
-forgecad measure F mass|wall        volume area centroid inertia; thinnest wall anywhere
+forgecad measure F mass|wall        exact volume area centroid inertia (+ principal); thinnest wall anywhere
 forgecad render F [VIEW] [--labels SEL] [--px 400] [-o F.png]   VIEW: iso front top right.. px: long side
 forgecad check F | diff A B         each body's validity after each line | what B changed from A
 forgecad edit F param NAME EXPR | dim LINE V | arg LINE K TEXT | insert LINE|end TEXT | delete LINE |

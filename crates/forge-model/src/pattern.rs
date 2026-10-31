@@ -513,13 +513,9 @@ mod tests {
     use forge_mesh::{Quality, tessellate};
 
     fn volume(b: &Body) -> f64 {
-        let q = Quality {
-            chord: 0.02,
-            ..Quality::default()
-        };
-        let m = tessellate(b, &q).expect("tessellates");
+        let m = tessellate(b, &Quality::default()).expect("tessellates");
         assert!(m.open_edges().is_empty(), "mesh has open edges");
-        m.volume()
+        forge_topo::mass::mass(b).expect("mass properties").volume
     }
 
     /// A moved or reflected part (planes, cylinders, cones, spheres, tori, intersection curves)
@@ -552,7 +548,7 @@ mod tests {
                     forge_topo::check(&c)
                 );
                 let vc = volume(&c);
-                assert!((vc - v).abs() <= 2e-5 * v, "{m:?}: volume {vc} vs {v}");
+                assert!((vc - v).abs() <= 1e-9 * v, "{m:?}: volume {vc} vs {v}");
             }
         }
     }

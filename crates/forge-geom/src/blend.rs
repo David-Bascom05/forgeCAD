@@ -714,6 +714,9 @@ impl ProceduralCurve for Spring {
     fn bbox(&self, range: Interval) -> Box3 {
         self.spine.bbox(range).grow(self.d.abs() + tol::LINEAR)
     }
+    fn kinks(&self, range: Interval) -> Vec<f64> {
+        self.spine.kinks(range)
+    }
     fn transformed(&self, f: &Frame) -> ProcCurve {
         ProcCurve(Arc::new(Spring {
             spine: self.spine.transformed(f),
@@ -905,6 +908,9 @@ impl Procedural for Pipe {
     }
     fn min_radius(&self) -> f64 {
         self.radius
+    }
+    fn u_kinks(&self, u: Interval) -> Vec<f64> {
+        self.spine.kinks(u)
     }
 }
 

@@ -10,14 +10,13 @@ use forge_topo::{Body, Name, check};
 
 const PI: f64 = dmath::PI;
 
+/// The exact volume, from the surfaces; the mesh only shows the solid is closed.
 fn volume(b: &Body) -> f64 {
-    let q = Quality {
-        chord: 1e-4,
-        ..Quality::default()
-    };
-    let m = tessellate(b, &q).expect("tessellates");
+    let m = tessellate(b, &Quality::default()).expect("tessellates");
     assert!(m.open_edges().is_empty(), "mesh has open edges");
-    m.volume()
+    let m = forge_topo::mass::mass(b).expect("mass properties");
+    assert!(m.err[0] <= 1e-9 * m.volume.abs(), "error bound {}", m.err[0]);
+    m.volume
 }
 
 fn frame(o: Point3, z: Vec3, x: Vec3) -> Frame {
@@ -418,13 +417,11 @@ fn up_to_surfaces_by_hand() {
         let seq = last(part.regenerate_solids()).unwrap_or_else(|e| panic!("{name}: {e:?}"));
         assert!(check(&seq).is_empty(), "{name}: {:?}", check(&seq));
         let v = volume(&seq);
-        // a torus meshes coarser at this chord: its volume converges from below (1e-5 at 1e-5)
-        let tol = if name.starts_with("torus") { 5e-4 } else { 1e-4 };
-        assert!((v - want).abs() <= tol * want, "{name}: volume {v} want {want}");
+        assert!((v - want).abs() <= 1e-9 * want, "{name}: volume {v} want {want}");
         let nary = last(part.regenerate_nary_solids(4)).unwrap_or_else(|e| panic!("{name} nary: {e:?}"));
         assert!(check(&nary).is_empty(), "{name} nary");
         assert_eq!(nary.faces.len(), seq.faces.len(), "{name}");
-        assert!((volume(&nary) - v).abs() <= 1e-6 * v, "{name} nary volume");
+        assert!((volume(&nary) - v).abs() <= 1e-9 * v, "{name} nary volume");
     }
 }
 

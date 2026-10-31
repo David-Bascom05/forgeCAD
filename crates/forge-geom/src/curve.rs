@@ -125,6 +125,11 @@ pub trait ProceduralCurve: Send + Sync + std::fmt::Debug {
     fn across(&self) -> Option<crate::Surface> {
         None
     }
+    /// Parameters strictly inside `range` where the parametrisation is only once
+    /// differentiable (a traced spine's chain points), for integrators that need smooth pieces.
+    fn kinks(&self, _range: Interval) -> Vec<f64> {
+        Vec::new()
+    }
 }
 
 /// A shared handle to a procedural curve; two handles are equal when they are the same curve.
@@ -478,6 +483,23 @@ impl CurveGeom for Curve {
 }
 
 impl Curve {
+    /// Parameters strictly inside `range` where the parametrisation is only once
+    /// differentiable: an intersection curve's chain points, or a procedural curve's own.
+    pub fn kinks(&self, range: Interval) -> Vec<f64> {
+        match self {
+            Curve::Intersection(_) => {
+                let mut k = range.lo.floor() + 1.0;
+                let mut out = Vec::new();
+                while k < range.hi {
+                    out.push(k);
+                    k += 1.0;
+                }
+                out
+            }
+            Curve::Procedural(c) => c.kinks(range),
+            _ => Vec::new(),
+        }
+    }
     /// Points at lo + k (hi - lo) / n for k in 1..n (the interior samples of an
     /// edge cut into n equal parameter steps), with stepped angles for conics.
     pub fn sample_interior(

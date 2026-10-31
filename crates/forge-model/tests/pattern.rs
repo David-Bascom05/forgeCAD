@@ -12,14 +12,13 @@ use forge_topo::{Body, Name, check};
 
 const PI: f64 = dmath::PI;
 
+/// The exact volume, from the surfaces; the mesh only shows the solid is closed.
 fn volume(b: &Body) -> f64 {
-    let q = Quality {
-        chord: 1e-4,
-        ..Quality::default()
-    };
-    let m = tessellate(b, &q).expect("tessellates");
+    let m = tessellate(b, &Quality::default()).expect("tessellates");
     assert!(m.open_edges().is_empty(), "mesh has open edges");
-    m.volume()
+    let m = forge_topo::mass::mass(b).expect("mass properties");
+    assert!(m.err[0] <= 1e-9 * m.volume.abs(), "error bound {}", m.err[0]);
+    m.volume
 }
 
 fn frame(o: Point3, z: Vec3, x: Vec3) -> Frame {
@@ -317,7 +316,7 @@ fn volumes_by_hand() {
         let seq = part.regenerate().unwrap_or_else(|e| panic!("{name}: {e:?}"));
         assert!(check(&seq).is_empty(), "{name}: {:?}", check(&seq));
         let v = volume(&seq);
-        assert!((v - want).abs() <= 1e-4 * want, "{name}: volume {v} want {want}");
+        assert!((v - want).abs() <= 1e-9 * want, "{name}: volume {v} want {want}");
         for threads in [1, 4] {
             let nary = part
                 .regenerate_nary(threads)
@@ -325,7 +324,7 @@ fn volumes_by_hand() {
             assert!(check(&nary).is_empty(), "{name} nary: {:?}", check(&nary));
             assert_eq!(nary.faces.len(), seq.faces.len(), "{name}");
             let vn = volume(&nary);
-            assert!((vn - v).abs() <= 1e-6 * v, "{name}: nary volume {vn} vs {v}");
+            assert!((vn - v).abs() <= 1e-9 * v, "{name}: nary volume {vn} vs {v}");
         }
     }
 }
@@ -348,12 +347,8 @@ fn suite_pattern_parts() {
     let (w, t) = (400.0, 12.0);
     let hole = PI * (5.5 * 5.5 * 6.5 + 3.3 * 3.3 * 5.5);
     let want = w * w * t - 400.0 * hole;
-    let q = Quality {
-        chord: 1e-3,
-        ..Quality::default()
-    };
-    let v = tessellate(&grid, &q).expect("mesh").volume();
-    assert!((v - want).abs() <= 1e-4 * want, "grid volume {v} want {want}");
+    let v = volume(&grid);
+    assert!((v - want).abs() <= 1e-9 * want, "grid volume {v} want {want}");
 }
 
 /// Copies keep names made from the pattern, their place in it and the original's name: the same
@@ -396,7 +391,7 @@ fn copies_have_stable_names() {
         let cut = PI * (3.0 - 1.0 / 3.0) * 1.0;
         let v = volume(&b);
         assert!(
-            (plain - cut - v).abs() <= 1e-4 * plain,
+            (plain - cut - v).abs() <= 1e-9 * plain,
             "chamfered copy: {v} vs {}",
             plain - cut
         );

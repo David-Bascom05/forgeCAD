@@ -4,6 +4,7 @@
 
 pub mod body;
 pub mod check;
+pub mod mass;
 pub mod name;
 pub mod uv;
 

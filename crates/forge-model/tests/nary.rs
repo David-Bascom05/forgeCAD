@@ -13,15 +13,15 @@ fn nary_matches_sequential_on_the_suite() {
             "{name}: {:?}",
             forge_topo::check(&nary)
         );
-        let q = forge_mesh::Quality {
-            chord: 0.05,
-            max_angle: 0.5,
-        };
-        let (a, b) = (
-            forge_mesh::tessellate(&seq, &q).expect("mesh").volume(),
-            forge_mesh::tessellate(&nary, &q).expect("mesh").volume(),
+        let mass = |b| forge_topo::mass::mass(b).expect("mass properties");
+        let (a, b) = (mass(&seq), mass(&nary));
+        let bound = a.err[0] + b.err[0] + 1e-12 * a.volume;
+        assert!(
+            (a.volume - b.volume).abs() <= bound,
+            "{name}: volume {} vs {} (bound {bound})",
+            a.volume,
+            b.volume
         );
-        assert!((a - b).abs() <= 1e-3 * a, "{name}: volume {a} vs {b}");
         // coincident faces: the one there first is kept, and keeps a later face's imprint
         assert_eq!(nary.face_ids().count(), seq.face_ids().count(), "{name}: faces");
     }

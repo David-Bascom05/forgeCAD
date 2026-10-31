@@ -136,6 +136,11 @@ pub trait Procedural: Send + Sync + std::fmt::Debug {
     fn as_any(&self) -> Option<&dyn std::any::Any> {
         None
     }
+    /// The u inside `u` where the surface is only once differentiable along u (a traced
+    /// spine's chain points), for integrators that need smooth pieces.
+    fn u_kinks(&self, _u: Interval) -> Vec<f64> {
+        Vec::new()
+    }
 }
 
 /// A shared handle to a procedural surface; two handles are equal when they are the same surface.
