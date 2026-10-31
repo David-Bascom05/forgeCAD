@@ -8,12 +8,10 @@ rf = 70
 rb = 20
 ns = 10
 clock = 180/ns deg
-# flange and spigot extruded, the bore a hole (TODO: one revolve of the section once regression chamfer_revolved_bore_rim holds)
-hub: extrude 12 circle 0 0 rf
-spigot: extrude 30 xy at 0 0 12 circle 0 0 36
-fillet 3 (edges between hub spigot concave)
-bore: hole 2*rb xy at 0 0 0 thru
-hax: axis bore (faces of bore cyl near 20 0 20)
+# flange, spigot and bore in one turned section
+hub: revolve xz axis y poly rb 0 rf 0 rf 12 36 12 36 42 rb 42
+fillet 3 (edges of hub circle r=36 concave)
+hax: axis hub (faces of hub cyl near 20 0 20)
 back: point meet hax hub (faces normal -z near 40 0 0)
 studs: sketch xy at back
   pt pcd/2*cos(clock+0*360/n) pcd/2*sin(clock+0*360/n)
@@ -35,4 +33,4 @@ sc: extrude cut 12 xy at rf 0 0 circle 0 0 6
 pattern sc path hub (edges of hub circle r=70 bottom) ns fit
 groove: revolve cut xz axis y poly rb-1 6 rb+1.2 6 rb+1.2 7.6 rb-1 7.6
 pattern groove path hax 2 28
-chamfer 1 (edges of bore circle top) (edges of bore circle bottom)
+chamfer 1 (edges of hub circle r=20 top) (edges of hub circle r=20 bottom)

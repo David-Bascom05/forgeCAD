@@ -343,7 +343,7 @@ impl Work {
                 None => return Err(unsupported("a non-manifold vertex")),
             }
         }
-        if ring.len() != 3 || ring.len() != around.len() {
+        if ring.len() != around.len() {
             return Err(unsupported("a vertex where other than three faces meet"));
         }
         let f: Vec<FaceId> = ring.iter().map(|c| c.0).collect();
@@ -352,6 +352,12 @@ impl Work {
             .map(|c| (src.coedge(c.2).edge, src.coedge(c.2).forward))
             .collect();
         let bev: Vec<Option<usize>> = ends.iter().map(|e| bevel_of.get(&e.0).copied()).collect();
+        if ring.len() == 4 {
+            return self.through_seam(src, bevels, &f, &ends, &bev, vname, root);
+        }
+        if ring.len() != 3 {
+            return Err(unsupported("a vertex where other than three faces meet"));
+        }
         let k = bev.iter().filter(|b| b.is_some()).count();
         let surf = |x: FaceId| src.face(x).surface.clone();
         // where chamfer b meets face x at end e (its cross-section there)
@@ -568,6 +574,57 @@ impl Work {
         }
         Ok(())
     }
+
+    /// Four faces where two chamfers on one surface cross a seam: the faces either side of each
+    /// unchamfered edge are halves of one surface (a revolve's halves), so the chamfer runs
+    /// straight through and the two seam edges end at its contacts.
+    #[allow(clippy::too_many_arguments)]
+    fn through_seam(
+        &mut self,
+        src: &Body,
+        bevels: &[Bevel],
+        f: &[FaceId],
+        ends: &[End],
+        bev: &[Option<usize>],
+        vname: Name,
+        root: Name,
+    ) -> Result<(), ChamferError> {
+        let unsupported = |what| ChamferError::Unsupported { edge: vname, what };
+        let i = (0..2).find(|&i| bev[i].is_some()).unwrap_or(0);
+        let (Some(b0), None, Some(b2), None) = (bev[i], bev[i + 1], bev[i + 2], bev[(i + 3) % 4]) else {
+            return Err(unsupported("a vertex where other than three faces meet"));
+        };
+        let halves = |a: FaceId, b: FaceId| {
+            let (a, b) = (src.face(a), src.face(b));
+            a.surface == b.surface && a.same_sense == b.same_sense
+        };
+        let [f0, f1, f2, f3] = [f[i], f[i + 1], f[i + 2], f[(i + 3) % 4]];
+        if !halves(f1, f2) || !halves(f3, f0) || bevels[b0].surface != bevels[b2].surface {
+            return Err(unsupported("a vertex where other than three faces meet"));
+        }
+        let ((e0, at0), (e2, at2)) = (ends[i], ends[i + 2]);
+        let pick = |b: usize, at: bool, x: FaceId| {
+            let pts = if at { bevels[b].at_start } else { bevels[b].at_end };
+            if x == bevels[b].a { pts[0] } else { pts[1] }
+        };
+        let mut n = 0;
+        let mut name = |kind: &str| {
+            n += 1;
+            vname.with_name(root).with_str(kind).with(n)
+        };
+        let q = self.vertex_at(pick(b0, at0, f1), name("v"));
+        let r = self.vertex_at(pick(b0, at0, f0), name("v"));
+        self.contact.insert((e0, at0, f1), q);
+        self.contact.insert((e2, at2, f2), q);
+        self.contact.insert((e0, at0, f0), r);
+        self.contact.insert((e2, at2, f3), r);
+        self.end_vertex.insert(ends[i + 1], q);
+        self.end_vertex.insert(ends[(i + 3) % 4], r);
+        let j = self.edge_between(q, r, name("e"));
+        self.cap.insert((e0, at0), (f1, vec![(j, true)]));
+        self.cap.insert((e2, at2), (f2, vec![(j, true)]));
+        Ok(())
+    }
 }
 
 /// The edge's direction leaving the vertex at end `e`.
@@ -712,7 +769,8 @@ fn bevel(src: &Body, e: EdgeId, size: ChamferSize, root: Name) -> Result<Bevel, 
                 ((off - z * h).length(), h)
             };
             let ((ra, ha), (rb, hb)) = (rh(pa), rh(pb));
-            let radial = pa - o - z * z.dot(pa - o);
+            // the circle's own x, so the halves of a split circle get the very same surface
+            let radial = k.frame.x().get();
             // a contact that reaches the axis (a cut wider than the radius) has nowhere to go
             let p0 = edge.curve.eval(edge.range.lo);
             let side = p0 - o - z * z.dot(p0 - o);

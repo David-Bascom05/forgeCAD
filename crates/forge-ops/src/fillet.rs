@@ -743,6 +743,28 @@ fn merge_faces(body: &mut Body, e: EdgeId) {
             }
         }
     }
+    // an edge walked both ways further apart (the other seam of a revolve's two halves) cuts
+    // the loop in two: the outer and the hole it ran into
+    let mut joined = vec![joined];
+    while let Some((k, i, j)) = joined.iter().enumerate().find_map(|(k, l)| {
+        (0..l.len()).find_map(|i| (i + 1..l.len()).find(|&j| l[j].0 == l[i].0).map(|j| (k, i, j)))
+    }) {
+        let (mut hole, mut rest) = (
+            joined[k][i + 1..j].to_vec(),
+            [&joined[k][..i], &joined[k][j + 1..]].concat(),
+        );
+        // the outer one turns counter-clockwise about the outward normal, and stays first
+        let n = body
+            .face(a)
+            .surface
+            .gradient(body.vertex(body.edge(e).start).point);
+        let n = if body.face(a).same_sense { n } else { -n };
+        if turn(body, &hole).dot(n) > 0.0 {
+            std::mem::swap(&mut hole, &mut rest);
+        }
+        joined[k] = rest;
+        joined.push(hole);
+    }
     let others: Vec<Vec<(EdgeId, bool)>> = body
         .face(b)
         .loops
@@ -756,8 +778,8 @@ fn merge_faces(body: &mut Body, e: EdgeId) {
         body.remove_loop(b, l);
     }
     body.kill_face(b);
-    if !joined.is_empty() {
-        body.add_loop(a, &joined);
+    for l in joined.into_iter().filter(|l| !l.is_empty()) {
+        body.add_loop(a, &l);
     }
     for o in others {
         body.add_loop(a, &o);
@@ -765,6 +787,21 @@ fn merge_faces(body: &mut Body, e: EdgeId) {
     let face = &mut body.faces[a.index()];
     face.bbox.clear();
     face.query.clear();
+}
+
+/// The area vector of a loop: along the normal it turns counter-clockwise about.
+fn turn(body: &Body, l: &[(EdgeId, bool)]) -> Vec3 {
+    let mut pts: Vec<Point3> = Vec::new();
+    for &(e, fw) in l {
+        let mut p = body.edge_points(e, 8);
+        if !fw {
+            p.reverse();
+        }
+        pts.extend(p);
+    }
+    let o = pts.first().copied().unwrap_or(Point3::ORIGIN);
+    pts.windows(2)
+        .fold(Vec3::ZERO, |s, w| s + (w[0] - o).cross(w[1] - o))
 }
 
 /// An edge's faces at one of its points, and where a ball between them sits.

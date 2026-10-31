@@ -733,14 +733,26 @@ revolve cut xz at -37 0 29 axis 0 0 0 1 poly 0 0 8 0 8 10 5 10 5 -50 0 -50\n",
 /// chamfer Unsupported(a vertex where other than three faces meet): a revolved hub's bore rim, its
 /// round faces in halves meeting at the seam
 #[test]
-#[ignore = "B10: kernel failure, see the comment"]
 fn chamfer_revolved_bore_rim() {
     holds(
         "\
 hub: revolve xz axis y poly 20 0 70 0 70 12 36 12 36 42 20 42
 chamfer 1 (edges of hub circle r=20 top)\n",
-        false,
+        true,
     );
+}
+
+/// a revolve's flange halves merge round a fillet's spring into one face with a hole, not one
+/// slit along the far seam (its mesh crossed itself), and a cut through the near seam keeps it
+#[test]
+fn fillet_revolved_step_meshes() {
+    let src = "\
+hub: revolve xz axis y poly 20 0 70 0 70 12 36 12 36 42 20 42
+fillet 3 (edges of hub circle r=36 concave)
+sc: extrude cut 12 xy at 70 0 0 circle 0 0 6\n";
+    holds(src, true);
+    let m = bench::model(src);
+    forge_mesh::tessellate(m.body().expect("a part"), &forge_mesh::Quality::default()).expect("meshes");
 }
 
 /// fillet Overflow: fillet 1 at the root of a 1.5 tab on a 1.5 ring wall; 0.5 builds, a 7 wall
