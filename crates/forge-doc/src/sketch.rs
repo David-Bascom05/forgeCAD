@@ -17,6 +17,9 @@ pub type Num<'a> = dyn Fn(&str, Want) -> R<f64> + 'a;
 /// `was`, the sketch this line read as before, lends the solve every part of it that did
 /// not change.
 pub fn build(plane: Frame, rows: Vec<Vec<String>>, num: &Num, was: Option<&Sketch>) -> R<Sketch> {
+    if let Some(s) = was.and_then(|w| values_only(plane, &rows, num, w)) {
+        return Ok(Sketch { rows, ..s });
+    }
     let mut b = B {
         s: forge_sketch::Sketch::new(plane),
         names: Vec::new(),
@@ -27,6 +30,7 @@ pub fn build(plane: Frame, rows: Vec<Vec<String>>, num: &Num, was: Option<&Sketc
     for (k, row) in rows.iter().enumerate() {
         b.row(k, row).map_err(|e| format!("`{}`: {e}", row.join(" ")))?;
     }
+    let written = b.s.params().to_vec();
     if b.s.solve_after(was.map(|w| &w.solved)).status != Status::Solved {
         let a = b.s.analyze();
         let say = |ids: &[ConstraintId]| {
@@ -85,6 +89,13 @@ pub fn build(plane: Frame, rows: Vec<Vec<String>>, num: &Num, was: Option<&Sketc
             ))
         })
         .collect::<R<_>>()?;
+    let dims = b
+        .made
+        .iter()
+        .filter(|m| DIMENSIONS.contains(&rows[m.1][0].as_str()))
+        .map(|m| (m.1, m.0))
+        .collect();
+    let driven_of = b.driven.iter().map(|d| (d.1.clone(), d.2.clone())).collect();
     Ok(Sketch {
         plane,
         on: None,
@@ -93,6 +104,66 @@ pub fn build(plane: Frame, rows: Vec<Vec<String>>, num: &Num, was: Option<&Sketc
         solved: b.s,
         driven,
         names: b.names,
+        written,
+        dims,
+        driven_of,
+    })
+}
+
+/// `was` again with new dimension values, when nothing else in the rows changed: the
+/// dimensions set in place and solved from the coordinates as written, which is what reading
+/// the rows afresh gives. None when anything else changed, or it fails (the full read says why).
+fn values_only(plane: Frame, rows: &[Vec<String>], num: &Num, was: &Sketch) -> Option<Sketch> {
+    if was.plane != plane || was.rows.len() != rows.len() {
+        return None;
+    }
+    // every token but a dimension's value is a number, a name or a word, as before
+    const WORDS: [&str; 27] = [
+        "pt", "line", "poly", "rect", "circle", "arc", "fix", "co", "hor", "ver", "par", "perp", "tan", "eq",
+        "conc", "mid", "sym", "dist", "hdist", "vdist", "rad", "dia", "ang", "ref", "cw", "cons", "open",
+    ];
+    let fixed = |t: &str| t.parse::<f64>().is_ok() || is_ref(t) || WORDS.contains(&t);
+    for (a, b) in rows.iter().zip(&was.rows) {
+        let dim = DIMENSIONS.contains(&a[0].as_str());
+        let n = a.len() - dim as usize;
+        if a.len() != b.len() || a[..n] != b[..n] || !a[..n].iter().all(|t| fixed(t)) {
+            return None;
+        }
+    }
+    let mut q = was.solved.clone();
+    q.set_params(&was.written).ok()?;
+    for &(k, c) in &was.dims {
+        let row = &rows[k];
+        let want = if row[0] == "ang" { Want::Angle } else { Want::Len };
+        q.set_value(c, num(row.last()?, want).ok()?).ok()?;
+    }
+    if q.solve_after(Some(&was.solved)).status != Status::Solved || !q.implied().is_empty() {
+        return None;
+    }
+    let b = B {
+        s: q,
+        names: was.names.clone(),
+        made: Vec::new(),
+        driven: Vec::new(),
+        num,
+    };
+    let driven = was
+        .driven
+        .iter()
+        .zip(&was.driven_of)
+        .map(|(d, (kw, es))| b.measure(kw, es).ok().map(|v| (d.0, v)))
+        .collect::<Option<Vec<_>>>()?;
+    Some(Sketch {
+        plane,
+        on: None,
+        at: None,
+        rows: Vec::new(),
+        solved: b.s,
+        driven,
+        names: b.names,
+        written: was.written.clone(),
+        dims: was.dims.clone(),
+        driven_of: was.driven_of.clone(),
     })
 }
 

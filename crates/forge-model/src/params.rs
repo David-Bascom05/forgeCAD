@@ -39,6 +39,11 @@ pub struct Sketch {
     pub driven: Vec<(usize, f64)>,
     /// Each named entity (`l3`, `c1`, `o`) and its id in `solved`.
     pub names: Vec<(String, forge_sketch::EntityId)>,
+    /// What a re-read with only dimension values changed starts from instead of the rows:
+    /// the parameters as written, each dimension row's constraint, each driven row's entities.
+    pub written: Vec<f64>,
+    pub dims: Vec<(usize, forge_sketch::ConstraintId)>,
+    pub driven_of: Vec<(String, Vec<forge_sketch::EntityId>)>,
 }
 
 /// A plane given by reference.

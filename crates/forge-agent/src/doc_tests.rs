@@ -525,3 +525,21 @@ fn edits_rebuild_like_the_file_they_print() {
     .expect("move");
     assert!(m.src().contains("hole w/11 on sketch2 c1 thru"), "{}", m.src());
 }
+
+/// A dimension changed alone is set in place, and the sketch is what reading it afresh gives,
+/// bit for bit; a coordinate or parameter changed reads the rows again.
+#[test]
+fn a_dimension_changed_alone_reads_as_afresh() {
+    let src = |d: &str, x: &str| {
+        format!(
+            "w = 40\nsketch\n  rect 0.2 0 {x} 25\n  circle 20 12 4\n  fix l1.a\n  dist l1 w\n  dist l2 {d}\n\
+             dia c1 8\n  hdist l1.a c1 (w/2)\n  vdist l1.a c1 12\n  ref dist l3\nend\nextrude 6 sketch1 l1\n"
+        )
+    };
+    let mut m = built(&src("25", "40"));
+    for (d, x) in [("30", "40"), ("w/2", "40"), ("w/2", "41"), ("26", "41")] {
+        m.update(&src(d, x));
+        let fresh = built(&src(d, x));
+        assert_eq!(m.features, fresh.features, "{d} {x}");
+    }
+}

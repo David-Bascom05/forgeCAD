@@ -457,6 +457,37 @@ impl Sketch {
         Ok(id)
     }
 
+    /// Changes a dimension's value (a distance, length, radius, diameter or angle) in place.
+    pub fn set_value(&mut self, id: ConstraintId, v: f64) -> Result<(), SketchError> {
+        use Constraint::*;
+        let rec = self
+            .constraints
+            .iter_mut()
+            .find(|r| r.id == id)
+            .ok_or(SketchError::UnknownConstraint(id))?;
+        let ok = match rec.c {
+            Distance(..) | Length(..) | Radius(..) | Diameter(..) => v > 0.0 && v.is_finite(),
+            DistancePointLine(..) => v >= 0.0 && v.is_finite(),
+            Angle(..) | HorizontalDistance(..) | VerticalDistance(..) => v.is_finite(),
+            _ => return Err(SketchError::WrongKind(EntityId(0))),
+        };
+        if !ok {
+            return Err(SketchError::BadValue);
+        }
+        match &mut rec.c {
+            Distance(_, _, d)
+            | DistancePointLine(_, _, d)
+            | Length(_, d)
+            | Radius(_, d)
+            | Diameter(_, d)
+            | Angle(_, _, d)
+            | HorizontalDistance(_, _, d)
+            | VerticalDistance(_, _, d) => *d = v,
+            _ => unreachable!("checked above"),
+        }
+        Ok(())
+    }
+
     pub fn remove_constraint(&mut self, id: ConstraintId) -> Result<(), SketchError> {
         let i = self
             .constraints
