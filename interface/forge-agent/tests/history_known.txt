@@ -10,5 +10,5 @@ Direct(Invalid(  # delete leaves a face with no loops
 # the n-ary regen names split faces and edges unlike the sequential one, so later references miss
 nary: the part is 9 bodies, not one  # the sequential regen keeps a disjoint add (invalid Euler) the n-ary refuses
 # on main 947e420 with bugs-3 alone too (not from this integration's other branches): filed to unblock it
-nary: volume differs  # seed 27: a mirrored revolve cut over a moved body with text and a sweep
+nary: no edge  # seed 27: the chamfer after a moved body with text: n-ary names the edge otherwise (docs/naming.md gap); it was left out silently, which was the volume difference
 fillet: invalid EdgeOffFace  # seed 32: a variable fillet after a thicken cut, then a fillet near it
