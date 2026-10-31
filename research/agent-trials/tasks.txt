@@ -2,7 +2,7 @@
 Make bracket.fc: an L mounting bracket. Base plate 80 x 50 x 6 mm lying on xy, centred on the origin
 in x and y, its bottom at z=0. An upright wall 6 thick along the base's back edge (y = +25 side,
 inside the base's outline), 80 wide, reaching z=50 at its top. Four 6.6 mm through holes in the base,
-10 mm in from each corner in x and y, drilled down. Two 6.6 mm through holes in the wall, 15 mm in
+drilled down: 10 mm in from each end in x, at y = -15 and y = +5. Two 6.6 mm through holes in the wall, 15 mm in
 from each end in x, at z=35, drilled through in y. A 4 mm fillet on the inside corner where wall meets
 base. A 1 mm chamfer on the four vertical outside corners of the base. Then: the customer wants the
 wall holes at z=30 and the wall 8 thick. Make that change. Report the final exact volume and the
@@ -25,3 +25,9 @@ the -x side to the slot) with a 12 mm counterbore 4 deep on the -x face, and in 
 M6 hole (5 mm tap drill, thread recorded, not modelled) from the slot 15 deep. 2 mm fillets on the four
 vertical corners of the block. Then: make the bore 30 mm, keeping everything else. Report the final
 exact volume, the number of faces, and the thinnest wall in the part.
+
+## rounded
+Make rounded.fc: a block 40 x 30 x 10 mm, corner at the origin, bottom at z=0, with a 25 mm fillet on
+each of its four vertical edges. The drawing's radius may not fit: if it can't be built, use the
+largest round the tool leads you to and say which. Then add a 6 mm through hole at the block's
+centre. Report the radius used, the final exact volume and the number of faces.
