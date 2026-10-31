@@ -380,6 +380,15 @@ impl Procedural for Ruled {
     fn project(&self, p: Point3) -> Point2 {
         self.nearest(p, self.ext)
     }
+    fn project_near(&self, p: Point3, uv: Point2) -> Point2 {
+        // a point lying on the surface is its own nearest point: Newton from nearby finds it
+        let (q, d) = polish(&|uv| self.point(uv), p, uv, self.ext, None);
+        if d.p.distance(p) <= tol::LINEAR {
+            q
+        } else {
+            self.nearest(p, self.ext)
+        }
+    }
     fn bbox(&self, uv: Box2) -> Box3 {
         // each ruling runs between its points at the box's two s, which lie in these boxes
         let (ba, bb) = (self.a.bbox(uv.u), self.b.bbox(uv.u));
@@ -523,6 +532,11 @@ mod tests {
                 let uv = rand_uv(&mut r);
                 let d = s.point(uv);
                 assert!(surf.eval(surf.project(d.p)).distance(d.p) < 1e-10, "{s:?} {uv:?}");
+                let near = Point2::new(uv.x + r.range(-0.05, 0.05), uv.y + r.range(-0.05, 0.05));
+                assert!(
+                    s.point(s.project_near(d.p, near)).p.distance(d.p) < 1e-10,
+                    "{s:?} {uv:?}"
+                );
                 let n = d.du.cross(d.dv).normalize().unwrap();
                 let off = d.p + n * r.range(-0.5, 0.5);
                 let q = surf.eval(surf.project(off));
