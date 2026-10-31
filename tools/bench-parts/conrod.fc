@@ -1,0 +1,51 @@
+# Connecting rod, forged steel, 150 mm centres: an I-beam shank between a 52 mm big end split
+# on its centre line and a 24 mm small end, rod bolts tapped M9x1 into the bosses.
+c = 150
+rb = 31
+rs = 15
+tb = 22
+ts = 20
+side: sketch xz
+  line -14 rb-6 -8 c-rs+5
+  line l1.b 8 c-rs+5
+  line l2.b 14 rb-6
+  line l3.b l1.a
+  line o 0 c cons
+  ver l5
+  sym l1.a l3.b l5
+  sym l1.b l3.a l5
+  vdist o l4.a rb-6
+  vdist o l2.a c-rs+5
+  dist l4 28
+  dist l2 16
+end
+shank: extrude sym ts side
+big: extrude sym tb xz circle 0 0 rb
+small: extrude sym ts xz circle 0 c rs
+bolts: extrude sym tb xz rect 26 -24 16 46
+pattern bolts mirror yz
+# I-beam: the flanges stay 3 thick, the web 5
+web: sketch xz at 0 ts/2 0
+  line -9.5 rb+2 -4.5 c-rs-4
+  line l1.b 4.5 c-rs-4
+  line l2.b 9.5 rb+2
+  line l3.b l1.a
+end
+pocket: extrude cut 7.5 web
+pattern pocket mirror xz
+fillet 6 (edges between shank big concave line) (edges between shank small concave)
+# TODO: fillet 3 the bolt bosses into the big end (regression fillet_block_on_cylinder_flush)
+fillet 1.5 (edges of pocket concave)
+# bores: the big end for 48 mm shells, the small end for a bushed 19 mm pin
+bigbore: hole 48 xz at 0 tb/2 0 thru
+smallbore: hole 22 xz at 0 ts/2 c thru
+oil: hole 4 -xy at 0 0 c+rs+1 6
+# rod bolts: clearance through the cap, spot faced, tapped M9x1 into the rod
+bolt: hole 9.2 xy at 34 0 -24 cb 15 1 24
+tap: hole 8 xy at 34 0 0 16 pt 118 thread 9 1
+# a translated copy, not a mirror: a mirrored thread would turn left-handed (pattern refuses it)
+pattern bolt tap lin -1 0 0 2 68
+thread hole tap 14
+# TODO: chamfer 1 the bore rims (edges of bigbore circle) (edges of smallbore circle) once n-ary holds it (regression nary_chamfer_after_fillet_conrod)
+# the cap: a second body, split off on the big end's centre line
+cap: split plane xy

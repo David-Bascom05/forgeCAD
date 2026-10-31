@@ -1,0 +1,27 @@
+# Centrifugal pump volute casing, end suction: a spiral passage lofted through sections that
+# grow round the impeller and on into the diffuser, cast with a 5 mm wall; open at the front
+# for the suction cover, a discharge flange, a seal housing behind and feet below.
+# TODO: shell the outer loft instead of cutting the core (regression shell_oblique_loft)
+# TODO: loft the diffuser on its own (regression extrude_from_smooth_loft_end)
+volute: loft smooth profile z -sin(60) cos(60) 0 x cos(60) sin(60) 0 at 87.17*cos(60) 87.17*sin(60) 0 circle 0 0 16.67 profile z -sin(110) cos(110) 0 x cos(110) sin(110) 0 at 89.81*cos(110) 89.81*sin(110) 0 circle 0 0 18.89 profile z -sin(160) cos(160) 0 x cos(160) sin(160) 0 at 92.44*cos(160) 92.44*sin(160) 0 circle 0 0 21.11 profile z -sin(210) cos(210) 0 x cos(210) sin(210) 0 at 95.08*cos(210) 95.08*sin(210) 0 circle 0 0 23.33 profile z -sin(260) cos(260) 0 x cos(260) sin(260) 0 at 97.72*cos(260) 97.72*sin(260) 0 circle 0 0 25.56 profile z -sin(310) cos(310) 0 x cos(310) sin(310) 0 at 100.4*cos(310) 100.4*sin(310) 0 circle 0 0 27.78 profile z -sin(360) cos(360) 0 x cos(360) sin(360) 0 at 103*cos(360) 103*sin(360) 0 circle 0 0 30 profile z 0 1 0 x 1 0 0 at 103 55 0 circle 0 0 33.5 profile z 0 1 0 x 1 0 0 at 103 110 0 circle 0 0 37
+casing: extrude sym 44 circle 0 0 84
+dflange: extrude 14 xz at 0 110 0 circle 103 0 55
+# TODO: a cover flange (extrude 12 at 0 0 10 circle 0 0 104) with twelve tapped M10 once n-ary holds it (regression nary_volute_core_and_flange_hole)
+seal: extrude 40 -xy at 0 0 -22 circle 0 0 34
+core: loft cut smooth profile z -sin(60) cos(60) 0 x cos(60) sin(60) 0 at 87.17*cos(60) 87.17*sin(60) 0 circle 0 0 11.67 profile z -sin(110) cos(110) 0 x cos(110) sin(110) 0 at 89.81*cos(110) 89.81*sin(110) 0 circle 0 0 13.89 profile z -sin(160) cos(160) 0 x cos(160) sin(160) 0 at 92.44*cos(160) 92.44*sin(160) 0 circle 0 0 16.11 profile z -sin(210) cos(210) 0 x cos(210) sin(210) 0 at 95.08*cos(210) 95.08*sin(210) 0 circle 0 0 18.33 profile z -sin(260) cos(260) 0 x cos(260) sin(260) 0 at 97.72*cos(260) 97.72*sin(260) 0 circle 0 0 20.56 profile z -sin(310) cos(310) 0 x cos(310) sin(310) 0 at 100.4*cos(310) 100.4*sin(310) 0 circle 0 0 22.78 profile z -sin(360) cos(360) 0 x cos(360) sin(360) 0 at 103*cos(360) 103*sin(360) 0 circle 0 0 25 profile z 0 1 0 x 1 0 0 at 103 55 0 circle 0 0 28.5 profile z 0 1 0 x 1 0 0 at 103 110 0 circle 0 0 32 profile z 0 1 0 x 1 0 0 at 103 125 0 circle 0 0 33
+chamber: extrude cut 38 at 0 0 -16 circle 0 0 76
+# discharge flange: eight bolts on a 90 PCD
+dbolt: hole 14 -xz at 103+45 96 0 thru
+pattern dbolt circ 103 0 0 0 1 0 8 360
+# seal housing: shaft bore and two gland studs, M10
+shaft: hole 36 xy at 0 0 -62 thru
+gland: hole 8.5 xy at 0 26 -62 15 thread 10 1.5
+pattern gland circ 0 0 0 0 0 1 2
+vent: hole 8.5 xz at 0 112 0 10 thread 10 1.5
+# foot: a pad cast under the volute
+foot: extrude 12 -xz at 0 -134 0 rect -80 -25 160 50
+# TODO: fillet 4 the pad into the volute (regression fillet_pad_into_smooth_loft)
+fhole: hole 14 -xz at -65 -134 0 12
+pattern fhole lin 1 0 0 2 130
+fillet 3 (edges between seal casing concave)
+chamfer 1 (edges of shaft circle)

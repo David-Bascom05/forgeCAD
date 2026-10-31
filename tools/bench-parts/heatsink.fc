@@ -1,0 +1,47 @@
+# Extruded aluminium heat sink, cross-cut, for a 40 W module: a fin field on a 6 mm base,
+# a plain land at the back carrying the part mark, a pad pocket and four M3 screws below.
+# Its text is in block.ttf, which `cargo run -p forge-agent --example benchparts font tools/bench-parts` writes.
+L = 100
+W = 80
+tb = 6
+hf = 32
+tf = 1.8
+n = 12
+p = 7.6
+land = 16
+plate: sketch xy
+  rect -50 -40 100 80
+  line l1.a l3.a cons
+  mid o l5
+  dist l1 L
+  dist l2 W
+end
+base: extrude tb plate
+fillet 4 (edges of base along +z)
+chamfer 0.8 (edges of base top)
+# one fin, its tip a full round, drawn on the land's front face and run out the front
+fin: sketch xz at -(n-1)*p/2 W/2-land 0
+  line -0.9 5 -0.9 37.1
+  arc 0 37.1 0.9 37.1 l1.b
+  line a1.a 0.9 5
+  line l2.b l1.a
+  ver l1 l2
+  hor l3
+  tan a1 l1
+  tan a1 l2
+  dist l3 tf
+  vdist l3.a a1 hf-tf/2+1
+  hdist o l1.a -tf/2
+  vdist o l3.a tb-1
+end
+blade: extrude W-land-3 fin
+fins: pattern blade lin 1 0 0 n p
+fillet 1.2 (edges between blade base concave)
+# cross cuts turn the plate fins into short blades
+cut: extrude cut hf at 0 -W/2+18 tb+5 rect -L/2 0 L 3
+pattern cut lin 0 1 0 3 20
+pad: extrude cut 1 rrect -22 -22 44 44 3
+chamfer 0.6 (edges of pad concave)
+hole 3.4 at -p/2 -W/2+9 0 cs 6.6 90 thru
+pattern hole1 lin 1 0 0 2 p*2 0 1 0 2 W-18
+mark: text cut "FORGE-40W" font "block.ttf" 6 0.5 at -44 W/2-land/2-2.1 tb

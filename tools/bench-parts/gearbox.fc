@@ -1,0 +1,79 @@
+# Two-stage gearbox housing, lower half: cast, split on the shaft plane z = h.
+# Input, intermediate and output shafts run along y in half bores on the split face.
+L = 240
+W = 130
+h = 95
+t = 8
+fl = 14
+fw = 22
+x1 = -72
+x2 = -8
+x3 = 62
+b1 = 47
+b2 = 62
+b3 = 68
+foot: sketch xy
+  rect -120 -65 240 130
+  line l1.a l3.a cons
+  mid o l5
+  dist l1 L
+  dist l2 W
+end
+box: extrude h foot
+dr: draft -2 xy at 0 0 h (faces of box normal +x) (faces of box normal -x) (faces of box normal +y) (faces of box normal -y)
+fillet 12 (edges of box shorter 100)
+shell t (faces top)
+flange: extrude fl -xy at 0 0 h rrect -L/2-fw -W/2-fw L+2*fw W+2*fw 14 rrect -L/2+t -W/2+t L-2*t W-2*t 4
+# bearing bosses: half rounds under the split, as long as the flange is wide
+boss1: extrude fw+t+6 xz at x1 W/2+fw h loop line -b1/2-10 0 b1/2+10 0 arc 0 0 b1/2+10 0 -90 arc 0 0 b1/2+10 -90 -90
+boss2: extrude fw+t+6 xz at x2 W/2+fw h loop line -b2/2-10 0 b2/2+10 0 arc 0 0 b2/2+10 0 -90 arc 0 0 b2/2+10 -90 -90
+boss3: extrude fw+t+6 xz at x3 W/2+fw h loop line -b3/2-8 0 b3/2+8 0 arc 0 0 b3/2+8 0 -90 arc 0 0 b3/2+8 -90 -90
+pattern boss1 boss2 boss3 mirror xz
+bore1: extrude cut thru both xz at x1 0 h circle 0 0 b1/2
+bore2: extrude cut thru both xz at x2 0 h circle 0 0 b2/2
+bore3: extrude cut thru both xz at x3 0 h circle 0 0 b3/2
+# circlip grooves near the outer face of each bore
+groove1: revolve cut yz at x1 0 h axis x rect W/2+fw-8 b1/2-1 2.2 3.4
+groove2: revolve cut yz at x2 0 h axis x rect W/2+fw-8 b2/2-1 2.2 3.4
+# TODO: a circlip groove in bore3 like the others (regression groove_across_overlapping_bosses)
+seat3: revolve cut yz at x3 0 h axis x rect W/2+fw-10 b3/2-1 12 2.5
+pattern groove1 groove2 seat3 mirror xz
+# flange bolts: tapped M10 at the corners, clearance holes on the ends
+hole 8.5 -xy at -L/2-fw/2 -W/2-fw/2 h 12 thread 10 1.5
+pattern hole1 lin 1 0 0 2 L+fw 0 1 0 2 W+fw
+hole 11 -xy at -L/2-fw/2 0 h thru
+pattern hole2 lin 1 0 0 2 L+fw
+thread hole hole1 full
+# mounting feet with spot-faced holes
+fa = -L/2+24
+fc = -W/2-28
+# four feet written out, each filleted before the next: n-ary loses a fillet over several
+# (regression nary_fillet_after_linear_pattern), seq one after the other (second_pad_fillet_overflow)
+footA: extrude 16 loop line fa -W/2+10 fa fc+8 arc fa+8 fc+8 8 180 90 line fa+8 fc fa+36 fc arc fa+36 fc+8 8 270 90 line fa+44 fc+8 fa+44 -W/2+10 line fa+44 -W/2+10 fa -W/2+10
+fillet 5 (edges between footA box concave)
+footB: extrude 16 at L-92 0 0 loop line fa -W/2+10 fa fc+8 arc fa+8 fc+8 8 180 90 line fa+8 fc fa+36 fc arc fa+36 fc+8 8 270 90 line fa+44 fc+8 fa+44 -W/2+10 line fa+44 -W/2+10 fa -W/2+10
+fillet 5 (edges between footB box concave)
+footC: extrude 16 z 0 0 1 x -1 0 0 loop line fa -W/2+10 fa fc+8 arc fa+8 fc+8 8 180 90 line fa+8 fc fa+36 fc arc fa+36 fc+8 8 270 90 line fa+44 fc+8 fa+44 -W/2+10 line fa+44 -W/2+10 fa -W/2+10
+fillet 5 (edges between footC box concave)
+footD: extrude 16 z 0 0 1 x -1 0 0 at -(L-92) 0 0 loop line fa -W/2+10 fa fc+8 arc fa+8 fc+8 8 180 90 line fa+8 fc fa+36 fc arc fa+36 fc+8 8 270 90 line fa+44 fc+8 fa+44 -W/2+10 line fa+44 -W/2+10 fa -W/2+10
+fillet 5 (edges between footD box concave)
+hole 13 -xy at -L/2+46 -W/2-15 16 cb 24 1.5 thru
+pattern hole3 lin 1 0 0 2 L-92 0 1 0 2 W+30
+# gusset ribs under each bearing boss, both sides
+rib 8 draft 1 yz at x1 0 0 line W/2-2 20 W/2+fw-4 h-b1/2-14
+rib 8 draft 1 yz at x2 0 0 line W/2-2 20 W/2+fw-4 h-b2/2-14
+# TODO: draft 1 here once a drafted rib can meet a fillet blend (regression drafted_rib_into_blend)
+rib 8 yz at x3 0 0 line W/2-2 20 W/2+fw-4 h-b3/2-12
+rib 8 draft 1 yz at x1 0 0 line -W/2-fw+4 h-b1/2-14 -W/2+2 20
+rib 8 draft 1 yz at x2 0 0 line -W/2-fw+4 h-b2/2-14 -W/2+2 20
+rib 8 yz at x3 0 0 line -W/2-fw+4 h-b3/2-12 -W/2+2 20
+# drain through the floor at the output end, M16x1.5 plug thread modeled
+# TODO: on a side boss once a thread can stand in a boss on a drafted wall (regression thread_in_boss_on_drafted_wall)
+drain: hole 14.4 xy at L/2-30 0 0 t thread 16 1.5
+thread hole drain full
+# breather / filler boss high on the input end, M12 tapped (cosmetic)
+breather: extrude 10 -yz at -L/2+6 0 h-30 circle 0 0 12
+hole 10.2 yz at -L/2-4 0 h-30 20 thread 12 1.75
+fillet 3 (edges between breather box concave)
+# TODO: fillet 4 the bosses into the walls once a fillet holds on a drafted wall (regression fillet_boss_on_drafted_wall)
+# TODO: chamfer 1 the bore mouths once a half-ring bore edge chamfers (regression chamfer_half_ring_bore)

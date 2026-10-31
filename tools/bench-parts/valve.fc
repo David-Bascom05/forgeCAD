@@ -1,0 +1,50 @@
+# Hydraulic valve body: a subplate for a 4/3 directional valve. The valve bolts to the top face
+# over four ports; drilled galleries take P to the front, T to the back and A, B to the sides.
+bx = 90
+by = 70
+bz = 55
+pg = 25
+ag = 33
+blk: sketch xy
+  rect -45 -35 90 70
+  line l1.a l3.a cons
+  mid o l5
+  dist l1 bx
+  dist l2 by
+end
+block: extrude bz blk
+chamfer 1.5 (edges of block)
+# valve interface: P, T, A, B ports and four M5 screws
+P: hole 8 -xy at 0 -12 bz bz-8 pt 118
+T: hole 8 -xy at 0 12 bz bz-pg+8 pt 118
+A: hole 8 -xy at -14 0 bz bz-ag+7 pt 118
+B: hole 8 -xy at 14 0 bz bz-ag+7 pt 118
+screw: hole M5 iso tap -xy at -16.5 -16 bz 12 pt 118
+pattern screw lin 1 0 0 2 33 0 1 0 2 32
+thread hole screw full
+ring: extrude cut 1.2 -xy at 0 0 bz circle 0 12 6.5 circle 0 12 5
+pattern ring lin 0 1 0 2 24
+# galleries drilled up to the port axes, tapped ports spot faced on the faces
+yP: plane -xz at 0 -12 0
+yT: plane xz at 0 12 0
+xA: plane -yz at -14 0 0
+xB: plane yz at 14 0 0
+x0: plane yz at 0 0 0
+gP: hole 16.4 -xz at 0 -by/2 pg cb 30 1 18 thread 18 1.5
+gT: hole 16.4 xz at 0 by/2 pg cb 30 1 18 thread 18 1.5
+gA: hole 12.4 yz at -bx/2 0 ag cb 26 1 16 thread 14 1.5
+gB: hole 12.4 -yz at bx/2 0 ag cb 26 1 16 thread 14 1.5
+hole 10 -xz at 0 -by/2 pg to yP pt 118
+hole 10 xz at 0 by/2 pg to yT pt 118
+hole 8 yz at -bx/2 0 ag to xA pt 118
+hole 8 -yz at bx/2 0 ag to xB pt 118
+thread hole gP 14 chamfer
+thread hole gT 14 chamfer
+thread hole gA 12
+thread hole gB 12
+# gauge port: a cross drilling from the right face into the foot of the P bore, M10x1
+gauge: hole 5 -yz at bx/2 -12 12 to x0 pt 118
+gp: hole M10x1 iso tap -yz at bx/2 -12 12 cs 11 90 12
+# mounting: four M8 counterbored through
+mount: hole M8 iso cbore -xy at -35 -25 bz thru
+pattern mount lin 1 0 0 2 70 0 1 0 2 50

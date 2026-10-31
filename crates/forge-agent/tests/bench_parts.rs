@@ -1,0 +1,82 @@
+//! The real-part benchmarks build as the agent builds them, then regenerate from their
+//! resolved features seq and n-ary to valid, closed bodies; the resolved features
+//! print and parse back unchanged.
+use forge_agent::{bench, text};
+use forge_model::Feature;
+
+fn builds(name: &str) {
+    let part = bench::part(name);
+    let mut back = text::parse(&text::print(&part)).unwrap_or_else(|(l, e)| panic!("{name}: line {l}: {e}"));
+    // text keeps only its font's name in the file
+    for (f, g) in back.features.iter_mut().zip(&part.features) {
+        if let (Feature::Text(t), Feature::Text(u)) = (f, g) {
+            t.font.font = u.font.font.clone();
+        }
+    }
+    assert!(back == part, "{name}: printed and parsed back differently");
+    let seq = part
+        .regenerate_solids()
+        .unwrap_or_else(|e| panic!("{name} seq: {e:?}"));
+    let nary = part
+        .regenerate_nary_solids(4)
+        .unwrap_or_else(|e| panic!("{name} nary: {e:?}"));
+    for (path, b) in seq
+        .iter()
+        .map(|s| ("seq", &s.body))
+        .chain(nary.iter().map(|s| ("nary", &s.body)))
+    {
+        let problems = forge_topo::check::check(b);
+        assert!(
+            problems.is_empty(),
+            "{name} {path}: {:?}",
+            &problems[..problems.len().min(3)]
+        );
+        let mesh = forge_mesh::tessellate(b, &forge_mesh::Quality::default()).expect("meshes");
+        assert!(mesh.open_edges().is_empty(), "{name} {path}: mesh not closed");
+    }
+}
+
+#[test]
+fn gearbox() {
+    builds("gearbox");
+}
+
+#[test]
+fn volute() {
+    builds("volute");
+}
+
+#[test]
+fn crank() {
+    builds("crank");
+}
+
+#[test]
+fn valve() {
+    builds("valve");
+}
+
+#[test]
+fn heatsink() {
+    builds("heatsink");
+}
+
+#[test]
+fn quadarm() {
+    builds("quadarm");
+}
+
+#[test]
+fn conrod() {
+    builds("conrod");
+}
+
+#[test]
+fn jack() {
+    builds("jack");
+}
+
+#[test]
+fn frame() {
+    builds("frame");
+}

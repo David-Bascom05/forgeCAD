@@ -1,0 +1,41 @@
+# Quadcopter arm, injection-moulded: a tapered channel open below with 1.6 walls and cross
+# webs inside, a round pad for a 2306 motor at the tip and a two-screw clamp at the root.
+len = 170
+wr = 15
+rp = 16
+h = 14
+t = 1.6
+plan: sketch xy
+  line 0 -15 156.6 -15.6
+  arc len 0 l1.b 156.6 15.6
+  line a1.b 0 15
+  line l2.b l1.a
+  mid o l3
+  ver l3
+  dist l3 2*wr
+  rad a1 rp
+  tan a1 l1
+  tan a1 l2
+  hdist o a1 len
+  vdist o a1 0
+end
+arm: extrude h plan
+# TODO: 0:2,0.5:3.5,1:2 and the root edge once regressions shell_after_variable_fillet, fillet_top_tapered_arm_tip hold
+fillet 3 (edges of arm top circle) (edges of arm top line longer 100)
+shell t (faces of arm bottom)
+# cross webs inside the channel, standing up from the open side to the skin
+rib 1.2 web flip xy at 0 0 0 line 40 -20 40 20
+rib 1.2 web flip xy at 0 0 0 line 80 -20 80 20
+rib 1.2 web flip xy at 0 0 0 line 120 -20 120 20
+# motor pad: four M3 on a 16 mm square, bosses under the skin, a shaft clearance
+mboss: extrude h-t-3 -xy at len+8 0 h-t circle 0 0 3.2
+pattern mboss circ len 0 0 0 0 1 4 360
+mhole: hole 3.2 -xy at len+8 0 h cs 6 90 thru
+pattern mhole circ len 0 0 0 0 1 4 360
+hole 9 -xy at len 0 h thru
+wire: extrude cut thru both rrect len-30 -3 12 6 2.5
+# root clamp: two M3 into bosses, mirrored across the arm
+rboss: extrude h-t -xy at 12 6 h-t circle 0 0 3.5
+rhole: hole 2.5 -xy at 12 6 h h-1 thread 3 0.5
+pattern rboss rhole mirror xz
+fillet 0.8 (edges of rboss concave)

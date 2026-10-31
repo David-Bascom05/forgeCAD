@@ -9,3 +9,4 @@
 /.claude/
 __pycache__/
 /tools/corpus/*.json
+/tools/bench-parts/block.ttf

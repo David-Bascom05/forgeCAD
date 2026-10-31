@@ -1,0 +1,22 @@
+# Spring plunger knob: a flanged M12 screw whose shaft carries a compression spring up to a
+# knurled knob with its maker's mark raised round the band.
+# Its text is in block.ttf, which `cargo run -p forge-agent --example benchparts font tools/bench-parts` writes.
+rf = 22
+d = 12
+rk = 20
+fl: sketch xy
+  circle o rf
+  rad c1 rf
+end
+flange: extrude 6 fl
+hex: extrude 8 at 0 0 6 poly 9.815 -5.667 9.815 5.667 0 11.333 -9.815 5.667 -9.815 -5.667 0 -11.333
+revolve cut xz axis y poly 9.4 14 13 14 13 10.6
+shaft: extrude 46 at 0 0 14 circle 0 0 d/2
+collar: extrude 4 at 0 0 58 circle 0 0 11
+# TODO: run the shaft up through the spring to the knob (regression coil_round_rod)
+spring: coil xz at 0 0 62.6 circle 9 0 1.2 pitch 6 turns 5
+knob: revolve xz axis y loop line 0 91 rk 91 line rk 91 rk 106 arc 0 106 rk 0 90 line 0 106+rk 0 91
+thread M12 -xy at 0 0 58 ext 36 chamfer
+knurl: extrude cut 9 at 0 0 98 poly rk+1 -0.9 rk-0.7 0 rk+1 0.9
+pattern knurl circ 0 0 0 0 0 1 36
+text "FORGECAD" font "block.ttf" 4 0.5 at 0 0 92 wrap rk
