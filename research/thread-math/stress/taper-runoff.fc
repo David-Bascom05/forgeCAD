@@ -1,0 +1,3 @@
+# tapered thread: a tapered coil cut round a cone-ish boss
+rod: extrude 30 circle 0 0 10
+coil cut xz at 0 0 -1 poly 9.2 0 11 -0.6 11 0.6 pitch 2 turns 14 taper 0.035

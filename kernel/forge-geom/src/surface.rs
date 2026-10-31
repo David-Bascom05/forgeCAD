@@ -186,6 +186,10 @@ pub trait Procedural: Send + Sync + std::fmt::Debug {
     fn as_any(&self) -> Option<&dyn std::any::Any> {
         None
     }
+    /// That no point of its domain is singular.
+    fn regular(&self) -> bool {
+        false
+    }
     /// The u inside `u` where the surface is only once differentiable along u (a traced
     /// spine's chain points), for integrators that need smooth pieces.
     fn u_kinks(&self, _u: Interval) -> Vec<f64> {
@@ -623,6 +627,7 @@ impl Surface {
         match self {
             Surface::Plane(_) | Surface::Cylinder(_) | Surface::Torus(_) => false,
             Surface::Cone(c) => c.radius_at(uv.y) <= tol::LINEAR,
+            Surface::Procedural(p) if p.regular() => false,
             _ => self.normal(uv).is_none(),
         }
     }

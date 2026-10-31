@@ -40,6 +40,9 @@ thread_local! {
 
 /// Where two surfaces with no closed form meet in `region`: by marching or tracing.
 pub fn searched(a: &Surface, b: &Surface, region: Box3) -> SurfaceSurface {
+    if forge_geom::screw::misses(a, b, region) {
+        return SurfaceSurface::Empty;
+    }
     let hit = |e: &Met| e.2 == region && e.0 == *a && e.1 == *b;
     if let Some(r) = MET.with(|m| m.borrow().iter().find(|e| hit(e)).map(|e| e.3.clone())) {
         return r;

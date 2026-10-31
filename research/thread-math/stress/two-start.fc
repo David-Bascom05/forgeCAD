@@ -1,0 +1,4 @@
+# two-start: the same coil cut twice, half a pitch apart
+rod: extrude 40 circle 0 0 10
+g1: coil cut xz at 0 0 -1 poly 9 -0.5 11 -0.9 11 0.9 9 0.5 pitch 8 turns 5
+g2: coil cut xz at 0 0 3 poly 9 -0.5 11 -0.9 11 0.9 9 0.5 pitch 8 turns 5

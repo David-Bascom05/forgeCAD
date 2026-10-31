@@ -1,0 +1,6 @@
+# a cross hole through a thread, then an oblique one
+b: extrude 40 rect -15 -15 30 30
+hole 10.106 -xy at 0 0 40 thru thread 12 1.75
+thread hole hole1 full
+c: extrude cut sym 40 -yz at 0 0 20 circle 0 0 2.5
+d: extrude cut 30 z 0.6 0 0.8 x 0.8 0 -0.6 at -12 0 8 circle 0 0 2

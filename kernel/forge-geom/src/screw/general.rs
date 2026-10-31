@@ -43,6 +43,65 @@ pub fn meet_general(a: &Surface, b: &Surface, region: Box3) -> Option<SurfaceSur
     }
 }
 
+/// Whether a screw face plainly misses a cylinder within `region`: the face lies in a shell about
+/// its axis, so over the stretch of the axis the region and the face's turns share, it is farther
+/// from the cylinder's axis than the radius plus its shell, or nearer than the radius less it.
+pub fn misses(a: &Surface, b: &Surface, region: Box3) -> bool {
+    let (s, other) = match (super::coaxial::screw(a), super::coaxial::screw(b)) {
+        (Some(s), None) => (s, b),
+        (None, Some(s)) => (s, a),
+        _ => return false,
+    };
+    let Surface::Cylinder(c) = other else {
+        return false;
+    };
+    let f = &s.m.frame;
+    let z = f.z().get();
+    let o = f.origin.to_vec();
+    let along = region.x * z.x + region.y * z.y + region.z * z.z + -(o.dot(z));
+    let piece = &s.ring.pieces[0];
+    let (rr, hh) = (piece.rr + s.u * s.m.a, piece.hh + s.u * s.m.b);
+    let (lo, hi) = (along.lo.max(hh.lo), along.hi.min(hh.hi));
+    if lo > hi {
+        return true;
+    }
+    let axis = c.frame.z().get();
+    // distance from the cylinder's axis, convex along the screw's axis
+    let off = |t: f64| {
+        let w = f.origin + f.z() * t - c.frame.origin;
+        (w - axis * axis.dot(w)).length()
+    };
+    let (d0, d1) = (off(lo), off(hi));
+    // the nearest point of the stretch: where the line through it comes closest
+    let w0 = f.origin + f.z() * lo - c.frame.origin;
+    let (e, g) = (w0 - axis * axis.dot(w0), z - axis * axis.dot(z));
+    let gg = g.dot(g);
+    let tmin = if gg > 0.0 {
+        (-e.dot(g) / gg).clamp(0.0, hi - lo)
+    } else {
+        0.0
+    };
+    let dmin = off(lo + tmin);
+    let margin = 4.0 * tol::LINEAR + rr.hi.max(0.0);
+    if dmin > c.radius + margin || d0.max(d1) < c.radius - margin {
+        return true;
+    }
+    // seen along the cylinder's axis the screw's axis is a line; along that line a point of the
+    // shell strays from its axis point by at most r |a . z|, and its distance from the cylinder's
+    // axis is at least that of its place along the line
+    if gg <= 1e-18 {
+        return false;
+    }
+    let u = g / gg.sqrt();
+    let (x0, x1) = (u.dot(e), u.dot(e) + gg.sqrt() * (hi - lo));
+    let along_min = if x0 <= 0.0 && x1 >= 0.0 {
+        0.0
+    } else {
+        x0.abs().min(x1.abs())
+    };
+    along_min > c.radius + 4.0 * tol::LINEAR + rr.hi.max(0.0) * axis.dot(z).abs()
+}
+
 impl Screw {
     fn meet_general(&self, other: &Surface, region: Box3) -> Option<SurfaceSurface> {
         let Section::Line { a: p, b: q } = self.ring.pieces[0].s else {

@@ -2665,6 +2665,12 @@ fn nary_body(
         let r = &regs[ri];
         let src = tools[r.side].face(r.face);
         let face = out.add_face(shell, src.surface.clone(), src.same_sense != flip, r.name);
+        // an untouched face keeps the box its edges gave it (a blend's or a screw's costs a lot)
+        if r.job.is_none()
+            && let Some(b) = src.bbox.get()
+        {
+            out.faces[face.index()].bbox.set(*b);
+        }
         for lp in &r.loops {
             let mut uses: Vec<(EdgeId, bool)> = Vec::with_capacity(lp.len());
             // a flipped face walks its loops backwards; entities are made in the order they are

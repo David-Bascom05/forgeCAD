@@ -4,6 +4,7 @@
 //!   featcost list SRC                 index, kind label, size of each feature of SRC
 //!   featcost run SRC N MODE           regen of SRC's first N features: seq | nary1 (counted)
 //!   featcost post SRC WHAT            regen, then none | mesh | mass | check on each body
+//!   featcost info SRC MODE            bodies, faces, edges, problems, open mesh edges, volume, area
 //! SRC is a resolved .fc file or a source name.
 use forge_agent::{bench, text};
 use forge_model::{BodyFeature, Edit, End, Extent, Feature, Head, Layout, Part, Source, Turn};
@@ -216,6 +217,37 @@ fn main() {
                     _ => {}
                 }
             }
+        }
+        "info" => {
+            let part = load(arg(1));
+            let r = match arg(2) {
+                "seq" => part.regenerate_solids(),
+                m => part.regenerate_nary_solids(m[4..].parse().expect("naryN")),
+            };
+            let solids = match r {
+                Ok(s) => s,
+                Err(e) => {
+                    println!("err {e:?}");
+                    return;
+                }
+            };
+            let q = forge_mesh::Quality::default();
+            let (mut faces, mut edges, mut bad, mut open, mut vol, mut area) = (0, 0, 0, 0, 0.0, 0.0);
+            for s in &solids {
+                let b = &s.body;
+                faces += b.faces.len();
+                edges += b.edges.len();
+                bad += forge_topo::check(b).len();
+                open += forge_mesh::tessellate(b, &q).map_or(usize::MAX / 2, |m| m.open_edges().len());
+                if let Ok(m) = forge_topo::mass::mass(b) {
+                    vol += m.volume;
+                    area += m.area;
+                }
+            }
+            println!(
+                "ok bodies {} faces {faces} edges {edges} problems {bad} open {open} volume {vol:.6} area {area:.6}",
+                solids.len()
+            );
         }
         a => panic!("unknown command {a}"),
     }

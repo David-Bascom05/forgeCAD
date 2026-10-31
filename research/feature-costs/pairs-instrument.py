@@ -71,7 +71,7 @@ pub(crate) fn classify_pair(c: &crate::Curve, s: &Surface) -> String {
 open(p,'w').write(s)
 p='interface/forge-agent/examples/featcost.rs'; s=open(p).read()
 s=s.replace("""match r {
-                Ok(s) =>""","""forge_geom::intersect::dump_stats();
+                Ok(s) => println""","""forge_geom::intersect::dump_stats();
             match r {
-                Ok(s) =>""")
+                Ok(s) => println""")
 open(p,'w').write(s)

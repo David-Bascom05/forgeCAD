@@ -22,11 +22,12 @@ use forge_math::linalg::solve2;
 use forge_math::{Box2, Box3, Frame, Interval, Point2, Point3, Vec2, Vec3, dmath, tol};
 use std::sync::Arc;
 
+pub(crate) mod along;
 mod coaxial;
 mod general;
 mod pair;
 pub use coaxial::meet_coaxial;
-pub use general::meet_general;
+pub use general::{meet_general, misses};
 
 /// A planar section in (r, h): distance from the axis, height along it.
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -626,6 +627,10 @@ impl Procedural for Screw {
     fn exact_d1(&self) -> bool {
         true
     }
+    /// Off the axis, the motion's turn is square to any section.
+    fn regular(&self) -> bool {
+        true
+    }
     /// A straight section moves linearly in v.
     fn v_degree(&self) -> Option<usize> {
         matches!(self.ring.pieces[0].s, Section::Line { .. }).then_some(1)
@@ -939,16 +944,27 @@ impl Fence {
         let nl = Vec2::new(self.d.y, -self.d.x);
         let lo = ((self.ue.lo - phi) / dmath::TAU).ceil() as i64;
         let hi = ((self.ue.hi - phi) / dmath::TAU).floor() as i64;
-        let mut best = (f64::INFINITY, Point2::new(phi, 0.0));
-        for m in lo..=hi {
+        let k = a * nl.x + b * nl.y;
+        let at = |m: i64| {
             let u = phi + dmath::TAU * m as f64;
             let q = Point2::new(rho - a * u, z - b * u);
-            let s = (q - self.p).dot(nl);
-            if s.abs() < best.0.abs() {
-                best = (s, Point2::new(u, (q - self.p).dot(self.d)));
+            ((q - self.p).dot(nl), Point2::new(u, (q - self.p).dot(self.d)))
+        };
+        // s falls by 2 pi k a turn, so the turn nearest zero is one of two
+        let mut best = (f64::INFINITY, Point2::new(phi, 0.0));
+        if lo <= hi {
+            let m0 = if k == 0.0 {
+                lo
+            } else {
+                ((at(0).0 / (dmath::TAU * k)).floor() as i64).clamp(lo, hi)
+            };
+            for m in [m0, (m0 + 1).min(hi)] {
+                let c = at(m);
+                if c.0.abs() < best.0.abs() {
+                    best = c;
+                }
             }
         }
-        let k = a * nl.x + b * nl.y;
         let n = if rho > 0.0 {
             (1.0 + k * k / (rho * rho)).sqrt()
         } else {
@@ -972,6 +988,9 @@ impl Fence {
 impl Procedural for Fence {
     fn exact_d1(&self) -> bool {
         true
+    }
+    fn as_any(&self) -> Option<&dyn std::any::Any> {
+        Some(self)
     }
     fn deriv(&self, uv: Point2) -> SurfDeriv {
         self.point(uv)

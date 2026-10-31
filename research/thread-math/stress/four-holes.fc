@@ -1,0 +1,5 @@
+# a pattern of tapped holes
+b: extrude 12 rect -40 -40 80 80
+h: hole 5 -xy at -20 -20 12 thru thread 6 1
+pattern h lin 1 0 0 2 40 0 1 0 2 40
+thread hole h full chamfer

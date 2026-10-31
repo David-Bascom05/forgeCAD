@@ -274,7 +274,7 @@ pub enum CurveSurface {
 }
 
 /// An upper bound on |C'(t)| over the range.
-fn speed_bound(c: &Curve, range: Interval) -> f64 {
+pub(crate) fn speed_bound(c: &Curve, range: Interval) -> f64 {
     match c {
         Curve::Line(_) => 1.0,
         Curve::Circle(k) => k.radius,
@@ -343,6 +343,12 @@ pub fn curve_surface_in(
             }
         }
         _ => {}
+    }
+    // the box is asked for at most once, by whichever needs it
+    let (asked, near) = (std::cell::OnceCell::new(), std::cell::Cell::new(Some(near)));
+    let near = || *asked.get_or_init(|| near.take().and_then(|f| f()));
+    if let Some(r) = crate::screw::along::curve_along(c, range, s, &near) {
+        return r;
     }
     curve_surface_subdivide(c, range, s, near())
 }
@@ -552,30 +558,54 @@ pub(crate) fn curve_surface_subdivide(
     near: Option<Box3>,
 ) -> CurveSurface {
     let g = |t: f64| s.implicit(c.eval(t));
-    let off = |p: Point3| {
-        near.map_or(0.0, |b| {
-            let d = |x: f64, i: Interval| (i.lo - x).max(x - i.hi).max(0.0);
-            Vec3::new(d(p.x, b.x), d(p.y, b.y), d(p.z, b.z)).length()
-        })
-    };
     let lip = speed_bound(c, range) * (1.0 + 1e-9) + f64::MIN_POSITIVE;
     let probes = 9;
     if (0..probes).all(|i| g(range.lo + range.width() * i as f64 / (probes - 1) as f64).abs() <= tol::LINEAR)
     {
         return CurveSurface::OnSurface;
     }
+    // pieces with their own speed bound, rightmost first so the leftmost pops first: a traced
+    // curve's chain segments (each bounded by its own chord, those surely clear of the surface
+    // dropped unevaluated), else the whole range
+    let stack: Vec<(f64, f64, f64)> = match (c, s) {
+        (Curve::Intersection(ic), s) if !matches!(s, Surface::Procedural(_)) => chain_pieces(ic, range, s),
+        _ => vec![(range.lo, range.hi, lip)],
+    };
+    subdivide_pieces(c, range, s, near, stack)
+}
+
+/// The search over only these stretches of the range, in order: a closed form's narrow spots.
+pub(crate) fn subdivide_stretches(
+    c: &Curve,
+    range: Interval,
+    stretches: &[Interval],
+    s: &Surface,
+    near: Option<Box3>,
+) -> CurveSurface {
+    let lip = speed_bound(c, range) * (1.0 + 1e-9) + f64::MIN_POSITIVE;
+    let stack = stretches.iter().rev().map(|i| (i.lo, i.hi, lip)).collect();
+    subdivide_pieces(c, range, s, near, stack)
+}
+
+fn subdivide_pieces(
+    c: &Curve,
+    range: Interval,
+    s: &Surface,
+    near: Option<Box3>,
+    mut stack: Vec<(f64, f64, f64)>,
+) -> CurveSurface {
+    let g = |t: f64| s.implicit(c.eval(t));
+    let off = |p: Point3| {
+        near.map_or(0.0, |b| {
+            let d = |x: f64, i: Interval| (i.lo - x).max(x - i.hi).max(0.0);
+            Vec3::new(d(p.x, b.x), d(p.y, b.y), d(p.z, b.z)).length()
+        })
+    };
     // a curve running beside the surface a little over the tolerance away is never pruned by
     // the Lipschitz bound until its pieces are that small: past a budget, a piece 1/4096 of the
     // range is kept only where the surface's sign changes across it
     let (mut budget, coarse) = (100_000usize, range.width() / 4096.0);
     let mut leaves: Vec<(f64, f64)> = Vec::new();
-    // pieces with their own speed bound, rightmost first so the leftmost pops first: a traced
-    // curve's chain segments (each bounded by its own chord, those surely clear of the surface
-    // dropped unevaluated), else the whole range
-    let mut stack: Vec<(f64, f64, f64)> = match (c, s) {
-        (Curve::Intersection(ic), s) if !matches!(s, Surface::Procedural(_)) => chain_pieces(ic, range, s),
-        _ => vec![(range.lo, range.hi, lip)],
-    };
     while let Some((a, b, lip)) = stack.pop() {
         let m = 0.5 * (a + b);
         let p = c.eval(m);

@@ -1,0 +1,5 @@
+# on an oblique tube with a wall: external thread running off into a shoulder
+t: extrude 50 z 0.6 0 0.8 x 0.8 0 -0.6 circle 0 0 15
+s: extrude add 8 z 0.6 0 0.8 x 0.8 0 -0.6 circle 0 0 22
+i: extrude cut 50 z 0.6 0 0.8 x 0.8 0 -0.6 circle 0 0 11
+thread M30x1.5 z -0.6 0 -0.8 x 0.8 0 -0.6 at 30 0 40 ext 30

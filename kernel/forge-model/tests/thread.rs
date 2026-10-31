@@ -473,3 +473,64 @@ fn a_chamfered_thread_in_a_bore_just_under_its_size() {
     };
     assert!(volume(&part) > 0.0);
 }
+
+/// A tapered groove that runs off its rod (it failed to split the rod's face when the search for
+/// its meetings with its own helices lost one). The volume against Pappus on the part still on.
+#[test]
+fn a_tapered_groove_runs_off_its_rod() {
+    let part = tapered_groove();
+    let solids = part.regenerate_solids().expect("regen");
+    assert!(forge_topo::check(&solids[0].body).is_empty());
+    let v = forge_topo::mass::mass(&solids[0].body).expect("mass").volume;
+    let rod = dmath::PI * 100.0 * 30.0;
+    assert!(v < rod && v > 0.95 * rod, "{v} of {rod}");
+}
+
+fn tapered_groove() -> Part {
+    use forge_ops::{ProfileLoop, Segment};
+    let groove = Profile {
+        plane: Frame::from_zx(Point3::new(0.0, 0.0, -1.0), -UnitVec3::Y, Vec3::X).expect("axes"),
+        loops: vec![ProfileLoop::new(vec![
+            (
+                Segment::Line {
+                    a: Point2::new(9.2, 0.0),
+                    b: Point2::new(11.0, -0.6),
+                },
+                0,
+            ),
+            (
+                Segment::Line {
+                    a: Point2::new(11.0, -0.6),
+                    b: Point2::new(11.0, 0.6),
+                },
+                1,
+            ),
+            (
+                Segment::Line {
+                    a: Point2::new(11.0, 0.6),
+                    b: Point2::new(9.2, 0.0),
+                },
+                2,
+            ),
+        ])],
+    };
+    Part {
+        features: vec![
+            rod(10.0, 30.0),
+            Feature::Coil(Box::new(forge_model::Coil {
+                profile: groove,
+                axis: forge_ops::Axis2 {
+                    origin: Point2::ORIGIN,
+                    dir: forge_math::Vec2::Y,
+                },
+                size: forge_model::CoilSize::PitchTurns {
+                    pitch: 2.0,
+                    turns: 14.0,
+                },
+                taper: 0.035,
+                handed: Handed::Right,
+                op: forge_model::Combine::Cut,
+            })),
+        ],
+    }
+}

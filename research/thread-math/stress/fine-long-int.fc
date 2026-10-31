@@ -1,0 +1,4 @@
+# long fine: 200 turns inside
+b: extrude 110 rect -20 -20 40 40
+hole 19.46 -xy at 0 0 110 thru thread 20 0.5
+thread hole hole1 full

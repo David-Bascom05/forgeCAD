@@ -20,6 +20,7 @@ OpenCascade) never become build dependencies; run them through `fbuild`.
 - `mass-props/`: exact mass properties' speed choices (corner patches' domain rule, procedural
   edge pieces, swept surfaces' columns, chord-walked pipe spines) and the timing harness.
 - `feature-costs/`: the ranked cost of every feature kind by prefix difference, and the tools.
+- `thread-math/`: threads: prior art, the screw-section closed forms and how they were checked.
 - `corner-patch/`: the rational corner quads and their fold proof, from branch `fold-research`
   (not yet on main when this index was written). Its README also covers the four
   `refs/experiments/corner-*` refs.

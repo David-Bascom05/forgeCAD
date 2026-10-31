@@ -1,0 +1,4 @@
+# plain nut in a block, chamfered
+b: extrude 20 rect -15 -15 30 30
+hole 8.376 -xy at 0 0 20 thru thread 10 1.5
+thread hole hole1 full chamfer
