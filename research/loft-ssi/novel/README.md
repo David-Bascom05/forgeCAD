@@ -68,4 +68,15 @@ On loft-speed 61de2e8 that ignored test passed and the loftmeet patch made it fa
 5a0b79f it fails with and without the patch. The pass was luck: the tracer's curves on the carried-on
 surfaces put vertices on the tool's bottom circle at points 0.07 to 1.2 mm OFF the loft (checked against
 py/loft.py; the curves from loftmeet sit on the loft to 2e-4, which is just print rounding). So
-R17 is a downstream boolean failure that those stray vertices happened to hide.
+R17 is a downstream failure that those stray vertices happened to hide. loft-speed found it: the checker
+drew loops at 11.25 deg per chord, and the r78 arc's 0.37 mm sag cut across a 0.33 mm floor sliver
+(fixed in 23ddd0a).
+
+## Newton steps measured in the model, not in the parameters
+At first about 20 span x cylinder/plane pairs of tools/bench-parts/volute.fc fell back to the tracer
+(~0.2 s). Each had a seed or a march step near the tube's inner or outer extreme (u = 0 or 1, where
+the cylinder only grazes the tube) that never converged. The minimum-norm step was taken in raw
+parameters, and a unit of u (half a turn, ~70 mm) weighs the same as a millimetre of v. So the step
+swung across the fold in u instead of walking down in v (30 iterations from Q = 17 to 13). Weighting by
+|S_u|^2, |S_v|^2 (the least move of the POINT) converges in a few steps: every pair is handled and
+volute.fc goes 5.64 G -> 4.76 G instructions.

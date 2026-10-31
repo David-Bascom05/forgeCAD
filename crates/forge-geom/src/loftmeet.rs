@@ -174,8 +174,10 @@ impl Pair<'_> {
         Some(out)
     }
 
-    /// The residual, its Jacobian's rows (in the unknowns used) and the normals of the two surfaces.
-    fn at(&self, x: &[f64; 4]) -> (Point3, Vec<f64>, Vec<[f64; 4]>, Vec3, Vec3) {
+    /// The residual, its Jacobian's rows (in the unknowns used), the normals of the two surfaces,
+    /// and how far each parameter moves the point (per unit).
+    #[allow(clippy::type_complexity)]
+    fn at(&self, x: &[f64; 4]) -> (Point3, Vec<f64>, Vec<[f64; 4]>, Vec3, Vec3, [f64; 4]) {
         match *self {
             Pair::Spans(a, b) => {
                 let (p, q) = (a.deriv(Point2::new(x[0], x[1])), b.deriv(Point2::new(x[2], x[3])));
@@ -190,6 +192,7 @@ impl Pair<'_> {
                     vec![row(0), row(1), row(2)],
                     p.du.cross(p.dv),
                     q.du.cross(q.dv),
+                    [p.du.length(), p.dv.length(), q.du.length(), q.dv.length()],
                 )
             }
             Pair::Quad(a, q) => {
@@ -201,6 +204,7 @@ impl Pair<'_> {
                     vec![[g.dot(p.du), g.dot(p.dv), 0.0, 0.0]],
                     p.du.cross(p.dv),
                     g,
+                    [p.du.length(), p.dv.length(), 1.0, 1.0],
                 )
             }
         }
@@ -208,27 +212,31 @@ impl Pair<'_> {
 
     /// Minimum-norm Newton from x onto both surfaces: the parameters and the point.
     fn newton(&self, mut x: [f64; 4]) -> Option<([f64; 4], Point3)> {
+        let norm = |f: &[f64]| f.iter().map(|v| v * v).sum::<f64>().sqrt();
+        let (mut p, mut f, mut jac, _, mut n2, mut w) = self.at(&x);
         for _ in 0..30 {
-            let (p, f, jac, _, n2) = self.at(&x);
             let scale = match self {
                 Pair::Spans(..) => 1.0,
                 Pair::Quad(..) => n2.length(),
             };
-            if f.iter().map(|v| v * v).sum::<f64>().sqrt() <= 1e-11 * scale * (1.0 + p.to_vec().length()) {
+            if norm(&f) <= 1e-11 * scale * (1.0 + p.to_vec().length()) {
                 return Some((x, p));
             }
-            // dx = -J^T (J J^T)^-1 f
+            // the least move of the point, not of the parameters (a turn of the angle sweeps far
+            // more than a unit along the loft): dx = -W^-1 J^T (J W^-1 J^T)^-1 f, W = diag(w^2)
+            let w2: [f64; 4] = std::array::from_fn(|k| (w[k] * w[k]).max(1e-300));
             let m = f.len();
             let mut g = [[0.0; 3]; 3];
             for i in 0..m {
                 for j in 0..m {
-                    g[i][j] = (0..4).map(|k| jac[i][k] * jac[j][k]).sum();
+                    g[i][j] = (0..4).map(|k| jac[i][k] * jac[j][k] / w2[k]).sum();
                 }
             }
             let y = solve(&g, &f, m)?;
-            for k in 0..4 {
-                x[k] -= (0..m).map(|i| jac[i][k] * y[i]).sum::<f64>();
-            }
+            let dx: [f64; 4] = std::array::from_fn(|k| (0..m).map(|i| jac[i][k] * y[i]).sum::<f64>() / w2[k]);
+            x = std::array::from_fn(|k| x[k] - dx[k]);
+            let next = self.at(&x);
+            (p, f, jac, n2, w) = (next.0, next.1, next.2, next.4, next.5);
         }
         None
     }
@@ -261,7 +269,7 @@ impl Pair<'_> {
     }
 
     fn direction(&self, x: &[f64; 4]) -> Option<Vec3> {
-        let (.., n1, n2) = self.at(x);
+        let (.., n1, n2, _) = self.at(x);
         n1.cross(n2).normalize().map(|u| u.get())
     }
 
