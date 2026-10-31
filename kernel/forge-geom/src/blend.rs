@@ -1150,6 +1150,13 @@ impl Procedural for Pipe {
         let u = spine_closest(&self.spine, p);
         (p - self.spine.eval(u)).normalize().map_or(Vec3::Z, |n| n.get())
     }
+    fn implicit_gradient(&self, p: Point3) -> (f64, Vec3) {
+        let c = self.spine.eval(spine_closest(&self.spine, p));
+        (
+            p.distance(c) - self.radius,
+            (p - c).normalize().map_or(Vec3::Z, |n| n.get()),
+        )
+    }
     fn transformed(&self, f: &Frame) -> Proc {
         Proc(Arc::new(Pipe {
             spine: self.spine.transformed(f),
