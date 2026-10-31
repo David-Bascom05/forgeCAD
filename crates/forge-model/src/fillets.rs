@@ -173,6 +173,16 @@ pub fn cases() -> Vec<(&'static str, Part, Option<f64>)> {
         with_fillet(&step, &[(Point3::new(10.0, 5.0, 8.0), 2.0)]),
         Some(vbox + 600.0 + spandrel(2.0) * 10.0),
     ));
+    // one foot edge of a block on a plate: the block's ends, carried on, cap the blend
+    let mut footed = boxed.clone();
+    footed
+        .features
+        .push(block_at(Point3::new(5.0, 3.0, 8.0), 8.0, 4.0, 5.0, Combine::Add));
+    out.push((
+        "block-one-foot-edge",
+        with_fillet(&footed, &[(Point3::new(9.0, 3.0, 8.0), 1.0)]),
+        Some(vbox + 160.0 + spandrel(1.0) * 8.0),
+    ));
     // a boss on a plate: a concave circle, rounded by a torus
     let mut boss = boxed.clone();
     boss.features
@@ -519,6 +529,39 @@ mod tests {
             }
         }
         worst
+    }
+
+    /// One to three random edges of random parts, random radii: every result is a
+    /// valid solid with a closed mesh, or an error, never a panic.
+    #[test]
+    fn random_fillets() {
+        use forge_math::rng::Rng;
+        use forge_ops::{FilletEdge, fillet};
+        let mut ok = 0;
+        for seed in 1..=150u64 {
+            let Ok(body) = crate::suite::fuzz(seed, 4).regenerate() else {
+                continue;
+            };
+            let mut r = Rng::new(seed * 7919);
+            let edges: Vec<_> = body.edge_ids().collect();
+            let mut pick: Vec<FilletEdge> = Vec::new();
+            for _ in 0..1 + r.below(3) {
+                let (edge, radius) = (edges[r.below(edges.len())], r.range(0.05, 1.0));
+                if pick.iter().all(|p| p.edge != edge) {
+                    pick.push(FilletEdge { edge, radius });
+                }
+            }
+            let Ok(b) = fillet(&body, &pick, 999) else {
+                continue;
+            };
+            let problems = forge_topo::check(&b);
+            assert!(problems.is_empty(), "seed {seed}: {problems:?}");
+            let mesh = tessellate(&b, &Quality::default()).unwrap_or_else(|e| panic!("seed {seed}: {e:?}"));
+            assert!(mesh.open_edges().is_empty(), "seed {seed}: open mesh");
+            ok += 1;
+        }
+        // seam picks are refused as smooth and adjacent picks as corners; the rest build
+        assert!(ok >= 70, "only {ok} of 150 built");
     }
 
     #[test]

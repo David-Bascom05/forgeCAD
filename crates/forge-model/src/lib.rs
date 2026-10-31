@@ -9,8 +9,8 @@ pub mod torture;
 use forge_bool::{BoolError, Op, Seg2, Shape, boolean_into};
 use forge_math::{Frame, Point2, Vec2, dmath};
 use forge_ops::{
-    Axis2, ChamferError, ChamferSize, DraftError, ExtrudeError, FilletEdge, FilletError, Profile, ProfileLoop,
-    RevolveError, Segment, ShellError, chamfer, draft, extrude, fillet, revolve, shell,
+    Axis2, ChamferError, ChamferSize, DraftError, ExtrudeError, FilletEdge, FilletError, Profile,
+    ProfileLoop, RevolveError, Segment, ShellError, chamfer, draft, extrude, fillet, revolve, shell,
 };
 use forge_topo::{Body, Name};
 
@@ -386,7 +386,9 @@ fn tool(i: usize, f: &Feature) -> Result<(Body, Combine), RegenError> {
 fn feature_op(f: &Feature) -> Option<Combine> {
     match f {
         Feature::Extrude { op, .. } | Feature::Revolve { op, .. } | Feature::Ball { op, .. } => Some(*op),
-        Feature::Fillet { .. } | Feature::Chamfer { .. } | Feature::Shell { .. } | Feature::Draft { .. } => None,
+        Feature::Fillet { .. } | Feature::Chamfer { .. } | Feature::Shell { .. } | Feature::Draft { .. } => {
+            None
+        }
     }
 }
 

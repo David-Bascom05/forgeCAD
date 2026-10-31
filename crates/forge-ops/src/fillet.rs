@@ -578,7 +578,16 @@ impl Builder {
     }
 
     /// Where an unfilleted edge, arriving at `v` through coedge `c`, is cut at `p`.
-    fn trim(&mut self, c: CoedgeId, p: Point3, x: VertexId, blend_edge: EdgeId) -> R<()> {
+    /// With `extend`, p may lie on the edge carried on past v, over face `extend`:
+    /// a blend's end cut by a face it runs out across, beyond that face's corner.
+    fn trim(
+        &mut self,
+        c: CoedgeId,
+        p: Point3,
+        x: VertexId,
+        blend_edge: EdgeId,
+        extend: Option<FaceId>,
+    ) -> R<()> {
         let co = self.body.coedge(c).clone();
         let e = self.body.edge(co.edge);
         let at_end = co.forward;
@@ -588,7 +597,30 @@ impl Builder {
         } else {
             Interval::new(e.range.lo, mid)
         };
-        let t = e.curve.closest(p, window);
+        let mut t = e.curve.closest(p, window);
+        if e.curve.eval(t).distance(p) > tol::LINEAR
+            && let Some(f) = extend
+        {
+            let v = if at_end { e.range.hi } else { e.range.lo };
+            let w = window.width();
+            let past = if at_end {
+                Interval::new(v, v + w)
+            } else {
+                Interval::new(v - w, v)
+            };
+            let u = e.curve.closest(p, past);
+            let ext = if at_end {
+                Interval::new(v, u)
+            } else {
+                Interval::new(u, v)
+            };
+            if e.curve.eval(u).distance(p) <= tol::LINEAR
+                && ext.width() > 0.0
+                && inside_face(&self.body, f, &e.curve, ext)
+            {
+                t = u;
+            }
+        }
         if e.curve.eval(t).distance(p) > tol::LINEAR {
             return Err(FilletError::Overflow { edge: blend_edge });
         }
@@ -647,7 +679,13 @@ impl Builder {
             *slot = (p, self.body.add_vertex(p, name));
         }
         for (j, &(p, x)) in xs.clone().iter().enumerate().skip(1) {
-            self.trim(at(j).cin, p, x, edge)?;
+            // the edges either side of the blend's own faces may carry on past v
+            let extend = match j {
+                1 => Some(at(0).face),
+                _ if j == k - 1 => Some(at(k - 1).face),
+                _ => None,
+            };
+            self.trim(at(j).cin, p, x, edge, extend)?;
         }
         // cross curves on the faces in between, each from X[j] to X[j+1]
         let mut back: Vec<(EdgeId, bool)> = Vec::new();
@@ -657,7 +695,9 @@ impl Builder {
             let (a, b) = (xs[j], xs[j + 1]);
             let (curve, ta, tb) = cross_curve(&ro.blend, &self.body.face(f).surface, a.0, b.0)
                 .ok_or(FilletError::Overflow { edge })?;
-            let name = Name::NONE.with_set(vec![ro.name, self.face_name(f)]);
+            let name = Name::NONE
+                .with_set(vec![ro.name, self.face_name(f)])
+                .with_name(self.body.vertex(v).name);
             let (eid, fwd) = self.edge_between(curve, ta, tb, a.1, b.1, name);
             self.paths.insert(at(j).cin, vec![(eid, fwd)]);
             back.push((eid, !fwd));
@@ -772,11 +812,11 @@ impl Builder {
                 let q = self.rolled[ra].springs[s_a].eval(t);
                 let name = Name::NONE.with_set(vec![na, nb]).with_name(ename);
                 if q.distance(foot) <= tol::LINEAR {
-                    self.trim(c, foot, fv, ea)?;
+                    self.trim(c, foot, fv, ea, None)?;
                     at_foot.push(m);
                 } else if ahead(self, ra, t, ta, mid_a) {
                     let qv = self.body.add_vertex(q, name);
-                    self.trim(c, q, qv, ea)?;
+                    self.trim(c, q, qv, ea, None)?;
                     on_a.push((t, qv, m));
                 } else {
                     let u = crossing(&self.rolled[rb].springs[s_b], tb, &curve, range).ok_or(err.clone())?;
@@ -785,7 +825,7 @@ impl Builder {
                     }
                     let q = self.rolled[rb].springs[s_b].eval(u);
                     let qv = self.body.add_vertex(q, name);
-                    self.trim(c, q, qv, ea)?;
+                    self.trim(c, q, qv, ea, None)?;
                     on_b.push((u, qv, m));
                 }
             }
@@ -1075,7 +1115,7 @@ impl Builder {
                 .find(|&p| on_edge(p) && p.distance(input.point) > tol::LINEAR)
                 .ok_or(err.clone())?;
             let vm = self.pooled(&mut pool, m, Name::NONE.with_str("cut").with_name(vname));
-            self.trim(ring[j].cin, m, vm, any_blend)?;
+            self.trim(ring[j].cin, m, vm, any_blend, None)?;
             cuts[j] = Some(vm);
         }
         // face corners: from the arriving side's stop to the leaving side's, along the face's trim
