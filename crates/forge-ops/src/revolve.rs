@@ -75,7 +75,7 @@ pub fn revolve(profile: &Profile, axis: Axis2, angle: f64, feature: u64) -> Resu
     let flat_or_round = |s: &Segment| {
         matches!(
             b.surface_of(s),
-            Ok(None | Some(Surface::Plane(_) | Surface::Cylinder(_)))
+            Ok(None | Some(Surface::Plane(_) | Surface::Cylinder(_) | Surface::Cone(_)))
         )
     };
     if full
@@ -293,8 +293,18 @@ impl Revolver<'_> {
 
         // vertices per copy; a vertex on the axis is one vertex for every copy
         let mut vid: Vec<Vec<VertexId>> = vec![Vec::new(); copies];
+        // on a whole turn only a cone's seam ends on the axis (at its apex)
+        let mut seam_end = vec![false; pverts.len()];
+        if copies == 1 {
+            for s in &segs {
+                if let Ok(Some(Surface::Cone(_))) = self.surface_of(&s.seg) {
+                    seam_end[s.start] = true;
+                    seam_end[s.end] = true;
+                }
+            }
+        }
         for (i, &p) in pverts.iter().enumerate() {
-            if self.on_axis(p) && copies == 1 {
+            if self.on_axis(p) && copies == 1 && !seam_end[i] {
                 // a whole-turn disc has no seam to end there: nothing uses the vertex
                 vid[0].push(VertexId(u32::MAX));
             } else if self.on_axis(p) {

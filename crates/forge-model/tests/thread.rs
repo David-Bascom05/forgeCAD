@@ -446,3 +446,30 @@ fn overlapping_coils_unite() {
         "{one} {two} {union} {common}"
     );
 }
+
+/// An M22x1 thread chamfered at the mouth of a 20.9 bore in a rod: the chamfer's whole-turn cone
+/// meets the top in a circle 0.06 outside the groove's reach, nearer the groove's outline there
+/// than the circle's chords lie to it.
+#[test]
+fn a_chamfered_thread_in_a_bore_just_under_its_size() {
+    let bore = Feature::Hole(Box::new(Hole {
+        at: top(30.0),
+        diameter: 20.9,
+        head: Head::Plain,
+        end: End::Depth(7.0),
+        point: None,
+        thread: None,
+        standard: None,
+        places: None,
+    }));
+    let spec = ThreadSpec::parse("M22x1").expect("fine M22");
+    let on = ThreadOn::Axis {
+        at: top(30.0),
+        spec,
+        internal: true,
+    };
+    let part = Part {
+        features: vec![rod(21.0, 30.0), bore, thread(on, 6.0, Handed::Right, true)],
+    };
+    assert!(volume(&part) > 0.0);
+}

@@ -1522,6 +1522,14 @@ pub(crate) fn local_class<T: PartialEq>(
     None
 }
 
+/// Whether `curve` passes the middle of edge `e`, not just an end.
+#[cold]
+fn runs_along(body: &Body, e: EdgeId, curve: &Curve, range: Interval) -> bool {
+    let edge = body.edge(e);
+    let m = edge.curve.eval(edge.range.mid());
+    curve.eval(curve.closest(m, range)).distance(m) <= tol::LINEAR.max(body.vertex(edge.start).tol)
+}
+
 /// Cuts `curve` (on both faces' surfaces) where it crosses either face's
 /// boundary and records the pieces lying inside both faces.
 #[allow(clippy::too_many_arguments)]
@@ -1625,7 +1633,10 @@ pub(crate) fn trim(
                         let other = &bodies[1 - k].face(faces[1 - k]).surface;
                         let coplanar =
                             g.is_some_and(|g| g != f && ssi::coincident(&body.face(g).surface, other));
-                        if !coplanar && !along.iter().any(|a| a.0 == k && a.1 == e) {
+                        // (on the surface across a seam the curve may only pass an end: a cone's
+                        // seam and another of its lines in one plane through its axis)
+                        let runs = !seam || runs_along(body, e, &curve, range);
+                        if runs && !coplanar && !along.iter().any(|a| a.0 == k && a.1 == e) {
                             along.push((k, e, seam));
                         }
                         for (s, v) in [(edge.range.lo, edge.start), (edge.range.hi, edge.end)] {
@@ -2902,10 +2913,28 @@ pub(crate) fn uv_dir(body: &Body, f: FaceId, p: &Piece, forward: bool, at_end: b
     // least squares for (a, b) with a du + b dv = dir
     let (uu, uv2, vv) = (sd.du.dot(sd.du), sd.du.dot(sd.dv), sd.dv.dot(sd.dv));
     let (ru, rv) = (sd.du.dot(dir), sd.dv.dot(dir));
-    let (a, b) = forge_math::linalg::solve2(uu, uv2, uv2, vv, ru, rv)
-        .ok_or(BoolError::Unsupported("split through a singular point"))?;
+    let Some((a, b)) = forge_math::linalg::solve2(uu, uv2, uv2, vv, ru, rv) else {
+        return round_point(face, p, t, uv, forward != at_end);
+    };
     let a = if face.same_sense { a } else { -a };
     Ok(Vec2::new(a, b))
+}
+
+/// `uv_dir` at a cone's apex or a sphere's pole, where every way leaves along v: a way is told
+/// by its u, the angle round the point, in the chart r (cos u, sin u) where r is the distance
+/// from it (turned over where v grows away from it, as (u, v) runs the other way round).
+#[cold]
+fn round_point(face: &forge_topo::Face, p: &Piece, t: f64, uv: Point2, from_lo: bool) -> R<Vec2> {
+    if !matches!(face.surface, Surface::Cone(_) | Surface::Sphere(_)) {
+        return Err(BoolError::Unsupported("split through a singular point"));
+    }
+    let step = 1e-3 * p.range.width();
+    let near = face
+        .surface
+        .project(p.curve.eval(if from_lo { t + step } else { t - step }));
+    let (sin, cos) = forge_math::dmath::sin_cos(near.x);
+    let flip = (near.y > uv.y) == face.same_sense;
+    Ok(Vec2::new(cos, if flip { -sin } else { sin }))
 }
 
 struct LocalSplit<'a> {
@@ -3230,6 +3259,8 @@ pub(crate) fn split_face(
     // must all be drawn)
     let mut skip = vec![false; cycles.len()];
     let mut polys: Vec<Option<Vec<Point2>>> = Vec::with_capacity(cycles.len());
+    // the cycles drawn exactly (their outlines have no sag)
+    let mut exact: Vec<usize> = Vec::new();
     for (k, cyc) in cycles.iter().enumerate() {
         if untouched(cyc) {
             polys.push(None);
@@ -3240,6 +3271,9 @@ pub(crate) fn split_face(
             Surface::Cylinder(c) => cylinder_outline(c, walk, pieces),
             _ => None,
         };
+        if pts.is_some() {
+            exact.push(k);
+        }
         // (a cycle using the face's outer loop is no hole: a hole needs drawing to find its region)
         if pts.is_none()
             && cyc.iter().any(|&i| i < outer_len)
@@ -3336,11 +3370,101 @@ pub(crate) fn split_face(
         }
     }
     let outlines = std::cell::OnceCell::<Vec<Outline>>::new();
-    for (k, cyc) in cycles.iter().enumerate() {
-        if areas[k] > 0.0 || skip[k] {
+    let shifts = |period: Option<f64>| match period {
+        Some(p) => ([0.0, -p, p], 3),
+        None => ([0.0; 3], 1),
+    };
+    let ((us, nu), (vs, nv)) = (shifts(dom.u.period), shifts(dom.v.period));
+    let (su, sv) = (&us[..nu], &vs[..nv]);
+    // each outline's chords by 16, each run's box grown by the most its chords may sag
+    const RUN: usize = 16;
+    let runs = std::cell::OnceCell::<Vec<std::cell::OnceCell<Vec<[f64; 4]>>>>::new();
+    let run_boxes = |p: &[Point2]| -> Vec<[f64; 4]> {
+        (0..p.len())
+            .step_by(RUN)
+            .map(|s| {
+                let mut r = [f64::INFINITY, f64::NEG_INFINITY, f64::INFINITY, f64::NEG_INFINITY];
+                let mut far = 0.0f64;
+                for k in s..(s + RUN).min(p.len()) {
+                    let (a, c) = (p[k], p[(k + 1) % p.len()]);
+                    far = far.max(0.06 * ((c.x - a.x).abs() + (c.y - a.y).abs()));
+                    r = [
+                        r[0].min(a.x.min(c.x)),
+                        r[1].max(a.x.max(c.x)),
+                        r[2].min(a.y.min(c.y)),
+                        r[3].max(a.y.max(c.y)),
+                    ];
+                }
+                [r[0] - far, r[1] + far, r[2] - far, r[3] + far]
+            })
+            .collect()
+    };
+    // how far point q lies from the chords of the outlines with a curve in them, not drawn
+    // exactly, that share no piece with hole cycle `cyc`, in sags (a chord of 16 to a piece
+    // bulges from its curve by under 0.06 of its length) plus `slack`; at least 1 where no such
+    // chord can be drawn past it
+    let off_chords = |q: Point2, cyc: &[usize], slack: f64| -> f64 {
+        let mut worst = f64::INFINITY;
+        let line = |j: &usize| matches!(pieces[half[*j].0].curve, Curve::Line(_));
+        let shares = |j: &usize| cyc.iter().any(|&i| half[i].0 == half[*j].0);
+        for &o in &outer_of {
+            let (Some(poly), Some(b)) = (&polys[o], boxes[o]) else {
+                continue;
+            };
+            let g = 0.06 * Vec2::new(b.1 - b.0, b.3 - b.2).length() + slack;
+            let near = |&(du, dv): &(f64, f64)| {
+                let q = Point2::new(q.x + du, q.y + dv);
+                q.x >= b.0 - g && q.x <= b.1 + g && q.y >= b.2 - g && q.y <= b.3 + g
+            };
+            let mut at = su
+                .iter()
+                .flat_map(|&du| sv.iter().map(move |&dv| (du, dv)))
+                .filter(near)
+                .peekable();
+            if at.peek().is_none()
+                || exact.contains(&o)
+                || cycles[o].iter().all(line)
+                || cycles[o].iter().any(shares)
+            {
+                continue;
+            }
+            for (du, dv) in at {
+                let q = Point2::new(q.x + du, q.y + dv);
+                let ks = runs.get_or_init(|| vec![std::cell::OnceCell::new(); cycles.len()])[o]
+                    .get_or_init(|| run_boxes(poly))
+                    .iter()
+                    .enumerate()
+                    .filter(|(_, r)| {
+                        q.x >= r[0] - slack
+                            && q.x <= r[1] + slack
+                            && q.y >= r[2] - slack
+                            && q.y <= r[3] + slack
+                    });
+                for k in ks.flat_map(|(j, _)| j * RUN..(j * RUN + RUN).min(poly.len())) {
+                    let (a, c) = (poly[k], poly[(k + 1) % poly.len()]);
+                    let ac = c - a;
+                    // (a chord is no longer than its run in x and y together)
+                    let far = 0.06 * (ac.x.abs() + ac.y.abs()) + slack;
+                    if q.x < a.x.min(c.x) - far
+                        || q.x > a.x.max(c.x) + far
+                        || q.y < a.y.min(c.y) - far
+                        || q.y > a.y.max(c.y) + far
+                    {
+                        continue;
+                    }
+                    let sag = 0.06 * ac.length() + slack;
+                    let t = ((q - a).dot(ac) / ac.length_sq().max(f64::MIN_POSITIVE)).clamp(0.0, 1.0);
+                    worst = worst.min(q.distance(a + ac * t) / sag.max(f64::MIN_POSITIVE));
+                }
+            }
+        }
+        worst
+    };
+    for (c, cyc) in cycles.iter().enumerate() {
+        if areas[c] > 0.0 || skip[c] {
             continue;
         }
-        let probe = match &polys[k] {
+        let probe = match &polys[c] {
             // a point just off the hole's longest segment, on its material side (the left);
             // a short first segment put the probe a hair from the outline, on either side
             Some(poly) => {
@@ -3351,7 +3475,39 @@ pub(crate) fn split_face(
                     })
                     .unwrap_or(0);
                 let (p0, p1) = (poly[k], poly[(k + 1) % poly.len()]);
-                p0.lerp(p1, 0.5) + (p1 - p0).perp() * 1e-3
+                let chord = p0.lerp(p1, 0.5) + (p1 - p0).perp() * 1e-3;
+                // the chord's middle may lie up to its sag off the hole's curve, and a curved
+                // outline may be drawn either side of a point nearer it than its own chords' sag:
+                // with such an outline that near (concentric or near-tangent loops), a point a
+                // step in off one of the hole's drawn points (each on its curve) where it runs
+                // smoothly, outside its outline and clearest of the others
+                let curved = !exact.contains(&c)
+                    && cyc
+                        .iter()
+                        .any(|&i| !matches!(pieces[half[i].0].curve, Curve::Line(_)));
+                let own = if curved { 0.06 * (p1 - p0).length() } else { 0.0 };
+                let mut best = (off_chords(chord, cyc, own), chord);
+                let n = poly.len();
+                let step = (n / 12).max(1);
+                for i in (step / 2..n).step_by(step) {
+                    if best.0 >= 1.0 {
+                        break;
+                    }
+                    let (a, b) = (poly[i] - poly[(i + n - 1) % n], poly[(i + 1) % n] - poly[i]);
+                    if a.dot(b) <= 0.9 * a.length() * b.length() {
+                        continue;
+                    }
+                    let q = poly[i] + (a + b).perp() * 0.5e-3;
+                    let s = off_chords(q, cyc, 0.0);
+                    let outside = |&du: &f64| {
+                        sv.iter()
+                            .all(|&dv| !inside_poly(Point2::new(q.x + du, q.y + dv), poly))
+                    };
+                    if s > best.0 && su.iter().all(outside) {
+                        best = (s, q);
+                    }
+                }
+                best.1
             }
             // an untouched hole touches no new edge, so it lies wholly on one side of every outline
             None => {
@@ -3375,11 +3531,6 @@ pub(crate) fn split_face(
         // the smallest outline holding it; the untouched outer loop (no outline) holds every hole.
         // Outlines of a face spanning more than a period can't all share one window, so the
         // probe is tried a period either way too
-        let shifts = |period: Option<f64>| match period {
-            Some(p) => vec![0.0, -p, p],
-            None => vec![0.0],
-        };
-        let (su, sv) = (shifts(dom.u.period), shifts(dom.v.period));
         let holds = |o: usize| {
             let (Some(poly), Some(b)) = (&polys[o], &boxes[o]) else {
                 return true;

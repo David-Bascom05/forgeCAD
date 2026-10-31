@@ -20,6 +20,7 @@ pub fn unify(body: &mut Body) {
         .map(|f| match &f.surface {
             Surface::Plane(p) => (1, p.frame.z().dot(p.frame.origin.to_vec()).abs()),
             Surface::Cylinder(c) => (2, c.radius),
+            Surface::Cone(_) => (3, 0.0),
             _ => (0, 0.0),
         })
         .collect();
@@ -240,6 +241,15 @@ fn between_same(body: &Body, keys: &[(u8, f64)], e: EdgeId) -> bool {
                     let c = p.frame.z().cross(off);
                     c.dot(c) <= tol::LINEAR * tol::LINEAR
                 }
+        }
+        // (not along a line from the apex: a whole cone there would have no seam)
+        (Surface::Cone(_), Surface::Cone(_)) => {
+            let s = &fa.surface;
+            fa.same_sense == fb.same_sense
+                && crate::ssi::coincident(s, &fb.surface)
+                && [x.start, x.end]
+                    .iter()
+                    .all(|&v| !s.singular(s.project(body.vertex(v).point)))
         }
         _ => false,
     };

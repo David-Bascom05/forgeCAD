@@ -92,8 +92,9 @@ fn a_ring_of_blocks_has_one_top_with_a_hole() {
     assert!((volume(&u) - (900.0 - 100.0) * 5.0).abs() < 1e-6);
 }
 
-/// A whole-turn revolve with a cone in it is made of half-turn faces: joined, each cylinder is
-/// one face with a seam and each disc or ring one face with no seam; the cone stays in halves.
+/// Two half-turn revolves of a profile with cones in it, one each side of the axis, added: the
+/// cylinder and the frustum each join into one face with a seam, the disc and ring into one with
+/// none; the cone to its apex stays in halves (one face there would have no seam).
 #[test]
 fn revolved_halves_join() {
     let pts = [
@@ -101,33 +102,94 @@ fn revolved_halves_join() {
         (3.0, 2.0),
         (3.0, 8.0),
         (5.0, 8.0),
-        (5.0, 12.0),
+        (7.0, 12.0),
         (0.0, 12.0),
     ];
-    let b = revolved(&pts, 1);
-    assert_eq!(b.face_ids().count(), 10);
-    let halves = volume(&b);
-    let u = unified(b);
-    // two half cones, cylinder, ring, cylinder, end disc
-    assert_eq!(u.face_ids().count(), 6);
+    let mirrored: Vec<(f64, f64)> = pts.iter().map(|p| (-p.0, p.1)).collect();
+    let halves = boolean(
+        &revolved_by(&pts, forge_math::dmath::PI, 1),
+        &revolved_by(&mirrored, forge_math::dmath::PI, 2),
+        Op::Union,
+        3,
+    )
+    .unwrap();
+    let whole = revolved(&pts, 4);
+    let u = unified(halves);
+    // two half cones, cylinder, ring, frustum, end disc
+    assert_eq!((u.face_ids().count(), whole.face_ids().count()), (6, 5));
+    assert!((volume(&u) - volume(&whole)).abs() < 1e-3 * volume(&whole));
+    let seamed: Vec<&Surface> = u
+        .face_ids()
+        .filter(|&f| {
+            u.face(f)
+                .loops
+                .iter()
+                .flat_map(|&l| u.lp(l).coedges())
+                .any(|c| u.partner(c).is_some_and(|p| u.coedge_face(p) == f))
+        })
+        .map(|f| &u.face(f).surface)
+        .collect();
     assert!(
-        (volume(&u) - halves).abs() < 1e-3 * halves,
-        "{} {halves}",
-        volume(&u)
+        matches!(
+            seamed[..],
+            [Surface::Cylinder(_), Surface::Cone(_)] | [Surface::Cone(_), Surface::Cylinder(_)]
+        ),
+        "{seamed:?}"
     );
-    for f in u.face_ids() {
-        let seam = u
-            .face(f)
-            .loops
-            .iter()
-            .flat_map(|&l| u.lp(l).coedges())
-            .any(|c| u.partner(c).is_some_and(|p| u.coedge_face(p) == f));
-        let round = matches!(u.face(f).surface, Surface::Cylinder(_));
-        assert_eq!(seam, round, "{:?}", u.face(f).surface);
+}
+
+/// A whole-turn cone (one face, its seam ending at the apex) cut by a wedge whose two sides hold
+/// its axis: the face is split along two lines through the apex, besides the seam, so the way on
+/// at the apex is chosen among three.
+#[test]
+fn a_wedge_through_a_cones_apex() {
+    let cone = || revolved(&[(0.0, 0.0), (5.0, 0.0), (0.0, 10.0)], 1);
+    let pts = [(0.0, 0.0), (20.0, 5.0), (20.0, 15.0)];
+    let segs = (0..3)
+        .map(|i| {
+            let (a, b) = (pts[i], pts[(i + 1) % 3]);
+            let seg = Segment::Line {
+                a: Point2::new(a.0, a.1),
+                b: Point2::new(b.0, b.1),
+            };
+            (seg, i as u64)
+        })
+        .collect();
+    let plane = Frame::from_axes(
+        Point3::new(0.0, -1.0, 0.0),
+        forge_math::Vec3::new(1.0, 0.0, 0.0),
+        forge_math::Vec3::new(0.0, 0.0, -1.0),
+        forge_math::Vec3::new(0.0, 1.0, 0.0),
+    )
+    .unwrap();
+    let wedge = extrude(
+        &Profile {
+            plane,
+            loops: vec![ProfileLoop::new(segs)],
+        },
+        12.0,
+        2,
+    )
+    .unwrap();
+    // (as meshed, a little under the cone's exact volume)
+    let whole = volume(&cone());
+    let share = (forge_math::dmath::atan(0.75) - forge_math::dmath::atan(0.25)) / forge_math::dmath::TAU;
+    for (op, want) in [(Op::Subtract, 1.0 - share), (Op::Intersect, share)] {
+        let b = boolean(&cone(), &wedge, op, 3).unwrap();
+        assert!(check(&b).is_empty(), "{op:?} {:?}", check(&b));
+        assert!(
+            (volume(&b) - want * whole).abs() < 1e-3 * whole,
+            "{op:?} {}",
+            volume(&b) / whole
+        );
     }
 }
 
 fn revolved(pts: &[(f64, f64)], feature: u64) -> Body {
+    revolved_by(pts, forge_math::dmath::TAU, feature)
+}
+
+fn revolved_by(pts: &[(f64, f64)], angle: f64, feature: u64) -> Body {
     let segs = (0..pts.len())
         .map(|i| {
             let (a, b) = (pts[i], pts[(i + 1) % pts.len()]);
@@ -146,7 +208,7 @@ fn revolved(pts: &[(f64, f64)], feature: u64) -> Body {
         origin: Point2::ORIGIN,
         dir: Vec2::new(0.0, 1.0),
     };
-    revolve(&profile, axis, forge_math::dmath::TAU, feature).unwrap()
+    revolve(&profile, axis, angle, feature).unwrap()
 }
 
 /// A tube's end disc joined whole, cut by a bore ending on it and a seat flush with it in one
