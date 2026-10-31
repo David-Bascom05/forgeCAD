@@ -551,10 +551,59 @@ pub fn nary_with(
     root: Name,
 ) -> R<Body> {
     let mut out = nary_body(tools, ops, shapes, batch, threads, root)?;
-    // pieces left touching at a point keep a vertex each
+    // pieces left touching at a point keep a vertex each: where walking round a vertex from one
+    // coedge leaving it (back along its loop, across to the partner) misses some of the others
+    let nv = out.vertices.len();
+    let from = |x: &forge_topo::Edge, c: forge_topo::CoedgeId| {
+        if out.coedges[c.index()].forward {
+            x.start
+        } else {
+            x.end
+        }
+        .index()
+    };
+    // the coedges leaving vertex v are leaving[at[v]..at[v + 1]]
+    let mut at = vec![0u32; nv + 1];
+    for x in out.edges.iter().filter(|x| x.alive) {
+        for &c in x.coedges.iter() {
+            at[from(x, c) + 1] += 1;
+        }
+    }
+    for v in 0..nv {
+        at[v + 1] += at[v];
+    }
+    let mut leaving = vec![forge_topo::CoedgeId(0); at[nv] as usize];
+    let mut fill = at.clone();
+    for x in out.edges.iter().filter(|x| x.alive) {
+        for &c in x.coedges.iter() {
+            let v = from(x, c);
+            leaving[fill[v] as usize] = c;
+            fill[v] += 1;
+        }
+    }
+    let mut before = vec![forge_topo::CoedgeId(0); out.coedges.len()];
+    for l in &out.loops {
+        let mut last = l.coedges().next_back().unwrap_or_default();
+        for c in l.coedges() {
+            before[c.index()] = last;
+            last = c;
+        }
+    }
     let mut prev = Vec::new();
-    for (v, cs) in out.leaving().into_iter().enumerate() {
-        out.split_pinched(forge_topo::VertexId(v as u32), &cs, &mut prev);
+    for v in 0..nv {
+        let from = &leaving[at[v] as usize..at[v + 1] as usize];
+        let Some(&c0) = from.first() else { continue };
+        let (mut c, mut k) = (c0, 1);
+        let one = loop {
+            match out.partner(before[c.index()]) {
+                Some(n) if n == c0 => break k == from.len(),
+                Some(n) if k < from.len() => (c, k) = (n, k + 1),
+                _ => break false,
+            }
+        };
+        if !one {
+            out.split_pinched(VertexId(v as u32), from, &mut prev);
+        }
     }
     Ok(out)
 }

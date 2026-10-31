@@ -292,8 +292,30 @@ fn split_new_pinches(target: &mut Body, loops: usize, verts: usize) {
         .filter(|(v, _)| v.index() >= verts)
         .collect();
     from.sort_unstable();
+    // round the vertex from the first (back along its loop, across to the partner): one fan
+    // when that comes back having passed all the others
+    let one_fan = |t: &Body, run: &[(VertexId, forge_topo::CoedgeId)]| {
+        let c0 = run[0].1;
+        let (mut c, mut seen) = (c0, 1);
+        for _ in 0..t.coedges.len() {
+            let l = t.lp(t.coedge(c).lp);
+            let (first, n) = (l.coedge(0).0, l.coedges().len() as u32);
+            let Some(next) = t.partner(forge_topo::CoedgeId(first + (c.0 - first + n - 1) % n)) else {
+                return false;
+            };
+            if next == c0 {
+                return seen == run.len();
+            }
+            seen += run[1..].iter().filter(|x| x.1 == next).count();
+            c = next;
+        }
+        false
+    };
     let mut prev = Vec::new();
     for run in from.chunk_by(|x, y| x.0 == y.0).filter(|run| run.len() > 1) {
+        if one_fan(target, run) {
+            continue;
+        }
         let cs: Vec<_> = run.iter().map(|x| x.1).collect();
         target.split_pinched(run[0].0, &cs, &mut prev);
     }
