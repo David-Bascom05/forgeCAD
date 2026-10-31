@@ -1863,10 +1863,13 @@ pub(crate) fn trim(
                 {
                     for h in more {
                         let t = curve.closest(h.point, range);
-                        if curve.eval(t).distance(h.point) <= tol::LINEAR
-                            && hs.iter().all(|x| x.point.distance(h.point) > 10.0 * tol::LINEAR)
-                        {
-                            hs.push(CurveHit { t, ..h });
+                        if curve.eval(t).distance(h.point) > tol::LINEAR {
+                            continue;
+                        }
+                        // the one point both faces of the spring take, so their curves meet there
+                        match hs.iter_mut().find(|x| x.point.distance(h.point) <= 1e-2) {
+                            Some(x) => *x = CurveHit { t, ..h },
+                            None => hs.push(CurveHit { t, ..h }),
                         }
                     }
                 }
