@@ -168,8 +168,18 @@ pub fn rebuild_some(body: &mut Body, verts: &[bool], edges: &[bool]) -> Result<(
         edge.range = range;
         edge.bbox.clear();
     }
+    // a face keeps its box unless an edge of it was refit or a vertex of it moved
     for f in 0..body.faces.len() {
-        body.faces[f].bbox.clear();
+        let moved = body.faces[f].loops.iter().any(|&l| {
+            body.lp(l).coedges().any(|c| {
+                let e = body.coedge(c).edge;
+                let edge = body.edge(e);
+                edges[e.index()] || verts[edge.start.index()] || verts[edge.end.index()]
+            })
+        });
+        if moved {
+            body.faces[f].bbox.clear();
+        }
         body.faces[f].query.clear();
     }
     Ok(())

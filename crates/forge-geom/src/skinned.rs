@@ -533,18 +533,21 @@ impl Poly {
 }
 
 impl Poly {
-    /// A box holding the points over `uv`, span by span.
-    fn bbox(&self, spline: &Spline, uv: Box2) -> Box3 {
+    /// A box holding the points over each u of `us` (at most four) by `v`, span by span.
+    fn bbox(&self, spline: &Spline, us: &[Interval], v: Interval) -> Box3 {
         let k = &spline.knots;
-        let mut out = Box3::EMPTY;
-        let mut lo = uv.v.lo;
+        let mut trig = [(Interval::EMPTY, Interval::EMPTY); 4];
+        if self.arcs {
+            for (t, &u) in trig.iter_mut().zip(us) {
+                let ang = u * self.sweep + self.start;
+                *t = (ang.cos(), ang.sin());
+            }
+        }
+        let mut out = [Box3::EMPTY; 4];
+        let mut lo = v.lo;
         loop {
             let i = spline.span(lo);
-            let hi = if i + 2 < k.len() {
-                uv.v.hi.min(k[i + 1])
-            } else {
-                uv.v.hi
-            };
+            let hi = if i + 2 < k.len() { v.hi.min(k[i + 1]) } else { v.hi };
             let h = k[i + 1] - k[i];
             let b = (Interval::new(lo, hi.max(lo)) + (-k[i])) * (1.0 / h);
             let cubic = |c: &[Vec3; 4]| {
@@ -553,22 +556,26 @@ impl Poly {
             };
             let sp = &self.spans[i];
             let (a, e) = (cubic(&sp[0]), cubic(&sp[3]));
-            let mut p = [0, 1, 2].map(|j| a[j] + e[j] * uv.u);
-            if self.arcs {
-                let ang = uv.u * self.sweep + self.start;
-                let (cs, sn) = (ang.cos(), ang.sin());
-                let (bb, dd) = (cubic(&sp[1]), cubic(&sp[2]));
-                for j in 0..3 {
-                    p[j] = p[j] + bb[j] * cs + dd[j] * sn;
+            let (bb, dd) = if self.arcs {
+                (cubic(&sp[1]), cubic(&sp[2]))
+            } else {
+                ([Interval::EMPTY; 3], [Interval::EMPTY; 3])
+            };
+            for ((o, &u), &(cs, sn)) in out.iter_mut().zip(us).zip(&trig) {
+                let mut p = [0, 1, 2].map(|j| a[j] + e[j] * u);
+                if self.arcs {
+                    for j in 0..3 {
+                        p[j] = p[j] + bb[j] * cs + dd[j] * sn;
+                    }
                 }
+                *o = o.hull(&Box3 {
+                    x: p[0],
+                    y: p[1],
+                    z: p[2],
+                });
             }
-            out = out.hull(&Box3 {
-                x: p[0],
-                y: p[1],
-                z: p[2],
-            });
-            if hi >= uv.v.hi {
-                return out.grow(tol::LINEAR);
+            if hi >= v.hi {
+                return out.iter().fold(Box3::EMPTY, |b, o| b.hull(&o.grow(tol::LINEAR)));
             }
             lo = hi;
         }
@@ -724,6 +731,14 @@ impl Data {
                 if k == 3 { x.hi } else { x.lo + w * (k + 1) as f64 },
             )
         };
+        if let Some(p) = &self.poly {
+            // the arcs' turns once per u piece, the cubics once per v piece
+            let us = [0, 1, 2, 3].map(|i| piece(uv.u, i));
+            for j in 0..4 {
+                b = b.hull(&p.bbox(&self.spline, &us, piece(uv.v, j)));
+            }
+            return b;
+        }
         for i in 0..4 {
             for j in 0..4 {
                 b = b.hull(&self.piece_box(Box2::new(piece(uv.u, i), piece(uv.v, j))));
@@ -734,7 +749,7 @@ impl Data {
 
     fn piece_box(&self, uv: Box2) -> Box3 {
         if let Some(p) = &self.poly {
-            return p.bbox(&self.spline, uv);
+            return p.bbox(&self.spline, &[uv.u], uv.v);
         }
         let w = self.spline.weight_box(uv.v, 0);
         // the values' weights sum to one: measured from a point of the piece, the sum stays

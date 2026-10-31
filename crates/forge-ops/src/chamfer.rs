@@ -126,8 +126,12 @@ pub fn chamfer(body: &Body, edges: &[Name], size: ChamferSize, feature: u64) -> 
     for _ in &src.shells {
         out.add_shell();
     }
-    for f in &src.faces {
-        out.add_face(f.shell, f.surface.clone(), f.same_sense, f.name);
+    for (k, f) in src.faces.iter().enumerate() {
+        let nf = out.add_face(f.shell, f.surface.clone(), f.same_sense, f.name);
+        // a face no corner touches keeps its loops, so its box
+        if let (false, Some(b)) = (near[k], f.bbox.get()) {
+            out.faces[nf.index()].bbox.set(*b);
+        }
     }
     let cfaces: Vec<FaceId> = bevels
         .iter()

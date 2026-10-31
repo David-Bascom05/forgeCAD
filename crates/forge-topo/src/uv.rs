@@ -302,14 +302,34 @@ pub(crate) fn procedural_box(body: &Body, f: FaceId, pr: &forge_geom::surface::P
         Interval::new((i.lo - g).max(w.lo), (i.hi + g).min(w.hi))
     };
     // eight columns; one the boundary crosses askew (a run-out's cut) in eight
-    // more, twice
+    // more, twice. Each column reads only the segments of its parent's that reach it
+    // (padded, a superset): one that cannot reach it adds nothing, it only parts runs.
     const G: usize = 8;
-    let mut todo = vec![(su.lo, su.hi, 0)];
-    while let Some((lo, hi, depth)) = todo.pop() {
-        let (runs, askew) = column_runs(&loops, lo, hi);
+    let reach = |segs: &[(u32, u32)], lo: f64, hi: f64| -> Vec<(u32, u32)> {
+        let g = 1e-9 * (hi - lo) + 1e-12 * (1.0 + lo.abs().max(hi.abs()));
+        let (lo, hi) = (lo - g, hi + g);
+        segs.iter()
+            .copied()
+            .filter(|&(l, i)| {
+                let pts = &loops[l as usize].points;
+                let (p, q) = (pts[i as usize], pts[(i as usize + 1) % pts.len()]);
+                !(p.x.min(q.x) > hi || p.x.max(q.x) < lo)
+            })
+            .collect()
+    };
+    let all: Vec<(u32, u32)> = (0..loops.len())
+        .flat_map(|l| (0..loops[l].points.len()).map(move |i| (l as u32, i as u32)))
+        .collect();
+    let mut todo = vec![(su.lo, su.hi, 0, all)];
+    while let Some((lo, hi, depth, segs)) = todo.pop() {
+        let (runs, askew) = if depth == 0 {
+            (Vec::new(), true)
+        } else {
+            column_runs(&loops, &segs, lo, hi)
+        };
         if depth == 0 || (depth < 3 && askew) {
             let at = |k: usize| lo + (hi - lo) * k as f64 / G as f64;
-            todo.extend((0..G).map(|k| (at(k), at(k + 1), depth + 1)));
+            todo.extend((0..G).map(|k| (at(k), at(k + 1), depth + 1, reach(&segs, at(k), at(k + 1)))));
             continue;
         }
         let u = pad(Interval::new(lo, hi), whole.u);
@@ -323,40 +343,45 @@ pub(crate) fn procedural_box(body: &Body, f: FaceId, pr: &forge_geom::surface::P
 /// The v a face holds over u in [lo, hi], as runs, from its uv loops: each stretch of boundary
 /// inside the column, and between the boundary's crossings of the column's middle; and whether
 /// the boundary moves much in v while moving in u there (a cut askew).
-fn column_runs(loops: &[UvLoop], lo: f64, hi: f64) -> (Vec<Interval>, bool) {
+fn column_runs(loops: &[UvLoop], segs: &[(u32, u32)], lo: f64, hi: f64) -> (Vec<Interval>, bool) {
     let mid = 0.5 * (lo + hi);
     let mut runs: Vec<Interval> = Vec::new();
     let mut cross: Vec<f64> = Vec::new();
     let (mut moves, mut span) = (0.0f64, Interval::EMPTY);
-    for l in loops {
-        let n = l.points.len();
-        let mut piece = Interval::EMPTY;
-        for i in 0..n {
-            let (p, q) = (l.points[i], l.points[(i + 1) % n]);
-            if (p.x <= mid) != (q.x <= mid) {
-                cross.push(p.y + (q.y - p.y) * (mid - p.x) / (q.x - p.x));
-            }
-            let (a, c) = (p.x.min(q.x).max(lo), p.x.max(q.x).min(hi));
-            if a > c {
-                if !piece.is_empty() {
-                    runs.push(piece);
-                    piece = Interval::EMPTY;
-                }
-                continue;
-            }
-            let at = |u: f64| p.y + (q.y - p.y) * ((u - p.x) / (q.x - p.x)).clamp(0.0, 1.0);
-            let (va, vc) = if q.x == p.x { (p.y, q.y) } else { (at(a), at(c)) };
-            if q.x != p.x {
-                moves += (va - vc).abs();
-            }
-            piece.include(va);
-            piece.include(vc);
-            span.include(va);
-            span.include(vc);
-        }
-        if !piece.is_empty() {
+    let mut piece = Interval::EMPTY;
+    let mut last = None;
+    for &(l, i) in segs {
+        // a stretch runs on along consecutive segments of one loop
+        if last != Some((l, i.wrapping_sub(1))) && !piece.is_empty() {
             runs.push(piece);
+            piece = Interval::EMPTY;
         }
+        last = Some((l, i));
+        let pts = &loops[l as usize].points;
+        let (p, q) = (pts[i as usize], pts[(i as usize + 1) % pts.len()]);
+        if (p.x <= mid) != (q.x <= mid) {
+            cross.push(p.y + (q.y - p.y) * (mid - p.x) / (q.x - p.x));
+        }
+        let (a, c) = (p.x.min(q.x).max(lo), p.x.max(q.x).min(hi));
+        if a > c {
+            if !piece.is_empty() {
+                runs.push(piece);
+                piece = Interval::EMPTY;
+            }
+            continue;
+        }
+        let at = |u: f64| p.y + (q.y - p.y) * ((u - p.x) / (q.x - p.x)).clamp(0.0, 1.0);
+        let (va, vc) = if q.x == p.x { (p.y, q.y) } else { (at(a), at(c)) };
+        if q.x != p.x {
+            moves += (va - vc).abs();
+        }
+        piece.include(va);
+        piece.include(vc);
+        span.include(va);
+        span.include(vc);
+    }
+    if !piece.is_empty() {
+        runs.push(piece);
     }
     cross.sort_by(f64::total_cmp);
     runs.extend(cross.as_chunks::<2>().0.iter().map(|&[a, b]| Interval::new(a, b)));
