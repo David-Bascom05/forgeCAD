@@ -1644,18 +1644,21 @@ fn nary_body(
             let holds = held[p].get_or_init(|| {
                 let m = list[p].curve.eval(list[p].range.mid());
                 let mut holds: Vec<Side> = Vec::new();
-                for &k in grid.at(m) {
+                // with no intersect the last holder decides, whatever the tools before it: walked
+                // from the last tool, the first that holds the point ends the walk
+                for &k in grid.at(m).iter().rev() {
                     let k = k as usize;
                     if sg.sides.contains(&k) || !index[k].bbox.contains(m) {
                         continue;
                     }
                     match sh[k].member(m, SHAPE_MARGIN) {
-                        Member::In if any_intersect || holds.is_empty() => holds.push(k),
-                        Member::In => holds[0] = k,
+                        Member::In if any_intersect => holds.push(k),
+                        Member::In => return Some(vec![k]),
                         Member::Out => {}
                         Member::Near => return None,
                     }
                 }
+                holds.reverse();
                 Some(holds)
             });
             holds

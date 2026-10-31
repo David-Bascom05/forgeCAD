@@ -5,11 +5,11 @@ shaft nary bad41182c195ed74
 housing seq eb5f5e1cc550831e
 housing nary 61b823f6c9aa32f6
 coplanar seq 535e7820e8076ee4
-coplanar nary 5b07e0f72855f321
+coplanar nary f7ac338718fb082d
 patterns seq 1a8048e7d137e335
 patterns nary 0e8ed2ec3360bea2
 mixed seq 1aedd3a8711a4232
-mixed nary b74fff8236860e72
+mixed nary 3014f0b3e2bcb6be
 tour seq 9ef69ffaca0e0e76
 tour nary dc66e4dc54a15575
 hole-grid seq a329abaafd8e6c10
