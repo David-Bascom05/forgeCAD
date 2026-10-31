@@ -3,13 +3,13 @@ plate nary 06ddd7366c6e3a4d
 shaft seq 53893e049b9a02a3
 shaft nary 99184724b31188b0
 housing seq d103e90dbf9da795
-housing nary 481c576d5e86936e
+housing nary afc76b521d0bddd5
 coplanar seq b6b72b7d18327745
-coplanar nary bbb13822f749d482
+coplanar nary eb2ce87e2c2f31ce
 patterns seq a87ccc2b0424a8df
-patterns nary 9d9f82acee2aa729
+patterns nary 1adb7e1757ed74a6
 mixed seq fa4ab4e78bfc23a1
-mixed nary 596088b2d82878d3
+mixed nary aed37bb096bd2ea0
 tour seq 9ef69ffaca0e0e76
 tour nary d1ae126d3f8160dd
 hole-grid seq a329abaafd8e6c10

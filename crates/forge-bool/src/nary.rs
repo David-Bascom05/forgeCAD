@@ -244,7 +244,7 @@ impl Grid {
     }
 }
 
-/// Which tools hold a point just inside and just outside a region, and whether a lower tool's
+/// Which tools hold a point just inside and just outside a region, and whether another tool's
 /// face lies on it.
 type Seen = (Vec<bool>, Vec<bool>, bool);
 /// A region's loops and its verdict: None dropped, Some(flip) kept.
@@ -370,6 +370,29 @@ fn in_result(ops: &[Op], inside: &[bool], any_intersect: bool) -> bool {
         };
     }
     v
+}
+
+/// Whether the region on tool `side`'s face, with these tools holding a point just inside and
+/// just outside it, is the face the sequential regen keeps there: the boundary through the point
+/// is that of the tool that last made it (as the part stood before each tool, a face already
+/// there keeps its place against a coincident one of a later tool).
+fn owned(ops: &[Op], inner: &[bool], outer: &[bool], side: Side) -> bool {
+    let (mut vin, mut vout) = (inner[0], outer[0]);
+    let mut was = (vin != vout).then_some(vin);
+    let mut owner = 0;
+    for k in 1..inner.len() {
+        (vin, vout) = match ops[k - 1] {
+            Op::Union => (vin || inner[k], vout || outer[k]),
+            Op::Subtract => (vin && !inner[k], vout && !outer[k]),
+            Op::Intersect => (vin && inner[k], vout && outer[k]),
+        };
+        let now = (vin != vout).then_some(vin);
+        if now.is_some() && now != was {
+            owner = k;
+        }
+        was = now;
+    }
+    owner == side
 }
 
 /// The solid `tools[0] ops[0] tools[1] ops[1] tools[2] ...`, folded left, in one pass.
@@ -1465,7 +1488,7 @@ pub fn nary_with(
             let mut inner = vec![false; n];
             let mut outer = vec![false; n];
             inner[r.side] = true;
-            let mut shadowed = false;
+            let mut on_face = false;
             for k in 0..n {
                 if k == r.side || !index[k].bbox.contains(p) {
                     continue;
@@ -1501,17 +1524,17 @@ pub fn nary_with(
                         let m = other
                             .face_normal(g, other.face(g).surface.project(p))
                             .ok_or(BoolError::Internal("no normal at a region's point"))?;
+                        on_face = true;
                         // the other tool's material is behind its face
                         if m.dot(normal.get()) > 0.0 {
                             inner[k] = true;
                         } else {
                             outer[k] = true;
                         }
-                        shadowed |= k < r.side;
                     }
                 }
             }
-            Ok(Ok((inner, outer, shadowed)))
+            Ok(Ok((inner, outer, on_face)))
         };
         let mut found = None;
         let mut stuck: Vec<Side> = Vec::new();
@@ -1533,7 +1556,7 @@ pub fn nary_with(
                 break;
             }
         }
-        let (p, (inner, outer, shadowed)) = match found {
+        let (p, (inner, outer, on_face)) = match found {
             Some(x) => x,
             None => {
                 // near-tangent faces: the whole region is within tolerance of tool k; which side of
@@ -1608,14 +1631,15 @@ pub fn nary_with(
         if nary_on() {
             let on = |b: &[bool]| (0..n).filter(|&k| b[k]).collect::<Vec<_>>();
             eprintln!(
-                "REG {ri}: tool {} face {:?} probe {p:?} in {:?} out {:?} -> {fin} {fout} shadowed {shadowed}",
+                "REG {ri}: tool {} face {:?} probe {p:?} in {:?} out {:?} -> {fin} {fout}",
                 r.side,
                 r.face,
                 on(&inner),
                 on(&outer)
             );
         }
-        Ok((fin != fout && !shadowed).then_some(!fin))
+        // only where faces coincide can another tool's face be the one kept
+        Ok((fin != fout && (!on_face || owned(ops, &inner, &outer, r.side))).then_some(!fin))
     };
     let class = match batch {
         None => par_map(regs.len(), threads, 32, |ri| full(ri, None)),
@@ -1654,7 +1678,9 @@ pub fn nary_with(
     let merge_start = std::time::Instant::now();
 
     // a new edge with the same verdict on both sides divides nothing: the face is split again
-    // without it, each new region taking the verdict of the old ones it is made of
+    // without it, each new region taking the verdict of the old ones it is made of. The edge of
+    // a later tool's coincident face imprinted between two kept regions stays, as in the
+    // sequential regen (the face was there first and took the imprint)
     let merged = par_map(jobs.len(), threads, 16, |j| -> R<Option<Vec<Judged>>> {
         let rr = job_regs[j].clone();
         // nothing of a face all dropped is sewn, however it is split
@@ -1672,7 +1698,13 @@ pub fn nary_with(
             .iter()
             .copied()
             .filter(|&p| match (owner((p, true)), owner((p, false))) {
-                (Some(a), Some(b)) => a != b && class[a] != class[b],
+                (Some(a), Some(b)) => {
+                    a != b
+                        && (class[a] != class[b]
+                            || class[a].is_some()
+                                && list[p].seg.is_none()
+                                && list[p].side.is_some_and(|k| k > side))
+                }
                 _ => true,
             })
             .collect();

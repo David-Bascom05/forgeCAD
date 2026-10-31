@@ -22,6 +22,8 @@ fn nary_matches_sequential_on_the_suite() {
             forge_mesh::tessellate(&nary, &q).expect("mesh").volume(),
         );
         assert!((a - b).abs() <= 1e-3 * a, "{name}: volume {a} vs {b}");
+        // coincident faces: the one there first is kept, and keeps a later face's imprint
+        assert_eq!(nary.face_ids().count(), seq.face_ids().count(), "{name}: faces");
     }
 }
 
