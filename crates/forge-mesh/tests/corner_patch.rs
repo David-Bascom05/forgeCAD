@@ -1,18 +1,23 @@
 //! Corner patches mesh like any face: vertices on the exact surface, chords within quality,
 //! triangles facing out.
 
+use forge_geom::corner::{Closing, close_hole_rational};
 use forge_geom::{Surface, SurfaceGeom};
 use forge_math::{Point3, Vec3};
 use forge_mesh::{Quality, tessellate};
 use forge_ops::corner::patch;
-use forge_ops::corner::synthetic::{corner, planned_hole};
-use forge_ops::fillet::CornerInput;
+use forge_ops::corner::synthetic::{corner, planned_hole, sides};
+use forge_ops::fillet::{CornerInput, HoleSide};
 use forge_topo::{Body, Name};
 
 fn mesh_corner(c: &CornerInput, what: &str) {
     let hole = planned_hole(c);
     let p = patch(c, &hole).unwrap().unwrap();
     let face = &p.faces[0];
+    mesh_face(&hole, &face.surface, face.same_sense, what);
+}
+
+fn mesh_face(hole: &[HoleSide], surface: &Surface, same_sense: bool, what: &str) {
     let mut body = Body::new();
     let shell = body.add_shell();
     let vs: Vec<_> = hole
@@ -26,11 +31,11 @@ fn mesh_corner(c: &CornerInput, what: &str) {
             body.add_edge(h.curve.clone(), h.range, vs[i], vs[(i + 1) % n], Name::NONE)
         })
         .collect();
-    let f = body.add_face(shell, face.surface.clone(), face.same_sense, Name::NONE);
+    let f = body.add_face(shell, surface.clone(), same_sense, Name::NONE);
     body.add_loop(f, &edges.iter().map(|&e| (e, true)).collect::<Vec<_>>());
     let q = Quality::default();
     let m = tessellate(&body, &q).unwrap_or_else(|e| panic!("{what}: {e:?}"));
-    let s: &Surface = &face.surface;
+    let s = surface;
     assert!(m.triangles.len() >= 8, "{what}: {} triangles", m.triangles.len());
     for &v in &m.positions {
         assert!(
@@ -53,7 +58,7 @@ fn mesh_corner(c: &CornerInput, what: &str) {
             s.eval(uv).distance(mid)
         );
         let tn: Vec3 = (b - a).cross(c - a);
-        let sn = s.normal(uv).unwrap().get() * if face.same_sense { 1.0 } else { -1.0 };
+        let sn = s.normal(uv).unwrap().get() * if same_sense { 1.0 } else { -1.0 };
         assert!(tn.dot(sn) > 0.0, "{what}: triangle faces in");
     }
 }
@@ -107,6 +112,51 @@ fn corner_patches_mesh() {
         &cone(&saddle, &[(1.0, false), (1.5, true), (0.8, false), (1.2, true)]),
         "saddle",
     );
+}
+
+/// One face of rational quads, joined along seams only C0 in their parameters, meshes the
+/// same: even holes, an odd one (a spoke from the middle of a side) and kinked ones (sharp
+/// edges, where no spoke may leave).
+#[test]
+fn rational_corner_patches_mesh() {
+    let apex = [
+        Vec3::new(1.0, 0.1, -0.8),
+        Vec3::new(0.0, 1.0, -0.6),
+        Vec3::new(-1.0, 0.0, -1.0),
+        Vec3::new(0.1, -1.0, -0.7),
+    ];
+    let cases = [
+        (
+            box_corner([Some((1.0, true)), Some((2.0, true)), Some((3.0, true))]),
+            6,
+            "1 2 3",
+        ),
+        (
+            box_corner([Some((0.5, true)), Some((4.0, true)), Some((1.0, true))]),
+            6,
+            "0.5 4 1",
+        ),
+        (
+            box_corner([Some((1.0, true)), Some((2.0, true)), None]),
+            5,
+            "two fillets",
+        ),
+        (box_corner([Some((1.0, true)), None, None]), 4, "one fillet"),
+        (
+            cone(&apex, &[(1.0, true), (1.5, true), (0.8, true), (1.2, true)]),
+            8,
+            "apex",
+        ),
+    ];
+    for (c, n, what) in &cases {
+        let hole = planned_hole(c);
+        assert_eq!(hole.len(), *n, "{what}");
+        let (Closing::One(surface, same), proof) = close_hole_rational(sides(&hole)).expect(what) else {
+            panic!("{what}: not one face")
+        };
+        assert!(proof.proved, "{what}");
+        mesh_face(&hole, &surface, same, what);
+    }
 }
 
 /// A vertex with material below faces between the given edge directions.

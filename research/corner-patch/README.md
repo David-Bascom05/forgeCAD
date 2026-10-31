@@ -1,7 +1,7 @@
 # Corner patch: rational quads and their fold proof
 
-How the rational corner quads (`crates/forge-geom/src/corner/rational.rs`, `close_hole_rational`
-and `rational_pieces` in `corner.rs`) were chosen and measured. The analysis and all results are
+How the rational corner quads (`crates/forge-geom/src/corner/rational.rs`, `close_hole_rational`,
+`plans` and `Cells` in `corner.rs`) were chosen and measured. The analysis and all results are
 in `docs/fold-proof.md` (stages 0 to 4); this folder holds the code that produced them.
 
 ## What was derived, and where the code uses it
@@ -15,6 +15,12 @@ in `docs/fold-proof.md` (stages 0 to 4); this folder holds the code that produce
   direction (`spokes` in `corner.rs`): `rq.rs` on the survey. Parabolic spokes left near a
   side for 8+ sides (builds refused); control lengths fitted to today's patch folded a third of
   the 8-sided holes (`FOLDS=1` prints each quad's proof, sampled fold and corner angles).
+- **One face: where spokes leave, the domain, projection** (`plans`, `HolePatch::from_quads`,
+  `Cells` in `corner.rs`; docs/fold-proof.md stage 4 "One face per corner"): `sharp.rs`
+  surveys corners with sharp edges (odd holes and kinked vertices) and audits the one-face
+  patch (boundary, G1 normal, projection, derivatives, boxes); `rq.rs` the same on the
+  all-fillet survey. Per-cell seeds and Newton from several cells' seeds came from projection
+  failures they printed (PROJ=1).
 - **The centre from today's patch, the old heuristic beyond 12 sides**: `rq.rs` (gap to
   today's 19% with the heuristic centre on 6 sides, 2% with today's; beyond 12 sides the
   heuristic proves more).
@@ -34,11 +40,16 @@ with the workspace):
 ```
 cp research/corner-patch/rq.rs crates/forge-ops/examples/
 fbuild cargo build --release -p forge-ops --example rq
-./target/release/examples/rq 60 3 0     # CASES EDGES PARITY: survey 3-, 4-, 5-edge corners
-                                        # (EDGES 3..5) or EDGES 6..10 on their own
+./target/release/examples/rq 60 3 0     # CASES EDGES PLAN: survey 3-, 4-, 5-edge corners
+                                        # (EDGES 3..5) or EDGES 6..10 on their own; PLAN picks
+                                        # the way spokes leave for the per-quad measurements
 # env: NOSHAPE=1 (skip shape), PER=1 (per hole), FOLDS=1, KLOC=1 (curvature peaks),
 #      PROJ=1 (projection failures), PROOFONLY=2 (proof timing), COUNT=today|build|proof
 sh research/corner-patch/ic.sh proof 3  # instructions per hole for one kind of work
+
+cp research/corner-patch/sharp.rs crates/forge-ops/examples/
+fbuild cargo build --release -p forge-ops --example sharp
+./target/release/examples/sharp 60 1    # CASES SHARP: SHARP neighbouring edges of each corner
 
 cp research/corner-patch/kmin.rs crates/forge-model/examples/
 fbuild cargo build --release -p forge-model --example kmin

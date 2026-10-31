@@ -17,7 +17,7 @@
 use super::{Scalar, Side, SurfaceRail};
 use crate::curve::{Curve, CurveGeom};
 use crate::surface::Surface;
-use forge_math::{Box3, Frame, Interval, Point2, Point3, Vec3, dmath};
+use forge_math::{Box3, Frame, Interval, Point3, Vec2, Vec3, dmath};
 use std::collections::HashMap;
 use std::sync::{Mutex, OnceLock};
 
@@ -467,13 +467,11 @@ impl Quad {
         self.sides[i].arc.s_of_t(t)
     }
 
-    /// The patch at (u, v) in the unit square, with derivatives in the domain's (x, y) =
-    /// (u, v) times `k`.
-    pub(super) fn eval<S: Scalar>(&self, x: Point2, k: f64) -> S::V {
-        let (uv, vv) = ((x.x / k).clamp(0.0, 1.0), (x.y / k).clamp(0.0, 1.0));
-        let g = 1.0 / k;
-        let u = S::affine(uv, g, 0.0);
-        let v = S::affine(vv, 0.0, g);
+    /// The patch at (u, v) in the unit square, with derivatives in the domain's (x, y), where
+    /// u and v have the gradients `gu` and `gv`.
+    pub(super) fn eval<S: Scalar>(&self, u: f64, v: f64, gu: Vec2, gv: Vec2) -> S::V {
+        let u = S::affine(u.clamp(0.0, 1.0), gu.x, gu.y);
+        let v = S::affine(v.clamp(0.0, 1.0), gv.x, gv.y);
         let one = S::konst(1.0);
         let s = [u, v, one - u, one - v];
         let d = [v, one - u, one - v, u];

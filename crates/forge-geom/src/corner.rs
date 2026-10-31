@@ -955,90 +955,150 @@ fn split(sides: &[Side]) -> Result<Patches, CornerError> {
     Ok(Patches::Split(c, spokes, pieces))
 }
 
-/// The hole closed by rational quads, each proven never to fold: one quad for four sides, else
-/// two sides per quad round a centre, the spokes leaving every other vertex. None when the
-/// hole has an odd number of sides, is the wrong way round, a side is not a line or conic on a
-/// plane, cylinder or sphere, or a proof fails.
-fn rational_patches(sides: &[Side], parity: usize) -> Option<(Patches, RationalProof)> {
-    let m = sides.len();
-    if !(4..=MAX_RATIONAL_SIDES).contains(&m) || m % 2 == 1 {
-        return None;
-    }
-    let mut proof = RationalProof {
-        proved: true,
-        ..RationalProof::default()
-    };
-    let mut take = |p: &HolePatch| -> bool {
-        let q = p.prove_rational().unwrap_or_default();
-        proof.proved &= q.proved;
-        proof.regions += q.regions;
-        proof.tests += q.tests;
-        proof.depth = proof.depth.max(q.depth);
-        proof.cached |= q.cached;
-        q.proved
-    };
-    if m == 4 {
-        let p = HolePatch::quad(sides.to_vec())?;
-        return take(&p).then_some((Patches::One(p), proof));
-    }
-    let at: Vec<usize> = (0..m / 2).map(|i| 2 * i + parity).collect();
-    let like = (m <= MAX_SIDES).then(|| HolePatch::with_domain(sides.to_vec(), 1.0));
-    let (c, spokes, rails) = spokes(sides, &at, true, like.as_ref()).ok()?;
-    let mut pieces = Vec::with_capacity(at.len());
-    for i in 0..at.len() {
-        let (ps, first, count) = piece_sides(sides, &at, &rails, i);
-        let p = HolePatch::quad(ps)?;
-        if !take(&p) {
-            return None;
+/// A way to split a hole into quads round a centre: its sides (some halved), the hole side
+/// each is part of, and the first of the points, every other one, that spokes leave.
+type Plan = (Vec<Side>, Vec<usize>, usize);
+
+/// The ways to split a hole into quads round a centre, best first. Spokes leave every other
+/// vertex from some start, never one where the sides' normals differ; a side between two
+/// vertices without spokes is halved and a spoke leaves its middle (one side of an odd hole,
+/// or both sides round a kinked vertex). Last, every side halved. At least three spokes; fewer
+/// halved sides first, then longer ones (measured: research/corner-patch/sharp.rs).
+fn plans(sides: &[Side]) -> Vec<Plan> {
+    let n = sides.len();
+    let smooth: Vec<bool> = (0..n).map(|k| vertex(sides, k).is_some()).collect();
+    let len: Vec<f64> = sides.iter().map(Side::chord_length).collect();
+    let mut ways: Vec<Vec<bool>> = (0..n)
+        .map(|s| {
+            (0..n)
+                .map(|k| {
+                    let j = (k + n - s) % n;
+                    j.is_multiple_of(2) && j + 1 < n && smooth[k]
+                })
+                .collect()
+        })
+        .collect();
+    ways.push(vec![false; n]);
+    let mut out: Vec<(usize, f64, Plan)> = Vec::new();
+    for (w, spoke) in ways.iter().enumerate() {
+        if ways[..w].contains(spoke) {
+            continue;
         }
-        pieces.push((p, first, count));
+        let halved = |i: usize| !spoke[i] && !spoke[(i + 1) % n];
+        let count = (0..n).filter(|&i| spoke[i] || halved(i)).count();
+        if count < 3 {
+            continue;
+        }
+        let (mut ex, mut from) = (Vec::new(), Vec::new());
+        for (i, s) in sides.iter().enumerate() {
+            if halved(i) {
+                let tm = 0.5 * (s.t0 + s.t1);
+                ex.extend([
+                    Side::new(s.rail.clone(), s.t0, tm),
+                    Side::new(s.rail.clone(), tm, s.t1),
+                ]);
+                from.extend([i, i]);
+            } else {
+                ex.push(s.clone());
+                from.push(i);
+            }
+        }
+        let cut: Vec<usize> = (0..n).filter(|&i| halved(i)).collect();
+        let first = if spoke[0] { 0 } else { 1 };
+        out.push((
+            cut.len(),
+            -cut.iter().map(|&i| len[i]).sum::<f64>(),
+            (ex, from, first),
+        ));
     }
-    Some((Patches::Split(c, spokes, pieces), proof))
+    out.sort_by(|a, b| a.0.cmp(&b.0).then(a.1.total_cmp(&b.1)));
+    out.into_iter().map(|x| x.2).collect()
 }
 
-/// The rational closing of a hole (see `rational_patches`), and its proof.
+/// The rational quads closing a hole by plan k of `plans` (for four sides, first one quad),
+/// unproven, each with its four sides, and every hole side's pieces. None when there is no
+/// such plan, a side is not a line or conic on a plane, cylinder or sphere, or the hole is the
+/// wrong way round.
+#[allow(clippy::type_complexity)]
+fn rational_cells(sides: &[Side], k: usize) -> Option<(Vec<(rational::Quad, Vec<Side>)>, Vec<Vec<Piece>>)> {
+    let n = sides.len();
+    if !(3..=MAX_RATIONAL_SIDES).contains(&n) {
+        return None;
+    }
+    if n == 4 && k == 0 {
+        let q = rational::Quad::build(sides)?;
+        let pieces = whole(sides);
+        return Some((vec![(q, sides.to_vec())], pieces));
+    }
+    let (ex, from, first) = plans(sides).into_iter().nth(if n == 4 { k - 1 } else { k })?;
+    let m = ex.len();
+    let at: Vec<usize> = (0..m / 2).map(|i| 2 * i + first).collect();
+    let like = (n <= MAX_SIDES).then(|| HolePatch::with_domain(sides.to_vec(), 1.0));
+    let (_, _, rails) = spokes(&ex, &at, true, like.as_ref()).ok()?;
+    let mut quads = Vec::with_capacity(at.len());
+    let mut place = vec![(0, 0); m];
+    for i in 0..at.len() {
+        let (ps, f, _) = piece_sides(&ex, &at, &rails, i);
+        quads.push((rational::Quad::build(&ps)?, ps));
+        (place[f % m], place[(f + 1) % m]) = ((i, 0), (i, 1));
+    }
+    let mut pieces = vec![Vec::new(); n];
+    for k in 0..m {
+        pieces[from[k]].push((place[k].0, place[k].1, ex[k].t0, ex[k].t1));
+    }
+    Some((quads, pieces))
+}
+
+/// The hole closed by one patch of rational quads (see `rational_cells`), proven never to
+/// fold, by the first plan that proves of the first two; None when neither does.
+fn rational_patch(sides: &[Side]) -> Option<(HolePatch, RationalProof)> {
+    let mut spent = RationalProof::default();
+    for k in 0..2 {
+        let Some((quads, pieces)) = rational_cells(sides, k) else {
+            continue;
+        };
+        let p = HolePatch::from_quads(sides.to_vec(), quads.into_iter().map(|q| q.0).collect(), pieces);
+        let mut proof = p.prove_rational()?;
+        proof.regions += spent.regions;
+        proof.tests += spent.tests;
+        if proof.proved {
+            return Some((p, proof));
+        }
+        spent = proof;
+    }
+    None
+}
+
+/// The rational closing of a hole (see `rational_patch`), and its proof.
 pub fn close_hole_rational(sides: Vec<Side>) -> Option<(Closing, RationalProof)> {
     if let Some((s, same)) = fit_sphere(&sides) {
         return Some((Closing::One(Surface::Sphere(s), same), RationalProof::default()));
     }
-    let proc = |p: HolePatch| Surface::Procedural(Proc(Arc::new(p)));
-    let (found, proof) = rational_patches(&sides, 0)?;
-    Some((
-        match found {
-            Patches::One(p) => Closing::One(proc(p), true),
-            Patches::Split(centre, spokes, pieces) => Closing::Split {
-                centre,
-                spokes,
-                pieces: pieces.into_iter().map(|(p, a, b)| (proc(p), a, b)).collect(),
-            },
-        },
-        proof,
-    ))
+    let (p, proof) = rational_patch(&sides)?;
+    Some((Closing::One(Surface::Procedural(Proc(Arc::new(p))), true), proof))
 }
 
-/// The rational quads of a hole, proven or not, for measurements.
+/// The rational quads of a hole by plan k, each a patch alone, proven or not, for
+/// measurements.
 #[doc(hidden)]
-pub fn rational_quads(sides: &[Side], parity: usize) -> Option<Vec<HolePatch>> {
-    let m = sides.len();
-    let at: Vec<usize> = (0..m / 2).map(|i| 2 * i + parity).collect();
-    let like = (m <= MAX_SIDES).then(|| HolePatch::with_domain(sides.to_vec(), 1.0));
-    let (_, _, rails) = spokes(sides, &at, true, like.as_ref()).ok()?;
-    (0..at.len())
-        .map(|i| HolePatch::quad(piece_sides(sides, &at, &rails, i).0))
-        .collect()
+pub fn rational_quads(sides: &[Side], k: usize) -> Option<Vec<HolePatch>> {
+    let (quads, _) = rational_cells(sides, k)?;
+    Some(
+        quads
+            .into_iter()
+            .map(|(q, s)| {
+                let pieces = whole(&s);
+                HolePatch::from_quads(s, vec![q], pieces)
+            })
+            .collect(),
+    )
 }
 
-/// The rational pieces of a hole and its proof, for measurements.
+/// The rational patch of a hole and its proof, for measurements.
 #[doc(hidden)]
-pub fn rational_pieces(sides: &[Side], parity: usize) -> Option<(Vec<HolePatch>, RationalProof)> {
-    let (found, proof) = rational_patches(sides, parity)?;
-    Some((
-        match found {
-            Patches::One(p) => vec![p],
-            Patches::Split(_, _, pieces) => pieces.into_iter().map(|x| x.0).collect(),
-        },
-        proof,
-    ))
+pub fn rational_pieces(sides: &[Side]) -> Option<(Vec<HolePatch>, RationalProof)> {
+    let (p, proof) = rational_patch(sides)?;
+    Some((vec![p], proof))
 }
 
 /// The sphere every side lies on with the sphere's normals, if there is one: the rolling
@@ -1105,7 +1165,8 @@ pub fn fit_sphere(sides: &[Side]) -> Option<(Sphere, bool)> {
 #[derive(Debug)]
 pub struct HolePatch {
     sides: Vec<Side>,
-    /// Domain polygon, counter-clockwise; side i runs from corner i to corner i + 1.
+    /// Domain polygon, counter-clockwise; side i runs from corner i to corner i + 1 (for
+    /// rational quads, the cells' outline).
     corners: Vec<Point2>,
     /// d_i(x) = g . x + h.
     lines: Vec<(Vec2, f64)>,
@@ -1128,8 +1189,108 @@ pub struct HolePatch {
     /// Whether at some corner the sides' normals differ.
     kinked: bool,
     fold: bool,
-    /// The rational form, when it replaces the ribbons.
-    rational: Option<Arc<rational::Quad>>,
+    /// The rational quads, when they replace the ribbons.
+    rational: Option<Arc<Cells>>,
+}
+
+/// A piece of a hole side: the cell and quad side it is, and its rail range.
+type Piece = (usize, usize, f64, f64);
+
+/// The pieces of a single quad's four sides: each whole.
+fn whole(sides: &[Side]) -> Vec<Vec<Piece>> {
+    (0..4).map(|i| vec![(0, i, sides[i].t0, sides[i].t1)]).collect()
+}
+
+/// Rational quads joined into one patch along internal seams, each over a parallelogram of the
+/// domain, x = o + u a + v b for (u, v) in the unit square. Neighbouring cells map their shared
+/// spoke alike, so the parametrisation is C0 across a seam (the surface G1).
+#[derive(Debug)]
+struct Cells {
+    cells: Vec<(rational::Quad, Point2, Vec2, Vec2)>,
+    /// Each hole side's pieces, in order.
+    pieces: Vec<Vec<Piece>>,
+}
+
+impl Cells {
+    /// Cell c's (u, v) at x and their gradients.
+    fn local(&self, c: usize, x: Point2) -> (f64, f64, Vec2, Vec2) {
+        let (_, o, a, b) = &self.cells[c];
+        let det = a.cross(*b);
+        let (gu, gv) = (Vec2::new(b.y, -b.x) / det, Vec2::new(-a.y, a.x) / det);
+        let r = x - *o;
+        (gu.dot(r), gv.dot(r), gu, gv)
+    }
+    /// The cell x is deepest in, and how deep (negative outside), in cell coordinates.
+    fn cell_of(&self, x: Point2) -> (usize, f64) {
+        let mut best = (0, f64::NEG_INFINITY);
+        for c in 0..self.cells.len() {
+            let (u, v, _, _) = self.local(c, x);
+            let m = u.min(v).min(1.0 - u).min(1.0 - v);
+            if m > best.1 {
+                best = (c, m);
+            }
+        }
+        best
+    }
+    fn eval<S: Scalar>(&self, x: Point2) -> S::V {
+        let c = self.cell_of(x).0;
+        let (u, v, gu, gv) = self.local(c, x);
+        self.cells[c].0.eval::<S>(u, v, gu, gv)
+    }
+    /// The domain point nearest p's, from x: Newton in x's cell, then into the neighbouring
+    /// cell while the nearest point is on their seam and the distance falls across it.
+    fn project(&self, p: Point3, x: Point2) -> Point2 {
+        const SQUARE: [(Vec2, f64); 4] = [
+            (Vec2::Y, 0.0),
+            (Vec2::new(-1.0, 0.0), 1.0),
+            (Vec2::new(0.0, -1.0), 1.0),
+            (Vec2::X, 0.0),
+        ];
+        let m = self.cells.len();
+        let mut c = self.cell_of(x).0;
+        let (u, v, _, _) = self.local(c, x);
+        let mut y = Point2::new(u.clamp(0.0, 1.0), v.clamp(0.0, 1.0));
+        let deriv = |c: usize, y: Point2| surf_deriv(self.cells[c].0.eval::<J>(y.x, y.y, Vec2::X, Vec2::Y));
+        for _ in 0..2 * m {
+            let q = &self.cells[c].0;
+            y = newton(
+                p,
+                y,
+                1.0,
+                &SQUARE,
+                |z| Point2::new(z.x.clamp(0.0, 1.0), z.y.clamp(0.0, 1.0)),
+                |z| deriv(c, z),
+                |z| Point3::ORIGIN + q.eval::<f64>(z.x, z.y, Vec2::X, Vec2::Y),
+            );
+            if m < 3 {
+                break;
+            }
+            let d = deriv(c, y);
+            let r = d.p - p;
+            // across v = 1 into cell c + 1, or u = 0 into c - 1
+            if y.y >= 1.0 - 1e-12 && r.dot(d.dv) < 0.0 {
+                (c, y) = ((c + 1) % m, Point2::new(0.0, 1.0 - y.x));
+            } else if y.x <= 1e-12 && r.dot(d.du) > 0.0 {
+                (c, y) = ((c + m - 1) % m, Point2::new(1.0 - y.y, 1.0));
+            } else {
+                break;
+            }
+        }
+        let (_, o, a, b) = &self.cells[c];
+        *o + *a * y.x + *b * y.y
+    }
+    /// The domain point of hole side i at rail parameter t.
+    fn side_point(&self, i: usize, t: f64) -> Point2 {
+        let off = |p: &&Piece| (p.2.min(p.3) - t).max(t - p.2.max(p.3)).max(0.0);
+        let &(c, q, _, _) = self.pieces[i]
+            .iter()
+            .min_by(|a, b| off(a).total_cmp(&off(b)))
+            .expect("a side has pieces");
+        let s = self.cells[c].0.side_s(q, t);
+        let (u, v) = [(s, 0.0), (1.0, s), (1.0 - s, 1.0), (0.0, 1.0 - s)][q];
+        let (_, o, a, b) = &self.cells[c];
+        *o + *a * u + *b * v
+    }
 }
 
 impl HolePatch {
@@ -1185,11 +1346,7 @@ impl HolePatch {
 
     fn with_corners(sides: Vec<Side>, corners: Vec<Point2>, side_len: f64) -> HolePatch {
         let n = sides.len();
-        let kinked = (0..n).any(|i| {
-            let (a, b) = (&sides[(i + n - 1) % n], &sides[i]);
-            let (na, nb) = (a.rail.point(a.t1).1, b.rail.point(b.t0).1);
-            na.dot(nb) < (1.0 - 1e-9) * na.length() * nb.length()
-        });
+        let kinked = kinked(&sides);
         let lines: Vec<(Vec2, f64)> = (0..n)
             .map(|i| {
                 let (a, b) = (corners[i], corners[(i + 1) % n]);
@@ -1263,11 +1420,11 @@ impl HolePatch {
 
     /// The domain point of side i at s in [0, 1] (where the patch is C_i(s)).
     pub fn side_uv(&self, i: usize, s: f64) -> Point2 {
+        if self.rational.is_some() {
+            return self.side_param_uv(i, self.sides[i].at(s));
+        }
         let n = self.sides.len();
         let (a, b) = (self.corners[i], self.corners[(i + 1) % n]);
-        if self.rational.is_some() {
-            return a.lerp(b, s);
-        }
         let dist = |k: usize, p: Point2| {
             let (g, h) = self.lines[k];
             g.dot(p.to_vec()) + h
@@ -1289,7 +1446,7 @@ impl HolePatch {
     /// The domain point of side i at rail parameter t.
     pub fn side_param_uv(&self, i: usize, t: f64) -> Point2 {
         if let Some(r) = &self.rational {
-            return self.side_uv(i, r.side_s(i, t));
+            return r.side_point(i, t);
         }
         let s = &self.sides[i];
         self.side_uv(i, (t - s.t0) / (s.t1 - s.t0))
@@ -1298,40 +1455,126 @@ impl HolePatch {
     /// A rational quad over four sides in order round it (lines and conics on planes,
     /// cylinders and spheres, and spokes), on a square domain; None when a side is of another
     /// kind or does not turn into the hole.
+    #[cfg(test)]
     fn quad(sides: Vec<Side>) -> Option<HolePatch> {
-        let q = Arc::new(rational::Quad::build(&sides)?);
-        // lengths per unit of u and v, and points to start projections from: the control net
-        let scale = q.net();
-        let square = |k: f64| {
-            [(0.0, 0.0), (k, 0.0), (k, k), (0.0, k)]
-                .map(|(x, y)| Point2::new(x, y))
-                .to_vec()
-        };
-        let mut p = HolePatch::with_corners(sides.clone(), square(1.0), 1.0);
-        p.rational = Some(q.clone());
-        let mut kmax: f64 = 0.0;
-        for i in 1..6 {
-            for j in 1..6 {
-                kmax = kmax.max(max_curvature(
-                    &p.deriv(Point2::new(i as f64 / 6.0, j as f64 / 6.0)),
-                ));
+        let q = rational::Quad::build(&sides)?;
+        let pieces = whole(&sides);
+        Some(HolePatch::from_quads(sides, vec![q], pieces))
+    }
+
+    /// One patch of rational quads (see `Cells`) over these hole sides. One quad is a square of
+    /// the domain; m >= 3 are parallelograms round the origin, cell i with corners A_i,
+    /// A_i + A_(i+1), A_(i+1) and the origin (A_i of length k at the angle 2 pi i / m): quad
+    /// sides 0 and 1 on the domain's outline, 2 and 3 the spokes. The domain is sized so a unit
+    /// is about the sampled min_radius, as `new` does.
+    fn from_quads(sides: Vec<Side>, quads: Vec<rational::Quad>, pieces: Vec<Vec<Piece>>) -> HolePatch {
+        let m = quads.len();
+        let (mut scale, mut kmax) = (0.0, 0.0f64);
+        for q in &quads {
+            let (a, b) = q.net();
+            scale += 0.5 * (a + b) / m as f64;
+            for i in 1..6 {
+                for j in 1..6 {
+                    let x = (i as f64 / 6.0, j as f64 / 6.0);
+                    kmax = kmax.max(max_curvature(&surf_deriv(q.eval::<J>(
+                        x.0,
+                        x.1,
+                        Vec2::X,
+                        Vec2::Y,
+                    ))));
+                }
             }
         }
-        let rmin = sampled_radius(kmax, &p.sides);
-        let k = (0.5 * (scale.0 + scale.1) / rmin).clamp(1e-3, 1e3);
-        let mut out = HolePatch::with_corners(sides, square(k), k);
-        out.rational = Some(q);
-        (out.scale, out.min_radius) = ((scale.0 / k, scale.1 / k), rmin);
-        out.seed();
-        Some(out)
+        let rmin = sampled_radius(kmax, &sides);
+        let k = (scale / rmin).clamp(1e-3, 1e3);
+        let (cells, outline): (Vec<_>, Vec<Point2>) = if m == 1 {
+            let (a, b) = (Vec2::new(k, 0.0), Vec2::new(0.0, k));
+            let o = Point2::ORIGIN;
+            (
+                quads.into_iter().map(|q| (q, o, a, b)).collect(),
+                vec![o, o + a, o + a + b, o + b],
+            )
+        } else {
+            let at = |i: usize| {
+                let (s, c) = dmath::sin_cos(dmath::TAU * (i % m) as f64 / m as f64);
+                Vec2::new(c * k, s * k)
+            };
+            (
+                quads
+                    .into_iter()
+                    .enumerate()
+                    .map(|(i, q)| (q, Point2::ORIGIN + at(i), at(i + 1), -at(i)))
+                    .collect(),
+                (0..2 * m)
+                    .map(|j| {
+                        Point2::ORIGIN
+                            + if j % 2 == 0 {
+                                at(j / 2)
+                            } else {
+                                at(j / 2) + at(j / 2 + 1)
+                            }
+                    })
+                    .collect(),
+            )
+        };
+        let w = outline.len();
+        let lines = (0..w)
+            .map(|i| {
+                let (a, b) = (outline[i], outline[(i + 1) % w]);
+                let g = (b - a).perp().normalize().expect("domain sides have length");
+                (g, -g.dot(a.to_vec()))
+            })
+            .collect();
+        let mut rect = Box2::new(Interval::EMPTY, Interval::EMPTY);
+        for c in &outline {
+            rect.u.include(c.x);
+            rect.v.include(c.y);
+        }
+        let mut p = HolePatch {
+            kinked: kinked(&sides),
+            sides,
+            corners: outline,
+            lines,
+            ends: Vec::new(),
+            bends: Vec::new(),
+            rect,
+            side: k,
+            heights: Vec::new(),
+            seeds: Vec::new(),
+            scale: (scale / k, scale / k),
+            min_radius: rmin,
+            fold: false,
+            rational: Some(Arc::new(Cells { cells, pieces })),
+        };
+        p.seed();
+        p
     }
 
     /// The proof that the rational form never folds (None for the ribbon form).
     pub fn prove_rational(&self) -> Option<RationalProof> {
-        Some(self.rational.as_ref()?.prove())
+        let mut out = RationalProof {
+            proved: true,
+            ..RationalProof::default()
+        };
+        for (q, ..) in &self.rational.as_ref()?.cells {
+            let p = q.prove();
+            out.regions += p.regions;
+            out.tests += p.tests;
+            out.depth = out.depth.max(p.depth);
+            out.cached |= p.cached;
+            if !p.proved {
+                out.proved = false;
+                break;
+            }
+        }
+        Some(out)
     }
 
     fn inside(&self, x: Point2) -> bool {
+        if let Some(r) = &self.rational {
+            // seams within rounding of both cells
+            return r.cell_of(x).1 >= -1e-12;
+        }
         self.lines.iter().all(|&(g, h)| g.dot(x.to_vec()) + h >= 0.0)
     }
 
@@ -1408,7 +1651,7 @@ impl HolePatch {
         let n = self.sides.len();
         let x = self.clamp(x);
         if let Some(r) = &self.rational {
-            return r.eval::<S>(x, self.side);
+            return r.eval::<S>(x);
         }
         let mut d = [S::konst(0.0); MAX_SIDES];
         let (mut k, mut second) = (0, f64::INFINITY);
@@ -1518,7 +1761,7 @@ impl HolePatch {
                 let b = self.sides[i].rail.point(self.sides[i].t0).1;
                 a.dot(b) < (1.0 - 1e-9) * a.length() * b.length()
             })
-            .map(|i| self.corners[i])
+            .map(|i| self.side_param_uv(i, self.sides[i].t0))
             .collect();
         let mut fold = false;
         let mut prev: Vec<Option<Vec3>> = vec![None; m + 1];
@@ -1575,8 +1818,34 @@ impl HolePatch {
     }
 
     fn seed(&mut self) {
-        self.seeds = self.grid(12).into_iter().map(|x| (x, self.point(x))).collect();
+        let xs = match &self.rational {
+            // each cell its own grid (the outline's rectangle leaves cells of a star thin)
+            Some(r) => {
+                let g = 12;
+                let mut xs = Vec::with_capacity(r.cells.len() * (g + 1) * (g + 1));
+                for (_, o, a, b) in &r.cells {
+                    for i in 0..=g {
+                        for j in 0..=g {
+                            xs.push(*o + *a * (i as f64 / g as f64) + *b * (j as f64 / g as f64));
+                        }
+                    }
+                }
+                xs
+            }
+            _ => self.grid(12),
+        };
+        self.seeds = xs.into_iter().map(|x| (x, self.point(x))).collect();
     }
+}
+
+/// Whether at some corner of the hole the sides' normals differ.
+fn kinked(sides: &[Side]) -> bool {
+    let n = sides.len();
+    (0..n).any(|i| {
+        let (a, b) = (&sides[(i + n - 1) % n], &sides[i]);
+        let (na, nb) = (a.rail.point(a.t1).1, b.rail.point(b.t0).1);
+        na.dot(nb) < (1.0 - 1e-9) * na.length() * nb.length()
+    })
 }
 
 /// A convex polygon with these side lengths, its corners on a circle, counter-clockwise.
@@ -1636,6 +1905,17 @@ fn sampled_radius(kmax: f64, sides: &[Side]) -> f64 {
     (1.0 / kmax).clamp(1e-3 * size, size)
 }
 
+fn surf_deriv(j: JV) -> SurfDeriv {
+    SurfDeriv {
+        p: Point3::new(j.v.x, j.v.y, j.v.z),
+        du: j.u,
+        dv: j.w,
+        duu: j.uu,
+        duv: j.uw,
+        dvv: j.ww,
+    }
+}
+
 /// Largest absolute principal curvature at a regular point.
 fn max_curvature(d: &SurfDeriv) -> f64 {
     let Some(n) = d.du.cross(d.dv).normalize() else {
@@ -1676,20 +1956,174 @@ impl HolePatch {
     }
 }
 
+impl HolePatch {
+    /// A box holding the rational quads over b: each cell's over the part of b in it. Points
+    /// outside the domain evaluate at their nearest domain point: within half b's diagonal of
+    /// the centre's for a convex domain (four cells or fewer), else within the centre's
+    /// distance from the domain plus the whole diagonal of the centre.
+    fn cells_bbox(&self, r: &Cells, b: Box2) -> Box3 {
+        let corners = [
+            Point2::new(b.u.lo, b.v.lo),
+            Point2::new(b.u.hi, b.v.lo),
+            Point2::new(b.u.lo, b.v.hi),
+            Point2::new(b.u.hi, b.v.hi),
+        ];
+        let convex = r.cells.len() <= 4;
+        let w = self.corners.len();
+        let within = corners.iter().all(|&c| self.inside(c))
+            && (convex || (0..w).all(|k| !meets(&b, self.corners[k], self.corners[(k + 1) % w])));
+        let b = if within {
+            b
+        } else {
+            let half = 0.5 * (b.u.width() * b.u.width() + b.v.width() * b.v.width()).sqrt();
+            let c = self.clamp(b.center());
+            let r = if convex {
+                half
+            } else {
+                2.0 * half + c.distance(b.center())
+            };
+            let r = (r * (1.0 + 1e-15)).next_up();
+            Box2::new(Interval::new(c.x - r, c.x + r), Interval::new(c.y - r, c.y + r))
+        };
+        let corners = [
+            Point2::new(b.u.lo, b.v.lo),
+            Point2::new(b.u.hi, b.v.lo),
+            Point2::new(b.u.lo, b.v.hi),
+            Point2::new(b.u.hi, b.v.hi),
+        ];
+        let mut out = Box3::EMPTY;
+        for (c, (q, ..)) in r.cells.iter().enumerate() {
+            let (mut u, mut v) = (Interval::EMPTY, Interval::EMPTY);
+            for &x in &corners {
+                let (cu, cv, _, _) = r.local(c, x);
+                u.include(cu);
+                v.include(cv);
+            }
+            // the inverse map's rounding
+            let (u, v) = (
+                Interval::new((u.lo - 1e-12).max(0.0), (u.hi + 1e-12).min(1.0)),
+                Interval::new((v.lo - 1e-12).max(0.0), (v.hi + 1e-12).min(1.0)),
+            );
+            if u.lo <= u.hi && v.lo <= v.hi {
+                out = out.hull(&q.bbox(u, v));
+            }
+        }
+        out
+    }
+}
+
+/// Parameters of the point nearest p, by Newton from x (Gauss-Newton where the distance is not
+/// convex) inside the convex polygon `lines` bound (d_i(x) = g . x + h >= 0), sliding along a
+/// side the step would leave by; `size` is the domain's.
+fn newton(
+    p: Point3,
+    x: Point2,
+    size: f64,
+    lines: &[(Vec2, f64)],
+    clamp: impl Fn(Point2) -> Point2,
+    deriv: impl Fn(Point2) -> SurfDeriv,
+    point: impl Fn(Point2) -> Point3,
+) -> Point2 {
+    let mut x = x;
+    let mut d = deriv(x);
+    for _ in 0..50 {
+        let r = d.p - p;
+        let f = r.length_sq();
+        let (gu, gv) = (r.dot(d.du), r.dot(d.dv));
+        let (e, fm, g) = (d.du.dot(d.du), d.du.dot(d.dv), d.dv.dot(d.dv));
+        let (h11, h12, h22) = (e + r.dot(d.duu), fm + r.dot(d.duv), g + r.dot(d.dvv));
+        // Newton where the distance is convex, Gauss-Newton elsewhere
+        let step = if h11 > 0.0 && h11 * h22 - h12 * h12 > 0.0 {
+            linalg::solve2(h11, h12, h12, h22, -gu, -gv)
+        } else {
+            linalg::solve2(e, fm, fm, g, -gu, -gv)
+        };
+        let Some((mut a, mut b)) = step else { break };
+        // on a side the step would leave by, Newton along that side instead
+        let mut active = lines
+            .iter()
+            .filter(|&&(n, h)| n.dot(x.to_vec()) + h <= 1e-12 * size && n.x * a + n.y * b < 0.0);
+        if let Some(&(n, _)) = active.next() {
+            if active.next().is_some() {
+                break;
+            }
+            let (tu, tv) = (-n.y, n.x);
+            let (gt, ht) = (
+                gu * tu + gv * tv,
+                h11 * tu * tu + 2.0 * h12 * tu * tv + h22 * tv * tv,
+            );
+            let ht = if ht > 0.0 {
+                ht
+            } else {
+                e * tu * tu + 2.0 * fm * tu * tv + g * tv * tv
+            };
+            let sigma = -gt / ht;
+            (a, b) = (sigma * tu, sigma * tv);
+        }
+        let len = (a * a + b * b).sqrt();
+        if f == 0.0 || len <= 1e-13 * size {
+            break;
+        }
+        // the full step is evaluated with derivatives, as it is usually the next iterate
+        let y = clamp(Point2::new(x.x + a, x.y + b));
+        let dy = deriv(y);
+        let next = if dy.p.distance_sq(p) <= f {
+            Some((y, dy))
+        } else if len <= 1e-9 * size {
+            // a step this small only fails to rounding: converged
+            None
+        } else {
+            let mut lam = 0.5;
+            let mut found = None;
+            for _ in 0..40 {
+                let y = clamp(Point2::new(x.x + a * lam, x.y + b * lam));
+                if point(y).distance_sq(p) <= f {
+                    found = Some((y, deriv(y)));
+                    break;
+                }
+                lam *= 0.5;
+            }
+            found
+        };
+        let Some((y, dy)) = next else { break };
+        let moved = y.distance(x);
+        (x, d) = (y, dy);
+        if moved <= 1e-13 * size {
+            break;
+        }
+    }
+    x
+}
+
+/// Whether the segment p q meets the box (Liang-Barsky).
+fn meets(b: &Box2, p: Point2, q: Point2) -> bool {
+    let d = q - p;
+    let (mut t0, mut t1) = (0.0f64, 1.0f64);
+    for (pk, qk) in [
+        (-d.x, p.x - b.u.lo),
+        (d.x, b.u.hi - p.x),
+        (-d.y, p.y - b.v.lo),
+        (d.y, b.v.hi - p.y),
+    ] {
+        if pk == 0.0 {
+            if qk < 0.0 {
+                return false;
+            }
+        } else if pk < 0.0 {
+            t0 = t0.max(qk / pk);
+        } else {
+            t1 = t1.min(qk / pk);
+        }
+    }
+    t0 <= t1
+}
+
 impl Procedural for HolePatch {
     fn point(&self, uv: Point2) -> Point3 {
         HolePatch::point(self, uv)
     }
     fn deriv(&self, uv: Point2) -> SurfDeriv {
-        let j = self.eval::<J>(uv);
-        SurfDeriv {
-            p: Point3::new(j.v.x, j.v.y, j.v.z),
-            du: j.u,
-            dv: j.w,
-            duu: j.uu,
-            duv: j.uw,
-            dvv: j.ww,
-        }
+        surf_deriv(self.eval::<J>(uv))
     }
     fn domain(&self) -> Domain2 {
         let d = |i: Interval| Domain1 {
@@ -1710,78 +2144,43 @@ impl Procedural for HolePatch {
                 (x, f) = (uv, d);
             }
         }
-        let size = self.rect.u.width().max(self.rect.v.width());
-        let mut d = self.deriv(x);
-        for _ in 0..50 {
-            let r = d.p - p;
-            f = r.length_sq();
-            let (gu, gv) = (r.dot(d.du), r.dot(d.dv));
-            let (e, fm, g) = (d.du.dot(d.du), d.du.dot(d.dv), d.dv.dot(d.dv));
-            let (h11, h12, h22) = (e + r.dot(d.duu), fm + r.dot(d.duv), g + r.dot(d.dvv));
-            // Newton where the distance is convex, Gauss-Newton elsewhere
-            let step = if h11 > 0.0 && h11 * h22 - h12 * h12 > 0.0 {
-                linalg::solve2(h11, h12, h12, h22, -gu, -gv)
-            } else {
-                linalg::solve2(e, fm, fm, g, -gu, -gv)
-            };
-            let Some((mut a, mut b)) = step else { break };
-            // on a side the step would leave by, Newton along that side instead
-            let mut active = self
-                .lines
-                .iter()
-                .filter(|&&(n, h)| n.dot(x.to_vec()) + h <= 1e-12 * size && n.x * a + n.y * b < 0.0);
-            if let Some(&(n, _)) = active.next() {
-                if active.next().is_some() {
-                    break;
-                }
-                let (tu, tv) = (-n.y, n.x);
-                let (gt, ht) = (
-                    gu * tu + gv * tv,
-                    h11 * tu * tu + 2.0 * h12 * tu * tv + h22 * tv * tv,
-                );
-                let ht = if ht > 0.0 {
-                    ht
-                } else {
-                    e * tu * tu + 2.0 * fm * tu * tv + g * tv * tv
-                };
-                let sigma = -gt / ht;
-                (a, b) = (sigma * tu, sigma * tv);
-            }
-            let len = (a * a + b * b).sqrt();
-            if f == 0.0 || len <= 1e-13 * size {
-                break;
-            }
-            // the full step is evaluated with derivatives, as it is usually the next iterate
-            let y = self.clamp(Point2::new(x.x + a, x.y + b));
-            let dy = self.deriv(y);
-            let next = if dy.p.distance_sq(p) <= f {
-                Some((y, dy))
-            } else if len <= 1e-9 * size {
-                // a step this small only fails to rounding: converged
-                None
-            } else {
-                let mut lam = 0.5;
-                let mut found = None;
-                for _ in 0..40 {
-                    let y = self.clamp(Point2::new(x.x + a * lam, x.y + b * lam));
-                    if self.point(y).distance_sq(p) <= f {
-                        found = Some((y, self.deriv(y)));
-                        break;
+        if let Some(r) = &self.rational {
+            // the nearest seed may be across a seam from p's cell, where a tight quad can hold
+            // a false minimum: from every cell's nearest seed within twice the nearest's distance
+            let m = r.cells.len();
+            let per = self.seeds.len() / m;
+            let mut best = (f64::INFINITY, x);
+            for c in 0..m {
+                let near = self.seeds[c * per..(c + 1) * per]
+                    .iter()
+                    .map(|&(uv, q)| (q.distance_sq(p), uv))
+                    .min_by(|a, b| a.0.total_cmp(&b.0))
+                    .expect("cells have seeds");
+                if near.0 <= 4.0 * f {
+                    let y = r.project(p, near.1);
+                    let e = self.point(y).distance_sq(p);
+                    if e < best.0 {
+                        best = (e, y);
                     }
-                    lam *= 0.5;
                 }
-                found
-            };
-            let Some((y, dy)) = next else { break };
-            let moved = y.distance(x);
-            (x, d) = (y, dy);
-            if moved <= 1e-13 * size {
-                break;
             }
+            return best.1;
         }
-        x
+        let size = self.rect.u.width().max(self.rect.v.width());
+        newton(
+            p,
+            x,
+            size,
+            &self.lines,
+            |y| self.clamp(y),
+            |y| self.deriv(y),
+            |y| self.point(y),
+        )
     }
     fn bbox(&self, b: Box2) -> Box3 {
+        if let Some(r) = &self.rational {
+            return self.cells_bbox(r, b);
+        }
         let n = self.sides.len();
         let corners_in = [
             Point2::new(b.u.lo, b.v.lo),
@@ -1805,10 +2204,6 @@ impl Procedural for HolePatch {
         for (i, &(g, h)) in self.lines.iter().enumerate() {
             let di = b.u * g.x + b.v * g.y + h;
             d[i] = Interval::new(di.lo.max(0.0), di.hi.max(0.0));
-        }
-        if let Some(r) = &self.rational {
-            let k = self.side;
-            return r.bbox(b.u * (1.0 / k), b.v * (1.0 / k));
         }
         let mut sq = [Interval::point(0.0); MAX_SIDES];
         for i in 0..n {
@@ -1919,7 +2314,16 @@ impl Procedural for HolePatch {
             min_radius: self.min_radius,
             kinked: self.kinked,
             fold: self.fold,
-            rational: self.rational.as_ref().map(|r| Arc::new(r.transformed(f))),
+            rational: self.rational.as_ref().map(|r| {
+                Arc::new(Cells {
+                    cells: r
+                        .cells
+                        .iter()
+                        .map(|(q, o, a, b)| (q.transformed(f), *o, *a, *b))
+                        .collect(),
+                    pieces: r.pieces.clone(),
+                })
+            }),
         }))
     }
     fn uv_scale(&self) -> (f64, f64) {
@@ -2214,11 +2618,14 @@ pub fn audit(p: &HolePatch, seed: u64) -> Audit {
         }
     }
     let m = 40;
+    let at = |i: f64, j: f64| {
+        Point2::new(
+            p.rect.u.lo + p.rect.u.width() * i / m as f64,
+            p.rect.v.lo + p.rect.v.width() * j / m as f64,
+        )
+    };
     let unit = |i: usize, j: usize| {
-        let x = Point2::new(
-            p.rect.u.lo + p.rect.u.width() * i as f64 / m as f64,
-            p.rect.v.lo + p.rect.v.width() * j as f64 / m as f64,
-        );
+        let x = at(i as f64, j as f64);
         let d = p.deriv(x);
         p.inside(x).then(|| d.du.cross(d.dv).normalize()).flatten()
     };
@@ -2228,9 +2635,17 @@ pub fn audit(p: &HolePatch, seed: u64) -> Audit {
     for i in 0..=m {
         for j in 0..=m {
             let Some(a0) = grid[i][j] else { continue };
+            // (not across a notch of the domain)
+            let (fi, fj) = (i as f64, j as f64);
             for b in [
-                grid.get(i + 1).and_then(|r| r[j]),
-                grid[i].get(j + 1).copied().flatten(),
+                grid.get(i + 1)
+                    .and_then(|r| r[j])
+                    .filter(|_| p.inside(at(fi + 0.5, fj))),
+                grid[i]
+                    .get(j + 1)
+                    .copied()
+                    .flatten()
+                    .filter(|_| p.inside(at(fi, fj + 0.5))),
             ]
             .into_iter()
             .flatten()
@@ -2257,7 +2672,12 @@ pub fn audit(p: &HolePatch, seed: u64) -> Audit {
         let mu = Point2::new(x.x - h, x.y);
         let pv = Point2::new(x.x, x.y + h);
         let mv = Point2::new(x.x, x.y - h);
-        if [pu, mu, pv, mv].iter().all(|&y| p.inside(y)) {
+        // central differences within one cell (across a seam the parametrisation is only C0)
+        let cell = |y: Point2| p.rational.as_ref().map(|r| r.cell_of(y).0);
+        if [pu, mu, pv, mv]
+            .iter()
+            .all(|&y| p.inside(y) && cell(y) == cell(x))
+        {
             let rel = |fd: Vec3, an: Vec3| (fd - an).length() / (1.0 + an.length());
             let e = [
                 rel((p.point(pu) - p.point(mu)) / (2.0 * h), d.du),

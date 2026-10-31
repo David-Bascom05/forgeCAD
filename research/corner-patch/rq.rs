@@ -259,7 +259,7 @@ fn main() {
                 }
             }
         }
-        let Some((pieces, pr)) = rational_pieces(sides, parity) else {
+        let Some((pieces, pr)) = rational_pieces(sides) else {
             none += 1;
             if verbose {
                 println!("case {case}: no rational form");
@@ -269,7 +269,7 @@ fn main() {
         tb1.push(t.elapsed().as_secs_f64() * 1e3);
         // warm: the proof from the cache
         let t = Instant::now();
-        let _ = rational_pieces(sides, parity);
+        let _ = rational_pieces(sides);
         tbw.push(t.elapsed().as_secs_f64() * 1e3);
         built += 1;
         tests.push(pr.tests as f64);

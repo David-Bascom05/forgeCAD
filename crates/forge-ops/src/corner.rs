@@ -540,11 +540,8 @@ mod tests {
         cases.push(corner(Point3::new(1.0, 2.0, -1.0), &dirs, &normals, &r));
         for (k, c) in cases.iter().enumerate() {
             let sides: Vec<_> = planned_hole(c).iter().map(hole_side).collect();
-            let (pieces, proof) = rational_pieces(&sides, 0).expect("rational form");
-            assert!(
-                proof.proved && pieces.len() == sides.len() / 2,
-                "case {k}: {proof:?}"
-            );
+            let (pieces, proof) = rational_pieces(&sides).expect("rational form");
+            assert!(proof.proved && pieces.len() == 1, "case {k}: {proof:?}");
             for p in &pieces {
                 let a = audit(p, 40 + k as u64);
                 assert!(a.boundary <= 1e-9 && a.normal <= 1e-9, "case {k}: {a:?}");

@@ -539,16 +539,14 @@ Four- to six-edge corners (8-12-sided holes) would raise the degree further (B_i
 
 Measurement code and how to rerun it: `research/corner-patch/`.
 
-`crates/forge-geom/src/corner/rational.rs` (`Quad`) and `close_hole_rational` /
-`rational_pieces` in `corner.rs`. Still not used in builds.
+`crates/forge-geom/src/corner/rational.rs` (`Quad`) and `close_hole_rational`, `plans` and
+`Cells` in `corner.rs`. Still not used in builds.
 
 ### Construction
 
-- **Quads round a centre.** A hole of four sides is one quad; an even number of sides from 6 to
-  20 is split by spokes from every other vertex to a centre, two hole sides per quad. The degree
-  no longer grows with the sides: every quad's blend is a tensor polynomial of degree (7, 7).
-  An odd number of sides would need a spoke from the middle of a side, which the B-rep handover
-  (`Closing::Split`) cannot express: those holes keep today's patch.
+- **Quads round a centre.** A hole of four sides is one quad; any other hole of 3 to 20 sides
+  is split by spokes to a centre, two hole sides (or halves) per quad. The degree no longer
+  grows with the sides: every quad's blend is a tensor polynomial of degree (7, 7).
 - **The domain is the unit square**, with s and d per side (side 0: s = u, d = v). Ribbons are
   (A + d B + d^2 C) / E of degree 3 in s and 2 in d, undamped (a Coons-like quad needs no
   damping: linear ribbons of a bilinear surface reproduce it). Weights B_i = prod_(j != i) d_j^2
@@ -567,6 +565,46 @@ Measurement code and how to rerun it: `research/corner-patch/`.
   patch made speeds uneven and folded a third of the 8-sided holes; equal lengths fold none.
 - **The centre** is today's ribbon patch at its domain's middle (one evaluation), or the old
   heuristic beyond 12 sides, where the ribbon patch has no form.
+
+### One face per corner
+
+The quads are one `HolePatch` (one B-rep face, `Closing::One`), joined along the spokes by
+internal G1 seams; the spokes are not B-rep edges.
+
+- **Where spokes leave** (`plans` in `corner.rs`): every other vertex from some start, never a
+  kinked vertex (a sharp edge's end, where the sides' normals differ); a side between two
+  vertices without spokes is halved and a spoke leaves its middle, splitting that side's
+  domain edge but not its B-rep edge. That one rule covers even holes (no halving), odd ones (one
+  side halved, the longest first) and kinked vertices (both sides round one halved). Every side
+  halved is the last way; at least three spokes. A build tries the first two ways (a proof
+  failing on the first is retried on the second): research/corner-patch/sharp.rs.
+- **The domain**: one quad is a square; m >= 3 quads are parallelograms round the origin, cell
+  i with corners A_i, A_i + A_(i+1), A_(i+1) and the origin (A_i of length k at the angle
+  2 pi i / m), quad sides 0 and 1 on the outline, the spokes on the cell edges from the origin.
+  Each cell's map is affine, and both cells along a spoke map it alike (the spoke's own
+  parameter), so the parametrisation is C0 across a seam and the surface G1. Hexagon (m = 3)
+  and square (m = 4) outlines are convex; from m = 5 the outline is a star.
+- **Evaluation** finds the cell holding the point (deepest in cell coordinates) and evaluates
+  its quad with the affine map's gradients; derivatives jump across a seam, the surface's
+  tangent plane does not.
+- **Projection** is Newton in a cell's unit square, stepping into the neighbouring cell while
+  the nearest point is on their seam and the distance falls across it. Each cell has its own
+  13 x 13 seeds; Newton starts from the nearest seed of every cell whose nearest seed is within
+  twice the nearest seed's distance, as a tight quad can hold a false minimum next to a seam
+  (one survey hole projected 7e-2 off from the single nearest seed; the old per-quad patches
+  failed there too).
+- **Boxes**: the union of each cell's quad box over the part of the box in the cell. Points
+  outside the domain evaluate at their nearest domain point: within the box's half diagonal of
+  the centre's nearest point for a convex outline, else within the centre's distance from the
+  domain plus the whole diagonal.
+- The fold proof stays per quad (each cell's affine map has a positive Jacobian).
+
+One face on the surveys: 6, 8 and 10 sides proven 120, 120 and 120 of 120 (10 sides was 117
+with one way to place spokes; the second way proves the rest). With sharp edges (`sharp.rs`,
+60 cases, holes proven of 40): one sharp edge, 5 / 7 / 9 sides 40 / 40 / 28; two, 4 / 6 / 8
+sides 40 / 40 / 32; three, 5 / 7 sides 40 / 38. Worst boundary 4.8e-15, G1 normal 2.2e-13 rad
+(seams included), projection 4.5e-13, no box misses. Meshes pass the same checks as today's
+patch (`rational_corner_patches_mesh`).
 
 ### The proof: a cone test
 
