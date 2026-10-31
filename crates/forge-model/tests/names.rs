@@ -225,6 +225,10 @@ fn every_regen_entry_point_names_alike() {
         for i in 0..part.features.len() {
             solids = forge_model::step_solids(h, i, solids).expect("a step");
         }
+        // a step leaves finishing to its caller
+        for s in &mut solids {
+            s.body = forge_model::finish(std::mem::take(&mut s.body));
+        }
         assert_eq!(seq, one(solids), "{name}");
         let nary = names(&part.regenerate_nary(1).expect("n-ary regen"));
         assert_eq!(
