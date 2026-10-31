@@ -340,23 +340,37 @@ pub fn log_header() -> Vec<u8> {
     MAGIC.to_vec()
 }
 
-/// The entries of a log file, and how many of its bytes they cover: a tail cut short by a crash
-/// is left out, to be written over. `None` if this is no log file.
+/// A log this long is left unread: 64 MB of edits is no log a part has.
+pub const LOG_LIMIT: u64 = 64 << 20;
+
+/// The entries of a log file, and how many of its bytes they cover. Only a tail cut short by a
+/// crash is left out, to be written over: an entry that is all there and does not read is damage,
+/// and `None`, as is what is no log file at all.
 pub fn read_log(bytes: &[u8]) -> Option<(Vec<Entry>, usize)> {
     let mut r = Reader(bytes.strip_prefix(MAGIC)?);
     let mut out = Vec::new();
     let mut good = MAGIC.len();
     while !r.0.is_empty() {
         let at = r.0;
-        let Some(n) = r.len() else { break };
+        let Some(n) = r.len() else {
+            // a length is at most ten bytes: longer and it isn't one
+            if at.len() > 10 {
+                return None;
+            }
+            break;
+        };
+        if n as u64 > LOG_LIMIT {
+            return None;
+        }
         let Some((body, rest)) = r.0.split_at_checked(n) else {
             break;
         };
         let mut one = Reader(body);
-        match one.entry() {
-            Some(e) if one.0.is_empty() => out.push(e),
-            _ => break,
+        let e = one.entry()?;
+        if !one.0.is_empty() {
+            return None;
         }
+        out.push(e);
         r.0 = rest;
         good += at.len() - rest.len();
     }
@@ -460,5 +474,9 @@ mod tests {
         let (got, good) = read_log(&b[..b.len() - 1]).expect("a log");
         assert_eq!((got, good), (vec![e], whole));
         assert!(read_log(b"not a log").is_none());
+        // all there and unreadable is no torn tail
+        let mut hurt = log_header();
+        hurt.extend_from_slice(&[3, 9, 9, 9]);
+        assert!(read_log(&hurt).is_none());
     }
 }

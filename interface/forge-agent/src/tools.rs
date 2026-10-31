@@ -378,18 +378,23 @@ impl Part {
             faces: s.faces as u32,
             volume: s.volume,
         };
+        self.append(e)?;
         self.undos.clear();
         self.redos.clear();
-        self.append(e)
+        Ok(())
     }
 
-    /// Onto the log, on disk first where there is a disk.
-    fn append(&mut self, e: Entry) -> Result<(), String> {
+    /// Onto the log, on disk first where there is a disk (the part file checked before). Where
+    /// on disk it starts.
+    fn append(&mut self, e: Entry) -> Result<Option<u64>, String> {
+        let mut at = None;
         if let Some(p) = &self.path {
-            append_entry(&log_path(p), &e).map_err(|w| format!("the op log: {w}"))?;
+            let part = crate::cmd::writable_file(p)?;
+            at =
+                Some(append_entry(&log_path(p), mode_of(&part), &e).map_err(|w| format!("the op log: {w}"))?);
         }
         self.log.push(e);
-        Ok(())
+        Ok(at)
     }
 
     /// The part's numbers now.
@@ -702,9 +707,16 @@ impl Part {
             faces: now.faces as u32,
             volume: now.volume,
         };
-        self.append(entry)?;
-        if let Some(p) = &self.path {
-            crate::cmd::replace(p, src)?;
+        let at = self.append(entry)?;
+        if let Some(p) = &self.path
+            && let Err(why) = crate::cmd::replace(p, src)
+        {
+            // the file stays as it was, so the log must too
+            if let Some(at) = at {
+                cut_log(&log_path(p), at);
+            }
+            self.log.pop();
+            return Err(why);
         }
         let i = self.log.len() - 1;
         match kind {
@@ -940,8 +952,12 @@ impl Part {
         let now = self.stat();
         let src = self.model.src().to_string();
         let ops = vec![op];
-        if let Err(why) = self.commit(ops.clone(), undo, Kind::Do, now, &src) {
-            return self.refused(format!("error: {why}"));
+        if let Err(why) = self.commit(ops.clone(), undo.clone(), Kind::Do, now, &src) {
+            for u in undo {
+                let _ = self.model.doc.apply(u);
+            }
+            self.model.sync_doc();
+            return self.refused(format!("error: {why}; back as it was"));
         }
         let at = (now.faces as i64, now.volume);
         Done {
@@ -1167,54 +1183,117 @@ fn log_path(part: &Path) -> PathBuf {
     PathBuf::from(p)
 }
 
-/// Longer than this and a log is left unread: 64 MB of edits is no log a part has.
-const LOG_LIMIT: u64 = 64 << 20;
-
-/// The file's bytes, if it is a plain file with one name.
+/// The log's bytes, if it is a plain file with one name, read through no link.
+#[cfg(unix)]
 fn read_plain(path: &Path) -> Option<Vec<u8>> {
-    let meta = std::fs::symlink_metadata(path).ok()?;
-    if !plain(&meta) || meta.len() > LOG_LIMIT {
+    use std::io::Read;
+    use std::os::unix::fs::{MetadataExt, OpenOptionsExt};
+    // a pipe would hang the open
+    if !std::fs::symlink_metadata(path).ok()?.is_file() {
         return None;
     }
-    std::fs::read(path).ok()
-}
-
-#[cfg(unix)]
-fn plain(meta: &std::fs::Metadata) -> bool {
-    use std::os::unix::fs::MetadataExt;
-    meta.is_file() && meta.nlink() == 1
+    let f = std::fs::OpenOptions::new()
+        .read(true)
+        .custom_flags(crate::cmd::NOFOLLOW)
+        .open(path)
+        .ok()?;
+    let held = f.metadata().ok()?;
+    if !held.is_file() || held.nlink() != 1 || held.len() > wire::LOG_LIMIT {
+        return None;
+    }
+    let mut out = Vec::new();
+    f.take(wire::LOG_LIMIT).read_to_end(&mut out).ok()?;
+    Some(out)
 }
 
 #[cfg(not(unix))]
-fn plain(meta: &std::fs::Metadata) -> bool {
-    meta.is_file()
+fn read_plain(_: &Path) -> Option<Vec<u8>> {
+    None
 }
 
-/// One entry onto the log file, a torn tail first cut off.
-fn append_entry(path: &Path, e: &Entry) -> Result<(), String> {
-    use std::io::Write;
-    let meta = std::fs::symlink_metadata(path);
-    if meta.as_ref().is_ok_and(|m| !plain(m)) {
-        return Err("not a plain file with one name; not written".into());
+/// One entry onto the log, which holds the part's text and so is as private as the part. Made if
+/// it isn't there, through no link; a torn tail cut off; anything but a log with one name left
+/// alone and refused. Where the entry starts, to take it back.
+#[cfg(unix)]
+fn append_entry(path: &Path, part_mode: u32, e: &Entry) -> Result<u64, String> {
+    use std::io::{ErrorKind, Read, Seek, Write};
+    use std::os::unix::fs::{MetadataExt, OpenOptionsExt, PermissionsExt};
+    let refused = "not an op log with one name; move it away to go on";
+    let cannot = |_| "cannot write".to_string();
+    let part_mode = part_mode & 0o777;
+    let opened = std::fs::OpenOptions::new()
+        .read(true)
+        .write(true)
+        .custom_flags(crate::cmd::NOFOLLOW)
+        .open(path);
+    let mut f = match opened {
+        Ok(f) => f,
+        Err(x) if x.kind() == ErrorKind::NotFound => std::fs::OpenOptions::new()
+            .read(true)
+            .write(true)
+            .create_new(true)
+            .mode(part_mode)
+            .open(path)
+            .map_err(|_| "cannot write".to_string())?,
+        Err(_) => return Err(refused.into()),
+    };
+    let held = f.metadata().map_err(cannot)?;
+    if !held.is_file() || held.nlink() != 1 || held.len() > wire::LOG_LIMIT {
+        return Err(refused.into());
     }
+    let mut bytes = Vec::new();
+    f.read_to_end(&mut bytes).map_err(cannot)?;
     let mut out = Vec::new();
-    let good = read_plain(path).and_then(|b| wire::read_log(&b).map(|x| x.1));
-    if good.is_none() {
+    let start = if bytes.is_empty() {
         out = wire::log_header();
+        0
+    } else {
+        let (_, good) = wire::read_log(&bytes).ok_or(refused)?;
+        good as u64
+    };
+    if held.mode() & 0o777 & !part_mode != 0 {
+        let tighter = std::fs::Permissions::from_mode(held.mode() & 0o777 & part_mode);
+        f.set_permissions(tighter).map_err(cannot)?;
     }
     wire::put_entry(&mut out, e);
-    let mut f = std::fs::OpenOptions::new()
-        .create(true)
-        .write(true)
-        .truncate(good.is_none())
-        .open(path)
-        .map_err(|_| "cannot write".to_string())?;
-    if let Some(n) = good {
-        use std::io::Seek;
-        f.set_len(n as u64).map_err(|_| "cannot write")?;
-        f.seek(std::io::SeekFrom::End(0)).map_err(|_| "cannot write")?;
+    f.set_len(start).map_err(cannot)?;
+    f.seek(std::io::SeekFrom::End(0)).map_err(cannot)?;
+    if f.write_all(&out).is_err() {
+        let _ = f.set_len(start);
+        return Err("cannot write".into());
     }
-    f.write_all(&out).map_err(|_| "cannot write".to_string())
+    Ok(start)
+}
+
+#[cfg(not(unix))]
+fn append_entry(_: &Path, _: u32, _: &Entry) -> Result<u64, String> {
+    Err("writing part files needs a unix system".into())
+}
+
+/// Takes the last entry back off the log.
+#[cfg(unix)]
+fn cut_log(path: &Path, to: u64) {
+    use std::os::unix::fs::OpenOptionsExt;
+    let f = std::fs::OpenOptions::new()
+        .write(true)
+        .custom_flags(crate::cmd::NOFOLLOW)
+        .open(path);
+    if let Ok(f) = f {
+        let _ = f.set_len(to);
+    }
+}
+
+#[cfg(not(unix))]
+fn cut_log(_: &Path, _: u64) {}
+
+#[cfg(unix)]
+fn mode_of(m: &std::fs::Metadata) -> u32 {
+    std::os::unix::fs::MetadataExt::mode(m)
+}
+
+#[cfg(not(unix))]
+fn mode_of(_: &std::fs::Metadata) -> u32 {
+    0o600
 }
 
 #[cfg(test)]

@@ -124,6 +124,18 @@ impl Session {
         self.part_at(file).map(|p| (&mut p.0.model, p.1))
     }
 
+    /// `part_at`, for what would change the file or show what is in it: only a file that has
+    /// shown itself a part file, and nothing of any other in the refusal.
+    fn part_file(&mut self, file: &str) -> Result<(&mut Part, std::path::PathBuf), String> {
+        let (p, path) = self.part_at(file)?;
+        if !is_part(&p.model) {
+            return Err(format!(
+                "{file}: not a part file; nothing read from it or changed"
+            ));
+        }
+        Ok((p, path))
+    }
+
     /// The file's part, brought up to date, and its real path.
     fn part_at(&mut self, file: &str) -> Result<(&mut Part, std::path::PathBuf), String> {
         // every check, and the read, on the one path with links resolved. A directory on it
@@ -166,20 +178,7 @@ impl Session {
             return Err("this session does not write files (serve and mcp take --writable)".into());
         }
         self.create(&a.file);
-        let (p, path) = self.part_at(&a.file)?;
-        // a file whose first line is no feature may not be a part file: neither change nor echo it
-        if p.model.error.as_ref().is_some_and(|f| f.at == 0)
-            && p.model.built() == 0
-            && !p.model.lines.is_empty()
-        {
-            let first = p.model.lines[0].toks.first().map(String::as_str).unwrap_or("");
-            if crate::text::kind(first).is_none() && p.model.lines[0].toks.get(1).is_none_or(|t| t != "=") {
-                return Err(format!(
-                    "{}: line 1 is not a feature; act changes part files only",
-                    a.file
-                ));
-            }
-        }
+        let (p, path) = self.part_file(&a.file)?;
         p.open(&path);
         let d = p.act(&a.words.join("\n"), a.base);
         Ok(Reply {
@@ -212,13 +211,12 @@ impl Session {
 
     /// What `query` answers beside selectors: the file, numbers, history, what can be dragged.
     fn query_more(&mut self, a: &Args, what: &str) -> Result<Reply, String> {
-        if what == "stat" {
-            return self.build(a);
+        let (p, path) = self.part_file(&a.file)?;
+        match what {
+            "stat" => return self.build(a),
+            "check" => return self.check(a),
+            _ => {}
         }
-        if what == "check" {
-            return self.check(a);
-        }
-        let (p, path) = self.part_at(&a.file)?;
         p.open(&path);
         let text = match what {
             "file" => format!("v{}\n{}", p.version(), p.model.src()),
@@ -314,18 +312,19 @@ impl Session {
                 } else {
                     String::new()
                 };
-                text.push_str(&format!("error line {}: {}", line.no, f.msg));
+                let (msg, hint) = told(m, &f);
+                text.push_str(&format!("error line {}: {msg}", line.no));
                 if !echo.is_empty() {
                     text.push_str(&format!("\n  {echo}"));
                 }
-                text.push_str(&format!("\nhint: {}", f.hint));
+                text.push_str(&format!("\nhint: {hint}"));
                 j.push((
                     "error",
                     Json::obj(vec![
                         ("line", line.no.into()),
                         ("text", echo.into()),
-                        ("msg", f.msg.into()),
-                        ("hint", f.hint.into()),
+                        ("msg", msg.into()),
+                        ("hint", hint.into()),
                     ]),
                 ));
             }
@@ -612,7 +611,8 @@ impl Session {
                 .join("\n")
         };
         if let Some(f) = &m.error {
-            text.push_str(&format!("\nline {} does not build: {}", m.lines[f.at].no, f.msg));
+            let (msg, _) = told(m, f);
+            text.push_str(&format!("\nline {} does not build: {msg}", m.lines[f.at].no));
         }
         let mut sketches = Vec::new();
         for (i, f) in m.features.iter().enumerate() {
@@ -760,7 +760,7 @@ impl Session {
 
 /// O_NOFOLLOW: open fails on a symbolic link (the value differs by platform).
 #[cfg(unix)]
-const NOFOLLOW: i32 = if cfg!(any(target_os = "macos", target_os = "ios", target_os = "freebsd")) {
+pub(crate) const NOFOLLOW: i32 = if cfg!(any(target_os = "macos", target_os = "ios", target_os = "freebsd")) {
     0x100
 } else if cfg!(any(target_arch = "aarch64", target_arch = "arm")) {
     0o100000
@@ -773,7 +773,10 @@ const NOFOLLOW: i32 = if cfg!(any(target_os = "macos", target_os = "ios", target
 /// since the check, nor a hard link to a file elsewhere), and through a new file in the same
 /// directory renamed into place.
 #[cfg(unix)]
-pub(crate) fn replace(path: &std::path::Path, src: &str) -> Result<(), String> {
+/// The part file's metadata, if it may be written: a plain file with one name, here on its own
+/// path. Refused, it has not been touched, and nothing of it should go anywhere else.
+#[cfg(unix)]
+pub(crate) fn writable_file(path: &std::path::Path) -> Result<std::fs::Metadata, String> {
     use std::os::unix::fs::{MetadataExt, OpenOptionsExt};
     let checked = std::fs::metadata(path).map_err(|_| "cannot write".to_string())?;
     let f = std::fs::OpenOptions::new()
@@ -788,6 +791,13 @@ pub(crate) fn replace(path: &std::path::Path, src: &str) -> Result<(), String> {
     {
         return Err("not a plain file with one name; not written".into());
     }
+    Ok(held)
+}
+
+#[cfg(unix)]
+pub(crate) fn replace(path: &std::path::Path, src: &str) -> Result<(), String> {
+    use std::os::unix::fs::{MetadataExt, OpenOptionsExt};
+    let held = writable_file(path)?;
     let dir = path.parent().ok_or("cannot write")?;
     let name = path.file_name().ok_or("cannot write")?.to_string_lossy();
     let tmp = dir.join(format!(".{name}.{}.tmp", std::process::id()));
@@ -806,8 +816,36 @@ pub(crate) fn replace(path: &std::path::Path, src: &str) -> Result<(), String> {
 }
 
 #[cfg(not(unix))]
+pub(crate) fn writable_file(_: &std::path::Path) -> Result<std::fs::Metadata, String> {
+    Err("writing part files needs a unix system".into())
+}
+
+#[cfg(not(unix))]
 pub(crate) fn replace(_: &std::path::Path, _: &str) -> Result<(), String> {
     Err("writing part files needs a unix system".into())
+}
+
+/// A part file, as far as can be told: a first line that read as one, or nothing written yet. A
+/// `KEY = value` line that reads as a parameter is as far as this can go; one that does not read
+/// says nothing either way.
+fn is_part(m: &Model) -> bool {
+    m.built() > 0 || m.src().trim().is_empty()
+}
+
+/// What a failure may say of a file: nothing from its text until it has shown itself a part.
+fn told(m: &Model, f: &crate::model::Failure) -> (String, String) {
+    if is_part(m) {
+        return (f.msg.clone(), f.hint.clone());
+    }
+    let first = m.lines[f.at].toks.first().map(String::as_str);
+    let hint = match first.and_then(crate::text::kind) {
+        Some(k) => k.syntax.to_string(),
+        None => "`help` lists the feature kinds".to_string(),
+    };
+    (
+        "the first line does not read as a part line; is this a .fc part file?".to_string(),
+        hint,
+    )
 }
 
 fn help_reply(topic: &str, a: &Args) -> Reply {
@@ -1392,9 +1430,181 @@ combine cut base lid keep
         assert!(s.run("act", &args(&plain, &["w = 9"])).ok);
         assert_eq!(
             std::fs::read_dir(&dir.0).expect("dir").count(),
-            5,
-            "no temporary file left: the two links and their logs' absence, the part and its log"
+            4,
+            "the two links with no log beside them, the part and its log, no temporary file"
         );
+    }
+
+    /// A file that never read as a part gives nothing back, by any
+    /// question and through any error, parameter-shaped first line or not.
+    #[cfg(unix)]
+    #[test]
+    fn no_question_echoes_a_file_that_is_no_part() {
+        let dir = Dir::new("no-part");
+        for (name, src) in [
+            ("a.fc", "not a part hunter2\nmore hunter2\n"),
+            ("b.fc", "API_KEY = hunter2\nOTHER = hunter2\n"),
+            ("c.fc", "move hunter2 away\n"),
+            ("d.fc", "# hunter2\n# hunter2\n"),
+        ] {
+            let f = dir.file(name, src);
+            let mut s = Session::default().writable(true);
+            for words in [&["file"][..], &["dims"], &["since", "0"], &["stat"], &["check"]] {
+                let r = s.run("query", &args(&f, words));
+                assert!(!r.text.contains("hunter2"), "{name} {words:?}: {}", r.text);
+                assert!(
+                    !r.json.to_string().contains("hunter2"),
+                    "{name} {words:?}: {}",
+                    r.json
+                );
+            }
+            assert!(!s.run("query", &args(&f, &["file"])).ok, "{name}");
+            for cmd in ["build", "check"] {
+                let r = s.run(cmd, &args(&f, &[]));
+                assert!(
+                    !r.json.to_string().contains("hunter2") && !r.text.contains("hunter2"),
+                    "{name} {cmd}: {}",
+                    r.text
+                );
+            }
+            let r = s.run("act", &args(&f, &["w = 3"]));
+            assert!(!r.ok && !r.text.contains("hunter2"), "{name}: {}", r.text);
+            assert_eq!(
+                std::fs::read_to_string(&f).expect("read"),
+                src,
+                "{name}: left alone"
+            );
+            assert!(
+                !dir.0.join(format!("{name}.log")).exists(),
+                "{name}: no log of it"
+            );
+        }
+        // a new file and an empty one are parts to be; a first line of your own says why it fails
+        let f = dir.0.join("new.fc").to_string_lossy().to_string();
+        let mut s = Session::default().writable(true);
+        let r = s.run("act", &args(&f, &["extrude 5 rectt 0 0 1 1"]));
+        assert!(!r.ok && r.text.contains("rectt"), "{}", r.text);
+        assert!(s.run("act", &args(&f, &["w = 3", "extrude w rect 0 0 1 1"])).ok);
+        assert!(s.run("query", &args(&f, &["file"])).text.contains("extrude w"));
+    }
+
+    /// The log is never followed through a link, and what isn't a log is
+    /// refused, not overwritten.
+    #[cfg(unix)]
+    #[test]
+    fn the_log_never_overwrites_what_is_not_a_log() {
+        let dir = Dir::new("log-kinds");
+        let outside = Dir::new("log-outside");
+        let away = outside.file("v.txt", "precious\n");
+        let part = "w = 4\nextrude w rect 0 0 1 1\n";
+        let mut s = Session::default().writable(true);
+        // a file that is no log
+        let f = dir.file("a.fc", part);
+        std::fs::write(dir.0.join("a.fc.log"), "my notes\n").expect("write");
+        let r = s.run("act", &args(&f, &["w = 5"]));
+        assert!(!r.ok, "{}", r.text);
+        assert_eq!(
+            std::fs::read_to_string(dir.0.join("a.fc.log")).expect("read"),
+            "my notes\n"
+        );
+        assert_eq!(std::fs::read_to_string(&f).expect("read"), part);
+        // a link, to a file or nowhere
+        let f = dir.file("b.fc", part);
+        std::os::unix::fs::symlink(&away, dir.0.join("b.fc.log")).expect("link");
+        assert!(!s.run("act", &args(&f, &["w = 5"])).ok);
+        let f = dir.file("c.fc", part);
+        let gone = outside.0.join("not-yet");
+        std::os::unix::fs::symlink(&gone, dir.0.join("c.fc.log")).expect("link");
+        assert!(!s.run("act", &args(&f, &["w = 5"])).ok);
+        assert!(!gone.exists(), "not created through the link");
+        // a second name
+        let f = dir.file("d.fc", part);
+        std::fs::hard_link(&away, dir.0.join("d.fc.log")).expect("link");
+        assert!(!s.run("act", &args(&f, &["w = 5"])).ok);
+        assert_eq!(std::fs::read_to_string(&away).expect("read"), "precious\n");
+        // a whole entry that does not read is damage, not a torn tail: left for a person
+        let f = dir.file("e.fc", part);
+        assert!(s.run("act", &args(&f, &["w = 5"])).ok);
+        let log = dir.0.join("e.fc.log");
+        let mut bytes = std::fs::read(&log).expect("read");
+        bytes.extend_from_slice(&[3, 9, 9, 9]);
+        std::fs::write(&log, &bytes).expect("write");
+        let r = Session::default()
+            .writable(true)
+            .run("act", &args(&f, &["w = 6"]));
+        assert!(!r.ok, "{}", r.text);
+        assert_eq!(std::fs::read(&log).expect("read"), bytes);
+    }
+
+    /// The log holds the part's text, so no one reads it who can't read the part.
+    #[cfg(unix)]
+    #[test]
+    fn the_log_is_as_private_as_the_part() {
+        use std::os::unix::fs::PermissionsExt;
+        let dir = Dir::new("log-mode");
+        let mode = |p: &std::path::Path| std::fs::metadata(p).expect("meta").permissions().mode() & 0o777;
+        let set = |p: &std::path::Path, m| {
+            std::fs::set_permissions(p, std::fs::Permissions::from_mode(m)).expect("chmod")
+        };
+        let f = dir.file("a.fc", "w = 4\nextrude w rect 0 0 1 1\n");
+        let log = dir.0.join("a.fc.log");
+        set(std::path::Path::new(&f), 0o600);
+        assert!(
+            Session::default()
+                .writable(true)
+                .run("act", &args(&f, &["w = 5"]))
+                .ok
+        );
+        assert_eq!(mode(&log), 0o600);
+        // one left broader than the part is tightened
+        set(&log, 0o644);
+        assert!(
+            Session::default()
+                .writable(true)
+                .run("act", &args(&f, &["w = 6"]))
+                .ok
+        );
+        assert_eq!(mode(&log), 0o600);
+        assert_eq!(mode(std::path::Path::new(&f)), 0o600);
+    }
+
+    /// A part that may not be written leaves nothing of itself in a log, and a
+    /// write that fails takes its entry back.
+    #[cfg(unix)]
+    #[test]
+    fn a_refused_write_leaves_no_log_entry() {
+        let dir = Dir::new("log-refused");
+        let outside = Dir::new("log-refused-out");
+        let away = outside.file("q.fc", "w = 4\nextrude w rect 0 0 1 1\n");
+        let hard = dir.0.join("hard.fc");
+        std::fs::hard_link(&away, &hard).expect("link");
+        let mut s = Session::default().writable(true);
+        let r = s.run("act", &args(&hard.to_string_lossy(), &["w = 9"]));
+        assert!(
+            !r.ok && r.text.contains("not a plain file with one name"),
+            "{}",
+            r.text
+        );
+        assert!(
+            !dir.0.join("hard.fc.log").exists(),
+            "no copy of it beside the link"
+        );
+        // the write itself fails: a directory that can't take the temporary file
+        use std::os::unix::fs::PermissionsExt;
+        let f = dir.file("p.fc", "w = 4\nextrude w rect 0 0 1 1\n");
+        assert!(s.run("act", &args(&f, &["w = 5"])).ok);
+        let log = dir.0.join("p.fc.log");
+        let before = std::fs::read(&log).expect("read");
+        let text = std::fs::read_to_string(&f).expect("read");
+        std::fs::set_permissions(&dir.0, std::fs::Permissions::from_mode(0o500)).expect("chmod");
+        let r = s.run("act", &args(&f, &["w = 6"]));
+        std::fs::set_permissions(&dir.0, std::fs::Permissions::from_mode(0o700)).expect("chmod");
+        assert!(!r.ok, "{}", r.text);
+        assert_eq!(std::fs::read(&log).expect("read"), before, "the entry went back");
+        assert_eq!(std::fs::read_to_string(&f).expect("read"), text);
+        // and the part goes on from where it was, one version on
+        let r = s.run("act", &args(&f, &["w = 7"]));
+        assert!(r.ok && r.text.starts_with("ok v3;"), "{}", r.text);
     }
 
     #[test]
