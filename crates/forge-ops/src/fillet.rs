@@ -3019,7 +3019,7 @@ fn at_length(c: &Curve, from: f64, to: f64, d: f64) -> Option<f64> {
         Curve::Circle(k) => Some(k.radius),
         _ => None,
     };
-    if !(d > 0.0) {
+    if d.is_nan() || d <= 0.0 {
         return None;
     }
     if let Some(v) = speed {

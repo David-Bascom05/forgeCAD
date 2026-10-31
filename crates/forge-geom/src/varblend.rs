@@ -14,6 +14,10 @@
 //! Where the plane turns smoothly (C2 guide), c' is continuous, so the characteristic circles
 //! are too, and blends of a tangent chain share their junction circles.
 //!
+//! A full round's balls also touch a third surface M (`VarBlend::round`): the radius is then
+//! solved with the centre at each s (the law is only the rows' fit, for seeds and bounds), and
+//! the arc runs from contact to contact over M, more than half a turn where M lies that way.
+//!
 //! Rejected: |r'| reaching |c'| (no envelope), a law bending faster than the balls can roll
 //! (F_ss <= 0 on the arc, F = |x - c|^2 - r^2: the envelope folds), coinciding contacts.
 //!
@@ -351,6 +355,52 @@ impl Rows3 {
     }
 }
 
+/// A 4x4 system factored once (LU with partial pivoting) for several right-hand sides; None
+/// when it is nearly singular.
+struct Rows4 {
+    lu: [[f64; 4]; 4],
+    perm: [usize; 4],
+}
+
+impl Rows4 {
+    fn new(mut lu: [[f64; 4]; 4]) -> Option<Rows4> {
+        let scale = lu.iter().flatten().fold(0.0f64, |m, x| m.max(x.abs()));
+        let mut perm = [0, 1, 2, 3];
+        for k in 0..4 {
+            let p = (k..4).max_by(|&i, &j| lu[i][k].abs().total_cmp(&lu[j][k].abs()))?;
+            if lu[p][k].is_nan() || lu[p][k].abs() <= 1e-12 * scale {
+                return None;
+            }
+            lu.swap(k, p);
+            perm.swap(k, p);
+            let pivot = lu[k];
+            for row in &mut lu[k + 1..] {
+                let f = row[k] / pivot[k];
+                row[k] = f;
+                for (x, p) in row.iter_mut().zip(pivot).skip(k + 1) {
+                    *x -= f * p;
+                }
+            }
+        }
+        Some(Rows4 { lu, perm })
+    }
+    fn solve(&self, b: [f64; 4]) -> [f64; 4] {
+        let mut x = self.perm.map(|i| b[i]);
+        for i in 1..4 {
+            for j in 0..i {
+                x[i] -= self.lu[i][j] * x[j];
+            }
+        }
+        for i in (0..4).rev() {
+            for j in i + 1..4 {
+                x[i] -= self.lu[i][j] * x[j];
+            }
+            x[i] /= self.lu[i][i];
+        }
+        x
+    }
+}
+
 /// How the radius varies along the edge: a function of the guide parameter s. It is design
 /// data (which ball sits where), so a C2 piecewise cubic is a fine way to state it. Past its
 /// first and last control points the end pieces carry on.
@@ -568,6 +618,29 @@ impl RadiusLaw {
             .collect();
         RadiusLaw {
             knots: x.to_vec(),
+            coef,
+            period: None,
+        }
+    }
+
+    /// The cubic Hermite through (s, r, dr/ds) points, s increasing.
+    fn hermite(points: &[(f64, f64, f64)]) -> RadiusLaw {
+        let coef = points
+            .windows(2)
+            .map(|w| {
+                let ((s0, r0, m0), (s1, r1, m1)) = (w[0], w[1]);
+                let h = s1 - s0;
+                let d = (r1 - r0) / h;
+                [
+                    r0,
+                    m0,
+                    (3.0 * d - 2.0 * m0 - m1) / h,
+                    (m0 + m1 - 2.0 * d) / (h * h),
+                ]
+            })
+            .collect();
+        RadiusLaw {
+            knots: points.iter().map(|p| p.0).collect(),
             coef,
             period: None,
         }
@@ -1107,10 +1180,15 @@ impl SecArc {
         self.k + (self.e1 * cs + self.e2 * sn) * self.rho
     }
 
-    /// v of the point of the circle nearest p (unclamped).
+    /// v of the point of the circle nearest p (unclamped; past the far end of an arc of more
+    /// than half a turn where that end is nearer in angle).
     fn v_of(&self, p: Point3) -> f64 {
         let d = p - self.k;
-        dmath::atan2(d.dot(self.e2), d.dot(self.e1)) / self.phi
+        let mut t = dmath::atan2(d.dot(self.e2), d.dot(self.e1));
+        if self.phi > dmath::PI && t < 0.0 && t + dmath::TAU - self.phi < -t {
+            t += dmath::TAU;
+        }
+        t / self.phi
     }
 
     /// Box of the arc over v in [v0, v1].
@@ -1134,8 +1212,9 @@ impl SecArc {
 #[derive(Clone, Copy, Debug, PartialEq)]
 struct Row {
     s: f64,
-    /// Taylor coefficients of the centre (the first as a vector from the origin).
+    /// Taylor coefficients of the centre (the first as a vector from the origin) and radius.
     c: [Vec3; 4],
+    rj: [f64; 4],
     r: f64,
     arc: SecArc,
     /// Points at v = 0, 1/2, 1.
@@ -1208,6 +1287,9 @@ pub struct VarBlend {
     hi: f64,
     /// The contact with b is at v = 0, so du x dv points out of the balls.
     swap: bool,
+    /// A surface (and the balls' side of it) the arc passes over between its contacts, the
+    /// long way round where that is the way to it (a full round's middle face).
+    through: Option<(Surface, f64)>,
     rows: Vec<Row>,
     segs: Vec<Seg>,
     /// Runs of segments under one ball, so searches skip what is far.
@@ -1228,7 +1310,45 @@ impl VarBlend {
         law: Arc<RadiusLaw>,
         range: Interval,
     ) -> Result<Arc<VarBlend>, VarBlendError> {
-        if matches!(a, Surface::Procedural(_)) || matches!(b, Surface::Procedural(_)) {
+        Self::make([a, b], [side_a, side_b], None, guide, law, range)
+    }
+
+    /// The full round between `a` and `b` over `m`, the balls on side `sides[i]` of each: the
+    /// ball at s touches all three, its radius solved with its centre, and its arc passes over
+    /// m, by more than half a turn where need be. `start` seeds one ball (centre, radius)
+    /// anywhere along the range.
+    pub fn round(
+        [a, m, b]: [&Surface; 3],
+        sides: [f64; 3],
+        guide: Guide,
+        range: Interval,
+        start: (Point3, f64),
+    ) -> Result<Arc<VarBlend>, VarBlendError> {
+        let law = Arc::new(RadiusLaw::constant(start.1));
+        Self::make(
+            [a, b],
+            [sides[0], sides[2]],
+            Some((m, sides[1], start.0)),
+            guide,
+            law,
+            range,
+        )
+    }
+
+    /// With `through` (a full round's middle, its side and the start centre), the law only
+    /// seeds the start: the radius is solved, and the law becomes its fit.
+    fn make(
+        [a, b]: [&Surface; 2],
+        [side_a, side_b]: [f64; 2],
+        through: Option<(&Surface, f64, Point3)>,
+        guide: Guide,
+        law: Arc<RadiusLaw>,
+        range: Interval,
+    ) -> Result<Arc<VarBlend>, VarBlendError> {
+        if [Some(a), Some(b), through.map(|t| t.0)]
+            .iter()
+            .any(|s| matches!(s, Some(Surface::Procedural(_))))
+        {
             return Err(VarBlendError::NotAnalytic);
         }
         if range.width().is_nan() || range.width() <= 0.0 || !range.lo.is_finite() || !range.hi.is_finite() {
@@ -1247,12 +1367,13 @@ impl VarBlend {
             lo: range.lo,
             hi: range.hi,
             swap: false,
+            through: through.map(|(m, side, _)| (m.clone(), side.signum())),
             rows: Vec::new(),
             segs: Vec::new(),
             blocks: Vec::new(),
             predict: 0.0,
         };
-        vb.build()?;
+        vb.build(through.map(|t| t.2))?;
         Ok(Arc::new(vb))
     }
 
@@ -1319,7 +1440,10 @@ impl VarBlend {
     }
 
     pub fn radius(&self, s: f64) -> f64 {
-        self.law.eval(s)
+        match self.through {
+            Some(_) => self.spine_at(s).1.0[0],
+            None => self.law.eval(s),
+        }
     }
 
     /// Smallest and largest radius over the range.
@@ -1370,20 +1494,125 @@ impl VarBlend {
         (norm(f) <= 1e-9 * scale).then_some(c)
     }
 
-    /// The centre's Taylor coefficients at s from the centre c0, solved order by order.
-    fn centre_jets(&self, s: f64, c0: Point3) -> Option<(V, J)> {
-        self.centre_jets_n(s, c0)
+    /// The ball at s: the centre for radius r, or with a through surface the centre and radius
+    /// touching all three (Newton from `seed` and r).
+    fn solve_ball(&self, s: f64, r: f64, seed: Point3) -> Option<(Point3, f64)> {
+        let Some((m, side_m)) = &self.through else {
+            return self.solve_centre(s, r, seed).map(|c| (c, r));
+        };
+        let (g, t) = self.guide.point_tan(s);
+        let t = t.normalize()?.get();
+        let res = |c: Point3, r: f64| {
+            [
+                self.a.implicit(c) - self.side[0] * r,
+                self.b.implicit(c) - self.side[1] * r,
+                m.implicit(c) - side_m * r,
+                (c - g).dot(t),
+            ]
+        };
+        let norm = |f: [f64; 4]| f.iter().fold(0.0f64, |m, x| m.max(x.abs()));
+        let better = |n: [f64; 4], o: [f64; 4]| norm(n) <= norm(o) && !n.iter().any(|x| x.is_nan());
+        let scale = 1.0 + r + seed.to_vec().abs_max();
+        let (mut c, mut r) = (seed, r);
+        let mut f = res(c, r);
+        for _ in 0..40 {
+            let row = |g: Vec3, side: f64| [g.x, g.y, g.z, -side];
+            let d = Rows4::new([
+                row(self.a.gradient(c), self.side[0]),
+                row(self.b.gradient(c), self.side[1]),
+                row(m.gradient(c), *side_m),
+                row(t, 0.0),
+            ])?
+            .solve(f.map(|x| -x));
+            let (dc, dr) = (Vec3::new(d[0], d[1], d[2]), d[3]);
+            let len = dc.length().max(dr.abs());
+            let mut lam = 1.0;
+            let (mut cn, mut rn) = (c + dc, r + dr);
+            let mut fnew = res(cn, rn);
+            while !better(fnew, f) && lam > 1.0 / 64.0 && len > 1e-9 * scale {
+                lam *= 0.5;
+                (cn, rn) = (c + dc * lam, r + dr * lam);
+                fnew = res(cn, rn);
+            }
+            if !better(fnew, f) && len > 1e-9 * scale {
+                return None;
+            }
+            (c, r, f) = (cn, rn, fnew);
+            if len * lam <= 1e-13 * scale {
+                break;
+            }
+        }
+        (norm(f) <= 1e-9 * scale && r > tol::MIN_LENGTH).then_some((c, r))
+    }
+
+    /// The guide parameter in [lo, hi] whose point lies nearest p (sampled, then narrowed).
+    fn guide_nearest(&self, p: Point3) -> f64 {
+        let n = 64;
+        let at = |k: usize| self.lo + (self.hi - self.lo) * k as f64 / n as f64;
+        let d = |s: f64| self.guide.point_tan(s).0.distance(p);
+        let k = (0..=n)
+            .min_by(|&i, &j| d(at(i)).total_cmp(&d(at(j))))
+            .unwrap_or(0);
+        let (mut a, mut b) = (at(k.saturating_sub(1)), at((k + 1).min(n)));
+        for _ in 0..60 {
+            let (x, y) = (a + (b - a) / 3.0, b - (b - a) / 3.0);
+            if d(x) <= d(y) {
+                b = y;
+            } else {
+                a = x;
+            }
+        }
+        0.5 * (a + b)
+    }
+
+    /// A first guess of the radius at s, from row i: its fitted model with a through surface,
+    /// else the law.
+    fn r_at(&self, i: usize, s: f64) -> f64 {
+        match self.through {
+            Some(_) => {
+                let (row, h) = (&self.rows[i], s - self.rows[i].s);
+                let r = row.rj;
+                r[0] + h * (r[1] + h * (r[2] + h * r[3]))
+            }
+            None => self.law.eval(s),
+        }
+    }
+
+    /// The centre's (and with a through surface the radius's) Taylor coefficients at s from the
+    /// ball (c0, r0), solved order by order.
+    fn centre_jets(&self, s: f64, c0: Point3, r0: f64) -> Option<(V, J)> {
+        self.centre_jets_n(s, c0, r0)
     }
 
     /// `centre_jets` to order N - 1 only.
-    fn centre_jets_n<const N: usize>(&self, s: f64, c0: Point3) -> Option<(Vn<N>, Jn<N>)> {
-        let rj = self.law.jet(s);
-        let r = Jn::<N>(std::array::from_fn(|k| rj.0[k]));
+    fn centre_jets_n<const N: usize>(&self, s: f64, c0: Point3, r0: f64) -> Option<(Vn<N>, Jn<N>)> {
         let (g4, gp4) = self.guide.jets(s);
         let (g, gp) = (
             Vn::<N>::from(std::array::from_fn(|k| g4.at(k))),
             Vn::<N>::from(std::array::from_fn(|k| gp4.at(k))),
         );
+        if let Some((m, side_m)) = &self.through {
+            let row = |g: Vec3, side: f64| [g.x, g.y, g.z, -side];
+            let rows = Rows4::new([
+                row(self.a.gradient(c0), self.side[0]),
+                row(self.b.gradient(c0), self.side[1]),
+                row(m.gradient(c0), *side_m),
+                row(gp.at(0), 0.0),
+            ])?;
+            let (mut c, mut r) = (Vn::<N>::k(c0.to_vec()), Jn::<N>::k(r0));
+            for i in 1..N {
+                let fa = dist_grad(&self.a, c, false).0 - r * self.side[0];
+                let fb = dist_grad(&self.b, c, false).0 - r * self.side[1];
+                let fm = dist_grad(m, c, false).0 - r * *side_m;
+                let fp = (c - g).dot(gp);
+                let x = rows.solve([-fa.0[i], -fb.0[i], -fm.0[i], -fp.0[i]]);
+                c.set(i, Vec3::new(x[0], x[1], x[2]));
+                r.0[i] = x[3];
+            }
+            return Some((c, r));
+        }
+        let rj = self.law.jet(s);
+        let r = Jn::<N>(std::array::from_fn(|k| rj.0[k]));
         let rows = Rows3::new(self.a.gradient(c0), self.b.gradient(c0), gp.at(0))?;
         let mut c = Vn::<N>::k(c0.to_vec());
         for i in 1..N {
@@ -1395,8 +1624,14 @@ impl VarBlend {
         Some((c, r))
     }
 
-    /// The section's arc alone, from centre and radius jets of any order past the first.
-    fn arc_of<const N: usize>(&self, c: Vn<N>, r: Jn<N>) -> SecArc {
+    /// The characteristic circle's centre and radius, its frame (e1 to the v = 0 contact), the
+    /// arc's angle and the contacts, from centre and radius jets of any order past the first.
+    #[allow(clippy::type_complexity)]
+    fn frame_of<const N: usize>(
+        &self,
+        c: Vn<N>,
+        r: Jn<N>,
+    ) -> (Vn<N>, Jn<N>, Vn<N>, Vn<N>, Jn<N>, [Vn<N>; 2]) {
         let cp = c.d();
         let rp = r.d();
         let g = cp.dot(cp).recip();
@@ -1408,9 +1643,26 @@ impl VarBlend {
         let a = q[0] - k;
         let e1 = a * a.norm().recip();
         let b = q[1] - k;
-        let bp = b - e1 * b.dot(e1);
+        // e2 toward the second contact, or toward the surface the arc passes over
+        let w = match &self.through {
+            None => b,
+            Some((m, side)) => {
+                let d = c - dist_grad(m, c, true).1 * (r * *side) - k;
+                d - cp * (d.dot(cp) * g)
+            }
+        };
+        let bp = w - e1 * w.dot(e1);
         let e2 = bp * bp.norm().recip();
-        let phi = Jn::<N>::atan2(b.dot(e2), b.dot(e1));
+        let mut phi = Jn::<N>::atan2(b.dot(e2), b.dot(e1));
+        if self.through.is_some() && phi.0[0] < 0.0 {
+            phi.0[0] += dmath::TAU;
+        }
+        (k, rho, e1, e2, phi, q)
+    }
+
+    /// The section's arc alone, from centre and radius jets of any order past the first.
+    fn arc_of<const N: usize>(&self, c: Vn<N>, r: Jn<N>) -> SecArc {
+        let (k, rho, e1, e2, phi, _) = self.frame_of(c, r);
         SecArc {
             k: Point3::ORIGIN + k.at(0),
             rho: rho.0[0],
@@ -1424,13 +1676,13 @@ impl VarBlend {
     fn arc_at(&self, s: f64) -> SecArc {
         let i = self.nearest_row(s);
         if self.rows[i].s == s {
-            let (c, r) = (self.rows[i].c, self.law.jet(s));
-            return self.arc_of(Vn::<2>::from([c[0], c[1]]), Jn::<2>([r.0[0], r.0[1]]));
+            let (c, r) = (self.rows[i].c, self.rows[i].rj);
+            return self.arc_of(Vn::<2>::from([c[0], c[1]]), Jn::<2>([r[0], r[1]]));
         }
         let seed = Point3::ORIGIN + self.model(i, s)[0];
         match self
-            .solve_centre(s, self.law.eval(s), seed)
-            .and_then(|c| self.centre_jets_n::<2>(s, c))
+            .solve_ball(s, self.r_at(i, s), seed)
+            .and_then(|(c, r)| self.centre_jets_n::<2>(s, c, r))
         {
             Some((c, r)) => self.arc_of(c, r),
             None => self.section_at(s).arc(),
@@ -1438,20 +1690,7 @@ impl VarBlend {
     }
 
     fn section_of(&self, c: V, r: J) -> Section {
-        let cp = c.d();
-        let rp = r.d();
-        let g = cp.dot(cp).recip();
-        let k = c - cp * (r * rp * g);
-        let rho = r * (J::k(1.0) - rp * rp * g).sqrt();
-        let qa = c - dist_grad(&self.a, c, true).1 * (r * self.side[0]);
-        let qb = c - dist_grad(&self.b, c, true).1 * (r * self.side[1]);
-        let q = if self.swap { [qb, qa] } else { [qa, qb] };
-        let a = q[0] - k;
-        let e1 = a * a.norm().recip();
-        let b = q[1] - k;
-        let bp = b - e1 * b.dot(e1);
-        let e2 = bp * bp.norm().recip();
-        let phi = J::atan2(b.dot(e2), b.dot(e1));
+        let (k, rho, e1, e2, phi, q) = self.frame_of(c, r);
         Section {
             c,
             r,
@@ -1511,24 +1750,29 @@ impl VarBlend {
         let i = self.nearest_row(s);
         // a row holds the solved jets at its own s
         if self.rows[i].s == s {
-            return (V::from(self.rows[i].c), self.law.jet(s));
+            return (V::from(self.rows[i].c), Jn(self.rows[i].rj));
         }
         let seed = Point3::ORIGIN + self.model(i, s)[0];
-        if let Some(c) = self.solve_centre(s, self.law.eval(s), seed)
-            && let Some(j) = self.centre_jets(s, c)
+        if let Some((c, r)) = self.solve_ball(s, self.r_at(i, s), seed)
+            && let Some(j) = self.centre_jets(s, c, r)
         {
             return j;
         }
         let s0 = self.rows[i].s;
-        let mut c = Point3::ORIGIN + self.rows[i].c[0];
+        let (mut c, mut r) = (Point3::ORIGIN + self.rows[i].c[0], self.rows[i].r);
         for k in 1..=16 {
             let t = s0 + (s - s0) * k as f64 / 16.0;
-            match self.solve_centre(t, self.law.eval(t), c) {
-                Some(n) => c = n,
+            let guess = if self.through.is_some() {
+                r
+            } else {
+                self.law.eval(t)
+            };
+            match self.solve_ball(t, guess, c) {
+                Some(n) => (c, r) = n,
                 None => return (V::from(self.model(i, s)), self.law.jet(s)),
             }
         }
-        self.centre_jets(s, c)
+        self.centre_jets(s, c, r)
             .unwrap_or_else(|| (V::from(self.model(i, s)), self.law.jet(s)))
     }
 
@@ -1556,13 +1800,18 @@ impl VarBlend {
         self.section_of(c, r)
     }
 
-    fn check(sec: &Section, s: f64) -> Result<(), VarBlendError> {
+    fn check(&self, sec: &Section, s: f64) -> Result<(), VarBlendError> {
         let (rho, phi) = (sec.rho.0[0], sec.phi.0[0]);
         if rho.is_nan() || rho <= tol::LINEAR {
             return Err(VarBlendError::RadiusTooSteep { s });
         }
-        let along = (sec.q[1] - sec.k).dot(sec.e2).0[0];
-        if (phi * rho).is_nan() || phi * rho <= tol::LINEAR || along.is_nan() || along <= tol::LINEAR {
+        // the contacts apart, the second off the first's diameter unless the arc goes round over
+        // its through surface
+        let apart = match self.through {
+            None => (sec.q[1] - sec.k).dot(sec.e2).0[0],
+            Some(_) => (dmath::TAU - phi) * rho,
+        };
+        if (phi * rho).is_nan() || phi * rho <= tol::LINEAR || apart.is_nan() || apart <= tol::LINEAR {
             return Err(VarBlendError::Contacts { s });
         }
         // the envelope is regular where F_ss > 0, F = |x - c|^2 - r^2: on the arc that is
@@ -1584,10 +1833,10 @@ impl VarBlend {
         Ok(())
     }
 
-    fn make_row(&self, s: f64, c: Point3) -> Result<Row, VarBlendError> {
-        let (cj, rj) = self.centre_jets(s, c).ok_or(VarBlendError::Tangent { s })?;
+    fn make_row(&self, s: f64, c: Point3, r: f64) -> Result<Row, VarBlendError> {
+        let (cj, rj) = self.centre_jets(s, c, r).ok_or(VarBlendError::Tangent { s })?;
         let sec = self.section_of(cj, rj);
-        Self::check(&sec, s)?;
+        self.check(&sec, s)?;
         let mut pts = [Point3::ORIGIN; 3];
         let (mut bu, mut bv, mut kmax) = (0.0f64, 0.0f64, 0.0f64);
         for (j, v) in [0.0, 0.25, 0.5, 0.75, 1.0].into_iter().enumerate() {
@@ -1604,6 +1853,7 @@ impl VarBlend {
         Ok(Row {
             s,
             c: cj.coefs(),
+            rj: rj.0,
             r: rj.0[0],
             arc: sec.arc(),
             pts,
@@ -1615,25 +1865,40 @@ impl VarBlend {
         })
     }
 
-    fn build(&mut self) -> Result<(), VarBlendError> {
+    /// The rows from `lo` to `hi`, from the ball at `lo` followed from one near `start` (with
+    /// a through surface) or grown from the guide point.
+    fn build(&mut self, start: Option<Point3>) -> Result<(), VarBlendError> {
         let lo = self.lo;
-        // the ball grows from nothing at the edge: radius continuation from the guide point
-        let (g, _) = self.guide.point_tan(lo);
-        let r = self.law.eval(lo);
-        let mut c = g;
-        for k in (0..=12).rev() {
-            let lam = 1.0 / (1u32 << k) as f64;
-            c = self.solve_centre(lo, r * lam, c).ok_or(VarBlendError::NoStart)?;
+        let mut r = self.law.eval(lo);
+        let mut c = self.guide.point_tan(lo).0;
+        match start {
+            Some(seed) => {
+                let s0 = self.guide_nearest(seed);
+                (c, r) = self.solve_ball(s0, r, seed).ok_or(VarBlendError::NoStart)?;
+                for k in 1..=16 {
+                    let t = s0 + (lo - s0) * k as f64 / 16.0;
+                    (c, r) = self.solve_ball(t, r, c).ok_or(VarBlendError::Lost { s: t })?;
+                }
+            }
+            // the ball grows from nothing at the edge: radius continuation from the guide point
+            None => {
+                for k in (0..=12).rev() {
+                    let lam = 1.0 / (1u32 << k) as f64;
+                    c = self.solve_centre(lo, r * lam, c).ok_or(VarBlendError::NoStart)?;
+                }
+            }
         }
         // orient: du x dv out of the ball
-        let (cj, rj) = self.centre_jets(lo, c).ok_or(VarBlendError::Tangent { s: lo })?;
+        let (cj, rj) = self
+            .centre_jets(lo, c, r)
+            .ok_or(VarBlendError::Tangent { s: lo })?;
         let sec = self.section_of(cj, rj);
-        Self::check(&sec, lo)?;
+        self.check(&sec, lo)?;
         let d = Self::point(&sec, 0.5);
         if d.du.cross(d.dv).dot(d.p - (Point3::ORIGIN + cj.at(0))) < 0.0 {
             self.swap = true;
         }
-        self.rows.push(self.make_row(lo, c)?);
+        self.rows.push(self.make_row(lo, c, r)?);
         let span = self.hi - self.lo;
         // rows only seed solves and bound searches; a thousandth of the smallest radius
         self.predict = (1e-3 * self.radii().0).max(tol::LINEAR * 0.1);
@@ -1649,27 +1914,35 @@ impl VarBlend {
             }
             let i = self.rows.len() - 1;
             let pred = Point3::ORIGIN + self.model(i, s)[0];
-            let r = self.law.eval(s);
-            let next = self.solve_centre(s, r, pred);
-            let err = next.map_or(f64::INFINITY, |c| c.distance(pred));
-            let moved = next.map_or(f64::INFINITY, |c| (c.to_vec() - last.c[0]).length());
+            let guess = self.r_at(i, s);
+            let next = self.solve_ball(s, guess, pred);
+            let err = next.map_or(f64::INFINITY, |(c, r)| c.distance(pred) + (r - guess).abs());
+            let moved = next.map_or(f64::INFINITY, |(c, _)| (c.to_vec() - last.c[0]).length());
+            let r = next.map_or(guess, |b| b.1);
             if err.is_nan() || err > self.predict || moved > 2.0 * last.r.min(r) {
                 h *= 0.5;
                 continue;
             }
-            let row = self.make_row(s, next.expect("checked above"))?;
+            let (c, r) = next.expect("checked above");
+            let row = self.make_row(s, c, r)?;
             // the section checks between rows too, where a fold could hide
             let mid = 0.5 * (last.s + s);
-            let mc = self.solve_centre(mid, self.law.eval(mid), Point3::ORIGIN + self.model(i, mid)[0]);
+            let mc = self.solve_ball(mid, self.r_at(i, mid), Point3::ORIGIN + self.model(i, mid)[0]);
             let (cj, rj) = mc
-                .and_then(|c| self.centre_jets(mid, c))
+                .and_then(|(c, r)| self.centre_jets(mid, c, r))
                 .ok_or(VarBlendError::Tangent { s: mid })?;
-            Self::check(&self.section_of(cj, rj), mid)?;
+            self.check(&self.section_of(cj, rj), mid)?;
             self.rows.push(row);
             if err < self.predict / 16.0 {
                 h = (h * 1.5).min(span / 4.0);
             }
         }
+        if self.through.is_some() {
+            // the solved radii, for bounds and seeds
+            let pts: Vec<(f64, f64, f64)> = self.rows.iter().map(|r| (r.s, r.rj[0], r.rj[1])).collect();
+            self.law = Arc::new(RadiusLaw::hermite(&pts));
+        }
+        let pad = if self.through.is_some() { self.predict } else { 0.0 };
         self.segs = (0..self.rows.len() - 1)
             .map(|i| {
                 let (r0, r1) = (&self.rows[i], &self.rows[i + 1]);
@@ -1684,6 +1957,7 @@ impl VarBlend {
                     .max(self.model(i, mid)[2].length() * 2.0)
                     .max(self.model(i + 1, mid)[2].length() * 2.0);
                 let (rmin, rmax) = self.law.bounds(r0.s, r1.s);
+                let (rmin, rmax) = (rmin - pad, rmax + pad);
                 Seg {
                     vb: 1.5 * r0.bu.max(r1.bu),
                     vq: [
@@ -1794,7 +2068,15 @@ impl VarBlend {
                     c[3],
                 ];
                 s = next;
-                r = self.law.jet(s);
+                r = match self.through {
+                    Some(_) => Jn([
+                        r.0[0] + h * (r.0[1] + h * (r.0[2] + h * r.0[3])),
+                        r.0[1] + h * (2.0 * r.0[2] + 3.0 * h * r.0[3]),
+                        r.0[2] + 3.0 * h * r.0[3],
+                        r.0[3],
+                    ]),
+                    None => self.law.jet(s),
+                };
                 if done {
                     break;
                 }
@@ -2071,6 +2353,7 @@ impl VarBlend {
         let mut out = VarBlend {
             a: self.a.transformed(f),
             b: self.b.transformed(f),
+            through: self.through.as_ref().map(|(m, side)| (m.transformed(f), *side)),
             guide: self.guide.transformed(f),
             rows,
             ..self.clone()
@@ -3323,6 +3606,41 @@ mod tests {
         let (lo, hi) = m.bounds(-5.0, 25.0);
         assert!((lo - 0.1).abs() < 1e-12 && (hi - 1.0).abs() < 1e-12, "{lo} {hi}");
         assert!((m.eval(10.25) - 0.55).abs() < 0.2 && m.slope(-3.0) == 0.0 && m.eval(30.0) == 0.1);
+    }
+
+    #[test]
+    fn full_round_balls_touch_all_three() {
+        // a rib along y narrowing from 4 wide to 2, its top at z = 8
+        let a = plane(Point3::new(-2.0, 0.0, 0.0), Vec3::new(-1.0, 0.05, 0.0));
+        let b = plane(Point3::new(2.0, 0.0, 0.0), Vec3::new(1.0, 0.05, 0.0));
+        let m = plane(Point3::new(0.0, 0.0, 8.0), Vec3::Z);
+        let k = (1.0f64 + 0.0025).sqrt();
+        let start = (Point3::new(0.0, 10.0, 6.5), 1.5);
+        let vb = VarBlend::round(
+            [&a, &m, &b],
+            [-1.0, -1.0, -1.0],
+            line_y(),
+            Interval::new(-2.0, 22.0),
+            start,
+        )
+        .expect("round");
+        for s in [-2.0, 0.0, 7.3, 20.0, 22.0] {
+            let (c, r) = vb.ball(s);
+            let want = (2.0 - s / 20.0) / k;
+            assert!(
+                (r - want).abs() < 1e-9 && (vb.radius(s) - want).abs() < 1e-9,
+                "{s}: {r} {want}"
+            );
+            for (surf, side) in [(&a, -1.0), (&b, -1.0), (&m, -1.0)] {
+                assert!((surf.implicit(c) - side * r).abs() < 1e-9);
+            }
+            // over the top, more than half a turn (the contacts sit just below the centre)
+            let (_, phi) = vb.section(s);
+            assert!(phi > dmath::PI && phi < dmath::PI + 0.1, "{phi}");
+            let top = Procedural::point(&*vb, Point2::new(s, 0.5));
+            assert!((top.z - 8.0).abs() < 1e-3, "{top:?}");
+            assert!(Procedural::project(&*vb, top).distance(Point2::new(s, 0.5)) < 1e-9);
+        }
     }
 
     #[test]

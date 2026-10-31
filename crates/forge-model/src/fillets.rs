@@ -921,9 +921,45 @@ pub fn variant_cases() -> Vec<(&'static str, Part, Option<f64>)> {
         Point3::new(10.0, 2.0, 8.0),
         Point3::new(10.0, 3.75, 4.0),
     );
+    let ring = Part {
+        features: vec![Feature::Extrude {
+            profile: Profile {
+                plane: Frame::WORLD,
+                loops: vec![
+                    Profile::circle(Point2::ORIGIN, 10.0, 0),
+                    Profile::circle(Point2::ORIGIN, 6.0, 1),
+                ],
+            },
+            extent: Extent::Distance(8.0),
+            op: Combine::New,
+        }],
+    };
+    let full_round_narrowing = with_full_round(
+        &narrowing_rib(),
+        Point3::new(10.0, 0.5, 4.0),
+        Point3::new(10.0, 2.0, 8.0),
+        Point3::new(10.0, 3.5, 4.0),
+    );
     vec![
         // a rib drafted across: the ball touches both sides and the top, its radius the same along
         ("full-round-drafted-rib", full_round_drafted, None),
+        // a ring's top between its walls: a torus all round, no ends
+        (
+            "full-round-ring",
+            with_full_round(
+                &ring,
+                Point3::new(10.0, 0.0, 4.0),
+                Point3::new(8.0, 0.0, 8.0),
+                Point3::new(6.0, 0.0, 4.0),
+            ),
+            Some(512.0 * pi - 16.0 * pi * (8.0 - 2.0 * pi)),
+        ),
+        // a rib narrowing along: the ball shrinks as it rolls, one face over the top
+        (
+            "full-round-narrowing-rib",
+            full_round_narrowing,
+            Some(narrowing_rib_round_volume()),
+        ),
         // the two faces meet: their edge rounds
         (
             "face-fillet-adjacent",
@@ -948,6 +984,58 @@ pub fn variant_cases() -> Vec<(&'static str, Part, Option<f64>)> {
             Some(640.0 - 20.0 * (8.0 - 2.0 * pi)),
         ),
     ]
+}
+
+/// A rib narrowing along its length: 20 long in x, 8 high, 4 wide at x = 0 and 2 at x = 20,
+/// its sides vertical planes.
+pub fn narrowing_rib() -> Part {
+    let pts = [(0.0, 0.0), (20.0, 1.0), (20.0, 3.0), (0.0, 4.0)];
+    Part {
+        features: vec![Feature::Extrude {
+            profile: Profile {
+                plane: Frame::WORLD,
+                loops: vec![ProfileLoop::new(
+                    (0..4)
+                        .map(|i| {
+                            let (a, b) = (pts[i], pts[(i + 1) % 4]);
+                            (
+                                Segment::Line {
+                                    a: Point2::new(a.0, a.1),
+                                    b: Point2::new(b.0, b.1),
+                                },
+                                i as u64,
+                            )
+                        })
+                        .collect(),
+                )],
+            },
+            extent: Extent::Distance(8.0),
+            op: Combine::New,
+        }],
+    }
+}
+
+/// The narrowing rib's volume under its full round. The balls touching both sides and the
+/// top have centres on a line and radii linear along it, so the round is a cone (apex
+/// (40, 2, 8)); each x slice keeps the rectangle under the slice ellipse's centre and the
+/// ellipse's upper half, a quadratic in x, so 3-point Gauss-Legendre is exact.
+pub fn narrowing_rib_round_volume() -> f64 {
+    let k = f64::sqrt(1.0 + 1.0 / 400.0);
+    // axis from the apex toward the ball at x = 0 (centre (0, 2, 8 - 2/k), radius 2/k)
+    let (ax, az) = (-40.0, -2.0 / k);
+    let len = f64::sqrt(ax * ax + az * az);
+    let (dx, dz) = (ax / len, az / len);
+    let sin = (2.0 / k) / len;
+    let cos2 = 1.0 - sin * sin;
+    let slice = |x: f64| {
+        let w = x - 40.0;
+        let (a, b, c, d) = (cos2, cos2 - dz * dz, -w * dx * dz, w * w * (dx * dx - cos2));
+        let e = d + c * c / b;
+        let zc = 8.0 - c / b;
+        2.0 * (e / a).sqrt() * zc + dmath::PI * e / (2.0 * (a * b).sqrt())
+    };
+    let g = f64::sqrt(0.6);
+    10.0 * (5.0 * slice(10.0 - 10.0 * g) + 8.0 * slice(10.0) + 5.0 * slice(10.0 + 10.0 * g)) / 9.0
 }
 
 /// A 20 long bar along x of L section in yz: 10 wide, 8 high, with a 2 x 7 notch under its
@@ -1252,38 +1340,6 @@ pub fn variable_cases() -> Vec<(&'static str, Part, Option<f64>)> {
 
 /// Fillets that cannot be built, and the error each must give (by its name).
 pub fn refusals() -> Vec<(&'static str, Part, &'static str)> {
-    // a rib narrowing along its length: no one ball touches both sides and the top all along
-    let wedge = Part {
-        features: vec![Feature::Extrude {
-            profile: Profile {
-                plane: Frame::WORLD,
-                loops: vec![ProfileLoop::new(
-                    [(0.0, 0.0), (20.0, 1.0), (20.0, 3.0), (0.0, 4.0)]
-                        .iter()
-                        .enumerate()
-                        .map(|(i, &a)| {
-                            let b = [(0.0, 0.0), (20.0, 1.0), (20.0, 3.0), (0.0, 4.0)][(i + 1) % 4];
-                            (
-                                Segment::Line {
-                                    a: Point2::new(a.0, a.1),
-                                    b: Point2::new(b.0, b.1),
-                                },
-                                i as u64,
-                            )
-                        })
-                        .collect(),
-                )],
-            },
-            extent: Extent::Distance(8.0),
-            op: Combine::New,
-        }],
-    };
-    let full_round_tapered = with_full_round(
-        &wedge,
-        Point3::new(10.0, 0.5, 4.0),
-        Point3::new(10.0, 2.0, 8.0),
-        Point3::new(10.0, 3.5, 4.0),
-    );
     let boxed = Part {
         features: vec![block_at(Point3::ORIGIN, 20.0, 10.0, 8.0, Combine::New)],
     };
@@ -1301,7 +1357,6 @@ pub fn refusals() -> Vec<(&'static str, Part, &'static str)> {
         }],
     };
     vec![
-        ("full-round-tapered", full_round_tapered, "BadRadius"),
         // the ball runs off the bottom of the front face
         (
             "radius-past-face",

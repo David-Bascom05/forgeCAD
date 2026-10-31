@@ -108,7 +108,8 @@ Fillet R: 3 | 2..4 (start to other end) | 0:2,0.5:4,1:2 (fraction along from the
   `setback VREF [REF] D`: at a corner where blends meet, they stop D along each edge from the vertex (one edge, or all).
 facefillet: rounds between two face sets: their shared edges, or the one four-sided strip face joining them
   (a chamfer, a land), which goes. fullround: the ball touching both sides and the middle face takes the
-  middle away (the sides parallel, so the radius holds along it).
+  middle away, one face over it; the radius follows the sides where they close in or open out, and a ring's
+  top (a middle closing round on itself) rounds all the way round.
 FEAT: a label, kind+count (`hole2` the 2nd hole, `pattern1`..), or `fN` (the Nth feature line)
 REF: @handle | (selector), found on the part as it stands above that line
 ```

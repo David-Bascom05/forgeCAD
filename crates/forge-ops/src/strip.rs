@@ -1,13 +1,15 @@
 //! Fillets that take a face away. A face fillet rounds between two sets of faces: where they
 //! meet it rounds the edges between, and where a strip face (a chamfer, a land) joins them it
 //! rolls one ball touching both sides and the strip goes. A full round takes a face between
-//! two sides away with the ball that touches all three.
+//! two sides away with the ball that touches all three, its radius changing where the sides
+//! close in.
 
 use crate::fillet::{FilletEdge, FilletError, Radius, chain_loops, fillet, inside_face, nearest_hit};
-use forge_geom::blend::{Blend, closed_form, foot, offset, spine};
-use forge_geom::{Curve, CurveGeom, Cylinder, Surface, SurfaceGeom, Torus};
-use forge_math::{Box3, Frame, Interval, Point3, Vec3, tol};
-use forge_topo::{Body, CoedgeId, EdgeId, FaceId, Name, VertexId};
+use forge_geom::blend::{Blend, closed_form, foot, offset, spine, spine_closest};
+use forge_geom::varblend::{Guide, VarBlend};
+use forge_geom::{Circle, Curve, CurveGeom, Cylinder, Surface, SurfaceGeom, Torus};
+use forge_math::{Box3, Frame, Interval, Point3, Vec3, dmath, tol};
+use forge_topo::{Body, CoedgeId, EdgeId, FaceId, LoopId, Name, VertexId};
 use std::collections::BTreeSet;
 
 type R<T> = Result<T, FilletError>;
@@ -85,9 +87,10 @@ pub fn face_fillet(body: &Body, first: &[FaceId], second: &[FaceId], radius: f64
     strip(&body, fa, m, fb, Some(radius), feature)
 }
 
-/// Takes face `middle` away between faces `side` and `other` with the ball touching all three
-/// (its radius fixed by them, so it must be the same all along: parallel planes, coaxial
-/// cylinders).
+/// Takes face `middle` away between faces `side` and `other` with the ball touching all three:
+/// one blend face over it, a cylinder or torus where the radius holds along it, else a canal
+/// surface whose radius is solved with each ball. A middle closing round on itself (a ring's
+/// top) rounds all the way round, with constant radius.
 pub fn full_round(body: &Body, side: FaceId, middle: FaceId, other: FaceId, feature: u64) -> R<Body> {
     strip(&body.compact_if_dead(), side, middle, other, None, feature)
 }
@@ -120,8 +123,13 @@ struct End {
 
 fn strip(body: &Body, fa: FaceId, m: FaceId, fb: FaceId, radius: Option<f64>, feature: u64) -> R<Body> {
     let ids_ok = |f: FaceId| f.index() < body.faces.len() && body.face(f).alive;
-    if !ids_ok(fa) || !ids_ok(fb) || !ids_ok(m) || body.face(m).loops.len() != 1 {
+    if !ids_ok(fa) || !ids_ok(fb) || !ids_ok(m) {
         return Err(FilletError::NoBlend { edge: EdgeId(0) });
+    }
+    match body.face(m).loops.len() {
+        1 => {}
+        2 => return closed_strip(body, fa, m, fb, radius, feature),
+        _ => return Err(FilletError::NoBlend { edge: EdgeId(0) }),
     }
     let ring = body.lp(body.face(m).loops[0]).coedges.clone();
     let face_across = |c: CoedgeId| body.partner(c).map(|p| body.coedge_face(p));
@@ -171,97 +179,18 @@ fn strip(body: &Body, fa: FaceId, m: FaceId, fb: FaceId, radius: Option<f64>, fe
             })
         })
         .collect::<R<_>>()?;
-    let (sa, sb, sm) = (
-        body.face(fa).surface.clone(),
-        body.face(fb).surface.clone(),
-        body.face(m).surface.clone(),
-    );
-    let sense = |f: FaceId| if body.face(f).same_sense { 1.0 } else { -1.0 };
     let mid = |e: EdgeId| {
         let x = body.edge(e);
         x.curve.eval(x.range.mid())
     };
     let (pa, pb) = (mid(ea), mid(eb));
-    let normal = |f: FaceId, p: Point3| body.face_normal(f, body.face(f).surface.project(p));
-    let na = normal(fa, pa).ok_or(err.clone())?;
-    // convex: side b lies behind side a, the ball inside the material
-    let convex = (pb - pa).dot(na.get()) < 0.0;
-    let s = if convex { -1.0 } else { 1.0 };
-    let pm = body.face_box(m).center();
-    let region = body.face_box(m).hull(&body.face_box(fa)).hull(&body.face_box(fb));
-    let (radius, sp) = match radius {
-        Some(r) => {
-            if !(r > tol::MIN_LENGTH && r.is_finite()) {
-                return Err(FilletError::BadRadius { edge: ea });
-            }
-            let nb = normal(fb, pb).ok_or(err.clone())?;
-            let bis = (na.get() + nb.get()).normalize().map_or(Vec3::ZERO, |u| u.get());
-            let near = pm + bis * (s * r);
-            let blend = Blend::new(
-                &sa,
-                &sb,
-                s * r * sense(fa),
-                s * r * sense(fb),
-                near,
-                region.grow(4.0 * r),
-            )
-            .ok_or(err.clone())?;
-            (r, blend)
-        }
-        None => {
-            // the ball touching all three at the strip's middle, the same at its ends
-            let r = touching_ball(
-                &[(&sa, s * sense(fa)), (&sb, s * sense(fb)), (&sm, s * sense(m))],
-                pm,
-                body.face_box(m).diagonal(),
-            )
-            .ok_or(err.clone())?
-            .1;
-            let (da, db, dm) = (s * r * sense(fa), s * r * sense(fb), s * r * sense(m));
-            let (oa, om, ob) = (
-                offset(&sa, da).ok_or(err.clone())?,
-                offset(&sm, dm).ok_or(err.clone())?,
-                offset(&sb, db).ok_or(err.clone())?,
-            );
-            let c0 = pm - normal(m, pm).ok_or(err.clone())?.get() * (s * -r);
-            let spine = spine(&oa, &om, c0, region.grow(4.0 * r)).ok_or(err.clone())?;
-            // the spine must run on side b's offset too: the sides do not close in or open out
-            let range = spine.full_range(1e6);
-            let t0 = spine.closest(c0, range);
-            for t in [t0 - 1.0, t0, t0 + 1.0] {
-                if ob.implicit(spine.eval(t)).abs() > tol::LINEAR {
-                    return Err(FilletError::BadRadius { edge: ea });
-                }
-            }
-            let surface = match &spine {
-                Curve::Line(l) => Surface::Cylinder(Cylinder {
-                    frame: Frame::from_zx(l.origin, l.dir, foot(&sa, da, l.origin) - l.origin)
-                        .unwrap_or_else(|| Frame::from_z(l.origin, l.dir)),
-                    radius: r,
-                }),
-                Curve::Circle(k) if k.radius > r + tol::LINEAR => Surface::Torus(Torus {
-                    frame: k.frame,
-                    major: k.radius,
-                    minor: r,
-                }),
-                _ => return Err(err),
-            };
-            (
-                r,
-                Blend {
-                    a: sa.clone(),
-                    b: sb.clone(),
-                    da,
-                    db,
-                    radius: r,
-                    spine,
-                    surface,
-                    var: None,
-                },
-            )
-        }
-    };
-    let blend = sp;
+    let (convex, radius, blend) = round_blend(
+        body,
+        [fa, m, fb],
+        [ea, eb],
+        [pa, body.face_box(m).center(), pb],
+        radius,
+    )?;
     let springs = [
         blend.spring(true).ok_or(err.clone())?,
         blend.spring(false).ok_or(err.clone())?,
@@ -270,6 +199,7 @@ fn strip(body: &Body, fa: FaceId, m: FaceId, fb: FaceId, radius: Option<f64>, fe
     let root = Name::feature(feature);
     let name = root.with_str("round").with_name(body.face(m).name);
     // per end: where each spring meets the end face, and the cut across it
+    let region = body.face_box(m).hull(&body.face_box(fa)).hull(&body.face_box(fb));
     let reach = region.diagonal() + 4.0 * radius;
     let mut xs = Vec::new();
     for (k, end) in ends.iter().enumerate() {
@@ -282,7 +212,11 @@ fn strip(body: &Body, fa: FaceId, m: FaceId, fb: FaceId, radius: Option<f64>, fe
             let vp = body.vertex(v).point;
             let t = spring.closest(vp, spring.full_range(1e6));
             let speed = spring.deriv(t).d1.length().max(1e-12);
-            let w = Interval::new(t - reach / speed, t + reach / speed);
+            let d = spring.domain();
+            let w = match d.period {
+                Some(_) => Interval::new(t - reach / speed, t + reach / speed),
+                None => Interval::new((t - reach / speed).max(d.lo), (t + reach / speed).min(d.hi)),
+            };
             let (t, p) = nearest_hit(spring, w, es, vp).ok_or(FilletError::Overflow { edge: ea })?;
             let e = body.edge(body.coedge(c).edge);
             if e.curve.eval(e.curve.closest(p, e.range)).distance(p) > tol::LINEAR {
@@ -295,8 +229,11 @@ fn strip(body: &Body, fa: FaceId, m: FaceId, fb: FaceId, radius: Option<f64>, fe
         }
         // the cut on the end face from a's spring to b's: the arc through the strip's end
         let strip_mid = mid(body.coedge(end.on_strip).edge);
-        let (curve, ta, tb) = cut_through(&blend.surface, es, at[0].1, at[1].1, strip_mid)
-            .ok_or(FilletError::Overflow { edge: ea })?;
+        let cut = match &blend.var {
+            Some(v) => v.cut(es, at[0].1, at[1].1),
+            None => cut_through(&blend.surface, es, at[0].1, at[1].1, strip_mid),
+        };
+        let (curve, ta, tb) = cut.ok_or(FilletError::Overflow { edge: ea })?;
         let en = name.with_str("end").with(k as u64);
         let cut = if ta <= tb {
             (
@@ -396,6 +333,331 @@ fn strip(body: &Body, fa: FaceId, m: FaceId, fb: FaceId, radius: Option<f64>, fe
         _ => return Err(err),
     }
     Ok(out.compact())
+}
+
+/// A strip closing round on itself (a ring's top between two coaxial walls): each of its two
+/// loops one closed edge, to side a and to side b, whose vertex the side's seam alone meets.
+/// The springs (circles) replace those edges, the seams are cut back to them, and the blend
+/// face takes a seam of its own: the section through side a's seam crossing.
+fn closed_strip(
+    body: &Body,
+    fa: FaceId,
+    m: FaceId,
+    fb: FaceId,
+    radius: Option<f64>,
+    feature: u64,
+) -> R<Body> {
+    let ml = &body.face(m).loops;
+    // M's coedge on each loop, the loop's edge closed and to one side
+    let lone = |l: LoopId| match body.lp(l).coedges[..] {
+        [c] if body.edge(body.coedge(c).edge).start == body.edge(body.coedge(c).edge).end => {
+            body.partner(c).map(|p| (c, body.coedge_face(p)))
+        }
+        _ => None,
+    };
+    let fail = FilletError::NoBlend { edge: EdgeId(0) };
+    let (Some(x), Some(y)) = (lone(ml[0]), lone(ml[1])) else {
+        return Err(fail);
+    };
+    let (ca, cb) = match (x.1, y.1) {
+        (p, q) if p == fa && q == fb => (x.0, y.0),
+        (p, q) if p == fb && q == fa => (y.0, x.0),
+        _ => return Err(fail),
+    };
+    let (ea, eb) = (body.coedge(ca).edge, body.coedge(cb).edge);
+    let err = FilletError::NoBlend { edge: ea };
+    let (xa, xb) = (body.edge(ea), body.edge(eb));
+    let pa = xa.curve.eval(xa.range.mid());
+    let pb = xb.curve.eval(xb.curve.closest(pa, xb.range));
+    let sm = &body.face(m).surface;
+    let pm = sm.eval(sm.project(pa.lerp(pb, 0.5)));
+    let (convex, r, blend) = round_blend(body, [fa, m, fb], [ea, eb], [pa, pm, pb], radius)?;
+    let (Some(Curve::Circle(ka)), Some(Curve::Circle(kb))) = (blend.spring(true), blend.spring(false)) else {
+        return Err(FilletError::BadRadius { edge: ea });
+    };
+    // each side's seam: the one other edge at its vertex, on its face both ways
+    let seam = |e: EdgeId, f: FaceId| -> R<EdgeId> {
+        let v = body.edge(e).start;
+        let at: BTreeSet<EdgeId> = body
+            .face(f)
+            .loops
+            .iter()
+            .flat_map(|&l| body.lp(l).coedges.iter().map(|&c| body.coedge(c).edge))
+            .filter(|&x| x != e && (body.edge(x).start == v || body.edge(x).end == v))
+            .collect();
+        match at.iter().collect::<Vec<_>>()[..] {
+            [&s] if body.edge(s).coedges.iter().all(|&c| body.coedge_face(c) == f) => Ok(s),
+            _ => Err(err.clone()),
+        }
+    };
+    let (sa, sb) = (seam(ea, fa)?, seam(eb, fb)?);
+    let mut out = body.clone();
+    let name = Name::feature(feature)
+        .with_str("round")
+        .with_name(body.face(m).name);
+    // where each seam crosses its spring's plane: the seam cut back there
+    let mut cross = |s: EdgeId, e: EdgeId, k: &Circle, f: FaceId| -> R<VertexId> {
+        let v = body.edge(e).start;
+        let plane = Surface::Plane(forge_geom::Plane { frame: k.frame });
+        let x = body.edge(s);
+        let (t, p) = nearest_hit(&x.curve, x.range, &plane, body.vertex(v).point).ok_or(err.clone())?;
+        if k.eval(k.closest(p, Interval::new(0.0, dmath::TAU))).distance(p) > tol::LINEAR {
+            return Err(FilletError::Overflow { edge: ea });
+        }
+        let q = out.add_vertex(
+            p,
+            Name::NONE.with_set(vec![name, body.face(f).name]).with_str("at"),
+        );
+        let edge = &mut out.edges[s.index()];
+        if edge.start == v {
+            (edge.start, edge.range.lo) = (q, t);
+        } else {
+            (edge.end, edge.range.hi) = (q, t);
+        }
+        edge.bbox.clear();
+        if edge.range.width() <= tol::LINEAR {
+            return Err(FilletError::Overflow { edge: ea });
+        }
+        Ok(q)
+    };
+    let (qa, qb) = (cross(sa, ea, &ka, fa)?, cross(sb, eb, &kb, fb)?);
+    // the blend's own seam: the section through qa, over the middle face, to b's spring
+    let qp = out.vertex(qa).point;
+    let t = spine_closest(&blend.spine, qp);
+    let (c, (_, fb_at)) = (blend.spine.eval(t), blend.feet(t));
+    let up = sm.eval(sm.project(c)) - c;
+    let x = qp - c;
+    let z = x.cross(up).normalize().ok_or(err.clone())?;
+    let sec = Circle {
+        frame: Frame::from_zx(c, z, x).ok_or(err.clone())?,
+        radius: r,
+    };
+    let l = sec.frame.point_to_local(fb_at);
+    let phi = dmath::wrap_tau(dmath::atan2(l.y, l.x));
+    let full = |k: &Circle, p: Point3| k.closest(p, Interval::new(0.0, dmath::TAU));
+    // spring b from qb round to qb, through a vertex where the seam lands unless that is qb
+    let qbp = out.vertex(qb).point;
+    let (tb, tp) = (full(&kb, qbp), full(&kb, fb_at));
+    let sn = |f: FaceId| Name::NONE.with_set(vec![name, body.face(f).name]);
+    let tau = dmath::TAU;
+    let (pv, b_arcs) = if qbp.distance(fb_at) <= tol::LINEAR {
+        let e = out.add_edge(Curve::Circle(kb), Interval::new(tb, tb + tau), qb, qb, sn(fb));
+        (qb, vec![e])
+    } else {
+        let pv = out.add_vertex(fb_at, sn(fb).with_str("at").with(1));
+        let tp = tb + (tp - tb).rem_euclid(tau);
+        let e1 = out.add_edge(Curve::Circle(kb), Interval::new(tb, tp), qb, pv, sn(fb));
+        let e2 = out.add_edge(
+            Curve::Circle(kb),
+            Interval::new(tp, tb + tau),
+            pv,
+            qb,
+            sn(fb).with(1),
+        );
+        (pv, vec![e1, e2])
+    };
+    let ta = full(&ka, qp);
+    let spa = out.add_edge(Curve::Circle(ka), Interval::new(ta, ta + tau), qa, qa, sn(fa));
+    let bseam = out.add_edge(
+        Curve::Circle(sec),
+        Interval::new(0.0, phi),
+        qa,
+        pv,
+        name.with_str("seam"),
+    );
+    // the walls walk their springs the way they walked the strip's edges
+    let along = |c: CoedgeId, k: &Circle, t: f64| {
+        let x = body.edge(body.coedge(c).edge);
+        let d = x.curve.deriv(x.range.lo).d1 * if body.coedge(c).forward { 1.0 } else { -1.0 };
+        d.dot(k.deriv(t).d1) > 0.0
+    };
+    let (pa_c, pb_c) = (
+        body.partner(ca).ok_or(err.clone())?,
+        body.partner(cb).ok_or(err.clone())?,
+    );
+    let (da, db) = (along(pa_c, &ka, ta), along(pb_c, &kb, tb));
+    // spring b's arcs from `from` round to it, one way or the other
+    let b_chain = |fwd: bool, from_qb: bool| -> Vec<(EdgeId, bool)> {
+        let mut v: Vec<(EdgeId, bool)> = b_arcs.iter().map(|&e| (e, fwd)).collect();
+        if !fwd {
+            v.reverse();
+        }
+        if !from_qb {
+            v.rotate_left(1);
+        }
+        v
+    };
+    for (c, chain) in [(pa_c, vec![(spa, da)]), (pb_c, b_chain(db, true))] {
+        let f = body.coedge_face(c);
+        let l = body.coedge(c).lp;
+        let uses: Vec<(EdgeId, bool)> = body
+            .lp(l)
+            .coedges
+            .iter()
+            .flat_map(|&x| {
+                if x == c {
+                    chain.clone()
+                } else {
+                    vec![(body.coedge(x).edge, body.coedge(x).forward)]
+                }
+            })
+            .collect();
+        out.remove_loop(f, l);
+        out.add_loop(f, &uses);
+        let face = &mut out.faces[f.index()];
+        face.bbox.clear();
+        face.query.clear();
+    }
+    for &l in ml {
+        out.remove_loop(m, l);
+    }
+    out.kill_face(m);
+    let f = out.add_face(body.face(fa).shell, blend.surface.clone(), convex, name);
+    let mut uses = vec![(spa, !da), (bseam, true)];
+    uses.extend(b_chain(!db, false));
+    uses.push((bseam, false));
+    out.add_loop(f, &uses);
+    Ok(out.compact())
+}
+
+/// The ball rolling between faces `fa` and `fb` over the strip `m` between their edges `ea`
+/// and `eb` (points `pa`, `pb` on them, `pm` on or near m): with `radius`, else touching all
+/// three. Whether it is convex, its (largest) radius and the blend.
+fn round_blend(
+    body: &Body,
+    [fa, m, fb]: [FaceId; 3],
+    [ea, eb]: [EdgeId; 2],
+    [pa, pm, pb]: [Point3; 3],
+    radius: Option<f64>,
+) -> R<(bool, f64, Blend)> {
+    let err = FilletError::NoBlend { edge: ea };
+    let (sa, sb, sm) = (
+        body.face(fa).surface.clone(),
+        body.face(fb).surface.clone(),
+        body.face(m).surface.clone(),
+    );
+    let sense = |f: FaceId| if body.face(f).same_sense { 1.0 } else { -1.0 };
+    let normal = |f: FaceId, p: Point3| body.face_normal(f, body.face(f).surface.project(p));
+    let na = normal(fa, pa).ok_or(err.clone())?;
+    // convex: side b lies behind side a, the ball inside the material
+    let convex = (pb - pa).dot(na.get()) < 0.0;
+    let s = if convex { -1.0 } else { 1.0 };
+    let region = body.face_box(m).hull(&body.face_box(fa)).hull(&body.face_box(fb));
+    let (radius, sp) = match radius {
+        Some(r) => {
+            if !(r > tol::MIN_LENGTH && r.is_finite()) {
+                return Err(FilletError::BadRadius { edge: ea });
+            }
+            let nb = normal(fb, pb).ok_or(err.clone())?;
+            let bis = (na.get() + nb.get()).normalize().map_or(Vec3::ZERO, |u| u.get());
+            let near = pm + bis * (s * r);
+            let blend = Blend::new(
+                &sa,
+                &sb,
+                s * r * sense(fa),
+                s * r * sense(fb),
+                near,
+                region.grow(4.0 * r),
+            )
+            .ok_or(err.clone())?;
+            (r, blend)
+        }
+        None => {
+            // the ball touching all three at the strip's middle
+            let sides = [s * sense(fa), s * sense(m), s * sense(fb)];
+            let (cb, r) = touching_ball(
+                &[(&sa, sides[0]), (&sb, sides[2]), (&sm, sides[1])],
+                pm,
+                body.face_box(m).diagonal(),
+            )
+            .ok_or(err.clone())?;
+            let (da, db, dm) = (s * r * sense(fa), s * r * sense(fb), s * r * sense(m));
+            let (oa, om, ob) = (
+                offset(&sa, da).ok_or(err.clone())?,
+                offset(&sm, dm).ok_or(err.clone())?,
+                offset(&sb, db).ok_or(err.clone())?,
+            );
+            let c0 = pm - normal(m, pm).ok_or(err.clone())?.get() * (s * -r);
+            let spine = spine(&oa, &om, c0, region.grow(4.0 * r)).ok_or(err.clone())?;
+            // the same ball all along when the spine runs on side b's offset too; else the
+            // radius changes along (the sides close in or open out)
+            let range = spine.full_range(1e6);
+            let t0 = spine.closest(c0, range);
+            if [t0 - 1.0, t0, t0 + 1.0]
+                .iter()
+                .any(|&t| ob.implicit(spine.eval(t)).abs() > tol::LINEAR)
+            {
+                let blend = varying_round(body, [ea, eb], [&sa, &sm, &sb], sides, (cb, r))?;
+                (blend.radius, blend)
+            } else {
+                let surface = match &spine {
+                    Curve::Line(l) => Surface::Cylinder(Cylinder {
+                        frame: Frame::from_zx(l.origin, l.dir, foot(&sa, da, l.origin) - l.origin)
+                            .unwrap_or_else(|| Frame::from_z(l.origin, l.dir)),
+                        radius: r,
+                    }),
+                    Curve::Circle(k) if k.radius > r + tol::LINEAR => Surface::Torus(Torus {
+                        frame: k.frame,
+                        major: k.radius,
+                        minor: r,
+                    }),
+                    _ => return Err(err),
+                };
+                (
+                    r,
+                    Blend {
+                        a: sa.clone(),
+                        b: sb.clone(),
+                        da,
+                        db,
+                        radius: r,
+                        spine,
+                        surface,
+                        var: None,
+                    },
+                )
+            }
+        }
+    };
+    Ok((convex, radius, sp))
+}
+
+/// The full round whose radius changes along the strip: one canal surface whose balls touch
+/// both sides and the middle (`faces` and the balls' `sides` of them, in a, m, b order), guided
+/// along the strip (between its straight edges `es` to a and b, else by the one to a) and
+/// carried on past its ends to run out; `ball` is one of them. Shorter run-outs where the
+/// balls shrink away past the ends.
+fn varying_round(
+    body: &Body,
+    es: [EdgeId; 2],
+    faces: [&Surface; 3],
+    sides: [f64; 3],
+    ball: (Point3, f64),
+) -> R<Blend> {
+    let (x, y) = (body.edge(es[0]), body.edge(es[1]));
+    let ends = |e: &forge_topo::Edge| [body.vertex(e.start).point, body.vertex(e.end).point];
+    let ([a0, a1], [b0, b1]) = (ends(x), ends(y));
+    let (b0, b1) = if a0.distance(b0) <= a0.distance(b1) {
+        (b0, b1)
+    } else {
+        (b1, b0)
+    };
+    let (m0, m1) = (a0.lerp(b0, 0.5), a1.lerp(b1, 0.5));
+    let path = match (&x.curve, &y.curve, forge_geom::Line::through(m0, m1)) {
+        (Curve::Line(_), Curve::Line(_), Some(l)) => {
+            (Curve::Line(l), Interval::new(0.0, m0.distance(m1)), true)
+        }
+        _ => (x.curve.clone(), x.range, true),
+    };
+    for reach in [4.0, 2.0, 1.0, 0.5].map(|k| k * ball.1) {
+        let Some((guide, _, whole)) = Guide::through_edges(std::slice::from_ref(&path), 8, reach) else {
+            break;
+        };
+        if let Ok(vb) = VarBlend::round(faces, sides, guide, whole, ball) {
+            return Ok(Blend::variable(faces[0], faces[2], vb));
+        }
+    }
+    Err(FilletError::BadRadius { edge: es[0] })
 }
 
 /// The ball touching every surface (each offset on its side, +1 or -1) near `p`: its centre
