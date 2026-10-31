@@ -310,7 +310,10 @@ pub fn samples(body: &Body, e: Ent) -> Vec<Point3> {
                 .into_iter()
                 .flat_map(|x| body.edge_points(x, 16))
                 .collect();
-            p.push(centre(body, e));
+            // a plane's middle is on it; a curved face's box middle is not
+            if plane_normal(body, f).is_some() {
+                p.push(centre(body, e));
+            }
             p
         }
     }
@@ -385,7 +388,12 @@ pub fn select(v: &View, sel: &str) -> Result<Vec<Ent>, String> {
         match e {
             Ent::Face(f) => origin(f).into_iter().collect(),
             Ent::Edge(x) => faces_of_edge(body, x).into_iter().filter_map(origin).collect(),
-            Ent::Vert(_) => vec![],
+            Ent::Vert(p) => body
+                .edge_ids()
+                .filter(|&x| body.edge(x).start == p || body.edge(x).end == p)
+                .flat_map(|x| faces_of_edge(body, x))
+                .filter_map(origin)
+                .collect(),
         }
     };
     while k < toks.len() {
@@ -446,7 +454,8 @@ pub fn select(v: &View, sel: &str) -> Result<Vec<Ent>, String> {
                 let op = t.as_bytes()[1];
                 Box::new(move |e| {
                     radius(body, *e).is_some_and(|x| match op {
-                        b'=' => (x - r).abs() <= 1e-6 * r.abs().max(1.0),
+                        // a typed radius matches what it rounds (r=18 finds 18.00003)
+                        b'=' => (x - r).abs() <= 1e-4 * r.abs().max(1.0),
                         b'<' => x < r,
                         _ => x > r,
                     })

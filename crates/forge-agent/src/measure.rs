@@ -161,23 +161,26 @@ pub fn one(body: &Body, mesh: &TriMesh, e: Ent) -> Vec<(&'static str, f64)> {
     out
 }
 
-/// The exact gap from a planar face to a round thing standing square to it: a cylinder lying
+/// The exact gap from a planar face to a round thing clear of it and standing square to it: a cylinder lying
 /// along it, a circle parallel to it, a sphere.
 fn plane_round(body: &Body, a: Ent, b: Ent) -> Option<f64> {
     let Ent::Face(f) = a else { return None };
     let n = select::plane_normal(body, f)?;
     let (p, dir) = select::axis(body, b)?;
     let off = (p - select::centre(body, a)).dot(n).abs();
-    // a plane through a round thing (a keyway floor in a shaft) is its depth in it
     let r = select::radius(body, b).unwrap_or(0.0);
+    // a plane cutting through the round thing: the faces' closest points are elsewhere
+    if off < r - 1e-9 {
+        return None;
+    }
     match (b, dir) {
         (Ent::Edge(_), Some(u)) if u.cross(n).length() < 1e-9 => Some(off),
         (Ent::Face(g), Some(u))
             if u.dot(n).abs() < 1e-9 && matches!(body.face(g).surface, forge_geom::Surface::Cylinder(_)) =>
         {
-            Some((off - r).abs())
+            Some(off - r)
         }
-        (Ent::Face(_), None) => Some((off - r).abs()),
+        (Ent::Face(_), None) => Some(off - r),
         _ => None,
     }
 }

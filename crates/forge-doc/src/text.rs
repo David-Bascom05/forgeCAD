@@ -373,10 +373,20 @@ pub const KINDS: &[Kind] = &[
             };
             let point = if p.eat("pt") { Some(p.angle()?) } else { None };
             let thread = if p.eat("thread") {
-                Some(Thread {
-                    size: p.num()?,
-                    pitch: p.num()?,
-                })
+                // `thread M36x2` as well as `thread 36 2`
+                match ThreadSpec::parse(p.peek()) {
+                    Some(s) => {
+                        p.k += 1;
+                        Some(Thread {
+                            size: s.major(),
+                            pitch: s.pitch(),
+                        })
+                    }
+                    None => Some(Thread {
+                        size: p.num()?,
+                        pitch: p.num()?,
+                    }),
+                }
             } else {
                 std.and_then(|s| s.thread())
             };
@@ -2181,7 +2191,22 @@ impl<'a> P<'a> {
     }
     /// A screw size and fit, or None for a plain diameter.
     fn standard(&mut self) -> R<Option<Standard>> {
-        let Some(screw) = standard::screw(self.peek()) else {
+        let t = self.peek();
+        // an explicit coarse pitch names the coarse size: M36x4 is M36
+        let coarse = match ThreadSpec::parse(t) {
+            Some(ThreadSpec::Iso { major, pitch }) => {
+                standard::screw(&format!("M{major}")).filter(|s| s.pitch == pitch)
+            }
+            _ => None,
+        };
+        let Some(screw) = standard::screw(t).or(coarse) else {
+            if let Some(s) = ThreadSpec::parse(t).filter(|_| t.parse::<f64>().is_err()) {
+                return Err(format!(
+                    "{t} has no standard hole here; drill it plainly and thread it: hole {} FRAME .. thread {t} \
+                     (tap drill about major - pitch)",
+                    fmt_num(s.major() - s.pitch())
+                ));
+            }
             return Ok(None);
         };
         self.k += 1;

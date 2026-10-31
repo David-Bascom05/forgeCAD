@@ -210,10 +210,13 @@ impl Session {
             },
             op => return Err(format!("unknown edit '{op}' (param dim arg insert delete move)")),
         };
+        let old = m.src().to_string();
         m.edit(e)?;
         let src = m.src().to_string();
         replace(&path, &src).map_err(|e| format!("{}: {e}", a.file))?;
-        self.build(a)
+        let mut r = self.build(a)?;
+        r.text = format!("{}\n{}", changed(&old, &src), r.text);
+        Ok(r)
     }
 
     pub fn run(&mut self, cmd: &str, a: &Args) -> Reply {
@@ -745,6 +748,32 @@ fn replace(_: &std::path::Path, _: &str) -> Result<(), String> {
 
 fn counts(b: &Body) -> (usize, usize, usize) {
     (b.face_ids().count(), b.edge_ids().count(), b.vertices.len())
+}
+
+/// The lines an edit changed, as the file now has them (a few at most).
+fn changed(old: &str, new: &str) -> String {
+    let (o, n): (Vec<&str>, Vec<&str>) = (old.lines().collect(), new.lines().collect());
+    let top = o.iter().zip(&n).take_while(|(a, b)| a == b).count();
+    let tail = o[top..]
+        .iter()
+        .rev()
+        .zip(n[top..].iter().rev())
+        .take_while(|(a, b)| a == b)
+        .count();
+    let span = &n[top..n.len() - tail];
+    if span.is_empty() {
+        return format!("removed line {}", top + 1);
+    }
+    let mut out: Vec<String> = span
+        .iter()
+        .take(3)
+        .enumerate()
+        .map(|(k, l)| format!("line {}: {}", top + k + 1, l.trim()))
+        .collect();
+    if span.len() > 3 {
+        out.push(format!("... {} more lines", span.len() - 3));
+    }
+    out.join("\n")
 }
 
 /// The one entity of the finished part a handle or selector names.

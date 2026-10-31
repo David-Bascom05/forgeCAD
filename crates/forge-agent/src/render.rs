@@ -169,7 +169,18 @@ pub fn render(
     }
     for ed in body.edge_ids() {
         let p: Vec<_> = body
-            .edge_points(ed, 24)
+            // a helix or blend edge can wind round many times
+            .edge_points(
+                ed,
+                if matches!(
+                    body.edge(ed).curve,
+                    forge_geom::Curve::Line(_) | forge_geom::Curve::Circle(_)
+                ) {
+                    24
+                } else {
+                    400
+                },
+            )
             .into_iter()
             .map(|q| screen(proj(q)))
             .collect();

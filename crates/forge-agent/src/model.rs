@@ -5,6 +5,7 @@ use crate::facemesh::{self, FaceMesh};
 use crate::select::{self, Ent, View};
 use crate::text::{self, Before, Line};
 use forge_doc::{Document, Edit};
+use forge_math::Box3;
 use forge_mesh::TriMesh;
 use forge_model::{Feature, History, RegenError, Solid, Source, step_solids};
 use forge_topo::mass::MassProps;
@@ -42,6 +43,8 @@ pub struct Model {
     pub fonts: Option<Arc<Fonts>>,
     /// The finished part's exact mass properties, worked out as asked for.
     mass: Option<Result<MassProps, String>>,
+    /// The source was just written by `edit`; the next update finds it unchanged.
+    edited: bool,
 }
 
 /// From a font's name in the part file to the font.
@@ -107,6 +110,7 @@ impl Default for Model {
             mesh: None,
             fonts: None,
             mass: None,
+            edited: false,
         }
     }
 }
@@ -124,6 +128,10 @@ impl Model {
     pub fn update(&mut self, src: &str) {
         let t0 = Instant::now();
         if src == self.src && !self.lines.is_empty() {
+            // just written by an edit, which timed its own rebuild
+            if std::mem::take(&mut self.edited) {
+                return;
+            }
             self.rebuilt = 0;
             self.ms = t0.elapsed().as_secs_f64() * 1e3;
             return;
@@ -149,6 +157,7 @@ impl Model {
         self.doc.apply(e)?;
         self.src = self.doc.print();
         self.rebuild(self.doc.lines(), t0);
+        self.edited = true;
         Ok(())
     }
 
@@ -508,7 +517,17 @@ impl Model {
                     if let Some(b) = body {
                         for &l in &b.face(*f).loops {
                             for c in b.lp(l).coedges() {
-                                bb = bb.hull(&b.edge_box(b.coedge(c).edge));
+                                let e = b.coedge(c).edge;
+                                // a line's or circle's box is tight; other curves' boxes are bounds
+                                bb = match b.edge(e).curve {
+                                    forge_geom::Curve::Line(_) | forge_geom::Curve::Circle(_) => {
+                                        bb.hull(&b.edge_box(e))
+                                    }
+                                    _ => b
+                                        .edge_points(e, 64)
+                                        .into_iter()
+                                        .fold(bb, |x, p| x.hull(&Box3::from_point(p))),
+                                };
                             }
                         }
                     }
@@ -681,7 +700,11 @@ pub fn explain(e: &RegenError) -> (String, String) {
     match e {
         Extrude { error, .. } => (
             format!("extrude: {error:?}"),
-            hint("check the loops: closed, not crossing, holes inside the outer loop"),
+            hint(if matches!(error, forge_ops::ExtrudeError::TooShort) {
+                "the distance is (about) zero: extrude a real length"
+            } else {
+                "check the loops: closed, not crossing, holes inside the outer loop"
+            }),
         ),
         Revolve { error, .. } => (
             format!("revolve: {error:?}"),
@@ -761,7 +784,8 @@ pub fn explain(e: &RegenError) -> (String, String) {
         Thread { error, .. } => (
             format!("thread: {error:?}"),
             hint(
-                "a spec that fits the cylinder (M6 on a 6 mm rod, in a bore of the minor diameter), a positive length",
+                "a spec that fits its cylinder: ext round a rod of the major (M6: 6), int in a bore of the minor, \
+                 major - 1.0825 pitch (M36x2: 33.835; a tap drill, major - pitch, is close); a positive length",
             ),
         ),
         Text { error, .. } => (
