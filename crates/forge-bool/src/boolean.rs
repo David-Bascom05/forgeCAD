@@ -268,12 +268,25 @@ fn with_imprint<'b, S: crate::imprint::Src>(
             // the general boolean on a copy; the part goes on from this path's result, so the
             // check follows what `on` would make
             let mut slow = target.clone();
+            let valid_before = forge_topo::check(target).is_empty();
             if crate::imprint::column(target, src, op) {
                 if let Err(e) = general(&mut slow, &body(), op) {
                     panic!("imprint made a body where the general boolean failed: {e}");
                 }
                 if let Some(d) = crate::imprint::diff(target, &slow) {
                     panic!("imprint differs from the general boolean: {d}");
+                }
+                let problems = forge_topo::check(target);
+                if valid_before && !problems.is_empty() {
+                    panic!(
+                        "imprint made an invalid body (the general's {}): {:?}",
+                        if forge_topo::check(&slow).is_empty() {
+                            "valid"
+                        } else {
+                            "invalid too"
+                        },
+                        &problems[..problems.len().min(3)]
+                    );
                 }
                 return Ok(());
             }
