@@ -80,6 +80,12 @@ coaxial circle x screw 11.9%, helix x plane/cylinder/cone 13.5%, off-axis plane 
 5. `screw::misses`: an oblique tube that plainly misses the thread's shell (frame's bottom bracket):
    no tracing at all. Bound derived in `derive.py` section 6.
 
+6. `Body::face_box`: on a face straight across in v (a screw face with a straight section, a ruled
+   face), a point lies between two boundary points at its u, so the face is in the hull of its
+   edges' boxes: no uv drawing, no column boxes. Tight boxes exposed that traced curves ended short of
+   the box's sides, so `meet_region` grows the tracer's region by 0.2% for these faces (`fuzz` t00001).
+7. `Screw::nearest`: a point of the surface reads its parameters straight off the turn's half plane.
+
 Tried and dropped: a ray along the thread's axis in `classify` (no win once the rest was in; the
 rays were not the cost). The swept section (`meet_general`) before the tracer failed with
 "inconsistent classification" on cross holes; see below.

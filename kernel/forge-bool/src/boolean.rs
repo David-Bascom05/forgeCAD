@@ -4876,5 +4876,13 @@ pub(crate) fn meet_region(ba: &Box3, bb: &Box3, sa: &Surface, sb: &Surface) -> B
         Surface::Torus(t) => Box3::from_point(t.frame.origin).grow(t.major + t.minor),
         _ => *b,
     };
-    overlap(&whole(sa, ba), &whole(sb, bb)).grow(tol::LINEAR)
+    let r = overlap(&whole(sa, ba), &whole(sb, bb));
+    // a straight-across face's box is its edges' hull, so its boundary reaches the box's sides:
+    // a traced curve must run on past them to cross them
+    let ruled = |s: &Surface| matches!(s, Surface::Procedural(p) if p.v_degree() == Some(1));
+    r.grow(if ruled(sa) || ruled(sb) {
+        (0.002 * r.diagonal()).max(tol::LINEAR)
+    } else {
+        tol::LINEAR
+    })
 }

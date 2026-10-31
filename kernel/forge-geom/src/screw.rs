@@ -528,9 +528,16 @@ impl Screw {
 
     /// Parameters of the carried-on surface's point nearest p.
     fn nearest(&self, p: Point3) -> Point2 {
-        let Some(Near { u, q, j, .. }) = self.nearest_turn(p).1 else {
+        let Some(Near { u, q, j, d, .. }) = self.nearest_turn(p).1 else {
             return Point2::new(self.u.mid(), 0.5);
         };
+        // a point of the surface reads its parameters straight off the turn's half plane
+        if d <= 1e-13 * (1.0 + q.x.abs() + q.y.abs()) && j == 0 {
+            let t = self.ring.pieces[0].s.frac(q);
+            if t > 0.0 && t < 1.0 {
+                return Point2::new(u, t);
+            }
+        }
         let solve = |j: usize, t: f64| {
             let v0 = j as f64;
             let (uv, d) = polish(

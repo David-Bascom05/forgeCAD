@@ -534,3 +534,22 @@ fn tapered_groove() -> Part {
         ],
     }
 }
+
+/// A face straight across in v has only its edges' hull for a box: every point of its mesh is in it.
+#[test]
+fn straight_faces_lie_in_their_boxes() {
+    for name in ["thread", "coil", "loft"] {
+        let part = forge_model::suite::part(name).expect("a suite part");
+        for solid in part.regenerate_solids().expect("regen") {
+            let b = &solid.body;
+            let m = tessellate(b, &Quality::default()).expect("mesh");
+            for (t, &f) in m.triangles.iter().zip(&m.face_of) {
+                let bx = b.face_box(forge_topo::FaceId(f)).grow(1e-9);
+                for &v in t {
+                    let p = m.positions[v as usize];
+                    assert!(bx.contains(p), "{name} face {f}: {p:?} off {bx:?}");
+                }
+            }
+        }
+    }
+}

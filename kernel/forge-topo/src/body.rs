@@ -1018,6 +1018,9 @@ impl Body {
                         arc.bbox(Interval::new(su.lo - pad, su.hi + pad)).grow(t.minor)
                     });
                 }
+                // straight across in v, a point of the face lies between two boundary points at
+                // its u: in the hull of its edges' boxes (research/thread-math)
+                Surface::Procedural(pr) if pr.v_degree() == Some(1) && !b.is_empty() => {}
                 Surface::Procedural(pr) => b = b.hull(&crate::uv::procedural_box(self, f, pr)),
                 _ => {}
             }
