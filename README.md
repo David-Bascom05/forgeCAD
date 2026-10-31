@@ -32,9 +32,15 @@ Units are millimetres. Tolerances live in `forge_math::tol`.
 ## Building
 
 ```
-cargo test --workspace                          # native
-cargo test --workspace --target wasm32-wasip1   # wasm, run under Node's WASI
+cargo test --workspace                              # native
+cargo test --workspace --target wasm32-wasip1       # wasm, run under Node's WASI
+cargo build --profile wasm --target wasm32-wasip1   # the browser build: fat LTO, simd128
+tools/speed/gate.sh                                 # native instruction counts and bits
+tools/speed/wasm.sh                                 # wasm instruction counts, ratio to native
 ```
+
+wasm is single-threaded (wasm32-wasip1 has no threads), so the n-ary regen runs on one thread
+there.
 
 The toolchain is pinned in `rust-toolchain.toml`; rustup installs it on first use.
 

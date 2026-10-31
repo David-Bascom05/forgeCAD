@@ -71,6 +71,18 @@ impl IntCurve {
         }
     }
 
+    /// t on the domain: wrapped if closed, clamped if open. In range it is t itself, without
+    /// the remainder (a library call on wasm).
+    fn wrap(&self, t: f64, hi: f64) -> f64 {
+        if (0.0..hi).contains(&t) {
+            t
+        } else if self.closed {
+            t.rem_euclid(hi)
+        } else {
+            t.clamp(0.0, hi)
+        }
+    }
+
     pub fn domain_hi(&self) -> f64 {
         self.segments() as f64
     }
@@ -84,11 +96,7 @@ impl IntCurve {
     fn locate(&self, t: f64) -> (usize, usize, f64) {
         let n = self.pts.len();
         let seg = self.segments();
-        let t = if self.closed {
-            t.rem_euclid(seg as f64)
-        } else {
-            t.clamp(0.0, seg as f64)
-        };
+        let t = self.wrap(t, seg as f64);
         let i = (t.floor() as usize).min(seg.saturating_sub(1));
         (i, (i + 1) % n, t - i as f64)
     }

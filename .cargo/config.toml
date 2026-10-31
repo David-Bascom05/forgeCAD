@@ -1,5 +1,7 @@
 [target.wasm32-wasip1]
 runner = "tools/wasi-run.mjs"
+# f64x2 lanes round each lane as the scalar op does; no relaxed-simd, no FMA
+rustflags = ["-C", "target-feature=+simd128"]
 
 # AVX2-era x86 (2013+): floor and round are single instructions, wider SIMD. Results are bit for
 # bit the same as the baseline target (examples/bits); FMA stays off, since nothing calls mul_add
