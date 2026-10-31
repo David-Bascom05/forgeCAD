@@ -37,3 +37,18 @@ fn equal_cross_holes() {
     // a T, ending at the other's axis
     builds_valid("extrude 40 rect -20 -20 40 40\nhole 8 -xy at 0 0 40 thru\nhole 8 yz at -20 0 20 20\n");
 }
+
+/// A cross hole whose lowest line is tangent to another hole's flat floor: the bore curve
+/// touches the floor circle from inside the bore's wall, a vertex on both.
+#[test]
+fn cross_drill_tangent_to_floor() {
+    builds_valid("extrude 55 rect -45 -35 90 70\nhole 7.5 -xy at 0 0 55 30\nhole 10 xz at 0 35 30 35\n");
+}
+
+/// The same with drill points, the cross hole drilled to a plane through the first's axis.
+#[test]
+fn cross_drill_tangent_to_floor_pointed() {
+    builds_valid(
+        "extrude 55 rect -45 -35 90 70\nhole 8 -xy at 0 -12 55 35 pt 118\nyP: plane -xz at 0 -12 0\nhole 10 -xz at 0 -35 25 to yP pt 118\n",
+    );
+}

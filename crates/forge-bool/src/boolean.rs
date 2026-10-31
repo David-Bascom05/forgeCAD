@@ -1450,13 +1450,15 @@ pub(crate) fn trim(
                 // a "touch" may be two crossings a hair apart (near-tangent circles), so look; a
                 // curve that only touches the boundary from outside the face is not cut there, but
                 // one touching it from inside meets the edge there and goes on: a vertex on both
-                // (a step out from the touch until it leaves the boundary's tolerance)
+                // (a step out from the touch until it leaves the boundary's tolerance: tangent,
+                // it parts from the boundary only quadratically, so the steps grow to a traced
+                // curve's chain spacing, one unit of its parameter)
                 let touch_inside = |h: &CurveHit| {
                     on_edge(body, e, h.point).is_some()
                         && index[1 - k].boxes[faces[1 - k].index()]
                             .grow(tol::LINEAR)
                             .contains(h.point)
-                        && [1e-3, 1e-2, 5e-2].iter().find_map(|&w| {
+                        && [1e-3, 1e-2, 5e-2, 0.2, 0.5].iter().find_map(|&w| {
                             let dt = w * range.width().min(1.0);
                             let at = [h.t - dt, h.t + dt].map(|t| {
                                 if range.contains(t) || closed {
