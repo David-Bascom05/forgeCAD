@@ -119,7 +119,8 @@ impl Session {
                 let line = &m.lines[f.at];
                 // the line is echoed only once the file has shown itself a part file
                 let echo = if f.at > 0 {
-                    line.toks.join(" ")
+                    // a sketch block's header; its message quotes the row
+                    line.toks.split(|t| t == ";").next().unwrap_or_default().join(" ")
                 } else {
                     String::new()
                 };
@@ -335,6 +336,26 @@ impl Session {
         if let Some(f) = &m.error {
             text.push_str(&format!("\nline {} does not build: {}", m.lines[f.at].no, f.msg));
         }
+        let mut sketches = Vec::new();
+        for (i, f) in m.features.iter().enumerate() {
+            if let forge_model::Feature::Sketch(s) = f {
+                let (dof, free) = crate::sketch::freedom(s);
+                let no = m.lines[i].no;
+                text.push_str(&match dof {
+                    0 => format!("\nline {no}: sketch fully constrained"),
+                    _ => format!(
+                        "\nline {no}: sketch has {dof} degrees of freedom; free: {}",
+                        free.join(" ")
+                    ),
+                });
+                let free = Json::Arr(free.into_iter().map(Json::from).collect());
+                sketches.push(Json::obj(vec![
+                    ("line", no.into()),
+                    ("dof", dof.into()),
+                    ("free", free),
+                ]));
+            }
+        }
         let list = bad
             .into_iter()
             .map(|(l, n, p)| {
@@ -348,7 +369,11 @@ impl Session {
         Ok(Reply {
             ok,
             text,
-            json: Json::obj(vec![("ok", ok.into()), ("bad", Json::Arr(list))]),
+            json: Json::obj(vec![
+                ("ok", ok.into()),
+                ("bad", Json::Arr(list)),
+                ("sketches", Json::Arr(sketches)),
+            ]),
             png: None,
         })
     }

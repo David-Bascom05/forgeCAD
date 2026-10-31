@@ -2,6 +2,7 @@
 //! their names, measuring, a small PNG renderer, and a session that regenerates incrementally.
 
 pub mod cmd;
+pub mod expr;
 pub mod facemesh;
 pub mod json;
 pub mod measure;
@@ -9,6 +10,7 @@ pub mod model;
 pub mod png;
 pub mod render;
 pub mod select;
+pub mod sketch;
 pub mod text;
 
 /// A number for people: a few decimals, trailing zeros dropped.

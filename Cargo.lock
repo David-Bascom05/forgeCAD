@@ -11,6 +11,7 @@ dependencies = [
  "forge-mesh",
  "forge-model",
  "forge-ops",
+ "forge-sketch",
  "forge-topo",
 ]
 
@@ -90,6 +91,7 @@ dependencies = [
  "forge-math",
  "forge-mesh",
  "forge-ops",
+ "forge-sketch",
  "forge-topo",
 ]
 

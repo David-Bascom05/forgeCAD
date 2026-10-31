@@ -72,7 +72,9 @@ impl Model {
         m
     }
 
-    /// Rebuilds from the first line whose label or tokens changed.
+    /// Rebuilds from the first line whose label or tokens changed, keeping each part built
+    /// after it while the line reads the same as before and nothing changed above it but
+    /// parameters and sketches (which make nothing).
     pub fn update(&mut self, src: &str) {
         let t0 = Instant::now();
         if src == self.src && !self.lines.is_empty() {
@@ -91,52 +93,65 @@ impl Model {
             .count()
             .min(self.stages.len());
         let old = self.stages.len();
-        self.features.truncate(keep);
+        let old_features = self.features.split_off(keep);
+        let mut old_stages = self.stages.split_off(keep).into_iter();
         self.labels.truncate(keep);
         self.kinds.truncate(keep);
-        self.stages.truncate(keep);
-        self.origins.get_mut().truncate(keep);
         self.picks.get_mut().retain(|p| p.0 < keep);
         self.lines = new;
         self.error = None;
         self.rebuilt = 0;
-        if keep != old || keep < self.lines.len() {
-            self.faces = None;
-            self.mesh = None;
-        }
+        let mut reuse = true;
         for i in keep..self.lines.len() {
             self.rebuilt += 1;
             let line = self.lines[i].clone();
             self.labels.push(line.label.clone());
             let parsed = {
                 let refs = |r: &str| self.refs(i, r);
+                let face = |r: &str| self.face(i, r);
                 let b = Before {
                     features: &self.features,
                     labels: &self.labels[..i],
                     kinds: &self.kinds,
                     refs: &refs,
+                    face: &face,
                 };
                 text::parse_line(&line, &b)
             };
+            let param = line.toks.get(1).is_some_and(|t| t == "=");
             let f = match parsed {
                 Ok(f) => f,
                 // until a line has parsed, this may not be a part file: echo none of it
-                Err(_) if i == 0 => {
+                Err(_) if i == 0 && !param => {
                     let msg = "the first line is not a feature; is this a .fc part file?".into();
                     self.fail(i, msg, "see AGENTS.md for the feature kinds".into());
                     break;
                 }
                 Err(msg) => {
-                    let hint = match text::kind(&line.toks[0]) {
+                    let hint = match text::kind(if param { "param" } else { &line.toks[0] }) {
+                        _ if msg.starts_with("the sketch does not solve") => {
+                            "change or remove one of those rows; a sketch may be under-constrained".into()
+                        }
                         Some(k) => k.syntax.to_string(),
                         None => "see AGENTS.md for the feature kinds".into(),
                     };
+                    let hint = self.defined_below(i, &msg).unwrap_or(hint);
                     self.fail(i, msg, hint);
                     break;
                 }
             };
+            let neutral = |f: &Feature| matches!(f, Feature::Param(_) | Feature::Sketch(_));
+            let was = old_features.get(i - keep);
+            reuse &= was.is_some_and(|w| *w == f || neutral(w) && neutral(&f));
             self.kinds.push(text::kind_of(&f).name);
             self.features.push(f);
+            if let (true, Some(stage)) = (reuse, old_stages.next()) {
+                self.stages.push(stage);
+                self.rebuilt -= 1;
+                continue;
+            }
+            reuse = false;
+            self.origins.get_mut().truncate(i);
             let before = if i == 0 { None } else { self.stages[i - 1].clone() };
             match step(&self.features, i, before) {
                 Ok(b) => self.stages.push(b),
@@ -155,7 +170,24 @@ impl Model {
                 }
             }
         }
+        if self.stages.len() != old || !reuse {
+            self.faces = None;
+            self.mesh = None;
+        }
+        self.origins.get_mut().truncate(self.stages.len());
         self.ms = t0.elapsed().as_secs_f64() * 1e3;
+    }
+
+    /// For an unknown name in `msg`, where a line below line `i` defines it.
+    fn defined_below(&self, i: usize, msg: &str) -> Option<String> {
+        let name = msg.split('\'').nth(1)?;
+        let l = self.lines[i + 1..]
+            .iter()
+            .find(|l| l.toks.len() > 1 && l.toks[0] == name && l.toks[1] == "=")?;
+        Some(format!(
+            "{name} is defined on line {}, below; define parameters above their use",
+            l.no
+        ))
     }
 
     fn fail(&mut self, at: usize, msg: String, hint: String) {
@@ -334,6 +366,25 @@ impl Model {
     }
 }
 
+impl Model {
+    /// The planar face a reference names before line `i`: its name and its plane, z outward.
+    fn face(&self, i: usize, r: &str) -> Result<(Name, forge_math::Frame), String> {
+        let names = self.refs(i, r)?;
+        let [name] = names[..] else {
+            return Err(format!("{r} names {} entities; one face is needed", names.len()));
+        };
+        let body = self.body_after(i).ok_or("nothing is built above this line")?;
+        let f = body
+            .face_by_name(name)
+            .ok_or_else(|| format!("{r} is not a face"))?;
+        match &body.face(f).surface {
+            forge_geom::Surface::Plane(p) if body.face(f).same_sense => Ok((name, p.frame)),
+            forge_geom::Surface::Plane(p) => Ok((name, p.frame.flipped())),
+            _ => Err(format!("{r} is not a planar face")),
+        }
+    }
+}
+
 /// `EdgeId(6)` and `FaceId(2)` in a message as the handles of those entities of `body`.
 fn with_handles(msg: &str, body: &Body) -> String {
     let handles = select::handles(body);
@@ -506,12 +557,15 @@ rib 2 flip yz at 15 0 0 line 5 25 25 5
             let edited = lines.join("\n");
             m.update(&edited);
             let fresh = Model::new(&edited);
-            // the lines from the edit to the end, or to the one that fails
-            assert_eq!(
-                m.rebuilt,
-                fresh.error.as_ref().map_or(n, |f| f.at + 1) - k,
-                "edit at line {k}"
-            );
+            // the lines from the edit to the end, or to the one that fails; none if the edit
+            // reads the same (a frame's x hint scaled, say)
+            let same = Model::new(&src).features.get(k) == fresh.features.get(k);
+            let want = if same {
+                0
+            } else {
+                fresh.error.as_ref().map_or(n, |f| f.at + 1) - k
+            };
+            assert_eq!(m.rebuilt, want, "edit at line {k}");
             assert_eq!(m.error.as_ref().map(|f| f.at), fresh.error.as_ref().map(|f| f.at));
             assert_eq!(m.built(), fresh.built());
             assert_eq!(finished(&m), finished(&fresh), "edit at line {k}");

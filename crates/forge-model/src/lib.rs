@@ -7,6 +7,7 @@ pub mod extent;
 pub mod fillets;
 pub mod finishing;
 pub mod hole;
+pub mod params;
 pub mod pattern;
 mod rib;
 pub mod suite;
@@ -27,6 +28,7 @@ use forge_ops::{
 };
 use forge_topo::{Body, Name};
 pub use hole::{End, Head, Hole, HoleError, Thread};
+pub use params::{Param, Sketch, Unit};
 pub use pattern::{Layout, PatternError, Row, Source, copy_sources, instance_name};
 use pattern::{instances, moved, moved_shape};
 pub use rib::{Rib, RibError};
@@ -80,6 +82,10 @@ pub enum Feature {
     Loft(Box<Loft>),
     /// A rib, offset or thickened faces, or a direct edit of the part's faces.
     Edit(Edit),
+    /// A named value; it makes nothing.
+    Param(Box<Param>),
+    /// A solved sketch; it makes nothing.
+    Sketch(Box<Sketch>),
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -308,7 +314,7 @@ pub fn step(features: &[Feature], i: usize, body: Option<Body>) -> Result<Option
         }
         return Ok(Some(b));
     }
-    if matches!(f, Feature::Plane(_)) {
+    if matches!(f, Feature::Plane(_) | Feature::Param(_) | Feature::Sketch(_)) {
         return Ok(body);
     }
     let mut b = body.ok_or(RegenError::NothingToCombine { feature: i })?;
@@ -608,7 +614,7 @@ fn tools(features: &[Feature], i: usize, build: bool) -> Result<Vec<Tool>, Regen
             }
             Ok(vec![t])
         }
-        Feature::Plane(_) => Ok(vec![]),
+        Feature::Plane(_) | Feature::Param(_) | Feature::Sketch(_) => Ok(vec![]),
         Feature::Sweep(_) | Feature::Coil(_) | Feature::Loft(_) => {
             Ok(vec![swept::tool_of(features, i, build)?])
         }

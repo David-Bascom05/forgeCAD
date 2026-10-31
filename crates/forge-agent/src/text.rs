@@ -2,11 +2,12 @@
 //! Each feature kind is one row of `KINDS`: its keyword, its syntax (shown as a hint on
 //! errors), a parser and a printer built from the shared helpers below.
 
+use crate::{expr, sketch};
 use forge_geom::Circle;
 use forge_math::{Frame, Point2, Point3, Vec2, Vec3, dmath};
 use forge_model::{
-    Coil, CoilSize, Combine, Edit, End, Extent, Feature, Head, Hole, Layout, Loft, Motion, Part, PathEnds,
-    Rib, Row, Side, Source, Sweep, Target, Thread, Toward, Turn,
+    Coil, CoilSize, Combine, Edit, End, Extent, Feature, Head, Hole, Layout, Loft, Motion, Param, Part,
+    PathEnds, Rib, Row, Side, Source, Sweep, Target, Thread, Toward, Turn, Unit,
 };
 use forge_ops::{
     Axis2, ChamferSize, Handed, LoftGuides, LoftKind, PathSeg, Profile, ProfileLoop, Radius, Segment,
@@ -24,7 +25,7 @@ pub struct Kind {
 pub const KINDS: &[Kind] = &[
     Kind {
         name: "extrude",
-        syntax: "extrude [op] EXT FRAME LOOPS",
+        syntax: "extrude [op] EXT (FRAME LOOPS | SKETCH [E])",
         parse: |p| {
             let op = p.op()?;
             let extent = p.extent()?;
@@ -43,15 +44,25 @@ pub const KINDS: &[Kind] = &[
     },
     Kind {
         name: "revolve",
-        syntax: "revolve [op] [TURN] FRAME [axis x|y|OX OY DX DY] LOOPS",
+        syntax: "revolve [op] [TURN] (FRAME [axis x|y|OX OY DX DY] LOOPS | SKETCH [axis L] [E])",
         parse: |p| {
             let op = p.op()?;
             let extent = p.turn()?;
-            let plane = p.frame()?;
-            let axis = p.axis()?;
-            let loops = p.loops()?;
+            let sk = p.sketch();
+            let plane = match sk {
+                Some(s) => s.plane,
+                None => p.frame()?,
+            };
+            let axis = p.axis(sk)?;
+            let profile = match sk {
+                Some(s) => p.region(s)?,
+                None => Profile {
+                    plane,
+                    loops: p.loops()?,
+                },
+            };
             Ok(Feature::Revolve {
-                profile: Profile { plane, loops },
+                profile,
                 axis,
                 extent,
                 op,
@@ -104,7 +115,7 @@ pub const KINDS: &[Kind] = &[
             let mut edges = Vec::new();
             let mut r = p.radius()?;
             while !p.done() {
-                if !p.peek().starts_with(['@', '(']) {
+                if !is_ref(p.peek()) {
                     r = p.radius()?;
                 } else {
                     edges.extend(p.one_or_more_refs()?.into_iter().map(|n| (n, r.clone())));
@@ -453,7 +464,7 @@ pub const KINDS: &[Kind] = &[
         parse: |p| {
             let op = p.op()?;
             let plane = p.frame()?;
-            let axis = p.axis()?;
+            let axis = p.axis(None)?;
             let loops = p.loops()?;
             let size = if p.eat("pitch") {
                 let pitch = p.num()?;
@@ -616,6 +627,82 @@ pub const KINDS: &[Kind] = &[
                     w.path(path);
                 }
             }
+            true
+        },
+    },
+    Kind {
+        name: "param",
+        syntax: "NAME = EXPR [mm|deg]",
+        parse: |p| {
+            let name = p.next()?.to_string();
+            p.expect("=")?;
+            let mut toks: Vec<&str> = p.t[p.k..].iter().map(|s| s.as_str()).collect();
+            p.k = p.t.len();
+            let unit = match toks.last() {
+                Some(&"mm") => Unit::Mm,
+                Some(&"deg") => Unit::Deg,
+                _ => Unit::None,
+            };
+            if unit != Unit::None {
+                toks.pop();
+            }
+            Ok(Feature::Param(Box::new(new_param(
+                p.b.features,
+                name,
+                toks.join(" "),
+                unit,
+            )?)))
+        },
+        print: |f, w| {
+            let Feature::Param(p) = f else { return false };
+            w.s.push_str(&format!("{} = {}", p.name, p.expr));
+            match p.unit {
+                Unit::None => {}
+                Unit::Mm => w.word("mm"),
+                Unit::Deg => w.word("deg"),
+            }
+            true
+        },
+    },
+    Kind {
+        name: "sketch",
+        syntax: "sketch [FRAME | on REF], then rows to `end`: pt line poly rect circle arc | fix co hor ver par perp tan eq conc mid sym | dist hdist vdist rad dia ang",
+        parse: |p| {
+            if p.peek() == "-on" && p.t.get(p.k + 1).is_some_and(|t| is_ref(t)) {
+                return Err("a sketch goes on a face's outside: `on REF`, not `-on`".into());
+            }
+            let plane = p.frame()?;
+            let on = p.on;
+            let mut rows = Vec::new();
+            while p.eat(";") {
+                let start = p.k;
+                while !p.done() && p.peek() != ";" {
+                    p.k += 1;
+                }
+                rows.push(p.t[start..p.k].to_vec());
+            }
+            let fs = p.b.features;
+            let mut s = sketch::build(plane, &rows, &|t, want| value(t, fs, want))?;
+            s.on = on;
+            Ok(Feature::Sketch(Box::new(s)))
+        },
+        print: |f, w| {
+            let Feature::Sketch(s) = f else { return false };
+            match s.on {
+                Some(n) => {
+                    w.word("on");
+                    w.name(n);
+                    let o = s.plane.origin;
+                    w.word("at");
+                    w.nums(&[o.x, o.y, o.z]);
+                }
+                None => w.frame(&s.plane),
+            }
+            for r in &s.rows {
+                w.s.push_str("\n ");
+                r.iter().for_each(|t| w.word(t));
+            }
+            w.s.push_str("\nend");
             true
         },
     },
@@ -826,6 +913,48 @@ pub const KINDS: &[Kind] = &[
 
 type R<T> = Result<T, String>;
 
+/// A parameter `name = expr`, checked against the lines above.
+fn new_param(above: &[Feature], name: String, expr: String, unit: Unit) -> R<Param> {
+    if !expr::is_name(&name) {
+        return Err(format!(
+            "'{name}': a parameter's name is letters, digits and _, from a letter"
+        ));
+    }
+    if expr::reserved(&name)
+        || KEYWORDS.contains(&name.as_str())
+        || kind(&name).is_some()
+        || sketch::is_ref(&name)
+    {
+        return Err(format!("'{name}' is a word the file uses; pick another name"));
+    }
+    if param(above, &name).is_some() {
+        return Err(format!("parameter '{name}' is already defined above"));
+    }
+    if expr::names(&expr).contains(&name.as_str()) {
+        return Err(format!("'{name}' refers to itself"));
+    }
+    if expr.is_empty() {
+        return Err(format!("{name} = needs a value"));
+    }
+    let (value, got) = expr::eval(&expr, &|n| param(above, n))?;
+    let unit = match (unit, got) {
+        (u, Unit::None) | (Unit::None, u) => u,
+        (u, g) if u == g => u,
+        _ => {
+            return Err(format!(
+                "'{expr}' is in {}",
+                if got == Unit::Mm { "mm" } else { "deg" }
+            ));
+        }
+    };
+    Ok(Param {
+        name,
+        expr,
+        unit,
+        value,
+    })
+}
+
 /// One line of a part file that holds a feature.
 #[derive(Clone, Debug, PartialEq)]
 pub struct Line {
@@ -836,35 +965,47 @@ pub struct Line {
     pub toks: Vec<String>,
 }
 
-/// The feature lines of a file (blank and comment-only lines skipped).
-pub fn lines(src: &str) -> Vec<Line> {
-    let mut out = Vec::new();
-    for (k, raw) in src.lines().enumerate() {
-        let text = raw.split('#').next().unwrap_or("");
-        let mut toks: Vec<String> = Vec::new();
-        let mut chars = text.chars().peekable();
+/// A line's tokens: a parenthesized selector is one token, and so is an expression whose
+/// parentheses touch its other characters (`(w+2)/2`, `sqrt(a)`).
+fn tokens(text: &str) -> Vec<String> {
+    let mut toks: Vec<String> = Vec::new();
+    let mut chars = text.chars().peekable();
+    while let Some(&c) = chars.peek() {
+        if c.is_whitespace() {
+            chars.next();
+            continue;
+        }
+        let mut t = String::new();
+        let mut depth = 0;
         while let Some(&c) = chars.peek() {
-            if c.is_whitespace() {
-                chars.next();
-            } else if c == '(' {
-                let mut t = String::new();
-                let mut depth = 0;
-                for c in chars.by_ref() {
-                    t.push(c);
-                    depth += (c == '(') as i32 - (c == ')') as i32;
-                    if depth == 0 {
-                        break;
-                    }
-                }
-                toks.push(t);
-            } else {
-                let mut t = String::new();
-                while let Some(&c) = chars.peek().filter(|c| !c.is_whitespace() && **c != '(') {
-                    t.push(c);
-                    chars.next();
-                }
-                toks.push(t);
+            if c.is_whitespace() && depth == 0 {
+                break;
             }
+            t.push(c);
+            chars.next();
+            depth += (c == '(') as i32 - (c == ')') as i32;
+        }
+        toks.push(t);
+    }
+    toks
+}
+
+/// The feature lines of a file (blank and comment-only lines skipped). A sketch block is one
+/// line: its header, then each row after a `;` token, up to `end`.
+pub fn lines(src: &str) -> Vec<Line> {
+    let mut out: Vec<Line> = Vec::new();
+    let mut block = false;
+    for (k, raw) in src.lines().enumerate() {
+        let mut toks = tokens(raw.split('#').next().unwrap_or(""));
+        if block {
+            let last = out.last_mut().expect("a block has its header");
+            if toks.len() == 1 && toks[0] == "end" {
+                block = false;
+            } else if !toks.is_empty() {
+                last.toks.push(";".into());
+                last.toks.extend(toks);
+            }
+            continue;
         }
         let label = match toks.first() {
             Some(t) if t.len() > 1 && t.ends_with(':') => {
@@ -873,6 +1014,7 @@ pub fn lines(src: &str) -> Vec<Line> {
             _ => None,
         };
         if !toks.is_empty() {
+            block = toks[0] == "sketch";
             out.push(Line {
                 no: k + 1,
                 label,
@@ -890,6 +1032,8 @@ pub struct Before<'a> {
     pub labels: &'a [Option<String>],
     pub kinds: &'a [&'static str],
     pub refs: &'a dyn Fn(&str) -> R<Vec<Name>>,
+    /// A reference to a planar face: its name, and its plane with z out of the part.
+    pub face: &'a dyn Fn(&str) -> R<(Name, Frame)>,
 }
 
 pub fn kind(name: &str) -> Option<&'static Kind> {
@@ -898,14 +1042,20 @@ pub fn kind(name: &str) -> Option<&'static Kind> {
 
 /// Parses one feature line.
 pub fn parse_line(line: &Line, before: &Before) -> R<Feature> {
-    let k = kind(&line.toks[0]).ok_or_else(|| {
+    let param = line.toks.get(1).is_some_and(|t| t == "=");
+    let k = if param { kind("param") } else { kind(&line.toks[0]) }.ok_or_else(|| {
         let names: Vec<&str> = KINDS.iter().map(|k| k.name).collect();
-        format!("unknown feature '{}' (one of: {})", line.toks[0], names.join(" "))
+        format!(
+            "unknown feature '{}' (one of: {} | NAME = EXPR)",
+            line.toks[0],
+            names.join(" ")
+        )
     })?;
     let mut p = P {
         t: &line.toks,
-        k: 1,
+        k: if param { 0 } else { 1 },
         b: before,
+        on: None,
     };
     let f = (k.parse)(&mut p)?;
     match p.t.get(p.k) {
@@ -929,7 +1079,9 @@ pub fn print(part: &Part) -> String {
     let mut out = String::new();
     for (i, f) in part.features.iter().enumerate() {
         let mut w = W::new(&part.features[..i], &kinds);
-        w.s.push_str(kinds[i]);
+        if !matches!(f, Feature::Param(_)) {
+            w.s.push_str(kinds[i]);
+        }
         (kind_of(f).print)(f, &mut w);
         out.push_str(&w.s);
         out.push('\n');
@@ -945,6 +1097,7 @@ pub fn parse(src: &str) -> Result<Part, (usize, String)> {
             None => Err(format!("'{r}' needs a part to resolve against")),
         }
     };
+    let face = |r: &str| -> R<(Name, Frame)> { Err(format!("'{r}' needs a part to resolve against")) };
     let ls = lines(src);
     let labels: Vec<Option<String>> = ls.iter().map(|l| l.label.clone()).collect();
     let mut kinds = Vec::new();
@@ -955,10 +1108,11 @@ pub fn parse(src: &str) -> Result<Part, (usize, String)> {
             labels: &labels[..i],
             kinds: &kinds,
             refs: &full,
+            face: &face,
         };
         let f = parse_line(l, &b).map_err(|e| (l.no, e))?;
+        kinds.push(kind_of(&f).name);
         features.push(f);
-        kinds.push(kind(&l.toks[0]).map(|k| k.name).unwrap_or(""));
     }
     Ok(Part { features })
 }
@@ -1043,16 +1197,83 @@ pub(crate) struct P<'a> {
     t: &'a [String],
     k: usize,
     b: &'a Before<'a>,
+    /// The face the last frame was placed on, if it was.
+    on: Option<Name>,
 }
 
-impl P<'_> {
+/// What a number slot holds: a length (or plain number), an angle, or a count.
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub enum Want {
+    Len,
+    /// Degrees in the file, radians out; `1.2r` is radians.
+    Angle,
+    Count,
+}
+
+/// The value of the parameter `name` defined above.
+fn param(features: &[Feature], name: &str) -> Option<(f64, Unit)> {
+    features.iter().rev().find_map(|f| match f {
+        Feature::Param(p) if p.name == name => Some((p.value, p.unit)),
+        _ => None,
+    })
+}
+
+/// A number token, or an expression over the parameters above, as `want` needs it.
+pub(crate) fn value(t: &str, features: &[Feature], want: Want) -> R<f64> {
+    let (v, unit) = match (t.parse::<f64>(), want) {
+        (Ok(v), _) => (v, Unit::None),
+        (Err(_), Want::Angle) if t.strip_suffix('r').is_some_and(|r| r.parse::<f64>().is_ok()) => {
+            return Ok(t[..t.len() - 1].parse().expect("checked"));
+        }
+        _ => expr::eval(t, &|n| param(features, n)).map_err(|e| {
+            if expr::is_name(t) && param(features, t).is_none() {
+                let what = if want == Want::Angle {
+                    "an angle"
+                } else {
+                    "a number"
+                };
+                format!("expected {what} or a parameter, found '{t}'")
+            } else {
+                format!("'{t}': {e}")
+            }
+        })?,
+    };
+    match (want, unit) {
+        (Want::Angle, Unit::Mm) => Err(format!("'{t}' is in mm; an angle is wanted")),
+        (Want::Len | Want::Count, Unit::Deg) => Err(format!("'{t}' is in deg; a length is wanted")),
+        (Want::Angle, _) => Ok(deg(v)),
+        (Want::Count, _) if v < 0.0 || v.fract() != 0.0 || v > u32::MAX as f64 => {
+            Err(format!("expected a count, found '{t}' ({v})"))
+        }
+        _ => Ok(v),
+    }
+}
+
+/// `@handle` or a `(selector)`, not a parenthesized expression.
+fn is_ref(t: &str) -> bool {
+    t.starts_with('@')
+        || t.strip_prefix('(').is_some_and(|r| {
+            ["faces", "edges", "verts"]
+                .iter()
+                .any(|w| r.trim_start().starts_with(w))
+        })
+}
+
+/// Words the grammar uses, which a parameter may not be named.
+const KEYWORDS: &[&str] = &[
+    "x", "y", "z", "axes", "on", "at", "axis", "id", "cw", "rect", "rrect", "circle", "poly", "loop", "line",
+    "arc", "circ", "sym", "two", "thru", "back", "both", "next", "to", "off", "new", "add", "cut", "keep",
+    "face", "ang", "cb", "cs", "pt", "thread", "body", "lin", "mirror", "step", "out", "end", "cons", "open",
+];
+
+impl<'a> P<'a> {
     fn peek(&self) -> &str {
         self.t.get(self.k).map_or("", |s| s.as_str())
     }
     fn done(&self) -> bool {
         self.k >= self.t.len()
     }
-    fn next(&mut self) -> R<&str> {
+    fn next(&mut self) -> R<&'a str> {
         let t = self.t.get(self.k).ok_or("line ends too soon")?;
         self.k += 1;
         Ok(t)
@@ -1071,29 +1292,34 @@ impl P<'_> {
     }
     fn is_num(&self) -> bool {
         let t = self.peek();
-        t.parse::<f64>().is_ok() || t.strip_suffix('r').is_some_and(|s| s.parse::<f64>().is_ok())
+        let fs = self.b.features;
+        !t.is_empty()
+            && !is_ref(t)
+            && (value(t, fs, Want::Angle).is_ok() || expr::eval(t, &|n| param(fs, n)).is_ok())
     }
-    fn num(&mut self) -> R<f64> {
+    fn value(&mut self, want: Want) -> R<f64> {
         let t = self.next()?;
-        t.parse().map_err(|_| {
+        value(t, self.b.features, want).map_err(|e| {
             let axisy = t
                 .trim_start_matches(['+', '-'])
                 .chars()
                 .all(|c| "xyz".contains(c));
-            let orient = if axisy {
-                " (orientations: xy xz yz -xy -xz -yz, or z A B C)"
+            if axisy {
+                format!("{e} (orientations: xy xz yz -xy -xz -yz, or z A B C)")
             } else {
-                ""
-            };
-            format!("expected a number, found '{t}'{orient}")
+                e
+            }
         })
+    }
+    fn num(&mut self) -> R<f64> {
+        self.value(Want::Len)
     }
     /// A fillet radius: constant, linear from the edge's first vertex (by name) to the other, or
     /// radii at fractions along from that vertex.
     fn radius(&mut self) -> R<Radius> {
         let t = self.next()?.to_string();
         let bad = || format!("expected a radius (3, 2..4 or 0:2,1:4), found '{t}'");
-        let f = |x: &str| x.parse::<f64>().map_err(|_| bad());
+        let f = |x: &str| value(x, self.b.features, Want::Len).map_err(|e| format!("{}: {e}", bad()));
         if t == ":" {
             Ok(Radius::Points(vec![]))
         } else if t.contains(':') {
@@ -1109,14 +1335,7 @@ impl P<'_> {
         }
     }
     fn angle(&mut self) -> R<f64> {
-        let t = self.next()?;
-        match t.strip_suffix('r') {
-            Some(r) => r.parse().map_err(|_| format!("expected an angle, found '{t}'")),
-            None => t
-                .parse()
-                .map(deg)
-                .map_err(|_| format!("expected an angle, found '{t}'")),
-        }
+        self.value(Want::Angle)
     }
     /// Which way a thickness goes: `pos`, `neg` or `sym`, else `default`.
     fn side(&mut self, default: Side) -> Side {
@@ -1129,8 +1348,7 @@ impl P<'_> {
         }
     }
     fn count(&mut self) -> R<usize> {
-        let t = self.next()?;
-        t.parse().map_err(|_| format!("expected a count, found '{t}'"))
+        Ok(self.value(Want::Count)? as usize)
     }
     fn point3(&mut self) -> R<Point3> {
         Ok(Point3::new(self.num()?, self.num()?, self.num()?))
@@ -1183,7 +1401,7 @@ impl P<'_> {
     }
     fn target(&mut self) -> R<Target> {
         let feature = self.feat()?;
-        if self.peek().starts_with(['@', '(']) {
+        if is_ref(self.peek()) {
             Ok(Target::Face {
                 feature,
                 name: self.one_ref()?,
@@ -1281,13 +1499,30 @@ impl P<'_> {
             self.k += 1;
             let (x, y, z) = (self.vec3()?, self.vec3()?, self.vec3()?);
             Frame::from_axes(Point3::ORIGIN, x, y, z).ok_or("axes not orthonormal and right-handed")?
-        } else if t == "on" {
+        } else if t == "on" || t == "-on" {
             self.k += 1;
-            let i = self.feat()?;
-            match self.b.features[i] {
-                Feature::Plane(f) => f,
-                _ => return Err(format!("'on' needs a plane feature; line {} is not one", i + 1)),
-            }
+            let f = if is_ref(self.peek()) {
+                let (name, f) = (self.b.face)(self.next()?)?;
+                self.on = Some(name);
+                f
+            } else {
+                let i = self.feat()?;
+                match &self.b.features[i] {
+                    Feature::Plane(f) => *f,
+                    Feature::Sketch(s) if sketch::is_ref(self.peek()) => {
+                        let at = sketch::point(s, self.next()?)?;
+                        s.plane.with_origin(s.plane.plane_point(at))
+                    }
+                    Feature::Sketch(s) => s.plane,
+                    _ => {
+                        return Err(format!(
+                            "'on' needs a plane or sketch feature, or a face; line {} is neither",
+                            i + 1
+                        ));
+                    }
+                }
+            };
+            if t == "-on" { f.flipped() } else { f }
         } else {
             Frame::WORLD
         };
@@ -1296,11 +1531,29 @@ impl P<'_> {
         }
         Ok(f)
     }
-    fn axis(&mut self) -> R<Axis2> {
+    /// The sketch a line names here, if it names one.
+    fn sketch(&mut self) -> Option<&'a forge_model::Sketch> {
+        let k = self.k;
+        match self.feat().map(|i| &self.b.features[i]) {
+            Ok(Feature::Sketch(s)) => Some(s),
+            _ => {
+                self.k = k;
+                None
+            }
+        }
+    }
+    fn axis(&mut self, sk: Option<&forge_model::Sketch>) -> R<Axis2> {
         if !self.eat("axis") {
             return Ok(Axis2 {
                 origin: Point2::ORIGIN,
                 dir: Vec2::Y,
+            });
+        }
+        if let Some(s) = sk.filter(|_| sketch::is_ref(self.peek())) {
+            let (a, b) = sketch::line(s, self.next()?)?;
+            return Ok(Axis2 {
+                origin: a,
+                dir: b - a,
             });
         }
         Ok(match self.peek() {
@@ -1322,10 +1575,22 @@ impl P<'_> {
         t.parse().map_err(|_| format!("expected an id, found '{t}'"))
     }
     fn profile(&mut self) -> R<Profile> {
+        if let Some(s) = self.sketch() {
+            return self.region(s);
+        }
         Ok(Profile {
             plane: self.frame()?,
             loops: self.loops()?,
         })
+    }
+    /// A sketch's region: its only one, or the one whose outside runs through the entity named.
+    fn region(&mut self, s: &forge_model::Sketch) -> R<Profile> {
+        let through = if sketch::is_ref(self.peek()) {
+            Some(self.next()?)
+        } else {
+            None
+        };
+        sketch::profile(s, through)
     }
     fn loops(&mut self) -> R<Vec<ProfileLoop>> {
         let mut next = 0u64;
@@ -1459,14 +1724,14 @@ impl P<'_> {
     }
     fn refs(&mut self) -> R<Vec<Name>> {
         let mut out = Vec::new();
-        while self.peek().starts_with(['@', '(']) {
+        while is_ref(self.peek()) {
             let t = self.next()?.to_string();
             out.extend((self.b.refs)(&t)?);
         }
         Ok(out)
     }
     fn one_or_more_refs(&mut self) -> R<Vec<Name>> {
-        if !self.peek().starts_with(['@', '(']) {
+        if !is_ref(self.peek()) {
             return Err(format!("expected @handle or (selector), found '{}'", self.peek()));
         }
         let t = self.next()?.to_string();
