@@ -197,3 +197,27 @@ extrude add 4 z 1 0 0 x 0 0 -1 at 5 0 0 poly -4 2.5 -4 0 4 0 4 2.5
 ",
     );
 }
+
+/// A cone that comes to a point stays one when shelled towards its axis: its apex moves along the
+/// axis. Refused at any thickness before, for a boss's tip or a drill point shelled outward.
+#[test]
+fn shell_towards_a_cone_point() {
+    let v = builds(
+        "extrude 30 rect 0 0 80 80
+revolve add xz at 40 40 30 axis y poly 0 0 8 0 0 10
+shell 2 (faces plane normal -z bottom)
+",
+    );
+    let half = forge_math::dmath::atan2(8.0, 10.0);
+    let h = 40.0 - 2.0 / forge_math::dmath::sin(half) - 28.0;
+    let r = h * forge_math::dmath::sin(half) / forge_math::dmath::cos(half);
+    let pi = forge_math::dmath::PI;
+    let want = 192000.0 + pi * 640.0 / 3.0 - (76.0 * 76.0 * 28.0 + pi * r * r * h / 3.0);
+    assert!((v - want).abs() < 1e-3 * want, "{v} {want}");
+    builds(
+        "extrude 30 rect 0 0 80 80
+hole 6 -xy at 40 40 30 15 pt 118
+shell 2 out (faces plane normal +z top)
+",
+    );
+}

@@ -88,7 +88,12 @@ pub fn shell(
         moved.faces[f.index()].surface = s;
     }
     // a cone offset towards its apex can close up within the face
-    let apex = |b: &Body, slack: f64| b.face_ids().find(|&f| reaches_apex(b, f, slack));
+    // (a cone that already came to a point stays one: its apex just moves along the axis)
+    let pointed = |n: Name| base.face_by_name(n).is_some_and(|f| reaches_apex(&base, f, 0.0));
+    let apex = |b: &Body, slack: f64| {
+        b.face_ids()
+            .find(|&f| reaches_apex(b, f, slack) && !pointed(b.face(f).name))
+    };
     if let Some(f) = apex(&moved, 0.0) {
         return Err(ShellError::Collapses {
             face: moved.face(f).name,
