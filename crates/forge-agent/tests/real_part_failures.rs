@@ -714,6 +714,46 @@ offset -0.3 (faces of cav) (faces of fl)\n",
     );
 }
 
+/// A face edit after a fillet builds, seq and n-ary, the shape the same edit gives before it:
+/// the blends roll again on the changed faces with the laws the history gave them.
+fn edits_through_blends(after: &str, before: &str) {
+    holds(after, true);
+    let (a, b) = (bench::model(after), bench::model(before));
+    let (a, b) = (
+        a.body().expect("a part").compact(),
+        b.body().expect("a part").compact(),
+    );
+    assert_eq!(a.faces.len(), b.faces.len());
+    for v in &a.vertices {
+        let d = b
+            .vertices
+            .iter()
+            .map(|w| w.point.distance(v.point))
+            .fold(f64::INFINITY, f64::min);
+        assert!(d < 1e-6, "{:?} off by {d}", v.point);
+    }
+}
+
+#[test]
+fn move_face_by_variable_blend() {
+    let block = "b: extrude 30 rect 0 0 60 40\n";
+    let round = "fillet 0:2,0.3:5,1:3 (edges of b top longer 50)\n";
+    let up = "move (faces of b normal +z) by 0 0 4\n";
+    edits_through_blends(&format!("{block}{round}{up}"), &format!("{block}{up}{round}"));
+    let lin = "fillet 1.5..4 (edges of b top shorter 50)\n";
+    let out = "offset 2 (faces of b normal +z)\n";
+    edits_through_blends(&format!("{block}{lin}{out}"), &format!("{block}{out}{lin}"));
+}
+
+#[test]
+fn offset_boss_under_rolling_blend() {
+    // a boss on a shaft: its root blend has no closed form
+    let shaft = "s: extrude sym 60 yz circle 0 0 20\nboss: extrude 30 xy circle 0 0 8\n";
+    let round = "fillet 2 (edges between boss s concave)\n";
+    let out = "offset 1 (faces of boss cyl)\n";
+    edits_through_blends(&format!("{shaft}{round}{out}"), &format!("{shaft}{out}{round}"));
+}
+
 /// a revolve cut of a cap screw whose head shoulder lies on the top face. It was found as
 /// invalid (EdgeUses 1) from a profile that ran the shank up through the head's base line,
 /// crossing itself exactly at a sample corner: that profile is now refused

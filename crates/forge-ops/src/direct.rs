@@ -3,10 +3,12 @@
 //! (an offset, a moved copy or a given surface); a result that would not be a valid solid is
 //! refused.
 
-use crate::fillet::{FilletEdge, FilletError, FilletOptions, fillet_with};
+use crate::fillet::{FilletEdge, FilletError, FilletOptions, Radius, fillet_with};
 use crate::rebuild::{RebuildError, reaches_apex, rebuild, rebuild_some};
 use crate::selfx::crossing;
 use crate::shell::offset;
+use forge_geom::blend::Pipe;
+use forge_geom::varblend::VarBlend;
 use forge_geom::{CurveGeom, Surface, SurfaceGeom};
 use forge_math::{Frame, Point3, Vec3, tol};
 use forge_topo::{Body, EdgeId, FaceId, LoopId, Name, Problem, VertexId, check};
@@ -53,10 +55,21 @@ fn find(body: &Body, name: Name) -> R<FaceId> {
         .ok_or(DirectError::NoSuchFace { face: name })
 }
 
+/// A blend an earlier fillet made, as the history knows it: its face, the edge it rounded, the
+/// radius along that edge and the fillet's id. Direct edits roll such blends again when a face
+/// they roll on changes.
+#[derive(Clone, Debug, PartialEq)]
+pub struct Rounded {
+    pub face: Name,
+    pub edge: Name,
+    pub radius: Radius,
+    pub feature: u64,
+}
+
 /// Moves each face `distance` along its outward normal (negative goes inward): a plane shifts,
 /// a cylinder, cone, sphere or torus changes radius; the neighbours are re-intersected.
-pub fn offset_faces(body: &Body, faces: &[Name], distance: f64) -> R<Body> {
-    resurface(body, faces, true, |f| {
+pub fn offset_faces(body: &Body, faces: &[Name], distance: f64, rounded: &[Rounded]) -> R<Body> {
+    resurface(body, faces, Some(distance), rounded, |f| {
         let d = if f.same_sense { distance } else { -distance };
         let s = offset(&f.surface, d).ok_or(DirectError::Collapses { face: f.name })?;
         Ok((s, f.same_sense))
@@ -65,14 +78,14 @@ pub fn offset_faces(body: &Body, faces: &[Name], distance: f64) -> R<Body> {
 
 /// Moves the faces by the rigid motion `motion` (local coordinates to world), re-intersecting
 /// their neighbours.
-pub fn move_faces(body: &Body, faces: &[Name], motion: &Frame) -> R<Body> {
-    resurface(body, faces, false, |f| {
+pub fn move_faces(body: &Body, faces: &[Name], motion: &Frame, rounded: &[Rounded]) -> R<Body> {
+    resurface(body, faces, None, rounded, |f| {
         Ok((f.surface.transformed(motion), f.same_sense))
     })
 }
 
 /// Puts face `face` on `surface`, facing the way it did, re-intersecting its neighbours.
-pub fn replace_face(body: &Body, face: Name, surface: &Surface) -> R<Body> {
+pub fn replace_face(body: &Body, face: Name, surface: &Surface, rounded: &[Rounded]) -> R<Body> {
     let b = body.compact();
     let f = b.face(find(&b, face)?);
     // the side is judged at a point of the face: one of its edges' middles
@@ -89,17 +102,19 @@ pub fn replace_face(body: &Body, face: Name, surface: &Surface) -> R<Body> {
         return Err(DirectError::Sideways { face });
     }
     let sense = f.same_sense == (dot > 0.0);
-    resurface(&b, &[face], false, |_| Ok((surface.clone(), sense)))
+    resurface(&b, &[face], None, rounded, |_| Ok((surface.clone(), sense)))
 }
 
-/// Gives each named face the surface (and sense) `new` makes for it, and rebuilds. Blends that
-/// roll on a changed face are taken off and rolled again on the new faces. A blend changed with
-/// both its faces (one offset of a whole pocket) is first just rebuilt; when `sized` (an offset)
-/// a changed blend rolls again with its new radius, else changing a blend itself only rebuilds.
+/// Gives each named face the surface (and sense) `new` makes for it, and rebuilds. Blends of
+/// the history that roll on a changed face are taken off and rolled again on the new faces. A
+/// blend changed with both its faces (one offset of a whole pocket) is first just rebuilt; by an
+/// offset (`sized`, its distance) a changed blend rolls again with its radius grown by it, else
+/// changing a blend itself only rebuilds.
 fn resurface(
     body: &Body,
     faces: &[Name],
-    sized: bool,
+    sized: Option<f64>,
+    rounded: &[Rounded],
     new: impl Fn(&forge_topo::Face) -> R<(Surface, bool)>,
 ) -> R<Body> {
     let base = body.compact();
@@ -107,7 +122,8 @@ fn resurface(
     for &name in faces {
         changed[find(&base, name)?.index()] = true;
     }
-    let (blends, corners) = blends_on(&base, &changed);
+    let (blends, corners) = blends_on(&base, &changed, rounded);
+    let sized_ = sized.is_some();
     let together = blends
         .iter()
         .all(|b| changed[b.face.index()] && b.rails.iter().all(|&f| changed[f.index()]));
@@ -120,13 +136,13 @@ fn resurface(
     if blends.is_empty() || together {
         match plain() {
             Ok(b) => return Ok(b),
-            Err(e) if blends.is_empty() || !sized => return Err(e),
+            Err(e) if blends.is_empty() || !sized_ => return Err(e),
             Err(_) => {}
         }
-    } else if !sized && blends.iter().any(|b| changed[b.face.index()]) {
+    } else if !sized_ && blends.iter().any(|b| changed[b.face.index()]) {
         return plain();
     }
-    reblend(&base, faces, &blends, &corners, &new)
+    reblend(&base, faces, sized, &blends, &corners, &new)
 }
 
 fn set_surfaces(
@@ -152,12 +168,33 @@ fn set_surfaces(
 }
 
 /// A rolling-ball blend found on a body: its face, its edges in loop order from a rail (where it
-/// touches a face it rolls on: the first and third), the faces across its rails, and its radius.
+/// touches a face it rolls on: the first and third), the faces across its rails, whether its
+/// balls lie inside the solid, and what the history knows of it (none for a blend a fillet ran
+/// on to along a tangent chain, which rolls again with the chain).
 struct Rolling {
     face: FaceId,
     edges: Vec<EdgeId>,
     rails: [FaceId; 2],
-    radius: f64,
+    convex: bool,
+    known: Option<Rounded>,
+}
+
+/// The radius of a blend surface's ball at (near) `p`.
+fn radius_at(s: &Surface, p: Point3) -> Option<f64> {
+    match s {
+        Surface::Cylinder(c) => Some(c.radius),
+        Surface::Torus(t) => Some(t.minor),
+        Surface::Procedural(q) => {
+            let any = q.as_any()?;
+            if let Some(pipe) = any.downcast_ref::<Pipe>() {
+                Some(pipe.radius)
+            } else {
+                let v = any.downcast_ref::<VarBlend>()?;
+                Some(v.radius(q.project(p).x))
+            }
+        }
+        _ => None,
+    }
 }
 
 /// The face across edge `e` from face `f`.
@@ -187,45 +224,46 @@ fn smooth(b: &Body, e: EdgeId) -> bool {
     outward(b, b.coedge_face(c0), p).dot(outward(b, b.coedge_face(c1), p)) >= 1.0 - 1e-9
 }
 
-/// Face `f` as a blend of constant radius: a strip whose two opposite edges are tangent to faces
-/// a ball of its radius touches both of, at each rail's middle.
-fn rolling(b: &Body, f: FaceId) -> Option<Rolling> {
+/// Face `f` as a blend: a strip whose two opposite edges are tangent to faces that a ball of
+/// its radius there touches both of, at each rail's middle.
+fn rolling(b: &Body, f: FaceId, known: Option<&Rounded>) -> Option<Rolling> {
     let face = b.face(f);
-    let radius = match &face.surface {
-        Surface::Cylinder(c) => c.radius,
-        Surface::Torus(t) => t.minor,
-        _ => return None,
-    };
     let [l] = face.loops[..] else { return None };
-    let es: Vec<EdgeId> = b.lp(l).coedges.iter().map(|&c| b.coedge(c).edge).collect();
+    let es: Vec<EdgeId> = b.lp(l).coedges().map(|c| b.coedge(c).edge).collect();
     if es.len() != 4 {
         return None;
     }
-    let near = |x: f64| (x - radius).abs() <= tol::LINEAR;
     (0..2).find_map(|k| {
         let (r0, r1) = (es[k], es[k + 2]);
         let rails = [across(b, r0, f)?, across(b, r1, f)?];
         if rails[0] == rails[1] || rails.contains(&f) || !smooth(b, r0) || !smooth(b, r1) {
             return None;
         }
-        // the ball's centre off each rail's middle, on the side both faces are a radius away
-        let rolls = [r0, r1].iter().all(|&r| {
+        // the ball's centre off each rail's middle, a radius inside both faces or outside both
+        let side = |r: EdgeId| -> Option<f64> {
             let edge = b.edge(r);
             let p = edge.curve.eval(edge.range.mid());
+            let radius = radius_at(&face.surface, p)?;
             let n = outward(b, f, p);
-            [1.0, -1.0].iter().any(|s| {
+            [1.0, -1.0].into_iter().find(|s| {
                 let c = p + n * (s * radius);
-                rails.iter().all(|&g| near(b.face(g).surface.implicit(c).abs()))
+                rails.iter().all(|&g| {
+                    let g = b.face(g);
+                    let out = if g.same_sense { 1.0 } else { -1.0 } * g.surface.implicit(c);
+                    (out - s * radius).abs() <= tol::LINEAR
+                })
             })
-        });
-        rolls.then(|| {
+        };
+        let s = side(r0)?;
+        (side(r1)? == s).then(|| {
             let mut edges = es.clone();
             edges.rotate_left(k);
             Rolling {
                 face: f,
                 edges,
                 rails,
-                radius,
+                convex: s < 0.0,
+                known: known.cloned(),
             }
         })
     })
@@ -234,18 +272,22 @@ fn rolling(b: &Body, f: FaceId) -> Option<Rolling> {
 /// The blends rolling on a changed face (or changed themselves), with every blend and corner
 /// patch they reach through their ends: what must come off together. Corners are faces tangent
 /// to everything round them, touching only those blends and the faces they roll on.
-fn blends_on(b: &Body, changed: &[bool]) -> (Vec<Rolling>, Vec<FaceId>) {
+fn blends_on(b: &Body, changed: &[bool], rounded: &[Rounded]) -> (Vec<Rolling>, Vec<FaceId>) {
+    if rounded.is_empty() {
+        return (Vec::new(), Vec::new());
+    }
     let mut found: Vec<Option<Rolling>> = b.faces.iter().map(|_| None).collect();
     for f in b.face_ids() {
-        found[f.index()] = rolling(b, f);
+        let name = b.face(f).name;
+        found[f.index()] = rolling(b, f, rounded.iter().find(|r| r.face == name));
     }
     let mut taken = vec![false; b.faces.len()];
     let mut queue: Vec<FaceId> = b
         .face_ids()
         .filter(|&f| {
-            found[f.index()]
-                .as_ref()
-                .is_some_and(|r| changed[f.index()] || r.rails.iter().any(|g| changed[g.index()]))
+            found[f.index()].as_ref().is_some_and(|r| {
+                r.known.is_some() && (changed[f.index()] || r.rails.iter().any(|g| changed[g.index()]))
+            })
         })
         .collect();
     let mut corners = Vec::new();
@@ -253,7 +295,7 @@ fn blends_on(b: &Body, changed: &[bool]) -> (Vec<Rolling>, Vec<FaceId>) {
         b.face(f)
             .loops
             .iter()
-            .flat_map(|&l| b.lp(l).coedges.iter().map(|&c| b.coedge(c).edge))
+            .flat_map(|&l| b.lp(l).coedges().map(|c| b.coedge(c).edge))
             .collect()
     };
     while let Some(f) = queue.pop() {
@@ -300,11 +342,13 @@ fn blends_on(b: &Body, changed: &[bool]) -> (Vec<Rolling>, Vec<FaceId>) {
 }
 
 /// Takes the blends and their corners off (each strip back to the edge it rounded, each corner
-/// to its vertex), changes the faces, and rolls the blends again with their radii (a changed
-/// blend's new one), carrying the old names over to what takes their place.
+/// to its vertex), changes the faces, and rolls the blends again as their fillets did, an offset
+/// one's radius grown by the offset: the edge gets its old name back, its radius law runs the
+/// way it ran, and the old names carry over to what takes the place of the rest.
 fn reblend(
     base: &Body,
     faces: &[Name],
+    sized: Option<f64>,
     blends: &[Rolling],
     corners: &[FaceId],
     new: &impl Fn(&forge_topo::Face) -> R<(Surface, bool)>,
@@ -321,7 +365,7 @@ fn reblend(
             .face(c)
             .loops
             .iter()
-            .flat_map(|&l| base.lp(l).coedges.iter().map(|&co| base.coedge(co).edge))
+            .flat_map(|&l| base.lp(l).coedges().map(|co| base.coedge(co).edge))
             .collect();
         strips.push((c, es, true));
     }
@@ -331,28 +375,84 @@ fn reblend(
     } = heal(base, &gone, &[], &strips)?;
     let changed = set_surfaces(&mut sharp, faces, new)?;
     rebuild(&mut sharp, &changed).map_err(DirectError::Rebuild)?;
-    let sharp = valid(sharp, &changed)?;
+    let mut sharp = valid(sharp, &changed)?;
     let mut picks = Vec::new();
+    let mut opts = FilletOptions::default();
+    let mut ids: Vec<u64> = Vec::new();
     for (r, &e) in blends.iter().zip(&joined) {
+        let Some(k) = &r.known else { continue };
         let face = base.face(r.face);
-        let radius = if faces.contains(&face.name) {
-            match new(face)?.0 {
-                Surface::Cylinder(c) => c.radius,
-                Surface::Torus(t) => t.minor,
-                _ => r.radius,
+        let grow = match sized {
+            Some(d) if faces.contains(&face.name) => {
+                if r.convex {
+                    d
+                } else {
+                    -d
+                }
             }
-        } else {
-            r.radius
+            _ => 0.0,
         };
-        picks.push(FilletEdge {
-            edge: e,
-            radius: radius.into(),
-        });
+        let rail = base.edge(r.edges[0]);
+        let radius = match &k.radius {
+            // as the blend stands: an earlier offset may have changed it
+            Radius::Constant(a) => Radius::Constant(
+                radius_at(&face.surface, rail.curve.eval(rail.range.mid())).unwrap_or(*a) + grow,
+            ),
+            Radius::Linear(a, b) => Radius::Linear(a + grow, b + grow),
+            Radius::Points(p) => Radius::Points(p.iter().map(|&(f, a)| (f, a + grow)).collect()),
+        };
+        if radius.constant().is_none() {
+            // the law from the end where the old blend's radius was its start's
+            let along = |f: f64| {
+                radius_at(
+                    &face.surface,
+                    rail.curve.eval(rail.range.lo + rail.range.width() * f),
+                )
+            };
+            let miss = |back: bool| -> f64 {
+                (0..=4)
+                    .map(|i| i as f64 / 4.0)
+                    .filter_map(|f| {
+                        let g = if back { 1.0 - f } else { f };
+                        Some((along(f)? - (law_at(&radius, g) - grow)).abs())
+                    })
+                    .sum()
+            };
+            let forward = miss(false) <= miss(true);
+            let edge = sharp.edge(e);
+            opts.starts.push((e, if forward { edge.start } else { edge.end }));
+        }
+        if sharp.edge_by_name(k.edge).is_none() {
+            sharp.edges[e.index()].name = k.edge;
+        }
+        ids.push(k.feature);
+        picks.push(FilletEdge { edge: e, radius });
     }
-    let mut out =
-        fillet_with(&sharp, &picks, &FilletOptions::default(), u64::MAX).map_err(DirectError::Reblend)?;
+    ids.sort();
+    ids.dedup();
+    let id = match ids[..] {
+        [id] => id,
+        _ => u64::MAX,
+    };
+    let mut out = fillet_with(&sharp, &picks, &opts, id).map_err(DirectError::Reblend)?;
     carry_names(base, &gone, &sharp, &mut out);
     Ok(out)
+}
+
+/// A radius law's value a fraction `f` along its edge, straight between its picks: enough to
+/// tell which way a law runs.
+fn law_at(r: &Radius, f: f64) -> f64 {
+    let p = match r {
+        Radius::Constant(a) => return *a,
+        Radius::Linear(a, b) => vec![(0.0, *a), (1.0, *b)],
+        Radius::Points(p) => p.clone(),
+    };
+    let i = p.iter().position(|q| q.0 >= f).unwrap_or(p.len() - 1);
+    if i == 0 || p[i].0 <= f {
+        return p[i].1;
+    }
+    let (a, b) = (p[i - 1], p[i]);
+    a.1 + (b.1 - a.1) * (f - a.0) / (b.0 - a.0)
 }
 
 /// Gives what the blends made again the names of what they replace: a face the name of the old
@@ -387,8 +487,8 @@ fn carry_names(base: &Body, gone: &[bool], sharp: &Body, out: &mut Body) {
         b.face(f)
             .loops
             .iter()
-            .flat_map(|&l| b.lp(l).coedges.iter())
-            .filter_map(|&c| across(b, b.coedge(c).edge, f))
+            .flat_map(|&l| b.lp(l).coedges())
+            .filter_map(|c| across(b, b.coedge(c).edge, f))
             .map(|g| b.face(g).name)
             .collect()
     };
@@ -748,19 +848,25 @@ mod tests {
     fn offset_and_move() {
         let b = plate(vec![Profile::rectangle(Point2::ORIGIN, 20.0, 10.0, 0)], 8.0);
         let top = face("end");
-        let o = offset_faces(&b, &[top], 2.0).unwrap();
+        let o = offset_faces(&b, &[top], 2.0, &[]).unwrap();
         assert!((bbox(&o).z.hi - 10.0).abs() < 1e-12);
-        let o = offset_faces(&b, &[face("side").with(1)], -3.0).unwrap();
+        let o = offset_faces(&b, &[face("side").with(1)], -3.0, &[]).unwrap();
         assert!((bbox(&o).x.hi - 17.0).abs() < 1e-12, "{:?}", bbox(&o));
-        let m = move_faces(&b, &[top], &Frame::WORLD.with_origin(Point3::new(0.0, 0.0, -2.0))).unwrap();
+        let m = move_faces(
+            &b,
+            &[top],
+            &Frame::WORLD.with_origin(Point3::new(0.0, 0.0, -2.0)),
+            &[],
+        )
+        .unwrap();
         assert!((bbox(&m).z.hi - 6.0).abs() < 1e-12);
         // tilt the top about the y axis through its middle
         let axis = Frame::from_z(Point3::new(10.0, 5.0, 8.0), Vec3::Y.normalize().unwrap());
         let tilt = axis.rotated_about_z(0.1).compose(&axis.inverse());
-        let m = move_faces(&b, &[top], &tilt).unwrap();
+        let m = move_faces(&b, &[top], &tilt, &[]).unwrap();
         assert!((bbox(&m).z.hi - (8.0 + 10.0 * dmath::sin(0.1) / dmath::cos(0.1))).abs() < 1e-9);
         // through the bottom: refused
-        assert!(offset_faces(&b, &[top], -9.0).is_err());
+        assert!(offset_faces(&b, &[top], -9.0, &[]).is_err());
     }
 
     #[test]
@@ -770,7 +876,13 @@ mod tests {
             Point3::new(0.0, 0.0, 10.0),
             Vec3::new(-0.2, 0.0, -1.0).normalize().unwrap(),
         );
-        let r = replace_face(&b, face("end"), &Surface::Plane(forge_geom::Plane::new(slant))).unwrap();
+        let r = replace_face(
+            &b,
+            face("end"),
+            &Surface::Plane(forge_geom::Plane::new(slant)),
+            &[],
+        )
+        .unwrap();
         assert!(
             (bbox(&r).z.hi - 10.0).abs() < 1e-9 && (bbox(&r).x.hi - 20.0).abs() < 1e-9,
             "{:?}",
@@ -781,49 +893,108 @@ mod tests {
             replace_face(
                 &b,
                 face("side").with(0),
-                &Surface::Plane(forge_geom::Plane::new(side))
+                &Surface::Plane(forge_geom::Plane::new(side)),
+                &[]
             )
             .is_err()
         );
+    }
+
+    /// The plate's top edges, the first `n` of them, rounded by `radius` as fillet 2.
+    fn rounded_top(b: &Body, n: u64, radius: crate::Radius) -> (Body, Vec<Rounded>) {
+        let top = face("end");
+        let mut picks = Vec::new();
+        let mut rounded = Vec::new();
+        for k in 0..n {
+            let edge = Name::NONE.with_set(&mut [top, face("side").with(k)]);
+            picks.push(crate::FilletEdge {
+                edge: b.edge_by_name(edge).unwrap(),
+                radius: radius.clone(),
+            });
+            rounded.push(Rounded {
+                face: Name::feature(2).with_str("fillet").with_name(edge),
+                edge,
+                radius: radius.clone(),
+                feature: 2,
+            });
+        }
+        (crate::fillet(b, &picks, 2).unwrap(), rounded)
+    }
+
+    fn names(b: &Body) -> Vec<Name> {
+        let mut n: Vec<Name> = b.face_ids().map(|f| b.face(f).name).collect();
+        n.extend(b.edge_ids().map(|e| b.edge(e).name));
+        n.extend(b.vertices.iter().map(|v| v.name));
+        n.sort();
+        n
+    }
+
+    /// The same points, to a hair.
+    fn same_shape(a: &Body, b: &Body) {
+        assert_eq!(a.vertices.len(), b.vertices.len());
+        for v in &a.vertices {
+            let d = b
+                .vertices
+                .iter()
+                .map(|w| w.point.distance(v.point))
+                .fold(f64::INFINITY, f64::min);
+            assert!(d < 1e-6, "{:?} off by {d}", v.point);
+        }
     }
 
     #[test]
     fn blends_roll_again() {
         let b = plate(vec![Profile::rectangle(Point2::ORIGIN, 20.0, 10.0, 0)], 8.0);
         let top = face("end");
-        let edges: Vec<crate::FilletEdge> = (0..4)
-            .map(|k| crate::FilletEdge {
-                edge: b
-                    .edge_by_name(Name::NONE.with_set(vec![top, face("side").with(k)]))
-                    .unwrap(),
-                radius: 1.0.into(),
-            })
-            .collect();
-        let f = crate::fillet(&b, &edges, 2).unwrap();
-        let names = |b: &Body| -> Vec<Name> {
-            let mut n: Vec<Name> = b.face_ids().map(|f| b.face(f).name).collect();
-            n.extend(b.edge_ids().map(|e| b.edge(e).name));
-            n.extend(b.vertices.iter().map(|v| v.name));
-            n.sort();
-            n
-        };
+        let (f, rounded) = rounded_top(&b, 4, 1.0.into());
         // the top up 2 and a side out 1: its round and its corners roll again, keeping their names
-        let m = move_faces(&f, &[top], &Frame::WORLD.with_origin(Point3::new(0.0, 0.0, 2.0))).unwrap();
+        let up = Frame::WORLD.with_origin(Point3::new(0.0, 0.0, 2.0));
+        let m = move_faces(&f, &[top], &up, &rounded).unwrap();
         assert!((bbox(&m).z.hi - 10.0).abs() < 1e-12);
-        let o = offset_faces(&m, &[face("side").with(1)], 1.0).unwrap();
+        let o = offset_faces(&m, &[face("side").with(1)], 1.0, &rounded).unwrap();
         assert!((bbox(&o).x.hi - 21.0).abs() < 1e-12, "{:?}", bbox(&o));
         assert_eq!(names(&o), names(&f));
-        // the rounds offset alone, inward: they roll again with the smaller radius
-        let rounds: Vec<Name> = o
+        // as if the faces had moved before the fillet
+        let before = offset_faces(
+            &move_faces(&b, &[top], &up, &[]).unwrap(),
+            &[face("side").with(1)],
+            1.0,
+            &[],
+        )
+        .unwrap();
+        same_shape(&o, &rounded_top(&before, 4, 1.0.into()).0);
+        // the rounds offset alone, inward: they roll again with the smaller radius, and a later
+        // edit keeps it
+        let rounds: Vec<Name> = rounded.iter().map(|r| r.face).collect();
+        let r = offset_faces(&o, &rounds, -0.5, &rounded).unwrap();
+        let r = move_faces(&r, &[top], &up, &rounded).unwrap();
+        let radii: Vec<f64> = r
             .face_ids()
-            .map(|g| o.face(g).name)
-            .filter(|&n| matches!(o.face(o.face_by_name(n).unwrap()).surface, Surface::Cylinder(_)))
+            .filter_map(|g| match &r.face(g).surface {
+                Surface::Cylinder(c) => Some(c.radius),
+                _ => None,
+            })
             .collect();
-        let r = offset_faces(&o, &rounds, -0.5).unwrap();
-        assert!(r.face_ids().all(|g| match &r.face(g).surface {
-            Surface::Cylinder(c) => c.radius == 0.5,
-            _ => true,
-        }));
+        assert_eq!(radii, vec![0.5; 4]);
+        // without the history they are not known, and the move cannot keep them
+        assert!(move_faces(&f, &[top], &up, &[]).is_err());
+    }
+
+    #[test]
+    fn variable_blends_roll_again() {
+        let b = plate(vec![Profile::rectangle(Point2::ORIGIN, 20.0, 10.0, 0)], 8.0);
+        let top = face("end");
+        let up = Frame::WORLD.with_origin(Point3::new(0.0, 0.0, 1.5));
+        for law in [
+            crate::Radius::Linear(0.8, 2.0),
+            crate::Radius::Points(vec![(0.0, 1.0), (0.3, 2.0), (1.0, 1.2)]),
+        ] {
+            let (f, rounded) = rounded_top(&b, 1, law.clone());
+            let m = move_faces(&f, &[top], &up, &rounded).unwrap();
+            assert_eq!(names(&m), names(&f));
+            let before = move_faces(&b, &[top], &up, &[]).unwrap();
+            same_shape(&m, &rounded_top(&before, 1, law).0);
+        }
     }
 
     #[test]

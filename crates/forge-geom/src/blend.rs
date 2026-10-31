@@ -987,6 +987,9 @@ impl Procedural for Pipe {
     fn u_kinks(&self, u: Interval) -> Vec<f64> {
         self.spine.kinks(u)
     }
+    fn as_any(&self) -> Option<&dyn std::any::Any> {
+        Some(self)
+    }
 }
 
 #[cfg(test)]

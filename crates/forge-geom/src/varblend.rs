@@ -2573,6 +2573,9 @@ impl Procedural for VarBlend {
             .0
             .min(if k > 0.0 { 1.0 / k } else { f64::INFINITY })
     }
+    fn as_any(&self) -> Option<&dyn std::any::Any> {
+        Some(self)
+    }
 }
 
 /// A curve the ball carries along s: a spring curve where it touches a surface, or its centre.

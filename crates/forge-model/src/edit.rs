@@ -2,10 +2,12 @@
 //! direct edits (delete, replace, move).
 
 use crate::rib::{Rib, RibError, rib};
-use crate::{Combine, History, RegenError, Target, op_of};
+use crate::{Combine, Feature, History, RegenError, Target, op_of};
 use forge_bool::{BoolError, boolean};
 use forge_math::{Frame, Point3, Vec3};
-use forge_ops::{DirectError, ThickenError, delete_faces, move_faces, offset_faces, replace_face, thicken};
+use forge_ops::{
+    DirectError, Rounded, ThickenError, delete_faces, move_faces, offset_faces, replace_face, thicken,
+};
 use forge_topo::{Body, Name};
 
 #[derive(Clone, Debug, PartialEq)]
@@ -106,7 +108,9 @@ pub(crate) fn apply(features: History<'_>, i: usize, edit: &Edit, body: &Body) -
     }
     match edit {
         Edit::Rib(r) => rib(body, r, id).map_err(|e| err(EditError::Rib(e))),
-        Edit::Offset { faces, distance } => offset_faces(body, faces, *distance).map_err(direct),
+        Edit::Offset { faces, distance } => {
+            offset_faces(body, faces, *distance, &rounded(features, i)).map_err(direct)
+        }
         Edit::Thicken {
             faces,
             thickness,
@@ -133,11 +137,30 @@ pub(crate) fn apply(features: History<'_>, i: usize, edit: &Edit, body: &Body) -
         Edit::Delete { faces } => delete_faces(body, faces).map_err(direct),
         Edit::Replace { face, with } => {
             let s = crate::extent::surface(features, i, with)?;
-            replace_face(body, *face, &s).map_err(direct)
+            replace_face(body, *face, &s, &rounded(features, i)).map_err(direct)
         }
         Edit::Move { faces, motion } => {
             let m = motion.frame().ok_or(err(EditError::BadSize))?;
-            move_faces(body, faces, &m).map_err(direct)
+            move_faces(body, faces, &m, &rounded(features, i)).map_err(direct)
         }
     }
+}
+
+/// The blends the fillets before feature `i` made, by the names they gave their faces.
+fn rounded(features: History<'_>, i: usize) -> Vec<Rounded> {
+    let mut out = Vec::new();
+    for (j, f) in features[..i].iter().enumerate() {
+        if let Feature::Fillet { edges, .. } = f {
+            let feature = features.id(j);
+            for (edge, radius) in edges {
+                out.push(Rounded {
+                    face: Name::feature(feature).with_str("fillet").with_name(*edge),
+                    edge: *edge,
+                    radius: radius.clone(),
+                    feature,
+                });
+            }
+        }
+    }
+    out
 }
