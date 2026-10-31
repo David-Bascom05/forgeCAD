@@ -23,7 +23,8 @@ def read_dir(d):
     out = []
     for f in sorted(os.listdir(d)):
         if f.endswith(".fc"):
-            out.append((f[:-3], open(os.path.join(d, f)).read()))
+            with open(os.path.join(d, f)) as h:
+                out.append((f[:-3], h.read()))
     return out
 
 

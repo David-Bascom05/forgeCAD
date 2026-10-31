@@ -1,4 +1,5 @@
 """Part generators. Each yields (name, source). Nothing here reads downloaded data."""
+import ast
 import math
 import os
 import random
@@ -11,28 +12,84 @@ BENCH = os.path.join(ROOT, "tools/bench-parts")
 def bench():
     for f in sorted(os.listdir(BENCH)):
         if f.endswith(".fc"):
-            yield f[:-3], open(os.path.join(BENCH, f)).read()
+            with open(os.path.join(BENCH, f)) as h:
+                yield f[:-3], h.read()
 
 
 # -- parameter sweeps of real parts: the edits that break CAD ---------------------------------
 
 SCALES = (0.25, 0.5, 0.75, 0.9, 0.99, 1.01, 1.1, 1.25, 1.5, 2.0, 3.0)
 NUDGES = (1e-3, 1e-6, 1e-8)
-FNS = {k: getattr(math, k) for k in ("sqrt", "sin", "cos", "tan", "asin", "acos", "atan", "atan2")}
-FNS.update(min=min, max=max, abs=abs, pi=math.pi)
+# as a part file reads them: angles in degrees
+FNS = {
+    "sqrt": math.sqrt,
+    "abs": abs,
+    "min": min,
+    "max": max,
+    "sin": lambda a: math.sin(math.radians(a)),
+    "cos": lambda a: math.cos(math.radians(a)),
+    "tan": lambda a: math.tan(math.radians(a)),
+    "asin": lambda x: math.degrees(math.asin(x)),
+    "acos": lambda x: math.degrees(math.acos(x)),
+    "atan": lambda x: math.degrees(math.atan(x)),
+    "atan2": lambda y, x: math.degrees(math.atan2(y, x)),
+}
+BINOPS = {ast.Add: lambda a, b: a + b, ast.Sub: lambda a, b: a - b, ast.Mult: lambda a, b: a * b, ast.Div: lambda a, b: a / b}
+MAX_EXPR, MAX_POWER = 500, 64.0
+
+
+def expr_value(text, env):
+    """A part file's EXPR, read as data: numbers, + - * / ^, names in env, calls to FNS. Anything else, a
+    power beyond MAX_POWER or a text longer than MAX_EXPR raises ValueError. Every value is a float, so
+    nothing grows without bound."""
+    if len(text) > MAX_EXPR:
+        raise ValueError("expression too long")
+    try:
+        tree = ast.parse(text.replace("^", "**"), mode="eval")
+    except (SyntaxError, RecursionError, MemoryError) as e:
+        raise ValueError(f"cannot read {text!r}") from e
+
+    def walk(n):
+        if isinstance(n, ast.Constant) and type(n.value) in (int, float):
+            return float(n.value)
+        if isinstance(n, ast.Name) and n.id in env:
+            return float(env[n.id])
+        if isinstance(n, ast.UnaryOp) and isinstance(n.op, (ast.USub, ast.UAdd)):
+            v = walk(n.operand)
+            return -v if isinstance(n.op, ast.USub) else v
+        if isinstance(n, ast.BinOp) and type(n.op) in BINOPS:
+            return float(BINOPS[type(n.op)](walk(n.left), walk(n.right)))
+        if isinstance(n, ast.BinOp) and isinstance(n.op, ast.Pow):
+            base, power = walk(n.left), walk(n.right)
+            if abs(power) > MAX_POWER:
+                raise ValueError("power out of range")
+            return float(base**power)
+        if isinstance(n, ast.Call) and isinstance(n.func, ast.Name) and n.func.id in FNS and not n.keywords:
+            return float(FNS[n.func.id](*[walk(a) for a in n.args]))
+        raise ValueError(f"not allowed in an expression: {type(n).__name__}")
+
+    try:
+        v = walk(tree.body)
+    except (ArithmeticError, TypeError, RecursionError) as e:
+        raise ValueError(f"cannot evaluate {text!r}") from e
+    if isinstance(v, complex) or not math.isfinite(v):
+        raise ValueError(f"not a finite number: {text!r}")
+    return v
+
+
 PARAM = re.compile(r"^(\w+)\s*=\s*([^#]+?)(?:\s+(mm|deg))?\s*(?:#.*)?$")
 
 
 def params(src):
     """Each `NAME = EXPR` line's index, name and value."""
-    env, out = dict(FNS), []
+    env, out = {"pi": math.pi}, []
     for i, l in enumerate(src.splitlines()):
         m = PARAM.match(l.strip())
         if not m:
             continue
         try:
-            v = eval(m.group(2).replace("^", "**"), {"__builtins__": {}}, env)
-        except Exception:
+            v = expr_value(m.group(2), env)
+        except ValueError:
             continue
         env[m.group(1)] = v
         out.append((i, m.group(1), float(v), m.group(3) or ""))
