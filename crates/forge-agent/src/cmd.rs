@@ -1,0 +1,577 @@
+//! The commands, each answering in a few lines of text and in JSON, over a session that keeps
+//! every file's build.
+
+use crate::json::Json;
+use crate::model::Model;
+use crate::select::{self, Ent};
+use crate::{measure, render, short};
+use forge_topo::{Body, check};
+use std::collections::HashMap;
+
+#[derive(Clone, Debug, Default)]
+pub struct Args {
+    pub file: String,
+    /// The selector, the entities to measure, the view, or the other file.
+    pub words: Vec<String>,
+    /// Ask about the part after this feature, not the finished one.
+    pub at: Option<String>,
+    pub labels: Option<String>,
+    pub px: Option<usize>,
+}
+
+pub struct Reply {
+    pub ok: bool,
+    pub text: String,
+    pub json: Json,
+    pub png: Option<Vec<u8>>,
+}
+
+fn fail(msg: impl Into<String>) -> Reply {
+    let msg = msg.into();
+    Reply {
+        ok: false,
+        text: format!("error: {msg}"),
+        json: Json::obj(vec![("ok", false.into()), ("error", msg.into())]),
+        png: None,
+    }
+}
+
+pub const COMMANDS: [&str; 6] = ["build", "query", "measure", "render", "check", "diff"];
+
+#[derive(Default)]
+pub struct Session {
+    models: HashMap<String, Model>,
+}
+
+impl Session {
+    /// The file's model, brought up to date with what is on disk.
+    pub fn model(&mut self, file: &str) -> Result<&mut Model, String> {
+        let src = std::fs::read_to_string(file).map_err(|e| format!("{file}: {e}"))?;
+        let m = self.models.entry(file.to_string()).or_default();
+        m.update(&src);
+        Ok(m)
+    }
+
+    pub fn run(&mut self, cmd: &str, a: &Args) -> Reply {
+        let r = match cmd {
+            "build" => self.build(a),
+            "query" => self.query(a),
+            "measure" => self.measure(a),
+            "render" => self.render(a),
+            "check" => self.check(a),
+            "diff" => self.diff(a),
+            _ => Err(format!(
+                "unknown command '{cmd}' (one of: {})",
+                COMMANDS.join(" ")
+            )),
+        };
+        r.unwrap_or_else(fail)
+    }
+
+    fn build(&mut self, a: &Args) -> Result<Reply, String> {
+        let m = self.model(&a.file)?;
+        let n = m.lines.len();
+        let mut text = String::new();
+        let mut j: Vec<(&str, Json)> = vec![("lines", n.into()), ("built", m.built().into())];
+        let ok = m.error.is_none();
+        match m.error.clone() {
+            None => text.push_str(&format!("ok {n} lines {:.2}ms", m.ms)),
+            Some(f) => {
+                let line = &m.lines[f.at];
+                text.push_str(&format!(
+                    "error line {}: {}\n  {}\nhint: {}",
+                    line.no,
+                    f.msg,
+                    line.toks.join(" "),
+                    f.hint
+                ));
+                j.push((
+                    "error",
+                    Json::obj(vec![
+                        ("line", line.no.into()),
+                        ("text", line.toks.join(" ").into()),
+                        ("msg", f.msg.into()),
+                        ("hint", f.hint.into()),
+                    ]),
+                ));
+                if m.built() > 0 {
+                    text.push_str(&format!("\nbuilt to line {}:", m.lines[m.built() - 1].no));
+                }
+            }
+        }
+        j.push(("ms", m.ms.into()));
+        j.push(("rebuilt", m.rebuilt.into()));
+        if m.body().is_some() {
+            let (volume, area, unmeshed) = m.volume_area();
+            let body = m.body().expect("built");
+            let bb = body
+                .face_ids()
+                .fold(forge_math::Box3::EMPTY, |b, f| b.hull(&body.face_box(f)));
+            let bbox = [bb.x.lo, bb.y.lo, bb.z.lo, bb.x.hi, bb.y.hi, bb.z.hi];
+            let (f, e, v) = counts(body);
+            text.push_str(&format!(
+                "\nvolume {} area {} bbox {}\nfaces {f} edges {e} verts {v}",
+                short(volume),
+                short(area),
+                bbox.map(short).join(" ")
+            ));
+            if unmeshed > 0 {
+                text.push_str(&format!(
+                    " ({unmeshed} faces would not mesh: volume, area approximate)"
+                ));
+            }
+            j.extend([
+                ("volume", volume.into()),
+                ("area", area.into()),
+                ("bbox", Json::Arr(bbox.map(Json::Num).to_vec())),
+                ("faces", f.into()),
+                ("edges", e.into()),
+                ("verts", v.into()),
+            ]);
+        }
+        j.insert(0, ("ok", ok.into()));
+        Ok(Reply {
+            ok,
+            text,
+            json: Json::obj(j),
+            png: None,
+        })
+    }
+
+    /// The part after `--at`'s line, or as far as it built.
+    fn upto(m: &Model, a: &Args) -> Result<Option<usize>, String> {
+        a.at.as_deref()
+            .map(|at| m.feat(m.built(), at).map(|i| i + 1))
+            .transpose()
+    }
+
+    fn query(&mut self, a: &Args) -> Result<Reply, String> {
+        let m = self.model(&a.file)?;
+        let sel = a.words.join(" ");
+        let (body, ents) = m.select(&sel, Self::upto(m, a)?)?;
+        let handles = select::handles(body);
+        let mut text = format!("{} found", ents.len());
+        let mut list = Vec::new();
+        for (k, &e) in ents.iter().enumerate() {
+            let h = &handles[&select::name(body, e)];
+            let d = select::describe(body, e);
+            if k < 25 {
+                text.push_str(&format!("\n{h} {d}"));
+            }
+            list.push(Json::obj(vec![("h", h.as_str().into()), ("d", d.into())]));
+        }
+        if ents.len() > 25 {
+            text.push_str(&format!("\n... {} more; narrow the selector", ents.len() - 25));
+        }
+        Ok(Reply {
+            ok: true,
+            text,
+            json: Json::obj(vec![("ok", true.into()), ("found", Json::Arr(list))]),
+            png: None,
+        })
+    }
+
+    fn measure(&mut self, a: &Args) -> Result<Reply, String> {
+        let m = self.model(&a.file)?;
+        let words: Vec<&str> = a.words.iter().map(|s| s.as_str()).collect();
+        let ents = match words[..] {
+            ["mass"] | ["wall"] => vec![],
+            _ => words
+                .iter()
+                .map(|w| one(m, w))
+                .collect::<Result<Vec<Ent>, String>>()?,
+        };
+        let (body, mesh) = m.ready()?;
+        let pairs: Vec<(&str, f64)> = match words[..] {
+            ["mass"] => {
+                let ms = measure::mass(mesh);
+                vec![
+                    ("volume", ms.volume),
+                    ("area", ms.area),
+                    ("cx", ms.centroid.x),
+                    ("cy", ms.centroid.y),
+                    ("cz", ms.centroid.z),
+                    ("ixx", ms.inertia[0]),
+                    ("iyy", ms.inertia[1]),
+                    ("izz", ms.inertia[2]),
+                ]
+            }
+            ["wall"] => match measure::wall(mesh) {
+                Some((t, p)) => vec![("wall", t), ("x", p.x), ("y", p.y), ("z", p.z)],
+                None => return Err("no wall found".into()),
+            },
+            [_] => measure::one(body, mesh, ents[0]),
+            [_, _] => measure::between(body, mesh, ents[0], ents[1]),
+            _ => return Err("measure takes mass, wall, or one or two @handles / (selectors)".into()),
+        };
+        let text = pairs
+            .iter()
+            .map(|(k, v)| format!("{k} {}", short(*v)))
+            .collect::<Vec<_>>()
+            .join(" ");
+        let mut j = vec![("ok", true.into())];
+        j.extend(pairs.iter().map(|&(k, v)| (k, Json::Num(v))));
+        Ok(Reply {
+            ok: true,
+            text,
+            json: Json::obj(j),
+            png: None,
+        })
+    }
+
+    fn render(&mut self, a: &Args) -> Result<Reply, String> {
+        let m = self.model(&a.file)?;
+        let view = a.words.first().map_or("iso", |s| s.as_str());
+        let mut labels = Vec::new();
+        if let Some(sel) = &a.labels {
+            let (body, ents) = m.select(sel, None)?;
+            let handles = select::handles(body);
+            for e in ents.into_iter().take(40) {
+                let h = handles[&select::name(body, e)]
+                    .trim_start_matches('@')
+                    .to_string();
+                labels.push((h, select::centre(body, e)));
+            }
+        }
+        let (body, mesh) = m.ready()?;
+        let png = render::render(body, mesh, view, a.px.unwrap_or(400), &labels)?;
+        let (w, h) = (
+            u32::from_be_bytes(png[16..20].try_into().expect("IHDR")),
+            u32::from_be_bytes(png[20..24].try_into().expect("IHDR")),
+        );
+        Ok(Reply {
+            ok: true,
+            text: format!(
+                "{view} {w}x{h} {} bytes{}",
+                png.len(),
+                if labels.is_empty() {
+                    ""
+                } else {
+                    ", labels are handles without @"
+                }
+            ),
+            json: Json::obj(vec![
+                ("ok", true.into()),
+                ("w", (w as usize).into()),
+                ("h", (h as usize).into()),
+                ("bytes", png.len().into()),
+            ]),
+            png: Some(png),
+        })
+    }
+
+    fn check(&mut self, a: &Args) -> Result<Reply, String> {
+        let m = self.model(&a.file)?;
+        let mut bad = Vec::new();
+        for i in 0..m.built() {
+            if let Some(b) = m.body_after(i + 1) {
+                let p = check(b);
+                if !p.is_empty() {
+                    bad.push((m.lines[i].no, p.len(), format!("{:?}", p[0])));
+                }
+            }
+        }
+        let ok = bad.is_empty() && m.error.is_none();
+        let mut text = if bad.is_empty() {
+            format!("valid after each of {} lines", m.built())
+        } else {
+            bad.iter()
+                .map(|(l, n, p)| format!("line {l}: {n} problems, first {p}"))
+                .collect::<Vec<_>>()
+                .join("\n")
+        };
+        if let Some(f) = &m.error {
+            text.push_str(&format!("\nline {} does not build: {}", m.lines[f.at].no, f.msg));
+        }
+        let list = bad
+            .into_iter()
+            .map(|(l, n, p)| {
+                Json::obj(vec![
+                    ("line", l.into()),
+                    ("problems", n.into()),
+                    ("first", p.into()),
+                ])
+            })
+            .collect();
+        Ok(Reply {
+            ok,
+            text,
+            json: Json::obj(vec![("ok", ok.into()), ("bad", Json::Arr(list))]),
+            png: None,
+        })
+    }
+
+    fn diff(&mut self, a: &Args) -> Result<Reply, String> {
+        let other = a.words.first().ok_or("diff A B: two files")?;
+        let mut side = |f: &str| -> Result<_, String> {
+            let m = self.model(f)?;
+            let built = m.body().is_some().then(|| m.volume_area().0);
+            Ok((m.lines.clone(), m.body().cloned(), built, m.error.is_some()))
+        };
+        let (la, ba, ma, ea) = side(&a.file)?;
+        let (lb, bb, mb, eb) = side(other)?;
+        let same = |x: &crate::text::Line, y: &crate::text::Line| x.label == y.label && x.toks == y.toks;
+        let first = la
+            .iter()
+            .zip(&lb)
+            .position(|(x, y)| !same(x, y))
+            .or((la.len() != lb.len()).then(|| la.len().min(lb.len())));
+        let mut text = match first {
+            None => "same features".to_string(),
+            Some(k) => format!(
+                "first change: line {} (a has {} lines, b {})",
+                lb.get(k).or(la.get(k)).map_or(0, |l| l.no),
+                la.len(),
+                lb.len()
+            ),
+        };
+        let mut j = vec![
+            ("ok", true.into()),
+            (
+                "first",
+                first.map_or(Json::Null, |k| lb.get(k).or(la.get(k)).map_or(0, |l| l.no).into()),
+            ),
+        ];
+        if ea || eb {
+            text.push_str(&format!("\n{} does not build", if ea { "a" } else { "b" }));
+        }
+        if let (Some(va), Some(vb), Some(ba), Some(bb)) = (ma, mb, ba, bb) {
+            let dv = short(vb - va);
+            text.push_str(&format!(
+                "\nvolume {} -> {} ({}{dv})",
+                short(va),
+                short(vb),
+                if vb >= va { "+" } else { "" }
+            ));
+            j.push(("dvolume", (vb - va).into()));
+            let names = |b: &Body| -> HashMap<forge_topo::Name, Ent> {
+                b.face_ids()
+                    .map(|f| (b.face(f).name, Ent::Face(f)))
+                    .chain(b.edge_ids().map(|e| (b.edge(e).name, Ent::Edge(e))))
+                    .collect()
+            };
+            let (na, nb) = (names(&ba), names(&bb));
+            let hb = select::handles(&bb);
+            let ha = select::handles(&ba);
+            let added: Vec<_> = nb.iter().filter(|x| !na.contains_key(x.0)).collect();
+            let gone: Vec<_> = na.iter().filter(|x| !nb.contains_key(x.0)).collect();
+            let faces =
+                |v: &[(&forge_topo::Name, &Ent)]| v.iter().filter(|x| matches!(x.1, Ent::Face(_))).count();
+            text.push_str(&format!(
+                "\nfaces +{} -{}, edges +{} -{}",
+                faces(&added),
+                faces(&gone),
+                added.len() - faces(&added),
+                gone.len() - faces(&gone)
+            ));
+            let mut shown = 0;
+            for (n, e) in &added {
+                if matches!(e, Ent::Face(_)) && shown < 5 {
+                    text.push_str(&format!("\n+ {} {}", hb[n], select::describe(&bb, **e)));
+                    shown += 1;
+                }
+            }
+            for (n, e) in &gone {
+                if matches!(e, Ent::Face(_)) && shown < 8 {
+                    text.push_str(&format!("\n- {} {}", ha[n], select::describe(&ba, **e)));
+                    shown += 1;
+                }
+            }
+            j.extend([
+                ("faces_added", faces(&added).into()),
+                ("faces_removed", faces(&gone).into()),
+            ]);
+        }
+        Ok(Reply {
+            ok: true,
+            text,
+            json: Json::obj(j),
+            png: None,
+        })
+    }
+}
+
+fn counts(b: &Body) -> (usize, usize, usize) {
+    (b.face_ids().count(), b.edge_ids().count(), b.vertices.len())
+}
+
+/// The one entity of the finished part a handle or selector names.
+fn one(m: &Model, r: &str) -> Result<Ent, String> {
+    if r.starts_with('@') {
+        return select::by_handle(m.body().ok_or("no part yet")?, r);
+    }
+    let (_, ents) = m.select(r, None)?;
+    match ents[..] {
+        [e] => Ok(e),
+        _ => Err(format!(
+            "'{r}' selects {} entities; measure needs one",
+            ents.len()
+        )),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    struct Dir(std::path::PathBuf);
+
+    impl Dir {
+        fn new(name: &str) -> Dir {
+            let d = std::env::temp_dir().join(format!("forge-agent-{}-{name}", std::process::id()));
+            std::fs::create_dir_all(&d).expect("temp dir");
+            Dir(d)
+        }
+        fn file(&self, name: &str, src: &str) -> String {
+            let p = self.0.join(name);
+            std::fs::write(&p, src).expect("write");
+            p.to_string_lossy().into_owned()
+        }
+    }
+
+    impl Drop for Dir {
+        fn drop(&mut self) {
+            let _ = std::fs::remove_dir_all(&self.0);
+        }
+    }
+
+    fn args(file: &str, words: &[&str]) -> Args {
+        Args {
+            file: file.into(),
+            words: words.iter().map(|w| w.to_string()).collect(),
+            ..Args::default()
+        }
+    }
+
+    const V1: &str = "base: extrude 8 rect -40 -25 80 50
+wall: extrude 8 xz at 0 25 0 rect -40 0 80 45
+hole 6.5 -xy at -28 -13 8 thru
+pattern hole1 lin 1 0 0 3 28
+hole 8 -y at 0 25 30 thru
+fillet 4 (edges between base wall concave)
+";
+
+    /// The loop an agent runs: write a bracket, build, fix an error, query an edge, fillet
+    /// it, render. Everything it writes and reads is counted.
+    #[test]
+    fn agent_loop_is_small() {
+        let dir = Dir::new("loop");
+        let f = dir.file("b.fc", V1);
+        let mut s = Session::default();
+        let mut cost: Vec<(&str, usize)> = vec![("write file", V1.len())];
+        let step = |what: &'static str,
+                    cmd: &str,
+                    words: &[&str],
+                    s: &mut Session,
+                    cost: &mut Vec<(&str, usize)>| {
+            let r = s.run(cmd, &args(&f, words));
+            let line = format!("forgecad {cmd} b.fc {}", words.join(" "));
+            cost.push((what, line.len() + r.text.len()));
+            eprintln!("$ {line}\n{}", r.text);
+            r
+        };
+        let r = step("build", "build", &[], &mut s, &mut cost);
+        assert!(!r.ok && r.text.starts_with("error line 5"), "{}", r.text);
+        let (old, new) = ("hole 8 -y at", "hole 8 xz at");
+        std::fs::write(&f, V1.replace(old, new)).expect("write");
+        let r = step("fix + build", "build", &[], &mut s, &mut cost);
+        cost.push(("edit", old.len() + new.len()));
+        assert!(r.ok, "{}", r.text);
+        let r = step(
+            "query",
+            "query",
+            &["edges convex top along +x"],
+            &mut s,
+            &mut cost,
+        );
+        let handles: Vec<String> = r
+            .text
+            .lines()
+            .skip(1)
+            .map(|l| l.split(' ').next().expect("handle").to_string())
+            .collect();
+        assert_eq!(handles.len(), 2, "{}", r.text);
+        let add = format!("fillet 2 {}\n", handles.join(" "));
+        std::fs::write(&f, V1.replace(old, new) + &add).expect("write");
+        cost.push(("add fillet", add.len()));
+        let r = step("build", "build", &[], &mut s, &mut cost);
+        assert!(r.ok, "{}", r.text);
+        let r = step("render", "render", &[], &mut s, &mut cost);
+        let (w, h) = (
+            r.json.get("w").and_then(Json::num).expect("w"),
+            r.json.get("h").and_then(Json::num).expect("h"),
+        );
+        // an image costs about (w h / 750) tokens
+        let image = (w * h / 750.0) as usize;
+        let chars: usize = cost.iter().map(|c| c.1).sum();
+        for (what, n) in &cost {
+            eprintln!("{what:>12} {n:>5} chars");
+        }
+        eprintln!(
+            "total {chars} chars, ~{} tokens + image ~{image} tokens",
+            chars / 4
+        );
+        assert!(chars < 1600, "{chars} chars");
+    }
+
+    #[test]
+    fn commands_answer() {
+        let dir = Dir::new("cmds");
+        let a = dir.file("a.fc", &V1.replace("-y at", "xz at"));
+        let b = dir.file(
+            "b.fc",
+            &(V1.replace("-y at", "xz at") + "chamfer 1 (edges of hole2)\n"),
+        );
+        let mut s = Session::default();
+        assert!(s.run("build", &args(&a, &[])).ok);
+        let q = s.run("query", &args(&a, &["faces cyl r=4 of hole2"]));
+        assert!(q.text.starts_with("2 found"), "{}", q.text);
+        let h = q
+            .text
+            .lines()
+            .nth(1)
+            .and_then(|l| l.split(' ').next())
+            .expect("a handle")
+            .to_string();
+        let m = s.run("measure", &args(&a, &[&h]));
+        assert!(m.text.contains("radius 4"), "{}", m.text);
+        let m = s.run(
+            "measure",
+            &args(&a, &["(faces normal -z near 0 0 0)", "(faces normal +z top)"]),
+        );
+        assert!(m.text.starts_with("distance 45 angle 180"), "{}", m.text);
+        let m = s.run("measure", &args(&a, &["wall"]));
+        assert!(m.text.starts_with("wall 8 "), "{}", m.text);
+        let m = s.run("measure", &args(&a, &["mass"]));
+        assert!(m.ok, "{}", m.text);
+        let c = s.run("check", &args(&a, &[]));
+        assert!(
+            c.ok && c.text.starts_with("valid after each of 6 lines"),
+            "{}",
+            c.text
+        );
+        let d = s.run("diff", &args(&a, &[&b]));
+        assert!(d.text.starts_with("first change: line 7"), "{}", d.text);
+        assert!(d.text.contains("faces +"), "{}", d.text);
+        let r = s.run(
+            "render",
+            &Args {
+                labels: Some("faces cyl".into()),
+                ..args(&a, &["top"])
+            },
+        );
+        assert!(
+            r.png.as_ref().is_some_and(|p| p.starts_with(b"\x89PNG")),
+            "{}",
+            r.text
+        );
+        let bad = s.run("query", &args(&a, &["edges of nothing"]));
+        assert!(
+            !bad.ok && bad.text.contains("no feature 'nothing'"),
+            "{}",
+            bad.text
+        );
+        let j = s.run("build", &args(&a, &[])).json.to_string();
+        assert!(j.starts_with("{\"ok\":true,\"lines\":6,\"built\":6,"), "{j}");
+    }
+}

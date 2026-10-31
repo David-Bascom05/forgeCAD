@@ -9,7 +9,7 @@ wall: extrude 6 xz at 0 20 0 rect -30 0 60 40
 hole 5 -xy at -20 -10 6 thru                # dia, frame (z drills in), depth|thru
 pattern hole1 lin 1 0 0 3 20                # dx dy dz count step
 extrude cut 2 -xy at 0 5 6 circle 0 0 4     # op: new add cut keep (default add)
-fillet 3 (edges between base wall)          # radius then refs; a later radius applies after it
+fillet 3 (edges between base wall concave) # radius then refs; a later radius applies after it
 chamfer 1 @9f3c @a1e0                       # @handles come from `query`
 ```
 

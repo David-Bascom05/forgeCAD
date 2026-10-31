@@ -42,6 +42,7 @@ dependencies = [
 name = "forge-cli"
 version = "0.1.0"
 dependencies = [
+ "forge-agent",
  "forge-geom",
  "forge-math",
  "forge-mesh",

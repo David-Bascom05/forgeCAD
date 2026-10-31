@@ -646,7 +646,18 @@ impl P<'_> {
     }
     fn num(&mut self) -> R<f64> {
         let t = self.next()?;
-        t.parse().map_err(|_| format!("expected a number, found '{t}'"))
+        t.parse().map_err(|_| {
+            let axisy = t
+                .trim_start_matches(['+', '-'])
+                .chars()
+                .all(|c| "xyz".contains(c));
+            let orient = if axisy {
+                " (orientations: xy xz yz -xy -xz -yz, or z A B C)"
+            } else {
+                ""
+            };
+            format!("expected a number, found '{t}'{orient}")
+        })
     }
     fn angle(&mut self) -> R<f64> {
         let t = self.next()?;

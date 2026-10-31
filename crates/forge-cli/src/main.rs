@@ -1,3 +1,6 @@
+mod serve;
+
+use forge_agent::cmd::{Args, COMMANDS, Session};
 use forge_geom::{CurveGeom, SurfaceGeom};
 use forge_math::{Frame, Point2, Vec2, dmath};
 use forge_mesh::{Quality, TriMesh, tessellate, to_binary_stl};
@@ -7,7 +10,11 @@ use std::process::ExitCode;
 use std::time::Instant;
 
 fn usage() -> ExitCode {
-    eprintln!("usage: forgecad demo <out.stl> [chord-mm]\n       forgecad preview <out.json>");
+    eprintln!(
+        "usage: forgecad build|query|measure|render|check|diff FILE [ARGS] [--json] [--at FEAT] [--labels SEL] [--px N] [-o OUT]\n       \
+         forgecad serve | mcp       (JSON-RPC / MCP on stdio)\n       \
+         forgecad demo <out.stl> [chord-mm] | preview <out.json>\nformat and selectors: AGENTS.md"
+    );
     ExitCode::from(2)
 }
 
@@ -97,7 +104,47 @@ fn main() -> ExitCode {
     match args.get(1).map(String::as_str) {
         Some("demo") if args.len() >= 3 => demo(&args),
         Some("preview") if args.len() >= 3 => preview(&args[2]),
+        Some("serve") => serve::run(false),
+        Some("mcp") => serve::run(true),
+        Some(c) if COMMANDS.contains(&c) && args.len() >= 3 => command(c, &args[2..]),
         _ => usage(),
+    }
+}
+
+fn command(cmd: &str, argv: &[String]) -> ExitCode {
+    let mut a = Args {
+        file: argv[0].clone(),
+        ..Args::default()
+    };
+    let (mut json, mut out) = (false, None);
+    let mut it = argv[1..].iter();
+    while let Some(w) = it.next() {
+        match w.as_str() {
+            "--json" => json = true,
+            "--at" => a.at = it.next().cloned(),
+            "--labels" => a.labels = it.next().cloned(),
+            "--px" => a.px = it.next().and_then(|p| p.parse().ok()),
+            "-o" => out = it.next().cloned(),
+            _ => a.words.push(w.clone()),
+        }
+    }
+    let r = Session::default().run(cmd, &a);
+    let mut text = if json { r.json.to_string() } else { r.text };
+    if let Some(png) = &r.png {
+        let path = out.unwrap_or_else(|| format!("{}.png", a.file.trim_end_matches(".fc")));
+        if let Err(e) = std::fs::write(&path, png) {
+            eprintln!("writing {path}: {e}");
+            return ExitCode::FAILURE;
+        }
+        if !json {
+            text = format!("wrote {path} {text}");
+        }
+    }
+    println!("{text}");
+    if r.ok {
+        ExitCode::SUCCESS
+    } else {
+        ExitCode::FAILURE
     }
 }
 
@@ -149,7 +196,7 @@ fn demo(args: &[String]) -> ExitCode {
     }
 }
 
-fn b64(bytes: &[u8]) -> String {
+pub(crate) fn b64(bytes: &[u8]) -> String {
     const T: &[u8; 64] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
     let mut out = String::with_capacity(bytes.len().div_ceil(3) * 4);
     for c in bytes.chunks(3) {
