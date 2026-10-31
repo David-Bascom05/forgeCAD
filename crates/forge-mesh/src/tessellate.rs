@@ -1,4 +1,4 @@
-use crate::cdt::{CdtError, triangulate_refined};
+use crate::cdt::{CdtError, Refine, triangulate_refined};
 use crate::mesh::TriMesh;
 use forge_geom::{Curve, Surface, SurfaceGeom};
 use forge_math::{Point2, dmath};
@@ -104,12 +104,8 @@ fn interior_steps(s: &Surface, q: &Quality) -> Option<(f64, f64)> {
             0.9 * arc_step(t.major + t.minor, q) / core::f64::consts::SQRT_2,
             0.9 * arc_step(t.minor, q) / core::f64::consts::SQRT_2,
         )),
-        Surface::Procedural(pr) => {
-            // arc steps on the tightest radius, turned into parameter steps by the uv scale
-            let (r, (su, sv)) = (pr.min_radius(), pr.uv_scale());
-            let l = arc_step(r, q) * r;
-            Some((l / su, l / sv))
-        }
+        // laid out by `Nodes` instead
+        Surface::Procedural(_) => None,
     }
 }
 
@@ -128,70 +124,110 @@ fn line_curvatures(d: &forge_geom::surface::SurfDeriv) -> (f64, f64) {
     ((d.duu.dot(n) / e).abs() + twist, (d.dvv.dot(n) / g).abs() + twist)
 }
 
-/// Grid points inside a procedural face's parameter box, each cell of an 8 x 8 split of the
-/// box as dense as the tightest curvature at the nodes round it needs (never denser than the
-/// face's tightest radius anywhere): a corner patch curves tightly in a corner and gently
-/// elsewhere. Distances on the surface turn into parameter steps by the face's uv scale.
-fn adaptive_grid(
-    s: &Surface,
-    q: &Quality,
+/// A procedural face's surface sampled at the nodes of an 8 x 8 split of its parameter box: per
+/// node the lengths per unit of u and of v, and the tightest radii along each (a blend bends
+/// across, hardly along; a corner patch curves tightly in a corner and gently elsewhere).
+struct Nodes {
     lo: Point2,
     hi: Point2,
-    (su, sv): (f64, f64),
-    out: &mut Vec<Point2>,
-) {
-    const G: usize = 8;
-    let at = |i: usize, j: usize| {
+    at: [[(f64, f64, f64, f64); G + 1]; G + 1],
+}
+
+const G: usize = 8;
+
+impl Nodes {
+    fn new(s: &Surface, lo: Point2, hi: Point2) -> Nodes {
+        let mut at = [[(0.0, 0.0, f64::INFINITY, f64::INFINITY); G + 1]; G + 1];
+        for (i, row) in at.iter_mut().enumerate() {
+            for (j, n) in row.iter_mut().enumerate() {
+                let d = s.deriv(Nodes::node(lo, hi, i, j));
+                let (ku, kv) = line_curvatures(&d);
+                *n = (d.du.length(), d.dv.length(), 1.0 / ku, 1.0 / kv);
+            }
+        }
+        Nodes { lo, hi, at }
+    }
+
+    fn node(lo: Point2, hi: Point2, i: usize, j: usize) -> Point2 {
         Point2::new(
             lo.x + (hi.x - lo.x) * i as f64 / G as f64,
             lo.y + (hi.y - lo.y) * j as f64 / G as f64,
         )
-    };
-    // per node: the tightest radius along u and along v (a blend bends across, hardly along)
-    let mut node = [[(f64::INFINITY, f64::INFINITY); G + 1]; G + 1];
-    for (i, row) in node.iter_mut().enumerate() {
-        for (j, n) in row.iter_mut().enumerate() {
-            let (ku, kv) = line_curvatures(&s.deriv(at(i, j)));
-            *n = (1.0 / ku, 1.0 / kv);
-        }
     }
-    let r0 = match s {
-        Surface::Procedural(pr) => pr.min_radius(),
-        _ => f64::INFINITY,
-    };
-    let step = |r: f64| {
-        let r = r.max(r0);
-        if r.is_finite() {
-            arc_step(r, q) * r
-        } else {
-            f64::INFINITY
-        }
-    };
-    for ci in 0..G {
-        for cj in 0..G {
-            // the nodes of this cell and its neighbours
-            let (mut ru, mut rv) = (f64::INFINITY, f64::INFINITY);
-            for row in &node[ci.saturating_sub(1)..(ci + 3).min(G + 1)] {
-                for &n in &row[cj.saturating_sub(1)..(cj + 3).min(G + 1)] {
-                    ru = ru.min(n.0);
-                    rv = rv.min(n.1);
-                }
+
+    /// How many grid steps each cell takes across u and across v: as many as the lengths and
+    /// tightest curvatures at the nodes round it need, never more than the face's tightest radius
+    /// anywhere does.
+    fn counts(&self, s: &Surface, q: &Quality) -> Counts {
+        let r0 = match s {
+            Surface::Procedural(pr) => pr.min_radius(),
+            _ => f64::INFINITY,
+        };
+        let step = |r: f64| {
+            let r = r.max(r0);
+            if r.is_finite() {
+                arc_step(r, q) * r
+            } else {
+                f64::INFINITY
             }
-            let (lu, lv) = (step(ru), step(rv));
-            let (a, b) = (at(ci, cj), at(ci + 1, cj + 1));
-            let nu = ((b.x - a.x) * su / lu).ceil().max(1.0) as usize;
-            let nv = ((b.y - a.y) * sv / lv).ceil().max(1.0) as usize;
-            // each cell owns its low sides; the box's own low sides are boundary
-            for i in usize::from(ci == 0)..nu {
-                for j in usize::from(cj == 0)..nv {
-                    let u = a.x + (b.x - a.x) * i as f64 / nu as f64;
-                    let v = a.y + (b.y - a.y) * j as f64 / nv as f64;
-                    out.push(Point2::new(u * su, v * sv));
+        };
+        let (cw, ch) = (
+            (self.hi.x - self.lo.x) / G as f64,
+            (self.hi.y - self.lo.y) / G as f64,
+        );
+        let mut n = [[(1, 1); G]; G];
+        for (ci, row) in n.iter_mut().enumerate() {
+            for (cj, c) in row.iter_mut().enumerate() {
+                // the densest any node of this cell or its neighbours needs, per unit u and v
+                let (mut du, mut dv) = (0.0f64, 0.0f64);
+                for row in &self.at[ci.saturating_sub(1)..(ci + 3).min(G + 1)] {
+                    for &n in &row[cj.saturating_sub(1)..(cj + 3).min(G + 1)] {
+                        du = du.max(n.0 / step(n.2));
+                        dv = dv.max(n.1 / step(n.3));
+                    }
+                }
+                let k = |l: f64| l.ceil().clamp(1.0, 1e6) as usize;
+                *c = (k(cw * du), k(ch * dv));
+            }
+        }
+        n
+    }
+
+    /// The layout scale that makes the grid's mean cell square, so the Delaunay joins neighbours.
+    fn scale(&self, n: &Counts) -> (f64, f64) {
+        let (mut u, mut v) = (0.0, 0.0);
+        for row in n {
+            for &(a, b) in row {
+                u += a as f64;
+                v += b as f64;
+            }
+        }
+        let side = |k: f64, w: f64| if w > 0.0 { k / G as f64 / w } else { 1.0 };
+        (side(u, self.hi.x - self.lo.x), side(v, self.hi.y - self.lo.y))
+    }
+
+    /// The grid's points inside the box.
+    fn grid(&self, n: &Counts, out: &mut Vec<Point2>) {
+        let (lo, hi) = (self.lo, self.hi);
+        for (ci, row) in n.iter().enumerate() {
+            for (cj, &(nu, nv)) in row.iter().enumerate() {
+                let (a, b) = (Nodes::node(lo, hi, ci, cj), Nodes::node(lo, hi, ci + 1, cj + 1));
+                // each cell owns its low sides; the box's own low sides are boundary
+                for i in usize::from(ci == 0)..nu {
+                    for j in usize::from(cj == 0)..nv {
+                        out.push(Point2::new(
+                            a.x + (b.x - a.x) * i as f64 / nu as f64,
+                            a.y + (b.y - a.y) * j as f64 / nv as f64,
+                        ));
+                    }
                 }
             }
         }
     }
 }
+
+/// Grid steps per cell of `Nodes`, across u and across v.
+type Counts = [[(usize, usize); G]; G];
 
 /// Mesh vertices joined along edges: `nbr[start[v]..start[v + 1]]` are v's neighbours, and
 /// `edges[on[v]..on[v + 1]]` the edges v lies on.
@@ -326,6 +362,31 @@ fn tessellate_face(
         rings.push(pts);
     }
     align_loops(body, f, rings.iter_mut());
+    let (mut lo, mut hi) = (
+        Point2::new(f64::INFINITY, f64::INFINITY),
+        Point2::new(f64::NEG_INFINITY, f64::NEG_INFINITY),
+    );
+    for p in rings.iter().flatten() {
+        lo = Point2::new(lo.x.min(p.x), lo.y.min(p.y));
+        hi = Point2::new(hi.x.max(p.x), hi.y.max(p.y));
+    }
+    let mut nodes = None;
+    let layout = match surface {
+        Surface::Cone(c) => Layout::Unrolled {
+            u_mid: 0.5 * (lo.x + hi.x),
+            apex_v: c.apex_v(),
+            sin_a: c.sin_a(),
+            cos_a: c.cos_a(),
+        },
+        Surface::Procedural(_) => {
+            let n = Nodes::new(surface, lo, hi);
+            let c = n.counts(surface, q);
+            let (a, b) = n.scale(&c);
+            nodes = Some((n, c));
+            Layout::Scaled(a, b)
+        }
+        _ => Layout::Scaled(su, sv),
+    };
     let mut loops: Vec<Vec<u32>> = Vec::new();
     for (pts, ids) in rings.into_iter().zip(ring_globals) {
         loops.push((uv.len() as u32..(uv.len() + pts.len()) as u32).collect());
@@ -334,6 +395,7 @@ fn tessellate_face(
     }
 
     if loops.len() == 1
+        && !matches!(surface, Surface::Procedural(_))
         && let Some(tris) = strips(surface, &uv, &global, q, mesh)
     {
         for [a, b, c] in tris {
@@ -347,22 +409,54 @@ fn tessellate_face(
         return Ok(());
     }
 
-    let mut scaled: Vec<Point2> = uv.iter().map(|p| Point2::new(p.x * su, p.y * sv)).collect();
+    if let Layout::Unrolled { .. } = layout {
+        // an apex drawn as a run along its parameter line is one point unrolled
+        let (old_uv, old_global) = (std::mem::take(&mut uv), std::mem::take(&mut global));
+        for l in &mut loops {
+            let start = uv.len() as u32;
+            for (k, &i) in l.iter().enumerate() {
+                let j = l[(k + l.len() - 1) % l.len()];
+                let (i, j) = (i as usize, j as usize);
+                if i != j && old_global[i] == old_global[j] && layout.put(old_uv[i]) == layout.put(old_uv[j])
+                {
+                    continue;
+                }
+                uv.push(old_uv[i]);
+                global.push(old_global[i]);
+            }
+            *l = (start..uv.len() as u32).collect();
+        }
+    }
+
+    let mut scaled: Vec<Point2> = uv.iter().map(|&p| layout.put(p)).collect();
     let mut interior = Vec::new();
     // an analytic face's grid: cells clear of the boundary are triangulated straight off the
     // grid, the band between them and the boundary by the constrained Delaunay
     let mut grid: Option<Grid> = None;
-    if let Some((du, dv)) = interior_steps(surface, q) {
-        let (mut lo, mut hi) = (
-            Point2::new(f64::INFINITY, f64::INFINITY),
-            Point2::new(f64::NEG_INFINITY, f64::NEG_INFINITY),
-        );
-        for p in &uv {
-            lo = Point2::new(lo.x.min(p.x), lo.y.min(p.y));
-            hi = Point2::new(hi.x.max(p.x), hi.y.max(p.y));
-        }
+    if let Some((n, c)) = &nodes {
+        n.grid(c, &mut interior);
+        interior.iter_mut().for_each(|p| *p = layout.put(*p));
+    } else if let Some((du, dv)) = interior_steps(surface, q) {
         match surface {
-            Surface::Procedural(_) => adaptive_grid(surface, q, lo, hi, (su, sv), &mut interior),
+            Surface::Cone(c) => {
+                // rows across the rulings, each with points as close as its own radius needs but
+                // no closer than half the rows' spacing (rows run together towards the apex)
+                let r = c.radius_at(0.5 * (lo.y + hi.y)).max(forge_math::tol::LINEAR);
+                let nv = ((hi.y - lo.y) / (2.0 * r * arc_step(r, q))).ceil().max(1.0) as usize;
+                let gap = (hi.y - lo.y) / nv as f64 / c.cos_a();
+                for j in 1..nv {
+                    let v = lo.y + (hi.y - lo.y) * j as f64 / nv as f64;
+                    let r = c.radius_at(v);
+                    let span = hi.x - lo.x;
+                    let nu = (span / arc_step(r, q))
+                        .min(span * r / (0.5 * gap))
+                        .ceil()
+                        .max(1.0) as usize;
+                    for i in 1..nu {
+                        interior.push(layout.put(Point2::new(lo.x + span * i as f64 / nu as f64, v)));
+                    }
+                }
+            }
             _ => {
                 let nu = ((hi.x - lo.x) / du).ceil().max(1.0) as usize;
                 let nv = ((hi.y - lo.y) / dv).ceil().max(1.0) as usize;
@@ -379,7 +473,7 @@ fn tessellate_face(
                     for j in 1..nv {
                         if !g.covered(i, j) {
                             let p = g.node(i, j);
-                            interior.push(Point2::new(p.x * su, p.y * sv));
+                            interior.push(layout.put(p));
                         }
                     }
                 }
@@ -388,7 +482,7 @@ fn tessellate_face(
                         loops.push((scaled.len() as u32..(scaled.len() + cycle.len()) as u32).collect());
                         for &(i, j) in &cycle {
                             let p = g.node(i, j);
-                            scaled.push(Point2::new(p.x * su, p.y * sv));
+                            scaled.push(layout.put(p));
                         }
                         g.cycles.borrow_mut().push(cycle);
                     }
@@ -401,8 +495,9 @@ fn tessellate_face(
     // chords that stray from the surface by more than the tolerance get a surface point at
     // their middle, inserted into the same triangulation round after round (a thin band between
     // two boundary curves has no grid points at all; a chord across a radian of a cylinder needs
-    // several halvings)
-    let at = |p: Point2| surface.eval(Point2::new(p.x / su, p.y / sv));
+    // several halvings); on a surface curved both ways a triangle's middle sags further than its
+    // sides' (by up to a third), so triangles there are looked at too
+    let at = |p: Point2| surface.eval(layout.uv(p));
     // each point's position is worked out once, however many edges and rounds test it (the
     // boundary's and the grid's are known already)
     let mut node_index: Vec<u32> = Vec::new();
@@ -426,53 +521,77 @@ fn tessellate_face(
         }
         *c[i as usize].get_or_insert_with(|| at(p))
     };
+    let nb = global.len() as u32;
+    let edges_at = |i: u32| match global[i as usize] as usize {
+        x if x + 1 < segments.on.len() => {
+            &segments.edges[segments.on[x] as usize..segments.on[x + 1] as usize]
+        }
+        _ => &[],
+    };
     let on_edge = |ia: u32, ib: u32| {
-        let n = global.len() as u32;
-        ia < n && ib < n && {
+        ia < nb && ib < nb && {
             let (x, y) = (global[ia as usize] as usize, global[ib as usize] as usize);
             x < segments.start.len() - 1
                 && segments.nbr[segments.start[x] as usize..segments.start[x + 1] as usize]
                     .contains(&(y as u32))
         }
     };
-    // a chord between two points of one edge cuts a flap off along it, and the face across the
-    // edge, as nearly tangent as a run-out meeting a wall, can cut the very same flap: the two
-    // faces would share a triangle
-    let one_edge = |ia: u32, ib: u32| {
-        let n = global.len() as u32;
-        ia < n && ib < n && {
-            let of = |i: u32| match global[i as usize] as usize {
-                x if x + 1 < segments.on.len() => {
-                    &segments.edges[segments.on[x] as usize..segments.on[x + 1] as usize]
-                }
-                _ => &[],
+    // a chord between two points on the boundary of one other face (of one edge, the face across
+    // it, as nearly tangent as a run-out meeting a wall) can be that face's chord too: the two
+    // faces would share its two triangles
+    let shared = |ia: u32, ib: u32| {
+        ia < nb && ib < nb && {
+            let others = |e: u32| {
+                body.edge(forge_topo::EdgeId(e))
+                    .coedges
+                    .iter()
+                    .map(|&c| body.coedge_face(c))
+                    .filter(|&g| g != f)
             };
-            let ob = of(ib);
-            of(ia).iter().any(|e| ob.contains(e))
+            let eb = edges_at(ib);
+            edges_at(ia)
+                .iter()
+                .any(|&x| eb.contains(&x) || eb.iter().any(|&y| others(x).any(|g| others(y).any(|h| h == g))))
         }
     };
     // a chord of a plane never strays from it
     let flat = matches!(surface, Surface::Plane(_));
-    // on a sphere, torus or cylinder the grid's steps come from its exact radii, so a chord
-    // between two inner points within one grid cell's span each way sags less than the
-    // tolerance and needs no look
-    let nb = global.len() as u32;
+    // on a sphere, torus or cylinder the grid's steps come from its exact radii (on a sphere or
+    // torus each way a little under half the tolerance): a chord between two inner points within
+    // one grid step each way sags less than the tolerance, and so does a triangle of three (its
+    // middle sags at most as far as the circle round it, no larger than the step's), and neither
+    // needs a look (a procedural face's curvatures at its nodes are only samples: everything there
+    // is looked at)
     let cell = match (surface, interior_steps(surface, q)) {
-        (Surface::Sphere(_) | Surface::Torus(_) | Surface::Cylinder(_), Some((du, dv))) => {
-            (du * su * (1.0 + 1e-9), dv * sv * (1.0 + 1e-9))
-        }
+        (Surface::Sphere(_) | Surface::Torus(_) | Surface::Cylinder(_), Some((du, dv))) => (du * su, dv * sv),
         _ => (0.0, 0.0),
     };
-    let strays = |ia: u32, ib: u32, a: Point2, b: Point2| {
-        if ia >= nb && ib >= nb && (a.x - b.x).abs() <= cell.0 && (a.y - b.y).abs() <= cell.1 {
+    let within = |a: Point2, b: Point2| {
+        (a.x - b.x).abs() <= cell.0 * (1.0 + 1e-9) && (a.y - b.y).abs() <= cell.1 * (1.0 + 1e-9)
+    };
+    // whether a point off the face (laid out at `p`) lies further than the tolerance from its
+    // surface (exactly, on an analytic one)
+    let off = |x: forge_math::Point3, p: Point2| match surface {
+        Surface::Procedural(_) => strays_from(surface, x, layout.uv(p), q.chord),
+        _ => surface.implicit(x).abs() > q.chord,
+    };
+    let edge = |ia: u32, ib: u32, a: Point2, b: Point2| {
+        if ia >= nb && ib >= nb && within(a, b) {
             return false;
         }
         on_edge(ia, ib)
-            || (!flat
-                && (one_edge(ia, ib)
-                    || at(a.lerp(b, 0.5)).distance(pos(ia, a).lerp(pos(ib, b), 0.5)) > q.chord))
+            || (!flat && (shared(ia, ib) || off(pos(ia, a).lerp(pos(ib, b), 0.5), a.lerp(b, 0.5))))
     };
-    let tri = match triangulate_refined(&scaled, &loops, &interior, Some(&strays), 24) {
+    let both_ways = doubly_curved(surface) || matches!(surface, Surface::Procedural(_));
+    let triangle = |v: [u32; 3], p: [Point2; 3]| {
+        let m = Point2::new((p[0].x + p[1].x + p[2].x) / 3.0, (p[0].y + p[1].y + p[2].y) / 3.0);
+        !(v.iter().all(|&k| k >= nb) && (0..3).all(|k| within(p[k], p[(k + 1) % 3]))) && {
+            let x = [0, 1, 2].map(|k| pos(v[k], p[k]));
+            off(x[0].lerp(x[1], 0.5).lerp(x[2], 1.0 / 3.0), m)
+        }
+    };
+    let strays = Tests(edge, triangle, both_ways);
+    let tri = match triangulate_refined(&scaled, &loops, &interior, Some(&strays)) {
         Ok(t) => t,
         Err(e) => {
             if let Some(path) = std::env::var_os("FORGE_CDT_DUMP") {
@@ -520,6 +639,107 @@ fn tessellate_face(
         mesh.face_of.push(f.0);
     }
     Ok(())
+}
+
+/// Where a face is laid out flat for the triangulation.
+#[derive(Clone, Copy)]
+enum Layout {
+    /// Its parameters, scaled so lengths roughly match the surface's.
+    Scaled(f64, f64),
+    /// A cone unrolled (exactly: it is developable), its rulings straight lines through the apex,
+    /// so no triangle with a corner there runs along one.
+    Unrolled {
+        u_mid: f64,
+        apex_v: f64,
+        sin_a: f64,
+        cos_a: f64,
+    },
+}
+
+impl Layout {
+    fn put(self, uv: Point2) -> Point2 {
+        match self {
+            Layout::Scaled(su, sv) => Point2::new(uv.x * su, uv.y * sv),
+            Layout::Unrolled {
+                u_mid,
+                apex_v,
+                sin_a,
+                cos_a,
+            } => {
+                let rho = (uv.y - apex_v) / cos_a;
+                let (s, c) = dmath::sin_cos((uv.x - u_mid) * sin_a);
+                // mirrored, so counter-clockwise stays counter-clockwise in (u, v)
+                Point2::new(rho * c, -rho * s)
+            }
+        }
+    }
+
+    fn uv(self, p: Point2) -> Point2 {
+        match self {
+            Layout::Scaled(su, sv) => Point2::new(p.x / su, p.y / sv),
+            Layout::Unrolled {
+                u_mid,
+                apex_v,
+                sin_a,
+                cos_a,
+            } => Point2::new(
+                u_mid + dmath::atan2(-p.y, p.x) / sin_a,
+                apex_v + (p.x * p.x + p.y * p.y).sqrt() * cos_a,
+            ),
+        }
+    }
+}
+
+/// Whether `x` lies further than `c` from the surface about `uv`, where it is expected near.
+/// The surface's point at `uv` bounds the distance from above. Where that is too far but the gap
+/// along the normal there is not (the point lies along from the nearest, as by a pole or a seam),
+/// Gauss-Newton looks for a nearer one, each step kept only if it comes closer.
+fn strays_from(s: &Surface, x: forge_math::Point3, uv: Point2, c: f64) -> bool {
+    if s.eval(uv).distance(x) <= c {
+        return false;
+    }
+    let (mut uv, mut d) = (uv, s.deriv(uv));
+    if let Some(n) = d.du.cross(d.dv).normalize()
+        && (x - d.p).dot(n.get()).abs() > c
+    {
+        return true;
+    }
+    let mut best = d.p.distance(x);
+    for _ in 0..6 {
+        let r = x - d.p;
+        let (e, f, g) = (d.du.dot(d.du), d.du.dot(d.dv), d.dv.dot(d.dv));
+        let det = e * g - f * f;
+        if det <= 0.0 {
+            break;
+        }
+        let (a, b) = (d.du.dot(r), d.dv.dot(r));
+        let next = Point2::new(uv.x + (g * a - f * b) / det, uv.y + (e * b - f * a) / det);
+        let dn = s.deriv(next);
+        let dist = dn.p.distance(x);
+        if dist.is_nan() || dist >= best {
+            break;
+        }
+        (uv, d, best) = (next, dn, dist);
+        if best <= c {
+            return false;
+        }
+    }
+    true
+}
+
+/// A refinement's tests: edges, triangles, and whether triangles are looked at.
+struct Tests<E, T>(E, T, bool);
+
+impl<E: Fn(u32, u32, Point2, Point2) -> bool, T: Fn([u32; 3], [Point2; 3]) -> bool> Refine for Tests<E, T> {
+    fn edge(&self, a: u32, b: u32, pa: Point2, pb: Point2) -> bool {
+        (self.0)(a, b, pa, pb)
+    }
+    fn triangle(&self, v: [u32; 3], p: [Point2; 3]) -> bool {
+        (self.1)(v, p)
+    }
+    fn triangles(&self) -> bool {
+        self.2
+    }
 }
 
 /// A face's interior grid in (u, v): `nu` x `nv` cells over the face's parameter box, and the

@@ -11,6 +11,7 @@ fn main() {
     let times: usize = args[3].parse().expect("times");
     let part = match name {
         "torture" => torture::part(221),
+        n if n.starts_with("fuzz") => suite::fuzz(n[4..].parse().expect("seed"), 80),
         n => suite::part(n).unwrap_or_else(|| {
             fillets::cases()
                 .into_iter()

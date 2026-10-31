@@ -645,18 +645,25 @@ pub fn triangulate(
     loops: &[Vec<u32>],
     interior: &[Point2],
 ) -> Result<Triangulation, CdtError> {
-    triangulate_refined(points, loops, interior, None, 0)
+    triangulate_refined(points, loops, interior, None)
 }
 
-/// `triangulate`, then up to `rounds` rounds of splitting every unconstrained edge for which
-/// `split(a, b, pa, pb)` holds (point indices as in the result, and their positions) at its
-/// midpoint, inserted into the same triangulation.
+/// What refinement splits (point indices as in the result, and their positions).
+pub trait Refine {
+    /// Whether an unconstrained edge gets a point at its middle.
+    fn edge(&self, a: u32, b: u32, pa: Point2, pb: Point2) -> bool;
+    /// Whether a triangle gets a point at its centroid; never asked unless `triangles`.
+    fn triangle(&self, v: [u32; 3], p: [Point2; 3]) -> bool;
+    fn triangles(&self) -> bool;
+}
+
+/// `triangulate`, then the points `refine` asks for inserted into the same triangulation, round
+/// after round, until it asks for none.
 pub fn triangulate_refined(
     points: &[Point2],
     loops: &[Vec<u32>],
     interior: &[Point2],
-    refine: Option<&dyn Fn(u32, u32, Point2, Point2) -> bool>,
-    rounds: usize,
+    refine: Option<&dyn Refine>,
 ) -> Result<Triangulation, CdtError> {
     let n = points.len() as u32;
     for (i, p) in points.iter().enumerate() {
@@ -771,32 +778,65 @@ pub fn triangulate_refined(
     for &p in &kept {
         mesh.insert_interior(p, eps)?;
     }
-    // then the midpoint of every unconstrained edge the caller rejects, round after round, into
-    // the same triangulation (each round halves the edges still rejected)
-    if let Some(split) = refine {
+    // then the points the caller asks for, round after round, into the same triangulation; each
+    // round looks only at the triangles the last one made (each made triangle holds a new point)
+    if let Some(refine) = refine {
         let mut mids: Vec<Point2> = Vec::new();
-        // after the first round only edges at a point the last round added can be new
         let mut fresh_from = SUPER;
-        for _ in 0..rounds {
+        let mut seen = vec![false; mesh.tris.len()];
+        let mut split = vec![false; mesh.tris.len()];
+        let mut look: Vec<u32> = (0..mesh.tris.len() as u32).collect();
+        let triangles = refine.triangles();
+        // only stops a cascade that never ends
+        for _ in 0..200 {
             mids.clear();
             let first_new = mesh.pts.len() as u32;
-            for (t, tt) in mesh.tris.iter().enumerate() {
-                if !mesh.inside[t] || tt.v.iter().any(|&v| v < SUPER) {
+            seen.resize(mesh.tris.len(), false);
+            split.resize(mesh.tris.len(), false);
+            for &t in &look {
+                seen[t as usize] = true;
+            }
+            // a triangle only once none of its edges is split (its middle sags by a third more
+            // than they do at most, and splitting them may be all it needs): its edges are
+            // looked at from the lower of their two triangles, and `look` runs upwards
+            for &t in &look {
+                let tt = mesh.tris[t as usize];
+                if !mesh.inside[t as usize]
+                    || tt.v.iter().any(|&v| v < SUPER)
+                    || tt.v.iter().all(|&v| v < fresh_from)
+                {
                     continue;
                 }
                 for i in 0..3 {
                     let u = tt.n[i];
-                    if tt.c[i] || (u != NONE && (u as usize) < t && mesh.inside[u as usize]) {
+                    if tt.c[i] || (u != NONE && u < t && seen[u as usize] && mesh.inside[u as usize]) {
                         continue;
                     }
                     let (va, vb) = (tt.v[nx(i)], tt.v[pv(i)]);
                     if va < fresh_from && vb < fresh_from {
                         continue;
                     }
-                    if split(va - SUPER, vb - SUPER, mesh.p(va), mesh.p(vb)) {
+                    if refine.edge(va - SUPER, vb - SUPER, mesh.p(va), mesh.p(vb)) {
                         mids.push(mesh.p(va).lerp(mesh.p(vb), 0.5));
+                        split[t as usize] = true;
+                        if u != NONE && seen[u as usize] {
+                            split[u as usize] = true;
+                        }
                     }
                 }
+                if triangles && !split[t as usize] {
+                    let p = tt.v.map(|v| mesh.p(v));
+                    if refine.triangle(tt.v.map(|v| v - SUPER), p) {
+                        mids.push(Point2::new(
+                            (p[0].x + p[1].x + p[2].x) / 3.0,
+                            (p[0].y + p[1].y + p[2].y) / 3.0,
+                        ));
+                    }
+                }
+            }
+            for &t in &look {
+                seen[t as usize] = false;
+                split[t as usize] = false;
             }
             if mids.is_empty() {
                 break;
@@ -808,6 +848,31 @@ pub fn triangulate_refined(
             for &p in &mids {
                 mesh.insert_interior(p, eps)?;
             }
+            // the triangles round each new point (whose fan closes: it lies inside the region)
+            look.clear();
+            seen.resize(mesh.tris.len(), false);
+            for v in first_new..mesh.pts.len() as u32 {
+                let start = mesh.vtri[v as usize];
+                let mut t = start;
+                for _ in 0..mesh.tris.len() {
+                    if !seen[t as usize] {
+                        seen[t as usize] = true;
+                        look.push(t);
+                    }
+                    let tt = mesh.tris[t as usize];
+                    let Some(i) = (0..3).find(|&k| tt.v[k] == v) else {
+                        break;
+                    };
+                    t = tt.n[nx(i)];
+                    if t == start || t == NONE {
+                        break;
+                    }
+                }
+            }
+            for &t in &look {
+                seen[t as usize] = false;
+            }
+            look.sort_unstable();
             fresh_from = first_new;
         }
     }
