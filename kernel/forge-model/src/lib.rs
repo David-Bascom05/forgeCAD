@@ -700,7 +700,8 @@ pub(crate) fn part_before(features: History<'_>, i: usize) -> Result<Body, Regen
     for k in 0..i {
         body = step(features.upto(i), k, body)?;
     }
-    body.map(finish).ok_or(RegenError::NothingToCombine { feature: i })
+    body.map(finish)
+        .ok_or(RegenError::NothingToCombine { feature: i })
 }
 
 /// The tools of features `from..` on up to `threads` threads, in order (only their shapes,

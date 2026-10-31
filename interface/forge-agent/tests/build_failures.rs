@@ -22,7 +22,11 @@ fn builds(src: &str) -> f64 {
         features: m.features.clone(),
     };
     let n = part.regenerate_nary(1).expect("n-ary");
-    assert!(forge_topo::check(&n).is_empty(), "n-ary: {:?}", forge_topo::check(&n));
+    assert!(
+        forge_topo::check(&n).is_empty(),
+        "n-ary: {:?}",
+        forge_topo::check(&n)
+    );
     let (vs, vn) = (volume(b), volume(&n));
     assert!((vs - vn).abs() < 1e-3 * vs, "seq {vs}, n-ary {vn}");
     vs
@@ -33,7 +37,12 @@ fn builds(src: &str) -> f64 {
 /// how they bend (adversarial ball_poles: "face split crossed itself").
 #[test]
 fn ball_over_where_two_balls_touch() {
-    for ops in [["add", "add", "add"], ["add", "cut", "add"], ["cut", "cut", "cut"], ["cut", "add", "cut"]] {
+    for ops in [
+        ["add", "add", "add"],
+        ["add", "cut", "add"],
+        ["cut", "cut", "cut"],
+        ["cut", "add", "cut"],
+    ] {
         builds(&format!(
             "extrude 10 rect 0 0 60 40
 ball {} 4 xz at 30 15 10
@@ -55,7 +64,10 @@ fn a_probe_on_a_touch_asks_again() {
 extrude cut 40 yz at -20 0 25 circle 0 0 5
 ",
     );
-    assert!((v - plain).abs() < 1e-2 * plain, "the cut touches and takes nothing");
+    assert!(
+        (v - plain).abs() < 1e-2 * plain,
+        "the cut touches and takes nothing"
+    );
 }
 
 /// Up to the next face past a fillet, chamfer or face edit: the pick looks at the part as it
@@ -74,7 +86,10 @@ fillet 2 (edges along +x top)
 ",
     );
     let bore = forge_math::dmath::PI * 9.0 * 20.0;
-    assert!((block - drilled - bore).abs() < 1e-2 * bore, "{block} {drilled} {bore}");
+    assert!(
+        (block - drilled - bore).abs() < 1e-2 * bore,
+        "{block} {drilled} {bore}"
+    );
     builds(
         "extrude 20 rect 0 0 60 40
 chamfer 2 (edges along +x top)

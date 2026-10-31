@@ -873,7 +873,7 @@ fn nary_body(
                 }
                 // a pair with no closed form is searched, at a cost: not where the tools holding all
                 // of the region (by bounds) say its curves would divide neither face
-                let found = match ssi::closed_form(sa, sb) {
+                let found = match ssi::closed_or_flush(sa, sb, &region) {
                     SurfaceSurface::NotAnalytic if !meets_matter(&region, i, j) => {
                         out.loose.push(((i, fa), (j, fb)));
                         continue;

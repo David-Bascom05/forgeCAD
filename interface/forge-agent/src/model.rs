@@ -464,7 +464,11 @@ impl Model {
                         Some(b) => with_handles(&msg, b),
                         None => msg,
                     };
-                    let before = if i == 0 { &[][..] } else { &self.stages[i - 1].solids[..] };
+                    let before = if i == 0 {
+                        &[][..]
+                    } else {
+                        &self.stages[i - 1].solids[..]
+                    };
                     let msg = msg + &size_limit(&self.features, &ids[..=i], before, &e);
                     self.fail(i, msg, hint);
                     break;

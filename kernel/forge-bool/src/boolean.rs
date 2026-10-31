@@ -1240,6 +1240,7 @@ fn plan(a: &Body, b: &Body, op: Op, scratch: &mut Scratch) -> R<Plan> {
         .collect();
     by_ends.sort();
     let mut canon: Vec<(usize, bool)> = (0..pieces.len()).map(|p| (p, false)).collect();
+    let mut shared: Vec<usize> = Vec::new();
     for (p, pc) in pieces.iter().enumerate().filter(|(_, pc)| pc.side == Some(1)) {
         let key = (pc.start.min(pc.end), pc.start.max(pc.end));
         let from = by_ends.partition_point(|x| x.0 < key);
@@ -1255,6 +1256,7 @@ fn plan(a: &Body, b: &Body, op: Op, scratch: &mut Scratch) -> R<Plan> {
                     pc.start != other.start
                 };
                 canon[p] = (a, flip);
+                shared.push(a);
                 break;
             }
         }
@@ -1275,7 +1277,7 @@ fn plan(a: &Body, b: &Body, op: Op, scratch: &mut Scratch) -> R<Plan> {
 
     lap(&mut clock, 3);
     // 5: classify
-    let class = classify_specs(&bodies, &index, &specs, &pieces, &segs, &coplanar)?;
+    let class = classify_specs(&bodies, &index, &specs, &pieces, &segs, &coplanar, &shared)?;
     if specs_on() {
         for (i, sp) in specs.iter().enumerate() {
             let ls: Vec<Vec<usize>> = sp.loops.iter().map(|l| l.iter().map(|h| h.0).collect()).collect();
@@ -2009,7 +2011,15 @@ pub(crate) fn trim(
                 }
                 let into = faces[1 - k];
                 let m = edge.curve.eval(0.5 * (w[0] + w[1]));
-                if index[1 - k].point_in_face(into, m) == Where::Inside {
+                // the whole stretch on the other face, not just its middle where a curve touches it
+                let on_it = |x: f64| {
+                    let q = edge.curve.eval(w[0] + x * (w[1] - w[0]));
+                    bodies[1 - k].face(into).surface.distance(q) <= tol::LINEAR
+                };
+                let straight = matches!(edge.curve, Curve::Line(_));
+                if index[1 - k].point_in_face(into, m) == Where::Inside
+                    && (straight || on_it(0.25) && on_it(0.75))
+                {
                     imprints.push(Imprint {
                         side,
                         edge: e,
@@ -3550,20 +3560,27 @@ fn uv_chord(body: &Body, f: FaceId, p: &Piece, forward: bool, at_end: bool) -> O
 /// which Ye and Maekawa's formulas give but which are numerically unreliable near a singular
 /// point (Patrikalakis, Maekawa and Cho, ch. 5).
 fn tied(
+    pieces: &[Piece],
     half: &[(usize, bool)],
+    out: &[(VKey, usize)],
     i: usize,
     theta: Vec2,
     (c, j): (Vec2, usize),
     ways: impl Iterator<Item = R<(Vec2, usize)>>,
 ) -> R<bool> {
-    // (not the way straight back along the same piece; two edges of one body make a tie too: at
-    // a pinch where two of its circles touch, the way on and the way straight through differ by
-    // how they bend)
+    // (ways of one body's own edges along one tangent are its own smooth joins, as they always
+    // were; only a way of a new edge, or of the other body's, makes a tie; nor is the way
+    // straight back along the same piece. Where every way is one body's own edge, the vertex is a
+    // pinch where two of its circles touch: the way on and the way through differ by how they bend)
     let near = |a: Vec2, b: Vec2| {
         let (d, x) = (a.dot(b), a.x * b.y - a.y * b.x);
         d > 0.0 && x * x < 0.002 * d * d
     };
-    let mixed = |x: usize, y: usize| half[x].0 != half[y].0;
+    let side = |x: usize| pieces[half[x].0].side;
+    let pinch = || out.iter().all(|&(_, k)| side(k).is_some() && side(k) == side(i));
+    let mixed = |x: usize, y: usize| {
+        half[x].0 != half[y].0 && (side(x).is_none() || side(y).is_none() || side(x) != side(y) || pinch())
+    };
     for w in ways {
         let (a, k) = w?;
         if (near(a, theta) && mixed(k, i)) || (k != j && near(a, c) && mixed(k, j)) {
@@ -3908,7 +3925,7 @@ pub(crate) fn split_face(
         let theta = dir(i, true)?;
         let ways = || out.iter().map(|&(_, k)| Ok((dir(k, false)?, k)));
         let (c, j) = clockwise(theta, ways())?.unwrap_or((theta, i));
-        if !tied(&half, i, theta, (c, j), ways())? {
+        if !tied(pieces, &half, out, i, theta, (c, j), ways())? {
             return Ok(j);
         }
         let mut ways: Vec<(Vec2, usize)> = ways().collect::<R<_>>()?;
@@ -4637,6 +4654,7 @@ fn classify_specs(
     pieces: &[Piece],
     segs: &[Seg],
     coplanar: &[(FaceId, FaceId)],
+    shared: &[usize],
 ) -> R<Vec<Class>> {
     let n = specs.len();
     let mut class: Vec<Option<Class>> = specs.iter().map(|s| s.preset).collect();
@@ -4704,6 +4722,11 @@ fn classify_specs(
     // an edge imprinted into the other body's face lies on that body: no flood across it
     let mut imprinted = vec![false; pieces.len()];
     for &p in specs.iter().flat_map(|s| &s.foreign) {
+        imprinted[p] = true;
+    }
+    // nor across an edge the two bodies share: the other's face may end there, so being in it
+    // can change across (a tool's edge lying on a part's edge)
+    for &p in shared {
         imprinted[p] = true;
     }
     // the specs using each piece, in spec order: piece p's are users[from[p]..from[p + 1]]
@@ -4786,14 +4809,16 @@ fn classify_specs(
                 index[1 - s.side].classify(probe)
             );
         }
+        let mut at = index[1 - s.side].classify(probe);
         // a probe on a line or circle where the bodies only touch says nothing: others decide
-        let on = |q: &Point3| index[1 - s.side].classify(*q) == Where::On;
-        let probe = if on(&probe) {
-            spare_probes(bodies[s.side], s, pieces).find(|q| !on(q)).unwrap_or(probe)
-        } else {
-            probe
-        };
-        class[i] = Some(match index[1 - s.side].classify(probe) {
+        if at == Where::On
+            && let Some(w) = spare_probes(bodies[s.side], s, pieces)
+                .map(|q| index[1 - s.side].classify(q))
+                .find(|w| *w != Where::On)
+        {
+            at = w;
+        }
+        class[i] = Some(match at {
             Where::Inside => Class::In,
             Where::Outside => Class::Out,
             Where::On => {
@@ -4931,14 +4956,19 @@ fn spare_probes<'a>(body: &'a Body, s: &'a Spec, pieces: &'a [Piece]) -> impl It
             let d = pc.curve.deriv(pc.range.lo + frac * pc.range.width());
             let face = body.face(s.from);
             let along = if h.1 { d.d1 } else { -d.d1 };
-            let inward = body.face_normal(s.from, face.surface.project(d.p))?.cross(along).normalize()?;
+            let inward = body
+                .face_normal(s.from, face.surface.project(d.p))?
+                .cross(along)
+                .normalize()?;
             let q = face.surface.eval(face.surface.project(d.p + inward * step));
             s.loops
                 .iter()
                 .flatten()
-                .all(|&(o, _)| o == h.0 || {
-                    let c = &pieces[o];
-                    c.curve.eval(c.curve.closest(q, c.range)).distance(q) >= step
+                .all(|&(o, _)| {
+                    o == h.0 || {
+                        let c = &pieces[o];
+                        c.curve.eval(c.curve.closest(q, c.range)).distance(q) >= step
+                    }
                 })
                 .then_some(q)
         })

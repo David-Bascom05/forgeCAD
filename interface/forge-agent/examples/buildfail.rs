@@ -73,7 +73,11 @@ fn main() {
     println!("{:<12} {:>6} {:>8} {:>7}", "kind", "tried", "refused", "%");
     for m in MAKERS {
         let (t, r) = tally.get(m.name).copied().unwrap_or_default();
-        println!("{:<12} {t:>6} {r:>8} {:>6.1}%", m.name, 100.0 * r as f64 / t.max(1) as f64);
+        println!(
+            "{:<12} {t:>6} {r:>8} {:>6.1}%",
+            m.name,
+            100.0 * r as f64 / t.max(1) as f64
+        );
     }
     let kinds = kinds.into_inner().expect("kinds");
     let mut rows: Vec<_> = kinds.iter().collect();

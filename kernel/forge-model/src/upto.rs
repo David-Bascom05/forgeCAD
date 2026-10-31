@@ -1084,7 +1084,9 @@ pub(crate) fn next_face_of(part: &Body, o: Point3, d: UnitVec3) -> Result<(Surfa
             continue;
         }
         let surface = &part.face(f).surface;
-        if let forge_geom::intersect::LineSurface::Hits(hs) = forge_geom::intersect::line_surface(&line, surface) {
+        if let forge_geom::intersect::LineSurface::Hits(hs) =
+            forge_geom::intersect::line_surface(&line, surface)
+        {
             for h in hs {
                 if h.t > tol::LINEAR && ix.point_in_face(f, h.point) != forge_bool::Where::Outside {
                     cand.push((h.t, Some(surface.clone())));
@@ -1407,7 +1409,8 @@ pub(crate) fn verify_next(
                 .iter()
                 .any(|(u, v)| u.hi.min(v.hi) - u.lo.max(v.lo) <= tol::LINEAR)
         };
-        let inside: Vec<&(usize, usize, Op)> = close.iter().filter(|c| !touches(&next.tools[c.0].1)).collect();
+        let inside: Vec<&(usize, usize, Op)> =
+            close.iter().filter(|c| !touches(&next.tools[c.0].1)).collect();
         if !material
             && let [&(n, _, Op::Union)] = inside[..]
             && close.iter().all(|c| c.2 != Op::Intersect)
