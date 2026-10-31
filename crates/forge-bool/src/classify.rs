@@ -202,9 +202,10 @@ pub struct Drawn {
 
 pub struct Index<'a> {
     pub body: &'a Body,
-    /// A box guaranteed to hold each face.
-    pub boxes: Vec<Box3>,
     pub bbox: Box3,
+    /// Every face's box by id (empty for a removed face), for whole-body scans: made on the
+    /// first, as most booleans on a large body make none.
+    boxes: std::sync::OnceLock<Vec<Box3>>,
 }
 
 /// A box holding face `f` (cached on the face).
@@ -214,19 +215,39 @@ pub fn face_box(body: &Body, f: FaceId) -> Box3 {
 
 impl<'a> Index<'a> {
     pub fn new(body: &'a Body) -> Self {
-        // indexed by face id; removed faces get an empty box, which nothing overlaps
-        let boxes: Vec<Box3> = (0..body.faces.len() as u32)
-            .map(FaceId)
-            .map(|f| {
-                if body.face(f).alive {
-                    face_box(body, f)
-                } else {
-                    Box3::EMPTY
-                }
-            })
-            .collect();
-        let bbox = boxes.iter().fold(Box3::EMPTY, |a, b| a.hull(b));
-        Index { body, boxes, bbox }
+        let ix = Index {
+            body,
+            bbox: Box3::EMPTY,
+            boxes: std::sync::OnceLock::new(),
+        };
+        // a large body keeps hulls of its faces' boxes from one boolean to the next; a small
+        // one (a tool) is cheaper scanned whole
+        let bbox = if body.faces.len() > 64 {
+            body.faces_box()
+        } else {
+            ix.boxes().iter().fold(Box3::EMPTY, |a, b| a.hull(b))
+        };
+        Index { bbox, ..ix }
+    }
+
+    /// A box guaranteed to hold face `f`; empty, overlapping nothing, for a removed face.
+    pub fn face_box(&self, f: FaceId) -> Box3 {
+        match self.boxes.get() {
+            Some(b) => b[f.index()],
+            None => self.body.live_face_box(f),
+        }
+    }
+
+    pub fn boxes(&self) -> &[Box3] {
+        self.boxes.get_or_init(|| {
+            (0..self.body.faces.len() as u32)
+                .map(FaceId)
+                .map(|f| match self.body.face(f).alive {
+                    true => self.body.face_box(f),
+                    false => Box3::EMPTY,
+                })
+                .collect()
+        })
     }
 
     fn info(&self, f: FaceId) -> &FaceInfo {
@@ -394,8 +415,9 @@ impl<'a> Index<'a> {
         if !self.bbox.contains(p) {
             return Where::Outside;
         }
+        let boxes = self.boxes();
         for f in self.body.face_ids() {
-            if self.boxes[f.index()].contains(p)
+            if boxes[f.index()].contains(p)
                 && self.body.face(f).surface.distance(p) <= tol::LINEAR
                 && self.point_in_face(f, p) != Where::Outside
             {
@@ -409,7 +431,7 @@ impl<'a> Index<'a> {
             let line = Line::new(p, dir);
             let mut crossings = 0usize;
             for f in self.body.face_ids() {
-                if !ray_hits_box(p, dir.get(), &self.boxes[f.index()]) {
+                if !ray_hits_box(p, dir.get(), &boxes[f.index()]) {
                     continue;
                 }
                 match line_surface(&line, &self.body.face(f).surface) {

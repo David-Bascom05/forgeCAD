@@ -141,7 +141,27 @@ pub struct Body {
     pub loops: Vec<Loop>,
     pub faces: Vec<Face>,
     pub shells: Vec<Shell>,
+    /// Built on first use, kept up to date from then on.
+    pub hulls: Cached<FaceHulls>,
 }
+
+/// Boxes over runs of face ids (a chunk of 16 faces, a block of 16 chunks), each the hull of
+/// its live faces' boxes: worked out on first use, dropped when a face in the run comes or goes.
+#[derive(Clone)]
+pub struct FaceHulls {
+    chunks: Vec<Cached<Chunk>>,
+    blocks: Vec<Cached<Box3>>,
+}
+
+#[derive(Clone)]
+struct Chunk {
+    hull: Box3,
+    /// Bit i: face 16c + i is alive.
+    live: u16,
+    boxes: [Box3; RUN],
+}
+
+const RUN: usize = 16;
 
 impl Body {
     pub fn new() -> Self {
@@ -194,6 +214,10 @@ impl Body {
         }
         self.faces[f.index()].alive = false;
         self.dead += 1;
+        if let Some(h) = self.hulls.get_mut() {
+            h.chunks[f.index() / RUN].clear();
+            h.blocks[f.index() / (RUN * RUN)].clear();
+        }
         // shell face lists go stale here; compact() regroups shells
         for li in 0..self.faces[f.index()].loops.len() {
             let l = self.faces[f.index()].loops[li];
@@ -395,6 +419,14 @@ impl Body {
             alive: true,
         });
         self.shells[shell.index()].faces.push(id);
+        // the new face is the last: so are its chunk and block
+        if let Some(h) = self.hulls.get_mut() {
+            h.chunks.resize_with(id.index() / RUN + 1, Cached::default);
+            h.blocks
+                .resize_with(id.index() / (RUN * RUN) + 1, Cached::default);
+            h.chunks[id.index() / RUN].clear();
+            h.blocks[id.index() / (RUN * RUN)].clear();
+        }
         id
     }
 
@@ -475,6 +507,73 @@ impl Body {
     pub fn edge_box(&self, e: EdgeId) -> Box3 {
         let edge = self.edge(e);
         *edge.bbox.get_or_init(|| edge.curve.bbox(edge.range))
+    }
+
+    fn hulls(&self) -> &FaceHulls {
+        self.hulls.get_or_init(|| FaceHulls {
+            chunks: (0..self.faces.len().div_ceil(RUN))
+                .map(|_| Cached::default())
+                .collect(),
+            blocks: (0..self.faces.len().div_ceil(RUN * RUN))
+                .map(|_| Cached::default())
+                .collect(),
+        })
+    }
+
+    fn chunk(&self, c: usize) -> &Chunk {
+        self.hulls().chunks[c].get_or_init(|| {
+            let mut ch = Chunk {
+                hull: Box3::EMPTY,
+                live: 0,
+                boxes: [Box3::EMPTY; RUN],
+            };
+            for i in 0..RUN.min(self.faces.len() - c * RUN) {
+                let f = FaceId((c * RUN + i) as u32);
+                if self.face(f).alive {
+                    ch.boxes[i] = self.face_box(f);
+                    ch.hull = ch.hull.hull(&ch.boxes[i]);
+                    ch.live |= 1 << i;
+                }
+            }
+            ch
+        })
+    }
+
+    fn block_box(&self, k: usize) -> Box3 {
+        let h = self.hulls();
+        *h.blocks[k].get_or_init(|| {
+            (k * RUN..(k * RUN + RUN).min(h.chunks.len()))
+                .fold(Box3::EMPTY, |b, c| b.hull(&self.chunk(c).hull))
+        })
+    }
+
+    /// A box holding every live face.
+    pub fn faces_box(&self) -> Box3 {
+        (0..self.hulls().blocks.len()).fold(Box3::EMPTY, |b, k| b.hull(&self.block_box(k)))
+    }
+
+    /// `face_box` of a live face, empty for a removed one, as kept with the hulls.
+    pub fn live_face_box(&self, f: FaceId) -> Box3 {
+        self.chunk(f.index() / RUN).boxes[f.index() % RUN]
+    }
+
+    /// The live faces whose boxes `hit` accepts, in id order. A run of faces is passed over when
+    /// `hit` refuses the hull of their boxes, so `hit` must accept every box holding one it accepts.
+    pub fn faces_where<'a>(
+        &'a self,
+        hit: impl Fn(&Box3) -> bool + Copy + 'a,
+    ) -> impl Iterator<Item = FaceId> + 'a {
+        let h = self.hulls();
+        (0..h.blocks.len())
+            .filter(move |&k| hit(&self.block_box(k)))
+            .flat_map(move |k| k * RUN..(k * RUN + RUN).min(h.chunks.len()))
+            .map(move |c| (c, self.chunk(c)))
+            .filter(move |(_, ch)| hit(&ch.hull))
+            .flat_map(move |(c, ch)| {
+                (0..RUN)
+                    .filter(move |&i| ch.live >> i & 1 == 1 && hit(&ch.boxes[i]))
+                    .map(move |i| FaceId((c * RUN + i) as u32))
+            })
     }
 
     pub fn face_box(&self, f: FaceId) -> Box3 {

@@ -609,19 +609,20 @@ pub fn nary_with(
         let mut out = PairOut::default();
         // a face surely clear of the other tool's solid meets none of its faces
         let clear = |f: &forge_math::Box3, k: Side| shapes.is_some_and(|sh| sh[k].box_out(f, SHAPE_MARGIN));
+        let (ba, bb) = (ia.boxes(), ib.boxes());
         let b_clear: Vec<bool> = b
             .face_ids()
-            .map(|fb| ib.boxes[fb.index()].overlaps(&ia.bbox) && clear(&ib.boxes[fb.index()], i))
+            .map(|fb| bb[fb.index()].overlaps(&ia.bbox) && clear(&bb[fb.index()], i))
             .collect();
         for fa in a.face_ids() {
-            if !ia.boxes[fa.index()].overlaps(&ib.bbox) || clear(&ia.boxes[fa.index()], j) {
+            if !ba[fa.index()].overlaps(&ib.bbox) || clear(&ba[fa.index()], j) {
                 continue;
             }
             for fb in b.face_ids() {
-                if !ia.boxes[fa.index()].overlaps(&ib.boxes[fb.index()]) || b_clear[fb.index()] {
+                if !ba[fa.index()].overlaps(&bb[fb.index()]) || b_clear[fb.index()] {
                     continue;
                 }
-                let region = overlap(&ia.boxes[fa.index()], &ib.boxes[fb.index()]).grow(tol::LINEAR);
+                let region = overlap(&ba[fa.index()], &bb[fb.index()]).grow(tol::LINEAR);
                 // an edge here would be dropped below, with both its sides (not known to meet: kept
                 // as meeting for the triple points)
                 if outside(&region) {
@@ -832,11 +833,11 @@ pub fn nary_with(
             {
                 continue;
             }
-            let body = tools[k];
+            let (body, boxes) = (tools[k], index[k].boxes());
             for h in body.face_ids() {
                 // a triple point lies on both the edge's faces and on h: where either of them was
                 // found apart from h, there is none
-                if !index[k].boxes[h.index()].overlaps(&reach) {
+                if !boxes[h.index()].overlaps(&reach) {
                     continue;
                 }
                 let s = &body.face(h).surface;

@@ -358,13 +358,19 @@ fn plan(a: &Body, b: &Body, op: Op) -> R<Plan> {
     let mut coplanar: Vec<(FaceId, FaceId)> = Vec::new();
     let mut imprints: Vec<Imprint> = Vec::new();
     let mut touching: Vec<Touch> = Vec::new();
-    for fa in a.face_ids() {
+    let b_box = index[1].bbox;
+    let near_b: Vec<FaceId> = a.faces_where(|x| x.overlaps(&b_box)).collect();
+    let b_boxes: Vec<Box3> = (0..b.faces.len() as u32)
+        .map(|f| index[1].face_box(FaceId(f)))
+        .collect();
+    for &fa in &near_b {
+        let ba = index[0].face_box(fa);
         for fb in b.face_ids() {
-            if !index[0].boxes[fa.index()].overlaps(&index[1].boxes[fb.index()]) {
+            if !ba.overlaps(&b_boxes[fb.index()]) {
                 continue;
             }
             let (sa, sb) = (&a.face(fa).surface, &b.face(fb).surface);
-            let region = overlap(&index[0].boxes[fa.index()], &index[1].boxes[fb.index()]).grow(tol::LINEAR);
+            let region = overlap(&ba, &b_boxes[fb.index()]).grow(tol::LINEAR);
             let found = ssi::surfaces_in(sa, sb, region);
             if debug_on() {
                 let what = match &found {
@@ -628,7 +634,6 @@ fn plan(a: &Body, b: &Body, op: Op) -> R<Plan> {
     }
 
     // A's faces that can change: crossed by new edges, using a split edge, or within B's reach
-    let b_box = index[1].bbox;
     let mut involved: Vec<FaceId> = segs.iter().map(|s| s.faces[0]).collect();
     involved.extend(imprints.iter().filter(|im| im.side == 1).map(|im| im.into));
     for &(sd, e, _) in &by_edge {
@@ -644,10 +649,7 @@ fn plan(a: &Body, b: &Body, op: Op) -> R<Plan> {
     }
     split_faces.sort_unstable();
     split_faces.dedup();
-    involved.extend(
-        a.face_ids()
-            .filter(|&f| index[0].boxes[f.index()].overlaps(&b_box)),
-    );
+    involved.extend(near_b);
     involved.sort_unstable();
     involved.dedup();
 
@@ -1324,9 +1326,8 @@ pub(crate) fn local_class<T: PartialEq>(
             let q = face.surface.eval(face.surface.project(p + w * step));
             // the face, or one beside it on the same surface (a ball's other half)
             let on_face = own.point_in_face(f, q) == Where::Inside
-                || body.face_ids().any(|g| {
+                || body.faces_where(|b| b.contains(q)).any(|g| {
                     g != f
-                        && own.boxes[g.index()].contains(q)
                         && body.face(g).surface == face.surface
                         && body.face(g).same_sense == face.same_sense
                         && own.point_in_face(g, q) == Where::Inside
@@ -1380,8 +1381,9 @@ pub(crate) fn trim(
     } else if domain.lo.is_finite() && domain.hi.is_finite() {
         Interval::new(domain.lo, domain.hi)
     } else {
-        let both = index[0].boxes[faces[0].index()]
-            .hull(&index[1].boxes[faces[1].index()])
+        let both = index[0]
+            .face_box(faces[0])
+            .hull(&index[1].face_box(faces[1]))
             .grow(1.0);
         // an open conic's parameter is bounded by its distance from its frame's origin:
         // the y coordinate (over b for a hyperbola)
@@ -1479,7 +1481,8 @@ pub(crate) fn trim(
                         let g = across.implicit(curve.eval(h.t - dt)) + across.implicit(curve.eval(h.t + dt));
                         g * inward >= 0.0 || g.abs() <= 1e-7
                     };
-                    index[1 - k].boxes[faces[1 - k].index()]
+                    index[1 - k]
+                        .face_box(faces[1 - k])
                         .grow(tol::LINEAR)
                         .contains(h.point)
                         && on_edge(body, e, h.point).is_some_and(|(s, _)| inner(s))
@@ -1504,7 +1507,7 @@ pub(crate) fn trim(
                     // only split it where nothing meets it (and not its coincident twin). Its box
                     // says so cheaply; a grazing crossing, or one within two tolerances of the
                     // box's side (where a face's own boundary lies), is checked exactly
-                    let other = index[1 - k].boxes[faces[1 - k].index()];
+                    let other = index[1 - k].face_box(faces[1 - k]);
                     if let Some((s, tol)) = on_edge(body, e, h.point)
                         && other.grow(tol::LINEAR).contains(h.point)
                         && (!(grazing || !other.contains(h.point))
@@ -1594,7 +1597,7 @@ pub(crate) fn trim(
                 .iter()
                 .any(|c| c.point.distance(p) <= c.tol.max(tol::LINEAR));
             if !cut
-                && (0..2).all(|k| index[k].boxes[faces[k].index()].grow(tol::LINEAR).contains(p))
+                && (0..2).all(|k| index[k].face_box(faces[k]).grow(tol::LINEAR).contains(p))
                 && (0..2).all(|k| index[k].point_in_face(faces[k], p) != Where::Outside)
             {
                 ts.push((t, cuts.len()));
