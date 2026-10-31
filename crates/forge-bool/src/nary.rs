@@ -274,6 +274,8 @@ struct Pieces<'a> {
     list: Vec<Piece>,
     /// Per tool, per edge: (first piece, count), count 0 if not split yet.
     of_edge: Vec<Vec<(u32, u32)>>,
+    /// The names of the new vertices at cuts.
+    vnames: &'a [Name],
 }
 
 impl Pieces<'_> {
@@ -282,6 +284,11 @@ impl Pieces<'_> {
         if n > 0 {
             return first as usize..(first + n) as usize;
         }
+        let (tools, vnames) = (self.tools, self.vnames);
+        let vname = |v: VKey| match v {
+            VKey::Old(sd, id) => tools[sd].vertex(id).name,
+            VKey::New(i) => vnames[i as usize],
+        };
         let r = edge_split(
             self.tools[side],
             side,
@@ -290,6 +297,7 @@ impl Pieces<'_> {
             self.by_edge,
             self.cut_vertex,
             self.alias,
+            &vname,
             &mut self.list,
         );
         self.of_edge[side][e.index()] = (r.start as u32, r.len() as u32);
@@ -791,6 +799,30 @@ pub fn nary_with(
     alias.sort();
     let cut_vertex: Vec<VKey> = cluster[..cuts.len()].iter().map(|&k| key_of[k]).collect();
     let triple_vertex: Vec<VKey> = cluster[cuts.len()..].iter().map(|&k| key_of[k]).collect();
+    let mut through = vec![Vec::new(); points.len()];
+    for (c, &k) in cuts.iter().zip(&cut_vertex) {
+        if let VKey::New(i) = k {
+            through[i as usize].push((tools[c.side].edge(c.edge).name, Some(c.s)));
+        }
+    }
+    for (tc, &k) in triple.iter().zip(&triple_vertex) {
+        if let VKey::New(i) = k {
+            through[i as usize].push((segs[tc.seg].name, Some(tc.t)));
+        }
+    }
+    for sg in &segs {
+        let Some((i0, i1)) = sg.ends else { continue };
+        for k in [cut_vertex[i0], cut_vertex[i1]] {
+            if let VKey::New(i) = k {
+                for j in 0..2 {
+                    through[i as usize].push((tools[sg.sides[j]].face(sg.faces[j]).name, None));
+                }
+            }
+        }
+    }
+    let vnames = crate::boolean::vertex_names(through, root);
+    // closed new edges' own vertices, added after those
+    let mut seams: Vec<Name> = Vec::new();
     // a new vertex settles on the point nearest every curve through it; parameters follow it
     {
         let mut through: Vec<Vec<(&Curve, Interval)>> = vec![Vec::new(); points.len()];
@@ -900,6 +932,7 @@ pub fn nary_with(
         alias: &alias,
         list: Vec::new(),
         of_edge: tools.iter().map(|b| vec![(0, 0); b.edges.len()]).collect(),
+        vnames: &vnames,
     };
     let mut at_seg: Vec<Vec<(f64, VKey)>> = vec![Vec::new(); segs.len()];
     for (tc, &k) in triple.iter().zip(&triple_vertex) {
@@ -909,16 +942,29 @@ pub fn nary_with(
     for (si, sg) in segs.iter().enumerate() {
         let first = pieces.list.len();
         let mut marks = std::mem::take(&mut at_seg[si]);
-        let push = |list: &mut Vec<Piece>, lo: (f64, VKey), hi: (f64, VKey), k: Option<usize>| {
+        // a piece between marks is named by its ends, not its place along the curve
+        let vname = |v: VKey| match v {
+            VKey::Old(sd, id) => tools[sd].vertex(id).name,
+            VKey::New(i) => vnames[i as usize],
+        };
+        let push = |list: &mut Vec<Piece>, lo: (f64, VKey), hi: (f64, VKey), part: bool| {
             list.push(Piece {
                 curve: sg.curve.clone(),
                 range: Interval::new(lo.0, hi.0),
                 start: lo.1,
                 end: hi.1,
-                name: k.map_or(sg.name, |k| sg.name.with_str("part").with(k as u64)),
+                name: if part {
+                    sg.name
+                        .with_str("part")
+                        .with_name(vname(lo.1))
+                        .with_name(vname(hi.1))
+                } else {
+                    sg.name
+                },
                 seg: Some(si),
                 whole: None,
                 side: None,
+                of: None,
             });
         };
         match sg.ends {
@@ -931,14 +977,14 @@ pub fn nary_with(
                 marks.sort_by(|x, y| x.0.total_cmp(&y.0));
                 marks.dedup_by(|x, y| x.1 == y.1);
                 if marks.is_empty() {
-                    push(&mut pieces.list, (sg.range.lo, v0), (sg.range.hi, v1), None);
+                    push(&mut pieces.list, (sg.range.lo, v0), (sg.range.hi, v1), false);
                 } else {
                     let all: Vec<(f64, VKey)> = std::iter::once((sg.range.lo, v0))
                         .chain(marks)
                         .chain(std::iter::once((sg.range.hi, v1)))
                         .collect();
-                    for (k, w) in all.windows(2).enumerate() {
-                        push(&mut pieces.list, w[0], w[1], Some(k));
+                    for w in all.windows(2) {
+                        push(&mut pieces.list, w[0], w[1], true);
                     }
                 }
             }
@@ -956,8 +1002,9 @@ pub fn nary_with(
                     // a closed new edge carries its own vertex
                     points.push(sg.curve.eval(sg.range.lo));
                     point_tols.push(tol::LINEAR);
+                    seams.push(sg.name.with_str("seam"));
                     let v = VKey::New(points.len() as u32 - 1);
-                    push(&mut pieces.list, (sg.range.lo, v), (sg.range.hi, v), None);
+                    push(&mut pieces.list, (sg.range.lo, v), (sg.range.hi, v), false);
                 } else {
                     let m = marks.len();
                     for k in 0..m {
@@ -966,7 +1013,7 @@ pub fn nary_with(
                         } else {
                             marks[k + 1]
                         };
-                        push(&mut pieces.list, marks[k], hi, Some(k));
+                        push(&mut pieces.list, marks[k], hi, true);
                     }
                 }
             }
@@ -1203,12 +1250,12 @@ pub fn nary_with(
     for (j, ((side, f, _, _), split)) in jobs.iter().zip(splits).enumerate() {
         let name = tools[*side].face(*f).name;
         let first = regs.len();
-        for (k, loops) in split?.into_iter().enumerate() {
+        for loops in split? {
             regs.push(Reg {
                 side: *side,
                 face: *f,
+                name: crate::boolean::region_name(name, &loops, list),
                 loops,
-                name: name.with_str("split").with(k as u64),
                 job: Some(j),
             });
         }
@@ -1507,13 +1554,13 @@ pub fn nary_with(
         replaced[j] = true;
         let (side, f, _, _) = jobs[j];
         let name = tools[side].face(f).name;
-        for (k, (loops, c)) in m.into_iter().enumerate() {
+        for (loops, c) in m {
             extra.push((
                 Reg {
                     side,
                     face: f,
+                    name: crate::boolean::region_name(name, &loops, list),
                     loops,
-                    name: name.with_str("split").with(k as u64),
                     job: Some(j),
                 },
                 c,
@@ -1558,7 +1605,7 @@ pub fn nary_with(
             regs[ri].loops = walks;
         }
     }
-    let list = pieces.list;
+    let mut list = pieces.list;
     let mut used: Vec<usize> = kept
         .iter()
         .flat_map(|&(ri, _)| regs[ri].loops.iter().flatten().map(|h| h.0))
@@ -1578,6 +1625,26 @@ pub fn nary_with(
                     at: pc.curve.eval(pc.range.mid()),
                 });
             }
+        }
+    }
+    // a face or edge only one piece of which is kept keeps its own name: it was only trimmed
+    let faces: Vec<(Side, FaceId)> = kept
+        .iter()
+        .map(|&(ri, _)| (regs[ri].side, regs[ri].face))
+        .collect();
+    for (&(ri, _), sole) in kept.iter().zip(crate::boolean::alone(&faces)) {
+        if sole {
+            regs[ri].name = tools[regs[ri].side].face(regs[ri].face).name;
+        }
+    }
+    let split: Vec<(usize, (Side, EdgeId))> = (0..list.len())
+        .filter(|&p| uses[p] > 0)
+        .filter_map(|p| Some((p, (list[p].side?, list[p].of?))))
+        .collect();
+    let keys: Vec<(Side, EdgeId)> = split.iter().map(|x| x.1).collect();
+    for (&(p, (sd, e)), sole) in split.iter().zip(crate::boolean::alone(&keys)) {
+        if sole {
+            list[p].name = tools[sd].edge(e).name;
         }
     }
     let mut out = Body::new();
@@ -1613,7 +1680,10 @@ pub fn nary_with(
                                 VKey::New(i) => out.add_tolerant_vertex(
                                     points[i as usize],
                                     point_tols[i as usize],
-                                    root.with_str("vertex").with(i as u64),
+                                    vnames
+                                        .get(i as usize)
+                                        .copied()
+                                        .unwrap_or_else(|| seams[i as usize - vnames.len()]),
                                 ),
                             })
                         };

@@ -128,6 +128,8 @@ pub(crate) struct Piece {
     pub(crate) whole: Option<(Side, EdgeId)>,
     /// The body whose edge this piece is part of (None for a new edge).
     pub(crate) side: Option<Side>,
+    /// The edge this piece is part of, when it was split.
+    pub(crate) of: Option<EdgeId>,
 }
 
 /// A face of the result before it is built: loops of (piece, forward).
@@ -180,11 +182,12 @@ pub fn boolean(a: &Body, b: &Body, op: Op, feature: u64) -> R<Body> {
 
 /// The boolean done in place on `target`: only faces near `b` are examined,
 /// and only the faces it actually changes are rebuilt. Removed entities stay
-/// as tombstones until `Body::compact`.
-pub fn boolean_into(target: &mut Body, b: &Body, op: Op, feature: u64) -> R<()> {
-    let plan = plan(target, b, op, feature)?;
+/// as tombstones until `Body::compact`. Names do not depend on `_feature`: what the boolean makes
+/// is named by what meets there, as the n-ary boolean names it.
+pub fn boolean_into(target: &mut Body, b: &Body, op: Op, _feature: u64) -> R<()> {
+    let plan = plan(target, b, op)?;
     let mut clock = phases_on().then(std::time::Instant::now);
-    apply(target, b, &plan, Name::feature(feature));
+    apply(target, b, &plan);
     lap(&mut clock, 6);
     Ok(())
 }
@@ -195,6 +198,8 @@ struct Plan {
     specs: Vec<Spec>,
     kept: Vec<(usize, bool)>,
     points: Vec<Point3>,
+    /// Each new point's name.
+    vnames: Vec<Name>,
     /// Each new point's tolerance.
     tols: Vec<f64>,
     /// Existing vertices whose tolerance grows to hold the curves now ending on them.
@@ -217,6 +222,7 @@ pub(crate) fn edge_split(
     by_edge: &[(Side, EdgeId, usize)],
     cut_vertex: &[VKey],
     alias: &[(VKey, VKey)],
+    vname: &dyn Fn(VKey) -> Name,
     pieces: &mut Vec<Piece>,
 ) -> std::ops::Range<usize> {
     let resolve = |v: VKey| alias.iter().find(|(f, _)| *f == v).map_or(v, |&(_, t)| t);
@@ -248,11 +254,12 @@ pub(crate) fn edge_split(
     let whole = splits.is_empty().then_some((side, e));
     let first = pieces.len();
     let mut at = (edge.range.lo, vs);
-    for (k, &(s, v)) in splits.iter().chain([(edge.range.hi, ve)].iter()).enumerate() {
+    for &(s, v) in splits.iter().chain([(edge.range.hi, ve)].iter()) {
+        // a piece is named by its ends, not its place in the order along the edge
         let name = if whole.is_some() {
             edge.name
         } else {
-            edge.name.with_str("split").with(k as u64)
+            edge.name.piece(vname(at.1).with_name(vname(v)))
         };
         pieces.push(Piece {
             curve: edge.curve.clone(),
@@ -263,6 +270,7 @@ pub(crate) fn edge_split(
             seg: None,
             whole,
             side: Some(side),
+            of: whole.is_none().then_some(e),
         });
         at = (s, v);
     }
@@ -307,11 +315,13 @@ fn lap(t: &mut Option<std::time::Instant>, k: usize) {
     }
 }
 
-fn plan(a: &Body, b: &Body, op: Op, feature: u64) -> R<Plan> {
+fn plan(a: &Body, b: &Body, op: Op) -> R<Plan> {
     let mut clock = phases_on().then(std::time::Instant::now);
     let bodies = [a, b];
     let index = [Index::new(a), Index::new(b)];
-    let root = Name::feature(feature);
+    // new edges and vertices are named by the faces and edges meeting there, never by the
+    // feature: the n-ary boolean, meeting them all at once, names them alike
+    let root = Name::feature(0);
 
     // 1-2: intersect overlapping face pairs, keep pieces inside both faces
     let mut cuts: Vec<Cut> = Vec::new();
@@ -418,6 +428,25 @@ fn plan(a: &Body, b: &Body, op: Op, feature: u64) -> R<Plan> {
     // 3: vertices for the cuts, then edge pieces
     lap(&mut clock, 1);
     let (cut_vertex, mut new_points, alias) = place_cuts(&bodies, &cuts)?;
+    let mut through = vec![Vec::new(); new_points.len()];
+    for (c, &k) in cuts.iter().zip(&cut_vertex) {
+        if let VKey::New(i) = k {
+            through[i as usize].push((bodies[c.side].edge(c.edge).name, Some(c.s)));
+        }
+    }
+    for sg in &segs {
+        let Some((i0, i1)) = sg.ends else { continue };
+        for k in [cut_vertex[i0], cut_vertex[i1]] {
+            if let VKey::New(i) = k {
+                for j in 0..2 {
+                    through[i as usize].push((bodies[sg.sides[j]].face(sg.faces[j]).name, None));
+                }
+            }
+        }
+    }
+    let mut vnames = vertex_names(through, root);
+    // closed new edges' own vertices (added after the cuts' below)
+    vnames.extend(segs.iter().map(|s| s.name.with_str("seam")));
     // cut points of one vertex differ by up to their tolerance: a new vertex settles on the point
     // nearest every curve through it (alternating projections), and every curve parameter is
     // then taken from that point, so edge and curve ends land on their vertices
@@ -497,6 +526,10 @@ fn plan(a: &Body, b: &Body, op: Op, feature: u64) -> R<Plan> {
         if n > 0 {
             return first as usize..(first + n) as usize;
         }
+        let vname = |v: VKey| match v {
+            VKey::Old(sd, id) => bodies[sd].vertex(id).name,
+            VKey::New(i) => vnames[i as usize],
+        };
         let r = edge_split(
             bodies[side],
             side,
@@ -505,6 +538,7 @@ fn plan(a: &Body, b: &Body, op: Op, feature: u64) -> R<Plan> {
             &by_edge,
             &cut_vertex,
             &alias,
+            &vname,
             pieces,
         );
         edge_pieces[side][e.index()] = (r.start as u32, r.len() as u32);
@@ -529,6 +563,7 @@ fn plan(a: &Body, b: &Body, op: Op, feature: u64) -> R<Plan> {
             seg: Some(si),
             whole: None,
             side: None,
+            of: None,
         });
     }
     // closed new edges carry their own vertex at the curve start
@@ -631,12 +666,13 @@ fn plan(a: &Body, b: &Body, op: Op, feature: u64) -> R<Plan> {
                     remove: Vec::new(),
                     preset: None,
                 });
+                // the face keeps its name in place
+                let disk = vec![disk];
                 specs.push(Spec {
                     side,
                     from: f,
-                    loops: vec![disk],
-                    // the face keeps its name in place: its pieces carry the feature's too
-                    name: name.with_name(root).with_str("split").with(1),
+                    name: region_name(name, &disk, &pieces),
+                    loops: disk,
                     foreign: Vec::new(),
                     whole: false,
                     extend: false,
@@ -769,8 +805,8 @@ fn plan(a: &Body, b: &Body, op: Op, feature: u64) -> R<Plan> {
                         side,
                         from: f,
                         foreign: used(&loops),
+                        name: region_name(face.name, &loops, &pieces),
                         loops,
-                        name: face.name.with_name(root).with_str("split").with(k as u64),
                         whole: false,
                         extend: false,
                         remove: Vec::new(),
@@ -812,7 +848,7 @@ fn plan(a: &Body, b: &Body, op: Op, feature: u64) -> R<Plan> {
             let mut new_edges: Vec<usize> = mine.iter().map(|&i| seg_piece[i]).collect();
             new_edges.extend(foreign.iter().copied());
             let regions = split_face(body, f, &pieces, &boundary, &new_edges, true)?.regions;
-            for (k, loops) in regions.into_iter().enumerate() {
+            for loops in regions {
                 let used: Vec<usize> = foreign
                     .iter()
                     .copied()
@@ -821,8 +857,8 @@ fn plan(a: &Body, b: &Body, op: Op, feature: u64) -> R<Plan> {
                 specs.push(Spec {
                     side,
                     from: f,
+                    name: region_name(body.face(f).name, &loops, &pieces),
                     loops,
-                    name: body.face(f).name.with_str("split").with(k as u64),
                     foreign: used,
                     whole: false,
                     extend: false,
@@ -917,11 +953,13 @@ fn plan(a: &Body, b: &Body, op: Op, feature: u64) -> R<Plan> {
         involved = a.face_ids().collect();
     }
     lap(&mut clock, 5);
+    sole_pieces_keep_names(&bodies, &mut specs, &kept, &mut pieces, &uses);
     Ok(Plan {
         pieces,
         specs,
         kept,
         points,
+        vnames,
         tols,
         grown,
         alias,
@@ -932,12 +970,13 @@ fn plan(a: &Body, b: &Body, op: Op, feature: u64) -> R<Plan> {
 
 /// Makes the planned changes to A: drops the faces that go, rebuilds the
 /// faces that change, adds the faces that come from B, and regroups shells.
-fn apply(a: &mut Body, b: &Body, plan: &Plan, root: Name) {
+fn apply(a: &mut Body, b: &Body, plan: &Plan) {
     let Plan {
         pieces,
         specs,
         kept,
         points,
+        vnames,
         tols,
         grown,
         alias,
@@ -997,7 +1036,7 @@ fn apply(a: &mut Body, b: &Body, plan: &Plan, root: Name) {
             }),
             VKey::New(i) => *new_vertex[i as usize].get_or_insert_with(|| {
                 let i = i as usize;
-                a.add_tolerant_vertex(points[i], tols[i], root.with_str("vertex").with(i as u64))
+                a.add_tolerant_vertex(points[i], tols[i], vnames[i])
             }),
         }
     };
@@ -1285,6 +1324,7 @@ pub(crate) fn trim(
         }
     };
     let first = cuts.len();
+    let first_seg = segs.len();
     let mut ts: Vec<(f64, usize)> = Vec::new();
     // edges the curve runs along: (side, edge, is a seam)
     let mut along: Vec<(Side, EdgeId, bool)> = Vec::new();
@@ -1531,11 +1571,113 @@ pub(crate) fn trim(
                 ends: Some((i0, i1)),
                 faces,
                 sides,
-                name: name.with(k as u64),
+                name,
             });
         }
     }
+    // a piece of the curve is named by the edges it runs between, not its place along the curve;
+    // pieces between the same two edges by where they start along the first
+    let edge_name = |i: usize| {
+        let k = sides
+            .iter()
+            .position(|&sd| sd == cuts[i].side)
+            .expect("a cut of one of the faces");
+        bodies[k].edge(cuts[i].edge).name
+    };
+    let keys: Vec<(Name, Name, f64)> = segs[first_seg..]
+        .iter()
+        .map(|sg| {
+            let (i0, i1) = sg.ends.expect("an open piece");
+            (edge_name(i0), edge_name(i1), cuts[i0].s)
+        })
+        .collect();
+    for (j, sg) in segs[first_seg..].iter_mut().enumerate() {
+        let (a, b, s) = keys[j];
+        let rank = keys.iter().filter(|k| k.0 == a && k.1 == b && k.2 < s).count();
+        sg.name = name.with_name(a).with_name(b).with(rank as u64);
+    }
     Ok(())
+}
+
+/// Names for new vertices from the edges, faces and curves meeting there, not from the order
+/// they were found in. Points where the same ones meet are told apart by their order along the
+/// least-named of those with the point's parameter along it.
+pub(crate) fn vertex_names(through: Vec<Vec<(Name, Option<f64>)>>, root: Name) -> Vec<Name> {
+    let n = through.len();
+    let keys: Vec<(Vec<Name>, f64)> = through
+        .into_iter()
+        .map(|mut t| {
+            t.sort_unstable_by(|a, b| a.0.cmp(&b.0));
+            let s = t.iter().find_map(|x| x.1).unwrap_or(0.0);
+            let mut names: Vec<Name> = t.into_iter().map(|x| x.0).collect();
+            names.dedup();
+            (names, s)
+        })
+        .collect();
+    let mut order: Vec<usize> = (0..n).collect();
+    order.sort_by(|&i, &j| keys[i].0.cmp(&keys[j].0).then(keys[i].1.total_cmp(&keys[j].1)));
+    let mut out = vec![Name::NONE; n];
+    let mut rank = 0;
+    for (w, &i) in order.iter().enumerate() {
+        rank = if w > 0 && keys[order[w - 1]].0 == keys[i].0 {
+            rank + 1
+        } else {
+            0
+        };
+        out[i] = root.with_str("vertex").with_set(keys[i].0.clone()).with(rank);
+    }
+    out
+}
+
+/// A name for a piece of a split face from its boundary, not its place in the split's order:
+/// the least of its boundary pieces' names, each with the way it runs (a piece runs each way
+/// round at most one region of a face).
+pub(crate) fn region_name(face: Name, loops: &[Vec<(usize, bool)>], pieces: &[Piece]) -> Name {
+    let least = loops
+        .iter()
+        .flatten()
+        .map(|&(p, fwd)| pieces[p].name.with(fwd as u64))
+        .min();
+    face.piece(least.unwrap_or(Name::NONE))
+}
+
+/// For each key, whether it is the only one of its value.
+pub(crate) fn alone<K: Ord + Copy>(keys: &[K]) -> Vec<bool> {
+    let mut sorted = keys.to_vec();
+    sorted.sort_unstable();
+    keys.iter()
+        .map(|k| sorted.get(sorted.partition_point(|x| x < k) + 1) != Some(k))
+        .collect()
+}
+
+/// A face or edge split by the boolean of which only one piece is kept keeps its own name: it
+/// was only trimmed.
+fn sole_pieces_keep_names(
+    bodies: &[&Body; 2],
+    specs: &mut [Spec],
+    kept: &[(usize, bool)],
+    pieces: &mut [Piece],
+    uses: &[u8],
+) {
+    let faces: Vec<(Side, FaceId)> = kept
+        .iter()
+        .map(|&(i, _)| (specs[i].side, specs[i].from))
+        .collect();
+    for (&(i, _), sole) in kept.iter().zip(alone(&faces)) {
+        if sole {
+            specs[i].name = bodies[specs[i].side].face(specs[i].from).name;
+        }
+    }
+    let split: Vec<(usize, (Side, EdgeId))> = (0..pieces.len())
+        .filter(|&p| uses[p] > 0)
+        .filter_map(|p| Some((p, (pieces[p].side?, pieces[p].of?))))
+        .collect();
+    let keys: Vec<(Side, EdgeId)> = split.iter().map(|x| x.1).collect();
+    for (&(p, (sd, e)), sole) in split.iter().zip(alone(&keys)) {
+        if sole {
+            pieces[p].name = bodies[sd].edge(e).name;
+        }
+    }
 }
 
 /// The surface that meets face `f`'s surface along the edge of coedge `c`:

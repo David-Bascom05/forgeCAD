@@ -674,10 +674,28 @@ pub(crate) fn build(
             return Err(bad(ExtentError::NotCovered));
         }
     }
+    // each start face comes through whole (a face trimmed to one piece keeps its name)
+    let shape_of = |b: &Body, n: Name| {
+        b.face_by_name(n).map(|f| {
+            let loops = &b.face(f).loops;
+            (
+                loops.len(),
+                loops.iter().map(|&l| b.lp(l).coedges.len()).sum::<usize>(),
+                b.face_box(f),
+            )
+        })
+    };
     for &n in start {
-        let whole = base.0.face_by_name(n).map(|f| base.0.face(f).loops.len());
-        let now = body.face_by_name(n).map(|f| body.face(f).loops.len());
-        if whole != now {
+        let same = match (shape_of(&base.0, n), shape_of(&body, n)) {
+            (Some(w), Some(h)) => {
+                let close = |a: forge_math::Interval, b: forge_math::Interval| {
+                    (a.lo - b.lo).abs() <= tol::LINEAR && (a.hi - b.hi).abs() <= tol::LINEAR
+                };
+                w.0 == h.0 && w.1 == h.1 && close(w.2.x, h.2.x) && close(w.2.y, h.2.y) && close(w.2.z, h.2.z)
+            }
+            _ => false,
+        };
+        if !same {
             return Err(bad(ExtentError::NotAhead));
         }
     }
@@ -1107,11 +1125,9 @@ pub(crate) fn names(b: &Body) -> Vec<Name> {
     b.face_ids().map(|f| b.face(f).name).collect()
 }
 
-/// The names of `from` and of the pieces a boolean may split each into (up to `pieces`).
-fn derived(from: &[Name], pieces: usize) -> std::collections::HashSet<Name> {
-    from.iter()
-        .flat_map(|&b| std::iter::once(b).chain((0..pieces as u64).map(move |k| b.with_str("split").with(k))))
-        .collect()
+/// Whether `n` is one of `from` or a piece a boolean split from one.
+fn derived(from: &[Name], n: Name) -> bool {
+    from.iter().any(|&b| n == b || n.is_piece_of(b))
 }
 
 /// Whether a sweep (box `sweep`) from outside convex solid `sh`, ending on its surface `s`
@@ -1306,11 +1322,9 @@ pub(crate) fn verify_next(
 ) -> Result<(), RegenError> {
     let material = next.material;
     let bad = |error| RegenError::Extent { feature: i, error };
-    let pieces = t.faces.len() + 1;
-    let (end, base) = (derived(end, pieces), derived(base, pieces));
     let ends: Vec<Name> = names(t)
         .into_iter()
-        .filter(|n| end.contains(n) || !base.contains(n))
+        .filter(|&n| derived(end, n) || !derived(base, n))
         .collect();
     // the part near the sweep, from the solids the pick looked at: a tool clear of it holds none
     // of it, so the history folds the same without it (an intersection with one empties it)
@@ -1407,8 +1421,7 @@ pub(crate) fn verify_next(
         return Err(bad(ExtentError::Ambiguous));
     }
     let after = with(if material { Op::Subtract } else { Op::Union })?;
-    let ends = derived(&ends, after.faces.len() + 1);
-    if after.face_ids().any(|f| ends.contains(&after.face(f).name)) {
+    if after.face_ids().any(|f| derived(&ends, after.face(f).name)) {
         return Err(bad(ExtentError::NotCovered));
     }
     Ok(())

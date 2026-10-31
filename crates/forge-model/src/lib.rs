@@ -7,6 +7,7 @@ pub mod extent;
 pub mod fillets;
 pub mod finishing;
 pub mod hole;
+pub mod names;
 pub mod params;
 pub mod pattern;
 mod rib;
@@ -537,9 +538,10 @@ fn nary_regen(
     .map_err(err)
 }
 
-/// The root of the names a boolean ending at feature `i` gives the vertices it makes.
-fn cut_root(i: usize) -> Name {
-    Name::feature(i as u64 + 1 + 1_000_000)
+/// The root of the names a boolean gives the vertices it makes: the same for every boolean, so
+/// the n-ary and the feature-by-feature regen name them alike.
+fn cut_root(_i: usize) -> Name {
+    Name::feature(0)
 }
 
 fn op_of(c: Combine) -> Op {

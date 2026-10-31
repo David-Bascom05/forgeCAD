@@ -1,0 +1,784 @@
+//! Name stability under upstream edits. A reference (a face, edge or vertex name) taken on the
+//! part partway down its history must, after an edit above that point, name the entity that
+//! geometrically corresponds to the one it named, or nothing. Never another one.
+//!
+//! The correspondence comes from geometry alone, never from names: a dimension or placement
+//! edit is made in steps small enough that each entity moves less than the gap to any other,
+//! and every entity is tracked step to step; an insert, delete or swap leaves the entities it
+//! does not touch exactly where they were.
+
+use crate::{CoilSize, Combine, End, Extent, Feature, Head, Part, PathEnds, Source, Target, Turn};
+use forge_geom::{CurveGeom, SurfaceGeom};
+use forge_math::rng::Rng;
+use forge_math::{Box3, Point2, Point3, Vec3};
+use forge_ops::{ChamferSize, Profile, ProfileLoop, Radius, Segment};
+use forge_topo::{Body, EdgeId, FaceId, Name, VertexId};
+
+#[derive(Clone, Debug, PartialEq)]
+pub enum Edit {
+    /// Every size of feature `feature` scaled by `by` (its sketch about the sketch's origin).
+    Resize { feature: usize, by: f64 },
+    /// Feature `feature` moved by `by`.
+    Move { feature: usize, by: Vec3 },
+    /// `feature` put in at position `at`.
+    Insert { at: usize, feature: Box<Feature> },
+    /// Feature `at` taken out.
+    Delete { at: usize },
+    /// Features `at` and `at + 1` swapped.
+    Swap { at: usize },
+}
+
+impl Edit {
+    /// Where history position `i` (one not taken out) is after the edit.
+    pub fn moves(&self, i: usize) -> usize {
+        match *self {
+            Edit::Insert { at, .. } if i >= at => i + 1,
+            Edit::Delete { at } if i > at => i - 1,
+            Edit::Swap { at } if i == at => at + 1,
+            Edit::Swap { at } if i == at + 1 => at,
+            _ => i,
+        }
+    }
+
+    /// Whether the edit renumbers features already in the history.
+    pub fn shifts(&self, before: usize) -> bool {
+        (0..before).any(|i| self.moves(i) != i)
+    }
+
+    /// Applied to `part`; None where the feature takes no such edit. A resize or move is made
+    /// `t` of the way (0 to 1); `reach` is how far any point of it moves at most.
+    pub fn apply(&self, part: &Part, t: f64) -> Option<(Part, f64)> {
+        let mut fs = part.features.clone();
+        let mut reach = 0.0;
+        match self {
+            Edit::Resize { feature, by } => {
+                let (f, r) = resized(&fs[*feature], 1.0 + (by - 1.0) * t)?;
+                fs[*feature] = f;
+                reach = r * (by - 1.0).abs() * t;
+            }
+            Edit::Move { feature, by } => {
+                fs[*feature] = moved(&fs[*feature], *by * t)?;
+                reach = by.length() * t;
+            }
+            Edit::Insert { at, feature } => fs.insert(*at, (**feature).clone()),
+            Edit::Delete { at } => {
+                fs.remove(*at);
+            }
+            Edit::Swap { at } => fs.swap(*at, at + 1),
+        }
+        if self.shifts(fs.len() + 1) {
+            for f in &mut fs {
+                for r in feature_refs(f) {
+                    *r = self.moves(*r);
+                }
+            }
+        }
+        Some((Part { features: fs }, reach))
+    }
+}
+
+// The plug-in points: a new feature kind adds its arm here to take edits. Kinds without one are
+// left alone (never resized, moved, deleted or swapped), so they still build in histories.
+
+/// `f` with its sizes scaled by `k`, and how far a point of it moves per unit of `k`.
+pub fn resized(f: &Feature, k: f64) -> Option<(Feature, f64)> {
+    let mut f = f.clone();
+    let reach = match &mut f {
+        Feature::Extrude { profile, extent, .. } => {
+            let r = scale_profile(profile, k);
+            match extent {
+                Extent::Distance(d) | Extent::Symmetric(d) => {
+                    *d *= k;
+                    r.max(d.abs() / k)
+                }
+                Extent::TwoSided { forward, back } => {
+                    *forward *= k;
+                    *back *= k;
+                    r.max(forward.abs().max(back.abs()) / k)
+                }
+                _ => r,
+            }
+        }
+        Feature::Revolve { profile, axis, .. } => {
+            axis.origin = Point2::new(axis.origin.x * k, axis.origin.y * k);
+            scale_profile(profile, k)
+        }
+        Feature::Ball { radius, .. } => {
+            *radius *= k;
+            *radius / k
+        }
+        Feature::Hole(h) => {
+            h.diameter *= k;
+            let mut r = h.diameter / k;
+            match &mut h.head {
+                Head::Plain => {}
+                Head::Counterbore { diameter, depth } => {
+                    *diameter *= k;
+                    *depth *= k;
+                    r = r.max(*diameter / k);
+                }
+                Head::Countersink { diameter, .. } => {
+                    *diameter *= k;
+                    r = r.max(*diameter / k);
+                }
+            }
+            if let End::Depth(d) = &mut h.end {
+                *d *= k;
+                r = r.max(*d / k + h.diameter / k);
+            }
+            r
+        }
+        Feature::Fillet { edges } => {
+            let mut r: f64 = 0.0;
+            for (_, rad) in edges.iter_mut() {
+                let Radius::Constant(x) = rad else { return None };
+                *x *= k;
+                r = r.max(2.0 * *x / k);
+            }
+            r
+        }
+        Feature::Chamfer {
+            size: ChamferSize::Equal(d),
+            ..
+        } => {
+            *d *= k;
+            2.0 * *d / k
+        }
+        Feature::Shell { thickness, .. } => {
+            *thickness *= k;
+            *thickness / k
+        }
+        _ => return None,
+    };
+    Some((f, reach))
+}
+
+/// `f` moved by `d`.
+pub fn moved(f: &Feature, d: Vec3) -> Option<Feature> {
+    let mut f = f.clone();
+    let frame = match &mut f {
+        Feature::Extrude { profile, .. } | Feature::Revolve { profile, .. } => &mut profile.plane,
+        Feature::Ball { frame, .. } | Feature::Plane(frame) => frame,
+        Feature::Hole(h) => &mut h.at,
+        _ => return None,
+    };
+    *frame = frame.with_origin(frame.origin + d);
+    Some(f)
+}
+
+/// The earlier features `f` refers to by position, to renumber when the history shifts.
+fn feature_refs(f: &mut Feature) -> Vec<&mut usize> {
+    fn target(t: &mut Target) -> &mut usize {
+        match t {
+            Target::Plane(i) => i,
+            Target::Face { feature, .. } => feature,
+        }
+    }
+    match f {
+        Feature::Extrude {
+            extent: Extent::To { target: t, .. },
+            ..
+        }
+        | Feature::Revolve {
+            extent: Turn::To { target: t, .. },
+            ..
+        } => vec![target(t)],
+        Feature::Hole(h) => match &mut h.end {
+            End::To { target: t, .. } => vec![target(t)],
+            _ => vec![],
+        },
+        Feature::Pattern {
+            of: Source::Features(src),
+            ..
+        } => src.iter_mut().collect(),
+        Feature::Sweep(s) => match &mut s.ends {
+            PathEnds::To { target: t, .. } => vec![target(t)],
+            _ => vec![],
+        },
+        Feature::Coil(c) => match &mut c.size {
+            CoilSize::To { target: t, .. } => vec![target(t)],
+            _ => vec![],
+        },
+        _ => vec![],
+    }
+}
+
+/// The names `f` refers to on the part before it.
+pub fn stored_refs(f: &Feature) -> Vec<(Kind, Name)> {
+    match f {
+        Feature::Fillet { edges } => edges.iter().map(|e| (Kind::Edge, e.0)).collect(),
+        Feature::Chamfer { edges, size } => {
+            let mut out: Vec<_> = edges.iter().map(|&e| (Kind::Edge, e)).collect();
+            if let ChamferSize::Distances { face, .. } | ChamferSize::DistanceAngle { face, .. } = size {
+                out.push((Kind::Face, *face));
+            }
+            out
+        }
+        Feature::Shell { open, .. } => open.iter().map(|&n| (Kind::Face, n)).collect(),
+        Feature::Draft { faces, .. } => faces.iter().map(|&n| (Kind::Face, n)).collect(),
+        _ => vec![],
+    }
+}
+
+/// Whether `f` stands alone: a solid tool sized by numbers only, so taking it out or swapping
+/// it with a like one changes nothing else.
+fn plain(f: &Feature) -> Option<Combine> {
+    match f {
+        Feature::Extrude {
+            extent: Extent::Distance(_) | Extent::Symmetric(_) | Extent::TwoSided { .. },
+            op,
+            ..
+        }
+        | Feature::Revolve {
+            extent: Turn::Angle(_),
+            op,
+            ..
+        }
+        | Feature::Ball { op, .. } => Some(*op),
+        Feature::Hole(h) if matches!(h.end, End::Depth(_)) => Some(Combine::Cut),
+        _ => None,
+    }
+}
+
+fn scale_profile(p: &mut Profile, k: f64) -> f64 {
+    let s = |q: &mut Point2| *q = Point2::new(q.x * k, q.y * k);
+    let mut r: f64 = 0.0;
+    for l in &mut p.loops {
+        for (seg, _) in &mut l.segments {
+            match seg {
+                Segment::Line { a, b } => {
+                    r = r.max(a.to_vec().length()).max(b.to_vec().length());
+                    s(a);
+                    s(b);
+                }
+                Segment::Arc { center, radius, .. } | Segment::Circle { center, radius, .. } => {
+                    r = r.max(center.to_vec().length() + *radius);
+                    s(center);
+                    *radius *= k;
+                }
+            }
+        }
+    }
+    r
+}
+
+/// A random edit of `part` above position `before` (the reference point); None if the dice
+/// found nothing to edit. `big`: dimensions and moves well past small tweaks.
+pub fn random_edit(part: &Part, before: usize, body: &Body, big: bool, r: &mut Rng) -> Option<Edit> {
+    let fs = &part.features;
+    let pick = r.below(before);
+    let mag = if big {
+        r.range(0.1, 0.5)
+    } else {
+        r.range(0.002, 0.02)
+    };
+    let sign = if r.bool() { 1.0 } else { -1.0 };
+    match r.below(10) {
+        0..=3 => Some(Edit::Resize {
+            feature: pick,
+            by: 1.0 + sign * mag,
+        })
+        .filter(|_| resized(&fs[pick], 1.0).is_some()),
+        4..=6 => {
+            let dir = Vec3::new(r.range(-1.0, 1.0), r.range(-1.0, 1.0), r.range(-1.0, 1.0));
+            let size = if big { 0.1 * body_box(body).diagonal() } else { 1.0 };
+            let by = dir.normalize()? * (mag * size);
+            moved(&fs[pick], by).map(|_| Edit::Move { feature: pick, by })
+        }
+        7 => {
+            let at = 1 + r.below(before);
+            Some(Edit::Insert {
+                at,
+                feature: Box::new(unrelated(body, r)),
+            })
+        }
+        8 => {
+            // only a feature no other one refers to by position
+            let referred = fs
+                .iter()
+                .any(|f| feature_refs(&mut f.clone()).iter().any(|x| **x == pick));
+            (pick > 0 && !referred && plain(&fs[pick]).is_some_and(|op| op != Combine::New))
+                .then_some(Edit::Delete { at: pick })
+        }
+        _ => {
+            let (a, b) = (pick, pick + 1);
+            let like =
+                b < before && plain(&fs[a]).is_some_and(|op| op != Combine::New && plain(&fs[b]) == Some(op));
+            like.then_some(Edit::Swap { at: a })
+        }
+    }
+}
+
+/// A small hole drilled straight down somewhere over the part.
+fn unrelated(body: &Body, r: &mut Rng) -> Feature {
+    let b = body_box(body);
+    let x = r.range(b.x.lo, b.x.hi);
+    let y = r.range(b.y.lo, b.y.hi);
+    let d = r.range(0.5, 2.0);
+    Feature::Extrude {
+        profile: Profile {
+            plane: forge_math::Frame::WORLD
+                .with_origin(Point3::new(x, y, b.z.hi + 1.0))
+                .flipped(),
+            loops: vec![ProfileLoop::new(vec![(
+                Segment::Circle {
+                    center: Point2::ORIGIN,
+                    radius: d,
+                    ccw: true,
+                },
+                0,
+            )])],
+        },
+        extent: Extent::Distance(1.0 + r.range(0.5, 3.0)),
+        op: Combine::Cut,
+    }
+}
+
+fn body_box(b: &Body) -> Box3 {
+    b.face_ids().fold(Box3::EMPTY, |acc, f| acc.hull(&b.face_box(f)))
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
+pub enum Kind {
+    Face,
+    Edge,
+    Vertex,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub enum Ent {
+    Face(FaceId),
+    Edge(EdgeId),
+    Vertex(VertexId),
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
+pub enum Class {
+    /// An entity the edit did not touch lost its name.
+    Renamed,
+    /// An entity the edit moved or reshaped, but that survives as itself, lost its name.
+    Lost,
+    /// A name now names a different entity: the worst case.
+    Wrong,
+    /// The edit changed the entity past tracking (a feature's extent flipped, an edge's end ran
+    /// along it), and its name is now on something else that is not a piece of it: perhaps the
+    /// same role on new geometry, perhaps another entity. Needs a look.
+    Jumped,
+    /// Two entities of one part share a name.
+    Duplicate,
+}
+
+#[derive(Clone, Debug)]
+pub struct Finding {
+    pub class: Class,
+    pub kind: Kind,
+    pub name: Name,
+    /// Where the entity was (a point of it), and where the name now points, if anywhere.
+    pub was: Point3,
+    pub now: Option<Point3>,
+    /// The entity's name after the edit, where geometry found it.
+    pub truth: Option<Name>,
+}
+
+/// How the references of one edited history fared.
+#[derive(Clone, Debug, Default)]
+pub struct Outcome {
+    /// Names that followed their entity.
+    pub kept: usize,
+    /// Names whose entity truly went, or split, and that name nothing.
+    pub gone: usize,
+    /// Names now on a piece of what they named (it split, or a sliver of it survived).
+    pub piece: usize,
+    /// References the geometry could not judge (ambiguous, or the tracking lost them).
+    pub unjudged: usize,
+    /// Whether the edit changed the part's topology: its counts of faces, edges and vertices.
+    /// Where it did not, every name must survive.
+    pub reshaped: bool,
+    pub findings: Vec<Finding>,
+}
+
+/// Each live entity of `b`, with its name.
+fn ents(b: &Body) -> Vec<(Ent, Kind, Name)> {
+    let mut out: Vec<_> = b
+        .face_ids()
+        .map(|f| (Ent::Face(f), Kind::Face, b.face(f).name))
+        .collect();
+    out.extend(b.edge_ids().map(|e| (Ent::Edge(e), Kind::Edge, b.edge(e).name)));
+    let mut used = vec![false; b.vertices.len()];
+    for e in b.edge_ids() {
+        used[b.edge(e).start.index()] = true;
+        used[b.edge(e).end.index()] = true;
+    }
+    out.extend(
+        b.vertex_ids()
+            .filter(|v| used[v.index()])
+            .map(|v| (Ent::Vertex(v), Kind::Vertex, b.vertex(v).name)),
+    );
+    out
+}
+
+/// What an entity looks like: its kind, its surface or curve kind, and points that pin it down.
+struct Geo {
+    sub: u8,
+    pts: Vec<Point3>,
+}
+
+fn geo(b: &Body, e: Ent) -> Geo {
+    let corners = |x: Box3| {
+        [
+            Point3::new(x.x.lo, x.y.lo, x.z.lo),
+            Point3::new(x.x.hi, x.y.hi, x.z.hi),
+        ]
+    };
+    match e {
+        Ent::Face(f) => {
+            let face = b.face(f);
+            let mut pts = corners(b.face_box(f)).to_vec();
+            let (mut sum, mut n) = (Vec3::ZERO, 0.0f64);
+            for &l in &face.loops {
+                for &c in &b.lp(l).coedges {
+                    for p in b.edge_points(b.coedge(c).edge, 4) {
+                        sum = sum + p.to_vec();
+                        n += 1.0;
+                    }
+                }
+            }
+            pts.push(Point3::ORIGIN + sum * (1.0 / n.max(1.0)));
+            let sub = match &face.surface {
+                forge_geom::Surface::Plane(p) => {
+                    // which way it faces, as a point a unit off
+                    let z = if face.same_sense {
+                        p.frame.z()
+                    } else {
+                        -p.frame.z()
+                    };
+                    pts.push(Point3::ORIGIN + z.get());
+                    0
+                }
+                forge_geom::Surface::Cylinder(_) => 1,
+                forge_geom::Surface::Cone(_) => 2,
+                forge_geom::Surface::Sphere(_) => 3,
+                forge_geom::Surface::Torus(_) => 4,
+                forge_geom::Surface::Procedural(_) => 5,
+            };
+            Geo { sub, pts }
+        }
+        Ent::Edge(x) => {
+            let edge = b.edge(x);
+            let s = b.vertex(edge.start).point;
+            let t = b.vertex(edge.end).point;
+            // the ends in a fixed order, so a reversed edge looks the same
+            let (s, t) = if (s.x, s.y, s.z) <= (t.x, t.y, t.z) {
+                (s, t)
+            } else {
+                (t, s)
+            };
+            let mut pts = vec![s, t, edge.curve.eval(edge.range.mid())];
+            pts.extend(corners(b.edge_box(x)));
+            let sub = match edge.curve {
+                forge_geom::Curve::Line(_) => 10,
+                forge_geom::Curve::Circle(_) => 11,
+                forge_geom::Curve::Ellipse(_) => 12,
+                _ => 13,
+            };
+            Geo { sub, pts }
+        }
+        Ent::Vertex(v) => Geo {
+            sub: 20,
+            pts: vec![b.vertex(v).point],
+        },
+    }
+}
+
+fn apart(a: &Geo, b: &Geo) -> f64 {
+    if a.sub != b.sub || a.pts.len() != b.pts.len() {
+        return f64::INFINITY;
+    }
+    let d = a
+        .pts
+        .iter()
+        .zip(&b.pts)
+        .fold(0.0f64, |m, (p, q)| m.max(p.distance(*q)));
+    if a.sub >= 10 && a.sub < 20 {
+        // ends that swapped order (nearly level) still match
+        let swapped = a.pts[0].distance(b.pts[1]).max(a.pts[1].distance(b.pts[0]));
+        let rest = a.pts[2..]
+            .iter()
+            .zip(&b.pts[2..])
+            .fold(0.0f64, |m, (p, q)| m.max(p.distance(*q)));
+        return d.min(swapped.max(rest));
+    }
+    d
+}
+
+/// A point of entity `e`.
+fn point(b: &Body, e: Ent) -> Point3 {
+    match e {
+        Ent::Face(f) => b.face_box(f).center(),
+        Ent::Edge(x) => b.edge(x).curve.eval(b.edge(x).range.mid()),
+        Ent::Vertex(v) => b.vertex(v).point,
+    }
+}
+
+/// Whether `r` (of `nb`) is a piece of what `e` (of `ob`) was, or `e` a piece of it, within
+/// `tol`: the same carrier, overlapping.
+fn piece_of(ob: &Body, e: Ent, nb: &Body, r: Ent, tol: f64) -> bool {
+    match (e, r) {
+        (Ent::Face(f), Ent::Face(g)) => {
+            let s = &ob.face(f).surface;
+            ob.face_box(f).grow(tol).overlaps(&nb.face_box(g))
+                && nb.face(g).loops.iter().all(|&l| {
+                    nb.lp(l).coedges.iter().all(|&c| {
+                        nb.edge_points(nb.coedge(c).edge, 2)
+                            .iter()
+                            .all(|p| s.distance(*p) <= tol.max(1e-6))
+                    })
+                })
+        }
+        (Ent::Edge(x), Ent::Edge(y)) => {
+            // on one line, overlapping: trimmed differently
+            if let (forge_geom::Curve::Line(l), true) = (
+                &ob.edge(x).curve,
+                ob.edge_box(x).grow(tol).overlaps(&nb.edge_box(y)),
+            ) {
+                let off = |p: &Point3| {
+                    let d = *p - l.origin;
+                    (d - l.dir.get() * d.dot(l.dir.get())).length()
+                };
+                if nb.edge_points(y, 2).iter().all(|p| off(p) <= tol.max(1e-6)) {
+                    return true;
+                }
+            }
+            let within = |a: &Body, x: EdgeId, b: &Body, y: EdgeId| {
+                let (c, range) = (&a.edge(x).curve, a.edge(x).range);
+                b.edge_points(y, 4)
+                    .iter()
+                    .all(|p| c.eval(c.closest(*p, range)).distance(*p) <= tol.max(1e-6))
+            };
+            within(ob, x, nb, y) || within(nb, y, ob, x)
+        }
+        _ => false,
+    }
+}
+
+/// How the references `refs` (names of `b0`'s entities; all of them if empty) fare when `part`
+/// (whose first `before` features made `b0`) is edited by `edit` in `steps` steps.
+pub fn check(
+    part: &Part,
+    before: usize,
+    b0: &Body,
+    edit: &Edit,
+    steps: usize,
+    refs: &[(Kind, Name)],
+) -> Option<Outcome> {
+    let continuous = matches!(edit, Edit::Resize { .. } | Edit::Move { .. });
+    let steps = if continuous { steps.max(1) } else { 1 };
+    let prefix = Part {
+        features: part.features[..before].to_vec(),
+    };
+    let all0 = ents(b0);
+    let picked: Vec<(Ent, Kind, Name)> = if refs.is_empty() {
+        all0.clone()
+    } else {
+        refs.iter()
+            .filter_map(|&(k, n)| all0.iter().find(|x| x.1 == k && x.2 == n).copied())
+            .collect()
+    };
+    let mut bodies = vec![b0.clone()];
+    let mut reaches = vec![0.0];
+    for s in 1..=steps {
+        let (p, reach) = edit.apply(&prefix, s as f64 / steps as f64)?;
+        let b = p.regenerate().ok()?;
+        // an edit that parts the solid in two (or joins it) leaves no part to name things on
+        if b.shells.len() != b0.shells.len() {
+            return None;
+        }
+        bodies.push(b);
+        reaches.push(reach);
+    }
+    let end = &bodies[steps];
+    let tables: Vec<Vec<(Ent, Kind, Geo)>> = bodies
+        .iter()
+        .map(|b| ents(b).into_iter().map(|x| (x.0, x.1, geo(b, x.0))).collect())
+        .collect();
+    let mut out = Outcome::default();
+    let dup = |b: &Body, all: &[(Ent, Kind, Name)], out: &mut Outcome| {
+        let mut names: Vec<(Kind, Name)> = all.iter().map(|x| (x.1, x.2)).collect();
+        names.sort();
+        for w in names.windows(2) {
+            if w[0] == w[1] && picked.iter().any(|p| (p.1, p.2) == w[0]) {
+                let e = all.iter().find(|x| (x.1, x.2) == w[0]).expect("listed");
+                out.findings.push(Finding {
+                    class: Class::Duplicate,
+                    kind: w[0].0,
+                    name: w[0].1,
+                    was: point(b, e.0),
+                    now: None,
+                    truth: None,
+                });
+            }
+        }
+    };
+    dup(b0, &all0, &mut out);
+    let all1 = ents(end);
+    dup(end, &all1, &mut out);
+    let count = |all: &[(Ent, Kind, Name)], k| all.iter().filter(|x| x.1 == k).count();
+    out.reshaped = [Kind::Face, Kind::Edge, Kind::Vertex]
+        .iter()
+        .any(|&k| bodies.iter().any(|b| count(&ents(b), k) != count(&all0, k)));
+    for &(e0, kind, name) in &picked {
+        // follow the entity step by step: (step last seen on, entity there), moved at all
+        let (mut at, mut e, mut moved) = (0, e0, false);
+        let mut ambiguous = false;
+        while at < steps {
+            let tol = 3.0 * (reaches[at + 1] - reaches[at]) + 1e-6;
+            let g = geo(&bodies[at], e);
+            let near: Vec<(Ent, f64)> = tables[at + 1]
+                .iter()
+                .filter(|x| x.1 == kind)
+                .map(|x| (x.0, apart(&g, &x.2)))
+                .filter(|x| x.1 <= tol)
+                .collect();
+            match near[..] {
+                [(n, d)] => {
+                    moved |= d > 1e-9;
+                    e = n;
+                    at += 1;
+                }
+                _ => {
+                    ambiguous = near.len() > 1;
+                    break;
+                }
+            }
+        }
+        let hits: Vec<Ent> = all1
+            .iter()
+            .filter(|x| x.1 == kind && x.2 == name)
+            .map(|x| x.0)
+            .collect();
+        let r = hits.first().copied();
+        let tracked = at == steps;
+        let truth = tracked
+            .then(|| all1.iter().find(|x| x.0 == e).map(|x| x.2))
+            .flatten();
+        let mut finding = |class| {
+            out.findings.push(Finding {
+                class,
+                kind,
+                name,
+                was: point(b0, e0),
+                now: r.map(|r| point(end, r)),
+                truth,
+            })
+        };
+        match r {
+            _ if tracked && hits.contains(&e) => out.kept += 1,
+            None if tracked && moved => finding(Class::Lost),
+            None if tracked => finding(Class::Renamed),
+            Some(r) if tracked => {
+                if piece_of(b0, e0, end, r, 3.0 * reaches[steps] + 1e-6) {
+                    out.piece += 1;
+                } else {
+                    finding(Class::Wrong)
+                }
+            }
+            _ if ambiguous => out.unjudged += 1,
+            None => out.gone += 1,
+            Some(r) => {
+                // a piece of what it was last seen as, or something else
+                let tol = 3.0 * (reaches[steps] - reaches[at]) + 1e-6;
+                if piece_of(&bodies[at], e, end, r, tol) {
+                    out.piece += 1;
+                } else {
+                    finding(Class::Jumped)
+                }
+            }
+        }
+    }
+    Some(out)
+}
+
+/// Histories to edit: the suite parts, random histories, and the fillet and finishing corpora.
+pub fn corpus() -> Vec<(String, Part)> {
+    let mut out: Vec<(String, Part)> = crate::suite::parts()
+        .into_iter()
+        .filter(|(n, _)| !matches!(*n, "plate" | "hole-grid" | "shaft" | "coil"))
+        .map(|(n, p)| (n.to_string(), p))
+        .collect();
+    out.extend((1..=8).map(|s| (format!("fuzz{s}"), crate::suite::fuzz(s, 12))));
+    out.extend(
+        crate::fillets::cases()
+            .into_iter()
+            .map(|(n, p, _)| (format!("fillet:{n}"), p)),
+    );
+    out.extend(
+        crate::finishing::parts()
+            .into_iter()
+            .map(|(n, p, _)| (format!("finish:{n}"), p)),
+    );
+    out.extend((1..=8).map(|s| (format!("finish-fuzz{s}"), crate::finishing::fuzz(s))));
+    out
+}
+
+/// One edited history and how its references fared.
+#[derive(Clone, Debug)]
+pub struct Case {
+    pub part: String,
+    /// The references were taken on the part after this many features.
+    pub before: usize,
+    pub edit: Edit,
+    pub outcome: Outcome,
+}
+
+/// `cases` random edits of `corpus` histories, each judged on up to `refs` sampled references
+/// plus the names a finishing feature at the reference point holds. `big`: large edits, made
+/// in `steps` steps.
+pub fn run(
+    corpus: &[(String, Part)],
+    seed: u64,
+    cases: usize,
+    big: bool,
+    steps: usize,
+    refs: usize,
+) -> Vec<Case> {
+    let mut r = Rng::new(seed);
+    let mut out = Vec::with_capacity(cases);
+    let mut tries = 0;
+    while out.len() < cases && tries < 20 * cases {
+        tries += 1;
+        let (name, part) = &corpus[r.below(corpus.len())];
+        let fs = &part.features;
+        let stops: Vec<usize> = (1..fs.len())
+            .filter(|&i| !stored_refs(&fs[i]).is_empty())
+            .collect();
+        let before = if !stops.is_empty() && r.bool() {
+            stops[r.below(stops.len())]
+        } else {
+            fs.len()
+        };
+        let prefix = Part {
+            features: fs[..before].to_vec(),
+        };
+        let Ok(b0) = prefix.regenerate() else { continue };
+        let Some(edit) = random_edit(part, before, &b0, big, &mut r) else {
+            continue;
+        };
+        let mut want: Vec<(Kind, Name)> = fs.get(before).map(stored_refs).unwrap_or_default();
+        let all = ents(&b0);
+        for _ in 0..refs.min(all.len()) {
+            let e = all[r.below(all.len())];
+            want.push((e.1, e.2));
+        }
+        want.sort();
+        want.dedup();
+        if let Some(outcome) = check(part, before, &b0, &edit, steps, &want) {
+            out.push(Case {
+                part: name.clone(),
+                before,
+                edit,
+                outcome,
+            });
+        }
+    }
+    out
+}

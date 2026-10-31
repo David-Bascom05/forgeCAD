@@ -7,6 +7,9 @@ use core::fmt;
 #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Default)]
 pub struct Name(pub u64);
 
+/// The bits of a piece's name that name the whole it is a piece of.
+const PIECE_OF: u64 = 0xffff_ffff_0000_0000;
+
 impl Name {
     pub const NONE: Name = Name(0);
 
@@ -34,6 +37,17 @@ impl Name {
 
     pub fn with_name(self, other: Name) -> Name {
         self.with(other.0)
+    }
+
+    /// A piece of the entity named `self` that a split made, told apart from its other pieces
+    /// by `which`. The high half of the name is the whole's, so `is_piece_of` can tell.
+    pub fn piece(self, which: Name) -> Name {
+        let whole = self.with_str("split").0 & PIECE_OF;
+        Name(whole | (which.with(0x9e3).0 & !PIECE_OF))
+    }
+
+    pub fn is_piece_of(self, whole: Name) -> bool {
+        self.0 & PIECE_OF == whole.with_str("split").0 & PIECE_OF
     }
 
     /// Order-independent combination, for entities defined by an unordered set
