@@ -22,6 +22,26 @@ fn holds(src: &str, nary: bool) {
     }
 }
 
+/// `holds`, n-ary too, and seq and n-ary give the same faces by name.
+fn holds_alike(src: &str) {
+    holds(src, true);
+    let part = Part {
+        features: bench::model(src).features.clone(),
+    };
+    let faces = |b: forge_topo::Body| {
+        let mut n: Vec<_> = b.face_ids().map(|f| b.face(f).name).collect();
+        n.sort();
+        n
+    };
+    assert_eq!(part.regenerate().map(faces), part.regenerate_nary(1).map(faces));
+}
+
+/// `holds`, n-ary too, and seq and n-ary give the same number of faces.
+fn holds_same_faces(src: &str) {
+    holds(src, true);
+    same_faces(src);
+}
+
 /// Seq and n-ary give the same number of faces.
 fn same_faces(src: &str) {
     let part = Part {
@@ -399,15 +419,13 @@ chamfer 1 (edges of bigbore circle)\n",
 /// a crank spider (arm on a rotated frame, patterned 5 round the hub), fillet 3 where the arms meet
 /// the hub: seq valid; n-ary fails MissingEdge on the fillet
 #[test]
-#[ignore = "R29: kernel failure, see the comment"]
 fn nary_fillet_after_circular_pattern() {
-    holds(
+    holds_alike(
         "\
 spindle: extrude sym 30 circle 0 0 21
 spider: extrude 6 z 0 0 1 x 0.809017 0.587785 0 at 0 0 -15 rrect 0 -7.5 62 15 6
 spiders: pattern spider circ 0 0 0 0 0 1 5
 fillet 3 (edges between spider spindle concave)\n",
-        true,
     );
 }
 
@@ -415,15 +433,13 @@ fillet 3 (edges between spider spindle concave)\n",
 /// fails MissingEdge on the fillet (one pad per fillet line passes; a lin pattern of one pad fails
 /// the same). Root of R29 and of the gearbox and frame n-ary failures
 #[test]
-#[ignore = "R30: kernel failure, see the comment"]
 fn nary_fillet_after_linear_pattern() {
-    holds(
+    holds_alike(
         "\
 box: extrude 95 rect -120 -65 240 130
 a: extrude 16 rect -96 -93 44 34
 b: extrude 16 rect 52 -93 44 34
 fillet 5 (edges between a box concave) (edges between b box concave)\n",
-        true,
     );
 }
 
@@ -431,15 +447,13 @@ fillet 5 (edges between a box concave) (edges between b box concave)\n",
 /// valid; n-ary fails Boolean Unsupported(surface pair without a closed form) (n-ary twin of R13;
 /// two profiles pass both ways)
 #[test]
-#[ignore = "R31: kernel failure, see the comment"]
 fn nary_thread_near_three_profile_loft() {
-    holds(
+    holds_same_faces(
         "\
 arm: loft profile yz at 12 0 0 rrect -15 -12 30 24 6 profile yz at 85 0 0 rrect -11.5 -9.5 23 19 5 profile yz at 166 0 0 rrect -9 -7.5 18 15 4
 pedal: extrude sym 18 at 170 0 0 circle 0 0 12
 hole 12.913 -xy at 170 0 9 thru
 thread 9/16-20 -xy at 170 0 9 int 18 left chamfer\n",
-        true,
     );
 }
 
@@ -506,9 +520,8 @@ fillet 3 (edges between st bb concave) (edges between dt bb concave) (edges betw
 /// down tube, tapered head tube (revolved cone), top tube, fillet 3 where the top tube meets the
 /// head tube: seq valid; n-ary fails MissingEdge (without the down tube it passes)
 #[test]
-#[ignore = "R35: kernel failure, see the comment"]
 fn nary_fillet_top_tube_head_tube() {
-    holds(
+    holds_alike(
         "\
 reach = 385
 stack = 575
@@ -532,7 +545,6 @@ dt: extrude dtl z dtx/dtl 0 dtz/dtl circle 0 0 17.5
 ht: revolve xz at reach 0 stack axis 0 0 hdx hdz poly 0 0 25*sin(hta) 25*cos(hta) htl*hdx+30*sin(hta) -htl*sin(hta)+30*cos(hta) htl*hdx -htl*sin(hta)
 tt: extrude ttl z (h1x-s1x)/ttl 0 (h1z-s1z)/ttl at s1x 0 s1z circle 0 0 14.3
 fillet 3 (edges between tt ht concave)\n",
-        true,
     );
 }
 

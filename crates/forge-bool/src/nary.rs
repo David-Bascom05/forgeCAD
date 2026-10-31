@@ -716,6 +716,31 @@ fn nary_body(
         divides(ops, any_intersect, holds, i, j) || divides(ops, any_intersect, holds, j, i)
     };
 
+    // what of tool `t` lies in `b` lies surely inside a later tool that is not intersected: no
+    // face of `t` is left there, and the sequential regen, which has dropped it by then, never
+    // meets it with a later tool
+    let grid = Grid::new(&index.iter().map(|x| x.bbox).collect::<Vec<_>>());
+    let buried = |t: Side, b: &forge_math::Box3| -> bool {
+        let Some(sh) = shapes else { return false };
+        grid.at(b.center()).iter().map(|&k| k as usize).any(|k| {
+            k > t
+                && ops[k - 1] != Op::Intersect
+                && [b.x.lo, b.y.lo, b.z.lo]
+                    .into_iter()
+                    .zip([b.x.hi, b.y.hi, b.z.hi])
+                    .zip([&index[k].bbox.x, &index[k].bbox.y, &index[k].bbox.z])
+                    .all(|((lo, hi), r)| r.lo <= lo && hi <= r.hi)
+                && sh[k].box_in(b, SHAPE_MARGIN)
+        })
+    };
+
+    // each tool's faces wholly buried so
+    let dead: Vec<Vec<bool>> = par_map(n, threads, 4, |t| {
+        let boxes = index[t].boxes();
+        let none = shapes.is_none() || t + 1 == n;
+        (0..boxes.len()).map(|f| !none && buried(t, &boxes[f])).collect()
+    });
+
     // 1: pairs of tools whose boxes meet, then their faces
     let mut pairs: Vec<(Side, Side)> = Vec::new();
     // tool pairs whose boxes meet but were left out as surely outside the result: whether their
@@ -742,10 +767,10 @@ fn nary_body(
         let (ba, bb) = (ia.boxes(), ib.boxes());
         let b_clear: Vec<bool> = b
             .face_ids()
-            .map(|fb| bb[fb.index()].overlaps(&ia.bbox) && clear(&bb[fb.index()], i))
+            .map(|fb| bb[fb.index()].overlaps(&ia.bbox) && (clear(&bb[fb.index()], i) || dead[j][fb.index()]))
             .collect();
         for fa in a.face_ids() {
-            if !ba[fa.index()].overlaps(&ib.bbox) || clear(&ba[fa.index()], j) {
+            if !ba[fa.index()].overlaps(&ib.bbox) || clear(&ba[fa.index()], j) || dead[i][fa.index()] {
                 continue;
             }
             for fb in b.face_ids() {
@@ -816,6 +841,8 @@ fn nary_body(
                         )?;
                         continue;
                     }
+                    // where either face is buried there is no curve to find
+                    SurfaceSurface::NotAnalytic if buried(i, &region) || buried(j, &region) => continue,
                     SurfaceSurface::NotAnalytic => {
                         return Err(BoolError::Unsupported("surface pair without a closed form"));
                     }
@@ -976,7 +1003,6 @@ fn nary_body(
     lap(&mut clock, 0);
 
     // 2: each new edge is cut where a face of a third tool crosses it
-    let grid = Grid::new(&index.iter().map(|x| x.bbox).collect::<Vec<_>>());
     // `f` of each face of another tool that may cross edge si
     let third = |si: usize, f: &mut dyn FnMut((Side, FaceId))| {
         let sg = &segs[si];
@@ -991,8 +1017,10 @@ fn nary_body(
                 continue;
             }
             for h in tools[k].face_ids() {
-                // a face bounding nothing crosses the edge only where it is dropped
+                // a buried face is no one's boundary; a face bounding nothing crosses the edge only
+                // where it is dropped
                 if index[k].boxes()[h.index()].overlaps(&reach)
+                    && !dead[k][h.index()]
                     && may_meet(&tools[k].face(h).surface, &reach)
                     && !inert(k, h)
                 {
