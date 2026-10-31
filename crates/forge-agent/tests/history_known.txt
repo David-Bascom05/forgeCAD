@@ -4,15 +4,12 @@
 # booleans losing their way (after fillets, on lofts, sweeps, coils, holes)
 boolean: Internal("face split crossed itself")
 boolean: Internal("inconsistent classification")
-boolean: Internal("hole outside every region")
-Boolean(Internal(  # the same inside ribs and thickened faces
 # booleans and finishing ops leaving an invalid solid
 invalid DuplicateName  # extrude sym of a line+arc loop onto a block
 invalid EdgeUses  # patterns of patterns, balls, sketches
 Direct(Invalid(  # delete leaves a face with no loops
 # the n-ary regen names split faces and edges unlike the sequential one, so later references miss
 nary: chamfer: NoSuchEdge
-nary: invalid EdgeUses
 nary: edit: Direct(Rebuild(  # the n-ary regen's face edit collapses an edge the sequential one keeps
 nary: the part is 9 bodies, not one  # the sequential regen keeps a disjoint add (invalid Euler) the n-ary refuses
 # tessellation of a face cut by a slanted hole and a revolve
