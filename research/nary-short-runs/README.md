@@ -36,3 +36,21 @@ python3 research/nary-short-runs/crosssum.py out.txt
 sh research/nary-short-runs/wall.sh wall.txt       # with SHORT_RUN at 8, so 12 and 16 run n-ary
 ```
 (`nx.rs` is not kept in examples.)
+
+## Tried and dropped (nary-speed-7)
+
+- Runs holding a pattern, a thread or a text handed off too when they have at most `SHORT_RUN`
+  tools: conrod's n-ary cost what seq does, but heatsink +23.7%, manifold +0.9%, quadarm and
+  bracket +1.3% (instructions:u, nary1). Kept as it was.
+- A thread cut into a bore (on a hole, or an internal one on an axis) starting a run of its own,
+  threads right after it sharing it, as in the sequential regen: nary1 instructions:u conrod
+  -21% (to seq's), valve -6%, frame -3%, gearbox -2%; but the thread's pass has one or two tool
+  pairs, so it runs on one thread, and wall time at 4 threads went up (best of three, load ~7:
+  valve 69 -> 99 ms, frame 395 -> 452, gearbox 104 -> 113, conrod 33 -> 41). Dropped for the
+  cause it worked round: a tapped hole's mouth lying on the bottom of the clearance hole above it,
+  which the n-ary pass now skips as a face that bounds nothing (`Shape::plane_in`).
+- In the n-ary pass's bookkeeping: `coincident` taking the jobs' pieces with repeats and sorting
+  once (+0.9-1.4%: more to sort than the two sorts it saved); the outside-the-result box test asking
+  the grid for nearby tools (+3-8%: the grid's list for a big box costs more than the walk);
+  settling a new vertex against each edge through it once rather than once per cut found on it
+  (+0.4% on housing and torture, and changed bits).
