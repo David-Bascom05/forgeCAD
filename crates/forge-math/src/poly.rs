@@ -37,44 +37,49 @@ fn trim(c: &[f64]) -> &[f64] {
 /// Numerically stable roots of `a x^2 + b x + c`, ascending. A double root is
 /// returned once, flagged touching.
 pub fn quadratic(a: f64, b: f64, c: f64) -> Vec<Root> {
+    let mut out = Vec::with_capacity(2);
+    quadratic_into(a, b, c, &mut |r| out.push(r));
+    out
+}
+
+fn quadratic_into(a: f64, b: f64, c: f64, out: &mut impl FnMut(Root)) {
     let scale = a.abs().max(b.abs()).max(c.abs());
     if scale == 0.0 {
-        return vec![];
+        return;
     }
     if a.abs() <= scale * 1e-14 {
-        if b.abs() <= scale * 1e-14 {
-            return vec![];
+        if b.abs() > scale * 1e-14 {
+            out(Root {
+                x: -c / b,
+                touching: false,
+            });
         }
-        return vec![Root {
-            x: -c / b,
-            touching: false,
-        }];
+        return;
     }
     let disc = b * b - 4.0 * a * c;
     let disc_err = 8.0 * f64::EPSILON * (b * b).max((4.0 * a * c).abs());
     if disc < -disc_err {
-        return vec![];
+        return;
     }
     if disc <= disc_err {
-        return vec![Root {
+        out(Root {
             x: -b / (2.0 * a),
             touching: true,
-        }];
+        });
+        return;
     }
     let s = disc.sqrt();
     let q = -0.5 * (b + if b >= 0.0 { s } else { -s });
     let (x1, x2) = (q / a, c / q);
     let (lo, hi) = if x1 <= x2 { (x1, x2) } else { (x2, x1) };
-    vec![
-        Root {
-            x: lo,
-            touching: false,
-        },
-        Root {
-            x: hi,
-            touching: false,
-        },
-    ]
+    out(Root {
+        x: lo,
+        touching: false,
+    });
+    out(Root {
+        x: hi,
+        touching: false,
+    });
 }
 
 /// All real roots of `c` in `[lo, hi]`, ascending. Works for any degree: the
@@ -83,33 +88,69 @@ pub fn quadratic(a: f64, b: f64, c: f64) -> Vec<Root> {
 /// polished with Newton. Roots where the value only touches zero (within its
 /// rounding error) come from the derivative's roots and are flagged.
 pub fn real_roots(c: &[f64], lo: f64, hi: f64) -> Vec<Root> {
+    let mut out = Vec::with_capacity(c.len());
+    roots_into(c, lo, hi, &mut out);
+    out
+}
+
+/// `real_roots` appended to `out` (which also holds the derivative's roots for a while):
+/// small degrees allocate nothing more.
+fn roots_into(c: &[f64], lo: f64, hi: f64, out: &mut Vec<Root>) {
     let c = trim(c);
     match c.len() {
-        0 | 1 => return vec![],
+        0 | 1 => return,
         2 => {
             let x = -c[0] / c[1];
-            return if lo <= x && x <= hi {
-                vec![Root { x, touching: false }]
-            } else {
-                vec![]
-            };
+            if lo <= x && x <= hi {
+                out.push(Root { x, touching: false });
+            }
+            return;
         }
         3 => {
-            return quadratic(c[2], c[1], c[0])
-                .into_iter()
-                .filter(|r| lo <= r.x && r.x <= hi)
-                .collect();
+            quadratic_into(c[2], c[1], c[0], &mut |r| {
+                if lo <= r.x && r.x <= hi {
+                    out.push(r)
+                }
+            });
+            return;
         }
         _ => {}
     }
-    let d = derivative(c);
-    let crit = real_roots(&d, lo, hi);
-    let mut cuts = Vec::with_capacity(crit.len() + 2);
-    cuts.push(lo);
-    cuts.extend(crit.iter().map(|r| r.x));
-    cuts.push(hi);
-
-    let mut out: Vec<Root> = Vec::new();
+    const SMALL: usize = 16;
+    let n = c.len() - 1;
+    let (mut ds, dh);
+    let d: &[f64] = if n <= SMALL {
+        ds = [0.0; SMALL];
+        for (i, &a) in c.iter().enumerate().skip(1) {
+            ds[i - 1] = a * i as f64;
+        }
+        &ds[..n]
+    } else {
+        dh = derivative(c);
+        &dh
+    };
+    // the derivative's roots, borrowed from the end of `out` as cuts
+    let mark = out.len();
+    roots_into(d, lo, hi, out);
+    let (mut cs, ch);
+    let cuts: &[f64] = if out.len() - mark + 2 <= SMALL + 2 {
+        cs = [0.0; SMALL + 2];
+        cs[0] = lo;
+        for (k, r) in out[mark..].iter().enumerate() {
+            cs[k + 1] = r.x;
+        }
+        let m = out.len() - mark + 2;
+        cs[m - 1] = hi;
+        &cs[..m]
+    } else {
+        let mut v = Vec::with_capacity(out.len() - mark + 2);
+        v.push(lo);
+        v.extend(out[mark..].iter().map(|r| r.x));
+        v.push(hi);
+        ch = v;
+        &ch
+    };
+    out.truncate(mark);
     for w in cuts.windows(2) {
         let (a, b) = (w[0], w[1]);
         let (fa, ea) = eval_with_bound(c, a);
@@ -117,26 +158,25 @@ pub fn real_roots(c: &[f64], lo: f64, hi: f64) -> Vec<Root> {
         let za = fa.abs() <= ea;
         let zb = fb.abs() <= eb;
         if za {
-            push_root(&mut out, c, a);
+            push_root(out, mark, c, d, a);
         }
         if !za && !zb && (fa < 0.0) != (fb < 0.0) {
-            push_root(&mut out, c, bisect(c, a, b, fa));
+            push_root(out, mark, c, d, bisect(c, d, a, b, fa));
         }
         if zb {
-            push_root(&mut out, c, b);
+            push_root(out, mark, c, d, b);
         }
     }
-    out
 }
 
-fn push_root(out: &mut Vec<Root>, c: &[f64], x: f64) {
-    if let Some(last) = out.last()
+fn push_root(out: &mut Vec<Root>, mark: usize, c: &[f64], d: &[f64], x: f64) {
+    if out.len() > mark
+        && let Some(last) = out.last()
         && (x - last.x).abs() <= 1e-12 * (1.0 + x.abs())
     {
         return;
     }
-    let d = derivative(c);
-    let (dv, de) = eval_with_bound(&d, x);
+    let (dv, de) = eval_with_bound(d, x);
     let scale = 1e-7 * c.iter().fold(0.0f64, |m, a| m.max(a.abs())).max(1e-300);
     out.push(Root {
         x,
@@ -144,9 +184,8 @@ fn push_root(out: &mut Vec<Root>, c: &[f64], x: f64) {
     });
 }
 
-fn bisect(c: &[f64], mut a: f64, mut b: f64, fa: f64) -> f64 {
+fn bisect(c: &[f64], d: &[f64], mut a: f64, mut b: f64, fa: f64) -> f64 {
     let neg_at_a = fa < 0.0;
-    let d = derivative(c);
     let mut x = 0.5 * (a + b);
     for _ in 0..200 {
         let f = eval(c, x);
@@ -158,7 +197,7 @@ fn bisect(c: &[f64], mut a: f64, mut b: f64, fa: f64) -> f64 {
         } else {
             b = x;
         }
-        let df = eval(&d, x);
+        let df = eval(d, x);
         let newton = x - f / df;
         let next = if df != 0.0 && newton > a && newton < b {
             newton
