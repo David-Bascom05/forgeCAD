@@ -445,6 +445,15 @@ impl Blend {
         ))
     }
 
+    /// The ball at t: its centre and radius. The section at t is its circle of contact, along
+    /// which the blend's normal is the ball's.
+    pub fn ball(&self, t: f64) -> (Point3, f64) {
+        match &self.var {
+            Some(v) => v.ball(t),
+            None => (self.spine.eval(t), self.radius),
+        }
+    }
+
     /// The spring curve on `a` (`on_a`) or `b` in closed form, sharing the
     /// spine's parameter, or None where it has none.
     pub fn spring(&self, on_a: bool) -> Option<Curve> {

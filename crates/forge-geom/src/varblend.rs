@@ -1302,6 +1302,13 @@ impl VarBlend {
         (Circle { frame, radius: rho }, phi)
     }
 
+    /// The ball at s: its centre and radius. The section at s is its circle of contact, along
+    /// which the blend's normal is the ball's.
+    pub fn ball(&self, s: f64) -> (Point3, f64) {
+        let sec = self.section_at(s);
+        (Point3::ORIGIN + sec.c.at(0), sec.r.0[0])
+    }
+
     /// The sides of a and b the balls are on (+1 or -1).
     pub fn sides(&self) -> (f64, f64) {
         (self.side[0], self.side[1])

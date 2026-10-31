@@ -2151,13 +2151,19 @@ impl Builder {
             if let Some((e, fwd)) = sections[j] {
                 let ro = &self.rolled[self.filleted(ring[j].cin).expect("blend")];
                 let blend = blend_ring.iter().position(|&x| x == j).expect("blend");
-                sides.push((
-                    e,
-                    !fwd,
-                    ro.blend.surface.clone(),
-                    ro.convex,
-                    SideKind::Section { blend },
-                ));
+                // along a section a swept blend's normal is its ball's: the sphere answers it
+                // without projecting onto the blend
+                let neighbour = match (&ro.blend.surface, stops[j]) {
+                    (Surface::Procedural(_), Some((t, _, _))) => {
+                        let (c, r) = ro.blend.ball(t);
+                        Surface::Sphere(Sphere {
+                            frame: Frame::from_z(c, UnitVec3::Z),
+                            radius: r,
+                        })
+                    }
+                    _ => ro.blend.surface.clone(),
+                };
+                sides.push((e, !fwd, neighbour, ro.convex, SideKind::Section { blend }));
             }
             if let Some((e, fwd)) = face_edges[jp] {
                 let face = self.body.face(ring[jp].face);
