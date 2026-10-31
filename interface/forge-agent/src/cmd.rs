@@ -1606,16 +1606,16 @@ combine cut base lid keep
             !dir.0.join("hard.fc.log").exists(),
             "no copy of it beside the link"
         );
-        // the write itself fails: a directory that can't take the temporary file
-        use std::os::unix::fs::PermissionsExt;
+        // the write itself fails, for root too: a directory where the temporary file must go
         let f = dir.file("p.fc", "w = 4\nextrude w rect 0 0 1 1\n");
         assert!(s.run("act", &args(&f, &["w = 5"])).ok);
         let log = dir.0.join("p.fc.log");
         let before = std::fs::read(&log).expect("read");
         let text = std::fs::read_to_string(&f).expect("read");
-        std::fs::set_permissions(&dir.0, std::fs::Permissions::from_mode(0o500)).expect("chmod");
+        let tmp = dir.0.join(format!(".p.fc.{}.tmp", std::process::id()));
+        std::fs::create_dir(&tmp).expect("in the way");
         let r = s.run("act", &args(&f, &["w = 6"]));
-        std::fs::set_permissions(&dir.0, std::fs::Permissions::from_mode(0o700)).expect("chmod");
+        std::fs::remove_dir(&tmp).expect("out of the way");
         assert!(!r.ok, "{}", r.text);
         assert_eq!(std::fs::read(&log).expect("read"), before, "the entry went back");
         assert_eq!(std::fs::read_to_string(&f).expect("read"), text);
