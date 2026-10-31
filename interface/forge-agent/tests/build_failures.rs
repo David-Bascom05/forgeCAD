@@ -174,3 +174,26 @@ extrude cut two 40 50 z 0 1 0 x 1 0 0 circle 30 0 10
     let rod = forge_math::dmath::PI * 1600.0 * 80.0;
     assert!(v < rod && v > 0.9 * rod, "{v}");
 }
+
+/// A flat cut on a rod from its end by a profile whose arc lies on the rod's own circle: the flat's
+/// two ends take their names from what meets there, alike; they are told apart by where they lie.
+#[test]
+fn flat_on_a_rod_by_an_arc_on_its_circle() {
+    builds(
+        "extrude two 15 15 z 0 1 0 x 1 0 0 circle 0 0 6
+extrude cut 7 z 0 -1 0 x -1 0 0 at 0 15 0 loop line -2 5.656854249 -2 -5.656854249 arc 0 0 6 -109.471220634 -141.057558732
+",
+    );
+}
+
+/// A tool's side all but tangent to a round floor's edge, the floor's wall a hair wider than the
+/// tool reaches: the imprint runs a hair from the boundary between the same vertices, and is it.
+#[test]
+fn imprint_a_hair_from_the_boundary() {
+    builds(
+        "extrude 4 z 0 1 0 x 1 0 0 circle 0 0 7
+extrude cut 3 z 0 1 0 x 1 0 0 circle 0 0 5.00000006
+extrude add 4 z 1 0 0 x 0 0 -1 at 5 0 0 poly -4 2.5 -4 0 4 0 4 2.5
+",
+    );
+}

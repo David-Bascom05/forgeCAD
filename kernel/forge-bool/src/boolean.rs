@@ -1186,6 +1186,21 @@ fn plan(a: &Body, b: &Body, op: Op, scratch: &mut Scratch) -> R<Plan> {
                 }
                 boundary.push(walk);
             }
+            // an imprint a hair from the boundary, between the same two vertices, is the boundary
+            // (a tool's side all but tangent to a round face's edge)
+            if !foreign.is_empty() {
+                foreign.retain(|&p| {
+                    let pc = &pieces[p];
+                    let mid = pc.curve.eval(pc.range.mid());
+                    !boundary.iter().flatten().any(|&(b, _)| {
+                        let o = &pieces[b];
+                        b != p
+                            && (o.start == pc.start && o.end == pc.end
+                                || o.start == pc.end && o.end == pc.start)
+                            && o.curve.eval(o.curve.closest(mid, o.range)).distance(mid) <= tol::LINEAR
+                    })
+                });
+            }
             if mine.is_empty() && foreign.is_empty() {
                 specs.push(Spec {
                     side,
@@ -2171,7 +2186,11 @@ pub(crate) fn trim(
                 let past = crossed(k, ends);
                 // an edge it crosses only to run within tolerance of it (a chord of a hair) is
                 // one it lies along
-                if past.is_empty() || past.iter().any(|&e| on_edge(bodies[k], e, p).is_some()) {
+                let hair = || {
+                    curve.eval(t0).distance(p).min(curve.eval(t1).distance(p)) > 4.0 * tol::LINEAR
+                        && past.iter().any(|&e| on_edge(bodies[k], e, p).is_some())
+                };
+                if past.is_empty() || hair() {
                     Where::On
                 } else {
                     index[k].point_in_face_past(faces[k], p, &past)
@@ -2739,7 +2758,13 @@ pub(crate) fn flush_edges_as_cuts(
             x.0 = n;
         }
     }
+    let mut lying: Vec<(VKey, Point3)> = Vec::new();
     for &(name, p, ends, _) in &named {
+        let pc = &pieces[p];
+        lying.extend(ends.map(|(v, _)| {
+            let t = if v == pc.start { pc.range.lo } else { pc.range.hi };
+            (v, pc.curve.eval(t))
+        }));
         pieces[p].name = name;
         at_vertex.extend(ends.map(|(v, m)| (v, m.0)));
     }
@@ -2754,6 +2779,21 @@ pub(crate) fn flush_edges_as_cuts(
     }
     for o in &mut out {
         o.1 = vertex.with(o.1.0).with(0);
+    }
+    // vertices their marks do not tell apart (a flat's two ends on a rod), by where they lie
+    if let Some(&(_, _, _, (sd, f))) = named.first() {
+        let frame = surface_frame(&bodies[sd].face(f).surface);
+        let mut names: Vec<Name> = out.iter().map(|x| x.1).collect();
+        rank_names(&mut names, &|k| {
+            let at = lying
+                .iter()
+                .find(|x| x.0 == out[k].0)
+                .map_or(Point3::ORIGIN, |x| x.1);
+            frame.point_to_local(at)
+        });
+        for (o, n) in out.iter_mut().zip(names) {
+            o.1 = n;
+        }
     }
     out
 }
