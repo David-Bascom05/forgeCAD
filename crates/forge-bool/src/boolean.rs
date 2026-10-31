@@ -1447,6 +1447,30 @@ pub(crate) fn trim(
                 if cuts[first..].iter().any(|x| x.on == CutOn::Edge(side, e)) {
                     continue; // a seam is visited twice
                 }
+                // on a plane the curve meets the edge where it meets the edge's own line or circle
+                if let Surface::Plane(pl) = &body.face(f).surface
+                    && let Some(hits) = plane_meet(pl, &curve, range, &edge.curve)
+                {
+                    for h in hits {
+                        if let Some((s, tol)) = on_edge(body, e, h.point) {
+                            let other = index[1 - k].face_box(faces[1 - k]);
+                            if other.grow(tol::LINEAR).contains(h.point)
+                                && (other.contains(h.point)
+                                    || index[1 - k].point_in_face(faces[1 - k], h.point) != Where::Outside)
+                            {
+                                ts.push((h.t, cuts.len()));
+                                cuts.push(Cut {
+                                    on: CutOn::Edge(side, e),
+                                    s,
+                                    point: h.point,
+                                    tol,
+                                    touch: branches[1],
+                                });
+                            }
+                        }
+                    }
+                    continue;
+                }
                 let across = across(body, f, c)?;
                 let hits = match curve_surface(&curve, range, &across) {
                     CurveSurface::Hits(h) => h,
@@ -1989,6 +2013,121 @@ fn sole_pieces_keep_names(
 /// A piece of edge `edge` named by its ends, not its place in the order along the edge.
 pub(crate) fn piece_name(edge: Name, pc: &Piece, vname: &dyn Fn(VKey) -> Name) -> Name {
     edge.piece(vname(pc.start).with_name(vname(pc.end)))
+}
+
+/// Where a line or circle of plane `pl` crosses a circle of the plane, or a circle a line, over the
+/// curve's `range`, in closed form. None when they come near touching, run together, or are
+/// other curves (two lines among them: a line meets the neighbouring plane as cheaply): the
+/// edge's neighbouring surface decides then.
+fn plane_meet(pl: &Plane, curve: &Curve, range: Interval, edge: &Curve) -> Option<Vec<CurveHit>> {
+    let n = pl.frame.z();
+    // the points where two of these meet, if they cross cleanly
+    let line_circle = |o: Point3, d: Vec3, c: Point3, r: f64| -> Option<Vec<Point3>> {
+        let w = o - c;
+        let (b, cc) = (d.dot(w), w.dot(w) - r * r);
+        let disc = b * b - cc;
+        if disc.abs() <= 1e-6 * r * r {
+            return None;
+        }
+        if disc < 0.0 {
+            return Some(Vec::new());
+        }
+        let q = disc.sqrt();
+        Some(vec![o + d * (-b - q), o + d * (-b + q)])
+    };
+    let pts: Vec<Point3> = match (curve, edge) {
+        (Curve::Line(a), Curve::Circle(k)) | (Curve::Circle(k), Curve::Line(a)) => {
+            if k.frame.z().dot(n).abs() < 1.0 - 1e-12 {
+                return None;
+            }
+            line_circle(a.origin, a.dir.get(), k.frame.origin, k.radius)?
+        }
+        (Curve::Circle(k1), Curve::Circle(k2)) => {
+            if k1.frame.z().dot(n).abs() < 1.0 - 1e-12 || k2.frame.z().dot(n).abs() < 1.0 - 1e-12 {
+                return None;
+            }
+            let (c1, c2, r1, r2) = (k1.frame.origin, k2.frame.origin, k1.radius, k2.radius);
+            let d = c1.distance(c2);
+            let r = r1.min(r2);
+            // concentric, or near touching inside or out
+            if d <= 1e-3 * r || (d - (r1 + r2)).abs() <= 1e-3 * r || (d - (r1 - r2).abs()).abs() <= 1e-3 * r {
+                return if d <= 1e-3 * r && (r1 - r2).abs() > 1e-3 * r {
+                    Some(Vec::new())
+                } else {
+                    None
+                };
+            }
+            if d > r1 + r2 || d < (r1 - r2).abs() {
+                return Some(Vec::new());
+            }
+            let u = (c2 - c1) * (1.0 / d);
+            let a = (d * d + r1 * r1 - r2 * r2) / (2.0 * d);
+            let h = (r1 * r1 - a * a).max(0.0).sqrt();
+            let v = n.cross(u);
+            vec![c1 + u * a + v * h, c1 + u * a - v * h]
+        }
+        _ => return None,
+    };
+    let mut hits: Vec<CurveHit> = Vec::with_capacity(pts.len());
+    for p in pts {
+        let t = match curve {
+            Curve::Line(l) => {
+                let t = (p - l.origin).dot(l.dir.get());
+                if !range.contains(t) {
+                    continue;
+                }
+                t
+            }
+            Curve::Circle(k) => {
+                let q = p - k.frame.origin;
+                let t0 = dmath::atan2(q.dot(k.frame.y().get()), q.dot(k.frame.x().get()));
+                let t = range.lo + dmath::wrap_tau(t0 - range.lo);
+                if t > range.hi + 1e-12 {
+                    continue;
+                }
+                t.min(range.hi)
+            }
+            _ => return None,
+        };
+        // polished on the edge: Newton steps on its distance while they bring the point nearer
+        let gap = |t: f64| {
+            let d = curve.deriv(t);
+            match edge {
+                Curve::Line(l) => {
+                    let m = n.cross(l.dir);
+                    ((d.p - l.origin).dot(m), d.d1.dot(m))
+                }
+                Curve::Circle(k) => {
+                    let q = d.p - k.frame.origin;
+                    let len = q.length();
+                    (len - k.radius, q.dot(d.d1) / len)
+                }
+                _ => (0.0, 1.0),
+            }
+        };
+        let mut t = t;
+        let mut g = gap(t);
+        for _ in 0..3 {
+            if g.0 == 0.0 || g.1 == 0.0 {
+                break;
+            }
+            let t1 = t - g.0 / g.1;
+            let g1 = gap(t1);
+            let nearer = g1.0.abs() < g.0.abs();
+            if !nearer || !range.contains(t1) {
+                break;
+            }
+            (t, g) = (t1, g1);
+        }
+        hits.push(CurveHit {
+            t,
+            point: curve.eval(t),
+            contact: Contact::Crossing,
+        });
+    }
+    hits.sort_by(|x, y| x.t.total_cmp(&y.t));
+    hits.dedup_by(|x, y| x.point.distance(y.point) <= tol::LINEAR);
+    Some(hits)
 }
 
 /// The surface that meets face `f`'s surface along the edge of coedge `c`:
