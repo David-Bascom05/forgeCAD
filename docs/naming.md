@@ -44,7 +44,10 @@ new B-rep against the old one after the fact (matching: Agbodan et al.).
 ## Our scheme
 
 - An extruded, revolved or swept face is named from its feature and its profile segment's id;
-  an edge between two such faces from the set of the two (Capoyleas' second mechanism).
+  an edge between two such faces from the set of the two (Capoyleas' second mechanism). A loop
+  of two segments meets itself twice, so its joints also take the segment starting there.
+- Names are 64-bit hashes: `Name::with` mixes a word in one step (a murmur3 finaliser),
+  `with_str` hashes the word first, `with_set` sums its members' mixes (order-free, no sort).
 - **Feature ids are stable.** Each feature line has an id from when it was made, kept in the
   part file (`id N` before the line where it is not the line's place among the features) and
   passed by forge-doc to the regen (`forge_model::History`), so inserting, deleting or moving
@@ -55,8 +58,12 @@ new B-rep against the old one after the fact (matching: Agbodan et al.).
 - Booleans (sequential and n-ary alike, since 2026-10-31):
   - a new edge, a piece of the curve where faces `a` and `b` meet, is named from the pair, the
     branch of the intersection, and the two edges its ends cut (not its place along the curve);
+    a seam edge names nothing (it lies where a surface's parameters start);
   - a new vertex is named from the curve pieces that end there (each with which end), or the
-    edges cut there, with ties broken by where it lies;
+    least-named edge cut there; pieces or vertices that still tie are ordered along the axis
+    they spread most along (`spread_rank`), which no small move changes;
+  - an edge kept along a face of the other body it lay flush on is named as the cut it becomes
+    when the bodies overlap by a hair, and its vertices likewise (`flush_edges_as_cuts`);
   - a piece of a split edge is named from its end vertices, a piece of a split face from the least
     of its boundary pieces' names with their directions (`Name::piece`, so `is_piece_of` can tell
     which face it came from);
@@ -78,30 +85,34 @@ went to something that is not a piece of it); *duplicate*.
 
 | class (literature) | before this work | now |
 |---|---|---|
-| order/index names (FreeCAD `FaceN`, [6]) | boolean vertices, curve pieces, edge pieces and face regions numbered by discovery order: wrong matches under small edits | none from booleans; small-edit hunts (900 edits) show wrong matches only in the seam class below |
+| order/index names (FreeCAD `FaceN`, [6]) | boolean vertices, curve pieces, edge pieces and face regions numbered by discovery order: wrong matches under small edits | none from booleans; small-edit hunts (1500 edits) show wrong matches only in the two order classes below |
 | split and merge [1, 6] | a face trimmed to one piece renamed `split k`; seq and n-ary disagreed | trimmed faces and edges keep their names on both paths |
 | ambiguity among pieces [2] | by order | by boundary; ties by position |
 | history change (insert, delete, reorder) [3, 6] | everything after renamed; deletes hand names to the next feature | stable ids: inserts rename nothing; a delete hands nothing on. Open: swapping two features that overlap reorders the booleans, and faces split by both are named from the pieces the earlier one left (fillet:pit-four, pit-five: 49 of 200 hunt edits, seed 3) |
-| seams of periodic surfaces | n/a | open: a closed intersection curve is cut where a cylinder's seam lies, so a tiny move can swap the halves' names (shaft-post, shaft-cross-hole) |
-| flush faces parting or meeting | n/a | open: a block standing flush on a plate names its foot edges as its own; sunk 0.01 mm in, they become intersection edges with new names (lost, never wrong) |
-| fillet faces on closed edges | n/a | open: fillet piece names follow the edge's seam (boss-foot-periodic) |
+| seams of periodic surfaces | n/a | fixed: seams name nothing; halves of a closed curve go by where they lie (shaft-post, boss-foot-periodic, and the fillets along them) |
+| two seams lying almost together | n/a | open: the slivers between them are told apart only by order (shaft-cross-hole) |
+| repeats (a thread's turns) | n/a | open: told apart by order along the axis; a turn appearing at an end shifts the rest |
+| flush faces parting or meeting | n/a | fixed for flat faces: a foot edge and its vertices keep their names whether the block stands flush or is sunk a hair in (lost names in topology-keeping edits roughly halved) |
+| two-segment loops (a half disc) | n/a | fixed: both joints took one name (DuplicateName, invalid bodies) |
 
 Seq and n-ary still name differently where a face splits into several kept pieces: the
 sequential regen sees the pieces earlier features left, the n-ary sees the original faces. Full
 agreement needs names defined against the original tool faces (Kripac's graph, or carrying each
 face's origin through booleans).
 
-## Open questions (for David)
+## Handles
 
-1. Stable feature ids: give each feature an id that survives insert, delete and reorder (stored
-   in the part, e.g. hidden in the `.fc`), instead of its position.
-2. Handles are 4+ hex digits of the name. When an upstream edit loses a name, another entity's
-   name can share those digits and the handle silently resolves to it (about one in 16^4 per
-   entity of the part). Longer handles, or a kind letter, would cut that.
-3. Seams: name pieces of closed curves (and the fillets along them) by a geometric qualifier
-   relative to the feature (Capoyleas' third mechanism) rather than where the seam falls.
-4. Flush configurations: name an edge between a tool's face and a coincident face of the part
-   the same whether they touch or overlap.
+`@`, the kind (`f` face, `e` edge, `v` vertex), and at least 8 hex digits of the name, more
+where two entities of one kind share them. A handle whose entity an upstream edit took away
+finds another entity only if that one shares the kind and all the digits: about one in 2^32
+per entity of the part, so in practice it fails. Old short handles are refused with a hint.
+
+## Open questions
+
+1. Fillet laws run from the vertex whose name sorts first (`forge_ops::law_start`). Any change
+   to naming can turn a stored variable radius end for end; a geometric rule (or storing the
+   start) would make it stable.
+2. Seq and n-ary still differ where a face splits into several kept pieces (above).
 
 ## References
 

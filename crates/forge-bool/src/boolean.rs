@@ -367,6 +367,8 @@ struct Plan {
     points: Vec<Point3>,
     /// Each new point's name.
     vnames: Vec<Name>,
+    /// Existing vertices renamed (`flush_edges_as_cuts`).
+    flush: Vec<(VKey, Name)>,
     /// Each new point's tolerance.
     tols: Vec<f64>,
     /// Existing vertices whose tolerance grows to hold the curves now ending on them.
@@ -541,7 +543,7 @@ fn plan(a: &Body, b: &Body, op: Op, scratch: &mut Scratch) -> R<Plan> {
                 }
                 let pair_name = root
                     .with_str("cut")
-                    .with_set(&mut [a.face(fa).name, b.face(fb).name])
+                    .with_set(&[a.face(fa).name, b.face(fb).name])
                     .with(ci as u64);
                 trim(
                     bodies,
@@ -607,20 +609,14 @@ fn plan(a: &Body, b: &Body, op: Op, scratch: &mut Scratch) -> R<Plan> {
     // 3: vertices for the cuts, then edge pieces
     lap(&mut clock, 1);
     let (cut_vertex, mut new_points, alias) = place_cuts(&bodies, &cuts)?;
-    let mut marks = curve_ends(&segs, &cut_vertex);
-    let mut ended = vec![false; new_points.len()];
-    for m in &marks {
-        ended[m.0 as usize] = true;
-    }
-    for (c, &k) in cuts.iter().zip(&cut_vertex) {
-        if let VKey::New(i) = k
-            && !ended[i as usize]
-            && let Some((sd, e)) = c.on.edge()
-        {
-            marks.push((i, bodies[sd].edge(e).name));
-        }
-    }
-    let mut vnames = vertex_names(&new_points, marks, root);
+    let cut_edges = cuts
+        .iter()
+        .zip(&cut_vertex)
+        .filter_map(|(c, &k)| match (k, c.on.edge()) {
+            (VKey::New(i), Some((sd, e))) => Some((i, bodies[sd].edge(e).name)),
+            _ => None,
+        });
+    let mut vnames = vertex_names(&new_points, curve_ends(&segs, &cut_vertex), cut_edges, root);
     // closed new edges' own vertices (added after the cuts' below)
     vnames.extend(segs.iter().map(|s| s.name.with_str("seam")));
     // cut points of one vertex differ by up to their tolerance: a new vertex settles on the point
@@ -1193,6 +1189,20 @@ fn plan(a: &Body, b: &Body, op: Op, scratch: &mut Scratch) -> R<Plan> {
         &split_runs,
         &vname,
     );
+    let flush = if coplanar.is_empty() {
+        Vec::new()
+    } else {
+        let kept_faces = kept
+            .iter()
+            .map(|&(i, _)| (specs[i].side, specs[i].from))
+            .collect();
+        let pairs: Vec<[(Side, FaceId); 2]> = coplanar.iter().map(|&(fa, fb)| [(0, fa), (1, fb)]).collect();
+        let whole = |sd: Side, e: EdgeId| match edge_pieces[sd][e.index()] {
+            (at, first, 1) if at == now => Some(first as usize),
+            _ => None,
+        };
+        flush_edges_as_cuts(&bodies, kept_faces, &mut pieces, &uses, &pairs, &whole, root)
+    };
     (scratch.cuts, scratch.segs) = (cuts, segs);
     Ok(Plan {
         pieces,
@@ -1200,6 +1210,7 @@ fn plan(a: &Body, b: &Body, op: Op, scratch: &mut Scratch) -> R<Plan> {
         kept,
         points,
         vnames,
+        flush,
         tols,
         grown,
         alias,
@@ -1218,6 +1229,7 @@ fn apply(a: &mut Body, b: &Body, plan: &Plan) {
         kept,
         points,
         vnames,
+        flush,
         tols,
         grown,
         alias,
@@ -1225,6 +1237,13 @@ fn apply(a: &mut Body, b: &Body, plan: &Plan) {
         untouched_kept,
         ..
     } = plan;
+    // sorted by vertex (`flush_edges_as_cuts`)
+    let renamed = |v: VKey, n: Name| flush.binary_search_by_key(&v, |f| f.0).map_or(n, |k| flush[k].1);
+    for &(v, n) in flush {
+        if let VKey::Old(0, id) = v {
+            a.vertices[id.index()].name = n;
+        }
+    }
     let mut as_is = vec![false; specs.len()];
     for &(si, flip) in kept {
         if specs[si].side == 0 && specs[si].whole && !flip {
@@ -1274,7 +1293,7 @@ fn apply(a: &mut Body, b: &Body, plan: &Plan) {
             VKey::Old(0, id) => id,
             VKey::Old(_, id) => *b_vertex[id.index()].get_or_insert_with(|| {
                 let x = b.vertex(id);
-                a.add_tolerant_vertex(x.point, grown_tol(grown, v, x.tol), x.name)
+                a.add_tolerant_vertex(x.point, grown_tol(grown, v, x.tol), renamed(v, x.name))
             }),
             VKey::New(i) => *new_vertex[i as usize].get_or_insert_with(|| {
                 let i = i as usize;
@@ -2033,8 +2052,9 @@ pub(crate) fn trim(
         }
     }
     // a piece of the curve is named by the edges it runs between, not its place along the curve;
-    // pieces between the same two edges by where they start along the first
-    // a free cut has no edge: it is named by its rank among the curve's free cuts
+    // a seam says nothing about the piece (it lies where the surface's parameters start), so it
+    // names nothing. Pieces between the same edges go in order along the way they spread most.
+    // A free cut has no edge: it is named by its rank among the curve's free cuts
     let free: Vec<usize> = ts
         .iter()
         .map(|x| x.1)
@@ -2042,94 +2062,132 @@ pub(crate) fn trim(
         .collect();
     let edge_name = |i: usize| match cuts[i].on {
         CutOn::Edge(sd, e) => {
-            let k = if sides[0] == sd { 0 } else { 1 };
-            bodies[k].edge(e).name
+            let body = bodies[if sides[0] == sd { 0 } else { 1 }];
+            let mut faces = body.edge(e).coedges.iter().map(|&c| body.coedge_face(c));
+            let first = faces.next();
+            if faces.all(|f| Some(f) == first) {
+                Name::NONE
+            } else {
+                // the edge it is, or is a piece of: earlier splits (which the n-ary boolean never
+                // sees) do not change it
+                body.edge(e).name.whole()
+            }
         }
         CutOn::Free => {
             let rank = free.iter().position(|&j| j == i).unwrap_or(free.len());
             name.with_str("free").with(rank as u64)
         }
     };
-    let keys: Vec<(Name, Name, f64)> = segs[first_seg..]
-        .iter()
-        .map(|sg| {
-            let (i0, i1) = sg.ends.expect("an open piece");
-            (edge_name(i0), edge_name(i1), cuts[i0].s)
-        })
-        .collect();
-    for (j, sg) in segs[first_seg..].iter_mut().enumerate() {
-        let (a, b, s) = keys[j];
-        let rank = keys.iter().filter(|k| k.0 == a && k.1 == b && k.2 < s).count();
-        sg.name = name.with_name(a).with_name(b).with(rank as u64);
+    for sg in &mut segs[first_seg..] {
+        let (i0, i1) = sg.ends.expect("an open piece");
+        sg.name = name.with_name(edge_name(i0)).with_name(edge_name(i1));
+    }
+    let new = &mut segs[first_seg..];
+    if new.len() == 1 {
+        new[0].name = new[0].name.with(0);
+    } else if new.len() > 1 {
+        let mut done = vec![false; new.len()];
+        for j in 0..new.len() {
+            if done[j] {
+                continue;
+            }
+            let key = new[j].name;
+            let same: Vec<usize> = (j..new.len()).filter(|&k| new[k].name == key).collect();
+            let pts: Vec<Point3> = match same.len() {
+                1 => Vec::new(),
+                _ => same
+                    .iter()
+                    .map(|&k| new[k].curve.eval(new[k].range.mid()))
+                    .collect(),
+            };
+            for (w, &k) in same.iter().enumerate() {
+                let rank = if same.len() == 1 { 0 } else { spread_rank(&pts, w) };
+                new[k].name = key.with(rank as u64);
+                done[k] = true;
+            }
+        }
     }
     Ok(())
 }
 
-/// The new curve pieces ending at each new vertex, each with which end: (point, name).
-pub(crate) fn curve_ends(segs: &[Seg], cut_vertex: &[VKey]) -> Vec<(u32, Name)> {
-    let mut out = Vec::with_capacity(2 * segs.len());
-    for sg in segs {
-        let Some((i0, i1)) = sg.ends else { continue };
-        for (k, end) in [(cut_vertex[i0], 0), (cut_vertex[i1], 1)] {
-            if let VKey::New(i) = k {
-                out.push((i, Name(sg.name.0 ^ end)));
-            }
+/// Where point `i` of `pts` comes in order along the axis they spread most along: an order no
+/// small move changes, unlike one along an axis they barely differ in.
+pub(crate) fn spread_rank(pts: &[Point3], i: usize) -> usize {
+    let b = forge_math::Box3::from_points(pts.iter().copied());
+    let (dx, dy, dz) = (b.x.width(), b.y.width(), b.z.width());
+    let along = |p: &Point3| {
+        if dx >= dy && dx >= dz {
+            p.x
+        } else if dy >= dz {
+            p.y
+        } else {
+            p.z
         }
-    }
-    out
+    };
+    let t = along(&pts[i]);
+    pts.iter()
+        .enumerate()
+        .filter(|&(k, p)| along(p) < t || (along(p) == t && k < i))
+        .count()
 }
 
-/// Names for new vertices from what meets there (`marks`: point and name: the curve pieces
-/// ending there, else the edges cut), not from the order they were found in. Points where the
-/// same ones meet are told apart by where they lie.
-pub(crate) fn vertex_names(points: &[Point3], marks: Vec<(u32, Name)>, root: Name) -> Vec<Name> {
-    let n = points.len();
-    // grouped by point (a counting sort), each group's names in order
-    let mut start = vec![0usize; n + 1];
-    for m in &marks {
-        start[m.0 as usize + 1] += 1;
-    }
-    for i in 0..n {
-        start[i + 1] += start[i];
-    }
-    let mut fill = start.clone();
-    let mut by_point = vec![Name::NONE; marks.len()];
-    for m in marks {
-        by_point[fill[m.0 as usize]] = m.1;
-        fill[m.0 as usize] += 1;
-    }
-    let root = root.with_str("vertex");
-    let keys: Vec<Name> = (0..n)
-        .map(|i| {
-            let group = &mut by_point[start[i]..start[i + 1]];
-            group.sort_unstable();
-            // a cheap mix: there are many of these, and the names mixed are hashes already
-            let mut key = root.0;
-            for k in 0..group.len() {
-                if k == 0 || group[k] != group[k - 1] {
-                    key = (key ^ group[k].0).wrapping_mul(0x9e37_79b9_7f4a_7c15);
-                    key ^= key >> 29;
-                }
-            }
-            Name(key)
+/// The new curve pieces ending at each new vertex, each with which end: (point, name).
+pub(crate) fn curve_ends<'a>(
+    segs: &'a [Seg],
+    cut_vertex: &'a [VKey],
+) -> impl Iterator<Item = (u32, Name)> + 'a {
+    segs.iter().flat_map(move |sg| {
+        let ends = sg.ends.map(|(i0, i1)| [(cut_vertex[i0], 0), (cut_vertex[i1], 1)]);
+        ends.into_iter().flatten().filter_map(move |(k, end)| match k {
+            VKey::New(i) => Some((i, Name(sg.name.0 ^ end))),
+            VKey::Old(..) => None,
         })
+    })
+}
+
+/// Names for new vertices from what meets there, not from the order they were found in: the
+/// curve pieces ending there (`ends`: point, name), else the least-named edge cut there
+/// (`cut`). Points that match are told apart by where they lie (`spread_rank`).
+pub(crate) fn vertex_names(
+    points: &[Point3],
+    ends: impl Iterator<Item = (u32, Name)>,
+    cut: impl Iterator<Item = (u32, Name)>,
+    root: Name,
+) -> Vec<Name> {
+    let n = points.len();
+    // a sum: no sort, and any order of finding gives the same key
+    let mut sum = vec![0u64; n];
+    let mut ended = vec![false; n];
+    for (i, m) in ends {
+        sum[i as usize] = sum[i as usize].wrapping_add(Name::NONE.with(m.0).0);
+        ended[i as usize] = true;
+    }
+    let mut least = vec![u64::MAX; n];
+    for (i, m) in cut {
+        least[i as usize] = least[i as usize].min(m.0);
+    }
+    let mut keys: Vec<(u64, u32)> = (0..n)
+        .map(|i| (if ended[i] { sum[i] } else { least[i] }, i as u32))
         .collect();
-    let at = |i: usize| (points[i].x, points[i].y, points[i].z);
-    let mut order: Vec<usize> = (0..n).collect();
-    order.sort_by(|&i, &j| {
-        keys[i]
-            .cmp(&keys[j])
-            .then(at(i).partial_cmp(&at(j)).unwrap_or(std::cmp::Ordering::Equal))
-    });
+    keys.sort_unstable();
+    let root = root.with_str("vertex");
     let mut out = vec![Name::NONE; n];
-    let mut rank = 0;
-    for (w, &i) in order.iter().enumerate() {
-        rank = if w > 0 && keys[order[w - 1]] == keys[i] {
-            rank + 1
+    let mut at = 0;
+    while at < n {
+        let mut end = at + 1;
+        while end < n && keys[end].0 == keys[at].0 {
+            end += 1;
+        }
+        let run = &keys[at..end];
+        if let [(key, i)] = run {
+            out[*i as usize] = root.with(*key).with(0);
         } else {
-            0
-        };
-        out[i] = keys[i].with(rank);
+            let pts: Vec<Point3> = run.iter().map(|k| points[k.1 as usize]).collect();
+            for (j, &(key, i)) in run.iter().enumerate() {
+                out[i as usize] = root.with(key).with(spread_rank(&pts, j) as u64);
+            }
+        }
+        at = end;
     }
     out
 }
@@ -2201,6 +2259,157 @@ fn sole_pieces_keep_names(
         at = end;
     }
     wholes
+}
+
+/// An edge of one body kept whole along a face of the other it lay flush on (a block standing on
+/// a plate) is named as the cut it becomes when the bodies overlap a little: by the face it
+/// lies on and its own other face, and the edges at its ends; its ends' vertices likewise. So
+/// sinking or lifting a feature by a hair keeps the names. Returns the vertices renamed, sorted.
+pub(crate) fn flush_edges_as_cuts(
+    bodies: &[&Body],
+    mut kept_faces: Vec<(Side, FaceId)>,
+    pieces: &mut [Piece],
+    uses: &[u8],
+    coplanar: &[[(Side, FaceId); 2]],
+    whole_piece: &dyn Fn(Side, EdgeId) -> Option<usize>,
+    root: Name,
+) -> Vec<(VKey, Name)> {
+    if coplanar.is_empty() {
+        return Vec::new();
+    }
+    kept_faces.sort_unstable();
+    let is_kept = |x: (Side, FaceId)| kept_faces.binary_search(&x).is_ok();
+    // each coplanar face and the face it lay on, in order
+    let mut partners: Vec<((Side, FaceId), (Side, FaceId))> =
+        coplanar.iter().flat_map(|&[x, y]| [(x, y), (y, x)]).collect();
+    partners.sort_unstable();
+    let cut = root.with_str("cut");
+    let mut at_vertex: Vec<(VKey, u64)> = Vec::new();
+    // the faces that went, each with the other body's face that took its place
+    let mut gone_faces: Vec<((Side, FaceId), (Side, FaceId))> = Vec::new();
+    for &(x, y) in &partners {
+        if !is_kept(x) && is_kept(y) && gone_faces.last().is_none_or(|g| g.0 != x) {
+            gone_faces.push((x, y));
+        }
+    }
+    let mut done: Vec<usize> = Vec::new();
+    for ((sd, gone), onto) in gone_faces {
+        let body = bodies[sd];
+        for &l in &body.face(gone).loops {
+            for gc in body.lp(l).coedges() {
+                let e = body.coedge(gc).edge;
+                let Some(p) = whole_piece(sd, e) else { continue };
+                if uses[p] == 0 || done.contains(&p) {
+                    continue;
+                }
+                done.push(p);
+                let Some(other) = body
+                    .edge(e)
+                    .coedges
+                    .iter()
+                    .map(|&c| body.coedge_face(c))
+                    .find(|&f| f != gone)
+                else {
+                    continue;
+                };
+                if let Some(r) = flush_name(body, sd, e, gone, other, onto, bodies, cut) {
+                    pieces[p].name = r.0;
+                    at_vertex.extend(r.1);
+                }
+            }
+        }
+    }
+    at_vertex.sort_unstable_by_key(|x| x.0);
+    let vertex = root.with_str("vertex");
+    let mut out: Vec<(VKey, Name)> = Vec::new();
+    for x in at_vertex {
+        match out.last_mut() {
+            Some(last) if last.0 == x.0 => last.1 = Name(last.1.0.wrapping_add(x.1)),
+            _ => out.push((x.0, Name(x.1))),
+        }
+    }
+    for o in &mut out {
+        o.1 = vertex.with(o.1.0).with(0);
+    }
+    out
+}
+
+/// The name a flush edge `e` (of body `sd`, between face `gone`, which went, and `other`) takes
+/// as a cut between `other` and the face `onto` that took `gone`'s place, and what its ends add
+/// to their vertices' keys.
+#[allow(clippy::too_many_arguments)]
+fn flush_name(
+    body: &Body,
+    sd: Side,
+    e: EdgeId,
+    gone: FaceId,
+    other: FaceId,
+    onto: (Side, FaceId),
+    bodies: &[&Body],
+    cut: Name,
+) -> Option<(Name, [(VKey, u64); 2])> {
+    // at each end, the edge of its other face that meets it there: its neighbours in that
+    // face's loop (not on the face it lay on)
+    let edge = body.edge(e);
+    let &c = edge.coedges.iter().find(|&&c| body.coedge_face(c) == other)?;
+    let lp = body.lp(body.coedge(c).lp);
+    let k = lp.coedges().position(|x| x == c).expect("in its loop");
+    let n = lp.coedges().len();
+    let beside = |x: forge_topo::CoedgeId| {
+        let x = body.coedge(x).edge;
+        let on_gone = body.edge(x).coedges.iter().any(|&c| body.coedge_face(c) == gone);
+        (x != e && !on_gone).then(|| body.edge(x).name.whole())
+    };
+    let (before, after) = (beside(lp.coedge((k + n - 1) % n)), beside(lp.coedge((k + 1) % n)));
+    // the one before meets it where the coedge starts
+    let at_start = body.coedge_start(c) == edge.start;
+    let (Some(n0), Some(n1)) = (if at_start {
+        (before, after)
+    } else {
+        (after, before)
+    }) else {
+        return None;
+    };
+    // which way, and as which branch, the intersection the bodies would meet in runs along
+    // it (the lower-numbered body's face first, as the booleans intersect them)
+    let mine = (sd, other);
+    let (lo, hi) = if mine < onto { (mine, onto) } else { (onto, mine) };
+    let (sa, sb) = (&bodies[lo.0].face(lo.1).surface, &bodies[hi.0].face(hi.1).surface);
+    let own = edge.curve.tangent(edge.range.mid())?;
+    let (ci, along) = if let (Surface::Plane(p), Surface::Plane(q)) = (sa, sb) {
+        // two planes meet in one line, along their normals' cross product (`plane_plane`)
+        (0, p.normal_vec().cross(q.normal_vec()))
+    } else {
+        let mid = edge.curve.eval(edge.range.mid());
+        let SurfaceSurface::Curves(found) =
+            ssi::surfaces_in(sa, sb, forge_math::Box3::from_point(mid).grow(1.0))
+        else {
+            return None;
+        };
+        let near = |c: &Curve| c.closest(mid, c.domain().interval());
+        let (ci, c) = found.iter().map(|x| &x.0).enumerate().min_by(|x, y| {
+            x.1.eval(near(x.1))
+                .distance(mid)
+                .total_cmp(&y.1.eval(near(y.1)).distance(mid))
+        })?;
+        let t = c.tangent(near(c))?;
+        (ci, t.get())
+    };
+    let (first, last, n0, n1) = if along.dot(own.get()) > 0.0 {
+        (edge.start, edge.end, n0, n1)
+    } else {
+        (edge.end, edge.start, n1, n0)
+    };
+    let name = cut
+        .with_set(&[bodies[lo.0].face(lo.1).name, bodies[hi.0].face(hi.1).name])
+        .with(ci as u64)
+        .with_name(n0)
+        .with_name(n1)
+        .with(0);
+    Some((
+        name,
+        [(first, 0), (last, 1)].map(|(v, end)| (VKey::Old(sd, v), Name::NONE.with(name.0 ^ end).0)),
+    ))
 }
 
 /// A piece of edge `edge` named by its ends, not its place in the order along the edge.

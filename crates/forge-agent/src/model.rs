@@ -855,6 +855,20 @@ fn near(x: f64) -> String {
 
 #[cfg(test)]
 mod tests {
+
+    /// A fillet between a feature's pattern copies and the part finds its edges on the n-ary
+    /// path too (pattern copies, standing flush on the part, named alike on both).
+    #[test]
+    fn fillet_after_a_pattern_builds_both_ways() {
+        let src = "extrude 95 rect -120 -65 240 130\nextrude 44 xz at 62 87 95 loop line -42 0 42 0 arc 0 0 42 0 -180\nfeet: extrude 16 loop line -96 -55 -96 -85 arc -88 -85 8 180 90 line -88 -93 -60 -93 arc -60 -85 8 270 90 line -52 -85 -52 -55 line -52 -55 -96 -55\npattern feet lin 1 0 0 2 148 0 1 0 2 146\nfillet 5 (edges between feet f1 concave)\n";
+        let m = Model::new(src);
+        assert!(m.error.is_none(), "{:?}", m.error);
+        let part = forge_model::Part {
+            features: m.features.clone(),
+        };
+        part.regenerate_nary(1).expect("n-ary regen");
+    }
+
     use super::*;
     use forge_model::{Part, fillets, suite};
 

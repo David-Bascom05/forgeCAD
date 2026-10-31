@@ -1253,6 +1253,43 @@ combine cut base lid keep
         assert!(!r.ok && !r.text.contains("BEGIN"), "{}", r.text);
     }
 
+    /// Parts that once came out with two entities of one name: a half disc (two segments that
+    /// meet twice), a chamfer on a half bore, a groove across overlapping half-round bosses.
+    #[test]
+    fn names_stay_unique() {
+        let half_disc = "extrude 36 loop line -33 0 33 0 arc 0 0 33 0 -180\n";
+        let half_bore = "boss: extrude 36 xz at -72 87 95 loop line -33.5 0 33.5 0 arc 0 0 33.5 0 -180\n\
+            bore: extrude cut thru both xz at -72 0 95 circle 0 0 23.5\n\
+            chamfer 1 (edges of bore circle back)\n";
+        let groove = "extrude 36 xz at -8 87 95 loop line -41 0 41 0 arc 0 0 41 0 -90 arc 0 0 41 -90 -90\n\
+            extrude 36 xz at 62 87 95 loop line -42 0 42 0 arc 0 0 42 0 -90 arc 0 0 42 -90 -90\n\
+            revolve cut yz at 62 0 95 axis x rect 79 33 2.2 3.4\n";
+        let dir = Dir::new("unique");
+        for (name, src) in [
+            ("half-disc", half_disc),
+            ("half-bore", half_bore),
+            ("groove", groove),
+        ] {
+            let f = dir.file(&format!("{name}.fc"), src);
+            let r = Session::default().run("check", &args(&f, &[]));
+            assert!(
+                r.ok && r.text.starts_with("valid after each"),
+                "{name}: {}",
+                r.text
+            );
+        }
+        // and on the n-ary path, where the lines need no part to resolve against
+        for src in [half_disc, groove] {
+            let part = crate::text::parse(src).expect("parses");
+            let body = part.regenerate_nary(1).expect("n-ary regen");
+            assert!(
+                forge_topo::check(&body).is_empty(),
+                "{:?}",
+                forge_topo::check(&body)
+            );
+        }
+    }
+
     /// The example AGENTS.md opens with builds, handles and all.
     #[test]
     fn the_agents_example_builds() {
@@ -1371,6 +1408,10 @@ combine cut base lid keep
             .to_string();
         let m = s.run("measure", &args(&a, &[&h]));
         assert!(m.text.contains("radius 4"), "{}", m.text);
+        // a face's handle, its kind first; a few digits of it no longer name anything
+        assert!(h.starts_with("@f") && h.len() >= 10, "{h}");
+        let m = s.run("measure", &args(&a, &[&h[..6]]));
+        assert!(!m.ok && m.text.contains("not a handle"), "{}", m.text);
         let m = s.run(
             "measure",
             &args(&a, &["(faces normal -z near 0 0 0)", "(faces normal +z top)"]),

@@ -907,7 +907,7 @@ mod tests {
         let mut picks = Vec::new();
         let mut rounded = Vec::new();
         for k in 0..n {
-            let edge = Name::NONE.with_set(&mut [top, face("side").with(k)]);
+            let edge = Name::NONE.with_set(&[top, face("side").with(k)]);
             picks.push(crate::FilletEdge {
                 edge: b.edge_by_name(edge).unwrap(),
                 radius: radius.clone(),
@@ -1010,7 +1010,7 @@ mod tests {
         let d = delete_faces(&b, &[face("side").with(50)]).unwrap();
         assert_eq!(d.faces.len(), 6);
         let top = face("end");
-        let edge = |k: u64| Name::NONE.with_set(&mut [top, face("side").with(k)]);
+        let edge = |k: u64| Name::NONE.with_set(&[top, face("side").with(k)]);
         let c = chamfer(&b, &[edge(0)], ChamferSize::Equal(1.0), 2).unwrap();
         let strip = |c: &Body| -> Vec<Name> {
             c.faces

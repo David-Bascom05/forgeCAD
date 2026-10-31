@@ -119,40 +119,78 @@ pub fn all(body: &Body) -> Vec<Ent> {
     v
 }
 
-/// Short handles: the fewest hex digits of each name (at least 4) that no other entity shares.
+/// Hex digits a handle carries at least: enough that a handle whose entity is gone almost
+/// never finds another (one in 2^32 per entity of the part), so it fails rather than moves.
+const HANDLE_DIGITS: usize = 8;
+/// At most: one more and a handle could read as a full name.
+const MAX_DIGITS: usize = 14;
+
+fn kind_letter(e: Ent) -> char {
+    match e {
+        Ent::Face(_) => 'f',
+        Ent::Edge(_) => 'e',
+        Ent::Vert(_) => 'v',
+    }
+}
+
+/// Handles: `@`, the kind (f, e, v), and the fewest hex digits of the name (at least
+/// `HANDLE_DIGITS`) that no other entity of that kind shares.
 pub fn handles(body: &Body) -> HashMap<Name, String> {
-    let mut names: Vec<u64> = all(body).into_iter().map(|e| name(body, e).0).collect();
+    let mut names: Vec<(char, u64)> = all(body)
+        .into_iter()
+        .map(|e| (kind_letter(e), name(body, e).0))
+        .collect();
     names.sort_unstable();
     names.dedup();
-    let common = |a: u64, b: u64| ((a ^ b).leading_zeros() / 4) as usize;
+    let common = |a: (char, u64), b: (char, u64)| {
+        if a.0 == b.0 {
+            ((a.1 ^ b.1).leading_zeros() / 4) as usize
+        } else {
+            0
+        }
+    };
     let mut out = HashMap::with_capacity(names.len());
     for (k, &n) in names.iter().enumerate() {
-        let mut d = 4;
+        let mut d = HANDLE_DIGITS;
         if k > 0 {
             d = d.max(common(n, names[k - 1]) + 1);
         }
         if k + 1 < names.len() {
             d = d.max(common(n, names[k + 1]) + 1);
         }
-        out.insert(Name(n), format!("@{}", &format!("{n:016x}")[..d.min(16)]));
+        let hex = format!("{:016x}", n.1);
+        out.insert(Name(n.1), format!("@{}{}", n.0, &hex[..d.min(MAX_DIGITS)]));
     }
     out
 }
 
-/// The entity a handle (`@` and a unique prefix of its name's hex) names.
+/// The entity a handle (`@`, its kind, and a unique prefix of its name's hex) names. A handle
+/// whose entity an edit took away fails: it never falls to another entity sharing a few digits.
 pub fn by_handle(body: &Body, h: &str) -> Result<Ent, String> {
     let p = h.strip_prefix('@').unwrap_or(h).to_ascii_lowercase();
+    let mut chars = p.chars();
+    let kind = chars.next().filter(|c| matches!(c, 'f' | 'e' | 'v'));
+    let digits = chars.as_str();
+    let (Some(kind), true) = (
+        kind,
+        (HANDLE_DIGITS..=MAX_DIGITS).contains(&digits.len()) && digits.bytes().all(|b| b.is_ascii_hexdigit()),
+    ) else {
+        return Err(format!(
+            "{h} is not a handle: @, then f, e or v, then {HANDLE_DIGITS} or more hex digits (query for fresh ones)"
+        ));
+    };
     let mut hits: Vec<Ent> = all(body)
         .into_iter()
-        .filter(|&e| format!("{:016x}", name(body, e).0).starts_with(&p))
+        .filter(|&e| kind_letter(e) == kind && format!("{:016x}", name(body, e).0).starts_with(digits))
         .collect();
     if hits.is_empty() {
         // a piece since joined into a whole
         for &(piece, _) in &body.joins.aliases {
-            if format!("{:016x}", piece.0).starts_with(&p) {
-                let e = match body.face_by_name(piece) {
-                    Some(f) => Some(Ent::Face(f)),
-                    None => body.edge_by_name(piece).map(Ent::Edge),
+            if format!("{:016x}", piece.0).starts_with(digits) {
+                let e = match kind {
+                    'f' => body.face_by_name(piece).map(Ent::Face),
+                    'e' => body.edge_by_name(piece).map(Ent::Edge),
+                    _ => None,
                 };
                 hits.extend(e.filter(|e| !hits.contains(e)));
             }
@@ -160,7 +198,9 @@ pub fn by_handle(body: &Body, h: &str) -> Result<Ent, String> {
     }
     match hits[..] {
         [e] => Ok(e),
-        [] => Err(format!("no entity {h} on the part here")),
+        [] => Err(format!(
+            "no entity {h} on the part here (an upstream edit may have taken it)"
+        )),
         _ => Err(format!(
             "{h} is ambiguous ({} entities); use more digits",
             hits.len()

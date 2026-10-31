@@ -5,24 +5,17 @@ use forge_model::{Combine, Extent, Feature, Part, suite};
 use forge_ops::Profile;
 use forge_topo::{Body, Name};
 
-/// Parts where a closed intersection curve's pieces still take their names from where the
-/// surfaces' seams cut it: a tiny move swaps them (docs/naming.md).
-const SEAMED: [&str; 6] = [
-    "fillet:shaft-post",
-    "fillet:shaft-post-periodic",
-    "fillet:shaft-cross-hole",
-    "fillet:boss-foot-periodic",
-    "fillet:boss-rim-periodic",
-    "fillet:pit-five",
-];
+/// Parts with pieces told apart only by their order: a thread's turns, and the slivers
+/// between two seams lying almost together (docs/naming.md).
+const REPEATS: [&str; 2] = ["thread", "fillet:shaft-cross-hole"];
 
 #[test]
 fn small_edits_never_move_a_name_to_another_entity() {
     let parts: Vec<(String, Part)> = corpus()
         .into_iter()
-        .filter(|c| !SEAMED.contains(&c.0.as_str()))
+        .filter(|c| !REPEATS.contains(&c.0.as_str()))
         .collect();
-    let cases = run(&parts, 11, 80, false, 1, 30);
+    let cases = run(&parts, 11, 100, false, 1, 30);
     let (mut kept, mut lost, mut used, mut shifted) = (0, 0, 0, 0);
     let mut bad = Vec::new();
     // inserts, deletes and swaps too: features keep their ids, so nothing renumbers

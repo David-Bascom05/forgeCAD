@@ -21,20 +21,18 @@ impl Name {
     }
 
     pub fn with(self, v: u64) -> Name {
-        let mut h = self.0 ^ 0xcbf2_9ce4_8422_2325;
-        for b in v.to_le_bytes() {
-            h ^= b as u64;
-            h = h.wrapping_mul(0x0100_0000_01b3);
-        }
-        // final avalanche so nearby inputs give unrelated names
-        h ^= h >> 33;
-        h = h.wrapping_mul(0xff51_afd7_ed55_8ccd);
-        h ^= h >> 33;
-        Name(h)
+        Name(mix((self.0 ^ 0xcbf2_9ce4_8422_2325)
+            .wrapping_mul(0x0100_0000_01b3)
+            ^ v))
     }
 
+    /// `with` a word: its bytes hashed to one number first (callers pass constants).
     pub fn with_str(self, s: &str) -> Name {
-        s.bytes().fold(self.with(s.len() as u64), |n, b| n.with(b as u64))
+        let mut h = 0xcbf2_9ce4_8422_2325u64;
+        for b in s.bytes() {
+            h = (h ^ b as u64).wrapping_mul(0x0100_0000_01b3);
+        }
+        self.with(h)
     }
 
     pub fn with_name(self, other: Name) -> Name {
@@ -42,24 +40,36 @@ impl Name {
     }
 
     /// A piece of the entity named `self` that a split made, told apart from its other pieces
-    /// by `which`. The high half of the name is the whole's, so `is_piece_of` can tell.
+    /// by `which`. The high half of the name is the whole's own, kept through any number of
+    /// splits, so `is_piece_of` and `whole` can tell.
     pub fn piece(self, which: Name) -> Name {
-        Name((self.with(PIECE).0 & PIECE_OF) | (which.0 & !PIECE_OF))
+        Name((self.0 & PIECE_OF) | (which.with(PIECE).0 & !PIECE_OF))
     }
 
     pub fn is_piece_of(self, whole: Name) -> bool {
-        self.0 & PIECE_OF == whole.with(PIECE).0 & PIECE_OF
+        self != whole && self.whole() == whole.whole()
+    }
+
+    /// What a name and all its pieces share: whatever splits an entity went through.
+    pub fn whole(self) -> Name {
+        Name(self.0 & PIECE_OF)
     }
 
     /// Order-independent combination, for entities defined by an unordered set
-    /// of neighbours (an edge between two faces).
-    pub fn with_set(self, names: &mut [Name]) -> Name {
-        names.sort();
-        names
-            .iter()
-            .copied()
-            .fold(self.with(0x5e7), |n, x| n.with_name(x))
+    /// of neighbours (an edge between two faces): a sum, so no sort and no allocation.
+    pub fn with_set(self, names: &[Name]) -> Name {
+        let sum = names.iter().fold(0u64, |a, n| a.wrapping_add(mix(n.0 ^ 0x5e7)));
+        self.with(0x5e7).with(sum)
     }
+}
+
+/// A 64-bit finaliser (murmur3's): nearby inputs give unrelated outputs.
+fn mix(mut h: u64) -> u64 {
+    h ^= h >> 33;
+    h = h.wrapping_mul(0xff51_afd7_ed55_8ccd);
+    h ^= h >> 33;
+    h = h.wrapping_mul(0xc4ce_b9fe_1a85_ec53);
+    h ^ (h >> 33)
 }
 
 impl fmt::Debug for Name {
@@ -79,8 +89,8 @@ mod tests {
         assert_ne!(f, Name::feature(4));
         assert_ne!(f.with_str("top"), f.with_str("bottom"));
         assert_eq!(
-            Name::NONE.with_set(&mut [f, f.with(1)]),
-            Name::NONE.with_set(&mut [f.with(1), f])
+            Name::NONE.with_set(&[f, f.with(1)]),
+            Name::NONE.with_set(&[f.with(1), f])
         );
     }
 }

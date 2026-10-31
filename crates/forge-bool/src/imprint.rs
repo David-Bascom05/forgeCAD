@@ -557,7 +557,7 @@ fn build<S: Src>(a: &mut Body, b: &S, t: &Tool, hits: &[Hit], wall_at: &[bool], 
         for (k, w) in t.walls.iter().enumerate() {
             let (c0, c1) = ends(k, h.segs[k].2);
             names.push(
-                cut.with_set(&mut [a.face(h.f).name, b.face(w.face).2])
+                cut.with_set(&[a.face(h.f).name, b.face(w.face).2])
                     .with(0)
                     .with_name(side_name(c0))
                     .with_name(side_name(c1))
@@ -575,7 +575,7 @@ fn build<S: Src>(a: &mut Body, b: &S, t: &Tool, hits: &[Hit], wall_at: &[bool], 
             marks.push(((i * nw + c1) as u32, Name(name.0 ^ 1)));
         }
     }
-    let vnames = vertex_names(&points, marks, root);
+    let vnames = vertex_names(&points, marks.into_iter(), std::iter::empty(), root);
     let shell = ShellId(0);
     let mut made = Made {
         b,

@@ -15,7 +15,7 @@ hole 5 -xy at -20 -10 6 thru                # dia, frame (its z drills in), dept
 pattern hole1 lin 1 0 0 3 20                # copy hole1: dir, count, step
 extrude cut 2 -xy at 0 5 6 circle 0 0 4     # op: add (default) cut keep (intersect) new (body)
 fillet 3 (edges between base wall concave)  # radius, then refs; a new radius applies onward
-chamfer 1 @d644 @b2e4                       # @handles come from `query`
+chamfer 1 @e78d2213f @e172f9490             # @handles come from `query`
 hole M6 iso tap -xy at 20 10 6 thru         # tap drill 5, thread M6x1 recorded
 pattern hole2 pts 20 10 6  20 0 6           # the source at the first point, copies at the rest
 ```
@@ -127,7 +127,7 @@ top bottom left right front back   near X Y Z              keep the extreme ones
 Commands (a few lines of text; `--json` for JSON):
 ```
 forgecad build F                    ok, or error at file line N + hint; exact volume, area; bbox; bodies
-forgecad query F SEL [--at FEAT]    @d644 line -x len=60 at 0,20,40   (round: axis, centre; body=FEAT;
+forgecad query F SEL [--at FEAT]    @e78d2213f line -x len=60 at 0,20,40  (round: axis, centre; body=FEAT;
                                     faces on one surface are one face; alike ones share a line)
 forgecad measure F REF [REF]        area|length radius centre; two: closest distance, angle, axes
 forgecad measure F mass|wall        exact volume area centroid inertia (+ principal); thinnest wall anywhere
@@ -138,5 +138,8 @@ forgecad edit F param NAME EXPR | dim LINE V | arg LINE K TEXT | insert LINE|end
 forgecad serve|mcp [--root DIR] [--writable]   stdio JSON-RPC / MCP, .fc files under DIR (default .) only; edit needs --writable
 ```
 `serve` takes one JSON object per line, `{"id":1,"method":"build","params":{"file":"b.fc"}}`;
-params: file sel at what to view labels px other. Render labels are handles without `@`. Handles
-survive edits below their feature; selectors survive more.
+params: file sel at what to view labels px other. Rendered labels are handles without `@`.
+
+Handles (`@`, f/e/v for face/edge/vertex, 8+ hex digits of the name) survive edits below their
+feature; one whose entity an upstream edit took away fails, never finds another. Selectors
+survive more.

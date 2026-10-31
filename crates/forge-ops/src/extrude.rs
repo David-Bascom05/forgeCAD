@@ -197,13 +197,15 @@ impl<'a, B: Sink> Builder<'a, B> {
     fn chain_walls(&mut self, segs: &[(Segment, u64)]) -> Vec<Wall> {
         let n = segs.len();
         let names: Vec<Name> = segs.iter().map(|&(_, id)| self.side_name(id)).collect();
+        // two segments meet twice (a half disc): each joint also takes the segment starting there
+        let joint = |i: usize, n0: Name| if n == 2 { n0.with_name(names[i]) } else { n0 };
         // vertex i is where segment i starts (between wall i-1 and wall i)
         let mut verts: Vec<[VertexId; 2]> = Vec::with_capacity(n);
         for (i, &(s, _)) in segs.iter().enumerate() {
             let prev = names[(i + n - 1) % n];
             let mut pair = [VertexId(0); 2];
             for (k, level) in [0.0, self.d].into_iter().enumerate() {
-                let name = Name::NONE.with_set(&mut [self.cap_name(k == 1), prev, names[i]]);
+                let name = joint(i, Name::NONE.with_set(&[self.cap_name(k == 1), prev, names[i]]));
                 pair[k] = self.body.add_vertex(self.at(s.start(), level), name);
             }
             verts.push(pair);
@@ -212,7 +214,7 @@ impl<'a, B: Sink> Builder<'a, B> {
         for (i, &(s, _)) in segs.iter().enumerate() {
             let prev = names[(i + n - 1) % n];
             let line = Line::new(self.at(s.start(), 0.0), self.up());
-            let name = Name::NONE.with_set(&mut [prev, names[i]]);
+            let name = joint(i, Name::NONE.with_set(&[prev, names[i]]));
             uprights.push(self.body.add_edge(
                 Curve::Line(line),
                 Interval::new(0.0, self.d),
@@ -230,7 +232,7 @@ impl<'a, B: Sink> Builder<'a, B> {
                 let (a, b) = (verts[i][k], verts[j][k]);
                 let (start, end) = if forward { (a, b) } else { (b, a) };
                 let curve = curve0.transformed(&Frame::WORLD.with_origin(Point3::ORIGIN + self.up() * level));
-                let name = Name::NONE.with_set(&mut [self.cap_name(k == 1), names[i]]);
+                let name = Name::NONE.with_set(&[self.cap_name(k == 1), names[i]]);
                 edges[k] = self.body.add_edge(curve, range, start, end, name);
             }
             let face = self.body.add_face(surface, same_sense, names[i]);
@@ -319,15 +321,11 @@ impl<'a, B: Sink> Builder<'a, B> {
             full,
             vb,
             vb,
-            Name::NONE.with_set(&mut [self.start_name, name]),
+            Name::NONE.with_set(&[self.start_name, name]),
         );
-        let top = self.body.add_edge(
-            top_c,
-            full,
-            vt,
-            vt,
-            Name::NONE.with_set(&mut [self.end_name, name]),
-        );
+        let top = self
+            .body
+            .add_edge(top_c, full, vt, vt, Name::NONE.with_set(&[self.end_name, name]));
         let seam = self.body.add_edge(
             Curve::Line(Line::new(self.at(start, 0.0), self.up())),
             Interval::new(0.0, self.d),

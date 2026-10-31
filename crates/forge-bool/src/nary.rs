@@ -838,7 +838,7 @@ fn nary_body(
                     }
                     let name = Name::feature(0)
                         .with_str("cut")
-                        .with_set(&mut [a.face(fa).name, b.face(fb).name])
+                        .with_set(&[a.face(fa).name, b.face(fb).name])
                         .with(ci as u64);
                     trim(
                         [a, b],
@@ -1298,25 +1298,23 @@ fn nary_body(
     alias.sort();
     let cut_vertex: Vec<VKey> = cluster[..cuts.len()].iter().map(|&k| key_of[k]).collect();
     let triple_vertex: Vec<VKey> = cluster[cuts.len()..].iter().map(|&k| key_of[k]).collect();
-    let mut marks = crate::boolean::curve_ends(&segs, &cut_vertex);
-    for (tc, &k) in triple.iter().zip(&triple_vertex) {
-        if let VKey::New(i) = k {
-            marks.push((i, segs[tc.seg].name));
-        }
-    }
-    let mut ended = vec![false; points.len()];
-    for m in &marks {
-        ended[m.0 as usize] = true;
-    }
-    for (c, &k) in cuts.iter().zip(&cut_vertex) {
-        if let VKey::New(i) = k
-            && !ended[i as usize]
-            && let Some((sd, e)) = c.on.edge()
-        {
-            marks.push((i, tools[sd].edge(e).name));
-        }
-    }
-    let vnames = crate::boolean::vertex_names(&points, marks, root);
+    let triples = triple.iter().zip(&triple_vertex).filter_map(|(tc, &k)| match k {
+        VKey::New(i) => Some((i, segs[tc.seg].name)),
+        VKey::Old(..) => None,
+    });
+    let cut_edges = cuts
+        .iter()
+        .zip(&cut_vertex)
+        .filter_map(|(c, &k)| match (k, c.on.edge()) {
+            (VKey::New(i), Some((sd, e))) => Some((i, tools[sd].edge(e).name)),
+            _ => None,
+        });
+    let vnames = crate::boolean::vertex_names(
+        &points,
+        crate::boolean::curve_ends(&segs, &cut_vertex).chain(triples),
+        cut_edges,
+        root,
+    );
     // closed new edges' own vertices, added after those
     let mut seams: Vec<Name> = Vec::new();
     // a new vertex settles on the point nearest every curve through it; parameters follow it
@@ -2326,6 +2324,16 @@ fn nary_body(
             n
         };
     }
+    let kept_faces = kept
+        .iter()
+        .map(|&(ri, _)| (regs[ri].side, regs[ri].face))
+        .collect();
+    let whole = |sd: Side, e: EdgeId| match pieces.of_edge[sd][e.index()] {
+        (first, 1) => Some(first as usize),
+        _ => None,
+    };
+    let flush =
+        crate::boolean::flush_edges_as_cuts(tools, kept_faces, &mut list, &uses, &coplanar, &whole, root);
     let mut out = Body::new();
     // sized up front: the body grows by pushes alone
     let (loops, uses): (usize, usize) = kept.iter().fold((0, 0), |a, &(ri, _)| {
@@ -2383,7 +2391,10 @@ fn nary_body(
                                         .iter()
                                         .take_while(|g| g.0 == v)
                                         .fold(x.tol, |t, g| t.max(g.1));
-                                    out.add_tolerant_vertex(x.point, t, x.name)
+                                    let name = flush
+                                        .binary_search_by_key(&v, |f| f.0)
+                                        .map_or(x.name, |k| flush[k].1);
+                                    out.add_tolerant_vertex(x.point, t, name)
                                 }
                                 VKey::New(i) => out.add_tolerant_vertex(
                                     points[i as usize],
