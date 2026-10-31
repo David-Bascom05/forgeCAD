@@ -414,10 +414,140 @@ struct Data {
     slopes: Vec<Vec3>,
     spline: Arc<Spline>,
     shifts: Vec<Shift>,
+    poly: Option<Poly>,
+}
+
+/// The surface summed once per span: A(s) + B(s) cos a + D(s) sin a + E(s) t, a = start + sweep t,
+/// each a cubic in the fraction b along the span (where every rail is a line or an arc turning
+/// through the same angles, and no guide pulls on it).
+#[derive(Clone, Debug)]
+struct Poly {
+    start: f64,
+    sweep: f64,
+    arcs: bool,
+    /// Per span, [A, B, D, E] by powers of b.
+    spans: Vec<[[Vec3; 4]; 4]>,
+}
+
+impl Poly {
+    fn new(rails: &[Rail], slopes: &[Vec3], spline: &Spline, shifts: &[Shift]) -> Option<Poly> {
+        if !shifts.is_empty() {
+            return None;
+        }
+        let mut angles = None;
+        for r in rails {
+            match *r {
+                Rail::Line { .. } => {}
+                Rail::Arc { start, sweep, .. } => {
+                    if angles.is_some_and(|a| a != (start, sweep)) {
+                        return None;
+                    }
+                    angles = Some((start, sweep));
+                }
+                _ => return None,
+            }
+        }
+        let (start, sweep) = angles.unwrap_or((0.0, 0.0));
+        let k = &spline.knots;
+        let spans = (0..k.len() - 1)
+            .map(|i| {
+                let q = (k[i + 1] - k[i]) * (k[i + 1] - k[i]) / 6.0;
+                let mut out = [[Vec3::ZERO; 4]; 4];
+                // datum d's weight over the span, in powers of b (as `Spline::weights`)
+                let weight = |d: usize| {
+                    let (mi, mj) = (spline.m[d][i], spline.m[d][i + 1]);
+                    let (yi, yj) = (f64::from(d == i), f64::from(d == i + 1));
+                    [yi, yj - yi - q * (2.0 * mi + mj), 3.0 * q * mi, q * (mj - mi)]
+                };
+                let mut add = |part: usize, d: usize, v: Vec3| {
+                    for (o, c) in out[part].iter_mut().zip(weight(d)) {
+                        *o += v * c;
+                    }
+                };
+                for (d, r) in rails.iter().enumerate() {
+                    match *r {
+                        Rail::Line { a, b } => {
+                            add(0, d, a.to_vec());
+                            add(3, d, b - a);
+                        }
+                        Rail::Arc { circle, .. } => {
+                            let (f, rad) = (&circle.frame, circle.radius);
+                            add(0, d, f.origin.to_vec());
+                            add(1, d, f.x().get() * rad);
+                            add(2, d, f.y().get() * rad);
+                        }
+                        _ => unreachable!("lines and arcs only"),
+                    }
+                }
+                for (j, &v) in slopes.iter().enumerate() {
+                    add(0, rails.len() + j, v);
+                }
+                out
+            })
+            .collect();
+        Some(Poly {
+            start,
+            sweep,
+            arcs: angles.is_some(),
+            spans,
+        })
+    }
+
+    fn point(&self, spline: &Spline, uv: Point2) -> SurfDeriv {
+        let i = spline.span(uv.y);
+        let (k0, h) = (spline.knots[i], spline.knots[i + 1] - spline.knots[i]);
+        let b = (uv.y - k0) / h;
+        // each part's value and first two derivatives in s
+        let cubic = |c: &[Vec3; 4]| {
+            [
+                ((c[3] * b + c[2]) * b + c[1]) * b + c[0],
+                ((c[3] * (3.0 * b) + c[2] * 2.0) * b + c[1]) * (1.0 / h),
+                (c[3] * (6.0 * b) + c[2] * 2.0) * (1.0 / (h * h)),
+            ]
+        };
+        let sp = &self.spans[i];
+        let (a, e) = (cubic(&sp[0]), cubic(&sp[3]));
+        let t = uv.x;
+        let mut d = SurfDeriv {
+            p: Point3::ORIGIN + a[0] + e[0] * t,
+            du: e[0],
+            dv: a[1] + e[1] * t,
+            duu: Vec3::ZERO,
+            duv: e[1],
+            dvv: a[2] + e[2] * t,
+        };
+        if self.arcs {
+            let (sn, cs) = forge_math::dmath::sin_cos(self.start + self.sweep * t);
+            let (bb, dd) = (cubic(&sp[1]), cubic(&sp[2]));
+            let w = self.sweep;
+            let r0 = bb[0] * cs + dd[0] * sn;
+            d.p += r0;
+            d.du += (dd[0] * cs - bb[0] * sn) * w;
+            d.duu = r0 * (-w * w);
+            d.dv += bb[1] * cs + dd[1] * sn;
+            d.duv += (dd[1] * cs - bb[1] * sn) * w;
+            d.dvv += bb[2] * cs + dd[2] * sn;
+        }
+        d
+    }
 }
 
 impl Data {
+    fn new(rails: Vec<Rail>, slopes: Vec<Vec3>, spline: Arc<Spline>, shifts: Vec<Shift>) -> Data {
+        let poly = Poly::new(&rails, &slopes, &spline, &shifts);
+        Data {
+            rails,
+            slopes,
+            spline,
+            shifts,
+            poly,
+        }
+    }
+
     fn point(&self, uv: Point2) -> SurfDeriv {
+        if let Some(p) = &self.poly {
+            return p.point(&self.spline, uv);
+        }
         let w = self.spline.weights(uv.y);
         let mut d = SurfDeriv {
             p: Point3::ORIGIN,
@@ -541,12 +671,12 @@ impl Data {
     }
 
     fn transformed(&self, f: &Frame) -> Data {
-        Data {
-            rails: self.rails.iter().map(|r| r.transformed(f)).collect(),
-            slopes: self.slopes.iter().map(|&s| f.vec_to_world(s)).collect(),
-            spline: self.spline.clone(),
-            shifts: self.shifts.iter().map(|sh| sh.transformed(f)).collect(),
-        }
+        Data::new(
+            self.rails.iter().map(|r| r.transformed(f)).collect(),
+            self.slopes.iter().map(|&s| f.vec_to_world(s)).collect(),
+            self.spline.clone(),
+            self.shifts.iter().map(|sh| sh.transformed(f)).collect(),
+        )
     }
 }
 
@@ -587,12 +717,7 @@ impl Skinned {
         let span = Interval::new(knots[k], knots[k + 1]);
         let te = rails.iter().map(Rail::reach).fold(0.25, f64::min);
         let mut s = Skinned {
-            data: Data {
-                rails,
-                slopes,
-                spline,
-                shifts,
-            },
+            data: Data::new(rails, slopes, spline, shifts),
             span,
             ext: Box2::new(Interval::new(0.0, 1.0), span),
             rows: Vec::new(),
@@ -753,8 +878,8 @@ impl Skinned {
             .filter(|sh| sh.along != Along::End)
             .map(|sh| sh.with(Along::Whole))
             .collect();
-        let fence = Data {
-            rails: points
+        let fence = Skinned::new(
+            points
                 .iter()
                 .zip(across)
                 .map(|(&p, &a)| Rail::Line {
@@ -762,25 +887,19 @@ impl Skinned {
                     b: p + a * half,
                 })
                 .collect(),
-            slopes: self.data.slopes.clone(),
-            spline: self.data.spline.clone(),
-            shifts: shifts.clone(),
-        };
-        let fence = Skinned::new(
-            fence.rails,
-            fence.slopes,
-            fence.spline,
+            self.data.slopes.clone(),
+            self.data.spline.clone(),
             self.data.spline.span(self.span.mid()),
-            fence.shifts,
+            shifts.clone(),
         )
         .map(Skinned::surface);
         crate::Curve::Procedural(ProcCurve(Arc::new(SplineRail {
-            data: Data {
-                rails: points.iter().map(|&p| Rail::Line { a: p, b: p }).collect(),
-                slopes: self.data.slopes.clone(),
-                spline: self.data.spline.clone(),
+            data: Data::new(
+                points.iter().map(|&p| Rail::Line { a: p, b: p }).collect(),
+                self.data.slopes.clone(),
+                self.data.spline.clone(),
                 shifts,
-            },
+            ),
             span: self.span,
             fence,
         })))
@@ -1101,6 +1220,35 @@ mod tests {
             .map(|_| Vec3::new(0.0, 0.0, r.range(0.5, 1.5)))
             .collect();
         (rails, Arc::new(Spline::new(knots, s0, s1).unwrap()), slopes)
+    }
+
+    #[test]
+    fn per_span_form_matches_the_sum() {
+        let mut r = Rng::new(11);
+        for _ in 0..40 {
+            let (rails, spline, slopes) = random(&mut r);
+            let mut d = Data::new(rails, slopes, spline, Vec::new());
+            assert!(d.poly.is_some());
+            let k = d.spline.knots().to_vec();
+            for _ in 0..50 {
+                let uv = Point2::new(r.range(-0.25, 1.25), r.range(k[0] - 2.0, k[k.len() - 1] + 2.0));
+                let fast = d.point(uv);
+                let poly = d.poly.take();
+                let sum = d.point(uv);
+                d.poly = poly;
+                let scale = 1.0 + sum.p.to_vec().abs_max();
+                for (a, b) in [
+                    (fast.p.to_vec(), sum.p.to_vec()),
+                    (fast.du, sum.du),
+                    (fast.dv, sum.dv),
+                    (fast.duu, sum.duu),
+                    (fast.duv, sum.duv),
+                    (fast.dvv, sum.dvv),
+                ] {
+                    assert!((a - b).length() <= 1e-12 * scale, "{uv:?}: {a:?} vs {b:?}");
+                }
+            }
+        }
     }
 
     #[test]
