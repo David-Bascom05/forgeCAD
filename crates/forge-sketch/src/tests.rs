@@ -350,3 +350,35 @@ fn implied_constraints_are_named_in_order() {
     assert_eq!(s.solve().status, Status::Solved);
     assert_eq!(s.implied(), vec![par, len, hor, fix]);
 }
+
+/// Solving after an earlier solve takes the groups that did not change and ends exactly where
+/// a solve from scratch does.
+#[test]
+fn unchanged_groups_are_taken_from_the_last_solve() {
+    let make = |w: f64| {
+        let mut s = Sketch::new(Frame::WORLD);
+        let a = rectangle(&mut s, 20.0, 10.0, true);
+        let b = rectangle(&mut s, w, 5.0, true);
+        s.add_constraint(Constraint::Fixed(line_ends(&s, a[0]).0))
+            .unwrap();
+        s.add_constraint(Constraint::Fixed(line_ends(&s, b[0]).0))
+            .unwrap();
+        s
+    };
+    let mut prev = make(30.0);
+    assert_eq!(prev.solve().status, Status::Solved);
+    for w in [30.0, 31.5] {
+        let (mut fresh, mut warm) = (make(w), make(w));
+        let r = fresh.solve();
+        let rw = warm.solve_after(Some(&prev));
+        assert_eq!(rw.status, Status::Solved);
+        assert_eq!(
+            fresh.params().iter().map(|v| v.to_bits()).collect::<Vec<_>>(),
+            warm.params().iter().map(|v| v.to_bits()).collect::<Vec<_>>()
+        );
+        assert!(rw.iterations <= r.iterations);
+        if w == 30.0 {
+            assert_eq!(rw.iterations, 0, "nothing changed");
+        }
+    }
+}

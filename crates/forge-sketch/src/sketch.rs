@@ -100,6 +100,9 @@ pub struct Sketch {
     pub(crate) entities: Vec<EntityRec>,
     pub(crate) constraints: Vec<ConstraintRec>,
     next_constraint: u64,
+    /// From the last solve, for the next one to take groups whose inputs did not change:
+    /// each parameter's value once ties were met, and its root (MAX: pinned).
+    pub(crate) last: Option<(Vec<f64>, Vec<usize>)>,
 }
 
 /// One constraint's residual rows: one or two.
@@ -163,6 +166,7 @@ impl Sketch {
             entities: Vec::new(),
             constraints: Vec::new(),
             next_constraint: 1,
+            last: None,
         }
     }
 

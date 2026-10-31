@@ -239,8 +239,15 @@ impl Sketch {
 
     /// Moves the parameters as little as possible until every constraint holds.
     pub fn solve(&mut self) -> SolveReport {
+        self.solve_after(None)
+    }
+
+    /// `solve`, taking from `prev` (the same sketch solved before, its values perhaps
+    /// changed) every linked group whose rows and starting values are bit for bit what they
+    /// were: the answer is exactly what solving it again would give.
+    pub fn solve_after(&mut self, prev: Option<&Sketch>) -> SolveReport {
         let w = vec![1.0; self.params.len()];
-        self.solve_weighted(&w)
+        self.solve_weighted(&w, prev)
     }
 
     /// Puts a point at `target` and re-solves, moving everything else as little
@@ -260,7 +267,7 @@ impl Sketch {
             c: Constraint::Fixed(point),
             data: [target.x, target.y],
         });
-        let held = self.solve_weighted(&w);
+        let held = self.solve_weighted(&w, None);
         self.constraints.pop();
         if held.status == Status::Solved {
             return Ok(held);
@@ -268,7 +275,7 @@ impl Sketch {
         self.params = before;
         self.params[px] = target.x;
         self.params[py] = target.y;
-        Ok(self.solve_weighted(&w))
+        Ok(self.solve_weighted(&w, None))
     }
 
     /// Fixed, coincident, concentric, horizontal, vertical and axis-distance constraints tie
@@ -390,7 +397,7 @@ impl Sketch {
     /// by the ties, one linked group at a time: each step solves [J; sqrt(lambda) W] dx =
     /// [-r; 0] by QR, so as lambda shrinks the step tends to the W-weighted smallest change
     /// that meets the constraints, and free geometry stays put.
-    fn solve_weighted(&mut self, w: &[f64]) -> SolveReport {
+    fn solve_weighted(&mut self, w: &[f64], prev: Option<&Sketch>) -> SolveReport {
         let n = self.params.len();
         let (mut ties, sources, _) = self.ties();
         // each parameter's root, and the roots that still move
@@ -430,6 +437,38 @@ impl Sketch {
             rows.at.push(rows.ent.len());
             rows.r.push(full.r[i]);
         }
+        let roots: Vec<usize> = (0..n)
+            .map(|i| {
+                if col[i] == usize::MAX {
+                    usize::MAX
+                } else {
+                    members[col[i]][0]
+                }
+            })
+            .collect();
+        let prev = prev.filter(|p| {
+            p.last.is_some() && p.entities == self.entities && p.constraints.len() == self.constraints.len()
+        });
+        let same_group = |rows_of: Vec<usize>, s: &Sketch| -> bool {
+            let Some((snap, root)) = prev.and_then(|p| p.last.as_ref()) else {
+                return false;
+            };
+            let p = prev.expect("checked");
+            rows_of.into_iter().all(|i| {
+                let ok_src = match full.source[i] {
+                    Source::Constraint(k) => {
+                        let (a, b) = (&s.constraints[k], &p.constraints[k]);
+                        a.c == b.c && a.data.map(f64::to_bits) == b.data.map(f64::to_bits)
+                    }
+                    Source::Arc(_) => true,
+                };
+                ok_src
+                    && full
+                        .row(i)
+                        .iter()
+                        .all(|&(v, _)| s.params[v].to_bits() == snap[v].to_bits() && roots[v] == root[v])
+            })
+        };
         let groups = components(&rows, members.len());
         let mut group = vec![usize::MAX; members.len()];
         for (k, g) in groups.iter().enumerate() {
@@ -444,6 +483,16 @@ impl Sketch {
                 Some(&(c, _)) => worst[group[c]] = worst[group[c]].max(full.r[i].abs()),
             }
         }
+        let (rows, group) = (&rows, &group);
+        let in_group = |k: usize| -> Vec<usize> {
+            (0..rows.r.len())
+                .filter(|&i| rows.row(i).first().is_some_and(|&(c, _)| group[c] == k))
+                .collect()
+        };
+        let reuse: Vec<bool> = (0..groups.len())
+            .map(|k| worst[k] > SOLVED && same_group(in_group(k), self))
+            .collect();
+        let snapped = self.params.clone();
         let mut iterations = 0;
         for (k, g) in groups.iter().enumerate() {
             if worst[k] <= SOLVED {
@@ -454,10 +503,20 @@ impl Sketch {
                 .map(|i| full.source[i])
                 .collect();
             src.dedup();
+            if reuse[k] {
+                let p = prev.expect("checked");
+                for &c in g {
+                    for &v in &members[c] {
+                        self.params[v] = p.params[v];
+                    }
+                }
+                continue;
+            }
             let (it, r) = self.solve_group(g, &src, &tied);
             iterations = iterations.max(it);
             max_residual = max_residual.max(r);
         }
+        self.last = Some((snapped, roots));
         let status = if max_residual <= SOLVED {
             Status::Solved
         } else {

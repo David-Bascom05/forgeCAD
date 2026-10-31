@@ -758,7 +758,11 @@ pub const KINDS: &[Kind] = &[
                 rows.push(p.t[start..p.k].to_vec());
             }
             let fs = p.b.features;
-            let mut s = sketch::build(plane, rows, &|t, want| value(t, fs, want))?;
+            let was = match p.b.was {
+                Some(Feature::Sketch(w)) => Some(&**w),
+                _ => None,
+            };
+            let mut s = sketch::build(plane, rows, &|t, want| value(t, fs, want), was)?;
             (s.on, s.at) = (on, at);
             Ok(Feature::Sketch(Box::new(s)))
         },
@@ -1298,6 +1302,8 @@ pub struct Before<'a> {
     pub face: &'a dyn Fn(&str) -> R<(Name, Frame)>,
     /// The font a text line names, found by the host; None where it does not look.
     pub fonts: &'a dyn Fn(&str) -> R<Option<std::sync::Arc<forge_font::Font>>>,
+    /// What this line read as last time, if known: a sketch takes its unchanged parts.
+    pub was: Option<&'a Feature>,
 }
 
 pub fn kind(name: &str) -> Option<&'static Kind> {
@@ -1388,6 +1394,7 @@ pub fn parse(src: &str) -> Result<Part, (usize, String)> {
             refs: &full,
             face: &face,
             fonts: &|_| Ok(None),
+            was: None,
         };
         let f = parse_line(l, &b).map_err(|e| (l.no, e))?;
         kinds.push(kind_of(&f).name);
@@ -2647,7 +2654,8 @@ mod tests {
             }
             _ => frame(r),
         };
-        let mut s = sketch::build(plane, rows, &|t, want| value(t, before, want)).expect("a good sketch");
+        let mut s =
+            sketch::build(plane, rows, &|t, want| value(t, before, want), None).expect("a good sketch");
         s.on = on.map(|(feature, flip)| forge_model::On::Feature {
             feature,
             point: None,

@@ -102,6 +102,45 @@ fn main() {
         })
     };
     println!("{what}: {us:.2} us");
+    // one dimension changed, as a session re-reads the line: from scratch, and lent the last solve
+    let env = |n: &str| {
+        part.features.iter().find_map(|f| match f {
+            forge_model::Feature::Param(p) if p.name == n => Some((p.value, p.unit)),
+            _ => None,
+        })
+    };
+    let num = |t: &str, want: text::Want| -> Result<f64, String> {
+        let v = forge_agent::expr::eval(t, &env)?.0;
+        Ok(if want == text::Want::Angle {
+            v / 180.0 * forge_math::dmath::PI
+        } else {
+            v
+        })
+    };
+    for (what, was) in [
+        ("dimension changed, from scratch", None),
+        ("dimension changed, lent the last solve", Some(&**s)),
+    ] {
+        if !case(what) {
+            continue;
+        }
+        let rows: Vec<Vec<String>> = s
+            .rows
+            .iter()
+            .map(|r| {
+                if r.join(" ") == "dist a1 a2 20" {
+                    vec!["dist".into(), "a1".into(), "a2".into(), "21".into()]
+                } else {
+                    r.clone()
+                }
+            })
+            .collect();
+        let us = best(200, |_| {
+            let k = forge_agent::sketch::build(s.plane, rows.clone(), &num, was).expect("solves");
+            std::hint::black_box(k);
+        });
+        println!("{what}: {us:.2} us");
+    }
     let mut r = forge_math::rng::Rng::new(1);
     for d in [0.01, 0.3] {
         if !case(&format!("re-solve {d}")) {

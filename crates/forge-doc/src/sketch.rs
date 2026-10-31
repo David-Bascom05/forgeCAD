@@ -14,7 +14,9 @@ type R<T> = Result<T, String>;
 pub type Num<'a> = dyn Fn(&str, Want) -> R<f64> + 'a;
 
 /// Builds a sketch's rows on `plane` and solves it from the coordinates as written.
-pub fn build(plane: Frame, rows: Vec<Vec<String>>, num: &Num) -> R<Sketch> {
+/// `was`, the sketch this line read as before, lends the solve every part of it that did
+/// not change.
+pub fn build(plane: Frame, rows: Vec<Vec<String>>, num: &Num, was: Option<&Sketch>) -> R<Sketch> {
     let mut b = B {
         s: forge_sketch::Sketch::new(plane),
         names: Vec::new(),
@@ -25,7 +27,7 @@ pub fn build(plane: Frame, rows: Vec<Vec<String>>, num: &Num) -> R<Sketch> {
     for (k, row) in rows.iter().enumerate() {
         b.row(k, row).map_err(|e| format!("`{}`: {e}", row.join(" ")))?;
     }
-    if b.s.solve().status != Status::Solved {
+    if b.s.solve_after(was.map(|w| &w.solved)).status != Status::Solved {
         let a = b.s.analyze();
         let say = |ids: &[ConstraintId]| {
             let mut ks: Vec<usize> = ids

@@ -155,6 +155,7 @@ impl Model {
                     refs: &refs,
                     face: &face,
                     fonts: &fonts,
+                    was: old_features.get(i - keep),
                 };
                 text::parse_line_refs(&line, &b)
             };
