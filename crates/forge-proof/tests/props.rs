@@ -105,6 +105,24 @@ fn nudge_moves_every_vertex() {
     }
 }
 
+/// U2: a void cut a tolerance short of the top leaves its rim as a hole of the top face, a
+/// tolerance off its plane. The notch's split of that face placed the hole by rays whose 3D box
+/// test the probe, a few ulps further off, passed beside.
+#[test]
+fn hole_a_tolerance_off_its_plane() {
+    let part = fc("extrude new 10 rect 0 0 60 40
+extrude cut 3 at 22 29 7 circle 0 0 3
+extrude cut 2.999995 at 11.59574686652088 22.93665566589452 6.999995 circle 0 0 3
+extrude cut 3 at 42 12 7 circle 0 0 3
+extrude cut 12 at 50 14 -1 rect 0 0 10 8
+");
+    for seed in [404, 406, 408] {
+        if let Some(hit) = props::ulp(&part, seed) {
+            panic!("seed {seed}: {}: {}", hit.kind, hit.detail);
+        }
+    }
+}
+
 /// The oracle is not vacuous: a part's tools against the body without its last cut disagree.
 #[test]
 fn membership_catches_a_missing_cut() {

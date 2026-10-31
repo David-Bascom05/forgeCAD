@@ -1136,13 +1136,16 @@ fn box_distance(b: &Box3, p: Point3) -> f64 {
 pub(crate) fn ray_hits_box(o: Point3, d: Vec3, b: &Box3) -> bool {
     let (mut t0, mut t1) = (0.0f64, f64::INFINITY);
     for (oi, di, iv) in [(o.x, d.x, b.x), (o.y, d.y, b.y), (o.z, d.z, b.z)] {
+        // grown once more: a ray along a face from a point a tolerance off it must still run
+        // through the boxes of the face's edges (grown by the tolerance), whatever a few ulps do
+        let (lo, hi) = (iv.lo - tol::LINEAR, iv.hi + tol::LINEAR);
         if di.abs() < 1e-300 {
-            if oi < iv.lo || oi > iv.hi {
+            if oi < lo || oi > hi {
                 return false;
             }
             continue;
         }
-        let (a, c) = ((iv.lo - oi) / di, (iv.hi - oi) / di);
+        let (a, c) = ((lo - oi) / di, (hi - oi) / di);
         t0 = t0.max(a.min(c));
         t1 = t1.min(a.max(c));
         if t0 > t1 {
