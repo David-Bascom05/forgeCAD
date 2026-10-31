@@ -373,3 +373,23 @@ fn cone_framed_at_its_apex_scales() {
         panic!("{}: {}", hit.kind, hit.detail);
     }
 }
+
+/// A seam stopped part way up a hole's wall by a torus that eats it: the wall's loop winds past
+/// one whole turn, and a point of the wall drawn on the copy outside the loop was called Outside,
+/// so a point in the open hole counted one crossing short and came out Inside (fuzz68 at count 20).
+#[test]
+fn point_in_a_hole_whose_seam_a_torus_cuts_short() {
+    let part = fc("extrude new 39 rect 0 0 199 103
+extrude cut 35 z 0 0 1 x 0.9887155042247666 0.14980537942799493 0 at 166 88 -4 circle 0 0 4
+revolve add -xz at 167.8 97.4 11.1 circle 8.7 0 2.7
+extrude add 32 z 0 0 1 x -0.360994102557712 0.9325680982740896 0 at 162 93 7 circle 0 0 7");
+    let body = part.regenerate().expect("builds").compact();
+    let p = forge_math::Point3::new(167.46767621091539, 88.39294512605494, 2.2139809034473172);
+    for body in [body, part.regenerate_nary(1).expect("n-ary").compact()] {
+        assert_eq!(
+            forge_bool::Index::new(&body).classify(p),
+            forge_bool::Where::Outside
+        );
+        assert_eq!(props::membership_of(&part, &body, 69), None);
+    }
+}

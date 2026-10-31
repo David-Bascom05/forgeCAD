@@ -633,7 +633,7 @@ impl<'a> Index<'a> {
         }
         let drawn = self.drawn(f);
         let uv = into_window(body, f, face.surface.project(p), drawn);
-        if point_in_loops(uv, &drawn.loops) {
+        if point_in_loops(uv, &drawn.loops) || other_turn_inside(body, f, uv, drawn) {
             Where::Inside
         } else {
             Where::Outside
@@ -763,6 +763,28 @@ fn into_window(body: &Body, f: FaceId, uv: Point2, info: &Drawn) -> Point2 {
         fit(uv.x, info.window.u, info.centre.x, d.u.period),
         fit(uv.y, info.window.v, info.centre.y, d.v.period),
     )
+}
+
+/// A boundary wound past one whole period (a seam that stops part way up the wall, where a cut
+/// eats it) draws the overlap twice, and `uv` may be the copy outside the loops: whether its copy
+/// one period along, still in the window, is inside.
+fn other_turn_inside(body: &Body, f: FaceId, uv: Point2, info: &Drawn) -> bool {
+    let d = body.face(f).surface.domain();
+    let w = info.window;
+    let wide = |i: Interval, per: Option<f64>| per.filter(|&p| i.width() > p);
+    let mut copies = [None; 4];
+    if let Some(p) = wide(w.u, d.u.period) {
+        copies[0] = Some(Point2::new(uv.x - p, uv.y));
+        copies[1] = Some(Point2::new(uv.x + p, uv.y));
+    }
+    if let Some(p) = wide(w.v, d.v.period) {
+        copies[2] = Some(Point2::new(uv.x, uv.y - p));
+        copies[3] = Some(Point2::new(uv.x, uv.y + p));
+    }
+    copies
+        .into_iter()
+        .flatten()
+        .any(|c| w.u.contains(c.x) && w.v.contains(c.y) && point_in_loops(c, &info.loops))
 }
 
 /// Fixed, deliberately irregular ray directions: a ray along one of these
