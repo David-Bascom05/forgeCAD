@@ -8,6 +8,7 @@ pub mod hole;
 pub mod pattern;
 pub mod suite;
 pub mod torture;
+mod trace;
 
 pub use extent::{Extent, ExtentError, Target, Toward, Turn};
 use forge_bool::{BoolError, CpuBatch, Op, Seg2, Shape, boolean_into};
@@ -194,11 +195,17 @@ impl Part {
             if modifies(f) {
                 let b = body.ok_or(RegenError::NothingToCombine { feature: i })?;
                 body = Some(modify(&self.features, i, &b, 1)?);
+                if trace::on() {
+                    trace::step(i, body.as_ref().expect("just set"), None);
+                }
                 continue;
             }
             let mut tools = tools(&self.features, i, true)?;
             if starts(f) {
                 body = Some(tools.swap_remove(0).0);
+                if trace::on() {
+                    trace::step(i, body.as_ref().expect("just set"), None);
+                }
                 continue;
             }
             if matches!(f, Feature::Plane(_)) {
@@ -222,6 +229,9 @@ impl Part {
                 b = forge_bool::nary_with(&all, &ops, None, None, 1, cut_root(i))
                     .map_err(err)?
                     .compact();
+            }
+            if trace::on() {
+                trace::step(i, &b, tools.first().map(|t| &t.0));
             }
             body = Some(b);
         }
