@@ -128,7 +128,7 @@ pub fn resized(f: &Feature, k: f64) -> Option<(Feature, f64)> {
             }
             r
         }
-        Feature::Fillet { edges } => {
+        Feature::Fillet { edges, .. } => {
             let mut r: f64 = 0.0;
             for (_, rad) in edges.iter_mut() {
                 let Radius::Constant(x) = rad else { return None };
@@ -206,7 +206,29 @@ fn feature_refs(f: &mut Feature) -> Vec<&mut usize> {
 /// The names `f` refers to on the part before it.
 pub fn stored_refs(f: &Feature) -> Vec<(Kind, Name)> {
     match f {
-        Feature::Fillet { edges } => edges.iter().map(|e| (Kind::Edge, e.0)).collect(),
+        Feature::Fillet {
+            edges,
+            starts,
+            setbacks,
+        } => {
+            let mut out: Vec<_> = edges.iter().map(|e| (Kind::Edge, e.0)).collect();
+            out.extend(
+                starts
+                    .iter()
+                    .flat_map(|&(e, v)| [(Kind::Edge, e), (Kind::Vertex, v)]),
+            );
+            for &(v, e, _) in setbacks {
+                out.push((Kind::Vertex, v));
+                out.extend(e.map(|e| (Kind::Edge, e)));
+            }
+            out
+        }
+        Feature::FaceFillet { first, second, .. } => {
+            first.iter().chain(second).map(|&n| (Kind::Face, n)).collect()
+        }
+        Feature::FullRound { side, middle, other } => {
+            [side, middle, other].iter().map(|&&n| (Kind::Face, n)).collect()
+        }
         Feature::Chamfer { edges, size } => {
             let mut out: Vec<_> = edges.iter().map(|&e| (Kind::Edge, e)).collect();
             if let ChamferSize::Distances { face, .. } | ChamferSize::DistanceAngle { face, .. } = size {
