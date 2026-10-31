@@ -7,7 +7,6 @@ order: redundant vertices differ  # M1
 backends: nary 1: redundant vertices differ  # M1, M2
 backends: nary no shapes: redundant vertices differ  # M1, M2
 backends: nary 1: topology differs  # M3
-boolean: (A-B) | (A&B) invalid  # M4
 mirror: fails: Boolean Internal "face  # M5
 backends: nary 1: fails: invalid EdgeUses EdgeId  # M6
 backends: nary 1: fails: Boolean Unsupported "region  # M7

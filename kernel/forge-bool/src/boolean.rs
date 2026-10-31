@@ -639,11 +639,33 @@ fn plan(a: &Body, b: &Body, op: Op, scratch: &mut Scratch) -> R<Plan> {
 
     lap(&mut clock, 0);
     // faces on one surface: each imprints the other's boundary
+    let mut along = Vec::new();
     for &(fa, fb) in &coplanar {
         let pair = [&index[0], &index[1]];
-        imprint(bodies, pair, [0, 1], 1, fb, fa, &mut cuts, &mut imprints)?;
-        imprint(bodies, pair, [0, 1], 0, fa, fb, &mut cuts, &mut imprints)?;
+        imprint(
+            bodies,
+            pair,
+            [0, 1],
+            1,
+            fb,
+            fa,
+            &mut cuts,
+            &mut imprints,
+            &mut along,
+        )?;
+        imprint(
+            bodies,
+            pair,
+            [0, 1],
+            0,
+            fa,
+            fb,
+            &mut cuts,
+            &mut imprints,
+            &mut along,
+        )?;
     }
+    share_cuts(&bodies, &mut along, &mut cuts);
 
     // 3: vertices for the cuts, then edge pieces
     lap(&mut clock, 1);
@@ -2962,6 +2984,7 @@ pub(crate) fn imprint(
     dst_face: FaceId,
     cuts: &mut Vec<Cut>,
     imprints: &mut Vec<Imprint>,
+    along: &mut Vec<Along>,
 ) -> R<()> {
     let dst = 1 - src;
     let (sb, db) = (bodies[src], bodies[dst]);
@@ -2996,6 +3019,11 @@ pub(crate) fn imprint(
                         // along the same carrier as e2: cut each at the other's ends inside it
                         _ => {
                             coincide(sb, sides[src], e, db, sides[dst], e2, cuts);
+                            along.push(if src == 0 {
+                                (sides[src], e, sides[dst], e2)
+                            } else {
+                                (sides[dst], e2, sides[src], e)
+                            });
                             continue;
                         }
                     };
@@ -3242,6 +3270,57 @@ fn coincide(sb: &Body, src: Side, e: EdgeId, db: &Body, dst: Side, e2: EdgeId, c
     };
     ends_into(sb, e, db, e2, dst);
     ends_into(db, e2, sb, e, src);
+}
+
+/// An edge and another body's edge on one carrier.
+pub(crate) type Along = (Side, EdgeId, Side, EdgeId);
+
+/// A cut in the middle of an edge is a cut of the edge lying along it too, or the two come out in
+/// different pieces and neither finds its partner. (A curve in the faces' common surface can cut
+/// one of them alone, on a neighbour's box where the neighbour itself does not reach.)
+fn share_cuts(bodies: &[&Body; 2], along: &mut Vec<Along>, cuts: &mut Vec<Cut>) {
+    if along.is_empty() {
+        return;
+    }
+    along.sort_unstable();
+    along.dedup();
+    for i in 0..cuts.len() {
+        let Some((sd, e)) = cuts[i].on.edge() else {
+            continue;
+        };
+        for &(a, ea, b, eb) in along.iter() {
+            let (to, e2) = if (a, ea) == (sd, e) {
+                (b, eb)
+            } else if (b, eb) == (sd, e) {
+                (a, ea)
+            } else {
+                continue;
+            };
+            let c = &cuts[i];
+            // at an end of either there is nothing to split: `coincide` has that cut already
+            let at_end = |b: &Body, e: EdgeId| {
+                let edge = b.edge(e);
+                [edge.start, edge.end].into_iter().any(|v| {
+                    let vx = b.vertex(v);
+                    vx.point.distance(c.point) <= vx.tol.max(c.tol)
+                })
+            };
+            if at_end(bodies[sd], e) || at_end(bodies[to], e2) {
+                continue;
+            }
+            if let Some((s, tol)) = on_edge(bodies[to], e2, c.point) {
+                let cut = Cut {
+                    on: CutOn::Edge(to, e2),
+                    s,
+                    tol,
+                    point: c.point,
+                    touch: c.touch,
+                    pair: c.pair,
+                };
+                cuts.push(cut);
+            }
+        }
+    }
 }
 
 fn line_box(line: &forge_geom::Line, b: &forge_math::Box3) -> Option<Interval> {

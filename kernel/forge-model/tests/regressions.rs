@@ -3797,3 +3797,54 @@ fn cone_axis_in_a_block_top() {
         }
     }
 }
+
+/// A pocket refilled flush with the top, over an older pocket's wall: the older wall's plane cut
+/// the filling block's top edge in the common top plane, the part's edge along it stayed whole, and
+/// neither found its partner (coincident_walls/15; M4's open edges the same way).
+#[test]
+fn a_cut_of_one_of_two_edges_along_each_other_cuts_both() {
+    let part = refilled_pockets();
+    for b in [part.regenerate(), part.regenerate_nary(1)] {
+        let b = b.expect("regenerates");
+        assert!(forge_topo::check(&b).is_empty(), "{:?}", forge_topo::check(&b));
+        let q = forge_mesh::Quality {
+            chord: 0.01,
+            ..forge_mesh::Quality::default()
+        };
+        let v = forge_mesh::tessellate(&b, &q).expect("meshes").volume();
+        assert!((v - 23805.8383).abs() < 1e-3, "{v}");
+    }
+}
+
+fn refilled_pockets() -> Part {
+    let block = |x: f64, y: f64, z: f64, w: f64, h: f64, d: f64, op| Feature::Extrude {
+        profile: Profile {
+            plane: forge_math::Frame::WORLD.with_origin(forge_math::Point3::new(x, y, z)),
+            loops: vec![Profile::rectangle(Point2::ORIGIN, w, h, 0)],
+        },
+        extent: Extent::Distance(d),
+        op,
+    };
+    let (w3, h3) = (12.550992059262036, 6.265132152408715);
+    let (w5, h5) = (9.989003538030312, 7.627176688297362);
+    let at3 = (31.527955146495902, 16.578141137451578);
+    let at5 = (30.29322893182988, 18.683898153192345);
+    Part {
+        features: vec![
+            block(0.0, 0.0, 0.0, 60.0, 40.0, 10.0, Combine::New),
+            block(
+                24.30355780835713,
+                15.657419317436279,
+                5.0,
+                13.351013558219384,
+                3.716688918887775,
+                6.0,
+                Combine::Cut,
+            ),
+            block(at3.0, at3.1, 7.0, w3, h3, 4.0, Combine::Cut),
+            block(at3.0, at3.1, 7.0, w3, h3, 3.0, Combine::Add),
+            block(at5.0, at5.1, 7.0, w5, h5, 4.0, Combine::Cut),
+            block(at5.0, at5.1, 7.0, w5, h5, 3.0, Combine::Add),
+        ],
+    }
+}

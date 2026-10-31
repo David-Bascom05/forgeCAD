@@ -905,6 +905,7 @@ fn nary_body(
                             fa,
                             &mut out.cuts,
                             &mut out.imprints,
+                            &mut Vec::new(),
                         )?;
                         imprint(
                             both,
@@ -915,6 +916,7 @@ fn nary_body(
                             fb,
                             &mut out.cuts,
                             &mut out.imprints,
+                            &mut Vec::new(),
                         )?;
                         continue;
                     }

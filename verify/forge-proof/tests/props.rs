@@ -306,7 +306,6 @@ extrude cut 9 yz at 6 26 45 circle 0 0 1
 
 /// M4: a part split by a cylinder into its difference and intersection, combined again.
 #[test]
-#[ignore = "M4: combining A - B and A & B leaves open edges"]
 fn m4_split_halves_combine_valid() {
     let part = fc("a: extrude new 20 rect 0 0 100 100
 ball cut 6 -xz at 36 58 22
