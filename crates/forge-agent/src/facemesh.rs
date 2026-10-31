@@ -2,7 +2,7 @@
 //! keeps its triangles, so after an edit only the faces it touched are meshed again.
 
 use forge_geom::{Surface, SurfaceGeom};
-use forge_math::{Point2, Point3};
+use forge_math::{Box3, Point2, Point3};
 use forge_mesh::{Quality, TriMesh, tessellate};
 use forge_topo::{Body, FaceId, Name};
 use std::collections::HashMap;
@@ -13,6 +13,8 @@ pub struct FaceMesh {
     /// The face's share of the solid's volume (divergence theorem) and its area.
     pub volume: f64,
     pub area: f64,
+    /// Tight, from the triangles (a face's own box may be loose).
+    pub bbox: Box3,
 }
 
 #[derive(Default)]
@@ -97,7 +99,13 @@ fn mesh_face(body: &Body, f: FaceId) -> Option<Arc<FaceMesh>> {
         area += (b - a).cross(c - a).length() / 2.0;
     }
     mesh.face_of.iter_mut().for_each(|x| *x = f.0);
-    Some(Arc::new(FaceMesh { mesh, volume, area }))
+    let bbox = mesh.bbox();
+    Some(Arc::new(FaceMesh {
+        mesh,
+        volume,
+        area,
+        bbox,
+    }))
 }
 
 impl Cache {
@@ -127,6 +135,7 @@ impl Cache {
                                 mesh,
                                 volume: m.volume,
                                 area: m.area,
+                                bbox: m.bbox,
                             })
                         }
                     }),

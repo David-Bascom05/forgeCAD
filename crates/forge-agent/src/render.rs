@@ -28,26 +28,26 @@ fn camera(view: &str) -> Option<(Vec3, Vec3)> {
     })
 }
 
-/// 3x5 glyphs, rows top down, for the hex digits of handles.
-fn glyph(c: char) -> Option<[u8; 5]> {
+/// 5x7 glyphs, rows top down, for the hex digits of handles (drawn upper case).
+fn glyph(c: char) -> Option<[u8; 7]> {
     let i = c.to_digit(16)? as usize;
-    const G: [[u8; 5]; 16] = [
-        [7, 5, 5, 5, 7],
-        [2, 6, 2, 2, 7],
-        [7, 1, 7, 4, 7],
-        [7, 1, 7, 1, 7],
-        [5, 5, 7, 1, 1],
-        [7, 4, 7, 1, 7],
-        [7, 4, 7, 5, 7],
-        [7, 1, 1, 1, 1],
-        [7, 5, 7, 5, 7],
-        [7, 5, 7, 1, 7],
-        [2, 5, 7, 5, 5],
-        [4, 4, 6, 5, 6],
-        [3, 4, 4, 4, 3],
-        [1, 1, 3, 5, 3],
-        [7, 4, 6, 4, 7],
-        [7, 4, 6, 4, 4],
+    const G: [[u8; 7]; 16] = [
+        [0b01110, 0b10001, 0b10011, 0b10101, 0b11001, 0b10001, 0b01110],
+        [0b00100, 0b01100, 0b00100, 0b00100, 0b00100, 0b00100, 0b01110],
+        [0b01110, 0b10001, 0b00001, 0b00010, 0b00100, 0b01000, 0b11111],
+        [0b11110, 0b00001, 0b00001, 0b01110, 0b00001, 0b00001, 0b11110],
+        [0b00010, 0b00110, 0b01010, 0b10010, 0b11111, 0b00010, 0b00010],
+        [0b11111, 0b10000, 0b11110, 0b00001, 0b00001, 0b10001, 0b01110],
+        [0b00110, 0b01000, 0b10000, 0b11110, 0b10001, 0b10001, 0b01110],
+        [0b11111, 0b00001, 0b00010, 0b00100, 0b01000, 0b01000, 0b01000],
+        [0b01110, 0b10001, 0b10001, 0b01110, 0b10001, 0b10001, 0b01110],
+        [0b01110, 0b10001, 0b10001, 0b01111, 0b00001, 0b00010, 0b01100],
+        [0b01110, 0b10001, 0b10001, 0b11111, 0b10001, 0b10001, 0b10001],
+        [0b11110, 0b10001, 0b10001, 0b11110, 0b10001, 0b10001, 0b11110],
+        [0b01110, 0b10001, 0b10000, 0b10000, 0b10000, 0b10001, 0b01110],
+        [0b11110, 0b10001, 0b10001, 0b10001, 0b10001, 0b10001, 0b11110],
+        [0b11111, 0b10000, 0b10000, 0b11110, 0b10000, 0b10000, 0b11111],
+        [0b11111, 0b10000, 0b10000, 0b11110, 0b10000, 0b10000, 0b10000],
     ];
     Some(G[i])
 }
@@ -186,8 +186,8 @@ pub fn render(
             continue;
         }
         let colour = LABEL;
-        let digits: Vec<[u8; 5]> = text.chars().filter_map(glyph).collect();
-        let (bw, bh) = (digits.len() * 8 + 2, 14);
+        let digits: Vec<[u8; 7]> = text.chars().filter_map(glyph).collect();
+        let (bw, bh) = (digits.len() * 12 + 2, 18);
         let mut bx = (x as usize + 3).min(w.saturating_sub(bw));
         let mut by = (y as usize).saturating_sub(bh / 2).min(h.saturating_sub(bh));
         for _ in 0..8 {
@@ -224,10 +224,10 @@ pub fn render(
         }
         for (i, g) in digits.iter().enumerate() {
             for (r, row) in g.iter().enumerate() {
-                for col in 0..3 {
-                    if row >> (2 - col) & 1 == 1 {
+                for col in 0..5 {
+                    if row >> (4 - col) & 1 == 1 {
                         for (sx, sy) in [(0, 0), (1, 0), (0, 1), (1, 1)] {
-                            put(bx + 2 + i * 8 + col * 2 + sx, by + 2 + r * 2 + sy, colour);
+                            put(bx + 2 + i * 12 + col * 2 + sx, by + 2 + r * 2 + sy, colour);
                         }
                     }
                 }

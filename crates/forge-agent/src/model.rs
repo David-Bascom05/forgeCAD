@@ -5,7 +5,7 @@ use crate::facemesh::{self, FaceMesh};
 use crate::select::{self, Ent, View};
 use crate::text::{self, Before, Line};
 use forge_mesh::TriMesh;
-use forge_model::{Feature, RegenError, step};
+use forge_model::{Feature, RegenError, Source, step};
 use forge_topo::{Body, Name};
 use std::cell::RefCell;
 use std::collections::HashMap;
@@ -22,6 +22,8 @@ pub struct Model {
     stages: Vec<Option<Body>>,
     /// Each stage's faces' making features, filled as asked for.
     origins: RefCell<Vec<HashMap<Name, usize>>>,
+    /// How many entities each inline selector picked: (line index, count).
+    picks: RefCell<Vec<(usize, usize)>>,
     /// The first line that failed, if one did.
     pub error: Option<Failure>,
     /// Milliseconds the last update spent parsing and regenerating.
@@ -52,6 +54,7 @@ impl Default for Model {
             kinds: vec![],
             stages: vec![],
             origins: RefCell::new(vec![]),
+            picks: RefCell::new(vec![]),
             error: None,
             ms: 0.0,
             rebuilt: 0,
@@ -93,6 +96,7 @@ impl Model {
         self.kinds.truncate(keep);
         self.stages.truncate(keep);
         self.origins.get_mut().truncate(keep);
+        self.picks.get_mut().retain(|p| p.0 < keep);
         self.lines = new;
         self.error = None;
         self.rebuilt = 0;
@@ -161,6 +165,15 @@ impl Model {
         self.error = Some(Failure { at, msg, hint });
     }
 
+    /// How many entities each inline selector picked: (file line number, count), in order.
+    pub fn picks(&self) -> Vec<(usize, usize)> {
+        self.picks
+            .borrow()
+            .iter()
+            .map(|&(i, n)| (self.lines[i].no, n))
+            .collect()
+    }
+
     /// Lines built without error.
     pub fn built(&self) -> usize {
         self.stages.len()
@@ -207,16 +220,36 @@ impl Model {
         Ok((m.body().ok_or("no part yet")?, m.mesh.as_ref().ok_or("no mesh")?))
     }
 
-    /// The finished part's volume and area, from each face's cached triangles, and how many
-    /// faces would not mesh.
-    pub fn volume_area(&mut self) -> (f64, f64, usize) {
-        let fs = self.faces();
-        let ok = fs.iter().filter_map(|f| f.1.as_ref());
-        (
-            ok.clone().map(|m| m.volume).sum(),
-            ok.map(|m| m.area).sum(),
-            fs.iter().filter(|f| f.1.is_none()).count(),
-        )
+    /// The finished part's volume, area and box (from each face's cached triangles and its
+    /// edges), and how many faces would not mesh (their own, looser, boxes stand in).
+    pub fn stats(&mut self) -> (f64, f64, forge_math::Box3, usize) {
+        let fs = self.faces().to_vec();
+        let body = self.body();
+        let (mut v, mut a, mut bb, mut bad) = (0.0, 0.0, forge_math::Box3::EMPTY, 0);
+        for (f, m) in &fs {
+            match m {
+                Some(m) => {
+                    v += m.volume;
+                    a += m.area;
+                    // the boundary's boxes are tight; the triangles catch a dome's top
+                    bb = bb.hull(&m.bbox);
+                    if let Some(b) = body {
+                        for &l in &b.face(*f).loops {
+                            for &c in &b.lp(l).coedges {
+                                bb = bb.hull(&b.edge_box(b.coedge(c).edge));
+                            }
+                        }
+                    }
+                }
+                None => {
+                    bad += 1;
+                    if let Some(b) = body {
+                        bb = bb.hull(&b.face_box(*f));
+                    }
+                }
+            }
+        }
+        (v, a, bb, bad)
     }
 
     /// Which feature made each face of the part after `n` lines.
@@ -259,12 +292,28 @@ impl Model {
         found.ok_or_else(|| format!("no feature '{r}'"))
     }
 
+    /// Feature `i` and the patterns among the first `n` features that copy it, or copy a copy.
+    fn copies(&self, n: usize, i: usize) -> Vec<usize> {
+        let mut out = vec![i];
+        for (j, f) in self.features.iter().enumerate().take(n).skip(i + 1) {
+            if let Feature::Pattern {
+                of: Source::Features(src),
+                ..
+            } = f
+                && src.iter().any(|s| out.contains(s))
+            {
+                out.push(j);
+            }
+        }
+        out
+    }
+
     /// Runs a selector on the part after `n` lines (all that built if `None`).
     pub fn select(&self, sel: &str, n: Option<usize>) -> Result<(&Body, Vec<Ent>), String> {
         let n = n.unwrap_or(self.built()).min(self.built());
         let body = self.body_after(n).ok_or("no part yet")?;
         let origin = self.origin(n);
-        let feat = |r: &str| self.feat(n, r);
+        let feat = |r: &str| self.feat(n, r).map(|i| self.copies(n, i));
         let ents = select::select(
             &View {
                 body,
@@ -286,6 +335,7 @@ impl Model {
             return Ok(vec![select::name(body, select::by_handle(body, r)?)]);
         }
         let (body, ents) = self.select(r, Some(i))?;
+        self.picks.borrow_mut().push((i, ents.len()));
         Ok(ents.into_iter().map(|e| select::name(body, e)).collect())
     }
 }

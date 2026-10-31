@@ -18,8 +18,9 @@ pub struct View<'a> {
     pub body: &'a Body,
     /// The feature (index) each face's surface first appeared in.
     pub origin: &'a HashMap<Name, usize>,
-    /// Resolves a feature reference (label, `hole2`, `fN`) to its index.
-    pub feat: &'a dyn Fn(&str) -> Result<usize, String>,
+    /// Resolves a feature reference (label, `hole2`, `fN`) to its index and those of the
+    /// patterns that copy it.
+    pub feat: &'a dyn Fn(&str) -> Result<Vec<usize>, String>,
 }
 
 /// Each face's making feature after feature `i` built `body`, given those before (`prev`, `None`
@@ -207,6 +208,28 @@ pub fn crease(body: &Body, e: EdgeId) -> Option<&'static str> {
     Some(if inward.dot(n2) > 0.0 { "concave" } else { "convex" })
 }
 
+/// A round entity's axis: a point on it level with the entity's middle, and its direction
+/// (none for a sphere, whose point is its centre).
+pub fn axis(body: &Body, e: Ent) -> Option<(Point3, Option<Vec3>)> {
+    let frame = match e {
+        Ent::Face(f) => match &body.face(f).surface {
+            Surface::Cylinder(c) => c.frame,
+            Surface::Cone(c) => c.frame,
+            Surface::Torus(t) => t.frame,
+            Surface::Sphere(s) => return Some((s.frame.origin, None)),
+            _ => return None,
+        },
+        Ent::Edge(x) => match &body.edge(x).curve {
+            Curve::Circle(c) => return Some((c.frame.origin, Some(c.frame.z().get()))),
+            _ => return None,
+        },
+        Ent::Vert(_) => return None,
+    };
+    let z = frame.z().get();
+    let along = (centre(body, e) - frame.origin).dot(z);
+    Some((frame.origin + z * along, Some(z)))
+}
+
 /// A point that stands for the entity: a vertex, an edge's middle, a face's box centre.
 pub fn centre(body: &Body, e: Ent) -> Point3 {
     match e {
@@ -388,28 +411,24 @@ pub fn select(v: &View, sel: &str) -> Result<Vec<Ent>, String> {
                 })
             }
             "of" => {
-                let mut name = toks.get(k).copied().unwrap_or("");
+                let mut name = toks.get(k).copied().unwrap_or("").to_string();
                 k += 1;
                 if name == "feature" {
-                    name = toks.get(k).copied().unwrap_or("");
+                    name = format!("f{}", toks.get(k).copied().unwrap_or(""));
                     k += 1;
-                    let n: usize = name
-                        .parse()
-                        .map_err(|_| format!("'feature' needs a number, found '{name}'"))?;
-                    let i = n.checked_sub(1).ok_or("features count from 1")?;
-                    Box::new(move |e| face_origins(*e).contains(&i))
-                } else {
-                    let i = (v.feat)(name)?;
-                    Box::new(move |e| face_origins(*e).contains(&i))
                 }
+                let set = (v.feat)(&name)?;
+                Box::new(move |e| face_origins(*e).iter().any(|o| set.contains(o)))
             }
             "between" => {
                 let a = (v.feat)(toks.get(k).copied().unwrap_or(""))?;
                 let b = (v.feat)(toks.get(k + 1).copied().unwrap_or(""))?;
                 k += 2;
-                Box::new(move |e| {
-                    let o = face_origins(*e);
-                    matches!(e, Ent::Edge(_)) && o.len() == 2 && (o == [a, b] || o == [b, a])
+                Box::new(move |e| match face_origins(*e)[..] {
+                    [x, y] if matches!(e, Ent::Edge(_)) => {
+                        (a.contains(&x) && b.contains(&y)) || (a.contains(&y) && b.contains(&x))
+                    }
+                    _ => false,
                 })
             }
             "on" => {
@@ -477,7 +496,12 @@ pub fn select(v: &View, sel: &str) -> Result<Vec<Ent>, String> {
 
 /// One line about an entity: its kind and the numbers that tell it apart.
 pub fn describe(body: &Body, e: Ent) -> String {
-    let c = centre(body, e);
+    // a round thing is placed by its axis, not by the middle of the (half) face
+    let (c, ax) = match axis(body, e) {
+        Some((p, Some(d))) => (p, format!("axis {} ", dir_text(d))),
+        Some((p, None)) => (p, String::new()),
+        None => (centre(body, e), String::new()),
+    };
     let at = format!(
         "at {},{},{}",
         crate::short(c.x),
@@ -490,7 +514,7 @@ pub fn describe(body: &Body, e: Ent) -> String {
             let k = surface_kind(s);
             match (plane_normal(body, f), radius(body, e)) {
                 (Some(n), _) => format!("{k} {} {at}", dir_text(n)),
-                (_, Some(r)) => format!("{k} r={} {at}", crate::short(r)),
+                (_, Some(r)) => format!("{k} r={} {ax}{at}", crate::short(r)),
                 _ => format!("{k} {at}"),
             }
         }
@@ -499,7 +523,7 @@ pub fn describe(body: &Body, e: Ent) -> String {
             let len = crate::short(length(body, x));
             match &body.edge(x).curve {
                 Curve::Line(l) => format!("{k} {} len={len} {at}", dir_text(l.dir.get())),
-                Curve::Circle(ci) => format!("{k} r={} len={len} {at}", crate::short(ci.radius)),
+                Curve::Circle(ci) => format!("{k} r={} len={len} {ax}{at}", crate::short(ci.radius)),
                 _ => format!("{k} len={len} {at}"),
             }
         }

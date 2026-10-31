@@ -78,6 +78,12 @@ impl Session {
     }
 
     pub fn run(&mut self, cmd: &str, a: &Args) -> Reply {
+        if a.at.is_some() && cmd != "query" {
+            return fail("--at goes with query only");
+        }
+        if (a.labels.is_some() || a.px.is_some()) && cmd != "render" {
+            return fail("--labels and --px go with render only");
+        }
         let r = match cmd {
             "build" => self.build(a),
             "query" => self.query(a),
@@ -100,7 +106,15 @@ impl Session {
         let mut j: Vec<(&str, Json)> = vec![("lines", n.into()), ("built", m.built().into())];
         let ok = m.error.is_none();
         match m.error.clone() {
-            None => text.push_str(&format!("ok {n} lines {:.2}ms", m.ms)),
+            None => {
+                text.push_str(&format!("ok {n} lines {:.2}ms", m.ms));
+                // a selector that picks fewer than meant fails quietly otherwise
+                let picks = m.picks();
+                if !picks.is_empty() {
+                    let p: Vec<String> = picks.iter().map(|(l, c)| format!("line {l}: {c}")).collect();
+                    text.push_str(&format!("\nselectors picked: {}", p.join(", ")));
+                }
+            }
             Some(f) => {
                 let line = &m.lines[f.at];
                 // the line is echoed only once the file has shown itself a part file
@@ -128,11 +142,8 @@ impl Session {
         j.push(("ms", m.ms.into()));
         j.push(("rebuilt", m.rebuilt.into()));
         if m.body().is_some() {
-            let (volume, area, unmeshed) = m.volume_area();
+            let (volume, area, bb, unmeshed) = m.stats();
             let body = m.body().expect("built");
-            let bb = body
-                .face_ids()
-                .fold(forge_math::Box3::EMPTY, |b, f| b.hull(&body.face_box(f)));
             let bbox = [bb.x.lo, bb.y.lo, bb.z.lo, bb.x.hi, bb.y.hi, bb.z.hi];
             let (f, e, v) = counts(body);
             // a failed build's numbers are in the JSON; the text keeps to the error
@@ -179,18 +190,30 @@ impl Session {
         let sel = a.words.join(" ");
         let (body, ents) = m.select(&sel, Self::upto(m, a)?)?;
         let handles = select::handles(body);
-        let mut text = format!("{} found", ents.len());
         let mut list = Vec::new();
-        for (k, &e) in ents.iter().enumerate() {
-            let h = &handles[&select::name(body, e)];
+        // pieces alike (a hole's two half faces) share a line
+        let mut lines: Vec<(Vec<String>, String)> = Vec::new();
+        for &e in &ents {
+            let h = handles[&select::name(body, e)].clone();
             let d = select::describe(body, e);
-            if k < 25 {
-                text.push_str(&format!("\n{h} {d}"));
+            list.push(Json::obj(vec![
+                ("h", h.as_str().into()),
+                ("d", d.as_str().into()),
+            ]));
+            match lines.iter_mut().find(|l| l.1 == d) {
+                Some(l) => l.0.push(h),
+                None => lines.push((vec![h], d)),
             }
-            list.push(Json::obj(vec![("h", h.as_str().into()), ("d", d.into())]));
         }
-        if ents.len() > 25 {
-            text.push_str(&format!("\n... {} more; narrow the selector", ents.len() - 25));
+        let mut text = format!("{} found", ents.len());
+        for (hs, d) in lines.iter().take(25) {
+            text.push_str(&format!("\n{} {d}", hs.join(" ")));
+        }
+        if lines.len() > 25 {
+            text.push_str(&format!(
+                "\n... {} more lines; narrow the selector",
+                lines.len() - 25
+            ));
         }
         Ok(Reply {
             ok: true,
@@ -334,7 +357,7 @@ impl Session {
         let other = a.words.first().ok_or("diff A B: two files")?;
         let mut side = |f: &str| -> Result<_, String> {
             let m = self.model(f)?;
-            let built = m.body().is_some().then(|| m.volume_area().0);
+            let built = m.body().is_some().then(|| m.stats().0);
             Ok((m.lines.clone(), m.body().cloned(), built, m.error.is_some()))
         };
         let (la, ba, ma, ea) = side(&a.file)?;

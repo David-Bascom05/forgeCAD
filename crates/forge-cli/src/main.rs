@@ -128,6 +128,10 @@ fn command(cmd: &str, argv: &[String]) -> ExitCode {
             "--labels" => a.labels = it.next().cloned(),
             "--px" => a.px = it.next().and_then(|p| p.parse().ok()),
             "-o" => out = it.next().cloned(),
+            w if w.starts_with("--") => {
+                eprintln!("unknown option {w} (--json --at --labels --px -o)");
+                return ExitCode::from(2);
+            }
             _ => a.words.push(w.clone()),
         }
     }

@@ -129,13 +129,14 @@ fn result(id: Json, r: Json) -> Json {
 }
 
 fn answer(session: &mut Session, req: &Json, mcp: bool) -> Option<Json> {
-    let id = req.get("id").cloned()?; // notifications get no answer
     let method = req.get("method").and_then(Json::str).unwrap_or("");
     let params = req.get("params").cloned().unwrap_or(Json::Obj(vec![]));
     if !mcp {
+        // every serve method answers, id or not
         let r = session.run(method, &args(&params));
-        return Some(result(id, served(r)));
+        return Some(result(req.get("id").cloned().unwrap_or(Json::Null), served(r)));
     }
+    let id = req.get("id").cloned()?; // MCP notifications get no answer
     Some(match method {
         "initialize" => {
             let version = params

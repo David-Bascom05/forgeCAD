@@ -172,6 +172,15 @@ pub fn between(body: &Body, mesh: &TriMesh, a: Ent, b: Ent) -> Vec<(&'static str
         }
         out.push(("distance", d));
     }
+    // two holes or bosses: how far apart their axes are, or their centres
+    match (select::axis(body, a), select::axis(body, b)) {
+        (Some((p, Some(u))), Some((q, Some(w)))) if u.cross(w).length() < 1e-9 => {
+            let d = q - p;
+            out.push(("axes", (d - u * d.dot(u)).length()));
+        }
+        (Some((p, None)), Some((q, None))) => out.push(("centres", p.distance(q))),
+        _ => {}
+    }
     if let (Some((u, pu)), Some((w, pw))) = (da, db) {
         let c = u.dot(w).clamp(-1.0, 1.0);
         let deg = |x: f64| x * 180.0 / dmath::PI;
