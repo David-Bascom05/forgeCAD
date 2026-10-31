@@ -29,11 +29,24 @@ pub fn closed_form(a: &Surface, b: &Surface) -> SurfaceSurface {
     }
 }
 
+/// Recent pairs marched: a boolean meets one pair several times over the same region (and a
+/// regen, over the same surfaces, many times more).
+type Met = (Surface, Surface, Box3, SurfaceSurface);
+thread_local! {
+    static MET: std::cell::RefCell<std::collections::VecDeque<Met>> = const {
+        std::cell::RefCell::new(std::collections::VecDeque::new())
+    };
+}
+
 /// Where two surfaces with no closed form meet in `region`: by marching or tracing.
 pub fn searched(a: &Surface, b: &Surface, region: Box3) -> SurfaceSurface {
-    let closed = forge_geom::meet::intersect(a, b, region).unwrap_or(SurfaceSurface::NotAnalytic);
-    match closed {
-        SurfaceSurface::NotAnalytic => match forge_geom::intcurve::trace(a, b, region) {
+    let hit = |e: &Met| e.2 == region && e.0 == *a && e.1 == *b;
+    if let Some(r) = MET.with(|m| m.borrow().iter().find(|e| hit(e)).map(|e| e.3.clone())) {
+        return r;
+    }
+    let r = match forge_geom::meet::intersect(a, b, region) {
+        Some(r) if r != SurfaceSurface::NotAnalytic => r,
+        _ => match forge_geom::intcurve::trace(a, b, region) {
             Some(cs) if cs.is_empty() => SurfaceSurface::Empty,
             Some(cs) => SurfaceSurface::Curves(
                 cs.into_iter()
@@ -43,8 +56,15 @@ pub fn searched(a: &Surface, b: &Surface, region: Box3) -> SurfaceSurface {
             // a screw face the tracer cannot follow across its carried track's corners
             None => forge_geom::screw::meet_general(a, b, region).unwrap_or(SurfaceSurface::NotAnalytic),
         },
-        r => r,
-    }
+    };
+    MET.with(|m| {
+        let mut m = m.borrow_mut();
+        if m.len() == 32 {
+            m.pop_front();
+        }
+        m.push_back((a.clone(), b.clone(), region, r.clone()));
+    });
+    r
 }
 
 /// Whether two surfaces are the same surface.
