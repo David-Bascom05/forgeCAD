@@ -2,6 +2,7 @@
 
 pub mod boolean;
 pub mod classify;
+pub mod imprint;
 pub mod nary;
 pub mod shape;
 pub mod ssi;

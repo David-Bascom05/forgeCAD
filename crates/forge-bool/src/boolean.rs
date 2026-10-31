@@ -220,6 +220,30 @@ pub fn boolean(a: &Body, b: &Body, op: Op, feature: u64) -> R<Body> {
 /// as tombstones until `Body::compact`. Names do not depend on `_feature`: what the boolean makes
 /// is named by what meets there, as the n-ary boolean names it.
 pub fn boolean_into(target: &mut Body, b: &Body, op: Op, _feature: u64) -> R<()> {
+    match crate::imprint::mode() {
+        crate::imprint::Mode::Off => {}
+        crate::imprint::Mode::On => {
+            if crate::imprint::column(target, b, op) {
+                return Ok(());
+            }
+        }
+        crate::imprint::Mode::Check => {
+            let mut fast = target.clone();
+            if crate::imprint::column(&mut fast, b, op) {
+                if let Err(e) = general(target, b, op) {
+                    panic!("imprint made a body where the general boolean failed: {e}");
+                }
+                if let Some(d) = crate::imprint::diff(&fast, target) {
+                    panic!("imprint differs from the general boolean: {d}");
+                }
+                return Ok(());
+            }
+        }
+    }
+    general(target, b, op)
+}
+
+fn general(target: &mut Body, b: &Body, op: Op) -> R<()> {
     let mut scratch = SCRATCH.with(|s| s.take());
     let plan = plan(target, b, op, &mut scratch)?;
     let mut clock = phases_on().then(std::time::Instant::now);
