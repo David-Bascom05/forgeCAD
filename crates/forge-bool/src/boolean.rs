@@ -2917,7 +2917,9 @@ pub(crate) fn split_face(
     // tangent there
     ties: &[VKey],
 ) -> R<Split> {
-    let mut half: Vec<(usize, bool)> = boundary.iter().flatten().copied().collect();
+    let mut half: Vec<(usize, bool)> =
+        Vec::with_capacity(boundary.iter().map(|l| l.len()).sum::<usize>() + 2 * new_edges.len());
+    half.extend(boundary.iter().flatten().copied());
     for &p in new_edges {
         half.push((p, true));
         half.push((p, false));
@@ -3008,7 +3010,7 @@ pub(crate) fn split_face(
             true => Some(Cycle::Hole),
             false => None,
         };
-        if let Some((regions, open)) = plane_split(pl, face.same_sense, &walks, kind, pieces, outer)? {
+        if let Some((regions, open)) = plane_split(pl, face.same_sense, walks, kind, pieces, outer)? {
             return Ok(Split {
                 regions,
                 open,
@@ -3259,7 +3261,7 @@ enum Cycle {
 fn plane_split(
     pl: &Plane,
     same_sense: bool,
-    walks: &[Walk],
+    mut walks: Vec<Walk>,
     kind: impl Fn(usize) -> Option<Cycle>,
     pieces: &[Piece],
     outer: bool,
@@ -3277,13 +3279,17 @@ fn plane_split(
         });
     }
     let outer_of: Vec<usize> = (0..walks.len()).filter(|&k| areas[k] > 0.0).collect();
-    let mut regions: Vec<Region> = outer_of.iter().map(|&k| vec![walks[k].clone()]).collect();
+    let mut regions: Vec<Region> = outer_of
+        .iter()
+        .map(|&k| vec![std::mem::take(&mut walks[k])])
+        .collect();
     let boxes = std::cell::OnceCell::<Vec<(Box3, Vec<Box3>)>>::new();
     let mut open: Vec<Walk> = Vec::new();
-    for (k, w) in walks.iter().enumerate() {
+    for k in 0..walks.len() {
         if areas[k] > 0.0 {
             continue;
         }
+        let w = std::mem::take(&mut walks[k]);
         // a point of the hole: just off its longest piece on its material side (the left), or an
         // untouched hole's own vertex, as it touches no new edge
         let probe = match kind(k) {
@@ -3314,10 +3320,10 @@ fn plane_split(
             let holds = match kind(o) {
                 Some(Cycle::Outer) => true,
                 _ => {
-                    let (hull, each) = &boxes
-                        .get_or_init(|| outer_of.iter().map(|&o| walk_boxes(&walks[o], pieces)).collect())[r];
+                    let (hull, each) =
+                        &boxes.get_or_init(|| regions.iter().map(|g| walk_boxes(&g[0], pieces)).collect())[r];
                     hull.contains(probe)
-                        && match plane_inside(pl, probe, &walks[o], pieces, each) {
+                        && match plane_inside(pl, probe, &regions[r][0], pieces, each) {
                             Some(b) => b,
                             None => return Ok(None),
                         }
@@ -3328,8 +3334,8 @@ fn plane_split(
             }
         }
         match host {
-            Some(r) => regions[r].push(w.clone()),
-            None if !outer => open.push(w.clone()),
+            Some(r) => regions[r].push(w),
+            None if !outer => open.push(w),
             None => return Err(BoolError::Internal("hole outside every region")),
         }
     }
