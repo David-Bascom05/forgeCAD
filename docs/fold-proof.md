@@ -700,6 +700,34 @@ the rest really fold (long thin quads round one centre) and would need a second 
   is ~1.65x today's (peaks near the vertices the spokes leave and along the spokes). For 10
   sides today's own patch is poor (fold cosine 0.79), so the comparison is loose.
 
+### Curvature (explored; nothing changed)
+
+`rq.rs` max curvature over the one face against today's patch (median, 60 cases): 1.49 for 6
+sides, 1.50 for 8, 1.96 for 10. Where the peaks are (each quad's peak, a probe not kept): at the quad
+corners, 284 of the 6-sided survey's quads at a corner a spoke leaves, 53 at a hole vertex.
+Along rays into a corner the curvature does not settle to one value: it depends on the
+direction even at r = 0.003 (0.67 to 1.17 of today's maximum round one corner). The two
+ribbons meeting there agree in position, tangent plane and the second derivatives along each
+side (the bend term), but not in the mixed term n . P_sd, which each takes from its own
+neighbour's second fundamental form, II(side, cross). At a hole vertex those are two real
+surfaces (a plane trim and a cylinder section): no G1 patch matches both, and today's patch
+has the same corners. At a spoke vertex one neighbour is the spoke's own normal field.
+
+Tried, each on 6 / 8 / 10 sides (median ratio; baseline 1.49 / 1.50 / 1.96):
+- spoke leaving along today's patch's direction instead of halving the angle: 1.63 / 1.71,
+  a 25x outlier;
+- spoke arriving at the centre along today's patch's direction: 1.51 / 1.45;
+- control length at the vertex 1/4 or 0.4 of the way (equal is 1/3): 1.61 / 1.61, 1.60 / 1.62;
+  at the centre 1/4: 1.64 / 1.67; 0.4: 1.44 / 1.54 (a 10x outlier); both with the centre's
+  direction, 0.37: 1.45 / 1.48 / 1.97, two 10-sided holes no longer proven;
+- bend K a quarter or none of the neighbours' second derivatives (exact is a half): 2.31 /
+  1.96, 3.39 / 2.80; 0.6 and 0.75: 1.50 / 1.76, 2.10 / 2.47;
+- the spoke's f quadratic, its middle chosen so the spoke's II(p', X) at the vertex matches the
+  two sides' neighbours' in least squares: 1.44 / 1.45 / 2.11.
+None is worth its cost. What would move it: corners at hole vertices are intrinsic; the
+spoke vertices are where the gain is, and a fit of the spoke's turning to both sides at once
+needs a cubic f (degree 4 ribbons, a dearer proof).
+
 ### Also done here
 
 - **Boxes**: the quad's box over a parameter box is the hull of the control points there (all
