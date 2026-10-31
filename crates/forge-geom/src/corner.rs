@@ -9,6 +9,9 @@ use forge_math::{Box2, Box3, Frame, Interval, Point2, Point3, Vec2, Vec3, dmath,
 use std::ops::{Add, Mul, Sub};
 use std::sync::Arc;
 
+mod rational;
+pub use rational::Proof as RationalProof;
+
 /// A boundary point, the outward normal of the surface beyond it, and their t derivatives.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct RailJet {
@@ -45,6 +48,9 @@ pub trait Rail: Send + Sync + std::fmt::Debug {
     /// Boxes guaranteed to hold the points, the normals and the t derivatives over `t`.
     fn bound(&self, t: Interval) -> RailBound;
     fn transformed(&self, f: &Frame) -> Arc<dyn Rail>;
+    fn surface_rail(&self) -> Option<&SurfaceRail> {
+        None
+    }
 }
 
 /// A curve lying on a surface; the normal is the surface's, flipped when not `same_sense`.
@@ -308,6 +314,9 @@ pub fn speed_bound(c: &Curve, t: Interval) -> f64 {
 }
 
 impl Rail for SurfaceRail {
+    fn surface_rail(&self) -> Option<&SurfaceRail> {
+        Some(self)
+    }
     fn frame(&self, t: f64) -> (Point3, Vec3, Vec3) {
         let c = self.curve.deriv(t);
         (c.p, c.d1, self.normal(&c, t, false).0 * self.sign)
@@ -807,6 +816,8 @@ pub struct HolePatch {
     scale: (f64, f64),
     min_radius: f64,
     fold: bool,
+    /// The rational form, when it replaces the ribbons.
+    rational: Option<Arc<rational::Rational>>,
 }
 
 impl HolePatch {
@@ -919,6 +930,7 @@ impl HolePatch {
             scale: (1.0, 1.0),
             min_radius: 1.0,
             fold: false,
+            rational: None,
         }
     }
 
@@ -928,6 +940,9 @@ impl HolePatch {
 
     /// The domain point of side i at s in [0, 1] (where the patch is C_i(s)).
     pub fn side_uv(&self, i: usize, s: f64) -> Point2 {
+        if let Some(r) = &self.rational {
+            return r.side_uv(i, s);
+        }
         let n = self.sides.len();
         let (a, b) = (self.corners[i], self.corners[(i + 1) % n]);
         let dist = |k: usize, p: Point2| {
@@ -950,8 +965,26 @@ impl HolePatch {
 
     /// The domain point of side i at rail parameter t.
     pub fn side_param_uv(&self, i: usize, t: f64) -> Point2 {
+        if let Some(r) = &self.rational {
+            return self.side_uv(i, r.side_s(i, t));
+        }
         let s = &self.sides[i];
         self.side_uv(i, (t - s.t0) / (s.t1 - s.t0))
+    }
+
+    /// The patch in rational form (lines and conics on planes, cylinders and spheres), None
+    /// when a side is of another kind or does not turn into the hole.
+    pub fn new_rational(sides: Vec<Side>) -> Option<HolePatch> {
+        let mut p = HolePatch::new(sides).ok()?;
+        p.rational = Some(Arc::new(rational::Rational::build(&p)?));
+        p.measure();
+        p.seed();
+        Some(p)
+    }
+
+    /// The Bernstein proof that the rational form never folds (None for the ribbon form).
+    pub fn prove_rational(&self) -> Option<RationalProof> {
+        Some(self.rational.as_ref()?.prove(self))
     }
 
     fn inside(&self, x: Point2) -> bool {
@@ -1030,6 +1063,9 @@ impl HolePatch {
     fn eval<S: Scalar>(&self, x: Point2) -> S::V {
         let n = self.sides.len();
         let x = self.clamp(x);
+        if let Some(r) = &self.rational {
+            return r.eval::<S>(x);
+        }
         let mut d = [S::konst(0.0); MAX_SIDES];
         let (mut k, mut second) = (0, f64::INFINITY);
         for i in 0..n {
@@ -1418,6 +1454,34 @@ impl Procedural for HolePatch {
             let di = b.u * g.x + b.v * g.y + h;
             d[i] = Interval::new(di.lo.max(0.0), di.hi.max(0.0));
         }
+        if let Some(r) = &self.rational {
+            let corners = [
+                Point2::new(b.u.lo, b.v.lo),
+                Point2::new(b.u.hi, b.v.lo),
+                Point2::new(b.u.lo, b.v.hi),
+                Point2::new(b.u.hi, b.v.hi),
+            ];
+            let dr: Vec<Interval> = (0..n)
+                .map(|i| {
+                    let mut iv = Interval::EMPTY;
+                    for &c in &corners {
+                        iv.include(r.dist(i, c).0);
+                    }
+                    let m = iv.lo.abs().max(iv.hi.abs()) + 1.0;
+                    Interval::new((iv.lo - 1e-12 * m).max(0.0), (iv.hi + 1e-12 * m).max(0.0))
+                })
+                .collect();
+            let sr: Vec<Interval> = (0..n)
+                .map(|i| {
+                    let mut iv = Interval::EMPTY;
+                    for &c in &corners {
+                        iv.include(r.param(i, c).0);
+                    }
+                    iv.grow(1e-12 * (1.0 + iv.lo.abs().max(iv.hi.abs())))
+                })
+                .collect();
+            return r.bbox(&dr, &sr);
+        }
         let mut sq = [Interval::point(0.0); MAX_SIDES];
         for i in 0..n {
             sq[i] = d[i].sqr();
@@ -1526,6 +1590,7 @@ impl Procedural for HolePatch {
             scale: self.scale,
             min_radius: self.min_radius,
             fold: self.fold,
+            rational: self.rational.as_ref().map(|r| Arc::new(r.transformed(f))),
         }))
     }
     fn uv_scale(&self) -> (f64, f64) {
@@ -1806,7 +1871,7 @@ pub fn audit(p: &HolePatch, seed: u64) -> Audit {
         let side = &p.sides[i];
         for k in 0..=64 {
             let s = k as f64 / 64.0;
-            let x = p.side_uv(i, s);
+            let x = p.side_param_uv(i, side.at(s));
             let (q, nb) = side.rail.point(side.at(s));
             a.boundary = a.boundary.max(p.point(x).distance(q));
             if (1..64).contains(&k) {

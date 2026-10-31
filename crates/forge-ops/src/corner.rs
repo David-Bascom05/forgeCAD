@@ -511,6 +511,38 @@ mod tests {
     }
 
     #[test]
+    fn rational_corner_patches_are_proven_and_meet_their_sides() {
+        use forge_geom::corner::{HolePatch, audit};
+        let mut rng = Rng::new(79);
+        let mut cases = vec![box_corner([
+            Some((1.0, true)),
+            Some((2.0, true)),
+            Some((3.0, true)),
+        ])];
+        for _ in 0..6 {
+            let dirs: Vec<Vec3> = [-Vec3::X, -Vec3::Y, -Vec3::Z]
+                .iter()
+                .map(|&d| d + Vec3::new(rng.range(-0.3, 0.3), rng.range(-0.3, 0.3), rng.range(-0.3, 0.3)))
+                .collect();
+            let normals = convex_normals(&dirs);
+            let r: Vec<Option<(f64, bool)>> = (0..3).map(|_| Some((rng.range(0.5, 4.0), true))).collect();
+            cases.push(corner(Point3::new(5.0, -3.0, 2.0), &dirs, &normals, &r));
+        }
+        for (k, c) in cases.iter().enumerate() {
+            let sides = planned_hole(c);
+            let p = HolePatch::new_rational(sides.iter().map(hole_side).collect()).expect("rational form");
+            let proof = p.prove_rational().unwrap();
+            assert!(proof.proved, "case {k}: {proof:?}");
+            let a = audit(&p, 40 + k as u64);
+            assert!(a.boundary <= 1e-9 && a.normal <= 1e-9, "case {k}: {a:?}");
+            assert!(
+                a.derivs <= 1e-4 && a.bbox_misses == 0 && a.fold > 0.0,
+                "case {k}: {a:?}"
+            );
+        }
+    }
+
+    #[test]
     fn mixed_convexity() {
         // a step: material is z < 0 where x < 0 or y < 0; the edge down -z is concave
         let dirs = [Vec3::X, -Vec3::Z, Vec3::Y];

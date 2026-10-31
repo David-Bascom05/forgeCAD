@@ -419,3 +419,117 @@ median 1.1 s, p90 4.8 s, max 6.6 s per patch. The pieces of the forced split of 
 3. If that is not wanted, the Taylor-model prover with the cache could run off the build
    path (background, once per new corner) to flag patches, at 0.25-6 s per corner as it
    stands.
+
+## Stage 3: a rational patch with a Bernstein proof
+
+`crates/forge-geom/src/corner/rational.rs`, built by `HolePatch::new_rational` and proven by
+`HolePatch::prove_rational`. Today's patch stays the default; nothing calls the rational form
+in builds yet. The measurement example and a render switch are on
+`refs/experiments/corner-rational-stage1`.
+
+### Construction
+
+The same side-based transfinite scheme as today, with every piece made polynomial:
+
+- **Sides are their exact rational curves.** A line, a parabola (an exact quadratic Bezier),
+  or a circular arc (an exact rational quadratic, weights 1, cos(sweep/2), 1). It is the same
+  point set as the rail. Only the parametrisation along the side changes, and
+  `side_param_uv` maps rail parameters through it. Neighbouring sides share their end point
+  bit for bit.
+- **The cross tangent is T = a(s) C' + b(s) D^k (n x C')**, with n the neighbour's normal
+  field: constant on a plane (k = 0); (C - o) / r, flattened for a cylinder, on a sphere or
+  cylinder (n D is polynomial, k = 1). So T lies exactly in the neighbour's tangent plane and
+  needs no normalisation. a and b are quadratics. Their ends make neighbouring ribbons agree
+  to first order at each corner, and their middles make the frame components of T
+  interpolate linearly, as today's do.
+- **The side parameter is affine** (the projection onto the domain side). The ratio
+  d_(i-1) / (d_(i-1) + d_(i+1)) put (a + b)^q into every ribbon's denominator and distorted
+  the blend. The bend K matches the neighbour's curve to second order along it.
+- **The blend is homogeneous:** P = sum B_i Num_i / sum B_i Den_i with B_i = prod_(j != i) d_j^2
+  and R_i = Num_i / Den_i. Den_i = E(s) (H + d)^2 (2H - d)^2. The last factor cancels most of
+  the damping denominator's growth across the domain. Without it the weights favoured far
+  ribbons and the patch's curvature was 2.5-5x today's. Damping H is 0.7 of the side's
+  height.
+- **The domain distances** are d_i = lambda_i cross(c_(i+1) - c_i, x - c_i). That is exactly zero
+  at both corners of the side (in exact arithmetic, with the stored corners), so in corner
+  coordinates d_a = sigma w kappa_a and d_b = sigma (1 - w) kappa_b exactly.
+- **Near a corner** (both distances under 1e-6 side) the nearest ribbon is the patch, as
+  today (there with 1e-8).
+
+### The proof
+
+For P = N / W over a region with coordinates (u, v),
+`n0 . (P_u x P_v) W^3 = W det(n0, N_u, N_v) - W_u det(n0, N, N_v) - W_v det(n0, N_u, N)`,
+which is a polynomial. With W > 0 (all its Bernstein coefficients positive), its Bernstein
+coefficients prove n0 . J > 0. Regions:
+
+- **Each corner**, in (sigma, w), in two shells: sigma from cut / kappa up to 1e-3 of reach,
+  then up to reach = 0.4 of each side. The weights are divided by sigma^2 symbolically:
+  B_a / sigma^2 = beta^2 prod_far, and so on. The map's Jacobian is -(...) sigma det[e_a, e_b],
+  of one sign.
+- **Each corner's cut-off zone** (both distances under the cut), where the evaluation returns
+  the nearest ribbon: both ribbons, alone.
+- **The middle:** the 2n-gon left after cutting the corners, as n bilinear quads round its
+  centre.
+- Any region that does not prove is split in four and measured against its own centre's
+  normal (n0 . J < 0 is no fold when the normal turns past 90 degrees), to depth 3. The
+  polynomial is subdivided (de Casteljau) to depth 8.
+
+**Soundness.** All polynomials are tensor Bernstein with one coefficient error bound each,
+carried through every product, sum, derivative and subdivision (relative to the operands'
+largest coefficient, with the number of terms). Region vertices are exact reals enclosed in
+intervals. The same exact vertices are shared between neighbouring regions, so the regions
+cover the domain exactly. The numerator is taken about a point of the region
+(N - p0 W), which leaves J unchanged and keeps the bounds relative to the patch's size, not its
+distance from the origin. The proof is of the patch defined by its stored f64 constants in
+exact arithmetic. The f64 evaluation differs from it by rounding, the usual separate step.
+
+### Stage 1 comparison: three-edge corners (six-sided holes)
+
+Interpretation: the "3-sided corners" are vertices where three blends meet (box corners),
+whose holes have six sides (three circular sections on the cylinders and three trims on the
+planes). 60 survey cases, 120 holes with both orientations, all on planes and cylinders:
+
+```
+                                today              rational
+fold proofs                     none (sampled)     120 of 120 proven, 0 refused
+boundary distance (worst)       3.0e-15            8.2e-15
+G1 normal error (worst, rad)    1.8e-15            6.5e-15
+derivative check (worst)        3.2e-6             3.7e-6
+projection error (worst)        8.3e-13            7.2e-13
+bbox misses                     0                  0
+min sampled fold cosine         0.991              0.974
+max curvature, rational/today   -                  median 1.04, range 0.60-3.95
+bulge off the boundary's plane  -                  median 1.11x, range 1.05-1.24x
+largest gap between the two     -                  median 4.2%, max 9.7% of the hole's size
+build (without proof)           0.34-0.56 ms       1.7-2.1 ms
+eval point + 2nd derivatives    ~2 us              ~4-6 us
+proof                           -                  median 33-43 ms, p90 66-78 ms, max ~110 ms
+```
+
+The machine's load was 35 during these runs, so times are +-50%. Ratios between the two
+patches from the same run are steadier.
+
+Renders (`forgecad render`, iso): `.scratch/{box,box2,skew}_side_by_side.png` in the worktree:
+a box corner with fillets 4/7/10 and 2/5/9, and a skewed (non-right-angle) corner with 3/6/9.
+They are visually the same; the rational one shades slightly darker where the corner patch
+meets the largest fillet.
+
+**What this shows.** Exact G1 and a sound fold proof are possible for the whole rational
+class, with zero refusals. The shape is within a few per cent of today's at the median, with
+a 4x curvature outlier still to look at. But **the proof costs ~40 ms, not < 1 ms.** The
+Jacobian numerator is degree 59 in each variable (B_i alone is degree 10 for six sides), and
+products of polynomials that size dominate: about two thirds of the time is the Jacobian,
+one third building N and W. Ways down, none tried yet:
+
+1. Fewer regions: 30 today (6 corners x 2 shells x 1-2 pieces, 12 zones, 6 quads). Larger
+   corner regions meeting at the side midpoints would leave 3 middle quads. The zones are
+   cheap.
+2. Lower degree: no bend term (-1 per ribbon), and a cheaper damping or weight compensation
+   (each factor of (H + d)(2H - d) costs +4 in N and W, +12 in the Jacobian).
+3. Exact-arithmetic-free shortcuts that remain sound: a first test on a degree-reduced
+   numerator with a bounded reduction error, before the full product.
+4. With the certificate cache (keyed by the exact sides), only new or edited corners pay.
+
+Four- to six-edge corners (8-12-sided holes) would raise the degree further (B_i is degree
+2(n - 1)) and the cost with it.
