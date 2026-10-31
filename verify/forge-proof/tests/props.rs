@@ -425,3 +425,40 @@ revolve add -xz at 31.964188863899732 36.04360694203633 10.700248852150338 circl
     }
     assert_eq!(props::membership(&part, 20), None);
 }
+
+#[test]
+fn every_feature_takes_effect_or_is_refused() {
+    let mut parts = fuzz();
+    parts.extend(
+        suite::parts()
+            .into_iter()
+            .filter(|p| p.1.features.len() <= 40)
+            .map(|(n, p)| (n.to_string(), p)),
+    );
+    holds("effect", props::effect, &parts);
+}
+
+/// The check itself: a body missing one of a pattern's copies fails it, for a cut and for an add.
+#[test]
+fn effect_catches_a_skipped_copy() {
+    for op in ["cut", "add"] {
+        let whole = fc(&format!(
+            "extrude new 10 rect 0 0 100 40
+h: extrude {op} 5 at 10 20 8 circle 0 0 4
+pattern h lin 1 0 0 4 20"
+        ));
+        let short = fc(&format!(
+            "extrude new 10 rect 0 0 100 40
+h: extrude {op} 5 at 10 20 8 circle 0 0 4
+pattern h lin 1 0 0 3 20"
+        ));
+        let body = short.regenerate().expect("builds").compact();
+        let mut r = forge_math::rng::Rng::new(5);
+        assert!(
+            props::tools_held(&whole, 2, &body, false, &mut r).is_some(),
+            "{op}"
+        );
+        let all = whole.regenerate().expect("builds").compact();
+        assert_eq!(props::tools_held(&whole, 2, &all, false, &mut r), None, "{op}");
+    }
+}

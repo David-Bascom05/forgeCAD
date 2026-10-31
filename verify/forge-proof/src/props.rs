@@ -659,6 +659,295 @@ fn sample(r: &mut Rng, b: &Box3) -> Point3 {
     )
 }
 
+/// What regen entry points to hold a feature to: each gives the bodies its prefix ends with.
+type Entry = (
+    &'static str,
+    fn(&Part) -> Result<Vec<Body>, forge_model::RegenError>,
+);
+
+fn solids(
+    r: Result<Vec<forge_model::Solid>, forge_model::RegenError>,
+) -> Result<Vec<Body>, forge_model::RegenError> {
+    r.map(|s| s.into_iter().map(|s| s.body).collect())
+}
+
+const ENTRIES: [Entry; 5] = [
+    ("regenerate_solids", |p| solids(p.regenerate_solids())),
+    ("regenerate_nary_solids", |p| solids(p.regenerate_nary_solids(1))),
+    ("regenerate", |p| p.regenerate().map(|b| vec![b])),
+    ("regenerate_nary", |p| p.regenerate_nary(1).map(|b| vec![b])),
+    ("regenerate_nary_with", |p| {
+        p.regenerate_nary_with(1, false).map(|b| vec![b])
+    }),
+];
+
+/// A body's faces' and edges' names and its vertices.
+type Fingerprint = (Vec<u64>, Vec<u64>, Vec<[u64; 3]>);
+
+/// A result as what could show a feature took effect: each body's faces, edges and vertices.
+fn fingerprint(bodies: &[Body]) -> Vec<Fingerprint> {
+    let mut out: Vec<_> = bodies
+        .iter()
+        .map(|b| {
+            let b = b.compact();
+            let mut faces: Vec<u64> = b.face_ids().map(|f| b.face(f).name.0).collect();
+            let mut edges: Vec<u64> = b.edge_ids().map(|e| b.edge(e).name.0).collect();
+            let mut verts: Vec<[u64; 3]> = b
+                .vertices
+                .iter()
+                .map(|v| [v.point.x.to_bits(), v.point.y.to_bits(), v.point.z.to_bits()])
+                .collect();
+            faces.sort_unstable();
+            edges.sort_unstable();
+            verts.sort_unstable();
+            (faces, edges, verts)
+        })
+        .collect();
+    out.sort();
+    out
+}
+
+/// Whether a feature only defines something for later ones.
+fn makes_nothing(f: &Feature) -> bool {
+    matches!(
+        f,
+        Feature::Param(_) | Feature::Sketch(_) | Feature::Plane(_) | Feature::Work(_)
+    )
+}
+
+fn feature_name(f: &Feature) -> String {
+    let d = format!("{f:?}");
+    d.split([' ', '(', '{']).next().unwrap_or("").to_string()
+}
+
+/// Points in `s`, from `reach` narrowed to the cells the solid may be in.
+fn points_in(s: &Shape, reach: Box3, r: &mut Rng, want: usize) -> Vec<Point3> {
+    let mut cells = vec![reach];
+    for _ in 0..5 {
+        let mut next = Vec::with_capacity(cells.len() * 2);
+        for c in &cells {
+            let (m, w) = (c.center(), [c.x.width(), c.y.width(), c.z.width()]);
+            let axis = (0..3).max_by(|&a, &b| w[a].total_cmp(&w[b])).unwrap_or(0);
+            let (mut a, mut b) = (*c, *c);
+            match axis {
+                0 => {
+                    a.x.hi = m.x;
+                    b.x.lo = m.x;
+                }
+                1 => {
+                    a.y.hi = m.y;
+                    b.y.lo = m.y;
+                }
+                _ => {
+                    a.z.hi = m.z;
+                    b.z.lo = m.z;
+                }
+            }
+            next.extend([a, b].into_iter().filter(|x| !s.box_out(x, 0.0)));
+        }
+        cells = next;
+    }
+    let mut out = Vec::new();
+    if cells.is_empty() {
+        return out;
+    }
+    for _ in 0..want * 8 {
+        let c = r.below(cells.len());
+        let p = sample(r, &cells[c]);
+        if s.member(p, 1e-3) == Member::In {
+            out.push(p);
+            if out.len() == want {
+                break;
+            }
+        }
+    }
+    out
+}
+
+/// Where tools of feature `k` disagree with the body it left: a tool added must be there, a tool
+/// cut gone, and nothing outside a tool kept: each instance on its own, so a pattern's skipped copy
+/// shows. And, given `unchanged`, why nothing changed is that the tool could change nothing.
+pub fn tools_held(part: &Part, k: usize, body: &Body, unchanged: bool, r: &mut Rng) -> Option<String> {
+    let h = forge_model::History::new(&part.features, None);
+    let tools = forge_model::tool_shapes(h, k).ok()?;
+    if tools.is_empty() {
+        return unchanged.then(|| "made no tools and changed nothing".to_string());
+    }
+    let index = Index::new(body);
+    let reach = bbox(body).grow(5.0);
+    let last = tools.len() - 1;
+    let alike = tools.iter().all(|t| t.1 == tools[0].1);
+    for (n, (shape, op)) in tools.iter().enumerate() {
+        // what a later tool of the feature may undo is judged only with all of one kind
+        if !alike && n != last {
+            continue;
+        }
+        let pts = points_in(shape, reach, r, 200);
+        for p in pts {
+            match (op, index.classify(p)) {
+                (Combine::Add | Combine::New, Where::Outside) => {
+                    return Some(format!("tool {n} of {} added is not there", tools.len()));
+                }
+                (Combine::Cut, Where::Inside) => {
+                    return Some(format!("tool {n} of {} cut is still there", tools.len()));
+                }
+                _ => {}
+            }
+        }
+        if *op == Combine::Keep {
+            for _ in 0..400 {
+                let p = sample(r, &bbox(body));
+                if shape.member(p, 1e-3) == Member::Out && index.classify(p) == Where::Inside {
+                    return Some("material kept outside the tool".to_string());
+                }
+            }
+        }
+    }
+    None
+}
+
+/// How many bodies a feature on bodies leaves, against how many there were.
+fn bodies_held(f: &Feature, before: &[Body], after: &[Body]) -> Option<&'static str> {
+    use forge_model::{BodyFeature, Keep};
+    let Feature::Body(b) = f else { return None };
+    let want = match &**b {
+        BodyFeature::Combine { tools, keep, .. } => before.len() - if *keep { 0 } else { tools.len() },
+        BodyFeature::Move { copy: true, .. } => before.len() + 1,
+        BodyFeature::Split { keep: Keep::Both, .. } => before.len() + 1,
+        _ => before.len(),
+    };
+    (after.len() != want).then_some("left the wrong number of bodies")
+}
+
+/// Each named edge a round or a bevel was asked for is gone from the body it left.
+fn edges_taken(f: &Feature, bodies: &[Body]) -> Option<String> {
+    let names: Vec<forge_topo::Name> = match f {
+        Feature::Fillet { edges, .. } => edges.iter().map(|e| e.0).collect(),
+        Feature::Chamfer { edges, .. } => edges.clone(),
+        _ => return None,
+    };
+    names
+        .iter()
+        .position(|&n| bodies.iter().any(|b| b.edge_by_name(n).is_some()))
+        .map(|i| format!("edge {i} of {} still on the part", names.len()))
+}
+
+/// After each feature, on every regen entry point, the regen errs or the feature visibly took
+/// effect: the body changed, or nothing could (a tool that misses), and every instance and every
+/// named edge is done. A feature that returns Ok with no change and no reason fails.
+pub fn effect(part: &Part, seed: u64) -> Option<Finding> {
+    let n = part.features.len();
+    let mut r = Rng::new(seed ^ 0xEFFEC7);
+    // the n-ary paths rebuild every prefix: on a long history its last few
+    let from_nary = n.saturating_sub(16);
+    for (name, entry) in ENTRIES {
+        let single = name == "regenerate" || name == "regenerate_nary" || name == "regenerate_nary_with";
+        let stride_all = name == "regenerate_solids" || n <= 40;
+        let start = if stride_all { 0 } else { from_nary };
+        let mut before: Option<Vec<Body>> = None;
+        if start > 0 {
+            let p = Part {
+                features: part.features[..start].to_vec(),
+            };
+            before = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| entry(&p)))
+                .ok()
+                .and_then(Result::ok);
+        }
+        for k in start..n {
+            let features = part.features[..=k].to_vec();
+            if single && forge_model::bodies::multi(&features) {
+                break;
+            }
+            let p = Part { features };
+            let got = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| entry(&p)));
+            // a refusal is an answer; and from there on the history is the refused one's
+            let Ok(Ok(got)) = got else {
+                // (no solid yet: parameters and sketches above the first)
+                if before.is_none() {
+                    continue;
+                }
+                break;
+            };
+            let f = &part.features[k];
+            let kind = feature_name(f);
+            if makes_nothing(f) {
+                before = Some(got);
+                continue;
+            }
+            let same = before
+                .as_ref()
+                .is_some_and(|b| fingerprint(b) == fingerprint(&got));
+            if let Some(w) = edges_taken(f, &got) {
+                return found(
+                    "effect",
+                    format!("{name}: {kind} partial"),
+                    format!("feature {k}: {w}"),
+                );
+            }
+            if let Some(w) = before.as_ref().and_then(|b| bodies_held(f, b, &got)) {
+                return found("effect", format!("{name}: {kind} {w}"), format!("feature {k}"));
+            }
+            let multi = forge_model::bodies::multi(&p.features);
+            let held = if !multi && got.len() == 1 {
+                let b = got[0].compact();
+                tools_of(f).then(|| tools_held(&p, k, &b, same, &mut r)).flatten()
+            } else {
+                None
+            };
+            if let Some(w) = held {
+                return found(
+                    "effect",
+                    format!(
+                        "{name}: {kind} {}",
+                        w.split(' ').skip(2).collect::<Vec<_>>().join(" ")
+                    ),
+                    format!("feature {k}: {w}"),
+                );
+            }
+            // a slab thickened outward and cut lies outside what it cuts: nothing to change
+            let slab_outside = matches!(
+                f,
+                Feature::Edit(forge_model::Edit::Thicken {
+                    side: forge_model::Side::Pos,
+                    op: Combine::Cut,
+                    ..
+                })
+            );
+            if same && !tools_of(f) && !slab_outside {
+                return found(
+                    "effect",
+                    format!("{name}: {kind} changed nothing"),
+                    format!("feature {k}"),
+                );
+            }
+            before = Some(got);
+        }
+    }
+    None
+}
+
+/// Whether a feature's effect is that of tools combined with the part.
+fn tools_of(f: &Feature) -> bool {
+    matches!(
+        f,
+        Feature::Extrude { .. }
+            | Feature::Revolve { .. }
+            | Feature::Ball { .. }
+            | Feature::Hole(_)
+            | Feature::Sweep(_)
+            | Feature::Coil(_)
+            | Feature::Loft(_)
+            | Feature::Thread(_)
+            | Feature::Text(_)
+    ) || matches!(
+        f,
+        Feature::Pattern {
+            of: forge_model::Source::Features(_),
+            ..
+        }
+    )
+}
+
 pub type Property = fn(&Part, u64) -> Option<Finding>;
 
 /// `prop` on `part`, a panic anywhere in it (a mesh, a classifier) a finding of its own.
@@ -710,6 +999,7 @@ pub fn all() -> Vec<(&'static str, Property)> {
         ("backends", backends),
         ("certify", certificate),
         ("membership", membership),
+        ("effect", effect),
         ("ulp", ulp),
     ]
 }
