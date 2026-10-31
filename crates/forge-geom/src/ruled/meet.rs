@@ -502,7 +502,7 @@ mod tests {
             for (k, plane) in [level, along].into_iter().enumerate() {
                 let s = Surface::Plane(crate::Plane { frame: plane });
                 let closed = wrap_surface(&w, unit, &s).expect("a closed form");
-                checked[k] += agree("plane", closed, curve_surface_subdivide(&c, unit, &s)) as usize;
+                checked[k] += agree("plane", closed, curve_surface_subdivide(&c, unit, &s, None)) as usize;
             }
             let cyl = |radius| Surface::Cylinder(crate::Cylinder { frame: axis, radius });
             assert!(
@@ -534,7 +534,11 @@ mod tests {
                 o => o,
             };
             let closed = wrap_wall(&w, unit, &ws).expect("a closed form");
-            checked[2] += agree("wall", closed, inside(curve_surface_subdivide(&c, unit, &ws))) as usize;
+            checked[2] += agree(
+                "wall",
+                closed,
+                inside(curve_surface_subdivide(&c, unit, &ws, None)),
+            ) as usize;
             let l = Line {
                 origin: axis.point_to_world(Point3::new(w.radius * 0.8, w.radius * 0.6, -4.0)),
                 dir: axis.z(),
@@ -542,7 +546,7 @@ mod tests {
             let range = Interval::new(0.5, 7.5);
             let closed = line_wall(&l, range, &ws).expect("a closed form");
             let line = crate::Curve::Line(l);
-            let numeric = curve_surface_subdivide(&line, range, &ws);
+            let numeric = curve_surface_subdivide(&line, range, &ws, None);
             let scale = |h: CurveSurface| match h {
                 CurveSurface::Hits(h) => CurveSurface::Hits(
                     h.into_iter()

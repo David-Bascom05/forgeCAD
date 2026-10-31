@@ -15,7 +15,9 @@
 
 use crate::classify::{Index, Where};
 use crate::ssi;
-use forge_geom::intersect::{Contact, CurveHit, CurveSurface, SurfaceSurface, curve_surface};
+use forge_geom::intersect::{
+    Contact, CurveHit, CurveSurface, SurfaceSurface, curve_surface, curve_surface_in,
+};
 use forge_geom::{Curve, CurveGeom, Cylinder, Plane, Surface, SurfaceGeom};
 use forge_math::predicates::angle_cmp;
 use forge_math::{Box3, Frame, Interval, Point2, Point3, Vec2, Vec3, dmath, tol};
@@ -1676,7 +1678,14 @@ pub(crate) fn trim(
                     continue;
                 }
                 let across = across(body, f, c)?;
-                let hits = match curve_surface(&curve, range, &across) {
+                // only hits on the edge count: within its ends' tolerance of its box
+                let slack = body
+                    .vertex(edge.start)
+                    .tol
+                    .max(body.vertex(edge.end).tol)
+                    .max(tol::LINEAR);
+                let near = body.edge_box(e).grow(2.0 * slack);
+                let hits = match curve_surface_in(&curve, range, &across, Some(near)) {
                     CurveSurface::Hits(h) => h,
                     // the curve runs along this edge: cut it at the edge's ends; the stretch along
                     // the edge is boundary, not a new edge (the faces either side of it meet the

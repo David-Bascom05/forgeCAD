@@ -9,7 +9,7 @@
 use crate::curve::{Circle, Curve, CurveGeom, Ellipse, Hyperbola, Line, Parabola};
 use crate::surface::{Cone, Cylinder, Plane, Sphere, Surface, SurfaceGeom, Torus};
 use forge_math::dmath;
-use forge_math::{Frame, Interval, Point3, UnitVec3, Vec3, poly, tol};
+use forge_math::{Box3, Frame, Interval, Point3, UnitVec3, Vec3, poly, tol};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Contact {
@@ -77,7 +77,7 @@ fn line_procedural(line: &Line, s: &Surface, pr: &crate::surface::Proc) -> LineS
     }
     let range = Interval::new(lo, hi);
     let found = crate::ruled::line_wall(line, range, s)
-        .unwrap_or_else(|| curve_surface_subdivide(&Curve::Line(*line), range, s));
+        .unwrap_or_else(|| curve_surface_subdivide(&Curve::Line(*line), range, s, None));
     match found {
         // the implicit holds more than the patch (a blend's: its balls whole), so only points
         // of the patch are hits
@@ -298,6 +298,12 @@ fn speed_bound(c: &Curve, range: Interval) -> f64 {
 /// the surface are grouped; a group with an odd number of sign changes is a
 /// crossing (bisected to full precision), an even number or none is a touch.
 pub fn curve_surface(c: &Curve, range: Interval, s: &Surface) -> CurveSurface {
+    curve_surface_in(c, range, s, None)
+}
+
+/// `curve_surface`, the hits wanted only inside box `near` (others may or may not be found):
+/// a subdivision skips the stretches of the curve that cannot reach it.
+pub fn curve_surface_in(c: &Curve, range: Interval, s: &Surface, near: Option<Box3>) -> CurveSurface {
     match c {
         Curve::Line(l) if !matches!(s, Surface::Procedural(_)) => return line_in_range(l, range, s),
         Curve::Circle(k) => {
@@ -332,7 +338,7 @@ pub fn curve_surface(c: &Curve, range: Interval, s: &Surface) -> CurveSurface {
         }
         _ => {}
     }
-    curve_surface_subdivide(c, range, s)
+    curve_surface_subdivide(c, range, s, near)
 }
 
 fn line_in_range(l: &Line, range: Interval, s: &Surface) -> CurveSurface {
@@ -533,14 +539,29 @@ fn parabola_quadric(par: &Parabola, range: Interval, s: &Surface) -> Option<Curv
     Some(CurveSurface::Hits(hits))
 }
 
-pub(crate) fn curve_surface_subdivide(c: &Curve, range: Interval, s: &Surface) -> CurveSurface {
+pub(crate) fn curve_surface_subdivide(
+    c: &Curve,
+    range: Interval,
+    s: &Surface,
+    near: Option<Box3>,
+) -> CurveSurface {
     let g = |t: f64| s.implicit(c.eval(t));
+    let off = |p: Point3| {
+        near.map_or(0.0, |b| {
+            let d = |x: f64, i: Interval| (i.lo - x).max(x - i.hi).max(0.0);
+            Vec3::new(d(p.x, b.x), d(p.y, b.y), d(p.z, b.z)).length()
+        })
+    };
     let lip = speed_bound(c, range) * (1.0 + 1e-9) + f64::MIN_POSITIVE;
     let probes = 9;
     if (0..probes).all(|i| g(range.lo + range.width() * i as f64 / (probes - 1) as f64).abs() <= tol::LINEAR)
     {
         return CurveSurface::OnSurface;
     }
+    // a curve running beside the surface a little over the tolerance away is never pruned by
+    // the Lipschitz bound until its pieces are that small: past a budget, a piece 1/4096 of the
+    // range is kept only where the surface's sign changes across it
+    let (mut budget, coarse) = (100_000usize, range.width() / 4096.0);
     let mut leaves: Vec<(f64, f64)> = Vec::new();
     // pieces with their own speed bound, rightmost first so the leftmost pops first: a traced
     // curve's chain segments (each bounded by its own chord, those surely clear of the surface
@@ -551,7 +572,16 @@ pub(crate) fn curve_surface_subdivide(c: &Curve, range: Interval, s: &Surface) -
     };
     while let Some((a, b, lip)) = stack.pop() {
         let m = 0.5 * (a + b);
-        if g(m).abs() > lip * 0.5 * (b - a) + tol::LINEAR {
+        let p = c.eval(m);
+        let reach = lip * 0.5 * (b - a) + tol::LINEAR;
+        if off(p) > reach || s.implicit(p).abs() > reach {
+            continue;
+        }
+        budget = budget.saturating_sub(1);
+        if budget == 0 && b - a <= coarse && b - a > tol::LINEAR / lip {
+            if (g(a) < 0.0) != (g(b) < 0.0) {
+                leaves.push((a, b));
+            }
             continue;
         }
         if b - a <= tol::LINEAR / lip {
