@@ -31,6 +31,17 @@ impl Screw {
         let p2 = Point2::new(p2.x, p2.y + h0);
         let det = d1.cross(d2);
         let (lo, hi) = (self.ue.lo, self.ue.hi);
+        // a quarter of the section, but a section along its own turn's rise (a cylinder's wall)
+        // stops well short of its next turn, or a point there would be found again on that turn
+        let past = |d: Vec2, ab: Vec2| {
+            let turn = ab * dmath::TAU;
+            if d.cross(turn).abs() <= 1e-9 * d.length() * turn.length() && d.dot(turn) != 0.0 {
+                (0.25 * (turn.length() / d.length() - 1.0)).clamp(0.0, 0.25)
+            } else {
+                0.25
+            }
+        };
+        let (e1, e2) = (past(d1, ab1), past(d2, ab2));
         let k0 = ((o.ue.lo - hi + phi0) / dmath::TAU).floor() as i64;
         let k1 = ((o.ue.hi - lo + phi0) / dmath::TAU).ceil() as i64;
         let mut curves = Vec::new();
@@ -81,14 +92,14 @@ impl Screw {
             let solve = |w: Vec2| (w.cross(d2) / det, w.cross(d1) / det);
             let (s0, t0) = solve(w0);
             let (su, tu) = solve(wu);
-            // both sections carried a quarter past their ends, and off the axis
-            for (x0, xu) in [(s0, su), (t0, tu)] {
+            // both sections carried a little past their ends, and off the axis
+            for (x0, xu, e) in [(s0, su, e1), (t0, tu, e2)] {
                 if xu == 0.0 {
-                    if !(-0.25..=1.25).contains(&x0) {
+                    if !(-e..=1.0 + e).contains(&x0) {
                         (ulo, uhi) = (1.0, 0.0);
                     }
                 } else {
-                    let (a, b) = ((-0.25 - x0) / xu, (1.25 - x0) / xu);
+                    let (a, b) = ((-e - x0) / xu, (1.0 + e - x0) / xu);
                     (ulo, uhi) = (ulo.max(a.min(b)), uhi.min(a.max(b)));
                 }
             }

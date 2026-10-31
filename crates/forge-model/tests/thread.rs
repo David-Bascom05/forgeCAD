@@ -7,19 +7,32 @@ use forge_model::{
 };
 use forge_ops::{Handed, Profile};
 
+/// The part's volume, the same feature by feature, in one pass, and in one pass placing points
+/// without the tools' analytic shapes (a thread's several tools cut together).
 fn volume(part: &Part) -> f64 {
-    let b = part.regenerate().expect("regenerates");
-    assert!(forge_topo::check(&b).is_empty(), "{:?}", forge_topo::check(&b));
-    let m = tessellate(
-        &b,
-        &Quality {
-            chord: 0.001,
-            ..Quality::default()
-        },
-    )
-    .expect("meshes");
-    assert!(m.open_edges().is_empty(), "closed mesh");
-    m.volume()
+    let vs: Vec<f64> = [
+        part.regenerate(),
+        part.regenerate_nary(1),
+        part.regenerate_nary_with(1, false),
+    ]
+    .into_iter()
+    .map(|b| {
+        let b = b.expect("regenerates");
+        assert!(forge_topo::check(&b).is_empty(), "{:?}", forge_topo::check(&b));
+        let m = tessellate(
+            &b,
+            &Quality {
+                chord: 0.001,
+                ..Quality::default()
+            },
+        )
+        .expect("meshes");
+        assert!(m.open_edges().is_empty(), "closed mesh");
+        m.volume()
+    })
+    .collect();
+    assert!(vs.iter().all(|v| (v - vs[0]).abs() <= 1e-6 * vs[0]), "{vs:?}");
+    vs[0]
 }
 
 fn rod(r: f64, h: f64) -> Feature {
@@ -307,5 +320,127 @@ fn face_and_patterned_hole_threads() {
     assert!(
         ((plain - bore - 2.0 * per) - two).abs() < 0.01 * per,
         "{plain} {one} {two}"
+    );
+}
+
+/// A groove and its run-out cut in one pass, wherever the thread starts: from the rod's top or
+/// inside it, axis down or up, from any start direction, of any length. The run-out's start
+/// lies inside the groove, whose end cap's plane passes through the axis; the screw faces'
+/// section lines in that plane once ran on through the axis and split the cap where nothing met it.
+#[test]
+fn run_outs_cut_in_one_pass() {
+    let down = |z: f64, x: Vec3| Frame::from_zx(Point3::new(0.0, 0.0, z), -UnitVec3::Z, x).expect("frame");
+    let up = |z: f64, x: Vec3| Frame::from_zx(Point3::new(0.0, 0.0, z), UnitVec3::Z, x).expect("frame");
+    let slant = Vec3::new(0.6, 0.8, 0.0);
+    for (at, length) in [
+        (down(20.0, slant), 8.0),
+        (down(20.0, Vec3::X), 6.0),
+        (down(20.0, Vec3::X), 8.3),
+        (down(14.0, slant), 8.0),
+        (up(10.0, Vec3::X), 8.0),
+    ] {
+        let part = Part {
+            features: vec![
+                rod(3.0, 20.0),
+                Feature::Thread(Box::new(ScrewThread {
+                    on: ThreadOn::Axis {
+                        at,
+                        spec: ThreadSpec::parse("M6").expect("M6"),
+                        internal: false,
+                    },
+                    length: ThreadLength::Distance(length),
+                    handed: Handed::Right,
+                    chamfer: false,
+                    runout: true,
+                })),
+            ],
+        };
+        assert!(
+            volume(&part)
+                < volume(&Part {
+                    features: vec![rod(3.0, 20.0)]
+                })
+        );
+    }
+}
+
+/// Two overlapping coils united: an M6 groove section, and one 15/16 its size starting an eighth
+/// of a turn before the first's end, inside it, and tapering out over a turn and an eighth. The
+/// first's outer face is a cylinder's wall, whose section carried past its ends once reached its
+/// next turn, so the second's helices were found twice.
+#[test]
+fn overlapping_coils_unite() {
+    use forge_model::{Coil, CoilSize};
+    use forge_ops::{Axis2, ProfileLoop, Segment};
+    let coil = |plane: Frame, pts: &[Point2], turns: f64, taper: f64, op: Combine| {
+        let n = pts.len();
+        let lp = ProfileLoop::new(
+            (0..n)
+                .map(|k| {
+                    (
+                        Segment::Line {
+                            a: pts[k],
+                            b: pts[(k + 1) % n],
+                        },
+                        k as u64,
+                    )
+                })
+                .collect(),
+        );
+        Feature::Coil(Box::new(Coil {
+            profile: Profile {
+                plane,
+                loops: vec![lp],
+            },
+            axis: Axis2 {
+                origin: Point2::ORIGIN,
+                dir: forge_math::Vec2::Y,
+            },
+            size: CoilSize::PitchTurns { pitch: 1.0, turns },
+            taper,
+            handed: Handed::Right,
+            op,
+        }))
+    };
+    let rn = 3.0 - 5.0 / 16.0 * 3f64.sqrt();
+    let r = 3.0 + 1.0 / 16.0;
+    let w = 1.0 / 8.0 + (r - rn) / 3f64.sqrt();
+    let g = [
+        Point2::new(rn, 0.125),
+        Point2::new(rn, -0.125),
+        Point2::new(r, -w),
+        Point2::new(r + 1.0, -w),
+        Point2::new(r + 1.0, w),
+        Point2::new(r, w),
+    ];
+    let c = Point2::new(g.iter().map(|q| q.x).sum::<f64>() / 6.0, 0.0);
+    let small: Vec<Point2> = g.iter().map(|q| c + (*q - c) * (15.0 / 16.0)).collect();
+    let plane = Frame::from_zx(Point3::new(0.0, 0.0, 10.0), -UnitVec3::Y, Vec3::X).expect("frame");
+    let ang = 3.5 * dmath::TAU - dmath::TAU / 8.0;
+    let (sn, cs) = dmath::sin_cos(ang);
+    let x = Vec3::new(cs, sn, 0.0);
+    let tail = Frame::from_zx(
+        Point3::new(0.0, 0.0, 10.0 + ang / dmath::TAU),
+        x.cross(Vec3::Z).normalize().expect("unit"),
+        x,
+    )
+    .expect("frame");
+    let taper = dmath::atan(0.9 / 1.125);
+    let first = coil(plane, &g, 3.5, 0.0, Combine::New);
+    let both = |op: Combine| Part {
+        features: vec![first.clone(), coil(tail, &small, 1.125, taper, op)],
+    };
+    let (one, two) = (
+        volume(&Part {
+            features: vec![first.clone()],
+        }),
+        volume(&Part {
+            features: vec![coil(tail, &small, 1.125, taper, Combine::New)],
+        }),
+    );
+    let (union, common) = (volume(&both(Combine::Add)), volume(&both(Combine::Keep)));
+    assert!(
+        common > 0.0 && (union - (one + two - common)).abs() < 1e-3 * union,
+        "{one} {two} {union} {common}"
     );
 }

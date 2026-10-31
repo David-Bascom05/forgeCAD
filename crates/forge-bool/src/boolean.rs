@@ -1661,6 +1661,15 @@ pub(crate) fn trim(
             .map(|(_, e)| e)
             .collect()
     };
+    // a line may run on past where a procedural surface holds it (a screw face's section line
+    // carried through the axis, into the opposite half plane): a stretch there is on no face
+    let off = |p: Point3| {
+        matches!(curve, Curve::Line(_))
+            && (0..2).any(|k| {
+                let s = &bodies[k].face(faces[k]).surface;
+                matches!(s, Surface::Procedural(_)) && s.distance(p) > 10.0 * tol::LINEAR
+            })
+    };
     let inside = |t0: f64, t1: f64, ends: &[usize]| -> R<bool> {
         let at = |k: usize, p: Point3| match index[k].point_in_face(faces[k], p) {
             Where::On => {
@@ -1699,6 +1708,9 @@ pub(crate) fn trim(
                     }))
             {
                 break;
+            }
+            if off(p) {
+                return Ok(false);
             }
             for (k, wk) in w.iter_mut().enumerate() {
                 if *wk == Where::On {
