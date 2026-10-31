@@ -669,7 +669,7 @@ impl Skinned {
             .map(|k| s.rows[k].1.p.distance(s.rows[k + nv + 1].1.p))
             .chain((0..s.rows.len() - 1).map(|k| s.rows[k].1.p.distance(s.rows[k + 1].1.p)))
             .fold(0.0, f64::max);
-        s.sharp = s.radius < 0.5 * cell;
+        s.sharp = s.radius < 0.1 * cell;
         Some(s)
     }
 
