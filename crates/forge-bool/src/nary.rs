@@ -1564,12 +1564,28 @@ fn nary_body(
         ties.extend(aliased);
         ties.sort_unstable();
     }
-    let mut by_edge: Vec<(Side, EdgeId, usize)> = cuts
-        .iter()
-        .enumerate()
-        .filter_map(|(i, c)| c.on.edge().map(|(sd, e)| (sd, e, i)))
-        .collect();
-    by_edge.sort_unstable();
+    // in order of edge (each tool's edges numbered in turn), counted into place
+    let mut eoff: Vec<usize> = vec![0];
+    for b in tools {
+        eoff.push(eoff[eoff.len() - 1] + b.edges.len());
+    }
+    let mut at = vec![0usize; eoff[n] + 1];
+    for c in &cuts {
+        if let Some((sd, e)) = c.on.edge() {
+            at[eoff[sd] + e.index() + 1] += 1;
+        }
+    }
+    for i in 1..at.len() {
+        at[i] += at[i - 1];
+    }
+    let mut by_edge: Vec<(Side, EdgeId, usize)> = vec![(0, EdgeId(0), 0); at[eoff[n]]];
+    for (i, c) in cuts.iter().enumerate() {
+        if let Some((sd, e)) = c.on.edge() {
+            let k = &mut at[eoff[sd] + e.index()];
+            by_edge[*k] = (sd, e, i);
+            *k += 1;
+        }
+    }
     let mut pieces = Pieces {
         tools,
         cuts: &cuts,
@@ -2127,7 +2143,23 @@ fn nary_body(
         unpaired[i] = true;
         unpaired[j] = true;
     }
-    let mut links: Vec<((Side, EdgeId, u32), usize)> = Vec::new();
+    // regions sharing an edge piece are one group: each joins the last one seen on it (a piece
+    // numbered by its place in the list, an edge never split by the pieces' count past that)
+    let mut group: Vec<usize> = (0..regs.len()).collect();
+    let mut last = vec![usize::MAX; list.len() + eoff[n]];
+    let mut link = |sd: Side, e: EdgeId, k: usize, ri: usize| {
+        let (first, count) = pieces.of_edge[sd][e.index()];
+        let at = if count > 0 {
+            first as usize + k
+        } else {
+            list.len() + eoff[sd] + e.index()
+        };
+        if last[at] != usize::MAX {
+            let (x, y) = (find(&mut group, last[at]), find(&mut group, ri));
+            group[x.max(y)] = x.min(y);
+        }
+        last[at] = ri;
+    };
     for (ri, r) in regs.iter().enumerate() {
         if unpaired[r.side] || unclean.binary_search(&(r.side, r.face)).is_ok() {
             continue;
@@ -2137,7 +2169,7 @@ fn nary_body(
             // an untouched face's edges are uncut: one piece each
             for &l in &body.face(r.face).loops {
                 for c in body.lp(l).coedges() {
-                    links.push(((r.side, body.coedge(c).edge, 0), ri));
+                    link(r.side, body.coedge(c).edge, 0, ri);
                 }
             }
             continue;
@@ -2147,16 +2179,8 @@ fn nary_body(
                 && sd == r.side
             {
                 let first = pieces.of_edge[sd][e.index()].0 as usize;
-                links.push(((sd, e, (p - first) as u32), ri));
+                link(sd, e, p - first, ri);
             }
-        }
-    }
-    links.sort_unstable();
-    let mut group: Vec<usize> = (0..regs.len()).collect();
-    for g in links.chunk_by(|x, y| x.0 == y.0) {
-        for w in g.windows(2) {
-            let (x, y) = (find(&mut group, w[0].1), find(&mut group, w[1].1));
-            group[x.max(y)] = x.min(y);
         }
     }
     let group: Vec<usize> = (0..regs.len()).map(|ri| find(&mut group, ri)).collect();
