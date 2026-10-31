@@ -360,21 +360,46 @@ fn march(
     // a helix winds many times its box's size
     let max = (64.0 * bounds.diagonal() / step) as usize + 16;
     for k in 0..max {
-        let d = direction(a, b, p)? * sign;
+        // the way the chain was going: where the surfaces touch on the curve their normals' cross
+        // product vanishes and may turn over, and the chain carries on regardless
+        let along = pts
+            .len()
+            .checked_sub(2)
+            .and_then(|i| (p - pts[i]).normalize())
+            .map(|u| u.get());
+        let d = match (direction(a, b, p), along) {
+            (Some(d), Some(u)) if d.dot(u) * sign < 0.0 => -d * sign,
+            (Some(d), _) => d * sign,
+            (None, Some(u)) => u,
+            (None, None) => return None,
+        };
         // a predictor along the tangent, then back onto both surfaces in the plane across it;
-        // a step that lands behind or far from its guess jumped (a corner of a surface's
-        // projection, another sheet) and is retried shorter
+        // a step that lands behind, short or far from its guess jumped (a corner of a surface's
+        // projection, another sheet) or stalled, and is retried shorter; at a touch, it steps
+        // over along the chain
+        let ahead = |d: Vec3, h: f64| {
+            let guess = p + d * h;
+            refine(a, b, guess).filter(|&q| (q - p).dot(d) > 0.5 * h && q.distance(guess) <= h)
+        };
         let mut h = step;
         let q = loop {
-            let guess = p + d * h;
-            match refine(a, b, guess) {
-                Some(q) if (q - p).dot(d) > 0.0 && q.distance(guess) <= h => break q,
-                _ if h > step / 64.0 => h *= 0.5,
-                // a procedural surface may stop at its face's rim: the branch ends there (any part
-                // of it back on the face is seeded and traced from there)
-                _ if ends(a, p, d, h) || ends(b, p, d, h) => return Some((pts, false)),
-                _ => return None,
+            if let Some(q) = ahead(d, h) {
+                break q;
             }
+            if h > step / 64.0 {
+                h *= 0.5;
+                continue;
+            }
+            if let Some(q) = along.and_then(|u| [1.0, 2.0, 4.0].into_iter().find_map(|m| ahead(u, step * m)))
+            {
+                break q;
+            }
+            // a procedural surface may stop at its face's rim: the branch ends there (any part
+            // of it back on the face is seeded and traced from there)
+            if ends(a, p, d, h) || ends(b, p, d, h) {
+                return Some((pts, false));
+            }
+            return None;
         };
         if k > 2 && q.distance(p0) <= 0.75 * step {
             pts.push(p0);

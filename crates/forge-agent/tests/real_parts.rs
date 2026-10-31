@@ -94,3 +94,14 @@ chamber: extrude cut 37 at 0 0 -15 circle 0 0 78
 ",
     );
 }
+
+/// A cylinder extruded on from a smooth loft's end circle: the loft meets the cylinder along
+/// that circle, touching it where the loft stands straight up (R15).
+#[test]
+fn extrude_from_smooth_loft_end() {
+    builds_valid(
+        "loft smooth profile at 0 0 0 circle 0 0 10 profile at 0 5 30 circle 0 0 14 profile at 0 15 60 circle 0 0 18
+extrude 40 at 0 15 60 circle 0 0 18
+",
+    );
+}
