@@ -852,11 +852,27 @@ impl Pipe {
             });
         }
     }
+
+    fn column(&self, u: f64, vs: &[f64], out: &mut Vec<Point3>) {
+        match self.cross(u) {
+            Some(x) => out.extend(vs.iter().map(|&v| self.on(x, v))),
+            None => {
+                let p = self.spine.eval(u);
+                out.extend(vs.iter().map(|_| p));
+            }
+        }
+    }
 }
 
 impl Procedural for Pipe {
     fn point(&self, uv: Point2) -> Point3 {
         Pipe::point(self, uv)
+    }
+    fn swept(&self) -> bool {
+        true
+    }
+    fn column(&self, u: f64, vs: &[f64], out: &mut Vec<Point3>) {
+        Pipe::column(self, u, vs, out)
     }
     fn deriv(&self, uv: Point2) -> SurfDeriv {
         let mut d = None;

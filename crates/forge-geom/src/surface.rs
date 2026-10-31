@@ -102,6 +102,15 @@ pub trait Procedural: Send + Sync + std::fmt::Debug {
     fn point(&self, uv: Point2) -> Point3 {
         self.deriv(uv).p
     }
+    /// Whether the surface is a section swept along u (a blend's arc), so `column` works the
+    /// section out once for all its points (meshing then lays the face out in columns).
+    fn swept(&self) -> bool {
+        false
+    }
+    /// The points at u and each v of `vs`, onto `out`, each exactly `point`'s.
+    fn column(&self, u: f64, vs: &[f64], out: &mut Vec<Point3>) {
+        out.extend(vs.iter().map(|&v| self.point(Point2::new(u, v))));
+    }
     /// The derivatives at u and each v of `vs`, onto `out`, each exactly `deriv`'s.
     fn column_derivs(&self, u: f64, vs: &[f64], out: &mut Vec<SurfDeriv>) {
         out.extend(vs.iter().map(|&v| self.deriv(Point2::new(u, v))));

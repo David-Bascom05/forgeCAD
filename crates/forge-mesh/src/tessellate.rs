@@ -185,38 +185,7 @@ impl Nodes {
     /// tightest curvatures at the nodes round it need, never more than the face's tightest radius
     /// anywhere does.
     fn counts(&self, s: &Surface, q: &Quality) -> Counts {
-        let r0 = match s {
-            Surface::Procedural(pr) => pr.min_radius(),
-            _ => f64::INFINITY,
-        };
-        let step = |r: f64| {
-            let r = r.max(r0);
-            if r.is_finite() {
-                arc_step(r, q) * r
-            } else {
-                f64::INFINITY
-            }
-        };
-        let (cw, ch) = (
-            (self.hi.x - self.lo.x) / G as f64,
-            (self.hi.y - self.lo.y) / G as f64,
-        );
-        // per node, the steps per unit u and v it needs
-        let per = self.at.map(|row| row.map(|n| (n.0 / step(n.2), n.1 / step(n.3))));
-        // the steps each cell needs, the densest any node of it or its neighbours needs
-        let mut want = [[(0.0, 0.0); G]; G];
-        for (ci, row) in want.iter_mut().enumerate() {
-            for (cj, c) in row.iter_mut().enumerate() {
-                let (mut du, mut dv) = (0.0f64, 0.0f64);
-                for row in &per[ci.saturating_sub(1)..(ci + 3).min(G + 1)] {
-                    for &n in &row[cj.saturating_sub(1)..(cj + 3).min(G + 1)] {
-                        du = du.max(n.0);
-                        dv = dv.max(n.1);
-                    }
-                }
-                *c = ((cw * du).min(1e6), (ch * dv).min(1e6));
-            }
-        }
+        let want = self.want(s, q, false);
         // in whole steps: a cell needing half a step or more as many rounded up, and the cells
         // needing less along a line of them sharing steps, as many as their sum rounded up (a
         // thin face needing three rows across gets three, not one per cell): one may get none
@@ -238,6 +207,85 @@ impl Nodes {
             }
         }
         n
+    }
+
+    /// The steps each cell needs across u and across v, the densest any node of it or its
+    /// neighbours needs. Each way's chords sag within the tolerance, or with `shared`, both
+    /// ways' together do (a triangle across a cell sags by its sides' sags), each turning through
+    /// no more than the largest angle.
+    fn want(&self, s: &Surface, q: &Quality, shared: bool) -> [[(f64, f64); G]; G] {
+        let r0 = match s {
+            Surface::Procedural(pr) => pr.min_radius(),
+            _ => f64::INFINITY,
+        };
+        let step = |r: f64| {
+            let r = r.max(r0);
+            if r.is_finite() {
+                arc_step(r, q) * r
+            } else {
+                f64::INFINITY
+            }
+        };
+        let (cw, ch) = (
+            (self.hi.x - self.lo.x) / G as f64,
+            (self.hi.y - self.lo.y) / G as f64,
+        );
+        // the sag per unit step squared along a line of length l per unit and radius r, and the
+        // longest step turning through the largest angle
+        let sag = |l: f64, r: f64| if r.is_finite() { l * l / (8.0 * r) } else { 0.0 };
+        let turn = |l: f64, r: f64| {
+            if l > 0.0 && r.is_finite() {
+                q.max_angle * r / l
+            } else {
+                f64::INFINITY
+            }
+        };
+        let longest = |a: f64, room: f64| {
+            if a > 0.0 {
+                (room.max(0.0) / a).sqrt()
+            } else {
+                f64::INFINITY
+            }
+        };
+        let c = 0.9 * q.chord;
+        let split = |(lu, lv, ru, rv): (f64, f64, f64, f64)| {
+            let (ru, rv) = (ru.max(r0), rv.max(r0));
+            let (au, av, tu, tv) = (sag(lu, ru), sag(lv, rv), turn(lu, ru), turn(lv, rv));
+            // half the tolerance each way, or where one way turns too far first, the rest the other
+            let sags = |a: f64, d: f64| if d.is_finite() { a * d * d } else { 0.0 };
+            let (du, dv) = if tu <= longest(au, 0.5 * c) {
+                (tu, tv.min(longest(av, c - sags(au, tu))))
+            } else if tv <= longest(av, 0.5 * c) {
+                (tu.min(longest(au, c - sags(av, tv))), tv)
+            } else {
+                (longest(au, 0.5 * c), longest(av, 0.5 * c))
+            };
+            (1.0 / du, 1.0 / dv)
+        };
+        // per node, the steps per unit u and v it needs
+        let per = self.at.map(|row| {
+            row.map(|n| {
+                if shared {
+                    split(n)
+                } else {
+                    (n.0 / step(n.2), n.1 / step(n.3))
+                }
+            })
+        });
+        let mut want = [[(0.0, 0.0); G]; G];
+        for (ci, row) in want.iter_mut().enumerate() {
+            for (cj, c) in row.iter_mut().enumerate() {
+                let (mut du, mut dv) = (0.0f64, 0.0f64);
+                for row in &per[ci.saturating_sub(1)..(ci + 3).min(G + 1)] {
+                    for &n in &row[cj.saturating_sub(1)..(cj + 3).min(G + 1)] {
+                        du = du.max(n.0);
+                        dv = dv.max(n.1);
+                    }
+                }
+                *c = ((cw * du).min(1e6), (ch * dv).min(1e6));
+            }
+        }
+        want
     }
 
     /// The layout scale that makes the grid's mean cell square, so the Delaunay joins neighbours.
@@ -840,6 +888,22 @@ fn tessellate_face(
         return Ok(());
     }
 
+    // a swept face square in its parameters (a blend cut square at its ends): a grid of columns
+    // joined to its boundary, where every chord and triangle holds
+    if let (Some((n, _)), Surface::Procedural(pr), [_]) = (&nodes, surface, &loops[..])
+        && pr.swept()
+    {
+        let off = |x, y, p| strays_from(surface, x, y, p, q.chord);
+        if let Some(tris) = proc_strips(pr, &uv, &global, &n.want(surface, q, true), q.chord, &off, mesh) {
+            for [a, b, c] in tris {
+                mesh.triangles
+                    .push(if face.same_sense { [a, b, c] } else { [a, c, b] });
+                mesh.face_of.push(f.0);
+            }
+            return Ok(());
+        }
+    }
+
     if let Layout::Unrolled { .. } = layout {
         // an apex drawn as a run along its parameter line is one point unrolled
         let (old_uv, old_global) = (std::mem::take(&mut uv), std::mem::take(&mut global));
@@ -1003,7 +1067,10 @@ fn tessellate_face(
     // whether a point off the face (laid out at `p`) lies further than the tolerance from its
     // surface (exactly, on an analytic one)
     let off = |x: forge_math::Point3, p: Point2| match surface {
-        Surface::Procedural(_) => strays_from(surface, x, layout.uv(p), q.chord),
+        Surface::Procedural(_) => {
+            let uv = layout.uv(p);
+            strays_from(surface, x, surface.eval(uv), uv, q.chord)
+        }
         _ => surface.implicit(x).abs() > q.chord,
     };
     // within the chord by the bounds on a procedural surface's bending (`grid`: all inner points)
@@ -1139,11 +1206,11 @@ impl Layout {
 }
 
 /// Whether `x` lies further than `c` from the surface about `uv`, where it is expected near.
-/// The surface's point at `uv` bounds the distance from above. Where that is too far but the gap
+/// The surface's point at `uv` (`y`) bounds the distance from above. Where that is too far but the gap
 /// along the normal there is not (the point lies along from the nearest, as by a pole or a seam),
 /// Gauss-Newton looks for a nearer one, each step kept only if it comes closer.
-fn strays_from(s: &Surface, x: forge_math::Point3, uv: Point2, c: f64) -> bool {
-    if s.eval(uv).distance(x) <= c {
+fn strays_from(s: &Surface, x: forge_math::Point3, y: forge_math::Point3, uv: Point2, c: f64) -> bool {
+    if y.distance(x) <= c {
         return false;
     }
     let (mut uv, mut d) = (uv, s.deriv(uv));
@@ -1403,18 +1470,10 @@ impl Grid {
     }
 }
 
-/// Faces that are rectangles in parameter space (every revolve face, every
-/// extrude wall) need no Delaunay: rows of points across u at each v sample
-/// of the side edges, stitched strip by strip. Counter-clockwise in (u, v).
-/// None when the face is not such a rectangle, or its two sides are sampled
-/// at different v (stitching rows then would leave T-junctions).
-fn strips(
-    surface: &Surface,
-    uv: &[Point2],
-    global: &[u32],
-    q: &Quality,
-    mesh: &mut TriMesh,
-) -> Option<Vec<[u32; 3]>> {
+/// A face's boundary as a rectangle in its parameters: its bottom (v0), right, top and left
+/// sides, each running from u0 to u1 or from bottom to top and each with both its corners, and
+/// u0 and u1. None when it is not one.
+fn rectangle(uv: &[Point2]) -> Option<([Vec<usize>; 4], f64, f64)> {
     let n = uv.len();
     let (mut u0, mut u1, mut v0, mut v1) =
         (f64::INFINITY, f64::NEG_INFINITY, f64::INFINITY, f64::NEG_INFINITY);
@@ -1463,7 +1522,254 @@ fn strips(
     let [bottom, right, mut top, mut left] = sides;
     top.reverse();
     left.reverse();
-    if left.len() != right.len() || left.iter().zip(&right).any(|(&a, &b)| !near(uv[a].y, uv[b].y)) {
+    Some(([bottom, right, top, left], u0, u1))
+}
+
+/// Points spread over [lo, hi] as `want` (steps per G-th of it) asks: as many steps as it wants
+/// in all, the cumulative want inverted; the inner ones.
+fn spread(lo: f64, hi: f64, want: &[f64; G]) -> Vec<f64> {
+    let total: f64 = want.iter().sum();
+    let m = (total.ceil() as usize).max(1);
+    let w = (hi - lo) / G as f64;
+    let (mut c, mut before) = (0, 0.0);
+    (1..m)
+        .map(|i| {
+            let t = total * i as f64 / m as f64;
+            while c + 1 < G && before + want[c] < t {
+                before += want[c];
+                c += 1;
+            }
+            let f = if want[c] > 0.0 {
+                ((t - before) / want[c]).clamp(0.0, 1.0)
+            } else {
+                0.5
+            };
+            lo + w * (c as f64 + f)
+        })
+        .collect()
+}
+
+/// A swept face that is a rectangle in its parameters (`rectangle`: a blend cut square at its
+/// ends): a grid inside spaced as its cells want (`want`), each column worked out in one go,
+/// triangulated straight, and joined to the boundary by a band stitched round it. Every inner
+/// chord and every triangle is looked at as the refinement would (`off`: whether a point strays
+/// from the surface, given the surface's point at parameters by it); where any strays, nothing
+/// is added (None). How it was chosen and measured: research/mesh-cost.
+fn proc_strips(
+    pr: &forge_geom::surface::Proc,
+    uv: &[Point2],
+    global: &[u32],
+    want: &[[(f64, f64); G]; G],
+    chord: f64,
+    off: &dyn Fn(forge_math::Point3, forge_math::Point3, Point2) -> bool,
+    mesh: &mut TriMesh,
+) -> Option<Vec<[u32; 3]>> {
+    let ([bottom, right, top, left], u0, u1) = rectangle(uv)?;
+    let (v0, v1) = (uv[bottom[0]].y, uv[top[0]].y);
+    let (w, h) = (u1 - u0, v1 - v0);
+    // each column of cells as dense along u as its densest cell, each row along v likewise
+    let us = spread(
+        u0,
+        u1,
+        &std::array::from_fn(|i| want[i].iter().fold(0.0f64, |m, c| m.max(c.0))),
+    );
+    let vs = spread(
+        v0,
+        v1,
+        &std::array::from_fn(|j| want.iter().fold(0.0f64, |m, c| m.max(c[j].1))),
+    );
+    let (mu, nv) = (us.len(), vs.len());
+    // a grid with a ring round it (two columns and two rows at least), and not past all reason
+    if mu < 2 || nv < 2 || mu * nv > 1 << 20 {
+        return None;
+    }
+    // per point: parameters, position, the boundary's index (u32::MAX inside); the boundary's
+    // first, each with its place round the rectangle (one per side, counter-clockwise from (u0, v0))
+    let mut pts: Vec<(Point2, forge_math::Point3, u32)> = Vec::new();
+    let mut outer: Vec<(f64, usize)> = Vec::new();
+    let place = |p: Point2, side: usize| match side {
+        0 => (p.x - u0) / w,
+        1 => 1.0 + (p.y - v0) / h,
+        2 => 2.0 + (u1 - p.x) / w,
+        _ => 3.0 + (v1 - p.y) / h,
+    };
+    let round = (bottom[..bottom.len() - 1].iter().map(|&i| (i, 0)))
+        .chain(right[..right.len() - 1].iter().map(|&i| (i, 1)))
+        .chain(top[1..].iter().rev().map(|&i| (i, 2)))
+        .chain(left[1..].iter().rev().map(|&i| (i, 3)));
+    for (i, side) in round {
+        outer.push((place(uv[i], side), pts.len()));
+        pts.push((uv[i], mesh.positions[global[i] as usize], i as u32));
+    }
+    let inner = pts.len();
+    // each column of the grid with its chords' middles across, then between each two columns the
+    // middles of the chords along and corner to corner, and the two triangles' middles: all of
+    // one u at a time; x strays from the surface not where within the chord of its point y at p,
+    // else as the refinement looks
+    let off = |x: forge_math::Point3, y: forge_math::Point3, p: Point2| y.distance(x) > chord && off(x, y, p);
+    let lerp = |a: f64, b: f64| a + (b - a) * 0.5;
+    let third = |a: f64, b: f64, c: f64| (a + b + c) / 3.0;
+    let mids: Vec<f64> = vs.windows(2).map(|w| lerp(w[0], w[1])).collect();
+    let both: Vec<f64> = vs.iter().chain(&mids).copied().collect();
+    // the triangles' middles' v, low then high in each cell
+    let thirds: Vec<f64> = (vs.windows(2).map(|w| third(w[0], w[0], w[1])))
+        .chain(vs.windows(2).map(|w| third(w[0], w[1], w[1])))
+        .collect();
+    let at = |u: f64, v: &[f64], out: &mut Vec<forge_math::Point3>| {
+        out.clear();
+        pr.column(u, v, out);
+    };
+    let (mut col, mut next, mut half, mut lo, mut hi) =
+        (Vec::new(), Vec::new(), Vec::new(), Vec::new(), Vec::new());
+    let mut tris = Vec::with_capacity(2 * mu * nv + outer.len() + 2 * (mu + nv));
+    let id = |i: usize, j: usize| inner + i * nv + j;
+    let mid3 = |a: forge_math::Point3, b: forge_math::Point3, c: forge_math::Point3| {
+        a.lerp(b, 0.5).lerp(c, 1.0 / 3.0)
+    };
+    at(us[0], &both, &mut next);
+    for i in 0..mu {
+        std::mem::swap(&mut col, &mut next);
+        let u = us[i];
+        pts.extend(
+            vs.iter()
+                .zip(&col)
+                .map(|(&v, &x)| (Point2::new(u, v), x, u32::MAX)),
+        );
+        for j in 0..nv - 1 {
+            if off(col[j].lerp(col[j + 1], 0.5), col[nv + j], Point2::new(u, mids[j])) {
+                return None;
+            }
+        }
+        if i + 1 == mu {
+            break;
+        }
+        let w = us[i + 1];
+        at(w, &both, &mut next);
+        at(lerp(u, w), &both, &mut half);
+        // the triangles' middles' u: towards w, towards u
+        let (tw, tu) = (third(u, w, w), third(u, w, u));
+        at(tw, &thirds, &mut lo);
+        at(tu, &thirds, &mut hi);
+        for j in 0..nv {
+            let (a, b) = (col[j], next[j]);
+            if off(a.lerp(b, 0.5), half[j], Point2::new(lerp(u, w), vs[j])) {
+                return None;
+            }
+            if j + 1 == nv {
+                continue;
+            }
+            let (c, d) = (next[j + 1], col[j + 1]);
+            // corner to corner, the diagonal nearer the surface at the cell's middle (a twisted
+            // cell sags far more along one than the other), and the triangles either side of it
+            let (m, y) = (Point2::new(lerp(u, w), mids[j]), half[nv + j]);
+            let (k, l) = (j, nv - 1 + j);
+            let ids = [id(i, j), id(i + 1, j), id(i + 1, j + 1), id(i, j + 1)];
+            if a.lerp(c, 0.5).distance(y) <= b.lerp(d, 0.5).distance(y) {
+                if off(a.lerp(c, 0.5), y, m)
+                    || off(mid3(a, b, c), lo[k], Point2::new(tw, thirds[k]))
+                    || off(mid3(a, c, d), hi[l], Point2::new(tu, thirds[l]))
+                {
+                    return None;
+                }
+                tris.extend([[ids[0], ids[1], ids[2]], [ids[0], ids[2], ids[3]]]);
+            } else {
+                if off(b.lerp(d, 0.5), y, m)
+                    || off(mid3(a, b, d), hi[k], Point2::new(tu, thirds[k]))
+                    || off(mid3(b, c, d), lo[l], Point2::new(tw, thirds[l]))
+                {
+                    return None;
+                }
+                tris.extend([[ids[0], ids[1], ids[3]], [ids[1], ids[2], ids[3]]]);
+            }
+        }
+    }
+    // the grid's outermost ring, counter-clockwise from its (u0, v0) corner, its corners placed
+    // at the boundary's
+    let mut ring: Vec<(f64, usize)> = Vec::with_capacity(2 * (mu + nv));
+    let mut walk = |i: usize, j: usize, side: usize| {
+        let corner = [(0, 0), (mu - 1, 0), (mu - 1, nv - 1), (0, nv - 1)]
+            .iter()
+            .position(|&c| c == (i, j));
+        ring.push((
+            corner.map_or_else(|| place(pts[id(i, j)].0, side), |k| k as f64),
+            id(i, j),
+        ));
+    };
+    for i in 0..mu {
+        walk(i, 0, 0);
+    }
+    for j in 1..nv {
+        walk(mu - 1, j, 1);
+    }
+    for i in (0..mu - 1).rev() {
+        walk(i, nv - 1, 2);
+    }
+    for j in (1..nv - 1).rev() {
+        walk(0, j, 3);
+    }
+    let strays = |a: usize, b: usize| {
+        let (m, x) = (pts[a].0.lerp(pts[b].0, 0.5), pts[a].1.lerp(pts[b].1, 0.5));
+        off(x, pr.point(m), m)
+    };
+    let sags = |t: [usize; 3]| {
+        let (p, x) = (t.map(|k| pts[k].0), t.map(|k| pts[k].1));
+        let m = Point2::new((p[0].x + p[1].x + p[2].x) / 3.0, (p[0].y + p[1].y + p[2].y) / 3.0);
+        // turned the wrong way round in the parameters, it would fold over its neighbours
+        (p[1] - p[0]).cross(p[2] - p[0]) <= 0.0 || off(mid3(x[0], x[1], x[2]), pr.point(m), m)
+    };
+    // the band: the boundary and the ring walked together by their places round the rectangle
+    if strays(outer[0].1, ring[0].1) {
+        return None;
+    }
+    let (no, nr) = (outer.len(), ring.len());
+    let next = |s: &[(f64, usize)], k: usize| if k + 1 < s.len() { s[k + 1].0 } else { s[0].0 + 4.0 };
+    let (mut a, mut b) = (0, 0);
+    while a < no || b < nr {
+        let t = if b >= nr || (a < no && next(&outer, a) < next(&ring, b)) {
+            a += 1;
+            [outer[a - 1].1, outer[a % no].1, ring[b % nr].1]
+        } else {
+            b += 1;
+            [outer[a % no].1, ring[b % nr].1, ring[b - 1].1]
+        };
+        if sags(t) || ((a < no || b < nr) && strays(outer[a % no].1, ring[b % nr].1)) {
+            return None;
+        }
+        tris.push(t);
+    }
+    let index: Vec<u32> = pts
+        .iter()
+        .map(|&(_, x, i)| {
+            if i == u32::MAX {
+                mesh.add_vertex(x)
+            } else {
+                global[i as usize]
+            }
+        })
+        .collect();
+    Some(tris.into_iter().map(|t| t.map(|k| index[k])).collect())
+}
+
+/// Faces that are rectangles in parameter space (every revolve face, every
+/// extrude wall) need no Delaunay: rows of points across u at each v sample
+/// of the side edges, stitched strip by strip. Counter-clockwise in (u, v).
+/// None when the face is not such a rectangle (`rectangle`), or its two sides
+/// are sampled at different v (stitching rows then would leave T-junctions).
+fn strips(
+    surface: &Surface,
+    uv: &[Point2],
+    global: &[u32],
+    q: &Quality,
+    mesh: &mut TriMesh,
+) -> Option<Vec<[u32; 3]>> {
+    let ([bottom, right, top, left], u0, u1) = rectangle(uv)?;
+    let eps = 1e-9 * (u1 - u0).max(uv[top[0]].y - uv[bottom[0]].y).max(1.0);
+    if left.len() != right.len()
+        || left
+            .iter()
+            .zip(&right)
+            .any(|(&a, &b)| (uv[a].y - uv[b].y).abs() > eps)
+    {
         return None;
     }
     let row_count = |v: f64| -> usize {

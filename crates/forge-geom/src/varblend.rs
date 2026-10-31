@@ -2480,6 +2480,13 @@ impl Procedural for VarBlend {
     fn point(&self, uv: Point2) -> Point3 {
         self.arc_at(uv.x).point(uv.y)
     }
+    fn swept(&self) -> bool {
+        true
+    }
+    fn column(&self, u: f64, vs: &[f64], out: &mut Vec<Point3>) {
+        let a = self.arc_at(u);
+        out.extend(vs.iter().map(|&v| a.point(v)));
+    }
     fn column_derivs(&self, u: f64, vs: &[f64], out: &mut Vec<SurfDeriv>) {
         let sec = self.section_at(u);
         out.extend(vs.iter().map(|&v| VarBlend::point(&sec, v)));
