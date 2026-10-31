@@ -162,6 +162,8 @@ pub(crate) struct Seg {
     /// what new vertices are named from, whatever lies at the curve's other end.
     pub(crate) pair: Name,
     pub(crate) end_names: [Name; 2],
+    /// What each end cuts, as the name has it (the n-ary renames spans of the curve by these).
+    pub(crate) end_keys: [Name; 2],
 }
 
 /// A piece of an edge in the result: part of an original edge, or a new edge.
@@ -2084,6 +2086,7 @@ pub(crate) fn trim(
                 name,
                 pair: name,
                 end_names: [Name::NONE; 2],
+                end_keys: [Name::NONE; 2],
             });
         }
         return Ok(());
@@ -2109,6 +2112,7 @@ pub(crate) fn trim(
                 name,
                 pair: name,
                 end_names: [Name::NONE; 2],
+                end_keys: [Name::NONE; 2],
             });
         }
     }
@@ -2139,6 +2143,7 @@ pub(crate) fn trim(
         let (a, b) = (edge_name(i0), edge_name(i1));
         sg.name = name.with(0x5e7).with_name(a.min(b)).with_name(a.max(b));
         sg.end_names = [name.with_name(a), name.with_name(b)];
+        sg.end_keys = [a, b];
     }
     for c in &mut cuts[first..] {
         c.pair = name;
@@ -2150,43 +2155,46 @@ pub(crate) fn trim(
 /// between do not tell apart, told apart by where they lie in `frame`, the pair's first face's
 /// surface frame: the part's own, so turning or moving the part, or rounding, keeps the order.
 pub(crate) fn rank_pair(segs: &mut [Seg], frame: &dyn Fn() -> forge_math::Frame) {
-    let n = segs.len();
-    if !(0..n).any(|i| (i + 1..n).any(|j| segs[i].name == segs[j].name)) {
+    let mut names: Vec<Name> = segs.iter().map(|sg| sg.name).collect();
+    rank_names(&mut names, &|i| {
+        let sg = &segs[i];
+        frame().point_to_local(curve_at(&sg.curve, sg.range, sg.ends.is_some()))
+    });
+    for (sg, n) in segs.iter_mut().zip(names) {
+        sg.name = n;
+    }
+}
+
+/// Where a curve piece lies, for ranking: an open one's middle, a closed one's samples' mean
+/// (wherever its parameter starts).
+pub(crate) fn curve_at(curve: &Curve, range: Interval, open: bool) -> Point3 {
+    if open {
+        return curve.eval(range.mid());
+    }
+    let sum = (0..8).fold(forge_math::Vec3::ZERO, |s, k| {
+        s + curve.eval(range.lo + range.width() * k as f64 / 8.0).to_vec()
+    });
+    Point3::ORIGIN + sum * 0.125
+}
+
+/// Names alike told apart by where their pieces lie (`at`, in the pair's frame): `rank_pair`.
+pub(crate) fn rank_names(names: &mut [Name], at: &dyn Fn(usize) -> Point3) {
+    let n = names.len();
+    if !(0..n).any(|i| (i + 1..n).any(|j| names[i] == names[j])) {
         return;
     }
-    let frame = frame();
-    let mut by_name: Vec<(Name, usize)> = segs.iter().enumerate().map(|(i, sg)| (sg.name, i)).collect();
+    let mut by_name: Vec<(Name, usize)> = names.iter().enumerate().map(|(i, &n)| (n, i)).collect();
     by_name.sort_unstable();
-    // a closed curve by its samples' mean, wherever its parameter starts
-    let at = |sg: &Seg| {
-        let p = match sg.ends {
-            Some(_) => sg.curve.eval(sg.range.mid()),
-            None => {
-                let sum = (0..8).fold(forge_math::Vec3::ZERO, |s, k| {
-                    s + sg
-                        .curve
-                        .eval(sg.range.lo + sg.range.width() * k as f64 / 8.0)
-                        .to_vec()
-                });
-                Point3::ORIGIN + sum * 0.125
-            }
-        };
-        frame.point_to_local(p)
-    };
     for group in by_name.chunk_by(|a, b| a.0 == b.0).filter(|g| g.len() > 1) {
         if let [(_, i), (_, j)] = *group {
-            let later = if ranked_pair(at(&segs[i]), at(&segs[j])) {
-                j
-            } else {
-                i
-            };
-            segs[later].name = segs[later].name.with(1);
+            let later = if ranked_pair(at(i), at(j)) { j } else { i };
+            names[later] = names[later].with(1);
             continue;
         }
-        let pts: Vec<Point3> = group.iter().map(|x| at(&segs[x.1])).collect();
+        let pts: Vec<Point3> = group.iter().map(|x| at(x.1)).collect();
         for (x, r) in group.iter().zip(ranked(&pts)) {
             if r > 0 {
-                segs[x.1].name = segs[x.1].name.with(r);
+                names[x.1] = names[x.1].with(r);
             }
         }
     }

@@ -492,9 +492,8 @@ fillet 5 (edges between b box concave)\n",
 /// seq valid; n-ary fails MissingEdge (any of the joints filleted alone fails Overflow seq, they
 /// cross)
 #[test]
-#[ignore = "R34: kernel failure, see the comment"]
 fn nary_bb_cluster_fillet() {
-    holds(
+    holds_alike(
         "\
 reach = 385
 stack = 575
@@ -513,7 +512,6 @@ bb: extrude sym 68 -xz circle 0 0 21
 st: extrude stl z -cos(sta) 0 sin(sta) circle 0 0 15.9
 dt: extrude dtl z dtx/dtl 0 dtz/dtl circle 0 0 17.5
 fillet 3 (edges between st bb concave) (edges between dt bb concave) (edges between st dt concave)\n",
-        true,
     );
 }
 
