@@ -76,8 +76,11 @@ fn line_procedural(line: &Line, s: &Surface, pr: &crate::surface::Proc) -> LineS
         return LineSurface::Hits(Vec::new());
     }
     match curve_surface_subdivide(&Curve::Line(*line), Interval::new(lo, hi), s) {
+        // the implicit holds more than the patch (a blend's: its balls whole), so only points
+        // of the patch are hits
         CurveSurface::Hits(h) => LineSurface::Hits(
             h.into_iter()
+                .filter(|h| s.eval(s.project(h.point)).distance(h.point) <= tol::LINEAR)
                 .map(|h| LineHit {
                     t: h.t,
                     point: h.point,

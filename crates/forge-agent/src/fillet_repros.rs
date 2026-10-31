@@ -101,3 +101,13 @@ fn second_pad_fillet() {
     // n-ary names pad b's edges apart from seq until the n-ary naming fix (R30) lands
     assert!(forge_topo::check(m.body().unwrap()).is_empty());
 }
+
+#[test]
+fn mirrored_cuts_after_a_variable_fillet() {
+    // a pattern's copies go through one n-ary boolean, whose rays classify the stay bore's pieces:
+    // one grazed the seat tube by the blend and met the blend's balls past its arc, a point not
+    // on the face that counted as a crossing
+    valid(
+        "reach = 385\nstack = 575\nhta = 73 deg\nsta = 73.5 deg\nstl = 540\ncsl = 410\ndrop = 70\nsp = 130\nhdx = cos(hta)\nhdz = -sin(hta)\nax = -sqrt(csl^2 - drop^2)\naz = drop\ns1x = -(stl-45)*cos(sta)\ns1z = (stl-45)*sin(sta)\nh1x = reach + 25*hdx\nh1z = stack + 25*hdz\nttl = sqrt((h1x-s1x)^2 + (h1z-s1z)^2)\nc0x = -17.5\nc0y = 22\nc1x = ax + 6\nc1y = sp/2 - 4\ncsx = c1x - c0x\ncsy = c1y - c0y\ncsz = az\ncl = sqrt(csx^2 + csy^2 + csz^2)\nq0x = -(stl-80)*cos(sta)\nq0z = (stl-80)*sin(sta)\nq0y = 10\nq1x = ax + 10\nq1z = az + 14\nq1y = sp/2 - 4\nssx = q1x - q0x\nssy = q1y - q0y\nssz = q1z - q0z\nsl = sqrt(ssx^2 + ssy^2 + ssz^2)\nst: extrude stl z -cos(sta) 0 sin(sta) circle 0 0 15.9\ntt: extrude ttl z (h1x-s1x)/ttl 0 (h1z-s1z)/ttl at s1x 0 s1z circle 0 0 14.3\nfillet 0:3,0.5:4.5,1:3 (edges between tt st concave)\ncsb: loft cut profile z csx/cl csy/cl csz/cl at c0x+12*csx/cl c0y+12*csy/cl 12*csz/cl circle 0 0 9.9 profile z csx/cl csy/cl csz/cl at c1x c1y az circle 0 0 5.5\nssb: loft cut profile z ssx/sl ssy/sl ssz/sl at q0x q0y q0z circle 0 0 7 profile z ssx/sl ssy/sl ssz/sl at q1x q1y q1z circle 0 0 5\npattern csb ssb mirror xz\n",
+    );
+}
