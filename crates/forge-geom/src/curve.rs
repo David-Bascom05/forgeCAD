@@ -411,7 +411,11 @@ impl CurveGeom for Hyperbola {
         let l = self.frame.point_to_local(p);
         let span = 4.0 * (l.x.abs() + l.y.abs()) / self.a.min(self.b) + 4.0;
         let near = Interval::new(range.lo.max(-span), range.hi.min(span));
-        let r = if near.lo <= near.hi { near } else { range };
+        let r = if near.lo <= near.hi && range.width() > 4.0 * span {
+            near
+        } else {
+            range
+        };
         closest_numeric(self, p, r)
     }
     fn bbox(&self, range: Interval) -> Box3 {
