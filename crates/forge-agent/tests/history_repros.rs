@@ -276,3 +276,15 @@ L3: hole 8.39 z 0 -1 0 at 34.85 92.38 3.5 cs 15.68 82 thru pt 118 thread 10.07 1
 ",
     );
 }
+
+/// The same ball cut twice: in one n-ary pass the two equal spheres met everywhere and left open
+/// edges. A tool equal to an earlier one combined the same way is left out of the pass.
+#[test]
+fn the_same_cut_twice() {
+    builds_valid(
+        "extrude 29.9 rect 0 0 74.83 101.22\nball cut 3.11 at 57.27 50.61 29.62\nball cut 3.11 at 57.27 50.61 29.62\n",
+    );
+    builds_valid(
+        "extrude 20 rect 0 0 40 30\nextrude cut 5 at 10 10 20 circle 0 0 3\nextrude cut 5 at 10 10 20 circle 0 0 3\nextrude add 4 at 30 20 20 rect 0 0 5 5\nextrude add 4 at 30 20 20 rect 0 0 5 5\n",
+    );
+}

@@ -592,6 +592,56 @@ fn build_tools(
     threads: usize,
     build: bool,
 ) -> Result<Vec<Tool>, RegenError> {
+    Ok(distinct(build_each(features, from, threads, build)?))
+}
+
+/// `tools` without a tool equal to an earlier one combined the same way (the same feature
+/// twice, say): two equal solids in one n-ary pass meet everywhere, and the second changes
+/// nothing. Equal means the same analytic shape; a shape known only by its B-rep is kept.
+fn distinct(tools: Vec<Tool>) -> Vec<Tool> {
+    let how = |c: Combine| if c == Combine::New { Combine::Add } else { c };
+    // a cheap key first: only tools that share it are compared whole
+    let key = |s: &Shape| -> Option<[u64; 3]> {
+        let p = match s {
+            Shape::Prism { frame, .. } | Shape::Revolved { frame, .. } | Shape::Coil { frame, .. } => {
+                frame.origin
+            }
+            Shape::Ball { center, .. } => *center,
+            Shape::Csg { .. } | Shape::Brep(_) => return None,
+        };
+        Some([p.x.to_bits(), p.y.to_bits(), p.z.to_bits()])
+    };
+    // sorted by key, then by place: within a key the earliest is kept
+    let mut keyed: Vec<([u64; 3], usize)> = tools
+        .iter()
+        .enumerate()
+        .filter_map(|(i, t)| key(&t.2).map(|k| (k, i)))
+        .collect();
+    keyed.sort_unstable();
+    let mut drop = vec![false; tools.len()];
+    for run in keyed.chunk_by(|a, b| a.0 == b.0) {
+        for (n, &(_, i)) in run.iter().enumerate() {
+            if run[..n]
+                .iter()
+                .any(|&(_, j)| !drop[j] && how(tools[j].1) == how(tools[i].1) && tools[j].2 == tools[i].2)
+            {
+                drop[i] = true;
+            }
+        }
+    }
+    tools
+        .into_iter()
+        .zip(drop)
+        .filter_map(|(t, d)| (!d).then_some(t))
+        .collect()
+}
+
+fn build_each(
+    features: History<'_>,
+    from: usize,
+    threads: usize,
+    build: bool,
+) -> Result<Vec<Tool>, RegenError> {
     let some = |r: std::ops::Range<usize>| -> Result<Vec<Tool>, RegenError> {
         let mut out = Vec::new();
         for i in r {
