@@ -734,13 +734,13 @@ fn one(m: &Model, r: &str) -> Result<Ent, String> {
 }
 
 #[cfg(test)]
-mod tests {
+pub(crate) mod tests {
     use super::*;
 
-    struct Dir(std::path::PathBuf);
+    pub(crate) struct Dir(pub(crate) std::path::PathBuf);
 
     impl Dir {
-        fn new(name: &str) -> Dir {
+        pub(crate) fn new(name: &str) -> Dir {
             // wasi has no temp_dir or pid; its runner opens the whole filesystem
             let (base, id) = if cfg!(target_os = "wasi") {
                 let t = std::time::SystemTime::now()
@@ -754,7 +754,7 @@ mod tests {
             std::fs::create_dir_all(&d).expect("temp dir");
             Dir(d)
         }
-        fn file(&self, name: &str, src: &str) -> String {
+        pub(crate) fn file(&self, name: &str, src: &str) -> String {
             let p = self.0.join(name);
             std::fs::write(&p, src).expect("write");
             p.to_string_lossy().into_owned()
@@ -767,7 +767,7 @@ mod tests {
         }
     }
 
-    fn args(file: &str, words: &[&str]) -> Args {
+    pub(crate) fn args(file: &str, words: &[&str]) -> Args {
         Args {
             file: file.into(),
             words: words.iter().map(|w| w.to_string()).collect(),

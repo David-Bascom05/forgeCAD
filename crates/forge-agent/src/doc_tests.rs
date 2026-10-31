@@ -349,22 +349,12 @@ fn over_constrained_names_the_row_and_the_fix() {
         e("  ref par l1 l3\n"),
         "`ref par l1 l3`: ref goes before a dimension (dist hdist vdist rad dia ang)"
     );
-    let dir = std::env::temp_dir().join(format!("forgecad-ref-{}", std::process::id()));
-    std::fs::create_dir_all(&dir).expect("dir");
-    let f = dir.join("r.fc");
-    std::fs::write(
-        &f,
+    let dir = crate::cmd::tests::Dir::new("ref");
+    let f = dir.file(
+        "r.fc",
         "sketch\n  rect 0 0 10 10\n  fix l1.a\n  dist l1 10\n  ref dist l3\n  ref hdist l1.a l2.b\nend\n",
-    )
-    .expect("write");
-    let r = crate::cmd::Session::default().run(
-        "check",
-        &crate::cmd::Args {
-            file: f.to_string_lossy().into(),
-            ..Default::default()
-        },
     );
-    std::fs::remove_dir_all(&dir).expect("clean");
+    let r = crate::cmd::Session::default().run("check", &crate::cmd::tests::args(&f, &[]));
     assert!(
         r.text
             .contains("\n  `ref dist l3` = 10\n  `ref hdist l1.a l2.b` = 10"),
