@@ -611,7 +611,7 @@ fn build_tools(
 
 /// Tools after the part so far up to which a run takes the sequential regen's booleans, one
 /// feature at a time: below it the n-ary pass costs more (research/nary-short-runs).
-pub(crate) const SHORT_RUN: usize = 8;
+pub(crate) const SHORT_RUN: usize = 16;
 
 /// Whether features `from..` are a run short enough for the sequential booleans: a few features
 /// of one tool each (a pattern's copies, a thread's or a text's tools take an n-ary pass over the
