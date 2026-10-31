@@ -8,8 +8,9 @@
 //! does not touch exactly where they were.
 
 use crate::{
-    At, AxisBy, CoilSize, Combine, End, Extent, Feature, Head, Layout, Part, PathEnds, PlaneBy, PointBy, Ref,
-    Source, Target, ThreadLength, ThreadOn, Turn, UcsBy, Work,
+    At, AxisBy, BodyFeature, CoilSize, Combine, Cutter, Edit as PartEdit, End, Extent, Feature, Head, Keep,
+    Layout, Part, PathEnds, Pick, PlaneBy, PointBy, Ref, RegenError, Source, Step, Target, ThreadLength,
+    ThreadOn, Turn, UcsBy, Work,
 };
 use forge_geom::{CurveGeom, SurfaceGeom};
 use forge_math::rng::Rng;
@@ -254,6 +255,27 @@ fn feature_refs(f: &mut Feature) -> Vec<&mut usize> {
             PathEnds::To { target: t, .. } => vec![target(t)],
             _ => vec![],
         },
+        Feature::Edit(PartEdit::Replace { with, .. }) => vec![target(with)],
+        Feature::Body(b) => match &mut **b {
+            BodyFeature::In { bodies, feature } => {
+                let mut out = match bodies {
+                    Pick::Some(ids) => ids.iter_mut().collect(),
+                    Pick::All => vec![],
+                };
+                out.extend(feature_refs(feature));
+                out
+            }
+            BodyFeature::Combine { target, tools, .. } => std::iter::once(target).chain(tools).collect(),
+            BodyFeature::Split {
+                by: Cutter::Target(t),
+                ..
+            }
+            | BodyFeature::SplitFace {
+                by: Cutter::Target(t),
+                ..
+            } => vec![target(t)],
+            _ => vec![],
+        },
         Feature::Coil(c) => match &mut c.size {
             CoilSize::To { target: t, .. } => vec![target(t)],
             _ => vec![],
@@ -297,8 +319,28 @@ pub fn stored_refs(f: &Feature) -> Vec<(Kind, Name)> {
         }
         Feature::Shell { open, .. } => open.iter().map(|&n| (Kind::Face, n)).collect(),
         Feature::Draft { faces, .. } => faces.iter().map(|&n| (Kind::Face, n)).collect(),
+        Feature::Body(b) => match &**b {
+            BodyFeature::In { feature, .. } => stored_refs(feature),
+            BodyFeature::SplitFace { faces, .. } => faces.iter().map(|&n| (Kind::Face, n)).collect(),
+            _ => vec![],
+        },
         _ => vec![],
     }
+}
+
+/// The part `features` make (with `ids`, or by places), several bodies side by side as one.
+pub fn regen(features: &[Feature], ids: Option<&[u64]>) -> Result<Body, RegenError> {
+    let part = Part {
+        features: features.to_vec(),
+    };
+    if !crate::bodies::multi(features) {
+        return part.regenerate_ids(ids);
+    }
+    let mut all = Body::new();
+    for s in part.regenerate_solids_ids(ids)? {
+        all.append(&s.body);
+    }
+    Ok(all)
 }
 
 /// Whether `f` stands alone: a solid tool sized by numbers only, so taking it out or swapping
@@ -372,21 +414,65 @@ pub fn random_edit(part: &Part, before: usize, body: &Body, big: bool, r: &mut R
                 feature: Box::new(unrelated(body, r)),
             })
         }
-        8 => {
-            // only a feature no other one refers to by position
-            let referred = fs
-                .iter()
-                .any(|f| feature_refs(&mut f.clone()).iter().any(|x| **x == pick));
-            (pick > 0 && !referred && plain(&fs[pick]).is_some_and(|op| op != Combine::New))
-                .then_some(Edit::Delete { at: pick })
-        }
-        _ => {
-            let (a, b) = (pick, pick + 1);
-            let like =
-                b < before && plain(&fs[a]).is_some_and(|op| op != Combine::New && plain(&fs[b]) == Some(op));
-            like.then_some(Edit::Swap { at: a })
+        8 => deletable(fs, pick).then_some(Edit::Delete { at: pick }),
+        _ => swappable(fs, pick, before).then_some(Edit::Swap { at: pick }),
+    }
+}
+
+/// Whether feature `at` stands alone, no other one referring to it by position.
+fn deletable(fs: &[Feature], at: usize) -> bool {
+    let referred = fs
+        .iter()
+        .any(|f| feature_refs(&mut f.clone()).iter().any(|x| **x == at));
+    at > 0 && !referred && plain(&fs[at]).is_some_and(|op| op != Combine::New)
+}
+
+/// Whether features `at` and `at + 1`, both above `before`, stand alone and combine alike.
+fn swappable(fs: &[Feature], at: usize, before: usize) -> bool {
+    at + 1 < before && plain(&fs[at]).is_some_and(|op| op != Combine::New && plain(&fs[at + 1]) == Some(op))
+}
+
+/// Every insert (of a work plane: it makes nothing, so it moves nothing), delete and swap
+/// above each finishing feature of `corpus` and the part's end, each judged on every entity
+/// of the part before it.
+pub fn run_shifts(corpus: &[(String, Part)]) -> Vec<Case> {
+    let mut out = Vec::new();
+    for (name, part) in corpus {
+        let fs = &part.features;
+        let stops = (1..fs.len()).filter(|&i| !stored_refs(&fs[i]).is_empty());
+        for before in stops.chain([fs.len()]) {
+            let Ok(b0) = regen(&fs[..before], None) else {
+                continue;
+            };
+            let mut edits: Vec<Edit> = (1..before)
+                .map(|at| Edit::Insert {
+                    at,
+                    feature: Box::new(Feature::Plane(forge_math::Frame::WORLD)),
+                })
+                .collect();
+            edits.extend(
+                (1..before)
+                    .filter(|&at| deletable(fs, at))
+                    .map(|at| Edit::Delete { at }),
+            );
+            edits.extend(
+                (0..before)
+                    .filter(|&at| swappable(fs, at, before))
+                    .map(|at| Edit::Swap { at }),
+            );
+            for edit in edits {
+                if let Some(outcome) = check(part, before, &b0, &edit, 1, &[]) {
+                    out.push(Case {
+                        part: name.clone(),
+                        before,
+                        edit,
+                        outcome,
+                    });
+                }
+            }
         }
     }
+    out
 }
 
 /// A small hole drilled straight down somewhere over the part.
@@ -668,7 +754,7 @@ pub fn check(
     let mut reaches = vec![0.0];
     for s in 1..=steps {
         let (p, ids, reach) = edit.apply(&prefix, s as f64 / steps as f64)?;
-        let b = p.regenerate_ids(Some(&ids)).ok()?;
+        let b = regen(&p.features, Some(&ids)).ok()?;
         // an edit that parts the solid in two (or joins it) leaves no part to name things on
         if b.shells.len() != b0.shells.len() {
             return None;
@@ -800,6 +886,127 @@ pub fn corpus() -> Vec<(String, Part)> {
     out
 }
 
+/// Histories whose names come from features a shifting edit leaves where they were but at
+/// another place: finishing features, face fillets, full rounds, several bodies, a work plane.
+pub fn shift_corpus() -> Vec<(String, Part)> {
+    let mut out: Vec<(String, Part)> = crate::finishing::parts()
+        .into_iter()
+        .map(|(n, p, _)| (format!("finish:{n}"), p))
+        .collect();
+    out.extend((1..=8).map(|s| (format!("finish-fuzz{s}"), crate::finishing::fuzz(s))));
+    out.extend(
+        crate::fillets::variant_cases()
+            .into_iter()
+            .map(|(n, p, _)| (format!("variant:{n}"), p)),
+    );
+    out.extend(body_parts());
+    out.push(("work".into(), work_part()));
+    out
+}
+
+/// Parts of several bodies: features on chosen bodies, a chamfer and a shell found by their
+/// edges and faces, splits, a moved copy, a split face and a kept combine.
+pub fn body_parts() -> Vec<(String, Part)> {
+    let block = |x: f64, y: f64, z: f64, w: f64, h: f64, op| Feature::Extrude {
+        profile: Profile {
+            plane: forge_math::Frame::WORLD.with_origin(Point3::new(x, y, z)),
+            loops: vec![Profile::rectangle(Point2::ORIGIN, w, 10.0, 0)],
+        },
+        extent: Extent::Distance(h),
+        op,
+    };
+    let rod = |x: f64, y: f64, z: f64, r: f64, h: f64, op| Feature::Extrude {
+        profile: Profile {
+            plane: forge_math::Frame::WORLD.with_origin(Point3::new(x, y, z)),
+            loops: vec![Profile::circle(Point2::ORIGIN, r, 0)],
+        },
+        extent: Extent::Distance(h),
+        op,
+    };
+    let body = |b| Feature::Body(Box::new(b));
+    let on = |ids: &[usize], feature| {
+        body(BodyFeature::In {
+            bodies: Pick::Some(ids.to_vec()),
+            feature,
+        })
+    };
+    let level = |z: f64| Cutter::Plane(forge_math::Frame::WORLD.with_origin(Point3::new(0.0, 0.0, z)));
+    // a finishing feature on what `fs` make, naming what lies nearest the points
+    let named = |fs: &[Feature], at: &[Point3], make: &dyn Fn(Vec<Name>) -> Feature| {
+        let b = regen(fs, None).expect("the part builds");
+        make(at.iter().map(|&p| crate::fillets::edge_near(&b, p)).collect())
+    };
+    let faced = |fs: &[Feature], at: &[Point3], make: &dyn Fn(Vec<Name>) -> Feature| {
+        let b = regen(fs, None).expect("the part builds");
+        make(at.iter().map(|&p| crate::fillets::face_near(&b, p)).collect())
+    };
+    let chamfer = |edges: Vec<Name>| Feature::Chamfer {
+        edges,
+        size: ChamferSize::Equal(1.0),
+    };
+    let shell = |open: Vec<Name>| Feature::Shell {
+        thickness: 1.0,
+        outward: false,
+        open,
+    };
+    let mut out = Vec::new();
+
+    let mut f = vec![
+        block(0.0, 0.0, 0.0, 20.0, 10.0, Combine::New),
+        block(30.0, 0.0, 0.0, 10.0, 10.0, Combine::New),
+        on(&[0], rod(5.0, 5.0, -1.0, 2.0, 12.0, Combine::Cut)),
+        rod(35.0, 5.0, 10.0, 2.0, 5.0, Combine::Add),
+        on(&[0, 1], block(-5.0, -8.0, 8.0, 50.0, 3.0, Combine::Cut)),
+    ];
+    f.push(named(&f, &[Point3::new(15.0, 10.0, 10.0)], &chamfer));
+    f.push(on(
+        &[1],
+        body(BodyFeature::Split {
+            by: level(4.0),
+            keep: Keep::Both,
+        }),
+    ));
+    f.push(faced(&f, &[Point3::new(20.0, 5.0, 5.0)], &|n| on(&[0], shell(n))));
+    out.push(("bodies:picks".to_string(), Part { features: f }));
+
+    let mut f = vec![
+        block(0.0, 0.0, 0.0, 20.0, 10.0, Combine::New),
+        on(
+            &[0],
+            body(BodyFeature::Move {
+                steps: vec![Step::Translate(forge_math::Vec3::new(0.0, 20.0, 0.0))],
+                copy: true,
+            }),
+        ),
+        on(&[0], rod(10.0, 5.0, -1.0, 3.0, 12.0, Combine::Cut)),
+        block(15.0, 25.0, 5.0, 10.0, 10.0, Combine::New),
+    ];
+    f.push(faced(&f, &[Point3::new(10.0, 0.0, 8.0)], &|faces| {
+        body(BodyFeature::SplitFace {
+            faces,
+            by: Cutter::Plane(
+                forge_math::Frame::from_zx(
+                    Point3::new(5.0, 0.0, 0.0),
+                    forge_math::Vec3::X.normalize().expect("x"),
+                    forge_math::Vec3::Y,
+                )
+                .expect("a frame"),
+            ),
+        })
+    }));
+    f.push(body(BodyFeature::Combine {
+        op: Combine::Cut,
+        target: 1,
+        tools: vec![3],
+        keep: true,
+    }));
+    f.push(named(&f, &[Point3::new(10.0, 30.0, 10.0)], &|e| {
+        on(&[1], chamfer(e))
+    }));
+    out.push(("bodies:copy-combine".to_string(), Part { features: f }));
+    out
+}
+
 /// A block and a boss, a work plane off the block's top, and a peg up to the plane.
 pub fn work_part() -> Part {
     let ex = |o: Point3, l: ProfileLoop, extent, op| Feature::Extrude {
@@ -878,10 +1085,9 @@ pub fn run(
         } else {
             fs.len()
         };
-        let prefix = Part {
-            features: fs[..before].to_vec(),
+        let Ok(b0) = regen(&fs[..before], None) else {
+            continue;
         };
-        let Ok(b0) = prefix.regenerate() else { continue };
         let Some(edit) = random_edit(part, before, &b0, big, &mut r) else {
             continue;
         };

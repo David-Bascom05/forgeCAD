@@ -1,6 +1,6 @@
 //! Names follow their entities through upstream edits, and both regen paths give them alike.
 use forge_math::{Frame, Point2, Point3};
-use forge_model::names::{Class, corpus, run, work_part};
+use forge_model::names::{Class, Edit, corpus, run, run_shifts, shift_corpus, work_part};
 use forge_model::{Combine, Extent, Feature, Part, suite};
 use forge_ops::Profile;
 use forge_topo::{Body, Name};
@@ -58,6 +58,31 @@ fn work_features_follow_their_ids() {
         cases.len()
     );
     assert!(bad.is_empty(), "{bad:#?}");
+}
+
+/// Inserts, deletes and swaps above finishing features, face fillets, full rounds, the
+/// features of several bodies and a work plane: every feature keeps its id, so an insert
+/// (which makes nothing) keeps every name, and nothing ever names another entity.
+#[test]
+fn shifting_edits_rename_nothing() {
+    let cases = run_shifts(&shift_corpus());
+    let mut shifted = std::collections::BTreeMap::new();
+    let mut bad = Vec::new();
+    for c in cases.iter().filter(|c| c.edit.shifts(c.before)) {
+        *shifted
+            .entry(c.part.split(':').next().unwrap_or("").to_string())
+            .or_insert(0) += 1;
+        let insert = matches!(c.edit, Edit::Insert { .. });
+        for f in &c.outcome.findings {
+            if insert || matches!(f.class, Class::Wrong | Class::Duplicate) {
+                bad.push(format!("{} {:?}: {f:?}", c.part, c.edit));
+            }
+        }
+    }
+    for (group, least) in [("bodies", 20), ("finish", 10), ("variant", 2), ("work", 2)] {
+        assert!(shifted.get(group).is_some_and(|&n| n >= least), "{shifted:?}");
+    }
+    assert!(bad.is_empty(), "{} {bad:#?}", bad.len());
 }
 
 fn names(b: &Body) -> Vec<Name> {
