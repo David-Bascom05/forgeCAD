@@ -63,3 +63,19 @@ counts (deterministic) and wall times, per part and per body, gate, bench and fi
 - Clenshaw-Curtis before Gauss-Kronrod on every surface: on corner patches it spent 33
   evaluations per node and failed, and its panels were not charged to the face's budget, so
   refinement ran on (5x slower). It is used on swept surfaces only.
+
+## Open
+
+- A part's size (`mass_rel`) is the hull of its face boxes. On a pipe round a traced spine the
+  face box (`uv::procedural_box`, shared with the booleans) costs about twice what it did round
+  the chord-walked spine: manifold's first mass call is 94M instructions against 78M (its later
+  calls 57.7M against 57.4M). Accepted for now.
+- Still dearer than meshing: valve, jack, insert (Fourier fits per torus/cylinder face, a
+  projection per node) and heatsink (48 corner patches by the domain rule; fewer certifying
+  points or a cheaper patch evaluation is the lever). Fillet corner cases run 3-8x the mesh.
+- Trimmed corner patches (not their whole domain polygon) take the interpolated loop path.
+- The rational quads converge only algebraically within a cell (12 against 32 points differ
+  2.5e-8 on the box corner): find where a cell is not smooth, or split cells in the rule.
+- Agent `measure mass` and oracle `--exact` loose ends (handoff massprops-2.md).
+- Pipes round analytic spines (ellipses) take exact first derivatives in the booleans too, not
+  main's differences: kept on purpose (more accurate; no bench part's bits change).
