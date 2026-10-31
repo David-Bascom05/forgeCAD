@@ -19,9 +19,12 @@ pub use chamfer::{ChamferError, ChamferSize, chamfer};
 pub use draft::{DraftError, draft};
 pub use extrude::{ExtrudeError, extrude};
 pub use fillet::{FilletEdge, FilletError, Radius, fillet};
-pub use loft::{LoftError, loft};
+pub use loft::{LoftError, loft, loft_bounds};
 pub use profile::{Profile, ProfileError, ProfileLoop, Segment};
 pub use rebuild::RebuildError;
 pub use revolve::{Axis2, RevolveError, revolve};
 pub use shell::{ShellError, shell};
-pub use sweep::{CoilError, PathSeg, SweepError, coil, sweep};
+pub use sweep::{
+    CoilError, Handed, PathSeg, Stretch, SweepError, Winding, Wound, coil, coil_motion, sweep,
+    sweep_stretches,
+};

@@ -25,7 +25,7 @@ use forge_topo::{Body, Name};
 pub use hole::{End, Head, Hole, HoleError, Thread};
 pub use pattern::{Layout, PatternError, Row, Source, instance_name};
 use pattern::{instances, moved, moved_shape};
-pub use swept::{Coil, Loft, Sweep};
+pub use swept::{Coil, CoilSize, Loft, PathEnds, Sweep};
 
 /// One step of a part's history.
 #[derive(Clone, Debug, PartialEq)]
@@ -596,6 +596,9 @@ fn tools(features: &[Feature], i: usize, build: bool) -> Result<Vec<Tool>, Regen
             Ok(vec![t])
         }
         Feature::Plane(_) => Ok(vec![]),
+        Feature::Sweep(_) | Feature::Coil(_) | Feature::Loft(_) => {
+            Ok(vec![swept::tool_of(features, i, build)?])
+        }
         f => Ok(vec![tool(i, f, build)?]),
     }
 }
@@ -623,11 +626,10 @@ fn solids_of(features: &[Feature], s: usize, build: bool) -> Result<Vec<Tool>, R
 fn tool(i: usize, f: &Feature, build: bool) -> Result<Tool, RegenError> {
     let id = i as u64 + 1;
     if !build {
-        let op = match f {
-            Feature::Extrude { op, .. } | Feature::Revolve { op, .. } | Feature::Ball { op, .. } => *op,
-            f => swept::op(f).expect("only solid features are built directly"),
+        let (Feature::Extrude { op, .. } | Feature::Revolve { op, .. } | Feature::Ball { op, .. }) = f else {
+            unreachable!("only extrudes, revolves and balls are built directly")
         };
-        return Ok((Body::new(), op, shape(f)));
+        return Ok((Body::new(), *op, shape(f)));
     }
     Ok(match f {
         Feature::Extrude {
@@ -684,11 +686,7 @@ fn tool(i: usize, f: &Feature, build: bool) -> Result<Tool, RegenError> {
                 shape(f),
             )
         }
-        f => (
-            swept::build(i, f)?,
-            swept::op(f).expect("only solid features are built directly"),
-            Shape::Brep,
-        ),
+        _ => unreachable!("only extrudes, revolves and balls are built directly"),
     })
 }
 
@@ -773,8 +771,7 @@ fn shape(f: &Feature) -> Shape {
             center: frame.origin,
             radius: *radius,
         },
-        Feature::Sweep(_) | Feature::Coil(_) | Feature::Loft(_) => Shape::Brep,
-        _ => unreachable!("only solid features have a shape of their own"),
+        _ => unreachable!("only extrudes, revolves and balls have a shape of their own"),
     }
 }
 
@@ -799,7 +796,7 @@ mod tests {
                 let ts = tools(&part.features, i, true).expect("tools build");
                 ts.into_iter().take(6).map(move |t| ((i, f), t))
             }) {
-                if sh == Shape::Brep {
+                if matches!(sh, Shape::Brep(_)) {
                     continue;
                 }
                 let index = Index::new(&body);

@@ -97,6 +97,32 @@ impl Section {
         }
     }
 
+    /// The exact ranges of r and of h over the section.
+    pub fn extent(&self) -> ((f64, f64), (f64, f64)) {
+        let (p0, p1) = (self.at(0.0).0, self.at(1.0).0);
+        let (mut r, mut h) = ((p0.x.min(p1.x), p0.x.max(p1.x)), (p0.y.min(p1.y), p0.y.max(p1.y)));
+        if let Section::Arc {
+            c,
+            r: rad,
+            start,
+            sweep,
+        } = *self
+        {
+            let (a, b) = (start.min(start + sweep), start.max(start + sweep));
+            // the arc's extremes where it passes the axes' directions
+            for k in 0..4 {
+                let angle = k as f64 * dmath::FRAC_PI_2;
+                if angle + ((a - angle) / dmath::TAU).ceil() * dmath::TAU <= b {
+                    let (sn, cs) = dmath::sin_cos(angle);
+                    let q = Point2::new(c.x + rad * cs, c.y + rad * sn);
+                    r = (r.0.min(q.x), r.1.max(q.x));
+                    h = (h.0.min(q.y), h.1.max(q.y));
+                }
+            }
+        }
+        (r, h)
+    }
+
     pub fn length(&self) -> f64 {
         match *self {
             Section::Line { a, b } => a.distance(b),

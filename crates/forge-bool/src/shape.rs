@@ -5,7 +5,7 @@
 //! it is Near and the caller asks the B-rep.
 
 use crate::Op;
-use forge_math::{Frame, Point2, Point3, Vec2, dmath};
+use forge_math::{Box3, Frame, Point2, Point3, Vec2, dmath};
 
 /// A piece of a closed 2D profile.
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -54,8 +54,20 @@ pub enum Shape {
         first: Box<Shape>,
         rest: Vec<(Op, Shape)>,
     },
-    /// A solid with no analytic test here (a sweep, coil or loft): its B-rep decides every point.
-    Brep,
+    /// A profile wound about `frame`'s z: its point (r, h) at angle u in [0, `angle`] lies at
+    /// ((r + a u) cos u, (r + a u) sin u, h + b u). `r` and `h` are the profile's extents.
+    Coil {
+        frame: Frame,
+        segs: Vec<Seg2>,
+        a: f64,
+        b: f64,
+        angle: f64,
+        r: (f64, f64),
+        h: (f64, f64),
+    },
+    /// A solid with no analytic test here (a loft) inside this box: its B-rep decides every
+    /// point in it.
+    Brep(Box3),
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -114,6 +126,88 @@ fn in_profile(segs: &[Seg2], q: Point2) -> Option<(bool, f64)> {
         }
     }
     Some((inside, dist))
+}
+
+/// Where `p` is against a coil (see `Shape::Coil`). In each turn's half plane through p the
+/// profile test gives a distance d; no point of that turn's walls lies nearer p than
+/// d / sqrt(1 + pi^2 (a^2 + b^2) / (4 rho r)), r the coil's least radius (the walls slant by
+/// the motion, and |p - s|^2 >= the in-plane offset plus 2 rho r (1 - cos w)). The ends lie on
+/// the half planes at angles 0 and `angle`.
+#[allow(clippy::too_many_arguments)]
+fn coil_member(
+    frame: &Frame,
+    segs: &[Seg2],
+    a: f64,
+    b: f64,
+    angle: f64,
+    r: (f64, f64),
+    h: (f64, f64),
+    p: Point3,
+    m: f64,
+) -> Member {
+    let l = frame.point_to_local(p);
+    let rho = (l.x * l.x + l.y * l.y).sqrt();
+    let (da, db) = (a * angle, b * angle);
+    let least = r.0 + da.min(0.0);
+    if rho < least - m
+        || rho > r.1 + da.max(0.0) + m
+        || l.z < h.0 + db.min(0.0) - m
+        || l.z > h.1 + db.max(0.0) + m
+    {
+        return Member::Out;
+    }
+    if rho <= 0.0 || least <= 0.0 {
+        return Member::Near;
+    }
+    let slant = (1.0 + dmath::PI * dmath::PI * (a * a + b * b) / (4.0 * rho * least)).sqrt();
+    let phi = dmath::atan2(l.y, l.x);
+    let k0 = ((-dmath::PI - phi) / dmath::TAU).ceil() as i64;
+    let k1 = ((angle + dmath::PI - phi) / dmath::TAU).floor() as i64;
+    let (mut inside_one, mut near) = (false, false);
+    for k in k0..=k1 {
+        let u = phi + dmath::TAU * k as f64;
+        let q = Point2::new(rho - a * u, l.z - b * u);
+        let gap = (h.0 - q.y).max(q.y - h.1).max(r.0 - q.x).max(q.x - r.1);
+        if gap > slant * m {
+            continue;
+        }
+        let Some((inside, d)) = in_profile(segs, q) else {
+            near = true;
+            continue;
+        };
+        let clear = d > slant * m;
+        // how far round from the nearer end, and how far that end's half plane is
+        let (into, off) = if u < 0.0 {
+            (0.0, -u)
+        } else if u > angle {
+            (0.0, u - angle)
+        } else {
+            (u.min(angle - u), 0.0)
+        };
+        let to_end = |w: f64| {
+            if w >= dmath::FRAC_PI_2 {
+                rho
+            } else {
+                rho * dmath::sin(w)
+            }
+        };
+        if off == 0.0 {
+            if inside && clear && to_end(into) > m {
+                inside_one = true;
+            } else if inside || !clear {
+                near = true;
+            }
+        } else if (inside || !clear) && to_end(off) <= m {
+            near = true;
+        }
+    }
+    if near {
+        Member::Near
+    } else if inside_one {
+        Member::In
+    } else {
+        Member::Out
+    }
 }
 
 /// Whether angle `a` lies on the arc from `start` through `sweep`.
@@ -229,7 +323,22 @@ impl Shape {
                 }
                 v
             }
-            Shape::Brep => Member::Near,
+            Shape::Brep(b) => {
+                if b.grow(m).contains(p) {
+                    Member::Near
+                } else {
+                    Member::Out
+                }
+            }
+            Shape::Coil {
+                frame,
+                segs,
+                a,
+                b,
+                angle,
+                r,
+                h,
+            } => coil_member(frame, segs, *a, *b, *angle, *r, *h, p, m),
             Shape::Ball { center, radius } => {
                 let d = p.distance(*center);
                 if d < radius - m {

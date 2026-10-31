@@ -325,7 +325,44 @@ pub(crate) fn moved_shape(s: &Shape, m: &Motion) -> Shape {
             first: Box::new(moved_shape(first, m)),
             rest: rest.iter().map(|(op, s)| (*op, moved_shape(s, m))).collect(),
         },
-        (Shape::Brep, _) => Shape::Brep,
+        (Shape::Brep(b), _) => Shape::Brep(m.bbox(b)),
+        // a mirrored coil: the frame's z turned back, so the profile's h and the rise with it
+        (
+            Shape::Coil {
+                frame,
+                segs,
+                a,
+                b,
+                angle,
+                r,
+                h,
+            },
+            _,
+        ) => {
+            let flip = m.mirrors();
+            let fy = |p: Point2| if flip { Point2::new(p.x, -p.y) } else { p };
+            Shape::Coil {
+                frame: m.frame(frame, !flip),
+                segs: segs
+                    .iter()
+                    .map(|s| match *s {
+                        Seg2::Line { a, b } => Seg2::Line { a: fy(a), b: fy(b) },
+                        Seg2::Arc { c, r, start, sweep } if flip => Seg2::Arc {
+                            c: fy(c),
+                            r,
+                            start: -start,
+                            sweep: -sweep,
+                        },
+                        arc => arc,
+                    })
+                    .collect(),
+                a: *a,
+                b: if flip { -b } else { *b },
+                angle: *angle,
+                r: *r,
+                h: if flip { (-h.1, -h.0) } else { *h },
+            }
+        }
         (Shape::Ball { center, radius }, _) => Shape::Ball {
             center: m.point(*center),
             radius: *radius,

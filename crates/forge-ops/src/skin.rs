@@ -20,7 +20,7 @@ pub(crate) struct SecCurve {
 }
 
 /// A profile ready to skin: z along the motion, normalized, whole circles in two halves.
-pub(crate) struct Prepared {
+pub struct Prepared {
     pub profile: Profile,
     /// Each segment's name key, through the loops in order.
     pub keys: Vec<Name>,
@@ -277,39 +277,4 @@ pub(crate) fn rh_section(rf: &Frame, plane: &Frame, s: &Segment) -> forge_geom::
         }
         Segment::Circle { .. } => unreachable!("prepare splits circles"),
     }
-}
-
-/// Nearest approach of a segment (in (r, h)) to the axis: its smallest r.
-pub(crate) fn min_radius(s: &forge_geom::screw::Section) -> f64 {
-    use forge_geom::screw::Section;
-    match *s {
-        Section::Line { a, b } => a.x.min(b.x),
-        Section::Arc { c, r, start, sweep } => {
-            let (p0, p1) = (s.at(0.0).0, s.at(1.0).0);
-            // the arc reaches straight towards the axis when it passes angle pi
-            let lo = start.min(start + sweep);
-            let hi = start.max(start + sweep);
-            let k = ((lo - dmath::PI) / dmath::TAU).ceil();
-            let through = dmath::PI + k * dmath::TAU <= hi;
-            let m = p0.x.min(p1.x);
-            if through { m.min(c.x - r) } else { m }
-        }
-    }
-}
-
-/// Height range of a segment in (r, h).
-pub(crate) fn heights(s: &forge_geom::screw::Section) -> (f64, f64) {
-    use forge_geom::screw::Section;
-    let (p0, p1) = (s.at(0.0).0, s.at(1.0).0);
-    let (mut lo, mut hi) = (p0.y.min(p1.y), p0.y.max(p1.y));
-    if let Section::Arc { c, r, start, sweep } = *s {
-        let (a, b) = (start.min(start + sweep), start.max(start + sweep));
-        for (angle, h) in [(dmath::FRAC_PI_2, c.y + r), (-dmath::FRAC_PI_2, c.y - r)] {
-            if angle + ((a - angle) / dmath::TAU).ceil() * dmath::TAU <= b {
-                lo = lo.min(h);
-                hi = hi.max(h);
-            }
-        }
-    }
-    (lo, hi)
 }

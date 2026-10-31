@@ -5,7 +5,8 @@
 // tools: TOOL values each (combinations' parts after all tools): kind (3: a combination of
 //        nseg parts from record seg0), op, seg0, nseg, frame origin xyz, x xyz, y xyz, z xyz,
 //        a, b (prism lo hi / revolve angle (<0 whole) / ball radius), origin2 xy, dir2 xy,
-//        perp2 xy
+//        perp2 xy; a coil (kind 4): a, b, angle, r0 r1, h0 h1 from 16; a box (kind 5): lo xyz,
+//        hi xyz from 16
 // segs:  SEG values each: kind (0 line, 1 arc), then a.x a.y b.x b.y | c.x c.y r start sweep
 // boxes: 6 doubles per tool (lo xyz, hi xyz), then 12 floats per tool: the box rounded
 //        outward and inward. Single precision culls by those and leaves a point between them
@@ -95,6 +96,54 @@ template <typename T> __device__ int member_plain(const T* t, const T* segs, T p
     T ly = vx * t[10] + vy * t[11] + vz * t[12];
     T lz = vx * t[13] + vy * t[14] + vz * t[15];
     int s0 = (int)t[2], n = (int)t[3];
+    if (kind == 5) {
+        // a solid with no test of its own: near inside its box, out beyond it
+        if (px < t[16] - m || py < t[17] - m || pz < t[18] - m || px > t[19] + m || py > t[20] + m ||
+            pz > t[21] + m)
+            return 0;
+        return 2;
+    }
+    if (kind == 4) {
+        // a coil, turn by turn (shape.rs coil_member)
+        T a = t[16], b = t[17], angle = t[18], r0 = t[19], r1 = t[20], h0 = t[21], h1 = t[22];
+        T rho = sqrt(lx * lx + ly * ly);
+        T da = a * angle, db = b * angle;
+        T least = r0 + fmin(da, (T)0);
+        if (rho < least - m || rho > r1 + fmax(da, (T)0) + m || lz < h0 + fmin(db, (T)0) - m ||
+            lz > h1 + fmax(db, (T)0) + m)
+            return 0;
+        if (rho <= (T)0 || least <= (T)0) return 2;
+        T pi = (T)(TAU / 2);
+        T slant = sqrt((T)1 + pi * pi * (a * a + b * b) / ((T)4 * rho * least));
+        T phi = atan2(ly, lx);
+        long k0 = (long)ceil((-pi - phi) / (T)TAU), k1 = (long)floor((angle + pi - phi) / (T)TAU);
+        int inside_one = 0, near = 0;
+        for (long k = k0; k <= k1; k++) {
+            T u = phi + (T)TAU * (T)k;
+            T qx = rho - a * u, qy = lz - b * u;
+            T gap = fmax(fmax(h0 - qy, qy - h1), fmax(r0 - qx, qx - r1));
+            if (gap > slant * m) continue;
+            Prof<T> p = in_profile(segs, s0, n, qx, qy, graze);
+            if (!p.ok) {
+                near = 1;
+                continue;
+            }
+            int clear = p.dist > slant * m;
+            T into = 0, off = 0;
+            if (u < (T)0) off = -u;
+            else if (u > angle) off = u - angle;
+            else into = fmin(u, angle - u);
+            if (off == (T)0) {
+                T te = into >= (T)HALF_PI ? rho : rho * sin(into);
+                if (p.in && clear && te > m) inside_one = 1;
+                else if (p.in || !clear) near = 1;
+            } else {
+                T te = off >= (T)HALF_PI ? rho : rho * sin(off);
+                if ((p.in || !clear) && te <= m) near = 1;
+            }
+        }
+        return near ? 2 : (inside_one ? 1 : 0);
+    }
     if (kind == 0) {
         T lo = t[16], hi = t[17];
         if (lz < lo - m || lz > hi + m) return 0;

@@ -14,7 +14,7 @@
 
 use crate::profile::{ProfileError, Segment};
 use crate::revolve::Axis2;
-use crate::skin::{Skin, min_radius, prepare, rh_section, section_curve};
+use crate::skin::{Skin, prepare, rh_section, section_curve};
 use forge_geom::screw::{Screw, Section};
 use forge_geom::{Circle, Cone, Curve, CurveGeom, Cylinder, Line, Plane, Sphere, Surface, Torus};
 use forge_math::{Frame, Interval, Point3, UnitVec3, Vec2, Vec3, dmath, tol};
@@ -123,6 +123,100 @@ impl PathSeg {
 /// plane, square to it, keeping the profile square to the path. `feature` is the history id the
 /// names derive from (see `skin`).
 pub fn sweep(profile: &crate::Profile, path: &[PathSeg], feature: u64) -> Result<Body, SweepError> {
+    let (prep, stretches) = stretches(profile, path)?;
+    let segs: Vec<Segment> = prep.segments().copied().collect();
+    let mut planes: Vec<Frame> = stretches.iter().map(|s| s.plane()).collect();
+    planes.push(path[path.len() - 1].carry(&planes[planes.len() - 1]));
+    let curves = planes
+        .iter()
+        .map(|f| segs.iter().map(|s| section_curve(s, f)).collect())
+        .collect();
+    let mut rails = Vec::with_capacity(path.len());
+    let mut walls = Vec::with_capacity(path.len());
+    let starts = |f: &Frame| -> Vec<Point3> { segs.iter().map(|s| f.plane_point(s.start())).collect() };
+    for st in &stretches {
+        match *st {
+            Stretch::Straight { plane: f, length } => {
+                rails.push(
+                    starts(&f)
+                        .into_iter()
+                        .map(|p| (Curve::Line(Line::new(p, f.z())), Interval::new(0.0, length)))
+                        .collect(),
+                );
+                walls.push(segs.iter().map(|sg| extruded(sg, &f)).collect());
+            }
+            Stretch::Bend {
+                plane: f,
+                axis: rf,
+                angle,
+            } => {
+                let w = rf.z();
+                let foot = |p: Point3| rf.origin + w * w.dot(p - rf.origin);
+                rails.push(
+                    starts(&f)
+                        .into_iter()
+                        .map(|p| {
+                            let c = foot(p);
+                            let frame = Frame::from_zx(c, w, p - c).expect("clear of the axis");
+                            let circle = Circle {
+                                frame,
+                                radius: p.distance(c),
+                            };
+                            (Curve::Circle(circle), Interval::new(0.0, angle))
+                        })
+                        .collect(),
+                );
+                let ring: Vec<Section> = segs.iter().map(|sg| rh_section(&rf, &f, sg)).collect();
+                walls.push(turned(&rf, &ring, &prep.loop_sizes(), angle));
+            }
+        }
+    }
+    let body = Skin {
+        loops: prep.loop_sizes(),
+        keys: prep.keys,
+        planes,
+        curves,
+        rails,
+        walls,
+    }
+    .build(Name::feature(feature));
+    if path.len() > 1 && crate::selfx::crossing(&body, &vec![true; body.faces.len()]).is_some() {
+        return Err(SweepError::SelfIntersecting);
+    }
+    Ok(body)
+}
+
+/// One stretch of a sweep: the profile's plane where it starts (z along the path), and how it
+/// moves from there.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub enum Stretch {
+    /// Along the plane's z.
+    Straight { plane: Frame, length: f64 },
+    /// Turning `angle` about `axis`'s z (its x points from the axis towards the profile).
+    Bend { plane: Frame, axis: Frame, angle: f64 },
+}
+
+impl Stretch {
+    pub fn plane(&self) -> Frame {
+        match *self {
+            Stretch::Straight { plane, .. } | Stretch::Bend { plane, .. } => plane,
+        }
+    }
+}
+
+/// The checked profile (square to the path, circles in halves) and the stretches a sweep
+/// along `path` is made of.
+pub fn sweep_stretches(
+    profile: &crate::Profile,
+    path: &[PathSeg],
+) -> Result<(crate::Profile, Vec<Stretch>), SweepError> {
+    stretches(profile, path).map(|(p, s)| (p.profile, s))
+}
+
+fn stretches(
+    profile: &crate::Profile,
+    path: &[PathSeg],
+) -> Result<(crate::skin::Prepared, Vec<Stretch>), SweepError> {
     let first = path.first().ok_or(SweepError::EmptyPath)?;
     let mut tangents = Vec::with_capacity(path.len());
     for (i, s) in path.iter().enumerate() {
@@ -146,74 +240,37 @@ pub fn sweep(profile: &crate::Profile, path: &[PathSeg], feature: u64) -> Result
     }
     let prep = prepare(profile, t0.get())?;
     let segs: Vec<Segment> = prep.segments().copied().collect();
-    let mut planes = vec![prep.profile.plane];
-    for s in path {
-        let next = s.carry(planes.last().expect("starts with the profile's plane"));
-        planes.push(next);
-    }
-    let curves = planes
-        .iter()
-        .map(|f| segs.iter().map(|s| section_curve(s, f)).collect())
-        .collect();
-    let mut rails = Vec::with_capacity(path.len());
-    let mut walls = Vec::with_capacity(path.len());
-    let starts = |f: &Frame| -> Vec<Point3> { segs.iter().map(|s| f.plane_point(s.start())).collect() };
+    let mut plane = prep.profile.plane;
+    let mut out = Vec::with_capacity(path.len());
     for (k, s) in path.iter().enumerate() {
-        let f = &planes[k];
-        match *s {
-            PathSeg::Line { a, b } => {
-                let len = a.distance(b);
-                let dir = (b - a).normalize().expect("not degenerate");
-                rails.push(
-                    starts(f)
-                        .into_iter()
-                        .map(|p| (Curve::Line(Line::new(p, dir)), Interval::new(0.0, len)))
-                        .collect(),
-                );
-                walls.push(segs.iter().map(|sg| extruded(sg, f)).collect());
-            }
+        out.push(match *s {
+            PathSeg::Line { a, b } => Stretch::Straight {
+                plane,
+                length: a.distance(b),
+            },
             PathSeg::Arc { circle, sweep, .. } => {
                 let (axis, angle) = PathSeg::turn(&circle, sweep);
                 let w = axis.z();
-                let foot = |p: Point3| axis.origin + w * w.dot(p - axis.origin);
-                let at = path[k].ends().0;
+                let at = s.ends().0;
+                let foot = axis.origin + w * w.dot(at - axis.origin);
                 let rf =
-                    Frame::from_zx(axis.origin, w, at - foot(at)).ok_or(SweepError::TooTight { index: k })?;
-                let ring: Vec<Section> = segs.iter().map(|sg| rh_section(&rf, f, sg)).collect();
-                if ring.iter().any(|sc| min_radius(sc) <= tol::LINEAR) {
+                    Frame::from_zx(axis.origin, w, at - foot).ok_or(SweepError::TooTight { index: k })?;
+                if segs
+                    .iter()
+                    .any(|sg| rh_section(&rf, &plane, sg).extent().0.0 <= tol::LINEAR)
+                {
                     return Err(SweepError::TooTight { index: k });
                 }
-                rails.push(
-                    starts(f)
-                        .into_iter()
-                        .map(|p| {
-                            let c = foot(p);
-                            let frame = Frame::from_zx(c, w, p - c).expect("clear of the axis");
-                            let circle = Circle {
-                                frame,
-                                radius: p.distance(c),
-                            };
-                            (Curve::Circle(circle), Interval::new(0.0, angle))
-                        })
-                        .collect(),
-                );
-                walls.push(turned(&rf, &ring, &prep.loop_sizes(), angle));
+                Stretch::Bend {
+                    plane,
+                    axis: rf,
+                    angle,
+                }
             }
-        }
+        });
+        plane = s.carry(&plane);
     }
-    let body = Skin {
-        loops: prep.loop_sizes(),
-        keys: prep.keys,
-        planes,
-        curves,
-        rails,
-        walls,
-    }
-    .build(Name::feature(feature));
-    if path.len() > 1 && crate::selfx::crossing(&body, &vec![true; body.faces.len()]).is_some() {
-        return Err(SweepError::SelfIntersecting);
-    }
-    Ok(body)
+    Ok((prep, out))
 }
 
 /// The wall a segment drawn in `f` makes moving along `f`'s z.
@@ -309,62 +366,50 @@ impl From<ProfileError> for CoilError {
     }
 }
 
-/// Winds a profile about an axis in its plane through `turns` turns (right-handed about the
-/// axis's direction), rising `pitch` per turn along it, the coil widening by `taper` (radians
-/// off the axis; negative narrows it) as it rises.
-pub fn coil(
-    profile: &crate::Profile,
-    axis: Axis2,
-    pitch: f64,
-    turns: f64,
-    taper: f64,
-    feature: u64,
-) -> Result<Body, CoilError> {
-    if !(turns > tol::ANGULAR && turns < 1000.0 && pitch > tol::MIN_LENGTH) {
-        return Err(CoilError::BadTurns);
-    }
-    if taper.is_nan() || taper.abs() >= dmath::FRAC_PI_2 - 1e-6 {
-        return Err(CoilError::BadTaper);
-    }
-    let dir2 = axis.dir.normalize().ok_or(CoilError::BadAxis)?;
-    let plane = profile.plane;
-    let vec3 = |v: Vec2| plane.x() * v.x + plane.y() * v.y;
-    // the side of the axis the profile is on
-    let perp2 = dir2.perp();
-    let mut side = 0.0f64;
-    for l in &profile.loops {
-        for (s, _) in &l.segments {
-            for p in s.samples(32) {
-                let r = (p - axis.origin).dot(perp2);
-                side = if r.abs() > side.abs() { r } else { side };
-            }
-        }
-    }
-    if side.abs() <= tol::LINEAR {
-        return Err(CoilError::CrossesAxis);
-    }
-    let z = vec3(dir2).normalize().ok_or(CoilError::BadAxis)?;
-    let rf = Frame::from_zx(plane.plane_point(axis.origin), z, vec3(perp2 * side.signum()))
-        .ok_or(CoilError::BadAxis)?;
-    let prep = prepare(profile, rf.y().get())?;
+/// Which way a coil turns as it rises along its axis.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Handed {
+    Right,
+    Left,
+}
+
+/// How a coil winds: `turns` turns rising `pitch` each along the axis, widening by `taper`
+/// (radians off the axis; negative narrows it) as it rises.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct Winding {
+    pub pitch: f64,
+    pub turns: f64,
+    pub taper: f64,
+    pub handed: Handed,
+}
+
+/// A coil's motion and profile: section point (r, h) at angle u (0 to `angle`) lies at
+/// ((r + a u) cos u, (r + a u) sin u, h + b u) in `frame` (z the axis, x through the profile).
+#[derive(Clone, Debug, PartialEq)]
+pub struct Wound {
+    pub frame: Frame,
+    /// The profile's loops in (r, h), outer first, each segment's section in turn.
+    pub sections: Vec<Section>,
+    pub loops: Vec<usize>,
+    pub a: f64,
+    pub b: f64,
+    pub angle: f64,
+}
+
+/// Winds a profile about an axis in its plane. `feature` is the history id the names derive
+/// from (see `skin`).
+pub fn coil(profile: &crate::Profile, axis: Axis2, w: &Winding, feature: u64) -> Result<Body, CoilError> {
+    let (prep, wound) = wind(profile, axis, w)?;
+    let Wound {
+        frame: rf,
+        sections: ring,
+        a,
+        b,
+        angle: total,
+        ..
+    } = wound;
     let f0 = prep.profile.plane;
     let segs: Vec<Segment> = prep.segments().copied().collect();
-    let ring: Vec<Section> = segs.iter().map(|s| rh_section(&rf, &f0, s)).collect();
-    if ring.iter().any(|s| min_radius(s) <= tol::LINEAR) {
-        return Err(CoilError::CrossesAxis);
-    }
-    let (lo, hi) = ring
-        .iter()
-        .map(crate::skin::heights)
-        .fold((f64::INFINITY, f64::NEG_INFINITY), |a, h| {
-            (a.0.min(h.0), a.1.max(h.1))
-        });
-    if pitch <= hi - lo + tol::LINEAR {
-        return Err(CoilError::TurnsTouch);
-    }
-    let total = dmath::TAU * turns;
-    let b = pitch / dmath::TAU;
-    let a = b * dmath::sin(taper) / dmath::cos(taper);
     let mut walls = Vec::with_capacity(ring.len());
     let mut first = 0;
     for len in prep.loop_sizes() {
@@ -402,6 +447,89 @@ pub fn coil(
     .build(Name::feature(feature)))
 }
 
+/// The motion and sections of a coil, checked, without building it.
+pub fn coil_motion(profile: &crate::Profile, axis: Axis2, w: &Winding) -> Result<Wound, CoilError> {
+    wind(profile, axis, w).map(|(_, m)| m)
+}
+
+fn wind(
+    profile: &crate::Profile,
+    axis: Axis2,
+    w: &Winding,
+) -> Result<(crate::skin::Prepared, Wound), CoilError> {
+    let Winding {
+        pitch,
+        turns,
+        taper,
+        handed,
+    } = *w;
+    if !(turns > tol::ANGULAR && turns < 1000.0 && pitch > tol::MIN_LENGTH) {
+        return Err(CoilError::BadTurns);
+    }
+    if taper.is_nan() || taper.abs() >= dmath::FRAC_PI_2 - 1e-6 {
+        return Err(CoilError::BadTaper);
+    }
+    let dir2 = axis.dir.normalize().ok_or(CoilError::BadAxis)?;
+    let plane = profile.plane;
+    let vec3 = |v: Vec2| plane.x() * v.x + plane.y() * v.y;
+    // the side of the axis the profile is on
+    let perp2 = dir2.perp();
+    let mut side = 0.0f64;
+    for l in &profile.loops {
+        for (s, _) in &l.segments {
+            for p in s.samples(32) {
+                let r = (p - axis.origin).dot(perp2);
+                side = if r.abs() > side.abs() { r } else { side };
+            }
+        }
+    }
+    if side.abs() <= tol::LINEAR {
+        return Err(CoilError::CrossesAxis);
+    }
+    let z = vec3(dir2).normalize().ok_or(CoilError::BadAxis)?;
+    // left-handed: turning the right way about the reversed axis while falling along it
+    let (z, sign) = match handed {
+        Handed::Right => (z, 1.0),
+        Handed::Left => (-z, -1.0),
+    };
+    let rf = Frame::from_zx(plane.plane_point(axis.origin), z, vec3(perp2 * side.signum()))
+        .ok_or(CoilError::BadAxis)?;
+    let prep = prepare(profile, rf.y().get())?;
+    let f0 = prep.profile.plane;
+    let ring: Vec<Section> = prep.segments().map(|s| rh_section(&rf, &f0, s)).collect();
+    let rmin = ring.iter().map(|s| s.extent().0.0).fold(f64::INFINITY, f64::min);
+    if rmin <= tol::LINEAR {
+        return Err(CoilError::CrossesAxis);
+    }
+    let (lo, hi) = ring
+        .iter()
+        .map(|s| s.extent().1)
+        .fold((f64::INFINITY, f64::NEG_INFINITY), |a, h| {
+            (a.0.min(h.0), a.1.max(h.1))
+        });
+    if pitch <= hi - lo + tol::LINEAR {
+        return Err(CoilError::TurnsTouch);
+    }
+    let angle = dmath::TAU * turns;
+    let b = sign * pitch / dmath::TAU;
+    let a = pitch / dmath::TAU * dmath::sin(taper) / dmath::cos(taper);
+    if rmin + (a * angle).min(0.0) <= tol::LINEAR {
+        return Err(CoilError::BadTaper);
+    }
+    let loops = prep.loop_sizes();
+    Ok((
+        prep,
+        Wound {
+            frame: rf,
+            sections: ring,
+            loops,
+            a,
+            b,
+            angle,
+        },
+    ))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -409,6 +537,15 @@ mod tests {
     use crate::profile::ProfileLoop;
     use forge_math::Point2;
     use forge_topo::check;
+
+    fn wind(pitch: f64, turns: f64, taper: f64, handed: Handed) -> Winding {
+        Winding {
+            pitch,
+            turns,
+            taper,
+            handed,
+        }
+    }
 
     fn valid(b: &Body) {
         let problems = check(b);
@@ -546,16 +683,21 @@ mod tests {
             loops: vec![Profile::rectangle(Point2::new(8.0, -1.0), 3.0, 2.0, 0)],
         };
         for (prof, taper) in [(&wire, 0.0), (&bar, 0.0), (&wire, 0.1), (&bar, -0.1)] {
-            let b = coil(prof, up, 4.0, 2.5, taper, 1).unwrap();
-            valid(&b);
+            for handed in [Handed::Right, Handed::Left] {
+                let b = coil(prof, up, &wind(4.0, 2.5, taper, handed), 1).unwrap();
+                valid(&b);
+            }
         }
         assert_eq!(
-            coil(&bar, up, 1.5, 2.0, 0.0, 1).unwrap_err(),
+            coil(&bar, up, &wind(1.5, 2.0, 0.0, Handed::Right), 1).unwrap_err(),
             CoilError::TurnsTouch
         );
-        assert_eq!(coil(&bar, up, 4.0, 0.0, 0.0, 1).unwrap_err(), CoilError::BadTurns);
         assert_eq!(
-            coil(&bar, up, 4.0, 10.0, -0.5, 1).unwrap_err(),
+            coil(&bar, up, &wind(4.0, 0.0, 0.0, Handed::Right), 1).unwrap_err(),
+            CoilError::BadTurns
+        );
+        assert_eq!(
+            coil(&bar, up, &wind(4.0, 10.0, -0.5, Handed::Right), 1).unwrap_err(),
             CoilError::BadTaper
         );
     }

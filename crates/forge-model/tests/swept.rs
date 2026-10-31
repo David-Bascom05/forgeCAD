@@ -3,7 +3,7 @@ use forge_geom::Circle;
 use forge_math::{Frame, Point2, Point3, UnitVec3, Vec2, Vec3, dmath};
 use forge_mesh::{Quality, tessellate};
 use forge_model::suite;
-use forge_ops::{Axis2, PathSeg, Profile, coil, loft, sweep};
+use forge_ops::{Axis2, Handed, PathSeg, Profile, Winding, coil, loft, sweep};
 use forge_topo::Body;
 
 fn volume(b: &Body) -> f64 {
@@ -38,13 +38,21 @@ fn coil_volume_is_area_times_centroid_path() {
         loops: vec![Profile::circle(Point2::new(15.0, 0.0), 1.5, 0)],
     };
     let turns = 2.5;
-    let v = volume(&coil(&wire, up, 6.0, turns, 0.0, 1).expect("coil"));
-    close(v, dmath::PI * 1.5 * 1.5 * 15.0 * dmath::TAU * turns);
+    let w = |pitch: f64, handed: Handed| Winding {
+        pitch,
+        turns,
+        taper: 0.0,
+        handed,
+    };
+    for handed in [Handed::Right, Handed::Left] {
+        let v = volume(&coil(&wire, up, &w(6.0, handed), 1).expect("coil"));
+        close(v, dmath::PI * 1.5 * 1.5 * 15.0 * dmath::TAU * turns);
+    }
     let bar = Profile {
         plane,
         loops: vec![Profile::rectangle(Point2::new(8.0, -1.0), 3.0, 2.0, 0)],
     };
-    let v = volume(&coil(&bar, up, 4.0, turns, 0.0, 1).expect("coil"));
+    let v = volume(&coil(&bar, up, &w(4.0, Handed::Right), 1).expect("coil"));
     close(v, 6.0 * 9.5 * dmath::TAU * turns);
 }
 

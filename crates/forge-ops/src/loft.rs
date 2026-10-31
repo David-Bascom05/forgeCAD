@@ -139,6 +139,34 @@ pub fn loft(profiles: &[Profile], feature: u64) -> Result<Body, LoftError> {
     Ok(body)
 }
 
+/// A box holding the loft through `profiles`: a ruled wall lies in the hull of its two sections.
+pub fn loft_bounds(profiles: &[Profile]) -> Result<forge_math::Box3, LoftError> {
+    if profiles.len() < 2 {
+        return Err(LoftError::TooFew);
+    }
+    let mut b = forge_math::Box3::EMPTY;
+    for p in profiles {
+        for l in &p.loops {
+            for (s, _) in &l.segments {
+                let curve = match *s {
+                    Segment::Circle { center, radius, .. } => section_curve(
+                        &Segment::Arc {
+                            center,
+                            radius,
+                            start: 0.0,
+                            sweep: dmath::TAU - 1e-9,
+                        },
+                        &p.plane,
+                    ),
+                    _ => section_curve(s, &p.plane),
+                };
+                b = b.hull(&curve.curve.bbox(curve.range));
+            }
+        }
+    }
+    Ok(b.grow(tol::LINEAR))
+}
+
 /// A segment drawn in plane `f`, by the fraction along it.
 fn rail(s: &Segment, f: &Frame) -> Rail {
     match *s {

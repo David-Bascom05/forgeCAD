@@ -163,7 +163,7 @@ fn surface(features: &[Feature], i: usize, t: &Target) -> Result<Surface, RegenE
 }
 
 /// The plane a target names.
-fn plane(features: &[Feature], i: usize, t: &Target) -> Result<Frame, RegenError> {
+pub(crate) fn plane(features: &[Feature], i: usize, t: &Target) -> Result<Frame, RegenError> {
     match surface(features, i, t)? {
         Surface::Plane(p) => Ok(p.frame),
         _ => Err(bad(i)(ExtentError::NotPlanar)),

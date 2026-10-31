@@ -2,13 +2,13 @@
 //! what "fast" and "robust" mean, plus a random history generator.
 
 use crate::{
-    Coil, Combine, End, Extent, Feature, Head, Hole, Layout, Loft, Part, Row, Source, Sweep, Target, Thread, Turn,
-    torture,
+    Coil, CoilSize, Combine, End, Extent, Feature, Head, Hole, Layout, Loft, Part, PathEnds, Row, Source,
+    Sweep, Target, Thread, Turn, torture,
 };
 use forge_geom::Circle;
 use forge_math::rng::Rng;
 use forge_math::{Frame, Point2, Point3, Vec2, Vec3, dmath};
-use forge_ops::{Axis2, PathSeg, Profile, ProfileLoop, Segment};
+use forge_ops::{Axis2, Handed, PathSeg, Profile, ProfileLoop, Segment};
 use forge_topo::Name;
 
 fn frame(o: Point3, z: Vec3, x: Vec3) -> Frame {
@@ -736,7 +736,13 @@ pub fn upto(flat: bool) -> Part {
 }
 
 /// A sweep along `path`, its profile square to the path's start.
-fn swept(profile_loops: Vec<ProfileLoop>, x: Vec3, path: Vec<PathSeg>, op: Combine) -> Feature {
+fn swept(
+    profile_loops: Vec<ProfileLoop>,
+    x: Vec3,
+    path: Vec<PathSeg>,
+    ends: PathEnds,
+    op: Combine,
+) -> Feature {
     let (o, t) = match path[0] {
         PathSeg::Line { a, b } => (a, b - a),
         PathSeg::Arc { .. } => unreachable!("the suite's paths start straight"),
@@ -747,6 +753,7 @@ fn swept(profile_loops: Vec<ProfileLoop>, x: Vec3, path: Vec<PathSeg>, op: Combi
             loops: profile_loops,
         },
         path,
+        ends,
         op,
     }))
 }
@@ -779,7 +786,12 @@ pub fn sweep() -> Part {
         20.0,
         Combine::New,
     )];
-    // the pipe: in from the side, up through the top
+    // the pipe: in from the side, up through the top, cut off at a tilted work plane
+    f.push(Feature::Plane(frame(
+        Point3::new(50.0, 20.0, 45.0),
+        Vec3::new(0.15, 0.0, 1.0),
+        Vec3::Y,
+    )));
     let a = Point3::new(-20.0, 20.0, 10.0);
     let b = Point3::new(30.0, 20.0, 10.0);
     let (arc, c) = bend(b, Vec3::X, Vec3::Z, 20.0);
@@ -794,6 +806,10 @@ pub fn sweep() -> Part {
                 b: c + Vec3::Z * 25.0,
             },
         ],
+        PathEnds::To {
+            target: Target::Plane(1),
+            offset: 0.0,
+        },
         Combine::Add,
     ));
     // the channel: along y, round a corner towards -x, half sunk in the top
@@ -811,6 +827,7 @@ pub fn sweep() -> Part {
                 b: c - Vec3::X * 20.0,
             },
         ],
+        PathEnds::Extended { start: 5.0, end: 3.0 },
         Combine::Cut,
     ));
     // the lens: the far arc's circle reaches past the bend's axis
@@ -850,28 +867,31 @@ pub fn sweep() -> Part {
                 b: c + Vec3::X * 30.0,
             },
         ],
+        PathEnds::Path,
         Combine::Cut,
     ));
     Part { features: f }
 }
 
-/// A rod on a plate with a thread cut round it and a spring wound about it, its first turn sunk
-/// in the plate, and a tapered spring beside it.
+/// A rod on a plate with a thread cut round it, a spring wound about it with its first turn
+/// sunk in the plate, a tapered left-handed spring beside it, and grooves cut round the rod's
+/// top up to a tilted work plane.
 pub fn coil() -> Part {
     let up_axis = Axis2 {
         origin: Point2::ORIGIN,
         dir: Vec2::new(0.0, -1.0),
     };
-    let wound = |plane: Frame, loops: Vec<ProfileLoop>, pitch: f64, turns: f64, taper: f64, op: Combine| {
-        Feature::Coil(Box::new(Coil {
-            profile: Profile { plane, loops },
-            axis: up_axis,
-            pitch,
-            turns,
-            taper,
-            op,
-        }))
-    };
+    let wound =
+        |plane: Frame, loops: Vec<ProfileLoop>, size: CoilSize, taper: f64, handed: Handed, op: Combine| {
+            Feature::Coil(Box::new(Coil {
+                profile: Profile { plane, loops },
+                axis: up_axis,
+                size,
+                taper,
+                handed,
+                op,
+            }))
+        };
     Part {
         features: vec![
             block(
@@ -886,26 +906,52 @@ pub fn coil() -> Part {
             wound(
                 standing(0.0, 0.0, 12.0),
                 vec![Profile::rectangle(Point2::new(7.0, -0.8), 2.0, 1.6, 0)],
-                4.0,
-                8.0,
+                CoilSize::TurnsHeight {
+                    turns: 8.0,
+                    height: 32.0,
+                },
                 0.0,
+                Handed::Right,
                 Combine::Cut,
             ),
             wound(
                 standing(0.0, 0.0, 4.0),
                 vec![Profile::circle(Point2::new(15.0, 0.0), 1.5, 0)],
-                6.0,
-                5.5,
+                CoilSize::PitchTurns {
+                    pitch: 6.0,
+                    turns: 5.5,
+                },
                 0.0,
+                Handed::Right,
                 Combine::Add,
             ),
             wound(
                 standing(45.0, 0.0, 4.0),
                 vec![Profile::rectangle(Point2::new(10.0, -0.5), 2.0, 2.0, 0)],
-                5.0,
-                4.0,
+                CoilSize::PitchHeight {
+                    pitch: 5.0,
+                    height: 20.0,
+                },
                 -0.15,
+                Handed::Left,
                 Combine::Add,
+            ),
+            Feature::Plane(frame(
+                Point3::new(0.0, 0.0, 56.0),
+                Vec3::new(0.1, 0.0, 1.0),
+                Vec3::X,
+            )),
+            wound(
+                standing(0.0, 0.0, 48.0),
+                vec![Profile::rectangle(Point2::new(7.2, -0.6), 2.0, 1.2, 0)],
+                CoilSize::To {
+                    pitch: 3.0,
+                    target: Target::Plane(5),
+                    offset: 0.0,
+                },
+                0.0,
+                Handed::Right,
+                Combine::Cut,
             ),
         ],
     }
