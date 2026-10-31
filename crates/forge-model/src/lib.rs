@@ -12,6 +12,8 @@ pub mod pattern;
 mod rib;
 pub mod suite;
 pub mod swept;
+pub mod text;
+pub mod thread;
 pub mod torture;
 mod trace;
 mod upto;
@@ -34,6 +36,8 @@ pub use pattern::{Layout, PatternError, Row, Source, copy_sources, instance_name
 use pattern::{instances, moved, moved_shape};
 pub use rib::{Rib, RibError};
 pub use swept::{Coil, CoilSize, Loft, PathEnds, Sweep};
+pub use text::{FontRef, Text, TextError, TextOn};
+pub use thread::{Length as ThreadLength, On as ThreadOn, ScrewThread, Spec as ThreadSpec, ThreadError};
 
 /// One step of a part's history.
 #[derive(Clone, Debug, PartialEq)]
@@ -103,6 +107,10 @@ pub enum Feature {
     Param(Box<Param>),
     /// A solved sketch; it makes nothing.
     Sketch(Box<Sketch>),
+    /// A modeled screw thread cut round or inside a cylinder.
+    Thread(Box<ScrewThread>),
+    /// Text embossed on or engraved into a plane or a cylinder.
+    Text(Box<Text>),
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -176,6 +184,14 @@ pub enum RegenError {
     Edit {
         feature: usize,
         error: EditError,
+    },
+    Thread {
+        feature: usize,
+        error: ThreadError,
+    },
+    Text {
+        feature: usize,
+        error: TextError,
     },
     /// A feature that combines with or changes the part came before any part existed.
     NothingToCombine {
@@ -733,6 +749,8 @@ fn tools(features: &[Feature], i: usize, build: bool) -> Result<Vec<Tool>, Regen
         Feature::Sweep(_) | Feature::Coil(_) | Feature::Loft(_) => {
             Ok(vec![swept::tool_of(features, i, build)?])
         }
+        Feature::Thread(_) => thread::tools(features, i, build),
+        Feature::Text(_) => text::tools(features, i),
         f => Ok(vec![tool(i, f, build)?]),
     }
 }

@@ -713,6 +713,8 @@ fn error_kind(e: &crate::RegenError) -> (String, usize) {
         Coil { feature, error } => (format!("Coil({error:?})"), *feature),
         Loft { feature, error } => (format!("Loft({error:?})"), *feature),
         Edit { feature, error } => (format!("Edit({error:?})"), *feature),
+        Thread { feature, error } => (format!("Thread({error:?})"), *feature),
+        Text { feature, error } => (format!("Text({error:?})"), *feature),
     }
 }
 

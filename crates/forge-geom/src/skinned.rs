@@ -261,6 +261,7 @@ impl GuidePath {
                             .collect()
                     }
                 }
+                Rail::Parabola { .. } | Rail::Wrap(_) => unreachable!("guide paths are lines and arcs"),
             };
             out.extend(
                 ts.into_iter()
@@ -845,7 +846,7 @@ impl Procedural for Skinned {
             .iter()
             .filter_map(|r| match *r {
                 Rail::Arc { circle, .. } => Some(circle.radius),
-                Rail::Line { .. } => None,
+                _ => None,
             })
             .fold(f64::INFINITY, f64::min);
         0.8 * self.radius.min(arcs)

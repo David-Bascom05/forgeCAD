@@ -8,11 +8,15 @@
 //! distance to its nearest point and projection searches all of it, so a point of the zero set
 //! off the face projects to parameters off the face.
 
-use crate::curve::{Circle, CurveGeom, Domain1};
+use crate::curve::{Circle, CurveGeom, Domain1, Parabola};
 use crate::screw::{fresh_id, polish, remembered};
 use crate::surface::{Domain2, Proc, Procedural, SurfDeriv, Surface};
+use crate::wrap::Wrap;
 use forge_math::{Box2, Box3, Frame, Interval, Point2, Point3, Vec3, tol};
 use std::sync::Arc;
+
+mod meet;
+pub use meet::meet_ruled;
 
 /// One of the two curves a ruled face spans, by the fraction t along it.
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -27,6 +31,13 @@ pub enum Rail {
         start: f64,
         sweep: f64,
     },
+    /// The parabola over its parameter range.
+    Parabola {
+        curve: Parabola,
+        range: Interval,
+    },
+    /// A flat curve wrapped round a cylinder.
+    Wrap(Wrap),
 }
 
 impl Rail {
@@ -38,6 +49,12 @@ impl Rail {
                 let d = circle.deriv(start + sweep * t);
                 (d.p, d.d1 * sweep, d.d2 * (sweep * sweep))
             }
+            Rail::Parabola { curve, range } => {
+                let w = range.width();
+                let d = curve.deriv(range.lo + w * t);
+                (d.p, d.d1 * w, d.d2 * (w * w))
+            }
+            Rail::Wrap(w) => w.at(t),
         }
     }
 
@@ -47,6 +64,11 @@ impl Rail {
             Rail::Arc { circle, start, sweep } => {
                 circle.bbox(Interval::new(start + sweep * t.lo, start + sweep * t.hi))
             }
+            Rail::Parabola { curve, range } => {
+                let w = range.width();
+                curve.bbox(Interval::new(range.lo + w * t.lo, range.lo + w * t.hi))
+            }
+            Rail::Wrap(w) => w.bbox(t),
         }
     }
 
@@ -61,6 +83,11 @@ impl Rail {
                 start,
                 sweep,
             },
+            Rail::Parabola { curve, range } => Rail::Parabola {
+                curve: curve.transformed(f),
+                range,
+            },
+            Rail::Wrap(w) => Rail::Wrap(w.transformed(f)),
         }
     }
 
@@ -68,13 +95,21 @@ impl Rail {
         match *self {
             Rail::Line { a, b } => a.distance(b),
             Rail::Arc { circle, sweep, .. } => circle.radius * sweep.abs(),
+            // chords: a little short, as a scale
+            _ => (0..16)
+                .map(|i| {
+                    self.at(i as f64 / 16.0)
+                        .0
+                        .distance(self.at((i + 1) as f64 / 16.0).0)
+                })
+                .sum(),
         }
     }
 
     /// How far past each end the curve can be carried and stay one turn at most.
     pub(crate) fn reach(&self) -> f64 {
         match *self {
-            Rail::Line { .. } => 0.25,
+            Rail::Line { .. } | Rail::Parabola { .. } | Rail::Wrap(_) => 0.25,
             Rail::Arc { sweep, .. } => (0.5 * (forge_math::dmath::TAU / sweep.abs() - 1.0)).clamp(0.0, 0.25),
         }
     }
@@ -161,6 +196,7 @@ impl Ruled {
         let sweep = |rail: &Rail| match *rail {
             Rail::Line { .. } => 0.0,
             Rail::Arc { sweep, .. } => sweep.abs(),
+            Rail::Parabola { .. } | Rail::Wrap(_) => 1.0,
         };
         let k = (16.0 + 8.0 * sweep(&a).max(sweep(&b))).ceil() as usize;
         r.rows = (0..=k)
@@ -248,6 +284,9 @@ impl Procedural for Ruled {
     fn deriv(&self, uv: Point2) -> SurfDeriv {
         self.point(uv)
     }
+    fn as_any(&self) -> Option<&dyn std::any::Any> {
+        Some(self)
+    }
     fn domain(&self) -> Domain2 {
         let unit = Domain1 {
             lo: 0.0,
@@ -291,6 +330,19 @@ impl Procedural for Ruled {
         let arc = |r: &Rail| match *r {
             Rail::Line { .. } => f64::INFINITY,
             Rail::Arc { circle, .. } => circle.radius,
+            // curvature |C' x C''| / |C'|^3 at samples, the tightest halved
+            Rail::Parabola { .. } | Rail::Wrap(_) => {
+                let k = (0..=16)
+                    .map(|i| {
+                        let (_, d1, d2) = r.at(i as f64 / 16.0);
+                        {
+                            let l = d1.length();
+                            d1.cross(d2).length() / (l * l * l).max(1e-300)
+                        }
+                    })
+                    .fold(0.0, f64::max);
+                0.5 / k.max(1e-300)
+            }
         };
         0.8 * self.radius.min(arc(&self.a)).min(arc(&self.b))
     }

@@ -7,6 +7,7 @@ pub mod direct;
 pub mod draft;
 pub mod extrude;
 pub mod fillet;
+pub mod glyph;
 pub mod loft;
 pub mod profile;
 pub mod rebuild;
@@ -23,6 +24,7 @@ pub use direct::{DirectError, delete_faces, move_faces, offset_faces, replace_fa
 pub use draft::{DraftError, draft};
 pub use extrude::{ExtrudeError, extrude};
 pub use fillet::{FilletEdge, FilletError, FilletOptions, Radius, fillet, fillet_with, law_start};
+pub use glyph::{GlyphError, GlyphSeg, Place, glyph};
 pub use loft::{LoftError, LoftGuides, LoftKind, loft, loft_bounds};
 pub use profile::{Profile, ProfileError, ProfileLoop, Segment};
 pub use rebuild::RebuildError;

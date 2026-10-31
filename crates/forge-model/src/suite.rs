@@ -2,9 +2,12 @@
 //! what "fast" and "robust" mean, plus a random history generator.
 
 use crate::{
-    Coil, CoilSize, Combine, End, Extent, Feature, Head, Hole, Layout, Loft, Part, PathEnds, Row, Source,
-    Sweep, Target, Thread, Turn, torture,
+    Coil, CoilSize, Combine, End, Extent, Feature, Head, Hole, Layout, Loft, Part, PathEnds, Row,
+    ScrewThread, Source, Sweep, Target, Text, TextOn, Thread, ThreadLength, ThreadOn, ThreadSpec, Turn,
+    torture,
 };
+use forge_font::Seg;
+use forge_font::testing::{TestGlyph, build, square_ring};
 use forge_geom::Circle;
 use forge_math::rng::Rng;
 use forge_math::{Frame, Point2, Point3, Vec2, Vec3, dmath};
@@ -116,7 +119,7 @@ pub fn parts() -> Vec<(&'static str, Part)> {
 }
 
 /// The names of the benchmark parts.
-pub const NAMES: [&str; 13] = [
+pub const NAMES: [&str; 15] = [
     "plate",
     "shaft",
     "housing",
@@ -130,6 +133,8 @@ pub const NAMES: [&str; 13] = [
     "sweep",
     "coil",
     "loft",
+    "thread",
+    "text",
 ];
 
 /// The benchmark part of that name, built alone.
@@ -148,6 +153,8 @@ pub fn part(name: &str) -> Option<Part> {
         "sweep" => sweep(),
         "coil" => coil(),
         "loft" => loft(),
+        "thread" => thread(),
+        "text" => text(),
         _ => return None,
     })
 }
@@ -1092,4 +1099,144 @@ pub fn fuzz(seed: u64, count: usize) -> Part {
         });
     }
     Part { features: f }
+}
+
+/// A plate with a bolt standing on it, threaded M10 with a chamfered start, and a through hole
+/// whose cosmetic M10 thread is modeled, left-handed.
+pub fn thread() -> Part {
+    let down = |o: Point3| frame(o, -Vec3::Z, Vec3::new(0.6, 0.8, 0.0));
+    let m10 = ThreadSpec::Iso {
+        major: 10.0,
+        pitch: 1.5,
+    };
+    let threaded = |on: ThreadOn, length: ThreadLength, handed: Handed| {
+        Feature::Thread(Box::new(ScrewThread {
+            on,
+            length,
+            handed,
+            chamfer: true,
+        }))
+    };
+    Part {
+        features: vec![
+            block(
+                Frame::WORLD,
+                Point2::new(-30.0, -15.0),
+                60.0,
+                30.0,
+                8.0,
+                Combine::New,
+            ),
+            rod(up(Point3::new(-15.0, 0.0, 8.0)), 5.0, 25.0, Combine::Add),
+            threaded(
+                ThreadOn::Axis {
+                    at: down(Point3::new(-15.0, 0.0, 33.0)),
+                    spec: m10,
+                    internal: false,
+                },
+                ThreadLength::Distance(18.0),
+                Handed::Right,
+            ),
+            Feature::Hole(Box::new(Hole {
+                at: down(Point3::new(15.0, 0.0, 8.0)),
+                diameter: 8.5,
+                head: Head::Plain,
+                end: End::Through,
+                point: None,
+                thread: Some(Thread {
+                    size: 10.0,
+                    pitch: 1.5,
+                }),
+            })),
+            threaded(ThreadOn::Hole(3), ThreadLength::Full, Handed::Left),
+        ],
+    }
+}
+
+/// A block with text embossed on top, engraved in its front, and wrapped round a boss.
+pub fn text() -> Part {
+    let p = Point2::new;
+    let q = |a: (f64, f64), c: (f64, f64), b: (f64, f64)| Seg::Quad(p(a.0, a.1), p(c.0, c.1), p(b.0, b.1));
+    // a D: a straight back and a bowl of two arcs, round a hole of the same
+    let d = |s: f64, o: f64| {
+        vec![
+            Seg::Line(p(o, o), p(o, 700.0 - o)),
+            q((o, 700.0 - o), (600.0 - o * s, 700.0 - o), (600.0 - o * s, 350.0)),
+            q((600.0 - o * s, 350.0), (600.0 - o * s, o), (o, o)),
+        ]
+    };
+    let mut hole = d(1.5, 150.0);
+    hole.reverse();
+    let hole: Vec<Seg> = hole
+        .into_iter()
+        .map(|s| match s {
+            Seg::Line(a, b) => Seg::Line(b, a),
+            Seg::Quad(a, c, b) => Seg::Quad(b, c, a),
+        })
+        .collect();
+    let glyphs = [
+        ('I', TestGlyph::bar(100.0, 0.0, 200.0, 700.0, 300.0)),
+        ('O', square_ring()),
+        (
+            'D',
+            TestGlyph {
+                contours: vec![d(1.0, 0.0), hole],
+                advance: 700,
+            },
+        ),
+    ];
+    // a small font written here, under a name no file has
+    let font = crate::FontRef {
+        name: "forgecad-test.ttf".into(),
+        font: Some(std::sync::Arc::new(
+            forge_font::Font::parse(build(1000, &glyphs, &[('D', 'O', -40)])).expect("the test font"),
+        )),
+    };
+    let text = |s: &str, size: f64, on: TextOn, depth: f64, op: Combine| {
+        Feature::Text(Box::new(Text {
+            text: s.into(),
+            font: font.clone(),
+            size,
+            on,
+            depth,
+            op,
+        }))
+    };
+    Part {
+        features: vec![
+            block(
+                Frame::WORLD,
+                Point2::new(-30.0, -15.0),
+                60.0,
+                30.0,
+                8.0,
+                Combine::New,
+            ),
+            rod(up(Point3::new(18.0, 0.0, 8.0)), 7.0, 20.0, Combine::Add),
+            text(
+                "DOI",
+                9.0,
+                TextOn::Plane(up(Point3::new(-27.0, -5.0, 8.0))),
+                1.0,
+                Combine::Add,
+            ),
+            text(
+                "IODI",
+                5.0,
+                TextOn::Plane(frame(Point3::new(-25.0, -15.0, 1.5), -Vec3::Y, Vec3::X)),
+                0.6,
+                Combine::Cut,
+            ),
+            text(
+                "DOI",
+                5.0,
+                TextOn::Cylinder {
+                    axis: frame(Point3::new(18.0, 0.0, 16.0), Vec3::Z, Vec3::new(0.0, -1.0, 0.0)),
+                    radius: 7.0,
+                },
+                0.5,
+                Combine::Add,
+            ),
+        ],
+    }
 }

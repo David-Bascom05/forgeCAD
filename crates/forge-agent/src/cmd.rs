@@ -45,6 +45,54 @@ pub struct Session {
     root: Option<std::path::PathBuf>,
 }
 
+/// Fonts larger than this are refused unread.
+const FONT_LIMIT: u64 = 32 << 20;
+
+/// The font a text line names: a .ttf or .otf file, relative to the part file's directory, read
+/// with links resolved first and, in a rooted session, only under the root. Rooted, every refusal
+/// reads the same and carries no OS error, as for part files.
+fn font_file(
+    dir: &std::path::Path,
+    root: Option<&std::path::Path>,
+    name: &str,
+) -> Result<std::sync::Arc<forge_font::Font>, String> {
+    use std::io::Read;
+    let real = std::fs::canonicalize(dir.join(name)).ok().filter(|r| {
+        r.extension()
+            .is_some_and(|x| x.eq_ignore_ascii_case("ttf") || x.eq_ignore_ascii_case("otf"))
+    });
+    let read = |r: &std::path::Path| -> Result<Vec<u8>, String> {
+        let meta = std::fs::metadata(r).map_err(|e| e.to_string())?;
+        if !meta.is_file() {
+            return Err("not a regular file".into());
+        }
+        if meta.len() > FONT_LIMIT {
+            return Err(format!("larger than {} MB", FONT_LIMIT >> 20));
+        }
+        // the limit again while reading, should the file grow in between
+        let mut data = Vec::new();
+        std::fs::File::open(r)
+            .and_then(|f| f.take(FONT_LIMIT + 1).read_to_end(&mut data))
+            .map_err(|e| e.to_string())?;
+        if data.len() as u64 > FONT_LIMIT {
+            return Err(format!("larger than {} MB", FONT_LIMIT >> 20));
+        }
+        Ok(data)
+    };
+    let parse = |data: Vec<u8>| forge_font::Font::parse(data).map(std::sync::Arc::new);
+    match (root, real) {
+        (Some(root), Some(r)) if r.starts_with(root) => read(&r)
+            .ok()
+            .and_then(|d| parse(d).ok())
+            .ok_or_else(|| format!("{name}: not a font file under the root")),
+        (Some(_), _) => Err(format!("{name}: not a font file under the root")),
+        (None, Some(r)) => {
+            parse(read(&r).map_err(|e| format!("{name}: {e}"))?).map_err(|e| format!("{name}: {e:?}"))
+        }
+        (None, None) => Err(format!("{name}: no such .ttf or .otf font file")),
+    }
+}
+
 impl Session {
     /// A session that reads `.fc` files under `root` only.
     pub fn rooted(root: std::path::PathBuf) -> Session {
@@ -72,7 +120,15 @@ impl Session {
             (None, Some(r)) => std::fs::read_to_string(&r).map_err(|e| format!("{file}: {e}"))?,
             (None, None) => return Err(format!("{file}: no such .fc part file")),
         };
+        let dir = std::fs::canonicalize(file)
+            .ok()
+            .and_then(|r| r.parent().map(|d| d.to_path_buf()))
+            .unwrap_or_default();
+        let root = self.root.clone();
         let m = self.models.entry(file.to_string()).or_default();
+        m.fonts = Some(std::sync::Arc::new(move |name: &str| {
+            font_file(&dir, root.as_deref(), name)
+        }));
         m.update(&src);
         Ok(m)
     }
@@ -739,6 +795,85 @@ fillet 4 (edges between base wall concave)
             "{}",
             r.text
         );
+    }
+
+    /// Text finds its font beside the part file; rooted, never outside the root, never a file
+    /// that is not a font, a link out, or a huge file, and every refusal reads the same.
+    #[test]
+    fn fonts_are_read_like_part_files() {
+        let font = forge_font::testing::build(
+            1000,
+            &[
+                (
+                    'I',
+                    forge_font::testing::TestGlyph::bar(100.0, 0.0, 200.0, 700.0, 300.0),
+                ),
+                ('O', forge_font::testing::square_ring()),
+            ],
+            &[],
+        );
+        let dir = Dir::new("fontroot");
+        let outside = Dir::new("fontout");
+        std::fs::write(dir.0.join("f.ttf"), &font).expect("write");
+        std::fs::write(outside.0.join("o.ttf"), &font).expect("write");
+        let key = dir.file("key.pem", "-----BEGIN PRIVATE KEY-----\n");
+        std::fs::create_dir_all(dir.0.join("d.ttf")).expect("dir");
+        // a huge file costs nothing on disk: it is never read
+        std::fs::File::create(dir.0.join("big.ttf"))
+            .and_then(|f| f.set_len(FONT_LIMIT + 1))
+            .expect("big");
+        let part = |font: &str| {
+            let name = format!("p{}.fc", font.len());
+            dir.file(
+                &name,
+                &format!("extrude 5 rect 0 0 40 20\ntext \"IOI\" font \"{font}\" 10 1 xy at 2 2 5\n"),
+            )
+        };
+        let mut s = Session {
+            root: Some(std::fs::canonicalize(&dir.0).expect("root")),
+            ..Session::default()
+        };
+        let r = s.run("build", &args(&part("f.ttf"), &[]));
+        assert!(r.ok, "{}", r.text);
+        let away = format!(
+            "../{}/o.ttf",
+            outside.0.file_name().expect("name").to_string_lossy()
+        );
+        let mut refused = vec![
+            away.clone(),
+            "key.pem".into(),
+            "d.ttf".into(),
+            "big.ttf".into(),
+            "none.ttf".into(),
+        ];
+        #[cfg(unix)]
+        {
+            std::os::unix::fs::symlink(outside.0.join("o.ttf"), dir.0.join("out.ttf")).expect("link");
+            std::os::unix::fs::symlink(&key, dir.0.join("key.ttf")).expect("link");
+            refused.extend(["out.ttf".into(), "key.ttf".into()]);
+        }
+        for name in &refused {
+            let r = s.run("build", &args(&part(name), &[]));
+            assert!(!r.ok, "{name}: {}", r.text);
+            assert!(
+                r.text
+                    .contains(&format!("{name}: not a font file under the root")),
+                "{}",
+                r.text
+            );
+            assert!(
+                !r.text.contains("os error") && !r.text.contains("BEGIN") && !r.text.contains("MB"),
+                "{}",
+                r.text
+            );
+        }
+        // not rooted, a font anywhere reads, and refusals say why
+        let mut free = Session::default();
+        assert!(free.run("build", &args(&part(&away), &[])).ok);
+        let r = free.run("build", &args(&part("big.ttf"), &[]));
+        assert!(!r.ok && r.text.contains("larger than 32 MB"), "{}", r.text);
+        let r = free.run("build", &args(&part("key.pem"), &[]));
+        assert!(!r.ok && !r.text.contains("BEGIN"), "{}", r.text);
     }
 
     /// The example AGENTS.md opens with builds, handles and all.

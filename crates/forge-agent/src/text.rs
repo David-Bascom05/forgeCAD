@@ -6,8 +6,9 @@ use crate::{expr, sketch};
 use forge_geom::Circle;
 use forge_math::{Frame, Point2, Point3, Vec2, Vec3, dmath};
 use forge_model::{
-    Coil, CoilSize, Combine, Edit, End, Extent, Feature, Head, Hole, Layout, Loft, Motion, Param, Part,
-    PathEnds, Rib, Row, Side, Source, Sweep, Target, Thread, Toward, Turn, Unit,
+    Coil, CoilSize, Combine, Edit, End, Extent, Feature, FontRef, Head, Hole, Layout, Loft, Motion, Param,
+    Part, PathEnds, Rib, Row, ScrewThread, Side, Source, Sweep, Target, Text, TextOn, Thread, ThreadLength,
+    ThreadOn, ThreadSpec, Toward, Turn, Unit,
 };
 use forge_ops::{
     Axis2, ChamferSize, Handed, LoftGuides, LoftKind, PathSeg, Profile, ProfileLoop, Radius, Segment,
@@ -996,6 +997,159 @@ pub const KINDS: &[Kind] = &[
             true
         },
     },
+    Kind {
+        name: "thread",
+        syntax: "thread (SPEC FRAME ext|int | SPEC face FEAT REF [flip] | hole FEAT) (N | full | to FEAT [@face] [off N]) [left] [chamfer]   SPEC: M6 | M6x0.75 | 1/4-20 | 0.19-24",
+        parse: |p| {
+            let on = if p.eat("hole") {
+                ThreadOn::Hole(p.feat()?)
+            } else {
+                let t = p.next()?;
+                let spec = ThreadSpec::parse(t).ok_or_else(|| {
+                    format!("expected a thread size (M6, M6x0.75, 1/4-20, 0.19-24), found '{t}'")
+                })?;
+                if p.eat("face") {
+                    let feature = p.feat()?;
+                    ThreadOn::Face {
+                        feature,
+                        name: p.one_ref()?,
+                        spec,
+                        flip: p.eat("flip"),
+                    }
+                } else {
+                    let at = p.frame()?;
+                    let internal = match p.next()? {
+                        "ext" => false,
+                        "int" => true,
+                        t => return Err(format!("expected ext or int, found '{t}'")),
+                    };
+                    ThreadOn::Axis { at, spec, internal }
+                }
+            };
+            let length = if p.eat("full") {
+                ThreadLength::Full
+            } else if p.eat("to") {
+                let target = p.target()?;
+                ThreadLength::To {
+                    target,
+                    offset: p.off(false)?,
+                }
+            } else {
+                ThreadLength::Distance(p.num()?)
+            };
+            let handed = if p.eat("left") {
+                Handed::Left
+            } else {
+                Handed::Right
+            };
+            Ok(Feature::Thread(Box::new(ScrewThread {
+                on,
+                length,
+                handed,
+                chamfer: p.eat("chamfer"),
+            })))
+        },
+        print: |f, w| {
+            let Feature::Thread(t) = f else { return false };
+            match t.on {
+                ThreadOn::Hole(k) => {
+                    w.word("hole");
+                    w.feat(k);
+                }
+                ThreadOn::Face {
+                    feature,
+                    name,
+                    spec,
+                    flip,
+                } => {
+                    w.word(&spec.designation());
+                    w.word("face");
+                    w.feat(feature);
+                    w.name(name);
+                    if flip {
+                        w.word("flip");
+                    }
+                }
+                ThreadOn::Axis { at, spec, internal } => {
+                    w.word(&spec.designation());
+                    w.frame(&at);
+                    w.word(if internal { "int" } else { "ext" });
+                }
+            }
+            match t.length {
+                ThreadLength::Full => w.word("full"),
+                ThreadLength::Distance(d) => w.num(d),
+                ThreadLength::To { target, offset } => {
+                    w.word("to");
+                    w.target(&target);
+                    w.off(offset, false);
+                }
+            }
+            if t.handed == Handed::Left {
+                w.word("left");
+            }
+            if t.chamfer {
+                w.word("chamfer");
+            }
+            true
+        },
+    },
+    Kind {
+        name: "text",
+        syntax: "text [add|cut] STRING font PATH SIZE DEPTH FRAME [wrap R]   STRING, PATH: quoted; SIZE: the em; wrap: round FRAME's z",
+        parse: |p| {
+            let op = if p.eat("cut") {
+                Combine::Cut
+            } else {
+                p.eat("add");
+                Combine::Add
+            };
+            let text = p.string()?;
+            p.expect("font")?;
+            let name = p.string()?;
+            let font = FontRef {
+                font: (p.b.fonts)(&name)?,
+                name,
+            };
+            let (size, depth) = (p.num()?, p.num()?);
+            let frame = p.frame()?;
+            let on = if p.eat("wrap") {
+                TextOn::Cylinder {
+                    axis: frame,
+                    radius: p.num()?,
+                }
+            } else {
+                TextOn::Plane(frame)
+            };
+            Ok(Feature::Text(Box::new(Text {
+                text,
+                font,
+                size,
+                on,
+                depth,
+                op,
+            })))
+        },
+        print: |f, w| {
+            let Feature::Text(t) = f else { return false };
+            if t.op != Combine::Add {
+                w.word(OPS.iter().find(|o| o.1 == t.op).expect("every op is named").0);
+            }
+            w.string(&t.text);
+            w.word("font");
+            w.string(&t.font.name);
+            w.nums(&[t.size, t.depth]);
+            match t.on {
+                TextOn::Plane(f) => w.frame(&f),
+                TextOn::Cylinder { axis, radius } => {
+                    w.frame(&axis);
+                    w.word("wrap");
+                    w.num(radius);
+                }
+            }
+            true
+        },
+    },
 ];
 
 type R<T> = Result<T, String>;
@@ -1058,9 +1212,10 @@ fn tokens(text: &str) -> Vec<String> {
     let mut toks: Vec<String> = Vec::new();
     let mut start = None;
     let mut depth = 0;
+    let (mut quoted, mut escaped) = (false, false);
     for (k, c) in text.char_indices() {
         match start {
-            Some(s) if c.is_whitespace() && depth == 0 => {
+            Some(s) if c.is_whitespace() && depth == 0 && !quoted => {
                 toks.push(text[s..k].to_string());
                 start = None;
             }
@@ -1068,12 +1223,33 @@ fn tokens(text: &str) -> Vec<String> {
             None => start = Some(k),
             _ => {}
         }
-        depth = (depth + (c == '(') as i32 - (c == ')') as i32).max(0);
+        if quoted {
+            (quoted, escaped) = (escaped || c != '"', !escaped && c == '\\');
+        } else if c == '"' {
+            quoted = true;
+        } else {
+            depth = (depth + (c == '(') as i32 - (c == ')') as i32).max(0);
+        }
     }
     if let Some(s) = start {
         toks.push(text[s..].to_string());
     }
     toks
+}
+
+/// The line up to its comment: a `#` outside a quoted string.
+fn uncommented(raw: &str) -> &str {
+    let (mut quoted, mut escaped) = (false, false);
+    for (k, c) in raw.char_indices() {
+        if quoted {
+            (quoted, escaped) = (escaped || c != '"', !escaped && c == '\\');
+        } else if c == '"' {
+            quoted = true;
+        } else if c == '#' {
+            return &raw[..k];
+        }
+    }
+    raw
 }
 
 /// The feature lines of a file (blank and comment-only lines skipped). A sketch block is one
@@ -1082,7 +1258,7 @@ pub fn lines(src: &str) -> Vec<Line> {
     let mut out: Vec<Line> = Vec::new();
     let mut block = false;
     for (k, raw) in src.lines().enumerate() {
-        let mut toks = tokens(raw.split('#').next().unwrap_or(""));
+        let mut toks = tokens(uncommented(raw));
         if block {
             let last = out.last_mut().expect("a block has its header");
             if toks.len() == 1 && toks[0] == "end" {
@@ -1120,6 +1296,8 @@ pub struct Before<'a> {
     pub refs: &'a dyn Fn(&str) -> R<Vec<Name>>,
     /// A reference to a planar face: its name, and its plane with z out of the part.
     pub face: &'a dyn Fn(&str) -> R<(Name, Frame)>,
+    /// The font a text line names, found by the host; None where it does not look.
+    pub fonts: &'a dyn Fn(&str) -> R<Option<std::sync::Arc<forge_font::Font>>>,
 }
 
 pub fn kind(name: &str) -> Option<&'static Kind> {
@@ -1202,6 +1380,7 @@ pub fn parse(src: &str) -> Result<Part, (usize, String)> {
             kinds: &kinds,
             refs: &full,
             face: &face,
+            fonts: &|_| Ok(None),
         };
         let f = parse_line(l, &b).map_err(|e| (l.no, e))?;
         kinds.push(kind_of(&f).name);
@@ -1503,6 +1682,28 @@ impl<'a> P<'a> {
         } else {
             Ok(Target::Plane(feature))
         }
+    }
+    /// A quoted string: \" \\ and \n inside it stand for a quote, a backslash and a newline.
+    fn string(&mut self) -> R<String> {
+        let t = self.next()?;
+        let inner = t
+            .strip_prefix('"')
+            .and_then(|t| t.strip_suffix('"'))
+            .ok_or_else(|| format!("expected a quoted string, found '{t}'"))?;
+        let mut out = String::new();
+        let mut cs = inner.chars();
+        while let Some(c) = cs.next() {
+            if c != '\\' {
+                out.push(c);
+                continue;
+            }
+            out.push(match cs.next() {
+                Some('n') => '\n',
+                Some(e) => e,
+                None => return Err(format!("unterminated string {t}")),
+            });
+        }
+        Ok(out)
     }
     fn off(&mut self, angle: bool) -> R<f64> {
         match (self.eat("off"), angle) {
@@ -1953,6 +2154,19 @@ impl<'a> W<'a> {
                 self.name(name);
             }
         }
+    }
+    fn string(&mut self, v: &str) {
+        let mut t = String::from('"');
+        for c in v.chars() {
+            match c {
+                '"' => t.push_str("\\\""),
+                '\\' => t.push_str("\\\\"),
+                '\n' => t.push_str("\\n"),
+                c => t.push(c),
+            }
+        }
+        t.push('"');
+        self.word(&t);
     }
     fn off(&mut self, offset: f64, angle: bool) {
         if offset.to_bits() != 0 {
@@ -2702,6 +2916,69 @@ mod tests {
             }),
             19 => param(r, before),
             20 => sketch(r, before),
+            21 => {
+                let spec = |r: &mut Rng| {
+                    let pos = |r: &mut Rng| num(r).abs().max(1e-3);
+                    if r.bool() {
+                        ThreadSpec::Iso {
+                            major: pos(r),
+                            pitch: pos(r),
+                        }
+                    } else {
+                        ThreadSpec::Uts {
+                            major: pos(r),
+                            tpi: pos(r),
+                        }
+                    }
+                };
+                Feature::Thread(Box::new(ScrewThread {
+                    on: match r.below(3) {
+                        0 => ThreadOn::Hole(r.below(i + 3)),
+                        1 => ThreadOn::Face {
+                            feature: r.below(i + 3),
+                            name: Name(r.next_u64()),
+                            spec: spec(r),
+                            flip: r.bool(),
+                        },
+                        _ => ThreadOn::Axis {
+                            at: frame(r),
+                            spec: spec(r),
+                            internal: r.bool(),
+                        },
+                    },
+                    length: match r.below(3) {
+                        0 => ThreadLength::Full,
+                        1 => ThreadLength::Distance(num(r)),
+                        _ => ThreadLength::To {
+                            target: target(r, i),
+                            offset: num(r),
+                        },
+                    },
+                    handed: if r.bool() { Handed::Right } else { Handed::Left },
+                    chamfer: r.bool(),
+                }))
+            }
+            22 => {
+                let chars = ['a', 'Z', ' ', '"', '\\', '\n', '#', '(', ')', 'é', '字', ':'];
+                let string = |r: &mut Rng| -> String {
+                    (0..r.below(8)).map(|_| chars[r.below(chars.len())]).collect()
+                };
+                Feature::Text(Box::new(Text {
+                    text: string(r),
+                    font: FontRef::named(&string(r)),
+                    size: num(r),
+                    on: if r.bool() {
+                        TextOn::Plane(frame(r))
+                    } else {
+                        TextOn::Cylinder {
+                            axis: frame(r),
+                            radius: num(r),
+                        }
+                    },
+                    depth: num(r),
+                    op: if r.bool() { Combine::Add } else { Combine::Cut },
+                }))
+            }
             _ => Feature::Plane(frame(r)),
         }
     }

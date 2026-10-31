@@ -34,7 +34,12 @@ pub struct Model {
     /// The finished part's faces' triangles, and all of them as one mesh, made as asked for.
     faces: Option<Vec<(forge_topo::FaceId, Option<Arc<FaceMesh>>)>>,
     mesh: Option<TriMesh>,
+    /// Finds the font a text line names; text finds none without it.
+    pub fonts: Option<Arc<Fonts>>,
 }
+
+/// From a font's name in the part file to the font.
+pub type Fonts = dyn Fn(&str) -> Result<Arc<forge_font::Font>, String>;
 
 #[derive(Clone, Debug)]
 pub struct Failure {
@@ -61,6 +66,7 @@ impl Default for Model {
             meshes: facemesh::Cache::default(),
             faces: None,
             mesh: None,
+            fonts: None,
         }
     }
 }
@@ -109,12 +115,14 @@ impl Model {
             let parsed = {
                 let refs = |r: &str| self.refs(i, r);
                 let face = |r: &str| self.face(i, r);
+                let fonts = |n: &str| self.fonts.as_ref().map(|f| f(n)).transpose();
                 let b = Before {
                     features: &self.features,
                     labels: &self.labels[..i],
                     kinds: &self.kinds,
                     refs: &refs,
                     face: &face,
+                    fonts: &fonts,
                 };
                 text::parse_line(&line, &b)
             };
@@ -489,6 +497,18 @@ pub fn explain(e: &RegenError) -> (String, String) {
                 }
                 _ => "try a smaller distance or angle; the faces' neighbours must still meet",
             }),
+        ),
+        Thread { error, .. } => (
+            format!("thread: {error:?}"),
+            hint(
+                "a spec that fits the cylinder (M6 on a 6 mm rod, in a bore of the minor diameter), a positive length",
+            ),
+        ),
+        Text { error, .. } => (
+            format!("text: {error:?}"),
+            hint(
+                "a TrueType (glyf) font file, a positive size and depth; wrapped text shorter than the cylinder's round",
+            ),
         ),
         NothingToCombine { .. } => (
             "nothing to combine with yet".into(),

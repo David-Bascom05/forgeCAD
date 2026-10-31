@@ -14,6 +14,7 @@ forge-ops = { path = "../forge-ops" }
 forge-bool = { path = "../forge-bool" }
 forge-gpu = { path = "../forge-gpu" }
 forge-sketch = { path = "../forge-sketch" }
+forge-font = { path = "../forge-font" }
 
 [dev-dependencies]
 forge-mesh = { path = "../forge-mesh" }

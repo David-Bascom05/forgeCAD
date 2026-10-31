@@ -22,6 +22,9 @@ use forge_math::linalg::solve2;
 use forge_math::{Box2, Box3, Frame, Interval, Point2, Point3, Vec2, Vec3, dmath, tol};
 use std::sync::Arc;
 
+mod coaxial;
+pub use coaxial::meet_coaxial;
+
 /// A planar section in (r, h): distance from the axis, height along it.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub enum Section {
@@ -619,6 +622,9 @@ impl Screw {
 impl Procedural for Screw {
     fn deriv(&self, uv: Point2) -> SurfDeriv {
         self.point(uv)
+    }
+    fn as_any(&self) -> Option<&dyn std::any::Any> {
+        Some(self)
     }
     fn domain(&self) -> Domain2 {
         Domain2 {

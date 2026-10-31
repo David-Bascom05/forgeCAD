@@ -13,9 +13,10 @@ pub fn surfaces_in(a: &Surface, b: &Surface, region: Box3) -> SurfaceSurface {
         _ => SurfaceSurface::NotAnalytic,
     };
     let closed = match closed {
-        SurfaceSurface::NotAnalytic => {
-            forge_geom::meet::intersect(a, b, region).unwrap_or(SurfaceSurface::NotAnalytic)
-        }
+        SurfaceSurface::NotAnalytic => forge_geom::screw::meet_coaxial(a, b)
+            .or_else(|| forge_geom::ruled::meet_ruled(a, b))
+            .or_else(|| forge_geom::meet::intersect(a, b, region))
+            .unwrap_or(SurfaceSurface::NotAnalytic),
         r => r,
     };
     match closed {

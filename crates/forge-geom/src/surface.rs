@@ -123,6 +123,10 @@ pub trait Procedural: Send + Sync + std::fmt::Debug {
     }
     /// A radius of curvature no larger than the surface's tightest (for meshing).
     fn min_radius(&self) -> f64;
+    /// The surface itself, for closed forms that know its kind.
+    fn as_any(&self) -> Option<&dyn std::any::Any> {
+        None
+    }
 }
 
 /// A shared handle to a procedural surface; two handles are equal when they are the same surface.

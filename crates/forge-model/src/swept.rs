@@ -302,7 +302,7 @@ fn sweep_shape(profile: &Profile, stretches: &[Stretch]) -> Shape {
     }
 }
 
-fn coil_shape(m: &forge_ops::Wound) -> Shape {
+pub(crate) fn coil_shape(m: &forge_ops::Wound) -> Shape {
     let segs = m
         .sections
         .iter()

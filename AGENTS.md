@@ -56,6 +56,15 @@ loft [op] [smooth [start W] [end W]] (profile FRAME LOOPS).. [rail I PATH.. | ce
 PATH: (line AX AY AZ BX BY BZ | arc FRAME R START SWEEP).. | SKETCH [E]     tangent-continuous; an arc's FRAME is its circle's, centre at `at`
 Wherever LOOPS go (sweep, coil, loft profiles too), `SKETCH [E]` may stand instead, as for extrude.
 plane FRAME                      a work plane, for `to FEAT` and `on FEAT`
+thread (SPEC FRAME ext|int | SPEC face FEAT REF [flip] | hole FEAT) (N | full | to FEAT [@face] [off N]) [left] [chamfer]
+  a modeled 60 degree ISO / UTS thread. SPEC: M6 (coarse) | M6x0.75 | 1/4-20 | 0.19-24 (inch, TPI).
+  FRAME: origin on the axis where it starts, z along it into the part; ext round a rod of the major
+  diameter, int in a bore of the minor. face: on a cylinder face, from its end furthest along the
+  face's axis (flip: the other). hole: a hole's cosmetic thread, its pattern copies too
+text [add|cut] STRING font PATH SIZE DEPTH FRAME [wrap R]
+  STRING, PATH quoted ("a \"b\""); PATH: a TrueType .ttf/.otf beside the part file; SIZE the em.
+  Baseline from the frame's origin along x, letters up y, raised (add) or cut (cut) DEPTH along z.
+  wrap R: round the cylinder of radius R about the frame's z, starting along its x
 rib T [pos|neg] [web] [flip] [draft A] FRAME (line AX AY BX BY | arc CX CY R START SWEEP)..
   a wall along an open path, ends run on until they meet the part. Default: fills across the path
   to its left (flip: right), T thick along the frame's z (sym; pos/neg: one side). web: fills along
