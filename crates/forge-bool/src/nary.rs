@@ -1641,12 +1641,75 @@ pub fn nary_with(
         // only where faces coincide can another tool's face be the one kept
         Ok((fin != fout && (!on_face || owned(ops, &inner, &outer, r.side))).then_some(!fin))
     };
+    // regions of one tool meeting across a piece of its own edge lie in the same other tools (a
+    // third tool's face crossing the edge cuts it there), so share a verdict: only the first of
+    // each group is placed. Faces that meet another tool's face otherwise than across a new edge
+    // (coincident, touching, left out unintersected) are each placed on their own
+    let mut unclean: Vec<(Side, FaceId)> = coplanar
+        .iter()
+        .flatten()
+        .copied()
+        .chain(loose.iter().flat_map(|&(x, y)| [x, y]))
+        .chain(
+            touching
+                .iter()
+                .flat_map(|t| [(t.sides[0], t.faces[0]), (t.sides[1], t.faces[1])]),
+        )
+        .collect();
+    unclean.sort_unstable();
+    unclean.dedup();
+    let mut unpaired = vec![false; n];
+    for &(i, j) in &unknown {
+        unpaired[i] = true;
+        unpaired[j] = true;
+    }
+    let mut links: Vec<((Side, EdgeId, u32), usize)> = Vec::new();
+    for (ri, r) in regs.iter().enumerate() {
+        if unpaired[r.side] || unclean.binary_search(&(r.side, r.face)).is_ok() {
+            continue;
+        }
+        let body = tools[r.side];
+        if r.loops.is_empty() {
+            // an untouched face's edges are uncut: one piece each
+            for &l in &body.face(r.face).loops {
+                for &c in &body.lp(l).coedges {
+                    links.push(((r.side, body.coedge(c).edge, 0), ri));
+                }
+            }
+            continue;
+        }
+        for &(p, _) in r.loops.iter().flatten() {
+            if let (None, Some(sd), Some(e)) = (list[p].seg, list[p].side, list[p].of)
+                && sd == r.side
+            {
+                let first = pieces.of_edge[sd][e.index()].0 as usize;
+                links.push(((sd, e, (p - first) as u32), ri));
+            }
+        }
+    }
+    links.sort_unstable();
+    let mut group: Vec<usize> = (0..regs.len()).collect();
+    for g in links.chunk_by(|x, y| x.0 == y.0) {
+        for w in g.windows(2) {
+            let (x, y) = (find(&mut group, w[0].1), find(&mut group, w[1].1));
+            group[x.max(y)] = x.min(y);
+        }
+    }
+    let group: Vec<usize> = (0..regs.len()).map(|ri| find(&mut group, ri)).collect();
     let class = match batch {
-        None => par_map(regs.len(), threads, 32, |ri| full(ri, None)),
+        None => par_map(regs.len(), threads, 32, |ri| {
+            if group[ri] != ri {
+                return Ok(None);
+            }
+            full(ri, None)
+        }),
         Some(batch) => {
             // one point per region, all placed at once; the rest decided the full way
             batch.warm();
             let first: Vec<Option<Point3>> = par_map(regs.len(), threads, 32, |ri| {
+                if group[ri] != ri {
+                    return None;
+                }
                 let r = &regs[ri];
                 region_points(tools[r.side], r.face, &r.loops, list, 1)
                     .first()
@@ -1667,6 +1730,7 @@ pub fn nary_with(
             let codes = batch.verdicts(&pts, &sides, &boxes);
             PHASES.with(|p| p.borrow_mut()[8] = t.elapsed().as_nanos() as u64);
             par_map(regs.len(), threads, 32, |ri| match at[ri].map(|i| codes[i]) {
+                _ if group[ri] != ri => Ok(None),
                 Some(0) => Ok(None),
                 Some(1) => Ok(Some(false)),
                 Some(2) => Ok(Some(true)),
@@ -1675,6 +1739,9 @@ pub fn nary_with(
         }
     };
     let mut class: Vec<Option<bool>> = class.into_iter().collect::<R<_>>()?;
+    for ri in 0..regs.len() {
+        class[ri] = class[group[ri]];
+    }
     let merge_start = std::time::Instant::now();
 
     // a new edge with the same verdict on both sides divides nothing: the face is split again
