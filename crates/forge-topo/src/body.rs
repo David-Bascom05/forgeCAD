@@ -703,6 +703,20 @@ impl Body {
         }
     }
 
+    /// Replaces loop `old` of face `f` by a new one of `uses`, in its place among the face's loops.
+    pub fn replace_loop(&mut self, f: FaceId, old: LoopId, uses: &[(EdgeId, bool)]) -> LoopId {
+        let at = self
+            .face(f)
+            .loops
+            .iter()
+            .position(|&x| x == old)
+            .expect("its face's loop");
+        self.remove_loop(f, old);
+        let nl = self.add_loop(f, uses);
+        self.faces[f.index()].loops[at..].rotate_right(1);
+        nl
+    }
+
     pub fn add_loop(&mut self, face: FaceId, uses: &[(EdgeId, bool)]) -> LoopId {
         let lp = LoopId(self.loops.len() as u32);
         let first = self.coedges.len() as u32;

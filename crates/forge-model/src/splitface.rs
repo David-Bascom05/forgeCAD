@@ -208,17 +208,7 @@ fn split_one(b: &mut Body, f: FaceId, by: &Surface, root: Name) -> Result<(), Bo
                 None => uses.push((co.edge, co.forward)),
             }
         }
-        let at = b
-            .face(face)
-            .loops
-            .iter()
-            .position(|&x| x == l)
-            .expect("its face's loop");
-        b.remove_loop(face, l);
-        let nl = b.add_loop(face, &uses);
-        let ls = &mut b.faces[face.index()].loops;
-        ls[at..].rotate_right(1);
-        debug_assert_eq!(ls[at], nl);
+        b.replace_loop(face, l, &uses);
     }
     // the new edges
     let mut leave: HashMap<VertexId, Use> = HashMap::new();

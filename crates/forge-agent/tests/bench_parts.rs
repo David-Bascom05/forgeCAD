@@ -110,3 +110,23 @@ fn hub() {
 fn guard() {
     builds("guard");
 }
+
+/// crank's varying fillet replaces a planar face's outer loop: the face must still list it first
+/// (the booleans read a face from its first loop), its holes after.
+#[test]
+fn fillet_keeps_outer_loop_first() {
+    let mut part = bench::part("crank");
+    part.features.truncate(16);
+    let b = part.regenerate().expect("builds");
+    for f in b.face_ids() {
+        let face = b.face(f);
+        if face.loops.len() > 1 && matches!(face.surface, forge_geom::Surface::Plane(_)) {
+            let first = &forge_topo::uv::face_uv_loops(&b, f)[0];
+            assert_eq!(
+                forge_topo::uv::signed_area(&first.points) > 0.0,
+                face.same_sense,
+                "face {f:?} lists a hole first"
+            );
+        }
+    }
+}

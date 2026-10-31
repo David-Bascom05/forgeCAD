@@ -697,8 +697,7 @@ fn split_edge(body: &mut Body, e: EdgeId, mid: f64) -> EdgeId {
                 _ => uses.push((co.edge, co.forward)),
             }
         }
-        body.remove_loop(f, l);
-        body.add_loop(f, &uses);
+        body.replace_loop(f, l, &uses);
     }
     other
 }
@@ -816,17 +815,26 @@ fn merge_faces(body: &mut Body, e: EdgeId) {
         .filter(|&&l| l != lb)
         .map(|&l| uses(body, l))
         .collect();
+    // the joined loop is the outer one where a's was
+    let outer = body.face(a).loops.first() == Some(&la);
     body.remove_loop(a, la);
     let lbs = body.face(b).loops.clone();
     for &l in &lbs {
         body.remove_loop(b, l);
     }
     body.kill_face(b);
+    let mut first = None;
     for l in joined.into_iter().filter(|l| !l.is_empty()) {
-        body.add_loop(a, &l);
+        first.get_or_insert(body.add_loop(a, &l));
     }
     for o in others {
         body.add_loop(a, &o);
+    }
+    if outer && let Some(l) = first {
+        let ls = &mut body.faces[a.index()].loops;
+        if let Some(k) = ls.iter().position(|&x| x == l) {
+            ls[..=k].rotate_right(1);
+        }
     }
     let face = &mut body.faces[a.index()];
     face.bbox.clear();
