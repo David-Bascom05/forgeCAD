@@ -711,7 +711,8 @@ pub fn nary_with(
     // sorted by slabs of x as wide as the widest reach, then by y: a point's partners lie in its
     // slab or the next, within that reach in y (a sweep along x alone met whole planes of points
     // at one x). Pairs join in any order: a cluster's root is its least index
-    let slab = |i: usize| (pts[i].x / widest).floor();
+    // + 0.0: a -0.0 slab sorts apart from 0.0 but compares equal to it, which split the scan
+    let slab = |i: usize| (pts[i].x / widest).floor() + 0.0;
     let mut order: Vec<(f64, f64, usize)> = (0..pts.len()).map(|i| (slab(i), pts[i].y, i)).collect();
     order.sort_unstable_by(|a, b| a.0.total_cmp(&b.0).then(a.1.total_cmp(&b.1)));
     let mut join = |i: usize, j: usize| {

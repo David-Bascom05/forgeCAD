@@ -38,3 +38,47 @@ fn nary_matches_sequential_on_fuzz() {
         );
     }
 }
+
+/// Cut points at x = 0.0 and x = -0.0 fell in two slabs of the vertex clustering that compared
+/// equal but sorted apart, so two of them that are one vertex stayed two: an open shell.
+#[test]
+fn fuzz11_signed_zero_cut_points() {
+    let part = suite::fuzz(11, 80);
+    for threads in [1, 2] {
+        let nary = part.regenerate_nary(threads).expect("n-ary regen");
+        assert!(
+            forge_topo::check(&nary).is_empty(),
+            "{threads} threads: {:?}",
+            forge_topo::check(&nary)
+        );
+    }
+}
+
+/// Every suite part's n-ary result, bit for bit, at 1, 2 and 4 threads (wasm runs one).
+#[test]
+fn nary_bits_do_not_depend_on_threads() {
+    let mut parts = suite::parts();
+    parts.push(("torture", torture::part(221)));
+    for (name, part) in parts {
+        let bits = |threads: usize| {
+            let mut h = forge_math::hash::BitHasher::new();
+            match part.regenerate_nary(threads) {
+                Ok(b) => {
+                    for v in &b.vertices {
+                        h.p3(v.point);
+                    }
+                    for e in &b.edges {
+                        h.f64(e.range.lo);
+                        h.f64(e.range.hi);
+                    }
+                    h.u64(b.faces.len() as u64);
+                }
+                Err(_) => h.u64(u64::MAX),
+            }
+            h.finish()
+        };
+        let one = bits(1);
+        assert_eq!(bits(2), one, "{name}: 2 threads");
+        assert_eq!(bits(4), one, "{name}: 4 threads");
+    }
+}
