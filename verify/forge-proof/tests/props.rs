@@ -462,3 +462,33 @@ pattern h lin 1 0 0 3 20"
         assert_eq!(props::tools_held(&whole, 2, &all, false, &mut r), None, "{op}");
     }
 }
+
+/// A cut may take a whole body of several and say so; nothing else may lose one.
+#[test]
+fn effect_lets_a_cut_take_a_whole_body() {
+    use forge_model::{BodyFeature, Combine, Feature, Pick};
+    let cut = fc("extrude new 10 rect 0 0 100 40\nextrude cut 5 at 10 20 8 circle 0 0 4").features[1].clone();
+    let add = fc("extrude new 10 rect 0 0 100 40\nextrude add 5 at 10 20 8 circle 0 0 4").features[1].clone();
+    let on = |feature| {
+        Feature::Body(Box::new(BodyFeature::In {
+            bodies: Pick::All,
+            feature,
+        }))
+    };
+    let bodies = |n: usize| vec![forge_topo::Body::new(); n];
+    assert_eq!(props::bodies_held(&on(cut.clone()), &bodies(2), &bodies(1)), None);
+    assert!(props::bodies_held(&on(add), &bodies(2), &bodies(1)).is_some());
+    let combine = |op| {
+        Feature::Body(Box::new(BodyFeature::Combine {
+            op,
+            target: 0,
+            tools: vec![1],
+            keep: true,
+        }))
+    };
+    assert_eq!(
+        props::bodies_held(&combine(Combine::Cut), &bodies(2), &bodies(1)),
+        None
+    );
+    assert!(props::bodies_held(&combine(Combine::Add), &bodies(2), &bodies(1)).is_some());
+}

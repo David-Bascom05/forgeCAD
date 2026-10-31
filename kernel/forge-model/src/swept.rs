@@ -82,7 +82,7 @@ pub struct Loft {
 }
 
 /// How a sweep, coil or loft combines with the part; None for any other feature.
-pub(crate) fn op(f: &Feature) -> Option<Combine> {
+pub fn op(f: &Feature) -> Option<Combine> {
     match f {
         Feature::Sweep(s) => Some(s.op),
         Feature::Coil(c) => Some(c.op),

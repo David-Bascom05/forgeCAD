@@ -806,17 +806,29 @@ pub fn tools_held(part: &Part, k: usize, body: &Body, unchanged: bool, r: &mut R
     None
 }
 
-/// How many bodies a feature on bodies leaves, against how many there were.
-fn bodies_held(f: &Feature, before: &[Body], after: &[Body]) -> Option<&'static str> {
+/// How many bodies a feature on bodies leaves, against how many there were. A cut may take a whole
+/// body of several: David's decision, reported by `Model::removed_bodies` (all of them is `Empty`).
+pub fn bodies_held(f: &Feature, before: &[Body], after: &[Body]) -> Option<&'static str> {
     use forge_model::{BodyFeature, Keep};
     let Feature::Body(b) = f else { return None };
-    let want = match &**b {
-        BodyFeature::Combine { tools, keep, .. } => before.len() - if *keep { 0 } else { tools.len() },
-        BodyFeature::Move { copy: true, .. } => before.len() + 1,
-        BodyFeature::Split { keep: Keep::Both, .. } => before.len() + 1,
-        _ => before.len(),
+    let cuts = |g: &Feature| match g {
+        Feature::Extrude { op, .. } | Feature::Revolve { op, .. } | Feature::Ball { op, .. } => {
+            *op == Combine::Cut
+        }
+        Feature::Hole(_) => true,
+        g => forge_model::swept::op(g) == Some(Combine::Cut),
     };
-    (after.len() != want).then_some("left the wrong number of bodies")
+    let (want, may_lose) = match &**b {
+        BodyFeature::Combine { tools, keep, op, .. } => (
+            before.len() - if *keep { 0 } else { tools.len() },
+            usize::from(*op == Combine::Cut),
+        ),
+        BodyFeature::Move { copy: true, .. } => (before.len() + 1, 0),
+        BodyFeature::Split { keep: Keep::Both, .. } => (before.len() + 1, 0),
+        BodyFeature::In { feature, .. } if cuts(feature) => (before.len(), before.len().saturating_sub(1)),
+        _ => (before.len(), 0),
+    };
+    (after.len() > want || after.len() + may_lose < want).then_some("left the wrong number of bodies")
 }
 
 /// Each named edge a round or a bevel was asked for is gone from the body it left.
