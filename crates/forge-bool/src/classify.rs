@@ -27,6 +27,183 @@ pub struct FaceInfo {
     /// For planar faces with many edges: edges bucketed by position across
     /// the first ray direction, so a query looks only at nearby edges.
     bands: Option<Bands>,
+    /// A face simple enough to decide a point clear of its boundary in closed form.
+    simple: std::sync::OnceLock<Option<Simple>>,
+}
+
+/// Faces a point is placed in by a comparison or two: a disk, a cylinder's band between two
+/// circles about its axis, or a sphere's wedge between two half great circles. A point near a
+/// seam is on the boundary too, as the face's edges have it.
+#[derive(Clone, Copy)]
+enum Simple {
+    Disk {
+        centre: Point3,
+        r: f64,
+    },
+    Band {
+        origin: Point3,
+        axis: Vec3,
+        lo: f64,
+        hi: f64,
+        /// The seam's ruling, from the axis.
+        seam: Option<Vec3>,
+    },
+    /// The sphere on the inner side of both planes (`w` their unit normals into the face), or
+    /// of either where the wedge is wider than a half turn (`convex` false).
+    Wedge {
+        centre: Point3,
+        w: [Vec3; 2],
+        convex: bool,
+    },
+}
+
+/// How far from a simple face's boundary a point must be for the closed form to decide it;
+/// nearer, the boundary is looked at.
+const SIMPLE_MARGIN: f64 = 1e-3;
+
+impl Simple {
+    fn of(body: &Body, f: FaceId) -> Option<Simple> {
+        let face = body.face(f);
+        let [l] = face.loops[..] else { return None };
+        let seam = |c: forge_topo::CoedgeId| body.partner(c).is_some_and(|o| body.coedge_face(o) == f);
+        let full_circle = |c: forge_topo::CoedgeId| {
+            let e = body.edge(body.coedge(c).edge);
+            match &e.curve {
+                Curve::Circle(ci) if e.start == e.end => Some(*ci),
+                _ => None,
+            }
+        };
+        let cs = body.lp(l).coedges();
+        match &face.surface {
+            Surface::Plane(pl) => {
+                let [c] = cs.collect::<Vec<_>>()[..] else {
+                    return None;
+                };
+                let ci = full_circle(c)?;
+                let n = pl.frame.z().get();
+                (ci.frame.z().get().cross(n).length() < 1e-12
+                    && (ci.frame.origin - pl.frame.origin).dot(n).abs() < 1e-9)
+                    .then_some(Simple::Disk {
+                        centre: ci.frame.origin,
+                        r: ci.radius,
+                    })
+            }
+            Surface::Cylinder(cy) => {
+                let (origin, axis) = (cy.frame.origin, cy.frame.z().get());
+                let mut h: Vec<f64> = Vec::new();
+                let mut ruling: Option<Vec3> = None;
+                for c in cs {
+                    if seam(c)
+                        && let Curve::Line(line) = &body.edge(body.coedge(c).edge).curve
+                    {
+                        let d = line.origin - origin;
+                        let off = d - axis * d.dot(axis);
+                        if ruling.is_some_and(|r| (r - off).length() >= 1e-9) {
+                            return None;
+                        }
+                        ruling = Some(off);
+                        continue;
+                    }
+                    let ci = full_circle(c)?;
+                    let d = ci.frame.origin - origin;
+                    let off = d - axis * d.dot(axis);
+                    if ci.frame.z().get().cross(axis).length() >= 1e-12
+                        || off.length() >= 1e-9
+                        || (ci.radius - cy.radius).abs() >= 1e-9
+                    {
+                        return None;
+                    }
+                    h.push(d.dot(axis));
+                }
+                let [a, b] = h[..] else { return None };
+                Some(Simple::Band {
+                    origin,
+                    axis,
+                    lo: a.min(b),
+                    hi: a.max(b),
+                    seam: ruling,
+                })
+            }
+            Surface::Sphere(sp) => {
+                let centre = sp.frame.origin;
+                let [c0, c1] = cs.collect::<Vec<_>>()[..] else {
+                    return None;
+                };
+                let (e0, e1) = (body.edge(body.coedge(c0).edge), body.edge(body.coedge(c1).edge));
+                let distinct = body.coedge(c0).edge != body.coedge(c1).edge;
+                if !distinct
+                    || (e0.start, e0.end) != (e1.start, e1.end) && (e0.start, e0.end) != (e1.end, e1.start)
+                {
+                    return None;
+                }
+                let mut w = [Vec3::ZERO; 2];
+                let mut mid = [Point3::ORIGIN; 2];
+                for (k, c) in [c0, c1].into_iter().enumerate() {
+                    let co = body.coedge(c);
+                    let e = body.edge(co.edge);
+                    let Curve::Circle(ci) = &e.curve else { return None };
+                    if ci.frame.origin.distance(centre) >= 1e-9 || (ci.radius - sp.radius).abs() >= 1e-9 {
+                        return None;
+                    }
+                    let d = e.curve.deriv(e.range.mid());
+                    let along = if co.forward { d.d1 } else { -d.d1 };
+                    let out = (d.p - centre) * if face.same_sense { 1.0 } else { -1.0 };
+                    let n = ci.frame.z().get();
+                    w[k] = if n.dot(out.cross(along)) > 0.0 { n } else { -n };
+                    mid[k] = d.p;
+                }
+                Some(Simple::Wedge {
+                    centre,
+                    w,
+                    convex: w[0].dot(mid[1] - centre) > 0.0,
+                })
+            }
+            _ => None,
+        }
+    }
+
+    /// Where `p`, on the face's surface, lies; None near the boundary.
+    fn place(self, p: Point3) -> Option<Where> {
+        let m = SIMPLE_MARGIN;
+        match self {
+            Simple::Disk { centre, r } => {
+                let d = p.distance(centre);
+                (d < r - m)
+                    .then_some(Where::Inside)
+                    .or((d > r + m).then_some(Where::Outside))
+            }
+            Simple::Band {
+                origin,
+                axis,
+                lo,
+                hi,
+                seam,
+            } => {
+                let h = (p - origin).dot(axis);
+                if let Some(r) = seam
+                    && ((p - origin) - axis * h - r).length() <= m
+                {
+                    return None;
+                }
+                if h > lo + m && h < hi - m {
+                    Some(Where::Inside)
+                } else {
+                    (h < lo - m || h > hi + m).then_some(Where::Outside)
+                }
+            }
+            Simple::Wedge { centre, w, convex } => {
+                let (a, b) = ((p - centre).dot(w[0]), (p - centre).dot(w[1]));
+                let (inside, outside) = if convex {
+                    (a > m && b > m, a < -m || b < -m)
+                } else {
+                    (a > m || b > m, a < -m && b < -m)
+                };
+                inside
+                    .then_some(Where::Inside)
+                    .or(outside.then_some(Where::Outside))
+            }
+        }
+    }
 }
 
 const RAY_ANGLES: [f64; 3] = [0.1234, 1.9876, 4.0123];
@@ -73,6 +250,7 @@ pub fn drop_query_loops(body: &mut Body, f: FaceId, gone: &[forge_topo::LoopId])
         dead += usize::from(e.0 == GONE);
     }
     info.drawn = std::sync::OnceLock::new();
+    info.simple = std::sync::OnceLock::new();
     if 2 * dead > info.edges.len() {
         face.query.clear();
     }
@@ -106,6 +284,7 @@ pub fn extend_query(body: &mut Body, f: FaceId, lp: forge_topo::LoopId) {
         info.bands = Some(Bands::build(&pl, &info.edges));
     }
     info.drawn = std::sync::OnceLock::new();
+    info.simple = std::sync::OnceLock::new();
 }
 
 impl Bands {
@@ -263,6 +442,7 @@ impl<'a> Index<'a> {
                 reach,
                 drawn: std::sync::OnceLock::new(),
                 bands,
+                simple: std::sync::OnceLock::new(),
             })
         });
         q.downcast_ref::<FaceInfo>()
@@ -303,6 +483,13 @@ impl<'a> Index<'a> {
         let body = self.body;
         let face = body.face(f);
         let info = self.info(f);
+        if let Some(w) = info
+            .simple
+            .get_or_init(|| Simple::of(body, f))
+            .and_then(|s| s.place(p))
+        {
+            return w;
+        }
         // nearest boundary point, exactly
         let mut best: Option<(f64, forge_topo::CoedgeId, f64)> = None;
         let mut near: Vec<u32> = Vec::new();
@@ -964,5 +1151,87 @@ mod planar_vs_polygon {
                 assert_eq!(fast, slow, "face {f:?} p {p:?}");
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod simple_vs_polygon {
+    use super::*;
+    use forge_math::rng::Rng;
+    use forge_math::{Frame, Vec2, dmath};
+    use forge_ops::{Axis2, Profile, ProfileLoop, Segment, extrude, revolve};
+
+    #[test]
+    fn agree() {
+        let q = dmath::FRAC_PI_2;
+        let half = Profile {
+            plane: Frame::WORLD,
+            loops: vec![ProfileLoop::new(vec![
+                (
+                    Segment::Arc {
+                        center: Point2::ORIGIN,
+                        radius: 3.0,
+                        start: -q,
+                        sweep: 2.0 * q,
+                    },
+                    0,
+                ),
+                (
+                    Segment::Line {
+                        a: Point2::new(0.0, 3.0),
+                        b: Point2::new(0.0, -3.0),
+                    },
+                    1,
+                ),
+            ])],
+        };
+        let axis = Axis2 {
+            origin: Point2::ORIGIN,
+            dir: Vec2::Y,
+        };
+        let disk = Profile {
+            plane: Frame::WORLD,
+            loops: vec![Profile::circle(Point2::new(1.0, 2.0), 2.5, 0)],
+        };
+        let bodies = [
+            revolve(&half, axis, dmath::TAU, 1).unwrap(),
+            revolve(&half, axis, 2.0, 1).unwrap(),
+            revolve(&half, axis, 4.0, 1).unwrap(),
+            extrude(&disk, 4.0, 1).unwrap(),
+            extrude(&disk, -4.0, 1).unwrap(),
+        ];
+        let mut r = Rng::new(7);
+        let mut decided = 0;
+        for body in &bodies {
+            let ix = Index::new(body);
+            for f in body.face_ids() {
+                let Some(simple) = Simple::of(body, f) else {
+                    continue;
+                };
+                let surface = &body.face(f).surface;
+                for _ in 0..500 {
+                    let raw = Point3::new(r.range(-6.0, 6.0), r.range(-6.0, 6.0), r.range(-6.0, 6.0));
+                    let p = surface.eval(surface.project(raw));
+                    let Some(fast) = simple.place(p) else { continue };
+                    let near = ix.info(f).edges.iter().any(|&(c, _)| {
+                        let e = body.edge(body.coedge(c).edge);
+                        e.curve.eval(e.curve.closest(p, e.range)).distance(p) < 0.05
+                    });
+                    if near {
+                        continue;
+                    }
+                    let drawn = ix.drawn(f);
+                    let uv = into_window(body, f, surface.project(p), drawn);
+                    let slow = if point_in_loops(uv, &drawn.loops) {
+                        Where::Inside
+                    } else {
+                        Where::Outside
+                    };
+                    assert_eq!(fast, slow, "face {f:?} {surface:?} p {p:?}");
+                    decided += 1;
+                }
+            }
+        }
+        assert!(decided > 1000);
     }
 }
