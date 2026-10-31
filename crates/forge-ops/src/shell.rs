@@ -1,8 +1,8 @@
 use crate::rebuild::{RebuildError, reaches_apex, rebuild};
 use crate::selfx::crossing;
 use forge_geom::{Cone, Cylinder, Plane, Sphere, Surface, Torus};
-use forge_math::{dmath, tol};
-use forge_topo::{Body, EdgeId, Name, Problem, VertexId, check};
+use forge_math::{Box2, Interval, dmath, tol};
+use forge_topo::{Body, EdgeId, FaceId, Name, Problem, VertexId, check};
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum ShellError {
@@ -67,11 +67,10 @@ pub fn shell(
     let shift = if outward { thickness } else { -thickness };
     let along = |f: &forge_topo::Face| if f.same_sense { shift } else { -shift };
     // faces whose offsets vanish go, and their neighbours meet instead
-    let gone: Vec<bool> = base
-        .faces
-        .iter()
+    let gone: Vec<bool> = (0..base.faces.len() as u32)
+        .map(FaceId)
         .zip(&opened)
-        .map(|(f, &o)| !o && offset(&f.surface, along(f)).is_none())
+        .map(|(f, &o)| !o && face_offset(&base, f, along(base.face(f))).is_none())
         .collect();
     let mut moved = if gone.iter().any(|&g| g) {
         collapse(&base, &gone)?
@@ -80,9 +79,13 @@ pub fn shell(
     };
     let open_moved: Vec<bool> = moved.faces.iter().map(|f| open.contains(&f.name)).collect();
     let changed: Vec<bool> = open_moved.iter().map(|&o| !o).collect();
-    for (face, _) in moved.faces.iter_mut().zip(&changed).filter(|c| *c.1) {
-        let d = along(face);
-        face.surface = offset(&face.surface, d).ok_or(ShellError::Collapses { face: face.name })?;
+    for f in (0..moved.faces.len() as u32)
+        .map(FaceId)
+        .filter(|f| changed[f.index()])
+    {
+        let face = moved.face(f);
+        let s = face_offset(&moved, f, along(face)).ok_or(ShellError::Collapses { face: face.name })?;
+        moved.faces[f.index()].surface = s;
     }
     // a cone offset towards its apex can close up within the face
     let apex = |b: &Body, slack: f64| b.face_ids().find(|&f| reaches_apex(b, f, slack));
@@ -351,6 +354,29 @@ pub fn offset(s: &Surface, d: f64) -> Option<Surface> {
         }
         Surface::Procedural(p) => forge_geom::blend::Offset::surface(p, d)?,
     })
+}
+
+/// Face `f`'s surface moved `d` along its normal; a procedural one is refused only where it would
+/// close up over the stretch of it the face spans (a blend's run-outs past its ends may be tighter).
+fn face_offset(body: &Body, f: FaceId, d: f64) -> Option<Surface> {
+    let Surface::Procedural(p) = &body.face(f).surface else {
+        return offset(&body.face(f).surface, d);
+    };
+    let dom = p.domain();
+    let mut uv = Box2::new(dom.u.interval(), dom.v.interval());
+    if dom.u.period.is_none() && dom.v.period.is_none() {
+        let (mut su, mut sv) = (Interval::EMPTY, Interval::EMPTY);
+        for l in forge_topo::uv::face_uv_loops(body, f) {
+            for q in &l.points {
+                su.include(q.x);
+                sv.include(q.y);
+            }
+        }
+        if !su.is_empty() {
+            uv = Box2::new(su, sv);
+        }
+    }
+    forge_geom::blend::Offset::surface_over(p, d, p.min_radius_over(uv))
 }
 
 #[cfg(test)]

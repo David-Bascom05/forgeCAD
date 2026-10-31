@@ -5,6 +5,8 @@ pub mod cmd;
 #[cfg(test)]
 mod doc_tests;
 pub mod facemesh;
+#[cfg(test)]
+mod fillet_repros;
 pub mod json;
 pub mod measure;
 pub mod model;

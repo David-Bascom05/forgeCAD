@@ -2520,9 +2520,20 @@ impl Procedural for VarBlend {
         (u.max(tol::LINEAR), v.max(tol::LINEAR))
     }
     fn min_radius(&self) -> f64 {
-        let k = self.rows.iter().map(|r| r.kmax).fold(0.0, f64::max);
-        let rmin = self.radii().0;
-        0.8 * rmin.min(if k > 0.0 { 1.0 / k } else { f64::INFINITY })
+        self.min_radius_over(Box2::new(self.range(), Interval::new(0.0, 1.0)))
+    }
+    fn min_radius_over(&self, uv: Box2) -> f64 {
+        // the rows round the stretch, and the law over it
+        let (a, b) = (uv.u.lo.max(self.lo), uv.u.hi.min(self.hi));
+        let (a, b) = if a <= b { (a, b) } else { (self.lo, self.hi) };
+        let i0 = self.rows.partition_point(|r| r.s <= a).saturating_sub(1);
+        let i1 = self.rows.partition_point(|r| r.s < b).min(self.rows.len() - 1);
+        let k = self.rows[i0..=i1].iter().map(|r| r.kmax).fold(0.0, f64::max);
+        0.8 * self
+            .law
+            .bounds(a, b)
+            .0
+            .min(if k > 0.0 { 1.0 / k } else { f64::INFINITY })
     }
 }
 

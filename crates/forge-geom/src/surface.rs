@@ -128,6 +128,10 @@ pub trait Procedural: Send + Sync + std::fmt::Debug {
     fn feature(&self) -> f64 {
         f64::INFINITY
     }
+    /// `min_radius` over the parameter box only (a face on part of the surface).
+    fn min_radius_over(&self, _uv: Box2) -> f64 {
+        self.min_radius()
+    }
     /// The surface itself, for closed forms that know its kind.
     fn as_any(&self) -> Option<&dyn std::any::Any> {
         None

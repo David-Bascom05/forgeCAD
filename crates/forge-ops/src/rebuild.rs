@@ -107,9 +107,28 @@ pub fn rebuild_some(body: &mut Body, verts: &[bool], edges: &[bool]) -> Result<(
         {
             cons.extend(seam_constraints(&s, p0, cons.len()));
         }
-        let p = solve_point(&cons, p0).ok_or(RebuildError::Vertex {
+        let mut p = solve_point(&cons, p0).ok_or(RebuildError::Vertex {
             vertex: body.vertices[v].name,
         })?;
+        // two faces meeting tangentially do not fix the vertex across their edge: it lies where
+        // their old edge, moved onto one of them, meets the others
+        for &e in &vedges[v] {
+            let fs = faces_of(body, e);
+            let [fa, fb] = fs[..] else { continue };
+            let (a, b) = (&body.face(fa).surface, &body.face(fb).surface);
+            if a.gradient(p).cross(b.gradient(p)).length() > 1e-6 {
+                continue;
+            }
+            let rest: Vec<&Surface> = cons
+                .iter()
+                .filter(|s| !same_surface(s, a) && !same_surface(s, b))
+                .collect();
+            let (oc, or) = &old[e.index()];
+            if let Some(q) = along_tangent(a, &rest, oc, *or, p0) {
+                p = q;
+            }
+            break;
+        }
         body.vertices[v].point = p;
     }
 
@@ -245,6 +264,37 @@ pub(crate) fn solve_point(cons: &[Surface], p0: Point3) -> Option<Point3> {
     cons.iter()
         .all(|s| s.implicit(p).abs() <= 1e-2 * tol::LINEAR)
         .then_some(p)
+}
+
+/// Where curve `c` (over `range`, from its end at `p0`) moved onto `a` meets every surface of
+/// `rest`: the vertex two tangent faces leave unfixed. None when it does not.
+fn along_tangent(a: &Surface, rest: &[&Surface], c: &Curve, range: Interval, p0: Point3) -> Option<Point3> {
+    let [s] = rest[..] else { return None };
+    let foot = |t: f64| {
+        let mut q = c.eval(t);
+        for _ in 0..4 {
+            q = q - a.gradient(q) * a.implicit(q);
+        }
+        q
+    };
+    let mut t = if c.eval(range.lo).distance(p0) <= c.eval(range.hi).distance(p0) {
+        range.lo
+    } else {
+        range.hi
+    };
+    // secant on the other surface's value along the moved curve
+    let h = 1e-3 * range.width();
+    let (mut t1, mut f0) = (t + h, s.implicit(foot(t)));
+    for _ in 0..40 {
+        let f1 = s.implicit(foot(t1));
+        if f1.abs() <= 1e-3 * tol::LINEAR || f1 == f0 {
+            t = t1;
+            break;
+        }
+        (t, t1, f0) = (t1, t1 - f1 * (t1 - t) / (f1 - f0), f1);
+    }
+    let q = foot(t);
+    (s.implicit(q).abs() <= 1e-2 * tol::LINEAR && a.implicit(q).abs() <= 1e-2 * tol::LINEAR).then_some(q)
 }
 
 fn solve3(mut a: [[f64; 3]; 3], mut b: [f64; 3]) -> Option<[f64; 3]> {
@@ -445,6 +495,25 @@ fn edge_curve(
             {
                 return Some((c, r));
             }
+        }
+    }
+    // a procedural edge that runs straight (a linear blend's spring between planes) stays straight:
+    // past a tangency, where tracing finds nothing
+    if !closed
+        && matches!(oc, Curve::Procedural(_))
+        && let (Some(l), Some(o)) = (
+            Line::through(ps, pe),
+            Line::through(oc.eval(or.lo), oc.eval(or.hi)),
+        )
+        && (0..=8).all(|i| {
+            let q = oc.eval(or.lo + or.width() * (i as f64 / 8.0));
+            o.eval(o.param_of(q)).distance(q) <= 0.1 * tol::LINEAR
+        })
+    {
+        let c = Curve::Line(l);
+        let r = Interval::new(0.0, ps.distance(pe));
+        if on_both(&c, r, a, b) {
+            return Some((c, r));
         }
     }
     let old_mid = oc.eval(or.mid());
