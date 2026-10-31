@@ -308,7 +308,18 @@ impl Session {
             let bbox = [bb.x.lo, bb.y.lo, bb.z.lo, bb.x.hi, bb.y.hi, bb.z.hi];
             let (f, e, v) = counts(body);
             // a failed build's numbers are in the JSON; the text keeps to the error
-            let bodies = m.solids_after(m.built()).len();
+            let ids: Vec<usize> = m.solids_after(m.built()).iter().map(|s| s.id).collect();
+            // each body's share of the volume, from the faces' cached triangles
+            let mut vols = vec![0.0; ids.len()];
+            let n = m.built();
+            let faces = m.faces().to_vec();
+            for (f, fm) in &faces {
+                if let (Some(fm), Some(b)) = (fm, m.body_of(n, Ent::Face(*f))) {
+                    if let Some(k) = ids.iter().position(|&i| i == b) {
+                        vols[k] += fm.volume;
+                    }
+                }
+            }
             if ok {
                 text.push_str(&format!(
                     "\nvolume {} area {}{} bbox {}\nfaces {f} edges {e} verts {v}",
@@ -319,10 +330,19 @@ impl Session {
                         .map_or(String::new(), |why| format!(" (approx: {why})")),
                     bbox.map(short).join(" ")
                 ));
-                if bodies > 1 {
-                    text.push_str(&format!(" bodies {bodies}"));
+                if ids.len() > 1 {
+                    let v: Vec<String> = ids
+                        .iter()
+                        .zip(&vols)
+                        .map(|(&i, x)| format!("{} {}", m.feat_name(i), short(*x)))
+                        .collect();
+                    text.push_str(&format!("\nbodies {}: {}", ids.len(), v.join(", ")));
                 }
             }
+            j.push((
+                "body_volumes",
+                Json::Arr(vols.into_iter().map(Json::Num).collect()),
+            ));
             if unmeshed > 0 {
                 text.push_str(&format!("\n({unmeshed} faces would not mesh: bbox approximate)"));
             }
@@ -347,7 +367,7 @@ impl Session {
                 ("faces", f.into()),
                 ("edges", e.into()),
                 ("verts", v.into()),
-                ("bodies", bodies.into()),
+                ("bodies", ids.len().into()),
             ]);
         }
         j.insert(0, ("ok", ok.into()));

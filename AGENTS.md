@@ -5,7 +5,8 @@ Units mm, angles degrees (`1.2r` is radians). `#` starts a comment. `name:` labe
 `id N` before a line (written by `edit`) is the id its names come from, kept when lines move;
 leave it off new lines. A first line `next N` keeps ids of deleted lines from coming back.
 A FRAME places a sketch or hole: `at` is its origin in world coordinates, its z the extrude or
-drill direction; a hole's mouth is at the origin. The part is one solid (it may be in pieces).
+drill direction; a hole's mouth is at the origin. A part may hold several bodies (a later `new`,
+`split`: see Bodies below); `build` lists each body's volume.
 
 ```
 base: extrude 6 rect -30 -20 60 40          # first solid: 6 up from xy; rect X Y W H
