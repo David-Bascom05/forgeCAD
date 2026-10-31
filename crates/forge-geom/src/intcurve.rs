@@ -76,6 +76,12 @@ impl IntCurve {
     }
 
     fn chain_point(&self, t: f64) -> Point3 {
+        let (i, j, f) = self.locate(t);
+        self.pts[i].lerp(self.pts[j], f)
+    }
+
+    /// The chain segment holding t: its end samples' indices and t's fraction along it.
+    fn locate(&self, t: f64) -> (usize, usize, f64) {
         let n = self.pts.len();
         let seg = self.segments();
         let t = if self.closed {
@@ -84,22 +90,12 @@ impl IntCurve {
             t.clamp(0.0, seg as f64)
         };
         let i = (t.floor() as usize).min(seg.saturating_sub(1));
-        let f = t - i as f64;
-        self.pts[i].lerp(self.pts[(i + 1) % n], f)
+        (i, (i + 1) % n, t - i as f64)
     }
 
     /// The cubic through the chain at t: point, first and second derivative.
     fn hermite(&self, t: f64) -> (Point3, Vec3, Vec3) {
-        let n = self.pts.len();
-        let seg = self.segments();
-        let t = if self.closed {
-            t.rem_euclid(seg as f64)
-        } else {
-            t.clamp(0.0, seg as f64)
-        };
-        let i = (t.floor() as usize).min(seg.saturating_sub(1));
-        let j = (i + 1) % n;
-        let f = t - i as f64;
+        let (i, j, f) = self.locate(t);
         let (p0, p1) = (self.pts[i], self.pts[j]);
         let chord = p1 - p0;
         let len = chord.length();
@@ -111,8 +107,24 @@ impl IntCurve {
         (p, d1, d2)
     }
 
+    /// The cubic's point alone (as `hermite`'s).
+    fn hermite_point(&self, t: f64) -> Point3 {
+        let (i, j, f) = self.locate(t);
+        let (p0, p1) = (self.pts[i], self.pts[j]);
+        let chord = p1 - p0;
+        let len = chord.length();
+        let (m0, m1) = (self.tans[i] * len, self.tans[j] * len);
+        let (f2, f3) = (f * f, f * f * f);
+        p0 + chord * (3.0 * f2 - 2.0 * f3) + m0 * (f3 - 2.0 * f2 + f) + m1 * (f3 - f2)
+    }
+
     pub fn eval(&self, t: f64) -> Point3 {
-        let q = refine_step(&self.a, &self.b, self.hermite(t).0);
+        self.onto(self.hermite_point(t))
+    }
+
+    /// A point of the cubic taken onto both surfaces.
+    fn onto(&self, p: Point3) -> Point3 {
+        let q = refine_step(&self.a, &self.b, p);
         // one step lands where the cubic was close; where it wasn't, finish the job
         let tight = |p: Point3| {
             self.a.implicit(p).abs() <= 1e-3 * tol::LINEAR && self.b.implicit(p).abs() <= 1e-3 * tol::LINEAR
@@ -126,8 +138,8 @@ impl IntCurve {
 
     /// First and second derivative with respect to t (the chain spacing sets its scale).
     pub fn derivs(&self, t: f64) -> (Point3, Vec3, Vec3) {
-        let (_, d1, d2) = self.hermite(t);
-        (self.eval(t), d1, d2)
+        let (p, d1, d2) = self.hermite(t);
+        (self.onto(p), d1, d2)
     }
 
     /// Bound on |dP/dt| over the curve.

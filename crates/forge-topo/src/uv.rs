@@ -1,5 +1,5 @@
 use crate::body::{Body, CoedgeId, Edge, FaceId, LoopId};
-use forge_geom::{Curve, CurveGeom, SurfaceGeom};
+use forge_geom::{Curve, CurveGeom, Domain2, SurfaceGeom};
 use forge_math::{Point2, Point3, dmath};
 
 /// A face loop drawn in its surface's parameter plane, with periodic
@@ -45,7 +45,10 @@ pub fn default_segments(e: &Edge) -> usize {
 
 /// Shifts `uv` by whole periods so it is as close as possible to `reference`.
 pub fn unwrap_near(body: &Body, face: FaceId, uv: Point2, reference: Point2) -> Point2 {
-    let d = body.face(face).surface.domain();
+    unwrap_in(&body.face(face).surface.domain(), uv, reference)
+}
+
+fn unwrap_in(d: &Domain2, uv: Point2, reference: Point2) -> Point2 {
     let fix = |x: f64, r: f64, period: Option<f64>| match period {
         Some(p) => x + p * ((r - x) / p).round(),
         None => x,
@@ -59,13 +62,17 @@ pub fn unwrap_near(body: &Body, face: FaceId, uv: Point2, reference: Point2) -> 
 /// Points of a loop in traversal order, each coedge contributing its samples
 /// minus its last point (the next coedge starts there).
 pub fn loop_samples(body: &Body, lp: LoopId, segments: impl Fn(&Edge) -> usize) -> (Vec<Point3>, Vec<usize>) {
-    let mut pts = Vec::new();
-    let mut first = Vec::new();
-    for &c in &body.lp(lp).coedges {
+    let coedges = &body.lp(lp).coedges;
+    let ns: Vec<usize> = coedges
+        .iter()
+        .map(|&c| segments(body.edge(body.coedge(c).edge)))
+        .collect();
+    let mut pts = Vec::with_capacity(ns.iter().sum());
+    let mut first = Vec::with_capacity(coedges.len());
+    for (&c, &n) in coedges.iter().zip(&ns) {
         first.push(pts.len());
         let co = body.coedge(c);
         let e = body.edge(co.edge);
-        let n = segments(e);
         for i in 0..n {
             let k = if co.forward { i } else { n - i };
             let t = (e.range.lo + e.range.width() * (k as f64 / n as f64)).min(e.range.hi);
@@ -85,9 +92,17 @@ pub fn loop_samples(body: &Body, lp: LoopId, segments: impl Fn(&Edge) -> usize) 
 /// face: counter-clockwise in (u, v) when the face normal is the surface's.
 pub fn draw_loop(body: &Body, face: FaceId, samples: &[Point3]) -> (Vec<Point2>, Vec<usize>) {
     let surface = &body.face(face).surface;
+    let domain = surface.domain();
     let n = samples.len();
-    let raw: Vec<Point2> = samples.iter().map(|&p| surface.project(p)).collect();
-    let singular: Vec<bool> = raw.iter().map(|&uv| surface.normal(uv).is_none()).collect();
+    let mut raw: Vec<Point2> = samples.iter().map(|&p| surface.project(p)).collect();
+    if !raw.iter().any(|&uv| surface.singular(uv)) {
+        // one run, unwrapped from the first sample
+        for i in 1..n {
+            raw[i] = unwrap_in(&domain, raw[i], raw[i - 1]);
+        }
+        return (raw, (0..n).collect());
+    }
+    let singular: Vec<bool> = raw.iter().map(|&uv| surface.singular(uv)).collect();
     // begin just after a singular sample when there is one, so each run below is one
     // whole stretch between singular points (a stretch split at the start would be
     // unwrapped as two runs and could be shifted apart)
@@ -122,13 +137,13 @@ pub fn draw_loop(body: &Body, face: FaceId, samples: &[Point3]) -> (Vec<Point2>,
             continue;
         }
         let p = match prev {
-            Some(r) => unwrap_near(body, face, raw[i], r),
+            Some(r) => unwrap_in(&domain, raw[i], r),
             None => raw[i],
         };
         runs.last_mut().expect("at least one run").push((p, i));
         prev = Some(p);
     }
-    let period = surface.domain().u.period;
+    let period = domain.u.period;
     let mut best: Vec<(Point2, usize)> = runs.concat();
     best.extend(tail.iter().copied());
     if runs.len() > 1

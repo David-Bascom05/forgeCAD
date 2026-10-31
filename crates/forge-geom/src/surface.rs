@@ -458,6 +458,18 @@ impl SurfaceGeom for Torus {
 }
 
 impl Surface {
+    /// Whether the normal is undefined at `uv` (`normal(uv)` is None), without working it out
+    /// where it never is.
+    pub fn singular(&self, uv: Point2) -> bool {
+        match self {
+            Surface::Plane(_) | Surface::Cylinder(_) | Surface::Torus(_) => false,
+            Surface::Cone(c) => c.radius_at(uv.y) <= tol::LINEAR,
+            _ => self.normal(uv).is_none(),
+        }
+    }
+}
+
+impl Surface {
     /// Signed distance-like value: zero on the surface, positive on the side
     /// of its natural normal, and 1-Lipschitz (it changes no faster than the
     /// point moves), so a bound on it bounds where the surface can be.

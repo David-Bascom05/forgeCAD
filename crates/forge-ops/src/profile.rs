@@ -292,7 +292,9 @@ impl Profile {
             }
         }
         for (i, l) in self.loops.iter().enumerate() {
-            if crosses_itself(&l.polygon()) {
+            // a lone circle is drawn as a convex polygon: it cannot cross itself
+            let circle = matches!(l.segments[..], [(Segment::Circle { .. }, _)]);
+            if !circle && crosses_itself(&l.polygon()) {
                 return Err(ProfileError::SelfIntersecting { loop_index: i });
             }
         }
@@ -302,10 +304,12 @@ impl Profile {
             let want_ccw = i == 0;
             loops.push(if ccw == want_ccw { l.clone() } else { l.reversed() });
         }
-        let outer = loops[0].polygon();
-        for (i, l) in loops.iter().enumerate().skip(1) {
-            if !l.polygon().iter().all(|&p| inside(p, &outer)) {
-                return Err(ProfileError::HoleOutside { loop_index: i });
+        if loops.len() > 1 {
+            let outer = loops[0].polygon();
+            for (i, l) in loops.iter().enumerate().skip(1) {
+                if !l.polygon().iter().all(|&p| inside(p, &outer)) {
+                    return Err(ProfileError::HoleOutside { loop_index: i });
+                }
             }
         }
         Ok(Profile {

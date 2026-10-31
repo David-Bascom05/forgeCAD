@@ -1,5 +1,5 @@
 //! One full regen of a part, for instruction counting: `regen1 <part> <seq|nary1|naryN>`.
-//! Parts: a suite name, torture, or fuzzN. The n-ary batch runs where FORGE_BATCH says.
+//! Parts: a suite name, torture (or tortureN, its first N features), or fuzzN. The n-ary batch runs where FORGE_BATCH says.
 use forge_model::{suite, torture};
 
 fn main() {
@@ -8,6 +8,7 @@ fn main() {
     let path = args.get(2).map_or("seq", |s| s.as_str());
     let part = match name {
         "torture" => torture::part(221),
+        n if n.starts_with("torture") => torture::part(n[7..].parse().expect("torture count")),
         n if n.starts_with("fuzz") => suite::fuzz(n[4..].parse().expect("fuzz seed"), 80),
         // only this part is built: the count is its regen's
         n => suite::part(n).expect("a suite part"),

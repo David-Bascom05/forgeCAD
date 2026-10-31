@@ -212,6 +212,29 @@ impl Body {
     /// Regroups live faces into shells by connectivity (after an in-place edit
     /// joins or separates pieces).
     pub fn rebuild_shells(&mut self) {
+        let group = self.connected();
+        self.shells.clear();
+        let mut shell_of: Vec<Option<ShellId>> = vec![None; self.faces.len()];
+        for f in 0..self.faces.len() {
+            if !self.faces[f].alive {
+                continue;
+            }
+            let s = match shell_of[group[f]] {
+                Some(s) => s,
+                None => {
+                    self.shells.push(Shell { faces: Vec::new() });
+                    let s = ShellId(self.shells.len() as u32 - 1);
+                    shell_of[group[f]] = Some(s);
+                    s
+                }
+            };
+            self.faces[f].shell = s;
+            self.shells[s.index()].faces.push(FaceId(f as u32));
+        }
+    }
+
+    /// For each face, the lowest face index connected to it through live edges.
+    fn connected(&self) -> Vec<usize> {
         let n = self.faces.len();
         let mut parent: Vec<usize> = (0..n).collect();
         fn find(p: &mut [usize], mut i: usize) -> usize {
@@ -221,59 +244,32 @@ impl Body {
             }
             i
         }
-        for e in 0..self.edges.len() {
-            if !self.edges[e].alive {
+        for e in &self.edges {
+            if !e.alive {
                 continue;
             }
-            let faces: Vec<usize> = self.edges[e]
-                .coedges
-                .iter()
-                .map(|&c| self.coedge_face(c).index())
-                .collect();
-            for w in faces.windows(2) {
-                let (x, y) = (find(&mut parent, w[0]), find(&mut parent, w[1]));
+            for w in e.coedges.windows(2) {
+                let (a, b) = (self.coedge_face(w[0]).index(), self.coedge_face(w[1]).index());
+                let (x, y) = (find(&mut parent, a), find(&mut parent, b));
                 if x != y {
                     parent[x.max(y)] = x.min(y);
                 }
             }
         }
-        self.shells.clear();
-        let mut shell_of: Vec<Option<ShellId>> = vec![None; n];
-        for f in 0..n {
-            if !self.faces[f].alive {
-                continue;
-            }
-            let r = find(&mut parent, f);
-            let s = match shell_of[r] {
-                Some(s) => s,
-                None => {
-                    self.shells.push(Shell { faces: Vec::new() });
-                    let s = ShellId(self.shells.len() as u32 - 1);
-                    shell_of[r] = Some(s);
-                    s
-                }
-            };
-            self.faces[f].shell = s;
-            self.shells[s.index()].faces.push(FaceId(f as u32));
-        }
+        (0..n).map(|f| find(&mut parent, f)).collect()
     }
 
     /// A copy holding only live entities, densely numbered, with shells
     /// regrouped by connectivity.
     pub fn compact(&self) -> Body {
-        let mut grouped = self.clone();
-        grouped.rebuild_shells();
-        grouped.compact_grouped()
-    }
-
-    fn compact_grouped(&self) -> Body {
+        let group = self.connected();
         let mut out = Body::new();
         let mut vmap: Vec<Option<VertexId>> = vec![None; self.vertices.len()];
         let mut emap: Vec<Option<EdgeId>> = vec![None; self.edges.len()];
-        let mut smap: Vec<Option<ShellId>> = vec![None; self.shells.len()];
+        let mut smap: Vec<Option<ShellId>> = vec![None; self.faces.len()];
         for f in self.face_ids() {
             let face = self.face(f);
-            let shell = *smap[face.shell.index()].get_or_insert_with(|| out.add_shell());
+            let shell = *smap[group[f.index()]].get_or_insert_with(|| out.add_shell());
             let nf = out.add_face(shell, face.surface.clone(), face.same_sense, face.name);
             if let Some(b) = face.bbox.get() {
                 out.faces[nf.index()].bbox.set(*b);
