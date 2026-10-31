@@ -47,14 +47,13 @@ fn same_faces(src: &str) {
     let part = Part {
         features: bench::model(src).features.clone(),
     };
-    let faces = |b: forge_topo::Body| b.faces.len();
+    let faces = |b: forge_topo::Body| b.face_ids().count();
     assert_eq!(part.regenerate().map(faces), part.regenerate_nary(1).map(faces));
 }
 
 /// seq step: boolean Internal(face split crossed itself); half-disc boss crossing drafted+filleted
 /// corner under a flange; ok without flange, without fillet, or boss r=25
 #[test]
-#[ignore = "R1: kernel failure, see the comment"]
 fn boss_through_drafted_fillet() {
     holds(
         "\
@@ -70,7 +69,6 @@ extrude sym 174 xz at -78 0 95 loop line -33.5 0 33.5 0 arc 0 0 33.5 0 -180\n",
 /// fillet Overflow; concave fillet r3 on a foot pad whose side is 0.7mm from the tangent line of a
 /// r12 fillet on drafted corner; ok when the pad is 14mm further
 #[test]
-#[ignore = "R2: kernel failure, see the comment"]
 fn fillet_runs_onto_drafted_corner_fillet() {
     holds(
         "\
@@ -103,7 +101,6 @@ rib 8 draft 1 yz at 62 0 0 line 63 20 83 49\n",
 /// modeled thread (thread hole, 12 deep) in a blind hole in a boss standing on a 2deg drafted face:
 /// boolean Unsupported(surface pair without a closed form); same without the draft builds
 #[test]
-#[ignore = "R4: kernel failure, see the comment"]
 fn thread_in_boss_on_drafted_wall() {
     holds(
         "\
@@ -119,7 +116,6 @@ thread hole hole1 12\n",
 /// fillet 2 on the curve where a half-round boss meets a 2deg drafted wall: Overflow; same without
 /// draft builds
 #[test]
-#[ignore = "R5: kernel failure, see the comment"]
 fn fillet_boss_on_drafted_wall() {
     holds(
         "\
@@ -134,7 +130,6 @@ fillet 2 (edges between boss box concave)\n",
 /// half-disc boss, concentric bore cut through, chamfer 1 the bore's semicircle edge: chamfer
 /// Invalid(DuplicateName x3); a rect block with the same half-bore chamfers fine
 #[test]
-#[ignore = "R6: kernel failure, see the comment"]
 fn chamfer_half_ring_bore() {
     holds(
         "\
@@ -148,7 +143,6 @@ chamfer 1 (edges of bore circle back)\n",
 /// extrude of a loop of a line and one 180deg arc is invalid: DuplicateName x3 (check); a 90deg arc
 /// or two 90deg arcs are valid. Root of R6 and of gearbox invalid stages
 #[test]
-#[ignore = "R7: kernel failure, see the comment"]
 fn half_disc_extrude() {
     holds(
         "\
@@ -160,7 +154,6 @@ extrude 36 loop line -33 0 33 0 arc 0 0 33 0 -180\n",
 /// two overlapping half-round bosses, a revolve-cut ring groove in one that reaches the overlap:
 /// DuplicateName (check); either boss alone is valid
 #[test]
-#[ignore = "R8: kernel failure, see the comment"]
 fn groove_across_overlapping_bosses() {
     holds(
         "\
@@ -189,7 +182,6 @@ thread M22x1 -xy at 0 0 15 int 6\n",
 /// a two-profile tapered loft arm into a cylindrical boss, fillet 1.2 (also 0.5) round the
 /// junction: fillet NoBlend; an extruded arm of the same section fillets fine
 #[test]
-#[ignore = "R14: kernel failure, see the comment"]
 fn fillet_loft_into_boss() {
     holds(
         "\
@@ -203,7 +195,6 @@ fillet 1.2 (edges between arm pedal concave)\n",
 /// smooth loft through three circles, then a cylinder extruded on from its end circle: boolean
 /// Unsupported(surface pair without a closed form); the same off a plain extrude is fine
 #[test]
-#[ignore = "R15: kernel failure, see the comment"]
 fn extrude_from_smooth_loft_end() {
     holds(
         "\
@@ -216,7 +207,6 @@ extrude 40 at 0 15 60 circle 0 0 18\n",
 /// shell 2 of a plain loft between two circles whose centres are offset (an oblique cone), top
 /// open: shell Rebuild(Edge); a coaxial loft shells fine. So no shelled volute
 #[test]
-#[ignore = "R16: kernel failure, see the comment"]
 fn shell_oblique_loft() {
     holds(
         "\
@@ -257,7 +247,6 @@ fillet 2 (edges between pad tube concave)\n",
 /// but check fails EdgeOffFace 0.0014; constant fillet 3 is valid; the same with axes at a round
 /// angle did not reproduce
 #[test]
-#[ignore = "R19: kernel failure, see the comment"]
 fn variable_fillet_tube_into_cone() {
     holds(
         "\
@@ -286,7 +275,6 @@ fillet 4..2.5 (edges between tt ht concave)\n",
 /// the stay it builds. The stay's surface no longer reaches the bore once it is cut, so this is the
 /// helix paired with a face it never meets (as R13, R4)
 #[test]
-#[ignore = "R20: kernel failure, see the comment"]
 fn bsa_thread_with_chainstay() {
     holds(
         "\
@@ -302,7 +290,6 @@ thread 1.370-24 -xz at 0 -34 0 int 16 left chamfer\n",
 /// hole full: boolean Unsupported(surface pair without a closed form); the same tube along x builds
 /// (helix vs a cylinder at a general angle has no closed form)
 #[test]
-#[ignore = "R21: kernel failure, see the comment"]
 fn thread_boss_into_oblique_tube() {
     holds(
         "\
@@ -319,7 +306,6 @@ thread hole bh full\n",
 /// fillet 2 all four top edges: fillet Corner{vertex 1}; any subset (root edge alone, arc alone,
 /// sides alone, arc+sides) builds, and the same with a rrect or a plain taper poly builds
 #[test]
-#[ignore = "R22: kernel failure, see the comment"]
 fn fillet_top_tapered_arm_tip() {
     holds(
         "\
@@ -332,7 +318,6 @@ fillet 2 (edges top)\n",
 /// a bar, fillet 4..3 on two top edges, shell 1.6 open below: shell Collapses on the variable blend
 /// (its radius never under 3); fillet 3 constant shells fine
 #[test]
-#[ignore = "R23: kernel failure, see the comment"]
 fn shell_after_variable_fillet() {
     holds(
         "\
@@ -362,7 +347,6 @@ fillet 3 (edges between b big concave)\n",
 /// Unsupported(surface pair without a closed form); a coil whose end sinks into a disc builds. A
 /// spring over its guide rod cannot be modelled
 #[test]
-#[ignore = "R25: kernel failure, see the comment"]
 fn coil_round_rod() {
     holds(
         "\
@@ -376,7 +360,6 @@ coil xz at 0 0 5 circle 9 0 1.2 pitch 6 turns 2\n",
 /// circles: chamfer Rebuild(Edge); the disc alone chamfers fine (the unmerged coplanar end faces
 /// again, as R24)
 #[test]
-#[ignore = "R26: kernel failure, see the comment"]
 fn chamfer_bore_past_flush_block() {
     holds(
         "\
@@ -391,7 +374,6 @@ chamfer 1 (edges of bigbore circle)\n",
 /// seq builds valid; n-ary fails Chamfer NoSuchEdge on the bore-rim chamfer after a fillet of the
 /// shank into the big end (without the bolt-boss block it passes)
 #[test]
-#[ignore = "R27: kernel failure, see the comment"]
 fn nary_chamfer_after_fillet_conrod() {
     holds(
         "\
@@ -475,7 +457,6 @@ dbolt: hole 14 -xz at 103+45 96 0 thru\n",
 /// a block, two separate foot pads, fillet 5 the first pad, then fillet 5 the second: the second
 /// fails Overflow (seq); each alone, or pad-fillet-pad-fillet interleaved, builds
 #[test]
-#[ignore = "R33: kernel failure, see the comment"]
 fn second_pad_fillet_overflow() {
     holds(
         "\
@@ -551,7 +532,6 @@ fillet 3 (edges between tt ht concave)\n",
 /// gearbox 359 vs 338, crank 145 vs 144, conrod 158 vs 154 faces. Likely the same root as R24, R26
 /// and union-coplanar-faces-unmerged
 #[test]
-#[ignore = "R36: kernel failure, see the comment"]
 fn seq_nary_face_count_differ() {
     same_faces(
         "\
@@ -564,7 +544,6 @@ b: extrude sym 22 xz rect 26 -24 16 46\n",
 /// missing the part), the pair mirrored: the mirror leaves an invalid body, EdgeUses (seq; build
 /// says ok, check fails); with a constant fillet, or mirroring only the cut that hits, it is valid
 #[test]
-#[ignore = "R37: kernel failure, see the comment"]
 fn mirror_cuts_after_variable_fillet() {
     holds(
         "\
@@ -617,7 +596,6 @@ pattern csb ssb mirror xz\n",
 /// apart, never touching; a torus face's box is its whole torus, and torus/torus with parallel
 /// axes has no closed form; 20 apart builds
 #[test]
-#[ignore = "B1: kernel failure, see the comment"]
 fn disjoint_swept_arcs() {
     holds(
         "\
@@ -630,7 +608,6 @@ pattern s mirror xz\n",
 /// HANGS: a tube swept along a line and a 2.4 degree arc in a general plane, bored by a sweep cut of a
 /// smaller circle along the same path; the same in a world plane builds in 20 ms
 #[test]
-#[ignore = "B2: kernel failure, see the comment"]
 fn bent_tube_bore_hangs() {
     holds(
         "\
@@ -643,7 +620,6 @@ sweep cut z -0.59048313866411 0.10148065235589 -0.800644328120049 at -130.647058
 /// fillet NoBlend: facefillet between an upright unioned onto a plate and the plate's top; a plain
 /// fillet of the same edge builds. face_fillet compacts the body, then uses the FaceIds it was given
 #[test]
-#[ignore = "B3: kernel failure, see the comment"]
 fn facefillet_after_union() {
     holds(
         "\
@@ -656,7 +632,6 @@ facefillet 6 (faces of up normal +x) to (faces of base normal +z)\n",
 
 /// fillet Overflow: fullround of a rib unioned onto a plate; the rib alone builds (stale FaceIds, as B3)
 #[test]
-#[ignore = "B4: kernel failure, see the comment"]
 fn fullround_after_union() {
     holds(
         "\
@@ -670,7 +645,6 @@ fullround (faces of rib normal -y) (faces of rib normal +z) (faces of rib normal
 /// HANGS: thicken a flange face after a line-arc-line runner swept out of it and bored by a sweep
 /// cut; thicken first, or a straight runner, builds
 #[test]
-#[ignore = "B5: kernel failure, see the comment"]
 fn thicken_after_bent_bore() {
     holds(
         "\
@@ -808,7 +782,6 @@ sc: extrude cut 12 xy at 70 0 0 circle 0 0 6\n";
 /// fillet Overflow: fillet 1 at the root of a 1.5 tab on a 1.5 ring wall; 0.5 builds, a 7 wall
 /// builds
 #[test]
-#[ignore = "B11: kernel failure, see the comment"]
 fn tab_root_fillet_on_thin_wall() {
     holds(
         "\
@@ -822,7 +795,6 @@ fillet 1 (edges between tab ring concave circle)\n",
 /// seq valid; n-ary fails Fillet Corner: two mirrored gussets in a face-filleted corner, their tops
 /// filleted, then their roots
 #[test]
-#[ignore = "B12: kernel failure, see the comment"]
 fn nary_fillet_two_gussets() {
     holds(
         "\
