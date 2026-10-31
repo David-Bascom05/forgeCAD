@@ -1,7 +1,7 @@
 use crate::profile::{Profile, ProfileError, Segment};
 use forge_geom::{Circle, Curve, CurveGeom, Cylinder, Line, Plane, Surface};
 use forge_math::{Frame, Interval, Point2, Point3, UnitVec3, dmath, tol};
-use forge_topo::{Body, EdgeId, Name, Unlinked, VertexId};
+use forge_topo::{Body, EdgeId, FaceId, Name, ShellId, Unlinked, VertexId};
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum ExtrudeError {
@@ -21,11 +21,28 @@ impl From<ProfileError> for ExtrudeError {
 /// the caps are "start" and "end", each segment's wall is "side" + its id,
 /// edges and vertices are named by the faces that meet there.
 pub fn extrude(profile: &Profile, distance: f64, feature: u64) -> Result<Body, ExtrudeError> {
-    Ok(extrude_unlinked(profile, distance, feature)?.into_body())
+    let profile = prepared(profile, distance)?;
+    let mut body = Body::new();
+    body.add_shell();
+    Ok(Builder::new(&profile, distance.abs(), Name::feature(feature), body).build())
 }
 
-/// `extrude`'s entities without the Body.
+/// `extrude`'s entities without the Body (`Unlinked::into_body` makes the same Body).
 pub fn extrude_unlinked(profile: &Profile, distance: f64, feature: u64) -> Result<Unlinked, ExtrudeError> {
+    let profile = prepared(profile, distance)?;
+    let n: usize = profile.loops.iter().map(|l| l.segments.len()).sum();
+    let out = Unlinked {
+        vertices: Vec::with_capacity(2 * n),
+        edges: Vec::with_capacity(3 * n),
+        faces: Vec::with_capacity(n + 2),
+        loops: Vec::with_capacity(n + 2 * profile.loops.len()),
+        uses: Vec::with_capacity(6 * n),
+    };
+    Ok(Builder::new(&profile, distance.abs(), Name::feature(feature), out).build())
+}
+
+/// The profile to sweep forwards by `distance.abs()`, normalized.
+fn prepared(profile: &Profile, distance: f64) -> Result<Profile, ExtrudeError> {
     if distance.abs() <= tol::MIN_LENGTH {
         return Err(ExtrudeError::TooShort);
     }
@@ -44,14 +61,72 @@ pub fn extrude_unlinked(profile: &Profile, distance: f64, feature: u64) -> Resul
     } else {
         profile.clone()
     };
-    let profile = profile.normalized()?;
-    Ok(Builder::new(&profile, distance.abs(), Name::feature(feature)).build())
+    Ok(profile.normalized()?)
 }
 
-struct Builder<'a> {
+/// Where a builder puts what it makes: a Body (its one shell) or its entities alone.
+trait Sink {
+    fn add_vertex(&mut self, p: Point3, name: Name) -> VertexId;
+    fn add_edge(
+        &mut self,
+        curve: Curve,
+        range: Interval,
+        start: VertexId,
+        end: VertexId,
+        name: Name,
+    ) -> EdgeId;
+    fn add_face(&mut self, surface: Surface, same_sense: bool, name: Name) -> FaceId;
+    fn add_loop(&mut self, face: FaceId, uses: &[(EdgeId, bool)]);
+}
+
+impl Sink for Body {
+    fn add_vertex(&mut self, p: Point3, name: Name) -> VertexId {
+        Body::add_vertex(self, p, name)
+    }
+    fn add_edge(
+        &mut self,
+        curve: Curve,
+        range: Interval,
+        start: VertexId,
+        end: VertexId,
+        name: Name,
+    ) -> EdgeId {
+        Body::add_edge(self, curve, range, start, end, name)
+    }
+    fn add_face(&mut self, surface: Surface, same_sense: bool, name: Name) -> FaceId {
+        Body::add_face(self, ShellId(0), surface, same_sense, name)
+    }
+    fn add_loop(&mut self, face: FaceId, uses: &[(EdgeId, bool)]) {
+        Body::add_loop(self, face, uses);
+    }
+}
+
+impl Sink for Unlinked {
+    fn add_vertex(&mut self, p: Point3, name: Name) -> VertexId {
+        Unlinked::add_vertex(self, p, name)
+    }
+    fn add_edge(
+        &mut self,
+        curve: Curve,
+        range: Interval,
+        start: VertexId,
+        end: VertexId,
+        name: Name,
+    ) -> EdgeId {
+        Unlinked::add_edge(self, curve, range, start, end, name)
+    }
+    fn add_face(&mut self, surface: Surface, same_sense: bool, name: Name) -> FaceId {
+        Unlinked::add_face(self, surface, same_sense, name)
+    }
+    fn add_loop(&mut self, face: FaceId, uses: &[(EdgeId, bool)]) {
+        Unlinked::add_loop(self, face, uses);
+    }
+}
+
+struct Builder<'a, B> {
     profile: &'a Profile,
     d: f64,
-    body: Unlinked,
+    body: B,
     start_name: Name,
     end_name: Name,
     root: Name,
@@ -65,20 +140,12 @@ struct Wall {
     forward: bool,
 }
 
-impl<'a> Builder<'a> {
-    fn new(profile: &'a Profile, d: f64, root: Name) -> Self {
-        let n: usize = profile.loops.iter().map(|l| l.segments.len()).sum();
-        let loops = profile.loops.len();
+impl<'a, B: Sink> Builder<'a, B> {
+    fn new(profile: &'a Profile, d: f64, root: Name, body: B) -> Self {
         Builder {
             profile,
             d,
-            body: Unlinked {
-                vertices: Vec::with_capacity(2 * n),
-                edges: Vec::with_capacity(3 * n),
-                faces: Vec::with_capacity(n + 2),
-                loops: Vec::with_capacity(n + 2 * loops),
-                uses: Vec::with_capacity(6 * n),
-            },
+            body,
             start_name: root.with_str("start"),
             end_name: root.with_str("end"),
             root,
@@ -98,7 +165,7 @@ impl<'a> Builder<'a> {
         self.root.with_str("side").with(id)
     }
 
-    fn build(mut self) -> Unlinked {
+    fn build(mut self) -> B {
         let bottom_plane = Plane::new(*self.frame());
         let top_plane = Plane::new(self.frame().with_origin(self.at(Point2::ORIGIN, self.d)));
         let bottom = self
