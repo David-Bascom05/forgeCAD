@@ -11,6 +11,10 @@ struct Globals {
     cube_hover: vec4f,
     // picked vertices: where (w: 0 none, 1 hovered, 2 selected)
     dots: array<vec4f, 8>,
+    // for occlusion: view x and y per clip unit at distance 1, the near plane, the reach in pixels
+    ao: vec4f,
+    // the view cube's square, which occlusion leaves alone: left, top, right, bottom
+    cube_box: vec4f,
     text: array<vec4u, 16>,
 }
 struct Placement {
@@ -42,32 +46,58 @@ struct Shaded {
     @builtin(position) clip: vec4f,
     @location(0) p: vec3f,
     @location(1) n: vec3f,
-    @location(2) tint: vec3f,
+    // rgb, and how metal
+    @location(2) tint: vec4f,
 }
 
 @vertex
 fn surface_vs(@location(0) p: vec3f, @location(1) n: vec2f, @location(2) at: u32) -> Shaded {
     let pl = placements[at];
     let w = place(pl, p);
-    return Shaded(g.view_proj * vec4f(w, 1.0), w, turn(pl, unoct(n)), tints[at].rgb);
+    return Shaded(g.view_proj * vec4f(w, 1.0), w, turn(pl, unoct(n)), tints[at]);
+}
+
+// what a shiny surface reflects: a bright sky, a band of light low down, a darker floor
+fn studio(r: vec3f) -> vec3f {
+    let sky = mix(vec3f(0.42, 0.44, 0.48), vec3f(0.95, 0.97, 1.0), smoothstep(0.0, 0.8, r.z));
+    let floor = mix(vec3f(0.24, 0.24, 0.26), vec3f(0.40, 0.40, 0.42), smoothstep(-1.0, 0.0, r.z));
+    let band = smoothstep(0.10, 0.0, abs(r.z - 0.06)) * 0.55;
+    return mix(floor, sky, smoothstep(-0.04, 0.04, r.z)) + band;
 }
 
 @fragment
 fn surface_fs(in: Shaded) -> @location(0) vec4f {
     let n = normalize(in.n);
     let v = normalize(g.eye.xyz - in.p);
-    let key = normalize(v + vec3f(0.25, 0.25, 0.75));
-    let half_v = normalize(key + v);
-    let up = n.z * 0.5 + 0.5;
-    let sky = mix(vec3f(0.24, 0.23, 0.22), vec3f(0.50, 0.53, 0.58), up);
-    let diffuse = max(dot(n, key), 0.0) * 0.62;
-    let shine = pow(max(dot(n, half_v), 0.0), 48.0) * 0.28;
-    return vec4f(in.tint * (sky + diffuse) + shine, 1.0);
+    let nv = max(dot(n, v), 0.0);
+    let base = in.tint.rgb;
+    let metal = in.tint.a;
+    // a key light over the shoulder of the eye, the room's light from above
+    let key = normalize(v + normalize(g.up.xyz * 0.7 + g.right.xyz * 0.35));
+    let nl = max(dot(n, key), 0.0);
+    let room = mix(vec3f(0.26, 0.25, 0.24), vec3f(0.56, 0.58, 0.62), n.z * 0.5 + 0.5);
+    let diffuse = base * (1.0 - metal) * (room + nl * 0.55);
+    // Schlick's Fresnel, a Blinn lobe for the key, the studio for the rest
+    let f0 = mix(vec3f(0.04), base, metal);
+    let fresnel = f0 + (vec3f(1.0) - f0) * pow(1.0 - nv, 5.0);
+    let h = normalize(key + v);
+    let lobe = pow(max(dot(n, h), 0.0), mix(40.0, 90.0, metal)) * mix(0.18, 0.55, metal);
+    let spec = fresnel * studio(reflect(-v, n)) * mix(0.35, 0.95, metal) + lobe * f0 * 2.0;
+    return vec4f(diffuse + spec, 1.0);
+}
+
+// behind everything: light at the top of the window, a little darker below
+@fragment
+fn back_fs(@builtin(position) at: vec4f) -> @location(0) vec4f {
+    let t = at.y * g.px.y * 0.5;
+    return vec4f(mix(vec3f(0.80, 0.83, 0.87), vec3f(0.56, 0.59, 0.64), t), 1.0);
 }
 
 struct Line {
     @builtin(position) clip: vec4f,
     @location(0) colour: vec3f,
+    // how far across the line, in pixels from its middle
+    @location(1) across: f32,
 }
 
 // where a line's corner goes: along it, across it
@@ -79,6 +109,10 @@ const CORNERS = array<vec2f, 6>(
 const LIFT = 1.0 + 3e-4;
 // somewhere nothing draws
 const NOWHERE = vec4f(0.0, 0.0, -1.0, 1.0);
+// lines fade over this many pixels at their sides, past their width
+const FEATHER = 0.75;
+// a segment is four vertices (lines are drawn with a shared index pattern, so each is shaded once)
+const LINE_CORNERS = array<vec2f, 4>(vec2f(0.0, -1.0), vec2f(1.0, -1.0), vec2f(0.0, 1.0), vec2f(1.0, 1.0));
 
 fn signed_pair(w: u32) -> vec2f {
     return vec2f(f32(i32(w << 16u) >> 16u), f32(i32(w) >> 16u)) / 32767.0;
@@ -86,8 +120,8 @@ fn signed_pair(w: u32) -> vec2f {
 
 // a segment's corner in clip space, half_px wide either side
 fn line_corner(vi: u32, pl: Placement, half_px: f32) -> vec4f {
-    let s0 = segments[vi / 6u * 2u];
-    let s1 = segments[vi / 6u * 2u + 1u];
+    let s0 = segments[vi / 4u * 2u];
+    let s1 = segments[vi / 4u * 2u + 1u];
     var a = g.view_proj * vec4f(place(pl, bitcast<vec3f>(s0.xyz)), 1.0);
     var b = g.view_proj * vec4f(place(pl, bitcast<vec3f>(s1.xyz)), 1.0);
     // cut at the near plane: clip z is the near distance
@@ -108,7 +142,7 @@ fn line_corner(vi: u32, pl: Placement, half_px: f32) -> vec4f {
     }
     let along = d / len;
     let across = vec2f(-along.y, along.x);
-    let c = CORNERS[vi % 6u];
+    let c = LINE_CORNERS[vi % 4u];
     let end = select(a, b, c.x > 0.5);
     let off = (along * (c.x * 2.0 - 1.0) + across * c.y) * half_px * g.px.xy;
     return vec4f(end.xy + off * end.w, end.z * LIFT, end.w);
@@ -117,8 +151,8 @@ fn line_corner(vi: u32, pl: Placement, half_px: f32) -> vec4f {
 @vertex
 fn line_vs(@builtin(vertex_index) vi: u32, @location(0) at: u32) -> Line {
     let pl = placements[at];
-    let s0 = segments[vi / 6u * 2u];
-    let s1 = segments[vi / 6u * 2u + 1u];
+    let s0 = segments[vi / 4u * 2u];
+    let s1 = segments[vi / 4u * 2u + 1u];
     var colour = vec3f(0.05, 0.06, 0.08);
     if (s0.w & 0xffffu) == 0x8000u {
         if (s1.w & 0xffffu) != 0u {
@@ -129,15 +163,17 @@ fn line_vs(@builtin(vertex_index) vi: u32, @location(0) at: u32) -> Line {
         let front_a = dot(turn(pl, unoct(signed_pair(s0.w))), v);
         let front_b = dot(turn(pl, unoct(signed_pair(s1.w))), v);
         if front_a * front_b > 0.0 {
-            return Line(NOWHERE, colour);
+            return Line(NOWHERE, colour, 0.0);
         }
     }
-    return Line(line_corner(vi, pl, g.px.z), colour);
+    let half_px = g.px.z + FEATHER;
+    return Line(line_corner(vi, pl, half_px), colour, LINE_CORNERS[vi % 4u].y * half_px);
 }
 
 @fragment
 fn line_fs(in: Line) -> @location(0) vec4f {
-    return vec4f(in.colour, 1.0);
+    let half_px = g.px.z + FEATHER;
+    return vec4f(in.colour, saturate((half_px - abs(in.across)) / FEATHER));
 }
 
 // the numbers overlay: a strip of 3x5 glyphs at the top left, scaled up
@@ -190,7 +226,7 @@ fn surface_pick_vs(@location(0) p: vec3f, @location(2) at: u32, @location(3) fac
 
 @vertex
 fn line_pick_vs(@builtin(vertex_index) vi: u32, @location(0) at: u32) -> Picked {
-    return Picked(line_corner(vi, placements[at], g.px.z), vec2u(at + 1u, (vi / 6u) | 0x80000000u));
+    return Picked(line_corner(vi, placements[at], g.px.z), vec2u(at + 1u, (vi / 4u) | 0x80000000u));
 }
 
 @fragment
@@ -327,4 +363,116 @@ fn cube_fs(in: CubeFace) -> @location(0) vec4f {
         }
     }
     return vec4f(colour, 1.0);
+}
+
+// ambient occlusion: how much of the hemisphere above each pixel its neighbours on screen hide,
+// worked out at half size from the scene's depth, smoothed keeping to surfaces, then multiplied in
+@group(1) @binding(0) var scene_depth: texture_depth_multisampled_2d;
+@group(1) @binding(1) var ao_in: texture_2d<f32>;
+const AO_SAMPLES = 8;
+const AO_STRENGTH = 2.6;
+// a fragment's own slope, not occlusion
+const AO_BIAS = 0.12;
+const AO_TILE = array<u32, 16>(0u, 8u, 2u, 10u, 12u, 4u, 14u, 6u, 3u, 11u, 1u, 9u, 15u, 7u, 13u, 5u);
+
+// a pixel's point in view space: x right, y up, z ahead; z zero where nothing was drawn
+fn view_at(px: vec2i) -> vec3f {
+    let d = textureLoad(scene_depth, px, 0);
+    if d <= 0.0 {
+        return vec3f(0.0);
+    }
+    let z = g.ao.z / d;
+    let clip = (vec2f(px) + 0.5) * g.px.xy - 1.0;
+    return vec3f(clip.x * g.ao.x * z, -clip.y * g.ao.y * z, z);
+}
+
+@fragment
+fn ao_fs(@builtin(position) at: vec4f) -> @location(0) vec4f {
+    let px = vec2i(at.xy * 2.0);
+    let p = view_at(px);
+    if p.z == 0.0 {
+        return vec4f(1.0, 0.0, 0.0, 1.0);
+    }
+    // the surface's normal from the nearer neighbour either way, so an edge doesn't bend it
+    let l = view_at(px - vec2i(2, 0));
+    let r = view_at(px + vec2i(2, 0));
+    let b = view_at(px - vec2i(0, 2));
+    let t = view_at(px + vec2i(0, 2));
+    let dx = select(r - p, p - l, abs(l.z - p.z) < abs(r.z - p.z) && l.z != 0.0);
+    let dy = select(t - p, p - b, abs(b.z - p.z) < abs(t.z - p.z) && b.z != 0.0);
+    var n = normalize(cross(dx, dy));
+    if dot(n, p) > 0.0 {
+        n = -n;
+    }
+    let reach = g.ao.w * p.z * g.ao.y * g.px.y;
+    // a 4 x 4 tile of turns, which the smoothing below exactly averages out
+    let tile = vec2u(at.xy) % 4u;
+    let noise = f32(AO_TILE[tile.y * 4u + tile.x]) / 16.0 * 6.2831853;
+    var hidden = 0.0;
+    for (var i = 0; i < AO_SAMPLES; i += 1) {
+        let u = (f32(i) + 0.5) / f32(AO_SAMPLES);
+        let turn_by = f32(i) * 2.3999632 + noise;
+        let off = vec2f(cos(turn_by), sin(turn_by)) * sqrt(u) * g.ao.w;
+        let q = view_at(px + vec2i(off));
+        if q.z == 0.0 {
+            continue;
+        }
+        let d = q - p;
+        let far2 = dot(d, d);
+        // what's near counts in full, then less, and nothing far enough off to be a halo
+        let fall = saturate(2.0 - far2 / (reach * reach * 2.25));
+        hidden += max(dot(d, n) / sqrt(far2 + 1e-6) - AO_BIAS, 0.0) * fall;
+    }
+    let ao = saturate(1.0 - AO_STRENGTH * hidden / f32(AO_SAMPLES));
+    return vec4f(ao, p.z, 0.0, 1.0);
+}
+
+// over the noise's 4 x 4 pattern, only from the same surface
+@fragment
+fn ao_blur_fs(@builtin(position) at: vec4f) -> @location(0) vec4f {
+    let px = vec2i(at.xy);
+    let centre = textureLoad(ao_in, px, 0);
+    if centre.g == 0.0 {
+        return centre;
+    }
+    var sum = 0.0;
+    var weight = 0.0;
+    for (var y = -2; y < 2; y += 1) {
+        for (var x = -2; x < 2; x += 1) {
+            let s = textureLoad(ao_in, px + vec2i(x, y), 0);
+            let w = max(1.0 - abs(s.g - centre.g) / (centre.g * 0.01), 0.0);
+            sum += s.r * w;
+            weight += w;
+        }
+    }
+    return vec4f(sum / max(weight, 1e-4), centre.g, 0.0, 1.0);
+}
+
+// back to full size, from the half-size pixels on this pixel's own surface; blended by multiplying
+@fragment
+fn ao_apply_fs(@builtin(position) at: vec4f) -> @location(0) vec4f {
+    if at.x >= g.cube_box.x && at.y >= g.cube_box.y && at.x < g.cube_box.z && at.y < g.cube_box.w {
+        return vec4f(1.0);
+    }
+    let px = vec2i(at.xy);
+    let d = textureLoad(scene_depth, px, 0);
+    if d <= 0.0 {
+        return vec4f(1.0);
+    }
+    let z = g.ao.z / d;
+    let half_px = (at.xy - 1.0) * 0.5;
+    let base = vec2i(floor(half_px));
+    let f = half_px - floor(half_px);
+    var sum = 0.0;
+    var weight = 0.0;
+    for (var y = 0; y < 2; y += 1) {
+        for (var x = 0; x < 2; x += 1) {
+            let s = textureLoad(ao_in, base + vec2i(x, y), 0);
+            let bilinear = abs(1.0 - f32(x) - f.x) * abs(1.0 - f32(y) - f.y);
+            let w = bilinear * max(1.0 - abs(s.g - z) / (z * 0.01), 0.001);
+            sum += s.r * w;
+            weight += w;
+        }
+    }
+    return vec4f(vec3f(sum / max(weight, 1e-5)), 1.0);
 }

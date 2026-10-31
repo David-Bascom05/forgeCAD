@@ -73,3 +73,23 @@ Not measured against others: 1 and 4 are the only counts WebGPU guarantees.
 The fins (mesh edges that can turn into a silhouette) and B-rep edges cost about half of a heavy
 frame: the 5,000-placement bench at 1920x1080 has p99 6.25 ms with lines and 3.95 ms with
 `--no-lines`. Each segment is 6 vertex invocations, most of which the vertex shader drops at once.
+
+## Line drawing: a shared index pattern
+
+Each segment was six vertex shader runs; with one index pattern over four vertices per segment the
+GPU's vertex cache makes it four. The 5,000-placement bench at 2560x1600, no occlusion: p99 15.33 ms
+drawn plain, 10.57 ms indexed (other changes to the pass being the same). Line width doesn't matter
+(a feather of 0.4 or 0.75 pixels: 15.19 and 15.33 ms): the time is in the vertices.
+
+## Far lines: off (`far_lines`, `--far-lines`, key L)
+
+Parts on clustered levels draw no lines. Drawing their B-rep edges from the coarsest tessellated
+level, on the same bench: p99 11.53 ms off, 21.86 ms on. On misses the budget as it stands; it waits
+on David's choice.
+
+## Occlusion: `AO_REACH` = 0.06 of the window's height (`render.rs`), `AO_STRENGTH`, `AO_BIAS` (`render.wgsl`)
+
+Set by eye on heatsink (fins and the plate under them) and the stress scene's mid view, then timed.
+A reach of 0.025 and 0.08 with a hard cut-off barely darkened the heatsink's plate between fins, since
+what hides it is further than the reach; the softer fall-off out to about twice the reach fixed that.
+Same bench: p99 9.65 ms without occlusion, 11.53 ms with, and 6.24 ms with occlusion but no lines.

@@ -14,7 +14,7 @@ const DEPTH: wgpu::TextureFormat = wgpu::TextureFormat::Depth32Float;
 const TIMERS: usize = 4;
 const HUD_CHARS: usize = 256;
 /// Where the overlay's text starts in the globals (see render.wgsl).
-const TEXT_AT: usize = 64 + 16 + 16 + 3 * 16 + 16 + DOTS * 16;
+const TEXT_AT: usize = 64 + 16 + 16 + 3 * 16 + 16 + DOTS * 16 + 2 * 16;
 /// Picked vertices a frame can mark.
 const DOTS: usize = 8;
 /// Picked faces and edges a frame can mark.
@@ -42,6 +42,23 @@ struct LodDraw {
     segments: u32,
     /// How many of the segments are B-rep edges.
     edges: u32,
+}
+
+struct AoPipelines {
+    layout: wgpu::BindGroupLayout,
+    ao: wgpu::RenderPipeline,
+    blur: wgpu::RenderPipeline,
+    apply: wgpu::RenderPipeline,
+}
+
+/// Half-size targets and what reads them, for this window size.
+struct AoTargets {
+    open: wgpu::TextureView,
+    smooth: wgpu::TextureView,
+    /// Reads the smoothed target (for applying), and the raw one (for smoothing).
+    read_smooth: wgpu::BindGroup,
+    read_open: wgpu::BindGroup,
+    half: (u32, u32),
 }
 
 /// Where a level's B-rep entities are.
@@ -147,8 +164,16 @@ pub struct Renderer {
     /// Each part's faces and edges, by level, for telling what a pick hit.
     index: Vec<Vec<PickIndex>>,
     vertex_faces: wgpu::Buffer,
+    line_indices: wgpu::Buffer,
     size: (u32, u32),
     colour: wgpu::TextureView,
+    ao_pipe: AoPipelines,
+    ao_size: AoTargets,
+    back: wgpu::RenderPipeline,
+    /// Occlusion is on.
+    pub ao: bool,
+    /// Lines also on levels that have none of their own, from the coarsest that has.
+    pub far_lines: bool,
     depth: wgpu::TextureView,
     timer_set: Option<wgpu::QuerySet>,
     timer_resolve: wgpu::Buffer,
@@ -355,7 +380,11 @@ impl Renderer {
                 module: &shader,
                 entry_point: Some("line_fs"),
                 compilation_options: Default::default(),
-                targets: &target,
+                targets: &[Some(wgpu::ColorTargetState {
+                    format,
+                    blend: Some(wgpu::BlendState::ALPHA_BLENDING),
+                    write_mask: wgpu::ColorWrites::ALL,
+                })],
             }),
             multiview_mask: None,
             cache: None,
@@ -606,6 +635,22 @@ impl Renderer {
             wgpu::BufferUsages::VERTEX,
             vec![&face_bytes],
         );
+        // one pattern of two triangles per segment, as long as the longest level needs; a level
+        // starts at its first segment's vertices
+        let most = all_lods().map(|l| l.segments.len() / SEGMENT).max().unwrap_or(0) as u32;
+        let mut pattern = Vec::with_capacity(most as usize * 24);
+        for k in 0..most {
+            for v in [0, 1, 2, 2, 1, 3] {
+                pattern.extend_from_slice(&(k * 4 + v).to_le_bytes());
+            }
+        }
+        let line_indices = filled(
+            &device,
+            "line indices",
+            pattern.len() as u64,
+            wgpu::BufferUsages::INDEX,
+            vec![&pattern],
+        );
         let index: Vec<Vec<PickIndex>> = parts
             .iter()
             .zip(&lods)
@@ -784,6 +829,105 @@ impl Renderer {
             .collect();
         let period_ns = queue.get_timestamp_period();
         let (colour, depth_view) = targets(&device, format, size);
+        let ao_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+            label: None,
+            entries: &[
+                wgpu::BindGroupLayoutEntry {
+                    binding: 0,
+                    visibility: wgpu::ShaderStages::FRAGMENT,
+                    ty: wgpu::BindingType::Texture {
+                        sample_type: wgpu::TextureSampleType::Depth,
+                        view_dimension: wgpu::TextureViewDimension::D2,
+                        multisampled: true,
+                    },
+                    count: None,
+                },
+                wgpu::BindGroupLayoutEntry {
+                    binding: 1,
+                    visibility: wgpu::ShaderStages::FRAGMENT,
+                    ty: wgpu::BindingType::Texture {
+                        sample_type: wgpu::TextureSampleType::Float { filterable: false },
+                        view_dimension: wgpu::TextureViewDimension::D2,
+                        multisampled: false,
+                    },
+                    count: None,
+                },
+            ],
+        });
+        let ao_pipeline_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
+            label: None,
+            bind_group_layouts: &[Some(&bind_layout), Some(&ao_layout)],
+            immediate_size: 0,
+        });
+        let fullscreen = |label, entry, format, blend| {
+            device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
+                label: Some(label),
+                layout: Some(&ao_pipeline_layout),
+                vertex: wgpu::VertexState {
+                    module: &shader,
+                    entry_point: Some("hud_vs"),
+                    compilation_options: Default::default(),
+                    buffers: &[],
+                },
+                primitive: wgpu::PrimitiveState::default(),
+                depth_stencil: None,
+                multisample: wgpu::MultisampleState::default(),
+                fragment: Some(wgpu::FragmentState {
+                    module: &shader,
+                    entry_point: Some(entry),
+                    compilation_options: Default::default(),
+                    targets: &[Some(wgpu::ColorTargetState {
+                        format,
+                        blend,
+                        write_mask: wgpu::ColorWrites::ALL,
+                    })],
+                }),
+                multiview_mask: None,
+                cache: None,
+            })
+        };
+        let multiply = wgpu::BlendState {
+            color: wgpu::BlendComponent {
+                src_factor: wgpu::BlendFactor::Dst,
+                dst_factor: wgpu::BlendFactor::Zero,
+                operation: wgpu::BlendOperation::Add,
+            },
+            alpha: wgpu::BlendComponent::OVER,
+        };
+        let ao_pipe = AoPipelines {
+            ao: fullscreen("occlusion", "ao_fs", AO_FORMAT, None),
+            blur: fullscreen("occlusion smoothing", "ao_blur_fs", AO_FORMAT, None),
+            apply: fullscreen("occlusion applying", "ao_apply_fs", format, Some(multiply)),
+            layout: ao_layout,
+        };
+        let ao_size = ao_targets(&device, &ao_pipe.layout, &depth_texture_view(&depth_view), size);
+        let back = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
+            label: Some("background"),
+            layout: Some(&layout),
+            vertex: wgpu::VertexState {
+                module: &shader,
+                entry_point: Some("hud_vs"),
+                compilation_options: Default::default(),
+                buffers: &[],
+            },
+            primitive: wgpu::PrimitiveState::default(),
+            depth_stencil: Some(wgpu::DepthStencilState {
+                format: DEPTH,
+                depth_write_enabled: Some(false),
+                depth_compare: Some(wgpu::CompareFunction::Always),
+                stencil: wgpu::StencilState::default(),
+                bias: wgpu::DepthBiasState::default(),
+            }),
+            multisample,
+            fragment: Some(wgpu::FragmentState {
+                module: &shader,
+                entry_point: Some("back_fs"),
+                compilation_options: Default::default(),
+                targets: &target,
+            }),
+            multiview_mask: None,
+            cache: None,
+        });
         Renderer {
             device,
             queue,
@@ -807,8 +951,14 @@ impl Renderer {
             lods,
             index,
             vertex_faces,
+            line_indices,
             size,
             colour,
+            ao_pipe,
+            ao_size,
+            back,
+            ao: true,
+            far_lines: false,
             depth: depth_view,
             timer_set,
             timer_resolve,
@@ -825,6 +975,12 @@ impl Renderer {
         if size != self.size && size.0 > 0 && size.1 > 0 {
             self.size = size;
             (self.colour, self.depth) = targets(&self.device, self.format, size);
+            self.ao_size = ao_targets(
+                &self.device,
+                &self.ao_pipe.layout,
+                &depth_texture_view(&self.depth),
+                size,
+            );
         }
     }
 
@@ -901,10 +1057,12 @@ impl Renderer {
             }
             pass.set_pipeline(&self.pick.line);
             pass.set_vertex_buffer(0, self.instances.slice(..));
+            pass.set_index_buffer(self.line_indices.slice(..), wgpu::IndexFormat::Uint32);
             for d in &scene.draws {
                 let l = self.lods[d.part as usize][self.pick_lod(d.part, d.lod)];
-                pass.draw(
-                    l.first_segment * 6..(l.first_segment + l.edges) * 6,
+                pass.draw_indexed(
+                    0..l.edges * 6,
+                    l.first_segment as i32 * 4,
                     d.first..d.first + d.count,
                 );
             }
@@ -1088,6 +1246,7 @@ impl Renderer {
         pass.set_vertex_buffer(1, self.marks.slice(..));
         pass.set_pipeline(&self.face_mark);
         pass.set_vertex_buffer(0, self.vertices.slice(..));
+        pass.set_index_buffer(self.indices.slice(..), wgpu::IndexFormat::Uint32);
         for (k, m) in marks.iter().take(MARKS).enumerate() {
             let k = k as u32;
             let part = scene.placements[m.placement as usize].part;
@@ -1108,6 +1267,7 @@ impl Renderer {
         }
         pass.set_pipeline(&self.edge_mark);
         pass.set_vertex_buffer(0, self.marks.slice(..));
+        pass.set_index_buffer(self.line_indices.slice(..), wgpu::IndexFormat::Uint32);
         for (k, m) in marks.iter().take(MARKS).enumerate() {
             let k = k as u32;
             let part = scene.placements[m.placement as usize].part;
@@ -1119,7 +1279,7 @@ impl Renderer {
                 && let Some(r) = self.index[part as usize][lod].edges.iter().find(|r| r.edge == e)
             {
                 let first = self.lods[part as usize][lod].first_segment + r.first;
-                pass.draw(first * 6..(first + r.count) * 6, k..k + 1);
+                pass.draw_indexed(0..r.count * 6, first as i32 * 4, k..k + 1);
             }
         }
         pass.set_pipeline(&self.dot);
@@ -1160,6 +1320,15 @@ impl Renderer {
 
         let hover = overlay.cube.map_or([0; 3], |c| c.2);
         let mut bytes = globals_bytes(&view, self.size, hover, hud.unwrap_or(""));
+        let tan = (camera.fovy * 0.5).tan();
+        let box_at = overlay
+            .cube
+            .map_or([0.0; 4], |(at, side, _)| [at.0, at.1, at.0 + side, at.1 + side]);
+        let aspect = self.size.0 as f32 / self.size.1 as f32;
+        let numbers = [tan * aspect, tan, view.near, AO_REACH * self.size.1 as f32];
+        for (k, v) in numbers.iter().chain(&box_at).enumerate() {
+            bytes[AO_AT + k * 4..AO_AT + k * 4 + 4].copy_from_slice(&v.to_le_bytes());
+        }
         self.write_dots(&mut bytes, scene, overlay.marks);
         let marked: Vec<[u8; 4]> = overlay
             .marks
@@ -1199,7 +1368,11 @@ impl Renderer {
                     view: &self.depth,
                     depth_ops: Some(wgpu::Operations {
                         load: wgpu::LoadOp::Clear(0.0),
-                        store: wgpu::StoreOp::Discard,
+                        store: if self.ao {
+                            wgpu::StoreOp::Store
+                        } else {
+                            wgpu::StoreOp::Discard
+                        },
                     }),
                     stencil_ops: None,
                 }),
@@ -1207,13 +1380,15 @@ impl Renderer {
                     wgpu::RenderPassTimestampWrites {
                         query_set: set,
                         beginning_of_pass_write_index: Some(0),
-                        end_of_pass_write_index: Some(1),
+                        end_of_pass_write_index: if self.ao { None } else { Some(1) },
                     }
                 }),
                 occlusion_query_set: None,
                 multiview_mask: None,
             });
             pass.set_bind_group(0, &self.binds, &[]);
+            pass.set_pipeline(&self.back);
+            pass.draw(0..3, 0..1);
             pass.set_pipeline(&self.surface);
             pass.set_vertex_buffer(0, self.vertices.slice(..));
             pass.set_vertex_buffer(1, self.instances.slice(..));
@@ -1231,11 +1406,17 @@ impl Renderer {
             if self.lines {
                 pass.set_pipeline(&self.line);
                 pass.set_vertex_buffer(0, self.instances.slice(..));
+                pass.set_index_buffer(self.line_indices.slice(..), wgpu::IndexFormat::Uint32);
                 for d in &scene.draws {
-                    let l = self.lods[d.part as usize][d.lod as usize];
+                    let mut l = self.lods[d.part as usize][d.lod as usize];
+                    if l.segments == 0 && self.far_lines {
+                        l = self.lods[d.part as usize][self.pick_lod(d.part, d.lod)];
+                        l.segments = l.edges;
+                    }
                     if l.segments > 0 {
-                        pass.draw(
-                            l.first_segment * 6..(l.first_segment + l.segments) * 6,
+                        pass.draw_indexed(
+                            0..l.segments * 6,
+                            l.first_segment as i32 * 4,
                             d.first..d.first + d.count,
                         );
                         drawn.segments += l.segments as u64 * d.count as u64;
@@ -1249,6 +1430,61 @@ impl Renderer {
                 pass.set_pipeline(&self.cube);
                 pass.draw(0..36, 0..1);
             }
+        }
+        if self.ao {
+            let half = self.ao_size.half;
+            let mut half_pass = |label, view, pipeline: &wgpu::RenderPipeline, reads: &wgpu::BindGroup| {
+                let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+                    label: Some(label),
+                    color_attachments: &[Some(wgpu::RenderPassColorAttachment {
+                        view,
+                        depth_slice: None,
+                        resolve_target: None,
+                        ops: wgpu::Operations {
+                            load: wgpu::LoadOp::Clear(wgpu::Color::WHITE),
+                            store: wgpu::StoreOp::Store,
+                        },
+                    })],
+                    depth_stencil_attachment: None,
+                    timestamp_writes: None,
+                    occlusion_query_set: None,
+                    multiview_mask: None,
+                });
+                pass.set_viewport(0.0, 0.0, half.0 as f32, half.1 as f32, 0.0, 1.0);
+                pass.set_bind_group(0, &self.binds, &[]);
+                pass.set_bind_group(1, reads, &[]);
+                pass.set_pipeline(pipeline);
+                pass.draw(0..3, 0..1);
+            };
+            let t = &self.ao_size;
+            half_pass("occlusion", &t.open, &self.ao_pipe.ao, &t.read_smooth);
+            half_pass("occlusion smoothing", &t.smooth, &self.ao_pipe.blur, &t.read_open);
+            let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+                label: Some("occlusion applying"),
+                color_attachments: &[Some(wgpu::RenderPassColorAttachment {
+                    view: target,
+                    depth_slice: None,
+                    resolve_target: None,
+                    ops: wgpu::Operations {
+                        load: wgpu::LoadOp::Load,
+                        store: wgpu::StoreOp::Store,
+                    },
+                })],
+                depth_stencil_attachment: None,
+                timestamp_writes: self.timer_set.as_ref().filter(|_| timed).map(|set| {
+                    wgpu::RenderPassTimestampWrites {
+                        query_set: set,
+                        beginning_of_pass_write_index: None,
+                        end_of_pass_write_index: Some(1),
+                    }
+                }),
+                occlusion_query_set: None,
+                multiview_mask: None,
+            });
+            pass.set_bind_group(0, &self.binds, &[]);
+            pass.set_bind_group(1, &t.read_smooth, &[]);
+            pass.set_pipeline(&self.ao_pipe.apply);
+            pass.draw(0..3, 0..1);
         }
         if hud.is_some() {
             let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
@@ -1397,11 +1633,76 @@ const MARK_HALF_PX: f32 = 1.5;
 const PICK_EDGE_PX: f32 = 4.0;
 const PICK_VERTEX_PX: f32 = 7.0;
 /// Where the picked vertices start in the globals.
-const DOTS_AT: usize = TEXT_AT - DOTS * 16;
+const DOTS_AT: usize = TEXT_AT - 2 * 16 - DOTS * 16;
+/// Where occlusion's numbers start in the globals, then the cube's square.
+const AO_AT: usize = TEXT_AT - 2 * 16;
+/// Half-size occlusion's format: how open, and the pixel's distance.
+const AO_FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::Rg16Float;
+/// How far occlusion reaches, as a share of the window's height (research/render).
+const AO_REACH: f32 = 0.06;
 /// Half a line's width in pixels.
 const LINE_HALF_PX: f32 = 0.7;
 /// A level's chord may be this many pixels on screen (research/render).
 pub const LOD_PX: f32 = 1.0;
+
+/// The depth target again, to read rather than draw to.
+fn depth_texture_view(depth: &wgpu::TextureView) -> wgpu::TextureView {
+    depth.texture().create_view(&wgpu::TextureViewDescriptor {
+        aspect: wgpu::TextureAspect::DepthOnly,
+        ..Default::default()
+    })
+}
+
+fn ao_targets(
+    device: &wgpu::Device,
+    layout: &wgpu::BindGroupLayout,
+    depth: &wgpu::TextureView,
+    size: (u32, u32),
+) -> AoTargets {
+    let half = (size.0.div_ceil(2), size.1.div_ceil(2));
+    let make = |label| {
+        device
+            .create_texture(&wgpu::TextureDescriptor {
+                label: Some(label),
+                size: wgpu::Extent3d {
+                    width: half.0,
+                    height: half.1,
+                    depth_or_array_layers: 1,
+                },
+                mip_level_count: 1,
+                sample_count: 1,
+                dimension: wgpu::TextureDimension::D2,
+                format: AO_FORMAT,
+                usage: wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::TEXTURE_BINDING,
+                view_formats: &[],
+            })
+            .create_view(&Default::default())
+    };
+    let (open, smooth) = (make("occlusion"), make("occlusion smoothed"));
+    let reads = |t: &wgpu::TextureView| {
+        device.create_bind_group(&wgpu::BindGroupDescriptor {
+            label: None,
+            layout,
+            entries: &[
+                wgpu::BindGroupEntry {
+                    binding: 0,
+                    resource: wgpu::BindingResource::TextureView(depth),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 1,
+                    resource: wgpu::BindingResource::TextureView(t),
+                },
+            ],
+        })
+    };
+    AoTargets {
+        read_smooth: reads(&smooth),
+        read_open: reads(&open),
+        open,
+        smooth,
+        half,
+    }
+}
 
 fn targets(
     device: &wgpu::Device,
@@ -1421,7 +1722,7 @@ fn targets(
                 sample_count: SAMPLES,
                 dimension: wgpu::TextureDimension::D2,
                 format,
-                usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
+                usage: wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::TEXTURE_BINDING,
                 view_formats: &[],
             })
             .create_view(&Default::default())

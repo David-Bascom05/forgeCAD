@@ -24,7 +24,7 @@ impl Placement {
                 [0.0, 1.0, 0.0, pos[1]],
                 [0.0, 0.0, 1.0, pos[2]],
             ],
-            tint: [0.62, 0.65, 0.69, 1.0],
+            tint: [0.60, 0.62, 0.66, 0.0],
         }
     }
 }
@@ -300,7 +300,8 @@ pub fn stress(parts: usize, n: usize, spacing: f32) -> Vec<Placement> {
                 0.62 + 0.10 * hue.cos(),
                 0.64 + 0.04 * hue.sin(),
                 0.68 - 0.10 * hue.cos(),
-                1.0,
+                // every third kind of part bare metal, the rest painted
+                if part.is_multiple_of(3) { 1.0 } else { 0.0 },
             ];
             Placement {
                 part,

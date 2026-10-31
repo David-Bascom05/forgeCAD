@@ -8,7 +8,7 @@ use std::sync::Arc;
 use winit::dpi::PhysicalSize;
 use winit::event::{ElementState, WindowEvent};
 use winit::event_loop::{ActiveEventLoop, ControlFlow};
-use winit::keyboard::PhysicalKey;
+use winit::keyboard::{KeyCode, PhysicalKey};
 use winit::window::Window;
 
 /// Milliseconds on a clock that only moves forward.
@@ -190,10 +190,21 @@ impl Viewer {
                 self.window.request_redraw();
             }
             WindowEvent::KeyboardInput { event, .. } if event.state == ElementState::Pressed => {
-                if let PhysicalKey::Code(code) = event.physical_key
-                    && self.nav.key(code, &self.scene)
-                {
-                    self.window.request_redraw();
+                if let PhysicalKey::Code(code) = event.physical_key {
+                    let changed = match code {
+                        KeyCode::KeyL => {
+                            self.renderer.far_lines = !self.renderer.far_lines;
+                            true
+                        }
+                        KeyCode::KeyO => {
+                            self.renderer.ao = !self.renderer.ao;
+                            true
+                        }
+                        _ => self.nav.key(code, &self.scene),
+                    };
+                    if changed {
+                        self.window.request_redraw();
+                    }
                 }
             }
             WindowEvent::RedrawRequested => {

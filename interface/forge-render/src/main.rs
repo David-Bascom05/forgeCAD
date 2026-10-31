@@ -13,7 +13,7 @@ use winit::window::{Window, WindowId};
 
 const USAGE: &str =
     "forge-render [PART | file.fc] [--stress N] [--moving N] [--bench] [--hover] [--window] [--frames N]
-  [--size WxH] [--lod-px T] [--no-lines] [--no-cache] [--shot FILE.ppm [--select X Y]..] [--yaw R --pitch R --dist X]
+  [--size WxH] [--lod-px T] [--no-lines] [--no-ao] [--far-lines] [--no-cache] [--shot FILE.ppm [--select X Y]..] [--yaw R --pitch R --dist X]
   [--export FILE] [--levels]
 PART: a bench part (default crank). --stress: all 15 bench parts placed N times. --moving N: N of
 them swing on joints every frame. --hover: --bench also picks under a wandering pixel each frame. --bench: a fixed
@@ -30,6 +30,8 @@ struct Args {
     size: (u32, u32),
     lod_px: f32,
     lines: bool,
+    ao: bool,
+    far_lines: bool,
     cache: bool,
     shot: Option<String>,
     select: Vec<(f32, f32)>,
@@ -52,6 +54,8 @@ fn args() -> Result<Args, String> {
         size: (1920, 1080),
         lod_px: render::LOD_PX,
         lines: true,
+        ao: true,
+        far_lines: false,
         cache: true,
         shot: None,
         select: Vec::new(),
@@ -76,6 +80,8 @@ fn args() -> Result<Args, String> {
             "--frames" => a.frames = num(it.next(), &k)?,
             "--lod-px" => a.lod_px = num(it.next(), &k)?,
             "--no-lines" => a.lines = false,
+            "--no-ao" => a.ao = false,
+            "--far-lines" => a.far_lines = true,
             "--no-cache" => a.cache = false,
             "--shot" => a.shot = it.next(),
             "--select" => {
@@ -166,6 +172,8 @@ fn headless(a: &Args, mut s: Stage) -> Result<(), String> {
     );
     r.lod_px = a.lod_px;
     r.lines = a.lines;
+    r.ao = a.ao;
+    r.far_lines = a.far_lines;
     let bytes: usize = s
         .parts
         .iter()
@@ -312,6 +320,8 @@ impl ApplicationHandler for App {
         );
         renderer.lod_px = self.args.lod_px;
         renderer.lines = self.args.lines;
+        renderer.ao = self.args.ao;
+        renderer.far_lines = self.args.far_lines;
         let mut v = Viewer::new(window.clone(), surface, config, renderer, s.scene, s.camera);
         v.motion = (self.args.moving > 0).then(|| Motion::new(&v.scene, self.args.moving));
         if self.args.bench {
