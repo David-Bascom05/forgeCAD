@@ -443,16 +443,40 @@ impl Eqn {
     /// of zeros close together shows as a dip below zero.
     fn events(&self, n: usize) -> Vec<(f64, bool)> {
         let f = |u: f64| self.disc(u);
-        let cross = |mut a: f64, mut b: f64, fa: f64| {
-            for _ in 0..100 {
-                let m = 0.5 * (a + b);
-                if m <= a || m >= b {
-                    break;
-                }
-                if (f(m) < 0.0) == (fa < 0.0) {
-                    a = m;
+        // a sign change, by regula falsi with the Illinois halving (the turn is polished after)
+        let cross = |mut a: f64, mut b: f64, mut fa: f64| {
+            let mut fb = f(b);
+            let mut side = 0;
+            for _ in 0..60 {
+                let m = if fa != fb {
+                    b - fb * (b - a) / (fb - fa)
                 } else {
-                    b = m;
+                    0.5 * (a + b)
+                };
+                let m = if m > a.min(b) && m < a.max(b) {
+                    m
+                } else {
+                    0.5 * (a + b)
+                };
+                let fm = f(m);
+                if fm == 0.0 || (b - a).abs() <= 1e-13 * (1.0 + m.abs()) {
+                    return m;
+                }
+                if (fm < 0.0) == (fb < 0.0) {
+                    (b, fb) = (m, fm);
+                    if side == -1 {
+                        fa *= 0.5;
+                    }
+                    side = -1;
+                } else {
+                    (a, fa) = (m, fm);
+                    if side == 1 {
+                        fb *= 0.5;
+                    }
+                    side = 1;
+                }
+                if (b - a).abs() <= 1e-13 * (1.0 + m.abs()) {
+                    return m;
                 }
             }
             0.5 * (a + b)
