@@ -940,7 +940,31 @@ pub fn variant_cases() -> Vec<(&'static str, Part, Option<f64>)> {
         Point3::new(10.0, 2.0, 8.0),
         Point3::new(10.0, 3.5, 4.0),
     );
+    // the bar rounded at radius 3 (centre (y, z) = (3, 5)); split, less the slope's wedge
+    // over the round: depth z - 7.6 by width 7 + sqrt(9 - (z - 5)^2) for z from 7.6 to 8
+    let bar = 20.0 * (80.0 - spandrel(3.0));
+    let wedge = {
+        let f = |u: f64| {
+            let w = 9.0 - u * u;
+            let root = if w > 0.0 { w.sqrt() } else { 0.0 };
+            -w * root / 3.0 - 2.6 * 0.5 * (u * root + 9.0 * dmath::asin((u / 3.0).min(1.0)))
+        };
+        7.0 * 0.08 + f(3.0) - f(2.6)
+    };
+    let (top_pt, front_pt) = (Point3::new(10.0, 5.0, 8.0), Point3::new(10.0, 0.0, 3.0));
     vec![
+        // a bevel of two facets: the ball rolls over both and they go
+        (
+            "face-fillet-over-two-bevels",
+            with_face_fillet(&two_bevels(false), &[top_pt], &[front_pt], 3.0),
+            Some(bar),
+        ),
+        // the facets end on two faces: the cut runs over both, through the edge between
+        (
+            "face-fillet-bevels-split-end",
+            with_face_fillet(&two_bevels(true), &[top_pt], &[front_pt], 3.0),
+            Some(bar - wedge),
+        ),
         // a rib drafted across: the ball touches both sides and the top, its radius the same along
         ("full-round-drafted-rib", full_round_drafted, None),
         // a ring's top between its walls: a torus all round, no ends
@@ -1036,6 +1060,70 @@ pub fn narrowing_rib_round_volume() -> f64 {
     };
     let g = f64::sqrt(0.6);
     10.0 * (5.0 * slice(10.0 - 10.0 * g) + 8.0 * slice(10.0) + 5.0 * slice(10.0 + 10.0 * g)) / 9.0
+}
+
+/// A 20 long bar along x, 10 deep in y and 8 high, its top front edge bevelled in two facets:
+/// from (y, z) = (2, 8) to (0.8, 7.6) to (0, 6). With `split`, its far end above z = 7.6 is cut
+/// back at 45 degrees, so the upper facet ends on that slope and the lower on the end face.
+pub fn two_bevels(split: bool) -> Part {
+    let pts = [
+        (0.0, 0.0),
+        (10.0, 0.0),
+        (10.0, 8.0),
+        (2.0, 8.0),
+        (0.8, 7.6),
+        (0.0, 6.0),
+    ];
+    let outline = ProfileLoop::new(
+        (0..6)
+            .map(|i| {
+                let (a, b) = (pts[i], pts[(i + 1) % 6]);
+                (
+                    Segment::Line {
+                        a: Point2::new(a.0, a.1),
+                        b: Point2::new(b.0, b.1),
+                    },
+                    i as u64,
+                )
+            })
+            .collect(),
+    );
+    let mut part = Part {
+        features: vec![Feature::Extrude {
+            profile: Profile {
+                plane: Frame::from_zx(Point3::ORIGIN, UnitVec3::X, Vec3::Y).expect("frame"),
+                loops: vec![outline],
+            },
+            extent: Extent::Distance(20.0),
+            op: Combine::New,
+        }],
+    };
+    if split {
+        let wedge = [(20.0, 7.6), (21.0, 7.6), (21.0, 9.0), (18.6, 9.0)];
+        part.features.push(Feature::Extrude {
+            profile: Profile {
+                // x along x, y up z, extruded toward -y through the bar
+                plane: Frame::from_zx(Point3::new(0.0, 11.0, 0.0), -UnitVec3::Y, Vec3::X).expect("frame"),
+                loops: vec![ProfileLoop::new(
+                    (0..4)
+                        .map(|i| {
+                            let (a, b) = (wedge[i], wedge[(i + 1) % 4]);
+                            (
+                                Segment::Line {
+                                    a: Point2::new(a.0, a.1),
+                                    b: Point2::new(b.0, b.1),
+                                },
+                                i as u64,
+                            )
+                        })
+                        .collect(),
+                )],
+            },
+            extent: Extent::Distance(12.0),
+            op: Combine::Cut,
+        });
+    }
+    part
 }
 
 /// A 20 long bar along x of L section in yz: 10 wide, 8 high, with a 2 x 7 notch under its

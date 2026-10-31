@@ -124,7 +124,7 @@ pub enum Feature {
         starts: Vec<(Name, Name)>,
         setbacks: Vec<(Name, Option<Name>, f64)>,
     },
-    /// Round between two sets of faces: the edges where they meet, or the one strip face
+    /// Round between two sets of faces: the edges where they meet, or the band of strip faces
     /// joining them, taken away.
     FaceFillet {
         first: Vec<Name>,

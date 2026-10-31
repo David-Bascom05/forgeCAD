@@ -1,6 +1,6 @@
 //! Fillets that take a face away. A face fillet rounds between two sets of faces: where they
-//! meet it rounds the edges between, and where a strip face (a chamfer, a land) joins them it
-//! rolls one ball touching both sides and the strip goes. A full round takes a face between
+//! meet it rounds the edges between, and where a band of strip faces (a chamfer, a land, a
+//! bevel of several facets) joins them it rolls one ball touching both sides and the band goes. A full round takes a face between
 //! two sides away with the ball that touches all three, its radius changing where the sides
 //! close in.
 
@@ -10,14 +10,16 @@ use forge_geom::varblend::{Guide, VarBlend};
 use forge_geom::{Circle, Curve, CurveGeom, Cylinder, Surface, SurfaceGeom, Torus};
 use forge_math::{Box3, Frame, Interval, Point3, Vec3, dmath, tol};
 use forge_topo::{Body, CoedgeId, EdgeId, FaceId, LoopId, Name, VertexId};
-use std::collections::BTreeSet;
+use std::collections::{BTreeMap, BTreeSet};
 
 type R<T> = Result<T, FilletError>;
 
 /// Rounds between faces `first` and faces `second` with radius `radius`: the edges where the
-/// two sets meet, or else the one strip face joining them, taken away by the ball.
+/// two sets meet, or else the band of strip faces joining them (one face of each set along
+/// it), taken away by the ball.
 pub fn face_fillet(body: &Body, first: &[FaceId], second: &[FaceId], radius: f64, feature: u64) -> R<Body> {
-    let body = body.compact_if_dead();
+    let (body, mut first) = compacted(body, &[first, second].concat());
+    let second = first.split_off(first.len() - second.len());
     let (a, b): (BTreeSet<FaceId>, BTreeSet<FaceId>) =
         (first.iter().copied().collect(), second.iter().copied().collect());
     let faces_of = |e: EdgeId| -> Vec<FaceId> {
@@ -45,46 +47,106 @@ pub fn face_fillet(body: &Body, first: &[FaceId], second: &[FaceId], radius: f64
             .collect();
         return fillet(&body, &edges, feature);
     }
-    // a strip face: neither set's, touching both
-    let touches = |f: FaceId, set: &BTreeSet<FaceId>| {
-        body.face(f).loops.iter().any(|&l| {
-            body.lp(l).coedges.iter().any(|&c| {
-                body.partner(c)
-                    .is_some_and(|p| set.contains(&body.coedge_face(p)))
-            })
-        })
-    };
-    // a strip: four sides, the two sets across from each other
-    let across = |f: FaceId| {
+    // the band joining them: four-sided faces in neither set, in a row from a across to b
+    // (a chamfer and a land, a bevel of several facets) or side by side along between them
+    let sides = |f: FaceId| -> Option<&[CoedgeId]> {
         let l = &body.face(f).loops;
-        let c = &body.lp(l[0]).coedges;
-        let side = |i: usize, set: &BTreeSet<FaceId>| {
-            body.partner(c[i])
-                .is_some_and(|p| set.contains(&body.coedge_face(p)))
+        (!a.contains(&f) && !b.contains(&f) && l.len() == 1 && body.lp(l[0]).coedges.len() == 4)
+            .then(|| &body.lp(l[0]).coedges[..])
+    };
+    let across = |c: CoedgeId| body.partner(c);
+    let face_of = |c: CoedgeId| body.coedge_face(c);
+    // how far the surface turns crossing coedge c's edge onto the face across
+    let turn = |c: CoedgeId| {
+        let x = body.edge(body.coedge(c).edge);
+        let p = x.curve.eval(x.range.mid());
+        let n = |f: FaceId| {
+            body.face_normal(f, body.face(f).surface.project(p))
+                .map(|u| u.get())
         };
-        l.len() == 1
-            && c.len() == 4
-            && (0..2).any(|i| (side(i, &a) && side(i + 2, &b)) || (side(i, &b) && side(i + 2, &a)))
+        match (n(face_of(c)), across(c).and_then(|q| n(face_of(q)))) {
+            (Some(u), Some(v)) => dmath::atan2(u.cross(v).length(), u.dot(v)),
+            _ => dmath::PI,
+        }
     };
-    let strips: Vec<FaceId> = body
-        .face_ids()
-        .filter(|f| !a.contains(f) && !b.contains(f) && touches(*f, &a) && touches(*f, &b) && across(*f))
-        .collect();
-    let [m] = strips[..] else {
-        return Err(FilletError::NoBlend { edge: EdgeId(0) });
+    // each band with how far the surface turns over it from a to b: the band between is the
+    // one that turns least (round the far side of a bar turns further)
+    let mut bands: BTreeMap<Vec<FaceId>, f64> = BTreeMap::new();
+    for f in body.face_ids() {
+        let Some(cs) = sides(f) else { continue };
+        for i in 0..4 {
+            // a row: in from a at side i, out across side i + 2, until b
+            if !across(cs[i]).is_some_and(|p| a.contains(&face_of(p))) {
+                continue;
+            }
+            let (mut row, mut out) = (vec![f], cs[(i + 2) % 4]);
+            let mut turned = turn(cs[i]);
+            while let Some(p) = across(out) {
+                let g = face_of(p);
+                turned += turn(out);
+                if b.contains(&g) {
+                    row.sort();
+                    bands.insert(row, turned);
+                    break;
+                }
+                let Some(next) = sides(g).filter(|_| !row.contains(&g) && row.len() < 16) else {
+                    break;
+                };
+                let k = next.iter().position(|&x| x == p).expect("in its loop");
+                out = next[(k + 2) % 4];
+                row.push(g);
+            }
+        }
+    }
+    // side by side: faces with a and b across from each other, joined at their ends
+    let between = |f: FaceId| {
+        let cs = sides(f)?;
+        let on = |c: CoedgeId, set: &BTreeSet<FaceId>| across(c).is_some_and(|p| set.contains(&face_of(p)));
+        (0..2)
+            .find(|&i| (on(cs[i], &a) && on(cs[i + 2], &b)) || (on(cs[i], &b) && on(cs[i + 2], &a)))
+            .map(|i| turn(cs[i]) + turn(cs[i + 2]))
     };
+    let mut left: BTreeSet<FaceId> = body.face_ids().filter(|&f| between(f).is_some()).collect();
+    while let Some(&f) = left.iter().next() {
+        let mut part = vec![f];
+        left.remove(&f);
+        let mut k = 0;
+        while k < part.len() {
+            let next: Vec<FaceId> = sides(part[k])
+                .expect("a strip")
+                .iter()
+                .filter_map(|&c| across(c).map(face_of))
+                .filter(|g| left.contains(g))
+                .collect();
+            for g in next {
+                left.remove(&g);
+                part.push(g);
+            }
+            k += 1;
+        }
+        part.sort();
+        let turned = between(part[0]).expect("a strip between");
+        bands.insert(part, turned);
+    }
+    let fail = FilletError::NoBlend { edge: EdgeId(0) };
+    let mut ranked: Vec<(f64, Vec<FaceId>)> = bands.into_iter().map(|(k, t)| (t, k)).collect();
+    ranked.sort_by(|x, y| x.0.total_cmp(&y.0));
+    let band = match &ranked[..] {
+        [(_, band)] => band,
+        [(t0, band), (t1, _), ..] if *t1 > t0 + 1e-6 => band,
+        _ => return Err(fail),
+    };
+    // the faces of each set along it
     let side = |set: &BTreeSet<FaceId>| {
-        body.lp(body.face(m).loops[0])
-            .coedges
-            .iter()
-            .filter_map(|&c| body.partner(c))
-            .map(|p| body.coedge_face(p))
+        band.iter()
+            .flat_map(|&f| body.lp(body.face(f).loops[0]).coedges.iter())
+            .filter_map(|&c| across(c).map(face_of))
             .find(|f| set.contains(f))
     };
     let (Some(fa), Some(fb)) = (side(&a), side(&b)) else {
-        return Err(FilletError::NoBlend { edge: EdgeId(0) });
+        return Err(fail);
     };
-    strip(&body, fa, m, fb, Some(radius), feature)
+    strip(&body, fa, band, fb, Some(radius), feature)
 }
 
 /// Takes face `middle` away between faces `side` and `other` with the ball touching all three:
@@ -92,123 +154,223 @@ pub fn face_fillet(body: &Body, first: &[FaceId], second: &[FaceId], radius: f64
 /// surface whose radius is solved with each ball. A middle closing round on itself (a ring's
 /// top) rounds all the way round, with constant radius.
 pub fn full_round(body: &Body, side: FaceId, middle: FaceId, other: FaceId, feature: u64) -> R<Body> {
-    strip(&body.compact_if_dead(), side, middle, other, None, feature)
+    let (body, f) = compacted(body, &[side, middle, other]);
+    strip(&body, f[0], &[f[1]], f[2], None, feature)
 }
 
-trait CompactIfDead {
-    fn compact_if_dead(&self) -> Body;
+/// The body without its dead entities, and the faces in it (found again by name: compacting
+/// renumbers them; a face not there gets an id past the end).
+fn compacted(body: &Body, faces: &[FaceId]) -> (Body, Vec<FaceId>) {
+    if body.dead == 0 {
+        return (body.clone(), faces.to_vec());
+    }
+    let out = body.compact();
+    let ids = faces
+        .iter()
+        .map(|&f| {
+            (f.index() < body.faces.len() && body.face(f).alive)
+                .then(|| out.face_by_name(body.face(f).name))
+                .flatten()
+                .unwrap_or(FaceId(u32::MAX))
+        })
+        .collect();
+    (out, ids)
 }
 
-impl CompactIfDead for Body {
-    fn compact_if_dead(&self) -> Body {
-        if self.dead > 0 {
-            self.compact()
-        } else {
-            self.clone()
+/// One end of the band, from side a to side b: the faces across it in order, each with its
+/// coedges along the band; the edges to a and b there and the band's corners on them; and
+/// between faces, the edge they share and the band's corner on it.
+struct End {
+    faces: Vec<(FaceId, Vec<CoedgeId>)>,
+    to_a: (EdgeId, VertexId),
+    to_b: (EdgeId, VertexId),
+    splits: Vec<(EdgeId, VertexId)>,
+}
+
+/// Takes the `band` of faces away between faces `fa` and `fb` (they bound it along two sides,
+/// the faces across its ends the other two) with the ball rolling between fa and fb: of
+/// `radius`, else touching the band's one face too. The springs replace the band's edges to fa
+/// and fb, the cuts across each end face its edges there, and the edges between end faces
+/// and to fa and fb are cut back to the blend.
+fn strip(body: &Body, fa: FaceId, band: &[FaceId], fb: FaceId, radius: Option<f64>, feature: u64) -> R<Body> {
+    let ids_ok = |f: FaceId| f.index() < body.faces.len() && body.face(f).alive;
+    let fail = FilletError::NoBlend { edge: EdgeId(0) };
+    if !ids_ok(fa) || !ids_ok(fb) || band.is_empty() || !band.iter().all(|&f| ids_ok(f)) {
+        return Err(fail);
+    }
+    if let [m] = band[..]
+        && body.face(m).loops.len() == 2
+    {
+        return closed_strip(body, fa, m, fb, radius, feature);
+    }
+    if band.iter().any(|&f| body.face(f).loops.len() != 1) {
+        return Err(fail);
+    }
+    let inside: BTreeSet<FaceId> = band.iter().copied().collect();
+    let across = |c: CoedgeId| body.partner(c).map(|p| body.coedge_face(p));
+    let end_of = |c: CoedgeId| {
+        let x = body.edge(body.coedge(c).edge);
+        if body.coedge(c).forward { x.end } else { x.start }
+    };
+    // the band's border, chained round
+    let border: Vec<CoedgeId> = band
+        .iter()
+        .flat_map(|&f| body.lp(body.face(f).loops[0]).coedges.iter().copied())
+        .filter(|&c| !across(c).is_some_and(|g| inside.contains(&g)))
+        .collect();
+    let mut order = vec![border[0]];
+    while order.len() < border.len() {
+        let v = end_of(*order.last().expect("non-empty"));
+        let next: Vec<CoedgeId> = border
+            .iter()
+            .copied()
+            .filter(|&c| body.coedge_start(c) == v)
+            .collect();
+        match next[..] {
+            [c] if c != order[0] => order.push(c),
+            _ => return Err(fail),
         }
     }
-}
-
-/// One end of the strip: the edge to its end face, the coedges either side of it there, and
-/// the strip's corners on side a and side b.
-struct End {
-    face: FaceId,
-    /// The end face's coedge on the strip's edge, and the end face's coedges on its edges to a and b.
-    on_strip: CoedgeId,
-    to_a: CoedgeId,
-    to_b: CoedgeId,
-    va: VertexId,
-    vb: VertexId,
-}
-
-fn strip(body: &Body, fa: FaceId, m: FaceId, fb: FaceId, radius: Option<f64>, feature: u64) -> R<Body> {
-    let ids_ok = |f: FaceId| f.index() < body.faces.len() && body.face(f).alive;
-    if !ids_ok(fa) || !ids_ok(fb) || !ids_ok(m) {
-        return Err(FilletError::NoBlend { edge: EdgeId(0) });
+    if end_of(order[order.len() - 1]) != body.coedge_start(order[0]) {
+        return Err(fail);
     }
-    match body.face(m).loops.len() {
-        1 => {}
-        2 => return closed_strip(body, fa, m, fb, radius, feature),
-        _ => return Err(FilletError::NoBlend { edge: EdgeId(0) }),
-    }
-    let ring = body.lp(body.face(m).loops[0]).coedges.clone();
-    let face_across = |c: CoedgeId| body.partner(c).map(|p| body.coedge_face(p));
-    // the strip's loop: its edge to a, an end, its edge to b, an end
-    let n = ring.len();
-    let ia = (0..n).find(|&i| face_across(ring[i]) == Some(fa));
-    let ib = (0..n).find(|&i| face_across(ring[i]) == Some(fb));
-    let (Some(ia), Some(ib)) = (ia, ib) else {
-        return Err(FilletError::NoBlend { edge: EdgeId(0) });
+    // its runs: along a, across an end, along b, across the other end
+    let side = |c: CoedgeId| match across(c) {
+        Some(f) if f == fa => 0,
+        Some(f) if f == fb => 1,
+        _ => 2,
     };
-    let err = FilletError::NoBlend {
-        edge: body.coedge(ring[ia]).edge,
+    let n = order.len();
+    let Some(k0) = (0..n).find(|&i| side(order[i]) == 0 && side(order[(i + n - 1) % n]) != 0) else {
+        return Err(fail);
     };
-    if n != 4 || (ib + 4 - ia) % 4 != 2 {
-        return Err(err);
+    order.rotate_left(k0);
+    let mut runs: Vec<(usize, Vec<CoedgeId>)> = Vec::new();
+    for &c in &order {
+        match runs.last_mut() {
+            Some((s, r)) if *s == side(c) => r.push(c),
+            _ => runs.push((side(c), vec![c])),
+        }
     }
-    let (ca, cb) = (ring[ia], ring[ib]);
-    let (ea, eb) = (body.coedge(ca).edge, body.coedge(cb).edge);
-    let ends: Vec<End> = [ring[(ia + 1) % 4], ring[(ia + 3) % 4]]
-        .iter()
-        .map(|&c| {
-            let p = body.partner(c).ok_or(err.clone())?;
-            let face = body.coedge_face(p);
-            let lp = &body.lp(body.coedge(p).lp).coedges;
-            let k = lp.iter().position(|&x| x == p).expect("in its loop");
-            let (prev, next) = (lp[(k + lp.len() - 1) % lp.len()], lp[(k + 1) % lp.len()]);
-            let across = |x: CoedgeId| face_across(x);
-            let (to_a, to_b) = match (across(prev), across(next)) {
-                (Some(x), Some(y)) if x == fa && y == fb => (prev, next),
-                (Some(x), Some(y)) if x == fb && y == fa => (next, prev),
-                _ => return Err(err.clone()),
-            };
-            let shared = |x: EdgeId, y: EdgeId| {
-                let (x, y) = (body.edge(x), body.edge(y));
-                [x.start, x.end]
-                    .into_iter()
-                    .find(|v| *v == y.start || *v == y.end)
-            };
-            let e = body.coedge(c).edge;
-            Ok(End {
-                face,
-                on_strip: p,
-                to_a,
-                to_b,
-                va: shared(e, ea).ok_or(err.clone())?,
-                vb: shared(e, eb).ok_or(err.clone())?,
-            })
-        })
-        .collect::<R<_>>()?;
+    if runs.iter().map(|r| r.0).collect::<Vec<_>>() != [0, 2, 1, 2]
+        || order.iter().any(|&c| across(c).is_none())
+    {
+        return Err(fail);
+    }
+    let pick = |r: &[CoedgeId]| body.coedge(r[r.len() / 2]).edge;
+    let (ea, eb) = (pick(&runs[0].1), pick(&runs[2].1));
+    let err = FilletError::NoBlend { edge: ea };
+    let lp_of = |c: CoedgeId| &body.lp(body.coedge(c).lp).coedges;
+    let step = |c: CoedgeId, by: usize| {
+        let lp = lp_of(c);
+        let k = lp.iter().position(|&x| x == c).expect("in its loop");
+        lp[(k + by) % lp.len()]
+    };
+    let partner = |c: CoedgeId| body.partner(c).ok_or(err.clone());
+    // each end walked from the side it leaves to the side it reaches, then put a to b
+    let mut ends = Vec::new();
+    for (run, from) in [(&runs[1].1, fa), (&runs[3].1, fb)] {
+        let mut faces: Vec<(FaceId, Vec<CoedgeId>)> = Vec::new();
+        for &c in run {
+            let (f, p) = (across(c).expect("checked"), partner(c)?);
+            match faces.last_mut() {
+                Some((g, ps)) if *g == f => ps.push(p),
+                _ => faces.push((f, vec![p])),
+            }
+        }
+        // in an end face's loop its band coedges run backwards: the edge after the first
+        // comes from where the end starts, the one before the last reaches where it stops
+        let edge_to = |c: CoedgeId, by: usize, want: FaceId| -> R<EdgeId> {
+            let x = step(partner(c)?, by);
+            (across(x) == Some(want))
+                .then_some(body.coedge(x).edge)
+                .ok_or(err.clone())
+        };
+        let mut splits = Vec::new();
+        let mut k = 0;
+        for w in faces.windows(2) {
+            k += w[0].1.len();
+            let last = run[k - 1];
+            let lp = lp_of(partner(last)?);
+            splits.push((edge_to(last, lp.len() - 1, w[1].0)?, end_of(last)));
+        }
+        let (first, last) = (run[0], run[run.len() - 1]);
+        let to = if from == fa { fb } else { fa };
+        let lead = (edge_to(first, 1, from)?, body.coedge_start(first));
+        let tail = (edge_to(last, lp_of(partner(last)?).len() - 1, to)?, end_of(last));
+        ends.push(if from == fa {
+            End {
+                faces,
+                to_a: lead,
+                to_b: tail,
+                splits,
+            }
+        } else {
+            faces.reverse();
+            splits.reverse();
+            End {
+                faces,
+                to_a: tail,
+                to_b: lead,
+                splits,
+            }
+        });
+    }
     let mid = |e: EdgeId| {
         let x = body.edge(e);
         x.curve.eval(x.range.mid())
     };
-    let (pa, pb) = (mid(ea), mid(eb));
-    let (convex, radius, blend) = round_blend(
-        body,
-        [fa, m, fb],
-        [ea, eb],
-        [pa, body.face_box(m).center(), pb],
-        radius,
-    )?;
+    let m = band[0];
+    let region = band
+        .iter()
+        .fold(body.face_box(fa).hull(&body.face_box(fb)), |b, &f| {
+            b.hull(&body.face_box(f))
+        });
+    let pm = band
+        .iter()
+        .fold(Box3::EMPTY, |b, &f| b.hull(&body.face_box(f)))
+        .center();
+    let (convex, radius, blend) = round_blend(body, [fa, m, fb], [ea, eb], [mid(ea), pm, mid(eb)], radius)?;
     let springs = [
         blend.spring(true).ok_or(err.clone())?,
         blend.spring(false).ok_or(err.clone())?,
     ];
     let mut out = body.clone();
-    let root = Name::feature(feature);
-    let name = root.with_str("round").with_name(body.face(m).name);
-    // per end: where each spring meets the end face, and the cut across it
-    let region = body.face_box(m).hull(&body.face_box(fa)).hull(&body.face_box(fb));
+    let mark = match band {
+        [m] => body.face(*m).name,
+        _ => Name::NONE.with_set(band.iter().map(|&f| body.face(f).name).collect()),
+    };
+    let name = Name::feature(feature).with_str("round").with_name(mark);
+    let overflow = FilletError::Overflow { edge: ea };
     let reach = region.diagonal() + 4.0 * radius;
-    let mut xs = Vec::new();
+    // an edge's end at v moved to where the blend crosses it, and the band's corner v with it
+    let mut moved: BTreeMap<VertexId, VertexId> = BTreeMap::new();
+    let mut trim = |out: &mut Body, e: EdgeId, v: VertexId, (p, q): (Point3, VertexId)| -> R<()> {
+        moved.insert(v, q);
+        let edge = &mut out.edges[e.index()];
+        let t = edge.curve.closest(p, edge.range);
+        if edge.start == v {
+            (edge.start, edge.range.lo) = (q, t);
+        } else {
+            (edge.end, edge.range.hi) = (q, t);
+        }
+        edge.bbox.clear();
+        if edge.range.width() <= 0.0 {
+            return Err(overflow.clone());
+        }
+        Ok(())
+    };
+    // per end: where each spring meets the end faces, where the blend crosses the edges between
+    // them, and the cuts across them
+    let mut hits = Vec::new();
+    let mut cuts = Vec::new();
     for (k, end) in ends.iter().enumerate() {
-        let es = &body.face(end.face).surface;
         let mut at = [(0.0, Point3::ORIGIN, VertexId(0)); 2];
-        for (j, (spring, v, c)) in [(&springs[0], end.va, end.to_a), (&springs[1], end.vb, end.to_b)]
-            .into_iter()
-            .enumerate()
-        {
+        let sides = [
+            (end.to_a, &end.faces[0]),
+            (end.to_b, &end.faces[end.faces.len() - 1]),
+        ];
+        for (j, (spring, ((e, v), (ef, _)))) in springs.iter().zip(sides).enumerate() {
             let vp = body.vertex(v).point;
             let t = spring.closest(vp, spring.full_range(1e6));
             let speed = spring.deriv(t).d1.length().max(1e-12);
@@ -217,46 +379,60 @@ fn strip(body: &Body, fa: FaceId, m: FaceId, fb: FaceId, radius: Option<f64>, fe
                 Some(_) => Interval::new(t - reach / speed, t + reach / speed),
                 None => Interval::new((t - reach / speed).max(d.lo), (t + reach / speed).min(d.hi)),
             };
-            let (t, p) = nearest_hit(spring, w, es, vp).ok_or(FilletError::Overflow { edge: ea })?;
-            let e = body.edge(body.coedge(c).edge);
-            if e.curve.eval(e.curve.closest(p, e.range)).distance(p) > tol::LINEAR {
-                return Err(FilletError::Overflow { edge: ea });
+            let (t, p) = nearest_hit(spring, w, &body.face(*ef).surface, vp).ok_or(overflow.clone())?;
+            let x = body.edge(e);
+            if x.curve.eval(x.curve.closest(p, x.range)).distance(p) > tol::LINEAR {
+                return Err(overflow);
             }
             let vn = Name::NONE
-                .with_set(vec![name, body.face(end.face).name])
+                .with_set(vec![name, body.face(*ef).name])
                 .with(j as u64);
             at[j] = (t, p, out.add_vertex(p, vn));
+            trim(&mut out, e, v, (p, at[j].2))?;
         }
-        // the cut on the end face from a's spring to b's: the arc through the strip's end
-        let strip_mid = mid(body.coedge(end.on_strip).edge);
-        let cut = match &blend.var {
-            Some(v) => v.cut(es, at[0].1, at[1].1),
-            None => cut_through(&blend.surface, es, at[0].1, at[1].1, strip_mid),
-        };
-        let (curve, ta, tb) = cut.ok_or(FilletError::Overflow { edge: ea })?;
-        let en = name.with_str("end").with(k as u64);
-        let cut = if ta <= tb {
-            (
-                out.add_edge(curve, Interval::new(ta, tb), at[0].2, at[1].2, en),
-                true,
-            )
-        } else {
-            (
-                out.add_edge(curve, Interval::new(tb, ta), at[1].2, at[0].2, en),
-                false,
-            )
-        };
-        xs.push((at, cut));
+        let mut xs = vec![(at[0].1, at[0].2)];
+        for (i, &(e, v)) in end.splits.iter().enumerate() {
+            let x = body.edge(e);
+            let (_, p) = nearest_hit(&x.curve, x.range, &blend.surface, body.vertex(v).point)
+                .ok_or(overflow.clone())?;
+            let names = vec![
+                name,
+                body.face(end.faces[i].0).name,
+                body.face(end.faces[i + 1].0).name,
+            ];
+            let q = out.add_vertex(p, Name::NONE.with_set(names));
+            trim(&mut out, e, v, (p, q))?;
+            xs.push((p, q));
+        }
+        xs.push((at[1].1, at[1].2));
+        // the cut across each end face, through the band's edge there
+        for (i, (f, ps)) in end.faces.iter().enumerate() {
+            let es = &body.face(*f).surface;
+            let (a, b) = (xs[i], xs[i + 1]);
+            let cut = match &blend.var {
+                Some(v) => v.cut(es, a.0, b.0),
+                None => cut_through(&blend.surface, es, a.0, b.0, mid(body.coedge(ps[0]).edge)),
+            };
+            let (curve, ta, tb) = cut.ok_or(overflow.clone())?;
+            let en = match i {
+                0 => name.with_str("end").with(k as u64),
+                _ => name.with_str("end").with(k as u64).with(i as u64),
+            };
+            let e = if ta <= tb {
+                out.add_edge(curve, Interval::new(ta, tb), a.1, b.1, en)
+            } else {
+                out.add_edge(curve, Interval::new(tb, ta), b.1, a.1, en)
+            };
+            cuts.push((*f, ps.clone(), e));
+        }
+        hits.push(at);
     }
-    // the springs between the ends, each the stretch through the strip's edge on its side
-    let mut spring_edges = Vec::new();
-    for (j, (curve, e, f)) in [(&springs[0], ea, fa), (&springs[1], eb, fb)]
-        .into_iter()
-        .enumerate()
-    {
-        let (t0, v0) = (xs[0].0[j].0, xs[0].0[j].2);
-        let (t1, v1) = (xs[1].0[j].0, xs[1].0[j].2);
-        let (lo, hi) = span(curve, t0, t1, mid(e)).ok_or(FilletError::Overflow { edge: ea })?;
+    // the springs between the ends, each the stretch through the band's edge on its side
+    let mut spliced = Vec::new();
+    for (j, (curve, (e, f))) in springs.iter().zip([(ea, fa), (eb, fb)]).enumerate() {
+        let (t0, v0) = (hits[0][j].0, hits[0][j].2);
+        let (t1, v1) = (hits[1][j].0, hits[1][j].2);
+        let (lo, hi) = span(curve, t0, t1, mid(e)).ok_or(overflow.clone())?;
         let (va, vb) = if (lo - t0).abs() <= (lo - t1).abs() {
             (v0, v1)
         } else {
@@ -264,70 +440,50 @@ fn strip(body: &Body, fa: FaceId, m: FaceId, fb: FaceId, radius: Option<f64>, fe
         };
         let range = Interval::new(lo, hi);
         if !inside_face(body, f, curve, range) {
-            return Err(FilletError::Overflow { edge: ea });
+            return Err(overflow);
         }
         let sn = Name::NONE.with_set(vec![name, body.face(f).name]);
-        spring_edges.push(out.add_edge(curve.clone(), range, va, vb, sn));
+        let new = out.add_edge(curve.clone(), range, va, vb, sn);
+        let run: Vec<CoedgeId> = runs[2 * j].1.iter().map(|&c| partner(c)).collect::<R<_>>()?;
+        spliced.push((f, run, new));
     }
-    // the end faces' edges to a and b cut back to the springs
-    for (end, (at, _)) in ends.iter().zip(&xs) {
-        for (c, v, x) in [(end.to_a, end.va, at[0]), (end.to_b, end.vb, at[1])] {
-            let e = body.coedge(c).edge;
-            let edge = &mut out.edges[e.index()];
-            let t = edge.curve.closest(x.1, edge.range);
-            if edge.start == v {
-                edge.start = x.2;
-                edge.range.lo = t;
-            } else {
-                edge.end = x.2;
-                edge.range.hi = t;
-            }
-            edge.bbox.clear();
-            if edge.range.width() <= 0.0 {
-                return Err(FilletError::Overflow { edge: ea });
-            }
-        }
-    }
-    // the faces round the strip walk the new edges where they walked the strip's
-    let swap: Vec<(CoedgeId, EdgeId)> = vec![
-        (body.partner(ca).ok_or(err.clone())?, spring_edges[0]),
-        (body.partner(cb).ok_or(err.clone())?, spring_edges[1]),
-        (ends[0].on_strip, xs[0].1.0),
-        (ends[1].on_strip, xs[1].1.0),
-    ];
+    spliced.extend(cuts);
+    // the faces round the band walk the new edges where they walked its border
     let mut blend_uses = Vec::new();
-    for (c, new) in &swap {
-        let f = body.coedge_face(*c);
-        let l = body.coedge(*c).lp;
-        // walking the new edge the way the old one ran: from the end nearest its start
-        let from = body.vertex(body.coedge_start(*c)).point;
-        let ne = out.edge(*new);
-        let fwd = out.vertex(ne.start).point.distance(from) <= out.vertex(ne.end).point.distance(from);
-        let uses: Vec<(EdgeId, bool)> = body
-            .lp(l)
-            .coedges
+    for (f, run, new) in &spliced {
+        let l = body.coedge(run[0]).lp;
+        let lp = &body.lp(l).coedges;
+        // the run's first coedge round the loop: walk the new edge from where its start moved
+        let first = *run
             .iter()
+            .find(|&&c| !run.contains(&step(c, lp.len() - 1)))
+            .ok_or(err.clone())?;
+        let fwd = moved.get(&body.coedge_start(first)) == Some(&out.edge(*new).start);
+        let uses: Vec<(EdgeId, bool)> = lp
+            .iter()
+            .filter(|&x| !run.contains(x) || *x == first)
             .map(|&x| {
-                if x == *c {
+                if x == first {
                     (*new, fwd)
                 } else {
                     (body.coedge(x).edge, body.coedge(x).forward)
                 }
             })
             .collect();
-        out.remove_loop(f, l);
-        out.add_loop(f, &uses);
+        out.remove_loop(*f, l);
+        out.add_loop(*f, &uses);
         let face = &mut out.faces[f.index()];
         face.bbox.clear();
         face.query.clear();
         blend_uses.push((*new, !fwd));
     }
-    out.remove_loop(m, body.face(m).loops[0]);
-    out.kill_face(m);
-    let shell = body.face(fa).shell;
-    let f = out.add_face(shell, blend.surface.clone(), convex, name);
+    for &g in band {
+        out.remove_loop(g, body.face(g).loops[0]);
+        out.kill_face(g);
+    }
+    let f = out.add_face(body.face(fa).shell, blend.surface.clone(), convex, name);
     match &chain_loops(&out, &blend_uses)[..] {
-        [lp] if lp.len() == 4 => {
+        [lp] if lp.len() == blend_uses.len() => {
             out.add_loop(f, lp);
         }
         _ => return Err(err),
