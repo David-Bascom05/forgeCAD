@@ -65,11 +65,24 @@ pub fn shell(
             return Err(ShellError::AdjacentOpen { edge: edge.name });
         }
     }
-    let mut moved = base.clone();
     let shift = if outward { thickness } else { -thickness };
-    let changed: Vec<bool> = opened.iter().map(|&o| !o).collect();
+    let along = |f: &forge_topo::Face| if f.same_sense { shift } else { -shift };
+    // faces whose offsets vanish go, and their neighbours meet instead
+    let gone: Vec<bool> = base
+        .faces
+        .iter()
+        .zip(&opened)
+        .map(|(f, &o)| !o && offset(&f.surface, along(f)).is_none())
+        .collect();
+    let mut moved = if gone.iter().any(|&g| g) {
+        collapse(&base, &gone)?
+    } else {
+        base.clone()
+    };
+    let open_moved: Vec<bool> = moved.faces.iter().map(|f| open.contains(&f.name)).collect();
+    let changed: Vec<bool> = open_moved.iter().map(|&o| !o).collect();
     for (face, _) in moved.faces.iter_mut().zip(&changed).filter(|c| *c.1) {
-        let d = if face.same_sense { shift } else { -shift };
+        let d = along(face);
         face.surface = offset(&face.surface, d).ok_or(ShellError::Collapses { face: face.name })?;
     }
     // a cone offset towards its apex can close up within the face
@@ -96,14 +109,16 @@ pub fn shell(
     } else {
         (&base, &moved, false, true)
     };
+    let skip_of = |b: &Body| -> Vec<bool> { b.faces.iter().map(|f| open.contains(&f.name)).collect() };
     let mut out = Body::new();
     let shell = out.add_shell();
     let copy = |src: &Body, flip: bool, renamed: bool, out: &mut Body| -> Vec<Option<EdgeId>> {
         let name = |n: Name| if renamed { rename(n) } else { n };
+        let skip = skip_of(src);
         let mut emap: Vec<Option<EdgeId>> = vec![None; src.edges.len()];
         let mut vmap: Vec<Option<VertexId>> = vec![None; src.vertices.len()];
         for f in src.face_ids() {
-            if opened[f.index()] {
+            if skip[f.index()] {
                 continue;
             }
             let face = src.face(f);
@@ -144,7 +159,14 @@ pub fn shell(
             continue;
         }
         let face = base.face(f);
-        for (k, (&lo, &li)) in outer.face(f).loops.iter().zip(&inner.face(f).loops).enumerate() {
+        let (fo, fi) = (
+            outer.face_by_name(face.name).expect("opened faces stay"),
+            inner.face_by_name(face.name).expect("opened faces stay"),
+        );
+        if outer.face(fo).loops.len() != inner.face(fi).loops.len() {
+            return Err(ShellError::Collapses { face: face.name });
+        }
+        for (k, (&lo, &li)) in outer.face(fo).loops.iter().zip(&inner.face(fi).loops).enumerate() {
             let rim = out.add_face(
                 shell,
                 face.surface.clone(),
@@ -179,6 +201,119 @@ pub fn shell(
         return Err(ShellError::Invalid(problems));
     }
     Ok(out)
+}
+
+/// `body` without the faces flagged `gone`, each a strip whose two long sides' faces now meet in
+/// one edge (a rounded corner thinner than the wall), or a closed band whose end loops close (a
+/// hole thinner than the wall).
+fn collapse(body: &Body, gone: &[bool]) -> Result<Body, ShellError> {
+    use std::collections::HashMap;
+    let mut vmap: Vec<VertexId> = (0..body.vertices.len() as u32).map(VertexId).collect();
+    // an edge dropped (None), or replaced by another run the same way or not
+    let mut sub: HashMap<EdgeId, Option<(EdgeId, bool)>> = HashMap::new();
+    let other_face = |e: EdgeId, f: forge_topo::FaceId| {
+        body.edge(e)
+            .coedges
+            .iter()
+            .map(|&c| body.coedge_face(c))
+            .find(|&g| g != f)
+    };
+    for f in body.face_ids() {
+        if !gone[f.index()] {
+            continue;
+        }
+        let face = body.face(f);
+        let fail = ShellError::Collapses { face: face.name };
+        let [l] = face.loops[..] else { return Err(fail) };
+        let es: Vec<EdgeId> = body.lp(l).coedges.iter().map(|&c| body.coedge(c).edge).collect();
+        let Surface::Cylinder(cyl) = &face.surface else {
+            return Err(fail);
+        };
+        let along_axis = |e: EdgeId| match &body.edge(e).curve {
+            forge_geom::Curve::Line(line) => line.dir.cross(cyl.frame.z()).length() <= 1e-9,
+            _ => false,
+        };
+        let sides: Vec<EdgeId> = es.iter().copied().filter(|&e| along_axis(e)).collect();
+        let ends: Vec<EdgeId> = es.iter().copied().filter(|&e| !along_axis(e)).collect();
+        if es.len() != 4 || sides.len() != 2 || ends.len() != 2 {
+            return Err(fail);
+        }
+        for &e in es.iter() {
+            match other_face(e, f) {
+                Some(g) if gone[g.index()] => return Err(fail),
+                _ => {}
+            }
+        }
+        if sides[0] == sides[1] {
+            // a closed band (a hole's wall): its end circles close up
+            for &e in &ends {
+                let g = other_face(e, f).ok_or(fail.clone())?;
+                if !body.face(g).loops.iter().any(|&l| body.lp(l).coedges.len() == 1) {
+                    return Err(fail);
+                }
+                sub.insert(e, None);
+            }
+            sub.insert(sides[0], None);
+            continue;
+        }
+        let (s1, s2) = (sides[0], sides[1]);
+        for &e in &ends {
+            let edge = body.edge(e);
+            let on = |s: EdgeId, v: VertexId| body.edge(s).start == v || body.edge(s).end == v;
+            let (a, b) = (edge.start, edge.end);
+            let (keep, merge) = if on(s1, a) { (a, b) } else { (b, a) };
+            if !on(s1, keep) || !on(s2, merge) {
+                return Err(fail);
+            }
+            vmap[merge.index()] = keep;
+            sub.insert(e, None);
+        }
+        let flip = vmap[body.edge(s2).start.index()] != body.edge(s1).start;
+        sub.insert(s2, Some((s1, flip)));
+        sub.insert(s1, Some((s1, false)));
+    }
+    let mut out = Body::new();
+    for v in &body.vertices {
+        out.add_vertex(v.point, v.name);
+    }
+    for e in &body.edges {
+        out.add_edge(
+            e.curve.clone(),
+            e.range,
+            vmap[e.start.index()],
+            vmap[e.end.index()],
+            e.name,
+        );
+    }
+    for _ in &body.shells {
+        out.add_shell();
+    }
+    for f in body.face_ids() {
+        if gone[f.index()] {
+            continue;
+        }
+        let face = body.face(f);
+        let nf = out.add_face(face.shell, face.surface.clone(), face.same_sense, face.name);
+        for &l in &face.loops {
+            let uses: Vec<(EdgeId, bool)> = body
+                .lp(l)
+                .coedges
+                .iter()
+                .filter_map(|&c| {
+                    let co = body.coedge(c);
+                    match sub.get(&co.edge) {
+                        None => Some((co.edge, co.forward)),
+                        Some(None) => None,
+                        Some(Some((e, flip))) => Some((*e, co.forward != *flip)),
+                    }
+                })
+                .collect();
+            if !uses.is_empty() {
+                out.add_loop(nf, &uses);
+            }
+        }
+    }
+    Ok(out.compact())
 }
 
 /// The surface `d` away along `s`'s natural normal, or None where it vanishes (a radius reaches
@@ -342,10 +477,10 @@ mod tests {
         let top = Name::feature(1).with_str("end");
         let s = shell(&b, 1.0, false, &[top], 2).unwrap();
         assert_eq!(s.shells.len(), 1);
-        // a corner radius under the thickness vanishes
+        // the corners vanish, but the hole's wall grows through the inner skin
         assert!(matches!(
             shell(&b, 5.0, false, &[top], 2),
-            Err(ShellError::Collapses { .. })
+            Err(ShellError::SelfIntersecting { .. })
         ));
         assert!(shell(&b, 2.0, true, &[top], 2).is_ok());
     }

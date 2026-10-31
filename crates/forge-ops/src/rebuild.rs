@@ -474,6 +474,29 @@ mod tests {
     use forge_geom::{Cylinder, Sphere};
 
     #[test]
+    fn tangent_pair_and_a_cone() {
+        let o = Point3::new(5.7467457927089125, 5.7467457927089125, 0.0);
+        let side = Surface::Plane(Plane::new(
+            Frame::from_zx(Point3::new(5.75, 0.351, 0.0), -UnitVec3::Y, Vec3::X).unwrap(),
+        ));
+        let cyl = Surface::Cylinder(Cylinder {
+            frame: Frame::WORLD.with_origin(o),
+            radius: o.y - 0.351,
+        });
+        let cone = Surface::Cone(
+            forge_geom::Cone::new(
+                Frame::WORLD.with_origin(o),
+                4.58318276687471,
+                0.5 * dmath::FRAC_PI_2,
+            )
+            .unwrap(),
+        );
+        let p0 = Point3::new(5.7467457927089125, 0.0, 0.6671650696334661);
+        let p = solve_point(&[side, cyl, cone], p0);
+        assert!(p.is_some());
+    }
+
+    #[test]
     fn three_planes_and_a_tangent_pair() {
         let plane = |o: Point3, n: Vec3| Surface::Plane(Plane::new(Frame::from_z(o, n.normalize().unwrap())));
         let cons = [

@@ -226,6 +226,52 @@ pub fn parts() -> Vec<(&'static str, Part, Option<f64>)> {
     ];
     out.push(("tray", Part { features: tray }, None));
 
+    // corners rounder than the wall is thick vanish inside: the inner walls meet sharp
+    let rr = 2.0;
+    out.push((
+        "shelled-rounded",
+        Part {
+            features: vec![
+                extrude(
+                    vec![Profile::rounded_rectangle(Point2::ORIGIN, a, b, rr, 0)],
+                    Frame::WORLD,
+                    h,
+                    Combine::New,
+                ),
+                Feature::Shell {
+                    thickness: 3.0,
+                    outward: false,
+                    open: vec![face(0, "end")],
+                },
+            ],
+        },
+        Some((a * b - (4.0 - pi) * rr * rr) * h - (a - 6.0) * (b - 6.0) * (h - 3.0)),
+    ));
+    // a hole narrower than the wall closes in the outer skin
+    let t = 2.0;
+    out.push((
+        "shelled-hole-out",
+        Part {
+            features: vec![
+                extrude(
+                    vec![
+                        Profile::rectangle(Point2::ORIGIN, a, b, 0),
+                        Profile::circle(Point2::new(20.0, 15.0), 1.5, 50),
+                    ],
+                    Frame::WORLD,
+                    h,
+                    Combine::New,
+                ),
+                Feature::Shell {
+                    thickness: t,
+                    outward: true,
+                    open: vec![],
+                },
+            ],
+        },
+        Some((a + 2.0 * t) * (b + 2.0 * t) * (h + 2.0 * t) - (a * b - pi * 2.25) * h),
+    ));
+
     let top = face(0, "end");
     let tops: Vec<Name> = (0..4).map(|k| edge(top, side(0, k))).collect();
     let bottoms: Vec<Name> = (0..4).map(|k| edge(face(0, "start"), side(0, k))).collect();
