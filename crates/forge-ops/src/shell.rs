@@ -185,13 +185,20 @@ pub fn shell(
                     })
                     .collect()
             };
-            out.add_loop(rim, &uses(outer, lo, &emap_out));
+            let front = uses(outer, lo, &emap_out);
             let mut back: Vec<(EdgeId, bool)> = uses(inner, li, &emap_in)
                 .into_iter()
                 .map(|(e, fw)| (e, !fw))
                 .collect();
             back.reverse();
-            out.add_loop(rim, &back);
+            // the rim round a hole of the open face has the inner skin's loop outside
+            if k == 0 {
+                out.add_loop(rim, &front);
+                out.add_loop(rim, &back);
+            } else {
+                out.add_loop(rim, &back);
+                out.add_loop(rim, &front);
+            }
         }
     }
     let out = out.into_compact();
@@ -432,5 +439,30 @@ mod tests {
             Err(ShellError::SelfIntersecting { .. })
         ));
         assert!(shell(&b, 2.0, true, &[top], 2).is_ok());
+    }
+
+    /// The rim round a hole of the open face lists its outer loop first, as every planar face
+    /// must: the inner skin's loop, inward or outward.
+    #[test]
+    fn hole_rim_outer_loop_first() {
+        let b = plate(
+            vec![
+                Profile::rectangle(Point2::ORIGIN, 30.0, 20.0, 0),
+                Profile::circle(Point2::new(15.0, 10.0), 3.0, 50),
+            ],
+            6.0,
+        );
+        let top = Name::feature(1).with_str("end");
+        for out in [false, true] {
+            let s = shell(&b, 1.0, out, &[top], 2).unwrap();
+            for f in s.face_ids().filter(|&f| s.face(f).loops.len() > 1) {
+                let first = &forge_topo::uv::face_uv_loops(&s, f)[0];
+                assert_eq!(
+                    forge_topo::uv::signed_area(&first.points) > 0.0,
+                    s.face(f).same_sense,
+                    "outward {out}: face {f:?} lists a hole first"
+                );
+            }
+        }
     }
 }
