@@ -874,6 +874,7 @@ fn spokes(
         let toward = (v - c) - nc * (v - c).dot(nc);
         if cubic {
             // a third of the way along the halving direction, and straight toward the vertex
+            // (fitted lengths fold: research/corner-patch)
             let e = toward.normalize().ok_or(CornerError::Folded)?.get();
             let ctrl = [v, v + dir * (l / 3.0), c + e * (l / 3.0), c];
             let curve = Curve::Procedural(crate::curve::ProcCurve(Arc::new(Cubic(ctrl))));
@@ -1918,7 +1919,7 @@ impl Procedural for HolePatch {
         self.scale
     }
     /// None (zero) round a corner where the sides' normals differ: the normal turns there in no
-    /// distance. Elsewhere sampled, as the domain is sized by it.
+    /// distance (research/corner-patch/kmin.rs). Elsewhere sampled, as the domain is sized by it.
     fn min_radius(&self) -> f64 {
         if self.kinked { 0.0 } else { self.min_radius }
     }

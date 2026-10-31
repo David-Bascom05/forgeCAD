@@ -1,0 +1,65 @@
+# Corner patch: rational quads and their fold proof
+
+How the rational corner quads (`crates/forge-geom/src/corner/rational.rs`, `close_hole_rational`
+and `rational_pieces` in `corner.rs`) were chosen and measured. The analysis and all results are
+in `docs/fold-proof.md` (stages 0 to 4); this folder holds the code that produced them.
+
+## What was derived, and where the code uses it
+
+- **The construction** (quads round a centre, ribbons of degree 3 in s and 2 in d, weights
+  prod d_j^2, blend degree (7, 7), cross tangents (a Q + b F) / D with F of degree <= 2, and
+  |Q| proportional to D for a circle so (n D x Q) / D is quadratic): derived by hand, written
+  out in `docs/fold-proof.md` stage 4 and in the module doc of `rational.rs`. Checked by
+  `rq.rs`'s audits (boundary, G1 normal, derivatives, projection, boxes).
+- **Cubic spokes with equal control lengths (a third of the way)**, leaving along the halving
+  direction (`spokes` in `corner.rs`): `rq.rs` on the survey. Parabolic spokes left near a
+  side for 8+ sides (builds refused); control lengths fitted to today's patch folded a third of
+  the 8-sided holes (`FOLDS=1` prints each quad's proof, sampled fold and corner angles).
+- **The centre from today's patch, the old heuristic beyond 12 sides**: `rq.rs` (gap to
+  today's 19% with the heuristic centre on 6 sides, 2% with today's; beyond 12 sides the
+  heuristic proves more).
+- **The proof's parameters** (`CORNER_BOX` = 1/4, halves along u and v in turn, Duffy triangles
+  from their halves, phi biquadratic for plain boxes and bilinear in Duffy triangles):
+  instruction counts with `ic.sh` and test counts from `rq.rs`, trying each alternative.
+- **`HolePatch::min_radius` is zero round a kinked corner**: `kmin.rs` (dense 300 x 300
+  curvature sampling of the fillet corpus' corner patches).
+- **The stage 1 n-gon rational patch** (superseded by the quads, kept in the record):
+  `rational_compare.rs`, the stage 1 table in `docs/fold-proof.md`.
+
+## How to rerun
+
+The programs are examples; copy them into a crate's `examples/` to build (they are not built
+with the workspace):
+
+```
+cp research/corner-patch/rq.rs crates/forge-ops/examples/
+fbuild cargo build --release -p forge-ops --example rq
+./target/release/examples/rq 60 3 0     # CASES EDGES PARITY: survey 3-, 4-, 5-edge corners
+                                        # (EDGES 3..5) or EDGES 6..10 on their own
+# env: NOSHAPE=1 (skip shape), PER=1 (per hole), FOLDS=1, KLOC=1 (curvature peaks),
+#      PROJ=1 (projection failures), PROOFONLY=2 (proof timing), COUNT=today|build|proof
+sh research/corner-patch/ic.sh proof 3  # instructions per hole for one kind of work
+
+cp research/corner-patch/kmin.rs crates/forge-model/examples/
+fbuild cargo build --release -p forge-model --example kmin
+./target/release/examples/kmin two-blends-sharp-edge
+```
+
+`rational_compare.rs` ran on `refs/experiments/corner-rational-stage1` (4b81f12); check that
+ref out to rerun it (`rational_compare 60 3`).
+
+## Dead ends (nothing uses them)
+
+- **Taylor models** (`refs/experiments/corner-fold-taylor-models`): sound, 0.25-6 s per patch;
+  the remainders of 1/x and x^-1/2 compositions, not truncation, refuse. Stage 2 of the doc.
+- **Mean-value regularity proof** (`refs/experiments/corner-fold-mean-value`): sound but refused
+  nearly every survey patch: corner disks covered ~0.4% of the domain and the Hessian bounds
+  came out 10-170x the true ones near corners.
+- **Corner-sector interpolant with a first-order interval proof**
+  (`refs/experiments/corner-blend-interval-proof`): worked but took 45272 cells / 345 ms for
+  one octant patch, and changed the patch so 10 forced-split folds slipped past the sampled
+  check.
+- **The n-gon rational patch with full Jacobian Bernstein coefficients** (stage 3): sound,
+  ~40 ms (degree 59); replaced by the quads and the cone test.
+- Within the cone test: cones of P_x = P_sigma - t P_t / sigma (cancels coefficient-wise, wider),
+  Duffy boxes of half the square (more tests), splits in four (more tests than halves).

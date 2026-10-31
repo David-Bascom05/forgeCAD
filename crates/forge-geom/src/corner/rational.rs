@@ -9,6 +9,7 @@
 //! hole. The fold proof bounds the directions of P_u and P_v by the Bernstein coefficients of
 //! N and W (a cone test), each corner's quarter in Duffy coordinates where the weights' common
 //! factor is divided out exactly. See docs/fold-proof.md.
+//! How the construction and the proof's parameters were chosen: research/corner-patch.
 
 // polynomial coefficient loops read best indexed
 #![allow(clippy::needless_range_loop)]
@@ -997,7 +998,8 @@ pub struct Proof {
 
 /// Deepest split of a region.
 const MAX_DEPTH: u32 = 12;
-/// The size of the box round a corner of the square proven in Duffy triangles.
+/// The size of the box round a corner of the square proven in Duffy triangles (measured:
+/// research/corner-patch).
 const CORNER_BOX: f64 = 0.25;
 
 impl Quad {

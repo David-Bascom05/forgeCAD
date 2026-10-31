@@ -424,7 +424,8 @@ median 1.1 s, p90 4.8 s, max 6.6 s per patch. The pieces of the forced split of 
 
 `crates/forge-geom/src/corner/rational.rs`, built by `HolePatch::new_rational` and proven by
 `HolePatch::prove_rational`. Today's patch stays the default; nothing calls the rational form
-in builds yet. The measurement example and a render switch are on
+in builds yet (superseded by stage 4's quads). The measurement example is
+`research/corner-patch/rational_compare.rs`; it and a render switch ran on
 `refs/experiments/corner-rational-stage1`.
 
 ### Construction
@@ -535,6 +536,8 @@ Four- to six-edge corners (8-12-sided holes) would raise the degree further (B_i
 2(n - 1)) and the cost with it.
 
 ## Stage 4: rational quads for 4 to 20 sides, and a faster proof
+
+Measurement code and how to rerun it: `research/corner-patch/`.
 
 `crates/forge-geom/src/corner/rational.rs` (`Quad`) and `close_hole_rational` /
 `rational_pieces` in `corner.rs`. Still not used in builds.
