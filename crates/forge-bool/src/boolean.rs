@@ -3386,24 +3386,22 @@ fn uv_chord(body: &Body, f: FaceId, p: &Piece, forward: bool, at_end: bool) -> O
     Some(if face.same_sense { d } else { Vec2::new(-d.x, d.y) })
 }
 
-/// The way on from half-edge `i` at a vertex where ways may leave along one tangent (a curve
-/// touching an edge, or a traced curve's tangent where the surfaces touch and its branches
-/// cross, which is unreliable): where the choice rests on two such, again by chords a short
+/// Whether the way on from half-edge `i` (`(c, j)`, the way just clockwise of `theta`) rests
+/// on ways leaving a vertex along one tangent (a curve touching an edge, or a traced curve's tangent where the surfaces touch and its branches
+/// cross, which is unreliable): those are told apart again by chords a short
 /// length along each, told apart by how each bends (at a pole or apex, where there is no
 /// chord, by the tangent). Ordering by the first direction that differs is what a
 /// second-order contact needs (the curves agree to first order); chords stand in for curvature,
 /// which Ye and Maekawa's formulas give but which are numerically unreliable near a singular
 /// point (Patrikalakis, Maekawa and Cho, ch. 5).
-fn untie(
-    body: &Body,
-    f: FaceId,
+fn tied(
     pieces: &[Piece],
     half: &[(usize, bool)],
     i: usize,
     theta: Vec2,
-    ways: &mut [(Vec2, usize)],
-) -> R<usize> {
-    let (c, j) = clockwise(theta, ways.iter().map(|&w| Ok(w)))?.unwrap_or((theta, i));
+    (c, j): (Vec2, usize),
+    ways: impl Iterator<Item = R<(Vec2, usize)>>,
+) -> R<bool> {
     // (ways of one body's own edges along one tangent are its own smooth joins, as they always
     // were; only a way of a new edge, or of the other body's, makes a tie; nor is the way
     // straight back along the same piece)
@@ -3415,16 +3413,16 @@ fn untie(
         let (p, q) = (&pieces[half[x].0], &pieces[half[y].0]);
         half[x].0 != half[y].0 && (p.side.is_none() || q.side.is_none() || p.side != q.side)
     };
-    let tie = ways
-        .iter()
-        .any(|&(a, k)| (near(a, theta) && mixed(k, i)) || (k != j && near(a, c) && mixed(k, j)));
-    if !tie {
-        return Ok(j);
+    for w in ways {
+        let (a, k) = w?;
+        if (near(a, theta) && mixed(k, i)) || (k != j && near(a, c) && mixed(k, j)) {
+            return Ok(true);
+        }
     }
-    by_chords(body, f, pieces, half, i, theta, ways)
+    Ok(false)
 }
 
-/// `untie`'s ways told apart by chords, where two leave along one tangent.
+/// The ways `tied` found tied, told apart by chords.
 #[cold]
 fn by_chords(
     body: &Body,
@@ -3747,25 +3745,17 @@ pub(crate) fn split_face(
         if let [(_, j)] = out {
             return Ok(*j);
         }
-        // each way by its tangent; where two leave along one, by chords (see untie): untie looks
+        // each way by its tangent; where two leave along one, by chords (see tied): tied looks
         // for that at every vertex (a new edge may leave an old vertex along the old arc beside
         // it), not only where a cut touched an edge
         let theta = dir(i, true)?;
-        let mut buf = [(Vec2::ZERO, 0usize); 8];
-        let mut heap: Vec<(Vec2, usize)>;
-        let ways: &mut [(Vec2, usize)] = if out.len() <= buf.len() {
-            for (w, &(_, k)) in buf.iter_mut().zip(out) {
-                *w = (dir(k, false)?, k);
-            }
-            &mut buf[..out.len()]
-        } else {
-            heap = out
-                .iter()
-                .map(|&(_, k)| Ok((dir(k, false)?, k)))
-                .collect::<R<_>>()?;
-            &mut heap
-        };
-        untie(body, f, pieces, &half, i, theta, ways)
+        let ways = || out.iter().map(|&(_, k)| Ok((dir(k, false)?, k)));
+        let (c, j) = clockwise(theta, ways())?.unwrap_or((theta, i));
+        if !tied(pieces, &half, i, theta, (c, j), ways())? {
+            return Ok(j);
+        }
+        let mut ways: Vec<(Vec2, usize)> = ways().collect::<R<_>>()?;
+        by_chords(body, f, pieces, &half, i, theta, &mut ways)
     };
     let mut used = vec![false; half.len()];
     let mut cycles: Vec<Vec<usize>> = Vec::new();
