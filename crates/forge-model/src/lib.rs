@@ -1050,12 +1050,16 @@ fn tools(features: History<'_>, i: usize, build: bool) -> Result<Vec<Tool>, Rege
         } => {
             let pe = |error| RegenError::Pattern { feature: i, error };
             let copies = instances(features, i, layout)?;
-            let mut base = Vec::new();
+            let mut reached = Vec::new();
             for &s in src {
                 if s >= i || modifies(&features[s]) {
                     return Err(pe(PatternError::BadSource { feature: s }));
                 }
-                base.extend(solids_of(features, s, build)?);
+                sources_of(features, s, &mut reached);
+            }
+            let mut base = Vec::new();
+            for s in reached {
+                base.extend(tools(features, s, build)?);
             }
             let mut out = Vec::with_capacity(copies.len() * base.len());
             for (key, m) in &copies {
@@ -1100,9 +1104,10 @@ fn tools(features: History<'_>, i: usize, build: bool) -> Result<Vec<Tool>, Rege
     }
 }
 
-/// The solids feature `s` stands for: its tool, or a pattern's sources' and its copies.
-fn solids_of(features: History<'_>, s: usize, build: bool) -> Result<Vec<Tool>, RegenError> {
-    let mut out = Vec::new();
+/// The features whose solids feature `s` stands for, added to `out` once each: a pattern's
+/// sources' (a source listed again, or reached through another pattern, would cut twice in one
+/// pass), then its own.
+fn sources_of(features: History<'_>, s: usize, out: &mut Vec<usize>) {
     if let Feature::Pattern {
         of: Source::Features(src),
         ..
@@ -1110,12 +1115,13 @@ fn solids_of(features: History<'_>, s: usize, build: bool) -> Result<Vec<Tool>, 
     {
         for &t in src {
             if t < s && !modifies(&features[t]) {
-                out.extend(solids_of(features, t, build)?);
+                sources_of(features, t, out);
             }
         }
     }
-    out.extend(tools(features, s, build)?);
-    Ok(out)
+    if !out.contains(&s) {
+        out.push(s);
+    }
 }
 
 /// The solid an extrude, revolve or ball makes (empty unless `build`), and how it combines

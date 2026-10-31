@@ -227,3 +227,19 @@ L7: draft 1.57 xy at 0 0 -9.27 (faces plane near 146.94 54 16.7)
         "Tangent",
     );
 }
+
+/// A pattern of a pattern and its source (r23): the source's ball came in twice, once as itself
+/// and once through the inner pattern, and two equal spheres cut in one pass left open edges.
+#[test]
+fn pattern_of_a_pattern_and_its_source() {
+    builds_valid(
+        "L0: extrude 29.9 rect 0 0 74.83 101.22
+L1: ball cut 3.11 at 57.27 50.61 29.62
+L2: pattern L1 lin 0.03 -1 0 4 7.72 1 0.03 0 3 7.72
+L3: pattern L2 L1 lin 0.11 0.99 0 2 9.35
+",
+    );
+    builds_valid(
+        "L0: extrude 29.9 rect 0 0 74.83 101.22\nL1: ball cut 3.11 at 57.27 50.61 29.62\nL3: pattern L1 L1 lin 0.11 0.99 0 2 9.35\n",
+    );
+}
