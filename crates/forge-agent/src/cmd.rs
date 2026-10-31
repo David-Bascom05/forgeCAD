@@ -994,7 +994,7 @@ combine cut base lid keep
         let f = dir.file("i.fc", &src);
         let mut s = Session::default();
         let r = s.run("build", &args(&f, &[]));
-        assert!(r.ok && r.text.ends_with("bodies 4"), "{}", r.text);
+        assert!(r.ok && r.text.contains("\nbodies 4: base "), "{}", r.text);
         assert_eq!(bodies(s.model(&f).expect("model")), want, "session");
         let ids: Vec<u64> = m.lines.iter().map(|l| l.id).collect();
         let part = forge_model::Part {
