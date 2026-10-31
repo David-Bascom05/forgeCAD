@@ -204,7 +204,7 @@ fn in_result(ops: &[Op], inside: &[bool], any_intersect: bool) -> bool {
 
 /// The solid `tools[0] ops[0] tools[1] ops[1] tools[2] ...`, folded left, in one pass.
 pub fn nary(tools: &[&Body], ops: &[Op], threads: usize) -> R<Body> {
-    nary_with(tools, ops, None, None, threads)
+    nary_with(tools, ops, None, None, threads, Name::feature(0))
 }
 
 /// Verdicts for many region points at once (on a GPU, say), given each point's own tool and
@@ -262,13 +262,15 @@ impl Batch for CpuBatch<'_> {
 }
 
 /// `nary`, with each tool also given as an analytic solid: a point clear of a tool's boundary
-/// is placed from its profile, and only points near it go to the B-rep.
+/// is placed from its profile, and only points near it go to the B-rep. New vertices are named
+/// from `root`.
 pub fn nary_with(
     tools: &[&Body],
     ops: &[Op],
     shapes: Option<&[Shape]>,
     batch: Option<&dyn Batch>,
     threads: usize,
+    root: Name,
 ) -> R<Body> {
     assert_eq!(ops.len() + 1, tools.len(), "one op per tool after the first");
     let n = tools.len();
@@ -1202,7 +1204,7 @@ pub fn nary_with(
                                 VKey::New(i) => out.add_tolerant_vertex(
                                     points[i as usize],
                                     point_tols[i as usize],
-                                    Name::feature(0).with_str("vertex").with(i as u64),
+                                    root.with_str("vertex").with(i as u64),
                                 ),
                             })
                         };

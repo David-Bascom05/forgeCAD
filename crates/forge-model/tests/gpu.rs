@@ -33,7 +33,7 @@ fn gpu_verdicts_are_the_cpus() {
     let mut parts = suite::parts();
     parts.push(("torture", torture::part(221)));
     for (name, part) in parts {
-        let (shapes, ops) = part.nary_solids();
+        let (shapes, ops) = part.nary_solids().expect("tools build");
         let cpu = CpuBatch {
             shapes: &shapes,
             ops: &ops,
@@ -44,7 +44,10 @@ fn gpu_verdicts_are_the_cpus() {
             got: Mutex::new(None),
         };
         let want = part.regenerate_nary_batch(4, true, Some(&rec));
-        let (mut pts, mut sides, boxes) = rec.got.into_inner().expect("record").expect("a batch");
+        // a history ending after a part-changing feature has no batch
+        let Some((mut pts, mut sides, boxes)) = rec.got.into_inner().expect("record") else {
+            continue;
+        };
         // and random points over the part, each with a random own tool
         let all = boxes.iter().fold(Box3::EMPTY, |a, b| a.hull(b));
         let mut r = Rng::new(7);

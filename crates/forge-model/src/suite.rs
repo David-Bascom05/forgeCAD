@@ -1,7 +1,7 @@
 //! A set of benchmark parts unlike one another, so no single shape decides
 //! what "fast" and "robust" mean, plus a random history generator.
 
-use crate::{Combine, Feature, Part, torture};
+use crate::{Combine, End, Feature, Head, Hole, Layout, Part, Row, Source, Thread, torture};
 use forge_math::rng::Rng;
 use forge_math::{Frame, Point2, Point3, Vec2, Vec3, dmath};
 use forge_ops::{Axis2, Profile, ProfileLoop, Segment};
@@ -111,6 +111,8 @@ pub fn parts() -> Vec<(&'static str, Part)> {
         ("coplanar", coplanar()),
         ("patterns", patterns()),
         ("mixed", mixed()),
+        ("tour", tour()),
+        ("hole-grid", hole_grid()),
     ]
 }
 
@@ -493,6 +495,120 @@ pub fn mixed() -> Part {
         ));
     }
     Part { features: f }
+}
+
+fn hole(at: Point3, diameter: f64, head: Head, end: End) -> Hole {
+    Hole {
+        at: frame(at, -Vec3::Z, Vec3::X),
+        diameter,
+        head,
+        end,
+        point: None,
+        thread: None,
+    }
+}
+
+/// Every pattern and hole kind: tapped blind holes in bosses, patterned in a row and mirrored,
+/// a ring of countersunk holes, then the whole part mirrored and drilled across the seam.
+pub fn tour() -> Part {
+    let (w, h, t) = (140.0, 90.0, 15.0);
+    let row = |dir: Vec3, count: usize, spacing: f64| Row { dir, count, spacing };
+    let features = vec![
+        block(Frame::WORLD, Point2::ORIGIN, w, h, t, Combine::New),
+        rod(up(Point3::new(20.0, 20.0, t - 1.0)), 6.0, 11.0, Combine::Add),
+        Feature::Hole(Hole {
+            point: Some(118.0 / 180.0 * dmath::PI),
+            thread: Some(Thread {
+                size: 5.0,
+                pitch: 0.8,
+            }),
+            ..hole(
+                Point3::new(20.0, 20.0, t + 10.0),
+                4.2,
+                Head::Plain,
+                End::Depth(12.0),
+            )
+        }),
+        Feature::Pattern {
+            of: Source::Features(vec![1, 2]),
+            layout: Layout::Linear {
+                first: row(Vec3::X, 3, 25.0),
+                second: None,
+            },
+        },
+        Feature::Hole(hole(
+            Point3::new(123.0, 55.0, t),
+            5.0,
+            Head::Countersink {
+                diameter: 10.0,
+                angle: dmath::FRAC_PI_2,
+            },
+            End::Through,
+        )),
+        Feature::Pattern {
+            of: Source::Features(vec![4]),
+            layout: Layout::Circular {
+                origin: Point3::new(105.0, 55.0, 0.0),
+                axis: Vec3::Z,
+                count: 6,
+                angle: dmath::TAU,
+            },
+        },
+        Feature::Pattern {
+            of: Source::Features(vec![3]),
+            layout: Layout::Mirror {
+                plane: frame(Point3::new(0.0, h / 2.0, 0.0), Vec3::Y, Vec3::X),
+            },
+        },
+        Feature::Pattern {
+            of: Source::Body,
+            layout: Layout::Mirror {
+                plane: frame(Point3::new(w, 0.0, 0.0), Vec3::X, Vec3::Y),
+            },
+        },
+        Feature::Hole(hole(
+            Point3::new(w, h / 2.0, t),
+            8.0,
+            Head::Counterbore {
+                diameter: 14.0,
+                depth: 5.0,
+            },
+            End::Through,
+        )),
+    ];
+    Part { features }
+}
+
+/// A plate drilled with a 20 x 20 grid of counterbored through holes: one hole, patterned.
+pub fn hole_grid() -> Part {
+    let (n, pitch, t) = (20, 20.0, 12.0);
+    let w = n as f64 * pitch;
+    let row = |dir: Vec3| Row {
+        dir,
+        count: n,
+        spacing: pitch,
+    };
+    let counterbore = Head::Counterbore {
+        diameter: 11.0,
+        depth: 6.5,
+    };
+    let features = vec![
+        block(Frame::WORLD, Point2::ORIGIN, w, w, t, Combine::New),
+        Feature::Hole(hole(
+            Point3::new(pitch / 2.0, pitch / 2.0, t),
+            6.6,
+            counterbore,
+            End::Through,
+        )),
+        Feature::Pattern {
+            of: Source::Features(vec![1]),
+            layout: Layout::Linear {
+                first: row(Vec3::X),
+                second: Some(row(Vec3::Y)),
+            },
+        },
+    ];
+    Part { features }
 }
 
 /// A random history: a random block, then `count` features of random kind,

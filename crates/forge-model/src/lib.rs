@@ -3,6 +3,8 @@
 pub mod adversarial;
 pub mod fillets;
 pub mod finishing;
+pub mod hole;
+pub mod pattern;
 pub mod suite;
 pub mod torture;
 
@@ -15,6 +17,9 @@ use forge_ops::{
     ProfileLoop, RevolveError, Segment, ShellError, chamfer, draft, extrude, fillet, revolve, shell,
 };
 use forge_topo::{Body, Name};
+pub use hole::{End, Head, Hole, HoleError, Thread};
+pub use pattern::{Layout, PatternError, Row, Source, instance_name};
+use pattern::{instances, moved, moved_shape};
 
 /// One step of a part's history.
 #[derive(Clone, Debug, PartialEq)]
@@ -50,6 +55,10 @@ pub enum Feature {
         neutral: Frame,
         angle: f64,
     },
+    /// A drilled hole, cut from the part.
+    Hole(Hole),
+    /// Copies of earlier features, or of the whole part, in rows, round an axis, or mirrored.
+    Pattern { of: Source, layout: Layout },
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -96,6 +105,14 @@ pub enum RegenError {
         feature: usize,
         error: DraftError,
     },
+    Hole {
+        feature: usize,
+        error: HoleError,
+    },
+    Pattern {
+        feature: usize,
+        error: PatternError,
+    },
     /// A feature that combines with or changes the part came before any part existed.
     NothingToCombine {
         feature: usize,
@@ -107,9 +124,10 @@ pub struct Part {
     pub features: Vec<Feature>,
 }
 
+/// A tool: its solid, how it combines with the part, and the solid as an analytic shape.
+type Tool = (Body, Combine, Shape);
+
 impl Part {
-    /// Rebuilds the solid from the first feature. Feature ids are their
-    /// positions, so entity names stay stable when nothing upstream changes.
     /// Rebuilds the solid in one n-ary boolean over every feature's tool (built in parallel),
     /// on up to `threads` threads.
     /// The region batch is classified on the backend FORGE_BATCH names (default Auto).
@@ -119,7 +137,7 @@ impl Part {
 
     /// `regenerate_nary`, the region batch classified on `backend`.
     pub fn regenerate_nary_on(&self, threads: usize, backend: Backend) -> Result<Body, RegenError> {
-        let (shapes, ops) = self.nary_solids();
+        let (shapes, ops) = self.nary_solids()?;
         let cpu = CpuBatch {
             shapes: &shapes,
             ops: &ops,
@@ -135,26 +153,15 @@ impl Part {
 
     /// The tools' analytic solids and ops, in the order the n-ary regen uses them (for building
     /// a batch classifier).
-    pub fn nary_solids(&self) -> (Vec<Shape>, Vec<Op>) {
-        let start = self
-            .features
-            .iter()
-            .rposition(|f| feature_op(f) == Some(Combine::New))
-            .unwrap_or(0);
-        let start = match self.features.iter().rposition(|f| feature_op(f).is_none()) {
+    pub fn nary_solids(&self) -> Result<(Vec<Shape>, Vec<Op>), RegenError> {
+        let start = self.features.iter().rposition(starts).unwrap_or(0);
+        let start = match self.features.iter().rposition(modifies) {
             Some(m) if m >= start => m + 1,
             _ => start,
         };
-        let feats = &self.features[start.min(self.features.len())..];
-        let ops = feats[1.min(feats.len())..]
-            .iter()
-            .map(|f| match feature_op(f) {
-                Some(Combine::Add) => Op::Union,
-                Some(Combine::Cut) => Op::Subtract,
-                _ => Op::Intersect,
-            })
-            .collect();
-        (feats.iter().map(shape).collect(), ops)
+        let built = build_tools(&self.features, start, 1, false)?;
+        let ops = built.iter().skip(1).map(|t| op_of(t.1)).collect();
+        Ok((built.into_iter().map(|t| t.2).collect(), ops))
     }
 
     /// `regenerate_nary_with`, regions classified in one batch first (on a GPU, say).
@@ -169,123 +176,223 @@ impl Part {
         nary_regen(&self.features, threads, shapes, batch)
     }
 
+    /// Rebuilds the solid from the first feature. Feature ids are their
+    /// positions, so entity names stay stable when nothing upstream changes.
     pub fn regenerate(&self) -> Result<Body, RegenError> {
         let mut body: Option<Body> = None;
         for (i, f) in self.features.iter().enumerate() {
             let id = i as u64 + 1;
-            if feature_op(f).is_none() {
+            if modifies(f) {
                 let b = body.ok_or(RegenError::NothingToCombine { feature: i })?;
-                body = Some(modify(i, f, &b)?);
+                body = Some(modify(&self.features, i, &b, 1)?);
                 continue;
             }
-            let (tool, op) = tool(i, f)?;
-            body = Some(match (body, op) {
-                (_, Combine::New) => tool,
-                (None, _) => return Err(RegenError::NothingToCombine { feature: i }),
-                (Some(mut b), op) => {
-                    // in place: only the faces near the tool change
-                    boolean_into(&mut b, &tool, op_of(op), id + 1_000_000)
-                        .map_err(|error| RegenError::Boolean { feature: i, error })?;
-                    // tombstones are cheap until they outnumber the living
-                    if b.dead > b.faces.len() / 2 {
-                        b.compact()
-                    } else {
-                        b
-                    }
+            let mut tools = tools(&self.features, i, true)?;
+            if starts(f) {
+                body = Some(tools.swap_remove(0).0);
+                continue;
+            }
+            let mut b = body.ok_or(RegenError::NothingToCombine { feature: i })?;
+            let err = |error| RegenError::Boolean { feature: i, error };
+            if let [(tool, op, _)] = &tools[..] {
+                // in place: only the faces near the tool change
+                boolean_into(&mut b, tool, op_of(*op), id + 1_000_000).map_err(err)?;
+                // tombstones are cheap until they outnumber the living
+                if b.dead > b.faces.len() / 2 {
+                    b = b.compact();
                 }
-            });
+            } else if !tools.is_empty() {
+                // a pattern's copies all in one pass
+                let base = if b.dead > 0 { b.compact() } else { b };
+                let mut all = vec![&base];
+                all.extend(tools.iter().map(|t| &t.0));
+                let ops: Vec<Op> = tools.iter().map(|t| op_of(t.1)).collect();
+                b = forge_bool::nary_with(&all, &ops, None, None, 1, cut_root(i))
+                    .map_err(err)?
+                    .compact();
+            }
+            body = Some(b);
         }
         body.map(|b| b.compact())
             .ok_or(RegenError::NothingToCombine { feature: 0 })
     }
+
+    /// Every cosmetic thread (each copy of a patterned hole has its own): the thread, the hole's
+    /// axis (origin at the mouth, z down the drill) and the wall's radius.
+    pub fn threads(&self) -> Vec<(Thread, Frame, f64)> {
+        // each thread and the features whose solids hold it
+        let mut out: Vec<(Thread, Frame, f64, Vec<usize>)> = Vec::new();
+        for (i, f) in self.features.iter().enumerate() {
+            match f {
+                Feature::Hole(h) => {
+                    if let Some(t) = h.thread {
+                        out.push((t, h.at, h.diameter / 2.0, vec![i]));
+                    }
+                }
+                Feature::Pattern { of, layout } => {
+                    let Ok(copies) = instances(layout) else {
+                        continue;
+                    };
+                    let mut added = Vec::new();
+                    for (t, at, r, owners) in &mut out {
+                        let held = match of {
+                            Source::Body => true,
+                            Source::Features(src) => owners.iter().any(|o| src.contains(o)),
+                        };
+                        if held {
+                            owners.push(i);
+                            added.extend(copies.iter().map(|(_, m)| (*t, m.frame(at, true), *r, vec![i])));
+                        }
+                    }
+                    out.extend(added);
+                }
+                _ => {}
+            }
+        }
+        out.into_iter().map(|(t, at, r, _)| (t, at, r)).collect()
+    }
+
+    /// The faces of `body` (this part, regenerated) each thread lies on: the cylinders on its
+    /// axis with its radius, however booleans split them.
+    pub fn thread_faces(&self, body: &Body) -> Vec<(Thread, Vec<forge_topo::FaceId>)> {
+        let eps = forge_math::tol::LINEAR;
+        self.threads()
+            .into_iter()
+            .map(|(t, at, r)| {
+                let on = |f: &forge_topo::FaceId| match &body.face(*f).surface {
+                    forge_geom::Surface::Cylinder(c) => {
+                        let off = at.origin - c.frame.origin;
+                        let across = off - c.frame.z() * c.frame.z().dot(off);
+                        (c.radius - r).abs() <= eps
+                            && c.frame.z().dot(at.z().get()).abs() >= 1.0 - eps
+                            && across.length() <= eps
+                    }
+                    _ => false,
+                };
+                (t, body.face_ids().filter(on).collect())
+            })
+            .collect()
+    }
 }
 
-/// Builds the tools of `feats` (feature ids from `start`) on up to `threads` threads.
-fn build_tools(feats: &[Feature], start: usize, threads: usize) -> Result<Vec<(Body, Combine)>, RegenError> {
-    if threads <= 1 {
-        return feats
-            .iter()
-            .enumerate()
-            .map(|(k, f)| tool(start + k, f))
-            .collect();
+/// Whether a feature starts the part afresh.
+fn starts(f: &Feature) -> bool {
+    matches!(
+        f,
+        Feature::Extrude { op: Combine::New, .. }
+            | Feature::Revolve { op: Combine::New, .. }
+            | Feature::Ball { op: Combine::New, .. }
+    )
+}
+
+/// Whether a feature changes the part as a whole, rather than making tools to combine with it.
+fn modifies(f: &Feature) -> bool {
+    matches!(
+        f,
+        Feature::Fillet { .. }
+            | Feature::Chamfer { .. }
+            | Feature::Shell { .. }
+            | Feature::Draft { .. }
+            | Feature::Pattern { of: Source::Body, .. }
+    )
+}
+
+/// The tools of features `from..` on up to `threads` threads, in order (only their shapes,
+/// solids left empty, unless `build`).
+fn build_tools(
+    features: &[Feature],
+    from: usize,
+    threads: usize,
+    build: bool,
+) -> Result<Vec<Tool>, RegenError> {
+    let some = |r: std::ops::Range<usize>| -> Result<Vec<Tool>, RegenError> {
+        let mut out = Vec::new();
+        for i in r {
+            out.extend(tools(features, i, build)?);
+        }
+        Ok(out)
+    };
+    let n = features.len().saturating_sub(from);
+    if threads <= 1 || n <= 1 {
+        return some(from..features.len());
     }
-    let built: Vec<Result<(Body, Combine), RegenError>> = std::thread::scope(|s| {
-        let chunk = feats.len().div_ceil(threads.max(1));
-        let hs: Vec<_> = feats
-            .chunks(chunk.max(1))
-            .enumerate()
-            .map(|(c, fs)| {
-                s.spawn(move || {
-                    fs.iter()
-                        .enumerate()
-                        .map(|(k, f)| tool(start + c * chunk + k, f))
-                        .collect::<Vec<_>>()
-                })
+    let chunk = n.div_ceil(threads);
+    let built: Vec<Result<Vec<Tool>, RegenError>> = std::thread::scope(|s| {
+        let hs: Vec<_> = (from..features.len())
+            .step_by(chunk)
+            .map(|a| {
+                let some = &some;
+                s.spawn(move || some(a..(a + chunk).min(features.len())))
             })
             .collect();
-        hs.into_iter()
-            .flat_map(|h| h.join().expect("tool builder"))
-            .collect()
+        hs.into_iter().map(|h| h.join().expect("tool builder")).collect()
     });
-    built.into_iter().collect()
+    let mut out = Vec::new();
+    for b in built {
+        out.extend(b?);
+    }
+    Ok(out)
 }
 
 /// The n-ary regen of a history: each run of solid features after a part-changing one (chamfer,
-/// shell, draft) is one n-ary boolean starting from the part so far.
+/// shell, draft, body pattern) is one n-ary boolean starting from the part so far.
 fn nary_regen(
     features: &[Feature],
     threads: usize,
     shapes: bool,
     batch: Option<&dyn forge_bool::Batch>,
 ) -> Result<Body, RegenError> {
-    let start = features
-        .iter()
-        .rposition(|f| feature_op(f) == Some(Combine::New))
-        .unwrap_or(0);
-    if let Some(m) = features.iter().rposition(|f| feature_op(f).is_none())
+    let start = features.iter().rposition(starts).unwrap_or(0);
+    let err = |error| RegenError::Boolean {
+        feature: features.len() - 1,
+        error,
+    };
+    if let Some(m) = features.iter().rposition(modifies)
         && m >= start
     {
         if m == 0 {
             return Err(RegenError::NothingToCombine { feature: 0 });
         }
         let body = modify(
+            features,
             m,
-            &features[m],
             // the batch holds the tools after the last modifier (nary_solids), not these
             &nary_regen(&features[..m], threads, shapes, None)?,
+            threads,
         )?;
-        if m + 1 == features.len() {
+        let built = build_tools(features, m + 1, threads, true)?;
+        if built.is_empty() {
             return Ok(body);
         }
-        let built = build_tools(&features[m + 1..], m + 1, threads)?;
         let mut tools: Vec<&Body> = vec![&body];
         tools.extend(built.iter().map(|t| &t.0));
         let ops: Vec<Op> = built.iter().map(|t| op_of(t.1)).collect();
-        return forge_bool::nary_with(&tools, &ops, None, None, threads)
+        return forge_bool::nary_with(&tools, &ops, None, None, threads, cut_root(features.len() - 1))
             .map(|b| b.compact())
-            .map_err(|error| RegenError::Boolean {
-                feature: features.len() - 1,
-                error,
-            });
+            .map_err(err);
     }
-    if start == 0
-        && features
-            .first()
-            .is_some_and(|f| feature_op(f) != Some(Combine::New))
-    {
+    if features.get(start).is_none_or(|f| !starts(f)) {
         return Err(RegenError::NothingToCombine { feature: 0 });
     }
-    let feats = &features[start..];
-    let built = build_tools(feats, start, threads)?;
+    let built = build_tools(features, start, threads, true)?;
     let tools: Vec<&Body> = built.iter().map(|t| &t.0).collect();
     let ops: Vec<Op> = built[1..].iter().map(|t| op_of(t.1)).collect();
-    let solids: Vec<Shape> = feats.iter().map(shape).collect();
-    forge_bool::nary_with(&tools, &ops, shapes.then_some(&solids[..]), batch, threads)
-        .map(|b| b.compact())
-        .map_err(|error| RegenError::Boolean {
-            feature: features.len() - 1,
-            error,
-        })
+    let solids: Vec<Shape> = built.iter().map(|t| t.2.clone()).collect();
+    forge_bool::nary_with(
+        &tools,
+        &ops,
+        shapes.then_some(&solids[..]),
+        batch,
+        threads,
+        cut_root(features.len() - 1),
+    )
+    .map(|b| b.compact())
+    .map_err(err)
+}
+
+/// The root of the names a boolean ending at feature `i` gives the vertices it makes.
+fn cut_root(i: usize) -> Name {
+    Name::feature(i as u64 + 1 + 1_000_000)
 }
 
 fn op_of(c: Combine) -> Op {
@@ -297,9 +404,9 @@ fn op_of(c: Combine) -> Op {
 }
 
 /// Applies part-changing feature `i` to `body`.
-fn modify(i: usize, f: &Feature, body: &Body) -> Result<Body, RegenError> {
+fn modify(features: &[Feature], i: usize, body: &Body, threads: usize) -> Result<Body, RegenError> {
     let id = i as u64 + 1;
-    match f {
+    match &features[i] {
         Feature::Fillet { edges } => apply_fillet(i, body, edges),
         Feature::Chamfer { edges, size } => {
             chamfer(body, edges, *size, id).map_err(|error| RegenError::Chamfer { feature: i, error })
@@ -315,6 +422,30 @@ fn modify(i: usize, f: &Feature, body: &Body) -> Result<Body, RegenError> {
             neutral,
             angle,
         } => draft(body, faces, neutral, *angle).map_err(|error| RegenError::Draft { feature: i, error }),
+        Feature::Pattern { layout, .. } => {
+            let pe = |error| RegenError::Pattern { feature: i, error };
+            let copies = instances(layout).map_err(pe)?;
+            let copies = copies
+                .iter()
+                .map(|(key, m)| moved(body, m, |n| instance_name(i, *key, n)))
+                .collect::<Result<Vec<Body>, _>>()
+                .map_err(pe)?;
+            if copies.is_empty() {
+                return Ok(body.clone());
+            }
+            let mut all = vec![body];
+            all.extend(copies.iter());
+            forge_bool::nary_with(
+                &all,
+                &vec![Op::Union; copies.len()],
+                None,
+                None,
+                threads,
+                cut_root(i),
+            )
+            .map(|b| b.compact())
+            .map_err(|error| RegenError::Boolean { feature: i, error })
+        }
         _ => unreachable!("solid features make tools"),
     }
 }
@@ -336,9 +467,70 @@ fn apply_fillet(i: usize, body: &Body, edges: &[(Name, f64)]) -> Result<Body, Re
     fillet(&body, &want, i as u64 + 1).map_err(|error| RegenError::Fillet { feature: i, error })
 }
 
-/// The solid feature `i` makes, and how it combines with the part.
-fn tool(i: usize, f: &Feature) -> Result<(Body, Combine), RegenError> {
+/// The tools feature `i` makes: one, or a pattern's copies (each named after its place).
+fn tools(features: &[Feature], i: usize, build: bool) -> Result<Vec<Tool>, RegenError> {
+    match &features[i] {
+        Feature::Hole(h) => {
+            let cut = h
+                .revolve(&hole::reach(&features[..i]))
+                .map_err(|error| RegenError::Hole { feature: i, error })?;
+            Ok(vec![tool(i, &cut, build)?])
+        }
+        Feature::Pattern {
+            of: Source::Features(src),
+            layout,
+        } => {
+            let pe = |error| RegenError::Pattern { feature: i, error };
+            let copies = instances(layout).map_err(pe)?;
+            let mut base = Vec::new();
+            for &s in src {
+                if s >= i || modifies(&features[s]) {
+                    return Err(pe(PatternError::BadSource { feature: s }));
+                }
+                base.extend(solids_of(features, s, build)?);
+            }
+            let mut out = Vec::with_capacity(copies.len() * base.len());
+            for (key, m) in &copies {
+                for (b, op, sh) in &base {
+                    let body = moved(b, m, |n| instance_name(i, *key, n)).map_err(pe)?;
+                    let op = if *op == Combine::New { Combine::Add } else { *op };
+                    out.push((body, op, moved_shape(sh, m)));
+                }
+            }
+            Ok(out)
+        }
+        f => Ok(vec![tool(i, f, build)?]),
+    }
+}
+
+/// The solids feature `s` stands for: its tool, or a pattern's sources' and its copies.
+fn solids_of(features: &[Feature], s: usize, build: bool) -> Result<Vec<Tool>, RegenError> {
+    let mut out = Vec::new();
+    if let Feature::Pattern {
+        of: Source::Features(src),
+        ..
+    } = &features[s]
+    {
+        for &t in src {
+            if t < s && !modifies(&features[t]) {
+                out.extend(solids_of(features, t, build)?);
+            }
+        }
+    }
+    out.extend(tools(features, s, build)?);
+    Ok(out)
+}
+
+/// The solid an extrude, revolve or ball makes (empty unless `build`), and how it combines
+/// with the part.
+fn tool(i: usize, f: &Feature, build: bool) -> Result<Tool, RegenError> {
     let id = i as u64 + 1;
+    if !build {
+        let (Feature::Extrude { op, .. } | Feature::Revolve { op, .. } | Feature::Ball { op, .. }) = f else {
+            unreachable!("only extrudes, revolves and balls are built directly")
+        };
+        return Ok((Body::new(), *op, shape(f)));
+    }
     Ok(match f {
         Feature::Extrude {
             profile,
@@ -347,6 +539,7 @@ fn tool(i: usize, f: &Feature) -> Result<(Body, Combine), RegenError> {
         } => (
             extrude(profile, *distance, id).map_err(|error| RegenError::Extrude { feature: i, error })?,
             *op,
+            shape(f),
         ),
         Feature::Revolve {
             profile,
@@ -356,6 +549,7 @@ fn tool(i: usize, f: &Feature) -> Result<(Body, Combine), RegenError> {
         } => (
             revolve(profile, *axis, *angle, id).map_err(|error| RegenError::Revolve { feature: i, error })?,
             *op,
+            shape(f),
         ),
         Feature::Ball { frame, radius, op } => {
             let q = dmath::FRAC_PI_2;
@@ -389,22 +583,11 @@ fn tool(i: usize, f: &Feature) -> Result<(Body, Combine), RegenError> {
                 revolve(&profile, axis, dmath::TAU, id)
                     .map_err(|error| RegenError::Revolve { feature: i, error })?,
                 *op,
+                shape(f),
             )
         }
-        Feature::Fillet { .. } | Feature::Chamfer { .. } | Feature::Shell { .. } | Feature::Draft { .. } => {
-            unreachable!("part-changing features are no tool")
-        }
+        _ => unreachable!("only extrudes, revolves and balls are built directly"),
     })
-}
-
-/// How a solid feature combines with the part; None for one that changes the part itself.
-fn feature_op(f: &Feature) -> Option<Combine> {
-    match f {
-        Feature::Extrude { op, .. } | Feature::Revolve { op, .. } | Feature::Ball { op, .. } => Some(*op),
-        Feature::Fillet { .. } | Feature::Chamfer { .. } | Feature::Shell { .. } | Feature::Draft { .. } => {
-            None
-        }
-    }
 }
 
 fn seg2(s: &Segment) -> Seg2 {
@@ -483,9 +666,7 @@ fn shape(f: &Feature) -> Shape {
             center: frame.origin,
             radius: *radius,
         },
-        Feature::Fillet { .. } | Feature::Chamfer { .. } | Feature::Shell { .. } | Feature::Draft { .. } => {
-            unreachable!("part-changing features are no tool")
-        }
+        _ => unreachable!("only extrudes, revolves and balls have a shape of their own"),
     }
 }
 
@@ -504,10 +685,13 @@ mod tests {
         let mut r = Rng::new(77);
         let (mut answered, mut near) = (0, 0);
         for part in &parts {
-            for (i, f) in part.features.iter().enumerate() {
-                let (body, _) = tool(i, f).expect("tool builds");
+            let solid = part.features.iter().enumerate().filter(|f| !modifies(f.1));
+            // a few copies of each pattern, mirrored ones among them
+            for ((i, f), (body, _, sh)) in solid.flat_map(|(i, f)| {
+                let ts = tools(&part.features, i, true).expect("tools build");
+                ts.into_iter().take(6).map(move |t| ((i, f), t))
+            }) {
                 let index = Index::new(&body);
-                let sh = shape(f);
                 let b = index.bbox.grow(1.0);
                 for _ in 0..200 {
                     let p = forge_math::Point3::new(
