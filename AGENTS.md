@@ -15,17 +15,18 @@ chamfer 1 @d644 @b2e4                       # @handles come from `query`
 
 Features (`[op]` is new for the first solid, add after):
 ```
-extrude [op] EXT FRAME LOOPS     EXT: N | sym N | two N M | thru [back|both] | to FEAT [@face] [off N]
+extrude [op] EXT FRAME LOOPS     EXT: N | sym N | two N M | thru [back|both] | next [back] | to FEAT [@face] [off N]
 revolve [op] [TURN] FRAME [axis x|y|OX OY DX DY] LOOPS     TURN: like EXT, in degrees; default 360
 ball [op] R FRAME     fillet R REF.. [R REF..]     shell T [out] REF..     draft A FRAME REF..
 chamfer D REF.. | chamfer D D2 face REF REF.. | chamfer D ang A face REF REF..
-hole D FRAME [cb D2 DEPTH | cs D2 A] (N | thru | to FEAT [@face] [off N]) [pt A] [thread SIZE PITCH]
+hole D FRAME [cb D2 DEPTH | cs D2 A] (N | thru | next | to FEAT [@face] [off N]) [pt A] [thread SIZE PITCH]
 pattern (body | FEAT..) (lin DX DY DZ N STEP [DX DY DZ N STEP] | circ OX OY OZ AX AY AZ N [A] [step] | mirror FRAME)
 plane FRAME                      a work plane, for `to FEAT` and `on FEAT`
 FRAME: [xy|xz|yz|-xy|-xz|-yz | z A B C [x A B C] | on FEAT] [at X Y Z]     default: xy at 0 0 0
   xy: normal +z; xz: sketch x,y = world x,z, normal -y; yz: world y,z, normal +x; -: flipped
 LOOPS (first is outside, rest are holes): rect X Y W H | rrect X Y W H R | circle X Y R |
   poly X Y X Y .. | loop (line AX AY BX BY | arc CX CY R START SWEEP)..
+`next`: up to the next face met. `to`: a plane feature, or a feature's face (plane, cylinder..).
 FEAT: a label, kind+count (`hole2` is the 2nd hole line), or `fN` (line N's feature)
 REF: @handle | (selector), found on the part as it stands above that line
 ```

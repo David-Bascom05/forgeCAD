@@ -234,7 +234,7 @@ pub const KINDS: &[Kind] = &[
     },
     Kind {
         name: "hole",
-        syntax: "hole D FRAME [cb D2 DEPTH | cs D2 A] (N | thru | to FEAT [@face] [off N]) [pt A] [thread SIZE PITCH]",
+        syntax: "hole D FRAME [cb D2 DEPTH | cs D2 A] (N | thru | next | to FEAT [@face] [off N]) [pt A] [thread SIZE PITCH]",
         parse: |p| {
             let diameter = p.num()?;
             let at = p.frame()?;
@@ -253,6 +253,8 @@ pub const KINDS: &[Kind] = &[
             };
             let end = if p.eat("thru") {
                 End::Through
+            } else if p.eat("next") {
+                End::ToNext
             } else if p.eat("to") {
                 let target = p.target()?;
                 End::To {
@@ -299,6 +301,7 @@ pub const KINDS: &[Kind] = &[
             }
             match h.end {
                 End::Through => w.word("thru"),
+                End::ToNext => w.word("next"),
                 End::Depth(d) => w.num(d),
                 End::To { target, offset } => {
                     w.word("to");
@@ -763,6 +766,12 @@ impl P<'_> {
                     Toward::Forward
                 })
             }
+            "next" => {
+                self.k += 1;
+                Extent::ToNext {
+                    reverse: self.eat("back"),
+                }
+            }
             "to" => {
                 self.k += 1;
                 let target = self.target()?;
@@ -1073,6 +1082,12 @@ impl<'a> W<'a> {
                     Toward::Forward => {}
                     Toward::Back => self.word("back"),
                     Toward::Both => self.word("both"),
+                }
+            }
+            Extent::ToNext { reverse } => {
+                self.word("next");
+                if reverse {
+                    self.word("back");
                 }
             }
             Extent::To { target, offset } => {
@@ -1430,7 +1445,8 @@ mod tests {
         match r.below(KINDS.len()) {
             0 => Feature::Extrude {
                 profile: profile(r),
-                extent: match r.below(5) {
+                extent: match r.below(6) {
+                    5 => Extent::ToNext { reverse: r.bool() },
                     0 => Extent::Distance(num(r)),
                     1 => Extent::Symmetric(num(r)),
                     2 => Extent::TwoSided {
@@ -1528,7 +1544,8 @@ mod tests {
                         angle: angle(r),
                     },
                 },
-                end: match r.below(3) {
+                end: match r.below(4) {
+                    3 => End::ToNext,
                     0 => End::Through,
                     1 => End::Depth(num(r)),
                     _ => End::To {
