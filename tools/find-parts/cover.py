@@ -25,7 +25,11 @@ from find import read_dir
 
 def counters(path):
     """Raw profile v11: a bitset of the counters that fired."""
-    b = open(path, "rb").read()
+    with open(path, "rb") as f:
+        b = f.read()
+    # a run killed while writing leaves a short file: no coverage from it
+    if len(b) < 152:
+        return 0
     h = struct.unpack("<19Q", b[:152])
     assert h[1] == 11, f"raw profile version {h[1]}"
     off = 152 + h[2] + h[3] * 72 + h[4]
