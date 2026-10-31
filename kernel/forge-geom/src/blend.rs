@@ -807,6 +807,17 @@ impl ProceduralCurve for Spring {
     fn kinks(&self, range: Interval) -> Vec<f64> {
         self.spine.kinks(range)
     }
+    fn across(&self) -> Option<Surface> {
+        Some(Surface::Procedural(Proc(Arc::new(Fence {
+            spring: Spring {
+                spine: self.spine.clone(),
+                surface: self.surface.clone(),
+                d: self.d,
+                on: None,
+                smooth: OnceLock::new(),
+            },
+        }))))
+    }
     fn transformed(&self, f: &Frame) -> ProcCurve {
         ProcCurve(Arc::new(Spring {
             spine: self.spine.transformed(f),
@@ -840,6 +851,84 @@ impl ProceduralCurve for Spring {
         let acc = acc * 1.5 + f64::MIN_POSITIVE;
         let h = (8.0 * chord / acc).sqrt();
         ((range.width() / h).ceil() as usize).max(1)
+    }
+}
+
+/// The rays from a spine through its spring, out past it: a surface holding the whole spring and
+/// standing square across the face it touches and the pipe (tangent there, so neither tells which
+/// side of the curve a point lies). u is the spine's, v in units of the distance, 0 on the spring,
+/// -1 on the spine. As varblend's Fence, for a constant radius.
+#[derive(Debug)]
+struct Fence {
+    spring: Spring,
+}
+
+impl Fence {
+    /// Signed distance across the fence in the spring's normal plane at its point nearest p
+    /// (exact on the fence, first order near the spring), the normal, and that point's t.
+    fn value(&self, p: Point3) -> (f64, Vec3, f64) {
+        let d = self.spring.spine.domain();
+        let t = self.spring.closest(p, Interval::new(d.lo, d.hi));
+        let (q, q1) = self.spring.deriv1(t);
+        let ray = q - self.spring.spine.eval(t);
+        let m = q1.cross(ray).normalize().map_or(Vec3::Z, |u| u.get());
+        ((p - q).dot(m), m, t)
+    }
+}
+
+impl Procedural for Fence {
+    fn deriv(&self, uv: Point2) -> SurfDeriv {
+        let q = ProceduralCurve::deriv(&self.spring, uv.x);
+        let c = self.spring.spine.deriv(uv.x);
+        let w = uv.y;
+        SurfDeriv {
+            p: q.p + (q.p - c.p) * w,
+            du: q.d1 + (q.d1 - c.d1) * w,
+            dv: q.p - c.p,
+            duu: q.d2 + (q.d2 - c.d2) * w,
+            duv: q.d1 - c.d1,
+            dvv: Vec3::ZERO,
+        }
+    }
+    fn domain(&self) -> Domain2 {
+        Domain2 {
+            u: self.spring.spine.domain(),
+            v: Domain1 {
+                lo: -1.0,
+                hi: 1.0,
+                period: None,
+            },
+        }
+    }
+    fn project(&self, p: Point3) -> Point2 {
+        let t = self.value(p).2;
+        let q = self.spring.at(t);
+        let ray = q - self.spring.spine.eval(t);
+        Point2::new(t, (p - q).dot(ray) / ray.length_sq().max(f64::MIN_POSITIVE))
+    }
+    fn bbox(&self, uv: Box2) -> Box3 {
+        let reach = self.spring.d.abs() * uv.v.lo.abs().max(uv.v.hi.abs());
+        self.spring.bbox(uv.u).grow(reach)
+    }
+    fn implicit(&self, p: Point3) -> f64 {
+        self.value(p).0
+    }
+    fn gradient(&self, p: Point3) -> Vec3 {
+        self.value(p).1
+    }
+    fn transformed(&self, f: &Frame) -> Proc {
+        Proc(Arc::new(Fence {
+            spring: Spring {
+                spine: self.spring.spine.transformed(f),
+                surface: self.spring.surface.transformed(f),
+                d: self.spring.d,
+                on: None,
+                smooth: OnceLock::new(),
+            },
+        }))
+    }
+    fn mesh_radius(&self) -> f64 {
+        self.spring.d.abs()
     }
 }
 
