@@ -276,6 +276,12 @@ pub struct Part {
     pub features: Vec<Feature>,
 }
 
+/// Tools in one n-ary run from which the n-ary regen is the faster, measured in instructions on
+/// one thread (suite::fuzz histories, 6 seeds each): n-ary costs 5-22% more up to 24 tools,
+/// about as much (median within 5%) from 24 to 56, and less from 64 on (the suite parts, ~200
+/// tools, 0.5-0.9x except shaft and housing, within 10% over).
+const NARY_FROM: usize = 64;
+
 /// A tool: its solid, how it combines with the part, and the solid as an analytic shape.
 type Tool = (Body, Combine, Shape);
 
@@ -303,6 +309,22 @@ impl Part {
     /// `regenerate_nary`, placing points against the tools' analytic solids first or not.
     pub fn regenerate_nary_with(&self, threads: usize, shapes: bool) -> Result<Body, RegenError> {
         self.regenerate_nary_batch(threads, shapes, None)
+    }
+
+    /// The regen expected to be the faster: the n-ary one from `NARY_FROM` tools in its last run
+    /// (after the last part-changing feature) on, the sequential one below. Decided from the
+    /// history alone, so the same history always takes the same path.
+    pub fn regenerate_auto(&self, threads: usize) -> Result<Body, RegenError> {
+        let start = self.features.iter().rposition(starts).unwrap_or(0);
+        let start = match self.features.iter().rposition(modifies) {
+            Some(m) if m >= start => m + 1,
+            _ => start,
+        };
+        if self.features.len().saturating_sub(start) >= NARY_FROM {
+            self.regenerate_nary(threads)
+        } else {
+            self.regenerate()
+        }
     }
 
     /// The tools' analytic solids and ops, in the order the n-ary regen uses them (for building

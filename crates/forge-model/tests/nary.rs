@@ -82,3 +82,19 @@ fn nary_bits_do_not_depend_on_threads() {
         assert_eq!(bits(4), one, "{name}: 4 threads");
     }
 }
+
+/// The auto regen takes the sequential path for a short history and the n-ary one for a long.
+#[test]
+fn auto_picks_by_history_length() {
+    let bits = |b: &forge_topo::Body| b.vertices.iter().map(|v| v.point.x.to_bits()).collect::<Vec<_>>();
+    let short = suite::fuzz(3, 10);
+    assert_eq!(
+        bits(&short.regenerate_auto(2).expect("auto")),
+        bits(&short.regenerate().expect("seq"))
+    );
+    let long = torture::part(221);
+    assert_eq!(
+        bits(&long.regenerate_auto(2).expect("auto")),
+        bits(&long.regenerate_nary(2).expect("nary"))
+    );
+}

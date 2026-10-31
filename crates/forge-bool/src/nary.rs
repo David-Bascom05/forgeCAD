@@ -54,22 +54,22 @@ fn par_map<T: Send>(n: usize, threads: usize, per: usize, f: impl Fn(usize) -> T
         return (0..n).map(f).collect();
     }
     let next = AtomicUsize::new(0);
+    let work = || {
+        let mut got = Vec::new();
+        loop {
+            let i = next.fetch_add(1, Ordering::Relaxed);
+            if i >= n {
+                break got;
+            }
+            got.push((i, f(i)));
+        }
+    };
+    // the calling thread is one of the workers: one spawn fewer per call
     let parts: Vec<Vec<(usize, T)>> = std::thread::scope(|s| {
-        let workers: Vec<_> = (0..threads.min(n))
-            .map(|_| {
-                s.spawn(|| {
-                    let mut got = Vec::new();
-                    loop {
-                        let i = next.fetch_add(1, Ordering::Relaxed);
-                        if i >= n {
-                            break got;
-                        }
-                        got.push((i, f(i)));
-                    }
-                })
-            })
-            .collect();
-        workers.into_iter().map(|w| w.join().expect("worker")).collect()
+        let workers: Vec<_> = (1..threads.min(n)).map(|_| s.spawn(work)).collect();
+        let mut parts = vec![work()];
+        parts.extend(workers.into_iter().map(|w| w.join().expect("worker")));
+        parts
     });
     let mut out: Vec<Option<T>> = (0..n).map(|_| None).collect();
     for (i, t) in parts.into_iter().flatten() {
@@ -80,6 +80,33 @@ fn par_map<T: Send>(n: usize, threads: usize, per: usize, f: impl Fn(usize) -> T
 
 /// How far clear of a tool's boundary a point must be for its analytic solid to answer.
 const SHAPE_MARGIN: f64 = tol::LINEAR;
+
+/// The part of `range` along which `c` may come within any of `boxes` (None: nowhere): for a
+/// traced curve, the span of its chain segments (each within its chord and sag of its ends) that
+/// meet one; for any other curve, the whole range.
+fn stretch(c: &Curve, range: Interval, boxes: &[forge_math::Box3]) -> Option<Interval> {
+    let Curve::Intersection(ic) = c else {
+        return Some(range);
+    };
+    let (n, segs) = (ic.pts.len() as i64, ic.segments() as i64);
+    let mut out: Option<Interval> = None;
+    let mut k = range.lo.floor() as i64;
+    while (k as f64) < range.hi {
+        let (a, b) = (range.lo.max(k as f64), range.hi.min((k + 1) as f64));
+        let i = if ic.closed {
+            k.rem_euclid(segs)
+        } else {
+            k.clamp(0, segs - 1)
+        };
+        let (p, q) = (ic.pts[i as usize], ic.pts[((i + 1) % n) as usize]);
+        let bx = forge_math::Box3::from_points([p, q]).grow(ic.sag + tol::LINEAR);
+        if b > a && boxes.iter().any(|x| x.overlaps(&bx)) {
+            out = Some(out.map_or(Interval::new(a, b), |o| Interval::new(o.lo, b)));
+        }
+        k += 1;
+    }
+    out
+}
 
 /// Whether surface `s` may pass through box `b` (false only when the box surely lies on one side
 /// of it, clear by more than a tolerance).
@@ -252,7 +279,13 @@ struct PairOut {
     imprints: Vec<Imprint>,
     coplanar: Vec<[(Side, FaceId); 2]>,
     touching: Vec<Touch>,
+    /// Face pairs whose meeting is not wholly in the new edges (points, coincident, touches,
+    /// curves along an edge, left out as outside the result).
+    loose: Vec<FacePair>,
 }
+
+/// Two tools' faces, the lower tool first.
+type FacePair = ((Side, FaceId), (Side, FaceId));
 
 /// A region of a tool face, before classification.
 struct Reg {
@@ -460,12 +493,17 @@ pub fn nary_with(
 
     // 1: pairs of tools whose boxes meet, then their faces
     let mut pairs: Vec<(Side, Side)> = Vec::new();
+    // tool pairs whose boxes meet but were left out as surely outside the result: whether their
+    // faces meet is not known
+    let mut unknown: Vec<(Side, Side)> = Vec::new();
     for i in 0..n {
         for j in i + 1..n {
-            if index[i].bbox.overlaps(&index[j].bbox)
-                && !outside(&overlap(&index[i].bbox, &index[j].bbox).grow(tol::LINEAR))
-            {
-                pairs.push((i, j));
+            if index[i].bbox.overlaps(&index[j].bbox) {
+                if outside(&overlap(&index[i].bbox, &index[j].bbox).grow(tol::LINEAR)) {
+                    unknown.push((i, j));
+                } else {
+                    pairs.push((i, j));
+                }
             }
         }
     }
@@ -489,8 +527,10 @@ pub fn nary_with(
                     continue;
                 }
                 let region = overlap(&ia.boxes[fa.index()], &ib.boxes[fb.index()]).grow(tol::LINEAR);
-                // an edge here would be dropped below, with both its sides
+                // an edge here would be dropped below, with both its sides (not known to meet: kept
+                // as meeting for the triple points)
                 if outside(&region) {
+                    out.loose.push(((i, fa), (j, fb)));
                     continue;
                 }
                 let (sa, sb) = (&a.face(fa).surface, &b.face(fb).surface);
@@ -498,7 +538,11 @@ pub fn nary_with(
                 out.touching
                     .extend(touches(&found, [ia, ib], [i, j], [fa, fb], region));
                 let curves = match found {
-                    SurfaceSurface::Empty | SurfaceSurface::Points(_) => continue,
+                    SurfaceSurface::Empty => continue,
+                    SurfaceSurface::Points(_) => {
+                        out.loose.push(((i, fa), (j, fb)));
+                        continue;
+                    }
                     SurfaceSurface::Coincident => {
                         out.coplanar.push([(i, fa), (j, fb)]);
                         let both = [a, b];
@@ -534,8 +578,14 @@ pub fn nary_with(
                     curves.iter().filter(|c| c.1 == Contact::Crossing).count() > 1,
                     branches_meet(&curves),
                 ];
+                // where the faces' meeting is not all in new edges (a touch, a curve along an
+                // edge), the triple points search the whole of every edge; a curve the trim leaves
+                // out lies outside a face, where no triple point of the two faces can be
+                let imprints_before = out.imprints.len();
+                let mut whole = true;
                 for (ci, (curve, contact)) in curves.into_iter().enumerate() {
                     if contact == Contact::Touching {
+                        whole = false;
                         continue;
                     }
                     let name = Name::feature(0)
@@ -555,6 +605,9 @@ pub fn nary_with(
                         &mut out.imprints,
                     )?;
                 }
+                if !whole || out.imprints.len() > imprints_before {
+                    out.loose.push(((i, fa), (j, fb)));
+                }
             }
         }
         Ok(out)
@@ -564,8 +617,10 @@ pub fn nary_with(
     let mut imprints: Vec<Imprint> = Vec::new();
     let mut coplanar: Vec<[(Side, FaceId); 2]> = Vec::new();
     let mut touching: Vec<Touch> = Vec::new();
+    let mut loose: Vec<FacePair> = Vec::new();
     for out in outs {
         let out = out?;
+        loose.extend(out.loose);
         let base = cuts.len();
         cuts.extend(out.cuts);
         segs.extend(out.segs.into_iter().map(|mut s| {
@@ -576,7 +631,44 @@ pub fn nary_with(
         coplanar.extend(out.coplanar);
         touching.extend(out.touching);
     }
-    segs.retain(|sg| !outside(&sg.curve.bbox(sg.range).grow(tol::LINEAR)));
+    // every new edge's box by its face pair (before those outside the result go): a triple point
+    // on an edge and a third tool's face h lies on the edge of the edge's face and h
+    let key = |x: (Side, FaceId), y: (Side, FaceId)| if x.0 < y.0 { (x, y) } else { (y, x) };
+    // each new edge's box, once (a traced curve's costs evaluations)
+    let mut seg_box: Vec<forge_math::Box3> = segs.iter().map(|sg| sg.curve.bbox(sg.range)).collect();
+    // only a traced edge's triple points are narrowed by them, so only the faces those lie on
+    let mut traced: Vec<(Side, FaceId)> = segs
+        .iter()
+        .filter(|sg| matches!(sg.curve, Curve::Intersection(_)))
+        .flat_map(|sg| [(sg.sides[0], sg.faces[0]), (sg.sides[1], sg.faces[1])])
+        .collect();
+    traced.sort_unstable();
+    traced.dedup();
+    let on_traced = |f: (Side, FaceId)| traced.binary_search(&f).is_ok();
+    let mut along: Vec<(FacePair, forge_math::Box3)> = segs
+        .iter()
+        .zip(&seg_box)
+        .filter(|(sg, _)| !traced.is_empty() && (0..2).any(|e| on_traced((sg.sides[e], sg.faces[e]))))
+        .map(|(sg, b)| {
+            (
+                key((sg.sides[0], sg.faces[0]), (sg.sides[1], sg.faces[1])),
+                b.grow(10.0 * tol::LINEAR),
+            )
+        })
+        .collect();
+    along.sort_unstable_by_key(|x| x.0);
+    if !traced.is_empty() {
+        // coincident faces too (kept in `coplanar` already)
+        loose.extend(coplanar.iter().map(|&[x, y]| key(x, y)));
+        loose.sort_unstable();
+    }
+    if shapes.is_some() {
+        let keep: Vec<bool> = seg_box.iter().map(|b| !outside(&b.grow(tol::LINEAR))).collect();
+        let mut flags = keep.iter();
+        segs.retain(|_| *flags.next().expect("a flag a seg"));
+        let mut flags = keep.iter();
+        seg_box.retain(|_| *flags.next().expect("a flag a seg"));
+    }
     // where two tools touch, both faces kept would be material meeting itself
     let any_intersect = ops.contains(&Op::Intersect);
     let kept_at = |side: Side, q: Point3| -> Option<bool> {
@@ -623,7 +715,10 @@ pub fn nary_with(
     let grid = Grid::new(&index.iter().map(|x| x.bbox).collect::<Vec<_>>());
     let seg_cuts: Vec<Vec<(f64, Point3, f64)>> = par_map(segs.len(), threads, 32, |si| {
         let sg = &segs[si];
-        let reach = sg.curve.bbox(sg.range).grow(tol::LINEAR);
+        let reach = seg_box[si].grow(tol::LINEAR);
+        // a traced curve's search costs evaluations: only it is worth narrowing by the face
+        // pairs' own edges (a line or conic meets a surface in closed form)
+        let traced = matches!(sg.curve, Curve::Intersection(_));
         let mut got = Vec::new();
         for k in grid.near(&reach) {
             let k = k as usize;
@@ -636,6 +731,8 @@ pub fn nary_with(
             }
             let body = tools[k];
             for h in body.face_ids() {
+                // a triple point lies on both the edge's faces and on h: where either of them was
+                // found apart from h, there is none
                 if !index[k].boxes[h.index()].overlaps(&reach) {
                     continue;
                 }
@@ -643,7 +740,40 @@ pub fn nary_with(
                 if !may_meet(s, &reach) {
                     continue;
                 }
-                match curve_surface(&sg.curve, sg.range, s) {
+                // and on the new edges of either face with h: for a traced edge, the stretch of
+                // it near them is all that needs searching
+                let found = if !traced {
+                    curve_surface(&sg.curve, sg.range, s)
+                } else {
+                    let near: Option<Vec<forge_math::Box3>> = (0..2).find_map(|e| {
+                        let fp = key((sg.sides[e], sg.faces[e]), (k, h));
+                        if loose.binary_search(&fp).is_ok()
+                            || unknown.binary_search(&(fp.0.0, fp.1.0)).is_ok()
+                        {
+                            return None;
+                        }
+                        let from = along.partition_point(|x| x.0 < fp);
+                        Some(
+                            along[from..]
+                                .iter()
+                                .take_while(|x| x.0 == fp)
+                                .map(|x| x.1)
+                                .collect(),
+                        )
+                    });
+                    match near {
+                        Some(boxes) if boxes.is_empty() => continue,
+                        Some(boxes) => match stretch(&sg.curve, sg.range, &boxes) {
+                            None => continue,
+                            Some(r) => match curve_surface(&sg.curve, r, s) {
+                                CurveSurface::Hits(h) => CurveSurface::Hits(h),
+                                _ => curve_surface(&sg.curve, sg.range, s),
+                            },
+                        },
+                        None => curve_surface(&sg.curve, sg.range, s),
+                    }
+                };
+                match found {
                     CurveSurface::Hits(hits) => {
                         for hit in hits
                             .into_iter()

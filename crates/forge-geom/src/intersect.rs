@@ -521,15 +521,20 @@ fn curve_surface_subdivide(c: &Curve, range: Interval, s: &Surface) -> CurveSurf
     {
         return CurveSurface::OnSurface;
     }
-    let leaf = tol::LINEAR / lip;
     let mut leaves: Vec<(f64, f64)> = Vec::new();
-    let mut stack = vec![(range.lo, range.hi)];
-    while let Some((a, b)) = stack.pop() {
+    // pieces with their own speed bound, rightmost first so the leftmost pops first: a traced
+    // curve's chain segments (each bounded by its own chord, those surely clear of the surface
+    // dropped unevaluated), else the whole range
+    let mut stack: Vec<(f64, f64, f64)> = match (c, s) {
+        (Curve::Intersection(ic), s) if !matches!(s, Surface::Procedural(_)) => chain_pieces(ic, range, s),
+        _ => vec![(range.lo, range.hi, lip)],
+    };
+    while let Some((a, b, lip)) = stack.pop() {
         let m = 0.5 * (a + b);
         if g(m).abs() > lip * 0.5 * (b - a) + tol::LINEAR {
             continue;
         }
-        if b - a <= leaf {
+        if b - a <= tol::LINEAR / lip {
             leaves.push((a, b));
             if leaves.len() > 20_000 {
                 return CurveSurface::Overlap;
@@ -537,8 +542,8 @@ fn curve_surface_subdivide(c: &Curve, range: Interval, s: &Surface) -> CurveSurf
             continue;
         }
         // right half first so the left half pops first: leaves come out in order
-        stack.push((m, b));
-        stack.push((a, m));
+        stack.push((m, b, lip));
+        stack.push((a, m, lip));
     }
     let mut hits = Vec::new();
     let mut i = 0;
@@ -580,6 +585,39 @@ fn curve_surface_subdivide(c: &Curve, range: Interval, s: &Surface) -> CurveSurf
         i = j;
     }
     CurveSurface::Hits(hits)
+}
+
+/// A traced curve's range as chain segments, each with the speed bound of its own stretch (as
+/// IntCurve::speed_bound is for all of them), rightmost first. A segment's stretch of curve lies
+/// within its chord and sag of either end and the surface's implicit is a distance, so a segment
+/// whose farther end is clear of the surface by more than that (and the 1.5 tolerances a leaf
+/// needs) holds no leaf and is left out unevaluated.
+fn chain_pieces(ic: &crate::intcurve::IntCurve, range: Interval, s: &Surface) -> Vec<(f64, f64, f64)> {
+    let (n, segs) = (ic.pts.len() as i64, ic.segments() as i64);
+    let mut out = Vec::new();
+    let mut k = range.lo.floor() as i64;
+    while (k as f64) < range.hi {
+        let (a, b) = (range.lo.max(k as f64), range.hi.min((k + 1) as f64));
+        // the chain segment holding [k, k + 1] (an open curve is clamped at its ends)
+        let i = if ic.closed {
+            k.rem_euclid(segs)
+        } else {
+            k.clamp(0, segs - 1)
+        };
+        let (p, q) = (ic.pts[i as usize], ic.pts[((i + 1) % n) as usize]);
+        let chord = p.distance(q);
+        let clear = s.implicit(p).abs().max(s.implicit(q).abs()) - chord - ic.sag;
+        if b > a && clear <= 2.0 * tol::LINEAR + 1e-6 {
+            out.push((
+                a,
+                b,
+                (1.5 * chord + 2.0 * ic.sag) * (1.0 + 1e-9) + f64::MIN_POSITIVE,
+            ));
+        }
+        k += 1;
+    }
+    out.reverse();
+    out
 }
 
 fn bisect_sign(g: &impl Fn(f64) -> f64, mut a: f64, mut b: f64) -> f64 {
