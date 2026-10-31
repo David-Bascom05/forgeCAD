@@ -62,6 +62,22 @@ pub fn report(mode: &str, frame: &[f64], gpu: &[f64], adapter: &wgpu::AdapterInf
     )
 }
 
+/// The CPU's share of the frames, for reading next to the frame times.
+pub fn report_cpu(moved: usize, motion_ms: &[f64], drawn: &[crate::render::Drawn]) -> String {
+    let mean = |f: &dyn Fn(&crate::render::Drawn) -> f32| {
+        drawn.iter().map(|d| f(d) as f64).sum::<f64>() / drawn.len().max(1) as f64
+    };
+    let m = summary(motion_ms);
+    format!(
+        "cpu: {moved} moving  motion mean {:.3} p99 {:.3} ms  cull {:.3}  upload {:.3}  encode {:.3} ms",
+        m.mean,
+        m.p99,
+        mean(&|d| d.cull_ms),
+        mean(&|d| d.upload_ms),
+        mean(&|d| d.encode_ms),
+    )
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

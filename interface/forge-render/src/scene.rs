@@ -2,11 +2,16 @@
 
 use crate::camera::View;
 
-/// A part's rows of a rigid transform (row major, translation in the last column) and its colour.
+/// Rows of a rigid transform: row major, translation in the last column.
+pub type Rows = [[f32; 4]; 3];
+/// Bytes per placement's rows on the GPU.
+pub const ROWS: usize = 48;
+
+/// A placed part and its colour.
 #[derive(Clone, Copy, Debug)]
 pub struct Placement {
     pub part: u32,
-    pub rows: [[f32; 4]; 3],
+    pub rows: Rows,
     pub tint: [f32; 4],
 }
 
@@ -37,6 +42,10 @@ pub struct Draw {
 /// frame's one loop over the placements runs over these.
 pub struct Scene {
     pub placements: Vec<Placement>,
+    /// Every placement's rows as the GPU holds them, and the bytes changed since the last upload.
+    pub rows_bytes: Vec<u8>,
+    dirty: Option<(usize, usize)>,
+    centers: Vec<[f32; 3]>,
     chords: Vec<Vec<f32>>,
     x: Vec<f32>,
     y: Vec<f32>,
@@ -63,8 +72,15 @@ impl Scene {
             z.push(at(p.rows[2]));
             r.push(*radius);
         }
+        let mut rows_bytes = vec![0; placements.len() * ROWS];
+        for (p, out) in placements.iter().zip(rows_bytes.as_chunks_mut::<ROWS>().0) {
+            write_rows(&p.rows, out);
+        }
         Scene {
             placements,
+            rows_bytes,
+            dirty: None,
+            centers: parts.iter().map(|p| p.0).collect(),
             chords: parts.iter().map(|p| p.2.clone()).collect(),
             x,
             y,
@@ -75,6 +91,28 @@ impl Scene {
             picked: Vec::new(),
             counts: vec![0; parts.len() * LODS],
         }
+    }
+
+    /// Moves a placement: its rows, its sphere, and what the next frame uploads.
+    pub fn set_rows(&mut self, i: usize, rows: &Rows) {
+        let p = &mut self.placements[i];
+        p.rows = *rows;
+        let c = self.centers[p.part as usize];
+        let at = |row: [f32; 4]| row[0] * c[0] + row[1] * c[1] + row[2] * c[2] + row[3];
+        self.x[i] = at(rows[0]);
+        self.y[i] = at(rows[1]);
+        self.z[i] = at(rows[2]);
+        let start = i * ROWS;
+        write_rows(rows, &mut self.rows_bytes[start..start + ROWS]);
+        self.dirty = Some(match self.dirty {
+            Some((lo, hi)) => (lo.min(start), hi.max(start + ROWS)),
+            None => (start, start + ROWS),
+        });
+    }
+
+    /// The span of `rows_bytes` to upload, once.
+    pub fn take_dirty(&mut self) -> Option<(usize, usize)> {
+        self.dirty.take()
     }
 
     /// A sphere holding the whole scene.
@@ -136,6 +174,78 @@ impl Scene {
             let slot = &mut self.counts[bin as usize];
             self.visible[*slot as usize] = i.to_le_bytes();
             *slot += 1;
+        }
+    }
+}
+
+fn write_rows(rows: &Rows, out: &mut [u8]) {
+    for (v, o) in rows.as_flattened().iter().zip(out.as_chunks_mut::<4>().0) {
+        *o = v.to_le_bytes();
+    }
+}
+
+/// What joints will do: placements swinging about a hinge of their own, each at its own pace. A
+/// hinge is off the part's centre, so its sphere moves too.
+pub struct Motion {
+    joints: Vec<Joint>,
+}
+
+struct Joint {
+    index: u32,
+    base: Rows,
+    hinge: [f32; 3],
+    pace: f32,
+    phase: f32,
+}
+
+impl Motion {
+    /// `n` joints spread evenly over the scene's placements.
+    pub fn new(scene: &Scene, n: usize) -> Motion {
+        let total = scene.placements.len();
+        let n = n.min(total);
+        let joints = (0..n)
+            .map(|k| {
+                let index = k * total / n;
+                let p = &scene.placements[index];
+                let c = scene.centers[p.part as usize];
+                let r = scene.r[index];
+                Joint {
+                    index: index as u32,
+                    base: p.rows,
+                    hinge: [c[0] + r * 0.5, c[1], c[2]],
+                    pace: 0.02 + 0.03 * (k % 17) as f32 / 17.0,
+                    phase: k as f32 * 0.37,
+                }
+            })
+            .collect();
+        Motion { joints }
+    }
+
+    pub fn len(&self) -> usize {
+        self.joints.len()
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.joints.is_empty()
+    }
+
+    /// Every joint at this frame: its part turned about its hinge's local z.
+    pub fn apply(&self, frame: usize, scene: &mut Scene) {
+        for j in &self.joints {
+            let (s, c) = ((frame as f32 * j.pace + j.phase).sin() * 0.6).sin_cos();
+            let h = j.hinge;
+            // the local point that lands where the hinge did: h - R h, with R about z
+            let off = [h[0] - (c * h[0] - s * h[1]), h[1] - (s * h[0] + c * h[1]), 0.0];
+            let row = |r: [f32; 4]| {
+                [
+                    r[0] * c + r[1] * s,
+                    r[1] * c - r[0] * s,
+                    r[2],
+                    r[3] + r[0] * off[0] + r[1] * off[1],
+                ]
+            };
+            let rows = [row(j.base[0]), row(j.base[1]), row(j.base[2])];
+            scene.set_rows(j.index as usize, &rows);
         }
     }
 }
@@ -231,6 +341,32 @@ mod tests {
         s.cull(&v, 1.0);
         assert_eq!(s.draws.len(), 2);
         assert!(s.draws[0].lod < s.draws[1].lod);
+    }
+
+    #[test]
+    fn a_joint_keeps_its_hinge_still_and_its_part_rigid_and_marks_what_changed() {
+        let mut s = Scene::new(
+            &[([1.0, 2.0, 3.0], 4.0, vec![1.0])],
+            vec![Placement::at(0, [0.0; 3]), Placement::at(0, [100.0, 0.0, 0.0])],
+        );
+        assert_eq!(s.take_dirty(), None);
+        let m = Motion::new(&s, 1);
+        m.apply(20, &mut s);
+        assert_eq!(s.take_dirty(), Some((0, ROWS)));
+        let p = s.placements[0].rows;
+        let at = |q: [f32; 3], r: [f32; 4]| r[0] * q[0] + r[1] * q[1] + r[2] * q[2] + r[3];
+        let hinge = [3.0, 2.0, 3.0];
+        for k in 0..3 {
+            assert!((at(hinge, p[k]) - hinge[k]).abs() < 1e-5);
+            let unit: f32 = p[k][..3].iter().map(|v| v * v).sum();
+            assert!((unit - 1.0).abs() < 1e-5);
+        }
+        // the sphere went with it
+        assert!((s.x[0] - at([1.0, 2.0, 3.0], p[0])).abs() < 1e-6);
+        assert_eq!(s.rows_bytes[..4], p[0][0].to_le_bytes());
+        // the other one stayed
+        assert_eq!(s.placements[1].rows[0][3], 100.0);
+        assert_eq!(s.take_dirty(), None);
     }
 
     #[test]

@@ -68,6 +68,8 @@ async fn open(window: Arc<Window>, mesh: PartMesh, frames: usize) -> Result<View
             frame: 0,
             times: Vec::new(),
             gpu: Vec::new(),
+            motion_ms: Vec::new(),
+            drawn: Vec::new(),
         });
     }
     Ok(v)

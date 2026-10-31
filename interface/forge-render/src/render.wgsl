@@ -9,11 +9,11 @@ struct Placement {
     r0: vec4f,
     r1: vec4f,
     r2: vec4f,
-    tint: vec4f,
 }
 @group(0) @binding(0) var<uniform> g: Globals;
 @group(0) @binding(1) var<storage, read> placements: array<Placement>;
 @group(0) @binding(2) var<storage, read> segments: array<vec4u>;
+@group(0) @binding(3) var<storage, read> tints: array<vec4f>;
 
 fn place(pl: Placement, p: vec3f) -> vec3f {
     let h = vec4f(p, 1.0);
@@ -41,7 +41,7 @@ struct Shaded {
 fn surface_vs(@location(0) p: vec3f, @location(1) n: vec2f, @location(2) at: u32) -> Shaded {
     let pl = placements[at];
     let w = place(pl, p);
-    return Shaded(g.view_proj * vec4f(w, 1.0), w, turn(pl, unoct(n)), pl.tint.rgb);
+    return Shaded(g.view_proj * vec4f(w, 1.0), w, turn(pl, unoct(n)), tints[at].rgb);
 }
 
 @fragment

@@ -2,7 +2,7 @@ use forge_render::bench::{self, Path};
 use forge_render::camera::Camera;
 use forge_render::mesh::PartMesh;
 use forge_render::render::{self, Offscreen, Renderer, part_info};
-use forge_render::scene::{self, Placement, Scene};
+use forge_render::scene::{self, Motion, Placement, Scene};
 use forge_render::viewer::{Bench, Viewer, now_ms};
 use std::fmt::Write;
 use std::sync::Arc;
@@ -11,15 +11,18 @@ use winit::event::WindowEvent;
 use winit::event_loop::{ActiveEventLoop, EventLoop};
 use winit::window::{Window, WindowId};
 
-const USAGE: &str = "forge-render [PART | file.fc] [--stress N] [--bench] [--window] [--frames N]
+const USAGE: &str =
+    "forge-render [PART | file.fc] [--stress N] [--moving N] [--bench] [--window] [--frames N]
   [--size WxH] [--lod-px T] [--no-lines] [--no-cache] [--shot FILE.ppm] [--yaw R --pitch R --dist X]
   [--export FILE] [--levels]
-PART: a bench part (default crank). --stress: all 15 bench parts placed N times. --bench: a fixed
+PART: a bench part (default crank). --stress: all 15 bench parts placed N times. --moving N: N of
+them swing on joints every frame. --bench: a fixed
 orbit, frame times on stdout, headless unless --window. --shot: one headless frame.";
 
 struct Args {
     part: String,
     stress: usize,
+    moving: usize,
     bench: bool,
     window: bool,
     frames: usize,
@@ -39,6 +42,7 @@ fn args() -> Result<Args, String> {
     let mut a = Args {
         part: "crank".into(),
         stress: 0,
+        moving: 0,
         bench: false,
         window: false,
         frames: 1200,
@@ -61,6 +65,7 @@ fn args() -> Result<Args, String> {
     while let Some(k) = it.next() {
         match k.as_str() {
             "--stress" => a.stress = num(it.next(), &k)?,
+            "--moving" => a.moving = num(it.next(), &k)?,
             "--bench" => a.bench = true,
             "--window" => a.window = true,
             "--frames" => a.frames = num(it.next(), &k)?,
@@ -190,12 +195,17 @@ fn headless(a: &Args, mut s: Stage) -> Result<(), String> {
         std::fs::write(path, out).map_err(|e| e.to_string())?;
     }
     if a.bench {
-        let (mut times, mut gpu) = (Vec::new(), Vec::new());
+        let motion = (a.moving > 0).then(|| Motion::new(&s.scene, a.moving));
+        let (mut times, mut gpu, mut motion_ms, mut all) = (Vec::new(), Vec::new(), vec![0.0], Vec::new());
         let mut heaviest = (0.0f64, 0, Default::default());
         let mut hud = String::new();
         for frame in 0..a.frames {
             let cam = s.path.at(frame);
             let t = now_ms();
+            if let Some(m) = &motion {
+                m.apply(frame, &mut s.scene);
+                motion_ms.push(now_ms() - t);
+            }
             let d = r.frame(&target.view, &mut s.scene, &cam, Some(&hud));
             r.wait();
             let ms = now_ms() - t;
@@ -206,9 +216,11 @@ fn headless(a: &Args, mut s: Stage) -> Result<(), String> {
             }
             times.push(ms);
             gpu.push(r.gpu_ms.unwrap_or(0.0) as f64);
+            all.push(d);
         }
         let mode = format!("headless {}x{}", a.size.0, a.size.1);
         println!("{}", bench::report(&mode, &times, &gpu, &r.adapter));
+        println!("{}", bench::report_cpu(a.moving, &motion_ms, &all));
         println!("slowest frame {} of {}: {:?}", heaviest.1, a.frames, heaviest.2);
     }
     Ok(())
@@ -254,12 +266,15 @@ impl ApplicationHandler for App {
         renderer.lod_px = self.args.lod_px;
         renderer.lines = self.args.lines;
         let mut v = Viewer::new(window.clone(), surface, config, renderer, s.scene, s.camera);
+        v.motion = (self.args.moving > 0).then(|| Motion::new(&v.scene, self.args.moving));
         if self.args.bench {
             v.bench = Some(Bench {
                 path: s.path,
                 frame: 0,
                 times: Vec::new(),
                 gpu: Vec::new(),
+                motion_ms: Vec::new(),
+                drawn: Vec::new(),
             });
         }
         window.request_redraw();

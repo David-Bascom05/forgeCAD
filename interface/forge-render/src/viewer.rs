@@ -42,6 +42,9 @@ pub struct Viewer {
     pub camera: Camera,
     /// Runs on its own until this many frames of a fixed path are done, then reports (--bench).
     pub bench: Option<Bench>,
+    /// Placements moving on their own: every frame draws them where they've got to.
+    pub motion: Option<crate::scene::Motion>,
+    motion_frame: usize,
     held: Option<MouseButton>,
     last_mouse: Option<(f32, f32)>,
     last_frame: f64,
@@ -54,6 +57,8 @@ pub struct Bench {
     pub frame: usize,
     pub times: Vec<f64>,
     pub gpu: Vec<f64>,
+    pub motion_ms: Vec<f64>,
+    pub drawn: Vec<crate::render::Drawn>,
 }
 
 impl Viewer {
@@ -73,6 +78,8 @@ impl Viewer {
             scene,
             camera,
             bench: None,
+            motion: None,
+            motion_frame: 0,
             held: None,
             last_mouse: None,
             last_frame: now_ms(),
@@ -101,8 +108,16 @@ impl Viewer {
             }
             _ => return,
         };
-        if let Some(b) = &mut self.bench {
+        if let Some(b) = &self.bench {
             self.camera = b.path.at(b.frame);
+        }
+        if let Some(m) = &self.motion {
+            let t = now_ms();
+            m.apply(self.motion_frame, &mut self.scene);
+            self.motion_frame += 1;
+            if let Some(b) = &mut self.bench {
+                b.motion_ms.push(now_ms() - t);
+            }
         }
         let view = frame.texture.create_view(&wgpu::TextureViewDescriptor {
             format: Some(self.config.format.add_srgb_suffix()),
@@ -121,16 +136,17 @@ impl Viewer {
             self.scene.visible.len(),
             self.tris as f64 / 1e6
         );
-        self.tris = self
+        let drawn = self
             .renderer
-            .frame(&view, &mut self.scene, &self.camera, Some(&hud))
-            .tris;
+            .frame(&view, &mut self.scene, &self.camera, Some(&hud));
+        self.tris = drawn.tris;
         self.window.pre_present_notify();
         self.renderer.queue.present(frame);
         let _ = self.renderer.device.poll(wgpu::PollType::Poll);
         if let Some(b) = &mut self.bench {
             b.times.push(self.frame_ms);
             b.gpu.push(self.renderer.gpu_ms.unwrap_or(0.0) as f64);
+            b.drawn.push(drawn);
             b.frame += 1;
         }
     }
@@ -150,10 +166,20 @@ impl Viewer {
                         let mode = format!("window {}x{}", self.config.width, self.config.height);
                         let out = crate::bench::report(&mode, &b.times, &b.gpu, &self.renderer.adapter);
                         say(&out);
+                        let moved = self.motion.as_ref().map_or(0, |m| m.len());
+                        let times = if b.motion_ms.is_empty() {
+                            vec![0.0]
+                        } else {
+                            b.motion_ms.clone()
+                        };
+                        say(&crate::bench::report_cpu(moved, &times, &b.drawn));
                         self.bench = None;
                         on_loop.exit();
                         return;
                     }
+                    self.window.request_redraw();
+                }
+                if self.motion.is_some() {
                     self.window.request_redraw();
                 }
             }

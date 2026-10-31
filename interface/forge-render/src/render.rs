@@ -3,7 +3,8 @@
 
 use crate::camera::Camera;
 use crate::mesh::{PartMesh, SEGMENT, VERTEX};
-use crate::scene::{Placement, Scene};
+use crate::scene::Scene;
+use crate::viewer::now_ms;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 
@@ -13,7 +14,6 @@ const DEPTH: wgpu::TextureFormat = wgpu::TextureFormat::Depth32Float;
 const TIMERS: usize = 4;
 const HUD_CHARS: usize = 256;
 const GLOBALS: usize = 64 + 16 + 16 + HUD_CHARS;
-const PLACEMENT: u64 = 64;
 const BACKGROUND: wgpu::Color = wgpu::Color {
     r: 0.72,
     g: 0.75,
@@ -37,6 +37,10 @@ pub struct Drawn {
     pub tris: u64,
     pub segments: u64,
     pub draws: u32,
+    /// CPU time in the frame: culling, uploading what moved and what's visible, encoding.
+    pub cull_ms: f32,
+    pub upload_ms: f32,
+    pub encode_ms: f32,
 }
 
 struct Timer {
@@ -55,6 +59,7 @@ pub struct Renderer {
     hud: wgpu::RenderPipeline,
     binds: wgpu::BindGroup,
     globals: wgpu::Buffer,
+    placements: wgpu::Buffer,
     vertices: wgpu::Buffer,
     indices: wgpu::Buffer,
     instances: wgpu::Buffer,
@@ -185,6 +190,7 @@ impl Renderer {
                 layout_entry(0, all, wgpu::BufferBindingType::Uniform),
                 layout_entry(1, wgpu::ShaderStages::VERTEX, read),
                 layout_entry(2, wgpu::ShaderStages::VERTEX, read),
+                layout_entry(3, wgpu::ShaderStages::VERTEX, read),
             ],
         });
         let layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
@@ -323,16 +329,23 @@ impl Renderer {
         let indices = filled(&device, "indices", ibytes, wgpu::BufferUsages::INDEX, i);
         let segments = filled(&device, "segments", sbytes, wgpu::BufferUsages::STORAGE, s);
 
-        let mut placed = Vec::with_capacity(scene.placements.len() * PLACEMENT as usize);
-        for p in &scene.placements {
-            write_placement(&mut placed, p);
-        }
         let placements = filled(
             &device,
             "placements",
-            placed.len() as u64,
+            scene.rows_bytes.len() as u64,
+            wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_DST,
+            vec![&scene.rows_bytes],
+        );
+        let mut tint_bytes = Vec::with_capacity(scene.placements.len() * 16);
+        for v in scene.placements.iter().flat_map(|p| &p.tint) {
+            tint_bytes.extend_from_slice(&v.to_le_bytes());
+        }
+        let tints = filled(
+            &device,
+            "tints",
+            tint_bytes.len() as u64,
             wgpu::BufferUsages::STORAGE,
-            vec![&placed],
+            vec![&tint_bytes],
         );
         let instances = device.create_buffer(&wgpu::BufferDescriptor {
             label: Some("visible"),
@@ -361,6 +374,10 @@ impl Renderer {
                 wgpu::BindGroupEntry {
                     binding: 2,
                     resource: segments.as_entire_binding(),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 3,
+                    resource: tints.as_entire_binding(),
                 },
             ],
         });
@@ -403,6 +420,7 @@ impl Renderer {
             hud,
             binds,
             globals,
+            placements,
             vertices,
             indices,
             instances,
@@ -458,8 +476,14 @@ impl Renderer {
         camera: &Camera,
         hud: Option<&str>,
     ) -> Drawn {
+        let start = now_ms();
         let view = camera.view(self.size.0, self.size.1);
         scene.cull(&view, self.lod_px);
+        let culled = now_ms();
+        if let Some((lo, hi)) = scene.take_dirty() {
+            self.queue
+                .write_buffer(&self.placements, lo as u64, &scene.rows_bytes[lo..hi]);
+        }
         self.queue
             .write_buffer(&self.instances, 0, scene.visible.as_flattened());
 
@@ -487,12 +511,15 @@ impl Renderer {
         }
         self.queue.write_buffer(&self.globals, 0, &bytes);
 
+        let uploaded = now_ms();
         self.read_timers();
         let slot = self.timer_at;
         let timed = self.timers.get(slot).is_some_and(|t| !t.busy);
         let mut encoder = self.device.create_command_encoder(&Default::default());
         let mut drawn = Drawn {
             placements: scene.visible.len() as u32,
+            cull_ms: (culled - start) as f32,
+            upload_ms: (uploaded - culled) as f32,
             ..Drawn::default()
         };
         {
@@ -582,6 +609,7 @@ impl Renderer {
             encoder.copy_buffer_to_buffer(&self.timer_resolve, 0, &self.timers[slot].read, 0, 16);
         }
         self.queue.submit([encoder.finish()]);
+        drawn.encode_ms = (now_ms() - uploaded) as f32;
         if timed {
             let t = &mut self.timers[slot];
             t.busy = true;
@@ -692,12 +720,6 @@ fn targets(
             .create_view(&Default::default())
     };
     (make(format, "colour"), make(DEPTH, "depth"))
-}
-
-fn write_placement(out: &mut Vec<u8>, p: &Placement) {
-    for v in p.rows.iter().flatten().chain(&p.tint) {
-        out.extend_from_slice(&v.to_le_bytes());
-    }
 }
 
 /// The overlay's glyph number of a byte (see GLYPHS in render.wgsl).
