@@ -102,6 +102,24 @@ pub struct Sketch {
     next_constraint: u64,
 }
 
+/// One constraint's residual rows: one or two.
+pub(crate) struct Rows {
+    pub d: [D; 2],
+    pub n: usize,
+}
+
+impl Rows {
+    fn one(a: D) -> Rows {
+        Rows {
+            d: [a, D::c(0.0)],
+            n: 1,
+        }
+    }
+    fn two(a: D, b: D) -> Rows {
+        Rows { d: [a, b], n: 2 }
+    }
+}
+
 /// Parameters touched by one constraint and their values.
 pub(crate) struct Local<'a> {
     x: &'a [f64],
@@ -522,49 +540,49 @@ impl Sketch {
     }
 
     /// Residual rows of one constraint (each in millimetres) and the parameters they depend on.
-    pub(crate) fn residuals<'x>(&self, rec: &ConstraintRec, x: &'x [f64]) -> (Local<'x>, Vec<D>) {
+    pub(crate) fn residuals<'x>(&self, rec: &ConstraintRec, x: &'x [f64]) -> (Local<'x>, Rows) {
         use Constraint::*;
         let mut loc = Local::new(x);
         let l = &mut loc;
         let rows = match rec.c {
             Fixed(p) => {
                 let q = self.pt(l, p);
-                vec![q.x - D::c(rec.data[0]), q.y - D::c(rec.data[1])]
+                Rows::two(q.x - D::c(rec.data[0]), q.y - D::c(rec.data[1]))
             }
             Coincident(p, q) => {
                 let d = self.pt(l, q).sub(self.pt(l, p));
-                vec![d.x, d.y]
+                Rows::two(d.x, d.y)
             }
             Concentric(a, b) => {
                 let d = self.center(l, b).sub(self.center(l, a));
-                vec![d.x, d.y]
+                Rows::two(d.x, d.y)
             }
             Horizontal(e) => {
                 let (a, b) = self.line(l, e);
-                vec![b.y - a.y]
+                Rows::one(b.y - a.y)
             }
             Vertical(e) => {
                 let (a, b) = self.line(l, e);
-                vec![b.x - a.x]
+                Rows::one(b.x - a.x)
             }
-            Distance(p, q, d) => vec![self.pt(l, q).sub(self.pt(l, p)).len() - D::c(d)],
+            Distance(p, q, d) => Rows::one(self.pt(l, q).sub(self.pt(l, p)).len() - D::c(d)),
             DistancePointLine(p, e, d) => {
                 let q = self.pt(l, p);
-                vec![self.signed_dist(l, q, e) - D::c(rec.data[0] * d)]
+                Rows::one(self.signed_dist(l, q, e) - D::c(rec.data[0] * d))
             }
             Length(e, d) => {
                 let (a, b) = self.line(l, e);
-                vec![b.sub(a).len() - D::c(d)]
+                Rows::one(b.sub(a).len() - D::c(d))
             }
-            Radius(e, d) => vec![self.rad(l, e) - D::c(d)],
-            Diameter(e, d) => vec![self.rad(l, e) * 2.0 - D::c(d)],
+            Radius(e, d) => Rows::one(self.rad(l, e) - D::c(d)),
+            Diameter(e, d) => Rows::one(self.rad(l, e) * 2.0 - D::c(d)),
             Equal(a, b) => {
                 if self.is_round(a).unwrap_or(false) {
-                    vec![self.rad(l, a) - self.rad(l, b)]
+                    Rows::one(self.rad(l, a) - self.rad(l, b))
                 } else {
                     let (a0, a1) = self.line(l, a);
                     let (b0, b1) = self.line(l, b);
-                    vec![a1.sub(a0).len() - b1.sub(b0).len()]
+                    Rows::one(a1.sub(a0).len() - b1.sub(b0).len())
                 }
             }
             Parallel(a, b) | Perpendicular(a, b) | Angle(a, b, _) => {
@@ -579,22 +597,22 @@ impl Sketch {
                 };
                 let (s, c) = forge_math::dmath::sin_cos(theta);
                 // |u| sin(phi - theta), phi the angle from u to v
-                vec![(u.cross(v) * c - u.dot(v) * s) / v.len()]
+                Rows::one((u.cross(v) * c - u.dot(v) * s) / v.len())
             }
             PointOnLine(p, e) => {
                 let q = self.pt(l, p);
-                vec![self.signed_dist(l, q, e)]
+                Rows::one(self.signed_dist(l, q, e))
             }
             PointOnCircle(p, e) => {
                 let q = self.pt(l, p);
                 let c = self.center(l, e);
-                vec![q.sub(c).len() - self.rad(l, e)]
+                Rows::one(q.sub(c).len() - self.rad(l, e))
             }
             Midpoint(p, e) => {
                 let q = self.pt(l, p);
                 let (a, b) = self.line(l, e);
                 let m = a.add(b).scale(0.5);
-                vec![q.x - m.x, q.y - m.y]
+                Rows::two(q.x - m.x, q.y - m.y)
             }
             Symmetric(p, q, e) => {
                 let (pp, qq) = (self.pt(l, p), self.pt(l, q));
@@ -602,7 +620,7 @@ impl Sketch {
                 let dir = b.sub(a);
                 let m = pp.add(qq).scale(0.5);
                 let len = dir.len();
-                vec![dir.cross(m.sub(a)) / len, dir.dot(qq.sub(pp)) / len]
+                Rows::two(dir.cross(m.sub(a)) / len, dir.dot(qq.sub(pp)) / len)
             }
             Tangent(a, b) => {
                 let (ra, rb) = (
@@ -613,21 +631,39 @@ impl Sketch {
                     let d = self.center(l, a).sub(self.center(l, b)).len();
                     let (r1, r2) = (self.rad(l, a), self.rad(l, b));
                     if rec.data[0] == 0.0 {
-                        vec![d - (r1 + r2)]
+                        Rows::one(d - (r1 + r2))
                     } else {
-                        vec![d - (r1 - r2) * rec.data[0]]
+                        Rows::one(d - (r1 - r2) * rec.data[0])
                     }
                 } else {
                     let (e, round) = if ra { (b, a) } else { (a, b) };
                     let c = self.center(l, round);
-                    let r = self.rad(l, round);
-                    vec![self.signed_dist(l, c, e) - r * rec.data[0]]
+                    if let Some(p) = self.joint(e, round) {
+                        // at a shared end the radius there is square to the line: the distance
+                        // form would touch zero quadratically and converge slowly
+                        let (a, b) = self.line(l, e);
+                        let dir = b.sub(a);
+                        Rows::one(dir.dot(self.pt(l, p).sub(c)) / dir.len())
+                    } else {
+                        let r = self.rad(l, round);
+                        Rows::one(self.signed_dist(l, c, e) - r * rec.data[0])
+                    }
                 }
             }
-            HorizontalDistance(p, q, d) => vec![self.pt(l, q).x - self.pt(l, p).x - D::c(d)],
-            VerticalDistance(p, q, d) => vec![self.pt(l, q).y - self.pt(l, p).y - D::c(d)],
+            HorizontalDistance(p, q, d) => Rows::one(self.pt(l, q).x - self.pt(l, p).x - D::c(d)),
+            VerticalDistance(p, q, d) => Rows::one(self.pt(l, q).y - self.pt(l, p).y - D::c(d)),
         };
         (loc, rows)
+    }
+
+    /// The end a line shares with an arc, if it shares one.
+    fn joint(&self, line: EntityId, arc: EntityId) -> Option<EntityId> {
+        match (self.rec(line).ok()?.kind, self.rec(arc).ok()?.kind) {
+            (Entity::Line { a, b }, Entity::Arc { start, end, .. }) => {
+                [a, b].into_iter().find(|p| *p == start || *p == end)
+            }
+            _ => None,
+        }
     }
 
     /// The implicit row of an arc: its end stays on its radius.
