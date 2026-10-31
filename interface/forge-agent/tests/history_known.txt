@@ -6,7 +6,6 @@ boolean: Internal("face split crossed itself")
 boolean: Internal("inconsistent classification")
 # booleans and finishing ops leaving an invalid solid
 invalid DuplicateName  # extrude sym of a line+arc loop onto a block
-invalid EdgeUses  # patterns of patterns, balls, sketches
 Direct(Invalid(  # delete leaves a face with no loops
 # the n-ary regen names split faces and edges unlike the sequential one, so later references miss
 nary: the part is 9 bodies, not one  # the sequential regen keeps a disjoint add (invalid Euler) the n-ary refuses
