@@ -284,3 +284,18 @@ fn m9_tilted_pad_over_hole() {
 extrude cut 17 at 75 19 -1 circle 0 0 3
 extrude add 8.945478516509796 z -0.061633258296996694 0.2939571355937309 0.9538294102748273 x -0.08391472378619189 0.9507366012975499 -0.29842626239168546 at 89.69521759175012 13.908448595830624 3.4058649537841124 rrect -13.632567574771072 -10.946070359275362 27.265135149542143 21.892140718550724 7.854519259083712");
 }
+
+/// A cone framed at its apex with a torus on its rim (degen_cone_torus 3, scaled 4 times): the
+/// mesh laid the cone out with a floor of 1 mm on its radius, so the part and its scaled copy
+/// meshed differently and their areas parted by 0.2%.
+#[test]
+fn cone_framed_at_its_apex_scales() {
+    let (_, g) = forge_model::adversarial::families()
+        .into_iter()
+        .find(|(f, _)| *f == "degen_cone_torus")
+        .expect("the family");
+    let part = forge_model::adversarial::canonical(&g(3));
+    if let Some(hit) = props::scale(&part, 662) {
+        panic!("{}: {}", hit.kind, hit.detail);
+    }
+}

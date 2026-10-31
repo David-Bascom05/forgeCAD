@@ -74,7 +74,7 @@ fn uv_scale(s: &Surface) -> (f64, f64) {
     match s {
         Surface::Plane(_) => (1.0, 1.0),
         Surface::Cylinder(c) => (c.radius, 1.0),
-        Surface::Cone(c) => (c.radius.max(1.0), 1.0 / c.cos_a()),
+        Surface::Cone(c) => (c.radius.max(forge_math::tol::LINEAR), 1.0 / c.cos_a()),
         Surface::Sphere(sp) => (sp.radius, sp.radius),
         Surface::Torus(t) => (t.major + t.minor, t.minor),
         Surface::Procedural(pr) => pr.uv_scale(),
@@ -771,7 +771,15 @@ fn tessellate_face(
 ) -> Result<(), CdtError> {
     let face = body.face(f);
     let surface = &face.surface;
-    let (su, sv) = uv_scale(surface);
+    let (su, sv) = match surface {
+        // a cone framed at its apex has no radius there: the face's own middle gives its scale
+        // (a fixed floor would mesh a part and the part scaled differently)
+        Surface::Cone(c) => {
+            let mid = c.radius_at(surface.project(body.face_box(f).center()).y);
+            (c.radius.max(mid).max(forge_math::tol::LINEAR), 1.0 / c.cos_a())
+        }
+        _ => uv_scale(surface),
+    };
 
     let mut uv: Vec<Point2> = Vec::new();
     let mut global: Vec<u32> = Vec::new();
