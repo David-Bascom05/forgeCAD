@@ -1,9 +1,9 @@
 use crate::body::{Body, CoedgeId, EdgeId, FaceId, LoopId, VertexId};
 use crate::name::Name;
 use crate::uv::{UvLoop, default_segments, face_uv_loops_with, point_in_loops, unwrap_near};
-use forge_geom::intersect::{Contact, LineSurface, line_surface};
-use forge_geom::{CurveGeom, Line, SurfaceGeom};
-use forge_math::{Point2, Point3, Vec3, tol};
+use forge_geom::intersect::{Contact, CurveSurface, curve_surface};
+use forge_geom::{Curve, CurveGeom, Line, SurfaceGeom};
+use forge_math::{Box3, Interval, Point2, Point3, Vec3, tol};
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum Problem {
@@ -365,6 +365,24 @@ const RAYS: [[f64; 3]; 3] = [
 /// on faces (beside each edge) are tested against the other shells by ray parity, counted only
 /// where every ray agrees (point membership by ray parity, as in Requicha and Tilove's set
 /// membership classification; a ray grazing an edge or face is not counted, so needs agreement).
+/// The stretch of the ray from `line`'s origin along it (from a tolerance behind) inside `b`.
+fn ray_in(line: &Line, b: &Box3) -> Option<Interval> {
+    let (mut lo, mut hi) = (-tol::LINEAR, f64::INFINITY);
+    let (o, d) = (line.origin, line.dir.get());
+    for (oi, di, iv) in [(o.x, d.x, b.x), (o.y, d.y, b.y), (o.z, d.z, b.z)] {
+        if di == 0.0 {
+            if oi < iv.lo || oi > iv.hi {
+                return None;
+            }
+            continue;
+        }
+        let (a, c) = ((iv.lo - oi) / di, (iv.hi - oi) / di);
+        lo = lo.max(a.min(c));
+        hi = hi.min(a.max(c));
+    }
+    (lo <= hi).then(|| Interval::new(lo, hi))
+}
+
 fn check_shells(body: &Body, out: &mut Vec<Problem>) {
     // drawn finely: a ray's hit near an edge must not fall the wrong side of its chords
     let loops: Vec<Vec<UvLoop>> = body
@@ -416,10 +434,16 @@ fn check_shells(body: &Body, out: &mut Vec<Problem>) {
         let line = Line::new(p, dir.normalize()?);
         let mut odd = false;
         for &f in &body.shells[shell].faces {
+            // a hit counts only in the face, so inside its box: only that stretch of the ray
+            // is searched (a procedural surface's own box may be far bigger)
             if !body.face(f).alive {
                 continue;
             }
-            let LineSurface::Hits(hits) = line_surface(&line, &body.face(f).surface) else {
+            let Some(range) = ray_in(&line, &body.face_box(f).grow(tol::LINEAR)) else {
+                continue;
+            };
+            let CurveSurface::Hits(hits) = curve_surface(&Curve::Line(line), range, &body.face(f).surface)
+            else {
                 return None;
             };
             for h in &hits {
@@ -498,6 +522,19 @@ fn check_shells(body: &Body, out: &mut Vec<Problem>) {
                 })
         })
         .collect();
+    // a ray from outside a shell's box crosses it an even number of times
+    let shell_box: Vec<Option<Box3>> = body
+        .shells
+        .iter()
+        .map(|s| {
+            s.faces
+                .iter()
+                .filter(|&&f| body.face(f).alive)
+                .map(|&f| body.face_box(f))
+                .reduce(|a, b| a.hull(&b))
+                .map(|b| b.grow(tol::LINEAR))
+        })
+        .collect();
     for (k, shell) in body.shells.iter().enumerate() {
         let Some(own) = sign[k] else { continue };
         let want = i64::from(own < 0);
@@ -506,6 +543,9 @@ fn check_shells(body: &Body, out: &mut Vec<Problem>) {
                 let Some((q, _)) = beside(f, c, at) else { continue };
                 let mut w = Some(0);
                 for j in (0..body.shells.len()).filter(|&j| j != k) {
+                    if shell_box[j].is_none_or(|b| !b.contains(q)) {
+                        continue;
+                    }
                     w = match (w, agreed(&|r: Vec3| parity(j, q, None, r)), sign[j]) {
                         (Some(w), Some(true), Some(s)) => Some(w + s),
                         (Some(w), Some(false), _) => Some(w),
