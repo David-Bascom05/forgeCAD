@@ -188,9 +188,10 @@ fn main() {
         }
         let dt = t.elapsed().as_secs_f64();
         println!(
-            "proof only: {:.3} ms per hole, {:.2} us per test",
+            "proof only: {:.3} ms per hole, {:.2} us per test, {} tests",
             dt * 1e3 / (5.0 * quads.len() as f64),
-            dt * 1e6 / n as f64
+            dt * 1e6 / n as f64,
+            n / 5
         );
         let t = Instant::now();
         for _ in 0..5 {

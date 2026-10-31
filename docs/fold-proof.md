@@ -683,10 +683,22 @@ the rest really fold (long thin quads round one centre) and would need a second 
   sides                     6        8        10
   today (close)             2.82 M   4.19 M   5.43 M
   proof, stage 4            13.5 M   18.5 M   27.1 M
-  proof now                 7.47 M   10.2 M   15.0 M
-  cold now                  8.89 M   12.2 M   17.8 M
+  proof                     7.47 M   10.2 M   15.0 M
+  cold                      8.89 M   12.2 M   17.8 M
   cold / today              3.15     2.90     3.28
+  proof, lanes              4.18 M   5.72 M   8.23 M
+  cold, lanes               5.57 M   7.61 M   10.9 M
+  cold / today              1.98     1.82     2.01
   ```
+
+  Lanes: N's x, y, z and W are one polynomial whose coefficients are [f64; 4] (`Bp<4>`; a
+  Duffy triangle carries sigma G, G raised a degree and W~ as `Bp<7>`, so a test there no
+  longer multiplies and raises), so every split, half, product and Duffy map is one loop over
+  four lanes at once; the cone test reads Y and the control points as rows of x, y, z apart,
+  so its loops over coefficients run four at a time; and each polynomial carries a bound on its
+  coefficients (a convex combination's is its parent's) instead of measuring it in every
+  operation (error bounds a little wider). The same proofs: cone tests 14346 / 20364 / 34073 (5 rounds
+  of the survey) and the sharp-edge counts unchanged.
 
   From: both halves of a split in one pass and the phi product in contiguous rows (identical
   arithmetic, the same proofs; 13.5 M to 9.2 M), the regions above (to 8.96 M, then 7.47 M),

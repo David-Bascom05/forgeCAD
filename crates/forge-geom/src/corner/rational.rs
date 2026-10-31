@@ -378,8 +378,7 @@ impl RSide {
 pub struct Quad {
     sides: Vec<RSide>,
     /// N (x, y, z) and W over the unit square.
-    num: [Bp; 3],
-    den: Bp,
+    nw: Bp<4>,
 }
 
 impl Quad {
@@ -435,16 +434,16 @@ impl Quad {
                 arc.clone(),
             ));
         }
-        let (num, den) = tensor(&out);
-        Some(Quad { sides: out, num, den })
+        let nw = tensor(&out);
+        Some(Quad { sides: out, nw })
     }
 
     /// The mean lengths per unit of u and of v, from the control net.
     pub(super) fn net(&self) -> (f64, f64) {
         let n1 = DEG + 1;
         let pt = |k: usize| {
-            let w = self.den.c[k];
-            (w > 0.0).then(|| Vec3::new(self.num[0].c[k], self.num[1].c[k], self.num[2].c[k]) / w)
+            let [x, y, z, w] = self.nw.c[k];
+            (w > 0.0).then(|| Vec3::new(x, y, z) / w)
         };
         let (mut su, mut sv, mut nu, mut nv) = (0.0, 0.0, 0, 0);
         for i in 0..n1 {
@@ -526,14 +525,12 @@ impl Quad {
             Interval::new((i.lo - w).max(0.0), (i.hi + w).min(1.0))
         };
         let (u, v) = (cl(u), cl(v));
-        let part = |p: &Bp| p.restrict(true, u.lo, u.hi).restrict(false, v.lo, v.hi);
-        let (n, w) = (self.num.map(|p| part(&p)), part(&self.den));
+        let p = self.nw.restrict(true, u.lo, u.hi).restrict(false, v.lo, v.hi);
         let mut hull = Box3::EMPTY;
         let mut big: f64 = 0.0;
-        for k in 0..w.c.len() {
-            if w.c[k] > 0.0 {
-                let q = Point3::new(n[0].c[k], n[1].c[k], n[2].c[k]) - Point3::ORIGIN;
-                let q = Point3::ORIGIN + q / w.c[k];
+        for &[x, y, z, w] in &p.c[..p.len()] {
+            if w > 0.0 {
+                let q = Point3::ORIGIN + Vec3::new(x, y, z) / w;
                 hull.include(q);
                 big = big.max(q.x.abs()).max(q.y.abs()).max(q.z.abs());
             }
@@ -570,15 +567,15 @@ impl Quad {
             arc.cw = tv(&s.arc.cw, &s.arc.d, true);
             *s = RSide::new(abc, s.e.clone(), arc);
         }
-        (out.num, out.den) = tensor(&out.sides);
+        out.nw = tensor(&out.sides);
         out
     }
 }
 
 /// N and W over the unit square: each side's weighted ribbon in its (s, d), turned into (u, v).
-fn tensor(sides: &[RSide]) -> ([Bp; 3], Bp) {
+fn tensor(sides: &[RSide]) -> Bp<4> {
     let n1 = DEG + 1;
-    let mut out = [Bp::zero(DEG, DEG); 4];
+    let mut out = Bp::zero(DEG, DEG);
     for (i, sd) in sides.iter().enumerate() {
         // the ribbon in Bernstein form of degree (SDEG, 2) in (s, d), the weight's factor
         // s^2 (1 - s)^2 (1 - d)^2 = B_2^4(s) B_0^2(d) / 6 multiplied in, d elevated to DEG
@@ -611,59 +608,87 @@ fn tensor(sides: &[RSide]) -> ([Bp; 3], Bp) {
                     _ => (be, DEG - al),
                 };
                 for k in 0..4 {
-                    out[k].c[iu * n1 + iv] += g[al][be][k];
+                    out.c[iu * n1 + iv][k] += g[al][be][k];
                 }
             }
         }
     }
     // a few roundings per term, a handful of terms per coefficient
-    for p in &mut out {
-        p.e = 64.0 * U * p.big();
-    }
-    ([out[0], out[1], out[2]], out[3])
+    out.b = out.big();
+    out.e = out.b.map(|b| 64.0 * U * b);
+    out
 }
 
 /// Room for the coefficients of a Duffy triangle's polynomials.
 const CAP: usize = (2 * DEG) * (DEG + 2);
 
-/// A polynomial over [0, 1]^2 in tensor Bernstein form, each coefficient within `e` of the true
-/// one (the rounding of its construction).
+/// K polynomials over [0, 1]^2 in tensor Bernstein form, one per lane of each coefficient (N's
+/// x, y, z then W), lane k's coefficients each within `e[k]` of the true ones (the rounding of
+/// their construction). Every operation runs all lanes in one loop.
 #[derive(Clone, Copy, Debug)]
-struct Bp {
+struct Bp<const K: usize> {
     m: usize,
     n: usize,
-    e: f64,
-    c: [f64; CAP],
+    e: [f64; K],
+    /// Each lane's largest coefficient (in size), or more.
+    b: [f64; K],
+    c: [[f64; K]; CAP],
 }
 
-impl Bp {
-    fn zero(m: usize, n: usize) -> Bp {
+impl<const K: usize> Bp<K> {
+    fn zero(m: usize, n: usize) -> Self {
         Bp {
             m,
             n,
-            e: 0.0,
-            c: [0.0; CAP],
+            e: [0.0; K],
+            b: [0.0; K],
+            c: [[0.0; K]; CAP],
         }
     }
     fn len(&self) -> usize {
         (self.m + 1) * (self.n + 1)
     }
-    fn at(&self, i: usize, j: usize) -> f64 {
+    fn at(&self, i: usize, j: usize) -> [f64; K] {
         self.c[i * (self.n + 1) + j]
     }
-    fn big(&self) -> f64 {
-        self.c[..self.len()].iter().fold(0.0f64, |a, &x| a.max(x.abs()))
+    /// Each lane's largest coefficient (in size), measured.
+    fn big(&self) -> [f64; K] {
+        let mut b = [0.0f64; K];
+        for x in &self.c[..self.len()] {
+            for k in 0..K {
+                b[k] = b[k].max(x[k].abs());
+            }
+        }
+        b
     }
-    /// The two parts either side of tau along u (or v): de Casteljau.
-    fn split(&self, along_u: bool, tau: f64) -> (Bp, Bp) {
+    /// Lanes `from..from + J` alone.
+    fn lanes<const J: usize>(&self, from: usize) -> Bp<J> {
+        let mut out = Bp::zero(self.m, self.n);
+        for i in 0..self.len() {
+            out.c[i] = std::array::from_fn(|k| self.c[i][from + k]);
+        }
+        out.e = std::array::from_fn(|k| self.e[from + k]);
+        out.b = std::array::from_fn(|k| self.b[from + k]);
+        out
+    }
+    /// The (deg, lines, step, stride) of a pass of de Casteljau along u (or v).
+    fn axes(&self, along_u: bool) -> (usize, usize, usize, usize) {
         let (m, n) = (self.m, self.n);
-        let (mut l, mut r) = (*self, *self);
-        let (deg, lines, step, stride) = if along_u {
+        if along_u {
             (m, n + 1, n + 1, 1)
         } else {
             (n, m + 1, 1, n + 1)
-        };
-        let mut col = [0.0; 2 * DEG + 2];
+        }
+    }
+    /// Each lane's error grown by `per` times its largest coefficient.
+    fn grown(&self, per: f64) -> [f64; K] {
+        std::array::from_fn(|k| self.e[k] + per * self.b[k])
+    }
+    /// The two parts either side of tau along u (or v): de Casteljau.
+    fn split(&self, along_u: bool, tau: f64) -> (Self, Self) {
+        let (mut l, mut r) = (Self::zero(self.m, self.n), Self::zero(self.m, self.n));
+        let (deg, lines, step, stride) = self.axes(along_u);
+        let mut col = [[0.0; K]; 2 * DEG + 2];
         let om = 1.0 - tau;
         for line in 0..lines {
             let base = line * stride;
@@ -674,81 +699,48 @@ impl Bp {
             r.c[base + deg * step] = col[deg];
             for lev in 1..=deg {
                 for i in 0..=deg - lev {
-                    col[i] = om * col[i] + tau * col[i + 1];
+                    for k in 0..K {
+                        col[i][k] = om * col[i][k] + tau * col[i + 1][k];
+                    }
                 }
                 l.c[base + lev * step] = col[0];
                 r.c[base + (deg - lev) * step] = col[deg - lev];
             }
         }
         // convex combinations: a few roundings per level
-        let e = self.e + (deg as f64 + 1.0) * 4.0 * U * self.big();
-        (l.e, r.e) = (e, e);
+        let e = self.grown((deg as f64 + 1.0) * 4.0 * U);
+        (l.e, r.e, l.b, r.b) = (e, e, self.b, self.b);
         (l, r)
     }
-    /// Both halves along u (or v) in one pass, each as `half` computes it.
-    fn halves(&self, along_u: bool) -> (Bp, Bp) {
-        let (m, n) = (self.m, self.n);
-        let (mut l, mut r) = (*self, *self);
-        let (deg, lines, step, stride) = if along_u {
-            (m, n + 1, n + 1, 1)
-        } else {
-            (n, m + 1, 1, n + 1)
-        };
-        let mut col = [0.0; 2 * DEG + 2];
+    /// Both halves along u (or v) in one pass.
+    fn halves(&self, along_u: bool) -> (Self, Self) {
+        let (mut l, mut r) = (Self::zero(self.m, self.n), Self::zero(self.m, self.n));
+        let (deg, lines, step, stride) = self.axes(along_u);
+        let mut col = [[0.0; K]; 2 * DEG + 2];
         for line in 0..lines {
             let base = line * stride;
             for k in 0..=deg {
                 col[k] = self.c[base + k * step];
             }
+            l.c[base] = col[0];
+            r.c[base + deg * step] = col[deg];
             for lev in 1..=deg {
                 for i in 0..=deg - lev {
-                    col[i] = 0.5 * (col[i] + col[i + 1]);
+                    for k in 0..K {
+                        col[i][k] = 0.5 * (col[i][k] + col[i + 1][k]);
+                    }
                 }
                 l.c[base + lev * step] = col[0];
                 r.c[base + (deg - lev) * step] = col[deg - lev];
             }
         }
-        let e = self.e + (deg as f64 + 1.0) * 2.0 * U * self.big();
-        (l.e, r.e) = (e, e);
+        let e = self.grown((deg as f64 + 1.0) * 2.0 * U);
+        (l.e, r.e, l.b, r.b) = (e, e, self.b, self.b);
         (l, r)
-    }
-    /// One half along u (or v): the first (0) or the second (1).
-    fn half(&self, along_u: bool, which: usize) -> Bp {
-        let (m, n) = (self.m, self.n);
-        let mut out = *self;
-        let (deg, lines, step, stride) = if along_u {
-            (m, n + 1, n + 1, 1)
-        } else {
-            (n, m + 1, 1, n + 1)
-        };
-        let mut col = [0.0; 2 * DEG + 2];
-        for line in 0..lines {
-            let base = line * stride;
-            for k in 0..=deg {
-                col[k] = self.c[base + k * step];
-            }
-            if which == 0 {
-                for lev in 1..=deg {
-                    for i in 0..=deg - lev {
-                        col[i] = 0.5 * (col[i] + col[i + 1]);
-                    }
-                    out.c[base + lev * step] = col[0];
-                }
-            } else {
-                for lev in 1..=deg {
-                    for i in 0..=deg - lev {
-                        col[i] = 0.5 * (col[i] + col[i + 1]);
-                    }
-                    out.c[base + (deg - lev) * step] = col[deg - lev];
-                }
-            }
-        }
-        out.e = self.e + (deg as f64 + 1.0) * 2.0 * U * self.big();
-        out
     }
     /// The polynomial over [lo, hi] along u (or v), rescaled to [0, 1]; the part covered is
     /// at least [lo, hi].
-    fn restrict(&self, along_u: bool, lo: f64, hi: f64) -> Bp {
+    fn restrict(&self, along_u: bool, lo: f64, hi: f64) -> Self {
         let p = if hi < 1.0 {
             self.split(along_u, hi).0
         } else {
@@ -762,7 +754,7 @@ impl Bp {
         }
     }
     /// Reversed along u (or v), exactly.
-    fn flip(&self, along_u: bool) -> Bp {
+    fn flip(&self, along_u: bool) -> Self {
         let mut out = *self;
         for i in 0..=self.m {
             for j in 0..=self.n {
@@ -773,9 +765,9 @@ impl Bp {
         out
     }
     /// u and v swapped, exactly.
-    fn transpose(&self) -> Bp {
-        let mut out = Bp::zero(self.n, self.m);
-        out.e = self.e;
+    fn transpose(&self) -> Self {
+        let mut out = Self::zero(self.n, self.m);
+        (out.e, out.b) = (self.e, self.b);
         for i in 0..=self.m {
             for j in 0..=self.n {
                 out.c[j * (self.m + 1) + i] = self.at(i, j);
@@ -783,19 +775,10 @@ impl Bp {
         }
         out
     }
-    /// self - k o (same degrees).
-    fn sub_scaled(&self, o: &Bp, k: f64) -> Bp {
-        let mut out = *self;
-        for i in 0..self.len() {
-            out.c[i] = self.c[i] - k * o.c[i];
-        }
-        out.e = self.e + k.abs() * o.e + 3.0 * U * (self.big() + k.abs() * o.big());
-        out
-    }
     /// g(sigma, t) = f(sigma, sigma t), of degree (m + n, n): with
     /// B_j^n(sigma t) = sum_(k >= j) B_k^n(sigma) B_j^k(t), a map with non-negative weights
     /// summing to one for every output coefficient.
-    fn duffy(&self) -> Bp {
+    fn duffy(&self) -> Self {
         let (m, n) = (self.m, self.n);
         debug_assert!(m == DEG && n == DEG);
         // the weight of coefficient (i, j) in (i + k, l), by [i][k][j][l]
@@ -815,8 +798,8 @@ impl Bp {
             }
             t
         });
-        let mut out = Bp::zero(m + n, n);
-        // for each output coefficient the terms add by rising i, then j, as the sparse sum did
+        let mut out = Self::zero(m + n, n);
+        // for each output coefficient the terms add by rising i, then j
         for i in 0..=DEG {
             for k in 0..=DEG {
                 let dst = &mut out.c[(i + k) * (DEG + 1)..(i + k + 1) * (DEG + 1)];
@@ -824,88 +807,99 @@ impl Bp {
                     let c = self.c[i * (DEG + 1) + j];
                     let w = &table[i][k][j];
                     for l in j..=j + DEG - k {
-                        dst[l] += c * w[l];
+                        for q in 0..K {
+                            dst[l][q] += c[q] * w[l];
+                        }
                     }
                 }
             }
         }
-        out.e = self.e + ((m + 1) * (n + 1) + 8) as f64 * 4.0 * U * self.big();
+        out.e = self.grown(((m + 1) * (n + 1) + 8) as f64 * 4.0 * U);
+        out.b = self.b;
         out
     }
     /// self / sigma^k (sigma along u), where the first k rows vanish in exact arithmetic.
-    fn div_rows(&self, k: usize) -> Bp {
+    fn div_rows(&self, k: usize) -> Self {
         let (mm, n) = (self.m, self.n);
         let m = mm - k;
-        let mut out = Bp::zero(m, n);
+        let mut out = Self::zero(m, n);
         let mut amp: f64 = 0.0;
         for j in 0..=m {
             let f = binom(mm, j + k) / binom(m, j);
             amp = amp.max(f);
             for l in 0..=n {
-                out.c[j * (n + 1) + l] = self.at(j + k, l) * f;
+                out.c[j * (n + 1) + l] = self.at(j + k, l).map(|x| x * f);
             }
         }
-        out.e = amp * (self.e + 2.0 * U * self.big());
+        out.e = std::array::from_fn(|q| amp * (self.e[q] + 2.0 * U * self.b[q]));
+        out.b = out.big();
         out
     }
     /// (a + b u) times self: of one degree more in u.
-    fn mul_affine(&self, a: f64, b: f64) -> Bp {
+    fn mul_affine(&self, a: f64, b: f64) -> Self {
         let (m, n) = (self.m, self.n);
-        let mut out = Bp::zero(m + 1, n);
+        let mut out = Self::zero(m + 1, n);
         let (s0, s1) = (a, a + b);
         let k = 1.0 / (m + 1) as f64;
         for i in 0..=m + 1 {
             let (f0, f1) = ((m + 1 - i) as f64 * s0 * k, i as f64 * s1 * k);
             for l in 0..=n {
-                let g0 = if i <= m { self.at(i, l) } else { 0.0 };
-                let g1 = if i > 0 { self.at(i - 1, l) } else { 0.0 };
-                out.c[i * (n + 1) + l] = f0 * g0 + f1 * g1;
+                let g0 = if i <= m { self.at(i, l) } else { [0.0; K] };
+                let g1 = if i > 0 { self.at(i - 1, l) } else { [0.0; K] };
+                out.c[i * (n + 1) + l] = std::array::from_fn(|q| f0 * g0[q] + f1 * g1[q]);
             }
         }
-        out.e = (self.e + 4.0 * U * self.big()) * (s0.abs().max(s1.abs()));
+        let e = self.grown(4.0 * U);
+        out.e = e.map(|x| x * s0.abs().max(s1.abs()));
+        out.b = out.big();
         out
     }
     /// Raised by one degree along u.
-    fn elevate_u(&self) -> Bp {
+    fn elevate_u(&self) -> Self {
         let (m, n) = (self.m, self.n);
-        let mut out = Bp::zero(m + 1, n);
+        let mut out = Self::zero(m + 1, n);
         for i in 0..=m + 1 {
             let t = i as f64 / (m + 1) as f64;
             for j in 0..=n {
-                let a = if i > 0 { self.at(i - 1, j) } else { 0.0 };
-                let b = if i <= m { self.at(i, j) } else { 0.0 };
-                out.c[i * (n + 1) + j] = t * a + (1.0 - t) * b;
+                let a = if i > 0 { self.at(i - 1, j) } else { [0.0; K] };
+                let b = if i <= m { self.at(i, j) } else { [0.0; K] };
+                out.c[i * (n + 1) + j] = std::array::from_fn(|q| t * a[q] + (1.0 - t) * b[q]);
             }
         }
-        out.e = self.e + 3.0 * U * self.big();
+        out.e = self.grown(3.0 * U);
+        out.b = self.b;
         out
     }
-    /// self times a polynomial of degree (a, b) given by its coefficients, row by row: in the
+    /// self times a polynomial of degree (a, a) given by its coefficients, row by row: in the
     /// scaled basis (coefficients times binomials) a product is a plain convolution.
-    fn mul_small(&self, a: usize, b: usize, f: &[f64]) -> Bp {
+    fn times(&self, phi: &Phi) -> Self {
+        let (a, f) = (phi.0, &phi.1[..(phi.0 + 1) * (phi.0 + 1)]);
         let (m, n) = (self.m, self.n);
-        let (mo, no) = (m + a, n + b);
-        let mut out = Bp::zero(mo, no);
+        let (mo, no) = (m + a, n + a);
+        let mut out = Self::zero(mo, no);
         let w = no + 1;
         let mut fs = [[0.0; 3]; 3];
         for p in 0..=a {
-            for q in 0..=b {
-                fs[p][q] = f[p * (b + 1) + q] * BINOM[a][p] * BINOM[b][q];
+            for q in 0..=a {
+                fs[p][q] = f[p * (a + 1) + q] * BINOM[a][p] * BINOM[a][q];
             }
         }
-        let mut row = [0.0; 2 * DEG + 2];
+        let mut row = [[0.0; K]; 2 * DEG + 2];
         for i in 0..=m {
             let ri = BINOM[m][i];
             for j in 0..=n {
-                row[j] = self.c[i * (n + 1) + j] * ri * BINOM[n][j];
+                let x = self.c[i * (n + 1) + j];
+                row[j] = std::array::from_fn(|k| x[k] * ri * BINOM[n][j]);
             }
             for p in 0..=a {
                 let dst = &mut out.c[(i + p) * w..(i + p + 1) * w];
                 // q falling, so each coefficient sums its terms by rising j
-                for q in (0..=b).rev() {
+                for q in (0..=a).rev() {
                     let fq = fs[p][q];
-                    for (d, &x) in dst[q..=q + n].iter_mut().zip(&row[..=n]) {
-                        *d += x * fq;
+                    for (d, x) in dst[q..=q + n].iter_mut().zip(&row[..=n]) {
+                        for k in 0..K {
+                            d[k] += x[k] * fq;
+                        }
                     }
                 }
             }
@@ -913,57 +907,97 @@ impl Bp {
         for i in 0..=mo {
             let ri = 1.0 / BINOM[mo][i];
             for j in 0..=no {
-                out.c[i * w + j] *= ri / BINOM[no][j];
+                let s = ri / BINOM[no][j];
+                for x in &mut out.c[i * w + j] {
+                    *x *= s;
+                }
             }
         }
         let fm = f.iter().fold(0.0f64, |acc, &x| acc.max(x.abs()));
-        out.e = (self.e + ((a + 1) * (b + 1) + 8) as f64 * 4.0 * U * self.big()) * fm;
+        let e = self.grown(((a + 1) * (a + 1) + 8) as f64 * 4.0 * U);
+        out.e = e.map(|x| x * fm);
+        out.b = out.big();
         out
     }
-    fn lower(&self) -> f64 {
-        self.c[..self.len()].iter().fold(f64::INFINITY, |a, &x| a.min(x)) - self.e
+    /// Lane k's lowest coefficient, less its error.
+    fn lower(&self, k: usize) -> f64 {
+        self.c[..self.len()]
+            .iter()
+            .fold(f64::INFINITY, |a, x| a.min(x[k]))
+            - self.e[k]
+    }
+}
+
+impl Bp<4> {
+    /// N - p W for a point p (lanes x, y, z less p times lane w).
+    fn about_point(&self, p: Vec3) -> Bp<4> {
+        let mut out = *self;
+        let p = [p.x, p.y, p.z];
+        for x in &mut out.c[..self.len()] {
+            for k in 0..3 {
+                x[k] -= p[k] * x[3];
+            }
+        }
+        let big = self.b;
+        for k in 0..3 {
+            out.e[k] = self.e[k] + p[k].abs() * self.e[3] + 3.0 * U * (big[k] + p[k].abs() * big[3]);
+        }
+        out.b = out.big();
+        out
     }
 }
 
 /// Y = X - q W, q the ratio of the coefficient sums (near the box's middle), with how far the
 /// control points Y_ij / W_ij reach from the origin and a bound on their rounding: P - q lies
-/// in their hull. All W_ij must be positive.
+/// in their hull. All W_ij must be positive. Coordinates are kept apart (x, y, z rows), so the
+/// loops over coefficients run several at a time.
 struct About {
     /// Y's coefficients.
-    ys: [Vec3; CAP],
+    ys: [[f64; CAP]; 3],
     /// Each coefficient of Y within this of the true one, plus a rounding of the largest.
     ye: f64,
     /// The control points.
-    pts: [Vec3; CAP],
+    pts: [[f64; CAP]; 3],
+    /// W's coefficients.
+    ws: [f64; CAP],
     reach: f64,
     blur: f64,
 }
 
 impl About {
-    fn of(x: &[Bp; 3], w: &Bp) -> About {
-        let len = w.len();
-        let sw: f64 = w.c[..len].iter().sum();
-        let q: [f64; 3] = std::array::from_fn(|k| x[k].c[..len].iter().sum::<f64>() / sw);
-        let (mut ys, mut pts) = ([Vec3::ZERO; CAP], [Vec3::ZERO; CAP]);
-        let (mut r2, mut wmin) = (0.0f64, f64::INFINITY);
-        let mut big = [0.0f64; 3];
-        for i in 0..len {
-            let y: [f64; 3] = std::array::from_fn(|k| x[k].c[i] - q[k] * w.c[i]);
+    /// X from lanes `x..x + 3` of p, W from lane `w`; `big` bounds each lane's coefficients.
+    fn of<const K: usize>(p: &Bp<K>, x: usize, w: usize, big: &[f64; K]) -> About {
+        let len = p.len();
+        let (mut sw, mut sx) = (0.0, [0.0; 3]);
+        for c in &p.c[..len] {
+            sw += c[w];
             for k in 0..3 {
-                big[k] = big[k].max(y[k].abs());
+                sx[k] += c[x + k];
             }
-            ys[i] = Vec3::new(y[0], y[1], y[2]);
-            let v = ys[i] / w.c[i];
-            pts[i] = v;
-            r2 = r2.max(v.length_sq());
-            wmin = wmin.min(w.c[i]);
         }
-        // as Bp::sub_scaled bounds Y's rounding
-        let (we, wb) = (w.e, w.big());
+        let q = sx.map(|v| v / sw);
+        let (mut ys, mut pts, mut ws) = ([[0.0; CAP]; 3], [[0.0; CAP]; 3], [0.0; CAP]);
+        let (mut r2, mut wmin) = (0.0f64, f64::INFINITY);
+        let mut ybig = [0.0f64; 3];
+        for i in 0..len {
+            let c = &p.c[i];
+            let y: [f64; 3] = std::array::from_fn(|k| c[x + k] - q[k] * c[w]);
+            let v = y.map(|a| a / c[w]);
+            for k in 0..3 {
+                ybig[k] = ybig[k].max(y[k].abs());
+                ys[k][i] = y[k];
+                pts[k][i] = v[k];
+            }
+            ws[i] = c[w];
+            r2 = r2.max(v[0] * v[0] + v[1] * v[1] + v[2] * v[2]);
+            wmin = wmin.min(c[w]);
+        }
+        // as Bp::about_point bounds Y's rounding
+        let (we, wb) = (p.e[w], big[w]);
         let e: [f64; 3] =
-            std::array::from_fn(|k| x[k].e + q[k].abs() * we + 3.0 * U * (x[k].big() + q[k].abs() * wb));
+            std::array::from_fn(|k| p.e[x + k] + q[k].abs() * we + 3.0 * U * (big[x + k] + q[k].abs() * wb));
         let ey = e.iter().fold(0.0f64, |a, &b| a.max(b)) * 1.8;
-        let ye = (0..3).map(|k| e[k] + U * big[k]).fold(0.0, f64::max);
+        let ye = (0..3).map(|k| e[k] + U * ybig[k]).fold(0.0, f64::max);
         let reach = r2.sqrt() * (1.0 + 4.0 * U);
         // v / w against the true ratio: v and w each off by their rounding
         let blur = (ey + reach * (we + 2.0 * U * wmin)) / (wmin - we);
@@ -971,23 +1005,23 @@ impl About {
             ys,
             ye,
             pts,
+            ws,
             reach,
             blur,
         }
     }
 
     /// The sum of the coefficients of d/du (or d/dv) of Y: the rows' (columns') ends.
-    fn axis(&self, w: &Bp, along_u: bool) -> Vec3 {
-        let (m, n) = (w.m, w.n);
+    fn axis(&self, m: usize, n: usize, along_u: bool) -> Vec3 {
         let mut s = Vec3::ZERO;
-        let at = |i: usize, j: usize| self.ys[i * (n + 1) + j];
+        let at = |t: usize| Vec3::new(self.ys[0][t], self.ys[1][t], self.ys[2][t]);
         if along_u {
             for j in 0..=n {
-                s += at(m, j) - at(0, j);
+                s += at(m * (n + 1) + j) - at(j);
             }
         } else {
             for i in 0..=m {
-                s += at(i, n) - at(i, 0);
+                s += at(i * (n + 1) + n) - at(i * (n + 1));
             }
         }
         s
@@ -996,46 +1030,69 @@ impl About {
     /// W P_u (or W P_v) is a Bernstein combination of K_ij - w_ij (P - q), the coefficients of
     /// d/du of Y and of W (the same basis), with P - q in the control points' hull: the tangents
     /// of the angles from `axis` (unit, across n0) it can make, None when it may not be within a
-    /// quarter turn of the axis.
-    fn sector(&self, w: &Bp, along_u: bool, n0: Vec3, axis: Vec3) -> Option<(f64, f64)> {
-        let len = w.len();
+    /// quarter turn of the axis. W's error is `we`, its largest coefficient `wbig`.
+    #[allow(clippy::too_many_arguments)]
+    fn sector(
+        &self,
+        (m, n): (usize, usize),
+        we: f64,
+        wbig: f64,
+        along_u: bool,
+        n0: Vec3,
+        axis: Vec3,
+    ) -> Option<(f64, f64)> {
+        let len = (m + 1) * (n + 1);
         let side = n0.cross(axis);
-        let pt = |k: usize| self.ys[k];
+        let [px, py, pz] = &self.pts;
+        let [yx, yy, yz] = &self.ys;
         // the control points along the axis and across it
         let (mut pl, mut ph, mut ql, mut qh) = (0.0f64, 0.0f64, 0.0f64, 0.0f64);
-        for &v in &self.pts[..len] {
-            let (p, q) = (axis.dot(v), side.dot(v));
+        for i in 0..len {
+            let p = axis.x * px[i] + axis.y * py[i] + axis.z * pz[i];
+            let q = side.x * px[i] + side.y * py[i] + side.z * pz[i];
             (pl, ph, ql, qh) = (pl.min(p), ph.max(p), ql.min(q), qh.max(q));
         }
-        let (m, n) = (w.m, w.n);
         let deg = if along_u { m } else { n } as f64;
         // each difference of two coefficients, times the degree; the weights' rounding times
         // the points' reach; the points' rounding times the weights
         let e = self.ye * 2.0 * deg * 1.8
-            + (w.e + U * w.big()) * 2.0 * deg * (self.reach + self.blur)
-            + self.blur * w.big() * 2.0 * deg;
+            + (we + U * wbig) * 2.0 * deg * (self.reach + self.blur)
+            + self.blur * wbig * 2.0 * deg;
         let (ri, rj, step) = if along_u { (m, n + 1, n + 1) } else { (m + 1, n, 1) };
-        let (mut lo, mut hi) = (f64::INFINITY, f64::NEG_INFINITY);
+        let (mut lo, mut hi, mut least) = (f64::INFINITY, f64::NEG_INFINITY, f64::INFINITY);
         for i in 0..ri {
-            for j in 0..rj {
-                let t = i * (n + 1) + j;
-                let a = (pt(t + step) - pt(t)) * deg;
-                let wd = (w.c[t + step] - w.c[t]) * deg;
+            let r = i * (n + 1);
+            for t in r..r + rj {
+                let u = t + step;
+                let (ax, ay, az) = (
+                    (yx[u] - yx[t]) * deg,
+                    (yy[u] - yy[t]) * deg,
+                    (yz[u] - yz[t]) * deg,
+                );
+                let wd = (self.ws[u] - self.ws[t]) * deg;
                 // a - wd y: the part along the axis stays positive, the ratio across it is bounded
-                let (c, s) = (axis.dot(a), side.dot(a));
-                let ((wl, wh), (vl, vh)) = if wd >= 0.0 {
-                    ((wd * pl, wd * ph), (wd * ql, wd * qh))
+                let c = axis.x * ax + axis.y * ay + axis.z * az;
+                let s = side.x * ax + side.y * ay + side.z * az;
+                let up = wd >= 0.0;
+                let (wl, wh) = if up {
+                    (wd * pl, wd * ph)
                 } else {
-                    ((wd * ph, wd * pl), (wd * qh, wd * ql))
+                    (wd * ph, wd * pl)
+                };
+                let (vl, vh) = if up {
+                    (wd * ql, wd * qh)
+                } else {
+                    (wd * qh, wd * ql)
                 };
                 let (cl, ch) = (c - wh - e, c - wl + e);
                 let (sl, sh) = (s - vh - e, s - vl + e);
-                if cl <= 0.0 {
-                    return None;
-                }
+                least = least.min(cl);
                 lo = lo.min(sl / if sl >= 0.0 { ch } else { cl });
                 hi = hi.max(sh / if sh >= 0.0 { cl } else { ch });
             }
+        }
+        if least <= 0.0 {
+            return None;
         }
         // the divisions' rounding
         Some((lo - 4.0 * U * lo.abs(), hi + 4.0 * U * hi.abs()))
@@ -1092,19 +1149,14 @@ impl Quad {
             let pc = self.corner(c);
             // the zone: sides c (at its start) and c - 1 (at its end), alone
             for (i, at_start) in [(c, true), ((c + 3) % 4, false)] {
-                let (rn, rw) = ribbon_tensor(&self.sides[i]);
-                let part = |p: &Bp| {
-                    let p = if at_start {
-                        p.split(true, ZONE).0
-                    } else {
-                        p.split(true, 1.0 - ZONE).1
-                    };
-                    p.split(false, ZONE).0
+                let p = ribbon_tensor(&self.sides[i]).about_point(pc);
+                let p = if at_start {
+                    p.split(true, ZONE).0
+                } else {
+                    p.split(true, 1.0 - ZONE).1
                 };
-                let w = part(&rw);
-                let n: [Bp; 3] = std::array::from_fn(|k| part(&rn[k].sub_scaled(&rw, [pc.x, pc.y, pc.z][k])));
                 st.regions += 1;
-                if !plain_region(&n, &w, true, 0, st) {
+                if !plain_region(&p.split(false, ZONE).0, true, 0, st) {
                     return false;
                 }
             }
@@ -1121,64 +1173,64 @@ impl Quad {
     /// The blend over the square cut at 1/4 and 3/4 both ways: the box round each corner, the
     /// strips between them along the sides, and the middle (measured: research/corner-patch).
     fn blend_regions(&self, st: &mut Proof) -> bool {
-        let cut = |p: &Bp, along_u: bool, k: usize| match k {
+        let cut = |p: &Bp<4>, along_u: bool, k: usize| match k {
             0 => p.split(along_u, CORNER_BOX).0,
             1 => p.restrict(along_u, CORNER_BOX, 1.0 - CORNER_BOX),
             _ => p.split(along_u, (1.0 - CORNER_BOX).next_down()).1,
         };
         (0..3).all(|a| {
-            let (nu, wu) = (self.num.map(|p| cut(&p, true, a)), cut(&self.den, true, a));
+            let pu = cut(&self.nw, true, a);
             (0..3).all(|b| {
-                let (n, w) = (nu.map(|p| cut(&p, false, b)), cut(&wu, false, b));
+                let p = cut(&pu, false, b);
                 if a != 1 && b != 1 {
                     let c = [[0, 3], [1, 2]][a / 2][b / 2];
-                    return self.corner_box(c, &n, &w, st);
+                    return self.corner_box(c, &p, st);
                 }
                 if a == 1 && b == 1 {
                     st.regions += 1;
-                    return plain_box(&n, &w, true, st);
+                    return plain_box(&p, st);
                 }
                 // a strip between two corners' boxes: its halves (they rarely pass whole)
-                let (hn, hw) = (n.map(|x| x.halves(a == 1)), w.halves(a == 1));
+                let (h0, h1) = p.halves(a == 1);
                 st.regions += 2;
-                plain_box(&hn.map(|x| x.0), &hw.0, true, st) && plain_box(&hn.map(|x| x.1), &hw.1, true, st)
+                plain_box(&h0, st) && plain_box(&h1, st)
             })
         })
     }
 
     /// The box round corner c (N and W over it): its quarter at the corner in two Duffy
     /// triangles (whole, they nearly always pass at that size), the other three quarters plain.
-    fn corner_box(&self, c: usize, n: &[Bp; 3], w: &Bp, st: &mut Proof) -> bool {
+    fn corner_box(&self, c: usize, p: &Bp<4>, st: &mut Proof) -> bool {
         // the corner to the origin, N about it: N - p_c W = sigma^3 G and W = sigma^2 W~ in
         // either triangle (every weight has u^2 or v^2, and the ribbons meet at p_c)
-        let pc = self.corner(c);
         let (fu, fv) = (c == 1 || c == 2, c >= 2);
-        let turn = |p: &Bp| {
-            let p = if fu { p.flip(true) } else { *p };
-            if fv { p.flip(false) } else { p }
-        };
-        let w = turn(w);
-        let n: [Bp; 3] = std::array::from_fn(|k| turn(&n[k]).sub_scaled(&w, [pc.x, pc.y, pc.z][k]));
-        let (nu, wu) = (n.map(|p| p.halves(true)), w.halves(true));
-        let (n0, w0) = (nu.map(|p| p.0.halves(false)), wu.0.halves(false));
-        let (n1, w1) = (nu.map(|p| p.1.halves(false)), wu.1.halves(false));
+        let p = if fu { p.flip(true) } else { *p };
+        let p = if fv { p.flip(false) } else { p };
+        let (pu0, pu1) = p.about_point(self.corner(c)).halves(true);
+        let (p00, p01) = pu0.halves(false);
+        let (p10, p11) = pu1.halves(false);
         st.regions += 3;
-        if !(plain_box(&n0.map(|p| p.1), &w0.1, true, st)
-            && plain_box(&n1.map(|p| p.0), &w1.0, true, st)
-            && plain_box(&n1.map(|p| p.1), &w1.1, true, st))
-        {
+        if !(plain_box(&p01, st) && plain_box(&p10, st) && plain_box(&p11, st)) {
             return false;
         }
-        let (n, w) = (n0.map(|p| p.0), w0.0);
         (0..2).all(|tri| {
-            let t = |p: &Bp| if tri == 0 { *p } else { p.transpose() };
-            let g: [Bp; 3] = std::array::from_fn(|k| t(&n[k]).duffy().div_rows(3));
-            let wt = t(&w).duffy().div_rows(2);
+            let d = if tri == 0 { p00 } else { p00.transpose() }.duffy();
+            let (g, wt) = (d.lanes::<3>(0).div_rows(3), d.lanes::<1>(3).div_rows(2));
             st.regions += 1;
-            let Some(phi) = normal_phi(&wt, 1) else {
+            let Some(phi) = normal_phi(&wt, 0, 1) else {
                 return false;
             };
-            duffy_region(&g.map(|p| times(&p, &phi)), &times(&wt, &phi), (0.0, 1.0), 0, st)
+            // sigma G and G raised a degree (the cones of W~ P_sigma and W~ P_t / sigma), W~
+            let (g, wt) = (g.times(&phi), wt.times(&phi));
+            let (h, ge) = (g.mul_affine(0.0, 1.0), g.elevate_u());
+            let mut x = Bp::<7>::zero(wt.m, wt.n);
+            for i in 0..x.len() {
+                let (a, b) = (h.c[i], ge.c[i]);
+                x.c[i] = [a[0], a[1], a[2], b[0], b[1], b[2], wt.c[i][0]];
+            }
+            x.e = [h.e[0], h.e[1], h.e[2], ge.e[0], ge.e[1], ge.e[2], wt.e[0]];
+            x.b = [h.b[0], h.b[1], h.b[2], ge.b[0], ge.b[1], ge.b[2], wt.b[0]];
+            duffy_region(&x, 0, st)
         })
     }
 
@@ -1209,38 +1261,38 @@ fn cache() -> &'static Mutex<HashMap<Vec<u64>, bool>> {
 }
 
 /// A ribbon alone as a tensor polynomial of degree (SDEG, 2) in (s, d): numerator and weight.
-fn ribbon_tensor(sd: &RSide) -> ([Bp; 3], Bp) {
-    let mut out = [Bp::zero(SDEG, 2); 4];
+fn ribbon_tensor(sd: &RSide) -> Bp<4> {
+    let mut out = Bp::zero(SDEG, 2);
     for a in 0..=SDEG {
         for b in 0..3 {
             for k in 0..3 {
                 let (av, bv, cv) = (sd.abc[0][k].0[a], sd.abc[1][k].0[a], sd.abc[2][k].0[a]);
-                out[k].c[a * 3 + b] = match b {
+                out.c[a * 3 + b][k] = match b {
                     0 => av,
                     1 => av + 0.5 * bv,
                     _ => av + bv + cv,
                 };
             }
-            out[3].c[a * 3 + b] = sd.e.0[a];
+            out.c[a * 3 + b][3] = sd.e.0[a];
         }
     }
-    for p in &mut out {
-        p.e = 4.0 * U * p.big();
-    }
-    ([out[0], out[1], out[2]], out[3])
+    out.b = out.big();
+    out.e = out.b.map(|b| 4.0 * U * b);
+    out
 }
 
-/// Whether W P_u (from X1) and W P_v (from X2) lie in angular sectors of the plane across some
-/// n0 that are ordered and less than a half turn apart, P = X1 / W + const = X2 / W + const':
-/// then n0 . (P_u x P_v) > 0 over the box.
-fn separated(x1: &[Bp; 3], x2: Option<&[Bp; 3]>, w: &Bp) -> bool {
-    if w.lower() <= 0.0 {
+/// Whether W P_u (from X1, lanes x1..x1 + 3 of p) and W P_v (from X2, lanes x2..x2 + 3) lie in
+/// angular sectors of the plane across some n0 that are ordered and less than a half turn
+/// apart, P = X1 / W + const = X2 / W + const', W lane w: then n0 . (P_u x P_v) > 0 over the box.
+fn separated<const K: usize>(p: &Bp<K>, x1: usize, x2: usize, w: usize) -> bool {
+    if p.lower(w) <= 0.0 {
         return false;
     }
-    let a1 = About::of(x1, w);
-    let a2 = x2.map(|x2| About::of(x2, w));
+    let big = p.b;
+    let a1 = About::of(p, x1, w, &big);
+    let a2 = (x2 != x1).then(|| About::of(p, x2, w, &big));
     let a2 = a2.as_ref().unwrap_or(&a1);
-    let (sx, sy) = (a1.axis(w, true), a2.axis(w, false));
+    let (sx, sy) = (a1.axis(p.m, p.n, true), a2.axis(p.m, p.n, false));
     let Some(n0) = sx.cross(sy).normalize() else {
         return false;
     };
@@ -1249,7 +1301,10 @@ fn separated(x1: &[Bp; 3], x2: Option<&[Bp; 3]>, w: &Bp) -> bool {
     let (Some(ua), Some(va)) = (flat(sx), flat(sy)) else {
         return false;
     };
-    let (Some(a), Some(b)) = (a1.sector(w, true, n0, ua), a2.sector(w, false, n0, va)) else {
+    let (Some(a), Some(b)) = (
+        a1.sector((p.m, p.n), p.e[w], big[w], true, n0, ua),
+        a2.sector((p.m, p.n), p.e[w], big[w], false, n0, va),
+    ) else {
         return false;
     };
     let beta = dmath::atan2(n0.dot(ua.cross(va)), ua.dot(va));
@@ -1259,30 +1314,40 @@ fn separated(x1: &[Bp; 3], x2: Option<&[Bp; 3]>, w: &Bp) -> bool {
         && beta + dmath::atan(b.1) - dmath::atan(a.0) < dmath::PI - slack
 }
 
+/// A polynomial of degree (a, a) by its coefficients (the first (a + 1)^2).
+type Phi = (usize, [f64; 9]);
+
 /// Phi, biquadratic with 1 / W at the box's corners, edges' middles and middle (or bilinear
 /// through the corners when that is not positive): W phi is nearly constant over the box and its
-/// parts, so the shift (P - q) (W phi)_u is small. P = X phi / W phi.
-fn normal_phi(w: &Bp, order: usize) -> Option<(usize, Vec<f64>)> {
-    let (m, n) = (w.m, w.n);
-    // W at u = 0, 1/2, 1 (rows of coefficients in v), each at v = 0, 1/2, 1
-    let mid = w.half(true, 0);
+/// parts, so the shift (P - q) (W phi)_u is small. P = X phi / W phi. W is lane `w` of p.
+fn normal_phi<const K: usize>(p: &Bp<K>, w: usize, order: usize) -> Option<Phi> {
+    let (m, n) = (p.m, p.n);
+    // W along v at u = 0, 1/2 (de Casteljau down each column), 1; each at v = 0, 1/2, 1
+    let mut mid = [0.0; 2 * DEG + 2];
+    let mut col = [0.0; 2 * DEG + 2];
+    for j in 0..=n {
+        for i in 0..=m {
+            col[i] = p.c[i * (n + 1) + j][w];
+        }
+        for r in 1..=m {
+            for i in 0..=m - r {
+                col[i] = 0.5 * (col[i] + col[i + 1]);
+            }
+        }
+        mid[j] = col[0];
+    }
+    let row = |i: usize| -> [f64; 2 * DEG + 2] {
+        std::array::from_fn(|j| if j <= n { p.c[i * (n + 1) + j][w] } else { 0.0 })
+    };
     let mut f = [[0.0; 3]; 3];
-    for (i, row) in [
-        &w.c[..=n],
-        &mid.c[m * (n + 1)..=m * (n + 1) + n],
-        &w.c[m * (n + 1)..=m * (n + 1) + n],
-    ]
-    .into_iter()
-    .enumerate()
-    {
-        let mut c = [0.0; 2 * DEG + 2];
-        c[..=n].copy_from_slice(row);
-        for r in 1..=n {
-            for k in 0..=n - r {
+    for (i, r) in [row(0), mid, row(m)].into_iter().enumerate() {
+        let mut c = r;
+        for l in 1..=n {
+            for k in 0..=n - l {
                 c[k] = 0.5 * (c[k] + c[k + 1]);
             }
         }
-        f[i] = [row[0], c[0], row[n]];
+        f[i] = [r[0], c[0], r[n]];
     }
     if f.iter().flatten().any(|&v| v <= 0.0) {
         return None;
@@ -1290,41 +1355,35 @@ fn normal_phi(w: &Bp, order: usize) -> Option<(usize, Vec<f64>)> {
     let f = f.map(|r| r.map(|v| 1.0 / v));
     // the quadratic through f0, f1/2, f1 has the middle coefficient 2 f1/2 - (f0 + f1) / 2
     let mid = |a: f64, m: f64, b: f64| 2.0 * m - 0.5 * (a + b);
-    let rows: Vec<[f64; 3]> = f.iter().map(|r| [r[0], mid(r[0], r[1], r[2]), r[2]]).collect();
-    let c: Vec<f64> = (0..3)
-        .flat_map(|i| (0..3).map(move |j| (i, j)))
-        .map(|(i, j)| {
-            if i == 1 {
-                mid(rows[0][j], rows[1][j], rows[2][j])
-            } else {
-                rows[i][j]
-            }
-        })
-        .collect();
+    let rows = f.map(|r| [r[0], mid(r[0], r[1], r[2]), r[2]]);
+    let c: [f64; 9] = std::array::from_fn(|k| {
+        let (i, j) = (k / 3, k % 3);
+        if i == 1 {
+            mid(rows[0][j], rows[1][j], rows[2][j])
+        } else {
+            rows[i][j]
+        }
+    });
     if order == 2 && c.iter().all(|&x| x > 0.0) {
         Some((2, c))
     } else {
-        Some((1, vec![f[0][0], f[0][2], f[2][0], f[2][2]]))
+        Some((1, [f[0][0], f[0][2], f[2][0], f[2][2], 0.0, 0.0, 0.0, 0.0, 0.0]))
     }
 }
 
-/// X times phi.
-fn times(x: &Bp, phi: &(usize, Vec<f64>)) -> Bp {
-    x.mul_small(phi.0, phi.0, &phi.1)
-}
-
-/// P = N / W regular over the box; boxes that fail are split in four.
-fn plain_box(n: &[Bp; 3], w: &Bp, first_u: bool, st: &mut Proof) -> bool {
-    let Some(phi) = normal_phi(w, 2) else {
+/// P = N / W regular over the box (N and W the lanes of p).
+fn plain_box(p: &Bp<4>, st: &mut Proof) -> bool {
+    let Some(phi) = normal_phi(p, 3, 2) else {
         return false;
     };
-    plain_region(&n.map(|p| times(&p, &phi)), &times(w, &phi), first_u, 0, st)
+    plain_region(&p.times(&phi), true, 0, st)
 }
 
-fn plain_region(n: &[Bp; 3], w: &Bp, first_u: bool, depth: u32, st: &mut Proof) -> bool {
+/// P = N / W regular over the box; boxes that fail are split in halves.
+fn plain_region(p: &Bp<4>, first_u: bool, depth: u32, st: &mut Proof) -> bool {
     st.tests += 1;
     st.depth = st.depth.max(depth);
-    if separated(n, None, w) {
+    if separated(p, 0, 0, 3) {
         return true;
     }
     // halves, along u and v in turn
@@ -1332,37 +1391,25 @@ fn plain_region(n: &[Bp; 3], w: &Bp, first_u: bool, depth: u32, st: &mut Proof) 
         return false;
     }
     let u = depth.is_multiple_of(2) == first_u;
-    let (hn, hw) = (n.map(|x| x.halves(u)), w.halves(u));
-    plain_region(&hn.map(|x| x.0), &hw.0, first_u, depth + 1, st)
-        && plain_region(&hn.map(|x| x.1), &hw.1, first_u, depth + 1, st)
+    let (h0, h1) = p.halves(u);
+    plain_region(&h0, first_u, depth + 1, st) && plain_region(&h1, first_u, depth + 1, st)
 }
 
-/// A corner's Duffy triangle (x = sigma, y = sigma t, sigma in `sig`, start and width) where
-/// N - p_c W = sigma^3 G and W = sigma^2 W~: P - p_c = sigma G / W~ and
-/// (P - p_c) / sigma = G / W~, so the cones are of W~ P_sigma (from sigma G) and
-/// W~ P_t / sigma (from G), both finite at the corner.
-fn duffy_region(g: &[Bp; 3], w: &Bp, sig: (f64, f64), depth: u32, st: &mut Proof) -> bool {
-    {
-        st.tests += 1;
-        st.depth = st.depth.max(depth);
-        let h = g.map(|p| p.mul_affine(sig.0, sig.1));
-        if separated(&h, Some(&g.map(|p| p.elevate_u())), w) {
-            return true;
-        }
+/// A corner's Duffy triangle (x = sigma, y = sigma t) where N - p_c W = sigma^3 G and
+/// W = sigma^2 W~: P - p_c = sigma G / W~ and (P - p_c) / sigma = G / W~, so the cones are of
+/// W~ P_sigma (from sigma G, lanes 0..3 of p) and W~ P_t / sigma (from G, raised a degree in
+/// sigma to match, lanes 3..6), both finite at the corner; W~ is lane 6. Parts of the triangle
+/// carry the same polynomials over the part.
+fn duffy_region(p: &Bp<7>, depth: u32, st: &mut Proof) -> bool {
+    st.tests += 1;
+    st.depth = st.depth.max(depth);
+    if separated(p, 0, 3, 6) {
+        return true;
     }
     // halves, along sigma and t in turn
-    let u = depth.is_multiple_of(2);
     if depth >= MAX_DEPTH {
         return false;
     }
-    let (hg, hw) = (g.map(|x| x.halves(u)), w.halves(u));
-    let s = |q: f64| {
-        if u {
-            (sig.0 + 0.5 * sig.1 * q, 0.5 * sig.1)
-        } else {
-            sig
-        }
-    };
-    duffy_region(&hg.map(|x| x.0), &hw.0, s(0.0), depth + 1, st)
-        && duffy_region(&hg.map(|x| x.1), &hw.1, s(1.0), depth + 1, st)
+    let (h0, h1) = p.halves(depth.is_multiple_of(2));
+    duffy_region(&h0, depth + 1, st) && duffy_region(&h1, depth + 1, st)
 }
