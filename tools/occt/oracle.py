@@ -13,6 +13,12 @@ surface's area beyond 3c x (meshed boundary length + area / smallest radius).
                                   [--parallel] [--fuzzy 0] [--only NAME] [--show N] [--surfaces]
                                   [--gate [--known FILE]] [--save-known FILE]
 
+Given a corpus file (tools/corpus/*.json, with "cases"), builds each case in OCCT alone and
+compares it with the case's expectations (this checks the corpus' closed forms too).
+
+--tiebreak settles each volume disagreement by Monte Carlo (montecarlo.py); a part where it backs
+us is "occt-wrong" (OCCT returned a valid but wrong solid).
+
 --gate exits 1 if any part (not listed in --known) fails on our side where OCCT succeeds, or
 disagrees on volume, area or a surface's area.
 
@@ -28,7 +34,10 @@ import time
 from OCP.BRepAdaptor import BRepAdaptor_Surface
 from OCP.BRepAlgoAPI import BRepAlgoAPI_Common, BRepAlgoAPI_Cut, BRepAlgoAPI_Fuse
 from OCP.BRepBuilderAPI import BRepBuilderAPI_MakeEdge, BRepBuilderAPI_MakeFace, BRepBuilderAPI_MakeWire
+from OCP.BRepBuilderAPI import BRepBuilderAPI_MakeVertex
 from OCP.BRepCheck import BRepCheck_Analyzer
+from OCP.BRepExtrema import BRepExtrema_DistShapeShape
+from OCP.BRepFilletAPI import BRepFilletAPI_MakeFillet
 from OCP.BRepGProp import BRepGProp
 from OCP.BRepPrimAPI import BRepPrimAPI_MakePrism, BRepPrimAPI_MakeRevol, BRepPrimAPI_MakeSphere
 from OCP.GC import GC_MakeArcOfCircle
@@ -116,10 +125,36 @@ def combine(body, t, op, parallel, fuzzy):
     return algo.Shape()
 
 
+def round_edges(body, f):
+    """A fillet step: each point picks the edge nearest it."""
+    m = ShapeMap()
+    TopExp.MapShapes_s(body, TopAbs_EDGE, m)
+    edges = [TopoDS.Edge(m.FindKey(i)) for i in range(1, m.Extent() + 1)]
+    mk = BRepFilletAPI_MakeFillet(body)
+    for k, at in enumerate(f["at"]):
+        v = BRepBuilderAPI_MakeVertex(gp_Pnt(*at)).Vertex()
+
+        def dist(e):
+            d = BRepExtrema_DistShapeShape(v, e)
+            return d.Value() if d.IsDone() else math.inf
+
+        e = min(edges, key=dist)
+        if dist(e) > 1e-3:
+            raise RuntimeError(f"no edge through {at}")
+        mk.Add(f["radii"][k] if "radii" in f else f["radius"], e)
+    mk.Build()
+    if not mk.IsDone():
+        raise RuntimeError("fillet failed")
+    return mk.Shape()
+
+
 def build(features, parallel, fuzzy):
     body = None
     for i, f in enumerate(features):
         try:
+            if f["kind"] == "fillet":
+                body = round_edges(body, f)
+                continue
             t = tool(f)
             body = t if f["op"] == "new" else combine(body, t, f["op"], parallel, fuzzy)
         except Exception as e:
@@ -323,7 +358,40 @@ def compare(ours, ref):
     return "agree", worst
 
 
-GOOD = ("agree", "reject-ok", "occt-invalid", "occt-error", "occt-timeout", "occt-crash")
+GOOD = ("agree", "reject-ok", "occt-invalid", "occt-error", "occt-timeout", "occt-crash", "occt-wrong")
+
+
+def surface_counts(faces):
+    """Distinct surfaces by kind."""
+    seen = []
+    for e in faces:
+        k, v = key(e)
+        if not any(s == k and same(w, v) for s, w in seen):
+            seen.append((k, v))
+    out = {}
+    for k, _ in seen:
+        out[k] = out.get(k, 0) + 1
+    return out
+
+
+def reference(a, cases):
+    """The corpus through OCCT alone: its result against each case's expectations."""
+    from concurrent.futures import ThreadPoolExecutor
+
+    with ThreadPoolExecutor(a.jobs) as ex:
+        refs = list(ex.map(lambda c: occt(c, 1, False, 0.0, a.timeout), cases))
+    print(f"{'case':<26} {'class':<20} {'expect':<13} {'occt':<8} {'ms':>8} {'volume':>12} {'dV/V exact':>11}  "
+          f"surfaces (occt | expected)")
+    for c, r in zip(cases, refs):
+        e = c["expect"]
+        dv = "-"
+        if r["status"] == "ok" and e.get("exact"):
+            dv = f"{(r['volume'] - e['volume']) / e['volume']:+.1e}"
+        sc = surface_counts(r.get("face_areas", []))
+        print(f"{c['id']:<26} {c['class']:<20} {e['status']:<13} {r['status']:<8} {r.get('ms', math.nan):>8.1f} "
+              f"{r.get('volume', math.nan):>12.3f} {dv:>11}  {sc} | {e.get('surfaces', '')}")
+        if r["status"] != "ok":
+            print(f"      {r.get('error', '')}")
 
 
 def main():
@@ -338,11 +406,15 @@ def main():
     ap.add_argument("--out")
     ap.add_argument("--show", type=int, default=1000, help="rows to print")
     ap.add_argument("--surfaces", action="store_true", help="print the mismatched surfaces of each part")
+    ap.add_argument("--tiebreak", action="store_true",
+                    help="settle volume disagreements by Monte Carlo against the analytic tools")
     ap.add_argument("--gate", action="store_true", help="exit 1 on any disagreement or failure of ours")
     ap.add_argument("--known", help="file of part names whose failures the gate tolerates")
     ap.add_argument("--save-known", help="write the failing part names to this file")
     a = ap.parse_args()
     data = json.load(open(a.parts))
+    if "cases" in data:
+        return reference(a, data["cases"])
     parts = [p for p in data["parts"] if not a.only or p["name"] == a.only]
     from concurrent.futures import ThreadPoolExecutor
 
@@ -354,6 +426,17 @@ def main():
     for i, (p, ref) in enumerate(zip(parts, refs)):
         f = p["forge"]
         (vs, ws), (vn, wn) = compare(f["seq"], ref), compare(f["nary"], ref)
+        if a.tiebreak and "volume" in (vs, vn):
+            try:
+                import montecarlo
+
+                path = "seq" if vs == "volume" else "nary"
+                who, mv, ms = montecarlo.judge(p, f[path]["volume"], ref["volume"])
+                if who == "ours":
+                    vs, vn = ("occt-wrong" if v == "volume" else v for v in (vs, vn))
+                print(f"    {p['name']}: monte carlo {mv:.1f} +- {ms:.1f} backs {who}")
+            except ValueError:
+                pass
         for path, v in (("seq", vs), ("nary", vn)):
             tally.setdefault(path, {}).setdefault(v, []).append(p["name"])
         if vs not in GOOD or vn not in GOOD:

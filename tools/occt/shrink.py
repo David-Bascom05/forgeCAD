@@ -6,6 +6,7 @@
 """
 import argparse
 import json
+import math
 import os
 import subprocess
 import sys
@@ -62,7 +63,14 @@ def main():
     f = part["forge"][a.path]
     print(f"minimal: KEEP={','.join(map(str, keep))} ({v})")
     print(f"  occt volume {ref.get('volume')} area {ref.get('area')} shells {ref.get('shells')}")
-    print(f"  ours volume {f.get('volume_mesh')} area {f.get('area_mesh')} shells {f.get('shells')} {f['status']}")
+    print(f"  ours volume {f.get('volume')} area {f.get('area')} shells {f.get('shells')} {f['status']}")
+    try:
+        import montecarlo
+
+        who, mv, ms = montecarlo.judge(part, f.get("volume", math.nan), ref.get("volume", math.nan))
+        print(f"  monte carlo {mv:.1f} +- {ms:.1f}: backs {who}")
+    except Exception as e:
+        print(f"  monte carlo: {e}")
     with tempfile.NamedTemporaryFile("w", suffix=".json", delete=False) as t:
         json.dump(part, t, indent=1)
     print(f"  part json: {t.name}")

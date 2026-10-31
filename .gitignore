@@ -8,3 +8,4 @@
 /crates/forge-model/examples/one.rs
 /.claude/
 __pycache__/
+/tools/corpus/*.json
