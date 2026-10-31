@@ -25,7 +25,6 @@ use forge_geom::intersect::{Contact, CurveSurface, SurfaceSurface, curve_surface
 use forge_geom::{Curve, CurveGeom, SurfaceGeom};
 use forge_math::{Interval, Point3, tol};
 use forge_topo::{Body, EdgeId, FaceId, Name, VertexId};
-use std::collections::HashMap;
 use std::sync::atomic::{AtomicUsize, Ordering};
 
 /// Time spent per step of the last n-ary boolean on this thread (ns): intersect, triple
@@ -1264,16 +1263,16 @@ pub fn nary_with(
     all.sort_unstable();
     all.dedup();
     let canon = coincident(&pieces.list, &all);
-    if !canon.is_empty() {
+    if canon.iter().any(Option::is_some) {
         for job in &mut jobs {
             for h in job.2.iter_mut().flatten() {
-                if let Some(&(q, f)) = canon.get(&h.0) {
+                if let Some((q, f)) = canon[h.0] {
                     *h = (q, h.1 != f);
                 }
             }
             let bound: Vec<usize> = job.2.iter().flatten().map(|h| h.0).collect();
             for p in &mut job.3 {
-                *p = canon.get(p).map_or(*p, |c| c.0);
+                *p = canon[*p].map_or(*p, |c| c.0);
             }
             job.3.sort_unstable();
             job.3.dedup();
@@ -1412,11 +1411,9 @@ pub fn nary_with(
 
     // 5: a point of each region, just outside and just inside its tool: kept where the
     // expression differs between them
-    let mut partners: HashMap<(Side, FaceId), Vec<(Side, FaceId)>> = HashMap::new();
-    for &[x, y] in &coplanar {
-        partners.entry(x).or_default().push(y);
-        partners.entry(y).or_default().push(x);
-    }
+    // each face's coincident partners, in the order they were found
+    let mut partners: Vec<FacePair> = coplanar.iter().flat_map(|&[x, y]| [(x, y), (y, x)]).collect();
+    partners.sort_by_key(|x| x.0);
     // whether a region lies inside tool k, by how it leans off k's face along a new edge they share
     let lean = |r: &Reg, k: Side| -> Option<bool> {
         let body = tools[r.side];
@@ -1491,11 +1488,13 @@ pub fn nary_with(
                     }
                     Where::Outside => {}
                     Where::On => {
-                        let on = partners.get(&(r.side, r.face)).and_then(|ps| {
-                            ps.iter()
-                                .find(|&&(sd, g)| sd == k && index[k].point_in_face(g, p) != Where::Outside)
-                        });
-                        let Some(&(_, g)) = on else {
+                        let from = partners.partition_point(|x| x.0 < (r.side, r.face));
+                        let on = partners[from..]
+                            .iter()
+                            .take_while(|x| x.0 == (r.side, r.face))
+                            .map(|x| x.1)
+                            .find(|&(sd, g)| sd == k && index[k].point_in_face(g, p) != Where::Outside);
+                        let Some((_, g)) = on else {
                             return Ok(Err(k));
                         };
                         let other = tools[k];
@@ -1763,7 +1762,7 @@ pub fn nary_with(
     let mut uses = vec![0u8; list.len()];
     for &(ri, _) in &kept {
         for &(p, _) in regs[ri].loops.iter().flatten() {
-            let p = canon.get(&p).map_or(p, |c| c.0);
+            let p = canon[p].map_or(p, |c| c.0);
             uses[p] = uses[p].saturating_add(1);
             if uses[p] > 2 {
                 let pc = &list[p];
@@ -1811,7 +1810,9 @@ pub fn nary_with(
     }
     let mut out = Body::new();
     let shell = out.add_shell();
-    let mut vmap: HashMap<VKey, VertexId> = HashMap::new();
+    // the body's vertex of each tool vertex (per tool, made on first use) and each new one
+    let mut old_v: Vec<Vec<Option<VertexId>>> = vec![Vec::new(); n];
+    let mut new_v: Vec<Option<VertexId>> = vec![None; points.len()];
     let mut emap: Vec<Option<EdgeId>> = vec![None; list.len()];
     for &(ri, flip) in &kept {
         let r = &regs[ri];
@@ -1824,8 +1825,8 @@ pub fn nary_with(
             for k in 0..lp.len() {
                 let (p, fwd) = lp[if flip { lp.len() - 1 - k } else { k }];
                 let fwd = fwd != flip;
-                let (p, fwd) = match canon.get(&p) {
-                    Some(&(q, f)) => (q, fwd != f),
+                let (p, fwd) = match canon[p] {
+                    Some((q, f)) => (q, fwd != f),
                     None => (p, fwd),
                 };
                 let e = match emap[p] {
@@ -1833,7 +1834,16 @@ pub fn nary_with(
                     None => {
                         let pc = &list[p];
                         let mut vertex = |out: &mut Body, v: VKey| -> VertexId {
-                            *vmap.entry(v).or_insert_with(|| match v {
+                            let slot = match v {
+                                VKey::Old(sd, id) => {
+                                    if old_v[sd].is_empty() {
+                                        old_v[sd] = vec![None; tools[sd].vertices.len()];
+                                    }
+                                    &mut old_v[sd][id.index()]
+                                }
+                                VKey::New(i) => &mut new_v[i as usize],
+                            };
+                            *slot.get_or_insert_with(|| match v {
                                 VKey::Old(sd, id) => {
                                     let x = tools[sd].vertex(id);
                                     let from = grown.partition_point(|g| g.0 < v);
@@ -1869,24 +1879,24 @@ pub fn nary_with(
     Ok(out)
 }
 
-/// Pieces among `ps` with the same ends along the same curve as a lower one: piece -> (the
+/// Pieces among `ps` with the same ends along the same curve as a lower one: by piece, (the
 /// lower one, whether it runs the other way).
-fn coincident(list: &[Piece], ps: &[usize]) -> HashMap<usize, (usize, bool)> {
+fn coincident(list: &[Piece], ps: &[usize]) -> Vec<Option<(usize, bool)>> {
     let key = |pc: &Piece| (pc.start.min(pc.end), pc.start.max(pc.end));
     let mut by_ends: Vec<((VKey, VKey), usize)> = ps.iter().map(|&p| (key(&list[p]), p)).collect();
     by_ends.sort_unstable();
-    let mut canon = HashMap::new();
+    let mut canon = vec![None; list.len()];
     for g in by_ends.chunk_by(|x, y| x.0 == y.0) {
         for (k, &(_, p)) in g.iter().enumerate().skip(1) {
             let pc = &list[p];
             let mid = pc.curve.eval(pc.range.mid());
             for &(_, q) in &g[..k] {
-                if canon.contains_key(&q) {
+                if canon[q].is_some() {
                     continue;
                 }
                 let o = &list[q];
                 if o.curve.eval(o.curve.closest(mid, o.range)).distance(mid) <= tol::LINEAR {
-                    canon.insert(p, (q, pc.start != o.start));
+                    canon[p] = Some((q, pc.start != o.start));
                     break;
                 }
             }
