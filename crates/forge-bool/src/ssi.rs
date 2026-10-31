@@ -27,7 +27,8 @@ pub fn surfaces_in(a: &Surface, b: &Surface, region: Box3) -> SurfaceSurface {
                     .map(|c| (Curve::Intersection(std::sync::Arc::new(c)), Contact::Crossing))
                     .collect(),
             ),
-            None => SurfaceSurface::NotAnalytic,
+            // a screw face the tracer cannot follow across its carried track's corners
+            None => forge_geom::screw::meet_general(a, b, region).unwrap_or(SurfaceSurface::NotAnalytic),
         },
         r => r,
     }
