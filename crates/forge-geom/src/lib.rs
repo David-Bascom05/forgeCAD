@@ -19,4 +19,4 @@ pub mod varblend;
 pub mod wrap;
 
 pub use curve::{Circle, Curve, CurveGeom, Domain1, Ellipse, Hyperbola, Line, Parabola};
-pub use surface::{Cone, Cylinder, Domain2, Plane, Sphere, Surface, SurfaceGeom, Torus};
+pub use surface::{Cone, Cylinder, Domain2, Plane, ShapeBounds, Sphere, Surface, SurfaceGeom, Torus};

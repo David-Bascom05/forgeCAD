@@ -148,9 +148,9 @@ impl Nodes {
         Nodes { lo, hi, at }
     }
 
-    /// Steps from bounds on the second derivatives: a little under half the tolerance along u,
-    /// the rest of it on a cell's diagonal, so the grid's triangles need no look.
-    fn bounded_counts(&self, [uu, uv, vv]: [f64; 3], q: &Quality) -> Counts {
+    /// Steps from bounds on the second derivatives' sizes over the whole box: a little under half
+    /// the tolerance along u, the rest of it on a cell's diagonal.
+    fn whole_counts(&self, [uu, uv, vv]: [f64; 3], q: &Quality) -> Counts {
         let c = 0.9 * 8.0 * q.chord;
         let du = if uu > 0.0 {
             (0.5 * c / uu).sqrt()
@@ -251,6 +251,307 @@ impl Nodes {
 
 /// Grid steps per cell of `Nodes`, across u and across v.
 type Counts = [[(usize, usize); G]; G];
+
+/// A procedural face's bounds on its bending over each cell of the G x G split of its parameter
+/// box (see `Bend`), over the cells round each (a point's nearest on the surface lies within a
+/// cell of it), and over the box grown by half each way.
+struct Cells {
+    lo: Point2,
+    hi: Point2,
+    b: Vec<Bend>,
+    round: Vec<Bend>,
+    far: (Bend, Point2, Point2),
+    /// Bounds on the second derivatives' sizes over the whole box: a chord across d sags at most
+    /// Q_m(d) / 8 from the surface, so most chords need nothing finer.
+    whole: [f64; 3],
+    /// Cells per unit u and v (none along a way the box has no width).
+    inv: (f64, f64),
+    /// The grid's steps per cell, where they are the bounds' own (`counts`): a chord or triangle
+    /// of grid points within one cell and a step each way lies within the chord.
+    fit: Option<Counts>,
+}
+
+/// Bounds over a cell: on the normal's part of the second derivatives (`k`) and on their sizes
+/// (`m`), on the normal's turn per unit u and v, and on the rows of [S_u S_v]'s pseudo-inverse
+/// (|S_v| and |S_u| over |S_u x S_v|: a step in the tangent plane of length l moves u and v by at
+/// most l times these). Without bounds, all infinite.
+#[derive(Clone, Copy, Debug, PartialEq)]
+struct Bend {
+    k: [f64; 3],
+    m: [f64; 3],
+    turn: (f64, f64),
+    inv: (f64, f64),
+}
+
+impl Bend {
+    const NONE: Bend = Bend {
+        k: [f64::INFINITY; 3],
+        m: [f64::INFINITY; 3],
+        turn: (f64::INFINITY, f64::INFINITY),
+        inv: (f64::INFINITY, f64::INFINITY),
+    };
+
+    fn of(x: Option<forge_geom::ShapeBounds>) -> Bend {
+        x.map_or(Bend::NONE, |x| Bend {
+            k: x.k,
+            m: x.m,
+            turn: x.turn(),
+            inv: (x.d[1] / x.area, x.d[0] / x.area),
+        })
+    }
+
+    fn max(self, o: Bend) -> Bend {
+        let mx = |a: [f64; 3], b: [f64; 3]| [a[0].max(b[0]), a[1].max(b[1]), a[2].max(b[2])];
+        Bend {
+            k: mx(self.k, o.k),
+            m: mx(self.m, o.m),
+            turn: (self.turn.0.max(o.turn.0), self.turn.1.max(o.turn.1)),
+            inv: (self.inv.0.max(o.inv.0), self.inv.1.max(o.inv.1)),
+        }
+    }
+}
+
+impl Cells {
+    /// The bounds over the whole box (None without any); the cells' come with `split`.
+    fn new(pr: &forge_geom::surface::Proc, lo: Point2, hi: Point2) -> Option<Cells> {
+        // a boundary sample past the surface's own parameters by a rounding error is on it still
+        let d = pr.domain();
+        let (lo, hi) = (
+            Point2::new(lo.x.max(d.u.lo).min(hi.x), lo.y.max(d.v.lo).min(hi.y)),
+            Point2::new(hi.x.min(d.u.hi).max(lo.x), hi.y.min(d.v.hi).max(lo.y)),
+        );
+        let whole = over(pr, lo, hi)?;
+        let inv = |w: f64| if w > 0.0 { G as f64 / w } else { 0.0 };
+        Some(Cells {
+            lo,
+            hi,
+            b: Vec::new(),
+            round: Vec::new(),
+            far: (Bend::NONE, lo, hi),
+            whole: whole.m,
+            inv: (inv(hi.x - lo.x), inv(hi.y - lo.y)),
+            fit: None,
+        })
+    }
+
+    /// The bounds over each cell, over the cells round each, and over the grown box.
+    fn split(&mut self, pr: &forge_geom::surface::Proc) {
+        let (lo, hi) = (self.lo, self.hi);
+        let mut b = Vec::with_capacity(G * G);
+        for i in 0..G {
+            for j in 0..G {
+                b.push(Bend::of(over(
+                    pr,
+                    Nodes::node(lo, hi, i, j),
+                    Nodes::node(lo, hi, i + 1, j + 1),
+                )));
+            }
+        }
+        self.round = (0..G * G)
+            .map(|c| {
+                let (i, j) = (c / G, c % G);
+                let mut r = b[c];
+                for a in i.saturating_sub(1)..(i + 2).min(G) {
+                    for d in j.saturating_sub(1)..(j + 2).min(G) {
+                        r = r.max(b[a * G + d]);
+                    }
+                }
+                r
+            })
+            .collect();
+        self.b = b;
+        let (w, h) = (0.5 * (hi.x - lo.x), 0.5 * (hi.y - lo.y));
+        let (flo, fhi) = (Point2::new(lo.x - w, lo.y - h), Point2::new(hi.x + w, hi.y + h));
+        self.far = (Bend::of(over(pr, flo, fhi)), flo, fhi);
+    }
+
+    /// The cell holding a point.
+    fn cell(&self, p: Point2) -> (usize, usize) {
+        (
+            self.at(p.x, self.lo.x, self.inv.0),
+            self.at(p.y, self.lo.y, self.inv.1),
+        )
+    }
+
+    /// The cell index along one way (truncation is the floor: never below zero).
+    fn at(&self, v: f64, lo: f64, inv: f64) -> usize {
+        (((v - lo) * inv).max(0.0) as usize).min(G - 1)
+    }
+
+    fn size(&self) -> (f64, f64) {
+        (
+            (self.hi.x - self.lo.x) / G as f64,
+            (self.hi.y - self.lo.y) / G as f64,
+        )
+    }
+
+    /// Whether the mean of points `p` (in parameters, `grid`: all the grid's or inner ones) lies
+    /// within the chord of the surface, its corners on it, by the bounds (`gap_by`).
+    fn within<const N: usize>(&self, p: [Point2; N], grid: bool, chord: f64) -> bool {
+        let (mut lo, mut hi) = (p[0], p[0]);
+        for q in &p[1..] {
+            (lo, hi) = (
+                Point2::new(lo.x.min(q.x), lo.y.min(q.y)),
+                Point2::new(hi.x.max(q.x), hi.y.max(q.y)),
+            );
+        }
+        let n = N as f64;
+        let x = Point2::new(
+            p.iter().map(|q| q.x).sum::<f64>() / n,
+            p.iter().map(|q| q.y).sum::<f64>() / n,
+        );
+        if p.iter()
+            .map(|q| quad(self.whole, (q.x - x.x, q.y - x.y)))
+            .sum::<f64>()
+            / (2.0 * n)
+            <= 0.98 * chord
+        {
+            return true;
+        }
+        if self.b.is_empty() {
+            return false;
+        }
+        let ((i0, j0), (i1, j1)) = (self.cell(lo), self.cell(hi));
+        if i0 == i1 && j0 == j1 {
+            if grid && let Some(n) = &self.fit {
+                let (cw, ch) = self.size();
+                let (nu, nv) = n[i0][j0];
+                if hi.x - lo.x <= cw / nu as f64 * (1.0 + 1e-9)
+                    && hi.y - lo.y <= ch / nv as f64 * (1.0 + 1e-9)
+                {
+                    return true;
+                }
+            }
+            let c = i0 * G + j0;
+            return self.gap_by(&self.b[c], &self.round[c], p) <= 0.98 * chord;
+        }
+        let (mut b, mut r) = (self.b[i0 * G + j0], self.round[i0 * G + j0]);
+        for i in i0..=i1 {
+            for j in j0..=j1 {
+                (b, r) = (b.max(self.b[i * G + j]), r.max(self.round[i * G + j]));
+            }
+        }
+        self.gap_by(&b, &r, p) <= 0.98 * chord
+    }
+
+    /// The most the mean x of points `p` lies off the surface, its corners on it, by bounds `b`
+    /// holding over the points' box and `r` over the cells round it.
+    ///
+    /// By Taylor with the integral remainder about x, the interpolation less S(x) is the mean of
+    /// the remainders R_i = int (1 - t) S''(x + t h_i)(h_i, h_i), h_i = p_i - x. Along the normal
+    /// n at x each is at most half of Q_k(h_i) + turn Q_m(h_i), the normal turning by at most
+    /// `turn` between x and the segments' points; the rest, at most the mean of Q_m(h_i) / 2,
+    /// lies in the tangent plane (`shift`).
+    fn gap_by<const N: usize>(&self, b: &Bend, r: &Bend, p: [Point2; N]) -> f64 {
+        let n = N as f64;
+        let x = Point2::new(
+            p.iter().map(|q| q.x).sum::<f64>() / n,
+            p.iter().map(|q| q.y).sum::<f64>() / n,
+        );
+        let (mut hu, mut hv) = (0.0f64, 0.0f64);
+        for pi in &p {
+            (hu, hv) = (hu.max((pi.x - x.x).abs()), hv.max((pi.y - x.y).abs()));
+        }
+        let turn = (b.turn.0 * hu + b.turn.1 * hv).min(2.0);
+        let (mut along, mut e) = (0.0, 0.0);
+        for pi in &p {
+            let h = (pi.x - x.x, pi.y - x.y);
+            let qm = quad(b.m, h);
+            (along, e) = (along + quad(b.k, h) + turn * qm, e + qm);
+        }
+        self.shift(b, r, Some(x), along / (2.0 * n), e / (2.0 * n))
+    }
+
+    /// The most any chord or triangle no wider than `du` by `dv` and within bounds `b` lies off
+    /// the surface, wherever it is in the box. A chord's offsets are half of it; a triangle's
+    /// from its middle sum at most 2/3 of the box's squares (three points in a width w spread at
+    /// most 2 w^2 / 3 about their mean) and its products, and reach at most 2/3 of it.
+    fn gap_box(&self, b: &Bend, r: &Bend, du: f64, dv: f64) -> f64 {
+        let (k, m) = (quad(b.k, (du, dv)), quad(b.m, (du, dv)));
+        let turn = b.turn.0 * du + b.turn.1 * dv;
+        let chord = (k + (0.5 * turn).min(2.0) * m) / 8.0;
+        let triangle = (k + (2.0 / 3.0 * turn).min(2.0) * m) / 9.0;
+        self.shift(b, r, None, chord.max(triangle), m / 8.0)
+    }
+
+    /// The most a point lies off the surface that lies `along` off it at x along the normal n
+    /// there and `e` off it within the tangent plane, by bounds `b` at x and `r` over the cells
+    /// round it: the surface's point at x + t, J t that tangent part, its u and v at most e
+    /// times the rows of J's pseudo-inverse, is off S(x) + J t by at most S''(t, t) / 2. The step
+    /// stays within the cells round x, or else within the grown box and its bounds; with x
+    /// unknown (None), within half the box and by both.
+    fn shift(&self, b: &Bend, r: &Bend, x: Option<Point2>, along: f64, e: f64) -> f64 {
+        let (du, dv) = (e * b.inv.0, e * b.inv.1);
+        let (cw, ch) = self.size();
+        let inside = |x: Point2, lo: Point2, hi: Point2| {
+            x.x - du >= lo.x && x.x + du <= hi.x && x.y - dv >= lo.y && x.y + dv <= hi.y
+        };
+        let m = match x {
+            None if du <= 0.5 * (self.hi.x - self.lo.x) && dv <= 0.5 * (self.hi.y - self.lo.y) => {
+                r.max(self.far.0).m
+            }
+            Some(x) if du <= cw && dv <= ch && inside(x, self.lo, self.hi) => r.m,
+            Some(x) if inside(x, self.far.1, self.far.2) => self.far.0.m,
+            _ => return f64::INFINITY,
+        };
+        along + 0.5 * quad(m, (du, dv))
+    }
+
+    /// Grid steps per cell from its bounds, so that any chord or triangle in the cell no wider
+    /// than a step each way lies within the chord by `gap_box`, with room to spare: from one step
+    /// each way, each round adds steps the way that brings the gap down further.
+    fn counts(&self, q: &Quality) -> Option<Counts> {
+        let (cw, ch) = self.size();
+        let mut n = [[(1, 1); G]; G];
+        let mut last: Option<(Bend, (usize, usize))> = None;
+        for (i, row) in n.iter_mut().enumerate() {
+            for (j, cell) in row.iter_mut().enumerate() {
+                let b = &self.b[i * G + j];
+                // cells alike (as along a screw) step alike
+                if let Some((x, s)) = last
+                    && x == *b
+                {
+                    *cell = s;
+                    continue;
+                }
+                // no fewer steps than the normal bending alone needs
+                let least =
+                    |w: f64, k: f64| (w * (k / (7.2 * q.chord)).sqrt()).ceil().clamp(1.0, 1e6) as usize;
+                let (mut a, mut c) = (least(cw, b.k[0]), least(ch, b.k[2]));
+                let r = &self.round[i * G + j];
+                let at = |a: usize, c: usize| self.gap_box(b, r, cw / a as f64, ch / c as f64);
+                let mut now = at(a, c);
+                while now > 0.9 * q.chord {
+                    if a * c > 1 << 20 {
+                        return None;
+                    }
+                    let (x, y) = (at(a + 1 + a / 8, c), at(a, c + 1 + c / 8));
+                    if x <= y {
+                        (a, now) = (a + 1 + a / 8, x);
+                    } else {
+                        (c, now) = (c + 1 + c / 8, y);
+                    }
+                }
+                *cell = (a, c);
+                last = Some((*b, (a, c)));
+            }
+        }
+        Some(n)
+    }
+}
+
+/// The surface's bounds over the parameter box from `a` to `c`.
+fn over(pr: &forge_geom::surface::Proc, a: Point2, c: Point2) -> Option<forge_geom::ShapeBounds> {
+    pr.shape_bounds(forge_math::Box2::new(
+        forge_math::Interval::new(a.x, c.x),
+        forge_math::Interval::new(a.y, c.y),
+    ))
+}
+
+/// b_uu h_u^2 + 2 b_uv |h_u h_v| + b_vv h_v^2.
+fn quad(b: [f64; 3], h: (f64, f64)) -> f64 {
+    b[0] * h.0 * h.0 + 2.0 * b[1] * (h.0 * h.1).abs() + b[2] * h.1 * h.1
+}
 
 /// Mesh vertices joined along edges: `nbr[start[v]..start[v + 1]]` are v's neighbours, and
 /// `edges[on[v]..on[v + 1]]` the edges v lies on.
@@ -427,12 +728,9 @@ fn tessellate_face(
         lo = Point2::new(lo.x.min(p.x), lo.y.min(p.y));
         hi = Point2::new(hi.x.max(p.x), hi.y.max(p.y));
     }
-    // a procedural surface's second derivatives bounded by its construction, where it can
-    let bounds = match surface {
-        Surface::Procedural(pr) => pr.second_bounds(forge_math::Box2::new(
-            forge_math::Interval::new(lo.x, hi.x),
-            forge_math::Interval::new(lo.y, hi.y),
-        )),
+    // a procedural surface's bending bounded by its construction, where it can
+    let mut cells = match surface {
+        Surface::Procedural(pr) => Cells::new(pr, lo, hi),
         _ => None,
     };
     let mut nodes = None;
@@ -446,15 +744,24 @@ fn tessellate_face(
             cos_a: c.cos_a(),
         },
         Surface::Procedural(_) => {
+            // the grid from curvatures sampled at the nodes, or where the bounds' grids (whose
+            // chords and triangles need no look) have no more points, theirs: from the whole box's
+            // bounds, or on a face of many points the cells'
             let n = Nodes::new(surface, lo, hi);
             let mut c = n.counts(surface, q);
-            // the bounds' grid needs no look at its triangles; where it has no more points than
-            // the sampled curvatures' grid it is the one
-            if let Some(b) = bounds {
-                let tight = n.bounded_counts(b, q);
-                let size = |c: &Counts| c.iter().flatten().map(|&(a, b)| a * b).sum::<usize>();
-                if size(&tight) <= size(&c) {
-                    c = tight;
+            let size = |c: &Counts| c.iter().flatten().map(|&(a, b)| a * b).sum::<usize>();
+            if let (Some(b), Surface::Procedural(pr)) = (cells.as_mut(), surface) {
+                let w = n.whole_counts(b.whole, q);
+                if size(&w) <= size(&c) {
+                    c = w;
+                }
+                if size(&c) > 2 * G * G {
+                    b.split(pr);
+                    if let Some(t) = b.counts(q)
+                        && size(&t) <= size(&c)
+                    {
+                        (c, b.fit) = (t, Some(t));
+                    }
                 }
             }
             let (a, b) = n.scale(&c);
@@ -668,31 +975,37 @@ fn tessellate_face(
         Surface::Procedural(_) => strays_from(surface, x, layout.uv(p), q.chord),
         _ => surface.implicit(x).abs() > q.chord,
     };
-    // within the chord by the bounds on a procedural surface's second derivatives
-    let bounded = |a: Point2, b: Point2| {
-        let (a, b) = (layout.uv(a), layout.uv(b));
-        bounds.is_some_and(|m| sag(m, b.x - a.x, b.y - a.y) <= 0.98 * q.chord)
+    // within the chord by the bounds on a procedural surface's bending (`grid`: all inner points)
+    let bounded2 = |a: Point2, b: Point2, grid: bool| {
+        cells
+            .as_ref()
+            .is_some_and(|c| c.within([layout.uv(a), layout.uv(b)], grid, q.chord))
+    };
+    let bounded3 = |p: [Point2; 3], grid: bool| {
+        cells
+            .as_ref()
+            .is_some_and(|c| c.within(p.map(|x| layout.uv(x)), grid, q.chord))
     };
     let edge = |ia: u32, ib: u32, a: Point2, b: Point2| {
-        if ia >= nb && ib >= nb && within(a, b) {
+        let grid = ia >= nb && ib >= nb;
+        if grid && within(a, b) {
             return false;
         }
         on_edge(ia, ib)
             || (!flat
                 && (shared(ia, ib)
-                    || (!bounded(a, b) && off(pos(ia, a).lerp(pos(ib, b), 0.5), a.lerp(b, 0.5)))))
+                    || (!bounded2(a, b, grid) && off(pos(ia, a).lerp(pos(ib, b), 0.5), a.lerp(b, 0.5)))))
     };
     // (a long triangle on a cone, between rulings at its two ends, can sag in its middle past
     // its sides too)
     let both_ways = doubly_curved(surface) || matches!(surface, Surface::Procedural(_) | Surface::Cone(_));
     let triangle = |v: [u32; 3], p: [Point2; 3]| {
         let m = Point2::new((p[0].x + p[1].x + p[2].x) / 3.0, (p[0].y + p[1].y + p[2].y) / 3.0);
-        !(v.iter().all(|&k| k >= nb) && (0..3).all(|k| within(p[k], p[(k + 1) % 3])))
-            && !bounds.is_some_and(|b| middle_sag(b, p.map(|x| layout.uv(x))) <= 0.98 * q.chord)
-            && {
-                let x = [0, 1, 2].map(|k| pos(v[k], p[k]));
-                off(x[0].lerp(x[1], 0.5).lerp(x[2], 1.0 / 3.0), m)
-            }
+        let grid = v.iter().all(|&k| k >= nb);
+        !(grid && (0..3).all(|k| within(p[k], p[(k + 1) % 3]))) && !bounded3(p, grid) && {
+            let x = [0, 1, 2].map(|k| pos(v[k], p[k]));
+            off(x[0].lerp(x[1], 0.5).lerp(x[2], 1.0 / 3.0), m)
+        }
     };
     let strays = Tests(edge, triangle, both_ways);
     let tri = match triangulate_refined(&scaled, &loops, &interior, Some(&strays)) {
@@ -829,20 +1142,6 @@ fn strays_from(s: &Surface, x: forge_math::Point3, uv: Point2, c: f64) -> bool {
         }
     }
     true
-}
-
-/// The most a chord across `d` in parameters sags from the surface, given bounds `b` on its
-/// second derivatives' sizes: an eighth of the second derivative along it.
-fn sag(b: [f64; 3], du: f64, dv: f64) -> f64 {
-    (b[0] * du * du + 2.0 * b[1] * (du * dv).abs() + b[2] * dv * dv) / 8.0
-}
-
-/// The most a triangle's centroid (corners at parameters `p`) lies off the surface: the
-/// surface less its linear interpolation there is half the mean of the second derivative along
-/// each corner's offset (Taylor with the integral remainder, the linear terms cancelling).
-fn middle_sag(b: [f64; 3], p: [Point2; 3]) -> f64 {
-    let c = Point2::new((p[0].x + p[1].x + p[2].x) / 3.0, (p[0].y + p[1].y + p[2].y) / 3.0);
-    p.iter().map(|&x| sag(b, x.x - c.x, x.y - c.y)).sum::<f64>() * 8.0 / 6.0
 }
 
 /// A refinement's tests: edges, triangles, and whether triangles are looked at.

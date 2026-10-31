@@ -17,7 +17,7 @@
 //! the face.
 
 use crate::curve::{CurveDeriv, Domain1, ProcCurve, ProceduralCurve};
-use crate::surface::{Domain2, Proc, Procedural, SurfDeriv, Surface};
+use crate::surface::{Domain2, Proc, Procedural, ShapeBounds, SurfDeriv, Surface};
 use forge_math::linalg::solve2;
 use forge_math::{Box2, Box3, Frame, Interval, Point2, Point3, Vec2, Vec3, dmath, tol};
 use std::sync::Arc;
@@ -682,30 +682,62 @@ impl Procedural for Screw {
             self.ring.pieces[0].s.length().max(tol::LINEAR),
         )
     }
-    fn second_bounds(&self, uv: Box2) -> Option<[f64; 3]> {
-        // S = O + e(u) r + z h, r = x(v) + a u, h = y(v) + b u for section point (x, y)(v):
-        // S_uu = 2 a e' - r e, S_uv = x'(v) e', S_vv = x''(v) e + y''(v) z
-        let (mut r, mut d1, mut d2) = (0.0f64, 0.0f64, 0.0f64);
+    fn shape_bounds(&self, uv: Box2) -> Option<ShapeBounds> {
+        // S = O + e(u) r + z h, r = x(v) + a u, h = y(v) + b u for section point (x, y)(v), in the
+        // frame (e, e', z): S_u = (a, r, b), S_v = (x', 0, y'), S_uu = (-r, 2a, 0), S_uv = (0, x', 0),
+        // S_vv = (x'', 0, y''), S_u.S_v = a x' + b y', and N = S_u x S_v = (r y', b x' - a y', -r x')
+        // with |N| >= r |S_v|.
+        // So |n.S_uu| <= r |y'| / |S_v| + 2 |a|, |n.S_uv| <= |x'| |b x' - a y'| / |N|, and
+        // |n.S_vv| = r |x'' y' - y'' x'| / |N| <= the section's curvature times |S_v|^2.
+        let (a, b) = (self.m.a, self.m.b);
+        let (mut rlo, mut rhi) = (f64::INFINITY, 0.0f64);
+        let (mut s, mut smax, mut x1, mut y1, mut d2) = (f64::INFINITY, 0.0f64, 0.0f64, 0.0f64, 0.0f64);
         let n = self.ring.pieces.len() as i64;
+        let mag = |i: Interval| i.lo.abs().max(i.hi.abs());
         let mut v = uv.v.lo;
         loop {
             let (j, t0) = ((v.floor() as i64).rem_euclid(n) as usize, v - v.floor());
             let end = (v.floor() + 1.0).min(uv.v.hi);
-            let s = self.ring.pieces[j].s;
-            let rr = s.bbox(Interval::new(t0, (t0 + (end - v)).min(1.0))).0 + uv.u * self.m.a;
-            r = r.max(rr.lo.abs()).max(rr.hi.abs());
-            let (l1, l2) = match s {
-                Section::Line { a, b } => (a.distance(b), 0.0),
-                Section::Arc { r, sweep, .. } => (r * sweep.abs(), r * sweep * sweep),
+            let t = Interval::new(t0, (t0 + (end - v)).min(1.0));
+            let sec = self.ring.pieces[j].s;
+            let rr = sec.bbox(t).0 + uv.u * a;
+            rhi = rhi.max(mag(rr));
+            rlo = rlo.min(if rr.lo > 0.0 {
+                rr.lo
+            } else if rr.hi < 0.0 {
+                -rr.hi
+            } else {
+                0.0
+            });
+            let (l1, dx, dy, l2) = match sec {
+                Section::Line { a: p, b: q } => (p.distance(q), (q.x - p.x).abs(), (q.y - p.y).abs(), 0.0),
+                Section::Arc { r, start, sweep, .. } => {
+                    let (k, ang) = ((r * sweep).abs(), Interval::point(start) + t * sweep);
+                    (k, k * mag(ang.sin()), k * mag(ang.cos()), r * sweep * sweep)
+                }
             };
-            (d1, d2) = (d1.max(l1), d2.max(l2));
+            (s, smax, x1, y1, d2) = (s.min(l1), smax.max(l1), x1.max(dx), y1.max(dy), d2.max(l2));
             if end >= uv.v.hi {
                 break;
             }
             v = end;
         }
-        let a = self.m.a;
-        Some([(4.0 * a * a + r * r).sqrt(), d1, d2])
+        let area = rlo * s;
+        let tw = (b.abs() * x1 + a.abs() * y1) * x1;
+        Some(ShapeBounds {
+            k: [
+                if s > 0.0 { rhi * y1 / s } else { f64::INFINITY } + 2.0 * a.abs(),
+                if area > 0.0 { x1.min(tw / area) } else { x1 },
+                d2,
+            ],
+            m: [(4.0 * a * a + rhi * rhi).sqrt(), x1, d2],
+            d: [
+                (a * a + rhi * rhi + b * b).sqrt(),
+                smax,
+                a.abs() * x1 + b.abs() * y1,
+            ],
+            area,
+        })
     }
     fn min_radius(&self) -> f64 {
         let r = match self.ring.pieces[0].s {

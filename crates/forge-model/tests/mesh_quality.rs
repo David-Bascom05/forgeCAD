@@ -202,13 +202,16 @@ fn fillet_cases() {
     check(parts, &[0.002, 0.01, 0.25]);
 }
 
-/// A procedural surface's bounds on its second derivatives hold over its faces' parameter boxes:
-/// meshing takes chords and triangles within them as within the chord without a look.
+/// A procedural surface's bounds on its bending hold over its faces' parameter boxes and over
+/// random boxes inside them, against the derivatives sampled there: meshing takes chords and
+/// triangles within them as within the chord without a look.
 #[test]
-fn second_derivative_bounds_hold() {
+fn shape_bounds_hold() {
     let mut parts: Vec<Part> = suite::parts().into_iter().map(|(_, p)| p).collect();
     parts.extend(fillets::cases().into_iter().map(|c| c.1));
-    let mut checked = 0;
+    parts.extend(fillets::variable_cases().into_iter().map(|c| c.1));
+    let mut rng = forge_math::rng::Rng::new(7);
+    let (mut faces, mut boxes) = (0, 0);
     for part in parts {
         let b = part.regenerate().expect("regenerates");
         for f in b.face_ids() {
@@ -223,29 +226,79 @@ fn second_derivative_bounds_hold() {
                 lo = Point2::new(lo.x.min(p.x), lo.y.min(p.y));
                 hi = Point2::new(hi.x.max(p.x), hi.y.max(p.y));
             }
-            let bx = Box2::new(Interval::new(lo.x, hi.x), Interval::new(lo.y, hi.y));
-            let Some([uu, uv, vv]) = pr.second_bounds(bx) else {
+            if pr
+                .shape_bounds(Box2::new(Interval::new(lo.x, hi.x), Interval::new(lo.y, hi.y)))
+                .is_none()
+            {
                 continue;
-            };
-            checked += 1;
-            for i in 0..=8 {
-                for j in 0..=8 {
-                    let p = Point2::new(
-                        lo.x + (hi.x - lo.x) * i as f64 / 8.0,
-                        lo.y + (hi.y - lo.y) * j as f64 / 8.0,
-                    );
-                    let d = s.deriv(p);
-                    let ok = |x: f64, m: f64| x <= m * (1.0 + 1e-9) + 1e-9;
-                    assert!(
-                        ok(d.duu.length(), uu) && ok(d.duv.length(), uv) && ok(d.dvv.length(), vv),
-                        "face {f:?} at {p:?}: {:?} over {:?}",
-                        (d.duu.length(), d.duv.length(), d.dvv.length()),
-                        (uu, uv, vv)
-                    );
+            }
+            faces += 1;
+            for n in 0..24 {
+                // the whole box, then boxes from a half down to a fiftieth of it each way
+                let (u, v) = if n == 0 {
+                    (Interval::new(lo.x, hi.x), Interval::new(lo.y, hi.y))
+                } else {
+                    let pick = |l: f64, h: f64, r: &mut forge_math::rng::Rng| {
+                        let w = (h - l) * r.range(0.02, 0.5);
+                        let a = r.range(l, h - w);
+                        Interval::new(a, a + w)
+                    };
+                    (pick(lo.x, hi.x, &mut rng), pick(lo.y, hi.y, &mut rng))
+                };
+                let Some(sb) = pr.shape_bounds(Box2::new(u, v)) else {
+                    continue;
+                };
+                boxes += 1;
+                for i in 0..=6 {
+                    for j in 0..=6 {
+                        let p = Point2::new(
+                            u.lo + u.width() * i as f64 / 6.0,
+                            v.lo + v.width() * j as f64 / 6.0,
+                        );
+                        let d = s.deriv(p);
+                        let Some(nrm) = d.du.cross(d.dv).normalize() else {
+                            continue;
+                        };
+                        let nrm = nrm.get();
+                        let (e, ff, g) = (d.du.dot(d.du), d.du.dot(d.dv), d.dv.dot(d.dv));
+                        let least = ((e * g - ff * ff)
+                            / (0.5 * (e + g) + (0.25 * (e - g) * (e - g) + ff * ff).sqrt()))
+                        .max(0.0)
+                        .sqrt();
+                        let sd = [d.duu, d.duv, d.dvv];
+                        let first = [d.du.length(), d.dv.length(), ff.abs()];
+                        let area = d.du.cross(d.dv).length();
+                        // the normal's turn rates against central differences of it
+                        let h = 1e-6;
+                        let nat = |q: Point2| s.deriv(q).du.cross(s.deriv(q).dv).normalize().map(|n| n.get());
+                        let rate = |a: Point2, b: Point2, w: f64| match (nat(a), nat(b)) {
+                            (Some(x), Some(y)) => (x - y).length() / w,
+                            _ => 0.0,
+                        };
+                        let (ru, rv) = (
+                            rate(Point2::new(p.x + h, p.y), Point2::new(p.x - h, p.y), 2.0 * h),
+                            rate(Point2::new(p.x, p.y + h), Point2::new(p.x, p.y - h), 2.0 * h),
+                        );
+                        let (tu, tv) = sb.turn();
+                        let ok = |x: f64, m: f64| x <= m * (1.0 + 1e-9) + 1e-9;
+                        assert!(
+                            (0..3).all(|t| ok(nrm.dot(sd[t]).abs(), sb.k[t])
+                                && ok(sd[t].length(), sb.m[t])
+                                && ok(first[t], sb.d[t]))
+                                && sb.area <= area * (1.0 + 1e-9) + 1e-12
+                                && sb.stretch() <= least * (1.0 + 1e-9) + 1e-12
+                                && ru <= tu * (1.0 + 1e-4) + 1e-6
+                                && rv <= tv * (1.0 + 1e-4) + 1e-6,
+                            "face {f:?} at {p:?} in {u:?} x {v:?}: k {:?} m {:?} d {first:?} area {area} least {least} turn {:?} over {sb:?}",
+                            sd.map(|x| nrm.dot(x).abs()),
+                            sd.map(|x| x.length()),
+                            (ru, rv),
+                        );
+                    }
                 }
             }
         }
     }
-    assert!(checked > 0);
-    println!("{checked} faces");
+    assert!(faces > 0);
+    println!("{faces} faces, {boxes} boxes");
 }

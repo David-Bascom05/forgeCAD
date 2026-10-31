@@ -132,10 +132,10 @@ pub trait Procedural: Send + Sync + std::fmt::Debug {
     fn min_radius_over(&self, _uv: Box2) -> f64 {
         self.min_radius()
     }
-    /// Bounds on |S_uu|, |S_uv| and |S_vv| over the parameter box, where the construction gives
-    /// them (None where it does not): with them a chord's gap from the surface is bounded without
+    /// Bounds on the surface's bending over the parameter box, where the construction gives them
+    /// (None where it does not): with them a chord's gap from the surface is bounded without
     /// evaluating it (meshing).
-    fn second_bounds(&self, uv: Box2) -> Option<[f64; 3]> {
+    fn shape_bounds(&self, uv: Box2) -> Option<ShapeBounds> {
         let _ = uv;
         None
     }
@@ -147,6 +147,69 @@ pub trait Procedural: Send + Sync + std::fmt::Debug {
     /// spine's chain points), for integrators that need smooth pieces.
     fn u_kinks(&self, _u: Interval) -> Vec<f64> {
         Vec::new()
+    }
+}
+
+/// Bounds over a parameter box: `k` on |n.S_uu|, |n.S_uv| and |n.S_vv| (n the unit normal at the
+/// same point), `m` on |S_uu|, |S_uv| and |S_vv|, `d` on |S_u|, |S_v| and |S_u.S_v|, and `area`
+/// from below on |S_u x S_v|.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct ShapeBounds {
+    pub k: [f64; 3],
+    pub m: [f64; 3],
+    pub d: [f64; 3],
+    pub area: f64,
+}
+
+impl ShapeBounds {
+    /// From the derivatives `d` at the middle of a box `half` wide each way, and bounds over it
+    /// on the second derivatives' sizes (`m`) and the third's (`t`: S_uuu, S_uuv, S_uvv, S_vvv).
+    /// Each first derivative strays from the middle's by at most m times the offset, the normal
+    /// by at most twice the cross product's stray over its size, the second derivatives by t
+    /// times the offset.
+    pub fn taylor(d: &SurfDeriv, (hu, hv): (f64, f64), m: [f64; 3], t: [f64; 4]) -> ShapeBounds {
+        let (eu, ev) = (m[0] * hu + m[1] * hv, m[1] * hu + m[2] * hv);
+        let (lu, lv) = (d.du.length(), d.dv.length());
+        let cross = d.du.cross(d.dv);
+        let size = cross.length();
+        // |a x b - a0 x b0| and |a.b - a0.b0| are both at most |a - a0| |b| + |a0| |b - b0|
+        let stray = eu * (lv + ev) + lu * ev;
+        let (n, turn) = if size > 0.0 {
+            (cross / size, (2.0 * stray / size).min(2.0))
+        } else {
+            (Vec3::ZERO, 2.0)
+        };
+        let s = [d.duu, d.duv, d.dvv];
+        let dt = [
+            t[0] * hu + t[1] * hv,
+            t[1] * hu + t[2] * hv,
+            t[2] * hu + t[3] * hv,
+        ];
+        ShapeBounds {
+            k: [0, 1, 2].map(|i| n.dot(s[i]).abs() + turn * s[i].length() + dt[i]),
+            m: [0, 1, 2].map(|i| m[i].min(s[i].length() + dt[i])),
+            d: [lu + eu, lv + ev, d.du.dot(d.dv).abs() + stray],
+            area: (size - stray).max(0.0),
+        }
+    }
+
+    /// From below, the least singular value of [S_u S_v]: its square times the largest's is the
+    /// area's square, and the largest's square is at most |S_u|^2 + |S_v|^2.
+    pub fn stretch(&self) -> f64 {
+        self.area / (self.d[0] * self.d[0] + self.d[1] * self.d[1]).sqrt()
+    }
+
+    /// The most the unit normal turns per unit of u and of v. Its derivative n_u is tangent with
+    /// n_u.S_u = -n.S_uu and n_u.S_v = -n.S_uv, so |n_u|^2 = (G a^2 - 2 F a b + E b^2) / (E G - F^2)
+    /// for a = n.S_uu, b = n.S_uv (and n_v likewise from n.S_uv, n.S_vv).
+    pub fn turn(&self) -> (f64, f64) {
+        let [eu, ev, f] = [self.d[0] * self.d[0], self.d[1] * self.d[1], self.d[2]];
+        let det = self.area * self.area;
+        if det <= 0.0 {
+            return (f64::INFINITY, f64::INFINITY);
+        }
+        let rate = |a: f64, b: f64| ((ev * a * a + 2.0 * f * a * b + eu * b * b) / det).sqrt();
+        (rate(self.k[0], self.k[1]), rate(self.k[1], self.k[2]))
     }
 }
 
