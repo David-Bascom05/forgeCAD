@@ -1740,26 +1740,50 @@ fn finish(m: &Model) -> Verdict {
 
 /// Regenerates a part file line by line, checking every stage, then the finished part.
 pub fn judge(src: &str) -> Verdict {
+    judge_model(src).0
+}
+
+/// `judge`, and the model it built (none if it panicked).
+pub fn judge_model(src: &str) -> (Verdict, Option<Model>) {
     let run = catch_unwind(AssertUnwindSafe(|| {
         let m = model(src);
         for i in 0..m.built() {
             let kind = m.kinds[i];
             if let f @ Verdict::Fail(_) = valid_after(kind, &m, i + 1) {
-                return f;
+                return (f, m);
             }
         }
         if let Some(f) = &m.error {
             let kind = m.lines[f.at].toks[0].clone();
-            return classify(&kind, &f.msg);
+            let v = classify(&kind, &f.msg);
+            return (v, m);
         }
-        finish(&m)
+        let v = finish(&m);
+        (v, m)
     }));
-    run.unwrap_or_else(|p| Verdict::Fail(format!("panic: {}", panic_text(p))))
+    match run {
+        Ok((v, m)) => (v, Some(m)),
+        Err(p) => (Verdict::Fail(format!("panic: {}", panic_text(p))), None),
+    }
 }
 
 /// Grows a history of up to `len` lines from `seed`. A line the kernel refuses, or fails on, is
 /// dropped and the history goes on from the part before it.
 pub fn run(seed: u64, len: usize) -> Run {
+    run_kinds(seed, len, u64::MAX)
+}
+
+/// `run` drawing only the kinds whose bit in `kinds` is set (of MAKERS, in order; empty counts as all).
+/// A history with few kinds piles them on each other, which all kinds at once rarely do (swarm
+/// testing: Groce et al., ISSTA 2012).
+pub fn run_kinds(seed: u64, len: usize, kinds: u64) -> Run {
+    let kinds = if kinds == 0 { u64::MAX } else { kinds };
+    let makers: Vec<&Maker> = MAKERS
+        .iter()
+        .enumerate()
+        .filter(|(i, _)| kinds >> (i % 64) & 1 == 1)
+        .map(|(_, m)| m)
+        .collect();
     let mut r = Rng::new(seed.wrapping_mul(0x2545_f491_4f6c_dd1d).wrapping_add(0x7e57));
     let mut src = base(&mut r) + "\n";
     let mut m = model(&src);
@@ -1767,7 +1791,7 @@ pub fn run(seed: u64, len: usize) -> Run {
     let mut fails = Vec::new();
     let mut slowest = (0.0, String::new());
     let mut label = 0;
-    let total: usize = MAKERS.iter().map(|k| k.weight).sum();
+    let total: usize = makers.iter().map(|k| k.weight).sum();
     let mut built = 0;
     for _ in 0..len * 3 {
         if built >= len {
@@ -1781,7 +1805,7 @@ pub fn run(seed: u64, len: usize) -> Run {
             break;
         }
         let mut pick = r.below(total);
-        let maker = MAKERS
+        let maker = makers
             .iter()
             .find(|k| {
                 let hit = pick < k.weight;
