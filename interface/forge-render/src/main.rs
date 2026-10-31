@@ -4,7 +4,8 @@ use forge_render::mesh::PartMesh;
 use forge_render::render::{self, LineMode, Mark, Offscreen, Overlay, Renderer, part_info};
 use forge_render::scene::{self, Motion, Placement, Scene};
 use forge_render::viewer::{Bench, Viewer, now_ms};
-use std::fmt::Write;
+use std::fmt::Write as _;
+use std::io::Write as _;
 use std::sync::Arc;
 use winit::application::ApplicationHandler;
 use winit::event::WindowEvent;
@@ -438,8 +439,12 @@ fn run() -> Result<(), String> {
         return std::fs::write(path, mesh.to_bytes()).map_err(|e| e.to_string());
     }
     if a.dims {
+        // a closed pipe (`| head`) is no error
+        let mut out = std::io::stdout().lock();
         for d in forge_render::load::tool_part(&a.part)?.dims() {
-            println!("{} = {}", d.name, forge_agent::short(d.value));
+            if writeln!(out, "{} = {}", d.name, forge_agent::short(d.value)).is_err() {
+                break;
+            }
         }
         return Ok(());
     }

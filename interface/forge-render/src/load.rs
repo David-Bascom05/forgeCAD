@@ -9,6 +9,7 @@ use forge_agent::cmd::Session;
 pub fn source(part: &str) -> Result<String, String> {
     match bench::src(part) {
         Some(s) => Ok(s.to_string()),
+        None if !part.ends_with(".fc") => Err(format!("{part}: no bench part or .fc part file")),
         None => std::fs::read_to_string(part).map_err(|e| format!("{part}: {e}")),
     }
 }

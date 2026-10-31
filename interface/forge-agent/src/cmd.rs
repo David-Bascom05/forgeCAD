@@ -126,18 +126,17 @@ impl Session {
 
     /// The file's part for its own use (a live session), its commits going to the file.
     pub fn take_part(&mut self, file: &str) -> Result<Part, String> {
-        let (p, path) = self.part_file(file)?;
+        let (p, path) = self.part_at(file)?;
         p.open(&path);
         Ok(self.parts.remove(file).expect("just opened"))
     }
 
-    /// `part_at`, for what would change the file or show what is in it: only a file that has
-    /// shown itself a part file, and nothing of any other in the refusal.
+    /// `part_at`, for what would change the file.
     fn part_file(&mut self, file: &str) -> Result<(&mut Part, std::path::PathBuf), String> {
         let (p, path) = self.part_at(file)?;
         if !is_part(&p.model) {
             return Err(format!(
-                "{file}: not a part file; nothing read from it or changed"
+                "{file}: line 1 is not a feature; act changes part files only"
             ));
         }
         Ok((p, path))
@@ -218,11 +217,14 @@ impl Session {
 
     /// What `query` answers beside selectors: the file, numbers, history, what can be dragged.
     fn query_more(&mut self, a: &Args, what: &str) -> Result<Reply, String> {
-        let (p, path) = self.part_file(&a.file)?;
         match what {
             "stat" => return self.build(a),
             "check" => return self.check(a),
             _ => {}
+        }
+        let (p, path) = self.part_at(&a.file)?;
+        if what == "file" && !one_name(&path) {
+            return Err(format!("{}: not a plain file with one name; not read", a.file));
         }
         p.open(&path);
         let text = match what {
@@ -329,19 +331,18 @@ impl Session {
                 } else {
                     String::new()
                 };
-                let (msg, hint) = told(m, &f);
-                text.push_str(&format!("error line {}: {msg}", line.no));
+                text.push_str(&format!("error line {}: {}", line.no, f.msg));
                 if !echo.is_empty() {
                     text.push_str(&format!("\n  {echo}"));
                 }
-                text.push_str(&format!("\nhint: {hint}"));
+                text.push_str(&format!("\nhint: {}", f.hint));
                 j.push((
                     "error",
                     Json::obj(vec![
                         ("line", line.no.into()),
                         ("text", echo.into()),
-                        ("msg", msg.into()),
-                        ("hint", hint.into()),
+                        ("msg", f.msg.into()),
+                        ("hint", f.hint.into()),
                     ]),
                 ));
             }
@@ -628,8 +629,7 @@ impl Session {
                 .join("\n")
         };
         if let Some(f) = &m.error {
-            let (msg, _) = told(m, f);
-            text.push_str(&format!("\nline {} does not build: {msg}", m.lines[f.at].no));
+            text.push_str(&format!("\nline {} does not build: {}", m.lines[f.at].no, f.msg));
         }
         let mut sketches = Vec::new();
         for (i, f) in m.features.iter().enumerate() {
@@ -842,27 +842,27 @@ pub(crate) fn replace(_: &std::path::Path, _: &str) -> Result<(), String> {
     Err("writing part files needs a unix system".into())
 }
 
-/// A part file, as far as can be told: a first line that read as one, or nothing written yet. A
-/// `KEY = value` line that reads as a parameter is as far as this can go; one that does not read
-/// says nothing either way.
+/// A file named `.fc` is a part, however broken (only those are opened at all), unless its first
+/// line starts with no feature or parameter: then it isn't changed.
 fn is_part(m: &Model) -> bool {
-    m.built() > 0 || m.src().trim().is_empty()
+    let Some(f) = m.error.as_ref().filter(|f| f.at == 0) else {
+        return true;
+    };
+    let t = &m.lines[f.at].toks;
+    crate::text::kind(&t[0]).is_some() || t.get(1).is_some_and(|w| w == "=")
 }
 
-/// What a failure may say of a file: nothing from its text until it has shown itself a part.
-fn told(m: &Model, f: &crate::model::Failure) -> (String, String) {
-    if is_part(m) {
-        return (f.msg.clone(), f.hint.clone());
-    }
-    let first = m.lines[f.at].toks.first().map(String::as_str);
-    let hint = match first.and_then(crate::text::kind) {
-        Some(k) => k.syntax.to_string(),
-        None => "`help` lists the feature kinds".to_string(),
-    };
-    (
-        "the first line does not read as a part line; is this a .fc part file?".to_string(),
-        hint,
-    )
+/// A file read back whole has one name, as one that is written must: a second name in the root
+/// is no way to read a file that was never a part.
+#[cfg(unix)]
+fn one_name(path: &std::path::Path) -> bool {
+    use std::os::unix::fs::MetadataExt;
+    std::fs::symlink_metadata(path).is_ok_and(|m| m.is_file() && m.nlink() == 1)
+}
+
+#[cfg(not(unix))]
+fn one_name(_: &std::path::Path) -> bool {
+    true
 }
 
 fn help_reply(topic: &str, a: &Args) -> Reply {
@@ -1452,51 +1452,72 @@ combine cut base lid keep
         );
     }
 
-    /// A file that never read as a part gives nothing back, by any
-    /// question and through any error, parameter-shaped first line or not.
+    /// Only paths ending in `.fc` are opened, read through links first, and made new. Within
+    /// them a broken part reads back so it can be mended, and says why its first line fails.
     #[cfg(unix)]
     #[test]
-    fn no_question_echoes_a_file_that_is_no_part() {
-        let dir = Dir::new("no-part");
-        for (name, src) in [
-            ("a.fc", "not a part hunter2\nmore hunter2\n"),
-            ("b.fc", "API_KEY = hunter2\nOTHER = hunter2\n"),
-            ("c.fc", "move hunter2 away\n"),
-            ("d.fc", "# hunter2\n# hunter2\n"),
-        ] {
-            let f = dir.file(name, src);
-            let mut s = Session::default().writable(true);
-            for words in [&["file"][..], &["dims"], &["since", "0"], &["stat"], &["check"]] {
-                let r = s.run("query", &args(&f, words));
-                assert!(!r.text.contains("hunter2"), "{name} {words:?}: {}", r.text);
-                assert!(
-                    !r.json.to_string().contains("hunter2"),
-                    "{name} {words:?}: {}",
-                    r.json
-                );
+    fn only_fc_paths_open_and_a_broken_part_reads_back() {
+        let dir = Dir::new("only-fc");
+        let env = dir.file(".env", "API_KEY = 123\nOTHER = hunter2\n");
+        let notes = dir.file("notes.txt", "w = 1\n");
+        let link = dir.0.join("env.fc");
+        std::os::unix::fs::symlink(&env, &link).expect("link");
+        let mut s = Session::default().writable(true);
+        for f in [env.clone(), notes.clone(), link.to_string_lossy().to_string()] {
+            for (cmd, words) in [
+                ("query", &["file"][..]),
+                ("query", &["dims"]),
+                ("query", &["stat"]),
+                ("build", &[]),
+                ("check", &[]),
+                ("act", &["w = 3"]),
+            ] {
+                let r = s.run(cmd, &args(&f, words));
+                assert!(!r.ok && !r.text.contains("hunter2"), "{f} {cmd}: {}", r.text);
+                assert!(!r.text.contains("123"), "{f} {cmd}: {}", r.text);
             }
-            assert!(!s.run("query", &args(&f, &["file"])).ok, "{name}");
-            for cmd in ["build", "check"] {
-                let r = s.run(cmd, &args(&f, &[]));
-                assert!(
-                    !r.json.to_string().contains("hunter2") && !r.text.contains("hunter2"),
-                    "{name} {cmd}: {}",
-                    r.text
-                );
-            }
-            let r = s.run("act", &args(&f, &["w = 3"]));
-            assert!(!r.ok && !r.text.contains("hunter2"), "{name}: {}", r.text);
-            assert_eq!(
-                std::fs::read_to_string(&f).expect("read"),
-                src,
-                "{name}: left alone"
-            );
-            assert!(
-                !dir.0.join(format!("{name}.log")).exists(),
-                "{name}: no log of it"
-            );
         }
-        // a new file and an empty one are parts to be; a first line of your own says why it fails
+        assert_eq!(
+            std::fs::read_to_string(&env).expect("read"),
+            "API_KEY = 123\nOTHER = hunter2\n"
+        );
+        let made = dir.0.join("new.txt").to_string_lossy().to_string();
+        assert!(!s.run("act", &args(&made, &["w = 3"])).ok);
+        assert!(!std::path::Path::new(&made).exists());
+
+        // a typo on line 1 of a real part says what it is, and the part reads back to be mended
+        let f = dir.file("typo.fc", "extrude 5 rectt 0 0 1 1\nfillet 1 (edges top)\n");
+        let r = s.run("build", &args(&f, &[]));
+        assert!(!r.ok && r.text.contains("rectt"), "{}", r.text);
+        let r = s.run("query", &args(&f, &["file"]));
+        assert!(r.ok && r.text.contains("rectt"), "{}", r.text);
+        let r = s.run("act", &args(&f, &["edit f1 extrude 5 rect 0 0 1 1"]));
+        assert!(r.ok, "{}", r.text);
+        // a broken line lower down too
+        let f = dir.file("low.fc", "w = 3\nextrude w rect 0 0 1 1\nnope 3\n");
+        assert!(s.run("query", &args(&f, &["file"])).text.contains("nope 3"));
+        // comments alone are a part yet to come
+        let f = dir.file("c.fc", "# a plate, later\n");
+        assert!(s.run("query", &args(&f, &["file"])).text.contains("a plate"));
+        assert!(s.run("act", &args(&f, &["w = 3", "extrude w rect 0 0 1 1"])).ok);
+        // what starts with no feature at all isn't changed, or logged
+        let f = dir.file("s.fc", "hunter2 swordfish\n");
+        let r = s.run("act", &args(&f, &["w = 3"]));
+        assert!(!r.ok && !r.text.contains("hunter2"), "{}", r.text);
+        assert_eq!(std::fs::read_to_string(&f).expect("read"), "hunter2 swordfish\n");
+        assert!(!dir.0.join("s.fc.log").exists());
+        // a second name is no way to read a file
+        let away = dir.file("key.txt", "hunter2\n");
+        let hard = dir.0.join("hard.fc");
+        std::fs::hard_link(&away, &hard).expect("link");
+        let r = s.run("query", &args(&hard.to_string_lossy(), &["file"]));
+        assert!(!r.ok && !r.text.contains("hunter2"), "{}", r.text);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn a_new_part_is_made_by_its_first_act() {
+        let dir = Dir::new("new-part");
         let f = dir.0.join("new.fc").to_string_lossy().to_string();
         let mut s = Session::default().writable(true);
         let r = s.run("act", &args(&f, &["extrude 5 rectt 0 0 1 1"]));
