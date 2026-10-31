@@ -57,10 +57,11 @@ top bottom left right front back   near X Y Z              keep the extreme ones
 Commands (a few lines of text; `--json` for JSON):
 ```
 forgecad build F                    ok, or error at file line N + hint; approx volume, area; bbox
-forgecad query F SEL [--at FEAT]    @d644 line -x len=60 at 0,20,40   (round: axis and centre)
+forgecad query F SEL [--at FEAT]    @d644 line -x len=60 at 0,20,40   (round: axis and centre;
+                                    a round face may be two halves, two handles on one line)
 forgecad measure F REF [REF]        area|length radius centre; two: closest distance, angle, axes
 forgecad measure F mass|wall        volume area centroid inertia; thinnest wall anywhere
-forgecad render F [VIEW] [--labels SEL] [--px 400] [-o F.png]   VIEW: iso front top right..
+forgecad render F [VIEW] [--labels SEL] [--px 400] [-o F.png]   VIEW: iso front top right.. px: long side
 forgecad check F | diff A B         validity after each line | what B changed from A
 forgecad serve|mcp [--root DIR]     stdio JSON-RPC / MCP, .fc files under DIR (default .) only
 ```

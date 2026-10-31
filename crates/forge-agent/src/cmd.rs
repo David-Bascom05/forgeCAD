@@ -248,7 +248,7 @@ impl Session {
                     ("izz", ms.inertia[2]),
                 ]
             }
-            ["wall"] => match measure::wall(mesh) {
+            ["wall"] => match measure::wall(body, mesh) {
                 Some((t, p)) => vec![("wall", t), ("x", p.x), ("y", p.y), ("z", p.z)],
                 None => return Err("no wall found".into()),
             },

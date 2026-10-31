@@ -42,7 +42,17 @@ pub fn mass(m: &TriMesh) -> Mass {
 
 /// The thinnest wall: from each triangle, straight in against its normal to the next surface
 /// the ray leaves the solid through. The thickness and where it is.
-pub fn wall(m: &TriMesh) -> Option<(f64, Point3)> {
+pub fn wall(body: &Body, m: &TriMesh) -> Option<(f64, Point3)> {
+    // faces meeting at an edge make a wedge there, not a wall
+    let mut touching = std::collections::HashSet::new();
+    for e in body.edge_ids() {
+        let fs = select::faces_of_edge(body, e);
+        for &a in &fs {
+            for &b in &fs {
+                touching.insert((a.0, b.0));
+            }
+        }
+    }
     let tri = |t: &[u32; 3]| t.map(|i| m.positions[i as usize]);
     let normals: Vec<Option<Vec3>> = m
         .triangles
@@ -57,7 +67,10 @@ pub fn wall(m: &TriMesh) -> Option<(f64, Point3)> {
         let d = -n;
         for (j, u) in m.triangles.iter().enumerate() {
             // only the far side: a face the ray leaves through looks along it
-            if j == i || normals[j].is_none_or(|nj| nj.dot(d) <= 1e-9) {
+            if j == i
+                || normals[j].is_none_or(|nj| nj.dot(d) <= 1e-9)
+                || touching.contains(&(m.face_of[i], m.face_of[j]))
+            {
                 continue;
             }
             if let Some(s) = hit(o, d, tri(u))
@@ -142,7 +155,8 @@ pub fn one(body: &Body, mesh: &TriMesh, e: Ent) -> Vec<(&'static str, f64)> {
     if let Some(r) = select::radius(body, e) {
         out.push(("radius", r));
     }
-    let c = select::centre(body, e);
+    // a round thing's centre is on its axis, not in the middle of a half face
+    let c = select::axis(body, e).map_or_else(|| select::centre(body, e), |a| a.0);
     out.extend([("x", c.x), ("y", c.y), ("z", c.z)]);
     out
 }
@@ -154,15 +168,16 @@ fn plane_round(body: &Body, a: Ent, b: Ent) -> Option<f64> {
     let n = select::plane_normal(body, f)?;
     let (p, dir) = select::axis(body, b)?;
     let off = (p - select::centre(body, a)).dot(n).abs();
+    // a plane through a round thing (a keyway floor in a shaft) is its depth in it
     let r = select::radius(body, b).unwrap_or(0.0);
     match (b, dir) {
         (Ent::Edge(_), Some(u)) if u.cross(n).length() < 1e-9 => Some(off),
         (Ent::Face(g), Some(u))
             if u.dot(n).abs() < 1e-9 && matches!(body.face(g).surface, forge_geom::Surface::Cylinder(_)) =>
         {
-            Some(off - r)
+            Some((off - r).abs())
         }
-        (Ent::Face(_), None) => Some(off - r),
+        (Ent::Face(_), None) => Some((off - r).abs()),
         _ => None,
     }
 }
