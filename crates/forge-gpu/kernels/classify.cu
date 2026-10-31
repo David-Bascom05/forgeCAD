@@ -1,14 +1,18 @@
-// Region verdicts for the n-ary boolean: each thread takes one region's point, finds which
-// tools hold it (from their analytic solids), and folds the CSG expression just inside and
-// just outside the region's own tool. Mirrors forge-bool's shape.rs; see layout in lib.rs.
+// Region verdicts for the n-ary boolean: forge-bool's CpuBatch, laid out for a GPU. Each point
+// finds which tools hold it (from their analytic solids: shape.rs) and folds the CSG
+// expression just inside and just outside its own tool. See the layout in lib.rs.
 //
-// tools: TOOL doubles each: kind, op, seg0, nseg, frame origin xyz, x xyz, y xyz, z xyz,
+// tools: TOOL values each: kind, op, seg0, nseg, frame origin xyz, x xyz, y xyz, z xyz,
 //        a, b (prism lo hi / revolve angle (<0 whole) / ball radius), origin2 xy, dir2 xy,
-//        perp2 xy, box lo xyz, box hi xyz
-// segs:  SEG doubles each: kind (0 line, 1 arc), then a.x a.y b.x b.y | c.x c.y r start sweep
+//        perp2 xy
+// segs:  SEG values each: kind (0 line, 1 arc), then a.x a.y b.x b.y | c.x c.y r start sweep
+// boxes: 6 doubles per tool (lo xyz, hi xyz), then 12 floats per tool: the box rounded
+//        outward and inward. Single precision culls by those and leaves a point between them
+//        undecided; double precision tests the exact box: a point is in a box exactly when the
+//        CPU finds it so.
 // out:   0 dropped, 1 kept, 2 kept flipped, 3 undecided (near some tool's boundary)
 
-#define TOOL 32
+#define TOOL 24
 #define SEG 6
 #define TAU 6.283185307179586
 #define HALF_PI 1.5707963267948966
@@ -122,51 +126,89 @@ template <typename T> __device__ int member(const T* t, const T* segs, T px, T p
     return 2;
 }
 
+// whether a point is in a tool's box (6 doubles, then 12 floats from `fast`): 0 out, 1 in, 2
+// too near the box's faces for floats to tell (single precision then leaves the point
+// undecided: it does no double arithmetic at all)
 template <typename T>
-__device__ void verdicts_t(const T* tools, int ntools, const T* segs, const T* points, const int* sides,
-                           int npoints, T margin, T graze, unsigned char* out) {
-    int i = blockIdx.x * blockDim.x + threadIdx.x;
-    if (i >= npoints) return;
-    T px = points[3 * i], py = points[3 * i + 1], pz = points[3 * i + 2];
-    int own = sides[i];
-    // fold the expression for the point just inside (vin) and just outside (vout) its tool
-    int vin = 0, vout = 0;
-    for (int k = 0; k < ntools; k++) {
+__device__ int in_box(const double* b, const float* f, double px, double py, double pz, T qx, T qy, T qz) {
+    if constexpr (sizeof(T) == 4) {
+        if (qx < f[0] || qy < f[1] || qz < f[2] || qx > f[3] || qy > f[4] || qz > f[5]) return 0;
+        return qx > f[6] && qy > f[7] && qz > f[8] && qx < f[9] && qy < f[10] && qz < f[11] ? 1 : 2;
+    } else {
+        return !(px < b[0] || py < b[1] || pz < b[2] || px > b[3] || py > b[4] || pz > b[5]);
+    }
+}
+
+// a point's verdict against every tool, its own tool `own` taken as just entered (CpuBatch's
+// verdict), worked by a group of `lanes` threads (1, 2, 4 .. 32, aligned in a warp) each taking
+// every lanes-th tool. Each tool after the first either leaves the folded expression as it is or
+// sets it (a union holding the point sets it true, a subtract holding it false, an intersect
+// not holding it false), so the fold is the value set by the highest tool that sets one: a max
+// across the lanes. Every lane of the warp must call this together (an `active` 0 lane takes
+// no tools), as the lanes trade results.
+template <typename T>
+__device__ int verdict(const T* tools, int ntools, const T* segs, const double* boxes, double px, double py,
+                       double pz, int own, T margin, T graze, int lane, int lanes, int active) {
+    T qx = (T)px, qy = (T)py, qz = (T)pz;
+    const float* fast = (const float*)(boxes + (size_t)ntools * 6);
+    // highest tool setting the value just inside (kin) and just outside (kout) the own tool,
+    // times two, plus the value
+    int kin = -1, kout = -1, near = 0;
+    for (int k = lane; active && k < ntools; k += lanes) {
         const T* t = tools + (size_t)k * TOOL;
-        int bin, bout;
+        int bin, bout, inb;
         if (k == own) {
             bin = 1; bout = 0;
-        } else if (px < t[24] || py < t[25] || pz < t[26] || px > t[27] || py > t[28] || pz > t[29]) {
+        } else if ((inb = in_box<T>(boxes + (size_t)k * 6, fast + (size_t)k * 12, px, py, pz, qx, qy, qz)) == 0) {
             bin = 0; bout = 0;
+        } else if (inb == 2) {
+            near = 1;
+            break;
         } else {
-            int mb = member(t, segs, px, py, pz, margin, graze);
-            if (mb == 2) { out[i] = 3; return; }
+            int mb = member(t, segs, qx, qy, qz, margin, graze);
+            if (mb == 2) {
+                near = 1;
+                break;
+            }
             bin = mb; bout = mb;
         }
-        if (k == 0) {
-            vin = bin; vout = bout;
-        } else {
-            int op = (int)t[1];
-            if (op == 0) { vin = vin || bin; vout = vout || bout; }
-            else if (op == 1) { vin = vin && !bin; vout = vout && !bout; }
-            else { vin = vin && bin; vout = vout && bout; }
-        }
+        int op = k == 0 ? -1 : (int)t[1];
+        if (op == -1) { kin = bin; kout = bout; }
+        else if (op == 0) { if (bin) kin = 2 * k + 1; if (bout) kout = 2 * k + 1; }
+        else if (op == 1) { if (bin) kin = 2 * k; if (bout) kout = 2 * k; }
+        else { if (!bin) kin = 2 * k; if (!bout) kout = 2 * k; }
     }
-    out[i] = vin == vout ? 0 : (vin ? 1 : 2);
+    for (int o = lanes / 2; o > 0; o >>= 1) {
+        near = max(near, __shfl_xor_sync(0xffffffffu, near, o));
+        kin = max(kin, __shfl_xor_sync(0xffffffffu, kin, o));
+        kout = max(kout, __shfl_xor_sync(0xffffffffu, kout, o));
+    }
+    if (near) return 3;
+    int vin = kin & 1, vout = kout & 1;
+    return vin == vout ? 0 : (vin ? 1 : 2);
 }
 
-extern "C" __global__ void verdicts(const double* tools, int ntools, const double* segs, const double* points,
-                                    const int* sides, int npoints, int any_intersect, double margin,
-                                    unsigned char* out) {
-    (void)any_intersect;
-    verdicts_t<double>(tools, ntools, segs, points, sides, npoints, margin, 1e-9, out);
+// Points 0..n, a group of `lanes` threads each: single precision answers the points clear of
+// every boundary by `margin32`; double precision, in the same group, takes the rest.
+extern "C" __global__ void verdicts(const float* tools32, const float* segs32, const double* tools,
+                                    const double* segs, int ntools, const double* boxes, const double* points,
+                                    const int* sides, int n, int lanes, float margin32, double margin,
+                                    double graze, unsigned char* out) {
+    int at = blockIdx.x * blockDim.x + threadIdx.x;
+    int i = at / lanes, lane = at % lanes;
+    // lanes past the end still take part in their warp's exchanges
+    int active = i < n;
+    if (!active) i = 0;
+    double px = points[3 * i], py = points[3 * i + 1], pz = points[3 * i + 2];
+    int v = verdict<float>(tools32, ntools, segs32, boxes, px, py, pz, sides[i], margin32, 1e-4f, lane, lanes,
+                           active);
+    int again = active && v == 3;
+    if (__any_sync(0xffffffffu, again)) {
+        int w = verdict<double>(tools, ntools, segs, boxes, px, py, pz, sides[i], margin, graze, lane, lanes, again);
+        if (again) v = w;
+    }
+    if (active && lane == 0) out[i] = (unsigned char)v;
 }
 
-// single precision: answers only where clear by `margin` (set well above float error by the
-// caller); everything nearer comes back undecided
-extern "C" __global__ void verdicts32(const float* tools, int ntools, const float* segs, const float* points,
-                                      const int* sides, int npoints, int any_intersect, float margin,
-                                      unsigned char* out) {
-    (void)any_intersect;
-    verdicts_t<float>(tools, ntools, segs, points, sides, npoints, margin, 1e-4f, out);
-}
+// does nothing: launched ahead of a batch so the GPU is awake (clocks up) when it comes
+extern "C" __global__ void wake() {}

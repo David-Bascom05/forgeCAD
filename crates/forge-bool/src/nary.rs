@@ -211,6 +211,8 @@ pub fn nary(tools: &[&Body], ops: &[Op], threads: usize) -> R<Body> {
 /// every tool's box: 0 dropped, 1 kept, 2 kept flipped, 3 undecided (the full way decides).
 pub trait Batch: Sync {
     fn verdicts(&self, points: &[Point3], sides: &[u32], boxes: &[forge_math::Box3]) -> Vec<u8>;
+    /// Called while the points are being placed, before `verdicts` (a GPU wakes up).
+    fn warm(&self) {}
 }
 
 /// The batch on the CPU, from the tools' analytic solids: what a GPU batch must match.
@@ -1030,6 +1032,7 @@ pub fn nary_with(
         None => par_map(regs.len(), threads, 32, full),
         Some(batch) => {
             // one point per region, all placed at once; the rest decided the full way
+            batch.warm();
             let first: Vec<Option<Point3>> = par_map(regs.len(), threads, 32, |ri| {
                 let r = &regs[ri];
                 region_points(tools[r.side], r.face, &r.loops, list, 1)
