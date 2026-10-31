@@ -2427,7 +2427,11 @@ fn nary_body(
             (Some(p), None) => list[p].name = spans[k].name,
             (Some(_), Some(_)) => {
                 halved.push(spans[k].name);
-                wholes.extend(r.clone().filter(|&p| on[p]).map(|p| (list[p].name, spans[k].name)));
+                wholes.extend(
+                    r.clone()
+                        .filter(|&p| on[p])
+                        .map(|p| (list[p].name, spans[k].name)),
+                );
             }
             _ => {}
         }

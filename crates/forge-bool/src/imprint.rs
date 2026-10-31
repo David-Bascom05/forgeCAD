@@ -1200,7 +1200,7 @@ impl Column<'_> {
             };
             static CUT: std::sync::OnceLock<Name> = std::sync::OnceLock::new();
             let cut = *CUT.get_or_init(|| Name::feature(0).with_str("cut"));
-            let base = cut.with_set(&mut [na, nb]).with(ci as u64);
+            let base = cut.with_set(&[na, nb]).with(ci as u64);
             Ok(Carrier {
                 curve,
                 period,
