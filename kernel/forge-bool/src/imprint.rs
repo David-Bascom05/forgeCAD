@@ -11,7 +11,10 @@
 //! and gains the profile's stretches over it. The result goes to the general boolean's `apply`
 //! as its plan, pieces and faces named as that boolean names them.
 
-use crate::boolean::{Op, Piece, Plan, Spec, VKey, apply, part_frame, piece_name, region_name, vertex_names};
+use crate::boolean::{
+    Op, Piece, Plan, Spec, VKey, apply, curve_at, part_frame, piece_name, rank_names, region_name,
+    surface_frame, vertex_names,
+};
 use crate::classify::{edges_near, in_loop, in_planar_face};
 use forge_geom::intersect::SurfaceSurface;
 use forge_geom::{Curve, CurveGeom, Cylinder, Plane, Surface, SurfaceGeom};
@@ -78,9 +81,14 @@ pub(crate) trait Src {
     fn edge(&self, e: EdgeId) -> (&Curve, Interval, VertexId, VertexId, Name);
     /// Face `f`'s box, where one is kept.
     fn bbox(&self, f: FaceId) -> Option<Box3>;
+    /// The tool as a Body, for what only reads Bodies (rare: a tool flush on a face).
+    fn body(&self) -> std::borrow::Cow<'_, Body>;
 }
 
 impl Src for Body {
+    fn body(&self) -> std::borrow::Cow<'_, Body> {
+        std::borrow::Cow::Borrowed(self)
+    }
     fn face_count(&self) -> usize {
         self.faces.len()
     }
@@ -115,6 +123,9 @@ impl Src for Body {
 }
 
 impl Src for Unlinked {
+    fn body(&self) -> std::borrow::Cow<'_, Body> {
+        std::borrow::Cow::Owned(self.clone().into_body())
+    }
     fn face_count(&self) -> usize {
         self.faces.len()
     }
@@ -413,7 +424,8 @@ struct Column<'x> {
     /// Per A wall, per stretch: inside the tool's section.
     inside: Vec<Vec<bool>>,
     /// Vertices the general boolean puts on uprights off the other face (its box holds them).
-    extra: Vec<(EdgeId, usize, Vk)>,
+    /// (the upright, its side, the vertex, the other body's face whose curve cut it)
+    extra: Vec<(EdgeId, usize, Vk, Name)>,
     /// Per cap: the square face it lies on, where the tool stands on (or sinks from) one; the cap
     /// goes and the face loses the tool's section, bounded by B's own edges.
     glued: [Option<usize>; 2],
@@ -1059,7 +1071,8 @@ fn plan(a: &Body, b: &dyn Src, op: Op) -> R<Plan> {
                 let q = wall.foot.eval(at) + z * sq.h;
                 if !c.over[k][i].contains(&s) && boxed(&a.face_box(sq.f), q)? {
                     let u = wall.ups[e];
-                    c.extra.push((u, 1, Vk::Up(1, u, c.lvl(sq.h))));
+                    let by = Body::face(a, sq.f).name;
+                    c.extra.push((u, 1, Vk::Up(1, u, c.lvl(sq.h)), by));
                 }
             }
         }
@@ -1085,12 +1098,13 @@ fn plan(a: &Body, b: &dyn Src, op: Op) -> R<Plan> {
                 let q = wall.foot.eval(at) + z * hc;
                 if !c.inside[j - c.nb][i] && boxed(&bx, q)? {
                     let u = wall.ups[e];
-                    c.extra.push((u, 0, Vk::Up(0, u, c.lvl(hc))));
+                    let by = b.face(c.caps[cap]).2;
+                    c.extra.push((u, 0, Vk::Up(0, u, c.lvl(hc)), by));
                 }
             }
         }
     }
-    for &(u, side, _) in &c.extra {
+    for &(u, side, ..) in &c.extra {
         if side == 0 && !(c.nb..n).any(|j| c.touches(j) && c.walls[j].ups.contains(&u)) {
             return Err("a vertex on an upright of a wall left alone");
         }
@@ -1132,8 +1146,6 @@ fn plan(a: &Body, b: &dyn Src, op: Op) -> R<Plan> {
 type Along = Vec<(f64, Vk)>;
 /// A curve's first piece, its vertices, whether it closes, its new pieces' name before their ends.
 type Run = (usize, Along, bool, Name);
-/// Where a new curve starts: on which side's edge, at which vertex.
-type Cut = (usize, EdgeId, Vk);
 
 /// A face of the result: where it comes from, its loops, and for a face of A changed in place,
 /// the loops it gives up.
@@ -1200,7 +1212,7 @@ impl Column<'_> {
             };
             static CUT: std::sync::OnceLock<Name> = std::sync::OnceLock::new();
             let cut = *CUT.get_or_init(|| Name::feature(0).with_str("cut"));
-            let base = cut.with_set(&[na, nb]).with(ci as u64);
+            let base = cut.with_set(&[na.whole(), nb.whole()]);
             Ok(Carrier {
                 curve,
                 period,
@@ -1235,6 +1247,20 @@ impl Column<'_> {
                 let (fa, fb) = (face(0, self.walls[j].face), face(1, self.caps[cap]));
                 new(fa.0, fb.0, fa.2, fb.2, sample)
             }
+        }
+    }
+
+    /// The two faces a new curve lies on.
+    fn faces_of(&self, ck: Ck) -> ((&Surface, bool, Name), (&Surface, bool, Name)) {
+        let face = |side: usize, f: FaceId| self.src(side).face(f);
+        match ck {
+            Ck::V(x) => (
+                face(0, self.walls[self.xs[x].a].face),
+                face(1, self.walls[self.xs[x].b].face),
+            ),
+            Ck::H(f, k) => (face(0, f), face(1, self.walls[k].face)),
+            Ck::C(cap, j) => (face(0, self.walls[j].face), face(1, self.caps[cap])),
+            Ck::Edge(..) => unreachable!("an edge's own pieces are named by the edge"),
         }
     }
 
@@ -1673,7 +1699,7 @@ impl Column<'_> {
             }
             curves.get_mut(&arc.ck).expect("just put").1.extend(add);
         }
-        for &(u, side, v) in &self.extra {
+        for &(u, side, v, _) in &self.extra {
             if let Some((car, pts)) = curves.get_mut(&Ck::Edge(side, u))
                 && !pts.iter().any(|p| p.1 == v)
             {
@@ -1805,12 +1831,13 @@ impl Column<'_> {
         }
         // new curves' pieces named by the edges they run between, the vertices by those
         let mut marks: Vec<(u32, Name, Name)> = Vec::new();
+        let mut keys: Vec<(Name, usize, Name, Name, Name, Ck)> = Vec::new();
         for (ck, (first, pts, closed, base)) in &runs {
             if matches!(ck, Ck::Edge(..)) {
                 continue;
             }
             let n = if *closed { pts.len() } else { pts.len() - 1 };
-            let mut keys: Vec<(usize, Name, Name, Cut)> = Vec::new();
+            // as the general boolean's `trim`: by the edges a piece runs between, either way round
             for i in 0..n {
                 if uses[first + i] == 0 {
                     continue;
@@ -1818,40 +1845,66 @@ impl Column<'_> {
                 let (v0, v1) = (pts[i].1, pts[(i + 1) % pts.len()].1);
                 let (s0, e0) = self.cut_edge(*ck, v0)?;
                 let (s1, e1) = self.cut_edge(*ck, v1)?;
-                keys.push((
-                    first + i,
-                    self.src(s0).edge(e0).4,
-                    self.src(s1).edge(e1).4,
-                    (s0, e0, v0),
-                ));
+                let (a, b) = (self.src(s0).edge(e0).4.whole(), self.src(s1).edge(e1).4.whole());
+                let name = base.with(0x5e7).with_name(a.min(b)).with_name(a.max(b));
+                keys.push((*base, first + i, a, b, name, *ck));
             }
-            // pieces between the same two edges ranked by where they start along the first
-            let along = |(s, e, v): (usize, EdgeId, Vk)| {
-                let (c, r, ..) = self.src(s).edge(e);
-                c.closest(self.point(v), r)
-            };
-            for &(p, n0, n1, at) in &keys {
-                let mut rank = 0;
-                for k in keys.iter().filter(|k| k.0 != p && k.1 == n0 && k.2 == n1) {
-                    rank += usize::from(along(k.3) < along(at));
-                }
-                let name = base.with_name(n0).with_name(n1).with(rank as u64);
+        }
+        // pieces alike, of one pair of faces on any of its curves, ranked by where they lie in the
+        // frame of the lesser whole's surface (`rank_pairs`)
+        // (the first in the general boolean's order of face pairs says which frame)
+        let of_a = |ck: Ck| match ck {
+            Ck::V(x) => self.walls[self.xs[x].a].face,
+            Ck::H(f, _) => f,
+            Ck::C(_, j) => self.walls[j].face,
+            Ck::Edge(..) => unreachable!("an edge's own pieces are named by the edge"),
+        };
+        keys.sort_unstable_by_key(|k| (k.0, of_a(k.5), k.1));
+        for g in keys.chunk_by(|x, y| x.0 == y.0) {
+            // the vertices between two pieces alike on one curve tie by which way the curve runs,
+            // and this path's carrier may run the other way
+            if (0..g.len()).any(|i| (0..i).any(|j| (g[i].4, g[i].5) == (g[j].4, g[j].5))) {
+                return Err("two pieces of one curve between the same edges");
+            }
+            let mut names: Vec<Name> = g.iter().map(|k| k.4).collect();
+            let (f0, f1) = self.faces_of(g[0].5);
+            let frame = surface_frame(if f0.2.whole() <= f1.2.whole() { f0.0 } else { f1.0 });
+            rank_names(&mut names, &|k| {
+                let pc = &pieces[g[k].1];
+                frame.point_to_local(curve_at(&pc.curve, pc.range, true))
+            });
+            for (k, &name) in g.iter().zip(&names) {
+                let (base, p, a, b) = (k.0, k.1, k.2, k.3);
                 pieces[p].name = name;
                 if let VKey::New(i) = pieces[p].start {
-                    marks.push((i, name, name.with(0)));
+                    marks.push((i, base.with_name(a), name.with(0)));
                 }
                 if let VKey::New(i) = pieces[p].end {
-                    marks.push((i, Name(name.0 ^ 1), name.with(1)));
+                    marks.push((i, base.with_name(b), name.with(1)));
                 }
             }
         }
         // a vertex no new curve ends at is named by the edge it cuts
-        for &(u, side, v) in &self.extra {
+        for &(u, side, v, by) in &self.extra {
             if let Some(&i) = new_ids.get(&v)
-                && !marks.iter().any(|m| m.0 == i)
+                && !marks.iter().any(|m| m.0 == i && m.1 != m.2)
             {
+                static CUT: std::sync::OnceLock<Name> = std::sync::OnceLock::new();
+                let cut = *CUT.get_or_init(|| Name::feature(0).with_str("cut"));
                 let n = self.src(side).edge(u).4.whole();
-                marks.push((i, n, n));
+                let walls = if side == 1 {
+                    0..self.nb
+                } else {
+                    self.nb..self.walls.len()
+                };
+                for w in &self.walls[walls] {
+                    if w.ups.contains(&u) {
+                        let m = cut
+                            .with_set(&[self.src(side).face(w.face).2.whole(), by.whole()])
+                            .with_name(n);
+                        marks.push((i, m, m));
+                    }
+                }
             }
         }
         let vnames = vertex_names(&points, marks, Name::feature(0), &part_frame(self.a), None);
@@ -1888,6 +1941,28 @@ impl Column<'_> {
             }
             at = end;
         }
+        // edges of a cap flush on a face are named as the cuts they become, as the general boolean's
+        let mut flush = Vec::new();
+        let pairs: Vec<[(usize, FaceId); 2]> = (0..2)
+            .filter_map(|cap| Some([(0, self.squares[self.glued[cap]?].f), (1, self.caps[cap])]))
+            .collect();
+        if !pairs.is_empty() {
+            let tool = self.b.body();
+            let whole = |sd: usize, e: EdgeId| match runs.get(&Ck::Edge(sd, e)) {
+                Some((first, pts, closed, _)) if pts.len() - usize::from(!*closed) == 1 => Some(*first),
+                _ => None,
+            };
+            let kept_faces = specs.iter().map(|s| (s.side, s.from)).collect();
+            flush = crate::boolean::flush_edges_as_cuts(
+                &[self.a, &*tool],
+                kept_faces,
+                &mut pieces,
+                &uses,
+                &pairs,
+                &whole,
+                Name::feature(0),
+            );
+        }
         let kept = specs
             .iter()
             .enumerate()
@@ -1902,7 +1977,7 @@ impl Column<'_> {
             kept,
             points,
             vnames,
-            flush: Vec::new(),
+            flush,
             tols,
             grown: Vec::new(),
             alias: Vec::new(),

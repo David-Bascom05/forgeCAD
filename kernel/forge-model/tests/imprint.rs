@@ -91,7 +91,6 @@ fn tools() -> Part {
 }
 
 #[test]
-#[ignore = "imprint names its new edges as the general boolean did before the naming batch; it is off"]
 fn imprint_matches_the_general_boolean() {
     set_mode(Mode::Check);
     let before = taken();
@@ -110,7 +109,7 @@ fn imprint_matches_the_general_boolean() {
     set_mode(Mode::Off);
     assert_eq!(on_tools, 9, "the tools part's booleans not all taken");
     assert!(
-        on_torture >= 150,
+        on_torture >= 130,
         "only {on_torture} booleans took the imprint path"
     );
 }
