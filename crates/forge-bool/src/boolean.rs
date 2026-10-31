@@ -1991,6 +1991,18 @@ pub(crate) fn across(body: &Body, f: FaceId, c: forge_topo::CoedgeId) -> R<Surfa
                 })
             }
             Curve::Circle(k) => Surface::Plane(Plane::new(k.frame)),
+            // in a planar face, the round cylinder of the minor radius whose axis leans over the
+            // major one holds it (an oblique section of that cylinder) and stands across the face
+            Curve::Ellipse(e) if matches!(s, Surface::Plane(_)) || n.dot(e.frame.z()).abs() > 1.0 - 1e-6 => {
+                let lean = (1.0 - (e.minor / e.major) * (e.minor / e.major)).max(0.0).sqrt();
+                let axis = (e.frame.z() * (e.minor / e.major) + e.frame.x() * lean)
+                    .normalize()
+                    .ok_or(BoolError::Internal("degenerate edge"))?;
+                Surface::Cylinder(Cylinder {
+                    frame: Frame::from_z(e.frame.origin, axis),
+                    radius: e.minor,
+                })
+            }
             Curve::Ellipse(e) => Surface::Plane(Plane::new(e.frame)),
             // likewise the parabolic wall square to a parabola's plane (a vertex blend's rim)
             Curve::Parabola(pa) if n.dot(pa.frame.z()).abs() > 1.0 - 1e-6 => {

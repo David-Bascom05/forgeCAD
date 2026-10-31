@@ -118,3 +118,18 @@ fillet 2 (edges between boss box concave)
 ",
     );
 }
+
+/// A half-round boss across a flange, over a drafted and filleted corner: the corner's
+/// ellipse rims on the top face stood across it as their own plane, so the boss's edge never
+/// split there (R1).
+#[test]
+fn boss_through_drafted_fillet() {
+    builds_valid(
+        "box: extrude 95 rect -120 -65 240 130
+dr: draft -2 xy at 0 0 95 (faces of box normal +x) (faces of box normal -x) (faces of box normal +y) (faces of box normal -y)
+fillet 12 (edges of box shorter 100)
+flange: extrude 14 -xy at 0 0 95 rect -142 -87 284 174
+extrude sym 174 xz at -78 0 95 loop line -33.5 0 33.5 0 arc 0 0 33.5 0 -90 arc 0 0 33.5 -90 -90
+",
+    );
+}
