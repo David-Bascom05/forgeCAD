@@ -161,6 +161,9 @@ impl CurveGeom for Line {
             d2: Vec3::ZERO,
         }
     }
+    fn eval(&self, t: f64) -> Point3 {
+        self.origin + self.dir * t
+    }
     fn domain(&self) -> Domain1 {
         Domain1::LINE
     }
@@ -217,6 +220,11 @@ impl CurveGeom for Circle {
             d1: f.x() * (-r * s) + f.y() * (r * c),
             d2: f.x() * (-r * c) + f.y() * (-r * s),
         }
+    }
+    fn eval(&self, t: f64) -> Point3 {
+        let (s, c) = dmath::sin_cos(t);
+        let f = &self.frame;
+        f.origin + f.x() * (self.radius * c) + f.y() * (self.radius * s)
     }
     fn domain(&self) -> Domain1 {
         Domain1::ANGLE
@@ -430,6 +438,14 @@ macro_rules! dispatch {
 impl CurveGeom for Curve {
     fn deriv(&self, t: f64) -> CurveDeriv {
         dispatch!(self, c => c.deriv(t))
+    }
+    fn eval(&self, t: f64) -> Point3 {
+        match self {
+            Curve::Line(c) => c.eval(t),
+            Curve::Circle(c) => c.eval(t),
+            Curve::Intersection(c) => c.eval(t),
+            _ => self.deriv(t).p,
+        }
     }
     fn domain(&self) -> Domain1 {
         dispatch!(self, c => c.domain())
