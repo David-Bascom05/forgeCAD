@@ -1,10 +1,13 @@
 //! A set of benchmark parts unlike one another, so no single shape decides
 //! what "fast" and "robust" mean, plus a random history generator.
 
-use crate::{Combine, End, Extent, Feature, Head, Hole, Layout, Part, Row, Source, Thread, Turn, torture};
+use crate::{
+    Combine, End, Extent, Feature, Head, Hole, Layout, Part, Row, Source, Target, Thread, Turn, torture,
+};
 use forge_math::rng::Rng;
 use forge_math::{Frame, Point2, Point3, Vec2, Vec3, dmath};
 use forge_ops::{Axis2, Profile, ProfileLoop, Segment};
+use forge_topo::Name;
 
 fn frame(o: Point3, z: Vec3, x: Vec3) -> Frame {
     let z = z.normalize().expect("nonzero axis");
@@ -610,6 +613,93 @@ pub fn hole_grid() -> Part {
         },
     ];
     Part { features }
+}
+
+/// Posts up to a dome and up to the underside of a rod lying over a plate, pockets down to a
+/// tilted plane, holes down to the next face; or (`flat`) the same, each ending flat at about
+/// the same place, to price ends on a surface.
+pub fn upto(flat: bool) -> Part {
+    let (w, h, t) = (120.0, 80.0, 10.0);
+    let mut f = vec![
+        block(Frame::WORLD, Point2::ORIGIN, w, h, t, Combine::New),
+        ball(Point3::new(30.0, 40.0, t), 15.0, Combine::Add),
+        rod(
+            frame(Point3::new(60.0, 10.0, 35.0), Vec3::Y, Vec3::X),
+            8.0,
+            60.0,
+            Combine::Add,
+        ),
+        Feature::Plane(frame(
+            Point3::new(0.0, 0.0, 6.0),
+            Vec3::new(0.05, 0.03, 1.0),
+            Vec3::X,
+        )),
+    ];
+    let dome = Name::feature(2).with_str("side").with(0).with(0);
+    let under = Name::feature(3).with_str("side").with(0);
+    let end = |e: Extent, d: f64| if flat { Extent::Distance(d) } else { e };
+    let post = |x: f64, y: f64, e: Extent| Feature::Extrude {
+        profile: Profile {
+            plane: up(Point3::new(x, y, t)),
+            loops: vec![Profile::circle(Point2::ORIGIN, 1.5, 0)],
+        },
+        extent: e,
+        op: Combine::Add,
+    };
+    for k in 0..4 {
+        let a = k as f64 * dmath::FRAC_PI_2 + 0.3;
+        let (s, c) = dmath::sin_cos(a);
+        let e = Extent::To {
+            target: Target::Face {
+                feature: 1,
+                name: dome,
+            },
+            offset: 2.0,
+        };
+        f.push(post(30.0 + 8.0 * c, 40.0 + 8.0 * s, end(e, 14.0)));
+    }
+    for k in 0..4 {
+        let e = Extent::To {
+            target: Target::Face {
+                feature: 2,
+                name: under,
+            },
+            offset: 1.0,
+        };
+        f.push(post(
+            60.0 + 2.0 * k as f64 - 3.0,
+            20.0 + 12.0 * k as f64,
+            end(e, 18.5),
+        ));
+    }
+    for k in 0..4 {
+        f.push(Feature::Extrude {
+            profile: Profile {
+                plane: up(Point3::new(80.0 + 8.0 * k as f64, 60.0, t)),
+                loops: vec![Profile::rectangle(Point2::ORIGIN, 5.0, 8.0, 0)],
+            },
+            extent: end(
+                Extent::To {
+                    target: Target::Plane(3),
+                    offset: 0.0,
+                },
+                -1.0,
+            ),
+            op: Combine::Cut,
+        });
+    }
+    for k in 0..4 {
+        f.push(Feature::Hole(Box::new(Hole {
+            end: if flat { End::Through } else { End::ToNext },
+            ..hole(
+                Point3::new(90.0 + 8.0 * k as f64, 20.0, t),
+                3.0,
+                Head::Plain,
+                End::Through,
+            )
+        })));
+    }
+    Part { features: f }
 }
 
 /// A random history: a random block, then `count` features of random kind,

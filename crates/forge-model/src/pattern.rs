@@ -321,6 +321,10 @@ fn mirror2(p: Point2) -> Point2 {
 /// A tool's analytic solid moved by `m`.
 pub(crate) fn moved_shape(s: &Shape, m: &Motion) -> Shape {
     match (s, m) {
+        (Shape::Csg { first, rest }, _) => Shape::Csg {
+            first: Box::new(moved_shape(first, m)),
+            rest: rest.iter().map(|(op, s)| (*op, moved_shape(s, m))).collect(),
+        },
         (Shape::Ball { center, radius }, _) => Shape::Ball {
             center: m.point(*center),
             radius: *radius,

@@ -1233,15 +1233,23 @@ pub(crate) fn trim(
     } else if domain.lo.is_finite() && domain.hi.is_finite() {
         Interval::new(domain.lo, domain.hi)
     } else {
-        let Curve::Line(line) = &curve else {
-            return Err(BoolError::Unsupported("open conic intersection curve"));
-        };
         let both = index[0].boxes[faces[0].index()]
             .hull(&index[1].boxes[faces[1].index()])
             .grow(1.0);
-        match line_box(line, &both) {
-            Some(r) => r,
-            None => return Ok(()),
+        // an open conic's parameter is bounded by its distance from its frame's origin:
+        // the y coordinate (over b for a hyperbola)
+        let reach = |f: &forge_math::Frame| {
+            let c = both.center();
+            c.distance(f.origin) + both.diagonal() / 2.0
+        };
+        match &curve {
+            Curve::Line(line) => match line_box(line, &both) {
+                Some(r) => r,
+                None => return Ok(()),
+            },
+            Curve::Parabola(p) => Interval::new(-reach(&p.frame), reach(&p.frame)),
+            Curve::Hyperbola(h) => Interval::new(-reach(&h.frame) / h.b, reach(&h.frame) / h.b),
+            _ => return Err(BoolError::Unsupported("open curve without a closed form")),
         }
     };
     let first = cuts.len();

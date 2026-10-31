@@ -9,6 +9,7 @@ pub mod pattern;
 pub mod suite;
 pub mod torture;
 mod trace;
+mod upto;
 
 pub use extent::{Extent, ExtentError, Target, Toward, Turn};
 use forge_bool::{BoolError, CpuBatch, Op, Seg2, Shape, boolean_into};
@@ -493,10 +494,15 @@ fn apply_fillet(i: usize, body: &Body, edges: &[(Name, f64)]) -> Result<Body, Re
 fn tools(features: &[Feature], i: usize, build: bool) -> Result<Vec<Tool>, RegenError> {
     match &features[i] {
         Feature::Hole(h) => {
-            let cut = extent::hole_end(features, i, h)?
+            let (h, up) = extent::hole_end(features, i, h)?;
+            let cut = h
                 .revolve(&hole::reach(&features[..i]))
                 .map_err(|error| RegenError::Hole { feature: i, error })?;
-            Ok(vec![tool(i, &cut, build)?])
+            let base = tool(i, &cut, build)?;
+            Ok(vec![match up {
+                None => base,
+                Some(u) => upto::build(i, base, &u.plan, &u.start, u.far, build)?,
+            }])
         }
         Feature::Pattern {
             of: Source::Features(src),
@@ -521,9 +527,12 @@ fn tools(features: &[Feature], i: usize, build: bool) -> Result<Vec<Tool>, Regen
             }
             Ok(out)
         }
-        Feature::Extrude { .. } | Feature::Revolve { .. } => {
-            Ok(vec![tool(i, &*extent::resolve(features, i)?, build)?])
-        }
+        Feature::Extrude { .. } | Feature::Revolve { .. } => Ok(vec![match extent::resolve(features, i)? {
+            extent::Resolved::Plain(f) => tool(i, &f, build)?,
+            extent::Resolved::UpTo(f, u) => {
+                upto::build(i, tool(i, &f, build)?, &u.plan, &u.start, u.far, build)?
+            }
+        }]),
         Feature::Plane(_) => Ok(vec![]),
         f => Ok(vec![tool(i, f, build)?]),
     }

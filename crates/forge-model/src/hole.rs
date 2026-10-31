@@ -40,8 +40,11 @@ pub enum End {
     Through,
     /// The wall's depth below the mouth (the drill point goes further).
     Depth(f64),
-    /// The wall down to a plane square to the hole, then `offset` further.
+    /// The wall down to a plane or face's surface, then `offset` further: flat on a plane
+    /// square to the hole, cut off on any other surface (no drill point then).
     To { target: crate::Target, offset: f64 },
+    /// Down to the next face of the part.
+    ToNext,
 }
 
 /// Nominal (major) diameter and pitch.
@@ -87,7 +90,7 @@ impl Hole {
         let depth = match self.end {
             End::Depth(d) if pos(d) => d,
             End::Depth(_) => return Err(HoleError::BadSize),
-            End::To { .. } => unreachable!("resolved to a depth first"),
+            End::To { .. } | End::ToNext => unreachable!("resolved to a depth first"),
             End::Through => {
                 // the part's whole width along the axis, from wherever the mouth is on it
                 let z = self.at.z();
@@ -173,7 +176,7 @@ fn segment_points(s: &Segment) -> Vec<Point2> {
     }
 }
 
-fn profile_points(p: &Profile) -> impl Iterator<Item = Point2> + '_ {
+pub(crate) fn profile_points(p: &Profile) -> impl Iterator<Item = Point2> + '_ {
     p.loops
         .iter()
         .flat_map(|l| l.segments.iter().flat_map(|(s, _)| segment_points(s)))
@@ -216,7 +219,11 @@ fn adds(features: &[Feature], i: usize) -> Vec<Box3> {
             match &features[i] {
                 Feature::Ball { .. } => vec![tool_box(&features[i])],
                 // a part it cannot be built is no part of the reach
-                _ => crate::extent::resolve(features, i).map_or(vec![], |f| vec![tool_box(&f)]),
+                _ => match crate::extent::resolve(features, i) {
+                    Ok(crate::extent::Resolved::Plain(f)) => vec![tool_box(&f)],
+                    Ok(crate::extent::Resolved::UpTo(f, _)) => vec![tool_box(&f)],
+                    Err(_) => vec![],
+                },
             }
         }
         Feature::Pattern {

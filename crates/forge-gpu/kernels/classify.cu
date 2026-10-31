@@ -2,7 +2,8 @@
 // finds which tools hold it (from their analytic solids: shape.rs) and folds the CSG
 // expression just inside and just outside its own tool. See the layout in lib.rs.
 //
-// tools: TOOL values each: kind, op, seg0, nseg, frame origin xyz, x xyz, y xyz, z xyz,
+// tools: TOOL values each (combinations' parts after all tools): kind (3: a combination of
+//        nseg parts from record seg0), op, seg0, nseg, frame origin xyz, x xyz, y xyz, z xyz,
 //        a, b (prism lo hi / revolve angle (<0 whole) / ball radius), origin2 xy, dir2 xy,
 //        perp2 xy
 // segs:  SEG values each: kind (0 line, 1 arc), then a.x a.y b.x b.y | c.x c.y r start sweep
@@ -81,7 +82,7 @@ template <typename T> __device__ int combine(Prof<T> p, T z, T lo, T hi, T m) {
     return (p.in && p.dist > m && dz > m) ? 1 : 2;
 }
 
-template <typename T> __device__ int member(const T* t, const T* segs, T px, T py, T pz, T m, T graze) {
+template <typename T> __device__ int member_plain(const T* t, const T* segs, T px, T py, T pz, T m, T graze) {
     int kind = (int)t[0];
     if (kind == 2) {
         T dx = px - t[4], dy = py - t[5], dz = pz - t[6];
@@ -126,6 +127,30 @@ template <typename T> __device__ int member(const T* t, const T* segs, T px, T p
     return 2;
 }
 
+// a tool's verdict: a plain solid's, or a combination's (kind 3: parts from t[2], t[3] of them,
+// each folded in by its op), from its parts' (shape.rs Csg)
+template <typename T>
+__device__ int member(const T* tools, const T* t, const T* segs, T px, T py, T pz, T m, T graze) {
+    // one call site, so the plain solid's test is inlined once
+    int n = 1;
+    if ((int)t[0] == 3) {
+        n = (int)t[3];
+        t = tools + (size_t)t[2] * TOOL;
+    }
+    int v = 0;
+    for (int i = 0; i < n; i++) {
+        const T* p = t + (size_t)i * TOOL;
+        int op = i == 0 ? -1 : (int)p[1];
+        if (v == 0 && op > 0) continue;
+        int w = member_plain(p, segs, px, py, pz, m, graze);
+        if (op == -1) v = w;
+        else if (op == 0) v = (v == 1 || w == 1) ? 1 : ((v == 0 && w == 0) ? 0 : 2);
+        else if (op == 1) v = (v == 0 || w == 1) ? 0 : ((v == 1 && w == 0) ? 1 : 2);
+        else v = (v == 0 || w == 0) ? 0 : ((v == 1 && w == 1) ? 1 : 2);
+    }
+    return v;
+}
+
 // whether a point is in a tool's box (6 doubles, then 12 floats from `fast`): 0 out, 1 in, 2
 // too near the box's faces for floats to tell (single precision then leaves the point
 // undecided: it does no double arithmetic at all)
@@ -165,7 +190,7 @@ __device__ int verdict(const T* tools, int ntools, const T* segs, const double* 
             near = 1;
             break;
         } else {
-            int mb = member(t, segs, qx, qy, qz, margin, graze);
+            int mb = member(tools, t, segs, qx, qy, qz, margin, graze);
             if (mb == 2) {
                 near = 1;
                 break;

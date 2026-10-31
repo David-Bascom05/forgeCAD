@@ -4,6 +4,7 @@
 //! The answer is In or Out only when the point is clear of the boundary by a margin; nearer,
 //! it is Near and the caller asks the B-rep.
 
+use crate::Op;
 use forge_math::{Frame, Point2, Point3, Vec2, dmath};
 
 /// A piece of a closed 2D profile.
@@ -45,6 +46,13 @@ pub enum Shape {
     Ball {
         center: Point3,
         radius: f64,
+    },
+    /// `first`, then each later solid combined with it in turn (a tool cut off at a surface:
+    /// its sweep, kept on the near side of a plane, less the solid beyond the surface). Parts
+    /// are plain solids, never combinations.
+    Csg {
+        first: Box<Shape>,
+        rest: Vec<(Op, Shape)>,
     },
 }
 
@@ -198,6 +206,26 @@ impl Shape {
                     Member::In if sector.0 && sector.1 > m => Member::In,
                     _ => Member::Near,
                 }
+            }
+            Shape::Csg { first, rest } => {
+                // a combination's boundary lies on its parts': clear of all of theirs is clear of it
+                let mut v = first.member(p, m);
+                for (op, sh) in rest {
+                    if v == Member::Out && *op != Op::Union {
+                        continue;
+                    }
+                    let w = sh.member(p, m);
+                    v = match op {
+                        Op::Union if v == Member::In || w == Member::In => Member::In,
+                        Op::Union if v == Member::Out && w == Member::Out => Member::Out,
+                        Op::Subtract if v == Member::Out || w == Member::In => Member::Out,
+                        Op::Subtract if v == Member::In && w == Member::Out => Member::In,
+                        Op::Intersect if v == Member::Out || w == Member::Out => Member::Out,
+                        Op::Intersect if v == Member::In && w == Member::In => Member::In,
+                        _ => Member::Near,
+                    };
+                }
+                v
             }
             Shape::Ball { center, radius } => {
                 let d = p.distance(*center);

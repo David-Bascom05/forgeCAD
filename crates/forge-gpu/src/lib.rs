@@ -476,91 +476,122 @@ fn float_box(b: &Box3) -> [f32; 12] {
 
 static NEXT_ID: AtomicU64 = AtomicU64::new(1);
 
+/// One plain solid as the kernel reads it, combined by op code `op` (0 union, 1 subtract, 2
+/// intersect), its profile appended to `segs`.
+fn plain(sh: &Shape, op: f64, segs: &mut Vec<f64>) -> [f64; TOOL] {
+    let mut t = [0.0f64; TOOL];
+    t[1] = op;
+    let mut put_segs = |t: &mut [f64; TOOL], ss: &[Seg2]| {
+        t[2] = (segs.len() / SEG) as f64;
+        t[3] = ss.len() as f64;
+        for s in ss {
+            segs.extend_from_slice(&match *s {
+                Seg2::Line { a, b } => [0.0, a.x, a.y, b.x, b.y, 0.0],
+                Seg2::Arc { c, r, start, sweep } => [1.0, c.x, c.y, r, start, sweep],
+            });
+        }
+    };
+    let put_frame = |t: &mut [f64; TOOL], f: &forge_math::Frame| {
+        let (x, y, z) = (f.x().get(), f.y().get(), f.z().get());
+        t[4..16].copy_from_slice(&[
+            f.origin.x, f.origin.y, f.origin.z, x.x, x.y, x.z, y.x, y.y, y.z, z.x, z.y, z.z,
+        ]);
+    };
+    match sh {
+        Shape::Prism {
+            frame,
+            segs: ss,
+            lo,
+            hi,
+        } => {
+            t[0] = 0.0;
+            put_segs(&mut t, ss);
+            put_frame(&mut t, frame);
+            t[16] = *lo;
+            t[17] = *hi;
+        }
+        Shape::Revolved {
+            frame,
+            origin,
+            dir,
+            perp,
+            segs: ss,
+            angle,
+        } => {
+            t[0] = 1.0;
+            put_segs(&mut t, ss);
+            put_frame(&mut t, frame);
+            t[16] = angle.unwrap_or(-1.0);
+            t[18..24].copy_from_slice(&[origin.x, origin.y, dir.x, dir.y, perp.x, perp.y]);
+        }
+        Shape::Ball { center, radius } => {
+            t[0] = 2.0;
+            t[4..7].copy_from_slice(&[center.x, center.y, center.z]);
+            t[16] = *radius;
+        }
+        Shape::Csg { .. } => unreachable!("a combination's parts are plain"),
+    }
+    t
+}
+
 /// Tools packed as the kernel reads them. Each packing has its own id, so the GPU knows when
 /// the tools on it are already these.
 #[derive(Clone)]
 pub struct Packed {
     tools: Vec<f64>,
     segs: Vec<f64>,
+    /// Tools (their parts follow them in `tools`).
+    n: usize,
     id: u64,
 }
 
 impl Packed {
     pub fn new(shapes: &[Shape], ops: &[Op]) -> Packed {
+        let code = |op: Option<&Op>| match op {
+            None | Some(Op::Union) => 0.0,
+            Some(Op::Subtract) => 1.0,
+            _ => 2.0,
+        };
         let mut tools = Vec::with_capacity(shapes.len() * TOOL);
         let mut segs: Vec<f64> = Vec::new();
+        // a combination's parts, packed after every tool
+        let mut parts: Vec<[f64; TOOL]> = Vec::new();
         for (k, sh) in shapes.iter().enumerate() {
-            let mut t = [0.0f64; TOOL];
-            t[1] = match ops.get(k.wrapping_sub(1)) {
-                _ if k == 0 => 0.0,
-                Some(Op::Union) => 0.0,
-                Some(Op::Subtract) => 1.0,
-                _ => 2.0,
+            let op = code(if k == 0 { None } else { ops.get(k - 1) });
+            let t = match sh {
+                Shape::Csg { first, rest } => {
+                    let mut t = [0.0f64; TOOL];
+                    t[0] = 3.0;
+                    t[1] = op;
+                    t[2] = (shapes.len() + parts.len()) as f64;
+                    t[3] = (1 + rest.len()) as f64;
+                    parts.push(plain(first, 0.0, &mut segs));
+                    for (o, p) in rest {
+                        parts.push(plain(p, code(Some(o)), &mut segs));
+                    }
+                    t
+                }
+                _ => plain(sh, op, &mut segs),
             };
-            let mut put_segs = |t: &mut [f64; TOOL], ss: &[Seg2]| {
-                t[2] = (segs.len() / SEG) as f64;
-                t[3] = ss.len() as f64;
-                for s in ss {
-                    segs.extend_from_slice(&match *s {
-                        Seg2::Line { a, b } => [0.0, a.x, a.y, b.x, b.y, 0.0],
-                        Seg2::Arc { c, r, start, sweep } => [1.0, c.x, c.y, r, start, sweep],
-                    });
-                }
-            };
-            let put_frame = |t: &mut [f64; TOOL], f: &forge_math::Frame| {
-                let (x, y, z) = (f.x().get(), f.y().get(), f.z().get());
-                t[4..16].copy_from_slice(&[
-                    f.origin.x, f.origin.y, f.origin.z, x.x, x.y, x.z, y.x, y.y, y.z, z.x, z.y, z.z,
-                ]);
-            };
-            match sh {
-                Shape::Prism {
-                    frame,
-                    segs: ss,
-                    lo,
-                    hi,
-                } => {
-                    t[0] = 0.0;
-                    put_segs(&mut t, ss);
-                    put_frame(&mut t, frame);
-                    t[16] = *lo;
-                    t[17] = *hi;
-                }
-                Shape::Revolved {
-                    frame,
-                    origin,
-                    dir,
-                    perp,
-                    segs: ss,
-                    angle,
-                } => {
-                    t[0] = 1.0;
-                    put_segs(&mut t, ss);
-                    put_frame(&mut t, frame);
-                    t[16] = angle.unwrap_or(-1.0);
-                    t[18..24].copy_from_slice(&[origin.x, origin.y, dir.x, dir.y, perp.x, perp.y]);
-                }
-                Shape::Ball { center, radius } => {
-                    t[0] = 2.0;
-                    t[4..7].copy_from_slice(&[center.x, center.y, center.z]);
-                    t[16] = *radius;
-                }
-            }
             tools.extend_from_slice(&t);
+        }
+        for p in parts {
+            tools.extend_from_slice(&p);
         }
         Packed {
             tools,
             segs,
+            n: shapes.len(),
             id: NEXT_ID.fetch_add(1, Ordering::Relaxed),
         }
     }
 
     pub fn len(&self) -> usize {
-        self.tools.len() / TOOL
+        self.n
     }
 
     pub fn is_empty(&self) -> bool {
-        self.tools.is_empty()
+        self.n == 0
     }
 }
 

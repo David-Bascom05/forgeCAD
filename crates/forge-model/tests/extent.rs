@@ -342,8 +342,9 @@ fn extent_refusals() {
         ),
         (
             tilted,
+            // tilted, it ends on the plane, which here cuts the sketch
             disc(at(10.0), 20.0, 15.0, 3.0, to(Target::Plane(1), 0.0), Combine::Add),
-            ExtentError::NotSquare,
+            ExtentError::NotAhead,
         ),
         (
             at(10.0),
@@ -389,7 +390,7 @@ fn extent_refusals() {
     for (plane, f, want) in cases {
         assert_eq!(refused(plane, f), bad(want));
     }
-    // a face that is not flat
+    // a rod's side, travelled along
     let part = on_plate(vec![
         disc(at(10.0), 8.0, 8.0, 3.0, Extent::Distance(5.0), Combine::Add),
         disc(
@@ -411,7 +412,7 @@ fn extent_refusals() {
         part.regenerate().expect_err("refused"),
         RegenError::Extent {
             feature: 2,
-            error: ExtentError::NotPlanar
+            error: ExtentError::NeverHits
         }
     );
 }

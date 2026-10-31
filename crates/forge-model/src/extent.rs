@@ -1,13 +1,15 @@
 //! How far an extrude, revolve or hole goes: a distance or angle, both ways, through
-//! everything, or up to a plane or an earlier feature's planar face. Each is worked out from
-//! the feature's definition and the earlier features' tools, never from the part as built, so
-//! the sequential and n-ary regens build the same tool.
+//! everything, up to a plane or an earlier feature's face, or up to the next face. Each is
+//! worked out from the feature's definition and the earlier features' tools, never from the
+//! part as built, so the sequential and n-ary regens build the same tool. An end that is not a
+//! plane square to the travel is cut off on its surface (upto.rs).
 
 use crate::pattern::corners;
-use crate::{End, Feature, Hole, RegenError, hole, shape, tools};
-use forge_bool::Shape;
-use forge_geom::Surface;
-use forge_math::{Frame, dmath, tol};
+use crate::upto::{Plan, next_face, plan, samples};
+use crate::{End, Feature, Head, Hole, RegenError, hole, shape, tools};
+use forge_bool::{Op, Shape};
+use forge_geom::{Plane, Surface};
+use forge_math::{Frame, Point2, Point3, UnitVec3, dmath, tol};
 use forge_topo::Name;
 use std::borrow::Cow;
 
@@ -22,8 +24,13 @@ pub enum Extent {
     TwoSided { forward: f64, back: f64 },
     /// Through everything the part can hold (cuts and intersections only).
     Through(Toward),
-    /// Up to a plane parallel to the sketch, then `offset` on past it (negative: short of it).
+    /// Up to a plane or a face's surface (extended past the face), then `offset` on past it
+    /// (negative: short of it). A plane square to the travel gives a flat end; any other
+    /// plane, a sphere, a cylinder or a cone an end on that surface.
     To { target: Target, offset: f64 },
+    /// Up to the first face of the part the sketch's rays meet, along its normal (`reverse`:
+    /// against it).
+    ToNext { reverse: bool },
 }
 
 /// How far a revolve turns about its axis.
@@ -51,8 +58,8 @@ pub enum Toward {
     Both,
 }
 
-/// A plane to end at: an earlier work plane feature (its xy), or a planar face of an earlier
-/// feature's tool (pattern copies included, by their instance names).
+/// A plane to end at: an earlier work plane feature (its xy), or a face of an earlier feature's
+/// tool (pattern copies included, by their instance names), its surface extended.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub enum Target {
     Plane(usize),
@@ -68,25 +75,51 @@ pub enum ExtentError {
     /// The target is not an earlier work plane, or the face not among an earlier solid
     /// feature's.
     NoFace,
-    /// The face is not planar.
+    /// The face is not planar (a revolve ends only at a plane).
     NotPlanar,
     /// The plane does not lie square to the travel (parallel to the sketch, or through a
     /// revolve's axis, or square to a hole), so the end would not be flat.
     NotSquare,
     /// The sketch already lies on the plane.
     AlreadyThere,
+    /// The travel never meets the surface (it runs along it).
+    NeverHits,
+    /// The surface is not wholly ahead of the sketch: it crosses it, or lies behind.
+    NotAhead,
+    /// Some of the profile's rays miss the surface.
+    NotCovered,
+    /// No face lies ahead of the sketch.
+    NoNextFace,
+    /// The sketch's rays meet different faces first, or meet one at an edge.
+    Ambiguous,
+    Unsupported(&'static str),
+}
+
+/// What an extrude or hole comes to: a plain one, or a sweep cut off at a surface.
+pub(crate) enum Resolved<'a> {
+    Plain(Cow<'a, Feature>),
+    /// The sweep (a plain extrude) and where it is cut off.
+    UpTo(Feature, UpTo),
+}
+
+/// A sweep (its sketch faces `start`, its far end on the plane through `far` square to it), cut
+/// off as `plan` says.
+pub(crate) struct UpTo {
+    pub plan: Plan,
+    pub start: Vec<Name>,
+    pub far: (Point3, UnitVec3),
 }
 
 fn bad(feature: usize) -> impl Fn(ExtentError) -> RegenError {
     move |error| RegenError::Extent { feature, error }
 }
 
-/// The plane a target names.
-fn plane(features: &[Feature], i: usize, t: &Target) -> Result<Frame, RegenError> {
+/// The surface a target names.
+fn surface(features: &[Feature], i: usize, t: &Target) -> Result<Surface, RegenError> {
     let (k, name) = match *t {
         Target::Plane(k) => {
             return match features.get(k) {
-                Some(Feature::Plane(f)) if k < i => Ok(*f),
+                Some(Feature::Plane(f)) if k < i => Ok(Surface::Plane(Plane { frame: *f })),
                 _ => Err(bad(i)(ExtentError::NoFace)),
             };
         }
@@ -97,13 +130,100 @@ fn plane(features: &[Feature], i: usize, t: &Target) -> Result<Frame, RegenError
     }
     for (body, ..) in tools(features, k, true)? {
         if let Some(f) = body.face_by_name(name) {
-            return match &body.face(f).surface {
-                Surface::Plane(p) => Ok(p.frame),
-                _ => Err(bad(i)(ExtentError::NotPlanar)),
-            };
+            return Ok(body.face(f).surface.clone());
         }
     }
     Err(bad(i)(ExtentError::NoFace))
+}
+
+/// The plane a target names.
+fn plane(features: &[Feature], i: usize, t: &Target) -> Result<Frame, RegenError> {
+    match surface(features, i, t)? {
+        Surface::Plane(p) => Ok(p.frame),
+        _ => Err(bad(i)(ExtentError::NotPlanar)),
+    }
+}
+
+/// A plane square to `at`'s z, or None.
+fn square(s: &Surface, at: &Frame) -> Option<Frame> {
+    match s {
+        Surface::Plane(p) if p.frame.z().dot(at.z().get()).abs() >= 1.0 - tol::ANGULAR => Some(p.frame),
+        _ => None,
+    }
+}
+
+/// Which way along `z` from `p` the surface lies: +1 or -1.
+fn toward(s: &Surface, p: Point3, z: UnitVec3) -> f64 {
+    let at = match s {
+        Surface::Plane(q) => {
+            let n = q.frame.z();
+            let t = n.dot(q.frame.origin - p) / n.dot(z.get());
+            return if t < 0.0 { -1.0 } else { 1.0 };
+        }
+        Surface::Cylinder(c) => {
+            let off = c.frame.origin - p;
+            let a = c.frame.z();
+            let across = off - a * a.dot(off);
+            return if across.dot(z.get()) < 0.0 && across.length() > c.radius {
+                -1.0
+            } else {
+                1.0
+            };
+        }
+        Surface::Sphere(c) => c.frame.origin,
+        Surface::Cone(c) => c.apex(),
+        Surface::Torus(c) => c.frame.origin,
+        Surface::Procedural(_) => return 1.0,
+    };
+    if z.dot(at - p) < 0.0 { -1.0 } else { 1.0 }
+}
+
+/// The solids of the tools before feature `i`, with how each combines (for finding the next
+/// face): from the last new solid, with no part-changing feature since.
+fn earlier(features: &[Feature], i: usize) -> Result<Vec<(Shape, Op)>, RegenError> {
+    let bad = bad(i);
+    let start = features[..i]
+        .iter()
+        .rposition(crate::starts)
+        .ok_or(bad(ExtentError::NoNextFace))?;
+    if features[start..i].iter().any(crate::modifies) {
+        return Err(bad(ExtentError::Unsupported(
+            "the next face after a part-changing feature",
+        )));
+    }
+    Ok(crate::build_tools(&features[..i], start, 1, false)?
+        .into_iter()
+        .map(|t| (t.2, crate::op_of(t.1)))
+        .collect())
+}
+
+/// The one surface every ray from `from` along `d` meets first.
+fn next(features: &[Feature], i: usize, from: &[Point3], d: UnitVec3) -> Result<Surface, RegenError> {
+    let tools = earlier(features, i)?;
+    let mut found: Option<Surface> = None;
+    for &p in from {
+        let s = next_face(&tools, p, d.get()).map_err(bad(i))?;
+        if found.as_ref().is_some_and(|f| *f != s) {
+            return Err(bad(i)(ExtentError::Ambiguous));
+        }
+        found = Some(s);
+    }
+    found.ok_or(bad(i)(ExtentError::NoNextFace))
+}
+
+/// The four corners of a profile's box, on its plane.
+fn foot(profile: &forge_ops::Profile) -> Vec<Point3> {
+    let (mut lo, mut hi) = (
+        Point2::new(f64::INFINITY, f64::INFINITY),
+        Point2::new(f64::NEG_INFINITY, f64::NEG_INFINITY),
+    );
+    for q in hole::profile_points(profile) {
+        lo = Point2::new(lo.x.min(q.x), lo.y.min(q.y));
+        hi = Point2::new(hi.x.max(q.x), hi.y.max(q.y));
+    }
+    [(lo.x, lo.y), (hi.x, lo.y), (lo.x, hi.y), (hi.x, hi.y)]
+        .map(|(x, y)| profile.plane.plane_point(Point2::new(x, y)))
+        .to_vec()
 }
 
 /// Where a plane parallel to `at`'s xy lies along its z, `offset` further on in the direction
@@ -129,7 +249,7 @@ fn positive(v: f64) -> bool {
 
 /// Feature `i` (an extrude or revolve with any extent) as the plain extrude or revolve it
 /// comes to: a distance from a moved sketch, or an angle from a turned one.
-pub(crate) fn resolve(features: &[Feature], i: usize) -> Result<Cow<'_, Feature>, RegenError> {
+pub(crate) fn resolve(features: &[Feature], i: usize) -> Result<Resolved<'_>, RegenError> {
     let err = bad(i);
     match &features[i] {
         Feature::Extrude {
@@ -139,7 +259,7 @@ pub(crate) fn resolve(features: &[Feature], i: usize) -> Result<Cow<'_, Feature>
         | Feature::Revolve {
             extent: Turn::Angle(_),
             ..
-        } => Ok(Cow::Borrowed(&features[i])),
+        } => Ok(Resolved::Plain(Cow::Borrowed(&features[i]))),
         Feature::Extrude { profile, extent, op } => {
             let at = profile.plane;
             let (lo, hi) = match *extent {
@@ -164,8 +284,31 @@ pub(crate) fn resolve(features: &[Feature], i: usize) -> Result<Cow<'_, Feature>
                     }
                 }
                 Extent::To { target, offset } => {
-                    let end = along(&at, &plane(features, i, &target)?, offset, i)?;
-                    (end.min(0.0), end.max(0.0))
+                    let s = surface(features, i, &target)?;
+                    match square(&s, &at) {
+                        Some(p) => {
+                            let end = along(&at, &p, offset, i)?;
+                            (end.min(0.0), end.max(0.0))
+                        }
+                        None => {
+                            return up_to(i, profile, *op, &s, offset, None)
+                                .map(|(f, u)| Resolved::UpTo(f, u));
+                        }
+                    }
+                }
+                Extent::ToNext { reverse } => {
+                    let z = if reverse { -at.z() } else { at.z() };
+                    let rays: Vec<Point3> = samples(profile).into_iter().map(|q| at.plane_point(q)).collect();
+                    let s = next(features, i, &rays, z)?;
+                    if let Some(p) = square(&s, &at) {
+                        let end = along(&at, &p, 0.0, i)?;
+                        if end * z.dot(at.z().get()) <= 0.0 {
+                            return Err(err(ExtentError::NotAhead));
+                        }
+                        (end.min(0.0), end.max(0.0))
+                    } else {
+                        return up_to(i, profile, *op, &s, 0.0, Some(z)).map(|(f, u)| Resolved::UpTo(f, u));
+                    }
                 }
                 Extent::Distance(_) => unreachable!(),
             };
@@ -174,11 +317,11 @@ pub(crate) fn resolve(features: &[Feature], i: usize) -> Result<Cow<'_, Feature>
             }
             let mut profile = profile.clone();
             profile.plane = at.with_origin(at.origin + at.z() * lo);
-            Ok(Cow::Owned(Feature::Extrude {
+            Ok(Resolved::Plain(Cow::Owned(Feature::Extrude {
                 profile,
                 extent: Extent::Distance(hi - lo),
                 op: *op,
-            }))
+            })))
         }
         Feature::Revolve {
             profile,
@@ -221,28 +364,102 @@ pub(crate) fn resolve(features: &[Feature], i: usize) -> Result<Cow<'_, Feature>
             let turn = rf.rotated_about_z(from).compose(&rf.inverse());
             let mut profile = profile.clone();
             profile.plane = turn.compose(&profile.plane);
-            Ok(Cow::Owned(Feature::Revolve {
+            Ok(Resolved::Plain(Cow::Owned(Feature::Revolve {
                 profile,
                 axis: *axis,
                 extent: Turn::Angle(sweep),
                 op: *op,
-            }))
+            })))
         }
         _ => unreachable!("only extrudes and revolves have extents"),
     }
 }
 
-/// Hole `i` with an end at a plane turned into one at a depth.
-pub(crate) fn hole_end(features: &[Feature], i: usize, h: &Hole) -> Result<Hole, RegenError> {
-    let End::To { target, offset } = h.end else {
-        return Ok(*h);
+/// Extrude `i` of `profile` cut off at `s`: along `z` if given, else toward the surface.
+fn up_to(
+    i: usize,
+    profile: &forge_ops::Profile,
+    op: crate::Combine,
+    s: &Surface,
+    offset: f64,
+    z: Option<UnitVec3>,
+) -> Result<(Feature, UpTo), RegenError> {
+    let at = profile.plane;
+    let refp = samples(profile).first().map_or(at.origin, |&q| at.plane_point(q));
+    let z = z.unwrap_or_else(|| {
+        if toward(s, refp, at.z()) < 0.0 {
+            -at.z()
+        } else {
+            at.z()
+        }
+    });
+    let (t, plan) = plan(z, &foot(profile), refp, s, offset).map_err(bad(i))?;
+    let sign = z.dot(at.z().get()).signum();
+    let base = Feature::Extrude {
+        profile: profile.clone(),
+        extent: Extent::Distance(sign * t),
+        op,
     };
-    let depth = along(&h.at, &plane(features, i, &target)?, offset, i)?;
-    if depth < 0.0 {
-        return Err(bad(i)(ExtentError::BadSize));
+    Ok((
+        base,
+        UpTo {
+            plan,
+            start: vec![Name::feature(i as u64 + 1).with_str("start")],
+            far: (at.origin + z * t, z),
+        },
+    ))
+}
+
+/// Hole `i` with an end at a plane square to it turned into one at a depth; with any other end
+/// surface, or up to the next face, a long hole (flat bottom) to cut off there.
+pub(crate) fn hole_end(features: &[Feature], i: usize, h: &Hole) -> Result<(Hole, Option<UpTo>), RegenError> {
+    let s = match h.end {
+        End::To { target, .. } => surface(features, i, &target)?,
+        End::ToNext => {
+            let r = h.diameter / 4.0;
+            let rays: Vec<Point3> = [(0.0, 0.0), (r, 0.0), (-r, 0.0), (0.0, r), (0.0, -r)]
+                .map(|(x, y)| h.at.plane_point(Point2::new(x, y)))
+                .to_vec();
+            next(features, i, &rays, h.at.z())?
+        }
+        _ => return Ok((*h, None)),
+    };
+    let offset = if let End::To { offset, .. } = h.end {
+        offset
+    } else {
+        0.0
+    };
+    if let Some(p) = square(&s, &h.at) {
+        let depth = along(&h.at, &p, offset, i)?;
+        if depth < 0.0 {
+            return Err(bad(i)(ExtentError::BadSize));
+        }
+        return Ok((
+            Hole {
+                end: End::Depth(depth),
+                ..*h
+            },
+            None,
+        ));
     }
-    Ok(Hole {
-        end: End::Depth(depth),
+    let mouth = match h.head {
+        Head::Plain => h.diameter,
+        Head::Counterbore { diameter, .. } | Head::Countersink { diameter, .. } => diameter,
+    } / 2.0;
+    let foot: Vec<Point3> = [(-1.0, -1.0), (1.0, -1.0), (-1.0, 1.0), (1.0, 1.0)]
+        .map(|(x, y)| h.at.plane_point(Point2::new(x * mouth, y * mouth)))
+        .to_vec();
+    let (t, plan) = plan(h.at.z(), &foot, h.at.origin, &s, offset).map_err(bad(i))?;
+    let long = Hole {
+        end: End::Depth(t),
+        point: None,
         ..*h
-    })
+    };
+    let side = Name::feature(i as u64 + 1).with_str("side").with(0);
+    let up = UpTo {
+        plan,
+        start: vec![side.with(0), side.with(1)],
+        far: (h.at.origin + h.at.z() * t, h.at.z()),
+    };
+    Ok((long, Some(up)))
 }
