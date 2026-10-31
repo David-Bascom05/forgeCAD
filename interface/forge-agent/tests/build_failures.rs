@@ -268,7 +268,7 @@ extrude add 10 at 20 0 0 rect 0 20 20 20
 
 /// Loops that touch are for the result to answer. A cut by such a profile whose touch lands in
 /// empty space, here beyond the plate, leaves a sound part; a plate whose hole touches its outline
-/// is refused above, and so is a cut leaving the pinch in the part.
+/// is refused above, and so is a boss whose outline pinches.
 #[test]
 fn a_touching_profile_is_judged_by_its_result() {
     let pi = forge_math::dmath::PI;
@@ -283,10 +283,17 @@ extrude cut 6 at 0 0 -1 circle 0 0 30 circle 0 -20 10
         v < 120.0 * 80.0 * 4.0 && v > 120.0 * 80.0 * 4.0 - lens * 4.0,
         "{v}"
     );
+    // an island of the plate left touching the rest along a line: separate solids, sound
+    builds(
+        "extrude 4 rect -60 -60 120 120
+extrude cut 6 at 0 0 -1 circle 0 0 30 circle 0 -20 10
+",
+    );
+    // the same outline stood on the plate: one solid, joined below, meeting itself along the line
     assert!(
         Model::new(
             "extrude 4 rect -60 -60 120 120
-extrude cut 6 at 0 0 -1 circle 0 0 30 circle 0 -20 10
+extrude add 6 at 0 0 4 circle 0 0 30 circle 0 -20 10
 "
         )
         .error
