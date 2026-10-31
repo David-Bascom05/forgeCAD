@@ -72,7 +72,7 @@ Not measured against others: 1 and 4 are the only counts WebGPU guarantees.
 
 The fins (mesh edges that can turn into a silhouette) and B-rep edges cost about half of a heavy
 frame: the 5,000-placement bench at 1920x1080 has p99 6.25 ms with lines and 3.95 ms with
-`--no-lines`. Each segment is 6 vertex invocations, most of which the vertex shader drops at once.
+`--lines none`. Each segment is 6 vertex invocations, most of which the vertex shader drops at once.
 
 ## Line drawing: a shared index pattern
 
@@ -81,11 +81,14 @@ GPU's vertex cache makes it four. The 5,000-placement bench at 2560x1600, no occ
 drawn plain, 10.57 ms indexed (other changes to the pass being the same). Line width doesn't matter
 (a feather of 0.4 or 0.75 pixels: 15.19 and 15.33 ms): the time is in the vertices.
 
-## Far lines: off (`far_lines`, `--far-lines`, key L)
+## Line modes: near (default), far, none (`LineMode`, `--lines`, key L)
 
-Parts on clustered levels draw no lines. Drawing their B-rep edges from the coarsest tessellated
-level, on the same bench: p99 11.53 ms off, 21.86 ms on. On misses the budget as it stands; it waits
-on David's choice.
+Near draws edges and silhouettes on tessellated levels, none on clustered ones. Far also draws, on
+clustered levels, the B-rep edges of the coarsest tessellated level: all of them, on the 5,000-placement
+bench at 2560x1600, p99 21.86 ms. Polylines are stored longest first, so a level can draw just the
+start of the list; keeping the edges at least `FAR_EDGE_PX` = 6 pixels long on screen (where a level's
+chord is about a pixel) brings it to p99 14.41 ms. Near 11.72 ms, none 6.29 ms on the same run. Far at
+that threshold wasn't compared by eye with others.
 
 ## Occlusion: `AO_REACH` = 0.06 of the window's height (`render.rs`), `AO_STRENGTH`, `AO_BIAS` (`render.wgsl`)
 

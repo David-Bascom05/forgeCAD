@@ -276,3 +276,37 @@ fn a_click_selects_and_the_selection_can_be_zoomed_to() {
     n.event(&button(ElementState::Released, MouseButton::Left));
     assert!(n.selected.is_empty());
 }
+
+#[test]
+fn keys_step_the_section_and_explode_and_ctrl_wheel_moves_the_cut() {
+    let parts = block();
+    let scene = Scene::new(&part_info(&parts), vec![Placement::at(0, [0.0; 3])]);
+    let mut n = nav();
+    assert!(n.key(KeyCode::KeyS, &scene));
+    let at = n.section.expect("on").1;
+    assert_eq!(n.section_plane(), Some([1.0, 0.0, 0.0, -at]));
+    n.event(&WindowEvent::ModifiersChanged(Modifiers::from(
+        ModifiersState::CONTROL,
+    )));
+    let d = n.camera.dist;
+    n.event(&wheel(2.0));
+    assert_eq!(n.camera.dist, d, "the camera stayed");
+    assert!(n.section.unwrap().1 > at);
+    n.key(KeyCode::KeyS, &scene);
+    assert_eq!(n.section.unwrap().0, 1);
+    n.key(KeyCode::KeyS, &scene);
+    n.key(KeyCode::KeyS, &scene);
+    assert_eq!(n.section, None);
+
+    assert_eq!(n.explode_tick(0.0), None);
+    n.key(KeyCode::KeyE, &scene);
+    let mut last = 0.0;
+    let mut now = 0.0;
+    while let Some(t) = n.explode_tick(now) {
+        assert!(t >= last);
+        last = t;
+        now += 16.0;
+    }
+    assert_eq!(last, 1.0);
+    assert!(now < 700.0);
+}

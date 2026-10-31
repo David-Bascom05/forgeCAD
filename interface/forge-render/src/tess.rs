@@ -145,7 +145,17 @@ pub fn build_lod(body: &Body, q: &Quality) -> Result<Lod, TessError> {
 
     // the B-rep edges; a seam (one face on both sides) is no edge to see
     let mut sharp: Vec<(u32, u32)> = Vec::new();
-    for (e, chain) in m.edges.iter().enumerate() {
+    // longest first, so far-lines mode can draw just the start of the list
+    let length = |chain: &[u32]| -> f64 {
+        chain
+            .windows(2)
+            .map(|w| (m.positions[w[1] as usize] - m.positions[w[0] as usize]).length())
+            .sum()
+    };
+    let mut order: Vec<usize> = (0..m.edges.len()).collect();
+    order.sort_by(|&a, &b| length(&m.edges[b]).total_cmp(&length(&m.edges[a])));
+    for e in order {
+        let chain = &m.edges[e];
         let edge = body.edge(EdgeId(e as u32));
         let faces: Vec<u32> = edge.coedges.iter().map(|&c| body.coedge_face(c).0).collect();
         if let [a, b] = faces[..]
@@ -382,6 +392,20 @@ mod tests {
             }
         }
         assert!(l.edges.len() <= body.edges.len() && !l.edges.is_empty());
+        // in order along the list, and longest first
+        let long = |e: &EdgeRange| {
+            (e.first..e.first + e.count)
+                .map(|k| {
+                    let (a, b) = (
+                        vec3_at(&l.segments, k as usize * SEGMENT),
+                        vec3_at(&l.segments, k as usize * SEGMENT + 16),
+                    );
+                    ((a[0] - b[0]).powi(2) + (a[1] - b[1]).powi(2) + (a[2] - b[2]).powi(2)).sqrt()
+                })
+                .sum::<f32>()
+        };
+        assert!(l.edges.windows(2).all(|w| w[0].first + w[0].count == w[1].first));
+        assert!(l.edges.windows(2).all(|w| long(&w[0]) >= long(&w[1]) - 1e-3));
     }
 
     #[test]

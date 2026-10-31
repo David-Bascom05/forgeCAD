@@ -41,7 +41,12 @@ pub struct Draw {
 /// Each part's chords (finest first), its sphere, and every placement's sphere in columns: the
 /// frame's one loop over the placements runs over these.
 pub struct Scene {
+    /// Where each is drawn: its pose, moved outward by exploding.
     pub placements: Vec<Placement>,
+    pose: Vec<Rows>,
+    /// How far exploding moves each, in full (see `set_explode`).
+    outward: Vec<[f32; 3]>,
+    explode: f32,
     /// Every placement's rows as the GPU holds them, and the bytes changed since the last upload.
     pub rows_bytes: Vec<u8>,
     dirty: Option<(usize, usize)>,
@@ -54,6 +59,8 @@ pub struct Scene {
     /// Filled by `cull`: the visible placements' indices, grouped as `draws` says.
     pub visible: Vec<[u8; 4]>,
     pub draws: Vec<Draw>,
+    /// Those a cutting plane crosses, whose insides show: indexed in `visible` too.
+    pub cut_draws: Vec<Draw>,
     picked: Vec<(u32, u32)>,
     counts: Vec<u32>,
     /// Each placement's level as of the last `cull`; `HIDDEN` if culled.
@@ -64,6 +71,9 @@ const HIDDEN: u8 = u8::MAX;
 
 /// A level per part at most (tessellated and clustered).
 pub const LODS: usize = 8;
+/// How far apart fully exploded is: each placement moves out by this many times its distance
+/// from the scene's middle.
+const EXPLODE: f32 = 1.5;
 
 impl Scene {
     pub fn new(parts: &[([f32; 3], f32, Vec<f32>)], placements: Vec<Placement>) -> Scene {
@@ -81,7 +91,25 @@ impl Scene {
         for (p, out) in placements.iter().zip(rows_bytes.as_chunks_mut::<ROWS>().0) {
             write_rows(&p.rows, out);
         }
+        let count = x.len().max(1) as f32;
+        let mid = [
+            x.iter().sum::<f32>() / count,
+            y.iter().sum::<f32>() / count,
+            z.iter().sum::<f32>() / count,
+        ];
+        let outward = (0..n)
+            .map(|i| {
+                [
+                    (x[i] - mid[0]) * EXPLODE,
+                    (y[i] - mid[1]) * EXPLODE,
+                    (z[i] - mid[2]) * EXPLODE,
+                ]
+            })
+            .collect();
         Scene {
+            pose: placements.iter().map(|p| p.rows).collect(),
+            outward,
+            explode: 0.0,
             placements,
             rows_bytes,
             dirty: None,
@@ -93,23 +121,41 @@ impl Scene {
             r,
             visible: Vec::new(),
             draws: Vec::new(),
+            cut_draws: Vec::new(),
             picked: Vec::new(),
             counts: vec![0; parts.len() * LODS],
             level: vec![HIDDEN; n],
         }
     }
 
-    /// Moves a placement: its rows, its sphere, and what the next frame uploads.
+    /// Moves a placement to a new pose: its rows, its sphere, and what the next frame uploads.
     pub fn set_rows(&mut self, i: usize, rows: &Rows) {
+        self.pose[i] = *rows;
+        self.place(i);
+    }
+
+    /// Moves every placement out from the scene's middle: 0 home, 1 fully apart.
+    pub fn set_explode(&mut self, t: f32) {
+        self.explode = t;
+        for i in 0..self.pose.len() {
+            self.place(i);
+        }
+    }
+
+    fn place(&mut self, i: usize) {
+        let mut rows = self.pose[i];
+        for (k, row) in rows.iter_mut().enumerate() {
+            row[3] += self.outward[i][k] * self.explode;
+        }
         let p = &mut self.placements[i];
-        p.rows = *rows;
+        p.rows = rows;
         let c = self.centers[p.part as usize];
         let at = |row: [f32; 4]| row[0] * c[0] + row[1] * c[1] + row[2] * c[2] + row[3];
         self.x[i] = at(rows[0]);
         self.y[i] = at(rows[1]);
         self.z[i] = at(rows[2]);
         let start = i * ROWS;
-        write_rows(rows, &mut self.rows_bytes[start..start + ROWS]);
+        write_rows(&rows, &mut self.rows_bytes[start..start + ROWS]);
         self.dirty = Some(match self.dirty {
             Some((lo, hi)) => (lo.min(start), hi.max(start + ROWS)),
             None => (start, start + ROWS),
@@ -150,16 +196,18 @@ impl Scene {
 
     /// Works out the frame's draws: finest levels first, which draws near things first.
     /// A level is the coarsest whose chord stays under `max_px` pixels on screen.
-    pub fn cull(&mut self, v: &View, max_px: f32) {
+    pub fn cull(&mut self, v: &View, max_px: f32, section: Option<[f32; 4]>) {
         let parts = self.chords.len();
         self.picked.clear();
         self.counts.fill(0);
         self.level.fill(HIDDEN);
         let [a, b, c, d, e] = v.planes;
+        // inside the view's planes, on the side of the cut that's kept
+        let kept = section.map_or([0.0, 0.0, 0.0, f32::MAX], |s| [-s[0], -s[1], -s[2], -s[3]]);
         for i in 0..self.x.len() {
             let (x, y, z, r) = (self.x[i], self.y[i], self.z[i], -self.r[i]);
             let side = |p: [f32; 4]| p[0] * x + p[1] * y + p[2] * z + p[3] < r;
-            if side(a) | side(b) | side(c) | side(d) | side(e) {
+            if side(a) | side(b) | side(c) | side(d) | side(e) | side(kept) {
                 continue;
             }
             let (dx, dy, dz) = (x - v.eye[0], y - v.eye[1], z - v.eye[2]);
@@ -193,6 +241,27 @@ impl Scene {
             let slot = &mut self.counts[bin as usize];
             self.visible[*slot as usize] = i.to_le_bytes();
             *slot += 1;
+        }
+        // those the plane crosses again after them, by bin, for their insides
+        self.cut_draws.clear();
+        if let Some(s) = section {
+            let crossing = |&&(_, i): &&(u32, u32)| {
+                let i = i as usize;
+                let d = s[0] * self.x[i] + s[1] * self.y[i] + s[2] * self.z[i] + s[3];
+                d.abs() < self.r[i]
+            };
+            let mut cut: Vec<(u32, u32)> = self.picked.iter().filter(crossing).copied().collect();
+            cut.sort_unstable();
+            for group in cut.chunk_by(|a, b| a.0 == b.0) {
+                let bin = group[0].0 as usize;
+                self.cut_draws.push(Draw {
+                    part: (bin % parts) as u32,
+                    lod: (bin / parts) as u32,
+                    first: self.visible.len() as u32,
+                    count: group.len() as u32,
+                });
+                self.visible.extend(group.iter().map(|&(_, i)| i.to_le_bytes()));
+            }
         }
     }
 }
@@ -230,7 +299,7 @@ impl Motion {
                 let r = scene.r[index];
                 Joint {
                     index: index as u32,
-                    base: p.rows,
+                    base: scene.pose[index],
                     hinge: [c[0] + r * 0.5, c[1], c[2]],
                     pace: 0.02 + 0.03 * (k % 17) as f32 / 17.0,
                     phase: k as f32 * 0.37,
@@ -346,7 +415,7 @@ mod tests {
         let v = cam.view(800, 600);
         let behind = [0, 1, 2].map(|k| v.eye[k] * 3.0);
         let mut s = scene(vec![Placement::at(0, behind), Placement::at(0, [0.0; 3])]);
-        s.cull(&v, 1.0);
+        s.cull(&v, 1.0, None);
         assert_eq!(s.visible, vec![1u32.to_le_bytes()]);
         assert_eq!(s.draws.len(), 1);
     }
@@ -358,7 +427,7 @@ mod tests {
         let dir = [0, 1, 2].map(|k| -v.eye[k]);
         let at = |t: f32| Placement::at(0, dir.map(|d| d * t));
         let mut s = scene(vec![at(1.0), at(1000.0)]);
-        s.cull(&v, 1.0);
+        s.cull(&v, 1.0, None);
         assert_eq!(s.draws.len(), 2);
         assert!(s.draws[0].lod < s.draws[1].lod);
     }
@@ -387,6 +456,42 @@ mod tests {
         // the other one stayed
         assert_eq!(s.placements[1].rows[0][3], 100.0);
         assert_eq!(s.take_dirty(), None);
+    }
+
+    #[test]
+    fn exploding_moves_each_out_from_the_middle_and_home_again() {
+        let mut s = scene(vec![
+            Placement::at(0, [-10.0, 0.0, 0.0]),
+            Placement::at(0, [10.0, 0.0, 0.0]),
+        ]);
+        s.set_explode(1.0);
+        assert_eq!(s.placements[0].rows[0][3], -25.0);
+        assert_eq!(s.placements[1].rows[0][3], 25.0);
+        assert_eq!(s.sphere(1).0[0], 25.0);
+        // a pose set while apart keeps its place apart
+        s.set_rows(1, &Placement::at(0, [20.0, 0.0, 0.0]).rows);
+        assert_eq!(s.placements[1].rows[0][3], 35.0);
+        s.set_explode(0.0);
+        assert_eq!(s.placements[1].rows[0][3], 20.0);
+    }
+
+    #[test]
+    fn a_cut_culls_what_is_all_on_its_far_side_and_lists_what_it_crosses() {
+        let cam = Camera::fit([0.0; 3], 100.0);
+        let v = cam.view(800, 600);
+        let mut s = scene(vec![
+            Placement::at(0, [-3.0, 0.0, 0.0]),
+            Placement::at(0, [0.0, 0.0, 0.0]),
+            Placement::at(0, [3.0, 0.0, 0.0]),
+        ]);
+        // cut away x > 0: radius 1, so 3 is gone, 0 crosses, -3 is whole
+        s.cull(&v, 1.0, Some([1.0, 0.0, 0.0, 0.0]));
+        let whole: u32 = s.draws.iter().map(|d| d.count).sum();
+        let cut: u32 = s.cut_draws.iter().map(|d| d.count).sum();
+        assert_eq!((whole, cut), (2, 1));
+        assert_eq!(s.visible.len(), 3);
+        let first = s.cut_draws[0].first as usize;
+        assert_eq!(s.visible[first], 1u32.to_le_bytes());
     }
 
     #[test]

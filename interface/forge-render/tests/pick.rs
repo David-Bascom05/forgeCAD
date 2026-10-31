@@ -307,3 +307,43 @@ fn what_is_picked_can_be_marked_and_shows() {
     assert!(selected[0] as i32 > selected[2] as i32, "{selected:?}");
     let _ = &g.parts;
 }
+
+#[test]
+fn a_cut_lets_picks_through_and_shows_the_inside_as_the_cut_face() {
+    let mut cam = from_above(90.0);
+    cam.yaw = 0.0;
+    let Some(mut g) = rig(BOX, vec![Placement::at(0, [0.0; 3])], cam) else {
+        return;
+    };
+    let body = g.body.clone();
+    let px = g.pixel(g.world(0, [50.0, 0.0, 10.0]));
+    let side = face_at(&body, [50.0, 0.0, 10.0])[0];
+    assert_eq!(g.pick(px).map(|h| h.entity), Some(Entity::Face(side)));
+
+    // cut away x > 20: that side's gone, the ray goes on, past the inside, to nothing or the back
+    g.r.section = Some([1.0, 0.0, 0.0, -20.0]);
+    if let Some(h) = g.pick(px) {
+        assert_ne!(h.entity, Entity::Face(side));
+    }
+    let shot = |g: &mut Rig| {
+        let camera = g.camera;
+        g.r.frame(&g.target.view, &mut g.scene, &camera, Overlay::default());
+        g.r.wait();
+        g.target.read_rgb(&g.r)
+    };
+    let cut = shot(&mut g);
+    // the middle of the cut, on the plane x = 20: drawn, in the part's colour or a hatch line
+    let mid = g.pixel(g.world(0, [20.0, 0.0, 10.0]));
+    let at = mid.1 as usize * SIZE.0 as usize * 3 + mid.0 as usize * 3;
+    let corner = &cut[3 * SIZE.0 as usize * (SIZE.1 as usize / 2)..][..3];
+    assert_ne!(
+        &cut[at..at + 3],
+        corner,
+        "the cut face shows against the background"
+    );
+    // nothing of the part past the plane: the old side's pixel is background now
+    let at = px.1 as usize * SIZE.0 as usize * 3 + px.0 as usize * 3;
+    let was_side = &cut[at..at + 3];
+    let row = 3 * SIZE.0 as usize * px.1 as usize;
+    assert_eq!(was_side, &cut[row..row + 3], "the cut-away side is gone");
+}

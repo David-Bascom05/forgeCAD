@@ -13,7 +13,8 @@ pub fn source(part: &str) -> Result<String, String> {
     }
 }
 
-fn build(part: &str) -> Result<PartMesh, String> {
+/// The part's body, built by the kernel: the one its mesh's entity numbers mean.
+pub fn body(part: &str) -> Result<forge_topo::Body, String> {
     let bench_model;
     let mut session;
     let model = match bench::src(part) {
@@ -29,8 +30,11 @@ fn build(part: &str) -> Result<PartMesh, String> {
     if let Some(e) = &model.error {
         return Err(format!("{part}: line {}: {}", model.lines[e.at].no, e.msg));
     }
-    let body = model.body().ok_or(format!("{part}: nothing built"))?;
-    tess::build_part(body).map_err(|e| format!("{part}: {e:?}"))
+    model.body().cloned().ok_or(format!("{part}: nothing built"))
+}
+
+fn build(part: &str) -> Result<PartMesh, String> {
+    tess::build_part(&body(part)?).map_err(|e| format!("{part}: {e:?}"))
 }
 
 /// The mesh of a part, and whether it came from the cache.

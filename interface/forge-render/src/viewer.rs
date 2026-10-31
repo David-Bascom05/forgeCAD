@@ -48,6 +48,12 @@ pub struct Viewer {
     pub motion: Option<crate::scene::Motion>,
     motion_frame: usize,
     pick_ms: f64,
+    #[cfg(not(target_arch = "wasm32"))]
+    pub measure: crate::measure::Measurer,
+    #[cfg(not(target_arch = "wasm32"))]
+    measure_of: Vec<(u32, crate::render::Entity)>,
+    #[cfg(not(target_arch = "wasm32"))]
+    measured: String,
     last_frame: f64,
     frame_ms: f64,
     parts: u32,
@@ -88,6 +94,12 @@ impl Viewer {
             motion: None,
             motion_frame: 0,
             pick_ms: 0.0,
+            #[cfg(not(target_arch = "wasm32"))]
+            measure: crate::measure::Measurer::default(),
+            #[cfg(not(target_arch = "wasm32"))]
+            measure_of: Vec::new(),
+            #[cfg(not(target_arch = "wasm32"))]
+            measured: String::new(),
             last_frame: now_ms(),
             frame_ms: 0.0,
             parts: 0,
@@ -121,6 +133,11 @@ impl Viewer {
         if self.nav.tick(now_ms()) {
             self.window.request_redraw();
         }
+        if let Some(t) = self.nav.explode_tick(now_ms()) {
+            self.scene.set_explode(t);
+            self.window.request_redraw();
+        }
+        self.renderer.section = self.nav.section_plane();
         if let Some(b) = &mut self.bench
             && b.hover
             && !self.renderer.pick_busy()
@@ -147,13 +164,16 @@ impl Viewer {
         }
         self.last_frame = now;
         let gpu = self.renderer.gpu_ms.unwrap_or(0.0);
+        let measured = self.measured_text();
         let hud = format!(
-            "frame {:.1} ms gpu {gpu:.1} ms pick {:.1} ms {} parts {:.1}m tris {}",
+            "frame {:.1} ms gpu {gpu:.1} ms pick {:.1} ms {} parts {:.1}m tris lines {} {}\n{}",
             self.frame_ms,
             self.pick_ms,
             self.parts,
             self.tris as f64 / 1e6,
-            self.nav.marked_text()
+            self.renderer.line_mode.name(),
+            self.nav.marked_text(),
+            measured
         );
         let (at, side) = self.nav.cube_box();
         let marks = self.nav.marks();
@@ -178,6 +198,29 @@ impl Viewer {
         }
     }
 
+    /// What the kernel says of the selection, as soon as it has said it.
+    #[cfg(not(target_arch = "wasm32"))]
+    fn measured_text(&mut self) -> String {
+        let want = self.nav.selected.clone();
+        if want != self.measure_of {
+            self.measure_of = want.clone();
+            self.measured.clear();
+            self.measure.ask(want, &self.scene);
+        }
+        if let Some(text) = self.measure.answer() {
+            self.measured = text;
+        }
+        if self.measure.waiting() {
+            self.window.request_redraw();
+        }
+        self.measured.clone()
+    }
+
+    #[cfg(target_arch = "wasm32")]
+    fn measured_text(&mut self) -> String {
+        String::new()
+    }
+
     /// What one window event does.
     pub fn event(&mut self, event: WindowEvent, on_loop: &ActiveEventLoop) {
         if self.bench.is_none() && self.nav.event(&event) {
@@ -193,7 +236,7 @@ impl Viewer {
                 if let PhysicalKey::Code(code) = event.physical_key {
                     let changed = match code {
                         KeyCode::KeyL => {
-                            self.renderer.far_lines = !self.renderer.far_lines;
+                            self.renderer.line_mode = self.renderer.line_mode.next();
                             true
                         }
                         KeyCode::KeyO => {

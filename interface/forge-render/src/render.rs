@@ -13,8 +13,10 @@ const DEPTH: wgpu::TextureFormat = wgpu::TextureFormat::Depth32Float;
 /// A frame keeps its GPU time this many frames at most before it is read.
 const TIMERS: usize = 4;
 const HUD_CHARS: usize = 256;
+/// Characters per row of the overlay (render.wgsl).
+const HUD_COLUMNS: usize = 85;
 /// Where the overlay's text starts in the globals (see render.wgsl).
-const TEXT_AT: usize = 64 + 16 + 16 + 3 * 16 + 16 + DOTS * 16 + 2 * 16;
+const TEXT_AT: usize = 64 + 16 + 16 + 3 * 16 + 16 + DOTS * 16 + 3 * 16;
 /// Picked vertices a frame can mark.
 const DOTS: usize = 8;
 /// Picked faces and edges a frame can mark.
@@ -42,6 +44,9 @@ struct LodDraw {
     segments: u32,
     /// How many of the segments are B-rep edges.
     edges: u32,
+    /// On a level with no lines of its own, how many of the coarsest level's with lines to draw
+    /// in far-lines mode: the edges (longest first) long enough to see from here.
+    far_segments: u32,
 }
 
 struct AoPipelines {
@@ -79,6 +84,40 @@ pub struct Drawn {
     pub cull_ms: f32,
     pub upload_ms: f32,
     pub encode_ms: f32,
+}
+
+/// Which lines are drawn: one setting, for keys, the command line and the future UI.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum LineMode {
+    /// Edges and silhouettes on parts near enough for a tessellated level, none on far ones.
+    Near,
+    /// On far parts too, their longer B-rep edges.
+    Far,
+    None,
+}
+
+impl LineMode {
+    pub fn next(self) -> LineMode {
+        match self {
+            LineMode::Near => LineMode::Far,
+            LineMode::Far => LineMode::None,
+            LineMode::None => LineMode::Near,
+        }
+    }
+
+    pub fn name(self) -> &'static str {
+        match self {
+            LineMode::Near => "near",
+            LineMode::Far => "far",
+            LineMode::None => "none",
+        }
+    }
+
+    pub fn from_name(s: &str) -> Option<LineMode> {
+        [LineMode::Near, LineMode::Far, LineMode::None]
+            .into_iter()
+            .find(|m| m.name() == s)
+    }
 }
 
 /// What's on the screen overlay of a frame.
@@ -149,6 +188,11 @@ pub struct Renderer {
     line: wgpu::RenderPipeline,
     hud: wgpu::RenderPipeline,
     cube: wgpu::RenderPipeline,
+    surface_cut: wgpu::RenderPipeline,
+    cap: wgpu::RenderPipeline,
+    line_cut: wgpu::RenderPipeline,
+    /// The cutting plane (a, b, c, d: cut away where a x + b y + c z + d > 0).
+    pub section: Option<[f32; 4]>,
     face_mark: wgpu::RenderPipeline,
     edge_mark: wgpu::RenderPipeline,
     dot: wgpu::RenderPipeline,
@@ -172,8 +216,7 @@ pub struct Renderer {
     back: wgpu::RenderPipeline,
     /// Occlusion is on.
     pub ao: bool,
-    /// Lines also on levels that have none of their own, from the coarsest that has.
-    pub far_lines: bool,
+    pub line_mode: LineMode,
     depth: wgpu::TextureView,
     timer_set: Option<wgpu::QuerySet>,
     timer_resolve: wgpu::Buffer,
@@ -184,7 +227,6 @@ pub struct Renderer {
     pub gpu_ms: Option<f32>,
     /// Coarsest level whose chord stays under this many pixels.
     pub lod_px: f32,
-    pub lines: bool,
 }
 
 /// What every part's chords and sphere are, for `Scene::new`.
@@ -307,290 +349,170 @@ impl Renderer {
             immediate_size: 0,
         });
 
-        let instance_at = |location| wgpu::VertexBufferLayout {
+        let vertices_at = wgpu::VertexBufferLayout {
+            array_stride: VERTEX as u64,
+            step_mode: wgpu::VertexStepMode::Vertex,
+            attributes: &wgpu::vertex_attr_array![0 => Float32x3, 1 => Snorm16x2],
+        };
+        let positions_at = wgpu::VertexBufferLayout {
+            array_stride: VERTEX as u64,
+            step_mode: wgpu::VertexStepMode::Vertex,
+            attributes: &wgpu::vertex_attr_array![0 => Float32x3],
+        };
+        let instance_2 = wgpu::VertexBufferLayout {
             array_stride: 4,
             step_mode: wgpu::VertexStepMode::Instance,
-            attributes: match location {
-                2 => &wgpu::vertex_attr_array![2 => Uint32],
-                _ => &wgpu::vertex_attr_array![0 => Uint32],
-            },
+            attributes: &wgpu::vertex_attr_array![2 => Uint32],
         };
-        let target = [Some(wgpu::ColorTargetState {
+        let instance_0 = wgpu::VertexBufferLayout {
+            array_stride: 4,
+            step_mode: wgpu::VertexStepMode::Instance,
+            attributes: &wgpu::vertex_attr_array![0 => Uint32],
+        };
+        let faces_at = wgpu::VertexBufferLayout {
+            array_stride: 4,
+            step_mode: wgpu::VertexStepMode::Vertex,
+            attributes: &wgpu::vertex_attr_array![3 => Uint32],
+        };
+        let surface_buffers = [Some(vertices_at), Some(instance_2.clone())];
+        let mark_buffers = [Some(positions_at.clone()), Some(instance_2.clone())];
+        let pick_buffers = [Some(positions_at), Some(instance_2), Some(faces_at)];
+        let line_buffers = [Some(instance_0)];
+        let opaque = [Some(wgpu::ColorTargetState {
             format,
             blend: None,
             write_mask: wgpu::ColorWrites::ALL,
         })];
-        let multisample = wgpu::MultisampleState {
-            count: SAMPLES,
-            ..Default::default()
-        };
-        let depth = |write| {
-            Some(wgpu::DepthStencilState {
-                format: DEPTH,
-                depth_write_enabled: Some(write),
-                depth_compare: Some(wgpu::CompareFunction::GreaterEqual),
-                stencil: wgpu::StencilState::default(),
-                bias: wgpu::DepthBiasState::default(),
-            })
-        };
-        let surface = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
-            label: Some("surface"),
-            layout: Some(&layout),
-            vertex: wgpu::VertexState {
-                module: &shader,
-                entry_point: Some("surface_vs"),
-                compilation_options: Default::default(),
-                buffers: &[
-                    Some(wgpu::VertexBufferLayout {
-                        array_stride: VERTEX as u64,
-                        step_mode: wgpu::VertexStepMode::Vertex,
-                        attributes: &wgpu::vertex_attr_array![0 => Float32x3, 1 => Snorm16x2],
-                    }),
-                    Some(instance_at(2)),
-                ],
-            },
-            primitive: wgpu::PrimitiveState {
-                cull_mode: Some(wgpu::Face::Back),
-                ..Default::default()
-            },
-            depth_stencil: depth(true),
-            multisample,
-            fragment: Some(wgpu::FragmentState {
-                module: &shader,
-                entry_point: Some("surface_fs"),
-                compilation_options: Default::default(),
-                targets: &target,
-            }),
-            multiview_mask: None,
-            cache: None,
-        });
-        let line = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
-            label: Some("line"),
-            layout: Some(&layout),
-            vertex: wgpu::VertexState {
-                module: &shader,
-                entry_point: Some("line_vs"),
-                compilation_options: Default::default(),
-                buffers: &[Some(instance_at(0))],
-            },
-            primitive: wgpu::PrimitiveState::default(),
-            depth_stencil: depth(false),
-            multisample,
-            fragment: Some(wgpu::FragmentState {
-                module: &shader,
-                entry_point: Some("line_fs"),
-                compilation_options: Default::default(),
-                targets: &[Some(wgpu::ColorTargetState {
-                    format,
-                    blend: Some(wgpu::BlendState::ALPHA_BLENDING),
-                    write_mask: wgpu::ColorWrites::ALL,
-                })],
-            }),
-            multiview_mask: None,
-            cache: None,
-        });
-        let hud = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
-            label: Some("hud"),
-            layout: Some(&layout),
-            vertex: wgpu::VertexState {
-                module: &shader,
-                entry_point: Some("hud_vs"),
-                compilation_options: Default::default(),
-                buffers: &[],
-            },
-            primitive: wgpu::PrimitiveState::default(),
-            depth_stencil: None,
-            multisample: wgpu::MultisampleState::default(),
-            fragment: Some(wgpu::FragmentState {
-                module: &shader,
-                entry_point: Some("hud_fs"),
-                compilation_options: Default::default(),
-                targets: &[Some(wgpu::ColorTargetState {
-                    format,
-                    blend: Some(wgpu::BlendState::ALPHA_BLENDING),
-                    write_mask: wgpu::ColorWrites::ALL,
-                })],
-            }),
-            multiview_mask: None,
-            cache: None,
-        });
-
-        let cube = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
-            label: Some("cube"),
-            layout: Some(&layout),
-            vertex: wgpu::VertexState {
-                module: &shader,
-                entry_point: Some("cube_vs"),
-                compilation_options: Default::default(),
-                buffers: &[],
-            },
-            // convex and culled: no depth needed, over everything
-            primitive: wgpu::PrimitiveState {
-                cull_mode: Some(wgpu::Face::Back),
-                ..Default::default()
-            },
-            depth_stencil: Some(wgpu::DepthStencilState {
-                format: DEPTH,
-                depth_write_enabled: Some(false),
-                depth_compare: Some(wgpu::CompareFunction::Always),
-                stencil: wgpu::StencilState::default(),
-                bias: wgpu::DepthBiasState::default(),
-            }),
-            multisample,
-            fragment: Some(wgpu::FragmentState {
-                module: &shader,
-                entry_point: Some("cube_fs"),
-                compilation_options: Default::default(),
-                targets: &target,
-            }),
-            multiview_mask: None,
-            cache: None,
-        });
-        let pick_surface = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
-            label: Some("pick surface"),
-            layout: Some(&layout),
-            vertex: wgpu::VertexState {
-                module: &shader,
-                entry_point: Some("surface_pick_vs"),
-                compilation_options: Default::default(),
-                buffers: &[
-                    Some(wgpu::VertexBufferLayout {
-                        array_stride: VERTEX as u64,
-                        step_mode: wgpu::VertexStepMode::Vertex,
-                        attributes: &wgpu::vertex_attr_array![0 => Float32x3],
-                    }),
-                    Some(instance_at(2)),
-                    Some(wgpu::VertexBufferLayout {
-                        array_stride: 4,
-                        step_mode: wgpu::VertexStepMode::Vertex,
-                        attributes: &wgpu::vertex_attr_array![3 => Uint32],
-                    }),
-                ],
-            },
-            primitive: wgpu::PrimitiveState {
-                cull_mode: Some(wgpu::Face::Back),
-                ..Default::default()
-            },
-            depth_stencil: depth(true),
-            multisample: wgpu::MultisampleState::default(),
-            fragment: Some(wgpu::FragmentState {
-                module: &shader,
-                entry_point: Some("pick_fs"),
-                compilation_options: Default::default(),
-                targets: &[Some(wgpu::ColorTargetState {
-                    format: PICK_ID,
-                    blend: None,
-                    write_mask: wgpu::ColorWrites::ALL,
-                })],
-            }),
-            multiview_mask: None,
-            cache: None,
-        });
-
-        let pick_target_state = [Some(wgpu::ColorTargetState {
-            format: PICK_ID,
-            blend: None,
-            write_mask: wgpu::ColorWrites::ALL,
-        })];
-        let pick_line = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
-            label: Some("pick line"),
-            layout: Some(&layout),
-            vertex: wgpu::VertexState {
-                module: &shader,
-                entry_point: Some("line_pick_vs"),
-                compilation_options: Default::default(),
-                buffers: &[Some(instance_at(0))],
-            },
-            primitive: wgpu::PrimitiveState::default(),
-            depth_stencil: depth(true),
-            multisample: wgpu::MultisampleState::default(),
-            fragment: Some(wgpu::FragmentState {
-                module: &shader,
-                entry_point: Some("pick_fs"),
-                compilation_options: Default::default(),
-                targets: &pick_target_state,
-            }),
-            multiview_mask: None,
-            cache: None,
-        });
         let over = [Some(wgpu::ColorTargetState {
             format,
             blend: Some(wgpu::BlendState::ALPHA_BLENDING),
             write_mask: wgpu::ColorWrites::ALL,
         })];
-        let face_mark = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
-            label: Some("face mark"),
-            layout: Some(&layout),
-            vertex: wgpu::VertexState {
-                module: &shader,
-                entry_point: Some("face_mark_vs"),
-                compilation_options: Default::default(),
-                buffers: &[
-                    Some(wgpu::VertexBufferLayout {
-                        array_stride: VERTEX as u64,
-                        step_mode: wgpu::VertexStepMode::Vertex,
-                        attributes: &wgpu::vertex_attr_array![0 => Float32x3],
-                    }),
-                    Some(instance_at(2)),
-                ],
-            },
-            primitive: wgpu::PrimitiveState {
-                cull_mode: Some(wgpu::Face::Back),
-                ..Default::default()
-            },
-            depth_stencil: depth(false),
-            multisample,
-            fragment: Some(wgpu::FragmentState {
-                module: &shader,
-                entry_point: Some("mark_fs"),
-                compilation_options: Default::default(),
-                targets: &over,
-            }),
-            multiview_mask: None,
-            cache: None,
-        });
-        let edge_mark = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
-            label: Some("edge mark"),
-            layout: Some(&layout),
-            vertex: wgpu::VertexState {
-                module: &shader,
-                entry_point: Some("edge_mark_vs"),
-                compilation_options: Default::default(),
-                buffers: &[Some(instance_at(0))],
-            },
-            primitive: wgpu::PrimitiveState::default(),
-            depth_stencil: depth(false),
-            multisample,
-            fragment: Some(wgpu::FragmentState {
-                module: &shader,
-                entry_point: Some("mark_fs"),
-                compilation_options: Default::default(),
-                targets: &over,
-            }),
-            multiview_mask: None,
-            cache: None,
-        });
-        let dot = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
-            label: Some("dot"),
-            layout: Some(&layout),
-            vertex: wgpu::VertexState {
-                module: &shader,
-                entry_point: Some("dot_vs"),
-                compilation_options: Default::default(),
-                buffers: &[],
-            },
-            primitive: wgpu::PrimitiveState::default(),
-            depth_stencil: depth(false),
-            multisample,
-            fragment: Some(wgpu::FragmentState {
-                module: &shader,
-                entry_point: Some("dot_fs"),
-                compilation_options: Default::default(),
-                targets: &over,
-            }),
-            multiview_mask: None,
-            cache: None,
-        });
+        let ids = [Some(wgpu::ColorTargetState {
+            format: PICK_ID,
+            blend: None,
+            write_mask: wgpu::ColorWrites::ALL,
+        })];
+        let msaa = wgpu::MultisampleState {
+            count: SAMPLES,
+            ..Default::default()
+        };
+        let one = wgpu::MultisampleState::default();
+        let depth_state = |write, compare| {
+            Some(wgpu::DepthStencilState {
+                format: DEPTH,
+                depth_write_enabled: Some(write),
+                depth_compare: Some(compare),
+                stencil: wgpu::StencilState::default(),
+                bias: wgpu::DepthBiasState::default(),
+            })
+        };
+        let writes = depth_state(true, wgpu::CompareFunction::GreaterEqual);
+        let tests = depth_state(false, wgpu::CompareFunction::GreaterEqual);
+        let always = depth_state(false, wgpu::CompareFunction::Always);
+        let back_culled = Some(wgpu::Face::Back);
+        let pipeline = |entries: (&str, &str),
+                        buffers: &[Option<wgpu::VertexBufferLayout>],
+                        cull: Option<wgpu::Face>,
+                        depth: &Option<wgpu::DepthStencilState>,
+                        multisample: wgpu::MultisampleState,
+                        targets: &[Option<wgpu::ColorTargetState>]| {
+            device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
+                label: Some(entries.1),
+                layout: Some(&layout),
+                vertex: wgpu::VertexState {
+                    module: &shader,
+                    entry_point: Some(entries.0),
+                    compilation_options: Default::default(),
+                    buffers,
+                },
+                primitive: wgpu::PrimitiveState {
+                    cull_mode: cull,
+                    ..Default::default()
+                },
+                depth_stencil: depth.clone(),
+                multisample,
+                fragment: Some(wgpu::FragmentState {
+                    module: &shader,
+                    entry_point: Some(entries.1),
+                    compilation_options: Default::default(),
+                    targets,
+                }),
+                multiview_mask: None,
+                cache: None,
+            })
+        };
+        let surface = pipeline(
+            ("surface_vs", "surface_fs"),
+            &surface_buffers,
+            back_culled,
+            &writes,
+            msaa,
+            &opaque,
+        );
+        let surface_cut = pipeline(
+            ("surface_vs", "surface_cut_fs"),
+            &surface_buffers,
+            back_culled,
+            &writes,
+            msaa,
+            &opaque,
+        );
+        // where a part is cut its inside shows: drawn as the plane it was cut by
+        let cap = pipeline(
+            ("surface_vs", "cap_fs"),
+            &surface_buffers,
+            Some(wgpu::Face::Front),
+            &writes,
+            msaa,
+            &opaque,
+        );
+        let line = pipeline(("line_vs", "line_fs"), &line_buffers, None, &tests, msaa, &over);
+        let line_cut = pipeline(
+            ("line_cut_vs", "line_cut_fs"),
+            &line_buffers,
+            None,
+            &tests,
+            msaa,
+            &over,
+        );
+        let hud = pipeline(("hud_vs", "hud_fs"), &[], None, &None, one, &over);
+        // convex and culled: no depth needed, over everything
+        let cube = pipeline(("cube_vs", "cube_fs"), &[], back_culled, &always, msaa, &opaque);
+        let pick_surface = pipeline(
+            ("surface_pick_vs", "pick_fs"),
+            &pick_buffers,
+            back_culled,
+            &writes,
+            one,
+            &ids,
+        );
+        let pick_line = pipeline(
+            ("line_pick_vs", "pick_fs"),
+            &line_buffers,
+            None,
+            &writes,
+            one,
+            &ids,
+        );
+        let face_mark = pipeline(
+            ("face_mark_vs", "mark_fs"),
+            &mark_buffers,
+            back_culled,
+            &tests,
+            msaa,
+            &over,
+        );
+        let edge_mark = pipeline(
+            ("edge_mark_vs", "mark_fs"),
+            &line_buffers,
+            None,
+            &tests,
+            msaa,
+            &over,
+        );
+        let dot = pipeline(("dot_vs", "dot_fs"), &[], None, &tests, msaa, &over);
+        let back = pipeline(("hud_vs", "back_fs"), &[], None, &always, msaa, &opaque);
 
         let (mut vbytes, mut ibytes, mut sbytes) = (0u64, 0u64, 0u64);
         let mut lods = Vec::with_capacity(parts.len());
@@ -604,10 +526,27 @@ impl Renderer {
                     first_segment: (sbytes / SEGMENT as u64) as u32,
                     segments: (l.segments.len() / SEGMENT) as u32,
                     edges: l.fins,
+                    far_segments: 0,
                 });
                 vbytes += l.vertices.len() as u64;
                 ibytes += l.indices.len() as u64;
                 sbytes += l.segments.len() as u64;
+            }
+            // a clustered level is drawn where its chord is about a pixel
+            if let Some(known) = p.lods.iter().rposition(|l| !l.segments.is_empty()) {
+                let source = &p.lods[known];
+                let lengths: Vec<(f32, u32)> = source
+                    .edges
+                    .iter()
+                    .map(|e| (edge_length(source, e), e.count))
+                    .collect();
+                for (k, l) in p.lods.iter().enumerate().skip(known + 1) {
+                    row[k].far_segments = lengths
+                        .iter()
+                        .take_while(|(length, _)| *length >= FAR_EDGE_PX * l.chord)
+                        .map(|(_, count)| count)
+                        .sum();
+                }
             }
             lods.push(row);
         }
@@ -690,7 +629,8 @@ impl Renderer {
         );
         let instances = device.create_buffer(&wgpu::BufferDescriptor {
             label: Some("visible"),
-            size: scene.placements.len().max(1) as u64 * 4,
+            // each may be listed twice: drawn, and its inside where a section crosses it
+            size: scene.placements.len().max(1) as u64 * 8,
             usage: wgpu::BufferUsages::VERTEX | wgpu::BufferUsages::COPY_DST,
             mapped_at_creation: false,
         });
@@ -901,33 +841,6 @@ impl Renderer {
             layout: ao_layout,
         };
         let ao_size = ao_targets(&device, &ao_pipe.layout, &depth_texture_view(&depth_view), size);
-        let back = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
-            label: Some("background"),
-            layout: Some(&layout),
-            vertex: wgpu::VertexState {
-                module: &shader,
-                entry_point: Some("hud_vs"),
-                compilation_options: Default::default(),
-                buffers: &[],
-            },
-            primitive: wgpu::PrimitiveState::default(),
-            depth_stencil: Some(wgpu::DepthStencilState {
-                format: DEPTH,
-                depth_write_enabled: Some(false),
-                depth_compare: Some(wgpu::CompareFunction::Always),
-                stencil: wgpu::StencilState::default(),
-                bias: wgpu::DepthBiasState::default(),
-            }),
-            multisample,
-            fragment: Some(wgpu::FragmentState {
-                module: &shader,
-                entry_point: Some("back_fs"),
-                compilation_options: Default::default(),
-                targets: &target,
-            }),
-            multiview_mask: None,
-            cache: None,
-        });
         Renderer {
             device,
             queue,
@@ -937,6 +850,10 @@ impl Renderer {
             line,
             hud,
             cube,
+            surface_cut,
+            cap,
+            line_cut,
+            section: None,
             face_mark,
             edge_mark,
             dot,
@@ -958,7 +875,7 @@ impl Renderer {
             ao_size,
             back,
             ao: true,
-            far_lines: false,
+            line_mode: LineMode::Near,
             depth: depth_view,
             timer_set,
             timer_resolve,
@@ -967,7 +884,6 @@ impl Renderer {
             period_ns,
             gpu_ms: None,
             lod_px: LOD_PX,
-            lines: true,
         }
     }
 
@@ -1008,13 +924,14 @@ impl Renderer {
     pub fn pick_start(&mut self, scene: &mut Scene, camera: &Camera, px: (f32, f32)) {
         let size = PICK_PX as f32;
         let view = camera.view_window(self.size.0, self.size.1, px, (size, size));
-        scene.cull(&view, self.lod_px);
+        scene.cull(&view, self.lod_px, self.section);
         self.upload_moves(scene);
         self.queue
             .write_buffer(&self.instances, 0, scene.visible.as_flattened());
         // the window is PICK_PX pixels across, a pixel of it one of the screen's
         let mut bytes = globals_bytes(&view, (PICK_PX, PICK_PX), [0; 3], "");
         bytes[88..92].copy_from_slice(&PICK_EDGE_PX.to_le_bytes());
+        self.write_section(&mut bytes);
         self.queue.write_buffer(&self.pick.globals, 0, &bytes);
         let mut encoder = self.device.create_command_encoder(&Default::default());
         {
@@ -1213,6 +1130,13 @@ impl Renderer {
         Entity::Edge(e.edge)
     }
 
+    fn write_section(&self, bytes: &mut [u8; GLOBALS]) {
+        let plane = self.section.unwrap_or([0.0; 4]);
+        for (k, v) in plane.iter().enumerate() {
+            bytes[SECTION_AT + k * 4..SECTION_AT + k * 4 + 4].copy_from_slice(&v.to_le_bytes());
+        }
+    }
+
     /// Where picked vertices are this frame, into the uniforms.
     fn write_dots(&self, bytes: &mut [u8; GLOBALS], scene: &Scene, marks: &[Mark]) {
         let mut k = 0;
@@ -1312,7 +1236,7 @@ impl Renderer {
         let hud = overlay.hud;
         let start = now_ms();
         let view = camera.view(self.size.0, self.size.1);
-        scene.cull(&view, self.lod_px);
+        scene.cull(&view, self.lod_px, self.section);
         let culled = now_ms();
         self.upload_moves(scene);
         self.queue
@@ -1329,6 +1253,7 @@ impl Renderer {
         for (k, v) in numbers.iter().chain(&box_at).enumerate() {
             bytes[AO_AT + k * 4..AO_AT + k * 4 + 4].copy_from_slice(&v.to_le_bytes());
         }
+        self.write_section(&mut bytes);
         self.write_dots(&mut bytes, scene, overlay.marks);
         let marked: Vec<[u8; 4]> = overlay
             .marks
@@ -1389,7 +1314,8 @@ impl Renderer {
             pass.set_bind_group(0, &self.binds, &[]);
             pass.set_pipeline(&self.back);
             pass.draw(0..3, 0..1);
-            pass.set_pipeline(&self.surface);
+            let cut = self.section.is_some();
+            pass.set_pipeline(if cut { &self.surface_cut } else { &self.surface });
             pass.set_vertex_buffer(0, self.vertices.slice(..));
             pass.set_vertex_buffer(1, self.instances.slice(..));
             pass.set_index_buffer(self.indices.slice(..), wgpu::IndexFormat::Uint32);
@@ -1403,15 +1329,29 @@ impl Renderer {
                 drawn.tris += l.indices as u64 / 3 * d.count as u64;
                 drawn.draws += 1;
             }
-            if self.lines {
-                pass.set_pipeline(&self.line);
+            if cut {
+                pass.set_pipeline(&self.cap);
+                for d in &scene.cut_draws {
+                    let l = self.lods[d.part as usize][d.lod as usize];
+                    pass.draw_indexed(
+                        l.first_index..l.first_index + l.indices,
+                        l.base_vertex,
+                        d.first..d.first + d.count,
+                    );
+                    drawn.tris += l.indices as u64 / 3 * d.count as u64;
+                    drawn.draws += 1;
+                }
+            }
+            if self.line_mode != LineMode::None {
+                pass.set_pipeline(if cut { &self.line_cut } else { &self.line });
                 pass.set_vertex_buffer(0, self.instances.slice(..));
                 pass.set_index_buffer(self.line_indices.slice(..), wgpu::IndexFormat::Uint32);
                 for d in &scene.draws {
                     let mut l = self.lods[d.part as usize][d.lod as usize];
-                    if l.segments == 0 && self.far_lines {
+                    if l.segments == 0 && self.line_mode == LineMode::Far {
+                        let far = l.far_segments;
                         l = self.lods[d.part as usize][self.pick_lod(d.part, d.lod)];
-                        l.segments = l.edges;
+                        l.segments = far;
                     }
                     if l.segments > 0 {
                         pass.draw_indexed(
@@ -1528,6 +1468,20 @@ impl Renderer {
     }
 }
 
+/// A B-rep edge's length along its polyline.
+fn edge_length(l: &crate::mesh::Lod, e: &EdgeRange) -> f32 {
+    let at = |s: u32, off: usize| {
+        let b = s as usize * SEGMENT + off;
+        [0, 4, 8].map(|k| f32::from_le_bytes(l.segments[b + k..b + k + 4].try_into().expect("4 bytes")))
+    };
+    (e.first..e.first + e.count)
+        .map(|s| {
+            let (a, b) = (at(s, 0), at(s, 16));
+            (0..3).map(|k| (a[k] - b[k]).powi(2)).sum::<f32>().sqrt()
+        })
+        .sum()
+}
+
 fn place(rows: &crate::scene::Rows, q: [f32; 3]) -> [f32; 3] {
     rows.map(|r| r[0] * q[0] + r[1] * q[1] + r[2] * q[2] + r[3])
 }
@@ -1555,8 +1509,14 @@ fn globals_bytes(view: &View, size: (u32, u32), hover: [i8; 3], hud: &str) -> [u
     }
     let text = &mut bytes[TEXT_AT..];
     text.fill(255);
-    for (c, b) in text.iter_mut().zip(hud.bytes()) {
-        *c = glyph(b);
+    let mut at = 0usize;
+    for b in hud.bytes() {
+        if b == b'\n' {
+            at = at.next_multiple_of(HUD_COLUMNS);
+        } else if at < text.len() {
+            text[at] = glyph(b);
+            at += 1;
+        }
     }
     bytes
 }
@@ -1627,15 +1587,19 @@ impl Offscreen {
     }
 }
 
+/// In far-lines mode, an edge shorter than this on screen isn't drawn (research/render).
+const FAR_EDGE_PX: f32 = 6.0;
 /// Half a marked edge's width in pixels.
 const MARK_HALF_PX: f32 = 1.5;
 /// How far from a pixel an edge is picked, and a vertex at its end (pixels).
 const PICK_EDGE_PX: f32 = 4.0;
 const PICK_VERTEX_PX: f32 = 7.0;
 /// Where the picked vertices start in the globals.
-const DOTS_AT: usize = TEXT_AT - 2 * 16 - DOTS * 16;
+const DOTS_AT: usize = TEXT_AT - 3 * 16 - DOTS * 16;
 /// Where occlusion's numbers start in the globals, then the cube's square.
-const AO_AT: usize = TEXT_AT - 2 * 16;
+const AO_AT: usize = TEXT_AT - 3 * 16;
+/// Where the cutting plane is in the globals.
+const SECTION_AT: usize = TEXT_AT - 16;
 /// Half-size occlusion's format: how open, and the pixel's distance.
 const AO_FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::Rg16Float;
 /// How far occlusion reaches, as a share of the window's height (research/render).

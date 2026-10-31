@@ -1,7 +1,7 @@
 use forge_render::bench::{self, Path};
 use forge_render::camera::Camera;
 use forge_render::mesh::PartMesh;
-use forge_render::render::{self, Mark, Offscreen, Overlay, Renderer, part_info};
+use forge_render::render::{self, LineMode, Mark, Offscreen, Overlay, Renderer, part_info};
 use forge_render::scene::{self, Motion, Placement, Scene};
 use forge_render::viewer::{Bench, Viewer, now_ms};
 use std::fmt::Write;
@@ -13,11 +13,16 @@ use winit::window::{Window, WindowId};
 
 const USAGE: &str =
     "forge-render [PART | file.fc] [--stress N] [--moving N] [--bench] [--hover] [--window] [--frames N]
-  [--size WxH] [--lod-px T] [--no-lines] [--no-ao] [--far-lines] [--no-cache] [--shot FILE.ppm [--select X Y]..] [--yaw R --pitch R --dist X]
+  [--size WxH] [--lod-px T] [--lines near|far|none] [--no-ao] [--section x|y|z] [--explode T] [--no-cache] [--shot FILE.ppm [--select X Y]..] [--yaw R --pitch R --dist X]
   [--export FILE] [--levels]
 PART: a bench part (default crank). --stress: all 15 bench parts placed N times. --moving N: N of
 them swing on joints every frame. --hover: --bench also picks under a wandering pixel each frame. --bench: a fixed
-orbit, frame times on stdout, headless unless --window. --shot: one headless frame.";
+orbit, frame times on stdout, headless unless --window. --shot: one headless frame.
+
+In the window: left drag orbits about what's under the cursor, middle or right drag pans, the wheel
+zooms at the cursor. Click selects, ctrl or shift + click adds; one or two selected on a part are
+measured. Home or F6 home, A fit all, F fit selection, Esc clear. View cube: click to go, drag to
+orbit. L lines near, far, none. O occlusion. S section x, y, z, off; ctrl + wheel moves it. E explode.";
 
 struct Args {
     part: String,
@@ -29,9 +34,10 @@ struct Args {
     frames: usize,
     size: (u32, u32),
     lod_px: f32,
-    lines: bool,
+    lines: LineMode,
     ao: bool,
-    far_lines: bool,
+    section: Option<usize>,
+    explode: f32,
     cache: bool,
     shot: Option<String>,
     select: Vec<(f32, f32)>,
@@ -53,9 +59,10 @@ fn args() -> Result<Args, String> {
         frames: 1200,
         size: (1920, 1080),
         lod_px: render::LOD_PX,
-        lines: true,
+        lines: LineMode::Near,
         ao: true,
-        far_lines: false,
+        section: None,
+        explode: 0.0,
         cache: true,
         shot: None,
         select: Vec::new(),
@@ -79,9 +86,19 @@ fn args() -> Result<Args, String> {
             "--window" => a.window = true,
             "--frames" => a.frames = num(it.next(), &k)?,
             "--lod-px" => a.lod_px = num(it.next(), &k)?,
-            "--no-lines" => a.lines = false,
+            "--lines" => {
+                a.lines = it.next().as_deref().and_then(LineMode::from_name).ok_or(USAGE)?;
+            }
             "--no-ao" => a.ao = false,
-            "--far-lines" => a.far_lines = true,
+            "--explode" => a.explode = num(it.next(), &k)?,
+            "--section" => {
+                a.section = match it.next().as_deref() {
+                    Some("x") => Some(0),
+                    Some("y") => Some(1),
+                    Some("z") => Some(2),
+                    _ => return Err(USAGE.into()),
+                }
+            }
             "--no-cache" => a.cache = false,
             "--shot" => a.shot = it.next(),
             "--select" => {
@@ -106,6 +123,7 @@ fn args() -> Result<Args, String> {
 }
 
 struct Stage {
+    names: Vec<String>,
     parts: Vec<PartMesh>,
     scene: Scene,
     camera: Camera,
@@ -129,8 +147,9 @@ fn stage(a: &Args) -> Result<Stage, String> {
     } else {
         vec![Placement::at(0, [0.0; 3])]
     };
-    let scene = Scene::new(&part_info(&parts), placements);
+    let mut scene = Scene::new(&part_info(&parts), placements);
     let (center, radius) = scene.bounds();
+    scene.set_explode(a.explode);
     let mut camera = Camera::fit(center, radius);
     camera.yaw = a.yaw.unwrap_or(camera.yaw);
     camera.pitch = a.pitch.unwrap_or(camera.pitch);
@@ -147,6 +166,7 @@ fn stage(a: &Args) -> Result<Stage, String> {
         frames: a.frames,
     };
     Ok(Stage {
+        names: names.iter().map(|n| n.to_string()).collect(),
         parts,
         scene,
         camera,
@@ -171,9 +191,15 @@ fn headless(a: &Args, mut s: Stage) -> Result<(), String> {
         &s.scene,
     );
     r.lod_px = a.lod_px;
-    r.lines = a.lines;
+    r.line_mode = a.lines;
     r.ao = a.ao;
-    r.far_lines = a.far_lines;
+    r.section = a.section.map(|axis| {
+        let (c, _) = s.scene.bounds();
+        let mut p = [0.0; 4];
+        p[axis] = 1.0;
+        p[3] = -c[axis];
+        p
+    });
     let bytes: usize = s
         .parts
         .iter()
@@ -319,10 +345,12 @@ impl ApplicationHandler for App {
             &s.scene,
         );
         renderer.lod_px = self.args.lod_px;
-        renderer.lines = self.args.lines;
+        renderer.line_mode = self.args.lines;
         renderer.ao = self.args.ao;
-        renderer.far_lines = self.args.far_lines;
         let mut v = Viewer::new(window.clone(), surface, config, renderer, s.scene, s.camera);
+        v.measure = forge_render::measure::Measurer::new(s.names);
+        let (c, _) = v.scene.bounds();
+        v.nav.section = self.args.section.map(|axis| (axis, c[axis]));
         v.motion = (self.args.moving > 0).then(|| Motion::new(&v.scene, self.args.moving));
         if self.args.bench {
             v.bench = Some(Bench {
@@ -353,7 +381,14 @@ impl ApplicationHandler for App {
     }
 }
 
-fn main() -> Result<(), String> {
+fn main() {
+    if let Err(e) = run() {
+        eprintln!("{e}");
+        std::process::exit(1);
+    }
+}
+
+fn run() -> Result<(), String> {
     let a = args()?;
     if let Some(path) = &a.export {
         let (mesh, _) = forge_render::load::open(&a.part, a.cache)?;

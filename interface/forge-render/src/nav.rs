@@ -16,6 +16,10 @@ const TRANSITION_MS: f64 = 280.0;
 /// The view cube's square, from the top right corner (pixels, before the window's scale).
 const CUBE_PX: f32 = 120.0;
 const CUBE_MARGIN_PX: f32 = 12.0;
+/// A wheel step of the section, as a share of the view's distance.
+const SECTION_STEP: f32 = 0.01;
+/// How long exploding or coming back together takes (ms).
+const EXPLODE_MS: f64 = 500.0;
 /// How far a cube's corner sits from its middle, as a share of the viewport's half (render.wgsl).
 pub const CUBE_SCALE: f32 = 1.1;
 /// How near a cube face's rim counts as its edge or corner (render.wgsl has it too).
@@ -52,6 +56,12 @@ pub struct Nav {
     transition: Option<Transition>,
     /// The cube's region under the cursor: each axis -1, 0 or 1; all zero is none.
     pub cube_hover: [i8; 3],
+    /// The section: which axis it's across (0 x, 1 y, 2 z), and where along it.
+    pub section: Option<(usize, f32)>,
+    /// How far apart the placements are heading, and are: both 0 to 1.
+    pub explode_to: f32,
+    pub explode_at: f32,
+    explode_time: Option<f64>,
     /// What's been clicked, in order.
     pub selected: Vec<(u32, Entity)>,
 }
@@ -128,6 +138,10 @@ impl Nav {
             transition: None,
             cube_hover: [0; 3],
             selected: Vec::new(),
+            section: None,
+            explode_to: 0.0,
+            explode_at: 0.0,
+            explode_time: None,
         }
     }
 
@@ -347,7 +361,25 @@ impl Nav {
         true
     }
 
+    /// The cutting plane in the renderer's form.
+    pub fn section_plane(&self) -> Option<[f32; 4]> {
+        self.section.map(|(axis, at)| {
+            let mut p = [0.0; 4];
+            p[axis] = 1.0;
+            p[3] = -at;
+            p
+        })
+    }
+
     fn wheel(&mut self, steps: f32) -> bool {
+        // ctrl + wheel moves the section along its axis, by a share of the view
+        if self.modifiers.control_key()
+            && let Some((_, at)) = &mut self.section
+        {
+            *at += steps * self.camera.dist * SECTION_STEP;
+            self.hit_at = None;
+            return true;
+        }
         self.transition = None;
         // the point under the cursor, or the target's depth there, stays put
         let at = self.known_hit().map_or_else(
@@ -405,6 +437,21 @@ impl Nav {
                 let (c, r) = scene.sphere(s as usize);
                 self.fit_sphere(c, r);
             }
+            // S: x, y, z, off
+            KeyCode::KeyS => {
+                let (c, _) = scene.bounds();
+                self.section = match self.section {
+                    None => Some((0, c[0])),
+                    Some((0, _)) => Some((1, c[1])),
+                    Some((1, _)) => Some((2, c[2])),
+                    Some(_) => None,
+                };
+                self.hit_at = None;
+            }
+            KeyCode::KeyE => {
+                self.explode_to = 1.0 - self.explode_to;
+                self.explode_time = None;
+            }
             KeyCode::Escape => {
                 let had = !self.selected.is_empty();
                 self.selected.clear();
@@ -413,6 +460,24 @@ impl Nav {
             _ => return false,
         }
         true
+    }
+
+    /// Advances exploding to this time; true while it's on its way, with where it's got to.
+    pub fn explode_tick(&mut self, now: f64) -> Option<f32> {
+        if self.explode_at == self.explode_to {
+            return None;
+        }
+        let last = self.explode_time.unwrap_or(now - 8.0);
+        self.explode_time = Some(now);
+        let step = ((now - last) / EXPLODE_MS) as f32;
+        self.explode_at = if self.explode_to > self.explode_at {
+            (self.explode_at + step).min(self.explode_to)
+        } else {
+            (self.explode_at - step).max(self.explode_to)
+        };
+        self.hit_at = None;
+        let u = self.explode_at;
+        Some(u * u * (3.0 - 2.0 * u))
     }
 
     /// Advances a view change to this time; true while one is under way.

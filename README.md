@@ -70,7 +70,7 @@ The toolchain is pinned in `rust-toolchain.toml`; rustup installs it on first us
 `interface/forge-render` is its own workspace, so wgpu never enters the commands above. From there:
 
 ```
-cargo run --release -- gearbox                      # a bench part or a .fc path; left drag orbits, other buttons pan, wheel zooms
+cargo run --release -- gearbox                      # a bench part or a .fc path (`--help` lists keys and mouse)
 cargo run --release -- --stress 5000                # the 15 bench parts placed 5,000 times
 cargo run --release -- --stress 5000 --bench        # a fixed orbit, frame times on stdout, no window (--window: with one)
 cargo test                                          # GPU tests skip where there is no GPU

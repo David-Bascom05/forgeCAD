@@ -15,6 +15,8 @@ struct Globals {
     ao: vec4f,
     // the view cube's square, which occlusion leaves alone: left, top, right, bottom
     cube_box: vec4f,
+    // the cutting plane: what's on its plus side is cut away; all zero cuts nothing
+    section: vec4f,
     text: array<vec4u, 16>,
 }
 struct Placement {
@@ -65,8 +67,7 @@ fn studio(r: vec3f) -> vec3f {
     return mix(floor, sky, smoothstep(-0.04, 0.04, r.z)) + band;
 }
 
-@fragment
-fn surface_fs(in: Shaded) -> @location(0) vec4f {
+fn shade(in: Shaded) -> vec4f {
     let n = normalize(in.n);
     let v = normalize(g.eye.xyz - in.p);
     let nv = max(dot(n, v), 0.0);
@@ -84,6 +85,48 @@ fn surface_fs(in: Shaded) -> @location(0) vec4f {
     let lobe = pow(max(dot(n, h), 0.0), mix(40.0, 90.0, metal)) * mix(0.18, 0.55, metal);
     let spec = fresnel * studio(reflect(-v, n)) * mix(0.35, 0.95, metal) + lobe * f0 * 2.0;
     return vec4f(diffuse + spec, 1.0);
+}
+
+@fragment
+fn surface_fs(in: Shaded) -> @location(0) vec4f {
+    return shade(in);
+}
+
+fn cut_away(p: vec3f) -> bool {
+    return dot(g.section.xyz, p) + g.section.w > 0.0;
+}
+
+@fragment
+fn surface_cut_fs(in: Shaded) -> @location(0) vec4f {
+    if cut_away(in.p) {
+        discard;
+    }
+    return shade(in);
+}
+
+// the inside of a cut part, seen through the cut: the ray to it crosses the plane where the cut
+// face is, so it colours itself as that, hatched with lines a steady size on screen. It stays at
+// its own depth: only a surface in front of it can be seen instead, and then the cut isn't there.
+@fragment
+fn cap_fs(in: Shaded) -> @location(0) vec4f {
+    if cut_away(in.p) {
+        discard;
+    }
+    let ray = in.p - g.eye.xyz;
+    let t = -(dot(g.section.xyz, g.eye.xyz) + g.section.w) / dot(g.section.xyz, ray);
+    if t <= 0.0 || t > 1.0 {
+        discard;
+    }
+    let q = g.eye.xyz + ray * t;
+    let px_mm = dot(g.forward.xyz, q - g.eye.xyz) * g.ao.y * g.px.y;
+    let spacing = pow(2.0, ceil(log2(px_mm * 9.0)));
+    let n = g.section.xyz;
+    let side = select(vec3f(1.0, 0.0, 0.0), vec3f(0.0, 1.0, 0.0), abs(n.x) > 0.5);
+    let u = normalize(cross(n, side));
+    let v = cross(n, u);
+    let stripe = fract((dot(q, u) + dot(q, v)) / spacing);
+    let line = 1.0 - smoothstep(0.0, 0.16, min(stripe, 1.0 - stripe));
+    return vec4f(mix(in.tint.rgb * 0.82, vec3f(0.18, 0.19, 0.22), line * 0.6), 1.0);
 }
 
 // behind everything: light at the top of the window, a little darker below
@@ -148,8 +191,13 @@ fn line_corner(vi: u32, pl: Placement, half_px: f32) -> vec4f {
     return vec4f(end.xy + off * end.w, end.z * LIFT, end.w);
 }
 
-@vertex
-fn line_vs(@builtin(vertex_index) vi: u32, @location(0) at: u32) -> Line {
+// where in the world a segment's corner is, to the end its corner is at
+fn line_end_at(vi: u32, pl: Placement) -> vec3f {
+    let end = segments[vi / 4u * 2u + u32(LINE_CORNERS[vi % 4u].x > 0.5)];
+    return place(pl, bitcast<vec3f>(end.xyz));
+}
+
+fn line_at(vi: u32, at: u32) -> Line {
     let pl = placements[at];
     let s0 = segments[vi / 4u * 2u];
     let s1 = segments[vi / 4u * 2u + 1u];
@@ -170,6 +218,33 @@ fn line_vs(@builtin(vertex_index) vi: u32, @location(0) at: u32) -> Line {
     return Line(line_corner(vi, pl, half_px), colour, LINE_CORNERS[vi % 4u].y * half_px);
 }
 
+@vertex
+fn line_vs(@builtin(vertex_index) vi: u32, @location(0) at: u32) -> Line {
+    return line_at(vi, at);
+}
+
+struct CutLine {
+    @builtin(position) clip: vec4f,
+    @location(0) colour: vec3f,
+    @location(1) across: f32,
+    @location(2) p: vec3f,
+}
+
+@vertex
+fn line_cut_vs(@builtin(vertex_index) vi: u32, @location(0) at: u32) -> CutLine {
+    let l = line_at(vi, at);
+    return CutLine(l.clip, l.colour, l.across, line_end_at(vi, placements[at]));
+}
+
+@fragment
+fn line_cut_fs(in: CutLine) -> @location(0) vec4f {
+    if cut_away(in.p) {
+        discard;
+    }
+    let half_px = g.px.z + FEATHER;
+    return vec4f(in.colour, saturate((half_px - abs(in.across)) / FEATHER));
+}
+
 @fragment
 fn line_fs(in: Line) -> @location(0) vec4f {
     let half_px = g.px.z + FEATHER;
@@ -178,6 +253,7 @@ fn line_fs(in: Line) -> @location(0) vec4f {
 
 // the numbers overlay: a strip of 3x5 glyphs at the top left, scaled up
 const SCALE = 3.0;
+const HUD_COLUMNS = 85.0;
 const GLYPHS = array<u32, 40>(
     0x7B6Fu, 0x749Au, 0x73E7u, 0x79E7u, 0x49EDu, 0x79CFu, 0x7BCFu, 0x24A7u, 0x7BEFu, 0x79EFu,
     0x5BEAu, 0x3AEBu, 0x624Eu, 0x3B6Bu, 0x72CFu, 0x12CFu, 0x6B4Eu, 0x5BEDu, 0x7497u, 0x2B24u,
@@ -193,11 +269,14 @@ fn hud_vs(@builtin(vertex_index) vi: u32) -> @builtin(position) vec4f {
 
 @fragment
 fn hud_fs(@builtin(position) at: vec4f) -> @location(0) vec4f {
-    let p = (at.xy - vec2f(8.0, 8.0)) / SCALE;
-    if p.x < 0.0 || p.y < -1.0 || p.y >= 6.0 || p.x >= 1024.0 {
+    let p0 = (at.xy - vec2f(8.0, 8.0)) / SCALE;
+    if p0.x < 0.0 || p0.y < -1.0 || p0.y >= 20.0 || p0.x >= 4.0 * HUD_COLUMNS {
         discard;
     }
-    let cell = u32(p.x) / 4u;
+    // rows of text, seven units apart
+    let row = u32(p0.y + 1.0) / 7u;
+    let p = vec2f(p0.x, p0.y - f32(row) * 7.0);
+    let cell = row * u32(HUD_COLUMNS) + u32(p.x) / 4u;
     let code = (g.text[cell / 16u][cell / 4u % 4u] >> (cell % 4u * 8u)) & 0xffu;
     if code == 255u {
         discard;
@@ -217,20 +296,26 @@ fn hud_fs(@builtin(position) at: vec4f) -> @location(0) vec4f {
 struct Picked {
     @builtin(position) clip: vec4f,
     @location(0) @interpolate(flat) id: vec2u,
+    @location(1) p: vec3f,
 }
 
 @vertex
 fn surface_pick_vs(@location(0) p: vec3f, @location(2) at: u32, @location(3) face: u32) -> Picked {
-    return Picked(g.view_proj * vec4f(place(placements[at], p), 1.0), vec2u(at + 1u, face));
+    let w = place(placements[at], p);
+    return Picked(g.view_proj * vec4f(w, 1.0), vec2u(at + 1u, face), w);
 }
 
 @vertex
 fn line_pick_vs(@builtin(vertex_index) vi: u32, @location(0) at: u32) -> Picked {
-    return Picked(line_corner(vi, placements[at], g.px.z), vec2u(at + 1u, (vi / 4u) | 0x80000000u));
+    let pl = placements[at];
+    return Picked(line_corner(vi, pl, g.px.z), vec2u(at + 1u, (vi / 4u) | 0x80000000u), line_end_at(vi, pl));
 }
 
 @fragment
 fn pick_fs(in: Picked) -> @location(0) vec2u {
+    if cut_away(in.p) {
+        discard;
+    }
     return in.id;
 }
 
