@@ -304,6 +304,13 @@ pub fn curve_surface(c: &Curve, range: Interval, s: &Surface) -> CurveSurface {
                 return r;
             }
         }
+        Curve::Parabola(p) => {
+            if let Some(r) =
+                parabola_quadric(p, range, s).or_else(|| crate::ruled::parabola_wall(p, range, s))
+            {
+                return r;
+            }
+        }
         _ => {}
     }
     curve_surface_subdivide(c, range, s)
@@ -447,6 +454,62 @@ fn conic_quadric(f: &Frame, a: f64, b: f64, range: Interval, s: &Surface) -> Opt
     }
     hits.sort_by(|x, y| x.t.total_cmp(&y.t));
     hits.dedup_by(|x, y| x.point.distance(y.point) <= tol::LINEAR);
+    Some(CurveSurface::Hits(hits))
+}
+
+/// A parabola on a quadric: Q(P(t)) is a quartic in t, P(t) = o + k t^2 x + t y.
+fn parabola_quadric(par: &Parabola, range: Interval, s: &Surface) -> Option<CurveSurface> {
+    if !(range.lo.is_finite() && range.hi.is_finite()) {
+        return None;
+    }
+    let (qf, m, lin, c0) = quadric(s)?;
+    let f = &par.frame;
+    let k = 1.0 / (4.0 * par.focal);
+    let (o, x, y) = (
+        qf.point_to_local(f.origin).to_vec(),
+        qf.vec_to_local(f.x().get()),
+        qf.vec_to_local(f.y().get()),
+    );
+    let mv = |v: Vec3| {
+        Vec3::new(
+            m[0][0] * v.x + m[0][1] * v.y + m[0][2] * v.z,
+            m[1][0] * v.x + m[1][1] * v.y + m[1][2] * v.z,
+            m[2][0] * v.x + m[2][1] * v.y + m[2][2] * v.z,
+        )
+    };
+    let lv = Vec3::new(lin[0], lin[1], lin[2]);
+    let (mo, mx, my) = (mv(o), mv(x), mv(y));
+    let poly = [
+        o.dot(mo) + lv.dot(o) + c0,
+        2.0 * y.dot(mo) + lv.dot(y),
+        2.0 * k * x.dot(mo) + y.dot(my) + k * lv.dot(x),
+        2.0 * k * x.dot(my),
+        k * k * x.dot(mx),
+    ];
+    let curve = Curve::Parabola(*par);
+    if (0..9).all(|i| s.distance(curve.eval(range.lo + range.width() * i as f64 / 8.0)) <= tol::LINEAR) {
+        return Some(CurveSurface::OnSurface);
+    }
+    let mut hits = Vec::new();
+    for r in poly::real_roots(&poly, range.lo, range.hi) {
+        let p = curve.eval(r.x);
+        if s.distance(p) > 100.0 * tol::LINEAR {
+            // a root lost to cancellation: the subdivision finds the truth
+            return None;
+        }
+        let contact = if r.touching {
+            Contact::Touching
+        } else {
+            Contact::Crossing
+        };
+        hits.push(CurveHit {
+            t: r.x,
+            point: p,
+            contact,
+        });
+    }
+    hits.sort_by(|a, b| a.t.total_cmp(&b.t));
+    hits.dedup_by(|a, b| a.point.distance(b.point) <= tol::LINEAR);
     Some(CurveSurface::Hits(hits))
 }
 

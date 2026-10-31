@@ -16,7 +16,7 @@ use forge_math::{Box2, Box3, Frame, Interval, Point2, Point3, Vec3, tol};
 use std::sync::Arc;
 
 mod meet;
-pub use meet::meet_ruled;
+pub use meet::{meet_ruled, parabola_wall};
 
 /// One of the two curves a ruled face spans, by the fraction t along it.
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -127,6 +127,9 @@ pub struct Ruled {
     radius: f64,
     /// Which surface this is, for remembering its last query.
     id: u64,
+    /// Set when the rails are one parabola and its translate square to its plane (a parabolic
+    /// cylinder): nearest points are then the parabola's own, solved in closed form.
+    extruded: bool,
 }
 
 /// Largest principal curvature magnitude from first and second derivatives.
@@ -158,7 +161,17 @@ impl Ruled {
             scale: (a.length().max(b.length()), 0.0),
             radius: f64::INFINITY,
             id: fresh_id(),
+            extruded: false,
         };
+        if let (Rail::Parabola { curve: ca, range: ra }, Rail::Parabola { curve: cb, range: rb }) = (a, b) {
+            let (fa, fb) = (&ca.frame, &cb.frame);
+            let d = fb.origin - fa.origin;
+            r.extruded = ra == rb
+                && ca.focal == cb.focal
+                && fa.x() == fb.x()
+                && fa.y() == fb.y()
+                && d.cross(fa.z().get()).length() <= 1e-12 * d.length();
+        }
         // the normal is linear in s along each ruling: it vanishes (the surface folds) between
         // s0 and s1 where the segment between its values there passes the origin
         let regular = |t: Interval, s0: f64, s1: f64| {
@@ -240,6 +253,18 @@ impl Ruled {
 
     /// Parameters of the point nearest p within `dom`.
     fn nearest(&self, p: Point3, dom: Box2) -> Point2 {
+        if self.extruded
+            && let (Rail::Parabola { curve, range }, Rail::Parabola { curve: cb, .. }) = (self.a, self.b)
+        {
+            // square to the rulings onto the parabola's plane, then its nearest point there
+            let d = cb.frame.origin - curve.frame.origin;
+            let w = range.width();
+            let along = Interval::new(range.lo + w * dom.u.lo, range.lo + w * dom.u.hi);
+            let flat = p - d * (d.dot(p - curve.frame.origin) / d.length_sq());
+            let t = (parabola_nearest(&curve, flat, along) - range.lo) / w;
+            let s = (d.dot(p - self.a.at(t).0) / d.length_sq()).clamp(dom.v.lo, dom.v.hi);
+            return Point2::new(t, s);
+        }
         let mut best = (f64::INFINITY, Point2::new(dom.u.mid(), dom.v.mid()));
         let mut take = |t: f64, pa: Point3, d: Vec3| {
             let w = p - pa;
@@ -269,6 +294,44 @@ impl Ruled {
             ((p - d.p).dot(n), n)
         })
     }
+}
+
+/// The parameter in `range` of the parabola's point nearest q: where (P - q).P' = 0, the
+/// depressed cubic 2k^2 t^3 + (1 - 2k x) t - y = 0 solved by Cardano, its roots polished.
+fn parabola_nearest(par: &Parabola, q: Point3, range: Interval) -> f64 {
+    use forge_math::dmath;
+    let l = par.frame.point_to_local(q);
+    let k = 1.0 / (4.0 * par.focal);
+    let (a, b, c) = (2.0 * k * k, 1.0 - 2.0 * k * l.x, -l.y);
+    let (pp, qq) = (b / a, c / a);
+    let disc = qq * qq / 4.0 + pp * pp * pp / 27.0;
+    let mut roots = [f64::NAN; 3];
+    if disc >= 0.0 {
+        let r = disc.sqrt();
+        roots[0] = dmath::cbrt(-qq / 2.0 + r) + dmath::cbrt(-qq / 2.0 - r);
+    } else {
+        let m = 2.0 * (-pp / 3.0).sqrt();
+        let th = dmath::acos_clamped(3.0 * qq / (pp * m)) / 3.0;
+        for (i, r) in roots.iter_mut().enumerate() {
+            *r = m * dmath::cos(th - dmath::TAU * i as f64 / 3.0);
+        }
+    }
+    let dist = |t: f64| par.eval(t).distance_sq(q);
+    let mut best = (dist(range.lo), range.lo);
+    for mut t in roots.into_iter().filter(|t| t.is_finite()).chain([range.hi]) {
+        for _ in 0..2 {
+            let d = 3.0 * a * t * t + b;
+            if d != 0.0 {
+                t -= (a * t * t * t + b * t + c) / d;
+            }
+        }
+        let t = t.clamp(range.lo, range.hi);
+        let e = dist(t);
+        if e < best.0 {
+            best = (e, t);
+        }
+    }
+    best.1
 }
 
 fn lerp_box(a: &Box3, b: &Box3, s: f64) -> Box3 {
