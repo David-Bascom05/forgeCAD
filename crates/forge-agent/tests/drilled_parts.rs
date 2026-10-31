@@ -69,3 +69,27 @@ fn disjoint_lumps_are_shells_apart() {
     let m = Model::new("extrude 10 rect 0 0 10 10\nextrude 10 rect 20 0 10 10\n");
     assert_eq!(m.body().expect("a body").shells.len(), 2);
 }
+
+/// A pocket whose mouth stands 2e-5 (two tolerances) above the top face, and a pad laid 2e-5
+/// under the top across it: the pocket's wall keeps a sliver two tolerances tall under the pad.
+/// The n-ary regen without shapes probed that sliver from a point a step outside it and kept it,
+/// leaving open edges; every point of it is within tolerance of a face, so it is refused, never
+/// built invalid.
+#[test]
+fn sliver_two_tolerances_tall() {
+    let m = Model::new(
+        "extrude new 10 rect 0 0 60 40
+extrude cut 3.00001 at 15.77764088281603 16.262082660203596 7.00001 circle 0 0 3
+extrude add 3 at 15.14935454448211 11.64952639287997 9.99998 rect 0 0 10 8
+",
+    );
+    assert!(m.error.is_none());
+    let part = Part {
+        features: m.features.clone(),
+    };
+    for shapes in [true, false] {
+        if let Ok(b) = part.regenerate_nary_with(1, shapes) {
+            assert!(forge_topo::check(&b).is_empty(), "{:?}", forge_topo::check(&b));
+        }
+    }
+}

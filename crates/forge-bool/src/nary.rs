@@ -2604,13 +2604,16 @@ fn region_points(
     }
     let mut order: Vec<(f64, usize)> = edges.iter().enumerate().map(|(i, e)| (e.3, i)).collect();
     order.sort_by(|a, b| b.0.total_cmp(&a.0));
+    // clear of every other edge by the step, less a slack under the tolerance: a probe that has
+    // crossed an edge a hair away (a near-tolerance sliver) lies a hair nearer it than the step
     let clear = |p: Point3, step: f64, own: usize| {
+        let slack = (1e-3 * step).min(0.1 * tol::LINEAR);
         edges.iter().enumerate().all(|(i, &(c, r, _, _, reach))| {
             let far = match reach {
                 Reach::Ball(m, d) => m.distance(p) > d + step,
                 Reach::Box(b) => !b.grow(step).contains(p),
             };
-            i == own || far || c.eval(c.closest(p, r)).distance(p) >= 0.999 * step
+            i == own || far || c.eval(c.closest(p, r)).distance(p) >= step - slack
         })
     };
     let mut out = Vec::new();
@@ -2632,11 +2635,25 @@ fn region_points(
             }
         }
     }
+    // nothing clear (a sliver thinner than the steps tried): halfway across to the nearest
+    // other edge from the longest one's middle
     if out.is_empty()
         && let Some(&(len, i)) = order.first()
     {
         let (c, r, fwd, _, _) = edges[i];
-        out.extend(step_in(body, f, c, r, fwd, 0.5, (0.01 * len).min(0.05)));
+        let at = c.eval(r.mid());
+        let gap = edges
+            .iter()
+            .enumerate()
+            .filter(|&(k, _)| k != i)
+            .map(|(_, &(o, ro, _, _, _))| o.eval(o.closest(at, ro)).distance(at))
+            .fold(f64::INFINITY, f64::min);
+        let step = if gap.is_finite() && gap > 0.0 {
+            0.5 * gap
+        } else {
+            0.01 * len
+        };
+        out.extend(step_in(body, f, c, r, fwd, 0.5, step.min(0.05)));
     }
     out
 }

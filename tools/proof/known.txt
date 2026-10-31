@@ -11,6 +11,7 @@ boolean: (A-B) | (A&B) invalid  # M4
 mirror: fails: Boolean Internal "face  # M5
 backends: nary 1: fails: invalid EdgeUses EdgeId  # M6
 backends: nary 1: fails: Boolean Unsupported "region  # M7
+backends: nary no shapes: fails: Boolean Unsupported "region  # M7: adv near_tolerance 1, a sliver two tolerances tall (was invalid EdgeUses)
 certify: Mesh  # M8
 boolean: A | B fails: invalid FaceWrongSide FaceId  # M9
 # on the part files in forgecad-gate/repros (not in CI)
