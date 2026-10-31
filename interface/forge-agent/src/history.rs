@@ -1693,9 +1693,9 @@ fn valid(kind: &str, b: &Body) -> Verdict {
 
 /// The finished part closes up and the n-ary regen makes the same solid.
 fn finish(m: &Model) -> Verdict {
-    let Some(body) = m.body() else {
+    if m.body().is_none() {
         return Verdict::Ok;
-    };
+    }
     let q = Quality {
         chord: CHORD,
         ..Quality::default()
@@ -1713,24 +1713,39 @@ fn finish(m: &Model) -> Verdict {
             Ok(Ok(t)) => Ok((t.volume(), t.area())),
         }
     };
-    let (v, a) = match measure(body, "seq") {
+    // every body, on both regens
+    let sum = |bs: Vec<&Body>, path: &str| -> Result<(f64, f64), Verdict> {
+        let mut t = (0.0, 0.0);
+        for b in bs {
+            let (v, a) = measure(b, path)?;
+            t = (t.0 + v, t.1 + a);
+        }
+        Ok(t)
+    };
+    let seq = m.solids_after(m.built());
+    let (v, a) = match sum(seq.iter().map(|s| &s.body).collect(), "seq") {
         Ok(x) => x,
         Err(f) => return f,
     };
     let part = Part {
         features: m.features.clone(),
     };
-    let nary = match catch_unwind(AssertUnwindSafe(|| part.regenerate_nary(1))) {
+    let nary = match catch_unwind(AssertUnwindSafe(|| part.regenerate_nary_solids(1))) {
         Err(p) => return Verdict::Fail(format!("nary: panic {}", panic_text(p))),
         Ok(Err(e)) => {
             return Verdict::Fail(format!("nary: {}", kind_of_msg(&crate::model::explain(&e).0)));
         }
         Ok(Ok(b)) => b,
     };
-    if let f @ Verdict::Fail(_) = valid("nary", &nary) {
-        return f;
+    if nary.len() != seq.len() {
+        return Verdict::Fail(format!("nary: {} bodies, sequential {}", nary.len(), seq.len()));
     }
-    match measure(&nary, "nary") {
+    for s in &nary {
+        if let f @ Verdict::Fail(_) = valid("nary", &s.body) {
+            return f;
+        }
+    }
+    match sum(nary.iter().map(|s| &s.body).collect(), "nary") {
         Err(f) => f,
         // both meshes sag inside curved faces by under a chord: they differ by less than that
         Ok((vn, _)) if (vn - v).abs() > CHORD * a + 1e-9 * v.abs() => {

@@ -45,7 +45,7 @@ Counts: real parts = find-parts, Fusion 360 Gallery, ~8600 parts, main d33b84aa 
 | fillet at any radius, history: NoBlend 28 (mostly variable radius), Overflow 18, Corner 20 | 66 of 202 | a variable law through a line and an arc: the guide (a spline) bends on the line's long step | variable fillets past a filleted corner | open: drawing knots in moved NoBlend to BadRadius only, dropped |
 | chamfer at any size: TooLarge 12; Unsupported 13 | history | not traced | chamfering a tilted hole's rim | open |
 | shell at any thickness, other: Rebuild 8 | history | not traced | | open |
-| n-ary refuses several bodies in `finish` | 37 history | the history check calls the one-body n-ary regen: a test gap | | open |
+| n-ary refuses several bodies in `finish` | 37 history | the history check called the one-body n-ary regen: a test gap | | fixed: every body on both regens, none differ in 34 seeds |
 | finder's synthetic list | 62 of 69 still fail | threads, coils and lofts against other tools; direct edits; see repros/find-synth | | open |
 
 Fusion rate on 3b1d1c47: 94.7% (8169 of 8625), against 91.2%; the later commits are not yet measured.

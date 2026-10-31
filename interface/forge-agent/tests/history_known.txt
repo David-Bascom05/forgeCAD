@@ -10,6 +10,5 @@ Direct(Invalid(  # delete leaves a face with no loops
 # the n-ary regen names split faces and edges unlike the sequential one, so later references miss:
 # it then rebuilds feature by feature (forge_model::nary_name_fallbacks). Seeds 3 and 27's class:
 # not a failure here any more; tests/history.rs lists the seeds that rely on it, which only shrinks
-nary: the part is 9 bodies, not one  # the sequential regen keeps a disjoint add (invalid Euler) the n-ary refuses
 # on main 947e420 with bugs-3 alone too (not from this integration's other branches): filed to unblock it
 fillet: invalid EdgeOffFace  # seed 32: a variable fillet after a thicken cut, then a fillet near it
