@@ -415,6 +415,7 @@ impl Body {
             faces: Vec::with_capacity(self.faces.len()),
             shells: Vec::new(),
             hulls: Cached::default(),
+            split: std::mem::take(&mut self.split),
         };
         for (i, mut face) in std::mem::take(&mut self.faces).into_iter().enumerate() {
             if !face.alive {
