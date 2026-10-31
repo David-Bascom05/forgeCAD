@@ -1992,6 +1992,21 @@ pub(crate) fn across(body: &Body, f: FaceId, c: forge_topo::CoedgeId) -> R<Surfa
             }
             Curve::Circle(k) => Surface::Plane(Plane::new(k.frame)),
             Curve::Ellipse(e) => Surface::Plane(Plane::new(e.frame)),
+            // likewise the parabolic wall square to a parabola's plane (a vertex blend's rim)
+            Curve::Parabola(pa) if n.dot(pa.frame.z()).abs() > 1.0 - 1e-6 => {
+                let h = pa.frame.z() * edge.range.width().max(1.0);
+                let rail = |o: Vec3| forge_geom::ruled::Rail::Parabola {
+                    curve: forge_geom::Parabola {
+                        frame: pa.frame.with_origin(pa.frame.origin + o),
+                        focal: pa.focal,
+                    },
+                    range: edge.range,
+                };
+                match forge_geom::ruled::Ruled::new(rail(-h), rail(h)) {
+                    Some(w) => w.surface(),
+                    None => return Err(BoolError::Internal("degenerate edge")),
+                }
+            }
             _ => {
                 let z =
                     d.d1.cross(n.get())

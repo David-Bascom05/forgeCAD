@@ -1263,6 +1263,31 @@ fn max_curvature(d: &SurfDeriv) -> f64 {
     h.abs() + (h * h - k).max(0.0).sqrt()
 }
 
+impl HolePatch {
+    /// The implicit value and its gradient. Off the patch the nearest point is on its rim, and
+    /// the surface is carried on past the rim, tangent there and bending the other way from the
+    /// patch across it (height -+ t^2 / 2 rho at t past the rim): an intersection crosses a
+    /// neighbour the patch meets tangentially instead of touching it at the rim, and the
+    /// carried-on part never runs along the neighbour. On the patch t is 0 and the value is the
+    /// signed distance.
+    fn carried(&self, p: Point3) -> (f64, Vec3) {
+        let d = self.deriv(self.project(p));
+        let n = d.du.cross(d.dv).normalize().map_or(Vec3::Z, |u| u.get());
+        let r = p - d.p;
+        let h = n.dot(r);
+        let t = r - n * h;
+        // the patch's normal curvature towards t: t's parameters, through the first form
+        let (e, f, g) = (d.du.dot(d.du), d.du.dot(d.dv), d.dv.dot(d.dv));
+        let bend = linalg::solve2(e, f, f, g, t.dot(d.du), t.dot(d.dv)).map_or(0.0, |(a, b)| {
+            n.dot(d.duu * (a * a) + d.duv * (2.0 * a * b) + d.dvv * (b * b))
+        });
+        let k = if bend > 0.0 { 1.0 } else { -1.0 } / self.min_radius;
+        let gr = n + t * k;
+        let l = gr.length();
+        ((h + 0.5 * k * t.length_sq()) / l, gr / l)
+    }
+}
+
 impl Procedural for HolePatch {
     fn point(&self, uv: Point2) -> Point3 {
         HolePatch::point(self, uv)
@@ -1469,25 +1494,10 @@ impl Procedural for HolePatch {
         bx.grow(64.0 * f64::EPSILON * m)
     }
     fn implicit(&self, p: Point3) -> f64 {
-        let d = self.deriv(self.project(p));
-        let r = p - d.p;
-        let side = d.du.cross(d.dv).dot(r);
-        if side < 0.0 { -r.length() } else { r.length() }
+        self.carried(p).0
     }
     fn gradient(&self, p: Point3) -> Vec3 {
-        let d = self.deriv(self.project(p));
-        let n = d.du.cross(d.dv).normalize().map_or(Vec3::Z, |u| u.get());
-        let r = p - d.p;
-        match r.normalize() {
-            Some(u) if r.length() > tol::LINEAR => {
-                if n.dot(r) < 0.0 {
-                    -u.get()
-                } else {
-                    u.get()
-                }
-            }
-            _ => n,
-        }
+        self.carried(p).1
     }
     fn transformed(&self, f: &Frame) -> Proc {
         let sides = self

@@ -123,6 +123,11 @@ pub trait Procedural: Send + Sync + std::fmt::Debug {
     }
     /// A radius of curvature no larger than the surface's tightest (for meshing).
     fn min_radius(&self) -> f64;
+    /// The size of the smallest feature of the implicit's zero set off the face (a turn of a
+    /// carried-on track, the gap between two sheets): tracing steps stay well below it.
+    fn feature(&self) -> f64 {
+        f64::INFINITY
+    }
     /// The surface itself, for closed forms that know its kind.
     fn as_any(&self) -> Option<&dyn std::any::Any> {
         None

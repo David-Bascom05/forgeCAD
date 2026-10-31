@@ -689,6 +689,13 @@ impl Procedural for Screw {
         };
         0.8 * self.rmin.min(r)
     }
+    fn feature(&self) -> f64 {
+        // the track's end turns are its tightest, and no two turns' tracks come closer
+        match self.ring.pieces[2].s {
+            Section::Arc { r, .. } => r,
+            Section::Line { .. } => f64::INFINITY,
+        }
+    }
 }
 
 /// A section point carried by the screw motion: a (conical) helix.

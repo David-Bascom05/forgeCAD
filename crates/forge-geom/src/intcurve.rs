@@ -250,7 +250,14 @@ impl IntCurve {
 /// are tangent somewhere the tracing needs to pass.
 pub fn trace(a: &Surface, b: &Surface, region: Box3) -> Option<Vec<IntCurve>> {
     let size = region.diagonal().max(1e-6);
-    let leaf = (size / 64.0).max(10.0 * tol::LINEAR);
+    let feature = |s: &Surface| match s {
+        Surface::Procedural(p) => p.feature(),
+        _ => f64::INFINITY,
+    };
+    let leaf = (size / 64.0)
+        .min(feature(a))
+        .min(feature(b))
+        .max(10.0 * tol::LINEAR);
     let step = leaf * 0.5;
     let mut seeds: Vec<Point3> = Vec::new();
     // cells are cubes, each held as its circumscribed sphere: the root is the cube on the
@@ -354,12 +361,21 @@ fn march(
     let max = (64.0 * bounds.diagonal() / step) as usize + 16;
     for k in 0..max {
         let d = direction(a, b, p)? * sign;
-        // a predictor along the tangent, then back onto both surfaces in the plane across it
-        let guess = p + d * step;
-        let q = refine(a, b, guess)?;
-        if (q - p).dot(d) <= 0.0 {
-            return None;
-        }
+        // a predictor along the tangent, then back onto both surfaces in the plane across it;
+        // a step that lands behind or far from its guess jumped (a corner of a surface's
+        // projection, another sheet) and is retried shorter
+        let mut h = step;
+        let q = loop {
+            let guess = p + d * h;
+            match refine(a, b, guess) {
+                Some(q) if (q - p).dot(d) > 0.0 && q.distance(guess) <= h => break q,
+                _ if h > step / 64.0 => h *= 0.5,
+                // a procedural surface may stop at its face's rim: the branch ends there (any part
+                // of it back on the face is seeded and traced from there)
+                _ if ends(a, p, d, h) || ends(b, p, d, h) => return Some((pts, false)),
+                _ => return None,
+            }
+        };
         if k > 2 && q.distance(p0) <= 0.75 * step {
             pts.push(p0);
             return Some((pts, true));
@@ -371,6 +387,14 @@ fn march(
         p = q;
     }
     None
+}
+
+/// Whether a procedural surface stops at p going along d: a short step on lies off it by about
+/// the step's length (a curve on it would stay within the step's square).
+fn ends(s: &Surface, p: Point3, d: Vec3, h: f64) -> bool {
+    let Surface::Procedural(pr) = s else { return false };
+    let x = p + d * h;
+    pr.point(pr.project(x)).distance(x) > 0.5 * h
 }
 
 pub(crate) fn finish(a: &Surface, b: &Surface, pts: Vec<Point3>, closed: bool, step: f64) -> IntCurve {
