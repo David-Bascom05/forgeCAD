@@ -595,6 +595,27 @@ fn brio_order(points: &[Point2], lo: Point2, size: f64) -> Vec<usize> {
     order
 }
 
+/// Position along a Hilbert curve over a 65536 x 65536 grid: neighbours along it are
+/// neighbours in the plane (a Z-order curve jumps across at each power of two).
+fn hilbert(mut x: u32, mut y: u32) -> u64 {
+    let mut d = 0u64;
+    let mut s = 1u32 << 15;
+    while s > 0 {
+        let rx = u32::from(x & s > 0);
+        let ry = u32::from(y & s > 0);
+        d += u64::from(s) * u64::from(s) * u64::from((3 * rx) ^ ry);
+        if ry == 0 {
+            if rx == 1 {
+                x = 0xffff - x;
+                y = 0xffff - y;
+            }
+            std::mem::swap(&mut x, &mut y);
+        }
+        s >>= 1;
+    }
+    d
+}
+
 /// Position along a Z-order (Morton) curve: the bits of x and y interleaved.
 #[inline]
 fn morton(x: u32, y: u32) -> u64 {
@@ -780,6 +801,10 @@ pub fn triangulate_refined(
             if mids.is_empty() {
                 break;
             }
+            // along a Hilbert curve, so each walk starts beside the point before
+            let scale = 65535.0 / size;
+            let zq = |v: f64| (v * scale).clamp(0.0, 65535.0) as u32;
+            mids.sort_by_cached_key(|p| hilbert(zq(p.x - lo.x), zq(p.y - lo.y)));
             for &p in &mids {
                 mesh.insert_interior(p, eps)?;
             }

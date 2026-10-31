@@ -1,6 +1,6 @@
 use crate::cdt::{CdtError, triangulate_refined};
 use crate::mesh::TriMesh;
-use forge_geom::{Curve, CurveGeom, Surface, SurfaceGeom};
+use forge_geom::{Curve, Surface, SurfaceGeom};
 use forge_math::{Point2, dmath};
 use forge_topo::uv::{align_loops, draw_loop};
 use forge_topo::{Body, FaceId};
@@ -309,16 +309,16 @@ fn tessellate_face(
         let mut ids = Vec::new();
         for &c in &body.lp(l).coedges {
             let co = body.coedge(c);
-            let edge = body.edge(co.edge);
             let s = &edge_samples[co.edge.index()];
-            let ordered: Vec<(f64, u32)> = if co.forward {
-                s.clone()
-            } else {
-                s.iter().rev().copied().collect()
-            };
-            for &(t, gi) in &ordered[..ordered.len() - 1] {
-                samples.push(edge.curve.eval(t));
+            // the edge's samples are already mesh vertices: their points, not evaluated again
+            let mut take = |&(_, gi): &(f64, u32)| {
+                samples.push(mesh.positions[gi as usize]);
                 ids.push(gi);
+            };
+            if co.forward {
+                s[..s.len() - 1].iter().for_each(&mut take);
+            } else {
+                s[1..].iter().rev().for_each(&mut take);
             }
         }
         let (pts, sample_of) = draw_loop(body, f, &samples);
@@ -347,8 +347,11 @@ fn tessellate_face(
         return Ok(());
     }
 
-    let scaled: Vec<Point2> = uv.iter().map(|p| Point2::new(p.x * su, p.y * sv)).collect();
+    let mut scaled: Vec<Point2> = uv.iter().map(|p| Point2::new(p.x * su, p.y * sv)).collect();
     let mut interior = Vec::new();
+    // an analytic face's grid: cells clear of the boundary are triangulated straight off the
+    // grid, the band between them and the boundary by the constrained Delaunay
+    let mut grid: Option<Grid> = None;
     if let Some((du, dv)) = interior_steps(surface, q) {
         let (mut lo, mut hi) = (
             Point2::new(f64::INFINITY, f64::INFINITY),
@@ -363,12 +366,33 @@ fn tessellate_face(
             _ => {
                 let nu = ((hi.x - lo.x) / du).ceil().max(1.0) as usize;
                 let nv = ((hi.y - lo.y) / dv).ceil().max(1.0) as usize;
+                let mut g = Grid::new(lo, hi, nu, nv, &uv, &loops);
+                // a cell's chords sag within the tolerance only where its steps come from the
+                // surface's exact radii (not a cone's, whose radius grows along it)
+                let exact = matches!(
+                    surface,
+                    Surface::Sphere(_) | Surface::Torus(_) | Surface::Cylinder(_)
+                );
+                let stairs = if g.any && exact { g.staircase() } else { None };
+                g.settle(stairs.is_some());
                 for i in 1..nu {
                     for j in 1..nv {
-                        let u = lo.x + (hi.x - lo.x) * i as f64 / nu as f64;
-                        let v = lo.y + (hi.y - lo.y) * j as f64 / nv as f64;
-                        interior.push(Point2::new(u * su, v * sv));
+                        if !g.covered(i, j) {
+                            let p = g.node(i, j);
+                            interior.push(Point2::new(p.x * su, p.y * sv));
+                        }
                     }
+                }
+                if let Some(stairs) = stairs {
+                    for cycle in stairs {
+                        loops.push((scaled.len() as u32..(scaled.len() + cycle.len()) as u32).collect());
+                        for &(i, j) in &cycle {
+                            let p = g.node(i, j);
+                            scaled.push(Point2::new(p.x * su, p.y * sv));
+                        }
+                        g.cycles.borrow_mut().push(cycle);
+                    }
+                    grid = Some(g);
                 }
             }
         }
@@ -379,8 +403,22 @@ fn tessellate_face(
     // two boundary curves has no grid points at all; a chord across a radian of a cylinder needs
     // several halvings)
     let at = |p: Point2| surface.eval(Point2::new(p.x / su, p.y / sv));
-    // each point's position is worked out once, however many edges and rounds test it
-    let cache = std::cell::RefCell::new(Vec::<Option<forge_math::Point3>>::new());
+    // each point's position is worked out once, however many edges and rounds test it (the
+    // boundary's and the grid's are known already)
+    let mut node_index: Vec<u32> = Vec::new();
+    let mut known: Vec<Option<forge_math::Point3>> =
+        global.iter().map(|&g| Some(mesh.positions[g as usize])).collect();
+    if let Some(g) = &grid {
+        node_index = g.place(surface, mesh);
+        for cycle in g.cycles.borrow().iter() {
+            known.extend(
+                cycle
+                    .iter()
+                    .map(|&(i, j)| Some(mesh.positions[node_index[g.id(i, j)] as usize])),
+            );
+        }
+    }
+    let cache = std::cell::RefCell::new(known);
     let pos = |i: u32, p: Point2| {
         let mut c = cache.borrow_mut();
         if c.len() <= i as usize {
@@ -447,13 +485,29 @@ fn tessellate_face(
             return Err(e);
         }
     };
-    let base = global.len();
     let mut index = global;
     let known = cache.into_inner();
-    for (i, p) in tri.points.iter().enumerate().skip(base) {
+    if let Some(g) = &grid {
+        for cycle in g.cycles.borrow().iter() {
+            index.extend(cycle.iter().map(|&(i, j)| node_index[g.id(i, j)]));
+        }
+    }
+    for (i, p) in tri.points.iter().enumerate().skip(index.len()) {
         let pos = known.get(i).copied().flatten().unwrap_or_else(|| at(*p));
         index.push(mesh.add_vertex(pos));
     }
+    if let Some(g) = &grid {
+        for (i, j) in g.inner_cells() {
+            let [a, b, c, d] =
+                [(i, j), (i + 1, j), (i + 1, j + 1), (i, j + 1)].map(|(x, y)| node_index[g.id(x, y)]);
+            for t in [[a, b, c], [a, c, d]] {
+                let t = if face.same_sense { t } else { [t[0], t[2], t[1]] };
+                mesh.triangles.push(t);
+                mesh.face_of.push(f.0);
+            }
+        }
+    }
+
     for t in &tri.triangles {
         let [a, b, c] = t.map(|k| index[k as usize]);
         // two corners on one pole: the triangle collapses to the pole and is dropped
@@ -466,6 +520,219 @@ fn tessellate_face(
         mesh.face_of.push(f.0);
     }
     Ok(())
+}
+
+/// A face's interior grid in (u, v): `nu` x `nv` cells over the face's parameter box, and the
+/// cells clear of its boundary (`inner`): no boundary segment's box meets the cell or any cell
+/// round it, and the cell's middle is inside the face.
+struct Grid {
+    lo: Point2,
+    hi: Point2,
+    nu: usize,
+    nv: usize,
+    inner: Vec<bool>,
+    any: bool,
+    /// Per node: a corner of an inner cell.
+    cover: Vec<bool>,
+    /// The staircase cycles round the inner cells, once traced.
+    cycles: std::cell::RefCell<Vec<Vec<(usize, usize)>>>,
+}
+
+impl Grid {
+    fn new(lo: Point2, hi: Point2, nu: usize, nv: usize, uv: &[Point2], loops: &[Vec<u32>]) -> Grid {
+        let (cw, ch) = ((hi.x - lo.x) / nu as f64, (hi.y - lo.y) / nv as f64);
+        let mut touched = vec![false; nu * nv];
+        // the cells a segment's box comes within a quarter cell of: no grid node of an untouched
+        // cell lies on or right by the boundary
+        let cell_of = |x: f64, w: f64, l: f64, n: usize| (((x - l) / w).floor().max(0.0) as usize).min(n - 1);
+        let reach = 0.25;
+        let segs = || {
+            loops.iter().flat_map(|l| {
+                (0..l.len()).map(move |k| (uv[l[k] as usize], uv[l[(k + 1) % l.len()] as usize]))
+            })
+        };
+        for (a, b) in segs() {
+            let (i0, i1) = (
+                cell_of(a.x.min(b.x) - reach * cw, cw, lo.x, nu),
+                cell_of(a.x.max(b.x) + reach * cw, cw, lo.x, nu),
+            );
+            let (j0, j1) = (
+                cell_of(a.y.min(b.y) - reach * ch, ch, lo.y, nv),
+                cell_of(a.y.max(b.y) + reach * ch, ch, lo.y, nv),
+            );
+            for i in i0..=i1 {
+                for j in j0..=j1 {
+                    touched[i * nv + j] = true;
+                }
+            }
+        }
+        // inside by the parity of crossings along each row's middle: each segment adds its
+        // crossings to the rows it spans
+        let mut inside = vec![false; nu * nv];
+        let mut rows: Vec<Vec<f64>> = vec![Vec::new(); nv];
+        let row_at = |y: f64| (y - lo.y) / ch - 0.5;
+        for (a, b) in segs() {
+            let (y0, y1) = (a.y.min(b.y), a.y.max(b.y));
+            let j0 = row_at(y0).floor().max(0.0) as usize;
+            let j1 = (row_at(y1).ceil().max(0.0) as usize).min(nv - 1);
+            for (j, xs) in rows.iter_mut().enumerate().take(j1 + 1).skip(j0) {
+                let v = lo.y + ch * (j as f64 + 0.5);
+                if (a.y > v) != (b.y > v) {
+                    xs.push(a.x + (v - a.y) / (b.y - a.y) * (b.x - a.x));
+                }
+            }
+        }
+        for (j, xs) in rows.iter_mut().enumerate() {
+            xs.sort_by(f64::total_cmp);
+            let mut k = 0;
+            for i in 0..nu {
+                let u = lo.x + cw * (i as f64 + 0.5);
+                while k < xs.len() && xs[k] < u {
+                    k += 1;
+                }
+                inside[i * nv + j] = k % 2 == 1;
+            }
+        }
+        let clear = |i: usize, j: usize| !touched[i * nv + j];
+        let mut inner: Vec<bool> = (0..nu * nv).map(|c| inside[c] && clear(c / nv, c % nv)).collect();
+        // no two inner cells meeting at a corner only (their staircases would touch there)
+        loop {
+            let mut changed = false;
+            for i in 0..nu.saturating_sub(1) {
+                for j in 0..nv.saturating_sub(1) {
+                    let at = |x: usize, y: usize| inner[x * nv + y];
+                    let (a, b, c, d) = (at(i, j), at(i + 1, j), at(i, j + 1), at(i + 1, j + 1));
+                    if (a && d && !b && !c) || (b && c && !a && !d) {
+                        inner[(i + 1) * nv + j + 1] = false;
+                        inner[(i + 1) * nv + j] = false;
+                        changed = true;
+                    }
+                }
+            }
+            if !changed {
+                break;
+            }
+        }
+        let any = inner.contains(&true);
+        Grid {
+            lo,
+            hi,
+            nu,
+            nv,
+            inner,
+            any,
+            cover: Vec::new(),
+            cycles: Default::default(),
+        }
+    }
+
+    fn node(&self, i: usize, j: usize) -> Point2 {
+        Point2::new(
+            self.lo.x + (self.hi.x - self.lo.x) * i as f64 / self.nu as f64,
+            self.lo.y + (self.hi.y - self.lo.y) * j as f64 / self.nv as f64,
+        )
+    }
+
+    fn id(&self, i: usize, j: usize) -> usize {
+        i * (self.nv + 1) + j
+    }
+
+    fn is_inner(&self, i: usize, j: usize) -> bool {
+        i < self.nu && j < self.nv && self.inner[i * self.nv + j]
+    }
+
+    /// Whether a node is a corner of an inner cell.
+    fn covered(&self, i: usize, j: usize) -> bool {
+        self.any && self.cover[self.id(i, j)]
+    }
+
+    /// Settles which nodes the inner cells use (none unless `any`).
+    fn settle(&mut self, any: bool) {
+        self.any = any;
+        self.cover = vec![false; (self.nu + 1) * (self.nv + 1)];
+        for c in 0..self.nu * self.nv {
+            if self.inner[c] {
+                let (i, j) = (c / self.nv, c % self.nv);
+                for (x, y) in [(i, j), (i + 1, j), (i, j + 1), (i + 1, j + 1)] {
+                    self.cover[x * (self.nv + 1) + y] = true;
+                }
+            }
+        }
+    }
+
+    fn inner_cells(&self) -> impl Iterator<Item = (usize, usize)> + '_ {
+        (0..self.nu * self.nv)
+            .filter(|&c| self.inner[c])
+            .map(|c| (c / self.nv, c % self.nv))
+    }
+
+    /// The boundary of the inner cells as cycles of nodes (each node on one at most once); None
+    /// if a node would start two sides (cannot happen once corner-only contacts are gone).
+    fn staircase(&self) -> Option<Vec<Vec<(usize, usize)>>> {
+        // each inner cell's sides against a cell that is not: from node to node, cell on the left
+        let mut next = vec![usize::MAX; (self.nu + 1) * (self.nv + 1)];
+        let mut twice = false;
+        let mut side = |from: usize, to: usize| {
+            twice |= next[from] != usize::MAX;
+            next[from] = to;
+        };
+        for (i, j) in self.inner_cells() {
+            let (i1, j1) = (i + 1, j + 1);
+            if j == 0 || !self.is_inner(i, j - 1) {
+                side(self.id(i, j), self.id(i1, j));
+            }
+            if !self.is_inner(i1, j) {
+                side(self.id(i1, j), self.id(i1, j1));
+            }
+            if !self.is_inner(i, j1) {
+                side(self.id(i1, j1), self.id(i, j1));
+            }
+            if i == 0 || !self.is_inner(i - 1, j) {
+                side(self.id(i, j1), self.id(i, j));
+            }
+        }
+        if twice {
+            return None;
+        }
+        let mut out = Vec::new();
+        for start in 0..next.len() {
+            if next[start] == usize::MAX {
+                continue;
+            }
+            let mut cycle = Vec::new();
+            let mut n = start;
+            while next[n] != usize::MAX {
+                cycle.push((n / (self.nv + 1), n % (self.nv + 1)));
+                let m = next[n];
+                next[n] = usize::MAX;
+                n = m;
+            }
+            if n != start {
+                return None;
+            }
+            out.push(cycle);
+        }
+        Some(out)
+    }
+
+    /// Mesh vertices for every node an inner cell or the staircase uses, row by row.
+    fn place(&self, surface: &Surface, mesh: &mut TriMesh) -> Vec<u32> {
+        let mut index = vec![u32::MAX; (self.nu + 1) * (self.nv + 1)];
+        let (mut trig, mut pts) = (Vec::new(), Vec::new());
+        for j in 1..self.nv {
+            if !(1..self.nu).any(|i| self.cover[self.id(i, j)]) {
+                continue;
+            }
+            let v = self.node(0, j).y;
+            surface.eval_row(v, self.lo.x, self.hi.x, self.nu, &mut trig, &mut pts);
+            for i in 1..self.nu {
+                if self.covered(i, j) {
+                    index[self.id(i, j)] = mesh.add_vertex(pts[i - 1]);
+                }
+            }
+        }
+        index
+    }
 }
 
 /// Faces that are rectangles in parameter space (every revolve face, every
