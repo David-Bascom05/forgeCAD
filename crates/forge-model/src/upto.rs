@@ -675,24 +675,23 @@ pub(crate) fn build(
         }
     }
     // each start face comes through whole (a face trimmed to one piece keeps its name)
-    let shape_of = |b: &Body, n: Name| {
-        b.face_by_name(n).map(|f| {
-            let loops = &b.face(f).loops;
-            (
-                loops.len(),
-                loops.iter().map(|&l| b.lp(l).coedges.len()).sum::<usize>(),
-                b.face_box(f),
-            )
-        })
+    let counts = |b: &Body, f: forge_topo::FaceId| {
+        let loops = &b.face(f).loops;
+        (
+            loops.len(),
+            loops.iter().map(|&l| b.lp(l).coedges.len()).sum::<usize>(),
+        )
+    };
+    let close = |a: forge_math::Interval, b: forge_math::Interval| {
+        (a.lo - b.lo).abs() <= tol::LINEAR && (a.hi - b.hi).abs() <= tol::LINEAR
     };
     for &n in start {
-        let same = match (shape_of(&base.0, n), shape_of(&body, n)) {
-            (Some(w), Some(h)) => {
-                let close = |a: forge_math::Interval, b: forge_math::Interval| {
-                    (a.lo - b.lo).abs() <= tol::LINEAR && (a.hi - b.hi).abs() <= tol::LINEAR
-                };
-                w.0 == h.0 && w.1 == h.1 && close(w.2.x, h.2.x) && close(w.2.y, h.2.y) && close(w.2.z, h.2.z)
+        let same = match (base.0.face_by_name(n), body.face_by_name(n)) {
+            (Some(w), Some(h)) if counts(&base.0, w) == counts(&body, h) => {
+                let (w, h) = (base.0.face_box(w), body.face_box(h));
+                close(w.x, h.x) && close(w.y, h.y) && close(w.z, h.z)
             }
+            (None, None) => true,
             _ => false,
         };
         if !same {

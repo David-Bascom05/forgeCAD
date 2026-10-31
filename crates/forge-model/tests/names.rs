@@ -6,7 +6,7 @@ use forge_ops::Profile;
 use forge_topo::{Body, Name};
 
 /// Parts where a closed intersection curve's pieces still take their names from where the
-/// surfaces' seams cut it: a tiny move swaps them (see the shaft-post repro below).
+/// surfaces' seams cut it: a tiny move swaps them (docs/naming.md).
 const SEAMED: [&str; 6] = [
     "fillet:shaft-post",
     "fillet:shaft-post-periodic",
@@ -39,7 +39,7 @@ fn small_edits_never_move_a_name_to_another_entity() {
     }
     assert!(used >= 50, "only {used} edits judged");
     assert!(bad.is_empty(), "{bad:#?}");
-    // names lost though their entity lives: where flush faces part or meet (see names.rs)
+    // names lost though their entity lives: where flush faces part or meet (docs/naming.md)
     assert!(lost * 25 <= kept, "{lost} lost, {kept} kept");
 }
 
@@ -93,7 +93,7 @@ fn a_face_cut_into_one_piece_keeps_its_name_on_both_paths() {
 #[test]
 fn both_regen_paths_name_alike() {
     // the other suite parts still differ where a face is split into several kept pieces: the
-    // sequential regen names those from the pieces earlier features left (see names.rs)
+    // sequential regen names those from the pieces earlier features left (docs/naming.md)
     for name in ["sweep", "loft"] {
         let part = suite::part(name).expect("a suite part");
         let seq = part.regenerate().expect("sequential regen");

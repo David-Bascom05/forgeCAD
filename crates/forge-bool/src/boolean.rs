@@ -137,6 +137,7 @@ struct Spec {
     side: Side,
     from: FaceId,
     loops: Vec<Vec<(usize, bool)>>,
+    /// NONE for a piece of a split face: named only if kept (`sole_pieces_keep_names`).
     name: Name,
     /// Pieces of the other body's edges imprinted on this face (a coplanar
     /// face's boundary); classification never floods across them.
@@ -222,7 +223,6 @@ pub(crate) fn edge_split(
     by_edge: &[(Side, EdgeId, usize)],
     cut_vertex: &[VKey],
     alias: &[(VKey, VKey)],
-    vname: &dyn Fn(VKey) -> Name,
     pieces: &mut Vec<Piece>,
 ) -> std::ops::Range<usize> {
     let resolve = |v: VKey| alias.iter().find(|(f, _)| *f == v).map_or(v, |&(_, t)| t);
@@ -255,18 +255,13 @@ pub(crate) fn edge_split(
     let first = pieces.len();
     let mut at = (edge.range.lo, vs);
     for &(s, v) in splits.iter().chain([(edge.range.hi, ve)].iter()) {
-        // a piece is named by its ends, not its place in the order along the edge
-        let name = if whole.is_some() {
-            edge.name
-        } else {
-            edge.name.piece(vname(at.1).with_name(vname(v)))
-        };
         pieces.push(Piece {
             curve: edge.curve.clone(),
             range: Interval::new(at.0, s),
             start: at.1,
             end: v,
-            name,
+            // a piece is named once kept (`piece_name`)
+            name: if whole.is_some() { edge.name } else { Name::NONE },
             seg: None,
             whole,
             side: Some(side),
@@ -428,23 +423,19 @@ fn plan(a: &Body, b: &Body, op: Op) -> R<Plan> {
     // 3: vertices for the cuts, then edge pieces
     lap(&mut clock, 1);
     let (cut_vertex, mut new_points, alias) = place_cuts(&bodies, &cuts)?;
-    let mut through = vec![Vec::new(); new_points.len()];
+    let mut marks = curve_ends(&segs, &cut_vertex);
+    let mut ended = vec![false; new_points.len()];
+    for m in &marks {
+        ended[m.0 as usize] = true;
+    }
     for (c, &k) in cuts.iter().zip(&cut_vertex) {
-        if let VKey::New(i) = k {
-            through[i as usize].push((bodies[c.side].edge(c.edge).name, Some(c.s)));
+        if let VKey::New(i) = k
+            && !ended[i as usize]
+        {
+            marks.push((i, bodies[c.side].edge(c.edge).name));
         }
     }
-    for sg in &segs {
-        let Some((i0, i1)) = sg.ends else { continue };
-        for k in [cut_vertex[i0], cut_vertex[i1]] {
-            if let VKey::New(i) = k {
-                for j in 0..2 {
-                    through[i as usize].push((bodies[sg.sides[j]].face(sg.faces[j]).name, None));
-                }
-            }
-        }
-    }
-    let mut vnames = vertex_names(through, root);
+    let mut vnames = vertex_names(&new_points, marks, root);
     // closed new edges' own vertices (added after the cuts' below)
     vnames.extend(segs.iter().map(|s| s.name.with_str("seam")));
     // cut points of one vertex differ by up to their tolerance: a new vertex settles on the point
@@ -521,15 +512,13 @@ fn plan(a: &Body, b: &Body, op: Op) -> R<Plan> {
     // looked up, never iterated, so the map's order cannot reach the result
     // each edge's pieces, split once: (first piece, count) by edge index, count 0 if not yet
     let mut edge_pieces: [Vec<(u32, u32)>; 2] = [vec![(0, 0); a.edges.len()], vec![(0, 0); b.edges.len()]];
+    // the edges split into more than one piece, and their pieces
+    let mut split_runs: Vec<(Side, EdgeId, std::ops::Range<usize>)> = Vec::new();
     let mut ensure = |side: Side, e: EdgeId, pieces: &mut Vec<Piece>| -> std::ops::Range<usize> {
         let (first, n) = edge_pieces[side][e.index()];
         if n > 0 {
             return first as usize..(first + n) as usize;
         }
-        let vname = |v: VKey| match v {
-            VKey::Old(sd, id) => bodies[sd].vertex(id).name,
-            VKey::New(i) => vnames[i as usize],
-        };
         let r = edge_split(
             bodies[side],
             side,
@@ -538,10 +527,12 @@ fn plan(a: &Body, b: &Body, op: Op) -> R<Plan> {
             &by_edge,
             &cut_vertex,
             &alias,
-            &vname,
             pieces,
         );
         edge_pieces[side][e.index()] = (r.start as u32, r.len() as u32);
+        if r.len() > 1 {
+            split_runs.push((side, e, r.clone()));
+        }
         r
     };
     let mut seg_piece = Vec::with_capacity(segs.len());
@@ -671,7 +662,7 @@ fn plan(a: &Body, b: &Body, op: Op) -> R<Plan> {
                 specs.push(Spec {
                     side,
                     from: f,
-                    name: region_name(name, &disk, &pieces),
+                    name: Name::NONE,
                     loops: disk,
                     foreign: Vec::new(),
                     whole: false,
@@ -805,7 +796,7 @@ fn plan(a: &Body, b: &Body, op: Op) -> R<Plan> {
                         side,
                         from: f,
                         foreign: used(&loops),
-                        name: region_name(face.name, &loops, &pieces),
+                        name: Name::NONE,
                         loops,
                         whole: false,
                         extend: false,
@@ -857,7 +848,7 @@ fn plan(a: &Body, b: &Body, op: Op) -> R<Plan> {
                 specs.push(Spec {
                     side,
                     from: f,
-                    name: region_name(body.face(f).name, &loops, &pieces),
+                    name: Name::NONE,
                     loops,
                     foreign: used,
                     whole: false,
@@ -953,7 +944,19 @@ fn plan(a: &Body, b: &Body, op: Op) -> R<Plan> {
         involved = a.face_ids().collect();
     }
     lap(&mut clock, 5);
-    sole_pieces_keep_names(&bodies, &mut specs, &kept, &mut pieces, &uses);
+    let vname = |v: VKey| match v {
+        VKey::Old(sd, id) => bodies[sd].vertex(id).name,
+        VKey::New(i) => vnames[i as usize],
+    };
+    sole_pieces_keep_names(
+        &bodies,
+        &mut specs,
+        &kept,
+        &mut pieces,
+        &uses,
+        &split_runs,
+        &vname,
+    );
     Ok(Plan {
         pieces,
         specs,
@@ -1599,32 +1602,71 @@ pub(crate) fn trim(
     Ok(())
 }
 
-/// Names for new vertices from the edges, faces and curves meeting there, not from the order
-/// they were found in. Points where the same ones meet are told apart by their order along the
-/// least-named of those with the point's parameter along it.
-pub(crate) fn vertex_names(through: Vec<Vec<(Name, Option<f64>)>>, root: Name) -> Vec<Name> {
-    let n = through.len();
-    let keys: Vec<(Vec<Name>, f64)> = through
-        .into_iter()
-        .map(|mut t| {
-            t.sort_by_key(|x| x.0);
-            let s = t.iter().find_map(|x| x.1).unwrap_or(0.0);
-            let mut names: Vec<Name> = t.into_iter().map(|x| x.0).collect();
-            names.dedup();
-            (names, s)
+/// The new curve pieces ending at each new vertex, each with which end: (point, name).
+pub(crate) fn curve_ends(segs: &[Seg], cut_vertex: &[VKey]) -> Vec<(u32, Name)> {
+    let mut out = Vec::with_capacity(2 * segs.len());
+    for sg in segs {
+        let Some((i0, i1)) = sg.ends else { continue };
+        for (k, end) in [(cut_vertex[i0], 0), (cut_vertex[i1], 1)] {
+            if let VKey::New(i) = k {
+                out.push((i, Name(sg.name.0 ^ end)));
+            }
+        }
+    }
+    out
+}
+
+/// Names for new vertices from what meets there (`marks`: point and name: the curve pieces
+/// ending there, else the edges cut), not from the order they were found in. Points where the
+/// same ones meet are told apart by where they lie.
+pub(crate) fn vertex_names(points: &[Point3], marks: Vec<(u32, Name)>, root: Name) -> Vec<Name> {
+    let n = points.len();
+    // grouped by point (a counting sort), each group's names in order
+    let mut start = vec![0usize; n + 1];
+    for m in &marks {
+        start[m.0 as usize + 1] += 1;
+    }
+    for i in 0..n {
+        start[i + 1] += start[i];
+    }
+    let mut fill = start.clone();
+    let mut by_point = vec![Name::NONE; marks.len()];
+    for m in marks {
+        by_point[fill[m.0 as usize]] = m.1;
+        fill[m.0 as usize] += 1;
+    }
+    let root = root.with_str("vertex");
+    let keys: Vec<Name> = (0..n)
+        .map(|i| {
+            let group = &mut by_point[start[i]..start[i + 1]];
+            group.sort_unstable();
+            // a cheap mix: there are many of these, and the names mixed are hashes already
+            let mut key = root.0;
+            for k in 0..group.len() {
+                if k == 0 || group[k] != group[k - 1] {
+                    key = (key ^ group[k].0).wrapping_mul(0x9e37_79b9_7f4a_7c15);
+                    key ^= key >> 29;
+                }
+            }
+            Name(key)
         })
         .collect();
+    let at = |i: usize| (points[i].x, points[i].y, points[i].z);
     let mut order: Vec<usize> = (0..n).collect();
-    order.sort_by(|&i, &j| keys[i].0.cmp(&keys[j].0).then(keys[i].1.total_cmp(&keys[j].1)));
+    order.sort_by(|&i, &j| {
+        keys[i]
+            .cmp(&keys[j])
+            .then(at(i).partial_cmp(&at(j)).unwrap_or(std::cmp::Ordering::Equal))
+    });
     let mut out = vec![Name::NONE; n];
     let mut rank = 0;
     for (w, &i) in order.iter().enumerate() {
-        rank = if w > 0 && keys[order[w - 1]].0 == keys[i].0 {
+        rank = if w > 0 && keys[order[w - 1]] == keys[i] {
             rank + 1
         } else {
             0
         };
-        out[i] = root.with_str("vertex").with_set(keys[i].0.clone()).with(rank);
+        out[i] = keys[i].with(rank);
     }
     out
 }
@@ -1636,9 +1678,9 @@ pub(crate) fn region_name(face: Name, loops: &[Vec<(usize, bool)>], pieces: &[Pi
     let least = loops
         .iter()
         .flatten()
-        .map(|&(p, fwd)| pieces[p].name.with(fwd as u64))
+        .map(|&(p, fwd)| (pieces[p].name, fwd))
         .min();
-    face.piece(least.unwrap_or(Name::NONE))
+    face.piece(least.map_or(Name::NONE, |(n, fwd)| n.with(fwd as u64)))
 }
 
 /// For each key, whether it is the only one of its value.
@@ -1650,34 +1692,51 @@ pub(crate) fn alone<K: Ord + Copy>(keys: &[K]) -> Vec<bool> {
         .collect()
 }
 
-/// A face or edge split by the boolean of which only one piece is kept keeps its own name: it
-/// was only trimmed.
+/// Names the kept pieces of split faces. A face or edge split by the boolean of which only one
+/// piece is kept keeps its own name: it was only trimmed.
 fn sole_pieces_keep_names(
     bodies: &[&Body; 2],
     specs: &mut [Spec],
     kept: &[(usize, bool)],
     pieces: &mut [Piece],
     uses: &[u8],
+    split_runs: &[(Side, EdgeId, std::ops::Range<usize>)],
+    vname: &dyn Fn(VKey) -> Name,
 ) {
-    let faces: Vec<(Side, FaceId)> = kept
-        .iter()
-        .map(|&(i, _)| (specs[i].side, specs[i].from))
-        .collect();
-    for (&(i, _), sole) in kept.iter().zip(alone(&faces)) {
-        if sole {
-            specs[i].name = bodies[specs[i].side].face(specs[i].from).name;
+    for (side, e, run) in split_runs {
+        let edge = bodies[*side].edge(*e).name;
+        let used: Vec<usize> = run.clone().filter(|&p| uses[p] > 0).collect();
+        for &p in &used {
+            pieces[p].name = if used.len() == 1 {
+                edge
+            } else {
+                piece_name(edge, &pieces[p], vname)
+            };
         }
     }
-    let split: Vec<(usize, (Side, EdgeId))> = (0..pieces.len())
-        .filter(|&p| uses[p] > 0)
-        .filter_map(|p| Some((p, (pieces[p].side?, pieces[p].of?))))
-        .collect();
-    let keys: Vec<(Side, EdgeId)> = split.iter().map(|x| x.1).collect();
-    for (&(p, (sd, e)), sole) in split.iter().zip(alone(&keys)) {
-        if sole {
-            pieces[p].name = bodies[sd].edge(e).name;
+    // a face's specs are pushed together, and kept in order: its kept pieces are one run
+    let mut at = 0;
+    while at < kept.len() {
+        let key = |k: usize| (specs[kept[k].0].side, specs[kept[k].0].from);
+        let mut end = at + 1;
+        while end < kept.len() && key(end) == key(at) {
+            end += 1;
         }
+        for k in at..end {
+            let s = &mut specs[kept[k].0];
+            if end == at + 1 && !s.whole {
+                s.name = bodies[s.side].face(s.from).name;
+            } else if s.name == Name::NONE {
+                s.name = region_name(bodies[s.side].face(s.from).name, &s.loops, pieces);
+            }
+        }
+        at = end;
     }
+}
+
+/// A piece of edge `edge` named by its ends, not its place in the order along the edge.
+pub(crate) fn piece_name(edge: Name, pc: &Piece, vname: &dyn Fn(VKey) -> Name) -> Name {
+    edge.piece(vname(pc.start).with_name(vname(pc.end)))
 }
 
 /// The surface that meets face `f`'s surface along the edge of coedge `c`:

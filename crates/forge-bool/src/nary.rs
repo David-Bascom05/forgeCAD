@@ -274,8 +274,6 @@ struct Pieces<'a> {
     list: Vec<Piece>,
     /// Per tool, per edge: (first piece, count), count 0 if not split yet.
     of_edge: Vec<Vec<(u32, u32)>>,
-    /// The names of the new vertices at cuts.
-    vnames: &'a [Name],
 }
 
 impl Pieces<'_> {
@@ -284,11 +282,6 @@ impl Pieces<'_> {
         if n > 0 {
             return first as usize..(first + n) as usize;
         }
-        let (tools, vnames) = (self.tools, self.vnames);
-        let vname = |v: VKey| match v {
-            VKey::Old(sd, id) => tools[sd].vertex(id).name,
-            VKey::New(i) => vnames[i as usize],
-        };
         let r = edge_split(
             self.tools[side],
             side,
@@ -297,7 +290,6 @@ impl Pieces<'_> {
             self.by_edge,
             self.cut_vertex,
             self.alias,
-            &vname,
             &mut self.list,
         );
         self.of_edge[side][e.index()] = (r.start as u32, r.len() as u32);
@@ -799,28 +791,24 @@ pub fn nary_with(
     alias.sort();
     let cut_vertex: Vec<VKey> = cluster[..cuts.len()].iter().map(|&k| key_of[k]).collect();
     let triple_vertex: Vec<VKey> = cluster[cuts.len()..].iter().map(|&k| key_of[k]).collect();
-    let mut through = vec![Vec::new(); points.len()];
-    for (c, &k) in cuts.iter().zip(&cut_vertex) {
-        if let VKey::New(i) = k {
-            through[i as usize].push((tools[c.side].edge(c.edge).name, Some(c.s)));
-        }
-    }
+    let mut marks = crate::boolean::curve_ends(&segs, &cut_vertex);
     for (tc, &k) in triple.iter().zip(&triple_vertex) {
         if let VKey::New(i) = k {
-            through[i as usize].push((segs[tc.seg].name, Some(tc.t)));
+            marks.push((i, segs[tc.seg].name));
         }
     }
-    for sg in &segs {
-        let Some((i0, i1)) = sg.ends else { continue };
-        for k in [cut_vertex[i0], cut_vertex[i1]] {
-            if let VKey::New(i) = k {
-                for j in 0..2 {
-                    through[i as usize].push((tools[sg.sides[j]].face(sg.faces[j]).name, None));
-                }
-            }
+    let mut ended = vec![false; points.len()];
+    for m in &marks {
+        ended[m.0 as usize] = true;
+    }
+    for (c, &k) in cuts.iter().zip(&cut_vertex) {
+        if let VKey::New(i) = k
+            && !ended[i as usize]
+        {
+            marks.push((i, tools[c.side].edge(c.edge).name));
         }
     }
-    let vnames = crate::boolean::vertex_names(through, root);
+    let vnames = crate::boolean::vertex_names(&points, marks, root);
     // closed new edges' own vertices, added after those
     let mut seams: Vec<Name> = Vec::new();
     // a new vertex settles on the point nearest every curve through it; parameters follow it
@@ -932,7 +920,6 @@ pub fn nary_with(
         alias: &alias,
         list: Vec::new(),
         of_edge: tools.iter().map(|b| vec![(0, 0); b.edges.len()]).collect(),
-        vnames: &vnames,
     };
     let mut at_seg: Vec<Vec<(f64, VKey)>> = vec![Vec::new(); segs.len()];
     for (tc, &k) in triple.iter().zip(&triple_vertex) {
@@ -1248,13 +1235,13 @@ pub fn nary_with(
     });
     let mut job_regs: Vec<std::ops::Range<usize>> = Vec::with_capacity(jobs.len());
     for (j, ((side, f, _, _), split)) in jobs.iter().zip(splits).enumerate() {
-        let name = tools[*side].face(*f).name;
         let first = regs.len();
         for loops in split? {
             regs.push(Reg {
                 side: *side,
                 face: *f,
-                name: crate::boolean::region_name(name, &loops, list),
+                // named once kept
+                name: Name::NONE,
                 loops,
                 job: Some(j),
             });
@@ -1553,13 +1540,12 @@ pub fn nary_with(
         let Some(m) = m? else { continue };
         replaced[j] = true;
         let (side, f, _, _) = jobs[j];
-        let name = tools[side].face(f).name;
         for (loops, c) in m {
             extra.push((
                 Reg {
                     side,
                     face: f,
-                    name: crate::boolean::region_name(name, &loops, list),
+                    name: Name::NONE,
                     loops,
                     job: Some(j),
                 },
@@ -1627,25 +1613,41 @@ pub fn nary_with(
             }
         }
     }
-    // a face or edge only one piece of which is kept keeps its own name: it was only trimmed
-    let faces: Vec<(Side, FaceId)> = kept
+    // a face or edge only one piece of which is kept keeps its own name: it was only trimmed;
+    // other pieces are named by their ends, and regions by their boundaries
+    let vname = |v: VKey| match v {
+        VKey::Old(sd, id) => tools[sd].vertex(id).name,
+        VKey::New(i) => vnames
+            .get(i as usize)
+            .copied()
+            .unwrap_or_else(|| seams[i as usize - vnames.len()]),
+    };
+    let split: Vec<(usize, (Side, EdgeId))> = used
         .iter()
-        .map(|&(ri, _)| (regs[ri].side, regs[ri].face))
-        .collect();
-    for (&(ri, _), sole) in kept.iter().zip(crate::boolean::alone(&faces)) {
-        if sole {
-            regs[ri].name = tools[regs[ri].side].face(regs[ri].face).name;
-        }
-    }
-    let split: Vec<(usize, (Side, EdgeId))> = (0..list.len())
-        .filter(|&p| uses[p] > 0)
-        .filter_map(|p| Some((p, (list[p].side?, list[p].of?))))
+        .filter_map(|&p| Some((p, (list[p].side?, list[p].of?))))
         .collect();
     let keys: Vec<(Side, EdgeId)> = split.iter().map(|x| x.1).collect();
     for (&(p, (sd, e)), sole) in split.iter().zip(crate::boolean::alone(&keys)) {
-        if sole {
-            list[p].name = tools[sd].edge(e).name;
-        }
+        let edge = tools[sd].edge(e).name;
+        list[p].name = if sole {
+            edge
+        } else {
+            crate::boolean::piece_name(edge, &list[p], &vname)
+        };
+    }
+    let split: Vec<usize> = kept
+        .iter()
+        .map(|k| k.0)
+        .filter(|&ri| regs[ri].job.is_some())
+        .collect();
+    let faces: Vec<(Side, FaceId)> = split.iter().map(|&ri| (regs[ri].side, regs[ri].face)).collect();
+    for (&ri, sole) in split.iter().zip(crate::boolean::alone(&faces)) {
+        let face = tools[regs[ri].side].face(regs[ri].face).name;
+        regs[ri].name = if sole {
+            face
+        } else {
+            crate::boolean::region_name(face, &regs[ri].loops, &list)
+        };
     }
     let mut out = Body::new();
     let shell = out.add_shell();
