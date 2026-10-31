@@ -480,7 +480,6 @@ pub fn step(features: History<'_>, i: usize, mut body: Option<Body>) -> Result<O
         && let Some(mut b) = body.take()
     {
         boolean_unlinked(&mut b, &tool, op_of(op)).map_err(err)?;
-        b = not_empty(b, i)?;
         if b.dead > b.faces.len() / 2 {
             b = b.compact();
         }
