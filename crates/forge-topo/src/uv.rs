@@ -1,5 +1,5 @@
 use crate::body::{Body, CoedgeId, Edge, FaceId, LoopId};
-use forge_geom::{Curve, CurveGeom, Domain2, SurfaceGeom};
+use forge_geom::{Curve, CurveGeom, Domain2, Surface, SurfaceGeom};
 use forge_math::{Box3, Interval, Point2, Point3, dmath};
 
 /// A face loop drawn in its surface's parameter plane, with periodic
@@ -91,8 +91,8 @@ pub fn loop_samples(body: &Body, lp: LoopId, segments: impl Fn(&Edge) -> usize) 
 /// two meridians), so the choice is the one whose orientation matches the
 /// face: counter-clockwise in (u, v) when the face normal is the surface's.
 pub fn draw_loop(body: &Body, face: FaceId, samples: &[Point3]) -> (Vec<Point2>, Vec<usize>) {
-    let surface = &body.face(face).surface;
-    draw(body, face, samples.iter().map(|&p| surface.project(p)).collect())
+    // a procedural face's samples are each found from the one before
+    draw_loop_near(body, face, samples)
 }
 
 /// `draw_loop` with each sample projected from the one before (`Surface::project_near`), for
@@ -101,7 +101,7 @@ pub fn draw_loop_near(body: &Body, face: FaceId, samples: &[Point3]) -> (Vec<Poi
     let surface = &body.face(face).surface;
     // an analytic surface's projection is closed form already
     if !matches!(surface, forge_geom::Surface::Procedural(_)) {
-        return draw_loop(body, face, samples);
+        return draw(body, face, samples.iter().map(|&p| surface.project(p)).collect());
     }
     let mut raw: Vec<Point2> = Vec::with_capacity(samples.len());
     for &p in samples {

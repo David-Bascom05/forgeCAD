@@ -979,6 +979,15 @@ impl Procedural for Skinned {
     fn project(&self, p: Point3) -> Point2 {
         self.nearest(p)
     }
+    fn project_near(&self, p: Point3, uv: Point2) -> Point2 {
+        // a point lying on the surface is its own nearest point: Newton from nearby finds it
+        let (q, d) = polish(&|uv| self.point(uv), p, uv, self.ext, None);
+        if d.p.distance(p) <= tol::LINEAR {
+            q
+        } else {
+            self.nearest(p)
+        }
+    }
     fn bbox(&self, uv: Box2) -> Box3 {
         self.data.bbox(uv)
     }
@@ -1365,6 +1374,8 @@ mod tests {
                 close((at(0.0, h).dv - at(0.0, -h).dv) / (2.0 * h), q.dvv);
                 close((at(0.0, h).du - at(0.0, -h).du) / (2.0 * h), q.duv);
                 assert!(surf.eval(surf.project(q.p)).distance(q.p) < 1e-9);
+                let near = Point2::new(uv.x + r.range(-0.05, 0.05), uv.y + r.range(-0.5, 0.5));
+                assert!(s.project_near(q.p, near).distance(surf.project(q.p)) < 1e-9);
                 let n = q.du.cross(q.dv).normalize().unwrap();
                 // within the local radius of curvature, the step along the normal reads its length
                 let k = principal_max(&q);
