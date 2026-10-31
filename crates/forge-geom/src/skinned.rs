@@ -189,8 +189,31 @@ impl Data {
             dvv: Vec3::ZERO,
         };
         let mut p = Vec3::ZERO;
+        // matched arcs usually turn through the same angles: one sin_cos serves them all
+        let mut trig: Option<(f64, (f64, f64))> = None;
         for (k, r) in self.rails.iter().enumerate() {
-            let (c, c1, c2) = r.at(uv.x);
+            let (c, c1, c2) = match *r {
+                Rail::Arc { circle, start, sweep } => {
+                    let a = start + sweep * uv.x;
+                    let (sn, cs) = match trig {
+                        Some((b, sc)) if b == a => sc,
+                        _ => {
+                            let sc = forge_math::dmath::sin_cos(a);
+                            trig = Some((a, sc));
+                            sc
+                        }
+                    };
+                    let (f, rad) = (&circle.frame, circle.radius);
+                    let (x, y) = (f.x().get(), f.y().get());
+                    let k1 = rad * sweep;
+                    (
+                        f.origin + (x * cs + y * sn) * rad,
+                        (y * cs - x * sn) * k1,
+                        (x * cs + y * sn) * (-k1 * sweep),
+                    )
+                }
+                _ => r.at(uv.x),
+            };
             let c = c.to_vec();
             let [w0, w1, w2] = w[k];
             p += c * w0;
@@ -232,18 +255,26 @@ impl Data {
 
     fn piece_box(&self, uv: Box2) -> Box3 {
         let w = self.spline.weight_box(uv.v, 0);
+        // the values' weights sum to one: measured from a point of the piece, the sum stays
+        // as small as the piece
+        let o = self.point(Point2::new(uv.u.mid(), uv.v.mid())).p;
         let mut b = Box3 {
-            x: Interval::point(0.0),
-            y: Interval::point(0.0),
-            z: Interval::point(0.0),
+            x: Interval::point(o.x),
+            y: Interval::point(o.y),
+            z: Interval::point(o.z),
         };
         let mut add = |w: Interval, c: Box3| {
             b.x = b.x + w * c.x;
             b.y = b.y + w * c.y;
             b.z = b.z + w * c.z;
         };
+        let rel = |c: Box3| Box3 {
+            x: c.x - Interval::point(o.x),
+            y: c.y - Interval::point(o.y),
+            z: c.z - Interval::point(o.z),
+        };
         for (k, r) in self.rails.iter().enumerate() {
-            add(w[k], r.bbox(uv.u));
+            add(w[k], rel(r.bbox(uv.u)));
         }
         let n = self.rails.len();
         for (j, &s) in self.slopes.iter().enumerate() {
@@ -261,6 +292,9 @@ impl Data {
     }
 }
 
+/// Steps of the seed grid over the carried-on surface, in t and in s.
+const GRID: (usize, usize) = (16, 8);
+
 /// One span (between two neighbouring sections) of a smooth loft's wall.
 #[derive(Clone, Debug)]
 pub struct Skinned {
@@ -269,9 +303,12 @@ pub struct Skinned {
     span: Interval,
     ext: Box2,
     /// Points on a grid over `ext`, seeding nearest-point searches.
-    rows: Vec<(Point2, Point3)>,
+    rows: Vec<(Point2, SurfDeriv)>,
     scale: (f64, f64),
     radius: f64,
+    /// The surface bends tighter than its seed grid is fine: its nearest points are sought from
+    /// two seeds in different places.
+    sharp: bool,
 }
 
 impl Skinned {
@@ -293,6 +330,7 @@ impl Skinned {
             rows: Vec::new(),
             scale: (0.0, 0.0),
             radius: f64::INFINITY,
+            sharp: false,
         };
         let regular = |s: &Skinned, b: Box2| {
             let (nu, nv) = (32, 32);
@@ -315,11 +353,7 @@ impl Skinned {
             let agree = |a: &SurfDeriv, c: &SurfDeriv| {
                 n(a).dot(n(c)) > 0.0 && a.du.dot(c.du) > 0.0 && a.dv.dot(c.dv) > 0.0
             };
-            // nor stalls along the loft (a near cusp)
-            let fast = grid.iter().flatten().map(|d| d.dv.length()).fold(0.0, f64::max);
-            grid.iter()
-                .flatten()
-                .all(|d| n(d).length() > 1e-9 * scale && d.dv.length() > 0.02 * fast)
+            grid.iter().flatten().all(|d| n(d).length() > 1e-9 * scale)
                 && (0..=nu).all(|i| {
                     (0..=nv).all(|j| {
                         (i == nu || agree(&grid[i][j], &grid[i + 1][j]))
@@ -342,14 +376,14 @@ impl Skinned {
                 break;
             }
         }
-        let (nu, nv) = (16, 8);
+        let (nu, nv) = (GRID.0, GRID.1);
         for i in 0..=nu {
             for j in 0..=nv {
                 let uv = Point2::new(
                     s.ext.u.lo + s.ext.u.width() * i as f64 / nu as f64,
                     s.ext.v.lo + s.ext.v.width() * j as f64 / nv as f64,
                 );
-                s.rows.push((uv, s.data.point(uv).p));
+                s.rows.push((uv, s.data.point(uv)));
             }
         }
         let (mut kmax, mut su, mut sv) = (0.0f64, 0.0f64, 0.0f64);
@@ -365,6 +399,11 @@ impl Skinned {
         }
         s.scale = (su, sv);
         s.radius = if kmax > 0.0 { 1.0 / kmax } else { f64::INFINITY };
+        let cell = (0..nu * (nv + 1))
+            .map(|k| s.rows[k].1.p.distance(s.rows[k + nv + 1].1.p))
+            .chain((0..s.rows.len() - 1).map(|k| s.rows[k].1.p.distance(s.rows[k + 1].1.p)))
+            .fold(0.0, f64::max);
+        s.sharp = s.radius < 2.0 * cell;
         Some(s)
     }
 
@@ -381,18 +420,50 @@ impl Skinned {
         self.rows
             .iter()
             .enumerate()
-            .map(|(k, r)| (k, r.1.distance_sq(p)))
+            .map(|(k, r)| (k, r.1.p.distance_sq(p)))
             .fold((0, f64::INFINITY), |b, x| if x.1 < b.1 { x } else { b })
     }
 
-    fn nearest(&self, p: Point3) -> Point2 {
+    /// The nearest point of the carried-on surface, from the nearest grid point, and on a sharp
+    /// surface also from the nearest grid point away from that one's neighbours.
+    fn solve(&self, p: Point3) -> (Point2, SurfDeriv) {
         let (k, _) = self.seed(p);
-        polish(&|uv| self.point(uv), p, self.rows[k].0, self.ext)
+        let from = |k: usize| {
+            polish(
+                &|uv| self.point(uv),
+                p,
+                self.rows[k].0,
+                self.ext,
+                Some(self.rows[k].1),
+            )
+        };
+        let best = from(k);
+        if !self.sharp {
+            return best;
+        }
+        let w = GRID.1 + 1;
+        let (i0, j0) = ((k / w) as i64, (k % w) as i64);
+        let other = (0..self.rows.len())
+            .filter(|&m| ((m / w) as i64 - i0).abs() > 1 || ((m % w) as i64 - j0).abs() > 1)
+            .map(|m| (m, self.rows[m].1.p.distance_sq(p)))
+            .fold((k, f64::INFINITY), |b, x| if x.1 < b.1 { x } else { b });
+        if other.1.is_infinite() {
+            return best;
+        }
+        let alt = from(other.0);
+        if alt.1.p.distance_sq(p) < best.1.p.distance_sq(p) {
+            alt
+        } else {
+            best
+        }
+    }
+
+    fn nearest(&self, p: Point3) -> Point2 {
+        self.solve(p).0
     }
 
     fn value(&self, p: Point3) -> (f64, Vec3) {
-        let (k, _) = self.seed(p);
-        let d = self.point(polish(&|uv| self.point(uv), p, self.rows[k].0, self.ext));
+        let (_, d) = self.solve(p);
         let n = d.du.cross(d.dv).normalize().map_or(Vec3::Z, |u| u.get());
         ((p - d.p).dot(n), n)
     }
@@ -469,7 +540,18 @@ impl Procedural for Skinned {
         s.rows = self
             .rows
             .iter()
-            .map(|&(uv, q)| (uv, f.point_to_world(q)))
+            .map(|&(uv, d)| {
+                let v = |x: Vec3| f.vec_to_world(x);
+                let moved = SurfDeriv {
+                    p: f.point_to_world(d.p),
+                    du: v(d.du),
+                    dv: v(d.dv),
+                    duu: v(d.duu),
+                    duv: v(d.duv),
+                    dvv: v(d.dvv),
+                };
+                (uv, moved)
+            })
             .collect();
         Proc(Arc::new(s))
     }

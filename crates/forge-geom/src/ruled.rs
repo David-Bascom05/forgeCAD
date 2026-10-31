@@ -219,7 +219,7 @@ impl Ruled {
             let (pa, _, _) = self.a.at(t);
             take(t, pa, self.b.at(t).0 - pa);
         }
-        polish(&|uv| self.point(uv), p, best.1, dom)
+        polish(&|uv| self.point(uv), p, best.1, dom, None).0
     }
 
     /// Signed distance to the carried-on surface and its gradient.

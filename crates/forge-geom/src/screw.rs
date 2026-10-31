@@ -526,13 +526,14 @@ impl Screw {
         };
         let solve = |j: usize, t: f64| {
             let v0 = j as f64;
-            let uv = polish(
+            let (uv, d) = polish(
                 &|uv| self.point(uv),
                 p,
                 Point2::new(u, v0 + t),
                 Box2::new(self.ue, Interval::new(v0, v0 + 1.0)),
+                None,
             );
-            (self.point(uv).p.distance_sq(p), uv)
+            (d.p.distance_sq(p), uv)
         };
         let mut out = solve(j, self.ring.pieces[j].s.frac(q));
         // stopped at a joint: the next piece may carry on downhill
@@ -876,7 +877,7 @@ impl Procedural for Fence {
     fn project(&self, p: Point3) -> Point2 {
         let seed = self.value(p).2;
         let dom = Box2::new(self.ue, Interval::new(-self.half, self.half));
-        polish(&|uv| self.point(uv), p, seed, dom)
+        polish(&|uv| self.point(uv), p, seed, dom, None).0
     }
     fn bbox(&self, uv: Box2) -> Box3 {
         let r = uv.v * self.d.x + self.p.x + uv.u * self.m.a;
@@ -899,12 +900,23 @@ impl Procedural for Fence {
     }
 }
 
-/// Parameters of the point of a patch nearest p, by Newton steps on |S - p|^2 from `uv`, kept
-/// inside `dom` (at a side, only along it) and taken only while they get closer.
-pub(crate) fn polish(s: &impl Fn(Point2) -> SurfDeriv, p: Point3, uv: Point2, dom: Box2) -> Point2 {
+/// Parameters of the point of a patch nearest p, and the point, by Newton steps on |S - p|^2
+/// from `uv` (whose point `at` may already be known), kept inside `dom` (at a side, only along
+/// it) and taken only while they get closer.
+pub(crate) fn polish(
+    s: &impl Fn(Point2) -> SurfDeriv,
+    p: Point3,
+    uv: Point2,
+    dom: Box2,
+    at: Option<SurfDeriv>,
+) -> (Point2, SurfDeriv) {
     let clamp = |q: Point2| Point2::new(q.x.clamp(dom.u.lo, dom.u.hi), q.y.clamp(dom.v.lo, dom.v.hi));
+    let start = uv;
     let mut uv = clamp(uv);
-    let mut d = s(uv);
+    let mut d = match at {
+        Some(d) if uv == start => d,
+        _ => s(uv),
+    };
     let mut f = (d.p - p).length_sq();
     for _ in 0..32 {
         let e = d.p - p;
@@ -934,9 +946,10 @@ pub(crate) fn polish(s: &impl Fn(Point2) -> SurfDeriv, p: Point3, uv: Point2, do
             }
             let moves = (a * x * x + 2.0 * b * x * y + c * y * y).max(0.0).sqrt();
             let overshoots = k == 0 && moves > 2.0 * f.sqrt();
-            // done when the step is lost in rounding, or (far off) when moving the foot that
-            // little changes the distance by a part in 1e18
-            tiny = moves <= 1e-13 * (1.0 + d.p.to_vec().abs_max()) || moves * moves <= 1e-18 * f;
+            // done when the step is lost in rounding, or (off the surface) when moving the foot
+            // that little changes the distance by a part in 1e12 (the foot's error enters the
+            // distance squared, scaled by the curvature); on the surface the first test decides
+            tiny = moves <= 1e-13 * (1.0 + d.p.to_vec().abs_max()) || moves * moves <= 1e-12 * f;
             for _ in 0..8 {
                 let next = clamp(Point2::new(uv.x + x, uv.y + y));
                 if next == uv {
@@ -958,7 +971,7 @@ pub(crate) fn polish(s: &impl Fn(Point2) -> SurfDeriv, p: Point3, uv: Point2, do
             break;
         }
     }
-    uv
+    (uv, d)
 }
 
 #[cfg(test)]

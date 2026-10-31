@@ -39,6 +39,41 @@ pub(crate) fn crossing(body: &Body, flagged: &[bool]) -> Option<(Name, Name)> {
             return Some((name, name));
         }
     }
+    // a surface defined by construction is held far tighter by the boxes of an 8 x 8 grid of its
+    // parameters than by one box: faces whose pieces' boxes all miss each other can't meet
+    let pieces: Vec<Vec<Box3>> = (0..n as u32)
+        .map(FaceId)
+        .map(|f| {
+            let face = body.face(f);
+            match &face.surface {
+                Surface::Procedural(pr) if face.alive => {
+                    let d = pr.domain();
+                    let (u, v) = (d.u.interval(), d.v.interval());
+                    if !(u.width().is_finite() && v.width().is_finite()) {
+                        return vec![body.face_box(f)];
+                    }
+                    let at = |x: Interval, k: usize| {
+                        Interval::new(
+                            x.lo + x.width() * k as f64 / 8.0,
+                            x.lo + x.width() * (k + 1) as f64 / 8.0,
+                        )
+                    };
+                    (0..64)
+                        .map(|k| {
+                            pr.bbox(forge_math::Box2::new(at(u, k / 8), at(v, k % 8)))
+                                .grow(tol::LINEAR)
+                        })
+                        .collect()
+                }
+                _ => vec![body.face_box(f)],
+            }
+        })
+        .collect();
+    let apart = |f: FaceId, g: FaceId| {
+        !pieces[f.index()]
+            .iter()
+            .any(|a| pieces[g.index()].iter().any(|b| a.overlaps(b)))
+    };
     let ids: Vec<FaceId> = body.face_ids().collect();
     for (k, &f) in ids.iter().enumerate() {
         for &g in &ids[k + 1..] {
@@ -50,7 +85,7 @@ pub(crate) fn crossing(body: &Body, flagged: &[bool]) -> Option<(Name, Name)> {
                 continue;
             }
             let (vf, vg) = (&verts[f.index()], &verts[g.index()]);
-            if vf.iter().any(|v| vg.binary_search(v).is_ok()) {
+            if vf.iter().any(|v| vg.binary_search(v).is_ok()) || apart(f, g) {
                 continue;
             }
             let region = Box3 {

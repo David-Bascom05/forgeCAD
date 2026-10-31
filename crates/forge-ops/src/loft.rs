@@ -457,7 +457,11 @@ mod tests {
             start: Some(1.0),
             end: Some(0.5),
         };
-        for kind in [free, square_ends] {
+        let heavy = LoftKind::Smooth {
+            start: Some(4.0),
+            end: Some(3.0),
+        };
+        for kind in [free, square_ends, heavy] {
             for profiles in [
                 vec![sq(0.0, 4.0, 0.0), sq(5.0, 2.0, 0.2), sq(9.0, 3.0, 0.3)],
                 vec![ci(0.0, 4.0), ci(5.0, 6.0), ci(10.0, 3.0), ci(14.0, 4.0)],
