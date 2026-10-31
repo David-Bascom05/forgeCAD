@@ -12,10 +12,6 @@ fn refused(src: &str, why: &str) {
     }
 }
 
-fn ok(src: &str) {
-    assert_eq!(judge(src), Verdict::Ok);
-}
-
 /// Builds valid feature by feature and n-ary (the mesh left to forge-mesh's own tests).
 fn builds_valid(src: &str) {
     let m = Model::new(src);
@@ -56,4 +52,42 @@ L2: pattern L1 lin 0.82 -0.58 0 4 10.8
 L3: hole 9.06 z -1 0 0 at 68.63 -6.59 28.17 thru pt 118
 L5: fillet 0.09..0.09 (edges circle of L1)
 ");
+}
+
+/// A twisted ruled loft joined to a block: its sections are quadrilaterals whose area is
+/// quadratic in height, so Simpson's rule is exact. The mesh once gave 103240 mm^3.
+#[test]
+fn twisted_loft_on_a_block_volume() {
+    let src = "extrude 15 rect 0 0 100 60
+loft profile xy at 30 30 10 rect -15 -15 30 30 profile z 0 0 1 x 0.8775825618903728 0.479425538604203 0 at 30 30 40 rect -8 -8 16 16
+";
+    let (s, c) = forge_math::dmath::sin_cos(0.5);
+    let area = |t: f64| {
+        let p: Vec<(f64, f64)> = [(-1.0, -1.0), (1.0, -1.0), (1.0, 1.0), (-1.0, 1.0)]
+            .iter()
+            .map(|&(x, y)| {
+                let (bx, by) = (8.0 * (c * x - s * y), 8.0 * (s * x + c * y));
+                ((1.0 - t) * 15.0 * x + t * bx, (1.0 - t) * 15.0 * y + t * by)
+            })
+            .collect();
+        0.5 * (0..4)
+            .map(|i| p[i].0 * p[(i + 1) % 4].1 - p[(i + 1) % 4].0 * p[i].1)
+            .sum::<f64>()
+    };
+    let t0 = 1.0 / 6.0;
+    let want = 90000.0 + 30.0 * (1.0 - t0) / 6.0 * (area(t0) + 4.0 * area(0.5 * (t0 + 1.0)) + area(1.0));
+    let m = Model::new(src);
+    let q = forge_mesh::Quality {
+        chord: 0.002,
+        ..Default::default()
+    };
+    let nary = Part {
+        features: m.features.clone(),
+    }
+    .regenerate_nary(1)
+    .expect("n-ary");
+    for b in [m.body().expect("a body").compact(), nary] {
+        let v = forge_mesh::tessellate(&b, &q).expect("meshes").volume();
+        assert!((v - want).abs() < 1.0, "{v} vs {want}");
+    }
 }
