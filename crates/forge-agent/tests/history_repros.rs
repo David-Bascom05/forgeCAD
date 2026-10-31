@@ -91,3 +91,19 @@ loft profile xy at 30 30 10 rect -15 -15 30 30 profile z 0 0 1 x 0.8775825618903
         assert!((v - want).abs() < 1.0, "{v} vs {want}");
     }
 }
+
+/// A rod cut across a pocket wall just above a variable fillet round the pocket floor: the rod's
+/// circle on the wall crosses the fillet's spring curve, which lies where the wall and the blend
+/// touch. It was cut against a plane square to the wall through the curve's middle, off the
+/// curved spring line by 0.008 there, so no cut was found ("inconsistent classification"); the
+/// spring curve's own fence (the rays from the ball's centre through it) finds it.
+#[test]
+fn cut_across_a_variable_fillet_spring_line() {
+    let src = "L0: extrude 40 rect 0 0 160 110
+L1: extrude cut 2 -xy at 80 55 40 rrect -30 -7 60 14 4
+L2: fillet 0.6..0.9 (edges near 80 62 38) (edges near 110 55 38) (edges near 80 48 38) (edges near 50 55 38) 0.9..0.6 (edges near 108.83 60.83 38) (edges near 108.83 49.17 38) (edges near 51.17 49.17 38) (edges near 51.17 60.83 38)
+L3: extrude cut 20 xz at 72 75 40.5 circle 0 0 2
+";
+    builds_valid(src);
+    assert_eq!(judge(src), Verdict::Ok);
+}

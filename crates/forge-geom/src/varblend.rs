@@ -2678,6 +2678,109 @@ impl ProceduralCurve for Track {
         let n = range.width() * (a / (8.0 * chord.max(tol::LINEAR))).sqrt();
         (n.ceil() as usize).max(1)
     }
+    fn across(&self) -> Option<Surface> {
+        (self.k < 2).then(|| {
+            Surface::Procedural(Proc(Arc::new(Fence {
+                blend: self.blend.clone(),
+                k: self.k,
+            })))
+        })
+    }
+}
+
+/// The rays from the ball's centre through spring curve k, out past it: a surface holding the
+/// spring curve and standing square across both the face it touches and the blend (both are
+/// tangent there, so neither tells which side of the curve a point lies). u = s, v in units of
+/// the radius, 0 on the curve, -1 at the centre.
+#[derive(Debug)]
+struct Fence {
+    blend: Arc<VarBlend>,
+    k: usize,
+}
+
+impl Fence {
+    /// The spring point and centre jets at s.
+    fn at(&self, s: f64) -> (V, V) {
+        let (c, r) = self.blend.spine_at(s.clamp(self.blend.lo, self.blend.hi));
+        (self.blend.track_of(c, r, self.k), c)
+    }
+
+    /// Signed distance across the fence, measured in the spring curve's normal plane at its
+    /// point nearest p (exact on the fence, first order near the curve), and that point's s.
+    fn value(&self, p: Point3) -> (f64, Vec3, f64) {
+        let b = &self.blend;
+        let s = b
+            .track_closest(self.k, p, Interval::new(b.lo, b.hi), f64::INFINITY)
+            .map_or(b.lo, |r| r.0);
+        let (q, c) = self.at(s);
+        let ray = q.at(0) - c.at(0);
+        let m = q.at(1).cross(ray).normalize().map_or(Vec3::Z, |u| u.get());
+        ((p - (Point3::ORIGIN + q.at(0))).dot(m), m, s)
+    }
+}
+
+impl Procedural for Fence {
+    fn deriv(&self, uv: Point2) -> SurfDeriv {
+        let (q, c) = self.at(uv.x);
+        let w = uv.y;
+        let d = |i: usize| q.at(i) - c.at(i);
+        SurfDeriv {
+            p: Point3::ORIGIN + q.at(0) + d(0) * w,
+            du: q.at(1) + d(1) * w,
+            dv: d(0),
+            duu: (q.at(2) + d(2) * w) * 2.0,
+            duv: d(1),
+            dvv: Vec3::ZERO,
+        }
+    }
+    fn domain(&self) -> Domain2 {
+        Domain2 {
+            u: Domain1 {
+                lo: self.blend.lo,
+                hi: self.blend.hi,
+                period: None,
+            },
+            v: Domain1 {
+                lo: -1.0,
+                hi: 1.0,
+                period: None,
+            },
+        }
+    }
+    fn project(&self, p: Point3) -> Point2 {
+        let s = self.value(p).2;
+        let (q, c) = self.at(s);
+        let ray = q.at(0) - c.at(0);
+        Point2::new(
+            s,
+            (p - (Point3::ORIGIN + q.at(0))).dot(ray) / ray.length_sq().max(f64::MIN_POSITIVE),
+        )
+    }
+    fn bbox(&self, uv: Box2) -> Box3 {
+        // the curve's box grown by the longest ray: the centre's distance r and as much beyond
+        let reach = self.blend.radii().1 * uv.v.lo.abs().max(uv.v.hi.abs());
+        Track {
+            blend: self.blend.clone(),
+            k: self.k,
+        }
+        .bbox(uv.u)
+        .grow(reach)
+    }
+    fn implicit(&self, p: Point3) -> f64 {
+        self.value(p).0
+    }
+    fn gradient(&self, p: Point3) -> Vec3 {
+        self.value(p).1
+    }
+    fn transformed(&self, f: &Frame) -> Proc {
+        Proc(Arc::new(Fence {
+            blend: Arc::new(self.blend.transformed_blend(f)),
+            k: self.k,
+        }))
+    }
+    fn mesh_radius(&self) -> f64 {
+        self.blend.mesh_radius()
+    }
 }
 
 /// Where a variable blend meets an analytic surface across its arc, as a curve of v (the
