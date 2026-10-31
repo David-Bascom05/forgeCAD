@@ -15,10 +15,31 @@ fillet 3 (edges between base wall concave)  # radius, then refs; a new radius ap
 chamfer 1 @d644 @b2e4                       # @handles come from `query`
 ```
 
+Parameters and sketches (each makes nothing; lines below use them):
+```
+w = 40                      # NAME = EXPR [mm|deg], defined above its use; any number below
+d = w*3 + 1 mm              #   may be an expression: w/2, (h + 2), sqrt(a), min(a,b)
+plate: sketch xy            # sketch FRAME | sketch on REF (a planar face); rows to `end`
+  rect 0 0 38 27            # l1..l4 (corners shared, kept square)    EXPR: + - * / ^ ( )
+  circle 20 12 4            # c1                     sqrt sin cos tan (degrees) min max abs pi
+  pt 6 6                    # p1
+  fix l1.a                  # constraints and dimensions, valued by EXPR:
+  dist l1 w                 #   fix E.. | co A B | hor|ver E.. | par|perp|tan|conc A B
+  dia c1 8                  #   eq A B.. | mid P L | sym P Q L | dist A B V | dist L V
+  hdist l1.a c1 w/2         #   hdist|vdist P Q V | rad|dia C V | ang L M V
+end
+extrude 6 plate             # its one region; `plate E`: the region E bounds outside
+hole 3 on plate p1 thru     # FRAME on a sketch's plane (-on: flipped), at its point
+```
+Rows: `pt P`, `line P P`, `poly P P.. [open]`, `rect X Y W H`, `circle P R`, `arc C S E [cw]`
+(append `cons` for construction). P: `X Y`, or a point: `p1`, `l2.a`|`.b`, `c1` (centre), `o`
+(origin). Entities count by kind: p l c a. Under-constrained solves from the coordinates
+written; `check` reports each sketch's freedom; conflicts name their rows.
+
 Features (`[op]` is new for the first solid, add after):
 ```
-extrude [op] EXT FRAME LOOPS     EXT: N | sym N | two N M | thru [back|both] | next [back] | to FEAT [@face] [off N]
-revolve [op] [TURN] FRAME [axis x|y|OX OY DX DY] LOOPS     TURN: like EXT, in degrees; default 360
+extrude [op] EXT (FRAME LOOPS | SKETCH [E]) EXT: N | sym N | two N M | thru [back|both] | next [back] | to FEAT [@face] [off N]
+revolve [op] [TURN] (FRAME [axis x|y|OX OY DX DY] LOOPS | SKETCH [axis L] [E]) TURN: like EXT, in degrees; default 360
 ball [op] R FRAME     fillet R REF.. [R REF..]     draft A FRAME REF..
 shell T [out] REF..              hollow to walls T thick (out: outside the skin), REF faces open
 chamfer D REF.. | chamfer D D2 face REF REF.. | chamfer D ang A face REF REF..
@@ -42,12 +63,12 @@ delete REF..                     faces removed, the gap closed by the faces arou
                                  pocket (its rim a whole loop of a face), or a chamfer/fillet strip
 replace REF with FEAT [@face]    a face put on a work plane or an earlier feature's face
 move REF.. (by DX DY DZ | turn A OX OY OZ AX AY AZ)   faces moved or turned, neighbours re-met
-FRAME: [xy|xz|yz|-xy|-xz|-yz | z A B C [x A B C] | on FEAT] [at X Y Z]     default: xy at 0 0 0
+FRAME: [xy|xz|yz|-xy|-xz|-yz | z A B C [x A B C] | [-]on FEAT [P] | on REF] [at X Y Z]     default: xy at 0 0 0
   xy: normal +z; xz: sketch x,y = world x,z, normal -y; yz: world y,z, normal +x;
   -xy: sketch y = world -y, normal -z (drill down); -xz: normal +y; -yz: normal -x
 LOOPS (first is outside, rest holes; X Y a corner): rect X Y W H | rrect X Y W H CORNER_R | circle CX CY R |
   poly X Y X Y .. | loop (line AX AY BX BY | arc CX CY R START SWEEP)..
-`next`: up to the next face met. `to`: a plane feature, or a feature's face (plane, cylinder..).
+`next`: up to the next face met. `to`: a plane or sketch feature, or a feature's face (plane, cylinder..).
 Fillet R: 3 | 2..4 (from the edge's first vertex, by name, to the other) | 0:2,0.5:4,1:2 (fraction along from that vertex:radius). A constant radius holds along its own edge; a tangent chain changes radius over its variable and unpicked edges.
 FEAT: a label, kind+count (`hole2` the 2nd hole, `pattern1`..), or `fN` (the Nth feature line)
 REF: @handle | (selector), found on the part as it stands above that line

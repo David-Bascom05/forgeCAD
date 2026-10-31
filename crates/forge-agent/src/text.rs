@@ -682,7 +682,7 @@ pub const KINDS: &[Kind] = &[
                 rows.push(p.t[start..p.k].to_vec());
             }
             let fs = p.b.features;
-            let mut s = sketch::build(plane, &rows, &|t, want| value(t, fs, want))?;
+            let mut s = sketch::build(plane, rows, &|t, want| value(t, fs, want))?;
             s.on = on;
             Ok(Feature::Sketch(Box::new(s)))
         },
@@ -969,23 +969,22 @@ pub struct Line {
 /// parentheses touch its other characters (`(w+2)/2`, `sqrt(a)`).
 fn tokens(text: &str) -> Vec<String> {
     let mut toks: Vec<String> = Vec::new();
-    let mut chars = text.chars().peekable();
-    while let Some(&c) = chars.peek() {
-        if c.is_whitespace() {
-            chars.next();
-            continue;
-        }
-        let mut t = String::new();
-        let mut depth = 0;
-        while let Some(&c) = chars.peek() {
-            if c.is_whitespace() && depth == 0 {
-                break;
+    let mut start = None;
+    let mut depth = 0;
+    for (k, c) in text.char_indices() {
+        match start {
+            Some(s) if c.is_whitespace() && depth == 0 => {
+                toks.push(text[s..k].to_string());
+                start = None;
             }
-            t.push(c);
-            chars.next();
-            depth += (c == '(') as i32 - (c == ')') as i32;
+            None if c.is_whitespace() => continue,
+            None => start = Some(k),
+            _ => {}
         }
-        toks.push(t);
+        depth = (depth + (c == '(') as i32 - (c == ')') as i32).max(0);
+    }
+    if let Some(s) = start {
+        toks.push(text[s..].to_string());
     }
     toks
 }
@@ -1066,6 +1065,12 @@ pub fn parse_line(line: &Line, before: &Before) -> R<Feature> {
 
 /// The kind of a feature.
 pub fn kind_of(f: &Feature) -> &'static Kind {
+    // rows without printing them
+    match f {
+        Feature::Param(_) => return kind("param").expect("a row"),
+        Feature::Sketch(_) => return kind("sketch").expect("a row"),
+        _ => {}
+    }
     let mut w = W::new(&[], &[]);
     KINDS
         .iter()
@@ -2231,8 +2236,47 @@ mod tests {
         }
     }
 
+    /// A parameter, maybe over one above it.
+    fn param(r: &mut Rng, before: &[Feature]) -> Feature {
+        let above: Vec<&Param> = before
+            .iter()
+            .filter_map(|f| match f {
+                Feature::Param(p) => Some(&**p),
+                _ => None,
+            })
+            .collect();
+        let (expr, unit) = match (r.below(3), above.get(r.below(above.len().max(1)))) {
+            (0, Some(p)) => (format!("{}*2 + 1", p.name), Unit::None),
+            (1, _) => ("sqrt(16) - (1 + 2)^2/9".into(), Unit::None),
+            _ => (fmt_num(num(r)), [Unit::None, Unit::Mm, Unit::Deg][r.below(3)]),
+        };
+        let name = format!("v{}", before.len());
+        Feature::Param(Box::new(
+            new_param(before, name, expr, unit).expect("a good parameter"),
+        ))
+    }
+
+    /// A sketch: a rectangle, maybe a hole, held by a few constraints.
+    fn sketch(r: &mut Rng, before: &[Feature]) -> Feature {
+        let w = |r: &mut Rng| fmt_num(1.0 + r.below(400) as f64 * 0.25);
+        let (x, y) = (fmt_num(r.range(-100.0, 100.0)), fmt_num(r.range(-100.0, 100.0)));
+        let (ww, hh) = (w(r), w(r));
+        let mut rows = vec![format!("rect {x} {y} {ww} {hh}"), "fix l1.a".into()];
+        if r.bool() {
+            rows.push(format!("dist l1 {ww}"));
+        }
+        if r.bool() {
+            rows.push("circle l1.a 0.5 cons".into());
+            rows.push("rad c1 (1 + 1)/4".into());
+        }
+        let rows = rows.iter().map(|row| tokens(row)).collect();
+        let mut s = sketch::build(frame(r), rows, &|t, want| value(t, before, want)).expect("a good sketch");
+        s.on = None;
+        Feature::Sketch(Box::new(s))
+    }
+
     /// One random feature of every kind there is, every field drawn at random.
-    fn feature(r: &mut Rng, i: usize) -> Feature {
+    fn feature(r: &mut Rng, i: usize, before: &[Feature]) -> Feature {
         match r.below(KINDS.len()) {
             0 => Feature::Extrude {
                 profile: profile(r),
@@ -2491,6 +2535,8 @@ mod tests {
                     }
                 },
             }),
+            19 => param(r, before),
+            20 => sketch(r, before),
             _ => Feature::Plane(frame(r)),
         }
     }
@@ -2523,7 +2569,8 @@ mod tests {
             let mut r = Rng::new(seed);
             let mut part = Part::default();
             for i in 0..1 + r.below(12) {
-                part.features.push(feature(&mut r, i));
+                let f = feature(&mut r, i, &part.features);
+                part.features.push(f);
             }
             round_trip(&format!("random {seed}"), &part);
         }
@@ -2555,6 +2602,18 @@ mod tests {
                 round_trip(name, &family(seed));
             }
         }
+    }
+
+    #[test]
+    fn parameters_and_sketches_print_as_written() {
+        let src = "w = 40\nd = w*3 + 1 mm\na = -30 deg\nsketch at 0 0 6\n  rect 0 0 w (d - 1)\n  circle l1.a 2 cons\n  ang l1 l2 90\nend\nextrude 6 sketch1\n";
+        let part = parse(src).expect("parses");
+        let printed = print(&part);
+        assert_eq!(
+            printed.lines().take(8).collect::<Vec<_>>(),
+            src.lines().take(8).collect::<Vec<_>>()
+        );
+        assert_eq!(parse(&printed), Ok(part));
     }
 
     #[test]

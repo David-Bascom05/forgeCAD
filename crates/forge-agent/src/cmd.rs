@@ -674,11 +674,14 @@ fillet 4 (edges between base wall concave)
     #[test]
     fn the_agents_example_builds() {
         let doc = include_str!("../../../AGENTS.md");
-        let example = doc.split("```").nth(1).expect("an example block");
         let dir = Dir::new("example");
-        let f = dir.file("e.fc", example);
-        let r = Session::default().run("build", &args(&f, &[]));
-        assert!(r.ok, "{}", r.text);
+        // the first part, and the parameters and sketch
+        for k in [1, 3] {
+            let example = doc.split("```").nth(k).expect("an example block");
+            let f = dir.file("e.fc", example);
+            let r = Session::default().run("build", &args(&f, &[]));
+            assert!(r.ok, "{}", r.text);
+        }
     }
 
     #[test]
