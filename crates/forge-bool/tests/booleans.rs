@@ -274,3 +274,64 @@ fn exact_touches_are_refused() {
     let r = forge_bool::nary(&[&plate, &first, &second], &[Op::Subtract, Op::Subtract], 2);
     assert!(zero_thickness(r.clone()), "{:?}", r.map(|b| check(&b)));
 }
+
+/// Both bodies' shells in one body, as a bad boolean might leave them.
+fn side_by_side(a: &Body, b: &Body) -> Body {
+    let mut out = a.clone();
+    let v: Vec<_> = b
+        .vertices
+        .iter()
+        .map(|x| out.add_tolerant_vertex(x.point, x.tol, x.name))
+        .collect();
+    let e: Vec<_> = b
+        .edges
+        .iter()
+        .map(|x| {
+            out.add_edge(
+                x.curve.clone(),
+                x.range,
+                v[x.start.index()],
+                v[x.end.index()],
+                x.name,
+            )
+        })
+        .collect();
+    let shell = out.add_shell();
+    for f in b.face_ids() {
+        let face = b.face(f);
+        let g = out.add_face(shell, face.surface.clone(), face.same_sense, face.name);
+        for &l in &face.loops {
+            let uses: Vec<_> = b
+                .lp(l)
+                .coedges
+                .iter()
+                .map(|&c| (e[b.coedge(c).edge.index()], b.coedge(c).forward))
+                .collect();
+            out.add_loop(g, &uses);
+        }
+    }
+    out
+}
+
+#[test]
+fn overlapping_shells_are_invalid() {
+    let has = |b: &Body| {
+        check(b)
+            .iter()
+            .any(|p| matches!(p, forge_topo::Problem::ShellsOverlap { .. }))
+    };
+    let plate = block(Point3::new(-20.0, -20.0, -20.0), 40.0, 40.0, 20.0, 1);
+    // a rod through the plate and out of it, never joined to it
+    let through = rod(Point3::new(0.0, 0.0, -30.0), 5.0, 60.0, 2);
+    let both = side_by_side(&plate, &through);
+    assert!(has(&both), "{:?}", check(&both));
+    // a block wholly inside, as a second outer skin
+    let inner = block(Point3::new(-5.0, -5.0, -15.0), 10.0, 10.0, 10.0, 2);
+    assert!(has(&side_by_side(&plate, &inner)));
+    // apart, or a void inside: fine
+    let apart = block(Point3::new(30.0, 0.0, 0.0), 10.0, 10.0, 10.0, 2);
+    valid(&side_by_side(&plate, &apart));
+    let void = boolean(&plate, &inner, Op::Subtract, 3).unwrap();
+    assert_eq!(void.shells.len(), 2);
+    valid(&void);
+}

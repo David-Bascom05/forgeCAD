@@ -1,8 +1,9 @@
 use crate::body::{Body, CoedgeId, EdgeId, FaceId, LoopId, VertexId};
 use crate::name::Name;
-use crate::uv::{face_uv_loops, point_in_loops, unwrap_near};
-use forge_geom::{CurveGeom, SurfaceGeom};
-use forge_math::tol;
+use crate::uv::{UvLoop, face_uv_loops, point_in_loops, unwrap_near};
+use forge_geom::intersect::{Contact, LineSurface, line_surface};
+use forge_geom::{CurveGeom, Line, SurfaceGeom};
+use forge_math::{Point2, Point3, Vec3, tol};
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum Problem {
@@ -58,6 +59,12 @@ pub enum Problem {
     FaceNoLoops {
         face: FaceId,
     },
+    /// Shells overlap: just inside this face the body's material is counted twice (two outer
+    /// shells overlapping, one inside the other), or just outside it there is a void outside
+    /// any material.
+    ShellsOverlap {
+        face: FaceId,
+    },
 }
 
 /// Everything wrong with a body, in a deterministic order. Empty means it is a
@@ -72,6 +79,9 @@ pub fn check(body: &Body) -> Vec<Problem> {
     check_geometry(body, &mut out);
     if out.is_empty() {
         check_sides(body, &mut out);
+    }
+    if out.is_empty() && body.shells.len() > 1 {
+        check_shells(body, &mut out);
     }
     check_names(body, &mut out);
     check_euler(body, &mut out);
@@ -215,6 +225,176 @@ fn check_sides(body: &Body, out: &mut Vec<Problem>) {
                 let probe = unwrap_near(body, f, probe, mid_uv);
                 if !point_in_loops(probe, &loops) {
                     out.push(Problem::FaceWrongSide { face: f, coedge: c });
+                }
+            }
+        }
+    }
+}
+
+/// Fixed, irregular ray directions: one rarely grazes a model edge.
+const RAYS: [[f64; 3]; 3] = [
+    [0.5773, 0.6121, 0.5404],
+    [-0.6311, 0.2347, 0.7393],
+    [0.1823, -0.8741, 0.4502],
+];
+
+/// Shells must neither overlap nor nest wrongly: a point on an outer skin lies in no other
+/// shell's material, a point on a void's skin in exactly one (the material round the void).
+/// Each shell's material side is told by a ray leaving one of its faces outward: it crosses the
+/// shell again an even number of times from an outer skin, an odd number from a void's. Points
+/// on faces (beside each edge) are tested against the other shells by ray parity, counted only
+/// where every ray agrees (point membership by ray parity, as in Requicha and Tilove's set
+/// membership classification; a ray grazing an edge or face is not counted, so needs agreement).
+fn check_shells(body: &Body, out: &mut Vec<Problem>) {
+    // drawn finely: a ray's hit near an edge must not fall the wrong side of its chords
+    let loops: Vec<Vec<UvLoop>> = body
+        .face_ids()
+        .map(|f| crate::uv::face_uv_loops_with(body, f, |e| 8 * crate::uv::default_segments(e)))
+        .collect();
+    // the loops' parameter box: a point is moved by whole periods into it before the test
+    let boxes: Vec<(Point2, Point2)> = loops
+        .iter()
+        .map(|ls| {
+            ls.iter().flat_map(|l| l.points.iter()).fold(
+                (
+                    Point2::new(f64::INFINITY, f64::INFINITY),
+                    Point2::new(f64::NEG_INFINITY, f64::NEG_INFINITY),
+                ),
+                |(lo, hi), q| {
+                    (
+                        Point2::new(lo.x.min(q.x), lo.y.min(q.y)),
+                        Point2::new(hi.x.max(q.x), hi.y.max(q.y)),
+                    )
+                },
+            )
+        })
+        .collect();
+    let in_face = |f: FaceId, p: Point3| {
+        let s = &body.face(f).surface;
+        let uv = s.project(p);
+        let d = s.domain();
+        let (lo, hi) = boxes[f.index()];
+        let shifts = |x: f64, lo: f64, hi: f64, per: Option<f64>| -> Vec<f64> {
+            match per {
+                Some(p) => {
+                    let k0 = ((lo - x) / p).floor() as i64;
+                    let k1 = ((hi - x) / p).ceil() as i64;
+                    (k0..=k1).map(|k| x + k as f64 * p).collect()
+                }
+                None => vec![x],
+            }
+        };
+        shifts(uv.x, lo.x, hi.x, d.u.period).iter().any(|&u| {
+            shifts(uv.y, lo.y, hi.y, d.v.period)
+                .iter()
+                .any(|&v| point_in_loops(Point2::new(u, v), &loops[f.index()]))
+        })
+    };
+    // a shell's crossings parity along a ray from p (on face `from`, or on none), or None where
+    // it grazes a face or passes within the tolerance of p on another
+    let parity = |shell: usize, p: Point3, from: Option<FaceId>, dir: Vec3| -> Option<bool> {
+        let line = Line::new(p, dir.normalize()?);
+        let mut odd = false;
+        for &f in &body.shells[shell].faces {
+            if !body.face(f).alive {
+                continue;
+            }
+            let LineSurface::Hits(hits) = line_surface(&line, &body.face(f).surface) else {
+                return None;
+            };
+            for h in &hits {
+                if h.t.abs() <= tol::LINEAR {
+                    if Some(f) != from && in_face(f, h.point) {
+                        return None;
+                    }
+                    continue;
+                }
+                if h.t < 0.0 {
+                    continue;
+                }
+                if h.contact != Contact::Crossing {
+                    return None;
+                }
+                if in_face(f, h.point) {
+                    odd = !odd;
+                }
+            }
+        }
+        Some(odd)
+    };
+    let agreed = |each: &dyn Fn(Vec3) -> Option<bool>| -> Option<bool> {
+        let got: Vec<bool> = RAYS
+            .iter()
+            .filter_map(|r| each(Vec3::new(r[0], r[1], r[2])))
+            .collect();
+        (!got.is_empty() && got.iter().all(|&g| g == got[0])).then(|| got[0])
+    };
+    // a point on face f a little in from coedge c at fraction `at` along it, and its normal there
+    let beside = |f: FaceId, c: CoedgeId, at: f64| -> Option<(Point3, Vec3)> {
+        let co = body.coedge(c);
+        let e = body.edge(co.edge);
+        let d = e.curve.deriv(e.range.lo + at * e.range.width());
+        let along = if co.forward { d.d1 } else { -d.d1 };
+        let surface = &body.face(f).surface;
+        let n = body.face_normal(f, surface.project(d.p))?;
+        let inward = n.cross(along).normalize()?;
+        let clearance = loops[f.index()]
+            .iter()
+            .flat_map(|l| l.coedges.iter())
+            .map(|&o| body.coedge(o).edge)
+            .filter(|&oe| oe != co.edge)
+            .map(|oe| {
+                let other = body.edge(oe);
+                other
+                    .curve
+                    .eval(other.curve.closest(d.p, other.range))
+                    .distance(d.p)
+            })
+            .fold(f64::INFINITY, f64::min);
+        let step = (0.2 * edge_length(body, co.edge)).min(1.0).min(0.25 * clearance);
+        let q = surface.eval(surface.project(d.p + inward * step));
+        let n = body.face_normal(f, surface.project(q))?;
+        Some((q, n.get()))
+    };
+    let probes = |f: FaceId| {
+        loops[f.index()]
+            .iter()
+            .flat_map(|l| l.coedges.iter())
+            .flat_map(move |&c| [0.25, 0.5, 0.75].map(|at| (c, at)))
+    };
+    // +1 for an outer skin, -1 for a void's
+    let sign: Vec<Option<i64>> = (0..body.shells.len())
+        .map(|k| {
+            body.shells[k]
+                .faces
+                .iter()
+                .filter(|&&f| body.face(f).alive)
+                .flat_map(|&f| probes(f).map(move |(c, at)| (f, c, at)))
+                .find_map(|(f, c, at)| {
+                    let (q, n) = beside(f, c, at)?;
+                    let again =
+                        agreed(&|r: Vec3| parity(k, q, Some(f), if r.dot(n) < 0.0 { -r } else { r }))?;
+                    Some(if again { -1 } else { 1 })
+                })
+        })
+        .collect();
+    for (k, shell) in body.shells.iter().enumerate() {
+        let Some(own) = sign[k] else { continue };
+        let want = i64::from(own < 0);
+        for &f in shell.faces.iter().filter(|&&f| body.face(f).alive) {
+            for (c, at) in probes(f) {
+                let Some((q, _)) = beside(f, c, at) else { continue };
+                let mut w = Some(0);
+                for j in (0..body.shells.len()).filter(|&j| j != k) {
+                    w = match (w, agreed(&|r: Vec3| parity(j, q, None, r)), sign[j]) {
+                        (Some(w), Some(true), Some(s)) => Some(w + s),
+                        (Some(w), Some(false), _) => Some(w),
+                        _ => None,
+                    };
+                }
+                if w.is_some_and(|w| w != want) {
+                    out.push(Problem::ShellsOverlap { face: f });
+                    return;
                 }
             }
         }

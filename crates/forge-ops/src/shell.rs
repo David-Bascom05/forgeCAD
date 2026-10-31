@@ -197,6 +197,11 @@ pub fn shell(
     if let Some((a, b)) = crossing(&out, &vec![true; out.faces.len()]) {
         return Err(ShellError::SelfIntersecting { a, b });
     }
+    // a wall thicker than the part puts one skin through another without their faces crossing
+    if let [Problem::ShellsOverlap { face }] = problems[..] {
+        let a = out.face(face).name;
+        return Err(ShellError::SelfIntersecting { a, b: a });
+    }
     if !problems.is_empty() {
         return Err(ShellError::Invalid(problems));
     }

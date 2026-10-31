@@ -3609,9 +3609,8 @@ fn self_intersecting_profile_is_rejected() {
 /// file:
 ///     extrude 8 rrect -40 -25 80 50 6
 ///     extrude 8 xz at 0 25 0 rect -40 0 80 45
-/// The boolean fails: Internal("face split crossed itself").
+/// The corner arcs leave the wall's edge along it: the split once took the wrong way there.
 #[test]
-#[ignore = "boolean: face split crossed itself"]
 fn wall_flush_with_rounded_base_edge() {
     let block = |plane, l: ProfileLoop| Feature::Extrude {
         profile: Profile {
@@ -3637,4 +3636,32 @@ fn wall_flush_with_rounded_base_edge() {
             wall,
         ],
     });
+}
+
+/// A cylinder tangent to a block's top and one wall from inside, through two walls: the wall
+/// circles touch the top and side edges, a vertex on each. Once the circles were left uncut and
+/// the union came out as two overlapping shells (36710), the common part empty.
+#[test]
+fn cylinder_tangent_to_top_and_wall_inside() {
+    let (_, part) = forge_model::adversarial::degenerate_parts()
+        .into_iter()
+        .find(|p| p.0 == "plane_cylinder/tangent_top_and_wall/Add")
+        .expect("the part");
+    let volume = |part: &Part| {
+        let b = part.regenerate().expect("regenerates");
+        assert!(forge_topo::check(&b).is_empty(), "{:?}", forge_topo::check(&b));
+        let q = forge_mesh::Quality {
+            chord: 0.002,
+            ..forge_mesh::Quality::default()
+        };
+        forge_mesh::tessellate(&b, &q).expect("meshes").volume()
+    };
+    let r2 = 25.0 * forge_math::dmath::PI;
+    // the block, and the 20 of the cylinder's 60 outside it
+    assert!((volume(&part) - (32000.0 + 20.0 * r2)).abs() < 5.0);
+    let mut keep = part.clone();
+    if let Feature::Extrude { op, .. } = &mut keep.features[1] {
+        *op = Combine::Keep;
+    }
+    assert!((volume(&keep) - 40.0 * r2).abs() < 5.0);
 }

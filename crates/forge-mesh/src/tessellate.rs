@@ -388,10 +388,27 @@ fn tessellate_face(
         _ => Layout::Scaled(su, sv),
     };
     let mut loops: Vec<Vec<u32>> = Vec::new();
+    let mut seen: Vec<u32> = ring_globals.iter().flatten().copied().collect();
+    seen.sort_unstable();
+    let repeats = seen.windows(2).any(|w| w[0] == w[1]);
     for (pts, ids) in rings.into_iter().zip(ring_globals) {
-        loops.push((uv.len() as u32..(uv.len() + pts.len()) as u32).collect());
-        uv.extend(pts);
-        global.extend(ids);
+        // a loop through one vertex twice (a face pinched where a curve touches its boundary):
+        // one point, met twice
+        let mut lp = Vec::with_capacity(pts.len());
+        for (p, id) in pts.into_iter().zip(ids) {
+            match repeats
+                .then(|| (0..uv.len()).find(|&k| global[k] == id && uv[k] == p))
+                .flatten()
+            {
+                Some(k) => lp.push(k as u32),
+                None => {
+                    lp.push(uv.len() as u32);
+                    uv.push(p);
+                    global.push(id);
+                }
+            }
+        }
+        loops.push(lp);
     }
 
     if loops.len() == 1

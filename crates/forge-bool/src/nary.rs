@@ -14,8 +14,8 @@
 //! a part grown to thousands of faces.
 
 use crate::boolean::{
-    BoolError, Cut, Imprint, Op, Piece, R, Seg, Side, Touch, VKey, Walk, crossings_near, edge_split,
-    grown_tols, imprint, local_class, on_edge, overlap, settle, split_face, touches, trim,
+    BoolError, Cut, FREE, Imprint, Op, Piece, R, Seg, Side, Touch, VKey, Walk, branches_meet, crossings_near,
+    edge_split, grown_tols, imprint, local_class, on_edge, overlap, settle, split_face, touches, trim,
 };
 use crate::classify::{Index, Where};
 use crate::shape::{Member, Shape};
@@ -528,6 +528,11 @@ pub fn nary_with(
                     }
                     SurfaceSurface::Curves(cs) => cs,
                 };
+                // branches of one intersection may meet where the surfaces touch
+                let branches = [
+                    curves.iter().filter(|c| c.1 == Contact::Crossing).count() > 1,
+                    branches_meet(&curves),
+                ];
                 for (ci, (curve, contact)) in curves.into_iter().enumerate() {
                     if contact == Contact::Touching {
                         continue;
@@ -543,6 +548,7 @@ pub fn nary_with(
                         [fa, fb],
                         curve,
                         name,
+                        branches,
                         &mut out.cuts,
                         &mut out.segs,
                         &mut out.imprints,
@@ -752,7 +758,7 @@ pub fn nary_with(
         cluster.push(id_of_root[r]);
     }
     let mut olds: Vec<Vec<VKey>> = vec![Vec::new(); heads.len()];
-    for (i, c) in cuts.iter().enumerate() {
+    for (i, c) in cuts.iter().enumerate().filter(|(_, c)| c.side != FREE) {
         let edge = tools[c.side].edge(c.edge);
         for v in [edge.start, edge.end] {
             let vx = tools[c.side].vertex(v);
@@ -805,6 +811,7 @@ pub fn nary_with(
     for (c, &k) in cuts.iter().zip(&cut_vertex) {
         if let VKey::New(i) = k
             && !ended[i as usize]
+            && c.side != FREE
         {
             marks.push((i, tools[c.side].edge(c.edge).name));
         }
@@ -816,7 +823,9 @@ pub fn nary_with(
     {
         let mut through: Vec<Vec<(&Curve, Interval)>> = vec![Vec::new(); points.len()];
         for (c, &k) in cuts.iter().zip(&cut_vertex) {
-            if let VKey::New(i) = k {
+            if let VKey::New(i) = k
+                && c.side != FREE
+            {
                 let edge = tools[c.side].edge(c.edge);
                 through[i as usize].push((&edge.curve, edge.range));
             }
@@ -853,13 +862,13 @@ pub fn nary_with(
     let at_cut = par_map(cuts.len(), threads, 64, |i| {
         let c = &cuts[i];
         let p = key_point(cut_vertex[i]);
-        (
-            p,
-            tools[c.side]
-                .edge(c.edge)
-                .curve
-                .closest(p, tools[c.side].edge(c.edge).range),
-        )
+        let s = if c.side == FREE {
+            c.s
+        } else {
+            let edge = tools[c.side].edge(c.edge);
+            edge.curve.closest(p, edge.range)
+        };
+        (p, s)
     });
     for (c, (p, s)) in cuts.iter_mut().zip(at_cut) {
         c.point = p;
@@ -907,9 +916,27 @@ pub fn nary_with(
     grown.sort_unstable_by_key(|g| g.0);
 
     // edge pieces on demand, new-edge pieces now
+    // ways out of a vertex share a tangent only where a curve met an edge without crossing it
+    let mut ties: Vec<VKey> = cuts
+        .iter()
+        .zip(&cut_vertex)
+        .filter(|(c, _)| c.touch)
+        .map(|(_, &k)| k)
+        .collect();
+    if !ties.is_empty() {
+        ties.sort_unstable();
+        let aliased: Vec<VKey> = alias
+            .iter()
+            .filter(|(_, t)| ties.binary_search(t).is_ok())
+            .map(|&(f, _)| f)
+            .collect();
+        ties.extend(aliased);
+        ties.sort_unstable();
+    }
     let mut by_edge: Vec<(Side, EdgeId, usize)> = cuts
         .iter()
         .enumerate()
+        .filter(|(_, c)| c.side != FREE)
         .map(|(i, c)| (c.side, c.edge, i))
         .collect();
     by_edge.sort_unstable();
@@ -1232,7 +1259,7 @@ pub fn nary_with(
     let list = &pieces.list;
     let splits = par_map(jobs.len(), threads, 8, |j| {
         let (side, f, ref boundary, ref new_edges) = jobs[j];
-        split_face(tools[side], f, list, boundary, new_edges, true).map(|s| s.regions)
+        split_face(tools[side], f, list, boundary, new_edges, true, &ties).map(|s| s.regions)
     });
     let mut job_regs: Vec<std::ops::Range<usize>> = Vec::with_capacity(jobs.len());
     for (j, ((side, f, _, _), split)) in jobs.iter().zip(splits).enumerate() {
@@ -1521,7 +1548,7 @@ pub fn nary_with(
         if keep.len() == new_edges.len() {
             return Ok(None);
         }
-        let regions = split_face(tools[side], f, list, boundary, &keep, true)?.regions;
+        let regions = split_face(tools[side], f, list, boundary, &keep, true, &ties)?.regions;
         regions
             .into_iter()
             .map(|loops| {

@@ -18,7 +18,7 @@ use crate::ssi;
 use forge_geom::intersect::{Contact, CurveHit, CurveSurface, SurfaceSurface, curve_surface};
 use forge_geom::{Curve, CurveGeom, Cylinder, Plane, Surface, SurfaceGeom};
 use forge_math::predicates::angle_cmp;
-use forge_math::{Frame, Interval, Point2, Point3, Vec2, Vec3, dmath, tol};
+use forge_math::{Box3, Frame, Interval, Point2, Point3, Vec2, Vec3, dmath, tol};
 use forge_topo::{Body, EdgeId, FaceId, Name, VertexId};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -64,6 +64,23 @@ pub(crate) type Region = Vec<Walk>;
 
 /// Which input body: 0 is A, 1 is B.
 pub(crate) type Side = usize;
+
+/// A cut on no edge: where an intersection curve ends inside both faces (its branches meet
+/// there, where the surfaces touch), a vertex the branches share.
+///
+/// Touch cuts and free cuts follow OpenCascade's general fuse: a curve that meets an edge,
+/// crossing or touching it, within tolerance leaves a vertex on both (its vertex/edge and
+/// edge/face interferences give "a vertex lying on an edge"), and a section curve is split at
+/// every such vertex before faces are split. Tolerances, not exact predicates: exact pipelines
+/// (Lévy 2024, CGAL's Nef polyhedra, Barki et al. 2015) need planar facets, and these curves are
+/// traced approximations of curved surfaces, so a touch is decided within tolerance as in
+/// Jackson's tolerant booleans (1995). Hoffmann (1989) is why the decision is made once, here,
+/// and every later step reads it rather than re-deciding from geometry.
+/// - OCCT Boolean Operations user guide: https://occt3d.com/dev/doc/overview/html/occt_user_guides__boolean_operations.html
+/// - B. Lévy, Exact predicates, exact constructions and combinatorics for mesh CSG, arXiv:2405.12949
+/// - D. Jackson, Boundary representation modelling with local tolerances, SMA 1995
+/// - C. M. Hoffmann, The problems of accuracy and robustness in geometric computation, Computer 22(3), 1989
+pub(crate) const FREE: Side = usize::MAX;
 /// Splits an edge into its pieces once (later calls give the same range).
 type Ensure<'x> = dyn FnMut(Side, EdgeId, &mut Vec<Piece>) -> std::ops::Range<usize> + 'x;
 
@@ -82,6 +99,9 @@ pub(crate) struct Cut {
     /// How far the point may be from the edge: LINEAR, or the distance to the end vertex it
     /// was found beside (within that vertex's tolerance).
     pub(crate) tol: f64,
+    /// Found where the curve meets the edge without crossing it, or a free cut: ways out of its
+    /// vertex may leave along one tangent.
+    pub(crate) touch: bool,
 }
 
 /// Where point `p` lies on edge `e`: its parameter and the cut's tolerance, if it is within
@@ -351,6 +371,11 @@ fn plan(a: &Body, b: &Body, op: Op) -> R<Plan> {
                 }
                 SurfaceSurface::Curves(cs) => cs,
             };
+            // branches of one intersection may meet where the surfaces touch
+            let branches = [
+                curves.iter().filter(|c| c.1 == Contact::Crossing).count() > 1,
+                branches_meet(&curves),
+            ];
             for (ci, (curve, contact)) in curves.into_iter().enumerate() {
                 // surfaces that only touch along a curve cross nowhere: no face splits there
                 if contact == Contact::Touching {
@@ -367,6 +392,7 @@ fn plan(a: &Body, b: &Body, op: Op) -> R<Plan> {
                     [fa, fb],
                     curve,
                     pair_name,
+                    branches,
                     &mut cuts,
                     &mut segs,
                     &mut imprints,
@@ -431,6 +457,7 @@ fn plan(a: &Body, b: &Body, op: Op) -> R<Plan> {
     for (c, &k) in cuts.iter().zip(&cut_vertex) {
         if let VKey::New(i) = k
             && !ended[i as usize]
+            && c.side != FREE
         {
             marks.push((i, bodies[c.side].edge(c.edge).name));
         }
@@ -443,7 +470,9 @@ fn plan(a: &Body, b: &Body, op: Op) -> R<Plan> {
     // then taken from that point, so edge and curve ends land on their vertices
     let mut through: Vec<Vec<(&Curve, Interval)>> = vec![Vec::new(); new_points.len()];
     for (c, &k) in cuts.iter().zip(&cut_vertex) {
-        if let VKey::New(i) = k {
+        if let VKey::New(i) = k
+            && c.side != FREE
+        {
             let edge = bodies[c.side].edge(c.edge);
             through[i as usize].push((&edge.curve, edge.range));
         }
@@ -468,9 +497,11 @@ fn plan(a: &Body, b: &Body, op: Op) -> R<Plan> {
         VKey::New(i) => new_points[i as usize],
     };
     for (c, &k) in cuts.iter_mut().zip(&cut_vertex) {
-        let edge = bodies[c.side].edge(c.edge);
         c.point = key_point(k);
-        c.s = edge.curve.closest(c.point, edge.range);
+        if c.side != FREE {
+            let edge = bodies[c.side].edge(c.edge);
+            c.s = edge.curve.closest(c.point, edge.range);
+        }
     }
     for sg in &mut segs {
         let Some((i0, i1)) = sg.ends else { continue };
@@ -502,9 +533,27 @@ fn plan(a: &Body, b: &Body, op: Op) -> R<Plan> {
         }
     }
     let mut pieces: Vec<Piece> = Vec::new();
+    // ways out of a vertex share a tangent only where a curve met an edge without crossing it
+    let mut ties: Vec<VKey> = cuts
+        .iter()
+        .zip(&cut_vertex)
+        .filter(|(c, _)| c.touch)
+        .map(|(_, &k)| k)
+        .collect();
+    if !ties.is_empty() {
+        ties.sort_unstable();
+        let aliased: Vec<VKey> = alias
+            .iter()
+            .filter(|(_, t)| ties.binary_search(t).is_ok())
+            .map(|&(f, _)| f)
+            .collect();
+        ties.extend(aliased);
+        ties.sort_unstable();
+    }
     let mut by_edge: Vec<(Side, EdgeId, usize)> = cuts
         .iter()
         .enumerate()
+        .filter(|(_, c)| c.side != FREE)
         .map(|(i, c)| (c.side, c.edge, i))
         .collect();
     by_edge.sort_unstable();
@@ -724,7 +773,7 @@ fn plan(a: &Body, b: &Body, op: Op) -> R<Plan> {
                     .collect();
                 let mut new_edges: Vec<usize> = mine.iter().map(|&i| seg_piece[i]).collect();
                 new_edges.extend(foreign.iter().copied());
-                let split = split_face(body, f, &pieces, &boundary, &new_edges, false)?;
+                let split = split_face(body, f, &pieces, &boundary, &new_edges, false, &ties)?;
                 // an untouched hole inside a new region moves into it
                 let face = body.face(f);
                 let mut moved: Vec<(usize, forge_topo::LoopId)> = Vec::new();
@@ -838,7 +887,7 @@ fn plan(a: &Body, b: &Body, op: Op) -> R<Plan> {
             }
             let mut new_edges: Vec<usize> = mine.iter().map(|&i| seg_piece[i]).collect();
             new_edges.extend(foreign.iter().copied());
-            let regions = split_face(body, f, &pieces, &boundary, &new_edges, true)?.regions;
+            let regions = split_face(body, f, &pieces, &boundary, &new_edges, true, &ties)?.regions;
             for loops in regions {
                 let used: Vec<usize> = foreign
                     .iter()
@@ -1048,22 +1097,26 @@ fn apply(a: &mut Body, b: &Body, plan: &Plan) {
             continue;
         }
         let s = &specs[si];
+        // (read by reference: a clone of the face would share its point-in-face index, which
+        // the next boolean then finds shared and rebuilds)
         let src = if s.side == 0 {
-            a.face(s.from).clone()
+            a.face(s.from)
         } else {
-            b.face(s.from).clone()
+            b.face(s.from)
         };
+        let (sense, bx) = (src.same_sense, src.bbox.get().copied());
         // an extended (planar) face only gains holes inside it: its box stays
         let face = if s.extend && !flip {
             s.from
         } else {
-            a.add_face(shell, src.surface, src.same_sense != flip, s.name)
+            let surface = src.surface.clone();
+            a.add_face(shell, surface, sense != flip, s.name)
         };
         if s.whole
             && !flip
-            && let Some(bx) = src.bbox.get()
+            && let Some(bx) = bx
         {
-            a.faces[face.index()].bbox.set(*bx);
+            a.faces[face.index()].bbox.set(bx);
         }
         for lp in &s.loops {
             let mut uses: Vec<(EdgeId, bool)> = Vec::with_capacity(lp.len());
@@ -1128,7 +1181,7 @@ pub(crate) fn grown_tols(
             grown.push((k, d));
         }
     };
-    for (c, &k) in cuts.iter().zip(cut_vertex) {
+    for (c, &k) in cuts.iter().zip(cut_vertex).filter(|(c, _)| c.side != FREE) {
         let edge = bodies[c.side].edge(c.edge);
         // an edge already ends on its own vertex; only a split at another body's vertex is new
         if k == VKey::Old(c.side, edge.start) || k == VKey::Old(c.side, edge.end) {
@@ -1295,6 +1348,8 @@ pub(crate) fn trim(
     faces: [FaceId; 2],
     curve: Curve,
     name: Name,
+    // whether the intersection has other branches; and whether they may meet this one (traced)
+    branches: [bool; 2],
     cuts: &mut Vec<Cut>,
     segs: &mut Vec<Seg>,
     imprints: &mut Vec<Imprint>,
@@ -1372,19 +1427,39 @@ pub(crate) fn trim(
                                     s,
                                     point: vx.point,
                                     tol: vx.tol,
+                                    touch: branches[1],
                                 });
                             }
                         }
                         continue;
                     }
                 };
-                // a curve that touches the boundary without crossing it is not cut there; a
-                // "touch" may be two crossings a hair apart (near-tangent circles), so look
+                // a "touch" may be two crossings a hair apart (near-tangent circles), so look; a
+                // curve that only touches the boundary from outside the face is not cut there, but
+                // one touching it from inside meets the edge there and goes on: a vertex on both
+                // (a step out from the touch until it leaves the boundary's tolerance)
+                let touch_inside = |h: &CurveHit| {
+                    on_edge(body, e, h.point).is_some()
+                        && index[1 - k].boxes[faces[1 - k].index()]
+                            .grow(tol::LINEAR)
+                            .contains(h.point)
+                        && [1e-3, 1e-2, 5e-2].iter().find_map(|&w| {
+                            let dt = w * range.width().min(1.0);
+                            let at = [h.t - dt, h.t + dt].map(|t| {
+                                if range.contains(t) || closed {
+                                    index[k].point_in_face(f, curve.eval(t))
+                                } else {
+                                    Where::Outside
+                                }
+                            });
+                            (!at.contains(&Where::On)).then_some(at == [Where::Inside; 2])
+                        }) == Some(true)
+                };
                 for (h, grazing) in hits.into_iter().flat_map(|h| {
                     let grazing = h.contact != Contact::Crossing;
-                    crossings_near(&curve, range, &across, h)
-                        .into_iter()
-                        .map(move |x| (x, grazing))
+                    let near = crossings_near(&curve, range, &across, h);
+                    let touch = (grazing && near.is_empty() && touch_inside(&h)).then_some(h);
+                    near.into_iter().chain(touch).map(move |x| (x, grazing))
                 }) {
                     // off the other face no piece of the curve starts here: cutting the edge would
                     // only split it where nothing meets it (and not its coincident twin). Its box
@@ -1403,6 +1478,7 @@ pub(crate) fn trim(
                             s,
                             point: h.point,
                             tol,
+                            touch: grazing || branches[1],
                         });
                     }
                 }
@@ -1429,6 +1505,7 @@ pub(crate) fn trim(
                         s,
                         point: p,
                         tol: tol.max(cuts[ci].tol),
+                        touch: cuts[ci].touch,
                     });
                     marks.push(s);
                 }
@@ -1455,16 +1532,102 @@ pub(crate) fn trim(
             return Ok(());
         }
     }
+    // where the curve passes a point at which the surfaces touch, branches of the intersection
+    // cross: a vertex there; and an open curve ending inside both
+    // faces ends where its branches meet: a vertex too, unless a boundary already cuts it there
+    let mut free: Vec<f64> = if !branches[1] {
+        Vec::new()
+    } else {
+        touch_params(
+            &curve,
+            range,
+            [
+                &bodies[0].face(faces[0]).surface,
+                &bodies[1].face(faces[1]).surface,
+            ],
+        )
+    };
+    if branches[0] && !closed && !matches!(curve, Curve::Line(_)) {
+        free.extend([range.lo, range.hi]);
+    }
+    {
+        for t in free {
+            let p = curve.eval(t);
+            let cut = cuts[first..]
+                .iter()
+                .any(|c| c.point.distance(p) <= c.tol.max(tol::LINEAR));
+            if !cut
+                && (0..2).all(|k| index[k].boxes[faces[k].index()].grow(tol::LINEAR).contains(p))
+                && (0..2).all(|k| index[k].point_in_face(faces[k], p) != Where::Outside)
+            {
+                ts.push((t, cuts.len()));
+                cuts.push(Cut {
+                    side: FREE,
+                    edge: EdgeId(u32::MAX),
+                    s: t,
+                    point: p,
+                    tol: tol::LINEAR,
+                    touch: true,
+                });
+            }
+        }
+    }
     ts.sort_by(|x, y| x.0.total_cmp(&y.0));
     if debug_on() {
         let tsp: Vec<_> = ts.iter().map(|&(t, k)| (t, cuts[k].point)).collect();
         eprintln!("  curve {faces:?} range {range:?} cuts {tsp:?}");
     }
-    // the same point found on two edges (a vertex, or both faces' boundaries) is one cut
+    // the same point found on two edges (a vertex, or both faces' boundaries) is one cut; a
+    // curve coming back to a point it passed (a branch crossing itself where the surfaces touch)
+    // meets it again, a cut each time
     ts.dedup_by(|x, y| {
         let (a, b) = (&cuts[x.1], &cuts[y.1]);
-        a.point.distance(b.point) <= a.tol.max(b.tol)
+        let reach = a.tol.max(b.tol);
+        a.point.distance(b.point) <= reach && curve.eval(0.5 * (x.0 + y.0)).distance(a.point) <= reach
     });
+    // and round the end of a closed curve's period
+    if closed && ts.len() > 1 {
+        let ((t0, i0), (t1, i1)) = (ts[0], ts[ts.len() - 1]);
+        let (a, b) = (&cuts[i0], &cuts[i1]);
+        let reach = a.tol.max(b.tol);
+        if a.point.distance(b.point) <= reach
+            && curve.eval(0.5 * (t1 + t0 + period)).distance(a.point) <= reach
+        {
+            ts.pop();
+        }
+    }
+    // such a loop from a point back to it gets a vertex half way: an edge ending where it starts
+    // is a whole period of its curve or nothing
+    let loops: Vec<f64> = (0..ts.len())
+        .filter_map(|k| {
+            let (t0, i0) = ts[k];
+            let (t1, i1) = match ts.get(k + 1) {
+                Some(&n) => n,
+                None if closed => (ts[0].0 + period, ts[0].1),
+                None => return None,
+            };
+            // (cut points of one vertex lie within its tolerance, so up to twice it apart)
+            let (a, b) = (&cuts[i0], &cuts[i1]);
+            let reach = 2.0 * a.tol.max(b.tol);
+            let mid = 0.5 * (t0 + t1);
+            let whole = closed && ts.len() == 1;
+            (!whole && a.point.distance(b.point) <= reach && curve.eval(mid).distance(a.point) > reach)
+                .then_some(mid)
+        })
+        .collect();
+    for t in loops {
+        let t = if closed && t >= range.hi { t - period } else { t };
+        ts.push((t, cuts.len()));
+        cuts.push(Cut {
+            side: FREE,
+            edge: EdgeId(u32::MAX),
+            s: t,
+            point: curve.eval(t),
+            tol: tol::LINEAR,
+            touch: true,
+        });
+    }
+    ts.sort_by(|x, y| x.0.total_cmp(&y.0));
     // a stretch on a boundary is an existing edge, never a new one; a stretch may still touch
     // a boundary at a point (circles tangent there), so a sample landing on one is tried again,
     // away from the ends (a cut is placed only to within tolerance). The edges a stretch crosses
@@ -1856,6 +2019,7 @@ pub(crate) fn imprint(
                                 s: s2,
                                 point: h.point,
                                 tol,
+                                touch: false,
                             });
                             cuts.push(Cut {
                                 side: sides[src],
@@ -1863,6 +2027,7 @@ pub(crate) fn imprint(
                                 s: h.t,
                                 point: h.point,
                                 tol,
+                                touch: false,
                             });
                             ts.push(h.t);
                         }
@@ -1905,6 +2070,112 @@ pub(crate) fn overlap(a: &forge_math::Box3, b: &forge_math::Box3) -> forge_math:
         y: cut(a.y, b.y),
         z: cut(a.z, b.z),
     }
+}
+
+/// Whether two traced branches of one intersection may cross (where the surfaces touch): their
+/// chains' boxes overlap.
+pub(crate) fn branches_meet(curves: &[(Curve, Contact)]) -> bool {
+    let boxes: Vec<Box3> = curves
+        .iter()
+        .filter_map(|c| match c {
+            (Curve::Intersection(k), Contact::Crossing) => {
+                Some(Box3::from_points(k.pts.iter().copied()).grow(k.sag + tol::LINEAR))
+            }
+            _ => None,
+        })
+        .collect();
+    (0..boxes.len()).any(|i| boxes[i + 1..].iter().any(|b| boxes[i].overlaps(b)))
+}
+
+/// Parameters of curve `c` (on both surfaces) where the surfaces touch: the normals there are
+/// parallel. Only a traced curve between two analytic surfaces passes such a point (a conic
+/// meets its surfaces across; a blend's curves are left alone): its chain points are scanned,
+/// and each dip of the angle between the normals narrowed down along the curve.
+///
+/// These are the singular ("characteristic") points of surface-surface intersection in
+/// Patrikalakis, Maekawa and Cho's Shape Interrogation (ch. 5, intersection problems): where the normals are collinear,
+/// and where branches cross (Ye and Maekawa's branch points). A marching tracer is unreliable
+/// there, so the point is found from the normals, not from the curve's own tangent; a crossing
+/// is told from a smooth dip in the angle by the angle's falling off linearly into it.
+/// - https://web.mit.edu/hyperbook/Patrikalakis-Maekawa-Cho/
+fn touch_params(c: &Curve, range: Interval, s: [&Surface; 2]) -> Vec<f64> {
+    let Curve::Intersection(k) = c else {
+        return Vec::new();
+    };
+    if s.iter()
+        .any(|x| matches!(x, Surface::Plane(_) | Surface::Procedural(_)))
+    {
+        return Vec::new();
+    }
+    // (the gradients of the analytic surfaces other than a plane are unit normals)
+    let sin_at = |p: Point3| s[0].gradient(p).cross(s[1].gradient(p)).length();
+    let sin = |t: f64| sin_at(c.eval(t));
+    // chain point i sits at t = i
+    let n = k.pts.len();
+    let stride = (n / 12).max(1);
+    let v: Vec<f64> = k.pts.iter().step_by(stride).map(|&p| sin_at(p)).collect();
+    let mut out = Vec::new();
+    for (m, i) in (0..n).step_by(stride).enumerate() {
+        let (l, r) = (
+            if m == 0 { f64::INFINITY } else { v[m - 1] },
+            v.get(m + 1).copied().unwrap_or(f64::INFINITY),
+        );
+        if !(v[m] <= l && v[m] < r && v[m] < 0.3) {
+            continue;
+        }
+        // the lowest chain point near the dip, and its neighbours
+        let near = i.saturating_sub(stride)..(i + stride + 1).min(n);
+        let w: Vec<f64> = near.clone().map(|j| sin_at(k.pts[j])).collect();
+        let Some(j) = (0..w.len()).min_by(|&x, &y| w[x].total_cmp(&w[y])) else {
+            continue;
+        };
+        let side = |d: isize| {
+            let q = (near.start + j) as isize + d;
+            let q = if k.closed {
+                q.rem_euclid(n as isize) as usize
+            } else {
+                q as usize
+            };
+            let x = q.checked_sub(near.start).and_then(|x| w.get(x).copied());
+            (q < n).then(|| {
+                (
+                    x.unwrap_or_else(|| sin_at(k.pts[q])),
+                    k.pts[q].distance(k.pts[near.start + j]),
+                )
+            })
+        };
+        // the angle falls off linearly into a touch: the steeper side's slope, carried past the
+        // lowest point, meets the other side (a smooth dip that stays open does not)
+        let x = w[j];
+        if x > 1e-3 {
+            let (Some(a), Some(b)) = (side(-1), side(1)) else {
+                continue;
+            };
+            let ((vs, ds), (vb, db)) = if a.0 < b.0 { (a, b) } else { (b, a) };
+            let slope = (vb - x) / db;
+            if !(slope > 0.0 && x < slope * ds && (vs - (slope * ds - x)).abs() <= 0.25 * vs) {
+                continue;
+            }
+        }
+        let t = (near.start + j) as f64;
+        let (mut lo, mut hi) = ((t - 1.0).max(range.lo), (t + 1.0).min(range.hi));
+        for _ in 0..50 {
+            let (m1, m2) = (
+                hi - 0.618_033_988_749_895 * (hi - lo),
+                lo + 0.618_033_988_749_895 * (hi - lo),
+            );
+            if sin(m1) < sin(m2) {
+                hi = m2;
+            } else {
+                lo = m1;
+            }
+        }
+        let t = 0.5 * (lo + hi);
+        if sin(t) <= 1e-5 {
+            out.push(t);
+        }
+    }
+    out
 }
 
 /// A crossing hit as it is; a touching one replaced by the crossings found where the surface's
@@ -1965,6 +2236,7 @@ fn coincide(sb: &Body, src: Side, e: EdgeId, db: &Body, dst: Side, e2: EdgeId, c
                     s,
                     point: vx.point,
                     tol: vx.tol,
+                    touch: false,
                 });
             }
         }
@@ -2013,6 +2285,9 @@ fn place_cuts(bodies: &[&Body; 2], cuts: &[Cut]) -> R<Placed> {
         }
     }
     let end_vertex = |c: &Cut| {
+        if c.side == FREE {
+            return None;
+        }
         let edge = bodies[c.side].edge(c.edge);
         [edge.start, edge.end]
             .into_iter()
@@ -2091,6 +2366,99 @@ pub(crate) fn settle(mut p: Point3, curves: &[(&Curve, Interval)]) -> R<(Point3,
 /// Direction of a half-edge in the face's oriented parameter plane, at its
 /// start (`at_end` false) or pointing back along it from its end. Directions are ordered by
 /// `predicates::angle_cmp`, exactly.
+/// The parameter-plane chord from a piece's end at a vertex (as `uv_dir`) to a point the same
+/// short length (0.01, or a tenth of the piece) along it: it tells apart curves leaving a vertex
+/// along one tangent (an intersection curve touching a boundary edge there) by how each bends.
+/// None at a singular point (a pole or an apex), where the parameters say nothing of direction.
+fn uv_chord(body: &Body, f: FaceId, p: &Piece, forward: bool, at_end: bool) -> Option<Vec2> {
+    let from_lo = forward != at_end;
+    let t = if from_lo { p.range.lo } else { p.range.hi };
+    let speed = p.curve.deriv(t).d1.length().max(f64::MIN_POSITIVE);
+    let dt = (0.01 / speed).min(0.1 * p.range.width());
+    let face = body.face(f);
+    let a = face.surface.project(p.curve.eval(t));
+    face.surface.normal(a)?;
+    let b = forge_topo::uv::unwrap_near(
+        body,
+        f,
+        face.surface
+            .project(p.curve.eval(if from_lo { t + dt } else { t - dt })),
+        a,
+    );
+    let d = b - a;
+    Some(if face.same_sense { d } else { Vec2::new(-d.x, d.y) })
+}
+
+/// The way on from half-edge `i` at a vertex where ways may leave along one tangent (a curve
+/// touching an edge, or a traced curve's tangent where the surfaces touch and its branches
+/// cross, which is unreliable): where the choice rests on two such, again by chords a short
+/// length along each, told apart by how each bends (at a pole or apex, where there is no
+/// chord, by the tangent). Ordering by the first direction that differs is what a
+/// second-order contact needs (the curves agree to first order); chords stand in for curvature,
+/// which Ye and Maekawa's formulas give but which are numerically unreliable near a singular
+/// point (Patrikalakis, Maekawa and Cho, ch. 5).
+#[cold]
+fn untie(
+    body: &Body,
+    f: FaceId,
+    pieces: &[Piece],
+    half: &[(usize, bool)],
+    i: usize,
+    out: &[(VKey, usize)],
+) -> R<usize> {
+    let dir = |k: usize| uv_dir(body, f, &pieces[half[k].0], half[k].1, false);
+    let mut theta = uv_dir(body, f, &pieces[half[i].0], half[i].1, true)?;
+    let mut ways: Vec<(Vec2, usize)> = out.iter().map(|&(_, k)| Ok((dir(k)?, k))).collect::<R<_>>()?;
+    let (c, j) = clockwise(theta, ways.iter().map(|&w| Ok(w)))?.unwrap_or((theta, i));
+    // (ways of one body's own edges along one tangent are its own smooth joins, as they always
+    // were; only a way of a new edge, or of the other body's, makes a tie; nor is the way
+    // straight back along the same piece)
+    let near = |a: Vec2, b: Vec2| {
+        let (d, x) = (a.dot(b), a.x * b.y - a.y * b.x);
+        d > 0.0 && x * x < 0.002 * d * d
+    };
+    let mixed = |x: usize, y: usize| {
+        let (p, q) = (&pieces[half[x].0], &pieces[half[y].0]);
+        half[x].0 != half[y].0 && (p.side.is_none() || q.side.is_none() || p.side != q.side)
+    };
+    let tie = ways
+        .iter()
+        .any(|&(a, k)| (near(a, theta) && mixed(k, i)) || (k != j && near(a, c) && mixed(k, j)));
+    if !tie {
+        return Ok(j);
+    }
+    let chord = |h: (usize, bool), at_end: bool| {
+        uv_chord(body, f, &pieces[h.0], h.1, at_end).and_then(|c| c.normalize())
+    };
+    if let Some(t) = chord(half[i], true) {
+        theta = t;
+    }
+    for w in &mut ways {
+        if let Some(c) = chord(half[w.1], false) {
+            w.0 = c;
+        }
+    }
+    Ok(clockwise(theta, ways.into_iter().map(Ok))?.map_or(i, |w| w.1))
+}
+
+/// Of the ways out of a vertex (uv direction, half-edge), the one just clockwise of the way
+/// back `theta`.
+fn clockwise(theta: Vec2, ways: impl Iterator<Item = R<(Vec2, usize)>>) -> R<Option<(Vec2, usize)>> {
+    let after = |x: Vec2, y: Vec2| angle_cmp(x, y) == std::cmp::Ordering::Greater;
+    let mut best: Option<(Vec2, usize)> = None;
+    let mut top: Option<(Vec2, usize)> = None;
+    for w in ways {
+        let (a, j) = w?;
+        if after(theta, a) && best.is_none_or(|b| after(a, b.0)) {
+            best = Some((a, j));
+        }
+        if top.is_none_or(|b| after(a, b.0)) {
+            top = Some((a, j));
+        }
+    }
+    Ok(best.or(top))
+}
+
 pub(crate) fn uv_dir(body: &Body, f: FaceId, p: &Piece, forward: bool, at_end: bool) -> R<Vec2> {
     let t = if forward != at_end { p.range.lo } else { p.range.hi };
     let d = p.curve.deriv(t);
@@ -2282,6 +2650,9 @@ pub(crate) fn split_face(
     boundary: &[Vec<(usize, bool)>],
     new_edges: &[usize],
     outer: bool,
+    // the vertices where a cut met its edge without crossing it: two ways out may share a
+    // tangent there
+    ties: &[VKey],
 ) -> R<Split> {
     let mut half: Vec<(usize, bool)> = boundary.iter().flatten().copied().collect();
     for &p in new_edges {
@@ -2296,30 +2667,20 @@ pub(crate) fn split_face(
     let next = |i: usize| -> R<usize> {
         let v = end_of(half[i]);
         let from = by_start.partition_point(|&(k, _)| k < v);
-        let out: Vec<usize> = by_start[from..]
-            .iter()
-            .take_while(|&&(k, _)| k == v)
-            .map(|&(_, j)| j)
-            .collect();
+        let out = &by_start[from..from + by_start[from..].partition_point(|&(k, _)| k == v)];
         // one way on (always so at a pole, where u is undefined): no angles needed
-        if out.len() == 1 {
-            return Ok(out[0]);
+        if let [(_, j)] = out {
+            return Ok(*j);
+        }
+        // each way by its tangent (where two may leave along one, by chords: see untie)
+        if ties.binary_search(&v).is_ok() {
+            return untie(body, f, pieces, &half, i, out);
         }
         let theta = uv_dir(body, f, &pieces[half[i].0], half[i].1, true)?;
-        // the outgoing half-edge just clockwise of the way back
-        let after = |x: Vec2, y: Vec2| angle_cmp(x, y) == std::cmp::Ordering::Greater;
-        let mut best: Option<(Vec2, usize)> = None;
-        let mut top: Option<(Vec2, usize)> = None;
-        for j in out {
-            let a = uv_dir(body, f, &pieces[half[j].0], half[j].1, false)?;
-            if after(theta, a) && best.is_none_or(|b| after(a, b.0)) {
-                best = Some((a, j));
-            }
-            if top.is_none_or(|b| after(a, b.0)) {
-                top = Some((a, j));
-            }
-        }
-        Ok(best.or(top).map_or(i, |b| b.1))
+        let ways = out
+            .iter()
+            .map(|&(_, k)| Ok((uv_dir(body, f, &pieces[half[k].0], half[k].1, false)?, k)));
+        Ok(clockwise(theta, ways)?.map_or(i, |w| w.1))
     };
     let mut used = vec![false; half.len()];
     let mut cycles: Vec<Vec<usize>> = Vec::new();
