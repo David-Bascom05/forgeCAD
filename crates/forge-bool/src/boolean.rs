@@ -3683,24 +3683,42 @@ fn classify_specs(
     }
     // flood across shared native edge pieces between pieces of one body
     // an edge imprinted into the other body's face lies on that body: no flood across it
-    let mut users: Vec<Vec<usize>> = vec![Vec::new(); pieces.len()];
     let mut imprinted = vec![false; pieces.len()];
     for &p in specs.iter().flat_map(|s| &s.foreign) {
         imprinted[p] = true;
     }
+    // the specs using each piece, in spec order: piece p's are users[from[p]..from[p + 1]]
+    let floods = |p: usize| pieces[p].seg.is_none() && !imprinted[p];
+    let mut from = vec![0u32; pieces.len() + 1];
+    for &(p, _) in specs.iter().flat_map(|s| s.loops.iter().flatten()) {
+        if floods(p) {
+            from[p + 1] += 1;
+        }
+    }
+    for p in 0..pieces.len() {
+        from[p + 1] += from[p];
+    }
+    let mut users = vec![0u32; from[pieces.len()] as usize];
+    let mut next = from.clone();
     for (i, s) in specs.iter().enumerate() {
         for &(p, _) in s.loops.iter().flatten() {
-            if pieces[p].seg.is_none() && !imprinted[p] {
-                users[p].push(i);
+            if floods(p) {
+                users[next[p] as usize] = i as u32;
+                next[p] += 1;
             }
         }
     }
+    let users = |p: usize| {
+        users[from[p] as usize..from[p + 1] as usize]
+            .iter()
+            .map(|&j| j as usize)
+    };
     let spread = |class: &mut Vec<Option<Class>>, start: usize| -> R<()> {
         let mut queue = vec![start];
         while let Some(i) = queue.pop() {
             let c = class[i].expect("queued specs are classified");
             for &(p, _) in specs[i].loops.iter().flatten() {
-                for &j in &users[p] {
+                for j in users(p) {
                     if specs[j].side != specs[i].side || fixed[j] {
                         continue;
                     }
