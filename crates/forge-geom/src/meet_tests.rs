@@ -152,3 +152,27 @@ fn plane_through_torus_in_a_thin_box() {
     )
     .unwrap();
 }
+
+/// Two tubes of one radius whose spines lie in one plane (a mirrored face fillet against a
+/// corner blend), both touching the plane under them: the discriminant hugs zero and gave
+/// some 18000 events, each recounting the rest. Left to the tracer, at once.
+#[test]
+fn tangent_tubes_end_quickly() {
+    let cf = Frame::from_axes(Point3::new(0.89, 0.0, 0.89), -Vec3::X, Vec3::Z, Vec3::Y).unwrap();
+    let c = Surface::Cylinder(Cylinder {
+        frame: cf,
+        radius: 0.89,
+    });
+    let x = Vec3::new(0.9801980198019803, 0.198019801980198, 0.0);
+    let tf = Frame::from_zx(
+        Point3::new(5.5362376237623785, 41.397623762376234, 0.89),
+        UnitVec3::Z,
+        x,
+    )
+    .unwrap();
+    let t = Surface::Torus(Torus::new(tf, 7.45, 0.89).unwrap());
+    let region = Box3::from_points([Point3::new(-20.0, -20.0, -5.0), Point3::new(60.0, 60.0, 5.0)]);
+    let at = std::time::Instant::now();
+    assert!(intersect(&c, &t, region).is_none());
+    assert!(at.elapsed().as_secs_f64() < 5.0);
+}

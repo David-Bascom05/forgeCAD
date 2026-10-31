@@ -192,12 +192,10 @@ pub const MAKERS: &[Maker] = &[
     },
 ];
 
-/// The seeds the tests run: 0 to 33 but 4 and 6, whose histories reach a boolean that runs
-/// for minutes or does not end (in forge_geom::meet::real_roots; repros in
-/// forgecad-gate/repros). Put them back once fixed.
-pub const SEEDS: [u64; 32] = [
-    0, 1, 2, 3, 5, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29,
-    30, 31, 32, 33,
+/// The seeds the tests run.
+pub const SEEDS: [u64; 34] = [
+    0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28,
+    29, 30, 31, 32, 33,
 ];
 
 /// Mesh chord for the volume checks.

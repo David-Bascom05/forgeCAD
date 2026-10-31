@@ -171,6 +171,9 @@ fn wrap_pi(x: f64) -> f64 {
 }
 
 const MAX_ROOTS: usize = 4;
+/// More events than a closed form keeps: a pair this degenerate (near tangent over a
+/// stretch) is left to the tracer, and finding them stops there.
+const MAX_EVENTS: usize = 256;
 type Roots = [(f64, f64); MAX_ROOTS];
 
 impl Eqn {
@@ -496,6 +499,9 @@ impl Eqn {
             fb = fa;
         }
         while let Some((a, fa, b, fb, depth)) = stack.pop() {
+            if out.len() > MAX_EVENTS {
+                break;
+            }
             if fa == 0.0 {
                 out.push((a, false));
                 continue;
@@ -1121,6 +1127,9 @@ pub fn intersect(a: &Surface, b: &Surface, region: Box3) -> Option<SurfaceSurfac
         merged[0] = (if merged[0].1 { merged[0].0 } else { l.0 }, true);
     }
     let mut events = merged;
+    if events.len() > MAX_EVENTS {
+        return None;
+    }
     // a simple event that changes no root count is a sign flicker of the rounding; one
     // that changes it by other than two is a pair of events seen as one
     loop {
