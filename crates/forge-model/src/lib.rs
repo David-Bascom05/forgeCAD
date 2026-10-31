@@ -516,7 +516,9 @@ pub fn step(features: History<'_>, i: usize, mut body: Option<Body>) -> Result<O
         let mut all = vec![&base];
         all.extend(tools.iter().map(|t| &t.0));
         let ops: Vec<Op> = tools.iter().map(|t| op_of(t.1)).collect();
-        b = forge_bool::nary_with(&all, &ops, None, None, 1, cut_root(i)).map_err(err)?;
+        let mut solids = vec![part_shape(&base)];
+        solids.extend(tools.iter().map(|t| t.2.clone()));
+        b = forge_bool::nary_with(&all, &ops, Some(&solids), None, 1, cut_root(i)).map_err(err)?;
     }
     if trace::on() {
         trace::step(i, &b, tools.first().map(|t| &t.0));
@@ -713,8 +715,7 @@ fn nary_run(
         let mut tools: Vec<&Body> = vec![&body];
         tools.extend(built.iter().map(|t| &t.0));
         let ops: Vec<Op> = built.iter().map(|t| op_of(t.1)).collect();
-        // the part so far has no analytic solid: its B-rep decides every point in its box
-        let mut solids = vec![Shape::Brep(forge_bool::Index::new(&body).bbox)];
+        let mut solids = vec![part_shape(&body)];
         solids.extend(built.iter().map(|t| t.2.clone()));
         return forge_bool::nary_with(
             &tools,
@@ -784,6 +785,12 @@ fn unified(mut b: Body) -> Body {
     } else {
         b
     }
+}
+
+/// The part so far as a tool's solid: it has no analytic one, so its B-rep decides every point
+/// in its box.
+pub(crate) fn part_shape(b: &Body) -> Shape {
+    Shape::Brep(forge_bool::Index::new(b).bbox)
 }
 
 /// The root of the names a boolean gives the vertices it makes: the same for every boolean, so

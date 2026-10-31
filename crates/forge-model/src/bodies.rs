@@ -5,8 +5,8 @@
 use crate::extent::Target;
 use crate::pattern::{Motion, PatternError, corners, moved};
 use crate::{
-    Combine, Edit, Feature, History, RegenError, SHORT_RUN, Tool, cut_root, modifies, modify, op_of, starts,
-    step, tools,
+    Combine, Edit, Feature, History, RegenError, SHORT_RUN, Tool, cut_root, modifies, modify, op_of,
+    part_shape, starts, step, tools,
 };
 use forge_bool::{BoolError, Op, Shape, boolean, boolean_into, nary_with};
 use forge_geom::{Cylinder, Plane, Surface};
@@ -424,7 +424,8 @@ fn add_tools(b: Body, ts: &[Tool], (i, id): (usize, u64), salt: Option<u64>) -> 
         }
     };
     let ops: Vec<Op> = ts.iter().map(|t| op_of(t.1)).collect();
-    combine(b, &bodies, &ops, (i, id), salt)
+    let shapes: Vec<&Shape> = ts.iter().map(|t| &t.2).collect();
+    combine(b, &bodies, &ops, &shapes, (i, id), salt)
 }
 
 /// `add_tools` with the tools' names already moved off.
@@ -432,6 +433,7 @@ fn combine(
     mut b: Body,
     bodies: &[&Body],
     ops: &[Op],
+    shapes: &[&Shape],
     (i, id): (usize, u64),
     salt: Option<u64>,
 ) -> Result<Body, RegenError> {
@@ -451,7 +453,9 @@ fn combine(
     let mut all = vec![&base];
     all.extend(bodies);
     let root = salt.map_or(cut_root(i), |s| salted(cut_root(i), "body", s));
-    nary_with(&all, ops, None, None, 1, root).map_err(err)
+    let mut sh = vec![part_shape(&base)];
+    sh.extend(shapes.iter().map(|&s| s.clone()));
+    nary_with(&all, ops, Some(&sh), None, 1, root).map_err(err)
 }
 
 fn bad(i: usize) -> impl Fn(BodyError) -> RegenError {
@@ -714,9 +718,8 @@ impl Run {
         let ops: Vec<Op> = self.tools.iter().map(|t| t.1).collect();
         let mut all = vec![base];
         all.extend(self.tools.iter().map(|t| &t.0));
-        // a body so far has no analytic solid: its B-rep decides every point in its box
         let mut shapes = vec![match &self.base {
-            Ok(b) => Shape::Brep(forge_bool::Index::new(b).bbox),
+            Ok(b) => part_shape(b),
             Err(t) => t.2.clone(),
         }];
         shapes.extend(self.tools.iter().map(|t| t.2.clone()));
@@ -733,7 +736,8 @@ impl Run {
             let ts = &self.tools[at..at + n];
             let bodies: Vec<&Body> = ts.iter().map(|t| &t.0).collect();
             let ops: Vec<Op> = ts.iter().map(|t| t.1).collect();
-            b = combine(b, &bodies, &ops, (i, plain.id(i)), salt).ok()?;
+            let shapes: Vec<&Shape> = ts.iter().map(|t| &t.2).collect();
+            b = combine(b, &bodies, &ops, &shapes, (i, plain.id(i)), salt).ok()?;
             at += n;
         }
         Some(b)

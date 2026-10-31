@@ -24,7 +24,7 @@ coil seq 33abfef05694b575
 coil nary 33abfef05694b575
 loft seq 7d7446f280234175
 loft nary 7d7446f280234175
-thread seq 4ba82c07d4279a51
+thread seq 436eeaf5c1531a01
 thread nary 35095fdb9f47309b
 text seq 69b3f83e0ef4f192
 text nary 95601e8437543f72
@@ -50,11 +50,11 @@ fuzz9 seq 2de252b5a4587f18
 fuzz9 nary f5e3c9945b60a0d7
 fuzz10 seq cb07c3129896269c
 fuzz10 nary 3960d9644434b3a8
-gearbox seq 32d1b21bf5b59208
+gearbox seq c1bdbf52f77dec14
 gearbox nary a44048a229eb203b
 volute seq bd0fdb9b74f243cc
 volute nary f753540eafe5718e
-crank seq ea7c0ab9b8d241f8
+crank seq ff87634c637cf1d8
 crank nary 883dee3f4e051129
 valve seq e6ad78888419cb2e
 valve nary f934db0bf2307f1b
@@ -64,9 +64,9 @@ quadarm seq 819f0bc71b5d7112
 quadarm nary 5608470297ef5d6e
 conrod seq ffd143d6cc7b8880
 conrod nary 4f2a8dd30bae9199
-jack seq 88c50ef4c9ec7e8c
+jack seq 9a558a38cd1243b0
 jack nary 47695ac9c6d5599d
-frame seq 1e98f2ca4deb71a5
+frame seq 0e18d9121df20e21
 frame nary 3784d2a7c30535a0
 manifold seq c0128ad7342b4fd6
 manifold nary 25627558d8f9022d
