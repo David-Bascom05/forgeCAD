@@ -1137,6 +1137,32 @@ combine cut base lid keep
         );
     }
 
+    /// A line's `in` body follows its line when an edit renumbers the lines above.
+    #[cfg(unix)]
+    #[test]
+    fn body_references_follow_edits() {
+        let dir = Dir::new("edit-in");
+        let f = dir.file(
+            "e.fc",
+            "extrude new 10 rect 0 0 10 10\nextrude new 4 at 20 0 0 rect 0 0 10 10\nextrude cut 12 at 5 5 -1 circle 0 0 2 in extrude1\n",
+        );
+        let mut s = Session::default().writable(true);
+        assert!(s.run("build", &args(&f, &[])).ok);
+        let r = s.run(
+            "edit",
+            &args(
+                &f,
+                &[
+                    "insert", "1", "extrude", "new", "3", "at", "-30", "0", "0", "rect", "0", "0", "5", "5",
+                ],
+            ),
+        );
+        assert!(r.ok, "{}", r.text);
+        let text = std::fs::read_to_string(&f).expect("written");
+        assert!(text.ends_with("circle 0 0 2 in extrude2\n"), "{text}");
+        assert!(r.text.contains("bodies 3"), "{}", r.text);
+    }
+
     /// Under a root, an edit never writes through a link to a file outside it.
     #[cfg(unix)]
     #[test]
