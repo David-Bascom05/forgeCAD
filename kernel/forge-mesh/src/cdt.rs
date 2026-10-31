@@ -7,6 +7,7 @@
 
 use forge_math::Point2;
 use forge_math::predicates::{certainly_in_circle, orient2d};
+use std::cmp::Ordering;
 use std::collections::VecDeque;
 
 #[derive(Clone, Debug, PartialEq)]
@@ -657,6 +658,72 @@ pub trait Refine {
     fn triangles(&self) -> bool;
 }
 
+/// A polygon with no inner points, zipped from its leftmost point along both sides, each step the
+/// shorter chord: no triangulation to keep up. Triangles all counter-clockwise inside a simple
+/// boundary cover it once. None where a step has no such triangle, or a chord or triangle fails
+/// `refine`.
+pub fn zip(points: &[Point2], lp: &[u32], refine: &dyn Refine) -> Option<Vec<[u32; 3]>> {
+    let n = lp.len();
+    if n < 3 {
+        return None;
+    }
+    let at = |k: usize| points[lp[k % n] as usize];
+    let s = (0..n).min_by(|&a, &b| {
+        (at(a).x, at(a).y)
+            .partial_cmp(&(at(b).x, at(b).y))
+            .unwrap_or(Ordering::Equal)
+    })?;
+    let mut out = Vec::with_capacity(n - 2);
+    let ccw = |a: usize, b: usize, c: usize| orient2d(at(a), at(b), at(c)) > 0.0;
+    let (mut lower, mut upper) = (s + n + 1, s + 2 * n - 1);
+    let mut tri = |v: [usize; 3]| {
+        let t = v.map(|k| lp[k % n]);
+        // a sliver the triangulation's choice of chords may well avoid: its call, not ours
+        let [a, b, c] = v.map(at);
+        let side = (a.distance(b)).max(b.distance(c)).max(c.distance(a));
+        if orient2d(a, b, c) <= 1e-5 * side * side
+            || (refine.triangles() && refine.triangle(t, t.map(|i| points[i as usize])))
+        {
+            return false;
+        }
+        out.push(t);
+        true
+    };
+    if !tri([s + n, lower, upper]) {
+        return None;
+    }
+    if lower + 1 < upper && refine.edge(lp[lower % n], lp[upper % n], at(lower), at(upper)) {
+        return None;
+    }
+    while lower + 1 < upper {
+        let chord = |a: usize, b: usize| at(a).distance(at(b));
+        let up_first = lower + 2 < upper && chord(lower, upper - 1) < chord(lower + 1, upper);
+        // the rest of the polygon is the triangle left: its chords are the sides
+        let take_up = if up_first {
+            ccw(lower, upper - 1, upper)
+        } else {
+            !ccw(lower, lower + 1, upper)
+        };
+        let (a, b) = if take_up {
+            (lower, upper - 1)
+        } else {
+            (lower + 1, upper)
+        };
+        if a + 1 < b && refine.edge(lp[a % n], lp[b % n], at(a), at(b)) {
+            return None;
+        }
+        if !(if take_up {
+            tri([lower, upper - 1, upper])
+        } else {
+            tri([lower, lower + 1, upper])
+        }) {
+            return None;
+        }
+        (lower, upper) = (a, b);
+    }
+    Some(out)
+}
+
 /// `triangulate`, then the points `refine` asks for inserted into the same triangulation, round
 /// after round, until it asks for none.
 pub fn triangulate_refined(
@@ -910,6 +977,67 @@ mod tests {
             })
             .sum::<f64>()
             * 0.5
+    }
+
+    struct Asks(bool);
+    impl Refine for Asks {
+        fn edge(&self, _: u32, _: u32, _: Point2, _: Point2) -> bool {
+            self.0
+        }
+        fn triangle(&self, _: [u32; 3], _: [Point2; 3]) -> bool {
+            false
+        }
+        fn triangles(&self) -> bool {
+            false
+        }
+    }
+
+    #[test]
+    fn zip_covers_a_polygon_once_or_declines() {
+        let mut r = Rng::new(41);
+        let mut zipped = 0;
+        for round in 0..300 {
+            // two wavy rails, far apart or nearly touching, so some zips must decline
+            let (n, m) = (3 + r.below(40), 3 + r.below(40));
+            let (amp, gap) = (r.range(0.0, 1.0), r.range(0.1, 2.0));
+            let rail = |i: usize, n: usize, y: f64, k: f64| {
+                let x = 10.0 * i as f64 / (n - 1) as f64;
+                Point2::new(x, y + amp * dmath::sin_cos(k * x).0)
+            };
+            let k = (r.range(0.2, 3.0), r.range(0.2, 3.0));
+            let mut pts: Vec<Point2> = (0..n).map(|i| rail(i, n, 0.0, k.0)).collect();
+            pts.extend((0..m).rev().map(|i| rail(i, m, gap, k.1)));
+            let lp: Vec<u32> = (0..pts.len() as u32).collect();
+            // rails that cross are no polygon: the Delaunay path refuses those too
+            let Ok(cdt) = triangulate(&pts, std::slice::from_ref(&lp), &[]) else {
+                continue;
+            };
+            let Some(triangles) = zip(&pts, &lp, &Asks(false)) else {
+                continue;
+            };
+            zipped += 1;
+            assert_eq!(triangles.len(), cdt.triangles.len(), "round {round}");
+            // all counter-clockwise and the polygon's area, each edge once each way or on the
+            // boundary
+            let mut area = 0.0;
+            let mut edges = std::collections::HashSet::new();
+            for t in &triangles {
+                let [a, b, c] = t.map(|i| pts[i as usize]);
+                assert!(orient2d(a, b, c) > 0.0, "round {round}");
+                area += 0.5 * (b - a).cross(c - a);
+                for k in 0..3 {
+                    assert!(edges.insert((t[k], t[(k + 1) % 3])), "round {round}");
+                }
+            }
+            let want = shoelace(&pts, &lp);
+            assert!((area - want).abs() <= 1e-9 * want, "round {round}: {area} {want}");
+            let on_loop = |a: u32, b: u32| (a + 1) % lp.len() as u32 == b;
+            for &(a, b) in &edges {
+                assert!(on_loop(a, b) || edges.contains(&(b, a)), "round {round}");
+            }
+            assert!(zip(&pts, &lp, &Asks(true)).is_none() || pts.len() == 3);
+        }
+        assert!(zipped > 50, "{zipped}");
     }
 
     /// Checks every invariant; `area` is the region's expected area.

@@ -1,4 +1,4 @@
-use crate::cdt::{CdtError, Refine, triangulate_refined};
+use crate::cdt::{CdtError, Refine, Triangulation, triangulate_refined, zip};
 use crate::mesh::TriMesh;
 use forge_geom::{Curve, Surface, SurfaceGeom};
 use forge_math::{Point2, dmath};
@@ -943,15 +943,28 @@ fn tessellate_face(
 
     let mut scaled: Vec<Point2> = uv.iter().map(|&p| layout.put(p)).collect();
     let mut interior = Vec::new();
+    // a cone that tapers little takes the grid of its widest radius: developable, so any chord of
+    // a cell sags no more than its way round
+    let grid_cone = match surface {
+        Surface::Cone(c) => {
+            let (a, b) = (c.radius_at(lo.y), c.radius_at(hi.y));
+            let (r0, r1) = (a.min(b), a.max(b));
+            (r0 >= 0.5 * r1 && r1 > forge_math::tol::LINEAR).then(|| {
+                let du = arc_step(r1, q);
+                (du, 2.0 * r1 * du)
+            })
+        }
+        _ => None,
+    };
     // an analytic face's grid: cells clear of the boundary are triangulated straight off the
     // grid, the band between them and the boundary by the constrained Delaunay
     let mut grid: Option<Grid> = None;
     if let Some((n, c)) = &nodes {
         n.grid(c, &mut interior);
         interior.iter_mut().for_each(|p| *p = layout.put(*p));
-    } else if let Some((du, dv)) = interior_steps(surface, q) {
+    } else if let Some((du, dv)) = grid_cone.or(interior_steps(surface, q)) {
         match surface {
-            Surface::Cone(c) => {
+            Surface::Cone(c) if grid_cone.is_none() => {
                 // rows across the rulings, each with points as close as its own radius needs but
                 // no closer than half the rows' spacing (rows run together towards the apex)
                 let r = c.radius_at(0.5 * (lo.y + hi.y)).max(forge_math::tol::LINEAR);
@@ -978,7 +991,7 @@ fn tessellate_face(
                 // surface's exact radii (not a cone's, whose radius grows along it)
                 let exact = matches!(
                     surface,
-                    Surface::Sphere(_) | Surface::Torus(_) | Surface::Cylinder(_)
+                    Surface::Sphere(_) | Surface::Torus(_) | Surface::Cylinder(_) | Surface::Cone(_)
                 );
                 let stairs = if g.any && exact { g.staircase() } else { None };
                 g.settle(stairs.is_some());
@@ -1075,8 +1088,9 @@ fn tessellate_face(
     // middle sags at most as far as the circle round it, no larger than the step's), and neither
     // needs a look (a procedural face's curvatures at its nodes are only samples: everything there
     // is looked at)
-    let cell = match (surface, interior_steps(surface, q)) {
+    let cell = match (surface, grid_cone.or(interior_steps(surface, q))) {
         (Surface::Sphere(_) | Surface::Torus(_) | Surface::Cylinder(_), Some((du, dv))) => (du * su, dv * sv),
+        (Surface::Cone(_), Some((du, dv))) if grid_cone.is_some() => (du * su, dv * sv),
         _ => (0.0, 0.0),
     };
     let within = |a: Point2, b: Point2| {
@@ -1124,7 +1138,19 @@ fn tessellate_face(
         }
     };
     let strays = Tests(edge, triangle, both_ways);
-    let tri = match triangulate_refined(&scaled, &loops, &interior, Some(&strays)) {
+    let zipped = match &loops[..] {
+        [lp] if interior.is_empty() && twice.is_empty() => zip(&scaled, lp, &strays),
+        _ => None,
+    };
+    let tri = match zipped.map_or_else(
+        || triangulate_refined(&scaled, &loops, &interior, Some(&strays)),
+        |triangles| {
+            Ok(Triangulation {
+                points: Vec::new(),
+                triangles,
+            })
+        },
+    ) {
         Ok(t) => t,
         Err(e) => {
             if let Some(path) = std::env::var_os("FORGE_CDT_DUMP") {

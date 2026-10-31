@@ -50,3 +50,43 @@ Meshing draws a face's loops with `draw_loop_near`: each sample projected from t
 and the extra step cost the analytic parts 0.7%). A pipe runs Newton on its spine from there and
 keeps it only where the sample lies the radius from the spine point it settles on; else the
 global search. The booleans keep `draw_loop`, so the parameters they see are unchanged.
+
+## Threaded parts and strips (mesh-1)
+
+Per face kind, on threaded parts, by a temporary timer round each `tessellate_face`: a screw face is a
+pure boundary strip, 23.5k triangles from 23.5k boundary samples and no inner points in valve. Its
+Delaunay structure (locate, insert, legalize) did nothing the strip needed.
+
+- `cdt::zip`: one loop, no inner points: from the leftmost point along both sides, each step the shorter
+  chord, every chord and triangle through the same `Refine` tests. Triangles all counter-clockwise inside a
+  simple boundary cover it once, so orientation is the whole check. A sliver (below 1e-5 of the longest
+  side squared), a chord or triangle the tests refuse, or no step at all: the Delaunay path as before. The
+  sliver test came from `mesh_quality`: nearly collinear samples on a planar face gave two degenerate triangles.
+- `Screw::on_turn_near`: a boundary sample lying on the turn at the sample before's u reads its parameters
+  there (no search over turns). Else `nearest`.
+- A cone with its radii within a factor 2 takes the cylinder's grid at its largest radius. Developable, so a
+  chord of a cell sags no more than its way round; `mesh_quality` holds. Frame's tapered tubes: 608M to 488M.
+
+Tried and dropped:
+- Interior points along a Hilbert curve instead of BRIO: frame -2.5%, but volute +4.3%, heatsink +1.5%.
+- `HolePatch::project_near`: no fewer Newton steps than from a seed, and regen +6%.
+
+Mesh instructions (`featcost post`), before and after:
+```
+bracket    14M    14M
+clamp      15M    13M
+conrod     88M    62M
+crank     153M   147M
+frame     671M   489M
+gearbox   374M   334M
+guard      19M    18M
+heatsink  851M   845M
+hub        17M    17M
+insert      5M     5M
+jack      221M   193M
+manifold  174M   174M
+quadarm    20M    20M
+valve     251M   173M
+volute   1148M  1141M
+sum      4020M  3644M
+```

@@ -526,6 +526,18 @@ impl Screw {
         best
     }
 
+    /// The turn at near's u, where p lies on it: `nearest`'s own answer, no turns searched (a
+    /// boundary sample from the one before).
+    fn on_turn_near(&self, p: Point3, near: f64) -> Option<Point2> {
+        let (rho, phi, z) = self.m.cylindrical(p);
+        let u = phi + dmath::TAU * ((near - phi) / dmath::TAU).round();
+        let q = Point2::new(rho - self.m.a * u, z - self.m.b * u);
+        let exact = 1e-13 * (1.0 + q.x.abs() + q.y.abs());
+        let piece = &self.ring.pieces[0];
+        let (d, np, _) = piece.dist(q);
+        (self.ue.contains(u) && d <= exact * exact).then(|| Point2::new(u, piece.s.frac(np).clamp(0.0, 1.0)))
+    }
+
     /// Parameters of the carried-on surface's point nearest p.
     fn nearest(&self, p: Point3) -> Point2 {
         let Some(Near { u, q, j, d, .. }) = self.nearest_turn(p).1 else {
@@ -666,6 +678,9 @@ impl Procedural for Screw {
     }
     fn project(&self, p: Point3) -> Point2 {
         self.nearest(p)
+    }
+    fn project_near(&self, p: Point3, near: Point2) -> Point2 {
+        self.on_turn_near(p, near.x).unwrap_or_else(|| self.nearest(p))
     }
     fn curve_uv(&self, c: &ProcCurve) -> Option<(Point2, Vec2)> {
         // a helix about the same axis is the section point moving along the face's section by
@@ -1283,6 +1298,10 @@ mod tests {
                 let d = s.point(uv);
                 let back = s.nearest(d.p);
                 assert!(surf.eval(back).distance(d.p) < 1e-10, "{s:?} {uv:?}");
+                // from a neighbouring sample it reads the same turn, or leaves it to the search
+                if let Some(near) = s.on_turn_near(d.p, uv.x + r.range(-0.3, 0.3)) {
+                    assert!(surf.eval(near).distance(d.p) < 1e-10, "{s:?} {uv:?} {near:?}");
+                }
                 assert!((back.y - uv.y).abs() < 1e-9 || s.point(back).p.distance(d.p) < 1e-10);
                 let off = d.p + Vec3::new(r.range(-1.0, 1.0), r.range(-1.0, 1.0), r.range(-1.0, 1.0));
                 let q = s.point(s.nearest(off)).p;
