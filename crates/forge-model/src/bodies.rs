@@ -398,10 +398,41 @@ fn renamed(b: &Body, rename: impl Fn(Name) -> Name) -> Body {
     out
 }
 
+/// `b` with the names `taken` holds moved off: what the cut trimmed on both sides becomes a
+/// piece, an edge named by its ends and a face by its edges, as if the cut had split it in one
+/// body; anything else by `salt`.
+fn split_off(mut b: Body, taken: &HashSet<Name>, salt: impl Fn(Name) -> Name) -> Body {
+    for v in b.vertices.iter_mut().filter(|v| taken.contains(&v.name)) {
+        v.name = salt(v.name);
+    }
+    for i in 0..b.edges.len() {
+        let e = &b.edges[i];
+        if taken.contains(&e.name) {
+            let ends = b.vertices[e.start.index()]
+                .name
+                .with_name(b.vertices[e.end.index()].name);
+            b.edges[i].name = e.name.piece(ends);
+        }
+    }
+    for f in b.face_ids().collect::<Vec<_>>() {
+        let name = b.face(f).name;
+        if taken.contains(&name) {
+            let least = b
+                .face(f)
+                .loops
+                .iter()
+                .flat_map(|&l| b.lp(l).coedges().map(|c| b.edge(b.coedge(c).edge).name))
+                .min();
+            b.faces[f.index()].name = least.map_or(salt(name), |n| name.piece(n));
+        }
+    }
+    b
+}
+
 /// A name moved off the names another body holds, by what moved it (the id of the feature
 /// that made that body, or of the feature that moves it).
 fn salted(n: Name, why: &str, id: u64) -> Name {
-    n.with_str(why).with(id)
+    n.salted(Name::NONE.with_str(why).with(id))
 }
 
 /// The id a boolean of the feature of id `id` names what it makes after (`n`: which of several).
@@ -539,13 +570,7 @@ fn body_feature(
                         let h2 = renamed(&h, |x| salted(x, "split", me));
                         let above = piece(plus, &h2, 1)?;
                         let taken: HashSet<Name> = all_names(&below).collect();
-                        let above = renamed(&above, |x| {
-                            if taken.contains(&x) {
-                                salted(x, "split", me)
-                            } else {
-                                x
-                            }
-                        });
+                        let above = split_off(above, &taken, |x| salted(x, "split", me));
                         solids[k].body = below;
                         solids.push(Solid { id: i, body: above });
                     }

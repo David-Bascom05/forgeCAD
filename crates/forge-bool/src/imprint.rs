@@ -549,33 +549,26 @@ fn build<S: Src>(a: &mut Body, b: &S, t: &Tool, hits: &[Hit], wall_at: &[bool], 
     let nh = hits.len();
     let z = t.z.get();
     let ends = |k: usize, starts: bool| ends(nw, k, starts);
-    // named as the general boolean names a curve's piece: by the faces, then the edges it ends on
-    let side_name = |c: usize| b.edge(t.walls[c].sides[0]).4;
-    // hit i's wall-k curve is name i * nw + k
-    let mut names: Vec<Name> = Vec::with_capacity(nh * nw);
-    for h in hits {
-        for (k, w) in t.walls.iter().enumerate() {
-            let (c0, c1) = ends(k, h.segs[k].2);
-            names.push(
-                cut.with_set(&[a.face(h.f).name, b.face(w.face).2])
-                    .with(0)
-                    .with_name(side_name(c0))
-                    .with_name(side_name(c1))
-                    .with(0),
-            );
-        }
-    }
+    // named as the general boolean names a curve's piece (`trim`): by the faces and the edges
+    // it ends on, as wholes, either way round; each end by its edge
+    let side_name = |c: usize| b.edge(t.walls[c].sides[0]).4.whole();
     // new vertices: hit i's corner c is point i * nw + c
     let points: Vec<Point3> = hits.iter().flat_map(|h| h.corners.iter().copied()).collect();
+    // hit i's wall-k curve is name i * nw + k
+    let mut names: Vec<Name> = Vec::with_capacity(nh * nw);
     let mut marks = Vec::with_capacity(2 * nw * nh);
     for (i, h) in hits.iter().enumerate() {
-        for (k, name) in names[i * nw..(i + 1) * nw].iter().enumerate() {
+        for (k, w) in t.walls.iter().enumerate() {
             let (c0, c1) = ends(k, h.segs[k].2);
-            marks.push(((i * nw + c0) as u32, *name));
-            marks.push(((i * nw + c1) as u32, Name(name.0 ^ 1)));
+            let pair = cut.with_set(&[a.face(h.f).name.whole(), b.face(w.face).2.whole()]);
+            let (n0, n1) = (side_name(c0), side_name(c1));
+            let name = pair.with(0x5e7).with_name(n0.min(n1)).with_name(n0.max(n1));
+            names.push(name);
+            marks.push(((i * nw + c0) as u32, pair.with_name(n0), name.with(0)));
+            marks.push(((i * nw + c1) as u32, pair.with_name(n1), name.with(1)));
         }
     }
-    let vnames = vertex_names(&points, marks.into_iter(), std::iter::empty(), root);
+    let vnames = vertex_names(&points, marks, root);
     let shell = ShellId(0);
     let mut made = Made {
         b,

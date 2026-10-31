@@ -337,11 +337,14 @@ fn strip(body: &Body, fa: FaceId, band: &[FaceId], fb: FaceId, radius: Option<f6
     ];
     let mut out = body.clone();
     let mark = match band {
-        [m] => body.face(*m).name,
-        _ => Name::NONE.with_set(&band.iter().map(|&f| body.face(f).name).collect::<Vec<_>>()),
+        [m] => body.face(*m).name.whole(),
+        _ => Name::NONE.with_set(&band.iter().map(|&f| body.face(f).name.whole()).collect::<Vec<_>>()),
     };
     let name = Name::feature(feature).with_str("round").with_name(mark);
     let overflow = FilletError::Overflow { edge: ea };
+    // named from the faces as wholes: a split elsewhere on one renames nothing here
+    let whole = |f: FaceId| body.face(f).name.whole();
+    let alike = ends[0].faces.iter().any(|a| ends[1].faces.iter().any(|b| whole(a.0) == whole(b.0)));
     let reach = region.diagonal() + 4.0 * radius;
     // an edge's end at v moved to where the blend crosses it, and the band's corner v with it
     let mut moved: BTreeMap<VertexId, VertexId> = BTreeMap::new();
@@ -385,8 +388,9 @@ fn strip(body: &Body, fa: FaceId, band: &[FaceId], fb: FaceId, radius: Option<f6
                 return Err(overflow);
             }
             let vn = Name::NONE
-                .with_set(&[name, body.face(*ef).name])
-                .with(j as u64);
+                .with_set(&[name, whole(*ef)])
+                .with(j as u64)
+                .with(if alike { k as u64 } else { 0 });
             at[j] = (t, p, out.add_vertex(p, vn));
             trim(&mut out, e, v, (p, at[j].2))?;
         }
@@ -395,11 +399,7 @@ fn strip(body: &Body, fa: FaceId, band: &[FaceId], fb: FaceId, radius: Option<f6
             let x = body.edge(e);
             let (_, p) = nearest_hit(&x.curve, x.range, &blend.surface, body.vertex(v).point)
                 .ok_or(overflow.clone())?;
-            let names = [
-                name,
-                body.face(end.faces[i].0).name,
-                body.face(end.faces[i + 1].0).name,
-            ];
+            let names = [name, whole(end.faces[i].0), whole(end.faces[i + 1].0)];
             let q = out.add_vertex(p, Name::NONE.with_set(&names));
             trim(&mut out, e, v, (p, q))?;
             xs.push((p, q));
@@ -414,10 +414,11 @@ fn strip(body: &Body, fa: FaceId, band: &[FaceId], fb: FaceId, radius: Option<f6
                 None => cut_through(&blend.surface, es, a.0, b.0, mid(body.coedge(ps[0]).edge)),
             };
             let (curve, ta, tb) = cut.ok_or(overflow.clone())?;
-            let en = match i {
-                0 => name.with_str("end").with(k as u64),
-                _ => name.with_str("end").with(k as u64).with(i as u64),
-            };
+            let en = name
+                .with_str("end")
+                .with_name(whole(*f))
+                .with(if alike { k as u64 } else { 0 })
+                .with(i as u64);
             let e = if ta <= tb {
                 out.add_edge(curve, Interval::new(ta, tb), a.1, b.1, en)
             } else {
@@ -442,7 +443,7 @@ fn strip(body: &Body, fa: FaceId, band: &[FaceId], fb: FaceId, radius: Option<f6
         if !inside_face(body, f, curve, range) {
             return Err(overflow);
         }
-        let sn = Name::NONE.with_set(&[name, body.face(f).name]);
+        let sn = Name::NONE.with_set(&[name, whole(f)]);
         let new = out.add_edge(curve.clone(), range, va, vb, sn);
         let run: Vec<CoedgeId> = runs[2 * j].1.iter().map(|&c| partner(c)).collect::<R<_>>()?;
         spliced.push((f, run, new));
@@ -550,7 +551,7 @@ fn closed_strip(
     let mut out = body.clone();
     let name = Name::feature(feature)
         .with_str("round")
-        .with_name(body.face(m).name);
+        .with_name(body.face(m).name.whole());
     // where each seam crosses its spring's plane: the seam cut back there
     let mut cross = |s: EdgeId, e: EdgeId, k: &Circle, f: FaceId| -> R<VertexId> {
         let v = body.edge(e).start;
@@ -562,7 +563,7 @@ fn closed_strip(
         }
         let q = out.add_vertex(
             p,
-            Name::NONE.with_set(&[name, body.face(f).name]).with_str("at"),
+            Name::NONE.with_set(&[name, body.face(f).name.whole()]).with_str("at"),
         );
         let edge = &mut out.edges[s.index()];
         if edge.start == v {
@@ -594,7 +595,7 @@ fn closed_strip(
     // spring b from qb round to qb, through a vertex where the seam lands unless that is qb
     let qbp = out.vertex(qb).point;
     let (tb, tp) = (full(&kb, qbp), full(&kb, fb_at));
-    let sn = |f: FaceId| Name::NONE.with_set(&[name, body.face(f).name]);
+    let sn = |f: FaceId| Name::NONE.with_set(&[name, body.face(f).name.whole()]);
     let tau = dmath::TAU;
     let (pv, b_arcs) = if qbp.distance(fb_at) <= tol::LINEAR {
         let e = out.add_edge(Curve::Circle(kb), Interval::new(tb, tb + tau), qb, qb, sn(fb));

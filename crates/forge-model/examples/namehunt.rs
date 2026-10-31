@@ -1,8 +1,9 @@
-//! cargo run --release -p forge-model --example namehunt -- [cases] [seed] [--big]
+//! cargo run --release -p forge-model --example namehunt -- [cases] [seed] [--big | --inserts]
 //! Random upstream edits of the corpus (inserts, deletes and swaps among them: features keep
 //! their ids through those), each reference judged by geometry; prints every finding by
-//! class, then the tally.
-use forge_model::names::{Class, Edit, corpus, run};
+//! class, then the tally. --inserts: `cases` holes, pockets, slots and bosses put in above
+//! each finishing feature of the shift corpus, every entity judged.
+use forge_model::names::{Class, Edit, corpus, run, run_inserts, shift_corpus};
 use std::collections::BTreeMap;
 
 fn main() {
@@ -11,9 +12,14 @@ fn main() {
     let cases = nums.first().copied().unwrap_or(100) as usize;
     let seed = nums.get(1).copied().unwrap_or(1);
     let big = args.iter().any(|a| a == "--big");
-    let corpus = corpus();
     let t0 = std::time::Instant::now();
-    let all = run(&corpus, seed, cases, big, if big { 8 } else { 1 }, 60);
+    let all = if args.iter().any(|a| a == "--inserts") {
+        let (all, failed) = run_inserts(&shift_corpus(), seed, cases);
+        println!("{failed} edited parts failed to build");
+        all
+    } else {
+        run(&corpus(), seed, cases, big, if big { 8 } else { 1 }, 60)
+    };
     let mut tally: BTreeMap<(String, Class), usize> = BTreeMap::new();
     let (mut kept, mut gone, mut piece, mut unjudged, mut used) = (0, 0, 0, 0, 0);
     for c in &all {

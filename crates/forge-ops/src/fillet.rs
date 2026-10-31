@@ -136,6 +136,9 @@ struct Rolled {
     coedges: [CoedgeId; 2],
     forward: [bool; 2],
     name: Name,
+    /// The name from the edge as a whole: what the blend makes at a vertex is named from this
+    /// and the vertex, so a split elsewhere on the edge renames nothing there.
+    base: Name,
     var: Option<VarEdge>,
     /// Per side, where the ball rests not on the edge's face but on one tangent to it beyond a
     /// smooth edge of it: that face and the smooth edge. The strip of the edge's face between is
@@ -956,6 +959,7 @@ fn roll(body: &Body, e: EdgeId, r: f64, root: Name) -> R<Rolled> {
         coedges: l.coedges,
         forward: l.forward,
         name: root.with_str("fillet").with_name(body.edge(e).name),
+        base: root.with_str("fillet").with_name(body.edge(e).name.whole()),
         var: None,
         over,
         split,
@@ -1318,6 +1322,7 @@ fn roll_chain(
                 coedges: l.coedges,
                 forward: l.forward,
                 name: root.with_str("fillet").with_name(edge.name),
+                base: root.with_str("fillet").with_name(edge.name.whole()),
                 var: Some(VarEdge {
                     chain: id,
                     index: i,
@@ -1962,7 +1967,7 @@ impl Builder {
     }
 
     fn face_name(&self, f: FaceId) -> Name {
-        self.body.face(f).name
+        self.body.face(f).name.whole()
     }
 
     /// An edge on `curve` from `a` (at parameter ta) to `b` (at tb), and whether walking
@@ -2078,7 +2083,7 @@ impl Builder {
             let names = [
                 self.face_name(at(j).face),
                 self.face_name(at(j - 1).face),
-                ro.name,
+                ro.base,
             ];
             let name = self.vertex_name(v, &names);
             xs[j] = (p, self.body.add_vertex(p, name));
@@ -2091,7 +2096,7 @@ impl Builder {
             let names = [
                 self.face_name(at(j).face),
                 self.face_name(at(j - 1).face),
-                self.rolled[ri].name,
+                self.rolled[ri].base,
             ];
             let name = self.vertex_name(v, &names);
             *slot = (p, self.body.add_vertex(p, name));
@@ -2114,7 +2119,7 @@ impl Builder {
             let (curve, ta, tb) = cross_curve(&ro.blend, &self.body.face(f).surface, a.0, b.0)
                 .ok_or(FilletError::Overflow { edge })?;
             let name = Name::NONE
-                .with_set(&[ro.name, self.face_name(f)])
+                .with_set(&[ro.base, self.face_name(f)])
                 .with_name(self.body.vertex(v).name);
             let (eid, fwd) = self.edge_between(curve, ta, tb, a.1, b.1, name);
             self.paths.insert(at(j).cin, vec![(eid, fwd)]);
@@ -2272,7 +2277,7 @@ impl Builder {
         let (s_in, s_out) = (self.side(at(0).cin), self.side(at(k - 1).cout));
         let (a0, b0) = (at(0).face, at(k - 1).face);
         let blend = self.rolled[ri].blend.surface.clone();
-        let name = self.rolled[ri].name;
+        let name = self.rolled[ri].base;
         let on_edge = |b: &Builder, c: CoedgeId, p: Point3| {
             let e = b.body.edge(b.body.coedge(c).edge);
             e.curve.eval(e.curve.closest(p, e.range)).distance(p) <= tol::LINEAR
@@ -2291,11 +2296,17 @@ impl Builder {
                 .map(|h| (h.t, h.point))
         };
         let mut dropped: Vec<CoedgeId> = Vec::new();
+        // named as the stop on that edge is where the blend ends square (`vertex_name`)
         let names = |b: &Builder, c: CoedgeId| {
-            let e = b.body.coedge(c).edge;
-            Name::NONE
-                .with_set(&[name, b.body.edge(e).name])
-                .with_name(b.body.vertex(v).name)
+            let mut faces: Vec<Name> = b
+                .body
+                .edge(b.body.coedge(c).edge)
+                .coedges
+                .iter()
+                .map(|&x| b.face_name(b.body.coedge_face(x)))
+                .collect();
+            faces.push(name);
+            b.vertex_name(v, &faces)
         };
         // off face a0: the spring's first crossing with an edge of a0 after the vertex
         let mut c = at(0).cout;
@@ -2489,7 +2500,7 @@ impl Builder {
         {
             return Err(err);
         }
-        let (na, nb) = (self.rolled[ra].name, self.rolled[rb].name);
+        let (na, nb) = (self.rolled[ra].base, self.rolled[rb].base);
         let fname = |j: usize| self.face_name(ring[j % k].face);
         let vp_name = self.vertex_name(v, &[fname(ia), fname(ib + k - 1), na, nb]);
         let vx_name = self.vertex_name(v, &[fname(ib), fname(ia + k - 1), na, nb]);
@@ -2530,7 +2541,7 @@ impl Builder {
             let mut at_foot: Vec<usize> = Vec::new();
             for (m, &c) in edges.iter().enumerate() {
                 let e = self.body.edge(self.body.coedge(c).edge);
-                let (curve, range, ename) = (e.curve.clone(), e.range, e.name);
+                let (curve, range, ename) = (e.curve.clone(), e.range, e.name.whole());
                 // a variable blend's spring stops at the section: the crossing may be b's
                 let hit = crossing(&self.rolled[ra].springs[s_a], ta, &curve, range);
                 if hit.is_none() && !var {
@@ -2926,6 +2937,24 @@ impl Builder {
         let vname = self.body.vertex(v).name;
         let patch_name = self.root.with_str("corner").with_name(vname);
         let mut pool: Vec<(Point3, VertexId)> = Vec::new();
+        // blends named as their edges' wholes, unless two here are pieces of one
+        let mut bases: Vec<Name> = blend_ring
+            .iter()
+            .filter_map(|&j| self.filleted(ring[j].cin).map(|ri| self.rolled[ri].base))
+            .collect();
+        bases.sort_unstable();
+        let whole = bases.windows(2).all(|w| w[0] != w[1]);
+        // and faces likewise
+        let mut lines: Vec<Name> = ring.iter().map(|c| self.face_name(c.face)).collect();
+        lines.sort_unstable();
+        let whole_faces = lines.windows(2).all(|w| w[0] != w[1]);
+        let fname = |b: &Self, f: FaceId| {
+            if whole_faces {
+                b.face_name(f)
+            } else {
+                b.body.face(f).name
+            }
+        };
         // per ring corner j: where its blend stops (parameter, contact on face j, contact on face j - 1)
         let mut stops: Vec<Option<(f64, VertexId, VertexId)>> = vec![None; k];
         for (b, &j) in blend_ring.iter().enumerate() {
@@ -2936,9 +2965,13 @@ impl Builder {
                 self.rolled[ri].springs[s_in].eval(t),
                 self.rolled[ri].springs[1 - s_in].eval(t),
             );
-            let fa = self.face_name(ring[j].face);
-            let fb = self.face_name(ring[(j + k - 1) % k].face);
-            let rn = self.rolled[ri].name;
+            let fa = fname(self, ring[j].face);
+            let fb = fname(self, ring[(j + k - 1) % k].face);
+            let rn = if whole {
+                self.rolled[ri].base
+            } else {
+                self.rolled[ri].name
+            };
             let va = self.pooled(&mut pool, pa, Name::NONE.with_set(&[fa, rn]).with_name(vname));
             let vb = self.pooled(&mut pool, pb, Name::NONE.with_set(&[fb, rn]).with_name(vname));
             stops[j] = Some((t, va, vb));
@@ -2991,7 +3024,7 @@ impl Builder {
                     {
                         return Err(err);
                     }
-                    let name = Name::NONE.with_set(&[self.face_name(ring[j].face), patch_name]);
+                    let name = Name::NONE.with_set(&[fname(self, ring[j].face), patch_name]);
                     let walk = self.edge_between(t.curve.clone(), ta, tb, a, b, name);
                     match self.rests(ring, j) {
                         // on a face rested on: from the cut smooth edge to the spring, joined

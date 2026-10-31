@@ -150,6 +150,28 @@ fn split_one(b: &mut Body, f: FaceId, by: &Surface, root: Name) -> Result<(), Bo
         return Err(BodyError::NotCrossed { name });
     }
 
+    // a new vertex is named by the edge it cuts (as a whole: a split elsewhere on it renames
+    // nothing), crossings on one by where they lie
+    let keys: Vec<Name> = cross
+        .iter()
+        .map(|c| match c.1 {
+            At::Edge(e, _) => b.edge(e).name.whole(),
+            At::Vertex(_) => Name::NONE,
+        })
+        .collect();
+    // ties by where they lie in the face's own frame, so turning the part keeps them
+    let frame = forge_bool::boolean::surface_frame(&b.face(f).surface);
+    let mut vnames = vec![Name::NONE; cross.len()];
+    for x in 0..cross.len() {
+        if vnames[x] != Name::NONE {
+            continue;
+        }
+        let group: Vec<usize> = (x..cross.len()).filter(|&y| keys[y] == keys[x]).collect();
+        let pts: Vec<_> = group.iter().map(|&y| frame.point_to_local(cross[y].0)).collect();
+        for (&y, r) in group.iter().zip(forge_bool::boolean::ranked(&pts)) {
+            vnames[y] = root.with_str("vertex").with_name(keys[x]).with(r);
+        }
+    }
     // a vertex at each crossing a chord ends at
     let mut vert: HashMap<usize, VertexId> = HashMap::new();
     for &(ci, range, ends) in &chords {
@@ -160,7 +182,7 @@ fn split_one(b: &mut Body, f: FaceId, by: &Surface, root: Name) -> Result<(), Bo
                 At::Vertex(v) => v,
                 At::Edge(e, u) => *vert.entry(x).or_insert_with(|| {
                     let p = b.edge(e).curve.eval(u);
-                    b.add_tolerant_vertex(p, gap + tol::LINEAR, root.with_str("vertex").with(x as u64))
+                    b.add_tolerant_vertex(p, gap + tol::LINEAR, vnames[x])
                 }),
             };
             let tv = &mut b.vertices[v.index()].tol;
@@ -184,8 +206,8 @@ fn split_one(b: &mut Body, f: FaceId, by: &Surface, root: Name) -> Result<(), Bo
         let edge = b.edge(*e).clone();
         let mut from = (edge.range.lo, edge.start);
         let mut out = Vec::new();
-        for (k, &(t, v)) in at.iter().chain([(edge.range.hi, edge.end)].iter()).enumerate() {
-            let n = edge.name.with_name(root).with_str("split").with(k as u64);
+        for &(t, v) in at.iter().chain([(edge.range.hi, edge.end)].iter()) {
+            let n = edge.name.piece(b.vertex(from.1).name.with_name(b.vertex(v).name));
             out.push(b.add_edge(edge.curve.clone(), Interval::new(from.0, t), from.1, v, n));
             from = (t, v);
         }
@@ -214,13 +236,17 @@ fn split_one(b: &mut Body, f: FaceId, by: &Surface, root: Name) -> Result<(), Bo
     let mut leave: HashMap<VertexId, Use> = HashMap::new();
     let mut closed: Vec<EdgeId> = Vec::new();
     let mut ring: Option<EdgeId> = None;
-    for (k, &(ci, range, ends)) in chords.iter().enumerate() {
-        let n = root.with_str("edge").with(k as u64);
-        // a split on purpose: unifying leaves it (and its pieces)
-        b.joins.kept.push(n);
+    for &(ci, range, ends) in &chords {
         match ends {
             Some((s, t)) => {
                 let (vs, vt) = (vert[&s], vert[&t]);
+                let n = root
+                    .with_str("edge")
+                    .with_name(b.vertex(vs).name)
+                    .with_name(b.vertex(vt).name)
+                    .with(ci as u64);
+                // a split on purpose: unifying leaves it (and its pieces)
+                b.joins.kept.push(n);
                 let e = b.add_edge(curves[ci].clone(), range, vs, vt, n);
                 if vs == vt {
                     ring = Some(e);
@@ -233,9 +259,11 @@ fn split_one(b: &mut Body, f: FaceId, by: &Surface, root: Name) -> Result<(), Bo
                 }
             }
             None => {
+                let n = root.with_str("edge").with_str("closed").with(ci as u64);
+                b.joins.kept.push(n);
                 let v = b.add_vertex(
                     curves[ci].eval(range.lo),
-                    root.with_str("vertex").with_str("closed").with(k as u64),
+                    root.with_str("vertex").with_str("closed").with(ci as u64),
                 );
                 closed.push(b.add_edge(curves[ci].clone(), range, v, v, n));
             }
@@ -270,12 +298,18 @@ fn split_one(b: &mut Body, f: FaceId, by: &Surface, root: Name) -> Result<(), Bo
     }
     let (surface, same_sense, shell) = (b.face(f).surface.clone(), b.face(f).same_sense, b.face(f).shell);
     b.kill_face(f);
-    for (k, g) in groups.iter().enumerate() {
+    for g in &groups {
+        // a piece named by its boundary, not its place among the pieces
+        let least = g
+            .iter()
+            .flat_map(|&c| cycles[c].iter())
+            .map(|&(e, fwd)| b.edge(e).name.with(fwd as u64))
+            .min();
         let nf = b.add_face(
             shell,
             surface.clone(),
             same_sense,
-            name.with_name(root).with_str("split").with(k as u64),
+            name.piece(root.with_name(least.unwrap_or(Name::NONE))),
         );
         for &c in g {
             b.add_loop(nf, &cycles[c]);

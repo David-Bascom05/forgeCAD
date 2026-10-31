@@ -475,6 +475,90 @@ pub fn run_shifts(corpus: &[(String, Part)]) -> Vec<Case> {
     out
 }
 
+/// `per_stop` random inserts (`splitter`) above each finishing feature of `corpus` and the
+/// part's end, each judged on every entity of the part before it; and how many edited parts
+/// failed to build.
+pub fn run_inserts(corpus: &[(String, Part)], seed: u64, per_stop: usize) -> (Vec<Case>, usize) {
+    let mut r = Rng::new(seed);
+    let (mut out, mut failed) = (Vec::new(), 0);
+    for (name, part) in corpus {
+        let fs = &part.features;
+        let stops = (1..fs.len()).filter(|&i| !stored_refs(&fs[i]).is_empty());
+        for before in stops.chain([fs.len()]) {
+            let Ok(b0) = regen(&fs[..before], None) else {
+                continue;
+            };
+            for _ in 0..per_stop {
+                let edit = Edit::Insert {
+                    at: 1 + r.below(before),
+                    feature: Box::new(splitter(&b0, &mut r)),
+                };
+                match check(part, before, &b0, &edit, 1, &[]) {
+                    Some(outcome) => out.push(Case {
+                        part: name.clone(),
+                        before,
+                        edit,
+                        outcome,
+                    }),
+                    None => failed += 1,
+                }
+            }
+        }
+    }
+    (out, failed)
+}
+
+/// A random feature that splits faces of `body` somewhere: a hole, pocket or slot cut in from
+/// one side of its box, or a round or square boss standing on that side.
+fn splitter(body: &Body, r: &mut Rng) -> Feature {
+    let b = body_box(body);
+    let (lo, hi) = ([b.x.lo, b.y.lo, b.z.lo], [b.x.hi, b.y.hi, b.z.hi]);
+    let mut p = [0.0; 3];
+    for i in 0..3 {
+        p[i] = r.range(lo[i], hi[i]);
+    }
+    let axis = r.below(3);
+    let out = if r.bool() { 1.0 } else { -1.0 };
+    let mut n = [0.0; 3];
+    n[axis] = out;
+    let n = Vec3::new(n[0], n[1], n[2]);
+    let side = if out > 0.0 { hi[axis] } else { lo[axis] };
+    let x = [Vec3::X, Vec3::Y, Vec3::Z][(axis + 1) % 3];
+    let kind = r.below(4);
+    let boss = kind == 3;
+    p[axis] = if boss { side - 0.5 * out } else { side + out };
+    let z = if boss { n } else { -n };
+    let plane = forge_math::Frame::from_zx(Point3::new(p[0], p[1], p[2]), z.normalize().expect("an axis"), x)
+        .expect("a frame");
+    let (w, h) = (r.range(1.0, 4.0), r.range(1.0, 2.0));
+    let shape = match kind {
+        0 => ProfileLoop::new(vec![(
+            Segment::Circle {
+                center: Point2::ORIGIN,
+                radius: r.range(0.5, 2.0),
+                ccw: true,
+            },
+            0,
+        )]),
+        1 => Profile::rectangle(Point2::new(-w / 2.0, -h), w, 2.0 * h, 0),
+        2 => Profile::rounded_rectangle(Point2::new(-2.0 * w, -h / 2.0), 4.0 * w, h, 0.45 * h, 0),
+        _ if r.bool() => Profile::circle(Point2::ORIGIN, w / 2.0, 0),
+        _ => Profile::rectangle(Point2::new(-w / 2.0, -w / 2.0), w, w, 0),
+    };
+    Feature::Extrude {
+        profile: Profile {
+            plane,
+            loops: vec![shape],
+        },
+        extent: Extent::Distance(if boss {
+            0.5 + r.range(1.0, 3.0)
+        } else {
+            1.0 + r.range(0.5, 3.0)
+        }),
+        op: if boss { Combine::Add } else { Combine::Cut },
+    }
+}
+
 /// A small hole drilled straight down somewhere over the part.
 fn unrelated(body: &Body, r: &mut Rng) -> Feature {
     let b = body_box(body);
@@ -823,7 +907,15 @@ pub fn check(
             .map(|x| x.0)
             .collect();
         let r = hits.first().copied();
+        // an entity another one of its part lies on exactly (bodies touching) is not told apart
+        let twin = || {
+            let g = geo(b0, e0);
+            tables[0]
+                .iter()
+                .any(|x| x.1 == kind && x.0 != e0 && apart(&g, &x.2) <= 1e-9)
+        };
         let tracked = at == steps;
+        let twinned = tracked && !hits.contains(&e) && twin();
         let truth = tracked
             .then(|| all1.iter().find(|x| x.0 == e).map(|x| x.2))
             .flatten();
@@ -838,6 +930,7 @@ pub fn check(
             })
         };
         match r {
+            _ if twinned => out.unjudged += 1,
             _ if tracked && hits.contains(&e) => out.kept += 1,
             None if tracked && moved => finding(Class::Lost),
             None if tracked => finding(Class::Renamed),

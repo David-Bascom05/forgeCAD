@@ -831,15 +831,15 @@ fn nary_body(
                 // out lies outside a face, where no triple point of the two faces can be
                 let imprints_before = out.imprints.len();
                 let mut whole = true;
-                for (ci, (curve, contact)) in curves.into_iter().enumerate() {
+                let pair_first = out.segs.len();
+                for (curve, contact) in curves {
                     if contact == Contact::Touching {
                         whole = false;
                         continue;
                     }
                     let name = Name::feature(0)
                         .with_str("cut")
-                        .with_set(&[a.face(fa).name, b.face(fb).name])
-                        .with(ci as u64);
+                        .with_set(&[a.face(fa).name.whole(), b.face(fb).name.whole()]);
                     trim(
                         [a, b],
                         [ia, ib],
@@ -856,6 +856,15 @@ fn nary_body(
                 if !whole || out.imprints.len() > imprints_before {
                     out.loose.push(((i, fa), (j, fb)));
                 }
+                // the first face by whole, so either order of the pair ranks alike
+                let first = if a.face(fa).name.whole() <= b.face(fb).name.whole() {
+                    &a.face(fa).surface
+                } else {
+                    &b.face(fb).surface
+                };
+                crate::boolean::rank_pair(&mut out.segs[pair_first..], &|| {
+                    crate::boolean::surface_frame(first)
+                });
             }
         }
         Ok(out)
@@ -1298,23 +1307,26 @@ fn nary_body(
     alias.sort();
     let cut_vertex: Vec<VKey> = cluster[..cuts.len()].iter().map(|&k| key_of[k]).collect();
     let triple_vertex: Vec<VKey> = cluster[cuts.len()..].iter().map(|&k| key_of[k]).collect();
-    let triples = triple.iter().zip(&triple_vertex).filter_map(|(tc, &k)| match k {
-        VKey::New(i) => Some((i, segs[tc.seg].name)),
-        VKey::Old(..) => None,
-    });
-    let cut_edges = cuts
-        .iter()
-        .zip(&cut_vertex)
-        .filter_map(|(c, &k)| match (k, c.on.edge()) {
-            (VKey::New(i), Some((sd, e))) => Some((i, tools[sd].edge(e).name)),
-            _ => None,
-        });
-    let vnames = crate::boolean::vertex_names(
-        &points,
-        crate::boolean::curve_ends(&segs, &cut_vertex).chain(triples),
-        cut_edges,
-        root,
-    );
+    let mut marks = crate::boolean::curve_ends(&segs, &cut_vertex);
+    for (tc, &k) in triple.iter().zip(&triple_vertex) {
+        if let VKey::New(i) = k {
+            marks.push((i, segs[tc.seg].pair, segs[tc.seg].name));
+        }
+    }
+    let mut ended = vec![false; points.len()];
+    for m in &marks {
+        ended[m.0 as usize] = true;
+    }
+    for (c, &k) in cuts.iter().zip(&cut_vertex) {
+        if let VKey::New(i) = k
+            && !ended[i as usize]
+            && let Some((sd, e)) = c.on.edge()
+        {
+            let n = tools[sd].edge(e).name.whole();
+            marks.push((i, n, n));
+        }
+    }
+    let vnames = crate::boolean::vertex_names(&points, marks, root);
     // closed new edges' own vertices, added after those
     let mut seams: Vec<Name> = Vec::new();
     // a new vertex settles on the point nearest every curve through it; parameters follow it

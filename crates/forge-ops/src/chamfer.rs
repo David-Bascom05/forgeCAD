@@ -156,10 +156,13 @@ pub fn chamfer(body: &Body, edges: &[Name], size: ChamferSize, feature: u64) -> 
     let mut contact_edge: HashMap<(EdgeId, FaceId), EdgeId> = HashMap::new();
     for b in &bevels {
         let e = src.edge(b.edge);
+        // from the faces as wholes, unless both are pieces of one
+        let whole = src.face(b.a).name.whole() != src.face(b.b).name.whole();
         for f in [b.a, b.b] {
             let s = w.contact[&(b.edge, true, f)];
             let t = w.contact[&(b.edge, false, f)];
-            let name = Name::NONE.with_set(&[src.face(f).name, b.name]);
+            let n = src.face(f).name;
+            let name = Name::NONE.with_set(&[if whole { n.whole() } else { n }, b.name]);
             let id = w.out.add_edge(e.curve.clone(), e.range, s, t, name);
             w.fit_e.push(id);
             contact_edge.insert((b.edge, f), id);
@@ -437,7 +440,9 @@ impl Work {
                     src.face(s).shell,
                     Surface::Plane(Plane::new(Frame::from_z(vp, normal))),
                     true,
-                    root.with_str("end").with_name(vname).with_name(src.edge(e).name),
+                    root.with_str("end")
+                        .with_name(vname)
+                        .with_name(src.edge(e).name.whole()),
                 );
                 self.patches.push((pf, [x1, j, x2]));
             }

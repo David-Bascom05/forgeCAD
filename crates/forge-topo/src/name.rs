@@ -7,9 +7,9 @@ use core::fmt;
 #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Default)]
 pub struct Name(pub u64);
 
-/// The bits of a piece's name that name the whole it is a piece of.
+/// The bits of a name that name the whole it is a piece of (or itself, if it is no piece).
 const PIECE_OF: u64 = 0xffff_ffff_0000_0000;
-/// Marks the whole's half of a piece's name.
+/// Marks a piece's half of its name.
 const PIECE: u64 = 0x0005_9117;
 
 impl Name {
@@ -53,6 +53,12 @@ impl Name {
     /// What a name and all its pieces share: whatever splits an entity went through.
     pub fn whole(self) -> Name {
         Name(self.0 & PIECE_OF)
+    }
+
+    /// The name moved off another body's by `salt`, keeping what it is a piece of: pieces of
+    /// one whole stay pieces of one (moved) whole.
+    pub fn salted(self, salt: Name) -> Name {
+        Name((self.whole().with_name(salt).0 & PIECE_OF) | (self.0 & !PIECE_OF))
     }
 
     /// Order-independent combination, for entities defined by an unordered set

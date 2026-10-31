@@ -852,3 +852,35 @@ fn one_hole_at_many_sketch_points() {
         "the third place's wall"
     );
 }
+
+/// A circular pattern of arms on a rod, and the same part turned and moved by an inexact
+/// rotation: every name the same (ties between branches and cuts are not broken by world
+/// coordinates or by which of several coincident edges a cut found).
+#[test]
+fn turning_the_whole_part_renames_nothing() {
+    let names = |src: &str, nary: bool| {
+        let part = text::parse(src).expect("parses");
+        let b = if nary {
+            part.regenerate_nary(1)
+        } else {
+            part.regenerate()
+        }
+        .expect("builds");
+        let mut out: Vec<u64> = b.face_ids().map(|f| b.face(f).name.0).collect();
+        out.extend(b.edge_ids().map(|e| b.edge(e).name.0));
+        out.extend(b.vertex_ids().map(|v| b.vertex(v).name.0));
+        out.sort();
+        out
+    };
+    let flat = "extrude new sym 30 circle 0 0 21
+extrude add 6 z 0 0 1 x 0.808086874008685 0.5890633277117765 0 at 0 0 -15 rrect 0 -8 62 16 6
+pattern extrude2 circ 0 0 0 0 0 1 5
+";
+    let turned = "extrude new sym 30 axes 0.23076923076923078 0.3076923076923077 -0.9230769230769231 -0.9723076923076924 0.036923076923076836 -0.23076923076923078 -0.03692307692307689 0.9507692307692308 0.3076923076923077 at -37 -53 73 circle 0 0 21
+extrude add 6 axes -0.38626921848083084 0.2703921456412609 -0.8818640362491962 -0.9216467746619315 -0.15141320087099525 0.35726917773194333 -0.03692307692307689 0.9507692307692308 0.3076923076923077 at -36.44615384615385 -67.26153846153846 68.38461538461539 rrect 0 -8 62 16 6
+pattern extrude2 circ -37 -53 73 -0.03692307692307689 0.9507692307692308 0.3076923076923077 5
+";
+    for nary in [false, true] {
+        assert_eq!(names(flat, nary), names(turned, nary), "n-ary {nary}");
+    }
+}

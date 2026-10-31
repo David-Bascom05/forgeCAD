@@ -1,6 +1,6 @@
 //! Names follow their entities through upstream edits, and both regen paths give them alike.
 use forge_math::{Frame, Point2, Point3};
-use forge_model::names::{Class, Edit, corpus, run, run_shifts, shift_corpus, work_part};
+use forge_model::names::{Class, Edit, corpus, run, run_inserts, run_shifts, shift_corpus, work_part};
 use forge_model::{Combine, Extent, Feature, Part, suite};
 use forge_ops::Profile;
 use forge_topo::{Body, Name};
@@ -85,6 +85,26 @@ fn shifting_edits_rename_nothing() {
     assert!(bad.is_empty(), "{} {bad:#?}", bad.len());
 }
 
+/// Holes, pockets, slots and bosses put in above finishing features and several bodies split
+/// faces and edges where they reach: every entity they leave where it was keeps its name, and
+/// nothing ever names another entity.
+#[test]
+fn inserts_that_split_faces_rename_nothing_they_miss() {
+    let corpus = shift_corpus();
+    let (mut used, mut bad) = (0, Vec::new());
+    for seed in 1..=3 {
+        let (cases, _) = run_inserts(&corpus, seed, 4);
+        used += cases.len();
+        for c in &cases {
+            for f in c.outcome.findings.iter().filter(|f| f.class != Class::Jumped) {
+                bad.push(format!("{} @{} {:?}: {f:?}", c.part, c.before, c.edit));
+            }
+        }
+    }
+    assert!(used >= 600, "only {used} inserts judged");
+    assert!(bad.is_empty(), "{} {bad:#?}", bad.len());
+}
+
 fn names(b: &Body) -> Vec<Name> {
     let mut out: Vec<Name> = b.face_ids().map(|f| b.face(f).name).collect();
     out.extend(b.edge_ids().map(|e| b.edge(e).name));
@@ -143,7 +163,7 @@ fn a_face_cut_into_one_piece_keeps_its_name_on_both_paths() {
 fn both_regen_paths_name_alike() {
     // the other suite parts still differ where a face is split into several kept pieces: the
     // sequential regen names those from the pieces earlier features left (docs/naming.md)
-    for name in ["sweep", "loft"] {
+    for name in ["sweep", "loft", "coil", "text", "upto", "upto-flat"] {
         let part = suite::part(name).expect("a suite part");
         let seq = part.regenerate().expect("sequential regen");
         let nary = part.regenerate_nary(1).expect("n-ary regen");

@@ -72,6 +72,31 @@ new B-rep against the old one after the fact (matching: Agbodan et al.).
     they split alike.
   This is Capoyleas' scheme with their third mechanism (geometric qualifiers) replaced by
   neighbours, and Kripac's split tracking replaced by naming pieces from their own boundaries.
+- **Lineage: neighbours are named as wholes** (since 2026-10-31). A piece's name keeps the high
+  32 bits of the whole it came from (`Name::whole`), through any number of splits, and its
+  low half is made from that lineage and what tells it from its siblings only, so a piece of
+  a piece is named as if cut from the whole at once. Everything named from a neighbour takes
+  the neighbour's lineage, not its name: a boolean's new edge from its faces' and end edges'
+  lineages, a new vertex from what meets *at* it (each curve piece's face pair with the edge it
+  cuts there, not the piece's other end), a fillet's or full round's ends from the end faces'
+  lineages and the vertex, a chamfer's contact edges from its faces' lineages. So a later
+  feature splitting a face or edge somewhere renames nothing it did not reach: an edge it never
+  touched keeps its name though both its faces are now pieces. Names stay unique because pieces
+  that would collide are told apart where they meet: their own ends, the vertex, or, for ties,
+  where they lie (Capoyleas' disambiguation, applied only when two pieces collide).
+- **No orientation or rounding in names** (since 2026-10-31). A new edge no longer carries the
+  index of its intersection branch (the order a surface-surface intersection returns branches
+  in turns with the part); it is named by its faces and the edges it runs between either way
+  round, and where the curve crosses several edges at one point (a vertex, or edges of both
+  faces) by all of them, since which cut ends the piece there is chance. Pieces or vertices
+  still alike are ranked by where they lie in the first face's surface frame (the part's own,
+  so it turns and moves with the part), along the axis on which they spread most, coordinates
+  within rounding counting as equal: nearly level points are never ordered by noise. A vertex
+  that ties on what meets at it is first told apart by the whole curve pieces ending there.
+- Body splits name what the cut trimmed on both sides as pieces by their ends, split faces
+  name pieces by their boundaries and new vertices by the edge they cut, and names moved off
+  another body's (copies, splits, tools of several bodies) keep their lineage (`Name::salted`).
+  None of these depend on order any more.
 
 ## Measured against the failure classes
 
@@ -94,9 +119,25 @@ went to something that is not a piece of it); *duplicate*.
 | repeats (a thread's turns) | n/a | open: told apart by order along the axis; a turn appearing at an end shifts the rest |
 | flush faces parting or meeting | n/a | fixed for flat faces: a foot edge and its vertices keep their names whether the block stands flush or is sunk a hair in (lost names in topology-keeping edits roughly halved) |
 | two-segment loops (a half disc) | n/a | fixed: both joints took one name (DuplicateName, invalid bodies) |
+| orientation (the whole history turned, moved or rounded) | a circular pattern's edge renamed under an inexact rotation (M11: branch order and which of five coincident edges a cut found) | the turned part names every entity alike, seq and n-ary (`turning_the_whole_part_renames_nothing`). A mirror is no pure re-orientation: a right-handed mirrored sketch puts its segments on the other sides and its seam elsewhere, so names follow those roles |
+| splits of neighbours (an insert splitting a face or edge elsewhere) | 39 edges, 91 vertices, 1 face renamed though untouched (60 seeds of `namehunt --inserts`, 14 137 inserts), and a face fillet or full round on a body with tombstones resolved its faces by stale ids and rounded the wrong edge | 4 edges, 1 vertex (14 296 inserts); open: below |
+
+`namehunt --inserts` puts holes, pockets, slots and bosses (`names::run_inserts`) in at random
+places above each finishing feature of the shift corpus (finishing parts, fillet variants,
+several bodies) and judges every entity: one the insert left where it was must keep its name.
+What is left is one class: an edge a first feature splits into two kept pieces and a later one
+trims back to one, which in the history without the first feature was trimmed whole and kept
+its own name (`bodies:picks`, the edge under the notch). A piece cannot give back the whole's
+full name: only its lineage is in it. The one fillet vertex is a cap the insert reshaped,
+whose corner did not move.
 
 Seq and n-ary still name differently where a face splits into several kept pieces: the
-sequential regen sees the pieces earlier features left, the n-ary sees the original faces. Full
+sequential regen sees the pieces earlier features left, the n-ary sees the original faces.
+Lineage cut the names that differ by about a third on the suite parts (mixed 4453 to 3589 of
+6253, shaft 3044 to 1895 of 5049; coil, upto and upto-flat now agree). Where they still differ
+the two paths make different topology, not different names: the sequential regen keeps the
+imprints of tools flush on one plane (the arms of a circular pattern on a rod's end face), the
+n-ary merges them. Full
 agreement needs names defined against the original tool faces (Kripac's graph, or carrying each
 face's origin through booleans).
 

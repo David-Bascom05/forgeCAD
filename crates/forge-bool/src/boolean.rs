@@ -156,6 +156,10 @@ pub(crate) struct Seg {
     /// The bodies the two faces belong to.
     pub(crate) sides: [Side; 2],
     pub(crate) name: Name,
+    /// The faces' pair and branch, as the name has them, and that with what each end cuts:
+    /// what new vertices are named from, whatever lies at the curve's other end.
+    pub(crate) pair: Name,
+    pub(crate) end_names: [Name; 2],
 }
 
 /// A piece of an edge in the result: part of an original edge, or a new edge.
@@ -536,15 +540,15 @@ fn plan(a: &Body, b: &Body, op: Op, scratch: &mut Scratch) -> R<Plan> {
                 curves.iter().filter(|c| c.1 == Contact::Crossing).count() > 1,
                 branches_meet(&curves),
             ];
-            for (ci, (curve, contact)) in curves.into_iter().enumerate() {
+            let pair_first = segs.len();
+            for (curve, contact) in curves {
                 // surfaces that only touch along a curve cross nowhere: no face splits there
                 if contact == Contact::Touching {
                     continue;
                 }
                 let pair_name = root
                     .with_str("cut")
-                    .with_set(&[a.face(fa).name, b.face(fb).name])
-                    .with(ci as u64);
+                    .with_set(&[a.face(fa).name.whole(), b.face(fb).name.whole()]);
                 trim(
                     bodies,
                     [&index[0], &index[1]],
@@ -558,6 +562,13 @@ fn plan(a: &Body, b: &Body, op: Op, scratch: &mut Scratch) -> R<Plan> {
                     &mut imprints,
                 )?;
             }
+            // the first face by whole, so either order of the pair ranks alike
+            let first = if a.face(fa).name.whole() <= b.face(fb).name.whole() {
+                &a.face(fa).surface
+            } else {
+                &b.face(fb).surface
+            };
+            crate::boolean::rank_pair(&mut segs[pair_first..], &|| crate::boolean::surface_frame(first));
         }
     }
 
@@ -609,14 +620,21 @@ fn plan(a: &Body, b: &Body, op: Op, scratch: &mut Scratch) -> R<Plan> {
     // 3: vertices for the cuts, then edge pieces
     lap(&mut clock, 1);
     let (cut_vertex, mut new_points, alias) = place_cuts(&bodies, &cuts)?;
-    let cut_edges = cuts
-        .iter()
-        .zip(&cut_vertex)
-        .filter_map(|(c, &k)| match (k, c.on.edge()) {
-            (VKey::New(i), Some((sd, e))) => Some((i, bodies[sd].edge(e).name)),
-            _ => None,
-        });
-    let mut vnames = vertex_names(&new_points, curve_ends(&segs, &cut_vertex), cut_edges, root);
+    let mut marks = curve_ends(&segs, &cut_vertex);
+    let mut ended = vec![false; new_points.len()];
+    for m in &marks {
+        ended[m.0 as usize] = true;
+    }
+    for (c, &k) in cuts.iter().zip(&cut_vertex) {
+        if let VKey::New(i) = k
+            && !ended[i as usize]
+            && let Some((sd, e)) = c.on.edge()
+        {
+            let n = bodies[sd].edge(e).name.whole();
+            marks.push((i, n, n));
+        }
+    }
+    let mut vnames = vertex_names(&new_points, marks, root);
     // closed new edges' own vertices (added after the cuts' below)
     vnames.extend(segs.iter().map(|s| s.name.with_str("seam")));
     // cut points of one vertex differ by up to their tolerance: a new vertex settles on the point
@@ -1876,6 +1894,7 @@ pub(crate) fn trim(
     // the same point found on two edges (a vertex, or both faces' boundaries) is one cut; a
     // curve coming back to a point it passed (a branch crossing itself where the surfaces touch)
     // meets it again, a cut each time
+    let found = ts.len();
     ts.dedup_by(|x, y| {
         let (a, b) = (&cuts[x.1], &cuts[y.1]);
         let reach = a.tol.max(b.tol);
@@ -1892,6 +1911,7 @@ pub(crate) fn trim(
             ts.pop();
         }
     }
+    let merged = ts.len() < found;
     // such a loop from a point back to it gets a vertex half way: an edge ending where it starts
     // is a whole period of its curve or nothing
     let loops: Vec<f64> = (0..ts.len())
@@ -2025,6 +2045,8 @@ pub(crate) fn trim(
                 faces,
                 sides,
                 name,
+                pair: name,
+                end_names: [Name::NONE; 2],
             });
         }
         return Ok(());
@@ -2048,146 +2070,233 @@ pub(crate) fn trim(
                 faces,
                 sides,
                 name,
+                pair: name,
+                end_names: [Name::NONE; 2],
             });
         }
     }
-    // a piece of the curve is named by the edges it runs between, not its place along the curve;
-    // a seam says nothing about the piece (it lies where the surface's parameters start), so it
-    // names nothing. Pieces between the same edges go in order along the way they spread most.
-    // A free cut has no edge: it is named by its rank among the curve's free cuts
-    let free: Vec<usize> = ts
-        .iter()
-        .map(|x| x.1)
-        .filter(|&i| cuts[i].on == CutOn::Free)
-        .collect();
-    let edge_name = |i: usize| match cuts[i].on {
-        CutOn::Edge(sd, e) => {
-            let body = bodies[if sides[0] == sd { 0 } else { 1 }];
-            let mut faces = body.edge(e).coedges.iter().map(|&c| body.coedge_face(c));
-            let first = faces.next();
-            if faces.all(|f| Some(f) == first) {
-                Name::NONE
-            } else {
-                // the edge it is, or is a piece of: earlier splits (which the n-ary boolean never
-                // sees) do not change it
-                body.edge(e).name.whole()
-            }
+    // a piece of the curve is named by the edges it runs between (either way round), not its
+    // place along the curve; pieces of the pair alike are ranked later (`rank_pair`)
+    let free = name.with_str("free");
+    let one = |i: usize| match cuts[i].on {
+        CutOn::Edge(sd, e) => bodies[if sides[0] == sd { 0 } else { 1 }].edge(e).name.whole(),
+        CutOn::Free => free,
+    };
+    // where the curve crosses several edges at once (a vertex, or edges of both faces), by all
+    // of them: which of the cuts there ends the piece is chance
+    let edge_name = |i: usize| {
+        let near = |j: usize| j != i && cuts[j].point.distance(cuts[i].point) <= cuts[i].tol.max(cuts[j].tol);
+        // (only where cuts were found to be one)
+        if !merged || !(first..cuts.len()).any(near) {
+            return one(i);
         }
-        CutOn::Free => {
-            let rank = free.iter().position(|&j| j == i).unwrap_or(free.len());
-            name.with_str("free").with(rank as u64)
-        }
+        Name::NONE.with_set(
+            &(first..cuts.len())
+                .filter(|&j| j == i || near(j))
+                .map(one)
+                .collect::<Vec<_>>(),
+        )
     };
     for sg in &mut segs[first_seg..] {
         let (i0, i1) = sg.ends.expect("an open piece");
-        sg.name = name.with_name(edge_name(i0)).with_name(edge_name(i1));
-    }
-    let new = &mut segs[first_seg..];
-    if new.len() == 1 {
-        new[0].name = new[0].name.with(0);
-    } else if new.len() > 1 {
-        let mut done = vec![false; new.len()];
-        for j in 0..new.len() {
-            if done[j] {
-                continue;
-            }
-            let key = new[j].name;
-            let same: Vec<usize> = (j..new.len()).filter(|&k| new[k].name == key).collect();
-            let pts: Vec<Point3> = match same.len() {
-                1 => Vec::new(),
-                _ => same
-                    .iter()
-                    .map(|&k| new[k].curve.eval(new[k].range.mid()))
-                    .collect(),
-            };
-            for (w, &k) in same.iter().enumerate() {
-                let rank = if same.len() == 1 { 0 } else { spread_rank(&pts, w) };
-                new[k].name = key.with(rank as u64);
-                done[k] = true;
-            }
-        }
+        let (a, b) = (edge_name(i0), edge_name(i1));
+        sg.name = name.with(0x5e7).with_name(a.min(b)).with_name(a.max(b));
+        sg.end_names = [name.with_name(a), name.with_name(b)];
     }
     Ok(())
 }
 
-/// Where point `i` of `pts` comes in order along the axis they spread most along: an order no
-/// small move changes, unlike one along an axis they barely differ in.
-pub(crate) fn spread_rank(pts: &[Point3], i: usize) -> usize {
-    let b = forge_math::Box3::from_points(pts.iter().copied());
-    let (dx, dy, dz) = (b.x.width(), b.y.width(), b.z.width());
-    let along = |p: &Point3| {
-        if dx >= dy && dx >= dz {
-            p.x
-        } else if dy >= dz {
-            p.y
-        } else {
-            p.z
-        }
+/// The pieces of one face pair's intersection (all its branches) that the edges they run
+/// between do not tell apart, told apart by where they lie in `frame`, the pair's first face's
+/// surface frame: the part's own, so turning or moving the part, or rounding, keeps the order.
+pub(crate) fn rank_pair(segs: &mut [Seg], frame: &dyn Fn() -> forge_math::Frame) {
+    let n = segs.len();
+    if !(0..n).any(|i| (i + 1..n).any(|j| segs[i].name == segs[j].name)) {
+        return;
+    }
+    let frame = frame();
+    let mut by_name: Vec<(Name, usize)> = segs.iter().enumerate().map(|(i, sg)| (sg.name, i)).collect();
+    by_name.sort_unstable();
+    // a closed curve by its samples' mean, wherever its parameter starts
+    let at = |sg: &Seg| {
+        let p = match sg.ends {
+            Some(_) => sg.curve.eval(sg.range.mid()),
+            None => {
+                let sum = (0..8).fold(forge_math::Vec3::ZERO, |s, k| {
+                    s + sg
+                        .curve
+                        .eval(sg.range.lo + sg.range.width() * k as f64 / 8.0)
+                        .to_vec()
+                });
+                Point3::ORIGIN + sum * 0.125
+            }
+        };
+        frame.point_to_local(p)
     };
-    let t = along(&pts[i]);
-    pts.iter()
-        .enumerate()
-        .filter(|&(k, p)| along(p) < t || (along(p) == t && k < i))
-        .count()
-}
-
-/// The new curve pieces ending at each new vertex, each with which end: (point, name).
-pub(crate) fn curve_ends<'a>(
-    segs: &'a [Seg],
-    cut_vertex: &'a [VKey],
-) -> impl Iterator<Item = (u32, Name)> + 'a {
-    segs.iter().flat_map(move |sg| {
-        let ends = sg.ends.map(|(i0, i1)| [(cut_vertex[i0], 0), (cut_vertex[i1], 1)]);
-        ends.into_iter().flatten().filter_map(move |(k, end)| match k {
-            VKey::New(i) => Some((i, Name(sg.name.0 ^ end))),
-            VKey::Old(..) => None,
-        })
-    })
-}
-
-/// Names for new vertices from what meets there, not from the order they were found in: the
-/// curve pieces ending there (`ends`: point, name), else the least-named edge cut there
-/// (`cut`). Points that match are told apart by where they lie (`spread_rank`).
-pub(crate) fn vertex_names(
-    points: &[Point3],
-    ends: impl Iterator<Item = (u32, Name)>,
-    cut: impl Iterator<Item = (u32, Name)>,
-    root: Name,
-) -> Vec<Name> {
-    let n = points.len();
-    // a sum: no sort, and any order of finding gives the same key
-    let mut sum = vec![0u64; n];
-    let mut ended = vec![false; n];
-    for (i, m) in ends {
-        sum[i as usize] = sum[i as usize].wrapping_add(Name::NONE.with(m.0).0);
-        ended[i as usize] = true;
-    }
-    let mut least = vec![u64::MAX; n];
-    for (i, m) in cut {
-        least[i as usize] = least[i as usize].min(m.0);
-    }
-    let mut keys: Vec<(u64, u32)> = (0..n)
-        .map(|i| (if ended[i] { sum[i] } else { least[i] }, i as u32))
-        .collect();
-    keys.sort_unstable();
-    let root = root.with_str("vertex");
-    let mut out = vec![Name::NONE; n];
-    let mut at = 0;
-    while at < n {
-        let mut end = at + 1;
-        while end < n && keys[end].0 == keys[at].0 {
-            end += 1;
+    for group in by_name.chunk_by(|a, b| a.0 == b.0).filter(|g| g.len() > 1) {
+        if let [(_, i), (_, j)] = *group {
+            let later = if ranked_pair(at(&segs[i]), at(&segs[j])) {
+                j
+            } else {
+                i
+            };
+            segs[later].name = segs[later].name.with(1);
+            continue;
         }
-        let run = &keys[at..end];
-        if let [(key, i)] = run {
-            out[*i as usize] = root.with(*key).with(0);
-        } else {
-            let pts: Vec<Point3> = run.iter().map(|k| points[k.1 as usize]).collect();
-            for (j, &(key, i)) in run.iter().enumerate() {
-                out[i as usize] = root.with(key).with(spread_rank(&pts, j) as u64);
+        let pts: Vec<Point3> = group.iter().map(|x| at(&segs[x.1])).collect();
+        for (x, r) in group.iter().zip(ranked(&pts)) {
+            if r > 0 {
+                segs[x.1].name = segs[x.1].name.with(r);
             }
         }
-        at = end;
+    }
+}
+
+/// Whether `p` comes before `q` as `ranked` orders the two.
+fn ranked_pair(p: Point3, q: Point3) -> bool {
+    let d = [q.x - p.x, q.y - p.y, q.z - p.z];
+    let k = (0..3)
+        .max_by(|&a, &b| d[a].abs().total_cmp(&d[b].abs()))
+        .unwrap_or(0);
+    d[k] > 0.0
+}
+
+/// Each point's rank among `pts`, along the axis they spread furthest on (then the next):
+/// points that sit nearly level on one axis are not ordered by noise on it.
+pub fn ranked(pts: &[Point3]) -> Vec<u64> {
+    if pts.len() < 2 {
+        return vec![0; pts.len()];
+    }
+    let coord = |p: Point3, k: usize| [p.x, p.y, p.z][k];
+    let spread = |k: usize| {
+        let (lo, hi) = pts
+            .iter()
+            .fold((f64::INFINITY, f64::NEG_INFINITY), |(lo, hi), &p| {
+                (lo.min(coord(p, k)), hi.max(coord(p, k)))
+            });
+        hi - lo
+    };
+    let mut axes = [0usize, 1, 2];
+    axes.sort_by(|&a, &b| spread(b).total_cmp(&spread(a)));
+    let near = |a: f64, b: f64| (a - b).abs() <= 1e-6 * (1.0 + a.abs().max(b.abs()));
+    let less = |p: Point3, q: Point3| {
+        for &k in &axes {
+            let (a, b) = (coord(p, k), coord(q, k));
+            if !near(a, b) {
+                return a < b;
+            }
+        }
+        false
+    };
+    pts.iter()
+        .map(|&p| pts.iter().filter(|&&q| less(q, p)).count() as u64)
+        .collect()
+}
+
+/// The surface's own frame: where ties among what it holds are broken.
+pub fn surface_frame(s: &Surface) -> forge_math::Frame {
+    match s {
+        Surface::Plane(p) => p.frame,
+        Surface::Cylinder(c) => c.frame,
+        Surface::Cone(c) => c.frame,
+        Surface::Sphere(c) => c.frame,
+        Surface::Torus(c) => c.frame,
+        Surface::Procedural(_) => forge_math::Frame::WORLD,
+    }
+}
+
+/// What meets at each new vertex where a curve piece ends: the piece's faces and what it cuts
+/// there. (point, name)
+/// And for vertices those leave alike, the pieces themselves, with which end.
+pub(crate) fn curve_ends(segs: &[Seg], cut_vertex: &[VKey]) -> Vec<(u32, Name, Name)> {
+    let mut out = Vec::with_capacity(2 * segs.len());
+    for sg in segs {
+        let Some((i0, i1)) = sg.ends else { continue };
+        for (k, end) in [(cut_vertex[i0], 0), (cut_vertex[i1], 1)] {
+            if let VKey::New(i) = k {
+                out.push((i, sg.end_names[end], sg.name.with(end as u64)));
+            }
+        }
+    }
+    out
+}
+
+/// Names for new vertices from what meets there (`marks`: point and name: the curve pieces
+/// ending there, else the edges cut), not from the order they were found in. Points where the
+/// same ones meet are told apart by where they lie.
+pub(crate) fn vertex_names(points: &[Point3], marks: Vec<(u32, Name, Name)>, root: Name) -> Vec<Name> {
+    let n = points.len();
+    // grouped by point (a counting sort), each group's names in order
+    let mut start = vec![0usize; n + 1];
+    for m in &marks {
+        start[m.0 as usize + 1] += 1;
+    }
+    for i in 0..n {
+        start[i + 1] += start[i];
+    }
+    let mut fill = start.clone();
+    let mut by_point = vec![(Name::NONE, Name::NONE); marks.len()];
+    for m in marks {
+        by_point[fill[m.0 as usize]] = (m.1, m.2);
+        fill[m.0 as usize] += 1;
+    }
+    let root = root.with_str("vertex");
+    // a cheap mix: there are many of these, and the names mixed are hashes already
+    let mix = |names: &mut dyn Iterator<Item = Name>| {
+        let (mut key, mut last) = (root.0, None);
+        for x in names {
+            if last != Some(x) {
+                key = (key ^ x.0).wrapping_mul(0x9e37_79b9_7f4a_7c15);
+                key ^= key >> 29;
+            }
+            last = Some(x);
+        }
+        Name(key)
+    };
+    let keys: Vec<Name> = (0..n)
+        .map(|i| {
+            let group = &mut by_point[start[i]..start[i + 1]];
+            group.sort_unstable_by_key(|g| g.0);
+            mix(&mut group.iter().map(|g| g.0))
+        })
+        .collect();
+    let mut order: Vec<usize> = (0..n).collect();
+    order.sort_unstable_by_key(|&i| (keys[i], i));
+    let mut out = vec![Name::NONE; n];
+    for group in order.chunk_by(|&i, &j| keys[i] == keys[j]) {
+        if let [i] = group {
+            out[*i] = keys[*i].with(0);
+            continue;
+        }
+        // vertices alike are told apart by their marks' second names, then by where they lie,
+        // along the way they spread most
+        let mut second = |i: usize| {
+            let marks = &mut by_point[start[i]..start[i + 1]];
+            marks.sort_unstable_by_key(|g| g.1);
+            mix(&mut marks.iter().map(|g| g.1))
+        };
+        if let [i, j] = *group {
+            let (a, b) = (second(i), second(j));
+            let first = if a != b {
+                a < b
+            } else {
+                !ranked_pair(points[j], points[i])
+            };
+            let (lo, hi) = if first { (i, j) } else { (j, i) };
+            out[lo] = keys[lo].with(0);
+            out[hi] = keys[hi].with(1);
+            continue;
+        }
+        let mut by_second: Vec<(Name, usize)> = group.iter().map(|&i| (second(i), i)).collect();
+        by_second.sort_unstable();
+        let mut rank = 0u64;
+        for sub in by_second.chunk_by(|a, b| a.0 == b.0) {
+            let pts: Vec<Point3> = sub.iter().map(|x| points[x.1]).collect();
+            for (x, r) in sub.iter().zip(ranked(&pts)) {
+                out[x.1] = keys[x.1].with(rank + r);
+            }
+            rank += sub.len() as u64;
+        }
     }
     out
 }
