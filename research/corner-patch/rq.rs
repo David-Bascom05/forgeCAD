@@ -151,6 +151,14 @@ fn main() {
                     "build" => {
                         let _ = forge_geom::corner::rational_quads(s, parity);
                     }
+                    // what a build runs: today's closing (with its fold check and split), and
+                    // the rational one cold (built and proven)
+                    "close" => {
+                        let _ = forge_geom::corner::close_hole(s.clone());
+                    }
+                    "cold" => {
+                        let _ = forge_geom::corner::close_hole_rational(s.clone());
+                    }
                     _ => {}
                 }
             }

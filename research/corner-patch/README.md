@@ -24,9 +24,11 @@ in `docs/fold-proof.md` (stages 0 to 4); this folder holds the code that produce
 - **The centre from today's patch, the old heuristic beyond 12 sides**: `rq.rs` (gap to
   today's 19% with the heuristic centre on 6 sides, 2% with today's; beyond 12 sides the
   heuristic proves more).
-- **The proof's parameters** (`CORNER_BOX` = 1/4, halves along u and v in turn, Duffy triangles
-  from their halves, phi biquadratic for plain boxes and bilinear in Duffy triangles):
-  instruction counts with `ic.sh` and test counts from `rq.rs`, trying each alternative.
+- **The proof's parameters and regions** (`CORNER_BOX` = 1/4, `blend_regions` and
+  `corner_box`: the middle whole, strips halved, Duffy triangles on each corner's eighth, halves
+  along u and v in turn, phi biquadratic for plain boxes and bilinear in Duffy triangles):
+  instruction counts with `ic.sh` and test counts from `rq.rs`, trying each alternative
+  (docs/fold-proof.md stage 4 lists the ones dropped).
 - **`HolePatch::min_radius` is zero round a kinked corner**: `kmin.rs` (dense 300 x 300
   curvature sampling of the fillet corpus' corner patches).
 - **The stage 1 n-gon rational patch** (superseded by the quads, kept in the record):
@@ -44,7 +46,8 @@ fbuild cargo build --release -p forge-ops --example rq
                                         # (EDGES 3..5) or EDGES 6..10 on their own; PLAN picks
                                         # the way spokes leave for the per-quad measurements
 # env: NOSHAPE=1 (skip shape), PER=1 (per hole), FOLDS=1, KLOC=1 (curvature peaks),
-#      PROJ=1 (projection failures), PROOFONLY=2 (proof timing), COUNT=today|build|proof
+#      PROJ=1 (projection failures), PROOFONLY=2 (proof timing),
+#      COUNT=today|build|proof|close|cold (close: today's close_hole; cold: close_hole_rational)
 sh research/corner-patch/ic.sh proof 3  # instructions per hole for one kind of work
 
 cp research/corner-patch/sharp.rs crates/forge-ops/examples/

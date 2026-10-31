@@ -624,7 +624,7 @@ fn tensor(sides: &[RSide]) -> ([Bp; 3], Bp) {
 }
 
 /// Room for the coefficients of a Duffy triangle's polynomials.
-const CAP: usize = (2 * DEG + 1) * (DEG + 3);
+const CAP: usize = (2 * DEG) * (DEG + 2);
 
 /// A polynomial over [0, 1]^2 in tensor Bernstein form, each coefficient within `e` of the true
 /// one (the rounding of its construction).
@@ -682,6 +682,33 @@ impl Bp {
         }
         // convex combinations: a few roundings per level
         let e = self.e + (deg as f64 + 1.0) * 4.0 * U * self.big();
+        (l.e, r.e) = (e, e);
+        (l, r)
+    }
+    /// Both halves along u (or v) in one pass, each as `half` computes it.
+    fn halves(&self, along_u: bool) -> (Bp, Bp) {
+        let (m, n) = (self.m, self.n);
+        let (mut l, mut r) = (*self, *self);
+        let (deg, lines, step, stride) = if along_u {
+            (m, n + 1, n + 1, 1)
+        } else {
+            (n, m + 1, 1, n + 1)
+        };
+        let mut col = [0.0; 2 * DEG + 2];
+        for line in 0..lines {
+            let base = line * stride;
+            for k in 0..=deg {
+                col[k] = self.c[base + k * step];
+            }
+            for lev in 1..=deg {
+                for i in 0..=deg - lev {
+                    col[i] = 0.5 * (col[i] + col[i + 1]);
+                }
+                l.c[base + lev * step] = col[0];
+                r.c[base + (deg - lev) * step] = col[deg - lev];
+            }
+        }
+        let e = self.e + (deg as f64 + 1.0) * 2.0 * U * self.big();
         (l.e, r.e) = (e, e);
         (l, r)
     }
@@ -771,16 +798,17 @@ impl Bp {
     fn duffy(&self) -> Bp {
         let (m, n) = (self.m, self.n);
         debug_assert!(m == DEG && n == DEG);
-        static T: OnceLock<Vec<(u16, u16, f64)>> = OnceLock::new();
+        // the weight of coefficient (i, j) in (i + k, l), by [i][k][j][l]
+        type Table = [[[[f64; DEG + 1]; DEG + 1]; DEG + 1]; DEG + 1];
+        static T: OnceLock<Box<Table>> = OnceLock::new();
         let table = T.get_or_init(|| {
-            let mut t = Vec::new();
+            let mut t = Box::new([[[[0.0; DEG + 1]; DEG + 1]; DEG + 1]; DEG + 1]);
             for i in 0..=DEG {
                 for j in 0..=DEG {
                     for k in j..=DEG {
                         let a = binom(DEG, i) * binom(DEG, k) / binom(2 * DEG, i + k) * binom(k, j);
                         for l in j..=j + DEG - k {
-                            let w = a * binom(DEG - k, l - j) / binom(DEG, l);
-                            t.push(((i * (DEG + 1) + j) as u16, ((i + k) * (DEG + 1) + l) as u16, w));
+                            t[i][k][j][l] = a * binom(DEG - k, l - j) / binom(DEG, l);
                         }
                     }
                 }
@@ -788,8 +816,18 @@ impl Bp {
             t
         });
         let mut out = Bp::zero(m + n, n);
-        for &(src, dst, w) in table {
-            out.c[dst as usize] += self.c[src as usize] * w;
+        // for each output coefficient the terms add by rising i, then j, as the sparse sum did
+        for i in 0..=DEG {
+            for k in 0..=DEG {
+                let dst = &mut out.c[(i + k) * (DEG + 1)..(i + k + 1) * (DEG + 1)];
+                for j in 0..=k {
+                    let c = self.c[i * (DEG + 1) + j];
+                    let w = &table[i][k][j];
+                    for l in j..=j + DEG - k {
+                        dst[l] += c * w[l];
+                    }
+                }
+            }
         }
         out.e = self.e + ((m + 1) * (n + 1) + 8) as f64 * 4.0 * U * self.big();
         out
@@ -849,21 +887,25 @@ impl Bp {
         let (mo, no) = (m + a, n + b);
         let mut out = Bp::zero(mo, no);
         let w = no + 1;
-        let mut fs = [0.0; 9];
+        let mut fs = [[0.0; 3]; 3];
         for p in 0..=a {
             for q in 0..=b {
-                fs[p * (b + 1) + q] = f[p * (b + 1) + q] * BINOM[a][p] * BINOM[b][q];
+                fs[p][q] = f[p * (b + 1) + q] * BINOM[a][p] * BINOM[b][q];
             }
         }
+        let mut row = [0.0; 2 * DEG + 2];
         for i in 0..=m {
             let ri = BINOM[m][i];
             for j in 0..=n {
-                let c = self.c[i * (n + 1) + j] * ri * BINOM[n][j];
-                for p in 0..=a {
-                    let row = (i + p) * w + j;
-                    let fr = &fs[p * (b + 1)..(p + 1) * (b + 1)];
-                    for (q, &fq) in fr.iter().enumerate() {
-                        out.c[row + q] += c * fq;
+                row[j] = self.c[i * (n + 1) + j] * ri * BINOM[n][j];
+            }
+            for p in 0..=a {
+                let dst = &mut out.c[(i + p) * w..(i + p + 1) * w];
+                // q falling, so each coefficient sums its terms by rising j
+                for q in (0..=b).rev() {
+                    let fq = fs[p][q];
+                    for (d, &x) in dst[q..=q + n].iter_mut().zip(&row[..=n]) {
+                        *d += x * fq;
                     }
                 }
             }
@@ -887,7 +929,12 @@ impl Bp {
 /// control points Y_ij / W_ij reach from the origin and a bound on their rounding: P - q lies
 /// in their hull. All W_ij must be positive.
 struct About {
-    y: [Bp; 3],
+    /// Y's coefficients.
+    ys: [Vec3; CAP],
+    /// Each coefficient of Y within this of the true one, plus a rounding of the largest.
+    ye: f64,
+    /// The control points.
+    pts: [Vec3; CAP],
     reach: f64,
     blur: f64,
 }
@@ -896,30 +943,44 @@ impl About {
     fn of(x: &[Bp; 3], w: &Bp) -> About {
         let len = w.len();
         let sw: f64 = w.c[..len].iter().sum();
-        let mut y = *x;
-        for k in 0..3 {
-            let q = x[k].c[..len].iter().sum::<f64>() / sw;
-            y[k] = x[k].sub_scaled(w, q);
-        }
-        let ey = y.iter().map(|p| p.e).fold(0.0, f64::max) * 1.8;
+        let q: [f64; 3] = std::array::from_fn(|k| x[k].c[..len].iter().sum::<f64>() / sw);
+        let (mut ys, mut pts) = ([Vec3::ZERO; CAP], [Vec3::ZERO; CAP]);
         let (mut r2, mut wmin) = (0.0f64, f64::INFINITY);
-        for k in 0..len {
-            let v = Vec3::new(y[0].c[k], y[1].c[k], y[2].c[k]) / w.c[k];
+        let mut big = [0.0f64; 3];
+        for i in 0..len {
+            let y: [f64; 3] = std::array::from_fn(|k| x[k].c[i] - q[k] * w.c[i]);
+            for k in 0..3 {
+                big[k] = big[k].max(y[k].abs());
+            }
+            ys[i] = Vec3::new(y[0], y[1], y[2]);
+            let v = ys[i] / w.c[i];
+            pts[i] = v;
             r2 = r2.max(v.length_sq());
-            wmin = wmin.min(w.c[k]);
+            wmin = wmin.min(w.c[i]);
         }
+        // as Bp::sub_scaled bounds Y's rounding
+        let (we, wb) = (w.e, w.big());
+        let e: [f64; 3] =
+            std::array::from_fn(|k| x[k].e + q[k].abs() * we + 3.0 * U * (x[k].big() + q[k].abs() * wb));
+        let ey = e.iter().fold(0.0f64, |a, &b| a.max(b)) * 1.8;
+        let ye = (0..3).map(|k| e[k] + U * big[k]).fold(0.0, f64::max);
         let reach = r2.sqrt() * (1.0 + 4.0 * U);
         // v / w against the true ratio: v and w each off by their rounding
-        let blur = (ey + reach * (w.e + 2.0 * U * wmin)) / (wmin - w.e);
-        About { y, reach, blur }
+        let blur = (ey + reach * (we + 2.0 * U * wmin)) / (wmin - we);
+        About {
+            ys,
+            ye,
+            pts,
+            reach,
+            blur,
+        }
     }
 
     /// The sum of the coefficients of d/du (or d/dv) of Y: the rows' (columns') ends.
-    fn axis(&self, along_u: bool) -> Vec3 {
-        let y = &self.y;
-        let (m, n) = (y[0].m, y[0].n);
+    fn axis(&self, w: &Bp, along_u: bool) -> Vec3 {
+        let (m, n) = (w.m, w.n);
         let mut s = Vec3::ZERO;
-        let at = |i: usize, j: usize| Vec3::new(y[0].at(i, j), y[1].at(i, j), y[2].at(i, j));
+        let at = |i: usize, j: usize| self.ys[i * (n + 1) + j];
         if along_u {
             for j in 0..=n {
                 s += at(m, j) - at(0, j);
@@ -937,13 +998,12 @@ impl About {
     /// of the angles from `axis` (unit, across n0) it can make, None when it may not be within a
     /// quarter turn of the axis.
     fn sector(&self, w: &Bp, along_u: bool, n0: Vec3, axis: Vec3) -> Option<(f64, f64)> {
-        let (y, len) = (&self.y, w.len());
+        let len = w.len();
         let side = n0.cross(axis);
-        let pt = |k: usize| Vec3::new(y[0].c[k], y[1].c[k], y[2].c[k]);
+        let pt = |k: usize| self.ys[k];
         // the control points along the axis and across it
         let (mut pl, mut ph, mut ql, mut qh) = (0.0f64, 0.0f64, 0.0f64, 0.0f64);
-        for k in 0..len {
-            let v = pt(k) / w.c[k];
+        for &v in &self.pts[..len] {
             let (p, q) = (axis.dot(v), side.dot(v));
             (pl, ph, ql, qh) = (pl.min(p), ph.max(p), ql.min(q), qh.max(q));
         }
@@ -951,7 +1011,7 @@ impl About {
         let deg = if along_u { m } else { n } as f64;
         // each difference of two coefficients, times the degree; the weights' rounding times
         // the points' reach; the points' rounding times the weights
-        let e = y.iter().map(|p| p.e + U * p.big()).fold(0.0, f64::max) * 2.0 * deg * 1.8
+        let e = self.ye * 2.0 * deg * 1.8
             + (w.e + U * w.big()) * 2.0 * deg * (self.reach + self.blur)
             + self.blur * w.big() * 2.0 * deg;
         let (ri, rj, step) = if along_u { (m, n + 1, n + 1) } else { (m + 1, n, 1) };
@@ -1024,7 +1084,7 @@ impl Quad {
     }
 
     fn prove_all(&self, st: &mut Proof) -> bool {
-        self.prove_zones(st) && self.blend_box(&self.num, &self.den, (0.0, 0.0, 1.0), st)
+        self.prove_zones(st) && self.blend_regions(st)
     }
 
     fn prove_zones(&self, st: &mut Proof) -> bool {
@@ -1044,7 +1104,7 @@ impl Quad {
                 let w = part(&rw);
                 let n: [Bp; 3] = std::array::from_fn(|k| part(&rn[k].sub_scaled(&rw, [pc.x, pc.y, pc.z][k])));
                 st.regions += 1;
-                if !plain_region(&n, &w, 0, st) {
+                if !plain_region(&n, &w, true, 0, st) {
                     return false;
                 }
             }
@@ -1058,27 +1118,37 @@ impl Quad {
         Vec3::new(a[0].0[0], a[1].0[0], a[2].0[0])
     }
 
-    /// The blend over the box at (u0, v0) of this size: quarters while it holds a corner of
-    /// the square, until the corner's box is small enough for two Duffy triangles.
-    fn blend_box(&self, n: &[Bp; 3], w: &Bp, (u0, v0, size): (f64, f64, f64), st: &mut Proof) -> bool {
-        let holds = |c: usize| {
-            let (cu, cv) = ([0.0, 1.0, 1.0, 0.0][c], [0.0, 0.0, 1.0, 1.0][c]);
-            (u0..=u0 + size).contains(&cu) && (v0..=v0 + size).contains(&cv)
+    /// The blend over the square cut at 1/4 and 3/4 both ways: the box round each corner, the
+    /// strips between them along the sides, and the middle (measured: research/corner-patch).
+    fn blend_regions(&self, st: &mut Proof) -> bool {
+        let cut = |p: &Bp, along_u: bool, k: usize| match k {
+            0 => p.split(along_u, CORNER_BOX).0,
+            1 => p.restrict(along_u, CORNER_BOX, 1.0 - CORNER_BOX),
+            _ => p.split(along_u, (1.0 - CORNER_BOX).next_down()).1,
         };
-        let corner = (0..4).find(|&c| holds(c));
-        if corner.is_none() {
-            st.regions += 1;
-            return plain_box(n, w, st);
-        }
-        if size > CORNER_BOX {
-            let h = 0.5 * size;
-            return (0..4).all(|q| {
-                let part = |p: &Bp| p.half(true, q / 2).half(false, q % 2);
-                let at = (u0 + h * (q / 2) as f64, v0 + h * (q % 2) as f64, h);
-                self.blend_box(&[part(&n[0]), part(&n[1]), part(&n[2])], &part(w), at, st)
-            });
-        }
-        let c = corner.unwrap();
+        (0..3).all(|a| {
+            let (nu, wu) = (self.num.map(|p| cut(&p, true, a)), cut(&self.den, true, a));
+            (0..3).all(|b| {
+                let (n, w) = (nu.map(|p| cut(&p, false, b)), cut(&wu, false, b));
+                if a != 1 && b != 1 {
+                    let c = [[0, 3], [1, 2]][a / 2][b / 2];
+                    return self.corner_box(c, &n, &w, st);
+                }
+                if a == 1 && b == 1 {
+                    st.regions += 1;
+                    return plain_box(&n, &w, true, st);
+                }
+                // a strip between two corners' boxes: its halves (they rarely pass whole)
+                let (hn, hw) = (n.map(|x| x.halves(a == 1)), w.halves(a == 1));
+                st.regions += 2;
+                plain_box(&hn.map(|x| x.0), &hw.0, true, st) && plain_box(&hn.map(|x| x.1), &hw.1, true, st)
+            })
+        })
+    }
+
+    /// The box round corner c (N and W over it): its quarter at the corner in two Duffy
+    /// triangles (whole, they nearly always pass at that size), the other three quarters plain.
+    fn corner_box(&self, c: usize, n: &[Bp; 3], w: &Bp, st: &mut Proof) -> bool {
         // the corner to the origin, N about it: N - p_c W = sigma^3 G and W = sigma^2 W~ in
         // either triangle (every weight has u^2 or v^2, and the ribbons meet at p_c)
         let pc = self.corner(c);
@@ -1089,6 +1159,17 @@ impl Quad {
         };
         let w = turn(w);
         let n: [Bp; 3] = std::array::from_fn(|k| turn(&n[k]).sub_scaled(&w, [pc.x, pc.y, pc.z][k]));
+        let (nu, wu) = (n.map(|p| p.halves(true)), w.halves(true));
+        let (n0, w0) = (nu.map(|p| p.0.halves(false)), wu.0.halves(false));
+        let (n1, w1) = (nu.map(|p| p.1.halves(false)), wu.1.halves(false));
+        st.regions += 3;
+        if !(plain_box(&n0.map(|p| p.1), &w0.1, true, st)
+            && plain_box(&n1.map(|p| p.0), &w1.0, true, st)
+            && plain_box(&n1.map(|p| p.1), &w1.1, true, st))
+        {
+            return false;
+        }
+        let (n, w) = (n0.map(|p| p.0), w0.0);
         (0..2).all(|tri| {
             let t = |p: &Bp| if tri == 0 { *p } else { p.transpose() };
             let g: [Bp; 3] = std::array::from_fn(|k| t(&n[k]).duffy().div_rows(3));
@@ -1159,7 +1240,7 @@ fn separated(x1: &[Bp; 3], x2: Option<&[Bp; 3]>, w: &Bp) -> bool {
     let a1 = About::of(x1, w);
     let a2 = x2.map(|x2| About::of(x2, w));
     let a2 = a2.as_ref().unwrap_or(&a1);
-    let (sx, sy) = (a1.axis(true), a2.axis(false));
+    let (sx, sy) = (a1.axis(w, true), a2.axis(w, false));
     let Some(n0) = sx.cross(sy).normalize() else {
         return false;
     };
@@ -1233,25 +1314,27 @@ fn times(x: &Bp, phi: &(usize, Vec<f64>)) -> Bp {
 }
 
 /// P = N / W regular over the box; boxes that fail are split in four.
-fn plain_box(n: &[Bp; 3], w: &Bp, st: &mut Proof) -> bool {
+fn plain_box(n: &[Bp; 3], w: &Bp, first_u: bool, st: &mut Proof) -> bool {
     let Some(phi) = normal_phi(w, 2) else {
         return false;
     };
-    plain_region(&n.map(|p| times(&p, &phi)), &times(w, &phi), 0, st)
+    plain_region(&n.map(|p| times(&p, &phi)), &times(w, &phi), first_u, 0, st)
 }
 
-fn plain_region(n: &[Bp; 3], w: &Bp, depth: u32, st: &mut Proof) -> bool {
+fn plain_region(n: &[Bp; 3], w: &Bp, first_u: bool, depth: u32, st: &mut Proof) -> bool {
     st.tests += 1;
     st.depth = st.depth.max(depth);
     if separated(n, None, w) {
         return true;
     }
     // halves, along u and v in turn
-    depth < MAX_DEPTH
-        && (0..2).all(|h| {
-            let p = |x: &Bp| x.half(depth.is_multiple_of(2), h);
-            plain_region(&n.map(|x| p(&x)), &p(w), depth + 1, st)
-        })
+    if depth >= MAX_DEPTH {
+        return false;
+    }
+    let u = depth.is_multiple_of(2) == first_u;
+    let (hn, hw) = (n.map(|x| x.halves(u)), w.halves(u));
+    plain_region(&hn.map(|x| x.0), &hw.0, first_u, depth + 1, st)
+        && plain_region(&hn.map(|x| x.1), &hw.1, first_u, depth + 1, st)
 }
 
 /// A corner's Duffy triangle (x = sigma, y = sigma t, sigma in `sig`, start and width) where
@@ -1259,8 +1342,7 @@ fn plain_region(n: &[Bp; 3], w: &Bp, depth: u32, st: &mut Proof) -> bool {
 /// (P - p_c) / sigma = G / W~, so the cones are of W~ P_sigma (from sigma G) and
 /// W~ P_t / sigma (from G), both finite at the corner.
 fn duffy_region(g: &[Bp; 3], w: &Bp, sig: (f64, f64), depth: u32, st: &mut Proof) -> bool {
-    // the whole triangle rarely passes: start from its halves
-    if depth > 0 {
+    {
         st.tests += 1;
         st.depth = st.depth.max(depth);
         let h = g.map(|p| p.mul_affine(sig.0, sig.1));
@@ -1270,14 +1352,17 @@ fn duffy_region(g: &[Bp; 3], w: &Bp, sig: (f64, f64), depth: u32, st: &mut Proof
     }
     // halves, along sigma and t in turn
     let u = depth.is_multiple_of(2);
-    depth < MAX_DEPTH
-        && (0..2).all(|q| {
-            let p = |x: &Bp| x.half(u, q);
-            let s = if u {
-                (sig.0 + 0.5 * sig.1 * q as f64, 0.5 * sig.1)
-            } else {
-                sig
-            };
-            duffy_region(&g.map(|x| p(&x)), &p(w), s, depth + 1, st)
-        })
+    if depth >= MAX_DEPTH {
+        return false;
+    }
+    let (hg, hw) = (g.map(|x| x.halves(u)), w.halves(u));
+    let s = |q: f64| {
+        if u {
+            (sig.0 + 0.5 * sig.1 * q, 0.5 * sig.1)
+        } else {
+            sig
+        }
+    };
+    duffy_region(&hg.map(|x| x.0), &hw.0, s(0.0), depth + 1, st)
+        && duffy_region(&hg.map(|x| x.1), &hw.1, s(1.0), depth + 1, st)
 }

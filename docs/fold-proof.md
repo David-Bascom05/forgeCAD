@@ -621,16 +621,25 @@ tangents of angles, with every coefficient's rounding carried.
   multiplied by phi fitted to 1 / W (biquadratic through 9 values, bilinear in Duffy
   triangles), so W phi is nearly constant and the shift term small. Children inherit it.
   This halved the tests.
-- **Corners** (W vanishes there to second order): the box round each corner, a quarter of the
-  square's side, in two Duffy triangles x = sigma, y = sigma t. Every weight has u^2 or v^2 and
+- **Regions**: the square cut at 1/4 and 3/4 both ways. The middle box is one region (it
+  nearly always passes whole); each strip between two corners' boxes is two (whole, a strip
+  took ~4 tests); each corner's box is its eighth at the corner in Duffy triangles and the three
+  other eighths plain. Per quad that is 8 zones, 9 plain boxes, 12 plain eighths and 8 Duffy
+  triangles, each nearly always one test.
+- **Corners** (W vanishes there to second order): the eighth of the square round each corner
+  in two Duffy triangles x = sigma, y = sigma t. Every weight has u^2 or v^2 and
   the ribbons meet at the corner point p_c, so N - p_c W = sigma^3 G and W = sigma^2 W~ with the
   vanishing rows known exactly; the cones are of W~ P_sigma (from sigma G) and W~ P_t / sigma
   (from G), both finite at the corner.
 - **Corner zones**, where evaluation takes the nearest ribbon (both distances under 1e-6): each
   ribbon alone over a power-of-two box holding the zone.
-- Regions that fail are split in halves along u and v in turn (Duffy triangles start from their
-  halves). Taking P_x = P_sigma - t P_t / sigma instead cancels badly coefficient-wise (wider
-  cones); boxes round the corners larger than a quarter need more tests, not fewer.
+- Regions that fail are split in halves along u and v in turn. Taking
+  P_x = P_sigma - t P_t / sigma instead cancels badly coefficient-wise (wider cones); boxes
+  round the corners larger than a quarter need more tests, not fewer. A whole triangle of a
+  quarter box rarely passes (2.4 tests each from its halves), one of an eighth nearly always
+  (1.05 tests). Tried and dropped: bilinear phi for plain boxes (twice the tests), the strips
+  whole (+13 tests per hole), the eighths beside a corner as two boxes (+14), corner boxes of
+  an eighth with the 3 x 3 cut (strips and middle fail: 10x the tests).
 - **Cache**: results keyed on the bits of every ribbon coefficient (what the proof reads), kept
   up to 20000 entries.
 
@@ -665,12 +674,28 @@ max curvature rational/today  1.67 (5.7)   1.64 (4.4)   2.6 (147)
 today's patch has no form at all): 12 sides 38 / 40, 16 sides 30 / 40, 20 sides 22 / 40 proven;
 the rest really fold (long thin quads round one centre) and would need a second ring of quads.
 
-- **Speed.** Cold, build plus proof is 5.5x today's instructions; with the proof cached it is
+- **Speed.** Cold, build plus proof was 5.5x today's instructions; with the proof cached it is
   0.65x. The proof went from ~40 ms to ~1.3 ms (6 sides): degree 59 to 7, products to cone
-  tests, allocation-free arrays, normalised weights. The rest is per-test cost (~100 k
-  instructions: shifts, sectors and halving of 4 polynomials of ~100 coefficients each) times
-  ~40 tests per quad, half of them in the boxes next to the corner boxes, where the corner's
-  scale-free weights make the shift large.
+  tests, allocation-free arrays, normalised weights. Then (one face, `ic.sh`, instructions per
+  hole; close is today's `close_hole` with its fold check, cold is `close_hole_rational`):
+
+  ```
+  sides                     6        8        10
+  today (close)             2.82 M   4.19 M   5.43 M
+  proof, stage 4            13.5 M   18.5 M   27.1 M
+  proof now                 7.47 M   10.2 M   15.0 M
+  cold now                  8.89 M   12.2 M   17.8 M
+  cold / today              3.15     2.90     3.28
+  ```
+
+  From: both halves of a split in one pass and the phi product in contiguous rows (identical
+  arithmetic, the same proofs; 13.5 M to 9.2 M), the regions above (to 8.96 M, then 7.47 M),
+  the Duffy map as dense rows of a precomputed table (identical sums; -0.9 M), Y = X - q W
+  kept as one array of points instead of three polynomials (-0.3 M). Builds stay on today's
+  patch: the rule is within 2x. What is left: about one test per region, so the cost is the
+  regions (8 zones, 21 plain, 8 Duffy per quad) times ~70 k instructions of setup and test,
+  a fifth of it copying fixed-size coefficient arrays, and the build's seeds (13 x 13 per cell;
+  9 x 9 brings back a projection failure).
 - **Shape.** Within a few per cent of today's patch on 6 and 8 sides, but the maximum curvature
   is ~1.65x today's (peaks near the vertices the spokes leave and along the spokes). For 10
   sides today's own patch is poor (fold cosine 0.79), so the comparison is loose.
