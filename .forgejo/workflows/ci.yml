@@ -83,8 +83,8 @@ jobs:
       - name: opencascade
         run: |
           # OCP's module loads libGL even headless
-          apt-get update -qq && apt-get install -y -qq python3-venv libgl1
-          VENV="$HOME/occt" sh tools/occt/setup.sh
+          apt-get update -qq && apt-get install -y -qq python3.11 python3.11-venv libgl1
+          PYTHON=python3.11 VENV="$HOME/occt" sh tools/occt/setup.sh
       - name: export parts
         run: |
           cargo build --release -p forge-model --example oracle
