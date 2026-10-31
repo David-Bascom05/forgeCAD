@@ -1132,22 +1132,27 @@ pub fn intersect(a: &Surface, b: &Surface, region: Box3) -> Option<SurfaceSurfac
     }
     // a simple event that changes no root count is a sign flicker of the rounding; one
     // that changes it by other than two is a pair of events seen as one
+    // (a removal merges two intervals: only that one is counted again)
+    let count_in = |events: &[(f64, bool)], j: usize| {
+        let hi = if j + 1 < events.len() {
+            events[j + 1].0
+        } else {
+            events[0].0 + dmath::TAU
+        };
+        eq.count(0.5 * (events[j].0 + hi))
+    };
+    let mut counts: Vec<usize> = (0..events.len()).map(|j| count_in(&events, j)).collect();
     loop {
         let n = events.len();
-        let counts: Vec<usize> = (0..n)
-            .map(|j| {
-                let hi = if j + 1 < n {
-                    events[j + 1].0
-                } else {
-                    events[0].0 + dmath::TAU
-                };
-                eq.count(0.5 * (events[j].0 + hi))
-            })
-            .collect();
         let step = |j: usize| counts[(j + n - 1) % n].abs_diff(counts[j]);
         match (0..n).find(|&j| !events[j].1 && step(j) == 0) {
             Some(j) => {
                 events.remove(j);
+                counts.remove(j);
+                if n > 1 {
+                    let k = (j + n - 2) % (n - 1);
+                    counts[k] = count_in(&events, k);
+                }
             }
             None if (0..n).any(|j| !events[j].1 && step(j) != 2) => return None,
             None => break,
