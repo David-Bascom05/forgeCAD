@@ -11,7 +11,7 @@
 use crate::curve::{CurveDeriv, Domain1, ProcCurve, ProceduralCurve};
 use crate::ruled::{Rail, principal_max};
 use crate::screw::{fresh_id, polish, remembered};
-use crate::surface::{Domain2, Proc, Procedural, SurfDeriv, Surface};
+use crate::surface::{Domain2, Proc, Procedural, ShapeBounds, SurfDeriv, Surface};
 use forge_math::{Box2, Box3, Frame, Interval, Point2, Point3, Vec3, tol};
 use std::sync::Arc;
 
@@ -112,7 +112,7 @@ impl Spline {
         out
     }
 
-    /// Boxes of each datum's weight (`order` 0) or its derivative (1, 2) over s.
+    /// Boxes of each datum's weight (`order` 0) or its derivative (1, 2, 3) over s.
     fn weight_box(&self, s: Interval, order: usize) -> Vec<Interval> {
         let mut out = vec![Interval::EMPTY; self.data()];
         let n = self.knots.len();
@@ -138,7 +138,8 @@ impl Spline {
                         Interval::point((yj - yi) / h)
                             + ((a * a * 3.0 + (-1.0)) * (-mi) + (b * b * 3.0 + (-1.0)) * mj) * (h / 6.0)
                     }
-                    _ => a * mi + b * mj,
+                    2 => a * mi + b * mj,
+                    _ => Interval::point((mj - mi) / h),
                 };
                 *o = o.hull(&w);
             }
@@ -838,6 +839,64 @@ impl Procedural for Skinned {
     }
     fn uv_scale(&self) -> (f64, f64) {
         (self.scale.0.max(tol::LINEAR), self.scale.1.max(tol::LINEAR))
+    }
+    fn shape_bounds(&self, uv: Box2) -> Option<ShapeBounds> {
+        // S = sum w_k(v) C_k(u) + sum w_j(v) D_j over the sections C_k and end slopes D_j, so
+        // S_(u^a v^b) = sum w_k^(b) C_k^(a) (the slopes' only for a = 0); the values' weights sum
+        // to one, so for b > 0 the sum is of w_k^(b) (C_k^(a) - C_0^(a)), each difference within
+        // its middle's plus the next derivatives' bounds over the half width (a guide's pull: none)
+        let d = &self.data;
+        if !d.shifts.is_empty() {
+            return None;
+        }
+        let (u, hu) = (uv.u.mid(), 0.5 * uv.u.width());
+        let bound: Vec<[f64; 3]> = d
+            .rails
+            .iter()
+            .map(|r| r.derivative_bounds(uv.u))
+            .collect::<Option<_>>()?;
+        let at: Vec<(Point3, Vec3, Vec3)> = d.rails.iter().map(|r| r.at(u)).collect();
+        let diff = |k: usize| {
+            if k == 0 {
+                return [0.0; 3];
+            }
+            let (p, d1, d2) = (at[k].0 - at[0].0, at[k].1 - at[0].1, at[k].2 - at[0].2);
+            let (bk, b0) = (bound[k], bound[0]);
+            [
+                p.length() + (bk[0] + b0[0]) * hu,
+                d1.length() + (bk[1] + b0[1]) * hu,
+                d2.length() + (bk[2] + b0[2]) * hu,
+            ]
+        };
+        let diffs: Vec<[f64; 3]> = (0..d.rails.len()).map(diff).collect();
+        let mag = |i: Interval| i.lo.abs().max(i.hi.abs());
+        let w: Vec<Vec<f64>> = (0..4)
+            .map(|o| d.spline.weight_box(uv.v, o).into_iter().map(mag).collect())
+            .collect();
+        let n = d.rails.len();
+        let sum = |o: usize, f: &dyn Fn(usize) -> f64| (0..n).map(|k| w[o][k] * f(k)).sum::<f64>();
+        let slopes = |o: usize| {
+            d.slopes
+                .iter()
+                .zip(&w[o][n..])
+                .map(|(s, &x)| s.length() * x)
+                .sum::<f64>()
+        };
+        Some(ShapeBounds::taylor(
+            &self.point(Point2::new(u, uv.v.mid())),
+            (hu, 0.5 * uv.v.width()),
+            [
+                sum(0, &|k| bound[k][1]),
+                sum(1, &|k| diffs[k][1]),
+                sum(2, &|k| diffs[k][0]) + slopes(2),
+            ],
+            [
+                sum(0, &|k| bound[k][2]),
+                sum(1, &|k| diffs[k][2]),
+                sum(2, &|k| diffs[k][1]),
+                sum(3, &|k| diffs[k][0]) + slopes(3),
+            ],
+        ))
     }
     fn min_radius(&self) -> f64 {
         let arcs = self
