@@ -928,7 +928,7 @@ combine cut base lid keep
         let mut s = Session::default();
         let r = s.run("build", &args(&f, &[]));
         assert!(r.ok, "{}", r.text);
-        assert!(r.text.ends_with("bodies 4"), "{}", r.text);
+        assert!(r.text.contains("\nbodies 4: base "), "{}", r.text);
         let r = s.run("check", &args(&f, &[]));
         assert!(r.ok, "{}", r.text);
         let r = s.run("query", &args(&f, &["faces body spare"]));
