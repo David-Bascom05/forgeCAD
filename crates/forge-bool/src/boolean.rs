@@ -240,59 +240,61 @@ pub fn boolean(a: &Body, b: &Body, op: Op, feature: u64) -> R<Body> {
 /// as tombstones until `Body::compact`. Names do not depend on `_feature`: what the boolean makes
 /// is named by what meets there, as the n-ary boolean names it.
 pub fn boolean_into(target: &mut Body, b: &Body, op: Op, _feature: u64) -> R<()> {
-    with_imprint(target, b, || std::borrow::Cow::Borrowed(b), op)
+    if imprinted(target, b, || std::borrow::Cow::Borrowed(b), op) {
+        return Ok(());
+    }
+    general(target, b, op)
 }
 
 /// `boolean_into` with the tool as its entities (`forge_ops::extrude_unlinked`): the Body is
 /// built only if the general boolean has to run.
-pub fn boolean_unlinked(target: &mut Body, b: &forge_topo::Unlinked, op: Op) -> R<()> {
-    with_imprint(target, b, || std::borrow::Cow::Owned(b.clone().into_body()), op)
+pub fn boolean_unlinked(target: &mut Body, b: forge_topo::Unlinked, op: Op) -> R<()> {
+    if imprinted(target, &b, || std::borrow::Cow::Owned(b.clone().into_body()), op) {
+        return Ok(());
+    }
+    general(target, &b.into_body(), op)
 }
 
-/// The local-imprint path where the mode lets it run and it covers the tool, else the general
-/// boolean on the tool's Body.
-fn with_imprint<'b, S: crate::imprint::Src>(
+/// Whether the local-imprint path did the boolean (the mode lets it run and it covers the tool);
+/// `body`, the tool's Body, only for the check.
+fn imprinted<'b, S: crate::imprint::Src>(
     target: &mut Body,
     src: &S,
     body: impl FnOnce() -> std::borrow::Cow<'b, Body>,
     op: Op,
-) -> R<()> {
+) -> bool {
     match crate::imprint::mode() {
-        crate::imprint::Mode::Off => {}
-        crate::imprint::Mode::On => {
-            if crate::imprint::column(target, src, op) {
-                return Ok(());
-            }
-        }
+        crate::imprint::Mode::Off => false,
+        crate::imprint::Mode::On => crate::imprint::column(target, src, op),
         crate::imprint::Mode::Check => {
             // the general boolean on a copy; the part goes on from this path's result, so the
             // check follows what `on` would make
             let mut slow = target.clone();
             let valid_before = forge_topo::check(target).is_empty();
-            if crate::imprint::column(target, src, op) {
-                if let Err(e) = general(&mut slow, &body(), op) {
-                    panic!("imprint made a body where the general boolean failed: {e}");
-                }
-                if let Some(d) = crate::imprint::diff(target, &slow) {
-                    panic!("imprint differs from the general boolean: {d}");
-                }
-                let problems = forge_topo::check(target);
-                if valid_before && !problems.is_empty() {
-                    panic!(
-                        "imprint made an invalid body (the general's {}): {:?}",
-                        if forge_topo::check(&slow).is_empty() {
-                            "valid"
-                        } else {
-                            "invalid too"
-                        },
-                        &problems[..problems.len().min(3)]
-                    );
-                }
-                return Ok(());
+            if !crate::imprint::column(target, src, op) {
+                return false;
             }
+            if let Err(e) = general(&mut slow, &body(), op) {
+                panic!("imprint made a body where the general boolean failed: {e}");
+            }
+            if let Some(d) = crate::imprint::diff(target, &slow) {
+                panic!("imprint differs from the general boolean: {d}");
+            }
+            let problems = forge_topo::check(target);
+            if valid_before && !problems.is_empty() {
+                panic!(
+                    "imprint made an invalid body (the general's {}): {:?}",
+                    if forge_topo::check(&slow).is_empty() {
+                        "valid"
+                    } else {
+                        "invalid too"
+                    },
+                    &problems[..problems.len().min(3)]
+                );
+            }
+            true
         }
     }
-    general(target, &body(), op)
 }
 
 fn general(target: &mut Body, b: &Body, op: Op) -> R<()> {

@@ -1059,6 +1059,8 @@ pub struct Unlinked {
     /// Each loop's face and the end of its uses in `uses` (they start at the previous loop's end).
     pub loops: Vec<(FaceId, u32)>,
     pub uses: Vec<(EdgeId, bool)>,
+    /// Each face's last loop and how many it has.
+    pub face_loops: Vec<(u32, u32)>,
 }
 
 impl Unlinked {
@@ -1079,25 +1081,30 @@ impl Unlinked {
     }
     pub fn add_face(&mut self, surface: Surface, same_sense: bool, name: Name) -> FaceId {
         self.faces.push((surface, same_sense, name));
+        self.face_loops.push((0, 0));
         FaceId(self.faces.len() as u32 - 1)
     }
     pub fn add_loop(&mut self, face: FaceId, uses: &[(EdgeId, bool)]) {
         self.uses.extend_from_slice(uses);
         self.loops.push((face, self.uses.len() as u32));
+        let fl = &mut self.face_loops[face.index()];
+        *fl = (self.loops.len() as u32 - 1, fl.1 + 1);
     }
 
-    /// The loops of face `f`, each as its uses.
-    pub fn loops_of(&self, f: FaceId) -> impl Iterator<Item = &[(EdgeId, bool)]> {
-        let starts = std::iter::once(0).chain(self.loops.iter().map(|l| l.1));
-        self.loops
-            .iter()
-            .zip(starts)
-            .filter(move |(l, _)| l.0 == f)
-            .map(|(l, at)| &self.uses[at as usize..l.1 as usize])
+    /// Face `f`'s uses when it has one loop.
+    pub fn lone_loop(&self, f: FaceId) -> Option<&[(EdgeId, bool)]> {
+        let (l, n) = self.face_loops[f.index()];
+        let at = if l == 0 { 0 } else { self.loops[l as usize - 1].1 };
+        (n == 1).then(|| &self.uses[at as usize..self.loops[l as usize].1 as usize])
     }
 
     pub fn into_body(self) -> Body {
         let mut body = Body::new();
+        body.vertices.reserve_exact(self.vertices.len());
+        body.edges.reserve_exact(self.edges.len());
+        body.faces.reserve_exact(self.faces.len());
+        body.loops.reserve_exact(self.loops.len());
+        body.coedges.reserve_exact(self.uses.len());
         let shell = body.add_shell();
         for (p, name) in self.vertices {
             body.add_vertex(p, name);

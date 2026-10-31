@@ -123,12 +123,10 @@ impl Src for Unlinked {
         (&x.0, x.1, x.2)
     }
     fn loop_len(&self, f: FaceId) -> Option<usize> {
-        let mut ls = self.loops_of(f);
-        let l = ls.next()?;
-        ls.next().is_none().then_some(l.len())
+        Some(Unlinked::lone_loop(self, f)?.len())
     }
     fn loop_use(&self, f: FaceId, i: usize) -> (EdgeId, bool) {
-        self.loops_of(f).next().expect("one loop")[i]
+        Unlinked::lone_loop(self, f).expect("one loop")[i]
     }
     fn vertex_count(&self) -> usize {
         self.vertices.len()

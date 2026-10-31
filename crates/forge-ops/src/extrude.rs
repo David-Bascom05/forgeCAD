@@ -37,6 +37,7 @@ pub fn extrude_unlinked(profile: &Profile, distance: f64, feature: u64) -> Resul
         faces: Vec::with_capacity(n + 2),
         loops: Vec::with_capacity(n + 2 * profile.loops.len()),
         uses: Vec::with_capacity(6 * n),
+        face_loops: Vec::with_capacity(n + 2),
     };
     Ok(Builder::new(&profile, distance.abs(), Name::feature(feature), out).build())
 }
