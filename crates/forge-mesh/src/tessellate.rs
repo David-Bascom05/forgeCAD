@@ -267,6 +267,30 @@ pub fn tessellate(body: &Body, q: &Quality) -> Result<TriMesh, TessError> {
     if body.dead > 0 {
         return tessellate(&body.compact(), q);
     }
+    // a face whose boundary chords cross (two of its edges running close, as a curve all but
+    // touching a line, or nearly tangent where they meet) gets its edges cut finer, so their
+    // chords follow them closer, until they no longer do
+    let mut finer = vec![1usize; body.edges.len()];
+    let mut rounds = 0;
+    loop {
+        match tessellate_with(body, q, &finer) {
+            Err(TessError::Face {
+                face,
+                error: CdtError::ConstraintsIntersect { .. },
+            }) if rounds < 6 => {
+                for &l in &body.face(face).loops {
+                    for &c in &body.lp(l).coedges {
+                        finer[body.coedge(c).edge.index()] *= 2;
+                    }
+                }
+                rounds += 1;
+            }
+            r => return r,
+        }
+    }
+}
+
+fn tessellate_with(body: &Body, q: &Quality, finer: &[usize]) -> Result<TriMesh, TessError> {
     let mut mesh = TriMesh::default();
     let vertex_index: Vec<u32> = body.vertices.iter().map(|v| mesh.add_vertex(v.point)).collect();
 
@@ -279,7 +303,7 @@ pub fn tessellate(body: &Body, q: &Quality) -> Result<TriMesh, TessError> {
             .coedges
             .iter()
             .any(|&c| doubly_curved(&body.face(body.coedge_face(c)).surface));
-        let n = edge_segments(&edge.curve, edge.range, q, fine);
+        let n = edge_segments(&edge.curve, edge.range, q, fine) * finer[e.index()];
         let mut s = Vec::with_capacity(n + 1);
         s.push((edge.range.lo, vertex_index[edge.start.index()]));
         edge.curve.sample_interior(edge.range, n, &mut trig, &mut pts);

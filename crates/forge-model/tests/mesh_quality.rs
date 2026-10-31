@@ -125,14 +125,22 @@ fn audit(body: &Body, m: &TriMesh, chord: f64) -> Option<String> {
 }
 
 fn check(parts: Vec<(String, Part)>, chords: &[f64]) {
+    let qs: Vec<Quality> = chords
+        .iter()
+        .map(|&chord| Quality {
+            chord,
+            ..Quality::default()
+        })
+        .collect();
+    check_at(parts, &qs);
+}
+
+fn check_at(parts: Vec<(String, Part)>, qs: &[Quality]) {
     let mut bad = Vec::new();
     for (name, part) in parts {
         let b = part.regenerate().expect("regenerates");
-        for &chord in chords {
-            let q = Quality {
-                chord,
-                ..Quality::default()
-            };
+        for &q in qs {
+            let chord = q.chord;
             match tessellate(&b, &q) {
                 Ok(m) => {
                     if let Some(e) = audit(&b, &m, chord) {
@@ -162,6 +170,21 @@ fn fuzz_histories() {
         .map(|s| (format!("fuzz {s}"), suite::fuzz(s, 80)))
         .collect();
     check(parts, &[0.01, 0.25]);
+}
+
+/// Fuzz histories with faces whose boundary chords crossed (an edge's chords cutting across
+/// another edge running close by): those edges are cut finer until they no longer cross.
+#[test]
+fn crossing_boundary_chords() {
+    let parts = [3u64, 35, 99, 109, 113]
+        .into_iter()
+        .map(|s| (format!("fuzz {s}"), suite::fuzz(s, 80)))
+        .collect();
+    let q = |chord: f64, max_angle: f64| Quality { chord, max_angle };
+    check_at(
+        parts,
+        &[q(0.05, 0.5), q(0.01, 0.5), q(0.25, Quality::default().max_angle)],
+    );
 }
 
 #[test]
