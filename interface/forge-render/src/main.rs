@@ -141,9 +141,7 @@ fn stage(a: &Args) -> Result<Stage, String> {
     };
     let (parts, hits) = forge_render::load::open_all(&names, a.cache)?;
     let placements = if a.stress > 0 {
-        // a spacing the largest part about fills, so neighbours overlap little and hide much
-        let r = parts.iter().map(|p| p.radius).sum::<f32>() / parts.len() as f32;
-        scene::stress(parts.len(), a.stress, r * 2.5)
+        scene::stress_of(&parts, a.stress)
     } else {
         vec![Placement::at(0, [0.0; 3])]
     };

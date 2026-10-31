@@ -96,3 +96,29 @@ Set by eye on heatsink (fins and the plate under them) and the stress scene's mi
 A reach of 0.025 and 0.08 with a hard cut-off barely darkened the heatsink's plate between fins, since
 what hides it is further than the reach; the softer fall-off out to about twice the reach fixed that.
 Same bench: p99 9.65 ms without occlusion, 11.53 ms with, and 6.24 ms with occlusion but no lines.
+
+## The browser: Chrome 150 on the RTX 5060, no canvas
+
+A WebGPU canvas can't be shown on this GPU in Chrome here: a bare clear in plain JavaScript fails at
+the canvas's shared image (`vkAllocateMemory` `VK_ERROR_OUT_OF_DEVICE_MEMORY`, `Error creating
+wgpu::Texture`), headless or with a window, whichever `--use-angle` was tried. It isn't the renderer's
+code. So `bench_offscreen` (`web.rs`, `&offscreen=WxH` in `web/index.html`) draws to a texture and
+waits for the GPU each frame, as native headless does, in a separate Chrome on a temporary profile:
+
+`__NV_PRIME_RENDER_OFFLOAD=1 __GLX_VENDOR_LIBRARY_NAME=nvidia __EGL_VENDOR_LIBRARY_FILENAMES=/usr/share/glvnd/egl_vendor.d/10_nvidia.json __VK_LAYER_NV_optimus=NVIDIA_only google-chrome --user-data-dir=$(mktemp -d) --headless=new --enable-unsafe-webgpu --use-webgpu-power-preference=force-high-performance --enable-features=Vulkan --use-angle=vulkan 'URL?stress=5000&moving=2000&bench=600&offscreen=2560x1600&need=nvidia'`
+
+`need=nvidia` draws nothing unless the adapter says so. The same scene and camera path, a pick each frame:
+
+```
+                          frame mean  p99   worst   gpu mean  gpu p99
+browser 2560x1600 moving    7.80     12.30  180.50    5.90    10.34
+browser 2560x1600 moving    7.75     11.90  169.90    5.92    10.51
+native  2560x1600 moving    7.23     11.75   11.89    6.43    10.87
+browser 1920x1080           4.69      7.20  166.50    3.19     5.27
+native  1920x1080           4.08      6.85    7.28    3.51     5.97
+browser crank 2560x1600     2.79      4.70   88.20    0.39     0.51
+native  crank 2560x1600     0.76      1.00    2.79    0.41     0.56
+```
+
+The extra 0.5 to 2 ms a frame is the wait itself, which is a browser callback (see crank); GPU time is
+the same. The worst frames weren't traced; a pick reads back one frame later here, so its time is a frame's.

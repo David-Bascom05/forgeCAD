@@ -74,7 +74,7 @@ cargo run --release -- gearbox                      # a bench part or a .fc path
 cargo run --release -- --stress 5000                # the 15 bench parts placed 5,000 times
 cargo run --release -- --stress 5000 --bench        # a fixed orbit, frame times on stdout, no window (--window: with one)
 cargo test                                          # GPU tests skip where there is no GPU
-sh web/build.sh OUT gearbox                         # the browser page and one part's mesh
+sh web/build.sh OUT                                 # the browser page and the bench parts' meshes
 ```
 
 Built meshes are cached in `~/.cache/forgecad/mesh`, by content hash of the part file and the

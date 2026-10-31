@@ -20,7 +20,7 @@ pub fn now_ms() -> f64 {
 
 #[cfg(target_arch = "wasm32")]
 pub fn now_ms() -> f64 {
-    js_sys::Date::now()
+    performance_now()
 }
 
 #[cfg(not(target_arch = "wasm32"))]
@@ -33,6 +33,8 @@ pub fn say(s: &str) {
 extern "C" {
     #[wasm_bindgen(js_namespace = console, js_name = log)]
     pub fn say(s: &str);
+    #[wasm_bindgen(js_namespace = performance, js_name = now)]
+    fn performance_now() -> f64;
 }
 
 pub struct Viewer {

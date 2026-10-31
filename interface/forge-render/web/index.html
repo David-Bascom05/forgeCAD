@@ -5,10 +5,36 @@
   html, body { margin: 0; height: 100%; background: #dfe2e6; }
   canvas { width: 100%; height: 100%; display: block; outline: none; }
 </style>
+<!-- ?part=NAME one part; ?stress=N all of them placed N times; &moving=N; &bench=FRAMES; &need=VENDOR
+     draws nothing unless the browser's GPU is that vendor's; &offscreen=WxH benches with no WebGPU
+     canvas, for where the browser can't show one, then shows the last frame on a plain canvas -->
 <script type="module">
-  import init, { start } from "./forge_render.js";
-  await init();
+  import init, { start, bench_offscreen } from "./forge_render.js";
   const q = new URLSearchParams(location.search);
-  const file = await fetch(q.get("mesh") ?? "part.mesh");
-  start(new Uint8Array(await file.arrayBuffer()), Number(q.get("bench") ?? 0));
+  const number = (k) => Number(q.get(k) ?? 0);
+  const adapter = await navigator.gpu?.requestAdapter({ powerPreference: "high-performance" });
+  const vendor = adapter?.info?.vendor ?? "none";
+  console.log(`forge-render adapter ${vendor} ${adapter?.info?.architecture ?? ""}`);
+  if (q.has("need") && vendor !== q.get("need")) {
+    console.log(`forge-render refused: needs ${q.get("need")}`);
+  } else {
+    await init();
+    const stress = number("stress");
+    const names = stress > 0
+      ? (await (await fetch("parts/list.txt")).text()).trim().split("\n")
+      : [q.get("part") ?? "crank"];
+    const files = await Promise.all(names.map(async (n) =>
+      new Uint8Array(await (await fetch(`parts/${n}.mesh`)).arrayBuffer())));
+    if (q.has("offscreen")) {
+      const [w, h] = q.get("offscreen").split("x").map(Number);
+      const rgba = await bench_offscreen(files, stress, number("moving"), number("bench"), w, h);
+      const canvas = document.body.appendChild(document.createElement("canvas"));
+      canvas.width = w;
+      canvas.height = h;
+      canvas.getContext("2d").putImageData(new ImageData(new Uint8ClampedArray(rgba), w, h), 0, 0);
+      console.log("forge-render done");
+    } else {
+      start(files, stress, number("moving"), number("bench"));
+    }
+  }
 </script>

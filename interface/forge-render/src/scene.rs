@@ -338,6 +338,13 @@ impl Motion {
     }
 }
 
+/// The stress scene over these parts: a spacing the average part about fills, so neighbours
+/// overlap little and hide much.
+pub fn stress_of(parts: &[crate::mesh::PartMesh], n: usize) -> Vec<Placement> {
+    let r = parts.iter().map(|p| p.radius).sum::<f32>() / parts.len() as f32;
+    stress(parts.len(), n, r * 2.5)
+}
+
 /// `n` placements of `parts` kinds in a cube, `spacing` apart on a jittered grid, turned at
 /// random (fixed seed, so every run sees the same scene).
 pub fn stress(parts: usize, n: usize, spacing: f32) -> Vec<Placement> {

@@ -1550,8 +1550,8 @@ impl Offscreen {
         Offscreen { texture, view, size }
     }
 
-    /// The picture, RGB, row by row from the top.
-    pub fn read_rgb(&self, r: &Renderer) -> Vec<u8> {
+    /// Asks for the picture back: a buffer to map, and how long its rows are.
+    pub fn copy_out(&self, r: &Renderer) -> (wgpu::Buffer, u32) {
         let (w, h) = self.size;
         let row = (w * 4).next_multiple_of(wgpu::COPY_BYTES_PER_ROW_ALIGNMENT);
         let buffer = r.device.create_buffer(&wgpu::BufferDescriptor {
@@ -1574,8 +1574,12 @@ impl Offscreen {
             self.texture.size(),
         );
         r.queue.submit([encoder.finish()]);
-        buffer.slice(..).map_async(wgpu::MapMode::Read, |_| {});
-        r.wait();
+        (buffer, row)
+    }
+
+    /// The picture from a mapped `copy_out`: RGB, row by row from the top.
+    pub fn rgb_of(&self, buffer: &wgpu::Buffer, row: u32) -> Vec<u8> {
+        let (w, h) = self.size;
         let map = buffer.slice(..).get_mapped_range().expect("it was waited for");
         let mut out = Vec::with_capacity((w * h * 3) as usize);
         for y in 0..h as usize {
@@ -1584,6 +1588,14 @@ impl Offscreen {
             }
         }
         out
+    }
+
+    /// The picture, RGB, row by row from the top.
+    pub fn read_rgb(&self, r: &Renderer) -> Vec<u8> {
+        let (buffer, row) = self.copy_out(r);
+        buffer.slice(..).map_async(wgpu::MapMode::Read, |_| {});
+        r.wait();
+        self.rgb_of(&buffer, row)
     }
 }
 
