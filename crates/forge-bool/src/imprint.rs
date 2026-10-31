@@ -65,8 +65,14 @@ pub fn taken() -> usize {
 pub(crate) trait Src {
     fn face_count(&self) -> usize;
     fn face(&self, f: FaceId) -> (&Surface, bool, Name);
+    /// How many uses face `f`'s loop has, when it has one loop.
+    fn loop_len(&self, f: FaceId) -> Option<usize>;
+    /// The `i`th use of face `f`'s one loop.
+    fn loop_use(&self, f: FaceId, i: usize) -> (EdgeId, bool);
     /// Face `f`'s uses when it has one loop.
-    fn lone_loop(&self, f: FaceId) -> Option<Vec<(EdgeId, bool)>>;
+    fn lone_loop(&self, f: FaceId) -> Option<Vec<(EdgeId, bool)>> {
+        Some((0..self.loop_len(f)?).map(|i| self.loop_use(f, i)).collect())
+    }
     fn vertex_count(&self) -> usize;
     fn vertex(&self, v: VertexId) -> (Point3, f64, Name);
     fn edge(&self, e: EdgeId) -> (&Curve, Interval, VertexId, VertexId, Name);
@@ -82,15 +88,15 @@ impl Src for Body {
         let face = Body::face(self, f);
         (&face.surface, face.same_sense, face.name)
     }
-    fn lone_loop(&self, f: FaceId) -> Option<Vec<(EdgeId, bool)>> {
-        let face = Body::face(self, f);
-        let [l] = face.loops[..] else { return None };
-        Some(
-            self.lp(l)
-                .coedges()
-                .map(|c| (self.coedge(c).edge, self.coedge(c).forward))
-                .collect(),
-        )
+    fn loop_len(&self, f: FaceId) -> Option<usize> {
+        let [l] = Body::face(self, f).loops[..] else {
+            return None;
+        };
+        Some(self.lp(l).coedges().len())
+    }
+    fn loop_use(&self, f: FaceId, i: usize) -> (EdgeId, bool) {
+        let c = self.coedge(self.lp(Body::face(self, f).loops[0]).coedge(i));
+        (c.edge, c.forward)
     }
     fn vertex_count(&self) -> usize {
         self.vertices.len()
@@ -116,10 +122,13 @@ impl Src for Unlinked {
         let x = &self.faces[f.index()];
         (&x.0, x.1, x.2)
     }
-    fn lone_loop(&self, f: FaceId) -> Option<Vec<(EdgeId, bool)>> {
+    fn loop_len(&self, f: FaceId) -> Option<usize> {
         let mut ls = self.loops_of(f);
         let l = ls.next()?;
-        ls.next().is_none().then(|| l.to_vec())
+        ls.next().is_none().then_some(l.len())
+    }
+    fn loop_use(&self, f: FaceId, i: usize) -> (EdgeId, bool) {
+        self.loops_of(f).next().expect("one loop")[i]
     }
     fn vertex_count(&self) -> usize {
         self.vertices.len()
@@ -157,10 +166,11 @@ fn tool(b: &dyn Src) -> Option<Tool> {
     let mut caps = Vec::new();
     let mut z = None;
     for f in (0..b.face_count() as u32).map(FaceId) {
-        let uses = b.lone_loop(f)?;
+        let n = b.loop_len(f)?;
+        let u = |i: usize| b.loop_use(f, i);
         // a wall's loop: bottom, upright going up, top the other way, upright going down
-        match uses[..] {
-            [(_, fwd), (up, true), (_, back), (down, false)] if back != fwd => {
+        match (n == 4).then(|| [u(0), u(1), u(2), u(3)]) {
+            Some([(_, fwd), (up, true), (_, back), (down, false)]) if back != fwd => {
                 let (Curve::Line(l), Curve::Line(_)) = (b.edge(up).0, b.edge(down).0) else {
                     return None;
                 };
@@ -194,11 +204,19 @@ fn tool(b: &dyn Src) -> Option<Tool> {
         ([_], (Surface::Cylinder(c), true, _)) => Some(*c),
         _ => None,
     };
+    // a box round the caps' edges: lines' ends, arcs' whole circles' balls
     let mut bbox = Box3::EMPTY;
-    for &f in &walls {
-        for (e, _) in b.lone_loop(f)? {
-            let (c, r, ..) = b.edge(e);
-            bbox = bbox.hull(&c.bbox(r));
+    for f in [bottom, top] {
+        for i in 0..b.loop_len(f)? {
+            let (c, r, ..) = b.edge(b.loop_use(f, i).0);
+            bbox = match c {
+                Curve::Circle(k) => bbox.hull(&Box3::from_point(k.frame.origin).grow(k.radius)),
+                c => {
+                    bbox.include(c.eval(r.lo));
+                    bbox.include(c.eval(r.hi));
+                    bbox
+                }
+            };
         }
     }
     Some(Tool {
@@ -726,7 +744,7 @@ impl Column<'_> {
 
     /// The grid of wall `w`: its cells along the foot and up between levels, the kept ones'
     /// boundary as arcs.
-    fn wall_arcs(&self, w: usize, keep_b: bool) -> R<Option<Vec<Arc>>> {
+    fn wall_arcs(&self, w: usize, keep_b: bool) -> R<Option<(Vec<Arc>, Vec<f64>)>> {
         let wall = &self.walls[w];
         let mut zs = vec![wall.z[0]];
         zs.extend(
@@ -829,7 +847,7 @@ impl Column<'_> {
                 }
             }
         }
-        Ok(Some(arcs))
+        Ok(Some((arcs, zs)))
     }
 }
 
@@ -858,12 +876,8 @@ fn plan(a: &Body, b: &dyn Src, op: Op) -> R<Plan> {
         extra: Vec::new(),
         carriers: Default::default(),
     };
-    for &f in &t.walls {
-        let w = c.wall(1, f).ok_or("a tool wall not along the axis")?;
-        c.walls.push(w);
-    }
-    c.nb = c.walls.len();
-    // A's faces along the axis near the tool, clear or walls
+    // A's faces near the tool first (most declines are found there), then B's walls
+    let mut a_walls = Vec::new();
     let mut sides: Vec<FaceId> = Vec::new();
     for f in a.faces_where(|x| x.overlaps(&t.bbox)) {
         let face = a.face(f);
@@ -896,8 +910,14 @@ fn plan(a: &Body, b: &dyn Src, op: Op) -> R<Plan> {
         if w.z[1] < 0.0 || w.z[0] > t.h {
             continue;
         }
+        a_walls.push(w);
+    }
+    for &f in &t.walls {
+        let w = c.wall(1, f).ok_or("a tool wall not along the axis")?;
         c.walls.push(w);
     }
+    c.nb = c.walls.len();
+    c.walls.append(&mut a_walls);
     // a square face's edges near the tool lie on those faces (not on a neighbour in its plane)
     let reach = t.bbox.grow(CLEAR);
     let mut near = Vec::new();
@@ -1407,18 +1427,61 @@ impl Column<'_> {
         let mut outs: Vec<Out> = Vec::new();
         let mut involved: Vec<FaceId> = Vec::new();
         for w in 0..self.walls.len() {
-            let Some(arcs) = self.wall_arcs(w, keep_b)? else {
+            let Some((arcs, zs)) = self.wall_arcs(w, keep_b)? else {
                 continue;
             };
             let wall = &self.walls[w];
             if wall.side == 0 {
                 involved.push(wall.face);
             }
+            // each loop's corners along the foot and up, counterclockwise for an outer loop
+            let corners = |c: &[Arc]| -> Vec<(f64, f64)> {
+                c.iter()
+                    .map(|a| {
+                        let g = a.grid.expect("a wall's arcs are on its grid")[0];
+                        (wall.breaks[g.0].0, zs[g.1])
+                    })
+                    .collect()
+            };
+            let (mut outer, mut holes): (Vec<Vec<Vec<Arc>>>, Vec<Vec<Arc>>) = (Vec::new(), Vec::new());
             for cyc in cycles(arcs)? {
+                let poly = corners(&cyc);
+                let area: f64 = (0..poly.len())
+                    .map(|i| {
+                        let (p, q) = (poly[i], poly[(i + 1) % poly.len()]);
+                        p.0 * q.1 - q.0 * p.1
+                    })
+                    .sum();
+                if (area > 0.0) == wall.ccw {
+                    outer.push(vec![cyc]);
+                } else {
+                    holes.push(cyc);
+                }
+            }
+            for hole in holes {
+                let (x, y) = corners(&hole)[0];
+                // the outer loop round the hole's corner (moved a hair into it)
+                let k = (0..outer.len())
+                    .find(|&k| {
+                        let poly = corners(&outer[k][0]);
+                        let (x, y) = (x + 1e-9 * (1.0 + x.abs()), y + 1e-9 * (1.0 + y.abs()));
+                        let mut inside = false;
+                        for i in 0..poly.len() {
+                            let (p, q) = (poly[i], poly[(i + 1) % poly.len()]);
+                            if (p.1 > y) != (q.1 > y) && x < p.0 + (y - p.1) * (q.0 - p.0) / (q.1 - p.1) {
+                                inside = !inside;
+                            }
+                        }
+                        inside
+                    })
+                    .ok_or("a hole in no piece of a wall")?;
+                outer[k].push(hole);
+            }
+            for loops in outer {
                 outs.push(Out {
                     side: wall.side,
                     face: wall.face,
-                    loops: vec![cyc],
+                    loops,
                     extend: false,
                     remove: Vec::new(),
                 });
@@ -1787,7 +1850,8 @@ impl Column<'_> {
 }
 /// Where two bodies differ, for the check mode (None: the same). Entities are matched by name,
 /// not by id or order: each face's surface and sense, its loops as cycles of (edge name, way),
-/// each edge's curve kind and ends, each vertex's point, points to within 1e-9.
+/// each edge's curve kind, its ends' names and its curve at both ends and its middle, points to
+/// within 1e-9.
 pub(crate) fn diff(x: &Body, y: &Body) -> Option<String> {
     let close = |p: Point3, q: Point3| p.distance(q) <= 1e-9 * (1.0 + p.distance(Point3::ORIGIN));
     type Loop = Vec<(Name, bool)>;
@@ -1819,7 +1883,19 @@ pub(crate) fn diff(x: &Body, y: &Body) -> Option<String> {
     };
     let (fx, fy) = (faces(x), faces(y));
     if fx.len() != fy.len() {
-        return Some(format!("{} faces vs {}", fx.len(), fy.len()));
+        let only = |p: &[(Name, bool, String, Vec<Loop>)], q: &[(Name, bool, String, Vec<Loop>)]| {
+            p.iter()
+                .filter(|f| !q.iter().any(|g| g.0 == f.0))
+                .map(|f| format!("{:?} {:?}", f.0, f.3))
+                .collect::<Vec<_>>()
+        };
+        return Some(format!(
+            "{} faces vs {}: only here {:?}, only there {:?}",
+            fx.len(),
+            fy.len(),
+            only(&fx, &fy),
+            only(&fy, &fx)
+        ));
     }
     for (p, q) in fx.iter().zip(&fy) {
         if p != q {
@@ -1827,30 +1903,20 @@ pub(crate) fn diff(x: &Body, y: &Body) -> Option<String> {
         }
     }
     // every edge the faces use, by name: its kind and its ends
+    // every edge by name: its kind, its ends' names, and its curve at both ends and between
     let edges = |b: &Body| {
-        let mut out: Vec<(
-            Name,
-            Point3,
-            Point3,
-            Name,
-            Name,
-            std::mem::Discriminant<forge_geom::Curve>,
-        )> = b
+        type Seen = (Name, Name, Name, std::mem::Discriminant<Curve>, [Point3; 3]);
+        let mut out: Vec<Seen> = b
             .edge_ids()
             .map(|e| {
                 let edge = b.edge(e);
                 let (s, t) = (b.vertex(edge.start), b.vertex(edge.end));
-                (
-                    edge.name,
-                    s.point,
-                    t.point,
-                    s.name,
-                    t.name,
-                    std::mem::discriminant(&edge.curve),
-                )
+                let r = edge.range;
+                let at = [r.lo, r.mid(), r.hi].map(|u| edge.curve.eval(u));
+                (edge.name, s.name, t.name, std::mem::discriminant(&edge.curve), at)
             })
             .collect();
-        out.sort_by_key(|e| (e.0, e.3, e.4));
+        out.sort_by_key(|e| (e.0, e.1, e.2));
         out
     };
     let (ex, ey) = (edges(x), edges(y));
@@ -1858,7 +1924,7 @@ pub(crate) fn diff(x: &Body, y: &Body) -> Option<String> {
         return Some(format!("{} edges vs {}", ex.len(), ey.len()));
     }
     for (p, q) in ex.iter().zip(&ey) {
-        if (p.0, p.3, p.4, p.5) != (q.0, q.3, q.4, q.5) || !close(p.1, q.1) || !close(p.2, q.2) {
+        if (p.0, p.1, p.2, p.3) != (q.0, q.1, q.2, q.3) || (0..3).any(|i| !close(p.4[i], q.4[i])) {
             return Some(format!("edge {:?}: {:?} vs {:?}", p.0, p, q));
         }
     }
