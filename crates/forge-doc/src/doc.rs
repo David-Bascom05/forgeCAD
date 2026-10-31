@@ -142,8 +142,7 @@ impl Document {
             .iter()
             .map(|it| it.id.0)
             .filter(|&i| i < BLANK)
-            .max()
-            .unwrap_or(0);
+            .fold(d.high, u64::max);
         d
     }
 
@@ -169,6 +168,17 @@ impl Document {
                 } else if !toks.is_empty() || note.is_some() {
                     rows.push(Row { args: toks, note });
                 }
+                continue;
+            }
+            // `next N`: ids below N may have been used, by lines since taken out
+            if placed
+                && note.is_none()
+                && toks.len() == 2
+                && toks[0] == "next"
+                && let Ok(n) = toks[1].parse::<u64>()
+                && (1..BLANK).contains(&n)
+            {
+                self.high = self.high.max(n - 1);
                 continue;
             }
             let label = match toks.first() {
@@ -223,7 +233,7 @@ impl Document {
                     self.next - 1
                 }
                 (_, Some(n)) => n,
-                (_, None) if placed => out.iter().filter(|it| it.id.0 < BLANK).count() as u64 + 1,
+                (_, None) if placed => 0,
                 _ => {
                     fresh += 1;
                     fresh - 1
@@ -237,12 +247,37 @@ impl Document {
                 note,
             });
         }
+        if placed {
+            // a line without an id takes its place, unless a line says that id is its own
+            let given: Vec<u64> = out
+                .iter()
+                .map(|it| it.id.0)
+                .filter(|&i| i > 0 && i < BLANK)
+                .collect();
+            let lines = out.iter().filter(|it| it.id.0 < BLANK).count() as u64;
+            let mut fresh = given.iter().copied().fold(self.high.max(lines), u64::max) + 1;
+            let mut place = 0;
+            for it in out.iter_mut().filter(|it| it.id.0 < BLANK) {
+                place += 1;
+                if it.id.0 == 0 {
+                    it.id = ItemId(if given.contains(&place) {
+                        fresh += 1;
+                        fresh - 1
+                    } else {
+                        place
+                    });
+                }
+            }
+        }
         out
     }
 
     /// The part file.
     pub fn print(&self) -> String {
         let mut out = String::new();
+        if let Some(n) = self.next_line() {
+            out.push_str(&format!("next {n}\n"));
+        }
         for (k, it) in self.items.iter().enumerate() {
             let note = |out: &mut String, note: &Option<String>, code: bool| {
                 if let Some(n) = note {
@@ -331,6 +366,19 @@ impl Document {
         Some(format!("{kd}{n}"))
     }
 
+    /// The id the next new line takes, when the file must say it: some id above every line's
+    /// was used by a line taken out, and must never name another.
+    fn next_line(&self) -> Option<u64> {
+        let top = self
+            .items
+            .iter()
+            .map(|it| it.id.0)
+            .filter(|&i| i < BLANK)
+            .max()
+            .unwrap_or(0);
+        (self.high > top).then_some(self.high + 1)
+    }
+
     /// Item `k`'s id when the file must say it: a feature line not at the place its id names.
     fn written_id(&self, k: usize) -> Option<u64> {
         let id = self.items[k].id.0;
@@ -342,7 +390,7 @@ impl Document {
     /// where they print.
     pub fn lines(&self) -> Vec<Line> {
         let mut out = Vec::new();
-        let mut no = 1;
+        let mut no = 1 + self.next_line().is_some() as usize;
         for (k, it) in self.items.iter().enumerate() {
             let mut toks = self.code(k);
             if let Body::Sketch { rows, .. } = &it.body {
@@ -415,7 +463,7 @@ impl Document {
 
     /// The item printed on file line `no` (from 1), and the sketch row if it is one.
     pub fn at_line(&self, no: usize) -> Option<(usize, Option<usize>)> {
-        let mut first = 1;
+        let mut first = 1 + self.next_line().is_some() as usize;
         for (k, it) in self.items.iter().enumerate() {
             let rows = match &it.body {
                 Body::Sketch { rows, .. } => rows.len() + 1,

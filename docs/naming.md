@@ -48,7 +48,10 @@ new B-rep against the old one after the fact (matching: Agbodan et al.).
 - **Feature ids are stable.** Each feature line has an id from when it was made, kept in the
   part file (`id N` before the line where it is not the line's place among the features) and
   passed by forge-doc to the regen (`forge_model::History`), so inserting, deleting or moving
-  lines renames nothing. A file written by hand without ids gets each line's place.
+  lines renames nothing. A file written by hand without ids gets each line's place (or, where a line
+  already says that id is its own, the next unused one). An id is never used twice: when lines
+  with the highest ids are deleted, the file starts `next N`, so a handle to a deleted feature
+  fails rather than find a later one's entities.
 - Booleans (sequential and n-ary alike, since 2026-10-31):
   - a new edge, a piece of the curve where faces `a` and `b` meet, is named from the pair, the
     branch of the intersection, and the two edges its ends cut (not its place along the curve);

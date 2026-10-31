@@ -713,6 +713,40 @@ fn holes_at_sketch_centers() {
 
 #[test]
 fn an_id_used_twice_is_an_error() {
-    let (line, msg, _) = error("id 2 extrude 1 rect 0 0 1 1\nextrude add 1 rect 0 0 2 2\n");
+    let (line, msg, _) = error("id 2 extrude 1 rect 0 0 1 1\nid 2 extrude add 1 rect 0 0 2 2\n");
     assert_eq!((line, msg.as_str()), (2, "id 2 is line 1's too"));
+    // a line written without one never takes an id another line says is its own
+    let m = built("id 2 extrude 1 rect 0 0 1 1\nextrude add 1 rect 0 0 2 2\n");
+    assert_eq!(m.lines.iter().map(|l| l.id).collect::<Vec<_>>(), [2, 3]);
+}
+
+/// An id taken out is never handed out again, across saving and reading the file back: a
+/// handle to the line taken out fails rather than find the new line's entities.
+#[test]
+fn a_deleted_id_is_never_used_again() {
+    use forge_doc::Edit;
+    let block =
+        "extrude 5 rect 0 0 20 10\nextrude 5 at 0 0 5 rect 0 0 5 5\nextrude 5 at 10 0 5 rect 0 0 5 5\n";
+    let mut m = built(block);
+    let (b, ents) = m.select("edges of f3 along +z", None).expect("selects");
+    let old = format!("@{:016x}", select::name(b, ents[0]).0);
+    let last = m.doc.features().nth(2).expect("a line").id;
+    m.edit(Edit::Delete { item: last }).expect("delete");
+    assert!(m.src().starts_with("next 4\n"), "{}", m.src());
+    // saved and read back: the new line takes 4, not 3
+    let mut m = built(m.src());
+    m.edit(Edit::Insert {
+        at: usize::MAX,
+        text: "extrude 5 at 10 0 5 rect 0 0 5 5".into(),
+    })
+    .expect("insert");
+    assert!(
+        m.src().ends_with("id 4 extrude 5 at 10 0 5 rect 0 0 5 5\n") && !m.src().contains("next"),
+        "{}",
+        m.src()
+    );
+    let (_, msg, _) = error(&format!("{}fillet 1 {old}\n", m.src()));
+    assert!(msg.starts_with("no edge"), "{msg}");
+    // with the old line back as it was, the handle finds its edge
+    built(&format!("{block}fillet 1 {old}\n"));
 }
