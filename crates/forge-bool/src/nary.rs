@@ -283,6 +283,8 @@ struct SegCut {
     t: f64,
     point: Point3,
     tol: f64,
+    /// The face whose surface it crosses (None where it meets that face's boundary).
+    by: Option<(Side, FaceId)>,
 }
 
 /// What intersecting one pair of tools gives.
@@ -758,23 +760,32 @@ fn nary_body(
     let key = |x: (Side, FaceId), y: (Side, FaceId)| if x.0 < y.0 { (x, y) } else { (y, x) };
     // each new edge's box, once (a traced curve's costs evaluations)
     let mut seg_box: Vec<forge_math::Box3> = segs.iter().map(|sg| sg.curve.bbox(sg.range)).collect();
+    let keep: Vec<bool> = seg_box
+        .iter()
+        .map(|b| shapes.is_none() || !outside(&b.grow(tol::LINEAR)))
+        .collect();
+    let is_traced = |sg: &Seg| matches!(sg.curve, Curve::Intersection(_));
     // only a traced edge's triple points are narrowed by them, so only the faces those lie on
     let mut traced: Vec<(Side, FaceId)> = segs
         .iter()
-        .filter(|sg| matches!(sg.curve, Curve::Intersection(_)))
+        .filter(|sg| is_traced(sg))
         .flat_map(|sg| [(sg.sides[0], sg.faces[0]), (sg.sides[1], sg.faces[1])])
         .collect();
     traced.sort_unstable();
     traced.dedup();
     let on_traced = |f: (Side, FaceId)| traced.binary_search(&f).is_ok();
-    let mut along: Vec<(FacePair, forge_math::Box3)> = segs
+    // (face pair, box, whether the edge is kept, whether it meets surfaces in closed form)
+    let mut along: Vec<(FacePair, forge_math::Box3, bool, bool)> = segs
         .iter()
         .zip(&seg_box)
-        .filter(|(sg, _)| !traced.is_empty() && (0..2).any(|e| on_traced((sg.sides[e], sg.faces[e]))))
-        .map(|(sg, b)| {
+        .zip(&keep)
+        .filter(|((sg, _), _)| !traced.is_empty() && (0..2).any(|e| on_traced((sg.sides[e], sg.faces[e]))))
+        .map(|((sg, b), &kept)| {
             (
                 key((sg.sides[0], sg.faces[0]), (sg.sides[1], sg.faces[1])),
                 b.grow(10.0 * tol::LINEAR),
+                kept,
+                !is_traced(sg),
             )
         })
         .collect();
@@ -785,7 +796,6 @@ fn nary_body(
         loose.sort_unstable();
     }
     if shapes.is_some() {
-        let keep: Vec<bool> = seg_box.iter().map(|b| !outside(&b.grow(tol::LINEAR))).collect();
         let mut flags = keep.iter();
         segs.retain(|_| *flags.next().expect("a flag a seg"));
         let mut flags = keep.iter();
@@ -834,13 +844,10 @@ fn nary_body(
 
     // 2: each new edge is cut where a face of a third tool crosses it
     let grid = Grid::new(&index.iter().map(|x| x.bbox).collect::<Vec<_>>());
-    let seg_cuts: Vec<Vec<(f64, Point3, f64)>> = par_map(segs.len(), threads, 32, |si| {
+    // `f` of each face of another tool that may cross edge si
+    let third = |si: usize, f: &mut dyn FnMut((Side, FaceId))| {
         let sg = &segs[si];
         let reach = seg_box[si].grow(tol::LINEAR);
-        // a traced curve's search costs evaluations: only it is worth narrowing by the face
-        // pairs' own edges (a line or conic meets a surface in closed form)
-        let traced = matches!(sg.curve, Curve::Intersection(_));
-        let mut got = Vec::new();
         for k in grid.near(&reach) {
             let k = k as usize;
             // the edge surely clear of tool k's solid crosses none of its faces
@@ -850,96 +857,208 @@ fn nary_body(
             {
                 continue;
             }
-            let (body, boxes) = (tools[k], index[k].boxes());
-            for h in body.face_ids() {
-                // a triple point lies on both the edge's faces and on h: where either of them was
-                // found apart from h, there is none
-                if !boxes[h.index()].overlaps(&reach) {
+            for h in tools[k].face_ids() {
+                if index[k].boxes()[h.index()].overlaps(&reach) && may_meet(&tools[k].face(h).surface, &reach) {
+                    f((k, h));
+                }
+            }
+        }
+    };
+    // (t, point, tol, the face whose surface it crosses: None where it meets that face's boundary)
+    type Hit = (f64, Point3, f64, Option<(Side, FaceId)>);
+    // edge si's cuts by tool k's face h over `range` (false: it lies on h's surface)
+    let cut_by = |si: usize, (k, h): (Side, FaceId), range: Interval, got: &mut Vec<Hit>| -> bool {
+        let sg = &segs[si];
+        let s = &tools[k].face(h).surface;
+        let CurveSurface::Hits(hits) = curve_surface(&sg.curve, range, s) else {
+            return false;
+        };
+        for hit in hits
+            .into_iter()
+            .flat_map(|x| crossings_near(&sg.curve, sg.range, s, x))
+        {
+            if index[k].point_in_face(h, hit.point) != Where::Outside {
+                got.push((hit.t, hit.point, tol::LINEAR, Some((k, h))));
+            }
+        }
+        true
+    };
+    // the new edge lies on this face's surface: it is cut where it crosses the face's boundary
+    let on_boundary = |si: usize, (k, h): (Side, FaceId), got: &mut Vec<Hit>| {
+        let sg = &segs[si];
+        let body = tools[k];
+        let reach = seg_box[si].grow(tol::LINEAR);
+        for &l in &body.face(h).loops {
+            for &c in &body.lp(l).coedges {
+                let e = body.coedge(c).edge;
+                if !body.edge_box(e).overlaps(&reach) {
                     continue;
                 }
-                let s = &body.face(h).surface;
-                if !may_meet(s, &reach) {
+                let Ok(across) = crate::boolean::across(body, h, c) else {
                     continue;
-                }
-                // and on the new edges of either face with h: for a traced edge, the stretch of
-                // it near them is all that needs searching
-                let found = if !traced {
-                    curve_surface(&sg.curve, sg.range, s)
-                } else {
-                    let near: Option<Vec<forge_math::Box3>> = (0..2).find_map(|e| {
-                        let fp = key((sg.sides[e], sg.faces[e]), (k, h));
-                        if loose.binary_search(&fp).is_ok()
-                            || unknown.binary_search(&(fp.0.0, fp.1.0)).is_ok()
-                        {
-                            return None;
-                        }
-                        let from = along.partition_point(|x| x.0 < fp);
-                        Some(
-                            along[from..]
-                                .iter()
-                                .take_while(|x| x.0 == fp)
-                                .map(|x| x.1)
-                                .collect(),
-                        )
-                    });
-                    match near {
-                        Some(boxes) if boxes.is_empty() => continue,
-                        Some(boxes) => match stretch(&sg.curve, sg.range, &boxes) {
-                            None => continue,
-                            Some(r) => match curve_surface(&sg.curve, r, s) {
-                                CurveSurface::Hits(h) => CurveSurface::Hits(h),
-                                _ => curve_surface(&sg.curve, sg.range, s),
-                            },
-                        },
-                        None => curve_surface(&sg.curve, sg.range, s),
-                    }
                 };
-                match found {
-                    CurveSurface::Hits(hits) => {
-                        for hit in hits
-                            .into_iter()
-                            .flat_map(|x| crossings_near(&sg.curve, sg.range, s, x))
-                        {
-                            if index[k].point_in_face(h, hit.point) != Where::Outside {
-                                got.push((hit.t, hit.point, tol::LINEAR));
-                            }
-                        }
-                    }
-                    // the new edge lies on this face's surface: it is cut where it crosses the
-                    // face's boundary
-                    CurveSurface::OnSurface | CurveSurface::Overlap => {
-                        for &l in &body.face(h).loops {
-                            for &c in &body.lp(l).coedges {
-                                let e = body.coedge(c).edge;
-                                if !body.edge_box(e).overlaps(&reach) {
-                                    continue;
-                                }
-                                let Ok(across) = crate::boolean::across(body, h, c) else {
-                                    continue;
-                                };
-                                if let CurveSurface::Hits(hits) = curve_surface(&sg.curve, sg.range, &across)
-                                {
-                                    for hit in hits {
-                                        if let Some((_, tol)) = on_edge(body, e, hit.point) {
-                                            got.push((hit.t, hit.point, tol));
-                                        }
-                                    }
-                                }
-                            }
+                if let CurveSurface::Hits(hits) = curve_surface(&sg.curve, sg.range, &across) {
+                    for hit in hits {
+                        if let Some((_, tol)) = on_edge(body, e, hit.point) {
+                            got.push((hit.t, hit.point, tol, None));
                         }
                     }
                 }
             }
         }
+    };
+    // A traced edge's triple points cost evaluations to search for. Every triple point of edge
+    // (a, b) and face h lies on the new edges of (a, h) and of (b, h), where those pairs meet only
+    // in new edges: where one pair's edges all met the edge's other face in closed form, the points
+    // are where they met it, placed on this edge by its nearest point; where all three pairs' edges
+    // are traced, the pair of the two lowest faces searches and the other two take its points.
+    // Otherwise only the stretch of the edge near the face pairs' own edges is searched. So what
+    // each edge on a traced edge's face met is noted: its face pair, the face, where (None: the
+    // edge lies on that face's surface)
+    type Met = (FacePair, (Side, FaceId), Option<Point3>);
+    enum Way {
+        None,
+        Take(FacePair, (Side, FaceId)),
+        Later,
+        Search(Option<Vec<forge_math::Box3>>),
+    }
+    let whole =
+        |fp: FacePair| loose.binary_search(&fp).is_err() && unknown.binary_search(&(fp.0.0, fp.1.0)).is_err();
+    let edges_of =
+        |fp: FacePair| &along[along.partition_point(|x| x.0 < fp)..along.partition_point(|x| x.0 <= fp)];
+    let met_of = |met: &'_ [Met], fp: FacePair, other: (Side, FaceId)| -> Option<Vec<Point3>> {
+        let from = met.partition_point(|x| (x.0, x.1) < (fp, other));
+        met[from..]
+            .iter()
+            .take_while(|x| (x.0, x.1) == (fp, other))
+            .map(|x| x.2)
+            .collect()
+    };
+    // `late`: the lowest pairs' searches are done
+    let way = |si: usize, kh: (Side, FaceId), met: &[Met], late: bool| -> Way {
+        let sg = &segs[si];
+        if !is_traced(sg) {
+            return Way::Search(None);
+        }
+        let fs = [(sg.sides[0], sg.faces[0]), (sg.sides[1], sg.faces[1])];
+        let top = fs[0].max(fs[1]).max(kh);
+        let mut near: Option<Vec<forge_math::Box3>> = None;
+        for e in 0..2 {
+            let fp = key(fs[e], kh);
+            if !whole(fp) {
+                continue;
+            }
+            let edges = edges_of(fp);
+            if edges.is_empty() {
+                return Way::None;
+            }
+            if edges.iter().all(|x| x.2 && x.3) && met_of(met, fp, fs[1 - e]).is_some() {
+                return Way::Take(fp, fs[1 - e]);
+            }
+            if fs[1 - e] == top && edges.iter().all(|x| x.2) {
+                if !late {
+                    return Way::Later;
+                }
+                if met_of(met, fp, top).is_some() {
+                    return Way::Take(fp, top);
+                }
+            }
+            near.get_or_insert_with(|| edges.iter().map(|x| x.1).collect());
+        }
+        Way::Search(near.filter(|_| !late))
+    };
+    // edge si's triple points with face kh found that way (false: it lies on kh's surface)
+    let cuts_with = |si: usize, kh: (Side, FaceId), met: &[Met], way: Way, got: &mut Vec<Hit>| -> bool {
+        let sg = &segs[si];
+        let crossed = match way {
+            Way::None | Way::Later => true,
+            Way::Take(fp, other) => {
+                for p in met_of(met, fp, other).expect("all met at points") {
+                    let t = sg.curve.closest(p, sg.range);
+                    if sg.curve.eval(t).distance(p) <= tol::LINEAR
+                        && index[kh.0].point_in_face(kh.1, p) != Where::Outside
+                    {
+                        got.push((t, p, tol::LINEAR, Some(kh)));
+                    }
+                }
+                true
+            }
+            Way::Search(Some(boxes)) => match stretch(&sg.curve, sg.range, &boxes) {
+                None => true,
+                Some(r) => cut_by(si, kh, r, got) || cut_by(si, kh, sg.range, got),
+            },
+            Way::Search(None) => cut_by(si, kh, sg.range, got),
+        };
+        if !crossed {
+            on_boundary(si, kh, got);
+        }
+        crossed
+    };
+    // edge si's cuts, what it met, and the faces left until the lowest pairs' searches are done
+    let run = |si: usize, met: &[Met]| {
+        let sg = &segs[si];
+        let fs = [(sg.sides[0], sg.faces[0]), (sg.sides[1], sg.faces[1])];
+        let (mut got, mut mine, mut later): (Vec<Hit>, Vec<Met>, Vec<(Side, FaceId)>) = Default::default();
+        // an edge on no traced edge's face: what it met is never asked
+        if !fs.iter().any(|&f| on_traced(f)) {
+            third(si, &mut |kh| {
+                if !cut_by(si, kh, sg.range, &mut got) {
+                    on_boundary(si, kh, &mut got);
+                }
+            });
+            return (got, mine, later);
+        }
+        third(si, &mut |kh| {
+            let w = way(si, kh, met, false);
+            if matches!(w, Way::Later) {
+                later.push(kh);
+                return;
+            }
+            let at = got.len();
+            let fp = key(fs[0], fs[1]);
+            if cuts_with(si, kh, met, w, &mut got) {
+                mine.extend(got[at..].iter().map(|x| (fp, kh, Some(x.1))));
+            } else {
+                mine.push((fp, kh, None));
+            }
+        });
+        (got, mine, later)
+    };
+    // edges met in closed form first, then traced ones, then those left
+    let mut seg_cuts: Vec<Vec<Hit>> = vec![Vec::new(); segs.len()];
+    let mut met: Vec<Met> = Vec::new();
+    let mut later: Vec<(usize, (Side, FaceId))> = Vec::new();
+    for traced in [false, true] {
+        let these: Vec<usize> = (0..segs.len())
+            .filter(|&si| is_traced(&segs[si]) == traced)
+            .collect();
+        let done = par_map(these.len(), threads, if traced { 4 } else { 32 }, |i| {
+            run(these[i], &met)
+        });
+        for (&si, (got, mine, l)) in these.iter().zip(done) {
+            seg_cuts[si] = got;
+            met.extend(mine);
+            later.extend(l.into_iter().map(|kh| (si, kh)));
+        }
+        met.sort_unstable_by_key(|x| (x.0, x.1));
+    }
+    let late = par_map(later.len(), threads, 16, |i| {
+        let (si, kh) = later[i];
+        let mut got = Vec::new();
+        cuts_with(si, kh, &met, way(si, kh, &met, true), &mut got);
         got
     });
+    for (&(si, _), got) in later.iter().zip(late) {
+        seg_cuts[si].extend(got);
+    }
     let mut triple: Vec<SegCut> = Vec::new();
     for (si, cs) in seg_cuts.into_iter().enumerate() {
-        triple.extend(cs.into_iter().map(|(t, point, tol)| SegCut {
+        triple.extend(cs.into_iter().map(|(t, point, tol, by)| SegCut {
             seg: si,
             t,
             point,
             tol,
+            by,
         }));
     }
     lap(&mut clock, 1);
@@ -1099,7 +1218,39 @@ fn nary_body(
                 through[i as usize].push((&sg.curve, Interval::new(tc.t - w, tc.t + w)));
             }
         }
-        let settled = par_map(points.len(), threads, 64, |i| settle(points[i], &through[i]));
+        // a vertex only triple points of three faces' surfaces make lies where those meet
+        let mut three: Vec<Option<[(Side, FaceId); 3]>> = vec![None; points.len()];
+        let mut mixed = vec![false; points.len()];
+        for &k in &cut_vertex {
+            if let VKey::New(i) = k {
+                mixed[i as usize] = true;
+            }
+        }
+        for (tc, &k) in triple.iter().zip(&triple_vertex) {
+            let VKey::New(i) = k else { continue };
+            let i = i as usize;
+            let sg = &segs[tc.seg];
+            match tc.by {
+                Some(kh) => {
+                    let mut fs = [(sg.sides[0], sg.faces[0]), (sg.sides[1], sg.faces[1]), kh];
+                    fs.sort_unstable();
+                    if three[i].is_some_and(|x| x != fs) {
+                        mixed[i] = true;
+                    }
+                    three[i] = Some(fs);
+                }
+                None => mixed[i] = true,
+            }
+        }
+        let settled = par_map(points.len(), threads, 64, |i| {
+            if !mixed[i]
+                && let Some(fs) = three[i]
+                && let Some(p) = meet3(fs.map(|(sd, f)| &tools[sd].face(f).surface), points[i])
+            {
+                return Ok((p, tol::LINEAR));
+            }
+            settle(points[i], &through[i])
+        });
         points.clear();
         for r in settled {
             let (p, t) = r?;
@@ -1133,6 +1284,10 @@ fn nary_body(
         let sg = &segs[tc.seg];
         let w = 1e-3 * sg.range.width();
         let p = key_point(triple_vertex[i]);
+        // a vertex where the cut was found is there already
+        if p == tc.point {
+            return (p, tc.t);
+        }
         (p, sg.curve.closest(p, Interval::new(tc.t - w, tc.t + w)))
     });
     for (tc, (p, t)) in triple.iter_mut().zip(at_triple) {
@@ -2046,6 +2201,31 @@ fn nary_body(
     out.rebuild_shells();
     lap(&mut clock, 5);
     Ok(out)
+}
+
+/// The point where three surfaces meet, by Newton's method from `p` (None where they meet at a
+/// shallow angle there, or not within tolerance of it).
+fn meet3(s: [&forge_geom::Surface; 3], p: Point3) -> Option<Point3> {
+    if s.iter().any(|x| matches!(x, forge_geom::Surface::Procedural(_))) {
+        return None;
+    }
+    let mut q = p;
+    for _ in 0..8 {
+        let [(f0, g0), (f1, g1), (f2, g2)] = s.map(|x| x.implicit_gradient(q));
+        if f0.abs().max(f1.abs()).max(f2.abs()) <= 1e-12 {
+            return Some(q);
+        }
+        let (c0, c1, c2) = (g1.cross(g2), g2.cross(g0), g0.cross(g1));
+        let det = g0.dot(c0);
+        if det.abs() <= 1e-3 * g0.length() * g1.length() * g2.length() {
+            return None;
+        }
+        q = q - (c0 * f0 + c1 * f1 + c2 * f2) / det;
+        if q.distance(p) > tol::LINEAR {
+            return None;
+        }
+    }
+    None
 }
 
 /// Pieces among `ps` with the same ends along the same curve as a lower one: by piece, (the
