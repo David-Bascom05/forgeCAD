@@ -713,8 +713,18 @@ fn nary_run(
         let mut tools: Vec<&Body> = vec![&body];
         tools.extend(built.iter().map(|t| &t.0));
         let ops: Vec<Op> = built.iter().map(|t| op_of(t.1)).collect();
-        return forge_bool::nary_with(&tools, &ops, None, None, threads, cut_root(features.len() - 1))
-            .map_err(err);
+        // the part so far has no analytic solid: its B-rep decides every point in its box
+        let mut solids = vec![Shape::Brep(forge_bool::Index::new(&body).bbox)];
+        solids.extend(built.iter().map(|t| t.2.clone()));
+        return forge_bool::nary_with(
+            &tools,
+            &ops,
+            Some(&solids),
+            None,
+            threads,
+            cut_root(features.len() - 1),
+        )
+        .map_err(err);
     }
     if features.get(start).is_none_or(|f| !starts(f)) {
         return Err(RegenError::NothingToCombine { feature: 0 });

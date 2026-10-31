@@ -714,13 +714,14 @@ impl Run {
         let ops: Vec<Op> = self.tools.iter().map(|t| t.1).collect();
         let mut all = vec![base];
         all.extend(self.tools.iter().map(|t| &t.0));
-        let shapes: Option<Vec<Shape>> = self.base.as_ref().err().map(|t| {
-            let mut shapes = vec![t.2.clone()];
-            shapes.extend(self.tools.iter().map(|t| t.2.clone()));
-            shapes
-        });
+        // a body so far has no analytic solid: its B-rep decides every point in its box
+        let mut shapes = vec![match &self.base {
+            Ok(b) => Shape::Brep(forge_bool::Index::new(b).bbox),
+            Err(t) => t.2.clone(),
+        }];
+        shapes.extend(self.tools.iter().map(|t| t.2.clone()));
         let body =
-            nary_with(&all, &ops, shapes.as_deref(), None, threads, root).map_err(boolean_err(self.last))?;
+            nary_with(&all, &ops, Some(&shapes), None, threads, root).map_err(boolean_err(self.last))?;
         Ok(Solid { id, body })
     }
 
