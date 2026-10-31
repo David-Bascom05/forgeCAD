@@ -827,6 +827,8 @@ fn modify(
             second,
             radius,
         } => {
+            // face ids of the body the fillet compacts, not of one with tombstones
+            let body = &*live(body);
             let faces = |ns: &[Name]| {
                 ns.iter()
                     .map(|&n| face_of(i, body, n))
@@ -835,14 +837,17 @@ fn modify(
             face_fillet(body, &faces(first)?, &faces(second)?, *radius, id)
                 .map_err(|error| RegenError::Fillet { feature: i, error })
         }
-        Feature::FullRound { side, middle, other } => full_round(
-            body,
-            face_of(i, body, *side)?,
-            face_of(i, body, *middle)?,
-            face_of(i, body, *other)?,
-            id,
-        )
-        .map_err(|error| RegenError::Fillet { feature: i, error }),
+        Feature::FullRound { side, middle, other } => {
+            let body = &*live(body);
+            full_round(
+                body,
+                face_of(i, body, *side)?,
+                face_of(i, body, *middle)?,
+                face_of(i, body, *other)?,
+                id,
+            )
+            .map_err(|error| RegenError::Fillet { feature: i, error })
+        }
         Feature::Chamfer { edges, size } => {
             chamfer(body, edges, *size, id).map_err(|error| RegenError::Chamfer { feature: i, error })
         }
@@ -886,6 +891,15 @@ fn modify(
 }
 
 /// The face named `n` on `body`.
+/// `body` without tombstones.
+fn live(body: &Body) -> std::borrow::Cow<'_, Body> {
+    if body.dead > 0 {
+        std::borrow::Cow::Owned(body.compact())
+    } else {
+        std::borrow::Cow::Borrowed(body)
+    }
+}
+
 fn face_of(i: usize, body: &Body, name: Name) -> Result<forge_topo::FaceId, RegenError> {
     body.face_by_name(name)
         .ok_or(RegenError::MissingEdge { feature: i, name })
