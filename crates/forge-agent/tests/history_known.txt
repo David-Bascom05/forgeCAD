@@ -10,7 +10,7 @@ invalid EdgeUses  # patterns of patterns, balls, sketches
 Direct(Invalid(  # delete leaves a face with no loops
 # the n-ary regen names split faces and edges unlike the sequential one, so later references miss
 nary: chamfer: NoSuchEdge
-nary: edit: Direct(Rebuild(  # the n-ary regen's face edit collapses an edge the sequential one keeps
+nary: no edge * on the part here  # seed 3: a hole through a ball cut, its rim filleted; fails on main itself (the n-ary regen names the rim apart)
 nary: the part is 9 bodies, not one  # the sequential regen keeps a disjoint add (invalid Euler) the n-ary refuses
 # tessellation of a face cut by a slanted hole and a revolve
 seq mesh: Face { face: FaceId(9), error: ConstraintsIntersect
