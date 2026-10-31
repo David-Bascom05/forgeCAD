@@ -18,7 +18,7 @@
 
 use crate::{Combine, ExtentError, Feature, RegenError, Tool, Turn, tool};
 use forge_bool::{Member, Op, Seg2, Shape};
-use forge_geom::{Cone, Cylinder, Plane, Sphere, Surface, Torus};
+use forge_geom::{Cone, CurveGeom, Cylinder, Plane, Sphere, Surface, SurfaceGeom, Torus};
 use forge_math::{Frame, Point2, Point3, UnitVec3, Vec2, Vec3, dmath, poly, tol};
 use forge_ops::{Axis2, Profile, ProfileLoop, Segment};
 use forge_topo::{Body, Name};
@@ -29,6 +29,9 @@ use forge_topo::{Body, Name};
 #[derive(Clone, Debug, PartialEq)]
 pub(crate) struct Plan {
     aux: Vec<(Op, Feature, bool)>,
+    /// A torus every face of the result on which must face the travel (its end), proved after
+    /// the build: a slanted torus's cut-off is placed from rays, so this is its exact check.
+    facing: Option<Torus>,
 }
 
 fn keep(f: Feature) -> (Op, Feature, bool) {
@@ -167,6 +170,7 @@ pub(crate) fn plan(
             let t = -lo / z.dot(dv) + 1.0;
             // the end itself lies on the plane: every ray meets it
             let plan = Plan {
+                facing: None,
                 aux: vec![keep(near_box(at, z, &swept(t)))],
             };
             Ok((t, plan))
@@ -196,6 +200,7 @@ pub(crate) fn plan(
                 return Ok((
                     t,
                     Plan {
+                        facing: None,
                         aux: vec![keep(ball)],
                     },
                 ));
@@ -209,6 +214,7 @@ pub(crate) fn plan(
             Ok((
                 t,
                 Plan {
+                    facing: None,
                     aux: vec![less(ball)],
                 },
             ))
@@ -237,15 +243,28 @@ pub(crate) fn plan(
             };
             let rod = drum(at, a, r, span(&swept(t), at, a.get()), refp);
             if inside {
-                return Ok((t, Plan { aux: vec![keep(rod)] }));
+                return Ok((
+                    t,
+                    Plan {
+                        facing: None,
+                        aux: vec![keep(rod)],
+                    },
+                ));
             }
             if across.dot(dv) >= 1.0 - tol::ANGULAR {
                 // travel square to the axis: the sweep's own end on the plane through it
-                return Ok((across.dot(at - refp), Plan { aux: vec![less(rod)] }));
+                return Ok((
+                    across.dot(at - refp),
+                    Plan {
+                        facing: None,
+                        aux: vec![less(rod)],
+                    },
+                ));
             }
             Ok((
                 t,
                 Plan {
+                    facing: None,
                     aux: vec![bound(near_box(at, across, &swept(t))), less(rod)],
                 },
             ))
@@ -313,9 +332,9 @@ pub(crate) fn plan(
                 Some((p, n)) => vec![bound(near_box(p, n, &swept(t))), less(tip)],
                 None => vec![keep(tip)],
             };
-            Ok((t, Plan { aux }))
+            Ok((t, Plan { facing: None, aux }))
         }
-        Surface::Torus(tr) => torus(tr, d, refp, offset),
+        Surface::Torus(tr) => torus(tr, d, foot, refp, offset),
         Surface::Procedural(_) => Err(ExtentError::Unsupported("ending on a blend")),
     }
 }
@@ -325,7 +344,13 @@ pub(crate) fn plan(
 /// with its hole filled), cut at the plane through the axis. From inside the tube: kept inside
 /// it (cut at the plane through the axis when heading for the hole). From the hole, square to
 /// the axis: kept inside the tube's middle circle, less the torus.
-fn torus(tr: &Torus, d: UnitVec3, refp: Point3, offset: f64) -> Result<(f64, Plan), ExtentError> {
+fn torus(
+    tr: &Torus,
+    d: UnitVec3,
+    foot: &[Point3],
+    refp: Point3,
+    offset: f64,
+) -> Result<(f64, Plan), ExtentError> {
     let dv = d.get();
     let (a, c) = (tr.frame.z(), tr.frame.origin);
     let off = refp - c;
@@ -361,6 +386,7 @@ fn torus(tr: &Torus, d: UnitVec3, refp: Point3, offset: f64) -> Result<(f64, Pla
             return Ok((
                 ahead + r + 1.0,
                 Plan {
+                    facing: None,
                     aux: vec![keep(ring)],
                 },
             ));
@@ -371,18 +397,54 @@ fn torus(tr: &Torus, d: UnitVec3, refp: Point3, offset: f64) -> Result<(f64, Pla
         return Ok((
             ahead,
             Plan {
+                facing: None,
                 aux: vec![less(ring)],
             },
         ));
     }
     if ad.abs() > tol::ANGULAR {
-        return Err(ExtentError::Unsupported("a torus met at a slant"));
+        // at a slant: the sweep ends on a plane square to the travel between where rays across
+        // the profile first meet the torus and where they first leave it (or, from inside, leave
+        // it and meet it again); `faces_ahead` then proves every ray of the tool ends at its
+        // first meeting
+        let k = Torus {
+            frame: tr.frame,
+            major: tr.major,
+            minor: r,
+        };
+        let (mut last, mut next) = (f64::NEG_INFINITY, f64::INFINITY);
+        let grid = (0..5).flat_map(|i| (0..5).map(move |j| (i as f64 / 4.0, j as f64 / 4.0)));
+        let rays = grid
+            .map(|(u, v)| foot[0] + (foot[1] - foot[0]) * u + (foot[2] - foot[0]) * v)
+            .chain([refp]);
+        for p in rays {
+            let ts = ray_torus(&k, p, dv);
+            if let Some(&t0) = ts.first() {
+                last = last.max(t0);
+                if let Some(&t1) = ts.get(1) {
+                    next = next.min(t1);
+                }
+            }
+        }
+        if !(last > tol::LINEAR && last < next) {
+            return Err(ExtentError::Unsupported(
+                "a torus met at a slant with no plane between its sides",
+            ));
+        }
+        let t = if next.is_finite() {
+            (last + next) / 2.0
+        } else {
+            last + 1.0
+        };
+        let aux = vec![if inside { keep(ring) } else { less(ring) }];
+        return Ok((t, Plan { facing: Some(k), aux }));
     }
     if inside {
         let t = if ahead > tol::LINEAR { ahead } else { big };
         return Ok((
             t,
             Plan {
+                facing: None,
                 aux: vec![keep(ring)],
             },
         ));
@@ -393,6 +455,7 @@ fn torus(tr: &Torus, d: UnitVec3, refp: Point3, offset: f64) -> Result<(f64, Pla
         return Ok((
             big,
             Plan {
+                facing: None,
                 aux: vec![bound(core), less(ring)],
             },
         ));
@@ -433,9 +496,118 @@ fn torus(tr: &Torus, d: UnitVec3, refp: Point3, offset: f64) -> Result<(f64, Pla
     Ok((
         ahead,
         Plan {
+            facing: None,
             aux: vec![less(spun(c, a, refp, filled))],
         },
     ))
+}
+
+/// Where the ray from `o` along `d` crosses a torus, ascending, ahead of `o`.
+fn ray_torus(tr: &Torus, o: Point3, d: Vec3) -> Vec<f64> {
+    let (l, v) = (tr.frame.point_to_local(o), tr.frame.vec_to_local(d));
+    let s2 = [
+        l.x * l.x + l.y * l.y,
+        2.0 * (l.x * v.x + l.y * v.y),
+        v.x * v.x + v.y * v.y,
+    ];
+    let (rc, r) = (tr.major, tr.minor);
+    let f = [
+        s2[0] + l.z * l.z + rc * rc - r * r,
+        s2[1] + 2.0 * l.z * v.z,
+        s2[2] + v.z * v.z,
+    ];
+    let c4 = [
+        f[0] * f[0] - 4.0 * rc * rc * s2[0],
+        2.0 * f[0] * f[1] - 4.0 * rc * rc * s2[1],
+        f[1] * f[1] + 2.0 * f[0] * f[2] - 4.0 * rc * rc * s2[2],
+        2.0 * f[1] * f[2],
+        f[2] * f[2],
+    ];
+    let mut ts: Vec<f64> = poly::all_real_roots(&c4)
+        .into_iter()
+        .filter(|x| !x.touching && x.x > tol::LINEAR)
+        .map(|x| x.x)
+        .collect();
+    ts.sort_by(f64::total_cmp);
+    ts
+}
+
+/// Whether every face of `b` on torus `tr` faces the travel `d` (its outward normal has a
+/// positive part along d) all over: proved on each face's edges with interval bounds of the
+/// torus's normal along d. The outline where it turns is a loop round the axis; when the axis
+/// misses the box `sweep` holding the faces, no such loop fits inside one, so it can only enter
+/// a face across its edges.
+fn faces_ahead(b: &Body, tr: &Torus, d: Vec3, sweep: &forge_math::Box3) -> bool {
+    let f = tr.frame;
+    let v = f.vec_to_local(d);
+    // the normal's part along d, up to a positive factor, over a box: in the torus's frame
+    let along = |bx: &forge_math::Box3| -> forge_math::Interval {
+        let local =
+            |e: Vec3| (bx.x + -f.origin.x) * e.x + (bx.y + -f.origin.y) * e.y + (bx.z + -f.origin.z) * e.z;
+        let (x, y, z) = (local(f.x().get()), local(f.y().get()), local(f.z().get()));
+        let rho = (x.sqr() + y.sqr()).sqrt();
+        ((rho + -tr.major) * (x * v.x + y * v.y)).div(&rho) + z * v.z
+    };
+    // whether the axis line passes through a box (slab by slab)
+    let axis_meets = |bx: &forge_math::Box3| {
+        let bx = bx.grow(tol::LINEAR);
+        let (mut t0, mut t1) = (f64::NEG_INFINITY, f64::INFINITY);
+        for (k, iv) in [bx.x, bx.y, bx.z].into_iter().enumerate() {
+            let (o, z) = (f.origin[k], f.z().get()[k]);
+            if z.abs() < 1e-15 {
+                if !iv.contains(o) {
+                    return false;
+                }
+            } else {
+                let (a, b) = ((iv.lo - o) / z, (iv.hi - o) / z);
+                t0 = t0.max(a.min(b));
+                t1 = t1.min(a.max(b));
+            }
+        }
+        t0 <= t1
+    };
+    if axis_meets(sweep) {
+        return false;
+    }
+    let target = Surface::Torus(*tr);
+    for fid in b.face_ids() {
+        let face = b.face(fid);
+        if !same_surface(&face.surface, &target) {
+            continue;
+        }
+        // the sign the normal's part along d must keep: from the outward normal at a corner
+        let lp = face.loops[0];
+        let c0 = b.lp(lp).coedges[0];
+        let p = b.vertex(b.coedge_start(c0)).point;
+        let Some(out) = b.face_normal(fid, face.surface.project(p)) else {
+            return false;
+        };
+        // the end faces the travel there, and the normal's part along d keeps its sign there
+        if out.dot(d) <= 0.0 {
+            return false;
+        }
+        let natural = along(&forge_math::Box3::from_point(p)).mid().signum();
+        for &l in &face.loops {
+            for &c in &b.lp(l).coedges {
+                let e = b.edge(b.coedge(c).edge);
+                let mut todo = vec![(e.range, 0)];
+                while let Some((r, depth)) = todo.pop() {
+                    let g = along(&e.curve.bbox(r));
+                    let clear = if natural > 0.0 { g.lo > 0.0 } else { g.hi < 0.0 };
+                    if clear {
+                        continue;
+                    }
+                    if depth > 24 {
+                        return false;
+                    }
+                    let (a, b2) = r.split();
+                    todo.push((a, depth + 1));
+                    todo.push((b2, depth + 1));
+                }
+            }
+        }
+    }
+    true
 }
 
 /// Whether a face lies on the plane through `at` square to `n`.
@@ -473,6 +645,7 @@ pub(crate) fn build(
     if !build {
         return Ok((Body::new(), base.1, shape));
     }
+    let facing = plan.facing;
     let mut bodies = vec![&base.0];
     bodies.extend(aux.iter().map(|t| &t.0));
     let ops: Vec<Op> = plan.aux.iter().map(|a| a.0).collect();
@@ -507,6 +680,13 @@ pub(crate) fn build(
         if whole != now {
             return Err(bad(ExtentError::NotAhead));
         }
+    }
+    if let Some(tr) = facing
+        && !faces_ahead(&body, &tr, far.1.get(), &shape_box(&base.2))
+    {
+        return Err(bad(ExtentError::Unsupported(
+            "a torus met at a slant where some rays graze it or meet it again first",
+        )));
     }
     Ok((body, base.1, shape))
 }
@@ -906,6 +1086,82 @@ fn derived(from: &[Name], pieces: usize) -> std::collections::HashSet<Name> {
         .collect()
 }
 
+/// Whether a sweep (box `sweep`) from outside convex solid `sh`, ending on its surface `s`
+/// (the end within `end`), meets none of it and ends wholly on its skin: a ball's sphere, or a
+/// convex prism's cap with the sweep beyond it and the end over the cap.
+fn skin_under(sh: &Shape, s: &Surface, sweep: &forge_math::Box3, end: &forge_math::Box3) -> bool {
+    let eps = 2.0 * tol::LINEAR;
+    match (sh, s) {
+        (Shape::Ball { center, radius }, Surface::Sphere(sp)) => {
+            sp.frame.origin.distance(*center) <= tol::LINEAR && (sp.radius - radius).abs() <= tol::LINEAR
+        }
+        (Shape::Prism { frame, lo, hi, .. }, Surface::Plane(p)) => {
+            if p.frame.z().dot(frame.z().get()).abs() < 1.0 - tol::ANGULAR {
+                return false;
+            }
+            let h = frame.point_to_local(p.frame.origin).z;
+            let (cap, up) = if (h - hi).abs() <= tol::LINEAR {
+                (*hi, true)
+            } else if (h - lo).abs() <= tol::LINEAR {
+                (*lo, false)
+            } else {
+                return false;
+            };
+            let z = |q: Point3| frame.point_to_local(q).z;
+            let beyond = crate::pattern::corners(sweep)
+                .iter()
+                .all(|&q| if up { z(q) >= cap - eps } else { z(q) <= cap + eps });
+            // the end's box squashed onto the cap must lie over it
+            let over = crate::pattern::corners(end).iter().all(|&q| {
+                let l = frame.point_to_local(q);
+                let flat = frame.point_to_world(Point3::new(l.x, l.y, (lo + hi) / 2.0));
+                convex_holds(sh, &forge_math::Box3::from_point(flat))
+            });
+            beyond && over
+        }
+        _ => false,
+    }
+}
+
+/// Whether a convex analytic solid (a ball, or a prism of a convex polygon) holds the box,
+/// within tolerance.
+fn convex_holds(sh: &Shape, b: &forge_math::Box3) -> bool {
+    let corners = crate::pattern::corners(b);
+    let eps = tol::LINEAR;
+    match sh {
+        Shape::Ball { center, radius } => corners.iter().all(|p| p.distance(*center) <= radius + eps),
+        Shape::Prism { frame, segs, lo, hi } => {
+            let pts: Option<Vec<(Point2, Point2)>> = segs
+                .iter()
+                .map(|s| match *s {
+                    Seg2::Line { a, b } => Some((a, b)),
+                    Seg2::Arc { .. } => None,
+                })
+                .collect();
+            let Some(pts) = pts else { return false };
+            let n = pts.len();
+            // one closed loop turning one way
+            let closed = (0..n).all(|k| pts[k].1.distance(pts[(k + 1) % n].0) <= eps);
+            let turn = |k: usize| (pts[k].1 - pts[k].0).cross(pts[(k + 1) % n].1 - pts[(k + 1) % n].0);
+            let sign = (0..n).map(turn).sum::<f64>().signum();
+            if !closed || n < 3 || (0..n).any(|k| turn(k) * sign < 0.0) {
+                return false;
+            }
+            corners.iter().all(|p| {
+                let l = frame.point_to_local(*p);
+                let q = Point2::new(l.x, l.y);
+                l.z >= lo - eps
+                    && l.z <= hi + eps
+                    && pts.iter().all(|(a, b)| {
+                        let e = *b - *a;
+                        e.cross(q - *a) * sign >= -eps * e.length()
+                    })
+            })
+        }
+        _ => false,
+    }
+}
+
 /// A box holding a tool's analytic solid.
 fn shape_box(sh: &Shape) -> forge_math::Box3 {
     let corners = |s: &Seg2| match *s {
@@ -935,7 +1191,15 @@ fn shape_box(sh: &Shape) -> forge_math::Box3 {
                 r = r.max((q - *origin).dot(*perp).abs());
             }
             let at = |h: f64| frame.point_to_world(Point3::new(0.0, 0.0, h));
-            forge_math::Box3::from_points([at(h0), at(h1)]).grow(r)
+            // the discs at either end: each reaches r across the axis, less along it
+            let z = frame.z().get();
+            let reach = |c: f64| r * (1.0 - c * c).max(0.0).sqrt();
+            let b = forge_math::Box3::from_points([at(h0), at(h1)]);
+            forge_math::Box3 {
+                x: b.x.grow(reach(z.x)),
+                y: b.y.grow(reach(z.y)),
+                z: b.z.grow(reach(z.z)),
+            }
         }
     }
 }
@@ -988,11 +1252,12 @@ fn same_surface(a: &Surface, b: &Surface) -> bool {
 pub(crate) fn verify_next(
     features: &[Feature],
     i: usize,
-    t: &Body,
+    (t, shape): (&Body, &Shape),
     base: &[Name],
     end: &[Name],
-    material: bool,
+    next: &crate::extent::Next,
 ) -> Result<(), RegenError> {
+    let material = next.material;
     let bad = |error| RegenError::Extent { feature: i, error };
     let pieces = t.faces.len() + 1;
     let (end, base) = (derived(end, pieces), derived(base, pieces));
@@ -1000,47 +1265,86 @@ pub(crate) fn verify_next(
         .into_iter()
         .filter(|n| end.contains(n) || !base.contains(n))
         .collect();
-    let start = features[..i]
-        .iter()
-        .rposition(crate::starts)
-        .ok_or(bad(ExtentError::NoNextFace))?;
-    // the part near the sweep: a tool clear of it holds none of it, so the history folds the same
-    // without it (an intersection with one empties it). Only those tools are built.
+    // the part near the sweep, from the solids the pick looked at: a tool clear of it holds none
+    // of it, so the history folds the same without it (an intersection with one empties it)
     let tb = body_box(t).grow(tol::LINEAR);
-    let mut built: Vec<(Body, Op)> = Vec::new();
-    let mut first = true;
-    for k in start..i {
-        let shapes = crate::tools(features, k, false)?;
-        let meets: Vec<bool> = shapes.iter().map(|x| shape_box(&x.2).overlaps(&tb)).collect();
-        let bodies = if meets.contains(&true) {
-            crate::tools(features, k, true)?
-        } else {
-            shapes
-        };
-        for ((b, op, _), m) in bodies.into_iter().zip(meets) {
-            let op = if first { Op::Union } else { crate::op_of(op) };
-            first = false;
-            if !m {
-                if op == Op::Intersect {
-                    built.clear();
-                }
-            } else if !built.is_empty() || op == Op::Union {
-                built.push((b, op));
+    let mut close: Vec<(usize, usize, Op)> = Vec::new();
+    let mut at = (usize::MAX, 0);
+    for (n, (k, sh, op)) in next.tools.iter().enumerate() {
+        // its place among its feature's tools
+        at = if at.0 == *k { (*k, at.1 + 1) } else { (*k, 0) };
+        let op = if n == 0 { Op::Union } else { *op };
+        if !shape_box(sh).overlaps(&tb) {
+            if op == Op::Intersect {
+                close.clear();
             }
+        } else if !close.is_empty() || op == Op::Union {
+            close.push((n, at.1, op));
         }
     }
-    let near: Vec<(&Body, Op)> = built.iter().map(|(b, op)| (b, *op)).collect();
-    if near.is_empty() {
+    if close.is_empty() {
         return Err(bad(ExtentError::NoNextFace));
     }
+    // one convex solid holding the whole sweep is the part there: nothing inside it, and the end
+    // (on its surface, inside it) lies on its skin
+    if let [(n, ..)] = close[..]
+        && material
+        && convex_holds(&next.tools[n].1, &shape_box(shape))
+    {
+        return Ok(());
+    }
+    // from outside, solids whose boxes only touch the sweep's share none of it; if one convex
+    // solid is left, the sweep was cut off at its own surface and its end lies on its skin
+    let sb = shape_box(shape);
+    let touches = |sh: &Shape| {
+        let b = shape_box(sh);
+        [(b.x, sb.x), (b.y, sb.y), (b.z, sb.z)]
+            .iter()
+            .any(|(u, v)| u.hi.min(v.hi) - u.lo.max(v.lo) <= tol::LINEAR)
+    };
+    let inside: Vec<&(usize, usize, Op)> = close.iter().filter(|c| !touches(&next.tools[c.0].1)).collect();
+    if !material
+        && let [&(n, _, Op::Union)] = inside[..]
+        && close.iter().all(|c| c.2 != Op::Intersect)
+    {
+        let end_box = t
+            .face_ids()
+            .filter(|&f| ends.contains(&t.face(f).name))
+            .fold(forge_math::Box3::EMPTY, |b, f| b.hull(&t.face_box(f)));
+        if skin_under(&next.tools[n].1, &next.surface, &sb, &end_box) {
+            return Ok(());
+        }
+    }
+    // only the tools near the sweep are built
+    let mut built: Vec<(Body, Op)> = Vec::new();
+    let mut k_built: Option<(usize, Vec<crate::Tool>)> = None;
+    for &(n, j, op) in &close {
+        let k = next.tools[n].0;
+        if k_built.as_ref().is_none_or(|b| b.0 != k) {
+            k_built = Some((k, crate::tools(features, k, true)?));
+        }
+        let tools = &k_built.as_ref().expect("built").1;
+        built.push((tools[j].0.clone(), op));
+    }
+    let near: Vec<(&Body, Op)> = built.iter().map(|(b, op)| (b, *op)).collect();
     let with = |last: Op| -> Result<Body, RegenError> {
         let mut bodies: Vec<&Body> = near.iter().map(|x| x.0).collect();
         bodies.push(t);
         let mut ops: Vec<Op> = near.iter().skip(1).map(|x| x.1).collect();
         ops.push(last);
-        forge_bool::nary_with(&bodies, &ops, None, None, 1, crate::cut_root(i + 4_000_000))
-            .map(|b| b.compact())
-            .map_err(|error| RegenError::Boolean { feature: i, error })
+        // the pick's analytic solids place most points without the B-rep
+        let mut shapes: Vec<Shape> = close.iter().map(|c| next.tools[c.0].1.clone()).collect();
+        shapes.push(shape.clone());
+        forge_bool::nary_with(
+            &bodies,
+            &ops,
+            Some(&shapes),
+            None,
+            1,
+            crate::cut_root(i + 4_000_000),
+        )
+        .map(|b| b.compact())
+        .map_err(|error| RegenError::Boolean { feature: i, error })
     };
     let inner = with(Op::Intersect)?;
     let clear = if material {
@@ -1061,4 +1365,68 @@ pub(crate) fn verify_next(
         return Err(bad(ExtentError::NotCovered));
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::{Extent, Part, Target};
+
+    /// The facing proof passes a slanted torus end that faces the travel, and fails it seen
+    /// the other way.
+    #[test]
+    fn facing_proof() {
+        let plane = Frame::from_zx(
+            Point3::new(0.0, 0.0, 20.0),
+            Vec3::Y.normalize().expect("y"),
+            Vec3::X,
+        )
+        .expect("frame");
+        let torus = Feature::Revolve {
+            profile: Profile {
+                plane,
+                loops: vec![Profile::circle(Point2::new(10.0, 0.0), 3.0, 0)],
+            },
+            axis: Axis2 {
+                origin: Point2::ORIGIN,
+                dir: Vec2::Y,
+            },
+            extent: Turn::Angle(dmath::TAU),
+            op: Combine::New,
+        };
+        let tilt = Vec3::new(0.3, 0.0, 1.0).normalize().expect("tilt");
+        let rod = Feature::Extrude {
+            profile: Profile {
+                plane: Frame::from_zx(Point3::new(4.5, 0.0, 0.0), tilt, Vec3::Y).expect("frame"),
+                loops: vec![Profile::circle(Point2::ORIGIN, 1.0, 0)],
+            },
+            extent: Extent::To {
+                target: Target::Face {
+                    feature: 0,
+                    name: Name::feature(1).with_str("side").with(0).with(0),
+                },
+                offset: 0.0,
+            },
+            op: Combine::New,
+        };
+        let b = Part {
+            features: vec![torus, rod],
+        }
+        .regenerate()
+        .expect("slanted end");
+        let tr = b
+            .face_ids()
+            .find_map(|f| match &b.face(f).surface {
+                Surface::Torus(t) => Some(*t),
+                _ => None,
+            })
+            .expect("an end on the torus");
+        // the rod's sweep: its edges' box, grown past where the end bulges between them
+        let sweep = b
+            .edge_ids()
+            .fold(forge_math::Box3::EMPTY, |x, e| x.hull(&b.edge_box(e)))
+            .grow(0.5);
+        assert!(faces_ahead(&b, &tr, tilt.get(), &sweep));
+        assert!(!faces_ahead(&b, &tr, -tilt.get(), &sweep));
+    }
 }

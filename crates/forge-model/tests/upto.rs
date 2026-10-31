@@ -170,6 +170,37 @@ fn parts() -> Vec<(&'static str, Part, f64)> {
             extrude(plane, disc(1.0), to(0, wall(0, 0).with(0), 0.0), Combine::New),
         ],
     };
+    // a rod tilted in xz rising into the tube's underside: each ray's first root on the torus
+    let slant_frame = frame(Point3::new(4.5, 0.0, 0.0), tilt, Vec3::Y);
+    let first = |p: Point3| {
+        let d = tilt.normalize().expect("axis").get();
+        let w = p - Point3::new(0.0, 0.0, 20.0);
+        let s = [
+            w.x * w.x + w.y * w.y,
+            2.0 * (w.x * d.x + w.y * d.y),
+            d.x * d.x + d.y * d.y,
+        ];
+        let f = [
+            s[0] + w.z * w.z + 100.0 - 9.0,
+            s[1] + 2.0 * w.z * d.z,
+            s[2] + d.z * d.z,
+        ];
+        let c = [
+            f[0] * f[0] - 400.0 * s[0],
+            2.0 * f[0] * f[1] - 400.0 * s[1],
+            f[1] * f[1] + 2.0 * f[0] * f[2] - 400.0 * s[2],
+            2.0 * f[1] * f[2],
+            f[2] * f[2],
+        ];
+        forge_math::poly::all_real_roots(&c)
+            .into_iter()
+            .map(|r| r.x)
+            .filter(|&t| t > 0.0)
+            .fold(f64::INFINITY, f64::min)
+    };
+    let slant = over_disc(1.0, (0.0, 0.0), |u, v| {
+        first(slant_frame.plane_point(Point2::new(u, v)))
+    });
     let side_cone = over_disc(2.0, (0.0, 20.0), |y, z| {
         40.0 - ((30.0 - z) * (30.0 - z) - y * y).sqrt()
     });
@@ -179,6 +210,7 @@ fn parts() -> Vec<(&'static str, Part, f64)> {
         ("torus-side", tube(rod_x(30.0, true)), from_side),
         ("torus-to-hole", tube(rod_x(11.0, true)), to_hole),
         ("torus-from-hole", tube(rod_x(2.0, false)), from_hole),
+        ("torus-slant", tube(slant_frame), slant),
         (
             "tilted-plane",
             Part {
@@ -486,29 +518,15 @@ fn up_to_refusals() {
         ]),
         bad(2, ExtentError::NotCovered)
     );
-    // a torus met at a slant
-    let ring = Feature::Revolve {
-        profile: Profile {
-            plane: frame(Point3::new(0.0, 0.0, 20.0), Vec3::Y, Vec3::X),
-            loops: vec![Profile::circle(Point2::new(10.0, 0.0), 3.0, 0)],
-        },
-        axis: Axis2 {
-            origin: Point2::ORIGIN,
-            dir: Vec2::Y,
-        },
-        extent: Turn::Angle(dmath::TAU),
-        op: Combine::New,
-    };
-    assert_eq!(
-        refused(vec![
-            ring,
-            extrude(
-                frame(Point3::new(10.0, 0.0, 0.0), Vec3::new(0.3, 0.0, 1.0), Vec3::Y),
-                disc(1.0),
-                to(0, wall(0, 0).with(0), 0.0),
-                Combine::New
-            )
-        ]),
-        bad(1, ExtentError::Unsupported("a torus met at a slant"))
-    );
+    // at a slant, a profile whose rays partly pass the tube (to the far side, or not at all)
+    let wide = refused(vec![
+        torus(),
+        extrude(
+            frame(Point3::new(4.5, 0.0, 0.0), Vec3::new(0.3, 0.0, 1.0), Vec3::Y),
+            disc(5.0),
+            to(0, wall(0, 0).with(0), 0.0),
+            Combine::New,
+        ),
+    ]);
+    assert!(matches!(wide, RegenError::Extent { feature: 1, .. }), "{wide:?}");
 }

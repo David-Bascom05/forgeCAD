@@ -95,20 +95,31 @@ pub enum ExtentError {
     Unsupported(&'static str),
 }
 
+/// What picking the next face found: whether the sketch starts in the part's material, and the
+/// earlier tools' solids it looked at (each with its feature and how it combines), for proving
+/// the pick (`upto::verify_next`).
+#[derive(Clone, Debug)]
+pub(crate) struct Next {
+    pub material: bool,
+    /// The surface picked.
+    pub surface: Surface,
+    pub tools: Vec<(usize, Shape, Op)>,
+}
+
 /// What an extrude or hole comes to: a plain one, or a sweep cut off at a surface.
 pub(crate) enum Resolved<'a> {
-    /// With, up to the next face, whether the sketch starts in the part's material.
-    Plain(Cow<'a, Feature>, Option<bool>),
+    /// With what the next face's pick found, up to the next face.
+    Plain(Cow<'a, Feature>, Option<Next>),
     /// The sweep (a plain extrude) and where it is cut off.
-    UpTo(Feature, UpTo),
+    UpTo(Feature, Box<UpTo>),
 }
 
 /// A sweep (its sketch faces `start`, its far end on the plane through `far` square to it), cut
 /// off as `plan` says.
 pub(crate) struct UpTo {
     pub plan: Plan,
-    /// Up to the next face: whether the sketch starts in the part's material.
-    pub next: Option<bool>,
+    /// Up to the next face: what the pick found.
+    pub next: Option<Next>,
     pub start: Vec<Name>,
     pub far: (Point3, UnitVec3),
 }
@@ -195,7 +206,7 @@ fn toward(s: &Surface, p: Point3, z: UnitVec3) -> f64 {
 
 /// The solids of the tools before feature `i`, with how each combines (for finding the next
 /// face): from the last new solid, with no part-changing feature since.
-fn earlier(features: &[Feature], i: usize) -> Result<Vec<(Shape, Op)>, RegenError> {
+fn earlier(features: &[Feature], i: usize) -> Result<Vec<(usize, Shape, Op)>, RegenError> {
     let bad = bad(i);
     let start = features[..i]
         .iter()
@@ -206,16 +217,22 @@ fn earlier(features: &[Feature], i: usize) -> Result<Vec<(Shape, Op)>, RegenErro
             "the next face after a part-changing feature",
         )));
     }
-    Ok(crate::build_tools(&features[..i], start, 1, false)?
-        .into_iter()
-        .map(|t| (t.2, crate::op_of(t.1)))
-        .collect())
+    let mut out = Vec::new();
+    for k in start..i {
+        out.extend(
+            tools(features, k, false)?
+                .into_iter()
+                .map(|t| (k, t.2, crate::op_of(t.1))),
+        );
+    }
+    Ok(out)
 }
 
 /// The one surface every ray from `from` along `d` meets first, and whether they start in the
 /// part's material (the pick; `upto::verify_next` proves it for the whole sweep).
-fn next(features: &[Feature], i: usize, from: &[Point3], d: UnitVec3) -> Result<(Surface, bool), RegenError> {
-    let tools = earlier(features, i)?;
+fn next(features: &[Feature], i: usize, from: &[Point3], d: UnitVec3) -> Result<(Surface, Next), RegenError> {
+    let all = earlier(features, i)?;
+    let tools: Vec<(Shape, Op)> = all.iter().map(|t| (t.1.clone(), t.2)).collect();
     let mut found: Option<(Surface, bool)> = None;
     for &p in from {
         let s = next_face(&tools, p, d.get()).map_err(bad(i))?;
@@ -224,7 +241,15 @@ fn next(features: &[Feature], i: usize, from: &[Point3], d: UnitVec3) -> Result<
         }
         found = Some(s);
     }
-    found.ok_or(bad(i)(ExtentError::NoNextFace))
+    let (s, material) = found.ok_or(bad(i)(ExtentError::NoNextFace))?;
+    Ok((
+        s.clone(),
+        Next {
+            material,
+            surface: s,
+            tools: all,
+        },
+    ))
 }
 
 /// The four corners of a profile's box, on its plane.
@@ -309,7 +334,7 @@ pub(crate) fn resolve(features: &[Feature], i: usize) -> Result<Resolved<'_>, Re
                         }
                         None => {
                             return up_to(i, profile, *op, &s, offset, None)
-                                .map(|(f, u)| Resolved::UpTo(f, u));
+                                .map(|(f, u)| Resolved::UpTo(f, Box::new(u)));
                         }
                     }
                 }
@@ -326,7 +351,7 @@ pub(crate) fn resolve(features: &[Feature], i: usize) -> Result<Resolved<'_>, Re
                         (end.min(0.0), end.max(0.0))
                     } else {
                         return up_to(i, profile, *op, &s, 0.0, Some(z))
-                            .map(|(f, u)| Resolved::UpTo(f, UpTo { next: material, ..u }));
+                            .map(|(f, u)| Resolved::UpTo(f, Box::new(UpTo { next: material, ..u })));
                     }
                 }
                 Extent::Distance(_) => unreachable!(),
@@ -442,7 +467,7 @@ pub(crate) fn hole_end(
     features: &[Feature],
     i: usize,
     h: &Hole,
-) -> Result<(Hole, Option<UpTo>, Option<bool>), RegenError> {
+) -> Result<(Hole, Option<UpTo>, Option<Next>), RegenError> {
     let mut material = None;
     let s = match h.end {
         End::To { target, .. } => surface(features, i, &target)?,
@@ -492,7 +517,7 @@ pub(crate) fn hole_end(
     let side = Name::feature(i as u64 + 1).with_str("side").with(0);
     let up = UpTo {
         plan,
-        next: material,
+        next: None,
         start: vec![side.with(0), side.with(1)],
         far: (h.at.origin + h.at.z() * t, h.at.z()),
     };

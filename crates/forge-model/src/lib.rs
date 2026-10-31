@@ -518,7 +518,14 @@ fn tools(features: &[Feature], i: usize, build: bool) -> Result<Vec<Tool>, Regen
             if let (true, Some(m)) = (build, next) {
                 // the flat bottom (or drill point) is the end
                 let bottom = Name::feature(i as u64 + 1).with_str("side").with(hole::BOTTOM);
-                upto::verify_next(features, i, &t.0, &names, &[bottom.with(0), bottom.with(1)], m)?;
+                upto::verify_next(
+                    features,
+                    i,
+                    (&t.0, &t.2),
+                    &names,
+                    &[bottom.with(0), bottom.with(1)],
+                    &m,
+                )?;
             }
             Ok(vec![t])
         }
@@ -564,7 +571,7 @@ fn tools(features: &[Feature], i: usize, build: bool) -> Result<Vec<Tool>, Regen
             };
             if let (true, Some(m)) = (build, next) {
                 let end = Name::feature(i as u64 + 1).with_str("end");
-                upto::verify_next(features, i, &t.0, &names, &[end], m)?;
+                upto::verify_next(features, i, (&t.0, &t.2), &names, &[end], &m)?;
             }
             Ok(vec![t])
         }
