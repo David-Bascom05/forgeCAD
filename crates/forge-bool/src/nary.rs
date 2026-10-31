@@ -2224,6 +2224,16 @@ fn nary_body(
         if keep.len() == new_edges.len() {
             return Ok(None);
         }
+        // an edge with dropped regions either side is in no kept region's loops: the face is split
+        // again only to drop one beside a kept region (its regions still go after the others)
+        let beside_kept = |p: usize| {
+            [true, false]
+                .iter()
+                .any(|&s| owner((p, s)).is_none_or(|r| class[r].is_some()))
+        };
+        if !new_edges.iter().any(|p| !keep.contains(p) && beside_kept(*p)) {
+            return Ok(Some(rr.map(|ri| (regs[ri].loops.clone(), class[ri])).collect()));
+        }
         let regions = match (!cut_faces[side][f.index()])
             .then(|| holes_only(tools[side], side, f, list, boundary, &keep, &ties))
             .flatten()
