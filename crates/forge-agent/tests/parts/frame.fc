@@ -1,0 +1,107 @@
+# Road bicycle frame, 56 cm, as one part: hollow tubes mitred by the booleans, a tapered head
+# tube with headset seats, a BSA threaded bottom bracket, stays to flat dropouts with a
+# threaded derailleur hanger, bridges, bottle bosses, a slotted seat clamp, cable ports.
+reach = 385
+stack = 575
+hta = 73 deg
+sta = 73.5 deg
+htl = 160
+stl = 540
+csl = 410
+drop = 70
+sp = 130
+wall = 1
+# head tube top centre, its axis down along d
+hdx = cos(hta)
+hdz = -sin(hta)
+hbx = reach + htl*hdx
+hbz = stack + htl*hdz
+# rear axle
+ax = -sqrt(csl^2 - drop^2)
+az = drop
+# down tube: bottom bracket to 45 up the head tube from its foot
+dtx = hbx - 45*hdx
+dtz = hbz - 45*hdz
+dtl = sqrt(dtx^2 + dtz^2)
+# top tube: 45 below the seat tube top to 25 below the head tube top
+s1x = -(stl-45)*cos(sta)
+s1z = (stl-45)*sin(sta)
+h1x = reach + 25*hdx
+h1z = stack + 25*hdz
+ttl = sqrt((h1x-s1x)^2 + (h1z-s1z)^2)
+# chainstays: from inside the shell wall, clear of the bore (TODO: from the bore once regression bsa_thread_with_chainstay holds), to the dropout
+c0x = -17.5
+c0y = 22
+c1x = ax + 6
+c1y = sp/2 - 4
+csx = c1x - c0x
+csy = c1y - c0y
+csz = az
+cl = sqrt(csx^2 + csy^2 + csz^2)
+# seatstays: from the seat tube, 80 below its top, to the dropout
+q0x = -(stl-80)*cos(sta)
+q0z = (stl-80)*sin(sta)
+q0y = 10
+q1x = ax + 10
+q1z = az + 14
+q1y = sp/2 - 4
+ssx = q1x - q0x
+ssy = q1y - q0y
+ssz = q1z - q0z
+sl = sqrt(ssx^2 + ssy^2 + ssz^2)
+# tubes, outside first; the booleans mitre them
+bb: extrude sym 68 -xz circle 0 0 21
+st: extrude stl z -cos(sta) 0 sin(sta) circle 0 0 15.9
+dt: extrude dtl z dtx/dtl 0 dtz/dtl circle 0 0 17.5
+ht: revolve xz at reach 0 stack axis 0 0 hdx hdz poly 0 0 25*sin(hta) 25*cos(hta) htl*hdx+30*sin(hta) -htl*sin(hta)+30*cos(hta) htl*hdx -htl*sin(hta)
+tt: extrude ttl z (h1x-s1x)/ttl 0 (h1z-s1z)/ttl at s1x 0 s1z circle 0 0 14.3
+cs: loft profile z csx/cl csy/cl csz/cl at c0x c0y 0 circle 0 0 11 profile z csx/cl csy/cl csz/cl at c1x c1y az circle 0 0 6.5
+ss: loft profile z ssx/sl ssy/sl ssz/sl at q0x q0y q0z circle 0 0 8 profile z ssx/sl ssy/sl ssz/sl at q1x q1y q1z circle 0 0 6
+drop: extrude 6 xz at 0 sp/2+2 0 poly ax-14 az-12 ax+34 az-16 ax+38 az-4 ax+24 az+34 ax+8 az+34 ax-14 az+12
+stays: pattern cs ss drop mirror xz
+# bridges, the drive-side hanger, the seat clamp and bottle bosses
+bbr: extrude sym 2*(q0y+0.22*ssy) -xz at q0x+0.22*ssx 0 q0z+0.22*ssz circle 0 0 5
+cbr: extrude sym 2*(c0y+0.25*csy) -xz at c0x+0.25*csx 0 0.25*csz circle 0 0 6
+hanger: extrude 6 xz at 0 -sp/2+4 0 poly ax-6 az-14 ax-12 az+6 ax-32 az-10 ax-30 az-32 ax-14 az-34
+collar: extrude 16 z -cos(sta) 0 sin(sta) at -(stl-16)*cos(sta) 0 (stl-16)*sin(sta) circle 0 0 18.5
+lug: extrude sym 14 xz poly -(stl-3)*cos(sta)-15*sin(sta) (stl-3)*sin(sta)-15*cos(sta) -(stl-3)*cos(sta)-27*sin(sta) (stl-3)*sin(sta)-27*cos(sta) -(stl-15)*cos(sta)-27*sin(sta) (stl-15)*sin(sta)-27*cos(sta) -(stl-15)*cos(sta)-15*sin(sta) (stl-15)*sin(sta)-15*cos(sta)
+dboss: extrude 21 z -dtz/dtl 0 dtx/dtl at 150*dtx/dtl 0 150*dtz/dtl circle 0 0 4.5
+pattern dboss lin dtx/dtl 0 dtz/dtl 2 64
+sboss: extrude 19.5 z sin(sta) 0 cos(sta) at -200*cos(sta) 0 200*sin(sta) circle 0 0 4.5
+pattern sboss lin -cos(sta) 0 sin(sta) 2 64
+# brazed fillets at the joints
+fillet 0:3,0.5:4.5,1:3 (edges between tt st concave)
+fillet 3 (edges between st bb concave) (edges between dt bb concave) (edges between st dt concave)
+fillet 3 (edges between tt ht concave)
+fillet 3 (edges between dt ht concave)
+# TODO: 4..2.5 at the head tube joints once a variable fillet holds on the cone (regression variable_fillet_tube_into_cone)
+# TODO: fillets where the lofted stays meet (regressions fillet_loft_into_boss, fillet_pad_into_smooth_loft)
+# hollow: each tube bored to its wall, bores running into the tube they meet
+bbore: hole 33.65 -xz at 0 -34 0 68
+thread 1.370-24 -xz at 0 -34 0 int 16 left chamfer
+thread 1.370-24 xz at 0 34 0 int 16 chamfer
+stb: extrude cut stl+1 z -cos(sta) 0 sin(sta) circle 0 0 15.9-wall
+dtb: extrude cut dtl z dtx/dtl 0 dtz/dtl circle 0 0 17.5-wall
+ttb: extrude cut ttl z (h1x-s1x)/ttl 0 (h1z-s1z)/ttl at s1x 0 s1z circle 0 0 14.3-wall
+htb: revolve cut xz at reach 0 stack axis 0 0 hdx hdz poly 0 0 23.5*sin(hta) 23.5*cos(hta) htl*hdx+28.5*sin(hta) -htl*sin(hta)+28.5*cos(hta) htl*hdx -htl*sin(hta)
+# headset bearing seats, 11 deep at each end
+extrude cut 11 z hdx 0 hdz at reach 0 stack circle 0 0 24
+extrude cut 11 z -hdx 0 -hdz at hbx 0 hbz circle 0 0 29
+csb: loft cut profile z csx/cl csy/cl csz/cl at c0x+12*csx/cl c0y+12*csy/cl 12*csz/cl circle 0 0 9.9 profile z csx/cl csy/cl csz/cl at c1x c1y az circle 0 0 5.5
+ssb: loft cut profile z ssx/sl ssy/sl ssz/sl at q0x q0y q0z circle 0 0 7 profile z ssx/sl ssy/sl ssz/sl at q1x q1y q1z circle 0 0 5
+pattern csb ssb mirror xz
+# axle slots, the hanger's M10x1 thread
+slot: extrude cut thru both xz loop line ax-5 az-40 ax+5 az-40 line ax+5 az-40 ax+5 az arc ax az 5 0 180 line ax-5 az ax-5 az-40
+hhole: hole 9 -xz at ax-22 -sp/2-2 az-20 6 thread 10 1
+thread hole hhole full
+# binder slot through the clamp, its bolt hole across the lug
+extrude cut 26 z cos(sta) 0 -sin(sta) x -sin(sta) 0 -cos(sta) at -stl*cos(sta) 0 stl*sin(sta) rect 0 -1.25 32 2.5
+hole 5.5 -xz at -(stl-11)*cos(sta)-21*sin(sta) -7 (stl-11)*sin(sta)-21*cos(sta) thru
+# bottle bosses tapped M5, cable ports each side of the down tube
+dbh: hole 4.2 z dtz/dtl 0 -dtx/dtl at 150*dtx/dtl-21*dtz/dtl 0 150*dtz/dtl+21*dtx/dtl 6 thread 5 0.8
+pattern dbh lin dtx/dtl 0 dtz/dtl 2 64
+# TODO: model the M5 threads (thread hole dbh, sbh full) once regression thread_boss_into_oblique_tube holds
+sbh: hole 4.2 z -sin(sta) 0 -cos(sta) at -200*cos(sta)+19.5*sin(sta) 0 200*sin(sta)+19.5*cos(sta) 6 thread 5 0.8
+pattern sbh lin -cos(sta) 0 sin(sta) 2 64
+port: hole 6 -xz at (dtl-110)*dtx/dtl -19 (dtl-110)*dtz/dtl 4
+pattern port mirror xz

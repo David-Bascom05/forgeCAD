@@ -1,0 +1,28 @@
+# Bicycle crank arm, left hand, 170 mm: a lofted arm that tapers from the spindle to the pedal,
+# a JIS square-taper bore with an M22x1 puller thread, a 9/16-20 left-hand pedal thread,
+# and a five-arm 110 BCD spider on the inboard side.
+len = 170
+rs = 21
+rp = 12
+tz = 30
+# TODO: loft smooth once a thread can sit near a smooth loft (regression thread_near_smooth_loft)
+arm: loft profile yz at 12 0 0 rrect -15 -12 30 24 6 profile yz at len/2 0 0 rrect -11.5 -9.5 23 19 5 profile yz at len-4 0 0 rrect -9 -7.5 18 15 4
+spindle: extrude sym tz circle 0 0 rs
+pedal: extrude sym 18 at len 0 0 circle 0 0 rp
+spider: extrude 6 z 0 0 1 x 0.809017 0.587785 0 at 0 0 -tz/2 rrect 0 -7.5 62 15 6
+spiders: pattern spider circ 0 0 0 0 0 1 5
+fillet 3 (edges between spider spindle concave)
+# chainring bolts on the 110 BCD, countersunk on the outboard side of the spider
+bolt: hole 10.2 z 0 0 1 at 44.4979 32.3305 -tz/2 cs 12 90 thru
+pattern bolt circ 0 0 0 0 0 1 5
+# square taper: 12.65 across the flats at the inboard face, 2 degrees included, diagonal on the arm
+taper: loft cut profile at 0 0 -tz/2 poly 8.945 0 0 8.945 -8.945 0 0 -8.945 profile at 0 0 8 poly 8.665 0 0 8.665 -8.665 0 0 -8.665
+puller: hole 20.9 -xy at 0 0 tz/2 tz/2-8
+thread M22x1 -xy at 0 0 tz/2 int 6 chamfer
+pedalbore: hole 12.913 -xy at len 0 9 thru
+thread 9/16-20 -xy at len 0 9 int 18 left chamfer
+# TODO: fillet 2.5 the arm into the spindle and 1.2 into the pedal boss (regression fillet_loft_into_boss)
+fillet 0:2,0.5:3.5,1:2 (edges of spindle circle r=21 top)
+fillet 1 (edges of pedal circle r=12)
+# the length, cut into the inboard face of the arm
+text cut "170" font "block.ttf" 8 0.4 z 0.034229 0 -0.999414 x 0.999414 0 0.034229 at 40 3 -11.041

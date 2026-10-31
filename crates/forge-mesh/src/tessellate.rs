@@ -318,8 +318,17 @@ pub fn tessellate(body: &Body, q: &Quality) -> Result<TriMesh, TessError> {
         edges,
     };
     for f in body.face_ids() {
-        tessellate_face(body, f, &edge_samples, &segments, q, &mut mesh)
-            .map_err(|error| TessError::Face { face: f, error })?;
+        // a cone is unrolled only to reach its apex cleanly; unrolled, two coarse chords of
+        // curves meeting at a sharp corner can cross (in its parameters both run straight)
+        match tessellate_face(body, f, &edge_samples, &segments, q, true, &mut mesh) {
+            Err(CdtError::ConstraintsIntersect { .. })
+                if matches!(body.face(f).surface, Surface::Cone(_)) =>
+            {
+                tessellate_face(body, f, &edge_samples, &segments, q, false, &mut mesh)
+            }
+            r => r,
+        }
+        .map_err(|error| TessError::Face { face: f, error })?;
     }
     Ok(mesh)
 }
@@ -330,6 +339,7 @@ fn tessellate_face(
     edge_samples: &[Vec<(f64, u32)>],
     segments: &Segments,
     q: &Quality,
+    unroll: bool,
     mesh: &mut TriMesh,
 ) -> Result<(), CdtError> {
     let face = body.face(f);
@@ -372,7 +382,9 @@ fn tessellate_face(
     }
     let mut nodes = None;
     let layout = match surface {
-        Surface::Cone(c) => Layout::Unrolled {
+        // unrolled where the face reaches the apex: there its rulings meet, and a triangle with a
+        // corner at the apex must not lie along one
+        Surface::Cone(c) if unroll && c.radius_at(lo.y) <= forge_math::tol::LINEAR => Layout::Unrolled {
             u_mid: 0.5 * (lo.x + hi.x),
             apex_v: c.apex_v(),
             sin_a: c.sin_a(),
@@ -599,7 +611,9 @@ fn tessellate_face(
         on_edge(ia, ib)
             || (!flat && (shared(ia, ib) || off(pos(ia, a).lerp(pos(ib, b), 0.5), a.lerp(b, 0.5))))
     };
-    let both_ways = doubly_curved(surface) || matches!(surface, Surface::Procedural(_));
+    // (a long triangle on a cone, between rulings at its two ends, can sag in its middle past
+    // its sides too)
+    let both_ways = doubly_curved(surface) || matches!(surface, Surface::Procedural(_) | Surface::Cone(_));
     let triangle = |v: [u32; 3], p: [Point2; 3]| {
         let m = Point2::new((p[0].x + p[1].x + p[2].x) / 3.0, (p[0].y + p[1].y + p[2].y) / 3.0);
         !(v.iter().all(|&k| k >= nb) && (0..3).all(|k| within(p[k], p[(k + 1) % 3]))) && {
@@ -1059,6 +1073,7 @@ fn strips(
         ((u1 - u0) * len / (r * step)).ceil().max(1.0) as usize
     };
     // each row: (u, mesh index), increasing u
+    let added = mesh.positions.len();
     let mut rows: Vec<Vec<(f64, u32)>> = Vec::with_capacity(left.len());
     let (mut trig, mut pts) = (Vec::new(), Vec::new());
     rows.push(bottom.iter().map(|&i| (uv[i].x, global[i])).collect());
@@ -1086,6 +1101,21 @@ fn strips(
                 tris.push([a[i].1, b[k + 1].1, b[k].1]);
                 k += 1;
             }
+        }
+    }
+    // a cone's radius changes between rows, so a triangle reaching across can sag past the
+    // chord in its middle or along a side: each is checked (cheaply: the distance is exact),
+    // and where one strays the Delaunay meshes the face instead
+    if let Surface::Cone(_) = surface {
+        let off = |x: forge_math::Point3| surface.implicit(x).abs() > q.chord;
+        let strays = tris.iter().any(|t| {
+            let p = t.map(|i| mesh.positions[i as usize]);
+            off(p[0].lerp(p[1], 0.5).lerp(p[2], 1.0 / 3.0))
+                || (0..3).any(|k| off(p[k].lerp(p[(k + 1) % 3], 0.5)))
+        });
+        if strays {
+            mesh.positions.truncate(added);
+            return None;
         }
     }
     Some(tris)
