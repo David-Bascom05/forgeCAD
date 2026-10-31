@@ -101,6 +101,11 @@ fn imprint_matches_the_general_boolean() {
     for name in suite::NAMES {
         let _ = suite::part(name).map(|p| p.regenerate());
     }
+    // where the general boolean cuts at a box an arc in a turned frame makes wide: a cap's over an
+    // edge of a face clear of the tool (11), faces only the tool's arcs' boxes reach (14)
+    for seed in [11, 14] {
+        let _ = suite::fuzz(seed, 80).regenerate();
+    }
     set_mode(Mode::Off);
     assert_eq!(on_tools, 9, "the tools part's booleans not all taken");
     assert!(

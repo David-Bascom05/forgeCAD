@@ -175,7 +175,7 @@ fn tool(b: &dyn Src) -> Option<Tool> {
                 z.get_or_insert(l.dir);
                 walls.push(f);
             }
-            _ if caps.len() == 2 => return None,
+            _ if caps.len() == 2 || !matches!(b.face(f).0, Surface::Plane(_)) => return None,
             _ => caps.push(f),
         }
     }
@@ -206,19 +206,13 @@ fn tool(b: &dyn Src) -> Option<Tool> {
         ([_], (Surface::Cylinder(c), true, _)) => Some(*c),
         _ => None,
     };
-    // a box round the caps' edges: lines' ends, arcs' whole circles' balls
+    // the caps' edges' boxes, as the general boolean boxes the tool's faces (an arc's is wider
+    // than its circle's ball in a turned frame, and faces there are cut by its box)
     let mut bbox = Box3::EMPTY;
     for f in [bottom, top] {
         for i in 0..b.loop_len(f)? {
             let (c, r, ..) = b.edge(b.loop_use(f, i).0);
-            bbox = match c {
-                Curve::Circle(k) => bbox.hull(&Box3::from_point(k.frame.origin).grow(k.radius)),
-                c => {
-                    bbox.include(c.eval(r.lo));
-                    bbox.include(c.eval(r.hi));
-                    bbox
-                }
-            };
+            bbox = bbox.hull(&c.bbox(r));
         }
     }
     Some(Tool {
@@ -420,6 +414,9 @@ struct Column<'x> {
     inside: Vec<Vec<bool>>,
     /// Vertices the general boolean puts on uprights off the other face (its box holds them).
     extra: Vec<(EdgeId, usize, Vk)>,
+    /// Per cap: the square face it lies on, where the tool stands on (or sinks from) one; the cap
+    /// goes and the face loses the tool's section, bounded by B's own edges.
+    glued: [Option<usize>; 2],
     carriers: std::cell::RefCell<Vec<(Ck, std::rc::Rc<Carrier>)>>,
 }
 
@@ -876,11 +873,13 @@ fn plan(a: &Body, b: &dyn Src, op: Op) -> R<Plan> {
         over: Vec::new(),
         inside: Vec::new(),
         extra: Vec::new(),
+        glued: [None, None],
         carriers: Default::default(),
     };
     // A's faces near the tool first (most declines are found there), then B's walls
     let mut a_walls = Vec::new();
     let mut sides: Vec<FaceId> = Vec::new();
+    let mut clear: Vec<FaceId> = Vec::new();
     for f in a.faces_where(|x| x.overlaps(&t.bbox)) {
         let face = a.face(f);
         if let Surface::Plane(pl) = &face.surface
@@ -890,15 +889,26 @@ fn plan(a: &Body, b: &dyn Src, op: Op) -> R<Plan> {
             if h < -CLEAR || h > t.h + CLEAR {
                 continue;
             }
-            if h < CLEAR || h > t.h - CLEAR {
-                return Err("a face on a cap's plane");
-            }
             let up = (pl.normal_vec().dot(z) > 0.0) == face.same_sense;
+            if h < CLEAR || h > t.h - CLEAR {
+                // exactly on a cap's plane, the tool on its far side for a union, its near side
+                // for a cut
+                let cap = match (h.abs() <= tol::LINEAR, (h - t.h).abs() <= tol::LINEAR) {
+                    (true, _) => 0,
+                    (_, true) => 1,
+                    _ => return Err("a face near a cap's plane"),
+                };
+                if (op == Op::Subtract) != ((cap == 1) == up) || c.glued[cap].is_some() {
+                    return Err("a face on a cap's plane");
+                }
+                c.glued[cap] = Some(c.squares.len());
+            }
             c.squares.push(Square { f, h, up });
             continue;
         }
         if clear_of(a, f, &t) {
             sides.push(f);
+            clear.push(f);
             continue;
         }
         sides.push(f);
@@ -1019,6 +1029,15 @@ fn plan(a: &Body, b: &dyn Src, op: Op) -> R<Plan> {
         }
         c.over.push(overs);
     }
+    // a face the tool stands on holds its whole section, no wall of A crossing it
+    for s in c.glued.into_iter().flatten() {
+        if !c.xs.is_empty() || c.inside.iter().flatten().any(|&x| x) {
+            return Err("a wall of A in a face the tool stands on");
+        }
+        if !c.over.iter().flatten().all(|o| o.contains(&s)) {
+            return Err("the tool's section off the face it stands on");
+        }
+    }
     // the general boolean cuts an upright where the other face's box holds the crossing, even
     // off that face: a vertex there too, a box edge near it not taken
     let boxed = |bx: &Box3, q: Point3| -> R<bool> {
@@ -1067,6 +1086,41 @@ fn plan(a: &Body, b: &dyn Src, op: Op) -> R<Plan> {
                 if !c.inside[j - c.nb][i] && boxed(&bx, q)? {
                     let u = wall.ups[e];
                     c.extra.push((u, 0, Vk::Up(0, u, c.lvl(hc))));
+                }
+            }
+        }
+    }
+    for &(u, side, _) in &c.extra {
+        if side == 0 && !(c.nb..n).any(|j| c.touches(j) && c.walls[j].ups.contains(&u)) {
+            return Err("a vertex on an upright of a wall left alone");
+        }
+    }
+    // nor on an edge of a face clear of the tool, where it crosses a cap's plane in its box
+    for (cap, hc) in [(0, 0.0), (1, t.h)] {
+        let bx = cap_box(cap);
+        for &f in &clear {
+            for &l in &a.face(f).loops {
+                for co in a.lp(l).coedges() {
+                    let e = a.edge(a.coedge(co).edge);
+                    let (h0, h1) = (
+                        c.height(e.curve.eval(e.range.lo)),
+                        c.height(e.curve.eval(e.range.hi)),
+                    );
+                    if (h0 - hc) * (h1 - hc) >= 0.0 {
+                        continue;
+                    }
+                    let q = match &e.curve {
+                        Curve::Line(_) => e
+                            .curve
+                            .eval(e.range.lo + (e.range.hi - e.range.lo) * (hc - h0) / (h1 - h0)),
+                        _ if a.edge_box(a.coedge(co).edge).overlaps(&bx) => {
+                            return Err("a curved edge beside the tool crosses a cap's box");
+                        }
+                        _ => continue,
+                    };
+                    if boxed(&bx, q)? {
+                        return Err("an edge beside the tool crosses a cap's plane in its box");
+                    }
                 }
             }
         }
@@ -1280,8 +1334,13 @@ impl Column<'_> {
                 } else {
                     (t, f, -d)
                 };
+                let ck = match self.glued.iter().position(|&g| g == Some(si)) {
+                    Some(0) => Ck::Edge(1, self.walls[k].bottom),
+                    Some(_) => Ck::Edge(1, self.walls[k].top),
+                    None => Ck::H(sq.f, k),
+                };
                 arcs.push(Arc {
-                    ck: Ck::H(sq.f, k),
+                    ck,
                     from,
                     to,
                     mid,
@@ -1528,7 +1587,7 @@ impl Column<'_> {
                 return Err("a face splits in two");
             }
         }
-        for cap in 0..2 {
+        for cap in (0..2).filter(|&cap| self.glued[cap].is_none()) {
             let arcs = self.arcs_of_cap(cap, keep_b)?;
             if arcs.is_empty() {
                 continue;
