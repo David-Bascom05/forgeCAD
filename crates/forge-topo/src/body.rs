@@ -813,17 +813,29 @@ impl Body {
         self.lp(self.coedge(c).lp).face
     }
 
-    /// The live coedges leaving each of vertices `vs` (sorted).
+    /// The live coedges leaving each of vertices `vs`, by edge (sought only on the faces whose
+    /// boxes hold the vertex).
     pub fn leaving_at(&self, vs: &[VertexId]) -> Vec<Vec<CoedgeId>> {
-        let mut out = vec![Vec::new(); vs.len()];
-        for e in self.edge_ids() {
-            for &c in &self.edge(e).coedges {
-                if let Ok(k) = vs.binary_search(&self.coedge_start(c)) {
-                    out[k].push(c);
+        vs.iter()
+            .map(|&v| {
+                let x = self.vertex(v);
+                let reach = x.tol + forge_math::tol::LINEAR;
+                let mut out: Vec<(u32, usize, CoedgeId)> = Vec::new();
+                for f in self.faces_where(|b| b.grow(reach).contains(x.point)) {
+                    for &l in &self.face(f).loops {
+                        for c in self.lp(l).coedges() {
+                            if self.coedge_start(c) == v {
+                                let e = self.coedge(c).edge;
+                                let k = self.edge(e).coedges.iter().position(|&d| d == c).unwrap_or(0);
+                                out.push((e.0, k, c));
+                            }
+                        }
+                    }
                 }
-            }
-        }
-        out
+                out.sort_unstable();
+                out.into_iter().map(|x| x.2).collect()
+            })
+            .collect()
     }
 
     /// The live coedges leaving each vertex.
