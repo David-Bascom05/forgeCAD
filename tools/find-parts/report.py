@@ -13,6 +13,7 @@ import sys
 
 KNOWN_LIMIT = "nary: the part is"
 NOT_KERNEL = re.compile(r"unknown parameter|: expected |: unknown |: unexpected |volume off")
+EARLY = 60.0
 FAILS = ("fail", "wrong", "timeout", "crash", "oom")
 
 
@@ -37,7 +38,7 @@ def root(sig):
 
 def load(d):
     cases, cpu, sigs, refused = 0, 0.0, {}, {}
-    seen = set()
+    early = set()
     for l in open(os.path.join(d, "ledger.jsonl")):
         r = json.loads(l)
         cpu += r.get("cpu") or 0
@@ -49,9 +50,11 @@ def load(d):
             continue
         if r["v"] in FAILS:
             sigs[s] = sigs.get(s, 0) + 1
+            if cpu <= EARLY:
+                early.add(root(s))
         elif r["v"] == "refused":
             refused[s] = refused.get(s, 0) + 1
-    return cases, cpu, sigs, refused
+    return cases, cpu, sigs, refused, early
 
 
 def main():
@@ -59,19 +62,19 @@ def main():
     real = set()
     if "--real" in a:
         i = a.index("--real")
-        _, _, s, rf = load(a[i + 1])
+        _, _, s, rf, _ = load(a[i + 1])
         real = {root(k) for k in list(s) + list(rf)}
         del a[i : i + 2]
-    print("| method | parts | CPU h | failing parts | distinct failures | distinct roots | roots per CPU h | roots seen in real parts | distinct refusals |")
-    print("|---|---:|---:|---:|---:|---:|---:|---:|---:|")
+    print("| method | parts | CPU h | failing parts | distinct failures | distinct roots | roots per CPU h | roots in first 60 CPU-s | roots seen in real parts | distinct refusals |")
+    print("|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|")
     allr = {}
     for d in a:
-        c, cpu, s, rf = load(d)
+        c, cpu, s, rf, early = load(d)
         roots = {root(k) for k in s}
         for r in roots:
             allr.setdefault(r, set()).add(os.path.basename(d))
         h = max(cpu / 3600, 1e-9)
-        print(f"| {os.path.basename(d)} | {c} | {h:.2f} | {sum(s.values())} | {len(s)} | {len(roots)} | {len(roots) / h:.0f} | {len(roots & real)} | {len(rf)} |")
+        print(f"| {os.path.basename(d)} | {c} | {h:.2f} | {sum(s.values())} | {len(s)} | {len(roots)} | {len(roots) / h:.0f} | {len(early)} | {len(roots & real)} | {len(rf)} |")
     only = {}
     for r, ms in allr.items():
         if len(ms) == 1:
