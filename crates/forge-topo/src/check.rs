@@ -59,6 +59,11 @@ pub enum Problem {
     FaceNoLoops {
         face: FaceId,
     },
+    /// A planar face's first loop must be its outer boundary (the booleans rely on it), the
+    /// rest its holes.
+    OuterNotFirst {
+        face: FaceId,
+    },
     /// Shells overlap: just inside this face the body's material is counted twice (two outer
     /// shells overlapping, one inside the other), or just outside it there is a void outside
     /// any material.
@@ -287,6 +292,12 @@ fn check_sides(body: &Body, out: &mut Vec<Problem>) {
         // drawn finely when a probe misses: a chord of a long arc may cut across a sliver of face
         let fine = std::cell::OnceCell::new();
         let surface = &body.face(f).surface;
+        if let forge_geom::Surface::Plane(_) = surface
+            && loops.len() > 1
+            && (crate::uv::signed_area(&loops[0].points) > 0.0) != body.face(f).same_sense
+        {
+            out.push(Problem::OuterNotFirst { face: f });
+        }
         // probe a small fraction of the face's shortest edge so narrow faces are not stepped across
         let shortest = loops
             .iter()

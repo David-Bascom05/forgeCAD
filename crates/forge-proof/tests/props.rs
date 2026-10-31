@@ -123,6 +123,29 @@ extrude cut 12 at 50 14 -1 rect 0 0 10 8
     }
 }
 
+/// A planar face's first loop is its outer one: the booleans read the face's place from it and
+/// keep it when only holes change. A face listing a hole first is flagged, and is what broke
+/// later cuts after a local imprint appended a new outer loop last.
+#[test]
+fn outer_loop_first() {
+    let mut b = fc("extrude new 10 rect 0 0 60 40
+extrude cut 20 at 20 20 -5 circle 0 0 4
+")
+    .regenerate()
+    .expect("builds");
+    assert!(forge_topo::check(&b).is_empty());
+    let f = b
+        .face_ids()
+        .find(|&f| b.face(f).loops.len() == 2)
+        .expect("a face with a hole");
+    b.faces[f.index()].loops.swap(0, 1);
+    assert!(
+        forge_topo::check(&b).contains(&forge_topo::Problem::OuterNotFirst { face: f }),
+        "{:?}",
+        forge_topo::check(&b)
+    );
+}
+
 /// The oracle is not vacuous: a part's tools against the body without its last cut disagree.
 #[test]
 fn membership_catches_a_missing_cut() {
