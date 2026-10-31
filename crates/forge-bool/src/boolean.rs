@@ -1453,21 +1453,41 @@ pub(crate) fn trim(
                 // (a step out from the touch until it leaves the boundary's tolerance: tangent,
                 // it parts from the boundary only quadratically, so the steps grow to a traced
                 // curve's chain spacing, one unit of its parameter)
+                // (a step out of the face on either side ends it: the curve crosses out there)
                 let touch_inside = |h: &CurveHit| {
-                    on_edge(body, e, h.point).is_some()
-                        && index[1 - k].boxes[faces[1 - k].index()]
-                            .grow(tol::LINEAR)
-                            .contains(h.point)
+                    let side = |t: f64| {
+                        if range.contains(t) || closed {
+                            index[k].point_in_face(f, curve.eval(t))
+                        } else {
+                            Where::Outside
+                        }
+                    };
+                    // the side of the surface across the edge the curve keeps to: the face's
+                    // outside there, it touches from outside (cheaper than asking the face)
+                    let inner = |s: f64| {
+                        let d = edge.curve.deriv(s).d1;
+                        let along = if body.coedge(c).forward { d } else { -d };
+                        let Some(n) = body.face_normal(f, body.face(f).surface.project(h.point)) else {
+                            return true;
+                        };
+                        let inward = across.gradient(h.point).dot(n.cross(along));
+                        let dt = 5e-2 * range.width().min(1.0);
+                        let g = across.implicit(curve.eval(h.t - dt)) + across.implicit(curve.eval(h.t + dt));
+                        g * inward >= 0.0 || g.abs() <= 1e-7
+                    };
+                    index[1 - k].boxes[faces[1 - k].index()]
+                        .grow(tol::LINEAR)
+                        .contains(h.point)
+                        && on_edge(body, e, h.point).is_some_and(|(s, _)| inner(s))
                         && [1e-3, 1e-2, 5e-2, 0.2, 0.5].iter().find_map(|&w| {
                             let dt = w * range.width().min(1.0);
-                            let at = [h.t - dt, h.t + dt].map(|t| {
-                                if range.contains(t) || closed {
-                                    index[k].point_in_face(f, curve.eval(t))
-                                } else {
-                                    Where::Outside
-                                }
-                            });
-                            (!at.contains(&Where::On)).then_some(at == [Where::Inside; 2])
+                            match side(h.t - dt) {
+                                Where::Outside => Some(false),
+                                a => match side(h.t + dt) {
+                                    Where::Outside => Some(false),
+                                    b => (a == Where::Inside && b == Where::Inside).then_some(true),
+                                },
+                            }
                         }) == Some(true)
                 };
                 for (h, grazing) in hits.into_iter().flat_map(|h| {
