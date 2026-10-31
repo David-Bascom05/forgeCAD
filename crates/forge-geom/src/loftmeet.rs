@@ -457,6 +457,12 @@ mod tests {
 
     /// Span k of half (0 or 1) of a smooth loft of four circles round a bend, `lift` up.
     fn tube(radii: [f64; 4], k: usize, half: usize, lift: f64) -> Surface {
+        twisted(radii, [0.0; 4], false, k, half, lift)
+    }
+
+    /// As `tube`, each section's half circle starting `turns[i]` further round, and all of them
+    /// run `back` from their far ends.
+    fn twisted(radii: [f64; 4], turns: [f64; 4], back: bool, k: usize, half: usize, lift: f64) -> Surface {
         let (mut rails, mut knots, mut last) = (Vec::new(), Vec::new(), None::<Point3>);
         for (i, &radius) in radii.iter().enumerate() {
             let t = 0.5 * i as f64;
@@ -466,11 +472,16 @@ mod tests {
             let frame = Frame::from_zx(o, z, Vec3::new(cs, sn, 0.0)).unwrap();
             knots.push(last.map_or(0.0, |p| knots[knots.len() - 1] + p.distance(o)));
             last = Some(o);
-            let start = half as f64 * dmath::PI;
+            let start = half as f64 * dmath::PI + turns[i];
+            let (start, sweep) = if back {
+                (start + dmath::PI, -dmath::PI)
+            } else {
+                (start, dmath::PI)
+            };
             rails.push(Rail::Arc {
                 circle: Circle { frame, radius },
                 start,
-                sweep: dmath::PI,
+                sweep,
             });
         }
         let sp = Arc::new(Spline::new(knots, false, false).unwrap());
@@ -540,6 +551,62 @@ mod tests {
         };
         cs.iter().for_each(|c| on_both(&c.0, &a, &plane));
         assert_eq!(cs.len(), 2);
+    }
+
+    #[test]
+    fn sections_starting_apart_meet_as_the_tracer_finds() {
+        let region = Box3::from_points([Point3::new(-50.0, -50.0, -20.0), Point3::new(50.0, 50.0, 20.0)]);
+        let mut r = Rng::new(5);
+        for _ in 0..20 {
+            let turns = std::array::from_fn(|_| r.range(-0.6, 0.6));
+            let half = r.below(2);
+            let a = twisted(radii(&mut r), turns, r.bool(), r.below(3), half, 0.0);
+            // the exact form, not the per-rail sum
+            assert!(skinned(&a).unwrap().turn() != 0.0);
+            let z = r.range(1.0, 5.0) * if half == 1 { 1.0 } else { -1.0 };
+            let plane = Surface::Plane(Plane {
+                frame: Frame::WORLD.with_origin(Point3::new(0.0, 0.0, z)),
+            });
+            let Some(SurfaceSurface::Curves(cs)) = meet(&a, &plane, region) else {
+                panic!("it cuts")
+            };
+            cs.iter().for_each(|c| on_both(&c.0, &a, &plane));
+            let traced = crate::intcurve::trace(&a, &plane, region).expect("the tracer finds it");
+            // the tracer runs on past the face: the two agree on it
+            let near = |p: Point3, ics: &[&IntCurve]| {
+                ics.iter().any(|ic| {
+                    ic.eval(ic.closest(p, Interval::new(0.0, ic.domain_hi())))
+                        .distance(p)
+                        <= 1e-3
+                })
+            };
+            let mine: Vec<&IntCurve> = cs
+                .iter()
+                .map(|c| match &c.0 {
+                    Curve::Intersection(ic) => &**ic,
+                    _ => unreachable!(),
+                })
+                .collect();
+            let theirs: Vec<&IntCurve> = traced.iter().collect();
+            let v = skinned(&a).unwrap().domain().v.interval();
+            let face = Box2::new(Interval::new(0.0, 1.0), v);
+            let (mut both, mut seen) = (0, 0);
+            for ic in &mine {
+                for k in 0..=40 {
+                    assert!(near(ic.eval(ic.domain_hi() * k as f64 / 40.0), &theirs));
+                }
+            }
+            for ic in &theirs {
+                for k in 0..=200 {
+                    let p = ic.eval(ic.domain_hi() * k as f64 / 200.0);
+                    if region.contains(p) && face.contains(a.project(p)) {
+                        seen += 1;
+                        both += usize::from(near(p, &mine));
+                    }
+                }
+            }
+            assert!(seen > 0 && both == seen, "{both} of {seen}");
+        }
     }
 
     #[test]

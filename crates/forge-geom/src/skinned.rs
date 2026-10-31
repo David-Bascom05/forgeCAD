@@ -419,7 +419,7 @@ struct Data {
 
 /// The surface summed once per span: A(s) + B(s) cos a + D(s) sin a + E(s) t, a = start + sweep t,
 /// each a cubic in the fraction b along the span (where every rail is a line or an arc turning
-/// through the same angles, and no guide pulls on it).
+/// through as much, and no guide pulls on it).
 #[derive(Clone, Debug)]
 struct Poly {
     start: f64,
@@ -439,10 +439,12 @@ impl Poly {
             match *r {
                 Rail::Line { .. } => {}
                 Rail::Arc { start, sweep, .. } => {
-                    if angles.is_some_and(|a| a != (start, sweep)) {
+                    // another start or sense folds into the section's axes; only the size must match
+                    // (research/loft-ssi/shipped: arc_any_start; unequal sizes, sympy/sweeps.py)
+                    if angles.is_some_and(|(_, w): (f64, f64)| w.abs() != sweep.abs()) {
                         return None;
                     }
-                    angles = Some((start, sweep));
+                    angles = angles.or(Some((start, sweep)));
                 }
                 _ => return None,
             }
@@ -470,11 +472,26 @@ impl Poly {
                             add(0, d, a.to_vec());
                             add(3, d, b - a);
                         }
-                        Rail::Arc { circle, .. } => {
+                        Rail::Arc {
+                            circle,
+                            start: s,
+                            sweep: w,
+                        } => {
                             let (f, rad) = (&circle.frame, circle.radius);
+                            let (mut x, mut y) = (f.x().get() * rad, f.y().get() * rad);
+                            // s + w t = delta + sign (start + sweep t): turn X, Y by delta, flip Y by sign
+                            let sign = if w == sweep { 1.0 } else { -1.0 };
+                            let delta = s - sign * start;
+                            if delta != 0.0 {
+                                let (sn, cs) = forge_math::dmath::sin_cos(delta);
+                                (x, y) = (x * cs + y * sn, y * cs - x * sn);
+                            }
+                            if sign < 0.0 {
+                                y = -y;
+                            }
                             add(0, d, f.origin.to_vec());
-                            add(1, d, f.x().get() * rad);
-                            add(2, d, f.y().get() * rad);
+                            add(1, d, x);
+                            add(2, d, y);
                         }
                         _ => unreachable!("lines and arcs only"),
                     }
@@ -1483,6 +1500,18 @@ mod tests {
         let mut r = Rng::new(11);
         for _ in 0..40 {
             let (rails, spline, slopes) = random(&mut r);
+            // arcs starting anywhere, turning either way, as much
+            let rails = rails
+                .into_iter()
+                .map(|x| match x {
+                    Rail::Arc { circle, sweep, .. } => Rail::Arc {
+                        circle,
+                        start: r.range(-3.0, 3.0),
+                        sweep: if r.bool() { sweep } else { -sweep },
+                    },
+                    l => l,
+                })
+                .collect();
             let mut d = Data::new(rails, slopes, spline, Vec::new());
             assert!(d.poly.is_some());
             let k = d.spline.knots().to_vec();
