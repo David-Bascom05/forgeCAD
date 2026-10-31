@@ -44,7 +44,8 @@ pub fn searched(a: &Surface, b: &Surface, region: Box3) -> SurfaceSurface {
     if let Some(r) = MET.with(|m| m.borrow().iter().find(|e| hit(e)).map(|e| e.3.clone())) {
         return r;
     }
-    let r = match forge_geom::meet::intersect(a, b, region) {
+    let met = forge_geom::meet::intersect(a, b, region).or_else(|| forge_geom::loftmeet::meet(a, b, region));
+    let r = match met {
         Some(r) if r != SurfaceSurface::NotAnalytic => r,
         _ => match forge_geom::intcurve::trace(a, b, region) {
             Some(cs) if cs.is_empty() => SurfaceSurface::Empty,

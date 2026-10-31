@@ -23,7 +23,7 @@ use forge_math::{Box3, Frame, Interval, Point2, Point3, Vec3, dmath, poly, tol};
 
 /// The other surface as a polynomial in world coordinates, zero on the surface.
 #[derive(Clone, Copy, Debug, PartialEq)]
-enum Alg {
+pub(crate) enum Alg {
     /// q.A.q + 2 b.q + c with q = p - o.
     Quadric {
         o: Point3,
@@ -35,7 +35,7 @@ enum Alg {
     Torus { frame: Frame, big: f64, r: f64 },
 }
 
-fn mul(a: &[[f64; 3]; 3], v: Vec3) -> Vec3 {
+pub(crate) fn mul(a: &[[f64; 3]; 3], v: Vec3) -> Vec3 {
     Vec3::new(
         a[0][0] * v.x + a[0][1] * v.y + a[0][2] * v.z,
         a[1][0] * v.x + a[1][1] * v.y + a[1][2] * v.z,
@@ -56,7 +56,7 @@ fn less_axis(z: Vec3, w: f64) -> [[f64; 3]; 3] {
 }
 
 impl Alg {
-    fn of(s: &Surface) -> Option<Alg> {
+    pub(crate) fn of(s: &Surface) -> Option<Alg> {
         Some(match s {
             Surface::Plane(p) => Alg::Quadric {
                 o: p.frame.origin,
@@ -96,7 +96,7 @@ impl Alg {
     }
 
     /// Value and gradient at p.
-    fn grad(&self, p: Point3) -> (f64, Vec3) {
+    pub(crate) fn grad(&self, p: Point3) -> (f64, Vec3) {
         match *self {
             Alg::Quadric { o, a, b, c } => {
                 let q = p - o;

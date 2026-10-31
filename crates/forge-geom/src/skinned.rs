@@ -573,6 +573,63 @@ impl Poly {
             lo = hi;
         }
     }
+
+    /// The control points of span i's piece over `uv` (v by the span's knots k0, k0 + h); None for a
+    /// span mixing lines and arcs, or a piece turning half a turn or more.
+    fn hull(&self, i: usize, k0: f64, h: f64, uv: Box2) -> Option<Hull> {
+        let sp = &self.spans[i];
+        let (b0, b1) = ((uv.v.lo - k0) / h, (uv.v.hi - k0) / h);
+        let third = (b1 - b0) / 3.0;
+        // a part's Bernstein points over [b0, b1], from its values and slopes at the ends
+        let bern = |c: &[Vec3; 4]| {
+            let val = |b: f64| ((c[3] * b + c[2]) * b + c[1]) * b + c[0];
+            let der = |b: f64| (c[3] * (3.0 * b) + c[2] * 2.0) * b + c[1];
+            [
+                val(b0),
+                val(b0) + der(b0) * third,
+                val(b1) - der(b1) * third,
+                val(b1),
+            ]
+        };
+        let a = bern(&sp[0]);
+        let mut out = Hull {
+            pts: [Point3::ORIGIN; 12],
+            w: [1.0; 3],
+            n: 2,
+        };
+        if !self.arcs {
+            let e = bern(&sp[3]);
+            for r in 0..4 {
+                out.pts[2 * r] = Point3::ORIGIN + a[r] + e[r] * uv.u.lo;
+                out.pts[2 * r + 1] = Point3::ORIGIN + a[r] + e[r] * uv.u.hi;
+            }
+            return Some(out);
+        }
+        if sp[3].iter().any(|v| *v != Vec3::ZERO) {
+            return None;
+        }
+        let (x0, x1) = (
+            self.start + self.sweep * uv.u.lo,
+            self.start + self.sweep * uv.u.hi,
+        );
+        let half = 0.5 * (x1 - x0);
+        if half.abs() >= 0.49 * forge_math::dmath::PI {
+            return None;
+        }
+        let ch = forge_math::dmath::cos(half);
+        let (s0, c0) = forge_math::dmath::sin_cos(x0);
+        let (sm, cm) = forge_math::dmath::sin_cos(x0 + half);
+        let (s1, c1) = forge_math::dmath::sin_cos(x1);
+        let (bb, dd) = (bern(&sp[1]), bern(&sp[2]));
+        for (j, (cx, sy)) in [(c0, s0), (cm / ch, sm / ch), (c1, s1)].into_iter().enumerate() {
+            for r in 0..4 {
+                out.pts[3 * r + j] = Point3::ORIGIN + a[r] + bb[r] * cx + dd[r] * sy;
+            }
+        }
+        out.w = [1.0, ch, 1.0];
+        out.n = 3;
+        Some(out)
+    }
 }
 
 impl Data {
@@ -723,6 +780,106 @@ impl Data {
             self.spline.clone(),
             self.shifts.iter().map(|sh| sh.transformed(f)).collect(),
         )
+    }
+}
+
+/// A piece of a span's control points: four rows (Bernstein in v) of two points (lines, in t) or of
+/// three (arcs: a rational quadratic, weights 1, cos h, 1, h half the piece's turn). The piece lies
+/// in their hull.
+pub(crate) struct Hull {
+    pts: [Point3; 12],
+    w: [f64; 3],
+    n: usize,
+}
+
+impl Hull {
+    fn rows(&self) -> &[Point3] {
+        &self.pts[..4 * self.n]
+    }
+
+    pub(crate) fn bbox(&self) -> Box3 {
+        Box3::from_points(self.rows().iter().copied())
+    }
+
+    pub(crate) fn centre(&self) -> Vec3 {
+        self.rows().iter().fold(Vec3::ZERO, |s, p| s + p.to_vec()) / (4 * self.n) as f64
+    }
+
+    pub(crate) fn along_u(&self) -> f64 {
+        let n = self.n;
+        self.pts[n].distance(self.pts[2 * n - 1]) + self.pts[2 * n].distance(self.pts[3 * n - 1])
+    }
+
+    pub(crate) fn along_v(&self) -> f64 {
+        let c = self.n / 2;
+        self.pts[c].distance(self.pts[3 * self.n + c])
+    }
+
+    pub(crate) fn normal(&self) -> Vec3 {
+        let (n, c) = (self.n, self.n / 2);
+        (self.pts[3 * n + c] - self.pts[c]).cross(self.pts[2 * n - 1] - self.pts[n])
+    }
+
+    pub(crate) fn extent(&self, u: Vec3) -> Interval {
+        self.rows().iter().fold(Interval::EMPTY, |mut i, p| {
+            i.include(p.to_vec().dot(u));
+            i
+        })
+    }
+
+    /// The quadric q.A.q + 2 b.q + c has one sign over the piece: Q(S) w^2 is a polynomial of
+    /// degree 6 in v and 2(n - 1) in t, every Bernstein coefficient of it the same sign.
+    pub(crate) fn misses(&self, q: &crate::meet::Alg) -> bool {
+        let crate::meet::Alg::Quadric { o, a, b, c } = *q else {
+            return false;
+        };
+        const C3: [f64; 4] = [1.0, 3.0, 3.0, 1.0];
+        const C6: [f64; 7] = [1.0, 6.0, 15.0, 20.0, 15.0, 6.0, 1.0];
+        let n = self.n;
+        let (cn, c2n): (&[f64], &[f64]) = if n == 3 {
+            (&[1.0, 2.0, 1.0], &[1.0, 4.0, 6.0, 4.0, 1.0])
+        } else {
+            (&[1.0, 1.0], &[1.0, 2.0, 1.0])
+        };
+        let h = |i: usize, j: usize| (self.pts[i * n + j] - o) * self.w[j];
+        let mut coef = [[0.0; 5]; 7];
+        for i in 0..4 {
+            for j in 0..n {
+                let (hij, ah) = (h(i, j), crate::meet::mul(&a, h(i, j)));
+                for k in 0..4 {
+                    for l in 0..n {
+                        let v = h(k, l).dot(ah) + 2.0 * b.dot(hij) * self.w[l] + c * self.w[j] * self.w[l];
+                        coef[i + k][j + l] += v * C3[i] * C3[k] * cn[j] * cn[l] / (C6[i + k] * c2n[j + l]);
+                    }
+                }
+            }
+        }
+        let all = coef.iter().flat_map(|r| &r[..2 * n - 1]);
+        let eps = 1e-12 * all.clone().fold(0.0f64, |m, x| m.max(x.abs()));
+        all.clone().all(|&x| x > eps) || all.clone().all(|&x| x < -eps)
+    }
+}
+
+impl Skinned {
+    /// The control points of the face's piece over `uv` (inside its domain); see `Hull`.
+    pub(crate) fn hull(&self, uv: Box2) -> Option<Hull> {
+        let poly = self.data.poly.as_ref()?;
+        let sp = &self.data.spline;
+        let i = sp.span(self.span.mid());
+        poly.hull(i, sp.knots[i], sp.knots[i + 1] - sp.knots[i], uv)
+    }
+
+    /// The face's domain carried on as far as the surface stays regular.
+    pub(crate) fn reach(&self) -> Box2 {
+        self.ext
+    }
+
+    /// The angle the arcs turn through across the face (none for lines).
+    pub(crate) fn turn(&self) -> f64 {
+        self.data
+            .poly
+            .as_ref()
+            .map_or(0.0, |p| if p.arcs { p.sweep } else { 0.0 })
     }
 }
 
@@ -1086,6 +1243,9 @@ impl Procedural for Skinned {
                 sum(3, &|k| diffs[k][0]) + slopes(3),
             ],
         ))
+    }
+    fn as_any(&self) -> Option<&dyn std::any::Any> {
+        Some(self)
     }
     fn min_radius(&self) -> f64 {
         let arcs = self
