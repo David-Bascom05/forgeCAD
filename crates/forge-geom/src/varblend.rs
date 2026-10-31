@@ -359,6 +359,8 @@ pub struct RadiusLaw {
     knots: Vec<f64>,
     /// Per segment: r = a + b h + c h^2 + d h^3, h measured from the segment's first knot.
     coef: Vec<[f64; 4]>,
+    /// A closed edge's law repeats with this period (the span of its knots).
+    period: Option<f64>,
 }
 
 impl RadiusLaw {
@@ -381,6 +383,95 @@ impl RadiusLaw {
         }
         let (x, y): (Vec<f64>, Vec<f64>) = points.iter().copied().unzip();
         Some(RadiusLaw::fit(&x, &y, end_slopes))
+    }
+
+    /// A shape-preserving C1 cubic through (s, r) control points (s increasing): it never
+    /// overshoots them (Fritsch-Carlson slopes), so it stays between neighbouring radii, and
+    /// it holds the end radii past the ends.
+    pub fn monotone(points: &[(f64, f64)]) -> Option<RadiusLaw> {
+        let n = points.len();
+        if n < 2
+            || points
+                .windows(2)
+                .any(|w| w[1].0.partial_cmp(&w[0].0) != Some(std::cmp::Ordering::Greater))
+        {
+            return None;
+        }
+        let h: Vec<f64> = (0..n - 1).map(|i| points[i + 1].0 - points[i].0).collect();
+        let d: Vec<f64> = (0..n - 1)
+            .map(|i| (points[i + 1].1 - points[i].1) / h[i])
+            .collect();
+        // flat ends; inside, the weighted harmonic mean of the neighbouring slopes, zero at an extreme
+        let mut m = vec![0.0; n];
+        for i in 1..n - 1 {
+            if d[i - 1] * d[i] > 0.0 {
+                let (w1, w2) = (2.0 * h[i] + h[i - 1], h[i] + 2.0 * h[i - 1]);
+                m[i] = (w1 + w2) / (w1 / d[i - 1] + w2 / d[i]);
+            }
+        }
+        let mut knots = vec![points[0].0 - 1.0];
+        let mut coef = vec![[points[0].1, 0.0, 0.0, 0.0]];
+        for i in 0..n - 1 {
+            let (y0, hi) = (points[i].1, h[i]);
+            let c = (3.0 * d[i] - 2.0 * m[i] - m[i + 1]) / hi;
+            let e = (m[i] + m[i + 1] - 2.0 * d[i]) / (hi * hi);
+            knots.push(points[i].0);
+            coef.push([y0, m[i], c, e]);
+        }
+        knots.push(points[n - 1].0);
+        coef.push([points[n - 1].1, 0.0, 0.0, 0.0]);
+        knots.push(points[n - 1].0 + 1.0);
+        Some(RadiusLaw {
+            knots,
+            coef,
+            period: None,
+        })
+    }
+
+    /// The C2 periodic cubic spline through (s, r) control points (s increasing, all within one
+    /// period of the first), for a closed edge whose s runs over `period`.
+    pub fn periodic(points: &[(f64, f64)], period: f64) -> Option<RadiusLaw> {
+        let n = points.len();
+        let ok = n >= 1
+            && period > 0.0
+            && points.windows(2).all(|w| w[1].0 > w[0].0)
+            && points[n - 1].0 < points[0].0 + period;
+        if !ok {
+            return None;
+        }
+        let mut x: Vec<f64> = points.iter().map(|p| p.0).collect();
+        let mut y: Vec<f64> = points.iter().map(|p| p.1).collect();
+        x.push(x[0] + period);
+        y.push(y[0]);
+        let h: Vec<f64> = (0..n).map(|i| x[i + 1] - x[i]).collect();
+        let slope: Vec<f64> = (0..n).map(|i| (y[i + 1] - y[i]) / h[i]).collect();
+        // cyclic system for the second derivatives, diagonally dominant: plain elimination
+        let mut a = vec![vec![0.0; n + 1]; n];
+        for i in 0..n {
+            let p = (i + n - 1) % n;
+            a[i][p] += h[p];
+            a[i][i] += 2.0 * (h[p] + h[i]);
+            a[i][(i + 1) % n] += h[i];
+            a[i][n] = 6.0 * (slope[i] - slope[p]);
+        }
+        for c in 0..n {
+            for r in c + 1..n {
+                let f = a[r][c] / a[c][c];
+                let pivot = a[c].clone();
+                for (x, p) in a[r].iter_mut().zip(&pivot).skip(c) {
+                    *x -= f * p;
+                }
+            }
+        }
+        let mut m = vec![0.0; n + 1];
+        for c in (0..n).rev() {
+            let acc = (c + 1..n).fold(a[c][n], |acc, k| acc - a[c][k] * m[k]);
+            m[c] = acc / a[c][c];
+        }
+        m[n] = m[0];
+        let mut law = RadiusLaw::pieces(&x, &y, &h, &slope, &m);
+        law.period = Some(period);
+        Some(law)
     }
 
     fn fit(x: &[f64], y: &[f64], ends: Option<(f64, f64)>) -> RadiusLaw {
@@ -418,6 +509,12 @@ impl RadiusLaw {
         for i in (0..n).rev() {
             m[i] = (rhs[i] - up[i] * m[i + 1]) / di[i];
         }
+        RadiusLaw::pieces(x, y, &h, &slope, &m)
+    }
+
+    /// The cubic pieces from the knots' values and second derivatives.
+    fn pieces(x: &[f64], y: &[f64], h: &[f64], slope: &[f64], m: &[f64]) -> RadiusLaw {
+        let n = h.len();
         let coef = (0..n)
             .map(|i| {
                 [
@@ -431,11 +528,13 @@ impl RadiusLaw {
         RadiusLaw {
             knots: x.to_vec(),
             coef,
+            period: None,
         }
     }
 
     /// Taylor coefficients at s (past the ends, of the end pieces).
     fn coefs(&self, s: f64) -> [f64; 4] {
+        let s = self.wrap(s);
         let i = self.knots.partition_point(|&k| k <= s).clamp(1, self.coef.len()) - 1;
         let h = s - self.knots[i];
         let [a, b, c, d] = self.coef[i];
@@ -447,8 +546,34 @@ impl RadiusLaw {
         ]
     }
 
+    /// s moved by whole periods into the first one.
+    fn wrap(&self, s: f64) -> f64 {
+        match self.period {
+            Some(p) => self.knots[0] + (s - self.knots[0]).rem_euclid(p),
+            None => s,
+        }
+    }
+
     /// Smallest and largest radius over [a, b].
     pub fn bounds(&self, a: f64, b: f64) -> (f64, f64) {
+        if let Some(p) = self.period {
+            let (k0, k1) = (self.knots[0], self.knots[self.knots.len() - 1]);
+            if b - a >= p {
+                return self.span_bounds(k0, k1);
+            }
+            let w = b - a;
+            let a = self.wrap(a);
+            let b = a + w;
+            if b <= k1 {
+                return self.span_bounds(a, b);
+            }
+            let (x, y) = (self.span_bounds(a, k1), self.span_bounds(k0, b - p));
+            return (x.0.min(y.0), x.1.max(y.1));
+        }
+        self.span_bounds(a, b)
+    }
+
+    fn span_bounds(&self, a: f64, b: f64) -> (f64, f64) {
         let mut lo = f64::INFINITY;
         let mut hi = f64::NEG_INFINITY;
         let mut take = |s: f64| {
@@ -694,8 +819,9 @@ impl Guide {
     /// A lone line or circle is its own guide, s its parameter. Otherwise the Hermite through
     /// the chain, each edge split into `per_edge` equal steps of its own parameter: knots take
     /// each edge's exact point and arc-length derivatives; where two edges meet the tangents
-    /// must agree (a tangent chain) and the higher derivatives are averaged. Deterministic:
-    /// knots depend only on the edges and their ranges.
+    /// must agree (a tangent chain) and the higher derivatives are averaged, also where a
+    /// closed chain (no reach) comes back to its start. Deterministic: knots depend only on
+    /// the edges and their ranges.
     pub fn through_edges(
         edges: &[(crate::Curve, Interval, bool)],
         per_edge: usize,
@@ -715,10 +841,12 @@ impl Guide {
             let t = if at_end == *fwd { r.hi } else { r.lo };
             let dt = reach / c.deriv(t).d1.length();
             let d = c.domain();
-            let far = if at_end == *fwd {
-                (t + dt).min(d.hi)
-            } else {
-                (t - dt).max(d.lo)
+            // a periodic curve carries on round; an edge's range may lie past its first period
+            let far = match (at_end == *fwd, d.period) {
+                (true, Some(_)) => t + dt,
+                (false, Some(_)) => t - dt,
+                (true, None) => (t + dt).min(d.hi),
+                (false, None) => (t - dt).max(d.lo),
             };
             let piece = (c.clone(), Interval::new(t.min(far), t.max(far)), *fwd);
             (c.eval(far).distance(c.eval(t)) > tol::LINEAR * per_edge as f64).then_some(piece)
@@ -726,6 +854,7 @@ impl Guide {
         let head = run_out(edges.first()?, false);
         let tail = run_out(edges.last()?, true);
         let first = usize::from(head.is_some());
+        let open = head.is_some() || tail.is_some();
         let chain: Vec<_> = head
             .into_iter()
             .chain(edges.iter().cloned())
@@ -764,6 +893,19 @@ impl Guide {
                 }
             }
             ends.push(Interval::new(start as f64, (data.len() - 1) as f64));
+        }
+        // a closed chain closes smoothly: its first and last knots become one
+        let n = data.len() - 1;
+        if !open
+            && n > 1
+            && (data[0][0] - data[n][0]).length() <= tol::LINEAR
+            && data[0][1].dot(data[n][1]) >= 1.0 - 1e-9
+        {
+            let last = data[n];
+            for (x, y) in data[0].iter_mut().zip(last).skip(2) {
+                *x = (*x + y) * 0.5;
+            }
+            data[n] = data[0];
         }
         let h = Hermite::new(&data)?;
         let s = |i: Interval| Interval::new(h.knots[i.lo as usize], h.knots[i.hi as usize]);
@@ -1090,6 +1232,11 @@ impl VarBlend {
         let z = e1.cross(e2).normalize().unwrap_or(UnitVec3::Z);
         let frame = Frame::from_zx(k, z, e1).unwrap_or_else(|| Frame::from_z(k, z));
         (Circle { frame, radius: rho }, phi)
+    }
+
+    /// The sides of a and b the balls are on (+1 or -1).
+    pub fn sides(&self) -> (f64, f64) {
+        (self.side[0], self.side[1])
     }
 
     pub fn range(&self) -> Interval {
@@ -1484,41 +1631,43 @@ impl VarBlend {
         }
     }
 
-    /// A model root polished against the exact centre: one solve, then Newton on h'(s) with
-    /// the solved jets carried along (the steps are tiny, so the carried Taylor series is exact
-    /// to rounding); kept inside the range.
+    /// A model root polished against the exact centre: a solve, then Newton on h'(s) with the
+    /// solved jets carried along, again from a fresh solve while the steps are not tiny (only
+    /// then is the carried Taylor series exact to rounding); kept inside the range.
     fn polish(&self, p: Point3, mut s: f64) -> (f64, V, J) {
-        let (c, mut r) = self.spine_at(s);
-        let mut c = c.coefs();
-        let s_at = s;
         for _ in 0..3 {
-            let (_, h1, h2) = Self::tube(p, &c, &r.0);
-            if h2.abs() < 1e-300 {
-                break;
+            let (c, mut r) = self.spine_at(s);
+            let mut c = c.coefs();
+            let s_at = s;
+            for _ in 0..3 {
+                let (_, h1, h2) = Self::tube(p, &c, &r.0);
+                if h2.abs() < 1e-300 {
+                    break;
+                }
+                let next = (s - h1 / h2).clamp(self.lo, self.hi);
+                if next == s {
+                    break;
+                }
+                let done = (next - s).abs() <= 1e-14 * (1.0 + s.abs());
+                let h = next - s;
+                c = [
+                    c[0] + (c[1] + (c[2] + c[3] * h) * h) * h,
+                    c[1] + (c[2] * 2.0 + c[3] * (3.0 * h)) * h,
+                    c[2] + c[3] * (3.0 * h),
+                    c[3],
+                ];
+                s = next;
+                r = self.law.jet(s);
+                if done {
+                    break;
+                }
             }
-            let next = (s - h1 / h2).clamp(self.lo, self.hi);
-            if next == s {
-                break;
-            }
-            let done = (next - s).abs() <= 1e-14 * (1.0 + s.abs());
-            let h = next - s;
-            c = [
-                c[0] + (c[1] + (c[2] + c[3] * h) * h) * h,
-                c[1] + (c[2] * 2.0 + c[3] * (3.0 * h)) * h,
-                c[2] + c[3] * (3.0 * h),
-                c[3],
-            ];
-            s = next;
-            r = self.law.jet(s);
-            if done {
-                break;
+            if (s - s_at).abs() <= 1e-2 * self.predict {
+                return (s, V::from(c), r);
             }
         }
-        if (s - s_at).abs() > 1e-4 * (1.0 + s.abs()) {
-            let (c, r) = self.spine_at(s);
-            return (s, c, r);
-        }
-        (s, V::from(c), r)
+        let (c, r) = self.spine_at(s);
+        (s, c, r)
     }
 
     /// Lower bounds on |p - c(s)| from below and above, over segment i.
@@ -2714,6 +2863,32 @@ mod tests {
             );
         }
         assert!(built * 10 >= tried * 7, "{built} of {tried}");
+    }
+
+    #[test]
+    fn periodic_and_monotone_laws() {
+        let pts = [(0.5, 1.0), (2.0, 2.5), (4.0, 1.5)];
+        let p = RadiusLaw::periodic(&pts, 6.0).unwrap();
+        for &(s, r) in &pts {
+            assert!((p.eval(s) - r).abs() < 1e-12 && (p.eval(s + 6.0) - r).abs() < 1e-12);
+        }
+        // C2 where the period closes
+        let (a, b) = (p.coefs(6.5 - 1e-12), p.coefs(0.5));
+        for k in 0..3 {
+            assert!((a[k] - b[k]).abs() < 1e-9, "{k}: {a:?} {b:?}");
+        }
+        let (lo, hi) = p.bounds(5.0, 9.0);
+        for i in 0..=400 {
+            let r = p.eval(5.0 + 4.0 * i as f64 / 400.0);
+            assert!(r >= lo - 1e-12 && r <= hi + 1e-12);
+        }
+        // steep between flat stretches: the spline swings past, the monotone law does not
+        let steep = [(0.0, 1.0), (10.0, 1.0), (10.5, 0.1), (20.0, 0.1)];
+        assert!(RadiusLaw::smooth(&steep, None).unwrap().bounds(0.0, 20.0).0 < 0.0);
+        let m = RadiusLaw::monotone(&steep).unwrap();
+        let (lo, hi) = m.bounds(-5.0, 25.0);
+        assert!((lo - 0.1).abs() < 1e-12 && (hi - 1.0).abs() < 1e-12, "{lo} {hi}");
+        assert!((m.eval(10.25) - 0.55).abs() < 0.2 && m.slope(-3.0) == 0.0 && m.eval(30.0) == 0.1);
     }
 
     #[test]

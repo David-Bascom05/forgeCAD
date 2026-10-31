@@ -8,6 +8,7 @@
 use crate::curve::{Circle, Curve, CurveDeriv, CurveGeom, Domain1, Line, ProcCurve, ProceduralCurve};
 use crate::intersect::{SurfaceSurface, plane_surface};
 use crate::surface::{Cylinder, Domain2, Plane, Proc, Procedural, SurfDeriv, Surface, SurfaceGeom, Torus};
+use crate::varblend::VarBlend;
 use forge_math::{Box2, Box3, Frame, Interval, Point2, Point3, UnitVec3, Vec2, Vec3, dmath, tol};
 use std::sync::Arc;
 
@@ -357,6 +358,8 @@ pub struct Blend {
     pub spine: Curve,
     /// The swept surface, its natural normal pointing away from the spine.
     pub surface: Surface,
+    /// A variable radius: the blend is this canal surface and `radius` its largest radius.
+    pub var: Option<Arc<VarBlend>>,
 }
 
 impl Blend {
@@ -390,11 +393,31 @@ impl Blend {
             radius,
             spine,
             surface,
+            var: None,
         })
+    }
+
+    /// The blend a variable-radius `vb` between `a` and `b` makes (its parameter is vb's s).
+    pub fn variable(a: &Surface, b: &Surface, vb: Arc<VarBlend>) -> Blend {
+        let radius = vb.radii().1;
+        let (sa, sb) = vb.sides();
+        Blend {
+            a: a.clone(),
+            b: b.clone(),
+            da: sa * radius,
+            db: sb * radius,
+            radius,
+            spine: vb.spine(),
+            surface: vb.surface(),
+            var: Some(vb),
+        }
     }
 
     /// The points where the ball centred at spine parameter `t` touches `a` and `b`.
     pub fn feet(&self, t: f64) -> (Point3, Point3) {
+        if let Some(v) = &self.var {
+            return (v.spring(0).eval(t), v.spring(1).eval(t));
+        }
         let c = self.spine.eval(t);
         (foot(&self.a, self.da, c), foot(&self.b, self.db, c))
     }
@@ -403,6 +426,9 @@ impl Blend {
     /// the foot on `a`, and the angle at which it reaches the foot on `b`
     /// (in (0, pi), the short way round).
     pub fn section(&self, t: f64) -> Option<(Circle, f64)> {
+        if let Some(v) = &self.var {
+            return Some(v.section(t));
+        }
         let c = self.spine.eval(t);
         let (fa, fb) = (foot(&self.a, self.da, c), foot(&self.b, self.db, c));
         let (wa, wb) = (fa - c, fb - c);
@@ -422,6 +448,9 @@ impl Blend {
     /// The spring curve on `a` (`on_a`) or `b` in closed form, sharing the
     /// spine's parameter, or None where it has none.
     pub fn spring(&self, on_a: bool) -> Option<Curve> {
+        if let Some(v) = &self.var {
+            return Some(v.spring(usize::from(!on_a)));
+        }
         let (s, d) = if on_a {
             (&self.a, self.da)
         } else {

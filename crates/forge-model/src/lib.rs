@@ -18,7 +18,7 @@ pub use forge_gpu::{Backend, open_in_background as open_gpu};
 use forge_math::{Frame, Point2, Vec2, dmath};
 use forge_ops::{
     Axis2, ChamferError, ChamferSize, DraftError, ExtrudeError, FilletEdge, FilletError, Profile,
-    ProfileLoop, RevolveError, Segment, ShellError, chamfer, draft, extrude, fillet, revolve, shell,
+    ProfileLoop, Radius, RevolveError, Segment, ShellError, chamfer, draft, extrude, fillet, revolve, shell,
 };
 use forge_topo::{Body, Name};
 pub use hole::{End, Head, Hole, HoleError, Thread};
@@ -44,7 +44,7 @@ pub enum Feature {
     /// A ball (a shorthand for revolving a half disc).
     Ball { frame: Frame, radius: f64, op: Combine },
     /// Round the named edges of the part as it stands, each with its own radius, in one go.
-    Fillet { edges: Vec<(Name, f64)> },
+    Fillet { edges: Vec<(Name, Radius)> },
     /// Bevel edges of the part.
     Chamfer { edges: Vec<Name>, size: ChamferSize },
     /// Hollow the part to walls `thickness` thick, inside or outside its skin, `open` faces removed.
@@ -474,18 +474,22 @@ fn modify(features: &[Feature], i: usize, body: &Body, threads: usize) -> Result
 }
 
 /// Feature `i`, a fillet of the named edges, applied to `body`.
-fn apply_fillet(i: usize, body: &Body, edges: &[(Name, f64)]) -> Result<Body, RegenError> {
+fn apply_fillet(i: usize, body: &Body, edges: &[(Name, Radius)]) -> Result<Body, RegenError> {
     let body = if body.dead > 0 {
         body.compact()
     } else {
         body.clone()
     };
     let mut want: Vec<FilletEdge> = Vec::with_capacity(edges.len());
-    for &(name, radius) in edges {
+    for (name, radius) in edges {
+        let name = *name;
         let edge = body
             .edge_by_name(name)
             .ok_or(RegenError::MissingEdge { feature: i, name })?;
-        want.push(FilletEdge { edge, radius });
+        want.push(FilletEdge {
+            edge,
+            radius: radius.clone(),
+        });
     }
     fillet(&body, &want, i as u64 + 1).map_err(|error| RegenError::Fillet { feature: i, error })
 }

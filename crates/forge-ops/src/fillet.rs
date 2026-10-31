@@ -1,33 +1,105 @@
-//! Constant-radius rolling-ball fillets, all edges of one operation solved
-//! together.
+//! Rolling-ball fillets, all edges of one operation solved together.
 //!
 //! Each filleted edge becomes a blend face (`forge_geom::blend`) and its two
-//! faces are cut back to the blend's spring curves. What happens at each end
-//! is decided per vertex, from the cycle of faces around it: a lone blend runs
-//! out into the faces across its end, two blends of a tangent chain meet in a
-//! shared cross-section, three equal blends meet in a sphere. Every face
-//! corner the fillet touches is closed by a path of new edges, so a corner
-//! may end in any trim curve.
+//! faces are cut back to the blend's spring curves. A tangent chain whose
+//! radius varies (picked with a law, or edges picked with different radii)
+//! gets one guide and one radius law (`forge_geom::varblend`), one canal
+//! surface per edge, so its blends share their junction circles. What happens
+//! at each end is decided per vertex, from the cycle of faces around it: a lone
+//! blend runs out into the faces across its end, two blends of a tangent chain
+//! meet in a shared cross-section, three equal blends meet in a sphere. Every
+//! face corner the fillet touches is closed by a path of new edges, so a
+//! corner may end in any trim curve.
 
 use forge_geom::blend::{Blend, closed_form, spine_closest};
 use forge_geom::intersect::{CurveSurface, curve_surface};
+use forge_geom::varblend::{Guide, RadiusLaw, VarBlend, VarBlendError};
 use forge_geom::{Curve, CurveGeom, Sphere, Surface, SurfaceGeom};
-use forge_math::{Box3, Frame, Interval, Point3, Vec3, dmath, tol};
+use forge_math::{Box3, Frame, Interval, Point3, UnitVec3, Vec3, dmath, tol};
 use forge_topo::{Body, CoedgeId, EdgeId, FaceId, Name, VertexId};
 use std::collections::{BTreeMap, BTreeSet};
+use std::sync::Arc;
+
+/// How the radius runs along a picked edge.
+#[derive(Clone, Debug, PartialEq)]
+pub enum Radius {
+    Constant(f64),
+    /// From the edge's start to its end, linear along it.
+    Linear(f64, f64),
+    /// Radii at fractions of the way along the edge from its start (0 to 1, increasing),
+    /// with a smooth law through them.
+    Points(Vec<(f64, f64)>),
+}
+
+impl From<f64> for Radius {
+    fn from(r: f64) -> Radius {
+        Radius::Constant(r)
+    }
+}
+
+impl Radius {
+    /// The same law with the edge walked the other way.
+    pub fn reversed(&self) -> Radius {
+        match self {
+            Radius::Constant(r) => Radius::Constant(*r),
+            Radius::Linear(a, b) => Radius::Linear(*b, *a),
+            Radius::Points(p) => Radius::Points(p.iter().rev().map(|&(f, r)| (1.0 - f, r)).collect()),
+        }
+    }
+    /// The (fraction along the edge, radius) points the pick fixes.
+    fn points(&self) -> Vec<(f64, f64)> {
+        match self {
+            Radius::Constant(r) => vec![(0.0, *r), (1.0, *r)],
+            Radius::Linear(a, b) => vec![(0.0, *a), (1.0, *b)],
+            Radius::Points(p) => p.clone(),
+        }
+    }
+    /// The law over each half of the edge, as fractions of that half.
+    fn halves(&self) -> (Option<Radius>, Option<Radius>) {
+        let p = self.points();
+        let mut out = (Vec::new(), Vec::new());
+        for &(f, r) in &p {
+            if f <= 0.5 {
+                out.0.push((2.0 * f, r));
+            }
+            if f >= 0.5 {
+                out.1.push((2.0 * f - 1.0, r));
+            }
+        }
+        let law = |pts: Vec<(f64, f64)>| (!pts.is_empty()).then_some(Radius::Points(pts));
+        (law(out.0), law(out.1))
+    }
+
+    /// The radius, where it is the same all along.
+    fn constant(&self) -> Option<f64> {
+        let p = self.points();
+        p.iter().all(|q| q.1 == p[0].1).then_some(p[0].1)
+    }
+    fn max(&self) -> f64 {
+        self.points().iter().fold(0.0f64, |m, q| m.max(q.1))
+    }
+    fn valid(&self) -> bool {
+        let p = self.points();
+        !p.is_empty()
+            && p.iter()
+                .all(|q| q.1 > tol::MIN_LENGTH && q.1.is_finite() && (0.0..=1.0).contains(&q.0))
+            && p.windows(2).all(|w| w[1].0 > w[0].0)
+    }
+}
 
 /// One edge to round, with its radius.
-#[derive(Clone, Copy, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct FilletEdge {
     pub edge: EdgeId,
-    pub radius: f64,
+    pub radius: Radius,
 }
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum FilletError {
     /// The edge is not a live edge between two faces.
     NotAnEdge { edge: EdgeId },
-    /// The radius is not a usable length.
+    /// The radius is not a usable length, or its law makes no blend (it changes or bends
+    /// faster than the ball can roll).
     BadRadius { edge: EdgeId },
     /// The two faces are tangent along the edge: there is nothing to round.
     Smooth { edge: EdgeId },
@@ -59,6 +131,25 @@ struct Rolled {
     coedges: [CoedgeId; 2],
     forward: [bool; 2],
     name: Name,
+    var: Option<VarEdge>,
+}
+
+/// Where a variable blend's edge sits in its chain.
+#[derive(Clone, Copy, Debug)]
+struct VarEdge {
+    chain: usize,
+    index: usize,
+    len: usize,
+    closed: bool,
+    /// The edge's own s range (the blend's runs on past the chain's ends).
+    own: Interval,
+}
+
+/// Filleted edges that continue each other through their vertices, in order, each
+/// walked forward or not.
+struct Chain {
+    members: Vec<(EdgeId, bool)>,
+    closed: bool,
 }
 
 /// How a filleted edge ends at one of its vertices: per side, the vertex and
@@ -87,15 +178,76 @@ pub fn fillet(body: &Body, edges: &[FilletEdge], feature: u64) -> R<Body> {
         if fe.edge.index() >= body.edges.len() || !body.edge(fe.edge).alive {
             return Err(FilletError::NotAnEdge { edge: fe.edge });
         }
+        if !fe.radius.valid() {
+            return Err(FilletError::BadRadius { edge: fe.edge });
+        }
     }
+    // a closed edge with a varying radius is split in two: the halves' blends then meet
+    // in sections at both vertices, like any chain
+    let mut picked: Vec<FilletEdge> = Vec::with_capacity(edges.len());
+    // a half with no point of the law on it still rounds, the law running across it
+    let mut unpicked: Vec<(EdgeId, f64)> = Vec::new();
+    for fe in edges {
+        let e = fe.edge;
+        if body.edge(e).start != body.edge(e).end || fe.radius.constant().is_some() {
+            picked.push(fe.clone());
+            continue;
+        }
+        let other = split_edge(&mut body, e);
+        let (first, second) = fe.radius.halves();
+        for (edge, radius) in [(e, first), (other, second)] {
+            match radius {
+                Some(radius) => picked.push(FilletEdge { edge, radius }),
+                None => unpicked.push((edge, fe.radius.max())),
+            }
+        }
+    }
+    let edges = &picked[..];
     merge_flush(&mut body, &seen);
-    let edges = tangent_chains(&body, edges);
-    let seen: BTreeSet<EdgeId> = edges.iter().map(|f| f.edge).collect();
+    let all = tangent_chains(&body, edges, &unpicked);
+    let seen: BTreeSet<EdgeId> = all.iter().map(|f| f.0).collect();
     merge_flush(&mut body, &seen);
     let root = Name::feature(feature);
     let body = body;
-    let rolled: Vec<R<Rolled>> = par_map(edges.len(), |i| roll(&body, edges[i], root));
-    let rolled: Vec<Rolled> = rolled.into_iter().collect::<R<_>>()?;
+    let picks: BTreeMap<EdgeId, &Radius> = edges.iter().map(|f| (f.edge, &f.radius)).collect();
+    // chains whose radius varies roll as a whole; every other edge rolls by itself
+    let chains: Vec<Chain> = chains(&body, &all)
+        .into_iter()
+        .filter(|c| {
+            let r: Vec<&Radius> = c
+                .members
+                .iter()
+                .filter_map(|m| picks.get(&m.0).copied())
+                .collect();
+            r.iter().any(|x| x.constant().is_none())
+                || r.iter().any(|x| (x.max() - r[0].max()).abs() > tol::LINEAR)
+        })
+        .collect();
+    let in_var: BTreeMap<EdgeId, (usize, usize)> = chains
+        .iter()
+        .enumerate()
+        .flat_map(|(c, ch)| ch.members.iter().enumerate().map(move |(i, m)| (m.0, (c, i))))
+        .collect();
+    let lone: Vec<(EdgeId, f64)> = all
+        .iter()
+        .filter(|f| !in_var.contains_key(&f.0))
+        .map(|&(e, scale)| (e, picks.get(&e).map_or(scale, |r| r.max())))
+        .collect();
+    let jobs = lone.len() + chains.len();
+    let rolled: Vec<R<Vec<Rolled>>> = par_map(jobs, |i| match lone.get(i) {
+        Some(&(e, r)) => roll(&body, e, r, root).map(|x| vec![x]),
+        None => roll_chain(&body, &chains[i - lone.len()], i - lone.len(), &picks, root),
+    });
+    let mut by_edge: BTreeMap<EdgeId, Rolled> = BTreeMap::new();
+    for r in rolled {
+        for x in r? {
+            by_edge.insert(x.edge, x);
+        }
+    }
+    let rolled = all
+        .iter()
+        .map(|f| by_edge.remove(&f.0).expect("every edge rolled"))
+        .collect();
     Builder::new(body, rolled, root).build()
 }
 
@@ -133,41 +285,21 @@ fn par_map<T: Send>(n: usize, f: impl Fn(usize) -> T + Sync) -> Vec<T> {
     out.into_iter().map(|t| t.expect("every edge done")).collect()
 }
 
-/// The edges with every tangent continuation of each added, at the same
-/// radius: a chain rounds as a whole, as a ball rolling along it would.
-fn tangent_chains(body: &Body, edges: &[FilletEdge]) -> Vec<FilletEdge> {
-    let mut at: BTreeMap<VertexId, Vec<EdgeId>> = BTreeMap::new();
-    for e in body.edge_ids() {
-        let x = body.edge(e);
-        at.entry(x.start).or_default().push(e);
-        if x.end != x.start {
-            at.entry(x.end).or_default().push(e);
-        }
-    }
-    // unit tangent of e at its end v, pointing out of v
-    let out_of = |e: EdgeId, v: VertexId| -> Vec<Vec3> {
-        let x = body.edge(e);
-        let mut t = Vec::new();
-        if x.start == v {
-            t.push(x.curve.deriv(x.range.lo).d1);
-        }
-        if x.end == v {
-            t.push(-x.curve.deriv(x.range.hi).d1);
-        }
-        t.into_iter()
-            .filter_map(|d| d.normalize())
-            .map(|u| u.get())
-            .collect()
-    };
-    let mut out: Vec<FilletEdge> = edges.to_vec();
-    let mut have: BTreeSet<EdgeId> = edges.iter().map(|f| f.edge).collect();
+/// The edges with every tangent continuation of each added, each with the largest
+/// radius of the pick that reached it: a chain rounds as a whole, as a ball rolling
+/// along it would.
+fn tangent_chains(body: &Body, edges: &[FilletEdge], unpicked: &[(EdgeId, f64)]) -> Vec<(EdgeId, f64)> {
+    let at = edges_at(body);
+    let mut out: Vec<(EdgeId, f64)> = edges.iter().map(|f| (f.edge, f.radius.max())).collect();
+    out.extend_from_slice(unpicked);
+    let mut have: BTreeSet<EdgeId> = out.iter().map(|f| f.0).collect();
     let mut i = 0;
     while i < out.len() {
-        let FilletEdge { edge, radius } = out[i];
+        let (edge, radius) = out[i];
         i += 1;
         let x = body.edge(edge);
         for v in [x.start, x.end] {
-            let mine = out_of(edge, v);
+            let mine = out_of(body, edge, v);
             let next: Vec<EdgeId> = at[&v]
                 .iter()
                 .copied()
@@ -176,19 +308,136 @@ fn tangent_chains(body: &Body, edges: &[FilletEdge]) -> Vec<FilletEdge> {
                     let f = &body.edge(o).coedges;
                     body.coedge_face(f[0]) != body.coedge_face(f[1])
                 })
-                .filter(|&o| {
-                    // continuing the chain: leaving v the opposite way, within LINEAR over a radius
-                    out_of(o, v)
-                        .iter()
-                        .any(|t| mine.iter().any(|m| (*m + *t).length() * radius <= tol::LINEAR))
-                })
+                .filter(|&o| continues(&mine, &out_of(body, o, v), radius))
                 .collect();
             if let [o] = next[..]
                 && !is_smooth(body, o, radius)
             {
                 have.insert(o);
-                out.push(FilletEdge { edge: o, radius });
+                out.push((o, radius));
             }
+        }
+    }
+    out
+}
+
+/// The edges at each vertex.
+fn edges_at(body: &Body) -> BTreeMap<VertexId, Vec<EdgeId>> {
+    let mut at: BTreeMap<VertexId, Vec<EdgeId>> = BTreeMap::new();
+    for e in body.edge_ids() {
+        let x = body.edge(e);
+        at.entry(x.start).or_default().push(e);
+        if x.end != x.start {
+            at.entry(x.end).or_default().push(e);
+        }
+    }
+    at
+}
+
+/// Unit tangents of e at its end v, pointing out of v.
+fn out_of(body: &Body, e: EdgeId, v: VertexId) -> Vec<Vec3> {
+    let x = body.edge(e);
+    let mut t = Vec::new();
+    if x.start == v {
+        t.push(x.curve.deriv(x.range.lo).d1);
+    }
+    if x.end == v {
+        t.push(-x.curve.deriv(x.range.hi).d1);
+    }
+    t.into_iter()
+        .filter_map(|d| d.normalize())
+        .map(|u| u.get())
+        .collect()
+}
+
+/// Whether two edges leave a vertex the opposite way, within LINEAR over the radius.
+fn continues(a: &[Vec3], b: &[Vec3], radius: f64) -> bool {
+    b.iter()
+        .any(|t| a.iter().any(|m| (*m + *t).length() * radius <= tol::LINEAR))
+}
+
+/// The filleted edges as tangent chains: two edges are linked at a vertex where they are
+/// the only filleted ends there, continue each other, and every other edge is smooth.
+fn chains(body: &Body, all: &[(EdgeId, f64)]) -> Vec<Chain> {
+    let scale: BTreeMap<EdgeId, f64> = all.iter().copied().collect();
+    let at = edges_at(body);
+    // (edge, at its end) -> the end it links to
+    let mut link: BTreeMap<(EdgeId, bool), (EdgeId, bool)> = BTreeMap::new();
+    let mut verts = BTreeSet::new();
+    for &(e, _) in all {
+        verts.insert(body.edge(e).start);
+        verts.insert(body.edge(e).end);
+    }
+    for v in verts {
+        let mut ends = Vec::new();
+        for &e in &at[&v] {
+            if scale.contains_key(&e) {
+                let x = body.edge(e);
+                if x.start == v {
+                    ends.push((e, false));
+                }
+                if x.end == v {
+                    ends.push((e, true));
+                }
+            }
+        }
+        let [a, b] = ends[..] else { continue };
+        let r = scale[&a.0].max(scale[&b.0]);
+        let tan = |(e, end): (EdgeId, bool)| {
+            let x = body.edge(e);
+            let d = if end {
+                -x.curve.deriv(x.range.hi).d1
+            } else {
+                x.curve.deriv(x.range.lo).d1
+            };
+            d.normalize().map(|u| u.get())
+        };
+        let (Some(ta), Some(tb)) = (tan(a), tan(b)) else {
+            continue;
+        };
+        let others_smooth = at[&v].iter().filter(|&&o| o != a.0 && o != b.0).all(|&o| {
+            let y = body.edge(o);
+            y.coedges.len() == 2
+                && (body.coedge_face(y.coedges[0]) == body.coedge_face(y.coedges[1]) || is_smooth(body, o, r))
+        });
+        if continues(&[ta], &[tb], r) && others_smooth {
+            link.insert(a, b);
+            link.insert(b, a);
+        }
+    }
+    let mut done = BTreeSet::new();
+    let mut out = Vec::new();
+    // open chains from their free ends first, then what is left is closed
+    for pass in 0..2 {
+        for &(e, _) in all {
+            if done.contains(&e) {
+                continue;
+            }
+            let fwd = match (link.contains_key(&(e, false)), link.contains_key(&(e, true))) {
+                (false, _) => true,
+                (true, false) => false,
+                (true, true) if pass == 1 => true,
+                _ => continue,
+            };
+            let mut members = vec![(e, fwd)];
+            done.insert(e);
+            let mut closed = false;
+            let (mut cur, mut f) = (e, fwd);
+            while let Some(&(n, n_end)) = link.get(&(cur, f)) {
+                if (n, n_end) == (e, !fwd) {
+                    closed = true;
+                    break;
+                }
+                if !done.insert(n) {
+                    break;
+                }
+                (cur, f) = (n, !n_end);
+                members.push((cur, f));
+            }
+            if closed {
+                members = canonical_loop(body, members);
+            }
+            out.push(Chain { members, closed });
         }
     }
     out
@@ -208,6 +457,75 @@ fn is_smooth(body: &Body, e: EdgeId, radius: f64) -> bool {
         })
         .collect();
     n.len() == 2 && n[0].cross(n[1]).length() * radius <= tol::LINEAR && n[0].dot(n[1]) > 0.0
+}
+
+/// A closed chain started and walked the same way whatever the body's numbering: from
+/// the member whose middle is least (by x, then y, then z), the way that runs up there.
+fn canonical_loop(body: &Body, members: Vec<(EdgeId, bool)>) -> Vec<(EdgeId, bool)> {
+    let key = |&(e, fwd): &(EdgeId, bool)| {
+        let x = body.edge(e);
+        let d = x.curve.deriv(x.range.mid());
+        let t = if fwd { d.d1 } else { -d.d1 };
+        ([d.p.x, d.p.y, d.p.z], [t.x, t.y, t.z])
+    };
+    let less = |a: [f64; 3], b: [f64; 3]| a.iter().zip(&b).find(|p| p.0 != p.1).is_some_and(|p| p.0 < p.1);
+    let i = (0..members.len())
+        .reduce(|a, b| {
+            if less(key(&members[b]).0, key(&members[a]).0) {
+                b
+            } else {
+                a
+            }
+        })
+        .unwrap_or(0);
+    let mut out: Vec<(EdgeId, bool)> = members[i..].iter().chain(&members[..i]).copied().collect();
+    if less(key(&out[0]).1, [0.0; 3]) {
+        // walked back: the same loop from the same member, the other way round
+        out[1..].reverse();
+        for m in &mut out {
+            m.1 = !m.1;
+        }
+    }
+    out
+}
+
+/// Splits closed edge `e` at its middle: `e` keeps the first half, the returned edge
+/// is the second. Every loop through it walks both.
+fn split_edge(body: &mut Body, e: EdgeId) -> EdgeId {
+    let x = body.edge(e).clone();
+    let mid = x.range.mid();
+    let m = body.add_vertex(x.curve.eval(mid), x.name.with_str("half"));
+    let other = body.add_edge(
+        x.curve.clone(),
+        Interval::new(mid, x.range.hi),
+        m,
+        x.end,
+        x.name.with_str("half"),
+    );
+    let edge = &mut body.edges[e.index()];
+    edge.range.hi = mid;
+    edge.end = m;
+    edge.bbox.clear();
+    let mut loops: Vec<(FaceId, forge_topo::LoopId)> = x
+        .coedges
+        .iter()
+        .map(|&c| (body.coedge_face(c), body.coedge(c).lp))
+        .collect();
+    loops.dedup();
+    for (f, l) in loops {
+        let mut uses: Vec<(EdgeId, bool)> = Vec::new();
+        for &d in &body.lp(l).coedges {
+            let co = body.coedge(d);
+            match (co.edge == e, co.forward) {
+                (true, true) => uses.extend([(e, true), (other, true)]),
+                (true, false) => uses.extend([(other, false), (e, false)]),
+                _ => uses.push((co.edge, co.forward)),
+            }
+        }
+        body.remove_loop(f, l);
+        body.add_loop(f, &uses);
+    }
+    other
 }
 
 /// Faces on one surface that meet along an edge at a vertex of a filleted edge
@@ -328,13 +646,25 @@ fn merge_faces(body: &mut Body, e: EdgeId) {
     face.query.clear();
 }
 
-/// The blend for one edge, from the faces on either side at its middle.
-fn roll(body: &Body, fe: FilletEdge, root: Name) -> R<Rolled> {
-    let e = fe.edge;
+/// An edge's faces at one of its points, and where a ball between them sits.
+struct Local {
+    faces: [FaceId; 2],
+    coedges: [CoedgeId; 2],
+    forward: [bool; 2],
+    convex: bool,
+    /// The side of each face's surface (along its natural normal) the ball centre is on.
+    sign: [f64; 2],
+    p: Point3,
+    tangent: UnitVec3,
+    /// From p towards the centre of a ball of radius 1.
+    toward: Vec3,
+}
+
+/// The faces either side of edge `e` at its parameter t, for a ball of radius about r.
+fn local(body: &Body, e: EdgeId, r: f64, t: f64) -> R<Local> {
     if e.index() >= body.edges.len() || !body.edge(e).alive || body.edge(e).coedges.len() != 2 {
         return Err(FilletError::NotAnEdge { edge: e });
     }
-    let r = fe.radius;
     if !(r > tol::MIN_LENGTH && r.is_finite()) {
         return Err(FilletError::BadRadius { edge: e });
     }
@@ -344,7 +674,7 @@ fn roll(body: &Body, fe: FilletEdge, root: Name) -> R<Rolled> {
     if f0 == f1 {
         return Err(FilletError::Smooth { edge: e });
     }
-    let d = edge.curve.deriv(edge.range.mid());
+    let d = edge.curve.deriv(t);
     let tangent = d.d1.normalize().ok_or(FilletError::NotAnEdge { edge: e })?;
     let normal = |f: FaceId| {
         let s = &body.face(f).surface;
@@ -367,34 +697,292 @@ fn roll(body: &Body, fe: FilletEdge, root: Name) -> R<Rolled> {
     let into1 = n1.cross(walk1);
     let convex = n0.dot(into1) < 0.0;
     let side = if convex { -1.0 } else { 1.0 };
-    let (s0, s1) = (&body.face(f0).surface, &body.face(f1).surface);
     let sense = |f: FaceId| if body.face(f).same_sense { 1.0 } else { -1.0 };
-    let (d0, d1) = (side * r * sense(f0), side * r * sense(f1));
     let bis = (n0.get() + n1.get()).normalize().map_or(Vec3::ZERO, |u| u.get());
     let half = ((1.0 + n0.dot(n1)) * 0.5).max(1e-6).sqrt();
-    let near = d.p + bis * (side * r / half);
+    Ok(Local {
+        faces: [f0, f1],
+        coedges: [c0, c1],
+        forward: [body.coedge(c0).forward, body.coedge(c1).forward],
+        convex,
+        sign: [side * sense(f0), side * sense(f1)],
+        p: d.p,
+        tangent,
+        toward: bis * (side / half),
+    })
+}
+
+/// The blend for one edge of constant radius r, from the faces on either side at its middle.
+fn roll(body: &Body, e: EdgeId, r: f64, root: Name) -> R<Rolled> {
+    if e.index() >= body.edges.len() {
+        return Err(FilletError::NotAnEdge { edge: e });
+    }
+    let l = local(body, e, r, body.edge(e).range.mid())?;
+    let (s0, s1) = (&body.face(l.faces[0]).surface, &body.face(l.faces[1]).surface);
+    let near = l.p + l.toward * r;
     let region = body.edge_box(e).grow(4.0 * r + tol::LINEAR);
-    let blend = Blend::new(s0, s1, d0, d1, near, region).ok_or(FilletError::NoBlend { edge: e })?;
-    let tm = spine_closest(&blend.spine, d.p);
+    let blend = Blend::new(s0, s1, l.sign[0] * r, l.sign[1] * r, near, region)
+        .ok_or(FilletError::NoBlend { edge: e })?;
+    let tm = spine_closest(&blend.spine, l.p);
     if blend.spine.eval(tm).distance(near) > r {
         return Err(FilletError::NoBlend { edge: e });
     }
-    let aligned = blend.spine.deriv(tm).d1.dot(tangent.get()) > 0.0;
+    let aligned = blend.spine.deriv(tm).d1.dot(l.tangent.get()) > 0.0;
     let springs = [
         blend.spring(true).ok_or(FilletError::NoBlend { edge: e })?,
         blend.spring(false).ok_or(FilletError::NoBlend { edge: e })?,
     ];
     Ok(Rolled {
         edge: e,
-        convex,
+        convex: l.convex,
         blend,
         springs,
         aligned,
-        faces: [f0, f1],
-        coedges: [c0, c1],
-        forward: [body.coedge(c0).forward, body.coedge(c1).forward],
-        name: root.with_str("fillet").with_name(edge.name),
+        faces: l.faces,
+        coedges: l.coedges,
+        forward: l.forward,
+        name: root.with_str("fillet").with_name(body.edge(e).name),
+        var: None,
     })
+}
+
+/// The blends of a chain whose radius varies: one guide and one law along the whole
+/// chain, one canal surface per edge on the edge's stretch of it (the end ones carried
+/// on past the chain's ends, so they can run out).
+fn roll_chain(
+    body: &Body,
+    chain: &Chain,
+    id: usize,
+    picks: &BTreeMap<EdgeId, &Radius>,
+    root: Name,
+) -> R<Vec<Rolled>> {
+    let first = chain.members[0].0;
+    let picked: Vec<&Radius> = chain
+        .members
+        .iter()
+        .filter_map(|m| picks.get(&m.0).copied())
+        .collect();
+    let rmax = picked.iter().fold(0.0f64, |m, r| m.max(r.max()));
+    let edges: Vec<(Curve, Interval, bool)> = chain
+        .members
+        .iter()
+        .map(|&(e, fwd)| (body.edge(e).curve.clone(), body.edge(e).range, fwd))
+        .collect();
+    // knots on lines and circles only smooth the joints: two steps, or one per quarter turn, so the
+    // guide turns gently there (closer knots bend it harder and fold large balls)
+    let exact = edges
+        .iter()
+        .all(|e| matches!(e.0, Curve::Line(_) | Curve::Circle(_)));
+    let quarters = |e: &(Curve, Interval, bool)| match e.0 {
+        Curve::Circle(_) => (e.1.width() / dmath::FRAC_PI_2 - 1e-9).ceil().max(1.0) as usize,
+        _ => 1,
+    };
+    let per = if exact {
+        edges.iter().map(quarters).max().unwrap_or(1).max(2)
+    } else {
+        8
+    };
+    let mut err = FilletError::NoBlend { edge: first };
+    // run-outs reach past the chain's ends far enough for the ball to cross oblique faces
+    // there; shorter where the law, carried on, would leave sensible radii or the blend fails
+    let full = chain
+        .members
+        .iter()
+        .fold(Box3::EMPTY, |b, m| b.hull(&body.edge_box(m.0)))
+        .diagonal()
+        + 4.0 * rmax;
+    let reaches = if chain.closed {
+        vec![0.0]
+    } else {
+        vec![full, 0.25 * full, rmax]
+    };
+    for reach in reaches {
+        let (guide, ranges, whole) =
+            Guide::through_edges(&edges, per, reach).ok_or(FilletError::NoBlend { edge: first })?;
+        let n = ranges.len();
+        let inner = Interval::new(ranges[0].lo, ranges[n - 1].hi);
+        let law = chain_law(chain, &ranges, whole, picks).ok_or(FilletError::BadRadius { edge: first })?;
+        let (lo, hi) = law.bounds(inner.lo, inner.hi);
+        if lo <= tol::MIN_LENGTH {
+            return Err(FilletError::BadRadius { edge: first });
+        }
+        let (wlo, whi) = law.bounds(whole.lo, whole.hi);
+        if (wlo < 0.5 * lo || whi > 2.0 * hi) && reach > rmax {
+            continue;
+        }
+        let law = Arc::new(law);
+        let mut out = Vec::with_capacity(n);
+        for (i, &(e, fwd)) in chain.members.iter().enumerate() {
+            let own = ranges[i];
+            let range = Interval::new(
+                if i == 0 { whole.lo } else { own.lo },
+                if i == n - 1 { whole.hi } else { own.hi },
+            );
+            let edge = body.edge(e);
+            let sm = own.mid();
+            let g = guide.point_tan(sm).0;
+            let l = local(body, e, rmax, edge.curve.closest(g, edge.range))?;
+            let (s0, s1) = (&body.face(l.faces[0]).surface, &body.face(l.faces[1]).surface);
+            let vb = match VarBlend::new(s0, l.sign[0], s1, l.sign[1], guide.clone(), law.clone(), range) {
+                Ok(vb) => vb,
+                Err(x) => {
+                    let at = match x {
+                        VarBlendError::Tangent { s }
+                        | VarBlendError::RadiusTooSteep { s }
+                        | VarBlendError::Contacts { s }
+                        | VarBlendError::Lost { s }
+                        | VarBlendError::Folds { s } => Some(s),
+                        _ => None,
+                    };
+                    err = match x {
+                        VarBlendError::RadiusTooSteep { .. } | VarBlendError::Folds { .. } => {
+                            FilletError::BadRadius { edge: e }
+                        }
+                        _ => FilletError::NoBlend { edge: e },
+                    };
+                    // trouble on the edges themselves is not the run-out's
+                    match at {
+                        Some(s) if s >= inner.lo && s <= inner.hi => return Err(err),
+                        _ => break,
+                    }
+                }
+            };
+            let rm = law.eval(sm);
+            if vb.centre(sm).distance(l.p + l.toward * rm) > rm {
+                return Err(FilletError::NoBlend { edge: e });
+            }
+            let blend = Blend::variable(s0, s1, vb);
+            let springs = [
+                blend.spring(true).ok_or(FilletError::NoBlend { edge: e })?,
+                blend.spring(false).ok_or(FilletError::NoBlend { edge: e })?,
+            ];
+            out.push(Rolled {
+                edge: e,
+                convex: l.convex,
+                blend,
+                springs,
+                aligned: fwd,
+                faces: l.faces,
+                coedges: l.coedges,
+                forward: l.forward,
+                name: root.with_str("fillet").with_name(edge.name),
+                var: Some(VarEdge {
+                    chain: id,
+                    index: i,
+                    len: n,
+                    closed: chain.closed,
+                    own,
+                }),
+            });
+        }
+        if out.len() == n {
+            return Ok(out);
+        }
+    }
+    Err(err)
+}
+
+/// The chain's radius law: the picks' points placed along their edges' s ranges; points
+/// at one place (a joint between different picks) take their mean. A closed chain's law
+/// is periodic.
+fn chain_law(
+    chain: &Chain,
+    ranges: &[Interval],
+    whole: Interval,
+    picks: &BTreeMap<EdgeId, &Radius>,
+) -> Option<RadiusLaw> {
+    let n = chain.members.len();
+    let neighbour = |i: usize, after: bool| -> Option<Option<f64>> {
+        let j = match (after, chain.closed) {
+            (true, true) => (i + 1) % n,
+            (false, true) => (i + n - 1) % n,
+            (true, false) => i + 1,
+            (false, false) => i.checked_sub(1)?,
+        };
+        let m = chain.members.get(j)?;
+        Some(picks.get(&m.0).and_then(|r| r.constant()))
+    };
+    let mut pts: Vec<(f64, f64)> = Vec::new();
+    for (i, &(e, fwd)) in chain.members.iter().enumerate() {
+        let Some(r) = picks.get(&e) else { continue };
+        let own = ranges[i];
+        let fixed = match (r, r.constant()) {
+            // a constant pick holds its radius at its middle, and at ends where its neighbour
+            // holds the same or the chain ends: elsewhere the law moves on to the next value
+            (Radius::Constant(_), Some(c)) => {
+                let mut p: Vec<(f64, f64)> = vec![(0.5, c)];
+                for (f, after) in [(0.0, !fwd), (1.0, fwd)] {
+                    match neighbour(i, after) {
+                        None => p.push((f, c)),
+                        Some(Some(d)) if (d - c).abs() <= tol::LINEAR => p.push((f, c)),
+                        _ => {}
+                    }
+                }
+                p.sort_by(|a, b| a.0.total_cmp(&b.0));
+                p
+            }
+            _ => r.points(),
+        };
+        for (f, rad) in fixed {
+            let s = if fwd {
+                own.lo + f * own.width()
+            } else {
+                own.hi - f * own.width()
+            };
+            pts.push((s, rad));
+        }
+    }
+    let period = whole.width();
+    if chain.closed {
+        for p in &mut pts {
+            p.0 = whole.lo + (p.0 - whole.lo).rem_euclid(period);
+        }
+    }
+    pts.sort_by(|a, b| a.0.total_cmp(&b.0));
+    let eps = 1e-9 * period.max(1.0);
+    let mut merged: Vec<(f64, f64, f64)> = Vec::new();
+    for (s, r) in pts {
+        match merged.last_mut() {
+            Some(m) if s - m.0 <= eps => {
+                m.1 += r;
+                m.2 += 1.0;
+            }
+            _ => merged.push((s, r, 1.0)),
+        }
+    }
+    if chain.closed && merged.len() > 1 {
+        let last = merged[merged.len() - 1];
+        if last.0 >= whole.lo + period - eps {
+            merged[0].1 += last.1;
+            merged[0].2 += last.2;
+            merged.pop();
+        }
+    }
+    let pts: Vec<(f64, f64)> = merged.iter().map(|m| (m.0, m.1 / m.2)).collect();
+    if pts.len() == 1 {
+        return Some(RadiusLaw::constant(pts[0].1));
+    }
+    let law = if chain.closed {
+        RadiusLaw::periodic(&pts, period)?
+    } else {
+        RadiusLaw::smooth(&pts, None)?
+    };
+    // the spline may swing past the radii it was given (steep between flat stretches, or
+    // carried on over unpicked edges): then a law that never overshoots
+    let (lo, hi) = pts
+        .iter()
+        .fold((f64::INFINITY, 0.0f64), |(a, b), p| (a.min(p.1), b.max(p.1)));
+    let (rlo, rhi) = law.bounds(ranges[0].lo, ranges[ranges.len() - 1].hi);
+    if rlo >= 0.5 * lo && rhi <= 2.0 * hi {
+        return Some(law);
+    }
+    if chain.closed {
+        // one turn of the points with the first repeated past the period, held flat beyond
+        let mut ring = pts.clone();
+        ring.push((pts[0].0 + period, pts[0].1));
+        return RadiusLaw::monotone(&ring);
+    }
+    RadiusLaw::monotone(&pts)
 }
 
 /// One face corner at a vertex: the face, the coedge arriving and the one leaving.
@@ -422,6 +1010,8 @@ struct Builder {
     /// Edges to insert after an arriving coedge, closing that face corner.
     paths: BTreeMap<CoedgeId, Vec<(EdgeId, bool)>>,
     touched: BTreeSet<FaceId>,
+    /// Coedges a run-out passes wholly over: their faces' loops drop them.
+    dropped: BTreeSet<CoedgeId>,
     /// New faces other than the blends (corner patches).
     patches: Vec<Patch>,
 }
@@ -445,6 +1035,7 @@ impl Builder {
             trims: BTreeMap::new(),
             paths: BTreeMap::new(),
             touched: BTreeSet::new(),
+            dropped: BTreeSet::new(),
             patches: Vec::new(),
         }
     }
@@ -520,7 +1111,17 @@ impl Builder {
             .filter(|&i| self.filleted(ring[i].cin).is_some())
             .collect();
         match hot[..] {
-            [h] => self.run_out(v, &ring, h),
+            [h] => {
+                // the ball may run off a short or narrow face there: then it rolls on over the next
+                let (trims, paths) = (self.trims.clone(), self.paths.clone());
+                match self.run_out(v, &ring, h) {
+                    Err(FilletError::Overflow { .. }) => {
+                        (self.trims, self.paths) = (trims, paths);
+                        self.roll_over(v, &ring, h)
+                    }
+                    other => other,
+                }
+            }
             [a, b] if self.is_joint(&ring, a, b) => self.joint(v, &ring, a, b),
             _ => self.corner(v, &ring),
         }
@@ -534,7 +1135,15 @@ impl Builder {
             &self.rolled[self.filleted(ring[a].cin).expect("hot")],
             &self.rolled[self.filleted(ring[b].cin).expect("hot")],
         );
-        if (ra.blend.radius - rb.blend.radius).abs() > tol::LINEAR || ra.convex != rb.convex {
+        let linked = match (ra.var, rb.var) {
+            (None, None) => (ra.blend.radius - rb.blend.radius).abs() <= tol::LINEAR,
+            (Some(x), Some(y)) => {
+                let step = (y.index + x.len - x.index) % x.len;
+                x.chain == y.chain && (step == 1 || step == x.len - 1 || (x.len == 1 && x.closed))
+            }
+            _ => false,
+        };
+        if !linked || ra.convex != rb.convex {
             return false;
         }
         (0..k).filter(|&j| j != a && j != b).all(|j| {
@@ -544,6 +1153,17 @@ impl Builder {
             self.body.coedge_face(x.coedges[0]) == self.body.coedge_face(x.coedges[1])
                 || is_smooth(&self.body, e, ra.blend.radius)
         })
+    }
+
+    /// The spine parameter where blend `ri` meets the vertex coedge `c` arrives at: a
+    /// variable blend's own end there, else the spine's point nearest the vertex.
+    fn end_t(&self, ri: usize, c: CoedgeId, vp: Point3) -> f64 {
+        let ro = &self.rolled[ri];
+        match ro.var {
+            Some(x) if self.arrives_at_end(c) == ro.aligned => x.own.hi,
+            Some(x) => x.own.lo,
+            None => spine_closest(&ro.blend.spine, vp),
+        }
     }
 
     fn vertex_name(&self, v: VertexId, faces: &[Name]) -> Name {
@@ -598,6 +1218,10 @@ impl Builder {
             Interval::new(e.range.lo, mid)
         };
         let mut t = e.curve.closest(p, window);
+        if e.curve.eval(t).distance(p) > tol::LINEAR {
+            // a short edge the blend crosses past its middle
+            t = e.curve.closest(p, e.range);
+        }
         if e.curve.eval(t).distance(p) > tol::LINEAR
             && let Some(f) = extend
         {
@@ -640,7 +1264,7 @@ impl Builder {
         let ri = self.filleted(at(0).cin).expect("hot corner");
         let edge = self.rolled[ri].edge;
         let vp = self.body.vertex(v).point;
-        let t_ref = spine_closest(&self.rolled[ri].blend.spine, vp);
+        let t_ref = self.end_t(ri, at(0).cin, vp);
         let radius = self.rolled[ri].blend.radius;
         let reach = self.body.edge_box(edge).diagonal() + 4.0 * radius;
         // points X[1..k-1]: X[j] on the edge arriving at corner j
@@ -716,6 +1340,151 @@ impl Builder {
         Ok(())
     }
 
+    /// A lone blend whose run-out leaves the faces round its vertex: the ball runs off a
+    /// short or narrow face onto the faces beyond. The blend's end is walked face by face
+    /// from one spring to the other: each edge where it crosses a face's boundary is cut,
+    /// and the corners and edges it passes wholly over are dropped.
+    fn roll_over(&mut self, v: VertexId, ring: &[Corner], hot: usize) -> R<()> {
+        let k = ring.len();
+        let at = |j: usize| ring[(hot + j) % k];
+        let ri = self.filleted(at(0).cin).expect("hot corner");
+        let edge = self.rolled[ri].edge;
+        let err = FilletError::Overflow { edge };
+        let vp = self.body.vertex(v).point;
+        let t_ref = self.end_t(ri, at(0).cin, vp);
+        let reach = self.body.edge_box(edge).diagonal() + 4.0 * self.rolled[ri].blend.radius;
+        let (s_in, s_out) = (self.side(at(0).cin), self.side(at(k - 1).cout));
+        let (a0, b0) = (at(0).face, at(k - 1).face);
+        let blend = self.rolled[ri].blend.surface.clone();
+        let name = self.rolled[ri].name;
+        let on_edge = |b: &Builder, c: CoedgeId, p: Point3| {
+            let e = b.body.edge(b.body.coedge(c).edge);
+            e.curve.eval(e.curve.closest(p, e.range)).distance(p) <= tol::LINEAR
+        };
+        // where spring s, near the vertex, crosses coedge c's edge (meeting the surface of face f)
+        let spring_hit = |b: &Builder, s: usize, c: CoedgeId, f: FaceId| -> Option<(f64, Point3)> {
+            let spring = &b.rolled[ri].springs[s];
+            let across = &b.body.face(f).surface;
+            let hits = match curve_surface(spring, search_window(spring, t_ref, reach), across) {
+                CurveSurface::Hits(h) => h,
+                _ => return None,
+            };
+            hits.into_iter()
+                .filter(|h| on_edge(b, c, h.point))
+                .min_by(|x, y| (x.t - t_ref).abs().total_cmp(&(y.t - t_ref).abs()))
+                .map(|h| (h.t, h.point))
+        };
+        let mut dropped: Vec<CoedgeId> = Vec::new();
+        let names = |b: &Builder, c: CoedgeId| {
+            let e = b.body.coedge(c).edge;
+            Name::NONE
+                .with_set(vec![name, b.body.edge(e).name])
+                .with_name(b.body.vertex(v).name)
+        };
+        // off face a0: the spring's first crossing with an edge of a0 after the vertex
+        let mut c = at(0).cout;
+        let (t_in, x_in) = loop {
+            if c == at(0).cin || dropped.len() > 64 {
+                return Err(err);
+            }
+            let across = self.body.coedge_face(self.body.partner(c).ok_or(err.clone())?);
+            if let Some(hit) = spring_hit(self, s_in, c, across) {
+                break hit;
+            }
+            dropped.push(c);
+            c = self.next_in_loop(c);
+        };
+        let xv_in = self.body.add_vertex(x_in, names(self, c));
+        let mut cur = self.body.partner(c).ok_or(err.clone())?;
+        self.trim(cur, x_in, xv_in, edge, None)?;
+        // across the faces beyond, each from its entry to its exit, to face b0
+        let (mut entry, mut back) = ((x_in, xv_in), Vec::new());
+        let (t_out, xv_out) = loop {
+            let f = self.body.coedge_face(cur);
+            if f == a0 || f == b0 || back.len() > 16 {
+                return Err(err);
+            }
+            self.touched.insert(f);
+            let mut d = self.next_in_loop(cur);
+            let (exit, t_out) = loop {
+                if d == cur {
+                    return Err(err);
+                }
+                let g = self.body.coedge_face(self.body.partner(d).ok_or(err.clone())?);
+                let hit = if g == b0 {
+                    spring_hit(self, s_out, d, f).map(|(t, p)| (p, Some(t)))
+                } else {
+                    let e = self.body.edge(self.body.coedge(d).edge);
+                    let (curve, range) = (e.curve.clone(), e.range);
+                    nearest_hit(&curve, range, &blend, vp)
+                        .filter(|h| h.1.distance(entry.0) > tol::LINEAR)
+                        .map(|h| (h.1, None))
+                };
+                if let Some(h) = hit {
+                    break h;
+                }
+                dropped.push(d);
+                d = self.next_in_loop(d);
+            };
+            let xv = self.body.add_vertex(exit, names(self, d));
+            let (curve, ta, tb) =
+                cross_curve(&self.rolled[ri].blend, &self.body.face(f).surface, entry.0, exit)
+                    .ok_or(err.clone())?;
+            let ename = Name::NONE
+                .with_set(vec![name, self.face_name(f)])
+                .with_name(self.body.vertex(v).name)
+                .with(back.len() as u64);
+            let (eid, fwd) = self.edge_between(curve, ta, tb, entry.1, xv, ename);
+            self.paths.insert(cur, vec![(eid, fwd)]);
+            back.push((eid, !fwd));
+            cur = self.body.partner(d).ok_or(err.clone())?;
+            self.trim(cur, exit, xv, edge, None)?;
+            entry = (exit, xv);
+            if let Some(t) = t_out {
+                break (t, xv);
+            }
+        };
+        // on face b0, from the last cut to the blend's edge
+        let mut d = self.next_in_loop(cur);
+        while d != at(k - 1).cout {
+            if dropped.len() > 64 {
+                return Err(err);
+            }
+            dropped.push(d);
+            d = self.next_in_loop(d);
+        }
+        // what is dropped goes from both its faces, and no other blend ends there
+        let gone: BTreeSet<CoedgeId> = dropped.iter().copied().collect();
+        for &d in &dropped {
+            let e = self.body.coedge(d).edge;
+            let x = self.body.edge(e);
+            if !self.body.partner(d).is_some_and(|p| gone.contains(&p))
+                || self.which.contains_key(&e)
+                || self.rolled.iter().any(|r| {
+                    let y = self.body.edge(r.edge);
+                    [y.start, y.end]
+                        .iter()
+                        .any(|&w| w != v && (w == x.start || w == x.end))
+                })
+            {
+                return Err(err);
+            }
+            self.touched.insert(self.body.coedge_face(d));
+        }
+        self.dropped.extend(gone);
+        back.reverse();
+        let mut end = SpringEnd {
+            v: [v; 2],
+            t: [0.0; 2],
+            path: back,
+        };
+        (end.v[s_in], end.t[s_in]) = (xv_in, t_in);
+        (end.v[s_out], end.t[s_out]) = (xv_out, t_out);
+        let at_end = self.arrives_at_end(at(0).cin);
+        self.ends.insert((edge, at_end), end);
+        Ok(())
+    }
+
     /// Whether coedge `c` (arriving at a vertex) arrives at its edge's end rather than its start.
     fn arrives_at_end(&self, c: CoedgeId) -> bool {
         self.body.coedge(c).forward
@@ -742,10 +1511,28 @@ impl Builder {
         let p_edges: Vec<CoedgeId> = (1..span).map(|d| ring[(ia + d) % k].cin).collect();
         let x_edges: Vec<CoedgeId> = (span + 1..k).rev().map(|d| ring[(ia + d) % k].cin).collect();
         // the section: where a spring crosses an edge between two surfaces, else any smooth edge
-        let t0 = spine_closest(&self.rolled[ra].blend.spine, vp);
+        let var = self.rolled[ra].var.is_some();
+        let t0 = self.end_t(ra, ring[ia].cin, vp);
         let mut ta = None;
         let mut any = None;
+        // a variable chain's section is its blends' shared end; edges between surfaces pass through its feet
         for (edges, s) in [(&p_edges, sa), (&x_edges, 1 - sa)] {
+            if var {
+                let foot = self.rolled[ra].springs[s].eval(t0);
+                for &c in edges.iter() {
+                    let e = self.body.edge(self.body.coedge(c).edge);
+                    let (f0, f1) = (
+                        self.body.coedge_face(e.coedges[0]),
+                        self.body.coedge_face(e.coedges[1]),
+                    );
+                    let change = f0 != f1 && self.body.face(f0).surface != self.body.face(f1).surface;
+                    if change && e.curve.eval(e.curve.closest(foot, e.range)).distance(foot) > tol::LINEAR {
+                        return Err(err);
+                    }
+                }
+                ta = Some(t0);
+                continue;
+            }
             for &c in edges.iter() {
                 let e = self.body.edge(self.body.coedge(c).edge);
                 let (f0, f1) = (
@@ -771,7 +1558,11 @@ impl Builder {
         }
         let ta = ta.or(any).unwrap_or(t0);
         let ca = self.rolled[ra].blend.spine.eval(ta);
-        let tb = spine_closest(&self.rolled[rb].blend.spine, ca);
+        let tb = if var {
+            self.end_t(rb, ring[ib].cin, vp)
+        } else {
+            spine_closest(&self.rolled[rb].blend.spine, ca)
+        };
         if ca.distance(self.rolled[rb].blend.spine.eval(tb)) > tol::LINEAR {
             return Err(err);
         }
@@ -788,9 +1579,12 @@ impl Builder {
         let vx_name = self.vertex_name(v, &[fname(ib), fname(ia + k - 1), na, nb]);
         let pv = self.body.add_vertex(p, vp_name);
         let xv = self.body.add_vertex(x, vx_name);
-        let mid = |b: &Builder, ri: usize| {
-            let e = b.body.edge(b.rolled[ri].edge);
-            spine_closest(&b.rolled[ri].blend.spine, e.curve.eval(e.range.mid()))
+        let mid = |b: &Builder, ri: usize| match b.rolled[ri].var {
+            Some(x) => x.own.mid(),
+            None => {
+                let e = b.body.edge(b.rolled[ri].edge);
+                spine_closest(&b.rolled[ri].blend.spine, e.curve.eval(e.range.mid()))
+            }
         };
         let (mid_a, mid_b) = (mid(self, ra), mid(self, rb));
         let ahead = |b: &Builder, ri: usize, t: f64, from: f64, mid: f64| {
@@ -808,13 +1602,21 @@ impl Builder {
             for (m, &c) in edges.iter().enumerate() {
                 let e = self.body.edge(self.body.coedge(c).edge);
                 let (curve, range, ename) = (e.curve.clone(), e.range, e.name);
-                let t = crossing(&self.rolled[ra].springs[s_a], ta, &curve, range).ok_or(err.clone())?;
-                let q = self.rolled[ra].springs[s_a].eval(t);
+                // a variable blend's spring stops at the section: the crossing may be b's
+                let hit = crossing(&self.rolled[ra].springs[s_a], ta, &curve, range);
+                if hit.is_none() && !var {
+                    return Err(err);
+                }
                 let name = Name::NONE.with_set(vec![na, nb]).with_name(ename);
-                if q.distance(foot) <= tol::LINEAR {
+                let q = hit.map(|t| (t, self.rolled[ra].springs[s_a].eval(t)));
+                if let Some((_, q)) = q
+                    && q.distance(foot) <= tol::LINEAR
+                {
                     self.trim(c, foot, fv, ea, None)?;
                     at_foot.push(m);
-                } else if ahead(self, ra, t, ta, mid_a) {
+                } else if let Some((t, q)) = q
+                    && ahead(self, ra, t, ta, mid_a)
+                {
                     let qv = self.body.add_vertex(q, name);
                     self.trim(c, q, qv, ea, None)?;
                     on_a.push((t, qv, m));
@@ -1012,7 +1814,7 @@ impl Builder {
                         convex: ro.convex,
                         spine: ro.blend.spine.clone(),
                         out: if ro.aligned { away } else { -away },
-                        setback: spine_closest(&ro.blend.spine, vp),
+                        setback: self.end_t(ri, c, vp),
                         middle,
                     });
                     blend_ring.push(j);
@@ -1043,6 +1845,9 @@ impl Builder {
             return None;
         }
         let ri: Vec<usize> = ring.iter().map(|k| self.filleted(k.cin)).collect::<Option<_>>()?;
+        if ri.iter().any(|&i| self.rolled[i].var.is_some()) {
+            return None;
+        }
         let r0 = &self.rolled[ri[0]];
         let (radius, convex) = (r0.blend.radius, r0.convex);
         if ri.iter().any(|&i| {
@@ -1367,6 +2172,9 @@ impl Builder {
             for l in loops {
                 let mut uses = Vec::new();
                 for &c in &self.body.lp(l).coedges {
+                    if self.dropped.contains(&c) {
+                        continue;
+                    }
                     let co = self.body.coedge(c).clone();
                     match self.which.get(&co.edge) {
                         Some(&i) => {

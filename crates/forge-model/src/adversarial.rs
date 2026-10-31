@@ -7,7 +7,7 @@
 use crate::{Combine, Extent, Feature, Part, Turn};
 use forge_math::rng::Rng;
 use forge_math::{Frame, Point2, Point3, UnitVec3, Vec2, Vec3, dmath};
-use forge_ops::{Axis2, Profile, ProfileLoop, Segment};
+use forge_ops::{Axis2, Profile, ProfileLoop, Radius, Segment};
 
 /// A frame rebuilt the way the literal printer writes it, so a printed repro
 /// reproduces bit for bit.
@@ -808,7 +808,17 @@ fn rounded_feature(f: &Feature, digits: i32) -> Feature {
             op: *op,
         },
         Feature::Fillet { edges } => Feature::Fillet {
-            edges: edges.iter().map(|&(n, r)| (n, rd(r))).collect(),
+            edges: edges
+                .iter()
+                .map(|(n, r)| {
+                    let r = match r {
+                        Radius::Constant(x) => Radius::Constant(rd(*x)),
+                        Radius::Linear(a, b) => Radius::Linear(rd(*a), rd(*b)),
+                        Radius::Points(p) => Radius::Points(p.iter().map(|&(f, x)| (f, rd(x))).collect()),
+                    };
+                    (*n, r)
+                })
+                .collect(),
         },
         other => other.clone(),
     }
@@ -1012,7 +1022,7 @@ pub fn literal(part: &Part) -> String {
                 "        Feature::Fillet {{ edges: vec![{}] }},",
                 edges
                     .iter()
-                    .map(|(n, r)| format!("(Name({}), {})", n.0, lit_f(*r)))
+                    .map(|(n, r)| format!("(Name({}), Radius::{r:?})", n.0))
                     .collect::<Vec<_>>()
                     .join(", ")
             ),

@@ -5,7 +5,7 @@
 use crate::{Combine, Extent, Feature, Part};
 use forge_geom::CurveGeom;
 use forge_math::{Frame, Point2, Point3, UnitVec3, Vec3, dmath};
-use forge_ops::Profile;
+use forge_ops::{Profile, ProfileLoop, Radius, Segment};
 use forge_topo::{Body, Name};
 
 /// A w x h x d box with a corner at `o`.
@@ -180,19 +180,45 @@ pub fn edge_near(body: &Body, p: Point3) -> Name {
 
 /// `part` followed by a fillet of the edges nearest each point, each with its radius.
 pub fn with_fillet(part: &Part, near: &[(Point3, f64)]) -> Part {
-    with_fillet_from(part, &part.regenerate().expect("base part regenerates"), near)
+    let near: Vec<(Point3, Radius)> = near.iter().map(|&(p, r)| (p, r.into())).collect();
+    with_var_fillet(part, &near)
 }
 
-/// `with_fillet`, the edges picked from `body` (the part as some regeneration made it).
-pub fn with_fillet_from(part: &Part, body: &Body, near: &[(Point3, f64)]) -> Part {
-    let edges = near.iter().map(|&(p, r)| (edge_near(body, p), r)).collect();
+/// `with_fillet` with a radius law per edge (along each edge as the part's body runs it).
+pub fn with_var_fillet(part: &Part, near: &[(Point3, Radius)]) -> Part {
+    let body = part.regenerate().expect("base part regenerates");
+    let edges = near
+        .iter()
+        .map(|(p, r)| (edge_near(&body, *p), r.clone()))
+        .collect();
     let mut out = part.clone();
     out.features.push(Feature::Fillet { edges });
     out
 }
 
-/// The points and radii a fillet case picked its edges with (from the names it holds).
-pub fn picks(part: &Part) -> Vec<(Point3, f64)> {
+/// A fillet case's picks: each edge's middle and start, and its radius.
+pub type Pick = (Point3, Point3, Radius);
+
+/// `part` followed by the fillet of `picks`, the edges picked from `body` (the part as
+/// some regeneration made it) and each law turned round where that body runs the edge
+/// the other way.
+pub fn with_fillet_from(part: &Part, body: &Body, picks: &[Pick]) -> Part {
+    let edges = picks
+        .iter()
+        .map(|(mid, start, r)| {
+            let n = edge_near(body, *mid);
+            let e = body.edge(body.edge_by_name(n).expect("named edge"));
+            let flip = e.curve.eval(e.range.lo).distance(*start) > e.curve.eval(e.range.hi).distance(*start);
+            (n, if flip { r.reversed() } else { r.clone() })
+        })
+        .collect();
+    let mut out = part.clone();
+    out.features.push(Feature::Fillet { edges });
+    out
+}
+
+/// The picks a fillet case holds (from its names).
+pub fn picks(part: &Part) -> Vec<Pick> {
     let mut base = part.clone();
     let Some(Feature::Fillet { edges }) = base.features.pop() else {
         return Vec::new();
@@ -200,9 +226,9 @@ pub fn picks(part: &Part) -> Vec<(Point3, f64)> {
     let body = base.regenerate().expect("base part regenerates");
     edges
         .iter()
-        .map(|&(n, r)| {
-            let e = body.edge(body.edge_by_name(n).expect("named edge"));
-            (e.curve.eval(e.range.mid()), r)
+        .map(|(n, r)| {
+            let e = body.edge(body.edge_by_name(*n).expect("named edge"));
+            (e.curve.eval(e.range.mid()), e.curve.eval(e.range.lo), r.clone())
         })
         .collect()
 }
@@ -750,7 +776,307 @@ pub fn cases() -> Vec<(&'static str, Part, Option<f64>)> {
         ),
         None,
     ));
+    // a bar of L section: the edge's side face is narrow at the front, where the ball rolls
+    // off it over the ledge onto the inside wall (the corner the spandrel cuts there is
+    // the 2 x 1 rectangle less the radius-2 disc's slice between heights 1 and 2 over its centre)
+    let r = 2.0;
+    let ledge = 2.0 - (pi - 0.75f64.sqrt() - pi / 3.0);
+    out.push((
+        "l-bar-roll-over",
+        with_fillet(&l_bar(), &[(Point3::new(0.0, 6.0, 8.0), r)]),
+        Some(20.0 * 66.0 - spandrel(r) * 8.0 - ledge * 2.0),
+    ));
+    out.extend(variable_cases());
     out
+}
+
+/// A 20 long bar along x of L section in yz: 10 wide, 8 high, with a 2 x 7 notch under its
+/// front edge, so its end face is only 1 high at the front.
+pub fn l_bar() -> Part {
+    let pts = [
+        (0.0, 7.0),
+        (2.0, 7.0),
+        (2.0, 0.0),
+        (10.0, 0.0),
+        (10.0, 8.0),
+        (0.0, 8.0),
+    ];
+    let outline = ProfileLoop::new(
+        (0..6)
+            .map(|i| {
+                let (a, b) = (pts[i], pts[(i + 1) % 6]);
+                (
+                    Segment::Line {
+                        a: Point2::new(a.0, a.1),
+                        b: Point2::new(b.0, b.1),
+                    },
+                    i as u64,
+                )
+            })
+            .collect(),
+    );
+    Part {
+        features: vec![Feature::Extrude {
+            profile: Profile {
+                plane: Frame::from_zx(Point3::ORIGIN, UnitVec3::X, Vec3::Y).expect("frame"),
+                loops: vec![outline],
+            },
+            extent: Extent::Distance(20.0),
+            op: Combine::New,
+        }],
+    }
+}
+
+/// A block whose top outline has one rounded corner: a straight edge, an arc and a straight
+/// edge tangent in a row along the top, the other corners sharp.
+pub fn one_round_corner() -> Part {
+    let q = dmath::FRAC_PI_2;
+    let outline = ProfileLoop::new(vec![
+        (
+            Segment::Line {
+                a: Point2::new(0.0, 0.0),
+                b: Point2::new(17.0, 0.0),
+            },
+            0,
+        ),
+        (
+            Segment::Arc {
+                center: Point2::new(17.0, 3.0),
+                radius: 3.0,
+                start: -q,
+                sweep: q,
+            },
+            1,
+        ),
+        (
+            Segment::Line {
+                a: Point2::new(20.0, 3.0),
+                b: Point2::new(20.0, 10.0),
+            },
+            2,
+        ),
+        (
+            Segment::Line {
+                a: Point2::new(20.0, 10.0),
+                b: Point2::new(0.0, 10.0),
+            },
+            3,
+        ),
+        (
+            Segment::Line {
+                a: Point2::new(0.0, 10.0),
+                b: Point2::new(0.0, 0.0),
+            },
+            4,
+        ),
+    ]);
+    Part {
+        features: vec![Feature::Extrude {
+            profile: Profile {
+                plane: Frame::WORLD,
+                loops: vec![outline],
+            },
+            extent: Extent::Distance(8.0),
+            op: Combine::New,
+        }],
+    }
+}
+
+/// Variable radii: laws along one edge, chains whose picks differ, closed edges with a
+/// periodic law, and a variable blend at a corner. No closed forms: the mesh, validity,
+/// G1 and n-ary checks hold them.
+pub fn variable_cases() -> Vec<(&'static str, Part, Option<f64>)> {
+    let o = Point3::ORIGIN;
+    let pts = |p: &[(f64, f64)]| Radius::Points(p.to_vec());
+    let boxed = Part {
+        features: vec![block_at(o, 20.0, 10.0, 8.0, Combine::New)],
+    };
+    let mut step = boxed.clone();
+    step.features.push(block_at(
+        Point3::new(0.0, 0.0, 8.0),
+        10.0,
+        10.0,
+        6.0,
+        Combine::Add,
+    ));
+    let mut boss = boxed.clone();
+    boss.features
+        .push(post_at(Point3::new(10.0, 5.0, 8.0), 3.0, 5.0, Combine::Add));
+    let rounded = Part {
+        features: vec![Feature::Extrude {
+            profile: Profile {
+                plane: Frame::WORLD,
+                loops: vec![Profile::rounded_rectangle(Point2::ORIGIN, 20.0, 12.0, 3.0, 0)],
+            },
+            extent: Extent::Distance(6.0),
+            op: Combine::New,
+        }],
+    };
+    let mut stand = Part {
+        features: vec![block_at(
+            Point3::new(-5.0, -5.0, -4.0),
+            30.0,
+            22.0,
+            4.0,
+            Combine::New,
+        )],
+    };
+    let mut top = rounded.features[0].clone();
+    if let Feature::Extrude { op, .. } = &mut top {
+        *op = Combine::Add;
+    }
+    stand.features.push(top);
+    let corner = one_round_corner();
+    let arc_mid = Point3::new(17.0 + 3.0 * f64::sqrt(0.5), 3.0 - 3.0 * f64::sqrt(0.5), 8.0);
+    let mut posted = Part {
+        features: vec![rod_at(
+            Point3::new(-15.0, 0.0, 0.0),
+            UnitVec3::X,
+            6.0,
+            30.0,
+            Combine::New,
+        )],
+    };
+    posted
+        .features
+        .push(post_at(Point3::new(0.0, 0.0, 0.0), 2.0, 10.0, Combine::Add));
+    let q = dmath::FRAC_PI_2;
+    let (apex, mids) = apex_post(&[(0.5 * q, 1.0), (1.5 * q, 0.8), (2.5 * q, 1.2), (3.5 * q, 0.9)]);
+    let front = Point3::new(10.0, 0.0, 8.0);
+    vec![
+        (
+            "box-linear-edge",
+            with_var_fillet(&boxed, &[(front, Radius::Linear(1.0, 3.0))]),
+            None,
+        ),
+        (
+            "box-points-edge",
+            with_var_fillet(&boxed, &[(front, pts(&[(0.0, 1.0), (0.5, 2.5), (1.0, 1.5)]))]),
+            None,
+        ),
+        (
+            "step-linear-concave",
+            with_var_fillet(&step, &[(Point3::new(10.0, 5.0, 8.0), Radius::Linear(1.0, 2.5))]),
+            None,
+        ),
+        (
+            "boss-rim-periodic",
+            with_var_fillet(
+                &boss,
+                &[(Point3::new(7.0, 5.0, 13.0), pts(&[(0.0, 0.6), (0.5, 1.4)]))],
+            ),
+            None,
+        ),
+        (
+            "boss-foot-periodic",
+            with_var_fillet(
+                &boss,
+                &[(
+                    Point3::new(7.0, 5.0, 8.0),
+                    pts(&[(0.0, 0.8), (0.25, 1.5), (0.6, 1.0)]),
+                )],
+            ),
+            None,
+        ),
+        (
+            "shaft-post-periodic",
+            with_var_fillet(
+                &posted,
+                &[(
+                    Point3::new(0.0, 2.0, f64::sqrt(32.0)),
+                    pts(&[(0.0, 0.8), (0.5, 1.3)]),
+                )],
+            ),
+            None,
+        ),
+        (
+            "rounded-top-linear-chain",
+            with_var_fillet(
+                &rounded,
+                &[(Point3::new(10.0, 0.0, 6.0), Radius::Linear(0.8, 1.6))],
+            ),
+            None,
+        ),
+        (
+            "rounded-top-two-radii",
+            with_var_fillet(
+                &rounded,
+                &[
+                    (Point3::new(10.0, 0.0, 6.0), 1.0.into()),
+                    (Point3::new(20.0, 6.0, 6.0), 1.6.into()),
+                ],
+            ),
+            None,
+        ),
+        (
+            "rounded-foot-linear-chain",
+            with_var_fillet(&stand, &[(Point3::new(10.0, 0.0, 0.0), Radius::Linear(0.8, 1.4))]),
+            None,
+        ),
+        (
+            "corner-chain-two-radii",
+            with_var_fillet(
+                &corner,
+                &[
+                    (Point3::new(8.0, 0.0, 8.0), 1.0.into()),
+                    (Point3::new(20.0, 6.0, 8.0), 1.6.into()),
+                ],
+            ),
+            None,
+        ),
+        (
+            "corner-chain-adjacent-radii",
+            with_var_fillet(
+                &corner,
+                &[(Point3::new(8.0, 0.0, 8.0), 1.0.into()), (arc_mid, 1.5.into())],
+            ),
+            None,
+        ),
+        (
+            "corner-chain-mixed",
+            with_var_fillet(
+                &corner,
+                &[
+                    (Point3::new(8.0, 0.0, 8.0), Radius::Linear(0.6, 1.4)),
+                    (Point3::new(20.0, 6.0, 8.0), 1.0.into()),
+                ],
+            ),
+            None,
+        ),
+        (
+            "l-bar-roll-over-linear",
+            with_var_fillet(
+                &l_bar(),
+                &[(Point3::new(0.0, 6.0, 8.0), Radius::Linear(1.6, 2.4))],
+            ),
+            None,
+        ),
+        (
+            "box-corner-variable",
+            with_var_fillet(
+                &boxed,
+                &[
+                    (front, Radius::Linear(1.0, 2.0)),
+                    (Point3::new(0.0, 5.0, 8.0), 1.0.into()),
+                    (Point3::new(0.0, 0.0, 4.0), 1.0.into()),
+                ],
+            ),
+            None,
+        ),
+        (
+            "apex-variable",
+            with_var_fillet(
+                &apex,
+                &[
+                    (mids[0], Radius::Linear(1.0, 1.6)),
+                    (mids[1], 1.5.into()),
+                    (mids[2], 0.8.into()),
+                    (mids[3], 1.2.into()),
+                ],
+            ),
+            None,
+        ),
+    ]
 }
 
 /// Fillets that cannot be built, and the error each must give (by its name).
@@ -864,8 +1190,9 @@ mod tests {
         Some(worst)
     }
 
-    /// One to three random edges of random parts, random radii: every result is a
-    /// valid solid with a closed mesh, or an error, never a panic.
+    /// One to three random edges of random parts, random radii (constant, linear or
+    /// through three points): every result is a valid solid with a closed mesh, or an
+    /// error, never a panic.
     #[test]
     fn random_fillets() {
         use forge_math::rng::Rng;
@@ -879,7 +1206,16 @@ mod tests {
             let edges: Vec<_> = body.edge_ids().collect();
             let mut pick: Vec<FilletEdge> = Vec::new();
             for _ in 0..1 + r.below(3) {
-                let (edge, radius) = (edges[r.below(edges.len())], r.range(0.05, 1.0));
+                let edge = edges[r.below(edges.len())];
+                let radius = match r.below(3) {
+                    0 => Radius::Constant(r.range(0.05, 1.0)),
+                    1 => Radius::Linear(r.range(0.05, 1.0), r.range(0.05, 1.0)),
+                    _ => Radius::Points(vec![
+                        (0.0, r.range(0.05, 1.0)),
+                        (r.range(0.2, 0.8), r.range(0.05, 1.0)),
+                        (1.0, r.range(0.05, 1.0)),
+                    ]),
+                };
                 if pick.iter().all(|p| p.edge != edge) {
                     pick.push(FilletEdge { edge, radius });
                 }
@@ -895,6 +1231,31 @@ mod tests {
         }
         // seam picks are refused as smooth and adjacent picks as corners; the rest build
         assert!(ok >= 70, "only {ok} of 150 built");
+    }
+
+    /// A radius running from 1 to 3 along an edge takes off more than 1 all along and less
+    /// than 3 all along.
+    #[test]
+    fn linear_radius_lies_between_its_ends() {
+        let boxed = Part {
+            features: vec![block_at(Point3::ORIGIN, 20.0, 10.0, 8.0, Combine::New)],
+        };
+        let q = Quality {
+            chord: 1e-3,
+            max_angle: 0.5,
+        };
+        let front = Point3::new(10.0, 0.0, 8.0);
+        let vol = |r: Radius| {
+            let body = with_var_fillet(&boxed, &[(front, r)])
+                .regenerate()
+                .expect("builds");
+            tessellate(&body, &q).expect("meshes").volume()
+        };
+        let (v1, v13, v3) = (vol(1.0.into()), vol(Radius::Linear(1.0, 3.0)), vol(3.0.into()));
+        assert!(v3 < v13 && v13 < v1, "{v3} {v13} {v1}");
+        // the cut is about (1 - pi/4) times the integral of r^2
+        let want = 1600.0 - (1.0 - dmath::PI / 4.0) * 20.0 * (1.0 + 3.0 + 9.0) / 3.0;
+        assert!((v13 - want).abs() < 0.01 * (1600.0 - want), "{v13} {want}");
     }
 
     #[test]
