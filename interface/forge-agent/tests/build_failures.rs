@@ -363,3 +363,15 @@ fillet 0.5 (edges top)
     );
     assert!(m.error.is_some_and(|e| e.msg.contains("fillet")));
 }
+
+/// A slot through a plate whose straight side is two lines a hair off one line, as float noise
+/// leaves it: where the plate's face crosses them, the neighbour across their edge meets at so
+/// shallow an angle that the crossing was lost. The edge's own plane finds it.
+#[test]
+fn a_kink_of_a_hair_in_a_slots_side() {
+    builds(
+        "extrude new two 2.4 2.4 z 0 1 0 x 1 0 0 at 0 0 0 rect -20 0 40 40
+extrude cut 12 z 0 -1 0 x 1 0 0 at 0 -1 0 loop line 2.5 -34 2.499985 -21.5 line 2.499985 -21.5 2.5 -9 arc 0 -9 2.5 0 180 line -2.5 -9 -2.5 -21.5 line -2.5 -21.5 -2.5 -34 arc 0 -34 2.5 180 180 in all
+",
+    );
+}

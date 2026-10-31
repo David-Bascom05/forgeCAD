@@ -3125,9 +3125,16 @@ pub(crate) fn across(body: &Body, f: FaceId, c: forge_topo::CoedgeId) -> R<Surfa
             let other = &body.face(g).surface;
             // a smooth edge (the faces meet tangentially, as a rounded corner meets its
             // walls): the neighbour's surface would only touch a crossing curve there
+            // (for a straight edge also where they all but do: the neighbour crosses at so shallow
+            // an angle that a hair of rounding moves the point along the curve past the edge)
+            let flat = if matches!(edge.curve, Curve::Line(_)) {
+                1e-3
+            } else {
+                1e-6
+            };
             let smooth = other
                 .normal(other.project(d.p))
-                .is_some_and(|m| m.cross(n).length() <= 1e-6);
+                .is_some_and(|m| m.cross(n).length() <= flat);
             if smooth && !matches!(edge.curve, Curve::Intersection(_)) {
                 edge_plane()
             } else {
