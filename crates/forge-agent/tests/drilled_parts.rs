@@ -59,3 +59,13 @@ fn cross_drill_tangent_to_floor_pointed() {
 fn hole_tangent_to_chamfer_edge() {
     builds_valid("extrude 55 rect -45 -35 90 70\nchamfer 1.5 (edges)\nhole 15 -xy at -36 -27 55 9\n");
 }
+
+/// Two blocks apart in one body: two lumps, a shell each (the union once kept one shell for
+/// both, and check counted its Euler characteristic as 4).
+#[test]
+fn disjoint_lumps_are_shells_apart() {
+    let v = builds_valid("extrude 10 rect 0 0 10 10\nextrude 10 rect 20 0 10 10\n");
+    assert!((v - 2000.0).abs() < 1e-6 * 2000.0, "{v}");
+    let m = Model::new("extrude 10 rect 0 0 10 10\nextrude 10 rect 20 0 10 10\n");
+    assert_eq!(m.body().expect("a body").shells.len(), 2);
+}

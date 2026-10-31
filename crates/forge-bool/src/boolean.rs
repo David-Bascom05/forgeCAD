@@ -1167,7 +1167,11 @@ fn apply(a: &mut Body, b: &Body, plan: &Plan) {
             x.tol = x.tol.max(t);
         }
     }
-    // shells are regrouped when the body is compacted
+    // B kept where no new edge joins it to A: a lump apart (a union of disjoint solids) or a
+    // void, a shell of its own (other shells are regrouped when the body is compacted)
+    if pieces.iter().all(|p| p.seg.is_none()) && kept.iter().any(|&(si, _)| specs[si].side == 1) {
+        a.rebuild_shells();
+    }
 }
 
 /// `tol` grown to what `grown` asks of vertex `k`.
