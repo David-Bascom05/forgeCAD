@@ -142,3 +142,15 @@ thicken 1.5 (faces of flange normal -x)
     let b = m.body().expect("a body");
     assert!(forge_topo::check(b).is_empty(), "{:?}", forge_topo::check(b));
 }
+
+/// A tilted pad over a through hole leaves a 1.6 mm2 lens of its side plane between its edge and
+/// two arcs of the hole meeting at the cylinder's seam (M9). The body was right; check's chords of
+/// the arcs cut into the thin lens past its probe (FaceWrongSide). A miss is now looked at again
+/// with the loops drawn finely.
+#[test]
+fn thin_lens_at_a_hole_seam() {
+    builds_valid("extrude new 15 rect 0 0 120 60
+extrude cut 17 at 75 19 -1 circle 0 0 3
+extrude add 8.945478516509796 z -0.061633258296996694 0.2939571355937309 0.9538294102748273 x -0.08391472378619189 0.9507366012975499 -0.29842626239168546 at 89.69521759175012 13.908448595830624 3.4058649537841124 rrect -13.632567574771072 -10.946070359275362 27.265135149542143 21.892140718550724 7.854519259083712
+");
+}

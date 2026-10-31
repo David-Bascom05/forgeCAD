@@ -8,7 +8,6 @@ boolean: Internal("hole outside every region")
 # booleans and finishing ops leaving an invalid solid
 invalid DuplicateName  # extrude sym of a line+arc loop onto a block
 invalid EdgeUses  # patterns of patterns, balls, sketches
-invalid FaceWrongSide  # fillets and face fillets
 Direct(Invalid(  # delete leaves a face with no loops
 # the n-ary regen names split faces and edges unlike the sequential one, so later references miss
 nary: chamfer: NoSuchEdge
