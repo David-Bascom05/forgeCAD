@@ -262,6 +262,8 @@ impl Grid {
 /// Which tools hold a point just inside and just outside a region, and whether another tool's
 /// face lies on it.
 type Seen = (Vec<bool>, Vec<bool>, bool);
+/// The tools holding a new edge piece's middle: the last alone with no intersect, else all.
+type Held = Option<(Option<Side>, Vec<Side>)>;
 /// A region's loops and its verdict: None dropped, Some(flip) kept.
 type Judged = (Vec<Walk>, Option<bool>);
 
@@ -626,11 +628,12 @@ fn nary_body(
 
     // the result lies within the first tool and those added to it: what is surely outside all of
     // them bounds none of it (its regions are all dropped, however they are split)
+    let holders: Vec<Side> = (0..n).filter(|&t| t == 0 || ops[t - 1] == Op::Union).collect();
     let outside = |b: &forge_math::Box3| -> bool {
         let Some(sh) = shapes else { return false };
-        (0..n)
-            .filter(|&k| k == 0 || ops[k - 1] == Op::Union)
-            .all(|k| !index[k].bbox.overlaps(b) || sh[k].box_out(b, SHAPE_MARGIN))
+        holders
+            .iter()
+            .all(|&k| !index[k].bbox.overlaps(b) || sh[k].box_out(b, SHAPE_MARGIN))
     };
 
     let any_intersect = ops.contains(&Op::Intersect);
@@ -640,7 +643,6 @@ fn nary_body(
     // or, with no intersect, it is a cut's plane whose outer side lies outside them, or inside
     // another cut that no tool after it adds to there, with no later tool adding material near it
     // (a hole's mouth on the part's face, or on the bottom of the hole it goes on from)
-    let holders: Vec<Side> = (0..n).filter(|&t| t == 0 || ops[t - 1] == Op::Union).collect();
     let revolved = shapes.is_some_and(|sh| holders.iter().any(|&t| sh[t].revolved()));
     let grid = Grid::new(&index.iter().map(|x| x.bbox).collect::<Vec<_>>());
     let inert_at: Vec<Vec<std::sync::OnceLock<bool>>> = (0..n)
@@ -1433,13 +1435,14 @@ fn nary_body(
     let found = points.clone();
     // a new vertex settles on the point nearest every curve through it; parameters follow it
     {
-        let mut through: Vec<Vec<(&Curve, Interval)>> = vec![Vec::new(); points.len()];
+        // (by vertex, each vertex's curves in the order found: counted into place)
+        let mut found: Vec<(u32, (&Curve, Interval))> = Vec::new();
         for (c, &k) in cuts.iter().zip(&cut_vertex) {
             if let VKey::New(i) = k
                 && let Some((sd, e)) = c.on.edge()
             {
                 let edge = tools[sd].edge(e);
-                through[i as usize].push((&edge.curve, edge.range));
+                found.push((i, (&edge.curve, edge.range)));
             }
         }
         for sg in &segs {
@@ -1447,7 +1450,7 @@ fn nary_body(
             let w = 1e-3 * sg.range.width();
             for (t, k) in [(sg.range.lo, cut_vertex[i0]), (sg.range.hi, cut_vertex[i1])] {
                 if let VKey::New(i) = k {
-                    through[i as usize].push((&sg.curve, Interval::new(t - w, t + w)));
+                    found.push((i, (&sg.curve, Interval::new(t - w, t + w))));
                 }
             }
         }
@@ -1455,8 +1458,22 @@ fn nary_body(
             if let VKey::New(i) = k {
                 let sg = &segs[tc.seg];
                 let w = 1e-3 * sg.range.width();
-                through[i as usize].push((&sg.curve, Interval::new(tc.t - w, tc.t + w)));
+                found.push((i, (&sg.curve, Interval::new(tc.t - w, tc.t + w))));
             }
+        }
+        let mut at = vec![0usize; points.len() + 1];
+        for f in &found {
+            at[f.0 as usize + 1] += 1;
+        }
+        for i in 1..at.len() {
+            at[i] += at[i - 1];
+        }
+        let mut through: Vec<(&Curve, Interval)> =
+            found.first().map_or(Vec::new(), |f| vec![f.1; found.len()]);
+        let mut next = at.clone();
+        for (i, c) in found {
+            through[next[i as usize]] = c;
+            next[i as usize] += 1;
         }
         // a vertex only triple points of three faces' surfaces make lies where those meet
         let mut three: Vec<Option<[(Side, FaceId); 3]>> = vec![None; points.len()];
@@ -1489,7 +1506,7 @@ fn nary_body(
             {
                 return Ok((p, tol::LINEAR));
             }
-            settle(points[i], &through[i])
+            settle(points[i], &through[at[i]..at[i + 1]])
         });
         points.clear();
         for r in settled {
@@ -1808,7 +1825,7 @@ fn nary_body(
         shared.sort_unstable();
         // the tools other than the edge's own two holding the middle of piece p, in order (with
         // no intersect only the last matters; None: one is too near to tell), once a piece
-        let held: Vec<std::sync::OnceLock<Option<Vec<Side>>>> =
+        let held: Vec<std::sync::OnceLock<Held>> =
             (0..list.len()).map(|_| std::sync::OnceLock::new()).collect();
         let needed = |side: Side, p: usize| -> bool {
             let Some(si) = list[p].seg else { return true };
@@ -1829,17 +1846,18 @@ fn nary_body(
                     }
                     match sh[k].member(m, SHAPE_MARGIN) {
                         Member::In if any_intersect => holds.push(k),
-                        Member::In => return Some(vec![k]),
+                        Member::In => return Some((Some(k), holds)),
                         Member::Out => {}
                         Member::Near => return None,
                     }
                 }
                 holds.reverse();
-                Some(holds)
+                Some((None, holds))
             });
-            holds
-                .as_ref()
-                .is_none_or(|h| divides(ops, any_intersect, h, side, other))
+            holds.as_ref().is_none_or(|h| {
+                let h = if any_intersect { &h.1[..] } else { h.0.as_slice() };
+                divides(ops, any_intersect, h, side, other)
+            })
         };
         let kept: Vec<Vec<usize>> = par_map(jobs.len(), threads, 8, |j| {
             let (side, f, ref boundary, ref new_edges) = jobs[j];
