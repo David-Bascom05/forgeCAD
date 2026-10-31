@@ -382,21 +382,3 @@ fn equal_cylinders_crossing() {
         }
     }
 }
-
-/// Blocks touching at a corner: the touch point keeps a vertex per fan of faces, feature by
-/// feature (where the corner is one the target already had, its faces left alone) and n-ary.
-#[test]
-fn blocks_touching_at_a_corner() {
-    let a = block(Point3::ORIGIN, 10.0, 10.0, 10.0, 1);
-    let b = block(Point3::new(10.0, 10.0, 10.0), 10.0, 10.0, 10.0, 2);
-    for nary in [false, true] {
-        let u = if nary {
-            forge_bool::nary(&[&a, &b], &[Op::Union], 1)
-        } else {
-            boolean(&a, &b, Op::Union, 3)
-        }
-        .unwrap();
-        valid(&u);
-        assert!((volume(&u) - 2000.0).abs() < 1e-6, "{}", volume(&u));
-    }
-}

@@ -813,19 +813,6 @@ impl Body {
         self.lp(self.coedge(c).lp).face
     }
 
-    /// The live coedges leaving each of vertices `vs` (sorted).
-    pub fn leaving_at(&self, vs: &[VertexId]) -> Vec<Vec<CoedgeId>> {
-        let mut out = vec![Vec::new(); vs.len()];
-        for e in self.edge_ids() {
-            for &c in &self.edge(e).coedges {
-                if let Ok(k) = vs.binary_search(&self.coedge_start(c)) {
-                    out[k].push(c);
-                }
-            }
-        }
-        out
-    }
-
     /// The live coedges leaving each vertex.
     pub fn leaving(&self) -> Vec<Vec<CoedgeId>> {
         let mut out = vec![Vec::new(); self.vertices.len()];
