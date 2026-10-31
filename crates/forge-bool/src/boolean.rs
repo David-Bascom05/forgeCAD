@@ -285,6 +285,12 @@ fn general(target: &mut Body, b: &Body, op: Op) -> R<()> {
     split_new_pinches(target, loops, verts);
     target.joins.extend(&b.joins);
     target.joins.pieces.extend_from_slice(&plan.wholes);
+    for &w in b.split.iter().chain(&plan.split) {
+        target.note_split(w);
+    }
+    if !plan.survivors.is_empty() {
+        target.sole_survivors(&plan.survivors);
+    }
     lap(&mut clock, 6);
     scratch.keep(plan);
     SCRATCH.with(|s| s.replace(scratch));
@@ -366,6 +372,11 @@ thread_local! {
 /// Everything a boolean decides, worked out without touching A.
 struct Plan {
     pieces: Vec<Piece>,
+    /// Edges split into several kept pieces, as wholes.
+    split: Vec<Name>,
+    /// Wholes of edges split before that this boolean trimmed to one piece: that piece may be
+    /// all that is left of them (sorted).
+    survivors: Vec<Name>,
     specs: Vec<Spec>,
     kept: Vec<(usize, bool)>,
     points: Vec<Point3>,
@@ -1198,7 +1209,7 @@ fn plan(a: &Body, b: &Body, op: Op, scratch: &mut Scratch) -> R<Plan> {
         VKey::Old(sd, id) => bodies[sd].vertex(id).name,
         VKey::New(i) => vnames[i as usize],
     };
-    let wholes = sole_pieces_keep_names(
+    let (split, wholes) = sole_pieces_keep_names(
         &bodies,
         &mut specs,
         &kept,
@@ -1221,9 +1232,25 @@ fn plan(a: &Body, b: &Body, op: Op, scratch: &mut Scratch) -> R<Plan> {
         };
         flush_edges_as_cuts(&bodies, kept_faces, &mut pieces, &uses, &pairs, &whole, root)
     };
+    // an edge of A split before and trimmed here to one piece may be its whole's last piece
+    let mut survivors: Vec<Name> = Vec::new();
+    if !a.split.is_empty() {
+        for (side, e, run) in &split_runs {
+            if *side == 0
+                && run.clone().filter(|&p| uses[p] > 0).count() == 1
+                && let Some(w) = a.split_whole(a.edge(*e).name)
+            {
+                survivors.push(w);
+            }
+        }
+        survivors.sort_unstable();
+        survivors.dedup();
+    }
     (scratch.cuts, scratch.segs) = (cuts, segs);
     Ok(Plan {
         pieces,
+        split,
+        survivors,
         specs,
         kept,
         points,
@@ -1243,6 +1270,8 @@ fn plan(a: &Body, b: &Body, op: Op, scratch: &mut Scratch) -> R<Plan> {
 fn apply(a: &mut Body, b: &Body, plan: &Plan) {
     let Plan {
         pieces,
+        split: _,
+        survivors: _,
         specs,
         kept,
         points,
@@ -2323,7 +2352,8 @@ pub(crate) fn alone<K: Ord + Copy>(keys: &[K]) -> Vec<bool> {
 }
 
 /// Names the kept pieces of split faces. A face or edge split by the boolean of which only one
-/// piece is kept keeps its own name: it was only trimmed.
+/// piece is kept keeps its own name: it was only trimmed. Returns the edges left in several
+/// pieces, as wholes, and each new piece with what it was split from.
 fn sole_pieces_keep_names(
     bodies: &[&Body; 2],
     specs: &mut [Spec],
@@ -2332,11 +2362,14 @@ fn sole_pieces_keep_names(
     uses: &[u8],
     split_runs: &[(Side, EdgeId, std::ops::Range<usize>)],
     vname: &dyn Fn(VKey) -> Name,
-) -> Vec<(Name, Name)> {
-    let mut wholes = Vec::new();
+) -> (Vec<Name>, Vec<(Name, Name)>) {
+    let (mut split, mut wholes) = (Vec::new(), Vec::new());
     for (side, e, run) in split_runs {
         let edge = bodies[*side].edge(*e).name;
         let used: Vec<usize> = run.clone().filter(|&p| uses[p] > 0).collect();
+        if used.len() > 1 {
+            split.push(bodies[*side].split_whole(edge).unwrap_or(edge));
+        }
         for &p in &used {
             pieces[p].name = if used.len() == 1 {
                 edge
@@ -2367,7 +2400,7 @@ fn sole_pieces_keep_names(
         }
         at = end;
     }
-    wholes
+    (split, wholes)
 }
 
 /// An edge of one body kept whole along a face of the other it lay flush on (a block standing on

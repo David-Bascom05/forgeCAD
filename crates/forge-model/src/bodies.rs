@@ -395,6 +395,10 @@ fn renamed(b: &Body, rename: impl Fn(Name) -> Name) -> Body {
     out.vertices.iter_mut().for_each(|v| v.name = rename(v.name));
     out.edges.iter_mut().for_each(|e| e.name = rename(e.name));
     out.faces.iter_mut().for_each(|f| f.name = rename(f.name));
+    out.split = Vec::new();
+    for &w in &b.split {
+        out.note_split(rename(w));
+    }
     out
 }
 
@@ -405,13 +409,20 @@ fn split_off(mut b: Body, taken: &HashSet<Name>, salt: impl Fn(Name) -> Name) ->
     for v in b.vertices.iter_mut().filter(|v| taken.contains(&v.name)) {
         v.name = salt(v.name);
     }
+    // an edge is taken where any piece of its whole is: the one piece the boolean left on this
+    // side may have taken the whole's name back (`Body::sole_survivors`)
+    let wholes: HashSet<Name> = taken.iter().map(|n| n.whole()).collect();
     for i in 0..b.edges.len() {
         let e = &b.edges[i];
-        if taken.contains(&e.name) {
+        if wholes.contains(&e.name.whole()) {
             let ends = b.vertices[e.start.index()]
                 .name
                 .with_name(b.vertices[e.end.index()].name);
+            let whole = e.name.whole();
             b.edges[i].name = e.name.piece(ends);
+            // a piece in its own body whether or not the edge was split before: never given
+            // the whole's name back here
+            b.split.retain(|w| w.whole() != whole);
         }
     }
     for f in b.face_ids().collect::<Vec<_>>() {

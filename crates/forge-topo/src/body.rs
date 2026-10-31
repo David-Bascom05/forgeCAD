@@ -226,6 +226,9 @@ pub struct Body {
     pub shells: Vec<Shell>,
     /// Built on first use, kept up to date from then on.
     pub hulls: Cached<FaceHulls>,
+    /// The full names of edges a split left in several pieces, sorted: so the one piece left
+    /// of such an edge gets its whole name back (`sole_survivors`).
+    pub split: Vec<Name>,
 }
 
 /// Boxes over runs of face ids (a chunk of 16 faces, a block of 16 chunks), each the hull of
@@ -524,11 +527,61 @@ impl Body {
                 out.add_loop(nf, &uses);
             }
         }
+        out.split = self.split.clone();
         out
+    }
+
+    /// Notes that edge `whole` (a whole's name, not a piece's) was split into several pieces.
+    pub fn note_split(&mut self, whole: Name) {
+        if let Err(k) = self.split.binary_search(&whole) {
+            self.split.insert(k, whole);
+        }
+    }
+
+    /// The whole edge `n` is a piece of, if a split left it in several pieces.
+    pub fn split_whole(&self, n: Name) -> Option<Name> {
+        let k = self.split.partition_point(|x| x.whole() < n.whole());
+        self.split.get(k).copied().filter(|x| x.whole() == n.whole())
+    }
+
+    /// The one piece left of an edge a split had left in several takes the edge's name back,
+    /// so the name does not depend on whether the edge was ever split; wholes with nothing
+    /// left are forgotten. `only`: the wholes to look at (sorted).
+    pub fn sole_survivors(&mut self, only: &[Name]) {
+        let look: Vec<usize> = (0..self.split.len())
+            .filter(|&k| only.binary_search(&self.split[k]).is_ok())
+            .collect();
+        if look.is_empty() {
+            return;
+        }
+        // per whole looked at: how many live edges are pieces of it, and the last one
+        let wholes: Vec<u64> = look.iter().map(|&k| self.split[k].whole().0).collect();
+        let mut left: Vec<(u32, Option<EdgeId>)> = vec![(0, None); look.len()];
+        for (i, edge) in self.edges.iter().enumerate() {
+            let w = edge.name.whole().0;
+            if edge.alive
+                && let Some(j) = wholes.iter().position(|&x| x == w)
+            {
+                left[j] = (left[j].0 + 1, Some(EdgeId(i as u32)));
+            }
+        }
+        for (j, &(n, e)) in left.iter().enumerate() {
+            if let (1, Some(e)) = (n, e) {
+                self.edges[e.index()].name = self.split[look[j]];
+            }
+        }
+        let gone: Vec<Name> = (0..look.len())
+            .filter(|&j| left[j].0 == 0)
+            .map(|j| self.split[look[j]])
+            .collect();
+        self.split.retain(|w| !gone.contains(w));
     }
 
     /// Adds `other`'s entities after this body's, renumbered, its shells kept apart.
     pub fn append(&mut self, other: &Body) {
+        for &w in &other.split {
+            self.note_split(w);
+        }
         let n = |x: usize| x as u32;
         let (v, e, c, l, f, s) = (
             n(self.vertices.len()),

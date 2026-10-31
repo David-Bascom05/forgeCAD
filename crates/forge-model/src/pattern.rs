@@ -87,12 +87,9 @@ pub enum PatternError {
 
 /// The name an entity gets in copy `key` of pattern `pattern` (a feature position): stable
 /// across regens, so later features can refer to one copy's faces and edges.
+/// Pieces of one whole stay pieces of one (copied) whole.
 pub fn instance_name(id: u64, key: [u64; 2], name: Name) -> Name {
-    Name::feature(id)
-        .with_str("instance")
-        .with(key[0])
-        .with(key[1])
-        .with_name(name)
+    name.salted(Name::feature(id).with_str("instance").with(key[0]).with(key[1]))
 }
 
 /// A rigid motion (local coordinates of the frame to world), or a reflection in a frame's xy.
@@ -403,6 +400,9 @@ pub(crate) fn moved(b: &Body, m: &Motion, rename: impl Fn(Name) -> Name) -> Resu
             }
             out.add_loop(nf, &uses);
         }
+    }
+    for &w in &b.split {
+        out.note_split(rename(w));
     }
     Ok(out)
 }

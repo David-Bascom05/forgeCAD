@@ -2310,11 +2310,16 @@ fn nary_body(
         .collect();
     let keys: Vec<(Side, EdgeId)> = split.iter().map(|x| x.1).collect();
     let mut wholes = Vec::new();
+    // edges left in several pieces, as wholes; split edges trimmed to one piece
+    let (mut halved, mut survivors): (Vec<Name>, Vec<Name>) = (Vec::new(), Vec::new());
     for (&(p, (sd, e)), sole) in split.iter().zip(crate::boolean::alone(&keys)) {
         let edge = tools[sd].edge(e).name;
         list[p].name = if sole {
+            // split before and trimmed here to one piece: perhaps its whole's last
+            survivors.extend(tools[sd].split_whole(edge));
             edge
         } else {
+            halved.push(tools[sd].split_whole(edge).unwrap_or(edge));
             let n = crate::boolean::piece_name(edge, &list[p], &vname);
             wholes.push((n, edge));
             n
@@ -2431,6 +2436,14 @@ fn nary_body(
     }
     out.rebuild_shells();
     lap(&mut clock, 5);
+    for &w in tools.iter().flat_map(|t| &t.split).chain(&halved) {
+        out.note_split(w);
+    }
+    if !survivors.is_empty() {
+        survivors.sort_unstable();
+        survivors.dedup();
+        out.sole_survivors(&survivors);
+    }
     Ok(out)
 }
 

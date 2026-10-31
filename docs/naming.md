@@ -74,7 +74,7 @@ new B-rep against the old one after the fact (matching: Agbodan et al.).
   neighbours, and Kripac's split tracking replaced by naming pieces from their own boundaries.
 - **Lineage: neighbours are named as wholes** (since 2026-10-31). A piece's name keeps the high
   32 bits of the whole it came from (`Name::whole`), through any number of splits, and its
-  low half is made from that lineage and what tells it from its siblings only, so a piece of
+  low half from what tells it from its siblings only (its ends), so a piece of
   a piece is named as if cut from the whole at once. Everything named from a neighbour takes
   the neighbour's lineage, not its name: a boolean's new edge from its faces' and end edges'
   lineages, a new vertex from what meets *at* it (each curve piece's face pair with the edge it
@@ -120,16 +120,19 @@ went to something that is not a piece of it); *duplicate*.
 | flush faces parting or meeting | n/a | fixed for flat faces: a foot edge and its vertices keep their names whether the block stands flush or is sunk a hair in (lost names in topology-keeping edits roughly halved) |
 | two-segment loops (a half disc) | n/a | fixed: both joints took one name (DuplicateName, invalid bodies) |
 | orientation (the whole history turned, moved or rounded) | a circular pattern's edge renamed under an inexact rotation (M11: branch order and which of five coincident edges a cut found) | the turned part names every entity alike, seq and n-ary (`turning_the_whole_part_renames_nothing`). A mirror is no pure re-orientation: a right-handed mirrored sketch puts its segments on the other sides and its seam elsewhere, so names follow those roles |
-| splits of neighbours (an insert splitting a face or edge elsewhere) | 39 edges, 91 vertices, 1 face renamed though untouched (60 seeds of `namehunt --inserts`, 14 137 inserts), and a face fillet or full round on a body with tombstones resolved its faces by stale ids and rounded the wrong edge | 4 edges, 1 vertex (14 296 inserts); open: below |
+| splits of neighbours (an insert splitting a face or edge elsewhere) | 39 edges, 91 vertices, 1 face renamed though untouched (60 seeds of `namehunt --inserts`, 14 137 inserts), and a face fillet or full round on a body with tombstones resolved its faces by stale ids and rounded the wrong edge | 0 edges, 2 vertices, 0 faces (14 296 inserts) |
 
 `namehunt --inserts` puts holes, pockets, slots and bosses (`names::run_inserts`) in at random
 places above each finishing feature of the shift corpus (finishing parts, fillet variants,
 several bodies) and judges every entity: one the insert left where it was must keep its name.
-What is left is one class: an edge a first feature splits into two kept pieces and a later one
-trims back to one, which in the history without the first feature was trimmed whole and kept
-its own name (`bodies:picks`, the edge under the notch). A piece cannot give back the whole's
-full name: only its lineage is in it. The one fillet vertex is a cap the insert reshaped,
-whose corner did not move.
+An edge a first feature splits into two kept pieces and a later one trims back to one would,
+without the first feature, have been trimmed whole and kept its own name. So a body remembers
+the full names of the edges it split (`Body::split`), and when a boolean trims a piece of one
+to the last piece left of it, that piece takes the edge's name back (`Body::sole_survivors`;
+only wholes this boolean trimmed are looked at, so it costs nothing elsewhere). Copies, body
+splits and salted bodies carry the list; ops that build a body afresh drop it. What is left
+are two vertices whose geometry stayed but whose role changed: a fillet cap's corner the insert
+reshaped, and the seam vertex of a closed edge the insert cut open (chamfer-box-shell).
 
 Seq and n-ary still name differently where a face splits into several kept pieces: the
 sequential regen sees the pieces earlier features left, the n-ary sees the original faces.
