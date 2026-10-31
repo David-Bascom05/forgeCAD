@@ -1930,33 +1930,6 @@ fn max_curvature(d: &SurfDeriv) -> f64 {
 }
 
 impl HolePatch {
-    /// The implicit value and its gradient. Off the patch the nearest point is on its rim, and
-    /// the surface is carried on past the rim, tangent there and bending the other way from the
-    /// patch across it (height -+ t^2 / 2 rho at t past the rim): an intersection crosses a
-    /// neighbour the patch meets tangentially instead of touching it at the rim, and the
-    /// carried-on part never runs along the neighbour. On the patch t is 0 and the value is the
-    /// signed distance.
-    fn carried(&self, p: Point3) -> (f64, Vec3) {
-        let d = self.deriv(self.project(p));
-        let n = d.du.cross(d.dv).normalize().map_or(Vec3::Z, |u| u.get());
-        let r = p - d.p;
-        let h = n.dot(r);
-        let t = r - n * h;
-        // the patch's normal curvature towards t: t's parameters, through the first form
-        let (e, f, g) = (d.du.dot(d.du), d.du.dot(d.dv), d.dv.dot(d.dv));
-        let bend = linalg::solve2(e, f, f, g, t.dot(d.du), t.dot(d.dv)).map_or(0.0, |(a, b)| {
-            n.dot(d.duu * (a * a) + d.duv * (2.0 * a * b) + d.dvv * (b * b))
-        });
-        // the sampled radius, not min_radius(): that is zero round a kinked corner, and the
-        // carried-on part only needs a positive bend of the patch's own size
-        let k = if bend > 0.0 { 1.0 } else { -1.0 } / self.min_radius;
-        let gr = n + t * k;
-        let l = gr.length();
-        ((h + 0.5 * k * t.length_sq()) / l, gr / l)
-    }
-}
-
-impl HolePatch {
     /// A box holding the rational quads over b: each cell's over the part of b in it. Points
     /// outside the domain evaluate at their nearest domain point: within half b's diagonal of
     /// the centre's for a convex domain (four cells or fewer), else within the centre's
@@ -2281,10 +2254,25 @@ impl Procedural for HolePatch {
         bx.grow(64.0 * f64::EPSILON * m)
     }
     fn implicit(&self, p: Point3) -> f64 {
-        self.carried(p).0
+        let d = self.deriv(self.project(p));
+        let r = p - d.p;
+        let side = d.du.cross(d.dv).dot(r);
+        if side < 0.0 { -r.length() } else { r.length() }
     }
     fn gradient(&self, p: Point3) -> Vec3 {
-        self.carried(p).1
+        let d = self.deriv(self.project(p));
+        let n = d.du.cross(d.dv).normalize().map_or(Vec3::Z, |u| u.get());
+        let r = p - d.p;
+        match r.normalize() {
+            Some(u) if r.length() > tol::LINEAR => {
+                if n.dot(r) < 0.0 {
+                    -u.get()
+                } else {
+                    u.get()
+                }
+            }
+            _ => n,
+        }
     }
     fn transformed(&self, f: &Frame) -> Proc {
         let sides = self
@@ -3001,7 +2989,7 @@ mod tests {
     }
 
     #[test]
-    fn kinked_patch_is_carried_past_its_rim() {
+    fn kinked_patch_has_a_distance_past_its_rim() {
         // the top spoke's normal tilts at its ends, so the corners there are kinked
         let p = |x: f64, y: f64| Point3::new(x, y, 0.0);
         let top = [p(1.0, 1.0), p(0.7, 1.0), p(0.3, 1.0), p(0.0, 1.0)];
