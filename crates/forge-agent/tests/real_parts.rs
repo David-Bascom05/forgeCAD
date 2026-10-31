@@ -71,3 +71,26 @@ fillet 2 (edges between boss tube concave)
 ",
     );
 }
+
+/// An internal thread in a spindle boss with a smooth loft arm just outside it: the thread's
+/// faces meet the loft's region but not the loft (R13).
+#[test]
+fn thread_near_smooth_loft() {
+    builds_valid(
+        "arm: loft smooth profile yz at 12 0 0 rrect -15 -12 30 24 6 profile yz at 85 0 0 rrect -11.5 -9.5 23 19 5 profile yz at 162 0 0 rrect -9 -7.5 18 15 4
+extrude sym 30 circle 0 0 21
+hole 20.9 -xy at 0 0 15 7
+thread M22x1 -xy at 0 0 15 int 6
+",
+    );
+}
+
+/// A cut whose floor and wall both cross a smooth spiral loft (a volute's chamber, R17).
+#[test]
+fn cut_across_smooth_spiral_loft() {
+    builds_valid(
+        "volute: loft smooth profile z -sin(60) cos(60) 0 x cos(60) sin(60) 0 at 87.17*cos(60) 87.17*sin(60) 0 circle 0 0 16.67 profile z -sin(110) cos(110) 0 x cos(110) sin(110) 0 at 89.81*cos(110) 89.81*sin(110) 0 circle 0 0 18.89 profile z -sin(160) cos(160) 0 x cos(160) sin(160) 0 at 92.44*cos(160) 92.44*sin(160) 0 circle 0 0 21.11 profile z -sin(210) cos(210) 0 x cos(210) sin(210) 0 at 95.08*cos(210) 95.08*sin(210) 0 circle 0 0 23.33 profile z -sin(260) cos(260) 0 x cos(260) sin(260) 0 at 97.72*cos(260) 97.72*sin(260) 0 circle 0 0 25.56 profile z -sin(310) cos(310) 0 x cos(310) sin(310) 0 at 100.4*cos(310) 100.4*sin(310) 0 circle 0 0 27.78 profile z -sin(360) cos(360) 0 x cos(360) sin(360) 0 at 103*cos(360) 103*sin(360) 0 circle 0 0 30 profile z 0 1 0 x 1 0 0 at 103 55 0 circle 0 0 33.5 profile z 0 1 0 x 1 0 0 at 103 110 0 circle 0 0 37
+chamber: extrude cut 37 at 0 0 -15 circle 0 0 78
+",
+    );
+}
