@@ -26,7 +26,7 @@ pub struct View<'a> {
 
 /// Each face's making feature after feature `i` built `body`, given those before (`prev`, `None`
 /// for the first). A face keeps its origin while its name lives, and a renamed piece of a face
-/// (split by a later boolean) keeps the origin of the face whose surface it lies on.
+/// (split by a later boolean) keeps the origin of the face it overlaps on the same surface.
 /// `copied` names the faces a pattern at `i` copied: their source's lineage, then `i`.
 pub fn lineage(body: &Body, prev: Option<(&Body, &Lineage)>, i: usize, copied: &Lineage) -> Lineage {
     let mut out = HashMap::with_capacity(body.faces.len());
@@ -37,10 +37,12 @@ pub fn lineage(body: &Body, prev: Option<(&Body, &Lineage)>, i: usize, copied: &
                 .cloned()
                 .or_else(|| copied.get(&face.name).cloned())
                 .or_else(|| {
+                    // a new face on a far face's surface (a second pad's top) is not that face
                     pb.face_ids()
-                        .map(|g| pb.face(g))
-                        .find(|g| g.surface == face.surface)
-                        .and_then(|g| po.get(&g.name).cloned())
+                        .find(|&g| {
+                            pb.face(g).surface == face.surface && pb.face_box(g).overlaps(&body.face_box(f))
+                        })
+                        .and_then(|g| po.get(&pb.face(g).name).cloned())
                 })
         });
         out.insert(face.name, o.unwrap_or_else(|| vec![i]));

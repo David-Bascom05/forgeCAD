@@ -88,3 +88,16 @@ fn tab_root_fillet_on_a_thin_wall() {
         "ring: extrude 50 circle 0 0 69.5 circle 0 0 68\ntab: extrude 1.5 rect -88 -10 19.25 20\nfillet 1 (edges between tab ring concave circle)\n",
     );
 }
+
+#[test]
+fn second_pad_fillet() {
+    // pad b's top lies on pad a's top plane but far from it: it is b's face, so the first line
+    // rounds only pad a, and the second finds pad b's edges unrounded
+    let src = "box: extrude 95 rect -120 -65 240 130\na: extrude 16 rect -96 -93 44 34\nb: extrude 16 rect 52 -93 44 34\nfillet 5 (edges between a box concave)\nfillet 5 (edges between b box concave)\n";
+    let m = Model::new(src);
+    assert!(m.error.is_none(), "{:?}", m.error.map(|f| f.msg));
+    let first = m.select("(edges between a box concave)", Some(3)).unwrap().1;
+    assert_eq!(first.len(), 3);
+    // n-ary names pad b's edges apart from seq until the n-ary naming fix (R30) lands
+    assert!(forge_topo::check(m.body().unwrap()).is_empty());
+}
