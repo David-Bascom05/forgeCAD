@@ -55,7 +55,7 @@ gearbox nary e510ea25212216ca
 volute seq bd0fdb9b74f243cc
 volute nary f753540eafe5718e
 crank seq ea7c0ab9b8d241f8
-crank nary 3261f4bb7f54b59b
+crank nary 883dee3f4e051129
 valve seq e6ad78888419cb2e
 valve nary 9802304e2e0c919c
 heatsink seq efd544d9e23cdde2

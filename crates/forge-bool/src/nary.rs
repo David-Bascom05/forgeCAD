@@ -631,36 +631,59 @@ fn nary_body(
             .all(|k| !index[k].bbox.overlaps(b) || sh[k].box_out(b, SHAPE_MARGIN))
     };
 
-    // whether a tool face lies surely outside the first tool and those added to it (whatever it
-    // meets is dropped with both its sides), once a face. Only a cylinder about a revolved
-    // solid's axis is told so beyond the boxes tested below
+    let any_intersect = ops.contains(&Op::Intersect);
+    // whether a tool face surely bounds nothing in the result (whatever it meets is dropped
+    // with both its sides), once a face: it lies outside the first tool and those added to it,
+    // which only a cylinder about a revolved one's axis is told beyond the boxes tested below;
+    // or, with no intersect, it is a cut's plane whose outer side lies outside them, with no
+    // later tool adding material near it (a hole's mouth on the part's face)
     let holders: Vec<Side> = (0..n).filter(|&t| t == 0 || ops[t - 1] == Op::Union).collect();
     let revolved = shapes.is_some_and(|sh| holders.iter().any(|&t| sh[t].revolved()));
-    let air: Vec<Vec<std::sync::OnceLock<bool>>> = (0..n)
-        .map(|k| match revolved {
-            true => (0..tools[k].faces.len())
+    let inert_at: Vec<Vec<std::sync::OnceLock<bool>>> = (0..n)
+        .map(|k| match shapes {
+            Some(_) => (0..tools[k].faces.len())
                 .map(|_| std::sync::OnceLock::new())
                 .collect(),
-            false => Vec::new(),
+            None => Vec::new(),
         })
         .collect();
-    let in_air = |k: Side, f: FaceId| -> bool {
-        let (true, Some(sh)) = (revolved, shapes) else {
-            return false;
+    let inert = |k: Side, f: FaceId| -> bool {
+        let Some(sh) = shapes else { return false };
+        let face = tools[k].face(f);
+        let cylinder = revolved && matches!(face.surface, forge_geom::Surface::Cylinder(_));
+        let cut = !any_intersect && k > 0 && ops[k - 1] == Op::Subtract;
+        let forge_geom::Surface::Plane(pl) = &face.surface else {
+            if !cylinder {
+                return false;
+            }
+            return *inert_at[k][f.index()].get_or_init(|| {
+                let b = &index[k].boxes()[f.index()];
+                holders
+                    .iter()
+                    .all(|&t| !index[t].bbox.overlaps(b) || sh[t].face_out(&face.surface, b, SHAPE_MARGIN))
+            });
         };
-        let s = &tools[k].face(f).surface;
-        if !matches!(s, forge_geom::Surface::Cylinder(_)) {
+        if !cut {
             return false;
         }
-        *air[k][f.index()].get_or_init(|| {
+        *inert_at[k][f.index()].get_or_init(|| {
             let b = &index[k].boxes()[f.index()];
+            let out = pl.frame.z().get() * (if face.same_sense { 10.0 } else { -10.0 } * tol::LINEAR);
+            let off = forge_math::Box3 {
+                x: forge_math::Interval::new(b.x.lo + out.x, b.x.hi + out.x),
+                y: forge_math::Interval::new(b.y.lo + out.y, b.y.hi + out.y),
+                z: forge_math::Interval::new(b.z.lo + out.z, b.z.hi + out.z),
+            };
+            let near = b.grow(tol::LINEAR);
             holders
                 .iter()
-                .all(|&t| !index[t].bbox.overlaps(b) || sh[t].face_out(s, b, SHAPE_MARGIN))
+                .all(|&t| !index[t].bbox.overlaps(&off) || sh[t].box_out(&off, SHAPE_MARGIN))
+                && holders[holders.partition_point(|&t| t <= k)..]
+                    .iter()
+                    .all(|&t| !index[t].bbox.overlaps(&near))
         })
     };
 
-    let any_intersect = ops.contains(&Op::Intersect);
     // whether a new edge of tools i and j in box b could divide a face of either: false only
     // when every other tool surely holds all of b or none of it
     let meets_matter = |b: &forge_math::Box3, i: Side, j: Side| -> bool {
@@ -732,11 +755,20 @@ fn nary_body(
                 let region = overlap(&ba[fa.index()], &bb[fb.index()]).grow(tol::LINEAR);
                 // an edge here would be dropped below, with both its sides (not known to meet: kept
                 // as meeting for the triple points)
-                if outside(&region) || in_air(i, fa) || in_air(j, fb) {
+                if outside(&region) {
                     out.loose.push(((i, fa), (j, fb)));
                     continue;
                 }
                 let (sa, sb) = (&a.face(fa).surface, &b.face(fb).surface);
+                // (planes on one plane still imprint each other, below)
+                let planes = matches!(
+                    (sa, sb),
+                    (forge_geom::Surface::Plane(_), forge_geom::Surface::Plane(_))
+                );
+                if !planes && (inert(i, fa) || inert(j, fb)) {
+                    out.loose.push(((i, fa), (j, fb)));
+                    continue;
+                }
                 // a pair with no closed form is searched, at a cost: not where the tools holding all
                 // of the region (by bounds) say its curves would divide neither face
                 let found = match ssi::closed_form(sa, sb) {
@@ -747,6 +779,10 @@ fn nary_body(
                     SurfaceSurface::NotAnalytic => ssi::searched(sa, sb, region),
                     r => r,
                 };
+                if planes && !matches!(found, SurfaceSurface::Coincident) && (inert(i, fa) || inert(j, fb)) {
+                    out.loose.push(((i, fa), (j, fb)));
+                    continue;
+                }
                 out.touching
                     .extend(touches(&found, [ia, ib], [i, j], [fa, fb], region));
                 let curves = match found {
@@ -946,10 +982,10 @@ fn nary_body(
                 continue;
             }
             for h in tools[k].face_ids() {
-                // a face outside the result crosses the edge only where it is dropped
+                // a face bounding nothing crosses the edge only where it is dropped
                 if index[k].boxes()[h.index()].overlaps(&reach)
                     && may_meet(&tools[k].face(h).surface, &reach)
-                    && !in_air(k, h)
+                    && !inert(k, h)
                 {
                     f((k, h));
                 }
