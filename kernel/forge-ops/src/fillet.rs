@@ -118,6 +118,9 @@ pub enum FilletError {
     /// A ring's round whose ball is wider than the circle its centre rolls round; `max` is the
     /// largest radius that rounds it.
     TooLarge { edge: EdgeId, max: f64 },
+    /// (Inside `fillet_with` only.) A spring leaves its face over this edge and comes back over
+    /// it: the edge's middle goes, so it is split at `at` and the fillet tried again.
+    SplitFirst { edge: EdgeId, at: f64 },
 }
 
 type R<T> = Result<T, FilletError>;
@@ -296,6 +299,154 @@ pub fn fillet(body: &Body, edges: &[FilletEdge], feature: u64) -> R<Body> {
 
 /// `fillet` with laws started at given vertices and corners set back by given distances.
 pub fn fillet_with(body: &Body, edges: &[FilletEdge], opts: &FilletOptions, feature: u64) -> R<Body> {
+    let mut work: Option<Body> = None;
+    let mut first = None;
+    for _ in 0..4 {
+        let on = work.as_ref().unwrap_or(body);
+        match fillet_on(on, edges, opts, feature) {
+            // the edge split in two, ids before it standing, its middle lies between the pieces
+            Err(FilletError::SplitFirst { edge, at }) => {
+                let mut b = if on.dead > 0 { on.compact() } else { on.clone() };
+                split_edge(&mut b, edge, at);
+                work = Some(b);
+            }
+            Err(e) => {
+                first = Some(first.unwrap_or(e));
+                break;
+            }
+            ok => return ok,
+        }
+    }
+    let e = first.unwrap_or(FilletError::Overflow {
+        edge: edges.first().map_or(EdgeId(0), |f| f.edge),
+    });
+    // a spring crossing a round face's seam meets a line that is no boundary at all: with the seam
+    // moved round to where nothing is, the blend never sees it
+    if matches!(e, FilletError::Overflow { .. } | FilletError::Corner { .. })
+        && let Some(b) = reseamed(body, edges)
+    {
+        return fillet_on(&b, edges, opts, feature).map_err(|_| e);
+    }
+    Err(e)
+}
+
+/// The body with the seam of each round face beside a filleted edge moved to the middle of the
+/// widest stretch round the face that its other loops leave free. Only a seam running between two
+/// closed rims, alone in its loop with them. None if no seam moved.
+fn reseamed(body: &Body, edges: &[FilletEdge]) -> Option<Body> {
+    let mut b = if body.dead > 0 {
+        body.compact()
+    } else {
+        body.clone()
+    };
+    let mut faces: Vec<FaceId> = edges
+        .iter()
+        .filter(|fe| fe.edge.index() < b.edges.len() && b.edge(fe.edge).alive)
+        .flat_map(|fe| {
+            b.edge(fe.edge)
+                .coedges
+                .iter()
+                .map(|&c| b.coedge_face(c))
+                .collect::<Vec<_>>()
+        })
+        .collect();
+    faces.sort_unstable();
+    faces.dedup();
+    let mut moved = false;
+    for f in faces {
+        moved |= move_seam(&mut b, f).is_some();
+    }
+    moved.then_some(b)
+}
+
+fn move_seam(b: &mut Body, f: FaceId) -> Option<()> {
+    let face = b.face(f);
+    let surface = face.surface.clone();
+    if !matches!(surface, Surface::Cylinder(_) | Surface::Cone(_)) || face.loops.len() < 2 {
+        return None;
+    }
+    // the loop of a seam and two rims, the others' extent round the face
+    let mut seam = None;
+    let mut taken: Vec<f64> = Vec::new();
+    for &l in &face.loops {
+        let uses: Vec<CoedgeId> = b.lp(l).coedges().collect();
+        let seams: Vec<EdgeId> = uses
+            .iter()
+            .map(|&c| b.coedge(c).edge)
+            .filter(|&e| b.edge(e).coedges.iter().all(|&c| b.coedge_face(c) == f))
+            .collect();
+        if uses.len() == 4 && seams.len() == 2 && seams[0] == seams[1] {
+            let rims: Vec<EdgeId> = uses
+                .iter()
+                .map(|&c| b.coedge(c).edge)
+                .filter(|&e| e != seams[0])
+                .collect();
+            seam = Some((seams[0], rims));
+        } else {
+            for &c in &uses {
+                let e = b.edge(b.coedge(c).edge);
+                for k in 0..=32 {
+                    let p = e.curve.eval(e.range.lo + e.range.width() * k as f64 / 32.0);
+                    taken.push(surface.project(p).x.rem_euclid(dmath::TAU));
+                }
+            }
+        }
+    }
+    let (e, rims) = seam?;
+    if taken.is_empty() || rims.len() != 2 {
+        return None;
+    }
+    taken.sort_by(f64::total_cmp);
+    let (mut gap, mut at) = (
+        taken[0] + dmath::TAU - taken[taken.len() - 1],
+        taken[taken.len() - 1],
+    );
+    for w in taken.windows(2) {
+        if w[1] - w[0] > gap {
+            (gap, at) = (w[1] - w[0], w[0]);
+        }
+    }
+    let u = at + 0.5 * gap;
+    let (vs, ve) = (b.edge(e).start, b.edge(e).end);
+    let new_at = |b: &Body, v: VertexId| {
+        let uv = surface.project(b.vertex(v).point);
+        surface.eval(forge_math::Point2::new(u, uv.y))
+    };
+    let (ps, pe) = (new_at(b, vs), new_at(b, ve));
+    let dir = (pe - ps).normalize()?;
+    // each rim runs round from the new point on, one turn as before
+    let mut ranges = Vec::new();
+    for &r in &rims {
+        let x = b.edge(r);
+        if x.start != x.end || !matches!(x.curve, Curve::Circle(_)) {
+            return None;
+        }
+        let q = if x.start == vs {
+            ps
+        } else if x.start == ve {
+            pe
+        } else {
+            return None;
+        };
+        let t = x.curve.closest(q, x.range);
+        ranges.push((r, Interval::new(t, t + x.range.width())));
+    }
+    for (r, range) in ranges {
+        let x = &mut b.edges[r.index()];
+        x.range = range;
+        x.bbox.clear();
+    }
+    b.vertices[vs.index()].point = ps;
+    b.vertices[ve.index()].point = pe;
+    let len = (pe - ps).length();
+    let x = &mut b.edges[e.index()];
+    x.curve = Curve::Line(forge_geom::Line::new(ps, dir));
+    x.range = Interval::new(0.0, len);
+    x.bbox.clear();
+    Some(())
+}
+
+fn fillet_on(body: &Body, edges: &[FilletEdge], opts: &FilletOptions, feature: u64) -> R<Body> {
     if body.dead > 0 && (!opts.starts.is_empty() || !opts.setbacks.is_empty()) {
         // the options name this body's entities
         return Err(FilletError::NotAnEdge {
@@ -3340,6 +3491,15 @@ impl Builder {
         let mut trips = Vec::new();
         for w in hits.chunks(2) {
             let ((t_out, c_out, p_out), (t_in, c_in, p_in)) = (w[0], w[1]);
+            let over = self.body.coedge(c_out).edge;
+            if over == self.body.coedge(c_in).edge {
+                let e = self.body.edge(over);
+                let q = spring.eval(0.5 * (t_out + t_in));
+                return Err(FilletError::SplitFirst {
+                    edge: over,
+                    at: e.curve.closest(q, e.range),
+                });
+            }
             let name = |b: &Builder, c: CoedgeId| {
                 Name::NONE
                     .with_set(&[b.rolled[ri].name, b.body.edge(b.body.coedge(c).edge).name])
@@ -3642,7 +3802,9 @@ pub(crate) fn chain_loops(body: &Body, uses: &[(EdgeId, bool)]) -> Vec<Vec<(Edge
         let mut lp = vec![uses[first]];
         let (start, mut at) = ends(&uses[first]);
         let mut i = first;
-        while at != start {
+        // back at the start with a way on still unused (a closed rim, and the seam leaving its
+        // vertex): the loop goes on
+        while at != start || (0..n).any(|j| !used[j] && ends(&uses[j]).0 == at) {
             let Some(next) = (1..n)
                 .map(|k| (i + k) % n)
                 .find(|&j| !used[j] && ends(&uses[j]).0 == at)

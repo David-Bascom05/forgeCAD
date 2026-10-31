@@ -327,3 +327,19 @@ extrude cut 10 at 0 0 -1 rect -1 -1 60 12 in all
     );
     assert!(every.error.is_some_and(|e| e.msg.contains("leaves nothing")));
 }
+
+/// A boss near a rod's end whose fillet runs off over the rim and back: the rim is split, the
+/// blend cuts the cap across the stretch that goes, and the wall's loop runs on through the rim's
+/// closed vertex (volume agrees with OCCT to 1e-5).
+#[test]
+fn fillet_runs_over_a_rim_and_back() {
+    let src = "extrude 51.4445 z 0 0 1 x 1 0 0 at 0 0 0 circle 0 0 17.7138
+extrude add 35.7306 z 0.249995868143 0.880986519465 0.401702400332 x 0 0.41487599798 -0.909877962311 at 2.42676623008 -0.570108876966 28.6203986907 circle 0 0 11.5667
+fillet 2.13853177 (edges concave)
+";
+    builds(src);
+    let v = forge_topo::mass::mass(Model::new(src).body().expect("a body"))
+        .expect("mass")
+        .volume;
+    assert!((v - 58260.8).abs() < 2.0, "{v}");
+}
