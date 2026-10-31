@@ -27,6 +27,7 @@ FRAME: [xy|xz|yz|-xy|-xz|-yz | z A B C [x A B C] | on FEAT] [at X Y Z]     defau
 LOOPS (first is outside, rest are holes): rect X Y W H | rrect X Y W H R | circle X Y R |
   poly X Y X Y .. | loop (line AX AY BX BY | arc CX CY R START SWEEP)..
 `next`: up to the next face met. `to`: a plane feature, or a feature's face (plane, cylinder..).
+Fillet R: 3 | 2..4 (start to end of each edge) | 0:2,0.5:4,1:2 (fraction along:radius).
 FEAT: a label, kind+count (`hole2` is the 2nd hole line), or `fN` (line N's feature)
 REF: @handle | (selector), found on the part as it stands above that line
 ```

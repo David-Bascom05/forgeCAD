@@ -6,7 +6,7 @@ use forge_math::{Frame, Point2, Point3, Vec2, Vec3, dmath};
 use forge_model::{
     Combine, End, Extent, Feature, Head, Hole, Layout, Part, Row, Source, Target, Thread, Toward, Turn,
 };
-use forge_ops::{Axis2, ChamferSize, Profile, ProfileLoop, Segment};
+use forge_ops::{Axis2, ChamferSize, Profile, ProfileLoop, Radius, Segment};
 use forge_topo::Name;
 
 pub struct Kind {
@@ -95,15 +95,15 @@ pub const KINDS: &[Kind] = &[
     },
     Kind {
         name: "fillet",
-        syntax: "fillet R REF.. [R REF..]",
+        syntax: "fillet R REF.. [R REF..]   R: 3 | 2..4 (start..end) | 0:2,0.5:4,1:2 (at:radius)",
         parse: |p| {
             let mut edges = Vec::new();
-            let mut r = p.num()?;
+            let mut r = p.radius()?;
             while !p.done() {
-                if p.is_num() {
-                    r = p.num()?;
+                if !p.peek().starts_with(['@', '(']) {
+                    r = p.radius()?;
                 } else {
-                    edges.extend(p.one_or_more_refs()?.into_iter().map(|n| (n, r)));
+                    edges.extend(p.one_or_more_refs()?.into_iter().map(|n| (n, r.clone())));
                 }
             }
             Ok(Feature::Fillet { edges })
@@ -113,12 +113,12 @@ pub const KINDS: &[Kind] = &[
                 return false;
             };
             let mut r = None;
-            for &(n, er) in edges {
-                if r.is_none_or(|r: f64| r.to_bits() != er.to_bits()) {
-                    w.num(er);
+            for (n, er) in edges {
+                if r != Some(er) {
+                    w.radius(er);
                     r = Some(er);
                 }
-                w.name(n);
+                w.name(*n);
             }
             true
         },
@@ -662,6 +662,25 @@ impl P<'_> {
             format!("expected a number, found '{t}'{orient}")
         })
     }
+    /// A fillet radius: constant, linear from start to end, or radii at fractions along.
+    fn radius(&mut self) -> R<Radius> {
+        let t = self.next()?.to_string();
+        let bad = || format!("expected a radius (3, 2..4 or 0:2,1:4), found '{t}'");
+        let f = |x: &str| x.parse::<f64>().map_err(|_| bad());
+        if t == ":" {
+            Ok(Radius::Points(vec![]))
+        } else if t.contains(':') {
+            let pts = t.split(',').map(|pr| {
+                let (a, b) = pr.split_once(':').ok_or_else(bad)?;
+                Ok((f(a)?, f(b)?))
+            });
+            Ok(Radius::Points(pts.collect::<R<Vec<_>>>()?))
+        } else if let Some((a, b)) = t.split_once("..") {
+            Ok(Radius::Linear(f(a)?, f(b)?))
+        } else {
+            Ok(Radius::Constant(f(&t)?))
+        }
+    }
     fn angle(&mut self) -> R<f64> {
         let t = self.next()?;
         match t.strip_suffix('r') {
@@ -1017,6 +1036,19 @@ impl<'a> W<'a> {
     }
     fn nums(&mut self, xs: &[f64]) {
         xs.iter().for_each(|&x| self.num(x));
+    }
+    fn radius(&mut self, r: &Radius) {
+        let w = match r {
+            Radius::Constant(x) => fmt_num(*x),
+            Radius::Linear(a, b) => format!("{}..{}", fmt_num(*a), fmt_num(*b)),
+            Radius::Points(p) if p.is_empty() => ":".into(),
+            Radius::Points(p) => p
+                .iter()
+                .map(|(a, b)| format!("{}:{}", fmt_num(*a), fmt_num(*b)))
+                .collect::<Vec<_>>()
+                .join(","),
+        };
+        self.word(&w);
     }
     fn angle(&mut self, a: f64) {
         self.word(&fmt_angle(a));
@@ -1498,9 +1530,17 @@ mod tests {
             },
             3 => {
                 let mut edges = Vec::new();
-                let rad = num(r);
+                let law = |r: &mut Rng| match r.below(4) {
+                    0 => Radius::Linear(num(r), num(r)),
+                    1 => Radius::Points((0..r.below(4)).map(|_| (num(r), num(r))).collect()),
+                    _ => Radius::Constant(num(r)),
+                };
+                let rad = law(r);
                 for _ in 0..1 + r.below(5) {
-                    edges.push((Name(r.next_u64()), if r.below(3) == 0 { num(r) } else { rad }));
+                    edges.push((
+                        Name(r.next_u64()),
+                        if r.below(3) == 0 { law(r) } else { rad.clone() },
+                    ));
                 }
                 Feature::Fillet { edges }
             }
