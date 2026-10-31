@@ -9,7 +9,7 @@ dir=$(dirname "$0")
 cargo build -q --release -p forge-model --example regen1 --example bits
 bin="${CARGO_TARGET_DIR:-$PWD/target}/release/examples"
 now=$(mktemp)
-for p in torture plate shaft housing coplanar patterns mixed; do
+for p in torture plate shaft housing coplanar patterns mixed hole-grid tour upto upto-flat; do
   for m in seq nary1; do
     n=$(perf stat -x, -e instructions:u "$bin/regen1" $p $m 2>&1 >/dev/null | awk -F, '/instructions/{print $1}')
     echo "$p $m ${n:-FAIL}" >> "$now"

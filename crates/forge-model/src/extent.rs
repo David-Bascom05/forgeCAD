@@ -97,7 +97,8 @@ pub enum ExtentError {
 
 /// What an extrude or hole comes to: a plain one, or a sweep cut off at a surface.
 pub(crate) enum Resolved<'a> {
-    Plain(Cow<'a, Feature>),
+    /// With, up to the next face, whether the sketch starts in the part's material.
+    Plain(Cow<'a, Feature>, Option<bool>),
     /// The sweep (a plain extrude) and where it is cut off.
     UpTo(Feature, UpTo),
 }
@@ -106,6 +107,8 @@ pub(crate) enum Resolved<'a> {
 /// off as `plan` says.
 pub(crate) struct UpTo {
     pub plan: Plan,
+    /// Up to the next face: whether the sketch starts in the part's material.
+    pub next: Option<bool>,
     pub start: Vec<Name>,
     pub far: (Point3, UnitVec3),
 }
@@ -127,6 +130,18 @@ fn surface(features: &[Feature], i: usize, t: &Target) -> Result<Surface, RegenE
     };
     if k >= i || crate::modifies(&features[k]) {
         return Err(bad(i)(ExtentError::NoFace));
+    }
+    // from the feature's definition where it can be, else from its built tool
+    let plain = match &features[k] {
+        Feature::Extrude { .. } | Feature::Revolve { .. } => match resolve(features, k)? {
+            Resolved::Plain(f, _) => Some(f.into_owned()),
+            Resolved::UpTo(..) => None,
+        },
+        Feature::Ball { .. } => Some(features[k].clone()),
+        _ => None,
+    };
+    if let Some(s) = plain.and_then(|f| crate::upto::named_surface(&f, k, name)) {
+        return Ok(s);
     }
     for (body, ..) in tools(features, k, true)? {
         if let Some(f) = body.face_by_name(name) {
@@ -197,10 +212,11 @@ fn earlier(features: &[Feature], i: usize) -> Result<Vec<(Shape, Op)>, RegenErro
         .collect())
 }
 
-/// The one surface every ray from `from` along `d` meets first.
-fn next(features: &[Feature], i: usize, from: &[Point3], d: UnitVec3) -> Result<Surface, RegenError> {
+/// The one surface every ray from `from` along `d` meets first, and whether they start in the
+/// part's material (the pick; `upto::verify_next` proves it for the whole sweep).
+fn next(features: &[Feature], i: usize, from: &[Point3], d: UnitVec3) -> Result<(Surface, bool), RegenError> {
     let tools = earlier(features, i)?;
-    let mut found: Option<Surface> = None;
+    let mut found: Option<(Surface, bool)> = None;
     for &p in from {
         let s = next_face(&tools, p, d.get()).map_err(bad(i))?;
         if found.as_ref().is_some_and(|f| *f != s) {
@@ -259,9 +275,10 @@ pub(crate) fn resolve(features: &[Feature], i: usize) -> Result<Resolved<'_>, Re
         | Feature::Revolve {
             extent: Turn::Angle(_),
             ..
-        } => Ok(Resolved::Plain(Cow::Borrowed(&features[i]))),
+        } => Ok(Resolved::Plain(Cow::Borrowed(&features[i]), None)),
         Feature::Extrude { profile, extent, op } => {
             let at = profile.plane;
+            let mut material = None;
             let (lo, hi) = match *extent {
                 Extent::Symmetric(d) => (-d / 2.0, d / 2.0),
                 Extent::TwoSided { forward, back } => (-back, forward),
@@ -299,7 +316,8 @@ pub(crate) fn resolve(features: &[Feature], i: usize) -> Result<Resolved<'_>, Re
                 Extent::ToNext { reverse } => {
                     let z = if reverse { -at.z() } else { at.z() };
                     let rays: Vec<Point3> = samples(profile).into_iter().map(|q| at.plane_point(q)).collect();
-                    let s = next(features, i, &rays, z)?;
+                    let (s, m) = next(features, i, &rays, z)?;
+                    material = Some(m);
                     if let Some(p) = square(&s, &at) {
                         let end = along(&at, &p, 0.0, i)?;
                         if end * z.dot(at.z().get()) <= 0.0 {
@@ -307,7 +325,8 @@ pub(crate) fn resolve(features: &[Feature], i: usize) -> Result<Resolved<'_>, Re
                         }
                         (end.min(0.0), end.max(0.0))
                     } else {
-                        return up_to(i, profile, *op, &s, 0.0, Some(z)).map(|(f, u)| Resolved::UpTo(f, u));
+                        return up_to(i, profile, *op, &s, 0.0, Some(z))
+                            .map(|(f, u)| Resolved::UpTo(f, UpTo { next: material, ..u }));
                     }
                 }
                 Extent::Distance(_) => unreachable!(),
@@ -317,11 +336,14 @@ pub(crate) fn resolve(features: &[Feature], i: usize) -> Result<Resolved<'_>, Re
             }
             let mut profile = profile.clone();
             profile.plane = at.with_origin(at.origin + at.z() * lo);
-            Ok(Resolved::Plain(Cow::Owned(Feature::Extrude {
-                profile,
-                extent: Extent::Distance(hi - lo),
-                op: *op,
-            })))
+            Ok(Resolved::Plain(
+                Cow::Owned(Feature::Extrude {
+                    profile,
+                    extent: Extent::Distance(hi - lo),
+                    op: *op,
+                }),
+                material,
+            ))
         }
         Feature::Revolve {
             profile,
@@ -364,12 +386,15 @@ pub(crate) fn resolve(features: &[Feature], i: usize) -> Result<Resolved<'_>, Re
             let turn = rf.rotated_about_z(from).compose(&rf.inverse());
             let mut profile = profile.clone();
             profile.plane = turn.compose(&profile.plane);
-            Ok(Resolved::Plain(Cow::Owned(Feature::Revolve {
-                profile,
-                axis: *axis,
-                extent: Turn::Angle(sweep),
-                op: *op,
-            })))
+            Ok(Resolved::Plain(
+                Cow::Owned(Feature::Revolve {
+                    profile,
+                    axis: *axis,
+                    extent: Turn::Angle(sweep),
+                    op: *op,
+                }),
+                None,
+            ))
         }
         _ => unreachable!("only extrudes and revolves have extents"),
     }
@@ -404,6 +429,7 @@ fn up_to(
         base,
         UpTo {
             plan,
+            next: None,
             start: vec![Name::feature(i as u64 + 1).with_str("start")],
             far: (at.origin + z * t, z),
         },
@@ -412,7 +438,12 @@ fn up_to(
 
 /// Hole `i` with an end at a plane square to it turned into one at a depth; with any other end
 /// surface, or up to the next face, a long hole (flat bottom) to cut off there.
-pub(crate) fn hole_end(features: &[Feature], i: usize, h: &Hole) -> Result<(Hole, Option<UpTo>), RegenError> {
+pub(crate) fn hole_end(
+    features: &[Feature],
+    i: usize,
+    h: &Hole,
+) -> Result<(Hole, Option<UpTo>, Option<bool>), RegenError> {
+    let mut material = None;
     let s = match h.end {
         End::To { target, .. } => surface(features, i, &target)?,
         End::ToNext => {
@@ -420,9 +451,11 @@ pub(crate) fn hole_end(features: &[Feature], i: usize, h: &Hole) -> Result<(Hole
             let rays: Vec<Point3> = [(0.0, 0.0), (r, 0.0), (-r, 0.0), (0.0, r), (0.0, -r)]
                 .map(|(x, y)| h.at.plane_point(Point2::new(x, y)))
                 .to_vec();
-            next(features, i, &rays, h.at.z())?
+            let (s, m) = next(features, i, &rays, h.at.z())?;
+            material = Some(m);
+            s
         }
-        _ => return Ok((*h, None)),
+        _ => return Ok((*h, None, None)),
     };
     let offset = if let End::To { offset, .. } = h.end {
         offset
@@ -440,6 +473,7 @@ pub(crate) fn hole_end(features: &[Feature], i: usize, h: &Hole) -> Result<(Hole
                 ..*h
             },
             None,
+            material,
         ));
     }
     let mouth = match h.head {
@@ -458,8 +492,9 @@ pub(crate) fn hole_end(features: &[Feature], i: usize, h: &Hole) -> Result<(Hole
     let side = Name::feature(i as u64 + 1).with_str("side").with(0);
     let up = UpTo {
         plan,
+        next: material,
         start: vec![side.with(0), side.with(1)],
         far: (h.at.origin + h.at.z() * t, h.at.z()),
     };
-    Ok((long, Some(up)))
+    Ok((long, Some(up), material))
 }

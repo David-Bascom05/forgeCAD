@@ -59,6 +59,22 @@ fn ball(c: Point3, r: f64, op: Combine) -> Feature {
     }
 }
 
+/// A ring torus about the z axis at height 20: tube radius 3 round a circle of radius 10.
+fn torus() -> Feature {
+    Feature::Revolve {
+        profile: Profile {
+            plane: frame(Point3::new(0.0, 0.0, 20.0), Vec3::Y, Vec3::X),
+            loops: vec![Profile::circle(Point2::new(10.0, 0.0), 3.0, 0)],
+        },
+        axis: Axis2 {
+            origin: Point2::ORIGIN,
+            dir: Vec2::Y,
+        },
+        extent: Turn::Angle(dmath::TAU),
+        op: Combine::New,
+    }
+}
+
 /// A solid cone standing on z = 10, radius 20 there, apex at z = 30.
 fn cone() -> Feature {
     let plane = frame(Point3::ORIGIN, Vec3::Y, Vec3::X);
@@ -89,9 +105,9 @@ fn cone() -> Feature {
     }
 }
 
-/// `f(y, z)` integrated over the disc of radius `r` about (0, `zc`), by Gauss-Legendre in both
+/// `f(u, v)` integrated over the disc of radius `r` about (`cu`, `cv`), by Gauss-Legendre in both
 /// polar directions.
-fn over_disc(r: f64, zc: f64, f: impl Fn(f64, f64) -> f64) -> f64 {
+fn over_disc(r: f64, (cu, cv): (f64, f64), f: impl Fn(f64, f64) -> f64) -> f64 {
     // 20-point Gauss-Legendre on [-1, 1]
     let nodes = [
         (0.076_526_521_133_497_33, 0.152_753_387_130_725_85),
@@ -112,7 +128,7 @@ fn over_disc(r: f64, zc: f64, f: impl Fn(f64, f64) -> f64) -> f64 {
         for &(v, wv) in &gl {
             let th = PI * (v + 1.0);
             let (s, c) = dmath::sin_cos(th);
-            sum += wu * wv * rho * f(rho * c, zc + rho * s);
+            sum += wu * wv * rho * f(cu + rho * c, cv + rho * s);
         }
     }
     sum * r / 2.0 * PI
@@ -129,8 +145,40 @@ fn parts() -> Vec<(&'static str, Part, f64)> {
     let (rad, shadow) = (10.0, (100.0f64 - 9.0).sqrt());
     let rod_to_sphere = PI * 9.0 * 20.0 - (PI * 9.0 * shadow + cap(rad - shadow, rad));
     let half_chord = 3.0 * 91.0f64.sqrt() + 100.0 * dmath::asin(0.3);
-    let side_cone = over_disc(2.0, 20.0, |y, z| 40.0 - ((30.0 - z) * (30.0 - z) - y * y).sqrt());
+    // the tube's half height and its inner and outer radius at height z
+    let half = |z: f64| (9.0 - (z - 20.0) * (z - 20.0)).max(0.0).sqrt();
+    let ring = |x: f64, y: f64| (x * x + y * y).sqrt();
+    let below = over_disc(1.0, (10.0, 0.0), |x, y| {
+        20.0 - (9.0 - (ring(x, y) - 10.0).powi(2)).sqrt()
+    });
+    let within = over_disc(1.0, (10.0, 0.0), |x, y| {
+        1.0 + (9.0 - (ring(x, y) - 10.0).powi(2)).sqrt()
+    });
+    let outer = |y: f64, z: f64| ((10.0 + half(z)).powi(2) - y * y).sqrt();
+    let inner = |y: f64, z: f64| ((10.0 - half(z)).powi(2) - y * y).sqrt();
+    let from_side = over_disc(1.0, (0.0, 20.0), |y, z| 30.0 - outer(y, z));
+    let to_hole = over_disc(1.0, (0.0, 20.0), |y, z| 11.0 - inner(y, z));
+    // from the hole the end lies either way; it goes toward the torus's centre, across the hole
+    let from_hole = over_disc(1.0, (0.0, 20.0), |y, z| inner(y, z) + 2.0);
+    let rod_x = |x: f64, back: bool| {
+        let z = if back { -Vec3::X } else { Vec3::X };
+        frame(Point3::new(x, 0.0, 20.0), z, Vec3::Y)
+    };
+    let tube = |plane: Frame| Part {
+        features: vec![
+            torus(),
+            extrude(plane, disc(1.0), to(0, wall(0, 0).with(0), 0.0), Combine::New),
+        ],
+    };
+    let side_cone = over_disc(2.0, (0.0, 20.0), |y, z| {
+        40.0 - ((30.0 - z) * (30.0 - z) - y * y).sqrt()
+    });
     vec![
+        ("torus-below", tube(at(10.0, 0.0, 0.0)), below),
+        ("torus-within", tube(at(10.0, 0.0, 19.0)), within),
+        ("torus-side", tube(rod_x(30.0, true)), from_side),
+        ("torus-to-hole", tube(rod_x(11.0, true)), to_hole),
+        ("torus-from-hole", tube(rod_x(2.0, false)), from_hole),
         (
             "tilted-plane",
             Part {
@@ -330,29 +378,15 @@ fn up_to_surfaces_by_hand() {
         let seq = part.regenerate().unwrap_or_else(|e| panic!("{name}: {e:?}"));
         assert!(check(&seq).is_empty(), "{name}: {:?}", check(&seq));
         let v = volume(&seq);
-        assert!((v - want).abs() <= 1e-4 * want, "{name}: volume {v} want {want}");
+        // a torus meshes coarser at this chord: its volume converges from below (1e-5 at 1e-5)
+        let tol = if name.starts_with("torus") { 5e-4 } else { 1e-4 };
+        assert!((v - want).abs() <= tol * want, "{name}: volume {v} want {want}");
         let nary = part
             .regenerate_nary(4)
             .unwrap_or_else(|e| panic!("{name} nary: {e:?}"));
         assert!(check(&nary).is_empty(), "{name} nary");
         assert_eq!(nary.faces.len(), seq.faces.len(), "{name}");
         assert!((volume(&nary) - v).abs() <= 1e-6 * v, "{name} nary volume");
-    }
-}
-
-/// The priced pair: ends on surfaces, and the same ends flat.
-#[test]
-fn suite_up_to_parts() {
-    for flat in [false, true] {
-        let part = forge_model::suite::upto(flat);
-        let seq = part.regenerate().expect("seq");
-        let nary = part.regenerate_nary(4).expect("nary");
-        assert!(check(&seq).is_empty() && check(&nary).is_empty(), "flat {flat}");
-        assert_eq!(seq.faces.len(), nary.faces.len(), "flat {flat}");
-        assert!(
-            (volume(&seq) - volume(&nary)).abs() <= 1e-6 * volume(&seq),
-            "flat {flat}"
-        );
     }
 }
 
@@ -406,7 +440,53 @@ fn up_to_refusals() {
         ]),
         bad(1, ExtentError::NeverHits)
     );
-    // a torus
+    // up to the next face: an obstacle in the sweep that no ray meets, and a face that covers
+    // the rays but not the whole profile, are both found exactly
+    let slab = |z: f64, h: f64| {
+        extrude(
+            at(-20.0, -20.0, z),
+            Profile::rectangle(Point2::ORIGIN, 40.0, 40.0, 0),
+            Extent::Distance(h),
+            if z == 0.0 { Combine::New } else { Combine::Add },
+        )
+    };
+    let post = || {
+        extrude(
+            at(-5.0, -5.0, 10.0),
+            Profile::rectangle(Point2::ORIGIN, 10.0, 10.0, 0),
+            Extent::ToNext { reverse: false },
+            Combine::Add,
+        )
+    };
+    assert_eq!(
+        refused(vec![
+            slab(0.0, 10.0),
+            slab(30.0, 5.0),
+            ball(Point3::new(4.5, 4.5, 20.0), 0.4, Combine::Add),
+            post()
+        ]),
+        bad(3, ExtentError::Ambiguous)
+    );
+    let diamond = ProfileLoop::new(
+        (0..4)
+            .map(|k| {
+                let p = |k: usize| {
+                    let (s, c) = dmath::sin_cos(k as f64 * PI / 2.0);
+                    Point2::new(6.0 * c, 6.0 * s)
+                };
+                (Segment::Line { a: p(k), b: p(k + 1) }, k as u64)
+            })
+            .collect(),
+    );
+    assert_eq!(
+        refused(vec![
+            slab(0.0, 10.0),
+            extrude(at(0.0, 0.0, 30.0), diamond, Extent::Distance(5.0), Combine::Add),
+            post()
+        ]),
+        bad(2, ExtentError::NotCovered)
+    );
+    // a torus met at a slant
     let ring = Feature::Revolve {
         profile: Profile {
             plane: frame(Point3::new(0.0, 0.0, 20.0), Vec3::Y, Vec3::X),
@@ -423,12 +503,12 @@ fn up_to_refusals() {
         refused(vec![
             ring,
             extrude(
-                at(10.0, 0.0, 0.0),
+                frame(Point3::new(10.0, 0.0, 0.0), Vec3::new(0.3, 0.0, 1.0), Vec3::Y),
                 disc(1.0),
                 to(0, wall(0, 0).with(0), 0.0),
                 Combine::New
             )
         ]),
-        bad(1, ExtentError::Unsupported("ending on a torus"))
+        bad(1, ExtentError::Unsupported("a torus met at a slant"))
     );
 }

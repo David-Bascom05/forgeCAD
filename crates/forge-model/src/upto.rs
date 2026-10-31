@@ -1,29 +1,93 @@
 //! Ends on a surface: a sweep cut off where it first meets a face's surface (any plane, a
-//! sphere, a cylinder or a cone, offset or not), and the next face along the way, found by rays
-//! against the earlier tools' solids.
+//! sphere, a cylinder, a cone or a torus, offset or not), and the next face along the way.
 //!
 //! Each ray of the sweep must meet the surface once before it leaves the near side of a
-//! separating plane: a plane through a sphere's centre square to the travel, through a
-//! cylinder's axis, through a cone's apex and the two lines it shows in outline. So the tool is
-//! the sweep kept on the near side of that plane, less the solid inside the surface (from
-//! outside), or the sweep kept inside it (from inside): one n-ary boolean of plain solids,
-//! whose analytic shapes combine the same way. Where some of the profile misses the surface,
-//! or the surface cuts the sketch, the tool shows it (a face on the separating plane or the
-//! sweep's far end, or a start cap no longer whole), and the feature is refused.
+//! separating plane: through a sphere's centre square to the travel, through a cylinder's axis,
+//! through a cone's apex and the two lines it shows in outline, through a torus's middle or its
+//! axis (a torus is met along its axis or square to it; square to it from outside, its hole is
+//! filled first, and from its hole the cut is at the tube's middle circle). Where the plane is
+//! square to the travel the sweep simply ends on it; otherwise a box keeps the near side. So the
+//! tool is the sweep less the solid inside the surface (from outside), or kept inside it (from
+//! inside): one n-ary boolean of plain solids, whose analytic shapes combine the same way. Where
+//! some of the profile misses the surface, or the surface cuts the sketch, the tool shows it (a
+//! face of a separating solid or on the sweep's far end, or a start cap no longer whole), and the
+//! feature is refused.
+//!
+//! The next face is picked by rays against the earlier tools' exact solids, then proved for the
+//! whole sweep by two booleans with the earlier tools near it (`verify_next`).
 
 use crate::{Combine, ExtentError, Feature, RegenError, Tool, Turn, tool};
 use forge_bool::{Member, Op, Seg2, Shape};
-use forge_geom::{Cone, Cylinder, Plane, Sphere, Surface};
+use forge_geom::{Cone, Cylinder, Plane, Sphere, Surface, Torus};
 use forge_math::{Frame, Point2, Point3, UnitVec3, Vec2, Vec3, dmath, poly, tol};
 use forge_ops::{Axis2, Profile, ProfileLoop, Segment};
 use forge_topo::{Body, Name};
 
-/// How a sweep is cut off at a surface: solids to keep or take away, in order, and planes no
-/// face of the result may lie on.
+/// How a sweep is cut off at a surface: solids to keep or take away, in order, each marked
+/// when none of its faces may show in the result (a separating bound: a face of it there means
+/// a ray missed the surface).
 #[derive(Clone, Debug, PartialEq)]
 pub(crate) struct Plan {
-    aux: Vec<(Op, Feature)>,
-    walls: Vec<(Point3, UnitVec3)>,
+    aux: Vec<(Op, Feature, bool)>,
+}
+
+fn keep(f: Feature) -> (Op, Feature, bool) {
+    (Op::Intersect, f, false)
+}
+
+fn less(f: Feature) -> (Op, Feature, bool) {
+    (Op::Subtract, f, false)
+}
+
+fn bound(f: Feature) -> (Op, Feature, bool) {
+    (Op::Intersect, f, true)
+}
+
+/// A solid of revolution about the line through `c` along `a` of a loop in the half plane
+/// (radius, height), its seams square to the side `refp` is on.
+fn spun(c: Point3, a: UnitVec3, refp: Point3, l: ProfileLoop) -> Feature {
+    let f = seam_away(c, a.get(), refp);
+    Feature::Revolve {
+        profile: Profile {
+            plane: Frame::from_zx(c, f.x(), f.y().get()).expect("frame"),
+            loops: vec![l],
+        },
+        axis: Axis2 {
+            origin: Point2::ORIGIN,
+            dir: Vec2::Y,
+        },
+        extent: Turn::Angle(dmath::TAU),
+        op: Combine::Cut,
+    }
+}
+
+/// A rod of radius `r` along the line through `c` along `a`, covering heights `lo..hi`.
+fn drum(c: Point3, a: UnitVec3, r: f64, (lo, hi): (f64, f64), refp: Point3) -> Feature {
+    Feature::Extrude {
+        profile: Profile {
+            plane: seam_away(c + a * (lo - 1.0), a.get(), refp),
+            loops: vec![Profile::circle(Point2::ORIGIN, r, 0)],
+        },
+        extent: crate::Extent::Distance(hi - lo + 2.0),
+        op: Combine::Cut,
+    }
+}
+
+fn polygon(pts: &[Point2]) -> ProfileLoop {
+    let n = pts.len();
+    ProfileLoop::new(
+        (0..n)
+            .map(|k| {
+                (
+                    Segment::Line {
+                        a: pts[k],
+                        b: pts[(k + 1) % n],
+                    },
+                    k as u64,
+                )
+            })
+            .collect(),
+    )
 }
 
 /// A box on the near side of the plane through `at` square to `z` (z pointing away from the
@@ -41,6 +105,20 @@ fn near_box(at: Point3, z: UnitVec3, pts: &[Point3]) -> Feature {
         },
         extent: crate::Extent::Distance(depth),
         op: Combine::Keep,
+    }
+}
+
+/// A frame at `o` whose xy plane holds the line along `along` through `o` and lies square to
+/// the way `away` is from it (any frame where `away` is on the line): a solid made from it puts
+/// its seams (circles start at x; revolves split at the xy plane) away from that side.
+fn seam_away(o: Point3, along: Vec3, away: Point3) -> Frame {
+    let w = away - o;
+    let w = w - along * (along.dot(w) / along.dot(along));
+    let z = along.normalize().expect("a direction");
+    match w.normalize().filter(|_| w.length() > tol::LINEAR) {
+        // z along the line, x straight away from the far side
+        Some(n) => Frame::from_zx(o, z, -n.get()).expect("frame"),
+        None => Frame::from_z(o, z),
     }
 }
 
@@ -87,10 +165,9 @@ pub(crate) fn plan(
                 return Err(ExtentError::NotAhead);
             }
             let t = -lo / z.dot(dv) + 1.0;
+            // the end itself lies on the plane: every ray meets it
             let plan = Plan {
-                aux: vec![(Op::Intersect, near_box(at, z, &swept(t)))],
-                // the end itself lies on the plane: every ray meets it
-                walls: vec![],
+                aux: vec![keep(near_box(at, z, &swept(t)))],
             };
             Ok((t, plan))
         }
@@ -103,7 +180,12 @@ pub(crate) fn plan(
                 sp.radius - offset
             })?;
             let ball = Feature::Ball {
-                frame: Frame::WORLD.with_origin(c),
+                // poles on the travel line through the centre, off the sweep's end plane; split
+                // along a plane holding it, square to the side the sweep is on
+                frame: {
+                    let f = seam_away(c, d.get(), refp);
+                    Frame::from_zx(c, f.x(), dv.cross(f.x().get())).expect("frame")
+                },
                 radius: r,
                 op: Combine::Cut,
             };
@@ -114,20 +196,20 @@ pub(crate) fn plan(
                 return Ok((
                     t,
                     Plan {
-                        aux: vec![(Op::Intersect, ball)],
-                        walls: vec![],
+                        aux: vec![keep(ball)],
                     },
                 ));
             }
-            if ahead <= tol::LINEAR {
+            // the sweep's own end on the plane through the centre (the sketch is square to the
+            // travel) keeps it short of where any ray leaves the ball
+            let t = dv.dot(c - refp);
+            if t <= tol::LINEAR {
                 return Err(ExtentError::NotAhead);
             }
-            let t = ahead + 1.0;
             Ok((
                 t,
                 Plan {
-                    aux: vec![(Op::Intersect, near_box(c, d, &swept(t))), (Op::Subtract, ball)],
-                    walls: vec![(c, d)],
+                    aux: vec![less(ball)],
                 },
             ))
         }
@@ -153,32 +235,18 @@ pub(crate) fn plan(
                 }
                 -lo / across.dot(dv) + 1.0
             };
-            let (lo, hi) = span(&swept(t), at, a.get());
-            let rod = Feature::Extrude {
-                profile: Profile {
-                    plane: Frame::from_z(at + a * (lo - 1.0), a),
-                    loops: vec![Profile::circle(Point2::ORIGIN, r, 0)],
-                },
-                extent: crate::Extent::Distance(hi - lo + 2.0),
-                op: Combine::Cut,
-            };
+            let rod = drum(at, a, r, span(&swept(t), at, a.get()), refp);
             if inside {
-                return Ok((
-                    t,
-                    Plan {
-                        aux: vec![(Op::Intersect, rod)],
-                        walls: vec![],
-                    },
-                ));
+                return Ok((t, Plan { aux: vec![keep(rod)] }));
+            }
+            if across.dot(dv) >= 1.0 - tol::ANGULAR {
+                // travel square to the axis: the sweep's own end on the plane through it
+                return Ok((across.dot(at - refp), Plan { aux: vec![less(rod)] }));
             }
             Ok((
                 t,
                 Plan {
-                    aux: vec![
-                        (Op::Intersect, near_box(at, across, &swept(t))),
-                        (Op::Subtract, rod),
-                    ],
-                    walls: vec![(at, across)],
+                    aux: vec![bound(near_box(at, across, &swept(t))), less(rod)],
                 },
             ))
         }
@@ -196,7 +264,7 @@ pub(crate) fn plan(
                     return Err(ExtentError::NeverHits);
                 }
                 let far = foot.iter().fold(0.0f64, |m, p| m.max(p.distance(apex)));
-                (far * (1.0 + ca) / (ca - ad) + 1.0, vec![])
+                (far * (1.0 + ca) / (ca - ad) + 1.0, None)
             } else {
                 // the two lines the cone shows in outline seen along d, and the plane through them
                 let e1 = cn.frame.x();
@@ -225,7 +293,7 @@ pub(crate) fn plan(
                 if hi >= -tol::LINEAR {
                     return Err(ExtentError::NotAhead);
                 }
-                (-lo / n.dot(dv) + 1.0, vec![(apex, n)])
+                (-lo / n.dot(dv) + 1.0, Some((apex, n)))
             };
             // the cone between the heights the sweep spans (clear of the apex where it can be)
             let (lo, h) = span(&swept(t), apex, a.get());
@@ -240,42 +308,134 @@ pub(crate) fn plan(
             if lo == 0.0 {
                 pts.pop();
             }
-            let n = pts.len();
-            let e = cn.frame.x();
-            let tip = Feature::Revolve {
-                profile: Profile {
-                    plane: Frame::from_zx(apex, e.cross(a).normalize().expect("unit"), e.get())
-                        .expect("frame"),
-                    loops: vec![ProfileLoop::new(
-                        (0..n)
-                            .map(|k| {
-                                (
-                                    Segment::Line {
-                                        a: pts[k],
-                                        b: pts[(k + 1) % n],
-                                    },
-                                    k as u64,
-                                )
-                            })
-                            .collect(),
-                    )],
-                },
-                axis: Axis2 {
-                    origin: Point2::ORIGIN,
-                    dir: Vec2::Y,
-                },
-                extent: Turn::Angle(dmath::TAU),
-                op: Combine::Cut,
+            let tip = spun(apex, a, refp, polygon(&pts));
+            let aux = match walls {
+                Some((p, n)) => vec![bound(near_box(p, n, &swept(t))), less(tip)],
+                None => vec![keep(tip)],
             };
-            let aux = match walls.first() {
-                Some(&(p, n)) => vec![(Op::Intersect, near_box(p, n, &swept(t))), (Op::Subtract, tip)],
-                None => vec![(Op::Intersect, tip)],
-            };
-            Ok((t, Plan { aux, walls }))
+            Ok((t, Plan { aux }))
         }
-        Surface::Torus(_) => Err(ExtentError::Unsupported("ending on a torus")),
+        Surface::Torus(tr) => torus(tr, d, refp, offset),
         Surface::Procedural(_) => Err(ExtentError::Unsupported("ending on a blend")),
     }
+}
+
+/// The cut-off at a ring torus, met along its axis or square to it. From outside, along the
+/// axis: the near half, cut at the middle plane; square to it, the outer envelope (the torus
+/// with its hole filled), cut at the plane through the axis. From inside the tube: kept inside
+/// it (cut at the plane through the axis when heading for the hole). From the hole, square to
+/// the axis: kept inside the tube's middle circle, less the torus.
+fn torus(tr: &Torus, d: UnitVec3, refp: Point3, offset: f64) -> Result<(f64, Plan), ExtentError> {
+    let dv = d.get();
+    let (a, c) = (tr.frame.z(), tr.frame.origin);
+    let off = refp - c;
+    let h = a.dot(off);
+    let rho = (off - a * h).length();
+    let inside = ((rho - tr.major).powi(2) + h * h).sqrt() < tr.minor;
+    let r = if inside {
+        tr.minor + offset
+    } else {
+        tr.minor - offset
+    };
+    if !(r > tol::LINEAR && r < tr.major) {
+        return Err(ExtentError::BadSize);
+    }
+    let big = 2.0 * (tr.major + r) + 1.0;
+    let ring = spun(
+        c,
+        a,
+        refp,
+        ProfileLoop::new(vec![(
+            Segment::Circle {
+                center: Point2::new(tr.major, 0.0),
+                radius: r,
+                ccw: true,
+            },
+            0,
+        )]),
+    );
+    let ahead = dv.dot(c - refp);
+    let ad = a.dot(dv);
+    if ad.abs() >= 1.0 - tol::ANGULAR {
+        if inside {
+            return Ok((
+                ahead + r + 1.0,
+                Plan {
+                    aux: vec![keep(ring)],
+                },
+            ));
+        }
+        if ahead <= tol::LINEAR {
+            return Err(ExtentError::NotAhead);
+        }
+        return Ok((
+            ahead,
+            Plan {
+                aux: vec![less(ring)],
+            },
+        ));
+    }
+    if ad.abs() > tol::ANGULAR {
+        return Err(ExtentError::Unsupported("a torus met at a slant"));
+    }
+    if inside {
+        let t = if ahead > tol::LINEAR { ahead } else { big };
+        return Ok((
+            t,
+            Plan {
+                aux: vec![keep(ring)],
+            },
+        ));
+    }
+    if rho < tr.major && h.abs() < r {
+        // in the hole: rays meet the tube's inside before its middle circle
+        let core = drum(c, a, tr.major, (-r, r), refp);
+        return Ok((
+            big,
+            Plan {
+                aux: vec![bound(core), less(ring)],
+            },
+        ));
+    }
+    if ahead <= tol::LINEAR {
+        return Err(ExtentError::NotAhead);
+    }
+    let arc = Segment::Arc {
+        center: Point2::new(tr.major, 0.0),
+        radius: r,
+        start: -dmath::FRAC_PI_2,
+        sweep: dmath::PI,
+    };
+    let filled = ProfileLoop::new(vec![
+        (
+            Segment::Line {
+                a: Point2::new(0.0, -r),
+                b: Point2::new(tr.major, -r),
+            },
+            0,
+        ),
+        (arc, 1),
+        (
+            Segment::Line {
+                a: Point2::new(tr.major, r),
+                b: Point2::new(0.0, r),
+            },
+            2,
+        ),
+        (
+            Segment::Line {
+                a: Point2::new(0.0, r),
+                b: Point2::new(0.0, -r),
+            },
+            3,
+        ),
+    ]);
+    Ok((
+        ahead,
+        Plan {
+            aux: vec![less(spun(c, a, refp, filled))],
+        },
+    ))
 }
 
 /// Whether a face lies on the plane through `at` square to `n`.
@@ -299,7 +459,7 @@ pub(crate) fn build(
         .aux
         .iter()
         .enumerate()
-        .map(|(k, (_, f))| tool(i + 2_000_000 + k * 1_000_000, f, build))
+        .map(|(k, (_, f, _))| tool(i + 2_000_000 + k * 1_000_000, f, build))
         .collect::<Result<_, _>>()?;
     let shape = Shape::Csg {
         first: Box::new(base.2.clone()),
@@ -307,7 +467,7 @@ pub(crate) fn build(
             .aux
             .iter()
             .zip(&aux)
-            .map(|((op, _), t)| (*op, t.2.clone()))
+            .map(|((op, ..), t)| (*op, t.2.clone()))
             .collect(),
     };
     if !build {
@@ -316,6 +476,13 @@ pub(crate) fn build(
     let mut bodies = vec![&base.0];
     bodies.extend(aux.iter().map(|t| &t.0));
     let ops: Vec<Op> = plan.aux.iter().map(|a| a.0).collect();
+    let bounds: Vec<&Surface> = plan
+        .aux
+        .iter()
+        .zip(&aux)
+        .filter(|(a, _)| a.2)
+        .flat_map(|(_, t)| t.0.face_ids().map(|f| &t.0.face(f).surface))
+        .collect();
     let mut shapes = vec![base.2.clone()];
     shapes.extend(aux.iter().map(|t| t.2.clone()));
     let body = forge_bool::nary_with(
@@ -330,7 +497,7 @@ pub(crate) fn build(
     .compact();
     for f in body.face_ids() {
         let s = &body.face(f).surface;
-        if on_plane(s, far.0, far.1) || plan.walls.iter().any(|w| on_plane(s, w.0, w.1)) {
+        if on_plane(s, far.0, far.1) || bounds.contains(&s) {
             return Err(bad(ExtentError::NotCovered));
         }
     }
@@ -344,8 +511,139 @@ pub(crate) fn build(
     Ok((body, base.1, shape))
 }
 
-/// Where a plain solid's boundary may cross the line `o + t d`: each t with the surface there
-/// (None for a torus).
+/// The surface a prism's wall from segment `s` lies on.
+fn prism_wall(frame: &Frame, s: &Seg2) -> Surface {
+    match *s {
+        Seg2::Line { a, b } => {
+            let e = b - a;
+            let n = Vec2::new(e.y, -e.x).normalize().expect("a segment");
+            let z = frame
+                .vec_to_world(Vec3::new(n.x, n.y, 0.0))
+                .normalize()
+                .expect("unit");
+            Surface::Plane(Plane {
+                frame: Frame::from_zx(frame.plane_point(a), z, frame.z().get()).expect("frame"),
+            })
+        }
+        Seg2::Arc { c, r, .. } => Surface::Cylinder(Cylinder {
+            frame: frame.with_origin(frame.plane_point(c)),
+            radius: r,
+        }),
+    }
+}
+
+/// The surface a revolved wall from segment `s` lies on (None for one on the axis, or a torus
+/// thinner at its middle than its tube).
+fn revolved_wall(frame: &Frame, origin: Point2, dir: Vec2, perp: Vec2, s: &Seg2) -> Option<Surface> {
+    let hr = |q: Point2| ((q - origin).dot(dir), (q - origin).dot(perp));
+    let axis_at = |h: f64| frame.with_origin(frame.point_to_world(Point3::new(0.0, 0.0, h)));
+    Some(match *s {
+        Seg2::Line { a, b } => {
+            let ((ha, ra), (hb, rb)) = (hr(a), hr(b));
+            if (hb - ha).abs() <= 1e-12 {
+                Surface::Plane(Plane { frame: axis_at(ha) })
+            } else if (rb - ra).abs() <= 1e-12 {
+                if ra.abs() <= 1e-12 {
+                    return None;
+                }
+                Surface::Cylinder(Cylinder {
+                    frame: axis_at(ha),
+                    radius: ra,
+                })
+            } else {
+                let k = (rb - ra) / (hb - ha);
+                let f = if k > 0.0 {
+                    axis_at(ha)
+                } else {
+                    axis_at(ha).flipped()
+                };
+                Surface::Cone(Cone::new(f, ra, dmath::atan(k.abs()))?)
+            }
+        }
+        Seg2::Arc { c, r, .. } => {
+            let (hc, rc) = hr(c);
+            if rc.abs() <= 1e-12 {
+                sphere(frame.point_to_world(Point3::new(0.0, 0.0, hc)), r)
+            } else if rc > r {
+                Surface::Torus(Torus {
+                    frame: axis_at(hc),
+                    major: rc,
+                    minor: r,
+                })
+            } else {
+                return None;
+            }
+        }
+    })
+}
+
+/// The plane through a revolve's axis at angle `th`.
+fn sector(frame: &Frame, th: f64) -> Surface {
+    let (s, c) = dmath::sin_cos(th);
+    let z = frame
+        .vec_to_world(Vec3::new(-s, c, 0.0))
+        .normalize()
+        .expect("unit");
+    Surface::Plane(Plane {
+        frame: Frame::from_zx(frame.origin, z, frame.z().get()).expect("frame"),
+    })
+}
+
+/// The surface of the face `name` of feature `k`'s tool (`f`, an extrude, revolve or ball with
+/// a plain extent), from its definition alone; None where it takes building the tool.
+pub(crate) fn named_surface(f: &Feature, k: usize, name: Name) -> Option<Surface> {
+    let root = Name::feature(k as u64 + 1);
+    let ids: Vec<u64> = match f {
+        Feature::Extrude { profile, .. } | Feature::Revolve { profile, .. } => profile
+            .loops
+            .iter()
+            .flat_map(|l| l.segments.iter().map(|s| s.1))
+            .collect(),
+        Feature::Ball { .. } => vec![0],
+        _ => return None,
+    };
+    let at = |id: u64| ids.iter().position(|&i| i == id);
+    match crate::shape(f) {
+        Shape::Prism { frame, segs, hi, .. } => {
+            if name == root.with_str("start") {
+                return Some(Surface::Plane(Plane { frame }));
+            }
+            if name == root.with_str("end") {
+                let top = frame.with_origin(frame.point_to_world(Point3::new(0.0, 0.0, hi)));
+                return Some(Surface::Plane(Plane { frame: top }));
+            }
+            let id = ids.iter().find(|&&i| name == root.with_str("side").with(i))?;
+            Some(prism_wall(&frame, &segs[at(*id)?]))
+        }
+        Shape::Revolved {
+            frame,
+            origin,
+            dir,
+            perp,
+            segs,
+            angle,
+        } => {
+            if let Some(a) = angle {
+                if name == root.with_str("start") {
+                    return Some(sector(&frame, 0.0));
+                }
+                if name == root.with_str("end") {
+                    return Some(sector(&frame, a));
+                }
+            }
+            let id = ids
+                .iter()
+                .find(|&&i| (0..2).any(|h| name == root.with_str("side").with(i).with(h)))?;
+            revolved_wall(&frame, origin, dir, perp, &segs[at(*id)?])
+        }
+        Shape::Ball { center, radius } => (0..2)
+            .any(|h| name == root.with_str("side").with(0).with(h))
+            .then(|| sphere(center, radius)),
+        Shape::Csg { .. } => None,
+    }
+}
+
+/// Where a plain solid's boundary may cross the line `o + t d`: each t with the surface there.
 fn hits(sh: &Shape, o: Point3, d: Vec3, out: &mut Vec<(f64, Option<Surface>)>) {
     match sh {
         Shape::Csg { first, rest } => {
@@ -395,14 +693,7 @@ fn hits(sh: &Shape, o: Point3, d: Vec3, out: &mut Vec<(f64, Option<Surface>)>) {
                         let t = (w.x * e.y - w.y * e.x) / den;
                         let u = (w.x * v.y - w.y * v.x) / den;
                         if (0.0..=1.0).contains(&u) && in_z(t) {
-                            let n = Vec2::new(e.y, -e.x).normalize().expect("a segment");
-                            let z = frame
-                                .vec_to_world(Vec3::new(n.x, n.y, 0.0))
-                                .normalize()
-                                .expect("unit");
-                            let plane =
-                                Frame::from_zx(frame.plane_point(a), z, frame.z().get()).expect("frame");
-                            out.push((t, Some(Surface::Plane(Plane { frame: plane }))));
+                            out.push((t, Some(prism_wall(frame, s))));
                         }
                     }
                     Seg2::Arc { c, r, start, sweep } => {
@@ -413,14 +704,7 @@ fn hits(sh: &Shape, o: Point3, d: Vec3, out: &mut Vec<(f64, Option<Surface>)>) {
                         {
                             let p = at(root.x);
                             if in_z(root.x) && on_sweep(dmath::atan2(p.y - c.y, p.x - c.x), start, sweep) {
-                                let axis = frame.with_origin(frame.plane_point(c));
-                                out.push((
-                                    root.x,
-                                    Some(Surface::Cylinder(Cylinder {
-                                        frame: axis,
-                                        radius: r,
-                                    })),
-                                ));
+                                out.push((root.x, Some(prism_wall(frame, s))));
                             }
                         }
                     }
@@ -437,13 +721,13 @@ fn hits(sh: &Shape, o: Point3, d: Vec3, out: &mut Vec<(f64, Option<Surface>)>) {
         } => {
             let (l, v) = (frame.point_to_local(o), frame.vec_to_local(d));
             let hr = |q: Point2| ((q - *origin).dot(*dir), (q - *origin).dot(*perp));
-            let axis_at = |h: f64| frame.with_origin(frame.point_to_world(Point3::new(0.0, 0.0, h)));
             let s2 = [
                 v.x * v.x + v.y * v.y,
                 2.0 * (l.x * v.x + l.y * v.y),
                 l.x * l.x + l.y * l.y,
             ];
             let radius = |t: f64| ((l.x + v.x * t).powi(2) + (l.y + v.y * t).powi(2)).sqrt();
+            let wall = |s: &Seg2| revolved_wall(frame, *origin, *dir, *perp, s);
             for s in segs {
                 match *s {
                     Seg2::Line { a, b } => {
@@ -454,7 +738,7 @@ fn hits(sh: &Shape, o: Point3, d: Vec3, out: &mut Vec<(f64, Option<Surface>)>) {
                                 let t = (ha - l.z) / v.z;
                                 let r = radius(t);
                                 if r >= ra.min(rb) && r <= ra.max(rb) {
-                                    out.push((t, Some(Surface::Plane(Plane { frame: axis_at(ha) }))));
+                                    out.push((t, wall(s)));
                                 }
                             }
                             continue;
@@ -466,20 +750,7 @@ fn hits(sh: &Shape, o: Point3, d: Vec3, out: &mut Vec<(f64, Option<Surface>)>) {
                             if r0 + r1 * root.x < 0.0 || h < h0 || h > h1 {
                                 continue;
                             }
-                            let surface = if k.abs() <= 1e-12 {
-                                Surface::Cylinder(Cylinder {
-                                    frame: axis_at(ha),
-                                    radius: ra,
-                                })
-                            } else {
-                                let f = axis_at(ha);
-                                let f = if k > 0.0 { f } else { f.flipped() };
-                                match Cone::new(f, ra, dmath::atan(k.abs())) {
-                                    Some(c) => Surface::Cone(c),
-                                    None => continue,
-                                }
-                            };
-                            out.push((root.x, Some(surface)));
+                            out.push((root.x, wall(s)));
                         }
                     }
                     Seg2::Arc { c, r, start, sweep } => {
@@ -503,12 +774,9 @@ fn hits(sh: &Shape, o: Point3, d: Vec3, out: &mut Vec<(f64, Option<Surface>)>) {
                         };
                         for t in roots {
                             let q = *origin + *dir * (l.z + v.z * t) + *perp * radius(t);
-                            if !on_sweep(dmath::atan2(q.y - c.y, q.x - c.x), start, sweep) {
-                                continue;
+                            if on_sweep(dmath::atan2(q.y - c.y, q.x - c.x), start, sweep) {
+                                out.push((t, wall(s)));
                             }
-                            let surface = (rc.abs() <= 1e-12)
-                                .then(|| sphere(frame.point_to_world(Point3::new(0.0, 0.0, hc)), r));
-                            out.push((t, surface));
                         }
                     }
                 }
@@ -523,9 +791,7 @@ fn hits(sh: &Shape, o: Point3, d: Vec3, out: &mut Vec<(f64, Option<Surface>)>) {
                     }
                     let t = -n.dot(l.to_vec()) / den;
                     if (l.x + v.x * t) * c + (l.y + v.y * t) * s >= 0.0 {
-                        let z = frame.vec_to_world(n).normalize().expect("unit");
-                        let plane = Frame::from_zx(frame.origin, z, frame.z().get()).expect("frame");
-                        out.push((t, Some(Surface::Plane(Plane { frame: plane }))));
+                        out.push((t, Some(sector(frame, th))));
                     }
                 }
             }
@@ -572,7 +838,7 @@ fn holds(tools: &[(Shape, Op)], p: Point3) -> Option<bool> {
 
 /// The surface of the first face the ray from `o` along `d` crosses, in the part the tools
 /// (first, then each combined by its op) make.
-pub(crate) fn next_face(tools: &[(Shape, Op)], o: Point3, d: Vec3) -> Result<Surface, ExtentError> {
+pub(crate) fn next_face(tools: &[(Shape, Op)], o: Point3, d: Vec3) -> Result<(Surface, bool), ExtentError> {
     let mut cand = Vec::new();
     for (sh, _) in tools {
         hits(sh, o, d, &mut cand);
@@ -599,7 +865,7 @@ pub(crate) fn next_face(tools: &[(Shape, Op)], o: Point3, d: Vec3) -> Result<Sur
             if cand[k..j].iter().any(|c| c.1.as_ref() != Some(&s)) {
                 return Err(ExtentError::Ambiguous);
             }
-            return Ok(s);
+            return Ok((s, was));
         }
         k = j;
     }
@@ -626,4 +892,173 @@ pub(crate) fn samples(profile: &Profile) -> Vec<Point2> {
             m + if ccw { left } else { left * -1.0 } * hair
         })
         .collect()
+}
+
+/// The names of a body's faces.
+pub(crate) fn names(b: &Body) -> Vec<Name> {
+    b.face_ids().map(|f| b.face(f).name).collect()
+}
+
+/// The names of `from` and of the pieces a boolean may split each into (up to `pieces`).
+fn derived(from: &[Name], pieces: usize) -> std::collections::HashSet<Name> {
+    from.iter()
+        .flat_map(|&b| std::iter::once(b).chain((0..pieces as u64).map(move |k| b.with_str("split").with(k))))
+        .collect()
+}
+
+/// A box holding a tool's analytic solid.
+fn shape_box(sh: &Shape) -> forge_math::Box3 {
+    let corners = |s: &Seg2| match *s {
+        Seg2::Line { a, b } => vec![a, b],
+        Seg2::Arc { c, r, .. } => vec![c + Vec2::new(-r, -r), c + Vec2::new(r, r)],
+    };
+    match sh {
+        Shape::Csg { first, .. } => shape_box(first),
+        Shape::Ball { center, radius } => forge_math::Box3::from_point(*center).grow(*radius),
+        Shape::Prism { frame, segs, lo, hi } => forge_math::Box3::from_points(
+            segs.iter()
+                .flat_map(corners)
+                .flat_map(|q| [*lo, *hi].map(|z| frame.point_to_world(Point3::new(q.x, q.y, z)))),
+        ),
+        Shape::Revolved {
+            frame,
+            origin,
+            dir,
+            perp,
+            segs,
+            ..
+        } => {
+            let (mut h0, mut h1, mut r) = (f64::INFINITY, f64::NEG_INFINITY, 0.0f64);
+            for q in segs.iter().flat_map(corners) {
+                let h = (q - *origin).dot(*dir);
+                (h0, h1) = (h0.min(h), h1.max(h));
+                r = r.max((q - *origin).dot(*perp).abs());
+            }
+            let at = |h: f64| frame.point_to_world(Point3::new(0.0, 0.0, h));
+            forge_math::Box3::from_points([at(h0), at(h1)]).grow(r)
+        }
+    }
+}
+
+fn body_box(b: &Body) -> forge_math::Box3 {
+    b.face_ids()
+        .fold(forge_math::Box3::EMPTY, |acc, f| acc.hull(&b.face_box(f)))
+}
+
+/// Whether two surfaces are the same set of points.
+fn same_surface(a: &Surface, b: &Surface) -> bool {
+    let par = |u: UnitVec3, v: UnitVec3| u.dot(v.get()).abs() >= 1.0 - tol::ANGULAR;
+    let on_axis = |o: Point3, z: UnitVec3, p: Point3| {
+        let w = p - o;
+        (w - z * z.dot(w)).length() <= tol::LINEAR
+    };
+    let near = |x: f64, y: f64| (x - y).abs() <= tol::LINEAR;
+    match (a, b) {
+        (Surface::Plane(p), Surface::Plane(q)) => {
+            par(p.frame.z(), q.frame.z()) && near(p.frame.z().dot(q.frame.origin - p.frame.origin), 0.0)
+        }
+        (Surface::Cylinder(p), Surface::Cylinder(q)) => {
+            par(p.frame.z(), q.frame.z())
+                && on_axis(p.frame.origin, p.frame.z(), q.frame.origin)
+                && near(p.radius, q.radius)
+        }
+        (Surface::Sphere(p), Surface::Sphere(q)) => {
+            p.frame.origin.distance(q.frame.origin) <= tol::LINEAR && near(p.radius, q.radius)
+        }
+        (Surface::Cone(p), Surface::Cone(q)) => {
+            p.apex().distance(q.apex()) <= tol::LINEAR
+                && p.frame.z().dot(q.frame.z().get()) >= 1.0 - tol::ANGULAR
+                && (p.sin_a() - q.sin_a()).abs() <= tol::ANGULAR
+        }
+        (Surface::Torus(p), Surface::Torus(q)) => {
+            p.frame.origin.distance(q.frame.origin) <= tol::LINEAR
+                && par(p.frame.z(), q.frame.z())
+                && near(p.major, q.major)
+                && near(p.minor, q.minor)
+        }
+        _ => a == b,
+    }
+}
+
+/// Proves, for the whole sweep `t` of feature `i` (up to the next face: `material` says whether
+/// it starts in the part), what the rays only picked: that no skin of the part lies inside it
+/// (the part near it, from the earlier tools, meets none of it, or holds all of it), and that
+/// the part's skin lies under all of its end (the end, `end` or what a cut-off made, vanishes
+/// into the part, or out of it for a cut). Both are exact booleans, not samples.
+pub(crate) fn verify_next(
+    features: &[Feature],
+    i: usize,
+    t: &Body,
+    base: &[Name],
+    end: &[Name],
+    material: bool,
+) -> Result<(), RegenError> {
+    let bad = |error| RegenError::Extent { feature: i, error };
+    let pieces = t.faces.len() + 1;
+    let (end, base) = (derived(end, pieces), derived(base, pieces));
+    let ends: Vec<Name> = names(t)
+        .into_iter()
+        .filter(|n| end.contains(n) || !base.contains(n))
+        .collect();
+    let start = features[..i]
+        .iter()
+        .rposition(crate::starts)
+        .ok_or(bad(ExtentError::NoNextFace))?;
+    // the part near the sweep: a tool clear of it holds none of it, so the history folds the same
+    // without it (an intersection with one empties it). Only those tools are built.
+    let tb = body_box(t).grow(tol::LINEAR);
+    let mut built: Vec<(Body, Op)> = Vec::new();
+    let mut first = true;
+    for k in start..i {
+        let shapes = crate::tools(features, k, false)?;
+        let meets: Vec<bool> = shapes.iter().map(|x| shape_box(&x.2).overlaps(&tb)).collect();
+        let bodies = if meets.contains(&true) {
+            crate::tools(features, k, true)?
+        } else {
+            shapes
+        };
+        for ((b, op, _), m) in bodies.into_iter().zip(meets) {
+            let op = if first { Op::Union } else { crate::op_of(op) };
+            first = false;
+            if !m {
+                if op == Op::Intersect {
+                    built.clear();
+                }
+            } else if !built.is_empty() || op == Op::Union {
+                built.push((b, op));
+            }
+        }
+    }
+    let near: Vec<(&Body, Op)> = built.iter().map(|(b, op)| (b, *op)).collect();
+    if near.is_empty() {
+        return Err(bad(ExtentError::NoNextFace));
+    }
+    let with = |last: Op| -> Result<Body, RegenError> {
+        let mut bodies: Vec<&Body> = near.iter().map(|x| x.0).collect();
+        bodies.push(t);
+        let mut ops: Vec<Op> = near.iter().skip(1).map(|x| x.1).collect();
+        ops.push(last);
+        forge_bool::nary_with(&bodies, &ops, None, None, 1, crate::cut_root(i + 4_000_000))
+            .map(|b| b.compact())
+            .map_err(|error| RegenError::Boolean { feature: i, error })
+    };
+    let inner = with(Op::Intersect)?;
+    let clear = if material {
+        let own: Vec<&Surface> = t.face_ids().map(|f| &t.face(f).surface).collect();
+        inner.face_ids().next().is_some()
+            && inner
+                .face_ids()
+                .all(|f| own.iter().any(|s| same_surface(s, &inner.face(f).surface)))
+    } else {
+        inner.face_ids().next().is_none()
+    };
+    if !clear {
+        return Err(bad(ExtentError::Ambiguous));
+    }
+    let after = with(if material { Op::Subtract } else { Op::Union })?;
+    let ends = derived(&ends, after.faces.len() + 1);
+    if after.face_ids().any(|f| ends.contains(&after.face(f).name)) {
+        return Err(bad(ExtentError::NotCovered));
+    }
+    Ok(())
 }

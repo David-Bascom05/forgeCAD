@@ -67,7 +67,7 @@ const BORE: u64 = 1;
 const SEAT: u64 = 2;
 const SINK: u64 = 3;
 const WALL: u64 = 4;
-const BOTTOM: u64 = 5;
+pub(crate) const BOTTOM: u64 = 5;
 const AXIS: u64 = 6;
 
 fn tan_half(angle: f64) -> f64 {
@@ -220,7 +220,7 @@ fn adds(features: &[Feature], i: usize) -> Vec<Box3> {
                 Feature::Ball { .. } => vec![tool_box(&features[i])],
                 // a part it cannot be built is no part of the reach
                 _ => match crate::extent::resolve(features, i) {
-                    Ok(crate::extent::Resolved::Plain(f)) => vec![tool_box(&f)],
+                    Ok(crate::extent::Resolved::Plain(f, _)) => vec![tool_box(&f)],
                     Ok(crate::extent::Resolved::UpTo(f, _)) => vec![tool_box(&f)],
                     Err(_) => vec![],
                 },

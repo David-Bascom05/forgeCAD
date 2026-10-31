@@ -107,16 +107,41 @@ const VERTICAL: Axis2 = Axis2 {
 
 /// Every named benchmark part.
 pub fn parts() -> Vec<(&'static str, Part)> {
-    vec![
-        ("plate", torture::part(usize::MAX)),
-        ("shaft", shaft()),
-        ("housing", housing()),
-        ("coplanar", coplanar()),
-        ("patterns", patterns()),
-        ("mixed", mixed()),
-        ("tour", tour()),
-        ("hole-grid", hole_grid()),
-    ]
+    NAMES
+        .iter()
+        .map(|&n| (n, part(n).expect("a named part")))
+        .collect()
+}
+
+/// The names of the benchmark parts.
+pub const NAMES: [&str; 10] = [
+    "plate",
+    "shaft",
+    "housing",
+    "coplanar",
+    "patterns",
+    "mixed",
+    "tour",
+    "hole-grid",
+    "upto",
+    "upto-flat",
+];
+
+/// The benchmark part of that name, built alone.
+pub fn part(name: &str) -> Option<Part> {
+    Some(match name {
+        "plate" => torture::part(usize::MAX),
+        "shaft" => shaft(),
+        "housing" => housing(),
+        "coplanar" => coplanar(),
+        "patterns" => patterns(),
+        "mixed" => mixed(),
+        "tour" => tour(),
+        "hole-grid" => hole_grid(),
+        "upto" => upto(false),
+        "upto-flat" => upto(true),
+        _ => return None,
+    })
 }
 
 /// A stepped shaft along world x: grooves, cross holes, flats, keyways and

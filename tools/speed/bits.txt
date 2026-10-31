@@ -14,6 +14,10 @@ tour seq 9ef69ffaca0e0e76
 tour nary 119ded16a9d90c65
 hole-grid seq a329abaafd8e6c10
 hole-grid nary 966fb032bab176c8
+upto seq fc4ac7c7444bb4b1
+upto nary 885a4dbcef8c0b64
+upto-flat seq 129adba965452ff6
+upto-flat nary 01600ec881b15a30
 torture seq c825d2ed0aaaa1c4
 torture nary f2f4bf5ddba11f7b
 fuzz1 seq c5d3c6ddb498ee82

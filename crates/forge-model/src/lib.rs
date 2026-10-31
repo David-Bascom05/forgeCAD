@@ -505,15 +505,22 @@ fn apply_fillet(i: usize, body: &Body, edges: &[(Name, Radius)]) -> Result<Body,
 fn tools(features: &[Feature], i: usize, build: bool) -> Result<Vec<Tool>, RegenError> {
     match &features[i] {
         Feature::Hole(h) => {
-            let (h, up) = extent::hole_end(features, i, h)?;
+            let (h, up, next) = extent::hole_end(features, i, h)?;
             let cut = h
                 .revolve(&hole::reach(&features[..i]))
                 .map_err(|error| RegenError::Hole { feature: i, error })?;
             let base = tool(i, &cut, build)?;
-            Ok(vec![match up {
+            let names = upto::names(&base.0);
+            let t = match up {
                 None => base,
                 Some(u) => upto::build(i, base, &u.plan, &u.start, u.far, build)?,
-            }])
+            };
+            if let (true, Some(m)) = (build, next) {
+                // the flat bottom (or drill point) is the end
+                let bottom = Name::feature(i as u64 + 1).with_str("side").with(hole::BOTTOM);
+                upto::verify_next(features, i, &t.0, &names, &[bottom.with(0), bottom.with(1)], m)?;
+            }
+            Ok(vec![t])
         }
         Feature::Pattern {
             of: Source::Features(src),
@@ -538,12 +545,29 @@ fn tools(features: &[Feature], i: usize, build: bool) -> Result<Vec<Tool>, Regen
             }
             Ok(out)
         }
-        Feature::Extrude { .. } | Feature::Revolve { .. } => Ok(vec![match extent::resolve(features, i)? {
-            extent::Resolved::Plain(f) => tool(i, &f, build)?,
-            extent::Resolved::UpTo(f, u) => {
-                upto::build(i, tool(i, &f, build)?, &u.plan, &u.start, u.far, build)?
+        Feature::Extrude { .. } | Feature::Revolve { .. } => {
+            let (t, names, next) = match extent::resolve(features, i)? {
+                extent::Resolved::Plain(f, next) => {
+                    let t = tool(i, &f, build)?;
+                    let names = upto::names(&t.0);
+                    (t, names, next)
+                }
+                extent::Resolved::UpTo(f, u) => {
+                    let base = tool(i, &f, build)?;
+                    let names = upto::names(&base.0);
+                    (
+                        upto::build(i, base, &u.plan, &u.start, u.far, build)?,
+                        names,
+                        u.next,
+                    )
+                }
+            };
+            if let (true, Some(m)) = (build, next) {
+                let end = Name::feature(i as u64 + 1).with_str("end");
+                upto::verify_next(features, i, &t.0, &names, &[end], m)?;
             }
-        }]),
+            Ok(vec![t])
+        }
         Feature::Plane(_) => Ok(vec![]),
         f => Ok(vec![tool(i, f, build)?]),
     }

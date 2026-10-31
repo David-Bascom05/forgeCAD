@@ -32,7 +32,6 @@ fn gpu_verdicts_are_the_cpus() {
     };
     let mut parts = suite::parts();
     parts.push(("torture", torture::part(221)));
-    parts.push(("upto", suite::upto(false)));
     for (name, part) in parts {
         let (shapes, ops) = part.nary_solids().expect("tools build");
         let cpu = CpuBatch {
