@@ -298,12 +298,18 @@ fn speed_bound(c: &Curve, range: Interval) -> f64 {
 /// the surface are grouped; a group with an odd number of sign changes is a
 /// crossing (bisected to full precision), an even number or none is a touch.
 pub fn curve_surface(c: &Curve, range: Interval, s: &Surface) -> CurveSurface {
-    curve_surface_in(c, range, s, None)
+    curve_surface_in(c, range, s, || None)
 }
 
 /// `curve_surface`, the hits wanted only inside box `near` (others may or may not be found):
-/// a subdivision skips the stretches of the curve that cannot reach it.
-pub fn curve_surface_in(c: &Curve, range: Interval, s: &Surface, near: Option<Box3>) -> CurveSurface {
+/// a subdivision skips the stretches of the curve that cannot reach it (`near` is asked only
+/// then; a closed form needs no box).
+pub fn curve_surface_in(
+    c: &Curve,
+    range: Interval,
+    s: &Surface,
+    near: impl FnOnce() -> Option<Box3>,
+) -> CurveSurface {
     match c {
         Curve::Line(l) if !matches!(s, Surface::Procedural(_)) => return line_in_range(l, range, s),
         Curve::Circle(k) => {
@@ -338,7 +344,7 @@ pub fn curve_surface_in(c: &Curve, range: Interval, s: &Surface, near: Option<Bo
         }
         _ => {}
     }
-    curve_surface_subdivide(c, range, s, near)
+    curve_surface_subdivide(c, range, s, near())
 }
 
 fn line_in_range(l: &Line, range: Interval, s: &Surface) -> CurveSurface {
@@ -1334,6 +1340,38 @@ mod tests {
             }
         }
         assert!(total > 300, "too few hits exercised: {total}");
+    }
+
+    #[test]
+    fn closed_forms_never_ask_for_the_box() {
+        // a boolean's trim asks for its edge's box only for a subdivision: building it per edge
+        // for lines and circles cost coplanar 0.8M instructions
+        let mut r = Rng::new(311);
+        for _ in 0..50 {
+            let f = rand_frame(&mut r);
+            let circle = Curve::Circle(Circle {
+                frame: f,
+                radius: r.range(1.0, 30.0),
+            });
+            let line = Curve::Line(Line::new(rand_point(&mut r, 30.0), rand_unit(&mut r)));
+            for s in rand_surfaces(&mut r)
+                .into_iter()
+                .filter(|s| !matches!(s, Surface::Torus(_)))
+            {
+                for (c, range) in [
+                    (&circle, Interval::new(0.0, dmath::TAU)),
+                    (&line, Interval::new(-60.0, 60.0)),
+                ] {
+                    let asked = std::cell::Cell::new(false);
+                    let got = curve_surface_in(c, range, &s, || {
+                        asked.set(true);
+                        None
+                    });
+                    assert!(!asked.get(), "{c:?} {s:?}");
+                    assert_eq!(got, curve_surface(c, range, &s));
+                }
+            }
+        }
     }
 
     #[test]

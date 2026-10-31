@@ -1737,13 +1737,15 @@ pub(crate) fn trim(
                 }
                 let across = across(body, f, c)?;
                 // only hits on the edge count: within its ends' tolerance of its box
-                let slack = body
-                    .vertex(edge.start)
-                    .tol
-                    .max(body.vertex(edge.end).tol)
-                    .max(tol::LINEAR);
-                let near = body.edge_box(e).grow(2.0 * slack);
-                let hits = match curve_surface_in(&curve, range, &across, Some(near)) {
+                let near = || {
+                    let slack = body
+                        .vertex(edge.start)
+                        .tol
+                        .max(body.vertex(edge.end).tol)
+                        .max(tol::LINEAR);
+                    Some(body.edge_box(e).grow(2.0 * slack))
+                };
+                let hits = match curve_surface_in(&curve, range, &across, near) {
                     CurveSurface::Hits(h) => h,
                     // the curve runs along this edge: cut it at the edge's ends; the stretch along
                     // the edge is boundary, not a new edge (the faces either side of it meet the
