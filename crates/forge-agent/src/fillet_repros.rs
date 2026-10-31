@@ -58,3 +58,12 @@ fn variable_fillet_round_a_tube_into_a_cone() {
         "reach = 385\nstack = 575\nhta = 73 deg\nsta = 73.5 deg\nhtl = 160\nstl = 540\nhdx = cos(hta)\nhdz = -sin(hta)\ns1x = -(stl-35)*cos(sta)\ns1z = (stl-35)*sin(sta)\nh1x = reach + 25*hdx\nh1z = stack + 25*hdz\nttl = sqrt((h1x-s1x)^2 + (h1z-s1z)^2)\nht: revolve xz at reach 0 stack axis 0 0 hdx hdz poly 0 0 25*sin(hta) 25*cos(hta) htl*hdx+30*sin(hta) -htl*sin(hta)+30*cos(hta) htl*hdx -htl*sin(hta)\ntt: extrude ttl z (h1x-s1x)/ttl 0 (h1z-s1z)/ttl at s1x 0 s1z circle 0 0 14.3\nfillet 4..2.5 (edges between tt ht concave)\n",
     );
 }
+
+#[test]
+fn concave_pad_fillet_ending_on_a_drafted_tube() {
+    // the blend's spine is a hyperbola (a plane cut through the offset cone): its nearest-point
+    // search over a corner's wide range sampled past where it could be near
+    valid(
+        "tube: extrude 60 circle 0 5 14\ndraft -8 xy at 0 0 0 (faces cyl)\npad: extrude 5 yz at 8 -40 10 rect 0 0 80 40\nfillet 2 (edges between pad tube concave)\n",
+    );
+}

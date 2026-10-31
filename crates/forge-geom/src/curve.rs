@@ -407,13 +407,11 @@ impl CurveGeom for Hyperbola {
         Domain1::LINE
     }
     fn closest(&self, p: Point3, range: Interval) -> f64 {
-        let r = if range.lo.is_finite() && range.hi.is_finite() {
-            range
-        } else {
-            let l = self.frame.point_to_local(p);
-            let span = 4.0 * (l.x.abs() + l.y.abs()) / self.a.min(self.b) + 4.0;
-            Interval::new(range.lo.max(-span), range.hi.min(span))
-        };
+        // past this span the curve runs away from p: a wide range, sampled whole, would miss it
+        let l = self.frame.point_to_local(p);
+        let span = 4.0 * (l.x.abs() + l.y.abs()) / self.a.min(self.b) + 4.0;
+        let near = Interval::new(range.lo.max(-span), range.hi.min(span));
+        let r = if near.lo <= near.hi { near } else { range };
         closest_numeric(self, p, r)
     }
     fn bbox(&self, range: Interval) -> Box3 {
