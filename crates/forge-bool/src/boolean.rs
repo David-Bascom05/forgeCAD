@@ -2955,6 +2955,18 @@ pub(crate) fn split_face(
     // half-edges by start vertex, for finding the ways on from a vertex
     let mut by_start: Vec<(VKey, usize)> = (0..half.len()).map(|j| (start_of(half[j]), j)).collect();
     by_start.sort();
+    // each half-edge's direction at its start and at its end, worked out once (a vertex where m
+    // ways meet is passed m times)
+    let dirs: Vec<[std::cell::Cell<Option<Vec2>>; 2]> = (0..half.len()).map(|_| Default::default()).collect();
+    let dir = |i: usize, at_end: bool| -> R<Vec2> {
+        let c = &dirs[i][at_end as usize];
+        if let Some(d) = c.get() {
+            return Ok(d);
+        }
+        let d = uv_dir(body, f, &pieces[half[i].0], half[i].1, at_end)?;
+        c.set(Some(d));
+        Ok(d)
+    };
     let next = |i: usize| -> R<usize> {
         let v = end_of(half[i]);
         let from = by_start.partition_point(|&(k, _)| k < v);
@@ -2967,10 +2979,8 @@ pub(crate) fn split_face(
         if ties.binary_search(&v).is_ok() {
             return untie(body, f, pieces, &half, i, out);
         }
-        let theta = uv_dir(body, f, &pieces[half[i].0], half[i].1, true)?;
-        let ways = out
-            .iter()
-            .map(|&(_, k)| Ok((uv_dir(body, f, &pieces[half[k].0], half[k].1, false)?, k)));
+        let theta = dir(i, true)?;
+        let ways = out.iter().map(|&(_, k)| Ok((dir(k, false)?, k)));
         Ok(clockwise(theta, ways)?.map_or(i, |w| w.1))
     };
     let mut used = vec![false; half.len()];
