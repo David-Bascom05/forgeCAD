@@ -100,3 +100,46 @@ fn auto_picks_by_history_length() {
         bits(&long.regenerate_nary(2).expect("nary"))
     );
 }
+
+/// A pocket whose mouth stands 0.00002 above the block's top: the n-ary took the strip of wall
+/// above the top for part of the wall below (its probe stepped across the strip), leaving open
+/// edges. Both regens give the plain pocket.
+#[test]
+fn pocket_mouth_a_hair_above_the_top() {
+    use forge_math::{Frame, Point2, Point3};
+    use forge_model::{Combine, Extent, Feature, Part};
+    use forge_ops::Profile;
+    let ex = |o: Point3, l, d, op| Feature::Extrude {
+        profile: Profile {
+            plane: Frame::WORLD.with_origin(o),
+            loops: vec![l],
+        },
+        extent: Extent::Distance(d),
+        op,
+    };
+    let part = Part {
+        features: vec![
+            ex(
+                Point3::ORIGIN,
+                Profile::rectangle(Point2::ORIGIN, 60.0, 40.0, 0),
+                10.0,
+                Combine::New,
+            ),
+            ex(
+                Point3::new(20.829744830901628, 31.98774163479715, 7.00001),
+                Profile::circle(Point2::ORIGIN, 3.0, 0),
+                3.00001,
+                Combine::Cut,
+            ),
+        ],
+    };
+    let count = |b: &forge_topo::Body| (b.face_ids().count(), b.edge_ids().count(), b.vertex_ids().count());
+    let seq = part.regenerate().expect("sequential regen");
+    let nary = part.regenerate_nary(1).expect("n-ary regen");
+    assert!(
+        forge_topo::check(&nary).is_empty(),
+        "{:?}",
+        forge_topo::check(&nary)
+    );
+    assert_eq!(count(&nary), count(&seq));
+}
