@@ -1,6 +1,6 @@
 use crate::body::{Body, CoedgeId, EdgeId, FaceId, LoopId, VertexId};
 use crate::name::Name;
-use crate::uv::{UvLoop, face_uv_loops, point_in_loops, unwrap_near};
+use crate::uv::{UvLoop, default_segments, face_uv_loops_with, point_in_loops, unwrap_near};
 use forge_geom::intersect::{Contact, LineSurface, line_surface};
 use forge_geom::{CurveGeom, Line, SurfaceGeom};
 use forge_math::{Point2, Point3, Vec3, tol};
@@ -282,7 +282,9 @@ fn check_geometry(body: &Body, out: &mut Vec<Problem>) {
 /// side the loop rule says is the face) and check the point is inside it.
 fn check_sides(body: &Body, out: &mut Vec<Problem>) {
     for f in body.face_ids() {
-        let loops = face_uv_loops(body, f);
+        let loops = face_uv_loops_with(body, f, default_segments);
+        // drawn finely when a probe misses: a chord of a long arc may cut across a sliver of face
+        let fine = std::cell::OnceCell::new();
         let surface = &body.face(f).surface;
         // probe a small fraction of the face's shortest edge so narrow faces are not stepped across
         let shortest = loops
@@ -298,7 +300,7 @@ fn check_sides(body: &Body, out: &mut Vec<Problem>) {
                 let t = e.range.mid();
                 let d = e.curve.deriv(t);
                 let along = if co.forward { d.d1 } else { -d.d1 };
-                let mid_uv = ul.point_of_sample(ul.coedge_first[k] + crate::uv::default_segments(e) / 2);
+                let mid_uv = ul.point_of_sample(ul.coedge_first[k] + default_segments(e) / 2);
                 let Some(n) = body.face_normal(f, mid_uv) else {
                     continue;
                 };
@@ -322,7 +324,12 @@ fn check_sides(body: &Body, out: &mut Vec<Problem>) {
                 let step = step.min(0.25 * clearance);
                 let probe = surface.project(d.p + inward * step);
                 let probe = unwrap_near(body, f, probe, mid_uv);
-                if !point_in_loops(probe, &loops) {
+                if !point_in_loops(probe, &loops)
+                    && !point_in_loops(
+                        probe,
+                        fine.get_or_init(|| face_uv_loops_with(body, f, |e| 8 * default_segments(e))),
+                    )
+                {
                     out.push(Problem::FaceWrongSide { face: f, coedge: c });
                 }
             }
@@ -348,7 +355,7 @@ fn check_shells(body: &Body, out: &mut Vec<Problem>) {
     // drawn finely: a ray's hit near an edge must not fall the wrong side of its chords
     let loops: Vec<Vec<UvLoop>> = body
         .face_ids()
-        .map(|f| crate::uv::face_uv_loops_with(body, f, |e| 8 * crate::uv::default_segments(e)))
+        .map(|f| face_uv_loops_with(body, f, |e| 8 * default_segments(e)))
         .collect();
     // the loops' parameter box: a point is moved by whole periods into it before the test
     let boxes: Vec<(Point2, Point2)> = loops

@@ -155,7 +155,6 @@ revolve cut yz at 62 0 95 axis x rect 79 33 2.2 3.4\n",
 /// thread's major radius (no contact): boolean Unsupported(surface pair without a closed form); the
 /// same with a plain loft builds
 #[test]
-#[ignore = "R13: kernel failure, see the comment"]
 fn thread_near_smooth_loft() {
     holds(
         "\
@@ -211,7 +210,6 @@ shell 2 (faces plane top)\n",
 /// both cross the loft: boolean Unsupported(surface pair without a closed form); the same cut sym
 /// 80 (no plane crossing) or r84 builds
 #[test]
-#[ignore = "R17: kernel failure, see the comment"]
 fn cut_cylinder_plane_corner_on_smooth_loft() {
     holds(
         "\
@@ -449,7 +447,6 @@ thread 9/16-20 -xy at 170 0 9 int 18 left chamfer\n",
 /// discharge-flange bolt hole far from the rest: seq valid; n-ary fails Boolean Unsupported(surface
 /// pair without a closed form) at the hole (without the disc or without the core it passes)
 #[test]
-#[ignore = "R32: kernel failure, see the comment"]
 fn nary_volute_core_and_flange_hole() {
     holds(
         "\
