@@ -66,6 +66,13 @@ fn tools() -> Part {
             12.0,
             Combine::Cut,
         ),
+        // its sides on the lines of the first pocket's
+        extrude(
+            p(10.0, 45.0, 7.0),
+            Profile::rectangle(o, 12.0, 5.0, 0),
+            4.0,
+            Combine::Cut,
+        ),
         // through both slabs either side of the tunnel
         extrude(
             p(70.0, 40.0, -1.0),
@@ -95,7 +102,7 @@ fn imprint_matches_the_general_boolean() {
         let _ = suite::part(name).map(|p| p.regenerate());
     }
     set_mode(Mode::Off);
-    assert_eq!(on_tools, 8, "the tools part's booleans not all taken");
+    assert_eq!(on_tools, 9, "the tools part's booleans not all taken");
     assert!(
         on_torture >= 100,
         "only {on_torture} booleans took the imprint path"

@@ -11,7 +11,7 @@
 //! the material changes, and a cap closes a wall that ends inside the tool.
 
 use crate::boolean::{Op, across, line_box, on_edge, settle, vertex_names};
-use crate::classify::{circle_in_face, extend_query, loop_in_face, runs_along};
+use crate::classify::{circle_in_face, extend_query, loop_in_face};
 use forge_geom::intersect::{Contact, CurveSurface, SurfaceSurface, curve_surface, plane_cylinder};
 use forge_geom::{Curve, CurveGeom, Cylinder, Surface};
 use forge_math::{Box3, Interval, Point3, UnitVec3, tol};
@@ -406,11 +406,7 @@ fn section(
             Some(p) => Interval::new(curve.domain().lo, curve.domain().lo + p),
             None => {
                 let Curve::Line(line) = curve else { return None };
-                let range = line_box(line, &a_box.hull(&b.face_box(w.face)).grow(1.0))?;
-                if runs_along(a, f, line, &curve.bbox(range).grow(tol::LINEAR)) {
-                    return None;
-                }
-                range
+                line_box(line, &a_box.hull(&b.face_box(w.face)).grow(1.0))?
             }
         };
         let mut at = [(0.0, Point3::ORIGIN); 2];
@@ -745,38 +741,83 @@ fn build(a: &mut Body, b: &Body, t: &Tool, hits: &[Hit], wall_at: &[bool], flip:
     }
 }
 
-/// Where two bodies differ, entity by entity, for the check mode (None: they are equal).
+/// Where two bodies differ, for the check mode (None: the same). Entities are matched by name,
+/// not by id or order: each face's surface and sense, its loops as cycles of (edge name, way),
+/// each edge's curve kind and ends, each vertex's point, points to within 1e-9.
 pub(crate) fn diff(x: &Body, y: &Body) -> Option<String> {
-    if x == y {
-        return None;
-    }
-    let first = |n: usize, same: &dyn Fn(usize) -> bool| (0..n).find(|&i| !same(i));
-    let counts = |b: &Body| {
-        (
-            b.vertices.len(),
-            b.edges.len(),
-            b.coedges.len(),
-            b.loops.len(),
-            b.faces.len(),
-        )
+    let close = |p: Point3, q: Point3| p.distance(q) <= 1e-9 * (1.0 + p.distance(Point3::ORIGIN));
+    type Loop = Vec<(Name, bool)>;
+    let faces = |b: &Body| {
+        let mut out: Vec<(Name, bool, String, Vec<Loop>)> = b
+            .face_ids()
+            .map(|f| {
+                let face = b.face(f);
+                let mut loops: Vec<Loop> = face
+                    .loops
+                    .iter()
+                    .map(|&l| {
+                        let mut c: Loop = b
+                            .lp(l)
+                            .coedges
+                            .iter()
+                            .map(|&c| (b.edge(b.coedge(c).edge).name, b.coedge(c).forward))
+                            .collect();
+                        let k = (0..c.len()).min_by_key(|&k| c[k]).unwrap_or(0);
+                        c.rotate_left(k);
+                        c
+                    })
+                    .collect();
+                loops.sort();
+                (face.name, face.same_sense, format!("{:?}", face.surface), loops)
+            })
+            .collect();
+        out.sort_by(|p, q| (p.0, &p.3).cmp(&(q.0, &q.3)));
+        out
     };
-    if counts(x) != counts(y) {
-        return Some(format!("counts v/e/c/l/f {:?} vs {:?}", counts(x), counts(y)));
+    let (fx, fy) = (faces(x), faces(y));
+    if fx.len() != fy.len() {
+        return Some(format!("{} faces vs {}", fx.len(), fy.len()));
     }
-    if let Some(i) = first(x.vertices.len(), &|i| x.vertices[i] == y.vertices[i]) {
-        return Some(format!("vertex {i}: {:?} vs {:?}", x.vertices[i], y.vertices[i]));
+    for (p, q) in fx.iter().zip(&fy) {
+        if p != q {
+            return Some(format!("face {:?}: {:?} vs {:?}", p.0, p, q));
+        }
     }
-    if let Some(i) = first(x.edges.len(), &|i| x.edges[i] == y.edges[i]) {
-        return Some(format!("edge {i}: {:?} vs {:?}", x.edges[i], y.edges[i]));
+    // every edge the faces use, by name: its kind and its ends
+    let edges = |b: &Body| {
+        let mut out: Vec<(
+            Name,
+            Point3,
+            Point3,
+            Name,
+            Name,
+            std::mem::Discriminant<forge_geom::Curve>,
+        )> = b
+            .edge_ids()
+            .map(|e| {
+                let edge = b.edge(e);
+                let (s, t) = (b.vertex(edge.start), b.vertex(edge.end));
+                (
+                    edge.name,
+                    s.point,
+                    t.point,
+                    s.name,
+                    t.name,
+                    std::mem::discriminant(&edge.curve),
+                )
+            })
+            .collect();
+        out.sort_by_key(|e| (e.0, e.3, e.4));
+        out
+    };
+    let (ex, ey) = (edges(x), edges(y));
+    if ex.len() != ey.len() {
+        return Some(format!("{} edges vs {}", ex.len(), ey.len()));
     }
-    if let Some(i) = first(x.coedges.len(), &|i| x.coedges[i] == y.coedges[i]) {
-        return Some(format!("coedge {i}: {:?} vs {:?}", x.coedges[i], y.coedges[i]));
+    for (p, q) in ex.iter().zip(&ey) {
+        if (p.0, p.3, p.4, p.5) != (q.0, q.3, q.4, q.5) || !close(p.1, q.1) || !close(p.2, q.2) {
+            return Some(format!("edge {:?}: {:?} vs {:?}", p.0, p, q));
+        }
     }
-    if let Some(i) = first(x.loops.len(), &|i| x.loops[i] == y.loops[i]) {
-        return Some(format!("loop {i}: {:?} vs {:?}", x.loops[i], y.loops[i]));
-    }
-    Some(match first(x.faces.len(), &|i| x.faces[i] == y.faces[i]) {
-        Some(i) => format!("face {i}: {:?} vs {:?}", x.faces[i], y.faces[i]),
-        None => "shells".into(),
-    })
+    None
 }

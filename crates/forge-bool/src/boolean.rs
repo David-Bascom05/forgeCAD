@@ -228,12 +228,14 @@ pub fn boolean_into(target: &mut Body, b: &Body, op: Op, _feature: u64) -> R<()>
             }
         }
         crate::imprint::Mode::Check => {
-            let mut fast = target.clone();
-            if crate::imprint::column(&mut fast, b, op) {
-                if let Err(e) = general(target, b, op) {
+            // the general boolean on a copy; the part goes on from this path's result, so the
+            // check follows what `on` would make
+            let mut slow = target.clone();
+            if crate::imprint::column(target, b, op) {
+                if let Err(e) = general(&mut slow, b, op) {
                     panic!("imprint made a body where the general boolean failed: {e}");
                 }
-                if let Some(d) = crate::imprint::diff(&fast, target) {
+                if let Some(d) = crate::imprint::diff(target, &slow) {
                     panic!("imprint differs from the general boolean: {d}");
                 }
                 return Ok(());

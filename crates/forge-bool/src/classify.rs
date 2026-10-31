@@ -808,23 +808,6 @@ pub(crate) fn loop_in_face(body: &Body, f: FaceId, pieces: &[(Curve, Interval)],
     None
 }
 
-/// Whether a line edge of face `f` with its box in `over` runs along `line`: the general
-/// boolean follows such an edge wherever along the line it lies.
-pub(crate) fn runs_along(body: &Body, f: FaceId, line: &Line, over: &Box3) -> bool {
-    info(body, f).edges.iter().any(|&(co, ref b)| {
-        co != GONE
-            && b.overlaps(over)
-            && match &body.edge(body.coedge(co).edge).curve {
-                Curve::Line(l) => {
-                    let off = l.origin - line.origin;
-                    l.dir.cross(line.dir.get()).length() <= 1e-9
-                        && (off - line.dir.get() * off.dot(line.dir.get())).length() <= 10.0 * tol::LINEAR
-                }
-                _ => false,
-            }
-    })
-}
-
 /// Whether two lines or arcs of a plane (normal `n`) are certainly more than `d` apart (arcs
 /// judged as their whole circles).
 fn apart(a: &Curve, ra: Interval, b: &Curve, rb: Interval, n: Vec3, d: f64) -> bool {
