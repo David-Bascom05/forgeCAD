@@ -175,11 +175,15 @@ fn tool(b: &dyn Src) -> Option<Tool> {
                 z.get_or_insert(l.dir);
                 walls.push(f);
             }
+            _ if caps.len() == 2 => return None,
             _ => caps.push(f),
         }
     }
     let z: UnitVec3 = z?;
-    if caps.len() != 2 {
+    // along a world axis only: the general boolean cuts curves where they cross a face's box,
+    // which for a wall square to a world plane is where they cross the face itself
+    let zv = z.get();
+    if caps.len() != 2 || zv.x.abs().max(zv.y.abs()).max(zv.z.abs()) < 1.0 - 1e-12 {
         return None;
     }
     // caps square to the axis, facing out of the tool: the bottom one down

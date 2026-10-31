@@ -304,12 +304,14 @@ impl Bands {
             }
             r
         };
-        let spans: Vec<Interval> = edges.iter().map(|(_, b)| span(b)).collect();
-        let all = spans.iter().fold(Interval::EMPTY, |a, s| a.hull(s));
+        // (a use gone from a face extended in place has no box and no row)
+        let spans: Vec<Option<Interval>> = edges.iter().map(|(c, b)| (*c != GONE).then(|| span(b))).collect();
+        let all = spans.iter().flatten().fold(Interval::EMPTY, |a, s| a.hull(s));
         let n = (edges.len() / 4).clamp(8, 512);
         let inv = n as f64 / all.width().max(1e-9);
         let mut rows = vec![Vec::new(); n];
         for (i, sp) in spans.iter().enumerate() {
+            let Some(sp) = sp else { continue };
             let (a, b) = (
                 ((sp.lo - all.lo) * inv) as usize,
                 ((sp.hi - all.lo) * inv) as usize,
@@ -1105,6 +1107,47 @@ mod tests {
             35.0,
             2,
         );
+    }
+
+    #[test]
+    fn bands_built_after_a_loop_is_replaced() {
+        // tilted, so a gone use's empty box spans everything across the bands
+        let n = Vec3::new(0.3, 0.2, 0.9).normalize().unwrap();
+        let fr = Frame::from_z(Point3::new(1.0, 2.0, 3.0), n);
+        let plate = Profile {
+            plane: fr,
+            loops: vec![
+                Profile::rectangle(Point2::ORIGIN, 30.0, 20.0, 0),
+                Profile::rectangle(Point2::new(5.0, 5.0), 4.0, 4.0, 4),
+                Profile::rectangle(Point2::new(20.0, 5.0), 4.0, 4.0, 8),
+            ],
+        };
+        let mut b = extrude(&plate, 6.0, 1).unwrap();
+        let top = b
+            .face_ids()
+            .find(|&f| matches!(&b.face(f).surface, Surface::Plane(pl) if pl.signed_distance(fr.origin).abs() > 5.0))
+            .unwrap();
+        let at = |x: f64, y: f64| fr.plane_point(Point2::new(x, y)) + n.get() * 6.0;
+        assert_eq!(in_planar_face(&b, top, at(15.0, 15.0)), Some(true));
+        // the same hole taken off and put back: 16 uses, 4 of them gone, so the face now keeps bands
+        let hole = b.face(top).loops[1];
+        let uses: Vec<_> = b
+            .lp(hole)
+            .coedges()
+            .map(|c| (b.coedge(c).edge, b.coedge(c).forward))
+            .collect();
+        drop_query_loops(&mut b, top, &[hole]);
+        b.remove_loop(top, hole);
+        let lp = b.add_loop(top, &uses);
+        extend_query(&mut b, top, lp);
+        for (x, y, want) in [
+            (15.0, 15.0, true),
+            (2.0, 2.0, true),
+            (7.0, 7.0, false),
+            (22.0, 7.0, false),
+        ] {
+            assert_eq!(in_planar_face(&b, top, at(x, y)), Some(want), "({x}, {y})");
+        }
     }
 
     #[test]
