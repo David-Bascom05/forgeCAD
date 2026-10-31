@@ -151,3 +151,32 @@ fn ring_round_wider_than_its_ring_is_refused() {
     let msg = m.error.map(|f| f.msg).unwrap_or_default();
     assert!(msg.contains("radius under 7.5"), "{msg}");
 }
+
+#[test]
+fn fillet_rolling_onto_a_corner_round() {
+    // a pad 0.31 past the wall's tangent line onto a corner round: the r 3 ball between the pad's
+    // side and the wall rests on the round, never the wall, so the blend is rolled on the round and
+    // the wall's 0.31 strip goes. Its section, the region between the pad side, the ball and the
+    // round, is 1.463135 mm^2 (the ball centre at x = -110.69, 15 from the round's axis), over 16
+    let part = "box: extrude 95 rect -120 -65 240 130\nfillet 12 (edges of box shorter 100 near -120 -65 50)\nextrude 16 rect -107.69 -93 44 40\n";
+    let src = format!("{part}fillet 3 (edges concave near -107.69 -65 8)\n");
+    valid(&src);
+    let q = forge_mesh::Quality {
+        chord: 1e-3,
+        max_angle: 0.2,
+    };
+    let volume = |s: &str| {
+        let b = Model::new(s).body().expect("built").clone();
+        let fine = forge_mesh::tessellate(&b, &q).expect("meshes").volume();
+        let coarse = forge_mesh::tessellate(&b, &forge_mesh::Quality { chord: 4e-3, ..q })
+            .expect("meshes")
+            .volume();
+        fine + (fine - coarse) / 3.0
+    };
+    let added = volume(&src) - volume(part);
+    assert!((added - 23.41016).abs() < 1e-2, "{added}");
+    // drafted walls: the round is a cone, the wall a drafted plane
+    valid(
+        "box: extrude 95 rect -120 -65 240 130\ndraft -2 xy at 0 0 95 (faces of box normal -x) (faces of box normal -y)\nfillet 12 (edges of box shorter 100 near -120 -65 50)\nextrude 16 rect -104 -93 44 40\nfillet 3 (edges concave near -104 -65 8)\n",
+    );
+}
