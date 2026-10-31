@@ -6,6 +6,7 @@ version = 4
 name = "forge-agent"
 version = "0.1.0"
 dependencies = [
+ "forge-doc",
  "forge-font",
  "forge-geom",
  "forge-math",
@@ -50,6 +51,19 @@ dependencies = [
  "forge-mesh",
  "forge-model",
  "forge-ops",
+ "forge-topo",
+]
+
+[[package]]
+name = "forge-doc"
+version = "0.1.0"
+dependencies = [
+ "forge-font",
+ "forge-geom",
+ "forge-math",
+ "forge-model",
+ "forge-ops",
+ "forge-sketch",
  "forge-topo",
 ]
 

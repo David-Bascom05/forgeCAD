@@ -2,7 +2,8 @@
 //! their names, measuring, a small PNG renderer, and a session that regenerates incrementally.
 
 pub mod cmd;
-pub mod expr;
+#[cfg(test)]
+mod doc_tests;
 pub mod facemesh;
 pub mod json;
 pub mod measure;
@@ -10,8 +11,7 @@ pub mod model;
 pub mod png;
 pub mod render;
 pub mod select;
-pub mod sketch;
-pub mod text;
+pub use forge_doc::{expr, sketch, text};
 
 /// A number for people: a few decimals, trailing zeros dropped.
 pub fn short(x: f64) -> String {

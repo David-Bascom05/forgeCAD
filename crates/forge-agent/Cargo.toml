@@ -15,6 +15,7 @@ forge-mesh = { path = "../forge-mesh" }
 forge-model = { path = "../forge-model" }
 forge-sketch = { path = "../forge-sketch" }
 forge-font = { path = "../forge-font" }
+forge-doc = { path = "../forge-doc" }
 
 [lints]
 workspace = true
