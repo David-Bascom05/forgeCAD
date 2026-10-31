@@ -9,7 +9,7 @@ use crate::curve::Parabola;
 use crate::intersect::{Contact, CurveHit, CurveSurface, SurfaceSurface};
 use crate::surface::Surface;
 use forge_math::tol;
-use forge_math::{Interval, Point2, poly};
+use forge_math::{Interval, poly};
 
 /// The closed form for such a wall and a plane or cylinder, in either order; None otherwise.
 pub fn meet_ruled(a: &Surface, b: &Surface) -> Option<SurfaceSurface> {
@@ -149,7 +149,7 @@ mod tests {
     use crate::surface::SurfaceGeom;
     use crate::testing::rand_frame;
     use forge_math::rng::Rng;
-    use forge_math::{Frame, Point3};
+    use forge_math::{Frame, Point2, Point3};
 
     /// A parabolic cylinder (a parabola raised `h` square to its plane) and a parabola in a
     /// parallel plane through its middle.

@@ -54,6 +54,8 @@ pub struct Font {
     /// Character ranges to glyph ids: (first, last, first glyph, or the id array's offset).
     cmap: Vec<(u32, u32, Map)>,
     kern: Vec<(u16, u16, i16)>,
+    /// What was wrong with the font but left out rather than refused (a malformed kern table).
+    pub warnings: Vec<&'static str>,
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -120,8 +122,13 @@ impl Font {
             return Err(FontError::Truncated);
         }
         let cmap = read_cmap(d, need("cmap")?.0)?;
-        let kern = match find(b"kern") {
-            Some((k, len)) => read_kern(d, k, len)?,
+        let mut warnings = Vec::new();
+        let kern = match find(b"kern").map(|(k, len)| read_kern(d, k, len)) {
+            Some(Ok(k)) => k,
+            Some(Err(_)) => {
+                warnings.push("the kern table does not hold together: no kerning");
+                Vec::new()
+            }
             None => Vec::new(),
         };
         Ok(Font {
@@ -135,6 +142,7 @@ impl Font {
             metrics,
             cmap,
             kern,
+            warnings,
         })
     }
 
@@ -605,18 +613,24 @@ mod tests {
     }
 
     #[test]
-    fn lying_kern_tables_are_refused() {
+    fn lying_kern_tables_are_dropped() {
         let kern = |words: &[u16]| {
             let k: Vec<u8> = words.iter().flat_map(|w| w.to_be_bytes()).collect();
             let bar = crate::testing::simple(&TestGlyph::bar(0.0, 0.0, 1.0, 1.0, 2.0));
             Font::parse(crate::testing::build_raw(1000, &[('I', bar, 2)], Some(k)))
         };
         // a subtable claiming 65535 pairs in 20 bytes; one running past the table; two where
-        // the table holds one
-        assert!(kern(&[0, 1, 0, 20, 1, 65535, 0, 0, 0, 1, 1, 5]).is_err());
-        assert!(kern(&[0, 1, 0, 200, 1, 1, 0, 0, 0, 1, 1, 5]).is_err());
-        assert!(kern(&[0, 2, 0, 20, 1, 1, 0, 0, 0, 1, 1, 5]).is_err());
-        assert!(kern(&[0, 1, 0, 20, 1, 1, 0, 0, 0, 1, 1, 5]).is_ok());
+        // the table holds one: the font loads, without kerning, and says so
+        for bad in [
+            [0, 1, 0, 20, 1, 65535, 0, 0, 0, 1, 1, 5],
+            [0, 1, 0, 200, 1, 1, 0, 0, 0, 1, 1, 5],
+            [0, 2, 0, 20, 1, 1, 0, 0, 0, 1, 1, 5],
+        ] {
+            let f = kern(&bad).expect("loads");
+            assert_eq!((f.kerning(1, 1), f.warnings.len()), (0.0, 1));
+        }
+        let f = kern(&[0, 1, 0, 20, 1, 1, 0, 0, 0, 1, 1, 5]).expect("loads");
+        assert_eq!((f.kerning(1, 1), f.warnings.len()), (5.0, 0));
     }
 
     /// Truncated and scrambled fonts never panic, and never take long or much memory.

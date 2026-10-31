@@ -254,6 +254,16 @@ impl Session {
                     let p: Vec<String> = picks.iter().map(|(l, c)| format!("line {l}: {c}")).collect();
                     text.push_str(&format!("\nselectors picked: {}", p.join(", ")));
                 }
+                // what a font left out (its kerning, say)
+                for (line, f) in m.lines.iter().zip(&m.features) {
+                    if let forge_model::Feature::Text(t) = f
+                        && let Some(font) = &t.font.font
+                    {
+                        for w in &font.warnings {
+                            text.push_str(&format!("\nwarning line {}: {}: {w}", line.no, t.font.name));
+                        }
+                    }
+                }
             }
             Some(f) => {
                 let line = &m.lines[f.at];
