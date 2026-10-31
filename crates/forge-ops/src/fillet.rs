@@ -319,6 +319,20 @@ pub fn fillet_with(body: &Body, edges: &[FilletEdge], opts: &FilletOptions, feat
             return Err(FilletError::BadRadius { edge: fe.edge });
         }
     }
+    // an edge between two faces on one plane (a seam a boolean left) has nothing to round:
+    // merging the faces removes it
+    let flush = |e: EdgeId| {
+        let c = &body.edge(e).coedges;
+        c.len() == 2 && {
+            let (a, b) = (body.coedge_face(c[0]), body.coedge_face(c[1]));
+            a != b && same_surface(&body, a, b)
+        }
+    };
+    let kept: Vec<FilletEdge> = edges.iter().filter(|fe| !flush(fe.edge)).cloned().collect();
+    if let (Some(fe), true) = (edges.first(), kept.is_empty()) {
+        return Err(FilletError::Smooth { edge: fe.edge });
+    }
+    let edges = &kept[..];
     // a closed edge with a varying radius is split in two: the halves' blends then meet
     // in sections at both vertices, like any chain
     let mut picked: Vec<FilletEdge> = Vec::with_capacity(edges.len());
