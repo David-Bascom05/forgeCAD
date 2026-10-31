@@ -2169,7 +2169,9 @@ pub(crate) fn trim(
         let at = |k: usize, p: Point3| match index[k].point_in_face(faces[k], p) {
             Where::On => {
                 let past = crossed(k, ends);
-                if past.is_empty() {
+                // an edge it crosses only to run within tolerance of it (a chord of a hair) is
+                // one it lies along
+                if past.is_empty() || past.iter().any(|&e| on_edge(bodies[k], e, p).is_some()) {
                     Where::On
                 } else {
                     index[k].point_in_face_past(faces[k], p, &past)
@@ -2186,22 +2188,11 @@ pub(crate) fn trim(
             if f != 0.5 && curve.eval(t0).distance(p).min(curve.eval(t1).distance(p)) <= 4.0 * tol::LINEAR {
                 break;
             }
-            // a stretch between two points of the boundary it is on runs along it: sampled again
-            // only where it touches a boundary that does not end it. A whole closed curve (no
-            // cut, or one) touching a boundary would need a vertex there, which no sample gives
-            if f != 0.5
-                && (ends.is_empty()
-                    || ends[0] == ends[1]
-                    || (0..2).any(|k| {
-                        w[k] == Where::On
-                            && cuts[first..].iter().any(|c| {
-                                c.on.edge().is_some_and(|(sd, _)| sd == sides[k])
-                                    && ends
-                                        .iter()
-                                        .any(|&i| cuts[i].point.distance(c.point) <= cuts[i].tol.max(c.tol))
-                            })
-                    }))
-            {
+            // only a closed curve whole (no cut, or one) touching a boundary would need a vertex
+            // there, which no sample gives. Between two cuts, a stretch running along the boundary
+            // it is on stays on it at every sample; one inside elsewhere only passes a boundary
+            // within tolerance (a tool's edge a hair clear of the surface makes no cut there)
+            if f != 0.5 && (ends.is_empty() || ends[0] == ends[1]) {
                 break;
             }
             if off(p) {

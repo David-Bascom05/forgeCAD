@@ -117,3 +117,60 @@ extrude add 5 z 0 1 0 x 1 0 0 circle 0 0 11
     );
     assert!((v - pi * (121.0 * 14.0 - 64.0 * 9.0)).abs() < 1e-2 * v, "{v}");
 }
+
+/// A tool's edge a hair clear of a wall makes no cut on the curve passing it, and that curve's
+/// middle lands on the edge's face boundary: other samples show it is a new edge, not one along
+/// a boundary. The cut did nothing, silently; 2e-7 is what a model rounded to float32 carries.
+#[test]
+fn a_tool_edge_a_hair_off_the_wall_still_cuts() {
+    let part = |x: f64| {
+        format!(
+            "extrude 30 z 0 -1 0 x 1 0 0 circle 0 0 15
+extrude cut two 35 35 z 1 0 0 x 0 0 -1 poly -1 -39 0 -30 {x} -4 22 -14 22 -37
+"
+        )
+    };
+    let (exact, noisy) = (builds(&part(15.0)), builds(&part(15.0000002)));
+    assert!((exact - noisy).abs() < 1e-3 * exact, "{exact} {noisy}");
+    assert!(
+        exact < 0.95 * forge_math::dmath::PI * 225.0 * 30.0,
+        "the cut took something: {exact}"
+    );
+}
+
+/// A pocket whose edge lies on the sharp edge a rib meets a plate along: the part's two faces there
+/// are one inside the tool and one outside, so no class floods across that edge.
+#[test]
+fn a_tool_edge_on_a_part_edge() {
+    let v = builds(
+        "extrude 5 z 0 1 0 x 1 0 0 poly 0 -150 0 0 200 0 200 -150
+extrude add 200 z 1 0 0 x 0 0 -1 poly 0 -80 -100 0 0 0
+extrude cut 90 z 0 -1 0 x 1 0 0 poly 190 100 190 10 10 10 10 100
+",
+    );
+    // plate + rib of triangular section, less the pocket's slice of the rib
+    let slice = 80.0 * (90.0 - (100.0 * 100.0 - 10.0 * 10.0) / 200.0);
+    let want = 200.0 * 150.0 * 5.0 + 200.0 * 4000.0 - 180.0 * slice;
+    assert!((v - want).abs() < 1e-3 * want, "{v} {want}");
+}
+
+/// Faces flush to within tolerance though tilted past the angle tolerance, and a tool's flat end
+/// tangent to a rod: neither may be taken for a crossing, whose edges the tolerance cannot tell
+/// apart.
+#[test]
+fn nearly_flush_faces() {
+    // a triangle's side within 1e-7 of tangent to a tube, its corner on the wall
+    builds(
+        "extrude 150 z 0 1 0 x 1 0 0 circle 0 0 8 circle 0 0 6
+extrude cut two 9 9 z 0 0 1 x 1 0 0 poly 7.99999994 150.4 -7 150 8 138
+",
+    );
+    // a cross hole ending on the plane tangent to the rod
+    let v = builds(
+        "extrude 80 z 1 0 0 x 0 0 -1 circle 0 0 40
+extrude cut two 40 50 z 0 1 0 x 1 0 0 circle 30 0 10
+",
+    );
+    let rod = forge_math::dmath::PI * 1600.0 * 80.0;
+    assert!(v < rod && v > 0.9 * rod, "{v}");
+}
