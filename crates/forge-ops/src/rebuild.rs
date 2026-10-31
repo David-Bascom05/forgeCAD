@@ -76,6 +76,23 @@ pub fn rebuild_some(body: &mut Body, verts: &[bool], edges: &[bool]) -> Result<(
             }
         }
         let p0 = old_pts[v];
+        // two faces meeting tangentially (a loft's halves) pin the vertex only once: the plane
+        // through their seam and normal holds it along the seam, as a meridian does a revolve's
+        for &e in &vedges[v] {
+            let fs = faces_of(body, e);
+            let [fa, fb] = fs[..] else { continue };
+            let (na, nb) = (
+                body.face(fa).surface.gradient(p0),
+                body.face(fb).surface.gradient(p0),
+            );
+            let (c, r) = &old[e.index()];
+            let along = c.deriv(c.closest(p0, *r)).d1;
+            if na.cross(nb).length() <= 1e-6 * na.length() * nb.length()
+                && let Some(m) = na.cross(along).normalize()
+            {
+                cons.push(Surface::Plane(Plane::new(Frame::from_z(p0, m))));
+            }
+        }
         if cons.len() < 3 {
             for &e in &vedges[v] {
                 let fs = faces_of(body, e);

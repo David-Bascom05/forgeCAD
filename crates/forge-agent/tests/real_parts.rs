@@ -133,3 +133,14 @@ extrude sym 174 xz at -78 0 95 loop line -33.5 0 33.5 0 arc 0 0 33.5 0 -90 arc 0
 ",
     );
 }
+
+/// A shell of a plain loft between offset circles (an oblique cone, in two tangent halves):
+/// the halves' seam vertices were pinned by the halves only once (R16).
+#[test]
+fn shell_oblique_loft() {
+    builds_valid(
+        "loft profile at 0 0 0 circle 0 0 10 profile at 0 5 30 circle 0 0 14
+shell 2 (faces plane top)
+",
+    );
+}
