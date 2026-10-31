@@ -847,7 +847,12 @@ impl Skinned {
         s.radius = if kmax > 0.0 { 1.0 / kmax } else { f64::INFINITY };
         let cell = (0..nu * (nv + 1))
             .map(|k| s.rows[k].1.p.distance(s.rows[k + nv + 1].1.p))
-            .chain((0..s.rows.len() - 1).map(|k| s.rows[k].1.p.distance(s.rows[k + 1].1.p)))
+            // along s within a column (not from one column's end to the next one's start)
+            .chain(
+                (0..s.rows.len() - 1)
+                    .filter(|k| (k + 1) % (nv + 1) != 0)
+                    .map(|k| s.rows[k].1.p.distance(s.rows[k + 1].1.p)),
+            )
             .fold(0.0, f64::max);
         s.sharp = s.radius < 0.1 * cell;
         Some(s)
