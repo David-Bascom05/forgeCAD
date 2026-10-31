@@ -535,7 +535,126 @@ fn closed_solids(
 /// Applies feature `i` to the part as features `..i` left it: `regenerate` one feature at a
 /// time, for callers that keep every stage (each as the next step needs it; `finish` one to
 /// show it). Only `features[..=i]` is read.
-pub fn step(features: History<'_>, i: usize, mut body: Option<Body>) -> Result<Option<Body>, RegenError> {
+pub fn step(features: History<'_>, i: usize, body: Option<Body>) -> Result<Option<Body>, RegenError> {
+    let b = step_on(features, i, body)?;
+    if let Some(b) = &b {
+        no_pinch(features, i, b)?;
+    }
+    Ok(b)
+}
+
+/// Whether a history has an extrude whose loops touch: its result is judged step by step.
+pub(crate) fn any_touching(features: &[Feature]) -> bool {
+    features.iter().any(|f| match f {
+        Feature::Extrude { profile, .. } if profile.loops.len() > 1 => profile
+            .normalized_touching()
+            .is_ok_and(|p| !p.touching().is_empty()),
+        _ => false,
+    })
+}
+
+/// The profile of an extrude whose loops touch, and how far its solid reaches each way.
+fn touching_extrude(features: History<'_>, i: usize) -> Option<(Profile, Vec<forge_ops::Touch>, f64, f64)> {
+    let Feature::Extrude { profile, .. } = &features[i] else {
+        return None;
+    };
+    if profile.loops.len() < 2 {
+        return None;
+    }
+    let p = profile.normalized_touching().ok()?;
+    let touches = p.touching();
+    if touches.is_empty() {
+        return None;
+    }
+    let extent::Resolved::Plain(f, _) = extent::resolve(features, i).ok()? else {
+        return None;
+    };
+    let Feature::Extrude {
+        extent: Extent::Distance(d),
+        profile: at,
+        ..
+    } = &*f
+    else {
+        return None;
+    };
+    let base = profile.plane.z().dot(at.plane.origin - profile.plane.origin);
+    Some((p, touches, base.min(base + d), base.max(base + d)))
+}
+
+/// An extrude's loops touching leave its result pinched there where material meets itself along
+/// that line: refused, as any other touch. Where the line lands in material or in empty space, or
+/// only separate solids meet, the result is sound (research/build-failures).
+pub(crate) fn no_pinch(features: History<'_>, i: usize, body: &Body) -> Result<(), RegenError> {
+    let Some((profile, touches, lo, hi)) = touching_extrude(features, i) else {
+        return Ok(());
+    };
+    let ix = forge_bool::Index::new(body);
+    for t in &touches {
+        for h in [0.25, 0.5, 0.75] {
+            let z = lo + h * (hi - lo);
+            let at = |q: Point2| profile.plane.plane_point(q) + profile.plane.z() * z;
+            // along the tangent the two wedges between the loops, across it the two sides
+            let (holes, other) = (&profile.loops[t.hole], &profile.loops[t.other]);
+            let across = Vec2::new(-t.tangent.y, t.tangent.x);
+            let wedge = |sign: f64| {
+                let mut r = 0.01;
+                loop {
+                    let q = t.at + t.tangent * (sign * r);
+                    let (a, b) = (holes.nearest(q), other.nearest(q));
+                    if a.distance(b) >= 1e-3 || r > 5.0 {
+                        return Point2::new(0.5 * (a.x + b.x), 0.5 * (a.y + b.y));
+                    }
+                    r *= 2.0;
+                }
+            };
+            let r = 0.5
+                * wedge(1.0)
+                    .distance(t.at)
+                    .min(wedge(-1.0).distance(t.at))
+                    .max(0.01);
+            let in_at = |q: Point2| match ix.classify(at(q)) {
+                forge_bool::Where::On => None,
+                w => Some(w == forge_bool::Where::Inside),
+            };
+            let sides = [wedge(1.0), wedge(-1.0), t.at + across * r, t.at + across * -r].map(in_at);
+            if let [Some(a), Some(b), Some(c), Some(d)] = sides
+                && a == b
+                && c == d
+                && a != c
+            {
+                // material on both of one pair: one solid across the line, or separate solids meeting?
+                if connected_through(body, &ix, at(t.at)) {
+                    return Err(RegenError::Boolean {
+                        feature: i,
+                        error: forge_bool::BoolError::ZeroThickness { at: at(t.at) },
+                    });
+                }
+            }
+        }
+    }
+    Ok(())
+}
+
+/// Whether the faces of one shell meet at `p` from both sides: separate shells only touching there
+/// are separate solids, and sound.
+fn connected_through(body: &Body, ix: &forge_bool::Index<'_>, p: forge_math::Point3) -> bool {
+    let mut first = None;
+    for f in body.face_ids() {
+        if ix.face_box(f).grow(forge_math::tol::LINEAR).contains(p)
+            && ix.point_in_face(f, p) != forge_bool::Where::Outside
+        {
+            let s = body.face(f).shell;
+            match first {
+                None => first = Some(s),
+                Some(o) if o != s => return false,
+                _ => {}
+            }
+        }
+    }
+    true
+}
+
+fn step_on(features: History<'_>, i: usize, mut body: Option<Body>) -> Result<Option<Body>, RegenError> {
     let f = &features[i];
     let id = features.id(i);
     if modifies(f) {
@@ -916,6 +1035,9 @@ fn nary_regen(
     shapes: bool,
     batching: Batching,
 ) -> Result<Body, RegenError> {
+    if any_touching(&features) {
+        return one_at_a_time(features);
+    }
     let r = match nary_run(features, threads, shapes, batching) {
         // every point the pass could probe a region at lies on another tool's edge: the tools one
         // at a time never have that question, and answer the same way (or refuse more clearly)

@@ -969,6 +969,18 @@ pub fn explain(e: &RegenError) -> (String, String) {
             format!("revolve: {error:?}"),
             hint("keep the profile on one side of the axis, off it"),
         ),
+        Boolean {
+            error: forge_bool::BoolError::ZeroThickness { at },
+            ..
+        } => (
+            format!(
+                "boolean: ZeroThickness: this line leaves material of no thickness at ({}, {}, {}), where the solids only touch",
+                crate::short(at.x),
+                crate::short(at.y),
+                crate::short(at.z)
+            ),
+            hint("this cannot be made: move one apart, or overlap them"),
+        ),
         Boolean { error, .. } => (
             format!("boolean: {error:?}"),
             hint("move or resize the tool so it does not just touch the part"),

@@ -62,7 +62,8 @@ fn prepared(profile: &Profile, distance: f64) -> Result<Profile, ExtrudeError> {
     } else {
         profile.clone()
     };
-    Ok(profile.normalized()?)
+    // loops may touch: whether the solid pinches is for the result to say
+    Ok(profile.normalized_touching()?)
 }
 
 /// Where a builder puts what it makes: a Body (its one shell) or its entities alone.

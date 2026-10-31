@@ -1,5 +1,5 @@
 use forge_math::predicates::{inside_polygon, orient2d};
-use forge_math::{Frame, Point2, Vec2, dmath, tol};
+use forge_math::{Frame, Point2, Point3, Vec2, dmath, tol};
 
 /// One piece of a closed 2D profile, in sketch-plane coordinates.
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -59,10 +59,182 @@ pub enum ProfileError {
     HoleOutside {
         loop_index: usize,
     },
+    /// A hole touches the outer loop at `at` (world coordinates): the wall there has no thickness,
+    /// so the solid would pinch along a line, which cannot be made.
+    Pinched {
+        loop_index: usize,
+        at: Point3,
+    },
     /// A loop crosses itself (a corner radius larger than half its side, say).
     SelfIntersecting {
         loop_index: usize,
     },
+}
+
+/// A piece of a loop as a line or an arc, for exact nearest points.
+#[derive(Clone, Copy)]
+enum Piece {
+    Line(Point2, Point2),
+    Arc(Point2, f64, f64, f64),
+}
+
+fn piece(s: &Segment) -> Piece {
+    match *s {
+        Segment::Line { a, b } => Piece::Line(a, b),
+        Segment::Arc {
+            center,
+            radius,
+            start,
+            sweep,
+        } => Piece::Arc(center, radius, start, sweep),
+        Segment::Circle { center, radius, .. } => Piece::Arc(center, radius, 0.0, dmath::TAU),
+    }
+}
+
+fn on_arc(angle: f64, start: f64, sweep: f64) -> bool {
+    let (lo, w) = if sweep >= 0.0 {
+        (start, sweep)
+    } else {
+        (start + sweep, -sweep)
+    };
+    (angle - lo).rem_euclid(dmath::TAU) <= w
+}
+
+impl Piece {
+    fn ends(self) -> [Point2; 2] {
+        match self {
+            Piece::Line(a, b) => [a, b],
+            Piece::Arc(c, r, s, w) => [arc_point(c, r, s), arc_point(c, r, s + w)],
+        }
+    }
+    /// The nearest point on this piece to p.
+    fn nearest(self, p: Point2) -> Point2 {
+        match self {
+            Piece::Line(a, b) => {
+                let ab = b - a;
+                a + ab * ((p - a).dot(ab) / ab.dot(ab).max(f64::MIN_POSITIVE)).clamp(0.0, 1.0)
+            }
+            Piece::Arc(c, r, s, w) => {
+                let d = p - c;
+                let at = dmath::atan2(d.y, d.x);
+                if d.dot(d) > 0.0 && on_arc(at, s, w) {
+                    arc_point(c, r, at)
+                } else {
+                    let [e0, e1] = self.ends();
+                    if e0.distance(p) <= e1.distance(p) { e0 } else { e1 }
+                }
+            }
+        }
+    }
+}
+
+/// Where two pieces come nearest, among the places they can touch without crossing: their ends,
+/// and along the line of centres (or the normal from a centre to a line): the point on `a`, and
+/// the distance.
+fn nearest_touch(a: Piece, b: Piece) -> (Point2, f64) {
+    let mut best = (Point2::ORIGIN, f64::INFINITY);
+    let mut try_on_a = |q: Point2| {
+        let d = b.nearest(q).distance(q);
+        if d < best.1 {
+            best = (q, d);
+        }
+    };
+    for e in a.ends() {
+        try_on_a(e);
+    }
+    for e in b.ends() {
+        try_on_a(a.nearest(e));
+    }
+    match (a, b) {
+        (Piece::Arc(c, _, _, _), Piece::Line(..)) => {
+            let foot = b.nearest(c);
+            try_on_a(a.nearest(foot));
+            // the far side of the circle from the line's foot is no touch from inside or out
+        }
+        (Piece::Line(..), Piece::Arc(c, _, _, _)) => try_on_a(a.nearest(c)),
+        (Piece::Arc(c, r, s, w), Piece::Arc(d, _, _, _)) => {
+            if let Some(u) = (d - c).normalize() {
+                for k in [1.0, -1.0] {
+                    let q = c + u * (k * r);
+                    if on_arc(dmath::atan2(q.y - c.y, q.x - c.x), s, w) {
+                        try_on_a(q);
+                    }
+                }
+            }
+        }
+        _ => {}
+    }
+    best
+}
+
+/// Where two loops touch, within tolerance, if they do.
+fn loops_touch(x: &ProfileLoop, y: &ProfileLoop) -> Option<Point2> {
+    let mut best: Option<(Point2, f64)> = None;
+    for (s, _) in &x.segments {
+        for (t, _) in &y.segments {
+            let (q, d) = nearest_touch(piece(s), piece(t));
+            if d <= tol::LINEAR && best.is_none_or(|b| d < b.1) {
+                best = Some((q, d));
+            }
+        }
+    }
+    best.map(|b| b.0)
+}
+
+/// Two loops of a profile touching at a point.
+#[derive(Clone, Copy, Debug)]
+pub struct Touch {
+    pub hole: usize,
+    pub other: usize,
+    /// In the sketch's coordinates.
+    pub at: Point2,
+    /// The hole's direction there.
+    pub tangent: Vec2,
+}
+
+fn loop_tangent(l: &ProfileLoop, at: Point2) -> Vec2 {
+    let mut best = (f64::INFINITY, Vec2::X);
+    for (s, _) in &l.segments {
+        let (q, t) = match piece(s) {
+            Piece::Line(a, b) => (piece(s).nearest(at), (b - a).normalize().unwrap_or(Vec2::X)),
+            Piece::Arc(c, ..) => {
+                let q = piece(s).nearest(at);
+                let d = (q - c).normalize().unwrap_or(Vec2::X);
+                (q, Vec2::new(-d.y, d.x))
+            }
+        };
+        if q.distance(at) < best.0 {
+            best = (q.distance(at), t);
+        }
+    }
+    best.1
+}
+
+/// Whether p lies inside a loop, its arcs exact: parity of crossings of the ray along +x.
+fn loop_holds(l: &ProfileLoop, p: Point2) -> bool {
+    let mut inside = false;
+    for (s, _) in &l.segments {
+        match piece(s) {
+            Piece::Line(a, b) => {
+                if (a.y > p.y) != (b.y > p.y) && p.x < a.x + (p.y - a.y) / (b.y - a.y) * (b.x - a.x) {
+                    inside = !inside;
+                }
+            }
+            Piece::Arc(c, r, st, w) => {
+                let dy = p.y - c.y;
+                if dy.abs() >= r {
+                    continue;
+                }
+                let dx = (r * r - dy * dy).sqrt();
+                for x in [c.x - dx, c.x + dx] {
+                    if x > p.x && on_arc(dmath::atan2(dy, x - c.x), st, w) {
+                        inside = !inside;
+                    }
+                }
+            }
+        }
+    }
+    inside
 }
 
 impl Segment {
@@ -217,6 +389,17 @@ impl ProfileLoop {
                 .collect(),
         }
     }
+    /// The nearest point of the loop to p.
+    pub fn nearest(&self, p: Point2) -> Point2 {
+        let mut best = (f64::INFINITY, p);
+        for (s, _) in &self.segments {
+            let q = piece(s).nearest(p);
+            if q.distance(p) < best.0 {
+                best = (q.distance(p), q);
+            }
+        }
+        best.1
+    }
     fn polygon(&self) -> Vec<Point2> {
         self.segments.iter().flat_map(|(s, _)| s.samples(16)).collect()
     }
@@ -289,6 +472,57 @@ impl Profile {
     /// Checks the profile and returns it with the outer loop counter-clockwise
     /// and every hole clockwise; a loop that crosses or touches itself is refused.
     pub fn normalized(&self) -> Result<Profile, ProfileError> {
+        let p = self.normalized_touching()?;
+        match p.touching().first() {
+            Some(t) => Err(ProfileError::Pinched {
+                loop_index: t.hole,
+                at: self.plane.plane_point(t.at),
+            }),
+            None => Ok(p),
+        }
+    }
+
+    /// Where the loops of a normalized profile touch at a point: outer and hole, or two holes.
+    pub fn touching(&self) -> Vec<Touch> {
+        let mut out = Vec::new();
+        if self.loops.len() < 2 {
+            return out;
+        }
+        let spans: Vec<(f64, f64)> = self
+            .loops
+            .iter()
+            .map(|l| {
+                l.polygon()
+                    .iter()
+                    .fold((f64::INFINITY, f64::NEG_INFINITY), |m, p| {
+                        (m.0.min(p.x), m.1.max(p.x))
+                    })
+            })
+            .collect();
+        for i in 1..self.loops.len() {
+            for j in 0..i {
+                // a sampled span is short of the true one by a chord's sag: the outer loop always asked
+                let (a, b) = (spans[i], spans[j]);
+                let slack = 0.2 * (a.1 - a.0).max(b.1 - b.0);
+                if j > 0 && (a.0 > b.1 + slack || b.0 > a.1 + slack) {
+                    continue;
+                }
+                if let Some(at) = loops_touch(&self.loops[i], &self.loops[j]) {
+                    out.push(Touch {
+                        hole: i,
+                        at,
+                        tangent: loop_tangent(&self.loops[i], at),
+                        other: j,
+                    });
+                }
+            }
+        }
+        out
+    }
+
+    /// `normalized`, letting loops touch at a point: an extrude's solid pinches there, which is
+    /// for its result to answer (`touching` says where).
+    pub fn normalized_touching(&self) -> Result<Profile, ProfileError> {
         if self.loops.is_empty() || self.loops.iter().any(|l| l.segments.is_empty()) {
             return Err(ProfileError::Empty);
         }
@@ -333,7 +567,10 @@ impl Profile {
         if loops.len() > 1 {
             let outer = loops[0].polygon();
             for (i, l) in loops.iter().enumerate().skip(1) {
-                if !l.polygon().iter().all(|&p| inside(p, &outer)) {
+                // the sampled outline cuts its own curves' corners: a point it leaves out is asked
+                // of the exact loop, so only a real stray makes the hole lie outside
+                let out = |p: Point2| !inside(p, &outer) && !loop_holds(&loops[0], p);
+                if l.polygon().into_iter().any(out) && loops_touch(l, &loops[0]).is_none() {
                     return Err(ProfileError::HoleOutside { loop_index: i });
                 }
             }
@@ -475,6 +712,16 @@ mod tests {
             .normalized(),
             Err(ProfileError::HoleOutside { loop_index: 1 })
         );
+        // touching from inside: where, and not as if it lay outside
+        let round = Profile::circle(Point2::ORIGIN, 40.0, 11);
+        let Err(ProfileError::Pinched { loop_index: 1, at }) = (Profile {
+            plane: Frame::WORLD,
+            loops: vec![round, Profile::circle(Point2::new(0.0, -30.0), 10.0, 12)],
+        })
+        .normalized() else {
+            panic!("a hole touching its outline");
+        };
+        assert!(at.distance(Point3::new(0.0, -40.0, 0.0)) < 0.5, "{at:?}");
         let mut open = outer.clone();
         open.segments.pop();
         assert!(matches!(

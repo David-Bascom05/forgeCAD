@@ -221,3 +221,75 @@ shell 2 out (faces plane normal +z top)
 ",
     );
 }
+
+/// Balls whose poles touch on a block's top, a third over the touch or beside it: the pinch where
+/// two circles touch is told apart by how they bend, on both paths (handed over by bugs-5).
+#[test]
+fn balls_touching_at_poles_on_a_top_face() {
+    builds(
+        "extrude new 10 rect 0 0 60 40
+ball cut 4.1 -xz at 33.3 25.3 10
+ball add 4.1 -xz at 33.3 33.5 10
+ball add 5.1 -xz at 30.7 12.4 10
+ball cut 5.1 -xz at 30.7 22.6 10
+",
+    );
+    builds(
+        "extrude new 10 rect 0 0 60 40
+ball cut 4.7742110386764 -xz at 36.529760196271496 12.25756041565283 10
+ball add 4.7742110386764 -xz at 36.529760196271496 21.80598249300563 10
+ball add 3.71 -xz at 32.83 24.37 10
+ball add 3.71 -xz at 32.83 31.8 10
+",
+    );
+}
+
+/// One solid pinched cannot be made: the refusal says where, and the line that made it.
+#[test]
+fn pinches_say_where() {
+    let refused = |src: &str| Model::new(src).error.expect("refused");
+    let e = refused("extrude 5 circle 0 0 40 circle 0 -30 10\n");
+    assert!(
+        e.msg.contains("ZeroThickness") && e.msg.contains("-40") && e.at == 0,
+        "{}",
+        e.msg
+    );
+    let e = refused(
+        "extrude 10 rect 0 0 20 20
+extrude add 10 at 20 0 0 rect 0 20 20 20
+",
+    );
+    assert!(
+        e.msg.contains("ZeroThickness") && e.msg.contains("(20") && e.at == 1,
+        "{}",
+        e.msg
+    );
+}
+
+/// Loops that touch are for the result to answer. A cut by such a profile whose touch lands in
+/// empty space, here beyond the plate, leaves a sound part; a plate whose hole touches its outline
+/// is refused above, and so is a cut leaving the pinch in the part.
+#[test]
+fn a_touching_profile_is_judged_by_its_result() {
+    let pi = forge_math::dmath::PI;
+    // the touch at (0, -30), the plate ends at y = -25
+    let v = builds(
+        "extrude 4 rect -60 -25 120 80
+extrude cut 6 at 0 0 -1 circle 0 0 30 circle 0 -20 10
+",
+    );
+    let lens = pi * 900.0 - pi * 100.0;
+    assert!(
+        v < 120.0 * 80.0 * 4.0 && v > 120.0 * 80.0 * 4.0 - lens * 4.0,
+        "{v}"
+    );
+    assert!(
+        Model::new(
+            "extrude 4 rect -60 -60 120 120
+extrude cut 6 at 0 0 -1 circle 0 0 30 circle 0 -20 10
+"
+        )
+        .error
+        .is_some_and(|e| e.msg.contains("ZeroThickness") && e.at == 1)
+    );
+}

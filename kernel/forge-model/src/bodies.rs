@@ -261,6 +261,7 @@ fn apply(
     }
     if starts(f) {
         let b = ts.into_iter().next().expect("one tool").0;
+        crate::no_pinch(plain, i, &b)?;
         solids.push(Solid { id: i, body: b });
         return Ok(solids);
     }
@@ -268,6 +269,7 @@ fn apply(
         let salt = (n > 0).then(|| plain.id(solids[k].id));
         let body = std::mem::take(&mut solids[k].body);
         solids[k].body = add_tools(body, &ts, (i, plain.id(i)), salt)?;
+        crate::no_pinch(plain, i, &solids[k].body)?;
     }
     Ok(solids)
 }
@@ -876,6 +878,9 @@ fn build_each(plain: History<'_>, start: usize, threads: usize) -> Result<Vec<Ve
 /// The n-ary regen of a multi-body history: each body's tools between features that need it
 /// built (part-changing and body features) go in one n-ary boolean.
 pub(crate) fn nary(features: History<'_>, threads: usize) -> Result<Vec<Solid>, RegenError> {
+    if crate::any_touching(&strip(&features).0) {
+        return sequential(features);
+    }
     match nary_pass(features, threads) {
         Err(e) if crate::names_missing(&e) => {
             crate::count_name_fallback();

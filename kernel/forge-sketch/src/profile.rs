@@ -112,7 +112,7 @@ pub fn profiles(sketch: &Sketch) -> Result<Vec<Profile>, ExtractError> {
             plane: sketch.plane,
             loops: ls,
         };
-        out.push(p.normalized().map_err(ExtractError::Profile)?);
+        out.push(p.normalized_touching().map_err(ExtractError::Profile)?);
     }
     Ok(out)
 }
