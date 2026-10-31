@@ -12,25 +12,28 @@ fn sheet(blend: &Arc<VarBlend>) -> Body {
     let mut b = Body::new();
     let r = blend.range();
     let (s0, s1) = (blend.spring(0), blend.spring(1));
-    // spring 0 runs at v = v_on(0); order the loop so it goes v = 0 spring forward
-    let (low, high) = if blend.v_on(0) == 0.0 { (s0, s1) } else { (s1, s0) };
-    let (c_lo, a_lo) = blend.section_circle(r.lo);
-    let (c_hi, a_hi) = blend.section_circle(r.hi);
+    let (c_lo, a_lo) = blend.section(r.lo);
+    let (c_hi, a_hi) = blend.section(r.hi);
     let v = [
-        b.add_vertex(low.eval(r.lo), Name(1)),
-        b.add_vertex(low.eval(r.hi), Name(2)),
-        b.add_vertex(high.eval(r.hi), Name(3)),
-        b.add_vertex(high.eval(r.lo), Name(4)),
+        b.add_vertex(s0.eval(r.lo), Name(1)),
+        b.add_vertex(s0.eval(r.hi), Name(2)),
+        b.add_vertex(s1.eval(r.hi), Name(3)),
+        b.add_vertex(s1.eval(r.lo), Name(4)),
     ];
     let e = [
-        b.add_edge(low, r, v[0], v[1], Name(5)),
+        b.add_edge(s0, r, v[0], v[1], Name(5)),
         b.add_edge(Curve::Circle(c_hi), Interval::new(0.0, a_hi), v[1], v[2], Name(6)),
-        b.add_edge(high, r, v[3], v[2], Name(7)),
+        b.add_edge(s1, r, v[3], v[2], Name(7)),
         b.add_edge(Curve::Circle(c_lo), Interval::new(0.0, a_lo), v[0], v[3], Name(8)),
     ];
     let sh = b.add_shell();
     let f = b.add_face(sh, blend.surface(), true, Name(9));
-    b.add_loop(f, &[(e[0], true), (e[1], true), (e[2], false), (e[3], false)]);
+    let mut uses = vec![(e[0], true), (e[1], true), (e[2], false), (e[3], false)];
+    // counter-clockwise in (u, v) only when the contact with a is at v = 0
+    if blend.v_on(0) != 0.0 {
+        uses = uses.into_iter().rev().map(|(e, f)| (e, !f)).collect();
+    }
+    b.add_loop(f, &uses);
     b
 }
 

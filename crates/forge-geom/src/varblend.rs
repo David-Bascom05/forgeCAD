@@ -323,12 +323,8 @@ fn dist_grad<const N: usize>(s: &Surface, x: Vn<N>, want_grad: bool) -> (Jn<N>, 
     }
 }
 
-/// Solves the rows `a`, `b`, `c` times x = r; None when the rows are nearly dependent.
-fn solve3(a: Vec3, b: Vec3, c: Vec3, r: [f64; 3]) -> Option<Vec3> {
-    Some(Rows3::new(a, b, c)?.solve(r))
-}
-
-/// Three rows factored once for several right-hand sides (Cramer, by cross products).
+/// Three rows `a`, `b`, `c` of a 3x3 system, factored once for several right-hand sides
+/// (Cramer, by cross products); None when they are nearly dependent.
 struct Rows3 {
     bc: Vec3,
     ca: Vec3,
@@ -355,17 +351,39 @@ impl Rows3 {
     }
 }
 
-/// A C2 piecewise cubic through (x, y) points: natural ends, or the given end slopes.
-/// Past the end knots the end segments carry on.
+/// How the radius varies along the edge: a function of the guide parameter s. It is design
+/// data (which ball sits where), so a C2 piecewise cubic is a fine way to state it. Past its
+/// first and last control points the end pieces carry on.
 #[derive(Clone, Debug, PartialEq)]
-struct Pieces {
+pub struct RadiusLaw {
     knots: Vec<f64>,
-    /// Per segment: y = a + b h + c h^2 + d h^3, h measured from the segment's first knot.
+    /// Per segment: r = a + b h + c h^2 + d h^3, h measured from the segment's first knot.
     coef: Vec<[f64; 4]>,
 }
 
-impl Pieces {
-    fn fit(x: &[f64], y: &[f64], ends: Option<(f64, f64)>) -> Pieces {
+impl RadiusLaw {
+    pub fn constant(r: f64) -> RadiusLaw {
+        RadiusLaw::linear(0.0, r, 1.0, r)
+    }
+    /// r0 at s0 to r1 at s1, linear in s.
+    pub fn linear(s0: f64, r0: f64, s1: f64, r1: f64) -> RadiusLaw {
+        RadiusLaw::fit(&[s0, s1], &[r0, r1], None)
+    }
+    /// The C2 cubic spline through (s, r) control points (s increasing): natural ends (r'' = 0)
+    /// unless end slopes dr/ds are given. Two points with natural ends give the linear law.
+    pub fn smooth(points: &[(f64, f64)], end_slopes: Option<(f64, f64)>) -> Option<RadiusLaw> {
+        if points.len() < 2
+            || points
+                .windows(2)
+                .any(|w| w[1].0.partial_cmp(&w[0].0) != Some(std::cmp::Ordering::Greater))
+        {
+            return None;
+        }
+        let (x, y): (Vec<f64>, Vec<f64>) = points.iter().copied().unzip();
+        Some(RadiusLaw::fit(&x, &y, end_slopes))
+    }
+
+    fn fit(x: &[f64], y: &[f64], ends: Option<(f64, f64)>) -> RadiusLaw {
         let n = x.len() - 1;
         let h: Vec<f64> = (0..n).map(|i| x[i + 1] - x[i]).collect();
         let slope: Vec<f64> = (0..n).map(|i| (y[i + 1] - y[i]) / h[i]).collect();
@@ -410,23 +428,16 @@ impl Pieces {
                 ]
             })
             .collect();
-        Pieces {
+        RadiusLaw {
             knots: x.to_vec(),
             coef,
         }
     }
 
-    /// Segment index and offset from its first knot (negative before the start, past its
-    /// width after the end).
-    fn seg(&self, s: f64) -> (usize, f64) {
-        let n = self.coef.len();
-        let i = self.knots.partition_point(|&k| k <= s).clamp(1, n) - 1;
-        (i, s - self.knots[i])
-    }
-
-    /// Taylor coefficients at s.
-    fn jet(&self, s: f64) -> [f64; 4] {
-        let (i, h) = self.seg(s);
+    /// Taylor coefficients at s (past the ends, of the end pieces).
+    fn coefs(&self, s: f64) -> [f64; 4] {
+        let i = self.knots.partition_point(|&k| k <= s).clamp(1, self.coef.len()) - 1;
+        let h = s - self.knots[i];
         let [a, b, c, d] = self.coef[i];
         [
             a + h * (b + h * (c + h * d)),
@@ -436,12 +447,12 @@ impl Pieces {
         ]
     }
 
-    /// Smallest and largest value over [a, b].
-    fn bounds(&self, a: f64, b: f64) -> (f64, f64) {
+    /// Smallest and largest radius over [a, b].
+    pub fn bounds(&self, a: f64, b: f64) -> (f64, f64) {
         let mut lo = f64::INFINITY;
         let mut hi = f64::NEG_INFINITY;
         let mut take = |s: f64| {
-            let v = self.jet(s)[0];
+            let v = self.eval(s);
             lo = lo.min(v);
             hi = hi.max(v);
         };
@@ -484,54 +495,16 @@ impl Pieces {
         }
         (lo, hi)
     }
-}
 
-/// How the radius varies along the edge: a function of the guide parameter s. It is design
-/// data (which ball sits where), so a cubic spline is a fine way to state it. Past its first and
-/// last control points the end pieces carry on.
-#[derive(Clone, Debug, PartialEq)]
-pub struct RadiusLaw {
-    p: Pieces,
-}
-
-impl RadiusLaw {
-    pub fn constant(r: f64) -> RadiusLaw {
-        RadiusLaw::linear(0.0, r, 1.0, r)
-    }
-    /// r0 at s0 to r1 at s1, linear in s.
-    pub fn linear(s0: f64, r0: f64, s1: f64, r1: f64) -> RadiusLaw {
-        RadiusLaw {
-            p: Pieces::fit(&[s0, s1], &[r0, r1], None),
-        }
-    }
-    /// The C2 cubic spline through (s, r) control points (s increasing): natural ends (r'' = 0)
-    /// unless end slopes dr/ds are given. Two points with natural ends give the linear law.
-    pub fn smooth(points: &[(f64, f64)], end_slopes: Option<(f64, f64)>) -> Option<RadiusLaw> {
-        if points.len() < 2
-            || points
-                .windows(2)
-                .any(|w| w[1].0.partial_cmp(&w[0].0) != Some(std::cmp::Ordering::Greater))
-        {
-            return None;
-        }
-        let (x, y): (Vec<f64>, Vec<f64>) = points.iter().copied().unzip();
-        Some(RadiusLaw {
-            p: Pieces::fit(&x, &y, end_slopes),
-        })
-    }
     pub fn eval(&self, s: f64) -> f64 {
-        self.p.jet(s)[0]
+        self.coefs(s)[0]
     }
     /// dr/ds.
     pub fn slope(&self, s: f64) -> f64 {
-        self.p.jet(s)[1]
+        self.coefs(s)[1]
     }
     fn jet(&self, s: f64) -> J {
-        Jn(self.p.jet(s))
-    }
-    /// Smallest and largest radius over [a, b].
-    pub fn bounds(&self, a: f64, b: f64) -> (f64, f64) {
-        self.p.bounds(a, b)
+        Jn(self.coefs(s))
     }
 }
 
@@ -597,7 +570,10 @@ fn edge_taylor(c: &crate::Curve, t: f64) -> Option<[Vec3; 5]> {
                 // unit speed: coefficient k-1 of e'.e' vanishes; e_k enters it as 2 k tan.e_k
                 let ep = e.d();
                 let w = ep.dot(ep).0[k - 1];
-                e.set(k, solve3(na, nb, tan, [-fa, -fb, -w / (2.0 * k as f64)])?);
+                e.set(
+                    k,
+                    Rows3::new(na, nb, tan)?.solve([-fa, -fb, -w / (2.0 * k as f64)]),
+                );
             }
             Some(e.coefs())
         }
@@ -710,22 +686,71 @@ fn invert5(m: [[f64; 5]; 5]) -> Option<[[f64; 5]; 5]> {
 }
 
 impl Guide {
-    /// The Hermite guide through a chain of edges (lines, circles, intersection curves), each
-    /// split into `per_edge` equal steps of its own parameter. Knots take each edge's exact
-    /// point and arc-length derivatives; where two edges meet, the tangents must agree (a
-    /// tangent chain) and the higher derivatives are averaged. Deterministic: knots depend only
-    /// on the edges and their ranges. Returns the guide and each edge's s range.
+    /// The guide along a chain of edges (lines, circles, intersection curves), each walked
+    /// forward (t increasing) or not, carried on for `reach` (a length) past both ends so a
+    /// blend can run out past its vertices. Returns the guide, each edge's s range and the
+    /// whole s range with the run-outs.
+    ///
+    /// A lone line or circle is its own guide, s its parameter. Otherwise the Hermite through
+    /// the chain, each edge split into `per_edge` equal steps of its own parameter: knots take
+    /// each edge's exact point and arc-length derivatives; where two edges meet the tangents
+    /// must agree (a tangent chain) and the higher derivatives are averaged. Deterministic:
+    /// knots depend only on the edges and their ranges.
     pub fn through_edges(
-        edges: &[(crate::Curve, Interval)],
+        edges: &[(crate::Curve, Interval, bool)],
         per_edge: usize,
-    ) -> Option<(Guide, Vec<Interval>)> {
+        reach: f64,
+    ) -> Option<(Guide, Vec<Interval>, Interval)> {
+        match edges {
+            [(crate::Curve::Line(l), r, _)] => {
+                return Some((Guide::Line(*l), vec![*r], r.grow(reach)));
+            }
+            [(crate::Curve::Circle(c), r, _)] => {
+                return Some((Guide::Circle(*c), vec![*r], r.grow(reach / c.radius)));
+            }
+            _ => {}
+        }
+        // the run-outs: each end edge carried on by `reach` along its own curve
+        let run_out = |(c, r, fwd): &(crate::Curve, Interval, bool), at_end: bool| {
+            let t = if at_end == *fwd { r.hi } else { r.lo };
+            let dt = reach / c.deriv(t).d1.length();
+            let d = c.domain();
+            let far = if at_end == *fwd {
+                (t + dt).min(d.hi)
+            } else {
+                (t - dt).max(d.lo)
+            };
+            let piece = (c.clone(), Interval::new(t.min(far), t.max(far)), *fwd);
+            (c.eval(far).distance(c.eval(t)) > tol::LINEAR * per_edge as f64).then_some(piece)
+        };
+        let head = run_out(edges.first()?, false);
+        let tail = run_out(edges.last()?, true);
+        let first = usize::from(head.is_some());
+        let chain: Vec<_> = head
+            .into_iter()
+            .chain(edges.iter().cloned())
+            .chain(tail)
+            .collect();
         let per = per_edge.max(1);
         let mut data: Vec<[Vec3; 5]> = Vec::new();
         let mut ends = Vec::new();
-        for (c, r) in edges {
-            let first = data.len().saturating_sub(1);
+        for (c, r, fwd) in &chain {
+            let start = data.len().saturating_sub(1);
             for k in 0..=per {
-                let e = edge_taylor(c, r.lo + r.width() * k as f64 / per as f64)?;
+                let f = k as f64 / per as f64;
+                let mut e = edge_taylor(
+                    c,
+                    if *fwd {
+                        r.lo + r.width() * f
+                    } else {
+                        r.hi - r.width() * f
+                    },
+                )?;
+                if !fwd {
+                    // walking back: odd arc-length derivatives change sign
+                    e[1] = -e[1];
+                    e[3] = -e[3];
+                }
                 match data.last_mut() {
                     Some(last) if k == 0 => {
                         if (last[0] - e[0]).length() > tol::LINEAR || last[1].dot(e[1]) < 1.0 - 1e-9 {
@@ -738,14 +763,13 @@ impl Guide {
                     _ => data.push(e),
                 }
             }
-            ends.push((first, data.len() - 1));
+            ends.push(Interval::new(start as f64, (data.len() - 1) as f64));
         }
         let h = Hermite::new(&data)?;
-        let ranges = ends
-            .iter()
-            .map(|&(a, b)| Interval::new(h.knots[a], h.knots[b]))
-            .collect();
-        Some((Guide::Hermite(Arc::new(h)), ranges))
+        let s = |i: Interval| Interval::new(h.knots[i.lo as usize], h.knots[i.hi as usize]);
+        let whole = Interval::new(s(ends[0]).lo, s(ends[ends.len() - 1]).hi);
+        let ranges = ends[first..first + edges.len()].iter().map(|&i| s(i)).collect();
+        Some((Guide::Hermite(Arc::new(h)), ranges, whole))
     }
 
     /// Point and derivative at s.
@@ -872,6 +896,45 @@ struct Section {
     q: [V; 2],
 }
 
+/// A cross-section's arc: k + rho (cos t e1 + sin t e2), t = v phi for v in [0, 1].
+#[derive(Clone, Copy, Debug, PartialEq)]
+struct SecArc {
+    k: Point3,
+    rho: f64,
+    e1: Vec3,
+    e2: Vec3,
+    phi: f64,
+}
+
+impl SecArc {
+    fn point(&self, v: f64) -> Point3 {
+        let (sn, cs) = dmath::sin_cos(v * self.phi);
+        self.k + (self.e1 * cs + self.e2 * sn) * self.rho
+    }
+
+    /// v of the point of the circle nearest p (unclamped).
+    fn v_of(&self, p: Point3) -> f64 {
+        let d = p - self.k;
+        dmath::atan2(d.dot(self.e2), d.dot(self.e1)) / self.phi
+    }
+
+    /// Box of the arc over v in [v0, v1].
+    fn bbox(&self, v0: f64, v1: f64) -> Box3 {
+        let (t0, t1) = (v0 * self.phi, v1 * self.phi);
+        let mut b = Box3::from_points([self.point(v0), self.point(v1)]);
+        for ax in 0..3 {
+            let t = dmath::atan2(self.e2[ax], self.e1[ax]);
+            // extremes of cos(t - t*) sit at t* + m pi
+            let mut m = ((t0 - t) / dmath::PI).ceil();
+            while t + m * dmath::PI <= t1 {
+                b.include(self.point((t + m * dmath::PI) / self.phi));
+                m += 1.0;
+            }
+        }
+        b
+    }
+}
+
 /// A solved cross-section, cached to seed solves and bound searches.
 #[derive(Clone, Copy, Debug, PartialEq)]
 struct Row {
@@ -879,11 +942,7 @@ struct Row {
     /// Taylor coefficients of the centre (the first as a vector from the origin).
     c: [Vec3; 4],
     r: f64,
-    k: Point3,
-    rho: f64,
-    e1: Vec3,
-    e2: Vec3,
-    phi: f64,
+    arc: SecArc,
     /// Points at v = 0, 1/2, 1.
     pts: [Point3; 3],
     /// Largest |B_u| and |B_v| seen over v, and the largest principal curvature.
@@ -895,15 +954,37 @@ struct Row {
     q2: [f64; 2],
 }
 
+impl Section {
+    fn arc(&self) -> SecArc {
+        SecArc {
+            k: Point3::ORIGIN + self.k.at(0),
+            rho: self.rho.0[0],
+            e1: self.e1.at(0),
+            e2: self.e2.at(0),
+            phi: self.phi.0[0],
+        }
+    }
+}
+
+impl Row {
+    /// The point of track k (see `Seg`).
+    fn on(&self, k: usize) -> Point3 {
+        if k == 2 {
+            Point3::ORIGIN + self.c[0]
+        } else {
+            self.pts[2 * k]
+        }
+    }
+}
+
 /// Bounds over the stretch between two rows.
 #[derive(Clone, Copy, Debug, PartialEq)]
 struct Seg {
-    /// Bounds on |c'|, |c''|, |B_u|, |q'| and |q''|.
-    vc: f64,
-    ac: f64,
+    /// Bounds on |B_u|, and on the speed and acceleration of each track (the contacts at
+    /// v = 0 and 1, then the centre).
     vb: f64,
-    vq: [f64; 2],
-    aq: [f64; 2],
+    vq: [f64; 3],
+    aq: [f64; 3],
     rmin: f64,
     rmax: f64,
 }
@@ -976,32 +1057,39 @@ impl VarBlend {
 
     /// The spring curve where the blend touches surface `i` (0 for a, 1 for b); its parameter is s.
     pub fn spring(self: &Arc<Self>, i: usize) -> crate::Curve {
-        crate::Curve::Procedural(ProcCurve(Arc::new(self.spring_curve(i))))
+        self.track(self.v_on(i) as usize)
     }
 
-    /// The spring curve on surface `i` as its concrete type.
-    pub fn spring_curve(self: &Arc<Self>, i: usize) -> Spring {
-        Spring {
+    /// The ball centre's path; its parameter is s.
+    pub fn spine(self: &Arc<Self>) -> crate::Curve {
+        self.track(2)
+    }
+
+    fn track(self: &Arc<Self>, k: usize) -> crate::Curve {
+        crate::Curve::Procedural(ProcCurve(Arc::new(Track {
             blend: self.clone(),
-            v: self.v_on(i) as usize,
-        }
+            k,
+        })))
     }
 
-    /// The characteristic circle at s (exact) and the arc's angle: the blend's cross-section
-    /// runs from angle 0 (v = 0) to that angle (v = 1).
-    pub fn section_circle(&self, s: f64) -> (Circle, f64) {
-        let sec = self.section_at(s);
-        let (e1, e2) = (sec.e1.at(0), sec.e2.at(0));
+    /// The cross-section at s: its characteristic circle (exact), x towards the contact with a,
+    /// and the angle at which it reaches the contact with b.
+    pub fn section(&self, s: f64) -> (Circle, f64) {
+        let SecArc {
+            k,
+            rho,
+            mut e1,
+            mut e2,
+            phi,
+        } = self.section_at(s).arc();
+        if self.swap {
+            // the arc from b to a, walked back
+            let (sn, cs) = dmath::sin_cos(phi);
+            (e1, e2) = (e1 * cs + e2 * sn, e1 * sn - e2 * cs);
+        }
         let z = e1.cross(e2).normalize().unwrap_or(UnitVec3::Z);
-        let frame = Frame::from_zx(Point3::ORIGIN + sec.k.at(0), z, e1)
-            .unwrap_or_else(|| Frame::from_z(Point3::ORIGIN + sec.k.at(0), z));
-        (
-            Circle {
-                frame,
-                radius: sec.rho.0[0],
-            },
-            sec.phi.0[0],
-        )
+        let frame = Frame::from_zx(k, z, e1).unwrap_or_else(|| Frame::from_z(k, z));
+        (Circle { frame, radius: rho }, phi)
     }
 
     pub fn range(&self) -> Interval {
@@ -1010,6 +1098,11 @@ impl VarBlend {
 
     pub fn radius(&self, s: f64) -> f64 {
         self.law.eval(s)
+    }
+
+    /// Smallest and largest radius over the range.
+    pub fn radii(&self) -> (f64, f64) {
+        self.law.bounds(self.lo, self.hi)
     }
 
     /// The ball centre at s.
@@ -1035,7 +1128,7 @@ impl VarBlend {
         let mut c = seed;
         let mut f = res(c);
         for _ in 0..40 {
-            let dx = solve3(self.a.gradient(c), self.b.gradient(c), t, [-f[0], -f[1], -f[2]])?;
+            let dx = Rows3::new(self.a.gradient(c), self.b.gradient(c), t)?.solve([-f[0], -f[1], -f[2]]);
             // backtracking keeps every step a decrease, so the iteration cannot run away
             let mut lam = 1.0;
             let (mut cn, mut fnew) = (c + dx, res(c + dx));
@@ -1056,7 +1149,7 @@ impl VarBlend {
     }
 
     /// The centre's Taylor coefficients at s from the centre c0, solved order by order.
-    fn spine(&self, s: f64, c0: Point3) -> Option<(V, J)> {
+    fn centre_jets(&self, s: f64, c0: Point3) -> Option<(V, J)> {
         let r = self.law.jet(s);
         let (g, gp) = self.guide.jets(s);
         let rows = Rows3::new(self.a.gradient(c0), self.b.gradient(c0), gp.at(0))?;
@@ -1070,7 +1163,7 @@ impl VarBlend {
         Some((c, r))
     }
 
-    fn section(&self, c: V, r: J) -> Section {
+    fn section_of(&self, c: V, r: J) -> Section {
         let cp = c.d();
         let rp = r.d();
         let g = cp.dot(cp).recip();
@@ -1144,7 +1237,7 @@ impl VarBlend {
         let i = self.nearest_row(s);
         let seed = Point3::ORIGIN + self.model(i, s)[0];
         if let Some(c) = self.solve_centre(s, self.law.eval(s), seed)
-            && let Some(j) = self.spine(s, c)
+            && let Some(j) = self.centre_jets(s, c)
         {
             return j;
         }
@@ -1157,14 +1250,17 @@ impl VarBlend {
                 None => return (V::from(self.model(i, s)), self.law.jet(s)),
             }
         }
-        self.spine(s, c)
+        self.centre_jets(s, c)
             .unwrap_or_else(|| (V::from(self.model(i, s)), self.law.jet(s)))
     }
 
-    /// Jets of the contact at v (0 or 1) at s: only the contact, not the whole section.
-    fn contact_at(&self, s: f64, v: usize) -> V {
+    /// Jets of track k at s: the contact at v = k (0 or 1), or the centre (2).
+    fn track_at(&self, s: f64, k: usize) -> V {
         let (c, r) = self.spine_at(s);
-        let (surf, side) = if (v == 1) != self.swap {
+        if k == 2 {
+            return c;
+        }
+        let (surf, side) = if (k == 1) != self.swap {
             (&self.b, self.side[1])
         } else {
             (&self.a, self.side[0])
@@ -1174,7 +1270,7 @@ impl VarBlend {
 
     fn section_at(&self, s: f64) -> Section {
         let (c, r) = self.spine_at(s);
-        self.section(c, r)
+        self.section_of(c, r)
     }
 
     fn check(sec: &Section, s: f64) -> Result<(), VarBlendError> {
@@ -1206,8 +1302,8 @@ impl VarBlend {
     }
 
     fn make_row(&self, s: f64, c: Point3) -> Result<Row, VarBlendError> {
-        let (cj, rj) = self.spine(s, c).ok_or(VarBlendError::Tangent { s })?;
-        let sec = self.section(cj, rj);
+        let (cj, rj) = self.centre_jets(s, c).ok_or(VarBlendError::Tangent { s })?;
+        let sec = self.section_of(cj, rj);
         Self::check(&sec, s)?;
         let mut pts = [Point3::ORIGIN; 3];
         let (mut bu, mut bv, mut kmax) = (0.0f64, 0.0f64, 0.0f64);
@@ -1226,11 +1322,7 @@ impl VarBlend {
             s,
             c: cj.coefs(),
             r: rj.0[0],
-            k: Point3::ORIGIN + sec.k.at(0),
-            rho: sec.rho.0[0],
-            e1: sec.e1.at(0),
-            e2: sec.e2.at(0),
-            phi: sec.phi.0[0],
+            arc: sec.arc(),
             pts,
             bu,
             bv,
@@ -1251,8 +1343,8 @@ impl VarBlend {
             c = self.solve_centre(lo, r * lam, c).ok_or(VarBlendError::NoStart)?;
         }
         // orient: du x dv out of the ball
-        let (cj, rj) = self.spine(lo, c).ok_or(VarBlendError::Tangent { s: lo })?;
-        let sec = self.section(cj, rj);
+        let (cj, rj) = self.centre_jets(lo, c).ok_or(VarBlendError::Tangent { s: lo })?;
+        let sec = self.section_of(cj, rj);
         Self::check(&sec, lo)?;
         let d = Self::point(&sec, 0.5);
         if d.du.cross(d.dv).dot(d.p - (Point3::ORIGIN + cj.at(0))) < 0.0 {
@@ -1261,7 +1353,7 @@ impl VarBlend {
         self.rows.push(self.make_row(lo, c)?);
         let span = self.hi - self.lo;
         // rows only seed solves and bound searches; a ten-thousandth of the smallest radius
-        self.predict = (1e-4 * self.law.bounds(self.lo, self.hi).0).max(tol::LINEAR * 0.1);
+        self.predict = (1e-4 * self.radii().0).max(tol::LINEAR * 0.1);
         let mut h = span / 8.0;
         while self.rows.last().is_some_and(|r| r.s < self.hi) {
             let last = *self.rows.last().expect("rows start non-empty");
@@ -1287,9 +1379,9 @@ impl VarBlend {
             let mid = 0.5 * (last.s + s);
             let mc = self.solve_centre(mid, self.law.eval(mid), Point3::ORIGIN + self.model(i, mid)[0]);
             let (cj, rj) = mc
-                .and_then(|c| self.spine(mid, c))
+                .and_then(|c| self.centre_jets(mid, c))
                 .ok_or(VarBlendError::Tangent { s: mid })?;
-            Self::check(&self.section(cj, rj), mid)?;
+            Self::check(&self.section_of(cj, rj), mid)?;
             self.rows.push(row);
             if err < self.predict / 16.0 {
                 h = (h * 1.5).min(span / 4.0);
@@ -1310,11 +1402,17 @@ impl VarBlend {
                     .max(self.model(i + 1, mid)[2].length() * 2.0);
                 let (rmin, rmax) = self.law.bounds(r0.s, r1.s);
                 Seg {
-                    vc: 1.25 * vc,
-                    ac: 1.5 * ac,
                     vb: 1.5 * r0.bu.max(r1.bu),
-                    vq: [1.5 * r0.q1[0].max(r1.q1[0]), 1.5 * r0.q1[1].max(r1.q1[1])],
-                    aq: [1.5 * r0.q2[0].max(r1.q2[0]), 1.5 * r0.q2[1].max(r1.q2[1])],
+                    vq: [
+                        1.5 * r0.q1[0].max(r1.q1[0]),
+                        1.5 * r0.q1[1].max(r1.q1[1]),
+                        1.25 * vc,
+                    ],
+                    aq: [
+                        1.5 * r0.q2[0].max(r1.q2[0]),
+                        1.5 * r0.q2[1].max(r1.q2[1]),
+                        1.5 * ac,
+                    ],
                     rmin,
                     rmax,
                 }
@@ -1339,7 +1437,7 @@ impl VarBlend {
         let (s0, s1) = (self.rows[i].s, self.rows[i + 1].s);
         let tube = |s: f64| {
             let j = if s - s0 <= s1 - s { i } else { i + 1 };
-            Self::tube(p, &self.model(j, s), &self.law.p.jet(s))
+            Self::tube(p, &self.model(j, s), &self.law.coefs(s))
         };
         const N: usize = 4;
         let xs: [f64; N + 1] = std::array::from_fn(|k| s0 + (s1 - s0) * k as f64 / N as f64);
@@ -1429,7 +1527,7 @@ impl VarBlend {
         let (a, b) = (Point3::ORIGIN + r0.c[0], Point3::ORIGIN + r1.c[0]);
         // the centre strays from its chord by at most |c''| h^2 / 8
         let h = r1.s - r0.s;
-        let sag = self.segs[i].ac * h * h * 0.125;
+        let sag = self.segs[i].aq[2] * h * h * 0.125;
         (chord_dist(p, a, b) - sag, p.distance(a).max(p.distance(b)) + sag)
     }
 
@@ -1466,26 +1564,20 @@ impl VarBlend {
         best
     }
 
-    /// v of the point of the section's circle nearest p (unclamped).
-    fn circle_v(sec_k: Point3, e1: Vec3, e2: Vec3, phi: f64, p: Point3) -> f64 {
-        let d = p - sec_k;
-        dmath::atan2(d.dot(e2), d.dot(e1)) / phi
-    }
-
-    /// Parameter of the nearest point on the v = `v` spring over `range`, and its distance;
-    /// None when nothing there is nearer than `bound`.
-    fn spring_closest(&self, v: usize, p: Point3, range: Interval, bound: f64) -> Option<(f64, f64)> {
+    /// Parameter of the nearest point on track k over `range`, and its distance; None when
+    /// nothing there is nearer than `bound`.
+    fn track_closest(&self, k: usize, p: Point3, range: Interval, bound: f64) -> Option<(f64, f64)> {
         let (lo, hi) = (
             range.lo.max(self.lo),
             range.hi.min(self.hi).max(range.lo.max(self.lo)),
         );
-        let q = |s: f64| self.contact_at(s, v);
+        let q = |s: f64| self.track_at(s, k);
         let mut best = (bound, f64::NAN);
         for s in [lo, hi] {
             // the range ends are usually rows already
             let i = self.nearest_row(s);
             let at = if self.rows[i].s == s {
-                self.rows[i].pts[2 * v]
+                self.rows[i].on(k)
             } else {
                 Point3::ORIGIN + q(s).at(0)
             };
@@ -1495,7 +1587,7 @@ impl VarBlend {
             }
         }
         for r in &self.rows {
-            let d = p.distance(r.pts[2 * v]);
+            let d = p.distance(r.on(k));
             if r.s >= lo && r.s <= hi && d < best.0 {
                 best = (d, r.s);
             }
@@ -1506,8 +1598,8 @@ impl VarBlend {
                 continue;
             }
             let h = self.rows[i + 1].s - self.rows[i].s;
-            let lb = chord_dist(p, self.rows[i].pts[2 * v], self.rows[i + 1].pts[2 * v])
-                - self.segs[i].aq[v] * h * h * 0.125;
+            let lb = chord_dist(p, self.rows[i].on(k), self.rows[i + 1].on(k))
+                - self.segs[i].aq[k] * h * h * 0.125;
             if lb >= best.0 {
                 continue;
             }
@@ -1579,14 +1671,7 @@ impl VarBlend {
                 break;
             }
             let (s, c, r) = self.polish(p, s);
-            let sec = self.section(c, r);
-            let v = Self::circle_v(
-                Point3::ORIGIN + sec.k.at(0),
-                sec.e1.at(0),
-                sec.e2.at(0),
-                sec.phi.0[0],
-                p,
-            );
+            let v = self.section_of(c, r).arc().v_of(p);
             let d = (p.distance(Point3::ORIGIN + c.at(0)) - r.0[0]).abs();
             if (0.0..=1.0).contains(&v) && d < best.0 {
                 take(d, s, v, &mut best);
@@ -1595,10 +1680,9 @@ impl VarBlend {
         }
         // the end arcs
         for r in [&self.rows[0], self.rows.last().expect("rows are non-empty")] {
-            let v = Self::circle_v(r.k, r.e1, r.e2, r.phi, p);
+            let v = r.arc.v_of(p);
             if (0.0..=1.0).contains(&v) {
-                let (sn, cs) = dmath::sin_cos(v * r.phi);
-                let d = p.distance(r.k + (r.e1 * cs + r.e2 * sn) * r.rho);
+                let d = p.distance(r.arc.point(v));
                 if d < best.0 {
                     take(d, r.s, v, &mut best);
                     exact = true;
@@ -1607,7 +1691,7 @@ impl VarBlend {
         }
         // the springs
         for v in 0..2 {
-            if let Some((s, d)) = self.spring_closest(v, p, Interval::new(self.lo, self.hi), best.0) {
+            if let Some((s, d)) = self.track_closest(v, p, Interval::new(self.lo, self.hi), best.0) {
                 take(d, s, v as f64, &mut best);
                 exact = true;
             }
@@ -1654,9 +1738,12 @@ impl VarBlend {
                     vw(r.c[2]),
                     vw(r.c[3]),
                 ],
-                k: pw(r.k),
-                e1: vw(r.e1),
-                e2: vw(r.e2),
+                arc: SecArc {
+                    k: pw(r.arc.k),
+                    e1: vw(r.arc.e1),
+                    e2: vw(r.arc.e2),
+                    ..r.arc
+                },
                 pts: r.pts.map(pw),
                 ..*r
             })
@@ -1670,30 +1757,18 @@ impl VarBlend {
         }
     }
 
-    /// Rows bounding [s0, s1]: exact sections at the ends, cached rows between.
-    fn rows_over(&self, s0: f64, s1: f64) -> Vec<(f64, Point3, f64, Vec3, Vec3, f64, usize)> {
+    /// Arcs bounding [s0, s1], each with its s and segment: exact sections at the ends, cached
+    /// rows between.
+    fn arcs_over(&self, s0: f64, s1: f64) -> Vec<(f64, SecArc, usize)> {
+        let last = self.segs.len() - 1;
         let at = |s: f64| {
-            let sec = self.section_at(s);
-            let i = self
-                .segs
-                .len()
-                .min(self.rows.partition_point(|r| r.s <= s))
-                .max(1)
-                - 1;
-            (
-                s,
-                Point3::ORIGIN + sec.k.at(0),
-                sec.rho.0[0],
-                sec.e1.at(0),
-                sec.e2.at(0),
-                sec.phi.0[0],
-                i,
-            )
+            let i = self.rows.partition_point(|r| r.s <= s).clamp(1, last + 1) - 1;
+            (s, self.section_at(s).arc(), i)
         };
         let mut out = vec![at(s0)];
         for (i, r) in self.rows.iter().enumerate() {
             if r.s > s0 && r.s < s1 {
-                out.push((r.s, r.k, r.rho, r.e1, r.e2, r.phi, i.min(self.segs.len() - 1)));
+                out.push((r.s, r.arc, i.min(last)));
             }
         }
         if s1 > s0 {
@@ -1731,27 +1806,6 @@ fn principal_max(d: &SurfDeriv) -> f64 {
     h.abs() + (h * h - k).max(0.0).sqrt()
 }
 
-/// Box of the arc k + rho (cos t e1 + sin t e2), t in [t0, t1].
-fn arc_box(k: Point3, rho: f64, e1: Vec3, e2: Vec3, t0: f64, t1: f64) -> Box3 {
-    let mut b = Box3::EMPTY;
-    let p = |t: f64| {
-        let (s, c) = dmath::sin_cos(t);
-        k + (e1 * c + e2 * s) * rho
-    };
-    b.include(p(t0));
-    b.include(p(t1));
-    for ax in 0..3 {
-        let t = dmath::atan2(e2[ax], e1[ax]);
-        // extremes of cos(t - t*) sit at t* + m pi
-        let mut m = ((t0 - t) / dmath::PI).ceil();
-        while t + m * dmath::PI <= t1 {
-            b.include(p(t + m * dmath::PI));
-            m += 1.0;
-        }
-    }
-    b
-}
-
 impl Procedural for VarBlend {
     fn deriv(&self, uv: Point2) -> SurfDeriv {
         VarBlend::point(&self.section_at(uv.x), uv.y)
@@ -1780,18 +1834,16 @@ impl Procedural for VarBlend {
             uv.v.lo.clamp(0.0, 1.0),
             uv.v.hi.clamp(0.0, 1.0).max(uv.v.lo.clamp(0.0, 1.0)),
         );
-        let rows = self.rows_over(s0, s1);
-        let arc =
-            |r: &(f64, Point3, f64, Vec3, Vec3, f64, usize)| arc_box(r.1, r.2, r.3, r.4, r.5 * v0, r.5 * v1);
-        let mut b = arc(&rows[0]);
-        for w in rows.windows(2) {
+        let arcs = self.arcs_over(s0, s1);
+        let mut b = arcs[0].1.bbox(v0, v1);
+        for w in arcs.windows(2) {
             // a point between two rows is within half the gap times |B_u| of one of them
-            let grow = self.segs[w[0].6.max(w[1].6.saturating_sub(1))]
+            let grow = self.segs[w[0].2.max(w[1].2.saturating_sub(1))]
                 .vb
-                .max(self.segs[w[0].6].vb)
+                .max(self.segs[w[0].2].vb)
                 * (w[1].0 - w[0].0)
                 * 0.5;
-            b = b.hull(&arc(&w[0]).hull(&arc(&w[1])).grow(grow));
+            b = b.hull(&w[0].1.bbox(v0, v1).hull(&w[1].1.bbox(v0, v1)).grow(grow));
         }
         b.grow(tol::LINEAR)
     }
@@ -1812,20 +1864,20 @@ impl Procedural for VarBlend {
     }
     fn min_radius(&self) -> f64 {
         let k = self.rows.iter().map(|r| r.kmax).fold(0.0, f64::max);
-        let rmin = self.law.bounds(self.lo, self.hi).0;
+        let rmin = self.radii().0;
         0.8 * rmin.min(if k > 0.0 { 1.0 / k } else { f64::INFINITY })
     }
 }
 
-/// Where a variable blend touches one of its surfaces: the contact point of the ball at s.
+/// A curve the ball carries along s: a spring curve where it touches a surface, or its centre.
 #[derive(Debug)]
-pub struct Spring {
+struct Track {
     blend: Arc<VarBlend>,
-    /// 0: the v = 0 edge, 1: the v = 1 edge.
-    v: usize,
+    /// 0: the v = 0 edge, 1: the v = 1 edge, 2: the centre.
+    k: usize,
 }
 
-impl Spring {
+impl Track {
     fn segs_over(&self, range: Interval) -> impl Iterator<Item = (usize, f64)> + '_ {
         let rows = &self.blend.rows;
         (0..self.blend.segs.len()).filter_map(move |i| {
@@ -1835,9 +1887,9 @@ impl Spring {
     }
 }
 
-impl ProceduralCurve for Spring {
+impl ProceduralCurve for Track {
     fn deriv(&self, t: f64) -> CurveDeriv {
-        let q = self.blend.section_at(t).q[self.v];
+        let q = self.blend.track_at(t, self.k);
         CurveDeriv {
             p: Point3::ORIGIN + q.at(0),
             d1: q.at(1),
@@ -1853,20 +1905,20 @@ impl ProceduralCurve for Spring {
     }
     fn closest(&self, p: Point3, range: Interval) -> f64 {
         let b = &self.blend;
-        b.spring_closest(self.v, p, range, f64::INFINITY)
+        b.track_closest(self.k, p, range, f64::INFINITY)
             .map_or(range.lo.clamp(b.lo, b.hi), |r| r.0)
     }
     fn bbox(&self, range: Interval) -> Box3 {
         let b = &self.blend;
         let s0 = range.lo.clamp(b.lo, b.hi);
         let s1 = range.hi.clamp(s0, b.hi);
-        let q = |s: f64| Point3::ORIGIN + b.section_at(s).q[self.v].at(0);
+        let q = |s: f64| Point3::ORIGIN + b.track_at(s, self.k).at(0);
         let mut pts = vec![(s0, q(s0))];
         pts.extend(
             b.rows
                 .iter()
                 .filter(|r| r.s > s0 && r.s < s1)
-                .map(|r| (r.s, r.pts[2 * self.v])),
+                .map(|r| (r.s, r.on(self.k))),
         );
         if s1 > s0 {
             pts.push((s1, q(s1)));
@@ -1878,27 +1930,27 @@ impl ProceduralCurve for Spring {
                 .partition_point(|r| r.s <= 0.5 * (w[0].0 + w[1].0))
                 .clamp(1, b.segs.len())
                 - 1;
-            let grow = b.segs[i].vq[self.v] * (w[1].0 - w[0].0) * 0.5;
+            let grow = b.segs[i].vq[self.k] * (w[1].0 - w[0].0) * 0.5;
             out = out.hull(&Box3::from_points([w[0].1, w[1].1]).grow(grow));
         }
         out.grow(tol::LINEAR)
     }
     fn transformed(&self, f: &Frame) -> ProcCurve {
-        ProcCurve(Arc::new(Spring {
+        ProcCurve(Arc::new(Track {
             blend: Arc::new(self.blend.transformed_blend(f)),
-            v: self.v,
+            k: self.k,
         }))
     }
     fn speed_bound(&self, range: Interval) -> f64 {
         self.segs_over(range)
-            .map(|(i, _)| self.blend.segs[i].vq[self.v])
+            .map(|(i, _)| self.blend.segs[i].vq[self.k])
             .fold(0.0, f64::max)
     }
     fn segments(&self, range: Interval, chord: f64) -> usize {
         // equal steps h keep each chord within |q''| h^2 / 8 of the curve
         let a = self
             .segs_over(range)
-            .map(|(i, _)| self.blend.segs[i].aq[self.v])
+            .map(|(i, _)| self.blend.segs[i].aq[self.k])
             .fold(0.0, f64::max);
         let n = range.width() * (a / (8.0 * chord.max(tol::LINEAR))).sqrt();
         (n.ceil() as usize).max(1)
@@ -1963,10 +2015,13 @@ mod tests {
         let ic = loops.into_iter().find(|c| c.pts[0].x > 0.0).unwrap();
         let hi = ic.domain_hi();
         let edge = Curve::Intersection(Arc::new(ic));
-        let (g, ranges) = Guide::through_edges(&[(edge, Interval::new(0.05 * hi, 0.3 * hi))], 8).unwrap();
+        // as a fillet builds it: the law set on the edge, the blend running out 1.0 past its ends
+        let (g, ranges, whole) =
+            Guide::through_edges(&[(edge, Interval::new(0.05 * hi, 0.3 * hi), true)], 8, 1.0).unwrap();
         let r = ranges[0];
+        assert!(whole.lo < r.lo - 0.9 && whole.hi > r.hi + 0.9, "{whole:?} {r:?}");
         let law = RadiusLaw::smooth(&[(r.lo, 0.8), (r.mid(), 1.6), (r.hi, 1.0)], None).unwrap();
-        make("cylinder-cylinder", a, 1.0, b, 1.0, g, law, r.lo, r.hi)
+        make("cylinder-cylinder", a, 1.0, b, 1.0, g, law, whole.lo, whole.hi)
     }
 
     fn cases() -> Vec<Case> {
@@ -2090,6 +2145,10 @@ mod tests {
         ]
     }
 
+    fn track(b: &Arc<VarBlend>, k: usize) -> Track {
+        Track { blend: b.clone(), k }
+    }
+
     fn rand_uv(r: &mut Rng, b: &VarBlend) -> Point2 {
         Point2::new(r.range(b.lo, b.hi), r.unit())
     }
@@ -2134,7 +2193,10 @@ mod tests {
     #[test]
     fn balls_touch_both_surfaces_and_the_blend() {
         let mut r = Rng::new(3);
-        for c in cases() {
+        let cases = cases();
+        // both contact orders are covered
+        assert!(cases.iter().any(|c| c.blend.swap) && cases.iter().any(|c| !c.blend.swap));
+        for c in cases {
             let b = &c.blend;
             for _ in 0..100 {
                 let uv = rand_uv(&mut r, b);
@@ -2157,6 +2219,19 @@ mod tests {
                     let sp = b.spring(i);
                     assert!(sp.eval(s).distance(q.p) < 1e-12, "{} spring {i}", c.name);
                 }
+                // what a fillet reads: the centre curve, and the section from a's contact to b's
+                assert!(b.spine().eval(s).distance(ctr) < 1e-12, "{} spine", c.name);
+                let (circle, angle) = b.section(s);
+                assert!(angle > 0.0 && angle < dmath::PI, "{} angle", c.name);
+                for (i, t) in [0.0, angle].into_iter().enumerate() {
+                    assert!(
+                        circle.eval(t).distance(b.spring(i).eval(s)) < 1e-9,
+                        "{} section {i}",
+                        c.name
+                    );
+                }
+                let mid = circle.eval(0.5 * angle);
+                assert!(mid.distance(Procedural::deriv(&**b, Point2::new(s, 0.5)).p) < 1e-9);
             }
         }
     }
@@ -2186,7 +2261,7 @@ mod tests {
                 close((pu.du - mu.du) / (2.0 * h), d.duu, "duu");
                 close((pv.du - mv.du) / (2.0 * h), d.duv, "duv");
                 close((pv.dv - mv.dv) / (2.0 * h), d.dvv, "dvv");
-                let sp = c.blend.spring_curve(0);
+                let sp = track(&c.blend, 0);
                 let cd = sp.deriv(uv.x);
                 close(
                     (sp.deriv(uv.x + h).p - sp.deriv(uv.x - h).p) / (2.0 * h),
@@ -2231,7 +2306,7 @@ mod tests {
                         );
                     }
                 }
-                let sp = c.blend.spring_curve(1);
+                let sp = track(&c.blend, 1);
                 let cb = sp.bbox(bx.u);
                 for i in 0..=20 {
                     let t = bx.u.lo + bx.u.width() * i as f64 / 20.0;
@@ -2318,11 +2393,11 @@ mod tests {
     }
 
     #[test]
-    fn spring_curves_project_and_segment() {
+    fn spring_and_centre_curves_project_and_segment() {
         let mut r = Rng::new(8);
         for c in cases() {
-            for i in 0..2 {
-                let sp = c.blend.spring_curve(i);
+            for k in 0..3 {
+                let sp = track(&c.blend, k);
                 let dom = sp.domain().interval();
                 for _ in 0..20 {
                     let t = r.range(dom.lo, dom.hi);
@@ -2384,10 +2459,14 @@ mod tests {
             radius: big,
         });
         let edges = [
-            (line, Interval::new(0.0, 10.0)),
-            (arc, Interval::new(-dmath::FRAC_PI_2, -dmath::FRAC_PI_2 + 1.0)),
+            (line, Interval::new(0.0, 10.0), true),
+            (
+                arc.clone(),
+                Interval::new(-dmath::FRAC_PI_2, -dmath::FRAC_PI_2 + 1.0),
+                true,
+            ),
         ];
-        let (g, ranges) = Guide::through_edges(&edges, 6).unwrap();
+        let (g, ranges, _) = Guide::through_edges(&edges, 6, 0.0).unwrap();
         let (r0, r1) = (ranges[0], ranges[1]);
         let law = Arc::new(RadiusLaw::smooth(&[(r0.lo, 1.0), (r0.hi, 2.5), (r1.hi, 1.5)], None).unwrap());
         let a = VarBlend::new(&floor, 1.0, &wall, 1.0, g.clone(), law.clone(), r0).unwrap();
@@ -2406,6 +2485,29 @@ mod tests {
             );
             assert!(na.dot(nb) > 1.0 - 1e-12, "{v}");
         }
+        // the same chain with the line walked against its parameter, carried on past both ends
+        let back = Curve::Line(Line::new(Point3::ORIGIN, -UnitVec3::X));
+        let edges = [
+            (back, Interval::new(0.0, 10.0), false),
+            (
+                arc,
+                Interval::new(-dmath::FRAC_PI_2, -dmath::FRAC_PI_2 + 1.0),
+                true,
+            ),
+        ];
+        let (g2, ranges2, whole) = Guide::through_edges(&edges, 6, 3.0).unwrap();
+        for k in 0..=10 {
+            let f = k as f64 / 10.0;
+            let (p, q) = (
+                a.guide.point_tan(r0.lo + f * (r1.hi - r0.lo)),
+                g2.point_tan(ranges2[0].lo + f * (ranges2[1].hi - ranges2[0].lo)),
+            );
+            assert!(p.0.distance(q.0) < 1e-9 && (p.1 - q.1).length() < 1e-9, "{f}");
+        }
+        assert!((ranges2[0].lo - whole.lo - 3.0).abs() < 1e-9);
+        assert!(g2.point_tan(whole.lo).0.distance(Point3::new(-13.0, 0.0, 0.0)) < 1e-9);
+        let end = g2.point_tan(whole.hi).0 - Point3::new(0.0, big, 0.0);
+        assert!((end.length() - big).abs() < 1e-6, "{}", end.length());
         // the spine turns smoothly through the junction (its curvature follows the wall's, which
         // jumps, so the blends' du differ there; the shared circle and normals make them G1)
         let (ca, cb) = (a.spine_at(s).0, b.spine_at(s).0);
@@ -2509,8 +2611,9 @@ mod tests {
                 let edge = (
                     Curve::Intersection(Arc::new(ic)),
                     Interval::new(t0, t0 + r.range(0.1, 0.35) * hi),
+                    true,
                 );
-                let (g, ranges) = Guide::through_edges(&[edge], 8).unwrap();
+                let (g, ranges, _) = Guide::through_edges(&[edge], 8, 0.0).unwrap();
                 (main, branch, 1.0, g, rb, ranges[0])
             }
         };
