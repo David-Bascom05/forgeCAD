@@ -995,7 +995,29 @@ impl Body {
             }
             match &face.surface {
                 Surface::Sphere(sp) => b = b.hull(&Box3::from_point(sp.frame.origin).grow(sp.radius)),
-                Surface::Torus(t) => b = b.hull(&Box3::from_point(t.frame.origin).grow(t.major + t.minor)),
+                Surface::Torus(t) => {
+                    // within the minor radius of the centre circle's arc over the u the face's
+                    // loops span (unwrapped, so a face across the seam spans past it), padded for
+                    // an edge bulging past its samples
+                    let mut su = Interval::EMPTY;
+                    for l in crate::uv::face_uv_loops(self, f) {
+                        for p in &l.points {
+                            su.include(p.x);
+                        }
+                    }
+                    let tau = 2.0 * forge_math::dmath::PI;
+                    let whole = Box3::from_point(t.frame.origin).grow(t.major + t.minor);
+                    b = b.hull(&if su.is_empty() || su.width() >= 0.9 * tau {
+                        whole
+                    } else {
+                        let arc = forge_geom::Circle {
+                            frame: t.frame,
+                            radius: t.major,
+                        };
+                        let pad = 0.01 * (1.0 + su.width());
+                        arc.bbox(Interval::new(su.lo - pad, su.hi + pad)).grow(t.minor)
+                    });
+                }
                 Surface::Procedural(pr) => b = b.hull(&crate::uv::procedural_box(self, f, pr)),
                 _ => {}
             }

@@ -107,3 +107,38 @@ L3: extrude cut 20 xz at 72 75 40.5 circle 0 0 2
     builds_valid(src);
     assert_eq!(judge(src), Verdict::Ok);
 }
+
+/// Two mirrored swept arcs 12 apart: each tube's torus face had the whole torus as its box, the
+/// two boxes overlapped, and the pair (tori whose centre circles cross away from the faces) has
+/// no closed form. A partial torus face's box now follows the arc its loops span.
+#[test]
+fn disjoint_swept_arcs_never_meet() {
+    let m = Model::new(
+        "s: sweep z 0 1 0 at 0 10 0 circle 0 0 4 path arc yz at 0 10 -100 100 90 -40\npattern s mirror xz\n",
+    );
+    assert!(m.error.is_none(), "{:?}", m.error.as_ref().map(|e| &e.msg));
+}
+
+/// A sweep cut boring a bent tube in a general plane: the closed-form meet of the bore's and
+/// the tube's tori found thousands of events and never returned.
+#[test]
+fn bent_tube_bore_in_a_general_plane() {
+    builds_valid("sweep z -0.59048313866411 0.10148065235589 -0.800644328120049 at -130.647058563804 10 441.057078039369 circle 0 0 7 path line -130.647058563804 10 441.057078039369 -313.740381258896 41.4664866995883 192.798286663673 arc z 0.804799093005477 -6.93889390390723e-18 -0.593547319004611 x -0.58966414290279 0.114200861333259 -0.799533840337893 at -306.512352962495 160.846988255089 202.598871100508 120 -90.7330947118864 2.44323436805379
+sweep cut z -0.59048313866411 0.10148065235589 -0.800644328120049 at -130.647058563804 10 441.057078039369 circle 0 0 6 path line -130.647058563804 10 441.057078039369 -313.740381258896 41.4664866995883 192.798286663673 arc z 0.804799093005477 -6.93889390390723e-18 -0.593547319004611 x -0.58966414290279 0.114200861333259 -0.799533840337893 at -306.512352962495 160.846988255089 202.598871100508 120 -90.7330947118864 2.44323436805379
+");
+}
+
+/// A runner swept and bored along a bend through a flange, then the flange's face thickened
+/// (B5): it hung in the bore like the bent tube, then left open edges. Feature by feature only:
+/// the n-ary regen names the flange face apart (the n-ary naming work has that).
+#[test]
+fn thicken_after_a_bent_bore() {
+    let m = Model::new("flange: extrude 12 yz at -12 0 0 rrect -60 -30 120 60 8
+runner: sweep yz at -12 0 0 circle 0 0 19 path line -12 0 0 30 0 0 arc xz at 30 0 -60 60 90 -90 line 90 0 -60 90 0 -115
+sweep cut yz at -12 0 0 circle 0 0 15.5 path line -12 0 0 30 0 0 arc xz at 30 0 -60 60 90 -90 line 90 0 -60 90 0 -130
+thicken 1.5 (faces of flange normal -x)
+");
+    assert!(m.error.is_none(), "{:?}", m.error.as_ref().map(|e| &e.msg));
+    let b = m.body().expect("a body");
+    assert!(forge_topo::check(b).is_empty(), "{:?}", forge_topo::check(b));
+}
