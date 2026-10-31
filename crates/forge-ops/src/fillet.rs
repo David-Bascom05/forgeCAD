@@ -1560,8 +1560,91 @@ impl Builder {
                 }
             }
             [a, b] if self.is_joint(&ring, a, b) => self.joint(v, &ring, a, b),
-            _ => self.corner(v, &ring),
+            _ => {
+                let ring = self.rest_ring(v, ring)?;
+                self.corner(v, &ring)
+            }
         }
+    }
+
+    /// The ring with, beside each blend resting on a face beyond its strip face's smooth edge,
+    /// that face put in between the two, the smooth edge as the sharp edge between it and the
+    /// strip face. Its corner's cin is the smooth edge's coedge arriving at its end along the
+    /// swallowed strip, or the blend's own coedge when the face rested on comes first.
+    fn rest_ring(&self, v: VertexId, ring: Vec<Corner>) -> R<Vec<Corner>> {
+        let k = ring.len();
+        // the smooth edge's coedge arriving at its end along blend ri's edge from v
+        let arriving = |ri: usize, g: EdgeId| {
+            let edge = self.rolled[ri].edge;
+            let x = self.body.edge(edge);
+            let into = if x.start == v {
+                x.curve.deriv(x.range.lo).d1
+            } else {
+                -x.curve.deriv(x.range.hi).d1
+            };
+            let gx = self.body.edge(g);
+            let (s, e) = (self.body.vertex(gx.start).point, self.body.vertex(gx.end).point);
+            let w = if (e - s).dot(into) > 0.0 { gx.end } else { gx.start };
+            gx.coedges
+                .iter()
+                .copied()
+                .find(|&c| self.body.coedge_end(c) == w)
+                .ok_or(FilletError::Corner { vertex: v })
+        };
+        let mut out = Vec::with_capacity(k + 2);
+        for j in 0..k {
+            let c = ring[j];
+            match self
+                .filleted(c.cin)
+                .map(|ri| (ri, self.rolled[ri].over[self.side(c.cin)]))
+            {
+                Some((ri, Some((cf, g)))) => {
+                    let gc = arriving(ri, g)?;
+                    if self.body.coedge_face(gc) != c.face {
+                        return Err(FilletError::Corner { vertex: v });
+                    }
+                    out.push(Corner {
+                        face: cf,
+                        cin: c.cin,
+                        cout: c.cin,
+                    });
+                    out.push(Corner {
+                        face: c.face,
+                        cin: gc,
+                        cout: c.cout,
+                    });
+                }
+                _ => out.push(c),
+            }
+            let next = ring[(j + 1) % k].cin;
+            if let Some(ri) = self.filleted(next)
+                && let Some((cf, g)) = self.rolled[ri].over[1 - self.side(next)]
+            {
+                let gc = arriving(ri, g)?;
+                if self.body.coedge_face(gc) != cf {
+                    return Err(FilletError::Corner { vertex: v });
+                }
+                out.push(Corner {
+                    face: cf,
+                    cin: gc,
+                    cout: gc,
+                });
+            }
+        }
+        Ok(out)
+    }
+
+    /// The blend and side resting on ring corner j's face, beyond the strip face's smooth edge.
+    fn rests(&self, ring: &[Corner], j: usize) -> Option<(usize, usize)> {
+        let k = ring.len();
+        let on = |c: CoedgeId, other: bool| {
+            let ri = self.filleted(c)?;
+            let s = usize::from(other) ^ self.side(c);
+            self.rolled[ri].over[s]
+                .is_some_and(|o| o.0 == ring[j].face)
+                .then_some((ri, s))
+        };
+        on(ring[j].cin, false).or_else(|| on(ring[(j + 1) % k].cin, true))
     }
 
     /// Whether the blends arriving at ring corners `a` and `b` continue each other
@@ -2613,7 +2696,12 @@ impl Builder {
                 .flat_map(|t| [t.start, t.end])
                 .find(|&p| on_edge(p) && p.distance(input.point) > tol::LINEAR)
                 .ok_or(err.clone())?;
-            let vm = self.pooled(&mut pool, m, Name::NONE.with_str("cut").with_name(vname));
+            // a smooth edge a blend rests beyond does not reach v: named for it too
+            let mut name = Name::NONE.with_str("cut").with_name(vname);
+            if e.start != v && e.end != v {
+                name = name.with_name(e.name);
+            }
+            let vm = self.pooled(&mut pool, m, name);
             self.trim(ring[j].cin, m, vm, any_blend, None)?;
             cuts[j] = Some(vm);
         }
@@ -2634,7 +2722,19 @@ impl Builder {
                     }
                     let name = Name::NONE.with_set(&mut [self.face_name(ring[j].face), patch_name]);
                     let walk = self.edge_between(t.curve.clone(), ta, tb, a, b, name);
-                    self.paths.insert(ring[j].cin, vec![walk]);
+                    match self.rests(ring, j) {
+                        // on a face rested on: from the cut smooth edge to the spring, joined
+                        // into the face with the spring
+                        Some(rs) => {
+                            let (xg, xv) = if cuts[j].is_some() { (a, b) } else { (b, a) };
+                            self.caps.entry(rs).or_default().push((walk.0, xg, xv));
+                            *self.cut_g.entry(rs).or_default() += 1;
+                            self.touched.insert(ring[j].face);
+                        }
+                        None => {
+                            self.paths.insert(ring[j].cin, vec![walk]);
+                        }
+                    }
                     face_edges[j] = Some(walk);
                 }
                 None if a == b => {}
@@ -2822,11 +2922,12 @@ impl Builder {
                         ends(&self.body, &uses[0]).0,
                         ends(&self.body, &uses[uses.len() - 1]).1,
                     );
-                    for &(ce, _, xv) in self.caps.get(&(i, side)).into_iter().flatten() {
+                    for &(ce, xg, xv) in self.caps.get(&(i, side)).into_iter().flatten() {
+                        let from_g = self.body.edge(ce).start == xg;
                         if xv == first {
-                            uses.insert(0, (ce, true));
+                            uses.insert(0, (ce, from_g));
                         } else if xv == last {
-                            uses.push((ce, false));
+                            uses.push((ce, !from_g));
                         }
                     }
                     self.extra.entry(face).or_default().extend(uses);

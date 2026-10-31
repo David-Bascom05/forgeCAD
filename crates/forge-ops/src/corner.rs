@@ -4,7 +4,7 @@
 use forge_geom::corner::{
     Closing, Side, SurfaceRail, close_hole, close_hole_rational, foot_velocity, trim_curve,
 };
-use forge_geom::{Curve, CurveGeom, Surface};
+use forge_geom::{Curve, CurveGeom, Surface, SurfaceGeom};
 use forge_math::{Interval, Point3, Vec3, dmath, tol};
 use std::sync::Arc;
 
@@ -91,6 +91,29 @@ pub fn face_curves(c: &CornerInput, setbacks: &[f64]) -> Result<Vec<FaceTrim>, S
     Ok(out)
 }
 
+/// Whether edge j is sharp only in name: its faces tangent along it (a strip's smooth edge, the
+/// blends either side resting beyond it).
+fn smooth_between_blends(c: &CornerInput, j: usize, t: f64) -> bool {
+    let n = c.edges.len();
+    let CornerEdge::Sharp { curve, .. } = &c.edges[j] else {
+        return false;
+    };
+    let blends = |k: usize| matches!(c.edges[k % n], CornerEdge::Blend(_));
+    if !blends(j + n - 1) || !blends(j + 1) {
+        return false;
+    }
+    let p = curve.eval(t);
+    let normal = |f: usize| {
+        let s = &c.face_surfaces[f % n].0;
+        let d = s.deriv(s.project(p));
+        d.du.cross(d.dv).normalize()
+    };
+    match (normal(j), normal(j + 1)) {
+        (Some(a), Some(b)) => a.cross(b.get()).length() <= 1e-6,
+        _ => false,
+    }
+}
+
 /// A ball-centre position on a blend, and where its contact with a face is.
 fn foot(c: &CornerInput, b: usize, face: usize, s: f64) -> (Point3, Vec3) {
     let d = c.blends[b].spine.deriv(s);
@@ -158,9 +181,12 @@ fn plan(c: &CornerInput) -> Result<Plan, String> {
     };
     let seeds: Vec<f64> = c.edges.iter().map(near).collect();
     let rmax = c.blends.iter().map(|b| b.radius).fold(0.0, f64::max);
+    let smooth: Vec<bool> = (0..n).map(|j| smooth_between_blends(c, j, seeds[j])).collect();
     // q[j] = (param where edge j meets its neighbour on face j, on face j + 1)
     let mut q = seeds.iter().map(|&s| (s, s)).collect::<Vec<_>>();
     let mut corner = vec![c.point; n];
+    // faces where a smooth edge's neighbour runs beside it, never meeting it
+    let mut beside = Vec::new();
     for (i, at) in corner.iter_mut().enumerate() {
         let (l, r) = ((i + n - 1) % n, i);
         if matches!(
@@ -172,12 +198,39 @@ fn plan(c: &CornerInput) -> Result<Plan, String> {
         let (fl, fr) = (edge_curve(c, &c.edges[l], i), edge_curve(c, &c.edges[r], i));
         // edges running on through the vertex in line have parallel springs, which never meet
         // (or meet far off): both then start from the section through the vertex
-        let (a, b) = meet(&fl, &fr, seeds[l], seeds[r])
-            .filter(|&(a, _)| fl(a).0.distance(c.point) <= 10.0 * rmax)
-            .unwrap_or((seeds[l], seeds[r]));
+        let met =
+            meet(&fl, &fr, seeds[l], seeds[r]).filter(|&(a, _)| fl(a).0.distance(c.point) <= 10.0 * rmax);
+        if met.is_none() && (smooth[l] || smooth[r]) {
+            beside.push(i);
+        }
+        let (a, b) = met.unwrap_or((seeds[l], seeds[r]));
         q[l].1 = a;
         q[r].0 = b;
         *at = fl(a).0.lerp(fr(b).0, 0.5);
+    }
+    // a smooth edge is cut where the blend on its other face meets it; on this face the trim
+    // aims at the blend's foot level with that cut
+    for i in beside {
+        let (l, r) = ((i + n - 1) % n, i);
+        let (j, b, x) = if smooth[l] { (l, r, q[l].0) } else { (r, l, q[r].1) };
+        let (CornerEdge::Sharp { curve, .. }, CornerEdge::Blend(bi)) = (&c.edges[j], &c.edges[b]) else {
+            return Err("a smooth edge between blends".into());
+        };
+        if x == seeds[j] {
+            return Err(format!("edge {j}: smooth, meeting neither blend beside it"));
+        }
+        let p = curve.eval(x);
+        let bl = &c.blends[*bi];
+        let span = 1e3 * bl.radius.max(1.0);
+        let s = bl
+            .spine
+            .closest(p, Interval::new(seeds[b] - span, seeds[b] + span));
+        if smooth[l] {
+            (q[l].1, q[r].0) = (x, s);
+        } else {
+            (q[l].1, q[r].0) = (s, x);
+        }
+        corner[i] = p.lerp(foot(c, *bi, i, s).0, 0.5);
     }
     let out_of = |e: &CornerEdge| match e {
         CornerEdge::Blend(b) => c.blends[*b].out,
@@ -208,7 +261,11 @@ fn plan(c: &CornerInput) -> Result<Plan, String> {
             }
             CornerEdge::Sharp { .. } => rmax,
         };
-        let step = if one_ball { 0.0 } else { reach / d.d1.length() };
+        let step = if one_ball || smooth[j] {
+            0.0
+        } else {
+            reach / d.d1.length()
+        };
         let mut s = far + o * step;
         // a short edge: no farther than nine tenths of the way to its middle
         if let CornerEdge::Blend(b) = e

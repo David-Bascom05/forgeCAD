@@ -181,6 +181,24 @@ fn fillet_rolling_onto_a_corner_round() {
     );
 }
 
+#[test]
+fn fillet_rolling_onto_a_corner_round_meets_the_pad_top_blend() {
+    // the full R2 repro: every concave edge, so the blend resting on the round meets the pad
+    // top's blend at the pad's top corner. The corner sees the round between the blend and the
+    // wall, the smooth edge between them cut where the pad top's blend meets it
+    for (draft, x) in [
+        ("", -107.69),
+        (
+            "draft -2 xy at 0 0 95 (faces of box normal -x) (faces of box normal -y)\n",
+            -104.0,
+        ),
+    ] {
+        valid(&format!(
+            "box: extrude 95 rect -120 -65 240 130\n{draft}fillet 12 (edges of box shorter 100 near -120 -65 50)\nextrude 16 rect {x} -93 44 40\nfillet 3 (edges concave)\n"
+        ));
+    }
+}
+
 /// `b` with every list stored the other way round: vertices, edges, faces, each face's loops, and
 /// each loop starting at its middle coedge.
 fn reversed_storage(b: &forge_topo::Body) -> forge_topo::Body {
