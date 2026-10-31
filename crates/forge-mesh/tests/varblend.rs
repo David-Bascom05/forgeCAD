@@ -41,7 +41,7 @@ fn check(blend: &Arc<VarBlend>) {
     let body = sheet(blend);
     let surface = blend.surface();
     let mesh = tessellate(&body, &Quality::default()).unwrap();
-    assert!(mesh.triangles.len() > 20, "{}", mesh.triangles.len());
+    assert!(mesh.triangles.len() > 10, "{}", mesh.triangles.len());
     for p in &mesh.positions {
         assert!(surface.distance(*p) < 1e-9, "{p:?}");
     }

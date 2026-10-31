@@ -198,10 +198,10 @@ impl Nodes {
             (self.hi.x - self.lo.x) / G as f64,
             (self.hi.y - self.lo.y) / G as f64,
         );
-        let mut n = [[(1, 1); G]; G];
-        for (ci, row) in n.iter_mut().enumerate() {
+        // the steps each cell needs, the densest any node of it or its neighbours needs
+        let mut want = [[(0.0, 0.0); G]; G];
+        for (ci, row) in want.iter_mut().enumerate() {
             for (cj, c) in row.iter_mut().enumerate() {
-                // the densest any node of this cell or its neighbours needs, per unit u and v
                 let (mut du, mut dv) = (0.0f64, 0.0f64);
                 for row in &self.at[ci.saturating_sub(1)..(ci + 3).min(G + 1)] {
                     for &n in &row[cj.saturating_sub(1)..(cj + 3).min(G + 1)] {
@@ -209,8 +209,27 @@ impl Nodes {
                         dv = dv.max(n.1 / step(n.3));
                     }
                 }
-                let k = |l: f64| l.ceil().clamp(1.0, 1e6) as usize;
-                *c = (k(cw * du), k(ch * dv));
+                *c = ((cw * du).min(1e6), (ch * dv).min(1e6));
+            }
+        }
+        // in whole steps: a cell needing half a step or more as many rounded up, and the cells
+        // needing less along a line of them sharing steps, as many as their sum rounded up (a
+        // thin face needing three rows across gets three, not one per cell): one may get none
+        let share = |w: f64, sum: &mut f64| {
+            if w >= 0.5 {
+                w.ceil() as usize
+            } else {
+                let k = (*sum + w).ceil() - sum.ceil();
+                *sum += w;
+                k as usize
+            }
+        };
+        let mut n = [[(0, 0); G]; G];
+        for i in 0..G {
+            let (mut su, mut sv) = (0.0f64, 0.0f64);
+            for j in 0..G {
+                n[j][i].0 = share(want[j][i].0, &mut su);
+                n[i][j].1 = share(want[i][j].1, &mut sv);
             }
         }
         n
@@ -225,7 +244,13 @@ impl Nodes {
                 v += b as f64;
             }
         }
-        let side = |k: f64, w: f64| if w > 0.0 { k / G as f64 / w } else { 1.0 };
+        let side = |k: f64, w: f64| {
+            if w > 0.0 {
+                k.max(G as f64) / G as f64 / w
+            } else {
+                1.0
+            }
+        };
         (side(u, self.hi.x - self.lo.x), side(v, self.hi.y - self.lo.y))
     }
 
