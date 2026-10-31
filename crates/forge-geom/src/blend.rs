@@ -60,8 +60,103 @@ pub fn offset(s: &Surface, d: f64) -> Option<Surface> {
                 minor: t.minor + d,
             })
         }
-        Surface::Procedural(_) => return None,
+        Surface::Procedural(p) => return Offset::surface(p, d),
     })
+}
+
+/// A procedural surface moved `d` along its normal.
+#[derive(Debug)]
+pub struct Offset {
+    base: Proc,
+    d: f64,
+}
+
+impl Offset {
+    /// `base` moved `d` along its normal, or None where that passes its tightest curvature.
+    pub fn surface(base: &Proc, d: f64) -> Option<Surface> {
+        if base.min_radius() <= -d + tol::MIN_LENGTH {
+            return None;
+        }
+        Some(Surface::Procedural(Proc(Arc::new(Offset {
+            base: base.clone(),
+            d,
+        }))))
+    }
+
+    /// The point, du and dv, from the base's derivatives and its normal's (Weingarten).
+    fn first(&self, uv: Point2) -> (Point3, Vec3, Vec3) {
+        let b = self.base.deriv(uv);
+        let n = b.du.cross(b.dv);
+        let len = n.length();
+        if len == 0.0 {
+            return (b.p, b.du, b.dv);
+        }
+        let unit = n / len;
+        let dn = |m: Vec3| (m - unit * unit.dot(m)) / len;
+        let nu = dn(b.duu.cross(b.dv) + b.du.cross(b.duv));
+        let nv = dn(b.duv.cross(b.dv) + b.du.cross(b.dvv));
+        (b.p + unit * self.d, b.du + nu * self.d, b.dv + nv * self.d)
+    }
+}
+
+impl Procedural for Offset {
+    fn point(&self, uv: Point2) -> Point3 {
+        self.first(uv).0
+    }
+    fn deriv(&self, uv: Point2) -> SurfDeriv {
+        let (p, du, dv) = self.first(uv);
+        let (su, sv) = self.base.uv_scale();
+        let h = 1e-6;
+        let (hu, hv) = (h / su.max(1e-9), h / sv.max(1e-9));
+        let (_, u1, v1) = self.first(Point2::new(uv.x + hu, uv.y));
+        let (_, u0, v0) = self.first(Point2::new(uv.x - hu, uv.y));
+        let (_, _, v3) = self.first(Point2::new(uv.x, uv.y + hv));
+        let (_, _, v2) = self.first(Point2::new(uv.x, uv.y - hv));
+        SurfDeriv {
+            p,
+            du,
+            dv,
+            duu: (u1 - u0) / (2.0 * hu),
+            duv: (v1 - v0) / (2.0 * hu),
+            dvv: (v3 - v2) / (2.0 * hv),
+        }
+    }
+    fn normal(&self, uv: Point2) -> Option<UnitVec3> {
+        self.base.normal(uv)
+    }
+    fn domain(&self) -> Domain2 {
+        self.base.domain()
+    }
+    fn project(&self, p: Point3) -> Point2 {
+        self.base.project(p)
+    }
+    fn bbox(&self, uv: Box2) -> Box3 {
+        self.base.bbox(uv).grow(self.d.abs())
+    }
+    fn implicit(&self, p: Point3) -> f64 {
+        let uv = self.project(p);
+        match self.base.normal(uv) {
+            Some(n) => n.dot(p - self.first(uv).0),
+            None => self.base.implicit(p) - self.d,
+        }
+    }
+    fn gradient(&self, p: Point3) -> Vec3 {
+        self.base
+            .normal(self.project(p))
+            .map_or_else(|| self.base.gradient(p), |n| n.get())
+    }
+    fn transformed(&self, f: &Frame) -> Proc {
+        Proc(Arc::new(Offset {
+            base: self.base.transformed(f),
+            d: self.d,
+        }))
+    }
+    fn uv_scale(&self) -> (f64, f64) {
+        self.base.uv_scale()
+    }
+    fn min_radius(&self) -> f64 {
+        (self.base.min_radius() + self.d).max(10.0 * tol::MIN_LENGTH)
+    }
 }
 
 /// The point of `s` the ball centre `c` stands over, for a centre on `s` offset by `d`.

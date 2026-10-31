@@ -1,5 +1,5 @@
-//! Real parts on drafted faces (draft tilts planes and turns rounds into cones): each builds
-//! valid, one feature after another and all at once.
+//! Real parts that broke on drafted faces (draft tilts planes and turns rounds into cones) and
+//! on lofts: each builds valid, one feature after another and all at once.
 
 use forge_agent::model::Model;
 use forge_model::Part;
@@ -45,6 +45,29 @@ extrude 44 xz at 62 87 95 loop line -42 0 42 0 arc 0 0 42 0 -90 arc 0 0 42 -90 -
 feet: extrude 16 loop line 52 -55 52 -85 arc 60 -85 8 180 90 line 60 -93 88 -93 arc 88 -85 8 270 90 line 96 -85 96 -55 line 96 -55 52 -55
 fillet 5 (edges between feet f1 concave)
 rib 8 draft 1 yz at 62 0 0 line 63 20 83 49
+",
+    );
+}
+
+/// A tapered loft arm into a boss, filleted round the junction: the ball rolls on the loft's
+/// face, offset along its normal like any other surface.
+#[test]
+fn fillet_loft_into_boss() {
+    builds_valid(
+        "arm: loft profile yz at 12 0 0 rrect -15 -12 30 24 6 profile yz at 166 0 0 rrect -9 -7.5 18 15 4
+pedal: extrude sym 18 at 170 0 0 circle 0 0 12
+fillet 1.2 (edges between arm pedal concave)
+",
+    );
+}
+
+/// A boss standing on a smooth three-profile loft, filleted round its foot.
+#[test]
+fn fillet_boss_into_smooth_loft() {
+    builds_valid(
+        "tube: loft smooth profile at 0 0 0 circle 0 0 10 profile at 0 5 30 circle 0 0 14 profile at 0 15 60 circle 0 0 18
+boss: extrude 25 yz at 0 5 30 circle 0 0 4
+fillet 2 (edges between boss tube concave)
 ",
     );
 }
