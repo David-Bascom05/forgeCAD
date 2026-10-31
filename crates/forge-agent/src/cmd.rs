@@ -681,7 +681,7 @@ fillet 4 (edges between base wall concave)
             "measure",
             &args(&a, &["(faces normal -z near 0 0 0)", "(faces normal +z top)"]),
         );
-        assert!(m.text.starts_with("distance 45 angle 180"), "{}", m.text);
+        assert!(m.text.starts_with("distance 45 angle 0"), "{}", m.text);
         let m = s.run("measure", &args(&a, &["wall"]));
         assert!(m.text.starts_with("wall 8 "), "{}", m.text);
         let m = s.run("measure", &args(&a, &["mass"]));

@@ -147,6 +147,26 @@ pub fn one(body: &Body, mesh: &TriMesh, e: Ent) -> Vec<(&'static str, f64)> {
     out
 }
 
+/// The exact gap from a planar face to a round thing standing square to it: a cylinder lying
+/// along it, a circle parallel to it, a sphere.
+fn plane_round(body: &Body, a: Ent, b: Ent) -> Option<f64> {
+    let Ent::Face(f) = a else { return None };
+    let n = select::plane_normal(body, f)?;
+    let (p, dir) = select::axis(body, b)?;
+    let off = (p - select::centre(body, a)).dot(n).abs();
+    let r = select::radius(body, b).unwrap_or(0.0);
+    match (b, dir) {
+        (Ent::Edge(_), Some(u)) if u.cross(n).length() < 1e-9 => Some(off),
+        (Ent::Face(g), Some(u))
+            if u.dot(n).abs() < 1e-9 && matches!(body.face(g).surface, forge_geom::Surface::Cylinder(_)) =>
+        {
+            Some(off - r)
+        }
+        (Ent::Face(_), None) => Some(off - r),
+        _ => None,
+    }
+}
+
 /// Distance between two entities (exact for parallel planes, else the closest of dense
 /// samples), and the angle between them when both have a direction.
 pub fn between(body: &Body, mesh: &TriMesh, a: Ent, b: Ent) -> Vec<(&'static str, f64)> {
@@ -162,6 +182,8 @@ pub fn between(body: &Body, mesh: &TriMesh, a: Ent, b: Ent) -> Vec<(&'static str
             "distance",
             (select::centre(body, b) - select::centre(body, a)).dot(n).abs(),
         ));
+    } else if let Some(d) = plane_round(body, a, b).or_else(|| plane_round(body, b, a)) {
+        out.push(("distance", d));
     } else {
         let (pa, pb) = (points(body, mesh, a), points(body, mesh, b));
         let mut d = f64::INFINITY;
@@ -187,7 +209,7 @@ pub fn between(body: &Body, mesh: &TriMesh, a: Ent, b: Ent) -> Vec<(&'static str
         let ang = if pu == pw {
             // two planes: the angle between them; two lines: between their directions
             let a = deg(dmath::acos(c));
-            if pu { a } else { a.min(180.0 - a) }
+            a.min(180.0 - a)
         } else {
             90.0 - deg(dmath::acos(c.abs()))
         };

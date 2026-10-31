@@ -24,8 +24,8 @@ shell T [out] REF..              hollow to walls T thick (out: outside the skin)
 chamfer D REF.. | chamfer D D2 face REF REF.. | chamfer D ang A face REF REF..
 hole D FRAME [cb D2 DEPTH | cs D2 A] (N | thru | next | to FEAT [@face] [off N]) [pt A] [thread SIZE PITCH]
 pattern (body | FEAT..) (lin DX DY DZ N STEP [DX DY DZ N STEP] | circ OX OY OZ AX AY AZ N [A] [step] | mirror FRAME)
-  N counts the original; circ spreads N over A (default 360), or `step`: A apart; mirror
-  reflects in the frame's xy plane (`mirror yz` is across x=0)
+  N counts the original; lin: STEP mm apart along DIR; circ: N spread over A (default 360),
+  or A apart with `step`; mirror: in the frame's xy plane (`mirror yz` is across x=0)
 sweep [op] FRAME LOOPS path PATH [extend N M | to FEAT [@face] [off N]]     profile square to the path's start
 coil [op] FRAME [axis ..] LOOPS (pitch P turns N | turns N height H | pitch P height H | pitch P to FEAT [@face] [off N]) [taper A] [left]
 loft [op] [smooth [start W] [end W]] (profile FRAME LOOPS).. [rail I PATH.. | centre PATH]     I: vertex (where segment I starts)
@@ -33,7 +33,7 @@ PATH: (line AX AY AZ BX BY BZ | arc FRAME R START SWEEP)..     tangent-continuou
 plane FRAME                      a work plane, for `to FEAT` and `on FEAT`
 FRAME: [xy|xz|yz|-xy|-xz|-yz | z A B C [x A B C] | on FEAT] [at X Y Z]     default: xy at 0 0 0
   xy: normal +z; xz: sketch x,y = world x,z, normal -y; yz: world y,z, normal +x;
-  -xy: sketch y = world -y, normal -z (drill down); -xz, -yz likewise flipped
+  -xy: sketch y = world -y, normal -z (drill down); -xz: normal +y; -yz: normal -x
 LOOPS (first is outside, rest holes; X Y a corner): rect X Y W H | rrect X Y W H CORNER_R | circle CX CY R |
   poly X Y X Y .. | loop (line AX AY BX BY | arc CX CY R START SWEEP)..
 `next`: up to the next face met. `to`: a plane feature, or a feature's face (plane, cylinder..).
@@ -56,7 +56,7 @@ top bottom left right front back   near X Y Z              keep the extreme ones
 
 Commands (a few lines of text; `--json` for JSON):
 ```
-forgecad build F                    ok, or error line N + hint; approx volume, area; bbox, counts
+forgecad build F                    ok, or error at file line N + hint; approx volume, area; bbox
 forgecad query F SEL [--at FEAT]    @d644 line -x len=60 at 0,20,40   (round: axis and centre)
 forgecad measure F REF [REF]        area|length radius centre; two: closest distance, angle, axes
 forgecad measure F mass|wall        volume area centroid inertia; thinnest wall anywhere
