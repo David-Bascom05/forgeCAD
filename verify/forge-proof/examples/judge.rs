@@ -61,7 +61,7 @@ fn main() {
             *w = format!("{}:{}", l.file(), l.line());
         }
     }));
-    let (v, m) = judge_model(&src);
+    let (v, mut m) = judge_model(&src);
     let (word, sig) = match &v {
         Verdict::Ok => ("ok", String::new()),
         Verdict::Refused(s) => ("refused", s.clone()),
@@ -72,22 +72,36 @@ fn main() {
         esc(&sig),
         esc(&WHERE.lock().map(|w| w.clone()).unwrap_or_default())
     );
-    if let Some(m) = &m {
+    if let Some(m) = &mut m {
         let solids = m.solids_after(m.built());
         let mut vol = Some(0.0);
+        let mut area = 0.0;
         let mut faces = 0;
         for s in solids {
             faces += s.body.face_ids().count();
             let one =
                 std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| forge_topo::mass::mass(&s.body)));
             vol = match (vol, one) {
-                (Some(t), Ok(Ok(p))) => Some(t + p.volume),
+                (Some(t), Ok(Ok(p))) => {
+                    area += p.area;
+                    Some(t + p.volume)
+                }
                 _ => None,
             };
         }
         o += &format!(",\"bodies\":{},\"faces\":{faces}", solids.len());
         if let Some(x) = vol {
-            o += &format!(",\"vol\":{x}");
+            o += &format!(",\"vol\":{x},\"area\":{area}");
+        }
+        if matches!(v, Verdict::Ok)
+            && let Ok((_, _, b, _, _)) =
+                std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| m.stats()))
+        {
+            let (x, y, z) = (b.x, b.y, b.z);
+            o += &format!(
+                ",\"bbox\":[{},{},{},{},{},{}]",
+                x.lo, y.lo, z.lo, x.hi, y.hi, z.hi
+            );
         }
         if let Some(f) = &m.error {
             o += &format!(",\"line\":{},\"msg\":\"{}\"", f.at, esc(&f.msg));
