@@ -345,6 +345,21 @@ impl Bands {
         }
     }
 
+    /// Rows a box's span across meets.
+    fn rows(&self, b: &Box3) -> std::ops::RangeInclusive<usize> {
+        let mut sp = Interval::EMPTY;
+        for &x in &[b.x.lo, b.x.hi] {
+            for &y in &[b.y.lo, b.y.hi] {
+                for &z in &[b.z.lo, b.z.hi] {
+                    sp.include((Point3::new(x, y, z) - self.origin).dot(self.across));
+                }
+            }
+        }
+        let n = self.rows.len();
+        let row = |w: f64| (((w - self.w0) * self.inv).floor().max(0.0) as usize).min(n - 1);
+        row(sp.lo)..=row(sp.hi)
+    }
+
     fn row(&self, w: f64) -> Option<usize> {
         let k = (w - self.w0) * self.inv;
         (k >= 0.0 && (k as usize) < self.rows.len()).then_some(k as usize)
@@ -468,6 +483,25 @@ impl<'a> Index<'a> {
                 window: Box2::new(u, v),
             }
         })
+    }
+
+    /// The uses of face `f`'s edges whose boxes meet `b`, found through the face's bands where it
+    /// keeps them, in no set order.
+    pub fn coedges_meeting(&self, f: FaceId, b: &Box3) -> Vec<forge_topo::CoedgeId> {
+        let info = self.info(f);
+        let hit = |i: usize| {
+            let (c, ref eb) = info.edges[i];
+            (c != GONE && eb.overlaps(b)).then_some(c)
+        };
+        match &info.bands {
+            Some(bands) => {
+                let mut ids: Vec<u32> = bands.rows[bands.rows(b)].iter().flatten().copied().collect();
+                ids.sort_unstable();
+                ids.dedup();
+                ids.into_iter().filter_map(|i| hit(i as usize)).collect()
+            }
+            None => (0..info.edges.len()).filter_map(hit).collect(),
+        }
     }
 
     /// Where a point that lies on (or within tolerance of) face `f`'s surface

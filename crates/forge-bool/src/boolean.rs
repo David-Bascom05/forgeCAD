@@ -824,7 +824,7 @@ fn plan(a: &Body, b: &Body, op: Op, scratch: &mut Scratch) -> R<Plan> {
                     body,
                     f,
                     op,
-                    index: &index[1],
+                    index: [&index[0], &index[1]],
                     by_edge: &by_edge,
                     alias: &alias,
                     new_edges: &mine
@@ -2807,8 +2807,8 @@ struct LocalSplit<'a> {
     body: &'a Body,
     f: FaceId,
     op: Op,
-    /// B's index.
-    index: &'a Index<'a>,
+    /// A's index and B's.
+    index: [&'a Index<'a>; 2],
     by_edge: &'a [(Side, EdgeId, usize)],
     alias: &'a [(VKey, VKey)],
     /// The new edges in the face (pieces).
@@ -2852,7 +2852,7 @@ fn local_split(c: LocalSplit) -> Option<Local> {
     if hit(loops[0]) {
         return None;
     }
-    let class = match c.index.classify(face_point(body, c.f)?) {
+    let class = match c.index[1].classify(face_point(body, c.f)?) {
         Where::Inside => Class::In,
         Where::Outside => Class::Out,
         Where::On => return None,
@@ -2861,8 +2861,23 @@ fn local_split(c: LocalSplit) -> Option<Local> {
         Op::Union | Op::Subtract => class == Class::Out,
         Op::Intersect => class == Class::In,
     };
+    // a touched loop has a cut edge, or a vertex a new edge ends on: within B's box either way
+    // (the vertex within its tolerance)
+    let reach = at_a.iter().fold(tol::LINEAR, |r, &v| r.max(body.vertex(v).tol));
+    let mut near: Vec<forge_topo::LoopId> = c.index[0]
+        .coedges_meeting(c.f, &c.index[1].bbox.grow(reach + tol::LINEAR))
+        .into_iter()
+        .map(|co| body.coedge(co).lp)
+        .collect();
+    near.sort_unstable();
+    near.dedup();
+    near.retain(|&l| hit(l));
     kept_as_is.then(|| Local {
-        touched: loops[1..].iter().copied().filter(|&l| hit(l)).collect(),
+        touched: loops[1..]
+            .iter()
+            .copied()
+            .filter(|l| near.binary_search(l).is_ok())
+            .collect(),
         class,
     })
 }
