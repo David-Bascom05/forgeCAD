@@ -1,7 +1,9 @@
 #!/usr/bin/env python3
 """A third opinion when ForgeCAD and OCCT disagree: the part's volume by Monte Carlo, classifying
 random points straight against the history's analytic tools (no B-rep at all). Whole circles are
-tested exactly; arcs are walked as 2048-gons (sag under 1.2e-6 of the radius).
+tested exactly; arcs are walked as 2048-gons (sag under 1.2e-6 of the radius). Ruled lofts blend
+matched section points; smooth lofts through circles follow our definition (natural spline over
+chord-length knots), so against OCCT's own spline they show which definition a volume belongs to.
 
   tools/occt/montecarlo.py part.json [--samples 2e7] [--budget 60]    (a part as the oracle example exports it)
 """
@@ -114,7 +116,142 @@ def hole_section(f):
     return np.array([(0, 0), (mouth, 0)] + pts + [(0, tip)])
 
 
+def loop_samples(loop, n=64):
+    """A profile loop at matched points: each segment by the same number of steps of its own
+    parameter, as a loft's walls match them. Loops of one loft have alike segments."""
+    pts = []
+    for s in loop:
+        if "line" in s:
+            a, b, c, d = s["line"]
+            pts.append((a, b))
+        elif "arc" in s:
+            cx, cy, r, st, sw = s["arc"]
+            pts += [(cx + r * math.cos(st + sw * i / n), cy + r * math.sin(st + sw * i / n)) for i in range(n)]
+        else:
+            cx, cy, r = s["circle"][:3]
+            pts += [(cx + r * math.cos(2 * math.pi * i / (4 * n)), cy + r * math.sin(2 * math.pi * i / (4 * n)))
+                    for i in range(4 * n)]
+    return np.array(pts)
+
+
+def ruled_member(f, P):
+    """Spans between sections on parallel planes: at each height the section is the matched
+    points' straight blend, tested by even-odd rays."""
+    pr = f["profiles"]
+    o0, x, y, z = (np.array(pr[0]["plane"][k]) for k in ("o", "x", "y", "z"))
+    if any(abs(np.array(q["plane"]["z"]) @ z) < 1 - 1e-12 for q in pr):
+        raise ValueError("a ruled loft's sections must be parallel here")
+    q = P - o0
+    u, v, h = q @ x, q @ y, q @ z
+    secs = []
+    for p in pr:
+        o, xk, yk = (np.array(p["plane"][k]) for k in ("o", "x", "y"))
+        w = loop_samples(p["loops"][0])
+        world = o + np.outer(w[:, 0], xk) + np.outer(w[:, 1], yk) - o0
+        secs.append((world @ z, np.stack([world @ x, world @ y], 1)))
+    inside = np.zeros(len(P), bool)
+    for (h0, a), (h1, b) in zip(secs, secs[1:]):
+        h0, h1 = h0.mean(), h1.mean()
+        mask = (h >= min(h0, h1)) & (h <= max(h0, h1))
+        idx = np.nonzero(mask)[0]
+        if not len(idx):
+            continue
+        t = ((h[idx] - h0) / (h1 - h0))[:, None]
+        pu, pv = u[idx], v[idx]
+        odd = np.zeros(len(idx), bool)
+        c0, c1 = a, b
+        for i in range(len(a)):
+            j = (i + 1) % len(a)
+            pi = c0[i] * (1 - t) + c1[i] * t
+            pj = c0[j] * (1 - t) + c1[j] * t
+            cross = (pi[:, 1] > pv) != (pj[:, 1] > pv)
+            with np.errstate(divide="ignore", invalid="ignore"):
+                at = pi[:, 0] + (pv - pi[:, 1]) * (pj[:, 0] - pi[:, 0]) / (pj[:, 1] - pi[:, 1])
+            odd ^= cross & (pu < at)
+        inside[idx] = odd
+    return inside
+
+
+def natural_spline(knots):
+    """The natural cubic spline's second derivatives for each unit value, one row per value."""
+    n = len(knots)
+    h = np.diff(knots)
+    a = np.zeros((n, n))
+    a[0, 0] = a[-1, -1] = 1.0
+    r = np.zeros((n, n))
+    for i in range(1, n - 1):
+        a[i, i - 1], a[i, i], a[i, i + 1] = h[i - 1], 2 * (h[i - 1] + h[i]), h[i]
+        for d in range(n):
+            y = lambda k: 1.0 if k == d else 0.0
+            r[i, d] = 6 * ((y(i + 1) - y(i)) / h[i] - (y(i) - y(i - 1)) / h[i - 1])
+    return np.linalg.solve(a, r)
+
+
+def spline_weights(knots, m2, s):
+    i = min(np.searchsorted(knots, s, side="right") - 1, len(knots) - 2)
+    h = knots[i + 1] - knots[i]
+    a, b = (knots[i + 1] - s) / h, (s - knots[i]) / h
+    w = np.zeros(len(knots))
+    w[i], w[i + 1] = a, b
+    return w + ((a ** 3 - a) * m2[i] + (b ** 3 - b) * m2[i + 1]) * h * h / 6
+
+
+def smooth_sections(f, k=2000):
+    """A smooth loft through whole circles: S(t, s) = sum w_k(s) C_k(t) (natural spline in s over
+    chord-length knots between the centres, forge-geom skinned.rs), whose section at each s is the
+    ellipse o(s) + cos t X(s) + sin t Y(s). Sampled at k values of s."""
+    pr = f["profiles"]
+    cs, xs, ys = [], [], []
+    for p in pr:
+        lp = p["loops"][0]
+        if len(p["loops"]) != 1 or len(lp) != 1 or "circle" not in lp[0]:
+            raise ValueError("a smooth loft here is through whole circles")
+        o, x, y = (np.array(p["plane"][q]) for q in ("o", "x", "y"))
+        cx, cy, r = lp[0]["circle"][:3]
+        cs.append(o + cx * x + cy * y)
+        xs.append(r * x)
+        ys.append(r * y)
+    cs, xs, ys = np.array(cs), np.array(xs), np.array(ys)
+    knots = np.concatenate([[0.0], np.cumsum(np.linalg.norm(np.diff(cs, axis=0), axis=1))])
+    m2 = natural_spline(knots)
+    w = np.array([spline_weights(knots, m2, s) for s in np.linspace(0, knots[-1], k)])
+    return w @ cs, w @ xs, w @ ys
+
+
+def smooth_member(f, P):
+    """Inside if some section's plane through p holds p inside its ellipse: where the distance to
+    that plane changes sign between samples, the solved (a, b) on the ellipse's axes, interpolated."""
+    o, x, y = smooth_sections(f)
+    n = np.cross(x, y)
+    inside = np.zeros(len(P), bool)
+    prev = None
+    for k in range(len(o)):
+        q = P - o[k]
+        g = q @ n[k]
+        xx, xy, yy = x[k] @ x[k], x[k] @ y[k], y[k] @ y[k]
+        det = xx * yy - xy * xy
+        qx, qy = q @ x[k], q @ y[k]
+        a, b = (yy * qx - xy * qy) / det, (xx * qy - xy * qx) / det
+        rr = a * a + b * b
+        if prev is not None:
+            g0, r0 = prev
+            hit = (g0 * g <= 0) & (g0 != g)
+            t = g0[hit] / (g0[hit] - g[hit])
+            inside[np.nonzero(hit)[0][(r0[hit] * (1 - t) + rr[hit] * t) <= 1.0]] = True
+        prev = (g, rr)
+    return inside
+
+
+def moved_member(f, P):
+    m = np.array(f["m"])
+    return member(f["src"], np.linalg.solve(m[:3].T, (P - m[3]).T).T)
+
+
 def member(f, P):
+    if f["kind"] == "moved":
+        return moved_member(f, P)
+    if f["kind"] == "loft":
+        return ruled_member(f, P) if f["ruled"] else smooth_member(f, P)
     if f["kind"] == "shape":
         return shape_member(f["shape"], P)
     if f["kind"] == "hole":
@@ -158,6 +295,24 @@ def member(f, P):
 
 
 def bbox(f):
+    if f["kind"] == "moved":
+        lo, hi = bbox(f["src"])
+        m = np.array(f["m"])
+        c = np.array([[a, b, d] for a in (lo[0], hi[0]) for b in (lo[1], hi[1]) for d in (lo[2], hi[2])])
+        w = c @ m[:3] + m[3]
+        return w.min(0), w.max(0)
+    if f["kind"] == "loft":
+        if f["ruled"]:
+            pts = []
+            for p in f["profiles"]:
+                o, x, y = (np.array(p["plane"][k]) for k in ("o", "x", "y"))
+                w = loop_samples(p["loops"][0])
+                pts.append(o + np.outer(w[:, 0], x) + np.outer(w[:, 1], y))
+            pts = np.vstack(pts)
+        else:
+            o, x, y = smooth_sections(f, 400)
+            pts = np.vstack([o + x * math.cos(t) + y * math.sin(t) for t in np.linspace(0, 2 * math.pi, 64)])
+        return pts.min(0) - 1e-3, pts.max(0) + 1e-3
     if f["kind"] == "shape":
         return shape_box(f["shape"])
     if f["kind"] == "ball":
@@ -270,13 +425,19 @@ def volume(part, samples=2e7, seed=1, budget=60.0, target=0.0):
     """Stops after `budget` seconds or once the standard error is under `target`, whichever
     comes first, with what it has by then."""
     feats = []
+    by_i = {f.get("i"): f for f in part["features"]}
     for f in part["features"]:
         if f["kind"] == "shapes":
             feats += [{"kind": "shape", "op": t["op"], "shape": t["shape"]} for t in f["tools"]]
+        elif f["kind"] == "pattern" and "src" in f:
+            for m in f["m"]:
+                feats += [{"kind": "moved", "op": "add" if by_i[i]["op"] == "new" else by_i[i]["op"], "src": by_i[i],
+                           "m": m} for i in f["src"]]
         else:
             feats.append(f)
-    if any(f["kind"] not in ("extrude", "revolve", "ball", "hole", "shape") for f in feats):
-        raise ValueError("only extrudes, revolves, balls, holes and analytic tools have a membership test here")
+    if any(f["kind"] not in ("extrude", "revolve", "ball", "hole", "shape", "moved", "loft") for f in feats):
+        raise ValueError("only extrudes, revolves, balls, holes, ruled and smooth lofts, patterns of them "
+                         "and analytic tools have a membership test here")
     for f in feats:
         if f["kind"] in ("extrude", "revolve"):
             span(f)
@@ -288,7 +449,7 @@ def volume(part, samples=2e7, seed=1, budget=60.0, target=0.0):
     lo = np.min([b[0] for b in boxes], 0) - 1e-6
     hi = np.max([b[1] for b in boxes], 0) + 1e-6
     rng = np.random.default_rng(seed)
-    hit, n, chunk = 0, 0, 500_000
+    hit, n, chunk = 0, 0, 100_000
     t0 = time.monotonic()
     vb = float(np.prod(hi - lo))
     while n < samples:
