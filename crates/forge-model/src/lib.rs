@@ -617,28 +617,35 @@ fn nary_regen(
         if m == 0 {
             return Err(RegenError::NothingToCombine { feature: 0 });
         }
-        let body = modify(
-            features,
-            &features[m],
-            m,
-            // a given batch holds the tools after the last modifier (nary_solids), not these
-            &nary_regen(
-                features.upto(m),
+        let modified = || {
+            modify(
+                features,
+                &features[m],
+                m,
+                // a given batch holds the tools after the last modifier (nary_solids), not these
+                &nary_regen(
+                    features.upto(m),
+                    threads,
+                    shapes,
+                    match batching {
+                        Batching::Given(_) => Batching::None,
+                        b => b,
+                    },
+                )?,
                 threads,
-                shapes,
-                match batching {
-                    Batching::Given(_) => Batching::None,
-                    b => b,
-                },
-            )?,
-            threads,
-        )?;
+            )
+        };
+        let mut body = modified()?;
         let built = build_tools(features, m + 1, threads, true)?;
         if built.is_empty() {
             return Ok(body);
         }
         if let [(tool, c, _)] = &built[..] {
-            return single(&body, tool, *c, None, threads).map_err(err);
+            if single(&mut body, tool, *c) {
+                return Ok(body);
+            }
+            // the boolean refused, perhaps halfway: the n-ary pass from the part as it was
+            body = modified()?;
         }
         let mut tools: Vec<&Body> = vec![&body];
         tools.extend(built.iter().map(|t| &t.0));
@@ -649,10 +656,12 @@ fn nary_regen(
     if features.get(start).is_none_or(|f| !starts(f)) {
         return Err(RegenError::NothingToCombine { feature: 0 });
     }
-    let built = build_tools(features, start, threads, true)?;
-    if let [(base, _, s0), (tool, c, s1)] = &built[..] {
-        let solids = [s0.clone(), s1.clone()];
-        return single(base, tool, *c, shapes.then_some(&solids[..]), threads).map_err(err);
+    let mut built = build_tools(features, start, threads, true)?;
+    if let [(base, _, _), (tool, c, _)] = &mut built[..] {
+        if single(base, tool, *c) {
+            return Ok(built.swap_remove(0).0);
+        }
+        built = build_tools(features, start, threads, true)?;
     }
     let tools: Vec<&Body> = built.iter().map(|t| &t.0).collect();
     let ops: Vec<Op> = built[1..].iter().map(|t| op_of(t.1)).collect();
@@ -684,20 +693,14 @@ fn nary_regen(
     .map_err(err)
 }
 
-/// A run of one tool: the sequential regen's boolean, the same body for less work; where that
-/// fails, the n-ary pass.
-fn single(
-    body: &Body,
-    tool: &Body,
-    c: Combine,
-    shapes: Option<&[Shape]>,
-    threads: usize,
-) -> Result<Body, BoolError> {
-    let mut b = body.clone();
-    match boolean_into(&mut b, tool, op_of(c), 0) {
-        Ok(()) => Ok(b.compact()),
-        Err(_) => forge_bool::nary_with(&[body, tool], &[op_of(c)], shapes, None, threads, cut_root(0)),
+/// A run of one tool: the sequential regen's boolean, the same body for less work. False where
+/// that fails (`body` may be left halfway; the caller takes the n-ary pass from the start).
+fn single(body: &mut Body, tool: &Body, c: Combine) -> bool {
+    if boolean_into(body, tool, op_of(c), 0).is_err() {
+        return false;
     }
+    *body = body.compact();
+    true
 }
 
 /// The root of the names a boolean gives the vertices it makes: the same for every boolean, so
