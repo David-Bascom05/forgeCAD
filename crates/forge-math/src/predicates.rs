@@ -4,7 +4,8 @@
 //! Arithmetic and Fast Robust Geometric Predicates", 1997). The returned value
 //! always has the correct sign; its magnitude is an approximation.
 
-use forge_math::Point2;
+use crate::{Point2, Vec2, Vec3};
+use std::cmp::Ordering;
 
 const EPS: f64 = f64::EPSILON * 0.5;
 const SPLITTER: f64 = 134_217_729.0; // 2^27 + 1
@@ -14,6 +15,12 @@ const ICC_BOUND: f64 = (10.0 + 96.0 * EPS) * EPS;
 // computed exactly, has the right sign when it is at least this times the permanent.
 const CCW_BOUND_B: f64 = (2.0 + 12.0 * EPS) * EPS;
 const ICC_BOUND_B: f64 = (4.0 + 48.0 * EPS) * EPS;
+/// a*b - c*d evaluated in f64 is within this times |a*b| + |c*d| (as evaluated) of the truth.
+const CROSS_BOUND: f64 = (2.0 + 8.0 * EPS) * EPS;
+/// The same for a 3-term dot product, relative to the sum of the products' magnitudes.
+const DOT3_BOUND: f64 = (3.0 + 32.0 * EPS) * EPS;
+/// The same for a triple product a . (b x c), relative to its permanent.
+const TRIPLE_BOUND: f64 = (5.0 + 64.0 * EPS) * EPS;
 
 fn two_sum(a: f64, b: f64) -> (f64, f64) {
     let x = a + b;
@@ -139,6 +146,7 @@ fn exact_diffs<const N: usize>(pairs: [(f64, f64); N]) -> Option<[f64; N]> {
 }
 
 /// Positive if a, b, c run counter-clockwise, negative if clockwise, zero if collinear.
+#[inline]
 pub fn orient2d(a: Point2, b: Point2, c: Point2) -> f64 {
     let left = (a.x - c.x) * (b.y - c.y);
     let right = (a.y - c.y) * (b.x - c.x);
@@ -151,6 +159,7 @@ pub fn orient2d(a: Point2, b: Point2, c: Point2) -> f64 {
     orient2d_adapt(a, b, c, detsum)
 }
 
+#[cold]
 fn orient2d_adapt(a: Point2, b: Point2, c: Point2, detsum: f64) -> f64 {
     let (acx, acy, bcx, bcy) = (a.x - c.x, a.y - c.y, b.x - c.x, b.y - c.y);
     let mut h = [0.0; 4];
@@ -172,7 +181,7 @@ fn orient2d_exact(a: Point2, b: Point2, c: Point2) -> f64 {
     let (acx, acy) = (diff2(a.x, c.x), diff2(a.y, c.y));
     let (bcx, bcy) = (diff2(b.x, c.x), diff2(b.y, c.y));
     let mut h = [0.0; 16];
-    let n = cross2(&acx, &bcy, &acy, &bcx, &mut h);
+    let n = cross_two(&acx, &bcy, &acy, &bcx, &mut h);
     estimate(&h[..n])
 }
 
@@ -194,7 +203,7 @@ fn mul_small(e: &[f64], f: &[f64], h: &mut [f64; 8]) -> usize {
 }
 
 /// x1 * y2 - x2 * y1 for two-component inputs: at most 16 components.
-fn cross2(
+fn cross_two(
     x1: &([f64; 2], usize),
     y2: &([f64; 2], usize),
     x2: &([f64; 2], usize),
@@ -208,6 +217,119 @@ fn cross2(
         *v = -*v;
     }
     sum_into(&p[..np], &q[..nq], h)
+}
+
+/// a*b - c*d with the right sign (zero exactly when it is zero).
+#[inline]
+pub fn cross_sign(a: f64, b: f64, c: f64, d: f64) -> f64 {
+    let (l, r) = (a * b, c * d);
+    let det = l - r;
+    if det.abs() > CROSS_BOUND * (l.abs() + r.abs()) {
+        return det;
+    }
+    let mut h = [0.0; 4];
+    let n = cross_exact(a, b, c, d, &mut h);
+    estimate(&h[..n])
+}
+
+/// The 2D cross product u x v with the right sign: positive when v is counter-clockwise of u.
+#[inline]
+pub fn cross2(u: Vec2, v: Vec2) -> f64 {
+    cross_sign(u.x, v.y, u.y, v.x)
+}
+
+/// u . v with the right sign.
+#[inline]
+pub fn dot3(u: Vec3, v: Vec3) -> f64 {
+    let (x, y, z) = (u.x * v.x, u.y * v.y, u.z * v.z);
+    let dot = x + y + z;
+    if dot.abs() > DOT3_BOUND * (x.abs() + y.abs() + z.abs()) {
+        return dot;
+    }
+    let (mut p, mut q) = ([0.0; 4], [0.0; 6]);
+    let (x1, x0) = two_product(u.x, v.x);
+    let (y1, y0) = two_product(u.y, v.y);
+    let (z1, z0) = two_product(u.z, v.z);
+    let np = sum_into(&[x0, x1], &[y0, y1], &mut p);
+    let nq = sum_into(&p[..np], &[z0, z1], &mut q);
+    estimate(&q[..nq])
+}
+
+/// The triple product a . (b x c) with the right sign: positive when a, b, c form a
+/// right-handed set.
+#[inline]
+pub fn triple(a: Vec3, b: Vec3, c: Vec3) -> f64 {
+    let (yz, zy) = (b.y * c.z, b.z * c.y);
+    let (zx, xz) = (b.z * c.x, b.x * c.z);
+    let (xy, yx) = (b.x * c.y, b.y * c.x);
+    let det = a.x * (yz - zy) + a.y * (zx - xz) + a.z * (xy - yx);
+    let permanent = a.x.abs() * (yz.abs() + zy.abs())
+        + a.y.abs() * (zx.abs() + xz.abs())
+        + a.z.abs() * (xy.abs() + yx.abs());
+    if det.abs() > TRIPLE_BOUND * permanent {
+        return det;
+    }
+    let mut parts = [[0.0; 8]; 3];
+    let mut lens = [0; 3];
+    for (k, (ai, (p, q, r, s))) in [
+        (a.x, (b.y, c.z, b.z, c.y)),
+        (a.y, (b.z, c.x, b.x, c.z)),
+        (a.z, (b.x, c.y, b.y, c.x)),
+    ]
+    .into_iter()
+    .enumerate()
+    {
+        let mut cr = [0.0; 4];
+        let n = cross_exact(p, q, r, s, &mut cr);
+        lens[k] = scale_into(&cr[..n], ai, &mut parts[k]);
+    }
+    let (mut ab, mut all) = ([0.0; 16], [0.0; 24]);
+    let n = sum_into(&parts[0][..lens[0]], &parts[1][..lens[1]], &mut ab);
+    let m = sum_into(&ab[..n], &parts[2][..lens[2]], &mut all);
+    estimate(&all[..m])
+}
+
+/// Orders two nonzero directions by their angle in (-pi, pi] (atan2's range), exactly.
+#[inline]
+pub fn angle_cmp(u: Vec2, v: Vec2) -> Ordering {
+    // lower half, the positive x axis, upper half, the negative x axis
+    let half = |w: Vec2| match (w.y < 0.0, w.y == 0.0, w.x >= 0.0) {
+        (true, _, _) => 0,
+        (_, true, true) => 1,
+        (_, true, false) => 3,
+        _ => 2,
+    };
+    half(u).cmp(&half(v)).then_with(|| {
+        let c = cross2(u, v);
+        if c > 0.0 {
+            Ordering::Less
+        } else if c < 0.0 {
+            Ordering::Greater
+        } else {
+            Ordering::Equal
+        }
+    })
+}
+
+/// Whether p is inside the closed polygon, by the parity of its edges' crossings with the ray
+/// from p towards +x (an end exactly at p's height counts on one side only), exactly.
+pub fn inside_polygon(p: Point2, poly: &[Point2]) -> bool {
+    let Some(&last) = poly.last() else {
+        return false;
+    };
+    let (mut a, mut a_above) = (last, last.y > p.y);
+    let mut inside = false;
+    for &b in poly {
+        let b_above = b.y > p.y;
+        if a_above != b_above {
+            let o = orient2d(a, b, p);
+            if if b_above { o > 0.0 } else { o < 0.0 } {
+                inside = !inside;
+            }
+        }
+        (a, a_above) = (b, b_above);
+    }
+    inside
 }
 
 /// True only when d is certainly strictly inside the circle through a, b, c
@@ -331,9 +453,9 @@ fn incircle_exact_general(a: Point2, b: Point2, c: Point2, d: Point2) -> f64 {
         na
     };
     let (mut bc, mut ca, mut ab) = ([0.0; 16], [0.0; 16], [0.0; 16]);
-    let nbc = cross2(&bdx, &cdy, &cdx, &bdy, &mut bc);
-    let nca = cross2(&cdx, &ady, &adx, &cdy, &mut ca);
-    let nab = cross2(&adx, &bdy, &bdx, &ady, &mut ab);
+    let nbc = cross_two(&bdx, &cdy, &cdx, &bdy, &mut bc);
+    let nca = cross_two(&cdx, &ady, &adx, &cdy, &mut ca);
+    let nab = cross_two(&adx, &bdy, &bdx, &ady, &mut ab);
     let (mut ta, mut tb, mut tc) = ([0.0; 512], [0.0; 512], [0.0; 512]);
     let na = term(&adx, &ady, &bc[..nbc], &mut ta);
     let nb = term(&bdx, &bdy, &ca[..nca], &mut tb);
@@ -348,7 +470,7 @@ fn incircle_exact_general(a: Point2, b: Point2, c: Point2, d: Point2) -> f64 {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use forge_math::rng::Rng;
+    use crate::rng::Rng;
 
     /// Integer-valued points scaled by 2^-shift: f64 holds them exactly and i128 gives exact signs.
     fn pt(x: i64, y: i64, shift: i32) -> Point2 {
@@ -453,6 +575,68 @@ mod tests {
     }
 
     #[test]
+    fn small_predicates_agree_with_integers() {
+        let mut r = Rng::new(503);
+        let v3 = |r: &mut Rng| {
+            let mut g = || (r.below(1 << 26) as i64 - (1 << 25)) as f64;
+            Vec3::new(g(), g(), g())
+        };
+        for _ in 0..20_000 {
+            let (a, b, mut c) = (v3(&mut r), v3(&mut r), v3(&mut r));
+            // often nearly coplanar: c a mix of a and b plus a nudge
+            if r.bool() {
+                let k = r.below(5) as f64 - 2.0;
+                c = Vec3::new(
+                    a.x * k + b.x,
+                    a.y * k + b.y,
+                    a.z * k + b.z + (r.below(3) as f64 - 1.0),
+                );
+            }
+            let i = |x: f64| x as i128;
+            let cx = i(b.y) * i(c.z) - i(b.z) * i(c.y);
+            let cy = i(b.z) * i(c.x) - i(b.x) * i(c.z);
+            let cz = i(b.x) * i(c.y) - i(b.y) * i(c.x);
+            let want = (i(a.x) * cx + i(a.y) * cy + i(a.z) * cz).signum() as i32;
+            assert_eq!(sign(triple(a, b, c)), want, "{a:?} {b:?} {c:?}");
+            let want = (i(a.x) * i(c.x) + i(a.y) * i(c.y) + i(a.z) * i(c.z)).signum() as i32;
+            assert_eq!(sign(dot3(a, c)), want);
+            let want = (i(a.x) * i(b.y) - i(a.y) * i(b.x)).signum() as i32;
+            assert_eq!(sign(cross2(Vec2::new(a.x, a.y), Vec2::new(b.x, b.y))), want);
+        }
+        // products whose rounding hides the difference entirely
+        let x = 1.0 + f64::EPSILON;
+        assert!(cross_sign(x, x, 1.0, 1.0 + 2.0 * f64::EPSILON) > 0.0);
+        assert_eq!(cross_sign(3.0, 5.0, 5.0, 3.0), 0.0);
+    }
+
+    #[test]
+    fn angles_order_like_atan2() {
+        let mut r = Rng::new(504);
+        let mut dirs: Vec<Vec2> = (0..400)
+            .map(|_| Vec2::new(r.range(-1.0, 1.0), r.range(-1.0, 1.0)))
+            .collect();
+        dirs.extend([
+            Vec2::new(1.0, 0.0),
+            Vec2::new(-1.0, 0.0),
+            Vec2::new(0.0, 1.0),
+            Vec2::new(0.0, -1.0),
+        ]);
+        for u in &dirs {
+            for v in &dirs {
+                let (a, b) = (crate::dmath::atan2(u.y, u.x), crate::dmath::atan2(v.y, v.x));
+                if (a - b).abs() > 1e-12 {
+                    assert_eq!(angle_cmp(*u, *v), a.total_cmp(&b), "{u:?} {v:?}");
+                }
+            }
+        }
+        // the same direction at two lengths is one angle
+        assert_eq!(
+            angle_cmp(Vec2::new(0.3, 0.7), Vec2::new(0.6, 1.4)),
+            Ordering::Equal
+        );
+    }
+
+    #[test]
     fn exact_paths_directly() {
         let a = Point2::new(0.5, 0.5);
         let b = Point2::new(12.0, 12.0);
@@ -483,7 +667,7 @@ mod tests {
             let rad = r.range(0.1, 10.0);
             let p: Vec<Point2> = (0..4)
                 .map(|_| {
-                    let a = r.range(0.0, forge_math::dmath::TAU);
+                    let a = r.range(0.0, crate::dmath::TAU);
                     let q = crate::predicates::tests::on_circle(c, rad, a);
                     if r.bool() {
                         Point2::new(q.x.next_up(), q.y)
@@ -519,14 +703,14 @@ mod tests {
     }
 
     fn on_circle(c: Point2, r: f64, a: f64) -> Point2 {
-        let (s, co) = forge_math::dmath::sin_cos(a);
+        let (s, co) = crate::dmath::sin_cos(a);
         Point2::new(c.x + r * co, c.y + r * s)
     }
 
     mod reference {
         //! The original allocating expansion code, kept as an independent check.
         use super::super::{estimate, two_diff, two_product, two_sum};
-        use forge_math::Point2;
+        use crate::Point2;
 
         /// Sum of two nonoverlapping expansions (components in increasing magnitude),
         /// zero components removed.
@@ -633,7 +817,7 @@ mod tests {
             let rad = r.range(1e-3, 10.0);
             let p: Vec<Point2> = (0..4)
                 .map(|_| {
-                    let q = on_circle(base, rad, r.range(0.0, forge_math::dmath::TAU));
+                    let q = on_circle(base, rad, r.range(0.0, crate::dmath::TAU));
                     Point2::new(q.x + r.range(-1e-12, 1e-12), q.y)
                 })
                 .collect();

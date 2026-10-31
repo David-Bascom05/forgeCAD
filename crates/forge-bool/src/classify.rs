@@ -1,5 +1,6 @@
 use forge_geom::intersect::{Contact, LineSurface, line_surface};
 use forge_geom::{Curve, CurveGeom, Line, Surface, SurfaceGeom};
+use forge_math::predicates::triple;
 use forge_math::{Box2, Box3, Interval, Point2, Point3, Vec3, tol};
 use forge_topo::uv::{UvLoop, face_uv_loops, point_in_loops};
 use forge_topo::{Body, FaceId};
@@ -489,15 +490,24 @@ fn planar_parity(
                 // ray p + s d against segment o + t dir, t in range
                 let w = l.origin - p;
                 let n = plane.frame.z().get();
-                let den = d.cross(l.dir.get()).dot(n);
-                if den.abs() <= 1e-15 {
+                // which way along the ray the line lies decides parity: its sign is exact
+                let den = triple(n, d, l.dir.get());
+                if den == 0.0 {
                     if l.dir.cross(w).dot(n).abs() <= tol::LINEAR {
                         return None; // the ray runs along this edge
                     }
                     continue;
                 }
-                let s = l.dir.get().cross(w).dot(n) / -den;
+                let along = triple(n, l.dir.get(), w);
+                let s = if along != 0.0 && (along > 0.0) == (den < 0.0) {
+                    1.0
+                } else {
+                    -1.0
+                };
                 let t = d.cross(w).dot(n) / -den;
+                if !t.is_finite() {
+                    return None;
+                }
                 vec![(s, t)]
             }
             Curve::Circle(k) => conic_ray(&k.frame, k.radius, k.radius, p, d),

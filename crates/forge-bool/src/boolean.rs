@@ -17,7 +17,8 @@ use crate::classify::{Index, Where};
 use crate::ssi;
 use forge_geom::intersect::{Contact, CurveHit, CurveSurface, SurfaceSurface, curve_surface};
 use forge_geom::{Curve, CurveGeom, Cylinder, Plane, Surface, SurfaceGeom};
-use forge_math::{Frame, Interval, Point2, Point3, Vec3, dmath, tol};
+use forge_math::predicates::angle_cmp;
+use forge_math::{Frame, Interval, Point2, Point3, Vec2, Vec3, dmath, tol};
 use forge_topo::{Body, EdgeId, FaceId, Name, VertexId};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -1759,8 +1760,9 @@ pub(crate) fn settle(mut p: Point3, curves: &[(&Curve, Interval)]) -> R<(Point3,
 }
 
 /// Direction of a half-edge in the face's oriented parameter plane, at its
-/// start (`at_end` false) or pointing back along it from its end.
-pub(crate) fn uv_angle(body: &Body, f: FaceId, p: &Piece, forward: bool, at_end: bool) -> R<f64> {
+/// start (`at_end` false) or pointing back along it from its end. Directions are ordered by
+/// `predicates::angle_cmp`, exactly.
+pub(crate) fn uv_dir(body: &Body, f: FaceId, p: &Piece, forward: bool, at_end: bool) -> R<Vec2> {
     let t = if forward != at_end { p.range.lo } else { p.range.hi };
     let d = p.curve.deriv(t);
     let dir = if forward != at_end { d.d1 } else { -d.d1 };
@@ -1773,7 +1775,7 @@ pub(crate) fn uv_angle(body: &Body, f: FaceId, p: &Piece, forward: bool, at_end:
     let (a, b) = forge_math::linalg::solve2(uu, uv2, uv2, vv, ru, rv)
         .ok_or(BoolError::Unsupported("split through a singular point"))?;
     let a = if face.same_sense { a } else { -a };
-    Ok(dmath::atan2(b, a))
+    Ok(Vec2::new(a, b))
 }
 
 struct LocalSplit<'a> {
@@ -1974,16 +1976,17 @@ pub(crate) fn split_face(
         if out.len() == 1 {
             return Ok(out[0]);
         }
-        let theta = uv_angle(body, f, &pieces[half[i].0], half[i].1, true)?;
+        let theta = uv_dir(body, f, &pieces[half[i].0], half[i].1, true)?;
         // the outgoing half-edge just clockwise of the way back
-        let mut best: Option<(f64, usize)> = None;
-        let mut top: Option<(f64, usize)> = None;
+        let after = |x: Vec2, y: Vec2| angle_cmp(x, y) == std::cmp::Ordering::Greater;
+        let mut best: Option<(Vec2, usize)> = None;
+        let mut top: Option<(Vec2, usize)> = None;
         for j in out {
-            let a = uv_angle(body, f, &pieces[half[j].0], half[j].1, false)?;
-            if a < theta && best.is_none_or(|b| a > b.0) {
+            let a = uv_dir(body, f, &pieces[half[j].0], half[j].1, false)?;
+            if after(theta, a) && best.is_none_or(|b| after(a, b.0)) {
                 best = Some((a, j));
             }
-            if top.is_none_or(|b| a > b.0) {
+            if top.is_none_or(|b| after(a, b.0)) {
                 top = Some((a, j));
             }
         }
@@ -2221,14 +2224,7 @@ pub(crate) fn split_face(
 }
 
 pub(crate) fn inside_poly(p: Point2, poly: &[Point2]) -> bool {
-    let mut c = false;
-    for i in 0..poly.len() {
-        let (a, b) = (poly[i], poly[(i + 1) % poly.len()]);
-        if (a.y > p.y) != (b.y > p.y) && p.x < a.x + (p.y - a.y) / (b.y - a.y) * (b.x - a.x) {
-            c = !c;
-        }
-    }
-    c
+    forge_math::predicates::inside_polygon(p, poly)
 }
 
 /// Inside, outside, or on the other body, for every spec.

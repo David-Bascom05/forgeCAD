@@ -1068,18 +1068,18 @@ pub fn nary_with(
         if rr.len() < 2 {
             return Ok(None);
         }
-        let mut owner: HashMap<(usize, bool), usize> = HashMap::new();
-        for ri in rr {
-            for &h in regs[ri].loops.iter().flatten() {
-                owner.insert(h, ri);
-            }
-        }
+        // the region each half-edge bounds, sorted for lookup
+        let mut owners: Vec<((usize, bool), usize)> = rr
+            .flat_map(|ri| regs[ri].loops.iter().flatten().map(move |&h| (h, ri)))
+            .collect();
+        owners.sort_unstable();
+        let owner = |h: (usize, bool)| owners.binary_search_by(|x| x.0.cmp(&h)).ok().map(|i| owners[i].1);
         let (side, f, ref boundary, ref new_edges) = jobs[j];
         let keep: Vec<usize> = new_edges
             .iter()
             .copied()
-            .filter(|&p| match (owner.get(&(p, true)), owner.get(&(p, false))) {
-                (Some(&a), Some(&b)) => a == b || class[a] != class[b],
+            .filter(|&p| match (owner((p, true)), owner((p, false))) {
+                (Some(a), Some(b)) => a == b || class[a] != class[b],
                 _ => true,
             })
             .collect();
@@ -1094,9 +1094,7 @@ pub fn nary_with(
                     .first()
                     .and_then(|l| l.first())
                     .ok_or(BoolError::Internal("empty region"))?;
-                let old = *owner
-                    .get(&first)
-                    .ok_or(BoolError::Internal("merged region of no old one"))?;
+                let old = owner(first).ok_or(BoolError::Internal("merged region of no old one"))?;
                 Ok((loops, class[old]))
             })
             .collect::<R<Vec<_>>>()

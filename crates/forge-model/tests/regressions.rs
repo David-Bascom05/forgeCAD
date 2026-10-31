@@ -156,7 +156,7 @@ fn axis_revolve_inconsistent_classification() {
 }
 
 #[test]
-#[ignore = "known failure: error: Boolean(Internal('face split crossed itself'))"]
+#[ignore = "known failure: error: Boolean(Internal('inconsistent classification'))"]
 #[allow(
     clippy::approx_constant,
     clippy::excessive_precision,
@@ -1135,14 +1135,13 @@ fn coplanar_stack_untouched_face_lies_on_the_other() {
 }
 
 #[test]
-#[ignore = "known failure: error: Boolean(Unsupported('intersection curve runs along an edge'))"]
 #[allow(
     clippy::approx_constant,
     clippy::excessive_precision,
     clippy::unreadable_literal
 )]
-fn exact_patterns_intersection_curve_runs_along_an_edge() {
-    regenerates_valid(Part {
+fn exact_patterns_touch_refused_zero_thickness() {
+    refused_zero_thickness(Part {
         features: vec![
             Feature::Extrude {
                 profile: Profile {
@@ -1507,7 +1506,6 @@ fn fuzz_inconsistent_classification() {
 }
 
 #[test]
-#[ignore = "known failure: invalid: VertexOffEdge"]
 #[allow(
     clippy::approx_constant,
     clippy::excessive_precision,
@@ -1654,7 +1652,6 @@ fn fuzz_invalid_vertexoffedge() {
 }
 
 #[test]
-#[ignore = "known failure: error: Boolean(Internal('face split crossed itself'))"]
 #[allow(
     clippy::approx_constant,
     clippy::excessive_precision,
@@ -1724,7 +1721,6 @@ fn near_tolerance_face_split_crossed_itself() {
 }
 
 #[test]
-#[ignore = "known failure: error: Boolean(Unsupported('coplanar faces share an edge'))"]
 #[allow(
     clippy::approx_constant,
     clippy::excessive_precision,
@@ -1886,7 +1882,6 @@ fn near_tolerance_coplanar_faces_share_an_edge() {
 }
 
 #[test]
-#[ignore = "known failure: error: Boolean(Unsupported('two vertices of one body meet at a cut'))"]
 #[allow(
     clippy::approx_constant,
     clippy::excessive_precision,
@@ -2348,7 +2343,6 @@ fn rounded_everywhere_invalid_vertexoffedge() {
 }
 
 #[test]
-#[ignore = "known failure: error: Boolean(Internal('face split crossed itself'))"]
 #[allow(
     clippy::approx_constant,
     clippy::excessive_precision,

@@ -185,17 +185,7 @@ pub fn signed_area(poly: &[Point2]) -> f64 {
 pub fn point_in_loops(p: Point2, loops: &[UvLoop]) -> bool {
     let mut inside = false;
     for l in loops {
-        let pts = &l.points;
-        let n = pts.len();
-        for i in 0..n {
-            let (a, b) = (pts[i], pts[(i + 1) % n]);
-            if (a.y > p.y) != (b.y > p.y) {
-                let x = a.x + (p.y - a.y) / (b.y - a.y) * (b.x - a.x);
-                if x > p.x {
-                    inside = !inside;
-                }
-            }
-        }
+        inside ^= forge_math::predicates::inside_polygon(p, &l.points);
     }
     inside
 }

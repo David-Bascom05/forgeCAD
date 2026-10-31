@@ -8,6 +8,7 @@ pub mod hash;
 pub mod interval;
 pub mod linalg;
 pub mod poly;
+pub mod predicates;
 pub mod rng;
 pub mod tol;
 pub mod vec;

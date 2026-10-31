@@ -5,8 +5,8 @@
 //! even-odd flood fill across constraint edges. All decisions use the exact
 //! predicates, so the result depends only on the input.
 
-use crate::predicates::{certainly_in_circle, orient2d};
 use forge_math::Point2;
+use forge_math::predicates::{certainly_in_circle, orient2d};
 use std::collections::VecDeque;
 
 #[derive(Clone, Debug, PartialEq)]

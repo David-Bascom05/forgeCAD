@@ -1,3 +1,4 @@
+use forge_math::predicates::{inside_polygon, orient2d};
 use forge_math::{Frame, Point2, Vec2, dmath, tol};
 
 /// One piece of a closed 2D profile, in sketch-plane coordinates.
@@ -220,19 +221,33 @@ impl ProfileLoop {
 }
 
 /// Whether two edges of the closed polygon cross properly (adjacent edges share a corner).
+/// Edges are swept by their x extent, so only edges whose boxes overlap are tested, exactly.
 fn crosses_itself(poly: &[Point2]) -> bool {
     let n = poly.len();
-    let cross = |o: Point2, a: Point2, b: Point2| (a.x - o.x) * (b.y - o.y) - (a.y - o.y) * (b.x - o.x);
-    for i in 0..n {
-        let (a, b) = (poly[i], poly[(i + 1) % n]);
-        for j in i + 2..n {
-            if (j + 1) % n == i {
+    let seg = |i: usize| (poly[i], poly[(i + 1) % n]);
+    let mut order: Vec<usize> = (0..n).collect();
+    order.sort_unstable_by(|&i, &j| {
+        let (a, b) = (seg(i), seg(j));
+        a.0.x.min(a.1.x).total_cmp(&b.0.x.min(b.1.x))
+    });
+    // strictly opposite sides (signs, not products: they could underflow)
+    let apart = |x: f64, y: f64| (x > 0.0 && y < 0.0) || (x < 0.0 && y > 0.0);
+    for (k, &i) in order.iter().enumerate() {
+        let (a, b) = seg(i);
+        let right = a.x.max(b.x);
+        for &j in &order[k + 1..] {
+            let (c, d) = seg(j);
+            if c.x.min(d.x) > right {
+                break;
+            }
+            if (i + 1) % n == j
+                || (j + 1) % n == i
+                || a.y.max(b.y) < c.y.min(d.y)
+                || c.y.max(d.y) < a.y.min(b.y)
+            {
                 continue;
             }
-            let (c, d) = (poly[j], poly[(j + 1) % n]);
-            let (d1, d2) = (cross(a, b, c), cross(a, b, d));
-            let (d3, d4) = (cross(c, d, a), cross(c, d, b));
-            if d1 * d2 < 0.0 && d3 * d4 < 0.0 {
+            if apart(orient2d(a, b, c), orient2d(a, b, d)) && apart(orient2d(c, d, a), orient2d(c, d, b)) {
                 return true;
             }
         }
@@ -241,14 +256,7 @@ fn crosses_itself(poly: &[Point2]) -> bool {
 }
 
 fn inside(p: Point2, poly: &[Point2]) -> bool {
-    let mut c = false;
-    for i in 0..poly.len() {
-        let (a, b) = (poly[i], poly[(i + 1) % poly.len()]);
-        if (a.y > p.y) != (b.y > p.y) && p.x < a.x + (p.y - a.y) / (b.y - a.y) * (b.x - a.x) {
-            c = !c;
-        }
-    }
-    c
+    inside_polygon(p, poly)
 }
 
 impl Profile {
