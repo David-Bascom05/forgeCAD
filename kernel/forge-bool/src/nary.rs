@@ -3279,8 +3279,15 @@ fn coincident(list: &[Piece], ps: &[usize], dense: impl Fn(VKey) -> usize) -> Ve
                         continue;
                     }
                     let o = &list[q];
-                    if o.curve.eval(o.curve.closest(mid, o.range)).distance(mid) <= tol::LINEAR {
-                        canon[p] = Some((q, pc.start != o.start));
+                    let t = o.curve.closest(mid, o.range);
+                    if o.curve.eval(t).distance(mid) <= tol::LINEAR {
+                        // a closed edge's ends say nothing of which way it runs: its tangent does
+                        let flip = if pc.start == pc.end {
+                            pc.curve.deriv(pc.range.mid()).d1.dot(o.curve.deriv(t).d1) < 0.0
+                        } else {
+                            pc.start != o.start
+                        };
+                        canon[p] = Some((q, flip));
                         break;
                     }
                 }

@@ -1071,12 +1071,47 @@ pub(crate) fn next_face(tools: &[(Shape, Op)], o: Point3, d: Vec3) -> Result<(Su
     if cand.iter().any(|c| c.0.is_nan()) {
         return Err(ExtentError::Unsupported("the next face past a coil or loft"));
     }
+    first_change(cand, o, d, |p| holds(tools, p))
+}
+
+/// `next_face`, in the part as it stands: its faces as they are after what fillets and edits did.
+pub(crate) fn next_face_of(part: &Body, o: Point3, d: UnitVec3) -> Result<(Surface, bool), ExtentError> {
+    let ix = forge_bool::Index::new(part);
+    let line = forge_geom::Line::new(o, d);
+    let mut cand = Vec::new();
+    for f in part.face_ids() {
+        if !ray_meets(&ix.face_box(f), o, d.get()) {
+            continue;
+        }
+        let surface = &part.face(f).surface;
+        if let forge_geom::intersect::LineSurface::Hits(hs) = forge_geom::intersect::line_surface(&line, surface) {
+            for h in hs {
+                if h.t > tol::LINEAR && ix.point_in_face(f, h.point) != forge_bool::Where::Outside {
+                    cand.push((h.t, Some(surface.clone())));
+                }
+            }
+        }
+    }
+    first_change(cand, o, d.get(), |p| match ix.classify(p) {
+        forge_bool::Where::On => None,
+        w => Some(w == forge_bool::Where::Inside),
+    })
+}
+
+/// Of the hits along the ray, the first surface where being in the part changes, and whether
+/// the ray started in it.
+fn first_change(
+    mut cand: Vec<(f64, Option<Surface>)>,
+    o: Point3,
+    d: Vec3,
+    holds: impl Fn(Point3) -> Option<bool>,
+) -> Result<(Surface, bool), ExtentError> {
     let eps = tol::LINEAR;
     cand.retain(|c| c.0 > eps);
     cand.sort_by(|a, b| a.0.total_cmp(&b.0));
     let at = |t: f64| o + d * t;
     let first = cand.first().ok_or(ExtentError::NoNextFace)?.0;
-    let was = holds(tools, at(first / 2.0)).ok_or(ExtentError::Ambiguous)?;
+    let was = holds(at(first / 2.0)).ok_or(ExtentError::Ambiguous)?;
     let mut k = 0;
     while k < cand.len() {
         let t = cand[k].0;
@@ -1085,7 +1120,7 @@ pub(crate) fn next_face(tools: &[(Shape, Op)], o: Point3, d: Vec3) -> Result<(Su
             j += 1;
         }
         let next = cand.get(j).map_or(t + 1.0, |c| c.0);
-        if holds(tools, at((t + next) / 2.0)).ok_or(ExtentError::Ambiguous)? != was {
+        if holds(at((t + next) / 2.0)).ok_or(ExtentError::Ambiguous)? != was {
             let s = cand[k]
                 .1
                 .clone()
@@ -1328,66 +1363,74 @@ pub(crate) fn verify_next(
         .into_iter()
         .filter(|&n| derived(end, n) || !derived(base, n))
         .collect();
-    // the part near the sweep, from the solids the pick looked at: a tool clear of it holds none
-    // of it, so the history folds the same without it (an intersection with one empties it)
-    let tb = body_box(t).grow(tol::LINEAR);
-    let mut close: Vec<(usize, usize, Op)> = Vec::new();
-    let mut at = (usize::MAX, 0);
-    for (n, (k, sh, op)) in next.tools.iter().enumerate() {
-        // its place among its feature's tools
-        at = if at.0 == *k { (*k, at.1 + 1) } else { (*k, 0) };
-        let op = if n == 0 { Op::Union } else { *op };
-        if !shape_box(sh).overlaps(&tb) {
-            if op == Op::Intersect {
-                close.clear();
+    // only the tools near the sweep are built, or the part as it stands where one was picked on it
+    let mut built: Vec<(Body, Op)> = Vec::new();
+    let mut shapes: Vec<Shape> = Vec::new();
+    if let Some(part) = &next.part {
+        built.push(((**part).clone(), Op::Union));
+        shapes.push(crate::part_shape(part));
+    } else {
+        // the part near the sweep, from the solids the pick looked at: a tool clear of it holds none
+        // of it, so the history folds the same without it (an intersection with one empties it)
+        let tb = body_box(t).grow(tol::LINEAR);
+        let mut close: Vec<(usize, usize, Op)> = Vec::new();
+        let mut at = (usize::MAX, 0);
+        for (n, (k, sh, op)) in next.tools.iter().enumerate() {
+            // its place among its feature's tools
+            at = if at.0 == *k { (*k, at.1 + 1) } else { (*k, 0) };
+            let op = if n == 0 { Op::Union } else { *op };
+            if !shape_box(sh).overlaps(&tb) {
+                if op == Op::Intersect {
+                    close.clear();
+                }
+            } else if !close.is_empty() || op == Op::Union {
+                close.push((n, at.1, op));
             }
-        } else if !close.is_empty() || op == Op::Union {
-            close.push((n, at.1, op));
         }
-    }
-    if close.is_empty() {
-        return Err(bad(ExtentError::NoNextFace));
-    }
-    // one convex solid holding the whole sweep is the part there: nothing inside it, and the end
-    // (on its surface, inside it) lies on its skin
-    if let [(n, ..)] = close[..]
-        && material
-        && convex_holds(&next.tools[n].1, &shape_box(shape))
-    {
-        return Ok(());
-    }
-    // from outside, solids whose boxes only touch the sweep's share none of it; if one convex
-    // solid is left, the sweep was cut off at its own surface and its end lies on its skin
-    let sb = shape_box(shape);
-    let touches = |sh: &Shape| {
-        let b = shape_box(sh);
-        [(b.x, sb.x), (b.y, sb.y), (b.z, sb.z)]
-            .iter()
-            .any(|(u, v)| u.hi.min(v.hi) - u.lo.max(v.lo) <= tol::LINEAR)
-    };
-    let inside: Vec<&(usize, usize, Op)> = close.iter().filter(|c| !touches(&next.tools[c.0].1)).collect();
-    if !material
-        && let [&(n, _, Op::Union)] = inside[..]
-        && close.iter().all(|c| c.2 != Op::Intersect)
-    {
-        let end_box = t
-            .face_ids()
-            .filter(|&f| ends.contains(&t.face(f).name))
-            .fold(forge_math::Box3::EMPTY, |b, f| b.hull(&t.face_box(f)));
-        if skin_under(&next.tools[n].1, &next.surface, &sb, &end_box) {
+        if close.is_empty() {
+            return Err(bad(ExtentError::NoNextFace));
+        }
+        // one convex solid holding the whole sweep is the part there: nothing inside it, and the end
+        // (on its surface, inside it) lies on its skin
+        if let [(n, ..)] = close[..]
+            && material
+            && convex_holds(&next.tools[n].1, &shape_box(shape))
+        {
             return Ok(());
         }
-    }
-    // only the tools near the sweep are built
-    let mut built: Vec<(Body, Op)> = Vec::new();
-    let mut k_built: Option<(usize, Vec<crate::Tool>)> = None;
-    for &(n, j, op) in &close {
-        let k = next.tools[n].0;
-        if k_built.as_ref().is_none_or(|b| b.0 != k) {
-            k_built = Some((k, crate::tools(features, k, true)?));
+        // from outside, solids whose boxes only touch the sweep's share none of it; if one convex
+        // solid is left, the sweep was cut off at its own surface and its end lies on its skin
+        let sb = shape_box(shape);
+        let touches = |sh: &Shape| {
+            let b = shape_box(sh);
+            [(b.x, sb.x), (b.y, sb.y), (b.z, sb.z)]
+                .iter()
+                .any(|(u, v)| u.hi.min(v.hi) - u.lo.max(v.lo) <= tol::LINEAR)
+        };
+        let inside: Vec<&(usize, usize, Op)> = close.iter().filter(|c| !touches(&next.tools[c.0].1)).collect();
+        if !material
+            && let [&(n, _, Op::Union)] = inside[..]
+            && close.iter().all(|c| c.2 != Op::Intersect)
+        {
+            let end_box = t
+                .face_ids()
+                .filter(|&f| ends.contains(&t.face(f).name))
+                .fold(forge_math::Box3::EMPTY, |b, f| b.hull(&t.face_box(f)));
+            if skin_under(&next.tools[n].1, &next.surface, &sb, &end_box) {
+                return Ok(());
+            }
         }
-        let tools = &k_built.as_ref().expect("built").1;
-        built.push((tools[j].0.clone(), op));
+        let mut k_built: Option<(usize, Vec<crate::Tool>)> = None;
+        for &(n, j, op) in &close {
+            let k = next.tools[n].0;
+            if k_built.as_ref().is_none_or(|b| b.0 != k) {
+                k_built = Some((k, crate::tools(features, k, true)?));
+            }
+            let tools = &k_built.as_ref().expect("built").1;
+            built.push((tools[j].0.clone(), op));
+        }
+        // the pick's analytic solids place most points without the B-rep
+        shapes = close.iter().map(|c| next.tools[c.0].1.clone()).collect();
     }
     let near: Vec<(&Body, Op)> = built.iter().map(|(b, op)| (b, *op)).collect();
     let with = |last: Op| -> Result<Body, RegenError> {
@@ -1395,8 +1438,7 @@ pub(crate) fn verify_next(
         bodies.push(t);
         let mut ops: Vec<Op> = near.iter().skip(1).map(|x| x.1).collect();
         ops.push(last);
-        // the pick's analytic solids place most points without the B-rep
-        let mut shapes: Vec<Shape> = close.iter().map(|c| next.tools[c.0].1.clone()).collect();
+        let mut shapes = shapes.clone();
         shapes.push(shape.clone());
         forge_bool::nary_with(
             &bodies,

@@ -694,6 +694,15 @@ fn modifies(f: &Feature) -> bool {
     )
 }
 
+/// The part (one body) as features before `i` leave it.
+pub(crate) fn part_before(features: History<'_>, i: usize) -> Result<Body, RegenError> {
+    let mut body = None;
+    for k in 0..i {
+        body = step(features.upto(i), k, body)?;
+    }
+    body.map(finish).ok_or(RegenError::NothingToCombine { feature: i })
+}
+
 /// The tools of features `from..` on up to `threads` threads, in order (only their shapes,
 /// solids left empty, unless `build`).
 fn build_tools(

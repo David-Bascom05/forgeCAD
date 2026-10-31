@@ -1246,13 +1246,15 @@ fn plan(a: &Body, b: &Body, op: Op, scratch: &mut Scratch) -> R<Plan> {
         let mid = pc.curve.eval(pc.range.mid());
         for &(_, a) in by_ends[from..].iter().take_while(|x| x.0 == key) {
             let other = &pieces[a];
-            if other
-                .curve
-                .eval(other.curve.closest(mid, other.range))
-                .distance(mid)
-                <= tol::LINEAR
-            {
-                canon[p] = (a, pc.start != other.start);
+            let t = other.curve.closest(mid, other.range);
+            if other.curve.eval(t).distance(mid) <= tol::LINEAR {
+                // a closed edge's ends say nothing of which way it runs: its tangent does
+                let flip = if pc.start == pc.end {
+                    pc.curve.deriv(pc.range.mid()).d1.dot(other.curve.deriv(t).d1) < 0.0
+                } else {
+                    pc.start != other.start
+                };
+                canon[p] = (a, flip);
                 break;
             }
         }
@@ -3548,24 +3550,20 @@ fn uv_chord(body: &Body, f: FaceId, p: &Piece, forward: bool, at_end: bool) -> O
 /// which Ye and Maekawa's formulas give but which are numerically unreliable near a singular
 /// point (Patrikalakis, Maekawa and Cho, ch. 5).
 fn tied(
-    pieces: &[Piece],
     half: &[(usize, bool)],
     i: usize,
     theta: Vec2,
     (c, j): (Vec2, usize),
     ways: impl Iterator<Item = R<(Vec2, usize)>>,
 ) -> R<bool> {
-    // (ways of one body's own edges along one tangent are its own smooth joins, as they always
-    // were; only a way of a new edge, or of the other body's, makes a tie; nor is the way
-    // straight back along the same piece)
+    // (not the way straight back along the same piece; two edges of one body make a tie too: at
+    // a pinch where two of its circles touch, the way on and the way straight through differ by
+    // how they bend)
     let near = |a: Vec2, b: Vec2| {
         let (d, x) = (a.dot(b), a.x * b.y - a.y * b.x);
         d > 0.0 && x * x < 0.002 * d * d
     };
-    let mixed = |x: usize, y: usize| {
-        let (p, q) = (&pieces[half[x].0], &pieces[half[y].0]);
-        half[x].0 != half[y].0 && (p.side.is_none() || q.side.is_none() || p.side != q.side)
-    };
+    let mixed = |x: usize, y: usize| half[x].0 != half[y].0;
     for w in ways {
         let (a, k) = w?;
         if (near(a, theta) && mixed(k, i)) || (k != j && near(a, c) && mixed(k, j)) {
@@ -3910,7 +3908,7 @@ pub(crate) fn split_face(
         let theta = dir(i, true)?;
         let ways = || out.iter().map(|&(_, k)| Ok((dir(k, false)?, k)));
         let (c, j) = clockwise(theta, ways())?.unwrap_or((theta, i));
-        if !tied(pieces, &half, i, theta, (c, j), ways())? {
+        if !tied(&half, i, theta, (c, j), ways())? {
             return Ok(j);
         }
         let mut ways: Vec<(Vec2, usize)> = ways().collect::<R<_>>()?;
@@ -4788,6 +4786,13 @@ fn classify_specs(
                 index[1 - s.side].classify(probe)
             );
         }
+        // a probe on a line or circle where the bodies only touch says nothing: others decide
+        let on = |q: &Point3| index[1 - s.side].classify(*q) == Where::On;
+        let probe = if on(&probe) {
+            spare_probes(bodies[s.side], s, pieces).find(|q| !on(q)).unwrap_or(probe)
+        } else {
+            probe
+        };
         class[i] = Some(match index[1 - s.side].classify(probe) {
             Where::Inside => Class::In,
             Where::Outside => Class::Out,
@@ -4913,6 +4918,31 @@ fn interior_point(body: &Body, s: &Spec, pieces: &[Piece]) -> Option<Point3> {
         step *= 0.25;
     }
     probe(body, s.from, h, pieces)
+}
+
+/// More points inside a region: a small step off each of its half-edges, a third and two thirds
+/// along it (where no other piece of the region comes nearer than the step).
+#[cold]
+fn spare_probes<'a>(body: &'a Body, s: &'a Spec, pieces: &'a [Piece]) -> impl Iterator<Item = Point3> + 'a {
+    s.loops.iter().flatten().flat_map(move |&h| {
+        [1.0 / 3.0, 2.0 / 3.0].into_iter().filter_map(move |frac| {
+            let pc = &pieces[h.0];
+            let step = (0.01 * half_chord(pc)).min(0.05);
+            let d = pc.curve.deriv(pc.range.lo + frac * pc.range.width());
+            let face = body.face(s.from);
+            let along = if h.1 { d.d1 } else { -d.d1 };
+            let inward = body.face_normal(s.from, face.surface.project(d.p))?.cross(along).normalize()?;
+            let q = face.surface.eval(face.surface.project(d.p + inward * step));
+            s.loops
+                .iter()
+                .flatten()
+                .all(|&(o, _)| o == h.0 || {
+                    let c = &pieces[o];
+                    c.curve.eval(c.curve.closest(q, c.range)).distance(q) >= step
+                })
+                .then_some(q)
+        })
+    })
 }
 
 /// A point inside face `f` a small step off the middle of half-edge `(p, fwd)` of one of its

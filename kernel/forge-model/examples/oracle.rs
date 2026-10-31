@@ -1153,7 +1153,10 @@ fn fc(path: &std::path::Path) -> (String, Part) {
     let name = path
         .file_stem()
         .map_or("fc".into(), |s| s.to_string_lossy().into_owned());
-    (name, Part { features: m.features })
+    // a refused line goes too: what OCCT makes of it is the test of the refusal
+    let mut features = m.features;
+    features.extend(m.refused);
+    (name, Part { features })
 }
 
 /// Part files for what only they write: parameters and sketches, work features, standard

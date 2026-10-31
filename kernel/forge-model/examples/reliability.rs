@@ -3,7 +3,8 @@
 //! cargo run --release -p forge-model --example reliability -- [seeds] [--save FILE] [--baseline FILE] [--show]
 //!
 //! Each part on each path is ok (valid solid), reject (a clear ZeroThickness error, correct for an
-//! exact zero-thickness touch), or a failure (error, invalid solid, panic). Both paths ok but with
+//! exact zero-thickness touch, or Empty: nothing left, which the OCCT oracle confirms on all the
+//! parts it is given here), or a failure (error, invalid solid, panic). Both paths ok but with
 //! meshed volumes more than 0.2% apart counts as a disagreement. With --baseline, exits 1 if any
 //! part that was ok or reject before now fails or disagrees.
 use forge_mesh::{Quality, tessellate};
@@ -61,7 +62,7 @@ fn run(f: impl FnOnce() -> Result<forge_topo::Body, RegenError>) -> Run {
         }
         Ok(Err(e)) => {
             let s = format!("{e:?}");
-            let v = if s.contains("ZeroThickness") {
+            let v = if s.contains("ZeroThickness") || s.starts_with("Empty") {
                 Verdict::Reject
             } else {
                 Verdict::Error

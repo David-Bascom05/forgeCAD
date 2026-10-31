@@ -12,6 +12,7 @@ use forge_topo::mass::MassProps;
 use forge_topo::{Body, Name};
 use std::cell::RefCell;
 use std::collections::HashMap;
+use std::panic::{AssertUnwindSafe, catch_unwind};
 use std::sync::{Arc, OnceLock};
 use std::time::Instant;
 
@@ -21,6 +22,8 @@ pub struct Model {
     pub doc: Document,
     pub lines: Vec<Line>,
     pub features: Vec<Feature>,
+    /// The feature the kernel refused at `error`, if the line read as one.
+    pub refused: Option<Feature>,
     pub labels: Vec<Option<String>>,
     pub kinds: Vec<&'static str>,
     /// The part after each built feature.
@@ -141,6 +144,7 @@ impl Default for Model {
             doc: Document::parse(""),
             lines: vec![],
             features: vec![],
+            refused: None,
             labels: vec![],
             kinds: vec![],
             stages: vec![],
@@ -360,6 +364,7 @@ impl Model {
         self.picks.get_mut().retain(|p| p.0 < keep);
         self.lines = new;
         self.error = None;
+        self.refused = None;
         self.rebuilt = 0;
         self.kernel_ms = 0.0;
         let mut reuse = true;
@@ -459,6 +464,8 @@ impl Model {
                         Some(b) => with_handles(&msg, b),
                         None => msg,
                     };
+                    let before = if i == 0 { &[][..] } else { &self.stages[i - 1].solids[..] };
+                    let msg = msg + &size_limit(&self.features, &ids[..=i], before, &e);
                     self.fail(i, msg, hint);
                     break;
                 }
@@ -486,6 +493,7 @@ impl Model {
     }
 
     fn fail(&mut self, at: usize, msg: String, hint: String) {
+        self.refused = self.features.get(at).cloned();
         self.features.truncate(at);
         self.labels.truncate(at);
         self.kinds.truncate(at);
@@ -839,6 +847,108 @@ fn with_handles(msg: &str, body: &Body) -> String {
 }
 
 /// What went wrong, and what to try.
+/// For a finishing feature refused as too big for the part: the size it does build at, found by
+/// building it smaller (`; it builds up to radius R`), or that no smaller one builds, so the size
+/// is not what stops it. Empty for any other refusal.
+fn size_limit(features: &[Feature], ids: &[u64], before: &[forge_model::Solid], e: &RegenError) -> String {
+    use forge_ops::{ChamferError as C, FilletError as F, ShellError as S};
+    let i = features.len() - 1;
+    let sized = matches!(
+        e,
+        RegenError::Fillet {
+            error: F::Overflow { .. } | F::NoBlend { .. } | F::Corner { .. } | F::Tangency { .. },
+            ..
+        } | RegenError::Chamfer {
+            error: C::TooLarge { .. } | C::Overflows { .. } | C::Rebuild(_),
+            ..
+        } | RegenError::Shell {
+            error: S::Collapses { .. } | S::SelfIntersecting { .. } | S::Rebuild(_),
+            ..
+        }
+    );
+    let Some((what, size)) = sized.then(|| sized_as(&features[i])).flatten() else {
+        return String::new();
+    };
+    let builds = |k: f64| {
+        let mut fs = features.to_vec();
+        fs[i] = scaled(&features[i], k);
+        let h = History::new(&fs, Some(ids));
+        catch_unwind(AssertUnwindSafe(|| {
+            step_solids(h, i, before.to_vec())
+                .is_ok_and(|ss| ss.iter().all(|s| forge_topo::check(&s.body).is_empty()))
+        }))
+        .unwrap_or(false)
+    };
+    let mut k = 0.5;
+    while k > 0.02 && !builds(k) {
+        k *= 0.5;
+    }
+    if k <= 0.02 {
+        return format!("; no smaller {what} builds either, so the size is not the reason");
+    }
+    let (mut lo, mut hi) = (k, 2.0 * k);
+    for _ in 0..4 {
+        let m = 0.5 * (lo + hi);
+        if builds(m) {
+            lo = m;
+        } else {
+            hi = m;
+        }
+    }
+    format!("; it builds up to {what} {}", crate::short(lo * size))
+}
+
+/// What a finishing feature's size is called, and its largest value.
+fn sized_as(f: &Feature) -> Option<(&'static str, f64)> {
+    use forge_ops::{ChamferSize, Radius};
+    let top = |r: &Radius| match r {
+        Radius::Constant(v) => *v,
+        Radius::Linear(a, b) => a.max(*b),
+        Radius::Points(ps) => ps.iter().fold(0.0, |m, p| p.1.max(m)),
+    };
+    match f {
+        Feature::Fillet { edges, .. } => Some(("radius", edges.iter().fold(0.0, |m, e| top(&e.1).max(m)))),
+        Feature::FaceFillet { radius, .. } => Some(("radius", *radius)),
+        Feature::Chamfer { size, .. } => Some((
+            "distance",
+            match size {
+                ChamferSize::Equal(d) | ChamferSize::DistanceAngle { d, .. } => *d,
+                ChamferSize::Distances { d1, d2, .. } => d1.max(*d2),
+            },
+        )),
+        Feature::Shell { thickness, .. } => Some(("thickness", *thickness)),
+        _ => None,
+    }
+}
+
+/// The feature with its size times `k`.
+fn scaled(f: &Feature, k: f64) -> Feature {
+    use forge_ops::{ChamferSize, Radius};
+    let mut f = f.clone();
+    match &mut f {
+        Feature::Fillet { edges, .. } => {
+            for (_, r) in edges {
+                *r = match &*r {
+                    Radius::Constant(v) => Radius::Constant(v * k),
+                    Radius::Linear(a, b) => Radius::Linear(a * k, b * k),
+                    Radius::Points(ps) => Radius::Points(ps.iter().map(|p| (p.0, p.1 * k)).collect()),
+                };
+            }
+        }
+        Feature::FaceFillet { radius, .. } => *radius *= k,
+        Feature::Chamfer { size, .. } => match size {
+            ChamferSize::Equal(d) | ChamferSize::DistanceAngle { d, .. } => *d *= k,
+            ChamferSize::Distances { d1, d2, .. } => {
+                *d1 *= k;
+                *d2 *= k;
+            }
+        },
+        Feature::Shell { thickness, .. } => *thickness *= k,
+        _ => {}
+    }
+    f
+}
+
 pub fn explain(e: &RegenError) -> (String, String) {
     use RegenError::*;
     let hint = |s: &str| s.to_string();

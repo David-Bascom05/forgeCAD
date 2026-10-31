@@ -10,7 +10,7 @@ use crate::{End, Feature, Head, History, Hole, RegenError, hole, shape, tools};
 use forge_bool::{Op, Shape};
 use forge_geom::{Plane, Surface};
 use forge_math::{Frame, Point2, Point3, UnitVec3, dmath, tol};
-use forge_topo::Name;
+use forge_topo::{Body, Name};
 use std::borrow::Cow;
 
 /// How far an extrude goes along its sketch's normal.
@@ -104,6 +104,8 @@ pub(crate) struct Next {
     /// The surface picked.
     pub surface: Surface,
     pub tools: Vec<(usize, Shape, Op)>,
+    /// The part as it stands, where a fillet or face edit above leaves no tools to look at.
+    pub part: Option<std::sync::Arc<Body>>,
 }
 
 /// What an extrude or hole comes to: a plain one, or a sweep cut off at a surface.
@@ -216,11 +218,6 @@ fn earlier(features: History<'_>, i: usize) -> Result<Vec<(usize, Shape, Op)>, R
         .iter()
         .rposition(crate::starts)
         .ok_or(bad(ExtentError::NoNextFace))?;
-    if features[start..i].iter().any(crate::modifies) {
-        return Err(bad(ExtentError::Unsupported(
-            "the next face after a part-changing feature",
-        )));
-    }
     if crate::bodies::multi(&features[..i]) {
         return Err(bad(ExtentError::Unsupported(
             "the next face in a multi-body part",
@@ -245,6 +242,31 @@ fn next(
     from: &[Point3],
     d: UnitVec3,
 ) -> Result<(Surface, Next), RegenError> {
+    let changed = features[..i]
+        .iter()
+        .rposition(crate::starts)
+        .is_some_and(|s| features[s..i].iter().any(crate::modifies));
+    if changed && !crate::bodies::multi(&features[..i]) {
+        let part = crate::part_before(features, i)?;
+        let mut found: Option<(Surface, bool)> = None;
+        for &p in from {
+            let s = crate::upto::next_face_of(&part, p, d).map_err(bad(i))?;
+            if found.as_ref().is_some_and(|f| *f != s) {
+                return Err(bad(i)(ExtentError::Ambiguous));
+            }
+            found = Some(s);
+        }
+        let (s, material) = found.ok_or(bad(i)(ExtentError::NoNextFace))?;
+        return Ok((
+            s.clone(),
+            Next {
+                material,
+                surface: s,
+                tools: Vec::new(),
+                part: Some(std::sync::Arc::new(part)),
+            },
+        ));
+    }
     let all = earlier(features, i)?;
     let tools: Vec<(Shape, Op)> = all.iter().map(|t| (t.1.clone(), t.2)).collect();
     let mut found: Option<(Surface, bool)> = None;
@@ -262,6 +284,7 @@ fn next(
             material,
             surface: s,
             tools: all,
+            part: None,
         },
     ))
 }

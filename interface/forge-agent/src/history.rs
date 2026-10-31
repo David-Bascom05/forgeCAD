@@ -1592,6 +1592,8 @@ pub struct Run {
     /// Per tried line: its kind, and None if it built, else the refusal or failure.
     pub tried: Vec<(&'static str, Option<String>)>,
     pub fails: Vec<(String, String)>,
+    /// Each refusal with the history it ends (the census of what the kernel will not build).
+    pub refused: Vec<(String, String)>,
     /// The slowest line's seconds and the history it ends.
     pub slowest: (f64, String),
 }
@@ -1789,6 +1791,7 @@ pub fn run_kinds(seed: u64, len: usize, kinds: u64) -> Run {
     let mut m = model(&src);
     let mut tried = Vec::new();
     let mut fails = Vec::new();
+    let mut refused = Vec::new();
     let mut slowest = (0.0, String::new());
     let mut label = 0;
     let total: usize = makers.iter().map(|k| k.weight).sum();
@@ -1852,7 +1855,8 @@ pub fn run_kinds(seed: u64, len: usize, kinds: u64) -> Run {
                 built += 1;
             }
             Verdict::Refused(why) => {
-                tried.push((maker.name, Some(why)));
+                tried.push((maker.name, Some(why.clone())));
+                refused.push((why, cand));
                 m.update(&src);
             }
             Verdict::Fail(why) => {
@@ -1872,6 +1876,7 @@ pub fn run_kinds(seed: u64, len: usize, kinds: u64) -> Run {
         src,
         tried,
         fails,
+        refused,
         slowest,
     }
 }
