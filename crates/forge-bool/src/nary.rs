@@ -1329,6 +1329,8 @@ fn nary_body(
             }
         }
     };
+    // the next slab's window starts where the last point's did or later
+    let mut from = 0;
     for a in 0..order.len() {
         let (sx, y, i) = order[a];
         for &(tx, ty, j) in &order[a + 1..] {
@@ -1337,7 +1339,11 @@ fn nary_body(
             }
             join(i, j);
         }
-        let from = order.partition_point(|o| o.0 < sx + 1.0 || (o.0 == sx + 1.0 && o.1 < y - widest));
+        while from < order.len()
+            && (order[from].0 < sx + 1.0 || (order[from].0 == sx + 1.0 && order[from].1 < y - widest))
+        {
+            from += 1;
+        }
         for &(tx, ty, j) in &order[from..] {
             if tx != sx + 1.0 || ty > y + widest {
                 break;
@@ -1719,13 +1725,24 @@ fn nary_body(
         }
     }
     // two tools' faces on one surface crossing a third give the same new edge twice: one copy
-    let mut all: Vec<usize> = jobs
+    let mut on = vec![false; pieces.list.len()];
+    for p in jobs
         .iter()
         .flat_map(|j| j.2.iter().flatten().map(|h| h.0).chain(j.3.iter().copied()))
-        .collect();
-    all.sort_unstable();
-    all.dedup();
-    let canon = coincident(&pieces.list, &all);
+    {
+        on[p] = true;
+    }
+    let all: Vec<usize> = (0..on.len()).filter(|&p| on[p]).collect();
+    // vertices numbered densely: each tool's in turn, then the new ones
+    let mut voff: Vec<usize> = vec![0];
+    for b in tools {
+        voff.push(voff[voff.len() - 1] + b.vertices.len());
+    }
+    let dense = |k: VKey| match k {
+        VKey::Old(sd, v) => voff[sd] + v.index(),
+        VKey::New(i) => voff[n] + i as usize,
+    };
+    let canon = coincident(&pieces.list, &all, dense);
     if canon.iter().any(Option::is_some) {
         for job in &mut jobs {
             for h in job.2.iter_mut().flatten() {
@@ -2317,13 +2334,14 @@ fn nary_body(
         }
     }
     let mut list = pieces.list;
-    let mut used: Vec<usize> = kept
-        .iter()
-        .flat_map(|&(ri, _)| regs[ri].loops.iter().flatten().map(|h| h.0))
-        .collect();
-    used.sort_unstable();
-    used.dedup();
-    let canon = coincident(&list, &used);
+    let mut on = vec![false; list.len()];
+    for &(ri, _) in &kept {
+        for h in regs[ri].loops.iter().flatten() {
+            on[h.0] = true;
+        }
+    }
+    let used: Vec<usize> = (0..on.len()).filter(|&p| on[p]).collect();
+    let canon = coincident(&list, &used, dense);
     // an edge four kept faces meet at is where two solids' material touches along a line
     let mut uses = vec![0u8; list.len()];
     for &(ri, _) in &kept {
@@ -3113,25 +3131,49 @@ fn name_spans(
     }
 }
 
-/// Pieces among `ps` with the same ends along the same curve as a lower one: by piece, (the
-/// lower one, whether it runs the other way).
-fn coincident(list: &[Piece], ps: &[usize]) -> Vec<Option<(usize, bool)>> {
+/// Pieces among `ps` (sorted) with the same ends along the same curve as a lower one: by piece,
+/// (the lower one, whether it runs the other way). Grouped by their lower end's number in `dense`
+/// first, then sorted within the group.
+fn coincident(list: &[Piece], ps: &[usize], dense: impl Fn(VKey) -> usize) -> Vec<Option<(usize, bool)>> {
+    let low = |p: usize| dense(list[p].start.min(list[p].end));
+    let mut first = vec![0u32; ps.iter().map(|&p| low(p) + 2).max().unwrap_or(1)];
+    for &p in ps {
+        first[low(p) + 1] += 1;
+    }
+    for i in 1..first.len() {
+        first[i] += first[i - 1];
+    }
+    let mut by_low = vec![0usize; ps.len()];
+    let mut next = first.clone();
+    for &p in ps {
+        let l = low(p);
+        by_low[next[l] as usize] = p;
+        next[l] += 1;
+    }
     let key = |pc: &Piece| (pc.start.min(pc.end).packed(), pc.start.max(pc.end).packed());
-    let mut by_ends: Vec<((u64, u64), usize)> = ps.iter().map(|&p| (key(&list[p]), p)).collect();
-    by_ends.sort_unstable();
     let mut canon = vec![None; list.len()];
-    for g in by_ends.chunk_by(|x, y| x.0 == y.0) {
-        for (k, &(_, p)) in g.iter().enumerate().skip(1) {
-            let pc = &list[p];
-            let mid = pc.curve.eval(pc.range.mid());
-            for &(_, q) in &g[..k] {
-                if canon[q].is_some() {
-                    continue;
-                }
-                let o = &list[q];
-                if o.curve.eval(o.curve.closest(mid, o.range)).distance(mid) <= tol::LINEAR {
-                    canon[p] = Some((q, pc.start != o.start));
-                    break;
+    let mut by_ends: Vec<((u64, u64), usize)> = Vec::new();
+    for w in first.windows(2) {
+        let bucket = &by_low[w[0] as usize..w[1] as usize];
+        if bucket.len() < 2 {
+            continue;
+        }
+        by_ends.clear();
+        by_ends.extend(bucket.iter().map(|&p| (key(&list[p]), p)));
+        by_ends.sort_unstable();
+        for g in by_ends.chunk_by(|x, y| x.0 == y.0) {
+            for (k, &(_, p)) in g.iter().enumerate().skip(1) {
+                let pc = &list[p];
+                let mid = pc.curve.eval(pc.range.mid());
+                for &(_, q) in &g[..k] {
+                    if canon[q].is_some() {
+                        continue;
+                    }
+                    let o = &list[q];
+                    if o.curve.eval(o.curve.closest(mid, o.range)).distance(mid) <= tol::LINEAR {
+                        canon[p] = Some((q, pc.start != o.start));
+                        break;
+                    }
                 }
             }
         }
