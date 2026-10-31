@@ -38,7 +38,10 @@ fn arc_step(r: f64, q: &Quality) -> f64 {
     by_chord.min(q.max_angle).max(1e-4)
 }
 
-fn edge_segments(curve: &Curve, range: forge_math::Interval, q: &Quality) -> usize {
+/// Chords along an edge. On a face curved both ways a chord along the edge and one across
+/// it make a triangle that sags by both their sags: there each gets half of the tolerance,
+/// a step shorter by sqrt 2 (`fine`).
+fn edge_segments(curve: &Curve, range: forge_math::Interval, q: &Quality, fine: bool) -> usize {
     let width = range.width();
     let n = match curve {
         Curve::Line(_) => 1.0,
@@ -52,7 +55,17 @@ fn edge_segments(curve: &Curve, range: forge_math::Interval, q: &Quality) -> usi
     // a curved edge gets two chords at least: a face bounded by a line and a short arc
     // still has three corners to triangulate
     let least = if matches!(curve, Curve::Line(_)) { 1 } else { 2 };
+    let n = if fine && least == 2 {
+        n * core::f64::consts::SQRT_2
+    } else {
+        n
+    };
     (n.ceil() as usize).max(least)
+}
+
+/// Whether the surface curves both ways, so a triangle on it sags by its sag along each side.
+fn doubly_curved(s: &Surface) -> bool {
+    matches!(s, Surface::Sphere(_) | Surface::Torus(_))
 }
 
 /// The surface's parameter scale, so distances in the scaled plane roughly
@@ -78,13 +91,99 @@ fn interior_steps(s: &Surface, q: &Quality) -> Option<(f64, f64)> {
             let r = c.radius.max(1.0);
             Some((arc_step(r, q), 4.0 * r * arc_step(r, q)))
         }
-        Surface::Sphere(sp) => Some((arc_step(sp.radius, q), arc_step(sp.radius, q))),
-        Surface::Torus(t) => Some((arc_step(t.major + t.minor, q), arc_step(t.minor, q))),
+        // curved both ways: half the tolerance each way (see edge_segments), and a little
+        // under, so a cell's diagonal does not sag by just about the whole tolerance and get
+        // split by the refinement
+        Surface::Sphere(sp) => {
+            let a = 0.9 * arc_step(sp.radius, q) / core::f64::consts::SQRT_2;
+            Some((a, a))
+        }
+        Surface::Torus(t) => Some((
+            0.9 * arc_step(t.major + t.minor, q) / core::f64::consts::SQRT_2,
+            0.9 * arc_step(t.minor, q) / core::f64::consts::SQRT_2,
+        )),
         Surface::Procedural(pr) => {
             // arc steps on the tightest radius, turned into parameter steps by the uv scale
             let (r, (su, sv)) = (pr.min_radius(), pr.uv_scale());
             let l = arc_step(r, q) * r;
             Some((l / su, l / sv))
+        }
+    }
+}
+
+/// Largest absolute principal curvature at a regular point (zero at a singular one).
+fn max_curvature(d: &forge_geom::surface::SurfDeriv) -> f64 {
+    let Some(n) = d.du.cross(d.dv).normalize() else {
+        return 0.0;
+    };
+    let n = n.get();
+    let (e, f, g) = (d.du.dot(d.du), d.du.dot(d.dv), d.dv.dot(d.dv));
+    let (l, m, nn) = (d.duu.dot(n), d.duv.dot(n), d.dvv.dot(n));
+    let det = e * g - f * f;
+    let h = (e * nn - 2.0 * f * m + g * l) / (2.0 * det);
+    let k = (l * nn - m * m) / det;
+    h.abs() + (h * h - k).max(0.0).sqrt()
+}
+
+/// Grid points inside a procedural face's parameter box, each cell of an 8 x 8 split of the
+/// box as dense as the tightest curvature at the nodes round it needs (never denser than the
+/// face's tightest radius anywhere): a corner patch curves tightly in a corner and gently
+/// elsewhere. Distances on the surface turn into parameter steps by the face's uv scale.
+fn adaptive_grid(
+    s: &Surface,
+    q: &Quality,
+    lo: Point2,
+    hi: Point2,
+    (su, sv): (f64, f64),
+    out: &mut Vec<Point2>,
+) {
+    const G: usize = 8;
+    let at = |i: usize, j: usize| {
+        Point2::new(
+            lo.x + (hi.x - lo.x) * i as f64 / G as f64,
+            lo.y + (hi.y - lo.y) * j as f64 / G as f64,
+        )
+    };
+    // per node: the tightest radius
+    let mut node = [[f64::INFINITY; G + 1]; G + 1];
+    for (i, row) in node.iter_mut().enumerate() {
+        for (j, n) in row.iter_mut().enumerate() {
+            let k = max_curvature(&s.deriv(at(i, j)));
+            if k > 0.0 {
+                *n = 1.0 / k;
+            }
+        }
+    }
+    let r0 = match s {
+        Surface::Procedural(pr) => pr.min_radius(),
+        _ => f64::INFINITY,
+    };
+    for ci in 0..G {
+        for cj in 0..G {
+            // the nodes of this cell and its neighbours
+            let mut r = f64::INFINITY;
+            for row in &node[ci.saturating_sub(1)..(ci + 3).min(G + 1)] {
+                for &n in &row[cj.saturating_sub(1)..(cj + 3).min(G + 1)] {
+                    r = r.min(n);
+                }
+            }
+            let r = r.max(r0);
+            let l = if r.is_finite() {
+                arc_step(r, q) * r
+            } else {
+                f64::INFINITY
+            };
+            let (a, b) = (at(ci, cj), at(ci + 1, cj + 1));
+            let nu = ((b.x - a.x) * su / l).ceil().max(1.0) as usize;
+            let nv = ((b.y - a.y) * sv / l).ceil().max(1.0) as usize;
+            // each cell owns its low sides; the box's own low sides are boundary
+            for i in usize::from(ci == 0)..nu {
+                for j in usize::from(cj == 0)..nv {
+                    let u = a.x + (b.x - a.x) * i as f64 / nu as f64;
+                    let v = a.y + (b.y - a.y) * j as f64 / nv as f64;
+                    out.push(Point2::new(u * su, v * sv));
+                }
+            }
         }
     }
 }
@@ -109,7 +208,11 @@ pub fn tessellate(body: &Body, q: &Quality) -> Result<TriMesh, TessError> {
     let (mut trig, mut pts) = (Vec::new(), Vec::new());
     for e in body.edge_ids() {
         let edge = body.edge(e);
-        let n = edge_segments(&edge.curve, edge.range, q);
+        let fine = edge
+            .coedges
+            .iter()
+            .any(|&c| doubly_curved(&body.face(body.coedge_face(c)).surface));
+        let n = edge_segments(&edge.curve, edge.range, q, fine);
         let mut s = Vec::with_capacity(n + 1);
         s.push((edge.range.lo, vertex_index[edge.start.index()]));
         edge.curve.sample_interior(edge.range, n, &mut trig, &mut pts);
@@ -225,13 +328,18 @@ fn tessellate_face(
             lo = Point2::new(lo.x.min(p.x), lo.y.min(p.y));
             hi = Point2::new(hi.x.max(p.x), hi.y.max(p.y));
         }
-        let nu = ((hi.x - lo.x) / du).ceil().max(1.0) as usize;
-        let nv = ((hi.y - lo.y) / dv).ceil().max(1.0) as usize;
-        for i in 1..nu {
-            for j in 1..nv {
-                let u = lo.x + (hi.x - lo.x) * i as f64 / nu as f64;
-                let v = lo.y + (hi.y - lo.y) * j as f64 / nv as f64;
-                interior.push(Point2::new(u * su, v * sv));
+        match surface {
+            Surface::Procedural(_) => adaptive_grid(surface, q, lo, hi, (su, sv), &mut interior),
+            _ => {
+                let nu = ((hi.x - lo.x) / du).ceil().max(1.0) as usize;
+                let nv = ((hi.y - lo.y) / dv).ceil().max(1.0) as usize;
+                for i in 1..nu {
+                    for j in 1..nv {
+                        let u = lo.x + (hi.x - lo.x) * i as f64 / nu as f64;
+                        let v = lo.y + (hi.y - lo.y) * j as f64 / nv as f64;
+                        interior.push(Point2::new(u * su, v * sv));
+                    }
+                }
             }
         }
     }
@@ -261,7 +369,20 @@ fn tessellate_face(
     };
     // a chord of a plane never strays from it
     let flat = matches!(surface, Surface::Plane(_));
+    // on a sphere, torus or cylinder the grid's steps come from its exact radii, so a chord
+    // between two inner points within one grid cell's span each way sags less than the
+    // tolerance and needs no look
+    let nb = global.len() as u32;
+    let cell = match (surface, interior_steps(surface, q)) {
+        (Surface::Sphere(_) | Surface::Torus(_) | Surface::Cylinder(_), Some((du, dv))) => {
+            (du * su * (1.0 + 1e-9), dv * sv * (1.0 + 1e-9))
+        }
+        _ => (0.0, 0.0),
+    };
     let strays = |ia: u32, ib: u32, a: Point2, b: Point2| {
+        if ia >= nb && ib >= nb && (a.x - b.x).abs() <= cell.0 && (a.y - b.y).abs() <= cell.1 {
+            return false;
+        }
         on_edge(ia, ib) || (!flat && at(a.lerp(b, 0.5)).distance(pos(ia, a).lerp(pos(ib, b), 0.5)) > q.chord)
     };
     let tri = match triangulate_refined(&scaled, &loops, &interior, Some(&strays), 24) {
@@ -377,7 +498,12 @@ fn strips(
         if r <= forge_math::tol::LINEAR {
             return 1;
         }
-        ((u1 - u0) * len / (r * arc_step(r, q))).ceil().max(1.0) as usize
+        let step = if doubly_curved(surface) {
+            arc_step(r, q) / core::f64::consts::SQRT_2
+        } else {
+            arc_step(r, q)
+        };
+        ((u1 - u0) * len / (r * step)).ceil().max(1.0) as usize
     };
     // each row: (u, mesh index), increasing u
     let mut rows: Vec<Vec<(f64, u32)>> = Vec::with_capacity(left.len());

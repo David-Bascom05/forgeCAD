@@ -1326,14 +1326,15 @@ mod tests {
                 .unwrap_or_else(|e| panic!("{name} nary: {e:?}"));
             assert!(forge_topo::check(&nary).is_empty(), "{name}: nary result invalid");
             let m2 = tessellate(&nary, &q).expect("nary meshes");
-            // the same surfaces (traced ones to a few 1e-9); a procedural face's mesh can
-            // differ with rounding in its edges, so then the volume only to the chord
+            // the same surfaces (traced ones to a few 1e-9); the meshes agree to rounding in
+            // the edges handed over, which can turn a tie in a face's Delaunay grid the other
+            // way (a procedural face's grid shifts with it too)
             let gap = procedural_gap(&body, &nary);
             assert!(
                 gap.is_none_or(|g| g < 1e-8),
                 "{name}: nary surfaces differ by {gap:?}"
             );
-            let rel = if gap.is_some() { 1e-6 } else { 1e-9 };
+            let rel = if gap.is_some() { 1e-6 } else { 1e-7 };
             assert!(
                 (m2.volume() - mesh.volume()).abs() < rel * mesh.volume(),
                 "{name}: nary volume"

@@ -98,6 +98,10 @@ pub enum Surface {
 /// solved for to full precision from the definition, never read off an approximation.
 pub trait Procedural: Send + Sync + std::fmt::Debug {
     fn deriv(&self, uv: Point2) -> SurfDeriv;
+    /// The point alone (meshing evaluates many more points than derivatives).
+    fn point(&self, uv: Point2) -> Point3 {
+        self.deriv(uv).p
+    }
     fn normal(&self, uv: Point2) -> Option<UnitVec3> {
         let d = self.deriv(uv);
         d.du.cross(d.dv).normalize()
@@ -579,6 +583,12 @@ macro_rules! dispatch {
 impl SurfaceGeom for Surface {
     fn deriv(&self, uv: Point2) -> SurfDeriv {
         dispatch!(self, s => s.deriv(uv))
+    }
+    fn eval(&self, uv: Point2) -> Point3 {
+        match self {
+            Surface::Procedural(s) => s.point(uv),
+            _ => self.deriv(uv).p,
+        }
     }
     fn normal(&self, uv: Point2) -> Option<UnitVec3> {
         dispatch!(self, s => s.normal(uv))

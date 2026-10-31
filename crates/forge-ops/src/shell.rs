@@ -379,6 +379,9 @@ impl Offset {
 }
 
 impl Procedural for Offset {
+    fn point(&self, uv: Point2) -> Point3 {
+        self.first(uv).0
+    }
     fn deriv(&self, uv: Point2) -> SurfDeriv {
         let (p, du, dv) = self.first(uv);
         let (su, sv) = self.base.uv_scale();

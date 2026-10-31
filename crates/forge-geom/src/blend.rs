@@ -687,6 +687,9 @@ impl Pipe {
 }
 
 impl Procedural for Pipe {
+    fn point(&self, uv: Point2) -> Point3 {
+        Pipe::point(self, uv)
+    }
     fn deriv(&self, uv: Point2) -> SurfDeriv {
         let r = self.radius;
         let Some((c, e1, e2, th)) = self.cross(uv.x) else {

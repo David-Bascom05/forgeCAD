@@ -32,6 +32,11 @@ pub struct RailBound {
 /// along it: everything the patch needs from one side.
 pub trait Rail: Send + Sync + std::fmt::Debug {
     fn jet(&self, t: f64) -> RailJet;
+    /// Point, its t derivative and the outward normal.
+    fn frame(&self, t: f64) -> (Point3, Vec3, Vec3) {
+        let j = self.jet(t);
+        (j.p, j.dp, j.n)
+    }
     /// Point and outward normal only.
     fn point(&self, t: f64) -> (Point3, Vec3) {
         let j = self.jet(t);
@@ -303,6 +308,10 @@ pub fn speed_bound(c: &Curve, t: Interval) -> f64 {
 }
 
 impl Rail for SurfaceRail {
+    fn frame(&self, t: f64) -> (Point3, Vec3, Vec3) {
+        let c = self.curve.deriv(t);
+        (c.p, c.d1, self.normal(&c, t, false).0 * self.sign)
+    }
     fn jet(&self, t: f64) -> RailJet {
         let c = self.curve.deriv(t);
         let (n, dn, ddn) = self.normal(&c, t, true);
@@ -703,8 +712,9 @@ fn split(sides: &[Side]) -> Result<Patches, CornerError> {
         let (out, back) = (&rails[(i + 1) % at.len()], &rails[i]);
         ps.push(Side::new(out.0.clone(), out.1.lo, out.1.hi));
         ps.push(Side::new(back.0.clone(), back.1.hi, back.1.lo));
+        // a split is the last resort: look four times as closely
         let p = HolePatch::new(ps)?;
-        if p.folded() {
+        if p.folded() || p.scan(64, &mut |_| {}) {
             return Err(CornerError::Folded);
         }
         pieces.push((p, first % m, next - first));
@@ -796,6 +806,7 @@ pub struct HolePatch {
     seeds: Vec<(Point2, Point3)>,
     scale: (f64, f64),
     min_radius: f64,
+    fold: bool,
 }
 
 impl HolePatch {
@@ -830,12 +841,13 @@ impl HolePatch {
         }
         // size the domain so a unit of u or v is about one min_radius on the surface: the
         // mesher steps the parameters by angles of that radius
+        // (scaling the domain leaves the surface as it is)
         p.measure();
         let k = (0.5 * (p.scale.0 + p.scale.1) / p.min_radius).clamp(1e-3, 1e3);
-        let mut p = HolePatch::with_domain(sides, k);
-        p.measure();
-        p.seed();
-        Ok(p)
+        let mut q = HolePatch::with_domain(sides, k);
+        (q.scale, q.min_radius, q.fold) = ((p.scale.0 / k, p.scale.1 / k), p.min_radius, p.fold);
+        q.seed();
+        Ok(q)
     }
 
     fn with_domain(sides: Vec<Side>, side_len: f64) -> HolePatch {
@@ -906,6 +918,7 @@ impl HolePatch {
             seeds: Vec::new(),
             scale: (1.0, 1.0),
             min_radius: 1.0,
+            fold: false,
         }
     }
 
@@ -995,17 +1008,18 @@ impl HolePatch {
         let side = &self.sides[i];
         let dt = side.t1 - side.t0;
         let sv = s.value();
-        let j = side.rail.jet(side.t0 + sv * dt);
         if !S::JET {
-            let e1 = j.dp * (dt / (j.dp.length() * dt.abs()));
+            let (p, dp, n) = side.rail.frame(side.t0 + sv * dt);
+            let e1 = dp * (dt / (dp.length() * dt.abs()));
             let [a0, b0, a1, b1] = self.ends[i];
-            let tv = e1 * (a0 + (a1 - a0) * sv) + j.n.cross(e1) * (b0 + (b1 - b0) * sv);
+            let tv = e1 * (a0 + (a1 - a0) * sv) + n.cross(e1) * (b0 + (b1 - b0) * sv);
             let (k0, k1) = self.bends[i];
             let k = (k0 + (k1 - k0) * sv) * 0.5;
-            return S::along(s, j.p.to_vec(), Vec3::ZERO, Vec3::ZERO)
+            return S::along(s, p.to_vec(), Vec3::ZERO, Vec3::ZERO)
                 + S::along(s, tv, Vec3::ZERO, Vec3::ZERO) * d
                 + S::along(s, k, Vec3::ZERO, Vec3::ZERO) * (d * d);
         }
+        let j = side.rail.jet(side.t0 + sv * dt);
         let [t0, t1, t2] = self.cross(i, &j, sv);
         let (c1, c2) = (j.dp * dt, j.ddp * (dt * dt));
         let (k0, k1) = self.bends[i];
@@ -1088,18 +1102,70 @@ impl HolePatch {
 
     /// Parameter scales and the tightest curvature, from a grid over the domain.
     fn measure(&mut self) {
-        let (mut su, mut sv, mut m) = (0.0, 0.0, 0usize);
+        let n = self.sides.len();
+        let (mut su, mut sv, mut count) = (0.0, 0.0, 0usize);
         let mut kmax: f64 = 0.0;
-        for x in self.grid(9) {
-            let d = self.deriv(x);
+        let mut take = |d: &SurfDeriv| {
             su += d.du.length();
             sv += d.dv.length();
-            m += 1;
-            kmax = kmax.max(max_curvature(&d));
+            count += 1;
+            kmax = kmax.max(max_curvature(d));
+        };
+        let fold = self.scan(16, &mut take);
+        for i in 0..n {
+            for k in 0..9 {
+                take(&self.deriv(self.side_uv(i, k as f64 / 9.0)));
+            }
         }
         let size = self.sides.iter().map(|s| s.chord_length()).fold(0.0, f64::max);
-        self.scale = (su / m as f64, sv / m as f64);
+        self.scale = (su / count as f64, sv / count as f64);
         self.min_radius = if kmax > 0.0 { (1.0 / kmax).min(size) } else { size };
+        self.fold = fold;
+    }
+
+    /// Whether the patch folds over or creases: on an m x m grid over the domain, the normals
+    /// of neighbouring points turn by more than 60 degrees, away from corners where the sides'
+    /// normals differ (a cut edge's end), round which the normal turns by design. Each
+    /// evaluation inside the domain is handed to `each`.
+    fn scan(&self, m: usize, each: &mut impl FnMut(&SurfDeriv)) -> bool {
+        let n = self.sides.len();
+        let cell = self.rect.u.width().max(self.rect.v.width()) / m as f64;
+        let kinks: Vec<Point2> = (0..n)
+            .filter(|&i| {
+                let a = self.sides[(i + n - 1) % n]
+                    .rail
+                    .point(self.sides[(i + n - 1) % n].t1)
+                    .1;
+                let b = self.sides[i].rail.point(self.sides[i].t0).1;
+                a.dot(b) < (1.0 - 1e-9) * a.length() * b.length()
+            })
+            .map(|i| self.corners[i])
+            .collect();
+        let mut fold = false;
+        let mut prev: Vec<Option<Vec3>> = vec![None; m + 1];
+        for i in 0..=m {
+            let mut left = None;
+            for (j, above) in prev.iter_mut().enumerate() {
+                let x = Point2::new(
+                    self.rect.u.lo + self.rect.u.width() * i as f64 / m as f64,
+                    self.rect.v.lo + self.rect.v.width() * j as f64 / m as f64,
+                );
+                let mut nrm = None;
+                if self.inside(x) {
+                    let d = self.deriv(x);
+                    each(&d);
+                    if kinks.iter().all(|k| k.distance(x) > 2.0 * cell) {
+                        nrm = d.du.cross(d.dv).normalize().map(|u| u.get());
+                    }
+                }
+                if let Some(a) = nrm {
+                    fold |= [left, *above].into_iter().flatten().any(|b: Vec3| a.dot(b) < 0.5);
+                }
+                *above = nrm;
+                left = nrm;
+            }
+        }
+        fold
     }
 
     /// Points of the domain on an m x m grid over its rectangle, plus side samples.
@@ -1124,47 +1190,9 @@ impl HolePatch {
         out
     }
 
-    /// Whether the patch folds over or creases: on a 16 x 16 grid over the domain, the normals
-    /// of neighbouring points turn by more than 60 degrees, away from corners where the sides'
-    /// normals differ (a cut edge's end), round which the normal turns by design.
+    /// Whether the patch folds over or creases (from `measure`).
     fn folded(&self) -> bool {
-        let (m, n) = (16, self.sides.len());
-        let cell = self.rect.u.width().max(self.rect.v.width()) / m as f64;
-        let kinks: Vec<Point2> = (0..n)
-            .filter(|&i| {
-                let a = self.sides[(i + n - 1) % n]
-                    .rail
-                    .point(self.sides[(i + n - 1) % n].t1)
-                    .1;
-                let b = self.sides[i].rail.point(self.sides[i].t0).1;
-                a.dot(b) < (1.0 - 1e-9) * a.length() * b.length()
-            })
-            .map(|i| self.corners[i])
-            .collect();
-        let mut prev: Vec<Option<Vec3>> = vec![None; m + 1];
-        for i in 0..=m {
-            let mut left = None;
-            for (j, above) in prev.iter_mut().enumerate() {
-                let x = Point2::new(
-                    self.rect.u.lo + self.rect.u.width() * i as f64 / m as f64,
-                    self.rect.v.lo + self.rect.v.width() * j as f64 / m as f64,
-                );
-                let n = if self.inside(x) && kinks.iter().all(|k| k.distance(x) > 2.0 * cell) {
-                    let d = self.deriv(x);
-                    d.du.cross(d.dv).normalize().map(|u| u.get())
-                } else {
-                    None
-                };
-                if let Some(a) = n
-                    && [left, *above].into_iter().flatten().any(|b: Vec3| a.dot(b) < 0.5)
-                {
-                    return true;
-                }
-                *above = n;
-                left = n;
-            }
-        }
-        false
+        self.fold
     }
 
     fn seed(&mut self) {
@@ -1236,6 +1264,9 @@ fn max_curvature(d: &SurfDeriv) -> f64 {
 }
 
 impl Procedural for HolePatch {
+    fn point(&self, uv: Point2) -> Point3 {
+        HolePatch::point(self, uv)
+    }
     fn deriv(&self, uv: Point2) -> SurfDeriv {
         let j = self.eval::<J>(uv);
         SurfDeriv {
@@ -1484,6 +1515,7 @@ impl Procedural for HolePatch {
                 .collect(),
             scale: self.scale,
             min_radius: self.min_radius,
+            fold: self.fold,
         }))
     }
     fn uv_scale(&self) -> (f64, f64) {
