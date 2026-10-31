@@ -122,6 +122,12 @@ pub trait Procedural: Send + Sync + std::fmt::Debug {
     fn domain(&self) -> Domain2;
     /// Parameters of the point of the surface nearest `p`.
     fn project(&self, p: Point3) -> Point2;
+    /// `project` for a point of the surface near the one at `near` (a loop's next sample), where
+    /// the construction can start from there instead of searching.
+    fn project_near(&self, p: Point3, near: Point2) -> Point2 {
+        let _ = near;
+        self.project(p)
+    }
     /// A box guaranteed to contain the surface over the parameter box.
     fn bbox(&self, uv: Box2) -> Box3;
     /// Zero on the surface, positive on the natural normal's side, 1-Lipschitz (as
@@ -559,6 +565,14 @@ impl SurfaceGeom for Torus {
 }
 
 impl Surface {
+    /// `project` for a point of the surface near the one at `near` (see `Procedural::project_near`).
+    pub fn project_near(&self, p: Point3, near: Point2) -> Point2 {
+        match self {
+            Surface::Procedural(pr) => pr.project_near(p, near),
+            _ => self.project(p),
+        }
+    }
+
     /// Whether the normal is undefined at `uv` (`normal(uv)` is None), without working it out
     /// where it never is.
     pub fn singular(&self, uv: Point2) -> bool {

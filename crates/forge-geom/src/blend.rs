@@ -424,26 +424,54 @@ fn local_range(c: &Curve, p: Point3) -> Interval {
 /// its guiding cubic; this finishes on the exact curve, stepping along its
 /// exact direction until p - c(t) is square to it.
 pub fn spine_closest(spine: &Curve, p: Point3) -> f64 {
-    let mut t = spine.closest(p, spine.full_range(1e6));
+    let t = spine.closest(p, spine.full_range(1e6));
     if let Curve::Intersection(ic) = spine {
-        for _ in 0..12 {
-            let d = spine.deriv(t);
-            let Some(dir) = crate::intcurve::direction(&ic.a, &ic.b, d.p) else {
-                break;
-            };
-            let dir = if dir.dot(d.d1) < 0.0 { -dir } else { dir };
-            let speed = d.d1.length();
-            if speed <= 0.0 {
-                break;
-            }
-            let along = (p - d.p).dot(dir);
-            t += along / speed;
-            if along.abs() <= 1e-3 * tol::LINEAR {
-                break;
-            }
-        }
+        return intersection_refine(ic, spine, p, t).0;
     }
     t
+}
+
+/// An intersection spine's parameter from t on, stepped along the exact direction (the chain's
+/// own tangent is an interpolation) until p's offset along it is gone, and whether it was.
+fn intersection_refine(ic: &crate::intcurve::IntCurve, spine: &Curve, p: Point3, mut t: f64) -> (f64, bool) {
+    for _ in 0..12 {
+        let d = spine.deriv(t);
+        let Some(dir) = crate::intcurve::direction(&ic.a, &ic.b, d.p) else {
+            break;
+        };
+        let dir = if dir.dot(d.d1) < 0.0 { -dir } else { dir };
+        let speed = d.d1.length();
+        if speed <= 0.0 {
+            break;
+        }
+        let along = (p - d.p).dot(dir);
+        t += along / speed;
+        if along.abs() <= 1e-3 * tol::LINEAR {
+            return (t, true);
+        }
+    }
+    (t, false)
+}
+
+/// The spine parameter near t whose normal plane holds p, by Newton from t (None where it does
+/// not settle).
+fn spine_refine(spine: &Curve, p: Point3, mut t: f64) -> Option<f64> {
+    if let Curve::Intersection(ic) = spine {
+        let (t, done) = intersection_refine(ic, spine, p, t);
+        return done.then_some(t);
+    }
+    for _ in 0..8 {
+        let d = spine.deriv(t);
+        let (g, slope) = ((d.p - p).dot(d.d1), d.d1.length_sq() + (d.p - p).dot(d.d2));
+        if slope.is_nan() || slope <= 0.0 {
+            return None;
+        }
+        t -= g / slope;
+        if g.abs() <= 1e-3 * tol::LINEAR * d.d1.length() {
+            return Some(t);
+        }
+    }
+    None
 }
 
 /// A rolling-ball blend between surfaces `a` and `b`: the ball centre runs on
@@ -853,6 +881,17 @@ impl Pipe {
         }
     }
 
+    /// The parameters of p, in the normal plane of the spine at u.
+    fn across(&self, p: Point3, u: f64) -> Point2 {
+        match self.cross(u) {
+            Some((c, e1, e2, th)) => {
+                let q = p - c;
+                Point2::new(u, dmath::atan2(q.dot(e2), q.dot(e1)) / th)
+            }
+            None => Point2::new(u, 0.0),
+        }
+    }
+
     fn column(&self, u: f64, vs: &[f64], out: &mut Vec<Point3>) {
         match self.cross(u) {
             Some(x) => out.extend(vs.iter().map(|&v| self.on(x, v))),
@@ -899,13 +938,16 @@ impl Procedural for Pipe {
         }
     }
     fn project(&self, p: Point3) -> Point2 {
-        let u = spine_closest(&self.spine, p);
-        match self.cross(u) {
-            Some((c, e1, e2, th)) => {
-                let q = p - c;
-                Point2::new(u, dmath::atan2(q.dot(e2), q.dot(e1)) / th)
+        self.across(p, spine_closest(&self.spine, p))
+    }
+    /// From the spine at near's u, Newton to the spine point whose normal plane holds p, kept
+    /// where p lies the radius from it (it is then on the pipe about there); else the search.
+    fn project_near(&self, p: Point3, near: Point2) -> Point2 {
+        match spine_refine(&self.spine, p, near.x) {
+            Some(u) if (p.distance(self.spine.eval(u)) - self.radius).abs() <= tol::LINEAR => {
+                self.across(p, u)
             }
-            None => Point2::new(u, 0.0),
+            _ => self.project(p),
         }
     }
     fn bbox(&self, uv: Box2) -> Box3 {

@@ -92,9 +92,33 @@ pub fn loop_samples(body: &Body, lp: LoopId, segments: impl Fn(&Edge) -> usize) 
 /// face: counter-clockwise in (u, v) when the face normal is the surface's.
 pub fn draw_loop(body: &Body, face: FaceId, samples: &[Point3]) -> (Vec<Point2>, Vec<usize>) {
     let surface = &body.face(face).surface;
+    draw(body, face, samples.iter().map(|&p| surface.project(p)).collect())
+}
+
+/// `draw_loop` with each sample projected from the one before (`Surface::project_near`), for
+/// meshing: the same points to within rounding, where the surface can start from there.
+pub fn draw_loop_near(body: &Body, face: FaceId, samples: &[Point3]) -> (Vec<Point2>, Vec<usize>) {
+    let surface = &body.face(face).surface;
+    // an analytic surface's projection is closed form already
+    if !matches!(surface, forge_geom::Surface::Procedural(_)) {
+        return draw_loop(body, face, samples);
+    }
+    let mut raw: Vec<Point2> = Vec::with_capacity(samples.len());
+    for &p in samples {
+        let uv = match raw.last() {
+            Some(&near) => surface.project_near(p, near),
+            None => surface.project(p),
+        };
+        raw.push(uv);
+    }
+    draw(body, face, raw)
+}
+
+/// `draw_loop` from the samples' parameters `raw`.
+fn draw(body: &Body, face: FaceId, mut raw: Vec<Point2>) -> (Vec<Point2>, Vec<usize>) {
+    let surface = &body.face(face).surface;
     let domain = surface.domain();
-    let n = samples.len();
-    let mut raw: Vec<Point2> = samples.iter().map(|&p| surface.project(p)).collect();
+    let n = raw.len();
     if !raw.iter().any(|&uv| surface.singular(uv)) {
         // one run, unwrapped from the first sample
         for i in 1..n {

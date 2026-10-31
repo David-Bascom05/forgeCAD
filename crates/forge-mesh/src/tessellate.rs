@@ -2,7 +2,7 @@ use crate::cdt::{CdtError, Refine, triangulate_refined};
 use crate::mesh::TriMesh;
 use forge_geom::{Curve, Surface, SurfaceGeom};
 use forge_math::{Point2, dmath};
-use forge_topo::uv::{align_loops, draw_loop};
+use forge_topo::uv::{align_loops, draw_loop_near};
 use forge_topo::{Body, FaceId};
 
 /// How closely the triangles must follow the exact shape.
@@ -793,7 +793,7 @@ fn tessellate_face(
                 s[1..].iter().rev().for_each(&mut take);
             }
         }
-        let (pts, sample_of) = draw_loop(body, f, &samples);
+        let (pts, sample_of) = draw_loop_near(body, f, &samples);
         ring_globals.push(sample_of.iter().map(|&k| ids[k]).collect());
         rings.push(pts);
     }

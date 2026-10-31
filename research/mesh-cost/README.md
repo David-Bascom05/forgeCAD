@@ -42,3 +42,11 @@ count moves by up to 2% between runs; compare a build against itself first.
 - The tube bound (spine curvature, reach) from mesh-speed-5's handoff, as the check for the strip
   triangles: evaluating the tests a column at a time made the checks cheap enough without it,
   and it held only for line, circle and ellipse spines.
+
+## Boundary samples projected from the one before (draw_loop_near)
+
+Meshing draws a face's loops with `draw_loop_near`: each sample projected from the one before
+(`Procedural::project_near`), on procedural faces only (an analytic projection is closed form,
+and the extra step cost the analytic parts 0.7%). A pipe runs Newton on its spine from there and
+keeps it only where the sample lies the radius from the spine point it settles on; else the
+global search. The booleans keep `draw_loop`, so the parameters they see are unchanged.
