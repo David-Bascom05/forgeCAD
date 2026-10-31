@@ -166,3 +166,13 @@ fn ball_with_its_poles_on_an_edge() {
         ));
     }
 }
+
+/// A bent square sweep patterned so the copies overlap (r21): a new edge leaves an old vertex
+/// along the tangent of the old arc beside it, and the face split took the wrong way there.
+#[test]
+fn new_edge_leaves_tangent_to_an_old_one() {
+    builds_valid("L0: extrude 32.31 rrect 0 0 99.32 87.16 13.8
+L2: sweep add z 0 -1 0 x 0 0 -1 at 80.59 80.34 -1.59 rect -3.19 -3.19 6.37 6.37 path line 80.59 80.34 -1.59 80.59 67.73 -1.59 arc z 1 0 0 x 0 0 1 at 80.59 67.73 -6.72 5.13 0 45 line 80.59 64.10254221251301 -3.0925422125130106 80.59 52.60498595041975 -14.590098474606272 extend 3.18 3.81
+L4: pattern L2 lin 0.21 -0.98 0 2 8.64
+");
+}

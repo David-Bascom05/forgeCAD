@@ -1800,17 +1800,9 @@ fn nary_body(
             .flatten()
         {
             Some(regions) => Ok(regions),
-            None => split_face(
-                tools[side],
-                f,
-                list,
-                boundary,
-                new_edges,
-                true,
-                &ties,
-                &gone(side, f),
-            )
-            .map(|s| s.regions),
+            None => {
+                split_face(tools[side], f, list, boundary, new_edges, true, &gone(side, f)).map(|s| s.regions)
+            }
         }
     });
     let mut job_regs: Vec<std::ops::Range<usize>> = Vec::with_capacity(jobs.len());
@@ -2186,7 +2178,7 @@ fn nary_body(
             .flatten()
         {
             Some(regions) => regions,
-            None => split_face(tools[side], f, list, boundary, &keep, true, &ties, &gone(side, f))?.regions,
+            None => split_face(tools[side], f, list, boundary, &keep, true, &gone(side, f))?.regions,
         };
         regions
             .into_iter()

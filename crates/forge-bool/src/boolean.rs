@@ -711,23 +711,6 @@ fn plan(a: &Body, b: &Body, op: Op, scratch: &mut Scratch) -> R<Plan> {
         }
     }
     let mut pieces = std::mem::take(&mut scratch.pieces);
-    // ways out of a vertex share a tangent only where a curve met an edge without crossing it
-    let mut ties: Vec<VKey> = cuts
-        .iter()
-        .zip(&cut_vertex)
-        .filter(|(c, _)| c.touch)
-        .map(|(_, &k)| k)
-        .collect();
-    if !ties.is_empty() {
-        ties.sort_unstable();
-        let aliased: Vec<VKey> = alias
-            .iter()
-            .filter(|(_, t)| ties.binary_search(t).is_ok())
-            .map(|&(f, _)| f)
-            .collect();
-        ties.extend(aliased);
-        ties.sort_unstable();
-    }
     let mut by_edge: Vec<(Side, EdgeId, usize)> = cuts
         .iter()
         .enumerate()
@@ -954,7 +937,7 @@ fn plan(a: &Body, b: &Body, op: Op, scratch: &mut Scratch) -> R<Plan> {
                     .collect();
                 let mut new_edges: Vec<usize> = mine.iter().map(|&i| seg_piece[i]).collect();
                 new_edges.extend(foreign.iter().copied());
-                let split = split_face(body, f, &pieces, &boundary, &new_edges, false, &ties, &|_| None)?;
+                let split = split_face(body, f, &pieces, &boundary, &new_edges, false, &|_| None)?;
                 // an untouched hole inside a new region moves into it
                 let face = body.face(f);
                 let mut moved: Vec<(usize, forge_topo::LoopId)> = Vec::new();
@@ -1101,7 +1084,7 @@ fn plan(a: &Body, b: &Body, op: Op, scratch: &mut Scratch) -> R<Plan> {
                 let class = if l < 0.0 { Class::In } else { Class::Out };
                 (l.abs() > 1e-3).then(|| keep_of(op, side, class).is_none())
             };
-            let regions = split_face(body, f, &pieces, &boundary, &new_edges, true, &ties, &gone)?.regions;
+            let regions = split_face(body, f, &pieces, &boundary, &new_edges, true, &gone)?.regions;
             for loops in regions {
                 let used: Vec<usize> = foreign
                     .iter()
@@ -3316,18 +3299,15 @@ fn uv_chord(body: &Body, f: FaceId, p: &Piece, forward: bool, at_end: bool) -> O
 /// second-order contact needs (the curves agree to first order); chords stand in for curvature,
 /// which Ye and Maekawa's formulas give but which are numerically unreliable near a singular
 /// point (Patrikalakis, Maekawa and Cho, ch. 5).
-#[cold]
 fn untie(
     body: &Body,
     f: FaceId,
     pieces: &[Piece],
     half: &[(usize, bool)],
     i: usize,
-    out: &[(VKey, usize)],
+    theta: Vec2,
+    ways: &mut [(Vec2, usize)],
 ) -> R<usize> {
-    let dir = |k: usize| uv_dir(body, f, &pieces[half[k].0], half[k].1, false);
-    let mut theta = uv_dir(body, f, &pieces[half[i].0], half[i].1, true)?;
-    let mut ways: Vec<(Vec2, usize)> = out.iter().map(|&(_, k)| Ok((dir(k)?, k))).collect::<R<_>>()?;
     let (c, j) = clockwise(theta, ways.iter().map(|&w| Ok(w)))?.unwrap_or((theta, i));
     // (ways of one body's own edges along one tangent are its own smooth joins, as they always
     // were; only a way of a new edge, or of the other body's, makes a tie; nor is the way
@@ -3346,18 +3326,32 @@ fn untie(
     if !tie {
         return Ok(j);
     }
+    by_chords(body, f, pieces, half, i, theta, ways)
+}
+
+/// `untie`'s ways told apart by chords, where two leave along one tangent.
+#[cold]
+fn by_chords(
+    body: &Body,
+    f: FaceId,
+    pieces: &[Piece],
+    half: &[(usize, bool)],
+    i: usize,
+    mut theta: Vec2,
+    ways: &mut [(Vec2, usize)],
+) -> R<usize> {
     let chord = |h: (usize, bool), at_end: bool| {
         uv_chord(body, f, &pieces[h.0], h.1, at_end).and_then(|c| c.normalize())
     };
     if let Some(t) = chord(half[i], true) {
         theta = t;
     }
-    for w in &mut ways {
+    for w in ways.iter_mut() {
         if let Some(c) = chord(half[w.1], false) {
             w.0 = c;
         }
     }
-    Ok(clockwise(theta, ways.into_iter().map(Ok))?.map_or(i, |w| w.1))
+    Ok(clockwise(theta, ways.iter().map(|&w| Ok(w)))?.map_or(i, |w| w.1))
 }
 
 /// Of the ways out of a vertex (uv direction, half-edge), the one just clockwise of the way
@@ -3622,9 +3616,6 @@ pub(crate) fn split_face(
     boundary: &[Vec<(usize, bool)>],
     new_edges: &[usize],
     outer: bool,
-    // the vertices where a cut met its edge without crossing it: two ways out may share a
-    // tangent there
-    ties: &[VKey],
     // of a half-edge, whether the region on its left is surely dropped (Some(true)) or kept
     // (Some(false)): a cycle dropped by its first answer is not drawn but made a region alone
     gone: &dyn Fn((usize, bool)) -> Option<bool>,
@@ -3661,13 +3652,25 @@ pub(crate) fn split_face(
         if let [(_, j)] = out {
             return Ok(*j);
         }
-        // each way by its tangent (where two may leave along one, by chords: see untie)
-        if ties.binary_search(&v).is_ok() {
-            return untie(body, f, pieces, &half, i, out);
-        }
+        // each way by its tangent; where two leave along one, by chords (see untie): untie looks
+        // for that at every vertex (a new edge may leave an old vertex along the old arc beside
+        // it), not only where a cut touched an edge
         let theta = dir(i, true)?;
-        let ways = out.iter().map(|&(_, k)| Ok((dir(k, false)?, k)));
-        Ok(clockwise(theta, ways)?.map_or(i, |w| w.1))
+        let mut buf = [(Vec2::ZERO, 0usize); 8];
+        let mut heap: Vec<(Vec2, usize)>;
+        let ways: &mut [(Vec2, usize)] = if out.len() <= buf.len() {
+            for (w, &(_, k)) in buf.iter_mut().zip(out) {
+                *w = (dir(k, false)?, k);
+            }
+            &mut buf[..out.len()]
+        } else {
+            heap = out
+                .iter()
+                .map(|&(_, k)| Ok((dir(k, false)?, k)))
+                .collect::<R<_>>()?;
+            &mut heap
+        };
+        untie(body, f, pieces, &half, i, theta, ways)
     };
     let mut used = vec![false; half.len()];
     let mut cycles: Vec<Vec<usize>> = Vec::new();
@@ -4044,7 +4047,7 @@ pub(crate) fn split_face(
         let Some(host) = host else {
             // its host may be a cycle not drawn: draw them all
             if skip.contains(&true) {
-                return split_face(body, f, pieces, boundary, new_edges, outer, ties, &|_| None);
+                return split_face(body, f, pieces, boundary, new_edges, outer, &|_| None);
             }
             if !outer {
                 open.push(cyc.iter().map(|&i| half[i]).collect());
