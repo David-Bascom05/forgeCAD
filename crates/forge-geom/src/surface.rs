@@ -462,6 +462,7 @@ impl Surface {
     /// of its natural normal, and 1-Lipschitz (it changes no faster than the
     /// point moves), so a bound on it bounds where the surface can be.
     /// Gradient of `implicit` at p (unit length away from axes, poles and apexes).
+    #[inline]
     pub fn gradient(&self, p: Point3) -> Vec3 {
         let radial = |f: &Frame, l: Point3| {
             let rho = (l.x * l.x + l.y * l.y).sqrt();
@@ -489,6 +490,7 @@ impl Surface {
         }
     }
 
+    #[inline]
     pub fn implicit(&self, p: Point3) -> f64 {
         match self {
             Surface::Plane(s) => s.signed_distance(p),

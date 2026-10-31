@@ -188,10 +188,13 @@ fn adaptive_grid(
     }
 }
 
-/// Mesh vertices joined along edges: `nbr[start[v]..start[v + 1]]` are v's neighbours.
+/// Mesh vertices joined along edges: `nbr[start[v]..start[v + 1]]` are v's neighbours, and
+/// `edges[on[v]..on[v + 1]]` the edges v lies on.
 struct Segments {
     start: Vec<u32>,
     nbr: Vec<u32>,
+    on: Vec<u32>,
+    edges: Vec<u32>,
 }
 
 /// A watertight mesh of a body: each edge is cut once and both faces share
@@ -250,7 +253,29 @@ pub fn tessellate(body: &Body, q: &Quality) -> Result<TriMesh, TessError> {
             fill[b] += 1;
         }
     }
-    let segments = Segments { start, nbr };
+    let mut on = vec![0u32; nv + 1];
+    for s in &edge_samples {
+        for &(_, v) in s {
+            on[v as usize + 1] += 1;
+        }
+    }
+    for i in 0..nv {
+        on[i + 1] += on[i];
+    }
+    let mut fill = on.clone();
+    let mut edges = vec![0u32; on[nv] as usize];
+    for (e, s) in edge_samples.iter().enumerate() {
+        for &(_, v) in s {
+            edges[fill[v as usize] as usize] = e as u32;
+            fill[v as usize] += 1;
+        }
+    }
+    let segments = Segments {
+        start,
+        nbr,
+        on,
+        edges,
+    };
     for f in body.face_ids() {
         tessellate_face(body, f, &edge_samples, &segments, q, &mut mesh)
             .map_err(|error| TessError::Face { face: f, error })?;
@@ -367,6 +392,22 @@ fn tessellate_face(
                     .contains(&(y as u32))
         }
     };
+    // a chord between two points of one edge cuts a flap off along it, and the face across the
+    // edge, as nearly tangent as a run-out meeting a wall, can cut the very same flap: the two
+    // faces would share a triangle
+    let one_edge = |ia: u32, ib: u32| {
+        let n = global.len() as u32;
+        ia < n && ib < n && {
+            let of = |i: u32| match global[i as usize] as usize {
+                x if x + 1 < segments.on.len() => {
+                    &segments.edges[segments.on[x] as usize..segments.on[x + 1] as usize]
+                }
+                _ => &[],
+            };
+            let ob = of(ib);
+            of(ia).iter().any(|e| ob.contains(e))
+        }
+    };
     // a chord of a plane never strays from it
     let flat = matches!(surface, Surface::Plane(_));
     // on a sphere, torus or cylinder the grid's steps come from its exact radii, so a chord
@@ -383,7 +424,10 @@ fn tessellate_face(
         if ia >= nb && ib >= nb && (a.x - b.x).abs() <= cell.0 && (a.y - b.y).abs() <= cell.1 {
             return false;
         }
-        on_edge(ia, ib) || (!flat && at(a.lerp(b, 0.5)).distance(pos(ia, a).lerp(pos(ib, b), 0.5)) > q.chord)
+        on_edge(ia, ib)
+            || (!flat
+                && (one_edge(ia, ib)
+                    || at(a.lerp(b, 0.5)).distance(pos(ia, a).lerp(pos(ib, b), 0.5)) > q.chord))
     };
     let tri = match triangulate_refined(&scaled, &loops, &interior, Some(&strays), 24) {
         Ok(t) => t,

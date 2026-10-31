@@ -1055,7 +1055,20 @@ impl Builder {
         }
         let springs = self.make_springs()?;
         self.trim_edges()?;
+        // two blends trimming one face: their springs on it may cross (a hole's rim rounded
+        // into a rounded edge beside it), which no single blend's own checks see
+        let mut by_face: BTreeMap<FaceId, Vec<EdgeId>> = BTreeMap::new();
+        for r in &self.rolled {
+            for &c in &self.body.edge(r.edge).coedges {
+                by_face.entry(self.body.coedge_face(c)).or_default().push(r.edge);
+            }
+        }
         self.rebuild_faces(&springs);
+        for (f, edges) in by_face {
+            if edges.len() > 1 && crate::selfx::face_loops_cross(&self.body, f) {
+                return Err(FilletError::Overflow { edge: edges[0] });
+            }
+        }
         self.add_blends(&springs);
         for (surface, same_sense, name, uses) in std::mem::take(&mut self.patches) {
             let shell = self.body.faces[0].shell;

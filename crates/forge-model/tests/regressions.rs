@@ -156,7 +156,6 @@ fn axis_revolve_inconsistent_classification() {
 }
 
 #[test]
-#[ignore = "known failure: error: Boolean(Internal('inconsistent classification'))"]
 #[allow(
     clippy::approx_constant,
     clippy::excessive_precision,
@@ -225,7 +224,6 @@ fn ball_poles_face_split_crossed_itself() {
 }
 
 #[test]
-#[ignore = "known failure: error: Boolean(Internal('inconsistent classification'))"]
 #[allow(
     clippy::approx_constant,
     clippy::excessive_precision,
@@ -2475,7 +2473,6 @@ fn slivers_face_split_crossed_itself() {
 }
 
 #[test]
-#[ignore = "known failure: invalid: EdgeUses"]
 #[allow(
     clippy::approx_constant,
     clippy::excessive_precision,
@@ -3309,6 +3306,286 @@ fn tilted_invalid_vertexoffedge() {
                 },
                 extent: Extent::Distance(10.0),
                 op: Combine::Cut,
+            },
+        ],
+    });
+}
+
+#[test]
+#[allow(
+    clippy::approx_constant,
+    clippy::excessive_precision,
+    clippy::unreadable_literal
+)]
+fn coincident_walls_refilled_hole_regenerates_valid() {
+    // the plug's circles are cut where pocket walls would meet them off the pocket: no cut there
+    regenerates_valid(Part {
+        features: vec![
+            Feature::Extrude {
+                profile: Profile {
+                    plane: fr([0.0, 0.0, 0.0], [0.0, 0.0, 1.0], [1.0, 0.0, 0.0]),
+                    loops: vec![ProfileLoop::new(vec![
+                        (
+                            Segment::Line {
+                                a: Point2::new(0.0, 0.0),
+                                b: Point2::new(60.0, 0.0),
+                            },
+                            0,
+                        ),
+                        (
+                            Segment::Line {
+                                a: Point2::new(60.0, 0.0),
+                                b: Point2::new(60.0, 40.0),
+                            },
+                            1,
+                        ),
+                        (
+                            Segment::Line {
+                                a: Point2::new(60.0, 40.0),
+                                b: Point2::new(0.0, 40.0),
+                            },
+                            2,
+                        ),
+                        (
+                            Segment::Line {
+                                a: Point2::new(0.0, 40.0),
+                                b: Point2::new(0.0, 0.0),
+                            },
+                            3,
+                        ),
+                    ])],
+                },
+                extent: Extent::Distance(10.0),
+                op: Combine::New,
+            },
+            Feature::Extrude {
+                profile: Profile {
+                    plane: fr([35.0, 6.0, 5.0], [0.0, 0.0, 1.0], [1.0, 0.0, 0.0]),
+                    loops: vec![ProfileLoop::new(vec![
+                        (
+                            Segment::Line {
+                                a: Point2::new(0.0, 0.0),
+                                b: Point2::new(8.490977405811462, 0.0),
+                            },
+                            0,
+                        ),
+                        (
+                            Segment::Line {
+                                a: Point2::new(8.490977405811462, 0.0),
+                                b: Point2::new(8.490977405811462, 4.216976719615461),
+                            },
+                            1,
+                        ),
+                        (
+                            Segment::Line {
+                                a: Point2::new(8.490977405811462, 4.216976719615461),
+                                b: Point2::new(0.0, 4.216976719615461),
+                            },
+                            2,
+                        ),
+                        (
+                            Segment::Line {
+                                a: Point2::new(0.0, 4.216976719615461),
+                                b: Point2::new(0.0, 0.0),
+                            },
+                            3,
+                        ),
+                    ])],
+                },
+                extent: Extent::Distance(6.0),
+                op: Combine::Cut,
+            },
+            Feature::Extrude {
+                profile: Profile {
+                    plane: fr([33.0, 11.0, -1.0], [0.0, 0.0, 1.0], [1.0, 0.0, 0.0]),
+                    loops: vec![ProfileLoop::new(vec![(
+                        Segment::Circle {
+                            center: Point2::new(0.0, 0.0),
+                            radius: 3.003655729400712,
+                            ccw: true,
+                        },
+                        0,
+                    )])],
+                },
+                extent: Extent::Distance(12.0),
+                op: Combine::Cut,
+            },
+            Feature::Extrude {
+                profile: Profile {
+                    plane: fr([33.0, 11.0, 0.0], [0.0, 0.0, 1.0], [1.0, 0.0, 0.0]),
+                    loops: vec![ProfileLoop::new(vec![(
+                        Segment::Circle {
+                            center: Point2::new(0.0, 0.0),
+                            radius: 3.003655729400712,
+                            ccw: true,
+                        },
+                        0,
+                    )])],
+                },
+                extent: Extent::Distance(10.0),
+                op: Combine::Add,
+            },
+        ],
+    });
+}
+
+#[test]
+#[allow(
+    clippy::approx_constant,
+    clippy::excessive_precision,
+    clippy::unreadable_literal
+)]
+fn coincident_walls_refill_touching_an_edge_refused_zero_thickness() {
+    // the refill meets the box only along the edge where one pocket's floor meets the other's wall
+    refused_zero_thickness(Part {
+        features: vec![
+            Feature::Extrude {
+                profile: Profile {
+                    plane: fr([0.0, 0.0, 0.0], [0.0, 0.0, 1.0], [1.0, 0.0, 0.0]),
+                    loops: vec![ProfileLoop::new(vec![
+                        (
+                            Segment::Line {
+                                a: Point2::new(0.0, 0.0),
+                                b: Point2::new(60.0, 0.0),
+                            },
+                            0,
+                        ),
+                        (
+                            Segment::Line {
+                                a: Point2::new(60.0, 0.0),
+                                b: Point2::new(60.0, 40.0),
+                            },
+                            1,
+                        ),
+                        (
+                            Segment::Line {
+                                a: Point2::new(60.0, 40.0),
+                                b: Point2::new(0.0, 40.0),
+                            },
+                            2,
+                        ),
+                        (
+                            Segment::Line {
+                                a: Point2::new(0.0, 40.0),
+                                b: Point2::new(0.0, 0.0),
+                            },
+                            3,
+                        ),
+                    ])],
+                },
+                extent: Extent::Distance(10.0),
+                op: Combine::New,
+            },
+            Feature::Extrude {
+                profile: Profile {
+                    plane: fr([11.0, 10.0, 7.0], [0.0, 0.0, 1.0], [1.0, 0.0, 0.0]),
+                    loops: vec![ProfileLoop::new(vec![
+                        (
+                            Segment::Line {
+                                a: Point2::new(0.0, 0.0),
+                                b: Point2::new(9.170899268088926, 0.0),
+                            },
+                            0,
+                        ),
+                        (
+                            Segment::Line {
+                                a: Point2::new(9.170899268088926, 0.0),
+                                b: Point2::new(9.170899268088926, 5.75793228426712),
+                            },
+                            1,
+                        ),
+                        (
+                            Segment::Line {
+                                a: Point2::new(9.170899268088926, 5.75793228426712),
+                                b: Point2::new(0.0, 5.75793228426712),
+                            },
+                            2,
+                        ),
+                        (
+                            Segment::Line {
+                                a: Point2::new(0.0, 5.75793228426712),
+                                b: Point2::new(0.0, 0.0),
+                            },
+                            3,
+                        ),
+                    ])],
+                },
+                extent: Extent::Distance(4.0),
+                op: Combine::Cut,
+            },
+            Feature::Extrude {
+                profile: Profile {
+                    plane: fr([10.0, 13.0, 5.0], [0.0, 0.0, 1.0], [1.0, 0.0, 0.0]),
+                    loops: vec![ProfileLoop::new(vec![
+                        (
+                            Segment::Line {
+                                a: Point2::new(0.0, 0.0),
+                                b: Point2::new(9.125313997047535, 0.0),
+                            },
+                            0,
+                        ),
+                        (
+                            Segment::Line {
+                                a: Point2::new(9.125313997047535, 0.0),
+                                b: Point2::new(9.125313997047535, 7.859748486427625),
+                            },
+                            1,
+                        ),
+                        (
+                            Segment::Line {
+                                a: Point2::new(9.125313997047535, 7.859748486427625),
+                                b: Point2::new(0.0, 7.859748486427625),
+                            },
+                            2,
+                        ),
+                        (
+                            Segment::Line {
+                                a: Point2::new(0.0, 7.859748486427625),
+                                b: Point2::new(0.0, 0.0),
+                            },
+                            3,
+                        ),
+                    ])],
+                },
+                extent: Extent::Distance(6.0),
+                op: Combine::Cut,
+            },
+            Feature::Extrude {
+                profile: Profile {
+                    plane: fr([5.0, 13.0, 7.0], [0.0, 0.0, 1.0], [1.0, 0.0, 0.0]),
+                    loops: vec![ProfileLoop::new(vec![
+                        (
+                            Segment::Line {
+                                a: Point2::new(0.0, 0.0),
+                                b: Point2::new(9.125313997047535, 0.0),
+                            },
+                            0,
+                        ),
+                        (
+                            Segment::Line {
+                                a: Point2::new(9.125313997047535, 0.0),
+                                b: Point2::new(9.125313997047535, 7.859748486427625),
+                            },
+                            1,
+                        ),
+                        (
+                            Segment::Line {
+                                a: Point2::new(9.125313997047535, 7.859748486427625),
+                                b: Point2::new(0.0, 7.859748486427625),
+                            },
+                            2,
+                        ),
+                        (
+                            Segment::Line {
+                                a: Point2::new(0.0, 7.859748486427625),
+                                b: Point2::new(0.0, 0.0),
+                            },
+                            3,
+                        ),
+                    ])],
+                },
+                extent: Extent::Distance(3.0),
+                op: Combine::Add,
             },
         ],
     });

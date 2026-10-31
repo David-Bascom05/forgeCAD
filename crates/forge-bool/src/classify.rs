@@ -280,6 +280,13 @@ impl<'a> Index<'a> {
     /// Where a point that lies on (or within tolerance of) face `f`'s surface
     /// falls relative to the face.
     pub fn point_in_face(&self, f: FaceId, p: Point3) -> Where {
+        self.point_in_face_past(f, p, &[])
+    }
+
+    /// As `point_in_face`, for a point of a curve that crosses edges `crossed` nearby: within
+    /// tolerance of only those it is not on the boundary but on the side of it the curve went
+    /// (a stretch shorter than two tolerances, between two crossings, is still decided).
+    pub fn point_in_face_past(&self, f: FaceId, p: Point3, crossed: &[forge_topo::EdgeId]) -> Where {
         let body = self.body;
         let face = body.face(f);
         let info = self.info(f);
@@ -315,16 +322,33 @@ impl<'a> Index<'a> {
             } else {
                 tol::LINEAR
             };
-            if d <= reach {
+            // a seam (an edge the face uses twice) has two sides that are both this face
+            let interior = || {
+                let seam = body.partner(c).is_some_and(|o| body.coedge_face(o) == f);
+                !seam
+                    && t > e.range.lo + 1e-9 * (1.0 + e.range.width())
+                    && t < e.range.hi - 1e-9 * (1.0 + e.range.width())
+            };
+            // near only an edge the curve crossed: decided by side below
+            let past = || {
+                crossed.contains(&co.edge)
+                    && d > 1e-3 * tol::LINEAR
+                    && interior()
+                    && !info.edges.iter().any(|&(o, ref b)| {
+                        o != GONE
+                            && !crossed.contains(&body.coedge(o).edge)
+                            && box_distance(b, p) <= tol::LINEAR
+                            && {
+                                let oe = body.edge(body.coedge(o).edge);
+                                oe.curve.eval(oe.curve.closest(p, oe.range)).distance(p) <= tol::LINEAR
+                            }
+                    })
+            };
+            if d <= reach && !past() {
                 return Where::On;
             }
-            // a seam (an edge the face uses twice) has two sides that are both this face
-            let seam = body.partner(c).is_some_and(|o| body.coedge_face(o) == f);
-            let interior = !seam
-                && t > e.range.lo + 1e-9 * (1.0 + e.range.width())
-                && t < e.range.hi - 1e-9 * (1.0 + e.range.width());
             // the polygon of the loop can be off by its chord sag near curved edges; decide those by side
-            if interior && d <= sag_bound(&e.curve) {
+            if d <= sag_bound(&e.curve) && interior() {
                 let q = e.curve.eval(t);
                 let along = if co.forward {
                     e.curve.deriv(t).d1

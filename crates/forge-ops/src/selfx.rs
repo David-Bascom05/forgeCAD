@@ -170,6 +170,11 @@ fn span(c: &Curve, region: &Box3) -> Option<Interval> {
     Some(r)
 }
 
+/// Whether face `f`'s loops cross each other.
+pub(crate) fn face_loops_cross(body: &Body, f: FaceId) -> bool {
+    loops_cross(&face_uv_loops(body, f))
+}
+
 /// Whether two segments of a face's loops cross properly (not at a shared end).
 fn loops_cross(loops: &[UvLoop]) -> bool {
     let segs: Vec<(Point2, Point2)> = loops

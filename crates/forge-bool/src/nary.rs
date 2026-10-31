@@ -1175,10 +1175,24 @@ pub fn nary_with(
     used.sort_unstable();
     used.dedup();
     let canon = coincident(&list, &used);
+    // an edge four kept faces meet at is where two solids' material touches along a line
+    let mut uses = vec![0u8; list.len()];
+    for &(ri, _) in &kept {
+        for &(p, _) in regs[ri].loops.iter().flatten() {
+            let p = canon.get(&p).map_or(p, |c| c.0);
+            uses[p] = uses[p].saturating_add(1);
+            if uses[p] > 2 {
+                let pc = &list[p];
+                return Err(BoolError::ZeroThickness {
+                    at: pc.curve.eval(pc.range.mid()),
+                });
+            }
+        }
+    }
     let mut out = Body::new();
     let shell = out.add_shell();
     let mut vmap: HashMap<VKey, VertexId> = HashMap::new();
-    let mut emap: HashMap<usize, EdgeId> = HashMap::new();
+    let mut emap: Vec<Option<EdgeId>> = vec![None; list.len()];
     for &(ri, flip) in &kept {
         let r = &regs[ri];
         let src = tools[r.side].face(r.face);
@@ -1190,8 +1204,8 @@ pub fn nary_with(
                     Some(&(q, f)) => (q, fwd != f),
                     None => (p, fwd),
                 };
-                let e = match emap.get(&p) {
-                    Some(&e) => e,
+                let e = match emap[p] {
+                    Some(e) => e,
                     None => {
                         let pc = &list[p];
                         let mut vertex = |out: &mut Body, v: VKey| -> VertexId {
@@ -1210,7 +1224,7 @@ pub fn nary_with(
                         };
                         let (v0, v1) = (vertex(&mut out, pc.start), vertex(&mut out, pc.end));
                         let e = out.add_edge(pc.curve.clone(), pc.range, v0, v1, pc.name);
-                        emap.insert(p, e);
+                        emap[p] = Some(e);
                         e
                     }
                 };

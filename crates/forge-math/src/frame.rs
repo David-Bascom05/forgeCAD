@@ -50,15 +50,19 @@ impl Frame {
         self.z
     }
 
+    #[inline]
     pub fn vec_to_world(&self, v: Vec3) -> Vec3 {
         self.x * v.x + self.y * v.y + self.z * v.z
     }
+    #[inline]
     pub fn vec_to_local(&self, v: Vec3) -> Vec3 {
         Vec3::new(self.x.dot(v), self.y.dot(v), self.z.dot(v))
     }
+    #[inline]
     pub fn point_to_world(&self, p: Point3) -> Point3 {
         self.origin + self.vec_to_world(p.to_vec())
     }
+    #[inline]
     pub fn point_to_local(&self, p: Point3) -> Point3 {
         let v = self.vec_to_local(p - self.origin);
         Point3::new(v.x, v.y, v.z)

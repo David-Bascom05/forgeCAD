@@ -832,16 +832,28 @@ impl Guide {
                 return Some((Guide::Line(*l), vec![*r], r.grow(reach)));
             }
             [(crate::Curve::Circle(c), r, _)] => {
-                return Some((Guide::Circle(*c), vec![*r], r.grow(reach / c.radius)));
+                // run-outs stop short of meeting round the back: a blend going round more than
+                // once would lie over itself, and points on it would project to either sheet
+                let grow = (reach / c.radius).min(0.25 * (dmath::TAU - r.width()).max(0.0));
+                return Some((Guide::Circle(*c), vec![*r], r.grow(grow)));
             }
             _ => {}
         }
         // the run-outs: each end edge carried on by `reach` along its own curve
         let run_out = |(c, r, fwd): &(crate::Curve, Interval, bool), at_end: bool| {
             let t = if at_end == *fwd { r.hi } else { r.lo };
-            let dt = reach / c.deriv(t).d1.length();
             let d = c.domain();
-            // a periodic curve carries on round; an edge's range may lie past its first period
+            // a periodic curve carries on round, but not back over the chain's own stretch of it
+            // (a blend going round onto itself lies over itself, and points on it project to
+            // either sheet): each run-out takes at most a quarter of the turn the chain leaves
+            let dt = match d.period {
+                Some(p) => {
+                    let own: f64 = edges.iter().filter(|e| e.0 == *c).map(|e| e.1.width()).sum();
+                    (reach / c.deriv(t).d1.length()).min(0.25 * (p - own).max(0.0))
+                }
+                None => reach / c.deriv(t).d1.length(),
+            };
+            // an edge's range may lie past its first period
             let far = match (at_end == *fwd, d.period) {
                 (true, Some(_)) => t + dt,
                 (false, Some(_)) => t - dt,

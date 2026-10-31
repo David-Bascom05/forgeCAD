@@ -713,9 +713,13 @@ fn error_kind(e: &crate::RegenError) -> (String, usize) {
 }
 
 /// Families whose solids touch exactly by design (tangent rods and balls, grids sharing walls
-/// and corners): refusing them with a zero-thickness error is correct handling.
+/// and corners, refills meeting a pocket's edge): refusing them with a zero-thickness error is
+/// correct handling.
 pub fn touches_by_design(family: &str) -> bool {
-    matches!(family, "tangent" | "ball_poles" | "exact_patterns")
+    matches!(
+        family,
+        "tangent" | "ball_poles" | "exact_patterns" | "coincident_walls"
+    )
 }
 
 /// Whether a family's part was handled correctly: a valid solid, or a zero-thickness refusal

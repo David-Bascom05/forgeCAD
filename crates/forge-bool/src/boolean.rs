@@ -701,16 +701,35 @@ fn plan(a: &Body, b: &Body, op: Op, feature: u64) -> R<Plan> {
                 // an untouched hole inside a new region moves into it
                 let face = body.face(f);
                 let mut moved: Vec<(usize, forge_topo::LoopId)> = Vec::new();
+                let outlines = std::cell::OnceCell::<Vec<Outline>>::new();
                 for &l in face.loops.iter().skip(1) {
                     if local.touched.contains(&l) {
                         continue;
                     }
-                    let v = body.coedge_start(body.lp(l).coedges[0]);
-                    let q = face.surface.project(body.vertex(v).point);
-                    let q = if face.same_sense {
-                        q
-                    } else {
-                        Point2::new(-q.x, q.y)
+                    let cands = body.lp(l).coedges.iter().map(|&c| {
+                        let q = face.surface.project(body.vertex(body.coedge_start(c)).point);
+                        if face.same_sense {
+                            q
+                        } else {
+                            Point2::new(-q.x, q.y)
+                        }
+                    });
+                    let outlines = outlines.get_or_init(|| {
+                        split
+                            .outlines
+                            .iter()
+                            .flatten()
+                            .map(|o| {
+                                let b = o.iter().fold(
+                                    (f64::INFINITY, f64::NEG_INFINITY, f64::INFINITY, f64::NEG_INFINITY),
+                                    |a, q| (a.0.min(q.x), a.1.max(q.x), a.2.min(q.y), a.3.max(q.y)),
+                                );
+                                (o.as_slice(), b)
+                            })
+                            .collect()
+                    });
+                    let Some(q) = clear_point(cands, outlines) else {
+                        continue;
                     };
                     if let Some(r) = split
                         .outlines
@@ -880,6 +899,19 @@ fn plan(a: &Body, b: &Body, op: Op, feature: u64) -> R<Plan> {
     let kept: Vec<(usize, bool)> = (0..specs.len())
         .filter_map(|i| keep(specs[i].side, class[i]).map(|flip| (i, flip)))
         .collect();
+    // an edge four kept faces meet at is where the two solids' material touches along a line
+    let mut uses = vec![0u8; pieces.len()];
+    for &(i, _) in &kept {
+        for &(p, _) in specs[i].loops.iter().flatten() {
+            uses[p] = uses[p].saturating_add(1);
+            if uses[p] > 2 {
+                let pc = &pieces[p];
+                return Err(BoolError::ZeroThickness {
+                    at: pc.curve.eval(pc.range.mid()),
+                });
+            }
+        }
+    }
     // faces of A beyond B's reach are outside B: kept by union and subtract, dropped by intersect
     if op == Op::Intersect {
         involved = a.face_ids().collect();
@@ -1305,11 +1337,22 @@ pub(crate) fn trim(
                 };
                 // a curve that touches the boundary without crossing it is not cut there; a
                 // "touch" may be two crossings a hair apart (near-tangent circles), so look
-                for h in hits
-                    .into_iter()
-                    .flat_map(|h| crossings_near(&curve, range, &across, h))
-                {
-                    if let Some((s, tol)) = on_edge(body, e, h.point) {
+                for (h, grazing) in hits.into_iter().flat_map(|h| {
+                    let grazing = h.contact != Contact::Crossing;
+                    crossings_near(&curve, range, &across, h)
+                        .into_iter()
+                        .map(move |x| (x, grazing))
+                }) {
+                    // off the other face no piece of the curve starts here: cutting the edge would
+                    // only split it where nothing meets it (and not its coincident twin). Its box
+                    // says so cheaply; a grazing crossing, or one within two tolerances of the
+                    // box's side (where a face's own boundary lies), is checked exactly
+                    let other = index[1 - k].boxes[faces[1 - k].index()];
+                    if let Some((s, tol)) = on_edge(body, e, h.point)
+                        && other.grow(tol::LINEAR).contains(h.point)
+                        && (!(grazing || !other.contains(h.point))
+                            || index[1 - k].point_in_face(faces[1 - k], h.point) != Where::Outside)
+                    {
                         ts.push((h.t, cuts.len()));
                         cuts.push(Cut {
                             side,
@@ -1379,18 +1422,86 @@ pub(crate) fn trim(
         let (a, b) = (&cuts[x.1], &cuts[y.1]);
         a.point.distance(b.point) <= a.tol.max(b.tol)
     });
-    let inside = |t: f64| -> R<bool> {
-        let p = curve.eval(t);
-        let wa = index[0].point_in_face(faces[0], p);
-        let wb = index[1].point_in_face(faces[1], p);
-        if debug_on() && matches!(curve, Curve::Circle(_)) {
-            eprintln!("  trim {:?} t {t:.4} p {p:?}: {wa:?} {wb:?}", faces);
+    // a stretch on a boundary is an existing edge, never a new one; a stretch may still touch
+    // a boundary at a point (circles tangent there), so a sample landing on one is tried again,
+    // away from the ends (a cut is placed only to within tolerance). The edges a stretch crosses
+    // at its ends (inside them, not running along them) do not put it on the boundary.
+    let crossed = |k: usize, ends: &[usize]| -> Vec<EdgeId> {
+        cuts[first..]
+            .iter()
+            .filter(|c| c.side == sides[k])
+            .filter(|c| {
+                let r = bodies[k].edge(c.edge).range;
+                let w = 1e-9 * (1.0 + r.width());
+                c.s > r.lo + w
+                    && c.s < r.hi - w
+                    && !along.iter().any(|a| a.0 == k && a.1 == c.edge)
+                    && ends
+                        .iter()
+                        .any(|&i| cuts[i].point.distance(c.point) <= cuts[i].tol.max(c.tol))
+            })
+            .map(|c| c.edge)
+            .collect()
+    };
+    let inside = |t0: f64, t1: f64, ends: &[usize]| -> R<bool> {
+        let at = |k: usize, p: Point3| match index[k].point_in_face(faces[k], p) {
+            Where::On => {
+                let past = crossed(k, ends);
+                if past.is_empty() {
+                    Where::On
+                } else {
+                    index[k].point_in_face_past(faces[k], p, &past)
+                }
+            }
+            w => w,
+        };
+        // no boundary of either face crosses the stretch: a face it is inside of somewhere it is
+        // inside of everywhere, and only the one it is on needs another sample
+        let mut w = [Where::On; 2];
+        for f in [0.5, 0.381_966_011_250_105_1, 0.618_033_988_749_894_9] {
+            let t = t0 + (t1 - t0) * f;
+            let p = curve.eval(t);
+            if f != 0.5 && curve.eval(t0).distance(p).min(curve.eval(t1).distance(p)) <= 4.0 * tol::LINEAR {
+                break;
+            }
+            // a stretch between two points of the boundary it is on runs along it: sampled again
+            // only where it touches a boundary that does not end it. A whole closed curve (no
+            // cut, or one) touching a boundary would need a vertex there, which no sample gives
+            if f != 0.5
+                && (ends.is_empty()
+                    || ends[0] == ends[1]
+                    || (0..2).any(|k| {
+                        w[k] == Where::On
+                            && cuts[first..].iter().any(|c| {
+                                c.side == sides[k]
+                                    && ends
+                                        .iter()
+                                        .any(|&i| cuts[i].point.distance(c.point) <= cuts[i].tol.max(c.tol))
+                            })
+                    }))
+            {
+                break;
+            }
+            for (k, wk) in w.iter_mut().enumerate() {
+                if *wk == Where::On {
+                    *wk = at(k, p);
+                    // off either face the stretch is no new edge, whatever the other says
+                    if *wk == Where::Outside {
+                        return Ok(false);
+                    }
+                }
+            }
+            if debug_on() && matches!(curve, Curve::Circle(_)) {
+                eprintln!("  trim {faces:?} t {t:.4} p {p:?}: {:?} {:?}", w[0], w[1]);
+            }
+            if w == [Where::Inside; 2] {
+                return Ok(true);
+            }
         }
-        // a stretch on a boundary is an existing edge, never a new one
-        Ok(wa == Where::Inside && wb == Where::Inside)
+        Ok(false)
     };
     if ts.is_empty() {
-        if closed && inside(range.mid())? {
+        if closed && inside(range.lo, range.hi, &[])? {
             segs.push(Seg {
                 curve: curve.clone(),
                 range,
@@ -1413,7 +1524,7 @@ pub(crate) fn trim(
         if t1 - t0 <= 1e-12 {
             continue;
         }
-        if inside(0.5 * (t0 + t1))? {
+        if inside(t0, t1, &[i0, i1])? {
             segs.push(Seg {
                 curve: curve.clone(),
                 range: Interval::new(t0, t1),
@@ -2134,6 +2245,7 @@ pub(crate) fn split_face(
             regions.push(vec![cyc.iter().map(|&i| half[i]).collect()]);
         }
     }
+    let outlines = std::cell::OnceCell::<Vec<Outline>>::new();
     for (k, cyc) in cycles.iter().enumerate() {
         if areas[k] > 0.0 {
             continue;
@@ -2151,16 +2263,23 @@ pub(crate) fn split_face(
                 let (p0, p1) = (poly[k], poly[(k + 1) % poly.len()]);
                 p0.lerp(p1, 0.5) + (p1 - p0).perp() * 1e-3
             }
-            // an untouched hole touches no new edge, so its first vertex is clear of every new outline
+            // an untouched hole touches no new edge, so it lies wholly on one side of every outline
             None => {
-                let pc = &pieces[half[cyc[0]].0];
-                mirror(
-                    face.surface.project(pc.curve.eval(if half[cyc[0]].1 {
+                let cands = cyc.iter().map(|&i| {
+                    let pc = &pieces[half[i].0];
+                    mirror(face.surface.project(pc.curve.eval(if half[i].1 {
                         pc.range.lo
                     } else {
                         pc.range.hi
-                    })),
-                )
+                    })))
+                });
+                let outlines = outlines.get_or_init(|| {
+                    outer_of
+                        .iter()
+                        .filter_map(|&o| Some((polys[o].as_deref()?, boxes[o]?)))
+                        .collect()
+                });
+                clear_point(cands, outlines).ok_or(BoolError::Internal("empty cycle"))?
             }
         };
         // the smallest outline holding it; the untouched outer loop (no outline) holds every hole.
@@ -2227,6 +2346,56 @@ pub(crate) fn split_face(
 
 pub(crate) fn inside_poly(p: Point2, poly: &[Point2]) -> bool {
     forge_math::predicates::inside_polygon(p, poly)
+}
+
+/// A drawn outline and its box (u lo, u hi, v lo, v hi).
+type Outline<'a> = (&'a [Point2], (f64, f64, f64, f64));
+
+/// Of points of a loop that crosses none of `outlines` (so lies wholly on one side of each), the
+/// first clear of every outline by a fiftieth of its size, else the one farthest from them: an
+/// outline drawn with chords can pass on the wrong side of a point nearer its curve than that.
+fn clear_point(cands: impl Iterator<Item = Point2>, outlines: &[Outline]) -> Option<Point2> {
+    let clearance = |q: Point2| -> f64 {
+        outlines
+            .iter()
+            .map(|&(o, b)| {
+                let gap = 0.02 * Vec2::new(b.1 - b.0, b.3 - b.2).length();
+                let off = Vec2::new(
+                    (b.0 - q.x).max(q.x - b.1).max(0.0),
+                    (b.2 - q.y).max(q.y - b.3).max(0.0),
+                )
+                .length();
+                if off >= gap {
+                    return f64::INFINITY;
+                }
+                let d = (0..o.len())
+                    .map(|i| {
+                        let (a, b) = (o[i], o[(i + 1) % o.len()]);
+                        let ab = b - a;
+                        let t = ((q - a).dot(ab) / ab.length_sq().max(f64::MIN_POSITIVE)).clamp(0.0, 1.0);
+                        q.distance(a + ab * t)
+                    })
+                    .fold(f64::INFINITY, f64::min);
+                d / gap.max(f64::MIN_POSITIVE)
+            })
+            .fold(f64::INFINITY, f64::min)
+    };
+    let mut best: Option<(f64, Point2)> = None;
+    let mut cands = cands.peekable();
+    while let Some(q) = cands.next() {
+        // a lone point needs no measuring
+        if best.is_none() && cands.peek().is_none() {
+            return Some(q);
+        }
+        let c = clearance(q);
+        if c >= 1.0 {
+            return Some(q);
+        }
+        if best.is_none_or(|b| c > b.0) {
+            best = Some((c, q));
+        }
+    }
+    best.map(|b| b.1)
 }
 
 /// Inside, outside, or on the other body, for every spec.
@@ -2450,7 +2619,26 @@ fn debug_conflict(
 
 /// A point inside a spec's face: a small step inward from its first edge's midpoint.
 fn interior_point(body: &Body, s: &Spec, pieces: &[Piece]) -> Option<Point3> {
-    probe(body, s.from, *s.loops.first()?.first()?, pieces)
+    let h = *s.loops.first()?.first()?;
+    // a step no other piece of the region comes nearer than: the way there crosses none of them
+    // (a sliver narrower than the usual step would put the probe past its far side)
+    let mut step = (0.01 * half_chord(&pieces[h.0])).min(0.05);
+    while step >= 10.0 * tol::LINEAR {
+        let q = probe_at(body, s.from, h, pieces, Some(step))?;
+        let clear = s.loops.iter().flatten().all(|&(o, _)| {
+            o == h.0 || {
+                let pc = &pieces[o];
+                // a circle's arc is no nearer than the whole circle
+                matches!(&pc.curve, Curve::Circle(c) if (q.distance(c.frame.origin) - c.radius).abs() >= step)
+                    || pc.curve.eval(pc.curve.closest(q, pc.range)).distance(q) >= step
+            }
+        });
+        if clear {
+            return Some(q);
+        }
+        step *= 0.25;
+    }
+    probe(body, s.from, h, pieces)
 }
 
 /// A point inside face `f` a small step off the middle of half-edge `(p, fwd)` of one of its
