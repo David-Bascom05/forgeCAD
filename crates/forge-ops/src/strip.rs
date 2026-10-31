@@ -338,7 +338,7 @@ fn strip(body: &Body, fa: FaceId, band: &[FaceId], fb: FaceId, radius: Option<f6
     let mut out = body.clone();
     let mark = match band {
         [m] => body.face(*m).name,
-        _ => Name::NONE.with_set(band.iter().map(|&f| body.face(f).name).collect()),
+        _ => Name::NONE.with_set(&mut band.iter().map(|&f| body.face(f).name).collect::<Vec<_>>()),
     };
     let name = Name::feature(feature).with_str("round").with_name(mark);
     let overflow = FilletError::Overflow { edge: ea };
@@ -385,7 +385,7 @@ fn strip(body: &Body, fa: FaceId, band: &[FaceId], fb: FaceId, radius: Option<f6
                 return Err(overflow);
             }
             let vn = Name::NONE
-                .with_set(vec![name, body.face(*ef).name])
+                .with_set(&mut [name, body.face(*ef).name])
                 .with(j as u64);
             at[j] = (t, p, out.add_vertex(p, vn));
             trim(&mut out, e, v, (p, at[j].2))?;
@@ -395,12 +395,12 @@ fn strip(body: &Body, fa: FaceId, band: &[FaceId], fb: FaceId, radius: Option<f6
             let x = body.edge(e);
             let (_, p) = nearest_hit(&x.curve, x.range, &blend.surface, body.vertex(v).point)
                 .ok_or(overflow.clone())?;
-            let names = vec![
+            let mut names = [
                 name,
                 body.face(end.faces[i].0).name,
                 body.face(end.faces[i + 1].0).name,
             ];
-            let q = out.add_vertex(p, Name::NONE.with_set(names));
+            let q = out.add_vertex(p, Name::NONE.with_set(&mut names));
             trim(&mut out, e, v, (p, q))?;
             xs.push((p, q));
         }
@@ -442,7 +442,7 @@ fn strip(body: &Body, fa: FaceId, band: &[FaceId], fb: FaceId, radius: Option<f6
         if !inside_face(body, f, curve, range) {
             return Err(overflow);
         }
-        let sn = Name::NONE.with_set(vec![name, body.face(f).name]);
+        let sn = Name::NONE.with_set(&mut [name, body.face(f).name]);
         let new = out.add_edge(curve.clone(), range, va, vb, sn);
         let run: Vec<CoedgeId> = runs[2 * j].1.iter().map(|&c| partner(c)).collect::<R<_>>()?;
         spliced.push((f, run, new));
@@ -562,7 +562,7 @@ fn closed_strip(
         }
         let q = out.add_vertex(
             p,
-            Name::NONE.with_set(vec![name, body.face(f).name]).with_str("at"),
+            Name::NONE.with_set(&mut [name, body.face(f).name]).with_str("at"),
         );
         let edge = &mut out.edges[s.index()];
         if edge.start == v {
@@ -594,7 +594,7 @@ fn closed_strip(
     // spring b from qb round to qb, through a vertex where the seam lands unless that is qb
     let qbp = out.vertex(qb).point;
     let (tb, tp) = (full(&kb, qbp), full(&kb, fb_at));
-    let sn = |f: FaceId| Name::NONE.with_set(vec![name, body.face(f).name]);
+    let sn = |f: FaceId| Name::NONE.with_set(&mut [name, body.face(f).name]);
     let tau = dmath::TAU;
     let (pv, b_arcs) = if qbp.distance(fb_at) <= tol::LINEAR {
         let e = out.add_edge(Curve::Circle(kb), Interval::new(tb, tb + tau), qb, qb, sn(fb));

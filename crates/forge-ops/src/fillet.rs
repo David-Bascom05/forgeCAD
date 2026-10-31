@@ -1419,7 +1419,7 @@ impl Builder {
 
     fn vertex_name(&self, v: VertexId, faces: &[Name]) -> Name {
         Name::NONE
-            .with_set(faces.to_vec())
+            .with_set(&mut faces.to_vec())
             .with_name(self.body.vertex(v).name)
     }
 
@@ -1576,7 +1576,7 @@ impl Builder {
             let (curve, ta, tb) = cross_curve(&ro.blend, &self.body.face(f).surface, a.0, b.0)
                 .ok_or(FilletError::Overflow { edge })?;
             let name = Name::NONE
-                .with_set(vec![ro.name, self.face_name(f)])
+                .with_set(&mut [ro.name, self.face_name(f)])
                 .with_name(self.body.vertex(v).name);
             let (eid, fwd) = self.edge_between(curve, ta, tb, a.1, b.1, name);
             self.paths.insert(at(j).cin, vec![(eid, fwd)]);
@@ -1634,7 +1634,7 @@ impl Builder {
         let names = |b: &Builder, c: CoedgeId| {
             let e = b.body.coedge(c).edge;
             Name::NONE
-                .with_set(vec![name, b.body.edge(e).name])
+                .with_set(&mut [name, b.body.edge(e).name])
                 .with_name(b.body.vertex(v).name)
         };
         // off face a0: the spring's first crossing with an edge of a0 after the vertex
@@ -1687,7 +1687,7 @@ impl Builder {
                 cross_curve(&self.rolled[ri].blend, &self.body.face(f).surface, entry.0, exit)
                     .ok_or(err.clone())?;
             let ename = Name::NONE
-                .with_set(vec![name, self.face_name(f)])
+                .with_set(&mut [name, self.face_name(f)])
                 .with_name(self.body.vertex(v).name)
                 .with(back.len() as u64);
             let (eid, fwd) = self.edge_between(curve, ta, tb, entry.1, xv, ename);
@@ -1863,7 +1863,7 @@ impl Builder {
                 if hit.is_none() && !var {
                     return Err(err);
                 }
-                let name = Name::NONE.with_set(vec![na, nb]).with_name(ename);
+                let name = Name::NONE.with_set(&mut [na, nb]).with_name(ename);
                 let q = hit.map(|t| (t, self.rolled[ra].springs[s_a].eval(t)));
                 if let Some((_, q)) = q
                     && q.distance(foot) <= tol::LINEAR
@@ -1916,7 +1916,7 @@ impl Builder {
                 let (t0, t1) = (t_of(&nodes[w]), t_of(&nodes[w + 1]));
                 let curve = self.rolled[ri].springs[s].clone();
                 let name = Name::NONE
-                    .with_set(vec![self.rolled[ri].name])
+                    .with_set(&mut [self.rolled[ri].name])
                     .with_name(self.body.vertex(nodes[w + 1].0).name)
                     .with(w as u64);
                 segs.push(self.edge_between(curve, t0, t1, nodes[w].0, nodes[w + 1].0, name));
@@ -1959,7 +1959,7 @@ impl Builder {
         // the section runs from the foot on the blend's first surface (its side 0)
         let (from_v, to_v) = if sa == 0 { (pv, xv) } else { (xv, pv) };
         let name = Name::NONE
-            .with_set(vec![na, nb])
+            .with_set(&mut [na, nb])
             .with_str("section")
             .with_name(self.body.vertex(v).name);
         let s = self.body.add_edge(
@@ -2266,8 +2266,8 @@ impl Builder {
             let fa = self.face_name(ring[j].face);
             let fb = self.face_name(ring[(j + k - 1) % k].face);
             let rn = self.rolled[ri].name;
-            let va = self.pooled(&mut pool, pa, Name::NONE.with_set(vec![fa, rn]).with_name(vname));
-            let vb = self.pooled(&mut pool, pb, Name::NONE.with_set(vec![fb, rn]).with_name(vname));
+            let va = self.pooled(&mut pool, pa, Name::NONE.with_set(&mut [fa, rn]).with_name(vname));
+            let vb = self.pooled(&mut pool, pb, Name::NONE.with_set(&mut [fb, rn]).with_name(vname));
             stops[j] = Some((t, va, vb));
         }
         // sharp edges are cut where the face trims beside them end
@@ -2305,7 +2305,7 @@ impl Builder {
                     {
                         return Err(err);
                     }
-                    let name = Name::NONE.with_set(vec![self.face_name(ring[j].face), patch_name]);
+                    let name = Name::NONE.with_set(&mut [self.face_name(ring[j].face), patch_name]);
                     let walk = self.edge_between(t.curve.clone(), ta, tb, a, b, name);
                     self.paths.insert(ring[j].cin, vec![walk]);
                     face_edges[j] = Some(walk);
@@ -2323,7 +2323,7 @@ impl Builder {
             let (circle, angle) = self.rolled[ri].blend.section(t).ok_or(err.clone())?;
             // the section runs from the foot on the blend's side 0
             let (v0, v1) = if s_in == 0 { (va, vb) } else { (vb, va) };
-            let name = Name::NONE.with_set(vec![self.rolled[ri].name, patch_name]);
+            let name = Name::NONE.with_set(&mut [self.rolled[ri].name, patch_name]);
             let e = self
                 .body
                 .add_edge(Curve::Circle(circle), Interval::new(0.0, angle), v0, v1, name);
@@ -2449,7 +2449,7 @@ impl Builder {
                 if (!closed && curve.eval(t0).distance(curve.eval(t1)) <= tol::LINEAR) || t1 <= t0 {
                     return Err(FilletError::Overflow { edge: e });
                 }
-                let name = Name::NONE.with_set(vec![ro.name, self.body.face(ro.faces[side]).name]);
+                let name = Name::NONE.with_set(&mut [ro.name, self.body.face(ro.faces[side]).name]);
                 let face = ro.faces[side];
                 // where the spring leaves its face and comes back, the ball rolls over what lies between
                 let trips = if inside_face(&self.body, face, &curve, Interval::new(t0, t1)) {
@@ -2536,7 +2536,7 @@ impl Builder {
             let ((t_out, c_out, p_out), (t_in, c_in, p_in)) = (w[0], w[1]);
             let name = |b: &Builder, c: CoedgeId| {
                 Name::NONE
-                    .with_set(vec![b.rolled[ri].name, b.body.edge(b.body.coedge(c).edge).name])
+                    .with_set(&mut [b.rolled[ri].name, b.body.edge(b.body.coedge(c).edge).name])
                     .with(t_out.to_bits())
             };
             let v_out = self.body.add_vertex(p_out, name(self, c_out));
@@ -2633,7 +2633,7 @@ impl Builder {
                 target.1
             } else {
                 let vn = Name::NONE
-                    .with_set(vec![name, self.body.edge(self.body.coedge(d).edge).name])
+                    .with_set(&mut [name, self.body.edge(self.body.coedge(d).edge).name])
                     .with(path.len() as u64);
                 self.body.add_vertex(exit, vn)
             };
@@ -2641,7 +2641,7 @@ impl Builder {
                 cross_curve(&self.rolled[ri].blend, &self.body.face(f).surface, entry.0, exit)
                     .ok_or(err.clone())?;
             let ename = Name::NONE
-                .with_set(vec![name, self.face_name(f)])
+                .with_set(&mut [name, self.face_name(f)])
                 .with(path.len() as u64)
                 .with(ta.to_bits());
             let (eid, fwd) = self.edge_between(curve, ta, tb, entry.1, xv, ename);

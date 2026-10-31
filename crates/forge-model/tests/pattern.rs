@@ -363,7 +363,7 @@ fn copies_have_stable_names() {
             linear(Source::Features(vec![1]), row(Vec3::X, 4, spacing), None),
         ];
         let boss = Name::feature(2);
-        let rim = Name::NONE.with_set(vec![boss.with_str("end"), boss.with_str("side").with(0)]);
+        let rim = Name::NONE.with_set(&mut [boss.with_str("end"), boss.with_str("side").with(0)]);
         if chamfer {
             features.push(Feature::Chamfer {
                 edges: vec![instance_name(3, [2, 0], rim)],

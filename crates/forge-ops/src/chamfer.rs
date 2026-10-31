@@ -154,7 +154,7 @@ pub fn chamfer(body: &Body, edges: &[Name], size: ChamferSize, feature: u64) -> 
         for f in [b.a, b.b] {
             let s = w.contact[&(b.edge, true, f)];
             let t = w.contact[&(b.edge, false, f)];
-            let name = Name::NONE.with_set(vec![src.face(f).name, b.name]);
+            let name = Name::NONE.with_set(&mut [src.face(f).name, b.name]);
             let id = w.out.add_edge(e.curve.clone(), e.range, s, t, name);
             w.fit_e.push(id);
             contact_edge.insert((b.edge, f), id);
@@ -774,7 +774,7 @@ mod tests {
     fn top_edges() -> Vec<Name> {
         let root = Name::feature(1);
         (0..4)
-            .map(|k| Name::NONE.with_set(vec![root.with_str("end"), root.with_str("side").with(k)]))
+            .map(|k| Name::NONE.with_set(&mut [root.with_str("end"), root.with_str("side").with(k)]))
             .collect()
     }
 
@@ -832,7 +832,7 @@ mod tests {
         let root = Name::feature(1);
         let top: Vec<Name> = (0..8)
             .chain([50])
-            .map(|k| Name::NONE.with_set(vec![root.with_str("end"), root.with_str("side").with(k)]))
+            .map(|k| Name::NONE.with_set(&mut [root.with_str("end"), root.with_str("side").with(k)]))
             .collect();
         let c = chamfer(&b, &top, ChamferSize::Equal(1.0), 2).unwrap();
         assert_eq!(c.faces.len(), b.faces.len() + 9);

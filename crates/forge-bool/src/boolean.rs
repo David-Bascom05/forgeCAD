@@ -220,12 +220,15 @@ pub fn boolean(a: &Body, b: &Body, op: Op, feature: u64) -> R<Body> {
 /// as tombstones until `Body::compact`. Names do not depend on `_feature`: what the boolean makes
 /// is named by what meets there, as the n-ary boolean names it.
 pub fn boolean_into(target: &mut Body, b: &Body, op: Op, _feature: u64) -> R<()> {
-    let plan = plan(target, b, op)?;
+    let mut scratch = SCRATCH.with(|s| s.take());
+    let plan = plan(target, b, op, &mut scratch)?;
     let mut clock = phases_on().then(std::time::Instant::now);
     let (loops, verts) = (target.loops.len(), target.vertices.len());
     apply(target, b, &plan);
     split_new_pinches(target, loops, verts);
     lap(&mut clock, 6);
+    scratch.keep(plan);
+    SCRATCH.with(|s| s.replace(scratch));
     Ok(())
 }
 
@@ -251,6 +254,32 @@ fn split_new_pinches(target: &mut Body, loops: usize, verts: usize) {
         let cs: Vec<_> = run.iter().map(|x| x.1).collect();
         target.split_pinched(run[0].0, &cs, &mut prev);
     }
+}
+
+/// Lists a boolean fills, kept per thread so the next boolean reuses their room.
+#[derive(Default)]
+struct Scratch {
+    cuts: Vec<Cut>,
+    segs: Vec<Seg>,
+    pieces: Vec<Piece>,
+    specs: Vec<Spec>,
+    /// Each edge's pieces: (boolean, first piece, count) by side and edge index, current only
+    /// where the boolean is this one's.
+    edge_pieces: [Vec<(u32, u32, u32)>; 2],
+    boolean: u32,
+}
+
+impl Scratch {
+    fn keep(&mut self, plan: Plan) {
+        let (mut pieces, mut specs) = (plan.pieces, plan.specs);
+        pieces.clear();
+        specs.clear();
+        (self.pieces, self.specs) = (pieces, specs);
+    }
+}
+
+thread_local! {
+    static SCRATCH: std::cell::RefCell<Scratch> = std::cell::RefCell::default();
 }
 
 /// Everything a boolean decides, worked out without touching A.
@@ -370,7 +399,7 @@ fn lap(t: &mut Option<std::time::Instant>, k: usize) {
     }
 }
 
-fn plan(a: &Body, b: &Body, op: Op) -> R<Plan> {
+fn plan(a: &Body, b: &Body, op: Op, scratch: &mut Scratch) -> R<Plan> {
     let mut clock = phases_on().then(std::time::Instant::now);
     let bodies = [a, b];
     let index = [Index::new(a), Index::new(b)];
@@ -379,8 +408,12 @@ fn plan(a: &Body, b: &Body, op: Op) -> R<Plan> {
     let root = Name::feature(0);
 
     // 1-2: intersect overlapping face pairs, keep pieces inside both faces
-    let mut cuts: Vec<Cut> = Vec::new();
-    let mut segs: Vec<Seg> = Vec::new();
+    let (mut cuts, mut segs) = (
+        std::mem::take(&mut scratch.cuts),
+        std::mem::take(&mut scratch.segs),
+    );
+    cuts.clear();
+    segs.clear();
     let mut coplanar: Vec<(FaceId, FaceId)> = Vec::new();
     let mut imprints: Vec<Imprint> = Vec::new();
     let mut touching: Vec<Touch> = Vec::new();
@@ -429,7 +462,7 @@ fn plan(a: &Body, b: &Body, op: Op) -> R<Plan> {
                 }
                 let pair_name = root
                     .with_str("cut")
-                    .with_set(vec![a.face(fa).name, b.face(fb).name])
+                    .with_set(&mut [a.face(fa).name, b.face(fb).name])
                     .with(ci as u64);
                 trim(
                     bodies,
@@ -578,7 +611,7 @@ fn plan(a: &Body, b: &Body, op: Op) -> R<Plan> {
             );
         }
     }
-    let mut pieces: Vec<Piece> = Vec::new();
+    let mut pieces = std::mem::take(&mut scratch.pieces);
     // ways out of a vertex share a tangent only where a curve met an edge without crossing it
     let mut ties: Vec<VKey> = cuts
         .iter()
@@ -605,12 +638,20 @@ fn plan(a: &Body, b: &Body, op: Op) -> R<Plan> {
     // pieces per edge, made only for edges a spec reaches
     // looked up, never iterated, so the map's order cannot reach the result
     // each edge's pieces, split once: (first piece, count) by edge index, count 0 if not yet
-    let mut edge_pieces: [Vec<(u32, u32)>; 2] = [vec![(0, 0); a.edges.len()], vec![(0, 0); b.edges.len()]];
+    scratch.boolean = scratch.boolean.wrapping_add(1);
+    if scratch.boolean == 0 {
+        scratch.edge_pieces = Default::default();
+        scratch.boolean = 1;
+    }
+    let now = scratch.boolean;
+    let edge_pieces = &mut scratch.edge_pieces;
+    edge_pieces[0].resize(edge_pieces[0].len().max(a.edges.len()), (0, 0, 0));
+    edge_pieces[1].resize(edge_pieces[1].len().max(b.edges.len()), (0, 0, 0));
     // the edges split into more than one piece, and their pieces
     let mut split_runs: Vec<(Side, EdgeId, std::ops::Range<usize>)> = Vec::new();
     let mut ensure = |side: Side, e: EdgeId, pieces: &mut Vec<Piece>| -> std::ops::Range<usize> {
-        let (first, n) = edge_pieces[side][e.index()];
-        if n > 0 {
+        let (at, first, n) = edge_pieces[side][e.index()];
+        if at == now {
             return first as usize..(first + n) as usize;
         }
         let r = edge_split(
@@ -623,7 +664,7 @@ fn plan(a: &Body, b: &Body, op: Op) -> R<Plan> {
             &alias,
             pieces,
         );
-        edge_pieces[side][e.index()] = (r.start as u32, r.len() as u32);
+        edge_pieces[side][e.index()] = (now, r.start as u32, r.len() as u32);
         if r.len() > 1 {
             split_runs.push((side, e, r.clone()));
         }
@@ -681,7 +722,7 @@ fn plan(a: &Body, b: &Body, op: Op) -> R<Plan> {
 
     lap(&mut clock, 2);
     // 4: split faces
-    let mut specs: Vec<Spec> = Vec::new();
+    let mut specs = std::mem::take(&mut scratch.specs);
     let mut untouched_kept: Vec<FaceId> = Vec::new();
     for (side, &body) in bodies.iter().enumerate() {
         let faces: Vec<FaceId> = if side == 0 {
@@ -1074,6 +1115,7 @@ fn plan(a: &Body, b: &Body, op: Op) -> R<Plan> {
         &split_runs,
         &vname,
     );
+    (scratch.cuts, scratch.segs) = (cuts, segs);
     Ok(Plan {
         pieces,
         specs,
@@ -3071,7 +3113,7 @@ pub(crate) fn split_face(
                 Surface::Cylinder(c) => cylinder_outline(c, walk, pieces),
                 _ => None,
             };
-            let pts = pts.unwrap_or_else(|| {
+            let mut pts = pts.unwrap_or_else(|| {
                 let mut samples = Vec::new();
                 for &i in cyc {
                     piece_samples(&pieces[half[i].0], half[i].1, &mut samples);
@@ -3080,7 +3122,10 @@ pub(crate) fn split_face(
                 forge_topo::uv::draw_loop(body, f, &samples).0
             });
             // mirrored so every face's loops run counter-clockwise
-            Some(pts.into_iter().map(mirror).collect())
+            for p in &mut pts {
+                *p = mirror(*p);
+            }
+            Some(pts)
         })
         .collect();
     // each cycle was unwrapped on its own; shift them all into the window of the

@@ -23,7 +23,7 @@ fn side(i: usize, k: u64) -> Name {
 }
 
 fn edge(a: Name, b: Name) -> Name {
-    Name::NONE.with_set(vec![a, b])
+    Name::NONE.with_set(&mut [a, b])
 }
 
 fn plane_at(o: Point3, n: Vec3) -> Frame {

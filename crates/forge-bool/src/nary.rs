@@ -724,7 +724,7 @@ fn nary_body(
                     }
                     let name = Name::feature(0)
                         .with_str("cut")
-                        .with_set(vec![a.face(fa).name, b.face(fb).name])
+                        .with_set(&mut [a.face(fa).name, b.face(fb).name])
                         .with(ci as u64);
                     trim(
                         [a, b],

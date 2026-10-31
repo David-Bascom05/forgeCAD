@@ -53,9 +53,12 @@ impl Name {
 
     /// Order-independent combination, for entities defined by an unordered set
     /// of neighbours (an edge between two faces).
-    pub fn with_set(self, mut names: Vec<Name>) -> Name {
+    pub fn with_set(self, names: &mut [Name]) -> Name {
         names.sort();
-        names.into_iter().fold(self.with(0x5e7), |n, x| n.with_name(x))
+        names
+            .iter()
+            .copied()
+            .fold(self.with(0x5e7), |n, x| n.with_name(x))
     }
 }
 
@@ -76,8 +79,8 @@ mod tests {
         assert_ne!(f, Name::feature(4));
         assert_ne!(f.with_str("top"), f.with_str("bottom"));
         assert_eq!(
-            Name::NONE.with_set(vec![f, f.with(1)]),
-            Name::NONE.with_set(vec![f.with(1), f])
+            Name::NONE.with_set(&mut [f, f.with(1)]),
+            Name::NONE.with_set(&mut [f.with(1), f])
         );
     }
 }

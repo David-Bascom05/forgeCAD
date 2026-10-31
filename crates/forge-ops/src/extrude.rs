@@ -126,7 +126,7 @@ impl<'a> Builder<'a> {
             let prev = names[(i + n - 1) % n];
             let mut pair = [VertexId(0); 2];
             for (k, level) in [0.0, self.d].into_iter().enumerate() {
-                let name = Name::NONE.with_set(vec![self.cap_name(k == 1), prev, names[i]]);
+                let name = Name::NONE.with_set(&mut [self.cap_name(k == 1), prev, names[i]]);
                 pair[k] = self.body.add_vertex(self.at(s.start(), level), name);
             }
             verts.push(pair);
@@ -135,7 +135,7 @@ impl<'a> Builder<'a> {
         for (i, &(s, _)) in segs.iter().enumerate() {
             let prev = names[(i + n - 1) % n];
             let line = Line::new(self.at(s.start(), 0.0), self.up());
-            let name = Name::NONE.with_set(vec![prev, names[i]]);
+            let name = Name::NONE.with_set(&mut [prev, names[i]]);
             uprights.push(self.body.add_edge(
                 Curve::Line(line),
                 Interval::new(0.0, self.d),
@@ -153,7 +153,7 @@ impl<'a> Builder<'a> {
                 let (a, b) = (verts[i][k], verts[j][k]);
                 let (start, end) = if forward { (a, b) } else { (b, a) };
                 let curve = curve0.transformed(&Frame::WORLD.with_origin(Point3::ORIGIN + self.up() * level));
-                let name = Name::NONE.with_set(vec![self.cap_name(k == 1), names[i]]);
+                let name = Name::NONE.with_set(&mut [self.cap_name(k == 1), names[i]]);
                 edges[k] = self.body.add_edge(curve, range, start, end, name);
             }
             let face = self.body.add_face(shell, surface, same_sense, names[i]);
@@ -249,14 +249,14 @@ impl<'a> Builder<'a> {
             full,
             vb,
             vb,
-            Name::NONE.with_set(vec![self.start_name, name]),
+            Name::NONE.with_set(&mut [self.start_name, name]),
         );
         let top = self.body.add_edge(
             top_c,
             full,
             vt,
             vt,
-            Name::NONE.with_set(vec![self.end_name, name]),
+            Name::NONE.with_set(&mut [self.end_name, name]),
         );
         let seam = self.body.add_edge(
             Curve::Line(Line::new(self.at(start, 0.0), self.up())),
