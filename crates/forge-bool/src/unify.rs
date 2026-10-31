@@ -125,7 +125,8 @@ fn rename_wholes(body: &mut Body, faces: &[(u32, u32)], edges: &[(u32, u32)]) {
     let rename = |pairs: &[(u32, u32)],
                   n: usize,
                   name: &dyn Fn(u32) -> Name,
-                  other: &dyn Fn(u32) -> Option<Name>|
+                  other: &dyn Fn(u32) -> Option<Name>,
+                  live: &dyn Fn(&mut dyn FnMut(u32))|
      -> Renamed {
         const NONE: u32 = u32::MAX;
         let mut parent = vec![NONE; n];
@@ -169,12 +170,20 @@ fn rename_wholes(body: &mut Body, faces: &[(u32, u32)], edges: &[(u32, u32)]) {
             .iter()
             .map(|&(r, w, own, any)| (r, if any { w } else { other(r).unwrap_or(w) }, own))
             .collect();
-        // a name two would take: each keeps the least of its own
+        // a name two would take, or one a live entity left alone holds: each keeps the least of
+        // its own
         let mut taken: Vec<Name> = to.iter().map(|t| t.1).collect();
         taken.sort_unstable();
         let twice: Vec<Name> = taken.windows(2).filter(|w| w[0] == w[1]).map(|w| w[0]).collect();
+        let mut held: Vec<Name> = Vec::new();
+        live(&mut |x| {
+            if slot[x as usize] == NONE && taken.binary_search(&name(x)).is_ok() {
+                held.push(name(x));
+            }
+        });
+        held.sort_unstable();
         for t in &mut to {
-            if twice.binary_search(&t.1).is_ok() {
+            if twice.binary_search(&t.1).is_ok() || held.binary_search(&t.1).is_ok() {
                 t.1 = t.2;
             }
         }
@@ -190,9 +199,13 @@ fn rename_wholes(body: &mut Body, faces: &[(u32, u32)], edges: &[(u32, u32)]) {
             }
         }
     };
-    let r = rename(faces, body.faces.len(), &|f| body.faces[f as usize].name, &|_| {
-        None
-    });
+    let r = rename(
+        faces,
+        body.faces.len(),
+        &|f| body.faces[f as usize].name,
+        &|_| None,
+        &|f| body.face_ids().for_each(|x| f(x.0)),
+    );
     apply(body, r, true);
     // an edge named from its faces takes their new names
     let joined = Name::NONE.with_str("joined").with(0x5e7);
@@ -202,7 +215,13 @@ fn rename_wholes(body: &mut Body, faces: &[(u32, u32)], edges: &[(u32, u32)]) {
         let (a, b) = (side(x.coedges[0]), side(x.coedges[1]));
         Some(joined.with_name(a.min(b)).with_name(a.max(b)))
     };
-    let r = rename(edges, body.edges.len(), &|e| body.edges[e as usize].name, &sides);
+    let r = rename(
+        edges,
+        body.edges.len(),
+        &|e| body.edges[e as usize].name,
+        &sides,
+        &|f| body.edge_ids().for_each(|x| f(x.0)),
+    );
     apply(body, r, false);
 }
 
