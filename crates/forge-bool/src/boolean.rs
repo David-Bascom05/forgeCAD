@@ -126,6 +126,8 @@ pub(crate) struct Cut {
     /// Found where the curve meets the edge without crossing it, or a free cut: ways out of its
     /// vertex may leave along one tangent.
     pub(crate) touch: bool,
+    /// The face pair whose curve found it (`trim`), for naming a vertex nothing ends at.
+    pub(crate) pair: Name,
 }
 
 /// Where point `p` lies on edge `e`: its parameter and the cut's tolerance, if it is within
@@ -641,7 +643,8 @@ fn plan(a: &Body, b: &Body, op: Op, scratch: &mut Scratch) -> R<Plan> {
             && !ended[i as usize]
             && let Some((sd, e)) = c.on.edge()
         {
-            let n = bodies[sd].edge(e).name.whole();
+            // nothing ends here: the edge cut, as a whole, and the faces whose curve cut it
+            let n = c.pair.with_name(bodies[sd].edge(e).name.whole());
             marks.push((i, n, n));
         }
     }
@@ -1685,7 +1688,7 @@ pub(crate) fn trim(
                             {
                                 ts.push((h.t, cuts.len()));
                                 cuts.push(Cut {
-                                    on: CutOn::Edge(side, e),
+                                    pair: Name::NONE,                                    on: CutOn::Edge(side, e),
                                     s,
                                     point: h.point,
                                     tol,
@@ -1721,6 +1724,7 @@ pub(crate) fn trim(
                             if curve.eval(t).distance(vx.point) <= vx.tol {
                                 ts.push((t, cuts.len()));
                                 cuts.push(Cut {
+                                    pair: Name::NONE,
                                     on: CutOn::Edge(side, e),
                                     s,
                                     point: vx.point,
@@ -1794,6 +1798,7 @@ pub(crate) fn trim(
                     {
                         ts.push((h.t, cuts.len()));
                         cuts.push(Cut {
+                            pair: Name::NONE,
                             on: CutOn::Edge(side, e),
                             s,
                             point: h.point,
@@ -1819,7 +1824,7 @@ pub(crate) fn trim(
                     {
                         ts.push((t, cuts.len()));
                         cuts.push(Cut {
-                            on: CutOn::Edge(side, e),
+                            pair: Name::NONE,                            on: CutOn::Edge(side, e),
                             s,
                             point: p,
                             tol,
@@ -1845,6 +1850,7 @@ pub(crate) fn trim(
                 let p = cuts[ci].point;
                 if let Some((s, tol)) = on_edge(body, e, p) {
                     cuts.push(Cut {
+                        pair: Name::NONE,
                         on: CutOn::Edge(side, e),
                         s,
                         point: p,
@@ -1906,6 +1912,7 @@ pub(crate) fn trim(
             {
                 ts.push((t, cuts.len()));
                 cuts.push(Cut {
+                    pair: Name::NONE,
                     on: CutOn::Free,
                     s: t,
                     point: p,
@@ -1964,6 +1971,7 @@ pub(crate) fn trim(
         let t = if closed && t >= range.hi { t - period } else { t };
         ts.push((t, cuts.len()));
         cuts.push(Cut {
+            pair: Name::NONE,
             on: CutOn::Free,
             s: t,
             point: curve.eval(t),
@@ -2131,6 +2139,9 @@ pub(crate) fn trim(
         let (a, b) = (edge_name(i0), edge_name(i1));
         sg.name = name.with(0x5e7).with_name(a.min(b)).with_name(a.max(b));
         sg.end_names = [name.with_name(a), name.with_name(b)];
+    }
+    for c in &mut cuts[first..] {
+        c.pair = name;
     }
     Ok(())
 }
@@ -2813,6 +2824,7 @@ pub(crate) fn imprint(
                     for h in hits {
                         if let Some((s2, tol)) = on_edge(db, e2, h.point) {
                             cuts.push(Cut {
+                                pair: Name::NONE,
                                 on: CutOn::Edge(sides[dst], e2),
                                 s: s2,
                                 point: h.point,
@@ -2820,6 +2832,7 @@ pub(crate) fn imprint(
                                 touch: false,
                             });
                             cuts.push(Cut {
+                                pair: Name::NONE,
                                 on: CutOn::Edge(sides[src], e),
                                 s: h.t,
                                 point: h.point,
@@ -3039,6 +3052,7 @@ fn coincide(sb: &Body, src: Side, e: EdgeId, db: &Body, dst: Side, e2: EdgeId, c
             let s = t.curve.closest(vx.point, t.range);
             if t.curve.eval(s).distance(vx.point) <= vx.tol {
                 cuts.push(Cut {
+                    pair: Name::NONE,
                     on: CutOn::Edge(side, te),
                     s,
                     point: vx.point,

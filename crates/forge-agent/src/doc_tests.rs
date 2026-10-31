@@ -884,3 +884,18 @@ pattern extrude2 circ -37 -53 73 -0.03692307692307689 0.9507692307692308 0.30769
         assert_eq!(names(flat, nary), names(turned, nary), "n-ary {nary}");
     }
 }
+
+/// A volute loft, a flange disc through it, then the core cut: a vertex each of the two booleans
+/// makes on one loft edge where no new edge ends were named alike (seq DuplicateName, R32).
+#[test]
+fn vertices_cut_on_one_edge_by_two_features_are_named_apart() {
+    let src = "volute: loft smooth profile z -sin(60) cos(60) 0 x cos(60) sin(60) 0 at 87.17*cos(60) 87.17*sin(60) 0 circle 0 0 16.67 profile z -sin(110) cos(110) 0 x cos(110) sin(110) 0 at 89.81*cos(110) 89.81*sin(110) 0 circle 0 0 18.89 profile z -sin(160) cos(160) 0 x cos(160) sin(160) 0 at 92.44*cos(160) 92.44*sin(160) 0 circle 0 0 21.11 profile z -sin(210) cos(210) 0 x cos(210) sin(210) 0 at 95.08*cos(210) 95.08*sin(210) 0 circle 0 0 23.33 profile z -sin(260) cos(260) 0 x cos(260) sin(260) 0 at 97.72*cos(260) 97.72*sin(260) 0 circle 0 0 25.56 profile z -sin(310) cos(310) 0 x cos(310) sin(310) 0 at 100.4*cos(310) 100.4*sin(310) 0 circle 0 0 27.78 profile z -sin(360) cos(360) 0 x cos(360) sin(360) 0 at 103*cos(360) 103*sin(360) 0 circle 0 0 30 profile z 0 1 0 x 1 0 0 at 103 55 0 circle 0 0 33.5 profile z 0 1 0 x 1 0 0 at 103 110 0 circle 0 0 37
+cflange: extrude 12 at 0 0 10 circle 0 0 104
+core: loft cut smooth profile z -sin(60) cos(60) 0 x cos(60) sin(60) 0 at 87.17*cos(60) 87.17*sin(60) 0 circle 0 0 11.67 profile z -sin(110) cos(110) 0 x cos(110) sin(110) 0 at 89.81*cos(110) 89.81*sin(110) 0 circle 0 0 13.89 profile z -sin(160) cos(160) 0 x cos(160) sin(160) 0 at 92.44*cos(160) 92.44*sin(160) 0 circle 0 0 16.11 profile z -sin(210) cos(210) 0 x cos(210) sin(210) 0 at 95.08*cos(210) 95.08*sin(210) 0 circle 0 0 18.33 profile z -sin(260) cos(260) 0 x cos(260) sin(260) 0 at 97.72*cos(260) 97.72*sin(260) 0 circle 0 0 20.56 profile z -sin(310) cos(310) 0 x cos(310) sin(310) 0 at 100.4*cos(310) 100.4*sin(310) 0 circle 0 0 22.78 profile z -sin(360) cos(360) 0 x cos(360) sin(360) 0 at 103*cos(360) 103*sin(360) 0 circle 0 0 25 profile z 0 1 0 x 1 0 0 at 103 55 0 circle 0 0 28.5 profile z 0 1 0 x 1 0 0 at 103 110 0 circle 0 0 32 profile z 0 1 0 x 1 0 0 at 103 125 0 circle 0 0 33
+dbolt: hole 14 -xz at 103+45 96 0 thru
+";
+    let part = text::parse(src).expect("parses");
+    let b = part.regenerate().expect("builds");
+    let problems = forge_topo::check(&b);
+    assert!(problems.is_empty(), "{problems:?}");
+}

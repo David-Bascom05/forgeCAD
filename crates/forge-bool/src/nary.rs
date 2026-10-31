@@ -1322,7 +1322,7 @@ fn nary_body(
             && !ended[i as usize]
             && let Some((sd, e)) = c.on.edge()
         {
-            let n = tools[sd].edge(e).name.whole();
+            let n = c.pair.with_name(tools[sd].edge(e).name.whole());
             marks.push((i, n, n));
         }
     }
