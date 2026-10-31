@@ -2,6 +2,9 @@
 //! FORGE_BATCH names): median and best of `REPS` (default 15) in ms on `THREADS` (default 4)
 //! threads, the batch call alone in µs, and whether every backend gives the same exact bits.
 //! Also the crossover Auto measured.
+//!
+//! `LOOP=n`: instead, n regens of the torture part in one process on Auto, from a cold start:
+//! per hundred, the median regen and batch times, and whether Auto has the GPU yet.
 use forge_math::hash::BitHasher;
 use forge_model::{Backend, RegenError, suite, torture};
 use std::time::Instant;
@@ -27,6 +30,36 @@ fn bits(r: &Result<forge_topo::Body, RegenError>) -> u64 {
 fn main() {
     let env = |k: &str, d: usize| std::env::var(k).ok().and_then(|v| v.parse().ok()).unwrap_or(d);
     let (reps, threads) = (env("REPS", 15), env("THREADS", 4));
+    let rounds = env("LOOP", 0);
+    if rounds > 0 {
+        let part = torture::part(221);
+        if std::env::var("OPEN").is_ok() {
+            forge_model::open_gpu();
+        }
+        let start = Instant::now();
+        let (mut t, mut batch) = (Vec::new(), Vec::new());
+        for i in 1..=rounds {
+            let s = Instant::now();
+            part.regenerate_nary_on(threads, Backend::from_env())
+                .expect("regen");
+            t.push(s.elapsed().as_secs_f64() * 1e3);
+            batch.push(forge_bool::nary_phase_times()[8] as f64 / 1e3);
+            if i % 100 == 0 {
+                t.sort_by(f64::total_cmp);
+                batch.sort_by(f64::total_cmp);
+                println!(
+                    "regens {:>5} at {:>6.2} s: regen {:.2} ms, batch {:.0} µs, gpu {}",
+                    i,
+                    start.elapsed().as_secs_f64(),
+                    t[t.len() / 2],
+                    batch[batch.len() / 2],
+                    forge_gpu::crossover().map_or("not yet".into(), |c| format!("in use (crossover {c})"))
+                );
+                (t, batch) = (Vec::new(), Vec::new());
+            }
+        }
+        return;
+    }
     let backends = match std::env::var("FORGE_BATCH") {
         Ok(_) => vec![Backend::from_env()],
         Err(_) => vec![Backend::Cpu, Backend::Gpu, Backend::Auto],

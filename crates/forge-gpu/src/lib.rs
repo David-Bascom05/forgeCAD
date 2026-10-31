@@ -568,7 +568,8 @@ impl Packed {
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub enum Backend {
     /// The GPU where it measurably beats the CPU (see `crossover`), else the CPU: the CPU too
-    /// until the GPU has opened in the background.
+    /// until the GPU is open, which it starts once the CPU time it could have saved reaches the
+    /// cost of opening it (or at `open_in_background`).
     #[default]
     Auto,
     Cpu,
@@ -666,17 +667,22 @@ extern "C" fn hand_off() {
     }
 }
 
-/// The process's GPU if it is open; the first call starts opening it on another thread.
-fn gpu_ready() -> Option<&'static Gpu> {
-    if cfg!(target_family = "wasm") {
-        return None;
-    }
+/// Starts opening the process's GPU on another thread, if it is not open or opening already. A
+/// long-running app calls this at startup; Backend::Auto otherwise opens it once it pays.
+pub fn open_in_background() {
     static OPEN: Once = Once::new();
-    OPEN.call_once(|| {
-        std::thread::spawn(gpu);
-    });
-    GPU.get().and_then(Option::as_ref)
+    if !cfg!(target_family = "wasm") {
+        OPEN.call_once(|| {
+            std::thread::spawn(gpu);
+        });
+    }
 }
+
+/// Nanoseconds this process spent on the CPU in batches the GPU could have taken: Auto opens the
+/// GPU once they reach OPEN_COST (break-even: never more than twice the best choice's time).
+static RENT: AtomicU64 = AtomicU64::new(0);
+/// What opening the GPU costs a process (~0.3 s, and an exit that waits while it is in flight).
+const OPEN_COST: u64 = 300_000_000;
 
 static CROSSOVER: OnceLock<usize> = OnceLock::new();
 
@@ -740,7 +746,7 @@ impl<'a> AutoBatch<'a> {
         // Auto runs on the CPU while the GPU opens
         let gpu = match backend {
             Backend::Cpu => None,
-            Backend::Auto => gpu_ready(),
+            Backend::Auto => GPU.get().and_then(Option::as_ref),
             Backend::Gpu => gpu(),
         };
         if backend == Backend::Gpu && gpu.is_none() {
@@ -768,6 +774,14 @@ impl Batch for AutoBatch<'_> {
                 }
             }
             return out;
+        }
+        if self.backend == Backend::Auto && points.len() >= crossover().unwrap_or(128) {
+            let t = Instant::now();
+            let v = self.cpu.verdicts(points, sides, boxes);
+            if RENT.fetch_add(t.elapsed().as_nanos() as u64, Ordering::Relaxed) >= OPEN_COST {
+                open_in_background();
+            }
+            return v;
         }
         self.cpu.verdicts(points, sides, boxes)
     }

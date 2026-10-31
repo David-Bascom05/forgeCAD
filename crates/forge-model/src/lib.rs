@@ -10,7 +10,7 @@ pub mod torture;
 
 use forge_bool::{BoolError, CpuBatch, Op, Seg2, Shape, boolean_into};
 use forge_gpu::AutoBatch;
-pub use forge_gpu::Backend;
+pub use forge_gpu::{Backend, open_in_background as open_gpu};
 use forge_math::{Frame, Point2, Vec2, dmath};
 use forge_ops::{
     Axis2, ChamferError, ChamferSize, DraftError, ExtrudeError, FilletEdge, FilletError, Profile,
@@ -130,7 +130,8 @@ type Tool = (Body, Combine, Shape);
 impl Part {
     /// Rebuilds the solid in one n-ary boolean over every feature's tool (built in parallel),
     /// on up to `threads` threads.
-    /// The region batch is classified on the backend FORGE_BATCH names (default Auto).
+    /// The region batch is classified on the backend FORGE_BATCH names (default Auto). A
+    /// long-running app calls `forge_model::open_gpu()` at startup so Auto has the GPU at once.
     pub fn regenerate_nary(&self, threads: usize) -> Result<Body, RegenError> {
         self.regenerate_nary_on(threads, Backend::from_env())
     }
