@@ -56,16 +56,17 @@ impl Session {
 
     /// The file's model, brought up to date with what is on disk.
     pub fn model(&mut self, file: &str) -> Result<&mut Model, String> {
-        if !file.ends_with(".fc") {
+        // every check, and the read, on the one path with links resolved
+        let real = std::fs::canonicalize(file).map_err(|e| format!("{file}: {e}"))?;
+        if real.extension().is_none_or(|x| x != "fc") {
             return Err(format!("{file}: not a .fc part file"));
         }
-        if let Some(root) = &self.root {
-            let real = std::fs::canonicalize(file).map_err(|e| format!("{file}: {e}"))?;
-            if !real.starts_with(root) {
-                return Err(format!("{file}: outside {}", root.display()));
-            }
+        if let Some(root) = &self.root
+            && !real.starts_with(root)
+        {
+            return Err(format!("{file}: outside {}", root.display()));
         }
-        let src = std::fs::read_to_string(file).map_err(|e| format!("{file}: {e}"))?;
+        let src = std::fs::read_to_string(&real).map_err(|e| format!("{file}: {e}"))?;
         let m = self.models.entry(file.to_string()).or_default();
         m.update(&src);
         Ok(m)
@@ -572,6 +573,20 @@ fillet 4 (edges between base wall concave)
             outside.0.file_name().expect("name").to_string_lossy()
         );
         assert!(!s.run("build", &args(&sneaky, &[])).ok);
+        // links are followed before any check: to a file outside, or to one not a part file
+        #[cfg(unix)]
+        {
+            let out_link = dir.0.join("out.fc");
+            let key_link = dir.0.join("key.fc");
+            std::os::unix::fs::symlink(&away, &out_link).expect("link");
+            std::os::unix::fs::symlink(&key, &key_link).expect("link");
+            let r = s.run("build", &args(&out_link.to_string_lossy(), &[]));
+            assert!(!r.ok && r.text.contains("outside"), "{}", r.text);
+            let r = s.run("build", &args(&key_link.to_string_lossy(), &[]));
+            assert!(!r.ok && r.text.contains("not a .fc"), "{}", r.text);
+            let r = Session::default().run("build", &args(&key_link.to_string_lossy(), &[]));
+            assert!(!r.ok && !r.text.contains("BEGIN"), "{}", r.text);
+        }
         // a file that is not a part file is never echoed, even named .fc
         let secret = dir.file("s.fc", "hunter2 swordfish\nmore\n");
         let r = s.run("build", &args(&secret, &[]));
