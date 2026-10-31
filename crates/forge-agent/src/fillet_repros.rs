@@ -33,3 +33,19 @@ fn round_a_tapered_arm_with_its_tip() {
         "extrude 14 loop line 0 -15 169.905858 -15.999723 arc 170 0 16 -90.337123 180.674246 line 169.905858 15.999723 0 15 line 0 15 0 -15\nfillet 2 (edges top)\n",
     );
 }
+
+#[test]
+fn block_flush_on_a_disc() {
+    // a conrod bolt boss: the end faces split by the union join before the blends run out over
+    // them. Radius 3 would touch the boss's side 3.04 above its top (the ball centre sits at
+    // z = sqrt(34^2 - 23^2) = 25.04 > 22): that refuses, and says so
+    let part = |r: &str| {
+        format!(
+            "big: extrude sym 22 xz circle 0 0 31\nb: extrude sym 22 xz rect 26 -24 16 46\nfillet {r} (edges between b big concave)\n"
+        )
+    };
+    valid(&part("1.5"));
+    let m = Model::new(&part("3"));
+    let msg = m.error.map(|f| f.msg).unwrap_or_default();
+    assert!(msg.contains("Overflow"), "{msg}");
+}
