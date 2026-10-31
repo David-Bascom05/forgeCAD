@@ -787,8 +787,13 @@ pub fn triangulate_refined(
         let mut split = vec![false; mesh.tris.len()];
         let mut look: Vec<u32> = (0..mesh.tris.len() as u32).collect();
         let triangles = refine.triangles();
-        // only stops a cascade that never ends
+        // only stops a cascade that never ends; a cascade that only grows is cut off by a budget
+        // of points (four million, or 64 for each point given), failing cleanly
+        let budget = (64 * (points.len() + kept.len())).max(1 << 22);
         for _ in 0..200 {
+            if mesh.pts.len() > budget {
+                return Err(CdtError::Internal("refinement did not settle"));
+            }
             mids.clear();
             let first_new = mesh.pts.len() as u32;
             seen.resize(mesh.tris.len(), false);
@@ -1260,6 +1265,34 @@ mod tests {
         assert!(matches!(
             triangulate(&sq, &[vec![0, 1, 9]], &[]),
             Err(CdtError::BadIndex { index: 9 })
+        ));
+    }
+
+    /// A refinement that never settles (every edge split, every round) stops at the point budget
+    /// with a clean error, not after 200 rounds of doubling.
+    #[test]
+    fn refinement_that_never_settles_fails() {
+        struct Always;
+        impl Refine for Always {
+            fn edge(&self, _: u32, _: u32, _: Point2, _: Point2) -> bool {
+                true
+            }
+            fn triangle(&self, _: [u32; 3], _: [Point2; 3]) -> bool {
+                true
+            }
+            fn triangles(&self) -> bool {
+                false
+            }
+        }
+        let sq = [
+            Point2::new(0.0, 0.0),
+            Point2::new(1.0, 0.0),
+            Point2::new(1.0, 1.0),
+            Point2::new(0.0, 1.0),
+        ];
+        assert!(matches!(
+            triangulate_refined(&sq, &[vec![0, 1, 2, 3]], &[], Some(&Always)),
+            Err(CdtError::Internal(_))
         ));
     }
 }

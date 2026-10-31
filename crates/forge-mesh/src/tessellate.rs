@@ -854,17 +854,22 @@ fn tessellate_face(
     seen.sort_unstable();
     let mut twice: Vec<u32> = seen.windows(2).filter(|w| w[0] == w[1]).map(|w| w[0]).collect();
     twice.dedup();
+    // where each such point went (id and parameters), looked up rather than searched for: a
+    // seam's samples are all met twice, and a linear search for each was quadratic in them
+    let mut placed: std::collections::HashMap<(u32, u64, u64), u32> = std::collections::HashMap::new();
     for (pts, ids) in rings.into_iter().zip(ring_globals) {
         // a loop through one vertex twice (a face pinched where a curve touches its boundary):
         // one point, met twice
         let mut lp = Vec::with_capacity(pts.len());
         for (p, id) in pts.into_iter().zip(ids) {
-            match (twice.binary_search(&id).is_ok())
-                .then(|| (0..uv.len()).find(|&k| global[k] == id && uv[k] == p))
-                .flatten()
-            {
-                Some(k) => lp.push(k as u32),
+            let key = (id, (p.x + 0.0).to_bits(), (p.y + 0.0).to_bits());
+            let again = twice.binary_search(&id).is_ok();
+            match again.then(|| placed.get(&key).copied()).flatten() {
+                Some(k) => lp.push(k),
                 None => {
+                    if again {
+                        placed.insert(key, uv.len() as u32);
+                    }
                     lp.push(uv.len() as u32);
                     uv.push(p);
                     global.push(id);
