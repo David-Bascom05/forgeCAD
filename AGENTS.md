@@ -1,7 +1,7 @@
 # Driving ForgeCAD
 
 A part is a `.fc` text file: its features, one a line, rebuilt top to bottom. Units mm, degrees.
-Change it with `act`; the reply says what happened. `help TOPIC` has the full grammar of anything.
+Change it with `act`; the reply says what happened. `help TOPIC..` has the full grammar of anything.
 
 ```
 base: extrude 6 rect -30 -20 60 40          # first solid: 6 up from xy; rect X Y W H

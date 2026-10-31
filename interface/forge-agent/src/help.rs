@@ -19,14 +19,24 @@ pub fn help(topic: &str) -> String {
         let names: Vec<&str> = sections().map(|s| s.0.split(' ').next().unwrap_or("")).collect();
         return format!("help TOPIC: {}", names.join(" "));
     }
-    let t = topic.split(' ').next().unwrap_or(topic);
-    if let Some((_, body)) = sections().find(|(names, _)| names.split(' ').any(|n| n == t)) {
-        return body.trim_end().to_string();
+    // several topics at one go, each section once
+    let mut seen: Vec<&str> = Vec::new();
+    let mut out: Vec<String> = Vec::new();
+    for t in topic.split_whitespace() {
+        match sections().find(|(names, _)| names.split(' ').any(|n| n == t)) {
+            Some((names, body)) => {
+                if !seen.contains(&names) {
+                    seen.push(names);
+                    out.push(body.trim_end().to_string());
+                }
+            }
+            None => match crate::text::kind(t) {
+                Some(k) => out.push(k.syntax.to_string()),
+                None => out.push(format!("no topic '{t}'; {}", help(""))),
+            },
+        }
     }
-    if let Some(k) = crate::text::kind(t) {
-        return k.syntax.to_string();
-    }
-    format!("no topic '{t}'; {}", help(""))
+    out.join("\n")
 }
 
 #[cfg(test)]
@@ -44,6 +54,8 @@ mod tests {
         assert!(help("fillet").contains("setback"));
         assert!(help("").starts_with("help TOPIC: "));
         assert!(help("nope").starts_with("no topic"));
+        let two = help("frame loops frame");
+        assert!(two.contains("FRAME:") && two.contains("LOOPS") && two.matches("FRAME:").count() == 1);
     }
 
     #[test]

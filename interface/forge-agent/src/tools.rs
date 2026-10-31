@@ -840,7 +840,12 @@ impl Part {
                 tries.push(with(&item, Some(k), &args[k].text.replace(bad, best)));
             }
         }
-        // a round or chamfer or wall too big for where it goes
+        for t in tries.into_iter().take(2) {
+            if let Some(text) = self.builds(at, id, t) {
+                return Some(text);
+            }
+        }
+        // a round or chamfer or wall too big for where it goes: as large as builds
         if matches!(kind.as_str(), "fillet" | "chamfer" | "shell" | "facefillet")
             && let Body::Feature { args, .. } = &item.body
             && let Some((k, size)) = args
@@ -853,27 +858,40 @@ impl Part {
                 .rsplit("radius under ")
                 .next()
                 .and_then(|m| m.parse::<f64>().ok());
-            let first = max.map_or(size * 0.5, |m| m * 0.9);
-            for v in [first, first * 0.5, first * 0.25] {
-                tries.push(with(&item, Some(k), &round2(v)));
+            let top = max.unwrap_or(size).min(size);
+            let (mut bad, mut good) = (top, None);
+            // halving down to where one fits, then closing in on where it stops
+            for v in (0..8).map(|k| top * 0.5f64.powi(k)) {
+                if let Some(text) = self.builds(at, id, with(&item, Some(k), &figures(v))) {
+                    good = Some((v, text));
+                    break;
+                }
+                bad = v;
             }
-        }
-        for t in tries.into_iter().take(4) {
-            let text = {
-                self.model.doc.items[at] = t;
-                self.model.doc.text_of(id)
-            };
-            self.model.sync_doc();
-            let fine = self
-                .model
-                .error
-                .as_ref()
-                .is_none_or(|e| self.model.lines[e.at].id != id.0);
-            if fine {
-                return text;
+            let (mut lo, mut text) = good?;
+            for _ in 0..SIZE_STEPS {
+                let mid = (lo + bad) * 0.5;
+                match self.builds(at, id, with(&item, Some(k), &figures(mid))) {
+                    Some(t) => (lo, text) = (mid, t),
+                    None => bad = mid,
+                }
             }
+            return Some(text);
         }
         None
+    }
+
+    /// The line this item prints as, if the part builds through it with it in place.
+    fn builds(&mut self, at: usize, id: ItemId, t: Item) -> Option<String> {
+        self.model.doc.items[at] = t;
+        let text = self.model.doc.text_of(id);
+        self.model.sync_doc();
+        let fine = self
+            .model
+            .error
+            .as_ref()
+            .is_none_or(|e| self.model.lines[e.at].id != id.0);
+        if fine { text } else { None }
     }
 
     /// Every number a drag can change: parameters written as numbers, numeric arguments of
@@ -1018,15 +1036,17 @@ fn change(was: (i64, f64), now: (i64, f64), valid: Option<bool>) -> String {
     parts.join(", ")
 }
 
-/// A size to try: two figures is plenty for a suggestion.
-fn round2(v: f64) -> String {
+/// A size to try, down to three figures: plenty for a suggestion.
+fn figures(v: f64) -> String {
     let mut d = 1.0;
-    while v * d < 10.0 && d < 1e6 {
+    while v * d < 100.0 && d < 1e6 {
         d *= 10.0;
     }
-    let scaled = (v * d) as u64 as f64;
-    short(scaled / d)
+    short(((v * d) as u64) as f64 / d)
 }
+
+/// How many more builds find the largest size that fits, once one does.
+const SIZE_STEPS: usize = 5;
 
 /// One text line as the call it is. Names resolve on the document as it stands at this line.
 fn line_call(doc: &mut Document, block: &str) -> Result<Call, String> {
@@ -1364,6 +1384,14 @@ mod tests {
             .lines()
             .find_map(|l| l.strip_prefix("try: "))
             .expect(&d.text);
+        // the largest that fits, near enough: the block is 30 across
+        let r: f64 = tried
+            .split(' ')
+            .nth(1)
+            .expect("a size")
+            .parse()
+            .expect("a number");
+        assert!((13.0..15.0).contains(&r), "{tried}");
         assert!(
             tried.starts_with("fillet ") && tried.ends_with("(edges of base along +z)"),
             "{tried}"
