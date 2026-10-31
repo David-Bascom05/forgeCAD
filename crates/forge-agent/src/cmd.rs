@@ -242,10 +242,12 @@ impl Session {
     fn build(&mut self, a: &Args) -> Result<Reply, String> {
         let writable = self.writable;
         let (m, path) = self.model_at(&a.file)?;
-        // a varying fillet's start, once found, goes into the file
-        if m.fill_law_starts() && writable {
+        // a varying fillet's start, once found, goes into the file; told where it cannot
+        let laws = m.fill_law_starts();
+        if !laws.is_empty() && writable {
             replace(&path, m.src()).map_err(|e| format!("{}: {e}", a.file))?;
         }
+        let unwritten = if writable { Vec::new() } else { laws };
         let n = m.lines.len();
         let mut text = String::new();
         let mut j: Vec<(&str, Json)> = vec![("lines", n.into()), ("built", m.built().into())];
@@ -320,6 +322,20 @@ impl Session {
                     "\n({unmeshed} faces would not mesh: volume, area approximate)"
                 ));
             }
+            for (no, sel) in &unwritten {
+                text.push_str(&format!(
+                    "\nline {no}: the law runs from {sel} (not written in: this session does not write files)"
+                ));
+            }
+            j.push((
+                "laws",
+                Json::Arr(
+                    unwritten
+                        .into_iter()
+                        .map(|(no, sel)| Json::obj(vec![("line", no.into()), ("from", sel.into())]))
+                        .collect(),
+                ),
+            ));
             j.extend([
                 ("volume", volume.into()),
                 ("area", area.into()),
@@ -794,6 +810,15 @@ fillet 4 (edges between base wall concave)
         let r2 = s.run("build", &args(&f, &[]));
         assert_eq!(std::fs::read_to_string(&f).expect("file"), written);
         assert_eq!(volume(&r.text), volume(&r2.text));
+        // a session that does not write says what it would have written
+        let g = dir.file("b.fc", src);
+        let r3 = Session::default().run("build", &args(&g, &[]));
+        assert!(
+            r3.text.contains("line 2: the law runs from (verts near 0 0 8)"),
+            "{}",
+            r3.text
+        );
+        assert_eq!(std::fs::read_to_string(&g).expect("file"), src);
     }
 
     const BODIES: &str = "base: extrude 10 rect 0 0 10 10

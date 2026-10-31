@@ -150,8 +150,8 @@ impl Model {
 
     /// Writes `from (verts near X Y Z)` into each built fillet line where a varying radius was
     /// left to start where the geometry says (`forge_ops::law_starts`): fixed at its first build,
-    /// it never turns round after. Whether a line changed.
-    pub fn fill_law_starts(&mut self) -> bool {
+    /// it never turns round after. Each start written: its line and its `from` selector.
+    pub fn fill_law_starts(&mut self) -> Vec<(usize, String)> {
         let mut edits = Vec::new();
         for i in 0..self.built().min(self.features.len()) {
             let Feature::Fillet { edges, starts, .. } = &self.features[i] else {
@@ -219,23 +219,23 @@ impl Model {
                     continue;
                 }
                 if let Some((item, _)) = self.doc.at_line(self.lines[i].no) {
-                    edits.push((item, at, sel));
+                    edits.push((item, at, sel, self.lines[i].no));
                 }
             }
         }
-        let changed = !edits.is_empty();
+        let written: Vec<(usize, String)> = edits.iter().map(|e| (e.3, e.2.clone())).collect();
         // a line's later groups first, so the earlier ones' places hold
-        for (item, at, sel) in edits.into_iter().rev() {
+        for (item, at, sel, _) in edits.into_iter().rev() {
             if let forge_doc::Body::Feature { args, .. } = &mut self.doc.items[item].body {
                 args.splice(at..at, [forge_doc::Arg::new("from"), forge_doc::Arg::new(sel)]);
             }
         }
-        if changed {
+        if !written.is_empty() {
             let t0 = Instant::now();
             self.src = self.doc.print();
             self.rebuild(self.doc.lines(), t0);
         }
-        changed
+        written
     }
 
     /// The file as the document prints it.
