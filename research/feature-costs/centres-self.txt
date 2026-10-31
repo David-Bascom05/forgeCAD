@@ -1,0 +1,50 @@
+# total 13468M in the frame-pointer build; percentages are what carry over
+  31.5%  [unknown]                                                               most in volute 40%
+   9.1%  <forge_geom::intcurve::IntCurve>::closest                               most in frame 69%
+   6.2%  <forge_geom::screw::Fence>::value                                       most in frame 56%
+   4.8%  <forge_geom::skinned::Data>::point                                      most in volute 100%
+   4.8%  <forge_geom::corner::HolePatch as forge_geom::surface::Procedural>::de  most in heatsink 60%
+   4.6%  forge_math::dmath::sin_cos                                              most in volute 28%
+   4.3%  forge_geom::screw::polish::<<forge_geom::skinned::Skinned as forge_geo  most in volute 100%
+   4.2%  <forge_geom::screw::Screw>::nearest_turn                                most in frame 50%
+   3.7%  forge_geom::intersect::curve_surface_subdivide                          most in frame 52%
+   3.5%  <forge_math::interval::Interval as core::ops::arith::Mul>::mul          most in heatsink 59%
+   2.7%  <forge_geom::surface::Surface>::implicit_gradient                       most in frame 58%
+   2.4%  <forge_geom::intcurve::IntCurve>::eval                                  most in frame 60%
+   2.3%  <forge_geom::surface::Surface>::implicit                                most in frame 43%
+   2.0%  <forge_geom::ruled::Ruled>::point                                       most in crank 97%
+   1.8%  <forge_math::interval::Interval as core::ops::arith::Mul<f64>>::mul     most in heatsink 80%
+   1.7%  <forge_geom::ruled::Ruled>::nearest                                     most in crank 95%
+   1.4%  forge_math::dmath::atan                                                 most in frame 45%
+   1.4%  <forge_geom::skinned::Hull>::misses                                     most in volute 100%
+   1.4%  <forge_geom::corner::HolePatch as forge_geom::surface::Procedural>::bb  most in heatsink 91%
+   1.3%  <forge_math::interval::Interval as core::ops::arith::Add>::add          most in heatsink 72%
+   1.2%  <forge_geom::screw::Screw>::value                                       most in frame 48%
+   1.2%  <forge_geom::corner::SurfaceRail as forge_geom::corner::Rail>::jet      most in heatsink 78%
+   1.1%  forge_geom::intcurve::trace                                             most in frame 53%
+   1.1%  <forge_geom::skinned::Skinned>::solve                                   most in volute 100%
+   1.1%  forge_geom::blend::intersection_refine                                  most in manifold 59%
+   1.1%  <forge_geom::corner::HolePatch>::cross                                  most in heatsink 62%
+   1.0%  <forge_geom::intcurve::IntCurve>::hermite                               most in frame 62%
+   1.0%  forge_topo::uv::procedural_box                                          most in heatsink 38%
+   1.0%  <forge_geom::screw::Screw as forge_geom::surface::Procedural>::normal   most in valve 41%
+   0.8%  forge_geom::meet::real_roots                                            most in frame 63%
+   0.8%  <forge_geom::corner::SurfaceRail>::normal                               most in heatsink 53%
+   0.8%  <forge_math::interval::Interval as core::ops::arith::Add<f64>>::add     most in heatsink 48%
+   0.7%  forge_ops::selfx::loops_cross                                           most in volute 98%
+   0.7%  <forge_geom::intcurve::IntCurve>::derivs                                most in manifold 50%
+   0.6%  <forge_math::interval::Interval>::shifted_cos                           most in volute 45%
+   0.6%  <forge_geom::screw::Helix as forge_geom::curve::ProceduralCurve>::poin  most in frame 40%
+   0.6%  __memset_avx512_unaligned_erms                                          most in heatsink 52%
+   0.6%  forge_geom::screw::polish::<<forge_geom::ruled::Ruled as forge_geom::s  most in crank 98%
+   0.6%  <forge_geom::corner::HolePatch as forge_geom::surface::Procedural>::pr  most in heatsink 66%
+   0.6%  forge_geom::intcurve::refine                                            most in frame 82%
+   0.6%  <forge_math::interval::Interval>::div                                   most in heatsink 89%
+   0.5%  <forge_geom::ruled::Rail>::at                                           most in crank 72%
+   0.5%  forge_geom::loftmeet::meet                                              most in volute 100%
+   0.5%  <forge_geom::ruled::Ruled>::new                                         most in heatsink 91%
+   0.4%  forge_topo::uv::uv_loop::<&forge_topo::uv::default_segments>            most in volute 38%
+   0.4%  <forge_geom::corner::HolePatch>::point                                  most in heatsink 73%
+   0.4%  <forge_geom::curve::Curve as forge_geom::curve::CurveGeom>::deriv       most in heatsink 59%
+   0.4%  forge_math::poly::roots_into                                            most in heatsink 49%
+   0.3%  <forge_geom::skinned::Data>::bbox                                       most in volute 100%

@@ -1,0 +1,171 @@
+one seq regen of the 15 bench parts: 13607M instructions:u
+
+kind                                  n real   median M    worst M per size M real sum M real %  worst at
+extrude.dist.cut                    947   18      0.43     768.03       2.11    3287.42   24.2  bench/frame#133
+thread.axis                           5    4    252.10     706.16     383.59    1815.17   13.3  bench/frame#127
+chamfer.equal                        21    8      1.66     800.84      14.11    1326.08    9.7  bench/volute#16
+thread.hole                          10    9     99.36     178.26      98.43     806.08    5.9  suite/thread#4
+text.plane.cut                        3    2    112.70     637.39      47.78     750.09    5.5  bench/heatsink#22
+edit.rib                             14    9      6.98     271.47      52.02     716.98    5.3  bench/gearbox#46
+loft.smooth.cut                       1    1    647.54     647.54      64.75     647.54    4.8  bench/volute#4
+extrude.sym.add                      10   10      2.49     287.89      33.43     601.76    4.4  bench/volute#1
+extrude.dist.add                    368   33      0.62     159.72       1.16     519.67    3.8  bench/volute#2
+pattern.features.linear              24   20      2.60     194.79       1.04     382.58    2.8  bench/manifold#19
+revolve.angle.add                    64    2     14.99     339.57       6.97     339.66    2.5  bench/jack#10
+hole.plain.through                   23   16      0.55     166.46      14.73     325.88    2.4  bench/volute#8
+loft.smooth.new                       1    1    309.64     309.64      34.40     309.64    2.3  bench/volute#0
+pattern.features.circular            10    7     22.96     157.37       5.29     268.39    2.0  bench/crank#8
+fillet.constant                      71   26      1.55     118.19       1.28     228.61    1.7  bench/heatsink#15
+sweep.path.cut                        5    2    137.56     283.82      52.15     206.51    1.5  suite/torture-2#11
+pattern.features.mirror              12    9      1.75      95.15       8.51     201.32    1.5  bench/frame#135
+hole.plain.depth                     28   23      0.64      74.40       5.72     157.94    1.2  bench/manifold#25
+revolve.angle.cut                    71    6      0.90     132.34       1.63     136.98    1.0  bench/frame#131
+text.cylinder.add                     2    1     65.60      93.43      11.93      93.43    0.7  bench/jack#14
+body.split.both                       2    1     46.92      93.17      46.92      93.17    0.7  bench/conrod#23
+sweep.path.add                        3    3      2.36      72.42       8.38      75.45    0.6  bench/frame#109
+edit.thicken.new                      2    1     32.58      64.87       6.52      64.87    0.5  bench/guard#10
+hole.plain.to                         5    5      9.20      19.20      10.69      53.47    0.4  bench/valve#29
+coil.add                              3    1     33.16     175.73      36.95      33.16    0.2  suite/coil#3
+loft.ruled.cut                        2    1     82.12     137.34      16.42      26.90    0.2  suite/loft#2
+hole.cbore.through                    7    3      0.46      21.27       3.50      22.27    0.2  bench/gearbox#44
+hole.csink.through                    6    3      0.81      14.22       3.68      20.52    0.2  bench/crank#9
+pattern.features.points               7    7      2.64       4.75       2.22      17.76    0.1  bench/insert#14
+extrude.through.cut                   5    5      2.55       6.86       1.08      16.25    0.1  bench/frame#136
+shell.in                             14    2      2.21      22.75       6.05      16.09    0.1  torture-2#4
+loft.ruled.new                        1    1      9.53       9.53       0.40       9.53    0.1  bench/crank#4
+fillet.variable                      29    1      5.24       8.70       2.29       8.70    0.1  bench/crank#15
+pattern.features.path                 2    2      3.80       7.18       0.63       7.60    0.1  bench/hub#16
+edit.thicken.add                      3    2      1.28       3.90       1.94       4.54    0.0  bench/manifold#9
+edit.move                             4    1      0.37       3.71       1.19       3.71    0.0  bench/insert#7
+edit.offset                           5    2      0.46       2.33       0.14       2.89    0.0  bench/insert#8
+edit.delete                           6    1      0.29       1.86       0.27       1.86    0.0  bench/insert#10
+hole.cbore.depth                      5    5      0.30       0.32       0.29       1.43    0.0  bench/valve#23
+body.combine.cut                      3    2      0.54       0.72       0.32       1.26    0.0  bench/clamp#14
+edit.replace                          4    1      0.29       1.13       0.50       1.13    0.0  bench/insert#5
+body.combine.add                      1    1      0.70       0.70       0.70       0.70    0.0  bench/clamp#10
+extrude.dist.new                    150    9      0.05       0.21       0.01       0.48    0.0  finishing/chamfer-plate#0
+hole.csink.depth                      1    1      0.48       0.48       0.48       0.48    0.0  bench/valve#35
+extrude.sym.cut                       3    1      2.60       2.73       0.64       0.45    0.0  torture-2#26
+draft                                 6    1      0.63       0.95       0.11       0.32    0.0  torture-2#1
+fillet.face                           9    1      0.15       0.18       0.07       0.18    0.0  fillet/face-fillet-bevels-split-end#2
+revolve.angle.new                     3    2      0.09       0.27       0.01       0.18    0.0  suite/shaft#0
+extrude.sym.new                       4    4      0.04       0.05       0.01       0.17    0.0  bench/bracket#6
+body.move.copy                        3    2      0.04       0.10       0.05       0.15    0.0  bench/clamp#6
+fillet.fullround                      9    1      0.10       3.24       0.78       0.10    0.0  fillet/full-round-narrowing-rib#1
+ball.cut                             82    0      0.85       4.64       1.09       0.00    0.0  torture#162
+coil.cut                              4    0      7.97     227.41      15.66       0.00    0.0  suite/coil#6
+chamfer.distanceangle                 3    0    789.26     789.30     526.33       0.00    0.0  suite/torture-2#14
+loft.ruled.add                        3    0    286.56     286.73      25.91       0.00    0.0  suite/torture-2#19
+extrude.to.add                       10    0      1.90       5.99       1.68       0.00    0.0  suite/upto#7
+ball.add                             42    0      0.35       2.33       0.56       0.00    0.0  suite/mixed#13
+pattern.body.mirror                   1    0      2.49       2.49       1.24       0.00    0.0  suite/tour#7
+extrude.to.cut                        4    0      1.04       1.28       0.27       0.00    0.0  suite/upto#15
+hole.plain.next                       4    0      1.66       3.67       1.96       0.00    0.0  suite/upto#19
+sweep.to.add                          1    0      2.78       2.78       0.93       0.00    0.0  suite/sweep#2
+sweep.extended.cut                    1    0      1.27       1.27       0.42       0.00    0.0  suite/sweep#3
+loft.smooth.add                       2    0    308.36     470.60      41.11       0.00    0.0  suite/loft#4
+text.plane.add                        1    0     10.30      10.30       3.43       0.00    0.0  suite/text#2
+ball.new                              2    0      0.08       0.08       0.08       0.00    0.0  fillet/ball-rod-pipe#0
+extrude.dist.keep                     2    0      0.59       0.64       0.15       0.00    0.0  fillet/pit-four#4
+shell.out                             2    0      1.56       2.51       1.56       0.00    0.0  finishing/shelled-hole-out#1
+chamfer.distances                     2    0      0.48       0.52       0.32       0.00    0.0  finishing/chamfer-mitre#1
+edit.thicken.cut                      1    0      1.48       1.48       1.48       0.00    0.0  edits/thicken-hole-cut#1
+body.splitface                        1    0      0.09       0.09       0.09       0.00    0.0  bodies/bodies:copy-combine#4
+
+by family (real parts)
+extrude          4426.21   32.5%
+thread           2621.25   19.3%
+chamfer          1326.08    9.7%
+loft              993.61    7.3%
+pattern           877.65    6.4%
+text              843.51    6.2%
+edit              795.98    5.8%
+hole              581.99    4.3%
+revolve           476.81    3.5%
+sweep             281.96    2.1%
+fillet            237.58    1.7%
+body               95.28    0.7%
+coil               33.16    0.2%
+shell              16.09    0.1%
+draft               0.32    0.0%
+ball                0.00    0.0%
+
+slowest single features
+    800.84  bench/volute#16 chamfer.equal size 2
+    789.30  suite/torture-2#14 chamfer.distanceangle size 1
+    789.26  torture-2#14 chamfer.distanceangle size 1
+    768.03  bench/frame#133 extrude.dist.cut size 1
+    706.16  bench/frame#127 thread.axis size 1
+    698.39  bench/frame#126 thread.axis size 1
+    647.54  bench/volute#4 loft.smooth.cut size 10
+    637.39  bench/heatsink#22 text.plane.cut size 9
+    577.71  bench/manifold#20 extrude.dist.cut size 1
+    496.65  bench/heatsink#19 chamfer.equal size 8
+    478.14  bench/heatsink#16 extrude.dist.cut size 4
+    474.29  bench/heatsink#18 extrude.dist.cut size 8
+    470.60  suite/loft#4 loft.smooth.add size 3
+    339.57  bench/jack#10 revolve.angle.add size 4
+    309.64  bench/volute#0 loft.smooth.new size 9
+    287.89  bench/volute#1 extrude.sym.add size 1
+    286.73  suite/torture-2#19 loft.ruled.add size 8
+    286.56  torture-2#19 loft.ruled.add size 8
+    283.82  suite/torture-2#11 sweep.path.cut size 3
+    283.82  torture-2#11 sweep.path.cut size 3
+    271.47  bench/gearbox#46 edit.rib size 1
+    258.61  bench/volute#5 extrude.dist.cut size 1
+    252.10  bench/crank#13 thread.axis size 1
+    227.41  suite/coil#6 coil.cut size 4
+    194.79  bench/manifold#19 pattern.features.linear size 4
+    185.71  bench/frame#130 extrude.dist.cut size 1
+    178.26  suite/thread#4 thread.hole size 1
+    175.73  suite/coil#3 coil.add size 1
+    174.68  bench/valve#31 thread.hole size 1
+    168.02  bench/frame#132 extrude.dist.cut size 1
+    167.86  bench/crank#5 extrude.sym.add size 1
+    166.46  bench/volute#8 hole.plain.through size 1
+    160.79  bench/gearbox#49 edit.rib size 1
+    159.72  bench/volute#2 extrude.dist.add size 1
+    158.52  bench/jack#11 thread.axis size 1
+    157.37  bench/crank#8 pattern.features.circular size 5
+    156.10  bench/frame#129 extrude.dist.cut size 1
+    146.12  suite/loft#3 loft.smooth.add size 12
+    137.56  bench/manifold#18 sweep.path.cut size 3
+    137.34  suite/loft#2 loft.ruled.cut size 2
+
+after the regen, per part: regen, mesh, mass, check (M)
+bench/frame                3382.99    686.14    187.36    123.49
+bench/volute               2897.01   1147.46    161.77    165.95
+bench/heatsink             2368.08    850.65   1297.31    324.87
+suite/mixed                1612.46   1161.03    563.65   2075.22
+suite/torture-2            1500.26    104.63     87.02    190.44
+torture-2                  1500.07    104.97     87.42    190.79
+bench/crank                1126.79    155.27    177.98    134.37
+bench/gearbox              1053.64    383.40    242.78    119.98
+bench/manifold             1046.31    178.03    124.51    111.26
+suite/loft                  803.10     77.07     82.06    107.26
+bench/jack                  690.30    230.90    244.90    158.64
+bench/valve                 685.94    272.74    322.69    112.19
+suite/shaft                 428.77    502.37    257.29    270.18
+suite/coil                  425.22    254.78    141.69     23.30
+suite/thread                291.79     49.60     64.75     21.83
+suite/coplanar              194.55    136.96     39.41    108.65
+bench/conrod                185.30     96.22     83.64     37.40
+suite/patterns              184.23     72.30     50.19    134.53
+suite/housing               129.76    154.76     45.54    282.42
+suite/plate                 129.47    242.11     71.02    437.35
+torture                     129.47    242.11     71.03    437.35
+suite/hole-grid             110.34    375.34     82.29    359.85
+bench/guard                  75.35     18.81      6.88      6.04
+suite/text                   63.03     44.49     43.13     28.15
+bench/quadarm                46.93     19.97      6.19      6.50
+suite/upto                   38.06     42.43     19.99      9.53
+bench/hub                    29.11     16.78      5.03      5.17
+bench/insert                 25.84      4.70      3.33      3.02
+suite/upto-flat              13.91     38.75     14.04      8.49
+suite/sweep                  12.65      9.99      6.39      4.66
+bench/bracket                12.00     13.72      2.52      4.21
+suite/tour                    9.39     16.85      5.76      6.61
+bench/clamp                   9.22     15.15      5.25      4.35
+bench sum mesh: 4090M over 13635M regen
+bench sum mass: 2872M over 13635M regen
+bench sum check: 1317M over 13635M regen

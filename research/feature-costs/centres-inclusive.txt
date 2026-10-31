@@ -1,0 +1,50 @@
+# total 16880M in the frame-pointer build; percentages are what carry over
+  54.5%  plan (inlined)                                                          most in frame 27%
+  53.1%  boolean_into (inlined)                                                  most in frame 27%
+  53.1%  general (inlined)                                                       most in frame 27%
+  34.7%  searched (inlined)                                                      most in frame 44%
+  34.0%  trace (inlined)                                                         most in frame 45%
+  29.5%  surfaces_in (inlined)                                                   most in frame 45%
+  27.9%  implicit (inlined)                                                      most in frame 39%
+  24.7%  nary_with (inlined)                                                     most in frame 45%
+  24.7%  nary_body (inlined)                                                     most in frame 45%
+  23.3%  new (inlined)                                                           most in heatsink 50%
+  20.9%  face_box (inlined)                                                      most in heatsink 48%
+  20.4%  procedural_box (inlined)                                                most in heatsink 49%
+  20.2%  trim (inlined)                                                          most in frame 38%
+  19.9%  curve_surface_subdivide (inlined)                                       most in frame 47%
+  17.1%  faces_box (inlined)                                                     most in heatsink 59%
+  17.1%  chunk (inlined)                                                         most in heatsink 59%
+  16.9%  curve_surface_in<forge_bool::boolean::trim::{closure_env#3}> (inlined)  most in frame 43%
+  16.4%  modify_on (inlined)                                                     most in volute 35%
+  16.3%  modify (inlined)                                                        most in volute 35%
+  16.0%  spine_closest (inlined)                                                 most in frame 67%
+  15.9%  closest (inlined)                                                       most in frame 62%
+  14.3%  face_uv_loops_with<fn(&forge_topo::body::Edge) -> usize> (inlined)      most in volute 36%
+  14.3%  uv_loop<&fn(&forge_topo::body::Edge) -> usize> (inlined)                most in volute 36%
+  13.6%  deriv (inlined)                                                         most in heatsink 38%
+  13.2%  implicit_gradient (inlined)                                             most in frame 51%
+  12.5%  value (inlined)                                                         most in frame 53%
+  12.1%  bbox (inlined)                                                          most in heatsink 63%
+  11.5%  eval (inlined)                                                          most in volute 29%
+  11.0%  refine (inlined)                                                        most in frame 55%
+  10.0%  crossing (inlined)                                                      most in volute 70%
+   9.5%  project (inlined)                                                       most in heatsink 51%
+   9.3%  chamfer (inlined)                                                       most in volute 61%
+   8.6%  point (inlined)                                                         most in volute 53%
+   7.6%  eval<forge_geom::corner::J> (inlined)                                   most in heatsink 63%
+   7.4%  polish<forge_geom::skinned::{impl#8}::solve::{closure#2}::{closure_env  most in volute 100%
+   7.4%  <forge_geom::screw::Fence as forge_geom::surface::Procedural>::implici  most in frame 54%
+   7.2%  newton<forge_geom::corner::{impl#10}::project::{closure_env#2}, forge_  most in heatsink 62%
+   5.6%  nearest (inlined)                                                       most in crank 84%
+   5.6%  onto (inlined)                                                          most in frame 38%
+   5.4%  tools (inlined)                                                         most in volute 76%
+   5.4%  boolean (inlined)                                                       most in gearbox 87%
+   5.2%  tool_of (inlined)                                                       most in volute 79%
+   5.1%  ribbon<forge_geom::corner::J> (inlined)                                 most in heatsink 61%
+   5.0%  project_near (inlined)                                                  most in volute 68%
+   4.9%  rib (inlined)                                                           most in gearbox 97%
+   4.8%  part_shape (inlined)                                                    most in heatsink 70%
+   4.7%  <forge_geom::screw::Screw as forge_geom::surface::Procedural>::implici  most in frame 52%
+   4.6%  sin_cos (inlined)                                                       most in volute 30%
+   4.5%  surfaces_meet<forge_ops::selfx::crossing::{closure_env#4}> (inlined)    most in volute 66%
