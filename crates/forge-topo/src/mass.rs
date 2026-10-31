@@ -1868,9 +1868,17 @@ fn face_integrals(body: &Body, f: FaceId, c: Point3, size: f64, rel: f64) -> Res
         let (ulo, uhi) = span(&loops, 0);
         let kinked = ulo < uhi && !p.u_kinks(forge_math::Interval::new(ulo, uhi)).is_empty();
         usize::from(p.v_degree().is_some() || kinked || w(1) * sv < w(0) * su)
-    } else if let Surface::Cylinder(_) | Surface::Cone(_) = s {
+    } else if matches!(s, Surface::Cylinder(_))
+        || matches!(s, Surface::Cone(_))
+            && !face.loops.iter().any(|&l| {
+                body.lp(l)
+                    .coedges()
+                    .any(|c| s.singular(s.project(body.vertex(body.coedge_start(c)).point)))
+            })
+    {
         // along the axis by Gauss-Legendre (2 or 3 points per node where u moves), or round it
-        // by a fit (9 points at each of 4 or 5 v) and a Fourier sum where v moves
+        // by a fit (9 points at each of 4 or 5 v) and a Fourier sum where v moves; a cone's face
+        // reaching its apex (one seamed face since whole-turn cones) always along the axis
         let gl = if matches!(s, Surface::Cylinder(_)) { 2 } else { 3 };
         let moving = |a: usize| -> usize {
             let pieces = loops.iter().flat_map(|l| l.runs.iter().flatten());
