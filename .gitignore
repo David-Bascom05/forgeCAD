@@ -5,7 +5,7 @@
 /target-prof
 /target-suite
 /target-hunt
-/crates/forge-model/examples/one.rs
+/kernel/forge-model/examples/one.rs
 /.claude/
 __pycache__/
 /tools/corpus/*.json

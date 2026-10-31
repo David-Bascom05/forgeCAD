@@ -2,7 +2,7 @@
 # usage: switch.sh: per fillet-corpus case with a corner hole, how each hole closes with builds
 # switched to the rational quads (rational, sphere or fallback to today's patch) and the regen's
 # instructions today and switched (minus the runner's own start-up, `corpus none`).
-# Needs switch.patch applied and corpus.rs in crates/forge-model/examples (see README.md).
+# Needs switch.patch applied and corpus.rs in kernel/forge-model/examples (see README.md).
 B=${CARGO_TARGET_DIR:-$PWD/target}/release/examples
 ic() { FBUILD_MEM=2G ~/.local/bin/fbuild perf stat -x, -e instructions:u env "$@" 2>&1 >/dev/null | awk -F, '/instructions/{print $1}'; }
 o=$(ic $B/corpus none)

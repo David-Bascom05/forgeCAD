@@ -1,6 +1,6 @@
 # What loftmeet.rs ships, proved
 
-Lean 4 + Mathlib proofs of the certified steps in `crates/forge-geom/src/loftmeet.rs` and the parts
+Lean 4 + Mathlib proofs of the certified steps in `kernel/forge-geom/src/loftmeet.rs` and the parts
 of `skinned.rs` it calls (`Poly::new`, `Poly::hull`, `Hull::extent`, `Hull::misses`), with the
 assumptions each one needs, which ones it doesn't, and what the f64 code relies on. No `sorry`;
 every theorem below depends only on `propext`, `Classical.choice`, `Quot.sound` (`Axioms.lean`).

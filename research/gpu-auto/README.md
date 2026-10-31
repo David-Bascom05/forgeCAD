@@ -1,6 +1,6 @@
 # When Auto uses the GPU
 
-`crates/forge-gpu/src/lib.rs`, `AutoBatch`: the n-ary regen's region batch on the CPU or the GPU.
+`kernel/forge-gpu/src/lib.rs`, `AutoBatch`: the n-ary regen's region batch on the CPU or the GPU.
 
 ## Measured
 
@@ -21,16 +21,16 @@
 ## Design, not measured
 
 The single-precision pass answers only points clear of every boundary by 1e-3, and the double
-pass's margin is tol::LINEAR a hair wider than the CPU's (`MARGIN`); `crates/forge-model/tests/gpu.rs`
+pass's margin is tol::LINEAR a hair wider than the CPU's (`MARGIN`); `kernel/forge-model/tests/gpu.rs`
 proves the verdicts equal the CPU's on every suite part plus 20k random points.
 
 ## How to rerun
 
 ```
-cp research/gpu-auto/open_cost.rs crates/forge-model/examples/
+cp research/gpu-auto/open_cost.rs kernel/forge-model/examples/
 fbuild cargo build --release -p forge-model --example open_cost && ./target/release/examples/open_cost 5
 LOOP=2000 ./target/release/examples/backends       # after building the backends example
 ```
-`bench.rs` builds only at d0c75dc, where it was `crates/forge-gpu/examples/bench.rs`
+`bench.rs` builds only at d0c75dc, where it was `kernel/forge-gpu/examples/bench.rs`
 (`cargo run --release -p forge-gpu --example bench`); `AutoBatch::new` has changed since. All need
 a CUDA GPU.

@@ -1,7 +1,7 @@
 # Loft x loft: the exact section-pair formula, proved (lean-derive)
 
 Offline research. Nothing in the kernel uses these files: the shipped method is the Bezier-hull test in
-`crates/forge-geom/src/loftmeet.rs` (`../novel/`; proved separately on branch lean-loftmeet,
+`kernel/forge-geom/src/loftmeet.rs` (`../novel/`; proved separately on branch lean-loftmeet,
 `../shipped/`). This directory is the exact alternative: where two smooth lofts with arc rails meet,
 as one polynomial equation in the two spline parameters, and a Bernstein certificate for disjointness.
 `proofs/` builds with no `sorry`, and no axioms beyond Lean's `propext`, `Classical.choice`, `Quot.sound`.

@@ -4,7 +4,7 @@ import LoftMeet.Bernstein
 /-!
 # loftmeet.rs: exact rational Bezier form of a circle-section span, hull and separation
 
-Models `Poly::new`, `Poly::hull`, `Hull::extent` and `apart` in crates/forge-geom/src/skinned.rs and
+Models `Poly::new`, `Poly::hull`, `Hull::extent` and `apart` in kernel/forge-geom/src/skinned.rs and
 loftmeet.rs. Points are `Fin 3 → ℝ`; a separating axis is any linear functional `ℓ`.
 -/
 

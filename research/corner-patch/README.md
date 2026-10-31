@@ -1,6 +1,6 @@
 # Corner patch: rational quads and their fold proof
 
-How the rational corner quads (`crates/forge-geom/src/corner/rational.rs`, `close_hole_rational`,
+How the rational corner quads (`kernel/forge-geom/src/corner/rational.rs`, `close_hole_rational`,
 `plans` and `Cells` in `corner.rs`) were chosen and measured. The analysis and all results are
 in `docs/fold-proof.md` (stages 0 to 4); this folder holds the code that produced them.
 
@@ -53,7 +53,7 @@ The programs are examples; copy them into a crate's `examples/` to build (they a
 with the workspace):
 
 ```
-cp research/corner-patch/rq.rs crates/forge-ops/examples/
+cp research/corner-patch/rq.rs kernel/forge-ops/examples/
 fbuild cargo build --release -p forge-ops --example rq
 ./target/release/examples/rq 60 3 0     # CASES EDGES PLAN: survey 3-, 4-, 5-edge corners
                                         # (EDGES 3..5) or EDGES 6..10 on their own; PLAN picks
@@ -63,18 +63,18 @@ fbuild cargo build --release -p forge-ops --example rq
 #      COUNT=today|build|proof|close|cold (close: today's close_hole; cold: close_hole_rational)
 sh research/corner-patch/ic.sh proof 3  # instructions per hole for one kind of work
 
-cp research/corner-patch/sharp.rs crates/forge-ops/examples/
+cp research/corner-patch/sharp.rs kernel/forge-ops/examples/
 fbuild cargo build --release -p forge-ops --example sharp
 ./target/release/examples/sharp 60 1    # CASES SHARP: SHARP neighbouring edges of each corner
 
-cp research/corner-patch/kmin.rs crates/forge-model/examples/
+cp research/corner-patch/kmin.rs kernel/forge-model/examples/
 fbuild cargo build --release -p forge-model --example kmin
 ./target/release/examples/kmin two-blends-sharp-edge
 ```
 
 ```
 git apply research/corner-patch/switch.patch
-cp research/corner-patch/corpus.rs crates/forge-model/examples/
+cp research/corner-patch/corpus.rs kernel/forge-model/examples/
 fbuild cargo build --release -p forge-model --example corpus --example regen1
 sh research/corner-patch/switch.sh      # per case: regen M instructions today, switched, ratio, paths
 for p in torture plate shaft housing coplanar patterns mixed hole-grid tour upto upto-flat; do

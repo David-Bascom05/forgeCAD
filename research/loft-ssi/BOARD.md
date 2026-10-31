@@ -6,7 +6,7 @@ Agents: prior-art, lean-derive, novel-math, plus loft-speed (profiling/optimizin
 Append findings here (dated, signed with your role), and message each other directly for anything
 that changes another's direction.
 
-## The Skinned surface, exactly (prior-art, 2026-10-31; from crates/forge-geom/src/skinned.rs, forge-ops/src/loft.rs, skin.rs)
+## The Skinned surface, exactly (prior-art, 2026-10-31; from kernel/forge-geom/src/skinned.rs, forge-ops/src/loft.rs, skin.rs)
 NOTE: the blend across sections is NOT a local Hermite blend. It is a global natural cubic spline
 (C2; or end-clamped when the loft has start/end slopes) with chord-length knots s_0 < ... < s_{n-1}
 (s_k = cumulative distance between profile centroids). n <= 14 sections. Each face is ONE span.
@@ -401,7 +401,7 @@ from downstream IntCurve evals. loft-speed's closed-form ring evaluator and a cl
  random points (Schwartz-Zippel), not proved in Lean. Same near-diagonal ill-conditioning applies to nested walls.
 
 ## Production patch handed to loft-speed (novel-math, 2026-10-31)
-research/loft-ssi/novel/loft-speed.patch, against loft-speed 5a0b79f: crates/forge-geom/src/loftmeet.rs
+research/loft-ssi/novel/loft-speed.patch, against loft-speed 5a0b79f: kernel/forge-geom/src/loftmeet.rs
 (exact rational Bezier hulls of span pieces; SAT for span x span; Bernstein sign test of Q(S) w^2 for span x
 quadric; seeds from the leaves; minimum-norm Newton and marching in the surfaces' own parameters), called in
 ssi::surfaces_in before the tracer, which remains the fallback. Instructions: vf6 3.65 -> 1.88 G, vfx 5.07 ->

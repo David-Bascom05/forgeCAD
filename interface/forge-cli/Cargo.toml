@@ -11,12 +11,12 @@ name = "forgecad"
 path = "src/main.rs"
 
 [dependencies]
-forge-math = { path = "../forge-math" }
-forge-geom = { path = "../forge-geom" }
-forge-topo = { path = "../forge-topo" }
-forge-ops = { path = "../forge-ops" }
-forge-mesh = { path = "../forge-mesh" }
-forge-model = { path = "../forge-model" }
+forge-math = { path = "../../kernel/forge-math" }
+forge-geom = { path = "../../kernel/forge-geom" }
+forge-topo = { path = "../../kernel/forge-topo" }
+forge-ops = { path = "../../kernel/forge-ops" }
+forge-mesh = { path = "../../kernel/forge-mesh" }
+forge-model = { path = "../../kernel/forge-model" }
 forge-agent = { path = "../forge-agent" }
 
 [lints]

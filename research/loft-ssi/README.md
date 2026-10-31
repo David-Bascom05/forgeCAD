@@ -2,7 +2,7 @@
 
 - `BOARD.md`: the shared board (profiles, findings, recipes R1-R5), as it stood when the branch landed.
 - `novel/`: what ships. Hull separation and Bernstein sign tests on the exact rational Bezier form of a
-  circle-section span, and marching in the surfaces' own parameters (`crates/forge-geom/src/loftmeet.rs`
+  circle-section span, and marching in the surfaces' own parameters (`kernel/forge-geom/src/loftmeet.rs`
   cites `novel/README.md`).
 - `shipped/`: Lean proofs of what loftmeet.rs certifies (exact patch form, hull, separating axis,
   Bernstein sign test), the assumptions each needs, and its f64 tolerances (`shipped/README.md`).

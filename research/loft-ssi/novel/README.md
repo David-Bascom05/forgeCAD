@@ -11,7 +11,7 @@ Everything here reruns from this folder (numpy only, no sympy needed):
 `py/loft.py` rebuilds forge-geom's smooth loft (natural spline, chord knots, circles split into two half
 arcs) as c(s), X(s), Y(s) cubics per span, for the volute benchmark (`repros/vf6.fc`) and for `vfx.fc`.
 
-The production form is `crates/forge-geom/src/loftmeet.rs` (ideas 1-4, called from forge-bool's
+The production form is `kernel/forge-geom/src/loftmeet.rs` (ideas 1-4, called from forge-bool's
 `ssi::surfaces_in` before the tracer, which stays the fallback). On loft-speed 5a0b79f, instructions per
 build: vf6 3.65 G -> 1.88 G, vfx 5.07 G -> 2.04 G, tools/bench-parts/volute.fc 10.03 G -> 5.79 G; the
 other eight bench parts unchanged; bench_parts and real_part_failures pass and fail exactly as before.

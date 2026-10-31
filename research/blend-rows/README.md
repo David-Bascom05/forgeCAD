@@ -1,6 +1,6 @@
 # Variable blends: how close the rows are kept
 
-`crates/forge-geom/src/varblend.rs`, `predict`: a VarBlend keeps rows of solved ball centres along
+`kernel/forge-geom/src/varblend.rs`, `predict`: a VarBlend keeps rows of solved ball centres along
 its guide, each predicted by the last within `predict` = a thousandth of the smallest radius
 (5123c9e; it was a ten-thousandth). Rows only seed the exact solves and bound searches, so the
 spacing moves cost, never the surface: every point is still solved to rounding.

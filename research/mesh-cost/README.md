@@ -1,7 +1,7 @@
 # Mesh cost of swept faces (pipes and variable blends)
 
 How the meshing of swept faces (`Procedural::swept`: `Pipe`, `VarBlend`) was measured and
-chosen, for `proc_strips` and `Nodes::want(.., shared)` in `crates/forge-mesh/src/tessellate.rs`.
+chosen, for `proc_strips` and `Nodes::want(.., shared)` in `kernel/forge-mesh/src/tessellate.rs`.
 
 ## Rerun
 

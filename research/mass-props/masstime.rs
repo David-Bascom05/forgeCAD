@@ -1,4 +1,4 @@
-//! Exact mass vs mesh timing per body (copy to crates/forge-agent/examples/ to run; see README).
+//! Exact mass vs mesh timing per body (copy to interface/forge-agent/examples/ to run; see README).
 //! masstime [names..]: gate and bench parts by default, `fillets` for the fillet corpus.
 //! MASSONLY=1 skips the mesh; COUNT=r regenerates, then makes r exact calls (MESH=1: meshes)
 //! for instruction counting; REGEN=1 times the regeneration instead.

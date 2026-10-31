@@ -1,7 +1,7 @@
-diff --git a/crates/forge-ops/src/corner.rs b/crates/forge-ops/src/corner.rs
+diff --git a/kernel/forge-ops/src/corner.rs b/kernel/forge-ops/src/corner.rs
 index 16b3143..d655224 100644
---- a/crates/forge-ops/src/corner.rs
-+++ b/crates/forge-ops/src/corner.rs
+--- a/kernel/forge-ops/src/corner.rs
++++ b/kernel/forge-ops/src/corner.rs
 @@ -1,7 +1,7 @@
  //! Vertex blends where blends meet at a vertex: where each blend stops (its setback), the
  //! trim curve that ends each face there, and the surface that closes the remaining hole.

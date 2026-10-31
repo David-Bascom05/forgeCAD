@@ -1,0 +1,23 @@
+[package]
+name = "forge-proof"
+description = "Properties every ForgeCAD result must have: metamorphic relations, certificates, point membership"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[dependencies]
+forge-math = { path = "../../kernel/forge-math" }
+forge-geom = { path = "../../kernel/forge-geom" }
+forge-topo = { path = "../../kernel/forge-topo" }
+forge-ops = { path = "../../kernel/forge-ops" }
+forge-bool = { path = "../../kernel/forge-bool" }
+forge-mesh = { path = "../../kernel/forge-mesh" }
+forge-model = { path = "../../kernel/forge-model" }
+
+[dev-dependencies]
+forge-doc = { path = "../../interface/forge-doc" }
+forge-agent = { path = "../../interface/forge-agent" }
+
+[lints]
+workspace = true

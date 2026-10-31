@@ -1,6 +1,6 @@
 # Float filters of the exact predicates
 
-`crates/forge-math/src/predicates.rs` evaluates each predicate in f64 and returns that value when
+`kernel/forge-math/src/predicates.rs` evaluates each predicate in f64 and returns that value when
 its error bound proves the sign; otherwise it recomputes exactly with expansions.
 
 ## Where each bound comes from

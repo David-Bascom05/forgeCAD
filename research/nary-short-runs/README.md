@@ -1,6 +1,6 @@
 # Short n-ary runs go sequential
 
-`crates/forge-model/src/lib.rs`, `SHORT_RUN` and `short` (and `bodies.rs`, `Run::flush`): a run
+`kernel/forge-model/src/lib.rs`, `SHORT_RUN` and `short` (and `bodies.rs`, `Run::flush`): a run
 of at most sixteen features of one tool each is applied with the sequential regen's booleans.
 
 ## Measured
@@ -29,7 +29,7 @@ sequential regen takes a pattern's copies in an n-ary pass over the whole part a
 ## How to rerun
 
 ```
-cp research/nary-short-runs/nx.rs crates/forge-model/examples/
+cp research/nary-short-runs/nx.rs kernel/forge-model/examples/
 fbuild cargo build --release -p forge-model --example nx
 sh research/nary-short-runs/cross.sh $PWD/target/release/examples/nx out.txt
 python3 research/nary-short-runs/crosssum.py out.txt

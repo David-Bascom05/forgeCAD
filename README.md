@@ -17,17 +17,39 @@ wasm32 to prove it.
 
 Units are millimetres. Tolerances live in `forge_math::tol`.
 
-| crate | what |
+The repository is split by what a thing is:
+
+- `kernel/` is the geometry kernel: exact results, zero third-party crates.
+- `interface/` is everything that uses the kernel: part files, the agent layer and the command
+  line. The app, host and protocol go here too ([design](docs/interface-design.md)).
+- `verify/` is what checks the kernel and is never shipped.
+- `research/` records how each derived formula and constant was reached, and `tools/` holds the
+  speed gate, the OpenCascade oracle and test runners.
+
+| `kernel/` | what |
 |---|---|
+| `forge-alloc` | the wasm heap |
 | `forge-math` | vectors, frames, deterministic trig, intervals, polynomial roots, small linear algebra |
 | `forge-geom` | curves, surfaces, intersections |
 | `forge-topo` | B-rep bodies, stable names, the validity checker |
 | `forge-sketch` | 2D sketches, geometric constraint solver, profile extraction |
-| `forge-ops` | profiles, extrude, revolve, sweep, coil, loft |
+| `forge-ops` | profiles, extrude, revolve, sweep, coil, loft, fillets, chamfers, shell, draft |
+| `forge-bool` | booleans, sequential and n-ary |
+| `forge-gpu` | the GPU batch backend |
+| `forge-font` | glyph outlines for text features |
 | `forge-mesh` | exact predicates, constrained Delaunay, tessellation, STL |
 | `forge-model` | part histories and regenerating them |
+
+| `interface/` | what |
+|---|---|
+| `forge-doc` | the document model behind part files |
 | `forge-agent` | the `.fc` part file, selectors, measuring, rendering, incremental sessions |
 | `forge-cli` | `forgecad build/query/measure/render/check/diff`, `serve`, `mcp` (see AGENTS.md) |
+
+| `verify/` | what |
+|---|---|
+| `forge-proof` | metamorphic properties, certificates, point membership against the CSG tree |
+| `forge-bench` | benchmarks |
 
 ## Building
 

@@ -1,6 +1,6 @@
 # Ends on a surface: the exact arguments
 
-`crates/forge-model/src/upto.rs` picks an end by sampling (rays) and then proves it exactly; the
+`kernel/forge-model/src/upto.rs` picks an end by sampling (rays) and then proves it exactly; the
 proofs are booleans or closed arguments, never samples. They were reasoned out in 0f6ca23 and
 05ce566 and live as comments at the code; this is the record in one place.
 

@@ -1,6 +1,6 @@
 # The one tolerance
 
-`crates/forge-math/src/tol.rs`.
+`kernel/forge-math/src/tol.rs`.
 
 ## Derived
 

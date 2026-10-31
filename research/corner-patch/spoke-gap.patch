@@ -1,7 +1,7 @@
-diff --git a/crates/forge-geom/src/corner.rs b/crates/forge-geom/src/corner.rs
+diff --git a/kernel/forge-geom/src/corner.rs b/kernel/forge-geom/src/corner.rs
 index 2a54aa4..d5bdd2b 100644
---- a/crates/forge-geom/src/corner.rs
-+++ b/crates/forge-geom/src/corner.rs
+--- a/kernel/forge-geom/src/corner.rs
++++ b/kernel/forge-geom/src/corner.rs
 @@ -904,6 +904,15 @@ fn spokes(
      // other pinch the quads between them there (curvature 6x to 20x today's patch's, and false
      // projection minima: research/corner-patch)

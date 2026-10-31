@@ -69,7 +69,7 @@ end).
 
 ## The patch and the claim
 
-`HolePatch` (crates/forge-geom/src/corner.rs) maps a convex cyclic n-gon D (n = 6, 8 or 10 for the
+`HolePatch` (kernel/forge-geom/src/corner.rs) maps a convex cyclic n-gon D (n = 6, 8 or 10 for the
 fillet corners of the survey, up to 12) into space:
 
 ```
@@ -111,7 +111,7 @@ on the computed values) and is left out below.
 
 ## Measurements (oracle cell counts)
 
-`crates/forge-ops/examples/fold_measure.rs` (on the experiment ref) takes the survey's
+`kernel/forge-ops/examples/fold_measure.rs` (on the experiment ref) takes the survey's
 generator (the same cone / flipped corners as the 1200-corner survey: n = 3..5 edges, 6..10
 hole sides, saddles and nearly flat edges) and counts the cells a tiling proof of
 g = n_c . J > 0 needs (n_c is the unit normal at the cell centre). Cells split in four until
@@ -317,7 +317,7 @@ proof only where the sampled scan's margin is small.
 
 ## Stage 2: the Taylor-model prototype
 
-Code: `crates/forge-geom/src/corner/proof.rs` on `refs/experiments/corner-fold-taylor-models` (7143102)
+Code: `kernel/forge-geom/src/corner/proof.rs` on `refs/experiments/corner-fold-taylor-models` (7143102)
 (not on the branch). What it does:
 
 - **Taylor models.** A polynomial of total degree K = 3 in two local variables (a, b), plus a
@@ -422,7 +422,7 @@ median 1.1 s, p90 4.8 s, max 6.6 s per patch. The pieces of the forced split of 
 
 ## Stage 3: a rational patch with a Bernstein proof
 
-`crates/forge-geom/src/corner/rational.rs`, built by `HolePatch::new_rational` and proven by
+`kernel/forge-geom/src/corner/rational.rs`, built by `HolePatch::new_rational` and proven by
 `HolePatch::prove_rational`. Today's patch stays the default; nothing calls the rational form
 in builds yet (superseded by stage 4's quads). The measurement example is
 `research/corner-patch/rational_compare.rs`; it and a render switch ran on
@@ -539,7 +539,7 @@ Four- to six-edge corners (8-12-sided holes) would raise the degree further (B_i
 
 Measurement code and how to rerun it: `research/corner-patch/`.
 
-`crates/forge-geom/src/corner/rational.rs` (`Quad`) and `close_hole_rational`, `plans` and
+`kernel/forge-geom/src/corner/rational.rs` (`Quad`) and `close_hole_rational`, `plans` and
 `Cells` in `corner.rs`. Builds use it only where today's patch has none ("Switching builds").
 
 ### Construction

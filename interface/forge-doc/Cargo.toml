@@ -1,0 +1,19 @@
+[package]
+name = "forge-doc"
+description = "ForgeCAD documents: parameters, expressions, sketches and feature lines, their part-file text, edits, and their evaluation into a part history"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[dependencies]
+forge-math = { path = "../../kernel/forge-math" }
+forge-geom = { path = "../../kernel/forge-geom" }
+forge-topo = { path = "../../kernel/forge-topo" }
+forge-ops = { path = "../../kernel/forge-ops" }
+forge-model = { path = "../../kernel/forge-model" }
+forge-sketch = { path = "../../kernel/forge-sketch" }
+forge-font = { path = "../../kernel/forge-font" }
+
+[lints]
+workspace = true

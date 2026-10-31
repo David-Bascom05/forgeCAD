@@ -1,4 +1,4 @@
-// research/nary-short-runs (copy into crates/forge-model/examples to run): nx run SEED LEN seq|naryT [SEEDHI]
+// research/nary-short-runs (copy into kernel/forge-model/examples to run): nx run SEED LEN seq|naryT [SEEDHI]
 // | nx hash FROM TO LEN T | nx wall PART reps | nx cmp PART
 use forge_math::hash::BitHasher;
 use forge_model::suite;

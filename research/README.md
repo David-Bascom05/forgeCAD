@@ -8,7 +8,7 @@ OpenCascade) never become build dependencies; run them through `fbuild`.
 ## Topics
 
 - `closed-forms/`: quartics and Cardano for surface pairs, quartic root counts, parabolas (text).
-  Also `tools/sympy/meet.py`, which generates `crates/forge-geom/src/meet_gen.rs`.
+  Also `tools/sympy/meet.py`, which generates `kernel/forge-geom/src/meet_gen.rs`.
 - `predicate-bounds/`: the float filters' error bounds in forge-math's exact predicates.
 - `mesh-bounds/`: chord-sag step sizes and the measured mesh layout choices.
 - `upto-proofs/`: the exact arguments that prove an end on a surface and the next face.
@@ -51,7 +51,7 @@ meant to replace them.
   `reliability` (degeneracy scoreboard) and the OpenCascade oracle (`tools/occt`).
 - From the literature, not derived here: dmath's fdlibm kernels, Shewchuk's predicate bounds,
   the hole tables (DIN 336, DIN 974-1, ASME B18.3).
-- Test fonts are written at test time by `crates/forge-font/src/testing.rs`; nothing derived.
+- Test fonts are written at test time by `kernel/forge-font/src/testing.rs`; nothing derived.
 
 ## Not on main yet
 

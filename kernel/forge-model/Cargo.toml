@@ -20,7 +20,7 @@ forge-font = { path = "../forge-font" }
 forge-mesh = { path = "../forge-mesh" }
 # part files (selectors, parameters, sketches) for the OpenCascade oracle's parts and the
 # whole-kernel history generator (examples/shrink)
-forge-agent = { path = "../forge-agent" }
+forge-agent = { path = "../../interface/forge-agent" }
 
 # its test: every feature kind reaches the oracle
 [[example]]

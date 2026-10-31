@@ -1,7 +1,7 @@
 # Mesh step sizes and the chord guarantee
 
-`crates/forge-mesh/src/tessellate.rs` promises every triangle within the chord tolerance at its
-centroid and edge midpoints (checked by `crates/forge-model/tests/mesh_quality.rs`).
+`kernel/forge-mesh/src/tessellate.rs` promises every triangle within the chord tolerance at its
+centroid and edge midpoints (checked by `kernel/forge-model/tests/mesh_quality.rs`).
 
 ## Derived (check.py, recreated 2026-11-01; the originals were worked by hand)
 

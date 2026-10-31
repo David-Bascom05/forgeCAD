@@ -19,7 +19,7 @@ degenerate cases meet.rs relies on.
 import os
 import sympy as sp
 
-OUT = os.path.join(os.path.dirname(__file__), "..", "..", "crates", "forge-geom", "src", "meet_gen.rs")
+OUT = os.path.join(os.path.dirname(__file__), "..", "..", "kernel", "forge-geom", "src", "meet_gen.rs")
 
 
 def rust(e, syms):
