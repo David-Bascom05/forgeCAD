@@ -3,6 +3,18 @@
 version = 4
 
 [[package]]
+name = "forge-agent"
+version = "0.1.0"
+dependencies = [
+ "forge-geom",
+ "forge-math",
+ "forge-mesh",
+ "forge-model",
+ "forge-ops",
+ "forge-topo",
+]
+
+[[package]]
 name = "forge-bench"
 version = "0.1.0"
 dependencies = [

@@ -40,6 +40,19 @@ impl Frame {
         Frame { origin, x, y, z }
     }
 
+    /// These exact axes, if they are orthonormal and right-handed to within 1e-12.
+    pub fn from_axes(origin: Point3, x: Vec3, y: Vec3, z: Vec3) -> Option<Frame> {
+        let unit = |v: Vec3| (v.dot(v) - 1.0).abs() <= 1e-12;
+        let ok =
+            unit(x) && unit(y) && unit(z) && x.dot(y).abs() <= 1e-12 && (x.cross(y) - z).length() <= 1e-12;
+        ok.then(|| Frame {
+            origin,
+            x: UnitVec3::new_unchecked(x),
+            y: UnitVec3::new_unchecked(y),
+            z: UnitVec3::new_unchecked(z),
+        })
+    }
+
     pub fn x(&self) -> UnitVec3 {
         self.x
     }

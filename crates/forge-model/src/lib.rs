@@ -190,51 +190,9 @@ impl Part {
     /// Rebuilds the solid from the first feature. Feature ids are their
     /// positions, so entity names stay stable when nothing upstream changes.
     pub fn regenerate(&self) -> Result<Body, RegenError> {
-        let mut body: Option<Body> = None;
-        for (i, f) in self.features.iter().enumerate() {
-            let id = i as u64 + 1;
-            if modifies(f) {
-                let b = body.ok_or(RegenError::NothingToCombine { feature: i })?;
-                body = Some(modify(&self.features, i, &b, 1)?);
-                if trace::on() {
-                    trace::step(i, body.as_ref().expect("just set"), None);
-                }
-                continue;
-            }
-            let mut tools = tools(&self.features, i, true)?;
-            if starts(f) {
-                body = Some(tools.swap_remove(0).0);
-                if trace::on() {
-                    trace::step(i, body.as_ref().expect("just set"), None);
-                }
-                continue;
-            }
-            if matches!(f, Feature::Plane(_)) {
-                continue;
-            }
-            let mut b = body.ok_or(RegenError::NothingToCombine { feature: i })?;
-            let err = |error| RegenError::Boolean { feature: i, error };
-            if let [(tool, op, _)] = &tools[..] {
-                // in place: only the faces near the tool change
-                boolean_into(&mut b, tool, op_of(*op), id + 1_000_000).map_err(err)?;
-                // tombstones are cheap until they outnumber the living
-                if b.dead > b.faces.len() / 2 {
-                    b = b.compact();
-                }
-            } else if !tools.is_empty() {
-                // a pattern's copies all in one pass
-                let base = if b.dead > 0 { b.compact() } else { b };
-                let mut all = vec![&base];
-                all.extend(tools.iter().map(|t| &t.0));
-                let ops: Vec<Op> = tools.iter().map(|t| op_of(t.1)).collect();
-                b = forge_bool::nary_with(&all, &ops, None, None, 1, cut_root(i))
-                    .map_err(err)?
-                    .compact();
-            }
-            if trace::on() {
-                trace::step(i, &b, tools.first().map(|t| &t.0));
-            }
-            body = Some(b);
+        let mut body = None;
+        for i in 0..self.features.len() {
+            body = step(&self.features, i, body)?;
         }
         body.map(|b| b.compact())
             .ok_or(RegenError::NothingToCombine { feature: 0 })
@@ -296,6 +254,55 @@ impl Part {
             })
             .collect()
     }
+}
+
+/// Applies feature `i` to the part as features `..i` left it: `regenerate` one feature at a
+/// time, for callers that keep every stage. Only `features[..=i]` is read.
+pub fn step(features: &[Feature], i: usize, body: Option<Body>) -> Result<Option<Body>, RegenError> {
+    let f = &features[i];
+    let id = i as u64 + 1;
+    if modifies(f) {
+        let b = body.ok_or(RegenError::NothingToCombine { feature: i })?;
+        let b = modify(features, i, &b, 1)?;
+        if trace::on() {
+            trace::step(i, &b, None);
+        }
+        return Ok(Some(b));
+    }
+    let mut tools = tools(features, i, true)?;
+    if starts(f) {
+        let b = tools.swap_remove(0).0;
+        if trace::on() {
+            trace::step(i, &b, None);
+        }
+        return Ok(Some(b));
+    }
+    if matches!(f, Feature::Plane(_)) {
+        return Ok(body);
+    }
+    let mut b = body.ok_or(RegenError::NothingToCombine { feature: i })?;
+    let err = |error| RegenError::Boolean { feature: i, error };
+    if let [(tool, op, _)] = &tools[..] {
+        // in place: only the faces near the tool change
+        boolean_into(&mut b, tool, op_of(*op), id + 1_000_000).map_err(err)?;
+        // tombstones are cheap until they outnumber the living
+        if b.dead > b.faces.len() / 2 {
+            b = b.compact();
+        }
+    } else if !tools.is_empty() {
+        // a pattern's copies all in one pass
+        let base = if b.dead > 0 { b.compact() } else { b };
+        let mut all = vec![&base];
+        all.extend(tools.iter().map(|t| &t.0));
+        let ops: Vec<Op> = tools.iter().map(|t| op_of(t.1)).collect();
+        b = forge_bool::nary_with(&all, &ops, None, None, 1, cut_root(i))
+            .map_err(err)?
+            .compact();
+    }
+    if trace::on() {
+        trace::step(i, &b, tools.first().map(|t| &t.0));
+    }
+    Ok(Some(b))
 }
 
 /// Whether a feature starts the part afresh.
