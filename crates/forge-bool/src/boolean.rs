@@ -1339,10 +1339,15 @@ pub(crate) fn apply<S: crate::imprint::Src>(a: &mut Body, b: &S, plan: &Plan) {
             a.kill_face(f);
         }
     }
-    // a face split locally gives up the loops it replaces before it gains the new ones
+    // a face split locally gives up the loops it replaces before it gains the new ones; where
+    // its outer loop goes, the spec's first loop (its new outer one) takes its place
+    let mut new_outer: Vec<usize> = Vec::new();
     for &(si, flip) in kept {
         let s = &specs[si];
         if s.extend && !flip && !s.remove.is_empty() {
+            if s.remove.contains(&a.face(s.from).loops[0]) {
+                new_outer.push(si);
+            }
             crate::classify::drop_query_loops(a, s.from, &s.remove);
             for &l in &s.remove {
                 a.remove_loop(s.from, l);
@@ -1428,6 +1433,11 @@ pub(crate) fn apply<S: crate::imprint::Src>(a: &mut Body, b: &S, plan: &Plan) {
             if s.extend && !flip {
                 crate::classify::extend_query(a, face, lp);
             }
+        }
+        if !flip && new_outer.contains(&si) {
+            let loops = &mut a.faces[face.index()].loops;
+            let at = loops.len() - s.loops.len();
+            loops[..=at].rotate_right(1);
         }
     }
     for &(k, t) in grown {

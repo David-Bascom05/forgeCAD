@@ -1493,11 +1493,14 @@ impl Column<'_> {
             };
             let sq = &self.squares[si];
             let nf = if sq.up { self.z } else { -self.z };
-            let cyc = cycles(arcs)?;
-            // the tool's stretches alone close only holes
+            let mut cyc = cycles(arcs)?;
+            // the tool's stretches alone close only holes; an outer cycle goes first
             let mut new_outer = 0;
-            for c in cyc.iter().filter(|_| !touched.is_empty()) {
-                new_outer += usize::from(self.area(c, nf)? > 0.0);
+            for k in 0..cyc.len() {
+                if !touched.is_empty() && self.area(&cyc[k], nf)? > 0.0 {
+                    cyc[new_outer..=k].rotate_right(1);
+                    new_outer += 1;
+                }
             }
             let mut old_outer = 0;
             for &lp in &touched {
@@ -1874,7 +1877,10 @@ pub(crate) fn diff(x: &Body, y: &Body) -> Option<String> {
                         c
                     })
                     .collect();
-                loops.sort();
+                // the outer loop must come first; holes in any order
+                if !loops.is_empty() {
+                    loops[1..].sort();
+                }
                 (face.name, face.same_sense, format!("{:?}", face.surface), loops)
             })
             .collect();
