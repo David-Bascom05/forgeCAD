@@ -18,6 +18,13 @@ forge-font = { path = "../forge-font" }
 
 [dev-dependencies]
 forge-mesh = { path = "../forge-mesh" }
+# part files (selectors, parameters, sketches) for the OpenCascade oracle's parts
+forge-agent = { path = "../forge-agent" }
+
+# its test: every feature kind reaches the oracle
+[[example]]
+name = "oracle"
+test = true
 
 [lints]
 workspace = true

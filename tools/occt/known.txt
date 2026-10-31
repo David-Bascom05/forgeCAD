@@ -1,1 +1,58 @@
+# Parts whose disagreement with OCCT is reviewed: "name  # why", one per line (the gate skips them).
+#
+# How each feature kind is replayed in OCCT (examples/oracle.rs exports, build.py builds):
+#   extrude      a prism of the profile face; distance, symmetric, two-sided and through worked out
+#                here (through: OCCT's own bounding box); to a plane square to it: a distance; to any
+#                other plane, cylinder, cone, sphere or torus (offset: moved past it): a long prism
+#                split at the surface by BRepAlgoAPI_Splitter, the pieces on the sketch kept; to the
+#                next face: rays from inside the profile against OCCT's part pick the face
+#   revolve      BRepPrimAPI_MakeRevol; symmetric, two-sided and to a plane through the axis here
+#   ball         BRepPrimAPI_MakeSphere
+#   hole         its section (mouth, counterbore or countersink, wall, drill point) turned about the
+#                drill; through: OCCT's bounding box; to a surface or the next face as an extrude.
+#                A standard's hole arrives as its diameter, head and thread
+#   fillet       BRepFilletAPI_MakeFillet on the edges through our edges' points; linear laws by
+#                SetRadius(r1, r2) along OCCT's contour; loose: laws through points (OCCT's own
+#                interpolation), setbacks, a varying law run on round a tangent chain (OCCT keeps
+#                edges it is not given constant), and corners of unequal radii or of two blends
+#                beside a sharp edge (each kernel patches those its own way)
+#   face fillet  the edges where the two face sets meet, as a fillet. NONE across a strip face:
+#                OCCT has no fillet that takes a face away
+#   full round   NONE: OCCT has no fillet that takes a face away (a fillet of half the width on
+#                both edges leaves a face of no width)
+#   chamfer      BRepFilletAPI_MakeChamfer: equal (Add d), two distances (Add d1 d2 on the face),
+#                distance and angle (AddDA); NONE where an edge runs on smoothly into one not named
+#                (OCCT bevels the whole tangent chain, we cap the chamfer)
+#   shell        BRepOffsetAPI_MakeThickSolid by join (open faces); closed: the skin offset by
+#                BRepOffsetAPI_MakeOffsetShape and the solid between
+#   draft        BRepOffsetAPI_DraftAngle about the neutral plane
+#   pattern      the sources' tools moved by each copy's affine map (a mirror's reflects); of the
+#                body: the moved bodies fused; along a path and at points: the maps ours places
+#   sweep        BRepOffsetAPI_MakePipe; extended ends as lines on along the tangents; to a plane:
+#                split there, the piece holding the path's start kept
+#   coil, thread our analytic tools (the winding, ISO/UTS form, run-out and chamfer cone are ours),
+#                lofted by BRepOffsetAPI_ThruSections through 24 sections a turn: OCCT's pipe shell
+#                along a helix builds the same solid but its booleans with it went wrong (a groove
+#                cut 336 mm^3 where Monte Carlo and the sections cut 231)
+#   loft         BRepOffsetAPI_ThruSections, ruled or smooth, loop by loop (holes lofted and cut);
+#                a centre line: BRepOffsetAPI_MakePipeShell through the sections; loose: smooth with
+#                more than two profiles or end weights, and centre lines (OCCT's own blends).
+#                NONE on rails: OCCT has no loft that follows rails
+#   rib, web     our construction in OCCT's booleans and drafts: the wall run far past the part,
+#                the part cut from it, the piece holding the path added
+#   offset       BRepOffset_MakeOffset with SetOffsetOnFace on the faces, the rest at 0
+#   thicken      the faces sewn into a skin, BRepOffsetAPI_MakeThickSolid by simple, combined
+#   delete       BRepAlgoAPI_Defeaturing
+#   replace      NONE: OCCT has no operation that puts a face on another surface
+#   move faces   NONE: OCCT has no operation that moves faces
+#   text         our layout's glyph outlines (OCCT's Font_BRepTextBuilder needs a font file and lays
+#                text out its own way): Bezier faces as prisms; wrapped, faces on the cylinder
+#                thickened radially by MakeThickSolidBySimple
+#   work, plane, param, sketch   nothing: the part holds them evaluated, as frames and numbers
+#   bodies       each body its own OCCT shape: in (features on chosen bodies), combine (booleans),
+#                split (half space, or outside a cylinder or sphere), move and copy (the motion's
+#                map); split face changes no solid
+# NONE cuts the part short there: both kernels build the history before it.
 shaft  # OCCT wrong: feature 61 (tilted r 2.6 hole) leaves it 868 mm^3 over; Monte Carlo 287322 +- 74 backs ours 287345
+shelled-hole-out  # OCCT wrong: a 2 mm outward shell closes the 1.5 mm hole, OCCT keeps a 0.5 mm one; ours is the closed form finishing_parts asserts
+corner-chain-mixed  # loose, 1.2% in volume: a linear law (0.6 to 1.4) on an edge running on round a tangent chain; OCCT holds the edges it is not given at the law's start radius, ours rolls the chain at the largest radius that reaches it (fillet.rs tangent_chains)

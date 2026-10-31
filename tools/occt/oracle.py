@@ -1,9 +1,15 @@
 #!/usr/bin/env python3
 """OpenCascade differential oracle (test only, never a dependency of the workspace).
 
-Rebuilds each part exported by `cargo run --release -p forge-model --example oracle` in OCCT
-(sequential BRepAlgoAPI booleans), measures volume, area, area per distinct surface, topology
-counts, BRepCheck validity and build time, and diffs them against ForgeCAD's results.
+Rebuilds each part exported by `cargo run --release -p forge-model --example oracle` in OCCT,
+every feature kind with OCCT's own operation (build.py), measures volume, area, area per distinct
+surface, topology counts, BRepCheck validity and build time, and diffs them against ForgeCAD's
+results (sequential, n-ary on one thread and on THREADS).
+
+A part marked loose (~) has a feature OCCT builds its own way (a smooth loft's spline, a corner
+of unequal blends): volume and area must agree within 1%, surfaces are not compared. A part cut
+short (|) reached a feature OCCT has no operation for: both kernels built the history up to it.
+The exporter prints which and why; known.txt lists each kind's translation.
 
 Ours are measured on a mesh of chord c (the exporter's CHORD, default 0.002), so a difference is
 a disagreement only beyond what the mesh can explain: volume beyond c x area; total area and each
@@ -11,7 +17,7 @@ surface's area beyond 3c x (meshed boundary length + area / smallest radius).
 
   tools/occt/oracle.py parts.json [--jobs 3] [--reps 1] [--timeout 120] [--out results.json]
                                   [--parallel] [--fuzzy 0] [--only NAME] [--show N] [--surfaces]
-                                  [--gate [--known FILE]] [--save-known FILE]
+                                  [--errors] [--tiebreak] [--gate [--known FILE]] [--save-known FILE]
 
 Given a corpus file (tools/corpus/*.json, with "cases"), builds each case in OCCT alone and
 compares it with the case's expectations (this checks the corpus' closed forms too).
@@ -32,134 +38,18 @@ import sys
 import time
 
 from OCP.BRepAdaptor import BRepAdaptor_Surface
-from OCP.BRepAlgoAPI import BRepAlgoAPI_Common, BRepAlgoAPI_Cut, BRepAlgoAPI_Fuse
-from OCP.BRepBuilderAPI import BRepBuilderAPI_MakeEdge, BRepBuilderAPI_MakeFace, BRepBuilderAPI_MakeWire
-from OCP.BRepBuilderAPI import BRepBuilderAPI_MakeVertex
+from OCP.BRepBuilderAPI import BRepBuilderAPI_Copy
 from OCP.BRepCheck import BRepCheck_Analyzer
-from OCP.BRepExtrema import BRepExtrema_DistShapeShape
-from OCP.BRepFilletAPI import BRepFilletAPI_MakeFillet
 from OCP.BRepGProp import BRepGProp
-from OCP.BRepPrimAPI import BRepPrimAPI_MakePrism, BRepPrimAPI_MakeRevol, BRepPrimAPI_MakeSphere
-from OCP.GC import GC_MakeArcOfCircle
 from OCP.GProp import GProp_GProps
 from OCP.GeomAbs import GeomAbs_Cone, GeomAbs_Cylinder, GeomAbs_Plane, GeomAbs_Sphere, GeomAbs_Torus
-from OCP.ShapeFix import ShapeFix_Face
 from OCP.ShapeUpgrade import ShapeUpgrade_UnifySameDomain
 from OCP.TopAbs import TopAbs_EDGE, TopAbs_FACE, TopAbs_SHELL, TopAbs_SOLID, TopAbs_VERTEX
 from OCP.TopExp import TopExp
 from OCP.OCP.collections import IndexedMap_TopoDS_Shape_TopTools_ShapeMapHasher as ShapeMap
-from OCP.OCP.collections import List_TopoDS_Shape as ShapeList
 from OCP.TopoDS import TopoDS
-from OCP.gp import gp_Ax1, gp_Ax2, gp_Ax3, gp_Circ, gp_Dir, gp_Pln, gp_Pnt, gp_Vec
 
-
-class Plane:
-    def __init__(self, f):
-        self.o, self.x, self.y, self.z = f["o"], f["x"], f["y"], f["z"]
-
-    def pt(self, u, v):
-        return gp_Pnt(*[self.o[i] + self.x[i] * u + self.y[i] * v for i in range(3)])
-
-    def vec(self, u, v):
-        return [self.x[i] * u + self.y[i] * v for i in range(3)]
-
-    def ax3(self):
-        return gp_Ax3(gp_Pnt(*self.o), gp_Dir(*self.z), gp_Dir(*self.x))
-
-
-def edge(pl, s):
-    if "line" in s:
-        a, b, c, d = s["line"]
-        return BRepBuilderAPI_MakeEdge(pl.pt(a, b), pl.pt(c, d)).Edge()
-    if "arc" in s:
-        cx, cy, r, st, sw = s["arc"]
-        p = [pl.pt(cx + r * math.cos(t), cy + r * math.sin(t)) for t in (st, st + sw / 2, st + sw)]
-        return BRepBuilderAPI_MakeEdge(GC_MakeArcOfCircle(p[0], p[1], p[2]).Value()).Edge()
-    cx, cy, r, _ = s["circle"]
-    ax = gp_Ax2(pl.pt(cx, cy), gp_Dir(*pl.z), gp_Dir(*pl.x))
-    return BRepBuilderAPI_MakeEdge(gp_Circ(ax, r)).Edge()
-
-
-def face(f):
-    pl = Plane(f["plane"])
-    wires = []
-    for lp in f["loops"]:
-        mw = BRepBuilderAPI_MakeWire()
-        for s in lp:
-            mw.Add(edge(pl, s))
-        wires.append(mw.Wire())
-    mf = BRepBuilderAPI_MakeFace(gp_Pln(pl.ax3()), wires[0])
-    for w in wires[1:]:
-        mf.Add(w)
-    fix = ShapeFix_Face(mf.Face())
-    fix.FixOrientation()
-    fix.Perform()
-    return fix.Face(), pl
-
-
-def tool(f):
-    if f["kind"] == "ball":
-        return BRepPrimAPI_MakeSphere(gp_Pnt(*f["center"]), f["radius"]).Shape()
-    fc, pl = face(f)
-    if f["kind"] == "extrude":
-        d = f["distance"]
-        return BRepPrimAPI_MakePrism(fc, gp_Vec(*[c * d for c in pl.z])).Shape()
-    ox, oy, dx, dy = f["axis"]
-    ax = gp_Ax1(pl.pt(ox, oy), gp_Dir(*pl.vec(dx, dy)))
-    return BRepPrimAPI_MakeRevol(fc, ax, f["angle"]).Shape()
-
-
-def combine(body, t, op, parallel, fuzzy):
-    algo = {"add": BRepAlgoAPI_Fuse, "cut": BRepAlgoAPI_Cut, "keep": BRepAlgoAPI_Common}[op]()
-    args, tools = ShapeList(), ShapeList()
-    args.Append(body)
-    tools.Append(t)
-    algo.SetArguments(args)
-    algo.SetTools(tools)
-    algo.SetRunParallel(parallel)
-    if fuzzy > 0:
-        algo.SetFuzzyValue(fuzzy)
-    algo.Build()
-    if not algo.IsDone():
-        raise RuntimeError(f"boolean {op} failed")
-    return algo.Shape()
-
-
-def round_edges(body, f):
-    """A fillet step: each point picks the edge nearest it."""
-    m = ShapeMap()
-    TopExp.MapShapes_s(body, TopAbs_EDGE, m)
-    edges = [TopoDS.Edge(m.FindKey(i)) for i in range(1, m.Extent() + 1)]
-    mk = BRepFilletAPI_MakeFillet(body)
-    for k, at in enumerate(f["at"]):
-        v = BRepBuilderAPI_MakeVertex(gp_Pnt(*at)).Vertex()
-
-        def dist(e):
-            d = BRepExtrema_DistShapeShape(v, e)
-            return d.Value() if d.IsDone() else math.inf
-
-        e = min(edges, key=dist)
-        if dist(e) > 1e-3:
-            raise RuntimeError(f"no edge through {at}")
-        mk.Add(f["radii"][k] if "radii" in f else f["radius"], e)
-    mk.Build()
-    if not mk.IsDone():
-        raise RuntimeError("fillet failed")
-    return mk.Shape()
-
-
-def build(features, parallel, fuzzy):
-    body = None
-    for i, f in enumerate(features):
-        try:
-            if f["kind"] == "fillet":
-                body = round_edges(body, f)
-                continue
-            t = tool(f)
-            body = t if f["op"] == "new" else combine(body, t, f["op"], parallel, fuzzy)
-        except Exception as e:
-            raise RuntimeError(f"feature {i}: {e}") from e
-    return body
+from build import Opts, build
 
 
 def count(shape, kind):
@@ -207,15 +97,17 @@ def face_areas(shape):
 
 
 def measure(shape):
+    valid = BRepCheck_Analyzer(shape).IsValid()
     g = GProp_GProps()
     BRepGProp.VolumeProperties_s(shape, g)
     vol = g.Mass()
     g = GProp_GProps()
     BRepGProp.SurfaceProperties_s(shape, g)
-    unify = ShapeUpgrade_UnifySameDomain(shape, True, True, False)
+    # on a copy: unifying changes the edges and faces the shape shares with its result
+    unify = ShapeUpgrade_UnifySameDomain(BRepBuilderAPI_Copy(shape).Shape(), True, True, False)
     unify.Build()
     return {
-        "valid": BRepCheck_Analyzer(shape).IsValid(),
+        "valid": valid,
         "volume": vol,
         "area": g.Mass(),
         "faces": count(shape, TopAbs_FACE),
@@ -233,7 +125,7 @@ def run_part(part, reps, parallel, fuzzy, conn):
         best, shape = math.inf, None
         for _ in range(reps):
             t = time.perf_counter()
-            shape = build(part["features"], parallel, fuzzy)
+            shape = build(part["features"], Opts(parallel, fuzzy))
             best = min(best, (time.perf_counter() - t) * 1e3)
         r = {"status": "ok", "ms": best}
         r.update(measure(shape))
@@ -251,7 +143,11 @@ def occt(part, reps, parallel, fuzzy, timeout):
     p.start()
     tx.close()
     got = rx.poll(timeout)
-    r = rx.recv() if got else None
+    try:
+        r = rx.recv() if got else None
+    except EOFError:
+        # the child died (OCCT crashed) before it answered
+        r = None
     p.join(1 if got else 0)
     if p.is_alive():
         p.kill()
@@ -288,7 +184,7 @@ def key(e):
     if s == "torus":
         n = unsigned(e["n"])
         return s, n + e["p"] + [e["R"], e["r"]]
-    return s, []
+    return "other", []
 
 
 def same(a, b):
@@ -302,7 +198,7 @@ def curvature(e):
         return 1.0 / e["r"]
     if s == "torus":
         return 1.0 / min(e["r"], e["R"])
-    if s == "cone":
+    if s in ("cone", "other", "procedural"):
         return 4.0 / max(math.sqrt(e["a"]), 1e-3)
     return 0.0
 
@@ -327,8 +223,9 @@ def surfaces(ours, ref):
     return groups
 
 
-def compare(ours, ref):
-    """How a ForgeCAD regen compares with OCCT, and the worst ratio of a difference to its bound."""
+def compare(ours, ref, loose=False):
+    """How a ForgeCAD regen compares with OCCT, and the worst ratio of a difference to its bound.
+    Loose (OCCT builds a feature its own way): volume and area within 1%, surfaces not compared."""
     s = ours["status"]
     if ref["status"] != "ok":
         return ("occt-" + ref["status"] if s == "ok" else "both-fail"), 0.0
@@ -343,22 +240,31 @@ def compare(ours, ref):
     vtol = max(chord * ref["area"], 1e-9)
     groups = surfaces(ours, ref)
     atol = max(sum(g["tol"] for g in groups), 1e-9)
+    if loose:
+        vtol, atol = max(vtol, 0.01 * abs(ref["volume"])), max(atol, 0.01 * ref["area"])
     rv = abs(ours["volume"] - ref["volume"]) / vtol
     ra = abs(ours["area"] - ref["area"]) / atol
-    rs = max([abs(g["a"][0] - g["a"][1]) / g["tol"] for g in groups if g["s"] != "other"] or [0.0])
+    # a surface one kernel holds exactly and the other only as a spline (fillets, pipes) is
+    # compared within the total area, not on its own
+    others = [sum(g["a"][i] for g in groups if g["s"] == "other") for i in (0, 1)]
+    fair = [g for g in groups if g["s"] != "other" and all(g["a"][i] > 0 or others[i] == 0 for i in (0, 1))]
+    # and where a kernel holds part of a surface as a spline, that spline's extra area is slack
+    slack = abs(others[0] - others[1])
+    rs = 0.0 if loose else max([max(abs(g["a"][0] - g["a"][1]) - slack, 0.0) / g["tol"] for g in fair] or [0.0])
     worst = max(rv, ra, rs)
+    pre = "loose-" if loose else ""
     if rv > 1:
-        return "volume", worst
+        return pre + "volume", worst
     if ra > 1:
-        return "area", worst
+        return pre + "area", worst
     if rs > 1:
         return "surface", worst
     if ours["shells"] != ref["shells"]:
-        return "shells", worst
-    return "agree", worst
+        return pre + "shells", worst
+    return pre + "agree", worst
 
 
-GOOD = ("agree", "reject-ok", "occt-invalid", "occt-error", "occt-timeout", "occt-crash", "occt-wrong")
+GOOD = ("agree", "loose-agree", "reject-ok", "occt-invalid", "occt-error", "occt-timeout", "occt-crash", "occt-wrong")
 
 
 def surface_counts(faces):
@@ -406,6 +312,7 @@ def main():
     ap.add_argument("--out")
     ap.add_argument("--show", type=int, default=1000, help="rows to print")
     ap.add_argument("--surfaces", action="store_true", help="print the mismatched surfaces of each part")
+    ap.add_argument("--errors", action="store_true", help="print why OCCT failed on each part it failed")
     ap.add_argument("--tiebreak", action="store_true",
                     help="settle volume disagreements by Monte Carlo against the analytic tools")
     ap.add_argument("--gate", action="store_true", help="exit 1 on any disagreement or failure of ours")
@@ -425,7 +332,8 @@ def main():
     tally, times, out, failing = {}, {"occt": 0.0, "seq": 0.0, "nary1": 0.0, "nary": 0.0}, [], []
     for i, (p, ref) in enumerate(zip(parts, refs)):
         f = p["forge"]
-        (vs, ws), (vn, wn) = compare(f["seq"], ref), compare(f["nary"], ref)
+        loose = bool(p.get("loose"))
+        (vs, ws), (vn, wn) = compare(f["seq"], ref, loose), compare(f["nary"], ref, loose)
         if a.tiebreak and "volume" in (vs, vn):
             try:
                 import montecarlo
@@ -452,9 +360,12 @@ def main():
         if i < a.show:
             faces = "/".join(str(x) for x in (ref.get("faces", "-"), ref.get("faces_unified", "-"),
                                               f["seq"].get("faces", "-"), f["nary"].get("faces", "-")))
-            print(f"{p['name']:<44} {len(p['features']):>4} {ref.get('ms', math.nan):>9.1f} "
+            mark = ("~" if loose else "") + ("|" if p.get("cut") else "")
+            print(f"{(p['name'] + mark)[:44]:<44} {len(p['features']):>4} {ref.get('ms', math.nan):>9.1f} "
                   f"{f['seq']['ms']:>8.1f} {f['nary1']['ms']:>8.1f} {f['nary']['ms']:>8.1f}  {ref['status']:<8} "
                   f"{vs:<10} {vn:<10} {max(ws, wn):>6.2f} {d(f['seq'], 'volume'):>8} {d(f['seq'], 'area'):>8}  {faces}")
+            if ref["status"] != "ok" and a.errors:
+                print(f"      occt: {ref.get('error', '')}")
             if a.surfaces and ref["status"] == "ok":
                 for path in ("seq", "nary"):
                     if f[path]["status"] != "ok":
@@ -466,6 +377,18 @@ def main():
         out.append({"name": p["name"], "occt": ref, "forge": f, "verdict": {"seq": vs, "nary": vn}})
     print(f"\n{len(parts)} parts. Time where all three succeed (ms, sum): OCCT {times['occt']:.0f}, "
           f"seq {times['seq']:.0f}, nary1 {times['nary1']:.0f}, nary x{data.get('threads')} {times['nary']:.0f}")
+    cuts, looses = {}, {}
+    for p in parts:
+        if p.get("cut"):
+            cuts.setdefault(p["cut"]["why"], []).append(p["name"])
+        for r in p.get("loose", []):
+            looses.setdefault(r, []).append(p["name"])
+    for title, d in (("cut short (| above; both kernels build the prefix)", cuts),
+                     ("compared loosely (~ above)", looses)):
+        if d:
+            print(title + ":")
+            for why, ns in sorted(d.items()):
+                print(f"   {len(ns):>3} {why}: {' '.join(ns[:8])}{' ...' if len(ns) > 8 else ''}")
     for path in ("seq", "nary"):
         print(f"{path}: " + ", ".join(f"{k} {len(v)}" for k, v in sorted(tally.get(path, {}).items())))
         for k, v in sorted(tally.get(path, {}).items()):

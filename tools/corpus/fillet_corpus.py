@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
 """The fillet and boolean hard-case corpus: writes tools/corpus/fillet.json.
 
-Each case is a part history in the oracle's JSON schema (examples/oracle.rs) plus fillet steps
-{"kind": "fillet", "radius": r, "at": [[x, y, z], ...], "radii": [...]}: each point lies on an edge
-to round (the edge nearest the point, so it survives an edge being split into pieces), "radii",
-if given, overrides the radius per edge. A fillet rounds every edge tangent-continuous with a
+Each case is a part history in the oracle's JSON schema (examples/oracle.rs, tools/occt/build.py),
+its fillets as {"kind": "fillet", "edges": [{"pts": [[x, y, z]], "law": [[[x, y, z], r]]}, ...]}:
+each point lies on an edge to round (the edge nearest the point, so it survives an edge being
+split into pieces), with its radius. A fillet rounds every edge tangent-continuous with a
 picked one, as every rolling-ball engine does; edges meeting at an angle are picked one by one.
 
 A case's "expect":
@@ -68,11 +68,11 @@ def rounded_rect(x0, y0, w, h, r):
 
 def box(x, y, z, w, h, d, op="new"):
     return {"kind": "extrude", "op": op, "plane": frame([x, y, z], [0, 0, 1], [1, 0, 0]),
-            "loops": [rect(0.0, 0.0, w, h)], "distance": float(d)}
+            "loops": [rect(0.0, 0.0, w, h)], "extent": {"d": float(d)}}
 
 
 def extrude(plane, loops, d, op):
-    return {"kind": "extrude", "op": op, "plane": plane, "loops": loops, "distance": float(d)}
+    return {"kind": "extrude", "op": op, "plane": plane, "loops": loops, "extent": {"d": float(d)}}
 
 
 def cyl(o, a, r, h, op="new", x=None):
@@ -86,7 +86,7 @@ def spun(o, a, pts, op="new"):
     # sketch x along u, sketch y along the axis: normal u x a
     n = [u[1] * a[2] - u[2] * a[1], u[2] * a[0] - u[0] * a[2], u[0] * a[1] - u[1] * a[0]]
     return {"kind": "revolve", "op": op, "plane": frame(o, n, u), "loops": [poly(pts)],
-            "axis": [0.0, 0.0, 0.0, 1.0], "angle": 2 * PI}
+            "axis": [0.0, 0.0, 0.0, 1.0], "turn": {"a": 2 * PI}}
 
 
 def ball(c, r, op="new"):
@@ -94,10 +94,9 @@ def ball(c, r, op="new"):
 
 
 def fillet(r, *at, radii=None):
-    f = {"kind": "fillet", "radius": float(r), "at": [list(map(float, p)) for p in at]}
-    if radii:
-        f["radii"] = list(map(float, radii))
-    return f
+    rs = list(map(float, radii)) if radii else [float(r)] * len(at)
+    pts = [list(map(float, p)) for p in at]
+    return {"kind": "fillet", "edges": [{"pts": [p], "law": [[p, q]]} for p, q in zip(pts, rs)]}
 
 
 def rim(cx, cy, r, z):
@@ -134,6 +133,7 @@ def cases():
     out = []
 
     def case(id, cls, description, why, features, expect, refs=()):
+        features = [dict(f, i=i) for i, f in enumerate(features)]
         out.append({"id": id, "class": cls, "description": description, "why": why,
                     "features": features, "expect": expect, "refs": list(refs)})
 

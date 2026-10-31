@@ -25,7 +25,7 @@ def evaluate(a, keep):
                          capture_output=True, text=True, check=True).stdout
     part = json.loads(out)["parts"][0]
     ref = oracle.occt(part, 1, False, 0.0, 120)
-    v = oracle.compare(part["forge"][a.path], ref)[0]
+    v = oracle.compare(part["forge"][a.path], ref, bool(part.get("loose")))[0]
     return v, part, ref
 
 

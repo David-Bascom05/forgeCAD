@@ -39,7 +39,9 @@ use forge_ops::{
 use forge_topo::{Body, Name};
 pub use hole::{End, Head, Hole, HoleError, Thread};
 pub use params::{On, Param, Sketch, Unit};
-pub use pattern::{At, Layout, PatternError, Row, Source, copy_sources, instance_name};
+pub use pattern::{
+    At, Layout, PatternError, Row, Source, body_motion, copy_sources, instance_name, placements,
+};
 use pattern::{instances, moved, moved_shape};
 pub use rib::{Rib, RibError};
 pub use standard::{Convention, Fit, Screw, Standard};
@@ -506,6 +508,15 @@ pub fn step(features: History<'_>, i: usize, body: Option<Body>) -> Result<Optio
         trace::step(i, &b, tools.first().map(|t| &t.0));
     }
     Ok(Some(b))
+}
+
+/// The analytic solids of feature `i`'s tools and how each combines, in the order they are
+/// applied: for checking against another kernel.
+pub fn tool_shapes(features: History<'_>, i: usize) -> Result<Vec<(Shape, Combine)>, RegenError> {
+    Ok(tools(features, i, false)?
+        .into_iter()
+        .map(|t| (t.2, t.1))
+        .collect())
 }
 
 /// Whether a feature makes a new body.

@@ -128,8 +128,8 @@ fn bad(feature: usize) -> impl Fn(ExtentError) -> RegenError {
     move |error| RegenError::Extent { feature, error }
 }
 
-/// The surface a target names.
-pub(crate) fn surface(features: History<'_>, i: usize, t: &Target) -> Result<Surface, RegenError> {
+/// The surface a target names (pub for checking against another kernel).
+pub fn surface(features: History<'_>, i: usize, t: &Target) -> Result<Surface, RegenError> {
     let (k, name) = match *t {
         Target::Plane(k) => {
             return match features.get(k) {

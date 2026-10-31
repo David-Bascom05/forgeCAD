@@ -114,6 +114,7 @@ dependencies = [
 name = "forge-model"
 version = "0.1.0"
 dependencies = [
+ "forge-agent",
  "forge-bool",
  "forge-font",
  "forge-geom",

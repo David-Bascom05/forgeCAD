@@ -180,6 +180,27 @@ pub fn copy_sources(
         .collect())
 }
 
+/// Each copy pattern `i`'s layout makes, as the affine map it is: the images of x, y and z and
+/// of the origin (a reflection for a mirror), for checking against another kernel.
+pub fn placements(features: History<'_>, i: usize, layout: &Layout) -> Result<Vec<[Point3; 4]>, RegenError> {
+    Ok(instances(features, i, layout)?
+        .iter()
+        .map(|(_, m)| columns(m))
+        .collect())
+}
+
+/// A body move's steps as the affine map they make (as `placements` gives it).
+pub fn body_motion(steps: &[crate::Step]) -> [Point3; 4] {
+    columns(&crate::bodies::motion(steps))
+}
+
+fn columns(m: &Motion) -> [Point3; 4] {
+    let o = Point3::ORIGIN;
+    let at = m.point(o);
+    let col = |v: Vec3| Point3::ORIGIN + (m.point(o + v) - at);
+    [col(Vec3::X), col(Vec3::Y), col(Vec3::Z), at]
+}
+
 /// Every copy pattern `i`'s layout makes (the original left out), keyed by its place in it.
 pub(crate) fn instances(
     features: History<'_>,
