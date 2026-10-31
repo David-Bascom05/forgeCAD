@@ -138,6 +138,8 @@ impl Part {
         shapes: bool,
         batch: Option<&dyn forge_bool::Batch>,
     ) -> Result<Body, RegenError> {
+        // wasm has no threads
+        let threads = if cfg!(target_family = "wasm") { 1 } else { threads };
         nary_regen(&self.features, threads, shapes, batch)
     }
 
@@ -174,6 +176,13 @@ impl Part {
 
 /// Builds the tools of `feats` (feature ids from `start`) on up to `threads` threads.
 fn build_tools(feats: &[Feature], start: usize, threads: usize) -> Result<Vec<(Body, Combine)>, RegenError> {
+    if threads <= 1 {
+        return feats
+            .iter()
+            .enumerate()
+            .map(|(k, f)| tool(start + k, f))
+            .collect();
+    }
     let built: Vec<Result<(Body, Combine), RegenError>> = std::thread::scope(|s| {
         let chunk = feats.len().div_ceil(threads.max(1));
         let hs: Vec<_> = feats
