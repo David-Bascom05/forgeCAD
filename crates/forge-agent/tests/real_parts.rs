@@ -38,7 +38,6 @@ thread hole hole1 12
 /// half arc names its joints alike, and a fillet after a pattern misses its edges n-ary, two
 /// separate bugs.)
 #[test]
-#[ignore = "tracer branch ending on a corner-patch rim; corner-3 agent fixing"]
 fn drafted_rib_into_blend() {
     builds_valid(
         "extrude 95 rect -120 -65 240 130

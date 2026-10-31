@@ -1500,6 +1500,9 @@ pub(crate) fn trim(
     let mut ts: Vec<(f64, usize)> = Vec::new();
     // edges the curve runs along: (side, edge, is a seam)
     let mut along: Vec<(Side, EdgeId, bool)> = Vec::new();
+    // a traced branch's ends, where it may stop on an edge
+    let ends = (!closed && domain.lo.is_finite() && domain.hi.is_finite())
+        .then(|| [range.lo, range.hi].map(|t| (t, curve.eval(t))));
     // an edge whose box misses the curve's cannot cut it (big faces have hundreds of edges)
     let reach = curve.bbox(range).grow(tol::LINEAR);
     for k in 0..2 {
@@ -1638,6 +1641,31 @@ pub(crate) fn trim(
                             point: h.point,
                             tol,
                             touch: grazing || branches[1],
+                        });
+                    }
+                }
+                // a traced branch stopping on the edge (on the rim of a face it runs over, past
+                // which that surface's implicit no longer vanishes) crosses nothing there: it is
+                // cut where it ends
+                for &(t, p) in ends.iter().flatten() {
+                    if !body.edge_box(e).grow(tol::LINEAR).contains(p)
+                        || cuts[first..].iter().any(|x| {
+                            x.on == CutOn::Edge(side, e) && x.point.distance(p) <= x.tol.max(tol::LINEAR)
+                        })
+                    {
+                        continue;
+                    }
+                    if let Some((s, tol)) = on_edge(body, e, p)
+                        && index[1 - k].face_box(faces[1 - k]).grow(tol::LINEAR).contains(p)
+                        && index[1 - k].point_in_face(faces[1 - k], p) != Where::Outside
+                    {
+                        ts.push((t, cuts.len()));
+                        cuts.push(Cut {
+                            on: CutOn::Edge(side, e),
+                            s,
+                            point: p,
+                            tol,
+                            touch: branches[1],
                         });
                     }
                 }
