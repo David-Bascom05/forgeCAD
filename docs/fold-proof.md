@@ -540,7 +540,7 @@ Four- to six-edge corners (8-12-sided holes) would raise the degree further (B_i
 Measurement code and how to rerun it: `research/corner-patch/`.
 
 `crates/forge-geom/src/corner/rational.rs` (`Quad`) and `close_hole_rational`, `plans` and
-`Cells` in `corner.rs`. Builds still use today's patch ("Switching builds").
+`Cells` in `corner.rs`. Builds use it only where today's patch has none ("Switching builds").
 
 ### Construction
 
@@ -809,7 +809,8 @@ carried-on implicit (main today) the octree seeds a second branch past the patch
 there), traced 1e-4 beside the first, and the two pieces broke the boolean's classification;
 with the signed distance back (loft-speed's cc3135e) the single branch ends exactly on the
 patch's rim edge at z = 16 and gets no cut there, and classification fails elsewhere. Today's
-patch passes both ways. So builds stay on today's patch: the switch is the one-line change in
+patch passes both ways. So builds stay on today's patch where it closes the hole, and take the
+rational quads only where it has none (more than twelve sides, every way folding): the switch is the one-line change in
 `patch` once the tracer cuts a branch ending on a face's rim (or carries it across through the
 face domain), after loft-speed lands.
 

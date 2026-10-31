@@ -1,7 +1,9 @@
 //! Vertex blends where blends meet at a vertex: where each blend stops (its setback), the
 //! trim curve that ends each face there, and the surface that closes the remaining hole.
 
-use forge_geom::corner::{Closing, Side, SurfaceRail, close_hole, foot_velocity, trim_curve};
+use forge_geom::corner::{
+    Closing, Side, SurfaceRail, close_hole, close_hole_rational, foot_velocity, trim_curve,
+};
 use forge_geom::{Curve, CurveGeom, Surface};
 use forge_math::{Interval, Point3, Vec3, dmath, tol};
 use std::sync::Arc;
@@ -234,10 +236,13 @@ fn plan(c: &CornerInput) -> Result<Plan, String> {
 }
 
 /// The surfaces closing the hole: the exact sphere where one ball fits, else the n-sided
-/// patch, or patches round a centre point where that would fold.
+/// patch, or patches round a centre point where that would fold, else (more than twelve sides,
+/// every way folding) rational quads proven never to fold.
 pub fn patch(_c: &CornerInput, hole: &[HoleSide]) -> Option<Result<CornerPatch, String>> {
     let sides: Vec<Side> = hole.iter().map(hole_side).collect();
-    Some(match close_hole(sides) {
+    // the rational quads cost about twice today's patch: only where today's has none
+    let closing = close_hole(sides.clone()).or_else(|e| close_hole_rational(sides).map(|c| c.0).ok_or(e));
+    Some(match closing {
         Ok(Closing::One(surface, same_sense)) => Ok(CornerPatch {
             inner: Vec::new(),
             faces: vec![PatchFace {
@@ -508,6 +513,47 @@ mod tests {
             let b = build(&c);
             check_hole(&b.sides, &format!("case {case}"), 1000 + case, false);
         }
+    }
+
+    #[test]
+    fn holes_past_todays_patch_close_with_rational_quads() {
+        // corners of seven fillets round a cone: fourteen sides, more than today's patch takes
+        let mut rng = Rng::new(81);
+        let mut closed = 0;
+        for _ in 0..6 {
+            let n = 7;
+            let dirs: Vec<Vec3> = (0..n)
+                .map(|i| {
+                    let (s, c) = dmath::sin_cos((i as f64 + rng.range(-0.15, 0.15)) * dmath::TAU / n as f64);
+                    Vec3::new(c, s, -rng.range(0.4, 1.5))
+                })
+                .collect();
+            let normals = convex_normals(&dirs);
+            let r: Vec<Option<(f64, bool)>> = (0..n).map(|_| Some((rng.range(0.5, 2.0), true))).collect();
+            let c = corner(Point3::new(0.5, -1.0, 2.0), &dirs, &normals, &r);
+            let Some(s) = setbacks(&c) else { continue };
+            let Ok(trims) = face_curves(&c, &s) else { continue };
+            let h = hole(&c, &s, &trims);
+            assert!(
+                close_hole(sides(&h)).is_err(),
+                "today's patch takes {} sides",
+                h.len()
+            );
+            if let Some(Ok(p)) = patch(&c, &h) {
+                use forge_geom::SurfaceGeom;
+                let f = &p.faces[0].surface;
+                assert!(matches!(f, Surface::Procedural(_)));
+                // the face runs through its sides
+                for side in sides(&h) {
+                    for k in 0..=8 {
+                        let q = side.rail.jet(side.t0 + (side.t1 - side.t0) * k as f64 / 8.0).p;
+                        assert!(f.eval(f.project(q)).distance(q) < 1e-9, "a side leaves the face");
+                    }
+                }
+                closed += 1;
+            }
+        }
+        assert!(closed >= 3, "{closed} of 6 closed");
     }
 
     #[test]
