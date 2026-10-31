@@ -45,3 +45,8 @@ fn crank() {
 fn frame() {
     meshes(include_str!("parts/frame.fc"));
 }
+
+#[test]
+fn balls_at_pole() {
+    meshes(include_str!("parts/balls-at-pole.fc"));
+}

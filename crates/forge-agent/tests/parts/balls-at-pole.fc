@@ -1,0 +1,6 @@
+# balls whose seams meet at a sphere's pole: once failed to mesh (ConstraintsIntersect)
+extrude new 10 rect 0 0 60 40
+ball add 5.9 -xz at 28.3 38.3 10
+ball add 2.93 -xz at 28.29 32.44 10
+extrude cut 20 at 28.29 32.44 -1 circle 0 0 1
+ball cut 3.9 -xz at 31.3 34.7 10
