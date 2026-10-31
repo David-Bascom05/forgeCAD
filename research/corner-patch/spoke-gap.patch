@@ -1,0 +1,20 @@
+diff --git a/crates/forge-geom/src/corner.rs b/crates/forge-geom/src/corner.rs
+index 2a54aa4..d5bdd2b 100644
+--- a/crates/forge-geom/src/corner.rs
++++ b/crates/forge-geom/src/corner.rs
+@@ -904,6 +904,15 @@ fn spokes(
+     // other pinch the quads between them there (curvature 6x to 20x today's patch's, and false
+     // projection minima: research/corner-patch)
+     let share = dmath::TAU / leave.len().max(1) as f64;
++    if std::env::var_os("SPOKEGAP").is_some() {
++        let gap = (0..leave.len())
++            .map(|i| {
++                let (a, b) = (leave[i], leave[(i + 1) % leave.len()]);
++                dmath::atan2(a.cross(b).length(), a.dot(b)).to_degrees()
++            })
++            .fold(f64::INFINITY, f64::min);
++        eprintln!("SPOKEGAP {gap:.2} of {:.1} sides {m}", share.to_degrees());
++    }
+     for i in 0..leave.len() {
+         let (a, b) = (leave[i], leave[(i + 1) % leave.len()]);
+         if dmath::atan2(a.cross(b).length(), a.dot(b)) < 0.25 * share {

@@ -540,7 +540,7 @@ Four- to six-edge corners (8-12-sided holes) would raise the degree further (B_i
 Measurement code and how to rerun it: `research/corner-patch/`.
 
 `crates/forge-geom/src/corner/rational.rs` (`Quad`) and `close_hole_rational`, `plans` and
-`Cells` in `corner.rs`. Still not used in builds.
+`Cells` in `corner.rs`. Builds still use today's patch ("Switching builds").
 
 ### Construction
 
@@ -770,6 +770,48 @@ housing, coplanar, patterns, mixed, hole-grid, tour, upto, upto-flat) close no c
 so they would not move; but where a part has corners, the corner is most of its regen and the
 switch costs 1.3x to 4.3x the whole part, far past the gate's 0.5%. Builds stay on today's
 patch until the proof is cheaper.
+
+**Switched, then held back** (after the proof in lanes, cold 1.8x-2.0x today's per hole):
+`forge_ops::corner::patch` closing a hole with `close_hole_rational`, falling back to
+`close_hole` when no plan proves or builds. Regen instructions (millions; today, switched):
+
+```
+box-corner-unequal 3.41 6.28   two-blends-sharp-edge 2.70 6.05   step-mixed-corner 4.53 7.61
+pocket-unequal-corners 13.00 24.58   box-corner-variable 9.04 10.47   apex-four-unequal 7.41 10.62
+apex-variable 16.79 18.25   pit-four 13.93 17.17   roof-boss-on-ridge 6.59 10.67
+roof-slot-on-ridge 6.55 10.06   apex-five-unequal 9.43 13.34   pit-five 19.89 23.68
+roof-diamond-on-ridge 8.17 8.59 (falls back)
+```
+
+Two things the switch turned up on the fillet corpus:
+
+- **Spokes pinched at the centre.** The spokes leave the centre toward their vertices projected
+  into the centre's tangent plane; on a hole far from flat (roof-diamond-on-ridge, a diamond
+  boss astride a ridge) two of those projections nearly coincide (0.5 degrees apart), the
+  quad between them is pinched there, and the patch, though proven regular, has a normal
+  curvature of 78 against today's 4.9 (radius 0.013 on a fillet of ~1): the mesher's chord
+  check failed (25 chords off at 0.002) and projection found false minima. The smallest angle
+  between consecutive spokes at the centre, over the corpus: 0.5 (roof-diamond), 12.7
+  (roof-boss, curvature 14 against 2.3), then 51 and up; over the survey's 10-sided holes 16.8
+  (curvature 296 against 18), then 26 and up. `spokes` now refuses a plan whose spokes leave
+  the centre within a quarter of an even share of the turn of each other (18 degrees for five
+  spokes): roof-diamond falls back to today's patch, roof-boss takes its second plan (curvature
+  10), the survey proves 120 / 120 / 118 (the two refused are the 296x outliers) and the
+  sharp-edge counts are unchanged.
+- **Projection started in the wrong cell.** Newton from each cell's nearest seed started in
+  the cell the seed is deepest in; a seed on a seam belongs to both, so both runs started on
+  one side. It now starts in the seed's own cell.
+
+Fillet corpus meshes, reliability (0 worse of 534) and forge-proof's metamorphic checks (no
+new failure) all passed switched, but forge-agent's `drafted_rib_into_blend` (R3) did not:
+the drafted rib's plane meets the rational patch of the feet's fillet corner. With the
+carried-on implicit (main today) the octree seeds a second branch past the patch's rim (zero
+there), traced 1e-4 beside the first, and the two pieces broke the boolean's classification;
+with the signed distance back (loft-speed's cc3135e) the single branch ends exactly on the
+patch's rim edge at z = 16 and gets no cut there, and classification fails elsewhere. Today's
+patch passes both ways. So builds stay on today's patch: the switch is the one-line change in
+`patch` once the tracer cuts a branch ending on a face's rim (or carries it across through the
+face domain), after loft-speed lands.
 
 ### Also done here
 

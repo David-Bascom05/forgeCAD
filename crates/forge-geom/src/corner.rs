@@ -868,6 +868,7 @@ fn spokes(
     };
     let mut spokes = Vec::with_capacity(at.len());
     let mut rails: Vec<(Arc<dyn Rail>, Interval)> = Vec::with_capacity(at.len());
+    let mut leave = Vec::with_capacity(at.len());
     for &k in at {
         let (v, nv, dir) = vertex(sides, k % m).ok_or(CornerError::Orientation(k % m))?;
         let l = v.distance(c);
@@ -876,6 +877,7 @@ fn spokes(
             // a third of the way along the halving direction, and straight toward the vertex
             // (fitted lengths fold: research/corner-patch)
             let e = toward.normalize().ok_or(CornerError::Folded)?.get();
+            leave.push(e);
             let ctrl = [v, v + dir * (l / 3.0), c + e * (l / 3.0), c];
             let curve = Curve::Procedural(crate::curve::ProcCurve(Arc::new(Cubic(ctrl))));
             rails.push((Arc::new(SpokeRail::cubic(ctrl, nv, nc)), Interval::new(0.0, 1.0)));
@@ -897,6 +899,16 @@ fn spokes(
         let (curve, range) = bezier_parabola(v, q, c).ok_or(CornerError::Orientation(k % m))?;
         rails.push((Arc::new(SpokeRail::new(curve.clone(), range, nv, nc)), range));
         spokes.push((k % m, curve, range));
+    }
+    // cubic spokes leaving the centre within a quarter of an even share of the turn of each
+    // other pinch the quads between them there (curvature 6x to 20x today's patch's, and false
+    // projection minima: research/corner-patch)
+    let share = dmath::TAU / leave.len().max(1) as f64;
+    for i in 0..leave.len() {
+        let (a, b) = (leave[i], leave[(i + 1) % leave.len()]);
+        if dmath::atan2(a.cross(b).length(), a.dot(b)) < 0.25 * share {
+            return Err(CornerError::Folded);
+        }
     }
     Ok((c, spokes, rails))
 }
@@ -1236,17 +1248,16 @@ impl Cells {
         let (u, v, gu, gv) = self.local(c, x);
         self.cells[c].0.eval::<S>(u, v, gu, gv)
     }
-    /// The domain point nearest p's, from x: Newton in x's cell, then into the neighbouring
-    /// cell while the nearest point is on their seam and the distance falls across it.
-    fn project(&self, p: Point3, x: Point2) -> Point2 {
+    /// The domain point nearest p's, from x in cell c: Newton in that cell, then into the
+    /// neighbouring cell while the nearest point is on their seam and the distance falls across it.
+    fn project(&self, p: Point3, c: usize, x: Point2) -> Point2 {
         const SQUARE: [(Vec2, f64); 4] = [
             (Vec2::Y, 0.0),
             (Vec2::new(-1.0, 0.0), 1.0),
             (Vec2::new(0.0, -1.0), 1.0),
             (Vec2::X, 0.0),
         ];
-        let m = self.cells.len();
-        let mut c = self.cell_of(x).0;
+        let (m, mut c) = (self.cells.len(), c);
         let (u, v, _, _) = self.local(c, x);
         let mut y = Point2::new(u.clamp(0.0, 1.0), v.clamp(0.0, 1.0));
         let deriv = |c: usize, y: Point2| surf_deriv(self.cells[c].0.eval::<J>(y.x, y.y, Vec2::X, Vec2::Y));
@@ -2116,7 +2127,8 @@ impl Procedural for HolePatch {
                     .min_by(|a, b| a.0.total_cmp(&b.0))
                     .expect("cells have seeds");
                 if near.0 <= 4.0 * f {
-                    let y = r.project(p, near.1);
+                    // in the seed's own cell: a seed on a seam belongs to both
+                    let y = r.project(p, c, near.1);
                     let e = self.point(y).distance_sq(p);
                     if e < best.0 {
                         best = (e, y);

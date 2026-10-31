@@ -32,9 +32,18 @@ in `docs/fold-proof.md` (stages 0 to 4); this folder holds the code that produce
 - **`HolePatch::min_radius` is zero round a kinked corner**: `kmin.rs` (dense 300 x 300
   curvature sampling of the fillet corpus' corner patches).
 - **What switching builds would cost whole parts** (docs/fold-proof.md stage 4 "Switching
-  builds"): `switch.patch` routes `forge_ops::corner::patch` through `close_hole_rational`
-  when CORNER_RATIONAL is set (falling back to `close_hole`) and logs each hole's path with
-  CORNER_LOG; `corpus.rs` regenerates one fillet-corpus case; `switch.sh` counts both.
+  builds"): `switch.patch` (against the tree before the switch, 69981df) routes
+  `forge_ops::corner::patch` through `close_hole_rational` when CORNER_RATIONAL is set (falling
+  back to `close_hole`) and logs each hole's path with CORNER_LOG; `corpus.rs` regenerates one
+  fillet-corpus case; `switch.sh` counts both. Since the switch, builds take that path always:
+  the switched column is `corpus.rs` under `perf stat` on the current tree.
+- **The spread guard at the centre** (`spokes` in `corner.rs` refuses cubic spokes leaving the
+  centre within a quarter of an even share of the turn of each other): `spoke-gap.patch` prints
+  each plan's smallest angle between consecutive spokes there (SPOKEGAP=1) for the corpus
+  (`corpus.rs`), `rq.rs` (with PER=1, beside each hole's kmax rational/today) and `sharp.rs`;
+  the curvature of the corpus faces was sampled with a 400 x 400 grid of normal curvatures
+  (|P_uu . n| / |P_u|^2 and the same in v) over each procedural face. docs/fold-proof.md stage 4
+  "Switching builds" has the numbers.
 - **The stage 1 n-gon rational patch** (superseded by the quads, kept in the record):
   `rational_compare.rs`, the stage 1 table in `docs/fold-proof.md`.
 
