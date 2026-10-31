@@ -646,6 +646,33 @@ fn plan(a: &Body, b: &Body, op: Op, scratch: &mut Scratch) -> R<Plan> {
         &mut marks,
     );
     let mut vnames = vertex_names(&new_points, marks, root, &part_frame(a), None);
+    // a piece of a cut edge keeps the whole edge's name, so an earlier boolean that cut it may
+    // have named the vertex it made from the same marks: then a name here passes over the ends
+    // of the edges cut (rare: looked for only at the new vertices' own edges)
+    let end_names = |sd: Side, e: EdgeId| {
+        let x = bodies[sd].edge(e);
+        [bodies[sd].vertex(x.start).name, bodies[sd].vertex(x.end).name]
+    };
+    let clash = cuts
+        .iter()
+        .zip(&cut_vertex)
+        .any(|(c, &k)| match (k, c.on.edge()) {
+            (VKey::New(i), Some((sd, e))) => end_names(sd, e).contains(&vnames[i as usize]),
+            _ => false,
+        });
+    if clash {
+        let mut old: Vec<Name> = cuts
+            .iter()
+            .filter_map(|c| c.on.edge())
+            .flat_map(|(sd, e)| end_names(sd, e))
+            .collect();
+        old.sort_unstable();
+        for n in &mut vnames {
+            while old.binary_search(n).is_ok() {
+                *n = n.with(1);
+            }
+        }
+    }
     // closed new edges' own vertices (added after the cuts' below)
     vnames.extend(segs.iter().map(|s| s.name.with_str("seam")));
     // cut points of one vertex differ by up to their tolerance: a new vertex settles on the point

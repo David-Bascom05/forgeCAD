@@ -288,3 +288,16 @@ fn the_same_cut_twice() {
         "extrude 20 rect 0 0 40 30\nextrude cut 5 at 10 10 20 circle 0 0 3\nextrude cut 5 at 10 10 20 circle 0 0 3\nextrude add 4 at 30 20 20 rect 0 0 5 5\nextrude add 4 at 30 20 20 rect 0 0 5 5\n",
     );
 }
+
+/// Two pads on a block meeting along a vertical line, then a tilted rod added across that line
+/// (forge-proof boolean on coplanar_stack 3): the rod cut the line's edge where the pads' boolean
+/// had already named its end vertex from the same mark, and the new vertex took the same name
+/// (DuplicateName). A name taken by an end of an edge being cut is passed over.
+#[test]
+fn a_cut_edge_end_keeps_its_name() {
+    builds_valid("extrude new 10 rect 0 0 80 60
+extrude add 3 at 25 9 10 rect 0 0 8 14
+extrude add 5 at 19 22 10 rect 0 0 15 5
+extrude add 6.017499452448846 axes -0.5628109381814766 0.8248369920439879 -0.053738109560276845 -0.7295934329388352 -0.4651627293351574 0.5013153277628689 0.3885064613051005 0.32135272177670027 0.8635943247444919 at 20.88144878342117 34.84501838629821 7.74183659105474 circle 0 0 12.659848035169743
+");
+}
