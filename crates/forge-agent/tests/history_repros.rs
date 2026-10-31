@@ -301,3 +301,16 @@ extrude add 5 at 19 22 10 rect 0 0 15 5
 extrude add 6.017499452448846 axes -0.5628109381814766 0.8248369920439879 -0.053738109560276845 -0.7295934329388352 -0.4651627293351574 0.5013153277628689 0.3885064613051005 0.32135272177670027 0.8635943247444919 at 20.88144878342117 34.84501838629821 7.74183659105474 circle 0 0 12.659848035169743
 ");
 }
+
+/// A smooth loft added over a revolve and a countersunk hole on a slanted plane (history r12): the
+/// loft's face split crossed itself, a traced curve ending inside a face, not on an edge. It
+/// builds valid on 982b866 (and n-ary); kept so it stays that way.
+#[test]
+fn loft_over_slanted_revolve_and_countersink() {
+    builds_valid("L0: extrude 21.4 circle 0 0 17.88
+L9: plane z -0.88 0.48 0 at -16.75 -1.13 0.96
+L10: revolve add to L9 off 5 xz at -16.75 -1.13 -0.02 circle 7.24 -1.22 1.37
+L11: hole 1.51 z 0.951 0.008 0.309 at -13.57 0.48 5.38 cs 3.26 120 2.88
+L14: loft add smooth profile xy at -10.84 1.08 6.03 rect -1.16 -1.16 2.32 2.32 profile xy at -10.84 1.08 16.12 rect -5.02 -5.02 10.04 10.04 profile xy at -10.84 1.08 28.29 rect -3.98 -3.98 7.96 7.96
+");
+}
