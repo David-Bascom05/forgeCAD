@@ -529,6 +529,11 @@ fn plain(sh: &Shape, op: f64, segs: &mut Vec<f64>) -> [f64; TOOL] {
             t[4..7].copy_from_slice(&[center.x, center.y, center.z]);
             t[16] = *radius;
         }
+        // a ball of no radius the kernel can compare: every point in its box is near
+        Shape::Brep => {
+            t[0] = 2.0;
+            t[16] = f64::NAN;
+        }
         Shape::Csg { .. } => unreachable!("a combination's parts are plain"),
     }
     t

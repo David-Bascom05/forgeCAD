@@ -325,6 +325,7 @@ pub(crate) fn moved_shape(s: &Shape, m: &Motion) -> Shape {
             first: Box::new(moved_shape(first, m)),
             rest: rest.iter().map(|(op, s)| (*op, moved_shape(s, m))).collect(),
         },
+        (Shape::Brep, _) => Shape::Brep,
         (Shape::Ball { center, radius }, _) => Shape::Ball {
             center: m.point(*center),
             radius: *radius,

@@ -54,6 +54,8 @@ pub enum Shape {
         first: Box<Shape>,
         rest: Vec<(Op, Shape)>,
     },
+    /// A solid with no analytic test here (a sweep, coil or loft): its B-rep decides every point.
+    Brep,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -227,6 +229,7 @@ impl Shape {
                 }
                 v
             }
+            Shape::Brep => Member::Near,
             Shape::Ball { center, radius } => {
                 let d = p.distance(*center);
                 if d < radius - m {

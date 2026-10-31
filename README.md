@@ -23,7 +23,7 @@ Units are millimetres. Tolerances live in `forge_math::tol`.
 | `forge-geom` | curves, surfaces, intersections |
 | `forge-topo` | B-rep bodies, stable names, the validity checker |
 | `forge-sketch` | 2D sketches, geometric constraint solver, profile extraction |
-| `forge-ops` | profiles, extrude, revolve |
+| `forge-ops` | profiles, extrude, revolve, sweep, coil, loft |
 | `forge-mesh` | exact predicates, constrained Delaunay, tessellation, STL |
 | `forge-model` | part histories and regenerating them |
 | `forge-agent` | the `.fc` part file, selectors, measuring, rendering, incremental sessions |

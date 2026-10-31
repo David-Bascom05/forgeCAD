@@ -826,6 +826,7 @@ pub(crate) fn named_surface(f: &Feature, k: usize, name: Name) -> Option<Surface
 /// Where a plain solid's boundary may cross the line `o + t d`: each t with the surface there.
 fn hits(sh: &Shape, o: Point3, d: Vec3, out: &mut Vec<(f64, Option<Surface>)>) {
     match sh {
+        Shape::Brep => {}
         Shape::Csg { first, rest } => {
             hits(first, o, d, out);
             for (_, p) in rest {

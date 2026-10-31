@@ -709,6 +709,9 @@ fn error_kind(e: &crate::RegenError) -> (String, usize) {
         Hole { feature, error } => (format!("Hole({error:?})"), *feature),
         Extent { feature, error } => (format!("Extent({error:?})"), *feature),
         Pattern { feature, error } => (format!("Pattern({error:?})"), *feature),
+        Sweep { feature, error } => (format!("Sweep({error:?})"), *feature),
+        Coil { feature, error } => (format!("Coil({error:?})"), *feature),
+        Loft { feature, error } => (format!("Loft({error:?})"), *feature),
     }
 }
 

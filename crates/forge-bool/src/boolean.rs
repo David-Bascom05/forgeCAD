@@ -1543,6 +1543,11 @@ pub(crate) fn trim(
 /// one surface, like revolve halves) the plane through the edge, across it.
 pub(crate) fn across(body: &Body, f: FaceId, c: forge_topo::CoedgeId) -> R<Surface> {
     let edge = body.edge(body.coedge(c).edge);
+    if let Curve::Procedural(pc) = &edge.curve
+        && let Some(s) = pc.across()
+    {
+        return Ok(s);
+    }
     let t = edge.range.mid();
     let d = edge.curve.deriv(t);
     let s = &body.face(f).surface;
@@ -1550,13 +1555,18 @@ pub(crate) fn across(body: &Body, f: FaceId, c: forge_topo::CoedgeId) -> R<Surfa
         .normal(s.project(d.p))
         .ok_or(BoolError::Internal("edge at a singular point"))?;
     // a surface through the edge, across this one: the edge's own plane for a conic (the
-    // cylinder on a circle lying in a planar face), or the plane holding a line and the normal
+    // cylinder on a circle lying in a planar face or touching it), or the plane holding a line
+    // and the normal
     let edge_plane = || -> R<Surface> {
         Ok(match &edge.curve {
-            Curve::Circle(k) if matches!(s, Surface::Plane(_)) => Surface::Cylinder(Cylinder {
-                frame: k.frame,
-                radius: k.radius,
-            }),
+            // in a planar face, or where its plane touches the face (a swept tube's side): the
+            // cylinder through it stands across the face
+            Curve::Circle(k) if matches!(s, Surface::Plane(_)) || n.dot(k.frame.z()).abs() > 1.0 - 1e-6 => {
+                Surface::Cylinder(Cylinder {
+                    frame: k.frame,
+                    radius: k.radius,
+                })
+            }
             Curve::Circle(k) => Surface::Plane(Plane::new(k.frame)),
             Curve::Ellipse(e) => Surface::Plane(Plane::new(e.frame)),
             _ => {

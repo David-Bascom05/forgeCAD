@@ -338,7 +338,8 @@ fn march(
 ) -> Option<(Vec<Point3>, bool)> {
     let mut pts = vec![p0];
     let mut p = p0;
-    let max = (4.0 * bounds.diagonal() / step) as usize + 16;
+    // a helix winds many times its box's size
+    let max = (64.0 * bounds.diagonal() / step) as usize + 16;
     for k in 0..max {
         let d = direction(a, b, p)? * sign;
         // a predictor along the tangent, then back onto both surfaces in the plane across it

@@ -9,6 +9,8 @@ pub mod intcurve;
 pub mod intersect;
 pub mod meet;
 mod meet_gen;
+pub mod ruled;
+pub mod screw;
 pub mod surface;
 #[doc(hidden)]
 pub mod testing;

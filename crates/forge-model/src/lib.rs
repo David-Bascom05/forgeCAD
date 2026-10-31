@@ -7,6 +7,7 @@ pub mod finishing;
 pub mod hole;
 pub mod pattern;
 pub mod suite;
+pub mod swept;
 pub mod torture;
 mod trace;
 mod upto;
@@ -24,6 +25,7 @@ use forge_topo::{Body, Name};
 pub use hole::{End, Head, Hole, HoleError, Thread};
 pub use pattern::{Layout, PatternError, Row, Source, instance_name};
 use pattern::{instances, moved, moved_shape};
+pub use swept::{Coil, Loft, Sweep};
 
 /// One step of a part's history.
 #[derive(Clone, Debug, PartialEq)]
@@ -65,6 +67,12 @@ pub enum Feature {
     Pattern { of: Source, layout: Layout },
     /// A work plane (the frame's xy) for later extents to end at; it makes nothing.
     Plane(Frame),
+    /// A profile swept along a path of lines and arcs.
+    Sweep(Box<Sweep>),
+    /// A profile wound about an axis.
+    Coil(Box<Coil>),
+    /// Ruled walls through two or more profiles.
+    Loft(Box<Loft>),
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -122,6 +130,18 @@ pub enum RegenError {
     Pattern {
         feature: usize,
         error: PatternError,
+    },
+    Sweep {
+        feature: usize,
+        error: forge_ops::SweepError,
+    },
+    Coil {
+        feature: usize,
+        error: forge_ops::CoilError,
+    },
+    Loft {
+        feature: usize,
+        error: forge_ops::LoftError,
     },
     /// A feature that combines with or changes the part came before any part existed.
     NothingToCombine {
@@ -312,7 +332,7 @@ fn starts(f: &Feature) -> bool {
         Feature::Extrude { op: Combine::New, .. }
             | Feature::Revolve { op: Combine::New, .. }
             | Feature::Ball { op: Combine::New, .. }
-    )
+    ) || swept::op(f) == Some(Combine::New)
 }
 
 /// Whether a feature changes the part as a whole, rather than making tools to combine with it.
@@ -603,10 +623,11 @@ fn solids_of(features: &[Feature], s: usize, build: bool) -> Result<Vec<Tool>, R
 fn tool(i: usize, f: &Feature, build: bool) -> Result<Tool, RegenError> {
     let id = i as u64 + 1;
     if !build {
-        let (Feature::Extrude { op, .. } | Feature::Revolve { op, .. } | Feature::Ball { op, .. }) = f else {
-            unreachable!("only extrudes, revolves and balls are built directly")
+        let op = match f {
+            Feature::Extrude { op, .. } | Feature::Revolve { op, .. } | Feature::Ball { op, .. } => *op,
+            f => swept::op(f).expect("only solid features are built directly"),
         };
-        return Ok((Body::new(), *op, shape(f)));
+        return Ok((Body::new(), op, shape(f)));
     }
     Ok(match f {
         Feature::Extrude {
@@ -663,7 +684,11 @@ fn tool(i: usize, f: &Feature, build: bool) -> Result<Tool, RegenError> {
                 shape(f),
             )
         }
-        _ => unreachable!("only extrudes, revolves and balls are built directly"),
+        f => (
+            swept::build(i, f)?,
+            swept::op(f).expect("only solid features are built directly"),
+            Shape::Brep,
+        ),
     })
 }
 
@@ -748,7 +773,8 @@ fn shape(f: &Feature) -> Shape {
             center: frame.origin,
             radius: *radius,
         },
-        _ => unreachable!("only extrudes, revolves and balls have a shape of their own"),
+        Feature::Sweep(_) | Feature::Coil(_) | Feature::Loft(_) => Shape::Brep,
+        _ => unreachable!("only solid features have a shape of their own"),
     }
 }
 
@@ -773,6 +799,9 @@ mod tests {
                 let ts = tools(&part.features, i, true).expect("tools build");
                 ts.into_iter().take(6).map(move |t| ((i, f), t))
             }) {
+                if sh == Shape::Brep {
+                    continue;
+                }
                 let index = Index::new(&body);
                 let b = index.bbox.grow(1.0);
                 for _ in 0..200 {

@@ -2,11 +2,13 @@
 //! what "fast" and "robust" mean, plus a random history generator.
 
 use crate::{
-    Combine, End, Extent, Feature, Head, Hole, Layout, Part, Row, Source, Target, Thread, Turn, torture,
+    Coil, Combine, End, Extent, Feature, Head, Hole, Layout, Loft, Part, Row, Source, Sweep, Target, Thread, Turn,
+    torture,
 };
+use forge_geom::Circle;
 use forge_math::rng::Rng;
 use forge_math::{Frame, Point2, Point3, Vec2, Vec3, dmath};
-use forge_ops::{Axis2, Profile, ProfileLoop, Segment};
+use forge_ops::{Axis2, PathSeg, Profile, ProfileLoop, Segment};
 use forge_topo::Name;
 
 fn frame(o: Point3, z: Vec3, x: Vec3) -> Frame {
@@ -114,7 +116,7 @@ pub fn parts() -> Vec<(&'static str, Part)> {
 }
 
 /// The names of the benchmark parts.
-pub const NAMES: [&str; 10] = [
+pub const NAMES: [&str; 13] = [
     "plate",
     "shaft",
     "housing",
@@ -125,6 +127,9 @@ pub const NAMES: [&str; 10] = [
     "hole-grid",
     "upto",
     "upto-flat",
+    "sweep",
+    "coil",
+    "loft",
 ];
 
 /// The benchmark part of that name, built alone.
@@ -140,6 +145,9 @@ pub fn part(name: &str) -> Option<Part> {
         "hole-grid" => hole_grid(),
         "upto" => upto(false),
         "upto-flat" => upto(true),
+        "sweep" => sweep(),
+        "coil" => coil(),
+        "loft" => loft(),
         _ => return None,
     })
 }
@@ -725,6 +733,226 @@ pub fn upto(flat: bool) -> Part {
         })));
     }
     Part { features: f }
+}
+
+/// A sweep along `path`, its profile square to the path's start.
+fn swept(profile_loops: Vec<ProfileLoop>, x: Vec3, path: Vec<PathSeg>, op: Combine) -> Feature {
+    let (o, t) = match path[0] {
+        PathSeg::Line { a, b } => (a, b - a),
+        PathSeg::Arc { .. } => unreachable!("the suite's paths start straight"),
+    };
+    Feature::Sweep(Box::new(Sweep {
+        profile: Profile {
+            plane: frame(o, t, x),
+            loops: profile_loops,
+        },
+        path,
+        op,
+    }))
+}
+
+/// A quarter arc from `a`, leaving along unit `t`, bending towards unit `n` with radius `r`.
+fn bend(a: Point3, t: Vec3, n: Vec3, r: f64) -> (PathSeg, Point3) {
+    let c = a + n * r;
+    let circle = Circle {
+        frame: frame(c, (-n).cross(t), -n),
+        radius: r,
+    };
+    (
+        PathSeg::Arc {
+            circle,
+            start: 0.0,
+            sweep: dmath::FRAC_PI_2,
+        },
+        c + t * r,
+    )
+}
+
+/// A block with a pipe swept through a bend out of its side and top, a square channel swept
+/// round a corner across its top, and a lens-shaped groove round a bend too tight for a torus.
+pub fn sweep() -> Part {
+    let mut f = vec![block(
+        Frame::WORLD,
+        Point2::ORIGIN,
+        120.0,
+        80.0,
+        20.0,
+        Combine::New,
+    )];
+    // the pipe: in from the side, up through the top
+    let a = Point3::new(-20.0, 20.0, 10.0);
+    let b = Point3::new(30.0, 20.0, 10.0);
+    let (arc, c) = bend(b, Vec3::X, Vec3::Z, 20.0);
+    f.push(swept(
+        vec![Profile::circle(Point2::ORIGIN, 6.0, 0)],
+        Vec3::Y,
+        vec![
+            PathSeg::Line { a, b },
+            arc,
+            PathSeg::Line {
+                a: c,
+                b: c + Vec3::Z * 25.0,
+            },
+        ],
+        Combine::Add,
+    ));
+    // the channel: along y, round a corner towards -x, half sunk in the top
+    let a = Point3::new(90.0, -10.0, 20.0);
+    let b = Point3::new(90.0, 30.0, 20.0);
+    let (arc, c) = bend(b, Vec3::Y, -Vec3::X, 15.0);
+    f.push(swept(
+        vec![Profile::rectangle(Point2::new(-2.0, -2.0), 4.0, 4.0, 0)],
+        Vec3::X,
+        vec![
+            PathSeg::Line { a, b },
+            arc,
+            PathSeg::Line {
+                a: c,
+                b: c - Vec3::X * 20.0,
+            },
+        ],
+        Combine::Cut,
+    ));
+    // the lens: the far arc's circle reaches past the bend's axis
+    let half = dmath::atan(0.5);
+    let (d, rad) = (2.0, 5f64.sqrt());
+    let lens = ProfileLoop::new(vec![
+        (
+            Segment::Arc {
+                center: Point2::new(-d, 0.0),
+                radius: rad,
+                start: -half,
+                sweep: 2.0 * half,
+            },
+            0,
+        ),
+        (
+            Segment::Arc {
+                center: Point2::new(d, 0.0),
+                radius: rad,
+                start: dmath::PI - half,
+                sweep: 2.0 * half,
+            },
+            1,
+        ),
+    ]);
+    let a = Point3::new(40.0, 90.0, 20.0);
+    let b = Point3::new(40.0, 60.0, 20.0);
+    let (arc, c) = bend(b, -Vec3::Y, Vec3::X, 2.5);
+    f.push(swept(
+        vec![lens],
+        Vec3::X,
+        vec![
+            PathSeg::Line { a, b },
+            arc,
+            PathSeg::Line {
+                a: c,
+                b: c + Vec3::X * 30.0,
+            },
+        ],
+        Combine::Cut,
+    ));
+    Part { features: f }
+}
+
+/// A rod on a plate with a thread cut round it and a spring wound about it, its first turn sunk
+/// in the plate, and a tapered spring beside it.
+pub fn coil() -> Part {
+    let up_axis = Axis2 {
+        origin: Point2::ORIGIN,
+        dir: Vec2::new(0.0, -1.0),
+    };
+    let wound = |plane: Frame, loops: Vec<ProfileLoop>, pitch: f64, turns: f64, taper: f64, op: Combine| {
+        Feature::Coil(Box::new(Coil {
+            profile: Profile { plane, loops },
+            axis: up_axis,
+            pitch,
+            turns,
+            taper,
+            op,
+        }))
+    };
+    Part {
+        features: vec![
+            block(
+                Frame::WORLD,
+                Point2::new(-30.0, -30.0),
+                100.0,
+                60.0,
+                5.0,
+                Combine::New,
+            ),
+            rod(up(Point3::new(0.0, 0.0, 4.0)), 8.0, 56.0, Combine::Add),
+            wound(
+                standing(0.0, 0.0, 12.0),
+                vec![Profile::rectangle(Point2::new(7.0, -0.8), 2.0, 1.6, 0)],
+                4.0,
+                8.0,
+                0.0,
+                Combine::Cut,
+            ),
+            wound(
+                standing(0.0, 0.0, 4.0),
+                vec![Profile::circle(Point2::new(15.0, 0.0), 1.5, 0)],
+                6.0,
+                5.5,
+                0.0,
+                Combine::Add,
+            ),
+            wound(
+                standing(45.0, 0.0, 4.0),
+                vec![Profile::rectangle(Point2::new(10.0, -0.5), 2.0, 2.0, 0)],
+                5.0,
+                4.0,
+                -0.15,
+                Combine::Add,
+            ),
+        ],
+    }
+}
+
+fn lofted(profiles: Vec<Profile>, op: Combine) -> Feature {
+    Feature::Loft(Box::new(Loft { profiles, op }))
+}
+
+/// A block with a twisted square loft standing out of it, an offset round loft cut through it,
+/// and a three-section frustum.
+pub fn loft() -> Part {
+    let square = |o: Point3, s: f64, turn: f64| Profile {
+        plane: turned(o, turn),
+        loops: vec![Profile::rectangle(Point2::new(-s, -s), 2.0 * s, 2.0 * s, 0)],
+    };
+    let round = |o: Point3, r: f64| Profile {
+        plane: up(o),
+        loops: vec![Profile::circle(Point2::ORIGIN, r, 0)],
+    };
+    Part {
+        features: vec![
+            block(Frame::WORLD, Point2::ORIGIN, 100.0, 60.0, 15.0, Combine::New),
+            lofted(
+                vec![
+                    square(Point3::new(30.0, 30.0, 10.0), 15.0, 0.0),
+                    square(Point3::new(30.0, 30.0, 40.0), 8.0, 0.5),
+                ],
+                Combine::Add,
+            ),
+            lofted(
+                vec![
+                    round(Point3::new(75.0, 30.0, -1.0), 8.0),
+                    round(Point3::new(80.0, 30.0, 16.0), 4.0),
+                ],
+                Combine::Cut,
+            ),
+            lofted(
+                vec![
+                    square(Point3::new(75.0, 50.0, 10.0), 4.0, 0.0),
+                    square(Point3::new(75.0, 50.0, 25.0), 6.0, 0.0),
+                    square(Point3::new(75.0, 50.0, 35.0), 2.5, 0.0),
+                ],
+                Combine::Add,
+            ),
+        ],
+    }
 }
 
 /// A random history: a random block, then `count` features of random kind,

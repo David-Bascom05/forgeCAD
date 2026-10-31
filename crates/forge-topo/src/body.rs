@@ -430,8 +430,8 @@ impl Body {
     /// A box holding face `f`, from its edges alone. A face on a plane,
     /// cylinder or cone lies in the hull of its boundary (through any point of
     /// it runs a straight line of the surface that meets the boundary on both
-    /// sides); spheres and tori can bulge past their edges, so their whole
-    /// surface box is added. Cached on the face.
+    /// sides); spheres, tori and surfaces defined by construction can bulge past
+    /// their edges, so their whole surface box is added. Cached on the face.
     /// A box holding edge `e` (cached on the edge).
     pub fn edge_box(&self, e: EdgeId) -> Box3 {
         let edge = self.edge(e);
@@ -450,6 +450,10 @@ impl Body {
             match &face.surface {
                 Surface::Sphere(sp) => b = b.hull(&Box3::from_point(sp.frame.origin).grow(sp.radius)),
                 Surface::Torus(t) => b = b.hull(&Box3::from_point(t.frame.origin).grow(t.major + t.minor)),
+                Surface::Procedural(pr) => {
+                    let d = pr.domain();
+                    b = b.hull(&pr.bbox(forge_math::Box2::new(d.u.interval(), d.v.interval())));
+                }
                 _ => {}
             }
             b.grow(forge_math::tol::LINEAR)

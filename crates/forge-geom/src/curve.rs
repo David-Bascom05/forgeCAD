@@ -119,6 +119,12 @@ pub trait ProceduralCurve: Send + Sync + std::fmt::Debug {
     fn speed_bound(&self, range: Interval) -> f64;
     /// Chords that draw `range` within `chord` of the curve (equal parameter steps).
     fn segments(&self, range: Interval, chord: f64) -> usize;
+    /// A surface holding the whole curve and crossing the faces it bounds, for telling which
+    /// side of it another curve passes, where the faces' own surfaces can't (a helix between
+    /// two faces of one swept loop).
+    fn across(&self) -> Option<crate::Surface> {
+        None
+    }
 }
 
 /// A shared handle to a procedural curve; two handles are equal when they are the same curve.
