@@ -19,8 +19,8 @@ compares it with the case's expectations (this checks the corpus' closed forms t
 --tiebreak settles each volume disagreement by Monte Carlo (montecarlo.py); a part where it backs
 us is "occt-wrong" (OCCT returned a valid but wrong solid).
 
---gate exits 1 if any part (not listed in --known) fails on our side where OCCT succeeds, or
-disagrees on volume, area or a surface's area.
+--gate exits 1 if any part fails on our side where OCCT succeeds, or disagrees on volume, area
+or a surface's area, unless --known lists it ("name  # reviewed reason", one per line).
 
 Needs the OCP bindings (tools/occt/setup.sh puts them in a venv).
 """
@@ -476,7 +476,8 @@ def main():
     if a.save_known:
         open(a.save_known, "w").write("".join(n + "\n" for n in failing))
     if a.gate:
-        known = set(open(a.known).read().split()) if a.known else set()
+        # one part name per line, then "# why" (a reviewed reason)
+        known = {ln.split()[0] for ln in open(a.known) if ln.split("#")[0].strip()} if a.known else set()
         new = [n for n in failing if n not in known]
         print(f"gate: {len(failing)} failing, {len(new)} not known" + (f": {' '.join(new[:20])}" if new else ""))
         return 1 if new else 0

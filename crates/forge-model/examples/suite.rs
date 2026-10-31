@@ -1,5 +1,5 @@
 //! Regenerates every benchmark part and a batch of random histories, reporting
-//! time, size and validity, and where each failure first appears.
+//! time, size and validity, and where each failure first appears. Exits 1 on any failure.
 use forge_model::{Part, RegenError, suite};
 use std::time::Instant;
 
@@ -29,6 +29,7 @@ fn main() {
         "{:<10} {:>8} {:>6} {:>10} {:>10} {:>8}  result",
         "part", "features", "faces", "ms", "ms/feat", "problems"
     );
+    let mut bad = false;
     for (name, part) in suite::parts() {
         let n = part.features.len();
         let mut best = f64::INFINITY;
@@ -42,6 +43,7 @@ fn main() {
         match out.expect("ran") {
             Ok(b) => {
                 let problems = forge_topo::check(&b).len();
+                bad |= problems > 0;
                 let verdict = if problems == 0 { "ok" } else { "INVALID" };
                 println!(
                     "{name:<10} {n:>8} {:>6} {best:>10.2} {:>10.3} {problems:>8}  {verdict}",
@@ -50,6 +52,7 @@ fn main() {
                 );
             }
             Err(_) => {
+                bad = true;
                 let (i, e) = first_failure(&part);
                 println!(
                     "{name:<10} {n:>8} {:>6} {:>10} {:>10} {:>8}  FAILS at feature {i}: {e:?}",
@@ -87,5 +90,8 @@ fn main() {
     );
     for f in failures {
         println!("  {f}");
+    }
+    if bad || ok < seeds {
+        std::process::exit(1);
     }
 }

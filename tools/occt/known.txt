@@ -1,0 +1,1 @@
+shaft  # OCCT wrong: feature 61 (tilted r 2.6 hole) leaves it 868 mm^3 over; Monte Carlo 287322 +- 74 backs ours 287345

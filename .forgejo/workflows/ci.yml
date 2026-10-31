@@ -29,3 +29,66 @@ jobs:
         run: cargo test --workspace
       - name: test (wasm, same arithmetic as the browser)
         run: cargo test --workspace --target wasm32-wasip1
+
+  scoreboard:
+    runs-on: members
+    env:
+      CARGO_TERM_COLOR: always
+      CARGO_INCREMENTAL: "0"
+    steps:
+      - name: checkout
+        run: |
+          git init -q .
+          git fetch -q --depth=1 "https://code.commonty.org/${{ github.repository }}.git" "${{ github.sha }}"
+          git checkout -q FETCH_HEAD
+      - name: rust
+        run: |
+          curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --profile minimal --default-toolchain none
+          echo "$HOME/.cargo/bin" >> "$GITHUB_PATH"
+      - name: build
+        run: cargo build --release -p forge-model --example reliability --example suite
+      - name: degeneracy scoreboard (no part worse than tools/reliability/baseline.txt)
+        run: THREADS=4 target/release/examples/reliability --baseline tools/reliability/baseline.txt
+      - name: suite parts and 150 fuzz histories, all valid
+        run: FUZZ_SEEDS=150 target/release/examples/suite
+      # perf_event_open decides whether the speed gate (tools/speed/gate.sh) can run here
+      - name: perf probe
+        run: |
+          python3 - <<'PY'
+          import ctypes, os, struct
+          attr = bytearray(128)
+          struct.pack_into("IIQ", attr, 0, 0, 128, 1)  # PERF_TYPE_HARDWARE, size, instructions
+          struct.pack_into("Q", attr, 40, 1 << 5 | 1 << 6)  # exclude_kernel, exclude_hv
+          libc = ctypes.CDLL(None, use_errno=True)
+          fd = libc.syscall(298, bytes(attr), 0, -1, -1, 0)
+          print("perf_event_open:", "works" if fd >= 0 else os.strerror(ctypes.get_errno()))
+          PY
+
+  oracle:
+    runs-on: members
+    env:
+      CARGO_TERM_COLOR: always
+      CARGO_INCREMENTAL: "0"
+    steps:
+      - name: checkout
+        run: |
+          git init -q .
+          git fetch -q --depth=1 "https://code.commonty.org/${{ github.repository }}.git" "${{ github.sha }}"
+          git checkout -q FETCH_HEAD
+      - name: rust
+        run: |
+          curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --profile minimal --default-toolchain none
+          echo "$HOME/.cargo/bin" >> "$GITHUB_PATH"
+      # OpenCascade is a test oracle only: a venv outside the checkout, never a Cargo dependency
+      - name: opencascade
+        run: |
+          python3 -m venv --help > /dev/null 2>&1 || { apt-get update -qq && apt-get install -y -qq python3-venv; }
+          VENV="$HOME/occt" sh tools/occt/setup.sh
+      - name: export parts
+        run: |
+          cargo build --release -p forge-model --example oracle
+          THREADS=2 REPS=1 target/release/examples/oracle suite,torture,fuzz:20 > parts.json
+      - name: oracle gate (disagreements outside tools/occt/known.txt fail)
+        run: |
+          "$HOME/occt/bin/python" -u tools/occt/oracle.py parts.json --jobs 4 --timeout 150 \
+            --show 0 --gate --known tools/occt/known.txt
