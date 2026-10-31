@@ -593,7 +593,77 @@ static GPU: OnceLock<Option<Gpu>> = OnceLock::new();
 
 /// The process's GPU, opened at first use (~0.3 s); None where there is none.
 pub fn gpu() -> Option<&'static Gpu> {
-    GPU.get_or_init(|| Gpu::new().ok()).as_ref()
+    GPU.get_or_init(|| {
+        #[cfg(not(target_arch = "wasm32"))]
+        // SAFETY: registers a plain extern "C" fn
+        unsafe {
+            atexit(hand_off);
+        }
+        Gpu::new().ok()
+    })
+    .as_ref()
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+unsafe extern "C" {
+    fn atexit(f: extern "C" fn()) -> c_int;
+    fn fork() -> c_int;
+    fn pipe2(fds: *mut c_int, flags: c_int) -> c_int;
+    fn close(fd: c_int) -> c_int;
+    fn read(fd: c_int, buf: *mut c_void, n: usize) -> isize;
+    fn _exit(code: c_int) -> !;
+}
+
+/// At exit, hands the driver's files to a child that holds them until this process is gone and
+/// then exits: the kernel's teardown of the GPU context on their release (~0.1 s) happens in
+/// the child, after the process's exit, not before it. The child does nothing but wait.
+#[cfg(not(target_arch = "wasm32"))]
+extern "C" fn hand_off() {
+    let Ok(dir) = std::fs::read_dir("/proc/self/fd") else {
+        return;
+    };
+    let mut keep = Vec::new();
+    let mut top = 0;
+    for e in dir.flatten() {
+        let Some(fd) = e.file_name().to_str().and_then(|n| n.parse::<c_int>().ok()) else {
+            continue;
+        };
+        top = top.max(fd);
+        if std::fs::read_link(e.path())
+            .is_ok_and(|t| t.as_os_str().as_encoded_bytes().starts_with(b"/dev/nvidia"))
+        {
+            keep.push(fd);
+        }
+    }
+    if keep.is_empty() {
+        return;
+    }
+    let mut ends = [0 as c_int; 2];
+    // SAFETY: pipe2, fork, close, read and _exit are async-signal-safe, the only calls a child
+    // of a threaded process may make; the child touches only `keep` and `ends`, copied with it
+    unsafe {
+        // O_CLOEXEC: nothing this process still starts holds the write end
+        if pipe2(ends.as_mut_ptr(), 0o2000000) != 0 {
+            return;
+        }
+        match fork() {
+            0 => {
+                // everything but the driver's files, so no reader waits on this child
+                for fd in 0..=top.max(ends[1]) {
+                    if fd != ends[0] && !keep.contains(&fd) {
+                        close(fd);
+                    }
+                }
+                // the write end closes when this process is gone
+                let mut b = 0u8;
+                read(ends[0], (&raw mut b).cast(), 1);
+                _exit(0);
+            }
+            _ => {
+                close(ends[0]);
+            }
+        }
+    }
 }
 
 /// The process's GPU if it is open; the first call starts opening it on another thread.
