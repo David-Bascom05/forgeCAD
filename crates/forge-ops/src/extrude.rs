@@ -67,10 +67,18 @@ struct Wall {
 
 impl<'a> Builder<'a> {
     fn new(profile: &'a Profile, d: f64, root: Name) -> Self {
+        let n: usize = profile.loops.iter().map(|l| l.segments.len()).sum();
+        let loops = profile.loops.len();
         Builder {
             profile,
             d,
-            body: Unlinked::default(),
+            body: Unlinked {
+                vertices: Vec::with_capacity(2 * n),
+                edges: Vec::with_capacity(3 * n),
+                faces: Vec::with_capacity(n + 2),
+                loops: Vec::with_capacity(n + 2 * loops),
+                uses: Vec::with_capacity(6 * n),
+            },
             start_name: root.with_str("start"),
             end_name: root.with_str("end"),
             root,
