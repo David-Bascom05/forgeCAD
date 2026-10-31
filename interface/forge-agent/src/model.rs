@@ -504,6 +504,25 @@ impl Model {
         self.error = Some(Failure { at, msg, hint });
     }
 
+    /// Bodies a line took whole: (its line number, the line number that made the body). A cut
+    /// that leaves nothing of one body of several deletes it.
+    pub fn removed_bodies(&self) -> Vec<(usize, usize)> {
+        let mut out = Vec::new();
+        for i in 1..self.built() {
+            if matches!(self.features[i], Feature::Body(ref b) if !matches!(**b, forge_model::BodyFeature::In { .. }))
+            {
+                continue;
+            }
+            let after: Vec<usize> = self.solids_after(i + 1).iter().map(|s| s.id).collect();
+            for s in self.solids_after(i) {
+                if !after.contains(&s.id) {
+                    out.push((self.lines[i].no, self.lines[s.id].no));
+                }
+            }
+        }
+        out
+    }
+
     /// How many entities each inline selector picked: (file line number, count), in order.
     pub fn picks(&self) -> Vec<(usize, usize)> {
         self.picks

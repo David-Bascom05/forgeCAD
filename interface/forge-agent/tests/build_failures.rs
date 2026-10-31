@@ -293,3 +293,30 @@ extrude cut 6 at 0 0 -1 circle 0 0 30 circle 0 -20 10
         .is_some_and(|e| e.msg.contains("ZeroThickness") && e.at == 1)
     );
 }
+
+/// A cut taking one whole body of several deletes it and says so, on both paths; a cut taking every
+/// body leaves no part, and is refused.
+#[test]
+fn a_cut_taking_a_whole_body() {
+    let src = "a: extrude 8 rect 0 0 10 10
+b: extrude new 8 rect 40 0 10 10
+extrude cut 10 at 0 0 -1 rect -1 -1 12 12 in all
+";
+    let m = Model::new(src);
+    assert!(m.error.is_none(), "{:?}", m.error.as_ref().map(|e| &e.msg));
+    assert_eq!(m.removed_bodies(), vec![(3, 1)]);
+    let part = Part {
+        features: m.features.clone(),
+    };
+    assert_eq!(part.regenerate_solids().expect("seq").len(), 1);
+    let solids = part.regenerate_nary_solids(1).expect("n-ary");
+    assert_eq!(solids.len(), 1);
+    assert_eq!(solids[0].id, 1);
+    let every = Model::new(
+        "a: extrude 8 rect 0 0 10 10
+b: extrude new 8 rect 40 0 10 10
+extrude cut 10 at 0 0 -1 rect -1 -1 60 12 in all
+",
+    );
+    assert!(every.error.is_some_and(|e| e.msg.contains("leaves nothing")));
+}

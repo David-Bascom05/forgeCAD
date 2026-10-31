@@ -295,6 +295,24 @@ impl Session {
         match m.error.clone() {
             None => {
                 text.push_str(&format!("ok {n} lines {:.2}ms", m.ms));
+                // a body a cut took whole: not an error, but not to pass unnoticed
+                let removed = m.removed_bodies();
+                for (line, body) in &removed {
+                    text.push_str(&format!(
+                        "\nline {line} removed the body made on line {body}: nothing of it was left"
+                    ));
+                }
+                j.push((
+                    "removed_bodies",
+                    Json::Arr(
+                        removed
+                            .iter()
+                            .map(|&(line, body)| {
+                                Json::obj(vec![("line", line.into()), ("body", body.into())])
+                            })
+                            .collect(),
+                    ),
+                ));
                 // a selector that picks fewer than meant fails quietly otherwise
                 let picks = m.picks();
                 if !picks.is_empty() {

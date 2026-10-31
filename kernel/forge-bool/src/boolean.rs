@@ -4744,7 +4744,12 @@ fn classify_specs(
             eprintln!("  COPLANAR spec {i} face {:?} probe {p:?} partners {w:?}", s.from);
         }
         for pf in partners {
-            if index[other].point_in_face(pf, p) == Where::Inside {
+            // a hair of the face, every point of it on the partner's boundary, lies on it too
+            let w = index[other].point_in_face(pf, p);
+            let on = w == Where::Inside
+                || (w == Where::On
+                    && spare_probes(body, s, pieces).all(|q| index[other].classify(q) == Where::On));
+            if on {
                 let ob = bodies[other];
                 let here = body.face_normal(s.from, body.face(s.from).surface.project(p));
                 let there = ob.face_normal(pf, ob.face(pf).surface.project(p));

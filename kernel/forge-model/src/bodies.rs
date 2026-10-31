@@ -265,11 +265,29 @@ fn apply(
         solids.push(Solid { id: i, body: b });
         return Ok(solids);
     }
+    let mut gone: Vec<usize> = Vec::new();
     for (n, k) in targets(&ids(&solids), p, i)?.into_iter().enumerate() {
         let salt = (n > 0).then(|| plain.id(solids[k].id));
         let body = std::mem::take(&mut solids[k].body);
-        solids[k].body = add_tools(body, &ts, (i, plain.id(i)), salt)?;
-        crate::no_pinch(plain, i, &solids[k].body)?;
+        match add_tools(body, &ts, (i, plain.id(i)), salt) {
+            // a cut taking one whole body deletes it (`Model::removed_bodies` says so)
+            Err(RegenError::Empty { .. }) => gone.push(k),
+            r => {
+                solids[k].body = r?;
+                crate::no_pinch(plain, i, &solids[k].body)?;
+            }
+        }
+    }
+    if !gone.is_empty() {
+        let mut at = 0;
+        solids.retain(|_| {
+            at += 1;
+            !gone.contains(&(at - 1))
+        });
+        // taking every body leaves no part
+        if solids.is_empty() {
+            return Err(RegenError::Empty { feature: i });
+        }
     }
     Ok(solids)
 }
@@ -886,6 +904,9 @@ pub(crate) fn nary(features: History<'_>, threads: usize) -> Result<Vec<Solid>, 
             crate::count_name_fallback();
             sequential(features)
         }
+        // a run that empties a body: it goes at that feature, and later ones act on what is left
+        Ok(s) if s.iter().any(|x| x.body.face_ids().next().is_none()) => sequential(features),
+        Err(RegenError::Empty { .. }) => sequential(features),
         r => r,
     }
 }
