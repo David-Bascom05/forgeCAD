@@ -631,6 +631,35 @@ fn nary_body(
             .all(|k| !index[k].bbox.overlaps(b) || sh[k].box_out(b, SHAPE_MARGIN))
     };
 
+    // whether a tool face lies surely outside the first tool and those added to it (whatever it
+    // meets is dropped with both its sides), once a face. Only a cylinder about a revolved
+    // solid's axis is told so beyond the boxes tested below
+    let holders: Vec<Side> = (0..n).filter(|&t| t == 0 || ops[t - 1] == Op::Union).collect();
+    let revolved = shapes.is_some_and(|sh| holders.iter().any(|&t| sh[t].revolved()));
+    let air: Vec<Vec<std::sync::OnceLock<bool>>> = (0..n)
+        .map(|k| match revolved {
+            true => (0..tools[k].faces.len())
+                .map(|_| std::sync::OnceLock::new())
+                .collect(),
+            false => Vec::new(),
+        })
+        .collect();
+    let in_air = |k: Side, f: FaceId| -> bool {
+        let (true, Some(sh)) = (revolved, shapes) else {
+            return false;
+        };
+        let s = &tools[k].face(f).surface;
+        if !matches!(s, forge_geom::Surface::Cylinder(_)) {
+            return false;
+        }
+        *air[k][f.index()].get_or_init(|| {
+            let b = &index[k].boxes()[f.index()];
+            holders
+                .iter()
+                .all(|&t| !index[t].bbox.overlaps(b) || sh[t].face_out(s, b, SHAPE_MARGIN))
+        })
+    };
+
     let any_intersect = ops.contains(&Op::Intersect);
     // whether a new edge of tools i and j in box b could divide a face of either: false only
     // when every other tool surely holds all of b or none of it
@@ -703,7 +732,7 @@ fn nary_body(
                 let region = overlap(&ba[fa.index()], &bb[fb.index()]).grow(tol::LINEAR);
                 // an edge here would be dropped below, with both its sides (not known to meet: kept
                 // as meeting for the triple points)
-                if outside(&region) {
+                if outside(&region) || in_air(i, fa) || in_air(j, fb) {
                     out.loose.push(((i, fa), (j, fb)));
                     continue;
                 }
@@ -917,7 +946,10 @@ fn nary_body(
                 continue;
             }
             for h in tools[k].face_ids() {
-                if index[k].boxes()[h.index()].overlaps(&reach) && may_meet(&tools[k].face(h).surface, &reach)
+                // a face outside the result crosses the edge only where it is dropped
+                if index[k].boxes()[h.index()].overlaps(&reach)
+                    && may_meet(&tools[k].face(h).surface, &reach)
+                    && !in_air(k, h)
                 {
                     f((k, h));
                 }

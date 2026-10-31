@@ -342,6 +342,64 @@ impl Shape {
         }
     }
 
+    /// Whether the solid is a revolved one, or a combination starting from one.
+    pub fn revolved(&self) -> bool {
+        match self {
+            Shape::Revolved { .. } => true,
+            Shape::Csg { first, .. } => first.revolved(),
+            _ => false,
+        }
+    }
+
+    /// Whether no point of a face on surface `s` within box `b` lies in the solid or within `m`
+    /// of it: `box_out`, and for a cylinder about a revolved solid's axis, its one radius over
+    /// the box's heights against the profile itself (true only when that is sure).
+    pub fn face_out(&self, s: &forge_geom::Surface, b: &Box3, m: f64) -> bool {
+        if self.box_out(b, m) {
+            return true;
+        }
+        match (self, s) {
+            (
+                Shape::Revolved {
+                    frame,
+                    origin,
+                    dir,
+                    perp,
+                    segs,
+                    ..
+                },
+                forge_geom::Surface::Cylinder(c),
+            ) => {
+                // its axis within `off` of the solid's, along it to an angle's rounding
+                let o = frame.point_to_local(c.frame.origin);
+                let off = (o.x * o.x + o.y * o.y).sqrt();
+                if c.frame.z().cross(frame.z()).length() > 1e-12 || off > 1e-6 {
+                    return false;
+                }
+                let l = local_box(frame, b);
+                let m = m + 1e-9 * (1.0 + b.diagonal());
+                // the profile points the face can reach lie within `off` of a segment of heights
+                // at its radius: walked from the lowest, each step as long as the clear disc at
+                // the last point allows
+                let mut h = l.z.lo;
+                for _ in 0..32 {
+                    match in_profile(segs, *origin + *dir * h + *perp * c.radius) {
+                        Some((false, d)) if d > off + m => h += d - off - m,
+                        _ => return false,
+                    }
+                    if h > l.z.hi {
+                        return true;
+                    }
+                }
+                false
+            }
+            (Shape::Csg { first, rest }, _) => {
+                first.face_out(s, b, m) && rest.iter().all(|(op, x)| *op != Op::Union || x.face_out(s, b, m))
+            }
+            _ => false,
+        }
+    }
+
     /// Whether every point of `b` lies in the solid clear of its boundary by more than `m`, by
     /// bounds: true only when that is sure (false says nothing).
     pub fn box_in(&self, b: &Box3, m: f64) -> bool {
@@ -516,5 +574,56 @@ impl Shape {
                 }
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use forge_geom::{Cylinder, Surface};
+
+    #[test]
+    fn a_cylinder_about_a_revolved_axis_is_out_where_the_profile_is_narrower() {
+        // radius 10 for heights 0..50, 20 for 50..100, about the world z
+        let p = |h: f64, r: f64| Point2::new(h, r);
+        let corners = [
+            p(0.0, 0.0),
+            p(100.0, 0.0),
+            p(100.0, 20.0),
+            p(50.0, 20.0),
+            p(50.0, 10.0),
+            p(0.0, 10.0),
+        ];
+        let shaft = Shape::Revolved {
+            frame: Frame::WORLD,
+            origin: Point2::ORIGIN,
+            dir: Vec2::new(1.0, 0.0),
+            perp: Vec2::new(0.0, 1.0),
+            segs: (0..6)
+                .map(|i| Seg2::Line {
+                    a: corners[i],
+                    b: corners[(i + 1) % 6],
+                })
+                .collect(),
+            angle: None,
+        };
+        let face = |at: Point3, radius: f64, lo: f64, hi: f64| {
+            let s = Surface::Cylinder(Cylinder {
+                frame: Frame::WORLD.with_origin(at),
+                radius,
+            });
+            let b = Box3::from_points([
+                Point3::new(at.x - radius, at.y - radius, lo),
+                Point3::new(at.x + radius, at.y + radius, hi),
+            ]);
+            shaft.face_out(&s, &b, 1e-6)
+        };
+        assert!(face(Point3::ORIGIN, 13.0, 20.0, 30.0));
+        assert!(!face(Point3::ORIGIN, 9.0, 20.0, 30.0));
+        // past the step, or reaching it
+        assert!(!face(Point3::ORIGIN, 13.0, 60.0, 70.0));
+        assert!(!face(Point3::ORIGIN, 13.0, 40.0, 55.0));
+        // off the axis
+        assert!(!face(Point3::new(0.5, 0.0, 0.0), 13.0, 20.0, 30.0));
     }
 }
