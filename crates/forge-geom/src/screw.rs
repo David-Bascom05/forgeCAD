@@ -23,6 +23,7 @@ use forge_math::{Box2, Box3, Frame, Interval, Point2, Point3, Vec2, Vec3, dmath,
 use std::sync::Arc;
 
 mod coaxial;
+mod pair;
 pub use coaxial::meet_coaxial;
 
 /// A planar section in (r, h): distance from the axis, height along it.

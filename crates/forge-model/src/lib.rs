@@ -353,6 +353,11 @@ pub fn step(features: &[Feature], i: usize, body: Option<Body>) -> Result<Option
         if b.dead > b.faces.len() / 2 {
             b = b.compact();
         }
+    } else if matches!(f, Feature::Thread(_)) {
+        // a thread's groove, its run-out and its chamfer, one after another
+        for (k, (tool, op, _)) in tools.iter().enumerate() {
+            boolean_into(&mut b, tool, op_of(*op), id + 1_000_000 + 10_000_000 * k as u64).map_err(err)?;
+        }
     } else if !tools.is_empty() {
         // a pattern's copies all in one pass
         let base = if b.dead > 0 { b.compact() } else { b };

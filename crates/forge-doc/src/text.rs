@@ -1003,7 +1003,7 @@ pub const KINDS: &[Kind] = &[
     },
     Kind {
         name: "thread",
-        syntax: "thread (SPEC FRAME ext|int | SPEC face FEAT REF [flip] | hole FEAT) (N | full | to FEAT [@face] [off N]) [left] [chamfer]   SPEC: M6 | M6x0.75 | 1/4-20 | 0.19-24",
+        syntax: "thread (SPEC FRAME ext|int | SPEC face FEAT REF [flip] | hole FEAT) (N | full | to FEAT [@face] [off N]) [left] [chamfer] [runout]   SPEC: M6 | M6x0.75 | 1/4-20 | 0.19-24",
         parse: |p| {
             let on = if p.eat("hole") {
                 ThreadOn::Hole(p.feat()?)
@@ -1051,6 +1051,7 @@ pub const KINDS: &[Kind] = &[
                 length,
                 handed,
                 chamfer: p.eat("chamfer"),
+                runout: p.eat("runout"),
             })))
         },
         print: |f, w| {
@@ -1094,6 +1095,9 @@ pub const KINDS: &[Kind] = &[
             }
             if t.chamfer {
                 w.word("chamfer");
+            }
+            if t.runout {
+                w.word("runout");
             }
             true
         },
@@ -2979,6 +2983,7 @@ mod tests {
                     },
                     handed: if r.bool() { Handed::Right } else { Handed::Left },
                     chamfer: r.bool(),
+                    runout: r.bool(),
                 }))
             }
             22 => {

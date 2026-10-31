@@ -3,7 +3,7 @@
 //! profile (a line in (r, h)) in one point, which moves linearly with u: the curve is a helix
 //! (on a cylinder), a conical helix (on a cone) or a flat spiral (on a plane), all the screw's
 //! own helix curve. Where the section runs along the profile it meets the surface at one angle,
-//! along the section line there.
+//! along the section line there. Two screw faces are met in `pair`.
 
 use super::{Helix, Motion, Screw, Section};
 use crate::curve::{Line, ProcCurve};
@@ -18,7 +18,45 @@ pub fn meet_coaxial(a: &Surface, b: &Surface) -> Option<SurfaceSurface> {
     match (screw(a), screw(b)) {
         (Some(s), None) => s.meet_coaxial(b),
         (None, Some(s)) => s.meet_coaxial(a),
+        (Some(s), Some(t)) => s.meet_screw(t),
         _ => None,
+    }
+}
+
+impl Screw {
+    /// A plane through the axis holds the section at every angle it passes, a half turn apart
+    /// (its two half planes): there the face meets it along the section line.
+    fn meet_axial_plane(
+        &self,
+        p: &crate::surface::Plane,
+        a: forge_math::Point2,
+        b: forge_math::Point2,
+    ) -> Option<SurfaceSurface> {
+        let f = &self.m.frame;
+        let n = p.frame.z();
+        if n.dot(f.z().get()).abs() > tol::ANGULAR {
+            return None;
+        }
+        // the half plane at angle th has e(th) square to n
+        let th = forge_math::dmath::atan2(-n.dot(f.x().get()), n.dot(f.y().get()));
+        let half = forge_math::dmath::PI;
+        let k0 = ((self.ue.lo - th) / half).ceil() as i64;
+        let k1 = ((self.ue.hi - th) / half).floor() as i64;
+        let mut curves = Vec::new();
+        for k in k0..=k1 {
+            let u = th + half * k as f64;
+            let (e, _, _) = self.m.axes(u);
+            let at =
+                |q: forge_math::Point2| f.origin + e * (q.x + self.m.a * u) + f.z() * (q.y + self.m.b * u);
+            if let Some(l) = Line::through(at(a), at(b)) {
+                curves.push((crate::Curve::Line(l), Contact::Crossing));
+            }
+        }
+        Some(if curves.is_empty() {
+            SurfaceSurface::Empty
+        } else {
+            SurfaceSurface::Curves(curves)
+        })
     }
 }
 
@@ -53,6 +91,11 @@ impl Screw {
                 let up = co.frame.z().dot(z.get()).signum();
                 let n = Vec2::new(up * co.cos_a(), -co.sin_a());
                 (n, n.dot(Vec2::new(co.radius, h(co.frame.origin))))
+            }
+            Surface::Plane(p)
+                if coaxial(p.frame.origin, p.frame.x()) || coaxial(p.frame.origin, p.frame.y()) =>
+            {
+                return self.meet_axial_plane(p, p0, p1);
             }
             _ => return None,
         };

@@ -1,7 +1,8 @@
 //! Modeled screw threads: the 60 degree basic form ISO metric and Unified threads share (crest
 //! flat P/8 at the major diameter, root flat P/4 at the minor, flanks 5H/8 deep, H = sqrt3/2 P),
 //! cut as a coil round a cylinder: outside for a bolt, inside for a nut. Every flank and flat is
-//! an exact screw surface. A chamfered start is a cone cut at the mouth.
+//! an exact screw surface. A chamfered start is a cone cut at the mouth; a run-out carries the
+//! groove a turn on, a tapered coil that draws it out of the material.
 
 use crate::pattern::{instance_name, instances, moved, moved_shape};
 use crate::{Combine, Feature, Hole, RegenError, Source, Target, Tool, Turn};
@@ -134,6 +135,8 @@ pub struct ScrewThread {
     pub handed: Handed,
     /// A 45 degree chamfer at the start, just past the thread's root.
     pub chamfer: bool,
+    /// The groove drawn out of the material over a turn past its end, not stopped square.
+    pub runout: bool,
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -398,9 +401,10 @@ fn polygon(pts: &[Point2], first_id: u64) -> ProfileLoop {
     )
 }
 
-/// Profile ids: the groove's and the chamfer's segments.
+/// Profile ids: the groove's, the chamfer's and the run-out's segments.
 const GROOVE: u64 = 0;
 const CHAMFER: u64 = 10;
+const RUNOUT: u64 = 20;
 
 fn cut(i: usize, p: &Placed, t: &ScrewThread, build: bool) -> Result<Vec<Tool>, RegenError> {
     let e = err(i);
@@ -440,7 +444,42 @@ fn cut(i: usize, p: &Placed, t: &ScrewThread, build: bool) -> Result<Vec<Tool>, 
     };
     let mut out = Vec::new();
     let main = coil_tool(&profile, &winding(turns, 0.0), id)?;
-    out.push(main);
+    if t.runout {
+        // a second groove, a hair smaller, from an eighth of a turn before the groove's end
+        // (inside it, so no faces lie on each other) on a turn past it, drifting out of the
+        // material past its depth
+        let back = dmath::TAU / 8.0;
+        let angle = turns * dmath::TAU - back;
+        let end = start + angle / dmath::TAU * pitch;
+        let (sn, cs) = dmath::sin_cos(match t.handed {
+            Handed::Right => angle,
+            Handed::Left => -angle,
+        });
+        let x = p.at.x() * cs + p.at.y() * sn;
+        let z = x.cross(p.at.z().get()).normalize().expect("square axes");
+        let turned = Frame::from_zx(p.at.origin + p.at.z() * end, z, x).expect("a frame's axes");
+        let out_by = (f.major - f.minor) + pitch / 4.0;
+        let drift = if p.internal { -out_by } else { out_by };
+        // its far side drawn halfway in and the whole a sixteenth smaller, so while it overlaps
+        // the groove it lies wholly inside it and leaves through the groove's end alone
+        let mut g = f.groove;
+        let mid = |a: Point2, b: Point2| Point2::new((a.x + b.x) / 2.0, (a.y + b.y) / 2.0);
+        (g[3], g[4]) = (mid(g[2], g[3]), mid(g[5], g[4]));
+        let c = g.iter().fold(Point2::ORIGIN, |m, q| {
+            Point2::new(m.x + q.x / 6.0, m.y + q.y / 6.0)
+        });
+        let smaller: Vec<Point2> = g.iter().map(|q| c + (*q - c) * (15.0 / 16.0)).collect();
+        let tail = Profile {
+            plane: turned,
+            loops: vec![polygon(&smaller, RUNOUT)],
+        };
+        let turns = 1.0 + back / dmath::TAU;
+        let a = drift / (turns * pitch);
+        out.push(main);
+        out.push(coil_tool(&tail, &winding(turns, dmath::atan(a)), id + 5_000_000)?);
+    } else {
+        out.push(main);
+    }
     if t.chamfer {
         // 45 degrees from just past the root at the mouth out past the cylinder, starting
         // clear of it (not through the root's own edge)
@@ -461,7 +500,8 @@ fn cut(i: usize, p: &Placed, t: &ScrewThread, build: bool) -> Result<Vec<Tool>, 
             extent: Turn::Angle(dmath::TAU),
             op: Combine::Cut,
         };
-        out.push(crate::tool(i, &cone, build)?);
+        // first: the groove then cuts the cone, not the cone the groove
+        out.insert(0, crate::tool(i, &cone, build)?);
     }
     Ok(out)
 }

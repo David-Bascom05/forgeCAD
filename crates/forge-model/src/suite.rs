@@ -1115,6 +1115,7 @@ pub fn thread() -> Part {
             length,
             handed,
             chamfer: true,
+            runout: false,
         }))
     };
     Part {
