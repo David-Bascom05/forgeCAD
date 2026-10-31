@@ -2627,7 +2627,7 @@ fn coincide(sb: &Body, src: Side, e: EdgeId, db: &Body, dst: Side, e2: EdgeId, c
     ends_into(db, e2, sb, e, src);
 }
 
-fn line_box(line: &forge_geom::Line, b: &forge_math::Box3) -> Option<Interval> {
+pub(crate) fn line_box(line: &forge_geom::Line, b: &forge_math::Box3) -> Option<Interval> {
     let (mut t0, mut t1) = (f64::NEG_INFINITY, f64::INFINITY);
     let d = line.dir.get();
     let o = line.origin;
