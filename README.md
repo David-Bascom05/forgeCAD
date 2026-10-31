@@ -25,7 +25,9 @@ Units are millimetres. Tolerances live in `forge_math::tol`.
 | `forge-sketch` | 2D sketches, geometric constraint solver, profile extraction |
 | `forge-ops` | profiles, extrude, revolve |
 | `forge-mesh` | exact predicates, constrained Delaunay, tessellation, STL |
-| `forge-cli` | `forgecad demo out.stl` |
+| `forge-model` | part histories and regenerating them |
+| `forge-agent` | the `.fc` part file, selectors, measuring, rendering, incremental sessions |
+| `forge-cli` | `forgecad build/query/measure/render/check/diff`, `serve`, `mcp` (see AGENTS.md) |
 
 ## Building
 

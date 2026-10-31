@@ -83,8 +83,16 @@ fn args(p: &Json) -> Args {
     a
 }
 
-pub fn run(mcp: bool) -> ExitCode {
-    let mut session = Session::default();
+/// Serves files under `root` only.
+pub fn run(mcp: bool, root: &str) -> ExitCode {
+    let root = match std::fs::canonicalize(root) {
+        Ok(r) => r,
+        Err(e) => {
+            eprintln!("{root}: {e}");
+            return ExitCode::from(2);
+        }
+    };
+    let mut session = Session::rooted(root);
     let stdin = std::io::stdin();
     let mut out = std::io::stdout().lock();
     for line in stdin.lock().lines() {
@@ -96,10 +104,10 @@ pub fn run(mcp: bool) -> ExitCode {
             Ok(req) => answer(&mut session, &req, mcp),
             Err(e) => Some(error(Json::Null, -32700, &e)),
         };
-        if let Some(r) = reply {
-            if writeln!(out, "{r}").and_then(|_| out.flush()).is_err() {
-                break;
-            }
+        if let Some(r) = reply
+            && writeln!(out, "{r}").and_then(|_| out.flush()).is_err()
+        {
+            break;
         }
     }
     ExitCode::SUCCESS

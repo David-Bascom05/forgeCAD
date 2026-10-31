@@ -41,11 +41,30 @@ pub const COMMANDS: [&str; 6] = ["build", "query", "measure", "render", "check",
 #[derive(Default)]
 pub struct Session {
     models: HashMap<String, Model>,
+    /// Where files may be read from (serve and mcp); any `.fc` file when `None`.
+    root: Option<std::path::PathBuf>,
 }
 
 impl Session {
+    /// A session that reads `.fc` files under `root` only.
+    pub fn rooted(root: std::path::PathBuf) -> Session {
+        Session {
+            root: Some(root),
+            ..Session::default()
+        }
+    }
+
     /// The file's model, brought up to date with what is on disk.
     pub fn model(&mut self, file: &str) -> Result<&mut Model, String> {
+        if !file.ends_with(".fc") {
+            return Err(format!("{file}: not a .fc part file"));
+        }
+        if let Some(root) = &self.root {
+            let real = std::fs::canonicalize(file).map_err(|e| format!("{file}: {e}"))?;
+            if !real.starts_with(root) {
+                return Err(format!("{file}: outside {}", root.display()));
+            }
+        }
         let src = std::fs::read_to_string(file).map_err(|e| format!("{file}: {e}"))?;
         let m = self.models.entry(file.to_string()).or_default();
         m.update(&src);
@@ -78,25 +97,26 @@ impl Session {
             None => text.push_str(&format!("ok {n} lines {:.2}ms", m.ms)),
             Some(f) => {
                 let line = &m.lines[f.at];
-                text.push_str(&format!(
-                    "error line {}: {}\n  {}\nhint: {}",
-                    line.no,
-                    f.msg,
-                    line.toks.join(" "),
-                    f.hint
-                ));
+                // the line is echoed only once the file has shown itself a part file
+                let echo = if f.at > 0 {
+                    line.toks.join(" ")
+                } else {
+                    String::new()
+                };
+                text.push_str(&format!("error line {}: {}", line.no, f.msg));
+                if !echo.is_empty() {
+                    text.push_str(&format!("\n  {echo}"));
+                }
+                text.push_str(&format!("\nhint: {}", f.hint));
                 j.push((
                     "error",
                     Json::obj(vec![
                         ("line", line.no.into()),
-                        ("text", line.toks.join(" ").into()),
+                        ("text", echo.into()),
                         ("msg", f.msg.into()),
                         ("hint", f.hint.into()),
                     ]),
                 ));
-                if m.built() > 0 {
-                    text.push_str(&format!("\nbuilt to line {}:", m.lines[m.built() - 1].no));
-                }
             }
         }
         j.push(("ms", m.ms.into()));
@@ -109,15 +129,18 @@ impl Session {
                 .fold(forge_math::Box3::EMPTY, |b, f| b.hull(&body.face_box(f)));
             let bbox = [bb.x.lo, bb.y.lo, bb.z.lo, bb.x.hi, bb.y.hi, bb.z.hi];
             let (f, e, v) = counts(body);
-            text.push_str(&format!(
-                "\nvolume {} area {} bbox {}\nfaces {f} edges {e} verts {v}",
-                short(volume),
-                short(area),
-                bbox.map(short).join(" ")
-            ));
+            // a failed build's numbers are in the JSON; the text keeps to the error
+            if ok {
+                text.push_str(&format!(
+                    "\nvolume {} area {} bbox {}\nfaces {f} edges {e} verts {v}",
+                    short(volume),
+                    short(area),
+                    bbox.map(short).join(" ")
+                ));
+            }
             if unmeshed > 0 {
                 text.push_str(&format!(
-                    " ({unmeshed} faces would not mesh: volume, area approximate)"
+                    "\n({unmeshed} faces would not mesh: volume, area approximate)"
                 ));
             }
             j.extend([
@@ -512,6 +535,53 @@ fillet 4 (edges between base wall concave)
             chars / 4
         );
         assert!(chars < 1600, "{chars} chars");
+    }
+
+    #[test]
+    fn reads_only_part_files_under_the_root() {
+        let dir = Dir::new("root");
+        let inside = dir.file("p.fc", "extrude 5 rect 0 0 10 10\n");
+        let key = dir.file("key.pem", "-----BEGIN PRIVATE KEY-----\n");
+        let outside = Dir::new("outside");
+        let away = outside.file("q.fc", "extrude 5 rect 0 0 10 10\n");
+        let mut s = Session {
+            root: Some(std::fs::canonicalize(&dir.0).expect("root")),
+            ..Session::default()
+        };
+        assert!(s.run("build", &args(&inside, &[])).ok);
+        let r = s.run("build", &args(&key, &[]));
+        assert!(
+            !r.ok && r.text.contains("not a .fc part file") && !r.text.contains("BEGIN"),
+            "{}",
+            r.text
+        );
+        let r = s.run("build", &args(&away, &[]));
+        assert!(!r.ok && r.text.contains("outside"), "{}", r.text);
+        let sneaky = format!(
+            "{}/../{}/q.fc",
+            dir.0.display(),
+            outside.0.file_name().expect("name").to_string_lossy()
+        );
+        assert!(!s.run("build", &args(&sneaky, &[])).ok);
+        // a file that is not a part file is never echoed, even named .fc
+        let secret = dir.file("s.fc", "hunter2 swordfish\nmore\n");
+        let r = s.run("build", &args(&secret, &[]));
+        assert!(
+            !r.ok && !r.text.contains("hunter2") && !r.json.to_string().contains("hunter2"),
+            "{}",
+            r.text
+        );
+    }
+
+    /// The example AGENTS.md opens with builds, handles and all.
+    #[test]
+    fn the_agents_example_builds() {
+        let doc = include_str!("../../../AGENTS.md");
+        let example = doc.split("```").nth(1).expect("an example block");
+        let dir = Dir::new("example");
+        let f = dir.file("e.fc", example);
+        let r = Session::default().run("build", &args(&f, &[]));
+        assert!(r.ok, "{}", r.text);
     }
 
     #[test]

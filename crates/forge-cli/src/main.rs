@@ -12,7 +12,7 @@ use std::time::Instant;
 fn usage() -> ExitCode {
     eprintln!(
         "usage: forgecad build|query|measure|render|check|diff FILE [ARGS] [--json] [--at FEAT] [--labels SEL] [--px N] [-o OUT]\n       \
-         forgecad serve | mcp       (JSON-RPC / MCP on stdio)\n       \
+         forgecad serve | mcp [--root DIR]   (JSON-RPC / MCP on stdio, .fc files under DIR, default .)\n       \
          forgecad demo <out.stl> [chord-mm] | preview <out.json>\nformat and selectors: AGENTS.md"
     );
     ExitCode::from(2)
@@ -104,8 +104,11 @@ fn main() -> ExitCode {
     match args.get(1).map(String::as_str) {
         Some("demo") if args.len() >= 3 => demo(&args),
         Some("preview") if args.len() >= 3 => preview(&args[2]),
-        Some("serve") => serve::run(false),
-        Some("mcp") => serve::run(true),
+        Some(m @ ("serve" | "mcp")) => match &args[2..] {
+            [] => serve::run(m == "mcp", "."),
+            [flag, root] if flag == "--root" => serve::run(m == "mcp", root),
+            _ => usage(),
+        },
         Some(c) if COMMANDS.contains(&c) && args.len() >= 3 => command(c, &args[2..]),
         _ => usage(),
     }

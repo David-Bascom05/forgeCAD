@@ -116,6 +116,12 @@ impl Model {
             };
             let f = match parsed {
                 Ok(f) => f,
+                // until a line has parsed, this may not be a part file: echo none of it
+                Err(_) if i == 0 => {
+                    let msg = "the first line is not a feature; is this a .fc part file?".into();
+                    self.fail(i, msg, "see AGENTS.md for the feature kinds".into());
+                    break;
+                }
                 Err(msg) => {
                     let hint = match text::kind(&line.toks[0]) {
                         Some(k) => k.syntax.to_string(),

@@ -22,7 +22,7 @@ pub fn mass(m: &TriMesh) -> Mass {
         let [a, b, d] = t.map(|i| m.positions[i as usize] - Point3::ORIGIN);
         let v = a.dot(b.cross(d)) / 6.0;
         vol += v;
-        c = c + (a + b + d) * (v / 4.0);
+        c += (a + b + d) * (v / 4.0);
         for (k, s) in sq.iter_mut().enumerate() {
             let (x, y, z) = (a[k], b[k], d[k]);
             *s += v / 10.0 * (x * x + y * y + z * z + x * y + y * z + z * x);
