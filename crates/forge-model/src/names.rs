@@ -7,7 +7,10 @@
 //! and every entity is tracked step to step; an insert, delete or swap leaves the entities it
 //! does not touch exactly where they were.
 
-use crate::{CoilSize, Combine, End, Extent, Feature, Head, Part, PathEnds, Source, Target, Turn};
+use crate::{
+    At, AxisBy, CoilSize, Combine, End, Extent, Feature, Head, Layout, Part, PathEnds, PlaneBy, PointBy, Ref,
+    Source, Target, ThreadLength, ThreadOn, Turn, UcsBy, Work,
+};
 use forge_geom::{CurveGeom, SurfaceGeom};
 use forge_math::rng::Rng;
 use forge_math::{Box3, Point2, Point3, Vec3};
@@ -158,6 +161,10 @@ pub fn resized(f: &Feature, k: f64) -> Option<(Feature, f64)> {
             *thickness *= k;
             *thickness / k
         }
+        Feature::Work(Work::Plane(PlaneBy::Offset(_, d))) => {
+            *d *= k;
+            d.abs() / k
+        }
         _ => return None,
     };
     Some((f, reach))
@@ -197,10 +204,52 @@ fn feature_refs(f: &mut Feature) -> Vec<&mut usize> {
             End::To { target: t, .. } => vec![target(t)],
             _ => vec![],
         },
-        Feature::Pattern {
-            of: Source::Features(src),
-            ..
-        } => src.iter_mut().collect(),
+        Feature::Pattern { of, layout } => {
+            let mut out: Vec<&mut usize> = match of {
+                Source::Features(src) => src.iter_mut().collect(),
+                Source::Body => vec![],
+            };
+            match layout {
+                Layout::Path { along, .. } => out.extend(along.iter_mut().map(|r| &mut r.feature)),
+                Layout::Points(at) => out.extend(at.iter_mut().filter_map(|a| match a {
+                    At::Ref(r) => Some(&mut r.feature),
+                    At::Sketch { feature, .. } => Some(feature),
+                    At::Xyz(_) => None,
+                })),
+                _ => {}
+            }
+            out
+        }
+        Feature::Thread(t) => {
+            let mut out = match &mut t.on {
+                ThreadOn::Face { feature, .. } | ThreadOn::Hole(feature) => vec![feature],
+                ThreadOn::Axis { .. } => vec![],
+            };
+            if let ThreadLength::To { target: t, .. } = &mut t.length {
+                out.push(target(t));
+            }
+            out
+        }
+        Feature::Work(w) => {
+            let refs: Vec<&mut Ref> = match w {
+                Work::Plane(PlaneBy::Offset(a, _))
+                | Work::Axis(AxisBy::Along(a))
+                | Work::Point(PointBy::At(a) | PointBy::Mid(a)) => vec![a],
+                Work::Plane(PlaneBy::Angle {
+                    plane: a, axis: b, ..
+                })
+                | Work::Plane(PlaneBy::Tangent { face: a, plane: b })
+                | Work::Plane(PlaneBy::Mid(a, b))
+                | Work::Plane(PlaneBy::Normal { curve: a, at: b })
+                | Work::Axis(
+                    AxisBy::Points(a, b) | AxisBy::Meet(a, b) | AxisBy::Normal { plane: a, at: b },
+                )
+                | Work::Point(PointBy::Meet(a, b)) => vec![a, b],
+                Work::Plane(PlaneBy::Points(rs)) | Work::Ucs(UcsBy::Points(rs)) => rs.iter_mut().collect(),
+                Work::Ucs(UcsBy::Frame(_)) => vec![],
+            };
+            refs.into_iter().map(|r| &mut r.feature).collect()
+        }
         Feature::Sweep(s) => match &mut s.ends {
             PathEnds::To { target: t, .. } => vec![target(t)],
             _ => vec![],
@@ -749,6 +798,48 @@ pub fn corpus() -> Vec<(String, Part)> {
     );
     out.extend((1..=8).map(|s| (format!("finish-fuzz{s}"), crate::finishing::fuzz(s))));
     out
+}
+
+/// A block and a boss, a work plane off the block's top, and a peg up to the plane.
+pub fn work_part() -> Part {
+    let ex = |o: Point3, l: ProfileLoop, extent, op| Feature::Extrude {
+        profile: Profile {
+            plane: forge_math::Frame::WORLD.with_origin(o),
+            loops: vec![l],
+        },
+        extent,
+        op,
+    };
+    let top = Ref {
+        feature: 0,
+        name: Some(Name::feature(1).with_str("end")),
+    };
+    Part {
+        features: vec![
+            ex(
+                Point3::ORIGIN,
+                Profile::rectangle(Point2::ORIGIN, 40.0, 20.0, 0),
+                Extent::Distance(10.0),
+                Combine::New,
+            ),
+            ex(
+                Point3::new(30.0, 10.0, 10.0),
+                Profile::circle(Point2::ORIGIN, 4.0, 0),
+                Extent::Distance(15.0),
+                Combine::Add,
+            ),
+            Feature::Work(Work::Plane(PlaneBy::Offset(top, 6.0))),
+            ex(
+                Point3::new(5.0, 5.0, 10.0),
+                Profile::circle(Point2::ORIGIN, 3.0, 0),
+                Extent::To {
+                    target: Target::Plane(2),
+                    offset: 0.0,
+                },
+                Combine::Add,
+            ),
+        ],
+    }
 }
 
 /// One edited history and how its references fared.

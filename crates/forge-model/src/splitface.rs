@@ -10,10 +10,10 @@ use forge_topo::uv::{default_segments, signed_area};
 use forge_topo::{Body, EdgeId, FaceId, Name, VertexId};
 use std::collections::HashMap;
 
-/// `body` with each face named in `faces` split along `by` (feature `i`).
-pub(crate) fn split(body: &Body, faces: &[Name], by: &Surface, i: usize) -> Result<Body, BodyError> {
+/// `body` with each face named in `faces` split along `by` (the feature of id `id`).
+pub(crate) fn split(body: &Body, faces: &[Name], by: &Surface, id: u64) -> Result<Body, BodyError> {
     let mut b = body.clone();
-    let root = Name::feature(i as u64 + 1).with_str("splitface");
+    let root = Name::feature(id).with_str("splitface");
     for (k, &name) in faces.iter().enumerate() {
         let f = b.face_by_name(name).ok_or(BodyError::NoFace { name })?;
         split_one(&mut b, f, by, root.with(k as u64))?;

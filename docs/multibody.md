@@ -18,7 +18,9 @@ meshing and rendering only, and `check` runs per body.
 
 Names stay unique across the whole part, so handles and selectors work unchanged. A feature
 that puts the same tool into a second body, `split`, `copybody` and `combine ... keep` salt the
-names of the entities they would otherwise duplicate (`name.with_str("body").with(id)`).
+names of the entities they would otherwise duplicate (`name.with_str("body").with(id)`, `id`
+the feature id of the body's line, or of the line that splits, copies or combines: never its
+place, so the salts survive inserts, deletes and moves like every other name, docs/naming.md).
 
 ## Targeting
 

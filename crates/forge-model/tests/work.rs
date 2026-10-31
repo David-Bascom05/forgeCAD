@@ -123,7 +123,7 @@ fn along(a: Vec3, b: Vec3) -> bool {
 }
 
 fn datum(features: &[Feature]) -> Datum {
-    work::datum(features, features.len() - 1).expect("work feature")
+    work::datum(forge_model::History::new(features, None), features.len() - 1).expect("work feature")
 }
 
 fn plane(features: &[Feature]) -> Frame {
@@ -205,7 +205,7 @@ fn planes() {
     // a plane parallel to the top that cannot meet it
     let mut bad = with(fs.clone(), Work::Plane(PlaneBy::Offset(r(0, top), 1.0)));
     bad.push(Feature::Work(Work::Axis(AxisBy::Meet(whole(2), r(0, top)))));
-    assert!(work::datum(&bad, 3).is_err());
+    assert!(work::datum(forge_model::History::new(&bad, None), 3).is_err());
 }
 
 #[test]
@@ -619,7 +619,7 @@ fn turned_or_fixed() {
         assert!(check(&b).is_empty());
         for k in 1..4u64 {
             let f = b
-                .face_by_name(forge_model::instance_name(2, [k, 0], cap))
+                .face_by_name(forge_model::instance_name(3, [k, 0], cap))
                 .expect("copy");
             let Surface::Plane(p) = &b.face(f).surface else {
                 panic!("a plane")

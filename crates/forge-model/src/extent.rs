@@ -325,7 +325,7 @@ pub(crate) fn resolve<'a>(features: History<'a>, i: usize) -> Result<Resolved<'a
                     if matches!(op, crate::Combine::New | crate::Combine::Add) {
                         return Err(err(ExtentError::ThroughJoins));
                     }
-                    let reach = hole::reach(&features[..i]);
+                    let reach = hole::reach(features.upto(i));
                     let (mut lo, mut hi) = (0.0f64, 0.0f64);
                     if !reach.is_empty() {
                         for c in corners(&reach) {

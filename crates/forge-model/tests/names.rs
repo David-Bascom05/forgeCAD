@@ -1,6 +1,6 @@
 //! Names follow their entities through upstream edits, and both regen paths give them alike.
 use forge_math::{Frame, Point2, Point3};
-use forge_model::names::{Class, corpus, run};
+use forge_model::names::{Class, corpus, run, work_part};
 use forge_model::{Combine, Extent, Feature, Part, suite};
 use forge_ops::Profile;
 use forge_topo::{Body, Name};
@@ -45,6 +45,26 @@ fn small_edits_never_move_a_name_to_another_entity() {
     assert!(bad.is_empty(), "{bad:#?}");
     // names lost though their entity lives: where flush faces part or meet (docs/naming.md)
     assert!(lost * 25 <= kept, "{lost} lost, {kept} kept");
+}
+
+/// A work plane's reference and the extrude ending on it keep their features through inserts,
+/// deletes and swaps above them, and the plane moves with a resize.
+#[test]
+fn work_features_follow_their_ids() {
+    let cases = run(&[("work".into(), work_part())], 5, 60, false, 1, 30);
+    let shifted = cases.iter().filter(|c| c.edit.shifts(c.before)).count();
+    let bad: Vec<_> = cases
+        .iter()
+        .flat_map(|c| c.outcome.findings.iter().map(move |f| (c, f)))
+        .filter(|(_, f)| matches!(f.class, Class::Wrong | Class::Duplicate))
+        .map(|(c, f)| format!("{:?}: {f:?}", c.edit))
+        .collect();
+    assert!(
+        cases.len() >= 30 && shifted >= 5,
+        "{} judged, {shifted} shifting",
+        cases.len()
+    );
+    assert!(bad.is_empty(), "{bad:#?}");
 }
 
 fn names(b: &Body) -> Vec<Name> {

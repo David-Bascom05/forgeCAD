@@ -889,6 +889,65 @@ combine cut base lid keep
         assert_eq!(back, part);
     }
 
+    /// A file whose lines keep ids away from their places builds the same through every entry
+    /// point: the edits that put them there, a fresh read, the CLI's session and the regens
+    /// given the ids. Read as a plain part, by places, it is refused.
+    #[test]
+    fn ids_out_of_place_build_alike_everywhere() {
+        use forge_model::Solid;
+        use forge_topo::Name;
+        let mut m = Model::new(BODIES);
+        m.edit(forge_doc::Edit::Insert {
+            at: 0,
+            text: "t = 1".into(),
+        })
+        .expect("insert");
+        let src = m.src().to_string();
+        assert!(src.starts_with("id 10 t = 1\nbase: id 1 extrude"), "{src}");
+        let want: Vec<Body> = Model::new(BODIES)
+            .solids_after(9)
+            .iter()
+            .map(|s| s.body.compact())
+            .collect();
+        let bodies = |m: &Model| -> Vec<Body> {
+            m.solids_after(m.built())
+                .iter()
+                .map(|s| s.body.compact())
+                .collect()
+        };
+        assert_eq!(bodies(&m), want, "edited");
+        assert_eq!(bodies(&Model::new(&src)), want, "read afresh");
+        let dir = Dir::new("ids");
+        let f = dir.file("i.fc", &src);
+        let mut s = Session::default();
+        let r = s.run("build", &args(&f, &[]));
+        assert!(r.ok && r.text.ends_with("bodies 4"), "{}", r.text);
+        assert_eq!(bodies(s.model(&f).expect("model")), want, "session");
+        let ids: Vec<u64> = m.lines.iter().map(|l| l.id).collect();
+        let part = forge_model::Part {
+            features: m.features.clone(),
+        };
+        let seq = part.regenerate_solids_ids(Some(&ids)).expect("regenerates");
+        assert_eq!(
+            seq.iter().map(|s| s.body.clone()).collect::<Vec<_>>(),
+            want,
+            "regen"
+        );
+        let nary = part.regenerate_nary_solids_ids(2, Some(&ids)).expect("n-ary");
+        let names = |b: &[Solid]| {
+            let mut n: Vec<Name> = b
+                .iter()
+                .flat_map(|s| s.body.face_ids().map(|f| s.body.face(f).name))
+                .collect();
+            n.sort();
+            n
+        };
+        assert_eq!(names(&nary), names(&seq), "n-ary");
+        // by places, the names the file holds are not found
+        assert!(part.regenerate_solids().is_err());
+        assert!(crate::text::parse(&src).is_err());
+    }
+
     /// The loop an agent runs: write a bracket, build, fix an error, query an edge, fillet
     /// it, render. Everything it writes and reads is counted.
     #[test]
@@ -1158,7 +1217,7 @@ combine cut base lid keep
         let text = std::fs::read_to_string(&f).expect("written");
         assert_eq!(
             text,
-            "extrude 3 at -30 0 0 rect 0 0 5 5\nextrude new 10 rect 0 0 10 10\nextrude new 4 at 20 0 0 rect 0 0 10 10\nextrude cut 12 at 5 5 -1 circle 0 0 2 in extrude2\n"
+            "id 4 extrude 3 at -30 0 0 rect 0 0 5 5\nid 1 extrude new 10 rect 0 0 10 10\nid 2 extrude new 4 at 20 0 0 rect 0 0 10 10\nid 3 extrude cut 12 at 5 5 -1 circle 0 0 2 in extrude2\n"
         );
         // the bodies before are as they were, the new one beside them
         let volume = |r: &Reply| r.json.get("volume").and_then(Json::num).expect("volume");

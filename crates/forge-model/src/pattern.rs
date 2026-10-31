@@ -9,7 +9,7 @@ use forge_math::{Box3, Frame, Point2, Point3, Vec3, dmath, tol};
 use forge_topo::{Body, EdgeId, Name, ShellId, VertexId};
 
 use crate::work::Ref;
-use crate::{Feature, RegenError};
+use crate::{History, RegenError};
 
 /// What a pattern or mirror copies.
 #[derive(Clone, Debug, PartialEq)]
@@ -165,7 +165,7 @@ pub(crate) fn corners(b: &Box3) -> [Point3; 8] {
 /// For each copy pattern `i`'s layout makes (the original left out), the point it carries
 /// onto `p`.
 pub fn copy_sources(
-    features: &[Feature],
+    features: History<'_>,
     i: usize,
     layout: &Layout,
     p: Point3,
@@ -182,7 +182,7 @@ pub fn copy_sources(
 
 /// Every copy pattern `i`'s layout makes (the original left out), keyed by its place in it.
 pub(crate) fn instances(
-    features: &[Feature],
+    features: History<'_>,
     i: usize,
     layout: &Layout,
 ) -> Result<Vec<([u64; 2], Motion)>, RegenError> {
@@ -599,7 +599,7 @@ mod tests {
                 angle,
                 incremental,
             };
-            let last = instances(&[], 0, &layout)
+            let last = instances(History::new(&[], None), 0, &layout)
                 .expect("layout")
                 .pop()
                 .expect("copies")

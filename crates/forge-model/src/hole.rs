@@ -213,7 +213,7 @@ fn tool_box(f: &Feature) -> Box3 {
 
 /// Boxes of the material feature `i` stands for (for a pattern of features: its sources' and
 /// its copies'); none for cuts and part-changing features.
-fn adds(features: &[Feature], i: usize) -> Vec<Box3> {
+fn adds(features: crate::History<'_>, i: usize) -> Vec<Box3> {
     match &features[i] {
         Feature::Extrude { op, .. } | Feature::Revolve { op, .. } | Feature::Ball { op, .. }
             if matches!(op, Combine::New | Combine::Add) =>
@@ -221,7 +221,7 @@ fn adds(features: &[Feature], i: usize) -> Vec<Box3> {
             match &features[i] {
                 Feature::Ball { .. } => vec![tool_box(&features[i])],
                 // a part it cannot be built is no part of the reach
-                _ => match crate::extent::resolve(crate::History::new(features, None), i) {
+                _ => match crate::extent::resolve(features, i) {
                     Ok(crate::extent::Resolved::Plain(f, _)) => vec![tool_box(&f)],
                     Ok(crate::extent::Resolved::UpTo(f, _)) => vec![tool_box(&f)],
                     Err(_) => vec![],
@@ -249,7 +249,7 @@ fn adds(features: &[Feature], i: usize) -> Vec<Box3> {
 }
 
 /// A box holding all the material `features` can make, to size through holes by.
-pub(crate) fn reach(features: &[Feature]) -> Box3 {
+pub(crate) fn reach(features: crate::History<'_>) -> Box3 {
     let mut b = Box3::EMPTY;
     for (i, f) in features.iter().enumerate() {
         match f {

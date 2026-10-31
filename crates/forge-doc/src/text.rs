@@ -1693,6 +1693,8 @@ pub fn lines(src: &str) -> Vec<Line> {
 /// for `@handle` and `(selector)` references against the part as it stands there.
 pub struct Before<'a> {
     pub features: &'a [Feature],
+    /// The id each of `features` is named by.
+    pub ids: &'a [u64],
     pub labels: &'a [Option<String>],
     pub kinds: &'a [&'static str],
     pub refs: &'a dyn Fn(&str) -> R<Vec<Name>>,
@@ -1818,7 +1820,9 @@ pub fn print(part: &Part) -> String {
     out
 }
 
-/// Parses a file whose references are all full names (as `print` writes them).
+/// Parses a file whose references are all full names (as `print` writes them). A `Part` is
+/// named by places, so a file whose lines keep other ids is refused: it builds through its
+/// document, which hands the regen those ids.
 pub fn parse(src: &str) -> Result<Part, (usize, String)> {
     let full = |r: &str| -> R<Vec<Name>> {
         match full_name(r) {
@@ -1829,11 +1833,19 @@ pub fn parse(src: &str) -> Result<Part, (usize, String)> {
     let face = |r: &str| -> R<(Name, Frame)> { Err(format!("'{r}' needs a part to resolve against")) };
     let ls = lines(src);
     let labels: Vec<Option<String>> = ls.iter().map(|l| l.label.clone()).collect();
+    let ids: Vec<u64> = (1..=ls.len() as u64).collect();
+    if let Some(l) = ls.iter().zip(&ids).find(|(l, id)| l.id != **id).map(|p| p.0) {
+        return Err((
+            l.no,
+            format!("id {} is not the line's place: read the file as a document", l.id),
+        ));
+    }
     let mut kinds = Vec::new();
     let mut features = Vec::new();
     for (i, l) in ls.iter().enumerate() {
         let b = Before {
             features: &features,
+            ids: &ids[..i],
             labels: &labels[..i],
             kinds: &kinds,
             refs: &full,
@@ -2199,7 +2211,7 @@ impl<'a> P<'a> {
     }
     /// What work feature `i` comes to.
     fn datum(&self, i: usize, what: &str) -> R<Datum> {
-        work::datum(self.b.features, i)
+        work::datum(forge_model::History::new(self.b.features, Some(self.b.ids)), i)
             .map_err(|e| format!("'{what}' needs a work feature that builds; line {}: {e:?}", i + 1))
     }
     fn cutter(&mut self) -> R<Cutter> {

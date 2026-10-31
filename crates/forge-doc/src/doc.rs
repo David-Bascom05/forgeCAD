@@ -690,7 +690,10 @@ mod tests {
         let mut d = Document::parse("extrude 1 rect 0 0 1 1\nball new 2 at 5 0 0\n");
         let ball = d.items[1].id;
         d.apply(Edit::Move { item: ball, to: 0 }).expect("move");
-        assert_eq!(d.print(), "ball new 2 at 5 0 0\nextrude new 1 rect 0 0 1 1\n");
+        assert_eq!(
+            d.print(),
+            "id 2 ball new 2 at 5 0 0\nid 1 extrude new 1 rect 0 0 1 1\n"
+        );
         // written ops are left as they are
         d.apply(Edit::Move { item: ball, to: 1 }).expect("move back");
         assert_eq!(d.print(), "extrude new 1 rect 0 0 1 1\nball new 2 at 5 0 0\n");

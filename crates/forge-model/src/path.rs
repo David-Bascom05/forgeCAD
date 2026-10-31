@@ -2,7 +2,7 @@
 
 use crate::pattern::{At, Motion, PatternError};
 use crate::work::{self, Ref, at_length, length};
-use crate::{Feature, RegenError};
+use crate::{History, RegenError};
 use forge_geom::{Curve, CurveGeom};
 use forge_math::{Frame, Interval, Point3, UnitVec3, Vec3, dmath, tol};
 
@@ -111,7 +111,7 @@ fn chain(mut free: Vec<(Curve, Interval)>) -> Option<(Vec<Piece>, bool)> {
 
 /// Copies along a path, keyed by their place on it.
 pub(crate) fn along(
-    features: &[Feature],
+    features: History<'_>,
     i: usize,
     refs: &[Ref],
     count: usize,
@@ -205,7 +205,7 @@ pub(crate) fn along(
 
 /// Copies moved from the first point to each of the others.
 pub(crate) fn at_points(
-    features: &[Feature],
+    features: History<'_>,
     i: usize,
     at: &[At],
 ) -> Result<Vec<([u64; 2], Motion)>, RegenError> {

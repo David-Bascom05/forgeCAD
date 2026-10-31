@@ -78,6 +78,14 @@ impl<'a> History<'a> {
             ids: self.ids.map(|ids| &ids[..n]),
         }
     }
+
+    /// The same ids on `features`, one for each of these (a copy with some rewritten).
+    pub(crate) fn on<'b>(&self, features: &'b [Feature]) -> History<'b>
+    where
+        'a: 'b,
+    {
+        History::new(features, self.ids)
+    }
 }
 
 impl std::ops::Deref for History<'_> {
@@ -318,7 +326,7 @@ impl Part {
         batch: Option<&dyn forge_bool::Batch>,
     ) -> Result<Body, RegenError> {
         if bodies::multi(&self.features) {
-            return bodies::one(bodies::nary(&self.features, wasm_one(threads))?);
+            return bodies::one(bodies::nary(self.history(), wasm_one(threads))?);
         }
         let batching = batch.map_or(Batching::None, Batching::Given);
         nary_regen(self.history(), wasm_one(threads), shapes, batching)
@@ -326,12 +334,26 @@ impl Part {
 
     /// Every body the part ends with, rebuilt feature by feature.
     pub fn regenerate_solids(&self) -> Result<Vec<Solid>, RegenError> {
-        bodies::sequential(&self.features)
+        self.regenerate_solids_ids(None)
+    }
+
+    /// `regenerate_solids`, each feature named from its id in `ids` (as `regenerate_ids`).
+    pub fn regenerate_solids_ids(&self, ids: Option<&[u64]>) -> Result<Vec<Solid>, RegenError> {
+        bodies::sequential(History::new(&self.features, ids))
     }
 
     /// `regenerate_solids` in n-ary booleans, one per run of each body's tools.
     pub fn regenerate_nary_solids(&self, threads: usize) -> Result<Vec<Solid>, RegenError> {
-        bodies::nary(&self.features, wasm_one(threads))
+        self.regenerate_nary_solids_ids(threads, None)
+    }
+
+    /// `regenerate_nary_solids`, each feature named from its id in `ids`.
+    pub fn regenerate_nary_solids_ids(
+        &self,
+        threads: usize,
+        ids: Option<&[u64]>,
+    ) -> Result<Vec<Solid>, RegenError> {
+        bodies::nary(History::new(&self.features, ids), wasm_one(threads))
     }
 
     /// Rebuilds the solid from the first feature. Feature ids are their
@@ -368,7 +390,7 @@ impl Part {
                     }
                 }
                 Feature::Pattern { of, layout } => {
-                    let Ok(copies) = instances(&self.features, i, layout) else {
+                    let Ok(copies) = instances(self.history(), i, layout) else {
                         continue;
                     };
                     let mut added = Vec::new();
@@ -659,13 +681,13 @@ fn modify(
     body: &Body,
     threads: usize,
 ) -> Result<Body, RegenError> {
-    let id = i as u64 + 1;
+    let id = features.id(i);
     match f {
         Feature::Fillet {
             edges,
             starts,
             setbacks,
-        } => apply_fillet(i, features.id(i), body, edges, starts, setbacks),
+        } => apply_fillet(i, id, body, edges, starts, setbacks),
         Feature::FaceFillet {
             first,
             second,
@@ -785,7 +807,7 @@ fn tools(features: History<'_>, i: usize, build: bool) -> Result<Vec<Tool>, Rege
         Feature::Hole(h) => {
             let (h, up, next) = extent::hole_end(features, i, h)?;
             let cut = h
-                .revolve(&hole::reach(&features[..i]))
+                .revolve(&hole::reach(features.upto(i)))
                 .map_err(|error| RegenError::Hole { feature: i, error })?;
             let base = tool(i, features.id(i), &cut, build)?;
             let names = upto::names(&base.0);

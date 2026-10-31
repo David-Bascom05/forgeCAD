@@ -3,7 +3,7 @@
 //! worked out from the earlier features' tools, never from the part as built, so they follow
 //! every upstream edit and both regens see the same. They make no solid.
 
-use crate::{Feature, RegenError};
+use crate::{Feature, History, RegenError};
 use forge_geom::intersect::{CurveSurface, LineSurface, curve_surface, line_surface};
 use forge_geom::{Curve, CurveGeom, Line, Plane, Surface};
 use forge_math::{Frame, Interval, Point3, Vec3, tol};
@@ -103,7 +103,7 @@ fn err(i: usize) -> impl Fn(WorkError) -> RegenError {
     move |error| RegenError::Work { feature: i, error }
 }
 
-fn geo(features: &[Feature], i: usize, r: Ref) -> Result<Geo, RegenError> {
+fn geo(features: History<'_>, i: usize, r: Ref) -> Result<Geo, RegenError> {
     let none = || err(i)(WorkError::NoEntity(r));
     let k = r.feature;
     if k >= i {
@@ -140,7 +140,7 @@ fn geo(features: &[Feature], i: usize, r: Ref) -> Result<Geo, RegenError> {
     Err(none())
 }
 
-fn point(features: &[Feature], i: usize, r: Ref) -> Result<Point3, RegenError> {
+fn point(features: History<'_>, i: usize, r: Ref) -> Result<Point3, RegenError> {
     match geo(features, i, r)? {
         Geo::Vertex(p) | Geo::Datum(Datum::Point(p)) => Ok(p),
         Geo::Datum(Datum::Frame(f)) => Ok(f.origin),
@@ -154,7 +154,7 @@ fn point(features: &[Feature], i: usize, r: Ref) -> Result<Point3, RegenError> {
 }
 
 /// An axis: origin, direction.
-fn axis(features: &[Feature], i: usize, r: Ref) -> Result<Line, RegenError> {
+fn axis(features: History<'_>, i: usize, r: Ref) -> Result<Line, RegenError> {
     let z = |f: &Frame| Line {
         origin: f.origin,
         dir: f.z(),
@@ -178,7 +178,7 @@ fn axis(features: &[Feature], i: usize, r: Ref) -> Result<Line, RegenError> {
 }
 
 /// A plane, as a frame whose xy it is.
-fn plane(features: &[Feature], i: usize, r: Ref) -> Result<Frame, RegenError> {
+fn plane(features: History<'_>, i: usize, r: Ref) -> Result<Frame, RegenError> {
     match geo(features, i, r)? {
         Geo::Datum(Datum::Plane(f) | Datum::Frame(f)) => Ok(f),
         Geo::Face(Surface::Plane(p)) => Ok(p.frame),
@@ -191,7 +191,7 @@ fn plane(features: &[Feature], i: usize, r: Ref) -> Result<Frame, RegenError> {
 }
 
 /// A curve over a range: an edge, or an axis (unbounded).
-fn curve(features: &[Feature], i: usize, r: Ref) -> Result<(Curve, Option<Interval>), RegenError> {
+fn curve(features: History<'_>, i: usize, r: Ref) -> Result<(Curve, Option<Interval>), RegenError> {
     match geo(features, i, r)? {
         Geo::Edge(c, range) => Ok((c, Some(range))),
         Geo::Datum(Datum::Axis(l)) => Ok((Curve::Line(l), None)),
@@ -203,7 +203,7 @@ fn curve(features: &[Feature], i: usize, r: Ref) -> Result<(Curve, Option<Interv
 }
 
 /// A surface: a face, or a plane.
-fn surface(features: &[Feature], i: usize, r: Ref) -> Result<Surface, RegenError> {
+fn surface(features: History<'_>, i: usize, r: Ref) -> Result<Surface, RegenError> {
     match geo(features, i, r)? {
         Geo::Face(s) => Ok(s),
         Geo::Datum(Datum::Plane(f) | Datum::Frame(f)) => Ok(Surface::Plane(Plane { frame: f })),
@@ -250,7 +250,7 @@ fn meet(p: &Frame, q: &Frame) -> Option<Line> {
 }
 
 /// What work feature `i` comes to.
-pub fn datum(features: &[Feature], i: usize) -> Result<Datum, RegenError> {
+pub fn datum(features: History<'_>, i: usize) -> Result<Datum, RegenError> {
     let Feature::Work(w) = &features[i] else {
         return match features[i] {
             Feature::Plane(f) => Ok(Datum::Plane(f)),
@@ -378,7 +378,7 @@ pub fn datum(features: &[Feature], i: usize) -> Result<Datum, RegenError> {
 
 /// The name feature `k`'s own solid gives the entity `name` of `part`, found by its geometry:
 /// a later boolean renames the faces and edges it splits or trims. None if it is none of `k`'s.
-pub fn own_name(features: &[Feature], k: usize, part: &Body, name: Name) -> Option<Name> {
+pub fn own_name(features: History<'_>, k: usize, part: &Body, name: Name) -> Option<Name> {
     if crate::modifies(features.get(k)?) {
         return None;
     }
@@ -423,7 +423,7 @@ pub fn own_name(features: &[Feature], k: usize, part: &Body, name: Name) -> Opti
 }
 
 /// The plane work feature or plane `k` stands for (a UCS: its xy), as seen from feature `i`.
-pub(crate) fn plane_of(features: &[Feature], i: usize, k: usize) -> Result<Frame, RegenError> {
+pub(crate) fn plane_of(features: History<'_>, i: usize, k: usize) -> Result<Frame, RegenError> {
     plane(
         features,
         i,
@@ -435,13 +435,13 @@ pub(crate) fn plane_of(features: &[Feature], i: usize, k: usize) -> Result<Frame
 }
 
 /// The points a reference stands for, as feature `i` sees them.
-pub(crate) fn points(features: &[Feature], i: usize, r: Ref) -> Result<Vec<Point3>, RegenError> {
+pub(crate) fn points(features: History<'_>, i: usize, r: Ref) -> Result<Vec<Point3>, RegenError> {
     Ok(vec![point(features, i, r)?])
 }
 
 /// The chain of edges and axes `refs` name, as feature `i` sees them.
 pub(crate) fn curves(
-    features: &[Feature],
+    features: History<'_>,
     i: usize,
     refs: &[Ref],
 ) -> Result<Vec<(Curve, Option<Interval>)>, RegenError> {

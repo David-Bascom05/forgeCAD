@@ -188,11 +188,19 @@ impl Model {
                 let fonts = |n: &str| self.fonts.as_ref().map(|f| f(n)).transpose();
                 let own = |k: usize, n: Name| {
                     self.body_after(i)
-                        .and_then(|b| forge_model::work::own_name(&self.features, k, b, n))
+                        .and_then(|b| {
+                            forge_model::work::own_name(
+                                History::new(&self.features, Some(&ids[..i])),
+                                k,
+                                b,
+                                n,
+                            )
+                        })
                         .unwrap_or(n)
                 };
                 let b = Before {
                     features: &self.features,
+                    ids: &ids[..i],
                     labels: &self.labels[..i],
                     kinds: &self.kinds,
                     refs: &refs,
@@ -416,7 +424,9 @@ impl Model {
                         Source::Body => true,
                         Source::Features(src) => c.iter().any(|x| src.contains(x)),
                     };
-                    select::copies(b, pb, &origins[k - 1], k, &self.features, layout, &from)
+                    let ids: Vec<u64> = self.lines[..self.features.len()].iter().map(|l| l.id).collect();
+                    let h = History::new(&self.features, Some(&ids));
+                    select::copies(b, pb, &origins[k - 1], k, h, layout, &from)
                 }
                 _ => HashMap::new(),
             };

@@ -56,7 +56,7 @@ pub fn copies(
     prev: &Body,
     po: &Lineage,
     k: usize,
-    features: &[forge_model::Feature],
+    features: forge_model::History<'_>,
     layout: &forge_model::Layout,
     from: &dyn Fn(&Vec<usize>) -> bool,
 ) -> Lineage {

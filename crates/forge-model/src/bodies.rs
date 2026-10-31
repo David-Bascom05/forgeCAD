@@ -5,7 +5,7 @@
 use crate::extent::Target;
 use crate::pattern::{Motion, PatternError, corners, moved};
 use crate::{
-    Combine, Edit, Feature, RegenError, Tool, cut_root, modifies, modify, op_of, starts, step, tools,
+    Combine, Edit, Feature, History, RegenError, Tool, cut_root, modifies, modify, op_of, starts, step, tools,
 };
 use forge_bool::{BoolError, Op, Shape, boolean, boolean_into, nary_with};
 use forge_geom::{Cylinder, Plane, Surface};
@@ -15,7 +15,7 @@ use forge_topo::{Body, Name};
 use std::borrow::Cow;
 use std::collections::HashSet;
 
-/// One body of a part: the feature (index) that made it, and its solid.
+/// One body of a part: the feature (its place in the history) that made it, and its solid.
 #[derive(Clone, Debug, PartialEq)]
 pub struct Solid {
     pub id: usize,
@@ -183,9 +183,13 @@ pub(crate) fn motion(steps: &[Step]) -> Motion {
 
 /// Feature `i` of a history applied to the bodies features `..i` left: `regenerate_solids`
 /// one feature at a time. Only `features[..=i]` is read.
-pub fn step_solids(features: &[Feature], i: usize, mut solids: Vec<Solid>) -> Result<Vec<Solid>, RegenError> {
-    let upto = &features[..=i];
-    if !multi(upto) {
+pub fn step_solids(
+    features: History<'_>,
+    i: usize,
+    mut solids: Vec<Solid>,
+) -> Result<Vec<Solid>, RegenError> {
+    let upto = features.upto(i + 1);
+    if !multi(&upto) {
         let id = upto.iter().rposition(starts).unwrap_or(0);
         let body = solids.pop().map(|s| s.body);
         return Ok(step(features, i, body)?
@@ -193,15 +197,16 @@ pub fn step_solids(features: &[Feature], i: usize, mut solids: Vec<Solid>) -> Re
             .into_iter()
             .collect());
     }
-    let (plain, picks) = strip(upto);
-    apply(&plain, &picks, i, solids)
+    let (plain, picks) = strip(&upto);
+    apply(upto.on(&plain), &picks, i, solids)
 }
 
-pub(crate) fn sequential(features: &[Feature]) -> Result<Vec<Solid>, RegenError> {
-    let (plain, picks) = strip(features);
+pub(crate) fn sequential(features: History<'_>) -> Result<Vec<Solid>, RegenError> {
+    let (plain, picks) = strip(&features);
+    let plain = features.on(&plain);
     let mut solids = Vec::new();
     for i in 0..plain.len() {
-        solids = apply(&plain, &picks, i, solids)?;
+        solids = apply(plain, &picks, i, solids)?;
     }
     finish(solids)
 }
@@ -221,7 +226,7 @@ fn pick<'a>(picks: &[Option<&'a Pick>], i: usize) -> Option<&'a Pick> {
 }
 
 fn apply(
-    plain: &[Feature],
+    plain: History<'_>,
     picks: &[Option<&Pick>],
     i: usize,
     mut solids: Vec<Solid>,
@@ -255,9 +260,9 @@ fn apply(
         return Ok(solids);
     }
     for (n, k) in targets(&ids(&solids), p, i)?.into_iter().enumerate() {
-        let salt = (n > 0).then_some(solids[k].id);
+        let salt = (n > 0).then(|| plain.id(solids[k].id));
         let body = std::mem::take(&mut solids[k].body);
-        solids[k].body = add_tools(body, &ts, i, salt)?;
+        solids[k].body = add_tools(body, &ts, (i, plain.id(i)), salt)?;
     }
     Ok(solids)
 }
@@ -356,7 +361,7 @@ fn only(f: &Feature, b: &Body) -> Feature {
 
 /// A part-changing feature applied to each body it is on.
 fn modify_on(
-    plain: &[Feature],
+    plain: History<'_>,
     i: usize,
     p: Option<&Pick>,
     solids: &mut Vec<Solid>,
@@ -392,19 +397,20 @@ fn renamed(b: &Body, rename: impl Fn(Name) -> Name) -> Body {
     out
 }
 
-/// A name moved off the names another body holds, by what moved it.
-fn salted(n: Name, why: &str, id: usize) -> Name {
-    n.with_str(why).with(id as u64)
+/// A name moved off the names another body holds, by what moved it (the id of the feature
+/// that made that body, or of the feature that moves it).
+fn salted(n: Name, why: &str, id: u64) -> Name {
+    n.with_str(why).with(id)
 }
 
-/// The id a boolean of feature `i` names what it makes after (`n`: which of several).
-fn bool_id(i: usize, n: usize) -> u64 {
-    (i as u64 + 1 + 1_000_000) | ((n as u64) << 40)
+/// The id a boolean of the feature of id `id` names what it makes after (`n`: which of several).
+fn bool_id(id: u64, n: u64) -> u64 {
+    (id + 1_000_000) | (n << 40)
 }
 
-/// A feature's tools combined into `b`; `salt`, the tools' names moved off the ones they
-/// left in another body.
-fn add_tools(mut b: Body, ts: &[Tool], i: usize, salt: Option<usize>) -> Result<Body, RegenError> {
+/// A feature's tools (feature `i`, of id `id`) combined into `b`; `salt`, the tools' names
+/// moved off the ones they left in another body.
+fn add_tools(mut b: Body, ts: &[Tool], (i, id): (usize, u64), salt: Option<u64>) -> Result<Body, RegenError> {
     let err = |error| RegenError::Boolean { feature: i, error };
     let moved_off: Vec<Body>;
     let bodies: Vec<&Body> = match salt {
@@ -417,9 +423,9 @@ fn add_tools(mut b: Body, ts: &[Tool], i: usize, salt: Option<usize>) -> Result<
             moved_off.iter().collect()
         }
     };
-    let n = salt.map_or(0, |id| id + 1);
+    let n = salt.map_or(0, |s| s + 1);
     if let [tool] = &bodies[..] {
-        boolean_into(&mut b, tool, op_of(ts[0].1), bool_id(i, n)).map_err(err)?;
+        boolean_into(&mut b, tool, op_of(ts[0].1), bool_id(id, n)).map_err(err)?;
         if b.dead > b.faces.len() / 2 {
             b = b.compact();
         }
@@ -432,7 +438,7 @@ fn add_tools(mut b: Body, ts: &[Tool], i: usize, salt: Option<usize>) -> Result<
     let mut all = vec![&base];
     all.extend(bodies);
     let ops: Vec<Op> = ts.iter().map(|t| op_of(t.1)).collect();
-    let root = salt.map_or(cut_root(i), |id| salted(cut_root(i), "body", id));
+    let root = salt.map_or(cut_root(i), |s| salted(cut_root(i), "body", s));
     Ok(nary_with(&all, &ops, None, None, 1, root).map_err(err)?.compact())
 }
 
@@ -453,13 +459,14 @@ fn find(solids: &[Solid], id: usize, i: usize) -> Result<usize, RegenError> {
 
 /// Combines, splits or moves bodies (feature `i`).
 fn body_feature(
-    plain: &[Feature],
+    plain: History<'_>,
     i: usize,
     bf: &BodyFeature,
     p: Option<&Pick>,
     solids: &mut Vec<Solid>,
 ) -> Result<(), RegenError> {
     let bad = bad(i);
+    let me = plain.id(i);
     match bf {
         BodyFeature::In { .. } => unreachable!("strip unwraps In"),
         BodyFeature::Combine {
@@ -476,11 +483,11 @@ fn body_feature(
                 }
                 let k = find(solids, id, i)?;
                 let tool = if *keep {
-                    renamed(&solids[k].body, |x| salted(x, "combine", i))
+                    renamed(&solids[k].body, |x| salted(x, "combine", me))
                 } else {
                     solids[k].body.clone()
                 };
-                body = boolean(&body, &tool, op_of(*op), bool_id(i, n)).map_err(boolean_err(i))?;
+                body = boolean(&body, &tool, op_of(*op), bool_id(me, n as u64)).map_err(boolean_err(i))?;
             }
             solids[t].body = body;
             if !keep {
@@ -495,14 +502,14 @@ fn body_feature(
             }
             for k in on {
                 let body = solids[k].body.compact();
-                let (h, plus_in) = half(&surface, &body_box(&body), i)?;
+                let (h, plus_in) = half(&surface, &body_box(&body), (i, me))?;
                 let (plus, minus) = if plus_in {
                     (Op::Intersect, Op::Subtract)
                 } else {
                     (Op::Subtract, Op::Intersect)
                 };
-                let piece = |op: Op, h: &Body, n: usize| -> Result<Body, RegenError> {
-                    let b = boolean(&body, h, op, bool_id(i, n)).map_err(boolean_err(i))?;
+                let piece = |op: Op, h: &Body, n: u64| -> Result<Body, RegenError> {
+                    let b = boolean(&body, h, op, bool_id(me, n)).map_err(boolean_err(i))?;
                     if b.face_ids().next().is_none() {
                         return Err(bad(BodyError::Misses));
                     }
@@ -513,12 +520,12 @@ fn body_feature(
                     Keep::Minus => solids[k].body = piece(minus, &h, 0)?,
                     Keep::Both => {
                         let below = piece(minus, &h, 0)?;
-                        let h2 = renamed(&h, |x| salted(x, "split", i));
+                        let h2 = renamed(&h, |x| salted(x, "split", me));
                         let above = piece(plus, &h2, 1)?;
                         let taken: HashSet<Name> = all_names(&below).collect();
                         let above = renamed(&above, |x| {
                             if taken.contains(&x) {
-                                salted(x, "split", i)
+                                salted(x, "split", me)
                             } else {
                                 x
                             }
@@ -543,7 +550,7 @@ fn body_feature(
                     .filter(|&n| solids[k].body.face_by_name(n).is_some())
                     .collect();
                 solids[k].body =
-                    crate::splitface::split(&solids[k].body.compact(), &mine, &surface, i).map_err(&bad)?;
+                    crate::splitface::split(&solids[k].body.compact(), &mine, &surface, me).map_err(&bad)?;
             }
         }
         BodyFeature::Move { steps, copy } => {
@@ -554,7 +561,7 @@ fn body_feature(
                 let [k] = on[..] else {
                     return Err(bad(BodyError::NotOne));
                 };
-                let body = moved(&solids[k].body.compact(), &m, |n| salted(n, "copy", i)).map_err(pe)?;
+                let body = moved(&solids[k].body.compact(), &m, |n| salted(n, "copy", me)).map_err(pe)?;
                 solids.push(Solid { id: i, body });
             } else {
                 for k in on {
@@ -579,7 +586,7 @@ fn body_box(b: &Body) -> Box3 {
 }
 
 /// The surface a cutter cuts along.
-fn cutter(plain: &[Feature], i: usize, by: &Cutter) -> Result<Surface, RegenError> {
+fn cutter(plain: History<'_>, i: usize, by: &Cutter) -> Result<Surface, RegenError> {
     Ok(match *by {
         Cutter::Target(t) => crate::extent::surface(plain, i, &t)?,
         Cutter::Plane(frame) => Surface::Plane(Plane { frame }),
@@ -610,8 +617,7 @@ fn cutter(plain: &[Feature], i: usize, by: &Cutter) -> Result<Surface, RegenErro
 
 /// A solid bounded by `s` holding all of box `b` on one side of it, and whether that side is
 /// the plus one (where the surface's normal points).
-fn half(s: &Surface, b: &Box3, i: usize) -> Result<(Body, bool), RegenError> {
-    let id = i as u64 + 1;
+fn half(s: &Surface, b: &Box3, (i, id): (usize, u64)) -> Result<(Body, bool), RegenError> {
     let ee = |error| RegenError::Extrude { feature: i, error };
     let b = b.grow(1.0 + 0.01 * b.diagonal());
     let local = |f: &Frame| Box3::from_points(corners(&b).map(|p| f.point_to_local(p)));
@@ -655,7 +661,7 @@ fn half(s: &Surface, b: &Box3, i: usize) -> Result<(Body, bool), RegenError> {
                 radius: sp.radius,
                 op: Combine::Add,
             };
-            Ok((crate::tool(i, &ball, true)?.0, false))
+            Ok((crate::tool(i, id, &ball, true)?.0, false))
         }
         _ => Err(bad(i)(BodyError::Unsupported(
             "splitting by a cone, torus or blend",
@@ -673,9 +679,9 @@ struct Run {
 }
 
 impl Run {
-    fn flush(self, threads: usize) -> Result<Solid, RegenError> {
+    fn flush(self, plain: History<'_>, threads: usize) -> Result<Solid, RegenError> {
         let err = boolean_err(self.last);
-        let root = salted(cut_root(self.last), "body", self.id);
+        let root = salted(cut_root(self.last), "body", plain.id(self.id));
         let ops: Vec<Op> = self.tools.iter().map(|t| t.1).collect();
         let body = match self.base {
             Ok(b) if self.tools.is_empty() => b,
@@ -701,8 +707,8 @@ impl Run {
     }
 }
 
-fn flush(runs: Vec<Run>, threads: usize) -> Result<Vec<Solid>, RegenError> {
-    runs.into_iter().map(|r| r.flush(threads)).collect()
+fn flush(runs: Vec<Run>, plain: History<'_>, threads: usize) -> Result<Vec<Solid>, RegenError> {
+    runs.into_iter().map(|r| r.flush(plain, threads)).collect()
 }
 
 fn unflush(solids: Vec<Solid>, last: usize) -> Vec<Run> {
@@ -718,7 +724,7 @@ fn unflush(solids: Vec<Solid>, last: usize) -> Vec<Run> {
 }
 
 /// Every tool feature's tools from `start` on, built on up to `threads` threads.
-fn build_each(plain: &[Feature], start: usize, threads: usize) -> Result<Vec<Vec<Tool>>, RegenError> {
+fn build_each(plain: History<'_>, start: usize, threads: usize) -> Result<Vec<Vec<Tool>>, RegenError> {
     let some = |r: std::ops::Range<usize>| -> Result<Vec<Vec<Tool>>, RegenError> {
         r.map(|i| match &plain[i] {
             f if modifies(f) || matches!(f, Feature::Plane(_)) => Ok(vec![]),
@@ -751,13 +757,14 @@ fn build_each(plain: &[Feature], start: usize, threads: usize) -> Result<Vec<Vec
 
 /// The n-ary regen of a multi-body history: each body's tools between features that need it
 /// built (part-changing and body features) go in one n-ary boolean.
-pub(crate) fn nary(features: &[Feature], threads: usize) -> Result<Vec<Solid>, RegenError> {
-    let (plain, picks) = strip(features);
+pub(crate) fn nary(features: History<'_>, threads: usize) -> Result<Vec<Solid>, RegenError> {
+    let (plain, picks) = strip(&features);
+    let plain = features.on(&plain);
     let start = plain.iter().position(starts).unwrap_or(0);
     if plain.get(start).is_none_or(|f| !starts(f)) {
         return Err(RegenError::NothingToCombine { feature: 0 });
     }
-    let mut built = build_each(&plain, start, threads)?;
+    let mut built = build_each(plain, start, threads)?;
     let mut runs: Vec<Run> = Vec::new();
     for i in start..plain.len() {
         let f = &plain[i];
@@ -775,16 +782,16 @@ pub(crate) fn nary(features: &[Feature], threads: usize) -> Result<Vec<Solid>, R
         match f {
             Feature::Plane(_) => {}
             Feature::Work(_) => {
-                crate::work::datum(&plain, i)?;
+                crate::work::datum(plain, i)?;
             }
             Feature::Body(b) => {
-                let mut solids = flush(std::mem::take(&mut runs), threads)?;
-                body_feature(&plain, i, b, p, &mut solids)?;
+                let mut solids = flush(std::mem::take(&mut runs), plain, threads)?;
+                body_feature(plain, i, b, p, &mut solids)?;
                 runs = unflush(solids, i);
             }
             _ if modifies(f) => {
-                let mut solids = flush(std::mem::take(&mut runs), threads)?;
-                modify_on(&plain, i, p, &mut solids, threads)?;
+                let mut solids = flush(std::mem::take(&mut runs), plain, threads)?;
+                modify_on(plain, i, p, &mut solids, threads)?;
                 runs = unflush(solids, i);
             }
             _ if ts.is_empty() => {}
@@ -795,7 +802,7 @@ pub(crate) fn nary(features: &[Feature], threads: usize) -> Result<Vec<Solid>, R
                 for &k in on.iter().skip(1) {
                     let run = &mut runs[k];
                     for t in &ts {
-                        let body = renamed(&t.0, |x| salted(x, "body", run.id));
+                        let body = renamed(&t.0, |x| salted(x, "body", plain.id(run.id)));
                         run.tools.push((body, op_of(t.1), t.2.clone()));
                     }
                     run.last = i;
@@ -806,5 +813,5 @@ pub(crate) fn nary(features: &[Feature], threads: usize) -> Result<Vec<Solid>, R
             }
         }
     }
-    finish(flush(runs, threads)?)
+    finish(flush(runs, plain, threads)?)
 }

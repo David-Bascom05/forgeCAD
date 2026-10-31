@@ -710,6 +710,7 @@ fn holes_at_sketch_centers() {
     round_trip(&part);
     let b = part.regenerate_nary(1).expect("regen");
     assert!(forge_topo::check(&b).is_empty());
+}
 
 #[test]
 fn an_id_used_twice_is_an_error() {
