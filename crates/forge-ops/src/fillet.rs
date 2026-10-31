@@ -1939,6 +1939,8 @@ impl Builder {
             };
             d.normalize().map_or(Vec3::ZERO, |u| u.get())
         };
+        // the chain's edges, each with the vertex it is walked from
+        let mut walk = vec![(e, v)];
         let (mut e, mut w) = (e, other(e, v));
         for _ in 0..self.rolled.len() {
             if w == v {
@@ -1950,13 +1952,43 @@ impl Builder {
                 o != e && (x.start == w || x.end == w) && leaving(o, w).dot(back) < -1.0 + 1e-9
             });
             let Some(o) = next else { break };
+            walk.push((o, w));
             (e, w) = (o, other(o, w));
         }
         if w == v {
             return None;
         }
-        let half = self.body.vertex(v).point.lerp(self.body.vertex(w).point, 0.5);
-        Some(spine.eval(spine_closest(spine, half)))
+        // halfway along it (not across: a chain round a tip comes back beside where it left)
+        let span = |e: EdgeId, from: VertexId| {
+            let x = self.body.edge(e);
+            if x.start == from {
+                (x.range.lo, x.range.hi)
+            } else {
+                (x.range.hi, x.range.lo)
+            }
+        };
+        let lengths: Vec<f64> = walk
+            .iter()
+            .map(|&(e, from)| {
+                let (a, b) = span(e, from);
+                arc_length(&self.body.edge(e).curve, a.min(b), a.max(b))
+            })
+            .collect();
+        let mut left = 0.5 * lengths.iter().sum::<f64>();
+        for (&(e, from), &l) in walk.iter().zip(&lengths) {
+            if left <= l {
+                let (a, b) = span(e, from);
+                let c = &self.body.edge(e).curve;
+                let t = if left > 0.0 {
+                    at_length(c, a, b, left).unwrap_or(b)
+                } else {
+                    a
+                };
+                return Some(spine.eval(spine_closest(spine, c.eval(t))));
+            }
+            left -= l;
+        }
+        None
     }
 
     /// The corner at `v` as the corner solver sees it: faces counter-clockwise
@@ -3055,6 +3087,11 @@ fn at_length(c: &Curve, from: f64, to: f64, d: f64) -> Option<f64> {
 /// The length of `c` between parameters `a` and `b`: 8-point Gauss-Legendre on panels doubled
 /// until two passes agree.
 fn arc_length(c: &Curve, a: f64, b: f64) -> f64 {
+    match c {
+        Curve::Line(_) => return (b - a).abs(),
+        Curve::Circle(k) => return k.radius * (b - a).abs(),
+        _ => {}
+    }
     const X: [f64; 4] = [
         0.1834346424956498,
         0.525532409916329,

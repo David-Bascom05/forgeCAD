@@ -24,3 +24,12 @@ fn shell_after_a_variable_fillet() {
     // its offset springs meet the offset top and sides tangentially
     valid("extrude 14 rect 0 -15 170 30\nfillet 4..3 (edges top line along +x)\nshell 1.6 (faces bottom)\n");
 }
+
+#[test]
+fn round_a_tapered_arm_with_its_tip() {
+    // the sides and the tip arc are one tangent chain round the tip, so it comes back beside the
+    // root corner it leaves: its middle is halfway along it, not across
+    valid(
+        "extrude 14 loop line 0 -15 169.905858 -15.999723 arc 170 0 16 -90.337123 180.674246 line 169.905858 15.999723 0 15 line 0 15 0 -15\nfillet 2 (edges top)\n",
+    );
+}
