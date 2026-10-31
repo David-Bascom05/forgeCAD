@@ -393,3 +393,13 @@ extrude add 32 z 0 0 1 x -0.360994102557712 0.9325680982740896 0 at 162 93 7 cir
         assert_eq!(props::membership_of(&part, &body, 69), None);
     }
 }
+
+/// A point of a sphere near its pole: a line in (u, v) from an edge's end is far from the edge
+/// there, and the drawn loop said the wrong side, so a ray miscounted.
+#[test]
+fn point_on_a_ball_near_its_pole() {
+    for (seed, count, at) in [(91, 6, 92), (18, 16, 19)] {
+        let part = suite::fuzz(seed + 1000, count);
+        assert_eq!(props::membership(&part, at), None, "fuzz{seed} count {count}");
+    }
+}

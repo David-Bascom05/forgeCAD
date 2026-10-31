@@ -632,7 +632,17 @@ impl<'a> Index<'a> {
             return if inside { Where::Inside } else { Where::Outside };
         }
         let drawn = self.drawn(f);
-        let uv = into_window(body, f, face.surface.project(p), drawn);
+        let on = face.surface.project(p);
+        let uv = into_window(body, f, on, drawn);
+        // a line in (u, v) sags 1/cos v times as far as an edge's chord: off the poles that is
+        // under the sag decided by side above, and a chord cannot be wrong outside its own span
+        if let Surface::Sphere(_) = &face.surface
+            && on.y.abs() > 1.05
+            && in_a_chords_span(uv, &drawn.loops)
+            && let Some(inside) = sphere_nearest(body, f, p, &info.edges)
+        {
+            return if inside { Where::Inside } else { Where::Outside };
+        }
         if point_in_loops(uv, &drawn.loops) || other_turn_inside(body, f, uv, drawn) {
             Where::Inside
         } else {
@@ -973,6 +983,60 @@ fn ruling_parity(
         }
     }
     Some(inside)
+}
+
+/// Whether `uv` is in the box of a chord of `loops`.
+fn in_a_chords_span(uv: Point2, loops: &[UvLoop]) -> bool {
+    loops.iter().any(|l| {
+        let n = l.points.len();
+        (0..n).any(|i| {
+            let (a, b) = (l.points[i], l.points[(i + 1) % n]);
+            uv.x >= a.x.min(b.x) && uv.x <= a.x.max(b.x) && uv.y >= a.y.min(b.y) && uv.y <= a.y.max(b.y)
+        })
+    })
+}
+
+/// Whether p, on a sphere, is inside face `f`, from the boundary point nearest it. A straight
+/// line in (u, v) is far from the edge it stands for near a pole, so the drawn loops do not
+/// decide there. On a sphere the nearest in space is the nearest on the surface, so nothing
+/// else lies between p and that point: p is on the side of the edge it comes from. None when the
+/// nearest point is a vertex.
+fn sphere_nearest(body: &Body, f: FaceId, p: Point3, edges: &[(forge_topo::CoedgeId, Box3)]) -> Option<bool> {
+    // nearest box first: a traced curve's closest point is dear, and the rest are mostly passed over
+    let mut order: Vec<(f64, forge_topo::CoedgeId)> = edges
+        .iter()
+        .filter(|e| e.0 != GONE)
+        .map(|e| (box_distance(&e.1, p), e.0))
+        .collect();
+    order.sort_unstable_by(|a, b| a.0.total_cmp(&b.0));
+    let mut best: Option<(f64, forge_topo::CoedgeId, f64)> = None;
+    for &(gap, c) in &order {
+        if best.is_some_and(|x| gap > x.0) {
+            break;
+        }
+        let e = body.edge(body.coedge(c).edge);
+        let t = e.curve.closest(p, e.range);
+        let d = e.curve.eval(t).distance(p);
+        if best.is_none_or(|x| d < x.0) {
+            best = Some((d, c, t));
+        }
+    }
+    let (_, c, t) = best?;
+    let co = body.coedge(c);
+    let e = body.edge(co.edge);
+    let margin = 1e-9 * (1.0 + e.range.width());
+    if t <= e.range.lo + margin || t >= e.range.hi - margin {
+        return None;
+    }
+    if body.partner(c).is_some_and(|o| body.coedge_face(o) == f) {
+        return Some(true);
+    }
+    let surface = &body.face(f).surface;
+    let q = e.curve.eval(t);
+    let d1 = e.curve.deriv(t).d1;
+    let along = if co.forward { d1 } else { -d1 };
+    let side = body.face_normal(f, surface.project(q))?.cross(along).dot(p - q);
+    (side != 0.0).then_some(side > 0.0)
 }
 
 /// Where a conic o + a cos t x + b sin t y crosses the plane through `at` with normal `m`: its
