@@ -1,5 +1,5 @@
-//! Expressions over named parameters: `+ - * / ^`, parentheses, `sqrt sin cos tan min max
-//! abs`, `pi`. Trig takes degrees. Evaluated straight from the text, only through IEEE
+//! Expressions over named parameters: `+ - * / ^`, parentheses, `sqrt sin cos tan asin acos
+//! atan atan2 min max abs`, `pi`. Trig takes degrees, inverse trig gives them. Evaluated straight from the text, only through IEEE
 //! arithmetic and `forge_math::dmath`, so a value is the same on every target.
 
 use forge_math::dmath;
@@ -7,7 +7,9 @@ use forge_model::Unit;
 
 pub type Env<'a> = dyn Fn(&str) -> Option<(f64, Unit)> + 'a;
 
-const FUNCS: [&str; 7] = ["sqrt", "sin", "cos", "tan", "min", "max", "abs"];
+const FUNCS: [&str; 11] = [
+    "sqrt", "sin", "cos", "tan", "asin", "acos", "atan", "atan2", "min", "max", "abs",
+];
 
 /// Words a parameter may not be named: functions, constants and units.
 pub fn reserved(name: &str) -> bool {
@@ -203,7 +205,11 @@ impl Ev<'_, '_> {
 }
 
 fn call(name: &str, args: &[V]) -> Result<V, String> {
-    let want = if matches!(name, "min" | "max") { 2 } else { 1 };
+    let want = if matches!(name, "min" | "max" | "atan2") {
+        2
+    } else {
+        1
+    };
     if args.len() != want {
         return Err(format!(
             "{name} takes {want} argument{}",
@@ -217,6 +223,16 @@ fn call(name: &str, args: &[V]) -> Result<V, String> {
         }
         Ok((f(x / 180.0 * dmath::PI), Unit::None))
     };
+    // an angle out, in degrees, from a ratio (mm/mm is mm here) or a point
+    let inv = |a: f64, u: Unit| {
+        if u == Unit::Deg {
+            return Err(format!("{name} takes a ratio, not deg"));
+        }
+        if a.is_nan() {
+            return Err(format!("{name} of a number outside -1..1"));
+        }
+        Ok((a * (180.0 / dmath::PI), Unit::Deg))
+    };
     match name {
         "sqrt" if x < 0.0 => Err("sqrt of a negative number".into()),
         "sqrt" => Ok((x.sqrt(), u)),
@@ -227,6 +243,10 @@ fn call(name: &str, args: &[V]) -> Result<V, String> {
             let (s, c) = dmath::sin_cos(a);
             s / c
         }),
+        "asin" => inv(dmath::asin(x), u),
+        "acos" => inv(dmath::acos(x), u),
+        "atan" => inv(dmath::atan(x), u),
+        "atan2" => inv(dmath::atan2(x, args[1].0), join(u, args[1].1)?),
         "min" => Ok((x.min(args[1].0), join(u, args[1].1)?)),
         _ => Ok((x.max(args[1].0), join(u, args[1].1)?)),
     }
@@ -287,6 +307,36 @@ mod tests {
         assert_eq!(ev("cos(90)").map(|v| v.0.abs() < 1e-16), Ok(true));
         assert!((ev("tan(45)").expect("tan").0 - 1.0).abs() < 1e-15);
         assert_eq!(ev("a*2"), Ok((60.0, Unit::Deg)));
+    }
+
+    #[test]
+    fn inverse_trig_in_degrees() {
+        let near = |s: &str, want: f64| {
+            let (v, u) = ev(s).expect(s);
+            assert!((v - want).abs() < 1e-12, "{s} = {v}");
+            assert_eq!(u, Unit::Deg, "{s}");
+        };
+        near("atan(1)", 45.0);
+        near("asin(0.5)", 30.0);
+        near("acos(-1)", 180.0);
+        near("atan2(wall, -wall)", 135.0);
+        near("atan2(-1, 0)", -90.0);
+        near("asin(sin(a))", 30.0);
+        assert_eq!(ev("acos(1)"), Ok((0.0, Unit::Deg)));
+        assert_eq!(
+            ev("atan2(1, 1)").map(|v| v.0),
+            Ok(dmath::atan2(1.0, 1.0) * (180.0 / dmath::PI))
+        );
+        // an angle feeds trig and angle sums, not lengths
+        assert!((ev("cos(atan2(3, 4))").expect("cos").0 - 0.8).abs() < 1e-15);
+        assert_eq!(ev("90 - atan(1)").map(|v| v.1), Ok(Unit::Deg));
+        let err = |s: &str| ev(s).expect_err(s);
+        assert_eq!(err("asin(1.5)"), "asin of a number outside -1..1");
+        assert_eq!(err("atan(a)"), "atan takes a ratio, not deg");
+        assert_eq!(err("atan2(1, a)"), "atan2 takes a ratio, not deg");
+        assert_eq!(err("atan2(wall, a)"), "mixes mm and deg");
+        assert_eq!(err("atan2(1)"), "atan2 takes 2 arguments");
+        assert_eq!(err("wall + atan(1)"), "mixes mm and deg");
     }
 
     #[test]

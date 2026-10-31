@@ -26,8 +26,8 @@ w = 40                      # NAME = EXPR [mm|deg], defined above its use; any n
 d = w*3 + 1 mm              #   may be an expression: w/2, (h + 2), sqrt(a), min(a,b)
 plate: sketch xy            # sketch FRAME | sketch on REF (a planar face); rows to `end`
   rect 0 0 38 27            # l1..l4 (corners shared, kept square)    EXPR: + - * / ^ ( )
-  circle 20 12 4            # c1                     sqrt sin cos tan (degrees) min max abs pi
-  pt 6 6                    # p1
+  circle 20 12 4            # c1                     sqrt min max abs pi sin cos tan
+  pt 6 6                    # p1                     asin acos atan atan2(y,x) (degrees)
   fix l1.a                  # constraints and dimensions, valued by EXPR:
   dist l1 w                 #   fix E.. | co A B | hor|ver E.. | par|perp|tan|conc A B
   dia c1 8                  #   eq A B.. | mid P L | sym P Q L | dist A B V | dist L V

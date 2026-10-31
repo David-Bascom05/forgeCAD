@@ -14,8 +14,10 @@ a = 30 deg
 extrude d rect 0 0 w/2 (h + wall)        # any number in any line may be an expression
 ```
 
-- Expressions: `+ - * / ^`, parentheses, `sqrt sin cos tan min max abs`, `pi`. Trig takes
-  degrees (the file's angle unit). `^` takes a whole exponent, or 0.5. Hand-written recursive
+- Expressions: `+ - * / ^`, parentheses, `sqrt sin cos tan asin acos atan atan2 min max abs`,
+  `pi`. Trig takes degrees (the file's angle unit); inverse trig gives degrees, a `deg` value,
+  from a ratio (`atan2(y, x)`: the angle of the point x, y), so an arc through computed points
+  stays parametric. `^` takes a whole exponent, or 0.5. Hand-written recursive
   descent over `f64`, trig through `forge_math::dmath`: bit-identical everywhere.
 - In a feature line an expression is one token (`w/2`) or a parenthesized one (`(h + wall)`);
   a `(` token is a selector only if it starts with `faces|edges|verts`.
