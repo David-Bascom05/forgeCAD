@@ -2,13 +2,13 @@
 # wasm speed: instructions:u and cycles:u of one regen of each gate part as wasm under Node (the
 # main thread only, every function compiled optimized up front), native's beside it and the ratio;
 # REGRESSED: wasm instructions more than 5% over the baseline (the smallest parts vary by a few %). Then
-# the wasm build's bits against tools/speed/bits.txt.
+# the wasm build's bits against native's.
 # usage: tools/speed/wasm.sh [baseline]    exit 1 regressed, 2 bits differ, 3 both
 #        tools/speed/wasm.sh --save        rewrite tools/speed/wasm-baseline.txt
 set -e
 dir=$(dirname "$0")
 export FORGE_BATCH=cpu
-cargo build -q --release -p forge-model --example regen1
+cargo build -q --release -p forge-model --example regen1 --example bits
 cargo build -q --profile wasm -p forge-model --example regen1 --example bits --target wasm32-wasip1
 t="${CARGO_TARGET_DIR:-$PWD/target}"
 count() { o=$(perf stat -i -x, -e instructions:u,cycles:u "$@" 2>&1 >/dev/null) || o=; echo "$o" | awk -F, '/instructions/{i=$1}/cycles/{c=$1}END{print i+0, c+0}'; }
@@ -32,6 +32,8 @@ awk 'NR==FNR{b[$1" "$2]=$3;next}{o=b[$1" "$2]; d=o>0?($3-o)*100/o:0; f=($3=="FAI
   "${1:-$dir/wasm-baseline.txt}" "$now" || status=1
 rm -f "$now"
 status=${status:-0}
-if node --no-turbo-fast-api-calls --no-warnings "$dir/../wasi-run.mjs" "$t/wasm32-wasip1/wasm/examples/bits.wasm" | diff "$dir/bits.txt" - > /dev/null; then
+"$t/release/examples/bits" > "$now"
+if node --no-turbo-fast-api-calls --no-warnings "$dir/../wasi-run.mjs" "$t/wasm32-wasip1/wasm/examples/bits.wasm" | diff "$now" - > /dev/null; then
   echo "wasm bits: identical"; else echo "wasm bits: DIFFER"; status=$((status | 2)); fi
+rm -f "$now"
 exit $status

@@ -30,6 +30,14 @@ jobs:
         run: cargo test --workspace
       - name: test (wasm, same arithmetic as the browser)
         run: sh tools/test-wasm.sh
+      # every part's exact result, native (n-ary on 4 threads) and as the browser build (1 thread)
+      - name: bits (native and wasm agree bit for bit)
+        run: |
+          cargo build -q --release -p forge-model --example bits
+          cargo build -q --profile wasm -p forge-model --example bits --target wasm32-wasip1
+          target/release/examples/bits > bits-native.txt
+          node --no-turbo-fast-api-calls tools/wasi-run.mjs target/wasm32-wasip1/wasm/examples/bits.wasm > bits-wasm.txt
+          diff bits-native.txt bits-wasm.txt
 
   scoreboard:
     runs-on: members
