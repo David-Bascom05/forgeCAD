@@ -468,20 +468,39 @@ pub fn membership(part: &Part, seed: u64) -> Option<Finding> {
     if !plain(part) {
         return None;
     }
-    let body = build(part).ok()?;
+    membership_of(part, &build(part).ok()?, seed)
+}
+
+/// `membership` of `body` against `part`'s tools.
+pub fn membership_of(part: &Part, body: &Body, seed: u64) -> Option<Finding> {
     let (shapes, ops) = part.nary_solids().ok()?;
-    let index = Index::new(&body);
+    let index = Index::new(body);
     let mut r = Rng::new(seed ^ 0x3E);
-    let bb = bbox(&body).grow(2.0);
-    for _ in 0..2000 {
-        let p = sample(&mut r, &bb);
+    let bb = bbox(body).grow(2.0);
+    // half the points anywhere, half in a random tool's box, so small tools are hit too
+    let tools: Vec<Box3> = part
+        .features
+        .iter()
+        .filter_map(|f| {
+            let alone = Part {
+                features: vec![with_op(f, Combine::New)],
+            };
+            Some(bbox(&alone.regenerate().ok()?).grow(0.5))
+        })
+        .collect();
+    for k in 0..2000 {
+        let p = if k % 2 == 0 || tools.is_empty() {
+            sample(&mut r, &bb)
+        } else {
+            let t = r.below(tools.len());
+            sample(&mut r, &tools[t])
+        };
         let tree = csg(&shapes, &ops, p, 1e-3);
         let brep = index.classify(p);
-        let bad = matches!(
+        if matches!(
             (tree, brep),
             (Member::In, Where::Outside) | (Member::Out, Where::Inside)
-        );
-        if bad {
+        ) {
             return found(
                 "membership",
                 format!("CSG {tree:?}, B-rep {brep:?}"),

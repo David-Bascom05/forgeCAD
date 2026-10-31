@@ -17,6 +17,7 @@ forge-model = { path = "../forge-model" }
 
 [dev-dependencies]
 forge-doc = { path = "../forge-doc" }
+forge-agent = { path = "../forge-agent" }
 
 [lints]
 workspace = true

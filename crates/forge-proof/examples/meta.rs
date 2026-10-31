@@ -2,7 +2,9 @@
 //! each failure shrunk to a minimal history and written as a part file.
 //!
 //! cargo run --release -p forge-proof --example meta -- [seeds N] [count N] [only PROP,..]
-//!     [out DIR] [known FILE] [FILE.fc..]
+//!     [adv N] [out DIR] [known FILE] [FILE.fc..]
+//! adv: N seeds of each adversarial family, moved and mirrored only exactly (even seeds), since
+//! an inexact motion moves their coincidences apart.
 //! known: lines `property: kind` already filed; those are counted but not shrunk, and any other
 //! failure makes the run fail (the CI job).
 use forge_model::{Part, suite};
@@ -40,11 +42,27 @@ fn main() {
         .map(|s| (format!("fuzz{s}"), suite::fuzz(s + 1000, count)))
         .collect();
     parts.extend(suite::parts().into_iter().map(|(n, p)| (n.to_string(), p)));
+    // the adversarial families: coincident, tangent and near-tolerance on purpose
+    let adv: u64 = opt("adv").and_then(|s| s.parse().ok()).unwrap_or(0);
+    for (fam, g) in forge_model::adversarial::families() {
+        parts.extend((0..adv).map(|s| {
+            (
+                format!("adv {fam} {s}"),
+                forge_model::adversarial::canonical(&g(s)),
+            )
+        }));
+    }
     for f in &files {
         let src = std::fs::read_to_string(f).expect("read part file");
-        match forge_doc::text::parse(&src) {
-            Ok(p) => parts.push((f.to_string(), p)),
-            Err((line, e)) => eprintln!("{f}: line {line}: {e}"),
+        // selectors resolve against the part as built above them
+        let m = std::panic::catch_unwind(|| forge_agent::model::Model::new(&src));
+        match m {
+            Ok(m) if m.error.is_none() => parts.push((f.to_string(), Part { features: m.features })),
+            Ok(m) => {
+                let e = m.error.expect("an error");
+                eprintln!("{f}: line {}: {}", e.at + 1, e.msg)
+            }
+            Err(_) => eprintln!("{f}: panics"),
         }
     }
     let props: Vec<(&str, Property)> = props::all()
@@ -58,7 +76,11 @@ fn main() {
         let t = Instant::now();
         let mut fails = 0;
         for (i, (pname, part)) in parts.iter().enumerate() {
-            let seed = i as u64 + 1;
+            let seed = if pname.starts_with("adv") {
+                2 * (i as u64 + 1)
+            } else {
+                i as u64 + 1
+            };
             let Some(hit) = f(part, seed) else { continue };
             fails += 1;
             let key = (name.to_string(), hit.kind.clone());

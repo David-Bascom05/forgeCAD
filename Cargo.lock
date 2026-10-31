@@ -139,6 +139,7 @@ dependencies = [
 name = "forge-proof"
 version = "0.1.0"
 dependencies = [
+ "forge-agent",
  "forge-bool",
  "forge-doc",
  "forge-geom",

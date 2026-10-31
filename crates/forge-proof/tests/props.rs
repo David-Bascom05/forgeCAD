@@ -28,6 +28,27 @@ fn scaled_by_powers_of_two() {
     holds("scale", props::scale, &parts);
 }
 
+/// Quarter turns and mirrors in coordinate planes map every coordinate exactly (even seeds pick
+/// those; odd ones an inexact rotation or a tilted plane, which M1 still trips).
+#[test]
+fn exact_turns_and_mirrors() {
+    for (name, part) in fuzz() {
+        for seed in [2, 4, 6] {
+            for (prop, f) in [
+                ("rigid", props::rigid as props::Property),
+                ("mirror", props::mirror),
+            ] {
+                if let Some(hit) = f(&part, seed) {
+                    panic!(
+                        "{prop} fails on {name} (seed {seed}): {}: {}",
+                        hit.kind, hit.detail
+                    );
+                }
+            }
+        }
+    }
+}
+
 #[test]
 fn neighbouring_tools_commute() {
     holds("order", props::order, &fuzz());
@@ -48,6 +69,18 @@ fn certified() {
 #[test]
 fn brep_agrees_with_csg_point_by_point() {
     holds("membership", props::membership, &fuzz());
+}
+
+/// The oracle is not vacuous: a part's tools against the body without its last cut disagree.
+#[test]
+fn membership_catches_a_missing_cut() {
+    let part = fc("extrude new 20 rect 0 0 100 100
+extrude cut 30 at 50 50 -5 circle 0 0 20
+");
+    let body = fc("extrude new 20 rect 0 0 100 100")
+        .regenerate()
+        .expect("builds");
+    assert!(props::membership_of(&part, &body, 1).is_some());
 }
 
 fn block(x: f64, y: f64, z: f64) -> forge_topo::Body {
@@ -151,5 +184,53 @@ fn certify_catches_a_pinched_vertex() {
             .iter()
             .any(|p| matches!(p, forge_topo::Problem::VertexFans { fans: 2, .. })),
         "{probs:?}"
+    );
+}
+
+fn fc(src: &str) -> Part {
+    forge_doc::text::parse(src).expect("parses")
+}
+
+/// M1: the same part rotated by an inexact rotation gets one more vertex between the same two
+/// faces (forgecad-gate/repros/M1-redundant-vertex-under-rotation.fc).
+#[test]
+#[ignore = "M1: booleans leave vertices between the same two faces, as rounding falls"]
+fn m1_rotation_keeps_topology() {
+    let part = fc("extrude new 17 rect 0 0 82 138
+extrude add 15.625457658136117 axes 0.6111332437811676 0.7772515422987627 -0.14965359447638588 -0.7694654469826927 0.6277120352052737 0.11790049515662869 0.18557770406283436 0.04310035791786255 0.9816838976483822 at 76.92553480349156 114.11085208111551 9.80044547195848 rrect -7.706843451315201 -3.8327248781946053 15.413686902630403 7.665449756389211 2.6191965533564114
+");
+    assert_eq!(props::rigid(&part, 1), None);
+}
+
+/// M3: two blind cuts sharing an end plane inside a block: seq and n-ary disagree on the faces.
+#[test]
+#[ignore = "M3: feature by feature leaves the coplanar ends of a void unmerged"]
+fn m3_void_ends_seq_matches_nary() {
+    let part = fc("extrude new 80 rect 0 0 200 150
+extrude cut 13 yz at 6 28 45 circle 0 0 2
+extrude cut 9 yz at 6 26 45 circle 0 0 1
+");
+    assert_eq!(props::backends(&part, 1), None);
+}
+
+/// M4: a part split by a cylinder into its difference and intersection, combined again.
+#[test]
+#[ignore = "M4: combining A - B and A & B leaves open edges"]
+fn m4_split_halves_combine_valid() {
+    let part = fc("a: extrude new 20 rect 0 0 100 100
+ball cut 6 -xz at 36 58 22
+revolve add -xz at 41 71 20 circle 7 -1 2
+extrude cut 17 at 46 60 16 circle 0 0 8
+b: extrude new 20 rect 0 0 100 100
+ball cut 6 -xz at 36 58 22
+revolve add -xz at 41 71 20 circle 7 -1 2
+extrude keep 17 at 46 60 16 circle 0 0 8
+combine add a b
+");
+    let body = props::build(&part).expect("builds");
+    assert!(
+        forge_topo::check(&body).is_empty(),
+        "{:?}",
+        forge_topo::check(&body)
     );
 }
