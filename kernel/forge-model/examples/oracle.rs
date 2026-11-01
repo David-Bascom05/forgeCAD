@@ -661,6 +661,12 @@ fn export(features: History<'_>, i: usize, before: Option<&Before>) -> Result<St
             json(format!("{{\"kind\":\"shapes\",\"tools\":[{}]}}", ts?.join(",")))
         }
         Feature::Loft(l) => {
+            if l.options.align || l.options.seams.iter().any(Option::is_some) {
+                return Err("a loft lining up its sections: OCCT is given them as written");
+            }
+            if l.options.apex.iter().flatten().any(|a| a.dome.is_some()) {
+                return Err("a domed loft: OCCT has no such end");
+            }
             let ps: Vec<String> = l.profiles.iter().map(|p| format!("{{{}}}", profile(p))).collect();
             let (ruled, loose) = match l.kind {
                 LoftKind::Ruled => (true, None),
@@ -683,8 +689,10 @@ fn export(features: History<'_>, i: usize, before: Option<&Before>) -> Result<St
             };
             Ok(Step::Json(
                 format!(
-                    "{{\"kind\":\"loft\",\"op\":\"{}\",\"ruled\":{ruled},\"centre\":{centre},\"profiles\":[{}]}}",
+                    "{{\"kind\":\"loft\",\"op\":\"{}\",\"ruled\":{ruled},\"centre\":{centre},\"apex\":[{},{}],\"profiles\":[{}]}}",
                     op(l.op),
+                    l.options.apex[0].map_or("null".to_string(), |a| p3(a.point)),
+                    l.options.apex[1].map_or("null".to_string(), |a| p3(a.point)),
                     ps.join(",")
                 ),
                 loose,

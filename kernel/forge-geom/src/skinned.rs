@@ -1142,7 +1142,8 @@ impl Skinned {
                     .map(|k| s.rows[k].1.p.distance(s.rows[k + 1].1.p)),
             )
             .fold(0.0, f64::max);
-        s.sharp = s.radius < 0.1 * cell;
+        // (the curvature's samples say nothing near an apex, where the surface narrows to a point)
+        s.sharp = s.radius < 0.1 * cell || s.pole.is_some();
         Some(s)
     }
 
@@ -1208,9 +1209,35 @@ impl Skinned {
                 Some(self.rows[k].1),
             )
         };
-        let best = from(k);
+        let mut best = from(k);
         if !self.sharp {
             return best;
+        }
+        if self.pole.is_some() {
+            // near an apex the grid's rows are too far apart for its u to mean anything: a fan of
+            // closing rows, its nearest point searched from too
+            let (lo, h) = (self.span.lo, self.span.width());
+            let toward = |f: f64| {
+                if self.pole == Some(0) {
+                    lo + h * f
+                } else {
+                    lo + h * (1.0 - f)
+                }
+            };
+            let mut near = (f64::INFINITY, Point2::new(0.5, toward(0.5)));
+            for f in [1.0 / 16.0, 1.0 / 32.0, 1.0 / 64.0, 1.0 / 128.0, 1.0 / 512.0, 1.0 / 2048.0] {
+                for i in 0..=16 {
+                    let uv = Point2::new(i as f64 / 16.0, toward(f));
+                    let e = self.data.point(uv).p.distance_sq(p);
+                    if e < near.0 {
+                        near = (e, uv);
+                    }
+                }
+            }
+            let alt = polish(&|uv| self.point(uv), p, near.1, self.search(), None);
+            if alt.1.p.distance_sq(p) < best.1.p.distance_sq(p) {
+                best = alt;
+            }
         }
         let (i0, j0) = ((k / w) as i64, (k % w) as i64);
         let other = nearest(
@@ -1300,6 +1327,20 @@ impl Skinned {
 }
 
 impl Procedural for Skinned {
+    fn direct(&self) -> bool {
+        self.pole.is_some()
+    }
+    fn normal(&self, uv: Point2) -> Option<forge_math::UnitVec3> {
+        // at an apex rounding can leave a sliver of a tangent where there is none
+        if let Some(j) = self.pole {
+            let end = if j == 0 { self.ext.v.lo } else { self.ext.v.hi };
+            if (uv.y - end).abs() <= 1e-9 * self.span.width() {
+                return None;
+            }
+        }
+        let d = self.point(uv);
+        d.du.cross(d.dv).normalize()
+    }
     fn whole_box(&self) -> bool {
         true
     }

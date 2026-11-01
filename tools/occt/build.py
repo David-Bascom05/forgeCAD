@@ -730,8 +730,13 @@ def loft(f):
         ts = BRepOffsetAPI_ThruSections(True, f["ruled"])
         # matched segment by segment from each loop's start, as ours are
         ts.CheckCompatibility(False)
+        tip = f.get("apex") or [None, None]
+        if tip[0]:
+            ts.AddVertex(BRepBuilderAPI_MakeVertex(gp_Pnt(*tip[0])).Vertex())
         for p in f["profiles"]:
             ts.AddWire(wire(Frame(p["plane"]).pt, p["loops"][k]))
+        if tip[1]:
+            ts.AddVertex(BRepBuilderAPI_MakeVertex(gp_Pnt(*tip[1])).Vertex())
         ts.Build()
         if not ts.IsDone():
             raise RuntimeError("ThruSections failed")
