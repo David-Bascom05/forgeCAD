@@ -1076,10 +1076,17 @@ class Tr:
                 if second:
                     sb = a.get("secondDirectionBound")
                     sb = sb[1].split(".")[-1] if isinstance(sb, tuple) else "BLIND"
-                    if sb != "BLIND" or a.get("secondDirectionOppositeDirection") is False:
+                    if sb != "BLIND":
                         raise Unsupported("second direction form")
                     d2 = self.val(a["secondDirectionDepth"])
                     head, lo, hi = f"two {num(d)} {num(d2)}", -d2, d
+                    if opp == (a.get("secondDirectionOppositeDirection") is True):
+                        # each flag turns its own direction about the normal: both one way, it runs between the two depths
+                        lo, hi = min(d, d2), max(d, d2)
+                        if hi - lo <= 1e-9:
+                            raise Unresolved("an extrude between equal depths")
+                        head = num(hi - lo)
+                        frame = "z {} x {} at {}".format(vtext(fr.n if not opp else tuple(-x for x in fr.n)), vtext(fr.x), vtext(add(fr.o, fr.n, sgn * lo)))
                 else:
                     head, hi = num(d), d
             elif bound == "SYMMETRIC":
