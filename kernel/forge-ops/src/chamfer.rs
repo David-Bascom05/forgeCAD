@@ -769,7 +769,9 @@ fn bevel(src: &Body, e: EdgeId, size: ChamferSize, root: Name) -> Result<Bevel, 
                         (off - z * z.dot(off)).length() <= tol::LINEAR
                     }
                     Surface::Torus(c) => axis(&c.frame),
-                    Surface::Procedural(_) => false,
+                    Surface::Procedural(_) => {
+                        forge_geom::spline::meet::spun(s).is_some_and(|w| axis(w.frame()))
+                    }
                 }
             };
             if !coaxial(sa) || !coaxial(sb) {
@@ -811,6 +813,57 @@ fn bevel(src: &Body, e: EdgeId, size: ChamferSize, root: Name) -> Result<Bevel, 
                     Cone::new(frame, ra, half).ok_or(unsupported("a chamfer cone too flat or steep"))?,
                 )
             };
+            let mid = pa.lerp(pb, 0.5);
+            let same = surface.gradient(mid).dot(out) > 0.0;
+            (surface, same)
+        }
+        Curve::Procedural(_) => {
+            // a section edge of a wall, in a plane cap: the cut's cross-section is the same all along
+            // it, so the chamfer is that line carried along the edge, square to it
+            let Some(c) = forge_geom::spline::spline_of(&edge.curve) else {
+                return Err(unsupported("a curved edge that is not a circle or a spline"));
+            };
+            let Some(normal) = forge_geom::spline::swept::plane_of(&c.c) else {
+                return Err(unsupported("a spline edge not in one plane"));
+            };
+            let holds = |s: &Surface| match s {
+                Surface::Plane(p) => p.normal_vec().cross(normal.get()).length() <= tol::ANGULAR,
+                _ => forge_geom::spline::meet::extruded(s)
+                    .is_some_and(|w| w.frame().z().cross(normal.get()).length() <= tol::ANGULAR),
+            };
+            if !holds(sa) || !holds(sb) {
+                return Err(unsupported(
+                    "a spline edge between faces whose section changes along it",
+                ));
+            }
+            let [pa, pb] = at_start;
+            let lo = c.c.deriv(edge.range.lo);
+            let plane = lo
+                .d1
+                .normalize()
+                .and_then(|t| Frame::from_zx(lo.p, t, normal.get()))
+                .ok_or_else(lost)?;
+            let (la, lb) = (plane.point_to_local(pa), plane.point_to_local(pb));
+            let section = forge_geom::spline::Spline::from_pieces(
+                1,
+                vec![0.0, pa.distance(pb)],
+                vec![[la.x, la.y, 0.0, 1.0], [lb.x, lb.y, 0.0, 1.0]],
+            )
+            .ok_or_else(lost)?;
+            // (the whole curve's spine: pieces of the edge keep the one surface)
+            let spine = forge_geom::spline::Spine::planar(c.c.clone(), normal).ok_or_else(lost)?;
+            let frame = {
+                let (at, back) = spine.turn_to(spine.domain().lo, edge.range.lo);
+                Frame::from_zx(
+                    at + (plane.origin - lo.p),
+                    back(plane.z().get()).normalize().ok_or_else(lost)?,
+                    back(plane.x().get()),
+                )
+                .ok_or_else(lost)?
+            };
+            let surface = forge_geom::spline::Swept::new(spine, std::sync::Arc::new(section), &frame)
+                .ok_or_else(lost)?
+                .surface();
             let mid = pa.lerp(pb, 0.5);
             let same = surface.gradient(mid).dot(out) > 0.0;
             (surface, same)

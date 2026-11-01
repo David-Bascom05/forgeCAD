@@ -407,3 +407,36 @@ fn sections_line_up_by_their_starts() {
     };
     assert!((run(&seamed) - lined).abs() < 1e-6 * lined);
 }
+
+#[test]
+fn a_chamfer_runs_along_a_spline_edge() {
+    use forge_ops::{ChamferSize, chamfer};
+    let p = prof(vec![dome()]);
+    let b = extrude(&p, 5.0, 1).unwrap();
+    // the top edge of the wall: named from the cap and the side
+    let root = forge_topo::Name::feature(1);
+    let side = root.with_str("side").with(0);
+    let name = forge_topo::Name::NONE.with_set(&[root.with_str("end"), side]);
+    let e = b.edge_by_name(name).expect("the top edge");
+    let c = chamfer(&b, &[b.edge(e).name], ChamferSize::Equal(0.5), 2).unwrap();
+    let v = checked(&c);
+    let v0 = forge_topo::mass::mass(&b).unwrap().volume;
+    // a triangle of area 1/8 along about the edge's length, the wall's offset side only slightly less
+    let cut = v0 - v;
+    let len = {
+        let Segment::Spline(s) = &dome().segments[0].0 else {
+            panic!()
+        };
+        let br = s.c.breaks();
+        let rule = forge_math::poly::gauss_legendre(16);
+        (0..s.c.pieces())
+            .map(|k| {
+                let (lo, h) = (br[k], br[k + 1] - br[k]);
+                rule.iter()
+                    .map(|&(x, w)| 0.5 * h * w * s.c.deriv(lo + 0.5 * h * (x + 1.0)).d1.length())
+                    .sum::<f64>()
+            })
+            .sum::<f64>()
+    };
+    assert!(cut > 0.8 * 0.125 * len && cut < 1.1 * 0.125 * len, "{cut} {len}");
+}

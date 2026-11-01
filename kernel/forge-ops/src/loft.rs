@@ -250,11 +250,16 @@ fn plan(
             let mut first = 0;
             for &len in &sizes {
                 let asked = options.seams.get(k).copied().flatten().filter(|_| first == 0);
-                let target = asked.map(|q| world(k, q)).or_else(|| {
-                    (options.align && k > 0).then(|| planes[k - 1].plane_point(segs[k - 1][first].start()))
-                });
-                if let Some(t) = target {
-                    start_at(&mut segs[k][first..first + len], &planes[k], t);
+                if let Some(q) = asked {
+                    start_at(&mut segs[k][first..first + len], &planes[k], world(k, q));
+                } else if options.align && k > 0 {
+                    let (before, after) = segs.split_at_mut(k);
+                    let last = &before[k - 1][first..first + len];
+                    let this = &mut after[0][first..first + len];
+                    if !line_up(this, &planes[k], last, &planes[k - 1]) {
+                        let t = planes[k - 1].plane_point(last[0].start());
+                        start_at(this, &planes[k], t);
+                    }
                 }
                 first += len;
             }
@@ -334,6 +339,26 @@ fn plan(
         walls,
         apex: is_apex,
     })
+}
+
+/// A loop rotated so its vertices, each about the loop's middle, lie nearest the last section's in the
+/// least squares sense; false for a circle's two halves, whose start the last section's point settles.
+fn line_up(this: &mut [Segment], plane: &Frame, last: &[Segment], before: &Frame) -> bool {
+    let round = |l: &[Segment]| matches!(l, [Segment::Arc { center: a, .. }, Segment::Arc { center: b, .. }] if a.distance(*b) <= tol::LINEAR);
+    if round(this) {
+        return false;
+    }
+    let around = |l: &[Segment], f: &Frame| -> Vec<Vec3> {
+        let p: Vec<Point3> = l.iter().map(|s| f.plane_point(s.start())).collect();
+        let c = p.iter().fold(Vec3::ZERO, |a, q| a + q.to_vec()) / p.len() as f64;
+        p.iter().map(|q| q.to_vec() - c).collect()
+    };
+    let (a, b) = (around(last, before), around(this, plane));
+    let n = b.len();
+    let cost = |r: usize| (0..n).map(|i| (a[i] - b[(i + r) % n]).length_sq()).sum::<f64>();
+    let best = (0..n).min_by(|&x, &y| cost(x).total_cmp(&cost(y))).unwrap_or(0);
+    this.rotate_left(best);
+    true
 }
 
 /// A loop of a section starting where it comes nearest `target`: the two halves of a circle turned

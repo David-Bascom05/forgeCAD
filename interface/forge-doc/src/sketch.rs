@@ -886,14 +886,13 @@ pub fn profile(s: &Sketch, through: Option<&str>) -> R<Profile> {
             {
                 *radius = d;
             }
-            let name = name_of(s, g.1);
-            g.1 = match listed.iter().find(|o| o.0 == name) {
-                Some(o) => o.1,
-                None if listed.is_empty() => stable(name),
-                None => stable(name) + UNLISTED,
-            };
-
-            g.1 = stable(name_of(s, g.1 & !PIECE)) | g.1 & PIECE;
+            let (piece, name) = (g.1 & PIECE, name_of(s, g.1 & !PIECE));
+            g.1 = piece
+                | match listed.iter().find(|o| o.0 == name) {
+                    Some(o) => o.1,
+                    None if listed.is_empty() => stable(name),
+                    None => stable(name) + UNLISTED,
+                };
         }
     }
     Ok(p)

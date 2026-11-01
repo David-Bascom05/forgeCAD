@@ -183,6 +183,13 @@ impl Spine {
         Some(Spine::Spatial { c, ext, table })
     }
 
+    /// The spine's point at `to` and how a direction at `from` turns to its place at `to`.
+    pub fn turn_to(&self, to: f64, from: f64) -> (Point3, Box<dyn Fn(Vec3) -> Vec3 + '_>) {
+        let (a, b) = (self.at(to), self.at(from));
+        let p = a.p;
+        (p, Box::new(move |v| a.turn(b.back(v))))
+    }
+
     /// A box round the spine.
     pub fn bbox(&self) -> Box3 {
         match self {

@@ -381,8 +381,11 @@ fn section_spline(s: &Segment) -> Arc<Spline> {
     }
 }
 
+/// A curve in (r, h), its radii's and heights' spans.
+type RhCurve = (Spline, (f64, f64), (f64, f64));
+
 /// A curve drawn in `plane` as (r, h) about the axis frame, its radii and heights' spans.
-pub(crate) fn rh_curve(rf: &Frame, plane: &Frame, c: &Spline) -> (Spline, (f64, f64), (f64, f64)) {
+pub(crate) fn rh_curve(rf: &Frame, plane: &Frame, c: &Spline) -> RhCurve {
     let m = c.mapped(|q| {
         let p = crate::skin::radius_height(rf, plane, forge_math::Point2::new(q.x, q.y));
         Point3::new(p.x, p.y, 0.0)
@@ -721,7 +724,7 @@ fn wind(
     let prep = prepare(profile, rf.y().get())?;
     let f0 = prep.profile.plane;
     let ring: Vec<Section> = prep.segments().map(|s| ring_section(&rf, &f0, s)).collect();
-    let curves: Vec<Option<(Spline, (f64, f64), (f64, f64))>> = prep
+    let curves: Vec<Option<RhCurve>> = prep
         .segments()
         .map(|s| match s {
             Segment::Spline(c) => Some(rh_curve(&rf, &f0, &c.c)),
