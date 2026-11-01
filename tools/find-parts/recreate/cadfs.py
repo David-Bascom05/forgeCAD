@@ -195,9 +195,18 @@ class Tr:
             if e.r:
                 ours.add(round(e.r, 3))
         best, score = None, 0
+        # the plane it was drawn on rules out look-alike sketches
+        try:
+            plane = self.carrier(single(f["args"]["sketchPlane"], f["env"]), f["env"])
+        except (Unresolved, KeyError, Unsupported):
+            plane = None
         for k, s in enumerate(self.raw.get("sketches", [])):
-            if k in self.used:
+            if k in self.used or "sketchMatrix" not in s:
                 continue
+            if isinstance(plane, OnPlane):
+                fr = Frame(s["sketchMatrix"])
+                if plane.dist(fr.o) > 1e-3 or abs(abs(dot(fr.n, plane.n)) - 1) > 1e-6:
+                    continue
             theirs = set()
             todo = list(s.get("entities", []))
             while todo:
@@ -563,6 +572,8 @@ class Tr:
             raise Unsupported("extrude operation")
         bound = a.get("endBound")
         bound = bound[1].split(".")[-1] if isinstance(bound, tuple) else "BLIND"
+        if a.get("symmetric") is True and bound == "BLIND":
+            bound = "SYMMETRIC"
         opp = a.get("oppositeDirection") is True
         for fid in by:
             fr = self.sk[fid][1]

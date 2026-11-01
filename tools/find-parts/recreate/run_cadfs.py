@@ -61,9 +61,14 @@ def compare(r, t, notes):
     if r.get("area") is not None:
         out["earea"] = abs(r["area"] - t["area"]) / max(t["area"], 1e-12)
     if r.get("bbox") and t.get("bbox"):
-        a, b = r["bbox"], t["bbox"]
+        # ours is bracketed: triangles inside a round part's box, face boxes outside it
+        a, u, b = r["bbox"], r.get("bboxu") or r["bbox"], t["bbox"]
         diag = max(sum((b[i + 3] - b[i]) ** 2 for i in range(3)) ** 0.5, 1e-12)
-        out["ebox"] = max(abs(x - y) for x, y in zip(a, b)) / diag
+        off = 0.0
+        for i in range(6):
+            lo, hi = min(a[i], u[i]), max(a[i], u[i])
+            off = max(off, lo - b[i], b[i] - hi)
+        out["ebox"] = off / diag
     out["match"] = all(out.get(k, 1) <= lim for k in ("evol", "earea", "ebox"))
     return out
 
@@ -86,7 +91,7 @@ def one(i, a):
     if j["v"] == "fail" and j["sig"].startswith("nary: the part is"):
         j = dict(j, v="ok", sig="", multi=True)
     r["v"], r["sig"] = j["v"], j["sig"]
-    for k in ("vol", "area", "bbox", "bodies", "faces", "cpu", "line"):
+    for k in ("vol", "area", "bbox", "bboxu", "bodies", "faces", "cpu", "line"):
         if k in j:
             r[k] = j[k]
     return r

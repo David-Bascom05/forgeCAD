@@ -103,6 +103,17 @@ fn main() {
                 ",\"bbox\":[{},{},{},{},{},{}]",
                 x.lo, y.lo, z.lo, x.hi, y.hi, z.hi
             );
+            // triangles fall inside a round part's box and face boxes outside it: the two bracket it
+            if let Some(b) = m.body() {
+                let u = b
+                    .face_ids()
+                    .map(|f| b.face_box(f))
+                    .fold(forge_math::Box3::EMPTY, |a, c| a.hull(&c));
+                o += &format!(
+                    ",\"bboxu\":[{},{},{},{},{},{}]",
+                    u.x.lo, u.y.lo, u.z.lo, u.x.hi, u.y.hi, u.z.hi
+                );
+            }
         }
         if let Some(f) = &m.error {
             o += &format!(",\"line\":{},\"msg\":\"{}\"", f.at, esc(&f.msg));
