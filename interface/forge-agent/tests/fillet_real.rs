@@ -1,6 +1,7 @@
 //! Fillets as real parts ask for them, each restated in its own numbers from a shape a dataset
 //! part had: every one valid on both regens and of exactly the volume and area worked out here.
 use forge_agent::model::Model;
+use forge_math::dmath;
 use forge_model::Part;
 use std::f64::consts::PI;
 
@@ -361,7 +362,7 @@ fn two_rounds_crossing_on_a_face_become_one_of_the_faces_beyond() {
     let (d, a, r, h, base) = (3.518f64, 2.218f64, 1.5625f64, 10.0f64, -6.0f64);
     let drop = 3.37f64;
     let big = ((d - a) * (d - a) + drop * drop).sqrt();
-    let start = drop.atan2(d - a).to_degrees();
+    let start = dmath::atan2(drop, d - a).to_degrees();
     let src = format!(
         "b: extrude {h} z 0 0 1 x 1 0 0 at 0 0 0 loop line {md} {base} {d} {base} line {d} {base} {d} {low} arc {d} 0 {a} -90 -90 arc 0 {mdrop} {big} {start} {sweep} arc {md} 0 {a} 0 -90 line {md} {low} {md} {base}\nfillet {r} (edges near {e} 0 5) (edges near {me} 0 5)\n",
         md = -d,
@@ -373,13 +374,13 @@ fn two_rounds_crossing_on_a_face_become_one_of_the_faces_beyond() {
     );
     // the ball's centre, on the middle line, a + r from each hollow's centre
     let yc = -((a + r) * (a + r) - d * d).sqrt();
-    let out = (-yc).atan2(d).to_degrees();
+    let out = dmath::atan2(-yc, d).to_degrees();
     let mut pts = vec![(-d, base), (d, base)];
     let n = 20000;
     let arc = |pts: &mut Vec<(f64, f64)>, c: (f64, f64), rad: f64, from: f64, to: f64| {
         for i in 0..=n {
             let t = (from + (to - from) * i as f64 / n as f64).to_radians();
-            pts.push((c.0 + rad * t.cos(), c.1 + rad * t.sin()));
+            pts.push((c.0 + rad * dmath::cos(t), c.1 + rad * dmath::sin(t)));
         }
     };
     arc(&mut pts, (d, 0.0), a, -90.0, -180.0 + out);
@@ -461,7 +462,7 @@ fn a_round_ending_where_its_arc_is_tangent_to_a_wall_keeps_to_its_own_arc() {
         .map(|i| {
             let u = r0 + (i as f64 + 0.5) * w;
             let under = r - (r * r - (r0 + r - u) * (r0 + r - u)).sqrt();
-            under * u * (r0 / u).asin()
+            under * u * dmath::asin(r0 / u)
         })
         .sum::<f64>()
         * w;

@@ -48,3 +48,23 @@ FreeCAD truth yet: tip shape only.
 Parasolid's public overflow table: smooth, then cliff, then notch; internal sharp opposite convexity
 gives cliff, then notch as the radius grows. Mitres: Parasolid and ACIS. 00508513 (a rim over a step) is cliff
 to ten digits. Sources: Parasolid docs through third-party mirrors, ACIS R10, facts only.
+
+## fillet-2 (rebased on 272014c9 and after), judged by the real judge against the run of main 33d794df
+
+`census.py` / `tally_census.py`: every part holding a fillet. A `stopped` part always counts as failed.
+WHUCAD is quantised, so its small errors can be the dataset's.
+
+```
+           parts   match        wrong       failed
+WHUCAD      1783   1044 > 1045   245 > 246   494 > 492
+FreeCAD      327    206 > 207      4 > 3     117 > 117
+CADFS        211    103 > 103     10 > 10     51 > 49
+```
+
+Three WHUCAD match > failed (100003203, 100004130, 100004231) fail the same on main: an extrude's boolean,
+since 33d794df. Six WHUCAD failed > wrong were invalid or far off on main and now build valid, nearer truth.
+Refused on purpose: 100001816, whose STEP truth has its round inside the cavity; 100000470 and FreeCAD
+4a66f49a, whose ball crosses several short faces, which no rule does yet.
+
+Rounds meeting at a ridge where no ball rests on both outer faces: exact on CADFS 00476278 and 00438053
+(OCCT's STEP), WHUCAD 100003117 at 2.7e-6; no part shows the ridge itself wrong. Kept.
