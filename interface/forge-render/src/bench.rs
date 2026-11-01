@@ -21,6 +21,8 @@ impl Path {
             target: self.center,
             yaw: t * tau,
             pitch: 0.35 * (t * tau * 3.0).sin() + 0.2,
+            roll: 0.0,
+            parallel: false,
             dist: self.far * (self.near / self.far).powf(breath),
             fovy: 45f32.to_radians(),
         }

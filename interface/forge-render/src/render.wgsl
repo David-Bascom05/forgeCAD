@@ -7,8 +7,8 @@ struct Globals {
     right: vec4f,
     up: vec4f,
     forward: vec4f,
-    // the cube's region under the cursor
-    cube_hover: vec4f,
+    // the view's flat background
+    back: vec4f,
     // picked vertices: where (w: 0 none, 1 hovered, 2 selected)
     dots: array<vec4f, 8>,
     // for occlusion: view x and y per clip unit at distance 1, the near plane, the reach in pixels
@@ -132,8 +132,7 @@ fn cap_fs(in: Shaded) -> @location(0) vec4f {
 // behind everything: light at the top of the window, a little darker below
 @fragment
 fn back_fs(@builtin(position) at: vec4f) -> @location(0) vec4f {
-    let t = at.y * g.px.y * 0.5;
-    return vec4f(mix(vec3f(0.80, 0.83, 0.87), vec3f(0.56, 0.59, 0.64), t), 1.0);
+    return vec4f(g.back.rgb, 1.0);
 }
 
 struct Line {
@@ -148,8 +147,10 @@ const CORNERS = array<vec2f, 6>(
     vec2f(0.0, -1.0), vec2f(1.0, -1.0), vec2f(0.0, 1.0),
     vec2f(0.0, 1.0), vec2f(1.0, -1.0), vec2f(1.0, 1.0),
 );
-// nearer than the surface it lies on by this share of its distance
-const LIFT = 1.0 + 3e-4;
+// nearer than the surface it lies on by this share of its distance, at the ordinary lens (a long
+// lens's part is a smaller share of its distance: g.eye.w scales these), and no less than f32 can hold
+const LIFT = 3e-4;
+const LIFT_MIN = 3e-7;
 // somewhere nothing draws
 const NOWHERE = vec4f(0.0, 0.0, -1.0, 1.0);
 // lines fade over this many pixels at their sides, past their width
@@ -188,7 +189,7 @@ fn line_corner(vi: u32, pl: Placement, half_px: f32) -> vec4f {
     let c = LINE_CORNERS[vi % 4u];
     let end = select(a, b, c.x > 0.5);
     let off = (along * (c.x * 2.0 - 1.0) + across * c.y) * half_px * g.px.xy;
-    return vec4f(end.xy + off * end.w, end.z * LIFT, end.w);
+    return vec4f(end.xy + off * end.w, end.z * (1.0 + max(LIFT * g.eye.w, LIFT_MIN)), end.w);
 }
 
 // where in the world a segment's corner is, to the end its corner is at
@@ -324,7 +325,8 @@ const HOVER = vec4f(0.20, 0.50, 0.95, 0.40);
 const CHOSEN = vec4f(0.98, 0.55, 0.10, 0.50);
 const SELECTED_BIT = 0x80000000u;
 // just nearer than the same triangles drawn before, so it wins without fighting
-const MARK_LIFT = 1.0 + 1e-5;
+const MARK_LIFT = 1e-5;
+const MARK_LIFT_MIN = 1.5e-7;
 
 struct Mark {
     @builtin(position) clip: vec4f,
@@ -338,7 +340,7 @@ fn mark_colour(selected: bool) -> vec4f {
 @vertex
 fn face_mark_vs(@location(0) p: vec3f, @location(2) at: u32) -> Mark {
     let clip = g.view_proj * vec4f(place(placements[at & ~SELECTED_BIT], p), 1.0);
-    return Mark(vec4f(clip.xy, clip.z * MARK_LIFT, clip.w), mark_colour((at & SELECTED_BIT) != 0u));
+    return Mark(vec4f(clip.xy, clip.z * (1.0 + max(MARK_LIFT * g.eye.w, MARK_LIFT_MIN)), clip.w), mark_colour((at & SELECTED_BIT) != 0u));
 }
 
 @vertex
@@ -380,74 +382,20 @@ fn dot_fs(in: Dot) -> @location(0) vec4f {
     return in.colour;
 }
 
-// the view cube: faces with their outward normal and label's right and up
-const CUBE_N = array<vec3f, 6>(
-    vec3f(0.0, 0.0, 1.0), vec3f(0.0, 0.0, -1.0), vec3f(0.0, -1.0, 0.0),
-    vec3f(0.0, 1.0, 0.0), vec3f(1.0, 0.0, 0.0), vec3f(-1.0, 0.0, 0.0),
-);
-const CUBE_U = array<vec3f, 6>(
-    vec3f(1.0, 0.0, 0.0), vec3f(1.0, 0.0, 0.0), vec3f(1.0, 0.0, 0.0),
-    vec3f(-1.0, 0.0, 0.0), vec3f(0.0, 1.0, 0.0), vec3f(0.0, -1.0, 0.0),
-);
-const CUBE_V = array<vec3f, 6>(
-    vec3f(0.0, 1.0, 0.0), vec3f(0.0, -1.0, 0.0), vec3f(0.0, 0.0, 1.0),
-    vec3f(0.0, 0.0, 1.0), vec3f(0.0, 0.0, 1.0), vec3f(0.0, 0.0, 1.0),
-);
-// TOP, BOTTOM, FRONT, BACK, RIGHT, LEFT as glyph numbers
-const CUBE_LABEL = array<array<u32, 6>, 6>(
-    array<u32, 6>(29u, 24u, 25u, 37u, 37u, 37u),
-    array<u32, 6>(11u, 24u, 29u, 29u, 24u, 22u),
-    array<u32, 6>(15u, 27u, 24u, 23u, 29u, 37u),
-    array<u32, 6>(11u, 10u, 12u, 20u, 37u, 37u),
-    array<u32, 6>(27u, 18u, 16u, 17u, 29u, 37u),
-    array<u32, 6>(21u, 14u, 15u, 29u, 37u, 37u),
-);
-const CUBE_LENGTH = array<u32, 6>(3u, 6u, 5u, 4u, 5u, 4u);
-// a corner's reach in the viewport's half (CUBE_SCALE) and a face's rim (CUBE_RIM), as in nav.rs
-const CUBE_SCALE = 1.1;
-const CUBE_RIM = 0.17;
-
-struct CubeFace {
+// the view cube: triangles in window pixels, built on the CPU (viewcube.rs)
+struct CubeVert {
     @builtin(position) clip: vec4f,
-    @location(0) q: vec3f,
-    @location(1) @interpolate(flat) face: u32,
-    @location(2) uv: vec2f,
+    @location(0) colour: vec4f,
 }
 
 @vertex
-fn cube_vs(@builtin(vertex_index) vi: u32) -> CubeFace {
-    let face = vi / 6u;
-    let c = CORNERS[vi % 6u];
-    let uv = vec2f(c.x - 0.5, c.y * 0.5);
-    let q = CUBE_N[face] * 0.5 + CUBE_U[face] * uv.x + CUBE_V[face] * uv.y;
-    let at = vec2f(dot(q, g.right.xyz), dot(q, g.up.xyz)) / CUBE_SCALE;
-    return CubeFace(vec4f(at, 0.5, 1.0), q, face, uv);
+fn cube_vs(@location(0) px: vec2f, @location(1) colour: vec4f) -> CubeVert {
+    return CubeVert(vec4f(px.x * g.px.x - 1.0, 1.0 - px.y * g.px.y, 0.5, 1.0), colour);
 }
 
 @fragment
-fn cube_fs(in: CubeFace) -> @location(0) vec4f {
-    let n = CUBE_N[in.face];
-    let light = 0.65 + 0.35 * max(-dot(n, g.forward.xyz), 0.0);
-    let rim = 0.5 - CUBE_RIM;
-    let region = vec3f(step(rim, in.q.x) - step(rim, -in.q.x), step(rim, in.q.y) - step(rim, -in.q.y), step(rim, in.q.z) - step(rim, -in.q.z));
-    var colour = vec3f(0.80, 0.82, 0.85) * light;
-    if dot(g.cube_hover.xyz, g.cube_hover.xyz) > 0.5 && all(region == g.cube_hover.xyz) {
-        colour = vec3f(0.30, 0.55, 0.90) * light;
-    }
-    if max(abs(in.uv.x), abs(in.uv.y)) > 0.485 {
-        colour = vec3f(0.15, 0.16, 0.18);
-    }
-    let unit = 0.036;
-    let length = CUBE_LENGTH[in.face];
-    let text = vec2f(in.uv.x / unit + f32(length) * 2.0 - 0.5, -in.uv.y / unit + 2.5);
-    if text.x >= 0.0 && text.y >= 0.0 && text.y < 5.0 && u32(text.x) / 4u < length {
-        let x = u32(text.x) % 4u;
-        let code = CUBE_LABEL[in.face][u32(text.x) / 4u];
-        if x < 3u && ((GLYPHS[code] >> (u32(text.y) * 3u + x)) & 1u) == 1u {
-            colour = vec3f(0.10, 0.11, 0.13);
-        }
-    }
-    return vec4f(colour, 1.0);
+fn cube_fs(in: CubeVert) -> @location(0) vec4f {
+    return in.colour;
 }
 
 // ambient occlusion: how much of the hemisphere above each pixel its neighbours on screen hide,

@@ -92,11 +92,33 @@ Our own compact binary format.
 ## Rendering
 
 One Rust renderer on wgpu: native on the GPU in the app, compiled to wasm on WebGPU in the
-browser. There is no webview or JavaScript in the drawing path. Only the UI chrome around the
-3D view is web code.
+browser. There is no webview and no JavaScript in the drawing path, chrome included.
 
-The app shell is Tauri 2, with that web UI shared between app and browser and the kernel running
-natively in-process.
+The app shell is winit plus wgpu, with the kernel running natively in-process. Chrome and viewport
+are drawn into one frame, so input reaches the pixels in one frame, and nothing is drawn when nothing
+moves. The chrome is egui (with egui-wgpu and egui-winit), restyled to Commonty's colours and type,
+with our own ribbon and tree widgets; the viewport, view cube and dimension arrows stay ours. The
+browser runs the same UI on one canvas (WebGPU, wasm), so `forge_render::shell` knows nothing of the
+window or the worker: it reads a document and says what was asked.
+
+Why these (David, 2026-10-31), measured on the bracket under load on the laptop's RTX 5060:
+
+```
+option                 crates added   release build   fit
+egui 0.37                  35           +121 s        wgpu 30, winit 0.30; all of the below
+cosmic-text + glyphon      30           +41 s         text only: widgets, menus, IME all ours
+iced 0.14                  61           +112 s        needs wgpu 27: a second wgpu
+slint 1.18                225           +231 s        its own language, an async stack
+```
+
+The added crates are over forge-render's 95. Click to GPU done is 0.7 ms at the median, 2.6 ms p95; an
+orbit frame with chrome and viewport 0.7 ms, 2.5 ms p95; idle asks for no frame at all. egui shapes
+with harfrust, so kerning is real. System clipboard through smithay-clipboard (3 crates); file dialogs
+through rfd's portal (2 crates, no async runtime). AccessKit stays an optional feature: egui's widgets
+and ours report their role and label from the start.
+
+Why not a webview over wgpu: WebKitGTK has no WebGPU, a frame shipped into a page takes 30 ms, and web
+chrome over a wgpu subsurface can't promise one frame for both.
 
 ## Storage
 
@@ -109,13 +131,16 @@ natively in-process.
 
 ## UI
 
-An Inventor-style layout: ribbon, browser tree, viewport. The `.fc` text stays in sync but isn't
+An Inventor-style layout: ribbon, browser tree, viewport, in Commonty's colours and type (Public Sans,
+IBM Plex Mono, bundled in `forge-render/fonts`). It holds to desktop standards, not a game UI's: text
+selection, caret, clipboard, IME, keyboard focus, tooltips, kinetic scrolling, context menus, fractional
+scales, system file dialogs. The `.fc` text stays in sync but isn't
 shown; it is for agents and files. Assemblies are in from the start and get optimized later.
 
 ## Dependencies
 
 The kernel stays at zero third-party crates. The interface may use a limited set of vetted ones
-(wgpu, Tauri, a QUIC library), each pinned, and each replaced by our own if it can't hit the
+(wgpu, winit, a QUIC library), each pinned, and each replaced by our own if it can't hit the
 speed targets.
 
 ## Milestone 1: viewer and protocol

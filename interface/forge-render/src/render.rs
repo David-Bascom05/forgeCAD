@@ -12,6 +12,8 @@ pub const SAMPLES: u32 = 4;
 const DEPTH: wgpu::TextureFormat = wgpu::TextureFormat::Depth32Float;
 /// A frame keeps its GPU time this many frames at most before it is read.
 const TIMERS: usize = 4;
+/// The view cube's triangles, at most (viewcube's test holds it under).
+const CUBE_BYTES: u64 = 24 * 3 * 4096;
 const HUD_CHARS: usize = 256;
 /// Characters per row of the overlay (render.wgsl).
 const HUD_COLUMNS: usize = 85;
@@ -124,8 +126,8 @@ impl LineMode {
 #[derive(Clone, Copy, Debug, Default)]
 pub struct Overlay<'a> {
     pub hud: Option<&'a str>,
-    /// The view cube's square (left, top, side in pixels) and its region under the cursor.
-    pub cube: Option<((f32, f32), f32, [i8; 3])>,
+    /// The view cube: where, and what's under the cursor.
+    pub cube: Option<(crate::viewcube::Place, Option<crate::viewcube::Hit>)>,
     /// What's hovered or selected, at most `MARKS` of them.
     pub marks: &'a [Mark],
 }
@@ -188,6 +190,10 @@ pub struct Renderer {
     line: wgpu::RenderPipeline,
     hud: wgpu::RenderPipeline,
     cube: wgpu::RenderPipeline,
+    cube_verts: wgpu::Buffer,
+    /// The view's flat background, and the view cube's colours: linear.
+    pub back_colour: [f32; 3],
+    pub cube_palette: crate::viewcube::Palette,
     surface_cut: wgpu::RenderPipeline,
     cap: wgpu::RenderPipeline,
     line_cut: wgpu::RenderPipeline,
@@ -619,7 +625,12 @@ impl Renderer {
         );
         let hud = pipeline(("hud_vs", "hud_fs"), &[], None, &None, one, &over);
         // convex and culled: no depth needed, over everything
-        let cube = pipeline(("cube_vs", "cube_fs"), &[], back_culled, &always, msaa, &opaque);
+        let cube_buffers = [Some(wgpu::VertexBufferLayout {
+            array_stride: 24,
+            step_mode: wgpu::VertexStepMode::Vertex,
+            attributes: &wgpu::vertex_attr_array![0 => Float32x2, 1 => Float32x4],
+        })];
+        let cube = pipeline(("cube_vs", "cube_fs"), &cube_buffers, None, &always, msaa, &over);
         let pick_surface = pipeline(
             ("surface_pick_vs", "pick_fs"),
             &pick_buffers,
@@ -859,6 +870,12 @@ impl Renderer {
             layout: ao_layout,
         };
         let ao_size = ao_targets(&device, &ao_pipe.layout, &depth_texture_view(&depth_view), size);
+        let cube_verts = device.create_buffer(&wgpu::BufferDescriptor {
+            label: Some("view cube"),
+            size: CUBE_BYTES,
+            usage: wgpu::BufferUsages::VERTEX | wgpu::BufferUsages::COPY_DST,
+            mapped_at_creation: false,
+        });
         Renderer {
             device,
             queue,
@@ -868,6 +885,9 @@ impl Renderer {
             line,
             hud,
             cube,
+            cube_verts,
+            back_colour: crate::viewcube::rgb(0x12171D),
+            cube_palette: crate::viewcube::DARK,
             surface_cut,
             cap,
             line_cut,
@@ -1002,7 +1022,7 @@ impl Renderer {
         self.queue
             .write_buffer(&self.instances, 0, scene.visible.as_flattened());
         // the window is PICK_PX pixels across, a pixel of it one of the screen's
-        let mut bytes = globals_bytes(&view, (PICK_PX, PICK_PX), [0; 3], "");
+        let mut bytes = globals_bytes(&view, (PICK_PX, PICK_PX), [0.0; 3], "");
         bytes[88..92].copy_from_slice(&PICK_EDGE_PX.to_le_bytes());
         self.write_section(&mut bytes);
         self.queue.write_buffer(&self.pick.globals, 0, &bytes);
@@ -1298,6 +1318,24 @@ impl Renderer {
         }
     }
 
+    /// The cube's triangles for this frame, into their buffer; how many vertices.
+    fn write_cube(&mut self, camera: &Camera, overlay: &Overlay) -> u32 {
+        let Some((place, hover)) = overlay.cube else {
+            return 0;
+        };
+        let mut verts = Vec::with_capacity(4096);
+        crate::viewcube::draw(camera, &place, hover, &self.cube_palette, &mut verts);
+        verts.truncate(CUBE_BYTES as usize / 24);
+        let mut bytes = Vec::with_capacity(verts.len() * 24);
+        for v in &verts {
+            for x in v.px.iter().chain(&v.colour) {
+                bytes.extend_from_slice(&x.to_le_bytes());
+            }
+        }
+        self.queue.write_buffer(&self.cube_verts, 0, &bytes);
+        verts.len() as u32
+    }
+
     /// Culls, draws into `target` and submits, the numbers overlay on top if given.
     pub fn frame(
         &mut self,
@@ -1315,12 +1353,12 @@ impl Renderer {
         self.queue
             .write_buffer(&self.instances, 0, scene.visible.as_flattened());
 
-        let hover = overlay.cube.map_or([0; 3], |c| c.2);
-        let mut bytes = globals_bytes(&view, self.size, hover, hud.unwrap_or(""));
+        let mut bytes = globals_bytes(&view, self.size, self.back_colour, hud.unwrap_or(""));
+        let cube_verts = self.write_cube(camera, &overlay);
         let tan = (camera.fovy * 0.5).tan();
-        let box_at = overlay
-            .cube
-            .map_or([0.0; 4], |(at, side, _)| [at.0, at.1, at.0 + side, at.1 + side]);
+        let box_at = overlay.cube.map_or([0.0; 4], |(p, _)| {
+            [p.at.0, p.at.1, p.at.0 + p.side, p.at.1 + p.side]
+        });
         let aspect = self.size.0 as f32 / self.size.1 as f32;
         let numbers = [tan * aspect, tan, view.near, AO_REACH * self.size.1 as f32];
         for (k, v) in numbers.iter().chain(&box_at).enumerate() {
@@ -1464,10 +1502,10 @@ impl Renderer {
                 pass.set_bind_group(0, &self.binds, &[]);
             }
             self.draw_marks(&mut pass, scene, overlay.marks);
-            if let Some((at, side, _)) = overlay.cube {
-                pass.set_viewport(at.0, at.1, side, side, 0.0, 1.0);
+            if cube_verts > 0 {
                 pass.set_pipeline(&self.cube);
-                pass.draw(0..36, 0..1);
+                pass.set_vertex_buffer(0, self.cube_verts.slice(..));
+                pass.draw(0..cube_verts, 0..1);
             }
         }
         if self.ao {
@@ -1586,13 +1624,13 @@ fn place(rows: &crate::scene::Rows, q: [f32; 3]) -> [f32; 3] {
 }
 
 /// The shader's uniforms for a view.
-fn globals_bytes(view: &View, size: (u32, u32), hover: [i8; 3], hud: &str) -> [u8; GLOBALS] {
+fn globals_bytes(view: &View, size: (u32, u32), back: [f32; 3], hud: &str) -> [u8; GLOBALS] {
     let mut bytes = [0u8; GLOBALS];
     let vec3 = |v: [f32; 3]| [v[0], v[1], v[2], 0.0];
     let words = view
         .matrix
         .into_iter()
-        .chain(vec3(view.eye))
+        .chain([view.eye[0], view.eye[1], view.eye[2], view.lens])
         .chain([
             2.0 / size.0 as f32,
             2.0 / size.1 as f32,
@@ -1602,7 +1640,7 @@ fn globals_bytes(view: &View, size: (u32, u32), hover: [i8; 3], hud: &str) -> [u
         .chain(vec3(view.right))
         .chain(vec3(view.up))
         .chain(vec3(view.forward))
-        .chain(vec3(hover.map(|v| v as f32)));
+        .chain(vec3(back));
     for (out, v) in bytes.as_chunks_mut::<4>().0.iter_mut().zip(words) {
         *out = v.to_le_bytes();
     }
@@ -1642,8 +1680,10 @@ impl Offscreen {
             sample_count: 1,
             dimension: wgpu::TextureDimension::D2,
             format: OFFSCREEN,
-            usage: wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::COPY_SRC,
-            view_formats: &[],
+            usage: wgpu::TextureUsages::RENDER_ATTACHMENT
+                | wgpu::TextureUsages::COPY_SRC
+                | wgpu::TextureUsages::TEXTURE_BINDING,
+            view_formats: &[wgpu::TextureFormat::Rgba8Unorm],
         });
         let view = texture.create_view(&Default::default());
         Offscreen { texture, view, size }

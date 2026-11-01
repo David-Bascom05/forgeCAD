@@ -5,6 +5,7 @@ use forge_render::mesh::PartMesh;
 use forge_render::nav::Nav;
 use forge_render::render::{self, Offscreen, Overlay, Renderer, part_info};
 use forge_render::scene::{Placement, Scene};
+use forge_render::viewcube::Hit;
 use winit::dpi::PhysicalPosition;
 use winit::event::{
     DeviceId, ElementState, Modifiers, MouseButton, MouseScrollDelta, TouchPhase, WindowEvent,
@@ -98,12 +99,13 @@ fn the_wheel_zooms_at_the_cursor_with_nothing_under_it() {
 #[test]
 fn clicking_a_cube_face_arrives_at_that_view_smoothly_and_the_wheel_stops_it() {
     let mut n = nav();
-    let (at, side) = n.cube_box();
-    let mid = (at.0 + side / 2.0, at.1 + side / 2.0);
+    let place = n.cube_place();
+    let mid = (place.at.0 + place.side / 2.0, place.at.1 + place.side / 2.0);
     let start = n.camera;
     n.event(&moved(mid.0, mid.1));
-    assert_ne!(n.cube_hover, [0; 3]);
-    let region = n.cube_hover;
+    let Some(Hit::Region(region)) = n.cube_hover else {
+        panic!("{:?}", n.cube_hover)
+    };
     n.event(&button(ElementState::Pressed, MouseButton::Left));
     n.event(&button(ElementState::Released, MouseButton::Left));
     assert!(n.tick(1000.0));
@@ -118,7 +120,7 @@ fn clicking_a_cube_face_arrives_at_that_view_smoothly_and_the_wheel_stops_it() {
     let mut n = nav();
     n.camera.pitch = 1.2;
     n.event(&moved(mid.0, mid.1));
-    assert_eq!(n.cube_hover, [0, 0, 1]);
+    assert_eq!(n.cube_hover, Some(Hit::Region([0, 0, 1])));
     n.event(&button(ElementState::Pressed, MouseButton::Left));
     n.event(&button(ElementState::Released, MouseButton::Left));
     n.tick(0.0);
@@ -144,8 +146,8 @@ fn clicking_a_cube_face_arrives_at_that_view_smoothly_and_the_wheel_stops_it() {
 #[test]
 fn a_drag_starting_on_the_cube_orbits_and_lands_on_no_view() {
     let mut n = nav();
-    let (at, side) = n.cube_box();
-    let mid = (at.0 + side / 2.0, at.1 + side / 2.0);
+    let place = n.cube_place();
+    let mid = (place.at.0 + place.side / 2.0, place.at.1 + place.side / 2.0);
     let start = n.camera;
     n.event(&moved(mid.0, mid.1));
     n.event(&button(ElementState::Pressed, MouseButton::Left));

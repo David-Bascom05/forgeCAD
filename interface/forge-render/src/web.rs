@@ -225,7 +225,7 @@ pub async fn bench_offscreen(
         }
         let overlay = Overlay {
             hud: Some(&hud),
-            cube: Some(((width as f32 - 132.0, 12.0), 120.0, [0; 3])),
+            cube: Some((crate::nav::Nav::new(cam, size, 1.0).cube_place(), None)),
             marks: &[],
         };
         all.push(r.frame(&target.view, &mut scene, &cam, overlay));

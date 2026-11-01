@@ -200,11 +200,10 @@ impl Viewer {
             self.nav.marked_text(),
             measured
         );
-        let (at, side) = self.nav.cube_box();
         let marks = self.nav.marks();
         let overlay = Overlay {
             hud: Some(&hud),
-            cube: Some((at, side, self.nav.cube_hover)),
+            cube: Some((self.nav.cube_place(), self.nav.cube_hover)),
             marks: &marks,
         };
         let drawn = self
@@ -401,6 +400,7 @@ impl Viewer {
                     self.renderer.live_show(false);
                     l.demo_done = true;
                 }
+                Event::Doc(_) => {}
             }
         }
         self.window.request_redraw();
@@ -436,6 +436,7 @@ impl Viewer {
             return;
         }
         if self.bench.is_none() && self.nav.event(&event) {
+            self.nav.home_if_asked(&self.scene);
             self.window.request_redraw();
         }
         match event {

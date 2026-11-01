@@ -3,7 +3,7 @@
 //! swaps a value into a slot and collects what is ready, so it never waits on the kernel.
 
 use crate::model::Model;
-use crate::tools::{Done, Part};
+use crate::tools::{Call, Done, Part};
 use forge_doc::Op;
 use forge_topo::Body;
 use std::collections::VecDeque;
@@ -47,11 +47,32 @@ pub enum Event<T> {
     Done(Done),
     /// The committed part's mesh, when it comes.
     Final(T),
+    /// The document after a commit, and at the start: what a UI's tree and panels read.
+    Doc(DocState),
+}
+
+/// What a UI needs of the part it can't ask the worker for: it parses `src` itself.
+#[derive(Clone, Debug, PartialEq)]
+pub struct DocState {
+    pub src: String,
+    pub version: u64,
+    /// The item that failed to build, and why.
+    pub failed: Option<(u64, String)>,
+}
+
+fn doc_state(part: &Part) -> DocState {
+    let m = &part.model;
+    DocState {
+        src: m.src().to_string(),
+        version: part.version(),
+        failed: m.error.as_ref().map(|f| (m.lines[f.at].id, f.msg.clone())),
+    }
 }
 
 enum Job {
     Commit(Op),
     Cancel,
+    Calls(Vec<Call>),
 }
 
 struct Slot<T> {
@@ -67,7 +88,11 @@ struct Slot<T> {
 struct Shared<T> {
     slot: Mutex<Slot<T>>,
     wake: Condvar,
+    /// Called when something is ready, so a UI can sleep till then.
+    ready: Mutex<Option<Waker>>,
 }
+
+type Waker = Box<dyn Fn() + Send>;
 
 /// The UI's end of the loop.
 pub struct Live<T> {
@@ -88,6 +113,7 @@ impl<T: Send + 'static> Live<T> {
                 stop: false,
             }),
             wake: Condvar::new(),
+            ready: Mutex::new(None),
         });
         let theirs = shared.clone();
         let worker = std::thread::Builder::new()
@@ -122,6 +148,17 @@ impl<T: Send + 'static> Live<T> {
     /// Ends the drag where it started.
     pub fn cancel(&mut self) {
         self.job(Job::Cancel);
+    }
+
+    /// Commits tool calls, in turn with the rest.
+    pub fn call(&mut self, calls: Vec<Call>) {
+        self.job(Job::Calls(calls));
+    }
+
+    /// `f` is called whenever something becomes ready. Whatever is already there, it's called for now.
+    pub fn on_ready(&mut self, f: impl Fn() + Send + 'static) {
+        f();
+        *self.shared.ready.lock().expect("the worker is alive") = Some(Box::new(f));
     }
 
     fn job(&mut self, j: Job) {
@@ -166,7 +203,13 @@ enum Next {
 }
 
 fn run<T>(mut part: Part, mesher: &mut impl FnMut(&Body, Stage) -> T, shared: &Shared<T>) {
-    let say = |e: Event<T>| shared.slot.lock().expect("the UI is alive").ready.push_back(e);
+    let say = |e: Event<T>| {
+        shared.slot.lock().expect("the UI is alive").ready.push_back(e);
+        if let Some(f) = &*shared.ready.lock().expect("the UI is alive") {
+            f();
+        }
+    };
+    say(Event::Doc(doc_state(&part)));
     // the last text that built, to go back to if the kernel panics on a value
     let mut good = part.model.src().to_string();
     // the last value that built, for a drag that ends on one that doesn't
@@ -216,9 +259,28 @@ fn run<T>(mut part: Part, mesher: &mut impl FnMut(&Body, Stage) -> T, shared: &S
                             version: part.version(),
                         }
                     }
+                    Job::Calls(calls) => {
+                        last_good = None;
+                        match catch_unwind(AssertUnwindSafe(|| part.call(calls, None))) {
+                            Ok(d) => d,
+                            Err(_) => {
+                                let fonts = part.model.fonts.take();
+                                part.model = Model::default();
+                                part.model.fonts = fonts;
+                                part.model.update(&good);
+                                Done {
+                                    ok: false,
+                                    text: "error: the kernel panicked; nothing applied".into(),
+                                    lines: Vec::new(),
+                                    version: part.version(),
+                                }
+                            }
+                        }
+                    }
                 };
                 good = part.model.src().to_string();
                 say(Event::Done(d));
+                say(Event::Doc(doc_state(&part)));
                 if let Some(b) = part.model.body() {
                     let out = mesher(b, Stage::Committed);
                     say(Event::Final(out));
@@ -298,6 +360,32 @@ mod tests {
             forge_topo::mass::mass(b).map(|m| m.volume).unwrap_or(0.0)
         });
         (live, w)
+    }
+
+    #[test]
+    fn calls_go_through_the_worker_and_say_what_the_document_is() {
+        let (mut l, _) = start();
+        let mut waker = std::sync::Arc::new(std::sync::atomic::AtomicU32::new(0));
+        let w2 = waker.clone();
+        l.on_ready(move || {
+            w2.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+        });
+        let got = wait(&mut l, |e| matches!(e, Event::Doc(_)));
+        let Some(Event::Doc(d)) = got.iter().find(|e| matches!(e, Event::Doc(_))) else {
+            panic!("a doc state")
+        };
+        assert!(d.src.contains("base: extrude"));
+        let id = forge_doc::Document::parse(&d.src).find("base").unwrap();
+        l.call(vec![Call::SetArg { item: id, arg: 0, text: "12".into() }]);
+        let got = wait(&mut l, |e| matches!(e, Event::Final(_)));
+        assert!(got.iter().any(|e| matches!(e, Event::Done(d) if d.ok)));
+        let doc = got.iter().find_map(|e| match e {
+            Event::Doc(d) => Some(d),
+            _ => None,
+        });
+        assert!(doc.unwrap().src.contains("base: extrude 12"));
+        assert!(std::sync::Arc::get_mut(&mut waker).is_none());
+        assert!(waker.load(std::sync::atomic::Ordering::Relaxed) >= 2);
     }
 
     #[test]

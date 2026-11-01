@@ -263,15 +263,15 @@ fn headless(a: &Args, mut s: Stage) -> Result<(), String> {
                 });
             }
         }
+        let nav = forge_render::nav::Nav::new(s.camera, a.size, 1.0);
         // a few frames, so the overlay shows real numbers
         let mut hud = String::new();
         let mut drawn = Default::default();
         for _ in 0..4 {
             let t = now_ms();
-            let (w, side) = (a.size.0 as f32, 120.0);
             let overlay = Overlay {
                 hud: Some(&hud),
-                cube: Some(((w - side - 12.0, 12.0), side, [0; 3])),
+                cube: Some((nav.cube_place(), None)),
                 marks: &marks,
             };
             drawn = r.frame(&target.view, &mut s.scene, &s.camera, overlay);
@@ -293,6 +293,7 @@ fn headless(a: &Args, mut s: Stage) -> Result<(), String> {
         let mut pick_ms = Vec::new();
         let mut heaviest = (0.0f64, 0, Default::default());
         let mut hud = String::new();
+        let place = forge_render::nav::Nav::new(s.camera, a.size, 1.0).cube_place();
         for frame in 0..a.frames {
             let cam = s.path.at(frame);
             let t = now_ms();
@@ -302,7 +303,7 @@ fn headless(a: &Args, mut s: Stage) -> Result<(), String> {
             }
             let overlay = Overlay {
                 hud: Some(&hud),
-                cube: Some(((a.size.0 as f32 - 132.0, 12.0), 120.0, [0; 3])),
+                cube: Some((place, None)),
                 marks: &[],
             };
             if a.hover {

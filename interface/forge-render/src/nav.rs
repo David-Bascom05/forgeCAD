@@ -1,11 +1,12 @@
-//! Inventor-style navigation, from real window events: left drag orbits about the point under the
-//! cursor, middle or right drag pans it with the cursor, the wheel zooms at it; shift + middle
-//! orbits too. The view cube's faces, edges and corners go to their views, smoothly. Nothing here
-//! touches the window or the GPU: what's under the cursor comes back through `on_pick`.
+//! Navigation from real window events: left drag orbits about the point under the cursor, middle or
+//! right drag pans it with the cursor, the wheel zooms at it; shift + middle orbits too. The view
+//! cube's faces, edges and corners go to their views, smoothly, its ring spins about up. Nothing
+//! here touches the window or the GPU: what's under the cursor comes back through `on_pick`.
 
 use crate::camera::{Camera, PITCH_END};
 use crate::render::{Entity, Mark, PickHit};
 use crate::scene::Scene;
+use crate::viewcube::{self, Hit, Place};
 use winit::event::{ElementState, MouseButton, MouseScrollDelta, WindowEvent};
 use winit::keyboard::{KeyCode, ModifiersState};
 
@@ -13,23 +14,27 @@ use winit::keyboard::{KeyCode, ModifiersState};
 const CLICK_SLOP: f32 = 4.0;
 /// How long a view change animates (ms).
 const TRANSITION_MS: f64 = 280.0;
-/// The view cube's square, from the top right corner (pixels, before the window's scale).
-const CUBE_PX: f32 = 120.0;
-const CUBE_MARGIN_PX: f32 = 12.0;
+const CUBE_MARGIN_PX: f32 = 8.0;
 /// A wheel step of the section, as a share of the view's distance.
 const SECTION_STEP: f32 = 0.01;
 /// How long exploding or coming back together takes (ms).
 const EXPLODE_MS: f64 = 500.0;
-/// How far a cube's corner sits from its middle, as a share of the viewport's half (render.wgsl).
-pub const CUBE_SCALE: f32 = 1.1;
-/// How near a cube face's rim counts as its edge or corner (render.wgsl has it too).
-const CUBE_RIM: f32 = 0.17;
+/// What the left button drags in the view.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum NavTool {
+    #[default]
+    Orbit,
+    Pan,
+    Zoom,
+}
 
 #[derive(Clone, Copy, Debug, PartialEq)]
 enum Drag {
     Orbit,
     Pan,
+    Zoom,
     Cube,
+    Ring,
 }
 
 struct Transition {
@@ -46,6 +51,7 @@ pub struct Nav {
     modifiers: ModifiersState,
     drag: Option<Drag>,
     press_at: (f32, f32),
+    press_button: MouseButton,
     moved: bool,
     /// What's under the cursor, as of a pick there.
     hit: Option<PickHit>,
@@ -53,9 +59,15 @@ pub struct Nav {
     pivot: Option<[f32; 3]>,
     pan_depth: Option<f32>,
     want_pick: Option<(f32, f32)>,
+    want_home: bool,
+    pub tool: NavTool,
     transition: Option<Transition>,
-    /// The cube's region under the cursor: each axis -1, 0 or 1; all zero is none.
-    pub cube_hover: [i8; 3],
+    /// What of the view cube's under the cursor.
+    pub cube_hover: Option<Hit>,
+    /// The view its home button goes to; none: fit the part from the opening angle.
+    pub home_view: Option<Camera>,
+    /// It was right-clicked here: the host's menu goes up, once.
+    pub cube_menu: Option<(f32, f32)>,
     /// The section: which axis it's across (0 x, 1 y, 2 z), and where along it.
     pub section: Option<(usize, f32)>,
     /// How far apart the placements are heading, and are: both 0 to 1.
@@ -64,45 +76,6 @@ pub struct Nav {
     explode_time: Option<f64>,
     /// What's been clicked, in order.
     pub selected: Vec<(u32, Entity)>,
-}
-
-/// Where a pixel falls on the view cube, as a region; None if off it.
-pub fn cube_region(camera: &Camera, px: (f32, f32), box_at: (f32, f32), box_px: f32) -> Option<[i8; 3]> {
-    let (sx, sy) = (
-        ((px.0 - box_at.0) / box_px * 2.0 - 1.0) * CUBE_SCALE,
-        (1.0 - (px.1 - box_at.1) / box_px * 2.0) * CUBE_SCALE,
-    );
-    if sx.abs() > CUBE_SCALE || sy.abs() > CUBE_SCALE {
-        return None;
-    }
-    let (f, r, u) = camera.axes();
-    let o = [0, 1, 2].map(|k| r[k] * sx + u[k] * sy);
-    // the ray o + f t through the box of half side 0.5
-    let (mut near, mut far) = (f32::MIN, f32::MAX);
-    for k in 0..3 {
-        if f[k].abs() < 1e-6 {
-            if o[k].abs() > 0.5 {
-                return None;
-            }
-            continue;
-        }
-        let (a, b) = ((-0.5 - o[k]) / f[k], (0.5 - o[k]) / f[k]);
-        near = near.max(a.min(b));
-        far = far.min(a.max(b));
-    }
-    if near > far {
-        return None;
-    }
-    let q = [0, 1, 2].map(|k| o[k] + f[k] * near);
-    Some(q.map(|v| {
-        if v > 0.5 - CUBE_RIM {
-            1
-        } else if v < -0.5 + CUBE_RIM {
-            -1
-        } else {
-            0
-        }
-    }))
 }
 
 /// The view from a region of the cube.
@@ -116,6 +89,7 @@ pub fn region_view(mut camera: Camera, region: [i8; 3]) -> Camera {
         // straight up or down: squared to the nearest side
         (camera.yaw / core::f32::consts::FRAC_PI_2).round() * core::f32::consts::FRAC_PI_2
     };
+    camera.roll = 0.0;
     camera
 }
 
@@ -129,14 +103,19 @@ impl Nav {
             modifiers: ModifiersState::empty(),
             drag: None,
             press_at: (0.0, 0.0),
+            press_button: MouseButton::Left,
             moved: false,
             hit: None,
             hit_at: None,
             pivot: None,
             pan_depth: None,
             want_pick: None,
+            want_home: false,
+            tool: NavTool::Orbit,
             transition: None,
-            cube_hover: [0; 3],
+            cube_hover: None,
+            home_view: None,
+            cube_menu: None,
             selected: Vec::new(),
             section: None,
             explode_to: 0.0,
@@ -145,21 +124,21 @@ impl Nav {
         }
     }
 
-    /// The cube's square: top left corner, side, in pixels.
-    pub fn cube_box(&self) -> ((f32, f32), f32) {
-        let side = CUBE_PX * self.scale;
-        (
-            (
+    /// Where the view cube is: the top right of the view.
+    pub fn cube_place(&self) -> Place {
+        let side = viewcube::WIDGET_PX * self.scale;
+        Place {
+            at: (
                 self.size.0 as f32 - side - CUBE_MARGIN_PX * self.scale,
                 CUBE_MARGIN_PX * self.scale,
             ),
             side,
-        )
+            scale: self.scale,
+        }
     }
 
-    fn region_under(&self, px: (f32, f32)) -> Option<[i8; 3]> {
-        let (at, side) = self.cube_box();
-        cube_region(&self.camera, px, at, side).filter(|r| *r != [0; 3])
+    fn cube_at(&self, px: (f32, f32)) -> Option<Hit> {
+        viewcube::hit(&self.camera, &self.cube_place(), px)
     }
 
     /// The pixel a pick is wanted for, once.
@@ -212,7 +191,7 @@ impl Nav {
         self.hit = hit;
         self.hit_at = Some(px);
         // the answer for this drag's press, even if the drag has moved on since
-        if self.drag.is_some_and(|d| d != Drag::Cube) && px == self.press_at {
+        if self.drag.is_some_and(|d| !matches!(d, Drag::Cube | Drag::Ring)) && px == self.press_at {
             self.pivot = hit.map(|h| h.point);
             self.pan_depth = hit.map(|h| h.depth);
         }
@@ -247,8 +226,8 @@ impl Nav {
                 self.moved_to((position.x as f32, position.y as f32))
             }
             WindowEvent::CursorLeft { .. } => {
-                let was = self.cube_hover != [0; 3];
-                self.cube_hover = [0; 3];
+                let was = self.cube_hover.is_some();
+                self.cube_hover = None;
                 self.hit_at = None;
                 self.drag = None;
                 was
@@ -267,14 +246,23 @@ impl Nav {
     fn press(&mut self, button: MouseButton) -> bool {
         self.transition = None;
         self.press_at = self.cursor;
+        self.press_button = button;
         self.moved = false;
-        if self.region_under(self.cursor).is_some() {
-            self.drag = Some(Drag::Cube);
+        if let Some(h) = self.cube_at(self.cursor) {
+            if button == MouseButton::Right {
+                self.cube_menu = Some(self.cursor);
+                return false;
+            }
+            self.drag = Some(if h == Hit::Ring { Drag::Ring } else { Drag::Cube });
             return false;
         }
         let shift = self.modifiers.shift_key();
         self.drag = Some(match button {
-            MouseButton::Left => Drag::Orbit,
+            MouseButton::Left => match self.tool {
+                NavTool::Orbit => Drag::Orbit,
+                NavTool::Pan => Drag::Pan,
+                NavTool::Zoom => Drag::Zoom,
+            },
             MouseButton::Middle if shift => Drag::Orbit,
             _ => Drag::Pan,
         });
@@ -298,13 +286,25 @@ impl Nav {
         }
         match drag {
             Some(Drag::Cube) => {
-                if let Some(r) = self.region_under(self.cursor) {
-                    self.go_to(region_view(self.camera, r));
-                    return true;
-                }
-                false
+                let to = match self.cube_at(self.cursor) {
+                    Some(Hit::Region(r)) => region_view(self.camera, r),
+                    Some(Hit::Roll(clockwise)) => {
+                        let mut c = self.camera;
+                        let turn = core::f32::consts::FRAC_PI_2;
+                        c.roll = ((c.roll + if clockwise { turn } else { -turn }) / turn).round() * turn;
+                        c
+                    }
+                    Some(Hit::Home) => {
+                        self.want_home = true;
+                        return true;
+                    }
+                    _ => return false,
+                };
+                self.go_to(to);
+                true
             }
-            Some(Drag::Orbit) => {
+            // a click with a tool up still selects
+            Some(Drag::Orbit | Drag::Pan | Drag::Zoom) if matches!(self.press_button, MouseButton::Left) => {
                 let got = self.known_hit().map(|h| (h.placement, h.entity));
                 if self.modifiers.control_key() || self.modifiers.shift_key() {
                     // adds to the selection, or takes off what's in it
@@ -329,10 +329,10 @@ impl Nav {
         let (dx, dy) = (at.0 - self.cursor.0, at.1 - self.cursor.1);
         self.cursor = at;
         let Some(drag) = self.drag else {
-            let hover = self.region_under(at).unwrap_or([0; 3]);
+            let hover = self.cube_at(at);
             let changed = hover != self.cube_hover;
             self.cube_hover = hover;
-            if hover == [0; 3] {
+            if hover.is_none() {
                 self.want_pick = Some(at);
             }
             // what's marked was for the pixel left behind
@@ -352,6 +352,20 @@ impl Nav {
             }
             Drag::Cube => {
                 self.camera.orbit_about(self.camera.target, dx, dy);
+            }
+            Drag::Ring => {
+                // the ring follows the cursor round the widget's middle
+                let p = self.cube_place();
+                let c = (p.at.0 + p.side * 0.5, p.at.1 + p.side * 0.5);
+                let a = (at.1 - c.1).atan2(at.0 - c.0) - (at.1 - dy - c.1).atan2(at.0 - dx - c.0);
+                let side = if self.camera.pitch < 0.0 { -1.0 } else { 1.0 };
+                self.camera.yaw += a * side;
+            }
+            Drag::Zoom => {
+                let at = self
+                    .camera
+                    .point_at(self.press_at, self.camera.dist, self.size.0, self.size.1);
+                self.camera.zoom_at(at, -dy * 0.05);
             }
             Drag::Pan => {
                 let depth = self.pan_depth.unwrap_or(self.camera.dist);
@@ -413,15 +427,22 @@ impl Nav {
     pub fn fit_sphere(&mut self, center: [f32; 3], radius: f32) {
         let mut to = self.camera;
         to.target = center;
-        to.dist = to.fit_dist(radius, self.size.0, self.size.1);
+        to.fit_to(radius, self.size.0, self.size.1);
         self.go_to(to);
     }
 
     /// The opening view of everything.
     pub fn home(&mut self, scene: &Scene) {
         let (c, r) = scene.bounds();
-        let mut to = Camera::fit(c, r);
-        to.dist = to.fit_dist(r, self.size.0, self.size.1);
+        let to = self.home_view.unwrap_or_else(|| {
+            let mut to = Camera::fit(c, r);
+            to.yaw = -35f32.to_radians();
+            if self.camera.parallel {
+                to.set_parallel(true, r);
+            }
+            to.fit_to(r, self.size.0, self.size.1);
+            to
+        });
         self.go_to(to);
     }
 
@@ -478,6 +499,22 @@ impl Nav {
         self.hit_at = None;
         let u = self.explode_at;
         Some(u * u * (3.0 - 2.0 * u))
+    }
+
+    /// The cube's home button was pressed: the scene's there for it now.
+    pub fn home_if_asked(&mut self, scene: &Scene) -> bool {
+        if std::mem::take(&mut self.want_home) {
+            self.home(scene);
+            return true;
+        }
+        false
+    }
+
+    /// Between a parallel and a perspective view, smoothly.
+    pub fn set_parallel(&mut self, on: bool, scene: &Scene) {
+        let mut to = self.camera;
+        to.set_parallel(on, scene.bounds().1);
+        self.go_to(to);
     }
 
     /// Advances a view change to this time; true while one is under way.

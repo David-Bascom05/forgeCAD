@@ -8,12 +8,18 @@ pub mod mesh;
 pub mod nav;
 pub mod render;
 pub mod scene;
+pub mod shell;
+pub mod viewcube;
 pub mod viewer;
 
+#[cfg(not(target_arch = "wasm32"))]
+pub mod app;
 #[cfg(not(target_arch = "wasm32"))]
 pub mod cache;
 #[cfg(not(target_arch = "wasm32"))]
 pub mod dragbench;
+#[cfg(not(target_arch = "wasm32"))]
+pub mod gui;
 #[cfg(not(target_arch = "wasm32"))]
 pub mod live;
 #[cfg(not(target_arch = "wasm32"))]

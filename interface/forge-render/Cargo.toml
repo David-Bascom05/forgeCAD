@@ -12,13 +12,26 @@ repository = "https://code.commonty.org/david/ForgeCAD"
 [lib]
 crate-type = ["cdylib", "rlib"]
 
+[[bin]]
+name = "forge-render"
+path = "src/main.rs"
+
+[[bin]]
+name = "forge-app"
+path = "src/bin/forge_app.rs"
+
 [dependencies]
 wgpu = { version = "=30.0.1", default-features = false, features = ["std", "parking_lot", "wgsl", "vulkan", "webgpu"] }
 winit = { version = "=0.30.13", default-features = false, features = ["rwh_06", "wayland", "wayland-dlopen", "x11"] }
+egui = { version = "=0.37.0", default-features = false }
+egui-wgpu = { version = "=0.37.0", default-features = false }
+forge-doc = { path = "../forge-doc" }
 
 # the kernel builds meshes natively; the browser loads them (see README)
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
 forge-agent = { path = "../forge-agent" }
+rfd = { version = "=0.17.2", default-features = false, features = ["xdg-portal", "pollster"] }
+egui-winit = { version = "=0.37.0", default-features = false, features = ["wayland", "x11", "smithay-clipboard"] }
 forge-mesh = { path = "../../kernel/forge-mesh" }
 forge-geom = { path = "../../kernel/forge-geom" }
 forge-math = { path = "../../kernel/forge-math" }
