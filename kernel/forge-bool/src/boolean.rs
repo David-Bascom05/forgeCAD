@@ -574,12 +574,15 @@ fn lap(t: &mut Option<std::time::Instant>, k: usize) {
 thread_local! {
     /// Springs a closed curve crossed an odd number of times are looked at again by their fences.
     static FENCES: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
+    /// A closed curve crossed springs an odd number of times in this plan.
+    static ODD: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
 }
 
 /// `plan_once`; lost its way, once more with the slow search for shallow crossings of springs.
 fn plan(a: &Body, b: &Body, op: Op, scratch: &mut Scratch) -> R<Plan> {
+    ODD.with(|o| o.set(false));
     match plan_once(a, b, op, scratch) {
-        Err(BoolError::Internal(w)) => {
+        Err(BoolError::Internal(w)) if ODD.with(|o| o.get()) => {
             FENCES.with(|f| f.set(true));
             let r = plan_once(a, b, op, scratch);
             FENCES.with(|f| f.set(false));
@@ -1929,22 +1932,29 @@ pub(crate) fn trim(
                         }
                         _ => None,
                     };
-                    let stretches = spring.map_or(vec![edge.range], |sp| {
-                        sp.crossing_stretches(edge.range, other_surface, &within)
-                    });
-                    let mut hs = Vec::new();
-                    let mut other = None;
-                    for r in stretches {
-                        match curve_surface_in(&edge.curve, r, other_surface, || Some(within)) {
-                            CurveSurface::Hits(more) => hs.extend(more.into_iter().filter_map(|h| {
-                                let t = curve.closest(h.point, range);
-                                (curve.eval(t).distance(h.point) <= tol::LINEAR)
-                                    .then_some(CurveHit { t, ..h })
-                            })),
-                            o => other = Some(o),
+                    let quick = spring.and_then(|sp| sp.crossing_points(edge.range, other_surface, &within));
+                    let on_curve = |t_on: f64, point: Point3| {
+                        let t = curve.closest(point, range);
+                        let _ = t_on;
+                        (curve.eval(t).distance(point) <= tol::LINEAR).then_some(CurveHit {
+                            t,
+                            point,
+                            contact: Contact::Crossing,
+                        })
+                    };
+                    match quick {
+                        Some(ps) => {
+                            CurveSurface::Hits(ps.into_iter().filter_map(|(t, p)| on_curve(t, p)).collect())
+                        }
+                        None => {
+                            match curve_surface_in(&edge.curve, edge.range, other_surface, || Some(within)) {
+                                CurveSurface::Hits(more) => CurveSurface::Hits(
+                                    more.into_iter().filter_map(|h| on_curve(h.t, h.point)).collect(),
+                                ),
+                                o => o,
+                            }
                         }
                     }
-                    other.unwrap_or(CurveSurface::Hits(hs))
                 } else {
                     curve_surface_in(&curve, range, &across, near)
                 };
@@ -2121,6 +2131,9 @@ pub(crate) fn trim(
         }
         at.len() % 2 == 1
     };
+    if closed && !fenced.is_empty() && !FENCES.with(|f| f.get()) && fenced.iter().any(|x| odd(x.0)) {
+        ODD.with(|o| o.set(true));
+    }
     if closed && FENCES.with(|f| f.get()) && fenced.iter().any(|x| odd(x.0)) {
         for &(k, e) in &fenced {
             let (body, side) = (bodies[k], sides[k]);
@@ -2306,10 +2319,16 @@ pub(crate) fn trim(
             let p = curve.eval(t);
             (0..2).map(move |k| (k, p))
         };
-        let touches = at(mid).any(|(k, p)| index[k].point_in_face(faces[k], p) == Where::On);
-        let inside_else = at(t0 + 0.381_966_011_250_105_1 * (t1 - t0))
-            .all(|(k, p)| index[k].point_in_face(faces[k], p) == Where::Inside);
-        if touches && inside_else {
+        // (most closed curves touch nothing: only an edge's box near the point asks more)
+        let touches = at(mid).any(|(k, p)| {
+            let near = forge_math::Box3::from_point(p).grow(tol::LINEAR);
+            !index[k].coedges_meeting(faces[k], &near).is_empty()
+                && index[k].point_in_face(faces[k], p) == Where::On
+        });
+        if touches
+            && at(t0 + 0.381_966_011_250_105_1 * (t1 - t0))
+                .all(|(k, p)| index[k].point_in_face(faces[k], p) == Where::Inside)
+        {
             loops.push(mid);
         }
     }
@@ -2398,18 +2417,31 @@ pub(crate) fn trim(
                         w[k] == Where::On && {
                             let body = bodies[k];
                             let (m, a, b) = (curve.eval(0.5 * (t0 + t1)), curve.eval(t0), curve.eval(t1));
-                            body.face(faces[k]).loops.iter().any(|&l| {
-                                body.lp(l).coedges().any(|c| {
-                                    let e = body.coedge(c).edge;
-                                    let eb = body.edge_box(e).grow(tol::LINEAR);
-                                    eb.contains(m)
-                                        && eb.contains(a)
-                                        && eb.contains(b)
+                            // both ends cut on one edge and the middle on it too
+                            let holds =
+                                |c: &Cut, i: usize| cuts[i].point.distance(c.point) <= cuts[i].tol.max(c.tol);
+                            let cut_along = cuts[first..].iter().any(|c| match c.on.edge() {
+                                Some((sd, e)) if sd == sides[k] && holds(c, ends[0]) => {
+                                    cuts[first..]
+                                        .iter()
+                                        .any(|d| d.on.edge() == Some((sd, e)) && holds(d, ends[1]))
                                         && on_edge(body, e, m).is_some()
-                                        && on_edge(body, e, a).is_some()
-                                        && on_edge(body, e, b).is_some()
+                                }
+                                _ => false,
+                            });
+                            cut_along
+                                || body.face(faces[k]).loops.iter().any(|&l| {
+                                    body.lp(l).coedges().any(|c| {
+                                        let e = body.coedge(c).edge;
+                                        let eb = body.edge_box(e).grow(tol::LINEAR);
+                                        eb.contains(m)
+                                            && eb.contains(a)
+                                            && eb.contains(b)
+                                            && on_edge(body, e, m).is_some()
+                                            && on_edge(body, e, a).is_some()
+                                            && on_edge(body, e, b).is_some()
+                                    })
                                 })
-                            })
                         }
                     }))
             {

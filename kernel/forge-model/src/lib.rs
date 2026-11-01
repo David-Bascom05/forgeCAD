@@ -545,12 +545,14 @@ pub fn step(features: History<'_>, i: usize, body: Option<Body>) -> Result<Optio
 
 /// Whether a history has an extrude whose loops touch: its result is judged step by step.
 pub(crate) fn any_touching(features: &[Feature]) -> bool {
-    features.iter().any(|f| match f {
-        Feature::Extrude { profile, .. } if profile.loops.len() > 1 => profile
-            .normalized_touching()
-            .is_ok_and(|p| !p.touching().is_empty()),
-        _ => false,
-    })
+    fn touches(f: &Feature) -> bool {
+        match f {
+            Feature::Extrude { profile, .. } if profile.loops.len() > 1 => !profile.touching().is_empty(),
+            Feature::Body(b) => matches!(&**b, BodyFeature::In { feature, .. } if touches(feature)),
+            _ => false,
+        }
+    }
+    features.iter().any(touches)
 }
 
 /// The profile of an extrude whose loops touch, and how far its solid reaches each way.
@@ -561,11 +563,11 @@ fn touching_extrude(features: History<'_>, i: usize) -> Option<(Profile, Vec<for
     if profile.loops.len() < 2 {
         return None;
     }
-    let p = profile.normalized_touching().ok()?;
-    let touches = p.touching();
-    if touches.is_empty() {
+    if profile.touching().is_empty() {
         return None;
     }
+    let p = profile.normalized_touching().ok()?;
+    let touches = p.touching();
     let extent::Resolved::Plain(f, _) = extent::resolve(features, i).ok()? else {
         return None;
     };
@@ -1070,6 +1072,16 @@ fn nary_regen(
     if any_touching(&features) {
         return one_at_a_time(features);
     }
+    nary_regen_on(features, threads, shapes, batching)
+}
+
+/// `nary_regen`, its history known to have no touching loops.
+fn nary_regen_on(
+    features: History<'_>,
+    threads: usize,
+    shapes: bool,
+    batching: Batching,
+) -> Result<Body, RegenError> {
     let r = match nary_run(features, threads, shapes, batching) {
         // every point the pass could probe a region at lies on another tool's edge: the tools one
         // at a time never have that question, and answer the same way (or refuse more clearly)
@@ -1110,7 +1122,7 @@ fn nary_run(
                 &features[m],
                 m,
                 // a given batch holds the tools after the last modifier (nary_solids), not these
-                &nary_regen(
+                &nary_regen_on(
                     features.upto(m),
                     threads,
                     shapes,

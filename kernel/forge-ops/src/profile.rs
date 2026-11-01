@@ -488,7 +488,7 @@ impl Profile {
         }
     }
 
-    /// Where the loops of a normalized profile touch at a point: outer and hole, or two holes.
+    /// Where the loops of a profile touch at a point: outer and hole, or two holes.
     pub fn touching(&self) -> Vec<Touch> {
         let mut out = Vec::new();
         if self.loops.len() < 2 {

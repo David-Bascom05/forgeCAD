@@ -726,7 +726,7 @@ impl Spring {
             return whole();
         }
         let pts = self.samples.get_or_init(|| {
-            let n = 64;
+            let n = 24;
             (0..=n)
                 .map(|i| {
                     let t = d.lo + (d.hi - d.lo) * i as f64 / n as f64;
@@ -757,6 +757,95 @@ impl Spring {
             }
         }
         out
+    }
+
+    /// Where the spring crosses `s` over `lo..hi` (ends and their distances known), by bisection,
+    /// splitting while a stretch could dip to it and back. A stretch lying along `s` to within
+    /// tolerance gives None: the caller's general search says what it is.
+    fn crossings(
+        &self,
+        s: &Surface,
+        (ta, a, ga): (f64, Point3, f64),
+        (tb, b, gb): (f64, Point3, f64),
+        depth: usize,
+        out: &mut Vec<(f64, Point3)>,
+    ) -> Option<()> {
+        if ga * gb <= 0.0 {
+            let (mut lo, mut hi, mut glo) = (ta, tb, ga);
+            let mut p = a;
+            for _ in 0..50 {
+                let m = 0.5 * (lo + hi);
+                p = self.at(m);
+                let g = s.implicit(p);
+                if g * glo <= 0.0 {
+                    hi = m;
+                } else {
+                    lo = m;
+                    glo = g;
+                }
+                if g.abs() <= 1e-3 * tol::LINEAR || hi - lo <= 1e-13 * (1.0 + m.abs()) {
+                    break;
+                }
+            }
+            out.push((0.5 * (lo + hi), p));
+            return Some(());
+        }
+        let len = 2.0 * a.distance(b) + tol::LINEAR;
+        if 0.5 * (ga.abs() + gb.abs()) > len {
+            return Some(());
+        }
+        if depth == 0 {
+            // down here and still that close: it runs along or grazes
+            return if ga.abs().max(gb.abs()) <= 2.0 * tol::LINEAR {
+                None
+            } else {
+                Some(())
+            };
+        }
+        let tm = 0.5 * (ta + tb);
+        let m = self.at(tm);
+        let gm = s.implicit(m);
+        self.crossings(s, (ta, a, ga), (tm, m, gm), depth - 1, out)?;
+        self.crossings(s, (tm, m, gm), (tb, b, gb), depth - 1, out)
+    }
+
+    /// The points where the spring crosses analytic `s` inside `within` over `range`, or None
+    /// where only the general search can tell (a stretch along it, a range it cannot sample).
+    pub fn crossing_points(&self, range: Interval, s: &Surface, within: &Box3) -> Option<Vec<(f64, Point3)>> {
+        let d = self.spine.domain();
+        if !(d.lo.is_finite() && d.hi.is_finite()) {
+            return None;
+        }
+        // a closed spring's range may lie past its first period, or across its seam
+        let parts: Vec<Interval> = match d.period {
+            Some(p) => {
+                let shift = ((range.lo - d.lo) / p).floor() * p;
+                let (lo, hi) = (range.lo - shift, range.hi - shift);
+                if hi > d.lo + p {
+                    vec![Interval::new(lo, d.lo + p), Interval::new(d.lo, hi - p)]
+                } else {
+                    vec![Interval::new(lo, hi)]
+                }
+            }
+            None if range.lo < d.lo || range.hi > d.hi => return None,
+            None => vec![range],
+        };
+        let mut out = Vec::new();
+        for part in parts {
+            for r in self.crossing_stretches(part, s, within) {
+                let n = ((r.width() / ((d.hi - d.lo) / 24.0)).ceil() as usize).max(1);
+                let mut prev = (r.lo, self.at(r.lo), 0.0);
+                prev.2 = s.implicit(prev.1);
+                for i in 1..=n {
+                    let t = (r.lo + r.width() * i as f64 / n as f64).min(r.hi);
+                    let p = self.at(t);
+                    let next = (t, p, s.implicit(p));
+                    self.crossings(s, prev, next, 6, &mut out)?;
+                    prev = next;
+                }
+            }
+        }
+        Some(out)
     }
 
     fn at(&self, t: f64) -> Point3 {

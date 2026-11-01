@@ -896,7 +896,7 @@ fn build_each(plain: History<'_>, start: usize, threads: usize) -> Result<Vec<Ve
 /// The n-ary regen of a multi-body history: each body's tools between features that need it
 /// built (part-changing and body features) go in one n-ary boolean.
 pub(crate) fn nary(features: History<'_>, threads: usize) -> Result<Vec<Solid>, RegenError> {
-    if crate::any_touching(&strip(&features).0) {
+    if crate::any_touching(&features) {
         return sequential(features);
     }
     match nary_pass(features, threads) {
