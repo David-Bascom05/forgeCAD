@@ -182,3 +182,8 @@ of 300 parts differ in `mass` between main and this; their meshes agree to 1e-7,
   0.3 chord + sag (the cubic's terms sum to at most 0.27 chord; measured at most 0.63 of the bound), made mixed +4% and valve +3.6%. As a first test ahead of the
   exact one, against analytic surfaces, it made mixed 5% slower: the pieces rarely prune there.
 - Dropped: a radial reject in `Screw::within` (no change on jack, frame, gearbox, valve).
+
+## The near match out
+
+`ssi::searched` taking a box within 1e-11 of one it knew made results depend on load: `bits` on main varied on n-ary lines (plate, torture, fuzz1, fuzz7, fuzz8, housing, mixed at load 60-70). `nary::par_map` starts helpers after 200 microseconds, the memory is per thread, and a box 1e-13 off has its
+own answer. With only this removed, 9 runs alike beside a control that varied. It costs a box a rounding off a second trace (upto, manifold, mixed, cold). `ssi.rs`, `a_box_a_little_off_is_another_question`, fails with the near match.

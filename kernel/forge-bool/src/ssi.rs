@@ -1,6 +1,6 @@
 use forge_geom::intersect::{Contact, SurfaceSurface, plane_surface};
 use forge_geom::{Circle, Curve, Cylinder, Ellipse, Line, Sphere, Surface};
-use forge_math::{Box3, Frame, Interval, Point3, tol};
+use forge_math::{Box3, Frame, Point3, tol};
 
 /// Intersection of two surfaces within `region`: closed form where the pair
 /// allows, otherwise traced (an exact curve defined by both surfaces).
@@ -129,10 +129,7 @@ pub fn searched(a: &Surface, b: &Surface, region: Box3) -> SurfaceSurface {
     if forge_geom::screw::misses(a, b, region) {
         return SurfaceSurface::Empty;
     }
-    // a box whose bounds differ only by rounding asks the same question
-    let same = |x: Interval, y: Interval| (x.lo - y.lo).abs() <= 1e-11 && (x.hi - y.hi).abs() <= 1e-11;
-    let near = |r: &Box3| same(r.x, region.x) && same(r.y, region.y) && same(r.z, region.z);
-    let hit = |e: &Met| near(&e.2) && e.0 == *a && e.1 == *b;
+    let hit = |e: &Met| e.2 == region && e.0 == *a && e.1 == *b;
     if let Some(r) = MET.with(|m| m.borrow().iter().find(|e| hit(e)).map(|e| e.3.clone())) {
         return r;
     }
@@ -343,5 +340,38 @@ mod tests {
             radius: 2.0,
         });
         assert_eq!(surfaces(&c, &c), SurfaceSurface::Coincident);
+    }
+
+    /// The answer depends on the box (at 1e-13 here, not at 1e-14), so a box near one known must not take its answer:
+    /// that made an n-ary regen's result hang on which thread took the pair, so on load. Fails with a near match.
+    #[test]
+    #[cfg_attr(target_family = "wasm", ignore = "needs a thread")]
+    fn a_box_a_little_off_is_another_question() {
+        use forge_math::Interval;
+        let cyl = Surface::Cylinder(Cylinder {
+            frame: Frame::WORLD,
+            radius: 5.0,
+        });
+        let tor = Surface::Torus(forge_geom::Torus {
+            frame: Frame::from_z(forge_math::Point3::new(5.0, 0.0, 0.0), forge_math::UnitVec3::X),
+            major: 6.0,
+            minor: 1.5,
+        });
+        let r = Box3::from_point(forge_math::Point3::ORIGIN).grow(30.0);
+        let first = format!("{:?}", searched(&cyl, &tor, r));
+        let mut told = false;
+        for off in [1e-15, 1e-14, 1e-13, 1e-12, 5e-12] {
+            let near = Box3 {
+                x: Interval::new(r.x.lo, r.x.hi + off),
+                ..r
+            };
+            let (a, b) = (cyl.clone(), tor.clone());
+            let alone = std::thread::spawn(move || format!("{:?}", searched(&a, &b, near)))
+                .join()
+                .unwrap();
+            told |= alone != first;
+            assert_eq!(format!("{:?}", searched(&cyl, &tor, near)), alone, "{off:e}");
+        }
+        assert!(told, "no box told apart: this no longer tests anything");
     }
 }
