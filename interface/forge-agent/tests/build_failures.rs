@@ -442,6 +442,29 @@ ball add 3.6 -xz at 17.98 {y} 10
     }
 }
 
+/// Rays past a lemon must not count the apple its quartic also holds: a point in a corner of the
+/// box was inside (WHUCAD 100003006, one point in 13).
+#[test]
+fn classify_beside_a_lemon() {
+    let a = forge_math::dmath::acos(5.0 / 13.0) * 180.0 / forge_math::dmath::PI;
+    let m = Model::new(&format!(
+        "revolve xz axis y loop arc -5 0 13 {} {} line 0 12 0 -12\n",
+        -a,
+        2.0 * a
+    ));
+    assert!(m.error.is_none(), "{:?}", m.error.as_ref().map(|e| &e.msg));
+    let body = m.body().expect("a body").compact();
+    let ix = forge_bool::Index::new(&body);
+    for x in [6.5, 7.0, 7.5] {
+        for y in [-5.0, 0.0, 5.0] {
+            let p = forge_math::Point3::new(x, y, x);
+            assert_eq!(ix.classify(p), forge_bool::Where::Outside, "{p:?}");
+        }
+    }
+    let p = forge_math::Point3::new(5.0, 1.0, 0.5);
+    assert_eq!(ix.classify(p), forge_bool::Where::Inside);
+}
+
 /// A revolved arc ending on the axis, its centre off it: the tube of a torus reaching through its
 /// axis, centre on the arc's side (an apple) or across (a lemon, once built as a sphere, invalid).
 /// A boolean on one is refused for now: the closed forms and the tracer go round the whole tube.

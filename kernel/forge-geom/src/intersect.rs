@@ -178,8 +178,11 @@ pub fn line_torus(line: &Line, t: &Torus) -> LineSurface {
         4.0 * s,
         1.0,
     ];
-    let span = t.major + t.minor + 1.0;
-    line_implicit(line, &Surface::Torus(*t), &coeffs, -s - span, -s + span, |_| true)
+    let span = t.major.abs() + t.minor + 1.0;
+    let surface = Surface::Torus(*t);
+    // the quartic holds a spindle's other sheet too (apple for lemon), which is not on the surface
+    let used = |h: f64| !t.is_spindle() || surface.distance(line.eval(h)) <= tol::LINEAR;
+    line_implicit(line, &surface, &coeffs, -s - span, -s + span, used)
 }
 
 /// Shared by every surface with a polynomial implicit equation. `f(t)` is that
@@ -1095,6 +1098,21 @@ mod tests {
     use crate::testing::*;
     use forge_math::rng::Rng;
     use forge_math::{Point2, dmath};
+
+    /// A spindle's quartic also holds its other sheet (apple for lemon): a line hits only the used one.
+    #[test]
+    fn a_line_hits_one_sheet_of_a_spindle() {
+        let line = Line::new(Point3::new(-40.0, 0.0, 0.0), Vec3::X.normalize().unwrap());
+        for (major, rho) in [(-5.0, 8.0), (5.0, 18.0)] {
+            let t = Torus::spindle(Frame::WORLD, major, 13.0).unwrap();
+            let LineSurface::Hits(h) = line_torus(&line, &t) else {
+                panic!("hits expected");
+            };
+            let at: Vec<f64> = h.iter().map(|h| h.point.x).collect();
+            assert_eq!(at.len(), 2, "{at:?}");
+            assert!((at[0] + rho).abs() < 1e-9 && (at[1] - rho).abs() < 1e-9, "{at:?}");
+        }
+    }
 
     fn hits(r: LineSurface) -> Vec<LineHit> {
         match r {
