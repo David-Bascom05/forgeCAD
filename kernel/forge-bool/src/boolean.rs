@@ -605,24 +605,28 @@ thread_local! {
 fn plan(a: &Body, b: &Body, op: Op, scratch: &mut Scratch) -> R<Plan> {
     match plan_fenced(a, b, op, scratch) {
         // what floods one way across a tool's edge hovering within tolerance of a face and the other
-        // way along it wants the curve under that edge, however close: an edge of its own
-        Err(BoolError::Internal(w)) if w == "face split crossed itself" => {
-            forge_geom::intersect::ABSORB_HAIR_ROOTS.with(|k| k.set(true));
-            let r = plan_fenced(a, b, op, scratch);
-            forge_geom::intersect::ABSORB_HAIR_ROOTS.with(|k| k.set(false));
-            r.map_err(|e| match e {
-                BoolError::Internal(_) => BoolError::Internal(w),
-                e => e,
-            })
-        }
-        Err(BoolError::Internal(w)) if w == "inconsistent classification" => {
-            CHORDS.with(|c| c.set(true));
-            let r = plan_fenced(a, b, op, scratch);
-            CHORDS.with(|c| c.set(false));
-            r.map_err(|e| match e {
-                BoolError::Internal(_) => BoolError::Internal(w),
-                e => e,
-            })
+        // way along it wants the curve under that edge, however close: an edge of its own (chords).
+        // A conic a hair past tangent is either two crossings or one touch: the other reading (absorb)
+        Err(BoolError::Internal(w))
+            if w == "inconsistent classification" || w == "face split crossed itself" =>
+        {
+            let crossed = w == "face split crossed itself";
+            let modes = if crossed {
+                [(true, false), (true, true), (false, true)]
+            } else {
+                [(false, true), (true, false), (true, true)]
+            };
+            for (absorb, chords) in modes {
+                forge_geom::intersect::ABSORB_HAIR_ROOTS.with(|k| k.set(absorb));
+                CHORDS.with(|c| c.set(chords));
+                let r = plan_fenced(a, b, op, scratch);
+                forge_geom::intersect::ABSORB_HAIR_ROOTS.with(|k| k.set(false));
+                CHORDS.with(|c| c.set(false));
+                if !matches!(r, Err(BoolError::Internal(_))) {
+                    return r;
+                }
+            }
+            Err(BoolError::Internal(w))
         }
         r => r,
     }
