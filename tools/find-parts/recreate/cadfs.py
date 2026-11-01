@@ -1563,6 +1563,15 @@ class Tr:
             d = tuple(-x for x in d)
         n, ang = int(self.val(a["instanceCount"])), self.val(a["angle"])
         tail = "" if a.get("equalSpace") is True else " step"
+        if self.op_of(a) == "new":
+            # each instance a body of its own, summed where they overlap, as the source's file holds them
+            step = ang if tail else ang / n if abs(ang - 360) < 1e-9 else ang / max(n - 1, 1)
+            b = self.current
+            for k in range(1, n):
+                self.names += 1
+                self.lines.append(f"b{self.names}: copybody rot {vtext(o)} {vtext(d)} {num(step * k)} in {b}")
+                self.bodies += 1
+            return
         self.lines.append(f"pattern body circ {vtext(o)} {vtext(d)} {n} {num(ang)}{tail}")
 
     def transform(self, f):
