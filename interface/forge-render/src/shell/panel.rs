@@ -222,7 +222,7 @@ pub fn template(kind: &str) -> (&'static str, Option<(&'static str, &'static str
             Some(("Profiles", "Pick two or more closed regions, in order")),
         ),
         "coil" => ("", Some(("Profile", "Pick a closed region in the view"))),
-        "rib" => ("2 xz", None),
+        "rib" => ("2", Some(("Path", "Pick the open sketch it runs along"))),
         "thread" => ("", Some(("Cylinder", "Pick a cylinder face or a hole"))),
         "combine" => ("", Some(("Target", "Pick the body to keep"))),
         "plane" => ("", Some(("Reference", "Pick a planar face"))),

@@ -220,6 +220,13 @@ impl Dialog {
                 queue.push(("Path".to_string(), "Pick the sketch to sweep along"));
             }
             "loft" => fields = vec![("Profiles".into(), String::new())],
+            "rib" => {
+                fields = vec![
+                    ("Thickness".into(), "2".into()),
+                    ("Flip".into(), String::new()),
+                    ("Path".into(), String::new()),
+                ];
+            }
             "coil" => {
                 fields = vec![
                     ("Profile".into(), String::new()),
@@ -404,6 +411,8 @@ impl Dialog {
     fn file_text(&self, label: &str, text: &str) -> String {
         match (self.kind.as_str(), label) {
             ("hole", _) if self.hole.is_some() => return text.to_string(),
+            // a rib names its sketch with no word before it
+            ("rib", "Path") => return text.trim_start_matches("path ").to_string(),
             ("plane", "Reference") if !text.trim().is_empty() => return format!("off {}", text.trim()),
             ("coil", "Pitch") if !text.trim_start().starts_with("pitch") => {
                 return format!("pitch {}", self.number_text(label, text));
@@ -1601,6 +1610,22 @@ impl Shell {
                                 &mut places,
                             ) {
                                 *text = ["", "left"][k].to_string();
+                            }
+                            continue;
+                        }
+                        if label == "Flip" {
+                            if let Some(k) = small_row(
+                                ui,
+                                &t,
+                                "Fills",
+                                &[
+                                    ("forward", "This side", text.is_empty()),
+                                    ("backward", "The other side", text == "flip"),
+                                ],
+                                "dialog:flip",
+                                &mut places,
+                            ) {
+                                *text = ["", "flip"][k].to_string();
                             }
                             continue;
                         }

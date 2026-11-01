@@ -63,7 +63,7 @@ fn groups(s: &Shell) -> Vec<Group> {
                     new("Sweep", "sweep", "sweep"),
                     new("Loft", "loft", "loft"),
                     new("Coil", "coil", "coil"),
-                    off("Rib", "rib"),
+                    new("Rib", "rib", "rib"),
                 ],
             ),
             g(

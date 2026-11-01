@@ -1352,6 +1352,121 @@ pub fn drawing(s: &Sketch) -> (Vec<(Vec<Point2>, bool)>, Vec<Point2>) {
     (curves, points)
 }
 
+/// The sketch's one open chain, or the one through `through`, in its plane: what a rib runs along.
+pub fn open_chain(s: &Sketch, through: Option<&str>) -> R<Vec<forge_ops::Segment>> {
+    let q = &s.solved;
+    let mut segs: Vec<(EntityId, Point2, Point2, forge_ops::Segment)> = Vec::new();
+    for id in q.entity_ids().filter(|&id| !q.is_construction(id)) {
+        match q.entity(id) {
+            Some(Entity::Line { a, b }) => {
+                let (a, b) = (q.point(a), q.point(b));
+                segs.push((id, a, b, forge_ops::Segment::Line { a, b }));
+            }
+            Some(Entity::Arc {
+                center,
+                start,
+                end,
+                ccw,
+            }) => {
+                let (c, a, b) = (q.point(center), q.point(start), q.point(end));
+                let t0 = dmath::atan2(a.y - c.y, a.x - c.x);
+                let t1 = dmath::atan2(b.y - c.y, b.x - c.x);
+                let turn = core::f64::consts::TAU;
+                let sweep = if ccw {
+                    (t1 - t0).rem_euclid(turn)
+                } else {
+                    -(t0 - t1).rem_euclid(turn)
+                };
+                segs.push((
+                    id,
+                    a,
+                    b,
+                    forge_ops::Segment::Arc {
+                        center: c,
+                        radius: a.distance(c),
+                        start: t0,
+                        sweep,
+                    },
+                ));
+            }
+            _ => {}
+        }
+    }
+    let first = match through {
+        Some(t) => {
+            let id = id_of(s, t)?;
+            segs.iter()
+                .position(|g| g.0 == id)
+                .ok_or_else(|| format!("{t} is not a line or arc of the sketch"))?
+        }
+        None if segs.is_empty() => return Err("the sketch has no lines or arcs".into()),
+        None => 0,
+    };
+    let meets = |p: Point2, q: Point2| p.distance(q) <= tol::LINEAR;
+    // walk back to one end, then forward: each piece as it's read
+    let flip = |g: &forge_ops::Segment| match g.clone() {
+        forge_ops::Segment::Line { a, b } => forge_ops::Segment::Line { a: b, b: a },
+        forge_ops::Segment::Arc {
+            center,
+            radius,
+            start,
+            sweep,
+        } => forge_ops::Segment::Arc {
+            center,
+            radius,
+            start: start + sweep,
+            sweep: -sweep,
+        },
+        c => c,
+    };
+    let mut chain: Vec<usize> = vec![first];
+    let mut out = vec![segs[first].3.clone()];
+    let mut head = segs[first].1;
+    let mut tail = segs[first].2;
+    loop {
+        let on: Vec<usize> = (0..segs.len())
+            .filter(|j| !chain.contains(j) && (meets(segs[*j].1, tail) || meets(segs[*j].2, tail)))
+            .collect();
+        let &[j] = &on[..] else {
+            if on.len() > 1 {
+                return Err("a rib's chain branches".into());
+            }
+            break;
+        };
+        chain.push(j);
+        if meets(segs[j].1, tail) {
+            out.push(segs[j].3.clone());
+            tail = segs[j].2;
+        } else {
+            out.push(flip(&segs[j].3));
+            tail = segs[j].1;
+        }
+    }
+    loop {
+        let on: Vec<usize> = (0..segs.len())
+            .filter(|j| !chain.contains(j) && (meets(segs[*j].1, head) || meets(segs[*j].2, head)))
+            .collect();
+        let &[j] = &on[..] else {
+            if on.len() > 1 {
+                return Err("a rib's chain branches".into());
+            }
+            break;
+        };
+        chain.push(j);
+        if meets(segs[j].2, head) {
+            out.insert(0, segs[j].3.clone());
+            head = segs[j].1;
+        } else {
+            out.insert(0, flip(&segs[j].3));
+            head = segs[j].2;
+        }
+    }
+    if meets(head, tail) {
+        return Err("a rib runs along an open chain; this one closes".into());
+    }
+    Ok(out)
+}
+
 /// The sketch's one chain of lines and arcs, or the one through `through`, end to end in 3D:
 /// a path to sweep along.
 pub fn path(s: &Sketch, through: Option<&str>) -> R<Vec<PathSeg>> {

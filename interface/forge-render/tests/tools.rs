@@ -220,7 +220,7 @@ fn the_tools_with_no_passing_test_are_off() {
     let Some(mut h) = open(BLOCK, "off").map(|o| o.0) else {
         return;
     };
-    for name in ["Rib", "Shell"] {
+    for name in ["Shell"] {
         h.click(&format!("tool:{name}"));
         for _ in 0..3 {
             h.step();
@@ -992,4 +992,47 @@ fn a_part_with_an_edge_off_its_face_is_found_too() {
         "{:?}",
         h.gui.shell.flags
     );
+}
+
+#[test]
+fn rib_runs_along_the_open_sketch_picked() {
+    // a floor and a wall, with a line across the corner between them
+    let part = "floor: extrude 10 rect -30 -30 60 60\nwall: extrude 40 xy at 0 0 10 rect -30 -30 10 60\nsk1: sketch xz\n  line -20 40 20 10\nend\n";
+    let Some((mut h, file)) = open(part, "rib") else {
+        return;
+    };
+    let was = built(&file, "before");
+    button(&mut h, "Rib");
+    assert!(
+        h.gui.shell.dialog.as_ref().unwrap().waiting_for_pick(),
+        "nothing from nothing"
+    );
+    point_at(&mut h, [0.0, 0.0, 25.0]);
+    settle(&mut h);
+    let want = h.gui.shell.dialog.as_ref().unwrap().line();
+    assert!(h.until(|g| g.shell.dialog.as_ref().unwrap().sent.as_deref() == Some(want.as_str())));
+    for _ in 0..60 {
+        h.step();
+        std::thread::sleep(std::time::Duration::from_millis(5));
+    }
+    // which side it fills is the person's to say
+    if h.gui.shell.dialog.as_ref().unwrap().error.is_some() {
+        h.click("dialog:flip:The other side");
+        settle(&mut h);
+        let want = h.gui.shell.dialog.as_ref().unwrap().line();
+        assert!(want.contains("flip"), "{want}");
+        assert!(h.until(|g| {
+            let d = g.shell.dialog.as_ref().unwrap();
+            d.sent.as_deref() == Some(want.as_str())
+        }));
+        for _ in 0..60 {
+            h.step();
+            std::thread::sleep(std::time::Duration::from_millis(5));
+        }
+    }
+    ok(&mut h, "rib");
+    let text = items(&file).join("\n");
+    assert!(text.contains("sk1 l1"), "{text}");
+    let added = built(&file, "rib") - was;
+    assert!(added > 100.0, "{added}");
 }

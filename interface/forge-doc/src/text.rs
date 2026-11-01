@@ -1191,13 +1191,31 @@ pub const KINDS: &[Kind] = &[
     },
     Kind {
         name: "rib",
-        syntax: "rib T [pos|neg] [web] [flip] [draft A] FRAME (line AX AY BX BY | arc CX CY R START SWEEP)..",
+        syntax: "rib T [pos|neg] [web] [flip] [draft A] (FRAME (line AX AY BX BY | arc CX CY R START SWEEP).. | SKETCH [E])",
         parse: |p| {
             let thickness = p.num()?;
             let side = p.side(Side::Both);
             let web = p.eat("web");
             let flip = p.eat("flip");
             let draft = if p.eat("draft") { p.angle()? } else { 0.0 };
+            // on a sketch: its plane and its open chain, or the chain through the entity named
+            if let Some(s) = p.sketch() {
+                let through = if sketch::is_ref(p.peek()) {
+                    Some(p.next()?)
+                } else {
+                    None
+                };
+                let path = sketch::open_chain(s, through)?;
+                return Ok(Feature::Edit(Edit::Rib(Box::new(Rib {
+                    plane: s.plane,
+                    path,
+                    thickness,
+                    side,
+                    web,
+                    flip,
+                    draft,
+                }))));
+            }
             let plane = p.frame()?;
             let mut path = Vec::new();
             while !p.done() {
