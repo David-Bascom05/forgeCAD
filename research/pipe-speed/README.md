@@ -167,9 +167,18 @@ of 300 parts differ in `mass` between main and this; their meshes agree to 1e-7,
 
 ## Curve search (after the seeds)
 
-- `bisect_sign`: Illinois steps, stopping at a value under 1e-13, not bisection to rounding (30-odd curve evaluations per crossing): mixed
-  1555M to 1487M, volute 1057M to 1032M. Results move in the last bits on 17 of the bench's bit lines.
-- `subdivide_pieces`: a traced curve's piece with reach over 4 (1e-5 + sag) reads the guiding cubic, its error added to the reach. Bits as the
-  line above. Mixed to 1468M, volute to 1011M, crank 275M to 265M. As a first test ahead of the exact one instead, against analytic surfaces,
-  it made mixed 5% slower: the pieces rarely prune there.
+- `bisect_sign`: Illinois steps, stopping at a value under 1e-13, not bisection to rounding (30-odd curve evaluations per crossing; now
+  median 5). An end already within 1e-13 is returned as it is: at a chain sample on the surface (value exactly 0) the secant step sits on that
+  end, which left plain bisection for 25 steps and stopped short of the end by 2e-12, and that sliver of curve cost upto-flat +4%. Checked against
+  bisection in the same run, by a temporary patch calling both (bench and about 110 fresh fuzz parts, 5300 crossings): at most 2e-11 mm apart, at a
+  crossing of sine 1.6e-3; t at most 7e-11 apart; a slow curve (speed 0.005) has the largest t differences and 7e-14 mm between the points.
+- What moved the bits, on the bench's parts against the same run by bisection: vertices at most 2.6e-13 mm apart, edge ends at most 5e-12 in t, same counts.
+- `ssi::searched`'s cache takes a box within 1e-11 of the one asked about. Bisection reached the same bits from different brackets, Illinois stops
+  up to about 1e-14 apart, so boxes built from those points missed by rounding and retraced. The cache also gains on its own: manifold 225M to 213M,
+  nary1 298M to 276M. Mixed 1557M to 1479M, volute 1057M to 1033M, upto 37.4M to 35.8M, crank 275M to 267M.
+- Dropped, after measuring: a traced curve's large pieces reading the guiding cubic in `subdivide_pieces`, with `1e-5 + sag` added to the reach
+  (mixed a further -1%, volute -2%, crank -1%). That bound is not one: on thread fuzz seed 5004 the cubic lies 2.5 times that from the curve
+  (the sag is measured at the chord's middle only, and says nothing of the tangents), so a piece could be pruned with a crossing in it. A bound that does hold,
+  0.3 chord + sag (the cubic's terms sum to at most 0.27 chord; measured at most 0.63 of the bound), made mixed +4% and valve +3.6%. As a first test ahead of the
+  exact one, against analytic surfaces, it made mixed 5% slower: the pieces rarely prune there.
 - Dropped: a radial reject in `Screw::within` (no change on jack, frame, gearbox, valve).

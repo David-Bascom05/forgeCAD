@@ -1,6 +1,6 @@
 use forge_geom::intersect::{Contact, SurfaceSurface, plane_surface};
 use forge_geom::{Circle, Curve, Cylinder, Ellipse, Line, Sphere, Surface};
-use forge_math::{Box3, Frame, Point3, tol};
+use forge_math::{Box3, Frame, Interval, Point3, tol};
 
 /// Intersection of two surfaces within `region`: closed form where the pair
 /// allows, otherwise traced (an exact curve defined by both surfaces).
@@ -120,7 +120,10 @@ pub fn searched(a: &Surface, b: &Surface, region: Box3) -> SurfaceSurface {
     if forge_geom::screw::misses(a, b, region) {
         return SurfaceSurface::Empty;
     }
-    let hit = |e: &Met| e.2 == region && e.0 == *a && e.1 == *b;
+    // a box whose bounds differ only by rounding asks the same question
+    let same = |x: Interval, y: Interval| (x.lo - y.lo).abs() <= 1e-11 && (x.hi - y.hi).abs() <= 1e-11;
+    let near = |r: &Box3| same(r.x, region.x) && same(r.y, region.y) && same(r.z, region.z);
+    let hit = |e: &Met| near(&e.2) && e.0 == *a && e.1 == *b;
     if let Some(r) = MET.with(|m| m.borrow().iter().find(|e| hit(e)).map(|e| e.3.clone())) {
         return r;
     }

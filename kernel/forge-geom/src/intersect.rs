@@ -710,9 +710,20 @@ fn bisect_sign(g: &impl Fn(f64) -> f64, mut a: f64, mut b: f64) -> f64 {
     // Illinois: secant steps, the kept end's value halved when an end stays twice. Over a leaf a
     // surface's value along a curve is all but straight, so two or three steps reach rounding.
     let (mut fa, mut fb) = (g(a), g(b));
+    // an end on the surface is the crossing: a chain's sample that lies on it, say
+    if fb.abs() <= 1e-13 {
+        return b;
+    }
+    if fa.abs() <= 1e-13 {
+        return a;
+    }
     let neg_a = fa < 0.0;
     for _ in 0..100 {
-        let x = if fa != fb { b - fb * (b - a) / (fb - fa) } else { 0.5 * (a + b) };
+        let x = if fa != fb {
+            b - fb * (b - a) / (fb - fa)
+        } else {
+            0.5 * (a + b)
+        };
         let x = if x > a && x < b { x } else { 0.5 * (a + b) };
         if x <= a || x >= b {
             break;
@@ -1056,6 +1067,20 @@ mod tests {
             LineSurface::Hits(h) => h,
             LineSurface::OnSurface => panic!("unexpected OnSurface"),
         }
+    }
+
+    #[test]
+    fn a_crossing_inside_a_bracket() {
+        // an end on the surface is returned exactly, at either end
+        assert_eq!(bisect_sign(&|t: f64| t - 1.0, 0.5, 1.0), 1.0);
+        assert_eq!(bisect_sign(&|t: f64| t - 0.5, 0.5, 1.0), 0.5);
+        // straight, bent, shallow and steep, and a jump (a pipe's value across its medial axis)
+        let bent = |t: f64| (t - 0.3) * (1.0 + 40.0 * t * t);
+        let shallow = |t: f64| 1e-3 * (t - 0.3);
+        let jump = |t: f64| if t < 0.3 { -1.0 } else { 1.0 };
+        assert!(bent(bisect_sign(&bent, 0.0, 1.0)).abs() <= 1e-13);
+        assert!(shallow(bisect_sign(&shallow, 0.0, 1.0)).abs() <= 1e-13);
+        assert!((bisect_sign(&jump, 0.0, 1.0) - 0.3).abs() <= 1e-12);
     }
 
     #[test]
