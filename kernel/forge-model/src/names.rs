@@ -383,6 +383,13 @@ fn scale_profile(p: &mut Profile, k: f64) -> f64 {
     for l in &mut p.loops {
         for (seg, _) in &mut l.segments {
             match seg {
+                Segment::Spline(c) => {
+                    let d = c.c.bbox(c.c.domain());
+                    r = r
+                        .max(d.x.lo.abs().max(d.x.hi.abs()))
+                        .max(d.y.lo.abs().max(d.y.hi.abs()));
+                    *c = std::sync::Arc::new(c.scaled(k));
+                }
                 Segment::Line { a, b } => {
                     r = r.max(a.to_vec().length()).max(b.to_vec().length());
                     s(a);

@@ -30,7 +30,7 @@ from OCP.Geom import Geom_BezierCurve, Geom_CylindricalSurface
 from OCP.Geom2d import Geom2d_BezierCurve, Geom2d_Line
 from OCP.GeomAbs import GeomAbs_Intersection, GeomAbs_Plane
 from OCP.IntCurvesFace import IntCurvesFace_ShapeIntersector
-from OCP.OCP.collections import Array1_gp_Pnt, Array1_gp_Pnt2d
+from OCP.OCP.collections import Array1_double, Array1_gp_Pnt, Array1_gp_Pnt2d
 from OCP.OCP.collections import IndexedMap_TopoDS_Shape_TopTools_ShapeMapHasher as ShapeMap
 from OCP.OCP.collections import List_TopoDS_Shape as ShapeList
 from OCP.ShapeFix import ShapeFix_Face
@@ -120,6 +120,20 @@ def arc_edge(pts):
     return BRepBuilderAPI_MakeEdge(GC_MakeArcOfCircle(*[gp_Pnt(*p) for p in pts]).Value()).Edge()
 
 
+def bezier_edges(at, b):
+    """A free curve as one edge per Bezier piece (its own degree, weights as given)."""
+    d, pts = b["d"], b["p"]
+    out = []
+    for i in range(0, len(pts), d + 1):
+        poles = Array1_gp_Pnt(1, d + 1)
+        ws = Array1_double(1, d + 1)
+        for k, (x, y, w) in enumerate(pts[i : i + d + 1]):
+            poles.SetValue(k + 1, gp_Pnt(*at(x, y)))
+            ws.SetValue(k + 1, w)
+        out.append(BRepBuilderAPI_MakeEdge(Geom_BezierCurve(poles, ws)).Edge())
+    return out
+
+
 def seg_edge(at, s):
     """A sketch segment as an edge; `at(u, v)` places sketch points in space."""
     if "line" in s:
@@ -140,7 +154,8 @@ def seg_edge(at, s):
 def wire(at, lp):
     mw = BRepBuilderAPI_MakeWire()
     for s in lp:
-        mw.Add(seg_edge(at, s))
+        for e in bezier_edges(at, s["bezier"]) if "bezier" in s else [seg_edge(at, s)]:
+            mw.Add(e)
     if not mw.IsDone():
         raise RuntimeError("a loop that does not close")
     return mw.Wire()
@@ -494,6 +509,8 @@ def extrude(f, body):
 
 def first_point(f, pl):
     s = f["loops"][0][0]
+    if "bezier" in s:
+        return pl.pt(*s["bezier"]["p"][0][:2])
     if "line" in s:
         return pl.pt(*s["line"][:2])
     if "arc" in s:
@@ -521,7 +538,23 @@ def revolve_frame(f, pl):
     return pl.pt(ox, oy), z, x, cross(z, x)
 
 
+def bezier_samples(b, per=32):
+    d, pts = b["d"], b["p"]
+    out = []
+    for i in range(0, len(pts), d + 1):
+        q = pts[i : i + d + 1]
+        for k in range(per):
+            u = k / per
+            h = [(x * w, y * w, w) for x, y, w in q]
+            for lev in range(d, 0, -1):
+                h = [tuple(a[n] * (1 - u) + c[n] * u for n in range(3)) for a, c in zip(h[: lev], h[1 : lev + 1])]
+            out.append((h[0][0] / h[0][2], h[0][1] / h[0][2]))
+    return out
+
+
 def seg_samples(s, n=32):
+    if "bezier" in s:
+        return bezier_samples(s["bezier"], n)
     if "line" in s:
         a, b, c, d = s["line"]
         return [(a + (c - a) * i / n, b + (d - b) * i / n) for i in range(n + 1)]

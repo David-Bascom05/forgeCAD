@@ -382,3 +382,105 @@ fn unchanged_groups_are_taken_from_the_last_solve() {
         }
     }
 }
+
+#[test]
+fn a_spline_on_ordinary_points_solves_and_extracts() {
+    let mut s = Sketch::new(Frame::WORLD);
+    let pts: Vec<_> = [(0.0, 0.0), (10.0, 8.0), (20.0, 3.0), (30.0, 0.0)]
+        .iter()
+        .map(|&(x, y)| s.add_point(Point2::new(x, y)))
+        .collect();
+    let e = s.add_spline(&pts, false).unwrap();
+    s.add_line(pts[3], pts[0]).unwrap();
+    s.add_constraint(Constraint::Fixed(pts[0])).unwrap();
+    s.add_constraint(Constraint::Distance(pts[0], pts[1], 15.0))
+        .unwrap();
+    assert_eq!(s.solve().status, Status::Solved);
+    assert!((s.point(pts[0]).distance(s.point(pts[1])) - 15.0).abs() < 1e-9);
+    // the curve follows its moved point
+    let d = s.spline_samples(e, 200);
+    let near = d
+        .iter()
+        .map(|p| p.distance(s.point(pts[1])))
+        .fold(f64::MAX, f64::min);
+    assert!(near < 0.2, "{near}");
+    let ps = profiles(&s).unwrap();
+    assert_eq!(ps.len(), 1);
+    assert_eq!(ps[0].loops[0].segments.len(), 2);
+}
+
+#[test]
+fn a_through_spline_takes_its_ends_slope_from_a_line() {
+    let mut s = Sketch::new(Frame::WORLD);
+    let (a, b) = (s.add_point(Point2::new(-5.0, 0.0)), s.add_point(Point2::ORIGIN));
+    let l = s.add_line(a, b).unwrap();
+    let (m, q) = (
+        s.add_point(Point2::new(4.0, 3.0)),
+        s.add_point(Point2::new(9.0, 1.0)),
+    );
+    let e = s.add_spline(&[b, m, q], false).unwrap();
+    let dof = s.analyze().dof;
+    assert_eq!(
+        s.tangent_spline(e, l).unwrap(),
+        None,
+        "no row: its end slope is free"
+    );
+    assert_eq!(s.analyze().dof, dof);
+    let c = s.curve(e).unwrap();
+    let d = c.c.deriv(c.c.domain().lo).d1;
+    assert!(d.y.abs() < 1e-12 && d.x > 0.0, "{d:?}");
+}
+
+#[test]
+fn a_control_spline_keeps_its_first_leg_on_the_line() {
+    let mut s = Sketch::new(Frame::WORLD);
+    let (a, b) = (s.add_point(Point2::new(-5.0, 0.0)), s.add_point(Point2::ORIGIN));
+    let l = s.add_line(a, b).unwrap();
+    let pts = [
+        b,
+        s.add_point(Point2::new(3.0, 1.0)),
+        s.add_point(Point2::new(6.0, 4.0)),
+        s.add_point(Point2::new(9.0, 1.0)),
+    ];
+    let e = s.add_bspline(3, &pts, None, None, false).unwrap();
+    s.tangent_spline(e, l).unwrap().unwrap();
+    s.add_constraint(Constraint::Fixed(a)).unwrap();
+    s.add_constraint(Constraint::Fixed(b)).unwrap();
+    assert_eq!(s.solve().status, Status::Solved);
+    let c = s.curve(e).unwrap();
+    let d = c.c.deriv(c.c.domain().lo).d1;
+    assert!(d.y.abs() < 1e-8 && d.x > 0.0, "{d:?}");
+}
+
+#[test]
+fn an_elliptical_arc_holds_its_ends_and_a_line_touches_an_ellipse() {
+    let mut s = Sketch::new(Frame::WORLD);
+    let (c, m) = (s.add_point(Point2::ORIGIN), s.add_point(Point2::new(5.0, 0.0)));
+    let (p, q) = (
+        s.add_point(Point2::new(5.0, 0.2)),
+        s.add_point(Point2::new(0.2, 3.0)),
+    );
+    let e = s.add_ellipse_arc(c, m, 3.0, p, q, true).unwrap();
+    s.add_constraint(Constraint::Fixed(c)).unwrap();
+    s.add_constraint(Constraint::Fixed(m)).unwrap();
+    assert_eq!(s.solve().status, Status::Solved);
+    let a = s.curve(e).unwrap();
+    assert!(a.start().distance(s.point(p)) < 1e-9 && a.end().distance(s.point(q)) < 1e-9);
+
+    let mut t = Sketch::new(Frame::WORLD);
+    let (c, m) = (t.add_point(Point2::ORIGIN), t.add_point(Point2::new(5.0, 0.0)));
+    let e = t.add_ellipse(c, m, 3.0).unwrap();
+    let (a, b) = (
+        t.add_point(Point2::new(-8.0, 4.0)),
+        t.add_point(Point2::new(8.0, 4.0)),
+    );
+    let l = t.add_line(a, b).unwrap();
+    for f in [c, m] {
+        t.add_constraint(Constraint::Fixed(f)).unwrap();
+    }
+    t.add_constraint(Constraint::Horizontal(l)).unwrap();
+    t.add_constraint(Constraint::EllipseMinor(e, 3.0)).unwrap();
+    t.add_constraint(Constraint::TangentEllipse(l, e)).unwrap();
+    assert_eq!(t.solve().status, Status::Solved);
+    assert!((t.point(a).y - 3.0).abs() < 1e-8, "{:?}", t.point(a));
+}

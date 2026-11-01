@@ -77,6 +77,7 @@ fn line_procedural(line: &Line, s: &Surface, pr: &crate::surface::Proc) -> LineS
     }
     let range = Interval::new(lo, hi);
     let found = crate::ruled::line_wall(line, range, s)
+        .or_else(|| crate::spline::meet::line_extruded(line, range, s))
         .unwrap_or_else(|| curve_surface_subdivide(&Curve::Line(*line), range, s, None));
     match found {
         // the implicit holds more than the patch (a blend's: its balls whole), so only points
@@ -330,14 +331,22 @@ pub fn curve_surface_in(
             }
         }
         Curve::Line(l) => {
-            if let Some(r) = crate::ruled::line_wall(l, range, s) {
+            if let Some(r) = crate::ruled::line_wall(l, range, s)
+                .or_else(|| crate::spline::meet::line_extruded(l, range, s))
+            {
                 return r;
             }
         }
         Curve::Procedural(p) => {
-            if let Some(w) = p.as_any().and_then(|a| a.downcast_ref::<crate::wrap::Wrap>())
+            let any = p.as_any();
+            if let Some(w) = any.and_then(|a| a.downcast_ref::<crate::wrap::Wrap>())
                 && let Some(r) =
                     crate::wrap::wrap_surface(w, range, s).or_else(|| crate::ruled::wrap_wall(w, range, s))
+            {
+                return r;
+            }
+            if let Some(c) = any.and_then(|a| a.downcast_ref::<crate::spline::SplineCurve>())
+                && let Some(r) = crate::spline::meet::spline_surface(c, range, s)
             {
                 return r;
             }

@@ -24,6 +24,7 @@ pub fn closed_form(a: &Surface, b: &Surface) -> SurfaceSurface {
     match closed {
         SurfaceSurface::NotAnalytic => forge_geom::screw::meet_coaxial(a, b)
             .or_else(|| forge_geom::ruled::meet_ruled(a, b))
+            .or_else(|| forge_geom::spline::meet::meet_spline(a, b))
             .unwrap_or(SurfaceSurface::NotAnalytic),
         r => r,
     }

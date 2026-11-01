@@ -8,6 +8,7 @@ repository.workspace = true
 
 [dependencies]
 forge-math = { path = "../forge-math" }
+forge-geom = { path = "../forge-geom" }
 forge-ops = { path = "../forge-ops" }
 
 [lints]

@@ -19,6 +19,21 @@ os.environ.setdefault("OMP_NUM_THREADS", "1")
 import numpy as np  # noqa: E402
 
 
+def bezier_points(b, per=256):
+    """Points along a free curve's Bezier pieces, each piece's end left to the next."""
+    d, pts = b["d"], np.array(b["p"], float)
+    out = []
+    for i in range(0, len(pts), d + 1):
+        q = pts[i : i + d + 1]
+        h = np.column_stack((q[:, 0] * q[:, 2], q[:, 1] * q[:, 2], q[:, 2]))
+        for k in range(per):
+            r, u = h.copy(), k / per
+            for lev in range(d, 0, -1):
+                r[:lev] = r[:lev] * (1 - u) + r[1 : lev + 1] * u
+            out.append((r[0, 0] / r[0, 2], r[0, 1] / r[0, 2]))
+    return out
+
+
 def loops2d(f):
     """The profile's loops as closed polylines (n x 2 arrays), or ("circle", cx, cy, r)."""
     out = []
@@ -28,7 +43,9 @@ def loops2d(f):
             continue
         pts = []
         for s in lp:
-            if "line" in s:
+            if "bezier" in s:
+                pts += bezier_points(s["bezier"])
+            elif "line" in s:
                 a, b, _, _ = s["line"]
                 pts.append((a, b))
             elif "arc" in s:
@@ -342,7 +359,9 @@ def seg_poly(segs):
     """Analytic-shape segments (lines and arcs, end to end) as one closed polyline."""
     pts = []
     for s in segs:
-        if "line" in s:
+        if "bezier" in s:
+            pts += bezier_points(s["bezier"])
+        elif "line" in s:
             pts.append(tuple(s["line"][:2]))
         else:
             cx, cy, r, st, sw = s["arc"]

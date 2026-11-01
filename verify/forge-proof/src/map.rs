@@ -87,8 +87,15 @@ impl Map {
                 let segs = l
                     .segments
                     .iter()
-                    .map(|&(s, id)| {
-                        let s = match s {
+                    .map(|(s, id)| {
+                        let id = *id;
+                        let s = match *s {
+                            Segment::Spline(ref c) => Segment::Spline(std::sync::Arc::new(c.remade(
+                                &|p| self.p2(p),
+                                &|r| self.len(r),
+                                &|a| self.angle(a),
+                                self.mirrors(),
+                            ))),
                             Segment::Line { a, b } => Segment::Line {
                                 a: self.p2(a),
                                 b: self.p2(b),

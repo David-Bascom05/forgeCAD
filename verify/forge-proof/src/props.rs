@@ -1384,42 +1384,48 @@ fn rounded(f: &Feature, digits: i32) -> Feature {
             [rdir(x.x), rdir(x.y), rdir(x.z)],
         )
     };
-    let prof = |p: &Profile| Profile {
-        plane: rf(&p.plane),
-        loops: p
-            .loops
-            .iter()
-            .map(|l| {
-                ProfileLoop::new(
-                    l.segments
-                        .iter()
-                        .map(|&(s, id)| {
-                            let s = match s {
-                                Segment::Line { a, b } => Segment::Line { a: p2(a), b: p2(b) },
-                                Segment::Arc {
-                                    center,
-                                    radius,
-                                    start,
-                                    sweep,
-                                } => Segment::Arc {
-                                    center: p2(center),
-                                    radius: rd(radius),
-                                    start,
-                                    sweep,
-                                },
-                                Segment::Circle { center, radius, ccw } => Segment::Circle {
-                                    center: p2(center),
-                                    radius: rd(radius),
-                                    ccw,
-                                },
-                            };
-                            (s, id)
-                        })
-                        .collect(),
-                )
-            })
-            .collect(),
-    };
+    let prof =
+        |p: &Profile| Profile {
+            plane: rf(&p.plane),
+            loops: p
+                .loops
+                .iter()
+                .map(|l| {
+                    ProfileLoop::new(
+                        l.segments
+                            .iter()
+                            .map(|(s, id)| {
+                                let id = *id;
+                                let s =
+                                    match *s {
+                                        Segment::Spline(ref c) => Segment::Spline(std::sync::Arc::new(
+                                            c.remade(&|q| p2(q), &|r| rd(r), &|a| a, false),
+                                        )),
+                                        Segment::Line { a, b } => Segment::Line { a: p2(a), b: p2(b) },
+                                        Segment::Arc {
+                                            center,
+                                            radius,
+                                            start,
+                                            sweep,
+                                        } => Segment::Arc {
+                                            center: p2(center),
+                                            radius: rd(radius),
+                                            start,
+                                            sweep,
+                                        },
+                                        Segment::Circle { center, radius, ccw } => Segment::Circle {
+                                            center: p2(center),
+                                            radius: rd(radius),
+                                            ccw,
+                                        },
+                                    };
+                                (s, id)
+                            })
+                            .collect(),
+                    )
+                })
+                .collect(),
+        };
     match f {
         Feature::Extrude {
             profile,

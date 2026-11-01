@@ -52,8 +52,24 @@ fn frame(f: &Frame) -> String {
     )
 }
 
+/// Bezier pieces: degree, breaks, and x y w per control point.
+fn curve(c: &forge_geom::spline::Spline) -> String {
+    let (d, br, pts) = c.bezier_data();
+    let pts: Vec<String> = pts
+        .iter()
+        .map(|h| format!("[{},{},{}]", num(h[0]), num(h[1]), num(h[3])))
+        .collect();
+    let br: Vec<String> = br.iter().map(|&x| num(x)).collect();
+    format!(
+        "{{\"bezier\":{{\"d\":{d},\"t\":[{}],\"p\":[{}]}}}}",
+        br.join(","),
+        pts.join(",")
+    )
+}
+
 fn segment(s: &Segment) -> String {
     match *s {
+        Segment::Spline(ref c) => curve(&c.c),
         Segment::Line { a, b } => format!(
             "{{\"line\":[{},{},{},{}]}}",
             num(a.x),
@@ -107,6 +123,7 @@ fn op(c: Combine) -> &'static str {
 
 fn seg2(s: &Seg2) -> String {
     match *s {
+        Seg2::Curve(ref c) => curve(c),
         Seg2::Line { a, b } => format!(
             "{{\"line\":[{},{},{},{}]}}",
             num(a.x),
@@ -234,9 +251,10 @@ fn target(features: History<'_>, i: usize, t: &Target) -> String {
 
 /// The surface a body split cuts along (as bodies.rs reads its cutter).
 fn cutter(features: History<'_>, i: usize, by: &Cutter) -> String {
-    match *by {
+    match by.clone() {
         Cutter::Target(t) => target(features, i, &t),
         Cutter::Plane(f) => format!("{{\"s\":\"plane\",\"f\":{}}}", frame(&f)),
+        Cutter::Curve(_, Segment::Spline(_)) => "null".into(),
         Cutter::Curve(f, Segment::Line { a, b }) => {
             let (a, b) = (f.plane_point(a), f.plane_point(b));
             let Some(along) = (b - a).normalize() else {
@@ -1238,6 +1256,14 @@ fn sets(sets: &str) -> Vec<(String, Part)> {
                 parts.extend(files.iter().map(|p| fc(p)));
             }
             "degen" => parts.extend(adversarial::degenerate_parts()),
+            "splines" => {
+                for (fam, g) in adversarial::families()
+                    .into_iter()
+                    .filter(|f| f.0.contains("spline") || f.0 == "ellipse_walls")
+                {
+                    parts.extend((0..n).map(|s| (format!("{fam}/{s}"), canonical(&g(s)))));
+                }
+            }
             "adv" => {
                 for (fam, g) in adversarial::families()
                     .into_iter()

@@ -1,4 +1,5 @@
-//! Where a smooth-loft span meets another span or a quadric, without tracing. A span whose rails are
+//! Where a smooth-loft span or a spline wall meets another of them or a quadric, without tracing.
+//! A spline wall is a rational Bezier patch piece by piece just as a span is. A span whose rails are
 //! all lines, or all arcs turning through the same angles, is exactly a (rational) Bezier patch, so a
 //! piece of it lies in the hull of its control points. Two pieces whose hulls a plane separates can't
 //! meet, and a quadric whose value has one sign over every Bernstein coefficient of a piece misses it.
@@ -18,17 +19,110 @@ use forge_math::{Box2, Box3, Interval, Point2, Point3, Vec3, dmath, tol};
 /// The most hull tests one pair may take before it is left to the tracer.
 const BUDGET: usize = 200_000;
 
-fn skinned(s: &Surface) -> Option<&Skinned> {
-    match s {
-        Surface::Procedural(p) => p.as_any().and_then(|x| x.downcast_ref::<Skinned>()),
-        _ => None,
+/// A surface that is a rational Bezier patch piece by piece.
+pub(crate) trait Span {
+    fn at(&self, uv: Point2) -> SurfDeriv;
+    /// How far the surface is carried on.
+    fn carried(&self) -> Box2;
+    /// The domain in pieces of one patch each.
+    fn pieces(&self) -> Vec<Box2>;
+    /// The control points over `uv`, inside one piece.
+    fn patch(&self, uv: Box2) -> Option<Patch>;
+}
+
+/// A patch's control points, the fixed form a span has or the general one of a spline wall.
+#[allow(clippy::large_enum_variant)] // no allocation per hull test: a loft takes millions
+pub(crate) enum Patch {
+    Loft(Hull),
+    Curve(crate::spline::CurveHull),
+}
+
+impl Patch {
+    fn bbox(&self) -> Box3 {
+        match self {
+            Patch::Loft(h) => h.bbox(),
+            Patch::Curve(h) => h.bbox(),
+        }
     }
+    fn along_u(&self) -> f64 {
+        match self {
+            Patch::Loft(h) => h.along_u(),
+            Patch::Curve(h) => h.along_u(),
+        }
+    }
+    fn along_v(&self) -> f64 {
+        match self {
+            Patch::Loft(h) => h.along_v(),
+            Patch::Curve(h) => h.along_v(),
+        }
+    }
+    fn normal(&self) -> Vec3 {
+        match self {
+            Patch::Loft(h) => h.normal(),
+            Patch::Curve(h) => h.normal(),
+        }
+    }
+    fn centre(&self) -> Vec3 {
+        match self {
+            Patch::Loft(h) => h.centre(),
+            Patch::Curve(h) => h.centre(),
+        }
+    }
+    fn extent(&self, u: Vec3) -> Interval {
+        match self {
+            Patch::Loft(h) => h.extent(u),
+            Patch::Curve(h) => h.extent(u),
+        }
+    }
+    fn misses(&self, q: &Alg) -> bool {
+        match self {
+            Patch::Loft(h) => h.misses(q),
+            Patch::Curve(h) => h.misses(q),
+        }
+    }
+}
+
+impl Span for Skinned {
+    fn at(&self, uv: Point2) -> SurfDeriv {
+        self.deriv(uv)
+    }
+    fn carried(&self) -> Box2 {
+        self.reach()
+    }
+    /// The face's domain in pieces narrow enough for one rational arc each (a quarter turn).
+    fn pieces(&self) -> Vec<Box2> {
+        let d = self.domain();
+        let n = (self.turn().abs() / (0.5 * dmath::PI)).ceil().max(1.0) as usize;
+        (0..n)
+            .map(|k| {
+                let (u0, u1) = (k as f64 / n as f64, (k + 1) as f64 / n as f64);
+                Box2::new(Interval::new(u0, u1), d.v.interval())
+            })
+            .collect()
+    }
+    fn patch(&self, uv: Box2) -> Option<Patch> {
+        self.hull(uv).map(Patch::Loft)
+    }
+}
+
+fn span(s: &Surface) -> Option<&dyn Span> {
+    let Surface::Procedural(p) = s else {
+        return None;
+    };
+    let any = p.as_any()?;
+    if let Some(x) = any.downcast_ref::<Skinned>() {
+        return Some(x);
+    }
+    if let Some(x) = any.downcast_ref::<crate::spline::Extruded>() {
+        return Some(x);
+    }
+    any.downcast_ref::<crate::spline::Spun>().map(|x| x as &dyn Span)
 }
 
 /// The curves where `a` and `b` meet inside `region`, for a span against a span or a quadric; None
 /// for any other pair, or when a step fails (the tracer takes those).
 pub fn meet(a: &Surface, b: &Surface, region: Box3) -> Option<SurfaceSurface> {
-    let pair = match (skinned(a), skinned(b)) {
+    let pair = match (span(a), span(b)) {
         (Some(x), Some(y)) => Pair::Spans(x, y),
         (Some(x), None) => Pair::Quad(x, quadric(b)?),
         (None, Some(y)) => Pair::Quad(y, quadric(a)?),
@@ -47,7 +141,7 @@ pub fn meet(a: &Surface, b: &Surface, region: Box3) -> Option<SurfaceSurface> {
         }
     };
     // a span first, as the pair came
-    let flip = matches!(pair, Pair::Quad(..)) && skinned(a).is_none();
+    let flip = matches!(pair, Pair::Quad(..)) && span(a).is_none();
     let (sa, sb) = if flip { (b, a) } else { (a, b) };
     Some(if curves.is_empty() {
         SurfaceSurface::Empty
@@ -77,23 +171,11 @@ enum Stop {
 }
 
 enum Pair<'a> {
-    Spans(&'a Skinned, &'a Skinned),
-    Quad(&'a Skinned, Alg),
+    Spans(&'a dyn Span, &'a dyn Span),
+    Quad(&'a dyn Span, Alg),
 }
 
-/// The face's domain in pieces narrow enough for one rational arc each (a quarter turn).
-fn pieces(s: &Skinned) -> Vec<Box2> {
-    let d = s.domain();
-    let n = (s.turn().abs() / (0.5 * dmath::PI)).ceil().max(1.0) as usize;
-    (0..n)
-        .map(|k| {
-            let (u0, u1) = (k as f64 / n as f64, (k + 1) as f64 / n as f64);
-            Box2::new(Interval::new(u0, u1), d.v.interval())
-        })
-        .collect()
-}
-
-fn halves(p: Box2, h: &Hull) -> [Box2; 2] {
+fn halves(p: Box2, h: &Patch) -> [Box2; 2] {
     if h.along_v() >= h.along_u() {
         let m = p.v.mid();
         [
@@ -114,7 +196,7 @@ fn size(b: &Box3) -> f64 {
 }
 
 /// Whether a plane square to one of a few axes parts the two hulls by more than `gap`.
-fn apart(x: &Hull, y: &Hull, gap: f64) -> bool {
+fn apart(x: &Patch, y: &Patch, gap: f64) -> bool {
     let axes = [
         Vec3::X,
         Vec3::Y,
@@ -139,8 +221,8 @@ impl Pair<'_> {
         match *self {
             Pair::Spans(a, b) => {
                 let mut stack: Vec<(Box2, Box2)> = Vec::new();
-                for &x in &pieces(a) {
-                    for &y in &pieces(b) {
+                for &x in &a.pieces() {
+                    for &y in &b.pieces() {
                         stack.push((x, y));
                     }
                 }
@@ -149,7 +231,7 @@ impl Pair<'_> {
                     if tests > BUDGET {
                         return None;
                     }
-                    let (hx, hy) = (a.hull(x)?, b.hull(y)?);
+                    let (hx, hy) = (a.patch(x)?, b.patch(y)?);
                     let (bx, by) = (hx.bbox(), hy.bbox());
                     if !bx.overlaps(&region) || !by.overlaps(&region) || apart(&hx, &hy, tol::LINEAR) {
                         continue;
@@ -165,13 +247,13 @@ impl Pair<'_> {
                 }
             }
             Pair::Quad(a, q) => {
-                let mut stack = pieces(a);
+                let mut stack = a.pieces();
                 while let Some(x) = stack.pop() {
                     tests += 1;
                     if tests > BUDGET {
                         return None;
                     }
-                    let h = a.hull(x)?;
+                    let h = a.patch(x)?;
                     let bx = h.bbox();
                     if !bx.overlaps(&region) || h.misses(&q) {
                         continue;
@@ -194,7 +276,7 @@ impl Pair<'_> {
     fn at(&self, x: &[f64; 4]) -> (Point3, Vec<f64>, Vec<[f64; 4]>, Vec3, Vec3, [f64; 4]) {
         match *self {
             Pair::Spans(a, b) => {
-                let (p, q) = (a.deriv(Point2::new(x[0], x[1])), b.deriv(Point2::new(x[2], x[3])));
+                let (p, q) = (a.at(Point2::new(x[0], x[1])), b.at(Point2::new(x[2], x[3])));
                 let f = p.p - q.p;
                 let row = |k: usize| {
                     let c = |v: Vec3| [v.x, v.y, v.z][k];
@@ -210,7 +292,7 @@ impl Pair<'_> {
                 )
             }
             Pair::Quad(a, q) => {
-                let p = a.deriv(Point2::new(x[0], x[1]));
+                let p = a.at(Point2::new(x[0], x[1]));
                 let (h, g) = q.grad(p.p);
                 (
                     p.p,
@@ -257,7 +339,7 @@ impl Pair<'_> {
 
     /// Within both spans as far as they are carried on.
     fn inside(&self, x: &[f64; 4]) -> bool {
-        let on = |s: &Skinned, u: f64, v: f64| s.reach().contains(Point2::new(u, v));
+        let on = |s: &dyn Span, u: f64, v: f64| s.carried().contains(Point2::new(u, v));
         match *self {
             Pair::Spans(a, b) => on(a, x[0], x[1]) && on(b, x[2], x[3]),
             Pair::Quad(a, _) => on(a, x[0], x[1]),
@@ -277,8 +359,8 @@ impl Pair<'_> {
             Pair::Spans(a, b) => (a, Some(b)),
             Pair::Quad(a, _) => (a, None),
         };
-        let (d0, d1) = local(&a.deriv(Point2::new(x[0], x[1])));
-        let (d2, d3) = b.map_or((0.0, 0.0), |b| local(&b.deriv(Point2::new(x[2], x[3]))));
+        let (d0, d1) = local(&a.at(Point2::new(x[0], x[1])));
+        let (d2, d3) = b.map_or((0.0, 0.0), |b| local(&b.at(Point2::new(x[2], x[3]))));
         [x[0] + d0, x[1] + d1, x[2] + d2, x[3] + d3]
     }
 
@@ -448,6 +530,14 @@ fn solve(g: &[[f64; 3]; 3], f: &[f64], m: usize) -> Option<[f64; 3]> {
 mod tests {
     use super::*;
     use crate::Circle;
+
+    fn skinned(s: &Surface) -> Option<&Skinned> {
+        match s {
+            Surface::Procedural(p) => p.as_any().and_then(|x| x.downcast_ref::<Skinned>()),
+            _ => None,
+        }
+    }
+
     use crate::ruled::Rail;
     use crate::skinned::Spline;
     use crate::surface::{Cylinder, Plane, SurfaceGeom};

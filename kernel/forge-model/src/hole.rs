@@ -192,6 +192,17 @@ impl Hole {
 
 fn segment_points(s: &Segment) -> Vec<Point2> {
     match *s {
+        Segment::Spline(ref c) => {
+            let b = c.c.bbox(c.c.domain());
+            [
+                (b.x.lo, b.y.lo),
+                (b.x.lo, b.y.hi),
+                (b.x.hi, b.y.lo),
+                (b.x.hi, b.y.hi),
+            ]
+            .map(|(x, y)| Point2::new(x, y))
+            .to_vec()
+        }
         Segment::Line { a, b } => vec![a, b],
         Segment::Arc { center, radius, .. } | Segment::Circle { center, radius, .. } => {
             [(1.0, 1.0), (1.0, -1.0), (-1.0, 1.0), (-1.0, -1.0)]

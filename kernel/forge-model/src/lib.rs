@@ -13,6 +13,7 @@ pub mod params;
 mod path;
 pub mod pattern;
 mod rib;
+pub mod splinefam;
 mod splitface;
 pub mod standard;
 pub mod suite;
@@ -1888,6 +1889,7 @@ fn tool(i: usize, id: u64, f: &Feature, build: bool) -> Result<Tool, RegenError>
 
 fn seg2(s: &Segment) -> Seg2 {
     match *s {
+        Segment::Spline(ref c) => Seg2::Curve(c.c.clone()),
         Segment::Line { a, b } => Seg2::Line { a, b },
         Segment::Arc {
             center,
@@ -1909,7 +1911,7 @@ fn seg2(s: &Segment) -> Seg2 {
     }
 }
 
-fn segs(profile: &Profile) -> Vec<Seg2> {
+fn segs(profile: &Profile) -> std::sync::Arc<[Seg2]> {
     profile
         .loops
         .iter()

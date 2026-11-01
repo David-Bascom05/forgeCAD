@@ -1,9 +1,9 @@
-//! Forward-mode dual numbers over the (at most eight) parameters one
+//! Forward-mode dual numbers over the (at most nine) parameters one
 //! constraint touches, so every residual comes with its exact gradient.
 
 use core::ops::{Add, Div, Mul, Neg, Sub};
 
-pub(crate) const N: usize = 8;
+pub(crate) const N: usize = 9;
 
 #[derive(Clone, Copy, Debug)]
 pub(crate) struct D {

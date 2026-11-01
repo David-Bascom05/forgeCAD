@@ -41,8 +41,10 @@ end
 extrude 6 plate             its one region; `plate E`: the region E bounds outside
 hole 3 on plate p1 thru     FRAME on a sketch's plane (-on: flipped), at its point
 `ids NAME N ..` keeps those entities' segment ids (so their faces' names) through later edits.
-Rows: `pt P` `line P P` `poly P P.. [open]` `rect X Y W H` `circle P R` `arc C S E [cw]` (+`cons`:
-construction). P: `X Y` or `p1`, `l2.a`|`.b`, `c1` (centre), `o`. Entities count by kind: p l c a.
+Rows: `pt P` `line P P` `poly P P.. [open]` `rect X Y W H` `circle P R` `arc C S E [cw]` `spline P P.. [open]`
+(cubic through them) `bspline D P P.. [knots K..] [weights W..] [open]` `ellipse C MAJOR B` `earc C MAJOR B S E [cw]`
+(+`cons`: construction). P: `X Y` or `p1`, `l2.a`|`.b`, `c1` (centre), `s1.a`|`.b`|`.0`.. (a spline's points), `o`.
+Entities count by kind: p l c a s e. `tan` takes a spline's end and the line or arc ending there, or an ellipse and a line.
 A row the rows above imply is an error; `ref dist l1` (no value) is driven. `query F check` shows
 driven values, each sketch's freedom and conflicting rows. A sketch `on` something follows edits above it.
 
@@ -62,9 +64,12 @@ FRAME: [xy|xz|yz|-xy|-xz|-yz | z A B C [x A B C] | [-]on FEAT [P] | on REF] [at 
 xy: normal +z; xz: sketch x,y = world x,z, normal -y; yz: world y,z, normal +x;
 -xy: sketch y = world -y, normal -z (drill down); -xz: normal +y; -yz: normal -x
 
-## loops rect rrect circle poly loop
+## loops rect rrect circle poly loop spline thru ellipse
 LOOPS (first is outside, rest holes; X Y a corner): rect X Y W H | rrect X Y W H CORNER_R | circle CX CY R |
-poly X Y X Y .. | loop (line AX AY BX BY | arc CX CY R START SWEEP)..
+ellipse CX CY A B ROT [cw] | poly X Y X Y .. | spline.. | thru.. | loop (line AX AY BX BY | arc CX CY R START SWEEP |
+spline D X Y .. [knots K..] [weights W..] | thru X Y .. [from DX DY] [to DX DY] | ell CX CY A B ROT START SWEEP)..
+spline: B-spline of degree D on control points, uniform and clamped unless knots are given. thru: the cubic through
+the points, closed when the first is the last. A corner in a curve splits its wall into faces.
 Wherever LOOPS go (sweep, coil, loft profiles too), `SKETCH [E]` may stand instead.
 
 ## fillet radius setback from

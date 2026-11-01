@@ -138,6 +138,9 @@ fn plan(profiles: &[Profile], kind: LoftKind, guides: &LoftGuides) -> Result<Ski
     if n < 2 {
         return Err(LoftError::TooFew);
     }
+    for (index, p) in profiles.iter().enumerate() {
+        crate::skin::curved(p).map_err(|error| LoftError::Profile { index, error })?;
+    }
     let centre = |p: &Profile| {
         let pts: Vec<Point3> = p.loops[0]
             .segments
@@ -186,7 +189,7 @@ fn plan(profiles: &[Profile], kind: LoftKind, guides: &LoftGuides) -> Result<Ski
             });
         }
     }
-    let segs: Vec<Vec<Segment>> = preps.iter().map(|p| p.segments().copied().collect()).collect();
+    let segs: Vec<Vec<Segment>> = preps.iter().map(|p| p.segments().cloned().collect()).collect();
     let planes: Vec<Frame> = preps.iter().map(|p| p.profile.plane).collect();
     for k in 0..n - 1 {
         for (sa, sb) in segs[k].iter().zip(&segs[k + 1]) {
@@ -412,7 +415,7 @@ fn rail(s: &Segment, f: &Frame) -> Rail {
             start,
             sweep,
         },
-        Segment::Circle { .. } => unreachable!("prepare splits circles"),
+        Segment::Circle { .. } | Segment::Spline(_) => unreachable!("prepare splits circles, refuses curves"),
     }
 }
 

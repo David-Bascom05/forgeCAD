@@ -78,6 +78,10 @@ pub type Family = fn(u64) -> Part;
 
 pub fn families() -> Vec<(&'static str, Family)> {
     vec![
+        ("spline_walls", crate::splinefam::spline_walls),
+        ("spline_tangent", crate::splinefam::spline_tangent),
+        ("spline_revolve", crate::splinefam::spline_revolve),
+        ("ellipse_walls", crate::splinefam::ellipse_walls),
         ("coplanar_stack", coplanar_stack),
         ("through_vertex", through_vertex),
         ("tangent", tangent),
@@ -982,6 +986,7 @@ fn lit_loops(loops: &[ProfileLoop]) -> String {
                 .iter()
                 .map(|(s, id)| {
                     let s = match *s {
+                        Segment::Spline(ref c) => format!("/* curve */ {:?}", c.form),
                         Segment::Line { a, b } => {
                             format!("Segment::Line {{ a: {}, b: {} }}", lit_p2(a), lit_p2(b))
                         }

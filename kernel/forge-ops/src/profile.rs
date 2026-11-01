@@ -1,8 +1,10 @@
+use forge_geom::spline::{PlaneSpline, Spline};
 use forge_math::predicates::{inside_polygon, orient2d};
-use forge_math::{Frame, Point2, Point3, Vec2, dmath, tol};
+use forge_math::{Frame, Interval, Point2, Point3, Vec2, Vec3, dmath, tol};
+use std::sync::Arc;
 
 /// One piece of a closed 2D profile, in sketch-plane coordinates.
-#[derive(Clone, Copy, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq)]
 pub enum Segment {
     Line {
         a: Point2,
@@ -21,6 +23,8 @@ pub enum Segment {
         radius: f64,
         ccw: bool,
     },
+    /// A B-spline, fit spline or elliptical arc, run with its parameter.
+    Spline(Arc<PlaneSpline>),
 }
 
 /// A closed chain of segments. Each segment has an id, unique within the
@@ -65,6 +69,10 @@ pub enum ProfileError {
         loop_index: usize,
         at: Point3,
     },
+    /// A spline or ellipse where this operation takes lines and arcs only.
+    Curve {
+        id: u64,
+    },
     /// A loop crosses itself (a corner radius larger than half its side, say).
     SelfIntersecting {
         loop_index: usize,
@@ -73,13 +81,22 @@ pub enum ProfileError {
 
 /// A piece of a loop as a line or an arc, for exact nearest points.
 #[derive(Clone, Copy)]
-enum Piece {
+enum Piece<'a> {
     Line(Point2, Point2),
     Arc(Point2, f64, f64, f64),
+    Curve(&'a Spline),
 }
 
-fn piece(s: &Segment) -> Piece {
+fn p3(p: Point2) -> Point3 {
+    Point3::new(p.x, p.y, 0.0)
+}
+fn p2(p: Point3) -> Point2 {
+    Point2::new(p.x, p.y)
+}
+
+fn piece(s: &Segment) -> Piece<'_> {
     match *s {
+        Segment::Spline(ref c) => Piece::Curve(&c.c),
         Segment::Line { a, b } => Piece::Line(a, b),
         Segment::Arc {
             center,
@@ -100,9 +117,13 @@ fn on_arc(angle: f64, start: f64, sweep: f64) -> bool {
     (angle - lo).rem_euclid(dmath::TAU) <= w
 }
 
-impl Piece {
+impl Piece<'_> {
     fn ends(self) -> [Point2; 2] {
         match self {
+            Piece::Curve(c) => {
+                let (a, b) = c.ends();
+                [p2(a), p2(b)]
+            }
             Piece::Line(a, b) => [a, b],
             Piece::Arc(c, r, s, w) => [arc_point(c, r, s), arc_point(c, r, s + w)],
         }
@@ -110,6 +131,7 @@ impl Piece {
     /// The nearest point on this piece to p.
     fn nearest(self, p: Point2) -> Point2 {
         match self {
+            Piece::Curve(c) => p2(c.point(c.closest(p3(p), c.domain()))),
             Piece::Line(a, b) => {
                 let ab = b - a;
                 a + ab * ((p - a).dot(ab) / ab.dot(ab).max(f64::MIN_POSITIVE)).clamp(0.0, 1.0)
@@ -152,6 +174,18 @@ fn nearest_touch(a: Piece, b: Piece) -> (Point2, f64) {
             // the far side of the circle from the line's foot is no touch from inside or out
         }
         (Piece::Line(..), Piece::Arc(c, _, _, _)) => try_on_a(a.nearest(c)),
+        (Piece::Curve(c), _) | (_, Piece::Curve(c)) => {
+            // from points along the curve, each to the other piece and back until it settles
+            let on_curve = matches!(a, Piece::Curve(_));
+            for q in c.samples(8 * c.pieces()) {
+                let mut q = p2(q);
+                for _ in 0..6 {
+                    let far = if on_curve { b.nearest(q) } else { a.nearest(q) };
+                    q = if on_curve { a.nearest(far) } else { b.nearest(far) };
+                }
+                try_on_a(if on_curve { q } else { a.nearest(q) });
+            }
+        }
         (Piece::Arc(c, r, s, w), Piece::Arc(d, _, _, _)) => {
             if let Some(u) = (d - c).normalize() {
                 for k in [1.0, -1.0] {
@@ -202,6 +236,10 @@ fn loop_tangent(l: &ProfileLoop, at: Point2) -> Vec2 {
     let mut best = (f64::INFINITY, Vec2::X);
     for (s, _) in &l.segments {
         let (q, t) = match piece(s) {
+            Piece::Curve(c) => {
+                let d = c.deriv(c.closest(p3(at), c.domain()));
+                (p2(d.p), Vec2::new(d.d1.x, d.d1.y).normalize().unwrap_or(Vec2::X))
+            }
             Piece::Line(a, b) => (piece(s).nearest(at), (b - a).normalize().unwrap_or(Vec2::X)),
             Piece::Arc(c, ..) => {
                 let q = piece(s).nearest(at);
@@ -221,6 +259,15 @@ fn loop_holds(l: &ProfileLoop, p: Point2) -> bool {
     let mut inside = false;
     for (s, _) in &l.segments {
         match piece(s) {
+            Piece::Curve(c) => {
+                // half-open like the lines': a point of the curve at the ray's height, by the
+                // sign the curve's ends take
+                for (t, touch) in c.plane_roots(Vec3::Y, -p.y, c.domain(), 0.0) {
+                    if !touch && c.point(t).x > p.x {
+                        inside = !inside;
+                    }
+                }
+            }
             Piece::Line(a, b) => {
                 if (a.y > p.y) != (b.y > p.y) && p.x < a.x + (p.y - a.y) / (b.y - a.y) * (b.x - a.x) {
                     inside = !inside;
@@ -246,6 +293,7 @@ fn loop_holds(l: &ProfileLoop, p: Point2) -> bool {
 impl Segment {
     pub fn start(&self) -> Point2 {
         match *self {
+            Segment::Spline(ref c) => c.start(),
             Segment::Line { a, .. } => a,
             Segment::Arc {
                 center,
@@ -258,6 +306,7 @@ impl Segment {
     }
     pub fn end(&self) -> Point2 {
         match *self {
+            Segment::Spline(ref c) => c.end(),
             Segment::Line { b, .. } => b,
             Segment::Arc {
                 center,
@@ -270,6 +319,7 @@ impl Segment {
     }
     pub fn reversed(&self) -> Segment {
         match *self {
+            Segment::Spline(ref c) => Segment::Spline(Arc::new(c.reversed())),
             Segment::Line { a, b } => Segment::Line { a: b, b: a },
             Segment::Arc {
                 center,
@@ -293,6 +343,7 @@ impl Segment {
     pub fn mirrored(&self) -> Segment {
         let m = |p: Point2| Point2::new(p.x, -p.y);
         match *self {
+            Segment::Spline(ref c) => Segment::Spline(Arc::new(c.mirrored())),
             Segment::Line { a, b } => Segment::Line { a: m(a), b: m(b) },
             Segment::Arc {
                 center,
@@ -315,6 +366,7 @@ impl Segment {
     /// This segment's share of the loop's signed area (the integral of x dy).
     pub fn area_term(&self) -> f64 {
         match *self {
+            Segment::Spline(ref c) => c.c.area_term(),
             Segment::Line { a, b } => 0.5 * a.to_vec().cross(b.to_vec()),
             Segment::Arc {
                 center,
@@ -339,6 +391,10 @@ impl Segment {
     }
     fn degenerate(&self) -> bool {
         match *self {
+            Segment::Spline(ref c) => {
+                let (b, r) = (c.c.bbox(c.c.domain()), tol::MIN_LENGTH);
+                !(b.x.width() > r || b.y.width() > r) || !b.diagonal().is_finite()
+            }
             // written to be true for NaN or infinite sizes too
             Segment::Line { a, b } => !(a.distance(b) > tol::MIN_LENGTH && a.distance(b) < f64::INFINITY),
             Segment::Arc { radius, sweep, .. } => {
@@ -352,10 +408,14 @@ impl Segment {
     }
     /// Points along the segment, for inside/outside tests.
     pub fn samples(&self, n: usize) -> Vec<Point2> {
+        if let Segment::Spline(c) = self {
+            return c.c.samples(n).into_iter().map(p2).collect();
+        }
         (0..n)
             .map(|i| {
                 let k = i as f64 / n as f64;
                 match *self {
+                    Segment::Spline(_) => unreachable!("taken above"),
                     Segment::Line { a, b } => a.lerp(b, k),
                     Segment::Arc {
                         center,
@@ -382,6 +442,37 @@ impl ProfileLoop {
     pub fn new(segments: Vec<(Segment, u64)>) -> Self {
         ProfileLoop { segments }
     }
+    /// Curves with corners cut there, each arc a face of its own (as Inventor shows them), and one
+    /// closing on itself cut in two. The first piece keeps the segment's id.
+    /// None where a curve stops being one (a cusp, a piece too short).
+    fn smooth_pieces(&self) -> Option<ProfileLoop> {
+        let mut out = Vec::with_capacity(self.segments.len());
+        let alone = self.segments.len() == 1;
+        for (s, id) in &self.segments {
+            let Segment::Spline(c) = s else {
+                out.push((s.clone(), *id));
+                continue;
+            };
+            let d = c.c.domain();
+            let mut cuts = c.c.corners();
+            if cuts.is_empty() && alone {
+                // a joint where the pieces meet, else the middle
+                let b = c.c.breaks();
+                cuts.push(if b.len() > 2 { b[b.len() / 2] } else { d.mid() });
+            }
+            if cuts.is_empty() {
+                out.push((s.clone(), *id));
+                continue;
+            }
+            let mut lo = d.lo;
+            for (k, &hi) in cuts.iter().chain([&d.hi]).enumerate() {
+                let part = c.part(Interval::new(lo, hi))?;
+                out.push((Segment::Spline(Arc::new(part)), *id ^ ((k as u64) << 48)));
+                lo = hi;
+            }
+        }
+        Some(ProfileLoop::new(out))
+    }
     pub fn signed_area(&self) -> f64 {
         self.segments.iter().map(|(s, _)| s.area_term()).sum()
     }
@@ -391,7 +482,7 @@ impl ProfileLoop {
                 .segments
                 .iter()
                 .rev()
-                .map(|&(s, id)| (s.reversed(), id))
+                .map(|(s, id)| (s.reversed(), *id))
                 .collect(),
         }
     }
@@ -649,14 +740,15 @@ impl Profile {
         }
         for l in &self.loops {
             let n = l.segments.len();
-            for (i, &(s, id)) in l.segments.iter().enumerate() {
+            for (i, (s, id)) in l.segments.iter().enumerate() {
+                let id = *id;
                 if s.degenerate() {
                     return Err(ProfileError::Degenerate { id });
                 }
                 if matches!(s, Segment::Circle { .. }) && n != 1 {
                     return Err(ProfileError::CircleNotAlone { id });
                 }
-                let next = l.segments[(i + 1) % n].0;
+                let next = &l.segments[(i + 1) % n].0;
                 let gap = s.end().distance(next.start());
                 if gap > tol::LINEAR {
                     return Err(ProfileError::Open { id, gap });
@@ -675,7 +767,15 @@ impl Profile {
         for (i, l) in self.loops.iter().enumerate() {
             let ccw = l.signed_area() > 0.0;
             let want_ccw = i == 0;
-            loops.push(if ccw == want_ccw { l.clone() } else { l.reversed() });
+            let l = if ccw == want_ccw { l.clone() } else { l.reversed() };
+            loops.push(
+                if l.segments.iter().any(|(s, _)| matches!(s, Segment::Spline(_))) {
+                    l.smooth_pieces()
+                        .ok_or(ProfileError::Degenerate { id: l.segments[0].1 })?
+                } else {
+                    l
+                },
+            );
         }
         if loops.len() > 1 {
             let outer = loops[0].polygon();

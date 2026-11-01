@@ -119,10 +119,10 @@ fn values_only(plane: Frame, rows: &[Vec<String>], num: &Num, was: &Sketch) -> O
         return None;
     }
     // every token but a dimension's value is a number, a name or a word, as before
-    const WORDS: [&str; 28] = [
+    const WORDS: [&str; 34] = [
         "ids", "pt", "line", "poly", "rect", "circle", "arc", "fix", "co", "hor", "ver", "par", "perp",
         "tan", "eq", "conc", "mid", "sym", "dist", "hdist", "vdist", "rad", "dia", "ang", "ref", "cw",
-        "cons", "open",
+        "cons", "open", "spline", "bspline", "ellipse", "earc", "knots", "weights",
     ];
     let fixed = |t: &str| t.parse::<f64>().is_ok() || is_ref(t) || WORDS.contains(&t);
     for (a, b) in rows.iter().zip(&was.rows) {
@@ -185,12 +185,16 @@ struct B<'a, 'n> {
 /// Whether a token names a sketch entity or one of its points (`o p1 l2 a3.c c4`) rather
 /// than being a number.
 pub fn is_ref(t: &str) -> bool {
-    let base = t
-        .split_once('.')
-        .map_or(t, |(b, p)| if ["a", "b", "c"].contains(&p) { b } else { "" });
+    let base = t.split_once('.').map_or(t, |(b, p)| {
+        if ["a", "b", "c"].contains(&p) || (b.starts_with('s') && p.bytes().all(|c| c.is_ascii_digit())) {
+            b
+        } else {
+            ""
+        }
+    });
     base == "o"
         || base.len() > 1
-            && base.starts_with(['p', 'l', 'a', 'c'])
+            && base.starts_with(['p', 'l', 'a', 'c', 's', 'e'])
             && base[1..].bytes().all(|c| c.is_ascii_digit())
 }
 
@@ -238,8 +242,41 @@ impl B<'_, '_> {
         let (base, part) = t.split_once('.').unwrap_or((t, ""));
         let e = self.entity(base)?;
         let kind = self.s.entity(e).expect("named");
+        if let Entity::Spline { .. } = kind {
+            let pts = self.s.spline_points(e).expect("a spline");
+            return match part {
+                "a" => Ok(pts[0]),
+                "b" => Ok(pts[pts.len() - 1]),
+                n => n
+                    .parse::<usize>()
+                    .ok()
+                    .and_then(|i| pts.get(i).copied())
+                    .ok_or_else(|| {
+                        format!(
+                            "'{t}' is not a point of the spline ({} points, from 0)",
+                            pts.len()
+                        )
+                    }),
+            };
+        }
         Ok(match (kind, part) {
             (Entity::Point { .. }, "") => e,
+            (Entity::Ellipse { center, .. }, "" | "c") => center,
+            (Entity::Ellipse { major, .. }, "m") => major,
+            (
+                Entity::Ellipse {
+                    ends: Some((a, _, _)),
+                    ..
+                },
+                "a",
+            ) => a,
+            (
+                Entity::Ellipse {
+                    ends: Some((_, b, _)),
+                    ..
+                },
+                "b",
+            ) => b,
             (Entity::Line { a, .. }, "a") | (Entity::Arc { start: a, .. }, "a") => a,
             (Entity::Line { b, .. }, "b") | (Entity::Arc { end: b, .. }, "b") => b,
             (Entity::Circle { center, .. } | Entity::Arc { center, .. }, "" | "c") => center,
@@ -342,6 +379,52 @@ impl B<'_, '_> {
                 let e = self.s.add_arc(center, a, b, ccw).map_err(bad)?;
                 self.name('a', e);
             }
+            "spline" | "bspline" => {
+                let degree = if row[0] == "bspline" {
+                    (self.num)(c.next()?, Want::Count)? as usize
+                } else {
+                    0
+                };
+                let mut pts = Vec::new();
+                while !c.done() && !["open", "knots", "weights"].contains(&c.peek()) {
+                    pts.push(self.point(&mut c)?);
+                }
+                let (mut knots, mut weights) = (None, None);
+                while c.peek() == "knots" || c.peek() == "weights" {
+                    let weighted = c.next()? == "weights";
+                    let mut v = Vec::new();
+                    while !c.done() && !["open", "knots", "weights"].contains(&c.peek()) {
+                        v.push(self.len(&mut c)?);
+                    }
+                    *if weighted { &mut weights } else { &mut knots } = Some(v);
+                }
+                let closed = !c.eat("open");
+                let e = if row[0] == "spline" {
+                    if pts.len() < 2 || (closed && pts.len() < 3) {
+                        return Err("spline needs two points, or three to close".into());
+                    }
+                    self.s.add_spline(&pts, closed).map_err(bad)?
+                } else {
+                    self.s
+                        .add_bspline(degree, &pts, knots, weights, closed)
+                        .map_err(|e| format!("{}: bspline needs more points than its degree", bad(e)))?
+                };
+                self.name('s', e);
+            }
+            "ellipse" | "earc" => {
+                let (center, major) = (self.point(&mut c)?, self.point(&mut c)?);
+                let b = self.len(&mut c)?;
+                let e = if row[0] == "ellipse" {
+                    self.s.add_ellipse(center, major, b).map_err(bad)?
+                } else {
+                    let (s0, s1) = (self.point(&mut c)?, self.point(&mut c)?);
+                    let ccw = !c.eat("cw");
+                    self.s
+                        .add_ellipse_arc(center, major, b, s0, s1, ccw)
+                        .map_err(bad)?
+                };
+                self.name('e', e);
+            }
             _ => {
                 if cons {
                     return Err("only geometry rows take `cons`".into());
@@ -381,6 +464,16 @@ impl B<'_, '_> {
                         Entity::Arc {
                             center, start, end, ..
                         } => vec![center, start, end],
+                        Entity::Spline { .. } => self.s.spline_points(e).expect("a spline").to_vec(),
+                        Entity::Ellipse {
+                            center, major, ends, ..
+                        } => {
+                            let mut v = vec![center, major];
+                            if let Some((a, b, _)) = ends {
+                                v.extend([a, b]);
+                            }
+                            v
+                        }
                     };
                     for p in pts {
                         self.add(k, C::Fixed(p))?;
@@ -396,6 +489,10 @@ impl B<'_, '_> {
                 let con = match self.s.entity(q).expect("named") {
                     Entity::Point { .. } => C::Coincident(p, q),
                     Entity::Line { .. } => C::PointOnLine(p, q),
+                    Entity::Ellipse { .. } => C::PointOnEllipse(p, q),
+                    Entity::Spline { .. } => {
+                        return Err("co on a spline: name its point (s1.a, s1.b, s1.0, s1.1 ..)".into());
+                    }
                     _ => C::PointOnCircle(p, q),
                 };
                 self.add(k, con)?;
@@ -430,6 +527,32 @@ impl B<'_, '_> {
             }
             "par" | "perp" | "tan" | "conc" => {
                 let (a, b) = (self.entity_tok(c)?, self.entity_tok(c)?);
+                if kw == "tan" {
+                    let kind = |s: &Self, e: EntityId| s.s.entity(e).expect("named");
+                    match (kind(self, a), kind(self, b)) {
+                        (Entity::Spline { .. }, _) | (_, Entity::Spline { .. }) => {
+                            let (sp, other) = if matches!(kind(self, a), Entity::Spline { .. }) {
+                                (a, b)
+                            } else {
+                                (b, a)
+                            };
+                            if let Some(id) = self.s.tangent_spline(sp, other).map_err(|_| {
+                                "tan on a spline: a line or arc that ends at the spline's start or end"
+                                    .to_string()
+                            })? {
+                                self.made.push((id, k));
+                            }
+                            return c.end();
+                        }
+                        (Entity::Ellipse { .. }, Entity::Line { .. }) => {
+                            return self.add(k, C::TangentEllipse(b, a));
+                        }
+                        (Entity::Line { .. }, Entity::Ellipse { .. }) => {
+                            return self.add(k, C::TangentEllipse(a, b));
+                        }
+                        _ => {}
+                    }
+                }
                 let con = match kw {
                     "par" => C::Parallel(a, b),
                     "perp" => C::Perpendicular(a, b),
@@ -493,6 +616,11 @@ impl B<'_, '_> {
             "rad" | "dia" => {
                 let e = self.entity_tok(c)?;
                 let d = self.len(c)?;
+                if matches!(self.s.entity(e), Some(Entity::Ellipse { .. })) {
+                    let d = if kw == "rad" { d } else { 0.5 * d };
+                    self.add(k, C::EllipseMinor(e, d))?;
+                    return c.end();
+                }
                 self.add(
                     k,
                     if kw == "rad" {
@@ -509,7 +637,7 @@ impl B<'_, '_> {
             }
             _ => {
                 return Err(
-                    "unknown row (pt line poly rect circle arc | fix co hor ver par perp tan eq conc mid sym | dist hdist vdist rad dia ang)"
+                    "unknown row (pt line poly rect circle arc spline bspline ellipse earc | fix co hor ver par perp tan eq conc mid sym | dist hdist vdist rad dia ang)"
                         .into(),
                 );
             }
@@ -541,6 +669,12 @@ impl B<'_, '_> {
             },
             ("hdist", [x, y]) => pt(*y)?.x - pt(*x)?.x,
             ("vdist", [x, y]) => pt(*y)?.y - pt(*x)?.y,
+            ("rad" | "dia", [c]) if matches!(q.entity(*c), Some(Entity::Ellipse { .. })) => {
+                let Some(Entity::Ellipse { b, .. }) = q.entity(*c) else {
+                    unreachable!("just matched")
+                };
+                q.params()[b] * if kw == "dia" { 2.0 } else { 1.0 }
+            }
             ("rad" | "dia", [c]) => {
                 if !matches!(q.entity(*c), Some(Entity::Circle { .. } | Entity::Arc { .. })) {
                     return Err("rad and dia need a circle or arc".into());
@@ -592,8 +726,11 @@ impl B<'_, '_> {
     fn as_point(&self, e: EntityId) -> R<EntityId> {
         match self.s.entity(e).expect("named") {
             Entity::Point { .. } => Ok(e),
-            Entity::Circle { center, .. } | Entity::Arc { center, .. } => Ok(center),
+            Entity::Circle { center, .. } | Entity::Arc { center, .. } | Entity::Ellipse { center, .. } => {
+                Ok(center)
+            }
             Entity::Line { .. } => Err("a line where a point is wanted".into()),
+            Entity::Spline { .. } => Err("a spline where a point is wanted: s1.a, s1.b, s1.0 ..".into()),
         }
     }
 
@@ -648,6 +785,9 @@ fn stable(name: &str) -> u64 {
     let k = match name.as_bytes()[0] {
         b'l' => 0,
         b'a' => 1,
+        b's' => 3,
+        // two bits ran out: ellipses sit above any other kind's count
+        b'e' => return n << 2 | 3 | 1 << 40,
         _ => 2,
     };
     n << 2 | k
@@ -682,6 +822,10 @@ fn ids_of_rows(rows: &[Vec<String>]) -> R<Vec<(String, u64)>> {
     Ok(out)
 }
 
+/// A profile segment's entity id, what a cut of a kinked or closed curve adds taken off (the
+/// piece number stays on the stable id, so piece 0 reads as the entity).
+const PIECE: u64 = 0xffff << 48;
+
 fn name_of(s: &Sketch, id: u64) -> &str {
     s.names
         .iter()
@@ -707,7 +851,10 @@ pub fn profile(s: &Sketch, through: Option<&str>) -> R<Profile> {
     let mut p = match through {
         None if ps.len() == 1 => ps.into_iter().next().expect("one"),
         None => {
-            let outs: Vec<&str> = ps.iter().map(|p| name_of(s, p.loops[0].segments[0].1)).collect();
+            let outs: Vec<&str> = ps
+                .iter()
+                .map(|p| name_of(s, p.loops[0].segments[0].1 & !PIECE))
+                .collect();
             return Err(format!(
                 "the sketch has {} regions; name one by an entity on its outside: {}",
                 ps.len(),
@@ -717,7 +864,7 @@ pub fn profile(s: &Sketch, through: Option<&str>) -> R<Profile> {
         Some(t) => {
             let id = id_of(s, t)?.0;
             ps.into_iter()
-                .find(|p| p.loops[0].segments.iter().any(|g| g.1 == id))
+                .find(|p| p.loops[0].segments.iter().any(|g| g.1 & !PIECE == id))
                 .ok_or_else(|| format!("{t} is not on the outside of a region"))?
         }
     };
@@ -744,6 +891,8 @@ pub fn profile(s: &Sketch, through: Option<&str>) -> R<Profile> {
                 None if listed.is_empty() => stable(name),
                 None => stable(name) + UNLISTED,
             };
+
+            g.1 = stable(name_of(s, g.1 & !PIECE)) | g.1 & PIECE;
         }
     }
     Ok(p)

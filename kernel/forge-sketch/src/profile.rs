@@ -84,6 +84,16 @@ pub fn profiles(sketch: &Sketch) -> Result<Vec<Profile>, ExtractError> {
                 };
                 loops.push(ProfileLoop::new(vec![(seg, id.0)]));
             }
+            Some(Entity::Spline { .. } | Entity::Ellipse { .. }) => {
+                let Some(c) = sketch.curve(id) else {
+                    return Err(ExtractError::Degenerate { entity: id });
+                };
+                if c.closed() {
+                    loops.push(ProfileLoop::new(vec![(Segment::Spline(c), id.0)]));
+                } else {
+                    open.push((Segment::Spline(c), id));
+                }
+            }
             _ => {}
         }
     }
@@ -161,8 +171,8 @@ fn chain_loops(open: &[(Segment, EntityId)]) -> Result<Vec<ProfileLoop>, Extract
         let (mut k, mut forward) = (first, true);
         loop {
             used[k] = true;
-            let (s, id) = open[k];
-            segs.push((if forward { s } else { s.reversed() }, id.0));
+            let (s, id) = &open[k];
+            segs.push((if forward { s.clone() } else { s.reversed() }, id.0));
             let at = if forward { ends[k].1 } else { ends[k].0 };
             let next = incident[at].iter().copied().find(|&o| o != k).unwrap_or(k);
             if next == first || used[next] {
@@ -187,8 +197,9 @@ fn contains(poly: &[Point2], p: Point2) -> bool {
     c
 }
 
-/// A segment as a line piece or a circular piece (full circles sweep 2pi).
+/// A segment as a line piece or a circular piece (full circles sweep 2pi), or a free curve.
 enum Shape {
+    Curve(std::sync::Arc<forge_geom::spline::PlaneSpline>),
     Line(Point2, Point2),
     Arc {
         c: Point2,
@@ -200,6 +211,7 @@ enum Shape {
 
 fn shape(s: &Segment) -> Shape {
     match *s {
+        Segment::Spline(ref c) => Shape::Curve(c.clone()),
         Segment::Line { a, b } => Shape::Line(a, b),
         Segment::Arc {
             center,
@@ -233,7 +245,7 @@ const EPS: f64 = 1e-9;
 
 fn radius(s: &Shape) -> f64 {
     match s {
-        Shape::Line(..) => 0.0,
+        Shape::Line(..) | Shape::Curve(_) => 0.0,
         Shape::Arc { r, .. } => *r,
     }
 }
@@ -250,6 +262,7 @@ enum Hit {
 
 fn hits(a: &Shape, b: &Shape) -> Hit {
     match (a, b) {
+        (Shape::Curve(c), o) | (o, Shape::Curve(c)) => curve_hits(c, o),
         (Shape::Line(p, q), Shape::Line(r, s)) => {
             let (d1, d2) = (*q - *p, *s - *r);
             let den = d1.cross(d2);
@@ -355,13 +368,73 @@ fn hits(a: &Shape, b: &Shape) -> Hit {
     }
 }
 
+/// Where a free curve meets another shape: Bernstein roots against a line or circle, hull
+/// subdivision against another curve.
+fn curve_hits(c: &forge_geom::spline::PlaneSpline, o: &Shape) -> Hit {
+    use forge_math::{Point3, Vec3};
+    let s = &c.c;
+    let on = |t: f64| {
+        let q = s.point(t);
+        Point2::new(q.x, q.y)
+    };
+    let d = s.domain();
+    match o {
+        Shape::Line(p, q) => {
+            let v = *q - *p;
+            let Some(u) = v.normalize() else {
+                return Hit::Points(vec![]);
+            };
+            let n = Vec3::new(-u.y, u.x, 0.0);
+            let k = -(n.x * p.x + n.y * p.y);
+            Hit::Points(
+                s.plane_roots(n, k, d, tol::LINEAR)
+                    .into_iter()
+                    .map(|(t, _)| on(t))
+                    .filter(|x| {
+                        let f = (*x - *p).dot(v) / v.length_sq();
+                        (-EPS..=1.0 + EPS).contains(&f)
+                    })
+                    .collect(),
+            )
+        }
+        Shape::Arc {
+            c: ctr,
+            r,
+            start,
+            sweep,
+        } => {
+            let a = [[1.0, 0.0, 0.0], [0.0, 1.0, 0.0], [0.0, 0.0, 1.0]];
+            let o3 = Point3::new(ctr.x, ctr.y, 0.0);
+            Hit::Points(
+                s.quadric_roots(o3, &a, Vec3::ZERO, -r * r, d, 2.0 * r * tol::LINEAR)
+                    .into_iter()
+                    .map(|(t, _)| on(t))
+                    .filter(|&x| on_arc(*ctr, *start, *sweep, x))
+                    .collect(),
+            )
+        }
+        Shape::Curve(e) => {
+            let f = &e.c;
+            if forge_geom::spline::meet::same_curve(s, f) {
+                return Hit::Overlap;
+            }
+            Hit::Points(
+                forge_geom::spline::meet::cross_sections(s, d, f, f.domain())
+                    .into_iter()
+                    .map(|(t, _)| on(t))
+                    .collect(),
+            )
+        }
+    }
+}
+
 /// No two segments may meet anywhere except at an end they share.
 fn check_crossings(loops: &[ProfileLoop]) -> Result<(), ExtractError> {
-    let all: Vec<(Segment, u64)> = loops.iter().flat_map(|l| l.segments.iter().copied()).collect();
+    let all: Vec<(Segment, u64)> = loops.iter().flat_map(|l| l.segments.iter().cloned()).collect();
     let shapes: Vec<Shape> = all.iter().map(|(s, _)| shape(s)).collect();
     for i in 0..all.len() {
         for j in i + 1..all.len() {
-            let (si, sj) = (all[i].0, all[j].0);
+            let (si, sj) = (&all[i].0, &all[j].0);
             let shared: Vec<Point2> = [si.start(), si.end()]
                 .into_iter()
                 .filter(|p| {

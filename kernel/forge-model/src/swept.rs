@@ -333,7 +333,7 @@ fn profile_reach(profile: &Profile, at: Point3) -> f64 {
 
 /// A sweep's solid: its stretches' prisms and solids of revolution, together.
 fn sweep_shape(profile: &Profile, stretches: &[Stretch]) -> Shape {
-    let segs: Vec<Seg2> = profile
+    let segs: std::sync::Arc<[Seg2]> = profile
         .loops
         .iter()
         .flat_map(|l| l.segments.iter().map(|(s, _)| seg2(s)))

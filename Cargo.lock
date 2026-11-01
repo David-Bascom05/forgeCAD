@@ -156,6 +156,7 @@ dependencies = [
 name = "forge-sketch"
 version = "0.1.0"
 dependencies = [
+ "forge-geom",
  "forge-math",
  "forge-ops",
 ]

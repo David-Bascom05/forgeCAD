@@ -40,6 +40,16 @@ impl Prepared {
 
 /// The profile turned so its plane's z faces `forward` (flipped and mirrored to match), checked,
 /// with every whole circle split into two half arcs so each segment has two ends.
+/// A profile with a free-form curve in it: the first such segment's id (for what takes only lines and arcs).
+pub(crate) fn curved(p: &Profile) -> Result<(), ProfileError> {
+    let c = p
+        .loops
+        .iter()
+        .flat_map(|l| &l.segments)
+        .find(|(s, _)| matches!(s, Segment::Spline(_)));
+    c.map_or(Ok(()), |(_, id)| Err(ProfileError::Curve { id: *id }))
+}
+
 pub(crate) fn prepare(profile: &Profile, forward: Vec3) -> Result<Prepared, ProfileError> {
     let turned = if profile.plane.z().dot(forward) < 0.0 {
         mirrored(profile)
@@ -53,8 +63,9 @@ pub(crate) fn prepare(profile: &Profile, forward: Vec3) -> Result<Prepared, Prof
         .iter()
         .map(|l| {
             let mut segs = Vec::new();
-            for &(s, id) in &l.segments {
-                if let Segment::Circle { center, radius, ccw } = s {
+            for (s, id) in &l.segments {
+                let id = *id;
+                if let Segment::Circle { center, radius, ccw } = *s {
                     let h = if ccw { dmath::PI } else { -dmath::PI };
                     for (half, start) in [(0, 0.0), (1, h)] {
                         segs.push((
@@ -69,7 +80,7 @@ pub(crate) fn prepare(profile: &Profile, forward: Vec3) -> Result<Prepared, Prof
                         keys.push(Name::NONE.with(id).with(half));
                     }
                 } else {
-                    segs.push((s, id));
+                    segs.push((s.clone(), id));
                     keys.push(Name::NONE.with(id).with(0));
                 }
             }
@@ -92,7 +103,7 @@ pub(crate) fn mirrored(profile: &Profile) -> Profile {
         loops: profile
             .loops
             .iter()
-            .map(|l| ProfileLoop::new(l.segments.iter().map(|&(s, id)| (s.mirrored(), id)).collect()))
+            .map(|l| ProfileLoop::new(l.segments.iter().map(|(s, id)| (s.mirrored(), *id)).collect()))
             .collect(),
     }
 }
@@ -100,6 +111,15 @@ pub(crate) fn mirrored(profile: &Profile) -> Profile {
 /// A segment drawn in the plane `f`.
 pub(crate) fn section_curve(s: &Segment, f: &Frame) -> SecCurve {
     match *s {
+        Segment::Spline(ref c) => {
+            let world = c.c.mapped(|q| f.point_to_world(q));
+            let d = c.c.domain();
+            SecCurve {
+                curve: forge_geom::spline::SplineCurve::curve(std::sync::Arc::new(world), d),
+                range: d,
+                forward: true,
+            }
+        }
         Segment::Line { a, b } => {
             let (pa, pb) = (f.plane_point(a), f.plane_point(b));
             SecCurve {
@@ -249,6 +269,7 @@ pub(crate) fn radius_height(rf: &Frame, plane: &Frame, p: Point2) -> Point2 {
 pub(crate) fn rh_section(rf: &Frame, plane: &Frame, s: &Segment) -> forge_geom::screw::Section {
     use forge_geom::screw::Section;
     match *s {
+        Segment::Spline(_) => unreachable!("callers refuse curves"),
         Segment::Line { a, b } => Section::Line {
             a: radius_height(rf, plane, a),
             b: radius_height(rf, plane, b),

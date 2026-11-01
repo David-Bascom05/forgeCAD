@@ -55,7 +55,7 @@ fn tangent(s: &Segment, end: bool) -> Option<Vec2> {
             let (sn, cs) = dmath::sin_cos(if end { start + sweep } else { start });
             Some(Vec2::new(-sn, cs) * sweep.signum())
         }
-        Segment::Circle { .. } => None,
+        Segment::Circle { .. } | Segment::Spline(_) => None,
     }
 }
 
@@ -89,12 +89,13 @@ fn offset_path(path: &[Segment], o: f64) -> Result<Vec<Segment>, RibError> {
                     sweep,
                 }
             }
-            Segment::Circle { .. } => return Err(RibError::BadPath),
+            Segment::Circle { .. } | Segment::Spline(_) => return Err(RibError::BadPath),
         };
         if let Some(prev) = out.last_mut()
             && prev.end().distance(n.start()) > tol::LINEAR
         {
-            let (Segment::Line { a: pa, b: pb }, Segment::Line { a: na, b: nb }) = (*prev, n) else {
+            let (&mut Segment::Line { a: pa, b: pb }, &Segment::Line { a: na, b: nb }) = (&mut *prev, &n)
+            else {
                 return Err(RibError::Corner);
             };
             let (d1, d2) = (pb - pa, nb - na);
@@ -117,7 +118,7 @@ fn extended(path: &[Segment], far: f64) -> Vec<Segment> {
     let mut out = path.to_vec();
     let t0 = tangent(&path[0], false).expect("checked");
     let t1 = tangent(&path[path.len() - 1], true).expect("checked");
-    match out[0] {
+    match out[0].clone() {
         Segment::Line { a, b } => out[0] = Segment::Line { a: a - t0 * far, b },
         s => out.insert(
             0,
@@ -128,7 +129,7 @@ fn extended(path: &[Segment], far: f64) -> Vec<Segment> {
         ),
     }
     let k = out.len() - 1;
-    match out[k] {
+    match out[k].clone() {
         Segment::Line { a, b } => out[k] = Segment::Line { a, b: b + t1 * far },
         s => out.push(Segment::Line {
             a: s.end(),

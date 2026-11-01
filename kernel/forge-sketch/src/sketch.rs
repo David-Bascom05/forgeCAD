@@ -1,5 +1,7 @@
 use crate::dual::{D, N, V};
-use forge_math::{Frame, Point2};
+use forge_geom::spline::PlaneSpline;
+use forge_math::{Frame, Point2, Vec2, dmath};
+use std::sync::Arc;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct EntityId(pub u64);
@@ -31,6 +33,39 @@ pub enum Entity {
         end: EntityId,
         ccw: bool,
     },
+    /// A curve through or on the control of ordinary points (`Sketch::spline_points`).
+    Spline {
+        index: usize,
+    },
+    /// Semi-axes |major - center| and the parameter b; a whole ellipse without `ends`.
+    Ellipse {
+        center: EntityId,
+        major: EntityId,
+        b: usize,
+        ends: Option<(EntityId, EntityId, bool)>,
+    },
+}
+
+/// How a spline's points make its curve.
+#[derive(Clone, Debug, PartialEq)]
+pub enum SplineKind {
+    /// The cubic through them, its end slopes along what it is tangent to (else natural).
+    Through,
+    /// Control points of this degree; knots uniform unless given, weights 1 unless given.
+    Control {
+        degree: usize,
+        knots: Option<Vec<f64>>,
+        weights: Option<Vec<f64>>,
+    },
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub(crate) struct SplineRec {
+    pub points: Vec<EntityId>,
+    pub kind: SplineKind,
+    pub closed: bool,
+    /// What a through-spline's start and end are tangent to.
+    pub ties: [Option<EntityId>; 2],
 }
 
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -66,6 +101,15 @@ pub enum Constraint {
     HorizontalDistance(EntityId, EntityId, f64),
     /// second.y - first.y = d
     VerticalDistance(EntityId, EntityId, f64),
+    /// A point on an ellipse.
+    PointOnEllipse(EntityId, EntityId),
+    /// A control spline's end (0 start, 1 end) runs along the other curve: its first leg is
+    /// collinear with the line, or square to the arc's radius there.
+    SplineEnd(EntityId, usize, EntityId),
+    /// A line and an ellipse, tangent on the side the line lies at when added.
+    TangentEllipse(EntityId, EntityId),
+    /// An ellipse's semi-minor axis.
+    EllipseMinor(EntityId, f64),
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -98,6 +142,7 @@ pub struct Sketch {
     pub plane: Frame,
     pub(crate) params: Vec<f64>,
     pub(crate) entities: Vec<EntityRec>,
+    pub(crate) splines: Vec<SplineRec>,
     pub(crate) constraints: Vec<ConstraintRec>,
     next_constraint: u64,
     /// From the last solve, for the next one to take groups whose inputs did not change:
@@ -164,6 +209,7 @@ impl Sketch {
             plane,
             params: Vec::new(),
             entities: Vec::new(),
+            splines: Vec::new(),
             constraints: Vec::new(),
             next_constraint: 1,
             last: None,
@@ -224,6 +270,253 @@ impl Sketch {
             end,
             ccw,
         }))
+    }
+
+    /// A curve through existing points; closed, it runs back to the first.
+    pub fn add_spline(&mut self, points: &[EntityId], closed: bool) -> Result<EntityId, SketchError> {
+        self.spline_rec(points, SplineKind::Through, closed, if closed { 3 } else { 2 })
+    }
+
+    /// A B-spline on existing control points. Closed, the control polygon wraps (a periodic
+    /// uniform spline; knots and weights are for open ones).
+    pub fn add_bspline(
+        &mut self,
+        degree: usize,
+        points: &[EntityId],
+        knots: Option<Vec<f64>>,
+        weights: Option<Vec<f64>>,
+        closed: bool,
+    ) -> Result<EntityId, SketchError> {
+        if degree == 0
+            || degree > forge_geom::spline::MAX_DEGREE
+            || (closed && (knots.is_some() || weights.is_some()))
+        {
+            return Err(SketchError::BadValue);
+        }
+        let kind = SplineKind::Control {
+            degree,
+            knots,
+            weights,
+        };
+        let e = self.spline_rec(points, kind, closed, if closed { degree + 2 } else { degree + 1 })?;
+        // what the numbers say must already make a curve
+        if self.curve(e).is_none() {
+            return Err(SketchError::BadValue);
+        }
+        Ok(e)
+    }
+
+    fn spline_rec(
+        &mut self,
+        points: &[EntityId],
+        kind: SplineKind,
+        closed: bool,
+        least: usize,
+    ) -> Result<EntityId, SketchError> {
+        for &p in points {
+            self.expect_point(p)?;
+        }
+        if points.len() < least {
+            return Err(SketchError::BadValue);
+        }
+        self.splines.push(SplineRec {
+            points: points.to_vec(),
+            kind,
+            closed,
+            ties: [None, None],
+        });
+        Ok(self.push(Entity::Spline {
+            index: self.splines.len() - 1,
+        }))
+    }
+
+    /// An ellipse about `center`, one end of its major axis at `major`, semi-minor axis `b`.
+    pub fn add_ellipse(
+        &mut self,
+        center: EntityId,
+        major: EntityId,
+        b: f64,
+    ) -> Result<EntityId, SketchError> {
+        self.expect_point(center)?;
+        self.expect_point(major)?;
+        if !(b > 0.0 && b.is_finite()) {
+            return Err(SketchError::BadValue);
+        }
+        let r = self.params.len();
+        self.params.push(b);
+        Ok(self.push(Entity::Ellipse {
+            center,
+            major,
+            b: r,
+            ends: None,
+        }))
+    }
+
+    /// An arc of an ellipse between two points held on it, counter-clockwise when `ccw`.
+    pub fn add_ellipse_arc(
+        &mut self,
+        center: EntityId,
+        major: EntityId,
+        b: f64,
+        start: EntityId,
+        end: EntityId,
+        ccw: bool,
+    ) -> Result<EntityId, SketchError> {
+        let e = self.add_ellipse(center, major, b)?;
+        self.expect_point(start)?;
+        self.expect_point(end)?;
+        let i = self.entities.len() - 1;
+        if let Entity::Ellipse { ends, .. } = &mut self.entities[i].kind {
+            *ends = Some((start, end, ccw));
+        }
+        self.add_constraint(Constraint::PointOnEllipse(start, e))?;
+        self.add_constraint(Constraint::PointOnEllipse(end, e))?;
+        Ok(e)
+    }
+
+    /// The points a spline is made from, in order.
+    pub fn spline_points(&self, id: EntityId) -> Option<&[EntityId]> {
+        match self.rec(id).ok()?.kind {
+            Entity::Spline { index } => Some(&self.splines[index].points),
+            _ => None,
+        }
+    }
+
+    /// `n` points along a spline or ellipse in plane coordinates, for drawing: the first at its
+    /// start, the last at its end.
+    pub fn spline_samples(&self, id: EntityId, n: usize) -> Vec<Point2> {
+        let Some(c) = self.curve(id) else {
+            return Vec::new();
+        };
+        let d = c.c.domain();
+        let n = n.max(2);
+        (0..n)
+            .map(|i| {
+                let q = c.c.point(d.lo + d.width() * i as f64 / (n - 1) as f64);
+                Point2::new(q.x, q.y)
+            })
+            .collect()
+    }
+
+    /// Makes a spline's end tangent to a line or arc at the end that lies on it. A through-spline
+    /// has free end slopes, so this takes up no freedom of its points and adds no row (None); a
+    /// control spline holds its first leg along the other curve.
+    pub fn tangent_spline(
+        &mut self,
+        spline: EntityId,
+        other: EntityId,
+    ) -> Result<Option<ConstraintId>, SketchError> {
+        let Entity::Spline { index } = self.rec(spline)?.kind else {
+            return Err(SketchError::WrongKind(spline));
+        };
+        let pts = &self.splines[index].points;
+        let (first, last) = (self.point(pts[0]), self.point(pts[pts.len() - 1]));
+        let (a, b) = match self.rec(other)?.kind {
+            Entity::Line { a, b } | Entity::Arc { start: a, end: b, .. } => (self.point(a), self.point(b)),
+            _ => return Err(SketchError::WrongKind(other)),
+        };
+        let gap = |p: Point2| p.distance(a).min(p.distance(b));
+        let end = usize::from(gap(last) < gap(first));
+        if gap(if end == 0 { first } else { last }) > 1e-6 {
+            return Err(SketchError::WrongKind(other));
+        }
+        if matches!(self.splines[index].kind, SplineKind::Through) {
+            self.splines[index].ties[end] = Some(other);
+            return Ok(None);
+        }
+        self.add_constraint(Constraint::SplineEnd(spline, end, other))
+            .map(Some)
+    }
+
+    /// The curve an entity makes as the parameters stand; None for other entities or where its
+    /// points can't make one (repeats, or fewer than it needs).
+    pub fn curve(&self, id: EntityId) -> Option<Arc<PlaneSpline>> {
+        let rec = self.rec(id).ok()?;
+        match rec.kind {
+            Entity::Spline { index } => {
+                let s = &self.splines[index];
+                let mut pts: Vec<Point2> = s.points.iter().map(|&p| self.point(p)).collect();
+                match &s.kind {
+                    SplineKind::Through => {
+                        if s.closed {
+                            pts.push(pts[0]);
+                        }
+                        let from = self.tie_slope(s, 0, &pts);
+                        let to = self.tie_slope(s, 1, &pts);
+                        PlaneSpline::through(pts, from, to).map(Arc::new)
+                    }
+                    SplineKind::Control {
+                        degree,
+                        knots,
+                        weights,
+                    } => {
+                        if s.closed {
+                            let n = pts.len();
+                            let w = (0..n + degree).map(|i| pts[i % n]).collect();
+                            let k = (0..n + 2 * degree + 1).map(|i| i as f64).collect();
+                            PlaneSpline::control(*degree, w, Some(k), None).map(Arc::new)
+                        } else {
+                            PlaneSpline::control(*degree, pts, knots.clone(), weights.clone()).map(Arc::new)
+                        }
+                    }
+                }
+            }
+            Entity::Ellipse {
+                center,
+                major,
+                b,
+                ends,
+            } => {
+                let c = self.point(center);
+                let m = self.point(major) - c;
+                let a = m.length();
+                let rot = dmath::atan2(m.y, m.x);
+                let bv = self.params[b];
+                let (sn, cs) = dmath::sin_cos(rot);
+                let angle = |p: EntityId| {
+                    let d = self.point(p) - c;
+                    dmath::atan2((-sn * d.x + cs * d.y) / bv, (cs * d.x + sn * d.y) / a)
+                };
+                let (start, sweep) = match ends {
+                    None => (0.0, dmath::TAU),
+                    Some((s, e, ccw)) => {
+                        let (a0, a1) = (angle(s), angle(e));
+                        (
+                            a0,
+                            if ccw {
+                                dmath::wrap_tau(a1 - a0)
+                            } else {
+                                -dmath::wrap_tau(a0 - a1)
+                            },
+                        )
+                    }
+                };
+                PlaneSpline::ellipse(c, a, bv, rot, start, sweep).map(Arc::new)
+            }
+            _ => None,
+        }
+    }
+
+    /// The direction a through-spline leaves its end `end` along what it is tangent to, pointing
+    /// the way the chord to the next point goes.
+    fn tie_slope(&self, s: &SplineRec, end: usize, pts: &[Point2]) -> Option<Vec2> {
+        let other = s.ties[end]?;
+        let at = if end == 0 { pts[0] } else { pts[pts.len() - 1] };
+        let chord = if end == 0 {
+            pts[1] - pts[0]
+        } else {
+            pts[pts.len() - 1] - pts[pts.len() - 2]
+        };
+        let dir = match self.rec(other).ok()?.kind {
+            Entity::Line { a, b } => self.point(b) - self.point(a),
+            Entity::Arc { center, .. } => {
+                let r = at - self.point(center);
+                Vec2::new(-r.y, r.x)
+            }
+            _ => return None,
+        };
+        let u = dir.normalize()?;
+        Some(if u.dot(chord) < 0.0 { u * -1.0 } else { u })
     }
 
     pub fn set_construction(&mut self, id: EntityId, on: bool) -> Result<(), SketchError> {
@@ -326,6 +619,20 @@ impl Sketch {
             Ok(Entity::Arc {
                 center, start, end, ..
             }) => pts(&[center, start, end]),
+            Ok(Entity::Spline { index }) => pts(&self.splines[index].points),
+            Ok(Entity::Ellipse {
+                center,
+                major,
+                b,
+                ends,
+            }) => {
+                let mut v = pts(&[center, major]);
+                v.push(b);
+                if let Some((s, e, _)) = ends {
+                    v.extend(pts(&[s, e]));
+                }
+                v
+            }
             Err(_) => vec![],
         }
     }
@@ -338,6 +645,22 @@ impl Sketch {
             Entity::Line { .. } => Ok(()),
             _ => Err(SketchError::WrongKind(id)),
         }
+    }
+    fn expect_ellipse(&self, id: EntityId) -> Result<(), SketchError> {
+        match self.rec(id)?.kind {
+            Entity::Ellipse { .. } => Ok(()),
+            _ => Err(SketchError::WrongKind(id)),
+        }
+    }
+    /// An ellipse's center, unit major axis, and two semi-axes, as duals.
+    fn ellipse_of(&self, loc: &mut Local, id: EntityId) -> (V, V, D, D) {
+        let Ok(Entity::Ellipse { center, major, b, .. }) = self.rec(id).map(|r| r.kind) else {
+            panic!("validated ellipse");
+        };
+        let c = self.pt(loc, center);
+        let m = self.pt(loc, major).sub(c);
+        let a = m.len();
+        (c, m, a, loc.var(b))
     }
     fn is_round(&self, id: EntityId) -> Result<bool, SketchError> {
         Ok(matches!(
@@ -449,6 +772,29 @@ impl Sketch {
                 self.expect_point(q)?;
                 finite(d)?;
             }
+            PointOnEllipse(p, e) => {
+                self.expect_point(p)?;
+                self.expect_ellipse(e)?;
+            }
+            SplineEnd(s, _, o) => {
+                let Entity::Spline { index } = self.rec(s)?.kind else {
+                    return Err(SketchError::WrongKind(s));
+                };
+                if matches!(self.splines[index].kind, SplineKind::Through) {
+                    return Err(SketchError::WrongKind(s));
+                }
+                if !matches!(self.rec(o)?.kind, Entity::Line { .. } | Entity::Arc { .. }) {
+                    return Err(SketchError::WrongKind(o));
+                }
+            }
+            TangentEllipse(l, e) => {
+                self.expect_line(l)?;
+                self.expect_ellipse(e)?;
+            }
+            EllipseMinor(e, d) => {
+                self.expect_ellipse(e)?;
+                positive(d)?;
+            }
         }
         let data = self.capture(c);
         let id = ConstraintId(self.next_constraint);
@@ -466,7 +812,9 @@ impl Sketch {
             .find(|r| r.id == id)
             .ok_or(SketchError::UnknownConstraint(id))?;
         let ok = match rec.c {
-            Distance(..) | Length(..) | Radius(..) | Diameter(..) => v > 0.0 && v.is_finite(),
+            Distance(..) | Length(..) | Radius(..) | Diameter(..) | EllipseMinor(..) => {
+                v > 0.0 && v.is_finite()
+            }
             DistancePointLine(..) => v >= 0.0 && v.is_finite(),
             Angle(..) | HorizontalDistance(..) | VerticalDistance(..) => v.is_finite(),
             _ => return Err(SketchError::WrongKind(EntityId(0))),
@@ -480,6 +828,7 @@ impl Sketch {
             | Length(_, d)
             | Radius(_, d)
             | Diameter(_, d)
+            | EllipseMinor(_, d)
             | Angle(_, _, d)
             | HorizontalDistance(_, _, d)
             | VerticalDistance(_, _, d) => *d = v,
@@ -532,6 +881,11 @@ impl Sketch {
                     let c = self.center(&mut loc, round);
                     [sign(self.signed_dist(&mut loc, c, l).v), 0.0]
                 }
+            }
+            Constraint::TangentEllipse(l, e) => {
+                let mut loc = Local::new(x);
+                let (c, ..) = self.ellipse_of(&mut loc, e);
+                [sign(self.signed_dist(&mut loc, c, l).v), 0.0]
             }
             _ => [0.0, 0.0],
         }
@@ -687,6 +1041,56 @@ impl Sketch {
             }
             HorizontalDistance(p, q, d) => Rows::one(self.pt(l, q).x - self.pt(l, p).x - D::c(d)),
             VerticalDistance(p, q, d) => Rows::one(self.pt(l, q).y - self.pt(l, p).y - D::c(d)),
+            EllipseMinor(e, d) => {
+                let (.., b) = self.ellipse_of(l, e);
+                Rows::one(b - D::c(d))
+            }
+            PointOnEllipse(p, e) => {
+                let q = self.pt(l, p);
+                let (c, m, a, b) = self.ellipse_of(l, e);
+                // a times the level of the ellipse's equation: millimetres near the curve
+                let d = q.sub(c);
+                let (u, v) = (m.dot(d) / a, m.cross(d) / a);
+                let (x, y) = (u / a, v / b);
+                Rows::one(((x * x + y * y).sqrt() - D::c(1.0)) * a)
+            }
+            SplineEnd(s, end, o) => {
+                let Ok(Entity::Spline { index }) = self.rec(s).map(|r| r.kind) else {
+                    panic!("validated spline");
+                };
+                let pts = &self.splines[index].points;
+                let n = pts.len();
+                let (p0, p1) = if end == 0 {
+                    (pts[0], pts[1])
+                } else {
+                    (pts[n - 1], pts[n - 2])
+                };
+                let (at, next) = (self.pt(l, p0), self.pt(l, p1));
+                let leg = next.sub(at);
+                match self.rec(o).map(|r| r.kind) {
+                    Ok(Entity::Line { .. }) => {
+                        let (a, b) = self.line(l, o);
+                        let dir = b.sub(a);
+                        Rows::one(dir.cross(leg) / dir.len())
+                    }
+                    _ => {
+                        let c = self.center(l, o);
+                        let r = at.sub(c);
+                        Rows::one(r.dot(leg) / r.len())
+                    }
+                }
+            }
+            TangentEllipse(ln, e) => {
+                let (a, b) = self.line(l, ln);
+                let dir = b.sub(a);
+                let len = dir.len();
+                let (c, m, ma, mb) = self.ellipse_of(l, e);
+                // the support of the ellipse along the line's normal: a^2 (n.u)^2 + b^2 (n.v)^2
+                let along = dir.dot(m) / (len * ma);
+                let across = dir.cross(m) / (len * ma);
+                let h = (ma * ma * across * across + mb * mb * along * along).sqrt();
+                Rows::one(dir.cross(c.sub(a)) / len - h * rec.data[0])
+            }
         };
         (loc, rows)
     }

@@ -50,7 +50,7 @@ pub enum Pick {
     Some(Vec<usize>),
 }
 
-#[derive(Clone, Copy, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq)]
 pub enum Cutter {
     /// A work plane, or an earlier feature's face's surface.
     Target(Target),
@@ -792,7 +792,14 @@ fn cutter(plain: History<'_>, i: usize, by: &Cutter) -> Result<Surface, RegenErr
     Ok(match *by {
         Cutter::Target(t) => crate::extent::surface(plain, i, &t)?,
         Cutter::Plane(frame) => Surface::Plane(Plane { frame }),
-        Cutter::Curve(frame, seg) => match seg {
+        Cutter::Curve(frame, ref seg) => match *seg {
+            Segment::Spline(ref c) => {
+                let b = c.c.bbox(c.c.domain());
+                let h = 2.0 * (1.0 + b.diagonal());
+                forge_geom::spline::Extruded::new(frame, c.c.clone(), forge_math::Interval::new(-h, h))
+                    .ok_or(bad(i)(BodyError::Unsupported("a curve with a cusp")))?
+                    .surface()
+            }
             Segment::Line { a, b } => {
                 let (a, b) = (frame.plane_point(a), frame.plane_point(b));
                 let along = (b - a)

@@ -124,7 +124,7 @@ impl PathSeg {
 /// names derive from (see `skin`).
 pub fn sweep(profile: &crate::Profile, path: &[PathSeg], feature: u64) -> Result<Body, SweepError> {
     let (prep, stretches) = stretches(profile, path)?;
-    let segs: Vec<Segment> = prep.segments().copied().collect();
+    let segs: Vec<Segment> = prep.segments().cloned().collect();
     let mut planes: Vec<Frame> = stretches.iter().map(|s| s.plane()).collect();
     planes.push(path[path.len() - 1].carry(&planes[planes.len() - 1]));
     let curves = planes
@@ -143,7 +143,7 @@ pub fn sweep(profile: &crate::Profile, path: &[PathSeg], feature: u64) -> Result
                         .map(|p| (Curve::Line(Line::new(p, f.z())), Interval::new(0.0, length)))
                         .collect(),
                 );
-                walls.push(segs.iter().map(|sg| extruded(sg, &f)).collect());
+                walls.push(segs.iter().map(|sg| extruded(sg, &f, length)).collect());
             }
             Stretch::Bend {
                 plane: f,
@@ -248,7 +248,7 @@ fn stretches(
         return Err(SweepError::NotSquare);
     }
     let prep = prepare(profile, t0.get())?;
-    let segs: Vec<Segment> = prep.segments().copied().collect();
+    let segs: Vec<Segment> = prep.segments().cloned().collect();
     let mut plane = prep.profile.plane;
     let mut out = Vec::with_capacity(path.len());
     for (k, s) in path.iter().enumerate() {
@@ -258,6 +258,7 @@ fn stretches(
                 length: a.distance(b),
             },
             PathSeg::Arc { circle, sweep, .. } => {
+                crate::skin::curved(profile).map_err(SweepError::Profile)?;
                 let (axis, angle) = PathSeg::turn(&circle, sweep);
                 let w = axis.z();
                 let at = s.ends().0;
@@ -283,8 +284,13 @@ fn stretches(
 }
 
 /// The wall a segment drawn in `f` makes moving along `f`'s z.
-fn extruded(s: &Segment, f: &Frame) -> Surface {
+fn extruded(s: &Segment, f: &Frame, length: f64) -> Surface {
     match *s {
+        Segment::Spline(ref c) => {
+            forge_geom::spline::Extruded::new(*f, c.c.clone(), Interval::new(0.0, length))
+                .expect("a profile's curves are regular")
+                .surface()
+        }
         Segment::Line { a, b } => {
             let (pa, pb) = (f.plane_point(a), f.plane_point(b));
             let along = pb - pa;
@@ -408,6 +414,7 @@ pub struct Wound {
 /// Winds a profile about an axis in its plane. `feature` is the history id the names derive
 /// from (see `skin`).
 pub fn coil(profile: &crate::Profile, axis: Axis2, w: &Winding, feature: u64) -> Result<Body, CoilError> {
+    crate::skin::curved(profile)?;
     let (prep, wound) = wind(profile, axis, w)?;
     let Wound {
         frame: rf,
@@ -418,7 +425,7 @@ pub fn coil(profile: &crate::Profile, axis: Axis2, w: &Winding, feature: u64) ->
         ..
     } = wound;
     let f0 = prep.profile.plane;
-    let segs: Vec<Segment> = prep.segments().copied().collect();
+    let segs: Vec<Segment> = prep.segments().cloned().collect();
     let mut walls = Vec::with_capacity(ring.len());
     let mut first = 0;
     for len in prep.loop_sizes() {
@@ -458,6 +465,7 @@ pub fn coil(profile: &crate::Profile, axis: Axis2, w: &Winding, feature: u64) ->
 
 /// The motion and sections of a coil, checked, without building it.
 pub fn coil_motion(profile: &crate::Profile, axis: Axis2, w: &Winding) -> Result<Wound, CoilError> {
+    crate::skin::curved(profile)?;
     wind(profile, axis, w).map(|(_, m)| m)
 }
 

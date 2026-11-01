@@ -714,6 +714,11 @@ pub(crate) fn build(
 /// The surface a prism's wall from segment `s` lies on.
 fn prism_wall(frame: &Frame, s: &Seg2) -> Surface {
     match *s {
+        Seg2::Curve(ref c) => {
+            forge_geom::spline::Extruded::new(*frame, c.clone(), forge_math::Interval::new(-1.0, 1.0))
+                .expect("a profile's curves are regular")
+                .surface()
+        }
         Seg2::Line { a, b } => {
             let e = b - a;
             let n = Vec2::new(e.y, -e.x).normalize().expect("a segment");
@@ -738,6 +743,13 @@ fn revolved_wall(frame: &Frame, origin: Point2, dir: Vec2, perp: Vec2, s: &Seg2)
     let hr = |q: Point2| ((q - origin).dot(dir), (q - origin).dot(perp));
     let axis_at = |h: f64| frame.with_origin(frame.point_to_world(Point3::new(0.0, 0.0, h)));
     Some(match *s {
+        Seg2::Curve(ref c) => {
+            let section = c.mapped(|q| {
+                let (h, r) = hr(Point2::new(q.x, q.y));
+                Point3::new(r, h, 0.0)
+            });
+            forge_geom::spline::Spun::new(*frame, std::sync::Arc::new(section))?.surface()
+        }
         Seg2::Line { a, b } => {
             let ((ha, ra), (hb, rb)) = (hr(a), hr(b));
             if (hb - ha).abs() <= 1e-12 {
@@ -888,8 +900,24 @@ fn hits(sh: &Shape, o: Point3, d: Vec3, out: &mut Vec<(f64, Option<Surface>)>) {
                 let z = l.z + v.z * t;
                 z >= *lo && z <= *hi
             };
-            for s in segs {
+            for s in segs.iter() {
                 match *s {
+                    Seg2::Curve(ref c) => {
+                        // the ray's trace in the sketch: the curve's points on it, then where along
+                        let flat = (v.x * v.x + v.y * v.y).sqrt();
+                        if flat <= 1e-12 {
+                            continue;
+                        }
+                        let n = Vec3::new(-v.y / flat, v.x / flat, 0.0);
+                        let k = -(n.x * l.x + n.y * l.y);
+                        for (u, _) in c.plane_roots(n, k, c.domain(), 0.0) {
+                            let q = c.point(u);
+                            let t = (v.x * (q.x - l.x) + v.y * (q.y - l.y)) / (flat * flat);
+                            if in_z(t) {
+                                out.push((t, Some(prism_wall(frame, s))));
+                            }
+                        }
+                    }
                     Seg2::Line { a, b } => {
                         let e = b - a;
                         let den = v.x * e.y - v.y * e.x;
@@ -935,8 +963,32 @@ fn hits(sh: &Shape, o: Point3, d: Vec3, out: &mut Vec<(f64, Option<Surface>)>) {
             ];
             let radius = |t: f64| ((l.x + v.x * t).powi(2) + (l.y + v.y * t).powi(2)).sqrt();
             let wall = |s: &Seg2| revolved_wall(frame, *origin, *dir, *perp, s);
-            for s in segs {
+            for s in segs.iter() {
                 match *s {
+                    Seg2::Curve(ref c) => {
+                        let section = c.mapped(|q| {
+                            let (h, r) = hr(Point2::new(q.x, q.y));
+                            Point3::new(r, h, 0.0)
+                        });
+                        let d = section.domain();
+                        if v.z.abs() > 1e-12 {
+                            // t = (h - l.z) / v.z in rho^2(t) = r^2: a quadric in (r, h)
+                            let (a2, a1) = (s2[0] / (v.z * v.z), s2[1] / v.z);
+                            let a0 = s2[2] - a1 * l.z + a2 * l.z * l.z;
+                            let form = [[-1.0, 0.0, 0.0], [0.0, a2, 0.0], [0.0, 0.0, 0.0]];
+                            let b = Vec3::new(0.0, 0.5 * a1 - a2 * l.z, 0.0);
+                            for (u, _) in section.quadric_roots(Point3::ORIGIN, &form, b, a0, d, 0.0) {
+                                out.push(((section.point(u).y - l.z) / v.z, wall(s)));
+                            }
+                        } else {
+                            for (u, _) in section.plane_roots(Vec3::Y, -l.z, d, 0.0) {
+                                let r = section.point(u).x;
+                                for root in poly::quadratic(s2[0], s2[1], s2[2] - r * r) {
+                                    out.push((root.x, wall(s)));
+                                }
+                            }
+                        }
+                    }
                     Seg2::Line { a, b } => {
                         let ((ha, ra), (hb, rb)) = (hr(a), hr(b));
                         let (h0, h1) = (ha.min(hb), ha.max(hb));
@@ -1218,7 +1270,7 @@ fn convex_holds(sh: &Shape, b: &forge_math::Box3) -> bool {
                 .iter()
                 .map(|s| match *s {
                     Seg2::Line { a, b } => Some((a, b)),
-                    Seg2::Arc { .. } => None,
+                    Seg2::Arc { .. } | Seg2::Curve(_) => None,
                 })
                 .collect();
             let Some(pts) = pts else { return false };
@@ -1248,6 +1300,10 @@ fn convex_holds(sh: &Shape, b: &forge_math::Box3) -> bool {
 /// A box holding a tool's analytic solid.
 fn shape_box(sh: &Shape) -> forge_math::Box3 {
     let corners = |s: &Seg2| match *s {
+        Seg2::Curve(ref c) => {
+            let b = c.bbox(c.domain());
+            vec![Point2::new(b.x.lo, b.y.lo), Point2::new(b.x.hi, b.y.hi)]
+        }
         Seg2::Line { a, b } => vec![a, b],
         Seg2::Arc { c, r, .. } => vec![c + Vec2::new(-r, -r), c + Vec2::new(r, r)],
     };

@@ -1,4 +1,5 @@
 use crate::profile::{Profile, ProfileError, Segment};
+use forge_geom::spline::{SplineCurve, Spun};
 use forge_geom::{Circle, Cone, Curve, Cylinder, Line, Plane, Sphere, Surface, SurfaceGeom, Torus};
 use forge_math::{Frame, Interval, Point2, Point3, Vec2, Vec3, dmath, tol};
 use forge_topo::{Body, EdgeId, FaceId, Name, ShellId, VertexId};
@@ -183,6 +184,17 @@ impl Revolver<'_> {
     fn surface_of(&self, s: &Segment) -> Result<Option<Surface>, RevolveError> {
         let rf = self.rf;
         match *s {
+            Segment::Spline(ref c) => {
+                let section = c.c.mapped(|q| {
+                    let (h, r) = self.hr(Point2::new(q.x, q.y));
+                    Point3::new(r, h, 0.0)
+                });
+                Spun::new(rf, std::sync::Arc::new(section))
+                    .map(|s| Some(s.surface()))
+                    .ok_or(RevolveError::Unsupported(
+                        "a curve crossing the axis or with a cusp",
+                    ))
+            }
             Segment::Line { a, b } => {
                 let ((h0, r0), (h1, r1)) = (self.hr(a), self.hr(b));
                 if r0 <= tol::LINEAR && r1 <= tol::LINEAR {
@@ -238,6 +250,12 @@ impl Revolver<'_> {
     /// The segment's curve in copy k, its range, start/end profile vertex order.
     fn copy_curve(&self, s: &Segment, a: f64) -> (Curve, Interval) {
         match *s {
+            Segment::Spline(ref c) => {
+                let world =
+                    c.c.mapped(|q| self.rotate(self.profile.plane.point_to_world(q), a));
+                let d = c.c.domain();
+                (SplineCurve::curve(std::sync::Arc::new(world), d), d)
+            }
             Segment::Line { a: p, b: q } => {
                 let (p3, q3) = (self.rotate(self.point3(p), a), self.rotate(self.point3(q), a));
                 (
@@ -280,11 +298,12 @@ impl Revolver<'_> {
             let first_v = pverts.len();
             let first_s = segs.len();
             let n = l.segments.len();
-            for (i, &(seg, id)) in l.segments.iter().enumerate() {
+            for (i, (seg, id)) in l.segments.iter().enumerate() {
+                let (seg, id) = (seg.clone(), *id);
                 pverts.push(seg.start());
                 pvert_name.push(id);
                 let forward = match seg {
-                    Segment::Line { .. } => true,
+                    Segment::Line { .. } | Segment::Spline(_) => true,
                     Segment::Arc { sweep, .. } => sweep > 0.0,
                     Segment::Circle { ccw, .. } => ccw,
                 };
@@ -465,7 +484,15 @@ impl Revolver<'_> {
     /// The face sense, and whether the loop as built runs the wrong way round.
     fn orientation(&self, seg: &Segment, surface: &Surface, a0: f64, a1: f64) -> (bool, bool) {
         let samples = seg.samples(2);
+        let spline_mid = match seg {
+            Segment::Spline(c) => Some(c.c.deriv(c.c.domain().mid())),
+            _ => None,
+        };
         let m = match *seg {
+            Segment::Spline(_) => {
+                let d = spline_mid.expect("a spline");
+                Point2::new(d.p.x, d.p.y)
+            }
             Segment::Line { a, b } => a.lerp(b, 0.5),
             Segment::Arc {
                 center,
@@ -476,6 +503,10 @@ impl Revolver<'_> {
             Segment::Circle { .. } => samples[1],
         };
         let t2 = match *seg {
+            Segment::Spline(_) => {
+                let d = spline_mid.expect("a spline");
+                Vec2::new(d.d1.x, d.d1.y)
+            }
             Segment::Line { a, b } => b - a,
             Segment::Arc { center, sweep, .. } => (m - center).perp() * sweep.signum(),
             Segment::Circle { center, ccw, .. } => (m - center).perp() * if ccw { 1.0 } else { -1.0 },

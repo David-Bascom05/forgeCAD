@@ -446,7 +446,7 @@ pub(crate) fn moved_shape(s: &Shape, m: &Motion) -> Shape {
                             start: -start,
                             sweep: -sweep,
                         },
-                        arc => arc,
+                        ref arc => arc.clone(),
                     })
                     .collect(),
                 a: *a,
@@ -479,6 +479,10 @@ pub(crate) fn moved_shape(s: &Shape, m: &Motion) -> Shape {
             segs: segs
                 .iter()
                 .map(|s| match *s {
+                    Seg2::Curve(ref c) => Seg2::Curve(std::sync::Arc::new(c.mapped(|q| {
+                        let m = mirror2(forge_math::Point2::new(q.x, q.y));
+                        forge_math::Point3::new(m.x, m.y, q.z)
+                    }))),
                     Seg2::Line { a, b } => Seg2::Line {
                         a: mirror2(a),
                         b: mirror2(b),

@@ -8,8 +8,10 @@ use crate::Op;
 use forge_math::{Box3, Frame, Point2, Point3, Vec2, Vec3, dmath};
 
 /// A piece of a closed 2D profile.
-#[derive(Clone, Copy, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq)]
 pub enum Seg2 {
+    /// A free curve in the xy plane.
+    Curve(std::sync::Arc<forge_geom::spline::Spline>),
     Line {
         a: Point2,
         b: Point2,
@@ -28,7 +30,7 @@ pub enum Shape {
     /// The profile (in `frame`'s xy) swept along its z from `lo` to `hi`.
     Prism {
         frame: Frame,
-        segs: Vec<Seg2>,
+        segs: std::sync::Arc<[Seg2]>,
         lo: f64,
         hi: f64,
     },
@@ -40,7 +42,7 @@ pub enum Shape {
         origin: Point2,
         dir: Vec2,
         perp: Vec2,
-        segs: Vec<Seg2>,
+        segs: std::sync::Arc<[Seg2]>,
         angle: Option<f64>,
     },
     Ball {
@@ -58,7 +60,7 @@ pub enum Shape {
     /// ((r + a u) cos u, (r + a u) sin u, h + b u). `r` and `h` are the profile's extents.
     Coil {
         frame: Frame,
-        segs: Vec<Seg2>,
+        segs: std::sync::Arc<[Seg2]>,
         a: f64,
         b: f64,
         angle: f64,
@@ -85,6 +87,23 @@ fn in_profile(segs: &[Seg2], q: Point2) -> Option<(bool, f64)> {
     let graze = 1e-9;
     for s in segs {
         match *s {
+            Seg2::Curve(ref c) => {
+                let at = Point3::new(q.x, q.y, 0.0);
+                let d = c.domain();
+                dist = dist.min(c.point(c.closest(at, d)).distance(at));
+                let (e0, e1) = c.ends();
+                if (e0.y - q.y).abs() <= graze || (e1.y - q.y).abs() <= graze {
+                    return None;
+                }
+                for (t, touch) in c.plane_roots(Vec3::Y, -q.y, d, graze) {
+                    if touch {
+                        return None;
+                    }
+                    if c.point(t).x > q.x {
+                        inside = !inside;
+                    }
+                }
+            }
             Seg2::Line { a, b } => {
                 dist = dist.min(segment_distance(q, a, b));
                 if (a.y > q.y) != (b.y > q.y) && q.x < a.x + (q.y - a.y) / (b.y - a.y) * (b.x - a.x) {
@@ -237,6 +256,12 @@ fn segment_in(segs: &[Seg2], axis: (Point2, Vec2), a: Point2, b: Point2, m: f64)
     let on_axis = |p: Point2| (p - axis.0).dot(axis.1).abs() <= 1e-12;
     matches!(in_profile(segs, a), Some((true, _)))
         && segs.iter().all(|s| match *s {
+            // the box says it only when clear
+            Seg2::Curve(ref c) => {
+                let bx = c.bbox(c.domain());
+                let gap = |lo: f64, hi: f64, x0: f64, x1: f64| lo - x0.max(x1) > m || x0.min(x1) - hi > m;
+                gap(bx.x.lo, bx.x.hi, a.x, b.x) || gap(bx.y.lo, bx.y.hi, a.y, b.y)
+            }
             Seg2::Line { a: p, b: q } if on_axis(p) && on_axis(q) => true,
             Seg2::Line { a: p, b: q } => {
                 let crosses =
@@ -272,7 +297,14 @@ fn combine(prof: Option<(bool, f64)>, z: f64, lo: f64, hi: f64, m: f64) -> Membe
     }
 }
 
+#[cold]
+#[inline(never)]
+fn curve_box(c: &forge_geom::spline::Spline) -> Box3 {
+    c.bbox(c.domain())
+}
+
 /// The box around a profile (u lo, u hi, v lo, v hi).
+#[inline]
 fn profile_box(segs: &[Seg2]) -> (f64, f64, f64, f64) {
     let mut b = (f64::INFINITY, f64::NEG_INFINITY, f64::INFINITY, f64::NEG_INFINITY);
     let mut take = |x: f64, y: f64, r: f64| {
@@ -280,6 +312,11 @@ fn profile_box(segs: &[Seg2]) -> (f64, f64, f64, f64) {
     };
     for s in segs {
         match *s {
+            Seg2::Curve(ref c) => {
+                let bx = curve_box(c);
+                take(bx.x.lo, bx.y.lo, 0.0);
+                take(bx.x.hi, bx.y.hi, 0.0);
+            }
             Seg2::Line { a, b } => {
                 take(a.x, a.y, 0.0);
                 take(b.x, b.y, 0.0);
@@ -304,6 +341,47 @@ fn local_box(frame: &Frame, b: &Box3) -> Box3 {
 }
 
 impl Shape {
+    /// For a prism or solid of revolution with a free curve in its profile, a box round it.
+    pub fn curved_box(&self) -> Option<Box3> {
+        let curved = |ss: &[Seg2]| ss.iter().any(|s| matches!(s, Seg2::Curve(_)));
+        let world = |frame: &Frame, x: (f64, f64), y: (f64, f64), z: (f64, f64)| {
+            let mut w = Box3::EMPTY;
+            for a in [x.0, x.1] {
+                for b in [y.0, y.1] {
+                    for c in [z.0, z.1] {
+                        w.include(frame.point_to_world(Point3::new(a, b, c)));
+                    }
+                }
+            }
+            w
+        };
+        match self {
+            Shape::Prism { frame, segs, lo, hi } if curved(segs) => {
+                let b = profile_box(segs);
+                Some(world(frame, (b.0, b.1), (b.2, b.3), (*lo, *hi)))
+            }
+            Shape::Revolved {
+                frame,
+                origin,
+                dir,
+                perp,
+                segs,
+                ..
+            } if curved(segs) => {
+                let b = profile_box(segs);
+                let (mut rm, mut h) = (0.0f64, (f64::INFINITY, f64::NEG_INFINITY));
+                for x in [b.0, b.1] {
+                    for y in [b.2, b.3] {
+                        let q = Point2::new(x, y) - *origin;
+                        rm = rm.max(q.dot(*perp).abs());
+                        h = (h.0.min(q.dot(*dir)), h.1.max(q.dot(*dir)));
+                    }
+                }
+                Some(world(frame, (-rm, rm), (-rm, rm), h))
+            }
+            _ => None,
+        }
+    }
     /// Whether no point of `b` lies in the solid or within `m` of it, by bounds: true only when
     /// that is sure (false says nothing).
     pub fn box_out(&self, b: &Box3, m: f64) -> bool {

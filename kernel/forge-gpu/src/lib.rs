@@ -479,6 +479,15 @@ static NEXT_ID: AtomicU64 = AtomicU64::new(1);
 /// One plain solid as the kernel reads it, combined by op code `op` (0 union, 1 subtract, 2
 /// intersect), its profile appended to `segs`.
 fn plain(sh: &Shape, op: f64, segs: &mut Vec<f64>) -> [f64; TOOL] {
+    let brep;
+    let sh = match sh.curved_box() {
+        // a free curve has no form the GPU reads: its B-rep decides, as a loft's
+        Some(b) => {
+            brep = Shape::Brep(b);
+            &brep
+        }
+        None => sh,
+    };
     let mut t = [0.0f64; TOOL];
     t[1] = op;
     let mut put_segs = |t: &mut [f64; TOOL], ss: &[Seg2]| {
@@ -488,6 +497,7 @@ fn plain(sh: &Shape, op: f64, segs: &mut Vec<f64>) -> [f64; TOOL] {
             segs.extend_from_slice(&match *s {
                 Seg2::Line { a, b } => [0.0, a.x, a.y, b.x, b.y, 0.0],
                 Seg2::Arc { c, r, start, sweep } => [1.0, c.x, c.y, r, start, sweep],
+                Seg2::Curve(_) => unreachable!("taken as a B-rep above"),
             });
         }
     };

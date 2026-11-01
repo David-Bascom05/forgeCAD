@@ -14,6 +14,7 @@ pub mod ruled;
 pub mod screw;
 pub mod skinned;
 pub mod smooth;
+pub mod spline;
 pub mod surface;
 #[doc(hidden)]
 pub mod testing;

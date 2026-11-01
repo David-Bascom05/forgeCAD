@@ -1,4 +1,5 @@
 use crate::profile::{Profile, ProfileError, Segment};
+use forge_geom::spline::{Extruded, SplineCurve};
 use forge_geom::{Circle, Curve, CurveGeom, Cylinder, Line, Plane, Surface};
 use forge_math::{Frame, Interval, Point2, Point3, UnitVec3, dmath, tol};
 use forge_topo::{Body, EdgeId, FaceId, Name, ShellId, Unlinked, VertexId};
@@ -55,7 +56,7 @@ pub(crate) fn prepared(profile: &Profile, distance: f64) -> Result<Profile, Extr
                 .loops
                 .iter()
                 .map(|l| crate::profile::ProfileLoop {
-                    segments: l.segments.iter().map(|&(s, id)| (s.mirrored(), id)).collect(),
+                    segments: l.segments.iter().map(|(s, id)| (s.mirrored(), *id)).collect(),
                 })
                 .collect(),
         }
@@ -198,12 +199,12 @@ impl<'a, B: Sink> Builder<'a, B> {
     /// Walls for a loop of lines and arcs: one vertical edge at each joint.
     fn chain_walls(&mut self, segs: &[(Segment, u64)]) -> Vec<Wall> {
         let n = segs.len();
-        let names: Vec<Name> = segs.iter().map(|&(_, id)| self.side_name(id)).collect();
+        let names: Vec<Name> = segs.iter().map(|(_, id)| self.side_name(*id)).collect();
         // two segments meet twice (a half disc): each joint also takes the segment starting there
         let joint = |i: usize, n0: Name| if n == 2 { n0.with_name(names[i]) } else { n0 };
         // vertex i is where segment i starts (between wall i-1 and wall i)
         let mut verts: Vec<[VertexId; 2]> = Vec::with_capacity(n);
-        for (i, &(s, _)) in segs.iter().enumerate() {
+        for (i, (s, _)) in segs.iter().enumerate() {
             let prev = names[(i + n - 1) % n];
             let mut pair = [VertexId(0); 2];
             for (k, level) in [0.0, self.d].into_iter().enumerate() {
@@ -213,7 +214,7 @@ impl<'a, B: Sink> Builder<'a, B> {
             verts.push(pair);
         }
         let mut uprights: Vec<EdgeId> = Vec::with_capacity(n);
-        for (i, &(s, _)) in segs.iter().enumerate() {
+        for (i, (s, _)) in segs.iter().enumerate() {
             let prev = names[(i + n - 1) % n];
             let line = Line::new(self.at(s.start(), 0.0), self.up());
             let name = joint(i, Name::NONE.with_set(&[prev, names[i]]));
@@ -226,7 +227,7 @@ impl<'a, B: Sink> Builder<'a, B> {
             ));
         }
         let mut walls = Vec::with_capacity(n);
-        for (i, &(s, _)) in segs.iter().enumerate() {
+        for (i, (s, _)) in segs.iter().enumerate() {
             let j = (i + 1) % n;
             let (surface, same_sense, curve0, range, forward) = self.segment_geometry(s);
             let mut edges = [EdgeId(0); 2];
@@ -258,9 +259,22 @@ impl<'a, B: Sink> Builder<'a, B> {
 
     /// The wall surface of a segment, its curve at the bottom, the curve's
     /// parameter range, and whether the profile runs with that parameter.
-    fn segment_geometry(&self, s: Segment) -> (Surface, bool, Curve, Interval, bool) {
+    fn segment_geometry(&self, s: &Segment) -> (Surface, bool, Curve, Interval, bool) {
         let f = *self.frame();
-        match s {
+        match *s {
+            Segment::Spline(ref c) => {
+                let wall = Extruded::new(f, c.c.clone(), Interval::new(0.0, self.d))
+                    .expect("a profile's curves are regular");
+                let d = c.c.domain();
+                let world = c.c.mapped(|q| f.point_to_world(q));
+                (
+                    wall.surface(),
+                    true,
+                    SplineCurve::curve(std::sync::Arc::new(world), d),
+                    d,
+                    true,
+                )
+            }
             Segment::Line { a, b } => {
                 let (pa, pb) = (self.at(a, 0.0), self.at(b, 0.0));
                 let line = Line::through(pa, pb).expect("profile rejects degenerate lines");

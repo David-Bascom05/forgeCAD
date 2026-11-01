@@ -4,6 +4,7 @@
 
 use crate::{expr, sketch};
 use forge_geom::Circle;
+use forge_geom::spline::{Form, PlaneSpline};
 use forge_math::{Frame, Point2, Point3, Vec2, Vec3, dmath};
 use forge_model::{
     At, AxisBy, BodyFeature, Coil, CoilSize, Combine, Convention, Cutter, Datum, Edit, End, Extent, Feature,
@@ -15,6 +16,7 @@ use forge_ops::{
     Axis2, ChamferSize, Handed, LoftGuides, LoftKind, PathSeg, Profile, ProfileLoop, Radius, Segment,
 };
 use forge_topo::Name;
+use std::sync::Arc;
 
 pub struct Kind {
     pub name: &'static str,
@@ -1189,7 +1191,9 @@ pub const KINDS: &[Kind] = &[
                         w.angle(start);
                         w.angle(sweep);
                     }
-                    Segment::Circle { .. } => unreachable!("a rib's path has no whole circles"),
+                    Segment::Circle { .. } | Segment::Spline(_) => {
+                        unreachable!("a rib's path has no whole circles or curves")
+                    }
                 }
             }
             true
@@ -1972,7 +1976,9 @@ const ORIENT: [(&str, [Vec3; 3]); 6] = [
     ),
 ];
 
-const LOOPS: [&str; 5] = ["rect", "rrect", "circle", "poly", "loop"];
+const LOOPS: [&str; 8] = [
+    "rect", "rrect", "circle", "poly", "loop", "spline", "thru", "ellipse",
+];
 
 fn deg(d: f64) -> f64 {
     d / 180.0 * dmath::PI
@@ -2069,8 +2075,9 @@ pub fn is_ref(t: &str) -> bool {
 /// Words the grammar uses, which a parameter may not be named.
 const KEYWORDS: &[&str] = &[
     "x", "y", "z", "axes", "on", "at", "axis", "id", "cw", "rect", "rrect", "circle", "poly", "loop", "line",
-    "arc", "circ", "sym", "two", "thru", "back", "both", "next", "to", "off", "new", "add", "cut", "keep",
-    "face", "ang", "cb", "cs", "pt", "thread", "body", "lin", "mirror", "step", "out", "end", "cons", "open",
+    "spline", "thru", "ellipse", "ell", "knots", "weights", "from", "arc", "circ", "sym", "two", "thru",
+    "back", "both", "next", "to", "off", "new", "add", "cut", "keep", "face", "ang", "cb", "cs", "pt",
+    "thread", "body", "lin", "mirror", "step", "out", "end", "cons", "open",
 ];
 
 impl<'a> P<'a> {
@@ -2312,7 +2319,22 @@ impl<'a> P<'a> {
                 radius: self.num()?,
                 ccw: true,
             },
-            t => return Err(format!("expected line, arc or circle, found '{t}'")),
+            kw @ ("spline" | "thru") => {
+                let kw = kw.to_string();
+                self.curve(&kw)?
+            }
+            "ell" => {
+                let (center, a, b, rot) = (self.p2()?, self.num()?, self.num()?, self.angle()?);
+                let (start, sweep) = (self.angle()?, self.angle()?);
+                let e = PlaneSpline::ellipse(center, a, b, rot, start, sweep)
+                    .ok_or("ell needs positive semi-axes and a sweep")?;
+                Segment::Spline(Arc::new(e))
+            }
+            t => {
+                return Err(format!(
+                    "expected line, arc, circle, spline, thru or ell, found '{t}'"
+                ));
+            }
         };
         Ok(Cutter::Curve(frame, seg))
     }
@@ -2720,6 +2742,17 @@ impl<'a> P<'a> {
                     let ccw = !self.eat("cw");
                     ProfileLoop::new(vec![(Segment::Circle { center, radius, ccw }, self.id(next)?)])
                 }
+                kw @ ("spline" | "thru") => {
+                    let s = self.curve(kw)?;
+                    ProfileLoop::new(vec![(s, self.id(next)?)])
+                }
+                "ellipse" => {
+                    let (center, a, b, rot) = (self.p2()?, self.num()?, self.num()?, self.angle()?);
+                    let sweep = if self.eat("cw") { -dmath::TAU } else { dmath::TAU };
+                    let e = PlaneSpline::ellipse(center, a, b, rot, 0.0, sweep)
+                        .ok_or("ellipse needs positive semi-axes")?;
+                    ProfileLoop::new(vec![(Segment::Spline(Arc::new(e)), self.id(next)?)])
+                }
                 "poly" => {
                     let mut pts = Vec::new();
                     while self.is_num() {
@@ -2774,6 +2807,20 @@ impl<'a> P<'a> {
                                     ccw: !self.eat("cw"),
                                 }
                             }
+                            kw @ ("spline" | "thru") => {
+                                let kw = kw.to_string();
+                                self.k += 1;
+                                self.curve(&kw)?
+                            }
+                            "ell" => {
+                                self.k += 1;
+                                let (center, a, b, rot) =
+                                    (self.p2()?, self.num()?, self.num()?, self.angle()?);
+                                let (start, sweep) = (self.angle()?, self.angle()?);
+                                let e = PlaneSpline::ellipse(center, a, b, rot, start, sweep)
+                                    .ok_or("ell needs positive semi-axes and a sweep")?;
+                                Segment::Spline(Arc::new(e))
+                            }
                             _ => break,
                         };
                         let id = self.id(want)?;
@@ -2781,7 +2828,10 @@ impl<'a> P<'a> {
                         segs.push((s, id));
                     }
                     if segs.is_empty() {
-                        return Err("loop needs segments: line AX AY BX BY | arc CX CY R A0 SWEEP".into());
+                        return Err(
+                            "loop needs segments: line AX AY BX BY | arc CX CY R A0 SWEEP | spline D X Y .. | thru X Y .. | ell CX CY A B ROT A0 SWEEP"
+                                .into(),
+                        );
                     }
                     ProfileLoop::new(segs)
                 }
@@ -2791,11 +2841,59 @@ impl<'a> P<'a> {
         }
         if out.is_empty() {
             return Err(format!(
-                "expected a loop (rect rrect circle poly loop), found '{}'",
+                "expected a loop (rect rrect circle poly loop spline thru ellipse), found '{}'",
                 self.peek()
             ));
         }
         Ok(out)
+    }
+    /// A free curve after its word: `spline D X Y .. [knots K..] [weights W..]` or
+    /// `thru X Y .. [from DX DY] [to DX DY]`.
+    fn curve(&mut self, kw: &str) -> R<Segment> {
+        let list = |s: &mut Self| -> R<Vec<f64>> {
+            let mut v = Vec::new();
+            while s.is_num() {
+                v.push(s.num()?);
+            }
+            Ok(v)
+        };
+        let c = if kw == "spline" {
+            let degree = self.value(Want::Count)? as usize;
+            let mut pts = Vec::new();
+            while self.is_num() {
+                pts.push(self.p2()?);
+            }
+            let knots = if self.eat("knots") {
+                Some(list(self)?)
+            } else {
+                None
+            };
+            let weights = if self.eat("weights") {
+                Some(list(self)?)
+            } else {
+                None
+            };
+            PlaneSpline::control(degree, pts, knots, weights)
+                .ok_or("spline: degree 1..15, more points than the degree, knots increasing, points + degree + 1 of them, weights positive")?
+        } else {
+            let mut pts = Vec::new();
+            while self.is_num() {
+                pts.push(self.p2()?);
+            }
+            let from = if self.eat("from") {
+                Some(self.p2()?.to_vec())
+            } else {
+                None
+            };
+            let to = if self.peek() == "to" {
+                self.k += 1;
+                Some(self.p2()?.to_vec())
+            } else {
+                None
+            };
+            PlaneSpline::through(pts, from, to).ok_or("thru needs two points or more, none repeated")?
+        };
+        Ok(Segment::Spline(Arc::new(c)))
     }
     /// A path: lines and arcs, each from where the one before ends.
     fn path(&mut self) -> R<Vec<PathSeg>> {
@@ -2961,6 +3059,25 @@ impl<'a> W<'a> {
                 self.word("curve");
                 self.frame(f);
                 match *s {
+                    Segment::Spline(ref c) => {
+                        if let Form::Ellipse {
+                            center,
+                            a,
+                            b,
+                            rot,
+                            start,
+                            sweep,
+                        } = c.form
+                        {
+                            self.word("ell");
+                            self.nums(&[center.x, center.y, a, b]);
+                            self.angle(rot);
+                            self.angle(start);
+                            self.angle(sweep);
+                        } else {
+                            self.curve(c);
+                        }
+                    }
                     Segment::Line { a, b } => {
                         self.word("line");
                         self.nums(&[a.x, a.y, b.x, b.y]);
@@ -3183,6 +3300,42 @@ impl<'a> W<'a> {
             }
         }
     }
+    fn curve(&mut self, c: &PlaneSpline) {
+        let pair = |p: &Point2| [p.x, p.y];
+        match &c.form {
+            Form::Control {
+                degree,
+                pts,
+                knots,
+                weights,
+            } => {
+                self.word("spline");
+                self.word(&degree.to_string());
+                pts.iter().for_each(|p| self.nums(&pair(p)));
+                if let Some(k) = knots {
+                    self.word("knots");
+                    self.nums(k);
+                }
+                if let Some(w) = weights {
+                    self.word("weights");
+                    self.nums(w);
+                }
+            }
+            Form::Through { pts, from, to } => {
+                self.word("thru");
+                pts.iter().for_each(|p| self.nums(&pair(p)));
+                if let Some(d) = from {
+                    self.word("from");
+                    self.nums(&[d.x, d.y]);
+                }
+                if let Some(d) = to {
+                    self.word("to");
+                    self.nums(&[d.x, d.y]);
+                }
+            }
+            Form::Ellipse { .. } => unreachable!("written by its own words"),
+        }
+    }
     fn loops(&mut self, loops: &[ProfileLoop]) {
         let mut next = 0u64;
         for l in loops {
@@ -3216,6 +3369,29 @@ impl<'a> W<'a> {
                 let (w, h) = (c.x - x0, d.y - y0);
                 if Profile::rounded_rectangle(Point2::new(x0, y0), w, h, *r, first) == *l {
                     short = Some(("rrect", vec![x0, y0, w, h, *r]));
+                }
+            }
+            if let [(Segment::Spline(c), _)] = &segs[..] {
+                if let Form::Ellipse {
+                    center,
+                    a,
+                    b,
+                    rot,
+                    start: 0.0,
+                    sweep,
+                } = c.form
+                    && sweep.abs() == dmath::TAU
+                {
+                    self.word("ellipse");
+                    self.nums(&[center.x, center.y, a, b]);
+                    self.angle(rot);
+                    if sweep < 0.0 {
+                        self.word("cw");
+                    }
+                    short = Some(("", vec![]));
+                } else if !matches!(c.form, Form::Ellipse { .. }) {
+                    self.curve(c);
+                    short = Some(("", vec![]));
                 }
             }
             if let [(Segment::Circle { center, radius, ccw }, _)] = segs[..] {
@@ -3257,8 +3433,28 @@ impl<'a> W<'a> {
         }
         self.word("loop");
         let mut want = next;
-        for &(s, id) in segs {
-            match s {
+        for (s, id) in segs {
+            let id = *id;
+            match *s {
+                Segment::Spline(ref c) => {
+                    if let Form::Ellipse {
+                        center,
+                        a,
+                        b,
+                        rot,
+                        start,
+                        sweep,
+                    } = c.form
+                    {
+                        self.word("ell");
+                        self.nums(&[center.x, center.y, a, b]);
+                        self.angle(rot);
+                        self.angle(start);
+                        self.angle(sweep);
+                    } else {
+                        self.curve(c);
+                    }
+                }
                 Segment::Line { a, b } => {
                     self.word("line");
                     self.nums(&[a.x, a.y, b.x, b.y]);
