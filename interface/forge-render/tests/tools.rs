@@ -557,3 +557,28 @@ fn to_next_stops_at_the_next_face_either_way_or_says_there_is_none() {
     let why = r.expect_err(&l);
     assert!(!why.is_empty() && !why.contains("Rebuild"), "{l}: {why}");
 }
+
+#[test]
+fn combine_on_overlapping_bodies_takes_each_from_the_view_or_the_tree() {
+    let part = "a: extrude 10 rect 0 0 20 20\nb: extrude new 10 rect 10 0 20 20\n";
+    let want = 30.0 * 20.0 * 10.0;
+    let Some((mut h, file)) = open(part, "overlap") else {
+        return;
+    };
+    button(&mut h, "Combine");
+    point_at(&mut h, [15.0, 3.0, 10.0]);
+    point_at(&mut h, [28.0, 3.0, 10.0]);
+    ok(&mut h, "from the view");
+    assert!((built(&file, "view") - want).abs() < 1e-6);
+    let Some((mut h, file)) = open(part, "overlap2") else {
+        return;
+    };
+    button(&mut h, "Combine");
+    h.click("tree:a");
+    for _ in 0..4 {
+        h.step();
+    }
+    h.click("tree:b");
+    ok(&mut h, "from the tree");
+    assert!((built(&file, "tree") - want).abs() < 1e-6);
+}

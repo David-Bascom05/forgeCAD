@@ -539,6 +539,31 @@ impl Gui {
         }
         let Some(v) = &mut self.view else { return };
         if let Some(d) = &mut self.shell.dialog {
+            // a feature from the tree, for what takes features: exact where bodies overlap
+            let takes = d.pick.as_ref().map(|p| p.0.clone()).unwrap_or_default();
+            if matches!(takes.as_str(), "Features" | "Target" | "Tools")
+                && let Some(id) = self.shell.selected.take()
+                && let Some(name) = self.shell.doc.as_ref().and_then(|doc| doc.name(id))
+            {
+                if takes == "Target" {
+                    d.take_pick("Target", name);
+                } else {
+                    let had = d
+                        .fields
+                        .iter()
+                        .find(|f| f.0 == takes)
+                        .map_or(String::new(), |f| f.1.clone());
+                    let mut names: Vec<String> = had.split_whitespace().map(str::to_string).collect();
+                    match names.iter().position(|n| *n == name) {
+                        Some(k) => {
+                            names.remove(k);
+                        }
+                        None => names.push(name),
+                    }
+                    d.take_pick(&takes, names.join(" "));
+                }
+                v.dirty = true;
+            }
             if v.nav.selected != v.clicked {
                 v.clicked = v.nav.selected.clone();
                 // a field for edges takes edges, one for faces takes faces
@@ -572,6 +597,27 @@ impl Gui {
                         && let Some(doc) = &self.shell.doc
                         && let Some(name) = doc.name(owner)
                     {
+                        // where bodies overlap, a face shared on the view reads as the first's: a
+                        // body can't combine with itself, so it's the other's
+                        let target = d
+                            .fields
+                            .iter()
+                            .find(|f| f.0 == "Target")
+                            .map_or(String::new(), |f| f.1.clone());
+                        let name = if wants == "Tools" && name == target {
+                            self.shell
+                                .rows
+                                .iter()
+                                .filter(|r| {
+                                    r.line.contains(" new ")
+                                        || r.line.split_whitespace().nth(2) == Some("new")
+                                })
+                                .filter_map(|r| doc.name(r.id))
+                                .find(|n| *n != target)
+                                .unwrap_or(name)
+                        } else {
+                            name
+                        };
                         if wants == "Target" {
                             d.take_pick("Target", name);
                         } else {

@@ -432,6 +432,51 @@ fn toggle_row(
     chose
 }
 
+/// A row of small icon buttons after its word: for options that don't earn a big toggle.
+fn small_row(
+    ui: &mut egui::Ui,
+    t: &super::theme::Theme,
+    label: &str,
+    items: &[(&str, &str, bool)],
+    name: &str,
+    places: &mut Vec<(String, Rect)>,
+) -> Option<usize> {
+    let (row, _) = ui.allocate_exact_size(vec2(DIALOG_W, 28.0), Sense::hover());
+    ui.painter().text(
+        pos2(row.left(), row.center().y),
+        Align2::LEFT_CENTER,
+        label,
+        sans(13.0),
+        t.ink,
+    );
+    let mut chose = None;
+    for (k, (icon, word, on)) in items.iter().enumerate() {
+        let r = Rect::from_min_size(
+            pos2(row.left() + FIELD_AT + k as f32 * 30.0, row.top()),
+            vec2(28.0, 28.0),
+        );
+        let resp = ui.interact(r, ui.scope_id().with((name, k)), Sense::click());
+        let fill = if *on {
+            t.on
+        } else if resp.hovered() {
+            t.hover
+        } else {
+            t.raised
+        };
+        let p = ui.painter();
+        p.rect_filled(r, 3.0, fill);
+        let edge = if *on { t.on_ink } else { t.line };
+        p.rect_stroke(r, 3.0, Stroke::new(1.0, edge), egui::StrokeKind::Inside);
+        let ink = if *on { t.on_ink } else { t.ink };
+        super::icons::draw(p, r.min + vec2(5.0, 5.0), 18.0, icon, 1.5, ink);
+        places.push((format!("{name}:{word}"), r));
+        if resp.on_hover_text(*word).clicked() {
+            chose = Some(k);
+        }
+    }
+    chose
+}
+
 /// A selection: what it wants, how many it has, and whether it's what the view's clicks go to.
 fn pick_row(
     ui: &mut egui::Ui,
@@ -645,9 +690,10 @@ impl Shell {
                         }
                         if label == "Direction" {
                             let now = text.clone();
-                            let row = toggle_row(
+                            let row = small_row(
                                 ui,
                                 &t,
+                                "Direction",
                                 &[
                                     ("axisx", "X", now == "lin 1 0 0"),
                                     ("axisy", "Y", now == "lin 0 1 0"),
@@ -704,9 +750,10 @@ impl Shell {
                         }
                         // how far: the kind of extent and the way it goes, then the number if it has one
                         if extrude && label == "Distance" {
-                            if let Some(k) = toggle_row(
+                            if let Some(k) = small_row(
                                 ui,
                                 &t,
+                                "Extent",
                                 &[
                                     ("distance", "Distance", extent == Extent::Distance),
                                     ("thruall", "Through All", extent == Extent::Through),
@@ -717,9 +764,10 @@ impl Shell {
                             ) {
                                 extent = [Extent::Distance, Extent::Through, Extent::Next][k];
                             }
-                            if let Some(k) = toggle_row(
+                            if let Some(k) = small_row(
                                 ui,
                                 &t,
+                                "Direction",
                                 &[
                                     ("forward", "Forward", toward == Toward::Forward),
                                     ("backward", "Back", toward == Toward::Back),

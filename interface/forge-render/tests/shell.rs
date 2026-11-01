@@ -1685,3 +1685,24 @@ fn a_sketch_read_by_features_shows_and_hides_by_its_eye_its_child_eye_and_its_me
     assert!(h.gui.shell.sketch_shown(row.id), "from the menu");
     assert!(h.gui.shell.row_menu.is_none());
 }
+
+#[test]
+fn a_sketch_shows_and_hides_by_the_eye_on_the_row_under_its_feature() {
+    let part = "sk1: sketch xy\n  rect 0 0 20 20\nend\nbase: extrude 10 sk1\n";
+    let Some((mut h, _)) = file_part(part) else {
+        return;
+    };
+    let id = h.gui.shell.doc.as_ref().unwrap().find("sk1").unwrap();
+    assert!(!h.gui.shell.sketch_shown(id));
+    h.click("tree:base:open");
+    step_some(&mut h);
+    h.click("tree:base:sketch:eye");
+    step_some(&mut h);
+    assert!(h.gui.shell.sketch_shown(id), "from under its feature");
+    assert!(eye_shows(&h, id));
+    h.click("tree:base:sketch:eye");
+    step_some(&mut h);
+    h.move_to(0.0, 0.0);
+    step_some(&mut h);
+    assert!(!eye_shows(&h, id));
+}
