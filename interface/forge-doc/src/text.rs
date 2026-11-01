@@ -3,9 +3,9 @@
 //! errors), a parser and a printer built from the shared helpers below.
 
 use crate::{expr, sketch};
-use forge_geom::Circle;
 use forge_geom::spline::{Form, PlaneSpline};
-use forge_math::{Frame, Point2, Point3, Vec2, Vec3, dmath};
+use forge_geom::{Circle, CurveGeom};
+use forge_math::{Frame, Point2, Point3, Vec2, Vec3, dmath, tol};
 use forge_model::{
     At, AxisBy, BodyFeature, Coil, CoilSize, Combine, Convention, Cutter, Datum, Edit, End, Extent, Feature,
     Fit, FontRef, Head, Hole, Keep, Layout, Loft, Motion, Param, Part, PathEnds, Pick, PlaneBy, PointBy, Ref,
@@ -970,7 +970,7 @@ pub const KINDS: &[Kind] = &[
     },
     Kind {
         name: "sketch",
-        syntax: "sketch [FRAME | on REF], then rows to `end`: pt line poly rect circle arc | fix co hor ver par perp tan eq conc mid sym | dist hdist vdist rad dia ang",
+        syntax: "sketch [FRAME | on REF], then rows to `end`: pt line poly rect circle arc project | fix co hor ver par perp tan eq conc mid sym | dist hdist vdist rad dia ang",
         parse: |p| {
             if p.peek() == "-on" && p.t.get(p.k + 1).is_some_and(|t| is_ref(t)) {
                 return Err("a sketch goes on a face's outside: `on REF`, not `-on`".into());
@@ -991,7 +991,9 @@ pub const KINDS: &[Kind] = &[
                 Some(Feature::Sketch(w)) => Some(&**w),
                 _ => None,
             };
-            let mut s = sketch::build(plane, rows, &|t, want| value(t, fs, want), was)?;
+            let b = p.b;
+            let src = |t: &[String]| sources_of(b, t);
+            let mut s = sketch::build_on(plane, rows, &|t, want| value(t, fs, want), &src, was)?;
             (s.on, s.at) = (on, at);
             Ok(Feature::Sketch(Box::new(s)))
         },
@@ -1813,6 +1815,8 @@ pub struct Before<'a> {
     pub refs: &'a dyn Fn(&str) -> R<Vec<Name>>,
     /// A reference to a planar face: its name, and its plane with z out of the part.
     pub face: &'a dyn Fn(&str) -> R<(Name, Frame)>,
+    /// What an `@handle` or `(selector)` of a `project` row comes to, against the part there.
+    pub sources: &'a dyn Fn(&str) -> R<sketch::Refd>,
     /// The font a text line names, found by the host; None where it does not look.
     pub fonts: &'a dyn Fn(&str) -> R<Option<std::sync::Arc<forge_font::Font>>>,
     /// What this line read as last time, if known: a sketch takes its unchanged parts.
@@ -1820,6 +1824,52 @@ pub struct Before<'a> {
     /// The name feature `k`'s own solid gives an entity of the part named `n` (a boolean renames
     /// what it splits); `n` itself where nothing is built to look at.
     pub own: &'a dyn Fn(usize, Name) -> Name,
+}
+
+/// A `project` row's references, its tokens after the word: `@handle` or `(selector)` on the part
+/// there, or FEAT, FEAT @h|(sel), SKETCH P as for work features.
+pub fn sources_of(b: &Before, toks: &[String]) -> R<Vec<sketch::Refd>> {
+    let mut p = P {
+        t: toks,
+        k: 0,
+        b,
+        on: None,
+        at: None,
+        feats: Vec::new(),
+    };
+    let mut out = Vec::new();
+    while !p.done() {
+        if p.peek().starts_with(['@', '(']) {
+            out.push((b.sources)(p.next()?)?);
+            continue;
+        }
+        let start = p.k;
+        let r = p.wref()?;
+        let h = forge_model::History::new(b.features, Some(b.ids));
+        let source = if let Ok(at) = work::locate(h, r) {
+            sketch::Source::Point(at)
+        } else if let Ok((curve, range)) = work::edge(h, r) {
+            sketch::Source::Edge {
+                start: curve.eval(range.lo),
+                end: curve.eval(range.hi),
+                closed: range.hi - range.lo >= dmath::TAU - tol::ANGULAR,
+                curve,
+                range,
+            }
+        } else if let (None, Ok(Datum::Axis(l))) = (r.name, work::datum(h, r.feature)) {
+            sketch::Source::Axis(l)
+        } else {
+            let t = toks[start..p.k].join(" ");
+            return Err(format!(
+                "'{t}' is no edge, face, vertex or point (a plane or a solid projects nothing)"
+            ));
+        };
+        out.push(sketch::Refd {
+            sources: vec![(Name::NONE, source)],
+            one: true,
+        });
+    }
+    Ok(out)
 }
 
 pub fn kind(name: &str) -> Option<&'static Kind> {
@@ -1963,6 +2013,7 @@ pub fn parse(src: &str) -> Result<Part, (usize, String)> {
             kinds: &kinds,
             refs: &full,
             face: &face,
+            sources: &|r| Err(format!("'{r}' needs a part to resolve against")),
             fonts: &|_| Ok(None),
             was: None,
             own: &|_, n| n,

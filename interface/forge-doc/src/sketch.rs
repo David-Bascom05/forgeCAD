@@ -3,20 +3,181 @@
 //! from it. Grammar in AGENTS.md.
 
 use crate::text::Want;
-use forge_geom::Circle;
-use forge_math::{Frame, Point2, dmath, tol};
+use forge_geom::{Circle, Curve, Line};
+use forge_math::{Frame, Interval, Point2, Point3, dmath, tol};
 use forge_model::Sketch;
 use forge_ops::{PathSeg, Profile};
 use forge_sketch::{Constraint as C, ConstraintId, Entity, EntityId, ExtractError, SketchError, Status};
+use forge_topo::Name;
 
 type R<T> = Result<T, String>;
 /// Reads a number token (a value or an expression) as the slot wants it.
 pub type Num<'a> = dyn Fn(&str, Want) -> R<f64> + 'a;
 
+/// A piece of 3D geometry a `project` row lays flat.
+#[derive(Clone, Debug, PartialEq)]
+pub enum Source {
+    Point(Point3),
+    Axis(Line),
+    Edge {
+        curve: Curve,
+        range: Interval,
+        start: Point3,
+        end: Point3,
+        closed: bool,
+    },
+}
+
+/// What one reference of a `project` row names: each source with its entity's name, and whether
+/// it is always just one (an edge's or vertex's handle, a work feature), so names may hold to it.
+#[derive(Clone, Debug, PartialEq)]
+pub struct Refd {
+    pub sources: Vec<(Name, Source)>,
+    pub one: bool,
+}
+
+/// Resolves a `project` row's tokens after the word.
+pub type Sources<'a> = dyn Fn(&[String]) -> R<Vec<Refd>> + 'a;
+
+/// A source laid in the plane.
+#[derive(Clone, Copy, Debug, PartialEq)]
+enum Flat {
+    Point(Point2),
+    Line(Point2, Point2),
+    Circle(Point2, f64),
+    Arc {
+        center: Point2,
+        start: Point2,
+        end: Point2,
+        ccw: bool,
+    },
+}
+
+fn in_plane(plane: &Frame, p: Point3) -> Point2 {
+    let q = plane.point_to_local(p);
+    Point2::new(q.x, q.y)
+}
+
+/// A conic's frame seen edge-on: P(t) = O + a cos t x + b sin t y runs along one line of the plane,
+/// so the result is that line from its least reach over the range to its most.
+fn edge_on(plane: &Frame, f: &Frame, (a, b): (f64, f64), range: Interval, ends: (Point3, Point3)) -> R<Flat> {
+    let Some(u) = plane.z().get().cross(f.z().get()).normalize() else {
+        return Err("the curve's plane has no direction across the sketch's".into());
+    };
+    let (ca, cb) = (a * f.x().get().dot(u.get()), b * f.y().get().dot(u.get()));
+    let amp = (ca * ca + cb * cb).sqrt();
+    let c = in_plane(plane, f.origin);
+    let (ux, uy) = (u.get().dot(plane.x().get()), u.get().dot(plane.y().get()));
+    let along = |s: f64| Point2::new(c.x + s * ux, c.y + s * uy);
+    let at = |t: f64| ca * dmath::cos(t) + cb * dmath::sin(t);
+    let mut stops = vec![
+        (at(range.lo), in_plane(plane, ends.0)),
+        (at(range.hi), in_plane(plane, ends.1)),
+    ];
+    // the reach's turning points inside the range: the curve doubles back there
+    let t0 = dmath::atan2(cb, ca);
+    let mut n = ((range.lo - t0) / dmath::PI).ceil();
+    while t0 + n * dmath::PI <= range.hi {
+        let s = if (n as i64).rem_euclid(2) == 0 { amp } else { -amp };
+        stops.push((s, along(s)));
+        n += 1.0;
+    }
+    let lo = stops.iter().fold(stops[0], |m, s| if s.0 < m.0 { *s } else { m });
+    let hi = stops.iter().fold(stops[0], |m, s| if s.0 > m.0 { *s } else { m });
+    Ok(if hi.0 - lo.0 <= tol::LINEAR {
+        Flat::Point(lo.1)
+    } else {
+        Flat::Line(lo.1, hi.1)
+    })
+}
+
+/// A source's exact image on the plane, or why it has none a sketch can hold. The tests of
+/// parallel and edge-on go by how far the true image strays from what's made: at most LINEAR.
+fn flat(plane: &Frame, s: &Source) -> R<Flat> {
+    let z = plane.z().get();
+    let degrees = |cos: f64| dmath::acos(cos.abs().min(1.0)) * 180.0 / dmath::PI;
+    match s {
+        Source::Point(p) => Ok(Flat::Point(in_plane(plane, *p))),
+        Source::Axis(l) => {
+            if l.dir.get().cross(z).length() <= tol::ANGULAR {
+                return Ok(Flat::Point(in_plane(plane, l.origin)));
+            }
+            Err("an axis has no ends, so it makes no line here unless seen end-on; project an edge along it".into())
+        }
+        Source::Edge {
+            curve,
+            range,
+            start,
+            end,
+            closed,
+        } => match curve {
+            Curve::Line(_) => {
+                let (a, b) = (in_plane(plane, *start), in_plane(plane, *end));
+                Ok(if a.distance(b) <= tol::LINEAR {
+                    Flat::Point(a)
+                } else {
+                    Flat::Line(a, b)
+                })
+            }
+            Curve::Circle(k) => {
+                let cos = k.frame.z().get().dot(z);
+                if k.radius * cos.abs() <= tol::LINEAR {
+                    return edge_on(plane, &k.frame, (k.radius, k.radius), *range, (*start, *end));
+                }
+                if k.radius * (1.0 - cos.abs()) > tol::LINEAR {
+                    return Err(format!(
+                        "a circle {:.3} degrees off the sketch's plane projects to an ellipse, which `project` does not make yet",
+                        degrees(cos)
+                    ));
+                }
+                let center = in_plane(plane, k.frame.origin);
+                if *closed {
+                    return Ok(Flat::Circle(center, k.radius));
+                }
+                let (a, b) = (in_plane(plane, *start), in_plane(plane, *end));
+                // ends a boolean settled off the circle: the centre moved the hair that keeps them equidistant
+                let center = if (a.distance(center) - b.distance(center)).abs() > 1e-11 {
+                    let (dx, dy) = (b.x - a.x, b.y - a.y);
+                    let t = ((a.x + b.x) / 2.0 - center.x) * dx + ((a.y + b.y) / 2.0 - center.y) * dy;
+                    let t = t / (dx * dx + dy * dy);
+                    Point2::new(center.x + t * dx, center.y + t * dy)
+                } else {
+                    center
+                };
+                Ok(Flat::Arc {
+                    center,
+                    start: a,
+                    end: b,
+                    ccw: cos > 0.0,
+                })
+            }
+            Curve::Ellipse(e) => {
+                if e.major * e.frame.z().get().dot(z).abs() <= tol::LINEAR {
+                    return edge_on(plane, &e.frame, (e.major, e.minor), *range, (*start, *end));
+                }
+                Err("an ellipse projects to an ellipse unless seen edge-on, which `project` does not make yet".into())
+            }
+            _ => Err("this edge is a general curve, and `project` does not make its image".into()),
+        },
+    }
+}
+
 /// Builds a sketch's rows on `plane` and solves it from the coordinates as written.
 /// `was`, the sketch this line read as before, lends the solve every part of it that did
 /// not change.
 pub fn build(plane: Frame, rows: Vec<Vec<String>>, num: &Num, was: Option<&Sketch>) -> R<Sketch> {
+    let none = |_: &[String]| Err("this needs a part to project from".to_string());
+    build_on(plane, rows, num, &none, was)
+}
+
+/// `build`, with what `project` rows name.
+pub fn build_on<'n>(
+    plane: Frame,
+    rows: Vec<Vec<String>>,
+    num: &Num<'n>,
+    src: &Sources<'n>,
+    was: Option<&Sketch>,
+) -> R<Sketch> {
     if let Some(s) = was.and_then(|w| values_only(plane, &rows, num, w)) {
         return Ok(Sketch { rows, ..s });
     }
@@ -26,6 +187,9 @@ pub fn build(plane: Frame, rows: Vec<Vec<String>>, num: &Num, was: Option<&Sketc
         made: Vec::new(),
         driven: Vec::new(),
         num,
+        src,
+        pins: Vec::new(),
+        flats: Vec::new(),
     };
     for (k, row) in rows.iter().enumerate() {
         b.row(k, row).map_err(|e| format!("`{}`: {e}", row.join(" ")))?;
@@ -148,6 +312,9 @@ fn values_only(plane: Frame, rows: &[Vec<String>], num: &Num, was: &Sketch) -> O
         made: Vec::new(),
         driven: Vec::new(),
         num,
+        src: &|_| Ok(Vec::new()),
+        pins: Vec::new(),
+        flats: Vec::new(),
     };
     let driven = was
         .driven
@@ -180,6 +347,11 @@ struct B<'a, 'n> {
     /// Each driven dimension: its row, kind and entities.
     driven: Vec<(usize, String, Vec<EntityId>)>,
     num: &'a Num<'n>,
+    src: &'a Sources<'n>,
+    /// The projected points so far: where each is held.
+    pins: Vec<(Point2, EntityId)>,
+    /// The projected lines, circles and arcs so far.
+    flats: Vec<EntityId>,
 }
 
 /// Whether a token names a sketch entity or one of its points (`o p1 l2 a3.c c4`) rather
@@ -195,7 +367,7 @@ pub fn is_ref(t: &str) -> bool {
     });
     base == "o"
         || base.len() > 1
-            && base.starts_with(['p', 'l', 'a', 'c', 's', 'e'])
+            && base.starts_with(['p', 'l', 'a', 'c', 's', 'e', 'j'])
             && base[1..].bytes().all(|c| c.is_ascii_digit())
 }
 
@@ -207,10 +379,117 @@ fn bad(e: SketchError) -> String {
     }
 }
 
+/// Whether a projected entity is this one again: the same held points, the same way.
+fn same_flat(s: &forge_sketch::Sketch, e: EntityId, kind: Entity, r: f64) -> bool {
+    match (s.entity(e), kind) {
+        (Some(Entity::Line { a, b }), Entity::Line { a: x, b: y }) => (a, b) == (x, y) || (a, b) == (y, x),
+        (Some(Entity::Circle { center, .. }), Entity::Circle { center: c, .. }) => {
+            center == c && (s.radius(e) - r).abs() <= tol::LINEAR
+        }
+        (
+            Some(Entity::Arc {
+                center,
+                start,
+                end,
+                ccw,
+            }),
+            Entity::Arc {
+                center: c,
+                start: x,
+                end: y,
+                ccw: w,
+            },
+        ) => center == c && ((start, end, ccw) == (x, y, w) || (start, end, ccw) == (y, x, !w)),
+        _ => false,
+    }
+}
+
 impl B<'_, '_> {
     fn add(&mut self, k: usize, c: C) -> R<()> {
         let id = self.s.add_constraint(c).map_err(bad)?;
         self.made.push((id, k));
+        Ok(())
+    }
+
+    /// A held point at `p`; one already within LINEAR is that point, so what meets there shares it.
+    fn pin(&mut self, k: usize, p: Point2) -> R<EntityId> {
+        if let Some(at) = self.pins.iter().find(|q| q.0.distance(p) <= tol::LINEAR) {
+            return Ok(at.1);
+        }
+        let id = self.s.add_point(p);
+        self.add(k, C::Fixed(id))?;
+        self.pins.push((p, id));
+        Ok(id)
+    }
+
+    /// The entity for a laid-flat source: the one already made if the same again.
+    fn laid(&mut self, k: usize, f: Flat) -> R<EntityId> {
+        let kind = match f {
+            Flat::Point(p) => return self.pin(k, p),
+            Flat::Line(a, b) => {
+                let (a, b) = (self.pin(k, a)?, self.pin(k, b)?);
+                if a == b {
+                    return Ok(a);
+                }
+                Entity::Line { a, b }
+            }
+            Flat::Circle(c, _) => Entity::Circle {
+                center: self.pin(k, c)?,
+                r: 0,
+            },
+            Flat::Arc {
+                center,
+                start,
+                end,
+                ccw,
+            } => Entity::Arc {
+                center: self.pin(k, center)?,
+                start: self.pin(k, start)?,
+                end: self.pin(k, end)?,
+                ccw,
+            },
+        };
+        let r = if let Flat::Circle(_, r) = f { r } else { 0.0 };
+        if let Some(&e) = self.flats.iter().find(|&&e| same_flat(&self.s, e, kind, r)) {
+            return Ok(e);
+        }
+        let e = match kind {
+            Entity::Line { a, b } => self.s.add_line(a, b),
+            Entity::Circle { center, .. } => self.s.add_circle(center, r),
+            Entity::Arc {
+                center,
+                start,
+                end,
+                ccw,
+            } => self.s.add_arc(center, start, end, ccw),
+            Entity::Point { .. } => unreachable!("returned above"),
+        }
+        .map_err(bad)?;
+        if matches!(f, Flat::Circle(..)) {
+            self.add(k, C::Radius(e, r))?;
+        }
+        self.flats.push(e);
+        Ok(e)
+    }
+
+    /// `project REF..`: each reference's geometry, held where it falls on the plane.
+    fn project(&mut self, k: usize, c: &Cur) -> R<()> {
+        if c.done() {
+            return Err("project needs an edge, face, vertex or work point".into());
+        }
+        let refs = (self.src)(&c.t[c.k..])?;
+        for r in refs {
+            for (n, s) in &r.sources {
+                let e = self.laid(k, flat(&self.s.plane, s)?)?;
+                if r.one {
+                    self.name('j', e);
+                } else {
+                    // how many a face or selector gives can change: no row may name one, and its
+                    // faces take their names from the edge it came from
+                    self.names.push((hidden(*n), e));
+                }
+            }
+        }
         Ok(())
     }
 
@@ -235,7 +514,12 @@ impl B<'_, '_> {
             self.names.push(("o".into(), id));
             return Ok(id);
         }
-        Err(format!("no entity '{t}' above this row"))
+        let hint = if self.names.iter().any(|n| n.0.starts_with('#')) {
+            "; a face's or selector's curves can change in number, so rows can't name them: list the edges, `project @e.. @e..`"
+        } else {
+            ""
+        };
+        Err(format!("no entity '{t}' above this row{hint}"))
     }
 
     /// A point: `name.a|b|c`, a point's name, or a circle's or arc's (its centre).
@@ -373,6 +657,10 @@ impl B<'_, '_> {
                 let r = self.len(&mut c)?;
                 let e = self.s.add_circle(center, r).map_err(bad)?;
                 self.name('c', e);
+            }
+            "project" => {
+                self.project(k, &c)?;
+                c.k = c.t.len();
             }
             "arc" => {
                 let (center, a, b) = (self.point(&mut c)?, self.point(&mut c)?, self.point(&mut c)?);
@@ -643,7 +931,7 @@ impl B<'_, '_> {
             }
             _ => {
                 return Err(
-                    "unknown row (pt line poly rect circle arc spline bspline ellipse earc | fix co hor ver par perp tan eq conc mid sym | dist hdist vdist rad dia ang)"
+                    "unknown row (pt line poly rect circle arc project spline bspline ellipse earc | fix co hor ver par perp tan eq conc mid sym | dist hdist vdist rad dia ang)"
                         .into(),
                 );
             }
@@ -787,6 +1075,9 @@ fn id_of(s: &Sketch, t: &str) -> R<EntityId> {
 /// The segment id an entity's profile edges carry: from its kind and count (`l3`), so it
 /// stays put when other kinds are added or dimensions change.
 fn stable(name: &str) -> u64 {
+    if let Some(h) = name.strip_prefix('#') {
+        return (u64::from_str_radix(h, 16).unwrap_or(0) >> 3) << 2 | 3 | 1 << 62;
+    }
     let n: u64 = name[1..].parse().unwrap_or(0);
     let k = match name.as_bytes()[0] {
         b'l' => 0,
@@ -794,6 +1085,7 @@ fn stable(name: &str) -> u64 {
         b's' => 3,
         // two bits ran out: ellipses sit above any other kind's count
         b'e' => return n << 2 | 3 | 1 << 40,
+        b'j' => return n << 2 | 3 | 1 << 41,
         _ => 2,
     };
     n << 2 | k
@@ -1194,6 +1486,16 @@ pub fn line(s: &Sketch, t: &str) -> R<(Point2, Point2)> {
     }
 }
 
+/// The name of a result of `project` that rows can't name: `#` starts a comment, so none can write it.
+fn hidden(n: Name) -> String {
+    format!("#{:016x}", n.0)
+}
+
+/// Whether a name in a sketch is `project`'s.
+pub fn is_projected(name: &str) -> bool {
+    name.starts_with(['j', '#'])
+}
+
 /// Degrees of freedom left, and the named entities not pinned down.
 pub fn freedom(s: &Sketch) -> (usize, Vec<String>) {
     let a = s.solved.analyze();
@@ -1209,6 +1511,7 @@ pub fn freedom(s: &Sketch) -> (usize, Vec<String>) {
 #[cfg(test)]
 mod ids_tests {
     use super::*;
+    use forge_math::Vec3;
 
     fn built(rows: &[&str]) -> R<Sketch> {
         let toks: Vec<Vec<String>> = rows.iter().map(|r| crate::text::tokens(r)).collect();
@@ -1244,6 +1547,100 @@ mod ids_tests {
         assert_eq!(v.len(), d.len(), "{v:?}");
         // without the row, nothing changes
         assert_eq!(seg_ids(&built(&["rect 0 0 10 10"]).unwrap()), [4, 8, 12, 16]);
+    }
+
+    fn edge(curve: Curve, range: Interval, start: Point3, end: Point3) -> Source {
+        Source::Edge {
+            curve,
+            range,
+            start,
+            end,
+            closed: false,
+        }
+    }
+
+    fn at_tilt(c: f64) -> Frame {
+        let s = (1.0 - c * c).sqrt();
+        Frame::from_z(Point3::ORIGIN, Vec3::new(0.0, s, c).normalize().unwrap())
+    }
+
+    #[test]
+    fn an_arc_whose_ends_a_boolean_settled_off_it_still_solves_held() {
+        let k = Circle {
+            frame: Frame::default(),
+            radius: 5.0,
+        };
+        let e = edge(
+            Curve::Circle(k),
+            Interval::new(0.0, 1.5),
+            Point3::new(5.0 + 4e-6, 0.0, 0.0),
+            Point3::new(5.0 * dmath::cos(1.5), 5.0 * dmath::sin(1.5), 0.0),
+        );
+        let src = |_: &[String]| {
+            Ok(vec![Refd {
+                sources: vec![(Name::NONE, e.clone())],
+                one: true,
+            }])
+        };
+        let num = |t: &str, _: Want| t.parse::<f64>().map_err(|e| e.to_string());
+        let s = build_on(
+            Frame::default(),
+            vec![vec!["project".into(), "@e".into()]],
+            &num,
+            &src,
+            None,
+        )
+        .unwrap();
+        assert_eq!(freedom(&s).0, 0);
+    }
+
+    #[test]
+    fn what_a_sketch_has_no_curve_for_is_refused_and_edge_on_is_a_line() {
+        let z = Frame::default();
+        let e = forge_geom::Ellipse {
+            frame: z,
+            major: 6.0,
+            minor: 3.0,
+        };
+        let (a, b) = (Point3::new(6.0, 0.0, 0.0), Point3::new(-6.0, 0.0, 0.0));
+        let whole = Interval::new(0.0, dmath::TAU);
+        let source = edge(Curve::Ellipse(e), whole, a, a);
+        assert!(flat(&z, &source).unwrap_err().contains("ellipse"));
+        // from the side (y up the sketch's normal), its major across
+        let side = Frame::from_z(Point3::ORIGIN, Vec3::new(0.0, 1.0, 0.0).normalize().unwrap());
+        let Flat::Line(p, q) = flat(&side, &source).unwrap() else {
+            panic!("a line")
+        };
+        assert!((p.distance(q) - 12.0).abs() < 1e-12, "{p:?} {q:?}");
+        // a half of it from the same side: from end to end, the far ends
+        let half = edge(Curve::Ellipse(e), Interval::new(0.0, dmath::PI), a, b);
+        let Flat::Line(p, q) = flat(&side, &half).unwrap() else {
+            panic!("a line")
+        };
+        assert!((p.distance(q) - 12.0).abs() < 1e-12);
+        let par = forge_geom::Parabola {
+            frame: z,
+            focal: 1.0,
+        };
+        let g = edge(Curve::Parabola(par), Interval::new(-1.0, 1.0), a, b);
+        assert!(flat(&z, &g).unwrap_err().contains("general curve"));
+        // a circle one hair off parallel is still it; further, an ellipse named by its tilt
+        let k = Curve::Circle(Circle { frame: z, radius: 10.0 });
+        let round = |c: f64| {
+            flat(
+                &at_tilt(c),
+                &Source::Edge {
+                    curve: k.clone(),
+                    range: whole,
+                    start: Point3::new(10.0, 0.0, 0.0),
+                    end: Point3::new(10.0, 0.0, 0.0),
+                    closed: true,
+                },
+            )
+        };
+        assert!(matches!(round(1.0 - 1e-7), Ok(Flat::Circle(..))));
+        assert!(round(1.0 - 1e-5).unwrap_err().contains("ellipse"));
+        assert!(matches!(round(1e-7), Ok(Flat::Line(..))));
     }
 
     #[test]

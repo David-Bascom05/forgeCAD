@@ -4,6 +4,7 @@
 use crate::facemesh::{self, FaceMesh};
 use crate::select::{self, Ent, View};
 use crate::text::{self, Before, Line};
+use forge_doc::sketch;
 use forge_doc::{Document, Op};
 use forge_math::Box3;
 use forge_mesh::TriMesh;
@@ -381,6 +382,7 @@ impl Model {
             let parsed = {
                 let refs = |r: &str| self.refs(i, r);
                 let face = |r: &str| self.face(i, r);
+                let sources = |r: &str| self.sources(i, r);
                 let fonts = |n: &str| self.fonts.as_ref().map(|f| f(n)).transpose();
                 let own = |k: usize, n: Name| {
                     self.body_after(i)
@@ -401,6 +403,7 @@ impl Model {
                     kinds: &self.kinds,
                     refs: &refs,
                     face: &face,
+                    sources: &sources,
                     fonts: &fonts,
                     was: old_features.get(i - keep),
                     own: &own,
@@ -834,6 +837,73 @@ impl Model {
             forge_geom::Surface::Plane(p) => Ok((name, p.frame.flipped())),
             _ => Err(format!("{r} is not a planar face")),
         }
+    }
+
+    /// What a `project` row's `@handle` or `(selector)` names on the part before line `i`: edges,
+    /// a face's edges (not its seam), vertices.
+    fn sources(&self, i: usize, r: &str) -> Result<sketch::Refd, String> {
+        let names = self.refs(i, r)?;
+        let body = self.body_after(i).ok_or("nothing is built above this line")?;
+        let mut edges: Vec<forge_topo::EdgeId> = Vec::new();
+        let mut sources = Vec::new();
+        let mut one = r.starts_with('@') && names.len() == 1;
+        for n in names {
+            if let Some(e) = body.edge_by_name(n) {
+                edges.push(e);
+            } else if let Some(f) = body.face_by_name(n) {
+                one = false;
+                edges.extend(
+                    select::edges_of_face(body, f)
+                        .into_iter()
+                        .filter(|&e| select::faces_of_edge(body, e).len() > 1 || body.edge(e).coedges.len() < 2),
+                );
+            } else if let Some(v) = body.vertex_ids().find(|&v| body.vertex(v).name == n) {
+                sources.push((n, sketch::Source::Point(body.vertex(v).point)));
+            } else {
+                return Err(format!(
+                    "{r}: no edge, face or vertex by that name on the part here (an edit above may have taken it)"
+                ));
+            }
+        }
+        edges.sort_unstable_by_key(|&e| body.edge(e).name);
+        edges.dedup();
+        for e in edges {
+            let x = body.edge(e);
+            sources.push((
+                x.name,
+                sketch::Source::Edge {
+                    curve: x.curve.clone(),
+                    range: x.range,
+                    start: body.vertex(x.start).point,
+                    end: body.vertex(x.end).point,
+                    closed: x.start == x.end,
+                },
+            ));
+        }
+        Ok(sketch::Refd { sources, one })
+    }
+
+    /// A `project` row's references as a sketch before the line with id `at` would read them (none:
+    /// on the end).
+    pub fn sources_at(&self, at: Option<u64>, toks: &[String]) -> Result<Vec<sketch::Refd>, String> {
+        let i = at
+            .and_then(|id| self.lines.iter().position(|l| l.id == id))
+            .unwrap_or(self.built())
+            .min(self.built());
+        let ids: Vec<u64> = self.lines.iter().map(|l| l.id).collect();
+        let b = Before {
+            features: &self.features[..i],
+            ids: &ids[..i],
+            labels: &self.labels[..i],
+            kinds: &self.kinds[..i],
+            refs: &|r| self.refs(i, r),
+            face: &|r| self.face(i, r),
+            sources: &|r| self.sources(i, r),
+            fonts: &|_| Ok(None),
+            was: None,
+            own: &|_, n| n,
+        };
+        text::sources_of(&b, toks)
     }
 
     /// Resolves a line's `@handle` or `(selector)` against the part before line `i`.

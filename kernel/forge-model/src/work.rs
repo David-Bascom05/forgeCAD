@@ -432,6 +432,17 @@ pub fn locate(features: History<'_>, r: Ref) -> Result<Point3, RegenError> {
     point(features, features.len(), r)
 }
 
+/// The edge a reference names: its curve and range, as the line after `features` sees it.
+pub fn edge(features: History<'_>, r: Ref) -> Result<(Curve, Interval), RegenError> {
+    match geo(features, features.len(), r)? {
+        Geo::Edge(c, range) => Ok((c, range)),
+        _ => Err(err(features.len())(WorkError::Not {
+            needs: "an edge",
+            at: r,
+        })),
+    }
+}
+
 /// The plane work feature or plane `k` stands for (a UCS: its xy), as seen from feature `i`.
 pub(crate) fn plane_of(features: History<'_>, i: usize, k: usize) -> Result<Frame, RegenError> {
     plane(

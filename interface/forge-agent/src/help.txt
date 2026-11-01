@@ -43,8 +43,15 @@ hole 3 on plate p1 thru     FRAME on a sketch's plane (-on: flipped), at its poi
 `ids NAME N ..` keeps those entities' segment ids (so their faces' names) through later edits.
 Rows: `pt P` `line P P` `poly P P.. [open]` `rect X Y W H` `circle P R` `arc C S E [cw]` `spline P P.. [open]`
 (cubic through them) `bspline D P P.. [knots K..] [weights W..] [open]` `ellipse C MAJOR B` `earc C MAJOR B S E [cw]`
-(+`cons`: construction). P: `X Y` or `p1`, `l2.a`|`.b`, `c1` (centre), `s1.a`|`.b`|`.0`.. (a spline's points), `o`.
+`project REF..` (+`cons`: construction). P: `X Y` or `p1`, `l2.a`|`.b`, `c1` (centre), `s1.a`|`.b`|`.0`.. (a spline's points), `o`.
 Entities count by kind: p l c a s e. `tan` takes a spline's end and the line or arc ending there, or an ellipse and a line.
+`project`: 3D geometry above this line laid on the plane and held there, read afresh on every rebuild: REF an
+edge, a face (its boundary edges), a vertex, a work point or anything else `help ref` allows. Results count on their own,
+j1 j2.. whatever each comes to, and take rows like others (`dist j1.a l1.b 5`, `line j1.b 10 10`). A line gives a line, or a
+point seen end-on; a circle or arc in a parallel plane the same, in a square-on plane a line. A tilted circle, an ellipse
+or a general curve is refused: `project` doesn't make their images yet. A row whose source an edit took away is an error
+naming it. A face or `(selector)` may give more or fewer curves after an edit, so rows can't name those: to constrain to
+them list the edges, `project @e.. @e..`.
 A row the rows above imply is an error; `ref dist l1` (no value) is driven. `query F check` shows
 driven values, each sketch's freedom and conflicting rows. A sketch `on` something follows edits above it.
 
