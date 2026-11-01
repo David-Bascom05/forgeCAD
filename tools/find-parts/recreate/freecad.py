@@ -325,10 +325,14 @@ class Tr:
         ws = self.truth.get(sk, {}).get("wires")
         if ws is None:
             raise Unresolved("a profile whose stored wires would not read")
+        # a stored shape placed only by its own location, which is the profile's placement: its own coordinates are the sketch's
+        root = self.truth[sk].get("root")
+        local = root is not None and all("l" in e for w in ws for e in w) and all(
+            abs(root[i][j] - (fr.x, fr.y, fr.n, fr.o)[j][i]) <= 1e-7 * (max(1.0, abs(fr.o[i])) if j == 3 else 1.0) for i in range(3) for j in range(4))
         ents = []
         for w in ws:
             for e in w:
-                uv = [list(fr.uvw(q)[:2]) for q in e["p"]]
+                uv = [q[:2] for q in e["l"]] if local else [list(fr.uvw(q)[:2]) for q in e["p"]]
                 i = f"w{len(ents)}"
                 if e["k"] == "line":
                     ents.append({"kind": "skLineSegment", "id": i, "start": uv[0], "end": uv[-1]})
@@ -564,7 +568,7 @@ class Tr:
                 hits = [e for e in st.get("edges", []) if any(inbox(p) and near(p, poly, tol) <= tol for p in e["p"][4:13:4])]
                 if not hits and self.approx:
                     # where a polyline stands in for a spline, what it meets moves a little: the nearest within the part's slack
-                    box = self.truth.get(base, {}).get("bbox") or [0.0] * 6
+                    box = self.truth.get(base, {}).get("vbox") or [0.0] * 6
                     slack = 1e-3 * math.dist(box[:3], box[3:])
                     scored = sorted(((max(near(p, poly, 0.0) for p in e["p"][4:13:4]), e["h"]) for e in st.get("edges", [])), key=lambda x: x[0])
                     if scored and scored[0][0] <= slack:

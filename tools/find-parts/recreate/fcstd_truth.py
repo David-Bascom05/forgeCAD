@@ -7,6 +7,7 @@ importer (interface/forge-import) evaluates.
   $VENV/bin/python -I fcstd_truth.py FILE.FCStd OBJ.json     OBJ.json from freecad.py: {"shapes": {name: file}, "subs": {name: [Edge3, Face2..]}}
 """
 import json
+import math
 import os
 import resource
 import sys
@@ -25,7 +26,7 @@ from OCP.BRepGProp import BRepGProp
 from OCP.BRepTools import BRepTools
 from OCP.GProp import GProp_GProps
 from OCP.OCP.collections import IndexedMap_TopoDS_Shape_TopTools_ShapeMapHasher as ShapeMap
-from OCP.TopAbs import TopAbs_EDGE, TopAbs_FACE, TopAbs_SOLID, TopAbs_WIRE
+from OCP.TopAbs import TopAbs_EDGE, TopAbs_FACE, TopAbs_SOLID, TopAbs_VERTEX, TopAbs_WIRE
 from OCP.TopExp import TopExp, TopExp_Explorer
 from OCP.TopLoc import TopLoc_Location
 from OCP.TopoDS import TopoDS, TopoDS_Shape
@@ -61,11 +62,13 @@ def identity(loc):
     return all(t.Value(i, j) == (1.0 if i == j else 0.0) for i in (1, 2, 3) for j in (1, 2, 3, 4))
 
 
-def own_curve(e):
+def own_curve(e, moved=False):
     """The edge's curve as the Rust importer reads it (forge-step BrepTopo), or None where it reads none or a location
-    moves it: then OpenCascade samples it."""
+    moves it: then OpenCascade samples it. moved: the curve in its own place, and its location, whatever that is."""
     t = TopoDS.Edge(e)
     if BRep_Tool.Degenerated_s(t):
+        if moved:
+            return None
         v = TopExp.FirstVertex_s(t)
         p = BRep_Tool.Pnt_s(v)
         return ("point", [p.X(), p.Y(), p.Z()])
@@ -73,7 +76,16 @@ def own_curve(e):
     ad = BRepAdaptor_Curve(t)
     a, b = ad.FirstParameter(), ad.LastParameter()
     c = BRep_Tool.Curve_s(t, loc, a, b)
+    if moved:
+        c = own_basis(c, a, b)
+        return (c, loc) if c is not None else None
     if c is None or not identity(loc):
+        return None
+    return own_basis(c, a, b)
+
+
+def own_basis(c, a, b):
+    if c is None:
         return None
     while isinstance(c, Geom_TrimmedCurve):
         c = c.BasisCurve()
@@ -157,15 +169,23 @@ def edge_points(e, n=N):
 
 
 def wires(s):
-    """A profile that is not a sketch: each wire's edges, what curve each is and samples along it."""
+    """A profile that is not a sketch: each wire's edges, what curve each is and samples along it, and where only the
+    shape's own location places it, its samples in that place ("l"): the profile's placement is that location, and its
+    sketch coordinates are these without a transform either side has to round alike."""
     out = []
+    root = s.Location()
     x = TopExp_Explorer(s, TopAbs_WIRE)
     while x.More():
         w, y = [], TopExp_Explorer(x.Current(), TopAbs_EDGE)
         while y.More():
             c = BRepAdaptor_Curve(TopoDS.Edge(y.Current()))
             k = {GeomAbs_Line: "line", GeomAbs_Circle: "circle"}.get(c.GetType(), "other")
-            w.append({"k": k, "p": edge_points(y.Current(), 96)})
+            d = {"k": k, "p": edge_points(y.Current(), 96)}
+            m = own_curve(y.Current(), moved=True)
+            if m is not None and m[1].IsEqual(root):
+                a, b = m[0][-2], m[0][-1]
+                d["l"] = [own_value(m[0], a + (b - a) * i / 96) for i in range(97)]
+            w.append(d)
             y.Next()
         out.append(w)
         x.Next()
@@ -203,7 +223,18 @@ def main():
                 a, b = box.CornerMin(), box.CornerMax()
                 r["bbox"] = [a.X(), a.Y(), a.Z(), b.X(), b.Y(), b.Z()]
             r["valid"] = bool(BRepCheck_Analyzer(s).IsValid())
+            if r["solids"]:
+                # a box both importers make alike: the vertices'
+                vm, vb = ShapeMap(), [math.inf] * 3 + [-math.inf] * 3
+                TopExp.MapShapes_s(s, TopAbs_VERTEX, vm)
+                for i in range(1, vm.Extent() + 1):
+                    p = BRep_Tool.Pnt_s(TopoDS.Vertex(vm.FindKey(i)))
+                    for k, x in enumerate((p.X(), p.Y(), p.Z())):
+                        vb[k], vb[k + 3] = min(vb[k], x), max(vb[k + 3], x)
+                r["vbox"] = vb
             if name in want.get("wires", []):
+                t = s.Location().Transformation()
+                r["root"] = [[t.Value(i, j) for j in (1, 2, 3, 4)] for i in (1, 2, 3)]
                 r["wires"] = wires(s)
             subs = want["subs"].get(name)
             if subs:
