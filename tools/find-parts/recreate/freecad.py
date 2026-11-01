@@ -455,6 +455,10 @@ class Tr:
         tail = f"axis {num(u)} {num(v)} {num(du)} {num(dv)} "
         return self.profile(name, "add", head, False, fr.n, tail, sk=sk)[0]
 
+    def after_moved(self, name):
+        """Does a real feature follow this clone in the body being built? Those are in the body's own frame, not the moved one."""
+        return bool(self.chain_rest) and any(self.doc.types[c] != "PartDesign::FeatureBase" for c in self.chain_rest[self.chain_rest.index(name) + 1:])
+
     def part_tree(self, name):
         """A Part workbench solid and what it is made of, as bodies and combines. Tools first, so the base is the last body
         made and the lines after it act on that. Returns (lines, the result's label)."""
@@ -672,6 +676,7 @@ class Tr:
                 raise Unsupported("feature " + t.split("::")[-1])
             if doc_approx(d, name):
                 self.approx = True
+        self.chain_rest = chain
         for name in chain:
             self.step(name)
 
@@ -679,7 +684,21 @@ class Tr:
         d = self.doc
         t = d.types[name]
         if t == "PartDesign::FeatureBase":
-            # stands for its BaseFeature, which the chain has already built
+            # stands for its BaseFeature, which the chain has already built, moved by its own placement
+            # (measured: a chain of clones composes them, and the base feature's own placement plays no part)
+            by, q = d.placement(name)
+            sn = math.sqrt(q[0] ** 2 + q[1] ** 2 + q[2] ** 2)
+            if sn < 1e-12 and math.sqrt(dot(by, by)) < 1e-9:
+                return
+            if self.after_moved(name):
+                raise Unsupported("features after a moved clone")
+            words = []
+            if sn >= 1e-12:
+                words.append(f"rot 0 0 0 {vtext(tuple(x / sn for x in q[:3]))} {num(math.degrees(2 * math.atan2(sn, q[3])))}")
+            if math.sqrt(dot(by, by)) >= 1e-9:
+                words.append(f"by {vtext(by)}")
+            self.lines.append("movebody " + " ".join(words))
+            self.steps.append((name, len(self.lines)))
             return
         if t.startswith("Part::"):
             ls, root = [], self.part_tree(name)
