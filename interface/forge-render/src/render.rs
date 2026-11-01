@@ -1161,6 +1161,165 @@ impl Renderer {
         self.pick.busy = Some((px, *camera, now_ms()));
     }
 
+    /// What can be seen of each entity, for a selection window: how many of its pixels are in this box
+    /// of the view and how many out of it. Draws the ids of the whole view and waits for them, so
+    /// for a window let go, not for a frame.
+    pub fn seen_in_box(
+        &mut self,
+        scene: &mut Scene,
+        camera: &Camera,
+        lo: (f32, f32),
+        hi: (f32, f32),
+    ) -> Vec<(Entity, u32, u32)> {
+        let (w, h) = self.size;
+        let view = camera.view_window(w, h, (w as f32 * 0.5, h as f32 * 0.5), (w as f32, h as f32));
+        scene.cull(&view, self.lod_px, self.section);
+        self.upload_moves(scene);
+        self.queue
+            .write_buffer(&self.instances, 0, scene.visible.as_flattened());
+        let mut bytes = globals_bytes(&view, (w, h), [0.0; 3], "");
+        bytes[88..92].copy_from_slice(&PICK_EDGE_PX.to_le_bytes());
+        self.write_section(&mut bytes);
+        self.queue.write_buffer(&self.pick.globals, 0, &bytes);
+        let target = |format, label| {
+            self.device.create_texture(&wgpu::TextureDescriptor {
+                label: Some(label),
+                size: wgpu::Extent3d {
+                    width: w,
+                    height: h,
+                    depth_or_array_layers: 1,
+                },
+                mip_level_count: 1,
+                sample_count: 1,
+                dimension: wgpu::TextureDimension::D2,
+                format,
+                usage: wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::COPY_SRC,
+                view_formats: &[],
+            })
+        };
+        let (id, depth) = (target(PICK_ID, "window ids"), target(DEPTH, "window depth"));
+        let id_view = id.create_view(&Default::default());
+        let depth_view = depth.create_view(&Default::default());
+        let row = (w * 8).next_multiple_of(wgpu::COPY_BYTES_PER_ROW_ALIGNMENT);
+        let read = self.device.create_buffer(&wgpu::BufferDescriptor {
+            label: Some("window read"),
+            size: (row * h) as u64,
+            usage: wgpu::BufferUsages::COPY_DST | wgpu::BufferUsages::MAP_READ,
+            mapped_at_creation: false,
+        });
+        let mut encoder = self.device.create_command_encoder(&Default::default());
+        {
+            let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+                label: Some("window ids"),
+                color_attachments: &[Some(wgpu::RenderPassColorAttachment {
+                    view: &id_view,
+                    depth_slice: None,
+                    resolve_target: None,
+                    ops: wgpu::Operations {
+                        load: wgpu::LoadOp::Clear(wgpu::Color::TRANSPARENT),
+                        store: wgpu::StoreOp::Store,
+                    },
+                })],
+                depth_stencil_attachment: Some(wgpu::RenderPassDepthStencilAttachment {
+                    view: &depth_view,
+                    depth_ops: Some(wgpu::Operations {
+                        load: wgpu::LoadOp::Clear(0.0),
+                        store: wgpu::StoreOp::Store,
+                    }),
+                    stencil_ops: None,
+                }),
+                timestamp_writes: None,
+                occlusion_query_set: None,
+                multiview_mask: None,
+            });
+            pass.set_bind_group(0, &self.pick.binds, &[]);
+            pass.set_pipeline(&self.pick.surface);
+            pass.set_vertex_buffer(0, self.vertices.slice(..));
+            pass.set_vertex_buffer(1, self.instances.slice(..));
+            pass.set_vertex_buffer(2, self.vertex_faces.slice(..));
+            pass.set_index_buffer(self.indices.slice(..), wgpu::IndexFormat::Uint32);
+            for d in &scene.draws {
+                let l = self.lods[d.part as usize][self.pick_lod(d.part, d.lod)];
+                pass.draw_indexed(
+                    l.first_index..l.first_index + l.indices,
+                    l.base_vertex,
+                    d.first..d.first + d.count,
+                );
+            }
+            pass.set_pipeline(&self.pick.line);
+            pass.set_vertex_buffer(0, self.instances.slice(..));
+            pass.set_index_buffer(self.line_indices.slice(..), wgpu::IndexFormat::Uint32);
+            for d in &scene.draws {
+                let l = self.lods[d.part as usize][self.pick_lod(d.part, d.lod)];
+                pass.draw_indexed(
+                    0..l.edges * 6,
+                    l.first_segment as i32 * 4,
+                    d.first..d.first + d.count,
+                );
+            }
+        }
+        encoder.copy_texture_to_buffer(
+            wgpu::TexelCopyTextureInfo {
+                texture: &id,
+                mip_level: 0,
+                origin: wgpu::Origin3d::ZERO,
+                aspect: wgpu::TextureAspect::All,
+            },
+            wgpu::TexelCopyBufferInfo {
+                buffer: &read,
+                layout: wgpu::TexelCopyBufferLayout {
+                    offset: 0,
+                    bytes_per_row: Some(row),
+                    rows_per_image: None,
+                },
+            },
+            id.size(),
+        );
+        self.queue.submit([encoder.finish()]);
+        read.slice(..).map_async(wgpu::MapMode::Read, |_| {});
+        let _ = self.device.poll(wgpu::PollType::wait_indefinitely());
+        let ids = read.slice(..).get_mapped_range().expect("it's been waited for");
+        let word = |at: usize| u32::from_le_bytes(ids[at..at + 4].try_into().expect("4 bytes"));
+        let mut counts: std::collections::HashMap<Entity, (u32, u32)> = Default::default();
+        for y in 0..h as usize {
+            for x in 0..w as usize {
+                let at = y * row as usize + x * 8;
+                if word(at) == 0 {
+                    continue;
+                }
+                let placement = word(at) - 1;
+                let raw = word(at + 4);
+                let e = if raw & SELECTED_BIT != 0 {
+                    self.edge_of_segment(scene, placement, raw & !SELECTED_BIT)
+                } else {
+                    Entity::Face(raw)
+                };
+                let (px, py) = (x as f32 + 0.5, y as f32 + 0.5);
+                let c = counts.entry(e).or_default();
+                if px >= lo.0 && px <= hi.0 && py >= lo.1 && py <= hi.1 {
+                    c.0 += 1;
+                } else {
+                    c.1 += 1;
+                }
+            }
+        }
+        drop(ids);
+        read.unmap();
+        counts.into_iter().map(|(e, c)| (e, c.0, c.1)).collect()
+    }
+
+    fn edge_of_segment(&self, scene: &Scene, placement: u32, segment: u32) -> Entity {
+        let p = &scene.placements[placement as usize];
+        let levels = &self.index[p.part as usize];
+        let level = levels
+            .iter()
+            .rfind(|l| l.first_segment <= segment && !l.edges.is_empty())
+            .expect("a segment is on a level");
+        let local = segment - level.first_segment;
+        let i = level.edges.partition_point(|e| e.first + e.count <= local);
+        Entity::Edge(level.edges[i].edge)
+    }
+
     /// The answer to the pick under way, once it's back: the pixel asked about, what's there,
     /// and how long it took in ms.
     pub fn pick_poll(&mut self, scene: &Scene) -> Option<((f32, f32), Option<PickHit>, f64)> {

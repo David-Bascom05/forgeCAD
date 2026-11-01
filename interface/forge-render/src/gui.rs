@@ -198,11 +198,16 @@ impl Gui {
         }
     }
 
-    /// F4: the left button orbits while it's down.
-    pub fn hold_orbit(&mut self, down: bool) {
+    /// A key that means something while it's down, as the window sees it; true if it was one.
+    pub fn held_key(&mut self, code: winit::keyboard::KeyCode, down: bool) -> bool {
+        if code != winit::keyboard::KeyCode::F4 {
+            return false;
+        }
+        // F4: the left button orbits while it's down
         if let Some(v) = &mut self.view {
             v.nav.orbit_held = down;
         }
+        true
     }
 
     /// A step of a held orbit, for measuring.
@@ -845,7 +850,6 @@ impl Gui {
             }
             if let Some((a, b)) = v.nav.window.take() {
                 v.dirty = true;
-                let (cam, size) = (v.nav.camera, v.size);
                 let lo = (a.0.min(b.0), a.1.min(b.1));
                 let hi = (a.0.max(b.0), a.1.max(b.1));
                 let wants = self
@@ -854,7 +858,22 @@ impl Gui {
                     .as_ref()
                     .and_then(|d| d.pick.as_ref())
                     .map_or(String::new(), |p| p.0.clone());
-                let found = window_finds(&v.facts, &cam, size, lo, hi, b.0 < a.0, &wants);
+                let camera = v.nav.camera;
+                // only what can be seen: right to left what shows in it, left to right what shows
+                // in it and nowhere else
+                let crossing = b.0 < a.0;
+                let found: Vec<Entity> = v
+                    .renderer
+                    .seen_in_box(&mut v.scene, &camera, lo, hi)
+                    .into_iter()
+                    .filter(|(e, _, _)| match e {
+                        Entity::Edge(_) => wants == "Edges",
+                        Entity::Face(_) => wants != "Edges",
+                        Entity::Vertex(_) => false,
+                    })
+                    .filter(|(_, inside, outside)| *inside > 0 && (crossing || *outside == 0))
+                    .map(|f| f.0)
+                    .collect();
                 if v.nav.ctrl_held() {
                     v.nav.selected.retain(|s| !found.contains(&s.1));
                 } else {
@@ -1820,69 +1839,6 @@ fn look_at(v: &mut View, plane: forge_math::Frame) {
 /// How long the right button stays down before its menu shows, in ms.
 const MARK_SHOW_MS: f64 = 220.0;
 
-/// What a selection window takes: edges or faces, wholly in it, or touching it too if `crossing`.
-fn window_finds(
-    facts: &Facts,
-    camera: &Camera,
-    size: (u32, u32),
-    lo: (f32, f32),
-    hi: (f32, f32),
-    crossing: bool,
-    wants: &str,
-) -> Vec<Entity> {
-    let edge_px = |k: usize| -> Vec<(f32, f32)> {
-        facts.edge_points[k]
-            .iter()
-            .filter_map(|p| camera.pixel_of(*p, size.0, size.1))
-            .collect()
-    };
-    let inside = |p: &(f32, f32)| p.0 >= lo.0 && p.0 <= hi.0 && p.1 >= lo.1 && p.1 <= hi.1;
-    let takes = |pts: &[(f32, f32)]| {
-        if crossing {
-            pts.iter().any(inside) || pts.windows(2).any(|w| segment_crosses(w[0], w[1], lo, hi))
-        } else {
-            !pts.is_empty() && pts.iter().all(inside)
-        }
-    };
-    if wants == "Edges" {
-        return (0..facts.edge_points.len())
-            .filter(|k| takes(&edge_px(*k)))
-            .map(|k| Entity::Edge(k as u32))
-            .collect();
-    }
-    facts
-        .face_edges
-        .iter()
-        .enumerate()
-        .filter(|(_, edges)| {
-            let pts: Vec<(f32, f32)> = edges.iter().flat_map(|e| edge_px(*e as usize)).collect();
-            if crossing {
-                edges.iter().any(|e| takes(&edge_px(*e as usize)))
-            } else {
-                takes(&pts)
-            }
-        })
-        .map(|(k, _)| Entity::Face(k as u32))
-        .collect()
-}
-
-/// Does this segment touch this box?
-fn segment_crosses(a: (f32, f32), b: (f32, f32), lo: (f32, f32), hi: (f32, f32)) -> bool {
-    let (mut t0, mut t1) = (0.0f32, 1.0f32);
-    for (p, d, min, max) in [(a.0, b.0 - a.0, lo.0, hi.0), (a.1, b.1 - a.1, lo.1, hi.1)] {
-        if d.abs() < 1e-6 {
-            if p < min || p > max {
-                return false;
-            }
-            continue;
-        }
-        let (u, v) = ((min - p) / d, (max - p) / d);
-        t0 = t0.max(u.min(v));
-        t1 = t1.min(u.max(v));
-    }
-    t0 <= t1
-}
-
 /// A picture read back from the target.
 pub struct Pixels {
     width: usize,
@@ -2033,6 +1989,11 @@ impl Headless {
         self.step();
         self.other_button(false);
         self.step();
+    }
+
+    /// The right button, held or let go, where the pointer is.
+    pub fn other_button_for_test(&mut self, down: bool) {
+        self.other_button(down);
     }
 
     fn other_button(&mut self, down: bool) {

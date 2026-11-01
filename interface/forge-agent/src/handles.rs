@@ -36,10 +36,6 @@ pub struct Facts {
     pub face_refs: Vec<String>,
     pub edge_refs: Vec<String>,
     pub vertex_refs: Vec<String>,
-    /// By the body's edge index: points along it.
-    pub edge_points: Vec<Vec<[f32; 3]>>,
-    /// By the body's face index: its edges, by the body's edge index.
-    pub face_edges: Vec<Vec<u32>>,
     /// By the body's face index: its radius, if it's a cylinder.
     pub face_radius: Vec<Option<f64>>,
     /// By the body's face index: does it face its own axis, as a bore's wall does?
@@ -354,8 +350,6 @@ pub fn facts(model: &mut Model) -> Facts {
         face_refs,
         edge_refs,
         vertex_refs: vertex_refs(model.body()),
-        edge_points: edge_points(model.body()),
-        face_edges: face_edges(model.body()),
         face_radius: radii(model.body()),
         face_bore: bores(model.body()),
         sketches: sketch_shapes(model, model.features.len()),
@@ -367,38 +361,6 @@ fn vertex_refs(body: Option<&forge_topo::Body>) -> Vec<String> {
     let names = crate::select::handles(b);
     b.vertex_ids()
         .map(|v| names.get(&b.vertex(v).name).cloned().unwrap_or_default())
-        .collect()
-}
-
-fn edge_points(body: Option<&forge_topo::Body>) -> Vec<Vec<[f32; 3]>> {
-    let Some(b) = body else { return Vec::new() };
-    b.edge_ids()
-        .map(|e| {
-            let g = b.edge(e);
-            let straight = matches!(g.curve, forge_geom::Curve::Line(_));
-            let steps = if straight { 1 } else { 16 };
-            (0..=steps)
-                .map(|k| {
-                    let t = g.range.lo + (g.range.hi - g.range.lo) * k as f64 / steps as f64;
-                    let p = forge_geom::CurveGeom::eval(&g.curve, t);
-                    [p.x as f32, p.y as f32, p.z as f32]
-                })
-                .collect()
-        })
-        .collect()
-}
-
-fn face_edges(body: Option<&forge_topo::Body>) -> Vec<Vec<u32>> {
-    let Some(b) = body else { return Vec::new() };
-    let at: std::collections::HashMap<_, u32> =
-        b.edge_ids().enumerate().map(|(k, e)| (e, k as u32)).collect();
-    b.face_ids()
-        .map(|f| {
-            crate::select::edges_of_face(b, f)
-                .into_iter()
-                .filter_map(|e| at.get(&e).copied())
-                .collect()
-        })
         .collect()
 }
 
@@ -444,8 +406,6 @@ pub fn facts_at(model: &Model, n: usize) -> Facts {
         face_refs,
         edge_refs,
         vertex_refs: vertex_refs(model.body_after(n)),
-        edge_points: edge_points(model.body_after(n)),
-        face_edges: face_edges(model.body_after(n)),
         face_radius: radii(model.body_after(n)),
         face_bore: bores(model.body_after(n)),
         sketches: sketch_shapes(model, n),

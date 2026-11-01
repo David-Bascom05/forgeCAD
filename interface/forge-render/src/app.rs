@@ -409,10 +409,8 @@ impl ApplicationHandler for App {
             }
             WindowEvent::ModifiersChanged(m) => self.mods = m.state(),
             WindowEvent::KeyboardInput { event, .. }
-                if event.physical_key == PhysicalKey::Code(KeyCode::F4) =>
-            {
-                l.gui.hold_orbit(event.state == ElementState::Pressed);
-            }
+                if matches!(event.physical_key, PhysicalKey::Code(c)
+                    if l.gui.held_key(c, event.state == ElementState::Pressed)) => {}
             WindowEvent::KeyboardInput { event, .. } if event.state == ElementState::Pressed => {
                 if let PhysicalKey::Code(code) = event.physical_key {
                     let ctrl = self.mods.control_key();

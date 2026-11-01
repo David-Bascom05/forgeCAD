@@ -1752,8 +1752,11 @@ fn a_left_drag_is_a_selection_window_and_f4_or_shift_middle_orbits() {
     step_some(&mut h);
     let crossing = h.gui.view.as_ref().unwrap().nav.selected.len();
     assert!(crossing > wholly, "{crossing} {wholly}");
+    // and never what can't be seen: of a block's six faces, three show from here
+    assert!(crossing <= 3, "{crossing} faces, some of them hidden");
     // F4 held: the left button orbits
-    h.gui.hold_orbit(true);
+    let f4 = winit::keyboard::KeyCode::F4;
+    assert!(h.gui.held_key(f4, true));
     h.move_to(v.left() + 40.0, v.bottom() - 40.0);
     h.step();
     h.button(true);
@@ -1762,7 +1765,7 @@ fn a_left_drag_is_a_selection_window_and_f4_or_shift_middle_orbits() {
     step_some(&mut h);
     h.button(false);
     step_some(&mut h);
-    h.gui.hold_orbit(false);
+    h.gui.held_key(f4, false);
     assert_ne!(h.gui.view.as_ref().unwrap().nav.camera.yaw, was.yaw);
 }
 
@@ -1812,4 +1815,28 @@ fn the_marking_menu_fits_where_things_stand_and_takes_a_direction() {
             .iter()
             .any(|m| m.0 == "Line" && m.2 == Some(Action::SketchTool(SkTool::Line)))
     );
+}
+
+#[test]
+fn a_held_right_button_shows_its_menu_and_a_quick_flick_never_does() {
+    let Some((mut h, _)) = file_part(BLOCK) else {
+        return;
+    };
+    let c = h.gui.shell.view_rect.center();
+    h.move_to(c.x, c.y);
+    h.step();
+    h.other_button_for_test(true);
+    h.step();
+    assert!(h.gui.shell.marking.is_none(), "not at once");
+    std::thread::sleep(std::time::Duration::from_millis(260));
+    let o = h.step();
+    assert!(o.again_in.is_some(), "it keeps checking while held");
+    h.step();
+    assert!(h.gui.shell.marking.is_some(), "held: it shows");
+    h.other_button_for_test(false);
+    step_some(&mut h);
+    assert!(h.gui.shell.marking.is_some(), "and stays to be chosen from");
+    h.key(egui::Key::Escape);
+    step_some(&mut h);
+    assert!(h.gui.shell.marking.is_none());
 }
