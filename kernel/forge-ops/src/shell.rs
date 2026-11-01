@@ -42,69 +42,12 @@ pub fn shell(
     open: &[Name],
     feature: u64,
 ) -> Result<Body, ShellError> {
-    if thickness <= tol::MIN_LENGTH {
-        return Err(ShellError::TooThin);
-    }
-    let base = body.compact();
-    let mut opened = vec![false; base.faces.len()];
-    for &n in open {
-        let f = base.face_by_name(n).ok_or(ShellError::NoSuchFace { face: n })?;
-        opened[f.index()] = true;
-    }
-    if opened.iter().all(|&o| o) {
-        return Err(ShellError::AllOpen);
-    }
-    // an opened plane all of whose edges its neighbours leave tangentially: their offsets never reach
-    // it, so it moves with them and the wall ends in strips square to it (`rim_strips`)
-    let strip: Vec<bool> = base
-        .face_ids()
-        .map(|f| opened[f.index()] && rolls_off_all_round(&base, f, &opened))
-        .collect();
-    let shift = if outward { thickness } else { -thickness };
-    let along = |f: &forge_topo::Face| if f.same_sense { shift } else { -shift };
-    // faces whose offsets vanish go, and their neighbours meet instead
-    let gone: Vec<bool> = (0..base.faces.len() as u32)
-        .map(FaceId)
-        .zip(&opened)
-        .map(|(f, &o)| !o && face_offset(&base, f, along(base.face(f))).is_none())
-        .collect();
-    let mut moved = if gone.iter().any(|&g| g) {
-        collapse(&base, &gone)?
-    } else {
-        base.clone()
-    };
-    let stays = |n: Name| open.contains(&n) && !base.face_by_name(n).is_some_and(|f| strip[f.index()]);
-    let open_moved: Vec<bool> = moved.faces.iter().map(|f| stays(f.name)).collect();
-    for f in (0..moved.faces.len() as u32)
-        .map(FaceId)
-        .filter(|f| !open_moved[f.index()])
-    {
-        let face = moved.face(f);
-        let s = face_offset(&moved, f, along(face)).ok_or(ShellError::Collapses { face: face.name })?;
-        moved.faces[f.index()].surface = s;
-    }
-    // a cone offset towards its apex can close up within the face
-    // (a cone that already came to a point stays one: its apex just moves along the axis)
-    let pointed = |n: Name| base.face_by_name(n).is_some_and(|f| reaches_apex(&base, f, 0.0));
-    let apex = |b: &Body, slack: f64| {
-        b.face_ids()
-            .find(|&f| reaches_apex(b, f, slack) && !pointed(b.face(f).name))
-    };
-    if let Some(f) = apex(&moved, 0.0) {
-        return Err(ShellError::Collapses {
-            face: moved.face(f).name,
-        });
-    }
-    let before = moved.clone();
-    if let Err(e) = crate::wavefront::rebuild_moving(&mut moved, &|b, f| !stays(b.face(f).name)) {
-        // vertices move up to the thickness along a cone's axis: past its apex, the face is gone
-        return Err(match apex(&before, thickness).or(apex(&before, -thickness)) {
-            Some(f) => ShellError::Collapses {
-                face: before.face(f).name,
-            },
-            None => ShellError::Rebuild(e),
-        });
-    }
+    let Moved {
+        base,
+        opened,
+        strip,
+        moved,
+    } = offset_all(body, thickness, outward, open)?;
     let root = Name::feature(feature);
     let rename = |n: Name| n.with_name(root).with_str("offset");
     let (outer, inner, outer_new, inner_new) = if outward {
@@ -220,6 +163,128 @@ pub fn shell(
         return Err(ShellError::Invalid(problems));
     }
     Ok(out)
+}
+
+/// A shell's body (compacted), which faces are opened, which of those end in strips, and the body
+/// with every other face moved to its offset and rebuilt: the solid the inner skin bounds (the outer
+/// one, `outward`), its opened faces where they were.
+struct Moved {
+    base: Body,
+    opened: Vec<bool>,
+    strip: Vec<bool>,
+    moved: Body,
+}
+
+fn offset_all(body: &Body, thickness: f64, outward: bool, open: &[Name]) -> Result<Moved, ShellError> {
+    if thickness <= tol::MIN_LENGTH {
+        return Err(ShellError::TooThin);
+    }
+    let base = body.compact();
+    let mut opened = vec![false; base.faces.len()];
+    for &n in open {
+        let f = base.face_by_name(n).ok_or(ShellError::NoSuchFace { face: n })?;
+        opened[f.index()] = true;
+    }
+    if opened.iter().all(|&o| o) {
+        return Err(ShellError::AllOpen);
+    }
+    // an opened plane all of whose edges its neighbours leave tangentially: their offsets never reach
+    // it, so it moves with them and the wall ends in strips square to it (`rim_strips`)
+    let strip: Vec<bool> = base
+        .face_ids()
+        .map(|f| opened[f.index()] && rolls_off_all_round(&base, f, &opened))
+        .collect();
+    let shift = if outward { thickness } else { -thickness };
+    let along = |f: &forge_topo::Face| if f.same_sense { shift } else { -shift };
+    // faces whose offsets vanish go, and their neighbours meet instead
+    let gone: Vec<bool> = (0..base.faces.len() as u32)
+        .map(FaceId)
+        .zip(&opened)
+        .map(|(f, &o)| !o && face_offset(&base, f, along(base.face(f))).is_none())
+        .collect();
+    let mut moved = if gone.iter().any(|&g| g) {
+        collapse(&base, &gone)?
+    } else {
+        base.clone()
+    };
+    let stays = |n: Name| open.contains(&n) && !base.face_by_name(n).is_some_and(|f| strip[f.index()]);
+    let open_moved: Vec<bool> = moved.faces.iter().map(|f| stays(f.name)).collect();
+    for f in (0..moved.faces.len() as u32)
+        .map(FaceId)
+        .filter(|f| !open_moved[f.index()])
+    {
+        let face = moved.face(f);
+        let s = face_offset(&moved, f, along(face)).ok_or(ShellError::Collapses { face: face.name })?;
+        moved.faces[f.index()].surface = s;
+    }
+    // a cone offset towards its apex can close up within the face
+    // (a cone that already came to a point stays one: its apex just moves along the axis)
+    let pointed = |n: Name| base.face_by_name(n).is_some_and(|f| reaches_apex(&base, f, 0.0));
+    let apex = |b: &Body, slack: f64| {
+        b.face_ids()
+            .find(|&f| reaches_apex(b, f, slack) && !pointed(b.face(f).name))
+    };
+    if let Some(f) = apex(&moved, 0.0) {
+        return Err(ShellError::Collapses {
+            face: moved.face(f).name,
+        });
+    }
+    let before = moved.clone();
+    if let Err(e) = crate::wavefront::rebuild_moving(&mut moved, &|b, f| !stays(b.face(f).name)) {
+        // vertices move up to the thickness along a cone's axis: past its apex, the face is gone
+        return Err(match apex(&before, thickness).or(apex(&before, -thickness)) {
+            Some(f) => ShellError::Collapses {
+                face: before.face(f).name,
+            },
+            None => ShellError::Rebuild(e),
+        });
+    }
+    Ok(Moved {
+        base,
+        opened,
+        strip,
+        moved,
+    })
+}
+
+/// The solid a shell's inner skin bounds (inward) or its outer one, its opened faces where they
+/// were, every name as the shell names that skin: the shell is the body less it, or it less the
+/// body. None if an opened face ends in strips (`rolls_off_all_round`): it moves with the walls.
+pub fn offset_solid(
+    body: &Body,
+    thickness: f64,
+    outward: bool,
+    open: &[Name],
+    feature: u64,
+) -> Result<Option<Body>, ShellError> {
+    let Moved { strip, mut moved, .. } = offset_all(body, thickness, outward, open)?;
+    if strip.contains(&true) {
+        return Ok(None);
+    }
+    if let Some((a, b)) = crossing(&moved, &vec![true; moved.faces.len()]) {
+        return Err(ShellError::SelfIntersecting { a, b });
+    }
+    let problems = forge_topo::check(&moved);
+    if !problems.is_empty() {
+        return Err(ShellError::Invalid(problems));
+    }
+    let root = Name::feature(feature);
+    let rename = |n: Name| n.with_name(root).with_str("offset");
+    moved.joins = moved.joins.renamed(rename);
+    for v in &mut moved.vertices {
+        v.name = rename(v.name);
+    }
+    for e in &mut moved.edges {
+        e.name = rename(e.name);
+    }
+    for f in &mut moved.faces {
+        f.name = rename(f.name);
+    }
+    for n in &mut moved.split {
+        *n = rename(*n);
+    }
+    moved.split.sort();
+    Ok(Some(moved))
 }
 
 /// Whether every edge of `f`, an opened plane, is a smooth one to a face that stays, on a line or circle.

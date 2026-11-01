@@ -171,6 +171,29 @@ pub(crate) fn tools(features: History<'_>, i: usize, build: bool) -> Result<Vec<
     let Feature::Thread(t) = &features[i] else {
         unreachable!("only threads")
     };
+    placed_tools(features, i, build, &|p| cut(i, features.id(i), p, t, build))
+}
+
+/// The rings thread feature `i`'s grooves lie in (`envelope`), one per thread it cuts, as solids
+/// named from feature id `id`.
+pub(crate) fn envelopes(features: History<'_>, i: usize, id: u64) -> Result<Vec<Body>, RegenError> {
+    let Feature::Thread(t) = &features[i] else {
+        unreachable!("only threads")
+    };
+    let rings = placed_tools(features, i, true, &|p| envelope(i, id, p, t))?;
+    Ok(rings.into_iter().map(|r| r.0).collect())
+}
+
+/// `make`'s tools for each thread feature `i` cuts, a pattern's copies of a hole's included.
+fn placed_tools(
+    features: History<'_>,
+    i: usize,
+    build: bool,
+    make: &dyn Fn(&Placed) -> Result<Vec<Tool>, RegenError>,
+) -> Result<Vec<Tool>, RegenError> {
+    let Feature::Thread(t) = &features[i] else {
+        unreachable!("only threads")
+    };
     let e = err(i);
     let place = |at: Frame, internal: bool, spec: Spec, full: f64| -> Result<Placed, RegenError> {
         let length = match t.length {
@@ -198,9 +221,7 @@ pub(crate) fn tools(features: History<'_>, i: usize, build: bool) -> Result<Vec<
         })
     };
     match t.on {
-        On::Axis { at, spec, internal } => {
-            cut(i, features.id(i), &place(at, internal, spec, f64::NAN)?, t, build)
-        }
+        On::Axis { at, spec, internal } => make(&place(at, internal, spec, f64::NAN)?),
         On::Face {
             feature,
             name,
@@ -213,7 +234,7 @@ pub(crate) fn tools(features: History<'_>, i: usize, build: bool) -> Result<Vec<
             if !(radius > rmin + 1e-6 && radius < rmax - 1e-6) {
                 return Err(e(ThreadError::BadSize));
             }
-            cut(i, features.id(i), &p, t, build)
+            make(&p)
         }
         On::Hole(k) => {
             let Some(Feature::Hole(h)) = features.get(k).filter(|_| k < i) else {
@@ -234,7 +255,7 @@ pub(crate) fn tools(features: History<'_>, i: usize, build: bool) -> Result<Vec<
             if !(h.diameter / 2.0 > rmin + 1e-6 && h.diameter / 2.0 < rmax - 1e-6) {
                 return Err(e(ThreadError::BadSize));
             }
-            let mut out = cut(i, features.id(i), &p, t, build)?;
+            let mut out = make(&p)?;
             // at the hole's other places, then copies by the patterns after it that hold it, as
             // `Part::threads` finds them
             let mut placed = Vec::new();
@@ -519,6 +540,55 @@ fn cut(i: usize, id: u64, p: &Placed, t: &ScrewThread, build: bool) -> Result<Ve
         out.insert(0, crate::tool(i, id, &cone, build)?);
     }
     Ok(out)
+}
+
+/// The ring about a thread's axis its grooves, chamfer and run-out lie in, P/8 past them all round:
+/// the groove's section out to where it runs on square past the cylinder (inside a collar the
+/// thread starts at, that part is cut too), the run-out's drift, from a pitch and a half before its
+/// start to past its end. A shell hollows the part as if the thread were not there: less this ring,
+/// the walls are measured from just past the thread's far radius (the major inside a bore, the
+/// minor round a rod).
+fn envelope(i: usize, id: u64, p: &Placed, t: &ScrewThread) -> Result<Vec<Tool>, RegenError> {
+    let f = form(p.major, p.pitch, p.internal);
+    let q = p.pitch;
+    let drift = if t.runout {
+        (f.major - f.minor) + q / 4.0
+    } else {
+        0.0
+    };
+    let (mut lo, mut hi) = (f64::INFINITY, f64::NEG_INFINITY);
+    for g in &f.groove {
+        (lo, hi) = (lo.min(g.x), hi.max(g.x));
+    }
+    let (lo, hi) = if p.internal {
+        (lo - drift - q / 8.0, hi + q / 8.0)
+    } else {
+        (lo - q / 8.0, hi + drift + q / 8.0)
+    };
+    let lo = lo.max(0.0);
+    let end = p.length + if t.runout { 1.25 * q } else { q / 4.0 };
+    let plane = Frame::from_zx(p.at.origin, -p.at.y(), p.at.x().get()).expect("a frame's axes");
+    let ring = Feature::Revolve {
+        profile: Profile {
+            plane,
+            loops: vec![polygon(
+                &[
+                    Point2::new(lo, -1.5 * q),
+                    Point2::new(hi, -1.5 * q),
+                    Point2::new(hi, end),
+                    Point2::new(lo, end),
+                ],
+                0,
+            )],
+        },
+        axis: Axis2 {
+            origin: Point2::ORIGIN,
+            dir: Vec2::Y,
+        },
+        extent: Turn::Angle(dmath::TAU),
+        op: Combine::Cut,
+    };
+    Ok(vec![crate::tool(i, id, &ring, true)?])
 }
 
 /// The groove's volume per radian of turn, inside a cylinder of the form's own radius: the

@@ -269,7 +269,15 @@ pub(crate) fn rebuild_moving(
     body: &mut Body,
     changed: &dyn Fn(&Body, FaceId) -> bool,
 ) -> Result<(), RebuildError> {
-    fn go(body: &Body, changed: &dyn Fn(&Body, FaceId) -> bool, left: usize) -> Result<Body, RebuildError> {
+    // the entities every event at which was tried and failed further on: a branch that comes to one
+    // again fails the same way, so the search stays linear in them (both splits of a vertex once
+    // led to the same refusal 2^8 times)
+    fn go(
+        body: &Body,
+        changed: &dyn Fn(&Body, FaceId) -> bool,
+        left: usize,
+        dead: &mut Vec<RebuildError>,
+    ) -> Result<Body, RebuildError> {
         let mut b = body.clone();
         let flags: Vec<bool> = (0..b.faces.len() as u32)
             .map(|f| changed(&b, FaceId(f)))
@@ -278,7 +286,7 @@ pub(crate) fn rebuild_moving(
             Ok(()) => return Ok(b),
             Err(e) => e,
         };
-        if left == 0 {
+        if left == 0 || dead.contains(&e) {
             return Err(e);
         }
         let n = net(body);
@@ -297,12 +305,13 @@ pub(crate) fn rebuild_moving(
             RebuildError::Edge { .. } => Vec::new(),
         };
         for m in tries {
-            if let Ok(r) = go(&built(body, &m), changed, left - 1) {
+            if let Ok(r) = go(&built(body, &m), changed, left - 1, dead) {
                 return Ok(r);
             }
         }
+        dead.push(e.clone());
         Err(e)
     }
-    *body = go(body, changed, 12)?;
+    *body = go(body, changed, 12, &mut Vec::new())?;
     Ok(())
 }

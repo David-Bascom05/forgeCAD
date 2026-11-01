@@ -1438,6 +1438,58 @@ fn round_left_off(before: &Body, after: &Body) -> Option<forge_topo::Problem> {
     })
 }
 
+/// A shell of a part with modeled threads: hollowed as if they were not there (each thread's ring,
+/// `thread::envelopes`, taken out, or filled in `outward`), then the part less that body's inner
+/// solid (or its outer solid less the part), so the threads stay whole in the skin and every wall
+/// is at least the thickness. Without threads, the shell.
+fn threaded_shell(
+    features: History<'_>,
+    i: usize,
+    body: &Body,
+    thickness: f64,
+    outward: bool,
+    open: &[Name],
+) -> Result<Body, RegenError> {
+    let id = features.id(i);
+    let e = |error| RegenError::Shell { feature: i, error };
+    let be = |error| RegenError::Boolean { feature: i, error };
+    let threads: Vec<usize> = (0..i)
+        .filter(|&j| matches!(features[j], Feature::Thread(_)))
+        .collect();
+    let mut rings = Vec::new();
+    if !threads.is_empty() {
+        let reach = forge_bool::Index::new(body).bbox;
+        for j in threads {
+            for r in thread::envelopes(features, j, id)? {
+                if forge_bool::Index::new(&r).bbox.overlaps(&reach) {
+                    rings.push(r);
+                }
+            }
+        }
+    }
+    if rings.is_empty() {
+        return shell(body, thickness, outward, open, id).map_err(e);
+    }
+    let mut plain = body.clone();
+    for r in &rings {
+        plain =
+            forge_bool::boolean(&plain, r, if outward { Op::Union } else { Op::Subtract }, id).map_err(be)?;
+    }
+    let Some(solid) = forge_ops::offset_solid(&plain, thickness, outward, open, id).map_err(e)? else {
+        return shell(body, thickness, outward, open, id).map_err(e);
+    };
+    let (a, b) = if outward { (&solid, body) } else { (body, &solid) };
+    let out = forge_bool::boolean(a, b, Op::Subtract, id).map_err(be)?;
+    // the solid taken lies wholly in the one it is taken from: else a wall ran through the skin
+    let volume = |b: &Body| forge_topo::mass::mass(b).map_or(f64::NAN, |m| m.volume);
+    let (va, vb, v) = (volume(a), volume(b), volume(&out));
+    if (v - (va - vb)).abs() <= 1e-6 * va {
+        return Ok(out);
+    }
+    let n = solid.faces[0].name;
+    Err(e(ShellError::SelfIntersecting { a: n, b: n }))
+}
+
 /// Applies part-changing feature `i` to `body`.
 fn modify(
     features: History<'_>,
@@ -1501,8 +1553,7 @@ fn modify(
             thickness,
             outward,
             open,
-        } => shell(body, *thickness, *outward, open, id)
-            .map_err(|error| RegenError::Shell { feature: i, error }),
+        } => threaded_shell(features, i, body, *thickness, *outward, open),
         Feature::Draft {
             faces,
             neutral,

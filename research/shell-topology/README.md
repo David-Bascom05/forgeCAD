@@ -42,6 +42,27 @@ reading of Rossignac and Requicha 1986). On the 135 refused parts: 26 built vali
 the source. Cells of adjacent faces leave wedges reaching the concave edges (zero thickness, 51 parts);
 `thicken` itself refuses most faces of real parts (212 no exact wall, 190 collapses).
 
+## Threads (David's option B, 2026-11-01)
+
+A thread's flanks are screw surfaces whose offsets meet nothing where a hole cuts them (bench conrod,
+frame, valve, gearbox, jack all refused there first). Offsetting them would also give a wall that
+follows the helix. Instead the part is hollowed as if the thread were not there: each thread's ring
+(`thread::envelopes`, about its axis from the minor radius less P/4 inside a bore, P/8 round a rod,
+to the major plus P/8 inside, P/4 outside; from 1.5 P before its start to P/4 past its end, 1.25 P
+with a run-out) is taken out of the body, that body's inner solid is made (`forge_ops::offset_solid`)
+and the part less it is the shell. The ring holds every screw face, the chamfer cone in the material
+and the run-out, with room so no face of it lies on one of the thread's: so the thread-free body lies
+inside the part and every wall is at least the thickness, measured from the major radius in a bore
+and the minor round a rod (from the major there the root would be thinner). Outward, the ring is
+added and the outer solid less the part is the shell. `threaded_shell` (forge-model) checks the
+volumes: the part less the solid must lose exactly the solid's volume, else the solid left the part.
+Closed forms in `screw_parts.rs` (`shell_of_a_tapped_block`, `shell_of_a_threaded_rod`).
+After it, none of the five thread parts stops at a thread; each stops at another face first.
+
+The wavefront's event search (`rebuild_moving`) tried both partings of a vertex at every level: on
+crank, once the thread no longer stopped it first, the same refusal came back 2^8 times at half a
+second each (530 s). An entity whose every event failed further on is now failed at once.
+
 ## Open
 
 Global events: walls of a thin flange meet (the flange turns solid, no cavity in it). `SelfIntersecting`

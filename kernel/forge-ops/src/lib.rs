@@ -33,7 +33,7 @@ pub use loft::{Apex, LoftError, LoftGuides, LoftKind, LoftOptions, loft, loft_an
 pub use profile::{Profile, ProfileError, ProfileLoop, Segment, Touch};
 pub use rebuild::RebuildError;
 pub use revolve::{Axis2, RevolveError, revolve, revolve_cutter};
-pub use shell::{ShellError, shell};
+pub use shell::{ShellError, offset_solid, shell};
 pub use strip::{face_fillet, full_round};
 pub use sweep::{
     CoilError, Handed, PathSeg, Stretch, SweepError, Winding, Wound, coil, coil_motion, sweep,
