@@ -284,11 +284,18 @@ fn smooth(
     let vertex = |k: usize, i: usize| planes[k].plane_point(segs[k][i].start());
     let pulls = |g: usize, path: &[crate::PathSeg], at: Option<usize>| -> Result<Pull, LoftError> {
         crate::sweep::check_path(path).map_err(|error| LoftError::GuideBroken { guide: g, error })?;
+        if let Some(index) = path.iter().position(|s| matches!(s, crate::PathSeg::Spline(_))) {
+            return Err(LoftError::GuideBroken {
+                guide: g,
+                error: crate::SweepError::NotPlanar { index },
+            });
+        }
         let pieces: Vec<Rail> = path
             .iter()
             .map(|s| match *s {
                 crate::PathSeg::Line { a, b } => Rail::Line { a, b },
                 crate::PathSeg::Arc { circle, start, sweep } => Rail::Arc { circle, start, sweep },
+                crate::PathSeg::Spline(_) => unreachable!("refused above"),
             })
             .collect();
         let gp = Arc::new(GuidePath::new(&pieces));
@@ -669,7 +676,7 @@ mod tests {
             sweep,
         };
         let two = [sq(0.0, 4.0), sq(9.0, 3.0)];
-        let railed = loft(&two, free, &LoftGuides::Rails(vec![(0, vec![rail])]), 1).unwrap();
+        let railed = loft(&two, free, &LoftGuides::Rails(vec![(0, vec![rail.clone()])]), 1).unwrap();
         valid(&railed);
         // the edge at that corner runs along the rail
         let on_rail =
@@ -683,14 +690,14 @@ mod tests {
             loft(
                 &two,
                 LoftKind::Ruled,
-                &LoftGuides::Rails(vec![(0, vec![rail])]),
+                &LoftGuides::Rails(vec![(0, vec![rail.clone()])]),
                 1
             )
             .unwrap_err(),
             LoftError::GuidesNeedSmooth
         );
         assert_eq!(
-            loft(&two, free, &LoftGuides::Rails(vec![(1, vec![rail])]), 1).unwrap_err(),
+            loft(&two, free, &LoftGuides::Rails(vec![(1, vec![rail.clone()])]), 1).unwrap_err(),
             LoftError::GuideMisses { guide: 0, profile: 0 }
         );
     }

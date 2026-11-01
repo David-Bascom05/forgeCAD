@@ -16,13 +16,18 @@ use crate::profile::{ProfileError, Segment};
 use crate::revolve::Axis2;
 use crate::skin::{Skin, prepare, rh_section, section_curve};
 use forge_geom::screw::{Screw, Section};
+use forge_geom::spline::swept::plane_of;
+use forge_geom::spline::{Spine, Spline, Spun, Swept};
 use forge_geom::{Circle, Cone, Curve, CurveGeom, Cylinder, Line, Plane, Sphere, Surface, Torus};
 use forge_math::{Frame, Interval, Point3, UnitVec3, Vec2, Vec3, dmath, tol};
 use forge_topo::{Body, Name};
+use std::sync::Arc;
 
 /// One piece of a sweep path.
-#[derive(Clone, Copy, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq)]
 pub enum PathSeg {
+    /// A free curve in space, lying in one plane.
+    Spline(Arc<Spline>),
     Line {
         a: Point3,
         b: Point3,
@@ -58,6 +63,10 @@ pub enum SweepError {
     },
     /// The path brings the swept solid back into itself.
     SelfIntersecting,
+    /// Path piece `index` is a curve not lying in one plane.
+    NotPlanar {
+        index: usize,
+    },
 }
 
 impl From<ProfileError> for SweepError {
@@ -69,6 +78,7 @@ impl From<ProfileError> for SweepError {
 impl PathSeg {
     fn ends(&self) -> (Point3, Point3) {
         match *self {
+            PathSeg::Spline(ref c) => c.ends(),
             PathSeg::Line { a, b } => (a, b),
             PathSeg::Arc { circle, start, sweep } => (circle.eval(start), circle.eval(start + sweep)),
         }
@@ -77,6 +87,10 @@ impl PathSeg {
     /// Unit tangents at the start and the end.
     fn tangents(&self) -> Option<(UnitVec3, UnitVec3)> {
         match *self {
+            PathSeg::Spline(ref c) => {
+                let d = c.domain();
+                Some((c.deriv(d.lo).d1.normalize()?, c.deriv(d.hi).d1.normalize()?))
+            }
             PathSeg::Line { a, b } => (b - a).normalize().map(|d| (d, d)),
             PathSeg::Arc { circle, start, sweep } => {
                 let s = sweep.signum();
@@ -88,6 +102,7 @@ impl PathSeg {
 
     fn degenerate(&self) -> bool {
         match *self {
+            PathSeg::Spline(ref c) => !c.is_regular() || c.bbox(c.domain()).diagonal() <= tol::MIN_LENGTH,
             PathSeg::Line { a, b } => a.distance(b) <= tol::MIN_LENGTH,
             PathSeg::Arc { circle, sweep, .. } => {
                 circle.radius <= tol::MIN_LENGTH
@@ -110,6 +125,24 @@ impl PathSeg {
     /// The frame `f` carried from the piece's start to its end.
     fn carry(&self, f: &Frame) -> Frame {
         match *self {
+            PathSeg::Spline(ref c) => {
+                let d = c.domain();
+                let (t0, t1) = (c.deriv(d.lo).d1.normalize(), c.deriv(d.hi).d1.normalize());
+                let (Some(t0), Some(t1)) = (t0, t1) else {
+                    return f.with_origin(c.ends().1);
+                };
+                let turned = |v: Vec3| {
+                    let axis = t0.get().cross(t1.get());
+                    let (cs, sn) = (t0.dot(t1.get()), axis.length());
+                    let Some(ax) = axis.normalize() else {
+                        return if cs < 0.0 { -v } else { v };
+                    };
+                    let along = ax * ax.dot(v);
+                    along + (v - along) * cs + ax.cross(v) * sn
+                };
+                Frame::from_zx(c.ends().1, t1, turned(f.x().get()))
+                    .unwrap_or_else(|| f.with_origin(c.ends().1))
+            }
             PathSeg::Line { a, b } => f.with_origin(f.origin + (b - a)),
             PathSeg::Arc { circle, sweep, .. } => {
                 let (r, angle) = PathSeg::turn(&circle, sweep);
@@ -136,6 +169,31 @@ pub fn sweep(profile: &crate::Profile, path: &[PathSeg], feature: u64) -> Result
     let starts = |f: &Frame| -> Vec<Point3> { segs.iter().map(|s| f.plane_point(s.start())).collect() };
     for st in &stretches {
         match *st {
+            Stretch::Along {
+                plane: f,
+                ref path,
+                normal,
+            } => {
+                let spine = Spine::planar(path.clone(), normal).expect("checked regular");
+                let w: Vec<Swept> = segs
+                    .iter()
+                    .map(|sg| {
+                        Swept::new(spine.clone(), section_spline(sg), &f)
+                            .expect("a profile's curves are regular")
+                    })
+                    .collect();
+                let range = path.domain();
+                rails.push(
+                    w.iter()
+                        .zip(&segs)
+                        .map(|(x, sg)| {
+                            let local = sg.start();
+                            (x.rail(local), range)
+                        })
+                        .collect(),
+                );
+                walls.push(w.into_iter().map(Swept::surface).collect());
+            }
             Stretch::Straight { plane: f, length } => {
                 rails.push(
                     starts(&f)
@@ -166,8 +224,15 @@ pub fn sweep(profile: &crate::Profile, path: &[PathSeg], feature: u64) -> Result
                         })
                         .collect(),
                 );
-                let ring: Vec<Section> = segs.iter().map(|sg| rh_section(&rf, &f, sg)).collect();
-                walls.push(turned(&rf, &ring, &prep.loop_sizes(), angle));
+                let ring: Vec<Section> = segs.iter().map(|sg| ring_section(&rf, &f, sg)).collect();
+                let mut w = turned(&rf, &ring, &prep.loop_sizes(), angle);
+                for (k, sg) in segs.iter().enumerate() {
+                    if let Segment::Spline(c) = sg {
+                        let (m, ..) = rh_curve(&rf, &f, &c.c);
+                        w[k] = Spun::new(rf, Arc::new(m)).expect("clear of the axis").surface();
+                    }
+                }
+                walls.push(w);
             }
         }
     }
@@ -188,8 +253,14 @@ pub fn sweep(profile: &crate::Profile, path: &[PathSeg], feature: u64) -> Result
 
 /// One stretch of a sweep: the profile's plane where it starts (z along the path), and how it
 /// moves from there.
-#[derive(Clone, Copy, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq)]
 pub enum Stretch {
+    /// Along a free curve in a plane of this normal, turning with its tangent.
+    Along {
+        plane: Frame,
+        path: Arc<Spline>,
+        normal: UnitVec3,
+    },
     /// Along the plane's z.
     Straight { plane: Frame, length: f64 },
     /// Turning `angle` about `axis`'s z (its x points from the axis towards the profile).
@@ -199,7 +270,9 @@ pub enum Stretch {
 impl Stretch {
     pub fn plane(&self) -> Frame {
         match *self {
-            Stretch::Straight { plane, .. } | Stretch::Bend { plane, .. } => plane,
+            Stretch::Straight { plane, .. } | Stretch::Bend { plane, .. } | Stretch::Along { plane, .. } => {
+                plane
+            }
         }
     }
 }
@@ -253,22 +326,37 @@ fn stretches(
     let mut out = Vec::with_capacity(path.len());
     for (k, s) in path.iter().enumerate() {
         out.push(match *s {
+            PathSeg::Spline(ref c) => {
+                // straight, it lies in any plane: one through the profile's x
+                let normal = match plane_of(c) {
+                    Some(n) => n,
+                    None if straight(c) => plane.x(),
+                    None => return Err(SweepError::NotPlanar { index: k }),
+                };
+                if too_tight(c, normal, &plane, &segs) {
+                    return Err(SweepError::TooTight { index: k });
+                }
+                Stretch::Along {
+                    plane,
+                    path: c.clone(),
+                    normal,
+                }
+            }
             PathSeg::Line { a, b } => Stretch::Straight {
                 plane,
                 length: a.distance(b),
             },
             PathSeg::Arc { circle, sweep, .. } => {
-                crate::skin::curved(profile).map_err(SweepError::Profile)?;
                 let (axis, angle) = PathSeg::turn(&circle, sweep);
                 let w = axis.z();
                 let at = s.ends().0;
                 let foot = axis.origin + w * w.dot(at - axis.origin);
                 let rf =
                     Frame::from_zx(axis.origin, w, at - foot).ok_or(SweepError::TooTight { index: k })?;
-                if segs
-                    .iter()
-                    .any(|sg| rh_section(&rf, &plane, sg).extent().0.0 <= tol::LINEAR)
-                {
+                if segs.iter().any(|sg| match sg {
+                    Segment::Spline(c) => rh_curve(&rf, &plane, &c.c).1.0 <= tol::LINEAR,
+                    _ => rh_section(&rf, &plane, sg).extent().0.0 <= tol::LINEAR,
+                }) {
                     return Err(SweepError::TooTight { index: k });
                 }
                 Stretch::Bend {
@@ -281,6 +369,91 @@ fn stretches(
         plane = s.carry(&plane);
     }
     Ok((prep, out))
+}
+
+/// A segment as a curve of its plane.
+fn section_spline(s: &Segment) -> Arc<Spline> {
+    match *s {
+        Segment::Spline(ref c) => c.c.clone(),
+        Segment::Line { a, b } => {
+            let row = [[a.x, a.y, 0.0, 1.0], [b.x, b.y, 0.0, 1.0]];
+            Arc::new(
+                Spline::from_pieces(1, vec![0.0, a.distance(b)], row.to_vec())
+                    .expect("profile rejects degenerate lines"),
+            )
+        }
+        Segment::Arc {
+            center,
+            radius,
+            start,
+            sweep,
+        } => Arc::new(
+            Spline::ellipse(
+                Point3::new(center.x, center.y, 0.0),
+                Vec3::X * radius,
+                Vec3::Y * radius,
+                start,
+                sweep,
+            )
+            .expect("profile rejects degenerate arcs"),
+        ),
+        Segment::Circle { .. } => unreachable!("prepare splits circles"),
+    }
+}
+
+/// A curve drawn in `plane` as (r, h) about the axis frame, its radii and heights' spans.
+pub(crate) fn rh_curve(rf: &Frame, plane: &Frame, c: &Spline) -> (Spline, (f64, f64), (f64, f64)) {
+    let m = c.mapped(|q| {
+        let p = crate::skin::radius_height(rf, plane, forge_math::Point2::new(q.x, q.y));
+        Point3::new(p.x, p.y, 0.0)
+    });
+    let b = m.bbox(m.domain());
+    (m, (b.x.lo, b.x.hi), (b.y.lo, b.y.hi))
+}
+
+/// A segment in (r, h), a free curve standing as its chord where only its ends are read.
+fn ring_section(rf: &Frame, plane: &Frame, s: &Segment) -> Section {
+    match s {
+        Segment::Spline(c) => Section::Line {
+            a: crate::skin::radius_height(rf, plane, c.start()),
+            b: crate::skin::radius_height(rf, plane, c.end()),
+        },
+        _ => rh_section(rf, plane, s),
+    }
+}
+
+fn straight(c: &Spline) -> bool {
+    let (a, b) = c.ends();
+    let Some(u) = (b - a).normalize() else {
+        return false;
+    };
+    let (_, _, pts) = c.bezier_data();
+    pts.iter()
+        .all(|h| u.get().cross(Point3::new(h[0], h[1], h[2]) - a).length() <= tol::LINEAR)
+}
+
+/// Whether the profile reaches past the path's centre of curvature, where the wall would fold.
+fn too_tight(c: &Spline, normal: UnitVec3, plane: &Frame, segs: &[Segment]) -> bool {
+    let d = c.domain();
+    let t0 = c.deriv(d.lo).d1;
+    let Some(n0) = normal.get().cross(t0).normalize() else {
+        return true;
+    };
+    let (mut lo, mut hi) = (0.0f64, 0.0f64);
+    for sg in segs {
+        for q in sg.samples(32) {
+            let s = plane.vec_to_world(Vec3::new(q.x, q.y, 0.0)).dot(n0.get());
+            lo = lo.min(s);
+            hi = hi.max(s);
+        }
+    }
+    let n = 32 * c.pieces();
+    (0..=n).any(|i| {
+        let q = c.deriv(d.lo + d.width() * i as f64 / n as f64);
+        let k = q.d1.cross(q.d2).dot(normal.get()) / q.d1.length().powi(3);
+        // a section point s along the normal moves at speed 1 - k s
+        1.0 - k * hi <= 1e-6 || 1.0 - k * lo <= 1e-6
+    })
 }
 
 /// The wall a segment drawn in `f` makes moving along `f`'s z.
@@ -403,8 +576,10 @@ pub struct Winding {
 #[derive(Clone, Debug, PartialEq)]
 pub struct Wound {
     pub frame: Frame,
-    /// The profile's loops in (r, h), outer first, each segment's section in turn.
+    /// The profile's loops in (r, h), outer first, each segment's section in turn (a free curve's
+    /// chord, the curve itself in `curves`).
     pub sections: Vec<Section>,
+    pub curves: Vec<Option<Arc<Spline>>>,
     pub loops: Vec<usize>,
     pub a: f64,
     pub b: f64,
@@ -414,7 +589,6 @@ pub struct Wound {
 /// Winds a profile about an axis in its plane. `feature` is the history id the names derive
 /// from (see `skin`).
 pub fn coil(profile: &crate::Profile, axis: Axis2, w: &Winding, feature: u64) -> Result<Body, CoilError> {
-    crate::skin::curved(profile)?;
     let (prep, wound) = wind(profile, axis, w)?;
     let Wound {
         frame: rf,
@@ -452,20 +626,39 @@ pub fn coil(profile: &crate::Profile, axis: Axis2, w: &Winding, feature: u64) ->
             .map(|w| (w.helix(0.0), Interval::new(0.0, total)))
             .collect(),
     ];
+    let range = Interval::new(0.0, total);
+    let surfaces = walls
+        .into_iter()
+        .zip(&segs)
+        .map(|(w, sg)| match sg {
+            Segment::Spline(c) => Swept::new(
+                Spine::Helix {
+                    axis: rf,
+                    a,
+                    b,
+                    range,
+                },
+                c.c.clone(),
+                &f0,
+            )
+            .expect("a profile's curves are regular")
+            .surface(),
+            _ => w.surface(),
+        })
+        .collect();
     Ok(Skin {
         loops: prep.loop_sizes(),
         keys: prep.keys,
         planes,
         curves,
         rails,
-        walls: vec![walls.into_iter().map(Screw::surface).collect()],
+        walls: vec![surfaces],
     }
     .build(Name::feature(feature)))
 }
 
 /// The motion and sections of a coil, checked, without building it.
 pub fn coil_motion(profile: &crate::Profile, axis: Axis2, w: &Winding) -> Result<Wound, CoilError> {
-    crate::skin::curved(profile)?;
     wind(profile, axis, w).map(|(_, m)| m)
 }
 
@@ -513,14 +706,27 @@ fn wind(
         .ok_or(CoilError::BadAxis)?;
     let prep = prepare(profile, rf.y().get())?;
     let f0 = prep.profile.plane;
-    let ring: Vec<Section> = prep.segments().map(|s| rh_section(&rf, &f0, s)).collect();
-    let rmin = ring.iter().map(|s| s.extent().0.0).fold(f64::INFINITY, f64::min);
+    let ring: Vec<Section> = prep.segments().map(|s| ring_section(&rf, &f0, s)).collect();
+    let curves: Vec<Option<(Spline, (f64, f64), (f64, f64))>> = prep
+        .segments()
+        .map(|s| match s {
+            Segment::Spline(c) => Some(rh_curve(&rf, &f0, &c.c)),
+            _ => None,
+        })
+        .collect();
+    // a chord's extent, or the curve's where there is one
+    let extent = |k: usize| match &curves[k] {
+        Some((_, r, h)) => (*r, *h),
+        None => ring[k].extent(),
+    };
+    let rmin = (0..ring.len())
+        .map(|k| extent(k).0.0)
+        .fold(f64::INFINITY, f64::min);
     if rmin <= tol::LINEAR {
         return Err(CoilError::CrossesAxis);
     }
-    let (lo, hi) = ring
-        .iter()
-        .map(|s| s.extent().1)
+    let (lo, hi) = (0..ring.len())
+        .map(|k| extent(k).1)
         .fold((f64::INFINITY, f64::NEG_INFINITY), |a, h| {
             (a.0.min(h.0), a.1.max(h.1))
         });
@@ -539,6 +745,7 @@ fn wind(
         Wound {
             frame: rf,
             sections: ring,
+            curves: curves.into_iter().map(|c| c.map(|(m, ..)| Arc::new(m))).collect(),
             loops,
             a,
             b,

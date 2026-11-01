@@ -10,8 +10,10 @@ use std::sync::Arc;
 mod extruded;
 pub mod meet;
 mod spun;
+pub mod swept;
 pub use extruded::Extruded;
 pub use spun::Spun;
+pub use swept::{Spine, Swept};
 
 /// The highest degree taken. Products of curves run to three times it.
 pub const MAX_DEGREE: usize = 15;
@@ -444,6 +446,28 @@ impl Spline {
     pub fn domain(&self) -> Interval {
         Interval::new(self.breaks[0], self.breaks[self.pieces()])
     }
+    /// The curve as B-spline data: degree, knots (each break to the degree, so the pieces come
+    /// back as they are), control points, weights where not all 1. Only where the pieces join.
+    pub fn control_form(&self) -> (usize, Vec<f64>, Vec<Point3>, Option<Vec<f64>>) {
+        let (p, n) = (self.degree, self.pieces());
+        let mut pts = Vec::with_capacity(n * p + 1);
+        let mut weights = Vec::with_capacity(n * p + 1);
+        for i in 0..n {
+            for (j, h) in self.row(i).iter().enumerate() {
+                if j > 0 || i == 0 {
+                    pts.push(point_of(h));
+                    weights.push(h[3]);
+                }
+            }
+        }
+        let mut knots = vec![self.breaks[0]; p + 1];
+        for b in &self.breaks[1..n] {
+            knots.extend(std::iter::repeat_n(*b, p));
+        }
+        knots.extend(std::iter::repeat_n(self.breaks[n], p + 1));
+        let any = weights.iter().any(|&w| w != 1.0);
+        (p, knots, pts, any.then_some(weights))
+    }
     /// Degree, breaks, and each piece's points in turn as x y z w (each its own, not times w).
     pub fn bezier_data(&self) -> (usize, Vec<f64>, Vec<H>) {
         let pts = self
@@ -542,6 +566,53 @@ impl Spline {
         let (a, h) = (self.breaks[i], self.breaks[i + 1] - self.breaks[i]);
         let w = self.part(i, (range.lo - a) / h, (range.hi - a) / h);
         w[..=self.degree].to_vec()
+    }
+
+    /// `deriv`, and the third derivative.
+    pub fn deriv3(&self, t: f64) -> (CurveDeriv, Vec3) {
+        let d = self.deriv(t);
+        if self.degree < 3 && !self.rational {
+            return (d, Vec3::ZERO);
+        }
+        let (i, s, h) = self.locate(t);
+        let p = self.degree;
+        // the homogeneous derivatives by their Bernstein points' differences
+        let mut w: [H; MAX_DEGREE + 1] = [[0.0; 4]; MAX_DEGREE + 1];
+        w[..=p].copy_from_slice(self.row(i));
+        let value = |row: &[H]| -> H {
+            let mut q: [H; MAX_DEGREE + 1] = [[0.0; 4]; MAX_DEGREE + 1];
+            q[..row.len()].copy_from_slice(row);
+            for r in (1..row.len()).rev() {
+                for j in 0..r {
+                    q[j] = lerp(&q[j], &q[j + 1], s);
+                }
+            }
+            q[0]
+        };
+        let a0 = value(&w[..=p]);
+        let mut scale = 1.0;
+        let mut ders = [[0.0; 4]; 4];
+        ders[0] = a0;
+        for o in 1..=3 {
+            if o > p {
+                break;
+            }
+            for j in 0..=p - o {
+                w[j] = sub(&w[j + 1], &w[j]);
+            }
+            scale *= (p + 1 - o) as f64 / h;
+            let x = value(&w[..=p - o]);
+            ders[o] = [x[0] * scale, x[1] * scale, x[2] * scale, x[3] * scale];
+        }
+        let v = |h: &H| Vec3::new(h[0], h[1], h[2]);
+        if !self.rational {
+            return (d, v(&ders[3]));
+        }
+        let iw = 1.0 / a0[3];
+        let d3 =
+            (v(&ders[3]) - d.d2 * (3.0 * ders[1][3]) - d.d1 * (3.0 * ders[2][3]) - d.p.to_vec() * ders[3][3])
+                * iw;
+        (d, d3)
     }
 
     /// Piece i's control points over [s0, s1] of its own parameter.
@@ -1348,31 +1419,14 @@ impl PlaneSpline {
     /// The stretch of the curve over `range`, given by its own Bezier pieces.
     pub fn part(&self, range: Interval) -> Option<PlaneSpline> {
         let c = self.c.stretch(range)?;
-        let p = c.degree();
-        let n = c.pieces();
-        let mut pts = Vec::with_capacity(n * p + 1);
-        let mut weights = Vec::with_capacity(n * p + 1);
-        for i in 0..n {
-            for (j, h) in c.row(i).iter().enumerate() {
-                if j > 0 || i == 0 {
-                    pts.push(Point2::new(h[0] / h[3], h[1] / h[3]));
-                    weights.push(h[3]);
-                }
-            }
-        }
-        let mut knots = vec![c.breaks()[0]; p + 1];
-        for b in &c.breaks()[1..n] {
-            knots.extend(std::iter::repeat_n(*b, p));
-        }
-        knots.extend(std::iter::repeat_n(c.breaks()[n], p + 1));
-        let any = weights.iter().any(|&w| w != 1.0);
+        let (degree, knots, pts, weights) = c.control_form();
         Some(PlaneSpline {
             c: Arc::new(c),
             form: Form::Control {
-                degree: p,
-                pts,
+                degree,
+                pts: pts.iter().map(|p| Point2::new(p.x, p.y)).collect(),
                 knots: Some(knots),
-                weights: any.then_some(weights),
+                weights,
             },
         })
     }

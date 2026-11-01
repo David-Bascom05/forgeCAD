@@ -359,3 +359,117 @@ pub fn ellipse_walls(seed: u64) -> Part {
     }
     Part { features: f }
 }
+
+/// A profile along a curve, round a bend and wound in a coil, some of it a curve itself, then cut.
+pub fn spline_sweep(seed: u64) -> Part {
+    use forge_geom::spline::Spline;
+    use forge_ops::{Handed, PathSeg};
+    let mut r = Rng::new(seed.wrapping_mul(16807).wrapping_add(5));
+    let s = r.range(1.0, 2.0);
+    let round = r.bool();
+    let section = |r: &mut Rng| -> ProfileLoop {
+        let (a, b) = (Point2::new(-s, 0.0), Point2::new(s, 0.0));
+        match r.below(3) {
+            0 => Profile::circle(Point2::ORIGIN, s, 0),
+            1 => Profile::rectangle(Point2::new(-s, -s), 2.0 * s, 2.0 * s, 0),
+            _ => {
+                let c =
+                    PlaneSpline::through(vec![a, Point2::new(0.0, s), b], None, None).expect("three points");
+                ProfileLoop::new(vec![(seg(c), 0), (Segment::Line { a: b, b: a }, 1)])
+            }
+        }
+    };
+    let l = section(&mut r);
+    let mut f = Vec::new();
+    match r.below(3) {
+        0 => {
+            // a curve in the xy plane, starting along x
+            let n = 4 + r.below(3);
+            let mut pts = vec![Point3::ORIGIN, Point3::new(6.0, 0.0, 0.0)];
+            let mut x = 6.0;
+            for _ in 0..n - 2 {
+                x += r.range(8.0, 14.0);
+                pts.push(Point3::new(x, r.range(-4.0, 4.0), 0.0));
+            }
+            let k = uniform_knots(3, pts.len());
+            let c = Spline::from_nurbs(3, &k, &pts, None).expect("a curve");
+            let plane = fr([0.0, 0.0, 0.0], [1.0, 0.0, 0.0], [0.0, 1.0, 0.0]);
+            let mut path = vec![PathSeg::Spline(Arc::new(c.clone()))];
+            if round {
+                let (e, d) = (c.ends().1, c.deriv(c.domain().hi).d1);
+                path.push(PathSeg::Line {
+                    a: e,
+                    b: e + d.normalize().expect("a tangent").get() * 5.0,
+                });
+            }
+            f.push(Feature::Sweep(Box::new(crate::Sweep {
+                profile: Profile {
+                    plane,
+                    loops: vec![l],
+                },
+                path,
+                ends: crate::PathEnds::Path,
+                op: Combine::New,
+            })));
+        }
+        1 => {
+            let plane = fr([0.0, 0.0, 0.0], [1.0, 0.0, 0.0], [0.0, 1.0, 0.0]);
+            let circle = forge_geom::Circle {
+                frame: fr([0.0, 15.0, 0.0], [0.0, 0.0, 1.0], [0.0, -1.0, 0.0]),
+                radius: 15.0,
+            };
+            f.push(Feature::Sweep(Box::new(crate::Sweep {
+                profile: Profile {
+                    plane,
+                    loops: vec![l],
+                },
+                path: vec![PathSeg::Arc {
+                    circle,
+                    start: 0.0,
+                    sweep: r.range(0.5, 3.0),
+                }],
+                ends: crate::PathEnds::Path,
+                op: Combine::New,
+            })));
+        }
+        _ => {
+            // a coil of a curved section, out from the axis
+            let mid = r.range(8.0, 14.0);
+            let (a, b) = (Point2::new(mid - s, 0.0), Point2::new(mid + s, 0.0));
+            let c = PlaneSpline::through(vec![a, Point2::new(mid, s), b], None, None).expect("three points");
+            let sec = ProfileLoop::new(vec![(seg(c), 0), (Segment::Line { a: b, b: a }, 1)]);
+            f.push(Feature::Coil(Box::new(crate::Coil {
+                profile: Profile {
+                    plane: fr([0.0, 0.0, 0.0], [0.0, -1.0, 0.0], [1.0, 0.0, 0.0]),
+                    loops: vec![sec],
+                },
+                axis: Axis2 {
+                    origin: Point2::ORIGIN,
+                    dir: Vec2::Y,
+                },
+                size: crate::CoilSize::PitchTurns {
+                    pitch: s + r.range(1.0, 4.0),
+                    turns: r.range(0.7, 3.0),
+                },
+                taper: 0.0,
+                handed: if r.bool() { Handed::Right } else { Handed::Left },
+                op: Combine::New,
+            })));
+        }
+    }
+    let (x, y) = (r.range(2.0, 25.0), r.range(-8.0, 12.0));
+    if r.below(3) > 0 {
+        f.push(ext(
+            up_at(x, y, -10.0),
+            vec![Profile::rectangle(
+                Point2::new(-20.0, -20.0),
+                40.0,
+                r.range(5.0, 40.0),
+                0,
+            )],
+            20.0,
+            Combine::Cut,
+        ));
+    }
+    Part { features: f }
+}

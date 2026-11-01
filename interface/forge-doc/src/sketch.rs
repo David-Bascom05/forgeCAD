@@ -1049,6 +1049,11 @@ pub fn path(s: &Sketch, through: Option<&str>) -> R<Vec<PathSeg>> {
         match q.entity(id) {
             Some(Entity::Line { a, b }) => segs.push((id, q.point(a), q.point(b))),
             Some(Entity::Arc { start, end, .. }) => segs.push((id, q.point(start), q.point(end))),
+            Some(Entity::Spline { .. } | Entity::Ellipse { .. }) => {
+                if let Some(c) = q.curve(id) {
+                    segs.push((id, c.start(), c.end()));
+                }
+            }
             _ => {}
         }
     }
@@ -1061,7 +1066,7 @@ pub fn path(s: &Sketch, through: Option<&str>) -> R<Vec<PathSeg>> {
                 .position(|g| g.0 == id)
                 .ok_or_else(|| format!("{t} is not a line or arc of the sketch"))?
         }
-        None if segs.is_empty() => return Err("the sketch has no lines or arcs".into()),
+        None if segs.is_empty() => return Err("the sketch has no lines, arcs or curves".into()),
         None => 0,
     };
     let mut chain = vec![first];
@@ -1117,6 +1122,15 @@ pub fn path(s: &Sketch, through: Option<&str>) -> R<Vec<PathSeg>> {
         let forward = meets(a, at);
         at = if forward { b } else { a };
         out.push(match q.entity(id).expect("a segment") {
+            Entity::Spline { .. } | Entity::Ellipse { .. } => {
+                let c = q.curve(id).expect("made one above");
+                let world = c.c.mapped(|p| plane.point_to_world(p));
+                PathSeg::Spline(std::sync::Arc::new(if forward {
+                    world
+                } else {
+                    world.reversed()
+                }))
+            }
             Entity::Arc { center, ccw, .. } => {
                 let c = q.point(center);
                 let (a0, a1) = (

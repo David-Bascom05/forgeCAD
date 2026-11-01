@@ -756,7 +756,7 @@ fn swept(
 ) -> Feature {
     let (o, t) = match path[0] {
         PathSeg::Line { a, b } => (a, b - a),
-        PathSeg::Arc { .. } => unreachable!("the suite's paths start straight"),
+        PathSeg::Arc { .. } | PathSeg::Spline(_) => unreachable!("the suite's paths start straight"),
     };
     Feature::Sweep(Box::new(Sweep {
         profile: Profile {

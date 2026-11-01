@@ -428,3 +428,87 @@ fn walls_meet_a_cylinder_without_tracing() {
         }
     }
 }
+
+#[test]
+fn a_swept_wall_stays_on_its_definition() {
+    use crate::spline::swept::{Spine, plane_of};
+    // a planar spine in the xy plane: its section square to it, x along z
+    let spine = Arc::new(cubic());
+    let b = plane_of(&spine).unwrap();
+    let sp = Spine::planar(spine.clone(), b).unwrap();
+    let start = spine.deriv(spine.domain().lo);
+    let t = start.d1.normalize().unwrap();
+    let plane = Frame::from_zx(start.p, t, b.get()).unwrap();
+    let section = Spline::ellipse(
+        Point3::new(0.3, 0.1, 0.0),
+        Vec3::X * 0.4,
+        Vec3::Y * 0.25,
+        0.2,
+        2.0,
+    )
+    .unwrap();
+    let w = Swept::new(sp, Arc::new(section.clone()), &plane).unwrap();
+    let dom = w.domain();
+    let mut r = Rng::new(31);
+    for _ in 0..300 {
+        let uv = Point2::new(r.range(dom.u.lo, dom.u.hi), r.range(dom.v.lo, dom.v.hi));
+        let d = w.deriv(uv);
+        // differences match
+        let h = 1e-5;
+        let at = |u: f64, v: f64| w.deriv(Point2::new(u, v));
+        let (u0, u1) = (at(uv.x - h, uv.y), at(uv.x + h, uv.y));
+        let (v0, v1) = (at(uv.x, uv.y - h), at(uv.x, uv.y + h));
+        assert!(((u1.p - u0.p) / (2.0 * h) - d.du).length() < 1e-6);
+        assert!(((v1.p - v0.p) / (2.0 * h) - d.dv).length() < 1e-4);
+        let kink = spine.breaks().iter().any(|&k| (k - uv.y).abs() < 2.0 * h);
+        if !kink {
+            assert!(((v1.dv - v0.dv) / (2.0 * h) - d.dvv).length() < 2e-3, "{:?}", uv);
+            assert!(((u1.dv - u0.dv) / (2.0 * h) - d.duv).length() < 1e-3);
+        }
+        // the section stays square to the spine and the same size: its distance from the
+        // spine's point is the start's
+        let m = spine.deriv(uv.y);
+        let e = d.p - m.p;
+        assert!(
+            e.dot(m.d1.normalize().unwrap().get()).abs() < 1e-10,
+            "off the normal plane"
+        );
+        let q = section.point(uv.x);
+        let want = (q.x * q.x + q.y * q.y).sqrt();
+        assert!((e.length() - want).abs() < 1e-10);
+        assert!(w.implicit(d.p).abs() < 1e-8, "{:?}", uv);
+        assert!(w.deriv(w.project(d.p)).p.distance(d.p) < 1e-8);
+    }
+}
+
+#[test]
+fn a_coil_on_a_section_keeps_its_helix() {
+    use crate::spline::swept::Spine;
+    let axis = Frame::WORLD;
+    let sp = Spine::Helix {
+        axis,
+        a: 0.0,
+        b: 2.0,
+        range: Interval::new(0.0, 12.0),
+    };
+    // the section in the axis' xz plane, 10 out
+    let plane = Frame::from_zx(
+        Point3::new(10.0, 0.0, 0.0),
+        Vec3::new(0.0, 1.0, 0.0).normalize().unwrap(),
+        Vec3::X,
+    )
+    .unwrap();
+    let section = Spline::ellipse(Point3::ORIGIN, Vec3::X * 1.0, Vec3::Y * 0.5, 0.0, 3.0).unwrap();
+    let w = Swept::new(sp, Arc::new(section.clone()), &plane).unwrap();
+    let mut r = Rng::new(32);
+    let dom = w.domain();
+    for _ in 0..200 {
+        let uv = Point2::new(r.range(dom.u.lo, dom.u.hi), r.range(dom.v.lo, dom.v.hi));
+        let d = w.deriv(uv);
+        let q = section.point(uv.x);
+        // radius and height by the section point, turned and raised
+        let rad = (d.p.x * d.p.x + d.p.y * d.p.y).sqrt();
+        assert!((rad - (10.0 + q.x)).abs() < 1e-9, "{rad} {q:?}");
+        assert!(w.implicit(d.p).abs() < 1e-8);
+    }
+}

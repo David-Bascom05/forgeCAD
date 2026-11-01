@@ -269,7 +269,7 @@ fn extended(
             b: p,
         });
     }
-    out.extend_from_slice(path);
+    out.extend(path.iter().cloned());
     if end > tol::LINEAR {
         let (p, t) = (last.end(), last.direction(1.0));
         out.push(PathSeg::Line { a: p, b: p + t * end });
@@ -288,18 +288,24 @@ trait PathPoints {
 impl PathPoints for PathSeg {
     fn start(&self) -> Point3 {
         match *self {
+            PathSeg::Spline(ref c) => c.ends().0,
             PathSeg::Line { a, .. } => a,
             PathSeg::Arc { circle, start, .. } => circle.eval(start),
         }
     }
     fn end(&self) -> Point3 {
         match *self {
+            PathSeg::Spline(ref c) => c.ends().1,
             PathSeg::Line { b, .. } => b,
             PathSeg::Arc { circle, start, sweep } => circle.eval(start + sweep),
         }
     }
     fn direction(&self, t: f64) -> Vec3 {
         let d = match *self {
+            PathSeg::Spline(ref c) => {
+                let r = c.domain();
+                c.deriv(r.lo + r.width() * t).d1
+            }
             PathSeg::Line { a, b } => b - a,
             PathSeg::Arc { circle, start, sweep } => circle.deriv(start + sweep * t).d1 * sweep,
         };
@@ -310,6 +316,7 @@ impl PathPoints for PathSeg {
 fn path_box(path: &[PathSeg]) -> Box3 {
     path.iter().fold(Box3::EMPTY, |b, s| {
         b.hull(&match *s {
+            PathSeg::Spline(ref c) => c.bbox(c.domain()),
             PathSeg::Line { a, b } => Box3::from_points([a, b]),
             PathSeg::Arc { circle, start, sweep } => circle.bbox(forge_math::Interval::new(
                 start.min(start + sweep),
@@ -338,7 +345,18 @@ fn sweep_shape(profile: &Profile, stretches: &[Stretch]) -> Shape {
         .iter()
         .flat_map(|l| l.segments.iter().map(|(s, _)| seg2(s)))
         .collect();
+    let reach = profile
+        .loops
+        .iter()
+        .flat_map(|l| l.segments.iter().flat_map(|(s, _)| s.samples(16)))
+        .map(|q| q.to_vec().length())
+        .fold(0.0, f64::max);
     let mut parts = stretches.iter().map(|s| match *s {
+        // no analytic test: its B-rep decides inside a box round it
+        Stretch::Along { ref path, plane, .. } => {
+            let o = plane.origin.to_vec().length();
+            Shape::Brep(path.bbox(path.domain()).grow(1.05 * (reach + o) + 1e-3))
+        }
         Stretch::Straight { plane, length } => Shape::Prism {
             frame: plane,
             segs: segs.clone(),
@@ -374,12 +392,14 @@ pub(crate) fn coil_shape(m: &forge_ops::Wound) -> Shape {
     let segs = m
         .sections
         .iter()
-        .map(|s| match *s {
-            Section::Line { a, b } => Seg2::Line { a, b },
-            Section::Arc { c, r, start, sweep } => Seg2::Arc { c, r, start, sweep },
+        .zip(&m.curves)
+        .map(|(s, curve)| match (*s, curve) {
+            (_, Some(c)) => Seg2::Curve(c.clone()),
+            (Section::Line { a, b }, _) => Seg2::Line { a, b },
+            (Section::Arc { c, r, start, sweep }, _) => Seg2::Arc { c, r, start, sweep },
         })
         .collect();
-    let (rr, hh) = extents(&m.sections);
+    let (rr, hh) = wound_extents(m);
     Shape::Coil {
         frame: m.frame,
         segs,
@@ -389,6 +409,17 @@ pub(crate) fn coil_shape(m: &forge_ops::Wound) -> Shape {
         r: rr,
         h: hh,
     }
+}
+
+/// The (r, h) extents of a coil's profile, curves and all.
+fn wound_extents(m: &forge_ops::Wound) -> ((f64, f64), (f64, f64)) {
+    let ((mut r0, mut r1), (mut h0, mut h1)) = extents(&m.sections);
+    for c in m.curves.iter().flatten() {
+        let b = c.bbox(c.domain());
+        (r0, r1) = (r0.min(b.x.lo), r1.max(b.x.hi));
+        (h0, h1) = (h0.min(b.y.lo), h1.max(b.y.hi));
+    }
+    ((r0, r1), (h0, h1))
 }
 
 /// The (r, h) extents of a profile's sections.
@@ -407,7 +438,7 @@ fn extents(sections: &[Section]) -> ((f64, f64), (f64, f64)) {
 
 /// A box holding the whole coil.
 fn coil_box(m: &forge_ops::Wound) -> Box3 {
-    let ((_, r1), (h0, h1)) = extents(&m.sections);
+    let ((_, r1), (h0, h1)) = wound_extents(m);
     let r = r1 + (m.a * m.angle).max(0.0);
     let rise = m.b * m.angle;
     let (lo, hi) = (h0 + rise.min(0.0), h1 + rise.max(0.0));

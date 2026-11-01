@@ -647,6 +647,16 @@ def hole(f, body):
 def path_wire(path):
     mw = BRepBuilderAPI_MakeWire()
     for s in path:
+        if "bezier3" in s:
+            d, pts = s["bezier3"]["d"], s["bezier3"]["p"]
+            for i in range(0, len(pts), d + 1):
+                poles = Array1_gp_Pnt(1, d + 1)
+                ws = Array1_double(1, d + 1)
+                for k, (x, y, z, w) in enumerate(pts[i : i + d + 1]):
+                    poles.SetValue(k + 1, gp_Pnt(x, y, z))
+                    ws.SetValue(k + 1, w)
+                mw.Add(BRepBuilderAPI_MakeEdge(Geom_BezierCurve(poles, ws)).Edge())
+            continue
         if "line" in s:
             mw.Add(BRepBuilderAPI_MakeEdge(gp_Pnt(*s["line"][0]), gp_Pnt(*s["line"][1])).Edge())
             continue
@@ -659,6 +669,10 @@ def path_wire(path):
 def path_ends(path):
     """The path's ends and directions there."""
     def at(s, end):
+        if "bezier3" in s:
+            q = s["bezier3"]["p"]
+            a, b = (q[-2][:3], q[-1][:3]) if end else (q[0][:3], q[1][:3])
+            return (b if end else a), norm(sub(b, a))
         if "line" in s:
             a, b = s["line"]
             return (b if end else a), norm(sub(b, a))

@@ -2927,12 +2927,36 @@ impl<'a> P<'a> {
                         sweep: self.angle()?,
                     }
                 }
+                "spline" => {
+                    self.k += 1;
+                    let degree = self.value(Want::Count)? as usize;
+                    let mut pts = Vec::new();
+                    while self.is_num() {
+                        pts.push(self.point3()?);
+                    }
+                    let list = |s: &mut Self| -> R<Vec<f64>> {
+                        let mut v = Vec::new();
+                        while s.is_num() {
+                            v.push(s.num()?);
+                        }
+                        Ok(v)
+                    };
+                    let knots = if self.eat("knots") {
+                        list(self)?
+                    } else {
+                        forge_geom::spline::uniform_knots(degree, pts.len())
+                    };
+                    let weights = if self.eat("weights") { Some(list(self)?) } else { None };
+                    let c = forge_geom::spline::Spline::from_nurbs(degree, &knots, &pts, weights.as_deref())
+                        .ok_or("a path's spline: degree 1..15, more points than the degree, knots not decreasing")?;
+                    PathSeg::Spline(Arc::new(c))
+                }
                 _ => break,
             });
         }
         if out.is_empty() {
             return Err(format!(
-                "expected a path (line AX AY AZ BX BY BZ | arc FRAME R START SWEEP), found '{}'",
+                "expected a path (line AX AY AZ BX BY BZ | arc FRAME R START SWEEP | spline D X Y Z ..), found '{}'",
                 self.peek()
             ));
         }
@@ -3286,6 +3310,18 @@ impl<'a> W<'a> {
     fn path(&mut self, path: &[PathSeg]) {
         for s in path {
             match *s {
+                PathSeg::Spline(ref c) => {
+                    let (d, knots, pts, weights) = c.control_form();
+                    self.word("spline");
+                    self.word(&d.to_string());
+                    pts.iter().for_each(|p| self.nums(&[p.x, p.y, p.z]));
+                    self.word("knots");
+                    self.nums(&knots);
+                    if let Some(w) = weights {
+                        self.word("weights");
+                        self.nums(&w);
+                    }
+                }
                 PathSeg::Line { a, b } => {
                     self.word("line");
                     self.nums(&[a.x, a.y, a.z, b.x, b.y, b.z]);

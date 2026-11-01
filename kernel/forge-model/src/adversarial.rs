@@ -82,6 +82,7 @@ pub fn families() -> Vec<(&'static str, Family)> {
         ("spline_tangent", crate::splinefam::spline_tangent),
         ("spline_revolve", crate::splinefam::spline_revolve),
         ("ellipse_walls", crate::splinefam::ellipse_walls),
+        ("spline_sweep", crate::splinefam::spline_sweep),
         ("coplanar_stack", coplanar_stack),
         ("through_vertex", through_vertex),
         ("tangent", tangent),

@@ -379,6 +379,19 @@ impl Shape {
                 }
                 Some(world(frame, (-rm, rm), (-rm, rm), h))
             }
+            Shape::Coil {
+                frame,
+                segs,
+                a,
+                b,
+                angle,
+                r,
+                h,
+            } if curved(segs) => {
+                let rm = r.1 + (a * angle).max(0.0);
+                let hs = (h.0 + (b * angle).min(0.0), h.1 + (b * angle).max(0.0));
+                Some(world(frame, (-rm, rm), (-rm, rm), hs))
+            }
             _ => None,
         }
     }

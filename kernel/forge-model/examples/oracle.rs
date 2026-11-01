@@ -281,6 +281,19 @@ fn path(path: &[PathSeg]) -> String {
     let segs: Vec<String> = path
         .iter()
         .map(|seg| match seg {
+            PathSeg::Spline(c) => {
+                let (d, br, pts) = c.bezier_data();
+                let pts: Vec<String> = pts
+                    .iter()
+                    .map(|h| format!("[{},{},{},{}]", num(h[0]), num(h[1]), num(h[2]), num(h[3])))
+                    .collect();
+                let br: Vec<String> = br.iter().map(|&x| num(x)).collect();
+                format!(
+                    "{{\"bezier3\":{{\"d\":{d},\"t\":[{}],\"p\":[{}]}}}}",
+                    br.join(","),
+                    pts.join(",")
+                )
+            }
             PathSeg::Line { a, b } => format!("{{\"line\":[{},{}]}}", p3(*a), p3(*b)),
             PathSeg::Arc { circle, start, sweep } => format!(
                 "{{\"arc\":{},\"r\":{},\"start\":{},\"sweep\":{}}}",
