@@ -1308,6 +1308,43 @@ impl Cells {
 }
 
 impl HolePatch {
+    /// The domain point of p on the rail of the side `near` lies on. On side i the ribbon's
+    /// s = a / (a + b), a and b the distances from the sides before and after. Along the side from
+    /// corner i to corner i + 1 they run linearly, a from 0 to ae and b from bs to 0, so the point
+    /// at s lies a fraction s bs / (s bs + (1 - s) ae) along it.
+    fn on_side(&self, p: Point3, near: Point2) -> Option<Point2> {
+        if self.rational.is_some() {
+            return None;
+        }
+        let n = self.sides.len();
+        let d = |i: usize, x: Point2| {
+            let (g, h) = self.lines[i % n];
+            g.x * x.x + g.y * x.y + h
+        };
+        let i = (0..n).find(|&i| d(i, near).abs() <= 1e-9 * self.side)?;
+        let side = &self.sides[i];
+        let (c0, c1) = (self.corners[i], self.corners[(i + 1) % n]);
+        let (ae, bs) = (d(i + n - 1, c1), d(i + 1, c0));
+        let (a, b) = (d(i + n - 1, near).max(0.0), d(i + 1, near).max(0.0));
+        let dt = side.t1 - side.t0;
+        let mut t = side.t0 + dt * (a / (a + b));
+        let (lo, hi) = (side.t0.min(side.t1), side.t0.max(side.t1));
+        for _ in 0..6 {
+            let (c, dp, _) = side.rail.frame(t);
+            let step = (p - c).dot(dp) / dp.length_sq();
+            t = (t + step).clamp(lo, hi);
+            if (step * step) * dp.length_sq() <= 1e-18 * self.side * self.side {
+                break;
+            }
+        }
+        if side.rail.frame(t).0.distance_sq(p) > 1e-6 * tol::LINEAR * tol::LINEAR {
+            return None;
+        }
+        let s = (t - side.t0) / dt;
+        let f = s * bs / (s * bs + (1.0 - s) * ae);
+        Some(c0 + (c1 - c0) * f)
+    }
+
     /// The domain polygon's corners, counter-clockwise.
     pub fn domain_corners(&self) -> &[Point2] {
         &self.corners
@@ -1702,8 +1739,13 @@ impl HolePatch {
         let [t0, t1, t2] = self.cross(i, &j, sv);
         let (c1, c2) = (j.dp * dt, j.ddp * (dt * dt));
         let (k0, k1) = self.bends[i];
-        let k = S::along(s, (k0 + (k1 - k0) * sv) * 0.5, (k1 - k0) * 0.5, Vec3::ZERO);
-        S::along(s, j.p.to_vec(), c1, c2) + S::along(s, t0, t1, t2) * d + k * (d * d)
+        S::ribbon(
+            s,
+            d,
+            [j.p.to_vec(), c1, c2],
+            [t0, t1, t2],
+            [(k0 + (k1 - k0) * sv) * 0.5, (k1 - k0) * 0.5],
+        )
     }
 
     fn eval<S: Scalar>(&self, x: Point2) -> S::V {
@@ -1725,8 +1767,7 @@ impl HolePatch {
                 second = second.min(v);
             }
         }
-        let mut r = [S::zero_v(); MAX_SIDES];
-        for i in 0..n {
+        let r = |i: usize| {
             let (a, b) = (d[(i + n - 1) % n], d[(i + 1) % n]);
             let den = a + b;
             // only at the far corner of a triangle, where this ribbon's weight is zero
@@ -1738,12 +1779,13 @@ impl HolePatch {
             // the ribbon reaches across the domain damped: h(d) = d / (1 + d / height) leaves
             // value and slope at the side alone and halves the reach at the far corner
             let h = d[i] * (S::konst(1.0) + d[i] * S::konst(1.0 / self.heights[i])).inv();
-            r[i] = self.ribbon(i, s, h);
-        }
+            self.ribbon(i, s, h)
+        };
+        let near = r(k);
         // within 1e-8 of a corner, where the patch is only C1, the ribbons agree to first order
         // and the nearest one is the patch to rounding (the rest is that distance squared)
         if second <= 1e-8 * self.side {
-            return r[k];
+            return near;
         }
         // B_i = d_i^-2 / sum_j d_j^-2, scaled by the nearest side's d_k^2 so every term is at
         // most 1: no underflow, and the ribbons are blended relative to the nearest one so the
@@ -1755,17 +1797,17 @@ impl HolePatch {
             if i != k {
                 if d[i].value() == 0.0 {
                     // a corner: the nearest ribbon is the corner point
-                    return r[k];
+                    return near;
                 }
                 w[i] = sk * (d[i] * d[i]).inv();
                 sum = sum + w[i];
             }
         }
         let inv = sum.inv();
-        let mut out = r[k];
-        for i in 0..n {
+        let mut out = near;
+        for (i, &wi) in w.iter().enumerate().take(n) {
             if i != k {
-                out = out + (r[i] - r[k]) * (w[i] * inv);
+                out = out + (r(i) - near) * (wi * inv);
             }
         }
         out
@@ -2168,6 +2210,11 @@ impl Procedural for HolePatch {
             u: d(self.rect.u),
             v: d(self.rect.v),
         }
+    }
+    /// A boundary sample from the one before: where that lies on a side and p on its rail, the
+    /// rail alone says where, in closed form from there (see `on_side`); else the whole search.
+    fn project_near(&self, p: Point3, near: Point2) -> Point2 {
+        self.on_side(p, near).unwrap_or_else(|| self.project(p))
     }
     fn project(&self, p: Point3) -> Point2 {
         let seeds = self.seeds();
@@ -2792,6 +2839,10 @@ trait Scalar: Copy + Add<Output = Self> + Sub<Output = Self> + Mul<Output = Self
     fn zero_v() -> Self::V;
     /// c(self), given c and its first two derivatives at self's value.
     fn along(self, c: Vec3, c1: Vec3, c2: Vec3) -> Self::V;
+    /// P(s) + T(s) d + K(s) d^2, given each part and its derivatives in s (K's second is zero).
+    fn ribbon(s: Self, d: Self, p: [Vec3; 3], t: [Vec3; 3], k: [Vec3; 2]) -> Self::V {
+        s.along(p[0], p[1], p[2]) + s.along(t[0], t[1], t[2]) * d + s.along(k[0], k[1], Vec3::ZERO) * (d * d)
+    }
 }
 
 impl Scalar for f64 {
@@ -3100,6 +3151,24 @@ impl Scalar for J {
             ww: c2 * (s.w * s.w) + c1 * s.ww,
         }
     }
+    /// By the chain rule through R(s, d), each partial once (research/pipe-speed/ribbon_jet.py).
+    fn ribbon(s: J, d: J, p: [Vec3; 3], t: [Vec3; 3], k: [Vec3; 2]) -> JV {
+        let (h, h2) = (d.v, d.v * d.v);
+        let rs = p[1] + t[1] * h + k[1] * h2;
+        let rd = t[0] + k[0] * (2.0 * h);
+        let rss = p[2] + t[2] * h;
+        let rsd = t[1] + k[1] * (2.0 * h);
+        let rdd = k[0] * 2.0;
+        let second = |a: f64, b: f64, x: f64, y: f64| rss * (a * b) + rsd * (a * y + b * x) + rdd * (x * y);
+        JV {
+            v: p[0] + t[0] * h + k[0] * h2,
+            u: rs * s.u + rd * d.u,
+            w: rs * s.w + rd * d.w,
+            uu: second(s.u, s.u, d.u, d.u) + rs * s.uu + rd * d.uu,
+            uw: second(s.u, s.w, d.u, d.w) + rs * s.uw + rd * d.uw,
+            ww: second(s.w, s.w, d.w, d.w) + rs * s.ww + rd * d.ww,
+        }
+    }
 }
 
 #[cfg(test)]
@@ -3160,6 +3229,16 @@ mod tests {
             assert!(a.project <= 1e-9 * r.max(1.0), "{a:?}");
             assert_eq!(a.bbox_misses, 0);
             assert!(a.fold > 0.5, "{a:?}");
+            // a point of a rail, from a domain point on that side, reads its place on the side
+            for (i, side) in p.sides.iter().enumerate() {
+                let (c0, c1) = (p.corners[i], p.corners[(i + 1) % p.sides.len()]);
+                for k in 1..8 {
+                    let q = side.rail.point(side.at(k as f64 / 8.0)).0;
+                    let near = c0 + (c1 - c0) * rng.range(0.01, 0.99);
+                    let x = p.on_side(q, near).expect("on its rail");
+                    assert!(p.point(x).distance(q) <= 1e-8 * r.max(1.0), "side {i} at {k}");
+                }
+            }
             // interior points stay near the sphere they interpolate
             for x in p.grid(8) {
                 let d = p.point(x).distance(f.origin);

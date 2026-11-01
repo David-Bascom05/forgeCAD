@@ -471,6 +471,104 @@ impl Procedural for Ruled {
             .hull(&lerp_box(&ba, &bb, uv.v.hi))
             .grow(tol::LINEAR)
     }
+    /// A ruling is a line and `other` a quadric: where each of a fan of rulings a leaf apart
+    /// meets it is a quadratic. A branch of the curve crosses the rulings it spans; one narrower
+    /// than the fan lies between two rulings, so a ruling's point nearest the quadric, where
+    /// that is within the fan's spacing, is a seed too.
+    fn seeds(&self, other: &Surface, region: Box3, leaf: f64) -> Option<Vec<Point3>> {
+        let crate::meet::Alg::Quadric { o, a, b, c } = crate::meet::Alg::of(other)? else {
+            return None;
+        };
+        // the region's own sphere clear of the quadric: nothing to look for
+        if other.implicit(region.center()).abs() > 0.5 * region.diagonal() {
+            return Some(Vec::new());
+        }
+        let along = |f: fn(&Ruled, usize) -> Point3| {
+            (1..self.rows.len())
+                .map(|i| f(self, i).distance(f(self, i - 1)))
+                .sum::<f64>()
+        };
+        let long = along(|r, i| r.rows[i].1).max(along(|r, i| r.rows[i].1 + r.rows[i].2));
+        let fan = ((long / leaf).ceil() as usize).clamp(16, 4096);
+        let gap = long / fan as f64;
+        let mut out = Vec::new();
+        let mut roots = Vec::with_capacity(2);
+        // rows whose rulings' box misses the region have nothing in the fan between them
+        let rows = self.rows.len() - 1;
+        let near: Vec<bool> = (0..rows)
+            .map(|k| {
+                let (r0, r1) = (&self.rows[k], &self.rows[k + 1]);
+                let mut b = Box3::from_points([
+                    r0.1 + r0.2 * self.ext.v.lo,
+                    r0.1 + r0.2 * self.ext.v.hi,
+                    r1.1 + r1.2 * self.ext.v.lo,
+                    r1.1 + r1.2 * self.ext.v.hi,
+                ]);
+                b = b.grow(self.reach);
+                b.overlaps(&region)
+            })
+            .collect();
+        for i in 0..=fan {
+            let k = (i * rows / fan).min(rows - 1);
+            if !near[k] {
+                continue;
+            }
+            let u = self.ext.u.lo + self.ext.u.width() * i as f64 / fan as f64;
+            let pa = self.a.at(u).0;
+            let d = self.b.at(u).0 - pa;
+            // the stretch of the ruling inside the region
+            let (mut lo, mut hi) = (self.ext.v.lo, self.ext.v.hi);
+            for (x, w, s) in [
+                (pa.x, d.x, region.x),
+                (pa.y, d.y, region.y),
+                (pa.z, d.z, region.z),
+            ] {
+                if w.abs() < 1e-300 {
+                    if x < s.lo || x > s.hi {
+                        hi = lo - 1.0;
+                    }
+                    continue;
+                }
+                let (t0, t1) = ((s.lo - x) / w, (s.hi - x) / w);
+                lo = lo.max(t0.min(t1));
+                hi = hi.min(t0.max(t1));
+            }
+            if lo > hi {
+                continue;
+            }
+            let h = pa - o;
+            let ad = crate::meet::mul(&a, d);
+            let (q2, q1, q0) = (
+                d.dot(ad),
+                2.0 * (h.dot(ad) + b.dot(d)),
+                h.dot(crate::meet::mul(&a, h)) + 2.0 * b.dot(h) + c,
+            );
+            roots.clear();
+            roots.extend(
+                forge_math::poly::quadratic(q2, q1, q0)
+                    .into_iter()
+                    .map(|r| r.x)
+                    .filter(|&v| v >= lo && v <= hi),
+            );
+            if roots.is_empty() {
+                let v = if q2 != 0.0 { -q1 / (2.0 * q2) } else { lo };
+                let near = [v.clamp(lo, hi), lo, hi];
+                roots.extend(
+                    near.into_iter()
+                        .filter(|&v| other.implicit(pa + d * v).abs() <= gap),
+                );
+            }
+            let apart = match roots[..] {
+                [x, y] => (y - x) * d.length(),
+                _ => f64::INFINITY,
+            };
+            out.extend(roots.iter().map(|&v| (apart, pa + d * v)));
+        }
+        // where two roots are far apart first: the curve crosses the ruling squarely there,
+        // and a chain started at a narrow tip can run past its own start
+        out.sort_by(|a, b| b.0.total_cmp(&a.0));
+        Some(out.into_iter().map(|s| s.1).collect())
+    }
     /// The nearest ruling among `rows` puts the surface's distance within the rows' spacing; only
     /// where r falls inside that does it take the search.
     fn within(&self, p: Point3, r: f64) -> bool {

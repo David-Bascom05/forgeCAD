@@ -463,7 +463,30 @@ pub fn trace(a: &Surface, b: &Surface, region: Box3) -> Option<Vec<IntCurve>> {
         let (dx, dy, dz) = (d(grown.x, c.x), d(grown.y, c.y), d(grown.z, c.z));
         dx * dx + dy * dy + dz * dz <= r * r
     };
-    let mut stack = vec![(region.center(), half * 3f64.sqrt())];
+    // a surface that can name points of the curve spares the octree
+    let named = match (a, b) {
+        (Surface::Procedural(p), other) | (other, Surface::Procedural(p)) => {
+            // its steps a fraction of a small round's radius: a narrow loop on one has sharp tips
+            let round = match other {
+                Surface::Cylinder(c) => c.radius,
+                Surface::Sphere(s) => s.radius,
+                Surface::Cone(c) => c.radius,
+                _ => f64::INFINITY,
+            };
+            let fine = leaf.min(0.5 * round).max(10.0 * tol::LINEAR);
+            p.seeds(other, grown, fine).map(|s| (s, fine))
+        }
+        _ => None,
+    };
+    let (leaf, step) = named.as_ref().map_or((leaf, step), |n| (n.1, 0.5 * n.1));
+    let named = named.map(|n| n.0);
+    let octree = named.is_none();
+    seeds.extend(named.into_iter().flatten());
+    let mut stack = if octree {
+        vec![(region.center(), half * 3f64.sqrt())]
+    } else {
+        Vec::new()
+    };
     while let Some((c, r)) = stack.pop() {
         if !touches(c, r)
             || (boxed && (!reaches(&pa, c, r) || !reaches(&pb, c, r)))

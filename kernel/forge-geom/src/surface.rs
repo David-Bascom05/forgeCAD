@@ -34,6 +34,11 @@ pub trait SurfaceGeom {
     fn project(&self, p: Point3) -> Point2;
     /// A box guaranteed to contain the surface over the parameter box.
     fn bbox(&self, uv: Box2) -> Box3;
+    /// Points of every branch of the surface's intersection with `other` in `region`, for the
+    /// tracer to start from in place of its octree; None where it has no such way.
+    fn seeds(&self, _other: &Surface, _region: Box3, _leaf: f64) -> Option<Vec<Point3>> {
+        None
+    }
     /// Whether a face's box may be `bbox` of the whole domain, no look at its loops.
     fn whole_box(&self) -> bool {
         false
@@ -151,6 +156,11 @@ pub trait Procedural: Send + Sync + std::fmt::Debug {
     }
     /// A box guaranteed to contain the surface over the parameter box.
     fn bbox(&self, uv: Box2) -> Box3;
+    /// Points of every branch of the surface's intersection with `other` in `region`, for the
+    /// tracer to start from in place of its octree; None where it has no such way.
+    fn seeds(&self, _other: &Surface, _region: Box3, _leaf: f64) -> Option<Vec<Point3>> {
+        None
+    }
     /// Whether a face's box may be `bbox` of the whole domain, no look at its loops.
     fn whole_box(&self) -> bool {
         false

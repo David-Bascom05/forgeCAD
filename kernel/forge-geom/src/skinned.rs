@@ -988,30 +988,30 @@ impl Skinned {
         };
         let regular = |s: &Skinned, b: Box2| {
             let (nu, nv) = (32, 32);
-            let grid: Vec<Vec<SurfDeriv>> = (0..=nu)
-                .map(|i| {
-                    (0..=nv)
-                        .map(|j| {
-                            s.data.point(Point2::new(
-                                b.u.lo + b.u.width() * i as f64 / nu as f64,
-                                b.v.lo + b.v.width() * j as f64 / nv as f64,
-                            ))
-                        })
-                        .collect()
-                })
-                .collect();
-            let n = |d: &SurfDeriv| d.du.cross(d.dv);
-            let scale = grid.iter().flatten().map(|d| n(d).length()).fold(0.0, f64::max);
+            let w = nv + 1;
+            // each grid point's normal and two tangents
+            let mut grid: Vec<[Vec3; 3]> = Vec::with_capacity((nu + 1) * w);
+            for i in 0..=nu {
+                for j in 0..=nv {
+                    let d = s.data.point(Point2::new(
+                        b.u.lo + b.u.width() * i as f64 / nu as f64,
+                        b.v.lo + b.v.width() * j as f64 / nv as f64,
+                    ));
+                    grid.push([d.du.cross(d.dv), d.du, d.dv]);
+                }
+            }
+            let scale = grid.iter().map(|d| d[0].length()).fold(0.0, f64::max);
             // the normal neither vanishes nor turns over, and neither direction doubles back,
             // between neighbouring grid points
-            let agree = |a: &SurfDeriv, c: &SurfDeriv| {
-                n(a).dot(n(c)) > 0.0 && a.du.dot(c.du) > 0.0 && a.dv.dot(c.dv) > 0.0
+            let agree = |a: &[Vec3; 3], c: &[Vec3; 3]| {
+                a[0].dot(c[0]) > 0.0 && a[1].dot(c[1]) > 0.0 && a[2].dot(c[2]) > 0.0
             };
-            grid.iter().flatten().all(|d| n(d).length() > 1e-9 * scale)
+            grid.iter().all(|d| d[0].length() > 1e-9 * scale)
                 && (0..=nu).all(|i| {
                     (0..=nv).all(|j| {
-                        (i == nu || agree(&grid[i][j], &grid[i + 1][j]))
-                            && (j == nv || agree(&grid[i][j], &grid[i][j + 1]))
+                        let at = i * w + j;
+                        (i == nu || agree(&grid[at], &grid[at + w]))
+                            && (j == nv || agree(&grid[at], &grid[at + 1]))
                     })
                 })
         };
@@ -1173,6 +1173,9 @@ impl Skinned {
 }
 
 impl Procedural for Skinned {
+    fn whole_box(&self) -> bool {
+        true
+    }
     fn exact_d1(&self) -> bool {
         true
     }

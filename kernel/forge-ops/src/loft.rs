@@ -90,11 +90,23 @@ pub fn loft(
     guides: &LoftGuides,
     feature: u64,
 ) -> Result<Body, LoftError> {
-    let body = plan(profiles, kind, guides)?.build(Name::feature(feature));
+    Ok(loft_and_bounds(profiles, kind, guides, feature)?.0)
+}
+
+/// `loft` and `loft_bounds` from one plan.
+pub fn loft_and_bounds(
+    profiles: &[Profile],
+    kind: LoftKind,
+    guides: &LoftGuides,
+    feature: u64,
+) -> Result<(Body, forge_math::Box3), LoftError> {
+    let skin = plan(profiles, kind, guides)?;
+    let b = skin_bounds(&skin);
+    let body = skin.build(Name::feature(feature));
     if crate::selfx::crossing(&body, &vec![true; body.faces.len()]).is_some() {
         return Err(LoftError::SelfIntersecting);
     }
-    Ok(body)
+    Ok((body, b))
 }
 
 /// A box holding the loft through `profiles`, without building it.
@@ -103,7 +115,10 @@ pub fn loft_bounds(
     kind: LoftKind,
     guides: &LoftGuides,
 ) -> Result<forge_math::Box3, LoftError> {
-    let skin = plan(profiles, kind, guides)?;
+    Ok(skin_bounds(&plan(profiles, kind, guides)?))
+}
+
+fn skin_bounds(skin: &Skin) -> forge_math::Box3 {
     let mut b = forge_math::Box3::EMPTY;
     for c in skin.curves.iter().flatten() {
         b = b.hull(&c.curve.bbox(c.range));
@@ -115,7 +130,7 @@ pub fn loft_bounds(
             b = b.hull(&pr.bbox(forge_math::Box2::new(d.u.interval(), d.v.interval())));
         }
     }
-    Ok(b.grow(tol::LINEAR))
+    b.grow(tol::LINEAR)
 }
 
 fn plan(profiles: &[Profile], kind: LoftKind, guides: &LoftGuides) -> Result<Skin, LoftError> {

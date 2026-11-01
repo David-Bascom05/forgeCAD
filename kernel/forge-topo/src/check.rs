@@ -317,11 +317,18 @@ fn check_geometry(body: &Body, out: &mut Vec<Problem>) {
         faces.dedup();
         for f in faces {
             let s = &body.face(f).surface;
-            let worst = body
-                .edge_points(e, 16)
-                .into_iter()
-                .map(|p| s.distance(p))
-                .fold(0.0, f64::max);
+            let points = body.edge_points(e, 16);
+            let mut worst = 0.0f64;
+            // each point from the one before, where it stays on the face that far; else the search
+            let mut near = None;
+            for &p in &points {
+                let uv = near.map_or_else(|| s.project(p), |uv| s.project_near(p, uv));
+                near = Some(uv);
+                worst = worst.max(s.eval(uv).distance(p));
+            }
+            if worst > band {
+                worst = points.iter().map(|&p| s.distance(p)).fold(0.0, f64::max);
+            }
             if worst > band {
                 out.push(Problem::EdgeOffFace {
                     edge: e,

@@ -8,8 +8,8 @@ use forge_geom::CurveGeom;
 use forge_geom::screw::Section;
 use forge_math::{Box3, Point2, Point3, UnitVec3, Vec3, dmath, tol};
 use forge_ops::{
-    Axis2, Handed, LoftGuides, LoftKind, PathSeg, Profile, Stretch, Winding, coil, coil_motion, loft,
-    loft_bounds, sweep, sweep_stretches,
+    Axis2, Handed, LoftGuides, LoftKind, PathSeg, Profile, Stretch, Winding, coil, coil_motion,
+    loft_and_bounds, loft_bounds, sweep, sweep_stretches,
 };
 use forge_topo::Body;
 
@@ -158,13 +158,15 @@ pub(crate) fn tool_of(features: History<'_>, i: usize, build: bool) -> Result<To
         }
         Feature::Loft(l) => {
             let err = |error| RegenError::Loft { feature: i, error };
-            let shape = Shape::Brep(loft_bounds(&l.profiles, l.kind, &l.guides).map_err(err)?);
-            let body = if build {
-                loft(&l.profiles, l.kind, &l.guides, id).map_err(err)?
+            let (body, bounds) = if build {
+                loft_and_bounds(&l.profiles, l.kind, &l.guides, id).map_err(err)?
             } else {
-                Body::new()
+                (
+                    Body::new(),
+                    loft_bounds(&l.profiles, l.kind, &l.guides).map_err(err)?,
+                )
             };
-            Ok((body, l.op, shape))
+            Ok((body, l.op, Shape::Brep(bounds)))
         }
         _ => unreachable!("only sweeps, coils and lofts"),
     }

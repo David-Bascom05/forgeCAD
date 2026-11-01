@@ -120,3 +120,45 @@ Then, also with bits unchanged:
 - `Ruled::within`: as `Pipe::within`, from the nearest of its rows. `reach` bounds how far the carried-on surface
   lies from a row; a cell further off than that is out, one nearer than r to a ruling is in. `ruled.rs` test: a cell
   holding a surface point is never ruled out. Crank 414M to 393M, jack 354M to 331M.
+
+## Corner patch evaluation
+
+Heatsink's profile after the boxes: `deriv` 36% with `eval<J>` 30%; half of that was projection, by Newton through the
+whole n-sided blend per iteration.
+- `HolePatch::on_side` (from `project_near`): a boundary sample lies on a rail. A short 1-D solve on that one rail finds t;
+  the domain point follows in closed form. On side i the ribbon's s = a / (a + b), a and b the distances from the
+  neighbouring sides, which are linear along side i: a from 0 to ae, b from bs to 0. So the fraction along the side is
+  s bs / (s bs + (1 - s) ae). Mesh: heatsink 787M to 542M, gearbox 321M to 281M; regen: heatsink 655M to 594M.
+- `check_geometry`: each edge point from the one before (`project_near`), the full search only to confirm one that looks
+  off: heatsink 594M to 517M.
+- `eval`: no array of ribbons (a 12-side array of 18-float jets, zeroed on every evaluation), and only the ribbons it comes
+  to (none but the nearest at a corner): heatsink 517M to 493M, gearbox 312M to 298M.
+- `Scalar::ribbon` for `J`: R(s, d) = P + T d + K d^2 by the chain rule, each partial once, not three generic jet products.
+  `ribbon_jet.py` proves it: `~/laya/.venv/bin/python -I research/pipe-speed/ribbon_jet.py`. Heatsink 493M to 475M,
+  gearbox 298M to 291M. Bits stay: the Newton they feed stops within rounding of the same point.
+
+## Lofts: construction, and seeds for ruled walls
+
+- `plan` ran twice per loft, for `loft_bounds` and for `loft`: now `loft_and_bounds` from one plan. The regularity check keeps
+  a flat list of three vectors a grid point, not nested lists of full derivatives. Volute 1369M to 1244M.
+- `Ruled::seeds` (`Procedural::seeds`, `intcurve::trace`): crank spends 42% in the tracer, 70% of it the octree, on ruled walls
+  against planes and cylinders. A ruling is a line and the other surface a quadric, so each of a fan of rulings a leaf apart
+  meets it at the roots of a quadratic: those are the seeds. Rulings are clipped to the region first, or a thin hole along the
+  wall has no seed. A ruling with no root in that stretch gives its point nearest the quadric, where that is within the fan's
+  spacing: a branch narrower than the fan lies between two rulings. Seeds go widest roots first, and steps are at most a quarter of
+  a small round's radius: from a seed at a narrow loop's tip a chain ran past its own start, and on `p00158` (a 1 mm hole down a
+  wall, loop 52.6 mm by a direct count) closed at 73.8 mm. Crank 390M to 275M.
+- Checked against the octree in real regens, with a temporary patch that traced both ways and compared (all bench parts;
+  `fuzz/gen_ruled.py`, 300 parts, 1412 traces): 1391 the same. All 15 branches only the octree found lie 2-8 mm off the wall
+  (`off`, measured from the wall's nearest point): false zeros of the implicit past the carried-on wall, where its foot is clamped.
+  Not one branch on the wall was lost.
+
+Against the trim of curves on lofts (`subdivide_pieces`), tried and dropped: pruning first by the guiding cubic plus its error
+(no gain; with the error folded into the reach itself the merged leaves broke volute and frame), and a grid `within` for `Skinned`
+(volute +1%). What is left there is the loft's own nearest point, which most pieces need.
+
+Seed 27 of the history test no longer needs the n-ary name fallback after these, so the list that only shrinks is empty.
+
+`fuzz/gen_ruled.py` also found a fault in `forge_topo::mass`, on main as here and not touched: on ruled lofts with holes its volume differs from the
+mesh's by up to 1% (p00137: mass 96871 or 97655 by which chain the curve has, mesh 97771.64 and 97771.65 either way), and it gives 0 on p00215. 12
+of 300 parts differ in `mass` between main and this; their meshes agree to 1e-7, so the geometry is the same.

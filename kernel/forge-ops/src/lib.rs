@@ -25,7 +25,7 @@ pub use draft::{DraftError, draft};
 pub use extrude::{ExtrudeError, extrude, extrude_unlinked};
 pub use fillet::{FilletEdge, FilletError, FilletOptions, Radius, fillet, fillet_with, law_starts};
 pub use glyph::{GlyphError, GlyphSeg, Place, glyph};
-pub use loft::{LoftError, LoftGuides, LoftKind, loft, loft_bounds};
+pub use loft::{LoftError, LoftGuides, LoftKind, loft, loft_and_bounds, loft_bounds};
 pub use profile::{Profile, ProfileError, ProfileLoop, Segment};
 pub use rebuild::RebuildError;
 pub use revolve::{Axis2, RevolveError, revolve};
