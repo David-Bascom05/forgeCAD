@@ -978,7 +978,7 @@ fn a_sound_part_has_no_mark() {
 }
 
 #[test]
-fn a_part_split_into_bodies_with_an_edge_off_its_face_is_found_too() {
+fn a_part_with_an_edge_off_its_face_is_found_too() {
     let part = repro("check-edge-off-face.fc");
     let Some((mut h, _)) = open(&part, "edgeoff") else {
         return;
