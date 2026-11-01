@@ -383,6 +383,10 @@ impl Pair<'_> {
     ) -> Result<Vec<(Vec<Point3>, Vec<Vec3>, bool, f64)>, Stop> {
         let grown = region.grow(step);
         let mut out: Vec<(Vec<Point3>, Vec<Vec3>, bool, f64)> = Vec::new();
+        // each branch's chords in runs of CHUNK, a box round each run: a run whose box lies
+        // farther than the nearest chord yet holds none nearer, and is passed over
+        let mut boxes: Vec<Vec<Box3>> = Vec::new();
+        const CHUNK: usize = 16;
         for &s in seeds {
             let (x0, p0) = self.newton(s).ok_or(Stop::Fail)?;
             if !self.inside(&x0) || !grown.contains(p0) {
@@ -392,17 +396,31 @@ impl Pair<'_> {
             // near a branch is another branch close by
             let d0 = self.direction(&x0);
             let mut seen = false;
-            for c in &out {
+            let slack = 1e-12 * (1.0 + p0.to_vec().abs_max());
+            let below = |b: &Box3| {
+                let d = |x: f64, i: Interval| (i.lo - x).max(x - i.hi).max(0.0);
+                Vec3::new(d(p0.x, b.x), d(p0.y, b.y), d(p0.z, b.z)).length() - slack
+            };
+            for (c, bx) in out.iter().zip(&boxes) {
                 let n = c.0.len();
                 let segs = if c.2 { n } else { n - 1 };
-                let (dist, ab) = (0..segs)
-                    .map(|i| {
+                let mut m = (f64::MAX, Vec3::ZERO);
+                for (r, b) in bx.iter().enumerate() {
+                    // past 1.5 steps every chord is alike to what follows
+                    if below(b) > m.0.min(1.5 * step) {
+                        continue;
+                    }
+                    for i in r * CHUNK..((r + 1) * CHUNK).min(segs) {
                         let (a, b) = (c.0[i], c.0[(i + 1) % n]);
                         let ab = b - a;
                         let t = ((p0 - a).dot(ab) / ab.dot(ab)).clamp(0.0, 1.0);
-                        (p0.distance(a + ab * t), ab)
-                    })
-                    .fold((f64::MAX, Vec3::ZERO), |m, x| if x.0 < m.0 { x } else { m });
+                        let x = (p0.distance(a + ab * t), ab);
+                        if x.0 < m.0 {
+                            m = x;
+                        }
+                    }
+                }
+                let (dist, ab) = m;
                 if dist > 1.5 * step {
                     continue;
                 }
@@ -498,6 +516,15 @@ impl Pair<'_> {
                     if d.dot(along) < 0.0 { -d } else { d }
                 })
                 .collect();
+            let segs = if closed { n } else { n - 1 };
+            boxes.push(
+                (0..segs.div_ceil(CHUNK))
+                    .map(|r| {
+                        let hi = ((r + 1) * CHUNK).min(segs);
+                        Box3::from_points((r * CHUNK..=hi).map(|i| pts[i % n]))
+                    })
+                    .collect(),
+            );
             out.push((pts, tans, closed, sag));
         }
         Ok(out)
