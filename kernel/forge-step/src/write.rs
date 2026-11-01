@@ -47,7 +47,9 @@ pub struct Export {
 #[derive(Clone, Debug, PartialEq)]
 pub enum ExportError {
     /// A number in the body that a file cannot hold.
-    NotFinite { face: Option<FaceId> },
+    NotFinite {
+        face: Option<FaceId>,
+    },
     NoSolid,
 }
 
@@ -150,9 +152,19 @@ impl W {
         i
     }
     fn placement(&mut self, f: &Frame) -> u64 {
-        let (p, z, x) = (self.point(f.origin), self.dir(f.z().into()), self.dir(f.x().into()));
+        let (p, z, x) = (
+            self.point(f.origin),
+            self.dir(f.z().into()),
+            self.dir(f.x().into()),
+        );
         let i = self.begin();
-        self.s("AXIS2_PLACEMENT_3D('',").id(p).s(",").id(z).s(",").id(x).s(")");
+        self.s("AXIS2_PLACEMENT_3D('',")
+            .id(p)
+            .s(",")
+            .id(z)
+            .s(",")
+            .id(x)
+            .s(")");
         self.end();
         i
     }
@@ -179,7 +191,13 @@ impl W {
             Curve::Ellipse(k) => {
                 let a = self.placement(&k.frame);
                 let i = self.begin();
-                self.s("ELLIPSE('',").id(a).s(",").r(k.major).s(",").r(k.minor).s(")");
+                self.s("ELLIPSE('',")
+                    .id(a)
+                    .s(",")
+                    .r(k.major)
+                    .s(",")
+                    .r(k.minor)
+                    .s(")");
                 self.end();
                 i
             }
@@ -206,7 +224,11 @@ impl W {
                 let pts: Vec<u64> = f.ctrl.iter().map(|&p| self.point(p)).collect();
                 let i = self.begin();
                 self.s("B_SPLINE_CURVE_WITH_KNOTS('',3,").ids(&pts);
-                self.s(",.UNSPECIFIED.,.F.,.F.,").ints(&f.mults).s(",").reals(&f.knots).s(",.UNSPECIFIED.)");
+                self.s(",.UNSPECIFIED.,.F.,.F.,")
+                    .ints(&f.mults)
+                    .s(",")
+                    .reals(&f.knots)
+                    .s(",.UNSPECIFIED.)");
                 self.end();
                 i
             }
@@ -233,7 +255,13 @@ impl W {
                 let a = self.placement(&s.frame);
                 let half = forge_math::dmath::atan2(s.sin_a(), s.cos_a());
                 let i = self.begin();
-                self.s("CONICAL_SURFACE('',").id(a).s(",").r(s.radius).s(",").r(half).s(")");
+                self.s("CONICAL_SURFACE('',")
+                    .id(a)
+                    .s(",")
+                    .r(s.radius)
+                    .s(",")
+                    .r(half)
+                    .s(")");
                 self.end();
                 i
             }
@@ -247,7 +275,13 @@ impl W {
             Surface::Torus(s) => {
                 let a = self.placement(&s.frame);
                 let i = self.begin();
-                self.s("TOROIDAL_SURFACE('',").id(a).s(",").r(s.major).s(",").r(s.minor).s(")");
+                self.s("TOROIDAL_SURFACE('',")
+                    .id(a)
+                    .s(",")
+                    .r(s.major)
+                    .s(",")
+                    .r(s.minor)
+                    .s(")");
                 self.end();
                 i
             }
@@ -270,7 +304,15 @@ impl W {
                     self.ids(r);
                 }
                 let flag = |b: bool| if b { ".T." } else { ".F." };
-                self.s("),.UNSPECIFIED.,").s(flag(fit.closed.0)).s(",").s(flag(fit.closed.1)).s(",.F.,").ints(&fit.u.1).s(",").ints(&fit.v.1).s(",");
+                self.s("),.UNSPECIFIED.,")
+                    .s(flag(fit.closed.0))
+                    .s(",")
+                    .s(flag(fit.closed.1))
+                    .s(",.F.,")
+                    .ints(&fit.u.1)
+                    .s(",")
+                    .ints(&fit.v.1)
+                    .s(",");
                 self.reals(&fit.u.0).s(",").reals(&fit.v.0).s(",.UNSPECIFIED.)");
                 self.end();
                 i
@@ -285,7 +327,10 @@ impl W {
 /// two uses are at the box's two ends in that direction.
 fn seams(body: &Body, f: FaceId) -> (bool, bool) {
     let loops = face_uv_loops_with(body, f, default_segments);
-    let (mut lo, mut hi) = (Point2::new(f64::INFINITY, f64::INFINITY), Point2::new(f64::NEG_INFINITY, f64::NEG_INFINITY));
+    let (mut lo, mut hi) = (
+        Point2::new(f64::INFINITY, f64::INFINITY),
+        Point2::new(f64::NEG_INFINITY, f64::NEG_INFINITY),
+    );
     for p in loops.iter().flat_map(|l| l.points.iter()) {
         lo = Point2::new(lo.x.min(p.x), lo.y.min(p.y));
         hi = Point2::new(hi.x.max(p.x), hi.y.max(p.y));
@@ -297,7 +342,10 @@ fn seams(body: &Body, f: FaceId) -> (bool, bool) {
             if e.coedges.len() < 2 || body.coedge_face(e.coedges[0]) != body.coedge_face(e.coedges[1]) {
                 continue;
             }
-            let (i, j) = (l.coedge_first[k], l.coedge_first.get(k + 1).copied().unwrap_or(l.points.len()));
+            let (i, j) = (
+                l.coedge_first[k],
+                l.coedge_first.get(k + 1).copied().unwrap_or(l.points.len()),
+            );
             let run = &l.points[i..j];
             let along = |x: fn(&Point2) -> f64, a: f64, b: f64| {
                 let eps = 1e-6 * (b - a).abs().max(1e-9);
@@ -312,7 +360,10 @@ fn seams(body: &Body, f: FaceId) -> (bool, bool) {
 
 pub fn face_box(body: &Body, f: FaceId) -> Box2 {
     let loops = face_uv_loops_with(body, f, default_segments);
-    let (mut lo, mut hi) = (Point2::new(f64::INFINITY, f64::INFINITY), Point2::new(f64::NEG_INFINITY, f64::NEG_INFINITY));
+    let (mut lo, mut hi) = (
+        Point2::new(f64::INFINITY, f64::INFINITY),
+        Point2::new(f64::NEG_INFINITY, f64::NEG_INFINITY),
+    );
     for p in loops.iter().flat_map(|l| l.points.iter()) {
         lo = Point2::new(lo.x.min(p.x), lo.y.min(p.y));
         hi = Point2::new(hi.x.max(p.x), hi.y.max(p.y));
@@ -368,7 +419,9 @@ impl FaceMask {
         for l in &self.loops {
             for (i, q) in l.iter().enumerate() {
                 let r = l[(i + 1) % l.len()];
-                let k = (((r.x - q.x).abs().max((r.y - q.y).abs())) / step).ceil().max(1.0) as usize;
+                let k = (((r.x - q.x).abs().max((r.y - q.y).abs())) / step)
+                    .ceil()
+                    .max(1.0) as usize;
                 out.extend((0..k).map(|a| {
                     let t = a as f64 / k as f64;
                     Point2::new(q.x + (r.x - q.x) * t, q.y + (r.y - q.y) * t)
@@ -379,10 +432,18 @@ impl FaceMask {
     }
 
     pub fn any(&self, u0: f64, u1: f64, v0: f64, v1: f64) -> bool {
-        let at = |x: f64, i: forge_math::Interval| ((x - i.lo) / i.width() * MASK_N as f64).clamp(0.0, MASK_N as f64);
+        let at = |x: f64, i: forge_math::Interval| {
+            ((x - i.lo) / i.width() * MASK_N as f64).clamp(0.0, MASK_N as f64)
+        };
         // a point asks of the cell it is in
-        let (a, b) = (at(u0, self.b.u).floor() as usize, (at(u1, self.b.u).floor() as usize + 1).min(MASK_N));
-        let (c, d) = (at(v0, self.b.v).floor() as usize, (at(v1, self.b.v).floor() as usize + 1).min(MASK_N));
+        let (a, b) = (
+            at(u0, self.b.u).floor() as usize,
+            (at(u1, self.b.u).floor() as usize + 1).min(MASK_N),
+        );
+        let (c, d) = (
+            at(v0, self.b.v).floor() as usize,
+            (at(v1, self.b.v).floor() as usize + 1).min(MASK_N),
+        );
         let (a, c) = (a.min(MASK_N - 1), c.min(MASK_N - 1));
         let s = |i: usize, j: usize| i64::from(self.sum[i * (MASK_N + 1) + j]);
         s(b, d) - s(a, d) - s(b, c) + s(a, c) > 0
@@ -393,7 +454,10 @@ impl FaceMask {
 /// plane (the rim of a seamless cylinder) has no inside to fill: the whole box counts.
 pub fn face_mask(body: &Body, f: FaceId) -> FaceMask {
     let b = face_box(body, f);
-    let loops: Vec<Vec<Point2>> = face_uv_loops_with(body, f, default_segments).into_iter().map(|l| l.points).collect();
+    let loops: Vec<Vec<Point2>> = face_uv_loops_with(body, f, default_segments)
+        .into_iter()
+        .map(|l| l.points)
+        .collect();
     let n = MASK_N;
     let (du, dv) = (b.u.width() / n as f64, b.v.width() / n as f64);
     let open = loops.iter().any(|l| match (l.first(), l.last()) {
@@ -414,7 +478,7 @@ pub fn face_mask(body: &Body, f: FaceId) -> FaceMask {
                 }
             }
             xs.sort_by(f64::total_cmp);
-            for w in xs.chunks_exact(2) {
+            for w in xs.as_chunks::<2>().0 {
                 let a = (((w[0] - b.u.lo) / du).floor().max(0.0) as usize).min(n);
                 let c = (((w[1] - b.u.lo) / du).ceil().max(0.0) as usize).min(n);
                 for x in a..c {
@@ -426,7 +490,8 @@ pub fn face_mask(body: &Body, f: FaceId) -> FaceMask {
         for l in &loops {
             for (i, q) in l.iter().enumerate() {
                 let r = l[(i + 1) % l.len()];
-                let steps = (((r.x - q.x).abs() / du).max((r.y - q.y).abs() / dv).ceil() as usize + 1).min(4 * n);
+                let steps =
+                    (((r.x - q.x).abs() / du).max((r.y - q.y).abs() / dv).ceil() as usize + 1).min(4 * n);
                 for k in 0..=steps {
                     let t = k as f64 / steps as f64;
                     let a = (((q.x + (r.x - q.x) * t - b.u.lo) / du).max(0.0) as usize).min(n - 1);
@@ -440,7 +505,9 @@ pub fn face_mask(body: &Body, f: FaceId) -> FaceMask {
     let mut sum = vec![0u32; (n + 1) * (n + 1)];
     for a in 0..n {
         for c in 0..n {
-            sum[(a + 1) * (n + 1) + c + 1] = u32::from(at(a, c)) + sum[a * (n + 1) + c + 1] + sum[(a + 1) * (n + 1) + c] - sum[a * (n + 1) + c];
+            sum[(a + 1) * (n + 1) + c + 1] =
+                u32::from(at(a, c)) + sum[a * (n + 1) + c + 1] + sum[(a + 1) * (n + 1) + c]
+                    - sum[a * (n + 1) + c];
         }
     }
     FaceMask { b, sum, loops }
@@ -448,7 +515,11 @@ pub fn face_mask(body: &Body, f: FaceId) -> FaceMask {
 
 /// The body as a file. One solid per outer shell, its voids with it.
 pub fn export(body: &Body, opt: &Options) -> Result<Export, ExportError> {
-    let body = if body.dead > 0 { body.compact() } else { body.clone() };
+    let body = if body.dead > 0 {
+        body.compact()
+    } else {
+        body.clone()
+    };
     if body.faces.is_empty() {
         return Err(ExportError::NoSolid);
     }
@@ -484,7 +555,11 @@ pub fn export(body: &Body, opt: &Options) -> Result<Export, ExportError> {
         .map(|e| {
             let ed = body.edge(e);
             let mut c = w.curve(&ed.curve, e, &body, opt.tol, &mut edge_fits);
-            if ed.coedges.iter().any(|&co| matches!(body.face(body.coedge_face(co)).surface, Surface::Procedural(_))) {
+            if ed
+                .coedges
+                .iter()
+                .any(|&co| matches!(body.face(body.coedge_face(co)).surface, Surface::Procedural(_)))
+            {
                 let on: Vec<u64> = ed
                     .coedges
                     .iter()
@@ -494,7 +569,8 @@ pub fn export(body: &Body, opt: &Options) -> Result<Export, ExportError> {
                         if !matches!(body.face(f).surface, Surface::Procedural(_)) {
                             return s;
                         }
-                        let fit = fit::fit_pcurve(&ed.curve, &anchors[co.index()], &body.face(f).surface, opt.tol);
+                        let fit =
+                            fit::fit_pcurve(&ed.curve, &anchors[co.index()], &body.face(f).surface, opt.tol);
                         let pts: Vec<u64> = fit
                             .ctrl
                             .iter()
@@ -507,10 +583,18 @@ pub fn export(body: &Body, opt: &Options) -> Result<Export, ExportError> {
                             .collect();
                         let b = w.begin();
                         w.s("B_SPLINE_CURVE_WITH_KNOTS('',3,").ids(&pts);
-                        w.s(",.UNSPECIFIED.,.F.,.F.,").ints(&fit.mults).s(",").reals(&fit.knots).s(",.UNSPECIFIED.)");
+                        w.s(",.UNSPECIFIED.,.F.,.F.,")
+                            .ints(&fit.mults)
+                            .s(",")
+                            .reals(&fit.knots)
+                            .s(",.UNSPECIFIED.)");
                         w.end();
                         let d = w.begin();
-                        w.s("DEFINITIONAL_REPRESENTATION('',(").id(b).s("),").id(ctx2).s(")");
+                        w.s("DEFINITIONAL_REPRESENTATION('',(")
+                            .id(b)
+                            .s("),")
+                            .id(ctx2)
+                            .s(")");
                         w.end();
                         let i = w.begin();
                         w.s("PCURVE('',").id(s).s(",").id(d).s(")");
@@ -518,15 +602,27 @@ pub fn export(body: &Body, opt: &Options) -> Result<Export, ExportError> {
                         i
                     })
                     .collect();
-                let seam = body.coedge_face(ed.coedges[0]) == body.coedge_face(ed.coedges[ed.coedges.len() - 1]);
+                let seam =
+                    body.coedge_face(ed.coedges[0]) == body.coedge_face(ed.coedges[ed.coedges.len() - 1]);
                 let i = w.begin();
-                w.s(if seam { "SEAM_CURVE('',".to_string() } else { "SURFACE_CURVE('',".to_string() }.as_str());
+                w.s(if seam {
+                    "SEAM_CURVE('',".to_string()
+                } else {
+                    "SURFACE_CURVE('',".to_string()
+                }
+                .as_str());
                 w.id(c).s(",").ids(&on).s(",.PCURVE_S1.)");
                 w.end();
                 c = i;
             }
             let i = w.begin();
-            w.s("EDGE_CURVE('',").id(vid(ed.start)).s(",").id(vid(ed.end)).s(",").id(c).s(",.T.)");
+            w.s("EDGE_CURVE('',")
+                .id(vid(ed.start))
+                .s(",")
+                .id(vid(ed.end))
+                .s(",")
+                .id(c)
+                .s(",.T.)");
             w.end();
             i
         })
@@ -551,13 +647,21 @@ pub fn export(body: &Body, opt: &Options) -> Result<Export, ExportError> {
             w.s("EDGE_LOOP('',").ids(&uses).s(")");
             w.end();
             let b = w.begin();
-            w.s(if k == 0 { "FACE_OUTER_BOUND('',".to_string() } else { "FACE_BOUND('',".to_string() }.as_str());
+            w.s(if k == 0 {
+                "FACE_OUTER_BOUND('',".to_string()
+            } else {
+                "FACE_BOUND('',".to_string()
+            }
+            .as_str());
             w.id(el).s(",.T.)");
             w.end();
             bounds.push(b);
         }
         let i = w.begin();
-        w.s("ADVANCED_FACE('',").ids(&bounds).s(",").id(surfaces[f.index()]);
+        w.s("ADVANCED_FACE('',")
+            .ids(&bounds)
+            .s(",")
+            .id(surfaces[f.index()]);
         w.s(if body.face(f).same_sense { ",.T.)" } else { ",.F.)" });
         w.end();
         faces[f.index()] = i;
@@ -606,30 +710,50 @@ pub fn export(body: &Body, opt: &Options) -> Result<Export, ExportError> {
         w.s("(NAMED_UNIT(*)SI_UNIT($,.STERADIAN.)SOLID_ANGLE_UNIT())");
         w.end();
         let u = w.begin();
-        w.s("UNCERTAINTY_MEASURE_WITH_UNIT(LENGTH_MEASURE(").r(forge_math::tol::LINEAR.max(opt.tol));
-        w.s("),").id(m).s(",'distance_accuracy_value','confusion accuracy')");
+        w.s("UNCERTAINTY_MEASURE_WITH_UNIT(LENGTH_MEASURE(")
+            .r(forge_math::tol::LINEAR.max(opt.tol));
+        w.s("),")
+            .id(m)
+            .s(",'distance_accuracy_value','confusion accuracy')");
         w.end();
         (m, a, s, u)
     };
     let ctx = w.begin();
-    w.s("(GEOMETRIC_REPRESENTATION_CONTEXT(3)GLOBAL_UNCERTAINTY_ASSIGNED_CONTEXT((").id(units.3);
-    w.s("))GLOBAL_UNIT_ASSIGNED_CONTEXT((").id(units.0).s(",").id(units.1).s(",").id(units.2);
+    w.s("(GEOMETRIC_REPRESENTATION_CONTEXT(3)GLOBAL_UNCERTAINTY_ASSIGNED_CONTEXT((")
+        .id(units.3);
+    w.s("))GLOBAL_UNIT_ASSIGNED_CONTEXT((")
+        .id(units.0)
+        .s(",")
+        .id(units.1)
+        .s(",")
+        .id(units.2);
     w.s("))REPRESENTATION_CONTEXT('',''))");
     w.end();
     let brep = w.begin();
-    w.s("ADVANCED_BREP_SHAPE_REPRESENTATION('',").ids(&solids).s(",").id(ctx).s(")");
+    w.s("ADVANCED_BREP_SHAPE_REPRESENTATION('',")
+        .ids(&solids)
+        .s(",")
+        .id(ctx)
+        .s(")");
     w.end();
 
     let (context, protocol, year) = match opt.schema {
         Schema::Ap214 => ("automotive design", "automotive_design", 2001),
-        Schema::Ap242 => ("managed model based 3d engineering", "ap242_managed_model_based_3d_engineering", 2014),
+        Schema::Ap242 => (
+            "managed model based 3d engineering",
+            "ap242_managed_model_based_3d_engineering",
+            2014,
+        ),
     };
     let name = quoted(&opt.name);
     let app = w.begin();
     let _ = write!(w.data, "APPLICATION_CONTEXT('{context}')");
     w.end();
     let i = w.begin();
-    let _ = write!(w.data, "APPLICATION_PROTOCOL_DEFINITION('international standard','{protocol}',{year},#{app})");
+    let _ = write!(
+        w.data,
+        "APPLICATION_PROTOCOL_DEFINITION('international standard','{protocol}',{year},#{app})"
+    );
     w.end();
     let _ = i;
     let pc = w.begin();
@@ -642,16 +766,26 @@ pub fn export(body: &Body, opt: &Options) -> Result<Export, ExportError> {
     w.s("PRODUCT_DEFINITION_FORMATION('','',").id(prod).s(")");
     w.end();
     let pdc = w.begin();
-    w.s("PRODUCT_DEFINITION_CONTEXT('part definition',").id(app).s(",'design')");
+    w.s("PRODUCT_DEFINITION_CONTEXT('part definition',")
+        .id(app)
+        .s(",'design')");
     w.end();
     let pd = w.begin();
-    w.s("PRODUCT_DEFINITION('design','',").id(form).s(",").id(pdc).s(")");
+    w.s("PRODUCT_DEFINITION('design','',")
+        .id(form)
+        .s(",")
+        .id(pdc)
+        .s(")");
     w.end();
     let pds = w.begin();
     w.s("PRODUCT_DEFINITION_SHAPE('','',").id(pd).s(")");
     w.end();
     let sdr = w.begin();
-    w.s("SHAPE_DEFINITION_REPRESENTATION(").id(pds).s(",").id(brep).s(")");
+    w.s("SHAPE_DEFINITION_REPRESENTATION(")
+        .id(pds)
+        .s(",")
+        .id(brep)
+        .s(")");
     w.end();
     let _ = sdr;
     if !w.finite {
@@ -693,7 +827,10 @@ fn coedge_anchors(body: &Body) -> Vec<Vec<(f64, Point2)>> {
             for (k, &c) in l.coedges.iter().enumerate() {
                 let co = body.coedge(c);
                 let e = body.edge(co.edge);
-                let (a, b) = (l.coedge_first[k], l.coedge_first.get(k + 1).copied().unwrap_or(total));
+                let (a, b) = (
+                    l.coedge_first[k],
+                    l.coedge_first.get(k + 1).copied().unwrap_or(total),
+                );
                 let n = b - a;
                 let mut row: Vec<(f64, Point2)> = (0..=n)
                     .map(|i| {
@@ -738,11 +875,17 @@ struct ShellKind {
 /// Each shell: bounding material, or a void in which outer shell. A void's sense is its signed
 /// volume; it belongs to the smallest outer shell whose box holds it.
 fn shell_kinds(body: &Body) -> Vec<(ShellId, ShellKind)> {
-    let shells: Vec<ShellId> = (0..body.shells.len() as u32).map(ShellId).filter(|&s| !body.shell(s).faces.is_empty()).collect();
+    let shells: Vec<ShellId> = (0..body.shells.len() as u32)
+        .map(ShellId)
+        .filter(|&s| !body.shell(s).faces.is_empty())
+        .collect();
     let boxes: Vec<forge_math::Box3> = shells
         .iter()
         .map(|&s| {
-            body.shell(s).faces.iter().fold(forge_math::Box3::EMPTY, |b, &f| b.hull(&body.face_box(f)))
+            body.shell(s)
+                .faces
+                .iter()
+                .fold(forge_math::Box3::EMPTY, |b, &f| b.hull(&body.face_box(f)))
         })
         .collect();
     let outer: Vec<bool> = shells
@@ -761,7 +904,13 @@ fn shell_kinds(body: &Body) -> Vec<(ShellId, ShellKind)> {
                     .min_by(|&a, &b| boxes[a].diagonal().total_cmp(&boxes[b].diagonal()))
                     .map(|j| shells[j])
             };
-            (s, ShellKind { outer: outer[i], within })
+            (
+                s,
+                ShellKind {
+                    outer: outer[i],
+                    within,
+                },
+            )
         })
         .collect()
 }
@@ -769,4 +918,60 @@ fn shell_kinds(body: &Body) -> Vec<(ShellId, ShellKind)> {
 fn holds(a: &forge_math::Box3, b: &forge_math::Box3) -> bool {
     let inside = |p: forge_math::Interval, q: forge_math::Interval| p.lo <= q.lo && p.hi >= q.hi;
     inside(a.x, b.x) && inside(a.y, b.y) && inside(a.z, b.z)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn r(x: f64) -> String {
+        let mut s = String::new();
+        real(&mut s, x);
+        s
+    }
+
+    #[test]
+    fn reals_have_a_point_and_read_back_the_same_bits() {
+        assert_eq!(r(1.0), "1.");
+        assert_eq!(r(-0.5), "-0.5");
+        assert_eq!(r(1e-7), "1.E-7");
+        assert_eq!(r(1.5e20), "1.5E20");
+        for x in [0.1, 1.0 / 3.0, 1e-300, 1.7976931348623157e308, -2.5e-5, 12345.678] {
+            let t = r(x);
+            assert!(t.contains('.'), "{t}");
+            assert_eq!(t.parse::<f64>().unwrap().to_bits(), x.to_bits(), "{t}");
+        }
+    }
+
+    #[test]
+    fn a_box_is_one_exact_solid() {
+        use forge_ops::{Profile, extrude};
+        let p = Profile {
+            plane: Frame::WORLD,
+            loops: vec![Profile::rectangle(Point2::new(0.0, 0.0), 10.0, 20.0, 0)],
+        };
+        let b = extrude(&p, 5.0, 1).unwrap();
+        let e = export(&b, &Options::default()).unwrap();
+        assert_eq!((e.solids, e.faces, e.edges), (1, 6, 12));
+        assert_eq!((e.fit_faces.count, e.fit_edges.count), (0, 0));
+        assert!(e.text.starts_with("ISO-10303-21;"));
+        assert!(e.text.ends_with("END-ISO-10303-21;\n"));
+        assert!(e.text.contains("AUTOMOTIVE_DESIGN"));
+        assert_eq!(e.text.matches("ADVANCED_FACE").count(), 6);
+        assert!(e.text.contains("MANIFOLD_SOLID_BREP"));
+        let again = export(&b, &Options::default()).unwrap();
+        assert_eq!(e.text, again.text);
+        let a242 = export(
+            &b,
+            &Options {
+                schema: Schema::Ap242,
+                ..Options::default()
+            },
+        )
+        .unwrap();
+        assert!(
+            a242.text
+                .contains("AP242_MANAGED_MODEL_BASED_3D_ENGINEERING_MIM_LF")
+        );
+    }
 }

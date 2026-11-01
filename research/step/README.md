@@ -19,3 +19,14 @@ CATIA's are few, to degree 5x5. Control nets mostly 16 or fewer points. WHUCAD a
 SURFACE_OF_REVOLUTION. No PCURVE or SEAM_CURVE in these samples, so the reader builds from 3D
 curves. Lengths come in metres (Onshape), centimetres (Fusion), mm and inches; uncertainty from
 1e-8 to 1e-2. 12-22% of files hold more than one solid.
+
+## Export: open
+
+OCCT reads 13 of 15 bench parts valid with volume and area matching (`tools/occt/step_read.py`).
+frame (volume -1.84%) and jack (-0.39%) do not. Repro: `benchparts resolve frame F.fc`,
+`forgecad export F.fc`, `step_read.py F.step`; on the two thread faces OCCT reports two edges
+at the run-out tip with tolerance about 0.9 mm (jack 1.5 mm) and pcurves at u = t + 2 pi, a turn
+away. The SURFACE_CURVE pcurves in our file have u = t and lie on the fitted surface: read the
+file's first control points. Our own surface, its loop drawing and whole-surface `project` hold
+those edges within 1e-8 mm. So OCCT drops our pcurves on these edges and projects again; why is
+not known. Changing OCCT's read options from Python had no effect on the result.

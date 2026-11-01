@@ -42,7 +42,12 @@ fn mults(n: usize) -> Vec<u32> {
 
 fn hermite(p0: Point3, d0: Vec3, p1: Point3, d1: Vec3, h: f64, s: f64) -> Point3 {
     let (s2, s3) = (s * s, s * s * s);
-    let (a, b, c, d) = (2.0 * s3 - 3.0 * s2 + 1.0, s3 - 2.0 * s2 + s, -2.0 * s3 + 3.0 * s2, s3 - s2);
+    let (a, b, c, d) = (
+        2.0 * s3 - 3.0 * s2 + 1.0,
+        s3 - 2.0 * s2 + s,
+        -2.0 * s3 + 3.0 * s2,
+        s3 - s2,
+    );
     Point3::ORIGIN + (p0 - Point3::ORIGIN) * a + d0 * (b * h) + (p1 - Point3::ORIGIN) * c + d1 * (d * h)
 }
 
@@ -54,9 +59,8 @@ pub struct PcurveFit {
 }
 
 /// `c` on `s` through `anchors`, its parameter and where the face's loop drew it, in order (they
-/// fix the period, and which turn of a thread), the curve's own parameter kept: a reader then
-/// reads the edge on the surface instead of searching for it, which on a many-turned thread can
-/// land on the wrong turn.
+/// fix the period and which turn of a thread), the curve's own parameter kept: a reader then has
+/// the edge on the surface and need not search for it.
 pub fn fit_pcurve(c: &Curve, anchors: &[(f64, Point2)], s: &Surface, tol: f64) -> PcurveFit {
     let dom = s.domain();
     let near = |uv: Point2, by: Point2| {
@@ -74,31 +78,7 @@ pub fn fit_pcurve(c: &Curve, anchors: &[(f64, Point2)], s: &Surface, tol: f64) -
         let (a, b) = (d.d1.dot(q.du), d.d1.dot(q.dv));
         ((g * a - f * b) / det, (e * b - f * a) / det)
     };
-    // from a point known on the curve, walked along it: Gauss-Newton from the tangent's step, and
-    // the surface's own nearest-point search only where that fails
-    let locate = |t: f64, from: (f64, Point2)| {
-        let target = c.eval(t);
-        let r0 = rate(from.0, from.1);
-        let mut uv = Point2::new(from.1.x + r0.0 * (t - from.0), from.1.y + r0.1 * (t - from.0));
-        for _ in 0..8 {
-            let q = s.deriv(uv);
-            let d = target - q.p;
-            if d.length() <= 1e-3 * tol {
-                return uv;
-            }
-            let (e, f, g) = (q.du.dot(q.du), q.du.dot(q.dv), q.dv.dot(q.dv));
-            let det = e * g - f * f;
-            if det <= 1e-14 * e * g || det == 0.0 {
-                break;
-            }
-            let (a, b) = (d.dot(q.du), d.dot(q.dv));
-            uv = Point2::new(uv.x + (g * a - f * b) / det, uv.y + (e * b - f * a) / det);
-        }
-        if s.eval(uv).distance(target) <= tol {
-            return uv;
-        }
-        near(s.project_near(target, from.1), from.1)
-    };
+    let locate = |t: f64, by: Point2| near(s.project_near(c.eval(t), by), by);
     let closed = match (c, s) {
         (Curve::Procedural(pc), Surface::Procedural(ps)) => ps.0.curve_uv(pc),
         _ => None,
@@ -107,22 +87,6 @@ pub fn fit_pcurve(c: &Curve, anchors: &[(f64, Point2)], s: &Surface, tol: f64) -
     if let Some((base, dir)) = closed {
         for p in &mut pts {
             p.1 = base + dir * p.0;
-        }
-    } else {
-        // the drawing's first sample comes from a whole search, which on a many-turned thread
-        // can settle a turn away: anything off the curve is found again from a neighbour on it
-        let miss = |p: &(f64, Point2)| s.eval(p.1).distance(c.eval(p.0));
-        if let Some(good) = pts.iter().position(|p| miss(p) <= 10.0 * tol.max(forge_math::tol::LINEAR)) {
-            for k in good + 1..pts.len() {
-                if miss(&pts[k]) > 10.0 * tol {
-                    pts[k].1 = locate(pts[k].0, pts[k - 1]);
-                }
-            }
-            for k in (0..good).rev() {
-                if miss(&pts[k]) > 10.0 * tol {
-                    pts[k].1 = locate(pts[k].0, pts[k + 1]);
-                }
-            }
         }
     }
     // the drawing's samples are many where few spans do: refinement adds back what is needed
@@ -138,7 +102,12 @@ pub fn fit_pcurve(c: &Curve, anchors: &[(f64, Point2)], s: &Surface, tol: f64) -
         let h = b.0 - a.0;
         let (ra, rb) = (rate(a.0, a.1), rate(b.0, b.1));
         let (s2, s3) = (x * x, x * x * x);
-        let (c0, c1, c2, c3) = (2.0 * s3 - 3.0 * s2 + 1.0, s3 - 2.0 * s2 + x, -2.0 * s3 + 3.0 * s2, s3 - s2);
+        let (c0, c1, c2, c3) = (
+            2.0 * s3 - 3.0 * s2 + 1.0,
+            s3 - 2.0 * s2 + x,
+            -2.0 * s3 + 3.0 * s2,
+            s3 - s2,
+        );
         Point2::new(
             c0 * a.1.x + c1 * h * ra.0 + c2 * b.1.x + c3 * h * rb.0,
             c0 * a.1.y + c1 * h * ra.1 + c2 * b.1.y + c3 * h * rb.1,
@@ -153,7 +122,7 @@ pub fn fit_pcurve(c: &Curve, anchors: &[(f64, Point2)], s: &Surface, tol: f64) -
             let m = herm2(a, b, 0.5);
             let miss = s.eval(m).distance(c.eval(tm));
             if miss > tol && pts.len() < MAX_SPANS {
-                next.push((tm, locate(tm, a)));
+                next.push((tm, locate(tm, a.1)));
             }
         }
         next.push(*pts.last().unwrap());
@@ -168,7 +137,11 @@ pub fn fit_pcurve(c: &Curve, anchors: &[(f64, Point2)], s: &Surface, tol: f64) -
         let r = rate(t, uv);
         let step = |h: f64| Point2::new(uv.x + r.0 * h / 3.0, uv.y + r.1 * h / 3.0);
         ctrl.push(if i > 0 { step(pts[i - 1].0 - t) } else { uv });
-        ctrl.push(if i + 1 < pts.len() { step(pts[i + 1].0 - t) } else { uv });
+        ctrl.push(if i + 1 < pts.len() {
+            step(pts[i + 1].0 - t)
+        } else {
+            uv
+        });
     }
     PcurveFit {
         ctrl,
@@ -253,7 +226,9 @@ pub fn fit_surface(s: &Surface, uv: Box2, tol: f64, keep: &FaceMask) -> SurfaceF
     }
     let node = |u: f64, v: f64| s.deriv(Point2::new(u, v));
     let grid = |us: &[f64], vs: &[f64]| -> Vec<Vec<SurfDeriv>> {
-        us.iter().map(|&u| vs.iter().map(|&v| node(u, v)).collect()).collect()
+        us.iter()
+            .map(|&u| vs.iter().map(|&v| node(u, v)).collect())
+            .collect()
     };
     let mut net = grid(&us, &vs);
     let mut error = 0.0;
@@ -280,17 +255,26 @@ pub fn fit_surface(s: &Surface, uv: Box2, tol: f64, keep: &FaceMask) -> SurfaceF
                 // along each direction, the mids of the cell's two lines
                 let (mut lu, mut lv) = (0.0_f64, 0.0_f64);
                 for (p, q, v) in [(a, b, v0), (c, d, v1)] {
-                    lu = lu.max(off(hermite(p.p, p.du, q.p, q.du, u1 - u0, 0.5), Point2::new(0.5 * (u0 + u1), v)));
+                    lu = lu.max(off(
+                        hermite(p.p, p.du, q.p, q.du, u1 - u0, 0.5),
+                        Point2::new(0.5 * (u0 + u1), v),
+                    ));
                 }
                 for (p, q, u) in [(a, c, u0), (b, d, u1)] {
-                    lv = lv.max(off(hermite(p.p, p.dv, q.p, q.dv, v1 - v0, 0.5), Point2::new(u, 0.5 * (v0 + v1))));
+                    lv = lv.max(off(
+                        hermite(p.p, p.dv, q.p, q.dv, v1 - v0, 0.5),
+                        Point2::new(u, 0.5 * (v0 + v1)),
+                    ));
                 }
                 eu[i] = eu[i].max(lu);
                 ev[j] = ev[j].max(lv);
                 worst = worst.max(lu).max(lv);
                 let (m, k) = (u1 - u0, v1 - v0);
                 for (st, ct) in [(0.5, 0.5), (0.25, 0.25), (0.75, 0.25), (0.25, 0.75), (0.75, 0.75)] {
-                    let e = off(patch(a, b, c, d, m, k, st, ct), Point2::new(u0 + m * st, v0 + k * ct));
+                    let e = off(
+                        patch(a, b, c, d, m, k, st, ct),
+                        Point2::new(u0 + m * st, v0 + k * ct),
+                    );
                     worst = worst.max(e);
                     if e > 0.5 * tol {
                         // the inside's miss goes to the direction its edges miss most by; a
@@ -334,10 +318,16 @@ pub fn fit_surface(s: &Surface, uv: Box2, tol: f64, keep: &FaceMask) -> SurfaceF
     let mut ctrl: Vec<Vec<Point3>> = Vec::with_capacity(2 * us.len());
     for i in 0..us.len() {
         let mut rows = [Vec::with_capacity(2 * vs.len()), Vec::with_capacity(2 * vs.len())];
-        let hu = [if i > 0 { us[i - 1] - us[i] } else { 0.0 }, if i + 1 < us.len() { us[i + 1] - us[i] } else { 0.0 }];
+        let hu = [
+            if i > 0 { us[i - 1] - us[i] } else { 0.0 },
+            if i + 1 < us.len() { us[i + 1] - us[i] } else { 0.0 },
+        ];
         for j in 0..vs.len() {
             let d = &net[i][j];
-            let hv = [if j > 0 { vs[j - 1] - vs[j] } else { 0.0 }, if j + 1 < vs.len() { vs[j + 1] - vs[j] } else { 0.0 }];
+            let hv = [
+                if j > 0 { vs[j - 1] - vs[j] } else { 0.0 },
+                if j + 1 < vs.len() { vs[j + 1] - vs[j] } else { 0.0 },
+            ];
             for (r, &h) in rows.iter_mut().zip(&hu) {
                 let a = h / 3.0;
                 for &k in &hv {
@@ -361,11 +351,30 @@ pub fn fit_surface(s: &Surface, uv: Box2, tol: f64, keep: &FaceMask) -> SurfaceF
 
 /// The bicubic Hermite patch over a cell, its twist from the corners.
 #[allow(clippy::too_many_arguments)]
-fn patch(a: &SurfDeriv, b: &SurfDeriv, c: &SurfDeriv, d: &SurfDeriv, m: f64, k: f64, s: f64, t: f64) -> Point3 {
-    let f = |x: f64| [2.0 * x * x * x - 3.0 * x * x + 1.0, x * x * x - 2.0 * x * x + x, -2.0 * x * x * x + 3.0 * x * x, x * x * x - x * x];
+fn patch(
+    a: &SurfDeriv,
+    b: &SurfDeriv,
+    c: &SurfDeriv,
+    d: &SurfDeriv,
+    m: f64,
+    k: f64,
+    s: f64,
+    t: f64,
+) -> Point3 {
+    let f = |x: f64| {
+        [
+            2.0 * x * x * x - 3.0 * x * x + 1.0,
+            x * x * x - 2.0 * x * x + x,
+            -2.0 * x * x * x + 3.0 * x * x,
+            x * x * x - x * x,
+        ]
+    };
     let (fu, fv) = (f(s), f(t));
     let term = |q: &SurfDeriv, su: f64, sv: f64, scale_u: f64, scale_v: f64| -> Vec3 {
-        (q.p - Point3::ORIGIN) * (su * sv) + q.du * (scale_u * sv) + q.dv * (su * scale_v) + q.duv * (scale_u * scale_v)
+        (q.p - Point3::ORIGIN) * (su * sv)
+            + q.du * (scale_u * sv)
+            + q.dv * (su * scale_v)
+            + q.duv * (scale_u * scale_v)
     };
     let v = term(a, fu[0], fv[0], fu[1] * m, fv[1] * k)
         + term(b, fu[2], fv[0], fu[3] * m, fv[1] * k)
@@ -416,6 +425,7 @@ fn basis(x: f64, n: usize) -> (usize, [f64; 4]) {
     (span, b)
 }
 
+#[allow(clippy::needless_range_loop)]
 fn lsq(s: &Surface, uv: Box2, n: usize, keep: &FaceMask) -> SurfaceFit {
     let m = n + 3;
     let total = m * m;
@@ -466,8 +476,16 @@ fn lsq(s: &Surface, uv: Box2, n: usize, keep: &FaceMask) -> SurfaceFit {
     for i in 0..m {
         for j in 0..m {
             for (a0, a1, a2) in [
-                (i.checked_sub(1).map(|k| at(k, j)), at(i, j), (i + 1 < m).then(|| at(i + 1, j))),
-                (j.checked_sub(1).map(|k| at(i, k)), at(i, j), (j + 1 < m).then(|| at(i, j + 1))),
+                (
+                    i.checked_sub(1).map(|k| at(k, j)),
+                    at(i, j),
+                    (i + 1 < m).then(|| at(i + 1, j)),
+                ),
+                (
+                    j.checked_sub(1).map(|k| at(i, k)),
+                    at(i, j),
+                    (j + 1 < m).then(|| at(i, j + 1)),
+                ),
             ] {
                 if let (Some(p), Some(q)) = (a0, a2) {
                     let t = [(p, 1.0), (a1, -2.0), (q, 1.0)];
@@ -517,7 +535,14 @@ fn lsq(s: &Surface, uv: Box2, n: usize, keep: &FaceMask) -> SurfaceFit {
         }
     }
     let ctrl: Vec<Vec<Point3>> = (0..m)
-        .map(|i| (0..m).map(|j| { let r = rhs[at(i, j)]; Point3::new(r[0], r[1], r[2]) }).collect())
+        .map(|i| {
+            (0..m)
+                .map(|j| {
+                    let r = rhs[at(i, j)];
+                    Point3::new(r[0], r[1], r[2])
+                })
+                .collect()
+        })
         .collect();
     let eval = |x: f64, y: f64| {
         let (i0, bu) = basis(x, n);
@@ -525,7 +550,7 @@ fn lsq(s: &Surface, uv: Box2, n: usize, keep: &FaceMask) -> SurfaceFit {
         let mut q = Vec3::ZERO;
         for i in 0..4 {
             for j in 0..4 {
-                q = q + (ctrl[i0 + i][j0 + j] - Point3::ORIGIN) * (bu[i] * bv[j]);
+                q += (ctrl[i0 + i][j0 + j] - Point3::ORIGIN) * (bu[i] * bv[j]);
             }
         }
         Point3::ORIGIN + q
