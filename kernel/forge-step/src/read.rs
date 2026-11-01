@@ -1187,21 +1187,29 @@ fn record_deviations(body: &mut Body, stats: &mut Stats) {
 }
 
 /// A body whose integrals and mesh disagree is refused: on a file's geometry the integrals can go
-/// wrong with nothing to show for it (`research/step/README.md`). Where either cannot answer, it
-/// says so when asked and there is nothing to compare.
+/// wrong with nothing to show for it (`research/step/README.md`). So is one that cannot be meshed
+/// even coarsely, with nothing to check it by and nothing to show. Where the integrals cannot
+/// answer they say so when asked.
 fn measures_agree(body: &Body) -> Result<(), String> {
-    let chord = 5e-4 * body.faces_box().diagonal();
-    let (Ok(m), Ok(mesh)) = (
-        forge_topo::mass::mass_rel(body, 1e-6),
+    let Ok(m) = forge_topo::mass::mass_rel(body, 1e-6) else {
+        return Ok(());
+    };
+    let mesh_at = |chord: f64| {
         forge_mesh::tessellate(
             body,
             &forge_mesh::Quality {
                 chord,
                 ..forge_mesh::Quality::default()
             },
-        ),
-    ) else {
-        return Ok(());
+        )
+    };
+    let diagonal = body.faces_box().diagonal();
+    let (mesh, chord) = match mesh_at(5e-4 * diagonal) {
+        Ok(x) => (x, 5e-4 * diagonal),
+        Err(_) => match mesh_at(5e-3 * diagonal) {
+            Ok(x) => (x, 5e-3 * diagonal),
+            Err(e) => return Err(format!("it cannot be meshed: {e:?}")),
+        },
     };
     let (mut volume, mut area) = (0.0, 0.0);
     for t in &mesh.triangles {
@@ -1210,9 +1218,15 @@ fn measures_agree(body: &Body) -> Result<(), String> {
         area += 0.5 * n.length();
         volume += a.dot(n) / 6.0;
     }
-    // a mesh strays by its chord at most, over the whole area
-    if (m.volume - volume).abs() > 0.02 * volume.abs() + 0.5 * area * chord
-        || (m.area - area).abs() > 0.02 * area
+    // a mesh strays by its chord at most, and only over what is curved
+    let curved: f64 = m
+        .faces
+        .iter()
+        .filter(|(f, _)| !matches!(body.face(*f).surface, forge_geom::Surface::Plane(_)))
+        .map(|x| x.1)
+        .sum();
+    if (m.volume - volume).abs() > 0.01 * volume.abs() + 0.5 * curved * chord
+        || (m.area - area).abs() > 0.01 * area
     {
         return Err(format!(
             "its volume and area integrate to {} and {}, its mesh says {volume} and {area}",
