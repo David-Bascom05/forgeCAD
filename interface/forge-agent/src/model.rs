@@ -907,6 +907,7 @@ impl Model {
             face: &|r| self.face(i, r),
             sources: &|r| self.sources(i, r),
             fonts: &|_| Ok(None),
+            imports: &|_| Ok(None),
             was: None,
             own: &|_, n| n,
         };
