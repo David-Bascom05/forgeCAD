@@ -126,9 +126,7 @@ fn chamfer_cuts_the_edge_picked() {
     assert!(built(&file, "chamfer") < was);
 }
 
-// off in the ribbon: it builds on a plain block and fails on every bench part tried
 #[test]
-#[ignore]
 fn shell_hollows_out_with_the_face_picked_open() {
     let Some((mut h, file)) = open(BLOCK, "shell") else {
         return;
@@ -139,7 +137,56 @@ fn shell_hollows_out_with_the_face_picked_open() {
     field(&mut h, "Thickness", "2");
     ok(&mut h, "shell");
     let now = built(&file, "shell");
-    assert!(now < was * 0.5, "{was} {now}");
+    // walls and floor 2 thick, open at the top
+    let want = 60.0 * 60.0 * 20.0 - 56.0 * 56.0 * 18.0;
+    assert!((now - want).abs() < 1e-6, "{was} {now}");
+}
+
+#[test]
+fn shell_hollows_a_part_with_rounds_and_a_hole() {
+    let part = "a: extrude 20 rect -30 -30 60 60\nfillet 3 (edges of a along +z)\nhole 10 at 0 0 20 thru\n";
+    let Some((mut h, file)) = open(part, "shellreal") else {
+        return;
+    };
+    let was = built(&file, "before");
+    button(&mut h, "Shell");
+    point_at(&mut h, [20.0, 20.0, 20.0]);
+    field(&mut h, "Thickness", "1");
+    ok(&mut h, "shell");
+    let now = built(&file, "shell");
+    assert!(now < was * 0.5 && now > 0.0, "{was} {now}");
+}
+
+#[test]
+fn a_shell_too_thick_says_so_in_words_and_writes_nothing() {
+    let Some((mut h, file)) = open(BLOCK, "shellthick") else {
+        return;
+    };
+    let before = std::fs::read_to_string(&file).unwrap();
+    button(&mut h, "Shell");
+    point_at(&mut h, [0.0, 0.0, 20.0]);
+    field(&mut h, "Thickness", "40");
+    assert!(
+        h.until(|g| g.shell.dialog.as_ref().unwrap().error.is_some()),
+        "{}",
+        h.gui.shell.dialog.as_ref().unwrap().line()
+    );
+    let why = h.gui.shell.dialog.as_ref().unwrap().error.clone().unwrap();
+    assert!(!why.contains("shell:") && !why.contains('#'), "{why}");
+    assert_eq!(std::fs::read_to_string(&file).unwrap(), before);
+}
+
+#[test]
+fn what_shell_refuses_with_is_in_words_and_keeps_how_far_it_builds() {
+    use forge_render::shell::panel::plain_error;
+    let why =
+        plain_error("shell: Rebuild(Vertex { vertex: #c7e871699bff9a91 }); it builds up to thickness 0.3281");
+    assert!(
+        why.starts_with("The walls don't close up") && why.ends_with("it builds up to thickness 0.3281"),
+        "{why}"
+    );
+    let why = plain_error("shell: SelfIntersecting { a: #8c98cc72da8e0151, b: #8c98cc72da8e0151 }");
+    assert_eq!(why, "Too thick: the walls would run through each other");
 }
 
 #[test]
@@ -213,20 +260,6 @@ fn hole_drills_at_each_sketch_point_picked() {
     let v = built(&file, "hole");
     let each = core::f64::consts::PI * 2.5 * 2.5 * 20.0;
     assert!((was - v - 2.0 * each).abs() < each * 0.02, "{was} {v}");
-}
-
-#[test]
-fn the_tools_with_no_passing_test_are_off() {
-    let Some(mut h) = open(BLOCK, "off").map(|o| o.0) else {
-        return;
-    };
-    for name in ["Shell"] {
-        h.click(&format!("tool:{name}"));
-        for _ in 0..3 {
-            h.step();
-        }
-        assert!(h.gui.shell.dialog.is_none(), "{name} is on with no test");
-    }
 }
 
 #[test]
@@ -527,15 +560,17 @@ fn to_next_stops_at_the_next_face_either_way_or_says_there_is_none() {
         (up.clone().unwrap() - (base + area * 25.0)).abs() < 1e-6,
         "{l}: {up:?}"
     );
-    // the kernel's `next back` refuses this today (raised with a repro): it must say so plainly, and
-    // once it's fixed this should stop at the floor, at base + area * 15
     let (down, l) = to_next(&on_plane(25.0), "next-down", false, true);
     assert!(
-        down.as_ref().is_err_and(|w| !w.contains("extent:"))
-            || down
-                .as_ref()
-                .is_ok_and(|v| (v - (base + area * 15.0)).abs() < 1e-6),
+        (down.clone().unwrap() - (base + area * 15.0)).abs() < 1e-6,
         "{l}: {down:?}"
+    );
+    // and a roof that's a body of its own
+    let two = "floor: extrude 10 rect -30 -30 60 60\nroof: extrude new 10 xy at 0 0 40 rect -30 -30 60 60\nsk1: sketch xy at 0 0 25\n  rect -5 -5 10 10\nend\n";
+    let (r, l) = to_next(two, "next-bodies", false, false);
+    assert!(
+        (r.clone().unwrap() - (2.0 * 60.0 * 60.0 * 10.0 + area * 15.0)).abs() < 1e-6,
+        "{l}: {r:?}"
     );
     // from the floor's top, up to the roof
     let (r, l) = to_next(&on_plane(10.0), "next-face", false, false);

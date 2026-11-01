@@ -38,8 +38,19 @@ pub fn plain_error(why: &str) -> String {
         "extent: NoNextFace" => "There's no face ahead to reach".to_string(),
         "extent: NeverHits" => "It never reaches that face: pick one it runs into".to_string(),
         "extent: NotAhead" => "That face crosses the start or lies behind it: pick one ahead".to_string(),
-        w if w.contains("the next face in a multi-body part") => {
-            "To Next can't look across separate bodies yet".to_string()
+        w if w.starts_with("shell: ") => {
+            let (what, rest) = w.split_once("; ").unwrap_or((w, ""));
+            let said = match what.split([' ', '(']).nth(1).unwrap_or("") {
+                "TooThin" => "That thickness is too small to make walls",
+                "AllOpen" => "Every face is open: nothing would be left",
+                "Collapses" => "Too thick: a curved face's wall would close up on itself",
+                "SelfIntersecting" => "Too thick: the walls would run through each other",
+                _ => "The walls don't close up on this part with these faces open",
+            };
+            match rest {
+                "" => said.to_string(),
+                r => format!("{said}; {r}"),
+            }
         }
         w => w.to_string(),
     }
@@ -715,13 +726,7 @@ mod tests {
     #[test]
     fn a_derived_sketch_builds_the_same_part_to_the_bit() {
         let (mut bad, mut good, mut done_all, mut left_all) = (Vec::new(), 0, 0, 0);
-        // a sketch line above the first extrude changes the kernel's fillet here by 2 mm^3, with every
-        // profile the same to the bit: raised with the kernel's owners, not a difference in the profile
-        const KERNEL_KNOWN: [&str; 1] = ["fuzz 24"];
-        for (name, src) in parts()
-            .into_iter()
-            .filter(|p| !KERNEL_KNOWN.contains(&p.0.as_str()))
-        {
+        for (name, src) in parts() {
             let mut a = forge_agent::model::Model::new(&src);
             if a.error.is_some() {
                 continue;

@@ -74,7 +74,7 @@ fn groups(s: &Shell) -> Vec<Group> {
                     new("Chamfer", "chamfer", "chamfer"),
                 ],
                 vec![
-                    off("Shell", "shell"),
+                    new("Shell", "shell", "shell"),
                     new("Draft", "draft", "draft"),
                     new("Thread", "thread", "thread"),
                     new("Combine", "combine", "combine"),
