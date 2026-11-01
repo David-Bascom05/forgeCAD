@@ -5748,7 +5748,8 @@ pub(crate) fn half_chord(piece: &Piece) -> f64 {
 /// clipped to it costs more pieces).
 pub(crate) fn meet_region(ba: &Box3, bb: &Box3, sa: &Surface, sb: &Surface) -> Box3 {
     let whole = |s: &Surface, b: &Box3| match s {
-        Surface::Torus(t) => Box3::from_point(t.frame.origin).grow(t.major + t.minor),
+        // (a lemon's major is negative)
+        Surface::Torus(t) => Box3::from_point(t.frame.origin).grow(t.major.abs() + t.minor),
         _ => *b,
     };
     let r = overlap(&whole(sa, ba), &whole(sb, bb));

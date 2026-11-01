@@ -22,13 +22,18 @@ pub fn closed_form(a: &Surface, b: &Surface) -> SurfaceSurface {
         (Surface::Sphere(s), Surface::Sphere(t)) => sphere_sphere(s, t),
         _ => SurfaceSurface::NotAnalytic,
     };
-    match closed {
+    let r = match closed {
         SurfaceSurface::NotAnalytic => forge_geom::screw::meet_coaxial(a, b)
             .or_else(|| forge_geom::ruled::meet_ruled(a, b))
             .or_else(|| forge_geom::spline::meet::meet_spline(a, b))
             .unwrap_or(SurfaceSurface::NotAnalytic),
         r => r,
+    };
+    // a spindle's equations hold its other sheet too
+    if forge_geom::sheet::spindle_in(a, b) {
+        return forge_geom::sheet::used_by(a, b, r);
     }
+    r
 }
 
 /// `closed_form`, except surfaces it has crossing that are `nearly_flush` over `region`.
@@ -160,13 +165,13 @@ pub fn searched_keeps(most: usize) {
 
 /// Where two surfaces with no closed form meet in `region`: by marching or tracing.
 pub fn searched(a: &Surface, b: &Surface, region: Box3) -> SurfaceSurface {
-    // of a spindle only the part off the axis is there, and neither the closed forms nor the tracer
-    // know: a clear refusal rather than a boolean that quietly misses (research/build-failures)
-    if [a, b]
-        .iter()
-        .any(|s| matches!(s, Surface::Torus(t) if t.is_spindle()))
-    {
-        return SurfaceSurface::NotAnalytic;
+    // of a spindle only the sheet off the axis is there: the closed forms, kept to it by a sign
+    // test (forge_geom::sheet). The tracer follows the whole quartic, so a pair it would take stays
+    // a clear refusal rather than a boolean that quietly misses (research/spindle-priorart)
+    if forge_geom::sheet::spindle_in(a, b) {
+        return forge_geom::meet::intersect(a, b, region).map_or(SurfaceSurface::NotAnalytic, |r| {
+            forge_geom::sheet::used_by(a, b, r)
+        });
     }
     if forge_geom::screw::misses(a, b, region) {
         return SurfaceSurface::Empty;

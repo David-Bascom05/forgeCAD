@@ -61,9 +61,30 @@ fn build(
         return Err(RevolveError::BadAngle);
     }
     let full = angle >= dmath::TAU - tol::ANGULAR;
-    let profile = profile.normalized()?;
+    let mut profile = profile.normalized()?;
     let dir2 = axis.dir.normalize().ok_or(RevolveError::BadAxis)?;
     let perp2 = dir2.perp();
+    // a whole circle tangent to the axis, turned part way, ends on the axis at an apex: its seam goes
+    // there, so that the ends meet at that vertex
+    if !full {
+        for l in &mut profile.loops {
+            for (seg, _) in &mut l.segments {
+                if let Segment::Circle { center, radius, ccw } = *seg {
+                    let off = (center - axis.origin).dot(perp2);
+                    if (off.abs() - radius).abs() <= tol::LINEAR {
+                        let to = if off > 0.0 { -perp2 } else { perp2 };
+                        let sweep = if ccw { dmath::TAU } else { -dmath::TAU };
+                        *seg = Segment::Arc {
+                            center,
+                            radius,
+                            start: dmath::atan2(to.y, to.x),
+                            sweep,
+                        };
+                    }
+                }
+            }
+        }
+    }
     let mut side = 0.0f64;
     for l in &profile.loops {
         for (s, _) in &l.segments {
@@ -257,7 +278,11 @@ impl Revolver<'_> {
                 if rc.abs() <= tol::LINEAR {
                     return Ok(Some(Surface::Sphere(Sphere { frame, radius })));
                 }
-                if matches!(s, Segment::Circle { .. }) && rc <= radius + tol::LINEAR {
+                // a whole circle tangent to the axis turned all the way round meets itself at one point;
+                // part way round it is an apex, like a cone's. One across the axis sweeps through itself
+                if matches!(s, Segment::Circle { .. })
+                    && (rc < radius - tol::LINEAR || (self.full && rc <= radius + tol::LINEAR))
+                {
                     return Err(RevolveError::Unsupported(
                         "a whole circle touching the axis pinches the solid there",
                     ));

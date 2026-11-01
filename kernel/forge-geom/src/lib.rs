@@ -13,6 +13,7 @@ pub mod meet;
 mod meet_gen;
 pub mod ruled;
 pub mod screw;
+pub mod sheet;
 pub mod skinned;
 pub mod smooth;
 pub mod spline;

@@ -1418,7 +1418,7 @@ pub fn intersect(a: &Surface, b: &Surface, region: Box3) -> Option<SurfaceSurfac
         let keep = chain.iter().filter(|&&q| on_nappes(&eq.host, &other, q)).count();
         if keep < chain.len() {
             if keep > 0 {
-                return None; // a loop through a cone's apex
+                return None; // a loop through a cone's apex, or a spindle's
             }
             continue;
         }
@@ -1491,6 +1491,8 @@ pub fn intersect(a: &Surface, b: &Surface, region: Box3) -> Option<SurfaceSurfac
 fn on_nappes(host: &Surface, other: &Surface, p: Point3) -> bool {
     [host, other].iter().all(|s| match s {
         Surface::Cone(c) => c.frame.point_to_local(p).z >= c.apex_v() - tol::LINEAR,
+        // a spindle's quartic holds its other sheet too
+        Surface::Torus(t) if t.is_spindle() => crate::sheet::side(t, p) > 0.0,
         _ => true,
     })
 }

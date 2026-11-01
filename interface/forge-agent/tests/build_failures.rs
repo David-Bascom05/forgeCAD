@@ -539,8 +539,8 @@ fn arcs_ending_on_the_axis() {
         let (v, area) = revolved(rc, half);
         assert!((m.volume - v).abs() < 1e-5 * v, "{} vs {v}", m.volume);
         assert!((m.area - area).abs() < 1e-5 * area, "{} vs {area}", m.area);
-        let cut = Model::new(&format!("{src}extrude cut thru xy at 0 0 -30 circle 3 0 2\n"));
-        assert!(cut.error.is_some_and(|e| e.msg.contains("closed form")));
+        // a cut along the axis builds now, judged by the definition in spindle_cuts.rs
+        builds(&format!("{src}extrude cut thru xy at 0 0 -30 circle 3 0 2\n"));
     }
     // a dome on a flange, the arc's centre off the axis but not reaching it
     mass(
