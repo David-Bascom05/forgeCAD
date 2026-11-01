@@ -216,18 +216,22 @@ impl Ruled {
         }
         // the normal is linear in s along each ruling: it vanishes (the surface folds) between
         // s0 and s1 where the segment between its values there passes the origin
+        // (a wall extruded square to its rails' plane has the same normal all along a ruling, and a
+        // parabola's tangent is never zero: nothing to look for)
+        let extruded = r.extruded;
         let regular = |t: Interval, s0: f64, s1: f64| {
-            (0..=64).all(|i| {
-                let t = t.lo + t.width() * i as f64 / 64.0;
-                let n = |s: f64| {
-                    let d = r.point(Point2::new(t, s));
-                    d.du.cross(d.dv)
-                };
-                let (m0, m1) = (n(s0), n(s1));
-                let d = m1 - m0;
-                let l = (-m0.dot(d) / d.length_sq().max(1e-300)).clamp(0.0, 1.0);
-                (m0 + d * l).length() > 1e-6 * m0.length().max(m1.length()).max(1e-6)
-            })
+            extruded
+                || (0..=64).all(|i| {
+                    let t = t.lo + t.width() * i as f64 / 64.0;
+                    let n = |s: f64| {
+                        let d = r.point(Point2::new(t, s));
+                        d.du.cross(d.dv)
+                    };
+                    let (m0, m1) = (n(s0), n(s1));
+                    let d = m1 - m0;
+                    let l = (-m0.dot(d) / d.length_sq().max(1e-300)).clamp(0.0, 1.0);
+                    (m0 + d * l).length() > 1e-6 * m0.length().max(m1.length()).max(1e-6)
+                })
         };
         // a rail of no length is an apex: the wall stops there, and the normal vanishes only there
         let (a_apex, b_apex) = (a.length() == 0.0, b.length() == 0.0);

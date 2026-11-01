@@ -159,8 +159,57 @@ fn adds(op: Combine) -> bool {
     matches!(op, Combine::New | Combine::Add)
 }
 
-/// The tool of sweep, coil or loft `i` (its solid empty unless `build`).
+thread_local! {
+    /// The last tools built: a drag rebuilds feature after feature whose own numbers did not move.
+    static BUILT: std::cell::RefCell<Vec<(u64, String, Tool)>> = const { std::cell::RefCell::new(Vec::new()) };
+    static BUILT_MOST: std::cell::Cell<usize> = const { std::cell::Cell::new(64) };
+}
+
+/// For tests: how many tools this thread keeps (0: none), and forgets those it has.
+pub fn tools_kept(most: usize) {
+    BUILT_MOST.with(|m| m.set(most));
+    BUILT.with(|b| b.borrow_mut().clear());
+}
+
+/// The tool of sweep, coil or loft `i` (its solid empty unless `build`). One that reads nothing but its own numbers
+/// and id is a function of them, so an earlier build of them is the answer, its surfaces the same ones
+/// (`ssi::searched` then knows them too): research/drag-speed. Its numbers by their debug text, which prints every
+/// field and tells any two floats apart, a zero's sign too.
 pub(crate) fn tool_of(features: History<'_>, i: usize, build: bool) -> Result<Tool, RegenError> {
+    let id = features.id(i);
+    let f = &features[i];
+    let own = build
+        && match f {
+            Feature::Sweep(s) => !matches!(s.ends, PathEnds::To { .. }),
+            Feature::Coil(c) => !matches!(c.size, CoilSize::To { .. }),
+            _ => true,
+        };
+    if !own {
+        return build_tool(features, i, build);
+    }
+    let text = format!("{f:?}");
+    let found = BUILT.with(|b| {
+        let b = b.borrow();
+        b.iter().find(|e| e.0 == id && e.1 == text).map(|e| e.2.clone())
+    });
+    if let Some(t) = found {
+        return Ok(t);
+    }
+    let t = build_tool(features, i, build)?;
+    let most = BUILT_MOST.with(|m| m.get());
+    BUILT.with(|b| {
+        let mut b = b.borrow_mut();
+        if b.len() >= most && !b.is_empty() {
+            b.remove(0);
+        }
+        if most > 0 {
+            b.push((id, text, t.clone()));
+        }
+    });
+    Ok(t)
+}
+
+fn build_tool(features: History<'_>, i: usize, build: bool) -> Result<Tool, RegenError> {
     let id = features.id(i);
     match &features[i] {
         Feature::Sweep(s) => {

@@ -68,11 +68,13 @@ fn label(f: &Feature) -> (String, usize) {
         Feature::Extrude { profile, extent, op } => {
             let e = match extent {
                 Extent::Distance(_) => "dist",
+                Extent::Tapered { .. } => "taper",
                 Extent::Symmetric(_) => "sym",
                 Extent::TwoSided { .. } => "two",
                 Extent::Through(_) => "through",
                 Extent::To { .. } => "to",
                 Extent::ToNext { .. } => "next",
+                _ => "other",
             };
             (format!("extrude.{e}.{}", op_name(op)), segs(profile))
         }

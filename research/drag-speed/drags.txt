@@ -1,0 +1,7 @@
+heatsink L
+frame reach
+manifold pitch
+gearbox W
+crank len
+volute core.166
+conrod bolt.4+tap.4

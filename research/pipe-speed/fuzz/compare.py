@@ -18,8 +18,13 @@ def run(b, f, tag):
         return "crash", None
     if p.stdout.strip():
         return p.stdout.strip().splitlines()[-1][:70], None
-    i = subprocess.run([b, "info", r, "seq"], capture_output=True, text=True, timeout=120).stdout.strip().splitlines()
+    try:
+        i = subprocess.run([b, "info", r, "seq"], capture_output=True, text=True, timeout=120).stdout.strip().splitlines()
+    except subprocess.TimeoutExpired:
+        return "timeout", None
     os.remove(r)
+    if not i:
+        return "crash", None
     w = i[-1].split()
     return "ok", {w[k]: float(w[k + 1]) for k in range(1, len(w) - 1, 2)}
 

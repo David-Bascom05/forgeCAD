@@ -102,6 +102,46 @@ pub enum Surface {
     Procedural(Proc),
 }
 
+/// A surface to the bit, or the procedural one it is by its address (whoever keeps these holds the surface too,
+/// so the address stays its own). Equal only for surfaces that answer every question alike.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub enum Bits {
+    Plane([u64; 12]),
+    Cylinder([u64; 13]),
+    Cone([u64; 15]),
+    Sphere([u64; 13]),
+    Torus([u64; 14]),
+    Procedural(usize),
+}
+
+impl Surface {
+    /// All this surface is. Whole structs below, so that a field added does not compile until it is here.
+    pub fn bits(&self) -> Bits {
+        fn with<const N: usize>(f: &Frame, more: &[f64]) -> [u64; N] {
+            let (o, x, y, z) = (f.origin, f.x().get(), f.y().get(), f.z().get());
+            let mut out = [0u64; N];
+            let head = [o.x, o.y, o.z, x.x, x.y, x.z, y.x, y.y, y.z, z.x, z.y, z.z];
+            for (w, v) in out.iter_mut().zip(head.iter().chain(more)) {
+                *w = v.to_bits();
+            }
+            out
+        }
+        match self {
+            Surface::Plane(Plane { frame }) => Bits::Plane(with(frame, &[])),
+            Surface::Cylinder(Cylinder { frame, radius }) => Bits::Cylinder(with(frame, &[*radius])),
+            Surface::Cone(Cone {
+                frame,
+                radius,
+                sin_a,
+                cos_a,
+            }) => Bits::Cone(with(frame, &[*radius, *sin_a, *cos_a])),
+            Surface::Sphere(Sphere { frame, radius }) => Bits::Sphere(with(frame, &[*radius])),
+            Surface::Torus(Torus { frame, major, minor }) => Bits::Torus(with(frame, &[*major, *minor])),
+            Surface::Procedural(p) => Bits::Procedural(std::sync::Arc::as_ptr(&p.0).cast::<()>() as usize),
+        }
+    }
+}
+
 /// A surface defined by construction rather than by a formula of its own: a rolling-ball blend,
 /// a pipe along an exact spine, a corner patch spanning exact boundary curves. Exact: points are
 /// solved for to full precision from the definition, never read off an approximation.

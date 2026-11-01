@@ -187,3 +187,9 @@ of 300 parts differ in `mass` between main and this; their meshes agree to 1e-7,
 
 `ssi::searched` taking a box within 1e-11 of one it knew made results depend on load: `bits` on main varied on n-ary lines (plate, torture, fuzz1, fuzz7, fuzz8, housing, mixed at load 60-70). `nary::par_map` starts helpers after 200 microseconds, the memory is per thread, and a box 1e-13 off has its
 own answer. With only this removed, 9 runs alike beside a control that varied. It costs a box a rounding off a second trace (upto, manifold, mixed, cold). `ssi.rs`, `a_box_a_little_off_is_another_question`, fails with the near match.
+
+## Walls across a parabola
+
+Heatsink `L`'s frame: a third of it in `boolean::across`, building the wall square to a vertex blend's parabolic rim, and most of that in `Ruled::new`'s regularity scan (4 x 65 x 2
+evaluations per candidate), many times a frame. A wall extruded square to its rails' plane has the same normal all along a ruling, `q'(t) x d`, and a parabola's tangent never vanishes: the
+scan cannot fail. Heatsink `L` 482M to 385M a frame, gearbox `W` 314M to 308M, bits the same. Frames: `research/drag-speed/`.

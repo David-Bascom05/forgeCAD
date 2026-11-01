@@ -1,0 +1,9 @@
+name = "memo"
+version = "0.1.0"
+defaultTargets = ["Memo"]
+
+[leanOptions]
+relaxedAutoImplicit = false
+
+[[lean_lib]]
+name = "Memo"

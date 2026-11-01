@@ -1,4 +1,5 @@
 use forge_geom::intersect::{Contact, SurfaceSurface, plane_surface};
+use forge_geom::surface::Proc;
 use forge_geom::{Circle, Curve, Cylinder, Ellipse, Line, Sphere, Surface};
 use forge_math::{Box3, Frame, Point3, tol};
 
@@ -107,13 +108,54 @@ fn nearly_flush(a: &Surface, b: &Surface, region: &Box3) -> Option<SurfaceSurfac
     }
 }
 
-/// Recent pairs marched: a boolean meets one pair several times over the same region (and a
-/// regen, over the same surfaces, many times more).
-type Met = (Surface, Surface, Box3, SurfaceSurface);
+/// Pairs searched: a boolean meets one pair several times over the same region, and a drag meets over again every
+/// pair it did not move. `search` is a function of the two surfaces and the region and of nothing else, and a key
+/// holds them whole, to the bit, so an answer found stands (research/drag-speed).
+#[derive(Clone, PartialEq, Eq, Hash)]
+struct Met([forge_geom::surface::Bits; 2], [u64; 6]);
+fn met(a: &Surface, b: &Surface, r: &Box3) -> Met {
+    Met(
+        [a.bits(), b.bits()],
+        [r.x.lo, r.x.hi, r.y.lo, r.y.hi, r.z.lo, r.z.hi].map(f64::to_bits),
+    )
+}
+
+/// A quick mix: the map compares whole keys, so all a hash does is pick where to look.
+#[derive(Default)]
+struct Mix(u64);
+impl std::hash::Hasher for Mix {
+    fn write(&mut self, bytes: &[u8]) {
+        for &b in bytes {
+            self.write_u64(b as u64);
+        }
+    }
+    fn write_u64(&mut self, x: u64) {
+        self.0 = (self.0.rotate_left(5) ^ x).wrapping_mul(0x517c_c1b7_2722_0a95);
+    }
+    fn write_usize(&mut self, x: usize) {
+        self.write_u64(x as u64);
+    }
+    fn finish(&self) -> u64 {
+        self.0
+    }
+}
+type Mets = (
+    std::collections::HashMap<
+        Met,
+        (Option<Proc>, Option<Proc>, SurfaceSurface),
+        std::hash::BuildHasherDefault<Mix>,
+    >,
+    usize,
+);
 thread_local! {
-    static MET: std::cell::RefCell<std::collections::VecDeque<Met>> = const {
-        std::cell::RefCell::new(std::collections::VecDeque::new())
-    };
+    static MET: std::cell::RefCell<Mets> = std::cell::RefCell::new(Default::default());
+    static MET_MOST: std::cell::Cell<usize> = const { std::cell::Cell::new(4096) };
+}
+
+/// For tests: how many answers this thread keeps (0: none), and forgets those it has.
+pub fn searched_keeps(most: usize) {
+    MET_MOST.with(|m| m.set(most));
+    MET.with(|m| *m.borrow_mut() = Default::default());
 }
 
 /// Where two surfaces with no closed form meet in `region`: by marching or tracing.
@@ -129,12 +171,36 @@ pub fn searched(a: &Surface, b: &Surface, region: Box3) -> SurfaceSurface {
     if forge_geom::screw::misses(a, b, region) {
         return SurfaceSurface::Empty;
     }
-    let hit = |e: &Met| e.2 == region && e.0 == *a && e.1 == *b;
-    if let Some(r) = MET.with(|m| m.borrow().iter().find(|e| hit(e)).map(|e| e.3.clone())) {
+    let key = met(a, b, &region);
+    if let Some(r) = MET.with(|m| m.borrow().0.get(&key).map(|e| e.2.clone())) {
         return r;
     }
+    let r = search(a, b, region);
+    let most = MET_MOST.with(|m| m.get());
+    MET.with(|m| {
+        let mut m = m.borrow_mut();
+        if m.1 >= most {
+            *m = Default::default();
+        }
+        if most > 0 {
+            if m.0.capacity() == 0 {
+                m.0.reserve(most.min(4096));
+            }
+            m.1 += 1;
+            // a procedural surface kept, so that its address stays its own
+            let held = |s: &Surface| match s {
+                Surface::Procedural(p) => Some(p.clone()),
+                _ => None,
+            };
+            m.0.insert(key, (held(a), held(b), r.clone()));
+        }
+    });
+    r
+}
+
+fn search(a: &Surface, b: &Surface, region: Box3) -> SurfaceSurface {
     let met = forge_geom::meet::intersect(a, b, region).or_else(|| forge_geom::loftmeet::meet(a, b, region));
-    let r = match met {
+    match met {
         Some(r) if r != SurfaceSurface::NotAnalytic => r,
         _ => match forge_geom::intcurve::trace(a, b, region) {
             Some(cs) if cs.is_empty() => SurfaceSurface::Empty,
@@ -146,15 +212,7 @@ pub fn searched(a: &Surface, b: &Surface, region: Box3) -> SurfaceSurface {
             // a screw face the tracer cannot follow across its carried track's corners
             None => forge_geom::screw::meet_general(a, b, region).unwrap_or(SurfaceSurface::NotAnalytic),
         },
-    };
-    MET.with(|m| {
-        let mut m = m.borrow_mut();
-        if m.len() == 32 {
-            m.pop_front();
-        }
-        m.push_back((a.clone(), b.clone(), region, r.clone()));
-    });
-    r
+    }
 }
 
 /// Whether two surfaces are the same surface.
@@ -342,12 +400,8 @@ mod tests {
         assert_eq!(surfaces(&c, &c), SurfaceSurface::Coincident);
     }
 
-    /// The answer depends on the box (at 1e-13 here, not at 1e-14), so a box near one known must not take its answer:
-    /// that made an n-ary regen's result hang on which thread took the pair, so on load. Fails with a near match.
-    #[test]
-    #[cfg_attr(target_family = "wasm", ignore = "needs a thread")]
-    fn a_box_a_little_off_is_another_question() {
-        use forge_math::Interval;
+    /// Memory on and off: a pair the tracer takes, to compare by all it returns.
+    fn pair() -> (Surface, Surface, Box3) {
         let cyl = Surface::Cylinder(Cylinder {
             frame: Frame::WORLD,
             radius: 5.0,
@@ -358,20 +412,181 @@ mod tests {
             minor: 1.5,
         });
         let r = Box3::from_point(forge_math::Point3::ORIGIN).grow(30.0);
-        let first = format!("{:?}", searched(&cyl, &tor, r));
+        (cyl, tor, r)
+    }
+
+    fn text(r: &SurfaceSurface) -> String {
+        format!("{r:?}")
+    }
+
+    /// Asked on a new thread, so with nothing remembered.
+    fn cold(a: &Surface, b: &Surface, r: Box3) -> String {
+        let (a, b) = (a.clone(), b.clone());
+        std::thread::spawn(move || text(&searched(&a, &b, r)))
+            .join()
+            .unwrap()
+    }
+
+    fn moved_digit(x: f64) -> f64 {
+        f64::from_bits(x.to_bits() + 1)
+    }
+
+    #[test]
+    #[cfg_attr(target_family = "wasm", ignore = "needs a thread")]
+    fn a_surface_a_last_digit_off_is_another_question() {
+        searched_keeps(4096);
+        let (a, b, r) = pair();
+        let first = text(&searched(&a, &b, r));
+        assert!(first.contains("Intersection"), "{first}");
+        assert_eq!(first, text(&searched(&a, &b, r)));
+        assert_eq!(first, cold(&a, &b, r));
+        let Surface::Cylinder(c) = &a else { unreachable!() };
+        let other = Surface::Cylinder(Cylinder {
+            frame: c.frame,
+            radius: moved_digit(c.radius),
+        });
+        let second = text(&searched(&other, &b, r));
+        assert_ne!(first, second);
+        assert_eq!(second, cold(&other, &b, r));
+        // and the first still answers as it did
+        assert_eq!(first, text(&searched(&a, &b, r)));
+        // the other way round is its own question
+        assert_eq!(cold(&b, &a, r), text(&searched(&b, &a, r)));
+    }
+
+    #[test]
+    fn every_field_is_in_the_bits() {
+        use forge_geom::{Cone, Plane, Torus};
+        let f = Frame::WORLD;
+        let g = f.with_origin(forge_math::Point3::new(moved_digit(1.0), 0.0, 0.0));
+        let h = f.with_origin(forge_math::Point3::new(1.0, 0.0, 0.0));
+        let turned = Frame::from_z(f.origin, forge_math::UnitVec3::X);
+        assert_ne!(
+            Surface::Plane(Plane { frame: g }).bits(),
+            Surface::Plane(Plane { frame: h }).bits()
+        );
+        assert_ne!(
+            Surface::Plane(Plane { frame: f }).bits(),
+            Surface::Plane(Plane { frame: turned }).bits()
+        );
+        let cyl = |frame, radius| Surface::Cylinder(Cylinder { frame, radius }).bits();
+        assert_ne!(cyl(f, 1.0), cyl(f, moved_digit(1.0)));
+        assert_ne!(cyl(g, 1.0), cyl(h, 1.0));
+        let sph = |frame, radius| Surface::Sphere(Sphere { frame, radius }).bits();
+        assert_ne!(sph(f, 1.0), sph(f, moved_digit(1.0)));
+        assert_ne!(sph(g, 1.0), sph(h, 1.0));
+        let tor = |frame, major, minor| Surface::Torus(Torus { frame, major, minor }).bits();
+        assert_ne!(tor(f, 3.0, 1.0), tor(f, moved_digit(3.0), 1.0));
+        assert_ne!(tor(f, 3.0, 1.0), tor(f, 3.0, moved_digit(1.0)));
+        assert_ne!(tor(g, 3.0, 1.0), tor(h, 3.0, 1.0));
+        let cone = |a: f64, r: f64, frame| Surface::Cone(Cone::new(frame, r, a).expect("a cone")).bits();
+        assert_ne!(cone(0.5, 1.0, f), cone(moved_digit(0.5), 1.0, f));
+        assert_ne!(cone(0.5, 1.0, f), cone(0.5, moved_digit(1.0), f));
+        assert_ne!(cone(0.5, 1.0, g), cone(0.5, 1.0, h));
+        // a zero's sign: `==` calls them equal, the key does not
+        let zero = f.with_origin(forge_math::Point3::new(0.0, 0.0, 0.0));
+        let minus = f.with_origin(forge_math::Point3::new(-0.0, 0.0, 0.0));
+        assert_ne!(cyl(zero, 1.0), cyl(minus, 1.0));
+        // kinds apart
+        assert_ne!(cyl(f, 1.0), sph(f, 1.0));
+    }
+
+    #[test]
+    fn a_hash_that_collides_finds_nothing_false() {
+        // every key on one list: only comparing keys can tell them apart
+        #[derive(Default)]
+        struct Same;
+        impl std::hash::Hasher for Same {
+            fn write(&mut self, _: &[u8]) {}
+            fn finish(&self) -> u64 {
+                7
+            }
+        }
+        let (a, b, r) = pair();
+        use forge_math::Interval;
+        let (k0, k1) = (met(&a, &b, &r), met(&b, &a, &r));
+        let mut m: std::collections::HashMap<Met, u32, std::hash::BuildHasherDefault<Same>> =
+            Default::default();
+        m.insert(k0.clone(), 0);
+        assert_eq!(m.get(&k1), None);
+        m.insert(k1.clone(), 1);
+        assert_eq!((m[&k0], m[&k1]), (0, 1));
+        let r2 = Box3 {
+            x: Interval::new(r.x.lo, moved_digit(r.x.hi)),
+            ..r
+        };
+        assert_eq!(m.get(&met(&a, &b, &r2)), None);
+    }
+
+    #[test]
+    #[cfg_attr(target_family = "wasm", ignore = "needs a thread")]
+    fn keeping_little_or_nothing_answers_the_same() {
+        let (a, b, r) = pair();
+        let want = cold(&a, &b, r);
+        for most in [0, 1, 2, 5] {
+            searched_keeps(most);
+            for k in 0..4 {
+                // something else asked in between, to push it out
+                let other = Surface::Cylinder(Cylinder {
+                    frame: Frame::WORLD,
+                    radius: 5.0 + 0.1 * k as f64,
+                });
+                searched(&other, &b, r);
+                assert_eq!(want, text(&searched(&a, &b, r)), "keeping {most}");
+            }
+        }
+        searched_keeps(4096);
+    }
+
+    /// The answer depends on the box (at 1e-13 here, not at 1e-14), so a box near one known must not take its answer:
+    /// that made an n-ary regen's result hang on which thread took the pair, so on load. Fails with a near match.
+    #[test]
+    #[cfg_attr(target_family = "wasm", ignore = "needs a thread")]
+    fn a_box_a_little_off_is_another_question() {
+        use forge_math::Interval;
+        searched_keeps(4096);
+        let (a, b, r) = pair();
+        let first = text(&searched(&a, &b, r));
         let mut told = false;
         for off in [1e-15, 1e-14, 1e-13, 1e-12, 5e-12] {
             let near = Box3 {
                 x: Interval::new(r.x.lo, r.x.hi + off),
                 ..r
             };
-            let (a, b) = (cyl.clone(), tor.clone());
-            let alone = std::thread::spawn(move || format!("{:?}", searched(&a, &b, near)))
-                .join()
-                .unwrap();
+            let alone = cold(&a, &b, near);
             told |= alone != first;
-            assert_eq!(format!("{:?}", searched(&cyl, &tor, near)), alone, "{off:e}");
+            assert_eq!(text(&searched(&a, &b, near)), alone, "{off:e}");
         }
         assert!(told, "no box told apart: this no longer tests anything");
+    }
+
+    /// A procedural surface goes by its address: a key must hold the surface, or the address could be another's.
+    #[test]
+    fn a_new_surface_at_a_freed_address_is_not_taken_for_the_old() {
+        use forge_geom::ruled::{Rail, Ruled};
+        use forge_math::Point3;
+        searched_keeps(4096);
+        let plane = Surface::Plane(forge_geom::Plane {
+            frame: Frame::from_z(Point3::new(0.0, 0.0, 0.5), forge_math::UnitVec3::Z),
+        });
+        let region = Box3::from_point(Point3::ORIGIN).grow(20.0);
+        let wall = |x: f64| {
+            let line = |z: f64| Rail::Line {
+                a: Point3::new(x, -3.0, z),
+                b: Point3::new(x, 3.0 + x * 0.1, z),
+            };
+            Ruled::new(line(0.0), line(1.0)).expect("a wall").surface()
+        };
+        for k in 0..200 {
+            let x = 1.0 + k as f64 * 0.01;
+            let s = wall(x);
+            if let SurfaceSurface::Curves(cs) = searched(&s, &plane, region) {
+                for (c, _) in &cs {
+                    if let Curve::Intersection(ic) = c {
+                        assert!(ic.a == s, "an answer for another surface");
+                    }
+                }
+            }
+        }
     }
 }
