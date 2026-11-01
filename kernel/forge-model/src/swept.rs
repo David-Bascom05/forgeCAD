@@ -150,7 +150,7 @@ fn reach_built(features: History<'_>, i: usize) -> Option<Box3> {
             };
             Some(coil_box(&coil_motion(&c.profile, c.axis, &w).ok()?))
         }
-        Feature::Loft(l) if adds(l.op) => loft_bounds(&l.profiles, l.kind, &l.guides).ok(),
+        Feature::Loft(l) if adds(l.op) => loft_bounds(&l.profiles, l.kind, &l.guides, &l.options).ok(),
         _ => None,
     }
 }
