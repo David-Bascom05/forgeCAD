@@ -526,6 +526,11 @@ fn arcs_ending_on_the_axis() {
     // a whole circle tangent to the axis would pinch there
     let e = Model::new("revolve xz axis y circle 4 0 4\n").error;
     assert!(e.is_some_and(|e| e.msg.contains("pinches")));
+    // as does a profile whose corner only touches it: a disc and a cone meeting at their centre
+    let e = Model::new("revolve xz axis y loop line 0 0 6 0 line 6 0 6 2 line 6 2 0 0\n").error;
+    assert!(e.is_some_and(|e| e.msg.contains("pinches")), "built");
+    // not on part of a turn: a wedge's point
+    builds("revolve 90 xz axis y loop line 0 0 6 0 line 6 0 6 2 line 6 2 0 0\n");
 }
 
 /// Points along the axis between axis lines are on nothing a whole turn makes: they were left as
@@ -588,6 +593,80 @@ extrude cut 12.15 z 1 0 0 x 0 -1 0 at -9 0 0 circle 7 0 3.5
     builds(
         "extrude sym 60 z 0 -1 0 x 1 0 0 at 0 0 0 circle 0 0 2
 extrude add sym 4 z 1 0 0 x 0 1 0 at 0 0 0 loop line -20 2 -48.7059047745 4.8296291314 arc -50 0 5 75 210 line -48.7059047745 -4.8296291314 -20 -2 line -20 -2 -20 2
+",
+    );
+}
+
+/// A body of several shells: what a boolean added all went to the first, whichever shell it joined.
+/// The solid was right and the shells wrong (ShellEuler on a void's pocket, ShellsOverlap on a lump).
+#[test]
+fn what_a_boolean_adds_joins_its_own_shell() {
+    let pi = std::f64::consts::PI;
+    // a pocket in the floor of a void
+    let v = builds(
+        "extrude 40 z 0 0 1 x 1 0 0 at 0 0 0 circle 0 0 20
+extrude cut 20 z 0 0 1 x 1 0 0 at 0 0 10 circle 0 0 15
+extrude cut 10 z 0 0 1 x 1 0 0 at 5 0 5 circle 0 0 5
+",
+    );
+    let want = pi * (400.0 * 40.0 - 225.0 * 20.0 - 25.0 * 5.0);
+    assert!((v - want).abs() < 2e-3 * want, "{v} vs {want}");
+    // a hole through two separate discs
+    let v = builds(
+        "extrude 1 z 0 -1 0 x 1 0 0 at 0 0 0 circle 0 0 10
+extrude add 0.5 z 0 1 0 x 1 0 0 at 0 -10 0 circle 0 0 25
+extrude cut sym 25 z 0 1 0 x 1 0 0 at 0 -10 0 circle 0 0 6
+",
+    );
+    let want = pi * (100.0 - 36.0 + 0.5 * (625.0 - 36.0));
+    assert!((v - want).abs() < 2e-3 * want, "{v} vs {want}");
+    // a slot parting a bar in one cut
+    builds(
+        "extrude 10 rect 0 0 40 10
+extrude cut sym 30 rect 18 -5 4 20
+extrude cut 3 at 5 5 7 circle 0 0 1
+extrude cut 3 at 35 5 7 circle 0 0 1
+",
+    );
+}
+
+/// A half disc starting flush with a block's face and crossing it further round: the flush edge is
+/// named as the cut it would be, and the new edge is that cut (DuplicateName).
+#[test]
+fn a_flush_edge_named_as_a_cut_that_is_there() {
+    builds(
+        "extrude 60 z 1 0 0 x 0 1 0 at -60 -30 -10 rect 0 0 60 30
+revolve add 185 z 1 0 0 x 0 1 0 at 0 0 0 axis 0 0 0 -1 rect 0 0 12 8
+",
+    );
+}
+
+/// A piece of a wall split where the wall's seam bounds it, across that seam from a piece a cut
+/// named by it: they came to one name (DuplicateName). A pocket through a tube's rim, and a ring
+/// that fills part of it.
+#[test]
+fn pieces_across_a_seam_are_named_apart() {
+    let m = Model::new(
+        "extrude 25 z 0 0 1 x 1 0 0 at 0 0 0 circle 0 0 67
+extrude cut 20 z 0 0 1 x 1 0 0 at 0 0 0 circle 0 0 30
+extrude cut 20 z 0 0 1 x 1 0 0 at 0 0 0 circle 0 0 30
+extrude cut 20 z 0 0 1 x 1 0 0 at -60 -20 0 circle 0 60 30
+extrude add 20 z 0 0 1 x 1 0 0 at -50 0 0 circle 50 0 47 circle 50 0 30
+",
+    );
+    assert!(m.error.is_none(), "{:?}", m.error.as_ref().map(|e| &e.msg));
+    for i in 0..m.built() {
+        for s in m.solids_after(i + 1) {
+            let p = forge_topo::check(&s.body);
+            assert!(p.is_empty(), "line {i}: {p:?}");
+        }
+    }
+    builds(
+        "extrude 25 z 0 0 1 x 1 0 0 at 0 0 0 circle 0 0 67
+extrude cut 20 z 0 0 1 x 1 0 0 at 0 0 0 circle 0 0 30
+extrude cut 20 z 0 0 1 x 1 0 0 at 0 0 0 circle 0 0 30
+extrude cut 20 z 0 0 1 x 1 0 0 at -60 -20 0 circle 0 60 30
+extrude add 20 z 0 0 1 x 1 0 0 at -50 0 0 circle 50 0 47 circle 50 0 30
 ",
     );
 }

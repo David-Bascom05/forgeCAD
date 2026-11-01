@@ -1615,8 +1615,11 @@ pub(crate) fn apply<S: crate::imprint::Src>(a: &mut Body, b: &S, plan: &Plan) {
         }
     }
     // B kept where no new edge joins it to A: a lump apart (a union of disjoint solids) or a
-    // void, a shell of its own (other shells are regrouped when the body is compacted)
-    if pieces.iter().all(|p| p.seg.is_none()) && kept.iter().any(|&(si, _)| specs[si].side == 1) {
+    // void, a shell of its own; and with several shells, what was added above joined only the first
+    // whichever it belongs to (other shells are regrouped when the body is compacted)
+    if a.shells.len() > 1
+        || pieces.iter().all(|p| p.seg.is_none()) && kept.iter().any(|&(si, _)| specs[si].side == 1)
+    {
         a.rebuild_shells();
     }
 }
@@ -3113,6 +3116,15 @@ fn sole_pieces_keep_names(
             } else if s.name == Name::NONE {
                 let whole = bodies[s.side].face(s.from).name;
                 s.name = region_name(whole, &s.loops, pieces);
+                // an edge's direction is the tool's own when a cut names a piece: the piece across
+                // that edge from one so named comes to the same name
+                let body = bodies[s.side];
+                while body
+                    .face_ids()
+                    .any(|f| f != s.from && body.face(f).name == s.name)
+                {
+                    s.name = whole.piece(s.name);
+                }
                 wholes.push((s.name, whole));
             }
         }
@@ -3181,16 +3193,28 @@ pub(crate) fn flush_edges_as_cuts(
             }
         }
     }
-    // flush edges their neighbours do not tell apart (a revolve's seams on a face), by where they lie
+    // flush edges their neighbours do not tell apart (a revolve's seams on a face), by where they
+    // lie; or the cut they are named as, where a new edge is that cut (a half disc on the face it
+    // starts flush with, and crosses further round)
     named.sort_unstable_by_key(|x| (x.0, x.1));
-    for g in named.chunk_by_mut(|a, b| a.0 == b.0).filter(|g| g.len() > 1) {
+    for g in named.chunk_by_mut(|a, b| a.0 == b.0) {
+        let cuts: Vec<usize> = (0..pieces.len())
+            .filter(|&p| uses[p] > 0 && pieces[p].seg.is_some() && pieces[p].name == g[0].0)
+            .collect();
+        if g.len() + cuts.len() < 2 {
+            continue;
+        }
         let (sd, f) = g[0].3;
         let frame = surface_frame(&bodies[sd].face(f).surface);
-        let mut names: Vec<Name> = g.iter().map(|x| x.0).collect();
+        let of = |k: usize| if k < g.len() { g[k].1 } else { cuts[k - g.len()] };
+        let mut names = vec![g[0].0; g.len() + cuts.len()];
         rank_names(&mut names, &|k| {
-            let pc = &pieces[g[k].1];
+            let pc = &pieces[of(k)];
             frame.point_to_local(pc.curve.eval(pc.range.mid()))
         });
+        for (k, &p) in cuts.iter().enumerate() {
+            pieces[p].name = names[g.len() + k];
+        }
         for (x, n) in g.iter_mut().zip(names) {
             x.0 = n;
         }

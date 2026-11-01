@@ -331,15 +331,21 @@ impl Revolver<'_> {
             }
         }
         // on a whole turn a segment on the axis makes nothing, so a point between two such is on nothing
-        let mut made = vec![false; pverts.len()];
+        let mut made = vec![0u8; pverts.len()];
         for s in &segs {
             if !matches!(self.surface_of(&s.seg), Ok(None)) {
-                made[s.start] = true;
-                made[s.end] = true;
+                made[s.start] += 1;
+                made[s.end] += 1;
             }
         }
         for (i, &p) in pverts.iter().enumerate() {
-            if self.on_axis(p) && self.full && !made[i] {
+            // two segments leaving a point on the axis: a whole turn makes two cones meeting at it
+            if self.on_axis(p) && self.full && made[i] == 2 {
+                return Err(RevolveError::Unsupported(
+                    "a profile touching the axis at a point pinches the solid there",
+                ));
+            }
+            if self.on_axis(p) && self.full && made[i] == 0 {
                 for c in vid.iter_mut() {
                     c.push(VertexId(u32::MAX));
                 }
