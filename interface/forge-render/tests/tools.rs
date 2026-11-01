@@ -1042,7 +1042,7 @@ fn a_rib_fills_the_corner_it_crosses_whichever_way_its_line_was_drawn() {
         ("xz\n  line 20 10 -20 40", "rib-b"),
     ] {
         let added = rib_on(CORNER_X, sketch, [0.0, 0.0, 25.0], tag);
-        assert!((added - wedge).abs() < wedge * 0.1, "{tag}: {added} {wedge}");
+        assert!((added - wedge).abs() < 1e-6, "{tag}: {added} {wedge}");
     }
     // the same on another plane, across another wall
     for (sketch, tag) in [
@@ -1050,7 +1050,7 @@ fn a_rib_fills_the_corner_it_crosses_whichever_way_its_line_was_drawn() {
         ("yz\n  line -20 10 20 40", "rib-d"),
     ] {
         let added = rib_on(CORNER_Y, sketch, [0.0, 0.0, 25.0], tag);
-        assert!((added - wedge).abs() < wedge * 0.1, "{tag}: {added} {wedge}");
+        assert!((added - wedge).abs() < 1e-6, "{tag}: {added} {wedge}");
     }
     // a chain of two lines is one rib
     let added = rib_on(
@@ -1059,7 +1059,7 @@ fn a_rib_fills_the_corner_it_crosses_whichever_way_its_line_was_drawn() {
         [-10.0, 0.0, 32.5],
         "rib-e",
     );
-    assert!((added - wedge).abs() < wedge * 0.1, "chain: {added}");
+    assert!((added - wedge).abs() < 1e-6, "chain: {added}");
 }
 
 #[test]
