@@ -702,7 +702,7 @@ class Tr:
             # stands for its BaseFeature, which the chain has already built, moved by its own placement
             # (measured: a chain of clones composes them, and the base feature's own placement plays no part)
             by, q = d.placement(name)
-            sn = math.sqrt(q[0] ** 2 + q[1] ** 2 + q[2] ** 2)
+            sn = math.sqrt(sketch2d.sq(q[0]) + sketch2d.sq(q[1]) + sketch2d.sq(q[2]))
             if sn < 1e-12 and math.sqrt(dot(by, by)) < 1e-9:
                 return
             if self.after_moved(name):
@@ -762,7 +762,7 @@ def line_or_circle(poly):
     cr = (u[1] * v[2] - u[2] * v[1], u[2] * v[0] - u[0] * v[2], u[0] * v[1] - u[1] * v[0])
     nn = dot(cr, cr)
     if nn < 1e-18:
-        return all(math.sqrt(max(dot(add(q, a, -1), add(q, a, -1)) - dot(add(q, a, -1), v) ** 2 / max(dot(v, v), 1e-18), 0.0)) < 1e-6 for q in poly)
+        return all(math.sqrt(max(dot(add(q, a, -1), add(q, a, -1)) - sketch2d.sq(dot(add(q, a, -1), v)) / max(dot(v, v), 1e-18), 0.0)) < 1e-6 for q in poly)
     t = lambda x, y: (x[1] * y[2] - x[2] * y[1], x[2] * y[0] - x[0] * y[2], x[0] * y[1] - x[1] * y[0])
     c = add(a, add(tuple(x * dot(u, u) for x in t(v, cr)), tuple(x * dot(v, v) for x in t(cr, u))), 1 / (2 * nn))
     r = math.dist(a, c)
@@ -913,7 +913,21 @@ def chain_of(doc, body):
     return out[::-1]
 
 
+def same_everywhere():
+    """sin, cos and atan2 as forge_math::dmath computes them, and squares as products, in this file and what it uses
+    of sketch2d and cadfs: the platform's libm rounds its own way, and interface/forge-import must match this byte for byte."""
+    global math
+    import types
+    import cadfs
+    import dmath
+    m = types.SimpleNamespace(**{k: getattr(math, k) for k in dir(math) if not k.startswith("_")})
+    m.sin, m.cos, m.atan2 = dmath.sin, dmath.cos, dmath.atan2
+    math = sketch2d.math = cadfs.math = m
+    sketch2d.sq = lambda x: x * x
+
+
 def main():
+    same_everywhere()
     a = sys.argv[1:]
     opt = lambda k: a[a.index(k) + 1]
     path, out = a[0], opt("--out")

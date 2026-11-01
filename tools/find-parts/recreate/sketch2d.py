@@ -6,6 +6,11 @@ EPS = 1e-5  # mm: points this close are one point
 SAG = 2e-3  # mm: how far a sampled spline can lie off the true one
 
 
+def sq(x):
+    """x ** 2, which is the platform's pow (glibc's is off x * x one time in a thousand); freecad.py makes it x * x."""
+    return x ** 2
+
+
 class Unsupported(Exception):
     pass
 
@@ -66,7 +71,7 @@ def curve_dist(pc, p):
     best = math.inf
     for u, v in zip(pts, pts[1:]):
         e = sub(v, u)
-        l2 = e[0] ** 2 + e[1] ** 2
+        l2 = sq(e[0]) + sq(e[1])
         t = 0.0 if l2 == 0 else max(0.0, min(1.0, ((p[0] - u[0]) * e[0] + (p[1] - u[1]) * e[1]) / l2))
         best = min(best, math.hypot(u[0] + t * e[0] - p[0], u[1] + t * e[1] - p[1]))
     return best
@@ -149,8 +154,8 @@ def circle_from(a, m, b):
     d = 2 * (ax * (by - cy) + bx * (cy - ay) + cx * (ay - by))
     if abs(d) < 1e-14:
         return None
-    ux = ((ax**2 + ay**2) * (by - cy) + (bx**2 + by**2) * (cy - ay) + (cx**2 + cy**2) * (ay - by)) / d
-    uy = ((ax**2 + ay**2) * (cx - bx) + (bx**2 + by**2) * (ax - cx) + (cx**2 + cy**2) * (bx - ax)) / d
+    ux = ((sq(ax) + sq(ay)) * (by - cy) + (sq(bx) + sq(by)) * (cy - ay) + (sq(cx) + sq(cy)) * (ay - by)) / d
+    uy = ((sq(ax) + sq(ay)) * (cx - bx) + (sq(bx) + sq(by)) * (ax - cx) + (sq(cx) + sq(cy)) * (bx - ax)) / d
     return (ux, uy), math.hypot(ax - ux, ay - uy), d > 0
 
 
@@ -236,7 +241,7 @@ def on_arc(pc, p):
 def line_circle(l, c):
     d = sub(l.b, l.a)
     f = sub(l.a, c.c)
-    A, B, C = d[0] ** 2 + d[1] ** 2, 2 * (f[0] * d[0] + f[1] * d[1]), f[0] ** 2 + f[1] ** 2 - c.r**2
+    A, B, C = sq(d[0]) + sq(d[1]), 2 * (f[0] * d[0] + f[1] * d[1]), sq(f[0]) + sq(f[1]) - sq(c.r)
     if A == 0:
         return []
     disc = B * B - 4 * A * C
@@ -311,7 +316,7 @@ def split(p, pts):
     """p cut at the points on it, in order along it."""
     if p.kind == "line":
         d = sub(p.b, p.a)
-        l2 = d[0] ** 2 + d[1] ** 2
+        l2 = sq(d[0]) + sq(d[1])
         ts = sorted({0.0, 1.0} | {max(0.0, min(1.0, ((q[0] - p.a[0]) * d[0] + (q[1] - p.a[1]) * d[1]) / l2)) for q in pts} if l2 else {0.0, 1.0})
         ps = [(p.a[0] + t * d[0], p.a[1] + t * d[1]) for t in ts]
         out = []
