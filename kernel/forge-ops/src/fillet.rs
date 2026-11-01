@@ -119,6 +119,9 @@ pub enum FilletError {
     /// The blend of this edge ends where its tangent chain runs on unpicked, and has nothing there
     /// to run out into: the chain's next edge needs picking too.
     FreeEnd { edge: EdgeId },
+    /// This edge's blend and another cross on the face between them, and the one blend of the faces
+    /// beyond, which should take that face whole, does not stand.
+    Crossed { edge: EdgeId },
     /// An edge is listed twice.
     Duplicate { edge: EdgeId },
     /// A ring's round whose ball is wider than the circle its centre rolls round; `max` is the
@@ -215,6 +218,9 @@ pub struct FilletOptions {
     pub stops: Vec<EdgeId>,
     /// Only the edges given: no tangent chain runs on from them at all.
     pub only: bool,
+    /// Where two blends' springs cross on the face between them, one blend of the faces beyond
+    /// takes that face whole. Asked only after the two have refused to stand side by side.
+    pub across: bool,
 }
 
 /// The vertex each varying law of `edges` runs from. A run is the edges one varying radius was
@@ -318,6 +324,22 @@ pub fn fillet(body: &Body, edges: &[FilletEdge], feature: u64) -> R<Body> {
 /// `fillet` with laws started at given vertices and corners set back by given distances.
 pub fn fillet_with(body: &Body, edges: &[FilletEdge], opts: &FilletOptions, feature: u64) -> R<Body> {
     let got = fillet_picked(body, edges, opts, feature);
+    if matches!(got, Err(FilletError::Overflow { .. })) && !opts.across {
+        let across = FilletOptions {
+            across: true,
+            ..opts.clone()
+        };
+        match fillet_picked(body, edges, &across, feature) {
+            Ok(b) if forge_topo::check(&b).is_empty() => return Ok(b),
+            Ok(_) => {
+                return Err(FilletError::Crossed {
+                    edge: edges.first().map_or(EdgeId(0), |f| f.edge),
+                });
+            }
+            Err(e @ FilletError::Crossed { .. }) => return Err(e),
+            Err(_) => {}
+        }
+    }
     if let Err(FilletError::Overflow { edge } | FilletError::NoBlend { edge }) = got
         && opts.only
     {
@@ -633,6 +655,24 @@ fn fillet_on(body: &Body, edges: &[FilletEdge], opts: &FilletOptions, feature: u
         for r in rolled {
             for x in r? {
                 by_edge.insert(x.edge, x);
+            }
+        }
+        if opts.across {
+            let pairs = crossing_pairs(&body, &by_edge);
+            let Some(&(first, ..)) = pairs.first() else {
+                return Err(FilletError::Overflow {
+                    edge: edges.first().map_or(EdgeId(0), |f| f.edge),
+                });
+            };
+            if pass > 0 {
+                return Err(FilletError::Overflow { edge: first });
+            }
+            for (e, other, near) in pairs {
+                let r = by_edge[&e].blend.radius;
+                by_edge.insert(e, roll_across(&body, e, other, r, near, root)?);
+                by_edge.remove(&other);
+                all.retain(|f| f.0 != other);
+                picks.remove(&other);
             }
         }
         let splits: Vec<(EdgeId, f64)> = by_edge
@@ -1306,10 +1346,23 @@ fn roll(body: &Body, e: EdgeId, r: f64, root: Name) -> R<Rolled> {
         Some(Some((b, sp, s))) => (b, sp, Some(s)),
         _ => (blend, springs, None),
     };
-    let split = switch_split(body, e, &l, &blend, &springs, &over);
+    Ok(rolled_from(body, e, &l, blend, springs, over, on_rim, root))
+}
+
+fn rolled_from(
+    body: &Body,
+    e: EdgeId,
+    l: &Local,
+    blend: Blend,
+    springs: [Curve; 2],
+    over: Over,
+    on_rim: Option<usize>,
+    root: Name,
+) -> Rolled {
+    let split = switch_split(body, e, l, &blend, &springs, &over);
     let tm = spine_closest(&blend.spine, l.p);
     let aligned = blend.spine.deriv(tm).d1.dot(l.tangent.get()) > 0.0;
-    Ok(Rolled {
+    Rolled {
         edge: e,
         convex: l.convex,
         blend,
@@ -1324,7 +1377,103 @@ fn roll(body: &Body, e: EdgeId, r: f64, root: Name) -> R<Rolled> {
         over,
         split,
         cliff: on_rim,
-    })
+    }
+}
+
+/// Pairs of picked edges of one radius and kind along a face between them, whose blends' springs
+/// on it have crossed all along: the first edge, the second, and near where the ball over both rolls.
+fn crossing_pairs(body: &Body, by_edge: &BTreeMap<EdgeId, Rolled>) -> Vec<(EdgeId, EdgeId, Point3)> {
+    let plain = |r: &Rolled| r.var.is_none() && r.cliff.is_none() && r.over.iter().all(Option::is_none);
+    let mut used = BTreeSet::new();
+    let mut out = Vec::new();
+    for (&a, ra) in by_edge {
+        for (&b, rb) in by_edge.range(a..).skip(1) {
+            if used.contains(&a)
+                || used.contains(&b)
+                || !plain(ra)
+                || !plain(rb)
+                || ra.convex != rb.convex
+                || (ra.blend.radius - rb.blend.radius).abs() > tol::LINEAR
+            {
+                continue;
+            }
+            let shared = |s: usize| (0..2).find(|&k| ra.faces[s] == rb.faces[k]).map(|k| (s, k));
+            let [Some((sa, sb))] = [shared(0).or_else(|| shared(1))] else {
+                continue;
+            };
+            let f = ra.faces[sa];
+            let surface = &body.face(f).surface;
+            let domain = surface.domain();
+            let (xa, xb) = (body.edge(a), body.edge(b));
+            let crossed = |frac: f64| {
+                let ea = xa.curve.eval(xa.range.lo + frac * xa.range.width());
+                let eb = xb.curve.eval(xb.curve.closest(ea, xb.range));
+                let pa = ra.springs[sa].eval(spine_closest(&ra.blend.spine, ea));
+                let pb = rb.springs[sb].eval(spine_closest(&rb.blend.spine, eb));
+                let o = surface.project(ea);
+                let uv = |p: Point3| {
+                    let q = surface.project(p);
+                    let wrap = |d: f64, per: Option<f64>| per.map_or(d, |w| d - w * (d / w).round());
+                    (wrap(q.x - o.x, domain.u.period), wrap(q.y - o.y, domain.v.period))
+                };
+                let (d, ua, ub) = (uv(eb), uv(pa), uv(pb));
+                let dd = d.0 * d.0 + d.1 * d.1;
+                dd > 0.0 && (ua.0 * d.0 + ua.1 * d.1) > (ub.0 * d.0 + ub.1 * d.1)
+            };
+            if [0.02, 0.5, 0.98].iter().all(|&s| crossed(s)) {
+                let mid = xa.curve.eval(xa.range.mid());
+                let ca = ra.blend.spine.eval(spine_closest(&ra.blend.spine, mid));
+                let cb = rb.blend.spine.eval(spine_closest(&rb.blend.spine, mid));
+                out.push((a, b, ca.lerp(cb, 0.5)));
+                used.insert(a);
+                used.insert(b);
+            }
+        }
+    }
+    out
+}
+
+/// One blend for two edges of the face between them: resting on the faces beyond each, with the
+/// face itself gone. The ball must rest on both within them, and stay behind the face it passes.
+fn roll_across(body: &Body, e: EdgeId, other: EdgeId, r: f64, near: Point3, root: Name) -> R<Rolled> {
+    let err = FilletError::Crossed { edge: e };
+    let l = local(body, e, r, body.edge(e).range.mid())?;
+    let sense = |f: FaceId| if body.face(f).same_sense { 1.0 } else { -1.0 };
+    let shared = |f: FaceId| body.edge(other).coedges.iter().any(|&c| body.coedge_face(c) == f);
+    let s = (0..2).find(|&s| shared(l.faces[s])).ok_or(err.clone())?;
+    let f = l.faces[s];
+    let beyond = body
+        .edge(other)
+        .coedges
+        .iter()
+        .map(|&c| body.coedge_face(c))
+        .find(|&x| x != f)
+        .ok_or(err.clone())?;
+    let mut faces = l.faces;
+    faces[s] = beyond;
+    let mut sign = l.sign;
+    sign[s] *= sense(f) * sense(beyond);
+    let region = body
+        .edge_box(e)
+        .hull(&body.edge_box(other))
+        .grow(4.0 * r + tol::LINEAR);
+    // no ball rests on both (walls parallel, too far apart): the two rounds are all there is
+    let blend = blend_of(body, faces, [sign[0] * r, sign[1] * r], l.p, near, region)
+        .ok_or(FilletError::Overflow { edge: e })?;
+    let springs = [
+        blend.spring(true).ok_or(err.clone())?,
+        blend.spring(false).ok_or(err.clone())?,
+    ];
+    let t = spine_closest(&blend.spine, l.p);
+    let centre = blend.spine.eval(t);
+    if body.face(f).surface.implicit(centre).abs() < r - tol::LINEAR
+        || !(0..2).all(|k| on_face(body, faces[k], springs[k].eval(t)))
+    {
+        return Err(err);
+    }
+    let mut over = [None, None];
+    over[s] = Some((beyond, other));
+    Ok(rolled_from(body, e, &l, blend, springs, over, None, root))
 }
 
 /// Where the ball is wider than a face it should rest on, so its foot there lies past that face's

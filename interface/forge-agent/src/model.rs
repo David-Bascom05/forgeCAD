@@ -995,6 +995,7 @@ fn size_limit(features: &[Feature], ids: &[u64], before: &[forge_model::Solid], 
                 | F::NoBlend { .. }
                 | F::Corner { .. }
                 | F::Mitre { .. }
+                | F::Crossed { .. }
                 | F::Tangency { .. },
             ..
         } | RegenError::Chamfer {
@@ -1131,6 +1132,13 @@ pub fn explain(e: &RegenError) -> (String, String) {
             hint(
                 "a round of this ring works up to that radius; for a full round, make the ring thinner or wider",
             ),
+        ),
+        Fillet {
+            error: forge_ops::FilletError::Crossed { .. },
+            ..
+        } => (
+            "fillet: two rounds cross on the face between them, and no one round of the faces beyond takes it".to_string(),
+            hint("try a smaller radius, or round the faces beyond with a full round"),
         ),
         Fillet {
             error: forge_ops::FilletError::FreeEnd { .. },

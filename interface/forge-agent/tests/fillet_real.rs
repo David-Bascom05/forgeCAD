@@ -353,3 +353,62 @@ fn a_ball_wider_than_a_short_face_does_not_rest_on_a_ridge_the_next_face_covers(
     let f = m.error.as_ref().expect("refuses, not a blend through the top");
     assert!(f.msg.contains("fillet"), "{}", f.msg);
 }
+
+#[test]
+fn two_rounds_crossing_on_a_face_become_one_of_the_faces_beyond() {
+    // a lobe of radius big between two hollows of radius a: a ball on either of its edges would
+    // reach past the other's tangent point, and one ball rests on both hollows instead
+    let (d, a, r, h, base) = (3.518f64, 2.218f64, 1.5625f64, 10.0f64, -6.0f64);
+    let drop = 3.37f64;
+    let big = ((d - a) * (d - a) + drop * drop).sqrt();
+    let start = drop.atan2(d - a).to_degrees();
+    let src = format!(
+        "b: extrude {h} z 0 0 1 x 1 0 0 at 0 0 0 loop line {md} {base} {d} {base} line {d} {base} {d} {low} arc {d} 0 {a} -90 -90 arc 0 {mdrop} {big} {start} {sweep} arc {md} 0 {a} 0 -90 line {md} {low} {md} {base}\nfillet {r} (edges near {e} 0 5) (edges near {me} 0 5)\n",
+        md = -d,
+        low = -a,
+        mdrop = -drop,
+        sweep = 180.0 - 2.0 * start,
+        e = d - a,
+        me = a - d,
+    );
+    // the ball's centre, on the middle line, a + r from each hollow's centre
+    let yc = -((a + r) * (a + r) - d * d).sqrt();
+    let out = (-yc).atan2(d).to_degrees();
+    let mut pts = vec![(-d, base), (d, base)];
+    let n = 20000;
+    let arc = |pts: &mut Vec<(f64, f64)>, c: (f64, f64), rad: f64, from: f64, to: f64| {
+        for i in 0..=n {
+            let t = (from + (to - from) * i as f64 / n as f64).to_radians();
+            pts.push((c.0 + rad * t.cos(), c.1 + rad * t.sin()));
+        }
+    };
+    arc(&mut pts, (d, 0.0), a, -90.0, -180.0 + out);
+    arc(&mut pts, (0.0, yc), r, out, 180.0 - out);
+    arc(&mut pts, (-d, 0.0), a, -out, -90.0);
+    let area: f64 = (0..pts.len())
+        .map(|i| {
+            let (p, q) = (pts[i], pts[(i + 1) % pts.len()]);
+            p.0 * q.1 - q.0 * p.1
+        })
+        .sum::<f64>()
+        * 0.5;
+    let m = Model::new(&src);
+    if let Some(f) = &m.error {
+        panic!("line {}: {}\n{src}", m.lines[f.at].no, f.msg);
+    }
+    let part = Part {
+        features: m.features.clone(),
+    };
+    for (how, built) in [("seq", part.regenerate()), ("n-ary", part.regenerate_nary(2))] {
+        let b = built.unwrap_or_else(|e| panic!("{how}: {e:?}\n{src}"));
+        assert_eq!(forge_topo::check(&b), vec![], "{how}\n{src}");
+        // ends, base, two sides, two hollows, the one round; the lobe is gone
+        assert_eq!(b.face_ids().count(), 8, "{how}\n{src}");
+        let v = forge_topo::mass::mass(&b).expect("mass").volume;
+        assert!(
+            (v - h * area).abs() < 1e-5 * v,
+            "{how}: {v} not {}\n{src}",
+            h * area
+        );
+    }
+}
