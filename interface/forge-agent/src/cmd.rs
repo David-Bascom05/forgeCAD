@@ -1415,8 +1415,9 @@ combine cut base lid keep
         let part = dir.file("p.fc", "import \"b.step\"\nhole 4 -xy at 20 10 10 thru\n");
         let r = s.run("measure", &args(&part, &["mass"]));
         assert!(r.ok, "{}", r.text);
+        // the hole goes right through: a through cut sees what was imported
         let want = 8000.0 - forge_math::dmath::PI * 4.0 * 10.0;
-        assert!(r.text.contains(&format!("{:.1}", want)) || r.text.contains(&format!("{want:.0}")), "{}", r.text);
+        assert!(r.text.contains(&format!("volume {want:.1}")), "{}", r.text);
         let c = s.run("check", &args(&part, &[]));
         assert!(c.ok, "{}", c.text);
         // no file: an error on its line
@@ -1433,7 +1434,13 @@ combine cut base lid keep
             root: Some(std::fs::canonicalize(&dir.0).expect("root")),
             ..Session::default()
         };
-        let away = dir.file("s.fc", &format!("import \"../{}/o.step\"\n", outside.0.file_name().expect("name").to_string_lossy()));
+        let away = dir.file(
+            "s.fc",
+            &format!(
+                "import \"../{}/o.step\"\n",
+                outside.0.file_name().expect("name").to_string_lossy()
+            ),
+        );
         assert!(!rooted.run("build", &args(&away, &[])).ok);
     }
 

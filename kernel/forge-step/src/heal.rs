@@ -299,6 +299,7 @@ impl Proto {
         let same = face.same_sense;
         let mut any_outer = false;
         let mut centre = Vec3::ZERO;
+        let k_origin = k.frame.origin;
         for (i, l) in face.loops.iter().enumerate() {
             if self.winding(l, &s) != (0, 0) {
                 return s;
@@ -318,11 +319,13 @@ impl Proto {
             }
             any_outer |= (area > 0.0) == same;
             if i == 0 {
-                let w = l.len().max(1) as f64;
+                // the middle of the loop, as seen from the sphere's centre
                 for &u in l {
                     let e = &self.edges[u.0];
-                    let mid = e.curve.eval(e.range.mid()) - k.frame.origin;
-                    centre += mid / w;
+                    for k in 0..8 {
+                        let t = e.range.lo + e.range.width() * (k as f64 + 0.5) / 8.0;
+                        centre += e.curve.eval(t) - k_origin;
+                    }
                 }
             }
         }
@@ -431,6 +434,9 @@ impl Proto {
         let name = self.fresh();
         self.verts.push((pole, name));
         let vp = self.verts.len() - 1;
+        if matches!(s, Surface::Sphere(_)) {
+            return self.two_lunes(f, a, vp);
+        }
         let va = self.start_of(self.faces[f].loops[a][0]);
         let seam = self
             .seam_edge(&s, dir, va, vp)
@@ -442,11 +448,107 @@ impl Proto {
         Ok(())
     }
 
+    /// A sphere's face round one pole, as bodies have spheres: two faces, a half turn each, met
+    /// by meridians from the pole to opposite points of the rim.
+    fn two_lunes(&mut self, f: usize, a: usize, pole: usize) -> Result<(), String> {
+        let s = self.faces[f].surface.clone();
+        // meridians clear of the face's other loops, if that can be
+        let mut holes: Vec<(f64, f64)> = Vec::new();
+        for (i, h) in self.faces[f].loops.iter().enumerate() {
+            if i != a {
+                let mut pts = Vec::new();
+                for &u in h {
+                    self.walk(u, &s, 8, &mut pts);
+                }
+                let lo = pts.iter().map(|q| q.x).fold(f64::INFINITY, f64::min);
+                let hi = pts.iter().map(|q| q.x).fold(f64::NEG_INFINITY, f64::max);
+                holes.push((lo, hi));
+            }
+        }
+        let clear = |u: f64| {
+            holes.iter().all(|&(lo, hi)| {
+                let x = lo + (u - lo).rem_euclid(dmath::TAU);
+                x > hi
+            })
+        };
+        let first = self.start_of(self.faces[f].loops[a][0]);
+        let u_first = s.project(self.verts[first].0).x;
+        let u0 = (0..32)
+            .map(|k| u_first + dmath::TAU * k as f64 / 32.0)
+            .find(|&u| clear(u) && clear(u + dmath::PI))
+            .unwrap_or(u_first);
+        let Some(va) = self.pick_vertex_on(f, a, 0, u0) else {
+            return Err("no place on the rim for a meridian".into());
+        };
+        let rim = self.faces[f].loops[a].clone();
+        let far = u0 + dmath::PI;
+        let vb = match &rim[..] {
+            // a closed rim is cut there, its vertex staying the first meridian's
+            [(e, _)] if self.edges[*e].start == self.edges[*e].end => {
+                let Some((_, t)) = self.find_on_loop(&rim, &s, 0, far) else {
+                    return Err("no place on the rim for a second meridian".into());
+                };
+                self.split_edge(*e, t)
+            }
+            _ => self
+                .pick_vertex_on(f, a, 0, far)
+                .ok_or("no place on the rim for a second meridian")?,
+        };
+        let (s0, s1) = (
+            self.seam_edge(&s, 0, va, pole).ok_or("no meridian")?,
+            self.seam_edge(&s, 0, vb, pole).ok_or("no meridian")?,
+        );
+        let mut l = self.faces[f].loops[a].clone();
+        if !self.start_at(&mut l, va) {
+            return Err("a rim does not pass its meridian's vertex".into());
+        }
+        let Some(cut) = (0..l.len()).find(|&i| self.start_of(l[i]) == vb) else {
+            return Err("a rim does not pass its meridian's vertex".into());
+        };
+        let (first, second) = l.split_at(cut);
+        let mut one = first.to_vec();
+        one.push((s1, true));
+        one.push((s0, false));
+        let mut two = second.to_vec();
+        two.push((s0, true));
+        two.push((s1, false));
+        // a hole goes with the half its first vertex lies in
+        let e0 = &self.edges[one[0].0];
+        let mid = s.project(e0.curve.eval(e0.range.mid())).x;
+        let dist = |x: f64, y: f64| {
+            let r = (x - y) / dmath::TAU;
+            ((r - r.round()) * dmath::TAU).abs()
+        };
+        let (mut stay, mut moved) = (vec![one], vec![two]);
+        for (i, h) in self.faces[f].loops.iter().enumerate() {
+            if i == a {
+                continue;
+            }
+            let u = s.project(self.verts[self.start_of(h[0])].0).x;
+            if dist(u, mid) <= 0.5 * dmath::PI {
+                stay.push(h.clone());
+            } else {
+                moved.push(h.clone());
+            }
+        }
+        self.faces[f].loops = stay;
+        let name = self.fresh();
+        let (same_sense, shell) = (self.faces[f].same_sense, self.faces[f].shell);
+        self.faces.push(PFace {
+            surface: s,
+            same_sense,
+            name,
+            shell,
+            loops: moved,
+        });
+        Ok(())
+    }
+
     /// A surface closed all round with no edges: a sphere gets one meridian, pole to pole.
     fn whole_face(&mut self, f: usize) -> Result<(), String> {
         let s = self.faces[f].surface.clone();
         match &s {
-            Surface::Sphere(_) => {
+            Surface::Sphere(k) => {
                 let (a, b) = (
                     pole_of(&s, 0, false).ok_or("no pole")?,
                     pole_of(&s, 0, true).ok_or("no pole")?,
@@ -455,8 +557,34 @@ impl Proto {
                 self.verts.push((a, na));
                 self.verts.push((b, nb));
                 let n = self.verts.len();
-                let seam = self.seam_edge(&s, 0, n - 2, n - 1).ok_or("no seam curve")?;
-                self.faces[f].loops = vec![vec![(seam, true), (seam, false)]];
+                let x: Vec3 = k.frame.x().into();
+                let z: Vec3 = k.frame.z().into();
+                let mut half = |o: Vec3| -> Option<usize> {
+                    let frame = Frame::from_zx(k.frame.origin, o.cross(z).normalize()?, o)?;
+                    let name = self.fresh();
+                    self.edges.push(PEdge {
+                        curve: Curve::Circle(Circle {
+                            frame,
+                            radius: k.radius,
+                        }),
+                        range: Interval::new(1.5 * dmath::PI, 2.5 * dmath::PI),
+                        start: n - 2,
+                        end: n - 1,
+                        name,
+                    });
+                    Some(self.edges.len() - 1)
+                };
+                let m0 = half(x).ok_or("no meridian")?;
+                let m1 = half(-x).ok_or("no meridian")?;
+                self.faces[f].loops = vec![vec![(m1, true), (m0, false)]];
+                let (name, same_sense, shell) = (self.fresh(), self.faces[f].same_sense, self.faces[f].shell);
+                self.faces.push(PFace {
+                    surface: s.clone(),
+                    same_sense,
+                    name,
+                    shell,
+                    loops: vec![vec![(m0, true), (m1, false)]],
+                });
                 Ok(())
             }
             _ => Err(format!("a whole {} with no edges", kind(&s))),
