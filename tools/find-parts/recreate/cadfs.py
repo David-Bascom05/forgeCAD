@@ -15,6 +15,7 @@ import os
 import resource
 import subprocess
 import sys
+import tempfile
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import fs
@@ -983,8 +984,6 @@ class Tr:
             self.current = f"b{self.names}"
             label = self.current + ": "
             self.bodies += 1
-        elif op == "add" and self.bodies > 1:
-            self.notes.add("multibody-join")
         if fid_out is not None:
             self.solid[fid_out].setdefault("made", []).append((ents, self.current))
         return label, this, " in all" if self.bodies > 1 and op in ("cut", "keep") else ""
@@ -1000,10 +999,46 @@ class Tr:
                 if op == "new" and same in self.made:
                     self.current = self.made[same]
                     continue
-                label, this, scope = self.solid_line(op, ents, fid_out)
+                # Onshape's add joins the bodies it meets and leaves the rest: a body of its own, then joined
+                text = f"{kind} {{}}{head} {frame_text} {tail}{loops}{after}"
+                joined = self.run_into(text) if op == "add" and self.bodies > 1 else []
+                label, this, scope = self.solid_line("new" if op == "add" and self.bodies > 1 else op, ents, fid_out)
                 if label:
                     self.made[same] = self.current
-                self.lines.append(f"{label}{kind} {this + ' ' if this else ''}{head} {frame_text} {tail}{loops}{after}{scope}")
+                self.lines.append(f"{label}{text.format(this + ' ' if this else '')}{scope}")
+                if op == "add" and label:
+                    self.notes.add("multibody-join")
+                if joined:
+                    self.lines.append(f"combine add {self.current} " + " ".join(joined))
+                    self.alias.update((b, self.current) for b in joined)
+                    self.bodies -= len(joined)
+
+    def mass_of(self, lines):
+        """Volume and area of these lines as a part, summed over its bodies; None if they don't build."""
+        with tempfile.NamedTemporaryFile("w", suffix=".fc", delete=False) as t:
+            t.write("\n".join(lines) + "\n")
+        try:
+            p = subprocess.run([os.path.join(os.path.dirname(self.topo_exe), "judge"), t.name], capture_output=True, text=True, timeout=300)
+            j = json.loads(p.stdout)
+        except (subprocess.TimeoutExpired, ValueError):
+            j = {}
+        os.remove(t.name)
+        return (j["vol"], j["area"]) if j.get("v") in ("ok", "fail") and "vol" in j and "area" in j and "combine" not in j.get("sig", "") else None
+
+    def run_into(self, text):
+        """The live bodies a new solid meets, by what joining them takes away: shared volume or a shared face."""
+        new = f"zz: {text.format('new ')}"
+        alone = self.mass_of(self.lines + [new])
+        if alone is None:
+            raise Unresolved("an add into several bodies that doesn't build alone")
+        out = []
+        for b in (f"b{k + 1}" for k in range(self.names)):
+            if b in self.alias:
+                continue
+            m = self.mass_of(self.lines + [new, f"combine add zz {b}"])
+            if m is not None and (m[0] < alone[0] * (1 - 1e-9) or m[1] < alone[1] * (1 - 1e-9)):
+                out.append(b)
+        return out
 
     def extrude(self, f):
         a, env = f["args"], f["env"]
