@@ -1528,6 +1528,8 @@ pub(crate) fn apply<S: crate::imprint::Src>(a: &mut Body, b: &S, plan: &Plan) {
         .first()
         .map(|_| forge_topo::ShellId(0))
         .unwrap_or_else(|| a.add_shell());
+    let other_shell =
+        a.shells.len() > 1 && specs.iter().any(|s| s.side == 0 && a.face(s.from).shell != shell);
     let mut vertex = |a: &mut Body, v: VKey| -> VertexId {
         let v = alias.iter().find(|(f, _)| *f == v).map_or(v, |&(_, t)| t);
         match v {
@@ -1615,9 +1617,9 @@ pub(crate) fn apply<S: crate::imprint::Src>(a: &mut Body, b: &S, plan: &Plan) {
         }
     }
     // B kept where no new edge joins it to A: a lump apart (a union of disjoint solids) or a
-    // void, a shell of its own; and with several shells, what was added above joined only the first
-    // whichever it belongs to (other shells are regrouped when the body is compacted)
-    if a.shells.len() > 1
+    // void, a shell of its own; and what meets a shell other than the first, as what was added
+    // above joined the first whichever it belongs to (others are regrouped when the body is compacted)
+    if other_shell
         || pieces.iter().all(|p| p.seg.is_none()) && kept.iter().any(|&(si, _)| specs[si].side == 1)
     {
         a.rebuild_shells();
@@ -3117,11 +3119,18 @@ fn sole_pieces_keep_names(
                 let whole = bodies[s.side].face(s.from).name;
                 s.name = region_name(whole, &s.loops, pieces);
                 // an edge's direction is the tool's own when a cut names a piece: the piece across
-                // that edge from one so named comes to the same name
+                // the least edge from one so named comes to the same name
                 let body = bodies[s.side];
-                while body
-                    .face_ids()
-                    .any(|f| f != s.from && body.face(f).name == s.name)
+                let least = s.loops.iter().flatten().min_by_key(|x| pieces[x.0].name);
+                let across = least
+                    .map(|x| &pieces[x.0])
+                    .filter(|pc| pc.side == Some(s.side))
+                    .and_then(|pc| pc.whole.map(|w| w.1).or(pc.of));
+                if let Some(e) = across
+                    && body.edge(e).coedges.iter().any(|&c| {
+                        let f = body.coedge_face(c);
+                        f != s.from && body.face(f).name == s.name
+                    })
                 {
                     s.name = whole.piece(s.name);
                 }
@@ -3197,9 +3206,19 @@ pub(crate) fn flush_edges_as_cuts(
     // lie; or the cut they are named as, where a new edge is that cut (a half disc on the face it
     // starts flush with, and crosses further round)
     named.sort_unstable_by_key(|x| (x.0, x.1));
+    // (most booleans have none: the flush names are sorted, so ask of each new edge)
+    let new_edges: Vec<usize> = (0..pieces.len())
+        .filter(|&p| {
+            pieces[p].seg.is_some()
+                && uses[p] > 0
+                && named.binary_search_by_key(&pieces[p].name, |x| x.0).is_ok()
+        })
+        .collect();
     for g in named.chunk_by_mut(|a, b| a.0 == b.0) {
-        let cuts: Vec<usize> = (0..pieces.len())
-            .filter(|&p| uses[p] > 0 && pieces[p].seg.is_some() && pieces[p].name == g[0].0)
+        let cuts: Vec<usize> = new_edges
+            .iter()
+            .copied()
+            .filter(|&p| pieces[p].name == g[0].0)
             .collect();
         if g.len() + cuts.len() < 2 {
             continue;

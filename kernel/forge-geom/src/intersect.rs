@@ -451,8 +451,12 @@ fn conic_quadric(f: &Frame, a: f64, b: f64, range: Interval, s: &Surface) -> Opt
     let mut turns: Vec<f64> = Vec::new();
     // the implicit's gradient along the conic, so how far a value within LINEAR of the surface can be
     // from zero (times 4 for the 1 + u^2 squared multiplied through below)
-    let mmax = m.iter().flatten().fold(0.0f64, |a, x| a.max(x.abs()));
-    let lip = 6.0 * mmax * (o.length() + ex0.length() + ey0.length()) + lv.length();
+    let lip = if matches!(s, Surface::Plane(_)) {
+        1.0
+    } else {
+        let mmax = m.iter().flatten().fold(0.0f64, |a, x| a.max(x.abs()));
+        6.0 * mmax * (o.length() + ex0.length() + ey0.length()) + lv.length()
+    };
     for phi in [0.0, dmath::PI] {
         let (sp, cp) = dmath::sin_cos(phi);
         let ex = ex0 * cp + ey0 * sp;
