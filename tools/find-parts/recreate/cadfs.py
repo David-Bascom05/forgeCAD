@@ -208,8 +208,19 @@ class LoftRail:
         return out
 
 
+def picks(c):
+    """Does this carrier hold a loft's wall or rail, which go by what they touch and have no distance?"""
+    if isinstance(c, Any):
+        return any(picks(x) for x in c.cs)
+    if isinstance(c, Both):
+        return picks(c.a) or picks(c.b)
+    return hasattr(c, "edges_in")
+
+
 def on_edges(c, st):
-    """The edges a carrier picks."""
+    """The edges a carrier picks. One edge can run along several curves of an Any, so distance decides where it can."""
+    if not picks(c):
+        return {e["h"] for e in st.get("edges", []) if all(c.dist(p) <= TOL for p in e["p"])}
     if isinstance(c, Any):
         return set().union(*(on_edges(x, st) for x in c.cs))
     if isinstance(c, Both):
@@ -221,6 +232,8 @@ def on_edges(c, st):
 
 def on_faces(c, st):
     """The faces a carrier picks."""
+    if not picks(c):
+        return {f["h"] for f in st.get("faces", []) if all(c.dist(p) <= TOL for p in f["p"])}
     if isinstance(c, Any):
         return set().union(*(on_faces(x, st) for x in c.cs))
     if isinstance(c, Both):
