@@ -944,3 +944,19 @@ extrude add 0.03 loop arc 0.098588751 0.0072 0.063498271 -173.489291243 170.4892
     // the banana 0.1 high, and the part of the D past its hollow 0.03 high: areas on a fine grid
     assert!((v - 0.00105669).abs() < 1e-3 * 0.00105669, "{v}");
 }
+
+/// A chamfer on a rim ending at a corner where the wall behind it turns away: its plane meets the rim beyond
+/// the corner, not on it, and the flat beside it runs on that far (was TooLarge at any size). OCCT's volume.
+#[test]
+fn a_chamfer_ending_at_a_concave_corner_of_the_rim() {
+    let mut v = Model::new(
+        "extrude 10 poly 0 0 40 0 40 10 25 10 20 20 0 20
+chamfer 1 (edges near 22.5 15 10)
+",
+    );
+    assert!(v.error.is_none(), "{:?}", v.error.as_ref().map(|e| &e.msg));
+    let b = v.body().expect("a body");
+    assert!(forge_topo::check(b).is_empty(), "{:?}", forge_topo::check(b));
+    let m = v.mass().expect("a mass").volume;
+    assert!((m - 6244.40983).abs() < 1e-4, "{m}");
+}

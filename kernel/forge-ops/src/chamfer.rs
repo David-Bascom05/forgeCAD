@@ -384,14 +384,27 @@ impl Work {
         let along = |end: End, s: &Surface| -> Result<Point3, ChamferError> {
             let edge = src.edge(end.0);
             let too_large = ChamferError::TooLarge { edge: edge.name };
-            match curve_surface(&edge.curve, edge.range, s) {
-                CurveSurface::Hits(h) => h
-                    .iter()
+            let nearest = |h: &[forge_geom::intersect::CurveHit]| {
+                h.iter()
                     .map(|h| h.point)
                     .min_by(|a, b| a.distance(vp).total_cmp(&b.distance(vp)))
-                    .ok_or(too_large),
-                _ => Err(too_large),
-            }
+            };
+            // not on the edge, but past this end of it: a corner the chamfer leaves on the far side of
+            // a concave edge. The face beyond runs on that far, and the edge with it
+            let on = match curve_surface(&edge.curve, edge.range, s) {
+                CurveSurface::Hits(h) => nearest(&h),
+                _ => None,
+            };
+            let past = || {
+                let Curve::Line(_) = &edge.curve else { return None };
+                let w = edge.range.width();
+                let r = forge_math::Interval::new(edge.range.lo - 64.0 * w, edge.range.hi + 64.0 * w);
+                match curve_surface(&edge.curve, r, s) {
+                    CurveSurface::Hits(h) => nearest(&h),
+                    _ => None,
+                }
+            };
+            on.or_else(past).ok_or(too_large)
         };
         let mut n = 0;
         let mut name = |kind: &str| {
