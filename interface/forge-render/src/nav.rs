@@ -4,10 +4,10 @@
 //! cube's faces, edges and corners go to their views, smoothly, its ring spins about up. Nothing
 //! here touches the window or the GPU: what's under the cursor comes back through `on_pick`.
 
-use crate::camera::{Camera, PITCH_END};
+use crate::camera::{Camera, PITCH_END, dot};
 use crate::render::{Entity, Mark, PickHit};
 use crate::scene::Scene;
-use crate::viewcube::{self, Hit, Place};
+use crate::viewcube::{self, Hit, Orient, Place};
 use winit::event::{ElementState, MouseButton, MouseScrollDelta, WindowEvent};
 use winit::keyboard::{KeyCode, ModifiersState};
 
@@ -75,6 +75,10 @@ pub struct Nav {
     pub home_view: Option<Camera>,
     /// It was right-clicked here: the host's menu goes up, once.
     pub cube_menu: Option<(f32, f32)>,
+    /// What part of the cube that click was on.
+    pub cube_menu_region: Option<[i8; 3]>,
+    /// How the part's axes are named on the cube.
+    pub orient: Orient,
     /// The right button in the view, from here to there: taken once by the host.
     pub marked: Option<((f32, f32), (f32, f32))>,
     /// The section: which axis it's across (0 x, 1 y, 2 z), and where along it.
@@ -85,6 +89,32 @@ pub struct Nav {
     explode_time: Option<f64>,
     /// What's been clicked, in order.
     pub selected: Vec<(u32, Entity)>,
+}
+
+/// The view from a region of the cube, with the part's axes named this way: the named TOP is up, and
+/// straight onto TOP or BOTTOM, FRONT is below or above it.
+pub fn region_view_as(camera: Camera, region: [i8; 3], orient: &Orient) -> Camera {
+    if *orient == Orient::default() {
+        return region_view(camera, region);
+    }
+    let v = region.map(|x| x as f32);
+    let l = dot(v, v).sqrt();
+    let f = v.map(|x| -x / l);
+    let top = orient.world([0, 0, 1]).map(|x| x as f32);
+    let up = match dot(f, top) {
+        d if d < -0.999 => orient.world([0, 1, 0]).map(|x| x as f32),
+        d if d > 0.999 => orient.world([0, -1, 0]).map(|x| x as f32),
+        _ => top,
+    };
+    let r = [
+        f[1] * up[2] - f[2] * up[1],
+        f[2] * up[0] - f[0] * up[2],
+        f[0] * up[1] - f[1] * up[0],
+    ];
+    let n = dot(r, r).sqrt();
+    let mut c = camera;
+    c.look(f, r.map(|x| x / n));
+    c
 }
 
 /// The view from a region of the cube.
@@ -126,6 +156,8 @@ impl Nav {
             cube_hover: None,
             home_view: None,
             cube_menu: None,
+            cube_menu_region: None,
+            orient: Orient::default(),
             marked: None,
             selected: Vec::new(),
             section: None,
@@ -266,6 +298,10 @@ impl Nav {
         if let Some(h) = self.cube_at(self.cursor) {
             if button == MouseButton::Right {
                 self.cube_menu = Some(self.cursor);
+                self.cube_menu_region = match h {
+                    Hit::Region(r) => Some(r),
+                    _ => None,
+                };
                 return false;
             }
             self.drag = Some(if h == Hit::Ring { Drag::Ring } else { Drag::Cube });
@@ -308,7 +344,7 @@ impl Nav {
         match drag {
             Some(Drag::Cube) => {
                 let to = match self.cube_at(self.cursor) {
-                    Some(Hit::Region(r)) => region_view(self.camera, r),
+                    Some(Hit::Region(r)) => region_view_as(self.camera, r, &self.orient),
                     Some(Hit::Roll(clockwise)) => {
                         let mut c = self.camera;
                         let turn = core::f32::consts::FRAC_PI_2;
@@ -471,7 +507,7 @@ impl Nav {
         let (c, r) = scene.bounds();
         let to = self.home_view.unwrap_or_else(|| {
             let mut to = Camera::fit(c, r);
-            to = region_view(to, HOME_CORNER);
+            to = region_view_as(to, self.orient.world(HOME_CORNER), &self.orient);
             if self.camera.parallel {
                 to.set_parallel(true, r);
             }
@@ -548,6 +584,31 @@ impl Nav {
             return true;
         }
         false
+    }
+
+    /// This world face takes this name, keeping what's up on the screen up. Back to the same view,
+    /// its word's now that.
+    pub fn set_face_as(&mut self, face: [i8; 3], name: [i8; 3]) {
+        // the axis nearest the screen's up that's square to the face; else nearest its right
+        let (_, right, up) = self.camera.axes();
+        let square = |v: [f32; 3]| -> Option<[i8; 3]> {
+            let mut best = None;
+            let mut most = 0.0;
+            for k in 0..3 {
+                if face[k] != 0 {
+                    continue;
+                }
+                if v[k].abs() > most {
+                    most = v[k].abs();
+                    let mut a = [0i8; 3];
+                    a[k] = if v[k] < 0.0 { -1 } else { 1 };
+                    best = Some(a);
+                }
+            }
+            best.filter(|_| most > 1e-3)
+        };
+        let axis = square(up).or_else(|| square(right)).unwrap_or([0, 0, 1]);
+        self.orient = Orient::with_face(face, name, axis);
     }
 
     /// Between a parallel and a perspective view, smoothly.

@@ -88,6 +88,99 @@ const fn root5(x: f64) -> f64 {
     y
 }
 
+/// Which way the part's axes are named: a rotation of the cube's labels. Named space has RIGHT at +x,
+/// FRONT at -y and TOP at +z; this takes a direction in the world to its name. Always one of the 24
+/// proper rotations, so opposite faces stay opposite and the set stays right-handed.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct Orient {
+    m: [[i8; 3]; 3],
+}
+
+impl Default for Orient {
+    fn default() -> Orient {
+        Orient {
+            m: [[1, 0, 0], [0, 1, 0], [0, 0, 1]],
+        }
+    }
+}
+
+fn cross_i(a: [i8; 3], b: [i8; 3]) -> [i8; 3] {
+    [
+        a[1] * b[2] - a[2] * b[1],
+        a[2] * b[0] - a[0] * b[2],
+        a[0] * b[1] - a[1] * b[0],
+    ]
+}
+
+/// The names of the six faces, as the menu has them, with where each is in named space.
+pub const FACE_NAMES: [(&str, [i8; 3]); 6] = [
+    ("Front", [0, -1, 0]),
+    ("Back", [0, 1, 0]),
+    ("Top", [0, 0, 1]),
+    ("Bottom", [0, 0, -1]),
+    ("Left", [-1, 0, 0]),
+    ("Right", [1, 0, 0]),
+];
+
+impl Orient {
+    /// A world direction, as it's named.
+    pub fn named(&self, w: [i8; 3]) -> [i8; 3] {
+        [0, 1, 2].map(|r| (0..3).map(|k| self.m[r][k] * w[k]).sum())
+    }
+
+    /// A named direction, in the world.
+    pub fn world(&self, n: [i8; 3]) -> [i8; 3] {
+        [0, 1, 2].map(|k| (0..3).map(|r| self.m[r][k] * n[r]).sum())
+    }
+
+    fn world_f(&self, n: [f32; 3]) -> [f32; 3] {
+        [0, 1, 2].map(|k| (0..3).map(|r| self.m[r][k] as f32 * n[r]).sum())
+    }
+
+    /// This world face gets this name, and the world axis `up` (square to the face) stays up: it's
+    /// TOP, or on a TOP or BOTTOM face what reads as up on it.
+    pub fn with_face(face: [i8; 3], name: [i8; 3], up: [i8; 3]) -> Orient {
+        let target = match name[2] {
+            0 => [0, 0, 1],
+            s => [0, s, 0],
+        };
+        let (c, third) = (cross_i(face, up), cross_i(name, target));
+        let mut m = [[0i8; 3]; 3];
+        for (r, row) in m.iter_mut().enumerate() {
+            for (k, v) in row.iter_mut().enumerate() {
+                *v = name[r] * face[k] + target[r] * up[k] + third[r] * c[k];
+            }
+        }
+        Orient { m }
+    }
+
+    /// As the view file holds it.
+    pub fn words(&self) -> String {
+        let w: Vec<String> = self.m.iter().flatten().map(i8::to_string).collect();
+        w.join(" ")
+    }
+
+    /// Back from that, if it's a proper rotation of the axes.
+    pub fn from_words(s: &str) -> Option<Orient> {
+        let v: Vec<i8> = s
+            .split_whitespace()
+            .map(|w| w.parse().ok())
+            .collect::<Option<_>>()?;
+        let [a, b, c, d, e, f, g, h, i] = v[..] else {
+            return None;
+        };
+        let o = Orient {
+            m: [[a, b, c], [d, e, f], [g, h, i]],
+        };
+        // a unit vector in each row and column, and right-handed
+        let axis = |x: [i8; 3]| x.iter().map(|q| q.abs() as i32).sum::<i32>() == 1;
+        let ok = o.m.iter().all(|r| axis(*r))
+            && (0..3).all(|k| axis([o.m[0][k], o.m[1][k], o.m[2][k]]))
+            && cross_i(o.m[0], o.m[1]) == o.m[2];
+        ok.then_some(o)
+    }
+}
+
 /// The widget's colours, from the theme.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct Palette {
@@ -397,10 +490,11 @@ pub const LABEL_EM: f32 = 0.3;
 const LABEL_FADE: (f32, f32) = (0.22, 0.42);
 
 /// The words on the cube, each a part of its face.
-pub fn labels(camera: &Camera, place: &Place, hover: Option<Hit>) -> Vec<Label> {
+pub fn labels(camera: &Camera, place: &Place, hover: Option<Hit>, orient: &Orient) -> Vec<Label> {
     let eye = Eye::new(camera, place);
     LABELS
         .into_iter()
+        .map(|(text, n, x, y)| (text, orient.world_f(n), orient.world_f(x), orient.world_f(y)))
         .filter(|(_, n, _, _)| eye.sees(*n, *n))
         .map(|(text, n, x, y)| Label {
             text,
@@ -660,7 +754,7 @@ mod tests {
         let p = place();
         // straight on: the word lies square, in full
         let front = crate::nav::region_view(cam(0.3, 0.2), [0, -1, 0]);
-        let ls = labels(&front, &p, None);
+        let ls = labels(&front, &p, None, &Orient::default());
         let l = ls.iter().find(|l| l.text == "FRONT").unwrap();
         assert_eq!(l.alpha, 1.0);
         let (u, v) = (
@@ -673,21 +767,112 @@ mod tests {
         );
         // from a corner, all three read, foreshortened alike
         let corner = crate::nav::region_view(cam(0.3, 0.2), [1, -1, 1]);
-        let ls = labels(&corner, &p, None);
+        let ls = labels(&corner, &p, None, &Orient::default());
         assert_eq!(ls.len(), 3);
         assert!(ls.iter().all(|l| l.alpha == 1.0), "{ls:?}");
         // turned near edge-on, it's gone rather than a smear
         let grazing = cam(-core::f32::consts::FRAC_PI_2 + 1.45, 0.0);
-        let f = labels(&grazing, &p, None).into_iter().find(|l| l.text == "FRONT");
+        let f = labels(&grazing, &p, None, &Orient::default())
+            .into_iter()
+            .find(|l| l.text == "FRONT");
         assert!(f.is_none_or(|l| l.alpha == 0.0), "{f:?}");
         // and from every view some word reads in full
         for yaw in (0..40).map(|k| k as f32 * 0.157) {
             for pitch in (-8..=8).map(|k| k as f32 * 0.196) {
                 let c = cam(yaw, pitch);
                 assert!(
-                    labels(&c, &p, None).iter().any(|l| l.alpha >= 1.0),
+                    labels(&c, &p, None, &Orient::default())
+                        .iter()
+                        .any(|l| l.alpha >= 1.0),
                     "{yaw} {pitch}"
                 );
+            }
+        }
+    }
+
+    /// Every face given every name, with every up that's square to it.
+    fn all_orients() -> Vec<(Orient, [i8; 3], [i8; 3], [i8; 3])> {
+        let axes: Vec<[i8; 3]> = FACE_NAMES.iter().map(|f| f.1).collect();
+        let mut out = Vec::new();
+        for &face in &axes {
+            for &(_, name) in &FACE_NAMES {
+                for &up in axes
+                    .iter()
+                    .filter(|u| (0..3).map(|k| u[k] * face[k]).sum::<i8>() == 0)
+                {
+                    out.push((Orient::with_face(face, name, up), face, name, up));
+                }
+            }
+        }
+        out
+    }
+
+    #[test]
+    fn every_face_name_and_up_gives_one_of_the_24_rotations_consistently() {
+        let all = all_orients();
+        let mut kinds: Vec<Orient> = all.iter().map(|a| a.0).collect();
+        kinds.sort_by_key(|o| o.words());
+        kinds.dedup();
+        assert_eq!(kinds.len(), 24);
+        for (o, face, name, _) in &all {
+            assert_eq!(o.named(*face), *name, "the chosen face has its name");
+            for &(_, n) in &FACE_NAMES {
+                let w = o.world(n);
+                assert_eq!(o.named(w), n, "there and back");
+                let opposite = n.map(|v| -v);
+                assert_eq!(o.world(opposite), w.map(|v| -v), "opposites stay opposite");
+            }
+            assert_eq!(
+                cross_i(o.world([1, 0, 0]), o.world([0, 1, 0])),
+                o.world([0, 0, 1]),
+                "right-handed"
+            );
+            assert_eq!(Orient::from_words(&o.words()), Some(*o));
+        }
+        assert_eq!(
+            Orient::from_words("1 0 0 0 1 0 0 0 -1"),
+            None,
+            "a mirror isn't a view"
+        );
+    }
+
+    #[test]
+    fn the_up_stays_up_for_a_side_name_and_reads_upright_on_top() {
+        let o = Orient::with_face([1, 0, 0], [0, -1, 0], [0, 0, 1]);
+        assert_eq!(o.named([0, 0, 1]), [0, 0, 1], "z stays TOP");
+        assert_eq!(o.named([1, 0, 0]), [0, -1, 0], "+x is FRONT");
+        let o = Orient::with_face([1, 0, 0], [0, 0, 1], [0, 0, 1]);
+        assert_eq!(o.named([1, 0, 0]), [0, 0, 1], "+x is TOP");
+        assert_eq!(o.named([0, 0, 1]), [0, 1, 0], "what was up reads up on it");
+    }
+
+    #[test]
+    fn a_click_on_a_named_face_looks_at_the_face_with_that_word() {
+        for (o, ..) in all_orients() {
+            for (word, n, _, _) in LABELS {
+                let region = o.world(round(n));
+                let c = crate::nav::region_view_as(cam(0.3, 0.2), region, &o);
+                let e = Eye::new(&c, &place());
+                let toward = region.map(|v| v as f32);
+                assert!(dot(e.f, toward) < -0.999, "{word} {:?}", o.words());
+                let shown = labels(&c, &place(), None, &o);
+                let l = shown.iter().find(|l| l.alpha >= 1.0).expect("a word");
+                assert_eq!(l.text, word, "{}", o.words());
+                // upright on it, and not mirrored
+                let (u, v) = (
+                    on_face(&c, &place(), l, -0.5, 0.0),
+                    on_face(&c, &place(), l, 0.5, 0.0),
+                );
+                let (t, b) = (
+                    on_face(&c, &place(), l, 0.0, 0.5),
+                    on_face(&c, &place(), l, 0.0, -0.5),
+                );
+                assert!(
+                    v[0] > u[0] + 1.0 && (u[1] - v[1]).abs() < 1e-2,
+                    "{word} {}: {u:?} {v:?}",
+                    o.words()
+                );
+                assert!(t[1] < b[1], "{word}");
             }
         }
     }

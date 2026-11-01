@@ -55,6 +55,11 @@ pub enum Action {
     FitAll,
     Home,
     SetHome,
+    /// Home is this part of the cube's view.
+    SetHomeAt([i8; 3]),
+    /// This face of the cube takes this name.
+    SetFaceAs([i8; 3], [i8; 3]),
+    ResetOrientation,
     Lines(LineMode),
     Section,
     Tool(NavTool),
@@ -159,6 +164,8 @@ pub struct Shell {
     pub places: Vec<(String, Rect)>,
     /// The view cube's right-click menu, at this point.
     pub cube_menu: Option<egui::Pos2>,
+    /// What part of the cube it's for.
+    pub cube_region: Option<[i8; 3]>,
     /// The part's picture, drawn by the renderer this same frame.
     pub view_tex: Option<egui::TextureId>,
     /// The view cube's words, in the view's device pixels: real type over its picture.
@@ -220,6 +227,7 @@ impl Default for Shell {
             view_rect: Rect::ZERO,
             places: Vec::new(),
             cube_menu: None,
+            cube_region: None,
             view_tex: None,
             cube_labels: Vec::new(),
             cube_place: None,
@@ -883,26 +891,43 @@ impl Shell {
         }
         if let Some(at) = self.cube_menu {
             let parallel = self.view.parallel;
-            let items = [
-                ("Home", Some(Action::Home)),
-                ("Set Current View as Home", Some(Action::SetHome)),
-                (
-                    if parallel {
-                        "\u{2713} Orthographic"
-                    } else {
-                        "Orthographic"
-                    },
-                    Some(Action::Parallel(true)),
-                ),
-                (
-                    if parallel {
-                        "Perspective"
-                    } else {
-                        "\u{2713} Perspective"
-                    },
-                    Some(Action::Parallel(false)),
-                ),
-            ];
+            let region = self.cube_region;
+            let mut items: Vec<(&str, Option<Action>)> = vec![("Go Home", Some(Action::Home))];
+            if let Some(r) = region {
+                items.push(("Set as Home", Some(Action::SetHomeAt(r))));
+            }
+            items.push(("Set Current View as Home", Some(Action::SetHome)));
+            // a face can take a name
+            if let Some(r) = region.filter(|r| r.iter().filter(|v| **v != 0).count() == 1) {
+                const WORDS: [&str; 6] = [
+                    "Set This Face As Front",
+                    "Set This Face As Back",
+                    "Set This Face As Top",
+                    "Set This Face As Bottom",
+                    "Set This Face As Left",
+                    "Set This Face As Right",
+                ];
+                for (word, (_, n)) in WORDS.iter().zip(crate::viewcube::FACE_NAMES) {
+                    items.push((word, Some(Action::SetFaceAs(r, n))));
+                }
+            }
+            items.push(("Reset Orientation", Some(Action::ResetOrientation)));
+            items.push((
+                if parallel {
+                    "\u{2713} Orthographic"
+                } else {
+                    "Orthographic"
+                },
+                Some(Action::Parallel(true)),
+            ));
+            items.push((
+                if parallel {
+                    "Perspective"
+                } else {
+                    "\u{2713} Perspective"
+                },
+                Some(Action::Parallel(false)),
+            ));
             match menu_at(ctx, "cube-menu", at, &t, &items) {
                 MenuResult::Chose(a) => {
                     self.out.push(a);

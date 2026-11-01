@@ -1186,6 +1186,7 @@ impl Shell {
                 egui::Area::new(id.with("area"))
                     .fixed_pos(u + vec2(-FIELD_W * 0.5, 10.0))
                     .order(egui::Order::Foreground)
+                    .fade_in(false)
                     .show(ctx, |ui| {
                         let (r, _) = ui.allocate_exact_size(vec2(FIELD_W, 24.0), Sense::hover());
                         ui.painter().rect_filled(r, 4.0, t.surface);

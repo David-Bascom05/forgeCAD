@@ -31,6 +31,8 @@ pub type Waker = Arc<dyn Fn() + Send + Sync>;
 pub const HEADLESS_FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::Rgba8Unorm;
 
 struct Loaded {
+    /// Its file, if it has one.
+    file: Option<String>,
     name: String,
     mesh: PartMesh,
     part: Part,
@@ -97,6 +99,8 @@ pub struct Gui {
     pixels_per_point: f32,
     /// The font atlas from before the first frame, still to go to the GPU.
     warm_textures: Option<egui::TexturesDelta>,
+    /// Where the part's view is kept: none for a part with no file.
+    view_file: Option<String>,
     /// The window, in device pixels.
     target_px: (u32, u32),
     tree_hover_was: Option<forge_doc::ItemId>,
@@ -170,6 +174,7 @@ impl Gui {
             calls: Vec::new(),
             pixels_per_point: 1.0,
             warm_textures: Some(warm.textures_delta),
+            view_file: None,
             target_px: (1, 1),
             tree_hover_was: None,
             sketch_for: None,
@@ -189,6 +194,7 @@ impl Gui {
                 let (mesh, _) = crate::load::open(&path, true)?;
                 let part = crate::load::tool_part(&path)?;
                 Ok(Loaded {
+                    file: path.ends_with(".fc").then(|| path.clone()),
                     name: name_of(&path),
                     mesh,
                     part,
@@ -244,6 +250,22 @@ impl Gui {
         live.on_ready(move || w());
         let mut nav = Nav::new(camera, size, self.pixels_per_point);
         nav.tool = self.shell.view.tool;
+        if let Some(f) = &l.file {
+            let path = format!("{f}.view");
+            let (orient, home) = Self::load_view(&path);
+            nav.orient = orient;
+            nav.home_view = home;
+            // it opens where Home is
+            nav.camera = home.unwrap_or_else(|| {
+                let mut c =
+                    crate::nav::region_view_as(camera, orient.world(crate::nav::HOME_CORNER), &orient);
+                c.target = camera.target;
+                c
+            });
+            self.view_file = Some(path);
+        } else {
+            self.view_file = None;
+        }
         self.view = Some(View {
             renderer,
             scene,
@@ -572,6 +594,7 @@ impl Gui {
                 }
             }
             if let Some(at) = v.nav.cube_menu.take() {
+                self.shell.cube_region = v.nav.cube_menu_region.take();
                 self.shell.cube_menu = Some(egui::pos2(origin.x + at.0 / p, origin.y + at.1 / p));
             }
         }
@@ -646,6 +669,9 @@ impl Gui {
                 Action::FitAll
                 | Action::Home
                 | Action::SetHome
+                | Action::SetHomeAt(_)
+                | Action::SetFaceAs(..)
+                | Action::ResetOrientation
                 | Action::Parallel(_)
                 | Action::Lines(_)
                 | Action::Section
@@ -988,6 +1014,51 @@ impl Gui {
         v.live.call(vec![call]);
     }
 
+    /// Home and the cube's names, beside the part in `PART.fc.view`: they're no part of what builds.
+    fn save_view(&self) {
+        let (Some(path), Some(v)) = (&self.view_file, &self.view) else {
+            return;
+        };
+        let mut out = format!("orient {}\n", v.nav.orient.words());
+        if let Some(h) = &v.nav.home_view {
+            out.push_str(&format!(
+                "home {} {} {} {} {} {} {} {} {}\n",
+                h.target[0], h.target[1], h.target[2], h.yaw, h.pitch, h.roll, h.dist, h.fovy, h.parallel
+            ));
+        }
+        if let Err(why) = std::fs::write(path, out) {
+            eprintln!("forge-app: can't keep the view beside the part: {why}");
+        }
+    }
+
+    /// What's kept beside the part, if anything is: a file it can't read is one it doesn't have.
+    fn load_view(path: &str) -> (crate::viewcube::Orient, Option<Camera>) {
+        let mut orient = crate::viewcube::Orient::default();
+        let mut home = None;
+        for line in std::fs::read_to_string(path).unwrap_or_default().lines() {
+            match line.split_once(' ') {
+                Some(("orient", w)) => orient = crate::viewcube::Orient::from_words(w).unwrap_or(orient),
+                Some(("home", w)) => {
+                    let words: Vec<&str> = w.split(' ').collect();
+                    let nums: Vec<f32> = words.iter().take(8).filter_map(|t| t.parse().ok()).collect();
+                    if let ([x, y, z, yaw, pitch, roll, dist, fovy], Some(par)) = (&nums[..], words.get(8)) {
+                        home = Some(Camera {
+                            target: [*x, *y, *z],
+                            yaw: *yaw,
+                            pitch: *pitch,
+                            roll: *roll,
+                            dist: *dist,
+                            fovy: *fovy,
+                            parallel: *par == "true",
+                        });
+                    }
+                }
+                _ => {}
+            }
+        }
+        (orient, home)
+    }
+
     fn apply_view(&mut self, a: Action) {
         if let Action::Tool(t) = a {
             self.shell.view.tool = t;
@@ -999,7 +1070,22 @@ impl Gui {
         match a {
             Action::FitAll => v.nav.fit_all(&v.scene),
             Action::Home => v.nav.home(&v.scene),
-            Action::SetHome => v.nav.home_view = Some(v.nav.camera),
+            Action::SetHome => {
+                v.nav.home_view = Some(v.nav.camera);
+            }
+            Action::SetHomeAt(r) => {
+                let (c, radius) = v.scene.bounds();
+                let mut to = crate::nav::region_view_as(v.nav.camera, r, &v.nav.orient);
+                to.target = c;
+                to.fit_to(radius * 1.1, v.size.0, v.size.1);
+                v.nav.home_view = Some(to);
+            }
+            Action::SetFaceAs(face, name) => {
+                v.nav.set_face_as(face, name);
+            }
+            Action::ResetOrientation => {
+                v.nav.orient = Default::default();
+            }
             Action::Parallel(on) => v.nav.set_parallel(on, &v.scene),
             Action::Lines(mode) => {
                 v.renderer.line_mode = mode;
@@ -1013,6 +1099,12 @@ impl Gui {
             _ => {}
         }
         v.dirty = true;
+        if matches!(
+            a,
+            Action::SetHome | Action::SetHomeAt(_) | Action::SetFaceAs(..) | Action::ResetOrientation
+        ) {
+            self.save_view();
+        }
     }
 
     /// One whole frame into `target`, `size` device pixels.
@@ -1039,7 +1131,7 @@ impl Gui {
                 animating = true;
             }
             let place = v.nav.cube_place();
-            self.shell.cube_labels = viewcube::labels(&v.nav.camera, &place, v.nav.cube_hover);
+            self.shell.cube_labels = viewcube::labels(&v.nav.camera, &place, v.nav.cube_hover, &v.nav.orient);
             self.shell.cube_place = Some(place);
         }
         self.sync_selection();

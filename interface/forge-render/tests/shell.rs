@@ -1013,3 +1013,63 @@ fn home_and_the_opening_view_are_the_cubes_front_right_top_corner_dead_on() {
     );
     assert_eq!(home.parallel, opened.parallel);
 }
+
+#[test]
+fn the_cube_can_name_its_faces_and_set_home_and_they_stay_with_the_file() {
+    use forge_render::viewcube::FACE_NAMES;
+    let Some((mut h, file)) = file_part(BLOCK) else {
+        return;
+    };
+    let view_file = format!("{}.view", file.display());
+    let _ = std::fs::remove_file(&view_file);
+    let (right, top) = (FACE_NAMES[5].1, FACE_NAMES[2].1);
+    assert_eq!(right, [1, 0, 0]);
+    // the +x face becomes FRONT, and z stays up
+    h.gui
+        .shell
+        .out
+        .push(Action::SetFaceAs([1, 0, 0], FACE_NAMES[0].1));
+    step_some(&mut h);
+    let o = h.gui.view.as_ref().unwrap().nav.orient;
+    assert_eq!(o.named([1, 0, 0]), [0, -1, 0]);
+    assert_eq!(o.world(top), [0, 0, 1]);
+    // the part didn't change, and the name's beside the file
+    assert_eq!(std::fs::read_to_string(&file).unwrap().trim(), BLOCK.trim());
+    assert!(
+        std::fs::read_to_string(&view_file)
+            .unwrap()
+            .starts_with("orient ")
+    );
+    // Home goes to the named corner
+    h.gui.shell.out.push(Action::Home);
+    for _ in 0..80 {
+        h.step();
+        std::thread::sleep(std::time::Duration::from_millis(5));
+    }
+    let cam = h.gui.view.as_ref().unwrap().nav.camera;
+    let want = forge_render::nav::region_view_as(cam, o.world(forge_render::nav::HOME_CORNER), &o);
+    assert!((cam.yaw - want.yaw).abs() < 1e-4 && (cam.pitch - want.pitch).abs() < 1e-4);
+    // a Home of its own
+    h.gui.shell.out.push(Action::SetHomeAt([0, 0, 1]));
+    step_some(&mut h);
+    let home = h.gui.view.as_ref().unwrap().nav.home_view.unwrap();
+    // a new app on the same file has them back, and opens there
+    let mut again = Headless::new((1200.0, 800.0), 1.0).unwrap();
+    again.step();
+    again.gui.open(file.to_str().unwrap());
+    again.settle();
+    again.step();
+    let n = &again.gui.view.as_ref().unwrap().nav;
+    assert_eq!(n.orient, o);
+    let kept = n.home_view.unwrap();
+    assert_eq!(
+        (kept.yaw, kept.pitch, kept.roll, kept.parallel),
+        (home.yaw, home.pitch, home.roll, home.parallel)
+    );
+    assert_eq!((n.camera.yaw, n.camera.pitch), (home.yaw, home.pitch));
+    // reset
+    h.gui.shell.out.push(Action::ResetOrientation);
+    step_some(&mut h);
+    assert_eq!(h.gui.view.as_ref().unwrap().nav.orient, Default::default());
+    let _ = std::fs::remove_file(&view_file);
+}
