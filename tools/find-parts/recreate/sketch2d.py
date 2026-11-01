@@ -3,6 +3,7 @@ regions' boundary as loops. Lines and arcs are exact; ellipses and splines are f
 import math
 
 EPS = 1e-5  # mm: points this close are one point
+SAG = 2e-3  # mm: how far a sampled spline can lie off the true one
 
 
 class Unsupported(Exception):
@@ -297,6 +298,12 @@ def meets(a, b):
                 out += line_circle(y, x)
             else:
                 out += circle_circle(x, y)
+    # a curve ending on a spline: the true spline passes through its end, the sampled one by up to the sag (00122736)
+    for x, y in ((a, b), (b, a)):
+        if x.kind == "poly" and y.kind in ("line", "arc"):
+            for q in (y.a, y.b):
+                if not any(dist(q, o) <= SAG for o in out + [x.a, x.b]) and any(curve_dist(s, q) <= SAG for s in segs(x)):
+                    out.append(q)
     return out
 
 
@@ -337,9 +344,14 @@ def split(p, pts):
         return out
     # polyline: cut by index
     out, cur = [], [p.pts[0]]
-    for u, v in zip(p.pts, p.pts[1:]):
-        s = Piece(p.ent, "line", u, v)
-        hits = sorted((dist(u, q), q) for q in pts if s.near(q, EPS * 2) and dist(u, q) > EPS and dist(v, q) > EPS)
+    segs_ = [Piece(p.ent, "line", u, v) for u, v in zip(p.pts, p.pts[1:])]
+    at = {}  # a point may lie off the chords by the sampling's sag: it goes on the nearest one
+    for q in pts:
+        k = min(range(len(segs_)), key=lambda i: curve_dist(segs_[i], q))
+        if curve_dist(segs_[k], q) <= SAG:
+            at.setdefault(k, []).append(q)
+    for k, (u, v) in enumerate(zip(p.pts, p.pts[1:])):
+        hits = sorted((dist(u, q), q) for q in at.get(k, []) if dist(u, q) > EPS and dist(v, q) > EPS)
         for _, q in hits:
             cur.append(q)
             out.append(Piece(p.ent, "poly", cur[0], cur[-1], pts=cur))
