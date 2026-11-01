@@ -15,13 +15,14 @@ resource.setrlimit(resource.RLIMIT_AS, (3 << 30, 3 << 30))
 from OCP.Bnd import Bnd_Box
 from OCP.BRep import BRep_Builder
 from OCP.BRepAdaptor import BRepAdaptor_Curve
+from OCP.GeomAbs import GeomAbs_Circle, GeomAbs_Line
 from OCP.BRepBndLib import BRepBndLib
 from OCP.BRepCheck import BRepCheck_Analyzer
 from OCP.BRepGProp import BRepGProp
 from OCP.BRepTools import BRepTools
 from OCP.GProp import GProp_GProps
 from OCP.OCP.collections import IndexedMap_TopoDS_Shape_TopTools_ShapeMapHasher as ShapeMap
-from OCP.TopAbs import TopAbs_EDGE, TopAbs_FACE, TopAbs_SOLID
+from OCP.TopAbs import TopAbs_EDGE, TopAbs_FACE, TopAbs_SOLID, TopAbs_WIRE
 from OCP.TopExp import TopExp, TopExp_Explorer
 from OCP.TopoDS import TopoDS, TopoDS_Shape
 
@@ -42,6 +43,24 @@ def edge_points(e):
     for i in range(N + 1):
         p = c.Value(a + (b - a) * i / N)
         out.append([p.X(), p.Y(), p.Z()])
+    return out
+
+
+def wires(s):
+    """A profile that is not a sketch: each wire's edges, what curve each is and samples along it."""
+    out = []
+    x = TopExp_Explorer(s, TopAbs_WIRE)
+    while x.More():
+        w, y = [], TopExp_Explorer(x.Current(), TopAbs_EDGE)
+        while y.More():
+            c = BRepAdaptor_Curve(TopoDS.Edge(y.Current()))
+            a, b = c.FirstParameter(), c.LastParameter()
+            k = {GeomAbs_Line: "line", GeomAbs_Circle: "circle"}.get(c.GetType(), "other")
+            ps = [c.Value(a + (b - a) * i / 96) for i in range(97)]
+            w.append({"k": k, "p": [[q.X(), q.Y(), q.Z()] for q in ps]})
+            y.Next()
+        out.append(w)
+        x.Next()
     return out
 
 
@@ -76,6 +95,8 @@ def main():
                 a, b = box.CornerMin(), box.CornerMax()
                 r["bbox"] = [a.X(), a.Y(), a.Z(), b.X(), b.Y(), b.Z()]
             r["valid"] = bool(BRepCheck_Analyzer(s).IsValid())
+            if name in want.get("wires", []):
+                r["wires"] = wires(s)
             subs = want["subs"].get(name)
             if subs:
                 em, fm = ShapeMap(), ShapeMap()

@@ -24,8 +24,9 @@ from sketch2d import Arrangement
 
 TOL = 2e-3
 HERE = os.path.dirname(os.path.abspath(__file__))
-SOLID = {"PartDesign::Pad", "PartDesign::Pocket", "PartDesign::Revolution", "PartDesign::Groove", "PartDesign::Fillet", "PartDesign::Chamfer", "PartDesign::Mirrored", "PartDesign::PolarPattern", "PartDesign::LinearPattern", "PartDesign::Hole", "PartDesign::Loft", "PartDesign::Pipe", "PartDesign::AdditiveLoft", "PartDesign::AdditivePipe", "PartDesign::SubtractiveLoft", "PartDesign::SubtractivePipe", "PartDesign::Draft", "PartDesign::Thickness", "PartDesign::MultiTransform", "PartDesign::Scaled", "PartDesign::AdditiveBox", "PartDesign::AdditiveCylinder", "PartDesign::Boolean", "PartDesign::Helix", "PartDesign::AdditiveHelix", "PartDesign::SubtractiveHelix", "PartDesign::FeatureBase", "PartDesign::SubtractiveBox", "PartDesign::SubtractiveCylinder", "PartDesign::AdditiveSphere", "PartDesign::SubtractiveSphere", "PartDesign::AdditiveCone", "PartDesign::SubtractiveCone", "PartDesign::AdditiveTorus", "PartDesign::SubtractiveTorus", "PartDesign::AdditivePrism", "PartDesign::SubtractivePrism", "PartDesign::AdditiveWedge", "PartDesign::SubtractiveWedge", "PartDesign::AdditiveEllipsoid", "PartDesign::SubtractiveEllipsoid"}
-NEEDS = {"PartDesign::Pad", "PartDesign::Pocket", "PartDesign::Revolution", "PartDesign::Groove", "PartDesign::Fillet", "PartDesign::Chamfer", "PartDesign::Mirrored", "PartDesign::PolarPattern", "PartDesign::LinearPattern"}
+SOLID = {"PartDesign::Pad", "PartDesign::Pocket", "PartDesign::Revolution", "PartDesign::Groove", "PartDesign::Fillet", "PartDesign::Chamfer", "PartDesign::Mirrored", "PartDesign::PolarPattern", "PartDesign::LinearPattern", "PartDesign::Hole", "PartDesign::Loft", "PartDesign::Pipe", "PartDesign::AdditiveLoft", "PartDesign::AdditivePipe", "PartDesign::SubtractiveLoft", "PartDesign::SubtractivePipe", "PartDesign::Draft", "PartDesign::Thickness", "PartDesign::MultiTransform", "PartDesign::Scaled", "PartDesign::AdditiveBox", "PartDesign::AdditiveCylinder", "PartDesign::Boolean", "PartDesign::Helix", "PartDesign::AdditiveHelix", "PartDesign::SubtractiveHelix", "PartDesign::FeatureBase", "PartDesign::SubtractiveBox", "PartDesign::SubtractiveCylinder", "PartDesign::AdditiveSphere", "PartDesign::SubtractiveSphere", "PartDesign::AdditiveCone", "PartDesign::SubtractiveCone", "PartDesign::AdditiveTorus", "PartDesign::SubtractiveTorus", "PartDesign::AdditivePrism", "PartDesign::SubtractivePrism", "PartDesign::AdditiveWedge", "PartDesign::SubtractiveWedge", "PartDesign::AdditiveEllipsoid", "PartDesign::SubtractiveEllipsoid", "Part::Revolution", "Part::Box", "Part::Cylinder"}
+FLAT = {"Sketcher::SketchObject", "Part::Part2DObjectPython"}  # what a pad's profile can be; only a sketch has rows, the rest a stored shape
+NEEDS = {"Part::Revolution", "Part::Box", "Part::Cylinder", "PartDesign::Pad", "PartDesign::Pocket", "PartDesign::Revolution", "PartDesign::Groove", "PartDesign::Fillet", "PartDesign::Chamfer", "PartDesign::Mirrored", "PartDesign::PolarPattern", "PartDesign::LinearPattern"}
 
 
 class Doc:
@@ -194,13 +195,92 @@ def bspline_points(e):
     return [at(u) for u in us] + [at(hi)]
 
 
+def closed_wires(ents):
+    """FreeCAD's Sketch::toShape: from the first edge left, pull in the first edge in document order that meets the wire's
+    last or first vertex, until nothing meets or the wire closes. So at a junction the order decides, and a wire can
+    end open; vertices meet within Precision::Confusion. Returns the closed wires as lists of entity ids."""
+    conf = 1e-7
+    same = lambda p, q: math.dist(p, q) <= conf
+    left = []
+    keep = []
+    for e in ents:
+        if e.get("construction"):
+            continue
+        if e["kind"] == "skCircle":
+            keep.append([e["id"]])
+        elif e["kind"] == "polyline":
+            left.append((e["id"], e["points"][0], e["points"][-1]))
+        elif e["kind"] in ("skLineSegment", "skArc"):
+            left.append((e["id"], e["start"], e["end"]))
+    while left:
+        i, first, last = left.pop(0)
+        wire = [i]
+        while left and not same(first, last):
+            for k, (j, a, b) in enumerate(left):
+                if same(last, a):
+                    last = b
+                elif same(first, b):
+                    first = a
+                elif same(last, b):
+                    last = a
+                elif same(first, a):
+                    first = b
+                else:
+                    continue
+                wire.append(j)
+                del left[k]
+                break
+            else:
+                break
+        if same(first, last):
+            keep.append(wire)
+    return keep
+
+
 def even_regions(a):
-    """FreeCAD's bullseye: regions at even nesting are solid, odd ones holes."""
+    """Regions at even nesting are solid, odd ones holes: FreeCAD's bullseye where nothing touches."""
     out = []
     for i, f in enumerate(a.faces):
         pt = sketch2d.point_within(a.loops[f["outer"]], a)
         depth = sum(1 for j, g in enumerate(a.faces) if j != i and g["area"] > f["area"] and sketch2d.inside(pt, a.loops[g["outer"]], a))
         if depth % 2 == 0:
+            out.append(i)
+    return out
+
+
+def inner_point(a, i):
+    """A point inside region i, beside its outer boundary, clear of its holes."""
+    lp = a.loops[a.faces[i]["outer"]]
+    for pc, fwd in lp:
+        pts = a.pieces[pc].sample(8)
+        k = len(pts) // 2
+        u, v = pts[k - 1], pts[k]
+        d = math.hypot(v[0] - u[0], v[1] - u[1])
+        if d < 1e-9:
+            continue
+        s = 1.0 if fwd else -1.0
+        n = (-(v[1] - u[1]) / d * s, (v[0] - u[0]) / d * s)
+        m = ((u[0] + v[0]) / 2, (u[1] + v[1]) / 2)
+        for w in (1e-3, 1e-4, 1e-5):
+            q = (m[0] + n[0] * w, m[1] + n[1] * w)
+            if a.holds(i, q):
+                return q
+    return sketch2d.point_within(lp, a)
+
+
+def wire_regions(a, ents, wires):
+    """FreeCAD's bullseye, which nests wires, not regions: a region inside an odd number of wires is solid. Wires that
+    touch cut the arrangement's regions apart without changing that."""
+    byid = {e["id"]: e for e in ents}
+    outlines = []
+    for w in wires:
+        g = Arrangement([byid[i] for i in w])
+        if g.faces:
+            outlines.append((g, g.loops[max(g.faces, key=lambda f: f["area"])["outer"]]))
+    out = []
+    for i in range(len(a.faces)):
+        q = inner_point(a, i)
+        if sum(1 for g, lp in outlines if sketch2d.inside(q, lp, g)) % 2:
             out.append(i)
     return out
 
@@ -236,13 +316,39 @@ class Tr:
             raise KernelStop(d["err"])
         return d
 
-    def profile(self, name, op, head, flip, frame_z, tail="", label=""):
-        sk = self.doc.link(name, "Profile")
-        if self.doc.types.get(sk) != "Sketcher::SketchObject":
+    def profile_ents(self, sk, fr):
+        if self.doc.types.get(sk) == "Sketcher::SketchObject":
+            return sketch_ents(self.doc, sk)
+        ws = self.truth.get(sk, {}).get("wires")
+        if ws is None:
+            raise Unresolved("a profile whose stored wires would not read")
+        ents = []
+        for w in ws:
+            for e in w:
+                uv = [list(fr.uvw(q)[:2]) for q in e["p"]]
+                i = f"w{len(ents)}"
+                if e["k"] == "line":
+                    ents.append({"kind": "skLineSegment", "id": i, "start": uv[0], "end": uv[-1]})
+                elif e["k"] == "circle" and math.dist(uv[0], uv[-1]) < 1e-7:
+                    c = sketch2d.circle_from(uv[0], uv[32], uv[64])
+                    ents.append({"kind": "skCircle", "id": i, "center": list(c[0]), "radius": c[1]})
+                elif e["k"] == "circle":
+                    ents.append({"kind": "skArc", "id": i, "start": uv[0], "mid": uv[48], "end": uv[-1]})
+                else:
+                    self.approx = True
+                    ents.append({"kind": "polyline", "id": i, "points": uv})
+        return ents
+
+    def profile(self, name, op, head, flip, frame_z, tail="", label="", sk=None):
+        sk = sk or self.doc.link(name, "Profile")
+        if self.doc.types.get(sk) not in FLAT:
             raise Unsupported("a profile not from a sketch")
         fr = Frame(self.doc.placement(sk))
-        a = Arrangement(sketch_ents(self.doc, sk))
-        regs = even_regions(a)
+        ents = self.profile_ents(sk, fr)
+        wires = closed_wires(ents)
+        wired = {i for w in wires for i in w}
+        a = Arrangement([e for e in ents if e["id"] in wired or e.get("construction")])
+        regs = wire_regions(a, ents, wires)
         if not regs:
             raise Unresolved("a sketch with no closed region")
         frame = f"z {vtext(frame_z)} x {vtext(fr.x)} at {vtext(fr.o)}"
@@ -269,12 +375,18 @@ class Tr:
         if d.boolean(name, "UseCustomVector") or d.prop(name, "AlongSketchNormal") is not None and not d.boolean(name, "AlongSketchNormal"):
             raise Unsupported("a pad along a custom direction")
         sk = d.link(name, "Profile")
-        if d.types.get(sk) != "Sketcher::SketchObject":
+        if d.types.get(sk) not in FLAT:
             raise Unsupported("a profile not from a sketch")
         n = Frame(d.placement(sk)).n
         rev = d.boolean(name, "Reversed")
         down = cut != rev  # a pocket runs against the sketch normal
         z = tuple(-x for x in n) if down else n
+        stored = d.prop(name, "Direction")
+        if d.types.get(sk) != "Sketcher::SketchObject" and stored is not None and stored.find("PropertyVector") is not None:
+            # a shape's plane may face either way; the feature records which way it went
+            e = stored.find("PropertyVector")
+            z = tuple(float(e.get(k)) for k in ("valueX", "valueY", "valueZ"))
+            down = dot(z, n) < 0
         t, L, L2 = d.integer(name, "Type"), d.flt(name, "Length"), d.flt(name, "Length2")
         mid = d.boolean(name, "Midplane")
         if t == 0:
@@ -299,7 +411,7 @@ class Tr:
         base = tuple(float(b.get(k)) for k in ("valueX", "valueY", "valueZ"))
         ax = tuple(float(c.get(k)) for k in ("valueX", "valueY", "valueZ"))
         sk = d.link(name, "Profile")
-        if d.types.get(sk) != "Sketcher::SketchObject":
+        if d.types.get(sk) not in FLAT:
             raise Unsupported("a profile not from a sketch")
         fr = Frame(d.placement(sk))
         u, v, w = fr.uvw(base)
@@ -313,6 +425,40 @@ class Tr:
         tail = f"axis {num(u)} {num(v)} {num(du)} {num(dv)} "
         return self.profile(name, "cut" if cut else "add", head, False, fr.n, tail)[0]
 
+    def part_revolve(self, name):
+        """Part workbench: a sketch turned about Axis through Base."""
+        d = self.doc
+        if not d.boolean(name, "Solid"):
+            raise Unsupported("a Part revolve that makes a shell")
+        vec = lambda k: tuple(float(d.prop(name, k).find("PropertyVector").get(w)) for w in ("valueX", "valueY", "valueZ"))
+        base, ax = vec("Base"), vec("Axis")
+        sk = d.link(name, "Source")
+        if d.types.get(sk) not in FLAT:
+            raise Unsupported("a Part revolve of something not a sketch")
+        fr = Frame(d.placement(sk))
+        u, v, w = fr.uvw(base)
+        du, dv, dw = dot(ax, fr.x), dot(ax, fr.y), dot(ax, fr.n)
+        if abs(w) > 1e-6 or abs(dw) > 1e-6:
+            raise Unsupported("a revolve axis out of the sketch's plane")
+        ang = d.flt(name, "Angle", 360.0)
+        head = "" if abs(ang - 360) < 1e-9 else num(ang)
+        if d.boolean(name, "Symmetric"):
+            head = "sym " + head if head else head
+        tail = f"axis {num(u)} {num(v)} {num(du)} {num(dv)} "
+        return self.profile(name, "add", head, False, fr.n, tail, sk=sk)[0]
+
+    def part_solid(self, name, t):
+        """Part workbench primitives, on their placement. An add: only ever the first in a chain here."""
+        d = self.doc
+        fr = Frame(d.placement(name))
+        frame = f"z {vtext(fr.n)} x {vtext(fr.x)} at {vtext(fr.o)}"
+        self.bodies = 1
+        if t == "Part::Box":
+            return [f"extrude {num(d.flt(name, 'Height'))} {frame} rect 0 0 {num(d.flt(name, 'Length'))} {num(d.flt(name, 'Width'))}"]
+        if abs(d.flt(name, "Angle", 360.0) - 360) > 1e-9:
+            raise Unsupported("a part of a cylinder")
+        return [f"extrude {num(d.flt(name, 'Height'))} {frame} circle 0 0 {num(d.flt(name, 'Radius'))}"]
+
     def blend(self, name, line, all_edges=False):
         d = self.doc
         base = d.link(name, "Base")
@@ -325,6 +471,9 @@ class Tr:
             if sub not in data:
                 raise Unresolved("a blend on " + sub[:4] + " not sampled")
             for poly in data[sub]:
+                if self.approx and not line_or_circle(poly):
+                    # the part's spline is a polyline here, so its edge is many short ones the blend cannot round as one
+                    raise Unsupported("a blend along a spline")
                 # one of ours can span several of theirs (a seam, a split circle): its middle stretch decides
                 lo = [min(q[k] for q in poly) - TOL for k in range(3)]
                 hi = [max(q[k] for q in poly) + TOL for k in range(3)]
@@ -377,7 +526,11 @@ class Tr:
                 self.approx = True
         for name in chain:
             t = d.types[name]
-            if t in ("PartDesign::Pad", "PartDesign::Pocket"):
+            if t == "Part::Revolution":
+                ls = self.part_revolve(name)
+            elif t in ("Part::Box", "Part::Cylinder"):
+                ls = self.part_solid(name, t)
+            elif t in ("PartDesign::Pad", "PartDesign::Pocket"):
                 ls = self.pad(name, t.endswith("Pocket"))
             elif t in ("PartDesign::Revolution", "PartDesign::Groove"):
                 ls = self.revolve(name, t.endswith("Groove"))
@@ -417,6 +570,20 @@ class Tr:
             ls[0] = f"{label}: {ls[0]}"
             self.lines += ls
             self.steps.append((name, len(self.lines)))
+
+
+def line_or_circle(poly):
+    """Do these samples lie on one line or one circle?"""
+    a, m, b = poly[0], poly[len(poly) // 3], poly[2 * len(poly) // 3]
+    u, v = add(m, a, -1), add(b, a, -1)
+    cr = (u[1] * v[2] - u[2] * v[1], u[2] * v[0] - u[0] * v[2], u[0] * v[1] - u[1] * v[0])
+    nn = dot(cr, cr)
+    if nn < 1e-18:
+        return all(math.sqrt(max(dot(add(q, a, -1), add(q, a, -1)) - dot(add(q, a, -1), v) ** 2 / max(dot(v, v), 1e-18), 0.0)) < 1e-6 for q in poly)
+    t = lambda x, y: (x[1] * y[2] - x[2] * y[1], x[2] * y[0] - x[0] * y[2], x[0] * y[1] - x[1] * y[0])
+    c = add(a, add(tuple(x * dot(u, u) for x in t(v, cr)), tuple(x * dot(v, v) for x in t(cr, u))), 1 / (2 * nn))
+    r = math.dist(a, c)
+    return all(abs(math.dist(q, c) - r) < 1e-6 for q in poly)
 
 
 def along_tangents(edges, picked):
@@ -472,6 +639,16 @@ def alone(doc, n):
     return va is not None and vb is not None and abs(va - vb) <= 1e-6 * max(vb, 1e-12)
 
 
+def support_of(doc, sk):
+    """What a sketch is attached to, across the file versions' three forms."""
+    p = doc.prop(sk, "Support")
+    e = p.find("LinkSubList") if p is not None else None
+    if e is not None:
+        ls = e.findall("Link")
+        return ls[0].get("obj") if ls else ""
+    return doc.link(sk, "Support")
+
+
 def base_of(doc, n):
     """The feature before n: older files without BaseFeature say it through a blend's Base, a pattern's
     original, or the solid its sketch sits on."""
@@ -488,8 +665,9 @@ def base_of(doc, n):
         return o[-1]
     sk = doc.link(n, "Profile")
     if sk in doc.props:
-        s = doc.link(sk, "Support")
-        if doc.types.get(s) in SOLID:
+        s = support_of(doc, sk)
+        # a sketch on a solid the importer has no form for says so here, not as a cut with nothing to cut
+        if s in doc.types and doc.types[s] not in ("App::Plane", "App::Origin", "PartDesign::Plane", "App::Line", "PartDesign::Line", "App::Part", "PartDesign::Body", "PartDesign::CoordinateSystem") and not doc.types[s].startswith("Sketcher"):
             return s
     # no link at all: these files fused each feature onto the one before it in the document
     if alone(doc, n):
@@ -505,10 +683,14 @@ def chain_of(doc, body):
     tip = doc.link(body, "Tip") if doc.types[body] == "PartDesign::Body" else body
     out = []
     while tip:
+        if doc.types.get(tip) == "PartDesign::Body":
+            # a body based on another body starts from that body's result
+            tip = doc.link(tip, "Tip")
+            continue
         if doc.types.get(tip) not in SOLID:
             raise Unsupported("a chain through " + str(doc.types.get(tip)))
         out.append(tip)
-        tip = base_of(doc, tip)
+        tip = base_of(doc, tip) if not doc.types[tip].startswith("Part::") else ""
     return out[::-1]
 
 
@@ -543,7 +725,8 @@ def main():
     # older files: a chain of features with no body; each end of a chain is a part
     inbody = {x for b in bodies for x in doc.links(b, "Group")}
     based = {base_of(doc, n) for n, t in doc.types.items() if t in SOLID}
-    loose = [n for n, t in doc.types.items() if t in SOLID and n not in based and n not in inbody]
+    # a Part solid alone is no part of this: only the PartDesign chains that start from one
+    loose = [n for n, t in doc.types.items() if t in SOLID and n not in based and n not in inbody and not t.startswith("Part::")]
     bodies += loose
     for b in bodies:
         r = {"file": stem, "body": b, "status": "translated", "notes": [], "why": "", "features": []}
@@ -554,7 +737,12 @@ def main():
                 raise Unsupported("an empty body")
             r["features"] = [doc.types[c].split("::")[-1] for c in chain]
             tip = chain[-1]
-            want = {"shapes": {tip: doc.shape_file(tip)}, "subs": {}}
+            want = {"shapes": {tip: doc.shape_file(tip)}, "subs": {}, "wires": []}
+            for c in chain:
+                sk = doc.link(c, "Profile")
+                if doc.types.get(sk) == "Part::Part2DObjectPython":
+                    want["shapes"][sk] = doc.shape_file(sk)
+                    want["wires"].append(sk)
             for c in chain:
                 if doc.types[c] in ("PartDesign::Fillet", "PartDesign::Chamfer"):
                     base = doc.link(c, "Base")
