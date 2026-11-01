@@ -3,6 +3,9 @@ on:
   push:
     branches: [main]
   pull_request:
+  # the full clean run
+  schedule:
+    - cron: "0 8 * * *"
 
 # a run on a commit always finishes: the default cancels it on the next push
 concurrency:
@@ -24,9 +27,34 @@ jobs:
           echo "tip $tip, this ${{ github.sha }}, run: $new"
           echo "newest=$new" >> "$GITHUB_OUTPUT"
 
+  # Each merge: fmerge leaves wasm to CI.
+  wasm:
+    needs: gate
+    if: needs.gate.outputs.newest == 'true' && github.event_name == 'push'
+    runs-on: members
+    env:
+      CARGO_TERM_COLOR: always
+      CARGO_INCREMENTAL: "0"
+      CARGO_PROFILE_TEST_DEBUG: "0"
+    steps:
+      # The members sandbox only reaches the internet, so clone from the public door, not git.<domain>.
+      - name: checkout
+        run: |
+          git init -q .
+          # the public door rate-limits (HTTP 429) when the jobs clone at once: back off and retry
+          for i in 1 2 3 4 5; do git fetch -q --depth=1 "https://code.commonty.org/${{ github.repository }}.git" "${{ github.sha }}" && break; sleep $((i * 15)); done
+          git checkout -q FETCH_HEAD
+      - name: rust
+        run: |
+          curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --profile minimal --default-toolchain none
+          echo "$HOME/.cargo/bin" >> "$GITHUB_PATH"
+      - name: test (wasm)
+        run: python3 tools/ci/wasm-tests.py
+
+  # Nightly and on PRs, clean: the whole suite one binary at a time, with the doc tests.
   check:
     needs: gate
-    if: needs.gate.outputs.newest == 'true'
+    if: github.event_name != 'push'
     runs-on: members
     env:
       CARGO_TERM_COLOR: always
@@ -51,19 +79,11 @@ jobs:
         run: cargo test --workspace
       - name: test (wasm, same arithmetic as the browser)
         run: sh tools/test-wasm.sh
-      # every part's exact result, native (n-ary on 4 threads) and as the browser build (1 thread)
-      - name: bits (native and wasm agree bit for bit)
-        run: |
-          cargo build -q --release -p forge-model --example bits
-          cargo build -q --profile wasm -p forge-model --example bits --target wasm32-wasip1
-          target/release/examples/bits > bits-native.txt
-          node --no-turbo-fast-api-calls tools/wasi-run.mjs target/wasm32-wasip1/wasm/examples/bits.wasm > bits-wasm.txt
-          diff bits-native.txt bits-wasm.txt
 
   # forge-render is its own workspace: wgpu stays out of every job above. The GPU tests skip on a runner with no GPU.
   render:
     needs: gate
-    if: needs.gate.outputs.newest == 'true'
+    if: github.event_name != 'push'
     runs-on: members
     env:
       CARGO_TERM_COLOR: always
@@ -91,7 +111,8 @@ jobs:
           rustup target add wasm32-unknown-unknown
           cargo clippy --lib --target wasm32-unknown-unknown -- -D warnings
 
-  scoreboard:
+  # One release build feeds every step.
+  parts:
     needs: gate
     if: needs.gate.outputs.newest == 'true'
     runs-on: members
@@ -110,31 +131,28 @@ jobs:
           curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --profile minimal --default-toolchain none
           echo "$HOME/.cargo/bin" >> "$GITHUB_PATH"
       - name: build
-        run: cargo build --release -p forge-model --example reliability --example suite
+        run: cargo build --release -p forge-model -p forge-proof --example bits --example reliability --example suite --example meta
       - name: degeneracy scoreboard (no part worse than tools/reliability/baseline.txt)
         run: THREADS=4 target/release/examples/reliability --baseline tools/reliability/baseline.txt
       - name: suite parts and 150 fuzz histories, all valid
         run: FUZZ_SEEDS=150 target/release/examples/suite
+      # on a merge a smaller count without effect and ulp, the slow properties; nightly all of it
       - name: metamorphic properties and certificates (no failure beyond tools/proof/known.txt)
         run: |
-          cargo build --release -p forge-proof --example meta
-          target/release/examples/meta seeds 150 count 20 adv 6 known tools/proof/known.txt
-      # perf_event_open decides whether the speed gate (tools/speed/gate.sh) can run here
-      - name: perf probe
+          depth="seeds 150 count 20 adv 6"
+          if [ "${{ github.event_name }}" = push ]; then depth="seeds 50 count 5 adv 2 only rigid,mirror,scale,order,boolean,backends,certify,membership"; fi
+          target/release/examples/meta $depth known tools/proof/known.txt
+      # every part's exact result, native (n-ary on 4 threads) and as the browser build (1 thread)
+      - name: bits (native and wasm agree bit for bit)
         run: |
-          python3 - <<'PY'
-          import ctypes, os, struct
-          attr = bytearray(128)
-          struct.pack_into("IIQ", attr, 0, 0, 128, 1)  # PERF_TYPE_HARDWARE, size, instructions
-          struct.pack_into("Q", attr, 40, 1 << 5 | 1 << 6)  # exclude_kernel, exclude_hv
-          libc = ctypes.CDLL(None, use_errno=True)
-          fd = libc.syscall(298, bytes(attr), 0, -1, -1, 0)
-          print("perf_event_open:", "works" if fd >= 0 else os.strerror(ctypes.get_errno()))
-          PY
+          cargo build -q --profile wasm -p forge-model --example bits --target wasm32-wasip1
+          target/release/examples/bits > bits-native.txt
+          node --no-turbo-fast-api-calls tools/wasi-run.mjs target/wasm32-wasip1/wasm/examples/bits.wasm > bits-wasm.txt
+          diff bits-native.txt bits-wasm.txt
 
+  # Nightly and on PRs: its cold setup and build alone take 10 minutes under load, the merge budget.
   oracle:
-    needs: gate
-    if: needs.gate.outputs.newest == 'true'
+    if: github.event_name != 'push'
     runs-on: members
     env:
       CARGO_TERM_COLOR: always
