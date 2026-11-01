@@ -95,3 +95,19 @@ fn a_face_reaching_its_axis_meshes_or_says_why() {
         assert!(m.positions.len() < 1 << 20, "{}", m.positions.len());
     }
 }
+
+/// What an exported file says of its accuracy holds for its own edges and faces.
+#[test]
+fn an_export_states_what_it_holds_to() {
+    let got = import(lens().as_bytes(), &Limits::default()).expect("reads");
+    let e = forge_step::export(&got.solids[0].body, &forge_step::Options::default()).expect("writes");
+    assert!(e.fit_faces.count > 0);
+    let back = import(e.text.as_bytes(), &Limits::default()).expect("reads back");
+    assert!(
+        back.stats.curve_off_surface <= back.stats.uncertainty,
+        "{} {}",
+        back.stats.curve_off_surface,
+        back.stats.uncertainty
+    );
+    assert_eq!(back.stats.uncertainty, e.uncertainty);
+}

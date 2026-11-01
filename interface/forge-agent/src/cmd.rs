@@ -697,14 +697,15 @@ impl Session {
         let body = m.body().ok_or("the part has no solid to export")?;
         let e = forge_step::export(body, &opt).map_err(|e| e.to_string())?;
         let text = format!(
-            "{} solids, {} faces, {} edges; fitted {} faces (within {:.1e} mm), {} edges (within {:.1e} mm)",
+            "{} solids, {} faces, {} edges; fitted {} faces (within {:.1e} mm), {} edges (within {:.1e} mm); accuracy stated {:.1e} mm",
             e.solids,
             e.faces,
             e.edges,
             e.fit_faces.count,
             e.fit_faces.error,
             e.fit_edges.count,
-            e.fit_edges.error
+            e.fit_edges.error,
+            e.uncertainty
         );
         let json = Json::obj(vec![
             ("ok", true.into()),

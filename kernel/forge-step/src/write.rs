@@ -36,6 +36,9 @@ impl Default for Options {
 #[derive(Clone, Debug, PartialEq)]
 pub struct Export {
     pub text: String,
+    /// The distance accuracy the file states: `Options::tol`, or more where a fitted edge lies
+    /// further than that off a fitted face.
+    pub uncertainty: f64,
     pub solids: usize,
     pub faces: usize,
     pub edges: usize,
@@ -804,8 +807,23 @@ pub fn export(body: &Body, opt: &Options) -> Result<Export, ExportError> {
          FILE_SCHEMA(('{schema}'));\nENDSEC;\nDATA;\n{}ENDSEC;\nEND-ISO-10303-21;\n",
         w.data
     );
+    // what the file says of itself is what its fits came to: a fitted edge and a fitted face can
+    // miss each other by more than either strays from what it stands for
+    let stated = forge_math::tol::LINEAR.max(opt.tol);
+    let mut uncertainty = stated;
+    if face_fits.count + edge_fits.count > 0
+        && let Ok(gap) = crate::read::curve_off_surface(text.as_bytes(), &crate::part21::Limits::default())
+        && gap > stated
+    {
+        uncertainty = 1.01 * gap;
+        let (mut a, mut b) = (String::from("LENGTH_MEASURE("), String::from("LENGTH_MEASURE("));
+        real(&mut a, stated);
+        real(&mut b, uncertainty);
+        text = text.replacen(&a, &b, 1);
+    }
     Ok(Export {
         text,
+        uncertainty,
         solids: solids.len(),
         faces: body.faces.len(),
         edges: edges.len(),

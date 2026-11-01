@@ -1650,6 +1650,8 @@ struct Ctx<'a> {
     a0: f64,
     c: Point3,
     inner: Inner,
+    /// Whether a point has asked the fit for a value past its box.
+    left_fit: std::cell::Cell<bool>,
     rel: f64,
     /// Below these a share of each integral is negligible: rel times a far smaller part's.
     floor: F,
@@ -1754,13 +1756,11 @@ impl Ctx<'_> {
                 (g, phi, [0.0; NF])
             }
             Inner::Cheb(ref ch, all) => {
-                // a fit holds just past its box, and blows up not far beyond (a loop near a pole,
-                // where the angle wanders): out there, the column itself
+                // a fit holds just past its box, and blows up not far beyond
                 let off =
                     |x: f64, (lo, hi): (f64, f64)| x < lo - 1e-3 * (hi - lo) || x > hi + 1e-3 * (hi - lo);
                 if off(a, all.0) || off(b, all.1) {
-                    let (v, e) = self.adapt(self.a0, a, b, 12);
-                    return (v, [0.0; NF], e);
+                    self.left_fit.set(true);
                 }
                 let (g, e) = Cheb::sum(ch, all, a, b);
                 (g, [0.0; NF], e)
@@ -2071,6 +2071,7 @@ fn face_integrals(body: &Body, f: FaceId, c: Point3, size: f64, rel: f64) -> Res
         a0,
         c,
         inner: Inner::Adapt,
+        left_fit: std::cell::Cell::new(false),
         panels: std::cell::Cell::new(
             20_000 + 20 * loops.iter().flat_map(|l| &l.runs).map(Vec::len).sum::<usize>(),
         ),
@@ -2180,28 +2181,39 @@ fn face_integrals(body: &Body, f: FaceId, c: Point3, size: f64, rel: f64) -> Res
         }
     }
     let mut units: Vec<Acc> = Vec::new();
-    for l in &loops {
-        for run in &l.runs {
-            let mut u = Acc::default();
-            for pc in run {
-                let mut work = vec![(8u32, None)];
-                while let Some((depth, piece)) = work.pop() {
-                    let pc = piece.as_ref().unwrap_or(pc);
-                    // made finer while the face's budget lasts
-                    match integrate(&cx, pc, &mut u, depth == 0 || cx.panels.get() == 0) {
-                        Some(()) => {}
-                        None => {
-                            cx.panels.set(cx.panels.get().saturating_sub(pc.n.len() / 4));
-                            let mut f = finer(s, pc);
-                            while let Some(p) = f.pop() {
-                                work.push((depth - 1, Some(p)));
+    // a loop that left the fit's box (near a pole, where the angle wanders) is measured again by
+    // columns alone: a fit past its box is no answer, and mixing the two does not cancel
+    loop {
+        units.clear();
+        for l in &loops {
+            for run in &l.runs {
+                let mut u = Acc::default();
+                for pc in run {
+                    let mut work = vec![(8u32, None)];
+                    while let Some((depth, piece)) = work.pop() {
+                        let pc = piece.as_ref().unwrap_or(pc);
+                        // made finer while the face's budget lasts
+                        match integrate(&cx, pc, &mut u, depth == 0 || cx.panels.get() == 0) {
+                            Some(()) => {}
+                            None => {
+                                cx.panels.set(cx.panels.get().saturating_sub(pc.n.len() / 4));
+                                let mut f = finer(s, pc);
+                                while let Some(p) = f.pop() {
+                                    work.push((depth - 1, Some(p)));
+                                }
                             }
                         }
                     }
                 }
+                units.push(u);
             }
-            units.push(u);
         }
+        if !cx.left_fit.get() || !matches!(cx.inner, Inner::Cheb(..)) {
+            break;
+        }
+        cx.inner = Inner::Adapt;
+        cx.panels
+            .set(20_000 + 20 * loops.iter().flat_map(|l| &l.runs).map(Vec::len).sum::<usize>());
     }
     // shift runs a period along a so the region drawn is the face: positive area, the least
     let mut total = [0.0; NF];

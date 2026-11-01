@@ -1224,6 +1224,16 @@ fn measures_agree(body: &Body) -> Result<(), String> {
 
 /// Reads a whole file. Parts that cannot be read become refusals; the others are returned.
 pub fn import(text: &[u8], lim: &Limits) -> Result<Imported, ImportError> {
+    read_file(text, lim, false)
+}
+
+/// The most any edge of a file lies off a face it bounds, by the same measure a read reports.
+pub(crate) fn curve_off_surface(text: &[u8], lim: &Limits) -> Result<f64, ImportError> {
+    Ok(read_file(text, lim, true)?.stats.curve_off_surface)
+}
+
+/// `only_measure`: as far as what the file's geometry misses by, and no bodies.
+fn read_file(text: &[u8], lim: &Limits, only_measure: bool) -> Result<Imported, ImportError> {
     let f = parse(text, lim).map_err(ImportError::Parse)?;
     let mut stats = Stats::default();
     let mut refusals = Vec::new();
@@ -1319,6 +1329,9 @@ pub fn import(text: &[u8], lim: &Limits) -> Result<Imported, ImportError> {
                         en.2 = en.2.max(worst);
                     }
                 }
+                if only_measure {
+                    continue;
+                }
                 proto.split_closed_splines();
                 if let Err(why) = proto.add_seams() {
                     refusals.push(Refusal {
@@ -1350,7 +1363,7 @@ pub fn import(text: &[u8], lim: &Limits) -> Result<Imported, ImportError> {
             Err(x) => refusals.push(x),
         }
     }
-    if solids.is_empty() && refusals.is_empty() {
+    if solids.is_empty() && refusals.is_empty() && !only_measure {
         return Err(ImportError::NoSolids);
     }
     Ok(Imported {

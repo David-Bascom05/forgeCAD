@@ -36,12 +36,20 @@ OCCT's adaptive mass, OCCT's own mesh and ours, face by face:
 - Two read wrong: `net_of` divided rational control points by their weights twice (`bezier_data` gives
   each its own), so surfaces moved from arcs missed their edges, 0.27 mm on an arc of radius 6. Fixed.
 - Several were `mass` going wrong near a pole on a revolved face with edges a little off it: the angle
-  wanders there, a Chebyshev fit was read far outside its box and came to 1e58. The fit is no longer
-  read outside its box, and `mass` refuses a negative face area or a volume past the box. What is left
+  wanders there, a Chebyshev fit was read far outside its box and came to 1e58. A face whose loop
+  leaves the fit's box is measured again by columns alone, and `mass` refuses a negative face area or a volume past the box. What is left
   of this can stay a few percent out, so `measures_agree` in `read.rs` holds the integrals against
   a mesh on import and refuses the body past 2% (plus what a chord can stray over the area).
 - Some were the judge: copies dropped on one side only, a truth from OCCT's non-adaptive volume (the
   CADFS truth was re-run), or OCCT disagreeing with itself (adaptive against its own mesh).
 
 Rerun: `rate.py` and `tools/occt/step_read.py`, with the datasets outside the repo.
+
+## Export: what a file says of its accuracy
+
+Each fit keeps within its tolerance of what it stands for, and a fitted edge and a fitted face still
+missed each other by far more where the edge runs past the part of the surface the fit was checked on:
+0.01 mm on jack against a stated 1e-4, confirmed by OCCT's own projection. `export` now measures this
+with the reader's measure and states the larger number (`Export::uncertainty`). The fit itself is
+not tightened yet.
 
