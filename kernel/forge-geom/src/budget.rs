@@ -1,5 +1,5 @@
 //! How much work the reading of one thing from a file may take: a count of evaluations of a file's
-//! spline surfaces, the one cost nothing else bounds. The same on every machine, so a file is
+//! spline surfaces and of steps round a mesh's largest fans, the costs nothing else bounds. The same on every machine, so a file is
 //! refused or not alike everywhere. Off unless `begin` set it, and nothing made here counts.
 
 use std::cell::Cell;
@@ -21,6 +21,10 @@ pub fn end() {
 #[inline]
 pub fn spend() {
     LEFT.set(LEFT.get().saturating_sub(1));
+}
+
+pub fn spend_many(n: u64) {
+    LEFT.set(LEFT.get().saturating_sub(n));
 }
 
 /// Whether what `begin` allowed is gone: the caller stops and says so.

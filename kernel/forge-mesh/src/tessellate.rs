@@ -332,6 +332,9 @@ impl Nodes {
     }
 }
 
+/// The most an edge is cut into, and the most cells an analytic face's grid has.
+const MAX_EDGE_CUTS: usize = 1 << 22;
+
 /// The most points a procedural face's first grid has.
 const MAX_GRID: usize = 1 << 15;
 
@@ -703,7 +706,7 @@ fn cut_finer(body: &Body, q: &Quality) -> Result<TriMesh, Failed> {
             Err(TessError::Face {
                 face,
                 error: CdtError::ConstraintsIntersect { .. },
-            }) if rounds < 9 => {
+            }) if rounds < if body.from_file { 3 } else { 9 } => {
                 let radius = |e: forge_topo::EdgeId| match &body.edge(e).curve {
                     Curve::Circle(c) => c.radius,
                     _ => f64::INFINITY,
@@ -808,6 +811,13 @@ fn tessellate_with(
             .iter()
             .any(|&c| doubly_curved(&body.face(body.coedge_face(c)).surface));
         let n = edge_segments(&edge.curve, edge.range, q, fine) * finer[e.index()];
+        // a file's arc of a huge radius, or a bad number: no room to be had, and no mesh
+        if n > MAX_EDGE_CUTS {
+            return Err(TessError::Face {
+                face: body.coedge_face(edge.coedges[0]),
+                error: CdtError::Internal("an edge would take too many points"),
+            });
+        }
         let mut s = Vec::with_capacity(n + 1);
         s.push((edge.range.lo, vertex_index[edge.start.index()]));
         edge.curve.sample_interior(edge.range, n, &mut trig, &mut pts);
@@ -1147,6 +1157,10 @@ fn tessellate_face(
             _ => {
                 let nu = ((hi.x - lo.x) / du).ceil().max(1.0) as usize;
                 let nv = ((hi.y - lo.y) / dv).ceil().max(1.0) as usize;
+                // (a file's bad number can ask for any grid at all)
+                if nu.saturating_mul(nv) > MAX_EDGE_CUTS {
+                    return Err(CdtError::Internal("a face would take too many points"));
+                }
                 let mut g = Grid::new(lo, hi, nu, nv, &uv, &loops);
                 // a cell's chords sag within the tolerance only where its steps come from the
                 // surface's exact radii (not a cone's, whose radius grows along it)

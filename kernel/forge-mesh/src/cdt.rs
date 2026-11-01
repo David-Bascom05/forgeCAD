@@ -329,12 +329,23 @@ impl Mesh {
 
     /// A triangle holding the directed edge a -> b, and the index of the vertex opposite it.
     fn find_edge(&self, a: u32, b: u32) -> Option<(u32, usize)> {
+        let mut steps = 0;
+        let found = self.find_edge_counted(a, b, &mut steps);
+        // a fan of thousands, asked of again and again, is the one cost here that grows unseen
+        if steps > 64 {
+            forge_geom::budget::spend_many(steps);
+        }
+        found
+    }
+
+    fn find_edge_counted(&self, a: u32, b: u32, steps: &mut u64) -> Option<(u32, usize)> {
         let start = self.vtri[a as usize];
         // counter-clockwise around a (across a -> v[pv]); a super-triangle corner's fan ends at
         // the hull, so the rest of it is searched clockwise (across a -> v[nx])
         for ccw in [true, false] {
             let mut t = start;
             for _ in 0..self.tris.len() {
+                *steps += 1;
                 let tt = self.tris[t as usize];
                 let ia = (0..3).find(|&k| tt.v[k] == a)?;
                 if tt.v[nx(ia)] == b {
@@ -440,6 +451,12 @@ impl Mesh {
             budget = budget
                 .checked_sub(1)
                 .ok_or(CdtError::Internal("constraint recovery did not converge"))?;
+            if budget.is_multiple_of(1024) {
+                forge_geom::budget::spend_many(16 * 1024);
+                if forge_geom::budget::over() {
+                    return Err(CdtError::Internal("the boundary would take too long"));
+                }
+            }
             let (t, i) = self
                 .find_edge(x, y)
                 .ok_or(CdtError::Internal("crossed edge vanished"))?;
@@ -507,6 +524,11 @@ impl Mesh {
                 }
             }
         }
+        // each a search round a vertex: a constraint across thousands of triangles is the dear part
+        let work = fresh.len() * rounds;
+        if work > 64 {
+            forge_geom::budget::spend_many(16 * work as u64);
+        }
         Ok(())
     }
 
@@ -526,6 +548,9 @@ impl Mesh {
             budget = budget
                 .checked_sub(1)
                 .ok_or(CdtError::Internal("a tangled boundary did not untangle"))?;
+            if forge_geom::budget::over() {
+                return Err(CdtError::Internal("the boundary would take too long"));
+            }
             match self.insert_constraint(a, b, |v| v) {
                 Ok(()) => *uses.entry(key(a, b)).or_insert(0) += 1,
                 Err(CdtError::ConstraintThroughPoint { point, .. }) => {
@@ -928,7 +953,13 @@ pub fn triangulate_within(
         mesh.insert_tangled(chords)?;
     } else {
         for lp in loops {
+            if forge_geom::budget::over() {
+                return Err(CdtError::Internal("the boundary would take too long"));
+            }
             for k in 0..lp.len() {
+                if k % 256 == 255 && forge_geom::budget::over() {
+                    return Err(CdtError::Internal("the boundary would take too long"));
+                }
                 let a = lp[k] + SUPER;
                 let b = lp[(k + 1) % lp.len()] + SUPER;
                 mesh.insert_constraint(a, b, ext)?;
@@ -1099,6 +1130,23 @@ mod tests {
                 0.5 * (b - a).cross(c - a)
             })
             .sum()
+    }
+
+    /// A boundary's cost counts against a file's budget: past it, a clean error.
+    #[test]
+    fn a_boundary_past_its_budget_fails_cleanly() {
+        let n = 2048;
+        let points: Vec<Point2> = (0..n)
+            .map(|k| {
+                let (s, c) = dmath::sin_cos(dmath::TAU * k as f64 / n as f64);
+                Point2::new(c, s)
+            })
+            .collect();
+        let lp: Vec<u32> = (0..n).collect();
+        forge_geom::budget::begin(0);
+        let got = triangulate_refined(&points, &[lp], &[], None);
+        forge_geom::budget::end();
+        assert!(matches!(got, Err(CdtError::Internal(_))), "{got:?}");
     }
 
     #[test]
