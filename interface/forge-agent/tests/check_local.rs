@@ -76,6 +76,13 @@ fn a_fault_in_any_one_entity_is_found() {
             run(format!("face {i} surface"), &|b| {
                 b.faces[i].surface = b.faces[i].surface.transformed(&shift);
             });
+            // the same plane turned over: its edges still lie on it, only the side test can tell
+            if let forge_geom::Surface::Plane(p) = &good.faces[i].surface {
+                let over = forge_geom::Plane::new(Frame::from_z(p.frame.origin, -p.frame.z()));
+                run(format!("face {i} plane over"), &|b| {
+                    b.faces[i].surface = forge_geom::Surface::Plane(over)
+                });
+            }
             run(format!("face {i} name"), &|b| {
                 b.faces[i].name = b.faces[(i + 1) % b.faces.len()].name
             });
@@ -87,6 +94,12 @@ fn a_fault_in_any_one_entity_is_found() {
             run(format!("edge {i} range"), &|b| {
                 let r = b.edges[i].range;
                 b.edges[i].range = forge_math::Interval::new(r.lo + 0.25 * r.width(), r.hi);
+            });
+            // walked the other way by both faces: a closed edge's loops still close
+            run(format!("edge {i} both ways"), &|b| {
+                for c in b.edges[i].coedges.clone().iter() {
+                    b.coedges[c.index()].forward ^= true;
+                }
             });
             run(format!("edge {i} ends"), &|b| {
                 let e = &mut b.edges[i];
