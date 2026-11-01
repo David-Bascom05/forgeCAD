@@ -1784,16 +1784,20 @@ pub(crate) fn crack_tip(bodies: [&Body; 2], index: [&Index; 2], t: &Touch, any: 
     };
     let dirs: Vec<Vec3> = match t.dir {
         Some(d) => match n.cross(d).normalize() {
-            Some(w) => vec![w.get(), -w.get()],
+            Some(w) => vec![w.get(), -w.get(), n.get(), -n.get()],
             None => return false,
         },
         None => {
             let fr = Frame::from_z(t.at, n);
-            vec![fr.x().get(), -fr.x().get(), fr.y().get(), -fr.y().get()]
+            let (x, y) = (fr.x().get(), fr.y().get());
+            vec![x, -x, y, -y, n.get(), -n.get()]
         }
     };
+    // (a part a few units across holds these steps too)
+    let size = index[0].bbox.diagonal().min(index[1].bbox.diagonal());
+    let scale = (size / 10.0).min(1.0);
     // far enough that a gap opening with the square of the distance shows past tolerance
-    [0.05, 0.2].iter().all(|&d| {
+    [0.05 * scale, 0.2 * scale].iter().all(|&d| {
         dirs.iter().any(|&w| {
             let q = t.at + w * d;
             let (x, y) = (index[0].classify(q), index[1].classify(q));
@@ -2228,7 +2232,7 @@ pub(crate) fn trim(
                             s,
                             point: h.point,
                             tol,
-                            touch: grazing || branches[1],
+                            touch: (grazing && !CHORDS.with(|c| c.get())) || branches[1],
                         });
                     }
                 }
@@ -2441,6 +2445,8 @@ pub(crate) fn trim(
     // would need an edge along the first edge
     let pairs = match curve {
         Curve::Line(_) => 0,
+        // (not when the retry wants that edge along the first)
+        _ if CHORDS.with(|c| c.get()) => 0,
         _ if closed => ts.len(),
         _ => ts.len().saturating_sub(1),
     };
