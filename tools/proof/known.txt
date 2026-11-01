@@ -21,3 +21,4 @@ backends: nary 1: fails: Boolean Unsupported "surface  # M10
 backends: nary 1: fails: MissingEdge  # nary-fillet-after-*-pattern.fc, nary-bb-cluster-fillet.fc
 backends: nary 1: fails: Chamfer NoSuchEdge  # nary-chamfer-after-fillet-conrod.fc
 backends: nary no shapes: fails: Boolean Internal "face  # test-gen/r14.fc
+ulp: invalid FaceWrongSide FaceId  # adv ball_poles: a ball cut and a ball added touching at their poles on a top face, nudged by ulps; was refused (crossed itself), the pinch tie gets further and leaves a wrong side on the top face

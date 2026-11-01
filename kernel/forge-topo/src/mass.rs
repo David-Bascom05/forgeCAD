@@ -895,8 +895,28 @@ fn coedge_pieces<'a>(
                 if t1 - t0 < 1e-6 {
                     t1 = next(t0);
                 }
-                let anchor = ic.eval(t0);
-                let end = ic.eval(t1);
+                // (a stop inside a chain step lies on the curve only as near as the chain does: both
+                // stretches there meet at the same exact point)
+                let exact = |t: f64| {
+                    let p = ic.eval(t);
+                    if t == lo || t == hi || t.fract() == 0.0 {
+                        return p;
+                    }
+                    let mut p = p;
+                    for _ in 0..4 {
+                        // the least step onto both
+                        let ((fa, na), (fb, nb)) = (ic.a.implicit_gradient(p), ic.b.implicit_gradient(p));
+                        let (aa, ab, bb) = (na.dot(na), na.dot(nb), nb.dot(nb));
+                        let det = aa * bb - ab * ab;
+                        if det <= 1e-12 * aa * bb {
+                            break;
+                        }
+                        p += (na * (ab * fb - bb * fa) + nb * (ab * fa - aa * fb)) / det;
+                    }
+                    p
+                };
+                let anchor = exact(t0);
+                let end = exact(t1);
                 let Some(dir) = (end - anchor).normalize() else {
                     // a stretch shorter than rounding adds nothing
                     t0 = t1;

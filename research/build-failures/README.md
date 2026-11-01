@@ -30,6 +30,7 @@ Counts: real parts = find-parts, Fusion 360 Gallery, ~8600 parts, main d33b84aa 
 | butted cylinders of one radius | 237 real parts | a closed edge two bodies share: its direction was read from its ends, one vertex, so one use ran the wrong way: open shell, or false ZeroThickness | shafts and tubes built in steps from a joint | fixed (`canon` in boolean.rs, nary.rs) |
 | crossing a traced fillet's spring missed | 97 of 200 pipe parts; now 140 of 200 valid | `across()` used a plane at the edge's middle for a curved spring, the neighbour being tangent there | any cut through a fillet on a non-circular edge | fixed (`Fence` in blend.rs, plus the spring against the other surface) |
 | lost cut, silent wrong volume | 3 real parts, wrong with no error | a stretch whose middle lands within tolerance of a boundary with its ends on that boundary was taken to run along it, and no edge was made | any model carrying float noise | fixed (`inside` in `trim`: along an edge only if that edge holds its middle and both ends). Noise check, 8188 parts at 3e-7: no volume moved over 0.01% |
+| mass silently wrong on an intersection curve with a tip | 8 of 300 ruled lofts (research/pipe-speed/fuzz/gen_ruled.py), up to 1%; 0 of 8420 real parts (extrudes only) | a plane across a V cuts the curve twice: a piece made finer solved Newton from a far seed and landed on the other arm, as exact as the right one, so no gap and no error estimate saw it; and a chain step holding the whole turn at the tip, where the chord distance doubles back. The second reaches every intersection curve, the first any procedural surface against an analytic one | any face of a loft cut by a cylinder that grazes a corner | fixed in `kernel/forge-topo/src/mass.rs`; forge-proof `mass` holds it |
 | classification floods across a shared edge | part of 76 real parts | a tool's edge on a part's edge: being inside the tool changes across it | pockets ending on a rib's root | fixed |
 | nearly flush surfaces | part of 76 and 65 real parts | plane on plane or tangent to a cylinder within LINEAR over the faces, tilted past `ANGULAR` (9-digit rounding), crossing in curves the tolerance cannot tell apart | imported or rounded data | fixed (`ssi::nearly_flush`) |
 | probe on a touch | part of 65 real parts, 6 scoreboard | the one probe of an untouched face lands on a tangent line; also a whole edge imprinted because its middle touched | cross holes ending on a tangent plane | fixed, except a tool's corners touching a circle (repro e6ca2) |
@@ -39,8 +40,8 @@ Counts: real parts = find-parts, Fusion 360 Gallery, ~8600 parts, main d33b84aa 
 | fillet off over an edge and back | 11 refusals, 8 valid of 200 pipe | the spring leaves its face over one edge and returns over it; the edge's middle goes | a boss near a rim | fixed (`SplitFirst`, `chain_loops`) |
 | shell towards a cone's point | part of 15 history | a pointed cone was taken to collapse | a pointed boss shelled in, a drill point shelled out | fixed |
 | hair kink in a straight side | noise repro; 162 noise failures carry this signature, how many this root is not known | a neighbour at a shallow angle loses the crossing | noisy imports | fixed for that repro (`across`) |
-| fillet Corner, pipe | 28 of 200 (13 at any radius) | no rule closes the vertex: `ball_setbacks`, a cold edge with no trim point, a seam the spring does not cross | concave chains across a box's convex edge | open |
-| fillet Overflow, pipe | 14 of 200 | odd crossings of the body's edges (a chain across a convex edge) and others | same | open |
+| fillet Corner, pipe (now the fillet agent's) | 28 of 200 (13 at any radius) | no rule closes the vertex: `ball_setbacks`, a cold edge with no trim point, a seam the spring does not cross | concave chains across a box's convex edge | open |
+| fillet Overflow, pipe (now the fillet agent's) | 14 of 200 | odd crossings of the body's edges (a chain across a convex edge) and others | same | open |
 | classification, pipe | 11 of 200 | a curve's crossing of a spring or rim still missed | flats lying along a contact | open |
 | fillet at any radius, history: NoBlend 28 (mostly variable radius), Overflow 18, Corner 20 | 66 of 202 | a variable law through a line and an arc: the guide (a spline) bends on the line's long step | variable fillets past a filleted corner | open: drawing knots in moved NoBlend to BadRadius only, dropped |
 | chamfer at any size: TooLarge 12; Unsupported 13 | history | not traced | chamfering a tilted hole's rim | open |
@@ -79,3 +80,12 @@ A cut taking one whole body of several deletes it (David); `build` names the bod
 The OCCT replay of all 495 refused histories did not finish, so "any size" for the history classes is
 measured by trying smaller, not yet by OCCT. On the pipe set OCCT did run: 142 agree, 3 differ in one
 surface's area, 23 OCCT fails too or is invalid, 31 we fail and it builds, 1 does not mesh (138 valid then; 139 now).
+
+## Volume checks
+
+forge-proof properties, tests only, deep tier. `volume`: each cut or add's volume change against 1200 points
+tested against the part before and the tool's solids, no boolean involved; 5 sigma of the sampling (a point on a
+boundary counts half, or a tool a few microns thick loses its share). `mass`: mass against two meshes a quarter of
+the sag apart, the volume and each face's area, the slack from the meshes' difference and the fine mesh's sag. Both
+were set by running them on the Fusion parts, the bench parts and fuzz seeds; every disagreement left was traced by
+a third, finer mesh or by hand. `verify/forge-proof/examples/propdir.rs` runs either over a directory.

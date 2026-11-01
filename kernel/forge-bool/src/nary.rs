@@ -558,7 +558,9 @@ pub fn nary_with(
     threads: usize,
     root: Name,
 ) -> R<Body> {
+    crate::boolean::UNDECIDED.with(|u| u.set(None));
     let mut out = nary_body(tools, ops, shapes, batch, threads, root)?;
+    crate::boolean::undecided_touch(&out)?;
     // pieces left touching at a point keep a vertex each: where walking round a vertex from one
     // coedge leaving it (back along its loop, across to the partner) misses some of the others
     let nv = out.vertices.len();
@@ -1062,17 +1064,14 @@ fn nary_body(
                 t.sides, t.faces, t.at
             );
         }
-        let both = (0..2).all(|k| {
+        let kept = [0, 1].map(|k| {
             let (sd, f) = (t.sides[k], t.faces[k]);
-            match local_class(tools[sd], &index[sd], f, t.at, t.dir, |q| kept_at(sd, q)) {
-                Some(k) => k,
-                // cut at the touch by a third surface: kept if any of it round the point is
-                None if t.dir.is_none() => {
-                    crate::boolean::local_any(tools[sd], &index[sd], f, t.at, |q| kept_at(sd, q))
-                }
-                None => false,
-            }
+            local_class(tools[sd], &index[sd], f, t.at, t.dir, |q| kept_at(sd, q))
         });
+        if t.dir.is_none() && kept.contains(&None) {
+            crate::boolean::UNDECIDED.with(|u| u.set(Some(t.at)));
+        }
+        let both = kept == [Some(true); 2];
         if both {
             return Err(BoolError::ZeroThickness { at: t.at });
         }
