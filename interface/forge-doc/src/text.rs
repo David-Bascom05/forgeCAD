@@ -1571,7 +1571,7 @@ pub const KINDS: &[Kind] = &[
     },
     Kind {
         name: "import",
-        syntax: "import [new|add|cut] PATH   a solid from a STEP file (.step .stp), quoted; features can follow",
+        syntax: "import [new|add|cut] PATH   a solid from a STEP or OpenCascade file (.step .stp .brep), quoted; features can follow",
         parse: |p| {
             let op = if p.eat("cut") {
                 Combine::Cut

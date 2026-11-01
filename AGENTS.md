@@ -16,7 +16,7 @@ w = 40                                      # a parameter: any number below may 
 
 `at X Y Z` is a frame's origin, its z the extrude or drill direction: xy +z, xz -y, yz +x, -xy -z
 (`help frame`). Loops: rect circle rrect ellipse poly spline thru loop (`help loops`). `help` lists every topic:
-sketch, revolve, sweep, loft, coil, thread, text, import (a STEP file), shell, draft, rib, hole, pattern, bodies, ...
+sketch, revolve, sweep, loft, coil, thread, text, import (a STEP or .brep file), shell, draft, rib, hole, pattern, bodies, ...
 
 Tools (CLI `forgecad TOOL F ..`, or MCP; lines on stdin if none given):
 ```

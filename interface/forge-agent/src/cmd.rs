@@ -81,14 +81,14 @@ fn import_file(
 ) -> Result<std::sync::Arc<forge_topo::Body>, String> {
     let real = std::fs::canonicalize(dir.join(name)).ok().filter(|r| {
         r.extension()
-            .is_some_and(|x| x.eq_ignore_ascii_case("step") || x.eq_ignore_ascii_case("stp"))
+            .is_some_and(|x| ["step", "stp", "brep"].iter().any(|k| x.eq_ignore_ascii_case(k)))
     });
-    let refused = || format!("{name}: not a STEP file under the root");
+    let refused = || format!("{name}: not a STEP or .brep file under the root");
     let r = match (root, real) {
         (Some(root), Some(r)) if r.starts_with(root) => r,
         (Some(_), _) => return Err(refused()),
         (None, Some(r)) => r,
-        (None, None) => return Err(format!("{name}: no such .step or .stp file")),
+        (None, None) => return Err(format!("{name}: no such .step, .stp or .brep file")),
     };
     let meta = std::fs::metadata(&r).map_err(|e| format!("{name}: {e}"))?;
     if !meta.is_file() || meta.len() > STEP_LIMIT {

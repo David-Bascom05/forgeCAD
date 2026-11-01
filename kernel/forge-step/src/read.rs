@@ -61,6 +61,8 @@ pub struct Imported {
 #[derive(Debug)]
 pub enum ImportError {
     Parse(ParseError),
+    /// A `.brep` that does not read as one.
+    Brep,
     NoSolids,
 }
 
@@ -68,6 +70,7 @@ impl std::fmt::Display for ImportError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             ImportError::Parse(e) => write!(f, "{e}"),
+            ImportError::Brep => write!(f, "not a readable OpenCascade .brep file"),
             ImportError::NoSolids => write!(f, "the file holds no solid"),
         }
     }
@@ -101,7 +104,7 @@ struct Reader<'a> {
 const MAX_WRAP: u32 = 16;
 
 /// A curve as degree, knots, points and weights.
-type Net = (usize, Vec<f64>, Vec<Point3>, Vec<f64>);
+pub(crate) type Net = (usize, Vec<f64>, Vec<Point3>, Vec<f64>);
 
 fn kw<'x>(f: &File<'x>, id: u32) -> Option<&'x str> {
     let r = f.records_of(id)?;
@@ -742,44 +745,12 @@ impl<'a> Reader<'a> {
         }
     }
 
-    /// A curve's control net, or the error, for surfaces built by moving it. Conics become
-    /// rational splines (exact) through `Spline::ellipse`; a line, two points.
+    /// A curve's control net, or the error, for surfaces built by moving it.
     fn generator(&mut self, id: u32, kind: &str, curve: u32) -> R<Net> {
         let c = self.curve(curve)?;
-        match &c {
-            Curve::Line(l) => {
-                // long enough for any part in the model box
-                let reach = 2.0 * forge_math::tol::MODEL_HALF_SIZE;
-                let (a, b) = (
-                    l.origin + Vec3::from(l.dir) * -reach,
-                    l.origin + Vec3::from(l.dir) * reach,
-                );
-                Ok((1, vec![-reach, -reach, reach, reach], vec![a, b], vec![1.0, 1.0]))
-            }
-            Curve::Circle(k) => {
-                let (x, y) = (
-                    Vec3::from(k.frame.x()) * k.radius,
-                    Vec3::from(k.frame.y()) * k.radius,
-                );
-                match Spline::ellipse(k.frame.origin, x, y, 0.0, dmath::TAU) {
-                    Some(s) => Ok(net_of(&s)),
-                    None => refuse(id, kind, "its circle has no spline"),
-                }
-            }
-            Curve::Ellipse(k) => {
-                let (x, y) = (
-                    Vec3::from(k.frame.x()) * k.major,
-                    Vec3::from(k.frame.y()) * k.minor,
-                );
-                match Spline::ellipse(k.frame.origin, x, y, 0.0, dmath::TAU) {
-                    Some(s) => Ok(net_of(&s)),
-                    None => refuse(id, kind, "its ellipse has no spline"),
-                }
-            }
-            other => match forge_geom::spline::spline_of(other) {
-                Some(s) => Ok(net_of(&s.c)),
-                None => refuse(id, kind, "its curve cannot be moved exactly"),
-            },
+        match net_of_curve(&c) {
+            Some(n) => Ok(n),
+            None => refuse(id, kind, "its curve cannot be moved exactly"),
         }
     }
 
@@ -791,78 +762,10 @@ impl<'a> Reader<'a> {
         let v = self.reference(id, name, a.get(2))?;
         let va = self.args_of(v, "VECTOR")?;
         let dir: Vec3 = self.direction(self.reference(v, "VECTOR", va.get(1))?)?.into();
-        let (deg, knots, pts, w) = self.generator(id, name, basis)?;
-        let reach = 2.0 * forge_math::tol::MODEL_HALF_SIZE;
-        let mut net = Vec::with_capacity(pts.len() * 2);
-        let mut ws = Vec::with_capacity(pts.len() * 2);
-        for (i, p) in pts.iter().enumerate() {
-            net.push(*p + dir * -reach);
-            net.push(*p + dir * reach);
-            ws.push(w[i]);
-            ws.push(w[i]);
-        }
-        match Nurbs::new(
-            (deg, 1),
-            (knots, vec![-reach, -reach, reach, reach]),
-            (pts.len(), 2),
-            &net,
-            Some(&ws),
-        ) {
-            Some(n) => Ok(n.surface()),
+        let net = self.generator(id, name, basis)?;
+        match extruded(net, dir) {
+            Some(n) => Ok(n),
             None => refuse(id, name, "no surface from its curve"),
-        }
-    }
-
-    /// `pts` with weights turned about an axis by rational quadratic quarter-turns.
-    fn turned(&self, id: u32, kind: &str, axis: (Point3, Vec3), (deg, knots, pts, w): Net) -> R<Surface> {
-        let (o, z) = axis;
-        // nine points round: four quarters, weights 1 and sqrt(1/2)
-        let s = 0.5_f64.sqrt();
-        let mut net = Vec::with_capacity(pts.len() * 9);
-        let mut ws = Vec::with_capacity(pts.len() * 9);
-        // as the standard has it: u the angle, v along the curve (the natural normal depends on it)
-        for k in 0..9 {
-            let (ca, cb, wt) = match k {
-                0 | 8 => (1.0, 0.0, 1.0),
-                1 => (1.0, 1.0, s),
-                2 => (0.0, 1.0, 1.0),
-                3 => (-1.0, 1.0, s),
-                4 => (-1.0, 0.0, 1.0),
-                5 => (-1.0, -1.0, s),
-                6 => (0.0, -1.0, 1.0),
-                _ => (1.0, -1.0, s),
-            };
-            for (i, p) in pts.iter().enumerate() {
-                let c = o + z * z.dot(*p - o);
-                let r = *p - c;
-                // a generator ending on the axis, within the file's tolerance, ends on it: a pole
-                let r = if r.length() <= self.u.uncertainty {
-                    Vec3::ZERO
-                } else {
-                    r
-                };
-                net.push(c + r * ca + z.cross(r) * cb);
-                ws.push(w[i] * wt);
-            }
-        }
-        let pi = dmath::PI;
-        let angle = vec![
-            0.0,
-            0.0,
-            0.0,
-            0.5 * pi,
-            0.5 * pi,
-            pi,
-            pi,
-            1.5 * pi,
-            1.5 * pi,
-            2.0 * pi,
-            2.0 * pi,
-            2.0 * pi,
-        ];
-        match Nurbs::new((2, deg), (angle, knots), (9, pts.len()), &net, Some(&ws)) {
-            Some(n) => Ok(n.surface()),
-            None => refuse(id, kind, "no surface from its curve"),
         }
     }
 
@@ -878,7 +781,10 @@ impl<'a> Reader<'a> {
             _ => Vec3::Z,
         };
         let g = self.generator(id, name, basis)?;
-        self.turned(id, name, (o, z), g)
+        match turned((o, z), g, self.u.uncertainty) {
+            Some(n) => Ok(n),
+            None => refuse(id, name, "no surface from its curve"),
+        }
     }
 
     /// The spindle torus's outer or inner arc of its tube turned about the axis.
@@ -904,14 +810,114 @@ impl<'a> Reader<'a> {
             Spline::ellipse(c, x * minor, z * minor, half, 2.0 * (dmath::PI - half))
         };
         match s {
-            Some(s) => self.turned(id, name, (frame.origin, z), net_of(&s)),
+            Some(s) => match turned((frame.origin, z), net_of(&s), self.u.uncertainty) {
+                Some(n) => Ok(n),
+                None => refuse(id, name, "no surface from its curve"),
+            },
             None => refuse(id, name, "no arc for its tube"),
         }
     }
 }
 
+/// A curve's control net, for surfaces built by moving it. Conics become rational splines (exact)
+/// through `Spline::ellipse`; a line, two points.
+pub(crate) fn net_of_curve(c: &Curve) -> Option<Net> {
+    match c {
+        Curve::Line(l) => {
+            // long enough for any part in the model box
+            let reach = 2.0 * forge_math::tol::MODEL_HALF_SIZE;
+            let (a, b) = (
+                l.origin + Vec3::from(l.dir) * -reach,
+                l.origin + Vec3::from(l.dir) * reach,
+            );
+            Some((1, vec![-reach, -reach, reach, reach], vec![a, b], vec![1.0, 1.0]))
+        }
+        Curve::Circle(k) => {
+            let (x, y) = (
+                Vec3::from(k.frame.x()) * k.radius,
+                Vec3::from(k.frame.y()) * k.radius,
+            );
+            Some(net_of(&Spline::ellipse(k.frame.origin, x, y, 0.0, dmath::TAU)?))
+        }
+        Curve::Ellipse(k) => {
+            let (x, y) = (
+                Vec3::from(k.frame.x()) * k.major,
+                Vec3::from(k.frame.y()) * k.minor,
+            );
+            Some(net_of(&Spline::ellipse(k.frame.origin, x, y, 0.0, dmath::TAU)?))
+        }
+        other => Some(net_of(&forge_geom::spline::spline_of(other)?.c)),
+    }
+}
+
+/// A curve's net swept linearly, in v over a range past any part.
+pub(crate) fn extruded((deg, knots, pts, w): Net, dir: Vec3) -> Option<Surface> {
+    let reach = 2.0 * forge_math::tol::MODEL_HALF_SIZE;
+    let mut net = Vec::with_capacity(pts.len() * 2);
+    let mut ws = Vec::with_capacity(pts.len() * 2);
+    for (i, p) in pts.iter().enumerate() {
+        net.push(*p + dir * -reach);
+        net.push(*p + dir * reach);
+        ws.push(w[i]);
+        ws.push(w[i]);
+    }
+    let n = Nurbs::new(
+        (deg, 1),
+        (knots, vec![-reach, -reach, reach, reach]),
+        (pts.len(), 2),
+        &net,
+        Some(&ws),
+    )?;
+    Some(n.surface())
+}
+
+/// A curve's net turned about an axis by rational quadratic quarter-turns. A generator ending
+/// within `on_axis` of the axis ends on it: a pole.
+pub(crate) fn turned((o, z): (Point3, Vec3), (deg, knots, pts, w): Net, on_axis: f64) -> Option<Surface> {
+    // nine points round: four quarters, weights 1 and sqrt(1/2)
+    let s = 0.5_f64.sqrt();
+    let mut net = Vec::with_capacity(pts.len() * 9);
+    let mut ws = Vec::with_capacity(pts.len() * 9);
+    // as the standard has it: u the angle, v along the curve (the natural normal depends on it)
+    for k in 0..9 {
+        let (ca, cb, wt) = match k {
+            0 | 8 => (1.0, 0.0, 1.0),
+            1 => (1.0, 1.0, s),
+            2 => (0.0, 1.0, 1.0),
+            3 => (-1.0, 1.0, s),
+            4 => (-1.0, 0.0, 1.0),
+            5 => (-1.0, -1.0, s),
+            6 => (0.0, -1.0, 1.0),
+            _ => (1.0, -1.0, s),
+        };
+        for (i, p) in pts.iter().enumerate() {
+            let c = o + z * z.dot(*p - o);
+            let r = *p - c;
+            let r = if r.length() <= on_axis { Vec3::ZERO } else { r };
+            net.push(c + r * ca + z.cross(r) * cb);
+            ws.push(w[i] * wt);
+        }
+    }
+    let pi = dmath::PI;
+    let angle = vec![
+        0.0,
+        0.0,
+        0.0,
+        0.5 * pi,
+        0.5 * pi,
+        pi,
+        pi,
+        1.5 * pi,
+        1.5 * pi,
+        2.0 * pi,
+        2.0 * pi,
+        2.0 * pi,
+    ];
+    Some(Nurbs::new((2, deg), (angle, knots), (9, pts.len()), &net, Some(&ws))?.surface())
+}
+
 /// A spline's Bezier pieces as a clamped B-spline's knots, points and weights.
-fn net_of(s: &Spline) -> Net {
+pub(crate) fn net_of(s: &Spline) -> Net {
     let (deg, breaks, h) = s.bezier_data();
     let mut knots = vec![breaks[0]; deg + 1];
     for b in &breaks[1..breaks.len() - 1] {
@@ -1249,8 +1255,69 @@ fn measures_agree(body: &Body) -> Result<(), String> {
     Ok(())
 }
 
+/// How far a file's geometry misses itself, before anything is changed.
+fn measure_gaps(proto: &Proto, stats: &mut Stats) {
+    for fa in &proto.faces {
+        for u in fa.loops.iter().flatten() {
+            let e = &proto.edges[u.0];
+            let w = e.range.width();
+            let worst = (0..=8)
+                .map(|k| fa.surface.distance(e.curve.eval(e.range.lo + w * k as f64 / 8.0)))
+                .fold(0.0, f64::max);
+            stats.curve_off_surface = stats.curve_off_surface.max(worst);
+            if worst > forge_math::tol::LINEAR {
+                stats.edges_off += 1;
+            }
+            let kind = |s: &str| s.split(['(', ' ']).next().unwrap_or("").to_string();
+            let key = format!(
+                "{}/{}",
+                kind(&format!("{:?}", e.curve).chars().take(12).collect::<String>()),
+                kind(&format!("{:?}", fa.surface).chars().take(12).collect::<String>())
+            );
+            let en = stats.pairs.entry(key).or_insert((0, 0, 0.0));
+            en.0 += 1;
+            en.1 += usize::from(worst > forge_math::tol::LINEAR);
+            en.2 = en.2.max(worst);
+        }
+    }
+}
+
+/// From a read file's topology to a body: seams, edges tightened, checked; healing and the check on
+/// one budget. `uncertainty`: what the file says of itself.
+pub(crate) fn finish(
+    mut proto: Proto,
+    uncertainty: f64,
+    lim: &Limits,
+    stats: &mut Stats,
+) -> Result<Body, String> {
+    if proto.faces.is_empty() {
+        return Err("a solid with no faces".into());
+    }
+    measure_gaps(&proto, stats);
+    forge_geom::budget::begin(lim.max_evals);
+    proto.split_closed_splines();
+    if let Err(why) = proto.add_seams() {
+        forge_geom::budget::end();
+        return Err(why);
+    }
+    let size = Box3::from_points(proto.verts.iter().map(|v| v.0)).diagonal();
+    proto.tighten(heal_limit(uncertainty, size));
+    stats.tangent_off += proto.tangent;
+    proto.split_fans();
+    proto.outer_first();
+    let mut body = proto.into_body();
+    record_deviations(&mut body, stats);
+    let agree = measures_agree(&body);
+    forge_geom::budget::end();
+    agree?;
+    Ok(body)
+}
+
 /// Reads a whole file. Parts that cannot be read become refusals; the others are returned.
 pub fn import(text: &[u8], lim: &Limits) -> Result<Imported, ImportError> {
+    if crate::brep::is_brep(text) {
+        return crate::brep::import(text, lim);
+    }
     read_file(text, lim, false)
 }
 
@@ -1329,70 +1396,25 @@ fn read_file(text: &[u8], lim: &Limits, only_measure: bool) -> Result<Imported, 
             }
             Ok(())
         })();
-        let mut proto = b.p;
+        let proto = b.p;
         match built {
             Ok(()) => {
-                // how far the file's geometry misses itself, before anything is changed
-                for fa in &proto.faces {
-                    for u in fa.loops.iter().flatten() {
-                        let e = &proto.edges[u.0];
-                        let w = e.range.width();
-                        let worst = (0..=8)
-                            .map(|k| fa.surface.distance(e.curve.eval(e.range.lo + w * k as f64 / 8.0)))
-                            .fold(0.0, f64::max);
-                        stats.curve_off_surface = stats.curve_off_surface.max(worst);
-                        if worst > forge_math::tol::LINEAR {
-                            stats.edges_off += 1;
-                        }
-                        let kind = |s: &str| s.split(['(', ' ']).next().unwrap_or("").to_string();
-                        let key = format!(
-                            "{}/{}",
-                            kind(&format!("{:?}", e.curve).chars().take(12).collect::<String>()),
-                            kind(&format!("{:?}", fa.surface).chars().take(12).collect::<String>())
-                        );
-                        let en = stats.pairs.entry(key).or_insert((0, 0, 0.0));
-                        en.0 += 1;
-                        en.1 += usize::from(worst > forge_math::tol::LINEAR);
-                        en.2 = en.2.max(worst);
-                    }
-                }
                 if only_measure {
+                    measure_gaps(&proto, &mut stats);
                     continue;
                 }
-                // healing, then the check, on one budget
-                forge_geom::budget::begin(lim.max_evals);
-                proto.split_closed_splines();
-                if let Err(why) = proto.add_seams() {
-                    forge_geom::budget::end();
-                    refusals.push(Refusal {
+                match finish(proto, u.uncertainty, lim, &mut stats) {
+                    Ok(body) => solids.push(Solid {
+                        entity: id,
+                        name,
+                        body,
+                    }),
+                    Err(why) => refusals.push(Refusal {
                         entity: id,
                         kind: f.name(&r).to_string(),
                         why,
-                    });
-                    continue;
+                    }),
                 }
-                let size = Box3::from_points(proto.verts.iter().map(|v| v.0)).diagonal();
-                proto.tighten(heal_limit(u.uncertainty, size));
-                stats.tangent_off += proto.tangent;
-                proto.split_fans();
-                proto.outer_first();
-                let mut body = proto.into_body();
-                record_deviations(&mut body, &mut stats);
-                let agree = measures_agree(&body);
-                forge_geom::budget::end();
-                if let Err(why) = agree {
-                    refusals.push(Refusal {
-                        entity: id,
-                        kind: f.name(&r).to_string(),
-                        why,
-                    });
-                    continue;
-                }
-                solids.push(Solid {
-                    entity: id,
-                    name,
-                    body,
-                });
             }
             Err(x) => refusals.push(x),
         }

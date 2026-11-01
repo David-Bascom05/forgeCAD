@@ -109,3 +109,13 @@ by parameters: 1e-4 on every bench part.
 A body whose mass cannot be worked out is refused: the check has nothing to compare with, and that is no pass.
 `mass` keeps its own refusal of an integral that did not settle for parts made here; on a file's body the bound holds
 the gaps the file leaves, and the mesh is what checks it.
+
+## OpenCascade .brep
+
+`kernel/forge-step/src/brep.rs` reads OCCT's text `.brep` (sniffed from "CASCADE Topology"), written from what the
+files hold with OCCT as test oracle only, and shares `finish` with STEP. Offset surfaces and curves, scaled or mirrored
+locations and edges with no 3D curve are refused by name. Corpus: 3206 FreeCAD-stored files, outside the repo.
+
+The budget also counts mesh work on such files: `find_edge` round a fan and constraint recovery, where a chord crosses
+thousands of triangles. Plain analytic faces took over 60 s there with no surface evaluation at all; now 3 to 5 s and a
+refusal. A file's face stops being cut finer after 3 rounds, not 9, and goes to the tangled draw.

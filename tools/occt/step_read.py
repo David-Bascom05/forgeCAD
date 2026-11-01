@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""OpenCascade reads STEP files: is each valid, and its volume, area and box. One child per file,
+"""OpenCascade reads STEP and .brep files: is each valid, and its volume, area and box. One child per file,
 memory and time capped, so a hostile or huge file costs only itself.
 
   $VENV/bin/python -I step_read.py [--jobs 4] [--timeout 120] FILE..  (or @LIST, or NAME=PATH)
@@ -32,11 +32,20 @@ def measure(path):
     from OCP.OCP.collections import IndexedMap_TopoDS_Shape_TopTools_ShapeMapHasher as ShapeMap
 
     t0 = time.time()
-    r = STEPControl_Reader()
-    if r.ReadFile(path) != IFSelect_RetDone:
-        return {"err": "unreadable"}
-    r.TransferRoots()
-    s = r.OneShape()
+    if path.lower().endswith((".brep", ".brp")):
+        from OCP.BRep import BRep_Builder
+        from OCP.BRepTools import BRepTools
+        from OCP.TopoDS import TopoDS_Shape
+
+        s = TopoDS_Shape()
+        if not BRepTools.Read_s(s, path, BRep_Builder()):
+            return {"err": "unreadable"}
+    else:
+        r = STEPControl_Reader()
+        if r.ReadFile(path) != IFSelect_RetDone:
+            return {"err": "unreadable"}
+        r.TransferRoots()
+        s = r.OneShape()
 
     def count(k):
         m = ShapeMap()
