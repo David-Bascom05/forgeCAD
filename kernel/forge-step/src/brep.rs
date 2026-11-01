@@ -1264,6 +1264,8 @@ pub fn import(text: &[u8], lim: &Limits) -> Result<Imported, ImportError> {
 pub struct Used {
     shape: usize,
     xf: Xf,
+    /// Placed by a location below the file's root one.
+    below: bool,
 }
 
 /// A `.brep`'s shapes as OpenCascade enumerates them, for reading another system's references to
@@ -1299,6 +1301,7 @@ impl<'a> BrepTopo<'a> {
         (self.f.root.shape >= 1 && self.f.root.shape <= self.f.shapes.len()).then_some(Used {
             shape: self.f.root.shape,
             xf: IDENTITY.then(l),
+            below: false,
         })
     }
 
@@ -1337,6 +1340,7 @@ impl<'a> BrepTopo<'a> {
                 Used {
                     shape: c.shape,
                     xf: u.xf.then(l),
+                    below: u.below || c.loc != 0,
                 },
                 k,
                 out,
@@ -1481,6 +1485,67 @@ impl<'a> BrepTopo<'a> {
         ))
     }
 
+    /// The root's location as rows of a 3x4 matrix.
+    pub fn root_matrix(&self) -> Option<[[f64; 4]; 3]> {
+        let x = self.root()?.xf;
+        Some(std::array::from_fn(|i| [x.r[i][0], x.r[i][1], x.r[i][2], x.t[i]]))
+    }
+
+    /// The box of a shape's vertices where it holds a solid, as both importers make it alike.
+    pub fn vertex_box(&self) -> Option<[f64; 6]> {
+        let root = self.root()?;
+        let mut so = vec![];
+        self.explore(root, "So", &mut so)?;
+        if so.is_empty() {
+            return None;
+        }
+        let mut b = [
+            f64::INFINITY,
+            f64::INFINITY,
+            f64::INFINITY,
+            f64::NEG_INFINITY,
+            f64::NEG_INFINITY,
+            f64::NEG_INFINITY,
+        ];
+        for v in self.map(root, "Ve")? {
+            let Kind::Vertex(p) = self.f.shapes[v.shape - 1].kind else {
+                continue;
+            };
+            let p = place(&v.xf, [p.x, p.y, p.z]);
+            for (k, x) in [p.x, p.y, p.z].into_iter().enumerate() {
+                if x < b[k] {
+                    b[k] = x;
+                }
+                if x > b[k + 3] {
+                    b[k + 3] = x;
+                }
+            }
+        }
+        Some(b)
+    }
+
+    /// `n + 1` samples where only the file's root location places the edge, without it: the
+    /// curve's own coordinates. None for an edge moved below the root, or degenerate.
+    pub fn local_sample(&self, e: Used, n: usize) -> Option<Vec<Point3>> {
+        let Kind::Edge {
+            curve: Some((c, l, a, b)),
+            ..
+        } = self.f.shapes[e.shape - 1].kind
+        else {
+            return None;
+        };
+        if e.below || l != 0 {
+            return None;
+        }
+        let (raw, _) = self.raw(*self.f.curves.get(c.wrapping_sub(1))?, 0)?;
+        (0..=n)
+            .map(|i| {
+                let q = eval_raw(&raw, a + (b - a) * i as f64 / n as f64)?;
+                Some(Point3::new(q[0], q[1], q[2]))
+            })
+            .collect()
+    }
+
     /// The curve's kind as GeomAdaptor names it: line, circle, or other.
     pub fn kind(&self, e: Used) -> &'static str {
         self.edge_curve(e)
@@ -1491,14 +1556,6 @@ impl<'a> BrepTopo<'a> {
     /// `n + 1` points at even steps over the edge's range; a degenerate edge's at its vertex.
     /// A curve's axes are normalised as OpenCascade's gp_Dir and gp_Ax2 do on reading.
     pub fn sample(&self, e: Used, n: usize) -> Option<Vec<Point3>> {
-        let place = |xf: &Xf, q: [f64; 3]| {
-            let p = Point3::new(q[0], q[1], q[2]);
-            if xf.r == IDENTITY.r && xf.t == IDENTITY.t {
-                p
-            } else {
-                xf.point(p)
-            }
-        };
         let s = &self.f.shapes[e.shape - 1];
         if let Kind::Edge {
             degenerate: true,
@@ -1517,6 +1574,16 @@ impl<'a> BrepTopo<'a> {
         (0..=n)
             .map(|i| Some(place(&xf, eval_raw(&raw, a + (b - a) * i as f64 / n as f64)?)))
             .collect()
+    }
+}
+
+/// A point where a location puts it; an identity one, as a file may write, leaves it exact.
+fn place(xf: &Xf, q: [f64; 3]) -> Point3 {
+    let p = Point3::new(q[0], q[1], q[2]);
+    if xf.r == IDENTITY.r && xf.t == IDENTITY.t {
+        p
+    } else {
+        xf.point(p)
     }
 }
 

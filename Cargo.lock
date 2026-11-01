@@ -107,7 +107,6 @@ name = "forge-import"
 version = "0.1.0"
 dependencies = [
  "forge-agent",
- "forge-bool",
  "forge-geom",
  "forge-math",
  "forge-step",

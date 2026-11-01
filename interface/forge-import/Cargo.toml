@@ -11,7 +11,6 @@ forge-math = { path = "../../kernel/forge-math" }
 forge-step = { path = "../../kernel/forge-step" }
 forge-topo = { path = "../../kernel/forge-topo" }
 forge-geom = { path = "../../kernel/forge-geom" }
-forge-bool = { path = "../../kernel/forge-bool" }
 forge-agent = { path = "../forge-agent" }
 # a .FCStd is a zip of deflated XML and .brp files
 miniz_oxide = { version = "=0.8.9", default-features = false, features = ["with-alloc"] }

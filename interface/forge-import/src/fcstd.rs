@@ -674,18 +674,21 @@ fn loop_text(a: &Arrangement, lp: &[(usize, bool)], flip: bool) -> String {
     format!("loop {}", parts.join(" "))
 }
 
-/// A stored edge: its curve's kind and samples.
-type Sampled = (&'static str, Vec<V3>);
+/// A stored edge: its curve's kind, samples, and samples without the root location.
+type Sampled = (&'static str, Vec<V3>, Option<Vec<V3>>);
 
 /// What a stored shape gives the translation.
 #[derive(Default)]
 struct Stored {
-    file: String,
     /// Samples of the edges each sub names: `Edge3`, `Face2` (its edges), `ALL`.
     subs: HashMap<String, Vec<Vec<V3>>>,
-    /// A profile's wires: each edge's kind and 97 samples.
+    /// A profile's wires: each edge's kind and 97 samples, and the same in the shape's own
+    /// coordinates where only its root location places it.
     wires: Option<Vec<Vec<Sampled>>>,
-    readable: bool,
+    /// The root location, rows of a 3x4 matrix.
+    root: Option<[[f64; 4]; 3]>,
+    /// Its vertices' box, where it holds a solid.
+    vbox: Option<[f64; 6]>,
 }
 
 fn p3(p: forge_math::Point3) -> V3 {
@@ -703,25 +706,24 @@ fn stored(
     for (name, file) in shapes {
         let file = file.as_ref()?;
         let data = zip.read(file)?;
-        let mut r = Stored {
-            file: file.clone(),
-            ..Stored::default()
-        };
+        let mut r = Stored::default();
         let Some(t) = forge_step::BrepTopo::new(&data) else {
             out.insert(name.clone(), r);
             continue;
         };
-        r.readable = true;
+        r.vbox = t.vertex_box();
         if wires.contains(name) {
             let mut ws = vec![];
             for w in t.wires()? {
                 let mut es = vec![];
                 for e in w {
-                    es.push((t.kind(e), t.sample(e, 96)?.into_iter().map(p3).collect()));
+                    let local = t.local_sample(e, 96).map(|l| l.into_iter().map(p3).collect());
+                    es.push((t.kind(e), t.sample(e, 96)?.into_iter().map(p3).collect(), local));
                 }
                 ws.push(es);
             }
             r.wires = Some(ws);
+            r.root = t.root_matrix();
         }
         if let Some(ss) = subs.get(name).filter(|s| !s.is_empty()) {
             let em = t.edges()?;
@@ -752,30 +754,17 @@ fn stored(
 }
 
 /// A stored shape's solids: their volume, summed, and box; None if it would not read.
-fn solids_of(data: &[u8]) -> Option<(f64, Option<[f64; 6]>)> {
+fn volume_of(data: &[u8]) -> Option<f64> {
     let imp = match forge_step::import(data, &forge_step::Limits::default()) {
         Ok(i) => i,
-        Err(forge_step::ImportError::NoSolids) => return Some((0.0, None)),
+        Err(forge_step::ImportError::NoSolids) => return Some(0.0),
         Err(_) => return None,
     };
-    let (mut vol, mut bb): (f64, Option<[f64; 6]>) = (0.0, None);
+    let mut vol = 0.0;
     for s in &imp.solids {
         vol += forge_topo::mass::mass(&s.body).ok()?.volume.abs();
-        let b = forge_bool::Index::new(&s.body).bbox;
-        let x = [b.x.lo, b.y.lo, b.z.lo, b.x.hi, b.y.hi, b.z.hi];
-        bb = Some(match bb {
-            None => x,
-            Some(o) => [
-                pmin(o[0], x[0]),
-                pmin(o[1], x[1]),
-                pmin(o[2], x[2]),
-                pmax(o[3], x[3]),
-                pmax(o[4], x[4]),
-                pmax(o[5], x[5]),
-            ],
-        });
     }
-    Some((vol, bb))
+    Some(vol)
 }
 
 /// Do these samples lie on one line or one circle?
@@ -1077,17 +1066,32 @@ impl Tr<'_, '_, '_> {
                 "a profile whose stored wires would not read".into(),
             ));
         };
+        // a stored shape placed only by its own location, which is the profile's placement: its
+        // own coordinates are the sketch's
+        let local = self.truth[sk].root.is_some_and(|m| {
+            let cols = [fr.x, fr.y, fr.n, fr.o];
+            (0..3).all(|i| {
+                (0..4).all(|j| {
+                    let c = [cols[j].0, cols[j].1, cols[j].2][i];
+                    let tol = if j == 3 { pmax(1.0, c.abs()) } else { 1.0 };
+                    (m[i][j] - c).abs() <= 1e-7 * tol
+                })
+            })
+        }) && ws.iter().flatten().all(|e| e.2.is_some());
         let mut ents = vec![];
         let mut approx = false;
         for w in ws {
-            for (k, p) in w {
-                let uv: Vec<V2> = p
-                    .iter()
-                    .map(|&q| {
-                        let r = fr.uvw(q);
-                        (r.0, r.1)
-                    })
-                    .collect();
+            for (k, p, l) in w {
+                let uv: Vec<V2> = match l {
+                    Some(l) if local => l.iter().map(|q| (q.0, q.1)).collect(),
+                    _ => p
+                        .iter()
+                        .map(|&q| {
+                            let r = fr.uvw(q);
+                            (r.0, r.1)
+                        })
+                        .collect(),
+                };
                 let id = format!("w{}", ents.len());
                 let (first, last) = (uv[0], uv[uv.len() - 1]);
                 let shape = if *k == "line" {
@@ -1552,15 +1556,7 @@ impl Tr<'_, '_, '_> {
 
     /// The base's stored solids' box, or zeros where it has none.
     fn base_box(&self, base: &str) -> [f64; 6] {
-        let file = self
-            .truth
-            .get(base)
-            .filter(|s| s.readable)
-            .map(|s| s.file.clone());
-        file.and_then(|f| self.doc.zip.read(&f))
-            .and_then(|data| solids_of(&data))
-            .and_then(|s| s.1)
-            .unwrap_or([0.0; 6])
+        self.truth.get(base).and_then(|s| s.vbox).unwrap_or([0.0; 6])
     }
 
     /// A pattern's direction or axis: a sketch's H, V or N axis, or the body's origin line.
@@ -1999,7 +1995,7 @@ fn file_bodies(doc: &mut Doc) -> Result<Vec<Body>, Fail> {
         if files.iter().all(|f| doc.zip.has(f)) {
             let mut vols = HashMap::new();
             for f in files {
-                let v = doc.zip.read(&f).and_then(|d| solids_of(&d)).map(|s| s.0);
+                let v = doc.zip.read(&f).and_then(|d| volume_of(&d));
                 vols.insert(f, v);
             }
             doc.volumes = Some(vols);
