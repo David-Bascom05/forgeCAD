@@ -412,3 +412,35 @@ fn two_rounds_crossing_on_a_face_become_one_of_the_faces_beyond() {
         );
     }
 }
+
+#[test]
+fn a_round_foot_of_a_boss_is_not_taken_for_a_blend_through_the_part() {
+    // a stadium boss on a stadium plate, its foot rounded all round: the half rings' vertices sit
+    // together at their ends, and the mean of them lies off the round
+    let (r, br, bl, bh) = (3.125f64, 9.375f64, 37.5f64, 14.0625f64);
+    let (pr, pl, ph) = (18.65f64, 37.3f64, 9.375f64);
+    let src = format!(
+        "extrude {ph} z 1 0 0 x 0 1 0 at 0 -18.75 -18.75 loop arc {pr} 0 {pr} 180 180 line {pl} 0 {pl} {pl} arc {pr} {pl} {pr} 0 180 line 0 {pl} 0 0\nextrude add {bh} z 1 0 0 x 0 1 0 at {ph} -{br} -18.75 loop arc {br} 0 {br} 180 180 line {d} 0 {d} {bl} arc {br} {bl} {br} 0 180 line 0 {bl} 0 0\nfillet {r} (edges near {ph} 0 28.125) (edges near {ph} {br} 0) (edges near {ph} 0 -28.125) (edges near {ph} -{br} 0)\n",
+        d = 2.0 * br,
+    );
+    let section = (1.0 - PI / 4.0) * r * r;
+    // a spandrel's centroid stands r(10 - 3 pi)/(12 - 3 pi) out from its corner
+    let out = r * (10.0 - 3.0 * PI) / (12.0 - 3.0 * PI);
+    let added = 2.0 * bl * section + 2.0 * PI * (br + out) * section;
+    let plate = ph * (pl * pl + PI * pr * pr);
+    let boss = bh * (2.0 * br * bl + PI * br * br);
+    let m = Model::new(&src);
+    if let Some(f) = &m.error {
+        panic!("line {}: {}\n{src}", m.lines[f.at].no, f.msg);
+    }
+    let part = Part {
+        features: m.features.clone(),
+    };
+    for (how, built) in [("seq", part.regenerate()), ("n-ary", part.regenerate_nary(2))] {
+        let b = built.unwrap_or_else(|e| panic!("{how}: {e:?}\n{src}"));
+        assert_eq!(forge_topo::check(&b), vec![], "{how}\n{src}");
+        let v = forge_topo::mass::mass(&b).expect("mass").volume;
+        let want = plate + boss + added;
+        assert!((v - want).abs() < 1e-5 * want, "{how}: {v} not {want}\n{src}");
+    }
+}

@@ -1587,6 +1587,21 @@ fn apply_fillet(
     })
 }
 
+/// A point of a round face well within it: the middle of its loops in the surface's parameters
+/// (the mean of its vertices can land off a ring, whose vertices sit together on one side).
+fn middle_of_face(body: &Body, f: forge_topo::FaceId) -> Option<forge_math::Point3> {
+    use forge_geom::SurfaceGeom;
+    let loops = forge_topo::uv::face_uv_loops(body, f);
+    let pts: Vec<_> = loops.iter().flat_map(|l| l.points.iter().copied()).collect();
+    let (lo, hi) = pts
+        .iter()
+        .fold(((f64::MAX, f64::MAX), (f64::MIN, f64::MIN)), |(lo, hi), p| {
+            ((lo.0.min(p.x), lo.1.min(p.y)), (hi.0.max(p.x), hi.1.max(p.y)))
+        });
+    let m = forge_math::Point2::new(0.5 * (lo.0 + hi.0), 0.5 * (lo.1 + hi.1));
+    forge_topo::uv::point_in_loops(m, &loops).then(|| body.face(f).surface.eval(m))
+}
+
 /// A blend that passes through a face of the old part it does not border (a ball wider than a thin
 /// wall comes out on its far side): the point of the face where it does. Asked of each face by the
 /// side of its surface the blend's middle and a corner lie on, boxes and loops only where they
@@ -1648,7 +1663,8 @@ fn blend_through(before: &Body, after: &Body) -> Option<forge_math::Point3> {
             if forge_topo::uv::point_in_loops(s.project(x), &forge_topo::uv::face_uv_loops(before, g)) {
                 // and the blend's middle really lies on the wrong side of the part: a convex round
                 // lies within what it held, a concave one outside it
-                let held = index.get_or_init(|| forge_bool::Index::new(before)).classify(q);
+                let at = middle_of_face(after, f).unwrap_or(q);
+                let held = index.get_or_init(|| forge_bool::Index::new(before)).classify(at);
                 let wrong = if face.same_sense {
                     held == forge_bool::Where::Outside
                 } else {

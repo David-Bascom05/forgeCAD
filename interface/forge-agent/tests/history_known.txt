@@ -12,3 +12,4 @@ invalid DuplicateName  # extrude sym of a line+arc loop onto a block
 # on main 947e420 with bugs-3 alone too (not from this integration's other branches): filed to unblock it
 fillet: invalid EdgeOffFace  # seed 32: a variable fillet after a thicken cut, then a fillet near it
 # seeds that picking by name brought up; these parts fail on main too, whatever the arena order
+fillet: invalid FaceWrongSide  # seed 33: a 0.05 fillet on a hole's rim after a fillet by it; not shrunk
