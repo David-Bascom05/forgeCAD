@@ -854,7 +854,8 @@ def base_of(doc, n):
         return ""
     names = list(doc.types)
     for b in reversed(names[: names.index(n)]):
-        if doc.types[b] in SOLID:
+        # a Part solid just before it says nothing: it was as likely a tool of some boolean
+        if doc.types[b] in SOLID and not doc.types[b].startswith("Part::"):
             return b
     return ""
 
