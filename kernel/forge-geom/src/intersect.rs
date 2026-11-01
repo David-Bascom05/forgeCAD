@@ -526,10 +526,12 @@ fn conic_quadric(f: &Frame, a: f64, b: f64, range: Interval, s: &Surface) -> Opt
             continue;
         }
         let t = t.min(range.hi);
-        let keep = KEEP_HAIR_ROOTS.with(|k| k.get());
-        if near(t) && !(keep && hits.iter().any(|h| near_between(&near, t + apart(h.t, t), t))) {
+        let absorb = ABSORB_HAIR_ROOTS.with(|k| k.get());
+        if near(t) && (absorb || !hits.iter().any(|h| near_between(&near, t + apart(h.t, t), t))) {
             // the roots beside it that never leave the tolerance are that touch, as for a line
-            hits.retain(|h| !near_between(&near, t + apart(h.t, t), t));
+            if absorb {
+                hits.retain(|h| !near_between(&near, t + apart(h.t, t), t));
+            }
             hits.push(CurveHit {
                 t,
                 point: curve.eval(t),
@@ -543,9 +545,9 @@ fn conic_quadric(f: &Frame, a: f64, b: f64, range: Interval, s: &Surface) -> Opt
 }
 
 thread_local! {
-    /// A conic's two roots a hair apart stay roots, not one touch: a boolean's retry, when a tool's
-    /// vertex lies between them and the touch leaves its face split crossed.
-    pub static KEEP_HAIR_ROOTS: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
+    /// A conic's two roots a hair apart become one touch: a boolean's retry, when as two crossings
+    /// they leave its face split crossed (a rim tangent to the edges of a flat it sits on).
+    pub static ABSORB_HAIR_ROOTS: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
 }
 
 /// A parabola on a quadric: Q(P(t)) is a quartic in t, P(t) = o + k t^2 x + t y.
