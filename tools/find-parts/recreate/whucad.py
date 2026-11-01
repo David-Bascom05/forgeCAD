@@ -151,7 +151,8 @@ class Tr(FT):
                 raise Unresolved("a curve the sketch does not have")
             return Turned(fr, e, rec["a2"], rec["d2"])
         if no in (1, 2):
-            z = rec["lo"] if no == 1 else rec["hi"]
+            # no 2 is the limit along the direction, no 1 the one behind it, whichever way they lie: on a pad reversed, no 1 is still at the sketch
+            z = rec["first"] if no == 2 else rec["second"]
             if b == "Pocket":  # no 2 is the floor, the limit farther from the sketch, whichever way it lies
                 far, near = (rec["lo"], rec["hi"]) if abs(rec["lo"]) >= abs(rec["hi"]) else (rec["hi"], rec["lo"])
                 z = far if no == 2 else near
@@ -242,7 +243,7 @@ class Tr(FT):
             raise Unresolved("an extent quantised to nothing")
         name = "Pocket" if kind == "Pocket" else "Pad"
         self.count[name] += 1
-        self.solid[(name, self.count[name])] = {"frame": fr, "lo": lo, "hi": hi}
+        self.solid[(name, self.count[name])] = {"frame": fr, "lo": lo, "hi": hi, "first": ends[0], "second": ends[1]}
         head = num(hi - lo)
         flip = False
         frame = f"z {vtext(fr.n)} x {vtext(fr.x)} at {vtext(fr.world(0, 0, lo))}"
