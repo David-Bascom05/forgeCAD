@@ -195,6 +195,14 @@ impl Gui {
         }
     }
 
+    /// A step of a held orbit, for measuring.
+    pub fn turn_view(&mut self) {
+        if let Some(v) = &mut self.view {
+            v.nav.camera.yaw += 0.01;
+            v.dirty = true;
+        }
+    }
+
     pub fn is_loading(&self) -> bool {
         self.loading.is_some()
     }

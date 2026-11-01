@@ -4,7 +4,7 @@ use forge_render::gui::Headless;
 
 const USAGE: &str = "forge-app [PART | file.fc] [--size WxH] [--times]
   [--shot FILE.ppm [--scale S] [--light] [--tab N] [--select NAME] [--click NAME].. [--at X Y] [--sketch ROW;ROW..] [--edit NAME] [--draw TOOL X Y] [--view YAW PITCH]]
-  [--present fifo|mailbox|immediate]
+  [--present fifo|mailbox|immediate] [--run-for SECONDS] [--spin]
   [--bench]
 PART: a bench part or a .fc file. --times: input-to-present on exit. --shot: one frame, no window.
 --bench: what clicks and frames cost, no window.";
@@ -26,6 +26,8 @@ struct Args {
     bench: bool,
     times: bool,
     present: Option<String>,
+    run_for: Option<f64>,
+    spin: bool,
 }
 
 fn args() -> Result<Args, String> {
@@ -46,6 +48,8 @@ fn args() -> Result<Args, String> {
         bench: false,
         times: false,
         present: None,
+        run_for: None,
+        spin: false,
     };
     let mut it = std::env::args().skip(1);
     while let Some(k) = it.next() {
@@ -84,6 +88,8 @@ fn args() -> Result<Args, String> {
             "--bench" => a.bench = true,
             "--times" => a.times = true,
             "--present" => a.present = Some(v()?),
+            "--run-for" => a.run_for = Some(v()?.parse().map_err(|_| USAGE)?),
+            "--spin" => a.spin = true,
             s if s.starts_with("--") => return Err(USAGE.into()),
             part => a.file = Some(part.into()),
         }
@@ -223,7 +229,14 @@ fn main() {
 fn run() -> Result<(), String> {
     let a = args()?;
     if a.shot.is_none() && !a.bench {
-        return forge_render::app::run(a.file, (a.size.0 as f64, a.size.1 as f64), a.times, a.present);
+        return forge_render::app::run(
+            a.file,
+            (a.size.0 as f64, a.size.1 as f64),
+            a.times,
+            a.present,
+            a.run_for,
+            a.spin,
+        );
     }
     let mut h = Headless::new(a.size, a.scale)?;
     if a.light {

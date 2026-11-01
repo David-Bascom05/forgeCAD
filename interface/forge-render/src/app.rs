@@ -93,6 +93,10 @@ impl Presenter {
         }
     }
 
+    fn is_out(&self) -> bool {
+        self.out.busy.load(Ordering::SeqCst)
+    }
+
     /// Is one out? If so, the loop's woken when it's back.
     fn busy(&self) -> bool {
         if !self.out.busy.load(Ordering::SeqCst) {
@@ -168,6 +172,11 @@ pub struct App {
     dialog: Option<std::sync::mpsc::Receiver<Option<String>>>,
     /// `--present`: how frames go out.
     present: Option<String>,
+    /// `--run-for`: leaves by itself then, the orderly way.
+    run_until: Option<Instant>,
+    /// `--spin`: turns the view all the while, as a held orbit does.
+    spin: bool,
+    started: Instant,
 }
 
 fn resize_direction(e: Edge) -> ResizeDirection {
@@ -432,9 +441,25 @@ impl ApplicationHandler for App {
 
     fn about_to_wait(&mut self, on_loop: &ActiveEventLoop) {
         let Some(l) = &mut self.live else { return };
-        // nothing can be drawn till it's back, and it wakes the loop
-        if l.presenter.busy() {
-            on_loop.set_control_flow(ControlFlow::Wait);
+        if let Some(end) = self.run_until
+            && Instant::now() >= end
+        {
+            on_loop.exit();
+            return;
+        }
+        if self.spin {
+            l.gui.turn_view();
+            l.window.request_redraw();
+        }
+        // nothing can be drawn till it's back; it wakes the loop only if something's waiting on it
+        if l.presenter.is_out() {
+            if l.gui.pick_busy() || l.gui.picks() {
+                l.presenter.busy();
+            }
+            on_loop.set_control_flow(match self.run_until {
+                Some(end) => ControlFlow::WaitUntil(end),
+                None => ControlFlow::Wait,
+            });
             return;
         }
         if l.gui.picks() {
@@ -446,9 +471,13 @@ impl ApplicationHandler for App {
             self.next = None;
             l.window.request_redraw();
         }
+        let wake = match (self.next, self.run_until) {
+            (Some(a), Some(b)) => Some(a.min(b)),
+            (a, b) => a.or(b),
+        };
         on_loop.set_control_flow(if l.gui.pick_busy() {
             ControlFlow::Poll
-        } else if let Some(n) = self.next {
+        } else if let Some(n) = wake {
             ControlFlow::WaitUntil(n)
         } else {
             ControlFlow::Wait
@@ -467,6 +496,11 @@ impl ApplicationHandler for App {
                     println!("present calls: {}", spread(log.calls.clone()));
                 }
                 println!("frames dropped while one was out: {}", log.dropped);
+                let secs = self.started.elapsed().as_secs_f64();
+                println!(
+                    "presents per second over {secs:.1} s: {:.1}",
+                    log.calls.len() as f64 / secs
+                );
             }
         }
         // while the display connection is still open: what holds it goes first (the clipboard), then
@@ -497,6 +531,8 @@ pub fn run(
     size: (f64, f64),
     times: bool,
     present: Option<String>,
+    run_for: Option<f64>,
+    spin: bool,
 ) -> Result<(), String> {
     let on_loop = EventLoop::with_user_event().build().map_err(|e| e.to_string())?;
     let proxy = on_loop.create_proxy();
@@ -510,6 +546,9 @@ pub fn run(
         times,
         dialog: None,
         present,
+        run_until: run_for.map(|s| Instant::now() + std::time::Duration::from_secs_f64(s)),
+        spin,
+        started: Instant::now(),
     };
     on_loop.run_app(&mut app).map_err(|e| e.to_string())
 }
