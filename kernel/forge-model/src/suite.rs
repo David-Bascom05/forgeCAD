@@ -973,6 +973,7 @@ fn lofted(profiles: Vec<Profile>, kind: LoftKind, op: Combine) -> Feature {
         profiles,
         kind,
         guides: LoftGuides::None,
+        apex: [None, None],
         op,
     }))
 }
@@ -1044,6 +1045,7 @@ pub fn loft() -> Part {
                         sweep: 0.6,
                     },
                 ]),
+                apex: [None, None],
                 op: Combine::Add,
             })),
         ],
@@ -1460,6 +1462,7 @@ pub fn torture2() -> Part {
         profiles: vec![square(4.0, 11.0), square(-18.0, 6.0)],
         kind: LoftKind::Ruled,
         guides: LoftGuides::None,
+        apex: [None, None],
         op: Combine::Add,
     })));
     f.push(Feature::Hole(Box::new(Hole {

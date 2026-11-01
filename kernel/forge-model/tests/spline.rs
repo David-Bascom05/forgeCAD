@@ -259,3 +259,95 @@ fn round_a_bend_and_in_a_coil_a_curved_section_keeps_pappus() {
     let v = want(dmath::FRAC_PI_2);
     assert!((m.volume - v).abs() < 1e-7 * v, "{} {v}", m.volume);
 }
+
+/// A body's volume by mass, against its mesh.
+fn checked(b: &Body) -> f64 {
+    sound(b);
+    let m = forge_topo::mass::mass(b).unwrap();
+    let mv = mesh_volume(b, 1e-3);
+    assert!(
+        (m.volume - mv).abs() < 2e-3 * m.volume.abs(),
+        "mass {} mesh {mv}",
+        m.volume
+    );
+    m.volume
+}
+
+#[test]
+fn a_loft_closes_on_a_point() {
+    use forge_math::{Point3, Vec3};
+    use forge_ops::{Apex, LoftGuides, LoftKind, loft_and_bounds};
+    let at = |x: f64, y: f64, z: f64| Apex {
+        point: Point3::new(x, y, z),
+        dome: None,
+    };
+    let circle = prof(vec![Profile::circle(Point2::ORIGIN, 5.0, 0)]);
+    let square = prof(vec![Profile::rectangle(Point2::new(-5.0, -5.0), 10.0, 10.0, 0)]);
+    let none = LoftGuides::None;
+    let ruled = LoftKind::Ruled;
+    let free = LoftKind::Smooth {
+        start: None,
+        end: None,
+    };
+    let one = |p: &Profile, k, a: &[Option<Apex>; 2]| {
+        loft_and_bounds(std::slice::from_ref(p), k, &none, a, 1)
+            .unwrap()
+            .0
+    };
+    // cone and oblique cone, pyramid and oblique pyramid: a third of base by height
+    for (x, y) in [(0.0, 0.0), (3.0, 2.0)] {
+        let v = checked(&one(&circle, ruled, &[None, Some(at(x, y, 20.0))]));
+        let want = dmath::PI * 25.0 * 20.0 / 3.0;
+        assert!((v - want).abs() < 1e-8 * want, "{v} {want}");
+        let v = checked(&one(&square, ruled, &[Some(at(x, y, -20.0)), None]));
+        let want = 100.0 * 20.0 / 3.0;
+        assert!((v - want).abs() < 1e-8 * want, "{v} {want}");
+    }
+    // a smooth loft through a section on to a point
+    let high = Profile {
+        plane: Frame::WORLD.with_origin(Point3::new(0.0, 0.0, 6.0)),
+        loops: vec![Profile::circle(Point2::ORIGIN, 4.0, 0)],
+    };
+    let b = loft_and_bounds(
+        &[circle.clone(), high],
+        free,
+        &none,
+        &[None, Some(at(0.0, 0.0, 12.0))],
+        1,
+    )
+    .unwrap()
+    .0;
+    assert!(checked(&b) > 0.0);
+    // a dome: walls arrive square to the axis, so the end is a smooth round nose
+    let mut dome = at(0.0, 0.0, 8.0);
+    dome.dome = Some((Vec3::Z, 2.0));
+    let b = loft_and_bounds(std::slice::from_ref(&circle), free, &none, &[None, Some(dome)], 1)
+        .unwrap()
+        .0;
+    let v = checked(&b);
+    // of revolution: r(s), z(s) a natural cubic with the end slope given (research/spline-loops)
+    let (l, r0): (f64, f64) = (8.0, 5.0);
+    let radial = |s: f64| {
+        // r = r0 + b s + d s^3; r(l) = 0, r'(l) = -2
+        let d = (r0 - 2.0 * l) / (2.0 * l * l * l);
+        let b = -2.0 - 3.0 * d * l * l;
+        (r0 + b * s + d * s * s * s, b + 3.0 * d * s * s)
+    };
+    let axial = |s: f64| {
+        // z = a s + c s^3; z(l) = 8, z'(l) = 0
+        let c = -8.0 / (2.0 * l * l * l);
+        let a = -3.0 * c * l * l;
+        (a * s + c * s * s * s, a + 3.0 * c * s * s)
+    };
+    let rule = forge_math::poly::gauss_legendre(32);
+    let want: f64 = rule
+        .iter()
+        .map(|&(x, w)| {
+            let s = 0.5 * l * (x + 1.0);
+            dmath::PI * radial(s).0.powi(2) * axial(s).1 * 0.5 * l * w
+        })
+        .sum();
+    assert!((v - want).abs() < 1e-7 * want, "{v} {want}");
+    let (_, dr) = radial(l);
+    assert!((dr + 2.0).abs() < 1e-12 && axial(l).0 > 7.999);
+}

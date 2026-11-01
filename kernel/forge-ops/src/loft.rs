@@ -10,7 +10,7 @@ use crate::skin::{Skin, prepare, section_curve};
 use forge_geom::ruled::{Rail, Ruled};
 use forge_geom::skinned::{Along, GuidePath, Shift, Skinned, Spline};
 use forge_geom::{Circle, Cone, Curve, CurveGeom, Cylinder, Line, Plane, Surface};
-use forge_math::{Frame, Interval, Point3, Vec3, dmath, tol};
+use forge_math::{Frame, Interval, Point2, Point3, Vec3, dmath, tol};
 use forge_topo::{Body, Name};
 use std::sync::Arc;
 
@@ -35,6 +35,14 @@ pub enum LoftError {
     Degenerate {
         index: usize,
     },
+    /// A loft ending in a point takes no rails or centre line.
+    ApexWithGuides,
+    /// A loft ending in a point has one loop per profile: holes have nothing to close on.
+    ApexWithHoles,
+    /// A dome needs a smooth loft.
+    DomeNeedsSmooth,
+    /// A dome's direction must be square to the profile next to it.
+    DomeNotSquare,
     /// A wall between profiles `index` and `index + 1` folds over: its rulings cross.
     Twisted {
         index: usize,
@@ -71,6 +79,15 @@ pub enum LoftGuides {
     CentreLine(Vec<crate::PathSeg>),
 }
 
+/// A loft's end collapsing to a point.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct Apex {
+    pub point: Point3,
+    /// A rounded nose on a smooth loft: walls arrive square to this direction (the section's
+    /// plane must be square to it too), the widest at `dome.1` times unit speed; None: sharp.
+    pub dome: Option<(Vec3, f64)>,
+}
+
 /// How a loft runs between its profiles.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub enum LoftKind {
@@ -90,7 +107,7 @@ pub fn loft(
     guides: &LoftGuides,
     feature: u64,
 ) -> Result<Body, LoftError> {
-    Ok(loft_and_bounds(profiles, kind, guides, feature)?.0)
+    Ok(loft_and_bounds(profiles, kind, guides, &[None, None], feature)?.0)
 }
 
 /// `loft` and `loft_bounds` from one plan.
@@ -98,9 +115,10 @@ pub fn loft_and_bounds(
     profiles: &[Profile],
     kind: LoftKind,
     guides: &LoftGuides,
+    apex: &[Option<Apex>; 2],
     feature: u64,
 ) -> Result<(Body, forge_math::Box3), LoftError> {
-    let skin = plan(profiles, kind, guides)?;
+    let skin = plan(profiles, kind, guides, apex)?;
     let b = skin_bounds(&skin);
     let body = skin.build(Name::feature(feature));
     if crate::selfx::crossing(&body, &vec![true; body.faces.len()]).is_some() {
@@ -114,8 +132,9 @@ pub fn loft_bounds(
     profiles: &[Profile],
     kind: LoftKind,
     guides: &LoftGuides,
+    apex: &[Option<Apex>; 2],
 ) -> Result<forge_math::Box3, LoftError> {
-    Ok(skin_bounds(&plan(profiles, kind, guides)?))
+    Ok(skin_bounds(&plan(profiles, kind, guides, apex)?))
 }
 
 fn skin_bounds(skin: &Skin) -> forge_math::Box3 {
@@ -133,13 +152,21 @@ fn skin_bounds(skin: &Skin) -> forge_math::Box3 {
     b.grow(tol::LINEAR)
 }
 
-fn plan(profiles: &[Profile], kind: LoftKind, guides: &LoftGuides) -> Result<Skin, LoftError> {
-    let n = profiles.len();
-    if n < 2 {
+fn plan(
+    profiles: &[Profile],
+    kind: LoftKind,
+    guides: &LoftGuides,
+    apex: &[Option<Apex>; 2],
+) -> Result<Skin, LoftError> {
+    let points = usize::from(apex[0].is_some()) + usize::from(apex[1].is_some());
+    if profiles.len() + points < 2 || profiles.is_empty() {
         return Err(LoftError::TooFew);
     }
     for (index, p) in profiles.iter().enumerate() {
         crate::skin::curved(p).map_err(|error| LoftError::Profile { index, error })?;
+    }
+    if points > 0 && *guides != LoftGuides::None {
+        return Err(LoftError::ApexWithGuides);
     }
     let centre = |p: &Profile| {
         let pts: Vec<Point3> = p.loops[0]
@@ -151,23 +178,33 @@ fn plan(profiles: &[Profile], kind: LoftKind, guides: &LoftGuides) -> Result<Ski
         let sum = pts.iter().fold(Vec3::ZERO, |a, q| a + q.to_vec());
         Point3::ORIGIN + sum / pts.len().max(1) as f64
     };
-    let mut preps = Vec::with_capacity(n);
-    let mut centres = Vec::with_capacity(n);
+    let empty = profiles.iter().position(|p| p.loops.is_empty());
+    if let Some(index) = empty {
+        return Err(LoftError::Profile {
+            index,
+            error: ProfileError::Empty,
+        });
+    }
+    // sections in order: the apexes, where there are any, at the ends
+    let first = usize::from(apex[0].is_some());
+    let mut centres: Vec<Point3> = Vec::with_capacity(profiles.len() + points);
+    centres.extend(apex[0].map(|a| a.point));
+    centres.extend(profiles.iter().map(centre));
+    centres.extend(apex[1].map(|a| a.point));
+    let n = centres.len();
+    let mut preps = Vec::with_capacity(profiles.len());
     for (i, p) in profiles.iter().enumerate() {
-        if p.loops.is_empty() {
-            return Err(LoftError::Profile {
-                index: i,
-                error: ProfileError::Empty,
-            });
-        }
-        // each profile faces the next; the last faces on from the one before
-        let (a, b) = if i + 1 < n { (i, i + 1) } else { (i - 1, i) };
-        let ahead = centre(&profiles[b]) - centre(&profiles[a]);
+        let k = first + i;
+        // each section faces the next; the last faces on from the one before
+        let (a, b) = if k + 1 < n { (k, k + 1) } else { (k - 1, k) };
+        let ahead = centres[b] - centres[a];
         if ahead.length() <= tol::LINEAR {
             return Err(LoftError::Degenerate { index: a });
         }
-        centres.push(centre(p));
         preps.push(prepare(p, ahead).map_err(|error| LoftError::Profile { index: i, error })?);
+    }
+    if points > 0 && preps.iter().any(|p| p.profile.loops.len() != 1) {
+        return Err(LoftError::ApexWithHoles);
     }
     let sizes = preps[0].loop_sizes();
     for (i, p) in preps.iter().enumerate().skip(1) {
@@ -189,8 +226,35 @@ fn plan(profiles: &[Profile], kind: LoftKind, guides: &LoftGuides) -> Result<Ski
             });
         }
     }
-    let segs: Vec<Vec<Segment>> = preps.iter().map(|p| p.segments().cloned().collect()).collect();
-    let planes: Vec<Frame> = preps.iter().map(|p| p.profile.plane).collect();
+    let mut segs: Vec<Vec<Segment>> = preps.iter().map(|p| p.segments().cloned().collect()).collect();
+    let mut planes: Vec<Frame> = preps.iter().map(|p| p.profile.plane).collect();
+    // an apex as a section of no size: each segment shrunk onto the point, in the neighbour's plane
+    let at_point = |near: &[Segment]| -> Vec<Segment> {
+        near.iter()
+            .map(|s| match *s {
+                Segment::Arc { start, sweep, .. } => Segment::Arc {
+                    center: Point2::ORIGIN,
+                    radius: 0.0,
+                    start,
+                    sweep,
+                },
+                _ => Segment::Line {
+                    a: Point2::ORIGIN,
+                    b: Point2::ORIGIN,
+                },
+            })
+            .collect()
+    };
+    if let Some(a) = apex[1] {
+        let far = at_point(&segs[segs.len() - 1]);
+        segs.push(far);
+        planes.push(planes[planes.len() - 1].with_origin(a.point));
+    }
+    if let Some(a) = apex[0] {
+        let near = at_point(&segs[0]);
+        segs.insert(0, near);
+        planes.insert(0, planes[0].with_origin(a.point));
+    }
     for k in 0..n - 1 {
         for (sa, sb) in segs[k].iter().zip(&segs[k + 1]) {
             let (pa, pb) = (
@@ -203,10 +267,15 @@ fn plan(profiles: &[Profile], kind: LoftKind, guides: &LoftGuides) -> Result<Ski
         }
     }
     let guided = *guides != LoftGuides::None;
+    let domed = apex.iter().flatten().any(|a| a.dome.is_some());
+    let is_apex = [apex[0].is_some(), apex[1].is_some()];
+    if domed && !matches!(kind, LoftKind::Smooth { .. }) {
+        return Err(LoftError::DomeNeedsSmooth);
+    }
     let (rails, walls) = match kind {
         // through two profiles with free ends and nothing guiding, a spline is a straight line
-        LoftKind::Smooth { start, end } if n > 2 || start.is_some() || end.is_some() || guided => {
-            smooth(&segs, &planes, &centres, &sizes, start, end, guides)?
+        LoftKind::Smooth { start, end } if n > 2 || start.is_some() || end.is_some() || guided || domed => {
+            smooth(&segs, &planes, &centres, &sizes, start, end, guides, apex)?
         }
         LoftKind::Smooth { .. } => ruled(&segs, &planes)?,
         LoftKind::Ruled if guided => return Err(LoftError::GuidesNeedSmooth),
@@ -215,7 +284,14 @@ fn plan(profiles: &[Profile], kind: LoftKind, guides: &LoftGuides) -> Result<Ski
     let curves = planes
         .iter()
         .zip(&segs)
-        .map(|(f, ss)| ss.iter().map(|s| section_curve(s, f)).collect())
+        .enumerate()
+        .map(|(k, (f, ss))| {
+            if (k == 0 && is_apex[0]) || (k == n - 1 && is_apex[1]) {
+                Vec::new()
+            } else {
+                ss.iter().map(|s| section_curve(s, f)).collect()
+            }
+        })
         .collect();
     Ok(Skin {
         keys: preps[0].keys.clone(),
@@ -224,6 +300,7 @@ fn plan(profiles: &[Profile], kind: LoftKind, guides: &LoftGuides) -> Result<Ski
         curves,
         rails,
         walls,
+        apex: is_apex,
     })
 }
 
@@ -257,6 +334,7 @@ fn ruled(segs: &[Vec<Segment>], planes: &[Frame]) -> Result<Walls, LoftError> {
 }
 
 /// Spline rails and skinned walls through all the profiles.
+#[allow(clippy::too_many_arguments)]
 fn smooth(
     segs: &[Vec<Segment>],
     planes: &[Frame],
@@ -265,20 +343,70 @@ fn smooth(
     start: Option<f64>,
     end: Option<f64>,
     guides: &LoftGuides,
+    apex: &[Option<Apex>; 2],
 ) -> Result<Walls, LoftError> {
     let n = planes.len();
     let mut knots = vec![0.0];
     for w in centres.windows(2) {
         knots.push(knots[knots.len() - 1] + w[0].distance(w[1]));
     }
+    let dome = |k: usize| apex[k].and_then(|a| a.dome);
     let spline = Arc::new(
-        Spline::new(knots.clone(), start.is_some(), end.is_some())
-            .ok_or(LoftError::Degenerate { index: 0 })?,
+        Spline::new(
+            knots.clone(),
+            start.is_some() || dome(0).is_some(),
+            end.is_some() || dome(1).is_some(),
+        )
+        .ok_or(LoftError::Degenerate { index: 0 })?,
     );
-    let slopes: Vec<Vec3> = [(start, 0), (end, n - 1)]
+    // a fixed slope, or at a dome a zero one the wall's ramp stands in for
+    let slopes: Vec<Vec3> = [(start, 0, 0), (end, n - 1, 1)]
         .iter()
-        .filter_map(|&(w, k)| w.map(|w| planes[k].z() * w))
+        .filter_map(|&(w, k, e)| {
+            if dome(e).is_some() {
+                Some(Vec3::ZERO)
+            } else {
+                w.map(|w| planes[k].z() * w)
+            }
+        })
         .collect();
+    // the slope along a dome's section: towards or from the point under the apex
+    let ramp = |e: usize, j: usize| -> Result<Option<Rail>, LoftError> {
+        let Some((dir, w)) = dome(e) else {
+            return Ok(None);
+        };
+        let at = if e == 0 { 1 } else { n - 2 };
+        let f = &planes[at];
+        let d = dir.normalize().ok_or(LoftError::DomeNotSquare)?;
+        if d.cross(f.z().get()).length() > tol::ANGULAR {
+            return Err(LoftError::DomeNotSquare);
+        }
+        let tip = centres[if e == 0 { 0 } else { n - 1 }];
+        let foot = tip - f.z() * f.z().dot(tip - f.origin);
+        let widest = segs[at]
+            .iter()
+            .flat_map(|s| s.samples(8))
+            .map(|q| f.plane_point(q).distance(foot))
+            .fold(tol::LINEAR, f64::max);
+        // the wall leaves the apex outward; it comes back in at the far end
+        let k = w / widest * if e == 0 { 1.0 } else { -1.0 };
+        let v = |p: Point3| Point3::ORIGIN + (p - foot) * k;
+        Ok(Some(match rail(&segs[at][j], f) {
+            Rail::Line { a, b } => Rail::Line { a: v(a), b: v(b) },
+            Rail::Arc { circle, start, sweep } => {
+                // a negative scale is the half turn it stands for
+                Rail::Arc {
+                    circle: Circle {
+                        frame: circle.frame.with_origin(v(circle.frame.origin)),
+                        radius: circle.radius * k.abs(),
+                    },
+                    start: if k >= 0.0 { start } else { start + dmath::PI },
+                    sweep,
+                }
+            }
+            other => other,
+        }))
+    };
     let nseg = segs[0].len();
     // each guide: its path, where it crosses the profiles, and the points there it pulls from
     let vertex = |k: usize, i: usize| planes[k].plane_point(segs[k][i].start());
@@ -360,6 +488,12 @@ fn smooth(
     }
     // across profile k at vertex i: between the normals of the two segments meeting there
     let across = |k: usize, i: usize| {
+        // an apex has no curves to read: as its neighbour's
+        let k = match (k, apex[0].is_some(), apex[1].is_some()) {
+            (0, true, _) => 1,
+            (m, _, true) if m == n - 1 => n - 2,
+            (m, ..) => m,
+        };
         let f = &planes[k];
         let right = |s: &Segment, at_end: bool| {
             let c = section_curve(s, f);
@@ -392,7 +526,14 @@ fn smooth(
         let wk = (0..nseg)
             .map(|j| {
                 let rs: Vec<Rail> = segs.iter().zip(planes).map(|(sg, f)| rail(&sg[j], f)).collect();
-                Skinned::new(rs, slopes.clone(), spline.clone(), k, shifts[j].clone())
+                let mut ramps = Vec::with_capacity(slopes.len());
+                if start.is_some() || dome(0).is_some() {
+                    ramps.push(ramp(0, j)?);
+                }
+                if end.is_some() || dome(1).is_some() {
+                    ramps.push(ramp(1, j)?);
+                }
+                Skinned::ramped(rs, slopes.clone(), ramps, spline.clone(), k, shifts[j].clone())
                     .ok_or(LoftError::Twisted { index: k })
             })
             .collect::<Result<Vec<_>, _>>()?;
@@ -443,7 +584,15 @@ fn wall(ra: Rail, rb: Rail) -> Option<Surface> {
                 let (da, db) = (a1 - a0, b1 - b0);
                 let side = [(da, b0 - a0), (da, b1 - a1), (db, b0 - a0), (db, b1 - a1)]
                     .map(|(d, r)| n.dot(d.cross(r)));
-                if !(side.iter().all(|&x| x > 0.0) || side.iter().all(|&x| x < 0.0)) {
+                // a side of no length (an apex) says nothing
+                let said = |x: &&f64| **x != 0.0;
+                let any = da.length_sq() == 0.0 || db.length_sq() == 0.0;
+                let ok = if any {
+                    side.iter().filter(said).all(|&x| x > 0.0) || side.iter().filter(said).all(|&x| x < 0.0)
+                } else {
+                    side.iter().all(|&x| x > 0.0) || side.iter().all(|&x| x < 0.0)
+                };
+                if !ok {
                     return None;
                 }
                 return Some(Surface::Plane(Plane::new(Frame::from_zx(a0, n, along)?)));
@@ -469,8 +618,11 @@ fn wall(ra: Rail, rb: Rail) -> Option<Surface> {
                 && (off - z * h).length() <= 1e-3 * tol::LINEAR
                 && h > tol::LINEAR;
             let dir = |c: &Circle, a: f64| (c.eval(a) - c.frame.origin) / c.radius;
-            let same =
-                (dir(&ca, sa) - dir(&cb, sb)).length() <= tol::ANGULAR && (wa - wb).abs() <= tol::ANGULAR;
+            // (an apex is a circle of no size: its direction is anything's)
+            let same = (ca.radius == 0.0
+                || cb.radius == 0.0
+                || (dir(&ca, sa) - dir(&cb, sb)).length() <= tol::ANGULAR)
+                && (wa - wb).abs() <= tol::ANGULAR;
             if coaxial && same {
                 let (r0, r1) = (ca.radius, cb.radius);
                 if (r1 - r0).abs() <= 1e-3 * tol::LINEAR {
@@ -613,7 +765,7 @@ mod tests {
                 valid(&b);
                 let walls = b.faces.len() - 2;
                 assert_eq!(kinds(&b).1, walls);
-                let bx = loft_bounds(&profiles, kind, &LoftGuides::None).unwrap();
+                let bx = loft_bounds(&profiles, kind, &LoftGuides::None, &[None, None]).unwrap();
                 for v in &b.vertices {
                     assert!(bx.contains(v.point));
                 }

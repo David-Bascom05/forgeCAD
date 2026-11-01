@@ -78,6 +78,8 @@ pub struct Loft {
     pub kind: LoftKind,
     /// Rails or a centre line shaping a smooth loft.
     pub guides: LoftGuides,
+    /// The start and the end closing on a point.
+    pub apex: [Option<forge_ops::Apex>; 2],
     pub op: Combine,
 }
 
@@ -225,11 +227,11 @@ pub(crate) fn tool_of(features: History<'_>, i: usize, build: bool) -> Result<To
         Feature::Loft(l) => {
             let err = |error| RegenError::Loft { feature: i, error };
             let (body, bounds) = if build {
-                loft_and_bounds(&l.profiles, l.kind, &l.guides, id).map_err(err)?
+                loft_and_bounds(&l.profiles, l.kind, &l.guides, &l.apex, id).map_err(err)?
             } else {
                 (
                     Body::new(),
-                    loft_bounds(&l.profiles, l.kind, &l.guides).map_err(err)?,
+                    loft_bounds(&l.profiles, l.kind, &l.guides, &l.apex).map_err(err)?,
                 )
             };
             Ok((body, l.op, Shape::Brep(bounds)))

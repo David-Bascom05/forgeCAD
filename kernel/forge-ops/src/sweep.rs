@@ -243,6 +243,7 @@ pub fn sweep(profile: &crate::Profile, path: &[PathSeg], feature: u64) -> Result
         curves,
         rails,
         walls,
+        apex: [false; 2],
     }
     .build(Name::feature(feature));
     if path.len() > 1 && crate::selfx::crossing(&body, &vec![true; body.faces.len()]).is_some() {
@@ -653,6 +654,7 @@ pub fn coil(profile: &crate::Profile, axis: Axis2, w: &Winding, feature: u64) ->
         curves,
         rails,
         walls: vec![surfaces],
+        apex: [false; 2],
     }
     .build(Name::feature(feature)))
 }

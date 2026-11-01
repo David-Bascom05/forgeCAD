@@ -806,7 +806,7 @@ pub const KINDS: &[Kind] = &[
     },
     Kind {
         name: "loft",
-        syntax: "loft [op] [smooth [start W] [end W]] (profile FRAME LOOPS).. [rail I PATH.. | centre PATH]",
+        syntax: "loft [op] [smooth [start W] [end W]] (profile FRAME LOOPS | point X Y Z [dome DX DY DZ [W]]).. [rail I PATH.. | centre PATH]",
         parse: |p| {
             let op = p.op()?;
             let kind = if p.eat("smooth") {
@@ -817,8 +817,26 @@ pub const KINDS: &[Kind] = &[
                 LoftKind::Ruled
             };
             let mut profiles = Vec::new();
+            let mut apex = [None, None];
+            let point = |p: &mut P| -> R<forge_ops::Apex> {
+                let point = p.point3()?;
+                let dome = if p.eat("dome") {
+                    let d = p.vec3()?;
+                    let w = if p.is_num() { p.num()? } else { 1.0 };
+                    Some((d, w))
+                } else {
+                    None
+                };
+                Ok(forge_ops::Apex { point, dome })
+            };
+            if p.eat("point") {
+                apex[0] = Some(point(p)?);
+            }
             while p.eat("profile") {
                 profiles.push(p.profile()?);
+            }
+            if p.eat("point") {
+                apex[1] = Some(point(p)?);
             }
             if profiles.is_empty() {
                 return Err(format!("expected 'profile', found '{}'", p.peek()));
@@ -838,6 +856,7 @@ pub const KINDS: &[Kind] = &[
                 profiles,
                 kind,
                 guides,
+                apex,
                 op,
             })))
         },
@@ -855,9 +874,23 @@ pub const KINDS: &[Kind] = &[
                     w.num(x);
                 }
             }
+            let point = |w: &mut W, a: &forge_ops::Apex| {
+                w.word("point");
+                w.nums(&[a.point.x, a.point.y, a.point.z]);
+                if let Some((d, k)) = a.dome {
+                    w.word("dome");
+                    w.nums(&[d.x, d.y, d.z, k]);
+                }
+            };
+            if let Some(a) = &l.apex[0] {
+                point(w, a);
+            }
             for p in &l.profiles {
                 w.word("profile");
                 w.profile(p);
+            }
+            if let Some(a) = &l.apex[1] {
+                point(w, a);
             }
             match &l.guides {
                 LoftGuides::None => {}
@@ -2075,9 +2108,9 @@ pub fn is_ref(t: &str) -> bool {
 /// Words the grammar uses, which a parameter may not be named.
 const KEYWORDS: &[&str] = &[
     "x", "y", "z", "axes", "on", "at", "axis", "id", "cw", "rect", "rrect", "circle", "poly", "loop", "line",
-    "spline", "thru", "ellipse", "ell", "knots", "weights", "from", "arc", "circ", "sym", "two", "thru",
-    "back", "both", "next", "to", "off", "new", "add", "cut", "keep", "face", "ang", "cb", "cs", "pt",
-    "thread", "body", "lin", "mirror", "step", "out", "end", "cons", "open",
+    "spline", "thru", "ellipse", "ell", "knots", "weights", "from", "point", "dome", "arc", "circ", "sym",
+    "two", "thru", "back", "both", "next", "to", "off", "new", "add", "cut", "keep", "face", "ang", "cb",
+    "cs", "pt", "thread", "body", "lin", "mirror", "step", "out", "end", "cons", "open",
 ];
 
 impl<'a> P<'a> {
@@ -4101,6 +4134,7 @@ mod tests {
                     1 => LoftGuides::Rails((0..1 + r.below(3)).map(|_| (r.below(8), path(r))).collect()),
                     _ => LoftGuides::CentreLine(path(r)),
                 },
+                apex: [None, None],
                 op: op(r),
             })),
             14 => Feature::Edit(Edit::Rib(Box::new(Rib {

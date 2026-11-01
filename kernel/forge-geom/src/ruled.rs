@@ -208,7 +208,39 @@ impl Ruled {
                 (m0 + d * l).length() > 1e-6 * m0.length().max(m1.length()).max(1e-6)
             })
         };
-        let (te, lo, hi) = if let Some((ra, rb)) = r.radii() {
+        // a rail of no length is an apex: the wall stops there, and the normal vanishes only there
+        let (a_apex, b_apex) = (a.length() == 0.0, b.length() == 0.0);
+        let (te, lo, hi) = if a_apex || b_apex {
+            let (s0, s1) = (
+                if a_apex { 1e-3 } else { 0.0 },
+                if b_apex { 1.0 - 1e-3 } else { 1.0 },
+            );
+            if !regular(Interval::new(0.0, 1.0), s0, s1) {
+                return None;
+            }
+            let te = [te, 0.5 * te, 0.25 * te]
+                .into_iter()
+                .find(|&e| regular(Interval::new(-e, 1.0 + e), s0, s1))
+                .unwrap_or(0.0);
+            let t = Interval::new(-te, 1.0 + te);
+            let lo = if a_apex {
+                0.0
+            } else {
+                [-1.0, -0.5, -0.25]
+                    .into_iter()
+                    .find(|&s| regular(t, s, s1))
+                    .unwrap_or(0.0)
+            };
+            let hi = if b_apex {
+                1.0
+            } else {
+                [2.0, 1.5, 1.25]
+                    .into_iter()
+                    .find(|&s| regular(t, s0, s))
+                    .unwrap_or(1.0)
+            };
+            (te, lo, hi)
+        } else if let Some((ra, rb)) = r.radii() {
             // a wall of rays from the axis folds only where it reaches the axis
             let keeps = |s: f64| (ra + (rb - ra) * s) * ra > 0.0;
             if !(keeps(0.0) && keeps(1.0)) {
@@ -376,8 +408,14 @@ impl Ruled {
     /// Signed distance to the carried-on surface and its gradient.
     fn value(&self, p: Point3) -> (f64, Vec3) {
         remembered(self.id, p, || {
-            let d = self.point(self.nearest(p, self.ext));
-            let n = d.du.cross(d.dv).normalize().map_or(Vec3::Z, |u| u.get());
+            let uv = self.nearest(p, self.ext);
+            let d = self.point(uv);
+            // at an apex, the normal just off it
+            let n = d.du.cross(d.dv).normalize().or_else(|| {
+                let q = self.point(Point2::new(uv.x, (uv.y).clamp(1e-3, 1.0 - 1e-3)));
+                q.du.cross(q.dv).normalize()
+            });
+            let n = n.map_or(Vec3::Z, |u| u.get());
             ((p - d.p).dot(n), n)
         })
     }

@@ -747,7 +747,8 @@ def loft(f):
 def seg2_wire(segs, at):
     mw = BRepBuilderAPI_MakeWire()
     for s in segs:
-        mw.Add(seg_edge(at, s))
+        for e in bezier_edges(at, s["bezier"]) if "bezier" in s else [seg_edge(at, s)]:
+            mw.Add(e)
     return mw.Wire()
 
 

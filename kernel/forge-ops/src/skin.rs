@@ -157,6 +157,9 @@ pub(crate) struct Skin {
     /// rails[k][i]: vertex i's path from section k to k + 1, its parameter increasing that way.
     pub rails: Vec<Vec<(Curve, Interval)>>,
     pub walls: Vec<Vec<Surface>>,
+    /// Whether the first and the last section are a point: its curves empty, no cap, every wall
+    /// three-sided there.
+    pub apex: [bool; 2],
 }
 
 impl Skin {
@@ -178,8 +181,20 @@ impl Skin {
             let t = if c.forward { c.range.lo } else { c.range.hi };
             c.curve.eval(t)
         };
+        let is_apex = |s: usize| (s == 0 && self.apex[0]) || (s == n - 1 && self.apex[1]);
         let verts: Vec<Vec<VertexId>> = (0..n)
             .map(|s| {
+                if is_apex(s) {
+                    // rails[k][i] start or end there: every rail's end at this section
+                    let (rc, rr) = if s == 0 {
+                        &self.rails[0][0]
+                    } else {
+                        &self.rails[n - 2][0]
+                    };
+                    let p = rc.eval(if s == 0 { rr.lo } else { rr.hi });
+                    let v = body.add_vertex(p, root.with_str("apex").with(s as u64));
+                    return vec![v; nseg];
+                }
                 (0..nseg)
                     .map(|i| {
                         let name = root.with_str("vertex").with(s as u64).with_name(self.keys[i]);
@@ -190,6 +205,9 @@ impl Skin {
             .collect();
         let edges: Vec<Vec<EdgeId>> = (0..n)
             .map(|s| {
+                if is_apex(s) {
+                    return Vec::new();
+                }
                 (0..nseg)
                     .map(|i| {
                         let c = &self.curves[s][i];
@@ -211,29 +229,33 @@ impl Skin {
                 .collect();
             for (j, surface) in self.walls[k].iter().enumerate() {
                 // the wall's outward normal is the profile's direction crossed with the motion
-                let c = &self.curves[k][j];
+                let at = if is_apex(k) { k + 1 } else { k };
+                let c = &self.curves[at][j];
                 let mid = c.curve.deriv(c.range.mid());
                 let along = if c.forward { mid.d1 } else { -mid.d1 };
                 let (rc, rr) = &self.rails[k][j];
-                let outward = along.cross(rc.deriv(rr.lo).d1);
+                let outward = along.cross(rc.deriv(if at == k { rr.lo } else { rr.hi }).d1);
                 let same = surface
                     .normal(surface.project(mid.p))
                     .is_none_or(|nat| nat.dot(outward) > 0.0);
                 let name = root.with_str("side").with_name(self.keys[j]).with(k as u64);
                 let face = body.add_face(shell, surface.clone(), same, name);
-                let fw = c.forward;
-                body.add_loop(
-                    face,
-                    &[
-                        (edges[k][j], fw),
-                        (rails[next[j]], true),
-                        (edges[k + 1][j], !self.curves[k + 1][j].forward),
-                        (rails[j], false),
-                    ],
-                );
+                let mut uses = Vec::with_capacity(4);
+                if !is_apex(k) {
+                    uses.push((edges[k][j], c.forward));
+                }
+                uses.push((rails[next[j]], true));
+                if !is_apex(k + 1) {
+                    uses.push((edges[k + 1][j], !self.curves[k + 1][j].forward));
+                }
+                uses.push((rails[j], false));
+                body.add_loop(face, &uses);
             }
         }
         for (s, same, name) in [(0, false, "start"), (n - 1, true, "end")] {
+            if is_apex(s) {
+                continue;
+            }
             let face = body.add_face(
                 shell,
                 Surface::Plane(Plane::new(self.planes[s])),

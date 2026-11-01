@@ -412,6 +412,7 @@ impl Shift {
 struct Data {
     rails: Vec<Rail>,
     slopes: Vec<Vec3>,
+    ramps: Vec<Option<Rail>>,
     spline: Arc<Spline>,
     shifts: Vec<Shift>,
     poly: Option<Poly>,
@@ -662,10 +663,28 @@ impl Data {
         Data {
             rails,
             slopes,
+            ramps: Vec::new(),
             spline,
             shifts,
             poly,
         }
+    }
+
+    /// `new` with end slopes that vary along the section (`ramps`, a rail per slope standing for
+    /// the slope at each u as a vector from the origin; None: the fixed one).
+    fn ramped(
+        rails: Vec<Rail>,
+        slopes: Vec<Vec3>,
+        ramps: Vec<Option<Rail>>,
+        spline: Arc<Spline>,
+        shifts: Vec<Shift>,
+    ) -> Data {
+        let mut d = Data::new(rails, slopes, spline, shifts);
+        if ramps.iter().any(Option::is_some) {
+            d.poly = None;
+            d.ramps = ramps;
+        }
+        d
     }
 
     fn point(&self, uv: Point2) -> SurfDeriv {
@@ -719,6 +738,17 @@ impl Data {
         let n = self.rails.len();
         for (j, &s) in self.slopes.iter().enumerate() {
             let [w0, w1, w2] = w[n + j];
+            if let Some(Some(r)) = self.ramps.get(j) {
+                let (c, c1, c2) = r.at(uv.x);
+                let c = c.to_vec();
+                p += c * w0;
+                d.du += c1 * w0;
+                d.duu += c2 * w0;
+                d.dv += c * w1;
+                d.duv += c1 * w1;
+                d.dvv += c * w2;
+                continue;
+            }
             p += s * w0;
             d.dv += s * w1;
             d.dvv += s * w2;
@@ -792,7 +822,10 @@ impl Data {
         }
         let n = self.rails.len();
         for (j, &s) in self.slopes.iter().enumerate() {
-            add(w[n + j], Box3::from_point(Point3::ORIGIN + s));
+            match self.ramps.get(j) {
+                Some(Some(r)) => add(w[n + j], r.bbox(uv.u)),
+                _ => add(w[n + j], Box3::from_point(Point3::ORIGIN + s)),
+            }
         }
         for sh in &self.shifts {
             let beta = match sh.along {
@@ -806,9 +839,14 @@ impl Data {
     }
 
     fn transformed(&self, f: &Frame) -> Data {
-        Data::new(
+        let linear = f.with_origin(Point3::ORIGIN);
+        Data::ramped(
             self.rails.iter().map(|r| r.transformed(f)).collect(),
             self.slopes.iter().map(|&s| f.vec_to_world(s)).collect(),
+            self.ramps
+                .iter()
+                .map(|r| r.as_ref().map(|r| r.transformed(&linear)))
+                .collect(),
             self.spline.clone(),
             self.shifts.iter().map(|sh| sh.transformed(f)).collect(),
         )
@@ -958,6 +996,8 @@ pub struct Skinned {
     /// Which surface this is, for remembering its last query.
     id: u64,
     patches: std::sync::OnceLock<Vec<Box3>>,
+    /// The row of the grid along v lying at an apex.
+    pole: Option<usize>,
 }
 
 impl Skinned {
@@ -971,11 +1011,37 @@ impl Skinned {
         k: usize,
         shifts: Vec<Shift>,
     ) -> Option<Skinned> {
+        Skinned::ramped(rails, slopes, Vec::new(), spline, k, shifts)
+    }
+
+    /// `new` with end slopes that vary along the section (a loft's domed apex), and rails of no
+    /// length at an end standing for an apex: the surface stops there, its normal undefined at it.
+    pub fn ramped(
+        rails: Vec<Rail>,
+        slopes: Vec<Vec3>,
+        ramps: Vec<Option<Rail>>,
+        spline: Arc<Spline>,
+        k: usize,
+        shifts: Vec<Shift>,
+    ) -> Option<Skinned> {
         let knots = spline.knots().to_vec();
         let span = Interval::new(knots[k], knots[k + 1]);
         let te = rails.iter().map(Rail::reach).fold(0.25, f64::min);
+        let none = |r: &Rail| r.length() == 0.0;
+        // an apex at this span's own end stops it; the middle's regularity is all that can be asked
+        let (lo_apex, hi_apex) = (
+            k == 0 && none(&rails[0]),
+            k + 2 == knots.len() && none(&rails[rails.len() - 1]),
+        );
+        let inner = |b: Interval| {
+            let h = 1e-3 * span.width();
+            Interval::new(
+                b.lo + if lo_apex { h } else { 0.0 },
+                b.hi - if hi_apex { h } else { 0.0 },
+            )
+        };
         let mut s = Skinned {
-            data: Data::new(rails, slopes, spline, shifts),
+            data: Data::ramped(rails, slopes, ramps, spline, shifts),
             span,
             ext: Box2::new(Interval::new(0.0, 1.0), span),
             rows: Vec::new(),
@@ -985,6 +1051,13 @@ impl Skinned {
             sharp: false,
             id: fresh_id(),
             patches: std::sync::OnceLock::new(),
+            pole: if lo_apex {
+                Some(0)
+            } else if hi_apex {
+                Some(GRID.1)
+            } else {
+                None
+            },
         };
         let regular = |s: &Skinned, b: Box2| {
             let (nu, nv) = (32, 32);
@@ -1015,17 +1088,18 @@ impl Skinned {
                     })
                 })
         };
-        if !regular(&s, s.ext) {
+        if !regular(&s, Box2::new(s.ext.u, inner(s.ext.v))) {
             return None;
         }
         // carried on as far as it stays regular
         let h = span.width();
         for (eu, ev) in [(te, 0.5 * h), (0.5 * te, 0.25 * h), (0.0, 0.0)] {
-            let b = Box2::new(
-                Interval::new(-eu, 1.0 + eu),
-                Interval::new(span.lo - ev, span.hi + ev),
+            let v = Interval::new(
+                if lo_apex { span.lo } else { span.lo - ev },
+                if hi_apex { span.hi } else { span.hi + ev },
             );
-            if regular(&s, b) {
+            let b = Box2::new(Interval::new(-eu, 1.0 + eu), v);
+            if regular(&s, Box2::new(b.u, inner(b.v))) {
                 s.ext = b;
                 break;
             }
@@ -1077,7 +1151,33 @@ impl Skinned {
 
     /// The nearest point of the carried-on surface, from the nearest grid point, and on a sharp
     /// surface also from the nearest grid point away from that one's neighbours.
+    /// The box a search for a nearest point runs in: short of an apex, where it could stay stuck
+    /// (the surface's parameters mean nothing there).
+    fn search(&self) -> Box2 {
+        let h = 1e-6 * self.span.width();
+        let v = match self.pole {
+            Some(0) => Interval::new(self.ext.v.lo + h, self.ext.v.hi),
+            Some(_) => Interval::new(self.ext.v.lo, self.ext.v.hi - h),
+            None => self.ext.v,
+        };
+        Box2::new(self.ext.u, v)
+    }
+
+    /// The apex's parameters, for a point at it.
+    fn at_pole(&self, p: Point3) -> Option<(Point2, SurfDeriv)> {
+        let v = match self.pole? {
+            0 => self.ext.v.lo,
+            _ => self.ext.v.hi,
+        };
+        let uv = Point2::new(0.5, v);
+        let d = self.point(uv);
+        (d.p.distance(p) <= 0.1 * tol::LINEAR).then_some((uv, d))
+    }
+
     fn solve(&self, p: Point3) -> (Point2, SurfDeriv) {
+        if let Some(r) = self.at_pole(p) {
+            return r;
+        }
         let mut dist = [0.0; ROWS];
         for (d, q) in dist.iter_mut().zip(&self.pts) {
             *d = q.distance_sq(p);
@@ -1088,13 +1188,18 @@ impl Skinned {
                 .map(|m| (m, dist[m]))
                 .fold((none, f64::INFINITY), |b, x| if x.1 < b.1 { x } else { b })
         };
-        let (k, _) = nearest(&|_| true, 0);
+        // a row at an apex is one point for every u: no start for a search
+        let w = GRID.1 + 1;
+        let (k, _) = match self.pole {
+            Some(j) => nearest(&|m| m % w != j, 0),
+            None => nearest(&|_| true, 0),
+        };
         let from = |k: usize| {
             polish(
                 &|uv| self.point(uv),
                 p,
                 self.rows[k].0,
-                self.ext,
+                self.search(),
                 Some(self.rows[k].1),
             )
         };
@@ -1102,7 +1207,6 @@ impl Skinned {
         if !self.sharp {
             return best;
         }
-        let w = GRID.1 + 1;
         let (i0, j0) = ((k / w) as i64, (k % w) as i64);
         let other = nearest(
             &|m| ((m / w) as i64 - i0).abs() > 1 || ((m % w) as i64 - j0).abs() > 1,
@@ -1125,8 +1229,15 @@ impl Skinned {
 
     fn value(&self, p: Point3) -> (f64, Vec3) {
         remembered(self.id, p, || {
-            let (_, d) = self.solve(p);
-            let n = d.du.cross(d.dv).normalize().map_or(Vec3::Z, |u| u.get());
+            let (q, d) = self.solve(p);
+            // at an apex, the normal just off it
+            let n = d.du.cross(d.dv).normalize().or_else(|| {
+                let h = 1e-3 * self.span.width();
+                let v = q.y.clamp(self.span.lo + h, self.span.hi - h);
+                let e = self.data.point(Point2::new(q.x, v));
+                e.du.cross(e.dv).normalize()
+            });
+            let n = n.map_or(Vec3::Z, |u| u.get());
             ((p - d.p).dot(n), n)
         })
     }
@@ -1144,6 +1255,17 @@ impl Skinned {
             .filter(|sh| sh.along != Along::End)
             .map(|sh| sh.with(Along::Whole))
             .collect();
+        // a slope varying along the section is, on this rail, the one at its start
+        let slopes: Vec<Vec3> = self
+            .data
+            .slopes
+            .iter()
+            .enumerate()
+            .map(|(j, &sl)| match self.data.ramps.get(j) {
+                Some(Some(r)) => r.at(0.0).0.to_vec(),
+                _ => sl,
+            })
+            .collect();
         let fence = Skinned::new(
             points
                 .iter()
@@ -1153,7 +1275,7 @@ impl Skinned {
                     b: p + a * half,
                 })
                 .collect(),
-            self.data.slopes.clone(),
+            slopes.clone(),
             self.data.spline.clone(),
             self.data.spline.span(self.span.mid()),
             shifts.clone(),
@@ -1162,7 +1284,7 @@ impl Skinned {
         crate::Curve::Procedural(ProcCurve(Arc::new(SplineRail {
             data: Data::new(
                 points.iter().map(|&p| Rail::Line { a: p, b: p }).collect(),
-                self.data.slopes.clone(),
+                slopes,
                 self.data.spline.clone(),
                 shifts,
             ),
@@ -1217,15 +1339,19 @@ impl Procedural for Skinned {
     }
     fn value_near(&self, p: Point3, uv: Option<Point2>) -> Option<(f64, Vec3, Point2)> {
         let near = uv
-            .map(|uv| polish(&|uv| self.point(uv), p, uv, self.ext, None))
+            .filter(|_| self.at_pole(p).is_none())
+            .map(|uv| polish(&|uv| self.point(uv), p, uv, self.search(), None))
             .filter(|(_, d)| d.p.distance(p) <= tol::LINEAR);
         let (q, d) = near.unwrap_or_else(|| self.solve(p));
         let n = d.du.cross(d.dv).normalize().map_or(Vec3::Z, |u| u.get());
         Some(((p - d.p).dot(n), n, q))
     }
     fn project_near(&self, p: Point3, uv: Point2) -> Point2 {
+        if let Some(r) = self.at_pole(p) {
+            return r.0;
+        }
         // a point lying on the surface is its own nearest point: Newton from nearby finds it
-        let (q, d) = polish(&|uv| self.point(uv), p, uv, self.ext, None);
+        let (q, d) = polish(&|uv| self.point(uv), p, uv, self.search(), None);
         if d.p.distance(p) <= tol::LINEAR {
             q
         } else {

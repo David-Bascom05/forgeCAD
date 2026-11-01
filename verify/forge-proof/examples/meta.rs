@@ -2,7 +2,7 @@
 //! each failure shrunk to a minimal history and written as a part file.
 //!
 //! cargo run --release -p forge-proof --example meta -- [seeds N] [count N] [only PROP,..]
-//!     [adv N] [out DIR] [known FILE] [FILE.fc..]
+//!     [adv N] [family NAME,..] [out DIR] [known FILE] [FILE.fc..]
 //! adv: N seeds of each adversarial family, moved and mirrored only exactly (even seeds), since
 //! an inexact motion moves their coincidences apart.
 //! known: lines `property: kind` already filed; those are counted but not shrunk, and any other
@@ -44,7 +44,14 @@ fn main() {
     parts.extend(suite::parts().into_iter().map(|(n, p)| (n.to_string(), p)));
     // the adversarial families: coincident, tangent and near-tolerance on purpose
     let adv: u64 = opt("adv").and_then(|s| s.parse().ok()).unwrap_or(0);
-    for (fam, g) in forge_model::adversarial::families() {
+    let fam_only = opt("family");
+    if fam_only.is_some() {
+        parts.clear();
+    }
+    for (fam, g) in forge_model::adversarial::families()
+        .into_iter()
+        .filter(|f| fam_only.as_ref().is_none_or(|o| o.split(',').any(|x| x == f.0)))
+    {
         parts.extend((0..adv).map(|s| {
             (
                 format!("adv {fam} {s}"),

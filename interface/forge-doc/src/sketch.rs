@@ -186,7 +186,8 @@ struct B<'a, 'n> {
 /// than being a number.
 pub fn is_ref(t: &str) -> bool {
     let base = t.split_once('.').map_or(t, |(b, p)| {
-        if ["a", "b", "c"].contains(&p) || (b.starts_with('s') && p.bytes().all(|c| c.is_ascii_digit())) {
+        if ["a", "b", "c", "m"].contains(&p) || (b.starts_with('s') && p.bytes().all(|c| c.is_ascii_digit()))
+        {
             b
         } else {
             ""
