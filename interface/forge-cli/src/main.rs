@@ -12,7 +12,7 @@ use std::time::Instant;
 
 fn usage() -> ExitCode {
     eprintln!(
-        "usage: forgecad act|query|measure|render|build|check|diff FILE [ARGS] [--json] [--base N] [--at FEAT] [--labels SEL] [--px N] [-o OUT]\n       \
+        "usage: forgecad act|query|measure|render|build|check|diff|export FILE [ARGS] [--json] [--base N] [--at FEAT] [--labels SEL] [--px N] [-o OUT]\n       \
          forgecad help [TOPIC]\n       \
          forgecad serve | mcp [--root DIR] [--writable]   (JSON-RPC / MCP on stdio, .fc files under DIR, default .; act only if --writable)\n       \
          forgecad demo <out.stl> [chord-mm] | preview <out.json>\nformat and selectors: AGENTS.md, forgecad help"
@@ -159,7 +159,8 @@ fn command(cmd: &str, argv: &[String]) -> ExitCode {
     let r = Session::default().writable(true).run(cmd, &a);
     let mut text = if json { r.json.to_string() } else { r.text };
     if let Some(png) = &r.png {
-        let path = out.unwrap_or_else(|| format!("{}.png", a.file.trim_end_matches(".fc")));
+        let ext = if cmd == "export" { "step" } else { "png" };
+        let path = out.unwrap_or_else(|| format!("{}.{ext}", a.file.trim_end_matches(".fc")));
         if let Err(e) = std::fs::write(&path, png) {
             eprintln!("writing {path}: {e}");
             return ExitCode::FAILURE;

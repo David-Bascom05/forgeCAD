@@ -71,6 +71,14 @@ pub fn mass(body: &Body) -> Result<MassProps, MassError> {
     mass_rel(body, REL)
 }
 
+/// The signed volume one shell bounds: negative for a void.
+pub fn shell_volume(body: &Body, shell: crate::body::ShellId) -> f64 {
+    let size = body.shell(shell).faces.iter().fold(forge_math::Box3::EMPTY, |b, &f| b.hull(&body.face_box(f))).diagonal();
+    // about the shell's own box middle: only the sign and rough size are wanted
+    let c = body.shell(shell).faces.iter().fold(forge_math::Box3::EMPTY, |b, &f| b.hull(&body.face_box(f))).center();
+    body.shell(shell).faces.iter().filter_map(|&f| face_integrals(body, f, c, size, 1e-4).ok()).map(|(v, _)| v[0]).sum()
+}
+
 pub fn mass_rel(body: &Body, rel: f64) -> Result<MassProps, MassError> {
     // moments about a point inside the part keep the cancellation small
     let n = body.vertices.len().max(1) as f64;

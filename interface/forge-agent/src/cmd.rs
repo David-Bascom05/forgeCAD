@@ -39,8 +39,8 @@ fn fail(msg: impl Into<String>) -> Reply {
     }
 }
 
-pub const COMMANDS: [&str; 8] = [
-    "act", "build", "query", "measure", "render", "check", "diff", "help",
+pub const COMMANDS: [&str; 9] = [
+    "act", "build", "query", "measure", "render", "check", "diff", "help", "export",
 ];
 
 #[derive(Default)]
@@ -271,6 +271,7 @@ impl Session {
             "diff" => self.diff(a),
             "act" => self.act(a),
             "help" => Ok(help_reply(&a.file, a)),
+            "export" => self.export(a),
             _ => Err(format!(
                 "unknown command '{cmd}' (one of: {})",
                 COMMANDS.join(" ")
@@ -580,6 +581,52 @@ impl Session {
             text,
             json: Json::obj(j),
             png: None,
+        })
+    }
+
+    /// The part as a STEP file, in the reply's bytes.
+    fn export(&mut self, a: &Args) -> Result<Reply, String> {
+        let mut opt = forge_step::Options::default();
+        let mut words = a.words.iter();
+        while let Some(w) = words.next() {
+            match w.as_str() {
+                "ap214" => opt.schema = forge_step::Schema::Ap214,
+                "ap242" => opt.schema = forge_step::Schema::Ap242,
+                "tol" => {
+                    opt.tol = words
+                        .next()
+                        .and_then(|t| t.parse().ok())
+                        .filter(|t: &f64| *t > 0.0)
+                        .ok_or("tol takes a length in mm")?;
+                }
+                _ => return Err(format!("export: unknown word '{w}' (ap214 ap242 tol MM)")),
+            }
+        }
+        opt.name = std::path::Path::new(&a.file)
+            .file_stem()
+            .map_or_else(|| "part".into(), |n| n.to_string_lossy().into_owned());
+        let m = self.model(&a.file)?;
+        let body = m.body().ok_or("the part has no solid to export")?;
+        let e = forge_step::export(body, &opt).map_err(|e| e.to_string())?;
+        let text = format!(
+            "{} solids, {} faces, {} edges; fitted {} faces (within {:.1e} mm), {} edges (within {:.1e} mm)",
+            e.solids, e.faces, e.edges, e.fit_faces.count, e.fit_faces.error, e.fit_edges.count, e.fit_edges.error
+        );
+        let json = Json::obj(vec![
+            ("ok", true.into()),
+            ("solids", e.solids.into()),
+            ("faces", e.faces.into()),
+            ("edges", e.edges.into()),
+            ("fit_faces", e.fit_faces.count.into()),
+            ("fit_face_error", e.fit_faces.error.into()),
+            ("fit_edges", e.fit_edges.count.into()),
+            ("fit_edge_error", e.fit_edges.error.into()),
+        ]);
+        Ok(Reply {
+            ok: true,
+            text,
+            json,
+            png: Some(e.text.into_bytes()),
         })
     }
 

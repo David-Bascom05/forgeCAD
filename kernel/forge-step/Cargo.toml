@@ -1,0 +1,18 @@
+[package]
+name = "forge-step"
+description = "STEP (ISO 10303-21, AP203/214/242) export and import for ForgeCAD bodies"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[dependencies]
+forge-math = { path = "../forge-math" }
+forge-geom = { path = "../forge-geom" }
+forge-topo = { path = "../forge-topo" }
+
+[dev-dependencies]
+forge-ops = { path = "../forge-ops" }
+
+[lints]
+workspace = true

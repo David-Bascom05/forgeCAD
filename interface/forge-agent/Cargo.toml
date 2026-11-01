@@ -13,6 +13,7 @@ forge-topo = { path = "../../kernel/forge-topo" }
 forge-bool = { path = "../../kernel/forge-bool" }
 forge-ops = { path = "../../kernel/forge-ops" }
 forge-mesh = { path = "../../kernel/forge-mesh" }
+forge-step = { path = "../../kernel/forge-step" }
 forge-model = { path = "../../kernel/forge-model" }
 forge-sketch = { path = "../../kernel/forge-sketch" }
 forge-font = { path = "../../kernel/forge-font" }

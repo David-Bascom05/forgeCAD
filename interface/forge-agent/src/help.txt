@@ -171,6 +171,12 @@ measure F mass|wall        exact volume area centroid inertia (+ principal); thi
 render F [VIEW] [--labels SEL] [--px 400] [-o F.png]   VIEW: iso (default) front top right back left bottom. px: long side
 Rendered labels are handles without `@`.
 
+## export step ap214 ap242
+`forgecad export F [ap214|ap242] [tol MM] [-o F.step]`: the part as a STEP file, an advanced B-rep.
+Planes, cylinders, cones, spheres, tori and conics are written exact. Fillets, lofts, threads and
+other surfaces made by construction become bicubic B-splines within tol (default 0.0001 mm);
+the reply says how many and how far they strayed.
+
 ## commands build check diff serve mcp
 forgecad act|query|measure|render|help as above; also
 forgecad build F     ok, or error at file line N + hint; exact volume, area; bbox; bodies (`query F stat`)
