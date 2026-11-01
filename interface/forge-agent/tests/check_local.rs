@@ -119,6 +119,18 @@ fn a_fault_in_any_one_entity_is_found() {
                 b.edges[i].coedges.retain(|_| std::mem::take(&mut first));
             });
         }
+        // two corners made one: two fans of faces round it
+        run("corners joined".to_string(), &|b| {
+            let (keep, other) = (b.edges[0].start, b.edges[b.edges.len() - 1].end);
+            for e in &mut b.edges {
+                if e.start == other {
+                    e.start = keep;
+                }
+                if e.end == other {
+                    e.end = keep;
+                }
+            }
+        });
         for i in 0..good.vertices.len() {
             run(format!("vertex {i} point"), &|b| b.vertices[i].point.x += 0.01);
             run(format!("vertex {i} tolerance"), &|b| b.vertices[i].tol = 1e3);
