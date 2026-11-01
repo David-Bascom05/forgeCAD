@@ -227,6 +227,8 @@ pub struct SketchMode {
     pub asking: Option<(String, Pos2, String)>,
     /// Numbers for `dist` and the like read through the part's parameters.
     params: Vec<(String, String)>,
+    /// The length unit it's being read in.
+    pub units: &'static str,
     /// The rows it opened with: nothing changed, nothing to commit.
     opened: Vec<String>,
     /// A dimension's row being changed, when it's one already there.
@@ -308,6 +310,7 @@ impl SketchMode {
             error: None,
             asking: None,
             params,
+            units: "mm",
         };
         m.solve();
         m
@@ -559,7 +562,14 @@ impl SketchMode {
     /// A field's value: what's typed if it's locked, a number or an expression over the parameters.
     fn locked(&self, k: usize, want: Want) -> Option<f64> {
         let f = self.fields.get(k).filter(|f| f.locked)?;
-        num_of(&self.params)(f.text.trim(), want).ok()
+        num_of(&self.params)(&self.file_of(f), want).ok()
+    }
+
+    /// What's typed, as a row writes it.
+    fn file_of(&self, f: &Field) -> String {
+        let is_param = |w: &str| self.params.iter().any(|p| p.0 == w);
+        let kind = super::panel::field_kind(f.label).unwrap_or(forge_doc::units::Kind::Length);
+        forge_doc::units::field_file(&f.text, kind, self.units, &is_param)
     }
 
     fn next_name(&self, kind: char) -> usize {
@@ -821,7 +831,7 @@ impl SketchMode {
                 d.rows.push(format!("line {from} {word}"));
                 d.rows.extend(relation);
                 if let Some(f) = self.fields.first().filter(|f| f.locked) {
-                    d.rows.push(format!("dist {line} {}", f.text.trim()));
+                    d.rows.push(format!("dist {line} {}", self.file_of(f)));
                 }
                 d.lines.push((a, end));
                 let way = (dx / length.max(1e-9), dy / length.max(1e-9));
@@ -858,11 +868,11 @@ impl SketchMode {
                     d.rows.push(format!("co l{corner}.a {}", self.picks[0]));
                 }
                 if let Some(f) = self.fields.first().filter(|f| f.locked) {
-                    d.rows.push(format!("hdist l{l}.a l{l}.b {}", f.text.trim()));
+                    d.rows.push(format!("hdist l{l}.a l{l}.b {}", self.file_of(f)));
                 }
                 if let Some(f) = self.fields.get(1).filter(|f| f.locked) {
                     d.rows
-                        .push(format!("vdist l{0}.a l{0}.b {1}", l + 1, f.text.trim()));
+                        .push(format!("vdist l{0}.a l{0}.b {1}", l + 1, self.file_of(f)));
                 }
                 let corners = [(x, y), (x + w, y), (x + w, y + h), (x, y + h)];
                 for k in 0..4 {
@@ -884,7 +894,7 @@ impl SketchMode {
                 d.rows.extend(self.first_rows.iter().cloned());
                 d.rows.push(format!("circle {} {}", self.picks[0], n(r)));
                 if let Some(f) = self.fields.first().filter(|f| f.locked) {
-                    d.rows.push(format!("dia c{name} {}", f.text.trim()));
+                    d.rows.push(format!("dia c{name} {}", self.file_of(f)));
                 }
                 d.circle = Some((c, r));
                 d.values.push((r * 2.0, Measure::Round(c, r, true)));
@@ -978,7 +988,7 @@ impl SketchMode {
                         let Some((_, p)) = d.end else { return };
                         if let Some(f) = self.fields.first().filter(|f| f.locked) {
                             self.first_rows
-                                .push(format!("rad a{} {}", self.next_name('a'), f.text.trim()));
+                                .push(format!("rad a{} {}", self.next_name('a'), self.file_of(f)));
                         }
                         self.picks.push(format!("{} {}", p.0, p.1));
                         self.pick_at.push(p);
@@ -1389,6 +1399,7 @@ impl Shell {
             };
             let values = d.values.clone();
             let n_fields = m.fields.len();
+            let units = m.units;
             let self_clear = self.modal_clear();
             if let Some(k) = m.want_focus.take() {
                 m.active = k;
@@ -1400,8 +1411,9 @@ impl Shell {
                     continue;
                 };
                 let Some(at_px) = pen.draw(what) else { continue };
+                let kind = super::panel::field_kind(f.label).unwrap_or(forge_doc::units::Kind::Length);
                 if !f.locked {
-                    f.text = forge_agent::short(value);
+                    f.text = forge_doc::units::number_in(value, kind, units);
                 }
                 let id = egui::Id::unique("sketch-field").with(k);
                 egui::Area::new(id.with("area"))
@@ -1469,7 +1481,13 @@ impl Shell {
             if cursor.is_some() && ctx.input(|i| i.pointer.primary_clicked()) && self.modal_clear() {
                 if tool == SkTool::Dimension {
                     if let (Some((row, value)), Some(pos)) = (m.dimension_at(at, reach), over) {
-                        m.asking = Some((row, pos, forge_agent::short(value)));
+                        let kind = if row.starts_with("ang") {
+                            forge_doc::units::Kind::Angle
+                        } else {
+                            forge_doc::units::Kind::Length
+                        };
+                        let shown = forge_doc::units::number_in(value, kind, m.units);
+                        m.asking = Some((row, pos, shown));
                     }
                 } else {
                     m.click(at, reach);
@@ -1482,9 +1500,23 @@ impl Shell {
         let chips = m.dimensions();
         let middle = m.middle();
         let values_of = m.params.clone();
-        let shown_value = |text: &str| match num_of(&values_of)(text, Want::Len) {
-            Ok(v) => forge_agent::short(v),
-            Err(_) => text.to_string(),
+        let doc_unit = m.units;
+        let shown_value = |text: &str, kind: forge_doc::units::Kind| {
+            if !forge_doc::units::is_bare(text)
+                && text.parse::<f64>().is_err()
+                && text.chars().any(|c| c.is_ascii_digit())
+                && forge_doc::units::to_person(text) != text
+            {
+                return forge_doc::units::to_person(text);
+            }
+            match num_of(&values_of)(text, Want::Len) {
+                Ok(v) => format!(
+                    "{} {}",
+                    forge_doc::units::number_in(v, kind, doc_unit),
+                    forge_doc::units::unit_of(kind, doc_unit)
+                ),
+                Err(_) => text.to_string(),
+            }
         };
         let mut ask_chip = None;
         let mut pen = DimPen {
@@ -1503,9 +1535,14 @@ impl Shell {
                 for (k, words, value, what) in &chips {
                     let Some(pos) = pen.draw(*what) else { continue };
                     let text = match what {
-                        Measure::Round(_, _, true) => format!("\u{D8}{}", shown_value(value)),
-                        Measure::Round(_, _, false) => format!("R{}", shown_value(value)),
-                        _ => shown_value(value),
+                        Measure::Round(_, _, true) => {
+                            format!("\u{D8}{}", shown_value(value, forge_doc::units::Kind::Length))
+                        }
+                        Measure::Round(_, _, false) => {
+                            format!("R{}", shown_value(value, forge_doc::units::Kind::Length))
+                        }
+                        Measure::Sweep(..) => shown_value(value, forge_doc::units::Kind::Angle),
+                        _ => shown_value(value, forge_doc::units::Kind::Length),
                     };
                     let g = ui.fonts_mut(|f| f.layout_no_wrap(text, mono(12.0), t.ink));
                     let r = Rect::from_center_size(pos, g.size() + vec2(10.0, 6.0));
@@ -1550,7 +1587,14 @@ impl Shell {
                     f.request_focus();
                     self.places.push(("sketch:dim".to_string(), r));
                     if ui.input(|i| i.key_pressed(egui::Key::Enter)) {
-                        asked = Some(format!("{row} {}", text.trim()));
+                        let kind = if row.starts_with("ang") {
+                            forge_doc::units::Kind::Angle
+                        } else {
+                            forge_doc::units::Kind::Length
+                        };
+                        let is_param = |w: &str| values_of.iter().any(|p| p.0 == w);
+                        let file = forge_doc::units::field_file(text, kind, doc_unit, &is_param);
+                        asked = Some(format!("{row} {file}"));
                     }
                 });
         }

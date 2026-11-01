@@ -401,7 +401,8 @@ impl Gui {
                     let asked = self.sketch_for.take_if(|a| a.0 == head);
                     match (got, asked) {
                         (Ok(plane), Some((head, edit, rows))) => {
-                            let m = SketchMode::new(edit, head, plane, rows, self.shell.doc.as_ref());
+                            let mut m = SketchMode::new(edit, head, plane, rows, self.shell.doc.as_ref());
+                            m.units = self.shell.units;
                             self.shell.sketch = Some(m);
                             self.shell.origin_selected = None;
                             self.shell.tab = 1;
@@ -426,7 +427,11 @@ impl Gui {
                         && self.shell.dim.as_ref().is_none_or(|e| !e.dragging)
                     {
                         let old = self.shell.dim.take();
-                        self.shell.dim = v.facts.handle(id).cloned().map(DimEdit::new);
+                        self.shell.dim = v
+                            .facts
+                            .handle(id)
+                            .cloned()
+                            .map(|h| DimEdit::in_units(h, self.shell.units));
                         if let (Some(e), Some(old)) = (&mut self.shell.dim, old) {
                             e.error = old.error;
                             // what's being typed stays, whatever the part has just become
@@ -816,6 +821,7 @@ impl Gui {
                     self.shell.tab = 0;
                     self.shell.status.clear();
                 }
+                Action::SetUnits(u) => self.set_units(u),
                 Action::CancelPick => {
                     self.shell.sketch_pick = false;
                     self.shell.then_feature = None;
@@ -842,7 +848,9 @@ impl Gui {
                         None => continue,
                     };
                     let fields = self.shell.fields_of(id);
-                    self.shell.dialog = Some(Dialog::edit(id, &kind, title, fields));
+                    let names = self.param_names();
+                    self.shell.dialog =
+                        Some(Dialog::edit(id, &kind, title, fields).in_units(self.shell.units, names));
                     if let Some(v) = &mut self.view {
                         v.nav.selected.clear();
                         v.clicked.clear();
@@ -857,7 +865,8 @@ impl Gui {
                 }
                 Action::NewFeature(kind) => {
                     self.end_preview();
-                    let mut d = Dialog::new_feature(kind);
+                    let names = self.param_names();
+                    let mut d = Dialog::new_feature(kind).in_units(self.shell.units, names);
                     if matches!(kind, "extrude" | "revolve")
                         && let Some(name) = self.free_sketch()
                     {
@@ -1105,6 +1114,47 @@ impl Gui {
         v.previewing = false;
         self.calls.push(call.clone());
         v.live.call(vec![call]);
+    }
+
+    fn param_names(&self) -> Vec<String> {
+        self.shell.doc.as_ref().map_or(Vec::new(), |d| {
+            d.items
+                .iter()
+                .filter_map(|i| match &i.body {
+                    forge_doc::Body::Param { name, .. } => Some(name.clone()),
+                    _ => None,
+                })
+                .collect()
+        })
+    }
+
+    /// The part reads in this unit: a comment on its first line, which nothing builds from.
+    fn set_units(&mut self, unit: &'static str) {
+        let Some(mut doc) = self.shell.doc.clone() else {
+            return;
+        };
+        let was = doc.items.iter().find(|i| {
+            matches!(i.body, forge_doc::Body::Blank)
+                && i.note
+                    .as_deref()
+                    .is_some_and(|n| n.starts_with(forge_doc::units::LINE))
+        });
+        let was = was.map(|i| i.id);
+        let first = doc.items.first().map(|i| i.id);
+        let items = doc.read_items(&format!("# {}{unit}", forge_doc::units::LINE));
+        let call = match (was, items.into_iter().next()) {
+            (Some(id), Some(mut item)) => {
+                item.id = id;
+                Call::Edit { item }
+            }
+            (None, Some(item)) => Call::Add {
+                before: first,
+                items: vec![item],
+            },
+            _ => return,
+        };
+        self.shell.units = unit;
+        self.tool(call);
     }
 
     /// A tool call for the worker, kept for replay.

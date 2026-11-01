@@ -29,6 +29,14 @@ pub struct DimEdit {
 
 impl DimEdit {
     pub fn new(handle: Handle) -> DimEdit {
+        DimEdit::in_units(handle, "mm")
+    }
+
+    /// As the document reads: what's written, in its unit if it's a bare number.
+    pub fn in_units(mut handle: Handle, units: &str) -> DimEdit {
+        if let Some(kind) = super::panel::field_kind(handle.label) {
+            handle.text = forge_doc::units::field_show(&handle.text, kind, units);
+        }
         DimEdit {
             text: handle.text.clone(),
             value: handle.value,
@@ -163,7 +171,10 @@ impl Shell {
                         let want = tidy(e.start + (s - e.press) * e.handle.per_mm, mm_per_px);
                         if want != e.value {
                             actions.push(Action::DimDrag(want));
-                            e.text = short(want);
+                            e.text = match super::panel::field_kind(e.handle.label) {
+                                Some(k) => forge_doc::units::number_in(want, k, self.units),
+                                None => short(want),
+                            };
                         }
                     }
                     if r.drag_stopped() && e.dragging {
@@ -216,9 +227,20 @@ impl Shell {
                 };
                 ui.painter()
                     .rect_stroke(field, 4.0, Stroke::new(1.0, edge), StrokeKind::Inside);
+                if let Some(k) = super::panel::field_kind(e.handle.label)
+                    && forge_doc::units::is_bare(&e.text)
+                {
+                    ui.painter().text(
+                        pos2(field.right() - 6.0, field.center().y),
+                        egui::Align2::RIGHT_CENTER,
+                        forge_doc::units::unit_of(k, self.units),
+                        theme::mono(11.0),
+                        t.ink2,
+                    );
+                }
                 let changed = e.text != e.handle.text;
                 if resp.lost_focus() && ui.input(|i| i.key_pressed(egui::Key::Enter)) && changed {
-                    typed = Some(e.text.clone());
+                    typed = Some(self.dim_file(&e));
                 }
                 if resp.lost_focus() && ui.input(|i| i.key_pressed(egui::Key::Escape)) {
                     e.text = e.handle.text.clone();
@@ -228,7 +250,7 @@ impl Shell {
                     let ok = Rect::from_min_size(pos2(field.right() + 2.0, field.top()), vec2(24.0, 26.0));
                     let no = Rect::from_min_size(pos2(ok.right() + 2.0, field.top()), vec2(24.0, 26.0));
                     if self.mini_button(ui, "dim:ok", ok, "finish", "OK").clicked() {
-                        typed = Some(e.text.clone());
+                        typed = Some(self.dim_file(&e));
                     }
                     if self
                         .mini_button(ui, "dim:cancel", no, "close", "Cancel")
@@ -265,6 +287,23 @@ impl Shell {
             self.dim_typed = typed;
         }
         self.dim = Some(e);
+    }
+
+    fn dim_file(&self, e: &DimEdit) -> String {
+        let Some(kind) = super::panel::field_kind(e.handle.label) else {
+            return e.text.clone();
+        };
+        let is_param = |w: &str| self.is_param(w);
+        forge_doc::units::field_file(&e.text, kind, self.units, &is_param)
+    }
+
+    /// Does the part have a parameter called this?
+    pub fn is_param(&self, w: &str) -> bool {
+        self.doc.as_ref().is_some_and(|d| {
+            d.items
+                .iter()
+                .any(|i| matches!(&i.body, forge_doc::Body::Param { name, .. } if name == w))
+        })
     }
 
     fn mini_button(

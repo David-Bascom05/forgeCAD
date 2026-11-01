@@ -28,6 +28,11 @@ pub struct Dialog {
     pub error: Option<String>,
     /// OK was pressed: the answer's on its way.
     pub awaiting: bool,
+    /// The unit a bare number's in, and the part's parameter names.
+    pub units: &'static str,
+    pub params: Vec<String>,
+    /// Each number field as first shown and as the file had it: what's untouched goes back as it was.
+    pub first: Vec<(String, String, String)>,
 }
 
 impl Dialog {
@@ -68,6 +73,9 @@ impl Dialog {
             seq: 0,
             error: None,
             awaiting: false,
+            units: "mm",
+            params: Vec::new(),
+            first: Vec::new(),
         }
     }
 
@@ -82,7 +90,36 @@ impl Dialog {
             seq: 0,
             error: None,
             awaiting: false,
+            units: "mm",
+            params: Vec::new(),
+            first: Vec::new(),
         }
+    }
+
+    /// Its numbers as a person reads them in the document's unit.
+    pub fn in_units(mut self, units: &'static str, params: Vec<String>) -> Dialog {
+        self.units = units;
+        self.params = params;
+        for (label, text) in &mut self.fields {
+            if let Some(kind) = panel::field_kind(label) {
+                let file = std::mem::take(text);
+                *text = forge_doc::units::field_show(&file, kind, units);
+                self.first.push((label.clone(), text.clone(), file));
+            }
+        }
+        self
+    }
+
+    /// A field's text, as the file would have it.
+    fn file_text(&self, label: &str, text: &str) -> String {
+        let Some(kind) = panel::field_kind(label) else {
+            return text.to_string();
+        };
+        if let Some(f) = self.first.iter().find(|f| f.0 == label && f.1 == text) {
+            return f.2.clone();
+        }
+        let is_param = |w: &str| self.params.iter().any(|p| p == w);
+        forge_doc::units::field_file(text, kind, self.units, &is_param)
     }
 
     /// It reads this sketch, with no plane or profile of its own.
@@ -95,8 +132,9 @@ impl Dialog {
     /// The feature's line, from its fields.
     pub fn line(&self) -> String {
         let mut out = self.kind.clone();
-        for (_, text) in &self.fields {
-            let t = text.trim();
+        for (label, text) in &self.fields {
+            let file = self.file_text(label, text);
+            let t = file.trim();
             if !t.is_empty() {
                 out.push(' ');
                 out.push_str(t);
@@ -208,6 +246,7 @@ impl Shell {
                         }
                         let pick = d.pick.clone();
                         let dims = d.sketch_dims();
+                        let units = d.units;
                         for (k, s) in sections.into_iter().enumerate() {
                             egui::CollapsingHeader::new(
                                 egui::RichText::new(s).font(semi(12.0)).color(t.ink2),
@@ -298,6 +337,17 @@ impl Shell {
                                             .desired_width(field.width() - 14.0)
                                             .margin(vec2(7.0, 6.0)),
                                     );
+                                    if let Some(kind) = panel::field_kind(label)
+                                        && forge_doc::units::is_bare(text)
+                                    {
+                                        ui.painter().text(
+                                            pos2(field.right() - 7.0, field.center().y),
+                                            Align2::RIGHT_CENTER,
+                                            forge_doc::units::unit_of(kind, units),
+                                            mono(11.0),
+                                            t.ink2,
+                                        );
+                                    }
                                 }
                             });
                         }

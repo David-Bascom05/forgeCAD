@@ -58,6 +58,8 @@ pub enum Action {
     LookAt,
     /// A sketch's eye.
     SketchVisibility(ItemId),
+    /// The part reads in this length unit, from now on.
+    SetUnits(&'static str),
     /// Back out of picking a plane.
     CancelPick,
     /// Nothing chosen.
@@ -205,6 +207,8 @@ pub struct Shell {
     pub sketch_eye: std::collections::HashMap<String, bool>,
     /// The sketch under the pointer in the view.
     pub sketch_hover: Option<ItemId>,
+    /// The length unit the part reads in.
+    pub units: &'static str,
     /// The part's middle: which way a hole faces in.
     pub part_middle: [f32; 3],
     /// The marking menu's up, centred here.
@@ -264,6 +268,7 @@ impl Default for Shell {
             sketch_shapes: Vec::new(),
             sketch_eye: Default::default(),
             sketch_hover: None,
+            units: "mm",
             part_middle: [0.0; 3],
             marking: None,
             origin_open: false,
@@ -383,6 +388,7 @@ impl Shell {
         {
             self.selected = None;
         }
+        self.units = forge_doc::units::of_text(src);
         self.doc = Some(doc);
         self.version = version;
     }
@@ -773,11 +779,11 @@ impl Shell {
             sans(12.0),
             Color32::WHITE,
         );
-        let right = if self.failed.is_some() {
-            "error | mm"
-        } else {
-            "valid | mm"
-        };
+        let right = format!(
+            "{} | {}",
+            if self.failed.is_some() { "error" } else { "valid" },
+            self.units
+        );
         p.text(
             pos2(s.width() - 10.0, st.center().y),
             Align2::RIGHT_CENTER,

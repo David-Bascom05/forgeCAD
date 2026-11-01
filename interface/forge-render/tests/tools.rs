@@ -222,3 +222,50 @@ fn the_tools_with_no_passing_test_are_off() {
         assert!(h.gui.shell.dialog.is_none(), "{name} is on with no test");
     }
 }
+
+#[test]
+fn a_part_in_inches_takes_and_shows_inches_and_its_geometry_stays() {
+    let Some((mut h, file)) = open(BLOCK, "units") else {
+        return;
+    };
+    let was = built(&file, "before");
+    h.gui.shell.out.push(Action::SetUnits("in"));
+    assert!(h.until(|g| g.shell.units == "in"));
+    let written = file.clone();
+    h.until(|_| std::fs::read_to_string(&written).unwrap().starts_with("# units"));
+    let text = std::fs::read_to_string(&file).unwrap();
+    assert!(text.starts_with("# units in\n"), "{text}");
+    assert_eq!(
+        built(&file, "units").to_bits(),
+        was.to_bits(),
+        "only how it reads"
+    );
+    assert!(h.until(|g| g.shell.rows.len() == 1), "the comment is no feature");
+    // a number typed takes the unit; what the part has shows in mm until it's edited
+    button(&mut h, "Fillet");
+    point_at(&mut h, [30.0, 0.0, 20.0]);
+    assert_eq!(
+        h.gui
+            .shell
+            .dialog
+            .as_ref()
+            .unwrap()
+            .fields
+            .iter()
+            .find(|f| f.0 == "Radius")
+            .unwrap()
+            .1,
+        "2 mm"
+    );
+    field(&mut h, "Radius", "1/8 in");
+    ok(&mut h, "fillet in inches");
+    let text = std::fs::read_to_string(&file).unwrap();
+    assert!(text.contains("fillet (1/8)in @e"), "{text}");
+    let now = built(&file, "fillet");
+    assert!(now < was);
+    // a part reopened reads in its own unit
+    let Some((h2, _)) = open(&text, "units2") else {
+        return;
+    };
+    assert_eq!(h2.gui.shell.units, "in");
+}

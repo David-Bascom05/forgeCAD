@@ -1,7 +1,8 @@
 //! Expressions over named parameters: `+ - * / ^`, parentheses, `sqrt sin cos tan asin acos
-//! atan atan2 min max abs`, `pi`. Trig takes degrees, inverse trig gives them. Evaluated straight from the text, only through IEEE
+//! atan atan2 min max abs`, `pi`. A number or a bracket can carry a unit, with no space: `1in`, `(3/8)in`. Trig takes degrees, inverse trig gives them. Evaluated straight from the text, only through IEEE
 //! arithmetic and `forge_math::dmath`, so a value is the same on every target.
 
+use crate::units;
 use forge_math::dmath;
 use forge_model::Unit;
 
@@ -14,6 +15,11 @@ const FUNCS: [&str; 11] = [
 /// Words a parameter may not be named: functions, constants and units.
 pub fn reserved(name: &str) -> bool {
     FUNCS.contains(&name) || ["pi", "mm", "deg"].contains(&name)
+}
+
+/// Is this one of the functions?
+pub fn is_call(name: &str) -> bool {
+    FUNCS.contains(&name) || name == "pi"
 }
 
 /// A name a parameter could have.
@@ -29,11 +35,23 @@ pub fn eval(src: &str, env: &Env) -> Result<(f64, Unit), String> {
         s: src.as_bytes(),
         k: 0,
         env,
+        strict: false,
+        mixed: None,
+        dims: Vec::new(),
     };
     let v = p.sum()?;
     p.ws();
     if p.k < p.s.len() {
         return Err(format!("unexpected '{}' in '{src}'", &src[p.k..]));
+    }
+    if p.strict {
+        if let Some(why) = p.mixed {
+            return Err(format!("'{src}': {why}"));
+        }
+        match p.dims.pop().flatten() {
+            None | Some(units::LENGTH | units::ANGLE | [0, 0, 0]) => {}
+            Some(d) => return Err(format!("'{src}' measures {}, not a length or angle", words(d))),
+        }
     }
     if !v.0.is_finite() {
         return Err(format!("'{src}' is not a finite number"));
@@ -53,7 +71,9 @@ pub fn names(src: &str) -> Vec<&str> {
                 k += 1;
             }
             let w = &src[s..k];
-            if !reserved(w) {
+            // a unit on a bracket is no parameter
+            let on_bracket = s > 0 && b[s - 1] == b')' && units::lookup(w).is_some();
+            if !reserved(w) && !on_bracket {
                 out.push(w);
             }
         } else if b[k].is_ascii_digit() || b[k] == b'.' {
@@ -72,6 +92,17 @@ pub fn names(src: &str) -> Vec<&str> {
     out
 }
 
+/// What these powers measure, in words.
+fn words(d: units::Dim) -> String {
+    match d {
+        units::LENGTH => "a length".into(),
+        units::ANGLE => "an angle".into(),
+        units::AREA => "an area".into(),
+        units::VOLUME => "a volume".into(),
+        _ => format!("length^{} angle^{}", d[0], d[1]),
+    }
+}
+
 /// Units combine: none takes the other's; mm and deg do not mix.
 fn join(a: Unit, b: Unit) -> Result<Unit, String> {
     match (a, b) {
@@ -85,6 +116,12 @@ struct Ev<'a, 'e> {
     s: &'a [u8],
     k: usize,
     env: &'a Env<'e>,
+    /// A number was written with a unit: the powers of what's measured must then add up.
+    strict: bool,
+    /// The first place they didn't.
+    mixed: Option<String>,
+    /// What each value on the way measures: None for a bare number, which reads as any.
+    dims: Vec<Option<units::Dim>>,
 }
 
 type V = (f64, Unit);
@@ -112,6 +149,7 @@ impl Ev<'_, '_> {
                 return Ok(a);
             };
             let b = self.product()?;
+            self.add_dims();
             a = (a.0 + sign * b.0, join(a.1, b.1)?);
         }
     }
@@ -120,12 +158,14 @@ impl Ev<'_, '_> {
         loop {
             if self.eat(b'*') {
                 let b = self.unary()?;
+                self.mul_dims(1);
                 a = (a.0 * b.0, join(a.1, b.1)?);
             } else if self.eat(b'/') {
                 let b = self.unary()?;
                 if b.0 == 0.0 {
                     return Err("division by zero".into());
                 }
+                self.mul_dims(-1);
                 a = (a.0 / b.0, join(a.1, b.1)?);
             } else {
                 return Ok(a);
@@ -148,7 +188,64 @@ impl Ev<'_, '_> {
         if eu != Unit::None {
             return Err("an exponent has no unit".into());
         }
+        self.dims.pop();
+        if let Some(Some(d)) = self.dims.last_mut() {
+            *d = d.map(|p| p * e as i8);
+        }
         Ok((pow(base.0, e)?, base.1))
+    }
+    fn add_dims(&mut self) {
+        let (b, a) = (self.dims.pop().flatten(), self.dims.pop().flatten());
+        if let (Some(x), Some(y)) = (a, b)
+            && x != y
+        {
+            self.mixed
+                .get_or_insert(format!("adds {} to {}", words(y), words(x)));
+        }
+        self.dims.push(a.or(b));
+    }
+    fn mul_dims(&mut self, sign: i8) {
+        let (b, a) = (self.dims.pop().flatten(), self.dims.pop().flatten());
+        let got = match (a, b) {
+            (Some(x), Some(y)) => Some([0, 1, 2].map(|k| x[k] + sign * y[k])),
+            (Some(x), None) => Some(x),
+            (None, Some(y)) if sign > 0 => Some(y),
+            (None, Some(_)) => {
+                self.mixed
+                    .get_or_insert("a number over a unit: write a fraction as (3/8)in".to_string());
+                None
+            }
+            (None, None) => None,
+        };
+        self.dims.push(got);
+    }
+    /// A unit written straight after what it's the unit of, if one is.
+    fn attached_unit(&mut self, v: V) -> Result<V, String> {
+        let s = self.k;
+        let mut k = s;
+        while k < self.s.len() && self.s[k].is_ascii_alphabetic() {
+            k += 1;
+        }
+        if k == s {
+            return Ok(v);
+        }
+        let word = std::str::from_utf8(&self.s[s..k]).expect("ascii");
+        let Some((dim, top, bottom)) = units::lookup(word) else {
+            return Ok(v);
+        };
+        if dim != units::LENGTH && dim != units::ANGLE {
+            return Err(format!("'{word}' isn't a length or an angle"));
+        }
+        if v.1 != Unit::None {
+            return Err(format!("'{word}' on what already has a unit"));
+        }
+        self.k = k;
+        self.strict = true;
+        if let Some(d) = self.dims.last_mut() {
+            *d = Some(dim);
+        }
+        let unit = if dim == units::LENGTH { Unit::Mm } else { Unit::Deg };
+        Ok((v.0 * top / bottom, unit))
     }
     fn atom(&mut self) -> Result<V, String> {
         self.ws();
@@ -160,7 +257,7 @@ impl Ev<'_, '_> {
             if !self.eat(b')') {
                 return Err("a '(' is not closed".into());
             }
-            return Ok(v);
+            return self.attached_unit(v);
         }
         if c.is_ascii_digit() || c == b'.' {
             while self.k < self.s.len() {
@@ -172,10 +269,12 @@ impl Ev<'_, '_> {
                 self.k += 1;
             }
             let t = std::str::from_utf8(&self.s[s..self.k]).expect("ascii");
-            return t
+            let v = t
                 .parse::<f64>()
                 .map(|v| (v, Unit::None))
-                .map_err(|_| format!("'{t}' is not a number"));
+                .map_err(|_| format!("'{t}' is not a number"))?;
+            self.dims.push(None);
+            return self.attached_unit(v);
         }
         if !(c.is_ascii_alphabetic() || c == b'_') {
             return Err(format!("unexpected '{}'", c as char));
@@ -185,12 +284,14 @@ impl Ev<'_, '_> {
         }
         let name = std::str::from_utf8(&self.s[s..self.k]).expect("ascii");
         if name == "pi" {
+            self.dims.push(None);
             return Ok((dmath::PI, Unit::None));
         }
         if FUNCS.contains(&name) {
             if !self.eat(b'(') {
                 return Err(format!("{name} needs parentheses: {name}(x)"));
             }
+            let before = self.dims.len();
             let mut args = vec![self.sum()?];
             while self.eat(b',') {
                 args.push(self.sum()?);
@@ -198,9 +299,24 @@ impl Ev<'_, '_> {
             if !self.eat(b')') {
                 return Err(format!("{name}( is not closed"));
             }
-            return call(name, &args);
+            let got = call(name, &args)?;
+            let first = self.dims.get(before).copied().flatten();
+            self.dims.truncate(before);
+            self.dims.push(match name {
+                "abs" | "min" | "max" => first,
+                "sqrt" => first.map(|d| d.map(|p| p / 2)),
+                "asin" | "acos" | "atan" | "atan2" => Some(units::ANGLE),
+                _ => None,
+            });
+            return Ok(got);
         }
-        (self.env)(name).ok_or_else(|| format!("unknown parameter '{name}'"))
+        let got = (self.env)(name).ok_or_else(|| format!("unknown parameter '{name}'"))?;
+        self.dims.push(match got.1 {
+            Unit::Mm => Some(units::LENGTH),
+            Unit::Deg => Some(units::ANGLE),
+            Unit::None => None,
+        });
+        Ok(got)
     }
 }
 
@@ -278,6 +394,34 @@ fn pow(x: f64, e: f64) -> Result<f64, String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_unit_sits_right_after_its_number_and_bare_expressions_read_as_they_did() {
+        let env = |n: &str| match n {
+            "m" => Some((7.0, Unit::None)),
+            "w" => Some((10.0, Unit::Mm)),
+            _ => None,
+        };
+        let v = |s: &str| eval(s, &env);
+        assert_eq!(v("1in").unwrap(), (25.4, Unit::Mm));
+        assert_eq!(v("(3/8)in").unwrap(), (9.525, Unit::Mm));
+        assert_eq!(v("1ft+3in").unwrap(), (381.0, Unit::Mm));
+        assert_eq!(v("45deg").unwrap(), (45.0, Unit::Deg));
+        assert_eq!(v("0.5turn").unwrap(), (180.0, Unit::Deg));
+        assert_eq!(v("1.5e-3m").unwrap(), (1.5, Unit::Mm));
+        // a parameter called m is still the parameter; attached, it's metres
+        assert_eq!(v("2*m").unwrap().0, 14.0);
+        assert_eq!(v("2m").unwrap().0, 2000.0);
+        assert_eq!(v("w+1in").unwrap().0, 35.4);
+        // with a unit written, what's measured must add up
+        assert!(v("1in+45deg").is_err());
+        assert!(v("2in*3in").is_err());
+        assert!(v("3/8in").unwrap_err().contains("(3/8)in"));
+        assert_eq!(v("2in*3in/1in").unwrap().0, 152.4);
+        // with none, the old loose rule, value for value
+        assert_eq!(v("w*w").unwrap(), (100.0, Unit::Mm));
+        assert_eq!(names("(3/8)in+w*2in"), ["w"]);
+    }
 
     fn env(n: &str) -> Option<(f64, Unit)> {
         match n {

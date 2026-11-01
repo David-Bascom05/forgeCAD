@@ -1142,6 +1142,43 @@ fn near(x: f64) -> String {
 #[cfg(test)]
 mod tests {
 
+    #[test]
+    fn a_comment_goes_in_through_a_call_with_nothing_rebuilt() {
+        use crate::tools::{Call, Part};
+        let mut p = Part::new("base: extrude 5 rect 0 0 9 9\n");
+        let first = p.model.doc.items.first().map(|i| i.id);
+        let items = p.model.doc.read_items("# units in");
+        eprintln!("items {items:?}");
+        let got = p.call(vec![Call::Add { before: first, items }], None);
+        assert!(got.ok, "{got:?}");
+        assert_eq!(p.model.src(), "# units in\nbase: extrude 5 rect 0 0 9 9\n");
+    }
+
+    #[test]
+    fn a_unit_comment_changes_nothing_and_a_written_unit_is_its_millimetres() {
+        let plain = "base: extrude 25.4 rect 0 0 10 10\nh: hole 2 -xy at 5 5 25.4 thru\n";
+        let (mut a, mut b) = (Model::new(plain), Model::new(&format!("# units in\n{plain}")));
+        assert!(a.error.is_none() && b.error.is_none());
+        let names = |m: &Model| {
+            let b = m.body().unwrap();
+            b.face_ids().map(|f| b.face(f).name.0).collect::<Vec<_>>()
+        };
+        assert_eq!(names(&a), names(&b), "no name moves");
+        assert_eq!(
+            a.mass().unwrap().volume.to_bits(),
+            b.mass().unwrap().volume.to_bits()
+        );
+        assert_eq!(a.features.len(), b.features.len());
+        let mut c = Model::new("base: extrude 1in rect 0 0 (3/8)in 10mm+1in\n");
+        assert!(c.error.is_none(), "{:?}", c.error);
+        let want = 25.4 * 9.525 * 35.4;
+        assert!((c.mass().unwrap().volume - want).abs() < 1e-6);
+        // and they read back as they were written
+        assert!(c.src().contains("(3/8)in 10mm+1in"), "{}", c.src());
+        let mixed = Model::new("base: extrude 1in+45deg rect 0 0 1 1\n");
+        assert!(mixed.error.is_some());
+    }
+
     /// A fillet between a feature's pattern copies and the part finds its edges on the n-ary
     /// path too (pattern copies, standing flush on the part, named alike on both).
     #[test]

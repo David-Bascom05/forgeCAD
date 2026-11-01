@@ -233,6 +233,14 @@ fn groups(s: &Shell) -> Vec<Group> {
                 vec![off("Save", "save"), go("Open", "open", Action::Open, false)],
                 vec![],
             ),
+            g(
+                "Units",
+                forge_doc::units::DOC_LENGTHS
+                    .into_iter()
+                    .map(|u| go(u, "measure", Action::SetUnits(u), s.units == u))
+                    .collect(),
+                vec![],
+            ),
         ],
     }
 }
