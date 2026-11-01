@@ -4,7 +4,9 @@ kernel/forge-topo/src/check.rs in turn and runs forge-agent's check_local test, 
 copy of the tree, never your checkout: it edits check.rs. mutate.py [CARGO_TEST_COMMAND...]
 
 Left out as they cannot change an answer: the length tests of `same_edge` (an edge not used twice is `edge-uses`, run
-always) and of a loop's coedges (a loop equal to another's start and longer is `loop-broken`, or pinched, run always)."""
+always) and of a loop's coedges (a loop equal to another's start and longer is `loop-broken`, or pinched, run always).
+`same_shells` stays uncaught by design: faces moved between shells with none changed, which `shell-euler` answers for; it only
+makes the check run in full there."""
 import subprocess, sys
 
 P = "kernel/forge-topo/src/check.rs"
@@ -36,7 +38,6 @@ CUTS = [
     ("new.chain(gone)", "new", 0),
     ("Some(r) => r.overlaps(&body.face_box(f)),", "Some(_) => false,", 0),
     ("want == 0 && clear", "clear", 0),
-    ("same_shells &=", "let _ =", 0),
 ]
 cmd = sys.argv[1:] or ["cargo", "test", "-q", "-p", "forge-agent", "--test", "check_local"]
 survived = 0

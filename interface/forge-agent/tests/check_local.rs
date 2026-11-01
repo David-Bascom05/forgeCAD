@@ -31,7 +31,16 @@ fn kind(p: &Problem) -> String {
         .to_string()
 }
 
+/// `b` with nothing it worked out kept: a box from before the fault would hide it.
+fn afresh(b: &Body) -> Body {
+    let mut b = b.clone();
+    b.faces.iter_mut().for_each(|f| f.bbox = Default::default());
+    b.edges.iter_mut().for_each(|e| e.bbox = Default::default());
+    b
+}
+
 fn same_answer(bad: &Body, good: &Body, what: &str, kinds: &mut BTreeSet<String>) {
+    let bad = &afresh(bad);
     let (full, local) = (check(bad), check_against(bad, good));
     assert_eq!(local, full, "{what}");
     kinds.extend(full.iter().map(kind));
@@ -212,6 +221,16 @@ hole 12 at 30 0 0 thru
         "round the small hole",
         &mut kinds,
     );
+    // against the body with both: the moved loop has the old one's names, and must not pass for it
+    let before = kinds.len();
+    let mut again = BTreeSet::new();
+    same_answer(
+        &moved(good, &wall, Vec3::new(-30.0, 0.0, 0.0)),
+        good,
+        "named as it was",
+        &mut again,
+    );
+    assert!(again.contains("FaceWrongSide") && before > 0, "{again:?}");
     assert!(kinds.contains("FaceWrongSide"), "{kinds:?}");
 }
 
@@ -273,6 +292,31 @@ isle: extrude add 10 at 0 0 25 rect -5 -5 10 10
     assert!(kinds.contains("ShellsOverlap"), "{kinds:?}");
 }
 
+/// Only a plane face is compared loop by loop, and only where its new loops' edges are long enough to leave the step alone.
+#[test]
+fn which_faces_are_compared_by_loop() {
+    let of = |src: &str| {
+        let s = stages_of(src);
+        forge_topo::check::faces_by_loop(&s[s.len() - 1], &s[s.len() - 2])
+    };
+    let block = "base: extrude 40 rect -60 -60 120 120\nhole 6 at -30 -30 0 thru\n";
+    assert_eq!(
+        of(&format!("{block}hole 6 at 30 30 0 thru\n")),
+        2,
+        "top and bottom"
+    );
+    // edges shorter than 2
+    assert_eq!(of(&format!("{block}hole 0.5 at 30 30 0 thru\n")), 0);
+    // through a round wall: not a plane
+    let rod = "base: extrude 80 circle 0 0 20\nc: extrude cut 80 z 1 0 0 x 0 1 0 at -40 0 20 circle 0 0 4\n";
+    assert_eq!(
+        of(&format!(
+            "{rod}d: extrude cut 80 z 1 0 0 x 0 1 0 at -40 0 60 circle 0 0 4\n"
+        )),
+        0
+    );
+}
+
 /// A body with a void: moved out of the material, or into another void, the void's shell is at fault.
 #[test]
 fn a_shell_moved_is_found() {
@@ -295,6 +339,19 @@ hole 4 at -30 -30 0 thru
                 Vec3::new(0.0, 0.0, 3.0),
             ] {
                 let bad = moved(&good, &good.shells[shell].faces, by);
+                // a void out in the open is in no material: a fault, though its box is clear of every shell
+                if by.z == 100.0 {
+                    assert!(
+                        check(&afresh(&bad))
+                            .iter()
+                            .any(|p| matches!(p, Problem::ShellsOverlap { .. })),
+                        "shell {shell}: {} faces of {}, found {:?} shells {:?}",
+                        good.shells[shell].faces.len(),
+                        good.faces.len(),
+                        check(&afresh(&bad)),
+                        good.shells.iter().map(|s| s.faces.len()).collect::<Vec<_>>()
+                    );
+                }
                 same_answer(&bad, old, &format!("shell {shell} by {by:?}"), &mut kinds);
             }
         }

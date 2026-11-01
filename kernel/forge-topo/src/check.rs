@@ -216,6 +216,16 @@ pub fn changed_faces(body: &Body, old: &Body) -> Vec<bool> {
     Known::new(body, old).faces.iter().map(|&k| !k).collect()
 }
 
+/// For tests: how many faces `check_against` compares loop by loop.
+#[doc(hidden)]
+pub fn faces_by_loop(body: &Body, old: &Body) -> usize {
+    Known::new(&body.compact(), &old.compact())
+        .quiet
+        .iter()
+        .flatten()
+        .count()
+}
+
 /// Which of a body's edges and faces need no geometric test. Found by comparing with the old body,
 /// never told by an operation; a name only says which old entity to compare with.
 #[derive(Default)]
