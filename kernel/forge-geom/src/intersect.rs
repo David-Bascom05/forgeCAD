@@ -707,16 +707,26 @@ fn chain_pieces(ic: &crate::intcurve::IntCurve, range: Interval, s: &Surface) ->
 }
 
 fn bisect_sign(g: &impl Fn(f64) -> f64, mut a: f64, mut b: f64) -> f64 {
-    let neg_a = g(a) < 0.0;
+    // Illinois: secant steps, the kept end's value halved when an end stays twice. Over a leaf a
+    // surface's value along a curve is all but straight, so two or three steps reach rounding.
+    let (mut fa, mut fb) = (g(a), g(b));
+    let neg_a = fa < 0.0;
     for _ in 0..100 {
-        let m = 0.5 * (a + b);
-        if m <= a || m >= b {
+        let x = if fa != fb { b - fb * (b - a) / (fb - fa) } else { 0.5 * (a + b) };
+        let x = if x > a && x < b { x } else { 0.5 * (a + b) };
+        if x <= a || x >= b {
             break;
         }
-        if (g(m) < 0.0) == neg_a {
-            a = m;
+        let fx = g(x);
+        if fx.abs() <= 1e-13 {
+            return x;
+        }
+        if (fx < 0.0) == neg_a {
+            (a, fa) = (x, fx);
+            fb *= 0.5;
         } else {
-            b = m;
+            (b, fb) = (x, fx);
+            fa *= 0.5;
         }
     }
     0.5 * (a + b)
