@@ -662,7 +662,7 @@ pub fn tessellate(body: &Body, q: &Quality) -> Result<TriMesh, TessError> {
             Err(TessError::Face {
                 face,
                 error: CdtError::ConstraintsIntersect { .. },
-            }) if rounds < 6 => {
+            }) if rounds < 8 => {
                 let radius = |e: forge_topo::EdgeId| match &body.edge(e).curve {
                     Curve::Circle(c) => c.radius,
                     _ => f64::INFINITY,
@@ -677,9 +677,9 @@ pub fn tessellate(body: &Body, q: &Quality) -> Result<TriMesh, TessError> {
                 for &l in &body.face(face).loops {
                     for c in body.lp(l).coedges() {
                         // circles tangent at a shared vertex: halving both keeps their first chords
-                        // crossed, so past two rounds the tightest stays as it is
+                        // crossed, so past four rounds the tightest stays as it is
                         let e = body.coedge(c).edge;
-                        if rounds < 2 || radius(e) > tightest {
+                        if rounds < 4 || radius(e) > tightest {
                             finer[e.index()] *= 2;
                         }
                     }
