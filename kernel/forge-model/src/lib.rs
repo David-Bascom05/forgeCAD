@@ -124,6 +124,8 @@ pub enum Feature {
         edges: Vec<(Name, Radius)>,
         starts: Vec<(Name, Name)>,
         setbacks: Vec<(Name, Option<Name>, f64)>,
+        /// Only the edges named, not the tangent chains they lie on.
+        only: bool,
     },
     /// Round between two sets of faces: the edges where they meet, or the band of strip faces
     /// joining them, taken away.
@@ -1423,7 +1425,8 @@ fn modify(
             edges,
             starts,
             setbacks,
-        } => apply_fillet(i, id, body, edges, starts, setbacks),
+            only,
+        } => apply_fillet(i, id, body, edges, starts, setbacks, *only),
         Feature::FaceFillet {
             first,
             second,
@@ -1518,6 +1521,7 @@ fn apply_fillet(
     edges: &[(Name, Radius)],
     starts: &[(Name, Name)],
     setbacks: &[(Name, Option<Name>, f64)],
+    only: bool,
 ) -> Result<Body, RegenError> {
     let body = if body.dead > 0 {
         body.compact()
@@ -1551,19 +1555,21 @@ fn apply_fillet(
             .iter()
             .map(|&(v, e, d)| Ok((vertex(v)?, e.map(edge).transpose()?, d)))
             .collect::<Result<_, RegenError>>()?,
+        only,
+        ..FilletOptions::default()
     };
     let first =
         match fillet_with(&body, &want, &opts, id) {
             // a blend passing through the part's far side (a ball wider than a thin wall): no rule yet
             // (with both kinds in one round, a convex blend may run on over the concave one's added part)
             Ok(done)
-                if want
-                    .iter()
-                    .map(|f| forge_ops::fillet_kind(&body, f.edge))
-                    .collect::<std::collections::BTreeSet<_>>()
-                    .len()
-                    == 1
-                    && blend_through(&body, &done).is_some() =>
+                if blend_through(&body, &done).is_some()
+                    && want
+                        .iter()
+                        .map(|f| forge_ops::fillet_kind(&body, f.edge))
+                        .collect::<std::collections::BTreeSet<_>>()
+                        .len()
+                        == 1 =>
             {
                 return Err(RegenError::Fillet {
                     feature: i,
@@ -1589,15 +1595,13 @@ fn blend_through(before: &Body, after: &Body) -> Option<forge_math::Point3> {
     use forge_geom::SurfaceGeom;
     let old: std::collections::BTreeSet<forge_topo::Name> =
         before.face_ids().map(|f| before.face(f).name).collect();
+    let index = std::cell::OnceCell::new();
     for f in after.face_ids() {
         let face = after.face(f);
-        if old.contains(&face.name)
-            || !matches!(
-                face.surface,
-                forge_geom::Surface::Cylinder(_)
-                    | forge_geom::Surface::Torus(_)
-                    | forge_geom::Surface::Sphere(_)
-            )
+        if !matches!(
+            face.surface,
+            forge_geom::Surface::Cylinder(_) | forge_geom::Surface::Torus(_) | forge_geom::Surface::Sphere(_)
+        ) || old.contains(&face.name)
         {
             continue;
         }
@@ -1638,10 +1642,13 @@ fn blend_through(before: &Body, after: &Body) -> Option<forge_math::Point3> {
                 continue;
             }
             let x = corner.lerp(q, dc / (dc - dq));
+            if !before.face_box(g).grow(forge_math::tol::LINEAR).contains(x) {
+                continue;
+            }
             if forge_topo::uv::point_in_loops(s.project(x), &forge_topo::uv::face_uv_loops(before, g)) {
                 // and the blend's middle really lies on the wrong side of the part: a convex round
                 // lies within what it held, a concave one outside it
-                let held = forge_bool::Index::new(before).classify(q);
+                let held = index.get_or_init(|| forge_bool::Index::new(before)).classify(q);
                 let wrong = if face.same_sense {
                     held == forge_bool::Where::Outside
                 } else {

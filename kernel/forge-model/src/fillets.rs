@@ -232,6 +232,7 @@ pub fn with_var_fillet(part: &Part, near: &[(Point3, Radius)]) -> Part {
         .collect();
     let mut out = part.clone();
     out.features.push(Feature::Fillet {
+        only: false,
         edges,
         starts: Vec::new(),
         setbacks: Vec::new(),
@@ -252,6 +253,7 @@ pub fn with_fillet_from(part: &Part, body: &Body, picks: &[Pick]) -> Part {
         .collect();
     let mut out = part.clone();
     out.features.push(Feature::Fillet {
+        only: false,
         edges,
         starts: Vec::new(),
         setbacks: Vec::new(),
@@ -1598,6 +1600,7 @@ mod tests {
         let fillet = |edges: Vec<(Name, Radius)>, starts, setbacks| {
             let mut p = boxed.clone();
             p.features.push(Feature::Fillet {
+                only: false,
                 edges,
                 starts,
                 setbacks,
@@ -1697,6 +1700,7 @@ mod tests {
             .expect("corner");
         let mut p = slice.clone();
         p.features.push(Feature::Fillet {
+            only: false,
             edges,
             starts: vec![],
             setbacks: vec![

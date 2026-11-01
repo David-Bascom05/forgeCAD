@@ -1288,6 +1288,7 @@ pub fn torture2() -> Part {
         angle: 0.05,
     });
     f.push(Feature::Fillet {
+        only: false,
         starts: vec![],
         setbacks: vec![],
         edges: (0..8)
@@ -1332,6 +1333,7 @@ pub fn torture2() -> Part {
     });
     let copies = [[1, 0], [2, 0], [0, 1], [1, 1], [2, 1]];
     f.push(Feature::Fillet {
+        only: false,
         starts: vec![],
         setbacks: vec![],
         edges: rims(boss, &copies, boss + 2)
@@ -1357,6 +1359,7 @@ pub fn torture2() -> Part {
     });
     // its floor rounded by a radius varying round it
     f.push(Feature::Fillet {
+        only: false,
         starts: vec![],
         setbacks: vec![],
         edges: (0..8)

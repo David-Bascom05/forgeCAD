@@ -1132,6 +1132,13 @@ pub fn explain(e: &RegenError) -> (String, String) {
                 "a round of this ring works up to that radius; for a full round, make the ring thinner or wider",
             ),
         ),
+        Fillet {
+            error: forge_ops::FilletError::FreeEnd { .. },
+            ..
+        } => (
+            "fillet: an edge's round ends where its tangent chain goes on unpicked, with nothing there to run out into".to_string(),
+            hint("pick the next edge of the chain too, or leave out `only`"),
+        ),
         Fillet { error, .. } => (
             format!("fillet: {error:?}"),
             hint("try a smaller radius, or fewer edges at once"),

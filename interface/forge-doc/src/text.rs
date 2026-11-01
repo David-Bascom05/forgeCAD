@@ -102,11 +102,12 @@ pub const KINDS: &[Kind] = &[
     },
     Kind {
         name: "fillet",
-        syntax: "fillet R [from REF] REF.. [R [from REF] REF..] [setback VREF [REF] D]..   R: 3 | 2..4 | 0:2,0.5:4,1:2 (at:radius)",
+        syntax: "fillet R [only] [from REF] REF.. [R [from REF] REF..] [setback VREF [REF] D]..   R: 3 | 2..4 | 0:2,0.5:4,1:2 (at:radius)",
         parse: |p| {
             let (mut edges, mut starts, mut setbacks) = (Vec::new(), Vec::new(), Vec::new());
             let mut r = p.radius()?;
             let mut from = None;
+            let only = p.eat("only");
             while !p.done() {
                 if p.eat("setback") {
                     let v = p.one_ref()?;
@@ -137,6 +138,7 @@ pub const KINDS: &[Kind] = &[
                 edges,
                 starts,
                 setbacks,
+                only,
             })
         },
         print: |f, w| {
@@ -144,6 +146,7 @@ pub const KINDS: &[Kind] = &[
                 edges,
                 starts,
                 setbacks,
+                only,
             } = f
             else {
                 return false;
@@ -153,6 +156,9 @@ pub const KINDS: &[Kind] = &[
                 let from = starts.iter().find(|s| s.0 == *n).map(|s| s.1);
                 if at != Some((er, from)) {
                     w.radius(er);
+                    if *only && at.is_none() {
+                        w.word("only");
+                    }
                     if let Some(v) = from {
                         w.word("from");
                         w.name(v);
@@ -4034,6 +4040,7 @@ mod tests {
                     .map(|_| (Name(r.next_u64()), r.bool().then(|| Name(r.next_u64())), num(r)))
                     .collect();
                 Feature::Fillet {
+                    only: !edges.is_empty() && r.bool(),
                     edges,
                     starts,
                     setbacks,

@@ -60,6 +60,7 @@ fn a_reference_to_nothing_is_an_error() {
     let neutral = Frame::WORLD;
     let modifiers = [
         Feature::Fillet {
+            only: false,
             edges: vec![(gone, Radius::Constant(1.0))],
             starts: vec![],
             setbacks: vec![],
@@ -123,6 +124,7 @@ fn one_gone_reference_among_good_ones_is_an_error() {
     let edge = first.edge(first.edge_ids().next().expect("an edge")).name;
     let gone = Name::feature(999).with_str("gone");
     let fillet = Feature::Fillet {
+        only: false,
         edges: vec![(edge, Radius::Constant(1.0)), (gone, Radius::Constant(1.0))],
         starts: vec![],
         setbacks: vec![],
@@ -162,6 +164,7 @@ fn a_pattern_of_nothing_is_an_error() {
 fn a_feature_naming_nothing_is_an_error() {
     let cases = [
         Feature::Fillet {
+            only: false,
             edges: vec![],
             starts: vec![],
             setbacks: vec![],

@@ -193,6 +193,7 @@ fn a_fillet_finds_its_body_by_its_edges() {
         })
         .expect("a vertical edge");
     f.push(Feature::Fillet {
+        only: false,
         edges: vec![(b.edge(edge).name, Radius::Constant(2.0))],
         starts: vec![],
         setbacks: vec![],

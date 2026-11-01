@@ -196,7 +196,9 @@ impl Map {
                 edges,
                 starts,
                 setbacks,
+                only,
             } => Feature::Fillet {
+                only: *only,
                 edges: edges.iter().map(|(n, r)| (*n, self.radius(r))).collect(),
                 starts: starts.clone(),
                 setbacks: setbacks.iter().map(|&(v, e, d)| (v, e, self.len(d))).collect(),

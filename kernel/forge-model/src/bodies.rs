@@ -406,6 +406,7 @@ fn names(f: &Feature) -> Vec<Name> {
             edges,
             starts,
             setbacks,
+            ..
         } => edges
             .iter()
             .map(|e| e.0)
@@ -460,6 +461,7 @@ fn only(f: &Feature, b: &Body) -> Feature {
             edges,
             starts,
             setbacks,
+            ..
         } => {
             edges.retain(|e| holds(b, e.0));
             starts.retain(|s| holds(b, s.0));

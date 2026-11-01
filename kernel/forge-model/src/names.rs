@@ -300,6 +300,7 @@ pub fn stored_refs(f: &Feature) -> Vec<(Kind, Name)> {
             edges,
             starts,
             setbacks,
+            ..
         } => {
             let mut out: Vec<_> = edges.iter().map(|e| (Kind::Edge, e.0)).collect();
             out.extend(

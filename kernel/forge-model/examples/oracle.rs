@@ -762,6 +762,7 @@ fn export(features: History<'_>, i: usize, before: Option<&Before>) -> Result<St
             edges,
             starts,
             setbacks,
+            ..
         } => {
             let b = need()?;
             let ids: Result<Vec<EdgeId>, _> = edges.iter().map(|e| b.edge(e.0)).collect();

@@ -833,7 +833,9 @@ fn rounded_feature(f: &Feature, digits: i32) -> Feature {
             edges,
             starts,
             setbacks,
+            only,
         } => Feature::Fillet {
+            only: *only,
             starts: starts.clone(),
             setbacks: setbacks.iter().map(|&(v, e, d)| (v, e, rd(d))).collect(),
             edges: edges
@@ -1051,8 +1053,9 @@ pub fn literal(part: &Part) -> String {
                 edges,
                 starts,
                 setbacks,
+                only,
             } => format!(
-                "        Feature::Fillet {{ edges: vec![{}], starts: vec![{}], setbacks: vec![{}] }},",
+                "        Feature::Fillet {{ only: {only}, edges: vec![{}], starts: vec![{}], setbacks: vec![{}] }},",
                 edges
                     .iter()
                     .map(|(n, r)| format!("(Name({}), Radius::{r:?})", n.0))

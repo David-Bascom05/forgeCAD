@@ -80,7 +80,7 @@ the points, closed when the first is the last. A corner in a curve splits its wa
 Wherever LOOPS go (sweep, coil, loft profiles too), `SKETCH [E]` may stand instead.
 
 ## fillet radius setback from
-fillet R [from VREF] REF.. [R ..] [setback VREF [REF] D]..    a new radius applies onward
+fillet R [only] [from VREF] REF.. [R ..] [setback VREF [REF] D]..    a new radius applies onward; only: just these edges, not the tangent chains they lie on
 R: 3 | 2..4 (start to end) | 0:2,0.5:4,1:2 (fraction:radius); the start is `from VREF`, else it is written in
 (`from (verts near X Y Z)`); a constant radius holds along its own edge, a tangent chain varies over its
 variable and unpicked edges; `setback VREF [REF] D`: blends meeting at a corner stop D from it.

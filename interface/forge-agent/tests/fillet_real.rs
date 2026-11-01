@@ -251,3 +251,105 @@ fn rounds_beside_chamfers_keep_their_names_apart() {
         assert!(forge_topo::check(m.body().expect("built")).is_empty());
     }
 }
+
+const ROUNDED_CORNER: &str = "b: extrude 10 z 0 0 1 x 1 0 0 at 0 0 0 loop line 0 0 40 0 arc 40 5 5 -90 90 line 45 5 45 30 line 45 30 0 30 line 0 30 0 0";
+
+fn with_line(line: &str) -> String {
+    format!("{ROUNDED_CORNER}\n{line}\n")
+}
+
+#[test]
+fn only_a_straight_edge_runs_out_into_the_rounded_corner_beside_it() {
+    // the plate's section is 45 x 30 less a corner of radius 5
+    let (r, base) = (2.0f64, 45.0 * 30.0 - (1.0 - PI / 4.0) * 25.0);
+    // along the 40 of the straight edge, the section the round takes off
+    let along = 40.0 * (1.0 - PI / 4.0) * r * r;
+    // past it the round's cylinder runs straight on, over the corner's cylinder until it leaves it:
+    // over y from 0 to r and z from the round's arc to the top, x from 40 to the corner's circle
+    let n = 4000;
+    let h = r / n as f64;
+    let beyond: f64 = (0..n)
+        .map(|i| {
+            let y = (i as f64 + 0.5) * h;
+            let under = r - (r * r - (r - y) * (r - y)).sqrt();
+            under * (25.0 - (5.0 - y) * (5.0 - y)).sqrt()
+        })
+        .sum::<f64>()
+        * h;
+    for at in ["10", "0"] {
+        let src = with_line(&format!("fillet 2 only (edges near 20 0 {at})"));
+        let m = Model::new(&src);
+        if let Some(f) = &m.error {
+            panic!("line {}: {}\n{src}", m.lines[f.at].no, f.msg);
+        }
+        let part = Part {
+            features: m.features.clone(),
+        };
+        for (how, built) in [("seq", part.regenerate()), ("n-ary", part.regenerate_nary(2))] {
+            let b = built.unwrap_or_else(|e| panic!("{how}: {e:?}\n{src}"));
+            assert_eq!(forge_topo::check(&b), vec![], "{how}\n{src}");
+            assert_eq!(b.face_ids().count(), 8, "{how}: the seven and the round");
+            let v = forge_topo::mass::mass(&b).expect("mass").volume;
+            let want = 10.0 * base - along - beyond;
+            assert!((v - want).abs() < 1e-4 * want, "{how} {at}: {v} not {want}");
+        }
+    }
+}
+
+#[test]
+fn only_changes_nothing_without_it_and_prints_back() {
+    let plain = Model::new(&with_line("fillet 2 (edges near 20 0 10)"));
+    assert!(plain.error.is_none());
+    let part = Part {
+        features: plain.features.clone(),
+    };
+    // the whole chain: the straight, the corner, the far wall's top
+    let b = part.regenerate().expect("chain");
+    assert_eq!(b.face_ids().count(), 10);
+    let src = with_line("fillet 2 only (edges near 20 0 10)");
+    let m = Model::new(&src);
+    assert!(matches!(
+        m.features.last(),
+        Some(forge_model::Feature::Fillet { only: true, .. })
+    ));
+    let back = forge_doc::text::print(&Part {
+        features: m.features.clone(),
+    });
+    assert!(back.contains("fillet 2 only"), "{back}");
+}
+
+#[test]
+fn a_free_end_with_nothing_to_run_out_into_says_so() {
+    // past the corner's arc the round stays in the material, and the wall it should end on stays
+    // tangent to it
+    for line in [
+        "fillet 2 only (edges near 43.5 1.5 10)",
+        "fillet 2 only (edges near 20 0 10) (edges near 43.5 1.5 10)",
+        // the corner's far side closer than the ball can leave it
+        "fillet 4.5 only (edges near 20 0 10)",
+    ] {
+        let m = Model::new(&with_line(line));
+        let f = m.error.as_ref().unwrap_or_else(|| panic!("{line} built"));
+        assert!(f.msg.contains("tangent chain"), "{line}: {}", f.msg);
+    }
+}
+
+#[test]
+fn a_ball_wider_than_a_short_face_does_not_rest_on_a_ridge_the_next_face_covers() {
+    // a top of short flats, each a little steeper: the ball on the corner's wall reaches past the
+    // first few, and the ridge between them lies outside it
+    let mut top = String::new();
+    let mut at = (20.0f64, 10.0f64);
+    for k in 1..=20 {
+        let next = (20.0 - k as f64, 10.0 + 0.05 * k as f64 - 0.00125 * (k * k) as f64);
+        top += &format!(" line {} {} {} {}", at.0, at.1, next.0, next.1);
+        at = next;
+    }
+    let src = format!(
+        "b: extrude 10 z 0 0 1 x 1 0 0 at 0 0 0 loop line 0 0 20 0 line 20 0 20 10{top} line {} {} 0 0\nfillet 3 (edges near 20 10 5)\n",
+        at.0, at.1
+    );
+    let m = Model::new(&src);
+    let f = m.error.as_ref().expect("refuses, not a blend through the top");
+    assert!(f.msg.contains("fillet"), "{}", f.msg);
+}

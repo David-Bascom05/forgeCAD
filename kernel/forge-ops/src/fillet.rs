@@ -116,6 +116,9 @@ pub enum FilletError {
     /// Two blends beside a sharp edge at this vertex should cut each other, and their cut cannot
     /// be followed: a patch there would be a shape nobody asked for.
     Mitre { vertex: VertexId },
+    /// The blend of this edge ends where its tangent chain runs on unpicked, and has nothing there
+    /// to run out into: the chain's next edge needs picking too.
+    FreeEnd { edge: EdgeId },
     /// An edge is listed twice.
     Duplicate { edge: EdgeId },
     /// A ring's round whose ball is wider than the circle its centre rolls round; `max` is the
@@ -208,6 +211,10 @@ pub struct FilletOptions {
     /// How far from a corner vertex its blends stop (the length along each edge from the vertex
     /// to where the blend's section crosses it): for one edge there, or all of them.
     pub setbacks: Vec<(VertexId, Option<EdgeId>, f64)>,
+    /// Edges a tangent chain does not run on along: the blend ends where it reaches one.
+    pub stops: Vec<EdgeId>,
+    /// Only the edges given: no tangent chain runs on from them at all.
+    pub only: bool,
 }
 
 /// The vertex each varying law of `edges` runs from. A run is the edges one varying radius was
@@ -310,6 +317,23 @@ pub fn fillet(body: &Body, edges: &[FilletEdge], feature: u64) -> R<Body> {
 
 /// `fillet` with laws started at given vertices and corners set back by given distances.
 pub fn fillet_with(body: &Body, edges: &[FilletEdge], opts: &FilletOptions, feature: u64) -> R<Body> {
+    let got = fillet_picked(body, edges, opts, feature);
+    if let Err(FilletError::Overflow { edge } | FilletError::NoBlend { edge }) = got
+        && opts.only
+    {
+        // what stops it is the end of the pick, if the whole chain builds
+        let chain = FilletOptions {
+            only: false,
+            ..opts.clone()
+        };
+        if fillet_picked(body, edges, &chain, feature).is_ok() {
+            return Err(FilletError::FreeEnd { edge });
+        }
+    }
+    got
+}
+
+fn fillet_picked(body: &Body, edges: &[FilletEdge], opts: &FilletOptions, feature: u64) -> R<Body> {
     if opts.setbacks.is_empty()
         && let Some((first, then)) = minority_first(body, edges)
     {
@@ -323,7 +347,22 @@ pub fn fillet_with(body: &Body, edges: &[FilletEdge], opts: &FilletOptions, feat
             })
         };
         let then: Vec<FilletEdge> = then.iter().filter_map(named).collect();
-        return fillet(&done, &then, feature);
+        // the rounds run on over the first ones' new faces, not along edges nobody picked
+        let picked: BTreeSet<Name> = edges.iter().map(|f| body.edge(f.edge).name).collect();
+        let was: BTreeSet<Name> = body.edge_ids().map(|e| body.edge(e).name).collect();
+        let stops = done
+            .edge_ids()
+            .filter(|&e| {
+                let n = done.edge(e).name;
+                was.contains(&n) && !picked.contains(&n)
+            })
+            .collect();
+        let rest = FilletOptions {
+            stops,
+            only: opts.only,
+            ..FilletOptions::default()
+        };
+        return fillet_with(&done, &then, &rest, feature);
     }
     let mut work: Option<Body> = None;
     let mut first = None;
@@ -540,7 +579,11 @@ fn fillet_on(body: &Body, edges: &[FilletEdge], opts: &FilletOptions, feature: u
     }
     let edges = &picked[..];
     merge_flush(&mut body, &seen);
-    let all = tangent_chains(&body, edges, &unpicked);
+    let all = if opts.only {
+        edges.iter().map(|f| (f.edge, f.radius.max())).collect()
+    } else {
+        tangent_chains(&body, edges, &unpicked, &opts.stops)
+    };
     let seen: BTreeSet<EdgeId> = all.iter().map(|f| f.0).collect();
     merge_flush(&mut body, &seen);
     let root = Name::feature(feature);
@@ -605,6 +648,7 @@ fn fillet_on(body: &Body, edges: &[FilletEdge], opts: &FilletOptions, feature: u
                 .map(|f| by_edge.remove(&f.0).expect("every edge rolled"))
                 .collect();
             let mut b = Builder::new(body, rolled, root);
+            b.free_ends = opts.only || !opts.stops.is_empty();
             b.setbacks = opts.setbacks.clone();
             b.pivots = pivots;
             return b.build();
@@ -755,7 +799,12 @@ fn par_map<T: Send>(n: usize, f: impl Fn(usize) -> T + Sync) -> Vec<T> {
 /// The edges with every tangent continuation of each added, each with the largest
 /// radius of the pick that reached it: a chain rounds as a whole, as a ball rolling
 /// along it would.
-fn tangent_chains(body: &Body, edges: &[FilletEdge], unpicked: &[(EdgeId, f64)]) -> Vec<(EdgeId, f64)> {
+fn tangent_chains(
+    body: &Body,
+    edges: &[FilletEdge],
+    unpicked: &[(EdgeId, f64)],
+    stops: &[EdgeId],
+) -> Vec<(EdgeId, f64)> {
     let at = edges_at(body);
     let mut out: Vec<(EdgeId, f64)> = edges.iter().map(|f| (f.edge, f.radius.max())).collect();
     out.extend_from_slice(unpicked);
@@ -770,7 +819,9 @@ fn tangent_chains(body: &Body, edges: &[FilletEdge], unpicked: &[(EdgeId, f64)])
             let next: Vec<EdgeId> = at[&v]
                 .iter()
                 .copied()
-                .filter(|&o| o != edge && !have.contains(&o) && body.edge(o).coedges.len() == 2)
+                .filter(|&o| {
+                    o != edge && !have.contains(&o) && !stops.contains(&o) && body.edge(o).coedges.len() == 2
+                })
                 .filter(|&o| {
                     let f = &body.edge(o).coedges;
                     body.coedge_face(f[0]) != body.coedge_face(f[1])
@@ -1330,6 +1381,7 @@ fn cliff(
                 let q = on_rail.eval(t);
                 if x.curve.eval(x.curve.closest(q, x.range)).distance(q) > tol::LINEAR
                     || !on_face(body, keep, on_keep.eval(t))
+                    || blocked_beyond(body, f, c, q, b.spine.eval(t), r, l.convex)
                 {
                     continue;
                 }
@@ -1345,6 +1397,42 @@ fn cliff(
         }
     }
     None
+}
+
+/// Whether the face across coedge `c` from `f` stands in the way of a ball touching the far edge
+/// at `q`: the centre lies on the ball's own side of it (in the material for a convex edge, out of
+/// it for a concave one), nearer than the radius, and the way from `q` to the foot of the centre
+/// leads onto the face. The face beyond a true cliff falls away; this one the ball would pass through.
+fn blocked_beyond(
+    body: &Body,
+    f: FaceId,
+    c: CoedgeId,
+    q: Point3,
+    centre: Point3,
+    r: f64,
+    convex: bool,
+) -> bool {
+    let Some(p) = body.partner(c) else {
+        return false;
+    };
+    let n = body.coedge_face(p);
+    if n == f {
+        return false;
+    }
+    let s = &body.face(n).surface;
+    let uv = s.project(centre);
+    let foot = s.eval(uv);
+    let Some(out) = body.face_normal(n, uv) else {
+        return false;
+    };
+    let above = (centre - foot).dot(out.get());
+    let Some(towards) = (foot - q).normalize() else {
+        return false;
+    };
+    let step = q + towards.get() * (1e-3 * r);
+    (if convex { above < 0.0 } else { above > 0.0 })
+        && foot.distance(centre) < r - tol::LINEAR
+        && on_face(body, n, s.eval(s.project(step)))
 }
 
 /// The blend between faces `f` (offset by `d`), its spine passing nearest `near`: built with the
@@ -2021,6 +2109,10 @@ struct Builder {
     /// becomes the second, and the edge between goes.
     merged: Vec<(VertexId, VertexId)>,
     collapsing: bool,
+    /// An edge whose blend ran out beside a tangent chain going on unpicked.
+    free_end: Option<EdgeId>,
+    /// Whether a chain may go on unpicked here: `only`, or a second round's stops.
+    free_ends: bool,
     /// Blend sides whose spring a mitre carries on past its face's corner: the face grows over a
     /// plane or surface carried on to meet it.
     overrun: BTreeSet<(usize, usize)>,
@@ -2078,20 +2170,14 @@ impl Builder {
             gone_faces: Vec::new(),
             merged: Vec::new(),
             collapsing: false,
+            free_end: None,
+            free_ends: false,
             overrun: BTreeSet::new(),
         }
     }
 
-    /// Whether new vertices share a name (a corner reached two ways, from pieces of one face).
-    /// Which should keep it nothing here can say stably, so such a corner refuses.
-    fn names_alike(&self, from: usize) -> bool {
-        let mut new: Vec<Name> = self.body.vertices[from..].iter().map(|v| v.name).collect();
-        new.sort_unstable();
-        new.windows(2).any(|w| w[0] == w[1])
-    }
-
     fn build(mut self) -> R<Body> {
-        let new_from = self.body.vertices.len();
+        let was: BTreeSet<Name> = self.body.vertices.iter().map(|v| v.name).collect();
         // each vertex with a coedge arriving there
         let mut verts: BTreeMap<VertexId, CoedgeId> = BTreeMap::new();
         for r in &self.rolled {
@@ -2151,14 +2237,24 @@ impl Builder {
             return Err(FilletError::Corner { vertex: s.0 });
         }
         let closed_up = self.collapsing;
+        let free_end = self.free_end;
         let first = self.rolled.first().map(|r| r.edge);
         self.collapse(no_width);
-        if self.names_alike(new_from) {
+        let out = self.body.into_compact();
+        // new vertices sharing a name: a corner reached two ways, from pieces of one face. Which
+        // should keep it nothing here can say stably, so such a corner refuses.
+        let mut new: Vec<Name> = out
+            .vertices
+            .iter()
+            .map(|v| v.name)
+            .filter(|n| !was.contains(n))
+            .collect();
+        new.sort_unstable();
+        if new.windows(2).any(|w| w[0] == w[1]) {
             return Err(FilletError::Overflow {
                 edge: first.unwrap_or(EdgeId(0)),
             });
         }
-        let out = self.body.into_compact();
         // no edge so short should stand
         if let Some(e) = first
             && out.edge_ids().any(|x| {
@@ -2169,6 +2265,11 @@ impl Builder {
             })
         {
             return Err(FilletError::Overflow { edge: e });
+        }
+        if let Some(edge) = free_end
+            && !forge_topo::check(&out).is_empty()
+        {
+            return Err(FilletError::FreeEnd { edge });
         }
         // these paths are rare, and a face closed up wrongly must not come back as a part
         if closed_up && !forge_topo::check(&out).is_empty() {
@@ -2620,6 +2721,7 @@ impl Builder {
         // points X[1..k-1]: X[j] on the edge arriving at corner j
         let mut xs: Vec<(Point3, VertexId)> = vec![(vp, v); k];
         let mut tside = [0.0; 2];
+        let mut free = false;
         for (j, (spring_c, other)) in [
             (1, (at(0).cin, at(1).face)),
             (k - 1, (at(k - 1).cout, at(k - 2).face)),
@@ -2628,8 +2730,23 @@ impl Builder {
             let s = self.side(spring_c);
             let spring = &ro.springs[s];
             let surf = &self.body.face(other).surface;
-            let (t, p) = nearest_hit(spring, search_window(spring, t_ref, reach), surf, vp)
-                .ok_or(FilletError::Overflow { edge })?;
+            // the face it would meet tangent to its own along their edge: the spring ends on that edge
+            let e = self.body.edge(self.body.coedge(at(j).cin).edge);
+            let tangent = self.free_ends && is_smooth(&self.body, self.body.coedge(at(j).cin).edge, radius);
+            let found = if tangent {
+                crossing(spring, t_ref, &e.curve, e.range).map(|t| (t, spring.eval(t)))
+            } else {
+                nearest_hit(spring, search_window(spring, t_ref, reach), surf, vp)
+            };
+            free |= tangent;
+            if tangent {
+                self.free_end = Some(edge);
+            }
+            let (t, p) = found.ok_or(if free {
+                FilletError::FreeEnd { edge }
+            } else {
+                FilletError::Overflow { edge }
+            })?;
             tside[s] = t;
             let names = [
                 self.face_name(at(j).face),
@@ -2668,7 +2785,36 @@ impl Builder {
             let ro = &self.rolled[ri];
             let (a, b) = (xs[j], xs[j + 1]);
             let (curve, ta, tb) = cross_curve(&ro.blend, &self.body.face(f).surface, a.0, b.0)
-                .ok_or(FilletError::Overflow { edge })?;
+                // a chain through a touch point can go round the far way, off the blend's own arc
+                .filter(|(c, ta, tb)| !free || on_contact_arc(&ro.blend, c.eval(0.5 * (ta + tb))))
+                .or_else(|| {
+                    // one end where the blend touches the face: walked into it
+                    let walk = |x, p| {
+                        forge_geom::intcurve::towards_touch(
+                            &ro.blend.surface,
+                            &self.body.face(f).surface,
+                            x,
+                            p,
+                            0.05 * ro.blend.radius,
+                        )
+                    };
+                    let curve = |c| Curve::Intersection(Arc::new(c));
+                    walk(a.0, b.0)
+                        .map(|c| {
+                            let hi = c.domain_hi();
+                            (curve(c), 0.0, hi)
+                        })
+                        .or_else(|| {
+                            let c = walk(b.0, a.0)?;
+                            let hi = c.domain_hi();
+                            Some((curve(c), hi, 0.0))
+                        })
+                })
+                .ok_or(if free {
+                    FilletError::FreeEnd { edge }
+                } else {
+                    FilletError::Overflow { edge }
+                })?;
             let name = Name::NONE
                 .with_set(&[ro.base, self.face_name(f)])
                 .with_name(self.body.vertex(v).name);
