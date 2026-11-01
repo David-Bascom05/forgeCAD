@@ -107,11 +107,15 @@ pub fn mass_rel(body: &Body, rel: f64) -> Result<MassProps, MassError> {
         .diagonal();
     let (mut t, mut e) = ([0.0; NF], [0.0; NF]);
     let mut faces = Vec::new();
+    let mut loosest = (FaceId(0), 0.0f64);
     for f in body.face_ids() {
         let (v, er) = face_integrals(body, f, c, size, rel).map_err(|why| MassError { face: f, why })?;
         for k in 0..NF {
             t[k] += v[k];
             e[k] += er[k];
+        }
+        if er[0] > loosest.1 {
+            loosest = (f, er[0]);
         }
         // an integral past what geometry allows is no measurement: a loop's parameters went wrong
         if !v[10].is_finite() || v[10] < -size * size * 1e-6 {
@@ -145,6 +149,14 @@ pub fn mass_rel(body: &Body, rel: f64) -> Result<MassProps, MassError> {
         return Err(MassError {
             face: FaceId(0),
             why: "the volume came out larger than the body's box",
+        });
+    }
+    // the rules did not settle: what they give is off by that much, and a number here reads as measured.
+    // (Real parts' bound stays under 1e-4 of the volume; p09444's blend said 10%, a wrong volume by .6%.)
+    if e[0] > 1e-3 * vol.abs() {
+        return Err(MassError {
+            face: loosest.0,
+            why: "the face's integral did not settle",
         });
     }
     let g = Vec3::new(t[1], t[2], t[3]) / vol;

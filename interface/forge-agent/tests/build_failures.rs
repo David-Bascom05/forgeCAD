@@ -893,3 +893,21 @@ extrude add 2 at 0 0 50 rect 0 0 10 10
     assert_eq!(nary.len(), m.solids_after(m.built()).len());
     assert_eq!(nary.len(), 1);
 }
+
+/// A blend's integral that does not settle says so: its bound was 10% of the volume, the volume .6% off
+/// and returned as measured (fuzz p09444).
+#[test]
+fn an_integral_that_did_not_settle_is_no_volume() {
+    let m = Model::new(
+        "body: extrude 33.8538 z 0 0 1 x 1 0 0 at 0 0 0 circle 0 0 18.6873
+boss: extrude add 34.7602 z -0.372619194143 -0.813273460032 -0.446924171828 x 0 -0.481607449972 0.876387051554 at -4.34617495356 1.52942340372 14.4425234406 circle 0 0 10.5378
+fillet 1.71121082 (edges between body boss concave)
+c0: extrude cut 43.8377 z -0.234138759071 -0.811155896008 0.535915248777 x -0 0.551237904395 0.834348112456 at -21.1807704343 -6.15178668063 5.35835986907 rect -87.6754 -87.6754 175.351 175.351
+c1: extrude cut 87.6754 z -0.927984340469 0.326558636907 0.179456179902 x -0.18986516855 0 -0.981810174001 at 19.4999129356 -20.4673606945 -2.5085832624 circle 1.02307 -1.47558 3.04561528
+",
+    );
+    let b = m.body().expect("builds");
+    if let Ok(p) = forge_topo::mass::mass(&b.compact()) {
+        assert!(p.err[0] <= 1e-3 * p.volume.abs(), "{} +- {}", p.volume, p.err[0]);
+    }
+}
