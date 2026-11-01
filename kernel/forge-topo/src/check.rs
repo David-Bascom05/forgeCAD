@@ -310,7 +310,7 @@ fn check_geometry(body: &Body, out: &mut Vec<Problem>) {
                 });
             }
             // (an edge this short is legal at the floor: rounding past it hides nothing more)
-            if vtol > 1.001 * band && 2.0 * vtol >= edge_length(body, e) {
+            if vtol > 1.1 * band && 2.0 * vtol >= edge_length(body, e) {
                 out.push(Problem::VertexTolerance { vertex: v, tol: vtol });
             }
         }

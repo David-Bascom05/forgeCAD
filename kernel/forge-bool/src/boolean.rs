@@ -2002,6 +2002,20 @@ pub(crate) fn trim(
                 } else {
                     curve_surface_in(&curve, range, &across, near)
                 };
+                // a line and a straight edge with both its ends on it run together, however their
+                // surfaces round off: a hair of tilt puts the crossing anywhere along them
+                let found = match found {
+                    CurveSurface::Hits(_)
+                        if matches!((&curve, &edge.curve), (Curve::Line(_), Curve::Line(_)))
+                            && [edge.start, edge.end].into_iter().all(|v| {
+                                let vx = body.vertex(v);
+                                curve.eval(curve.closest(vx.point, range)).distance(vx.point) <= vx.tol
+                            }) =>
+                    {
+                        CurveSurface::OnSurface
+                    }
+                    f => f,
+                };
                 let hits = match found {
                     CurveSurface::Hits(h) => h,
                     // the curve runs along this edge: cut it at the edge's ends; the stretch along
@@ -3528,6 +3542,21 @@ pub(crate) fn imprint(
                             continue;
                         }
                     };
+                    // this edge's end on e2 without a crossing there (a corner on a rim it all but
+                    // runs along): e2 ends there too, or the two come out in different pieces
+                    for v in [edge.start, edge.end] {
+                        let p = sb.vertex(v).point;
+                        if let Some((s2, tol)) = on_edge(db, e2, p) {
+                            cuts.push(Cut {
+                                pair: Name::NONE,
+                                on: CutOn::Edge(sides[dst], e2),
+                                s: s2,
+                                point: p,
+                                tol,
+                                touch: false,
+                            });
+                        }
+                    }
                     for h in hits {
                         if let Some((s2, tol)) = on_edge(db, e2, h.point) {
                             cuts.push(Cut {
@@ -5439,7 +5468,8 @@ fn clear_step(
     chord: f64,
 ) -> Option<Option<Point3>> {
     let mut step = (0.01 * chord).min(0.05);
-    while step >= 10.0 * tol::LINEAR {
+    // (two tolerances clear of everything still tells inside from on)
+    while step >= 2.0 * tol::LINEAR {
         let q = probe_at(body, s.from, h, pieces, Some(step))?;
         let clear = s.loops.iter().flatten().all(|&(o, _)| {
             o == h.0 || {
@@ -5452,7 +5482,7 @@ fn clear_step(
         if clear {
             return Some(Some(q));
         }
-        step *= 0.25;
+        step *= 0.5;
     }
     Some(None)
 }

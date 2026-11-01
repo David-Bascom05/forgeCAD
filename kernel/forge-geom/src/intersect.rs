@@ -813,6 +813,29 @@ pub fn plane_cylinder(p: &Plane, c: &Cylinder) -> SurfaceSurface {
             (Curve::Line(Line::new(foot + side * h, a)), Contact::Crossing),
         ]);
     }
+    // A hair off parallel the ellipse is millions of radii long and straight anywhere a part
+    // reaches: lines tangent to it beside the plane's origin (off by (t cos)^2 / r at t from there).
+    if cos <= 1e-6 {
+        let q = c.frame.origin + a * a.dot(p.frame.origin - c.frame.origin);
+        let d = p.signed_distance(q);
+        if d.abs() < 0.999 * r {
+            let side = a.cross(n).normalize().expect("axis in plane direction");
+            let foot = q - n * d;
+            let h = (r * r - d * d).sqrt();
+            let lines: Option<Vec<_>> = [-h, h]
+                .into_iter()
+                .map(|w| {
+                    let x = foot + side * w;
+                    let dir = n.cross((x - q) / r).normalize()?;
+                    let dir = if dir.dot(a.get()) < 0.0 { -dir } else { dir };
+                    Some((Curve::Line(Line::new(x, dir)), Contact::Crossing))
+                })
+                .collect();
+            if let Some(lines) = lines {
+                return SurfaceSurface::Curves(lines);
+            }
+        }
+    }
     let center = axis_hit(p, c.frame.origin, a).expect("checked not parallel");
     // A circle when the ellipse's two axes differ by less than LINEAR.
     if r * (1.0 / cos - 1.0) <= tol::LINEAR {
