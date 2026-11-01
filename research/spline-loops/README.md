@@ -78,8 +78,13 @@ apex, other ops                  0      1    1    0    0        7     31
 cone pure                      215      1    0    0    0        1     18
 ```
 The held-out half was seen once under the shortest-chord rule before the tenth percentile was chosen on dev numbers.
-Not measured: 81 lofts between splines and 70 of different segment counts among "many" do not translate (the kernel
-refuses curved sections in a loft; the importer takes no sections of unequal counts), so curves that may matter most are hidden. Remaining worst errors are mostly
+A fresh sample, seen only after the rule was fixed: the other 366 plain 3+ section parts of CADFS, more features each; 297 do not
+translate (125 spline sections) and 54 stop, so only 15 have a volume to compare, too few to say much: within 1e-3 13 of 15
+after, 8 of 15 before; worst 2.9% (00591958, off axis, 2.8% before).
+End speed `start W`/`end W` is open: real end speed varies along a section, a single W times a length cannot hold it, and 6
+parts did not settle which length; 00992463 went from 0.29% to 1.13%, and the old length costs others as much.
+Not measured: 81 lofts between splines and 70 of different segment counts among "many" do not translate (the importer does not translate spline sections, though
+the kernel lofts them, or sections of unequal counts), so curves that may matter most are hidden. Remaining worst errors are mostly
 sections off a common axis ("oblique", 00125711 30%) and end conditions: not explained yet.
 
 ## A smooth loft on to a point (`apex_volume.py`)

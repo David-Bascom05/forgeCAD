@@ -118,6 +118,7 @@ sweep [op] FRAME LOOPS path PATH [extend N M | to FEAT [@face] [off N]]     prof
 coil [op] FRAME [axis ..] LOOPS (pitch P turns N | turns N height H | pitch P height H | pitch P to FEAT [@face] [off N]) [taper A] [left]
 loft [op] [smooth [start W] [end W]] [align auto|none] (profile FRAME LOOPS [seam X Y] | point X Y Z [dome DX DY DZ [W]]).. [rail I PATH.. | centre PATH]     I: vertex (where segment I starts)
 `align auto`: each section starts where it comes nearest the one before's start. `seam X Y`: where this profile starts.
+A smooth loft's curve between sections is a fit to Parasolid's, close but not the same (research/spline-loops).
 `point` first or last: the loft closes on it, sharp, or with `dome` (smooth lofts) rounded, its walls arriving square to D
 PATH: (line AX AY AZ BX BY BZ | arc FRAME R START SWEEP | spline D X Y Z .. [knots K..] [weights W..]).. | SKETCH [E]     tangent-continuous, each curve in one plane; an arc's FRAME is its circle's, centre at `at`
 

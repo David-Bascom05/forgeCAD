@@ -108,7 +108,7 @@ pub enum LoftKind {
     /// Straight lines from each profile to the next.
     Ruled,
     /// A curvature-continuous blend through all the profiles (a cubic spline at each matched
-    /// point, knots spaced by how far apart matched points of the profiles mostly are). Free at an end, or
+    /// point, knots spaced as a fit to Parasolid's: see research/spline-loops). Free at an end, or
     /// leaving square to the end profile at `weight` times unit speed.
     Smooth { start: Option<f64>, end: Option<f64> },
 }
@@ -481,9 +481,8 @@ fn smooth(
     let n = planes.len();
     let mut knots = vec![0.0];
     for k in 0..n - 1 {
-        // how far apart two sections mostly are: the tenth percentile of the chords between matched
-        // points (research/spline-loops). Sections that share a centre are still apart, and a few long
-        // diagonals do not set the pace
+        // the tenth percentile of the chords between matched points: a fit to the spacing Parasolid's surfaces show,
+        // not its rule, which is not known (research/spline-loops has the residual)
         let mut chords: Vec<f64> = segs[k]
             .iter()
             .zip(&segs[k + 1])

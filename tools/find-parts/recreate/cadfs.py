@@ -1339,7 +1339,7 @@ class Tr:
             along = math.sqrt(dot(off, off)) * abs(dot(unit(off), a0["fr"].n)) if dot(off, off) > 0 else 0.0
             if abs(abs(dot(a0["fr"].n, b0["fr"].n)) - 1) > 1e-9 or abs(along - math.sqrt(dot(off, off))) > 1e-6:
                 self.notes.add("loft-oblique")
-                if any(whole_circle(l) for x in (a0, b0) for l in x["loops"]):
+                if a0.get("split") or b0.get("split") or any(whole_circle(l) for x in (a0, b0) for l in x["loops"]):
                     # Parasolid's seam on a circle is not in the history, and off its axis it twists the wall (found in
                     # the source's rulings): any choice here would be a guess that moves the volume by tens of percent
                     raise Unsupported("a loft between circles off one axis")
@@ -1763,8 +1763,10 @@ def align(a, b, first=None):
             # in line with its corners, at the same fraction along both, which is what the kernel's wall does
             if whole_circle(lb):
                 b["loops"][k] = split_circle(lb, la, fa, ca, fb, cb)
+                b["split"] = True
             elif whole_circle(la) and not a.get("matched"):
                 a["loops"][k] = split_circle(la, lb, fb, cb, fa, ca)
+                a["split"] = True
             else:
                 raise Unsupported("a loft between profiles of different segment counts")
             continue
