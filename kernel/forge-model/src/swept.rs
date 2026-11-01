@@ -96,10 +96,6 @@ pub fn op(f: &Feature) -> Option<Combine> {
 /// A box round what sweep, coil or loft `i` adds, none if it cuts or cannot be built: without
 /// building it (a through cut sizes itself by this, on every regen).
 pub(crate) fn reach_of(features: History<'_>, i: usize) -> Option<Box3> {
-    // (asked for each through hole of a regen: a loft's bounds cost something)
-    thread_local! {
-        static SEEN: std::cell::RefCell<Vec<(Feature, Option<Box3>)>> = const { std::cell::RefCell::new(Vec::new()) };
-    }
     let f = &features[i];
     let free = !matches!(f, Feature::Coil(c) if matches!(c.size, CoilSize::To { .. }));
     if free && let Some(b) = SEEN.with(|s| s.borrow().iter().find(|x| x.0 == *f).map(|x| x.1)) {
@@ -107,15 +103,27 @@ pub(crate) fn reach_of(features: History<'_>, i: usize) -> Option<Box3> {
     }
     let b = reach_built(features, i);
     if free {
-        SEEN.with(|s| {
-            let mut s = s.borrow_mut();
-            if s.len() == 16 {
-                s.remove(0);
-            }
-            s.push((f.clone(), b));
-        });
+        remember_reach(f, b);
     }
     b
+}
+
+// (asked for each through hole of a regen: a loft's bounds cost something, and building it found them)
+thread_local! {
+    static SEEN: std::cell::RefCell<Vec<(Feature, Option<Box3>)>> = const { std::cell::RefCell::new(Vec::new()) };
+}
+
+fn remember_reach(f: &Feature, b: Option<Box3>) {
+    SEEN.with(|s| {
+        let mut s = s.borrow_mut();
+        if s.iter().any(|x| x.0 == *f) {
+            return;
+        }
+        if s.len() == 16 {
+            s.remove(0);
+        }
+        s.push((f.clone(), b));
+    });
 }
 
 fn reach_built(features: History<'_>, i: usize) -> Option<Box3> {
@@ -283,6 +291,9 @@ fn build_tool(features: History<'_>, i: usize, build: bool) -> Result<Tool, Rege
                     loft_bounds(&l.profiles, l.kind, &l.guides, &l.options).map_err(err)?,
                 )
             };
+            if adds(l.op) {
+                remember_reach(&features[i], Some(bounds));
+            }
             Ok((body, l.op, Shape::Brep(bounds)))
         }
         _ => unreachable!("only sweeps, coils and lofts"),
