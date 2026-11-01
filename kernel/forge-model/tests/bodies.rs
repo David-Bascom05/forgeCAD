@@ -140,6 +140,7 @@ fn an_imported_body_stays_from_a_file() {
     .regenerate()
     .expect("builds");
     read.from_file = true;
+    read.unplaced = true;
     let import = Feature::Import(Box::new(forge_model::Import {
         file: "x.step".into(),
         op: Combine::New,
@@ -150,13 +151,13 @@ fn an_imported_body_stays_from_a_file() {
     }
     .regenerate()
     .expect("imports");
-    assert!(alone.from_file);
+    assert!(alone.from_file && alone.unplaced);
     let cut = Part {
         features: vec![import, block(p3(2.0, 2.0, 5.0), 2.0, 2.0, 5.0, Combine::Cut)],
     }
     .regenerate()
     .expect("cuts");
-    assert!(cut.from_file);
+    assert!(cut.from_file && cut.unplaced);
     // a part made here is not
     assert!(
         !Part {

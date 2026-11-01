@@ -235,6 +235,9 @@ pub struct Body {
     /// Read from a file, whose edges may meet only within their tolerance: only such a body may be
     /// meshed with a boundary that crosses itself (`tessellate_tolerant`). Ours never.
     pub from_file: bool,
+    /// The file places its parts as an assembly, which is not read: each solid is here once, where it
+    /// stands in its own part. Said in the check, as it can be wrong with nothing else to show for it.
+    pub unplaced: bool,
 }
 
 /// Boxes over runs of face ids (a chunk of 16 faces, a block of 16 chunks), each the hull of
@@ -479,6 +482,7 @@ impl Body {
             hulls: Cached::default(),
             split: std::mem::take(&mut self.split),
             from_file: self.from_file,
+            unplaced: self.unplaced,
         };
         for (i, mut face) in std::mem::take(&mut self.faces).into_iter().enumerate() {
             if !face.alive {
@@ -551,6 +555,7 @@ impl Body {
     fn compact_by(&self, group: &[usize]) -> Body {
         let mut out = Body::new();
         out.from_file = self.from_file;
+        out.unplaced = self.unplaced;
         out.joins = self.joins.clone();
         out.vertices.reserve(self.vertices.len());
         out.edges.reserve(self.edges.len());
@@ -657,6 +662,7 @@ impl Body {
     /// Adds `other`'s entities after this body's, renumbered, its shells kept apart.
     pub fn append(&mut self, other: &Body) {
         self.from_file |= other.from_file;
+        self.unplaced |= other.unplaced;
         for &w in &other.split {
             self.note_split(w);
         }

@@ -48,6 +48,9 @@ pub struct Stats {
     /// Edges that keep a tolerance above the kernel's, and the largest.
     pub tolerant_edges: usize,
     pub max_edge_tol: f64,
+    /// What an assembly asks that is not done (`Body::unplaced`): parts moved from where they stand,
+    /// and parts used more than once.
+    pub assembly: usize,
 }
 
 pub struct Imported {
@@ -1255,6 +1258,48 @@ fn measures_agree(body: &Body) -> Result<(), String> {
     Ok(())
 }
 
+/// How many placements a file gives that move a part, and how many extra uses of a part or of a
+/// mapped shape, none of which are applied. A placement onto itself (Onshape wraps every part in one)
+/// asks for nothing.
+fn assembly_asks(f: &File<'_>, reader: &Reader<'_>) -> usize {
+    let moves = |a: Option<&Value>, b: Option<&Value>| match (a, b) {
+        (Some(Value::Ref(a)), Some(Value::Ref(b))) => match (reader.placement(*a), reader.placement(*b)) {
+            (Ok(p), Ok(q)) => {
+                let near = |x: Vec3, y: Vec3| x.dot(y) >= 1.0 - 1e-12;
+                p.origin.distance(q.origin) > 1e-9 * (1.0 + (p.origin - Point3::ORIGIN).abs_max())
+                    || !near(p.x().into(), q.x().into())
+                    || !near(p.z().into(), q.z().into())
+            }
+            // a part placed by something not read: moved, for all that can be told
+            _ => true,
+        },
+        _ => true,
+    };
+    let (mut asks, mut used) = (0, BTreeMap::<u32, usize>::new());
+    for &(_, at, n) in &f.ids {
+        for r in &f.records[at as usize..(at + n) as usize] {
+            let a = f.args(r);
+            match f.name(r) {
+                "NEXT_ASSEMBLY_USAGE_OCCURRENCE" => {
+                    if let Some(Value::Ref(part)) = a.get(4) {
+                        *used.entry(*part).or_default() += 1;
+                    }
+                }
+                "ITEM_DEFINED_TRANSFORMATION" => asks += usize::from(moves(a.get(2), a.get(3))),
+                "MAPPED_ITEM" => {
+                    if let Some(Value::Ref(map)) = a.get(1) {
+                        *used.entry(*map).or_default() += 1;
+                        let origin = f.records_of(*map).and_then(|x| x.first()).map(|x| f.args(x));
+                        asks += usize::from(moves(origin.as_ref().and_then(|o| o.first()), a.get(2)));
+                    }
+                }
+                _ => {}
+            }
+        }
+    }
+    asks + used.values().map(|&k| k - 1).sum::<usize>()
+}
+
 /// How far a file's geometry misses itself, before anything is changed.
 fn measure_gaps(proto: &Proto, stats: &mut Stats) {
     for fa in &proto.faces {
@@ -1356,6 +1401,9 @@ fn read_file(text: &[u8], lim: &Limits, only_measure: bool) -> Result<Imported, 
             }
         }
     }
+    if let Some(u) = any_ctx.and_then(|c| units_of(&f, c)) {
+        stats.assembly = assembly_asks(&f, &Reader { f: &f, u, depth: 0 });
+    }
     for (id, r) in roots {
         let ctx = ctx_of.get(&id).copied().or(any_ctx);
         let Some(u) = ctx.and_then(|c| units_of(&f, c)) else {
@@ -1404,11 +1452,14 @@ fn read_file(text: &[u8], lim: &Limits, only_measure: bool) -> Result<Imported, 
                     continue;
                 }
                 match finish(proto, u.uncertainty, lim, &mut stats) {
-                    Ok(body) => solids.push(Solid {
-                        entity: id,
-                        name,
-                        body,
-                    }),
+                    Ok(mut body) => {
+                        body.unplaced = stats.assembly > 0;
+                        solids.push(Solid {
+                            entity: id,
+                            name,
+                            body,
+                        })
+                    }
                     Err(why) => refusals.push(Refusal {
                         entity: id,
                         kind: f.name(&r).to_string(),

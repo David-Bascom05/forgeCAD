@@ -113,6 +113,47 @@ fn analytic_bodies_come_back_the_same() {
 }
 
 /// The numbers count in the file's own unit: a cube of side 1 in centimetres.
+/// An assembly's placements are not read, and a body from such a file says so.
+#[test]
+fn a_file_with_assembly_structure_is_marked() {
+    let body = &parts()[0].1;
+    let text = export(body, &Options::default()).expect("writes").text;
+    let plain = import(text.as_bytes(), &Limits::default()).expect("reads");
+    assert_eq!(plain.stats.assembly, 0);
+    assert!(!plain.solids[0].body.unplaced);
+    let with = |extra: &str| {
+        let t = text.replacen("ENDSEC;\nEND-ISO", &format!("{extra}ENDSEC;\nEND-ISO"), 1);
+        assert_ne!(t, text);
+        import(t.as_bytes(), &Limits::default()).expect("reads")
+    };
+    let places = "#9001=CARTESIAN_POINT('',(0.,0.,0.));\n#9002=CARTESIAN_POINT('',(1.,0.,0.));\n\
+                  #9003=AXIS2_PLACEMENT_3D('',#9001,$,$);\n#9004=AXIS2_PLACEMENT_3D('',#9002,$,$);\n";
+    // onto itself: nothing asked, nothing said
+    let same = with(&format!(
+        "{places}#9005=ITEM_DEFINED_TRANSFORMATION('','',#9003,#9003);\n"
+    ));
+    assert_eq!(same.stats.assembly, 0);
+    assert!(!same.solids[0].body.unplaced);
+    // moved
+    let moved = with(&format!(
+        "{places}#9005=ITEM_DEFINED_TRANSFORMATION('','',#9003,#9004);\n"
+    ));
+    assert_eq!(moved.stats.assembly, 1);
+    assert!(moved.solids[0].body.unplaced);
+    // used twice
+    let twice = with(
+        "#9005=NEXT_ASSEMBLY_USAGE_OCCURRENCE('','','',#1,#2,$);\n\
+         #9006=NEXT_ASSEMBLY_USAGE_OCCURRENCE('','','',#1,#2,$);\n",
+    );
+    assert_eq!(twice.stats.assembly, 1);
+    assert!(twice.solids[0].body.unplaced);
+    // mapped onto itself, once
+    let mapped = with(&format!(
+        "{places}#9005=REPRESENTATION_MAP(#9003,#1);\n#9006=MAPPED_ITEM('',#9005,#9003);\n"
+    ));
+    assert_eq!(mapped.stats.assembly, 0);
+}
+
 #[test]
 fn units_come_from_the_context() {
     let b = extrude(

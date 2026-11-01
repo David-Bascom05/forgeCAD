@@ -215,7 +215,8 @@ fn main() {
         .map(|(k, v)| format!("\"{k}\":[{},{},{}]", v.0, v.1, v.2))
         .collect();
     println!(
-        "{{\"system\":\"{}\",\"schema\":\"{}\",\"read_ms\":{:.1},\"all_ms\":{:.1},\"mm\":{},\"unc\":{},\"voff\":{},\"coff\":{},\"voffn\":{},\"coffn\":{},\"edges\":{},\"faces\":{},\"tangent\":{},\"tolerant\":{},\"maxtol\":{},\"pairs\":{{{}}},\"refusals\":{{{}}},\"why\":\"{}\",\"solids\":[{}]}}",
+        "{{\"assembly\":{},\"system\":\"{}\",\"schema\":\"{}\",\"read_ms\":{:.1},\"all_ms\":{:.1},\"mm\":{},\"unc\":{},\"voff\":{},\"coff\":{},\"voffn\":{},\"coffn\":{},\"edges\":{},\"faces\":{},\"tangent\":{},\"tolerant\":{},\"maxtol\":{},\"pairs\":{{{}}},\"refusals\":{{{}}},\"why\":\"{}\",\"solids\":[{}]}}",
+        st.assembly,
         esc(&imp.system),
         esc(&imp.schema),
         read_ms,

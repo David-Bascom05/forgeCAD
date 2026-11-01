@@ -209,27 +209,37 @@ pub fn check_stages(stages: &[Arc<Stage>], from: usize, stop: &AtomicBool) -> Ve
     Verdict::Done(list)
 }
 
-/// Faces of a file's body that only mesh drawn as they are (`tessellate_tolerant`): the picture of them
-/// parts from the next face by what the file's edges miss by. It is said, not left to look fine.
+/// What the reader of a file's body leaves undone, said and not left to look fine: faces that only mesh
+/// drawn as they are (`tessellate_tolerant`), the picture of them parting from the next face by what the
+/// file's edges miss by, and an assembly's placements, which are not read.
 pub fn tangled(solids: &[forge_model::Solid]) -> Vec<Issue> {
-    solids
-        .iter()
-        .filter(|s| s.body.from_file)
-        .filter_map(|s| {
-            let body = s.body.compact();
-            let q = forge_mesh::Quality::default();
-            match forge_mesh::tessellate(&body, &q) {
-                Err(e @ forge_mesh::TessError::Face { face, .. }) if e.tangled() => Some(Issue {
-                    rule: "tangled-face",
-                    reason: "this face's edges from the file cross within their tolerance: it is drawn \
-                             as they are, with a small crack to the next face"
-                        .to_string(),
-                    entity: Some(forge_topo::Entity::Face(body.face(face).name)),
-                }),
-                _ => None,
-            }
-        })
-        .collect()
+    let mut out = Vec::new();
+    for s in solids.iter().filter(|s| s.body.from_file) {
+        if s.body.unplaced {
+            out.push(Issue {
+                rule: "assembly-not-placed",
+                reason: "the file places its parts as an assembly, which is not read: each solid is here \
+                         once, where it stands in its own part, so copies are missing and parts may be \
+                         out of place"
+                    .to_string(),
+                entity: None,
+            });
+        }
+        let body = s.body.compact();
+        if let Err(e @ forge_mesh::TessError::Face { face, .. }) =
+            forge_mesh::tessellate(&body, &forge_mesh::Quality::default())
+            && e.tangled()
+        {
+            out.push(Issue {
+                rule: "tangled-face",
+                reason: "this face's edges from the file cross within their tolerance: it is drawn \
+                         as they are, with a small crack to the next face"
+                    .to_string(),
+                entity: Some(forge_topo::Entity::Face(body.face(face).name)),
+            });
+        }
+    }
+    out
 }
 
 /// How many leading stages are the same as in `checked`: where `check_stages` goes on from.
@@ -1439,6 +1449,8 @@ mod tests {
         assert_eq!(said.len(), 1);
         assert_eq!(said[0].rule, "tangled-face");
         assert!(said[0].entity.is_some());
+        solids[0].body.unplaced = true;
+        assert!(tangled(&solids).iter().any(|i| i.rule == "assembly-not-placed"));
     }
     use forge_model::{Part, fillets, suite};
 

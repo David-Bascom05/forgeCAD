@@ -119,3 +119,11 @@ locations and edges with no 3D curve are refused by name. Corpus: 3206 FreeCAD-s
 The budget also counts mesh work on such files: `find_edge` round a fan and constraint recovery, where a chord crosses
 thousands of triangles. Plain analytic faces took over 60 s there with no surface evaluation at all; now 3 to 5 s and a
 refusal. A file's face stops being cut finer after 3 rounds, not 9, and goes to the tangled draw.
+
+## Assemblies are not read
+
+Each solid is read once, where it stands in its own part: NEXT_ASSEMBLY_USAGE_OCCURRENCE, MAPPED_ITEM and
+CONTEXT_DEPENDENT_SHAPE_REPRESENTATION are not applied, so copies are missing and parts may be out of place, valid all
+the same. `assembly_asks` counts what a file asks that this leaves undone, placements that move and parts used twice, and
+such a body is flagged `assembly-not-placed` in the check. A placement onto itself asks nothing: all 59 Onshape files of the CADFS
+set with a MAPPED_ITEM are these, and match OCCT. Reading placements is David's call.
