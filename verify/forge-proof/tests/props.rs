@@ -492,3 +492,45 @@ fn effect_lets_a_cut_take_a_whole_body() {
     );
     assert!(props::bodies_held(&combine(Combine::Add), &bodies(2), &bodies(1)).is_some());
 }
+
+// Ruled lofts cut by a cylinder: the curve on the wall comes to a tip, so a plane across it cuts two
+// arms (Newton from a far seed landed on the other, as exact as the right one), and one chain step
+// can hold the whole turn at the tip.
+#[test]
+fn mass_agrees_with_the_mesh_on_a_curve_with_two_arms() {
+    let parts = [
+        (
+            "two arms",
+            "arm: loft profile at 1.92387 2.39903 0 circle 0 0 20.2127 profile at 2.77072 2.03649 66.9086 circle 0 0 23.9307
+             extrude cut 76.9086 z 0 0 1 x 1 0 0 at 17.0662172828 19.6484941013 -5 circle 0 0 1.69944
+             extrude cut 213.949 z 0.986371786648 -0.164531755306 0 x 0 0 1 at -105.516428921 17.6006689353 11.8710917543 circle 0 0 5.42322
+             extrude cut 213.949 z -0.590787687949 0.806675132166 -0.0156569126432 x 0 -0.0194055372993 -0.999811694832 at 63.1990978722 -86.2935055498 19.826670494 circle 0 0 2.62392",
+        ),
+        (
+            "no region",
+            "arm: loft profile at -2.76075 -0.743971 0 circle 0 0 5.58991 profile at 1.86503 0.567644 56.3615 circle 0 0 10.7266 profile at -1.45221 -2.28102 112.723 circle 0 0 12.0474
+             extrude cut 122.723 z 0 0 1 x 1 0 0 at -11.4885874662 -1.52046134588 -5 circle 0 0 2.05112
+             extrude cut 122.723 z 0 0 1 x 1 0 0 at 7.88027351596 8.6001202425 -5 circle 0 0 1.84516",
+        ),
+        (
+            "turn in a chain step",
+            "arm: loft profile at 1.71584 2.90262 0 circle 0 0 22.4298 profile at -0.877333 -0.276794 47.8258 circle 0 0 10.8143 profile at 2.41955 -0.408761 95.6516 circle 0 0 17.746
+             extrude cut 219.311 z 0.16714244831 -0.985932757328 0 x 0 0 1 at -18.3281298161 108.113191765 22.4474540782 circle 0 0 4.05556
+             extrude add 105.652 z 0 0 1 x 1 0 0 at 17.0008755596 5.12124836525 -5 circle 0 0 1.14856",
+        ),
+    ];
+    for (name, src) in parts {
+        let lines: Vec<&str> = src.lines().map(str::trim).collect();
+        let m = forge_agent::model::Model::new(&lines.join("\n"));
+        let part = Part {
+            features: m.features.clone(),
+        };
+        assert!(part.regenerate().is_ok(), "{name} builds");
+        assert!(props::mass_mesh(&part, 1).is_none(), "{name}: {:?}", props::mass_mesh(&part, 1));
+        // and through the n-ary road
+        let body = part.regenerate_nary(1).expect("n-ary builds");
+        let m = forge_topo::mass::mass(&body.compact()).expect("a mass");
+        let seq = forge_topo::mass::mass(&part.regenerate().unwrap().compact()).expect("a mass");
+        assert!((m.volume - seq.volume).abs() < 1e-6 * seq.volume, "{name}: {} vs {}", m.volume, seq.volume);
+    }
+}

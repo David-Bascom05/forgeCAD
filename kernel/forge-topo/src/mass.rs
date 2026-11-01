@@ -436,8 +436,20 @@ impl Way<'_> {
                 if let Some((k, last)) = on {
                     let (ps, other) = if *k == 0 { (&c.a, &c.b) } else { (&c.b, &c.a) };
                     let ps = ps.smooth();
-                    let seed = last.get().unwrap_or_else(|| ps.project(self.chord_point(s)));
-                    match chord_on(ps, other, *anchor, *dir, s, seed) {
+                    // the plane at s can cut the curve twice (a V on a hole's wall): from a seed far
+                    // along (a piece made finer starts over) Newton can land on the other arm, which
+                    // is as exact as this one. The chain says which arm is this one.
+                    let (near, reach) = self.chain_at(s);
+                    let on_arm = |p: Point3| {
+                        let off = p - near;
+                        (off - *dir * dir.dot(off)).length() <= reach
+                    };
+                    let from_last = last.get().and_then(|seed| chord_on(ps, other, *anchor, *dir, s, seed));
+                    let got = from_last.filter(|x| on_arm(x.0)).or_else(|| {
+                        chord_on(ps, other, *anchor, *dir, s, ps.project(self.chord_point(s)))
+                            .filter(|x| on_arm(x.0))
+                    });
+                    match got {
                         Some((p, t, uv)) => {
                             last.set(Some(uv));
                             return (p, t, Some((ps, uv)));
@@ -453,20 +465,25 @@ impl Way<'_> {
         }
     }
 
+    /// The chain's point at chord distance s, and how far off it the curve can be there: a part of
+    /// the chain step it falls in.
+    fn chain_at(&self, s: f64) -> (Point3, f64) {
+        let Way::Chord { c, knots, .. } = self else {
+            unreachable!("only a chord way has a chain")
+        };
+        let i = knots.partition_point(|k| k.1 <= s).clamp(1, knots.len() - 1);
+        let ((t0, s0), (t1, s1)) = (knots[i - 1], knots[i]);
+        (c.eval(t0 + (t1 - t0) * ((s - s0) / (s1 - s0))), 0.25 * (s1 - s0))
+    }
+
     /// A chord way's point at s, solved onto both surfaces' implicit values.
     fn chord_point(&self, s: f64) -> Point3 {
         match self {
             Way::Curve(c) => c.eval(s),
             Way::Chord {
-                c,
-                anchor,
-                dir,
-                knots,
-                ..
+                c, anchor, dir, ..
             } => {
-                let i = knots.partition_point(|k| k.1 <= s).clamp(1, knots.len() - 1);
-                let ((t0, s0), (t1, s1)) = (knots[i - 1], knots[i]);
-                let mut p = c.eval(t0 + (t1 - t0) * ((s - s0) / (s1 - s0)));
+                let mut p = self.chain_at(s).0;
                 let tight = 4.0 * f64::EPSILON * (1.0 + (p - Point3::ORIGIN).abs_max());
                 for _ in 0..8 {
                     let ((fa, ga), (fb, gb)) = (c.a.implicit_gradient(p), c.b.implicit_gradient(p));
@@ -846,15 +863,32 @@ fn coedge_pieces<'a>(
             while t0 < hi {
                 // pieces over which the curve turns less than 30 degrees: the distance along
                 // their chord then runs one way
-                let tan0 = ic.tans[idx(t0)];
+                let tan = |t: f64| ic.derivs(t).1.normalize().map_or(Vec3::new(0.0, 0.0, 0.0), |d| d.get());
+                let tan0 = tan(t0);
                 // the next chain point, or the end when that is a hair away
                 let next = |t: f64| {
                     let k = (t + 1e-9).floor() + 1.0;
                     if hi - k <= 1e-9 { hi } else { k }
                 };
                 let mut t1 = next(t0);
-                while t1 < hi && ic.tans[idx(t1)].dot(tan0) >= 0.866 {
+                while t1 < hi && tan(t1).dot(tan0) >= 0.866 {
                     t1 = next(t1);
+                }
+                // a chain step can hold the whole turn (the tip of a curve): stop where it passes 30
+                let mut from = (t1 - 1.0).max(t0);
+                for _ in 0..12 {
+                    if tan(t1).dot(tan0) >= 0.866 || t1 - from <= 1e-9 {
+                        break;
+                    }
+                    let mid = 0.5 * (from + t1);
+                    if tan(mid).dot(tan0) >= 0.866 {
+                        from = mid;
+                    } else {
+                        t1 = mid;
+                    }
+                }
+                if t1 - t0 < 1e-6 {
+                    t1 = next(t0);
                 }
                 let anchor = ic.eval(t0);
                 let end = ic.eval(t1);

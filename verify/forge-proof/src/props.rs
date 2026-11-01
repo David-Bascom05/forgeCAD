@@ -1013,8 +1013,71 @@ pub fn all() -> Vec<(&'static str, Property)> {
         ("membership", membership),
         ("effect", effect),
         ("volume", tool_volume),
+        ("mass", mass_mesh),
         ("ulp", ulp),
     ]
+}
+
+/// The exact mass integrals and meshes of the same body are two independent roads to one volume
+/// and one area per face. A mesh's error goes as its sag, so a mesh at a quarter of it tells both
+/// the limit and how far off that may be. A mass that cannot be had of a body that meshes is a
+/// finding too.
+pub fn mass_mesh(part: &Part, _seed: u64) -> Option<Finding> {
+    let body = build(part).ok()?;
+    if !forge_topo::check(&body).is_empty() {
+        return None;
+    }
+    let body = body.compact();
+    let mesh = |chord: f64, max_angle: f64| guarded_mesh(&body, chord, max_angle);
+    // (a small part's mesh is as fine for its size)
+    let diagonal = body
+        .face_ids()
+        .fold(forge_math::Box3::EMPTY, |b, f| b.hull(&body.face_box(f)))
+        .diagonal();
+    let chord = CHORD.min(1e-3 * diagonal);
+    let (coarse, fine) = (mesh(chord, 0.5)?, mesh(chord / 4.0, 0.25)?);
+    let m = match forge_topo::mass::mass(&body) {
+        Ok(m) => m,
+        Err(e) => return found("mass", "no mass", format!("{e}; the mesh says {}", fine.volume())),
+    };
+    let limit = |c: f64, f: f64| (f + (f - c) / 3.0, 0.5 * (f - c).abs());
+    let (v, dv) = limit(coarse.volume(), fine.volume());
+    if (m.volume - v).abs() > 2.0 * dv + m.err[0] + 3e-5 * m.volume.abs() {
+        return found(
+            "mass",
+            "volume differs from the mesh",
+            format!("mass {} +- {}, mesh {v} +- {dv}", m.volume, m.err[0]),
+        );
+    }
+    let faces = |t: &forge_mesh::TriMesh| {
+        let mut a = vec![0.0; body.faces.len()];
+        for (tri, &f) in t.triangles.iter().zip(&t.face_of) {
+            let [p, q, r] = tri.map(|i| t.positions[i as usize]);
+            a[f as usize] += (q - p).cross(r - p).length() * 0.5;
+        }
+        a
+    };
+    let (ca, fa) = (faces(&coarse), faces(&fine));
+    for &(f, area) in &m.faces {
+        let k = f.0 as usize;
+        let (want, slack) = limit(ca[k], fa[k]);
+        if (area - want).abs() > slack + m.err[1] + 1e-5 * m.area {
+            return found(
+                "mass",
+                "a face's area differs from the mesh",
+                format!("face {}: mass {area}, mesh {want} +- {slack}", f.0),
+            );
+        }
+    }
+    None
+}
+
+fn guarded_mesh(b: &Body, chord: f64, max_angle: f64) -> Option<forge_mesh::TriMesh> {
+    std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        tessellate(b, &Quality { chord, max_angle }).ok()
+    }))
+    .ok()
+    .flatten()
 }
 
 /// How many points each checked feature samples, and how many features of a part are checked.
@@ -1117,35 +1180,31 @@ fn volume_change(
     if !(volume > 0.0) {
         return None;
     }
-    let (mut hits, mut asked) = (0usize, 0usize);
-    let mut tries = 0;
-    while asked < VOLUME_SAMPLES && tries < 3 * VOLUME_SAMPLES {
-        tries += 1;
+    let mut hits = 0.0;
+    // a point on a boundary counts half (left out, a tool a few microns thick loses its share)
+    let share = |w: Where| match w {
+        Where::Inside => 1.0,
+        Where::On => 0.5,
+        _ => 0.0,
+    };
+    for _ in 0..VOLUME_SAMPLES {
         let q = Point3::new(
             r.range(bb.x.lo, bb.x.hi),
             r.range(bb.y.lo, bb.y.hi),
             r.range(bb.z.lo, bb.z.hi),
         );
-        let w: Vec<Where> = solids.iter().map(|s| s.classify(q)).collect();
-        let b = ix.classify(q);
-        if b == Where::On || w.contains(&Where::On) {
-            continue;
-        }
-        asked += 1;
-        let in_tool = w.contains(&Where::Inside);
-        let in_body = b == Where::Inside;
+        let in_tool = solids.iter().map(|s| share(s.classify(q))).fold(0.0, f64::max);
+        let in_body = share(ix.classify(q));
         hits += match op {
-            Combine::Cut => in_tool && in_body,
-            _ => in_tool && !in_body,
-        } as usize;
+            Combine::Cut => in_tool * in_body,
+            _ => in_tool * (1.0 - in_body),
+        };
     }
-    if asked < VOLUME_SAMPLES / 2 {
-        return None;
-    }
+    let asked = VOLUME_SAMPLES as f64;
     // (a share of none or all still has an error: one point's worth)
-    let p = (hits as f64 + 1.0) / (asked as f64 + 2.0);
-    let sigma = volume * (p * (1.0 - p) / asked as f64).sqrt();
-    let want = volume * hits as f64 / asked as f64;
+    let p = (hits + 1.0) / (asked + 2.0);
+    let sigma = volume * (p * (1.0 - p) / asked).sqrt();
+    let want = volume * hits / asked;
     let got = if op == Combine::Cut { v0 - v1 } else { v1 - v0 };
     Some((want, sigma, got))
 }

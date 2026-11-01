@@ -1,4 +1,4 @@
-//! The `volume` property over a directory of part files: toolvolume DIR [FROM COUNT] [THREADS]
+//! One property over a directory of part files: propdir PROP DIR [FROM COUNT] [THREADS]
 use forge_agent::model::Model;
 use forge_model::Part;
 use std::sync::Mutex;
@@ -6,6 +6,11 @@ use std::sync::atomic::{AtomicUsize, Ordering};
 
 fn main() {
     let a: Vec<String> = std::env::args().skip(1).collect();
+    let (name, prop) = forge_proof::props::all()
+        .into_iter()
+        .find(|p| p.0 == a[0])
+        .expect("a property");
+    let a = &a[1..];
     let mut files: Vec<_> = std::fs::read_dir(&a[0])
         .expect("a directory")
         .filter_map(|e| e.ok().map(|e| e.path()))
@@ -32,12 +37,12 @@ fn main() {
                         let part = Part {
                             features: m.features.clone(),
                         };
-                        forge_proof::props::tool_volume(&part, 1)
+                        prop(&part, 1)
                     });
                     checked.fetch_add(1, Ordering::Relaxed);
                     if let Ok(Some(x)) = got {
                         let _g = out.lock();
-                        println!("{} {}: {}", f.display(), x.kind, x.detail);
+                        println!("{} {name} {}: {}", f.display(), x.kind, x.detail);
                     }
                 }
             });
