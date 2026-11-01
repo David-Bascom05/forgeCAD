@@ -102,6 +102,7 @@ pub fn fuzz(seed: u64) -> Part {
         0 => {
             let k = r.below(4) as u64;
             features.push(Feature::Chamfer {
+                corner: Default::default(),
                 edges: vec![edge(top, side(0, k))],
                 size: ChamferSize::Equal(r.range(0.2, 0.4) * h.min(d)),
             });
@@ -391,6 +392,7 @@ pub fn parts() -> Vec<(&'static str, Part, Option<f64>)> {
             part(vec![
                 block(),
                 Feature::Chamfer {
+                    corner: Default::default(),
                     edges: vec![edge(top, side(0, 0))],
                     size: ChamferSize::Equal(3.0),
                 },

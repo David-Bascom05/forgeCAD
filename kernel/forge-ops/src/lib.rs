@@ -21,7 +21,7 @@ pub mod taper;
 pub mod thicken;
 mod wavefront;
 
-pub use chamfer::{ChamferError, ChamferSize, chamfer};
+pub use chamfer::{ChamferCorner, ChamferError, ChamferSize, chamfer, chamfer_with};
 pub use direct::{DirectError, Rounded, delete_faces, move_faces, offset_faces, replace_face};
 pub use draft::{DraftError, draft};
 pub use extrude::{ExtrudeError, extrude, extrude_unlinked};

@@ -861,6 +861,7 @@ pub fn variant_cases() -> Vec<(&'static str, Part, Option<f64>)> {
     let (top, front) = (Point3::new(10.0, 5.0, 8.0), Point3::new(10.0, 0.0, 4.0));
     let mut chamfered = boxed.clone();
     chamfered.features.push(Feature::Chamfer {
+        corner: Default::default(),
         edges: vec![edge_near(
             &boxed.regenerate().expect("box"),
             Point3::new(10.0, 0.0, 8.0),

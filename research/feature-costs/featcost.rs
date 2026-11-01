@@ -96,7 +96,7 @@ fn label(f: &Feature) -> (String, usize) {
         }
         Feature::FaceFillet { first, second, .. } => ("fillet.face".into(), first.len() + second.len()),
         Feature::FullRound { .. } => ("fillet.fullround".into(), 1),
-        Feature::Chamfer { edges, size } => (format!("chamfer.{}", first_word(size)), edges.len()),
+        Feature::Chamfer { edges, size, .. } => (format!("chamfer.{}", first_word(size)), edges.len()),
         Feature::Shell { outward, open, .. } => {
             (format!("shell.{}", if *outward { "out" } else { "in" }), open.len())
         }

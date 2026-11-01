@@ -14,7 +14,8 @@ use forge_model::{
     ThreadOn, ThreadSpec, Toward, Turn, UcsBy, Unit, Work, standard, work,
 };
 use forge_ops::{
-    Axis2, ChamferSize, Handed, LoftGuides, LoftKind, PathSeg, Profile, ProfileLoop, Radius, Segment,
+    Axis2, ChamferCorner, ChamferSize, Handed, LoftGuides, LoftKind, PathSeg, Profile, ProfileLoop, Radius,
+    Segment,
 };
 use forge_topo::Name;
 use std::sync::Arc;
@@ -230,7 +231,7 @@ pub const KINDS: &[Kind] = &[
     },
     Kind {
         name: "chamfer",
-        syntax: "chamfer D REF.. | chamfer D D2 face REF REF.. | chamfer D ang A face REF REF..",
+        syntax: "chamfer D [corner point|patch] REF.. | chamfer D D2 face REF [corner ..] REF.. | chamfer D ang A face REF [corner ..] REF..",
         parse: |p| {
             let d = p.num()?;
             let size = if p.eat("ang") {
@@ -252,13 +253,23 @@ pub const KINDS: &[Kind] = &[
             } else {
                 ChamferSize::Equal(d)
             };
+            // three chamfers at a corner: a flat triangle (default), or their planes on to a point
+            let corner = if !p.eat("corner") {
+                ChamferCorner::Patch
+            } else if p.eat("point") {
+                ChamferCorner::Point
+            } else {
+                p.expect("patch")?;
+                ChamferCorner::Patch
+            };
             Ok(Feature::Chamfer {
+                corner,
                 edges: p.some_refs()?,
                 size,
             })
         },
         print: |f, w| {
-            let Feature::Chamfer { edges, size } = f else {
+            let Feature::Chamfer { edges, size, corner } = f else {
                 return false;
             };
             match *size {
@@ -276,6 +287,10 @@ pub const KINDS: &[Kind] = &[
                     w.word("face");
                     w.name(face);
                 }
+            }
+            if *corner == ChamferCorner::Point {
+                w.word("corner");
+                w.word("point");
             }
             w.names(edges);
             true
@@ -4094,6 +4109,7 @@ mod tests {
                 }
             }
             4 => Feature::Chamfer {
+                corner: Default::default(),
                 edges: names(r),
                 size: match r.below(3) {
                     0 => ChamferSize::Equal(num(r)),

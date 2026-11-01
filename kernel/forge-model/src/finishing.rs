@@ -65,6 +65,7 @@ pub fn fuzz(seed: u64) -> Part {
                 let pick: Vec<u64> = walls.iter().copied().filter(|_| r.bool()).collect();
                 let cap = if r.bool() { top } else { bottom };
                 features.push(Feature::Chamfer {
+                    corner: Default::default(),
                     edges: pick.iter().map(|&k| edge(cap, side(0, k))).collect(),
                     size: ChamferSize::Equal(size(&mut r)),
                 });
@@ -277,7 +278,14 @@ pub fn parts() -> Vec<(&'static str, Part, Option<f64>)> {
     let bottoms: Vec<Name> = (0..4).map(|k| edge(face(0, "start"), side(0, k))).collect();
     let uprights: Vec<Name> = (0..4).map(|k| edge(side(0, (k + 3) % 4), side(0, k))).collect();
     let chamfered = |edges: Vec<Name>, size: ChamferSize| Part {
-        features: vec![block(), Feature::Chamfer { edges, size }],
+        features: vec![
+            block(),
+            Feature::Chamfer {
+                edges,
+                size,
+                corner: Default::default(),
+            },
+        ],
     };
     let d = 2.0;
     out.push((
@@ -341,6 +349,7 @@ pub fn parts() -> Vec<(&'static str, Part, Option<f64>)> {
             features: vec![
                 rod(r),
                 Feature::Chamfer {
+                    corner: Default::default(),
                     edges: vec![edge(top, side(0, 0)), edge(face(0, "start"), side(0, 0))],
                     size: ChamferSize::Equal(dc),
                 },
@@ -367,6 +376,7 @@ pub fn parts() -> Vec<(&'static str, Part, Option<f64>)> {
             features: vec![
                 plate(),
                 Feature::Chamfer {
+                    corner: Default::default(),
                     edges: rims.clone(),
                     size: ChamferSize::Equal(1.0),
                 },
@@ -386,6 +396,7 @@ pub fn parts() -> Vec<(&'static str, Part, Option<f64>)> {
             features: vec![
                 block(),
                 Feature::Chamfer {
+                    corner: Default::default(),
                     edges: uprights.clone(),
                     size: ChamferSize::Equal(4.0),
                 },

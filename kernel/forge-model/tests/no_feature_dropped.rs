@@ -76,6 +76,7 @@ fn a_reference_to_nothing_is_an_error() {
             other: gone,
         },
         Feature::Chamfer {
+            corner: Default::default(),
             edges: vec![gone],
             size: ChamferSize::Equal(1.0),
         },
@@ -170,6 +171,7 @@ fn a_feature_naming_nothing_is_an_error() {
             setbacks: vec![],
         },
         Feature::Chamfer {
+            corner: Default::default(),
             edges: vec![],
             size: ChamferSize::Equal(1.0),
         },

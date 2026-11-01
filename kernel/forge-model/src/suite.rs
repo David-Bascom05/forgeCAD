@@ -1296,6 +1296,7 @@ pub fn torture2() -> Part {
             .collect(),
     });
     f.push(Feature::Chamfer {
+        corner: Default::default(),
         edges: (0..8).map(|k| edge(face(0, "start"), side(0, k))).collect(),
         size: ChamferSize::Equal(1.5),
     });
@@ -1410,6 +1411,7 @@ pub fn torture2() -> Part {
         op: Combine::Cut,
     })));
     f.push(Feature::Chamfer {
+        corner: Default::default(),
         edges: vec![edge(face(spigot, "end"), side(spigot, 0))],
         size: ChamferSize::DistanceAngle {
             face: face(spigot, "end"),

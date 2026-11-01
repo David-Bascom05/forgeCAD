@@ -35,9 +35,9 @@ use forge_gpu::AutoBatch;
 pub use forge_gpu::{Backend, open_in_background as open_gpu};
 use forge_math::{Frame, Point2, Vec2, dmath};
 use forge_ops::{
-    Axis2, ChamferError, ChamferSize, DraftError, ExtrudeError, FilletEdge, FilletError, FilletOptions,
-    Profile, ProfileLoop, Radius, RevolveError, Segment, ShellError, chamfer, draft, extrude, face_fillet,
-    fillet_with, full_round, revolve, revolve_cutter, shell,
+    Axis2, ChamferCorner, ChamferError, ChamferSize, DraftError, ExtrudeError, FilletEdge, FilletError,
+    FilletOptions, Profile, ProfileLoop, Radius, RevolveError, Segment, ShellError, chamfer_with, draft,
+    extrude, face_fillet, fillet_with, full_round, revolve, revolve_cutter, shell,
 };
 use forge_topo::{Body, Name};
 pub use hole::{End, Head, Hole, HoleError, Thread};
@@ -140,7 +140,11 @@ pub enum Feature {
     /// Take face `middle` away between faces `side` and `other` with the ball touching all three.
     FullRound { side: Name, middle: Name, other: Name },
     /// Bevel edges of the part.
-    Chamfer { edges: Vec<Name>, size: ChamferSize },
+    Chamfer {
+        edges: Vec<Name>,
+        size: ChamferSize,
+        corner: ChamferCorner,
+    },
     /// Hollow the part to walls `thickness` thick, inside or outside its skin, `open` faces removed.
     Shell {
         thickness: f64,
@@ -1486,11 +1490,12 @@ fn modify(
                 None => Ok(b),
             })
         }
-        Feature::Chamfer { edges, size } => {
+        Feature::Chamfer { edges, size, corner } => {
             // a selector gives edges in arena order, which must not name anything
             let mut edges = edges.clone();
             edges.sort();
-            chamfer(body, &edges, *size, id).map_err(|error| RegenError::Chamfer { feature: i, error })
+            chamfer_with(body, &edges, *size, *corner, id)
+                .map_err(|error| RegenError::Chamfer { feature: i, error })
         }
         Feature::Shell {
             thickness,

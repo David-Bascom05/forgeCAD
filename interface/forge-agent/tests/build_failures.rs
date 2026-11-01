@@ -975,3 +975,20 @@ fn a_chamfer_beside_an_equal_one_takes_the_short_edge_between() {
     let m = v.mass().expect("a mass").volume;
     assert!((m - (990.0 + 1.0 / 3.0)).abs() < 1e-6, "{m}");
 }
+
+/// Three chamfers of one feature at a corner, `corner point`: their cut planes run on to a point (CATIA's corner;
+/// the default is Parasolid's flat triangle). Own numbers: the volume of |x|,|y|,|z| <= 5 with |x|+|y|, |y|+|z|,
+/// |z|+|x| <= 9, by inclusion-exclusion: 1000 - 12 * 5 + 8 * 3/4. The line prints back as written.
+#[test]
+fn three_chamfers_at_a_corner_meet_at_a_point_when_asked() {
+    let mut v = Model::new("extrude 10 rect 0 0 10 10\nchamfer 1 corner point (edges)\n");
+    assert!(v.error.is_none(), "{:?}", v.error.as_ref().map(|e| &e.msg));
+    let b = v.body().expect("a body");
+    assert!(forge_topo::check(b).is_empty(), "{:?}", forge_topo::check(b));
+    assert_eq!(b.faces.len(), 18);
+    let m = v.mass().expect("a mass").volume;
+    assert!((m - 946.0).abs() < 1e-6, "{m}");
+    let mut p = Model::new("extrude 10 rect 0 0 10 10\nchamfer 1 (edges)\n");
+    assert_eq!(p.body().expect("a body").faces.len(), 26);
+    assert!(p.mass().expect("a mass").volume < 946.0);
+}

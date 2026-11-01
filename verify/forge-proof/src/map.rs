@@ -212,7 +212,8 @@ impl Map {
                 second: second.clone(),
                 radius: self.len(*radius),
             },
-            Feature::Chamfer { edges, size } => Feature::Chamfer {
+            Feature::Chamfer { edges, size, corner } => Feature::Chamfer {
+                corner: *corner,
                 edges: edges.clone(),
                 size: match *size {
                     ChamferSize::Equal(d) => ChamferSize::Equal(self.len(d)),

@@ -826,7 +826,7 @@ fn export(features: History<'_>, i: usize, before: Option<&Before>) -> Result<St
             json(format!("{{\"kind\":\"fillet\",\"edges\":[{}]}}", es.join(",")))
         }
         Feature::FullRound { .. } => Err("full round: OCCT has no fillet that takes a face away"),
-        Feature::Chamfer { edges, size } => {
+        Feature::Chamfer { edges, size, .. } => {
             let b = need()?;
             let ids: Result<Vec<EdgeId>, _> = edges.iter().map(|&n| b.edge(n)).collect();
             let ids = ids?;

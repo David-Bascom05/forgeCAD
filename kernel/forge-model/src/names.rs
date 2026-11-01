@@ -320,7 +320,7 @@ pub fn stored_refs(f: &Feature) -> Vec<(Kind, Name)> {
         Feature::FullRound { side, middle, other } => {
             [side, middle, other].iter().map(|&&n| (Kind::Face, n)).collect()
         }
-        Feature::Chamfer { edges, size } => {
+        Feature::Chamfer { edges, size, .. } => {
             let mut out: Vec<_> = edges.iter().map(|&e| (Kind::Edge, e)).collect();
             if let ChamferSize::Distances { face, .. } | ChamferSize::DistanceAngle { face, .. } = size {
                 out.push((Kind::Face, *face));
@@ -1056,6 +1056,7 @@ pub fn body_parts() -> Vec<(String, Part)> {
         make(at.iter().map(|&p| crate::fillets::face_near(&b, p)).collect())
     };
     let chamfer = |edges: Vec<Name>| Feature::Chamfer {
+        corner: Default::default(),
         edges,
         size: ChamferSize::Equal(1.0),
     };

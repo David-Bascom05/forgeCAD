@@ -367,6 +367,7 @@ fn copies_have_stable_names() {
         let rim = Name::NONE.with_set(&[boss.with_str("end"), boss.with_str("side").with(0)]);
         if chamfer {
             features.push(Feature::Chamfer {
+                corner: Default::default(),
                 edges: vec![instance_name(3, [2, 0], rim)],
                 size: ChamferSize::Equal(1.0),
             });

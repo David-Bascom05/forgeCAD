@@ -17,6 +17,15 @@ pub enum ChamferSize {
     DistanceAngle { face: Name, d: f64, angle: f64 },
 }
 
+/// Where three chamfers of one feature meet at a corner: a flat triangle across it (Parasolid),
+/// or their planes run on to a point (CATIA).
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum ChamferCorner {
+    #[default]
+    Patch,
+    Point,
+}
+
 #[derive(Clone, Debug, PartialEq)]
 pub enum ChamferError {
     NoSuchEdge {
@@ -71,6 +80,17 @@ type Path = Vec<(EdgeId, bool)>;
 /// lines, a cone or plane between two coaxial circles), the faces beside it are trimmed back,
 /// and where chamfers meet they mitre (two) or get a flat corner patch (three).
 pub fn chamfer(body: &Body, edges: &[Name], size: ChamferSize, feature: u64) -> Result<Body, ChamferError> {
+    chamfer_with(body, edges, size, ChamferCorner::Patch, feature)
+}
+
+/// `chamfer`, three planar chamfers at a corner meeting as `corner` says.
+pub fn chamfer_with(
+    body: &Body,
+    edges: &[Name],
+    size: ChamferSize,
+    corner: ChamferCorner,
+    feature: u64,
+) -> Result<Body, ChamferError> {
     let src = body.compact();
     let root = Name::feature(feature);
     let mut bevels: Vec<Bevel> = Vec::new();
@@ -148,6 +168,7 @@ pub fn chamfer(body: &Body, edges: &[Name], size: ChamferSize, feature: u64) -> 
         cap: HashMap::new(),
         patches: Vec::new(),
         gone: Vec::new(),
+        corner,
     };
     for &v in &affected {
         w.vertex(&src, &bevels, &bevel_of, v, &corners[&v], root)?;
@@ -303,6 +324,7 @@ struct Work {
     patches: Vec<(FaceId, [EdgeId; 3])>,
     /// Untouched edges the chamfer reaches the far end of: gone, that end the corner.
     gone: Vec<EdgeId>,
+    corner: ChamferCorner,
 }
 
 fn reverse(p: &[(EdgeId, bool)]) -> Path {
@@ -606,6 +628,34 @@ impl Work {
                     .fold(Vec3::ZERO, |s, n| s + n);
                 if normal.dot(outward) < 0.0 {
                     normal = -normal;
+                }
+                // asked to, the three planes run on to a point, when it lies below all three faces and past
+                // where the patch would be (else the patch)
+                let planes = b.iter().map(|&x| bevels[x].surface.clone()).collect::<Vec<_>>();
+                let mid = qs[0].lerp(qs[1].lerp(qs[2], 0.5), 2.0 / 3.0);
+                let meet = (self.corner == ChamferCorner::Point
+                    && planes.iter().all(|s| matches!(s, Surface::Plane(_))))
+                .then(|| solve_point(&planes, mid))
+                .flatten()
+                .filter(|&m| {
+                    normal.dot(m - qs[0]) > tol::LINEAR
+                        && f.iter()
+                            .all(|&x| face_normal_at(src, x, vp).dot(m - vp) < -tol::LINEAR)
+                });
+                if let Some(m) = meet {
+                    let vs: Vec<VertexId> = qs.iter().map(|&p| self.vertex_at(p, name("v"))).collect();
+                    let top = self.vertex_at(m, name("v"));
+                    let spokes: Vec<EdgeId> =
+                        vs.iter().map(|&q| self.edge_between(q, top, name("e"))).collect();
+                    for j in 0..3 {
+                        let (e, at) = ends[j];
+                        let k = (j + 1) % 3;
+                        self.contact.insert((e, at, f[j]), vs[j]);
+                        self.contact.insert((e, at, f[k]), vs[k]);
+                        self.cap
+                            .insert(ends[j], (f[j], vec![(spokes[j], true), (spokes[k], false)]));
+                    }
+                    return Ok(());
                 }
                 let patch = Surface::Plane(Plane::new(Frame::from_z(qs[0], normal)));
                 let pf = self.out.add_face(
@@ -960,6 +1010,14 @@ mod tests {
         let all: Vec<Name> = b.edges.iter().map(|e| e.name).collect();
         let c = chamfer(&b, &all, ChamferSize::Equal(1.0), 2).unwrap();
         assert_eq!(c.faces.len(), 6 + 12 + 8);
+    }
+
+    #[test]
+    fn every_edge_planes_meeting_at_points() {
+        let b = boxed();
+        let all: Vec<Name> = b.edges.iter().map(|e| e.name).collect();
+        let c = chamfer_with(&b, &all, ChamferSize::Equal(1.0), ChamferCorner::Point, 2).unwrap();
+        assert_eq!(c.faces.len(), 6 + 12);
     }
 
     #[test]

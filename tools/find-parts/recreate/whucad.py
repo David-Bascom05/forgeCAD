@@ -341,7 +341,8 @@ class Tr(FT):
                 self.kinds.append("chamfer")
                 if abs(r[22] - r[23]) > 1:
                     raise Unsupported("an unequal chamfer")
-                self.finish(pending, f"chamfer {num(unq(r[22]))}")
+                # CATIA runs three chamfers of one feature on to a point at a corner
+                self.finish(pending, f"chamfer {num(unq(r[22]))} corner point")
                 pending = []
             elif c == "Shell":
                 self.kinds.append("shell")
