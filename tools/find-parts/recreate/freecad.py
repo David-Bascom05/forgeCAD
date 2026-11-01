@@ -34,6 +34,7 @@ class Doc:
     def __init__(self, data):
         self.z = zipfile.ZipFile(io.BytesIO(data))
         self.volumes = None
+        self.bodied = None
         info = self.z.getinfo("Document.xml")
         if info.file_size > 64 << 20:
             raise Unsupported("a huge document")
@@ -746,7 +747,11 @@ def base_of(doc, n):
     if b:
         return b
     if doc.prop(n, "BaseFeature") is not None:
-        return ""
+        # empty inside a body means first. Outside one (0.18 to 0.21 files without bodies) it says nothing: the sketch's support is the base
+        if doc.bodied is None:
+            doc.bodied = {x for k, t in doc.types.items() if t == "PartDesign::Body" for x in doc.links(k, "Group")}
+        s = support_of(doc, doc.link(n, "Profile")) if doc.link(n, "Profile") in doc.props else ""
+        return s if n not in doc.bodied and doc.types.get(s) in SOLID else ""
     b = doc.link(n, "Base")
     if b in doc.types and doc.types[b] in SOLID:
         return b
