@@ -315,6 +315,7 @@ class Tr:
         self.imprint_off = set()
         self.copies = {}
         self.made = {}
+        self.gone = False
 
     def val(self, v):
         if isinstance(v, float):
@@ -678,7 +679,7 @@ class Tr:
                 # one with a free end bounds nothing anyway (00058990 matches with it left out)
                 used = {i for lp in a.loops for i, _ in lp}
                 ends = [v for p in a.pieces for v in (p.va, p.vb)]
-                if any(p.kind == "poly" and i not in used and ends.count(p.va) > 1 and ends.count(p.vb) > 1 for i, p in enumerate(a.pieces)):
+                if any(p.kind == "poly" and i not in used and ends.count(p.va) > 1 and ends.count(p.vb) > 1 and sketch2d.dist(p.a, p.b) > 0.1 for i, p in enumerate(a.pieces)):
                     raise Unsupported("a sketch's spline left out of its regions")
                 filt = len(q[1]) > 1 and q[1][1] is True
                 by.setdefault(fid, []).extend(a.not_inner() if filt else range(len(a.faces)))
@@ -686,8 +687,10 @@ class Tr:
                     # the query says "all", which does not always hold for sketches of many regions
                     self.notes.add("all-regions")
             elif isinstance(q, fs.Call) and q[0] == "makeQuery" and q[1][1] == "IMPRINT" and q[1][2] == ("name", "FACE"):
+                self.gone = False
                 fid, r = self.imprint(q, env)
-                by.setdefault(fid, []).append(r)
+                if r is not None:
+                    by.setdefault(fid, []).append(r)
             elif isinstance(q, fs.Call) and q[0] == "makeQuery" and q[1][2] == ("name", "FACE"):
                 fid, r = self.face_region(q, env)
                 by.setdefault(fid, []).extend(r)
@@ -848,6 +851,8 @@ class Tr:
             self.imprint_off.add(fid)
             self.notes.discard("imprint")
             return self.imprint(q, env)
+        if not cands and self.gone:
+            return fid, None
         if not cands:
             raise Unresolved("no region on that side")
         if len(cands) > 1:
@@ -924,6 +929,10 @@ class Tr:
             # an arc drawn clockwise is still counter-clockwise in Parasolid: the weight's side is of that (5 parts of 225, all 5 exact after)
             if any(a.pieces[i].kind == "arc" and not a.pieces[i].ccw for i in ps):
                 return off
+        # the side named on a clockwise arc has no region: the query was made before the sketch changed, and names nothing now (00274310)
+        if on and not off and all(a.pieces[i].kind == "arc" and not a.pieces[i].ccw for i in ps):
+            self.gone = True
+            return set()
         return on or off
 
     def loop_text(self, a, lp, flip):
