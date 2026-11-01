@@ -207,6 +207,12 @@ fn offset_all(body: &Body, thickness: f64, outward: bool, open: &[Name]) -> Resu
     } else {
         base.clone()
     };
+    if !outward {
+        let closed = islands(&moved, thickness, &|n| open.contains(&n));
+        if !closed.is_empty() {
+            moved = without(&moved, &closed);
+        }
+    }
     let stays = |n: Name| open.contains(&n) && !base.face_by_name(n).is_some_and(|f| strip[f.index()]);
     let open_moved: Vec<bool> = moved.faces.iter().map(|f| stays(f.name)).collect();
     for f in (0..moved.faces.len() as u32)
@@ -554,6 +560,172 @@ impl Rims<'_> {
         }
         Ok(())
     }
+}
+
+/// Islands the wall closes over: a prism standing on a plane inside one of its inner loops, its
+/// walls planes square to it, its top a plane facing the same way, its footprint convex, that the
+/// thickness reaches the middle of from every wall. Its inner offset is empty (the walls meet, the
+/// prism turns solid), so the plane's offset runs on across it. Each: the plane, the loop and the
+/// prism's faces.
+fn islands(
+    b: &Body,
+    t: f64,
+    opened: &dyn Fn(Name) -> bool,
+) -> Vec<(FaceId, forge_topo::LoopId, Vec<FaceId>)> {
+    let outward = |f: FaceId| -> Option<(Plane, forge_math::Vec3)> {
+        let face = b.face(f);
+        let Surface::Plane(p) = &face.surface else {
+            return None;
+        };
+        let z = p.frame.z().get();
+        (!opened(face.name)).then_some((*p, if face.same_sense { z } else { -z }))
+    };
+    let across = |c: forge_topo::CoedgeId| b.partner(c).map(|o| b.coedge_face(o));
+    let mut out = Vec::new();
+    for f in b.face_ids() {
+        let Some((pl, n)) = outward(f) else { continue };
+        for &l in b.face(f).loops.iter().skip(1) {
+            let ring: Vec<_> = b.lp(l).coedges().collect();
+            let Some(walls) = ring.iter().map(|&c| across(c)).collect::<Option<Vec<FaceId>>>() else {
+                continue;
+            };
+            let mut top = None;
+            let prism = walls.iter().enumerate().all(|(k, &w)| {
+                let Some((_, nw)) = outward(w) else { return false };
+                let face = b.face(w);
+                let [wl] = face.loops[..] else { return false };
+                let sides: Vec<_> = b.lp(wl).coedges().filter_map(&across).collect();
+                let others: Vec<FaceId> = sides
+                    .iter()
+                    .copied()
+                    .filter(|g| *g != f && !walls.contains(g))
+                    .collect();
+                let before = walls[(k + walls.len() - 1) % walls.len()];
+                let after = walls[(k + 1) % walls.len()];
+                let [up] = others[..] else { return false };
+                *top.get_or_insert(up) == up
+                    && nw.dot(n).abs() <= 1e-9
+                    && sides.len() == 4
+                    && walls.iter().filter(|&&x| x == w).count() == 1
+                    && sides.contains(&before)
+                    && sides.contains(&after)
+            });
+            let Some(top) = top.filter(|_| prism && walls.len() >= 3) else {
+                continue;
+            };
+            let up = b.face(top);
+            // standing out of the plane, not sunk into it
+            match (outward(top), &up.loops[..]) {
+                (Some((pt, nt)), [tl])
+                    if nt.dot(n) >= 1.0 - 1e-9
+                        && (pt.frame.origin - pl.frame.origin).dot(n) > tol::LINEAR
+                        && b.lp(*tl).coedges().len() == walls.len() => {}
+                _ => continue,
+            }
+            // the footprint in the plane's frame, and each wall as the half-plane it bounds
+            let at = |q: forge_math::Point3| {
+                let d = q - pl.frame.origin;
+                (d.dot(pl.frame.x().get()), d.dot(pl.frame.y().get()))
+            };
+            let corners: Vec<(f64, f64)> = ring
+                .iter()
+                .map(|&c| {
+                    let co = b.coedge(c);
+                    let e = b.edge(co.edge);
+                    at(b.vertex(if co.forward { e.start } else { e.end }).point)
+                })
+                .collect();
+            let halves: Vec<(f64, f64, f64)> = walls
+                .iter()
+                .filter_map(|&w| {
+                    let (p, nw) = outward(w)?;
+                    let (x, y) = (nw.dot(pl.frame.x().get()), nw.dot(pl.frame.y().get()));
+                    let o = at(p.frame.origin);
+                    Some((x, y, x * o.0 + y * o.1))
+                })
+                .collect();
+            let convex = corners
+                .iter()
+                .all(|c| halves.iter().all(|h| h.0 * c.0 + h.1 * c.1 - h.2 <= tol::LINEAR));
+            if convex && met(&corners, &halves, t) {
+                let mut faces = walls.clone();
+                faces.push(top);
+                out.push((f, l, faces));
+            }
+        }
+    }
+    out
+}
+
+/// Whether the convex polygon `corners`, every half-plane (x, y, c) of `halves` (x px + y py <= c)
+/// moved in by `t`, is left with nothing wider than the tolerance.
+fn met(corners: &[(f64, f64)], halves: &[(f64, f64, f64)], t: f64) -> bool {
+    let mut poly = corners.to_vec();
+    for &(x, y, c) in halves {
+        let inside = |p: (f64, f64)| c - t - (x * p.0 + y * p.1);
+        let mut next = Vec::new();
+        for k in 0..poly.len() {
+            let (p, q) = (poly[k], poly[(k + 1) % poly.len()]);
+            let (dp, dq) = (inside(p), inside(q));
+            if dp >= 0.0 {
+                next.push(p);
+            }
+            if (dp >= 0.0) != (dq >= 0.0) {
+                let s = dp / (dp - dq);
+                next.push((p.0 + (q.0 - p.0) * s, p.1 + (q.1 - p.1) * s));
+            }
+        }
+        poly = next;
+        if poly.is_empty() {
+            return true;
+        }
+    }
+    // what is left lies within the tolerance of a line through it
+    let wide = poly.iter().any(|p| {
+        poly.iter().any(|q| {
+            let (dx, dy) = (q.0 - p.0, q.1 - p.1);
+            let l = (dx * dx + dy * dy).sqrt();
+            l > tol::LINEAR
+                && poly
+                    .iter()
+                    .any(|r| ((r.0 - p.0) * dy - (r.1 - p.1) * dx).abs() / l > tol::LINEAR)
+        })
+    });
+    !wide
+}
+
+/// `body` without each island's prism and the loop it stood in.
+fn without(body: &Body, islands: &[(FaceId, forge_topo::LoopId, Vec<FaceId>)]) -> Body {
+    let mut out = Body::new();
+    out.joins = body.joins.clone();
+    for v in &body.vertices {
+        out.add_vertex(v.point, v.name);
+    }
+    for e in &body.edges {
+        out.add_edge(e.curve.clone(), e.range, e.start, e.end, e.name);
+    }
+    for _ in &body.shells {
+        out.add_shell();
+    }
+    for f in body.face_ids() {
+        if islands.iter().any(|i| i.2.contains(&f)) {
+            continue;
+        }
+        let face = body.face(f);
+        let nf = out.add_face(face.shell, face.surface.clone(), face.same_sense, face.name);
+        for &l in &face.loops {
+            if islands.iter().any(|i| i.1 == l) {
+                continue;
+            }
+            let uses: Vec<(EdgeId, bool)> = body
+                .lp(l)
+                .coedges()
+                .map(|c| (body.coedge(c).edge, body.coedge(c).forward))
+                .collect();
+            out.add_loop(nf, &uses);
+        }
+    }
+    out.into_compact()
 }
 
 /// `body` without the faces flagged `gone`, each a strip whose two long sides' faces now meet in

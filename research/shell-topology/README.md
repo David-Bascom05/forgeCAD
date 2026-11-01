@@ -32,7 +32,9 @@ offset events of Forsyth, "Shelling and offsetting bodies", 1995, as later paper
 trim or extend, rebuild the closed model) there are local events and global ones:
 - an edge shrinks away: its end faces meet instead (flip);
 - a vertex of four faces no longer lies on one point: it parts in two along a new edge.
-Both are applied where the rebuild stops, and it goes on. They bring few parts on their own (9 of 135
+- a face whose two ends shrink away together (a wall square to a face whose outline narrows to
+  nothing: a prism's edge event, glyph walls) goes, and its two sides become one edge.
+They are applied where the rebuild stops, and it goes on. They bring few parts on their own (9 of 135
 with the spindle), because what is left is mostly global.
 
 ## Tried and dropped
@@ -41,6 +43,24 @@ Inner solid as the body less a thickened cell per face, the shell as the body le
 reading of Rossignac and Requicha 1986). On the 135 refused parts: 26 built valid, 0 of 5 judged matched
 the source. Cells of adjacent faces leave wedges reaching the concave edges (zero thickness, 51 parts);
 `thicken` itself refuses most faces of real parts (212 no exact wall, 190 collapses).
+
+## Islands (global, the first case)
+
+A prism standing on a plane inside one of its inner loops (walls square to it, a top facing the same
+way, a convex footprint of lines) whose footprint the thickness reaches the middle of from every
+wall: in the mitred offset its walls cross and leave nothing (2D: the convex polygon's half-planes
+moved in by t meet in no area, checked by clipping), so the plane's offset runs on across it and
+just loses that loop (`shell::islands`, `without`). A boss thinner than twice the wall, a letter's
+counter. Closed forms in `shell_events.rs`; the glyph plates and heatsink checked by the distance
+definition below. Not yet: footprints with arcs, islands on a curved face, and peninsulas (a tongue
+of material joined to the rest along one side, two parallel walls meeting all along: E's arms,
+and the heatsink's fins, whose root fillets' offsets must then meet each other in a ridge).
+
+The distance definition used to check (scratch tool, not shipped): points near the skin without
+the opened face, each in the part, in the shell and its distance d to that skin (a fine mesh):
+nearer than t must be in the shell, further than t must not, except within t of both faces of a
+concave edge (the mitre leaves more wall there than the distance does) and by the opened face's rim
+(the walls run on to it). It finds a lobe left out on purpose (the island dropped while thicker).
 
 ## Threads (David's option B, 2026-11-01)
 

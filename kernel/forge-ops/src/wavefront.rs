@@ -1,5 +1,6 @@
 //! A body's faces moved to new surfaces can no longer meet as they did: an edge shrinks away and its
-//! neighbours meet instead, or a vertex of four faces, no longer on one point, parts in two. These are
+//! neighbours meet instead, a four-sided face's two ends shrink away together and it goes, or a vertex
+//! of four faces, no longer on one point, parts in two. These are
 //! the local events of a moving wavefront (straight skeletons; Forsyth 1995 on shelling): each changes
 //! the topology to what the moved faces want and the rebuild goes on. research/shell-topology
 use crate::rebuild::{RebuildError, rebuild, solve_point};
@@ -263,6 +264,60 @@ fn flip(b: &Body, n: &Net, e: usize) -> Option<Net> {
     Some(m)
 }
 
+/// The net with face `f`, four-sided with edge `e` one of its ends, gone: its two ends shrank away
+/// together (a wall square to a face whose outline narrows to nothing, as a prism's edge event), so
+/// its two sides become one edge between the faces beyond them.
+fn drop_face(n: &Net, f: usize, e: usize) -> Option<Net> {
+    let [l] = &n.faces[f].1[..] else { return None };
+    let k = l.iter().position(|u| u.0 == e)?;
+    if l.len() != 4 {
+        return None;
+    }
+    let (end2, s1, s2) = (l[(k + 2) % 4].0, l[(k + 1) % 4].0, l[(k + 3) % 4].0);
+    if [e, end2, s1, s2]
+        .iter()
+        .any(|&x| [e, end2, s1, s2].iter().filter(|&&y| y == x).count() > 1)
+    {
+        return None;
+    }
+    let mut m = n.clone();
+    let ends = |x: usize| (n.edges[x].2, n.edges[x].3);
+    let on = |s: usize, v: usize| ends(s).0 == v || ends(s).1 == v;
+    // each end's vertex on s2 goes to its vertex on s1
+    let mut map: Vec<usize> = (0..n.verts.len()).collect();
+    for x in [e, end2] {
+        let (a, b) = ends(x);
+        let (keep, gone) = if on(s1, a) && on(s2, b) {
+            (a, b)
+        } else if on(s1, b) && on(s2, a) {
+            (b, a)
+        } else {
+            return None;
+        };
+        map[gone] = keep;
+    }
+    for x in &mut m.edges {
+        (x.2, x.3) = (map[x.2], map[x.3]);
+    }
+    let flip = (m.edges[s2].2, m.edges[s2].3) != (m.edges[s1].2, m.edges[s1].3);
+    if flip && (m.edges[s2].3, m.edges[s2].2) != (m.edges[s1].2, m.edges[s1].3) {
+        return None;
+    }
+    m.faces.remove(f);
+    for (_, loops) in &mut m.faces {
+        for l in loops.iter_mut() {
+            l.retain(|u| u.0 != e && u.0 != end2);
+            for u in l.iter_mut() {
+                if u.0 == s2 {
+                    *u = (s1, u.1 != flip);
+                }
+            }
+        }
+        loops.retain(|l| !l.is_empty());
+    }
+    Some(m)
+}
+
 /// `rebuild`, changing the topology at the edges and vertices that stop it. Ok with the body as it
 /// came out, Err with the first refusal no event answers.
 pub(crate) fn rebuild_moving(
@@ -294,9 +349,17 @@ pub(crate) fn rebuild_moving(
             RebuildError::Collapsed { edge } => body
                 .edge_ids()
                 .find(|&x| body.edge(x).name == *edge)
-                .and_then(|x| flip(body, &n, x.index()))
-                .into_iter()
-                .collect(),
+                .map(|x| {
+                    let along = body.edge(x).coedges.iter().map(|&c| body.coedge_face(c));
+                    let faces: Vec<usize> = along
+                        .filter_map(|g| n.faces.iter().position(|nf| nf.0 == g))
+                        .collect();
+                    flip(body, &n, x.index())
+                        .into_iter()
+                        .chain(faces.into_iter().filter_map(|f| drop_face(&n, f, x.index())))
+                        .collect()
+                })
+                .unwrap_or_default(),
             RebuildError::Vertex { vertex } => body
                 .vertex_ids()
                 .find(|&v| body.vertex(v).name == *vertex)
