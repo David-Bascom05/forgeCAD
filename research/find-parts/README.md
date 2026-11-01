@@ -8,8 +8,8 @@ CI tier (`verify/forge-proof/tests/find_parts.rs`, `tools/find-parts/ci-corpus.t
 ## The real-parts build rate
 
 ```
-real-parts build rate: 91.3% (7875 of 8625) on main d33b84aa   the Fusion 360 Gallery reconstruction set, all of it
-                       94.7% (8169 of 8625) on reliab-2 3b1d1c47, the first day's fixes
+real-parts build rate: 91.3% (7874 of 8625) on main b431a0db   the Fusion 360 Gallery reconstruction set, all of it
+                       95.0% (8194 of 8625) on reliab-1 7bc265a2, not merged yet, a preview
 OpenCascade yardstick: 99.0% of 1053 translated parts (every 8th) with the same translation; ours 94.9% on main, 97.8% on reliab-2
 ```
 Built means: regenerates, every stage valid, meshes closed, exact volume within 0.1% of what Fusion recorded (1% for parts whose
@@ -18,9 +18,9 @@ body truly pinched in one solid cannot exist, so refusing it is right (`correct-
 below gives the number; it moves only with the kernel, since the dataset, translation and tolerance are fixed.
 
 Of the 750 not built on main: 205 did not translate (129 tapered extrudes, which the part format lacks; 49 profiles that do not
-close; 20 elliptical arcs without angles; 7 others), 545 did. 33 of those are wrong volumes, nearly all translation: OCCT agreed
-with our kernel on 31 of the 35 on reliab-2, mostly multi-body joins (a Join merges the bodies it touches; the translation adds to
-the last one). The fixed translation also costs OCCT 0.8%, which is roughly the ceiling this importer allows.
+close; 20 elliptical arcs without angles; 7 others), 545 did. About 35 of those are wrong volumes, nearly all translation: OCCT replaying the same text agreed
+with our kernel on 35 of 36 on reliab-1, mostly multi-body joins (a Join merges the bodies it touches; the translation adds to
+the last one). The 36th is a real wrong answer, found and filed. The fixed translation also costs OCCT 0.8%, which is roughly the ceiling this importer allows.
 
 DeepCAD, every 20th design: 94.7% build (10184 of 10754), with no volume to check against, so this says only that they build.
 HistCAD's 10 open samples (5 Industrial: revolves, fillets): 9 build on main. All 10 build in OCCT. One failed with `inconsistent
@@ -59,11 +59,11 @@ What the table shows, and what it cannot:
 - **Real parts find what matters, not the most kinds.** Random fuzz still reaches the most failure kinds, mostly n-ary regen
   disagreements on features the real data here does not use. But it says nothing about frequency, and it cannot see a wrong answer. Real
   parts ranked the failures (one case, coaxial equal-radius cylinders butted, was 244 of 545) and fixing that ranking moved the rate
-  from 91.3% to 94.7% in a day. Real parts are also cheap: DeepCAD reached 12 roots in 28 CPU-seconds.
+  from 91.3% to 95.0% on the reliability branch in a day. Real parts are also cheap: DeepCAD reached 12 roots in 28 CPU-seconds.
 - **Only a truth finds silent wrong answers.** Three parts lost a cut with no error, and every method without a truth reported them ok.
   Fusion's volume or OCCT caught them. The cause was float noise of about 3e-7 mm, which is why `noise` exists.
-- **Noise is the cheapest fragility test.** On reliab-2, 3e-7 mm of noise stopped 309 of 8188 built real parts (3.8%), and no volume
-  moved by more than 0.01%. That threshold cannot see a lost cut smaller than that.
+- **Noise is the cheapest fragility test.** On reliab-1, 3e-7 mm of noise stopped 312 of 8215 built real parts (3.8%), and moved one
+  volume by more than 0.01%: a real wrong answer. That threshold cannot see a lost cut smaller than that.
 - **Swarm beats plain fuzz** at no cost: nearly the same roots in 56% of the CPU. It should replace the default, with the usual caveat
   that this is one seed range.
 - **Feature pairs give the smallest repros** (2-3 lines) and fill gaps: `enum-cells.md`, `matrix-cells.md`. 124 of 1681 pair cells
