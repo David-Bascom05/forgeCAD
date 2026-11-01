@@ -626,7 +626,10 @@ pub fn offset(s: &Surface, d: f64) -> Option<Surface> {
             frame: c.frame,
             radius: positive(c.radius + d)?,
         }),
-        Surface::Torus(t) => Surface::Torus(Torus::new(t.frame, t.major, positive(t.minor + d)?)?),
+        Surface::Torus(t) => {
+            let r = positive(t.minor + d)?;
+            Surface::Torus(Torus::new(t.frame, t.major, r).or_else(|| Torus::spindle(t.frame, t.major, r))?)
+        }
         Surface::Cone(c) => {
             // every point moves d along the normal: the same cone, radius d / cos(a) wider
             let half = dmath::atan2(c.sin_a(), c.cos_a());
