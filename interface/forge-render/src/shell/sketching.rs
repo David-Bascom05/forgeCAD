@@ -194,6 +194,8 @@ const ARROW_PT: f32 = 8.0;
 
 /// How close a click must be to take a point or an entity, in points.
 const SNAP_PT: f32 = 9.0;
+/// How far from where a line would touch a rim it still reads as tangent, in reaches.
+const TANGENT_REACH: f64 = 6.0;
 const CIRCLE_STEPS: usize = 64;
 
 /// What Finish Sketch changes.
@@ -608,6 +610,64 @@ impl SketchMode {
         Some((p, m, Glyph::Midpoint, rows))
     }
 
+    /// A round thing's rim near this place that a line from `from` can leave tangent: its name and
+    /// the point where it touches.
+    fn tangent_from(&self, from: (f64, f64), at: (f64, f64), reach: f64) -> Option<(String, (f64, f64))> {
+        let s = self.solved.as_ref()?;
+        let mut best: Option<(f64, String, (f64, f64))> = None;
+        for (name, id) in &s.names {
+            let (c, r, span) = match s.solved.entity(*id) {
+                Some(Entity::Circle { center, .. }) => (s.solved.point(center), s.solved.radius(*id), None),
+                Some(Entity::Arc {
+                    center,
+                    start,
+                    end,
+                    ccw,
+                }) => {
+                    let (a, b) = if ccw { (start, end) } else { (end, start) };
+                    let (c, a, b) = (s.solved.point(center), s.solved.point(a), s.solved.point(b));
+                    let r = ((a.x - c.x).powi(2) + (a.y - c.y).powi(2)).sqrt();
+                    (c, r, Some((a, b)))
+                }
+                _ => continue,
+            };
+            let (vx, vy) = (c.x - from.0, c.y - from.1);
+            let dist = (vx * vx + vy * vy).sqrt();
+            let off_rim = (((at.0 - c.x).powi(2) + (at.1 - c.y).powi(2)).sqrt() - r).abs();
+            if dist <= r + 1e-9 || off_rim > reach {
+                continue;
+            }
+            let leg = (dist * dist - r * r).sqrt();
+            let (cos, sin) = (leg / dist, r / dist);
+            for side in [-1.0, 1.0] {
+                let way = (
+                    (vx * cos - side * vy * sin) / dist,
+                    (vy * cos + side * vx * sin) / dist,
+                );
+                let t = (from.0 + way.0 * leg, from.1 + way.1 * leg);
+                let gap = ((t.0 - at.0).powi(2) + (t.1 - at.1).powi(2)).sqrt();
+                if gap > TANGENT_REACH * reach {
+                    continue;
+                }
+                // on an arc, only where the arc is
+                if let Some((a, b)) = span {
+                    let turn = |u: (f64, f64)| {
+                        forge_math::dmath::atan2(u.1 - c.y, u.0 - c.x).rem_euclid(core::f64::consts::TAU)
+                    };
+                    let t0 = turn((a.x, a.y));
+                    let sweep = (turn((b.x, b.y)) - t0).rem_euclid(core::f64::consts::TAU);
+                    if (turn(t) - t0).rem_euclid(core::f64::consts::TAU) > sweep {
+                        continue;
+                    }
+                }
+                if best.as_ref().is_none_or(|b| gap < b.0) {
+                    best = Some((gap, name.clone(), t));
+                }
+            }
+        }
+        best.map(|b| (b.1, b.2))
+    }
+
     /// The other lines of the sketch, with their directions.
     fn line_ways(&self) -> Vec<(String, (f64, f64))> {
         let Some(s) = &self.solved else { return Vec::new() };
@@ -660,7 +720,18 @@ impl SketchMode {
                 let (mut dx, mut dy) = (free.0 - a.0, free.1 - a.1);
                 let mut length = (dx * dx + dy * dy).sqrt();
                 let mut typed = false;
-                if let Some(deg) = ang_on {
+                let touching = if snapped.is_none() && ang_on.is_none() && len_on.is_none() {
+                    self.tangent_from(a, at, reach)
+                } else {
+                    None
+                };
+                if let Some((round, t)) = &touching {
+                    (dx, dy) = (t.0 - a.0, t.1 - a.1);
+                    length = (dx * dx + dy * dy).sqrt();
+                    typed = true;
+                    d.glyphs.push((Glyph::Tangent, *t));
+                    relation.push(format!("tan {line} {round}"));
+                } else if let Some(deg) = ang_on {
                     let r = deg * core::f64::consts::PI / 180.0;
                     (dx, dy) = (
                         forge_math::dmath::cos(r) * length.max(1e-9),
@@ -741,7 +812,6 @@ impl SketchMode {
                     d.rows.push(format!("dist {line} {}", f.text.trim()));
                 }
                 d.lines.push((a, end));
-                let mid = ((a.0 + end.0) * 0.5, (a.1 + end.1) * 0.5);
                 let way = (dx / length.max(1e-9), dy / length.max(1e-9));
                 d.values.push((length, Measure::Along(a, end, way)));
                 let angle = forge_math::dmath::atan2(end.1 - a.1, end.0 - a.0);
@@ -749,7 +819,6 @@ impl SketchMode {
                     angle * 180.0 / core::f64::consts::PI,
                     Measure::Sweep(a, length * 0.5, 0.0, angle),
                 ));
-                let _ = mid;
                 d.end = Some((format!("{line}.b"), end));
             }
             (SkTool::Rectangle, 1) => {
@@ -1654,6 +1723,35 @@ mod tests {
         let d = m.draft((250.0, 200.5), 0.5);
         assert!(d.glyphs.iter().any(|g| g.0 == Glyph::Horizontal));
         assert_eq!(d.lines[0].1, (250.0, 200.0));
+    }
+
+    #[test]
+    fn a_line_near_a_rim_leaves_tangent_and_ends_on_it() {
+        let mut m = mode();
+        m.rows.push("circle 50 0 10".into());
+        m.solve();
+        m.set_tool(Some(SkTool::Line));
+        m.click((0.0, 0.0), 0.5);
+        // where it touches, seen from the origin
+        let (leg, dist) = ((2400.0f64).sqrt(), 50.0);
+        let t = (leg * leg / dist, leg * 10.0 / dist);
+        let d = m.draft((t.0 + 0.1, t.1 + 0.1), 0.5);
+        assert!(d.glyphs.iter().any(|g| g.0 == Glyph::Tangent), "{:?}", d.glyphs);
+        // far from where it would touch, on the rim: nothing inferred
+        let d = m.draft((60.0, 0.1), 0.5);
+        assert!(!d.glyphs.iter().any(|g| g.0 == Glyph::Tangent), "{:?}", d.glyphs);
+        m.click((t.0 + 0.1, t.1 + 0.1), 0.5);
+        assert!(m.error.is_none(), "{:?}", m.error);
+        assert!(m.rows.iter().any(|r| r.starts_with("tan ")), "{:?}", m.rows);
+        let s = m.solved.as_ref().unwrap();
+        let line = s
+            .names
+            .iter()
+            .map(|n| n.0.clone())
+            .find(|n| n.starts_with('l'))
+            .unwrap();
+        let (_, b) = sk::line(s, &line).unwrap();
+        assert!((b.x - t.0).abs() < 1e-6 && (b.y - t.1).abs() < 1e-6, "{b:?}");
     }
 
     #[test]
