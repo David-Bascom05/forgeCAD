@@ -2,10 +2,12 @@
 //! start frame, R(v) a turn about a fixed axis. For a planar spine the axis is the plane's normal and
 //! R(v) takes the start tangent to the tangent at v, with no trigonometry (cos = T0.T, sin =
 //! (T0 x T).B), so nothing twists and the formula is exact. For a helix R(v) turns by v about the coil's
-//! axis and P(v) = a v e_r + b v z. Derivation: research/spline-loops/derive.py (7).
+//! axis and P(v) = a v e_r + b v z. For a spatial spine R(v) is the rotation-minimizing frame (no twist
+//! about the tangent): R' = [w] R with w = T x T', tabulated by Magnus steps at build and stepped from
+//! the nearest entry at each v. Derivation: research/spline-loops/derive.py (7).
 
+use super::Spline;
 use super::extruded::{carried, foot as foot2};
-use super::{Spline, spline_of};
 use crate::curve::{CurveDeriv, Domain1, ProcCurve, ProceduralCurve};
 use crate::ruled::principal_max;
 use crate::screw::{fresh_id, polish, remembered};
@@ -23,6 +25,12 @@ pub enum Spine {
         t0: Vec3,
         ext: Interval,
     },
+    /// A curve in space, with R from its table: at each knot v, R(v) as a unit quaternion.
+    Spatial {
+        c: Arc<Spline>,
+        ext: Interval,
+        table: Arc<Vec<(f64, Quat)>>,
+    },
     /// About `axis`'s z: the section's point (r, h) in the axis' xz at angle v lies at
     /// (r + a v) e_r(v) + (h + b v) z. v over `range`.
     Helix {
@@ -33,23 +41,131 @@ pub enum Spine {
     },
 }
 
-/// The spine at v: P and its derivatives, the axis, and the turn's cosine, sine, rate and its rate.
+/// A rotation, as a unit quaternion (w, x, y, z).
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct Quat(f64, Vec3);
+
+impl Quat {
+    const ONE: Quat = Quat(1.0, Vec3::ZERO);
+    /// The rotation by the vector's length about its direction.
+    fn of(v: Vec3) -> Quat {
+        let a = v.length();
+        if a <= 1e-300 {
+            return Quat::ONE;
+        }
+        let (s, c) = dmath::sin_cos(0.5 * a);
+        Quat(c, v * (s / a))
+    }
+    fn then(self, o: Quat) -> Quat {
+        // o after self
+        Quat(
+            o.0 * self.0 - o.1.dot(self.1),
+            self.1 * o.0 + o.1 * self.0 + o.1.cross(self.1),
+        )
+    }
+    fn apply(self, v: Vec3) -> Vec3 {
+        let t = self.1.cross(v) * 2.0;
+        v + t * self.0 + self.1.cross(t)
+    }
+    fn undo(self, v: Vec3) -> Vec3 {
+        Quat(self.0, -self.1).apply(v)
+    }
+}
+
+/// The rotation rate of a curve's rotation-minimizing frame, and its derivative.
+fn rates_at(c: &Spline, v: f64) -> (Vec3, Vec3) {
+    let (d, d3) = c.deriv3(v);
+    let l2 = d.d1.length_sq();
+    let w = d.d1.cross(d.d2) / l2;
+    (w, d.d1.cross(d3) / l2 - w * (2.0 * d.d1.dot(d.d2) / l2))
+}
+
+/// One step of the fourth-order Magnus rule from v over h: R(v + h) = this R(v), with no drift off a
+/// rotation however many are taken.
+fn magnus(c: &Spline, v: f64, h: f64) -> Quat {
+    const G: f64 = 0.288_675_134_594_812_9; // sqrt(3) / 6
+    let (w1, _) = rates_at(c, v + (0.5 - G) * h);
+    let (w2, _) = rates_at(c, v + (0.5 + G) * h);
+    Quat::of((w1 + w2) * (0.5 * h) - w1.cross(w2) * (h * h * G * 0.5))
+}
+
+/// The frame table of a spatial curve over `ext`, from its start: each step halved until two half steps
+/// agree with the whole to a part in 1e13.
+fn frame_table(c: &Spline, ext: Interval) -> Vec<(f64, Quat)> {
+    let dom = c.domain();
+    let walk = |from: f64, to: f64, first: Quat| -> Vec<(f64, Quat)> {
+        let mut out = vec![(from, first)];
+        let (mut v, mut q) = (from, first);
+        // joints first: the rate is only continuous across them
+        let mut stops: Vec<f64> = c.knots_in(Interval::new(from.min(to), from.max(to)));
+        if to < from {
+            stops.reverse();
+        }
+        stops.push(to);
+        for stop in stops {
+            while (stop - v).abs() > 1e-13 * (1.0 + stop.abs()) {
+                let mut h = stop - v;
+                loop {
+                    let whole = magnus(c, v, h);
+                    let half = magnus(c, v, 0.5 * h).then(magnus(c, v + 0.5 * h, 0.5 * h));
+                    let e = (whole.1 - half.1).length() + (whole.0 - half.0).abs();
+                    if e <= 1e-13 || h.abs() <= 1e-9 * (1.0 + stop.abs()) {
+                        q = q.then(half);
+                        v += h;
+                        break;
+                    }
+                    h *= 0.5;
+                }
+                out.push((v, q));
+            }
+        }
+        out
+    };
+    let back = walk(dom.lo, ext.lo, Quat::ONE);
+    let mut all: Vec<(f64, Quat)> = back.into_iter().rev().collect();
+    all.pop();
+    all.extend(walk(dom.lo, ext.hi, Quat::ONE));
+    all
+}
+
+/// How the section is turned at v.
+#[derive(Clone, Copy)]
+enum Turn {
+    /// About a fixed axis, by cosine and sine.
+    Axis(Vec3, f64, f64),
+    Quat(Quat),
+}
+
+/// The spine at v: P and its derivatives, the turn, its rate and the rate's derivative as vectors.
 struct At {
     p: Point3,
     d1: Vec3,
     d2: Vec3,
-    axis: Vec3,
-    cos: f64,
-    sin: f64,
-    w: f64,
-    dw: f64,
+    turn: Turn,
+    w: Vec3,
+    dw: Vec3,
 }
 
 impl At {
-    /// R q, about the axis.
+    /// R q.
     fn turn(&self, q: Vec3) -> Vec3 {
-        let along = self.axis * self.axis.dot(q);
-        along + (q - along) * self.cos + self.axis.cross(q) * self.sin
+        match self.turn {
+            Turn::Axis(axis, cos, sin) => {
+                let along = axis * axis.dot(q);
+                along + (q - along) * cos + axis.cross(q) * sin
+            }
+            Turn::Quat(r) => r.apply(q),
+        }
+    }
+    /// q from R q.
+    fn back(&self, v: Vec3) -> Vec3 {
+        match self.turn {
+            Turn::Axis(axis, cos, sin) => {
+                let along = axis * axis.dot(v);
+                along + (v - along) * cos - axis.cross(v) * sin
+            }
+            Turn::Quat(r) => r.undo(v),
+        }
     }
 }
 
@@ -60,16 +176,45 @@ impl Spine {
         Some(Spine::Planar { c, b, t0, ext })
     }
 
+    /// The rotation-minimizing spine of a curve not in one plane.
+    pub fn spatial(c: Arc<Spline>) -> Option<Spine> {
+        let ext = carried(&c)?;
+        let table = Arc::new(frame_table(&c, ext));
+        Some(Spine::Spatial { c, ext, table })
+    }
+
+    /// A box round the spine.
+    pub fn bbox(&self) -> Box3 {
+        match self {
+            Spine::Planar { c, .. } | Spine::Spatial { c, .. } => c.bbox(c.domain()),
+            Spine::Helix { axis, a, b, range } => {
+                let t = range.lo.abs().max(range.hi.abs());
+                let r = (a * t).abs();
+                let h = (b * t).abs();
+                Box3 {
+                    x: Interval::new(axis.origin.x - r - h, axis.origin.x + r + h),
+                    y: Interval::new(axis.origin.y - r - h, axis.origin.y + r + h),
+                    z: Interval::new(axis.origin.z - r - h, axis.origin.z + r + h),
+                }
+            }
+        }
+    }
+
+    /// R at the spine's end against its start: where a frame at the start is carried.
+    pub fn end_turn(&self, v: Vec3) -> Vec3 {
+        self.at(self.domain().hi).turn(v)
+    }
+
     pub fn domain(&self) -> Interval {
         match self {
-            Spine::Planar { c, .. } => c.domain(),
+            Spine::Planar { c, .. } | Spine::Spatial { c, .. } => c.domain(),
             Spine::Helix { range, .. } => *range,
         }
     }
 
     fn reach(&self) -> Interval {
         match self {
-            Spine::Planar { ext, .. } => *ext,
+            Spine::Planar { ext, .. } | Spine::Spatial { ext, .. } => *ext,
             Spine::Helix { range, .. } => {
                 let e = 0.25 * range.width().min(dmath::PI);
                 Interval::new(range.lo - e, range.hi + e)
@@ -94,9 +239,26 @@ impl Spine {
                     p: d.p,
                     d1: d.d1,
                     d2: d.d2,
-                    axis: bv,
-                    cos: t0.dot(t),
-                    sin: t0.cross(t).dot(bv),
+                    turn: Turn::Axis(bv, t0.dot(t), t0.cross(t).dot(bv)),
+                    w: bv * w,
+                    dw: bv * dw,
+                }
+            }
+            Spine::Spatial { c, table, .. } => {
+                let d = c.deriv(v);
+                let (w, dw) = rates_at(c, v);
+                // from the table's entry nearest below, one step on
+                let k = table.partition_point(|e| e.0 <= v).max(1) - 1;
+                let (v0, q0) = table[k];
+                At {
+                    p: d.p,
+                    d1: d.d1,
+                    d2: d.d2,
+                    turn: Turn::Quat(if v == v0 {
+                        q0
+                    } else {
+                        q0.then(magnus(c, v0, v - v0))
+                    }),
                     w,
                     dw,
                 }
@@ -110,11 +272,9 @@ impl Spine {
                     p: axis.origin + radial * (*a * v) + ez * (*b * v),
                     d1: radial * *a + round * (*a * v) + ez * *b,
                     d2: round * (2.0 * *a) - radial * (*a * v),
-                    axis: ez,
-                    cos: c,
-                    sin: s,
-                    w: 1.0,
-                    dw: 0.0,
+                    turn: Turn::Axis(ez, c, s),
+                    w: ez,
+                    dw: Vec3::ZERO,
                 }
             }
         }
@@ -129,6 +289,7 @@ impl Spine {
                 let q = p - bv * bv.dot(p - o);
                 out.push(c.closest(q, *ext));
             }
+            Spine::Spatial { c, ext, .. } => out.push(c.closest(p, *ext)),
             Spine::Helix { axis, range, .. } => {
                 let l = axis.point_to_local(p);
                 let th = dmath::atan2(l.y, l.x);
@@ -147,7 +308,7 @@ impl Spine {
     /// Bounds on |P'| and on the turn's rate over `v`.
     fn rates(&self, v: Interval) -> (f64, f64) {
         match self {
-            Spine::Planar { c, .. } => {
+            Spine::Planar { c, .. } | Spine::Spatial { c, .. } => {
                 let [m1, m2, _] = c.derivative_bounds(v);
                 let mut low = f64::INFINITY;
                 for i in 0..=8 {
@@ -171,6 +332,8 @@ impl Spine {
                 t0: f.vec_to_world(*t0),
                 ext: *ext,
             },
+            Spine::Spatial { c, .. } => Spine::spatial(Arc::new(c.mapped(|p| f.point_to_world(p))))
+                .expect("a rigid motion keeps it regular"),
             Spine::Helix { axis, a, b, range } => Spine::Helix {
                 axis: f.compose(axis),
                 a: *a,
@@ -205,12 +368,8 @@ impl Swept {
         let ext = carried(&c)?;
         let start = spine.at(spine.domain().lo);
         // the section's frame without the start's turn: R(lo) (x0, y0) = plane's axes
-        let back = |v: Vec3| {
-            let along = start.axis * start.axis.dot(v);
-            along + (v - along) * start.cos - start.axis.cross(v) * start.sin
-        };
-        let (x, y) = (back(plane.x().get()), back(plane.y().get()));
-        let off = back(plane.origin - start.p);
+        let (x, y) = (start.back(plane.x().get()), start.back(plane.y().get()));
+        let off = start.back(plane.origin - start.p);
         let mut s = Swept {
             spine,
             c,
@@ -266,15 +425,14 @@ impl Swept {
             self.x * c.d2.x + self.y * c.d2.y,
         );
         let (rq, r1, r2) = (m.turn(q), m.turn(q1), m.turn(q2));
-        let ax = m.axis;
-        let wrq = ax.cross(rq);
+        let wrq = m.w.cross(rq);
         SurfDeriv {
             p: m.p + rq,
             du: r1,
-            dv: m.d1 + wrq * m.w,
+            dv: m.d1 + wrq,
             duu: r2,
-            duv: ax.cross(r1) * m.w,
-            dvv: m.d2 + wrq * m.dw + ax.cross(wrq) * (m.w * m.w),
+            duv: m.w.cross(r1),
+            dvv: m.d2 + m.dw.cross(rq) + m.w.cross(wrq),
         }
     }
 
@@ -296,11 +454,7 @@ impl Swept {
         for v in starts {
             // the point in the section's plane at v: its foot on the section starts the search
             let m = self.spine.at(v);
-            let inv = |w: Vec3| {
-                let along = m.axis * m.axis.dot(w);
-                along + (w - along) * m.cos - m.axis.cross(w) * m.sin
-            };
-            let local = inv(p - m.p) - self.off;
+            let local = m.back(p - m.p) - self.off;
             let q = Point3::new(local.dot(self.x), local.dot(self.y), 0.0);
             let (u, ..) = foot2(&self.c, self.ext, q, None);
             let (uv, d) = polish(&s, p, Point2::new(u, v), reach, None);
@@ -419,12 +573,12 @@ struct Rail {
 impl ProceduralCurve for Rail {
     fn deriv(&self, t: f64) -> CurveDeriv {
         let m = self.spine.at(t);
-        let (rq, ax) = (m.turn(self.q), m.axis);
-        let wrq = ax.cross(rq);
+        let rq = m.turn(self.q);
+        let wrq = m.w.cross(rq);
         CurveDeriv {
             p: m.p + rq,
-            d1: m.d1 + wrq * m.w,
-            d2: m.d2 + wrq * m.dw + ax.cross(wrq) * (m.w * m.w),
+            d1: m.d1 + wrq,
+            d2: m.d2 + m.dw.cross(rq) + m.w.cross(wrq),
         }
     }
     fn domain(&self) -> Domain1 {
@@ -500,7 +654,7 @@ impl ProceduralCurve for Rail {
     }
     fn kinks(&self, range: Interval) -> Vec<f64> {
         match &self.spine {
-            Spine::Planar { c, .. } => c.knots_in(range),
+            Spine::Planar { c, .. } | Spine::Spatial { c, .. } => c.knots_in(range),
             Spine::Helix { .. } => Vec::new(),
         }
     }
@@ -527,10 +681,4 @@ pub fn plane_of(c: &Spline) -> Option<UnitVec3> {
     }
     let n = n?;
     p.iter().all(|q| n.dot(*q - o).abs() <= tol::LINEAR).then_some(n)
-}
-
-/// The spine a path curve gives, if it is a plain curve made of a spline.
-pub fn spine_of(c: &crate::Curve) -> Option<Spine> {
-    let s = spline_of(c)?;
-    Spine::planar(s.c.clone(), plane_of(&s.c)?)
 }

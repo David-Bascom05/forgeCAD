@@ -88,6 +88,20 @@ pub struct Apex {
     pub dome: Option<(Vec3, f64)>,
 }
 
+/// What a loft does at its ends and how it lines up its sections.
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct LoftOptions {
+    /// The start and the end closing on a point.
+    pub apex: [Option<Apex>; 2],
+    /// Start each section where it comes nearest the start of the one before: what Parasolid does
+    /// (research/spline-loops/README.md), so a circle's seam follows, and walls take the twist that
+    /// gives. Off: each section starts as written.
+    pub align: bool,
+    /// Where a profile's outer loop starts, in its plane (the nearest point of a circle, or the nearest
+    /// vertex), per profile.
+    pub seams: Vec<Option<Point2>>,
+}
+
 /// How a loft runs between its profiles.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub enum LoftKind {
@@ -107,7 +121,7 @@ pub fn loft(
     guides: &LoftGuides,
     feature: u64,
 ) -> Result<Body, LoftError> {
-    Ok(loft_and_bounds(profiles, kind, guides, &[None, None], feature)?.0)
+    Ok(loft_and_bounds(profiles, kind, guides, &LoftOptions::default(), feature)?.0)
 }
 
 /// `loft` and `loft_bounds` from one plan.
@@ -115,10 +129,10 @@ pub fn loft_and_bounds(
     profiles: &[Profile],
     kind: LoftKind,
     guides: &LoftGuides,
-    apex: &[Option<Apex>; 2],
+    options: &LoftOptions,
     feature: u64,
 ) -> Result<(Body, forge_math::Box3), LoftError> {
-    let skin = plan(profiles, kind, guides, apex)?;
+    let skin = plan(profiles, kind, guides, options)?;
     let b = skin_bounds(&skin);
     let body = skin.build(Name::feature(feature));
     if crate::selfx::crossing(&body, &vec![true; body.faces.len()]).is_some() {
@@ -132,9 +146,9 @@ pub fn loft_bounds(
     profiles: &[Profile],
     kind: LoftKind,
     guides: &LoftGuides,
-    apex: &[Option<Apex>; 2],
+    options: &LoftOptions,
 ) -> Result<forge_math::Box3, LoftError> {
-    Ok(skin_bounds(&plan(profiles, kind, guides, apex)?))
+    Ok(skin_bounds(&plan(profiles, kind, guides, options)?))
 }
 
 fn skin_bounds(skin: &Skin) -> forge_math::Box3 {
@@ -156,8 +170,9 @@ fn plan(
     profiles: &[Profile],
     kind: LoftKind,
     guides: &LoftGuides,
-    apex: &[Option<Apex>; 2],
+    options: &LoftOptions,
 ) -> Result<Skin, LoftError> {
+    let apex = &options.apex;
     let points = usize::from(apex[0].is_some()) + usize::from(apex[1].is_some());
     if profiles.len() + points < 2 || profiles.is_empty() {
         return Err(LoftError::TooFew);
@@ -228,6 +243,23 @@ fn plan(
     }
     let mut segs: Vec<Vec<Segment>> = preps.iter().map(|p| p.segments().cloned().collect()).collect();
     let mut planes: Vec<Frame> = preps.iter().map(|p| p.profile.plane).collect();
+    if options.align || options.seams.iter().any(Option::is_some) {
+        let world = |k: usize, q: Point2| profiles[k].plane.plane_point(q);
+        for k in 0..segs.len() {
+            // a seam asked for, else the last section's own where the sections line up
+            let mut first = 0;
+            for &len in &sizes {
+                let asked = options.seams.get(k).copied().flatten().filter(|_| first == 0);
+                let target = asked.map(|q| world(k, q)).or_else(|| {
+                    (options.align && k > 0).then(|| planes[k - 1].plane_point(segs[k - 1][first].start()))
+                });
+                if let Some(t) = target {
+                    start_at(&mut segs[k][first..first + len], &planes[k], t);
+                }
+                first += len;
+            }
+        }
+    }
     // an apex as a section of no size: each segment shrunk onto the point, in the neighbour's plane
     let at_point = |near: &[Segment]| -> Vec<Segment> {
         near.iter()
@@ -302,6 +334,54 @@ fn plan(
         walls,
         apex: is_apex,
     })
+}
+
+/// A loop of a section starting where it comes nearest `target`: the two halves of a circle turned
+/// round to it, or the segments rotated to the nearest vertex.
+fn start_at(l: &mut [Segment], plane: &Frame, target: Point3) {
+    let q = plane.point_to_local(target);
+    let q = Point2::new(q.x, q.y);
+    if let [
+        Segment::Arc {
+            center: c0,
+            radius: r0,
+            sweep: w0,
+            ..
+        },
+        Segment::Arc {
+            center: c1,
+            radius: r1,
+            sweep: w1,
+            ..
+        },
+    ] = *l
+        && c0.distance(c1) <= tol::LINEAR
+        && (r0 - r1).abs() <= tol::LINEAR
+        && (w0.abs() + w1.abs() - dmath::TAU).abs() <= tol::ANGULAR
+        && w0 * w1 > 0.0
+    {
+        let d = q - c0;
+        if d.length_sq() > 0.0 {
+            let a = dmath::atan2(d.y, d.x);
+            l[0] = Segment::Arc {
+                center: c0,
+                radius: r0,
+                start: a,
+                sweep: w0,
+            };
+            l[1] = Segment::Arc {
+                center: c1,
+                radius: r1,
+                start: a + w0,
+                sweep: w1,
+            };
+        }
+        return;
+    }
+    let near = (0..l.len())
+        .min_by(|&i, &j| l[i].start().distance(q).total_cmp(&l[j].start().distance(q)))
+        .unwrap_or(0);
+    l.rotate_left(near);
 }
 
 type Walls = (Vec<Vec<(Curve, Interval)>>, Vec<Vec<Surface>>);
@@ -415,7 +495,7 @@ fn smooth(
         if let Some(index) = path.iter().position(|s| matches!(s, crate::PathSeg::Spline(_))) {
             return Err(LoftError::GuideBroken {
                 guide: g,
-                error: crate::SweepError::NotPlanar { index },
+                error: crate::SweepError::CurveGuide { index },
             });
         }
         let pieces: Vec<Rail> = path
@@ -765,7 +845,7 @@ mod tests {
                 valid(&b);
                 let walls = b.faces.len() - 2;
                 assert_eq!(kinds(&b).1, walls);
-                let bx = loft_bounds(&profiles, kind, &LoftGuides::None, &[None, None]).unwrap();
+                let bx = loft_bounds(&profiles, kind, &LoftGuides::None, &LoftOptions::default()).unwrap();
                 for v in &b.vertices {
                     assert!(bx.contains(v.point));
                 }

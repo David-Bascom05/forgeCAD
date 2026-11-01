@@ -1272,7 +1272,7 @@ fn sets(sets: &str) -> Vec<(String, Part)> {
             "splines" => {
                 for (fam, g) in adversarial::families()
                     .into_iter()
-                    .filter(|f| f.0.contains("spline") || f.0 == "ellipse_walls")
+                    .filter(|f| f.0.contains("spline") || f.0 == "ellipse_walls" || f.0 == "loft_ends")
                 {
                     parts.extend((0..n).map(|s| (format!("{fam}/{s}"), canonical(&g(s)))));
                 }

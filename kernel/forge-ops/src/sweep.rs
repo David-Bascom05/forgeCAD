@@ -63,8 +63,8 @@ pub enum SweepError {
     },
     /// The path brings the swept solid back into itself.
     SelfIntersecting,
-    /// Path piece `index` is a curve not lying in one plane.
-    NotPlanar {
+    /// A rail or centre line is a free curve: a loft takes lines and arcs there.
+    CurveGuide {
         index: usize,
     },
 }
@@ -126,22 +126,17 @@ impl PathSeg {
     fn carry(&self, f: &Frame) -> Frame {
         match *self {
             PathSeg::Spline(ref c) => {
-                let d = c.domain();
-                let (t0, t1) = (c.deriv(d.lo).d1.normalize(), c.deriv(d.hi).d1.normalize());
-                let (Some(t0), Some(t1)) = (t0, t1) else {
-                    return f.with_origin(c.ends().1);
+                let at = c.ends().1;
+                let Some(spine) = spine_of(c) else {
+                    return f.with_origin(at);
                 };
-                let turned = |v: Vec3| {
-                    let axis = t0.get().cross(t1.get());
-                    let (cs, sn) = (t0.dot(t1.get()), axis.length());
-                    let Some(ax) = axis.normalize() else {
-                        return if cs < 0.0 { -v } else { v };
-                    };
-                    let along = ax * ax.dot(v);
-                    along + (v - along) * cs + ax.cross(v) * sn
-                };
-                Frame::from_zx(c.ends().1, t1, turned(f.x().get()))
-                    .unwrap_or_else(|| f.with_origin(c.ends().1))
+                let z = spine.end_turn(f.z().get());
+                let x = spine.end_turn(f.x().get());
+                let start = c.ends().0;
+                let o = at + spine.end_turn(f.origin - start);
+                z.normalize()
+                    .and_then(|z| Frame::from_zx(o, z, x))
+                    .unwrap_or_else(|| f.with_origin(at))
             }
             PathSeg::Line { a, b } => f.with_origin(f.origin + (b - a)),
             PathSeg::Arc { circle, sweep, .. } => {
@@ -169,12 +164,7 @@ pub fn sweep(profile: &crate::Profile, path: &[PathSeg], feature: u64) -> Result
     let starts = |f: &Frame| -> Vec<Point3> { segs.iter().map(|s| f.plane_point(s.start())).collect() };
     for st in &stretches {
         match *st {
-            Stretch::Along {
-                plane: f,
-                ref path,
-                normal,
-            } => {
-                let spine = Spine::planar(path.clone(), normal).expect("checked regular");
+            Stretch::Along { plane: f, ref spine } => {
                 let w: Vec<Swept> = segs
                     .iter()
                     .map(|sg| {
@@ -182,7 +172,7 @@ pub fn sweep(profile: &crate::Profile, path: &[PathSeg], feature: u64) -> Result
                             .expect("a profile's curves are regular")
                     })
                     .collect();
-                let range = path.domain();
+                let range = spine.domain();
                 rails.push(
                     w.iter()
                         .zip(&segs)
@@ -254,14 +244,10 @@ pub fn sweep(profile: &crate::Profile, path: &[PathSeg], feature: u64) -> Result
 
 /// One stretch of a sweep: the profile's plane where it starts (z along the path), and how it
 /// moves from there.
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug)]
 pub enum Stretch {
-    /// Along a free curve in a plane of this normal, turning with its tangent.
-    Along {
-        plane: Frame,
-        path: Arc<Spline>,
-        normal: UnitVec3,
-    },
+    /// Along a free curve, turning with its tangent: about a plane's normal, or with no twist.
+    Along { plane: Frame, spine: Spine },
     /// Along the plane's z.
     Straight { plane: Frame, length: f64 },
     /// Turning `angle` about `axis`'s z (its x points from the axis towards the profile).
@@ -328,19 +314,12 @@ fn stretches(
     for (k, s) in path.iter().enumerate() {
         out.push(match *s {
             PathSeg::Spline(ref c) => {
-                // straight, it lies in any plane: one through the profile's x
-                let normal = match plane_of(c) {
-                    Some(n) => n,
-                    None if straight(c) => plane.x(),
-                    None => return Err(SweepError::NotPlanar { index: k }),
-                };
-                if too_tight(c, normal, &plane, &segs) {
+                if too_tight(c, &plane, &segs) {
                     return Err(SweepError::TooTight { index: k });
                 }
                 Stretch::Along {
                     plane,
-                    path: c.clone(),
-                    normal,
+                    spine: spine_of(c).ok_or(SweepError::Degenerate { index: k })?,
                 }
             }
             PathSeg::Line { a, b } => Stretch::Straight {
@@ -433,27 +412,60 @@ fn straight(c: &Spline) -> bool {
         .all(|h| u.get().cross(Point3::new(h[0], h[1], h[2]) - a).length() <= tol::LINEAR)
 }
 
-/// Whether the profile reaches past the path's centre of curvature, where the wall would fold.
-fn too_tight(c: &Spline, normal: UnitVec3, plane: &Frame, segs: &[Segment]) -> bool {
+/// A curve's spine: in its plane if it has one (or straight, in any), else rotation-minimizing.
+fn spine_of(c: &Arc<Spline>) -> Option<Spine> {
+    match plane_of(c) {
+        Some(n) => Spine::planar(c.clone(), n),
+        None if straight(c) => {
+            let d = c.deriv(c.domain().lo).d1;
+            let any = if d.x.abs() < 0.9 * d.length() {
+                Vec3::X
+            } else {
+                Vec3::Y
+            };
+            Spine::planar(c.clone(), d.cross(any).normalize()?)
+        }
+        None => Spine::spatial(c.clone()),
+    }
+}
+
+/// Whether the profile reaches past the path's centre of curvature, where the wall would fold: for a
+/// section point at distance s off the path, on the inside of the bend, the speed goes as 1 - k s
+/// (over-careful round a spatial curve, by the profile's whole reach).
+fn too_tight(c: &Spline, plane: &Frame, segs: &[Segment]) -> bool {
     let d = c.domain();
-    let t0 = c.deriv(d.lo).d1;
-    let Some(n0) = normal.get().cross(t0).normalize() else {
-        return true;
-    };
+    let start = c.ends().0;
+    let reach = segs
+        .iter()
+        .flat_map(|sg| sg.samples(32))
+        .map(|q| plane.plane_point(q).distance(start))
+        .fold(0.0f64, f64::max);
+    let n = 32 * c.pieces();
+    let planar = plane_of(c);
     let (mut lo, mut hi) = (0.0f64, 0.0f64);
-    for sg in segs {
-        for q in sg.samples(32) {
-            let s = plane.vec_to_world(Vec3::new(q.x, q.y, 0.0)).dot(n0.get());
-            lo = lo.min(s);
-            hi = hi.max(s);
+    if let Some(b) = planar {
+        let t0 = c.deriv(d.lo).d1;
+        if let Some(n0) = b.get().cross(t0).normalize() {
+            for sg in segs {
+                for q in sg.samples(32) {
+                    let s = (plane.plane_point(q) - start).dot(n0.get());
+                    lo = lo.min(s);
+                    hi = hi.max(s);
+                }
+            }
         }
     }
-    let n = 32 * c.pieces();
     (0..=n).any(|i| {
         let q = c.deriv(d.lo + d.width() * i as f64 / n as f64);
-        let k = q.d1.cross(q.d2).dot(normal.get()) / q.d1.length().powi(3);
-        // a section point s along the normal moves at speed 1 - k s
-        1.0 - k * hi <= 1e-6 || 1.0 - k * lo <= 1e-6
+        let turn = q.d1.cross(q.d2);
+        let l3 = q.d1.length().powi(3);
+        match planar {
+            Some(b) => {
+                let k = turn.dot(b.get()) / l3;
+                1.0 - k * hi <= 1e-6 || 1.0 - k * lo <= 1e-6
+            }
+            None => 1.0 - turn.length() / l3 * reach <= 1e-6,
+        }
     })
 }
 

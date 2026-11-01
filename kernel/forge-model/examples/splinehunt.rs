@@ -8,8 +8,10 @@ fn main() {
     let only = a.get(2).cloned();
     std::panic::set_hook(Box::new(|_| {}));
     for (fam, g) in families().into_iter().filter(|f| {
-        only.as_deref()
-            .map_or(f.0.contains("spline") || f.0 == "ellipse_walls", |o| o == f.0)
+        only.as_deref().map_or(
+            f.0.contains("spline") || f.0 == "ellipse_walls" || f.0 == "loft_ends",
+            |o| o == f.0,
+        )
     }) {
         let mut kinds: BTreeMap<String, (usize, u64)> = BTreeMap::new();
         let mut ok = 0;

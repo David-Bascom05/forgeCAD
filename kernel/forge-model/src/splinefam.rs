@@ -5,7 +5,7 @@ use crate::adversarial::fr;
 use crate::{Combine, Extent, Feature, Part, Turn};
 use forge_geom::spline::{PlaneSpline, uniform_knots};
 use forge_math::rng::Rng;
-use forge_math::{Frame, Point2, Point3, Vec2, dmath};
+use forge_math::{Frame, Point2, Point3, Vec2, Vec3, dmath};
 use forge_ops::{Axis2, Profile, ProfileLoop, Segment};
 use std::sync::Arc;
 
@@ -391,6 +391,12 @@ pub fn spline_sweep(seed: u64) -> Part {
                 x += r.range(8.0, 14.0);
                 pts.push(Point3::new(x, r.range(-4.0, 4.0), 0.0));
             }
+            // half of them leave the plane: a spatial path
+            if r.bool() {
+                for q in pts.iter_mut().skip(2) {
+                    q.z = r.range(-5.0, 5.0);
+                }
+            }
             let k = uniform_knots(3, pts.len());
             let c = Spline::from_nurbs(3, &k, &pts, None).expect("a curve");
             let plane = fr([0.0, 0.0, 0.0], [1.0, 0.0, 0.0], [0.0, 1.0, 0.0]);
@@ -468,6 +474,90 @@ pub fn spline_sweep(seed: u64) -> Part {
                 0,
             )],
             20.0,
+            Combine::Cut,
+        ));
+    }
+    Part { features: f }
+}
+
+/// Lofts closing on a point, sharp and domed, on and off the axis, and lining up off one axis, then cut.
+pub fn loft_ends(seed: u64) -> Part {
+    use forge_ops::{Apex, LoftGuides, LoftKind, LoftOptions};
+    let mut r = Rng::new(seed.wrapping_mul(48271).wrapping_add(9));
+    let s = r.range(3.0, 8.0);
+    let base = match r.below(3) {
+        0 => Profile::circle(Point2::ORIGIN, s, 0),
+        1 => Profile::rectangle(Point2::new(-s, -s), 2.0 * s, 2.0 * s, 0),
+        _ => Profile::rounded_rectangle(Point2::new(-s, -s), 2.0 * s, 2.0 * s, 0.25 * s, 0),
+    };
+    let h = r.range(8.0, 25.0);
+    let (ox, oy) = if r.bool() {
+        (0.0, 0.0)
+    } else {
+        (r.range(-4.0, 4.0), r.range(-4.0, 4.0))
+    };
+    let low = Profile {
+        plane: Frame::WORLD,
+        loops: vec![base.clone()],
+    };
+    let mut options = LoftOptions::default();
+    let mut profiles = vec![low];
+    let mut kind = LoftKind::Ruled;
+    match r.below(4) {
+        0 => {
+            options.apex[1] = Some(Apex {
+                point: Point3::new(ox, oy, h),
+                dome: None,
+            });
+        }
+        1 => {
+            kind = LoftKind::Smooth {
+                start: None,
+                end: None,
+            };
+            profiles.push(Profile {
+                plane: Frame::WORLD.with_origin(Point3::new(0.0, 0.0, 0.5 * h)),
+                loops: vec![base.clone()],
+            });
+            options.apex[1] = Some(Apex {
+                point: Point3::new(ox, oy, h),
+                dome: None,
+            });
+        }
+        2 => {
+            kind = LoftKind::Smooth {
+                start: None,
+                end: None,
+            };
+            options.apex[1] = Some(Apex {
+                point: Point3::new(ox, oy, h),
+                dome: Some((Vec3::Z, r.range(0.5, 2.0))),
+            });
+        }
+        _ => {
+            options.align = true;
+            profiles.push(Profile {
+                plane: Frame::WORLD.with_origin(Point3::new(r.range(-30.0, 30.0), r.range(-30.0, 30.0), h)),
+                loops: vec![base.clone()],
+            });
+        }
+    }
+    let mut f = vec![Feature::Loft(Box::new(crate::Loft {
+        profiles,
+        kind,
+        guides: LoftGuides::None,
+        options,
+        op: Combine::New,
+    }))];
+    if r.bool() {
+        f.push(ext(
+            tilted(
+                [0.0, 0.0, r.range(0.2, 0.8) * h],
+                [r.range(-0.3, 0.3), r.range(-0.3, 0.3), 1.0],
+                [1.0, 0.0, 0.0],
+            ),
+            vec![Profile::rectangle(Point2::new(-80.0, -80.0), 160.0, 160.0, 0)],
+            80.0,
             Combine::Cut,
         ));
     }

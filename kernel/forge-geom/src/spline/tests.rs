@@ -512,3 +512,57 @@ fn a_coil_on_a_section_keeps_its_helix() {
         assert!(w.implicit(d.p).abs() < 1e-8);
     }
 }
+
+#[test]
+fn a_spatial_spine_turns_without_twist() {
+    use crate::spline::swept::Spine;
+    // a helix-like cubic chain: the frame must keep the tangent, and its rate have no part along it
+    let pts: Vec<Point3> = (0..9)
+        .map(|i| {
+            let a = i as f64 * 0.9;
+            Point3::new(10.0 * dmath::cos(a), 10.0 * dmath::sin(a), 3.0 * i as f64)
+        })
+        .collect();
+    let k = uniform_knots(3, pts.len());
+    let c = Arc::new(Spline::from_nurbs(3, &k, &pts, None).unwrap());
+    let sp = Spine::spatial(c.clone()).unwrap();
+    let d = c.domain();
+    let t0 = c.deriv(d.lo).d1.normalize().unwrap();
+    let plane = Frame::from_z(c.point(d.lo), t0);
+    let section = Spline::ellipse(Point3::ORIGIN, Vec3::X * 0.8, Vec3::Y * 0.4, 0.0, 2.0).unwrap();
+    let w = Swept::new(sp.clone(), Arc::new(section), &plane).unwrap();
+    let mut r = Rng::new(40);
+    for _ in 0..200 {
+        let v = r.range(d.lo, d.hi);
+        let m = c.deriv(v);
+        let t = m.d1.normalize().unwrap().get();
+        // the start's frame, carried: tangent onto tangent
+        let u = r.range(0.1, 1.9);
+        let s = w.deriv(Point2::new(u, v));
+        assert!((s.p - m.p).dot(t).abs() < 1e-9, "out of the normal plane at {v}");
+        assert!(w.implicit(s.p).abs() < 1e-7, "{v}");
+        // derivatives against differences
+        let h = 1e-5;
+        if !c.breaks().iter().any(|&b| (b - v).abs() < 3.0 * h) {
+            let (a, b) = (w.deriv(Point2::new(u, v - h)), w.deriv(Point2::new(u, v + h)));
+            assert!(((b.p - a.p) / (2.0 * h) - s.dv).length() < 1e-5);
+            assert!(((b.dv - a.dv) / (2.0 * h) - s.dvv).length() < 1e-3);
+        }
+    }
+    // the far end's frame by the table, against a fine fixed march of the defining equation
+    let probe = Vec3::new(t0.get().y, -t0.get().x, 0.0).normalize().unwrap().get();
+    let mut q = probe;
+    let n = 200_000;
+    let hh = d.width() / n as f64;
+    for i in 0..n {
+        let dd = c.deriv(d.lo + (i as f64 + 0.5) * hh);
+        let wr = dd.d1.cross(dd.d2) / dd.d1.length_sq();
+        q = q + (wr * hh).cross(q + (wr * hh).cross(q) * 0.5);
+        q = q / q.length();
+    }
+    assert!(
+        (sp.end_turn(probe) - q).length() < 1e-6,
+        "{:?} {q:?}",
+        sp.end_turn(probe)
+    );
+}

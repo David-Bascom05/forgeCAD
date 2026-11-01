@@ -276,7 +276,7 @@ fn checked(b: &Body) -> f64 {
 #[test]
 fn a_loft_closes_on_a_point() {
     use forge_math::{Point3, Vec3};
-    use forge_ops::{Apex, LoftGuides, LoftKind, loft_and_bounds};
+    use forge_ops::{Apex, LoftGuides, LoftKind, LoftOptions, loft_and_bounds};
     let at = |x: f64, y: f64, z: f64| Apex {
         point: Point3::new(x, y, z),
         dome: None,
@@ -289,17 +289,21 @@ fn a_loft_closes_on_a_point() {
         start: None,
         end: None,
     };
-    let one = |p: &Profile, k, a: &[Option<Apex>; 2]| {
-        loft_and_bounds(std::slice::from_ref(p), k, &none, a, 1)
+    let with = |a: [Option<Apex>; 2]| LoftOptions {
+        apex: a,
+        ..LoftOptions::default()
+    };
+    let one = |p: &Profile, k, a: [Option<Apex>; 2]| {
+        loft_and_bounds(std::slice::from_ref(p), k, &none, &with(a), 1)
             .unwrap()
             .0
     };
     // cone and oblique cone, pyramid and oblique pyramid: a third of base by height
     for (x, y) in [(0.0, 0.0), (3.0, 2.0)] {
-        let v = checked(&one(&circle, ruled, &[None, Some(at(x, y, 20.0))]));
+        let v = checked(&one(&circle, ruled, [None, Some(at(x, y, 20.0))]));
         let want = dmath::PI * 25.0 * 20.0 / 3.0;
         assert!((v - want).abs() < 1e-8 * want, "{v} {want}");
-        let v = checked(&one(&square, ruled, &[Some(at(x, y, -20.0)), None]));
+        let v = checked(&one(&square, ruled, [Some(at(x, y, -20.0)), None]));
         let want = 100.0 * 20.0 / 3.0;
         assert!((v - want).abs() < 1e-8 * want, "{v} {want}");
     }
@@ -312,7 +316,7 @@ fn a_loft_closes_on_a_point() {
         &[circle.clone(), high],
         free,
         &none,
-        &[None, Some(at(0.0, 0.0, 12.0))],
+        &with([None, Some(at(0.0, 0.0, 12.0))]),
         1,
     )
     .unwrap()
@@ -321,9 +325,15 @@ fn a_loft_closes_on_a_point() {
     // a dome: walls arrive square to the axis, so the end is a smooth round nose
     let mut dome = at(0.0, 0.0, 8.0);
     dome.dome = Some((Vec3::Z, 2.0));
-    let b = loft_and_bounds(std::slice::from_ref(&circle), free, &none, &[None, Some(dome)], 1)
-        .unwrap()
-        .0;
+    let b = loft_and_bounds(
+        std::slice::from_ref(&circle),
+        free,
+        &none,
+        &with([None, Some(dome)]),
+        1,
+    )
+    .unwrap()
+    .0;
     let v = checked(&b);
     // of revolution: r(s), z(s) a natural cubic with the end slope given (research/spline-loops)
     let (l, r0): (f64, f64) = (8.0, 5.0);
@@ -350,4 +360,50 @@ fn a_loft_closes_on_a_point() {
     assert!((v - want).abs() < 1e-7 * want, "{v} {want}");
     let (_, dr) = radial(l);
     assert!((dr + 2.0).abs() < 1e-12 && axial(l).0 > 7.999);
+}
+
+#[test]
+fn sections_line_up_by_their_starts() {
+    use forge_math::Point3;
+    use forge_ops::{LoftGuides, LoftKind, LoftOptions, loft_and_bounds};
+    // a measured case's shape (research/spline-loops): two parallel circles far off one axis
+    let high = Profile {
+        plane: Frame::WORLD.with_origin(Point3::new(0.0, 96.0, 400.0)),
+        loops: vec![Profile::circle(Point2::ORIGIN, 10.0, 0)],
+    };
+    let low = prof(vec![Profile::circle(Point2::ORIGIN, 6.0, 0)]);
+    let plain = LoftOptions::default();
+    let auto = LoftOptions {
+        align: true,
+        ..plain.clone()
+    };
+    let run = |o: &LoftOptions| {
+        let b = loft_and_bounds(
+            &[high.clone(), low.clone()],
+            LoftKind::Ruled,
+            &LoftGuides::None,
+            o,
+            1,
+        )
+        .unwrap()
+        .0;
+        checked(&b)
+    };
+    let (as_written, lined) = (run(&plain), run(&auto));
+    // as written the rulings are parallel to the axis of an oblique cone: the frustum's volume
+    let frustum = dmath::PI * 400.0 / 3.0 * (100.0 + 36.0 + 60.0);
+    assert!(
+        (as_written - frustum).abs() < 1e-6 * frustum,
+        "{as_written} {frustum}"
+    );
+    // the second circle starts nearest the first's start: twisted, so less material
+    assert!(lined < 0.8 * as_written, "{lined} {as_written}");
+    // a seam given where the rule would put it is the same solid
+    let d = (10.0f64, 96.0f64);
+    let l = (d.0 * d.0 + d.1 * d.1).sqrt();
+    let seamed = LoftOptions {
+        seams: vec![None, Some(Point2::new(6.0 * d.0 / l, 6.0 * d.1 / l))],
+        ..plain.clone()
+    };
+    assert!((run(&seamed) - lined).abs() < 1e-6 * lined);
 }

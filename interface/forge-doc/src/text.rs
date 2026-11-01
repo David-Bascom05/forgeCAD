@@ -806,7 +806,7 @@ pub const KINDS: &[Kind] = &[
     },
     Kind {
         name: "loft",
-        syntax: "loft [op] [smooth [start W] [end W]] (profile FRAME LOOPS | point X Y Z [dome DX DY DZ [W]]).. [rail I PATH.. | centre PATH]",
+        syntax: "loft [op] [smooth [start W] [end W]] [align auto|none] (profile FRAME LOOPS [seam X Y] | point X Y Z [dome DX DY DZ [W]]).. [rail I PATH.. | centre PATH]",
         parse: |p| {
             let op = p.op()?;
             let kind = if p.eat("smooth") {
@@ -829,11 +829,20 @@ pub const KINDS: &[Kind] = &[
                 };
                 Ok(forge_ops::Apex { point, dome })
             };
+            let align = p.eat("align") && {
+                let auto = p.eat("auto");
+                if !auto && !p.eat("none") {
+                    return Err("align auto|none".into());
+                }
+                auto
+            };
             if p.eat("point") {
                 apex[0] = Some(point(p)?);
             }
+            let mut seams = Vec::new();
             while p.eat("profile") {
                 profiles.push(p.profile()?);
+                seams.push(if p.eat("seam") { Some(p.p2()?) } else { None });
             }
             if p.eat("point") {
                 apex[1] = Some(point(p)?);
@@ -856,7 +865,7 @@ pub const KINDS: &[Kind] = &[
                 profiles,
                 kind,
                 guides,
-                apex,
+                options: forge_ops::LoftOptions { apex, align, seams },
                 op,
             })))
         },
@@ -874,6 +883,10 @@ pub const KINDS: &[Kind] = &[
                     w.num(x);
                 }
             }
+            if l.options.align {
+                w.word("align");
+                w.word("auto");
+            }
             let point = |w: &mut W, a: &forge_ops::Apex| {
                 w.word("point");
                 w.nums(&[a.point.x, a.point.y, a.point.z]);
@@ -882,14 +895,18 @@ pub const KINDS: &[Kind] = &[
                     w.nums(&[d.x, d.y, d.z, k]);
                 }
             };
-            if let Some(a) = &l.apex[0] {
+            if let Some(a) = &l.options.apex[0] {
                 point(w, a);
             }
-            for p in &l.profiles {
+            for (k, p) in l.profiles.iter().enumerate() {
                 w.word("profile");
                 w.profile(p);
+                if let Some(Some(q)) = l.options.seams.get(k) {
+                    w.word("seam");
+                    w.nums(&[q.x, q.y]);
+                }
             }
-            if let Some(a) = &l.apex[1] {
+            if let Some(a) = &l.options.apex[1] {
                 point(w, a);
             }
             match &l.guides {
@@ -2108,9 +2125,9 @@ pub fn is_ref(t: &str) -> bool {
 /// Words the grammar uses, which a parameter may not be named.
 const KEYWORDS: &[&str] = &[
     "x", "y", "z", "axes", "on", "at", "axis", "id", "cw", "rect", "rrect", "circle", "poly", "loop", "line",
-    "spline", "thru", "ellipse", "ell", "knots", "weights", "from", "point", "dome", "arc", "circ", "sym",
-    "two", "thru", "back", "both", "next", "to", "off", "new", "add", "cut", "keep", "face", "ang", "cb",
-    "cs", "pt", "thread", "body", "lin", "mirror", "step", "out", "end", "cons", "open",
+    "spline", "thru", "ellipse", "ell", "knots", "weights", "from", "point", "dome", "align", "auto", "seam",
+    "arc", "circ", "sym", "two", "thru", "back", "both", "next", "to", "off", "new", "add", "cut", "keep",
+    "face", "ang", "cb", "cs", "pt", "thread", "body", "lin", "mirror", "step", "out", "end", "cons", "open",
 ];
 
 impl<'a> P<'a> {
@@ -4134,7 +4151,10 @@ mod tests {
                     1 => LoftGuides::Rails((0..1 + r.below(3)).map(|_| (r.below(8), path(r))).collect()),
                     _ => LoftGuides::CentreLine(path(r)),
                 },
-                apex: [None, None],
+                options: forge_ops::LoftOptions {
+                    align: r.bool(),
+                    ..Default::default()
+                },
                 op: op(r),
             })),
             14 => Feature::Edit(Edit::Rib(Box::new(Rib {

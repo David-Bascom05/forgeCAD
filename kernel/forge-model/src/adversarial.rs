@@ -83,6 +83,7 @@ pub fn families() -> Vec<(&'static str, Family)> {
         ("spline_revolve", crate::splinefam::spline_revolve),
         ("ellipse_walls", crate::splinefam::ellipse_walls),
         ("spline_sweep", crate::splinefam::spline_sweep),
+        ("loft_ends", crate::splinefam::loft_ends),
         ("coplanar_stack", coplanar_stack),
         ("through_vertex", through_vertex),
         ("tangent", tangent),
@@ -735,7 +736,7 @@ fn error_kind(e: &crate::RegenError) -> (String, usize) {
 pub fn touches_by_design(family: &str) -> bool {
     matches!(
         family,
-        "tangent" | "ball_poles" | "exact_patterns" | "coincident_walls"
+        "tangent" | "ball_poles" | "exact_patterns" | "coincident_walls" | "spline_tangent"
     )
 }
 
