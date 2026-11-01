@@ -1476,7 +1476,7 @@ combine cut base lid keep
     #[test]
     fn only_fc_paths_open_and_a_broken_part_reads_back() {
         let dir = Dir::new("only-fc");
-        let env = dir.file(".env", "API_KEY = 123\nOTHER = hunter2\n");
+        let env = dir.file(".env", "API_KEY = s3kr1t\nOTHER = hunter2\n");
         let notes = dir.file("notes.txt", "w = 1\n");
         let link = dir.0.join("env.fc");
         std::os::unix::fs::symlink(&env, &link).expect("link");
@@ -1492,12 +1492,12 @@ combine cut base lid keep
             ] {
                 let r = s.run(cmd, &args(&f, words));
                 assert!(!r.ok && !r.text.contains("hunter2"), "{f} {cmd}: {}", r.text);
-                assert!(!r.text.contains("123"), "{f} {cmd}: {}", r.text);
+                assert!(!r.text.contains("s3kr1t"), "{f} {cmd}: {}", r.text);
             }
         }
         assert_eq!(
             std::fs::read_to_string(&env).expect("read"),
-            "API_KEY = 123\nOTHER = hunter2\n"
+            "API_KEY = s3kr1t\nOTHER = hunter2\n"
         );
         let made = dir.0.join("new.txt").to_string_lossy().to_string();
         assert!(!s.run("act", &args(&made, &["w = 3"])).ok);
