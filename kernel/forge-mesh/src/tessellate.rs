@@ -328,6 +328,9 @@ impl Nodes {
     }
 }
 
+/// The most points a procedural face's first grid has.
+const MAX_GRID: usize = 1 << 15;
+
 /// Grid steps per cell of `Nodes`, across u and across v.
 type Counts = [[(usize, usize); G]; G];
 
@@ -876,6 +879,16 @@ fn tessellate_face(
                     {
                         (c, b.fit) = (t, Some(t));
                     }
+                }
+            }
+            // curvature sampled near a pole can ask for millions of points on a small face: the
+            // grid stays affordable, and the refinement adds what is really needed where it is
+            if size(&c) > MAX_GRID {
+                let f = (MAX_GRID as f64 / size(&c) as f64).sqrt();
+                let less = |x: usize| (x as f64 * f).ceil() as usize;
+                c.iter_mut().flatten().for_each(|x| *x = (less(x.0), less(x.1)));
+                if let Some(b) = cells.as_mut() {
+                    b.fit = None;
                 }
             }
             let (a, b) = n.scale(&c);

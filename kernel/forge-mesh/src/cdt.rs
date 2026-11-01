@@ -855,8 +855,8 @@ pub fn triangulate_refined(
         let mut look: Vec<u32> = (0..mesh.tris.len() as u32).collect();
         let triangles = refine.triangles();
         // only stops a cascade that never ends; a cascade that only grows is cut off by a budget
-        // of points (four million, or 64 for each point given), failing cleanly
-        let budget = (64 * (points.len() + kept.len())).max(1 << 22);
+        // of points (a quarter of a million, or four for each point given), failing cleanly
+        let budget = (4 * (points.len() + kept.len())).max(1 << 18);
         for _ in 0..200 {
             if mesh.pts.len() > budget {
                 return Err(CdtError::Internal("refinement did not settle"));
