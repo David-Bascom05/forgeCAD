@@ -6,7 +6,10 @@ use std::collections::BTreeMap;
 use std::io::Read;
 
 fn esc(s: &str) -> String {
-    s.chars().filter(|c| c.is_ascii_graphic() || *c == ' ').map(|c| if c == '"' || c == '\\' { '_' } else { c }).collect()
+    s.chars()
+        .filter(|c| c.is_ascii_graphic() || *c == ' ')
+        .map(|c| if c == '"' || c == '\\' { '_' } else { c })
+        .collect()
 }
 
 /// Runs one edit, panics held: "ok", "invalid:Kind", "err:why" or "panic".
@@ -60,21 +63,37 @@ fn edits(b: &forge_topo::Body, vol: f64) -> String {
         let x = b.edge(e);
         matches!(x.curve, Curve::Line(_))
             && x.tol <= forge_math::tol::LINEAR
-            && x.coedges.iter().all(|&c| matches!(b.face(b.coedge_face(c)).surface, Surface::Plane(_)))
+            && x.coedges
+                .iter()
+                .all(|&c| matches!(b.face(b.coedge_face(c)).surface, Surface::Plane(_)))
             && x.range.width() > 0.1 * small
     });
     if let Some(e) = plain {
         let r = 0.03 * small;
         let f = trial(vol * 1.5, move || {
-            fillet(b, &[FilletEdge { edge: e, radius: Radius::Constant(r) }], 7003).map_err(|x| format!("{x:?}"))
+            fillet(
+                b,
+                &[FilletEdge {
+                    edge: e,
+                    radius: Radius::Constant(r),
+                }],
+                7003,
+            )
+            .map_err(|x| format!("{x:?}"))
         });
         out.push(format!("\"fillet\":\"{f}\""));
     }
-    let tolerant = b.edge_ids().find(|&e| b.edge(e).tol > forge_math::tol::LINEAR && b.edge(e).alive);
+    let tolerant = b
+        .edge_ids()
+        .find(|&e| b.edge(e).tol > forge_math::tol::LINEAR && b.edge(e).alive);
     if let Some(e) = tolerant {
         let x = b.edge(e);
         let at = x.curve.eval(x.range.mid());
-        let len = b.edge_points(e, 8).windows(2).map(|w| w[0].distance(w[1])).sum::<f64>();
+        let len = b
+            .edge_points(e, 8)
+            .windows(2)
+            .map(|w| w[0].distance(w[1]))
+            .sum::<f64>();
         let r = (0.2 * len).min(0.05 * small).max(1e-3);
         let dir = x.curve.deriv(x.range.mid()).d1.normalize().unwrap_or(UnitVec3::Z);
         let z = dir.any_perpendicular();
@@ -84,7 +103,15 @@ fn edits(b: &forge_topo::Body, vol: f64) -> String {
         });
         out.push(format!("\"near\":\"{near}\""));
         let on = trial(vol * 1.5, move || {
-            fillet(b, &[FilletEdge { edge: e, radius: Radius::Constant(0.3 * r) }], 7005).map_err(|x| format!("{x:?}"))
+            fillet(
+                b,
+                &[FilletEdge {
+                    edge: e,
+                    radius: Radius::Constant(0.3 * r),
+                }],
+                7005,
+            )
+            .map_err(|x| format!("{x:?}"))
         });
         out.push(format!("\"ontol\":\"{on}\""));
     }
@@ -135,10 +162,22 @@ fn main() {
                 Err(e) => merr = e.to_string(),
             }
         }
-        let num = |x: f64| if x.is_finite() { format!("{x}") } else { "null".to_string() };
+        let num = |x: f64| {
+            if x.is_finite() {
+                format!("{x}")
+            } else {
+                "null".to_string()
+            }
+        };
         let mut bx = "null".to_string();
         if !flag("--no-box") {
-            if let Ok(m) = tessellate(&s.body, &Quality { chord: 0.05, ..Quality::default() }) {
+            if let Ok(m) = tessellate(
+                &s.body,
+                &Quality {
+                    chord: 0.05,
+                    ..Quality::default()
+                },
+            ) {
                 let (mut lo, mut hi) = ([f64::INFINITY; 3], [f64::NEG_INFINITY; 3]);
                 for p in &m.positions {
                     for (k, c) in [p.x, p.y, p.z].into_iter().enumerate() {
@@ -169,9 +208,31 @@ fn main() {
     }
     let rj: Vec<String> = refs.iter().map(|(k, n)| format!("\"{k}\":{n}")).collect();
     let st = &imp.stats;
-    let pj: Vec<String> = st.pairs.iter().map(|(k, v)| format!("\"{k}\":[{},{},{}]", v.0, v.1, v.2)).collect();
+    let pj: Vec<String> = st
+        .pairs
+        .iter()
+        .map(|(k, v)| format!("\"{k}\":[{},{},{}]", v.0, v.1, v.2))
+        .collect();
     println!(
         "{{\"system\":\"{}\",\"schema\":\"{}\",\"read_ms\":{:.1},\"all_ms\":{:.1},\"mm\":{},\"unc\":{},\"voff\":{},\"coff\":{},\"voffn\":{},\"coffn\":{},\"edges\":{},\"faces\":{},\"tangent\":{},\"tolerant\":{},\"maxtol\":{},\"pairs\":{{{}}},\"refusals\":{{{}}},\"why\":\"{}\",\"solids\":[{}]}}",
-        esc(&imp.system), esc(&imp.schema), read_ms, t.elapsed().as_secs_f64() * 1e3, st.units_mm, st.uncertainty, st.vertex_off_curve, st.curve_off_surface, st.vertices_off, st.edges_off, st.edges, st.faces, st.tangent_off, st.tolerant_edges, st.max_edge_tol, pj.join(","), rj.join(","), why, solids.join(",")
+        esc(&imp.system),
+        esc(&imp.schema),
+        read_ms,
+        t.elapsed().as_secs_f64() * 1e3,
+        st.units_mm,
+        st.uncertainty,
+        st.vertex_off_curve,
+        st.curve_off_surface,
+        st.vertices_off,
+        st.edges_off,
+        st.edges,
+        st.faces,
+        st.tangent_off,
+        st.tolerant_edges,
+        st.max_edge_tol,
+        pj.join(","),
+        rj.join(","),
+        why,
+        solids.join(",")
     );
 }

@@ -8,6 +8,7 @@ pub mod extent;
 pub mod fillets;
 pub mod finishing;
 pub mod hole;
+pub mod import;
 pub mod names;
 pub mod params;
 mod path;
@@ -39,6 +40,7 @@ use forge_ops::{
 };
 use forge_topo::{Body, Name};
 pub use hole::{End, Head, Hole, HoleError, Thread};
+pub use import::Import;
 pub use params::{On, Param, Sketch, Unit};
 pub use pattern::{
     At, Layout, PatternError, Row, Source, body_motion, copy_sources, instance_name, placements,
@@ -172,6 +174,8 @@ pub enum Feature {
     Thread(Box<ScrewThread>),
     /// Text embossed on or engraved into a plane or a cylinder.
     Text(Box<Text>),
+    /// A solid read from another system's file.
+    Import(Box<Import>),
     /// A work plane, axis, point or UCS defined by references; it makes nothing.
     Work(Work),
     /// A feature on chosen bodies, or one that combines, splits or moves bodies (bodies.rs).
@@ -189,6 +193,11 @@ pub enum Combine {
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum RegenError {
+    /// The host found no solid in the file an import names.
+    Import {
+        feature: usize,
+        file: String,
+    },
     Extrude {
         feature: usize,
         error: ExtrudeError,
@@ -975,6 +984,7 @@ fn starts(f: &Feature) -> bool {
             | Feature::Revolve { op: Combine::New, .. }
             | Feature::Ball { op: Combine::New, .. }
     ) || swept::op(f) == Some(Combine::New)
+        || matches!(f, Feature::Import(t) if t.op == Combine::New)
 }
 
 /// Whether a feature changes the part as a whole, rather than making tools to combine with it.
@@ -1125,7 +1135,9 @@ fn short(features: History<'_>, from: usize) -> bool {
     let mut n = 0;
     for f in features.iter().skip(from) {
         match f {
-            Feature::Pattern { .. } | Feature::Thread(_) | Feature::Text(_) => return false,
+            Feature::Pattern { .. } | Feature::Thread(_) | Feature::Text(_) | Feature::Import(_) => {
+                return false;
+            }
             Feature::Plane(_) | Feature::Param(_) | Feature::Sketch(_) | Feature::Work(_) => {}
             _ => n += 1,
         }
@@ -1874,6 +1886,7 @@ fn tools(features: History<'_>, i: usize, build: bool) -> Result<Vec<Tool>, Rege
         }
         Feature::Thread(_) => thread::tools(features, i, build),
         Feature::Text(_) => text::tools(features, i),
+        Feature::Import(_) => import::tools(features, i),
         f => Ok(vec![tool(i, features.id(i), f, build)?]),
     }
 }

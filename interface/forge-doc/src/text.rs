@@ -6,6 +6,7 @@ use crate::{expr, sketch};
 use forge_geom::spline::{Form, PlaneSpline};
 use forge_geom::{Circle, CurveGeom};
 use forge_math::{Frame, Point2, Point3, Vec2, Vec3, dmath, tol};
+use forge_model::Import;
 use forge_model::{
     At, AxisBy, BodyFeature, Coil, CoilSize, Combine, Convention, Cutter, Datum, Edit, End, Extent, Feature,
     Fit, FontRef, Head, Hole, Keep, Layout, Loft, Motion, Param, Part, PathEnds, Pick, PlaneBy, PointBy, Ref,
@@ -1551,6 +1552,31 @@ pub const KINDS: &[Kind] = &[
         },
     },
     Kind {
+        name: "import",
+        syntax: "import [new|add|cut] PATH   a solid from a STEP file (.step .stp), quoted; features can follow",
+        parse: |p| {
+            let op = if p.eat("cut") {
+                Combine::Cut
+            } else if p.eat("add") {
+                Combine::Add
+            } else {
+                p.eat("new");
+                Combine::New
+            };
+            let file = p.string()?;
+            let body = (p.b.imports)(&file)?;
+            Ok(Feature::Import(Box::new(Import { file, op, body })))
+        },
+        print: |f, w| {
+            let Feature::Import(t) = f else { return false };
+            if t.op != Combine::New {
+                w.word(OPS.iter().find(|o| o.1 == t.op).expect("every op is named").0);
+            }
+            w.string(&t.file);
+            true
+        },
+    },
+    Kind {
         name: "combine",
         syntax: "combine (add|cut|keep) TARGET TOOL.. [keep]   bodies by the lines that made them",
         parse: |p| {
@@ -1825,6 +1851,8 @@ pub struct Before<'a> {
     pub sources: &'a dyn Fn(&str) -> R<sketch::Refd>,
     /// The font a text line names, found by the host; None where it does not look.
     pub fonts: &'a dyn Fn(&str) -> R<Option<std::sync::Arc<forge_font::Font>>>,
+    /// The body an import line names, read by the host; None where it does not look.
+    pub imports: &'a dyn Fn(&str) -> R<Option<std::sync::Arc<forge_topo::Body>>>,
     /// What this line read as last time, if known: a sketch takes its unchanged parts.
     pub was: Option<&'a Feature>,
     /// The name feature `k`'s own solid gives an entity of the part named `n` (a boolean renames
@@ -2021,6 +2049,7 @@ pub fn parse(src: &str) -> Result<Part, (usize, String)> {
             face: &face,
             sources: &|r| Err(format!("'{r}' needs a part to resolve against")),
             fonts: &|_| Ok(None),
+            imports: &|_| Ok(None),
             was: None,
             own: &|_, n| n,
         };

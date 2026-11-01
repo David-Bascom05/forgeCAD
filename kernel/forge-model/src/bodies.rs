@@ -121,6 +121,7 @@ fn op(f: &Feature) -> Option<Combine> {
     match f {
         Feature::Extrude { op, .. } | Feature::Revolve { op, .. } | Feature::Ball { op, .. } => Some(*op),
         Feature::Edit(Edit::Thicken { op, .. }) => Some(*op),
+        Feature::Import(t) => Some(t.op),
         _ => crate::swept::op(f),
     }
 }

@@ -206,7 +206,9 @@ impl<'a> P<'a> {
         if self.eat(c)? {
             Ok(())
         } else {
-            let got = self.peek().map_or("the end of the file".to_string(), |x| format!("'{}'", x as char));
+            let got = self
+                .peek()
+                .map_or("the end of the file".to_string(), |x| format!("'{}'", x as char));
             self.err(format!("expected '{}', found {got}", c as char))
         }
     }
@@ -320,7 +322,12 @@ impl<'a> P<'a> {
             match w {
                 b"FILE_SCHEMA" => {
                     if let Some(Value::List(a, n)) = args.first() {
-                        if let Some(v) = self.f.values.get(*a as usize..(*a + *n) as usize).and_then(|r| r.first()) {
+                        if let Some(v) = self
+                            .f
+                            .values
+                            .get(*a as usize..(*a + *n) as usize)
+                            .and_then(|r| r.first())
+                        {
                             let s = text(v);
                             let name = s.split(|c: char| c == ' ' || c == '{').next().unwrap_or("");
                             self.f.schema = name.to_ascii_uppercase();
@@ -367,7 +374,9 @@ impl<'a> P<'a> {
             self.i += 1;
         }
         let digits = &self.b[a..self.i];
-        let n = std::str::from_utf8(digits).ok().and_then(|s| s.parse::<u32>().ok());
+        let n = std::str::from_utf8(digits)
+            .ok()
+            .and_then(|s| s.parse::<u32>().ok());
         match n {
             Some(n) => Ok(n),
             None => self.err("an instance number that is empty or over 32 bits"),
@@ -472,10 +481,17 @@ impl<'a> P<'a> {
                 }
                 Value::Str(0, 0)
             }
-            b'.' if self.b.get(self.i + 1).is_some_and(|x| x.is_ascii_alphabetic() || *x == b'_') => {
+            b'.' if self
+                .b
+                .get(self.i + 1)
+                .is_some_and(|x| x.is_ascii_alphabetic() || *x == b'_') =>
+            {
                 self.i += 1;
                 let a = self.i;
-                while self.peek().is_some_and(|x| x.is_ascii_alphanumeric() || x == b'_') {
+                while self
+                    .peek()
+                    .is_some_and(|x| x.is_ascii_alphanumeric() || x == b'_')
+                {
                     self.i += 1;
                 }
                 let n = self.i - a;
@@ -596,8 +612,13 @@ mod tests {
         assert_eq!(f.ids.len(), 4);
         let r = f.records_of(1).unwrap();
         assert_eq!(f.name(&r[0]), "CARTESIAN_POINT");
-        let Value::List(a, n) = f.args(&r[0])[1] else { panic!() };
-        assert_eq!(f.run(a, n), &[Value::Real(1.0), Value::Real(-0.25), Value::Int(3)]);
+        let Value::List(a, n) = f.args(&r[0])[1] else {
+            panic!()
+        };
+        assert_eq!(
+            f.run(a, n),
+            &[Value::Real(1.0), Value::Real(-0.25), Value::Int(3)]
+        );
         assert_eq!(f.records_of(3).unwrap().len(), 3);
         let x = f.records_of(4).unwrap()[0];
         let v = f.args(&x);

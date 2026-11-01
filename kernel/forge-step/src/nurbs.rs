@@ -58,7 +58,11 @@ fn basis(knots: &[f64], p: usize, span: usize, t: f64, out: &mut [[f64; MAX_DEGR
         let mut saved = 0.0;
         for r in 0..j {
             ndu[j][r] = right[r + 1] + left[j - r];
-            let w = if ndu[j][r] != 0.0 { ndu[r][j - 1] / ndu[j][r] } else { 0.0 };
+            let w = if ndu[j][r] != 0.0 {
+                ndu[r][j - 1] / ndu[j][r]
+            } else {
+                0.0
+            };
             ndu[r][j] = saved + right[r + 1] * w;
             saved = left[j - r] * w;
         }
@@ -75,15 +79,31 @@ fn basis(knots: &[f64], p: usize, span: usize, t: f64, out: &mut [[f64; MAX_DEGR
             return 0.0;
         }
         let i = span - k + j;
-        let a = if j >= 1 { ratio(ndu[j - 1][k - 1], knots[i + k] - knots[i]) } else { 0.0 };
-        let b = if j < k { ratio(ndu[j][k - 1], knots[i + k + 1] - knots[i + 1]) } else { 0.0 };
+        let a = if j >= 1 {
+            ratio(ndu[j - 1][k - 1], knots[i + k] - knots[i])
+        } else {
+            0.0
+        };
+        let b = if j < k {
+            ratio(ndu[j][k - 1], knots[i + k + 1] - knots[i + 1])
+        } else {
+            0.0
+        };
         k as f64 * (a - b)
     };
     for j in 0..=p {
         out[1][j] = first(p, j);
         let i = span - p + j;
-        let a = if j >= 1 && p >= 1 { ratio(first(p - 1, j - 1), knots[i + p] - knots[i]) } else { 0.0 };
-        let b = if j < p { ratio(first(p - 1, j), knots[i + p + 1] - knots[i + 1]) } else { 0.0 };
+        let a = if j >= 1 && p >= 1 {
+            ratio(first(p - 1, j - 1), knots[i + p] - knots[i])
+        } else {
+            0.0
+        };
+        let b = if j < p {
+            ratio(first(p - 1, j), knots[i + p + 1] - knots[i + 1])
+        } else {
+            0.0
+        };
         out[2][j] = p as f64 * (a - b);
     }
 }
@@ -342,7 +362,10 @@ impl Nurbs {
         self.tree.get_or_init(|| {
             // the non-empty knot spans of a direction: (lo, hi, span index)
             let spans = |k: &[f64], d: usize, n: usize| -> Vec<(f64, f64, usize)> {
-                (d..n).filter(|&i| k[i + 1] > k[i]).map(|i| (k[i], k[i + 1], i)).collect()
+                (d..n)
+                    .filter(|&i| k[i + 1] > k[i])
+                    .map(|i| (k[i], k[i + 1], i))
+                    .collect()
             };
             let (us, vs) = (spans(&self.u, self.p, self.nu), spans(&self.v, self.q, self.nv));
             let mut nodes = Vec::with_capacity(2 * us.len() * vs.len());
@@ -383,10 +406,16 @@ impl Nurbs {
         } else {
             let (x, y) = if b - a >= d - c {
                 let m = a + (b - a) / 2;
-                (self.build(us, vs, (a, m), (c, d), out), self.build(us, vs, (m, b), (c, d), out))
+                (
+                    self.build(us, vs, (a, m), (c, d), out),
+                    self.build(us, vs, (m, b), (c, d), out),
+                )
             } else {
                 let m = c + (d - c) / 2;
-                (self.build(us, vs, (a, b), (c, m), out), self.build(us, vs, (a, b), (m, d), out))
+                (
+                    self.build(us, vs, (a, b), (c, m), out),
+                    self.build(us, vs, (a, b), (m, d), out),
+                )
             };
             bx = out[x as usize].0.hull(&out[y as usize].0);
             (l, r, leaf) = (x, y, (0, 0));
@@ -541,7 +570,11 @@ impl Procedural for Nurbs {
         true
     }
     fn u_kinks(&self, u: Interval) -> Vec<f64> {
-        let mut k: Vec<f64> = self.u[self.p + 1..self.nu].iter().copied().filter(|&x| x > u.lo && x < u.hi).collect();
+        let mut k: Vec<f64> = self.u[self.p + 1..self.nu]
+            .iter()
+            .copied()
+            .filter(|&x| x > u.lo && x < u.hi)
+            .collect();
         k.dedup();
         k
     }
@@ -565,7 +598,10 @@ mod tests {
         }
         Nurbs::new(
             (3, 2),
-            (vec![0., 0., 0., 0., 0.4, 1., 1., 1., 1.], vec![0., 0., 0., 0.5, 2., 2., 2.]),
+            (
+                vec![0., 0., 0., 0., 0.4, 1., 1., 1., 1.],
+                vec![0., 0., 0., 0.5, 2., 2., 2.],
+            ),
             (5, 4),
             &pts,
             Some(&w),
@@ -601,8 +637,16 @@ mod tests {
             let q = s.eval(Point2::new(u, v));
             assert!(s.distance(q) < 1e-9);
             let w = Interval::new(u - 0.1, u + 0.1);
-            let b = s.bbox(Box2 { u: w, v: Interval::new(v - 0.1, v + 0.1) });
-            assert!(q.x >= b.x.lo - 1e-12 && q.x <= b.x.hi + 1e-12 && q.z >= b.z.lo - 1e-12 && q.z <= b.z.hi + 1e-12);
+            let b = s.bbox(Box2 {
+                u: w,
+                v: Interval::new(v - 0.1, v + 0.1),
+            });
+            assert!(
+                q.x >= b.x.lo - 1e-12
+                    && q.x <= b.x.hi + 1e-12
+                    && q.z >= b.z.lo - 1e-12
+                    && q.z <= b.z.hi + 1e-12
+            );
         }
     }
 

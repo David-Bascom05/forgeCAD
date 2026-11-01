@@ -48,8 +48,91 @@ pub struct Session {
     parts: HashMap<String, Part>,
     /// Where files may be read from (serve and mcp); any `.fc` file when `None`.
     root: Option<std::path::PathBuf>,
+    /// Bodies read from STEP files, by path, with the file's length and time: reading is dear.
+    imported: Imported,
     /// Whether `act` may write files (off unless asked for).
     writable: bool,
+}
+
+type Imported = std::sync::Arc<
+    std::sync::Mutex<
+        HashMap<
+            std::path::PathBuf,
+            (
+                u64,
+                Option<std::time::SystemTime>,
+                std::sync::Arc<forge_topo::Body>,
+            ),
+        >,
+    >,
+>;
+
+/// STEP files larger than this are refused unread.
+const STEP_LIMIT: u64 = 2 << 30;
+
+/// The solid an import line names: every solid of a STEP file as one body, found with links
+/// resolved first and, in a rooted session, only under the root. What the file does not make a
+/// valid solid of is refused, with the entities and problems named.
+fn import_file(
+    dir: &std::path::Path,
+    root: Option<&std::path::Path>,
+    name: &str,
+    cache: &Imported,
+) -> Result<std::sync::Arc<forge_topo::Body>, String> {
+    let real = std::fs::canonicalize(dir.join(name)).ok().filter(|r| {
+        r.extension()
+            .is_some_and(|x| x.eq_ignore_ascii_case("step") || x.eq_ignore_ascii_case("stp"))
+    });
+    let refused = || format!("{name}: not a STEP file under the root");
+    let r = match (root, real) {
+        (Some(root), Some(r)) if r.starts_with(root) => r,
+        (Some(_), _) => return Err(refused()),
+        (None, Some(r)) => r,
+        (None, None) => return Err(format!("{name}: no such .step or .stp file")),
+    };
+    let meta = std::fs::metadata(&r).map_err(|e| format!("{name}: {e}"))?;
+    if !meta.is_file() || meta.len() > STEP_LIMIT {
+        return Err(format!(
+            "{name}: not a regular file of at most {} MB",
+            STEP_LIMIT >> 20
+        ));
+    }
+    let stamp = (meta.len(), meta.modified().ok());
+    if let Ok(c) = cache.lock()
+        && let Some((n, t, b)) = c.get(&r)
+        && (*n, *t) == stamp
+    {
+        return Ok(b.clone());
+    }
+    let data = std::fs::read(&r).map_err(|e| format!("{name}: {e}"))?;
+    let imp =
+        forge_step::import(&data, &forge_step::Limits::default()).map_err(|e| format!("{name}: {e}"))?;
+    if let Some(x) = imp.refusals.first() {
+        return Err(format!(
+            "{name}: {} solid(s) refused; #{} {}: {}",
+            imp.refusals.len(),
+            x.entity,
+            x.kind,
+            x.why
+        ));
+    }
+    let mut body = forge_topo::Body::new();
+    for s in &imp.solids {
+        let problems = forge_topo::check(&s.body);
+        if let Some(p) = problems.first() {
+            return Err(format!(
+                "{name}: solid #{} is not valid here: {} problem(s), first {p:?}",
+                s.entity,
+                problems.len()
+            ));
+        }
+        body.append(&s.body);
+    }
+    let body = std::sync::Arc::new(body);
+    if let Ok(mut c) = cache.lock() {
+        c.insert(r, (stamp.0, stamp.1, body.clone()));
+    }
+    Ok(body)
 }
 
 /// Fonts larger than this are refused unread.
@@ -168,11 +251,16 @@ impl Session {
             .ok()
             .and_then(|r| r.parent().map(|d| d.to_path_buf()))
             .unwrap_or_default();
+        let dir2 = dir.clone();
         let root = self.root.clone();
         let part = self.parts.entry(file.to_string()).or_default();
         let m = &mut part.model;
         m.fonts = Some(std::sync::Arc::new(move |name: &str| {
             font_file(&dir, root.as_deref(), name)
+        }));
+        let (dir, root, cache) = (dir2, self.root.clone(), self.imported.clone());
+        m.imports = Some(std::sync::Arc::new(move |name: &str| {
+            import_file(&dir, root.as_deref(), name, &cache)
         }));
         m.update(&src);
         Ok((part, real))

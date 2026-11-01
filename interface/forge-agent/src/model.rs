@@ -47,6 +47,8 @@ pub struct Model {
     mesh: Option<TriMesh>,
     /// Finds the font a text line names; text finds none without it.
     pub fonts: Option<Arc<Fonts>>,
+    /// Reads the file an import line names; import finds nothing without it.
+    pub imports: Option<Arc<Imports>>,
     /// The finished part's exact mass properties, worked out as asked for.
     mass: Option<Result<MassProps, String>>,
     /// The source was just written by `edit`; the next update finds it unchanged.
@@ -55,6 +57,8 @@ pub struct Model {
 
 /// From a font's name in the part file to the font.
 pub type Fonts = dyn Fn(&str) -> Result<Arc<forge_font::Font>, String> + Send + Sync;
+/// From an imported file's name in the part file to its body.
+pub type Imports = dyn Fn(&str) -> Result<Arc<Body>, String> + Send + Sync;
 
 /// The bodies after a line, as the next line builds on them; all of them as one body to look at
 /// (finished: faces on one surface joined); and as one body unfinished, to trace faces through.
@@ -159,6 +163,7 @@ impl Default for Model {
             faces: None,
             mesh: None,
             fonts: None,
+            imports: None,
             mass: None,
             edited: false,
         }
@@ -384,6 +389,7 @@ impl Model {
                 let face = |r: &str| self.face(i, r);
                 let sources = |r: &str| self.sources(i, r);
                 let fonts = |n: &str| self.fonts.as_ref().map(|f| f(n)).transpose();
+                let imports = |n: &str| self.imports.as_ref().map(|f| f(n)).transpose();
                 let own = |k: usize, n: Name| {
                     self.body_after(i)
                         .and_then(|b| {
@@ -405,6 +411,7 @@ impl Model {
                     face: &face,
                     sources: &sources,
                     fonts: &fonts,
+                    imports: &imports,
                     was: old_features.get(i - keep),
                     own: &own,
                 };
@@ -1093,6 +1100,10 @@ pub fn explain(e: &RegenError) -> (String, String) {
     use RegenError::*;
     let hint = |s: &str| s.to_string();
     match e {
+        Import { file, .. } => (
+            format!("import: no solid read from {file}"),
+            hint("the file is found beside the part file"),
+        ),
         Extrude { error, .. } => (
             format!("extrude: {error:?}"),
             hint(if matches!(error, forge_ops::ExtrudeError::TooShort) {

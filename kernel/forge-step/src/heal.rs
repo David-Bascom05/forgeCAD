@@ -49,7 +49,11 @@ impl Proto {
     }
 
     pub fn start_of(&self, u: (usize, bool)) -> usize {
-        if u.1 { self.edges[u.0].start } else { self.edges[u.0].end }
+        if u.1 {
+            self.edges[u.0].start
+        } else {
+            self.edges[u.0].end
+        }
     }
 
     /// Splits edge `e` at parameter `t`, in every loop that uses it; returns the new vertex.
@@ -64,7 +68,11 @@ impl Proto {
 
     fn split_edge_at(&mut self, e: usize, t: f64, v: usize) {
         let name = self.fresh();
-        let (curve, range, end) = (self.edges[e].curve.clone(), self.edges[e].range, self.edges[e].end);
+        let (curve, range, end) = (
+            self.edges[e].curve.clone(),
+            self.edges[e].range,
+            self.edges[e].end,
+        );
         self.edges.push(PEdge {
             curve,
             range: Interval::new(t, range.hi),
@@ -289,6 +297,10 @@ impl Proto {
             for &u in l {
                 self.walk(u, &s, 16, &mut pts);
             }
+            // through a pole it bounds a lune, as bodies draw them
+            if pts.iter().any(|&q| s.singular(q)) {
+                return s;
+            }
             let mut area = 0.0;
             for j in 0..pts.len() {
                 let (a, b) = (pts[j], pts[(j + 1) % pts.len()]);
@@ -330,7 +342,9 @@ impl Proto {
             return Err("no place on the second rim for a seam".into());
         };
         // the rim may have been edited: look the loops up afresh
-        let seam = self.seam_edge(&s, dir, va, vb).ok_or("the surface has no seam curve")?;
+        let seam = self
+            .seam_edge(&s, dir, va, vb)
+            .ok_or("the surface has no seam curve")?;
         let (mut la, mut lb) = (self.faces[f].loops[a].clone(), self.faces[f].loops[b].clone());
         if !self.start_at(&mut la, va) || !self.start_at(&mut lb, vb) {
             return Err("a rim does not pass its seam's vertex".into());
@@ -359,7 +373,9 @@ impl Proto {
         self.verts.push((pole, name));
         let vp = self.verts.len() - 1;
         let va = self.start_of(self.faces[f].loops[a][0]);
-        let seam = self.seam_edge(&s, dir, va, vp).ok_or("the surface has no seam curve")?;
+        let seam = self
+            .seam_edge(&s, dir, va, vp)
+            .ok_or("the surface has no seam curve")?;
         let mut l = self.faces[f].loops[a].clone();
         l.push((seam, true));
         l.push((seam, false));
@@ -372,7 +388,10 @@ impl Proto {
         let s = self.faces[f].surface.clone();
         match &s {
             Surface::Sphere(_) => {
-                let (a, b) = (pole_of(&s, 0, false).ok_or("no pole")?, pole_of(&s, 0, true).ok_or("no pole")?);
+                let (a, b) = (
+                    pole_of(&s, 0, false).ok_or("no pole")?,
+                    pole_of(&s, 0, true).ok_or("no pole")?,
+                );
                 let (na, nb) = (self.fresh(), self.fresh());
                 self.verts.push((a, na));
                 self.verts.push((b, nb));
@@ -418,7 +437,10 @@ impl Proto {
             if adj[e].len() != 2 {
                 continue;
             }
-            let (a, b) = (self.faces[adj[e][0]].surface.clone(), self.faces[adj[e][1]].surface.clone());
+            let (a, b) = (
+                self.faces[adj[e][0]].surface.clone(),
+                self.faces[adj[e][1]].surface.clone(),
+            );
             let dev = self.off(e, &a).max(self.off(e, &b));
             if dev <= 0.5 * tol::LINEAR {
                 continue;
@@ -501,7 +523,9 @@ impl Proto {
         };
         let ed = &self.edges[e];
         let w = ed.range.width();
-        let samples: Vec<Point3> = (0..=8).map(|k| ed.curve.eval(ed.range.lo + w * k as f64 / 8.0)).collect();
+        let samples: Vec<Point3> = (0..=8)
+            .map(|k| ed.curve.eval(ed.range.lo + w * k as f64 / 8.0))
+            .collect();
         let (ps, pe) = (self.verts[ed.start].0, self.verts[ed.end].0);
         let closed = ed.start == ed.end;
         for (c, _) in curves {
@@ -512,13 +536,18 @@ impl Proto {
                 let far = 4.0 * tol::MODEL_HALF_SIZE;
                 Interval::new(-far, far)
             };
-            let fits = samples.iter().all(|&p| c.eval(c.closest(p, whole)).distance(p) <= limit);
+            let fits = samples
+                .iter()
+                .all(|&p| c.eval(c.closest(p, whole)).distance(p) <= limit);
             if !fits {
                 continue;
             }
             let (t0, t1) = (c.closest(ps, whole), c.closest(pe, whole));
             // along the old edge's way, or the new curve runs against it
-            let (old, new) = (ed.curve.deriv(ed.range.lo + 0.5 * w).d1, c.deriv(c.closest(samples[4], whole)).d1);
+            let (old, new) = (
+                ed.curve.deriv(ed.range.lo + 0.5 * w).d1,
+                c.deriv(c.closest(samples[4], whole)).d1,
+            );
             let same = old.dot(new) >= 0.0;
             let range = match d.period {
                 Some(p) if closed => Interval::new(t0, t0 + p),
@@ -703,7 +732,8 @@ impl Proto {
         for f in self.faces {
             let face = body.add_face(shells[f.shell], f.surface, f.same_sense, f.name);
             for l in &f.loops {
-                let uses: Vec<(EdgeId, bool)> = l.iter().filter_map(|&(e, w)| emap[e].map(|x| (x, w))).collect();
+                let uses: Vec<(EdgeId, bool)> =
+                    l.iter().filter_map(|&(e, w)| emap[e].map(|x| (x, w))).collect();
                 body.add_loop(face, &uses);
             }
         }
@@ -745,13 +775,21 @@ fn pole_of(s: &Surface, dir: usize, up: bool) -> Option<Point3> {
             // collapsed there: the row of points is one point
             let at = |k: f64| {
                 if dir == 0 {
-                    s.eval(Point2::new(d.u.lo + (d.u.hi - d.u.lo) * k, if up { d.v.hi } else { d.v.lo }))
+                    s.eval(Point2::new(
+                        d.u.lo + (d.u.hi - d.u.lo) * k,
+                        if up { d.v.hi } else { d.v.lo },
+                    ))
                 } else {
-                    s.eval(Point2::new(if up { d.u.hi } else { d.u.lo }, d.v.lo + (d.v.hi - d.v.lo) * k))
+                    s.eval(Point2::new(
+                        if up { d.u.hi } else { d.u.lo },
+                        d.v.lo + (d.v.hi - d.v.lo) * k,
+                    ))
                 }
             };
             let a = at(0.0);
-            (1..8).all(|k| at(k as f64 / 8.0).distance(a) <= tol::LINEAR).then_some(a)
+            (1..8)
+                .all(|k| at(k as f64 / 8.0).distance(a) <= tol::LINEAR)
+                .then_some(a)
         }
         _ => None,
     }
@@ -763,7 +801,10 @@ fn iso_curve(s: &Surface, dir: usize, a: Point3, b: Point3) -> Option<(Curve, In
         // along the axis or the slant: straight
         Surface::Cylinder(_) | Surface::Cone(_) if dir == 0 => {
             let d = (b - a).normalize()?;
-            Some((Curve::Line(Line { origin: a, dir: d }), Interval::new(0.0, a.distance(b))))
+            Some((
+                Curve::Line(Line { origin: a, dir: d }),
+                Interval::new(0.0, a.distance(b)),
+            ))
         }
         Surface::Cylinder(k) => {
             // round the axis at b's height: no winding of v exists, so this is not reached
@@ -773,12 +814,23 @@ fn iso_curve(s: &Surface, dir: usize, a: Point3, b: Point3) -> Option<(Curve, In
         Surface::Sphere(k) => {
             // a meridian: a circle through a and the poles, in their plane
             let z: Vec3 = k.frame.z().into();
-            let uv = s.project(if a.distance(k.frame.origin + z * k.radius) > tol::LINEAR && a.distance(k.frame.origin - z * k.radius) > tol::LINEAR { a } else { b });
+            let uv = s.project(
+                if a.distance(k.frame.origin + z * k.radius) > tol::LINEAR
+                    && a.distance(k.frame.origin - z * k.radius) > tol::LINEAR
+                {
+                    a
+                } else {
+                    b
+                },
+            );
             let (su, cu) = dmath::sin_cos(uv.x);
             let (x, y): (Vec3, Vec3) = (k.frame.x().into(), k.frame.y().into());
             let rad = x * cu + y * su;
             let frame = Frame::from_zx(k.frame.origin, rad.cross(z).normalize()?, rad)?;
-            let circle = Circle { frame, radius: k.radius };
+            let circle = Circle {
+                frame,
+                radius: k.radius,
+            };
             arc(Curve::Circle(circle), a, b)
         }
         Surface::Torus(k) => {
@@ -790,18 +842,36 @@ fn iso_curve(s: &Surface, dir: usize, a: Point3, b: Point3) -> Option<(Curve, In
                 let (x, y): (Vec3, Vec3) = (k.frame.x().into(), k.frame.y().into());
                 let rad = x * cu + y * su;
                 let frame = Frame::from_zx(k.frame.origin + rad * k.major, rad.cross(z).normalize()?, rad)?;
-                arc(Curve::Circle(Circle { frame, radius: k.minor }), a, b)
+                arc(
+                    Curve::Circle(Circle {
+                        frame,
+                        radius: k.minor,
+                    }),
+                    a,
+                    b,
+                )
             } else {
                 // round the axis at this v
                 let (sv, cv) = dmath::sin_cos(uv.y);
                 let c = k.frame.origin + z * (k.minor * sv);
                 let frame = Frame::from_zx(c, k.frame.z(), k.frame.x().into())?;
-                arc(Curve::Circle(Circle { frame, radius: k.major + k.minor * cv }), a, b)
+                arc(
+                    Curve::Circle(Circle {
+                        frame,
+                        radius: k.major + k.minor * cv,
+                    }),
+                    a,
+                    b,
+                )
             }
         }
         Surface::Procedural(_) => {
             let (ua, ub) = (s.project(a), s.project(b));
-            let (fixed, t0, t1) = if dir == 0 { (ua.x, ua.y, ub.y) } else { (ua.y, ua.x, ub.x) };
+            let (fixed, t0, t1) = if dir == 0 {
+                (ua.x, ua.y, ub.y)
+            } else {
+                (ua.y, ua.x, ub.x)
+            };
             let (lo, hi) = (t0.min(t1), t0.max(t1));
             let up = t1 >= t0;
             let c = Iso {
@@ -830,8 +900,15 @@ fn arc(c: Curve, a: Point3, b: Point3) -> Option<(Curve, Interval)> {
     if t1 - t0 > dmath::PI + 1e-9 {
         // the other way round: turn the circle over
         if let Curve::Circle(k) = &c {
-            let flipped = Frame::from_zx(k.frame.origin, (-Vec3::from(k.frame.z())).normalize()?, k.frame.x().into())?;
-            let n = Curve::Circle(Circle { frame: flipped, radius: k.radius });
+            let flipped = Frame::from_zx(
+                k.frame.origin,
+                (-Vec3::from(k.frame.z())).normalize()?,
+                k.frame.x().into(),
+            )?;
+            let n = Curve::Circle(Circle {
+                frame: flipped,
+                radius: k.radius,
+            });
             let (s0, mut s1) = (n.closest(a, whole), n.closest(b, whole));
             if s1 <= s0 {
                 s1 += d.period?;
@@ -855,8 +932,16 @@ struct Iso {
 
 impl Iso {
     fn uv(&self, t: f64) -> Point2 {
-        let x = if self.up { self.span.lo + t } else { self.span.hi - t };
-        if self.dir == 0 { Point2::new(self.fixed, x) } else { Point2::new(x, self.fixed) }
+        let x = if self.up {
+            self.span.lo + t
+        } else {
+            self.span.hi - t
+        };
+        if self.dir == 0 {
+            Point2::new(self.fixed, x)
+        } else {
+            Point2::new(x, self.fixed)
+        }
     }
 }
 
@@ -865,18 +950,34 @@ impl ProceduralCurve for Iso {
         let d = self.s.deriv(self.uv(t));
         let k = if self.up { 1.0 } else { -1.0 };
         if self.dir == 0 {
-            CurveDeriv { p: d.p, d1: d.dv * k, d2: d.dvv }
+            CurveDeriv {
+                p: d.p,
+                d1: d.dv * k,
+                d2: d.dvv,
+            }
         } else {
-            CurveDeriv { p: d.p, d1: d.du * k, d2: d.duu }
+            CurveDeriv {
+                p: d.p,
+                d1: d.du * k,
+                d2: d.duu,
+            }
         }
     }
     fn domain(&self) -> Domain1 {
-        Domain1 { lo: 0.0, hi: self.span.width(), period: None }
+        Domain1 {
+            lo: 0.0,
+            hi: self.span.width(),
+            period: None,
+        }
     }
     fn closest(&self, p: Point3, range: Interval) -> f64 {
         let uv = self.s.project(p);
         let x = if self.dir == 0 { uv.y } else { uv.x };
-        let t = if self.up { x - self.span.lo } else { self.span.hi - x };
+        let t = if self.up {
+            x - self.span.lo
+        } else {
+            self.span.hi - x
+        };
         t.clamp(range.lo, range.hi)
     }
     fn bbox(&self, range: Interval) -> Box3 {

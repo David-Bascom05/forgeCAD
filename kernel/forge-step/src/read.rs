@@ -1,13 +1,16 @@
 //! A part 21 file's boundary representations into bodies. Refusals name the entity and say why;
 //! nothing in a file can panic this or make it loop.
 
+use crate::heal::{PEdge, PFace, Proto};
 use crate::nurbs::{self, Nurbs};
 use crate::part21::{File, Limits, ParseError, Record, Value, parse};
-use forge_geom::spline::{Spline, SplineCurve};
-use forge_geom::{Circle, Cone, Curve, CurveGeom, Cylinder, Ellipse, Hyperbola, Line, Parabola, Plane, Sphere, Surface, Torus};
 use forge_geom::SurfaceGeom;
+use forge_geom::spline::{Spline, SplineCurve};
+use forge_geom::{
+    Circle, Cone, Curve, CurveGeom, Cylinder, Ellipse, Hyperbola, Line, Parabola, Plane, Sphere, Surface,
+    Torus,
+};
 use forge_math::{Frame, Interval, Point3, UnitVec3, Vec3, dmath};
-use crate::heal::{PEdge, PFace, Proto};
 use forge_topo::{Body, Name};
 use std::collections::BTreeMap;
 
@@ -166,7 +169,10 @@ fn unit_scale(f: &File, id: u32, depth: u32) -> Option<f64> {
                 let mr = f.records_of(m)?;
                 for x in mr {
                     let nm = f.name(x);
-                    if nm == "LENGTH_MEASURE_WITH_UNIT" || nm == "PLANE_ANGLE_MEASURE_WITH_UNIT" || nm == "MEASURE_WITH_UNIT" {
+                    if nm == "LENGTH_MEASURE_WITH_UNIT"
+                        || nm == "PLANE_ANGLE_MEASURE_WITH_UNIT"
+                        || nm == "MEASURE_WITH_UNIT"
+                    {
                         let b = f.args(x);
                         let k = number(f, b.first()?)?;
                         let Value::Ref(base) = *b.get(1)? else { return None };
@@ -187,7 +193,9 @@ fn units_of(f: &File, ctx: u32) -> Option<Units> {
     for r in rs {
         match f.name(r) {
             "GLOBAL_UNIT_ASSIGNED_CONTEXT" => {
-                let Value::List(a, n) = *f.args(r).first()? else { return None };
+                let Value::List(a, n) = *f.args(r).first()? else {
+                    return None;
+                };
                 for v in f.run(a, n) {
                     let Value::Ref(u) = *v else { continue };
                     let names: Vec<&str> = f.records_of(u)?.iter().map(|x| f.name(x)).collect();
@@ -199,13 +207,21 @@ fn units_of(f: &File, ctx: u32) -> Option<Units> {
                 }
             }
             "GLOBAL_UNCERTAINTY_ASSIGNED_CONTEXT" => {
-                let Value::List(a, n) = *f.args(r).first()? else { continue };
+                let Value::List(a, n) = *f.args(r).first()? else {
+                    continue;
+                };
                 for v in f.run(a, n) {
                     let Value::Ref(u) = *v else { continue };
-                    let Some(m) = rec(f, u, "UNCERTAINTY_MEASURE_WITH_UNIT") else { continue };
+                    let Some(m) = rec(f, u, "UNCERTAINTY_MEASURE_WITH_UNIT") else {
+                        continue;
+                    };
                     let b = f.args(&m);
-                    let Some(k) = b.first().and_then(|x| number(f, x)) else { continue };
-                    let Some(Value::Ref(unit)) = b.get(1) else { continue };
+                    let Some(k) = b.first().and_then(|x| number(f, x)) else {
+                        continue;
+                    };
+                    let Some(Value::Ref(unit)) = b.get(1) else {
+                        continue;
+                    };
                     if let Some(s) = unit_scale(f, *unit, 0) {
                         unc = Some(unc.unwrap_or(f64::INFINITY).min(k * s));
                     }
@@ -224,7 +240,10 @@ fn units_of(f: &File, ctx: u32) -> Option<Units> {
 impl<'a> Reader<'a> {
     fn args_of(&self, id: u32, name: &str) -> R<&'a [Value]> {
         let f = self.f;
-        match f.records_of(id).and_then(|rs| rs.iter().find(|r| f.name(r) == name)) {
+        match f
+            .records_of(id)
+            .and_then(|rs| rs.iter().find(|r| f.name(r) == name))
+        {
             Some(r) => Ok(f.args(r)),
             None => refuse(id, name, "the entity is missing or of another kind"),
         }
@@ -313,7 +332,10 @@ impl<'a> Reader<'a> {
     }
 
     fn knots(&self, id: u32, kind: &str, mults: &Value, values: &Value) -> R<Vec<f64>> {
-        let (m, k) = (self.list(id, kind, Some(mults))?, self.list(id, kind, Some(values))?);
+        let (m, k) = (
+            self.list(id, kind, Some(mults))?,
+            self.list(id, kind, Some(values))?,
+        );
         if m.len() != k.len() {
             return refuse(id, kind, "knots and multiplicities differ in number");
         }
@@ -337,7 +359,11 @@ impl<'a> Reader<'a> {
     /// Knots a curve or surface without any states: clamped, even. For BEZIER_ and QUASI_UNIFORM_
     /// the standard fixes them; UNIFORM_ is unclamped and even.
     fn implied(&self, id: u32, kind: &str, deg: usize, n: usize) -> R<Vec<f64>> {
-        let names = self.f.records_of(id).map(|r| r.iter().map(|x| self.f.name(x)).collect::<Vec<_>>()).unwrap_or_default();
+        let names = self
+            .f
+            .records_of(id)
+            .map(|r| r.iter().map(|x| self.f.name(x)).collect::<Vec<_>>())
+            .unwrap_or_default();
         let has = |s: &str| names.iter().any(|x| x.starts_with(s));
         if has("BEZIER_") {
             if n != deg + 1 {
@@ -373,7 +399,11 @@ impl<'a> Reader<'a> {
     }
 
     fn weights(&self, id: u32, kind: &str, rec_name: &str) -> R<Option<&'a [Value]>> {
-        match self.f.records_of(id).and_then(|rs| rs.iter().find(|r| self.f.name(r) == rec_name)) {
+        match self
+            .f
+            .records_of(id)
+            .and_then(|rs| rs.iter().find(|r| self.f.name(r) == rec_name))
+        {
             Some(r) => Ok(Some(self.list(id, kind, self.f.args(r).first())?)),
             None => Ok(None),
         }
@@ -393,7 +423,11 @@ impl<'a> Reader<'a> {
         let rs = f.records_of(id).unwrap_or(&[]);
         let base = rs.iter().find(|r| {
             let n = f.name(r);
-            n == "B_SPLINE_CURVE" || (rs.len() == 1 && n.starts_with(|c: char| c == 'B' || c == 'U' || c == 'Q') && n.ends_with("_CURVE") || n == "B_SPLINE_CURVE_WITH_KNOTS")
+            n == "B_SPLINE_CURVE"
+                || (rs.len() == 1
+                    && n.starts_with(|c: char| c == 'B' || c == 'U' || c == 'Q')
+                    && n.ends_with("_CURVE")
+                    || n == "B_SPLINE_CURVE_WITH_KNOTS")
         });
         let Some(base) = base else {
             return refuse(id, kind, "no B-spline record");
@@ -414,7 +448,11 @@ impl<'a> Reader<'a> {
             Some(r) => {
                 let k = f.args(r);
                 // simple: name, degree, points, form, closed, intersect, mults, knots, spec
-                let (m, v) = if k.len() >= 8 { (k.get(k.len() - 3), k.get(k.len() - 2)) } else { (k.first(), k.get(1)) };
+                let (m, v) = if k.len() >= 8 {
+                    (k.get(k.len() - 3), k.get(k.len() - 2))
+                } else {
+                    (k.first(), k.get(1))
+                };
                 match (m, v) {
                     (Some(m), Some(v)) => self.knots(id, kind, m, v)?,
                     _ => return refuse(id, kind, "no knots"),
@@ -459,10 +497,16 @@ impl<'a> Reader<'a> {
             return refuse(id, "curve", "the entity is missing");
         };
         let m = self.u.mm;
-        let is_spline = f.records_of(id).is_some_and(|rs| rs.iter().any(|r| {
-            let n = f.name(r);
-            n == "B_SPLINE_CURVE" || n == "B_SPLINE_CURVE_WITH_KNOTS" || n == "BEZIER_CURVE" || n == "UNIFORM_CURVE" || n == "QUASI_UNIFORM_CURVE"
-        }));
+        let is_spline = f.records_of(id).is_some_and(|rs| {
+            rs.iter().any(|r| {
+                let n = f.name(r);
+                n == "B_SPLINE_CURVE"
+                    || n == "B_SPLINE_CURVE_WITH_KNOTS"
+                    || n == "BEZIER_CURVE"
+                    || n == "UNIFORM_CURVE"
+                    || n == "QUASI_UNIFORM_CURVE"
+            })
+        });
         if is_spline {
             return self.bspline_curve(id);
         }
@@ -487,7 +531,10 @@ impl<'a> Reader<'a> {
             "ELLIPSE" => {
                 let a = self.args_of(id, "ELLIPSE")?;
                 let frame = self.placement(self.reference(id, "ELLIPSE", a.get(1))?)?;
-                let (major, minor) = (self.real(id, "ELLIPSE", a.get(2))? * m, self.real(id, "ELLIPSE", a.get(3))? * m);
+                let (major, minor) = (
+                    self.real(id, "ELLIPSE", a.get(2))? * m,
+                    self.real(id, "ELLIPSE", a.get(3))? * m,
+                );
                 if !(major > 0.0 && minor > 0.0) {
                     return refuse(id, "ELLIPSE", "a semi-axis not positive");
                 }
@@ -505,7 +552,10 @@ impl<'a> Reader<'a> {
             "HYPERBOLA" => {
                 let a = self.args_of(id, "HYPERBOLA")?;
                 let frame = self.placement(self.reference(id, "HYPERBOLA", a.get(1))?)?;
-                let (x, y) = (self.real(id, "HYPERBOLA", a.get(2))? * m, self.real(id, "HYPERBOLA", a.get(3))? * m);
+                let (x, y) = (
+                    self.real(id, "HYPERBOLA", a.get(2))? * m,
+                    self.real(id, "HYPERBOLA", a.get(3))? * m,
+                );
                 if !(x > 0.0 && y > 0.0) {
                     return refuse(id, "HYPERBOLA", "a semi-axis not positive");
                 }
@@ -543,10 +593,16 @@ impl<'a> Reader<'a> {
             return refuse(id, "surface", "the entity is missing");
         };
         let m = self.u.mm;
-        let is_spline = f.records_of(id).is_some_and(|rs| rs.iter().any(|r| {
-            let n = f.name(r);
-            n == "B_SPLINE_SURFACE" || n == "B_SPLINE_SURFACE_WITH_KNOTS" || n == "BEZIER_SURFACE" || n == "UNIFORM_SURFACE" || n == "QUASI_UNIFORM_SURFACE"
-        }));
+        let is_spline = f.records_of(id).is_some_and(|rs| {
+            rs.iter().any(|r| {
+                let n = f.name(r);
+                n == "B_SPLINE_SURFACE"
+                    || n == "B_SPLINE_SURFACE_WITH_KNOTS"
+                    || n == "BEZIER_SURFACE"
+                    || n == "UNIFORM_SURFACE"
+                    || n == "QUASI_UNIFORM_SURFACE"
+            })
+        });
         if is_spline {
             return self.bspline_surface(id);
         }
@@ -588,7 +644,10 @@ impl<'a> Reader<'a> {
             "TOROIDAL_SURFACE" | "DEGENERATE_TOROIDAL_SURFACE" => {
                 let a = self.args_of(id, name)?;
                 let frame = self.placement(self.reference(id, name, a.get(1))?)?;
-                let (major, minor) = (self.real(id, name, a.get(2))? * m, self.real(id, name, a.get(3))? * m);
+                let (major, minor) = (
+                    self.real(id, name, a.get(2))? * m,
+                    self.real(id, name, a.get(3))? * m,
+                );
                 if name == "TOROIDAL_SURFACE" {
                     if let Some(t) = Torus::new(frame, major, minor) {
                         return Ok(Surface::Torus(t));
@@ -615,7 +674,9 @@ impl<'a> Reader<'a> {
         let rs = f.records_of(id).unwrap_or(&[]);
         let Some(base) = rs.iter().find(|r| {
             let n = f.name(r);
-            n == "B_SPLINE_SURFACE" || (rs.len() == 1 && n.ends_with("_SURFACE")) || n == "B_SPLINE_SURFACE_WITH_KNOTS"
+            n == "B_SPLINE_SURFACE"
+                || (rs.len() == 1 && n.ends_with("_SURFACE"))
+                || n == "B_SPLINE_SURFACE_WITH_KNOTS"
         }) else {
             return refuse(id, kind, "no B-spline record");
         };
@@ -684,18 +745,27 @@ impl<'a> Reader<'a> {
             Curve::Line(l) => {
                 // long enough for any part in the model box
                 let reach = 2.0 * forge_math::tol::MODEL_HALF_SIZE;
-                let (a, b) = (l.origin + Vec3::from(l.dir) * -reach, l.origin + Vec3::from(l.dir) * reach);
+                let (a, b) = (
+                    l.origin + Vec3::from(l.dir) * -reach,
+                    l.origin + Vec3::from(l.dir) * reach,
+                );
                 Ok((1, vec![-reach, -reach, reach, reach], vec![a, b], vec![1.0, 1.0]))
             }
             Curve::Circle(k) => {
-                let (x, y) = (Vec3::from(k.frame.x()) * k.radius, Vec3::from(k.frame.y()) * k.radius);
+                let (x, y) = (
+                    Vec3::from(k.frame.x()) * k.radius,
+                    Vec3::from(k.frame.y()) * k.radius,
+                );
                 match Spline::ellipse(k.frame.origin, x, y, 0.0, dmath::TAU) {
                     Some(s) => Ok(net_of(&s)),
                     None => refuse(id, kind, "its circle has no spline"),
                 }
             }
             Curve::Ellipse(k) => {
-                let (x, y) = (Vec3::from(k.frame.x()) * k.major, Vec3::from(k.frame.y()) * k.minor);
+                let (x, y) = (
+                    Vec3::from(k.frame.x()) * k.major,
+                    Vec3::from(k.frame.y()) * k.minor,
+                );
                 match Spline::ellipse(k.frame.origin, x, y, 0.0, dmath::TAU) {
                     Some(s) => Ok(net_of(&s)),
                     None => refuse(id, kind, "its ellipse has no spline"),
@@ -726,7 +796,13 @@ impl<'a> Reader<'a> {
             ws.push(w[i]);
             ws.push(w[i]);
         }
-        match Nurbs::new((deg, 1), (knots, vec![-reach, -reach, reach, reach]), (pts.len(), 2), &net, Some(&ws)) {
+        match Nurbs::new(
+            (deg, 1),
+            (knots, vec![-reach, -reach, reach, reach]),
+            (pts.len(), 2),
+            &net,
+            Some(&ws),
+        ) {
             Some(n) => Ok(n.surface()),
             None => refuse(id, name, "no surface from its curve"),
         }
@@ -766,7 +842,20 @@ impl<'a> Reader<'a> {
             }
         }
         let pi = dmath::PI;
-        let v = vec![0.0, 0.0, 0.0, 0.5 * pi, 0.5 * pi, pi, pi, 1.5 * pi, 1.5 * pi, 2.0 * pi, 2.0 * pi, 2.0 * pi];
+        let v = vec![
+            0.0,
+            0.0,
+            0.0,
+            0.5 * pi,
+            0.5 * pi,
+            pi,
+            pi,
+            1.5 * pi,
+            1.5 * pi,
+            2.0 * pi,
+            2.0 * pi,
+            2.0 * pi,
+        ];
         match Nurbs::new((deg, 2), (knots, v), (pts.len(), 9), &net, Some(&ws)) {
             Some(n) => Ok(n.surface()),
             None => refuse(id, kind, "no surface from its curve"),
@@ -794,7 +883,11 @@ impl<'a> Reader<'a> {
             return refuse(id, name, "minor radius not positive");
         }
         if major > minor + forge_math::tol::MIN_LENGTH {
-            return refuse(id, name, format!("radii {major} and {minor}: a ring torus with too thin a tube"));
+            return refuse(
+                id,
+                name,
+                format!("radii {major} and {minor}: a ring torus with too thin a tube"),
+            );
         }
         // the tube's circle meets the axis at tube angle +-half from the side away from it
         let h = (minor * minor - major * major).max(0.0).sqrt();
@@ -862,7 +955,10 @@ impl Build<'_, '_> {
         }
         let k = "EDGE_CURVE";
         let a = self.r.args_of(id, k)?;
-        let (v0, v1) = (self.r.reference(id, k, a.get(1))?, self.r.reference(id, k, a.get(2))?);
+        let (v0, v1) = (
+            self.r.reference(id, k, a.get(1))?,
+            self.r.reference(id, k, a.get(2))?,
+        );
         let curve_id = self.r.reference(id, k, a.get(3))?;
         let Some(same) = a.get(4).and_then(|v| logical(self.r.f, v)) else {
             return refuse(id, k, "same_sense is missing");
@@ -870,10 +966,18 @@ impl Build<'_, '_> {
         let (start, end) = (self.vertex(v0)?, self.vertex(v1)?);
         let curve = self.r.curve(curve_id)?;
         // the edge runs the way its curve's parameter increases
-        let (s, t, flipped) = if same { (start, end, false) } else { (end, start, true) };
+        let (s, t, flipped) = if same {
+            (start, end, false)
+        } else {
+            (end, start, true)
+        };
         let (range, off, against) = edge_range(&curve, self.p.verts[s].0, self.p.verts[t].0, s == t);
         // a file's same_sense can be wrong: the vertices say which way the edge really runs
-        let (s, t, flipped) = if against { (t, s, !flipped) } else { (s, t, flipped) };
+        let (s, t, flipped) = if against {
+            (t, s, !flipped)
+        } else {
+            (s, t, flipped)
+        };
         self.stats.vertex_off_curve = self.stats.vertex_off_curve.max(off);
         if off > forge_math::tol::LINEAR {
             self.stats.vertices_off += 1;
@@ -1035,9 +1139,16 @@ fn edge_range(c: &Curve, a: Point3, b: Point3, closed: bool) -> (Interval, f64, 
 fn record_deviations(body: &mut Body, stats: &mut Stats) {
     use forge_math::tol::LINEAR;
     for e in body.edge_ids().collect::<Vec<_>>() {
-        let faces: Vec<_> = body.edge(e).coedges.iter().map(|&c| body.coedge_face(c)).collect();
+        let faces: Vec<_> = body
+            .edge(e)
+            .coedges
+            .iter()
+            .map(|&c| body.coedge_face(c))
+            .collect();
         let free_form = matches!(body.edge(e).curve, Curve::Procedural(_) | Curve::Intersection(_))
-            || faces.iter().any(|&f| matches!(body.face(f).surface, Surface::Procedural(_)));
+            || faces
+                .iter()
+                .any(|&f| matches!(body.face(f).surface, Surface::Procedural(_)));
         let measure = |n: usize| {
             let pts = body.edge_points(e, n);
             faces
@@ -1057,7 +1168,11 @@ fn record_deviations(body: &mut Body, stats: &mut Stats) {
                 .fold(0.0, f64::max)
         };
         let dev = measure(16);
-        let dev = if free_form || dev > LINEAR { dev.max(measure(256)) } else { dev };
+        let dev = if free_form || dev > LINEAR {
+            dev.max(measure(256))
+        } else {
+            dev
+        };
         if dev > LINEAR {
             body.edges[e.index()].tol = dev;
             stats.tolerant_edges += 1;
@@ -1152,7 +1267,11 @@ pub fn import(text: &[u8], lim: &Limits) -> Result<Imported, ImportError> {
                             stats.edges_off += 1;
                         }
                         let kind = |s: &str| s.split(['(', ' ']).next().unwrap_or("").to_string();
-                        let key = format!("{}/{}", kind(&format!("{:?}", e.curve).chars().take(12).collect::<String>()), kind(&format!("{:?}", fa.surface).chars().take(12).collect::<String>()));
+                        let key = format!(
+                            "{}/{}",
+                            kind(&format!("{:?}", e.curve).chars().take(12).collect::<String>()),
+                            kind(&format!("{:?}", fa.surface).chars().take(12).collect::<String>())
+                        );
                         let en = stats.pairs.entry(key).or_insert((0, 0, 0.0));
                         en.0 += 1;
                         en.1 += usize::from(worst > forge_math::tol::LINEAR);
