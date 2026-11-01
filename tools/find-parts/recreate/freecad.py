@@ -212,6 +212,7 @@ class Tr:
         self.topo = None
         self.bodies = 0
         self.approx = False
+        self.steps = []
 
     def state(self):
         if self.topo is None:
@@ -337,23 +338,7 @@ class Tr:
         if not picked:
             raise Unresolved("no edge where the base's edge lies")
         # OpenCascade carries a blend along tangent edges
-        at = {}
-        for e in st["edges"]:
-            for k, v in enumerate(e["v"]):
-                at.setdefault(v, []).append((e, k))
-        todo = list(picked.values())
-        while todo:
-            e = todo.pop()
-            for k, v in enumerate(e["v"]):
-                t = e["t"][k]
-                for g, j in at[v] if t else []:
-                    if g["h"] in picked or g["c"] == "smooth" or not g["t"][j]:
-                        continue
-                    a, b = t, g["t"][j]
-                    cr = (a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b[2], a[0] * b[1] - a[1] * b[0])
-                    if math.sqrt(dot(cr, cr)) < 1e-4:
-                        picked[g["h"]] = g
-                        todo.append(g)
+        along_tangents(st["edges"], picked)
         return [line + " " + " ".join(sorted(picked))]
 
     def axis_of(self, name, prop):
@@ -430,6 +415,28 @@ class Tr:
             self.labels[name] = label
             ls[0] = f"{label}: {ls[0]}"
             self.lines += ls
+            self.steps.append((name, len(self.lines)))
+
+
+def along_tangents(edges, picked):
+    """Grows {handle: edge} along edges tangent where they meet."""
+    at = {}
+    for e in edges:
+        for k, v in enumerate(e["v"]):
+            at.setdefault(v, []).append((e, k))
+    todo = list(picked.values())
+    while todo:
+        e = todo.pop()
+        for k, v in enumerate(e["v"]):
+            t = e["t"][k]
+            for g, j in at[v] if t else []:
+                if g["h"] in picked or g["c"] == "smooth" or not g["t"][j]:
+                    continue
+                a, b = t, g["t"][j]
+                cr = (a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b[2], a[0] * b[1] - a[1] * b[0])
+                if math.sqrt(dot(cr, cr)) < 1e-4:
+                    picked[g["h"]] = g
+                    todo.append(g)
 
 
 def doc_approx(d, name):

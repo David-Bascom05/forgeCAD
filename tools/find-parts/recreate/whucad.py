@@ -17,8 +17,8 @@ import sys
 import h5py
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from cadfs import Any, Both, KernelStop, OnPlane, Swept, Unresolved, Unsupported, add, dot, num, vtext
-from freecad import Tr as FT, even_regions
+from cadfs import Any, Both, KernelStop, OnPlane, Swept, Turned, Unresolved, Unsupported, add, dot, num, vtext
+from freecad import Tr as FT, along_tangents, even_regions
 from sketch2d import Arrangement, Piece
 
 CMD = ["Line", "Arc", "Circle", "Spline", "SCP", "EOS", "SOL", "Ext", "Rev", "Pocket", "Groove", "Shell", "Chamfer", "Fillet", "Draft", "Mirror", "Hole", "Topo", "Select", "MirrorStart", "NSI", "NSIE", "AOI1", "AOI2", "AOIE", "API", "APIE"]
@@ -62,7 +62,10 @@ def curves(rows, scale):
         j = i + 1
         while j < len(rows) and CMD[int(rows[j][0])] != "SOL":
             j += 1
-        lp = rows[i + 1 : j]
+        lp = [r for r in rows[i + 1 : j] if CMD[int(r[0])] in ("Line", "Arc", "Circle", "Spline", "SCP")]
+        if not lp:
+            i = j
+            continue
         if any(CMD[int(r[0])] in ("Spline", "SCP") for r in lp):
             raise Unsupported("a spline in a sketch")
         last = lp[-1]
@@ -125,6 +128,14 @@ class Tr(FT):
         if rec is None:
             raise Unresolved(f"a face of {b}")
         fr = rec["frame"]
+        if "a2" in rec:
+            if no != 0 or not wires:
+                raise Unresolved("a cap of a revolve")
+            s, c = wires[-1]
+            e = self.sk[s][0].every.get(f"c{c}")
+            if e is None:
+                raise Unresolved("a curve the sketch does not have")
+            return Turned(fr, e, rec["a2"], rec["d2"])
         if no in (1, 2):
             z = rec["lo"] if no == 1 else rec["hi"]
             return OnPlane(fr.world(0, 0, z), fr.n)
@@ -138,19 +149,21 @@ class Tr(FT):
         raise Unresolved("a face form")
 
     def items(self, group):
-        stack, wires, out = [], [], []
+        stack, subs, wires, out = [], [], [], []
         for t, b, k, no in group:
             if t == "Wire":
                 if b != "Sketch":
                     raise Unresolved("a wire of " + b)
                 wires.append((k, no))
             elif t in ("Face", "Sub_Face"):
-                if b not in ("Pad", "Pocket"):
+                if b not in ("Pad", "Pocket", "Shaft"):
                     raise Unresolved(f"a face of {b}")
-                stack.append(self.face_carrier(wires, b, k, no))
+                (subs if t == "Sub_Face" else stack).append(self.face_carrier(wires, b, k, no))
                 wires = []
             elif t == "Multiply_Face":
-                stack = [Any(stack)] if stack else []
+                if subs:
+                    stack.append(Any(subs))
+                subs = []
             elif t == "Edge":
                 if len(stack) < 2:
                     raise Unresolved("an edge of fewer than two faces")
@@ -165,25 +178,27 @@ class Tr(FT):
     def finish(self, rows, head, faces_only=False):
         st = self.state()
         edges, faces = st.get("edges", []), st.get("faces", [])
-        picked = set()
+        picked = {}
         for g in self.groups(rows):
             for kind, c in self.items(g):
                 if kind == "edge":
                     hit = [e for e in edges if all(c.dist(p) <= TOL for p in e["p"])]
                     if not hit:
                         raise Unresolved("no edge where the faces meet")
-                    picked |= {e["h"] for e in hit}
+                    picked.update({e["h"]: e for e in hit})
                 else:
                     hit = [f for f in faces if all(c.dist(p) <= TOL for p in f["p"])]
                     if not hit:
                         raise Unresolved("no such face")
                     if faces_only:
-                        picked |= {f["h"] for f in hit}
+                        picked.update({f["h"]: f for f in hit})
                     else:
                         for f in hit:
-                            picked |= {e["h"] for e in edges if f["h"] in e["f"] and e["c"] != "smooth"}
+                            picked.update({e["h"]: e for e in edges if f["h"] in e["f"] and e["c"] != "smooth"})
         if not picked:
             raise Unresolved("nothing selected")
+        if not faces_only:
+            along_tangents(edges, picked)  # CATIA's fillets and chamfers run on along tangents
         self.lines.append(head + " " + " ".join(sorted(picked)))
 
     def extrude(self, rows, r, kind):
@@ -223,6 +238,67 @@ class Tr(FT):
                 self.bodies = 1
             self.lines.append(f"extrude {op + ' ' if op else ''}{head} {frame} {loops}")
 
+    def mirror(self, rows):
+        g = self.groups(rows)
+        if len(g) != 1 or len(g[0]) < 1:
+            raise Unresolved("a mirror's plane")
+        t, b, k, no = g[0][-1]
+        if b == "OriginElements":
+            n = {1: (0.0, 0.0, 1.0), 2: (1.0, 0.0, 0.0), 3: (0.0, 1.0, 0.0)}.get(no)
+            if n is None:
+                raise Unresolved("a mirror's plane")
+            o = (0.0, 0.0, 0.0)
+        else:
+            cs = self.items(g[0])
+            c = cs[0][1] if cs else None
+            if not isinstance(c, OnPlane):
+                raise Unsupported("a mirror in a side face")
+            n, o = c.n, c.o
+        self.lines.append(f"pattern body mirror z {vtext(n)} at {vtext(o)}")
+
+    def revolve(self, rows, r, cut):
+        fr = Frame(r)
+        self.count["Sketch"] += 1
+        s = self.count["Sketch"]
+        a = Arrangement(curves(rows, fr.size / 95.0))
+        self.sk[s] = (a, fr)
+        regs = even_regions(a)
+        if not regs:
+            raise Unresolved("no closed region")
+        sel = [g for g in self.groups(rows)]
+        if not sel or not sel[0]:
+            raise Unresolved("a revolve with no axis")
+        t, b, k, no = sel[0][0]
+        if b == "OriginElements":
+            o2, d2 = (0.0, 0.0), ((1.0, 0.0) if no == 1 else (0.0, 1.0))
+        elif b == "Sketch" and k == s and a.every.get(f"c{no}") is not None and a.every[f"c{no}"].kind == "line":
+            e = a.every[f"c{no}"]
+            l = math.dist(e.a, e.b)
+            o2, d2 = e.a, ((e.b[0] - e.a[0]) / l, (e.b[1] - e.a[1]) / l)
+        else:
+            raise Unresolved("a revolve axis on " + b)
+        ang = r[17] / 255.0 * 360
+        back = r[18] / 255.0 * 360
+        if not (ang >= 359.9 and back == 0):
+            if back != 0:
+                raise Unsupported("a revolve both ways")
+        head = "" if ang >= 359.9 else num(ang)
+        name = "Groove" if cut else "Shaft"
+        self.count.setdefault(name, 0)
+        self.count[name] += 1
+        self.solid[(name, self.count[name])] = {"frame": fr, "a2": o2, "d2": d2}
+        frame = f"z {vtext(fr.n)} x {vtext(fr.x)} at {vtext(fr.o)} axis {num(o2[0])} {num(o2[1])} {num(d2[0])} {num(d2[1])}"
+        from cadfs import Tr as C
+        for prof in a.merged(regs):
+            loops = " ".join(C.loop_text(self, a, lp, False) for lp in prof)
+            op = "cut" if cut or r[19] == 1 else "add"
+            if self.bodies == 0:
+                if op == "cut":
+                    raise Unsupported("first feature cuts")
+                op = ""
+                self.bodies = 1
+            self.lines.append(f"revolve {op + ' ' if op else ''}{head} {frame} {loops}")
+
     def run(self):
         pending = []
         for r in self.v:
@@ -233,7 +309,15 @@ class Tr(FT):
                 self.kinds.append("extrude" if c == "Ext" else "pocket")
                 self.extrude(pending, r, c)
                 pending = []
-            elif c in ("Rev", "Groove", "Draft", "Mirror", "Hole"):
+            elif c in ("Rev", "Groove"):
+                self.kinds.append("revolve" if c == "Rev" else "groove")
+                self.revolve(pending, r, c == "Groove")
+                pending = []
+            elif c == "Mirror":
+                self.kinds.append("mirror")
+                self.mirror(pending)
+                pending = []
+            elif c in ("Draft", "Hole"):
                 raise Unsupported("feature " + c)
             elif c == "Fillet":
                 self.kinds.append("fillet")
@@ -241,10 +325,14 @@ class Tr(FT):
                 pending = []
             elif c == "Chamfer":
                 self.kinds.append("chamfer")
+                if abs(r[22] - r[23]) > 1:
+                    raise Unsupported("an unequal chamfer")
                 self.finish(pending, f"chamfer {num(unq(r[22]))}")
                 pending = []
             elif c == "Shell":
                 self.kinds.append("shell")
+                if r[21] > 128:
+                    raise Unsupported("a shell with outer thickness")
                 self.finish(pending, f"shell {num(unq(r[20]))}", True)
                 pending = []
             else:

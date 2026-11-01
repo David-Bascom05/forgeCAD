@@ -20,8 +20,8 @@ import run_cadfs as R
 
 def one(i, a):
     fc = os.path.join(a["out"], "parts", i + ".fc")
-    h5 = os.path.join(a["vec"], f"01{int(i[1:]) // 1419:02d}", i + ".h5")
-    if not os.path.exists(h5):
+    h5 = a["index"].get(i)
+    if h5 is None:
         return {"id": i, "status": "untranslated", "cls": "importer", "why": "no vector file"}
     try:
         p = subprocess.run([a["h5py"], "-I", os.path.join(HERE, "whucad.py"), h5, "--topo", a["topo"], "--out", fc], capture_output=True, text=True, timeout=300)
@@ -55,6 +55,7 @@ def run(a):
     out = opt("--out")
     os.makedirs(os.path.join(out, "parts"), exist_ok=True)
     args = {k: opt("--" + k) for k in ("vec", "step", "out", "judge", "topo", "h5py", "occt")}
+    args["index"] = {f[:-3]: os.path.join(r, f) for r, _, fs in os.walk(args["vec"]) for f in fs if f.endswith(".h5")}
     path = os.path.join(out, "results.jsonl")
     done = {json.loads(l)["id"] for l in open(path)} if os.path.exists(path) else set()
     todo = [i for i in open(a[0]).read().split() if i not in done]
