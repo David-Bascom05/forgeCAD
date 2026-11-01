@@ -97,20 +97,6 @@ def curves(rows, scale):
     return ents
 
 
-def one_line(hit):
-    """An edge named with several faces on one side is one line: a piece off it is only where those faces' planes also meet."""
-    near = lambda p, a, u: math.dist(p, tuple(a[i] + u[i] * sum((p[j] - a[j]) * u[j] for j in range(3)) for i in range(3)))
-    e = max(hit, key=lambda e: math.dist(e["p"][0], e["p"][-1]))
-    a, b = e["p"][0], e["p"][-1]
-    l = math.dist(a, b)
-    if l <= TOL:
-        return hit
-    u = tuple((b[i] - a[i]) / l for i in range(3))
-    if any(near(p, a, u) > TOL for p in e["p"]):
-        return hit
-    return [x for x in hit if all(near(p, a, u) <= TOL for p in x["p"])]
-
-
 class Tr(FT):
     def __init__(self, v, topo):
         self.lines, self.topo, self.topo_exe = [], None, topo
@@ -203,8 +189,6 @@ class Tr(FT):
                     hit = [e for e in edges if all(c.dist(p) <= TOL for p in e["p"])]
                     if not hit:
                         raise Unresolved("no edge where the faces meet")
-                    if isinstance(c, Both) and (isinstance(c.a, Any) or isinstance(c.b, Any)):
-                        hit = one_line(hit)
                     picked.update({e["h"]: e for e in hit})
                 else:
                     hit = [f for f in faces if all(c.dist(p) <= TOL for p in f["p"])]
