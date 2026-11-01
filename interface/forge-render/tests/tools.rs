@@ -882,6 +882,11 @@ fn flipping_a_hole_sends_it_the_other_way_and_there_it_says_so() {
     assert_ne!(now.contains(" -on sk1 "), was_on, "{line} {now}");
 }
 
+fn repro(name: &str) -> String {
+    std::fs::read_to_string(format!("{}/tests/faulty/{name}", env!("CARGO_MANIFEST_DIR")))
+        .unwrap_or_else(|e| panic!("{name}: {e}"))
+}
+
 #[test]
 fn a_marked_edge_is_its_full_colour_on_a_shadowed_inner_corner() {
     // the deep corner where a wall meets a floor: the occlusion is at its darkest here
@@ -910,27 +915,81 @@ fn a_marked_edge_is_its_full_colour_on_a_shadowed_inner_corner() {
     }
     // the chosen amber undimmed: red well over blue, however dark the corner
     assert!(warmest > 120, "{warmest}");
-fn a_flagged_feature_has_its_mark_and_says_why_and_a_clean_part_has_none() {
-    let Some((mut h, _)) = open(BLOCK, "flags") else {
+}
+
+#[test]
+fn a_part_the_check_faults_shows_it_and_fixing_the_part_clears_it() {
+    // a part the kernel builds and the check doesn't pass: a fillet whose loops cross
+    let part = repro("check-loops-cross.fc");
+    let Some((mut h, file)) = open(&part, "fault") else {
         return;
     };
-    // the worker's look at a sound part: nothing to say, and the bar says valid
-    assert!(h.until(|g| g.shell.checking_since.is_none() && g.shell.flags.is_empty()));
+    assert!(
+        h.until(|g| !g.shell.flags.is_empty()),
+        "the check found nothing on a part known to fail it"
+    );
+    assert!(h.gui.shell.unshown, "it says some of it can't be shown");
+    let f = h.gui.shell.flags[0].clone();
+    assert_eq!(f.rule, "loops-cross", "{f:?}");
+    assert!(!f.reason.is_empty());
+    let row = h.gui.shell.rows.iter().find(|r| r.id == f.item).unwrap().clone();
+    assert_eq!(row.kind, "fillet", "the feature that made it");
+    for _ in 0..3 {
+        h.step();
+    }
+    assert!(
+        h.gui.shell.place(&format!("tree:{}:warning", row.name)).is_some(),
+        "its amber mark"
+    );
+    // what's at fault can be found on the part shown, by its name
+    let Some(forge_topo::Entity::Face(name)) = f.entity else {
+        panic!("{f:?}")
+    };
+    assert!(
+        h.gui.view.as_ref().unwrap().facts.face_names.contains(&name.0),
+        "{f:?}"
+    );
+    // choosing it marks what's at fault, on the part shown, if it's still there
+    h.gui.shell.selected = Some(row.id);
+    for _ in 0..3 {
+        h.step();
+    }
+    // the count, for the status bar
+    let items: std::collections::HashSet<_> = h.gui.shell.flags.iter().map(|x| x.item).collect();
+    assert!(!items.is_empty());
+    // the fillet taken out: the part is sound, and it says so by itself
+    h.gui.shell.out.push(Action::Delete(row.id));
+    assert!(
+        h.until(|g| g.shell.flags.is_empty() && g.shell.checking_since.is_none() && !g.shell.unshown),
+        "{:?}\n{}",
+        h.gui.shell.flags,
+        std::fs::read_to_string(&file).unwrap()
+    );
+}
+
+#[test]
+fn a_sound_part_has_no_mark() {
+    let Some((mut h, _)) = open(BLOCK, "sound") else {
+        return;
+    };
+    assert!(h.until(|g| g.shell.checking_since.is_none()));
+    assert!(h.gui.shell.flags.is_empty());
     assert!(h.gui.shell.place("tree:base:warning").is_none());
-    let id = h.gui.shell.doc.as_ref().unwrap().find("base").unwrap();
-    h.gui.shell.flags = vec![forge_agent::live::Flag {
-        item: id,
-        rule: "loops-cross",
-        reason: "two loops of a face cross".to_string(),
-    }];
-    for _ in 0..3 {
-        h.step();
-    }
-    let at = h.gui.shell.place("tree:base:warning").expect("its mark");
-    // clicking the row selects it
-    h.click_at(at.center().x - 80.0, at.center().y);
-    for _ in 0..3 {
-        h.step();
-    }
-    assert_eq!(h.gui.shell.selected, Some(id));
+}
+
+#[test]
+fn a_part_split_into_bodies_with_an_edge_off_its_face_is_found_too() {
+    let part = repro("check-edge-off-face.fc");
+    let Some((mut h, _)) = open(&part, "edgeoff") else {
+        return;
+    };
+    assert!(
+        h.until(|g| !g.shell.flags.is_empty()),
+        "the check found nothing on a part known to fail it"
+    );
+    assert!(
+        h.gui.shell.flags.iter().any(|f| f.rule == "edge-off-face"),
+        "{:?}",
+        h.gui.shell.flags
+    );
 }

@@ -217,6 +217,8 @@ pub struct Shell {
     pub sketch_eye: std::collections::HashMap<String, bool>,
     /// The sketch under the pointer in the view.
     pub sketch_hover: Option<ItemId>,
+    /// It built but couldn't all be drawn.
+    pub unshown: bool,
     /// What the check found of the part: amber in the tree, counted in the status bar.
     pub flags: Vec<forge_agent::live::Flag>,
     /// A check's been going on since then.
@@ -285,6 +287,7 @@ impl Default for Shell {
             sketch_shapes: Vec::new(),
             sketch_eye: Default::default(),
             sketch_hover: None,
+            unshown: false,
             flags: Vec::new(),
             checking_since: None,
             units: "mm",
@@ -881,7 +884,11 @@ impl Shell {
         p.text(
             pos2(10.0, st.center().y),
             Align2::LEFT_CENTER,
-            &self.status,
+            if self.status.is_empty() && self.unshown {
+                "This part built but some of it can't be drawn: fix or delete what the tree marks"
+            } else {
+                &self.status
+            },
             sans(12.0),
             Color32::WHITE,
         );

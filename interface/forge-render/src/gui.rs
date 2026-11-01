@@ -37,6 +37,8 @@ struct Loaded {
     scene: Scene,
     /// Its pipelines take tens of milliseconds to make: on the loader's thread, never in a frame.
     renderer: Renderer,
+    /// It built but can't be shown, and why.
+    unshown: Option<String>,
 }
 
 /// The part in view.
@@ -267,12 +269,14 @@ impl Gui {
                     &parts,
                     &scene,
                 );
+                let unshown = crate::load::MESH_FAILED.with(|f| f.borrow_mut().take());
                 Ok(Loaded {
                     file: path.ends_with(".fc").then(|| path.clone()),
                     name: name_of(&path),
                     part,
                     scene,
                     renderer,
+                    unshown,
                 })
             })();
             let _ = send.send(got);
@@ -295,6 +299,7 @@ impl Gui {
                 return;
             }
         };
+        self.shell.unshown = l.unshown.is_some();
         let (scene, mut renderer) = (l.scene, l.renderer);
         let (center, radius) = scene.bounds();
         let size = self.view_px();
@@ -433,6 +438,7 @@ impl Gui {
                 }
                 Event::Final(out) => {
                     if let Out::Whole(m) = out {
+                        self.shell.unshown = false;
                         v.renderer.set_parts(std::slice::from_ref(&*m));
                         let chords = m.lods.iter().map(|x| x.chord).collect();
                         v.scene.set_part(part, m.center, m.radius, chords);
@@ -1799,6 +1805,20 @@ impl Gui {
                     entity: Entity::Face(f),
                     selected: true,
                 }));
+                // what's at fault on a chosen feature: as it's named on the part shown
+                let at_fault: Vec<Entity> = self
+                    .shell
+                    .flags
+                    .iter()
+                    .filter(|f| Some(f.item) == self.shell.selected)
+                    .filter_map(|f| f.entity)
+                    .flat_map(|e| fault_marks(&v.facts, e))
+                    .collect();
+                m.extend(at_fault.into_iter().map(|entity| Mark {
+                    placement: 0,
+                    entity,
+                    selected: false,
+                }));
                 let over = self.shell.tree_hover.filter(|h| Some(*h) != self.shell.selected);
                 m.extend(
                     over.map_or(Vec::new(), |id| v.facts.faces_of(id))
@@ -1938,6 +1958,42 @@ fn look_at(v: &mut View, plane: forge_math::Frame) {
 
 /// How long the right button stays down before its menu shows, in ms.
 const MARK_SHOW_MS: f64 = 220.0;
+
+/// The entities of the part shown with the name a check gave: none if a later feature took it.
+fn fault_marks(facts: &Facts, e: forge_topo::Entity) -> Vec<Entity> {
+    use forge_topo::Entity as T;
+    let find = |names: &[u64], n: u64| -> Vec<u32> {
+        names
+            .iter()
+            .enumerate()
+            .filter(|x| *x.1 == n)
+            .map(|x| x.0 as u32)
+            .collect()
+    };
+    match e {
+        T::Face(n) => find(&facts.face_names, n.0)
+            .into_iter()
+            .map(Entity::Face)
+            .collect(),
+        T::Edge(n) => find(&facts.edge_names, n.0)
+            .into_iter()
+            .map(Entity::Edge)
+            .collect(),
+        T::Vertex(n) => find(&facts.vertex_names, n.0)
+            .into_iter()
+            .map(Entity::Vertex)
+            .collect(),
+        T::Named(n) => {
+            let mut all: Vec<Entity> = find(&facts.face_names, n.0)
+                .into_iter()
+                .map(Entity::Face)
+                .collect();
+            all.extend(find(&facts.edge_names, n.0).into_iter().map(Entity::Edge));
+            all.extend(find(&facts.vertex_names, n.0).into_iter().map(Entity::Vertex));
+            all
+        }
+    }
+}
 
 /// A picture read back from the target.
 pub struct Pixels {

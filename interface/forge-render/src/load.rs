@@ -50,6 +50,11 @@ fn build(part: &str) -> Result<PartMesh, String> {
     tess::build_part(&body(part)?).map_err(|e| format!("{part}: {e:?}"))
 }
 
+thread_local! {
+    /// Why the last `open` on this thread couldn't mesh what it opened.
+    pub static MESH_FAILED: std::cell::RefCell<Option<String>> = const { std::cell::RefCell::new(None) };
+}
+
 /// The mesh of a part, and whether it came from the cache.
 pub fn open(part: &str, use_cache: bool) -> Result<(PartMesh, bool), String> {
     let src = source(part)?;
@@ -60,9 +65,14 @@ pub fn open(part: &str, use_cache: bool) -> Result<(PartMesh, bool), String> {
     if use_cache && let Some(m) = cache::load(&src) {
         return Ok((m, true));
     }
-    // sketches with no solid yet draw nothing
+    // sketches with no solid yet draw nothing; a solid that can't be meshed still opens, to be fixed
     let m = match build(part) {
         Err(e) if e.ends_with("nothing built") => return Ok((PartMesh::empty(), false)),
+        Err(e) if body(part).is_ok() => {
+            eprintln!("forge-app: can't mesh it: {e}");
+            MESH_FAILED.with(|f| *f.borrow_mut() = Some(e));
+            return Ok((PartMesh::empty(), false));
+        }
         m => m?,
     };
     if use_cache {

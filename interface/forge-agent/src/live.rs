@@ -119,6 +119,8 @@ pub struct Flag {
     pub item: ItemId,
     pub rule: &'static str,
     pub reason: String,
+    /// The face, edge or corner at fault, by the name it had on that feature's part.
+    pub entity: Option<forge_topo::Entity>,
 }
 
 /// The checker's memory: the stages it last finished, and what it found on each by index.
@@ -174,6 +176,7 @@ fn start_check<T: Send + 'static>(
                         item,
                         rule: i.rule,
                         reason: i.reason,
+                        entity: i.entity,
                     },
                 ));
             }

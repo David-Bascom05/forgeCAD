@@ -36,6 +36,10 @@ pub struct Facts {
     pub face_refs: Vec<String>,
     pub edge_refs: Vec<String>,
     pub vertex_refs: Vec<String>,
+    /// By the body's face, edge and vertex index: its name.
+    pub face_names: Vec<u64>,
+    pub edge_names: Vec<u64>,
+    pub vertex_names: Vec<u64>,
     /// By the body's face index: its radius, if it's a cylinder.
     pub face_radius: Vec<Option<f64>>,
     /// By the body's face index: does it face its own axis, as a bore's wall does?
@@ -350,6 +354,9 @@ pub fn facts(model: &mut Model) -> Facts {
         face_refs,
         edge_refs,
         vertex_refs: vertex_refs(model.body()),
+        face_names: names(model.body()).0,
+        edge_names: names(model.body()).1,
+        vertex_names: names(model.body()).2,
         face_radius: radii(model.body()),
         face_bore: bores(model.body()),
         sketches: sketch_shapes(model, model.features.len()),
@@ -362,6 +369,15 @@ fn vertex_refs(body: Option<&forge_topo::Body>) -> Vec<String> {
     b.vertex_ids()
         .map(|v| names.get(&b.vertex(v).name).cloned().unwrap_or_default())
         .collect()
+}
+
+fn names(body: Option<&forge_topo::Body>) -> (Vec<u64>, Vec<u64>, Vec<u64>) {
+    let Some(b) = body else { return Default::default() };
+    (
+        b.face_ids().map(|f| b.face(f).name.0).collect(),
+        b.edge_ids().map(|e| b.edge(e).name.0).collect(),
+        b.vertex_ids().map(|v| b.vertex(v).name.0).collect(),
+    )
 }
 
 fn bores(body: Option<&forge_topo::Body>) -> Vec<bool> {
@@ -406,6 +422,9 @@ pub fn facts_at(model: &Model, n: usize) -> Facts {
         face_refs,
         edge_refs,
         vertex_refs: vertex_refs(model.body_after(n)),
+        face_names: names(model.body_after(n)).0,
+        edge_names: names(model.body_after(n)).1,
+        vertex_names: names(model.body_after(n)).2,
         face_radius: radii(model.body_after(n)),
         face_bore: bores(model.body_after(n)),
         sketches: sketch_shapes(model, n),
