@@ -4,9 +4,8 @@
 use forge_geom::intcurve::trace;
 use forge_geom::intersect::{SurfaceSurface, plane_surface};
 use forge_geom::{Curve, CurveGeom, Surface, SurfaceGeom};
-use forge_math::predicates::orient2d;
 use forge_math::{Box3, Interval, Point2, Point3, tol};
-use forge_topo::uv::{UvLoop, face_uv_loops, point_in_loops, unwrap_near};
+use forge_topo::uv::{UvLoop, face_uv_loops, loops_cross, point_in_loops, unwrap_near};
 use forge_topo::{Body, FaceId, Name, VertexId};
 use std::cell::OnceCell;
 
@@ -220,39 +219,4 @@ fn span(c: &Curve, region: &Box3) -> Option<Interval> {
 /// Whether face `f`'s loops cross each other.
 pub(crate) fn face_loops_cross(body: &Body, f: FaceId) -> bool {
     loops_cross(&face_uv_loops(body, f))
-}
-
-/// Whether two segments of a face's loops cross properly (not at a shared end).
-fn loops_cross(loops: &[UvLoop]) -> bool {
-    let segs: Vec<(Point2, Point2)> = loops
-        .iter()
-        .flat_map(|l| {
-            let n = l.points.len();
-            (0..n).map(move |i| (l.points[i], l.points[(i + 1) % n]))
-        })
-        .filter(|s| s.0 != s.1)
-        .collect();
-    // swept along u: only segments whose u spans overlap are compared
-    let mut segs = segs;
-    segs.sort_by(|p, q| p.0.x.min(p.1.x).total_cmp(&q.0.x.min(q.1.x)));
-    let opposite = |p: f64, q: f64| (p < 0.0 && q > 0.0) || (p > 0.0 && q < 0.0);
-    for i in 0..segs.len() {
-        let reach = segs[i].0.x.max(segs[i].1.x);
-        for j in i + 1..segs.len() {
-            if segs[j].0.x.min(segs[j].1.x) > reach {
-                break;
-            }
-            let ((a, b), (c, d)) = (segs[i], segs[j]);
-            let apart = |p: f64, q: f64, r: f64, t: f64| p.max(q) < r.min(t) || r.max(t) < p.min(q);
-            if apart(a.y, b.y, c.y, d.y) || a == c || a == d || b == c || b == d {
-                continue;
-            }
-            if opposite(orient2d(a, b, c), orient2d(a, b, d))
-                && opposite(orient2d(c, d, a), orient2d(c, d, b))
-            {
-                return true;
-            }
-        }
-    }
-    false
 }

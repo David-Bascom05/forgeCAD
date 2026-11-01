@@ -24,6 +24,7 @@ pub mod thread;
 pub mod torture;
 mod trace;
 mod upto;
+pub mod verify;
 pub mod work;
 
 pub use bodies::{BodyError, BodyFeature, Cutter, Keep, Pick, Solid, Step, step_solids};

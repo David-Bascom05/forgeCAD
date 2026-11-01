@@ -2,7 +2,7 @@ use crate::rebuild::{RebuildError, reaches_apex, rebuild};
 use crate::selfx::crossing;
 use forge_geom::{Cone, Cylinder, Plane, Sphere, Surface, Torus};
 use forge_math::{Box2, Interval, dmath, tol};
-use forge_topo::{Body, EdgeId, FaceId, Name, Problem, VertexId, check};
+use forge_topo::{Body, EdgeId, FaceId, Name, Problem, VertexId, check_against};
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum ShellError {
@@ -207,7 +207,7 @@ pub fn shell(
         }
     }
     let out = out.into_compact();
-    let problems = check(&out);
+    let problems = check_against(&out, &base);
     if let Some((a, b)) = crossing(&out, &vec![true; out.faces.len()]) {
         return Err(ShellError::SelfIntersecting { a, b });
     }

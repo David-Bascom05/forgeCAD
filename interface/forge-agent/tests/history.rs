@@ -27,6 +27,7 @@ fn every_kind_has_a_maker() {
 #[test]
 #[cfg_attr(target_family = "wasm", ignore = "a kernel panic aborts the wasm run")]
 fn random_histories() {
+    forge_topo::check::check_against_both_ways(true);
     let known: Vec<&str> = include_str!("history_known.txt")
         .lines()
         .map(|l| l.split(" #").next().unwrap_or("").trim())

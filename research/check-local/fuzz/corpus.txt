@@ -1,0 +1,482 @@
+# seed 0
+base: extrude 16.0937 rect -40.3327 -29.554 80.6653 59.1079
+draft 0.135297 xy at 0 0 0 (faces of base normal -y)
+chamfer 3.36214041 (edges of base top)
+chamfer 0.198566942 (edges of base top)
+p2: extrude cut 16.0937 at 0 0 8.04686 rect 5.96315 -59.1079 2.04943 118.216
+p3: extrude cut 1.20391 rrect -6.36246 -24.7593 15.0216 15.0216 2.95949
+chamfer 0.610281044 (edges of p3 concave)
+# seed 1
+base: extrude 24.3306 rect -19.0309 -31.5673 38.0619 63.1345
+draft -0.054779 xy at 0 0 0 (faces of base normal -y)
+offset -0.599652459 (faces of base normal +y)
+offset 0.729876423 (faces of base normal -x)
+chamfer 0.444620352 (edges of base top)
+# seed 2
+base: extrude 7.35723 rect -43.681 -33.8261 87.3621 67.6522
+draft 4.02599 xy at 0 0 0 (faces of base normal -y)
+offset 0.659168667 (faces of base normal +x)
+offset -0.4417393 (faces of base normal +x)
+thicken 21.3885061 (faces of base normal -y)
+# seed 3
+base: extrude 14.8789 rect -22.1389 -24.7452 44.2779 49.4903
+p0: extrude add 4.7257 at 0 0 14.8789 circle 3.11715 13.4884 4.81539
+chamfer 0.452633026 (edges of p0 top)
+offset -0.536417459 (faces of base normal -x)
+# seed 4
+base: extrude 15.5054 rect -22.0814 -14.8212 44.1629 29.6425
+draft -5.20182 xy at 0 0 0 (faces of base normal -y)
+hole 2.19606 at -8.18697 0.724857 0 thru
+p1: extrude cut 6.51191 rrect 1.96597 -12.3666 15.3155 15.3155 2.92778
+chamfer 0.225734152 (edges of p1 concave)
+# seed 5
+base: extrude 25.0846 rect -33.6871 -29.1902 67.3741 58.3804
+p0: extrude cut 11.3489 rrect 11.7928 7.24607 6.98863 6.98863 0.487884
+chamfer 0.260272341 (edges of p0 concave)
+offset -0.618145544 (faces of base normal +x)
+# seed 6
+base: extrude 17.6408 rect -38.8002 -30.994 77.6004 61.9879
+draft -5.99458 xy at 0 0 0 (faces of base normal -y)
+fillet 0.575614301 (edges of base along +z)
+chamfer 0.595836685 (edges of base top)
+chamfer 0.193148792 (edges of base top)
+chamfer 0.76952392 (edges of base top)
+chamfer 0.189956121 (edges of base top)
+offset -0.189768505 (faces of base normal +x)
+# seed 7
+base: extrude 21.6224 rect -24.715 -15.8941 49.43 31.7882
+draft 0.430584 xy at 0 0 0 (faces of base normal -x)
+p0: extrude cut 21.6224 at 0 0 10.8112 rect -17.6602 -3.82532 4.83827 4.83827
+chamfer 0.110737463 (edges of p0)
+offset 5.20055465 (faces of base normal +x)
+p2: extrude cut 21.6224 at 0 0 10.8112 rect -3.75518 -4.81504 12.184 12.184
+chamfer 0.412225004 (edges of p2)
+# seed 8
+base: extrude 9.03194 rect -21.8012 -34.1516 43.6024 68.3033
+fillet 1.36604355 (edges of base along +z)
+p0: extrude add 11.0761 at 0 0 9.03194 circle -1.18791 -2.13414 4.9699
+chamfer 0.415314663 (edges of p0 top)
+p1: extrude cut 9.03194 at 0 0 4.51597 rect -6.88042 -8.63616 14.9339 14.9339
+chamfer 0.13052696 (edges of p1)
+# seed 9
+base: extrude 9.32495 rect -28.8902 -20.8995 57.7804 41.799
+fillet 2.25973728 (edges of base along +z)
+offset -0.254707932 (faces of base normal -x)
+offset 0.602177255 (faces of base normal -x)
+shell 1.34318514 (faces plane top)
+# seed 10
+base: extrude 19.8742 rect -32.1421 -22.15 64.2842 44.3
+draft 3.75986 xy at 0 0 0 (faces of base normal -x)
+fillet 2.21529954 (edges of base along +z)
+offset -0.637452349 (faces of base normal -y)
+p1: extrude cut 19.8742 at 0 0 9.9371 rect -15.7291 -44.3 2.64664 88.6
+chamfer 0.722203371 (edges of base top)
+chamfer 0.242006856 (edges of base top)
+shell 13.4442416 (faces plane top)
+# seed 11
+base: extrude 28.1811 rect -28.5714 -25.0949 57.1428 50.1898
+hole 3.46758 at -12.0129 0.398461 0 thru
+p1: extrude cut 8.5923 rrect -18.006 -9.12219 5.08805 5.08805 0.607146
+chamfer 0.580295322 (edges of p1 concave)
+p2: extrude add 8.39656 at 0 0 28.1811 circle 12.6362 -14.6164 2.21392
+chamfer 0.312090579 (edges of p2 top)
+# seed 12
+base: extrude 21.9939 rect -29.2371 -27.2931 58.4742 54.5863
+draft -5.86967 xy at 0 0 0 (faces of base normal -y)
+fillet 3.33621808 (edges of base along +z)
+p0: extrude add 3.52942 at 0 0 21.9939 circle 18.6354 -4.81613 4.03808
+chamfer 0.148506262 (edges of p0 top)
+p1: extrude add 3.8188 at 0 0 21.9939 circle 11.612 -15.0167 7.51344
+chamfer 0.715363462 (edges of p1 top)
+hole 4.3753 at 18.3734 1.4371 0 thru
+# seed 13
+base: extrude 22.418 rect -22.7703 -27.9183 45.5405 55.8366
+fillet 1.30695513 (edges of base along +z)
+chamfer 4.0795642 (edges of base top)
+chamfer 0.700905119 (edges of base top)
+offset 0.677599102 (faces of base normal -y)
+# seed 14
+base: extrude 21.649 rect -18.2049 -28.3082 36.4097 56.6163
+fillet 1.3952143 (edges of base along +z)
+p0: extrude cut 21.649 at 0 0 10.8245 rect -5.17314 9.70902 8.72572 8.72572
+chamfer 0.532833223 (edges of p0)
+hole 3.47782 at 7.47251 -5.2589 0 thru
+p2: extrude cut 7.22846 rrect -11.8793 2.59213 7.30396 7.30396 0.522449
+chamfer 0.154085303 (edges of p2 concave)
+p3: extrude cut 21.649 at 0 0 10.8245 rect -6.96998 13.8791 9.26378 9.26378
+chamfer 0.43717942 (edges of p3)
+shell 35.2421691 (faces plane top)
+# seed 15
+base: extrude 23.6638 rect -43.9573 -12.7622 87.9145 25.5245
+draft 5.83607 xy at 0 0 0 (faces of base normal +x)
+chamfer 0.397496658 (edges of base top)
+chamfer 0.294225142 (edges of base top)
+p2: extrude cut 23.6638 at 0 0 11.8319 rect 4.52171 -25.5245 2.47642 51.0489
+thicken 1.41028258 (faces of base normal +y)
+# seed 16
+base: extrude 16.0069 rect -25.8457 -23.3108 51.6914 46.6216
+fillet 2.80196939 (edges of base along +z)
+hole 2.40623 at -16.8814 -6.1527 0 thru
+p1: extrude add 11.6058 at 0 0 16.0069 circle 15.5653 3.17363 2.13309
+chamfer 0.680801458 (edges of p1 top)
+p2: extrude add 10.0439 at 0 0 16.0069 circle -1.48911 3.93949 3.77735
+chamfer 0.373182819 (edges of p2 top)
+thicken 0.423944488 (faces of base normal -x)
+# seed 17
+base: extrude 29.0519 rect -30.6595 -30.6505 61.319 61.3011
+draft 3.19329 xy at 0 0 0 (faces of base normal -x)
+chamfer 0.653839104 (edges of base top)
+p1: extrude add 4.35824 at 0 0 29.0519 circle 20.3762 -17.892 6.87565
+chamfer 0.463279815 (edges of p1 top)
+chamfer 0.514685082 (edges of base top)
+# seed 18
+base: extrude 14.0294 rect -20.4379 -27.3822 40.8759 54.7644
+draft -0.125816 xy at 0 0 0 (faces of base normal -x)
+fillet 2.1041579 (edges of base along +z)
+hole 3.07958 at 10.8794 -13.9467 0 thru
+p1: extrude add 4.80203 at 0 0 14.0294 circle 9.97223 16.2113 3.40735
+chamfer 0.429031964 (edges of p1 top)
+offset 0.572627772 (faces of base normal -x)
+p3: extrude cut 14.0294 at 0 0 7.01472 rect -5.95898 -54.7644 2.89377 109.529
+# seed 19
+base: extrude 18.4912 rect -35.3138 -30.1605 70.6275 60.321
+fillet 3.98885828 (edges of base along +z)
+p0: extrude cut 18.4912 at 0 0 9.24559 rect -26.281 -11.3522 15.6161 15.6161
+chamfer 0.546544751 (edges of p0)
+p1: extrude cut 18.4912 at 0 0 9.24559 rect 17.8521 -60.321 1.85997 120.642
+p2: extrude cut 18.4912 at 0 0 9.24559 rect 6.50634 7.70061 8.97325 8.97325
+chamfer 0.300073537 (edges of p2)
+hole 4.49362 at 7.45306 -8.08097 0 thru
+# seed 20
+base: extrude 24.3962 rect -42.1692 -27.9407 84.3384 55.8814
+fillet 2.72504054 (edges of base along +z)
+hole 1.47003 at -26.5958 -3.47433 0 thru
+p1: extrude add 4.79835 at 0 0 24.3962 circle -10.169 16.7659 4.6964
+chamfer 0.542865825 (edges of p1 top)
+offset -11.8909889 (faces of base normal +x)
+shell 0.59658149 (faces plane top)
+# seed 21
+base: extrude 21.24 rect -19.9485 -28.0198 39.897 56.0395
+fillet 3.27421675 (edges of base along +z)
+hole 2.74149 at -12.9234 16.1685 0 thru
+p1: extrude cut 4.92098 rrect 4.41701 -13.3991 6.79234 6.79234 1.52278
+chamfer 0.363399901 (edges of p1 concave)
+# seed 22
+base: extrude 6.56679 rect -43.7463 -15.6583 87.4926 31.3166
+fillet 0.922062221 (edges of base along +z)
+hole 4.71398 at -13.4583 -9.40205 0 thru
+p1: extrude cut 2.10642 rrect 17.6599 -3.67528 15.0862 15.0862 0.810592
+chamfer 0.373987097 (edges of p1 concave)
+p2: extrude cut 2.44388 rrect -1.81273 2.5005 13.2874 13.2874 2.08821
+chamfer 0.721865066 (edges of p2 concave)
+shell 1.09943351 (faces plane top)
+# seed 23
+base: extrude 27.4184 rect -42.746 -33.8436 85.4919 67.6873
+draft 1.10433 xy at 0 0 0 (faces of base normal -y)
+p0: extrude cut 27.4184 at 0 0 13.7092 rect 12.8782 -67.6873 3.6558 135.375
+p1: extrude cut 7.27148 rrect -27.451 16.728 9.97889 9.97889 1.7811
+chamfer 0.137410444 (edges of p1 concave)
+chamfer 0.790913099 (edges of base top)
+# seed 24
+base: extrude 10.3822 rect -36.3703 -31.3955 72.7406 62.791
+fillet 2.84810356 (edges of base along +z)
+p0: extrude cut 10.3822 at 0 0 5.1911 rect 6.23612 6.48427 9.29653 9.29653
+chamfer 3.36450165 (edges of p0)
+chamfer 0.243016412 (edges of base top)
+p2: extrude cut 4.83754 rrect -26.5988 0.271967 11.9291 11.9291 1.25648
+chamfer 0.145246777 (edges of p2 concave)
+p3: extrude cut 10.3822 at 0 0 5.1911 rect 8.00778 -62.791 3.50904 125.582
+shell 1.40204995 (faces plane top)
+# seed 25
+base: extrude 26.2427 rect -26.3089 -33.3527 52.6177 66.7055
+draft 4.4605 xy at 0 0 0 (faces of base normal -x)
+p0: extrude cut 26.2427 at 0 0 13.1214 rect -18.8982 0.301999 5.15381 5.15381
+chamfer 0.459069125 (edges of p0)
+p1: extrude cut 26.2427 at 0 0 13.1214 rect 11.3939 -66.7055 2.33628 133.411
+chamfer 0.267729187 (edges of base top)
+hole 1.44967 at -14.9975 -4.29355 0 thru
+# seed 26
+base: extrude 10.9238 rect -37.4187 -17.0619 74.8375 34.1239
+fillet 3.2161501 (edges of base along +z)
+offset -0.231263425 (faces of base normal +x)
+chamfer 0.575636641 (edges of base top)
+p2: extrude cut 2.80397 rrect 12.1392 -4.22226 10.114 10.114 1.66928
+chamfer 0.307490518 (edges of p2 concave)
+# seed 27
+base: extrude 28.9691 rect -34.4549 -28.2808 68.9098 56.5616
+draft -5.21557 xy at 0 0 0 (faces of base normal -y)
+fillet 3.35203038 (edges of base along +z)
+p0: extrude cut 28.9691 at 0 0 14.4846 rect -7.91255 -23.6708 15.0137 15.0137
+chamfer 0.301090799 (edges of p0)
+p1: extrude cut 28.9691 at 0 0 14.4846 rect 7.23683 -56.5616 1.38529 113.123
+hole 3.54113 at 5.16566 -6.11498 0 thru
+shell 0.592646734 (faces plane top)
+# seed 28
+base: extrude 20.3343 rect -18.3887 -15.4442 36.7774 30.8883
+draft -4.41004 xy at 0 0 0 (faces of base normal -y)
+fillet 1.00510581 (edges of base along +z)
+offset 0.304460848 (faces of base normal +y)
+chamfer 13.3664638 (edges of base top)
+p2: extrude cut 20.3343 at 0 0 10.1671 rect -1.35192 4.73852 6.4254 6.4254
+chamfer 12.4098673 (edges of p2)
+shell 1.28751722 (faces plane top)
+# seed 29
+base: extrude 26.2764 rect -31.4436 -20.2812 62.8871 40.5624
+draft 0.12414 xy at 0 0 0 (faces of base normal -y)
+fillet 3.90850579 (edges of base along +z)
+offset 0.229572117 (faces of base normal -x)
+p1: extrude add 10.3688 at 0 0 26.2764 circle 1.82919 -2.0976 3.66965
+chamfer 0.407122758 (edges of p1 top)
+offset -0.651488817 (faces of base normal -x)
+# seed 30
+base: extrude 6.72089 rect -31.1724 -19.0069 62.3449 38.0138
+fillet 1.40048941 (edges of base along +z)
+p0: extrude add 3.23266 at 0 0 6.72089 circle 20.3166 -0.974852 7.96091
+chamfer 0.690568943 (edges of p0 top)
+chamfer 0.561207925 (edges of base top)
+chamfer 0.316583531 (edges of base top)
+shell 1.20054554 (faces plane top)
+# seed 31
+base: extrude 15.4281 rect -15.3683 -15.029 30.7367 30.0579
+fillet 0.89355237 (edges of base along +z)
+p0: extrude add 7.82096 at 0 0 15.4281 circle 9.87088 -9.35572 2.3637
+chamfer 0.368170554 (edges of p0 top)
+p1: extrude add 4.85335 at 0 0 15.4281 circle -9.82823 8.81303 4.41767
+chamfer 0.487956739 (edges of p1 top)
+p2: extrude cut 7.38035 rrect -1.38685 -7.65282 11.9527 11.9527 2.35192
+chamfer 0.232487577 (edges of p2 concave)
+shell 0.770284653 (faces plane top)
+# seed 32
+base: extrude 13.2751 rect -17.3227 -17.3064 34.6453 34.6128
+fillet 3.020842 (edges of base along +z)
+p0: extrude cut 13.2751 at 0 0 6.63754 rect 7.92391 -34.6128 1.79836 69.2255
+p1: extrude cut 3.47959 rrect -14.2897 3.13188 5.51691 5.51691 1.02214
+chamfer 0.287089626 (edges of p1 concave)
+p2: extrude cut 13.2751 at 0 0 6.63754 rect -17.5325 -16.6177 15.7329 15.7329
+chamfer 0.308185712 (edges of p2)
+p3: extrude cut 13.2751 at 0 0 6.63754 rect 9.74245 -34.6128 1.58386 69.2255
+# seed 33
+base: extrude 25.6081 rect -32.1099 -26.7252 64.2197 53.4505
+draft 1.82232 xy at 0 0 0 (faces of base normal +y)
+chamfer 0.52422852 (edges of base top)
+p1: extrude add 4.05532 at 0 0 25.6081 circle 13.4964 -7.82222 3.91677
+chamfer 19.620425 (edges of p1 top)
+chamfer 0.519968964 (edges of base top)
+offset -0.171555179 (faces of base normal +x)
+offset 0.231881695 (faces of base normal -y)
+# seed 34
+base: extrude 26.2398 rect -30.8681 -25.6793 61.7361 51.3586
+chamfer 12.8662612 (edges of base top)
+p1: extrude cut 26.2398 at 0 0 13.1199 rect -15.9504 -2.87193 13.3165 13.3165
+chamfer 0.271985546 (edges of p1)
+chamfer 0.284976315 (edges of base top)
+offset 0.544637265 (faces of base normal -y)
+shell 1.37937308 (faces plane top)
+# seed 35
+base: extrude 23.9354 rect -31.4608 -29.3872 62.9217 58.7743
+fillet 3.87950362 (edges of base along +z)
+p0: extrude cut 23.9354 at 0 0 11.9677 rect 5.22679 8.85064 15.1692 15.1692
+chamfer 0.576722828 (edges of p0)
+p1: extrude cut 23.9354 at 0 0 11.9677 rect 9.29906 -58.7743 0.680522 117.549
+hole 1.76536 at -11.1308 -6.85756 0 thru
+chamfer 0.180058568 (edges of base top)
+# seed 36
+base: extrude 29.0219 rect -24.861 -34.6223 49.722 69.2446
+offset 0.274256707 (faces of base normal -y)
+hole 2.07592 at 8.49629 -4.81772 0 thru
+shell 1.19405211 (faces plane top)
+# seed 37
+base: extrude 20.8276 rect -35.4601 -14.5611 70.9203 29.1221
+p0: extrude cut 20.8276 at 0 0 10.4138 rect 1.02739 -7.70698 10.3362 10.3362
+chamfer 0.317565803 (edges of p0)
+p1: extrude cut 1.40243 rrect 19.5003 -4.35688 5.73277 5.73277 0.362034
+chamfer 0.334739591 (edges of p1 concave)
+# seed 38
+base: extrude 23.3832 rect -34.1842 -22.153 68.3684 44.3059
+draft 2.37435 xy at 0 0 0 (faces of base normal -x)
+chamfer 0.870957673 (edges of base top)
+offset -0.107583338 (faces of base normal -x)
+p2: extrude cut 23.3832 at 0 0 11.6916 rect -18.7474 -0.0576198 14.7236 14.7236
+chamfer 6.79658602 (edges of p2)
+thicken 0.57378408 (faces of base normal -y)
+# seed 39
+base: extrude 10.6814 rect -21.2955 -21.1715 42.5911 42.3429
+p0: extrude cut 1.9232 rrect -2.73588 -1.8143 15.5068 15.5068 3.1709
+chamfer 1.16373676 (edges of p0 concave)
+chamfer 0.171967627 (edges of base top)
+p2: extrude cut 3.6549 rrect -4.14024 -4.50302 12.6946 12.6946 2.67332
+chamfer 0.412651231 (edges of p2 concave)
+chamfer 0.533991086 (edges of base top)
+shell 0.575099288 (faces plane top)
+# seed 40
+base: extrude 6.76432 rect -28.7582 -32.252 57.5164 64.5041
+draft 5.54149 xy at 0 0 0 (faces of base normal +x)
+hole 1.30308 at 14.5612 -2.54738 0 thru
+p1: extrude cut 1.00885 rrect -23.1407 -19.0582 12.4854 12.4854 1.94561
+chamfer 19.346358 (edges of p1 concave)
+chamfer 0.239981113 (edges of base top)
+hole 4.02421 at 7.49599 -8.97076 0 thru
+# seed 41
+base: extrude 9.98488 rect -26.4306 -17.6912 52.8612 35.3824
+p0: extrude cut 4.00954 rrect -4.51989 -9.13674 12.7795 12.7795 2.11854
+chamfer 0.385606432 (edges of p0 concave)
+p1: extrude cut 1.03828 rrect 13.3695 -7.81728 7.09016 7.09016 1.08378
+chamfer 0.28319333 (edges of p1 concave)
+p2: extrude cut 1.05602 rrect 5.22279 2.73047 5.50005 5.50005 1.15399
+chamfer 0.737003205 (edges of p2 concave)
+hole 3.38954 at -6.42087 2.82823 0 thru
+thicken 0.274587997 (faces of base normal +x)
+# seed 42
+base: extrude 12.6007 rect -34.1828 -13.0627 68.3656 26.1255
+draft 2.83765 xy at 0 0 0 (faces of base normal +y)
+fillet 0.82793324 (edges of base along +z)
+p0: extrude cut 12.6007 at 0 0 6.30035 rect 9.84554 -26.1255 2.56243 52.251
+offset -0.201051675 (faces of base normal -x)
+p2: extrude cut 4.7327 rrect -10.0144 -6.30495 7.17425 7.17425 1.03194
+chamfer 0.346048345 (edges of p2 concave)
+# seed 43
+base: extrude 9.4544 rect -16.1566 -28.165 32.3131 56.3301
+offset -0.505951435 (faces of base normal +x)
+p1: extrude cut 9.4544 at 0 0 4.7272 rect 6.8982 -56.3301 0.950465 112.66
+thicken 0.553516805 (faces of base normal +x)
+# seed 44
+base: extrude 26.6889 rect -27.2561 -24.6944 54.5122 49.3887
+draft -3.29809 xy at 0 0 0 (faces of base normal +x)
+fillet 0.530819691 (edges of base along +z)
+chamfer 20.386722 (edges of base top)
+chamfer 15.4572259 (edges of base top)
+p2: extrude add 4.69734 at 0 0 26.6889 circle -5.64924 -13.3082 4.85664
+chamfer 0.261177017 (edges of p2 top)
+p3: extrude cut 9.98696 rrect 1.69493 5.8096 9.23638 9.23638 1.58474
+chamfer 0.627483736 (edges of p3 concave)
+p4: extrude add 7.35106 at 0 0 26.6889 circle 4.74467 2.96246 5.24318
+chamfer 0.578794869 (edges of p4 top)
+shell 35.559785 (faces plane top)
+# seed 45
+base: extrude 7.9651 rect -23.1563 -23.4806 46.3125 46.9613
+fillet 0.538626285 (edges of base along +z)
+p0: extrude cut 7.9651 at 0 0 3.98255 rect 3.57883 -2.72043 14.7895 14.7895
+chamfer 12.8850829 (edges of p0)
+offset 2.08667824 (faces of base normal -y)
+p2: extrude cut 7.9651 at 0 0 3.98255 rect 5.93097 11.9226 5.12506 5.12506
+chamfer 5.79330399 (edges of p2)
+p3: extrude add 6.16209 at 0 0 7.9651 circle 2.87626 -13.7795 7.45767
+chamfer 0.111984378 (edges of p3 top)
+shell 1.28607505 (faces plane top)
+# seed 46
+base: extrude 20.1269 rect -41.648 -21.4999 83.2961 42.9997
+fillet 2.30501049 (edges of base along +z)
+p0: extrude cut 1.79481 rrect 13.3971 1.46185 4.6535 4.6535 0.981514
+chamfer 0.729132786 (edges of p0 concave)
+p1: extrude cut 20.1269 at 0 0 10.0634 rect 26.3418 -42.9997 3.40721 85.9995
+thicken 1.0051112 (faces of base normal -y)
+# seed 47
+base: extrude 16.8881 rect -25.5554 -22.1792 51.1108 44.3584
+p0: extrude cut 16.8881 at 0 0 8.44405 rect -2.01414 2.7745 11.9035 11.9035
+chamfer 15.1272714 (edges of p0)
+p1: extrude add 5.13968 at 0 0 16.8881 circle 14.2226 11.7916 5.40541
+chamfer 0.38744355 (edges of p1 top)
+chamfer 0.714280588 (edges of base top)
+chamfer 21.0803495 (edges of base top)
+chamfer 0.343328387 (edges of base top)
+thicken 0.829149846 (faces of base normal +x)
+# seed 48
+base: extrude 23.0771 rect -31.4447 -15.4676 62.8895 30.9351
+p0: extrude cut 23.0771 at 0 0 11.5386 rect 6.03883 -4.25069 5.8557 5.8557
+chamfer 0.194607938 (edges of p0)
+p1: extrude cut 23.0771 at 0 0 11.5386 rect -11.8608 -30.9351 2.85292 61.8702
+chamfer 0.193978772 (edges of base top)
+shell 35.5053396 (faces plane top)
+# seed 49
+base: extrude 8.65211 rect -17.0065 -21.798 34.013 43.5959
+p0: extrude cut 8.65211 at 0 0 4.32606 rect 4.07842 -43.5959 3.06811 87.1919
+chamfer 0.432061756 (edges of base top)
+shell 0.624521074 (faces plane top)
+# seed 50
+base: extrude 21.2979 rect -29.9261 -18.4889 59.8522 36.9778
+draft -0.321977 xy at 0 0 0 (faces of base normal -x)
+p0: extrude cut 21.2979 at 0 0 10.6489 rect 4.12047 -13.1445 5.83981 5.83981
+chamfer 0.246055995 (edges of p0)
+offset 0.695004904 (faces of base normal +x)
+p2: extrude cut 21.2979 at 0 0 10.6489 rect -11.0925 2.75861 9.21298 9.21298
+chamfer 0.309209851 (edges of p2)
+shell 0.952778161 (faces plane top)
+# seed 51
+base: extrude 9.8865 rect -22.3055 -23.7997 44.6111 47.5994
+fillet 2.43317024 (edges of base along +z)
+offset 0.104941947 (faces of base normal +y)
+chamfer 0.732829459 (edges of base top)
+p2: extrude cut 4.88178 rrect -6.65983 5.88032 9.64146 9.64146 1.87274
+chamfer 0.632374672 (edges of p2 concave)
+offset 0.692520883 (faces of base normal +y)
+# seed 52
+base: extrude 23.4159 rect -44.3506 -13.7268 88.7013 27.4535
+offset -0.72641595 (faces of base normal -y)
+p1: extrude add 8.62572 at 0 0 23.4159 circle -28.9105 -7.88157 3.02176
+chamfer 0.424412009 (edges of p1 top)
+offset 0.672977906 (faces of base normal +y)
+offset 0.231211814 (faces of base normal +x)
+p4: extrude add 5.76381 at 0 0 23.4159 circle 13.2033 4.79698 2.52307
+chamfer 0.3790104 (edges of p4 top)
+shell 1.30801905 (faces plane top)
+# seed 53
+base: extrude 16.9557 rect -33.5142 -32.5281 67.0285 65.0562
+p0: extrude cut 7.77036 rrect 3.30018 2.74083 14.2982 14.2982 3.16092
+chamfer 0.186037229 (edges of p0 concave)
+hole 1.91354 at -20.2479 -11.7487 0 thru
+chamfer 0.434523669 (edges of base top)
+offset 0.743130365 (faces of base normal -x)
+# seed 54
+base: extrude 19.3457 rect -42.4093 -15.5933 84.8186 31.1865
+p0: extrude add 9.51365 at 0 0 19.3457 circle -15.8893 -3.53298 6.38776
+chamfer 19.8043354 (edges of p0 top)
+chamfer 0.195471514 (edges of base top)
+p2: extrude cut 3.82212 rrect 25.1583 -0.420635 4.44482 4.44482 0.222564
+chamfer 0.210556018 (edges of p2 concave)
+p3: extrude cut 19.3457 at 0 0 9.67284 rect -14.5463 -31.1865 1.83164 62.373
+p4: extrude cut 6.4335 rrect -21.7385 -4.73154 6.93419 6.93419 1.02259
+chamfer 0.728203353 (edges of p4 concave)
+thicken 0.917607793 (faces of base normal -x)
+# seed 55
+base: extrude 9.59931 rect -17.7102 -33.8893 35.4204 67.7785
+p0: extrude cut 9.59931 at 0 0 4.79965 rect -4.67697 -67.7785 2.39203 135.557
+offset -0.60242842 (faces of base normal +x)
+p2: extrude add 3.79724 at 0 0 9.59931 circle 1.66118 15.2685 2.31492
+chamfer 0.378340487 (edges of p2 top)
+thicken 1.27829038 (faces of base normal -y)
+# seed 56
+base: extrude 17.3681 rect -43.9776 -25.0945 87.9552 50.189
+chamfer 0.894225522 (edges of base top)
+hole 4.54677 at 15.1897 -9.67275 0 thru
+p2: extrude add 4.67905 at 0 0 17.3681 circle -6.76367 -15.7143 2.93379
+chamfer 0.462131278 (edges of p2 top)
+p3: extrude cut 17.3681 at 0 0 8.68406 rect 6.49826 -18.5491 12.0486 12.0486
+chamfer 0.353177402 (edges of p3)
+chamfer 16.5814993 (edges of base top)
+# seed 57
+base: extrude 6.46346 rect -16.277 -25.7679 32.5539 51.5359
+offset 14.9772458 (faces of base normal +y)
+hole 3.41857 at 1.00619 10.7682 0 thru
+offset -0.214940331 (faces of base normal +y)
+p3: extrude cut 6.46346 at 0 0 3.23173 rect -2.27177 -51.5359 2.05998 103.072
+# seed 58
+base: extrude 21.4073 rect -32.4227 -17.1288 64.8454 34.2576
+fillet 2.07290866 (edges of base along +z)
+p0: extrude cut 21.4073 at 0 0 10.7036 rect 15.6627 2.42628 9.02837 9.02837
+chamfer 4.04494095 (edges of p0)
+p1: extrude cut 21.4073 at 0 0 10.7036 rect -1.89283 -7.02412 8.41399 8.41399
+chamfer 0.484412841 (edges of p1)
+p2: extrude add 9.85114 at 0 0 21.4073 circle -13.6419 -4.71457 3.03324
+chamfer 0.202175668 (edges of p2 top)
+chamfer 0.644393385 (edges of base top)
+# seed 59
+base: extrude 28.6978 rect -21.7256 -33.4844 43.4511 66.9688
+draft 4.163 xy at 0 0 0 (faces of base normal +x)
+hole 3.12979 at -3.52643 13.6865 0 thru
+p1: extrude cut 28.6978 at 0 0 14.3489 rect 0.604228 -13.2104 12.0368 12.0368
+chamfer 10.5379425 (edges of p1)
+p2: extrude cut 28.6978 at 0 0 14.3489 rect -14.4269 -16.1876 4.99177 4.99177
+chamfer 0.126232962 (edges of p2)
+p3: extrude cut 28.6978 at 0 0 14.3489 rect 0.0658933 5.27638 4.1562 4.1562
+chamfer 0.358924033 (edges of p3)
+chamfer 0.220962143 (edges of base top)

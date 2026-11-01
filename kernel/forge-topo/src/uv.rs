@@ -466,3 +466,42 @@ fn column_runs(loops: &[UvLoop], segs: &[(u32, u32)], lo: f64, hi: f64) -> (Vec<
     }
     (out, moves > 0.05 * span.width())
 }
+
+/// Whether two segments of a face's loops cross properly (not at a shared end).
+pub fn loops_cross(loops: &[UvLoop]) -> bool {
+    let segs: Vec<(Point2, Point2)> = loops
+        .iter()
+        .flat_map(|l| {
+            let n = l.points.len();
+            (0..n).map(move |i| (l.points[i], l.points[(i + 1) % n]))
+        })
+        .filter(|s| s.0 != s.1)
+        .collect();
+    // swept along u: only segments whose u spans overlap are compared
+    let mut segs = segs;
+    segs.sort_by(|p, q| p.0.x.min(p.1.x).total_cmp(&q.0.x.min(q.1.x)));
+    let opposite = |p: f64, q: f64| (p < 0.0 && q > 0.0) || (p > 0.0 && q < 0.0);
+    for i in 0..segs.len() {
+        let reach = segs[i].0.x.max(segs[i].1.x);
+        for j in i + 1..segs.len() {
+            if segs[j].0.x.min(segs[j].1.x) > reach {
+                break;
+            }
+            let ((a, b), (c, d)) = (segs[i], segs[j]);
+            let apart = |p: f64, q: f64, r: f64, t: f64| p.max(q) < r.min(t) || r.max(t) < p.min(q);
+            if apart(a.y, b.y, c.y, d.y) || a == c || a == d || b == c || b == d {
+                continue;
+            }
+            if opposite(
+                forge_math::predicates::orient2d(a, b, c),
+                forge_math::predicates::orient2d(a, b, d),
+            ) && opposite(
+                forge_math::predicates::orient2d(c, d, a),
+                forge_math::predicates::orient2d(c, d, b),
+            ) {
+                return true;
+            }
+        }
+    }
+    false
+}

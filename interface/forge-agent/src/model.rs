@@ -8,12 +8,14 @@ use forge_doc::sketch;
 use forge_doc::{Document, Op};
 use forge_math::Box3;
 use forge_mesh::TriMesh;
+use forge_model::verify::{Issue, Verdict, faults};
 use forge_model::{Feature, History, RegenError, Solid, Source, step_solids};
 use forge_topo::mass::MassProps;
 use forge_topo::{Body, Name};
 use std::cell::RefCell;
 use std::collections::HashMap;
 use std::panic::{AssertUnwindSafe, catch_unwind};
+use std::sync::atomic::AtomicBool;
 use std::sync::{Arc, OnceLock};
 use std::time::Instant;
 
@@ -62,7 +64,7 @@ pub type Imports = dyn Fn(&str) -> Result<Arc<Body>, String> + Send + Sync;
 
 /// The bodies after a line, as the next line builds on them; all of them as one body to look at
 /// (finished: faces on one surface joined); and as one body unfinished, to trace faces through.
-struct Stage {
+pub struct Stage {
     solids: Vec<Solid>,
     view: OnceLock<Joined>,
     work: OnceLock<Body>,
@@ -168,6 +170,30 @@ impl Default for Model {
             edited: false,
         }
     }
+}
+
+/// Each feature from `from` on that left a part failing `check`: for a worker after a commit or a settled
+/// rebuild, never on the way to a frame. `from` may be the first stage that is not the same `Arc` as last time;
+/// what was found before it stands. `stop` set: it gives up with `Verdict::Stopped`.
+pub fn check_stages(stages: &[Arc<Stage>], from: usize, stop: &AtomicBool) -> Verdict {
+    faults(stages.iter().map(|s| &s.solids[..]), from, stop)
+}
+
+/// How many leading stages are the same as in `checked`: where `check_stages` goes on from.
+pub fn stages_kept(stages: &[Arc<Stage>], checked: &[Arc<Stage>]) -> usize {
+    stages
+        .iter()
+        .zip(checked)
+        .take_while(|(a, b)| Arc::ptr_eq(a, b))
+        .count()
+}
+
+/// The full check of what the last stage holds, for a save. Finds what `check_stages` does on the last stage and
+/// takes nothing from earlier ones; empty is a part fit to save without a warning.
+pub fn check_for_save(stages: &[Arc<Stage>]) -> Vec<Issue> {
+    stages
+        .last()
+        .map_or(Vec::new(), |s| forge_model::verify::full(&s.solids))
 }
 
 impl Model {
@@ -492,6 +518,12 @@ impl Model {
         }
         self.origins.get_mut().truncate(self.stages.len());
         self.ms = t0.elapsed().as_secs_f64() * 1e3;
+    }
+
+    /// The part after each built feature, to hand a worker for `check_stages`: cheap to take, and the
+    /// model goes on changing without it. A stage kept from the last rebuild is the same `Arc`.
+    pub fn stages(&self) -> Vec<Arc<Stage>> {
+        self.stages.clone()
     }
 
     /// For an unknown name in `msg`, where a line below line `i` defines it.

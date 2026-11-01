@@ -5,6 +5,7 @@ use forge_agent::{bench, text};
 use forge_model::Feature;
 
 fn builds(name: &str) {
+    forge_topo::check::check_against_both_ways(true);
     let part = bench::part(name);
     let mut back = text::parse(&text::print(&part)).unwrap_or_else(|(l, e)| panic!("{name}: line {l}: {e}"));
     // text keeps only its font's name in the file

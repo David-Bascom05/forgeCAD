@@ -1,0 +1,9 @@
+name = "checklocal"
+version = "0.1.0"
+defaultTargets = ["CheckLocal"]
+
+[leanOptions]
+relaxedAutoImplicit = false
+
+[[lean_lib]]
+name = "CheckLocal"

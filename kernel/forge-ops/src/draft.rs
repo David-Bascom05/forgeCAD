@@ -3,7 +3,7 @@ use crate::selfx::crossing;
 use forge_geom::intersect::{SurfaceSurface, plane_plane};
 use forge_geom::{Cone, Curve, CurveGeom, Plane, Surface, SurfaceGeom};
 use forge_math::{Frame, Point3, UnitVec3, dmath, tol};
-use forge_topo::{Body, FaceId, Name, Problem, check};
+use forge_topo::{Body, FaceId, Name, Problem, check_against};
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum DraftError {
@@ -81,7 +81,9 @@ pub fn draft(body: &Body, faces: &[Name], neutral: &Frame, angle: f64) -> Result
         }
     }
     rebuild(&mut out, &changed).map_err(DraftError::Rebuild)?;
-    let problems = check(&out);
+    let problems = check_against(&out, body);
+    let found = forge_topo::changed_faces(&out, body);
+    let changed: Vec<bool> = changed.iter().zip(found).map(|(&c, f)| c || f).collect();
     if let Some((a, b)) = crossing(&out, &changed) {
         return Err(DraftError::SelfIntersecting { a, b });
     }

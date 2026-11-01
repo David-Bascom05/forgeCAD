@@ -3,7 +3,7 @@ use crate::selfx::crossing;
 use forge_geom::intersect::{CurveSurface, curve_surface};
 use forge_geom::{Cone, Curve, CurveGeom, Cylinder, Line, Plane, Sphere, Surface};
 use forge_math::{Frame, Interval, Point3, UnitVec3, Vec3, dmath, tol};
-use forge_topo::{Body, CoedgeId, EdgeId, FaceId, Name, Problem, VertexId, check};
+use forge_topo::{Body, CoedgeId, EdgeId, FaceId, Name, Problem, VertexId, check_against};
 use std::collections::HashMap;
 
 /// How far a chamfer cuts back from its edges.
@@ -264,11 +264,11 @@ pub fn chamfer(body: &Body, edges: &[Name], size: ChamferSize, feature: u64) -> 
         e => ChamferError::Rebuild(e),
     })?;
     let out = out.into_compact();
-    let problems = check(&out);
-    let flagged: Vec<bool> = out
-        .faces
-        .iter()
-        .map(|f| src.face_by_name(f.name).is_none_or(|g| near[g.index()]))
+    let problems = check_against(&out, &src);
+    let flagged: Vec<bool> = forge_topo::changed_faces(&out, &src)
+        .into_iter()
+        .zip(&out.faces)
+        .map(|(c, f)| c || src.face_by_name(f.name).is_none_or(|g| near[g.index()]))
         .collect();
     if let Some((a, _)) = crossing(&out, &flagged) {
         return Err(ChamferError::Overflows { face: a });

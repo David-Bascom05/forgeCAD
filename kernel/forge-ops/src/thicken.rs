@@ -3,7 +3,7 @@ use crate::selfx::crossing;
 use crate::shell::offset;
 use forge_geom::{Cone, Curve, CurveGeom, Cylinder, Line, Plane, Surface, SurfaceGeom};
 use forge_math::{Frame, Interval, Point3, UnitVec3, dmath, tol};
-use forge_topo::{Body, EdgeId, FaceId, Name, Problem, VertexId, check};
+use forge_topo::{Body, EdgeId, FaceId, Name, Problem, VertexId, check_against};
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum ThickenError {
@@ -207,7 +207,7 @@ pub fn thicken(body: &Body, faces: &[Name], lo: f64, hi: f64, feature: u64) -> R
     let mut edges = vec![false; out.edges.len()];
     solve_e.iter().for_each(|e| edges[e.index()] = true);
     rebuild_some(&mut out, &verts, &edges).map_err(ThickenError::Rebuild)?;
-    let problems = check(&out);
+    let problems = check_against(&out, &base);
     if !problems.is_empty() {
         return Err(ThickenError::Invalid(problems));
     }

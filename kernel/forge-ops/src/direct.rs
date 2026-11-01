@@ -11,7 +11,7 @@ use forge_geom::blend::Pipe;
 use forge_geom::varblend::VarBlend;
 use forge_geom::{CurveGeom, Surface, SurfaceGeom};
 use forge_math::{Frame, Point3, Vec3, tol};
-use forge_topo::{Body, EdgeId, FaceId, LoopId, Name, Problem, VertexId, check};
+use forge_topo::{Body, EdgeId, FaceId, LoopId, Name, Problem, VertexId, check_against};
 use std::collections::{HashMap, HashSet};
 
 #[derive(Clone, Debug, PartialEq)]
@@ -131,7 +131,7 @@ fn resurface(
         let mut out = base.clone();
         set_surfaces(&mut out, faces, &new)?;
         rebuild(&mut out, &changed).map_err(DirectError::Rebuild)?;
-        valid(out, &changed)
+        valid(out, &base, &changed)
     };
     if blends.is_empty() || together {
         match plain() {
@@ -375,7 +375,7 @@ fn reblend(
     } = heal(base, &gone, &[], &strips)?;
     let changed = set_surfaces(&mut sharp, faces, new)?;
     rebuild(&mut sharp, &changed).map_err(DirectError::Rebuild)?;
-    let mut sharp = valid(sharp, &changed)?;
+    let mut sharp = valid(sharp, base, &changed)?;
     let mut picks = Vec::new();
     let mut opts = FilletOptions::default();
     let mut ids: Vec<u64> = Vec::new();
@@ -568,10 +568,12 @@ fn carry_names(base: &Body, gone: &[bool], sharp: &Body, out: &mut Body) {
     }
 }
 
-fn valid(out: Body, changed: &[bool]) -> R<Body> {
+fn valid(out: Body, old: &Body, changed: &[bool]) -> R<Body> {
     // faces run through each other show first as faces turned inside out: name the crossing
-    let problems = check(&out);
-    if let Some((a, b)) = crossing(&out, changed) {
+    let problems = check_against(&out, old);
+    let found = forge_topo::changed_faces(&out, old);
+    let changed: Vec<bool> = changed.iter().zip(found).map(|(&c, f)| c || f).collect();
+    if let Some((a, b)) = crossing(&out, &changed) {
         return Err(DirectError::SelfIntersecting { a, b });
     }
     if let Some(Problem::FaceWrongSide { face, .. }) = problems.first()
@@ -826,7 +828,7 @@ fn heal(base: &Body, gone: &[bool], dropped: &[LoopId], strips: &[Strip]) -> R<H
         .map(|&e| out.edge_by_name(base.edge(e).name).expect("joined edges stay"))
         .collect();
     Ok(Healed {
-        body: valid(out, &changed)?,
+        body: valid(out, base, &changed)?,
         joined,
     })
 }
