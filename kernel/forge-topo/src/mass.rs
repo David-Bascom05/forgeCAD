@@ -1014,7 +1014,8 @@ fn trace_loop<'a>(body: &'a Body, s: &Surface, lp: LoopId, rel: f64) -> Result<L
         .iter()
         .map(|&c| {
             let p = body.vertex(body.coedge_start(c)).point;
-            s.normal(s.project(p)).is_none()
+            let uv = s.project(p);
+            s.normal(uv).is_none() || matches!(s, Surface::Torus(_)) && s.singular(uv)
         })
         .collect();
     let rot = sing.iter().position(|&b| b).unwrap_or(0);
@@ -1606,6 +1607,13 @@ impl Ctx<'_> {
     fn of(&self, d: &forge_geom::surface::SurfDeriv) -> F {
         let n = d.du.cross(d.dv);
         let mut f = integrand(d.p - self.c, n);
+        if let Surface::Torus(t) = self.s
+            && t.is_spindle()
+        {
+            // r rho, signed: it changes sign through the axis, where |du x dv| has a kink the fit
+            // round the tube cannot follow
+            f[10] = -n.dot(d.dvv) / t.minor;
+        }
         if let Surface::Sphere(sp) = self.s {
             // r^2 cos v: |du x dv| as the trigonometric polynomial it is between the poles
             f[10] = n.dot(d.p - sp.frame.origin) / sp.radius;
@@ -1967,6 +1975,17 @@ fn face_integrals(body: &Body, f: FaceId, c: Point3, size: f64, rel: f64) -> Res
         ahi
     } else if wd < 0.0 && alo.is_finite() && per[ax].is_none() {
         alo
+    } else if let (Surface::Torus(t), true) = (s, wd != 0.0 && ax == 1) {
+        if !t.is_spindle() {
+            return Err("a loop winds round a face that holds no singular point");
+        }
+        // up to the pole the face holds: the region runs from the loops to it
+        let v = t.pole_v();
+        let at = |x: f64| {
+            let (lo, hi) = span(&loops, 1);
+            near(x, 0.5 * (lo + hi), per[1])
+        };
+        if wd > 0.0 { at(v) } else { at(-v) }
     } else if wd != 0.0 {
         return Err("a loop winds round a face that holds no singular point");
     } else if loops.is_empty() {

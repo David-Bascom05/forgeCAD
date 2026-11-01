@@ -441,3 +441,95 @@ ball add 3.6 -xz at 17.98 {y} 10
         }
     }
 }
+
+/// A revolved arc ending on the axis, its centre off it: the tube of a torus reaching through its
+/// axis, centre on the arc's side (an apple) or across (a lemon, once built as a sphere, invalid).
+/// A boolean on one is refused for now: the closed forms and the tracer go round the whole tube.
+#[test]
+fn arcs_ending_on_the_axis() {
+    let mass = |src: &str| {
+        let m = Model::new(src);
+        assert!(m.error.is_none(), "{:?}", m.error.as_ref().map(|e| &e.msg));
+        let b = m.body().expect("a body");
+        assert!(forge_topo::check(b).is_empty(), "{:?}", forge_topo::check(b));
+        forge_topo::mass::mass(&b.compact()).expect("a mass")
+    };
+    // by hand: pi times the integral of r^2 dz along the arc
+    let revolved = |rc: f64, a: f64| {
+        let n = 200_000;
+        let (mut v, mut area) = (0.0, 0.0);
+        let pi = std::f64::consts::PI;
+        for k in 0..n {
+            let t = -a + 2.0 * a * (k as f64 + 0.5) / n as f64;
+            let (r, h) = (rc + 13.0 * t.cos(), 2.0 * a / n as f64);
+            v += pi * r * r * 13.0 * t.cos() * h;
+            area += 2.0 * pi * r * 13.0 * h;
+        }
+        (v, area)
+    };
+    let a = (5.0f64 / 13.0).acos();
+    let deg = a.to_degrees();
+    for (src, rc, half) in [
+        (
+            format!(
+                "revolve xz axis y loop arc -5 0 13 {} {} line 0 12 0 -12\n",
+                -deg,
+                2.0 * deg
+            ),
+            -5.0,
+            a,
+        ),
+        (
+            format!(
+                "revolve xz axis y loop arc 5 0 13 {} {} line 0 12 0 -12\n",
+                deg - 180.0,
+                2.0 * (180.0 - deg)
+            ),
+            5.0,
+            std::f64::consts::PI - a,
+        ),
+    ] {
+        let m = mass(&src);
+        let (v, area) = revolved(rc, half);
+        assert!((m.volume - v).abs() < 1e-5 * v, "{} vs {v}", m.volume);
+        assert!((m.area - area).abs() < 1e-5 * area, "{} vs {area}", m.area);
+        let cut = Model::new(&format!("{src}extrude cut thru xy at 0 0 -30 circle 3 0 2\n"));
+        assert!(cut.error.is_some_and(|e| e.msg.contains("closed form")));
+    }
+    // a dome on a flange, the arc's centre off the axis but not reaching it
+    mass(
+        "revolve xz axis y loop line 0 -3 15 -3 line 15 -3 15 0 arc 2 0 13 0 90 line 2 13 0 13 line 0 13 0 -3\n",
+    );
+    // a whole circle tangent to the axis would pinch there
+    let e = Model::new("revolve xz axis y circle 4 0 4\n").error;
+    assert!(e.is_some_and(|e| e.msg.contains("pinches")));
+}
+
+/// Points along the axis between axis lines are on nothing a whole turn makes: they were left as
+/// loose vertices.
+#[test]
+fn a_point_between_two_lines_on_the_axis() {
+    builds("revolve xz axis y loop line 0 0 5 0 line 5 0 5 3 line 5 3 0 3 line 0 3 0 1 line 0 1 0 0\n");
+}
+
+/// A cut through everything reaches past all the material there can be: lofts, sweeps and coils
+/// were left out of that, so it went a millimetre into them, valid and wrong.
+#[test]
+fn a_cut_through_a_loft_or_a_sweep_goes_through() {
+    let pi = std::f64::consts::PI;
+    let frustum = 15.0 * (40.0f64 * 40.0 + 40.0 * 16.0 + 16.0 * 16.0) / 3.0;
+    let v = builds(
+        "loft smooth profile z 0 0 1 x 1 0 0 at 0 0 0 rect -20 -20 40 40 profile z 0 0 1 x 1 0 0 at 0 0 15 rect -8 -8 16 16
+extrude cut thru z 0 0 -1 x 1 0 0 at 0 0 15 circle 0 0 4
+",
+    );
+    let want = frustum - pi * 16.0 * 15.0;
+    assert!((v - want).abs() < 2e-3 * want, "loft {v} vs {want}");
+    let v = builds(
+        "sweep z 0 0 1 x 1 0 0 at 0 0 0 rect -20 -20 40 40 path line 0 0 0 0 0 15
+hole 8 z 0 0 -1 x 1 0 0 at 0 0 15 thru
+",
+    );
+    let want = 1600.0 * 15.0 - pi * 16.0 * 15.0;
+    assert!((v - want).abs() < 2e-3 * want, "sweep {v} vs {want}");
+}

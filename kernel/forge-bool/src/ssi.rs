@@ -117,6 +117,14 @@ thread_local! {
 
 /// Where two surfaces with no closed form meet in `region`: by marching or tracing.
 pub fn searched(a: &Surface, b: &Surface, region: Box3) -> SurfaceSurface {
+    // of a spindle only the part off the axis is there, and neither the closed forms nor the tracer
+    // know: a clear refusal rather than a boolean that quietly misses (research/build-failures)
+    if [a, b]
+        .iter()
+        .any(|s| matches!(s, Surface::Torus(t) if t.is_spindle()))
+    {
+        return SurfaceSurface::NotAnalytic;
+    }
     if forge_geom::screw::misses(a, b, region) {
         return SurfaceSurface::Empty;
     }

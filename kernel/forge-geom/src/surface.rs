@@ -586,6 +586,24 @@ impl Torus {
     pub fn new(frame: Frame, major: f64, minor: f64) -> Option<Self> {
         (minor > tol::MIN_LENGTH && major > minor + tol::MIN_LENGTH).then_some(Torus { frame, major, minor })
     }
+
+    /// A torus whose tube reaches through its axis, for a revolved arc that ends on the axis: the
+    /// centre on the arc's side (major > 0), or across the axis from it (major < 0). Only the part
+    /// of the tube off the axis on the centre circle's frame is used, between the poles at `poles`.
+    pub fn spindle(frame: Frame, major: f64, minor: f64) -> Option<Self> {
+        (minor > tol::MIN_LENGTH && major.abs() > tol::MIN_LENGTH && major.abs() <= minor + tol::MIN_LENGTH)
+            .then_some(Torus { frame, major, minor })
+    }
+
+    /// Whether the tube reaches the axis.
+    pub fn is_spindle(&self) -> bool {
+        self.major.abs() <= self.minor + tol::MIN_LENGTH
+    }
+
+    /// The v of the pole a spindle's used part ends at, positive; the other is its negative.
+    pub fn pole_v(&self) -> f64 {
+        dmath::acos((-self.major / self.minor).clamp(-1.0, 1.0))
+    }
 }
 
 impl SurfaceGeom for Torus {
@@ -651,7 +669,11 @@ impl Surface {
     /// where it never is.
     pub fn singular(&self, uv: Point2) -> bool {
         match self {
-            Surface::Plane(_) | Surface::Cylinder(_) | Surface::Torus(_) => false,
+            Surface::Plane(_) | Surface::Cylinder(_) => false,
+            // (a profile's arc ends on the axis to within tolerance)
+            Surface::Torus(t) => {
+                t.is_spindle() && (t.major + t.minor * dmath::cos(uv.y)).abs() <= 2.0 * tol::LINEAR
+            }
             Surface::Cone(c) => c.radius_at(uv.y) <= tol::LINEAR,
             Surface::Procedural(p) if p.regular() => false,
             _ => self.normal(uv).is_none(),

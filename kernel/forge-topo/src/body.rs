@@ -1062,6 +1062,17 @@ impl Body {
                         }
                     }
                     let tau = 2.0 * forge_math::dmath::PI;
+                    if t.is_spindle() {
+                        // only the part of the tube off the axis: between the poles, u all round
+                        // for want of knowing better
+                        use forge_geom::SurfaceGeom;
+                        let v = t.pole_v();
+                        let uv = forge_math::Box2 {
+                            u: Interval::new(0.0, tau),
+                            v: Interval::new(-v, v),
+                        };
+                        return b.hull(&t.bbox(uv)).grow(forge_math::tol::LINEAR);
+                    }
                     let whole = Box3::from_point(t.frame.origin).grow(t.major + t.minor);
                     b = b.hull(&if su.is_empty() || su.width() >= 0.9 * tau {
                         whole

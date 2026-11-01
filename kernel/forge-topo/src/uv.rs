@@ -146,15 +146,17 @@ fn draw(body: &Body, face: FaceId, mut raw: Vec<Point2>) -> (Vec<Point2>, Vec<us
         let i = (start + k) % n;
         if singular[i] {
             let before = prev.expect("loop starts at a regular sample");
+            // (a spindle torus's v is periodic: the pole is where the run has got to)
+            let y = unwrap_in(&domain, raw[i], before).y;
             runs.last_mut()
                 .expect("at least one run")
-                .push((Point2::new(before.x, raw[i].y), i));
+                .push((Point2::new(before.x, y), i));
             if next_regular(i) == start {
-                tail.push((Point2::new(runs[0][0].0.x, raw[i].y), i));
+                tail.push((Point2::new(runs[0][0].0.x, y), i));
                 continue;
             }
             let after = raw[next_regular(i)];
-            let p = Point2::new(after.x, raw[i].y);
+            let p = Point2::new(after.x, y);
             runs.push(vec![(p, i)]);
             prev = Some(p);
             continue;

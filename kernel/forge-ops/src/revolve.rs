@@ -215,12 +215,20 @@ impl Revolver<'_> {
                 Ok(Some(Surface::Cone(cone)))
             }
             Segment::Arc { center, radius, .. } | Segment::Circle { center, radius, .. } => {
-                let (hc, rc) = self.hr(center);
+                let d = center - self.axis_origin;
+                // (signed: a centre across the axis from the arc is a lemon, not a sphere)
+                let (hc, rc) = (d.dot(self.dir2), d.dot(self.perp2));
                 let frame = rf.with_origin(self.axis_point(hc));
-                if rc <= tol::LINEAR {
+                if rc.abs() <= tol::LINEAR {
                     return Ok(Some(Surface::Sphere(Sphere { frame, radius })));
                 }
+                if matches!(s, Segment::Circle { .. }) && rc <= radius + tol::LINEAR {
+                    return Err(RevolveError::Unsupported(
+                        "a whole circle touching the axis pinches the solid there",
+                    ));
+                }
                 Torus::new(frame, rc, radius)
+                    .or_else(|| Torus::spindle(frame, rc, radius))
                     .map(|t| Some(Surface::Torus(t)))
                     .ok_or(RevolveError::Unsupported("arc whose circle reaches the axis"))
             }
@@ -303,14 +311,29 @@ impl Revolver<'_> {
                 }
             }
         }
+        // on a whole turn a segment on the axis makes nothing, so a point between two such is on nothing
+        let mut made = vec![false; pverts.len()];
+        for s in &segs {
+            if !matches!(self.surface_of(&s.seg), Ok(None)) {
+                made[s.start] = true;
+                made[s.end] = true;
+            }
+        }
         for (i, &p) in pverts.iter().enumerate() {
-            if self.on_axis(p) && copies == 1 && !seam_end[i] {
+            if self.on_axis(p) && self.full && !made[i] {
+                for c in vid.iter_mut() {
+                    c.push(VertexId(u32::MAX));
+                }
+            } else if self.on_axis(p) && copies == 1 && !seam_end[i] {
                 // a whole-turn disc has no seam to end there: nothing uses the vertex
                 vid[0].push(VertexId(u32::MAX));
             } else if self.on_axis(p) {
-                let v = self
-                    .body
-                    .add_vertex(self.point3(p), self.root.with_str("pole").with(pvert_name[i]));
+                // (a profile's arc may end a little short of the axis point the line gives)
+                let v = self.body.add_tolerant_vertex(
+                    self.point3(p),
+                    3.0 * tol::LINEAR,
+                    self.root.with_str("pole").with(pvert_name[i]),
+                );
                 for c in vid.iter_mut() {
                     c.push(v);
                 }

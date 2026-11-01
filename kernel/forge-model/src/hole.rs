@@ -267,6 +267,32 @@ fn adds(features: crate::History<'_>, i: usize) -> Vec<Box3> {
                 .collect();
             base.into_iter().chain(moved).collect()
         }
+        // what is added by a tool without a box of its own: a through cut that left these out went
+        // a millimetre into a loft and said nothing
+        Feature::Sweep(_) | Feature::Coil(_) | Feature::Loft(_) | Feature::Thread(_) | Feature::Text(_) => {
+            let Ok(cheap) = crate::tools(features, i, false) else {
+                return vec![];
+            };
+            if cheap.iter().all(|t| matches!(t.1, Combine::Cut | Combine::Keep)) {
+                return vec![];
+            }
+            if cheap.iter().all(|t| matches!(t.2, crate::Shape::Brep(_))) {
+                return cheap
+                    .iter()
+                    .filter_map(|t| match t.2 {
+                        crate::Shape::Brep(b) => Some(b),
+                        _ => None,
+                    })
+                    .collect();
+            }
+            crate::tools(features, i, true)
+                .map(|ts| {
+                    ts.iter()
+                        .map(|t| t.0.face_ids().fold(Box3::EMPTY, |b, f| b.hull(&t.0.face_box(f))))
+                        .collect()
+                })
+                .unwrap_or_default()
+        }
         _ => vec![],
     }
 }
@@ -283,6 +309,12 @@ pub(crate) fn reach(features: crate::History<'_>) -> Box3 {
             } if !b.is_empty() => b = b.grow(*thickness),
             Feature::Draft { angle, .. } if !b.is_empty() => {
                 b = b.grow(b.diagonal() * tan_half(2.0 * angle.abs()))
+            }
+            Feature::Edit(crate::Edit::Offset { distance, .. }) if !b.is_empty() => {
+                b = b.grow(distance.abs())
+            }
+            Feature::Edit(crate::Edit::Thicken { thickness, .. }) if !b.is_empty() => {
+                b = b.grow(thickness.abs())
             }
             Feature::Pattern {
                 of: Source::Body,
