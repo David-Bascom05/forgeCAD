@@ -36,6 +36,8 @@ pub fn plain_error(why: &str) -> String {
         "edit: Rib(Corner)" => "The rib's path turns a sharp corner at an arc: only lines can".to_string(),
         "extent: NotCovered" => "The next face doesn't cover the whole profile".to_string(),
         "extent: NoNextFace" => "There's no face ahead to reach".to_string(),
+        "extent: NeverHits" => "It never reaches that face: pick one it runs into".to_string(),
+        "extent: NotAhead" => "That face crosses the start or lies behind it: pick one ahead".to_string(),
         w if w.contains("the next face in a multi-body part") => {
             "To Next can't look across separate bodies yet".to_string()
         }

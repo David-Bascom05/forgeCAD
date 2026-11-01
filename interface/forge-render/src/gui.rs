@@ -699,11 +699,16 @@ impl Gui {
                 };
                 let picked = v.clicked.last().map(|c| c.1);
                 let wants_surface = d.kind == "extrude" && d.extent == crate::shell::dialog::Extent::Surface;
+                const UNNAMED: &str = "No feature owns that face, so it can't be named here. Pick another.";
                 if wants_surface {
-                    if let Some(Entity::Face(f)) = picked
-                        && let Some(t) = names(f)
-                    {
-                        d.surface = t;
+                    if let Some(Entity::Face(f)) = picked {
+                        match names(f) {
+                            Some(t) => {
+                                d.surface = t;
+                                d.error = None;
+                            }
+                            None => d.error = Some(UNNAMED.to_string()),
+                        }
                     }
                     v.nav.selected.clear();
                     v.clicked.clear();
@@ -714,12 +719,18 @@ impl Gui {
                 if let Some(h) = &mut d.hole {
                     use crate::shell::dialog::{Placing, Termination};
                     let mut took = false;
+                    // and again after one it couldn't reach
                     if h.termination == Termination::Surface
-                        && h.surface.is_empty()
+                        && (h.surface.is_empty() || d.error.is_some())
                         && let Some(Entity::Face(f)) = picked
-                        && let Some(t) = names(f)
                     {
-                        h.surface = t;
+                        match names(f) {
+                            Some(t) => {
+                                h.surface = t;
+                                d.error = None;
+                            }
+                            None => d.error = Some(UNNAMED.to_string()),
+                        }
                         took = true;
                     }
                     if !took {

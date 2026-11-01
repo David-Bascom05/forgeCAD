@@ -1192,6 +1192,61 @@ end
 }
 
 #[test]
+fn a_face_it_cannot_take_says_why_and_the_next_click_takes() {
+    let part = "a: extrude 30 rect -30 -30 60 60
+step: extrude cut 10 xy at 0 0 20 rect 0 -30 30 60
+sk1: sketch xy at 0 0 30
+  pt -15 0
+end
+";
+    let Some((mut h, file)) = open(part, "hunowned") else {
+        return;
+    };
+    let was = built(&file, "before");
+    button(&mut h, "Hole");
+    point_at(&mut h, [-15.0, 0.0, 30.0]);
+    h.click("dialog:end:To");
+    settle(&mut h);
+    // what a face with no maker gives: the click can't name it, and the dialog keeps waiting
+    let owners = std::mem::take(&mut h.gui.view.as_mut().unwrap().facts.face_item);
+    h.gui.view.as_mut().unwrap().facts.face_item = vec![None; owners.len()];
+    point_at(&mut h, [15.0, 0.0, 20.0]);
+    settle(&mut h);
+    let d = h.gui.shell.dialog.as_ref().unwrap();
+    let why = d.error.clone().unwrap_or_default();
+    assert!(why.contains("Pick another"), "{why}");
+    assert!(d.waiting_for_pick());
+    h.gui.view.as_mut().unwrap().facts.face_item = owners;
+    // a face that runs alongside the hole: it never gets there, in words
+    point_at(&mut h, [30.0, 10.0, 5.0]);
+    assert!(
+        h.until(|g| g
+            .shell
+            .dialog
+            .as_ref()
+            .unwrap()
+            .error
+            .as_deref()
+            .is_some_and(|e| e.contains("never reaches"))),
+        "{:?}",
+        h.gui.shell.dialog.as_ref().unwrap().error
+    );
+    // and one it does: taken in its place
+    point_at(&mut h, [15.0, 0.0, 20.0]);
+    assert!(
+        h.until(|g| g.shell.dialog.as_ref().unwrap().error.is_none()
+            && g.shell.dialog.as_ref().unwrap().line().contains(" to step @f")),
+        "{:?} {}",
+        h.gui.shell.dialog.as_ref().unwrap().error,
+        h.gui.shell.dialog.as_ref().unwrap().line()
+    );
+    ok(&mut h, "to a face");
+    let got = was - built(&file, "to a face");
+    let want = pi_r2(5.0) * 10.0;
+    assert!((got - want).abs() < want * 0.01, "{got} {want}");
+}
+
+#[test]
 fn an_extrude_goes_up_to_a_face_picked() {
     let part = "floor: extrude 10 rect -30 -30 70 60\nwall: extrude 40 xy at 0 0 10 rect 30 -30 10 60\nroof: extrude 10 xy at 0 0 50 rect -30 -30 70 60\nsk1: sketch xy at 0 0 25\n  rect -5 -5 10 10\nend\n";
     let Some((mut h, file)) = open(part, "exto") else {
