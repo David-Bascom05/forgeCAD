@@ -47,6 +47,9 @@ impl Facts {
     }
 }
 
+/// A number's word and value, its arrow's start and way, its value per mm.
+type Found = (&'static str, f64, [f64; 3], [f64; 3], f64);
+
 #[derive(Clone, Copy)]
 struct Patch {
     centre: [f64; 3],
@@ -194,7 +197,7 @@ pub fn facts(model: &mut Model) -> Facts {
             let out = grows_out.unwrap_or(p.bulge < 0.0);
             Some((label, value, p.centre, p.normal, if out { 1.0 } else { -1.0 }))
         };
-        let found: Option<(&'static str, f64, [f64; 3], [f64; 3], f64)> = match &model.features[i] {
+        let found: Option<Found> = match &model.features[i] {
             Feature::Extrude { profile, extent, .. } => {
                 let z = vec3(profile.plane.z().into());
                 let o = point(profile.plane.origin);
@@ -269,6 +272,20 @@ pub fn facts(model: &mut Model) -> Facts {
         });
     }
     Facts { face_item, handles }
+}
+
+/// What's known of the part rolled back to `n` lines: its faces' makers, and no numbers on it.
+pub fn facts_at(model: &Model, n: usize) -> Facts {
+    let n = n.min(model.built());
+    let face_item = model
+        .face_makers_at(n)
+        .iter()
+        .map(|m| m.filter(|&i| i < n).map(|i| ItemId(model.lines[i].id)))
+        .collect();
+    Facts {
+        face_item,
+        handles: Vec::new(),
+    }
 }
 
 #[cfg(test)]

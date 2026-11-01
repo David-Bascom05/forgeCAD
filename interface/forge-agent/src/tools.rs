@@ -47,6 +47,20 @@ pub enum Call {
         item: ItemId,
         before: Option<ItemId>,
     },
+    /// Takes a feature out of the build, and what names it, keeping each as a comment that can come
+    /// back: `# ~ID LINE`. A sketch can't, being several lines.
+    Suppress {
+        item: ItemId,
+    },
+    /// A suppressed line (the comment's item) back in the build, with its id and so its names.
+    Unsuppress {
+        item: ItemId,
+    },
+    /// A person's name for a feature, kept in a comment `#: NAME` on its line; empty takes it off.
+    Rename {
+        item: ItemId,
+        name: String,
+    },
     Undo,
     Redo,
     /// What later reads of the selection mean: handles or selectors.
@@ -62,7 +76,7 @@ pub struct Tool {
     pub what: &'static str,
 }
 
-pub const TOOLS: [Tool; 10] = [
+pub const TOOLS: [Tool; 13] = [
     Tool {
         name: "add",
         syntax: "LINE",
@@ -102,6 +116,21 @@ pub const TOOLS: [Tool; 10] = [
         name: "mv",
         syntax: "mv FEAT FEAT2|end",
         what: "moves FEAT above FEAT2; ids and names stay",
+    },
+    Tool {
+        name: "suppress",
+        syntax: "suppress FEAT",
+        what: "takes FEAT and all that names it out of the build, as comments",
+    },
+    Tool {
+        name: "unsuppress",
+        syntax: "unsuppress ID",
+        what: "brings the suppressed line with this id back",
+    },
+    Tool {
+        name: "rename",
+        syntax: "rename FEAT NAME",
+        what: "a display name, kept in a comment; references go on using the label",
     },
     Tool {
         name: "undo",
@@ -1016,6 +1045,25 @@ impl Part {
     }
 }
 
+/// A suppressed line's comment: its id and its text.
+pub fn suppressed(note: &str) -> Option<(u64, &str)> {
+    let rest = note.strip_prefix('~')?;
+    let (id, text) = rest.split_once(' ')?;
+    Some((id.parse().ok()?, text))
+}
+
+/// A person's name in a line's comment.
+pub fn display_name(note: Option<&str>) -> Option<&str> {
+    note?.strip_prefix(": ")
+}
+
+fn suppressed_line(doc: &Document, id: u64) -> Option<ItemId> {
+    doc.items
+        .iter()
+        .find(|it| it.note.as_deref().and_then(suppressed).is_some_and(|s| s.0 == id))
+        .map(|it| it.id)
+}
+
 /// What a commit did: `+4 faces, volume -120.4 mm3, valid`.
 fn change(was: (i64, f64), now: (i64, f64), valid: Option<bool>) -> String {
     let mut parts = Vec::new();
@@ -1148,6 +1196,22 @@ fn line_call(doc: &mut Document, block: &str) -> Result<Call, String> {
             },
         }),
         "mv" => Err("mv FEAT FEAT2|end".into()),
+        "suppress" if t.len() == 2 => Ok(Call::Suppress {
+            item: feat(doc, &t[1])?,
+        }),
+        "suppress" => Err("suppress FEAT".into()),
+        "unsuppress" if t.len() == 2 => {
+            let id: u64 = t[1].parse().map_err(|_| "unsuppress ID".to_string())?;
+            suppressed_line(doc, id)
+                .map(|item| Call::Unsuppress { item })
+                .ok_or(format!("no suppressed line {id}"))
+        }
+        "unsuppress" => Err("unsuppress ID".into()),
+        "rename" if t.len() > 1 => Ok(Call::Rename {
+            item: feat(doc, &t[1])?,
+            name: rest(2),
+        }),
+        "rename" => Err("rename FEAT NAME".into()),
         _ if w(1) == Some("=") && t.len() > 2 => match doc.param(&t[0]) {
             Some(item) => {
                 let mut e = t[2..].to_vec();
@@ -1199,6 +1263,69 @@ fn push(doc: &mut Document, call: Call, tx: &mut Tx) -> Result<(), String> {
             (vec![], vec![Op::Delete { item }])
         }
         Call::Move { item, before } => (vec![item], vec![Op::Move { item, before }]),
+        Call::Suppress { item } => {
+            // what names it first, latest first, so nothing's left naming what's gone
+            let mut all = vec![item];
+            let mut k = 0;
+            while k < all.len() {
+                for u in doc.users(all[k]) {
+                    if !all.contains(&u) {
+                        all.push(u);
+                    }
+                }
+                k += 1;
+            }
+            let at = |d: &Document, i: ItemId| d.items.iter().position(|x| x.id == i);
+            all.sort_by_key(|&i| std::cmp::Reverse(at(doc, i)));
+            for i in all {
+                let k = at(doc, i).ok_or("no such feature")?;
+                if matches!(doc.items[k].body, Body::Sketch { .. }) {
+                    return Err(format!(
+                        "{} is a sketch: it can't be suppressed",
+                        doc.name(i).unwrap_or_default()
+                    ));
+                }
+                let text = doc.text_of(i).ok_or("no such feature")?;
+                let before = doc.items.get(k + 1).map(|x| x.id);
+                let blank = doc.read_items(&format!("# ~{} {text}", i.0));
+                for op in [Op::Delete { item: i }, Op::Insert { before, items: blank }] {
+                    let u = doc.apply(op.clone())?;
+                    tx.ops.push(op);
+                    tx.undo.splice(0..0, u);
+                }
+            }
+            (vec![], vec![])
+        }
+        Call::Unsuppress { item } => {
+            let k = doc
+                .items
+                .iter()
+                .position(|x| x.id == item)
+                .ok_or("no such line")?;
+            let note = doc.items[k].note.clone().unwrap_or_default();
+            let (id, text) = suppressed(&note).ok_or("that line isn't suppressed")?;
+            let before = doc.items.get(k + 1).map(|x| x.id);
+            let mut items = doc.read_items(text);
+            let [back] = &mut items[..] else {
+                return Err("that line isn't suppressed".into());
+            };
+            back.id = ItemId(id);
+            let back_id = back.id;
+            (
+                vec![back_id],
+                vec![Op::Delete { item }, Op::Insert { before, items }],
+            )
+        }
+        Call::Rename { item, name } => {
+            let mut it = doc
+                .items
+                .iter()
+                .find(|x| x.id == item)
+                .ok_or("no such feature")?
+                .clone();
+            it.note = (!name.is_empty()).then(|| format!(": {name}"));
+            (vec![item], vec![Op::SetItem { item: it }])
+        }
         Call::Undo | Call::Redo | Call::Select { .. } => {
             return Err("undo, redo and select go alone".into());
         }
@@ -1329,6 +1456,84 @@ fn mode_of(m: &std::fs::Metadata) -> u32 {
 #[cfg(not(unix))]
 fn mode_of(_: &std::fs::Metadata) -> u32 {
     0o600
+}
+
+#[cfg(test)]
+mod more_tests {
+    use super::*;
+
+    fn part() -> Part {
+        Part::new(
+            "base: extrude 20 rect 0 0 40 40\nh1: hole 5 -xy at 10 10 20 thru\nh2: hole 5 -xy at 30 30 20 thru\nf: fillet 1 (edges of h1 top)\n",
+        )
+    }
+
+    #[test]
+    fn a_suppressed_feature_and_what_names_it_leave_the_build_and_come_back() {
+        let mut p = part();
+        let v0 = p.stat();
+        let h1 = p.model.doc.find("h1").unwrap();
+        assert!(p.model.error.is_none(), "{:?}", p.model.error);
+        let d = p.call(vec![Call::Suppress { item: h1 }], None);
+        assert!(d.ok, "{}", d.text);
+        // the fillet named it, so it went too
+        assert!(p.model.src().contains("# ~"), "{}", p.model.src());
+        assert!(p.model.doc.find("f").is_none());
+        assert!(p.model.error.is_none());
+        let less = p.stat();
+        assert!(less.volume > v0.volume);
+        let line = suppressed_line(&p.model.doc, h1.0).unwrap();
+        let d = p.call(vec![Call::Unsuppress { item: line }], None);
+        assert!(d.ok, "{}", d.text);
+        assert_eq!(p.model.doc.find("h1"), Some(h1), "the same id, so the same names");
+        let f = suppressed_line(&p.model.doc, 4).unwrap();
+        assert!(p.call(vec![Call::Unsuppress { item: f }], None).ok);
+        assert!((p.stat().volume - v0.volume).abs() < 1e-9);
+        // undo walks back through all of that
+        assert!(p.call(vec![Call::Undo], None).ok);
+        assert!(p.model.doc.find("f").is_none());
+        // the same by text
+        let mut q = part();
+        assert!(q.act("suppress h1", None).ok);
+        assert!(q.act("unsuppress 2", None).ok);
+        assert!(q.model.doc.find("h1").is_some());
+    }
+
+    #[test]
+    fn a_name_lives_in_a_comment_and_changes_nothing_else() {
+        let mut p = part();
+        let v = p.stat();
+        let h1 = p.model.doc.find("h1").unwrap();
+        let d = p.call(
+            vec![Call::Rename {
+                item: h1,
+                name: "Pilot bore".into(),
+            }],
+            None,
+        );
+        assert!(d.ok, "{}", d.text);
+        assert!(
+            p.model.src().contains("#: Pilot bore") || p.model.src().contains("# : Pilot bore"),
+            "{}",
+            p.model.src()
+        );
+        let it = p.model.doc.items.iter().find(|i| i.id == h1).unwrap();
+        assert_eq!(display_name(it.note.as_deref()), Some("Pilot bore"));
+        assert_eq!(p.stat().volume, v.volume);
+        assert_eq!(p.model.doc.find("h1"), Some(h1));
+        assert!(
+            p.call(
+                vec![Call::Rename {
+                    item: h1,
+                    name: String::new()
+                }],
+                None
+            )
+            .ok
+        );
+        let it = p.model.doc.items.iter().find(|i| i.id == h1).unwrap();
+        assert_eq!(it.note, None);
+    }
 }
 
 #[cfg(test)]

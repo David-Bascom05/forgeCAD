@@ -2,10 +2,10 @@
 //! newest value asked for; a value overtaken before it started is dropped. The UI thread only
 //! swaps a value into a slot and collects what is ready, so it never waits on the kernel.
 
-use crate::handles::{Facts, facts};
+use crate::handles::{Facts, facts, facts_at};
 use crate::model::Model;
 use crate::tools::{Call, Done, Part};
-use forge_doc::Op;
+use forge_doc::{ItemId, Op};
 use forge_topo::Body;
 use std::collections::VecDeque;
 use std::panic::{AssertUnwindSafe, catch_unwind};
@@ -76,6 +76,8 @@ enum Job {
     Commit(Op),
     Cancel,
     Calls(Vec<Call>),
+    /// Look at the part as of this item, or all of it.
+    Roll(Option<ItemId>),
 }
 
 struct Slot<T> {
@@ -158,6 +160,12 @@ impl<T: Send + 'static> Live<T> {
         self.job(Job::Calls(calls));
     }
 
+    /// Shows the part as of this item (its end-of-part marker), or all of it. It stays so through
+    /// commits, till told otherwise.
+    pub fn roll(&mut self, to: Option<ItemId>) {
+        self.job(Job::Roll(to));
+    }
+
     /// `f` is called whenever something becomes ready. Whatever is already there, it's called for now.
     pub fn on_ready(&mut self, f: impl Fn() + Send + 'static) {
         f();
@@ -200,9 +208,20 @@ impl<T> Drop for Live<T> {
 }
 
 /// A part the kernel can't say these of still stands, with nothing to point at.
-fn say_facts<T>(part: &mut Part, say: &impl Fn(Event<T>)) {
-    let f = catch_unwind(AssertUnwindSafe(|| facts(&mut part.model))).unwrap_or_default();
+fn say_facts<T>(part: &mut Part, lines: Option<usize>, say: &impl Fn(Event<T>)) {
+    let f = catch_unwind(AssertUnwindSafe(|| match lines {
+        Some(n) => facts_at(&part.model, n),
+        None => facts(&mut part.model),
+    }))
+    .unwrap_or_default();
     say(Event::Facts(Box::new(f)));
+}
+
+/// How many lines to show, for an end-of-part at this item.
+fn lines_to(part: &Part, to: Option<ItemId>) -> Option<usize> {
+    let id = to?;
+    let k = part.model.lines.iter().position(|l| l.id == id.0)?;
+    Some(k + 1)
 }
 
 enum Next {
@@ -236,8 +255,9 @@ fn run<T>(mut part: Part, mesher: &mut impl FnMut(&Body, Stage) -> T, shared: &S
             finish_ms: 0.0,
             mesh_ms: t.elapsed().as_secs_f64() * 1e3,
         }));
-        say_facts(&mut part, &say);
+        say_facts(&mut part, None, &say);
     }
+    let mut rolled: Option<ItemId> = None;
     loop {
         let next = {
             let mut s = shared.slot.lock().expect("the UI is alive");
@@ -257,7 +277,23 @@ fn run<T>(mut part: Part, mesher: &mut impl FnMut(&Body, Stage) -> T, shared: &S
         match next {
             Next::Stop => return,
             Next::Job(j) => {
+                if let Job::Roll(to) = j {
+                    rolled = to;
+                    let lines = lines_to(&part, rolled);
+                    let m = &part.model;
+                    let body = match lines {
+                        Some(n) => m.body_after(n),
+                        None => m.body(),
+                    };
+                    if let Some(b) = body {
+                        let out = mesher(b, Stage::Committed);
+                        say(Event::Final(out));
+                    }
+                    say_facts(&mut part, lines, &say);
+                    continue;
+                }
                 let d = match j {
+                    Job::Roll(_) => unreachable!("taken above"),
                     Job::Commit(op) => part.drag_commit(op, last_good.take()),
                     Job::Cancel => {
                         last_good = None;
@@ -291,10 +327,16 @@ fn run<T>(mut part: Part, mesher: &mut impl FnMut(&Body, Stage) -> T, shared: &S
                 good = part.model.src().to_string();
                 say(Event::Done(d));
                 say(Event::Doc(doc_state(&part)));
-                if let Some(b) = part.model.body() {
+                let lines = lines_to(&part, rolled);
+                let m = &part.model;
+                let body = match lines {
+                    Some(n) => m.body_after(n),
+                    None => m.body(),
+                };
+                if let Some(b) = body {
                     let out = mesher(b, Stage::Committed);
                     say(Event::Final(out));
-                    say_facts(&mut part, &say);
+                    say_facts(&mut part, lines, &say);
                 }
             }
             Next::Value(seq, op) => {
@@ -404,6 +446,28 @@ mod tests {
     }
 
     #[test]
+    fn rolled_back_the_part_is_as_of_that_line_through_commits_till_told_otherwise() {
+        let p = Part::new("w = 40\nbase: extrude 10 rect 0 0 w 30\ntop: extrude 5 at 0 0 10 rect 0 0 w 30\n");
+        let base = p.model.doc.find("base").unwrap();
+        let mut l = Live::start(p, |b, _| {
+            forge_topo::mass::mass(b).map(|m| m.volume).unwrap_or(0.0)
+        });
+        wait(&mut l, |e| matches!(e, Event::Facts(_)));
+        l.roll(Some(base));
+        let got = wait(&mut l, |e| matches!(e, Event::Facts(_)));
+        assert!(
+            got.iter()
+                .any(|e| matches!(e, Event::Final(v) if *v == 40.0 * 30.0 * 10.0))
+        );
+        l.roll(None);
+        let got = wait(&mut l, |e| matches!(e, Event::Facts(_)));
+        assert!(
+            got.iter()
+                .any(|e| matches!(e, Event::Final(v) if *v == 40.0 * 30.0 * 15.0))
+        );
+    }
+
+    #[test]
     fn a_commit_that_overtakes_every_value_still_commits() {
         let (mut l, w) = start();
         l.commit(w.op("50".into()));
@@ -473,14 +537,14 @@ mod tests {
         wait(&mut l, |e| matches!(e, Event::Frame(f) if f.seq == s));
         l.commit(w.op("nope".into()));
         let got = wait(&mut l, |e| matches!(e, Event::Final(_)));
-        let last = got.last().expect("final");
+        let last = got.iter().rfind(|e| matches!(e, Event::Final(_))).expect("final");
         assert!(matches!(last, Event::Final(v) if *v == 16500.0), "{last:?}");
         // none did: where it started
         let s = l.drag(w.op("nope".into()));
         wait(&mut l, |e| matches!(e, Event::Frame(f) if f.seq == s));
         l.commit(w.op("nope".into()));
         let got = wait(&mut l, |e| matches!(e, Event::Final(_)));
-        let last = got.last().expect("final");
+        let last = got.iter().rfind(|e| matches!(e, Event::Final(_))).expect("final");
         assert!(matches!(last, Event::Final(v) if *v == 16500.0), "{last:?}");
     }
 }

@@ -21,7 +21,7 @@ struct RowLook<'a> {
 impl Shell {
     fn tree_row(&self, ui: &mut Ui, w: f32, look: RowLook) -> (Rect, egui::Response) {
         let t = self.theme;
-        let (r, resp) = ui.allocate_exact_size(vec2(w, ROW_H), Sense::click());
+        let (r, resp) = ui.allocate_exact_size(vec2(w, ROW_H), Sense::click_and_drag());
         resp.widget_info(|| egui::WidgetInfo::selected(egui::Role::TreeItem, true, look.on, look.label));
         let p = ui.painter();
         if look.on {
@@ -96,6 +96,11 @@ impl Shell {
         let mut all_shown = None;
         let mut places: Vec<(String, Rect)> = Vec::new();
         let mut toggle_open = false;
+        let mut tree_hover = None;
+        let mut menu = None;
+        let mut moved = None;
+        let mut end_to = None;
+        let (mut rename_to, mut stop_rename, mut typed_name) = (None, false, None);
         ui.scope_builder(egui::UiBuilder::new().max_rect(tree), |ui| {
             egui::ScrollArea::vertical()
                 .id_salt("tree")
@@ -175,22 +180,97 @@ impl Shell {
                         }
                     }
 
+                    let end_row = self.end_at.and_then(|e| rows.iter().position(|r| r.id == e));
+                    let mut tops: Vec<f32> = Vec::with_capacity(rows.len());
+                    let end_mark = |ui: &mut Ui, places: &mut Vec<(String, Rect)>| {
+                        let (r, resp) = ui.allocate_exact_size(vec2(w, 28.0), Sense::click_and_drag());
+                        resp.widget_info(|| {
+                            egui::WidgetInfo::labeled(egui::Role::Button, true, "End of part")
+                        });
+                        let resp = resp.on_hover_cursor(egui::CursorIcon::Grab);
+                        let p = ui.painter();
+                        let ink = if resp.hovered() || resp.dragged() {
+                            t.focus
+                        } else {
+                            t.line
+                        };
+                        let mut x = r.left() + 8.0;
+                        while x < r.right() - 8.0 {
+                            p.hline(x..=x + 3.0, r.top() + 3.0, Stroke::new(1.0, ink));
+                            x += 6.0;
+                        }
+                        icons::draw(p, pos2(r.left() + 8.0, r.top() + 9.0), 16.0, "end", 1.5, t.ink2);
+                        p.text(
+                            pos2(r.left() + 31.0, r.top() + 17.0),
+                            Align2::LEFT_CENTER,
+                            "End of part",
+                            sans(12.0),
+                            t.ink2,
+                        );
+                        places.push(("tree:End of part".into(), r));
+                        resp
+                    };
+                    let mut end_resp = None;
+                    let mut row_drag: Option<(usize, egui::Response)> = None;
                     for (k, row) in rows.iter().enumerate() {
                         let why = (Some(k) == failed_at)
                             .then(|| failed.as_ref().map(|f| f.1.as_str()))
                             .flatten();
+                        tops.push(ui.cursor().top());
+                        let editing = self
+                            .renaming
+                            .as_ref()
+                            .filter(|n| n.0 == row.id)
+                            .map(|n| n.1.clone());
                         let (r, resp) = self.tree_row(
                             ui,
                             w,
                             RowLook {
-                                label: &row.title,
+                                label: if editing.is_some() { "" } else { &row.title },
                                 icon: row.icon,
                                 tint: None,
                                 on: self.selected == Some(row.id),
-                                dim: failed_at.is_some_and(|f| k > f),
+                                dim: row.suppressed
+                                    || failed_at.is_some_and(|f| k > f)
+                                    || end_row.is_some_and(|e| k > e),
                                 depth: 0.5,
                             },
                         );
+                        if row.suppressed {
+                            let y = r.center().y;
+                            let g = ui
+                                .fonts_mut(|f| f.layout_no_wrap(row.title.clone(), sans(13.0), t.ink2))
+                                .size()
+                                .x;
+                            ui.painter().hline(
+                                r.left() + 40.0..=r.left() + 40.0 + g,
+                                y,
+                                Stroke::new(1.0, t.ink2),
+                            );
+                        }
+                        if let Some(mut text) = editing {
+                            let field = Rect::from_min_size(
+                                pos2(r.left() + 38.0, r.top() + 2.0),
+                                vec2(w - 48.0, ROW_H - 4.0),
+                            );
+                            let f = ui.put(
+                                field,
+                                egui::TextEdit::singleline(&mut text)
+                                    .font(sans(13.0))
+                                    .margin(vec2(4.0, 3.0))
+                                    .desired_width(field.width() - 8.0),
+                            );
+                            if !f.has_focus() && !f.lost_focus() {
+                                f.request_focus();
+                            }
+                            if f.lost_focus() {
+                                if ui.input(|i| i.key_pressed(egui::Key::Enter)) {
+                                    rename_to = Some((row.id, text.clone()));
+                                }
+                                stop_rename = true;
+                            }
+                            typed_name = Some(text);
+                        }
                         if why.is_some() {
                             icons::draw(
                                 ui.painter(),
@@ -206,33 +286,83 @@ impl Shell {
                             None => row.line.clone(),
                         };
                         let resp = resp.on_hover_text(tip);
-                        if resp.double_clicked() {
+                        if resp.hovered() {
+                            tree_hover = Some(row.id);
+                        }
+                        if resp.double_clicked() && !row.suppressed {
                             opened = Some(row.id);
                         } else if resp.clicked() {
                             chosen = Some(Some(row.id));
                         }
+                        if resp.secondary_clicked() {
+                            menu = resp.interact_pointer_pos().map(|p| (row.id, p));
+                        }
+                        if resp.dragged() || resp.drag_stopped() {
+                            row_drag = Some((k, resp.clone()));
+                        }
                         places.push((format!("tree:{}", row.name), r));
+                        if end_row == Some(k) {
+                            end_resp = Some(end_mark(ui, &mut places));
+                        }
                     }
-
-                    let (r, _) = ui.allocate_exact_size(vec2(w, 28.0), Sense::hover());
-                    let p = ui.painter();
-                    let mut x = r.left() + 8.0;
-                    while x < r.right() - 8.0 {
-                        p.hline(x..=x + 3.0, r.top() + 3.0, Stroke::new(1.0, t.line));
-                        x += 6.0;
+                    tops.push(ui.cursor().top());
+                    if end_row.is_none() {
+                        end_resp = Some(end_mark(ui, &mut places));
                     }
-                    icons::draw(p, pos2(r.left() + 8.0, r.top() + 9.0), 16.0, "end", 1.5, t.ink2);
-                    p.text(
-                        pos2(r.left() + 31.0, r.top() + 17.0),
-                        Align2::LEFT_CENTER,
-                        "End of part",
-                        sans(12.0),
-                        t.ink2,
-                    );
+                    // where a drag would drop: the gap between rows nearest the pointer
+                    let gap_at = |y: f32| {
+                        tops.iter()
+                            .enumerate()
+                            .min_by(|a, b| (a.1 - y).abs().total_cmp(&(b.1 - y).abs()))
+                            .map_or(0, |g| g.0)
+                    };
+                    let pointer = ui.input(|i| i.pointer.interact_pos()).map(|p| p.y);
+                    if let (Some((k, resp)), Some(y)) = (&row_drag, pointer) {
+                        let gap = gap_at(y);
+                        ui.painter()
+                            .hline(tree.x_range(), tops[gap], Stroke::new(2.0, t.focus));
+                        if resp.drag_stopped() && gap != *k && gap != *k + 1 {
+                            moved = Some((rows[*k].id, rows.get(gap).map(|r| r.id)));
+                        }
+                    }
+                    if let (Some(resp), Some(y)) = (&end_resp, pointer)
+                        && (resp.dragged() || resp.drag_stopped())
+                    {
+                        let gap = gap_at(y);
+                        ui.painter()
+                            .hline(tree.x_range(), tops[gap], Stroke::new(2.0, t.focus));
+                        if resp.drag_stopped() {
+                            // at least the first feature stays
+                            end_to = Some(if gap >= rows.len() {
+                                None
+                            } else {
+                                rows.get(gap.max(1) - 1).map(|r| r.id)
+                            });
+                        }
+                    }
                 });
         });
         self.rows = rows;
         self.places.extend(places);
+        self.tree_hover = tree_hover;
+        if let Some(m) = menu {
+            self.row_menu = Some(m);
+        }
+        if let Some((id, before)) = moved {
+            self.out.push(super::Action::Reorder(id, before));
+        }
+        if let Some(to) = end_to {
+            self.out.push(super::Action::EndAt(to));
+        }
+        if let (Some(text), Some(r)) = (typed_name, &mut self.renaming) {
+            r.1 = text;
+        }
+        if stop_rename {
+            self.renaming = None;
+        }
+        if rename_to.is_some() {
+            self.renamed = rename_to;
+        }
         if toggle_open {
             self.origin_open = !self.origin_open;
         }

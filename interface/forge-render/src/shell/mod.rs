@@ -62,6 +62,16 @@ pub enum Action {
     Close,
     DragWindow,
     ResizeWindow(Edge),
+    /// What the tree and the marking menu ask of a feature.
+    Edit(ItemId),
+    Delete(ItemId),
+    Suppress(ItemId),
+    Unsuppress(ItemId),
+    /// Move it up to before this one, or to the end.
+    Reorder(ItemId, Option<ItemId>),
+    /// The end-of-part marker after this feature, or at the end.
+    EndAt(Option<ItemId>),
+    StartRename(ItemId),
     /// A dragged number's new value; the drag ending there; the drag or edit called off.
     DimDrag(f64),
     DimCommit(f64),
@@ -79,6 +89,8 @@ pub struct Row {
     pub title: String,
     /// Its line in the part file, label and all.
     pub line: String,
+    /// Out of the build, kept as a comment.
+    pub suppressed: bool,
 }
 
 /// What the view shows, for the buttons that reflect it.
@@ -133,6 +145,17 @@ pub struct Shell {
     pub origin_hover: Option<crate::origin::Item>,
     origin_tree_hover: Option<crate::origin::Item>,
     pub origin_selected: Option<crate::origin::Item>,
+    /// The feature whose faces the pointer's over in the tree.
+    pub tree_hover: Option<ItemId>,
+    /// The end-of-part marker: after this feature, or at the end.
+    pub end_at: Option<ItemId>,
+    /// A row's name being typed; a name typed, for the tool.
+    renaming: Option<(ItemId, String)>,
+    pub renamed: Option<(ItemId, String)>,
+    /// The tree's right-click menu: for this row, at this point.
+    pub row_menu: Option<(ItemId, egui::Pos2)>,
+    /// The marking menu's up, centred here.
+    pub marking: Option<egui::Pos2>,
     /// The feature whose dialog is up.
     pub dialog: Option<ItemId>,
     /// The selected feature's number, on the model.
@@ -165,6 +188,12 @@ impl Default for Shell {
             view_tex: None,
             cube_labels: Vec::new(),
             camera: None,
+            tree_hover: None,
+            end_at: None,
+            renaming: None,
+            renamed: None,
+            row_menu: None,
+            marking: None,
             origin_open: false,
             origin_shown: [false; 7],
             origin_hover: None,
@@ -189,22 +218,37 @@ impl Shell {
             .items
             .iter()
             .filter_map(|it| {
-                let kind = match &it.body {
-                    Body::Feature { kind, .. } => kind.clone(),
-                    Body::Sketch { .. } => "sketch".to_string(),
+                let note = it.note.as_deref();
+                let (kind, text, suppressed) = match &it.body {
+                    Body::Feature { kind, .. } => {
+                        (kind.clone(), doc.text_of(it.id).unwrap_or_default(), false)
+                    }
+                    Body::Sketch { .. } => (
+                        "sketch".to_string(),
+                        doc.text_of(it.id).unwrap_or_default(),
+                        false,
+                    ),
+                    Body::Blank => {
+                        let (_, line) = note.and_then(forge_agent::tools::suppressed)?;
+                        let words = forge_doc::text::tokens(line);
+                        let at = usize::from(words.first().is_some_and(|w| w.ends_with(':')));
+                        (words.get(at)?.clone(), line.to_string(), true)
+                    }
                     _ => return None,
                 };
                 let word = panel::kind_word(&kind);
                 let count = counts.entry(word.clone()).or_default();
                 *count += 1;
-                let text = doc.text_of(it.id).unwrap_or_default();
+                let title = forge_agent::tools::display_name(note)
+                    .map_or_else(|| format!("{word}{count}"), str::to_string);
                 Some(Row {
                     id: it.id,
-                    title: format!("{word}{count}"),
+                    title,
                     line: text.lines().next().unwrap_or("").to_string(),
                     name: doc.name(it.id).unwrap_or_else(|| kind.clone()),
                     icon: panel::icon(&kind),
                     kind,
+                    suppressed,
                 })
             })
             .collect();
@@ -229,7 +273,35 @@ impl Shell {
 
     /// A menu's up: a press anywhere else only closes it.
     pub fn menu_open(&self) -> bool {
-        self.file_menu || self.cube_menu.is_some()
+        self.file_menu || self.cube_menu.is_some() || self.row_menu.is_some() || self.marking.is_some()
+    }
+
+    /// The marking menu's eight places, clockwise from the top. What's about the selection is there
+    /// only when there's one.
+    pub fn marking_items(&self) -> [(&'static str, Option<Action>); 8] {
+        let f = self
+            .selected
+            .filter(|s| self.rows.iter().any(|r| r.id == *s && !r.suppressed));
+        [
+            ("Undo", Some(Action::Undo)),
+            ("Edit Feature", f.map(Action::Edit)),
+            ("Fit All", Some(Action::FitAll)),
+            ("Suppress", f.map(Action::Suppress)),
+            ("Redo", Some(Action::Redo)),
+            ("Delete", f.map(Action::Delete)),
+            ("Home", Some(Action::Home)),
+            ("Rename", f.map(Action::StartRename)),
+        ]
+    }
+
+    /// A flick of the right button from `from` to `to`: which of the eight, if it went far enough.
+    pub fn marking_flick(from: (f32, f32), to: (f32, f32), scale: f32) -> Option<usize> {
+        let (dx, dy) = (to.0 - from.0, to.1 - from.1);
+        if (dx * dx + dy * dy).sqrt() < 30.0 * scale {
+            return None;
+        }
+        let a = dx.atan2(-dy).rem_euclid(core::f32::consts::TAU);
+        Some(((a / core::f32::consts::FRAC_PI_4).round() as usize) % 8)
     }
 
     /// The whole window.
@@ -724,6 +796,33 @@ impl Shell {
 
     fn menus(&mut self, ctx: &egui::Context) {
         let t = self.theme;
+        self.tree_keys(ctx);
+        if let Some((id, at)) = self.row_menu {
+            let off = self.rows.iter().any(|r| r.id == id && r.suppressed);
+            let items = [
+                ("Edit Feature", (!off).then_some(Action::Edit(id))),
+                ("Rename", (!off).then_some(Action::StartRename(id))),
+                (
+                    if off { "Unsuppress" } else { "Suppress" },
+                    Some(if off {
+                        Action::Unsuppress(id)
+                    } else {
+                        Action::Suppress(id)
+                    }),
+                ),
+                ("Move End of Part Here", (!off).then_some(Action::EndAt(Some(id)))),
+                ("Delete", (!off).then_some(Action::Delete(id))),
+            ];
+            match menu_at(ctx, "row-menu", at, &t, &items) {
+                MenuResult::Chose(a) => {
+                    self.out.push(a);
+                    self.row_menu = None;
+                }
+                MenuResult::Close => self.row_menu = None,
+                MenuResult::Open => {}
+            }
+        }
+        self.marking_menu(ctx);
         if self.file_menu {
             let at = pos2(8.0, TITLE_H + TABS_H);
             let items = [("New", Some(Action::New)), ("Open...", Some(Action::Open))];
@@ -766,6 +865,89 @@ impl Shell {
                 MenuResult::Close => self.cube_menu = None,
                 MenuResult::Open => {}
             }
+        }
+    }
+}
+
+impl Shell {
+    /// Keys for what's chosen in the tree, when no field has the keyboard.
+    fn tree_keys(&mut self, ctx: &egui::Context) {
+        if ctx.egui_wants_keyboard_input() {
+            return;
+        }
+        let Some(id) = self.selected else { return };
+        if ctx.input(|i| i.key_pressed(egui::Key::F2)) {
+            self.out.push(Action::StartRename(id));
+        }
+        if ctx.input(|i| i.key_pressed(egui::Key::Delete)) {
+            self.out.push(Action::Delete(id));
+        }
+    }
+
+    pub fn start_rename(&mut self, id: ItemId) {
+        let title = self.rows.iter().find(|r| r.id == id).map(|r| r.title.clone());
+        if let Some(t) = title {
+            self.renaming = Some((id, t));
+        }
+    }
+
+    fn marking_menu(&mut self, ctx: &egui::Context) {
+        let Some(c) = self.marking else { return };
+        let t = self.theme;
+        let items = self.marking_items();
+        let mut chose = None;
+        let inner = egui::Area::new(egui::Id::unique("marking"))
+            .fixed_pos(c - vec2(190.0, 110.0))
+            .order(egui::Order::Foreground)
+            .constrain(true)
+            .show(ctx, |ui| {
+                let (whole, _) = ui.allocate_exact_size(vec2(380.0, 220.0), Sense::hover());
+                let mid = whole.center();
+                ui.painter().circle_stroke(mid, 6.0, Stroke::new(1.5, t.ink2));
+                for (k, (label, action)) in items.iter().enumerate() {
+                    let a = k as f32 * core::f32::consts::FRAC_PI_4;
+                    let at = mid + vec2(a.sin() * 130.0, -a.cos() * 80.0);
+                    let r = Rect::from_center_size(at, vec2(112.0, 26.0));
+                    let sense = if action.is_some() {
+                        Sense::click()
+                    } else {
+                        Sense::hover()
+                    };
+                    let resp = ui.interact(r, ui.scope_id().with(k), sense);
+                    resp.widget_info(|| {
+                        egui::WidgetInfo::labeled(egui::Role::Button, action.is_some(), *label)
+                    });
+                    let on = resp.hovered() && action.is_some();
+                    ui.painter()
+                        .rect_filled(r, 4.0, if on { t.on } else { t.surface });
+                    ui.painter()
+                        .rect_stroke(r, 4.0, Stroke::new(1.0, t.line), StrokeKind::Inside);
+                    let ink = if action.is_none() {
+                        t.ink2.gamma_multiply(0.55)
+                    } else if on {
+                        t.on_ink
+                    } else {
+                        t.ink
+                    };
+                    ui.painter()
+                        .text(at, Align2::CENTER_CENTER, *label, sans(12.0), ink);
+                    self.places.push((format!("mark:{label}"), r));
+                    if resp.clicked() {
+                        chose = *action;
+                    }
+                }
+            });
+        let press_off = ctx.input(|i| {
+            i.pointer.any_pressed()
+                && i.pointer
+                    .interact_pos()
+                    .is_some_and(|p| !inner.response.rect.contains(p))
+        });
+        if let Some(a) = chose {
+            self.out.push(a);
+            self.marking = None;
+        } else if press_off || ctx.input(|i| i.key_pressed(egui::Key::Escape)) {
+            self.marking = None;
         }
     }
 }

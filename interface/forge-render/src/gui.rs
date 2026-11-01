@@ -92,6 +92,7 @@ pub struct Gui {
     pixels_per_point: f32,
     /// The window, in device pixels.
     target_px: (u32, u32),
+    tree_hover_was: Option<forge_doc::ItemId>,
     /// The GPU refused something: said once, and no more views are drawn.
     gpu_failed: Arc<std::sync::Mutex<Option<String>>>,
 }
@@ -155,6 +156,7 @@ impl Gui {
             calls: Vec::new(),
             pixels_per_point: 1.0,
             target_px: (1, 1),
+            tree_hover_was: None,
             gpu_failed,
         }
     }
@@ -442,6 +444,14 @@ impl Gui {
             if v.nav.home_if_asked(&v.scene) {
                 v.dirty = true;
             }
+            if let Some((from, to)) = v.nav.marked.take() {
+                // a flick chooses from the marking menu without showing it; a click shows it
+                let items = self.shell.marking_items();
+                match Shell::marking_flick(from, to, p) {
+                    Some(k) => self.shell.out.extend(items[k].1),
+                    None => self.shell.marking = Some(egui::pos2(origin.x + to.0 / p, origin.y + to.1 / p)),
+                }
+            }
             if let Some(at) = v.nav.cube_menu.take() {
                 self.shell.cube_menu = Some(egui::pos2(origin.x + at.0 / p, origin.y + at.1 / p));
             }
@@ -468,6 +478,11 @@ impl Gui {
             _ => v.nav.key(code, &v.scene),
         };
         self.shell.view.section = v.nav.section.is_some();
+        if code == K::Escape {
+            self.shell.selected = None;
+            self.shell.origin_selected = None;
+            self.shell.marking = None;
+        }
         v.dirty |= changed;
         changed
     }
@@ -517,6 +532,21 @@ impl Gui {
                 | Action::Tool(_) => {
                     self.apply_view(a);
                 }
+                Action::Edit(id) => {
+                    self.shell.selected = Some(id);
+                    self.shell.dialog = Some(id);
+                }
+                Action::StartRename(id) => self.shell.start_rename(id),
+                Action::Delete(item) => self.tool(Call::Delete { item }),
+                Action::Suppress(item) => self.tool(Call::Suppress { item }),
+                Action::Unsuppress(item) => self.tool(Call::Unsuppress { item }),
+                Action::Reorder(item, before) => self.tool(Call::Move { item, before }),
+                Action::EndAt(to) => {
+                    self.shell.end_at = to;
+                    if let Some(v) = &mut self.view {
+                        v.live.roll(to);
+                    }
+                }
                 Action::DimDrag(value) => self.dim_drag(value),
                 Action::DimCommit(value) => self.dim_commit(value),
                 Action::DimCancel => self.dim_cancel(),
@@ -526,7 +556,18 @@ impl Gui {
         if let Some(text) = self.shell.dim_typed.take() {
             self.dim_type(text);
         }
+        if let Some((item, name)) = self.shell.renamed.take() {
+            self.tool(Call::Rename { item, name });
+        }
         host
+    }
+
+    /// A tool call for the worker, kept for replay.
+    fn tool(&mut self, call: Call) {
+        if let Some(v) = &mut self.view {
+            self.calls.push(call.clone());
+            v.live.call(vec![call]);
+        }
     }
 
     fn dim_drag(&mut self, value: f64) {
@@ -651,6 +692,12 @@ impl Gui {
         let host = self.apply();
         times.ui = now_ms() - t0;
 
+        if self.shell.tree_hover != self.tree_hover_was {
+            self.tree_hover_was = self.shell.tree_hover;
+            if let Some(v) = &mut self.view {
+                v.dirty = true;
+            }
+        }
         let drawn = self.shell.origin_drawn();
         if let Some(v) = &mut self.view
             && v.origin_was != drawn
@@ -711,6 +758,16 @@ impl Gui {
                     entity: Entity::Face(f),
                     selected: true,
                 }));
+                let over = self.shell.tree_hover.filter(|h| Some(*h) != self.shell.selected);
+                m.extend(
+                    over.map_or(Vec::new(), |id| v.facts.faces_of(id))
+                        .into_iter()
+                        .map(|f| Mark {
+                            placement: 0,
+                            entity: Entity::Face(f),
+                            selected: false,
+                        }),
+                );
                 m
             };
             let overlay = Overlay {
@@ -939,6 +996,36 @@ impl Headless {
                 ElementState::Released
             },
             button: MouseButton::Left,
+        });
+    }
+
+    /// A right click, or the right button pressed here and let go there.
+    pub fn right_drag(&mut self, from: (f32, f32), to: (f32, f32)) {
+        self.move_to(from.0, from.1);
+        self.step();
+        self.other_button(true);
+        self.step();
+        self.move_to(to.0, to.1);
+        self.step();
+        self.other_button(false);
+        self.step();
+    }
+
+    fn other_button(&mut self, down: bool) {
+        self.pending.push(egui::Event::PointerButton {
+            pos: self.pointer,
+            button: egui::PointerButton::Secondary,
+            pressed: down,
+            modifiers: Default::default(),
+        });
+        self.gui.view_event(&WindowEvent::MouseInput {
+            device_id: winit::event::DeviceId::dummy(),
+            state: if down {
+                ElementState::Pressed
+            } else {
+                ElementState::Released
+            },
+            button: MouseButton::Right,
         });
     }
 

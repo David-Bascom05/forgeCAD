@@ -648,6 +648,22 @@ impl Document {
         refs.find(|r| r.3 == id && r.0 != id).map(|r| r.0)
     }
 
+    /// Every item that names this one, by a reference or in a selector.
+    pub fn users(&self, id: ItemId) -> Vec<ItemId> {
+        let mut out: Vec<ItemId> = self
+            .items
+            .iter()
+            .filter(|it| it.id != id && it.args().iter().any(|a| a.to == Some(id)))
+            .map(|it| it.id)
+            .collect();
+        for r in self.selector_refs() {
+            if r.3 == id && r.0 != id && !out.contains(&r.0) {
+                out.push(r.0);
+            }
+        }
+        out
+    }
+
     /// Selectors that named a feature by its place name it by its new place.
     fn rename_selectors(&mut self, was: Vec<(ItemId, usize, String, ItemId)>) {
         for (item, k, word, to) in was {

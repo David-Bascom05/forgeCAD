@@ -544,3 +544,168 @@ fn selecting_shows_no_dialog_a_double_click_does_and_cancel_closes_it() {
     h.step();
     assert_eq!(h.gui.shell.dialog, None);
 }
+
+fn step_some(h: &mut Headless) {
+    for _ in 0..3 {
+        h.step();
+    }
+}
+
+#[test]
+fn tree_operations_are_tool_calls_that_replay_on_a_fresh_part() {
+    let dir = std::env::temp_dir().join(format!("fc-tree-{}", std::process::id()));
+    std::fs::create_dir_all(&dir).unwrap();
+    let file = dir.join("p.fc");
+    std::fs::write(
+        &file,
+        "base: extrude 20 rect 0 0 40 40\nh1: hole 5 -xy at 10 10 20 thru\nh2: hole 5 -xy at 30 30 20 thru\n",
+    )
+    .unwrap();
+    let Ok(mut h) = Headless::new((1200.0, 800.0), 1.0) else {
+        return;
+    };
+    h.step();
+    h.gui.open(file.to_str().unwrap());
+    h.settle();
+    step_some(&mut h);
+    let rows: Vec<String> = h.gui.shell.rows.iter().map(|r| r.title.clone()).collect();
+    assert_eq!(rows, ["Extrude1", "Hole1", "Hole2"]);
+
+    // the right-click menu suppresses
+    let c = h.gui.shell.place("tree:h1").unwrap().center();
+    h.right_drag((c.x, c.y), (c.x, c.y));
+    step_some(&mut h);
+    assert!(h.gui.shell.row_menu.is_some());
+    let id = title_of(&h, "h1").id;
+    h.gui.shell.row_menu = None;
+    h.gui.shell.out.push(forge_render::shell::Action::Suppress(id));
+    assert!(h.until(|g| g.shell.rows.iter().any(|r| r.suppressed)));
+    let off = h.gui.shell.rows.iter().find(|r| r.suppressed).unwrap().clone();
+    assert_eq!(off.title, "Hole1", "it keeps its place in the tree");
+    // and back
+    h.gui
+        .shell
+        .out
+        .push(forge_render::shell::Action::Unsuppress(off.id));
+    assert!(h.until(|g| g.shell.rows.iter().all(|r| !r.suppressed)));
+
+    // rename by F2 and typing
+    let c = h.gui.shell.place("tree:h2").unwrap().center();
+    h.move_to(c.x, c.y);
+    h.step();
+    h.button(true);
+    h.step();
+    h.button(false);
+    step_some(&mut h);
+    h.key(egui::Key::F2);
+    step_some(&mut h);
+    h.text("X");
+    step_some(&mut h);
+    h.key(egui::Key::Enter);
+    assert!(
+        h.until(|g| g.shell.rows.iter().any(|r| r.title.contains('X'))),
+        "{:?}",
+        h.gui.calls
+    );
+    let renamed = h
+        .gui
+        .shell
+        .rows
+        .iter()
+        .find(|r| r.title.contains('X'))
+        .unwrap()
+        .clone();
+    assert!(renamed.title.len() > 1);
+
+    // drag a row: h2 above h1
+    let (from, to) = (
+        h.gui.shell.place("tree:h2").unwrap(),
+        h.gui.shell.place("tree:h1").unwrap(),
+    );
+    h.move_to(from.center().x, from.center().y);
+    h.step();
+    h.button(true);
+    h.step();
+    h.move_to(to.center().x, to.top() + 1.0);
+    step_some(&mut h);
+    h.button(false);
+    assert!(h.until(|g| g.shell.rows[1].name == "h2"), "{:?}", h.gui.calls);
+
+    // delete
+    let c = h.gui.shell.place("tree:h1").unwrap().center();
+    h.move_to(c.x, c.y);
+    h.step();
+    h.button(true);
+    h.step();
+    h.button(false);
+    step_some(&mut h);
+    h.key(egui::Key::Delete);
+    assert!(h.until(|g| g.shell.rows.len() == 2));
+
+    // all of it, the same on a fresh part
+    let on_disk = std::fs::read_to_string(&file).unwrap();
+    let mut p = Part::new(
+        "base: extrude 20 rect 0 0 40 40\nh1: hole 5 -xy at 10 10 20 thru\nh2: hole 5 -xy at 30 30 20 thru\n",
+    );
+    for c in h.gui.calls.clone() {
+        let d = p.call(vec![c.clone()], None);
+        assert!(d.ok, "{c:?}: {}", d.text);
+    }
+    assert_eq!(p.model.src(), on_disk);
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn the_end_of_part_marker_rolls_the_part_back_and_rows_below_it_dim() {
+    let Some(mut h) = app() else { return };
+    assert!(h.until(|g| !g.view.as_ref().unwrap().facts.face_item.is_empty()));
+    let full = h.gui.view.as_ref().unwrap().facts.face_item.len();
+    let m = h.gui.shell.place("tree:End of part").unwrap().center();
+    let to = h.gui.shell.place("tree:boss").unwrap();
+    h.move_to(m.x, m.y);
+    h.step();
+    h.button(true);
+    h.step();
+    h.move_to(to.center().x, to.top() + 1.0);
+    step_some(&mut h);
+    h.button(false);
+    let corner = title_of(&h, "corner").id;
+    assert!(
+        h.until(|g| g.shell.end_at == Some(corner)),
+        "{:?}",
+        h.gui.shell.end_at
+    );
+    assert!(
+        h.until(|g| {
+            let n = g.view.as_ref().unwrap().facts.face_item.len();
+            n > 0 && n < full
+        }),
+        "the part as of that feature"
+    );
+    // and forward again
+    h.gui.shell.out.push(forge_render::shell::Action::EndAt(None));
+    assert!(h.until(|g| g.view.as_ref().unwrap().facts.face_item.len() == full));
+}
+
+#[test]
+fn the_right_button_in_the_view_is_the_marking_menu() {
+    let Some(mut h) = app() else { return };
+    assert!(h.until(|g| !g.view.as_ref().unwrap().facts.face_item.is_empty()));
+    let v = h.gui.shell.view_rect;
+    let c = (v.left() + 60.0, v.bottom() - 120.0);
+    // a click brings it up, Esc takes it away, and nothing panned
+    let cam = h.gui.view.as_ref().unwrap().nav.camera;
+    h.right_drag(c, c);
+    step_some(&mut h);
+    assert!(h.gui.shell.marking.is_some());
+    assert!(h.gui.shell.place("mark:Fit All").is_some());
+    h.key(egui::Key::Escape);
+    step_some(&mut h);
+    assert!(h.gui.shell.marking.is_none());
+    assert_eq!(h.gui.view.as_ref().unwrap().nav.camera, cam);
+    // a flick straight up chooses the top place without showing it: Undo
+    h.right_drag(c, (c.0, c.1 - 80.0));
+    step_some(&mut h);
+    assert!(h.gui.shell.marking.is_none());
+    assert_eq!(h.gui.calls, vec![Call::Undo]);
+}

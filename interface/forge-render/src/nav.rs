@@ -1,5 +1,6 @@
-//! Navigation from real window events: left drag orbits about the point under the cursor, middle or
-//! right drag pans it with the cursor, the wheel zooms at it; shift + middle orbits too. The view
+//! Navigation from real window events: left drag orbits about the point under the cursor, middle
+//! drag pans it with the cursor, the wheel zooms at it; shift + middle orbits too. The right button
+//! is the marking menu's: a click brings it up, a flick chooses from it. The view
 //! cube's faces, edges and corners go to their views, smoothly, its ring spins about up. Nothing
 //! here touches the window or the GPU: what's under the cursor comes back through `on_pick`.
 
@@ -35,6 +36,8 @@ enum Drag {
     Zoom,
     Cube,
     Ring,
+    /// The right button: nothing moves; where it ends says what's meant.
+    Mark,
 }
 
 struct Transition {
@@ -70,6 +73,8 @@ pub struct Nav {
     pub home_view: Option<Camera>,
     /// It was right-clicked here: the host's menu goes up, once.
     pub cube_menu: Option<(f32, f32)>,
+    /// The right button in the view, from here to there: taken once by the host.
+    pub marked: Option<((f32, f32), (f32, f32))>,
     /// The section: which axis it's across (0 x, 1 y, 2 z), and where along it.
     pub section: Option<(usize, f32)>,
     /// How far apart the placements are heading, and are: both 0 to 1.
@@ -119,6 +124,7 @@ impl Nav {
             cube_hover: None,
             home_view: None,
             cube_menu: None,
+            marked: None,
             selected: Vec::new(),
             section: None,
             explode_to: 0.0,
@@ -194,7 +200,11 @@ impl Nav {
         self.hit = hit;
         self.hit_at = Some(px);
         // the answer for this drag's press, even if the drag has moved on since
-        if self.drag.is_some_and(|d| !matches!(d, Drag::Cube | Drag::Ring)) && px == self.press_at {
+        if self
+            .drag
+            .is_some_and(|d| !matches!(d, Drag::Cube | Drag::Ring | Drag::Mark))
+            && px == self.press_at
+        {
             self.pivot = hit.map(|h| h.point);
             self.pan_depth = hit.map(|h| h.depth);
         }
@@ -266,6 +276,7 @@ impl Nav {
                 NavTool::Pan => Drag::Pan,
                 NavTool::Zoom => Drag::Zoom,
             },
+            MouseButton::Right => Drag::Mark,
             MouseButton::Middle if shift => Drag::Orbit,
             _ => Drag::Pan,
         });
@@ -283,6 +294,11 @@ impl Nav {
 
     fn release(&mut self) -> bool {
         let drag = self.drag.take();
+        if drag == Some(Drag::Mark) {
+            self.marked = Some((self.press_at, self.cursor));
+            self.moved = false;
+            return false;
+        }
         if self.moved {
             self.want_pick = Some(self.cursor);
             return false;
@@ -363,6 +379,7 @@ impl Nav {
             self.moved = true;
         }
         match drag {
+            Drag::Mark => return false,
             Drag::Orbit => {
                 let pivot = self.pivot.unwrap_or(self.camera.target);
                 self.camera.orbit_about(pivot, dx, dy);

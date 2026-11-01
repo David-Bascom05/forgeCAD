@@ -728,8 +728,13 @@ impl Model {
 
     /// Which feature made each face of the finished part, by the body's face index.
     pub fn face_makers(&self) -> Vec<Option<usize>> {
-        let origin = self.origin(self.built());
-        let Some(b) = self.body() else {
+        self.face_makers_at(self.built())
+    }
+
+    /// The same of the part after `n` lines.
+    pub fn face_makers_at(&self, n: usize) -> Vec<Option<usize>> {
+        let origin = self.origin(n);
+        let Some(b) = self.body_after(n) else {
             return Vec::new();
         };
         let mut out = vec![None; b.faces.len()];
