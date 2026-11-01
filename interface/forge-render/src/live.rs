@@ -6,7 +6,7 @@ use crate::mesh::{PartMesh, VERTEX};
 use crate::tess;
 use forge_agent::facemesh;
 use forge_agent::live::{Live, Stage};
-use forge_agent::tools::{Part, Target};
+use forge_agent::tools::Part;
 use forge_mesh::Quality;
 use forge_topo::{Body, FaceId};
 use std::collections::HashMap;
@@ -168,50 +168,6 @@ pub fn start(part: Part) -> Live<Out> {
     })
 }
 
-/// A value on the part, how the mouse moves it, and how far it has got.
-pub struct Drag {
-    pub name: String,
-    pub at: Target,
-    pub start: f64,
-    pub value: f64,
-    /// Value per pixel.
-    pub per_px: f64,
-    pub dragging: bool,
-    /// The newest frame's numbers, for the HUD.
-    pub rebuild_ms: f64,
-    pub mesh_ms: f64,
-    pub upload_ms: f64,
-    pub failure: Option<String>,
-}
-
-impl Drag {
-    pub fn new(part: &Part, name: &str, radius: f32) -> Result<Drag, String> {
-        let dims = part.dims();
-        let Some(d) = dims.iter().find(|d| d.name == name) else {
-            let all: Vec<&str> = dims.iter().map(|d| d.name.as_str()).collect();
-            return Err(format!("no number '{name}' to drag; there are {}", all.join(" ")));
-        };
-        Ok(Drag {
-            name: name.to_string(),
-            at: d.at,
-            start: d.value,
-            value: d.value,
-            per_px: radius as f64 / 500.0,
-            dragging: false,
-            rebuild_ms: 0.0,
-            mesh_ms: 0.0,
-            upload_ms: 0.0,
-            failure: None,
-        })
-    }
-
-    /// The value at so many pixels from where the drag began, tidied to what a person would type.
-    pub fn at_pixels(&self, px: f64) -> f64 {
-        let v = self.start + px * self.per_px;
-        (v * 1000.0).round() / 1000.0
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -249,15 +205,5 @@ mod tests {
             .map(|(_, f)| f.segments.len() / crate::mesh::SEGMENT)
             .sum();
         assert_eq!(segs, 12);
-    }
-
-    #[test]
-    fn a_drag_starts_where_the_value_is_and_tidies_what_the_mouse_gives() {
-        let p = Part::new("w = 40\nextrude w rect 0 0 1 1\n");
-        let d = Drag::new(&p, "w", 100.0).unwrap();
-        assert_eq!(d.value, 40.0);
-        assert_eq!(d.at_pixels(5.0), 41.0);
-        assert_eq!(d.at_pixels(-1.0), 39.8);
-        assert!(Drag::new(&p, "q", 1.0).err().unwrap().contains("there are w"));
     }
 }

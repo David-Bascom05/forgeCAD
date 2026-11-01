@@ -2,6 +2,7 @@
 //! newest value asked for; a value overtaken before it started is dropped. The UI thread only
 //! swaps a value into a slot and collects what is ready, so it never waits on the kernel.
 
+use crate::handles::{Facts, facts};
 use crate::model::Model;
 use crate::tools::{Call, Done, Part};
 use forge_doc::Op;
@@ -49,6 +50,8 @@ pub enum Event<T> {
     Final(T),
     /// The document after a commit, and at the start: what a UI's tree and panels read.
     Doc(DocState),
+    /// Which feature made each face and each feature's number, once the part stands.
+    Facts(Box<Facts>),
 }
 
 /// What a UI needs of the part it can't ask the worker for: it parses `src` itself.
@@ -196,6 +199,12 @@ impl<T> Drop for Live<T> {
     }
 }
 
+/// A part the kernel can't say these of still stands, with nothing to point at.
+fn say_facts<T>(part: &mut Part, say: &impl Fn(Event<T>)) {
+    let f = catch_unwind(AssertUnwindSafe(|| facts(&mut part.model))).unwrap_or_default();
+    say(Event::Facts(Box::new(f)));
+}
+
 enum Next {
     Value(u64, Op),
     Job(Job),
@@ -227,6 +236,7 @@ fn run<T>(mut part: Part, mesher: &mut impl FnMut(&Body, Stage) -> T, shared: &S
             finish_ms: 0.0,
             mesh_ms: t.elapsed().as_secs_f64() * 1e3,
         }));
+        say_facts(&mut part, &say);
     }
     loop {
         let next = {
@@ -284,6 +294,7 @@ fn run<T>(mut part: Part, mesher: &mut impl FnMut(&Body, Stage) -> T, shared: &S
                 if let Some(b) = part.model.body() {
                     let out = mesher(b, Stage::Committed);
                     say(Event::Final(out));
+                    say_facts(&mut part, &say);
                 }
             }
             Next::Value(seq, op) => {
@@ -376,7 +387,11 @@ mod tests {
         };
         assert!(d.src.contains("base: extrude"));
         let id = forge_doc::Document::parse(&d.src).find("base").unwrap();
-        l.call(vec![Call::SetArg { item: id, arg: 0, text: "12".into() }]);
+        l.call(vec![Call::SetArg {
+            item: id,
+            arg: 0,
+            text: "12".into(),
+        }]);
         let got = wait(&mut l, |e| matches!(e, Event::Final(_)));
         assert!(got.iter().any(|e| matches!(e, Event::Done(d) if d.ok)));
         let doc = got.iter().find_map(|e| match e {
@@ -386,6 +401,21 @@ mod tests {
         assert!(doc.unwrap().src.contains("base: extrude 12"));
         assert!(std::sync::Arc::get_mut(&mut waker).is_none());
         assert!(waker.load(std::sync::atomic::Ordering::Relaxed) >= 2);
+    }
+
+    #[test]
+    fn a_commit_that_overtakes_every_value_still_commits() {
+        let (mut l, w) = start();
+        l.commit(w.op("50".into()));
+        let got = wait(&mut l, |e| matches!(e, Event::Final(_)));
+        assert!(got.iter().any(|e| matches!(e, Event::Done(d) if d.ok)));
+        assert_eq!(
+            got.iter().find_map(|e| match e {
+                Event::Final(v) => Some(*v),
+                _ => None,
+            }),
+            Some(50.0 * 30.0 * 10.0)
+        );
     }
 
     #[test]

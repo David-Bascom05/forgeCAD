@@ -1,6 +1,7 @@
 //! The view cube: a chamfered cube drawn from the live camera, whose 6 faces, 12 edges and 8 corners
-//! are the 26 regions it can go to, with a compass ring, home and roll. Geometry and hit testing
-//! read the same projection, so what you see is what a click finds. All in pixels; no GPU here.
+//! are the 26 regions it can go to, with a ring flat on the screen that rolls the view, arrows that
+//! step it by a quarter turn, home and roll. Geometry and hit testing read the same projection, so
+//! what you see is what a click finds. All in pixels; no GPU here.
 
 use crate::camera::{Camera, dot};
 
@@ -10,14 +11,12 @@ pub const WIDGET_PX: f32 = 160.0;
 const CHAMFER: f32 = 0.24;
 /// A mild perspective, so it reads as a solid: the eye's distance in cube half sides.
 const EYE: f32 = 9.0;
-/// Ring: under the cube, inner and outer radius, in cube half sides.
-const RING_Z: f32 = 1.25;
-const RING_IN: f32 = 1.42;
-const RING_OUT: f32 = 1.68;
-/// The ring tilts towards the eye at least this far, so it can still be grabbed from the side.
-const RING_TILT: f32 = 0.24;
-/// Pixels of widget half per cube half side.
-const SCALE: f32 = 0.47;
+/// The ring round the cube, flat on the screen, and where the arrows are: in shares of the half side.
+const RING_IN: f32 = 0.72;
+const RING_OUT: f32 = 0.77;
+const ARROW_AT: f32 = 0.84;
+/// Pixels of widget half per cube half side: its corners fit inside the ring.
+const SCALE: f32 = 0.42;
 /// Looking this straight at a face shows the roll arrows and the arrows to its neighbours.
 const SQUARE_ON: f32 = 0.9999;
 
@@ -29,6 +28,8 @@ pub enum Hit {
     Home,
     /// Clockwise on screen, or the other way.
     Roll(bool),
+    /// A quarter turn to see what's that way on screen: x and y, y up.
+    Step(i8, i8),
 }
 
 /// Where the widget is on the window, in pixels.
@@ -226,15 +227,6 @@ impl Eye {
         dot(to_eye, n) > 0.0
     }
 
-    /// The same eye, tilted so a flat ring under the cube stays open.
-    fn for_ring(&self, camera: &Camera) -> Eye {
-        let mut c = *camera;
-        let s = if c.pitch < 0.0 { -1.0 } else { 1.0 };
-        c.pitch = s * c.pitch.abs().max(RING_TILT);
-        let (f, r, u) = c.axes();
-        Eye { f, r, u, ..*self }
-    }
-
     fn square_on(&self) -> bool {
         self.f.iter().any(|v| v.abs() > SQUARE_ON)
     }
@@ -259,27 +251,22 @@ fn round(v: [f32; 3]) -> [i8; 3] {
     v.map(|c| c.round() as i8)
 }
 
-type Arrow = ([[f32; 2]; 3], [i8; 3]);
+type Arrow = ([[f32; 2]; 3], (i8, i8));
 
-/// The arrows round a square-on face, each going to the neighbouring face: its triangle and region.
-fn neighbours(eye: &Eye, place: &Place) -> Vec<Arrow> {
-    if !eye.square_on() {
-        return Vec::new();
-    }
-    let (reach, wide, tall) = (eye.k * 1.2, 6.0 * place.scale, 7.0 * place.scale);
-    [(1.0f32, 0.0f32), (-1.0, 0.0), (0.0, 1.0), (0.0, -1.0)]
-        .into_iter()
-        .map(|(x, y)| {
-            let c = |out: f32, side: f32| {
-                [
-                    eye.centre.0 + x * out + y * side,
-                    eye.centre.1 - y * out + x * side,
-                ]
-            };
-            let to = [0, 1, 2].map(|k| eye.r[k] * x + eye.u[k] * y);
-            ([c(reach + tall, 0.0), c(reach, wide), c(reach, -wide)], round(to))
-        })
-        .collect()
+/// The four arrows round the ring: their triangle, and which way each steps the view.
+fn arrows(eye: &Eye, place: &Place) -> [Arrow; 4] {
+    let half = place.side * 0.5;
+    let (reach, wide, tall) = (half * ARROW_AT, 7.0 * place.scale, 8.0 * place.scale);
+    [(1i8, 0i8), (-1, 0), (0, 1), (0, -1)].map(|(x, y)| {
+        let (fx, fy) = (x as f32, y as f32);
+        let c = |out: f32, side: f32| {
+            [
+                eye.centre.0 + fx * out + fy * side,
+                eye.centre.1 - fy * out + fx * side,
+            ]
+        };
+        ([c(reach + tall, 0.0), c(reach, wide), c(reach, -wide)], (x, y))
+    })
 }
 
 fn home_at(place: &Place) -> (f32, f32) {
@@ -319,10 +306,15 @@ pub fn hit(camera: &Camera, place: &Place, px: (f32, f32)) -> Option<Hit> {
                 return Some(Hit::Roll(clockwise));
             }
         }
-        for (tri, r) in neighbours(&eye, place) {
-            if inside(&tri, px) {
-                return Some(Hit::Region(r));
-            }
+    }
+    for (tri, (x, y)) in arrows(&eye, place) {
+        // a little more than the triangle, for the hand
+        let mid = [
+            (tri[0][0] + tri[1][0] + tri[2][0]) / 3.0,
+            (tri[0][1] + tri[1][1] + tri[2][1]) / 3.0,
+        ];
+        if near(px, (mid[0], mid[1]), reach) || inside(&tri, px) {
+            return Some(Hit::Step(x, y));
         }
     }
     for p in polys() {
@@ -333,27 +325,10 @@ pub fn hit(camera: &Camera, place: &Place, px: (f32, f32)) -> Option<Hit> {
             }
         }
     }
-    ring_hit(camera, &eye, px).then_some(Hit::Ring)
-}
-
-fn ring_hit(camera: &Camera, eye: &Eye, px: (f32, f32)) -> bool {
-    let tilted = eye.for_ring(camera);
-    let steps = 48;
-    let corner = |k: usize, r: f32| {
-        let a = k as f32 / steps as f32 * core::f32::consts::TAU;
-        tilted.px([a.cos() * r, a.sin() * r, -RING_Z])
-    };
-    (0..steps).any(|k| {
-        inside(
-            &[
-                corner(k, RING_IN),
-                corner(k + 1, RING_IN),
-                corner(k + 1, RING_OUT),
-                corner(k, RING_OUT),
-            ],
-            px,
-        )
-    })
+    let (dx, dy) = (px.0 - eye.centre.0, px.1 - eye.centre.1);
+    let r = (dx * dx + dy * dy).sqrt() / (place.side * 0.5);
+    // easier to catch than it is to see
+    (r > RING_IN - 0.03 && r < RING_OUT + 0.03).then_some(Hit::Ring)
 }
 
 struct Pen<'a> {
@@ -416,11 +391,10 @@ pub struct Label {
     pub hovered: bool,
 }
 
-/// How big face labels and compass letters are at most, and where they're too small to read (CSS px).
-const LABEL_PX: f32 = 11.0;
+/// How big face labels are at most, and where they're too small to read (CSS px).
+const LABEL_PX: f32 = 10.0;
 const LABEL_MIN: f32 = 6.0;
 const LABEL_FULL: f32 = 8.0;
-const COMPASS_PX: f32 = 10.0;
 /// A capital's width and height in ems, near enough to fit a word to its face.
 const EM_WIDE: f32 = 0.72;
 const EM_TALL: f32 = 0.72;
@@ -432,7 +406,6 @@ pub fn labels(camera: &Camera, place: &Place, hover: Option<Hit>) -> Vec<Label> 
     let eye = Eye::new(camera, place);
     let mut out = Vec::with_capacity(10);
     let reach = 1.0 - CHAMFER;
-    let pieces = polys();
     for (word, n, x, y) in LABELS {
         if !eye.sees(n, n) {
             continue;
@@ -462,33 +435,6 @@ pub fn labels(camera: &Camera, place: &Place, hover: Option<Hit>) -> Vec<Label> 
             hovered: hover == Some(Hit::Region(round(n))),
         });
     }
-    let tilted = eye.for_ring(camera);
-    let mid = (RING_IN + RING_OUT) * 0.5;
-    for (word, d) in [
-        ("N", [0.0, 1.0]),
-        ("E", [1.0, 0.0]),
-        ("S", [0.0, -1.0]),
-        ("W", [-1.0, 0.0]),
-    ] {
-        let at = tilted.px([d[0] * mid, d[1] * mid, -RING_Z]);
-        // what's behind the cube is hidden by it
-        let hidden = pieces.iter().any(|p| {
-            eye.sees(p.pts[0], p.normal) && {
-                let flat: Vec<[f32; 2]> = p.pts.iter().map(|&q| eye.px(q)).collect();
-                inside(&flat, (at[0], at[1]))
-            }
-        });
-        if !hidden {
-            out.push(Label {
-                text: word,
-                at,
-                angle: 0.0,
-                size: COMPASS_PX,
-                alpha: 1.0,
-                hovered: hover == Some(Hit::Ring),
-            });
-        }
-    }
     out
 }
 
@@ -497,34 +443,36 @@ pub fn draw(camera: &Camera, place: &Place, hover: Option<Hit>, pal: &Palette, o
     let eye = Eye::new(camera, place);
     let mut pen = Pen { out };
     let line = place.scale;
-    let tilted = eye.for_ring(camera);
+    let near_it = hover.is_some();
 
-    // the ring's half behind the cube first, its half in front last
+    // the ring: flat on the screen, faint until the pointer's on the widget
     let ring_on = hover == Some(Hit::Ring);
     let ring_colour = if ring_on { pal.hover_ink } else { pal.line };
-    let alpha = if ring_on { 0.75 } else { 0.32 };
-    let steps = 72;
-    let corner = |k: usize, r: f32| {
+    let alpha = if ring_on {
+        0.8
+    } else if near_it {
+        0.35
+    } else {
+        0.18
+    };
+    let half = place.side * 0.5;
+    let steps = 96;
+    let at = |k: usize, r: f32| {
         let a = k as f32 / steps as f32 * core::f32::consts::TAU;
-        [a.cos() * r, a.sin() * r, -RING_Z]
+        [
+            eye.centre.0 + a.cos() * r * half,
+            eye.centre.1 + a.sin() * r * half,
+        ]
     };
-    let ring = |pen: &mut Pen, behind: bool| {
-        for k in 0..steps {
-            let (a, b) = (corner(k, RING_IN), corner(k + 1, RING_OUT));
-            let mid = [(a[0] + b[0]) * 0.5, (a[1] + b[1]) * 0.5, 0.0];
-            if (dot(mid, tilted.f) > 0.0) != behind {
-                continue;
-            }
-            let quad = [
-                tilted.px(a),
-                tilted.px(corner(k + 1, RING_IN)),
-                tilted.px(b),
-                tilted.px(corner(k, RING_OUT)),
-            ];
-            pen.fill(&quad, [ring_colour[0], ring_colour[1], ring_colour[2], alpha]);
-        }
-    };
-    ring(&mut pen, true);
+    for k in 0..steps {
+        let quad = [
+            at(k, RING_IN),
+            at(k + 1, RING_IN),
+            at(k + 1, RING_OUT),
+            at(k, RING_OUT),
+        ];
+        pen.fill(&quad, [ring_colour[0], ring_colour[1], ring_colour[2], alpha]);
+    }
 
     for p in polys() {
         if !eye.sees(p.pts[0], p.normal) {
@@ -543,8 +491,6 @@ pub fn draw(camera: &Camera, place: &Place, hover: Option<Hit>, pal: &Palette, o
         let edge = if on { pal.hover_ink } else { pal.line };
         pen.polyline(&outline, line, [edge[0], edge[1], edge[2], 0.7]);
     }
-
-    ring(&mut pen, false);
 
     let stroke = |on: bool| {
         let c = if on { pal.hover_ink } else { pal.line };
@@ -590,10 +536,13 @@ pub fn draw(camera: &Camera, place: &Place, hover: Option<Hit>, pal: &Palette, o
                 c,
             );
         }
-        for (tri, to) in neighbours(&eye, place) {
-            let on = hover == Some(Hit::Region(to));
+    }
+    // the steps show only when the pointer's on the widget, and stay quiet till one's meant
+    if near_it {
+        for (tri, (x, y)) in arrows(&eye, place) {
+            let on = hover == Some(Hit::Step(x, y));
             let c = if on { pal.focus } else { pal.line };
-            pen.fill(&tri, [c[0], c[1], c[2], 1.0]);
+            pen.fill(&tri, [c[0], c[1], c[2], if on { 0.9 } else { 0.4 }]);
         }
     }
 }
@@ -671,73 +620,53 @@ mod tests {
     }
 
     #[test]
-    fn square_on_shows_roll_and_neighbours_and_only_then() {
+    fn square_on_shows_roll_and_only_then() {
         let front = crate::nav::region_view(cam(0.3, 0.2), [0, -1, 0]);
         let at = roll_at(&place(), true);
         assert_eq!(hit(&front, &place(), at), Some(Hit::Roll(true)));
         assert_ne!(hit(&cam(0.3, 0.2), &place(), at), Some(Hit::Roll(true)));
-        // the arrow to the right of a front view goes to the right face
-        let e = Eye::new(&front, &place());
-        let n = neighbours(&e, &place());
-        assert!(n.iter().any(|(_, r)| *r == [1, 0, 0]));
-        assert!(n.iter().any(|(_, r)| *r == [0, 0, 1]));
     }
 
     #[test]
-    fn home_and_the_ring_are_found() {
-        let c = cam(0.5, 0.5);
-        assert_eq!(hit(&c, &place(), home_at(&place())), Some(Hit::Home));
-        // from straight above, the ring's a circle round the cube
-        let mut top = c;
-        top.pitch = core::f32::consts::FRAC_PI_2;
-        let e = Eye::new(&top, &place());
-        let on = e.px([(RING_IN + RING_OUT) * 0.5, 0.0, -RING_Z]);
-        assert_eq!(hit(&top, &place(), (on[0], on[1])), Some(Hit::Ring));
-        // and from the side it can still be grabbed
-        let side = cam(0.5, 0.0);
-        let e = Eye::new(&side, &place()).for_ring(&side);
-        let on = e.px([0.0, -(RING_IN + RING_OUT) * 0.5, -RING_Z]);
-        assert!(matches!(
-            hit(&side, &place(), (on[0], on[1])),
-            Some(Hit::Ring | Hit::Region(_))
-        ));
-    }
-
-    #[test]
-    fn a_face_word_is_readable_at_every_angle_or_not_there() {
-        let p = place();
-        for yaw in (0..40).map(|k| k as f32 * 0.157) {
-            for pitch in (-8..=8).map(|k| k as f32 * 0.196) {
-                for roll in [0.0, core::f32::consts::FRAC_PI_2, 2.5] {
-                    let mut c = cam(yaw, pitch);
-                    c.roll = roll;
-                    for l in labels(&c, &p, None) {
-                        assert!(l.angle.abs() <= core::f32::consts::FRAC_PI_2 + 0.03, "{l:?}");
-                        if l.alpha > 0.0 {
-                            assert!(l.size >= LABEL_MIN && l.size <= LABEL_PX, "{l:?}");
-                        }
-                    }
-                    // from any view at least one face reads in full
-                    assert!(
-                        labels(&c, &p, None)
-                            .iter()
-                            .filter(|l| l.text.len() > 1)
-                            .any(|l| l.alpha >= 1.0)
-                    );
-                }
+    fn home_the_flat_ring_and_the_step_arrows_are_found_from_any_view() {
+        for (y, p) in [
+            (0.5, 0.5),
+            (0.0, 0.0),
+            (2.0, -1.2),
+            (1.0, core::f32::consts::FRAC_PI_2),
+        ] {
+            let c = cam(y, p);
+            let pl = place();
+            assert_eq!(hit(&c, &pl, home_at(&pl)), Some(Hit::Home));
+            let (cx, cy) = (pl.at.0 + pl.side / 2.0, pl.at.1 + pl.side / 2.0);
+            let half = pl.side / 2.0;
+            let r = (RING_IN + RING_OUT) / 2.0 * half;
+            // the ring is a circle on the screen, whatever the view: any angle clear of the arrows
+            for a in [0.6f32, 2.2, 3.9, 5.5] {
+                let px = (cx + a.cos() * r, cy + a.sin() * r);
+                assert_eq!(hit(&c, &pl, px), Some(Hit::Ring), "{y} {p} {a}");
+            }
+            let e = Eye::new(&c, &pl);
+            for (tri, (x, yy)) in arrows(&e, &pl) {
+                assert_eq!(hit(&c, &pl, (tri[0][0], tri[0][1])), Some(Hit::Step(x, yy)));
             }
         }
     }
 
     #[test]
-    fn the_compass_letter_behind_the_cube_is_hidden() {
-        let front = crate::nav::region_view(cam(0.3, 0.2), [0, -1, 0]);
-        let mut raised = front;
-        raised.pitch = 0.5;
-        let ls = labels(&raised, &place(), None);
-        // looking north: the S is in front of the cube, the N behind it
-        assert!(ls.iter().any(|l| l.text == "S"));
-        assert!(!ls.iter().any(|l| l.text == "N"));
+    fn the_cube_fits_inside_the_ring_from_every_view() {
+        let pl = place();
+        let half = pl.side / 2.0;
+        for yaw in (0..24).map(|k| k as f32 * 0.26) {
+            for pitch in (-6..=6).map(|k| k as f32 * 0.26) {
+                let e = Eye::new(&cam(yaw, pitch), &pl);
+                for q in polys().iter().flat_map(|p| p.pts.clone()) {
+                    let w = e.px(q);
+                    let r = (w[0] - e.centre.0).hypot(w[1] - e.centre.1) / half;
+                    assert!(r < RING_IN, "{r}");
+                }
+            }
+        }
     }
 
     #[test]

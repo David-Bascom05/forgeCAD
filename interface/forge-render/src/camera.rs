@@ -292,20 +292,8 @@ impl Camera {
         q.map(|v| v / l)
     }
 
-    /// This camera's angles set to look the way a quaternion says.
-    fn turn_to(&mut self, q: [f32; 4]) {
-        let [w, x, y, z] = q;
-        let r = [
-            1.0 - 2.0 * (y * y + z * z),
-            2.0 * (x * y + w * z),
-            2.0 * (x * z - w * y),
-        ];
-        let back = [
-            2.0 * (x * z + w * y),
-            2.0 * (y * z - w * x),
-            1.0 - 2.0 * (x * x + y * y),
-        ];
-        let f = back.map(|v| -v);
+    /// This camera, looking along `f` with `r` to its right (unit and square to each other).
+    pub fn look(&mut self, f: [f32; 3], r: [f32; 3]) {
         self.pitch = (-f[2]).clamp(-1.0, 1.0).asin();
         if f[2].abs() > 0.99999 {
             // straight up or down: the right vector alone gives the turn
@@ -319,6 +307,22 @@ impl Camera {
             let top = cross(flat, f);
             self.roll = dot(r, top).atan2(dot(r, flat));
         }
+    }
+
+    /// This camera's angles set to look the way a quaternion says.
+    fn turn_to(&mut self, q: [f32; 4]) {
+        let [w, x, y, z] = q;
+        let r = [
+            1.0 - 2.0 * (y * y + z * z),
+            2.0 * (x * y + w * z),
+            2.0 * (x * z - w * y),
+        ];
+        let back = [
+            2.0 * (x * z + w * y),
+            2.0 * (y * z - w * x),
+            1.0 - 2.0 * (x * x + y * y),
+        ];
+        self.look(back.map(|v| -v), r);
     }
 
     /// Between two views, t from 0 to 1: the shortest turn, the distance and field evenly by ratio.

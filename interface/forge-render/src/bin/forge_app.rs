@@ -3,7 +3,7 @@
 use forge_render::gui::Headless;
 
 const USAGE: &str = "forge-app [PART | file.fc] [--size WxH] [--times]
-  [--shot FILE.ppm [--scale S] [--light] [--tab N] [--select NAME] [--click NAME]..]
+  [--shot FILE.ppm [--scale S] [--light] [--tab N] [--select NAME] [--click NAME].. [--at X Y]]
   [--bench]
 PART: a bench part or a .fc file. --times: input-to-present on exit. --shot: one frame, no window.
 --bench: what clicks and frames cost, no window.";
@@ -17,6 +17,7 @@ struct Args {
     tab: usize,
     select: Option<String>,
     clicks: Vec<String>,
+    at: Option<(f32, f32)>,
     bench: bool,
     times: bool,
 }
@@ -31,6 +32,7 @@ fn args() -> Result<Args, String> {
         tab: 0,
         select: None,
         clicks: Vec::new(),
+        at: None,
         bench: false,
         times: false,
     };
@@ -49,6 +51,11 @@ fn args() -> Result<Args, String> {
             "--tab" => a.tab = v()?.parse().map_err(|_| USAGE)?,
             "--select" => a.select = Some(v()?),
             "--click" => a.clicks.push(v()?),
+            "--at" => {
+                let x = v()?.parse().map_err(|_| USAGE)?;
+                let mut v = || it.next().ok_or(format!("{k} takes X Y\n{USAGE}"));
+                a.at = Some((x, v()?.parse().map_err(|_| USAGE)?));
+            }
             "--bench" => a.bench = true,
             "--times" => a.times = true,
             s if s.starts_with("--") => return Err(USAGE.into()),
@@ -109,6 +116,56 @@ fn bench(h: &mut Headless) {
         orbit.push(now() - t);
     }
     report("orbit frame, chrome and viewport, GPU done", orbit);
+    // a number dragged: the cursor moves, then the frame with the new shape
+    let draggable = h
+        .gui
+        .view
+        .as_ref()
+        .and_then(|v| v.facts.handles.iter().find(|d| d.draggable).map(|d| d.item));
+    let row = h
+        .gui
+        .shell
+        .rows
+        .iter()
+        .find(|r| Some(r.id) == draggable)
+        .map(|r| format!("tree:{}", r.name));
+    if let Some(name) = row {
+        h.click(&name);
+        h.until(|g| g.shell.dim.is_some());
+        h.step();
+        h.step();
+        if let Some(c) = h.gui.shell.place("dim:arrow").map(|r| r.center()) {
+            h.move_to(c.x, c.y);
+            h.step();
+            h.button(true);
+            h.step();
+            let mut drag = Vec::new();
+            for k in 0..120 {
+                let d = 40.0 * (k as f32 * 0.052).sin();
+                let was = h.gui.shell.dim.as_ref().map(|e| e.value);
+                let t = now();
+                h.move_to(c.x + d, c.y + d * 0.6);
+                let mut drawn = h.step().times.view_drawn;
+                if h.gui.shell.dim.as_ref().map(|e| e.value) == was {
+                    continue;
+                }
+                // a value that can't build draws no new shape
+                let failed = |h: &Headless| h.gui.shell.dim.as_ref().is_some_and(|e| e.error.is_some());
+                while !drawn && !failed(h) && now() - t < 2000.0 {
+                    std::thread::sleep(std::time::Duration::from_micros(200));
+                    drawn = h.step().times.view_drawn;
+                }
+                if drawn {
+                    drag.push(now() - t);
+                }
+            }
+            report("drag a number: cursor to the frame with its shape", drag);
+            h.key(egui::Key::Escape);
+            h.step();
+            h.button(false);
+            h.until(|g| g.view.as_ref().is_some_and(|v| !v.live_drag));
+        }
+    }
     let o = h.step();
     let o2 = h.step();
     println!(
@@ -140,18 +197,29 @@ fn run() -> Result<(), String> {
     for _ in 0..5 {
         h.step();
     }
+    for c in &a.clicks {
+        if !h.click(c) {
+            return Err(format!("nothing called {c}"));
+        }
+        h.step();
+        h.step();
+    }
     if let Some(s) = &a.select
         && !h.click(&format!("tree:{s}"))
     {
         return Err(format!("no tree row {s}"));
     }
-    for c in &a.clicks {
-        if !h.click(c) {
-            return Err(format!("nothing called {c}"));
-        }
-    }
+    h.step();
+    h.step();
     for _ in 0..3 {
         h.step();
+    }
+    if let Some((x, y)) = a.at {
+        h.move_to(x, y);
+        for _ in 0..3 {
+            h.step();
+            std::thread::sleep(std::time::Duration::from_millis(10));
+        }
     }
     if a.bench {
         bench(&mut h);

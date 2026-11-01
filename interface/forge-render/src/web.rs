@@ -227,6 +227,7 @@ pub async fn bench_offscreen(
             hud: Some(&hud),
             cube: Some((crate::nav::Nav::new(cam, size, 1.0).cube_place(), None)),
             marks: &[],
+            world: &[],
         };
         all.push(r.frame(&target.view, &mut scene, &cam, overlay));
         // a buffer the GPU has just been told to write maps once it has got that far

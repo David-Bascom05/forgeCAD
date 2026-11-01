@@ -726,6 +726,19 @@ impl Model {
         n.checked_sub(1).map(|i| origins[i].clone()).unwrap_or_default()
     }
 
+    /// Which feature made each face of the finished part, by the body's face index.
+    pub fn face_makers(&self) -> Vec<Option<usize>> {
+        let origin = self.origin(self.built());
+        let Some(b) = self.body() else {
+            return Vec::new();
+        };
+        let mut out = vec![None; b.faces.len()];
+        for f in b.face_ids() {
+            out[f.index()] = origin.get(&b.face(f).name).and_then(|m| m.last().copied());
+        }
+        out
+    }
+
     /// The index of the feature a reference names, among the first `n`.
     pub fn feat(&self, n: usize, r: &str) -> Result<usize, String> {
         if let Some(i) = self.labels[..n.min(self.labels.len())]

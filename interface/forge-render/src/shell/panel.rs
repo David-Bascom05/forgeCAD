@@ -241,6 +241,7 @@ pub fn icon(kind: &str) -> &'static str {
         "draft" => "draft",
         "thread" => "thread",
         "pattern" => "rect",
+        "sketch" => "sketch",
         "plane" => "plane",
         "axis" => "axis",
         "point" => "point",

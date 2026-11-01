@@ -15,7 +15,7 @@ use winit::window::{Window, WindowId};
 const USAGE: &str =
     "forge-render [PART | file.fc] [--stress N] [--moving N] [--bench] [--hover] [--window] [--frames N]
   [--size WxH] [--lod-px T] [--lines near|far|none] [--no-ao] [--section x|y|z] [--explode T] [--no-cache] [--shot FILE.ppm [--select X Y]..] [--yaw R --pitch R --dist X]
-  [--export FILE] [--levels] [--dims] [--drag NAME [--drag-demo]] [--drag-bench [--drag-parts A,B] [--ticks N]]
+  [--export FILE] [--levels] [--dims] [--drag-bench [--drag-parts A,B] [--ticks N]]
 PART: a bench part (default crank). --stress: all 15 bench parts placed N times. --moving N: N of
 them swing on joints every frame. --hover: --bench also picks under a wandering pixel each frame. --bench: a fixed
 orbit, frame times on stdout, headless unless --window. --shot: one headless frame.
@@ -25,9 +25,7 @@ zooms at the cursor. Click selects, ctrl or shift + click adds; one or two selec
 measured. Home or F6 home, A fit all, F fit selection, Esc clear. View cube: click to go, drag to
 orbit. L lines near, far, none. O occlusion. S section x, y, z, off; ctrl + wheel moves it. E explode.
 
---dims lists the numbers a part has. --drag NAME: left drag changes that number live, release commits
-it (a file is rewritten; the line prints), Esc cancels, D swaps the left button back to orbiting.
---drag-demo: the same with no mouse, there and back, then exits. --drag-bench: drags over every bench part, value change to frame, headless.";
+--dims lists the numbers a part has. --drag-bench: drags over every bench part, value change to frame, headless.";
 
 struct Args {
     part: String,
@@ -52,8 +50,6 @@ struct Args {
     pitch: Option<f32>,
     dist: Option<f32>,
     dims: bool,
-    drag: Option<String>,
-    drag_demo: bool,
     drag_bench: bool,
     drag_parts: Vec<String>,
     ticks: usize,
@@ -83,8 +79,6 @@ fn args() -> Result<Args, String> {
         pitch: None,
         dist: None,
         dims: false,
-        drag: None,
-        drag_demo: false,
         drag_bench: false,
         drag_parts: Vec::new(),
         ticks: 180,
@@ -118,8 +112,6 @@ fn args() -> Result<Args, String> {
             }
             "--no-cache" => a.cache = false,
             "--dims" => a.dims = true,
-            "--drag" => a.drag = it.next(),
-            "--drag-demo" => a.drag_demo = true,
             "--drag-bench" => a.drag_bench = true,
             "--drag-parts" => {
                 a.drag_parts = it
@@ -273,6 +265,7 @@ fn headless(a: &Args, mut s: Stage) -> Result<(), String> {
                 hud: Some(&hud),
                 cube: Some((nav.cube_place(), None)),
                 marks: &marks,
+                world: &[],
             };
             drawn = r.frame(&target.view, &mut s.scene, &s.camera, overlay);
             r.wait();
@@ -305,6 +298,7 @@ fn headless(a: &Args, mut s: Stage) -> Result<(), String> {
                 hud: Some(&hud),
                 cube: Some((place, None)),
                 marks: &[],
+                world: &[],
             };
             if a.hover {
                 let p = now_ms();
@@ -340,7 +334,6 @@ struct App {
     stage: Option<Stage>,
     args: Args,
     viewer: Option<Viewer>,
-    drag: Option<(forge_agent::tools::Part, String)>,
 }
 
 impl ApplicationHandler for App {
@@ -379,21 +372,6 @@ impl ApplicationHandler for App {
         renderer.ao = self.args.ao;
         let mut v = Viewer::new(window.clone(), surface, config, renderer, s.scene, s.camera);
         v.measure = forge_render::measure::Measurer::new(s.names);
-        if let Some((part, name)) = self.drag.take() {
-            let (_, radius) = v.scene.bounds();
-            let drag = forge_render::live::Drag::new(&part, &name, radius).expect("checked");
-            v.drag = Some(forge_render::viewer::LiveDrag {
-                live: forge_render::live::start(part),
-                drag,
-                on: true,
-                cursor_x: 0.0,
-                from_x: 0.0,
-                waiting: 0,
-                last_seq: 0,
-                demo: self.args.drag_demo.then_some(120),
-                demo_done: false,
-            });
-        }
         let (c, _) = v.scene.bounds();
         v.nav.section = self.args.section.map(|axis| (axis, c[axis]));
         v.motion = (self.args.moving > 0).then(|| Motion::new(&v.scene, self.args.moving));
@@ -452,14 +430,6 @@ fn run() -> Result<(), String> {
     if a.drag_bench {
         return forge_render::dragbench::run(&a.drag_parts, a.ticks, a.size);
     }
-    let drag = match &a.drag {
-        Some(name) => {
-            let part = forge_render::load::tool_part(&a.part)?;
-            forge_render::live::Drag::new(&part, name, 1.0)?;
-            Some((part, name.clone()))
-        }
-        None => None,
-    };
     let s = stage(&a)?;
     if a.levels {
         for p in &s.parts {
@@ -484,7 +454,6 @@ fn run() -> Result<(), String> {
         stage: Some(s),
         args: a,
         viewer: None,
-        drag,
     };
     on_loop.run_app(&mut app).map_err(|e| e.to_string())
 }

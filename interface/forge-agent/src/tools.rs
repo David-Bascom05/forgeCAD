@@ -958,6 +958,12 @@ impl Part {
     /// The drag ends on this value, or on `fallback` (the last that built) if it doesn't build:
     /// one commit, one line. If neither does it ends where it started.
     pub fn drag_commit(&mut self, op: Op, fallback: Option<Op>) -> Done {
+        // a commit can overtake every value before one was built
+        if self.live.is_none()
+            && let Err(why) = self.drag(op.clone())
+        {
+            return self.refused(format!("error: {why}"));
+        }
         let Some(undo) = self.live.take() else {
             return self.refused("error: nothing is being dragged".into());
         };

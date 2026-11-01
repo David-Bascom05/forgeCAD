@@ -322,7 +322,8 @@ fn pick_fs(in: Picked) -> @location(0) vec2u {
 
 // a picked entity drawn again on top; the top bit of a placement's number says selected
 const HOVER = vec4f(0.20, 0.50, 0.95, 0.40);
-const CHOSEN = vec4f(0.98, 0.55, 0.10, 0.50);
+// the theme's focus amber, in linear
+const CHOSEN = vec4f(0.745, 0.361, 0.011, 0.45);
 const SELECTED_BIT = 0x80000000u;
 // just nearer than the same triangles drawn before, so it wins without fighting
 const MARK_LIFT = 1e-5;
@@ -391,6 +392,13 @@ struct CubeVert {
 @vertex
 fn cube_vs(@location(0) px: vec2f, @location(1) colour: vec4f) -> CubeVert {
     return CubeVert(vec4f(px.x * g.px.x - 1.0, 1.0 - px.y * g.px.y, 0.5, 1.0), colour);
+}
+
+// world triangles, translucent: the origin's planes, axes and point
+@vertex
+fn world_vs(@location(0) p: vec3f, @location(1) colour: vec4f) -> CubeVert {
+    let clip = g.view_proj * vec4f(p, 1.0);
+    return CubeVert(vec4f(clip.xy, clip.z * (1.0 + max(LIFT * g.eye.w, LIFT_MIN)), clip.w), colour);
 }
 
 @fragment

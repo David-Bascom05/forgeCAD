@@ -61,6 +61,8 @@ pub struct Nav {
     want_pick: Option<(f32, f32)>,
     want_home: bool,
     pub tool: NavTool,
+    /// Clicks that select, so far: the host's other things in the view can answer one.
+    pub clicks: u32,
     transition: Option<Transition>,
     /// What of the view cube's under the cursor.
     pub cube_hover: Option<Hit>,
@@ -112,6 +114,7 @@ impl Nav {
             want_pick: None,
             want_home: false,
             tool: NavTool::Orbit,
+            clicks: 0,
             transition: None,
             cube_hover: None,
             home_view: None,
@@ -294,6 +297,19 @@ impl Nav {
                         c.roll = ((c.roll + if clockwise { turn } else { -turn }) / turn).round() * turn;
                         c
                     }
+                    Some(Hit::Step(x, y)) => {
+                        // the eye swings a quarter turn to the side that was shown
+                        let (f, r, u) = self.camera.axes();
+                        let (nf, nr) = match (x, y) {
+                            (1, _) => (r.map(|v| -v), f),
+                            (-1, _) => (r, f.map(|v| -v)),
+                            (_, 1) => (u.map(|v| -v), r),
+                            _ => (u, r),
+                        };
+                        let mut c = self.camera;
+                        c.look(nf, nr);
+                        c
+                    }
                     Some(Hit::Home) => {
                         self.want_home = true;
                         return true;
@@ -305,6 +321,7 @@ impl Nav {
             }
             // a click with a tool up still selects
             Some(Drag::Orbit | Drag::Pan | Drag::Zoom) if matches!(self.press_button, MouseButton::Left) => {
+                self.clicks += 1;
                 let got = self.known_hit().map(|h| (h.placement, h.entity));
                 if self.modifiers.control_key() || self.modifiers.shift_key() {
                     // adds to the selection, or takes off what's in it
@@ -354,12 +371,11 @@ impl Nav {
                 self.camera.orbit_about(self.camera.target, dx, dy);
             }
             Drag::Ring => {
-                // the ring follows the cursor round the widget's middle
+                // the view turns about the screen's axis, following the cursor round the ring
                 let p = self.cube_place();
                 let c = (p.at.0 + p.side * 0.5, p.at.1 + p.side * 0.5);
                 let a = (at.1 - c.1).atan2(at.0 - c.0) - (at.1 - dy - c.1).atan2(at.0 - dx - c.0);
-                let side = if self.camera.pitch < 0.0 { -1.0 } else { 1.0 };
-                self.camera.yaw += a * side;
+                self.camera.roll += a;
             }
             Drag::Zoom => {
                 let at = self
@@ -499,6 +515,11 @@ impl Nav {
         self.hit_at = None;
         let u = self.explode_at;
         Some(u * u * (3.0 - 2.0 * u))
+    }
+
+    /// Where the pointer last was in the view.
+    pub fn cursor(&self) -> (f32, f32) {
+        self.cursor
     }
 
     /// The cube's home button was pressed: the scene's there for it now.

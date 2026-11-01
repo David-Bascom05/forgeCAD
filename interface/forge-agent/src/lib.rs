@@ -8,6 +8,7 @@ mod doc_tests;
 pub mod facemesh;
 #[cfg(test)]
 mod fillet_repros;
+pub mod handles;
 pub mod help;
 pub mod history;
 pub mod json;

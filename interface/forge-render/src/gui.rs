@@ -6,13 +6,16 @@ use crate::camera::Camera;
 use crate::live::{self, Out};
 use crate::mesh::PartMesh;
 use crate::nav::Nav;
-use crate::render::{self, Offscreen, Overlay, Renderer, part_info};
+use crate::render::{self, Entity, Mark, Offscreen, Overlay, Renderer, part_info};
 use crate::scene::{Motion, Placement, Scene};
+use crate::shell::dim::DimEdit;
 use crate::shell::{Action, Shell};
 use crate::viewcube;
 use crate::viewer::now_ms;
+use forge_agent::handles::Facts;
 use forge_agent::live::{Event, Live};
-use forge_agent::tools::{Call, Part};
+use forge_agent::short;
+use forge_agent::tools::{Call, Part, Target};
 use std::sync::Arc;
 use std::sync::mpsc::{Receiver, channel};
 use winit::dpi::PhysicalPosition;
@@ -42,6 +45,14 @@ pub struct View {
     dirty: bool,
     pub live: Live<Out>,
     pub motion: Option<Motion>,
+    pub facts: Facts,
+    /// What the view's click had selected, to see a new click by.
+    clicked: Vec<(u32, Entity)>,
+    clicks: u32,
+    /// What of the origin was drawn last: its picture changes with this.
+    origin_was: Vec<(crate::origin::Item, bool)>,
+    /// A number's being dragged or has just been let go: the picture's the worker's, not the mesh's.
+    pub live_drag: bool,
 }
 
 /// A frame's times, in milliseconds.
@@ -224,6 +235,11 @@ impl Gui {
             dirty: true,
             live,
             motion: None,
+            facts: Facts::default(),
+            clicked: Vec::new(),
+            clicks: 0,
+            origin_was: Vec::new(),
+            live_drag: false,
         });
         self.shell.view_tex = Some(tex);
         self.shell.name = l.name;
@@ -256,11 +272,25 @@ impl Gui {
                 Event::Doc(d) => self.shell.set_doc(&d.src, d.version, d.failed),
                 Event::Done(d) => {
                     // the reply's first line says it
-                    self.shell.status = d.text.lines().next().unwrap_or("").to_string();
+                    let first = d.text.lines().next().unwrap_or("").to_string();
+                    if let Some(e) = &mut self.shell.dim {
+                        e.error = (!d.ok).then(|| d.text.lines().nth(1).unwrap_or(&first).to_string());
+                    }
+                    self.shell.status = first;
                 }
                 Event::Frame(f) => {
+                    if f.seq > 0
+                        && let Some(e) = &mut self.shell.dim
+                    {
+                        e.error = f.failure.clone();
+                    }
                     if let Some(Out::Delta(d)) = f.out {
                         v.renderer.live_apply(part, &d);
+                        if f.seq > 0 {
+                            v.renderer.live_show(true);
+                            v.scene.set_part(part, d.center, d.radius, vec![d.chord]);
+                            v.dirty = true;
+                        }
                     }
                 }
                 Event::Final(out) => {
@@ -270,9 +300,83 @@ impl Gui {
                         v.scene.set_part(part, m.center, m.radius, chords);
                     }
                     v.renderer.live_show(false);
+                    v.live_drag = false;
                     v.dirty = true;
                 }
+                Event::Facts(f) => {
+                    v.facts = *f;
+                    // what's marked for the selection reads these
+                    v.dirty |= self.shell.selected.is_some();
+                    if let Some(id) = self.shell.selected
+                        && self.shell.dim.as_ref().is_none_or(|e| !e.dragging)
+                    {
+                        let old = self.shell.dim.take();
+                        self.shell.dim = v.facts.handle(id).cloned().map(DimEdit::new);
+                        if let (Some(e), Some(old)) = (&mut self.shell.dim, old) {
+                            e.error = old.error;
+                            // what's being typed stays, whatever the part has just become
+                            if old.text != old.handle.text {
+                                e.text = old.text;
+                            }
+                        }
+                    }
+                }
             }
+        }
+    }
+
+    /// What of the origin is under the pointer in the view: what's shown, any time it's the axes or
+    /// the point; a plane only where the part isn't hit.
+    fn origin_under(&self) -> Option<crate::origin::Item> {
+        let v = self.view.as_ref()?;
+        if !self.over_view {
+            return None;
+        }
+        let shown: Vec<crate::origin::Item> = crate::origin::ITEMS
+            .into_iter()
+            .enumerate()
+            .filter(|(k, i)| self.shell.origin_shown[*k] || self.shell.origin_selected == Some(*i))
+            .map(|(_, i)| i)
+            .collect();
+        let (c, r) = v.scene.bounds();
+        let empty = v.nav.marks().iter().all(|m| m.selected);
+        crate::origin::hit(
+            &shown,
+            crate::origin::reach(c, r),
+            &v.nav.camera,
+            v.size,
+            v.nav.cursor(),
+            empty,
+        )
+    }
+
+    /// A click in the view chooses a face's feature; a row of the tree chooses its faces.
+    fn sync_selection(&mut self) {
+        let under = self.origin_under();
+        self.shell.origin_hover = under;
+        let Some(v) = &mut self.view else { return };
+        if v.nav.clicks != v.clicks {
+            v.clicks = v.nav.clicks;
+            if let Some(i) = under {
+                self.shell.origin_selected = Some(i);
+                self.shell.selected = None;
+                v.nav.selected.clear();
+            } else {
+                self.shell.origin_selected = None;
+            }
+        }
+        if v.nav.selected != v.clicked {
+            v.clicked = v.nav.selected.clone();
+            let owner = v.clicked.iter().rev().find_map(|&(_, e)| match e {
+                Entity::Face(f) => v.facts.face_item.get(f as usize).copied().flatten(),
+                _ => None,
+            });
+            self.shell.selected = owner;
+        }
+        let want = self.shell.selected;
+        if self.shell.dim.as_ref().map(|d| d.handle.item) != want {
+            self.shell.dim = want.and_then(|id| v.facts.handle(id).cloned()).map(DimEdit::new);
+            v.dirty = true;
         }
     }
 
@@ -292,6 +396,8 @@ impl Gui {
                 let at = egui::pos2(position.x as f32 / p, position.y as f32 / p);
                 let over = self.shell.view_rect.contains(at)
                     && !self.shell.menu_open()
+                    && !self.ctx.egui_is_using_pointer()
+                    && !self.shell.view_blocks.iter().any(|r| r.contains(at))
                     && self
                         .ctx
                         .layer_id_at(at)
@@ -369,7 +475,10 @@ impl Gui {
     /// Asks for what's under the cursor, and takes in the answer. True if that changed anything.
     pub fn picks(&mut self) -> bool {
         let Some(v) = &mut self.view else { return false };
-        if !v.renderer.pick_busy()
+        // what a pick would read is the mesh from before the drag
+        if v.live_drag {
+            v.nav.take_pick();
+        } else if !v.renderer.pick_busy()
             && let Some(px) = v.nav.take_pick()
         {
             v.renderer.pick_start(&mut v.scene, &v.nav.camera, px);
@@ -408,10 +517,66 @@ impl Gui {
                 | Action::Tool(_) => {
                     self.apply_view(a);
                 }
+                Action::DimDrag(value) => self.dim_drag(value),
+                Action::DimCommit(value) => self.dim_commit(value),
+                Action::DimCancel => self.dim_cancel(),
                 other => host.push(other),
             }
         }
+        if let Some(text) = self.shell.dim_typed.take() {
+            self.dim_type(text);
+        }
         host
+    }
+
+    fn dim_drag(&mut self, value: f64) {
+        let (Some(v), Some(e)) = (&mut self.view, &mut self.shell.dim) else {
+            return;
+        };
+        e.value = value;
+        v.live_drag = true;
+        v.live.drag(e.handle.at.op(short(value)));
+    }
+
+    /// The tool call that sets this number: the same one an agent would send.
+    fn call_of(at: Target, value: String) -> Call {
+        match at {
+            Target::Param(item) => Call::SetParam { item, expr: value },
+            Target::Arg(item, arg) => Call::SetArg {
+                item,
+                arg,
+                text: value,
+            },
+            Target::Row(item, row) => Call::SetDim { item, row, value },
+        }
+    }
+
+    fn dim_commit(&mut self, value: f64) {
+        let (Some(v), Some(e)) = (&mut self.view, &mut self.shell.dim) else {
+            return;
+        };
+        e.dragging = false;
+        v.live.commit(e.handle.at.op(short(value)));
+        self.calls.push(Self::call_of(e.handle.at, short(value)));
+    }
+
+    fn dim_cancel(&mut self) {
+        let (Some(v), Some(e)) = (&mut self.view, &mut self.shell.dim) else {
+            return;
+        };
+        e.dragging = false;
+        e.value = e.handle.value;
+        e.error = None;
+        v.live.cancel();
+    }
+
+    fn dim_type(&mut self, text: String) {
+        let (Some(v), Some(e)) = (&mut self.view, &mut self.shell.dim) else {
+            return;
+        };
+        let call = Self::call_of(e.handle.at, text);
+        self.calls.push(call.clone());
+        v.live.call(vec![call]);
     }
 
     fn apply_view(&mut self, a: Action) {
@@ -466,12 +631,33 @@ impl Gui {
             }
             self.shell.cube_labels = viewcube::labels(&v.nav.camera, &v.nav.cube_place(), v.nav.cube_hover);
         }
+        self.sync_selection();
+        if let Some(v) = &self.view {
+            self.shell.camera = Some((v.nav.camera, v.size));
+        }
+        let was_selected = self.shell.selected;
         let shell = &mut self.shell;
         let output = self.ctx.run_ui(raw, |ui| shell.ui(ui));
+        if self.shell.selected != was_selected
+            && let Some(v) = &mut self.view
+        {
+            // a row of the tree was chosen: the view's click no longer says
+            v.nav.selected.clear();
+            v.clicked.clear();
+            v.dirty = true;
+        }
+        self.sync_selection();
         self.pixels_per_point = output.pixels_per_point;
         let host = self.apply();
         times.ui = now_ms() - t0;
 
+        let drawn = self.shell.origin_drawn();
+        if let Some(v) = &mut self.view
+            && v.origin_was != drawn
+        {
+            v.origin_was = drawn;
+            v.dirty = true;
+        }
         let want_view = self.view_px();
         if let Some(v) = &mut self.view {
             if want_view != v.size {
@@ -503,11 +689,35 @@ impl Gui {
             && v.dirty
         {
             v.renderer.section = v.nav.section_plane();
-            let marks = v.nav.marks();
+            let mut world = Vec::new();
+            let (c, r) = v.scene.bounds();
+            for (item, strong) in &v.origin_was {
+                crate::origin::tris(
+                    *item,
+                    crate::origin::reach(c, r),
+                    &v.nav.camera,
+                    v.size,
+                    *strong,
+                    &mut world,
+                );
+            }
+            let marks = if v.live_drag {
+                Vec::new()
+            } else {
+                let mut m: Vec<Mark> = v.nav.marks().into_iter().filter(|m| !m.selected).collect();
+                let of = self.shell.selected.map_or(Vec::new(), |id| v.facts.faces_of(id));
+                m.extend(of.into_iter().map(|f| Mark {
+                    placement: 0,
+                    entity: Entity::Face(f),
+                    selected: true,
+                }));
+                m
+            };
             let overlay = Overlay {
                 hud: None,
                 cube: Some((v.nav.cube_place(), v.nav.cube_hover)),
                 marks: &marks,
+                world: &world,
             };
             v.renderer
                 .frame(&v.target.view, &mut v.scene, &v.nav.camera, overlay);
@@ -730,6 +940,35 @@ impl Headless {
             },
             button: MouseButton::Left,
         });
+    }
+
+    /// A key press and release.
+    pub fn key(&mut self, key: egui::Key) {
+        for pressed in [true, false] {
+            self.pending.push(egui::Event::Key {
+                key,
+                physical_key: None,
+                pressed,
+                repeat: false,
+                modifiers: Default::default(),
+            });
+        }
+    }
+
+    pub fn text(&mut self, s: &str) {
+        self.pending.push(egui::Event::Text(s.to_string()));
+    }
+
+    /// Frames until this holds, or a good while.
+    pub fn until(&mut self, what: impl Fn(&Gui) -> bool) -> bool {
+        for _ in 0..5000 {
+            self.step();
+            if what(&self.gui) {
+                return true;
+            }
+            std::thread::sleep(std::time::Duration::from_millis(1));
+        }
+        false
     }
 
     /// Queues a click at the middle of what the shell last drew under this name.

@@ -3,10 +3,12 @@
 //! desktop app and the browser share it. Buttons never change the document themselves: the host
 //! turns an action into a tool call.
 
+pub mod dim;
 pub mod icons;
 pub mod panel;
 mod ribbon;
 pub mod theme;
+mod tree;
 
 pub use crate::nav::NavTool;
 use crate::render::LineMode;
@@ -60,6 +62,10 @@ pub enum Action {
     Close,
     DragWindow,
     ResizeWindow(Edge),
+    /// A dragged number's new value; the drag ending there; the drag or edit called off.
+    DimDrag(f64),
+    DimCommit(f64),
+    DimCancel,
 }
 
 /// One row of the tree.
@@ -119,6 +125,22 @@ pub struct Shell {
     pub view_tex: Option<egui::TextureId>,
     /// The view cube's words, in the view's device pixels: real type over its picture.
     pub cube_labels: Vec<crate::viewcube::Label>,
+    /// The view's camera and its size in device pixels, for what's drawn on the model.
+    pub camera: Option<(crate::camera::Camera, (u32, u32))>,
+    /// The Origin folder's open; which of its items are always shown; which is hovered or selected.
+    pub origin_open: bool,
+    pub origin_shown: [bool; 7],
+    pub origin_hover: Option<crate::origin::Item>,
+    origin_tree_hover: Option<crate::origin::Item>,
+    pub origin_selected: Option<crate::origin::Item>,
+    /// The feature whose dialog is up.
+    pub dialog: Option<ItemId>,
+    /// The selected feature's number, on the model.
+    pub dim: Option<dim::DimEdit>,
+    /// What's on the model and takes the pointer from the view.
+    pub view_blocks: Vec<Rect>,
+    /// What was typed for it, committed with Enter.
+    pub dim_typed: Option<String>,
     file_menu: bool,
     style_set: Option<bool>,
 }
@@ -142,6 +164,16 @@ impl Default for Shell {
             cube_menu: None,
             view_tex: None,
             cube_labels: Vec::new(),
+            camera: None,
+            origin_open: false,
+            origin_shown: [false; 7],
+            origin_hover: None,
+            origin_tree_hover: None,
+            origin_selected: None,
+            dialog: None,
+            dim: None,
+            view_blocks: Vec::new(),
+            dim_typed: None,
             file_menu: false,
             style_set: None,
         }
@@ -209,6 +241,7 @@ impl Shell {
             self.style_set = Some(t.dark);
         }
         self.places.clear();
+        self.view_blocks.clear();
         let s = ctx.content_rect();
         let p = ui.painter().clone();
         p.rect_filled(s, 0.0, t.bg);
@@ -239,6 +272,8 @@ impl Shell {
         self.side(ui, side);
         self.docs_and_status(ui, s, bottom);
         self.navbar(&ctx);
+        self.dim_ui(&ctx);
+        self.dialog(&ctx);
         self.resize_edges(ui, s);
         self.menus(&ctx);
     }
@@ -436,17 +471,9 @@ impl Shell {
         let p = ui.painter().clone();
         p.rect_filled(side, 0.0, t.surface);
         p.vline(side.right(), side.y_range(), Stroke::new(1.0, t.line));
-        let panel_h = self.panel_height();
-        let tree_bottom = side.bottom() - panel_h;
         self.head(&p, side.top(), "Model", self.name.trim_end_matches(".fc"));
-        let tree = Rect::from_min_max(pos2(0.0, side.top() + HEAD_H), pos2(SIDE_W, tree_bottom));
+        let tree = Rect::from_min_max(pos2(0.0, side.top() + HEAD_H), pos2(SIDE_W, side.bottom()));
         self.tree(ui, tree);
-        if panel_h > 0.0 {
-            self.panel(
-                ui,
-                Rect::from_min_max(pos2(0.0, tree_bottom), pos2(SIDE_W, side.bottom())),
-            );
-        }
     }
 
     fn head(&self, p: &egui::Painter, y: f32, left: &str, right: &str) {
@@ -470,123 +497,7 @@ impl Shell {
         );
     }
 
-    fn tree(&mut self, ui: &mut Ui, tree: Rect) {
-        let t = self.theme;
-        let rows = std::mem::take(&mut self.rows);
-        let selected = self.selected;
-        let failed = self.failed.clone();
-        let mut chosen = None;
-        let mut places = Vec::new();
-        ui.scope_builder(egui::UiBuilder::new().max_rect(tree), |ui| {
-            egui::ScrollArea::vertical()
-                .id_salt("tree")
-                .auto_shrink(false)
-                .show(ui, |ui| {
-                    let (top, _) = ui.allocate_exact_size(vec2(tree.width(), 4.0), Sense::hover());
-                    let _ = top;
-                    let failed_at = failed
-                        .as_ref()
-                        .and_then(|(id, _)| rows.iter().position(|r| r.id == *id));
-                    let mut origin = |ui: &mut Ui,
-                                      label: &str,
-                                      icon: &str,
-                                      id: Option<ItemId>,
-                                      dim: bool,
-                                      why: Option<&str>,
-                                      line: &str| {
-                        let (r, resp) = ui.allocate_exact_size(vec2(tree.width(), ROW_H), Sense::click());
-                        resp.widget_info(|| {
-                            egui::WidgetInfo::selected(
-                                egui::Role::TreeItem,
-                                true,
-                                id.is_some() && id == selected,
-                                label,
-                            )
-                        });
-                        let on = id.is_some() && id == selected;
-                        let p = ui.painter();
-                        if on {
-                            p.rect_filled(r, 0.0, t.on);
-                            p.rect_filled(Rect::from_min_size(r.min, vec2(2.0, ROW_H)), 0.0, t.focus);
-                        } else if resp.hovered() {
-                            p.rect_filled(r, 0.0, t.hover);
-                        }
-                        if resp.has_focus() {
-                            p.rect_stroke(r, 0.0, Stroke::new(2.0, t.focus), StrokeKind::Inside);
-                        }
-                        let ink = if on {
-                            t.on_ink
-                        } else if dim {
-                            t.ink2
-                        } else {
-                            t.ink
-                        };
-                        icons::draw(p, pos2(r.left() + 8.0, r.top() + 5.0), 16.0, icon, 1.5, ink);
-                        let font = if on { theme::medium(13.0) } else { sans(13.0) };
-                        p.text(
-                            pos2(r.left() + 31.0, r.center().y),
-                            Align2::LEFT_CENTER,
-                            label,
-                            font,
-                            ink,
-                        );
-                        if why.is_some() {
-                            icons::draw(
-                                p,
-                                pos2(r.right() - 26.0, r.top() + 5.0),
-                                16.0,
-                                "warning",
-                                1.5,
-                                t.error,
-                            );
-                        }
-                        let resp = match why {
-                            Some(w) => resp.on_hover_text(format!("{line}\n{w}")),
-                            None if !line.is_empty() => resp.on_hover_text(line),
-                            None => resp,
-                        };
-                        if resp.clicked() {
-                            chosen = Some(id);
-                        }
-                        r
-                    };
-                    origin(ui, "Origin", "folder", None, false, None, "");
-                    for (k, row) in rows.iter().enumerate() {
-                        let why = (Some(k) == failed_at)
-                            .then(|| failed.as_ref().map(|f| f.1.as_str()))
-                            .flatten();
-                        let dim = failed_at.is_some_and(|f| k > f);
-                        let r = origin(ui, &row.title, row.icon, Some(row.id), dim, why, &row.line);
-                        places.push((format!("tree:{}", row.name), r));
-                    }
-                    let (r, _) = ui.allocate_exact_size(vec2(tree.width(), 28.0), Sense::hover());
-                    let p = ui.painter();
-                    let mut x = r.left() + 8.0;
-                    while x < r.right() - 8.0 {
-                        p.hline(x..=x + 3.0, r.top() + 3.0, Stroke::new(1.0, t.line));
-                        x += 6.0;
-                    }
-                    icons::draw(p, pos2(r.left() + 8.0, r.top() + 9.0), 16.0, "end", 1.5, t.ink2);
-                    p.text(
-                        pos2(r.left() + 31.0, r.top() + 17.0),
-                        Align2::LEFT_CENTER,
-                        "End of part",
-                        sans(12.0),
-                        t.ink2,
-                    );
-                });
-        });
-        self.rows = rows;
-        self.places.extend(places);
-        if let Some(c) = chosen {
-            self.selected = c;
-        }
-    }
-
-    fn panel_rows(&self) -> Vec<(String, String)> {
-        let Some(id) = self.selected else {
-            return Vec::new();
-        };
+    fn dialog_rows(&self, id: ItemId) -> Vec<(String, String)> {
         let Some(doc) = &self.doc else { return Vec::new() };
         let Some(item) = doc.items.iter().find(|i| i.id == id) else {
             return Vec::new();
@@ -601,53 +512,87 @@ impl Shell {
         }
     }
 
-    fn panel_height(&self) -> f32 {
-        if self.selected.is_none() {
-            return 0.0;
-        }
-        (HEAD_H + 8.0 + self.panel_rows().len().min(9) as f32 * 34.0 + 8.0).min(340.0)
-    }
-
-    fn panel(&mut self, ui: &mut Ui, r: Rect) {
+    /// A feature's dialog: floats over the view, drags by its title, remembers where it was left,
+    /// scrolls. In step 4 its body is the feature's tabs and collapsing sections (`panel::form`).
+    fn dialog(&mut self, ctx: &egui::Context) {
         let t = self.theme;
-        let p = ui.painter().clone();
-        p.hline(r.x_range(), r.top(), Stroke::new(1.0, t.line));
-        let title = self
-            .rows
-            .iter()
-            .find(|w| Some(w.id) == self.selected)
-            .map_or(String::new(), |w| w.title.clone());
-        self.head(&p, r.top(), &title, "");
-        let rows = self.panel_rows();
-        let body = Rect::from_min_max(pos2(r.left(), r.top() + HEAD_H), r.max);
-        ui.scope_builder(egui::UiBuilder::new().max_rect(body), |ui| {
-            egui::ScrollArea::vertical()
-                .id_salt("panel")
-                .auto_shrink(false)
-                .show(ui, |ui| {
-                    ui.add_space(8.0);
-                    for (label, value) in &rows {
-                        let (row, _) = ui.allocate_exact_size(vec2(SIDE_W, 34.0), Sense::hover());
-                        ui.painter().text(
-                            pos2(row.left() + 10.0, row.center().y),
-                            Align2::LEFT_CENTER,
-                            label,
-                            sans(12.0),
-                            t.ink2,
-                        );
-                        let field =
-                            Rect::from_min_size(pos2(row.left() + 96.0, row.top() + 4.0), vec2(164.0, 26.0));
-                        let mut shown: &str = value;
-                        ui.put(
-                            field,
-                            egui::TextEdit::singleline(&mut shown)
-                                .font(mono(12.0))
-                                .desired_width(148.0)
-                                .margin(egui::vec2(7.0, 6.0)),
-                        );
+        let Some(id) = self.dialog else { return };
+        let Some(row) = self.rows.iter().find(|r| r.id == id) else {
+            self.dialog = None;
+            return;
+        };
+        let (title, rows) = (row.title.clone(), self.dialog_rows(id));
+        let mut close = false;
+        let frame = egui::Frame::new()
+            .fill(t.surface)
+            .stroke(Stroke::new(1.0, t.line))
+            .corner_radius(4)
+            .inner_margin(10);
+        let v = self.view_rect;
+        let shown = egui::Window::new(title)
+            .id(egui::Id::unique("feature-dialog"))
+            .collapsible(false)
+            .resizable(true)
+            .default_pos(pos2(v.left() + 16.0, v.top() + 16.0))
+            .default_size(vec2(340.0, 460.0))
+            .min_size(vec2(280.0, 200.0))
+            .frame(frame)
+            .show(ctx, |ui| {
+                let footer = 40.0;
+                let body = ui.available_height() - footer;
+                egui::ScrollArea::vertical()
+                    .id_salt("dialog-body")
+                    .max_height(body)
+                    .auto_shrink([false, false])
+                    .show(ui, |ui| {
+                        for (label, value) in &rows {
+                            let w = ui.available_width();
+                            let (row, _) = ui.allocate_exact_size(vec2(w, 34.0), Sense::hover());
+                            ui.painter().text(
+                                pos2(row.left(), row.center().y),
+                                Align2::LEFT_CENTER,
+                                label,
+                                sans(12.0),
+                                t.ink2,
+                            );
+                            let field = Rect::from_min_size(
+                                pos2(row.left() + 96.0, row.top() + 4.0),
+                                vec2((w - 96.0).max(60.0), 26.0),
+                            );
+                            let mut shown: &str = value;
+                            ui.put(
+                                field,
+                                egui::TextEdit::singleline(&mut shown)
+                                    .font(mono(12.0))
+                                    .desired_width(field.width() - 14.0)
+                                    .margin(vec2(7.0, 6.0)),
+                            );
+                        }
+                    });
+                ui.add_space(8.0);
+                ui.horizontal(|ui| {
+                    ui.add_space((ui.available_width() - 126.0).max(0.0));
+                    if ui
+                        .add_sized(vec2(64.0, 28.0), egui::Button::new("Cancel"))
+                        .clicked()
+                    {
+                        close = true;
+                    }
+                    ui.add_space(6.0);
+                    let ok =
+                        egui::Button::new(egui::RichText::new("OK").font(semi(12.0)).color(Color32::WHITE))
+                            .fill(t.accent);
+                    if ui.add_sized(vec2(56.0, 28.0), ok).clicked() {
+                        close = true;
                     }
                 });
-        });
+            });
+        if let Some(s) = shown {
+            self.note("dialog", s.response.rect);
+        }
+        if close || ctx.input(|i| i.key_pressed(egui::Key::Escape)) {
+            self.dialog = None;
+        }
     }
 
     fn docs_and_status(&mut self, ui: &mut Ui, s: Rect, bottom: f32) {

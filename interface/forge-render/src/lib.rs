@@ -6,6 +6,7 @@ pub mod camera;
 pub mod livegpu;
 pub mod mesh;
 pub mod nav;
+pub mod origin;
 pub mod render;
 pub mod scene;
 pub mod shell;
