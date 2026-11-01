@@ -23,6 +23,10 @@ fn is_number(w: &str) -> bool {
 /// What the kernel said, in words for a person.
 pub fn plain_error(why: &str) -> String {
     match why.trim() {
+        "thread: BadSize" => {
+            "That thread doesn't fit this cylinder: its diameter must be between the thread's minor and major"
+                .to_string()
+        }
         "extent: NotCovered" => "The next face doesn't cover the whole profile".to_string(),
         "extent: NoNextFace" => "There's no face ahead to reach".to_string(),
         w if w.contains("the next face in a multi-body part") => {
@@ -192,9 +196,9 @@ pub fn fields(kind: &str, args: &[&str]) -> Vec<(String, String)> {
 /// Which section of a feature's dialog a field belongs to.
 pub fn section(label: &str) -> &'static str {
     match label {
-        "Operation" | "Hand" | "Flip" | "Smooth" => "Output",
-        "Plane" | "Profile" | "Profiles" | "Path" | "Axis" | "On" | "Centre path" | "Rail" | "Edges"
-        | "Faces" | "Reference" | "Features" | "Bodies" | "Points" | "Cylinder" | "Target" | "Tools" => {
+        "Operation" | "Flip" | "Smooth" => "Output",
+        "Cylinder" | "Plane" | "Profile" | "Profiles" | "Path" | "Axis" | "On" | "Centre path" | "Rail"
+        | "Edges" | "Faces" | "Reference" | "Features" | "Bodies" | "Points" | "Target" | "Tools" => {
             "Input Geometry"
         }
         _ => "Behavior",

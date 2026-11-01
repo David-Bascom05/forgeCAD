@@ -38,6 +38,8 @@ pub struct Dialog {
     pub toward: Toward,
     /// + was pressed: OK, then another of these.
     pub again: bool,
+    /// A thread's choice from the catalogue.
+    pub thread: ThreadChoice,
     /// The selections still to come after the one taking clicks.
     pub queue: Vec<(String, &'static str)>,
 }
@@ -56,6 +58,42 @@ pub enum Toward {
     Forward,
     Back,
     Both,
+}
+
+/// A thread from the catalogue: type, size, designation, class; and which way it's gauged.
+#[derive(Clone, Debug, PartialEq)]
+pub struct ThreadChoice {
+    pub family: String,
+    pub size: String,
+    pub designation: String,
+    pub class: String,
+    /// Cut in a bore, not on a rod: which classes it has.
+    pub internal: bool,
+}
+
+impl Default for ThreadChoice {
+    fn default() -> ThreadChoice {
+        ThreadChoice {
+            family: "ISO Metric".to_string(),
+            size: String::new(),
+            designation: String::new(),
+            class: String::new(),
+            internal: false,
+        }
+    }
+}
+
+impl ThreadChoice {
+    fn entry(&self) -> Option<&'static forge_doc::threads::Thread> {
+        forge_doc::threads::designations(&self.family, &self.size)
+            .into_iter()
+            .find(|t| t.designation == self.designation)
+    }
+
+    fn classes(&self) -> &'static [&'static str] {
+        self.entry()
+            .map_or(&[], |t| if self.internal { t.internal } else { t.external })
+    }
 }
 
 /// Does this kind's line start with how it combines with the part?
@@ -125,6 +163,8 @@ impl Dialog {
                     ("Size".to_string(), String::new()),
                     ("Cylinder".to_string(), String::new()),
                     ("Length".to_string(), "full".to_string()),
+                    ("Hand".to_string(), String::new()),
+                    ("Class".to_string(), String::new()),
                 ];
             }
             _ => {}
@@ -136,6 +176,7 @@ impl Dialog {
             fields,
             pick: pick.map(|(l, why)| (l.to_string(), why)),
             queue,
+            thread: ThreadChoice::default(),
             sent: None,
             seq: 0,
             error: None,
@@ -167,6 +208,7 @@ impl Dialog {
             toward: Toward::Forward,
             again: false,
             queue: Vec::new(),
+            thread: ThreadChoice::default(),
         }
     }
 
@@ -178,6 +220,9 @@ impl Dialog {
             self.fields.insert(0, ("Operation".to_string(), String::new()));
         }
         self.read_extent();
+        if self.kind == "thread" && matches!(self.target, DialogTarget::Edit(_)) {
+            self.read_thread();
+        }
         for (label, text) in &mut self.fields {
             if let Some(kind) = panel::field_kind(label) {
                 let file = std::mem::take(text);
@@ -303,9 +348,14 @@ impl Dialog {
 
     /// A field that must come from the view is still empty.
     pub fn waiting_for_pick(&self) -> bool {
-        self.pick
-            .as_ref()
-            .is_some_and(|(l, _)| self.fields.iter().any(|f| f.0 == *l && f.1.trim().is_empty()))
+        self.thread_blocked().is_some()
+            || (self.kind == "thread"
+                && self.fields.iter().any(|f| f.0 == "Size" && f.1.is_empty())
+                && matches!(self.target, DialogTarget::New(_)))
+            || self
+                .pick
+                .as_ref()
+                .is_some_and(|(l, _)| self.fields.iter().any(|f| f.0 == *l && f.1.trim().is_empty()))
             || self
                 .queue
                 .iter()
@@ -352,18 +402,169 @@ impl Dialog {
         };
     }
 
-    /// A thread's cylinder, and the size that fits it till one's typed.
-    pub fn thread_on(&mut self, on: String, size: Option<String>) {
+    /// A thread's cylinder, and the size of the chosen type that fits it.
+    pub fn thread_on(&mut self, on: String, diameter: f64, internal: bool) {
+        self.thread.internal = internal;
+        let fit = forge_doc::threads::fits(&self.thread.family, diameter, internal);
+        if let Some(t) = fit {
+            self.thread.size.clone_from(&t.size);
+            self.thread.designation.clone_from(&t.designation);
+        }
+        self.settle_thread();
+        if let Some(f) = self.fields.iter_mut().find(|f| f.0 == "Cylinder") {
+            f.1 = on;
+        }
+    }
+
+    /// Choose from the catalogue; what's below what changed comes to the first it has.
+    pub fn choose_thread(
+        &mut self,
+        family: Option<&str>,
+        size: Option<&str>,
+        designation: Option<&str>,
+        class: Option<&str>,
+    ) {
+        if let Some(f) = family {
+            // the nearest it has to what was chosen, or its first
+            let was = self.thread.entry().map(|t| t.major);
+            self.thread.family = f.to_string();
+            let near = was
+                .and_then(|d| forge_doc::threads::fits(f, d, self.thread.internal))
+                .or_else(|| forge_doc::threads::catalogue().iter().find(|t| t.family == f));
+            self.thread.size = near.map_or(String::new(), |t| t.size.clone());
+            self.thread.designation = near.map_or(String::new(), |t| t.designation.clone());
+        }
+        if let Some(s) = size {
+            self.thread.size = s.to_string();
+            self.thread.designation = forge_doc::threads::designations(&self.thread.family, s)
+                .first()
+                .map_or(String::new(), |t| t.designation.clone());
+        }
+        if let Some(d) = designation {
+            self.thread.designation = d.to_string();
+        }
+        if let Some(c) = class {
+            self.thread.class = c.to_string();
+        }
+        self.settle_thread();
+    }
+
+    /// The fields the line reads, from what's chosen.
+    fn settle_thread(&mut self) {
+        if !self.thread.classes().iter().any(|c| *c == self.thread.class) {
+            self.thread.class = self
+                .thread
+                .classes()
+                .first()
+                .map_or(String::new(), |c| c.to_string());
+        }
+        let spec = self
+            .thread
+            .entry()
+            .and_then(|t| t.spec.clone())
+            .unwrap_or_default();
+        let class = match self.thread.class.as_str() {
+            "" | "-" => String::new(),
+            c => format!("class {c}"),
+        };
         for f in &mut self.fields {
-            if f.0 == "Cylinder" {
-                f.1.clone_from(&on);
+            match f.0.as_str() {
+                "Size" => f.1.clone_from(&spec),
+                "Class" => f.1.clone_from(&class),
+                _ => {}
             }
-            if f.0 == "Size"
-                && f.1.is_empty()
-                && let Some(s) = &size
-            {
-                f.1.clone_from(s);
+        }
+    }
+
+    /// What's chosen can't be cut yet: why.
+    pub fn thread_blocked(&self) -> Option<String> {
+        if self.kind != "thread" {
+            return None;
+        }
+        self.thread.entry().filter(|t| !t.modeled).map(|t| {
+            format!(
+                "{} has its own form, which can't be cut yet: only 60 degree V threads can",
+                t.family
+            )
+        })
+    }
+
+    /// A thread's line read back into its choice, to edit it.
+    fn read_thread(&mut self) {
+        let line: Vec<String> = self
+            .fields
+            .iter()
+            .flat_map(|f| f.1.split_whitespace().map(str::to_string).collect::<Vec<_>>())
+            .collect();
+        let Some(first) = line.first() else { return };
+        let (mut cylinder, mut length, mut hand, mut class) =
+            (String::new(), String::new(), String::new(), String::new());
+        let found = forge_doc::threads::catalogue().iter().find(|t| {
+            t.spec.as_deref() == Some(first.as_str())
+                || t.spec
+                    .as_deref()
+                    .is_some_and(|s| s.split('x').next() == Some(first.as_str()) && t.pitch > 0.0)
+        });
+        let mut k = 1;
+        if first == "hole" {
+            cylinder = line[..2.min(line.len())].join(" ");
+            k = 2;
+        } else if line.get(1).is_some_and(|w| w == "face") {
+            cylinder = line[1..4.min(line.len())].join(" ");
+            k = 4;
+        }
+        while k < line.len() {
+            match line[k].as_str() {
+                "left" => hand = "left".to_string(),
+                "class" => {
+                    class = line.get(k + 1).cloned().unwrap_or_default();
+                    k += 1;
+                }
+                w if length.is_empty() => length = w.to_string(),
+                _ => {}
             }
+            k += 1;
+        }
+        if let Some(t) = found {
+            self.thread = ThreadChoice {
+                family: t.family.to_string(),
+                size: t.size.clone(),
+                designation: t.designation.clone(),
+                class: class.clone(),
+                internal: false,
+            };
+        }
+        let size = if found.is_some() {
+            String::new()
+        } else {
+            first.clone()
+        };
+        self.fields = vec![
+            ("Size".to_string(), size),
+            ("Cylinder".to_string(), cylinder),
+            (
+                "Length".to_string(),
+                if length.is_empty() {
+                    "full".to_string()
+                } else {
+                    length
+                },
+            ),
+            ("Hand".to_string(), hand),
+            (
+                "Class".to_string(),
+                if class.is_empty() {
+                    String::new()
+                } else {
+                    format!("class {class}")
+                },
+            ),
+        ];
+        if found.is_some() {
+            if self.thread.internal || !self.thread.classes().iter().any(|c| *c == class) {
+                self.thread.internal = true;
+            }
+            self.settle_thread();
         }
     }
 
@@ -430,6 +631,81 @@ fn toggle_row(
         }
     }
     chose
+}
+
+type ThreadChange = (Option<String>, Option<String>, Option<String>, Option<String>);
+
+/// One of a thread's dropdowns.
+fn dropdown(
+    ui: &mut egui::Ui,
+    t: &super::theme::Theme,
+    label: &str,
+    now: &str,
+    items: &[(String, String, bool)],
+) -> Option<String> {
+    let (row, _) = ui.allocate_exact_size(vec2(DIALOG_W, 28.0), Sense::hover());
+    ui.painter().text(
+        pos2(row.left(), row.center().y),
+        Align2::LEFT_CENTER,
+        label,
+        sans(13.0),
+        t.ink,
+    );
+    let at = Rect::from_min_size(
+        pos2(row.left() + FIELD_AT, row.top() + 1.0),
+        vec2(DIALOG_W - FIELD_AT, 26.0),
+    );
+    let mut chose = None;
+    ui.scope_builder(egui::UiBuilder::new().max_rect(at), |ui| {
+        egui::ComboBox::from_id_salt(("thread", label))
+            .selected_text(now)
+            .width(DIALOG_W - FIELD_AT)
+            .height(320.0)
+            .show_ui(ui, |ui| {
+                for (value, words, greyed) in items {
+                    let text = egui::RichText::new(words);
+                    let text = if *greyed { text.color(t.ink2) } else { text };
+                    if ui.selectable_label(value == now, text).clicked() {
+                        chose = Some(value.clone());
+                    }
+                }
+            });
+    });
+    chose
+}
+
+/// Type, Size, Designation, Class, in that order.
+fn thread_rows(ui: &mut egui::Ui, c: &ThreadChoice, t: &super::theme::Theme, out: &mut ThreadChange) {
+    use forge_doc::threads as th;
+    let families: Vec<(String, String, bool)> = th::families()
+        .into_iter()
+        .map(|f| {
+            let cut = th::catalogue().iter().any(|x| x.family == f && x.modeled);
+            let words = if cut {
+                f.to_string()
+            } else {
+                format!("{f} (can't be cut yet)")
+            };
+            (f.to_string(), words, !cut)
+        })
+        .collect();
+    out.0 = dropdown(ui, t, "Type", &c.family, &families);
+    let sizes: Vec<(String, String, bool)> = th::sizes(&c.family)
+        .into_iter()
+        .map(|s| (s.to_string(), s.to_string(), false))
+        .collect();
+    out.1 = dropdown(ui, t, "Size", &c.size, &sizes);
+    let names: Vec<(String, String, bool)> = th::designations(&c.family, &c.size)
+        .into_iter()
+        .map(|x| (x.designation.clone(), x.designation.clone(), false))
+        .collect();
+    out.2 = dropdown(ui, t, "Designation", &c.designation, &names);
+    let classes: Vec<(String, String, bool)> = c
+        .classes()
+        .iter()
+        .map(|k| (k.to_string(), k.to_string(), false))
+        .collect();
+    out.3 = dropdown(ui, t, "Class", &c.class, &classes);
 }
 
 /// A row of small icon buttons after its word: for options that don't earn a big toggle.
@@ -649,6 +925,8 @@ impl Shell {
                 let combine = d.kind == "combine";
                 let mut activate = None;
                 let d_kind = d.kind.clone();
+                let thread = d.thread.clone();
+                let mut thread_change: ThreadChange = (None, None, None, None);
                 let mut extent = d.extent;
                 let mut toward = d.toward;
                 for section in ["Input Geometry", "Behavior", "Output"] {
@@ -686,6 +964,29 @@ impl Shell {
                                     ["", "cut", "keep", "new"][k].to_string()
                                 };
                             }
+                            continue;
+                        }
+                        if label == "Hand" {
+                            if let Some(k) = small_row(
+                                ui,
+                                &t,
+                                "Hand",
+                                &[
+                                    ("forward", "Right-handed", text.is_empty()),
+                                    ("backward", "Left-handed", text == "left"),
+                                ],
+                                "dialog:hand",
+                                &mut places,
+                            ) {
+                                *text = ["", "left"][k].to_string();
+                            }
+                            continue;
+                        }
+                        if label == "Class" {
+                            continue;
+                        }
+                        if label == "Size" && d_kind == "thread" {
+                            thread_rows(ui, &thread, &t, &mut thread_change);
                             continue;
                         }
                         if label == "Direction" {
@@ -789,6 +1090,17 @@ impl Shell {
                 d.toward = toward;
                 if let Some(l) = activate {
                     d.activate(&l);
+                }
+                let (a, b, c, e) = thread_change;
+                if a.is_some() || b.is_some() || c.is_some() || e.is_some() {
+                    d.choose_thread(a.as_deref(), b.as_deref(), c.as_deref(), e.as_deref());
+                }
+                if let Some(why) = d.thread_blocked() {
+                    let g = ui.fonts_mut(|f| f.layout(why, sans(12.0), t.ink, DIALOG_W - 14.0));
+                    let (r, _) = ui.allocate_exact_size(vec2(DIALOG_W, g.size().y + 8.0), Sense::hover());
+                    ui.painter()
+                        .rect_stroke(r, 4.0, Stroke::new(1.0, t.focus), egui::StrokeKind::Inside);
+                    ui.painter().galley(r.min + vec2(7.0, 4.0), g, t.ink);
                 }
                 if let Some(why) = &d.error {
                     ui.add_space(2.0);

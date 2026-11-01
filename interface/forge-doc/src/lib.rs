@@ -6,6 +6,7 @@ pub mod doc;
 pub mod expr;
 pub mod sketch;
 pub mod text;
+pub mod threads;
 pub mod units;
 pub mod wire;
 

@@ -577,14 +577,8 @@ impl Gui {
                         && let Some(doc) = &self.shell.doc
                         && let Some(name) = doc.name(owner)
                     {
-                        let by_hole = self.shell.rows.iter().any(|r| r.id == owner && r.kind == "hole");
-                        let on = if by_hole {
-                            format!("hole {name}")
-                        } else {
-                            format!("face {name} {handle}")
-                        };
-                        let size = (!by_hole).then(|| format!("M{}", (r * 2.0).round()));
-                        d.thread_on(on, size.or(Some("M6".to_string())));
+                        let bore = v.facts.face_bore.get(f as usize).copied().unwrap_or(false);
+                        d.thread_on(format!("face {name} {handle}"), r * 2.0, bore);
                     }
                     v.dirty = true;
                     v.clicks = v.nav.clicks;
@@ -988,6 +982,9 @@ impl Gui {
                     self.end_preview();
                     let names = self.param_names();
                     let mut d = Dialog::new_feature(kind).in_units(self.shell.units, names);
+                    if kind == "thread" {
+                        d.choose_thread(Some("ISO Metric"), None, None, None);
+                    }
                     if matches!(kind, "extrude" | "revolve")
                         && let Some(name) = self.free_sketch()
                     {

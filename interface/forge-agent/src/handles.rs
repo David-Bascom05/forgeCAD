@@ -38,6 +38,8 @@ pub struct Facts {
     pub vertex_refs: Vec<String>,
     /// By the body's face index: its radius, if it's a cylinder.
     pub face_radius: Vec<Option<f64>>,
+    /// By the body's face index: does it face its own axis, as a bore's wall does?
+    pub face_bore: Vec<bool>,
     pub sketches: Vec<SketchShape>,
 }
 
@@ -349,6 +351,7 @@ pub fn facts(model: &mut Model) -> Facts {
         edge_refs,
         vertex_refs: vertex_refs(model.body()),
         face_radius: radii(model.body()),
+        face_bore: bores(model.body()),
         sketches: sketch_shapes(model, model.features.len()),
     }
 }
@@ -359,6 +362,11 @@ fn vertex_refs(body: Option<&forge_topo::Body>) -> Vec<String> {
     b.vertex_ids()
         .map(|v| names.get(&b.vertex(v).name).cloned().unwrap_or_default())
         .collect()
+}
+
+fn bores(body: Option<&forge_topo::Body>) -> Vec<bool> {
+    let Some(b) = body else { return Vec::new() };
+    b.face_ids().map(|f| !b.face(f).same_sense).collect()
 }
 
 fn radii(body: Option<&forge_topo::Body>) -> Vec<Option<f64>> {
@@ -399,6 +407,7 @@ pub fn facts_at(model: &Model, n: usize) -> Facts {
         edge_refs,
         vertex_refs: vertex_refs(model.body_after(n)),
         face_radius: radii(model.body_after(n)),
+        face_bore: bores(model.body_after(n)),
         sketches: sketch_shapes(model, n),
     }
 }

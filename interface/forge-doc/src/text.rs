@@ -1358,12 +1358,18 @@ pub const KINDS: &[Kind] = &[
             } else {
                 Handed::Right
             };
+            let chamfer = p.eat("chamfer");
+            let runout = p.eat("runout");
+            // what it's to be gauged to: said on the line, nothing built from it
+            if p.eat("class") {
+                p.next()?;
+            }
             Ok(Feature::Thread(Box::new(ScrewThread {
                 on,
                 length,
                 handed,
-                chamfer: p.eat("chamfer"),
-                runout: p.eat("runout"),
+                chamfer,
+                runout,
             })))
         },
         print: |f, w| {

@@ -582,3 +582,90 @@ fn combine_on_overlapping_bodies_takes_each_from_the_view_or_the_tree() {
     ok(&mut h, "from the tree");
     assert!((built(&file, "tree") - want).abs() < 1e-6);
 }
+
+fn thread_on(part: &str, at: [f32; 3], tag: &str) -> Option<(Headless, std::path::PathBuf, f64)> {
+    let (mut h, file) = open(part, tag)?;
+    let was = built(&file, "before");
+    button(&mut h, "Thread");
+    point_at(&mut h, at);
+    Some((h, file, was))
+}
+
+#[test]
+fn a_thread_on_a_hole_made_cylinder_and_on_any_diameter_comes_from_the_catalogue() {
+    let c = core::f32::consts::FRAC_1_SQRT_2;
+    // a boss no coarse size is exactly: the nearest fits
+    let Some((mut h, file, was)) = thread_on(
+        "base: extrude 20 circle 0 0 6.5\n",
+        [6.5 * c, -6.5 * c, 10.0],
+        "th13",
+    ) else {
+        return;
+    };
+    let d = h.gui.shell.dialog.as_ref().unwrap();
+    assert_eq!(d.thread.designation, "M14x2", "{}", d.line());
+    assert_eq!(d.thread.class, "4h", "an outside thread's classes");
+    h.gui
+        .shell
+        .dialog
+        .as_mut()
+        .unwrap()
+        .choose_thread(None, None, None, Some("6g"));
+    ok(&mut h, "boss 13");
+    let text = std::fs::read_to_string(&file).unwrap();
+    assert!(
+        text.contains("thread M14x2 face base @f") && text.contains("class 6g"),
+        "{text}"
+    );
+    assert!((built(&file, "boss 13") - was).abs() > 0.1, "it cut something");
+    // reopened, it's what was chosen
+    let id = h.gui.shell.doc.as_ref().unwrap().items.last().unwrap().id;
+    h.gui.shell.out.push(Action::Edit(id));
+    assert!(h.until(|g| g.shell.dialog.is_some()));
+    let d = h.gui.shell.dialog.as_ref().unwrap();
+    assert_eq!(
+        (d.thread.designation.as_str(), d.thread.class.as_str()),
+        ("M14x2", "6g"),
+        "{:?}",
+        d.fields
+    );
+
+    // a hole's wall: the bore's size picks the size whose minor it is, and the thread's inside
+    let drilled = "base: extrude 20 rect -30 -30 60 60\nh: hole 12 -xy at 0 0 20 thru\n";
+    let Some((mut h, file, was)) = thread_on(drilled, [-6.0 * c, 6.0 * c, 16.0], "thhole") else {
+        return;
+    };
+    let d = h.gui.shell.dialog.as_ref().unwrap();
+    assert_eq!(d.thread.designation, "M14x2", "{}", d.line());
+    assert!(d.thread.internal);
+    assert_eq!(d.thread.class, "5H");
+    ok(&mut h, "tapped");
+    assert!((built(&file, "tapped") - was).abs() > 0.1);
+
+    // a type that can't be cut says so, and OK waits
+    let Some((mut h, _, _)) = thread_on(
+        "base: extrude 20 circle 0 0 10\n",
+        [10.0 * c, -10.0 * c, 10.0],
+        "thtr",
+    ) else {
+        return;
+    };
+    h.gui
+        .shell
+        .dialog
+        .as_mut()
+        .unwrap()
+        .choose_thread(Some("ISO Trapezoidal"), None, None, None);
+    for _ in 0..3 {
+        h.step();
+    }
+    let d = h.gui.shell.dialog.as_ref().unwrap();
+    assert!(d.thread_blocked().is_some() && d.waiting_for_pick());
+    // the same pick, left-handed, in inches
+    let d = h.gui.shell.dialog.as_mut().unwrap();
+    d.choose_thread(Some("UNC"), Some("3/4"), None, None);
+    d.fields.iter_mut().find(|f| f.0 == "Hand").unwrap().1 = "left".to_string();
+    assert!(d.thread_blocked().is_none());
+    assert!(d.line().starts_with("thread 0.75-10 face"), "{}", d.line());
+    assert!(d.line().contains("full left class 1A"), "{}", d.line());
+}

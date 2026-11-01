@@ -1,0 +1,815 @@
+//! Screw threads as a person chooses them: type, size, designation, class. One table, for the
+//! dialogs and for agents. The standards themselves are paid: the lists here are their widely
+//! published size tables, entered by hand and spot-checked, not compared with the standards.
+//! `SOURCES` says, type by type, what each is.
+//!
+//! Only some can be cut: the kernel's thread has the 60 degree V form alone. The rest are listed
+//! with `modeled` false, for a hole's record or a drawing, until it has their forms.
+
+use std::sync::OnceLock;
+
+/// One selection in the catalogue.
+#[derive(Clone, Debug, PartialEq)]
+pub struct Thread {
+    pub family: &'static str,
+    /// As the family writes the size: M6, 1/4, G1/2.
+    pub size: String,
+    /// The size with its pitch: M6x1, 1/4-20.
+    pub designation: String,
+    /// Major diameter and pitch, mm.
+    pub major: f64,
+    pub pitch: f64,
+    /// Can the kernel cut it?
+    pub modeled: bool,
+    pub external: &'static [&'static str],
+    pub internal: &'static [&'static str],
+    /// How `thread` writes it, for those it can cut.
+    pub spec: Option<String>,
+}
+
+/// Type by type, where its table comes from. All are public listings of paid standards; none has been
+/// compared with the standard itself.
+pub const SOURCES: [(&str, &str); 19] = [
+    ("ISO Metric", "ISO 261 sizes and pitches, as widely reproduced"),
+    (
+        "ANSI Metric M",
+        "ASME B1.13M preferred sizes, as widely reproduced",
+    ),
+    ("UNC", "ASME B1.1 coarse series, as widely reproduced"),
+    ("UNF", "ASME B1.1 fine series, as widely reproduced"),
+    ("UNEF", "ASME B1.1 extra fine series, as widely reproduced"),
+    (
+        "4UN",
+        "ASME B1.1 constant pitch: generated over the standard's size steps",
+    ),
+    (
+        "6UN",
+        "ASME B1.1 constant pitch: generated over the standard's size steps",
+    ),
+    (
+        "8UN",
+        "ASME B1.1 constant pitch: generated over the standard's size steps",
+    ),
+    (
+        "12UN",
+        "ASME B1.1 constant pitch: generated over the standard's size steps",
+    ),
+    (
+        "16UN",
+        "ASME B1.1 constant pitch: generated over the standard's size steps",
+    ),
+    (
+        "ISO Trapezoidal",
+        "ISO 2904 sizes and pitches, as widely reproduced, to 140 mm",
+    ),
+    ("ACME", "ASME B1.5 general purpose sizes, as widely reproduced"),
+    ("Stub ACME", "ASME B1.8 sizes, as widely reproduced"),
+    ("NPT", "ASME B1.20.1 sizes; major is the pipe's outside diameter"),
+    ("NPTF", "ASME B1.20.3 sizes; major is the pipe's outside diameter"),
+    ("BSP G", "ISO 228-1 sizes, as widely reproduced"),
+    ("BSP R/Rp", "ISO 7-1 sizes, as widely reproduced"),
+    ("Whitworth", "BS 84 BSW and BSF sizes, as widely reproduced"),
+    ("Pg / Rd", "DIN 40430 and DIN 405 sizes, as widely reproduced"),
+];
+
+const IN: f64 = 25.4;
+const ISO_EXT: &[&str] = &["4h", "6e", "6f", "6g", "6h", "8g"];
+const ISO_INT: &[&str] = &["5H", "6G", "6H", "7H", "8H"];
+const UN_EXT: &[&str] = &["1A", "2A", "3A"];
+const UN_INT: &[&str] = &["1B", "2B", "3B"];
+const M_EXT: &[&str] = &["4g6g", "6g", "6h"];
+const M_INT: &[&str] = &["4H6H", "6H"];
+const TR_EXT: &[&str] = &["7e", "7c", "8e", "8c", "9c"];
+const TR_INT: &[&str] = &["7H", "8H", "9H"];
+const AC_EXT: &[&str] = &["2G", "3G", "4G", "5G", "2C", "3C", "4C"];
+const AC_INT: &[&str] = &["2G", "3G", "4G", "5G", "2C", "3C", "4C"];
+const G_EXT: &[&str] = &["A", "B"];
+const G_INT: &[&str] = &["-"];
+const NONE: &[&str] = &["-"];
+
+/// ISO 261: diameter, whether the first pitch is the coarse one, and the pitches.
+const ISO_261: &[(f64, &[f64])] = &[
+    (1.0, &[0.25, 0.2]),
+    (1.1, &[0.25, 0.2]),
+    (1.2, &[0.25, 0.2]),
+    (1.4, &[0.3, 0.2]),
+    (1.6, &[0.35, 0.2]),
+    (1.8, &[0.35, 0.2]),
+    (2.0, &[0.4, 0.25]),
+    (2.2, &[0.45, 0.25]),
+    (2.5, &[0.45, 0.35]),
+    (3.0, &[0.5, 0.35]),
+    (3.5, &[0.6, 0.35]),
+    (4.0, &[0.7, 0.5]),
+    (4.5, &[0.75, 0.5]),
+    (5.0, &[0.8, 0.5]),
+    (5.5, &[0.5]),
+    (6.0, &[1.0, 0.75]),
+    (7.0, &[1.0, 0.75]),
+    (8.0, &[1.25, 1.0, 0.75]),
+    (9.0, &[1.25, 1.0, 0.75]),
+    (10.0, &[1.5, 1.25, 1.0, 0.75]),
+    (11.0, &[1.5, 1.0, 0.75]),
+    (12.0, &[1.75, 1.5, 1.25, 1.0]),
+    (14.0, &[2.0, 1.5, 1.25, 1.0]),
+    (15.0, &[1.5, 1.0]),
+    (16.0, &[2.0, 1.5, 1.0]),
+    (17.0, &[1.5, 1.0]),
+    (18.0, &[2.5, 2.0, 1.5, 1.0]),
+    (20.0, &[2.5, 2.0, 1.5, 1.0]),
+    (22.0, &[2.5, 2.0, 1.5, 1.0]),
+    (24.0, &[3.0, 2.0, 1.5, 1.0]),
+    (25.0, &[2.0, 1.5, 1.0]),
+    (26.0, &[1.5]),
+    (27.0, &[3.0, 2.0, 1.5, 1.0]),
+    (28.0, &[2.0, 1.5, 1.0]),
+    (30.0, &[3.5, 3.0, 2.0, 1.5, 1.0]),
+    (32.0, &[2.0, 1.5]),
+    (33.0, &[3.5, 3.0, 2.0, 1.5]),
+    (35.0, &[1.5]),
+    (36.0, &[4.0, 3.0, 2.0, 1.5]),
+    (38.0, &[1.5]),
+    (39.0, &[4.0, 3.0, 2.0, 1.5]),
+    (40.0, &[3.0, 2.0, 1.5]),
+    (42.0, &[4.5, 4.0, 3.0, 2.0, 1.5]),
+    (45.0, &[4.5, 4.0, 3.0, 2.0, 1.5]),
+    (48.0, &[5.0, 4.0, 3.0, 2.0, 1.5]),
+    (50.0, &[3.0, 2.0, 1.5]),
+    (52.0, &[5.0, 4.0, 3.0, 2.0, 1.5]),
+    (55.0, &[4.0, 3.0, 2.0, 1.5]),
+    (56.0, &[5.5, 4.0, 3.0, 2.0, 1.5]),
+    (58.0, &[4.0, 3.0, 2.0, 1.5]),
+    (60.0, &[5.5, 4.0, 3.0, 2.0, 1.5]),
+    (62.0, &[4.0, 3.0, 2.0, 1.5]),
+    (64.0, &[6.0, 4.0, 3.0, 2.0, 1.5]),
+    (65.0, &[4.0, 3.0, 2.0, 1.5]),
+    (68.0, &[6.0, 4.0, 3.0, 2.0, 1.5]),
+    (70.0, &[6.0, 4.0, 3.0, 2.0, 1.5]),
+    (72.0, &[6.0, 4.0, 3.0, 2.0, 1.5]),
+    (75.0, &[4.0, 3.0, 2.0, 1.5]),
+    (76.0, &[6.0, 4.0, 3.0, 2.0, 1.5]),
+    (78.0, &[2.0]),
+    (80.0, &[6.0, 4.0, 3.0, 2.0, 1.5]),
+    (82.0, &[2.0]),
+];
+
+const ANSI_M: &[(f64, &[f64])] = &[
+    (1.6, &[0.35]),
+    (2.0, &[0.4]),
+    (2.5, &[0.45]),
+    (3.0, &[0.5]),
+    (3.5, &[0.6]),
+    (4.0, &[0.7]),
+    (5.0, &[0.8]),
+    (6.0, &[1.0]),
+    (8.0, &[1.25, 1.0]),
+    (10.0, &[1.5, 1.25, 0.75]),
+    (12.0, &[1.75, 1.25, 1.0]),
+    (14.0, &[2.0, 1.5]),
+    (15.0, &[1.0]),
+    (16.0, &[2.0, 1.5]),
+    (17.0, &[1.0]),
+    (18.0, &[1.5]),
+    (20.0, &[2.5, 1.5, 1.0]),
+    (22.0, &[2.5, 1.5]),
+    (24.0, &[3.0, 2.0]),
+    (25.0, &[1.5]),
+    (27.0, &[3.0, 2.0]),
+    (30.0, &[3.5, 2.0, 1.5]),
+    (33.0, &[3.5, 2.0]),
+    (35.0, &[1.5]),
+    (36.0, &[4.0, 2.0]),
+    (39.0, &[4.0, 2.0]),
+    (40.0, &[1.5]),
+    (42.0, &[4.5, 2.0]),
+    (45.0, &[1.5]),
+    (48.0, &[5.0, 2.0]),
+    (50.0, &[1.5]),
+    (55.0, &[1.5]),
+    (56.0, &[5.5, 2.0]),
+    (60.0, &[1.5]),
+    (64.0, &[6.0, 2.0]),
+    (65.0, &[1.5]),
+    (70.0, &[1.5]),
+    (72.0, &[6.0, 2.0]),
+    (75.0, &[1.5]),
+    (80.0, &[6.0, 2.0, 1.5]),
+    (85.0, &[2.0]),
+    (90.0, &[6.0, 2.0]),
+    (95.0, &[2.0]),
+    (100.0, &[6.0, 2.0]),
+];
+
+/// ISO 2904: diameter and pitches, coarse first in its order of the table.
+const ISO_2904: &[(f64, &[f64])] = &[
+    (8.0, &[1.5]),
+    (9.0, &[2.0, 1.5]),
+    (10.0, &[2.0, 1.5]),
+    (11.0, &[3.0, 2.0]),
+    (12.0, &[3.0, 2.0]),
+    (14.0, &[3.0, 2.0]),
+    (16.0, &[4.0, 2.0]),
+    (18.0, &[4.0, 2.0]),
+    (20.0, &[4.0, 2.0]),
+    (22.0, &[8.0, 5.0, 3.0]),
+    (24.0, &[8.0, 5.0, 3.0]),
+    (26.0, &[8.0, 5.0, 3.0]),
+    (28.0, &[8.0, 5.0, 3.0]),
+    (30.0, &[10.0, 6.0, 3.0]),
+    (32.0, &[10.0, 6.0, 3.0]),
+    (34.0, &[10.0, 6.0, 3.0]),
+    (36.0, &[10.0, 6.0, 3.0]),
+    (38.0, &[10.0, 7.0, 3.0]),
+    (40.0, &[10.0, 7.0, 3.0]),
+    (42.0, &[10.0, 7.0, 3.0]),
+    (44.0, &[12.0, 7.0, 3.0]),
+    (46.0, &[12.0, 8.0, 3.0]),
+    (48.0, &[12.0, 8.0, 3.0]),
+    (50.0, &[12.0, 8.0, 3.0]),
+    (52.0, &[12.0, 8.0, 3.0]),
+    (55.0, &[14.0, 9.0, 3.0]),
+    (60.0, &[14.0, 9.0, 3.0]),
+    (65.0, &[16.0, 10.0, 4.0]),
+    (70.0, &[16.0, 10.0, 4.0]),
+    (75.0, &[16.0, 10.0, 4.0]),
+    (80.0, &[16.0, 10.0, 4.0]),
+    (85.0, &[20.0, 12.0, 5.0]),
+    (90.0, &[20.0, 12.0, 5.0]),
+    (95.0, &[20.0, 12.0, 5.0]),
+    (100.0, &[20.0, 12.0, 5.0]),
+    (110.0, &[20.0, 12.0, 5.0]),
+    (120.0, &[22.0, 14.0, 6.0]),
+    (130.0, &[22.0, 14.0, 6.0]),
+    (140.0, &[24.0, 14.0, 6.0]),
+];
+
+/// An inch size: its words and its major diameter in inches.
+type Inch = (&'static str, f64);
+
+const UNC: &[(Inch, f64)] = &[
+    (("#1", 0.073), 64.0),
+    (("#2", 0.086), 56.0),
+    (("#3", 0.099), 48.0),
+    (("#4", 0.112), 40.0),
+    (("#5", 0.125), 40.0),
+    (("#6", 0.138), 32.0),
+    (("#8", 0.164), 32.0),
+    (("#10", 0.19), 24.0),
+    (("#12", 0.216), 24.0),
+    (("1/4", 0.25), 20.0),
+    (("5/16", 0.3125), 18.0),
+    (("3/8", 0.375), 16.0),
+    (("7/16", 0.4375), 14.0),
+    (("1/2", 0.5), 13.0),
+    (("9/16", 0.5625), 12.0),
+    (("5/8", 0.625), 11.0),
+    (("3/4", 0.75), 10.0),
+    (("7/8", 0.875), 9.0),
+    (("1", 1.0), 8.0),
+    (("1-1/8", 1.125), 7.0),
+    (("1-1/4", 1.25), 7.0),
+    (("1-3/8", 1.375), 6.0),
+    (("1-1/2", 1.5), 6.0),
+    (("1-3/4", 1.75), 5.0),
+    (("2", 2.0), 4.5),
+    (("2-1/4", 2.25), 4.5),
+    (("2-1/2", 2.5), 4.0),
+    (("2-3/4", 2.75), 4.0),
+    (("3", 3.0), 4.0),
+    (("3-1/4", 3.25), 4.0),
+    (("3-1/2", 3.5), 4.0),
+    (("3-3/4", 3.75), 4.0),
+    (("4", 4.0), 4.0),
+];
+
+const UNF: &[(Inch, f64)] = &[
+    (("#0", 0.06), 80.0),
+    (("#1", 0.073), 72.0),
+    (("#2", 0.086), 64.0),
+    (("#3", 0.099), 56.0),
+    (("#4", 0.112), 48.0),
+    (("#5", 0.125), 44.0),
+    (("#6", 0.138), 40.0),
+    (("#8", 0.164), 36.0),
+    (("#10", 0.19), 32.0),
+    (("#12", 0.216), 28.0),
+    (("1/4", 0.25), 28.0),
+    (("5/16", 0.3125), 24.0),
+    (("3/8", 0.375), 24.0),
+    (("7/16", 0.4375), 20.0),
+    (("1/2", 0.5), 20.0),
+    (("9/16", 0.5625), 18.0),
+    (("5/8", 0.625), 18.0),
+    (("3/4", 0.75), 16.0),
+    (("7/8", 0.875), 14.0),
+    (("1", 1.0), 12.0),
+    (("1-1/8", 1.125), 12.0),
+    (("1-1/4", 1.25), 12.0),
+    (("1-3/8", 1.375), 12.0),
+    (("1-1/2", 1.5), 12.0),
+];
+
+const UNEF: &[(Inch, f64)] = &[
+    (("#12", 0.216), 32.0),
+    (("1/4", 0.25), 32.0),
+    (("5/16", 0.3125), 32.0),
+    (("3/8", 0.375), 32.0),
+    (("7/16", 0.4375), 28.0),
+    (("1/2", 0.5), 28.0),
+    (("9/16", 0.5625), 24.0),
+    (("5/8", 0.625), 24.0),
+    (("11/16", 0.6875), 24.0),
+    (("3/4", 0.75), 20.0),
+    (("13/16", 0.8125), 20.0),
+    (("7/8", 0.875), 20.0),
+    (("15/16", 0.9375), 20.0),
+    (("1", 1.0), 20.0),
+    (("1-1/16", 1.0625), 18.0),
+    (("1-1/8", 1.125), 18.0),
+    (("1-3/16", 1.1875), 18.0),
+    (("1-1/4", 1.25), 18.0),
+    (("1-5/16", 1.3125), 18.0),
+    (("1-3/8", 1.375), 18.0),
+    (("1-7/16", 1.4375), 18.0),
+    (("1-1/2", 1.5), 18.0),
+    (("1-9/16", 1.5625), 18.0),
+    (("1-5/8", 1.625), 18.0),
+    (("1-11/16", 1.6875), 18.0),
+];
+
+const ACME: &[(Inch, f64)] = &[
+    (("1/4", 0.25), 16.0),
+    (("5/16", 0.3125), 14.0),
+    (("3/8", 0.375), 12.0),
+    (("7/16", 0.4375), 12.0),
+    (("1/2", 0.5), 10.0),
+    (("5/8", 0.625), 8.0),
+    (("3/4", 0.75), 6.0),
+    (("7/8", 0.875), 6.0),
+    (("1", 1.0), 5.0),
+    (("1-1/8", 1.125), 5.0),
+    (("1-1/4", 1.25), 5.0),
+    (("1-3/8", 1.375), 4.0),
+    (("1-1/2", 1.5), 4.0),
+    (("1-3/4", 1.75), 4.0),
+    (("2", 2.0), 4.0),
+    (("2-1/4", 2.25), 3.0),
+    (("2-1/2", 2.5), 3.0),
+    (("2-3/4", 2.75), 3.0),
+    (("3", 3.0), 2.0),
+    (("3-1/2", 3.5), 2.0),
+    (("4", 4.0), 2.0),
+    (("4-1/2", 4.5), 2.0),
+    (("5", 5.0), 2.0),
+];
+
+/// Pipe sizes: nominal, pipe's outside diameter in mm, threads per inch.
+const NPT: &[(&str, f64, f64)] = &[
+    ("1/16", 7.938, 27.0),
+    ("1/8", 10.287, 27.0),
+    ("1/4", 13.716, 18.0),
+    ("3/8", 17.145, 18.0),
+    ("1/2", 21.336, 14.0),
+    ("3/4", 26.67, 14.0),
+    ("1", 33.401, 11.5),
+    ("1-1/4", 42.164, 11.5),
+    ("1-1/2", 48.26, 11.5),
+    ("2", 60.325, 11.5),
+    ("2-1/2", 73.025, 8.0),
+    ("3", 88.9, 8.0),
+    ("3-1/2", 101.6, 8.0),
+    ("4", 114.3, 8.0),
+    ("5", 141.3, 8.0),
+    ("6", 168.275, 8.0),
+    ("8", 219.075, 8.0),
+    ("10", 273.05, 8.0),
+    ("12", 323.85, 8.0),
+    ("14", 355.6, 8.0),
+    ("16", 406.4, 8.0),
+    ("18", 457.2, 8.0),
+    ("20", 508.0, 8.0),
+    ("24", 609.6, 8.0),
+];
+
+const BSP: &[(&str, f64, f64)] = &[
+    ("1/16", 7.723, 28.0),
+    ("1/8", 9.728, 28.0),
+    ("1/4", 13.157, 19.0),
+    ("3/8", 16.662, 19.0),
+    ("1/2", 20.955, 14.0),
+    ("5/8", 22.911, 14.0),
+    ("3/4", 26.441, 14.0),
+    ("7/8", 30.201, 14.0),
+    ("1", 33.249, 11.0),
+    ("1-1/8", 37.897, 11.0),
+    ("1-1/4", 41.91, 11.0),
+    ("1-1/2", 47.803, 11.0),
+    ("1-3/4", 53.746, 11.0),
+    ("2", 59.614, 11.0),
+    ("2-1/4", 65.71, 11.0),
+    ("2-1/2", 75.184, 11.0),
+    ("2-3/4", 81.534, 11.0),
+    ("3", 87.884, 11.0),
+    ("3-1/2", 100.33, 11.0),
+    ("4", 113.03, 11.0),
+    ("4-1/2", 125.73, 11.0),
+    ("5", 138.43, 11.0),
+    ("5-1/2", 151.13, 11.0),
+    ("6", 163.83, 11.0),
+];
+
+const BSW: &[(Inch, f64)] = &[
+    (("1/8", 0.125), 40.0),
+    (("3/16", 0.1875), 24.0),
+    (("1/4", 0.25), 20.0),
+    (("5/16", 0.3125), 18.0),
+    (("3/8", 0.375), 16.0),
+    (("7/16", 0.4375), 14.0),
+    (("1/2", 0.5), 12.0),
+    (("9/16", 0.5625), 12.0),
+    (("5/8", 0.625), 11.0),
+    (("3/4", 0.75), 10.0),
+    (("7/8", 0.875), 9.0),
+    (("1", 1.0), 8.0),
+    (("1-1/8", 1.125), 7.0),
+    (("1-1/4", 1.25), 7.0),
+    (("1-1/2", 1.5), 6.0),
+    (("1-3/4", 1.75), 5.0),
+    (("2", 2.0), 4.5),
+];
+
+const BSF: &[(Inch, f64)] = &[
+    (("3/16", 0.1875), 32.0),
+    (("1/4", 0.25), 26.0),
+    (("5/16", 0.3125), 22.0),
+    (("3/8", 0.375), 20.0),
+    (("7/16", 0.4375), 18.0),
+    (("1/2", 0.5), 16.0),
+    (("9/16", 0.5625), 16.0),
+    (("5/8", 0.625), 14.0),
+    (("3/4", 0.75), 12.0),
+    (("7/8", 0.875), 11.0),
+    (("1", 1.0), 10.0),
+    (("1-1/4", 1.25), 9.0),
+    (("1-1/2", 1.5), 8.0),
+    (("2", 2.0), 7.0),
+];
+
+const PG: &[(&str, f64, f64)] = &[
+    ("Pg7", 12.5, 20.0),
+    ("Pg9", 15.2, 18.0),
+    ("Pg11", 18.6, 18.0),
+    ("Pg13.5", 20.4, 18.0),
+    ("Pg16", 22.5, 18.0),
+    ("Pg21", 28.3, 16.0),
+    ("Pg29", 37.0, 16.0),
+    ("Pg36", 47.0, 16.0),
+    ("Pg42", 54.0, 16.0),
+    ("Pg48", 59.3, 16.0),
+];
+
+fn number(v: f64) -> String {
+    v.to_string()
+}
+
+/// A fraction's words for a size in sixteenths of an inch.
+fn inch_words(sixteenths: u32) -> String {
+    let (whole, rest) = (sixteenths / 16, sixteenths % 16);
+    if rest == 0 {
+        return whole.to_string();
+    }
+    let g = {
+        let (mut a, mut b) = (rest, 16);
+        while b != 0 {
+            (a, b) = (b, a % b);
+        }
+        a
+    };
+    let frac = format!("{}/{}", rest / g, 16 / g);
+    if whole == 0 {
+        frac
+    } else {
+        format!("{whole}-{frac}")
+    }
+}
+
+fn build() -> Vec<Thread> {
+    let mut out = Vec::new();
+    let metric = |out: &mut Vec<Thread>,
+                  family: &'static str,
+                  table: &[(f64, &[f64])],
+                  external: &'static [&'static str],
+                  internal: &'static [&'static str]| {
+        for (d, pitches) in table {
+            for p in *pitches {
+                let spec = format!("M{}x{}", number(*d), number(*p));
+                out.push(Thread {
+                    family,
+                    size: format!("M{}", number(*d)),
+                    designation: spec.clone(),
+                    major: *d,
+                    pitch: *p,
+                    modeled: true,
+                    external,
+                    internal,
+                    spec: Some(spec),
+                });
+            }
+        }
+    };
+    metric(&mut out, "ISO Metric", ISO_261, ISO_EXT, ISO_INT);
+    // over 82 mm ISO 261 goes on in fives with the same few pitches
+    let mut d = 85.0;
+    while d <= 300.0 {
+        let pitches: &[f64] = if d <= 150.0 {
+            &[6.0, 4.0, 3.0, 2.0]
+        } else if d <= 200.0 {
+            &[6.0, 4.0, 3.0]
+        } else {
+            &[6.0, 4.0]
+        };
+        metric(&mut out, "ISO Metric", &[(d, pitches)], ISO_EXT, ISO_INT);
+        d += 5.0;
+    }
+    metric(&mut out, "ANSI Metric M", ANSI_M, M_EXT, M_INT);
+    let unified = |out: &mut Vec<Thread>, family: &'static str, table: &[(Inch, f64)], modeled: bool| {
+        for ((words, inches), tpi) in table {
+            out.push(Thread {
+                family,
+                size: words.to_string(),
+                designation: format!("{words}-{}", number(*tpi)),
+                major: inches * IN,
+                pitch: IN / tpi,
+                modeled,
+                external: UN_EXT,
+                internal: UN_INT,
+                spec: modeled.then(|| format!("{}-{}", number(*inches), number(*tpi))),
+            });
+        }
+    };
+    unified(&mut out, "UNC", UNC, true);
+    unified(&mut out, "UNF", UNF, true);
+    unified(&mut out, "UNEF", UNEF, true);
+    // the constant pitches over the size steps: sixteenths to 2 in, eighths to 4, quarters to 6
+    for (family, tpi, from) in [
+        ("4UN", 4.0, 40u32),
+        ("6UN", 6.0, 22),
+        ("8UN", 8.0, 16),
+        ("12UN", 12.0, 9),
+        ("16UN", 16.0, 6),
+    ] {
+        let mut s = from;
+        while s <= 96 {
+            let words = inch_words(s);
+            let inches = s as f64 / 16.0;
+            out.push(Thread {
+                family,
+                size: words.clone(),
+                designation: format!("{words}-{}", number(tpi)),
+                major: inches * IN,
+                pitch: IN / tpi,
+                modeled: true,
+                external: UN_EXT,
+                internal: UN_INT,
+                spec: Some(format!("{}-{}", number(inches), number(tpi))),
+            });
+            s += if s < 32 {
+                1
+            } else if s < 64 {
+                2
+            } else {
+                4
+            };
+        }
+    }
+    for (d, pitches) in ISO_2904 {
+        for p in *pitches {
+            out.push(Thread {
+                family: "ISO Trapezoidal",
+                size: format!("Tr{}", number(*d)),
+                designation: format!("Tr{}x{}", number(*d), number(*p)),
+                major: *d,
+                pitch: *p,
+                modeled: false,
+                external: TR_EXT,
+                internal: TR_INT,
+                spec: None,
+            });
+        }
+    }
+    let listed = |out: &mut Vec<Thread>,
+                  family: &'static str,
+                  prefix: &str,
+                  size: &str,
+                  major: f64,
+                  tpi: f64,
+                  external: &'static [&'static str],
+                  internal: &'static [&'static str]| {
+        out.push(Thread {
+            family,
+            size: format!("{prefix}{size}"),
+            designation: format!("{prefix}{size}-{}", number(tpi)),
+            major,
+            pitch: IN / tpi,
+            modeled: false,
+            external,
+            internal,
+            spec: None,
+        });
+    };
+    for ((w, i), t) in ACME {
+        listed(&mut out, "ACME", "", w, i * IN, *t, AC_EXT, AC_INT);
+        listed(&mut out, "Stub ACME", "", w, i * IN, *t, NONE, NONE);
+    }
+    for (w, od, t) in NPT {
+        listed(&mut out, "NPT", "", w, *od, *t, NONE, NONE);
+        listed(&mut out, "NPTF", "", w, *od, *t, NONE, NONE);
+    }
+    for (w, d, t) in BSP {
+        listed(&mut out, "BSP G", "G", w, *d, *t, G_EXT, G_INT);
+        listed(&mut out, "BSP R/Rp", "R", w, *d, *t, NONE, NONE);
+    }
+    for ((w, i), t) in BSW {
+        listed(&mut out, "BSW", "", w, i * IN, *t, NONE, NONE);
+    }
+    for ((w, i), t) in BSF {
+        listed(&mut out, "BSF", "", w, i * IN, *t, NONE, NONE);
+    }
+    for (w, d, t) in PG {
+        listed(&mut out, "Pg", "", w, *d, *t, NONE, NONE);
+    }
+    // Rd by its size bands: 10 tpi to 10 mm, 8 to 38, 6 to 100, 4 to 200
+    let mut d = 8u32;
+    while d <= 200 {
+        let tpi = match d {
+            0..=10 => 10.0,
+            11..=38 => 8.0,
+            39..=100 => 6.0,
+            _ => 4.0,
+        };
+        let w = d.to_string();
+        listed(&mut out, "Rd", "Rd", &w, d as f64, tpi, NONE, NONE);
+        d += if d < 40 {
+            2
+        } else if d < 100 {
+            5
+        } else {
+            10
+        };
+    }
+    out
+}
+
+/// Every selection.
+pub fn catalogue() -> &'static [Thread] {
+    static ALL: OnceLock<Vec<Thread>> = OnceLock::new();
+    ALL.get_or_init(build)
+}
+
+/// The types, in the catalogue's order.
+pub fn families() -> Vec<&'static str> {
+    let mut out: Vec<&'static str> = Vec::new();
+    for t in catalogue() {
+        if !out.contains(&t.family) {
+            out.push(t.family);
+        }
+    }
+    out
+}
+
+/// A type's sizes, in order.
+pub fn sizes(family: &str) -> Vec<&'static str> {
+    let mut out: Vec<&'static str> = Vec::new();
+    for t in catalogue().iter().filter(|t| t.family == family) {
+        if !out.contains(&t.size.as_str()) {
+            out.push(&t.size);
+        }
+    }
+    out
+}
+
+/// A size's designations, coarsest first.
+pub fn designations(family: &str, size: &str) -> Vec<&'static Thread> {
+    catalogue()
+        .iter()
+        .filter(|t| t.family == family && t.size == size)
+        .collect()
+}
+
+/// How many selections there are: by designation, and with each class counted.
+pub fn counts() -> (usize, usize) {
+    let all = catalogue();
+    (
+        all.len(),
+        all.iter().map(|t| t.external.len() + t.internal.len()).sum(),
+    )
+}
+
+/// The size of this type that fits a cylinder of this diameter: on a rod, its major is the
+/// diameter; in a bore, its minor is. Its first designation.
+pub fn fits(family: &str, diameter: f64, internal: bool) -> Option<&'static Thread> {
+    // a bore's drilled to about the major less the pitch
+    let across = |t: &Thread| if internal { t.major - t.pitch } else { t.major };
+    let mut seen: Vec<&str> = Vec::new();
+    let firsts: Vec<&'static Thread> = catalogue()
+        .iter()
+        .filter(|t| t.family == family)
+        .filter(|t| {
+            let fresh = !seen.contains(&t.size.as_str());
+            if fresh {
+                seen.push(&t.size);
+            }
+            fresh
+        })
+        .collect();
+    // it can only be cut where the cylinder's between the thread's minor and major
+    let spans = |t: &&&Thread| diameter > t.major - 1.0825 * t.pitch && diameter <= t.major;
+    let any = firsts.iter().any(|t| spans(&t));
+    firsts
+        .iter()
+        .filter(|t| !any || spans(t))
+        .copied()
+        .min_by(|a, b| {
+            let gap = |t: &Thread| ((across(t) - diameter).abs() * 1e6).round();
+            gap(a).total_cmp(&gap(b)).then_with(|| {
+                // even between two: a rod takes the one it can be cut to, a bore the coarser
+                if internal {
+                    b.pitch.total_cmp(&a.pitch)
+                } else {
+                    a.major.total_cmp(&b.major)
+                }
+            })
+        })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn find(designation: &str) -> &'static Thread {
+        catalogue()
+            .iter()
+            .find(|t| t.designation == designation)
+            .unwrap_or_else(|| panic!("{designation}"))
+    }
+
+    #[test]
+    fn known_sizes_read_as_published() {
+        for (d, major, pitch) in [
+            ("M6x1", 6.0, 1.0),
+            ("M10x1.25", 10.0, 1.25),
+            ("M36x4", 36.0, 4.0),
+            ("M300x6", 300.0, 6.0),
+            ("1/4-20", 6.35, 1.27),
+            ("1/2-13", 12.7, 25.4 / 13.0),
+            ("#10-32", 4.826, 25.4 / 32.0),
+            ("1-8", 25.4, 3.175),
+            ("Tr20x4", 20.0, 4.0),
+            ("G1/2-14", 20.955, 25.4 / 14.0),
+            ("Pg9-18", 15.2, 25.4 / 18.0),
+        ] {
+            let t = find(d);
+            assert!(
+                (t.major - major).abs() < 1e-9 && (t.pitch - pitch).abs() < 1e-9,
+                "{d}: {t:?}"
+            );
+        }
+        // the coarse pitch comes first
+        assert_eq!(designations("ISO Metric", "M6")[0].pitch, 1.0);
+        assert_eq!(designations("ISO Metric", "M8")[0].pitch, 1.25);
+    }
+
+    #[test]
+    fn a_cylinder_finds_the_size_that_fits() {
+        assert_eq!(fits("ISO Metric", 20.0, false).unwrap().size, "M20");
+        // a 13 mm rod is between M14's minor and major, and over M12's
+        assert_eq!(fits("ISO Metric", 13.0, false).unwrap().size, "M14");
+        // a tap drill's bore: M10's is 8.5, M6's is 5
+        assert_eq!(fits("ISO Metric", 8.5, true).unwrap().size, "M10");
+        assert_eq!(fits("ISO Metric", 5.0, true).unwrap().size, "M6");
+        assert_eq!(fits("UNC", 6.35, false).unwrap().designation, "1/4-20");
+    }
+
+    #[test]
+    fn every_one_says_where_it_comes_from_and_what_can_be_cut_is_all_sixty_degree() {
+        let named = |f: &str| {
+            SOURCES.iter().any(|s| {
+                s.0 == f || s.0.split(" / ").any(|w| w == f) || (f.starts_with("BS") && s.0 == "Whitworth")
+            })
+        };
+        for f in families() {
+            let rd = f == "Rd" || f == "Pg";
+            assert!(rd || named(f), "{f} has no source");
+        }
+        for t in catalogue() {
+            assert_eq!(t.modeled, t.spec.is_some(), "{}", t.designation);
+            assert!(
+                t.major > 0.0 && t.pitch > 0.0 && t.pitch < t.major,
+                "{}",
+                t.designation
+            );
+        }
+        let (plain, with_classes) = counts();
+        assert!(plain > 700 && with_classes > 4000, "{plain} {with_classes}");
+    }
+}
