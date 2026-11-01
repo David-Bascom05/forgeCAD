@@ -1307,13 +1307,26 @@ class Tr:
         op = self.op_of(a)
         if op is None:
             raise Unsupported("loft operation")
-        secs = []
-        for m in a["sheetProfilesArray"]:
-            secs.append(self.section(m["sheetProfileEntities"], env))
-        if len(secs) < 2:
+        secs, tips = [], []
+        sheets = a["sheetProfilesArray"]
+        for k, m in enumerate(sheets):
+            at = self.loft_point(m["sheetProfileEntities"], env)
+            if at is None:
+                secs.append(self.section(m["sheetProfileEntities"], env))
+            elif k in (0, len(sheets) - 1):
+                tips.append((k == 0, at))
+            else:
+                raise Unsupported("a loft through a point between sections")
+        if len(secs) + len(tips) < 2 or not secs:
             raise Unsupported("a loft of one profile")
+        if any(w in " ".join(ends) for w in [("start" if t[0] else "end") for t in tips]):
+            raise Unsupported("a loft end condition at a point")
         n = len(secs)
-        for k, s in enumerate(secs):
+        if n == 1:
+            first, at = tips[0]
+            off = add(secs[0]["centre"], at, -1) if first else add(at, secs[0]["centre"], -1)
+            face(secs[0], dot(off, secs[0]["fr"].n) < 0)
+        for k, s in enumerate(secs if n > 1 else []):
             i, j = (k, k + 1) if k + 1 < n else (k - 1, k)
             face(s, dot(add(secs[j]["centre"], secs[i]["centre"], -1), s["fr"].n) < 0)
         for k in range(1, n):
@@ -1335,10 +1348,37 @@ class Tr:
         if ends:
             self.notes.add("loft-end")
         words = ["profile " + section_text(s) for s in secs]
+        for first, at in tips:
+            self.notes.add("loft-point")
+            words.insert(0 if first else len(words), "point " + vfine(at))
         ents = {e for s in secs for e in s["ents"]}
         self.solid[f["id"]] = {"kind": "loft", "secs": secs}
         label, this, scope = self.solid_line(op, ents, f["id"])
         self.lines.append(f"{label}loft {this + ' ' if this else ''}smooth {' '.join(ends) + ' ' if ends else ''}" + " ".join(words) + scope)
+
+    def loft_point(self, v, env):
+        """The world point of a section that is a sketch's vertex, else None."""
+        qs = qunion(v)
+        if len(qs) != 1:
+            return None
+        q = self.deref(qs[0], env)
+        if not (isinstance(q, fs.Call) and q[0] == "sQuery" and q[1][1] == ("name", "VERTEX")):
+            return None
+        fid = q[1][0][1].split(".")[0]
+        if fid not in self.sk:
+            raise Unresolved("a loft's point on an unread sketch")
+        arr, fr = self.sk[fid]
+        name = q[1][2]
+        e = arr.every.get(name)
+        if e is not None and e.kind == "point":
+            return fr.world(*e.a)
+        if name.endswith(".center") and name[:-7] in arr.every and arr.every[name[:-7]].c is not None:
+            return fr.world(*arr.every[name[:-7]].c)
+        if name.endswith(".start") and name[:-6] in arr.every:
+            return fr.world(*arr.every[name[:-6]].a)
+        if name.endswith(".end") and name[:-4] in arr.every:
+            return fr.world(*arr.every[name[:-4]].b)
+        raise Unresolved("a loft's point")
 
     def section(self, v, env):
         """One loft section: a single region's loops as world-free segment lists on its sketch's frame."""
