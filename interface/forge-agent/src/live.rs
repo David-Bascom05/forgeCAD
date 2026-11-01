@@ -287,8 +287,9 @@ fn run<T>(mut part: Part, mesher: &mut impl FnMut(&Body, Stage) -> T, shared: &S
             finish_ms: 0.0,
             mesh_ms: t.elapsed().as_secs_f64() * 1e3,
         }));
-        say_facts(&mut part, None, &say);
     }
+    // sketches stand with no solid yet
+    say_facts(&mut part, None, &say);
     let mut rolled: Option<ItemId> = None;
     let mut before_preview: Option<crate::model::Saved> = None;
     loop {

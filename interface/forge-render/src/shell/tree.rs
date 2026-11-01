@@ -242,6 +242,13 @@ impl Shell {
                                 depth: 0.5,
                             },
                         );
+                        if row.kind == "sketch" {
+                            let shown = self.sketch_shown(row.id);
+                            if self.eye(ui, r, 1000 + k, shown) {
+                                self.out.push(super::Action::SketchVisibility(row.id));
+                            }
+                            places.push((format!("tree:{}:eye", row.name), r));
+                        }
                         if row.suppressed {
                             let y = r.center().y;
                             let g = ui
@@ -346,11 +353,24 @@ impl Shell {
                                 },
                             );
                             places.push((format!("tree:{}:sketch", row.name), r));
+                            if let super::SketchChild::Line(id, _) = child {
+                                let shown = self.sketch_shown(*id);
+                                if self.eye(ui, r, 2000 + k, shown) {
+                                    self.out.push(super::Action::SketchVisibility(*id));
+                                }
+                                if resp.hovered() {
+                                    tree_hover = Some(*id);
+                                }
+                                if resp.secondary_clicked() {
+                                    menu = resp.interact_pointer_pos().map(|p| (*id, p));
+                                }
+                            }
                             let edit = match child {
                                 super::SketchChild::Line(id, _) => super::Action::Edit(*id),
                                 super::SketchChild::Inline(..) => super::Action::EditInline(row.id),
                             };
-                            if resp.double_clicked() || resp.secondary_clicked() {
+                            let inline = matches!(child, super::SketchChild::Inline(..));
+                            if resp.double_clicked() || (inline && resp.secondary_clicked()) {
                                 child_edit = Some(edit);
                             } else if resp.clicked()
                                 && let super::SketchChild::Line(id, _) = child

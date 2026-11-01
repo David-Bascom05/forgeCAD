@@ -60,7 +60,11 @@ pub fn open(part: &str, use_cache: bool) -> Result<(PartMesh, bool), String> {
     if use_cache && let Some(m) = cache::load(&src) {
         return Ok((m, true));
     }
-    let m = build(part)?;
+    // sketches with no solid yet draw nothing
+    let m = match build(part) {
+        Err(e) if e.ends_with("nothing built") => return Ok((PartMesh::empty(), false)),
+        m => m?,
+    };
     if use_cache {
         cache::store(&src, &m);
     }

@@ -1227,3 +1227,117 @@ fn a_new_part_starts_empty_with_its_planes_and_its_first_sketch_makes_a_solid() 
     let written = std::fs::read_to_string(&path).unwrap();
     assert!(written.contains("sketch"), "{written}");
 }
+
+const TWO_SKETCHES: &str =
+    "sk1: sketch xy\n  rect 0 0 40 30\nend\nsk2: sketch xz\n  circle 0 0 15\nend\nbase: extrude 10 sk1\n";
+
+#[test]
+fn a_sketch_nothing_reads_shows_and_one_that_is_read_hides_till_its_eye_says() {
+    let Some((mut h, _)) = file_part(TWO_SKETCHES) else {
+        return;
+    };
+    let id = |h: &Headless, n: &str| h.gui.shell.doc.as_ref().unwrap().find(n).unwrap();
+    let (one, two) = (id(&h, "sk1"), id(&h, "sk2"));
+    assert_eq!(h.gui.shell.sketch_shapes.len(), 2);
+    assert!(!h.gui.shell.sketch_shown(one), "read by the extrude");
+    assert!(h.gui.shell.sketch_shown(two), "nothing reads it");
+    h.gui.shell.out.push(Action::SketchVisibility(one));
+    h.gui.shell.out.push(Action::SketchVisibility(two));
+    step_some(&mut h);
+    assert!(h.gui.shell.sketch_shown(one));
+    assert!(!h.gui.shell.sketch_shown(two));
+}
+
+#[test]
+fn pointing_at_a_sketch_in_the_view_chooses_it_and_a_face_under_it_does_not_light() {
+    let Some((mut h, _)) =
+        file_part("sk2: sketch xy\n  circle 60 60 15\nend\nbase: extrude 10 rect 0 0 120 30\n")
+    else {
+        return;
+    };
+    let (cam, size) = h.gui.shell.camera.unwrap();
+    let rect = h.gui.shell.view_rect;
+    let on = cam.pixel_of([75.0, 60.0, 0.0], size.0, size.1).unwrap();
+    h.move_to(rect.min.x + on.0, rect.min.y + on.1);
+    step_some(&mut h);
+    let id = h.gui.shell.doc.as_ref().unwrap().find("sk2").unwrap();
+    assert_eq!(h.gui.shell.sketch_hover, Some(id));
+    h.button(true);
+    h.step();
+    h.button(false);
+    step_some(&mut h);
+    assert_eq!(h.gui.shell.selected, Some(id));
+}
+
+#[test]
+fn extrude_picks_a_region_of_a_visible_sketch_in_the_view() {
+    let two = "sk1: sketch xy\n  rect 0 0 20 20\n  rect 40 0 20 20\nend\n";
+    let Some((mut h, _)) = file_part(two) else {
+        return;
+    };
+    h.gui.shell.out.push(Action::NewFeature("extrude"));
+    assert!(h.until(|g| g.shell.dialog.is_some()));
+    let (cam, size) = h.gui.shell.camera.unwrap();
+    let rect = h.gui.shell.view_rect;
+    let on = cam.pixel_of([50.0, 10.0, 0.0], size.0, size.1).unwrap();
+    h.move_to(rect.min.x + on.0, rect.min.y + on.1);
+    step_some(&mut h);
+    h.button(true);
+    h.step();
+    h.button(false);
+    step_some(&mut h);
+    let d = h.gui.shell.dialog.as_ref().unwrap();
+    let profile = d.fields.iter().find(|f| f.0 == "Profile").unwrap();
+    assert!(profile.1.starts_with("sk1 l"), "{profile:?}");
+    assert_ne!(profile.1, "sk1 l1", "the second, not the first");
+    assert!(d.error.is_none(), "{:?}", d.error);
+}
+
+#[test]
+fn in_a_sketch_faces_do_not_answer_the_pointer_and_orbiting_stays_put_until_look_at() {
+    let Some((mut h, _)) = file_part(BLOCK) else {
+        return;
+    };
+    h.gui.shell.origin_selected = Some(forge_render::origin::Item::XyPlane);
+    h.gui.shell.out.push(Action::StartSketch);
+    assert!(h.until(|g| g.shell.sketch.is_some()));
+    h.gui.shell.tab = 1;
+    for _ in 0..80 {
+        h.step();
+        std::thread::sleep(std::time::Duration::from_millis(10));
+    }
+    let c = h.gui.shell.view_rect.center();
+    h.move_to(c.x, c.y);
+    for _ in 0..4 {
+        h.step();
+    }
+    assert!(
+        h.gui
+            .view
+            .as_ref()
+            .unwrap()
+            .nav
+            .marks()
+            .iter()
+            .all(|m| !m.selected)
+    );
+    let was = h.gui.view.as_ref().unwrap().nav.camera;
+    h.gui.view.as_mut().unwrap().nav.camera.yaw += 0.7;
+    for _ in 0..30 {
+        h.step();
+    }
+    let turned = h.gui.view.as_ref().unwrap().nav.camera;
+    assert!((turned.yaw - was.yaw - 0.7).abs() < 1e-4, "no snap back");
+    h.gui.shell.out.push(Action::LookAt);
+    for _ in 0..200 {
+        h.step();
+        std::thread::sleep(std::time::Duration::from_millis(5));
+    }
+    let squared = h.gui.view.as_ref().unwrap().nav.camera;
+    assert!(
+        (squared.yaw - was.yaw).abs() < 1e-3,
+        "{} {}",
+        squared.yaw,
+        was.yaw
+    );
+}

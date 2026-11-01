@@ -8,6 +8,7 @@ pub mod dim;
 pub mod icons;
 pub mod panel;
 mod ribbon;
+mod sketch3d;
 pub mod sketching;
 pub mod theme;
 mod tree;
@@ -53,6 +54,10 @@ pub enum Action {
     Undo,
     Redo,
     FitAll,
+    /// Square on to the sketch being drawn or the one chosen.
+    LookAt,
+    /// A sketch's eye.
+    SketchVisibility(ItemId),
     Home,
     SetHome,
     /// Home is this part of the cube's view.
@@ -190,6 +195,12 @@ pub struct Shell {
     pub renamed: Option<(ItemId, String)>,
     /// The tree's right-click menu: for this row, at this point.
     pub row_menu: Option<(ItemId, egui::Pos2)>,
+    /// What the model's sketches are, in 3D.
+    pub sketch_shapes: Vec<forge_agent::handles::SketchShape>,
+    /// Sketches told to show or hide, by name. Others show until something reads them.
+    pub sketch_eye: std::collections::HashMap<String, bool>,
+    /// The sketch under the pointer in the view.
+    pub sketch_hover: Option<ItemId>,
     /// The marking menu's up, centred here.
     pub marking: Option<egui::Pos2>,
     /// Sketch mode.
@@ -244,6 +255,9 @@ impl Default for Shell {
             renaming: None,
             renamed: None,
             row_menu: None,
+            sketch_shapes: Vec::new(),
+            sketch_eye: Default::default(),
+            sketch_hover: None,
             marking: None,
             origin_open: false,
             origin_shown: [false; 7],
@@ -447,6 +461,7 @@ impl Shell {
         self.side(ui, side);
         self.docs_and_status(ui, s, bottom);
         self.navbar(&ctx);
+        self.sketches_ui(&ctx);
         self.dim_ui(&ctx);
         self.dialog_ui(&ctx);
         self.sketch_ui(&ctx);
@@ -856,7 +871,7 @@ impl Shell {
         self.tree_keys(ctx);
         if let Some((id, at)) = self.row_menu {
             let off = self.rows.iter().any(|r| r.id == id && r.suppressed);
-            let items = [
+            let mut items = vec![
                 ("Edit Feature", (!off).then_some(Action::Edit(id))),
                 ("Rename", (!off).then_some(Action::StartRename(id))),
                 (
@@ -870,6 +885,14 @@ impl Shell {
                 ("Move End of Part Here", (!off).then_some(Action::EndAt(Some(id)))),
                 ("Delete", (!off).then_some(Action::Delete(id))),
             ];
+            if self.rows.iter().any(|r| r.id == id && r.kind == "sketch") {
+                let word = if self.sketch_shown(id) {
+                    "\u{2713} Visibility"
+                } else {
+                    "Visibility"
+                };
+                items.insert(1, (word, Some(Action::SketchVisibility(id))));
+            }
             match menu_at(ctx, "row-menu", at, &t, &items) {
                 MenuResult::Chose(a) => {
                     self.out.push(a);

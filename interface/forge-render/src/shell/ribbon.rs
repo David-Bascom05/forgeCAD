@@ -129,6 +129,16 @@ fn groups(s: &Shell) -> Vec<Group> {
                     ],
                 ),
                 g(
+                    "View",
+                    vec![Tool {
+                        name: "Look At",
+                        icon: "lookat",
+                        action: s.sketch.as_ref().map(|_| Action::LookAt),
+                        on: false,
+                    }],
+                    vec![],
+                ),
+                g(
                     "Exit",
                     vec![Tool {
                         name: "Finish Sketch",

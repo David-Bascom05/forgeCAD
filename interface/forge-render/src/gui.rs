@@ -277,7 +277,8 @@ impl Gui {
         nav.tool = self.shell.view.tool;
         if let Some(f) = &l.file {
             let path = format!("{f}.view");
-            let (orient, home) = Self::load_view(&path);
+            let (orient, home, eyes) = Self::load_view(&path);
+            self.shell.sketch_eye = eyes;
             nav.orient = orient;
             nav.home_view = home;
             // it opens where Home is
@@ -396,15 +397,7 @@ impl Gui {
                             self.shell.tab = 1;
                             self.shell.status.clear();
                             // square on to it, as if drawing on a sheet
-                            let (x, z): (forge_math::Vec3, forge_math::Vec3) =
-                                (plane.x().into(), plane.z().into());
-                            let mut to = v.nav.camera;
-                            to.look(
-                                [-z.x as f32, -z.y as f32, -z.z as f32],
-                                [x.x as f32, x.y as f32, x.z as f32],
-                            );
-                            v.nav.go_to(to);
-                            v.dirty = true;
+                            look_at(v, plane);
                         }
                         (Err(why), Some(_)) => self.shell.status = why,
                         _ => {}
@@ -415,6 +408,7 @@ impl Gui {
                         self.shell.out.push(Action::NewFeature(kind));
                     }
                     v.facts = *f;
+                    self.shell.sketch_shapes = v.facts.sketches.clone();
                     // what's marked for the selection reads these
                     v.dirty |= self.shell.selected.is_some();
                     if let Some(id) = self.shell.selected
@@ -467,6 +461,16 @@ impl Gui {
     /// A click in the view chooses a face's feature; a row of the tree chooses its faces. With a
     /// dialog up, what's clicked goes to the field waiting for picks.
     fn sync_selection(&mut self) {
+        // in a sketch only the sketch answers the pointer; the model's for what's looked at
+        if self.shell.sketch.is_some() {
+            self.shell.origin_hover = None;
+            if let Some(v) = &mut self.view {
+                v.clicks = v.nav.clicks;
+                v.nav.selected.clear();
+                v.clicked.clear();
+            }
+            return;
+        }
         let under = self.origin_under();
         self.shell.origin_hover = under;
         if self.shell.sketch_pick {
@@ -519,6 +523,13 @@ impl Gui {
         }
         if v.nav.clicks != v.clicks {
             v.clicks = v.nav.clicks;
+            if let Some(id) = self.shell.sketch_hover {
+                self.shell.selected = Some(id);
+                self.shell.origin_selected = None;
+                v.nav.selected.clear();
+                v.clicked.clear();
+                return;
+            }
             if let Some(i) = under {
                 self.shell.origin_selected = Some(i);
                 self.shell.selected = None;
@@ -720,6 +731,23 @@ impl Gui {
                         self.calls.push(call.clone());
                         v.live.call(vec![call]);
                     }
+                }
+                Action::LookAt => {
+                    let plane = self.shell.sketch.as_ref().map(|m| m.plane).or_else(|| {
+                        let on = self.shell.selected;
+                        self.shell
+                            .sketch_shapes
+                            .iter()
+                            .find(|s| s.item == on)
+                            .map(|s| s.plane)
+                    });
+                    if let (Some(plane), Some(v)) = (plane, &mut self.view) {
+                        look_at(v, plane);
+                    }
+                }
+                Action::SketchVisibility(id) => {
+                    self.shell.toggle_sketch(id);
+                    self.save_view();
                 }
                 Action::FitAll
                 | Action::Home
@@ -1081,15 +1109,27 @@ impl Gui {
                 h.target[0], h.target[1], h.target[2], h.yaw, h.pitch, h.roll, h.dist, h.fovy, h.parallel
             ));
         }
+        let mut eyes: Vec<_> = self.shell.sketch_eye.iter().collect();
+        eyes.sort();
+        for (name, on) in eyes {
+            out.push_str(&format!("eye {name} {on}\n"));
+        }
         if let Err(why) = std::fs::write(path, out) {
             eprintln!("forge-app: can't keep the view beside the part: {why}");
         }
     }
 
     /// What's kept beside the part, if anything is: a file it can't read is one it doesn't have.
-    fn load_view(path: &str) -> (crate::viewcube::Orient, Option<Camera>) {
+    fn load_view(
+        path: &str,
+    ) -> (
+        crate::viewcube::Orient,
+        Option<Camera>,
+        std::collections::HashMap<String, bool>,
+    ) {
         let mut orient = crate::viewcube::Orient::default();
         let mut home = None;
+        let mut eyes = std::collections::HashMap::new();
         for line in std::fs::read_to_string(path).unwrap_or_default().lines() {
             match line.split_once(' ') {
                 Some(("orient", w)) => orient = crate::viewcube::Orient::from_words(w).unwrap_or(orient),
@@ -1108,10 +1148,15 @@ impl Gui {
                         });
                     }
                 }
+                Some(("eye", w)) => {
+                    if let Some((name, on)) = w.split_once(' ') {
+                        eyes.insert(name.to_string(), on == "true");
+                    }
+                }
                 _ => {}
             }
         }
-        (orient, home)
+        (orient, home, eyes)
     }
 
     fn apply_view(&mut self, a: Action) {
@@ -1268,7 +1313,13 @@ impl Gui {
             let marks = if v.live_drag {
                 Vec::new()
             } else {
-                let mut m: Vec<Mark> = v.nav.marks().into_iter().filter(|m| !m.selected).collect();
+                let quiet = self.shell.sketch.is_some() || self.shell.sketch_hover.is_some();
+                let mut m: Vec<Mark> = v
+                    .nav
+                    .marks()
+                    .into_iter()
+                    .filter(|m| !m.selected && !quiet)
+                    .collect();
                 // with a dialog up the picks are what's marked
                 if self.shell.dialog.is_some() {
                     m.extend(v.nav.selected.iter().map(|&(placement, entity)| Mark {
@@ -1407,6 +1458,18 @@ fn raw_view(t: &Offscreen) -> wgpu::TextureView {
         format: Some(wgpu::TextureFormat::Rgba8Unorm),
         ..Default::default()
     })
+}
+
+/// Square on to a plane, as if drawing on a sheet.
+fn look_at(v: &mut View, plane: forge_math::Frame) {
+    let (x, z): (forge_math::Vec3, forge_math::Vec3) = (plane.x().into(), plane.z().into());
+    let mut to = v.nav.camera;
+    to.look(
+        [-z.x as f32, -z.y as f32, -z.z as f32],
+        [x.x as f32, x.y as f32, x.z as f32],
+    );
+    v.nav.go_to(to);
+    v.dirty = true;
 }
 
 /// The app with no window: input by hand, a texture for a target. What `--shot`, `--bench` and the

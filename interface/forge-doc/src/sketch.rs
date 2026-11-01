@@ -749,6 +749,108 @@ pub fn profile(s: &Sketch, through: Option<&str>) -> R<Profile> {
     Ok(p)
 }
 
+/// A closed region of a sketch, as a line that reads it would name it.
+#[derive(Clone, Debug, PartialEq)]
+pub struct Region {
+    /// An entity on its outside: what picks it out of the others.
+    pub through: String,
+    /// Its outside, then its holes, as points around each.
+    pub loops: Vec<Vec<Point2>>,
+}
+
+/// Points along a curve, about one per `STEP` radians where it bends.
+fn along(g: &forge_ops::Segment) -> Vec<Point2> {
+    const STEP: f64 = core::f64::consts::TAU / 64.0;
+    let arc = |c: Point2, r: f64, t0: f64, sweep: f64| -> Vec<Point2> {
+        let n = ((sweep.abs() / STEP).ceil() as usize).max(1);
+        (0..=n)
+            .map(|k| {
+                let t = t0 + sweep * k as f64 / n as f64;
+                Point2::new(c.x + r * dmath::cos(t), c.y + r * dmath::sin(t))
+            })
+            .collect()
+    };
+    match *g {
+        forge_ops::Segment::Line { a, b } => vec![a, b],
+        forge_ops::Segment::Arc {
+            center,
+            radius,
+            start,
+            sweep,
+        } => arc(center, radius, start, sweep),
+        forge_ops::Segment::Circle { center, radius, .. } => arc(center, radius, 0.0, core::f64::consts::TAU),
+    }
+}
+
+/// The closed regions it has now: none if what's drawn doesn't close.
+pub fn regions(s: &Sketch) -> Vec<Region> {
+    let Ok(ps) = forge_sketch::profiles(&s.solved) else {
+        return Vec::new();
+    };
+    ps.iter()
+        .map(|p| Region {
+            through: name_of(s, p.loops[0].segments[0].1).to_string(),
+            loops: p
+                .loops
+                .iter()
+                .map(|l| l.segments.iter().flat_map(|g| along(&g.0)).collect())
+                .collect(),
+        })
+        .collect()
+}
+
+/// What it draws: each curve as points, whether it's construction; and its end points.
+pub fn drawing(s: &Sketch) -> (Vec<(Vec<Point2>, bool)>, Vec<Point2>) {
+    let q = &s.solved;
+    let (mut curves, mut points) = (Vec::new(), Vec::new());
+    for id in q.entity_ids() {
+        let faint = q.is_construction(id);
+        let g = match q.entity(id) {
+            Some(Entity::Line { a, b }) => {
+                points.extend([q.point(a), q.point(b)]);
+                forge_ops::Segment::Line {
+                    a: q.point(a),
+                    b: q.point(b),
+                }
+            }
+            Some(Entity::Circle { center, .. }) => {
+                points.push(q.point(center));
+                forge_ops::Segment::Circle {
+                    center: q.point(center),
+                    radius: q.radius(id),
+                    ccw: true,
+                }
+            }
+            Some(Entity::Arc {
+                center,
+                start,
+                end,
+                ccw,
+            }) => {
+                let (c, a, b) = (q.point(center), q.point(start), q.point(end));
+                points.extend([a, b, c]);
+                let t0 = dmath::atan2(a.y - c.y, a.x - c.x);
+                let t1 = dmath::atan2(b.y - c.y, b.x - c.x);
+                let turn = core::f64::consts::TAU;
+                let sweep = if ccw {
+                    (t1 - t0).rem_euclid(turn)
+                } else {
+                    -(t0 - t1).rem_euclid(turn)
+                };
+                forge_ops::Segment::Arc {
+                    center: c,
+                    radius: a.distance(c),
+                    start: t0,
+                    sweep,
+                }
+            }
+            _ => continue,
+        };
+        curves.push((along(&g), faint));
+    }
+    (curves, points)
+}
+
 /// The sketch's one chain of lines and arcs, or the one through `through`, end to end in 3D:
 /// a path to sweep along.
 pub fn path(s: &Sketch, through: Option<&str>) -> R<Vec<PathSeg>> {

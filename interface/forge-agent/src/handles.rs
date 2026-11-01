@@ -35,6 +35,61 @@ pub struct Facts {
     /// By the body's face and edge index: how a part file names each (`@f..`, `@e..`).
     pub face_refs: Vec<String>,
     pub edge_refs: Vec<String>,
+    pub sketches: Vec<SketchShape>,
+}
+
+/// A sketch line as it stands in the model, in 3D.
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct SketchShape {
+    pub item: Option<ItemId>,
+    pub plane: forge_math::Frame,
+    /// Each curve as points, and whether it's construction.
+    pub curves: Vec<(Vec<[f64; 3]>, bool)>,
+    pub points: Vec<[f64; 3]>,
+    pub regions: Vec<RegionShape>,
+}
+
+/// A closed region of a sketch, in 3D.
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct RegionShape {
+    /// What a line reading the sketch names to mean this one.
+    pub through: String,
+    pub loops: Vec<Vec<[f64; 3]>>,
+}
+
+fn sketch_shapes(model: &Model, n: usize) -> Vec<SketchShape> {
+    (0..n.min(model.features.len()))
+        .filter_map(|i| {
+            let forge_model::Feature::Sketch(s) = &model.features[i] else {
+                return None;
+            };
+            let up = |p: forge_math::Point2| {
+                let w = s.plane.plane_point(p);
+                [w.x, w.y, w.z]
+            };
+            let (curves, points) = forge_doc::sketch::drawing(s);
+            Some(SketchShape {
+                item: Some(ItemId(model.lines[i].id)),
+                plane: s.plane,
+                curves: curves
+                    .into_iter()
+                    .map(|(c, faint)| (c.into_iter().map(up).collect(), faint))
+                    .collect(),
+                points: points.into_iter().map(up).collect(),
+                regions: forge_doc::sketch::regions(s)
+                    .into_iter()
+                    .map(|r| RegionShape {
+                        through: r.through,
+                        loops: r
+                            .loops
+                            .into_iter()
+                            .map(|l| l.into_iter().map(up).collect())
+                            .collect(),
+                    })
+                    .collect(),
+            })
+        })
+        .collect()
 }
 
 impl Facts {
@@ -280,6 +335,7 @@ pub fn facts(model: &mut Model) -> Facts {
         handles,
         face_refs,
         edge_refs,
+        sketches: sketch_shapes(model, model.features.len()),
     }
 }
 
@@ -309,6 +365,7 @@ pub fn facts_at(model: &Model, n: usize) -> Facts {
         handles: Vec::new(),
         face_refs,
         edge_refs,
+        sketches: sketch_shapes(model, n),
     }
 }
 

@@ -1409,6 +1409,17 @@ impl Shell {
                         } else {
                             t.line
                         };
+                        // what's live goes when something's typed
+                        if k == active && !f.locked {
+                            let mut st =
+                                egui::text_edit::TextEditState::load(ui.ctx(), id).unwrap_or_default();
+                            let all = egui::text::CCursorRange::two(
+                                egui::text::CCursor::new(0),
+                                egui::text::CCursor::new(f.text.chars().count()),
+                            );
+                            st.cursor.set_char_range(Some(all));
+                            st.store(ui.ctx(), id);
+                        }
                         let resp = ui.put(
                             r,
                             egui::TextEdit::singleline(&mut f.text)
@@ -1429,17 +1440,6 @@ impl Shell {
                         }
                         if on && !resp.has_focus() && !resp.lost_focus() {
                             resp.request_focus();
-                        }
-                        // what's live goes when something's typed
-                        if on && !f.locked {
-                            let mut st =
-                                egui::text_edit::TextEditState::load(ui.ctx(), id).unwrap_or_default();
-                            let all = egui::text::CCursorRange::two(
-                                egui::text::CCursor::new(0),
-                                egui::text::CCursor::new(f.text.chars().count()),
-                            );
-                            st.cursor.set_char_range(Some(all));
-                            st.store(ui.ctx(), id);
                         }
                     });
             }
