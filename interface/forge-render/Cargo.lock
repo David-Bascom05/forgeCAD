@@ -690,6 +690,7 @@ dependencies = [
  "forge-model",
  "forge-ops",
  "forge-sketch",
+ "forge-step",
  "forge-topo",
 ]
 
@@ -809,6 +810,15 @@ version = "0.1.0"
 dependencies = [
  "forge-math",
  "forge-ops",
+]
+
+[[package]]
+name = "forge-step"
+version = "0.1.0"
+dependencies = [
+ "forge-geom",
+ "forge-math",
+ "forge-topo",
 ]
 
 [[package]]
