@@ -401,15 +401,22 @@ fn bspline_points(e: Node) -> Result<Vec<V2>, Fail> {
             float(Some(p.attribute("Weight").unwrap_or("1")))?,
         ));
     }
+    // a file is untrusted: knots, poles and degree are capped before anything is made of them
+    const MAX: usize = 100_000;
     let mut k = vec![];
     for x in kids(e, "Knot") {
         let v = float(x.attribute("Value"))?;
         let m = int(x.attribute("Mult"))?;
         if m > 0 {
-            k.extend(std::iter::repeat_n(v, m as usize));
+            let m = usize::try_from(m).ok().filter(|&m| k.len() + m <= MAX);
+            let Some(m) = m else {
+                return bug("a spline of too many knots");
+            };
+            k.extend(std::iter::repeat_n(v, m));
         }
     }
-    if cp.len() <= deg || k.len() < cp.len() + deg + 1 || cp.len() > 100_000 {
+    let need = cp.len().checked_add(deg).and_then(|n| n.checked_add(1));
+    if cp.len() <= deg || cp.len() > MAX || need.is_none_or(|n| k.len() < n) {
         return bug("a spline's knots and poles do not add up");
     }
     let at = |u: f64| -> Result<V2, Fail> {
@@ -1882,6 +1889,39 @@ impl Tr<'_, '_, '_> {
     }
 }
 
+/// File names for each body's part file, `<stem>.<body>.fc`, safe for any names a file holds: only
+/// `[A-Za-z0-9_-]`, the rest `_`, and kept apart by a `-N` where two would meet.
+pub fn part_files(stem: &str, bodies: &[Body]) -> Vec<String> {
+    let clean = |s: &str| -> String {
+        let t: String = s
+            .chars()
+            .map(|c| {
+                if c.is_ascii_alphanumeric() || c == '_' || c == '-' {
+                    c
+                } else {
+                    '_'
+                }
+            })
+            .collect();
+        if t.is_empty() { "_".into() } else { t }
+    };
+    let stem = clean(stem);
+    let mut seen = HashSet::new();
+    bodies
+        .iter()
+        .map(|b| {
+            let base = format!("{stem}.{}", clean(&b.name));
+            let mut name = format!("{base}.fc");
+            let mut n = 1;
+            while !seen.insert(name.clone()) {
+                n += 1;
+                name = format!("{base}-{n}.fc");
+            }
+            name
+        })
+        .collect()
+}
+
 /// Every body of the file, each translated or not, in the file's order: its PartDesign bodies, then
 /// the ends of older files' chains of features with no body. Err when the file will not read.
 pub fn translate(data: &[u8]) -> Result<Vec<Body>, String> {
@@ -1988,7 +2028,18 @@ fn file_bodies(doc: &mut Doc) -> Result<Vec<Body>, Fail> {
     Ok(bodies.iter().map(|b| one_body(doc, b)).collect())
 }
 
+/// A body's outcome; a panic in the kernel or here is that body's bug, not the file's end.
 fn one_body(doc: &Doc, b: &str) -> Body {
+    std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| body_of(doc, b))).unwrap_or_else(|_| Body {
+        name: b.into(),
+        features: vec![],
+        approx: false,
+        fc: None,
+        fail: Some(Fail::Bug("a panic".into())),
+    })
+}
+
+fn body_of(doc: &Doc, b: &str) -> Body {
     let mut out = Body {
         name: b.into(),
         features: vec![],

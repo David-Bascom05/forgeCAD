@@ -276,3 +276,70 @@ fn a_fillet_on_an_edge_the_stored_shape_lacks_is_unresolved() {
 fn not_a_zip_is_refused() {
     assert!(translate(b"PK nothing").is_err());
 }
+
+#[test]
+fn part_file_names_stay_in_their_directory_and_apart() {
+    let body = |n: &str| forge_import::Body {
+        name: n.into(),
+        features: vec![],
+        approx: false,
+        fc: None,
+        fail: None,
+    };
+    let bodies = [body("../../x"), body("a/b"), body("Body"), body("Body"), body("")];
+    let names = forge_import::fcstd::part_files("../evil.FCStd", &bodies);
+    assert_eq!(
+        names,
+        [
+            "___evil_FCStd.______x.fc",
+            "___evil_FCStd.a_b.fc",
+            "___evil_FCStd.Body.fc",
+            "___evil_FCStd.Body-2.fc",
+            "___evil_FCStd._.fc"
+        ]
+    );
+    assert!(names.iter().all(|n| !n.contains('/') && !n.contains("..")));
+}
+
+/// A zip whose one member says it inflates to `size` from `csize` bytes.
+fn claiming(size: u32, csize: u32) -> Vec<u8> {
+    let mut z = zip(&[("Document.xml", "x")]);
+    // the central directory entry follows the 31-byte local header and the member's byte
+    let cd = 30 + "Document.xml".len() + 1;
+    z[cd + 20..cd + 24].copy_from_slice(&csize.to_le_bytes());
+    z[cd + 24..cd + 28].copy_from_slice(&size.to_le_bytes());
+    z
+}
+
+#[test]
+fn a_zip_that_would_inflate_past_its_caps_is_refused_unread() {
+    assert!(translate(&claiming(300 << 20, 1)).is_err());
+    // a megabyte from a hundred bytes: past the ratio a document ever needs
+    assert!(translate(&claiming(1 << 20, 100)).is_err());
+}
+
+#[test]
+fn a_spline_of_absurd_multiplicity_is_a_clean_refusal() {
+    let spline = "<GeometryList count=\"1\"><Geometry type=\"Part::GeomBSplineCurve\"><BSplineCurve PolesCount=\"2\" KnotsCount=\"2\" Degree=\"1\" IsPeriodic=\"0\"><Pole X=\"0\" Y=\"0\" Z=\"0\" Weight=\"1\"/><Pole X=\"1\" Y=\"0\" Z=\"0\" Weight=\"1\"/><Knot Value=\"0\" Mult=\"4000000000000\"/><Knot Value=\"1\" Mult=\"2\"/></BSplineCurve><Construction value=\"0\"/></Geometry></GeometryList>";
+    let d = doc(&[
+        body("Pad", &["Sketch", "Pad"]),
+        (
+            "Sketch",
+            "Sketcher::SketchObject",
+            vec![("Placement", place(0.0)), ("Geometry", spline.into())],
+        ),
+        (
+            "Pad",
+            "PartDesign::Pad",
+            vec![
+                ("BaseFeature", "<Link value=\"\"/>".into()),
+                ("Profile", "<LinkSub value=\"Sketch\"/>".into()),
+                ("Length", "<Float value=\"10\"/>".into()),
+                ("Shape", "<Part file=\"PadShape.brp\"/>".into()),
+            ],
+        ),
+    ]);
+    let b = &translate(&file(d)).expect("reads")[0];
+    assert_eq!(b.status(), "untranslated");
+    assert!(b.fail.as_ref().is_some_and(|f| f.why().contains("knots")));
+}

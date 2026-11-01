@@ -830,6 +830,9 @@ impl Arrangement {
     /// A point just inside a counter-clockwise loop: off the boundary any neighbouring region shares.
     pub fn point_within(&self, lp: &[He]) -> V2 {
         let ps = self.polygon(lp);
+        if ps.len() < 2 {
+            return ps.first().copied().unwrap_or((0.0, 0.0));
+        }
         let (a, b) = (ps[0], ps[1]);
         let l = pmax(dist(a, b), 1e-12);
         let d = pmin(1e-4, l / 8.0);
@@ -842,6 +845,9 @@ impl Arrangement {
     /// The middle of a boundary stretch: off any vertex it may share with a loop around it.
     fn point_of(&self, lp: &[He]) -> V2 {
         let ps = self.polygon(lp);
+        if ps.len() < 2 {
+            return ps.first().copied().unwrap_or((0.0, 0.0));
+        }
         ((ps[0].0 + ps[1].0) / 2.0, (ps[0].1 + ps[1].1) / 2.0)
     }
 }

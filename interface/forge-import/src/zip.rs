@@ -1,7 +1,15 @@
 //! The members of a zip archive, stored or deflated, by the central directory. No zip64: a
-//! document past 4 GB is no part file.
+//! document past 4 GB is no part file. A file is untrusted: what its members would inflate to is
+//! capped before anything is inflated.
 
 use std::collections::HashMap;
+
+/// The most one member may inflate to.
+pub const MEMBER_MAX: usize = 256 << 20;
+/// The most all members together may (the largest FreeCAD library file holds 393 MB).
+pub const TOTAL_MAX: usize = 1 << 30;
+/// Past 64 kB, a member may inflate at most this many times (the library's most is 59).
+pub const RATIO_MAX: usize = 1000;
 
 pub struct Zip<'a> {
     data: &'a [u8],
@@ -27,6 +35,7 @@ impl<'a> Zip<'a> {
         let n = u16_at(data, end + 10)? as usize;
         let mut at = u32_at(data, end + 16)?;
         let mut members = HashMap::new();
+        let mut total = 0usize;
         for _ in 0..n {
             if u32_at(data, at)? != 0x0201_4b50 {
                 return None;
@@ -39,6 +48,11 @@ impl<'a> Zip<'a> {
                 u16_at(data, at + 32)? as usize,
             );
             let off = u32_at(data, at + 42)?;
+            total = total.checked_add(size)?;
+            let bomb = size > 1 << 16 && size / RATIO_MAX > csize;
+            if size > MEMBER_MAX || total > TOTAL_MAX || bomb || csize > data.len() {
+                return None;
+            }
             let name = String::from_utf8_lossy(data.get(at + 46..at + 46 + nl)?).into_owned();
             // a later member of the same name is the one read, as Python's zipfile does
             members.insert(name, (method, off, csize, size));

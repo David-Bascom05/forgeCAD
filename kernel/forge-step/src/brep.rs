@@ -1414,7 +1414,7 @@ impl<'a> BrepTopo<'a> {
                 } else {
                     (t.count()?, t.count()?)
                 };
-                if deg == 0 || np > nurbs::MAX_CTRL || nk > nurbs::MAX_CTRL {
+                if deg == 0 || np <= deg || np > nurbs::MAX_CTRL || nk > nurbs::MAX_CTRL {
                     return None;
                 }
                 let mut poles = Vec::with_capacity(np);

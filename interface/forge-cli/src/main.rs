@@ -172,8 +172,14 @@ fn import(argv: &[String]) -> ExitCode {
             return ExitCode::FAILURE;
         }
     };
-    for b in &bodies {
-        let out = std::path::Path::new(&dir).join(format!("{stem}.{}.fc", b.name));
+    let names = forge_import::fcstd::part_files(&stem, &bodies);
+    for (b, name) in bodies.iter().zip(&names) {
+        // names are [A-Za-z0-9_-] and dots: nothing a file holds can write outside DIR
+        let out = std::path::Path::new(&dir).join(name);
+        if out.parent() != Some(std::path::Path::new(&dir)) {
+            eprintln!("{}: not in {dir}", out.display());
+            return ExitCode::FAILURE;
+        }
         if let Some(fc) = &b.fc
             && let Err(e) = std::fs::write(&out, fc)
         {
