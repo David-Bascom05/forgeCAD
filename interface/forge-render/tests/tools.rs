@@ -266,7 +266,7 @@ fn a_part_in_inches_takes_and_shows_inches_and_its_geometry_stays() {
     field(&mut h, "Radius", "1/8 in");
     ok(&mut h, "fillet in inches");
     let text = std::fs::read_to_string(&file).unwrap();
-    assert!(text.contains("fillet (1/8)in @e"), "{text}");
+    assert!(text.contains("fillet (1/8)in only @e"), "{text}");
     let now = built(&file, "fillet");
     assert!(now < was);
     // a part reopened reads in its own unit
@@ -1204,4 +1204,52 @@ fn an_extrude_goes_up_to_a_face_picked() {
     let got = built(&file, "to surface") - was;
     // up to z = 60 through the roof's own 10: 25 of open air is what's added
     assert!((got - 100.0 * 25.0).abs() < 1.0, "{got}");
+}
+
+#[test]
+fn a_fillet_takes_only_the_edge_picked_unless_told_to_follow_the_chain() {
+    // the top rim of a rounded block: straight edges and arcs, all tangent, a chain round it
+    let part = "base: extrude 20 rrect -30 -30 60 60 8\n";
+    let chain = |tag: &str, on: bool| -> Option<Result<f64, String>> {
+        let (mut h, file) = open(part, tag)?;
+        let was = built(&file, "before");
+        button(&mut h, "Fillet");
+        point_at(&mut h, [30.0, 0.0, 20.0]);
+        field(&mut h, "Radius", "2");
+        if on {
+            h.click("dialog:chain:All that's tangent to it");
+            settle(&mut h);
+        }
+        let want = h.gui.shell.dialog.as_ref().unwrap().line();
+        assert_eq!(want.contains(" only "), !on, "{want}");
+        h.until(|g| {
+            let d = g.shell.dialog.as_ref().unwrap();
+            d.sent.as_deref() == Some(want.as_str()) && d.seq > 0
+        });
+        for _ in 0..100 {
+            h.step();
+            std::thread::sleep(std::time::Duration::from_millis(5));
+        }
+        if let Some(e) = h.gui.shell.dialog.as_ref().unwrap().error.clone() {
+            return Some(Err(e));
+        }
+        h.gui.shell.out.push(Action::DialogOk);
+        assert!(h.until(|g| g.shell.dialog.is_none()));
+        Some(Ok(was - built(&file, tag)))
+    };
+    let Some(whole) = chain("chain-on", true) else {
+        return;
+    };
+    let whole = whole.expect("the whole chain rounds");
+    // the block's rim is about 4*44 + 2*pi*8 long, a 2 mm round off it (1 - pi/4) * 4 in section
+    assert!(whole > 100.0, "{whole}");
+    let Some(one) = chain("chain-off", false) else {
+        return;
+    };
+    match one {
+        // a piece of it takes less
+        Ok(v) => assert!(v < whole * 0.5, "{v} {whole}"),
+        // or it says why it can't stop there, and doesn't quietly take the rest
+        Err(why) => assert!(why.contains("tangent chain"), "{why}"),
+    }
 }

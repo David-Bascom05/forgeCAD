@@ -311,6 +311,14 @@ impl Dialog {
                 queue.push(("Path".to_string(), "Pick the sketch to sweep along"));
             }
             "loft" => fields = vec![("Profiles".into(), String::new())],
+            // exact by default: only what's picked, unless told to follow the tangent chain
+            "fillet" => {
+                fields = vec![
+                    ("Radius".into(), "2".into()),
+                    ("Only".into(), "only".into()),
+                    ("Edges".into(), String::new()),
+                ];
+            }
             "rib" => {
                 fields = vec![
                     ("Thickness".into(), "2".into()),
@@ -423,6 +431,20 @@ impl Dialog {
             self.fields.insert(0, ("Operation".to_string(), String::new()));
         }
         self.read_extent();
+        // an existing fillet reads back whether it follows the chain
+        if self.kind == "fillet" && matches!(self.target, DialogTarget::Edit(_)) {
+            let at = self.fields.iter().position(|f| f.0 == "Edges");
+            let only = at.is_some_and(|k| self.fields[k].1.starts_with("only "));
+            if let Some(k) = at {
+                if only {
+                    self.fields[k].1 = self.fields[k].1["only ".len()..].to_string();
+                }
+                self.fields.insert(
+                    k,
+                    ("Only".to_string(), if only { "only" } else { "" }.to_string()),
+                );
+            }
+        }
         if self.kind == "hole" {
             self.first.clear();
             self.thread.internal = true;
@@ -1850,6 +1872,22 @@ impl Shell {
                                 &mut places,
                             ) {
                                 *text = ["", "left"][k].to_string();
+                            }
+                            continue;
+                        }
+                        if label == "Only" {
+                            if let Some(k) = small_row(
+                                ui,
+                                &t,
+                                "Tangent chain",
+                                &[
+                                    ("edge1", "Only what's picked", !text.is_empty()),
+                                    ("chain", "All that's tangent to it", text.is_empty()),
+                                ],
+                                "dialog:chain",
+                                &mut places,
+                            ) {
+                                *text = ["only", ""][k].to_string();
                             }
                             continue;
                         }

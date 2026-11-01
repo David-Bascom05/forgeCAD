@@ -820,7 +820,11 @@ fn a_fillet_waits_for_picks_takes_them_from_the_view_and_a_bad_value_says_so() {
     }));
     h.gui.shell.out.push(Action::DialogOk);
     assert!(h.until(|g| g.shell.dialog.is_none()), "{:?}", h.gui.shell.dialog);
-    assert!(std::fs::read_to_string(&file).unwrap().contains("fillet 2 @e"));
+    assert!(
+        std::fs::read_to_string(&file)
+            .unwrap()
+            .contains("fillet 2 only @e")
+    );
 }
 
 #[test]
