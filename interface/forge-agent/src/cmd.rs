@@ -1401,6 +1401,42 @@ combine cut base lid keep
         );
     }
 
+    /// A part exported, and imported into another with a hole in it: the STEP file beside the
+    /// part file, features on top, names steady; rooted, never outside the root.
+    #[test]
+    fn a_step_file_is_a_feature() {
+        let dir = Dir::new("steproot");
+        let block = dir.file("block.fc", "extrude 10 rect 0 0 40 20\n");
+        let mut s = Session::default();
+        let e = s.run("export", &args(&block, &[]));
+        assert!(e.ok, "{}", e.text);
+        let step = dir.0.join("b.step");
+        std::fs::write(&step, e.png.expect("the file")).expect("write");
+        let part = dir.file("p.fc", "import \"b.step\"\nhole 4 -xy at 20 10 10 thru\n");
+        let r = s.run("measure", &args(&part, &["mass"]));
+        assert!(r.ok, "{}", r.text);
+        let want = 8000.0 - forge_math::dmath::PI * 4.0 * 10.0;
+        assert!(r.text.contains(&format!("{:.1}", want)) || r.text.contains(&format!("{want:.0}")), "{}", r.text);
+        let c = s.run("check", &args(&part, &[]));
+        assert!(c.ok, "{}", c.text);
+        // no file: an error on its line
+        let gone = dir.file("q.fc", "import \"nope.step\"\n");
+        assert!(!s.run("build", &args(&gone, &[])).ok);
+        // a file that is no STEP: an error, not a panic
+        dir.file("bad.step", "this is not one");
+        let bad = dir.file("r.fc", "import \"bad.step\"\n");
+        assert!(!s.run("build", &args(&bad, &[])).ok);
+        // rooted, a file outside the root is refused
+        let outside = Dir::new("stepout");
+        std::fs::write(outside.0.join("o.step"), std::fs::read(&step).expect("read")).expect("write");
+        let mut rooted = Session {
+            root: Some(std::fs::canonicalize(&dir.0).expect("root")),
+            ..Session::default()
+        };
+        let away = dir.file("s.fc", &format!("import \"../{}/o.step\"\n", outside.0.file_name().expect("name").to_string_lossy()));
+        assert!(!rooted.run("build", &args(&away, &[])).ok);
+    }
+
     /// Text finds its font beside the part file; rooted, never outside the root, never a file
     /// that is not a font, a link out, or a huge file, and every refusal reads the same.
     #[test]

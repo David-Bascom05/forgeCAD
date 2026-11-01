@@ -16,7 +16,7 @@ w = 40                                      # a parameter: any number below may 
 
 `at X Y Z` is a frame's origin, its z the extrude or drill direction: xy +z, xz -y, yz +x, -xy -z
 (`help frame`). Loops: rect circle rrect ellipse poly spline thru loop (`help loops`). `help` lists every topic:
-sketch, revolve, sweep, loft, coil, thread, text, shell, draft, rib, hole, pattern, bodies, ...
+sketch, revolve, sweep, loft, coil, thread, text, import (a STEP file), shell, draft, rib, hole, pattern, bodies, ...
 
 Tools (CLI `forgecad TOOL F ..`, or MCP; lines on stdin if none given):
 ```
@@ -28,6 +28,7 @@ query F SEL [--at FEAT]     find entities, for handles: `edges of hole1`, `faces
 query F stat|file|check|dims|since N
 measure F REF [REF] | mass | wall
 render F [VIEW] [--labels SEL] [--px N] [-o F.png]
+export F [ap214|ap242] [tol MM] [-o F.step]
 help [TOPIC]
 ```
 FEAT: a label, kind+count (`hole2`), `fN` (Nth line). REF: `@handle` or `(selector)`, in a line too.

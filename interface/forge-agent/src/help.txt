@@ -134,6 +134,11 @@ text [add|cut] STRING font PATH SIZE DEPTH FRAME [wrap R]
 quoted STRING and PATH (a .ttf/.otf beside the file); SIZE the em (capitals ~0.73 em); baseline from
 the origin along x, letters up y, DEPTH along z (cut: into the part). wrap R: round a cylinder about z
 
+## import step
+import [new|add|cut] PATH   a solid from a STEP file beside the part file, quoted: every solid in it,
+as one body whose faces, edges and vertices have names you can use; features can follow. Exact surfaces
+stay exact; edges keep the deviation the file gave them. A file it cannot read is refused by entity.
+
 ## rib web
 rib T [pos|neg] [web] [flip] [draft A] FRAME (line AX AY BX BY | arc CX CY R START SWEEP)..
 a wall along an open path, ends run on to the part, filling to the path's left (flip: right), T thick
