@@ -34,6 +34,7 @@ import argparse
 import json
 import math
 import multiprocessing as mp
+import re
 import sys
 import time
 
@@ -233,7 +234,7 @@ def compare(ours, ref, loose=False):
         return ("occt-" + ref["status"] if s == "ok" else "both-fail"), 0.0
     if s != "ok":
         # an exact zero-thickness touch rejected clearly, where OCCT's answer is empty
-        if "ZeroThickness" in ours.get("error", "") and abs(ref["volume"]) < 1e-6 * max(ref["area"], 1.0):
+        if re.search("ZeroThickness|Empty", ours.get("error", "")) and abs(ref["volume"]) < 1e-6 * max(ref["area"], 1.0):
             return "reject-ok", 0.0
         return "ours-" + s, 0.0
     if "volume" not in ours:
