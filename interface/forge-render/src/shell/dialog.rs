@@ -101,6 +101,8 @@ pub struct HoleChoice {
     pub depth: String,
     /// The drill's point: none is flat.
     pub point: Option<String>,
+    /// What the seat's sizes were last filled from: another screw or seat fills them again.
+    pub seat_from: String,
 }
 
 impl Default for HoleChoice {
@@ -111,13 +113,29 @@ impl Default for HoleChoice {
             screw: "M6".to_string(),
             fit: "normal",
             seat: Seat::None,
-            seat_diameter: "10".to_string(),
-            seat_depth: "5".to_string(),
-            seat_angle: "90".to_string(),
+            seat_diameter: String::new(),
+            seat_depth: String::new(),
+            seat_angle: String::new(),
             termination: Termination::Through,
             depth: "10".to_string(),
             point: None,
+            seat_from: String::new(),
         }
+    }
+}
+
+/// The kernel's screw row with this size and pitch, if it has one, and whose tables it follows.
+fn screw_of(major: f64, pitch: f64) -> Option<&'static forge_model::standard::Screw> {
+    forge_model::standard::SCREWS
+        .iter()
+        .find(|s| (s.size - major).abs() < 1e-9 && (s.pitch - pitch).abs() < 1e-9)
+}
+
+/// A tapped hole's drill: the table's where the size is in it; else worked out, and it says so.
+fn tap_drill(t: &forge_doc::threads::Thread) -> (f64, &'static str) {
+    match screw_of(t.major, t.pitch) {
+        Some(s) => (s.tap[s.default_convention() as usize], "from the table"),
+        None => ((t.major - t.pitch).max(0.1), "calculated: major less pitch"),
     }
 }
 
@@ -446,6 +464,7 @@ impl Dialog {
     /// A field that must come from the view is still empty.
     pub fn waiting_for_pick(&self) -> bool {
         self.thread_blocked().is_some()
+            || self.seat_wanting()
             || (self.kind == "thread"
                 && self.fields.iter().any(|f| f.0 == "Size" && f.1.is_empty())
                 && matches!(self.target, DialogTarget::New(_)))
@@ -507,8 +526,55 @@ impl Dialog {
         };
     }
 
+    /// A seat's sizes from the fastener's row, when there's a fastener in the table and the seat or
+    /// the fastener has just changed. With none, they're the person's to type.
+    fn fill_seat(&mut self) {
+        let screw = match self.hole.as_ref().map(|h| h.kind) {
+            Some(HoleKind::Clearance) => self
+                .hole
+                .as_ref()
+                .and_then(|h| forge_model::standard::screw(&h.screw)),
+            Some(HoleKind::Tapped) => self.thread.entry().and_then(|t| screw_of(t.major, t.pitch)),
+            _ => None,
+        };
+        let Some(h) = &mut self.hole else { return };
+        let key = format!("{:?} {:?} {}", h.seat, h.kind, screw.map_or("", |s| s.name));
+        if h.seat_from == key {
+            return;
+        }
+        h.seat_from = key;
+        let (mut d, mut deep, mut angle) = (String::new(), String::new(), String::new());
+        if let Some(s) = screw {
+            let at = s.default_convention() as usize;
+            match h.seat {
+                Seat::Counterbore => {
+                    d = s.counterbore[at].0.to_string();
+                    deep = s.counterbore[at].1.to_string();
+                }
+                // a spotface's as wide as the screw's counterbore; how deep is the person's
+                Seat::Spotface => d = s.counterbore[at].0.to_string(),
+                Seat::Countersink => {
+                    if let Some((a, b)) = s.countersink {
+                        d = a.to_string();
+                        angle = (b * 180.0 / core::f64::consts::PI).round().to_string();
+                    }
+                }
+                Seat::None => {}
+            }
+        }
+        (h.seat_diameter, h.seat_depth, h.seat_angle) = (d, deep, angle);
+    }
+
+    /// Everything's been said that a line needs?
+    fn seat_wanting(&self) -> bool {
+        self.fields
+            .iter()
+            .any(|f| f.0 == "Seat" && f.1 == "needs-seat-size")
+    }
+
     /// The hole's fields, from what's chosen. A typed length reads in the part's unit.
     pub fn settle_hole(&mut self) {
+        self.fill_seat();
         let Some(h) = self.hole.clone() else { return };
         let is_param = |w: &str| self.params.iter().any(|p| p == w);
         let len =
@@ -518,12 +584,18 @@ impl Dialog {
             HoleKind::Simple => len(&h.diameter),
             HoleKind::Clearance => format!("{} {}", h.screw, h.fit),
             // the drill's the major less the pitch
-            HoleKind::Tapped => tapped.map_or(String::new(), |t| {
-                forge_doc::units::trim((t.major - t.pitch).max(0.1))
-            }),
+            HoleKind::Tapped => tapped.map_or(String::new(), |t| tap_drill(t).0.to_string()),
         };
         let seat = match h.seat {
             Seat::None => String::new(),
+            Seat::Counterbore | Seat::Spotface
+                if h.seat_diameter.trim().is_empty() || h.seat_depth.trim().is_empty() =>
+            {
+                "needs-seat-size".to_string()
+            }
+            Seat::Countersink if h.seat_diameter.trim().is_empty() || h.seat_angle.trim().is_empty() => {
+                "needs-seat-size".to_string()
+            }
             Seat::Counterbore | Seat::Spotface => {
                 format!("cb {} {}", len(&h.seat_diameter), len(&h.seat_depth))
             }
@@ -1338,8 +1410,8 @@ impl Shell {
                             &t,
                             "Direction",
                             &[
-                                ("forward", "As placed", !flipped),
-                                ("backward", "Flipped", flipped),
+                                ("forward", "Along the normal", !flipped),
+                                ("backward", "Against the normal", flipped),
                             ],
                             "dialog:flip",
                             &mut places,
@@ -1398,9 +1470,22 @@ impl Shell {
                         HoleKind::Tapped => {
                             thread_rows(ui, &thread, &t, &mut change);
                             let drill = thread.entry().map_or(String::new(), |e| {
-                                format!("{} mm", forge_doc::units::trim((e.major - e.pitch).max(0.1)))
+                                let (d, how) = tap_drill(e);
+                                format!("{} mm, {how}", forge_doc::units::trim(d))
                             });
                             value_row(ui, "Tap drill", &drill, &t);
+                            let g = ui.fonts_mut(|f| {
+                                f.layout(
+                                    "Records the thread; it isn't cut. A Thread feature on this hole cuts it."
+                                        .to_string(),
+                                    sans(12.0),
+                                    t.ink2,
+                                    DIALOG_W,
+                                )
+                            });
+                            let (r, _) =
+                                ui.allocate_exact_size(vec2(DIALOG_W, g.size().y + 2.0), Sense::hover());
+                            ui.painter().galley(r.min, g, t.ink2);
                         }
                     }
                     ui.add_space(4.0);
@@ -1418,9 +1503,6 @@ impl Shell {
                         &mut places,
                     ) {
                         h.seat = [Seat::None, Seat::Counterbore, Seat::Spotface, Seat::Countersink][k];
-                        if h.seat == Seat::Spotface {
-                            h.seat_depth = "1".to_string();
-                        }
                     }
                     if h.seat != Seat::None {
                         field_row(ui, "Seat diameter", &mut h.seat_diameter, units, &t, &mut places);

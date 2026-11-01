@@ -720,10 +720,12 @@ fn a_tapped_hole_is_drilled_to_its_threads_tap_size_and_says_its_class() {
         line.contains("thread M8x1.25") && line.contains("class 6H"),
         "{line}"
     );
-    assert!(line.starts_with("hole 6.75 "), "{line}");
+    let drill = forge_model::standard::screw("M8").unwrap().tap[0];
+    assert!(line.starts_with(&format!("hole {drill} ")), "{line}");
+    assert!(forge_model::standard::screw("M8").is_some());
     ok(&mut h, "tapped");
     let v = built(&file, "tapped");
-    assert!((was - v - pi_r2(6.75) * 20.0).abs() < 1.0, "{was} {v}");
+    assert!((was - v - pi_r2(drill) * 20.0).abs() < 1.0, "{was} {v}");
     // it reads back as chosen
     let id = h.gui.shell.doc.as_ref().unwrap().items.last().unwrap().id;
     h.gui.shell.out.push(Action::Edit(id));
@@ -747,6 +749,13 @@ fn a_seat_and_a_depth_and_a_point_are_cut_as_chosen() {
     };
     h.click("dialog:seat:Counterbore");
     settle(&mut h);
+    // a simple hole has no fastener to take a seat's size from: it waits to be told
+    let d = h.gui.shell.dialog.as_ref().unwrap();
+    assert!(d.waiting_for_pick() && d.hole.as_ref().unwrap().seat_diameter.is_empty());
+    let hole = h.gui.shell.dialog.as_mut().unwrap().hole.as_mut().unwrap();
+    hole.seat_diameter = "10".to_string();
+    hole.seat_depth = "5".to_string();
+    settle(&mut h);
     h.click("dialog:end:Distance");
     settle(&mut h);
     h.click("dialog:point:Angled 118");
@@ -761,16 +770,113 @@ fn a_seat_and_a_depth_and_a_point_are_cut_as_chosen() {
 }
 
 #[test]
+fn a_fasteners_seat_comes_from_its_row_and_a_countersink_cuts_that_cone() {
+    let Some((mut h, file, was)) = hole_at_point("csink") else {
+        return;
+    };
+    h.click("dialog:holekind:Clearance");
+    settle(&mut h);
+    h.click("dialog:seat:Countersink");
+    settle(&mut h);
+    let s = forge_model::standard::screw("M6").unwrap();
+    let (big, angle) = s.countersink.unwrap();
+    let d = s.clearance[1];
+    let hole = h.gui.shell.dialog.as_ref().unwrap().hole.clone().unwrap();
+    assert_eq!(hole.seat_diameter, big.to_string());
+    ok(&mut h, "countersunk");
+    let v = built(&file, "countersunk");
+    let (sin, cos) = forge_math::dmath::sin_cos(angle / 2.0);
+    let deep = (big - d) / 2.0 * cos / sin;
+    let cone = core::f64::consts::PI * deep / 3.0 * (big * big + big * d + d * d) / 4.0;
+    let want = pi_r2(d) * (20.0 - deep) + cone;
+    assert!((was - v - want).abs() < want * 0.01, "{} {want}", was - v);
+}
+
+#[test]
+fn a_spotface_takes_its_width_from_the_fastener_and_its_depth_from_the_person() {
+    let Some((mut h, file, was)) = hole_at_point("spot") else {
+        return;
+    };
+    h.click("dialog:holekind:Clearance");
+    settle(&mut h);
+    h.click("dialog:seat:Spotface");
+    settle(&mut h);
+    let s = forge_model::standard::screw("M6").unwrap();
+    let wide = s.counterbore[0].0;
+    let d = h.gui.shell.dialog.as_ref().unwrap();
+    assert_eq!(d.hole.as_ref().unwrap().seat_diameter, wide.to_string());
+    assert!(d.waiting_for_pick(), "how deep is theirs to say");
+    h.gui
+        .shell
+        .dialog
+        .as_mut()
+        .unwrap()
+        .hole
+        .as_mut()
+        .unwrap()
+        .seat_depth = "1".to_string();
+    settle(&mut h);
+    ok(&mut h, "spotface");
+    let want = pi_r2(wide) * 1.0 + pi_r2(s.clearance[1]) * 19.0;
+    let got = was - built(&file, "spotface");
+    assert!((got - want).abs() < want * 0.01, "{got} {want}");
+}
+
+#[test]
+fn a_hole_to_next_stops_at_the_next_face() {
+    let part = "a: extrude 30 rect -30 -30 60 60\np: extrude cut 10 xy at 0 0 10 rect -20 -20 40 40\nsk1: sketch xy at 0 0 30\n  pt 10 10\nend\n";
+    let Some((mut h, file)) = open(part, "hnext") else {
+        return;
+    };
+    let was = built(&file, "before");
+    button(&mut h, "Hole");
+    point_at(&mut h, [10.0, 10.0, 30.0]);
+    h.click("dialog:end:To Next");
+    settle(&mut h);
+    ok(&mut h, "to next");
+    let got = was - built(&file, "to next");
+    let want = pi_r2(5.0) * 10.0;
+    assert!((got - want).abs() < want * 0.01, "{got} {want}");
+}
+
+#[test]
+fn a_flipped_hole_goes_the_other_way_by_volume() {
+    // a sketch 17 up in a block 20 high: 5 down is all in it; 5 up has only 3 to cut
+    let part = "a: extrude 20 rect -30 -30 60 60\nsk1: sketch xy at 0 0 17\n  pt 10 10\nend\n";
+    let cut = |flip: bool, tag: &str| -> Option<f64> {
+        let (mut h, file) = open(part, tag)?;
+        let was = built(&file, "before");
+        button(&mut h, "Hole");
+        point_at(&mut h, [10.0, 10.0, 17.0]);
+        h.click("dialog:end:Distance");
+        settle(&mut h);
+        h.gui.shell.dialog.as_mut().unwrap().hole.as_mut().unwrap().depth = "5".to_string();
+        settle(&mut h);
+        if flip {
+            h.click("dialog:flip:Along the normal");
+            settle(&mut h);
+        }
+        ok(&mut h, "flip");
+        Some(was - built(&file, "flip"))
+    };
+    let Some(down) = cut(false, "hflip0") else { return };
+    let Some(up) = cut(true, "hflip1") else { return };
+    let area = pi_r2(5.0);
+    assert!((down - area * 5.0).abs() < 1.0, "{down}");
+    assert!((up - area * 3.0).abs() < 1.0, "{up}");
+}
+
+#[test]
 fn flipping_a_hole_sends_it_the_other_way_and_there_it_says_so() {
     let Some((mut h, _, _)) = hole_at_point("flip") else {
         return;
     };
-    h.click("dialog:flip:Flipped");
+    h.click("dialog:flip:Along the normal");
     settle(&mut h);
     let line = h.gui.shell.dialog.as_ref().unwrap().line();
     assert!(line.contains(" -on sk1 ") || line.contains(" on sk1 "), "{line}");
     let was_on = line.contains(" -on sk1 ");
-    h.click("dialog:flip:As placed");
+    h.click("dialog:flip:Against the normal");
     settle(&mut h);
     let now = h.gui.shell.dialog.as_ref().unwrap().line();
     assert_ne!(now.contains(" -on sk1 "), was_on, "{line} {now}");
