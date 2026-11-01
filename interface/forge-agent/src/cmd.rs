@@ -1125,9 +1125,6 @@ hole 8 -y at 0 25 30 thru
 fillet 4 (edges between base wall concave)
 ";
 
-    /// A varying fillet law left to its default start gets it written into the file at its
-    /// first build, which builds the same part and stays put.
-    #[cfg(unix)]
     /// A body that fails its check is said to; a sound one says nothing.
     #[test]
     fn build_warns_of_an_invalid_body() {
@@ -1143,6 +1140,9 @@ fillet 4 (edges between base wall concave)
         assert!(r.ok && !r.text.contains("warning"), "{}", r.text);
     }
 
+    /// A varying fillet law left to its default start gets it written into the file at its
+    /// first build, which builds the same part and stays put.
+    #[cfg(unix)]
     #[test]
     fn law_starts_are_written_in() {
         let dir = Dir::new("laws");
