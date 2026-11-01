@@ -706,3 +706,24 @@ shell 5 (faces plane normal -z)
     );
     assert!(v > 0.0 && v < pi * 1600.0 * 30.0 * 0.6, "{v}");
 }
+
+/// Writing a varying fillet's start into its line must not turn the law round: the regen runs a group
+/// in order of name, the start was worked out in the order of the line (2 mm^3, silent, on a sketch
+/// line's first save).
+#[test]
+fn writing_a_law_start_moves_nothing() {
+    for pick in [
+        "(edges near 100 20 0) (edges near 50 0 0)",
+        "(edges near 50 0 0) (edges near 100 20 0)",
+        "(edges near 100 20 0) (edges near 50 40 0)",
+        "(edges near 50 40 0) (edges near 100 20 0)",
+    ] {
+        let mut m = Model::new(&format!("extrude 30 rect 0 0 100 40\nfillet 4..2 {pick}\n"));
+        assert!(m.error.is_none(), "{pick}");
+        let before = m.mass().unwrap().volume;
+        let wrote = m.fill_law_starts();
+        assert!(!wrote.is_empty(), "{pick}");
+        let after = m.mass().unwrap().volume;
+        assert!((before - after).abs() < 1e-9 * before, "{pick}: {before} {after}");
+    }
+}
