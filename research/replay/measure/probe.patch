@@ -1,0 +1,450 @@
+diff --git a/Cargo.lock b/Cargo.lock
+index 96783a21..598655a5 100644
+--- a/Cargo.lock
++++ b/Cargo.lock
+@@ -2,10 +2,15 @@
+ # It is not intended for manual editing.
+ version = 4
+ 
++[[package]]
++name = "cputime"
++version = "0.0.0"
++
+ [[package]]
+ name = "forge-agent"
+ version = "0.1.0"
+ dependencies = [
++ "cputime",
+  "forge-bool",
+  "forge-doc",
+  "forge-font",
+@@ -39,6 +44,7 @@ dependencies = [
+ name = "forge-bool"
+ version = "0.1.0"
+ dependencies = [
++ "cputime",
+  "forge-geom",
+  "forge-math",
+  "forge-mesh",
+diff --git a/interface/forge-agent/Cargo.toml b/interface/forge-agent/Cargo.toml
+index 97581dfb..e55349fa 100644
+--- a/interface/forge-agent/Cargo.toml
++++ b/interface/forge-agent/Cargo.toml
+@@ -14,6 +14,7 @@ forge-ops = { path = "../../kernel/forge-ops" }
+ forge-mesh = { path = "../../kernel/forge-mesh" }
+ forge-model = { path = "../../kernel/forge-model" }
+ forge-bool = { path = "../../kernel/forge-bool" }
++cputime = { path = "../../research/rebuild/measure/cputime" }
+ forge-sketch = { path = "../../kernel/forge-sketch" }
+ forge-font = { path = "../../kernel/forge-font" }
+ forge-doc = { path = "../forge-doc" }
+diff --git a/interface/forge-agent/src/model.rs b/interface/forge-agent/src/model.rs
+index e8c9d6ac..936f913f 100644
+--- a/interface/forge-agent/src/model.rs
++++ b/interface/forge-agent/src/model.rs
+@@ -40,6 +40,10 @@ pub struct Model {
+     /// skipped last step costs nothing to run this step.
+     skip_wait: Vec<u8>,
+     pub skip_wrong: Vec<String>,
++    /// Why each re-run line was not skipped.
++    pub skip_why: Vec<(usize, &'static str)>,
++    /// Measurement: each rebuilt line's Mi to read it and to step it.
++    pub costs: Vec<(usize, f64, f64)>,
+     /// Milliseconds the last update spent parsing and regenerating.
+     pub ms: f64,
+     /// Lines the last update rebuilt.
+@@ -134,7 +138,9 @@ fn skip_step(
+     (new_h, old_h, i): (History<'_>, History<'_>, usize),
+     changed: &[forge_math::Box3],
+     chain: &mut Vec<Option<delta::Names>>,
++    no: &mut &'static str,
+ ) -> Option<Vec<Solid>> {
++    *no = "kind";
+     if matches!(new_h[i], Feature::Body(_) | Feature::Work(_)) {
+         return None;
+     }
+@@ -197,6 +203,7 @@ fn skip_step(
+             (fr.x(), fr.y(), fr.z())
+         })
+     };
++    *no = "tie frame moved";
+     for (x, y) in a.solids.iter().zip(&p.solids) {
+         if first(&x.body) != first(&y.body) {
+             return None;
+@@ -208,9 +215,11 @@ fn skip_step(
+         forge_model::tool_shapes_if(old_h, i),
+     ) {
+         (Some(new), Some(old)) => {
++            *no = "tool shape changed";
+             if new != old && skip_mode() != 4 {
+                 return None;
+             }
++            *no = "change reaches the tool (shape)";
+             for (s, _) in &new {
+                 if !off && !changed.iter().all(|c| s.box_out(c, CLEAR) || s.box_in(c, CLEAR)) {
+                     return None;
+@@ -226,6 +235,7 @@ fn skip_step(
+                 (false, _) => {
+                     let reach = local_reach(&new_h[i])?;
+                     let reach = 2.0 * reach + CLEAR;
++                    *no = "change reaches the fillet";
+                     let near = |c: &forge_math::Box3| {
+                         effect
+                             .0
+@@ -238,11 +248,13 @@ fn skip_step(
+                     forge_math::Box3::EMPTY
+                 }
+             };
++            *no = "change reaches the tool (box)";
+             if !off && changed.iter().any(|c| c.overlaps(&bx.grow(CLEAR))) {
+                 return None;
+             }
+         }
+     }
++    *no = "delta refused";
+     let mut out = Vec::with_capacity(p.solids.len());
+     chain.resize_with(p.solids.len(), || None);
+     for (k, (s, d)) in p.solids.iter().zip(effect.0.iter()).enumerate() {
+@@ -397,6 +409,8 @@ impl Default for Model {
+             no_skip: false,
+             skip_wait: vec![],
+             skip_wrong: vec![],
++            skip_why: vec![],
++            costs: vec![],
+             ms: 0.0,
+             rebuilt: 0,
+             kernel_ms: 0.0,
+@@ -627,6 +641,7 @@ impl Model {
+         let mut ran: Vec<usize> = Vec::new();
+         self.skipped = 0;
+         self.skip_wrong.clear();
++        self.skip_why.clear();
+         self.labels.truncate(keep);
+         self.kinds.truncate(keep);
+         self.picks.get_mut().retain(|p| p.0 < keep);
+@@ -634,10 +649,13 @@ impl Model {
+         self.error = None;
+         self.rebuilt = 0;
+         self.kernel_ms = 0.0;
++        self.costs.clear();
++        let mi = cputime::mi;
+         let mut reuse = true;
+         let ids: Vec<u64> = self.lines.iter().map(|l| l.id).collect();
+         for i in keep..self.lines.len() {
+             self.rebuilt += 1;
++            let m0 = mi();
+             let line = self.lines[i].clone();
+             self.labels.push(line.label.clone());
+             if let Some(k) = ids[..i].iter().position(|&d| d == line.id) {
+@@ -733,9 +751,13 @@ impl Model {
+                 ran.push(i);
+             }
+             let same_line = old_all.get(i).is_some_and(|w| w == f);
++            if mode != 0 && !inert && !same_line {
++                self.skip_why.push((i, "own line changed"));
++            }
+             let wait = self.skip_wait.get(i).copied().unwrap_or(0);
+             if mode != 0 && !inert && same_line && wait > 0 && mode < 2 {
+                 self.skip_wait[i] = wait - 1;
++                self.skip_why.push((i, "waiting"));
+             }
+             if mode != 0
+                 && !inert
+@@ -746,6 +768,9 @@ impl Model {
+                 changed.clear();
+                 changed_ok = moved_since(old_tail.get(at - keep), &self.stages[at].solids, &mut changed);
+             }
++            if mode != 0 && !inert && !changed_ok {
++                self.skip_why.push((i, "bodies came or went"));
++            }
+             if mode != 0 && !inert && changed_ok && same_line && (wait == 0 || mode >= 2) {
+                 let prev = if i == 0 {
+                     None
+@@ -762,13 +787,16 @@ impl Model {
+                 );
+                 let names_moved = mode != 4 && line_refs.iter().any(|r| ran.contains(&r.1));
+                 if names_moved {
++                    self.skip_why.push((i, "names a moved line"));
+                     self.skip_wait[i] = 8;
+                 }
+                 if let (false, Some(a), Some(o), Some(p)) = (names_moved, &old_prev, old_i, &prev) {
+                     let new_h = History::new(&self.features[..=i], Some(&ids[..=i]));
+                     let old_h = History::new(&old_all[..=i], Some(&old_ids[..=i]));
+-                    let stepped = skip_step(a, o, p, (new_h, old_h, i), &changed, &mut chain);
++                    let mut no = "";
++                    let stepped = skip_step(a, o, p, (new_h, old_h, i), &changed, &mut chain, &mut no);
+                     if stepped.is_none() {
++                        self.skip_why.push((i, no));
+                         chain.clear();
+                         self.skip_wait[i] = 8;
+                     }
+@@ -793,7 +821,9 @@ impl Model {
+                 self.stages[i - 1].solids.clone()
+             };
+             let t = Instant::now();
++            let m1 = mi();
+             let stepped = step_solids(History::new(&self.features, Some(&ids[..=i])), i, before);
++            self.costs.push((i, m1 - m0, mi() - m1));
+             self.kernel_ms += t.elapsed().as_secs_f64() * 1e3;
+             match stepped {
+                 Ok(solids) => {
+diff --git a/kernel/forge-bool/Cargo.toml b/kernel/forge-bool/Cargo.toml
+index 5265fd8e..82a10025 100644
+--- a/kernel/forge-bool/Cargo.toml
++++ b/kernel/forge-bool/Cargo.toml
+@@ -10,6 +10,7 @@ repository.workspace = true
+ forge-math = { path = "../forge-math" }
+ forge-geom = { path = "../forge-geom" }
+ forge-topo = { path = "../forge-topo" }
++cputime = { path = "../../research/rebuild/measure/cputime" }
+ 
+ [dev-dependencies]
+ forge-ops = { path = "../forge-ops" }
+diff --git a/kernel/forge-bool/src/boolean.rs b/kernel/forge-bool/src/boolean.rs
+index ff9f640f..06da8c76 100644
+--- a/kernel/forge-bool/src/boolean.rs
++++ b/kernel/forge-bool/src/boolean.rs
+@@ -59,6 +59,57 @@ impl std::fmt::Display for BoolError {
+ 
+ pub(crate) type R<T> = Result<T, BoolError>;
+ 
++/// Measurement only. Pair buckets: [closed, proc] x [kept, rejected] x [ssi, trim-kept-edge, trim-rej-edge].
++pub mod probe {
++    use std::sync::atomic::{AtomicU64, Ordering::Relaxed};
++    pub static MI: [AtomicU64; 32] = [const { AtomicU64::new(0) }; 32];
++    pub static N: [AtomicU64; 16] = [const { AtomicU64::new(0) }; 16];
++    type K = (Vec<u64>, Vec<u64>, forge_math::Box3);
++    /// A surface's values at a few parameters, as bits: a rebuilt procedural surface is a new Arc.
++    fn print(s: &forge_geom::Surface) -> Vec<u64> {
++        use forge_geom::SurfaceGeom;
++        let d = s.domain();
++        let cl = |x: f64| x.clamp(-1e3, 1e3);
++        let (ul, uh, vl, vh) = (cl(d.u.lo), cl(d.u.hi), cl(d.v.lo), cl(d.v.hi));
++        let mut o = vec![ul.to_bits(), uh.to_bits(), vl.to_bits(), vh.to_bits()];
++        for (a, b) in [(0.13, 0.29), (0.71, 0.37), (0.43, 0.83), (0.97, 0.05), (0.5, 0.5)] {
++            let p = s.eval(forge_math::Point2::new(ul + a * (uh - ul), vl + b * (vh - vl)));
++            o.extend([p.x.to_bits(), p.y.to_bits(), p.z.to_bits()]);
++        }
++        o
++    }
++    thread_local!(static SEEN: std::cell::RefCell<(Vec<K>, Vec<K>)> = const { std::cell::RefCell::new((Vec::new(), Vec::new())) });
++    /// Whether the last frame met this pair over this region, surfaces and box to the bit.
++    pub fn seen(a: &forge_geom::Surface, b: &forge_geom::Surface, r: forge_math::Box3) -> bool {
++        SEEN.with(|s| {
++            let mut s = s.borrow_mut();
++            let (pa, pb) = (print(a), print(b));
++            let hit = s.0.iter().any(|k| k.2 == r && k.0 == pa && k.1 == pb);
++            s.1.push((pa, pb, r));
++            hit
++        })
++    }
++    pub fn next_frame() {
++        SEEN.with(|s| {
++            let mut s = s.borrow_mut();
++            let s = &mut *s;
++            std::mem::swap(&mut s.0, &mut s.1);
++            s.1.clear();
++        })
++    }
++    pub fn now() -> f64 { cputime::mi() }
++    pub fn add(i: usize, d: f64) { MI[i].fetch_add((d * 1e6) as u64, Relaxed); }
++    pub fn count(i: usize) { N[i].fetch_add(1, Relaxed); }
++    pub fn take() -> (Vec<f64>, Vec<u64>) {
++        (MI.iter().map(|x| x.swap(0, Relaxed) as f64 / 1e6).collect(), N.iter().map(|x| x.swap(0, Relaxed)).collect())
++    }
++    thread_local!(pub static TRIM: std::cell::Cell<[f64; 2]> = const { std::cell::Cell::new([0.0; 2]) });
++    pub fn is_proc(a: &forge_geom::Surface, b: &forge_geom::Surface) -> bool {
++        matches!(a, forge_geom::Surface::Procedural(_)) || matches!(b, forge_geom::Surface::Procedural(_))
++            || matches!(crate::ssi::closed_form(a, b), forge_geom::intersect::SurfaceSurface::NotAnalytic)
++    }
++}
++
+ /// A closed walk of edge pieces: (piece, forward).
+ pub(crate) type Walk = Vec<(usize, bool)>;
+ /// A face region: outer walk first, then holes.
+@@ -607,7 +658,24 @@ fn plan(a: &Body, b: &Body, op: Op, scratch: &mut Scratch) -> R<Plan> {
+                 continue;
+             }
+             let region = overlap(&ba, &b_boxes[fb.index()]).grow(tol::LINEAR);
++            let pr_same = probe::seen(sa, sb, meet_region(&ba, &b_boxes[fb.index()], sa, sb)) as usize;
++            let pr_proc = probe::is_proc(sa, sb) as usize;
++            let pr_t0 = probe::now();
++            let (pr_c0, pr_s0) = (cuts.len(), segs.len());
++            probe::TRIM.with(|t| t.set([0.0; 2]));
+             let found = ssi::surfaces_in(sa, sb, meet_region(&ba, &b_boxes[fb.index()], sa, sb));
++            let pr_t1 = probe::now();
++            let mut pr_done = |cuts: &Vec<Cut>, segs: &Vec<Seg>| {
++                let kept = cuts.len() > pr_c0 || segs.len() > pr_s0;
++                let t2 = probe::now();
++                let tr = probe::TRIM.with(|t| t.get());
++                let base = pr_same * 16 + pr_proc * 8 + (!kept as usize) * 4;
++                probe::add(base, pr_t1 - pr_t0);
++                probe::add(base + 1, tr[0]);
++                probe::add(base + 2, tr[1]);
++                probe::add(base + 3, (t2 - pr_t1 - tr[0] - tr[1]).max(0.0));
++                probe::count(pr_same * 8 + pr_proc * 2 + !kept as usize);
++            };
+             if debug_on() {
+                 let what = match &found {
+                     SurfaceSurface::Curves(cs) => format!("{} curves", cs.len()),
+@@ -617,9 +685,13 @@ fn plan(a: &Body, b: &Body, op: Op, scratch: &mut Scratch) -> R<Plan> {
+             }
+             touching.extend(touches(&found, [&index[0], &index[1]], [0, 1], [fa, fb], region));
+             let curves = match found {
+-                SurfaceSurface::Empty | SurfaceSurface::Points(_) => continue,
++                SurfaceSurface::Empty | SurfaceSurface::Points(_) => {
++                    pr_done(&cuts, &segs);
++                    continue;
++                }
+                 SurfaceSurface::Coincident => {
+                     coplanar.push((fa, fb));
++                    pr_done(&cuts, &segs);
+                     continue;
+                 }
+                 SurfaceSurface::NotAnalytic => {
+@@ -653,6 +725,7 @@ fn plan(a: &Body, b: &Body, op: Op, scratch: &mut Scratch) -> R<Plan> {
+                     &mut imprints,
+                 )?;
+             }
++            pr_done(&cuts, &segs);
+         }
+     }
+     rank_pairs(&mut segs, &bodies);
+@@ -1777,10 +1850,14 @@ pub(crate) fn trim(
+         .then(|| [range.lo, range.hi].map(|t| (t, curve.eval(t))));
+     // an edge whose box misses the curve's cannot cut it (big faces have hundreds of edges)
+     let reach = curve.bbox(range).grow(tol::LINEAR);
++    let (mut pr_t, mut pr_n, mut pr) = (probe::now(), cuts.len(), [0.0f64; 2]);
+     for k in 0..2 {
+         let (body, f, side) = (bodies[k], faces[k], sides[k]);
+         for &l in &body.face(f).loops {
+             for c in body.lp(l).coedges() {
++                let t_ = probe::now();
++                pr[(cuts.len() == pr_n) as usize] += t_ - pr_t;
++                (pr_t, pr_n) = (t_, cuts.len());
+                 let e = body.coedge(c).edge;
+                 let edge = body.edge(e);
+                 if !body.edge_box(e).overlaps(&reach) {
+@@ -1977,6 +2054,8 @@ pub(crate) fn trim(
+             }
+         }
+     }
++    pr[(cuts.len() == pr_n) as usize] += probe::now() - pr_t;
++    probe::TRIM.with(|t| { let o = t.get(); t.set([o[0] + pr[0], o[1] + pr[1]]) });
+     // where the curve runs along an existing edge it crosses the other face there: the edge is
+     // cut where it leaves that face and imprinted into it (splitting that face, and stopping the
+     // classification flood across it); along a seam the curve adds no edge at all
+@@ -3479,7 +3558,7 @@ fn place_cuts(bodies: &[&Body; 2], cuts: &[Cut]) -> R<Placed> {
+ 
+ /// The point nearest every curve through a new vertex (alternating projections from `p`), and
+ /// the tolerance it needs: the farthest curve, at least LINEAR.
+-pub(crate) fn settle(mut p: Point3, curves: &[(&Curve, Interval)]) -> R<(Point3, f64)> {
++pub fn settle(mut p: Point3, curves: &[(&Curve, Interval)]) -> R<(Point3, f64)> {
+     if curves.is_empty() {
+         return Ok((p, tol::LINEAR));
+     }
+diff --git a/kernel/forge-bool/src/lib.rs b/kernel/forge-bool/src/lib.rs
+index 186a4594..3bead2aa 100644
+--- a/kernel/forge-bool/src/lib.rs
++++ b/kernel/forge-bool/src/lib.rs
+@@ -10,6 +10,6 @@ pub mod unify;
+ 
+ pub use boolean::{BoolError, Op, boolean, boolean_into, boolean_unlinked, phase_times};
+ pub use classify::{Index, Where};
+-pub use nary::{Batch, CpuBatch, nary, nary_phase_times, nary_with};
++pub use nary::{Batch, CpuBatch, NARY_CALLS, nary, nary_phase_times, nary_with};
+ pub use shape::{Member, Seg2, Shape};
+ pub use unify::unify;
+diff --git a/kernel/forge-bool/src/nary.rs b/kernel/forge-bool/src/nary.rs
+index 476ee791..03d48112 100644
+--- a/kernel/forge-bool/src/nary.rs
++++ b/kernel/forge-bool/src/nary.rs
+@@ -547,6 +547,8 @@ impl Batch for CpuBatch<'_> {
+     }
+ }
+ 
++pub static NARY_CALLS: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
++
+ /// `nary`, with each tool also given as an analytic solid: a point clear of a tool's boundary
+ /// is placed from its profile, and only points near it go to the B-rep. New vertices are named
+ /// from `root`. The body comes out compact (as `Body::compact` leaves it).
+@@ -558,6 +560,7 @@ pub fn nary_with(
+     threads: usize,
+     root: Name,
+ ) -> R<Body> {
++    NARY_CALLS.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+     let mut out = nary_body(tools, ops, shapes, batch, threads, root)?;
+     // pieces left touching at a point keep a vertex each: where walking round a vertex from one
+     // coedge leaving it (back along its loop, across to the partner) misses some of the others
+@@ -873,6 +876,11 @@ fn nary_body(
+                 }
+                 // a pair with no closed form is searched, at a cost: not where the tools holding all
+                 // of the region (by bounds) say its curves would divide neither face
++                let pr_same = crate::boolean::probe::seen(sa, sb, region) as usize;
++                let pr_proc = crate::boolean::probe::is_proc(sa, sb) as usize;
++                let pr_t0 = crate::boolean::probe::now();
++                let (pr_c0, pr_s0) = (out.cuts.len(), out.segs.len());
++                crate::boolean::probe::TRIM.with(|t| t.set([0.0; 2]));
+                 let found = match ssi::closed_form(sa, sb) {
+                     SurfaceSurface::NotAnalytic if !meets_matter(&region, i, j) => {
+                         out.loose.push(((i, fa), (j, fb)));
+@@ -881,16 +889,34 @@ fn nary_body(
+                     SurfaceSurface::NotAnalytic => ssi::searched(sa, sb, region),
+                     r => r,
+                 };
++                let pr_t1 = crate::boolean::probe::now();
++                let pr_done = |c: usize, s: usize| {
++                    use crate::boolean::probe;
++                    let kept = c > pr_c0 || s > pr_s0;
++                    let t2 = probe::now();
++                    let tr = probe::TRIM.with(|t| t.get());
++                    let base = pr_same * 16 + pr_proc * 8 + (!kept as usize) * 4;
++                    probe::add(base, pr_t1 - pr_t0);
++                    probe::add(base + 1, tr[0]);
++                    probe::add(base + 2, tr[1]);
++                    probe::add(base + 3, (t2 - pr_t1 - tr[0] - tr[1]).max(0.0));
++                    probe::count(pr_same * 8 + pr_proc * 2 + !kept as usize);
++                };
+                 if planes && !matches!(found, SurfaceSurface::Coincident) && (inert(i, fa) || inert(j, fb)) {
+                     out.loose.push(((i, fa), (j, fb)));
++                    pr_done(out.cuts.len(), out.segs.len());
+                     continue;
+                 }
+                 out.touching
+                     .extend(touches(&found, [ia, ib], [i, j], [fa, fb], region));
+                 let curves = match found {
+-                    SurfaceSurface::Empty => continue,
++                    SurfaceSurface::Empty => {
++                        pr_done(out.cuts.len(), out.segs.len());
++                        continue;
++                    }
+                     SurfaceSurface::Points(_) => {
+                         out.loose.push(((i, fa), (j, fb)));
++                        pr_done(out.cuts.len(), out.segs.len());
+                         continue;
+                     }
+                     SurfaceSurface::Coincident => {
+@@ -918,10 +944,14 @@ fn nary_body(
+                             &mut out.imprints,
+                             &mut Vec::new(),
+                         )?;
++                        pr_done(out.cuts.len(), out.segs.len());
+                         continue;
+                     }
+                     // where either face is buried there is no curve to find
+-                    SurfaceSurface::NotAnalytic if buried(i, &region) || buried(j, &region) => continue,
++                    SurfaceSurface::NotAnalytic if buried(i, &region) || buried(j, &region) => {
++                        pr_done(out.cuts.len(), out.segs.len());
++                        continue;
++                    }
+                     SurfaceSurface::NotAnalytic => {
+                         return Err(BoolError::Unsupported("surface pair without a closed form"));
+                     }
+@@ -961,6 +991,7 @@ fn nary_body(
+                 if !whole || out.imprints.len() > imprints_before {
+                     out.loose.push(((i, fa), (j, fb)));
+                 }
++                pr_done(out.cuts.len(), out.segs.len());
+             }
+         }
+         Ok(out)
