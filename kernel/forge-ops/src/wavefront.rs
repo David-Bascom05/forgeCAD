@@ -7,12 +7,15 @@ use forge_geom::{Curve, Line, Surface};
 use forge_math::{Interval, Point3};
 use forge_topo::{Body, FaceId, Name, VertexId};
 
+type NetEdge = (Curve, Interval, usize, usize, Name);
+type NetFace = (FaceId, Vec<Vec<(usize, bool)>>);
+
 /// Edges and loops as plain lists, to change round a vertex and build again.
 #[derive(Clone)]
 struct Net {
     verts: Vec<(Point3, Name)>,
-    edges: Vec<(Curve, Interval, usize, usize, Name)>,
-    faces: Vec<(FaceId, Vec<Vec<(usize, bool)>>)>,
+    edges: Vec<NetEdge>,
+    faces: Vec<NetFace>,
 }
 
 fn net(b: &Body) -> Net {
@@ -146,7 +149,6 @@ fn split(b: &Body, n: &Net, v: usize, k: usize) -> Option<Net> {
         let l = &n.faces[c.0].1[c.1];
         l[(c.2 + 1) % l.len()].0
     };
-    let edge_in = |c: (usize, usize, usize)| n.faces[c.0].1[c.1][c.2].0;
     let move_end = |m: &mut Net, e: usize, to: usize| {
         if m.edges[e].2 == v {
             m.edges[e].2 = to;
@@ -160,7 +162,6 @@ fn split(b: &Body, n: &Net, v: usize, k: usize) -> Option<Net> {
     move_end(&mut m, edge_after(x), vx);
     move_end(&mut m, edge_after(c), vy);
     move_end(&mut m, edge_after(y), vy);
-    let _ = edge_in;
     // corner a's face runs in from y's side, out to x's: from vy to vx; corner c's the other way
     let la = &mut m.faces[a.0].1[a.1];
     la.insert(a.2 + 1, (f, false));
