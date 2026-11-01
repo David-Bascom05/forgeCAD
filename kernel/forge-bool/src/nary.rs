@@ -1064,7 +1064,14 @@ fn nary_body(
         }
         let both = (0..2).all(|k| {
             let (sd, f) = (t.sides[k], t.faces[k]);
-            local_class(tools[sd], &index[sd], f, t.at, t.dir, |q| kept_at(sd, q)) == Some(true)
+            match local_class(tools[sd], &index[sd], f, t.at, t.dir, |q| kept_at(sd, q)) {
+                Some(k) => k,
+                // cut at the touch by a third surface: kept if any of it round the point is
+                None if t.dir.is_none() => {
+                    crate::boolean::local_any(tools[sd], &index[sd], f, t.at, |q| kept_at(sd, q))
+                }
+                None => false,
+            }
         });
         if both {
             return Err(BoolError::ZeroThickness { at: t.at });

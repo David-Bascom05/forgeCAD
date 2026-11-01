@@ -697,17 +697,30 @@ fn plan_once(a: &Body, b: &Body, op: Op, scratch: &mut Scratch) -> R<Plan> {
                 near(1)
             );
         }
-        let (Some(ca), Some(cb)) = (near(0), near(1)) else {
+        let keeps = |side: Side, c: Where| match (op, side, c) {
+            (Op::Union | Op::Subtract, 0, Where::Outside) | (Op::Intersect, 0, Where::Inside) => true,
+            (Op::Union, 1, Where::Outside) | (Op::Subtract | Op::Intersect, 1, Where::Inside) => true,
+            _ => false,
+        };
+        // a face a third surface cuts at the touch (a ball's equator on the top the touch lies on)
+        // is kept there if any of it round the point is
+        let kept = |side: Side| match near(side) {
+            Some(c) => Some(keeps(side, c)),
+            None if t.dir.is_none() => Some(local_any(
+                bodies[side],
+                &index[side],
+                t.faces[side],
+                t.at,
+                |q| match index[1 - side].classify(q) {
+                    Where::On => None,
+                    w => Some(keeps(side, w)),
+                },
+            )),
+            None => None,
+        };
+        let (Some(kept_a), Some(kept_b)) = (kept(0), kept(1)) else {
             continue;
         };
-        let kept_a = matches!(
-            (op, ca),
-            (Op::Union | Op::Subtract, Where::Outside) | (Op::Intersect, Where::Inside)
-        );
-        let kept_b = matches!(
-            (op, cb),
-            (Op::Union, Where::Outside) | (Op::Subtract | Op::Intersect, Where::Inside)
-        );
         if kept_a && kept_b {
             return Err(BoolError::ZeroThickness { at: t.at });
         }
@@ -1700,6 +1713,27 @@ pub(crate) fn touches(
 /// points of the face a growing step away from `p` across the touch, the first step at which
 /// every direction landing on the face gives an answer (None from `class` is too close to
 /// call). None if the directions disagree (the face crosses there) or no step decides.
+/// Whether `class` says yes at any point of face `f` round `p` (`local_class`'s points).
+pub(crate) fn local_any(
+    body: &Body,
+    own: &Index,
+    f: FaceId,
+    p: Point3,
+    class: impl Fn(Point3) -> Option<bool>,
+) -> bool {
+    let face = &body.face(f).surface;
+    let Some(n) = body.face_normal(f, face.project(p)) else {
+        return false;
+    };
+    let fr = Frame::from_z(p, n);
+    (0..8).any(|k| {
+        let (sn, cs) = dmath::sin_cos(0.3719 + k as f64 * 0.5 * dmath::FRAC_PI_2);
+        let w = fr.x().get() * cs + fr.y().get() * sn;
+        let q = face.eval(face.project(p + w * 0.01));
+        own.point_in_face(f, q) == Where::Inside && class(q) == Some(true)
+    })
+}
+
 pub(crate) fn local_class<T: PartialEq>(
     body: &Body,
     own: &Index,
