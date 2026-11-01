@@ -17,3 +17,8 @@ face; a chamfer's corner starts from its least-named face. `tests/arena_order.rs
 Rerun: copy `nameprobe.rs` to interface/forge-agent/examples/ on two checkouts, `nameprobe dump > F` on
 each, `python3 renames.py F_OLD F_NEW`; `cargo run --release -p forge-model --example namehunt -- 200 SEED`,
 also with `--inserts` and `--big`.
+
+The history generator (`interface/forge-agent/src/history.rs`) picked faces and edges by arena index, so a seed made
+a different part under each order: seeds 4, 15, 27 and 28 "failing with order" were different parts, and each such
+file fails the same in every order, on main too. It now picks by name (`pick_named`). Checked with arenas reversed,
+hashed and in name order, and no order at all: the same lines per seed and the same failures.

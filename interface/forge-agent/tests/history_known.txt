@@ -12,3 +12,6 @@ Direct(Invalid(  # delete leaves a face with no loops
 # not a failure here any more; tests/history.rs lists the seeds that rely on it, which only shrinks
 # on main 947e420 with bugs-3 alone too (not from this integration's other branches): filed to unblock it
 fillet: invalid EdgeOffFace  # seed 32: a variable fillet after a thicken cut, then a fillet near it
+# seeds that picking by name brought up; these parts fail on main too, whatever the arena order
+fillet: invalid FaceWrongSide  # seed 33: a 0.05 fillet on a hole's rim after a fillet by it; not shrunk
+ConstraintsIntersect  # seed 10: a face's mesh, the constraints crossing; the part itself is valid; not shrunk

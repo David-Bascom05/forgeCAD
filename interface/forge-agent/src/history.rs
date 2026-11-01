@@ -201,6 +201,39 @@ pub const SEEDS: [u64; 34] = [
 /// Mesh chord for the volume checks.
 const CHORD: f64 = 0.004;
 
+/// What orders an entity among its like, whatever the arena.
+trait Named {
+    fn name_in(&self, b: &Body) -> forge_topo::Name;
+}
+
+impl Named for FaceId {
+    fn name_in(&self, b: &Body) -> forge_topo::Name {
+        b.face(*self).name
+    }
+}
+
+impl Named for forge_topo::EdgeId {
+    fn name_in(&self, b: &Body) -> forge_topo::Name {
+        b.edge(*self).name
+    }
+}
+
+impl Named for forge_topo::VertexId {
+    fn name_in(&self, b: &Body) -> forge_topo::Name {
+        b.vertex(*self).name
+    }
+}
+
+impl Named for Ent {
+    fn name_in(&self, b: &Body) -> forge_topo::Name {
+        match *self {
+            Ent::Face(f) => f.name_in(b),
+            Ent::Edge(e) => e.name_in(b),
+            Ent::Vert(v) => v.name_in(b),
+        }
+    }
+}
+
 /// What a generator sees: the part so far and the dice.
 pub struct G<'a> {
     r: &'a mut Rng,
@@ -223,6 +256,13 @@ impl G<'_> {
     }
     fn pick<T: Clone>(&mut self, xs: &[T]) -> Option<T> {
         (!xs.is_empty()).then(|| xs[self.r.below(xs.len())].clone())
+    }
+    /// One of these faces, edges or vertices, by name: a seed makes the same part whatever order
+    /// the arenas are in.
+    fn pick_named<T: Copy + Named>(&mut self, xs: &[T]) -> Option<T> {
+        let mut v = xs.to_vec();
+        v.sort_by_key(|x| x.name_in(self.body));
+        self.pick(&v)
     }
     /// A size on the part's scale.
     fn size(&mut self, lo: f64, hi: f64) -> f64 {
@@ -277,12 +317,12 @@ impl G<'_> {
             .face_ids()
             .filter(|&f| select::plane_normal(self.body, f).is_some())
             .collect();
-        match self.pick(&planar) {
+        match self.pick_named(&planar) {
             Some(f) if !self.one_in(5) => {
                 let n = select::plane_normal(self.body, f).expect("planar");
                 let fb = self.body.face_box(f);
                 let edges = select::edges_of_face(self.body, f);
-                let at = match self.pick(&edges) {
+                let at = match self.pick_named(&edges) {
                     Some(e) => {
                         let m = select::centre(self.body, Ent::Edge(e));
                         let t = self.range(0.15, 0.6);
@@ -376,7 +416,7 @@ impl G<'_> {
         let mut out = Vec::new();
         let mut len = f64::INFINITY;
         for _ in 0..1 + self.r.below(n) {
-            let e = self.pick(&creases)?;
+            let e = self.pick_named(&creases)?;
             let what = match (select::crease(self.body, e), self.r.below(3)) {
                 (Some(c), 0) => format!(" {c}"),
                 _ => String::new(),
@@ -401,7 +441,7 @@ impl G<'_> {
             })
             .collect();
         for _ in 0..4 {
-            let f = self.pick(&fs)?;
+            let f = self.pick_named(&fs)?;
             if let Some(s) = self.sel(Ent::Face(f), if planar { " plane" } else { "" }) {
                 return Some((f, s));
             }
@@ -416,7 +456,7 @@ impl G<'_> {
             let l = self.pick(&ls)?;
             let s = format!("(faces of {})", trim(&l));
             let (_, hits) = self.m.select(&s, None).ok()?;
-            let f = self.pick(&hits)?;
+            let f = self.pick_named(&hits)?;
             let what = format!(" of {}", trim(&l));
             let face = self.sel(f, &what)?;
             return Some(format!("to {} {face}{}", trim(&l), self.offset()));
@@ -671,7 +711,7 @@ fn fillet(g: &mut G) -> Option<Vec<String>> {
     // a law's start, or a corner's setback, at a vertex of the part
     let verts = select::verts(g.body);
     let vert = |g: &mut G| -> Option<String> {
-        let v = g.pick(&verts)?;
+        let v = g.pick_named(&verts)?;
         let p = g.body.vertex(v).point;
         Some(format!("(verts near {})", p3(p)))
     };
@@ -701,7 +741,7 @@ fn chamfer(g: &mut G) -> Option<Vec<String>> {
         .into_iter()
         .filter(|&e| select::curve_kind(&g.body.edge(e).curve) != "curve")
         .collect();
-    let e = g.pick(&creases)?;
+    let e = g.pick_named(&creases)?;
     let len = select::length(g.body, e);
     let d = |g: &mut G| n((len * 0.3).min(g.bx.diagonal() * 0.04) * g.range(0.1, 1.0) + 0.01);
     let first = g.sel(Ent::Edge(e), "")?;
@@ -709,7 +749,7 @@ fn chamfer(g: &mut G) -> Option<Vec<String>> {
         k @ (0 | 1) => {
             // the face the first distance is measured on: one of the edge's own
             let fs = select::faces_of_edge(g.body, e);
-            let f = g.pick(&fs)?;
+            let f = g.pick_named(&fs)?;
             let face = g.sel(Ent::Face(f), "")?;
             if k == 0 {
                 format!("{} {} face {face}", d(g), d(g))
@@ -1097,8 +1137,9 @@ fn plane(g: &mut G) -> Option<Vec<String>> {
 fn facefillet(g: &mut G) -> Option<Vec<String>> {
     // the two faces of a crease, or the faces either side of a planar strip
     let creases = g.creases();
-    let e = g.pick(&creases)?;
-    let fs = select::faces_of_edge(g.body, e);
+    let e = g.pick_named(&creases)?;
+    let mut fs = select::faces_of_edge(g.body, e);
+    fs.sort_by_key(|f| f.name_in(g.body));
     let (a, b) = (
         g.sel(Ent::Face(*fs.first()?), "")?,
         g.sel(Ent::Face(*fs.get(1)?), "")?,
@@ -1135,6 +1176,7 @@ fn fullround(g: &mut G) -> Option<Vec<String>> {
             }
         }
     }
+    found.sort_by_key(|x: &(FaceId, FaceId, FaceId)| (x.0.name_in(b), x.1.name_in(b), x.2.name_in(b)));
     let (s1, m, s2) = g.pick(&found)?;
     let (a, mid, c) = (
         g.sel(Ent::Face(s1), "")?,
@@ -1214,8 +1256,9 @@ fn rib(g: &mut G) -> Option<Vec<String>> {
             select::crease(b, e) == Some("concave") && select::curve_kind(&b.edge(e).curve) == "line"
         })
         .collect();
-    let e = g.pick(&edges)?;
-    let fs = select::faces_of_edge(b, e);
+    let e = g.pick_named(&edges)?;
+    let mut fs = select::faces_of_edge(b, e);
+    fs.sort_by_key(|f| f.name_in(b));
     let (na, nb) = (
         select::plane_normal(b, *fs.first()?)?,
         select::plane_normal(b, *fs.get(1)?)?,
@@ -1281,7 +1324,7 @@ fn delete(g: &mut G) -> Option<Vec<String>> {
             .face_ids()
             .filter(|&f| select::surface_kind(&g.body.face(f).surface) == "blend")
             .collect();
-        let f = g.pick(&blends)?;
+        let f = g.pick_named(&blends)?;
         g.sel(Ent::Face(f), " blend")?
     } else {
         let s = format!("(faces of {})", trim(&l));
@@ -1340,7 +1383,7 @@ fn made(g: &mut G, all: &str, what: &str) -> Option<String> {
     };
     let s = format!("({all} {what}{of})");
     let (_, hits) = g.m.select(&s, None).ok()?;
-    let e = g.pick(&hits)?;
+    let e = g.pick_named(&hits)?;
     let near = format!("({all} {what}{of} near {})", p3(select::centre(g.body, e)));
     let (_, hits) = g.m.select(&near, None).ok()?;
     (hits == [e]).then(|| format!("{} {near}", trim(&l)))
@@ -1501,7 +1544,7 @@ fn thread(g: &mut G) -> Option<Vec<String>> {
             let l = g.pick(&ls)?;
             let s = format!("(faces cyl of {})", trim(&l));
             let (_, hits) = g.m.select(&s, None).ok()?;
-            let f = g.pick(&hits)?;
+            let f = g.pick_named(&hits)?;
             let r = select::radius(g.body, f)?;
             let what = format!(" cyl of {}", trim(&l));
             let face = g.sel(f, &what)?;

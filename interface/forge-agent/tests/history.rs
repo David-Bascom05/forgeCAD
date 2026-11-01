@@ -7,7 +7,7 @@ use forge_agent::text::KINDS;
 use std::collections::BTreeMap;
 
 const LEN: usize = 12;
-const RELY_ON_NAME_FALLBACK: &[u64] = &[16];
+const RELY_ON_NAME_FALLBACK: &[u64] = &[8];
 
 #[test]
 fn every_kind_has_a_maker() {
