@@ -3539,8 +3539,8 @@ pub(crate) fn imprint(
                             continue;
                         }
                     };
-                    // this edge's end on e2 without a crossing there (a corner on a rim it all but
-                    // runs along): e2 ends there too, or the two come out in different pieces
+                    // this edge's end on e2 beside a crossing but not at one (a corner on a rim it all
+                    // but runs along): e2 ends there too, or the two come out in different pieces
                     let straight = matches!(
                         (&edge.curve, &db.edge(e2).curve),
                         (Curve::Line(_), Curve::Line(_))
@@ -3551,6 +3551,8 @@ pub(crate) fn imprint(
                             |w: VertexId| db.vertex(w).point.distance(p) <= db.vertex(w).tol.max(tol::LINEAR);
                         let e2_ends = db.edge(e2);
                         if db.edge_box(e2).grow(grow + slack(db, e2)).contains(p)
+                            && hits.iter().any(|h| h.point.distance(p) <= 0.3)
+                            && !hits.iter().any(|h| h.point.distance(p) <= tol::LINEAR)
                             && !end(e2_ends.start)
                             && !end(e2_ends.end)
                             && let Some((s2, tol)) = on_edge(db, e2, p)
