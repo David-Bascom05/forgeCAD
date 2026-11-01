@@ -790,21 +790,28 @@ fn tessellate_face(
     let mut rings: Vec<Vec<Point2>> = Vec::new();
     let mut ring_globals: Vec<Vec<u32>> = Vec::new();
     for &l in &face.loops {
-        // edges walked there and back (a tool touched this face along a line) bound nothing
+        // edges walked there and back (a tool touched this face along a line) bound nothing; on a
+        // plane any such run, elsewhere only a whole loop (it may be the seam up to a cone's apex)
+        let there_and_back = |c: CoedgeId| body.partner(c).is_some_and(|p| body.coedge(p).lp == l);
+        if body.lp(l).coedges().all(there_and_back) {
+            continue;
+        }
         let mut walk: Vec<CoedgeId> = Vec::new();
         for c in body.lp(l).coedges() {
-            if walk.last().is_some_and(|&t| body.partner(t) == Some(c)) {
+            if matches!(surface, Surface::Plane(_))
+                && walk.last().is_some_and(|&t| body.partner(t) == Some(c))
+            {
                 walk.pop();
             } else {
                 walk.push(c);
             }
         }
-        while walk.len() >= 2 && body.partner(walk[0]) == walk.last().copied() {
+        while matches!(surface, Surface::Plane(_))
+            && walk.len() >= 2
+            && body.partner(walk[0]) == walk.last().copied()
+        {
             walk.pop();
             walk.remove(0);
-        }
-        if walk.is_empty() {
-            continue;
         }
         let mut samples = Vec::new();
         let mut ids = Vec::new();

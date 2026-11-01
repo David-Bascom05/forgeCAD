@@ -13,4 +13,3 @@ invalid DuplicateName  # extrude sym of a line+arc loop onto a block
 fillet: invalid EdgeOffFace  # seed 32: a variable fillet after a thicken cut, then a fillet near it
 # seeds that picking by name brought up; these parts fail on main too, whatever the arena order
 fillet: invalid FaceWrongSide  # seed 33: a 0.05 fillet on a hole's rim after a fillet by it; not shrunk
-ConstraintsIntersect  # seed 10: a face's mesh, the constraints crossing; the part itself is valid; not shrunk
