@@ -42,6 +42,31 @@ fn main() {
     let part = Part {
         features: m.features.clone(),
     };
+    if std::env::var_os("FILLETDUMP").is_some() {
+        for sol in m.solids_after(m.built()) {
+            let b = &sol.body;
+            for p in forge_topo::check(b) {
+                eprintln!("{p:?}");
+                if let forge_topo::Problem::DuplicateName { name } = p {
+                    for v in b.vertex_ids().filter(|&v| b.vertex(v).name == name) {
+                        eprintln!("  vertex {:?}", b.vertex(v).point);
+                    }
+                    for e in b.edge_ids().filter(|&e| b.edge(e).name == name) {
+                        use forge_geom::CurveGeom;
+                        let x = b.edge(e);
+                        eprintln!(
+                            "  edge {:?} {:?}",
+                            x.curve.eval(x.range.lo),
+                            x.curve.eval(x.range.hi)
+                        );
+                    }
+                    for f in b.face_ids().filter(|&f| b.face(f).name == name) {
+                        eprintln!("  face {:?}", b.face_box(f));
+                    }
+                }
+            }
+        }
+    }
     let problems: usize = m
         .solids_after(m.built())
         .iter()
@@ -60,6 +85,8 @@ fn main() {
         .as_ref()
         .map_or((String::new(), 0), |f| (f.msg.clone(), m.lines[f.at].no));
     if m.error.is_none() && problems == 0 {
+        let mut m = m;
+        let bb = m.stats().2;
         let (mut vol, mut area) = (0.0, 0.0);
         let mut massed = true;
         for s in m.solids_after(m.built()) {
@@ -72,7 +99,13 @@ fn main() {
             }
         }
         println!(
-            "{{\"v\":\"ok\",\"massed\":{massed},\"vol\":{vol},\"area\":{area},\"problems\":0,\"nary\":{nary},\"audits\":[{}]}}",
+            "{{\"v\":\"ok\",\"massed\":{massed},\"vol\":{vol},\"area\":{area},\"bbox\":[{},{},{},{},{},{}],\"problems\":0,\"nary\":{nary},\"audits\":[{}]}}",
+            bb.x.lo,
+            bb.y.lo,
+            bb.z.lo,
+            bb.x.hi,
+            bb.y.hi,
+            bb.z.hi,
             audits.join(",")
         );
         return;

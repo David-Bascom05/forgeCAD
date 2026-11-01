@@ -382,49 +382,78 @@ pub fn points(before: &Body, after: &Body, want: usize, seed: u64) -> Points {
         }
         // beyond a blend face from its centre, along the ball's radius through the point
         let mut clear = false;
-        let explained = blends.iter().any(|&f| {
+        // (beyond a face's stretch of its surface, beyond the face as trimmed)
+        let (mut may, mut must) = (false, false);
+        for &f in &blends {
             let s = &after.face(f).surface;
-            let Some(c) = spine_near(s, p) else { return false };
-            let Some(d) = (p - c).normalize() else {
-                return false;
-            };
+            let Some(c) = spine_near(s, p) else { continue };
+            let Some(d) = (p - c).normalize() else { continue };
             let radius = match s {
                 Surface::Cylinder(k) => k.radius,
                 Surface::Torus(k) => k.minor,
                 Surface::Sphere(k) => k.radius,
-                _ => return false,
+                _ => continue,
             };
             let dist = p.distance(c);
             let q = c + d.get() * radius;
             if (dist - radius).abs() <= 1e-3 {
                 clear = true;
-                return false;
+                continue;
             }
-            // on the face's stretch of its surface: not the face as trimmed, since where blends
-            // cut each other (a mitre, a ridge) each still takes what lies beyond it past the cut
-            let on = in_span(after, f, q);
             // a convex round takes what the part held, a concave one fills what it did not; a
-            // point the ball covers is neither
-            // and it lies in the wedge itself: nothing of another class between the blend and it
-            (was == Where::Inside) == after.face(f).same_sense
+            // point the ball covers is neither. It lies in the wedge: nothing of another class
+            // before it, and further on the class changes
+            let wedge = (was == Where::Inside) == after.face(f).same_sense
                 && dist > radius
-                && on
-                && (1..5).all(|i| {
-                    let m = q.lerp(p, i as f64 / 5.0);
-                    ib.classify(m) == was
-                })
-                // and the wedge ends at the old part's corner: further on the class changes
-                && (1..=12).any(|i| ib.classify(p + d.get() * (i as f64 * radius / 3.0)) != was)
-        });
+                && (1..5).all(|i| ib.classify(q.lerp(p, i as f64 / 5.0)) == was)
+                && (1..=12).any(|i| ib.classify(p + d.get() * (i as f64 * radius / 3.0)) != was);
+            let inside_face = !matches!(ia.point_in_face(f, q), Where::Outside);
+            if wedge && (inside_face || in_span(after, f, q)) {
+                may = true;
+                // past a cut with another blend a wedge may or may not go: which, the corner's
+                // kind says, so only what is beyond the face as it stands, and no further from the
+                // centre than the old corner (where the tangents at the feet cross), must have changed
+                must |= dist <= corner_reach(after, f, radius) && inside_face;
+            }
+        }
         if clear {
             continue;
         }
-        if changed != explained {
+        if (changed && !may) || (!changed && must) {
             out.wrong += 1;
             out.worst.get_or_insert(p);
         }
     }
     out
+}
+
+/// How far from the ball's centre the old corner can be: the tangents at the ends of the arc the
+/// face spans cross at the radius over the cosine of half that arc.
+fn corner_reach(b: &Body, f: FaceId, radius: f64) -> f64 {
+    let loops = forge_topo::uv::face_uv_loops(b, f);
+    // the arc the angles cover: a whole turn less the widest gap among them
+    let width = |pick: fn(&Point2) -> f64| {
+        let tau = forge_math::dmath::TAU;
+        let mut a: Vec<f64> = loops
+            .iter()
+            .flat_map(|l| l.points.iter().map(pick))
+            .map(|x| x.rem_euclid(tau))
+            .collect();
+        a.sort_by(f64::total_cmp);
+        let gap = a.windows(2).map(|w| w[1] - w[0]).fold(
+            a.first().zip(a.last()).map_or(0.0, |(p, q)| p + tau - q),
+            f64::max,
+        );
+        tau - gap
+    };
+    let arc = match &b.face(f).surface {
+        Surface::Cylinder(_) => width(|p| p.x),
+        Surface::Torus(_) => width(|p| p.y),
+        // a corner's ball: three tangent planes square to each other at the widest
+        _ => 1.91,
+    };
+    let half = forge_math::dmath::cos(0.5 * arc.min(2.6));
+    1.001 * radius / half.max(0.05)
 }
 
 /// Whether `q`, on a face's surface, lies within the box of parameters its loops span.

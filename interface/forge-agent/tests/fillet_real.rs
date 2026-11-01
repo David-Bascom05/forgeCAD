@@ -201,3 +201,53 @@ fn a_notch_round_rolls_the_rim_over_the_concave_blend_first() {
         .count();
     assert_eq!(patches, 0);
 }
+
+#[test]
+fn a_ring_as_wide_as_the_ball_loses_its_top() {
+    // a rounded frame 120 x 200 outside with corners of 20, 100 x 180 inside with corners of 10, 40
+    // tall, its outer top rim of radius 10: the spring lies on the inner rim all the way round
+    let src = "b: extrude 40 loop line 40 100 -40 100 arc -40 80 20 90 90 line -60 80 -60 -80 arc -40 -80 20 180 90 line -40 -100 40 -100 arc 40 -80 20 -90 90 line 60 -80 60 80 arc 40 80 20 0 90 loop line -40 90 40 90 arc 40 80 10 90 -90 line 50 80 50 -80 arc 40 -80 10 0 -90 line 40 -90 -40 -90 arc -40 -80 10 -90 -90 line -50 -80 -50 80 arc -40 80 10 180 -90\nfillet 10 (edges top r=20) (edges top line near 0 100 40) (edges top line near 0 -100 40) (edges top line near 60 0 40) (edges top line near -60 0 40)\n";
+    let m = Model::new(src);
+    assert!(m.error.is_none(), "{:?}", m.error.map(|f| f.msg));
+    let b = m.body().expect("built");
+    assert!(forge_topo::check(b).is_empty());
+    let tops = b
+        .face_ids()
+        .filter(|&f| matches!(&b.face(f).surface, forge_geom::Surface::Plane(_)))
+        .filter(|&f| b.face_box(f).z.lo > 39.0)
+        .count();
+    assert_eq!(tops, 0, "the top goes");
+}
+
+#[test]
+fn two_rounds_past_each_other_round_a_ring_refuse() {
+    // a disc's rim and the root of a boss on it, the ring between narrower than the two balls: their
+    // springs pass with no crossing to see; the face must not come back wrong side out
+    let m = Model::new(
+        "extrude 0.15 circle 0 0 0.3\nextrude add 1 at 0 0 0 circle 0 0 0.15\nfillet 0.1 (edges top r=0.3) (edges concave)\n",
+    );
+    let b = m.body().expect("the part before");
+    assert!(forge_topo::check(b).is_empty());
+    if m.error.is_none() {
+        panic!("built");
+    }
+}
+
+#[test]
+fn a_ball_wider_than_a_shell_wall_refuses() {
+    // a shelled cup, wall 0.5, its rim rounded 3: the blend would pass through the wall into the cup
+    let m = Model::new("c: extrude 20 circle 0 0 20\nshell 0.5 (faces top)\nfillet 3 (edges bottom)\n");
+    let msg = m.error.map(|f| f.msg).unwrap_or_default();
+    assert!(msg.contains("Overflow"), "{msg}");
+}
+
+#[test]
+fn rounds_beside_chamfers_keep_their_names_apart() {
+    // a plate chamfered all round its one end face, then those bevels' outer edges rounded by the bevel's own size
+    let m = Model::new(
+        "b: extrude 0.2 yz rect 0 0 0.19 0.75\nchamfer 0.02 (edges of b top)\nfillet 0.02 (edges line near 0.2 0.1 0.02) (edges line near 0.2 0.19 0.37) (edges line near 0.2 0 0.37) (edges line near 0.2 0.1 0.73)\n",
+    );
+    if m.error.is_none() {
+        assert!(forge_topo::check(m.body().expect("built")).is_empty());
+    }
+}

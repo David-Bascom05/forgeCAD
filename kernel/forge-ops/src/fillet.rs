@@ -113,6 +113,9 @@ pub enum FilletError {
     Tangency { edge: EdgeId },
     /// Several blends meet at this vertex in a way that needs a corner patch.
     Corner { vertex: VertexId },
+    /// Two blends beside a sharp edge at this vertex should cut each other, and their cut cannot
+    /// be followed: a patch there would be a shape nobody asked for.
+    Mitre { vertex: VertexId },
     /// An edge is listed twice.
     Duplicate { edge: EdgeId },
     /// A ring's round whose ball is wider than the circle its centre rolls round; `max` is the
@@ -1510,7 +1513,7 @@ fn switch_split(
             let (Some(h0), Some(h1)) = (side(ends[0]), side(ends[1])) else {
                 continue;
             };
-            if h0 * h1 >= 0.0 || h0.abs().min(h1.abs()) <= 1e3 * tol::LINEAR {
+            if h0 * h1 >= 0.0 || h0.abs().min(h1.abs()) <= 4.0 * tol::LINEAR {
                 continue;
             }
             // tangent along g: its faces' normals agree at its middle
@@ -2079,7 +2082,16 @@ impl Builder {
         }
     }
 
+    /// Whether new vertices share a name (a corner reached two ways, from pieces of one face).
+    /// Which should keep it nothing here can say stably, so such a corner refuses.
+    fn names_alike(&self, from: usize) -> bool {
+        let mut new: Vec<Name> = self.body.vertices[from..].iter().map(|v| v.name).collect();
+        new.sort_unstable();
+        new.windows(2).any(|w| w[0] == w[1])
+    }
+
     fn build(mut self) -> R<Body> {
+        let new_from = self.body.vertices.len();
         // each vertex with a coedge arriving there
         let mut verts: BTreeMap<VertexId, CoedgeId> = BTreeMap::new();
         for r in &self.rolled {
@@ -2116,9 +2128,12 @@ impl Builder {
         self.align_rings();
         let no_width = self.no_width();
         for (f, edges) in by_face {
+            // two blends' springs may have passed each other with no crossing (round a ring)
             if edges.len() > 1
                 && !no_width.iter().any(|n| n.0 == f)
-                && (crate::selfx::face_loops_cross(&self.body, f) || loops_touch(&self.body, f))
+                && (crate::selfx::face_loops_cross(&self.body, f)
+                    || loops_touch(&self.body, f)
+                    || (loops_near(&self.body, f) && !forge_topo::sides_of(&self.body, &[f]).is_empty()))
             {
                 return Err(FilletError::Overflow { edge: edges[0] });
             }
@@ -2138,6 +2153,11 @@ impl Builder {
         let closed_up = self.collapsing;
         let first = self.rolled.first().map(|r| r.edge);
         self.collapse(no_width);
+        if self.names_alike(new_from) {
+            return Err(FilletError::Overflow {
+                edge: first.unwrap_or(EdgeId(0)),
+            });
+        }
         let out = self.body.into_compact();
         // no edge so short should stand
         if let Some(e) = first
@@ -2263,7 +2283,9 @@ impl Builder {
                 }
             }
             [a, b] if self.is_joint(&ring, a, b) => self.joint(v, &ring, a, b),
-            [a, b] if self.mitres(v, &ring, a, b) => self.mitre(v, &ring, a, b),
+            [a, b] if self.mitres(v, &ring, a, b) => self
+                .mitre(v, &ring, a, b)
+                .map_err(|_| FilletError::Mitre { vertex: v }),
             _ => {
                 let ring = self.rest_ring(v, ring)?;
                 self.corner(v, &ring)
@@ -4324,6 +4346,13 @@ impl Builder {
         }
     }
 
+    /// Two vertices at one place become the one of the lesser name: which way round they came is
+    /// the order of the edges, which names nothing.
+    fn merge_by_name(&mut self, a: VertexId, b: VertexId) {
+        let (na, nb) = (self.body.vertex(a).name, self.body.vertex(b).name);
+        self.merged.push(if na < nb { (b, a) } else { (a, b) });
+    }
+
     /// Makes each merged vertex the one it landed on.
     fn apply_merges(&mut self) {
         if self.merged.is_empty() {
@@ -4345,13 +4374,42 @@ impl Builder {
         }
         let faces: Vec<FaceId> = self.touched.iter().copied().collect();
         for f in faces {
-            let es: Vec<EdgeId> = self
+            let all: Vec<EdgeId> = self
                 .body
                 .face(f)
                 .loops
                 .iter()
                 .flat_map(|&l| self.body.lp(l).coedges())
                 .map(|c| self.body.coedge(c).edge)
+                .collect();
+            // open edges along each other: their ends at one place are one vertex
+            for (i, &a) in all.iter().enumerate() {
+                for &b in &all[i + 1..] {
+                    let (x, y) = (self.body.edge(a).clone(), self.body.edge(b).clone());
+                    if x.start == x.end || y.start == y.end {
+                        continue;
+                    }
+                    let p = x.curve.eval(x.range.mid());
+                    if y.curve.eval(y.curve.closest(p, y.range)).distance(p) > tol::LINEAR {
+                        continue;
+                    }
+                    let at = |b: &Body, v: VertexId| b.vertex(v).point;
+                    for (u, w) in [
+                        (x.start, y.start),
+                        (x.start, y.end),
+                        (x.end, y.start),
+                        (x.end, y.end),
+                    ] {
+                        if u != w && at(&self.body, u).distance(at(&self.body, w)) <= tol::LINEAR {
+                            self.merge_by_name(u, w);
+                        }
+                    }
+                    self.apply_merges();
+                }
+            }
+            let es: Vec<EdgeId> = all
+                .iter()
+                .copied()
                 .filter(|&e| self.body.edge(e).start == self.body.edge(e).end)
                 .collect();
             for (i, &a) in es.iter().enumerate() {
@@ -4366,7 +4424,7 @@ impl Builder {
                     let (va, vb) = (x.start, y.start);
                     let (pa, pb) = (self.body.vertex(va).point, self.body.vertex(vb).point);
                     if pa.distance(pb) <= tol::LINEAR {
-                        self.merged.push((va, vb));
+                        self.merge_by_name(va, vb);
                         self.apply_merges();
                         continue;
                     }
@@ -4516,7 +4574,8 @@ impl Builder {
                 .distance(self.body.vertex(edge.end).point)
                 <= tol::LINEAR
             {
-                self.merged.push((edge.end, edge.start));
+                let (from, to) = (edge.end, edge.start);
+                self.merge_by_name(from, to);
                 self.drop_whole(e);
                 continue;
             }
@@ -4733,6 +4792,27 @@ fn merge_roots(merges: &[(VertexId, VertexId)]) -> BTreeMap<VertexId, VertexId> 
     }
     let all: Vec<VertexId> = parent.keys().copied().collect();
     all.into_iter().map(|v| (v, root(&parent, v))).collect()
+}
+
+/// Whether two edges of a face's loops that share no vertex stand in each other's boxes: only
+/// then can they have touched or passed.
+fn loops_near(body: &Body, f: FaceId) -> bool {
+    let es: Vec<EdgeId> = body
+        .face(f)
+        .loops
+        .iter()
+        .flat_map(|&l| body.lp(l).coedges())
+        .map(|c| body.coedge(c).edge)
+        .collect();
+    es.iter().enumerate().any(|(i, &a)| {
+        let (ax, ab) = (body.edge(a), body.edge_box(a).grow(2.0 * tol::LINEAR));
+        es[i + 1..].iter().any(|&b| {
+            let bx = body.edge(b);
+            a != b
+                && ab.overlaps(&body.edge_box(b))
+                && ![bx.start, bx.end].iter().any(|&w| w == ax.start || w == ax.end)
+        })
+    })
 }
 
 /// Whether two edges of a face's loops that share no vertex come within tolerance of each other:

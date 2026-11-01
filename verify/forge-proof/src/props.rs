@@ -1021,9 +1021,8 @@ pub fn all() -> Vec<(&'static str, Property)> {
 
 /// Every fillet of a part against the part before it (`blends`): each ball surface at the asked
 /// radius from two supports, seams meant to be smooth smooth, the volume changed what points say,
-/// no patch where two blends meet beside a sharp edge. `blends::points`' count of points no ball
-/// surface answers for is not held here: past a ridge a point lies beyond both trimmed faces, so
-/// real parts that match their source show some. research/fillets says how to read it.
+/// no patch where two blends meet beside a sharp edge, every point the round changed answered for
+/// by a ball surface.
 pub fn blend(part: &Part, seed: u64) -> Option<Finding> {
     for (k, f) in part.features.iter().enumerate().take(8) {
         let Feature::Fillet { edges, setbacks, .. } = f else {
@@ -1056,6 +1055,13 @@ pub fn blend(part: &Part, seed: u64) -> Option<Finding> {
             );
         }
         let pts = crate::blends::points(&before, &after, 200, seed);
+        if pts.wrong > 0 {
+            return found(
+                "blend",
+                "a point no ball surface answers for",
+                format!("feature {k}, {} of {} at {:?}", pts.wrong, pts.tried, pts.worst),
+            );
+        }
         // the volume it changed, by those points against the masses, within five sigma
         if pts.sampled > 50
             && let (Ok(mb), Ok(ma)) = (forge_topo::mass::mass(&before), forge_topo::mass::mass(&after))

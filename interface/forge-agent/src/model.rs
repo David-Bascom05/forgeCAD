@@ -991,7 +991,11 @@ fn size_limit(features: &[Feature], ids: &[u64], before: &[forge_model::Solid], 
     let sized = matches!(
         e,
         RegenError::Fillet {
-            error: F::Overflow { .. } | F::NoBlend { .. } | F::Corner { .. } | F::Tangency { .. },
+            error: F::Overflow { .. }
+                | F::NoBlend { .. }
+                | F::Corner { .. }
+                | F::Mitre { .. }
+                | F::Tangency { .. },
             ..
         } | RegenError::Chamfer {
             error: C::TooLarge { .. } | C::Overflows { .. } | C::Rebuild(_),

@@ -1552,14 +1552,109 @@ fn apply_fillet(
             .map(|&(v, e, d)| Ok((vertex(v)?, e.map(edge).transpose()?, d)))
             .collect::<Result<_, RegenError>>()?,
     };
-    let first = match fillet_with(&body, &want, &opts, id) {
-        Err(e @ (FilletError::Overflow { .. } | FilletError::Corner { .. })) if opts.setbacks.is_empty() => e,
-        done => return done.map_err(|error| RegenError::Fillet { feature: i, error }),
-    };
+    let first =
+        match fillet_with(&body, &want, &opts, id) {
+            // a blend passing through the part's far side (a ball wider than a thin wall): no rule yet
+            // (with both kinds in one round, a convex blend may run on over the concave one's added part)
+            Ok(done)
+                if want
+                    .iter()
+                    .map(|f| forge_ops::fillet_kind(&body, f.edge))
+                    .collect::<std::collections::BTreeSet<_>>()
+                    .len()
+                    == 1
+                    && blend_through(&body, &done).is_some() =>
+            {
+                return Err(RegenError::Fillet {
+                    feature: i,
+                    error: FilletError::Overflow { edge: want[0].edge },
+                });
+            }
+            Err(
+                e @ (FilletError::Overflow { .. } | FilletError::Corner { .. } | FilletError::Mitre { .. }),
+            ) if opts.setbacks.is_empty() => e,
+            done => return done.map_err(|error| RegenError::Fillet { feature: i, error }),
+        };
     overlapping_rounds(&body, &want, &opts, id).ok_or(RegenError::Fillet {
         feature: i,
         error: first,
     })
+}
+
+/// A blend that passes through a face of the old part it does not border (a ball wider than a thin
+/// wall comes out on its far side): the point of the face where it does. Asked of each face by the
+/// side of its surface the blend's middle and a corner lie on, boxes and loops only where they
+/// differ. Procedural faces are not asked: their surfaces are slow, and a ball rarely meets one so.
+fn blend_through(before: &Body, after: &Body) -> Option<forge_math::Point3> {
+    use forge_geom::SurfaceGeom;
+    let old: std::collections::BTreeSet<forge_topo::Name> =
+        before.face_ids().map(|f| before.face(f).name).collect();
+    for f in after.face_ids() {
+        let face = after.face(f);
+        if old.contains(&face.name)
+            || !matches!(
+                face.surface,
+                forge_geom::Surface::Cylinder(_)
+                    | forge_geom::Surface::Torus(_)
+                    | forge_geom::Surface::Sphere(_)
+            )
+        {
+            continue;
+        }
+        // the middle of the face near enough: of its vertices, taken onto the surface
+        let (mut mean, mut n) = (forge_math::Vec3::ZERO, 0.0);
+        for &l in &face.loops {
+            for c in after.lp(l).coedges() {
+                mean += after.vertex(after.coedge_start(c)).point.to_vec();
+                n += 1.0;
+            }
+        }
+        let m = mean / f64::max(n, 1.0);
+        let q = face
+            .surface
+            .eval(face.surface.project(forge_math::Point3::new(m.x, m.y, m.z)));
+        let corner = after
+            .vertex(after.coedge_start(after.lp(face.loops[0]).coedge(0)))
+            .point;
+        let reach = 2.0 * q.distance(corner);
+        for g in before.face_ids() {
+            let s = &before.face(g).surface;
+            if matches!(s, forge_geom::Surface::Procedural(_)) {
+                continue;
+            }
+            let (dq, dc) = (s.implicit(q), s.implicit(corner));
+            if dq * dc >= 0.0 || dq.abs().min(dc.abs()) <= forge_math::tol::LINEAR || dq.abs() > reach {
+                continue;
+            }
+            // the blend borders it, or the way from the corner to the middle misses the face
+            let name = before.face(g).name;
+            let borders = face
+                .loops
+                .iter()
+                .flat_map(|&l| after.lp(l).coedges())
+                .filter_map(|c| after.partner(c))
+                .any(|c| after.face(after.coedge_face(c)).name == name);
+            if borders {
+                continue;
+            }
+            let x = corner.lerp(q, dc / (dc - dq));
+            if forge_topo::uv::point_in_loops(s.project(x), &forge_topo::uv::face_uv_loops(before, g)) {
+                // and the blend's middle really lies on the wrong side of the part: a convex round
+                // lies within what it held, a concave one outside it
+                let held = forge_bool::Index::new(before).classify(q);
+                let wrong = if face.same_sense {
+                    held == forge_bool::Where::Outside
+                } else {
+                    held == forge_bool::Where::Inside
+                };
+                if wrong {
+                    return Some(x);
+                }
+                break;
+            }
+        }
+    }
+    None
 }
 
 /// Rounds that overlap with no vertex between them (a plate rounded on both sides past half its
@@ -1584,14 +1679,30 @@ fn overlapping_rounds(body: &Body, want: &[FilletEdge], opts: &FilletOptions, id
     if groups.len() < 2 {
         return None;
     }
-    let kind = forge_ops::fillet_kind(body, want[0].edge)?;
-    if want
+    let kinds: Vec<Option<bool>> = want
         .iter()
-        .any(|f| forge_ops::fillet_kind(body, f.edge) != Some(kind))
-    {
+        .map(|f| forge_ops::fillet_kind(body, f.edge))
+        .collect();
+    if kinds.iter().any(Option::is_none) {
         return None;
     }
-    let op = if kind {
+    // convex rounds take material and concave ones add it, and neither touches the other's: the
+    // concave group's part less what the convex group took
+    if kinds.contains(&Some(true)) && kinds.contains(&Some(false)) {
+        let pick = |kind: bool| -> Vec<FilletEdge> {
+            want.iter()
+                .zip(&kinds)
+                .filter(|(_, k)| **k == Some(kind))
+                .map(|(f, _)| f.clone())
+                .collect()
+        };
+        let cut = fillet_with(body, &pick(true), opts, id).ok()?;
+        let fill = fillet_with(body, &pick(false), opts, id).ok()?;
+        let taken = forge_bool::boolean(body, &cut, forge_bool::Op::Subtract, id).ok()?;
+        let done = forge_bool::boolean(&fill, &taken, forge_bool::Op::Subtract, id).ok()?;
+        return forge_topo::check(&done).is_empty().then_some(done);
+    }
+    let op = if kinds[0] == Some(true) {
         forge_bool::Op::Intersect
     } else {
         forge_bool::Op::Union

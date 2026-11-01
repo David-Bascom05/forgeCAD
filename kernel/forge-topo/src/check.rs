@@ -344,7 +344,19 @@ fn check_geometry(body: &Body, out: &mut Vec<Problem>) {
 /// At each coedge's midpoint, step a little to its left on the face (the
 /// side the loop rule says is the face) and check the point is inside it.
 fn check_sides(body: &Body, out: &mut Vec<Problem>) {
-    for f in body.face_ids() {
+    let faces: Vec<FaceId> = body.face_ids().collect();
+    check_sides_of(body, &faces, out);
+}
+
+/// Whether each of `faces` lies on the left of its loops: what `check` asks of them.
+pub fn sides_of(body: &Body, faces: &[FaceId]) -> Vec<Problem> {
+    let mut out = Vec::new();
+    check_sides_of(body, faces, &mut out);
+    out
+}
+
+fn check_sides_of(body: &Body, faces: &[FaceId], out: &mut Vec<Problem>) {
+    for &f in faces {
         let loops = face_uv_loops_with(body, f, default_segments);
         // drawn finely when a probe misses: a chord of a long arc may cut across a sliver of face
         let fine = std::cell::OnceCell::new();

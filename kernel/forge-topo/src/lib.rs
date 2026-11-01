@@ -13,5 +13,5 @@ pub use body::{
     Body, Coedge, CoedgeId, Coedges, Edge, EdgeId, Face, FaceId, Joins, Loop, LoopId, Shell, ShellId,
     Unlinked, Vertex, VertexId,
 };
-pub use check::{Problem, certify, check, genus};
+pub use check::{Problem, certify, check, genus, sides_of};
 pub use name::Name;
