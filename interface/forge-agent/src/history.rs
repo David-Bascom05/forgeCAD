@@ -1719,6 +1719,14 @@ fn valid_after(kind: &str, m: &Model, n: usize) -> Verdict {
         .unwrap_or(Verdict::Ok)
 }
 
+/// Nothing wrong with the body but vertices where its surface pinches.
+fn only_pinched(b: &Body) -> bool {
+    catch_unwind(AssertUnwindSafe(|| forge_topo::check(b))).is_ok_and(|p| {
+        p.iter()
+            .all(|x| matches!(x, forge_topo::Problem::VertexFans { .. }))
+    })
+}
+
 /// The checks after a history built: its part's validity at line `i` (kind `kind`).
 fn valid(kind: &str, b: &Body) -> Verdict {
     match catch_unwind(AssertUnwindSafe(|| forge_topo::check(b))) {
@@ -1809,6 +1817,12 @@ pub fn judge_model(src: &str) -> (Verdict, Option<Model>) {
         let m = model(src);
         for i in 0..m.built() {
             let kind = m.kinds[i];
+            // a pinch on the way is the part's business if a later line clears it: the finished
+            // part is held to the full check
+            let finished = i + 1 == m.built();
+            if !finished && m.solids_after(i + 1).iter().all(|s| only_pinched(&s.body)) {
+                continue;
+            }
             if let f @ Verdict::Fail(_) = valid_after(kind, &m, i + 1) {
                 return (f, m);
             }

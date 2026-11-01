@@ -109,6 +109,11 @@ pub fn resized(f: &Feature, k: f64) -> Option<(Feature, f64)> {
                     *distance *= k;
                     r.max(distance.abs() / k)
                 }
+                Extent::Along { forward, back, .. } => {
+                    *forward *= k;
+                    *back *= k;
+                    r.max(forward.abs().max(back.abs()) / k)
+                }
                 Extent::TwoSided { forward, back } => {
                     *forward *= k;
                     *back *= k;
@@ -353,7 +358,11 @@ fn plain(f: &Feature) -> Option<Combine> {
     match f {
         Feature::Extrude {
             extent:
-                Extent::Distance(_) | Extent::Tapered { .. } | Extent::Symmetric(_) | Extent::TwoSided { .. },
+                Extent::Distance(_)
+                | Extent::Tapered { .. }
+                | Extent::Along { .. }
+                | Extent::Symmetric(_)
+                | Extent::TwoSided { .. },
             op,
             ..
         }

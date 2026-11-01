@@ -469,6 +469,10 @@ def extrude(f, body):
                       "both": (min(ts) - 1, max(ts) + 1)}[e["through"]]
         if hi - lo <= 0:
             raise RuntimeError("an extent of nothing")
+        if "along" in e:
+            # lo and hi along the normal, the prism running along the direction
+            t = dot(z, e["along"])
+            z = [c / t for c in e["along"]]
         return prism(translated(fc, [c * lo for c in z]), [c * (hi - lo) for c in z])
     if "next" in e:
         d = [-c for c in z] if e["next"] else z

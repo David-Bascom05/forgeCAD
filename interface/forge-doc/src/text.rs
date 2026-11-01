@@ -2377,13 +2377,28 @@ impl<'a> P<'a> {
         Ok(match self.peek() {
             "sym" => {
                 self.k += 1;
-                Extent::Symmetric(self.num()?)
+                let d = self.num()?;
+                if self.eat("along") {
+                    Extent::Along {
+                        forward: d / 2.0,
+                        back: d / 2.0,
+                        dir: Vec3::new(self.num()?, self.num()?, self.num()?),
+                    }
+                } else {
+                    Extent::Symmetric(d)
+                }
             }
             "two" => {
                 self.k += 1;
-                Extent::TwoSided {
-                    forward: self.num()?,
-                    back: self.num()?,
+                let (forward, back) = (self.num()?, self.num()?);
+                if self.eat("along") {
+                    Extent::Along {
+                        forward,
+                        back,
+                        dir: Vec3::new(self.num()?, self.num()?, self.num()?),
+                    }
+                } else {
+                    Extent::TwoSided { forward, back }
                 }
             }
             "thru" => {
@@ -2416,6 +2431,12 @@ impl<'a> P<'a> {
                     Extent::Tapered {
                         distance,
                         angle: self.angle()?,
+                    }
+                } else if self.eat("along") {
+                    Extent::Along {
+                        forward: distance,
+                        back: 0.0,
+                        dir: Vec3::new(self.num()?, self.num()?, self.num()?),
                     }
                 } else {
                     Extent::Distance(distance)
@@ -3031,6 +3052,21 @@ impl<'a> W<'a> {
                 self.num(distance);
                 self.word("taper");
                 self.angle(angle);
+            }
+            Extent::Along { forward, back, dir } => {
+                if back == 0.0 {
+                    self.num(forward);
+                } else if back == forward {
+                    self.word("sym");
+                    self.num(forward + back);
+                } else {
+                    self.word("two");
+                    self.nums(&[forward, back]);
+                }
+                self.word("along");
+                self.num(dir.x);
+                self.num(dir.y);
+                self.num(dir.z);
             }
             Extent::Symmetric(d) => {
                 self.word("sym");

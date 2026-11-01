@@ -457,3 +457,109 @@ extrude cut 5 z 0 -1 0 x -1 0 0 at 0 0 0 loop arc -30 0 25 36.869897646 -73.7397
 ",
     );
 }
+
+// A sheared prism keeps its section's area at every height (Cavalieri): area x height.
+#[test]
+fn oblique_extrude_keeps_area_times_height() {
+    near(builds("extrude 10 along 0.3 0.1 1 rect 0 0 8 5"), 400.0);
+    near(builds("extrude 10 along -2 0 1 circle 0 0 3"), 90.0 * dmath::PI);
+    near(
+        builds("extrude 10 along 0 1 1 circle 0 0 4 circle 0 0 1"),
+        150.0 * dmath::PI,
+    );
+    near(builds("extrude -10 along 0.5 0 1 rect 0 0 8 5"), 400.0);
+    near(builds("extrude 10 along -0.5 0 -1 rect 0 0 8 5"), 400.0);
+}
+
+#[test]
+fn oblique_extrude_both_ways() {
+    near(
+        builds("extrude sym 10 along 0.5 0 1 circle 0 0 3"),
+        90.0 * dmath::PI,
+    );
+    near(builds("extrude two 6 4 along 0.5 0 1 rect 0 0 8 5"), 400.0);
+}
+
+// A round slanted hole right through a plate takes area x thickness, however it leans.
+#[test]
+fn oblique_tools_cut_and_add() {
+    near(
+        builds("extrude 10 rect -20 -20 40 40\nextrude cut 10 along 0.5 0 1 circle 0 0 3\n"),
+        16000.0 - 90.0 * dmath::PI,
+    );
+    near(
+        builds("extrude 10 rect -20 -20 40 40\nextrude add 8 along 0.5 0 1 at 0 0 10 rect -5 -5 10 10\n"),
+        16000.0 + 800.0,
+    );
+    let m = Model::new("extrude 10 along 1 0 0 rect 0 0 8 5\n");
+    assert!(m.error.is_some(), "a direction in the sketch's plane");
+}
+
+const CROSSED_THEN_FILLED: &str = "extrude 20 rect -20 -20 40 40
+extrude cut 60 yz at -30 0 10 circle 0 0 3
+extrude cut 60 xz at 0 30 10 circle 0 0 3
+extrude add 60 yz at -30 0 10 circle 0 0 3
+";
+
+// Equal bores crossing, one filled again: what is left of the other touches itself at two points.
+// A line that clears them leaves a sound part: only the finished part has to be sound.
+#[test]
+fn pinch_at_an_intermediate_line_builds_when_the_part_ends_sound() {
+    let m = Model::new(CROSSED_THEN_FILLED);
+    let fans = |p: &forge_topo::Problem| matches!(p, forge_topo::Problem::VertexFans { .. });
+    assert!(forge_topo::check(m.body().unwrap()).iter().any(fans));
+    let src = format!("{CROSSED_THEN_FILLED}extrude cut 20 circle 0 0 5\n");
+    // block 32000, r5 bore 500 pi, r3 bore outside it 360 pi - 269.3706 (the integral of
+    // 2 sqrt(9 - x^2) 2 sqrt(25 - x^2) over |x| < 3), the fill's stubs past the block 180 pi
+    near(
+        builds(&src),
+        32000.0 - 500.0 * dmath::PI - 360.0 * dmath::PI + 269.3706 + 180.0 * dmath::PI,
+    );
+    assert_eq!(
+        forge_agent::history::judge(&src),
+        forge_agent::history::Verdict::Ok
+    );
+}
+
+// The check's slack is for rounding past the floor: past it, an edge the tolerance hides is still found.
+#[test]
+fn vertex_tolerance_slack_hides_nothing_past_the_floor() {
+    let m = Model::new("extrude 5 poly 0 0 10 0 10 5 5.000015 5 5 5 0 5\n");
+    assert!(m.error.is_none(), "{:?}", m.error.as_ref().map(|e| &e.msg));
+    let base = m.solids_after(m.built())[0].body.compact();
+    assert!(forge_topo::check(&base).is_empty());
+    let hair = base
+        .vertex_ids()
+        .find(|&v| (base.vertex(v).point.x - 5.000015).abs() < 1e-9)
+        .unwrap();
+    let with_tol = |t: f64| {
+        let mut b = base.clone();
+        b.vertices[hair.index()].tol = t;
+        forge_topo::check(&b)
+    };
+    let hides = |p: &forge_topo::Problem| matches!(p, forge_topo::Problem::VertexTolerance { .. });
+    assert!(with_tol(1.05e-5).is_empty());
+    assert!(with_tol(1.11e-5).iter().any(hides));
+    assert!(with_tol(5e-5).iter().any(hides));
+    // nor does it reach the distance a vertex may lie off its edge
+    let mut off = base.clone();
+    off.vertices[hair.index()].point.y += 1.05e-5;
+    assert!(
+        forge_topo::check(&off)
+            .iter()
+            .any(|p| matches!(p, forge_topo::Problem::VertexOffEdge { .. }))
+    );
+}
+
+#[test]
+fn oblique_extrude_prints_as_written() {
+    for src in [
+        "extrude 10 along 0.5 0 1 rect 0 0 8 5",
+        "extrude sym 10 along 0.5 0 1 rect 0 0 8 5",
+        "extrude two 6 4 along 0.5 0 1 rect 0 0 8 5",
+    ] {
+        let part = forge_doc::text::parse(src).expect("parses");
+        let again = forge_doc::text::parse(&forge_doc::text::print(&part)).expect("reparses");
+        assert_eq!(part.features, again.features, "{src}");
+    }
+}

@@ -1768,6 +1768,38 @@ fn sources_of(features: History<'_>, s: usize, out: &mut Vec<usize>) {
 fn tool(i: usize, id: u64, f: &Feature, build: bool) -> Result<Tool, RegenError> {
     if let Feature::Extrude {
         profile,
+        extent: Extent::Along { forward, back, dir },
+        op,
+    } = f
+    {
+        // the profile at each end: planes off lines, exact sheared walls off arcs
+        let bad = |error| RegenError::Extent { feature: i, error };
+        let unit = dir.normalize().ok_or(bad(ExtentError::AlongSketch))?;
+        let rise = unit.dot(profile.plane.z().get());
+        if rise.abs() < 0.0175 {
+            return Err(bad(ExtentError::AlongSketch));
+        }
+        if (forward + back).abs() <= forge_math::tol::MIN_LENGTH {
+            return Err(bad(ExtentError::BadSize));
+        }
+        let at = |h: f64| forge_ops::Profile {
+            plane: profile
+                .plane
+                .with_origin(profile.plane.origin + unit.get() * (h / rise)),
+            loops: profile.loops.clone(),
+        };
+        let b = forge_ops::loft(
+            &[at(-*back), at(*forward)],
+            forge_ops::LoftKind::Ruled,
+            &forge_ops::LoftGuides::None,
+            id,
+        )
+        .map_err(|error| RegenError::Loft { feature: i, error })?;
+        let sh = part_shape(&b);
+        return Ok((if build { b } else { Body::new() }, *op, sh));
+    }
+    if let Feature::Extrude {
+        profile,
         extent: Extent::Tapered { distance, angle },
         op,
     } = f

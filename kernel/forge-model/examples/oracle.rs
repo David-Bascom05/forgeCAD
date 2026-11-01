@@ -500,6 +500,14 @@ fn export(features: History<'_>, i: usize, before: Option<&Before>) -> Result<St
                 Extent::Tapered { distance, angle } => {
                     format!("{{\"d\":{},\"taper\":{}}}", num(distance), num(angle))
                 }
+                Extent::Along { forward, back, dir } => format!(
+                    "{{\"two\":[{},{}],\"along\":[{},{},{}]}}",
+                    num(forward),
+                    num(back),
+                    num(dir.x),
+                    num(dir.y),
+                    num(dir.z)
+                ),
                 Extent::Symmetric(d) => format!("{{\"sym\":{}}}", num(d)),
                 Extent::TwoSided { forward, back } => format!("{{\"two\":[{},{}]}}", num(forward), num(back)),
                 Extent::Through(t) => format!(

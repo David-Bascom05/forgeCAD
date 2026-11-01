@@ -21,6 +21,13 @@ pub enum Extent {
     /// `distance`, its sides leaning in by `angle` going away from the sketch (negative: out),
     /// the profile itself staying as drawn.
     Tapered { distance: f64, angle: f64 },
+    /// `forward` along the normal and `back` against it, travelling along `dir` (world, any length
+    /// or sense): the walls lean, the ends stay parallel to the sketch.
+    Along {
+        forward: f64,
+        back: f64,
+        dir: forge_math::Vec3,
+    },
     /// This far in all, half each side of the sketch.
     Symmetric(f64),
     /// `forward` along the normal and `back` against it.
@@ -85,6 +92,8 @@ pub enum ExtentError {
     NotSquare,
     /// The sketch already lies on the plane.
     AlreadyThere,
+    /// The direction lies in the sketch's plane, or within a degree of it.
+    AlongSketch,
     /// The travel never meets the surface (it runs along it).
     NeverHits,
     /// The surface is not wholly ahead of the sketch: it crosses it, or lies behind.
@@ -334,7 +343,7 @@ pub(crate) fn resolve<'a>(features: History<'a>, i: usize) -> Result<Resolved<'a
     let err = bad(i);
     match &features[i] {
         Feature::Extrude {
-            extent: Extent::Distance(_) | Extent::Tapered { .. },
+            extent: Extent::Distance(_) | Extent::Tapered { .. } | Extent::Along { .. },
             ..
         }
         | Feature::Revolve {
@@ -394,7 +403,7 @@ pub(crate) fn resolve<'a>(features: History<'a>, i: usize) -> Result<Resolved<'a
                             .map(|(f, u)| Resolved::UpTo(f, Box::new(UpTo { next: material, ..u })));
                     }
                 }
-                Extent::Distance(_) | Extent::Tapered { .. } => unreachable!(),
+                Extent::Distance(_) | Extent::Tapered { .. } | Extent::Along { .. } => unreachable!(),
             };
             if !(positive(hi - lo) && lo.is_finite() && hi.is_finite()) {
                 return Err(err(ExtentError::BadSize));

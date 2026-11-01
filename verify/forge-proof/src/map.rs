@@ -137,6 +137,11 @@ impl Map {
                 profile: self.profile(profile),
                 extent: match *extent {
                     Extent::Distance(d) => Extent::Distance(self.len(d)),
+                    Extent::Along { forward, back, dir } => Extent::Along {
+                        forward: self.len(forward),
+                        back: self.len(back),
+                        dir: self.vec(dir),
+                    },
                     Extent::Tapered { distance, angle } => Extent::Tapered {
                         distance: self.len(distance),
                         angle,
