@@ -6,7 +6,7 @@ use crate::extent::Target;
 use crate::pattern::{Motion, PatternError, corners, moved};
 use crate::{
     Combine, Edit, Feature, History, RegenError, SHORT_RUN, Tool, cut_root, modifies, modify, op_of,
-    part_shape, starts, step, tools,
+    part_shape, starts, tools,
 };
 use forge_bool::{BoolError, Op, Shape, boolean, boolean_into, nary_with};
 use forge_geom::{Cylinder, Plane, Surface};
@@ -186,9 +186,21 @@ pub(crate) fn motion(steps: &[Step]) -> Motion {
 /// one feature at a time. Only `features[..=i]` is read.
 pub fn step_solids(features: History<'_>, i: usize, solids: Vec<Solid>) -> Result<Vec<Solid>, RegenError> {
     let solids = step_unchecked(features, i, solids)?;
-    match solids.iter().find_map(|s| forge_topo::check::open_at(&s.body)) {
-        Some(what) => Err(RegenError::NotClosed { feature: i, what }),
-        None => Ok(solids),
+    let open = |s: &[Solid]| s.iter().find_map(|s| forge_topo::check::open_at(&s.body));
+    let Some(what) = open(&solids) else {
+        return Ok(solids);
+    };
+    // (sides of a knife edge within tolerance can leave the body open as well as refused)
+    let again = if multi(&features.upto(i + 1)) {
+        all_blunted(features, i, i + 1)
+    } else {
+        let id = features.upto(i + 1).iter().rposition(starts).unwrap_or(0);
+        crate::rebuilt_blunted(features, i)
+            .map(|r| r.map(|b| b.map(|body| Solid { id, body }).into_iter().collect()))
+    };
+    match again {
+        Some(Ok(s)) if open(&s).is_none() => Ok(s),
+        _ => Err(RegenError::NotClosed { feature: i, what }),
     }
 }
 
@@ -197,13 +209,45 @@ fn step_unchecked(features: History<'_>, i: usize, mut solids: Vec<Solid>) -> Re
     if !multi(&upto) {
         let id = upto.iter().rposition(starts).unwrap_or(0);
         let body = solids.pop().map(|s| s.body);
-        return Ok(step(features, i, body)?
-            .map(|body| Solid { id, body })
-            .into_iter()
-            .collect());
+        // (a caller stepping keeps the part so far itself: a copy only for what may need a retry, and
+        // no nesting: at worst the part once more with all its knife edges blunted)
+        let tried = match crate::blunted(features, i) {
+            None => crate::step_plain(features, i, body),
+            Some(fs) => match crate::step_plain(features, i, body.clone()) {
+                Err(e) if crate::lost_its_way(&e) => {
+                    crate::step_plain(History::new(&fs, features.ids), i, body).map_err(|_| e)
+                }
+                r => r,
+            },
+        };
+        let one = match tried {
+            Err(e) if crate::lost_its_way(&e) => match crate::rebuilt_blunted(features, i) {
+                Some(Ok(b)) => b,
+                _ => return Err(e),
+            },
+            r => r?,
+        };
+        return Ok(one.map(|body| Solid { id, body }).into_iter().collect());
     }
     let (plain, picks) = strip(&upto);
-    apply(upto.on(&plain), &picks, i, solids)
+    let plain = upto.on(&plain);
+    let tried = match crate::blunted(plain, i) {
+        None => apply_once(plain, &picks, i, solids),
+        Some(fs) => match apply_once(plain, &picks, i, solids.clone()) {
+            Err(e) if crate::lost_its_way(&e) => {
+                apply_once(History::new(&fs, plain.ids), &picks, i, solids).map_err(|_| e)
+            }
+            r => r,
+        },
+    };
+    match tried {
+        // (a tip already in the part may be what this trips on: at worst the part once more)
+        Err(e) if crate::lost_its_way(&e) => match all_blunted(features, i, i + 1) {
+            Some(Ok(s)) => Ok(s),
+            _ => Err(e),
+        },
+        r => r,
+    }
 }
 
 pub(crate) fn sequential(features: History<'_>) -> Result<Vec<Solid>, RegenError> {
@@ -211,7 +255,18 @@ pub(crate) fn sequential(features: History<'_>) -> Result<Vec<Solid>, RegenError
     let plain = features.on(&plain);
     let mut solids = Vec::new();
     for i in 0..plain.len() {
-        solids = apply(plain, &picks, i, solids)?;
+        solids = match apply_once(plain, &picks, i, solids) {
+            Err(e) if crate::lost_its_way(&e) => {
+                return match careful(plain, &picks, 0, plain.len(), Vec::new()) {
+                    Ok(s) => finish(s),
+                    Err(_) => match all_blunted(features, features.len() - 1, features.len()) {
+                        Some(Ok(s)) => finish(s),
+                        _ => Err(e),
+                    },
+                };
+            }
+            r => r?,
+        };
     }
     finish(solids)
 }
@@ -230,7 +285,39 @@ fn pick<'a>(picks: &[Option<&'a Pick>], i: usize) -> Option<&'a Pick> {
     picks.get(i).copied().flatten()
 }
 
-fn apply(
+/// The first `to` features with every knife edge up to `last` blunted, if there are any.
+fn all_blunted(features: History<'_>, last: usize, to: usize) -> Option<Result<Vec<Solid>, RegenError>> {
+    let all = crate::all_blunted(features, last)?;
+    let h = History::new(&all, features.ids).upto(to);
+    let (plain, picks) = strip(&h);
+    let plain = h.on(&plain);
+    Some((0..to).try_fold(Vec::new(), |s, k| apply_once(plain, &picks, k, s)))
+}
+
+/// Features `from..to`, each extrude with knife edges tried plain and then blunted, for which a copy
+/// is kept. Never nested: at most two tries of each feature, once.
+fn careful(
+    plain: History<'_>,
+    picks: &[Option<&Pick>],
+    from: usize,
+    to: usize,
+    mut solids: Vec<Solid>,
+) -> Result<Vec<Solid>, RegenError> {
+    for i in from..to {
+        solids = match crate::blunted(plain, i) {
+            None => apply_once(plain, picks, i, solids)?,
+            Some(fs) => match apply_once(plain, picks, i, solids.clone()) {
+                Err(e) if crate::lost_its_way(&e) => {
+                    apply_once(History::new(&fs, plain.ids), picks, i, solids).map_err(|_| e)?
+                }
+                r => r?,
+            },
+        };
+    }
+    Ok(solids)
+}
+
+fn apply_once(
     plain: History<'_>,
     picks: &[Option<&Pick>],
     i: usize,
@@ -907,6 +994,16 @@ pub(crate) fn nary(features: History<'_>, threads: usize) -> Result<Vec<Solid>, 
         // a run that empties a body: it goes at that feature, and later ones act on what is left
         Ok(s) if s.iter().any(|x| x.body.face_ids().next().is_none()) => sequential(features),
         Err(RegenError::Empty { .. }) => sequential(features),
+        // (one at a time, a tool's knife edge can be blunted)
+        Err(e)
+            if crate::lost_its_way(&e) && {
+                let (plain, _) = strip(&features);
+                let plain = features.on(&plain);
+                (0..plain.len()).any(|i| crate::blunted(plain, i).is_some())
+            } =>
+        {
+            sequential(features)
+        }
         r => r,
     }
 }

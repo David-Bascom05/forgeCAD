@@ -1072,7 +1072,21 @@ fn nary_body(
             crate::boolean::UNDECIDED.with(|u| u.set(Some(t.at)));
         }
         let both = kept == [Some(true); 2];
-        if both {
+        let flipped = |sd: usize| sd > 0 && ops[sd - 1] == Op::Subtract;
+        if both
+            && !crate::boolean::flows_on(
+                [tools[t.sides[0]], tools[t.sides[1]]],
+                t.faces,
+                t.at,
+                flipped(t.sides[0]) != flipped(t.sides[1]),
+            )
+            && !crate::boolean::crack_tip(
+                [tools[t.sides[0]], tools[t.sides[1]]],
+                [&index[t.sides[0]], &index[t.sides[1]]],
+                t,
+                !flipped(t.sides[0]) && !flipped(t.sides[1]),
+            )
+        {
             return Err(BoolError::ZeroThickness { at: t.at });
         }
     }

@@ -56,7 +56,7 @@ pub(crate) fn closed_or_flush(a: &Surface, b: &Surface, region: &Box3) -> Surfac
 /// apart gives edges the tolerance cannot tell apart.
 #[cold]
 fn nearly_flush(a: &Surface, b: &Surface, region: &Box3) -> Option<SurfaceSurface> {
-    const NEAR: f64 = 1e-6;
+    const NEAR: f64 = 1e-4;
     let corners = || {
         [
             (region.x.lo, region.y.lo, region.z.lo),

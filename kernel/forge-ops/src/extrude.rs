@@ -43,7 +43,7 @@ pub fn extrude_unlinked(profile: &Profile, distance: f64, feature: u64) -> Resul
 }
 
 /// The profile to sweep forwards by `distance.abs()`, normalized.
-fn prepared(profile: &Profile, distance: f64) -> Result<Profile, ExtrudeError> {
+pub(crate) fn prepared(profile: &Profile, distance: f64) -> Result<Profile, ExtrudeError> {
     if !(distance.abs() > tol::MIN_LENGTH && distance.abs() < f64::INFINITY) {
         return Err(ExtrudeError::TooShort);
     }

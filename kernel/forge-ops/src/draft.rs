@@ -116,7 +116,7 @@ fn tangent_neighbour(body: &Body, f: FaceId, changed: &[bool]) -> bool {
         })
 }
 
-fn drafted(
+pub(crate) fn drafted(
     s: &Surface,
     same_sense: bool,
     np: &Plane,

@@ -18,6 +18,9 @@ use std::borrow::Cow;
 pub enum Extent {
     /// This far along the normal (negative: the other way).
     Distance(f64),
+    /// `distance`, its sides leaning in by `angle` going away from the sketch (negative: out),
+    /// the profile itself staying as drawn.
+    Tapered { distance: f64, angle: f64 },
     /// This far in all, half each side of the sketch.
     Symmetric(f64),
     /// `forward` along the normal and `back` against it.
@@ -331,7 +334,7 @@ pub(crate) fn resolve<'a>(features: History<'a>, i: usize) -> Result<Resolved<'a
     let err = bad(i);
     match &features[i] {
         Feature::Extrude {
-            extent: Extent::Distance(_),
+            extent: Extent::Distance(_) | Extent::Tapered { .. },
             ..
         }
         | Feature::Revolve {
@@ -391,7 +394,7 @@ pub(crate) fn resolve<'a>(features: History<'a>, i: usize) -> Result<Resolved<'a
                             .map(|(f, u)| Resolved::UpTo(f, Box::new(UpTo { next: material, ..u })));
                     }
                 }
-                Extent::Distance(_) => unreachable!(),
+                Extent::Distance(_) | Extent::Tapered { .. } => unreachable!(),
             };
             if !(positive(hi - lo) && lo.is_finite() && hi.is_finite()) {
                 return Err(err(ExtentError::BadSize));

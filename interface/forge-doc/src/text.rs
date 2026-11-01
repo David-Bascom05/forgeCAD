@@ -2410,7 +2410,17 @@ impl<'a> P<'a> {
                     offset: self.off(false)?,
                 }
             }
-            _ => Extent::Distance(self.num()?),
+            _ => {
+                let distance = self.num()?;
+                if self.eat("taper") {
+                    Extent::Tapered {
+                        distance,
+                        angle: self.angle()?,
+                    }
+                } else {
+                    Extent::Distance(distance)
+                }
+            }
         })
     }
     fn turn(&mut self) -> R<Turn> {
@@ -3017,6 +3027,11 @@ impl<'a> W<'a> {
     fn extent(&mut self, e: &Extent) {
         match *e {
             Extent::Distance(d) => self.num(d),
+            Extent::Tapered { distance, angle } => {
+                self.num(distance);
+                self.word("taper");
+                self.angle(angle);
+            }
             Extent::Symmetric(d) => {
                 self.word("sym");
                 self.num(d);

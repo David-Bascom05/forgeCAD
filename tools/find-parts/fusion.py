@@ -8,7 +8,7 @@ stays out of the repo (see research/find-parts/README.md for the licences); run 
   fusion.py FILE.json ... --out DIR [--mm SCALE]    write DIR/<stem>.fc, DIR/<stem>.json (truth)
 
 Exact curves: lines, arcs, circles. Ellipses and splines have no row in a part file: they become
-fine polylines and the part is marked approx. A tapered extrude has no form yet: untranslatable.
+fine polylines and the part is marked approx.
 """
 import json
 import math
@@ -266,6 +266,113 @@ def prune(edges):
         edges = keep
 
 
+def ellipse_param(c, p):
+    """A sketch point's angle on an elliptical arc's ellipse, and how far off it (mm), mm."""
+    ce, mx = Edge.mm(c["center_point"]), vec(c["major_axis"])
+    k = math.sqrt(dot(mx, mx))
+    mx = tuple(x / k for x in mx)
+    my = cross(vec(c["normal"]), mx)
+    A, B = c["major_axis_radius"] * MM, c["minor_axis_radius"] * MM
+    d = add(p, ce, -1.0)
+    u = math.atan2(dot(d, my) / B, dot(d, mx) / A)
+    q = add(add(ce, mx, A * math.cos(u)), my, B * math.sin(u))
+    return u, math.dist(q[:2], p[:2])
+
+
+def same_ellipse(a, b):
+    return all(abs(a[k] - b[k]) < 1e-7 for k in ("major_axis_radius", "minor_axis_radius")) and math.dist(vec(a["center_point"]), vec(b["center_point"])) < 1e-7
+
+
+def trimmed_ellipses(loop, wall, taken):
+    """Fusion's elliptical arcs often come without their ends. A loop of nothing else is the whole
+    ellipse; between other curves an arc runs from one curve's free end to the next's, the way
+    round that holds a point of the feature's wall (`wall`, sketch points). An arc next to another
+    with no ends has none to find."""
+    curves = loop["profile_curves"]
+    bare = [c for c in curves if c["type"] == "EllipticalArc3D" and "start_angle" not in c]
+    if not bare:
+        return loop
+    if len(bare) == len(curves) and all(same_ellipse(bare[0], c) for c in bare):
+        return dict(loop, profile_curves=[dict(bare[0], type="Ellipse3D")])
+    if len(bare) > 1:
+        raise Unsupported("elliptical arc without angles")
+    c = bare[0]
+    ends = {}
+    for o in curves:
+        if o is c:
+            continue
+        e = Edge(o)
+        if e.kind == "circle":
+            raise Unsupported("elliptical arc without angles")
+        for p in (e.a, e.b):
+            key = (round(p[0], 3), round(p[1], 3))
+            ends[key] = (ends.get(key, (0, p))[0] + 1, p)
+    free = [p for n, p in ends.values() if n % 2]
+    if len(free) != 2:
+        raise Unsupported("elliptical arc without angles")
+    (u0, d0), (u1, d1) = ellipse_param(c, free[0]), ellipse_param(c, free[1])
+    if max(d0, d1) > 1e-2:
+        raise Unsupported("elliptical arc without angles")
+    if u1 < u0:
+        u0, u1 = u1, u0
+    # u0..u1 or u1..u0+2pi: the one the wall is on; with no wall left, the shorter
+    on = [ellipse_param(c, q) for q in wall]
+    on = [u for u, d in on if d < 1e-2]
+    first = sum(u0 < u < u1 for u in on)
+    second = len(on) - first
+    short = first > second or (first == second and u1 - u0 <= math.pi)
+    # the two profiles either side of a chord share its ends: one arc each
+    key = (round(u0, 4), round(u1, 4), c["major_axis_radius"], c["minor_axis_radius"])
+    if key in taken:
+        short = not taken[key]
+    taken[key] = short
+    a0, a1 = (u0, u1) if short else (u1, u0 + 2 * math.pi)
+    out = dict(c, start_angle=a0, end_angle=a1)
+    return dict(loop, profile_curves=[out if o is c else o for o in curves])
+
+
+def bridges(edges):
+    """A curve joining an outline to its hole counts once in a loop, as Fusion records a keyhole: the
+    odd vertices pair up along such curves, which bound no area. Drop the shortest path between them."""
+    pt = Snap()
+    while True:
+        at = {}
+        for i, e in enumerate(edges):
+            if e.a is not None and pt(e.a) != pt(e.b):
+                at.setdefault(pt(e.a), []).append((i, pt(e.b)))
+                at.setdefault(pt(e.b), []).append((i, pt(e.a)))
+        odd = [v for v in at if len(at[v]) % 2]
+        if not odd:
+            return edges
+        seen, todo, path = {odd[0]: None}, [odd[0]], None
+        for v in todo:
+            if v != odd[0] and len(at[v]) % 2:
+                path = v
+                break
+            for i, w in at[v]:
+                if w not in seen:
+                    seen[w] = (v, i)
+                    todo.append(w)
+        if path is None:
+            return edges
+        drop = set()
+        while seen[path]:
+            path, i = seen[path]
+            drop.add(i)
+        edges = prune([e for i, e in enumerate(edges) if i not in drop])
+
+
+def pinched(edges):
+    """Whether more than two curves meet anywhere: which loops they make is then ambiguous, so the
+    profiles stay apart."""
+    pt, deg = Snap(), {}
+    for e in edges:
+        if e.a is not None and pt(e.a) != pt(e.b):
+            for p in (e.a, e.b):
+                deg[pt(p)] = deg.get(pt(p), 0) + 1
+    return any(v > 2 for v in deg.values())
+
+
 def regions(profiles):
     """The union of a feature's profiles as regions [outer, holes..]: curves two profiles share
     (one region's hole filled by the next, or a common edge) cancel, as the CAD system merges them."""
@@ -282,7 +389,10 @@ def regions(profiles):
     edges = [e for e in seen.values() if e is not None]
     if not edges:
         raise Unsupported("profiles cancel to nothing")
-    loops = chain(prune(edges))
+    edges = bridges(prune(edges))
+    if len(profiles) > 1 and pinched(edges):
+        raise Unsupported("profiles meet at a point")
+    loops = chain(edges)
     # a loop that bounds nothing (a line out and back) goes
     loops = [l for l in loops if len(polygon(l)) > 2 and abs(area(polygon(l))) > 1e-9]
     if not loops:
@@ -326,7 +436,10 @@ def emit_loop(loop, f):
             sw = (-e.sweep if rev else e.sweep) * (-1 if f.flipped else 1)
             d = math.dist(p, q)
             c = f(e.c)
-            if d > 1e-9 and abs(abs(sw) - 2 * math.pi) > 1e-6:
+            # the joint on the data's circle if it is there: refitting moves a centre further the less
+            # an arc turns, and coaxial walls would come out a hair apart
+            on = max(abs(math.dist(p, c) - e.r), abs(math.dist(q, c) - e.r)) < 4e-6
+            if not on and d > 1e-9 and abs(abs(sw) - 2 * math.pi) > 1e-6:
                 h2 = e.r * e.r - d * d / 4
                 h = math.sqrt(max(h2, 0.0))
                 m = ((p[0] + q[0]) / 2, (p[1] + q[1]) / 2)
@@ -334,7 +447,7 @@ def emit_loop(loop, f):
                 c1, c2 = (m[0] + h * nx, m[1] + h * ny), (m[0] - h * nx, m[1] - h * ny)
                 c = c1 if math.dist(c1, c) <= math.dist(c2, c) else c2
             a0 = math.degrees(math.atan2(p[1] - c[1], p[0] - c[0]))
-            r = math.dist(p, c)
+            r = e.r if on else math.dist(p, c)
             if math.dist(q, c) > 0:
                 a1 = math.degrees(math.atan2(q[1] - c[1], q[0] - c[0]))
                 dg = a1 - a0
@@ -369,23 +482,146 @@ class Frame:
 
 
 def extent(e):
+    """(up, down, taper up, taper down): lengths along the normal and against it, radians."""
     t = e["extent_type"]
     one = e["extent_one"]
-    if abs(one["taper_angle"]["value"]) > 1e-9:
-        raise Unsupported("taper")
+    a1 = one["taper_angle"]["value"]
     d1 = one["distance"]["value"] * MM
+    two = e.get("extent_two")
     if t == "OneSideFeatureExtentType":
-        if d1 == 0 and e.get("extent_two"):
-            return 0.0, e["extent_two"]["distance"]["value"] * MM
-        return d1, 0.0
+        if d1 == 0 and two:
+            return 0.0, two["distance"]["value"] * MM, 0.0, two["taper_angle"]["value"]
+        return d1, 0.0, a1, 0.0
     if t == "SymmetricFeatureExtentType":
         if one.get("is_full_length", False):
-            return d1 / 2, d1 / 2
-        return d1, d1
-    two = e.get("extent_two")
-    if two and abs(two["taper_angle"]["value"]) > 1e-9:
-        raise Unsupported("taper")
-    return d1, (two["distance"]["value"] * MM if two else 0.0)
+            return d1 / 2, d1 / 2, a1, a1
+        return d1, d1, a1, a1
+    return d1, (two["distance"]["value"] * MM if two else 0.0), a1, (two["taper_angle"]["value"] if two else 0.0)
+
+
+def touching(regs):
+    """Whether a region's hole touches its outline or another hole. Merged, such profiles are a
+    pinched loop the part format refuses; apart they are plain regions."""
+    for r in regs:
+        polys = [polygon(lp) for lp in r]
+        size = max(math.dist(p, polys[0][0]) for p in polys[0])
+        near = max(1e-3, 0.005 * size)
+        for i, h in enumerate(polys[1:], 1):
+            for j, o in enumerate(polys):
+                if j != i and any(seg_dist(q, o) < near for q in h):
+                    return True
+    return False
+
+
+def seg_dist(q, pts):
+    """A point's distance from a closed polygon."""
+    best = float("inf")
+    for i in range(len(pts)):
+        a, b = pts[i], pts[(i + 1) % len(pts)]
+        ab = (b[0] - a[0], b[1] - a[1])
+        den = ab[0] ** 2 + ab[1] ** 2
+        t = ((q[0] - a[0]) * ab[0] + (q[1] - a[1]) * ab[1]) / den if den else 0.0
+        t = min(1.0, max(0.0, t))
+        best = min(best, math.dist(q[:2], (a[0] + t * ab[0], a[1] + t * ab[1])))
+    return best
+
+
+def joined(r, s):
+    """Whether two regions share more than points: a stretch of edge, or area."""
+    a, b = polygon(r[0]), polygon(s[0])
+    for x, y in ((a, b), (b, a)):
+        for i in range(len(x)):
+            p, q = x[i], x[(i + 1) % len(x)]
+            m = ((p[0] + q[0]) / 2, (p[1] + q[1]) / 2)
+            if seg_dist(m, y) < 1e-3 or inside(m, y):
+                return True
+    return False
+
+
+def on_or_inside(q, r):
+    """A sketch point lies in region r = [outer, holes..], or within a hair of its boundary."""
+    polys = [polygon(lp) for lp in r]
+    if any(seg_dist(q, pts) < 1e-3 for pts in polys):
+        return True
+    return inside(q, polys[0]) and not any(inside(q, h) for h in polys[1:])
+
+
+def body_points(e):
+    """Each body's points on faces (mm) after a feature."""
+    return {bid: [tuple(x * MM for x in vec(e["faces"][f]["point_on_face"])) for f in b["faces"]] for bid, b in e["bodies"].items()}
+
+
+def moved(c, f):
+    """Curve data with its points and vectors put through (point map, vector map)."""
+    if isinstance(c, list):
+        return [moved(x, f) for x in c]
+    if not isinstance(c, dict):
+        return c
+    if c.get("type") == "Point3D":
+        return dict(c, **dict(zip("xyz", f[0](vec(c)))))
+    if c.get("type") == "Vector3D":
+        return dict(c, **dict(zip("xyz", f[1](vec(c)))))
+    return {k: moved(v, f) for k, v in c.items()}
+
+
+def replaned(T, profs, e, up, down):
+    """Profiles Fusion stored off their sketch's plane (a sketch moved after they were made; their
+    sketch z varies) lie in a plane of their own, and extrude square to it. The transform and the
+    profiles in that plane, or None if they lie in the sketch's own. Fusion's side faces of the
+    feature say which way it went."""
+    O, X, Y, Z = (vec(T["origin"]), vec(T["x_axis"]), vec(T["y_axis"]), vec(T["z_axis"]))
+    pts = []
+    for pr in profs:
+        for l in pr["loops"]:
+            for c in l["profile_curves"]:
+                for k in ("start_point", "end_point", "center_point"):
+                    if k in c:
+                        pts.append(vec(c[k]))
+    if not pts or max(p[2] for p in pts) - min(p[2] for p in pts) < 1e-6:
+        return None
+    world = lambda p: add(add(add(O, X, p[0]), Y, p[1]), Z, p[2])
+    w = [world(p) for p in pts]
+    best, n = 0.0, None
+    a = w[0]
+    b = max(w, key=lambda q: math.dist(a, q))
+    for q in w:
+        m = cross(add(b, a, -1.0), add(q, a, -1.0))
+        if dot(m, m) > best:
+            best, n = dot(m, m), m
+    if n is None or best < 1e-18:
+        return None
+    n = tuple(x / math.sqrt(best) for x in n)
+    d = add(b, a, -1.0)
+    x = tuple(v / math.sqrt(dot(d, d)) for v in d)
+    side = [tuple(u * MM for u in vec(e["faces"][f]["point_on_face"])) for f in e.get("extrude_side_faces", []) if f in e["faces"]]
+    reach = [dot(add(q, tuple(u * MM for u in a), -1.0), n) for q in side]
+    # the direction whose slab holds Fusion's side faces
+    lo, hi = -down, up
+    if lo > hi:
+        lo, hi = hi, lo
+    if reach and sum(lo - 1e-3 <= t <= hi + 1e-3 for t in reach) < sum(lo - 1e-3 <= -t <= hi + 1e-3 for t in reach):
+        n = tuple(-v for v in n)
+    y = cross(n, x)
+    pm = lambda p: (lambda q: (dot(add(q, a, -1.0), x), dot(add(q, a, -1.0), y), dot(add(q, a, -1.0), n)))(world(p))
+    vm = lambda v: (lambda q: (dot(q, x), dot(q, y), dot(q, n)))(add(add(add((0, 0, 0), X, v[0]), Y, v[1]), Z, v[2]))
+    pv = lambda t, v: dict(zip("xyz", v), type=t)
+    return {"origin": pv("Point3D", a), "x_axis": pv("Vector3D", x), "y_axis": pv("Vector3D", y), "z_axis": pv("Vector3D", n)}, moved(profs, (pm, vm))
+
+
+class Slab:
+    """A region extruded: how many of a body's face points lie in it says whose it is."""
+
+    def __init__(self, r, O, X, Y, Z, lo, hi):
+        self.r, self.O, self.X, self.Y, self.Z, self.lo, self.hi = r, O, X, Y, Z, lo, hi
+
+    def score(self, pts):
+        n = 0
+        for p in pts:
+            d = add(p, self.O, -1.0)
+            t = dot(d, self.Z)
+            if self.lo - 1e-3 <= t <= self.hi + 1e-3 and on_or_inside((dot(d, self.X), dot(d, self.Y)), self.r):
+                n += 1
+        return n
 
 
 def translate(d):
@@ -396,7 +632,10 @@ def translate(d):
         if s["type"] == "ExtrudeFeature" and (not seq or seq[-1] != s["entity"]):
             seq.append(s["entity"])
     lines, notes = [], set()
-    bodies = 0
+    # Fusion's body id -> the label of the line that made our body; several ids may share one (a cut
+    # split it: one body of two lumps here)
+    label = {}
+    made = 0
     after = []
     for k, eid in enumerate(seq):
         e = ents[eid]
@@ -407,19 +646,34 @@ def translate(d):
         by = {}
         for p in e["profiles"]:
             by.setdefault(p["sketch"], []).append(ents[p["sketch"]]["profiles"][p["profile"]])
-        up, down = extent(e)
+        up, down, t_up, t_down = extent(e)
         off = 0.0
         st = e["start_extent"]
         if st["type"] == "OffsetStartDefinition":
             off = st.get("offset", {}).get("value", 0.0) * MM
         op = {"NewBodyFeatureOperation": "new", "JoinFeatureOperation": "add", "CutFeatureOperation": "cut", "IntersectFeatureOperation": "keep"}[e["operation"]]
+        now = list(e["bodies"])
+        pts = body_points(e)
+        fresh = [b for b in now if b not in label]
+        ext = e.get("extrude_bodies") or []
+        slabs, used = [], []
         for sk, profs in by.items():
             T = ents[sk]["transform"]
+            again = replaned(T, profs, e, up, down)
+            if again:
+                notes.add("replaned")
+                T, profs = again
             O, X, Y, Z = (vec(T["origin"]), vec(T["x_axis"]), vec(T["y_axis"]), vec(T["z_axis"]))
             O = tuple(x * MM for x in O)
             lift = 0.0
+            wall = [tuple(u * MM for u in vec(e["faces"][f]["point_on_face"])) for f in e.get("extrude_side_faces", []) if f in e["faces"]]
+            wall = [(lambda d: (dot(d, X), dot(d, Y), 0.0))(add(q, O, -1.0)) for q in wall]
+            taken = {}
+            profs = [dict(pr, loops=[trimmed_ellipses(l, wall, taken) for l in pr["loops"]]) for pr in profs]
             try:
                 regs = regions(profs)
+                if len(profs) > 1 and touching(regs):
+                    raise Unsupported("a hole touches")
             except (Unsupported, IndexError):
                 # one profile at a time, the way it was drawn
                 notes.add("unmerged")
@@ -438,33 +692,82 @@ def translate(d):
                 lo, hi = (-down, up) if down else ((0.0, up) if up > 0 else (up, 0.0))
                 if lo > hi:
                     lo, hi = hi, lo
-                if hi <= 0:
-                    z, a, b, shift = tuple(-x for x in Z), hi - lo, 0.0, hi
-                elif lo >= 0:
-                    z, a, b, shift = Z, hi - lo, 0.0, lo
+                # a taper leans away from the sketch plane: each side of it is its own extrude
+                tapered = abs(t_up) > 1e-9 or abs(t_down) > 1e-9
+                pieces = [(0.0, hi, t_up), (lo, 0.0, t_down)] if tapered and lo < 0 < hi else [(lo, hi, t_up or t_down)]
+                texts = []
+                for plo, phi, ang in pieces:
+                    if phi <= 0:
+                        z, a, b, shift = tuple(-x for x in Z), phi - plo, 0.0, phi
+                    elif plo >= 0:
+                        z, a, b, shift = Z, phi - plo, 0.0, plo
+                    else:
+                        z, a, b, shift = Z, phi, -plo, 0.0
+                    y = cross(z, X)
+                    org = add(O, Z, lift + off + shift)
+                    f2 = Frame(X, Y, y)
+                    frame = f"z {num(z[0])} {num(z[1])} {num(z[2])} x {num(X[0])} {num(X[1])} {num(X[2])} at {num(org[0])} {num(org[1])} {num(org[2])}"
+                    loops = " ".join(emit_loop(lp, f2) for lp in r)
+                    ext_txt = num(a) if b == 0 else f"two {num(a)} {num(b)}"
+                    if abs(ang) > 1e-9:
+                        # Fusion's negative taper leans in
+                        ext_txt += f" taper {fine(-math.degrees(ang))}"
+                    texts.append(f"extrude {{}}{ext_txt} {frame} {loops}")
+                slab = Slab(r, O, X, Y, Z, lift + off + lo, lift + off + hi)
+                alive = set(label.values())
+                body = texts[0]
+                here = None
+                if not alive and not made and op in ("cut", "keep"):
+                    raise Unsupported("first feature cuts")
+                owner = None
+                if op == "new" or not made or op == "add":
+                    # the region goes to the body its faces are in: what Fusion made of this feature, or
+                    # the bodies a join names (profiles abutting along part of an edge make one body)
+                    cands = fresh if op == "new" or not made else [x for x in ext if x in now] or now
+                    owner = max(cands, key=lambda x: slab.score(pts.get(x, []))) if cands else None
+                # regions of one body that only touch at points are solids of their own: one would pinch
+                apart = op == "new" and owner in label and not any(joined(r, o.r) for o, n in slabs if n == label[owner])
+                if apart or ((op == "new" or not made or op == "add") and owner not in label):
+                    name = here = f"b{made}"
+                    lines.append(f"{name}: " + body.format("new " if made else ""))
+                    made += 1
+                    slabs.append((slab, name))
+                    if owner is not None and not apart:
+                        label[owner] = name
+                elif op == "new" or op == "add":
+                    if op == "add":
+                        used.append(owner)
+                    here = label[owner]
+                    slabs.append((slab, here))
+                    lines.append(body.format("add ") + (f" in {label[owner]}" if len(alive) > 1 else ""))
                 else:
-                    z, a, b, shift = Z, hi, -lo, 0.0
-                y = cross(z, X)
-                org = add(O, Z, lift + off + shift)
-
-                f2 = Frame(X, Y, y)
-                frame = f"z {num(z[0])} {num(z[1])} {num(z[2])} x {num(X[0])} {num(X[1])} {num(X[2])} at {num(org[0])} {num(org[1])} {num(org[2])}"
-                loops = " ".join(emit_loop(lp, f2) for lp in r)
-                ext = num(a) if b == 0 else f"two {num(a)} {num(b)}"
-                this = op
-                if bodies == 0:
-                    if op in ("cut", "keep"):
-                        raise Unsupported("first feature cuts")
-                    this = ""
-                if this == "new" and "unmerged" in notes and r is not regs[0]:
-                    # a feature's profiles that would not merge still make one body
-                    this = "add"
-                if this == "new" or this == "":
-                    bodies += 1
-                    tail = ""
-                else:
-                    tail = " in all" if bodies > 1 and op != "add" else ""
-                lines.append(f"extrude {this + ' ' if this else ''}{ext} {frame} {loops}{tail}")
+                    lines.append(body.format(op + " ") + (" in all" if len(alive) > 1 else ""))
+                for t in texts[1:]:
+                    if here:
+                        lines.append(t.format("add ") + (f" in {here}" if len(set(label.values()) | {here}) > 1 else ""))
+                    else:
+                        lines.append(t.format(op + " ") + (" in all" if len(alive) > 1 else ""))
+        for x in fresh:
+            if x in label:
+                continue
+            if slabs:
+                label[x] = max(slabs, key=lambda s: s[0].score(pts.get(x, [])))[1]
+            else:
+                # a cut split a body: its lumps stay one body here
+                old = [label[b] for b in ext if b in label] or list(label.values())
+                if old:
+                    label[x] = old[0]
+        if op == "add" and used:
+            # bodies the join took in end with it
+            into = label[used[0]]
+            gone = sorted({label[b] for b in label if b not in now} - {label[b] for b in now if b in label})
+            if gone:
+                lines.append(f"combine add {into} " + " ".join(gone))
+                for b, n in label.items():
+                    if n in gone:
+                        label[b] = into
+        for b in [b for b in label if b not in now]:
+            del label[b]
         after.append(len(lines))
     notes = sorted(notes)
     return lines, notes + ["after:" + ",".join(map(str, after))]

@@ -734,7 +734,11 @@ fn plan_once(a: &Body, b: &Body, op: Op, scratch: &mut Scratch) -> R<Plan> {
             (op, cb),
             (Op::Union, Where::Outside) | (Op::Subtract | Op::Intersect, Where::Inside)
         );
-        if kept_a && kept_b {
+        if kept_a
+            && kept_b
+            && !flows_on([a, b], t.faces, t.at, op == Op::Subtract)
+            && !crack_tip([a, b], [&index[0], &index[1]], t, op == Op::Union)
+        {
             return Err(BoolError::ZeroThickness { at: t.at });
         }
     }
@@ -1722,6 +1726,55 @@ pub(crate) fn touches(
     out
 }
 
+/// Whether two faces kept where they touch face the same way there (`flip`: one of them turned
+/// over in the result): each ends where the other starts and one skin runs on tangent across the
+/// touch, with material all on its one side. Only faces facing apart have material meeting itself.
+pub(crate) fn flows_on(bodies: [&Body; 2], faces: [FaceId; 2], at: Point3, flip: bool) -> bool {
+    let normal = |k: usize| {
+        let s = &bodies[k].face(faces[k]).surface;
+        bodies[k].face_normal(faces[k], s.project(at))
+    };
+    match (normal(0), normal(1)) {
+        (Some(x), Some(y)) => (x.dot(y.get()) > 0.0) != flip,
+        _ => false,
+    }
+}
+
+/// Whether solids touching here, facing apart, have material on one side of the touch: faces flush
+/// (or one solid in the other) up to the line, parting as a groove of no width at its root beyond it.
+/// One skin turns back along the line, no material meets itself. Only with a gap on every side do they
+/// meet there and nowhere near. `any`: a union, where either solid's inside is material.
+#[cold]
+pub(crate) fn crack_tip(bodies: [&Body; 2], index: [&Index; 2], t: &Touch, any: bool) -> bool {
+    let s = &bodies[0].face(t.faces[0]).surface;
+    let Some(n) = bodies[0].face_normal(t.faces[0], s.project(t.at)) else {
+        return false;
+    };
+    let dirs: Vec<Vec3> = match t.dir {
+        Some(d) => match n.cross(d).normalize() {
+            Some(w) => vec![w.get(), -w.get()],
+            None => return false,
+        },
+        None => {
+            let fr = Frame::from_z(t.at, n);
+            vec![fr.x().get(), -fr.x().get(), fr.y().get(), -fr.y().get()]
+        }
+    };
+    // far enough that a gap opening with the square of the distance shows past tolerance
+    [0.05, 0.2].iter().all(|&d| {
+        dirs.iter().any(|&w| {
+            let q = t.at + w * d;
+            let (x, y) = (index[0].classify(q), index[1].classify(q));
+            let inside = if any {
+                x == Where::Inside || y == Where::Inside
+            } else {
+                x == Where::Inside && y == Where::Inside
+            };
+            inside || (x == Where::On && y == Where::On)
+        })
+    })
+}
+
 /// How face `f` lies around a point `p` of it where it touches another solid: `class` of
 /// points of the face a growing step away from `p` across the touch, the first step at which
 /// every direction landing on the face gives an answer (None from `class` is too close to
@@ -2011,26 +2064,63 @@ pub(crate) fn trim(
                         let g = across.implicit(curve.eval(h.t - dt)) + across.implicit(curve.eval(h.t + dt));
                         g * inward >= 0.0 || g.abs() <= 1e-7
                     };
+                    // faces tangent along the edge: any curve reaching it grazes what lies across
+                    let smooth = || {
+                        let (x, y) = (body.face(f).surface.gradient(h.point), across.gradient(h.point));
+                        let c = x.cross(y);
+                        c.dot(c) <= 1e-8 * x.dot(x) * y.dot(y)
+                    };
                     index[1 - k]
                         .face_box(faces[1 - k])
                         .grow(tol::LINEAR)
                         .contains(h.point)
-                        && on_edge(body, e, h.point).is_some_and(|(s, _)| inner(s))
+                        && on_edge(body, e, h.point).is_some_and(|(s, _)| inner(s) || smooth())
                         && [1e-3, 1e-2, 5e-2, 0.2, 0.5].iter().find_map(|&w| {
                             let dt = w * range.width().min(1.0);
                             match side(h.t - dt) {
-                                Where::Outside => Some(false),
-                                a => match side(h.t + dt) {
-                                    Where::Outside => Some(false),
-                                    b => (a == Where::Inside && b == Where::Inside).then_some(true),
+                                // leaving the face at this edge, tangent to what lies across it
+                                Where::Outside if !smooth() => Some(false),
+                                a => match (a, side(h.t + dt)) {
+                                    (Where::Outside, Where::Inside) | (Where::Inside, Where::Outside) => {
+                                        Some(smooth())
+                                    }
+                                    (Where::Outside, _) | (_, Where::Outside) => Some(false),
+                                    (Where::Inside, Where::Inside) => Some(true),
+                                    _ => None,
                                 },
                             }
                         }) == Some(true)
                 };
+                // a tangent-looking root a hair along from this edge, whose neighbour leaves the face
+                // nearly tangent: the curve crosses the edge itself, where it passes closest
+                let slid = |h: CurveHit| {
+                    // (near this edge's box only, the common case passed over cheaply)
+                    if !body.edge_box(e).grow(1e-3).contains(h.point) || on_edge(body, e, h.point).is_some() {
+                        return h;
+                    }
+                    let p = edge.curve.eval(edge.curve.closest(h.point, edge.range));
+                    let normal = |g: FaceId| body.face_normal(g, body.face(g).surface.project(p));
+                    let smooth = body.partner(c).map(|o| body.coedge_face(o)).is_some_and(|g| {
+                        matches!((normal(f), normal(g)), (Some(a), Some(b)) if a.cross(b).length() <= 1e-4)
+                    });
+                    let t = curve.closest(p, range);
+                    if smooth && p.distance(h.point) <= 1e-3 && curve.eval(t).distance(p) <= tol::LINEAR {
+                        CurveHit { t, point: p, ..h }
+                    } else {
+                        h
+                    }
+                };
                 for (h, grazing) in hits.into_iter().flat_map(|h| {
                     let grazing = h.contact != Contact::Crossing;
                     let near = crossings_near(&curve, range, &across, h);
-                    let touch = (grazing && near.is_empty() && touch_inside(&h)).then_some(h);
+                    let h = if grazing && near.is_empty() { slid(h) } else { h };
+                    // (at the edge's end the curve meets the face's corner, whichever way it goes on)
+                    let corner = || {
+                        [edge.start, edge.end].iter().any(|&v| {
+                            body.vertex(v).point.distance(h.point) <= body.vertex(v).tol.max(tol::LINEAR)
+                        })
+                    };
+                    let touch = (grazing && near.is_empty() && (corner() || touch_inside(&h))).then_some(h);
                     near.into_iter().chain(touch).map(move |x| (x, grazing))
                 }) {
                     // off the other face no piece of the curve starts here: cutting the edge would
@@ -2256,6 +2346,54 @@ pub(crate) fn trim(
     if debug_on() {
         let tsp: Vec<_> = ts.iter().map(|&(t, k)| (t, cuts[k].point)).collect();
         eprintln!("  curve {faces:?} range {range:?} cuts {tsp:?}");
+    }
+    // a curve leaving an edge at a shallow angle stays within tolerance of it for a while, so where
+    // it "crosses" is anywhere along that stretch. With another edge's cut in the stretch, it
+    // crosses there; out and back over one edge, in the stretch's middle: two vertices a hair apart
+    // would need an edge along the first edge
+    let pairs = match curve {
+        Curve::Line(_) => 0,
+        _ if closed => ts.len(),
+        _ => ts.len().saturating_sub(1),
+    };
+    for w in 0..pairs {
+        let next = (w + 1) % ts.len();
+        let (i, j) = (ts[w].1, ts[next].1);
+        if i == j {
+            continue;
+        }
+        let gap = cuts[i].point.distance(cuts[j].point);
+        // (a curve radius R stays within t of a tangent for sqrt(8 R t): under a third of a mm unless
+        // R is over a metre)
+        if gap <= 4.0 * cuts[i].tol.max(cuts[j].tol) || gap > 0.3 {
+            continue;
+        }
+        let wrap = if next == 0 { period } else { 0.0 };
+        let mid = curve.eval(0.5 * (ts[w].0 + ts[next].0 + wrap));
+        let onto = |c: &Cut, q: Point3| match c.on {
+            CutOn::Edge(sd, e) => on_edge(bodies[(sides[0] != sd) as usize], e, q),
+            CutOn::Free => None,
+        };
+        if onto(&cuts[i], mid).is_none() && onto(&cuts[j], mid).is_none() {
+            continue;
+        }
+        if cuts[i].on == cuts[j].on {
+            if let Some((s, tol)) = onto(&cuts[i], mid) {
+                for k in [i, j] {
+                    (cuts[k].s, cuts[k].point, cuts[k].tol) = (s, mid, tol);
+                }
+            }
+            continue;
+        }
+        for (from, to) in [(j, i), (i, j)] {
+            if onto(&cuts[from], mid).is_some()
+                && let Some((s, tol)) = onto(&cuts[from], cuts[to].point)
+            {
+                let point = cuts[to].point;
+                (cuts[from].s, cuts[from].point, cuts[from].tol) = (s, point, tol);
+                break;
+            }
+        }
     }
     // the same point found on two edges (a vertex, or both faces' boundaries) is one cut; a
     // curve coming back to a point it passed (a branch crossing itself where the surfaces touch)
@@ -3423,7 +3561,26 @@ pub(crate) fn imprint(
                 if w[1] - w[0] <= 1e-12 * (1.0 + edge.range.width()) {
                     continue;
                 }
-                match index[dst].point_in_face(dst_face, edge.curve.eval(0.5 * (w[0] + w[1]))) {
+                // a sample on the boundary may only touch it there (a circle tangent to an edge), so
+                // the stretch runs along it only if it is on at others too
+                let at =
+                    |f: f64| index[dst].point_in_face(dst_face, edge.curve.eval(w[0] + (w[1] - w[0]) * f));
+                // (an edge already found along one of the face's is on it)
+                let lies_along = |a: &Along| {
+                    if src == 0 {
+                        a.0 == sides[src] && a.1 == e
+                    } else {
+                        a.2 == sides[src] && a.3 == e
+                    }
+                };
+                let place = match at(0.5) {
+                    Where::On if !along.iter().any(lies_along) => match at(0.381_966_011_250_105_1) {
+                        Where::On => at(0.618_033_988_749_894_9),
+                        o => o,
+                    },
+                    o => o,
+                };
+                match place {
                     Where::Inside => imprints.push(Imprint {
                         side: sides[src],
                         edge: e,
@@ -3711,15 +3868,47 @@ type Placed = (Vec<VKey>, Vec<Point3>, Vec<(VKey, VKey)>);
 fn place_cuts(bodies: &[&Body; 2], cuts: &[Cut]) -> R<Placed> {
     let mut cluster: Vec<usize> = Vec::with_capacity(cuts.len());
     let mut heads: Vec<usize> = Vec::new();
+    let mut chained = false;
     for (i, c) in cuts.iter().enumerate() {
-        match heads
-            .iter()
-            .position(|&h| cuts[h].point.distance(c.point) <= cuts[h].tol.max(c.tol))
-        {
+        let mut found = None;
+        for (k, &h) in heads.iter().enumerate() {
+            let (d, reach) = (cuts[h].point.distance(c.point), cuts[h].tol.max(c.tol));
+            if d <= reach {
+                found = Some(k);
+                break;
+            }
+            chained |= d <= 2.0 * reach;
+        }
+        match found {
             Some(k) => cluster.push(k),
             None => {
                 cluster.push(heads.len());
                 heads.push(i);
+            }
+        }
+    }
+    // "within tolerance" chains: a cut near two heads is one place with them, or a vertex near both
+    // would end up in two. Only heads within two tolerances can have one
+    for o in (1..if chained { heads.len() } else { 1 }).rev() {
+        let (h, t) = (cuts[heads[o]].point, cuts[heads[o]].tol);
+        for k in 0..o {
+            let reach = t.max(cuts[heads[k]].tol);
+            if h.distance(cuts[heads[k]].point) <= 2.0 * reach
+                && (0..cuts.len()).any(|i| {
+                    (cluster[i] == k || cluster[i] == o)
+                        && cuts[i].point.distance(h) <= reach
+                        && cuts[i].point.distance(cuts[heads[k]].point) <= reach
+                })
+            {
+                for x in cluster.iter_mut() {
+                    if *x == o {
+                        *x = k;
+                    } else if *x > o {
+                        *x -= 1;
+                    }
+                }
+                heads.remove(o);
+                break;
             }
         }
     }
@@ -4502,7 +4691,19 @@ pub(crate) fn split_face(
                     })
                     .unwrap_or(0);
                 let (p0, p1) = (poly[k], poly[(k + 1) % poly.len()]);
-                let chord = p0.lerp(p1, 0.5) + (p1 - p0).perp() * 1e-3;
+                // (no further across than a thousandth of the hole's own width: u and v scale apart
+                // on a curved face, and a long segment's step in v may be a wide one in u)
+                let across = (p1 - p0).perp();
+                let width = if matches!(face.surface, Surface::Plane(_)) {
+                    1.0
+                } else {
+                    let at = |p: Point2| (p - p0).dot(across);
+                    let (lo, hi) = poly
+                        .iter()
+                        .fold((0.0f64, 0.0f64), |r, &p| (r.0.min(at(p)), r.1.max(at(p))));
+                    (hi - lo) / across.length_sq().max(f64::MIN_POSITIVE)
+                };
+                let chord = p0.lerp(p1, 0.5) + across * (1e-3 * width.min(1.0));
                 // the chord's middle may lie up to its sag off the hole's curve, and a curved
                 // outline may be drawn either side of a point nearer it than its own chords' sag:
                 // with such an outline that near (concentric or near-tangent loops), a point a
@@ -5200,10 +5401,42 @@ fn debug_conflict(
 
 /// A point inside a spec's face: a small step inward from its first edge's midpoint.
 fn interior_point(body: &Body, s: &Spec, pieces: &[Piece]) -> Option<Point3> {
-    let h = *s.loops.first()?.first()?;
-    // a step no other piece of the region comes nearer than: the way there crosses none of them
-    // (a sliver narrower than the usual step would put the probe past its far side)
-    let mut step = (0.01 * half_chord(&pieces[h.0])).min(0.05);
+    // (off a hair of an edge a step is too small to leave the boundary: its longest piece then)
+    let first = s.loops.first()?;
+    let mut h = *first.first()?;
+    let mut chord = half_chord(&pieces[h.0]);
+    if chord < 0.01
+        && let Some((o, c)) = first
+            .iter()
+            .map(|o| (*o, half_chord(&pieces[o.0])))
+            .find(|o| o.1 >= 0.01)
+    {
+        (h, chord) = (o, c);
+    }
+    if let Some(q) = clear_step(body, s, pieces, h, chord)? {
+        return Some(q);
+    }
+    // (a hole a hair inside that piece, along all of it: off another)
+    for &o in s.loops.iter().flatten() {
+        if o != h
+            && let Some(q) = clear_step(body, s, pieces, o, half_chord(&pieces[o.0]))?
+        {
+            return Some(q);
+        }
+    }
+    probe(body, s.from, h, pieces)
+}
+
+/// A step off half-edge `h` no other piece of the region comes nearer than: the way there crosses none
+/// of them (a sliver narrower than the usual step would put the probe past its far side).
+fn clear_step(
+    body: &Body,
+    s: &Spec,
+    pieces: &[Piece],
+    h: (usize, bool),
+    chord: f64,
+) -> Option<Option<Point3>> {
+    let mut step = (0.01 * chord).min(0.05);
     while step >= 10.0 * tol::LINEAR {
         let q = probe_at(body, s.from, h, pieces, Some(step))?;
         let clear = s.loops.iter().flatten().all(|&(o, _)| {
@@ -5215,11 +5448,11 @@ fn interior_point(body: &Body, s: &Spec, pieces: &[Piece]) -> Option<Point3> {
             }
         });
         if clear {
-            return Some(q);
+            return Some(Some(q));
         }
         step *= 0.25;
     }
-    probe(body, s.from, h, pieces)
+    Some(None)
 }
 
 /// More points inside a region: a small step off each of its half-edges, a third and two thirds

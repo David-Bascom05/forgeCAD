@@ -55,6 +55,32 @@ ZeroThickness, some of them false (fixes on fusion-1), some true pinches main bu
 3b1d1c47: 309 of 8188 built parts stop building at 3e-7 (162 classification, 49 EdgeUses, 47
 ZeroThickness), no volume moved over 0.01%.
 
+## Fusion 360 Gallery, what changed the rate
+
+`tools/find-parts/realparts.py` against every design: 91.2% to 98.3% so far. Most of the first wrong volumes
+were the importer. Volumes are compared with the dataset's; a design's own STEP (read by OCCT, `tools/find-parts/stepvol.py`)
+settles a disagreement.
+
+| class | parts | root cause | state |
+|---|---|---|---|
+| join merged nothing | most of 33 wrong | importer: a join adds to the bodies Fusion names and takes in those it says went; a region to the body whose faces lie in it | fixed, importer |
+| profile off its sketch's plane | 8, 6 untranslated | importer: sketch z varying means the profile lies in a plane of its own | fixed, importer |
+| tapered extrude | 129 untranslated | no form: `extrude N taper A`, an extrude drafted, or slabs between heights where the offset wipes a segment out (`forge_ops::taper`) | fixed; 4 parts open: a reflex vertex meeting another side splits the region (not written), one collapse |
+| elliptical arcs without ends | 22 untranslated | ends from neighbours, the side from the feature's wall | 12 fixed; 10 say too little: **the dataset omits them** |
+| false ZeroThickness | 16 of 28 sampled | faces touching tangent, facing the same way, each ending at the line: one skin runs on (`flows_on`). Flush below and parting above: a groove rooted there (`crack_tip`) | fixed |
+| knife edge in a profile | 30 of the failures held one | a line and arc doubling back, within tolerance of each other for a stretch. Blunted where the sides part, only when the boolean refuses the exact tool (a tip may meet other faces exactly) | partly: fails when a later feature is what trips on it |
+| faces merged off their surface | 7 (n-ary) | "on one surface" is not transitive: unify keeps pieces within a tolerance of the one kept | fixed |
+| hole's probe past its host | | a step of 1e-3 of a long segment in v is wide in u: a fraction of the hole's width on curved faces | fixed |
+| rim tangent to a flush face's edge | | imprint's middle sample on the boundary only touched it | fixed |
+| cross hole tangent to a tube | | a curve leaving an edge at a shallow angle "crosses" anywhere along a stretch: at a neighbouring cut, or one vertex for out and back | fixed |
+| chain of cuts within tolerance | | a vertex near two cuts not near each other ended in two vertices | fixed |
+| seam that steps, hole on it | | a merged bore's span exceeds a period; a loop's window chosen from the widest loop, by the outline | fixed |
+| curve reaching a smooth edge | | it grazes what lies across: a cut if it leaves the face there | fixed |
+
+Open, by signature: the numbers in the last `fusion-N ready`. `verify/forge-proof/examples/pinch.rs` counts a
+ZeroThickness result's material on a sphere about the point; a tangent contact's gap can fall between its
+samples, so one piece there is not proof it is false: the shrunk part decides.
+
 ## Correctly refused
 
 David's rule: what cannot exist is the solid, not the sketch. A profile's loops may touch; the

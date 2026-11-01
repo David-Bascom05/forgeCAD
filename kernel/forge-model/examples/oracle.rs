@@ -501,6 +501,9 @@ fn export(features: History<'_>, i: usize, before: Option<&Before>) -> Result<St
         } => {
             let e = match *extent {
                 Extent::Distance(d) => format!("{{\"d\":{}}}", num(d)),
+                Extent::Tapered { distance, angle } => {
+                    format!("{{\"d\":{},\"taper\":{}}}", num(distance), num(angle))
+                }
                 Extent::Symmetric(d) => format!("{{\"sym\":{}}}", num(d)),
                 Extent::TwoSided { forward, back } => format!("{{\"two\":[{},{}]}}", num(forward), num(back)),
                 Extent::Through(t) => format!(

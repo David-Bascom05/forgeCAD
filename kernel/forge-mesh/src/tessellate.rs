@@ -790,6 +790,14 @@ fn tessellate_face(
     let mut rings: Vec<Vec<Point2>> = Vec::new();
     let mut ring_globals: Vec<Vec<u32>> = Vec::new();
     for &l in &face.loops {
+        // a loop of edges there and back (a tool touched this face along a line) bounds nothing
+        if body
+            .lp(l)
+            .coedges()
+            .all(|c| body.partner(c).is_some_and(|p| body.coedge(p).lp == l))
+        {
+            continue;
+        }
         let mut samples = Vec::new();
         let mut ids = Vec::new();
         for c in body.lp(l).coedges() {

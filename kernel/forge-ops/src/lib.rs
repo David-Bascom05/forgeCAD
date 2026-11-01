@@ -17,6 +17,7 @@ pub mod shell;
 mod skin;
 pub mod strip;
 pub mod sweep;
+pub mod taper;
 pub mod thicken;
 
 pub use chamfer::{ChamferError, ChamferSize, chamfer};
@@ -35,4 +36,5 @@ pub use sweep::{
     CoilError, Handed, PathSeg, Stretch, SweepError, Winding, Wound, coil, coil_motion, sweep,
     sweep_stretches,
 };
+pub use taper::{TaperError, tapered};
 pub use thicken::{ThickenError, thicken};

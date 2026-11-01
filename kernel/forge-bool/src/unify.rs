@@ -224,6 +224,10 @@ fn rename_wholes(body: &mut Body, faces: &[(u32, u32)], edges: &[(u32, u32)]) {
     apply(body, r, false);
 }
 
+/// How near two surfaces count as one. "On one surface" is not transitive: pieces each this near
+/// the next stay within a tolerance of the one a run of them keeps.
+const SAME: f64 = 0.5 * tol::LINEAR;
+
 /// Whether live edge `e` lies between two faces on one surface, facing the same way (`keys` as
 /// `unify` makes them).
 fn between_same(body: &Body, keys: &[(u8, f64)], e: EdgeId) -> bool {
@@ -248,16 +252,16 @@ fn between_same(body: &Body, keys: &[(u8, f64)], e: EdgeId) -> bool {
         (Surface::Plane(p), Surface::Plane(q)) => {
             parallel(p.frame.z(), q.frame.z())
                 && (p.frame.z().dot(q.frame.z()) > 0.0) == (fa.same_sense == fb.same_sense)
-                && p.frame.z().dot(q.frame.origin - p.frame.origin).abs() <= tol::LINEAR
+                && p.frame.z().dot(q.frame.origin - p.frame.origin).abs() <= SAME
         }
         (Surface::Cylinder(p), Surface::Cylinder(q)) => {
             let off = q.frame.origin - p.frame.origin;
             fa.same_sense == fb.same_sense
-                && (p.radius - q.radius).abs() <= tol::LINEAR
+                && (p.radius - q.radius).abs() <= SAME
                 && parallel(p.frame.z(), q.frame.z())
                 && {
                     let c = p.frame.z().cross(off);
-                    c.dot(c) <= tol::LINEAR * tol::LINEAR
+                    c.dot(c) <= SAME * SAME
                 }
         }
         // (not along a line from the apex: a whole cone there would have no seam)

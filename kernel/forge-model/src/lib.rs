@@ -422,11 +422,8 @@ impl Part {
         }
         closed_body(self, ids, &|p, ids| {
             let h = History::new(&p.features, ids);
-            let mut body = None;
-            for i in 0..p.features.len() {
-                body = step(h, i, body)?;
-            }
-            body.map(finish)
+            in_turn(h)?
+                .map(finish)
                 .ok_or(RegenError::NothingToCombine { feature: 0 })
         })
     }
@@ -507,6 +504,15 @@ fn closed_result<T>(
     let Some(what) = open(&made) else {
         return Ok(made);
     };
+    // (sides of a knife edge within tolerance can leave the body open as well as refused)
+    if let Some(all) = all_blunted(
+        History::new(&part.features, ids),
+        part.features.len().saturating_sub(1),
+    ) && let Ok(b) = regen(&Part { features: all }, ids)
+        && open(&b).is_none()
+    {
+        return Ok(b);
+    }
     let feature = (0..part.features.len().saturating_sub(1))
         .find(|&k| {
             let shorter = Part {
@@ -536,6 +542,33 @@ fn closed_solids(
 /// time, for callers that keep every stage (each as the next step needs it; `finish` one to
 /// show it). Only `features[..=i]` is read.
 pub fn step(features: History<'_>, i: usize, body: Option<Body>) -> Result<Option<Body>, RegenError> {
+    match step_plain(features, i, body) {
+        Err(e) if lost_its_way(&e) => {
+            let Some(fs) = blunted(features, i) else {
+                return Err(e);
+            };
+            let Ok(so_far) = careful(features, 0, i, None) else {
+                return Err(e);
+            };
+            step_plain(
+                History {
+                    features: &fs,
+                    ids: features.ids,
+                },
+                i,
+                so_far,
+            )
+            .map_err(|_| e)
+        }
+        r => r,
+    }
+}
+
+pub(crate) fn step_plain(
+    features: History<'_>,
+    i: usize,
+    body: Option<Body>,
+) -> Result<Option<Body>, RegenError> {
     let b = step_on(features, i, body)?;
     if let Some(b) = &b {
         no_pinch(features, i, b)?;
@@ -543,11 +576,119 @@ pub fn step(features: History<'_>, i: usize, body: Option<Body>) -> Result<Optio
     Ok(b)
 }
 
+/// Features `from..to` from `body`, each extrude with knife edges tried plain and then blunted, for
+/// which a copy is kept. Never nested: at most two tries of each feature, once.
+fn careful(
+    features: History<'_>,
+    from: usize,
+    to: usize,
+    mut body: Option<Body>,
+) -> Result<Option<Body>, RegenError> {
+    for i in from..to {
+        body = match blunted(features, i) {
+            None => step_plain(features, i, body)?,
+            Some(fs) => match step_plain(features, i, body.clone()) {
+                Err(e) if lost_its_way(&e) => step_plain(
+                    History {
+                        features: &fs,
+                        ids: features.ids,
+                    },
+                    i,
+                    body,
+                )
+                .map_err(|_| e)?,
+                r => r?,
+            },
+        };
+    }
+    Ok(body)
+}
+
+/// Every feature in turn. Should a boolean refuse with knife edges about: again trying each plain and
+/// then blunted, and if that fails too with all of them blunted. Three passes at most, however many
+/// knife edges: nothing nests.
+fn in_turn(features: History<'_>) -> Result<Option<Body>, RegenError> {
+    let plain = |h: History<'_>| (0..h.len()).try_fold(None, |b, i| step_plain(h, i, b));
+    match plain(features) {
+        Err(e) if lost_its_way(&e) => {
+            let Some(all) = all_blunted(features, features.len().saturating_sub(1)) else {
+                return Err(e);
+            };
+            careful(features, 0, features.len(), None)
+                .or_else(|_| {
+                    plain(History {
+                        features: &all,
+                        ids: features.ids,
+                    })
+                })
+                .map_err(|_| e)
+        }
+        r => r,
+    }
+}
+
+/// Features up to `i` with every knife edge blunted: for a part whose earlier tip a tool trips on.
+pub(crate) fn rebuilt_blunted(features: History<'_>, i: usize) -> Option<Result<Option<Body>, RegenError>> {
+    let all = all_blunted(features, i)?;
+    let h = History {
+        features: &all,
+        ids: features.ids,
+    };
+    Some((0..=i).try_fold(None, |b, k| step_plain(h, k, b)))
+}
+
+/// The history with feature `i`, an extrude with knife edges in its profile, blunted.
+pub(crate) fn blunted(features: History<'_>, i: usize) -> Option<Vec<Feature>> {
+    let Feature::Extrude { profile, extent, op } = &features[i] else {
+        return None;
+    };
+    let profile = profile.blunted()?;
+    let mut fs = features.features.to_vec();
+    fs[i] = Feature::Extrude {
+        profile,
+        extent: *extent,
+        op: *op,
+    };
+    Some(fs)
+}
+
+/// The history with every extrude's knife edges blunted up to feature `to`: a tip already in the part
+/// can be what a later tool trips on.
+pub(crate) fn all_blunted(features: History<'_>, to: usize) -> Option<Vec<Feature>> {
+    let mut fs = features.features.to_vec();
+    let mut any = false;
+    fn blunt(f: &mut Feature) -> bool {
+        match f {
+            Feature::Extrude { profile, .. } => profile.blunted().map(|b| *profile = b).is_some(),
+            Feature::Body(b) => match &mut **b {
+                BodyFeature::In { feature, .. } => blunt(feature),
+                _ => false,
+            },
+            _ => false,
+        }
+    }
+    for f in fs.iter_mut().take(to + 1) {
+        any |= blunt(f);
+    }
+    any.then_some(fs)
+}
+
+/// A boolean's refusal that sides within tolerance of each other can cause.
+pub(crate) fn lost_its_way(e: &RegenError) -> bool {
+    matches!(
+        e,
+        RegenError::Boolean {
+            error: BoolError::ZeroThickness { .. } | BoolError::Internal(_) | BoolError::Unsupported(_),
+            ..
+        }
+    )
+}
+
 /// Whether a history has an extrude whose loops touch: its result is judged step by step.
 pub(crate) fn any_touching(features: &[Feature]) -> bool {
     fn touches(f: &Feature) -> bool {
         match f {
-            Feature::Extrude { profile, .. } if profile.loops.len() > 1 => !profile.touching().is_empty(),
+            Feature::Extrude { profile, .. } => profile.loops.len() > 1 && !profile.touching().is_empty(),
             Feature::Body(b) => matches!(&**b, BodyFeature::In { feature, .. } if touches(feature)),
             _ => false,
         }
@@ -805,11 +946,8 @@ fn may_empty(first: &Body, tools: &[Tool]) -> bool {
 
 /// Features `..` rebuilt one at a time (the part between them seen, an empty one refused).
 fn one_at_a_time(features: History<'_>) -> Result<Body, RegenError> {
-    let mut body = None;
-    for i in 0..features.len() {
-        body = step(features, i, body)?;
-    }
-    body.map(Body::into_compact)
+    in_turn(features)?
+        .map(Body::into_compact)
         .ok_or(RegenError::NothingToCombine { feature: 0 })
 }
 
@@ -1099,6 +1237,10 @@ fn nary_regen_on(
         }) => one_at_a_time(features),
         Err(e) if names_missing(&e) => {
             count_name_fallback();
+            one_at_a_time(features)
+        }
+        // (one at a time, a tool's knife edge can be blunted)
+        Err(e) if lost_its_way(&e) && (0..features.len()).any(|i| blunted(features, i).is_some()) => {
             one_at_a_time(features)
         }
         r => r,
@@ -1561,6 +1703,29 @@ fn sources_of(features: History<'_>, s: usize, out: &mut Vec<usize>) {
 /// The solid an extrude, revolve or ball makes (empty unless `build`), and how it combines
 /// with the part.
 fn tool(i: usize, id: u64, f: &Feature, build: bool) -> Result<Tool, RegenError> {
+    if let Feature::Extrude {
+        profile,
+        extent: Extent::Tapered { distance, angle },
+        op,
+    } = f
+    {
+        let slabs = forge_ops::tapered(profile, *distance, *angle, id).map_err(|e| match e {
+            forge_ops::TaperError::Extrude(error) => RegenError::Extrude { feature: i, error },
+            forge_ops::TaperError::Draft(error) => RegenError::Draft { feature: i, error },
+        })?;
+        let mut b = Body::new();
+        for (k, s) in slabs.into_iter().enumerate() {
+            b = if k == 0 {
+                s
+            } else {
+                forge_bool::boolean(&b, &s, Op::Union, (id + 1_000_000) | ((k as u64) << 40))
+                    .map_err(|error| RegenError::Boolean { feature: i, error })?
+            };
+        }
+        // the side leans either way, so it is the built body that bounds it
+        let sh = part_shape(&b);
+        return Ok((if build { b } else { Body::new() }, *op, sh));
+    }
     if !build {
         let (Feature::Extrude { op, .. } | Feature::Revolve { op, .. } | Feature::Ball { op, .. }) = f else {
             unreachable!("only extrudes, revolves and balls are built directly")

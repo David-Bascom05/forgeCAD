@@ -105,6 +105,10 @@ pub fn resized(f: &Feature, k: f64) -> Option<(Feature, f64)> {
                     *d *= k;
                     r.max(d.abs() / k)
                 }
+                Extent::Tapered { distance, .. } => {
+                    *distance *= k;
+                    r.max(distance.abs() / k)
+                }
                 Extent::TwoSided { forward, back } => {
                     *forward *= k;
                     *back *= k;
@@ -348,7 +352,8 @@ pub fn regen(features: &[Feature], ids: Option<&[u64]>) -> Result<Body, RegenErr
 fn plain(f: &Feature) -> Option<Combine> {
     match f {
         Feature::Extrude {
-            extent: Extent::Distance(_) | Extent::Symmetric(_) | Extent::TwoSided { .. },
+            extent:
+                Extent::Distance(_) | Extent::Tapered { .. } | Extent::Symmetric(_) | Extent::TwoSided { .. },
             op,
             ..
         }

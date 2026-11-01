@@ -352,7 +352,7 @@ fn deleting_every_wall_is_refused() {
     assert!(e.is_some_and(|e| e.msg.contains("CannotHeal")));
 }
 
-/// A cone with a hexagon cut through it, its top edges rounded: a clear refusal, not a panic.
+/// A cone with a hexagon cut through it, its top edges rounded: no panic, and sound if it builds.
 #[test]
 fn rounding_a_hex_cut_cone_top_does_not_panic() {
     let m = Model::new(

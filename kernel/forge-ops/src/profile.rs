@@ -474,6 +474,112 @@ fn inside(p: Point2, poly: &[Point2]) -> bool {
     inside_polygon(p, poly)
 }
 
+/// Whether a segment's end direction turns back on itself into the next one's start. (Asked of every
+/// extrude's every joint: an arc's direction comes from the joint, its neighbour's end, without trig
+/// when it meets a line.)
+fn doubles_back(a: &Segment, b: &Segment) -> bool {
+    let at = match (a, b) {
+        (Segment::Line { b: p, .. }, _) => *p,
+        (_, Segment::Line { a: p, .. }) => *p,
+        (Segment::Arc { .. }, Segment::Arc { .. }) => b.start(),
+        _ => return false,
+    };
+    let dir = |s: &Segment| -> Vec2 {
+        match *s {
+            Segment::Line { a, b } => b - a,
+            Segment::Arc { center, sweep, .. } => (at - center).perp() * sweep.signum(),
+            Segment::Circle { .. } => Vec2::new(1.0, 0.0),
+        }
+    };
+    let (u, v) = (dir(a), dir(b));
+    let d = u.dot(v);
+    d < 0.0 && d * d >= 0.9999 * u.length_sq() * v.length_sq()
+}
+
+/// A loop's joint where it doubles back on itself (a line leaving tangent along the arc it came on)
+/// is a knife edge whose two sides run within tolerance of each other for a stretch: walls a boolean
+/// cannot tell apart. They end instead where they part, the tip a shade shorter than drawn.
+fn blunt_cusps(l: &ProfileLoop) -> ProfileLoop {
+    let n = l.segments.len();
+    let length = |s: &Segment| match *s {
+        Segment::Line { a, b } => a.distance(b),
+        Segment::Arc { radius, sweep, .. } => radius * sweep.abs(),
+        Segment::Circle { .. } => 0.0,
+    };
+    // `s` along the segment back from its end, or on from its start
+    let at = |seg: &Segment, end: bool, s: f64| -> Point2 {
+        match *seg {
+            Segment::Line { a, b } => {
+                let t = s / a.distance(b);
+                if end { b.lerp(a, t) } else { a.lerp(b, t) }
+            }
+            Segment::Arc {
+                center,
+                radius,
+                start,
+                sweep,
+            } => {
+                let w = sweep.signum() * s / radius;
+                arc_point(center, radius, if end { start + sweep - w } else { start + w })
+            }
+            Segment::Circle { center, .. } => center,
+        }
+    };
+    let cut = |seg: &Segment, end: bool, s: f64| -> Segment {
+        match *seg {
+            Segment::Line { a, b } => {
+                let q = at(seg, end, s);
+                if end {
+                    Segment::Line { a, b: q }
+                } else {
+                    Segment::Line { a: q, b }
+                }
+            }
+            Segment::Arc {
+                center,
+                radius,
+                start,
+                sweep,
+            } => {
+                let w = sweep.signum() * s / radius;
+                Segment::Arc {
+                    center,
+                    radius,
+                    start: if end { start } else { start + w },
+                    sweep: sweep - w,
+                }
+            }
+            c => c,
+        }
+    };
+    let mut out = l.segments.clone();
+    for i in 0..n {
+        let j = (i + 1) % n;
+        let (a, b) = (out[i].0, out[j].0);
+        if !doubles_back(&a, &b) {
+            continue;
+        }
+        let part = 0.9 * tol::LINEAR;
+        let apart = |s: f64| at(&a, true, s).distance(at(&b, false, s));
+        let far = 0.5 * length(&a).min(length(&b));
+        if apart(far) < part || apart(0.0) >= part {
+            continue;
+        }
+        let (mut lo, mut hi) = (0.0, far);
+        for _ in 0..50 {
+            let mid = 0.5 * (lo + hi);
+            if apart(mid) < part {
+                lo = mid;
+            } else {
+                hi = mid;
+            }
+        }
+        out[i].0 = cut(&a, true, lo);
+        out[j].0 = cut(&b, false, lo);
+    }
+    ProfileLoop::new(out)
+}
+
 impl Profile {
     /// Checks the profile and returns it with the outer loop counter-clockwise
     /// and every hole clockwise; a loop that crosses or touches itself is refused.
@@ -560,7 +666,8 @@ impl Profile {
         for (i, l) in self.loops.iter().enumerate() {
             // a lone circle is drawn as a convex polygon: it cannot cross itself
             let circle = matches!(l.segments[..], [(Segment::Circle { .. }, _)]);
-            if !circle && crosses_itself(&l.outline()) {
+            // (a knife edge's sides, samples of them, cross within tolerance)
+            if !circle && crosses_itself(&l.outline()) && crosses_itself(&blunt_cusps(l).outline()) {
                 return Err(ProfileError::SelfIntersecting { loop_index: i });
             }
         }
@@ -582,6 +689,24 @@ impl Profile {
             }
         }
         Ok(Profile {
+            plane: self.plane,
+            loops,
+        })
+    }
+
+    /// This profile with its knife edges ended where their sides part, if it has any: for a boolean
+    /// that cannot tell the sides apart (a tip that stays can meet other faces exactly, so it comes first).
+    pub fn blunted(&self) -> Option<Profile> {
+        let cusp = |l: &ProfileLoop| {
+            let n = l.segments.len();
+            (0..n).any(|i| doubles_back(&l.segments[i].0, &l.segments[(i + 1) % n].0))
+        };
+        if !self.loops.iter().any(cusp) {
+            return None;
+        }
+        let loops: Vec<ProfileLoop> = self.loops.iter().map(blunt_cusps).collect();
+        let same = |a: &ProfileLoop, b: &ProfileLoop| a.segments == b.segments;
+        (!loops.iter().zip(&self.loops).all(|(a, b)| same(a, b))).then_some(Profile {
             plane: self.plane,
             loops,
         })

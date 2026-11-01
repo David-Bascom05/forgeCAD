@@ -279,7 +279,7 @@ pub fn face_uv_loops_with(body: &Body, face: FaceId, segments: impl Fn(&Edge) ->
 
 /// Shifts every loop after the first by whole periods so the middle of its span
 /// falls in the first loop's span.
-pub fn align_loops<'a>(body: &Body, face: FaceId, mut loops: impl Iterator<Item = &'a mut Vec<Point2>>) {
+pub fn align_loops<'a>(body: &Body, face: FaceId, loops: impl Iterator<Item = &'a mut Vec<Point2>>) {
     // spans, not sample centroids: a full-turn loop whose samples bunch near one end
     // would otherwise pull the others a period away
     let span = |pts: &[Point2]| {
@@ -288,8 +288,31 @@ pub fn align_loops<'a>(body: &Body, face: FaceId, mut loops: impl Iterator<Item 
             |a, q| (a.0.min(q.x), a.1.max(q.x), a.2.min(q.y), a.3.max(q.y)),
         )
     };
-    let Some(first) = loops.next() else { return };
-    let r = span(first);
+    let loops: Vec<&mut Vec<Point2>> = loops.collect();
+    if loops.len() < 2 {
+        return;
+    }
+    // (the widest: on a curved face a hole may come first, and the rest go in the outline's window)
+    let spans: Vec<_> = loops.iter().map(|l| span(&l[..])).collect();
+    let area = |s: &(f64, f64, f64, f64)| (s.1 - s.0) * (s.3 - s.2);
+    let mut at = 0;
+    for k in 1..spans.len() {
+        if area(&spans[k]) > area(&spans[at]) {
+            at = k;
+        }
+    }
+    let r = spans[at];
+    let first: &Vec<Point2> = &*loops[at];
+    // a face whose seam steps (pieces with seams apart, joined) spans more than a period, so its
+    // span no longer says where a hole goes: that takes the outline itself
+    let outline: Option<Vec<Point2>> = body
+        .face(face)
+        .surface
+        .domain()
+        .u
+        .period
+        .is_some_and(|per| r.1 - r.0 > per + 1e-6)
+        .then(|| first.clone());
     let d = body.face(face).surface.domain();
     // the shift that puts `c` inside [lo, hi], else the one nearest its middle
     let fit = |c: f64, lo: f64, hi: f64, period: Option<f64>| match period {
@@ -299,9 +322,19 @@ pub fn align_loops<'a>(body: &Body, face: FaceId, mut loops: impl Iterator<Item 
             .unwrap_or_else(|| per * ((0.5 * (lo + hi) - c) / per).round()),
         None => 0.0,
     };
-    for l in loops {
-        let s = span(l);
-        let du = fit(0.5 * (s.0 + s.1), r.0, r.1, d.u.period);
+    for (k, l) in loops.into_iter().enumerate() {
+        if k == at {
+            continue;
+        }
+        let s = spans[k];
+        let mut du = fit(0.5 * (s.0 + s.1), r.0, r.1, d.u.period);
+        if let (Some(o), Some(per), Some(&q)) = (&outline, d.u.period, l.first())
+            && let Some(k) = [du, du - per, du + per]
+                .into_iter()
+                .find(|k| forge_math::predicates::inside_polygon(Point2::new(q.x + k, q.y), o))
+        {
+            du = k;
+        }
         let dv = fit(0.5 * (s.2 + s.3), r.2, r.3, d.v.period);
         for p in l.iter_mut() {
             *p = Point2::new(p.x + du, p.y + dv);
