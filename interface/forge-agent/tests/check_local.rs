@@ -189,6 +189,90 @@ fn loops_that_cross_are_found() {
     assert!(kinds.contains("LoopsCross"), "{kinds:?}");
 }
 
+/// A new hole round a kept one on a plane face: the kept loop's coedges face into the new hole, though neither
+/// loop crosses the other. What is near a change must be tested.
+#[test]
+fn a_kept_loop_inside_a_new_one_is_found() {
+    let stages = stages_of(
+        "base: extrude 12 rect -60 -60 120 120
+hole 3 at 0 0 0 thru
+hole 12 at 30 0 0 thru
+",
+    );
+    let (old, good) = (&stages[stages.len() - 2], &stages[stages.len() - 1]);
+    let wall: Vec<_> = good
+        .face_ids()
+        .filter(|&f| matches!(&good.face(f).surface, forge_geom::Surface::Cylinder(c) if (c.radius - 6.0).abs() < 1e-9))
+        .collect();
+    assert!(!wall.is_empty());
+    let mut kinds = BTreeSet::new();
+    same_answer(
+        &moved(good, &wall, Vec3::new(-30.0, 0.0, 0.0)),
+        old,
+        "round the small hole",
+        &mut kinds,
+    );
+    assert!(kinds.contains("FaceWrongSide"), "{kinds:?}");
+}
+
+/// Faces unchanged, their material changed: a void moved round another, and a void taken away from round an
+/// island. Only an unchanged face's probe tells, so where material changed must be asked about.
+#[test]
+fn unchanged_faces_in_changed_material_are_found() {
+    let stages = stages_of(
+        "base: extrude 60 rect -60 -60 120 120
+big: extrude cut 20 at 0 0 20 rect -40 -40 30 30
+small: extrude cut 4 at 0 0 28 rect 25 25 4 4
+",
+    );
+    let good = stages[stages.len() - 1].clone();
+    assert_eq!(good.shells.len(), 3, "{:?}", good.shells.len());
+    let mut kinds = BTreeSet::new();
+    let of = |x: f64| {
+        (0..good.shells.len()).find(|&k| {
+            good.shells[k].faces.iter().any(|&f| {
+                let b = good.face_box(f);
+                (b.x.hi - b.x.lo - x).abs() < 1e-3
+            })
+        })
+    };
+    let big = of(30.0).expect("the big void");
+    let by = Vec3::new(40.0, 40.0, 0.0);
+    same_answer(
+        &moved(&good, &good.shells[big].faces, by),
+        &good,
+        "big round small",
+        &mut kinds,
+    );
+    assert!(kinds.contains("ShellsOverlap"), "{kinds:?}");
+
+    let island = stages_of(
+        "base: extrude 60 rect -60 -60 120 120
+big: extrude cut 40 at 0 0 10 rect -40 -40 80 80
+isle: extrude add 10 at 0 0 25 rect -5 -5 10 10
+",
+    );
+    let good = island[island.len() - 1].clone();
+    assert_eq!(good.shells.len(), 3, "{:?}", good.shells.len());
+    assert!(check(&good).is_empty());
+    let void = (0..good.shells.len())
+        .find(|&k| {
+            good.shells[k].faces.iter().any(|&f| {
+                let b = good.face_box(f);
+                (b.x.hi - b.x.lo - 80.0).abs() < 1e-3
+            })
+        })
+        .expect("the void");
+    let mut bad = good.clone();
+    for &f in &good.shells[void].faces {
+        bad.kill_face(f);
+    }
+    let bad = bad.compact();
+    let mut kinds = BTreeSet::new();
+    same_answer(&bad, &good, "void gone from round the island", &mut kinds);
+    assert!(kinds.contains("ShellsOverlap"), "{kinds:?}");
+}
+
 /// A body with a void: moved out of the material, or into another void, the void's shell is at fault.
 #[test]
 fn a_shell_moved_is_found() {
