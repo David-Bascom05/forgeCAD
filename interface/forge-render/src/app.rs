@@ -5,7 +5,8 @@ use crate::gui::{Gui, Waker};
 use crate::render;
 use crate::shell::{Action, Edge};
 use crate::viewer::now_ms;
-use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::{Arc, Mutex};
 use std::time::Instant;
 use winit::application::ApplicationHandler;
 use winit::dpi::{LogicalSize, PhysicalSize};
@@ -25,7 +26,134 @@ struct Live {
     egui: egui_winit::State,
     /// Input to pixels: when the oldest input not yet on screen came.
     input_at: Option<f64>,
-    click_ms: Vec<f64>,
+    presenter: Presenter,
+    /// The window changed size while a frame was going out.
+    configure: bool,
+}
+
+/// Presents on its own thread. A present can wait a long time on the compositor, and wgpu holds its
+/// submit lock for all of it: so the loop neither presents nor submits while one's out, and the frame
+/// it would have drawn is dropped for a later one that shows everything.
+struct Presenter {
+    send: Option<std::sync::mpsc::Sender<(wgpu::SurfaceTexture, Option<f64>)>>,
+    thread: Option<std::thread::JoinHandle<()>>,
+    out: Arc<PresentState>,
+}
+
+#[derive(Default)]
+struct PresentState {
+    busy: AtomicBool,
+    /// The loop wanted to draw while it was busy.
+    wanted: AtomicBool,
+    log: Mutex<PresentLog>,
+}
+
+#[derive(Default)]
+struct PresentLog {
+    /// How long each present call took.
+    calls: Vec<f64>,
+    /// Input to the frame showing it having gone out.
+    inputs: Vec<f64>,
+    dropped: usize,
+}
+
+impl Presenter {
+    fn start(queue: wgpu::Queue, wake: Waker, times: bool) -> Presenter {
+        let (send, recv) = std::sync::mpsc::channel::<(wgpu::SurfaceTexture, Option<f64>)>();
+        let out = Arc::new(PresentState::default());
+        let state = out.clone();
+        let thread = std::thread::Builder::new()
+            .name("present".into())
+            .spawn(move || {
+                while let Ok((frame, input_at)) = recv.recv() {
+                    let t = now_ms();
+                    queue.present(frame);
+                    let done = now_ms();
+                    {
+                        let mut log = state.log.lock().unwrap_or_else(|e| e.into_inner());
+                        log.calls.push(done - t);
+                        if let Some(at) = input_at {
+                            log.inputs.push(done - at);
+                        }
+                    }
+                    if times && done - t > SLOW_MS {
+                        eprintln!("forge-app: slow present {:.1} ms", done - t);
+                    }
+                    state.busy.store(false, Ordering::SeqCst);
+                    if state.wanted.swap(false, Ordering::SeqCst) {
+                        wake();
+                    }
+                }
+            })
+            .expect("a thread");
+        Presenter {
+            send: Some(send),
+            thread: Some(thread),
+            out,
+        }
+    }
+
+    /// Is one out? If so, the loop's woken when it's back.
+    fn busy(&self) -> bool {
+        if !self.out.busy.load(Ordering::SeqCst) {
+            return false;
+        }
+        self.out.wanted.store(true, Ordering::SeqCst);
+        if self.out.busy.load(Ordering::SeqCst) {
+            return true;
+        }
+        self.out.wanted.store(false, Ordering::SeqCst);
+        false
+    }
+
+    fn present(&self, frame: wgpu::SurfaceTexture, input_at: Option<f64>) {
+        self.out.busy.store(true, Ordering::SeqCst);
+        if let Some(s) = &self.send {
+            let _ = s.send((frame, input_at));
+        }
+    }
+
+    fn dropped(&self) {
+        self.out.log.lock().unwrap_or_else(|e| e.into_inner()).dropped += 1;
+    }
+
+    /// Waits for what's out; nothing's presented after.
+    fn stop(&mut self) {
+        self.send = None;
+        if let Some(t) = self.thread.take() {
+            let _ = t.join();
+        }
+    }
+}
+
+fn spread(mut v: Vec<f64>) -> String {
+    v.sort_by(f64::total_cmp);
+    let at = |p: f64| v[((v.len() - 1) as f64 * p) as usize];
+    format!(
+        "{} of them, p50 {:.2} p95 {:.2} p99 {:.2} max {:.2} ms",
+        v.len(),
+        at(0.5),
+        at(0.95),
+        at(0.99),
+        at(1.0)
+    )
+}
+
+/// How frames go to the compositor: what was asked for if the window can, else one that never waits
+/// on its frame callbacks, else the one every window has.
+fn present_mode(asked: Option<&str>, has: &[wgpu::PresentMode]) -> wgpu::PresentMode {
+    use wgpu::PresentMode as P;
+    let named = asked.and_then(|a| match a {
+        "fifo" => Some(P::Fifo),
+        "mailbox" => Some(P::Mailbox),
+        "immediate" => Some(P::Immediate),
+        _ => None,
+    });
+    named
+        .into_iter()
+        .chain([P::Mailbox, P::Fifo])
+        .find(|m| has.contains(m))
+        .unwrap_or(P::Fifo)
 }
 
 pub struct App {
@@ -38,6 +166,8 @@ pub struct App {
     /// Report input-to-pixels on exit (`--times`).
     times: bool,
     dialog: Option<std::sync::mpsc::Receiver<Option<String>>>,
+    /// `--present`: how frames go out.
+    present: Option<String>,
 }
 
 fn resize_direction(e: Edge) -> ResizeDirection {
@@ -56,6 +186,14 @@ fn resize_direction(e: Edge) -> ResizeDirection {
 impl App {
     fn draw(&mut self, on_loop: &ActiveEventLoop) {
         let Some(l) = &mut self.live else { return };
+        if l.presenter.busy() {
+            l.presenter.dropped();
+            return;
+        }
+        if std::mem::take(&mut l.configure) {
+            let device = l.gui.device();
+            l.surface.configure(&device, &l.config);
+        }
         use wgpu::CurrentSurfaceTexture as T;
         let began = now_ms();
         let frame = match l.surface.get_current_texture() {
@@ -76,17 +214,12 @@ impl App {
         l.egui.handle_platform_output(&l.window, out.platform);
         let output_ms = now_ms() - drawn;
         l.window.pre_present_notify();
-        let t = now_ms();
-        l.gui.queue().present(frame);
-        let present_ms = now_ms() - t;
+        l.presenter.present(frame, l.input_at.take());
         let done = now_ms();
-        if let Some(at) = l.input_at.take() {
-            l.click_ms.push(done - at);
-        }
         if self.times && done - began > SLOW_MS {
             let t = out.times;
             eprintln!(
-                "forge-app: slow frame {:.1} ms: acquire {:.1}, ui {:.1}, view {:.1} (drawn {}), tessellate {:.1}, draw {:.1}, platform {output_ms:.1}, present call {present_ms:.1}",
+                "forge-app: slow frame {:.1} ms: acquire {:.1}, ui {:.1}, view {:.1} (drawn {}), tessellate {:.1}, draw {:.1}, platform {output_ms:.1}",
                 done - began,
                 acquired - began,
                 t.ui,
@@ -175,6 +308,12 @@ impl ApplicationHandler for App {
         let mut config = surface
             .get_default_config(&adapter, size.width.max(1), size.height.max(1))
             .expect("the GPU draws to this window");
+        let modes = surface.get_capabilities(&adapter).present_modes;
+        config.present_mode = present_mode(self.present.as_deref(), &modes);
+        eprintln!(
+            "forge-app: present modes {modes:?}, using {:?}",
+            config.present_mode
+        );
         // the chrome blends in sRGB, as a browser does
         config.format = config.format.remove_srgb_suffix();
         config.desired_maximum_frame_latency = 1;
@@ -195,6 +334,7 @@ impl ApplicationHandler for App {
             let _ = proxy.send_event(());
         });
         let scale = window.scale_factor() as f32;
+        let presenter = Presenter::start(queue.clone(), waker.clone(), self.times);
         let mut gui = Gui::new(device, queue, adapter.get_info(), config.format, waker, scale);
         if let Some(f) = self.file.take() {
             gui.open(&f);
@@ -215,7 +355,8 @@ impl ApplicationHandler for App {
             gui,
             egui,
             input_at: None,
-            click_ms: Vec::new(),
+            presenter,
+            configure: false,
         });
     }
 
@@ -254,8 +395,7 @@ impl ApplicationHandler for App {
             WindowEvent::Resized(PhysicalSize { width, height }) if *width > 0 && *height > 0 => {
                 l.config.width = *width;
                 l.config.height = *height;
-                let device = l.gui.device();
-                l.surface.configure(&device, &l.config);
+                l.configure = true;
                 redraw = true;
             }
             WindowEvent::ModifiersChanged(m) => self.mods = m.state(),
@@ -292,6 +432,11 @@ impl ApplicationHandler for App {
 
     fn about_to_wait(&mut self, on_loop: &ActiveEventLoop) {
         let Some(l) = &mut self.live else { return };
+        // nothing can be drawn till it's back, and it wakes the loop
+        if l.presenter.busy() {
+            on_loop.set_control_flow(ControlFlow::Wait);
+            return;
+        }
         if l.gui.picks() {
             l.window.request_redraw();
         }
@@ -311,19 +456,17 @@ impl ApplicationHandler for App {
     }
 
     fn exiting(&mut self, _: &ActiveEventLoop) {
-        if self.times
-            && let Some(l) = &mut self.live
-        {
-            l.click_ms.sort_by(f64::total_cmp);
-            if !l.click_ms.is_empty() {
-                let at = |p: f64| l.click_ms[((l.click_ms.len() - 1) as f64 * p) as usize];
-                println!(
-                    "input to present: {} inputs, p50 {:.2} p95 {:.2} max {:.2} ms",
-                    l.click_ms.len(),
-                    at(0.5),
-                    at(0.95),
-                    at(1.0)
-                );
+        if let Some(l) = &mut self.live {
+            l.presenter.stop();
+            if self.times {
+                let log = l.presenter.out.log.lock().unwrap_or_else(|e| e.into_inner());
+                if !log.inputs.is_empty() {
+                    println!("input to present: {}", spread(log.inputs.clone()));
+                }
+                if !log.calls.is_empty() {
+                    println!("present calls: {}", spread(log.calls.clone()));
+                }
+                println!("frames dropped while one was out: {}", log.dropped);
             }
         }
         // while the display connection is still open: what holds it goes first (the clipboard), then
@@ -349,7 +492,12 @@ impl ApplicationHandler for App {
 }
 
 /// Runs the app, on this file if there is one.
-pub fn run(file: Option<String>, size: (f64, f64), times: bool) -> Result<(), String> {
+pub fn run(
+    file: Option<String>,
+    size: (f64, f64),
+    times: bool,
+    present: Option<String>,
+) -> Result<(), String> {
     let on_loop = EventLoop::with_user_event().build().map_err(|e| e.to_string())?;
     let proxy = on_loop.create_proxy();
     let mut app = App {
@@ -361,6 +509,7 @@ pub fn run(file: Option<String>, size: (f64, f64), times: bool) -> Result<(), St
         next: None,
         times,
         dialog: None,
+        present,
     };
     on_loop.run_app(&mut app).map_err(|e| e.to_string())
 }

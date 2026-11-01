@@ -4,6 +4,7 @@ use forge_render::gui::Headless;
 
 const USAGE: &str = "forge-app [PART | file.fc] [--size WxH] [--times]
   [--shot FILE.ppm [--scale S] [--light] [--tab N] [--select NAME] [--click NAME].. [--at X Y] [--sketch ROW;ROW..] [--edit NAME] [--draw TOOL X Y] [--view YAW PITCH]]
+  [--present fifo|mailbox|immediate]
   [--bench]
 PART: a bench part or a .fc file. --times: input-to-present on exit. --shot: one frame, no window.
 --bench: what clicks and frames cost, no window.";
@@ -24,6 +25,7 @@ struct Args {
     draw: Option<(String, f64, f64)>,
     bench: bool,
     times: bool,
+    present: Option<String>,
 }
 
 fn args() -> Result<Args, String> {
@@ -43,6 +45,7 @@ fn args() -> Result<Args, String> {
         draw: None,
         bench: false,
         times: false,
+        present: None,
     };
     let mut it = std::env::args().skip(1);
     while let Some(k) = it.next() {
@@ -80,6 +83,7 @@ fn args() -> Result<Args, String> {
             }
             "--bench" => a.bench = true,
             "--times" => a.times = true,
+            "--present" => a.present = Some(v()?),
             s if s.starts_with("--") => return Err(USAGE.into()),
             part => a.file = Some(part.into()),
         }
@@ -219,7 +223,7 @@ fn main() {
 fn run() -> Result<(), String> {
     let a = args()?;
     if a.shot.is_none() && !a.bench {
-        return forge_render::app::run(a.file, (a.size.0 as f64, a.size.1 as f64), a.times);
+        return forge_render::app::run(a.file, (a.size.0 as f64, a.size.1 as f64), a.times, a.present);
     }
     let mut h = Headless::new(a.size, a.scale)?;
     if a.light {
