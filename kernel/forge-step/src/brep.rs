@@ -1313,7 +1313,14 @@ impl<'a> BrepTopo<'a> {
 
     /// TopExp_Explorer: depth first, each child in order, not below a match.
     fn explore(&self, u: Used, k: &str, out: &mut Vec<Used>) -> Option<()> {
-        if out.len() > MAX_FACES {
+        // shapes shared many times over can make a walk exponential: a budget of visits, a bound on depth
+        let mut budget = 4 * MAX_FACES;
+        self.walk(u, k, out, &mut budget, 0)
+    }
+
+    fn walk(&self, u: Used, k: &str, out: &mut Vec<Used>, budget: &mut usize, depth: u32) -> Option<()> {
+        *budget = budget.checked_sub(1)?;
+        if depth > 4 * MAX_WRAP {
             return None;
         }
         if self.is(u, k) {
@@ -1323,13 +1330,15 @@ impl<'a> BrepTopo<'a> {
         for c in &self.f.shapes[u.shape - 1].children {
             let l = self.f.locs.get(c.loc)?;
             self.f.shapes.get(c.shape.wrapping_sub(1))?;
-            self.explore(
+            self.walk(
                 Used {
                     shape: c.shape,
                     xf: u.xf.then(l),
                 },
                 k,
                 out,
+                budget,
+                depth + 1,
             )?;
         }
         Some(())
@@ -1498,11 +1507,9 @@ impl<'a> BrepTopo<'a> {
         }
         let (at, xf, a, b) = self.edge_curve(e)?;
         let (raw, _) = self.raw(at, 0)?;
-        Some(
-            (0..=n)
-                .map(|i| place(&xf, eval_raw(&raw, a + (b - a) * i as f64 / n as f64)))
-                .collect(),
-        )
+        (0..=n)
+            .map(|i| Some(place(&xf, eval_raw(&raw, a + (b - a) * i as f64 / n as f64)?)))
+            .collect()
     }
 }
 
@@ -1542,8 +1549,9 @@ impl Cur<'_, '_> {
     }
 }
 
-fn eval_raw(c: &Raw, u: f64) -> [f64; 3] {
-    match c {
+/// None for a parameter some periods away from a periodic spline's, or a period of next to nothing.
+fn eval_raw(c: &Raw, u: f64) -> Option<[f64; 3]> {
+    Some(match c {
         Raw::Line(o, d) => [o[0] + u * d[0], o[1] + u * d[1], o[2] + u * d[2]],
         Raw::Conic(o, x, y, ra, rb) => {
             let (s, co) = dmath::sin_cos(u);
@@ -1559,13 +1567,21 @@ fn eval_raw(c: &Raw, u: f64) -> [f64; 3] {
             let mut u = u;
             if let Some((lo, hi)) = *per {
                 let p = hi - lo;
-                if p > 0.0 {
-                    while u > hi {
-                        u -= p;
-                    }
-                    while u < lo {
-                        u += p;
-                    }
+                if p <= 1e-12 * lo.abs().max(hi.abs()).max(1.0) {
+                    return None;
+                }
+                // a step at a time, as the Python samples it; a file's edge lies within a period or two
+                let mut n = 0;
+                while u > hi && n < 64 {
+                    u -= p;
+                    n += 1;
+                }
+                while u < lo && n < 64 {
+                    u += p;
+                    n += 1;
+                }
+                if n == 64 {
+                    return None;
                 }
             }
             let last = poles.len() - 1;
@@ -1588,7 +1604,7 @@ fn eval_raw(c: &Raw, u: f64) -> [f64; 3] {
             let w = d[deg][3];
             [d[deg][0] / w, d[deg][1] / w, d[deg][2] / w]
         }
-    }
+    })
 }
 
 #[cfg(test)]
@@ -1611,5 +1627,41 @@ mod topo_tests {
         let q = t.sample(es[2], 2).expect("samples");
         assert!((q[1].x - 5.0).abs() < 1e-15 && (q[1].y - 2.0).abs() < 1e-15);
         assert_eq!(t.wires().expect("wires")[0].len(), 3);
+    }
+
+    fn header(curves: &str) -> String {
+        format!(
+            "CASCADE Topology V1, (c) Matra-Datavision\nLocations 0\nCurve2ds 0\n{curves}Polygon3D 0\nPolygonOnTriangulations 0\nSurfaces 0\nTriangulations 0\n\n"
+        )
+    }
+
+    #[test]
+    fn shapes_shared_over_and_over_are_walked_within_a_budget() {
+        // forty compounds, each holding the next one twice: 2^40 paths to one edge
+        let n = 40;
+        let mut t = header("Curves 1\n1 0 0 0 1 0 0\n");
+        t += &format!("TShapes {}\nVe\n1e-07\n0 0 0\n0 0\n\n0101101\n*\n", n + 2);
+        t += &format!(
+            "Ed\n 1e-07 1 1 0\n1  1 0 0 1\n0\n\n0101000\n+{0} 0 -{0} 0 *\n",
+            n + 2
+        );
+        for k in (1..=n).rev() {
+            t += &format!("Co\n\n1100000\n+{0} 0 +{0} 0 *\n", k + 1);
+        }
+        t += "\n+1 0\n";
+        let topo = BrepTopo::new(t.as_bytes()).expect("reads");
+        assert!(topo.edges().is_none());
+        assert!(topo.wires().is_none());
+    }
+
+    #[test]
+    fn a_period_of_next_to_nothing_samples_as_none() {
+        let mut t = header("Curves 1\n7 0 1 1 2 3\n0 0 0 1 0 0\n0 1 5e-21 1 1e-20 1\n");
+        t += "TShapes 3\nVe\n1e-07\n0 0 0\n0 0\n\n0101101\n*\nVe\n1e-07\n1 0 0\n0 0\n\n0101101\n*\n";
+        t += "Ed\n 1e-07 1 1 0\n1  1 0 0 1000000\n0\n\n0101000\n+3 0 -2 0 *\n\n+1 0\n";
+        let topo = BrepTopo::new(t.as_bytes()).expect("reads");
+        let es = topo.edges().expect("edges");
+        assert_eq!(es.len(), 1);
+        assert!(topo.sample(es[0], 8).is_none());
     }
 }
