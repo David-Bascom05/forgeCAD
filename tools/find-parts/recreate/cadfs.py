@@ -794,7 +794,8 @@ class Tr:
             raise Unresolved("an imprint of an unread sketch")
         self.plain.setdefault(fid, self.sk[fid][0])
         plain = self.plain[fid]
-        a = self.imprinted(fid) if self.names_outside(q, env) else plain
+        # a line on a face bounds nothing by itself: the face's own edges are what close it
+        a = self.imprinted(fid) if self.names_outside(q, env) or self.bounds_nothing(plain, q, env) else plain
         self.current_fr = self.sk[fid][1]
         cands = None
         for d in q[1][3].get("disambiguationData", []):
@@ -831,6 +832,17 @@ class Tr:
         if len(cands) > 1:
             raise Unresolved("a region the query does not settle")
         return fid, next(iter(cands))
+
+    def bounds_nothing(self, a, q, env):
+        for d in q[1][3].get("disambiguationData", []):
+            if d[0] == "TD":
+                for item in d[1][0]:
+                    try:
+                        self.edge_pieces(a, item[0], env)
+                    except Unresolved as x:
+                        if "bounds nothing" in str(x):
+                            return True
+        return False
 
     def edge_pieces(self, a, eq, env):
         """The arrangement pieces an imprint edge query can be, its neighbours narrowing it down."""

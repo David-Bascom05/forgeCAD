@@ -25,8 +25,9 @@ from sketch2d import Arrangement
 TOL = 2e-3
 HERE = os.path.dirname(os.path.abspath(__file__))
 SOLID = {"PartDesign::Pad", "PartDesign::Pocket", "PartDesign::Revolution", "PartDesign::Groove", "PartDesign::Fillet", "PartDesign::Chamfer", "PartDesign::Mirrored", "PartDesign::PolarPattern", "PartDesign::LinearPattern", "PartDesign::Hole", "PartDesign::Loft", "PartDesign::Pipe", "PartDesign::AdditiveLoft", "PartDesign::AdditivePipe", "PartDesign::SubtractiveLoft", "PartDesign::SubtractivePipe", "PartDesign::Draft", "PartDesign::Thickness", "PartDesign::MultiTransform", "PartDesign::Scaled", "PartDesign::AdditiveBox", "PartDesign::AdditiveCylinder", "PartDesign::Boolean", "PartDesign::Helix", "PartDesign::AdditiveHelix", "PartDesign::SubtractiveHelix", "PartDesign::FeatureBase", "PartDesign::SubtractiveBox", "PartDesign::SubtractiveCylinder", "PartDesign::AdditiveSphere", "PartDesign::SubtractiveSphere", "PartDesign::AdditiveCone", "PartDesign::SubtractiveCone", "PartDesign::AdditiveTorus", "PartDesign::SubtractiveTorus", "PartDesign::AdditivePrism", "PartDesign::SubtractivePrism", "PartDesign::AdditiveWedge", "PartDesign::SubtractiveWedge", "PartDesign::AdditiveEllipsoid", "PartDesign::SubtractiveEllipsoid", "Part::Revolution", "Part::Box", "Part::Cylinder"}
+TRANSFORMS = {"PartDesign::PolarPattern", "PartDesign::LinearPattern", "PartDesign::Mirrored"}
 FLAT = {"Sketcher::SketchObject", "Part::Part2DObjectPython"}  # what a pad's profile can be; only a sketch has rows, the rest a stored shape
-NEEDS = {"Part::Revolution", "Part::Box", "Part::Cylinder", "PartDesign::Pad", "PartDesign::Pocket", "PartDesign::Revolution", "PartDesign::Groove", "PartDesign::Fillet", "PartDesign::Chamfer", "PartDesign::Mirrored", "PartDesign::PolarPattern", "PartDesign::LinearPattern"}
+NEEDS = {"PartDesign::Hole", "PartDesign::MultiTransform", "PartDesign::AdditiveBox", "PartDesign::SubtractiveBox", "PartDesign::AdditiveCylinder", "PartDesign::SubtractiveCylinder", "Part::Revolution", "Part::Box", "Part::Cylinder", "PartDesign::Pad", "PartDesign::Pocket", "PartDesign::Revolution", "PartDesign::Groove", "PartDesign::Fillet", "PartDesign::Chamfer", "PartDesign::Mirrored", "PartDesign::PolarPattern", "PartDesign::LinearPattern"}
 
 
 class Doc:
@@ -519,7 +520,79 @@ class Tr:
             role = d.prop(ref, "Role")
             w = role.find("String").get("value") if role is not None else ""
             return (0.0, 0.0, 0.0), {"X_Axis": (1.0, 0.0, 0.0), "Y_Axis": (0.0, 1.0, 0.0), "Z_Axis": (0.0, 0.0, 1.0)}.get(w) or self.fail(prop)
+        if d.types.get(ref) == "PartDesign::Line":
+            fr = Frame(d.placement(ref))
+            return fr.o, fr.n
         raise Unsupported("a pattern axis on " + (d.types.get(ref) or "nothing"))
+
+    def transform(self, name, t, src):
+        d = self.doc
+        if t == "PartDesign::PolarPattern":
+            o, a = self.axis_of(name, "Axis")
+            if d.boolean(name, "Reversed"):
+                a = tuple(-x for x in a)
+            return f"pattern {src} circ {vtext(o)} {vtext(a)} {d.integer(name, 'Occurrences')} {num(d.flt(name, 'Angle', 360.0))}"
+        if t == "PartDesign::LinearPattern":
+            _, a = self.axis_of(name, "Direction")
+            if d.boolean(name, "Reversed"):
+                a = tuple(-x for x in a)
+            n = d.integer(name, "Occurrences")
+            return f"pattern {src} lin {vtext(a)} {n} {num(d.flt(name, 'Length') / max(n - 1, 1))}"
+        ref, subs = d.link(name, "MirrorPlane"), d.subs(name, "MirrorPlane")
+        if d.types.get(ref) == "Sketcher::SketchObject":
+            fr = Frame(d.placement(ref))
+            n = {"H_Axis": fr.y, "V_Axis": fr.x, "": fr.n}.get(subs[0] if subs else "") or self.fail("mirror")
+            o = fr.o
+        elif d.types.get(ref) == "App::Plane":
+            role = d.prop(ref, "Role").find("String").get("value")
+            n = {"XY_Plane": (0.0, 0.0, 1.0), "XZ_Plane": (0.0, 1.0, 0.0), "YZ_Plane": (1.0, 0.0, 0.0)}.get(role) or self.fail("mirror")
+            o = (0.0, 0.0, 0.0)
+        elif d.types.get(ref) == "PartDesign::Plane":
+            fr = Frame(d.placement(ref))
+            n, o = fr.n, fr.o
+        else:
+            raise Unsupported("a mirror in " + (d.types.get(ref) or "nothing"))
+        return f"pattern {src} mirror z {vtext(n)} at {vtext(o)}"
+
+    def hole(self, name):
+        """One hole at each of the sketch's circles, drilled against its normal; its seat from what the file stored."""
+        d = self.doc
+        if d.boolean(name, "Tapered") or d.boolean(name, "ModelActualThread") or d.boolean(name, "Midplane"):
+            raise Unsupported("a tapered, threaded or two-way hole")
+        sk = d.link(name, "Profile")
+        fr = Frame(d.placement(sk))
+        ents = [e for e in sketch_ents(d, sk) if not e.get("construction")]
+        if not ents or any(e["kind"] != "skCircle" for e in ents):
+            raise Unsupported("a hole on something other than circles")
+        z = fr.n if d.boolean(name, "Reversed") else tuple(-x for x in fr.n)
+        t = d.integer(name, "DepthType")
+        ext = "thru" if t == 1 else num(d.flt(name, "Depth")) if t == 0 else None
+        if ext is None:
+            raise Unsupported("a hole up to a face")
+        if t == 0 and d.integer(name, "DrillPoint") == 1:
+            ext += f" pt {num(d.flt(name, 'DrillPointAngle'))}"
+        seat = ""
+        if d.integer(name, "HoleCutType") != 0:
+            if d.flt(name, "HoleCutDepth") > 0:
+                seat = f" cb {num(d.flt(name, 'HoleCutDiameter'))} {num(d.flt(name, 'HoleCutDepth'))}"
+            else:
+                seat = f" cs {num(d.flt(name, 'HoleCutDiameter'))} {num(d.flt(name, 'HoleCutCountersinkAngle'))}"
+        return [f"hole {num(d.flt(name, 'Diameter'))} z {vtext(z)} x {vtext(fr.x)} at {vtext(fr.world(*e['center']))}{seat} {ext}" for e in ents]
+
+    def primitive(self, name, t):
+        d = self.doc
+        fr = Frame(d.placement(name))
+        frame = f"z {vtext(fr.n)} x {vtext(fr.x)} at {vtext(fr.o)}"
+        cut = "Subtractive" in t
+        if cut and self.bodies == 0:
+            raise Unsupported("first feature cuts")
+        op = ("cut " if cut else "add ") if self.bodies else ""
+        self.bodies = 1
+        if t.endswith("Box"):
+            return [f"extrude {op}{num(d.flt(name, 'Height'))} {frame} rect 0 0 {num(d.flt(name, 'Length'))} {num(d.flt(name, 'Width'))}"]
+        if abs(d.flt(name, "Angle", 360.0) - 360) > 1e-9 or abs(d.flt(name, "FirstAngle")) > 1e-9 or abs(d.flt(name, "SecondAngle")) > 1e-9:
+            raise Unsupported("a part of a cylinder")
+        return [f"extrude {op}{num(d.flt(name, 'Height'))} {frame} circle 0 0 {num(d.flt(name, 'Radius'))}"]
 
     def fail(self, what):
         raise Unsupported("a pattern reference " + what)
@@ -556,34 +629,27 @@ class Tr:
                 if d.integer(name, "ChamferType") != 0:
                     raise Unsupported("an unequal chamfer")
                 ls = self.blend(name, f"chamfer {num(d.flt(name, 'Size'))}", d.boolean(name, "UseAllEdges"))
-            elif t == "PartDesign::PolarPattern":
-                o, a = self.axis_of(name, "Axis")
-                if d.boolean(name, "Reversed"):
-                    a = tuple(-x for x in a)
-                ls = [f"pattern {self.originals(name)} circ {vtext(o)} {vtext(a)} {d.integer(name, 'Occurrences')} {num(d.flt(name, 'Angle', 360.0))}"]
-            elif t == "PartDesign::LinearPattern":
-                _, a = self.axis_of(name, "Direction")
-                if d.boolean(name, "Reversed"):
-                    a = tuple(-x for x in a)
-                n = d.integer(name, "Occurrences")
-                L = d.flt(name, "Length")
-                ls = [f"pattern {self.originals(name)} lin {vtext(a)} {n} {num(L / max(n - 1, 1))}"]
-            elif t == "PartDesign::Mirrored":
-                ref, subs = d.link(name, "MirrorPlane"), d.subs(name, "MirrorPlane")
-                if d.types.get(ref) == "Sketcher::SketchObject":
-                    fr = Frame(d.placement(ref))
-                    n = {"H_Axis": fr.y, "V_Axis": fr.x, "": fr.n}.get(subs[0] if subs else "") or self.fail("mirror")
-                    o = fr.o
-                elif d.types.get(ref) == "App::Plane":
-                    role = d.prop(ref, "Role").find("String").get("value")
-                    n = {"XY_Plane": (0.0, 0.0, 1.0), "XZ_Plane": (0.0, 1.0, 0.0), "YZ_Plane": (1.0, 0.0, 0.0)}.get(role) or self.fail("mirror")
-                    o = (0.0, 0.0, 0.0)
-                else:
-                    raise Unsupported("a mirror in " + (d.types.get(ref) or "nothing"))
-                ls = [f"pattern {self.originals(name)} mirror z {vtext(n)} at {vtext(o)}"]
-            label = f"t{len(self.labels)}"
-            self.labels[name] = label
-            ls[0] = f"{label}: {ls[0]}"
+            elif t in TRANSFORMS:
+                ls = [self.transform(name, t, self.originals(name))]
+            elif t == "PartDesign::MultiTransform":
+                ls, src = [], self.originals(name)
+                for k, m in enumerate(d.links(name, "Transformations")):
+                    if d.types.get(m) not in TRANSFORMS:
+                        raise Unsupported("a multi-transform with " + str(d.types.get(m)).split("::")[-1])
+                    ls.append(f"m{len(self.labels)}x{k}: " + self.transform(m, d.types[m], src))
+                    src += f" m{len(self.labels)}x{k}"
+            elif t == "PartDesign::Hole":
+                ls = self.hole(name)
+            elif t in ("PartDesign::AdditiveBox", "PartDesign::SubtractiveBox", "PartDesign::AdditiveCylinder", "PartDesign::SubtractiveCylinder"):
+                ls = self.primitive(name, t)
+            if t == "PartDesign::MultiTransform":
+                self.labels[name] = ls[-1].split(":")[0]  # already labelled, each its own
+            else:
+                # a feature of several lines (regions that do not touch): a pattern of it needs them all
+                base = f"t{len(self.labels)}"
+                names = [base if k == 0 else f"{base}x{k}" for k in range(len(ls))]
+                self.labels[name] = " ".join(names)
+                ls = [f"{n}: {l}" for n, l in zip(names, ls)]
             self.lines += ls
             self.steps.append((name, len(self.lines)))
 
