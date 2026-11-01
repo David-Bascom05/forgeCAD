@@ -615,12 +615,7 @@ fn plan(a: &Body, b: &Body, op: Op, scratch: &mut Scratch) -> R<Plan> {
             if w == "inconsistent classification" || w == "face split crossed itself" =>
         {
             let crossed = w == "face split crossed itself";
-            let modes = if crossed {
-                [(true, false), (true, true), (false, true)]
-            } else {
-                [(false, true), (true, false), (true, true)]
-            };
-            for (absorb, chords) in modes {
+            for (absorb, chords) in [(crossed, !crossed), (!crossed, crossed)] {
                 forge_geom::intersect::ABSORB_HAIR_ROOTS.with(|k| k.set(absorb));
                 CHORDS.with(|c| c.set(chords));
                 let r = plan_fenced(a, b, op, scratch);
@@ -629,6 +624,9 @@ fn plan(a: &Body, b: &Body, op: Op, scratch: &mut Scratch) -> R<Plan> {
                 if !matches!(r, Err(BoolError::Internal(_))) {
                     return r;
                 }
+            }
+            if !crossed {
+                return Err(BoolError::Internal(w));
             }
             NO_RUN_ON.with(|c| c.set(true));
             let r = plan_fenced(a, b, op, scratch);
