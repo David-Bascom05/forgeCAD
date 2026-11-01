@@ -7,7 +7,7 @@ surface, topology counts, BRepCheck validity and build time, and diffs them agai
 results (sequential, n-ary on one thread and on THREADS).
 
 A part marked loose (~) has a feature OCCT builds its own way (a smooth loft's spline, a corner
-of unequal blends): volume and area must agree within 1%, surfaces are not compared. A part cut
+of three or more unequal blends): volume and area must agree within 1%, surfaces are not compared. A part cut
 short (|) reached a feature OCCT has no operation for: both kernels built the history up to it.
 The exporter prints which and why; known.txt lists each kind's translation.
 

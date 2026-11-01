@@ -1405,12 +1405,6 @@ pub fn variable_cases() -> Vec<(&'static str, Part, Option<f64>)> {
 
 /// Fillets that cannot be built, and the error each must give (by its name).
 pub fn refusals() -> Vec<(&'static str, Part, &'static str)> {
-    let boxed = Part {
-        features: vec![block_at(Point3::ORIGIN, 20.0, 10.0, 8.0, Combine::New)],
-    };
-    let rib = Part {
-        features: vec![block_at(Point3::ORIGIN, 20.0, 4.0, 8.0, Combine::New)],
-    };
     let rounded = Part {
         features: vec![Feature::Extrude {
             profile: Profile {
@@ -1443,24 +1437,6 @@ pub fn refusals() -> Vec<(&'static str, Part, &'static str)> {
     );
     vec![
         ("full-round-eccentric-ring", eccentric_round, "BadRadius"),
-        // the ball runs off the bottom of the front face
-        (
-            "radius-past-face",
-            with_fillet(&boxed, &[(Point3::new(10.0, 0.0, 8.0), 9.0)]),
-            "Overflow",
-        ),
-        // two blends meet exactly along the rib's top: the top face shrinks to a line
-        (
-            "rib-full-round",
-            with_fillet(
-                &rib,
-                &[
-                    (Point3::new(10.0, 0.0, 8.0), 2.0),
-                    (Point3::new(10.0, 4.0, 8.0), 2.0),
-                ],
-            ),
-            "Tangency",
-        ),
         // the seam between a flat side and a rounded corner is already smooth
         (
             "smooth-seam",

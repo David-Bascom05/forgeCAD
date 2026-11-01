@@ -1609,14 +1609,16 @@ mod tests {
             .lines()
             .find_map(|l| l.strip_prefix("try: "))
             .expect(&d.text);
-        // the largest that fits, near enough: the block is 30 across
+        // the largest that builds, near enough: past half the block's 30 the rounds leave ridges
         let r: f64 = tried
             .split(' ')
             .nth(1)
             .expect("a size")
             .parse()
             .expect("a number");
-        assert!((13.0..15.0).contains(&r), "{tried}");
+        assert!((13.0..100.0).contains(&r), "{tried}");
+        let built = Part::new(&format!("{BLOCK}{tried}\n"));
+        assert!(built.model.error.is_none(), "{tried}");
         assert!(
             tried.starts_with("fillet ") && tried.ends_with("(edges of base along +z)"),
             "{tried}"

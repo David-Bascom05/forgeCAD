@@ -14,8 +14,8 @@
 #   fillet       BRepFilletAPI_MakeFillet on the edges through our edges' points; linear laws by
 #                SetRadius(r1, r2) along OCCT's contour; loose: laws through points (OCCT's own
 #                interpolation), setbacks, a varying law run on round a tangent chain (OCCT keeps
-#                edges it is not given constant), and corners of unequal radii or of two blends
-#                beside a sharp edge (each kernel patches those its own way)
+#                edges it is not given constant), and corners of three or more blends of unequal radii
+#                (each kernel patches those its own way)
 #   face fillet  the edges where the two face sets meet, as a fillet. NONE across a strip face:
 #                OCCT has no fillet that takes a face away
 #   full round   NONE: OCCT has no fillet that takes a face away (a fillet of half the width on

@@ -3,6 +3,7 @@
 //! the CSG tree it came from. A quick tier runs in `cargo test`; the deep tier is the `meta`
 //! example, which shrinks each failure to a minimal history and writes it as a part file.
 
+pub mod blends;
 pub mod cert;
 pub mod map;
 pub mod props;

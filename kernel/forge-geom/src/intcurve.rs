@@ -564,6 +564,35 @@ pub fn trace(a: &Surface, b: &Surface, region: Box3) -> Option<Vec<IntCurve>> {
     Some(curves)
 }
 
+/// The branch where surfaces `a` and `b` meet from `x` to `p`, `p` a point where they touch (two
+/// rolling-ball blends meet so, tangent to one face): no tracing from seeds finds its way into such a
+/// point, so the chain walks from `x` towards it and ends there. An evaluation still takes a Newton
+/// step onto both surfaces wherever they have not quite touched.
+pub fn towards_touch(a: &Surface, b: &Surface, x: Point3, p: Point3, step: f64) -> Option<IntCurve> {
+    let mut pts = vec![x];
+    let mut cur = x;
+    for _ in 0..4096 {
+        let left = cur.distance(p);
+        if left <= 1.5 * step {
+            break;
+        }
+        let d = direction(a, b, cur)?;
+        let d = if d.dot(p - cur) < 0.0 { -d } else { d };
+        let h = step;
+        let q = refine(a, b, cur + d * h)?;
+        if (q - cur).dot(d) <= 0.5 * h || q.distance(p) >= left {
+            return None;
+        }
+        pts.push(q);
+        cur = q;
+    }
+    pts.push(p);
+    if pts.len() < 2 {
+        return None;
+    }
+    Some(finish(a, b, pts, false, step))
+}
+
 fn near_chain(c: &IntCurve, p: Point3, step: f64) -> bool {
     c.pts.iter().any(|q| q.distance(p) <= 1.5 * step)
 }

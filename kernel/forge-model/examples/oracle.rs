@@ -470,12 +470,8 @@ fn rounds(
     }
     let odd = ends.iter().any(|&(v, r)| {
         let here: Vec<f64> = ends.iter().filter(|e| e.0 == v).map(|e| e.1).collect();
-        let degree = b
-            .body
-            .edge_ids()
-            .filter(|&e| [b.body.edge(e).start, b.body.edge(e).end].contains(&v))
-            .count();
-        here.len() >= 2 && (here.iter().any(|&x| x != r) || degree == 3 && here.len() == 2)
+        // two blends beside a sharp edge are a mitre, in Parasolid and OCCT alike: no looseness
+        here.len() >= 3 && here.iter().any(|&x| x != r)
     });
     Ok((format!("[{}]", out.join(",")), smooth, odd))
 }
@@ -718,7 +714,7 @@ fn export(features: History<'_>, i: usize, before: Option<&Before>) -> Result<St
                 Some("fillet radius through points: OCCT interpolates its own law")
             } else if odd {
                 Some(
-                    "fillet corner of unequal radii, or of two blends and a sharp edge: each kernel patches it its own way",
+                    "fillet corner of three or more blends of unequal radii: each kernel patches it its own way",
                 )
             } else {
                 None

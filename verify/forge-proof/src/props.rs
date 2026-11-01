@@ -1015,7 +1015,82 @@ pub fn all() -> Vec<(&'static str, Property)> {
         ("volume", tool_volume),
         ("mass", mass_mesh),
         ("ulp", ulp),
+        ("blend", blend),
     ]
+}
+
+/// Every fillet of a part against the part before it (`blends`): each ball surface at the asked
+/// radius from two supports, seams meant to be smooth smooth, the volume changed what points say,
+/// no patch where two blends meet beside a sharp edge. `blends::points`' count of points no ball
+/// surface answers for is not held here: past a ridge a point lies beyond both trimmed faces, so
+/// real parts that match their source show some. research/fillets says how to read it.
+pub fn blend(part: &Part, seed: u64) -> Option<Finding> {
+    for (k, f) in part.features.iter().enumerate().take(8) {
+        let Feature::Fillet { edges, setbacks, .. } = f else {
+            continue;
+        };
+        let upto = |n: usize| {
+            Part {
+                features: part.features[..n].to_vec(),
+            }
+            .regenerate()
+            .ok()
+        };
+        let (Some(before), Some(after)) = (upto(k), upto(k + 1)) else {
+            continue;
+        };
+        let radii = crate::blends::Radii::of(edges.iter().map(|e| &e.1));
+        let a = crate::blends::audit(&before, &after, &radii, seed);
+        if a.unsupported > 0 {
+            return found(
+                "blend",
+                "a ball surface off its supports",
+                format!("feature {k}, {:e} at {:?}", a.worst_gap, a.worst_at),
+            );
+        }
+        if a.worst_kink > 1e-6 {
+            return found(
+                "blend",
+                "a seam meant to be smooth is not",
+                format!("feature {k}, sine {:e} at {:?}", a.worst_kink, a.kink_at),
+            );
+        }
+        let pts = crate::blends::points(&before, &after, 200, seed);
+        // the volume it changed, by those points against the masses, within five sigma
+        if pts.sampled > 50
+            && let (Ok(mb), Ok(ma)) = (forge_topo::mass::mass(&before), forge_topo::mass::mass(&after))
+        {
+            let f = pts.changed as f64 / pts.sampled as f64;
+            let sigma = (f.max(1.0 / pts.sampled as f64) * (1.0 - f) / pts.sampled as f64).sqrt();
+            let (estimate, moved) = (f * pts.reach_volume, (mb.volume - ma.volume).abs());
+            if (estimate - moved).abs() > 5.0 * sigma * pts.reach_volume + 1e-6 * mb.volume {
+                return found(
+                    "blend",
+                    "the volume a fillet changed is not what points say",
+                    format!(
+                        "feature {k}: mass {moved}, points {estimate} of box {}",
+                        pts.reach_volume
+                    ),
+                );
+            }
+        }
+        let (off, kink) = crate::blends::patch_seams(&before, &after);
+        if off > forge_math::tol::LINEAR || kink > 1e-4 {
+            return found(
+                "blend",
+                "a corner patch off its neighbours",
+                format!("feature {k}, {off:e} away, sine {kink:e}"),
+            );
+        }
+        if setbacks.is_empty() && !crate::blends::needless_patches(&before, &after).is_empty() {
+            return found(
+                "blend",
+                "a patch where two blends should mitre",
+                format!("feature {k}"),
+            );
+        }
+    }
+    None
 }
 
 /// The exact mass integrals and meshes of the same body are two independent roads to one volume

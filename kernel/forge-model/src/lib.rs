@@ -1551,7 +1551,60 @@ fn apply_fillet(
             .map(|&(v, e, d)| Ok((vertex(v)?, e.map(edge).transpose()?, d)))
             .collect::<Result<_, RegenError>>()?,
     };
-    fillet_with(&body, &want, &opts, id).map_err(|error| RegenError::Fillet { feature: i, error })
+    let first = match fillet_with(&body, &want, &opts, id) {
+        Err(e @ (FilletError::Overflow { .. } | FilletError::Corner { .. })) if opts.setbacks.is_empty() => e,
+        done => return done.map_err(|error| RegenError::Fillet { feature: i, error }),
+    };
+    overlapping_rounds(&body, &want, &opts, id).ok_or(RegenError::Fillet {
+        feature: i,
+        error: first,
+    })
+}
+
+/// Rounds that overlap with no vertex between them (a plate rounded on both sides past half its
+/// width): each group of edges sharing vertices rounds by itself, and what each takes away (or
+/// adds, where they are concave) is taken from the part together, leaving a ridge where the blends cut.
+fn overlapping_rounds(body: &Body, want: &[FilletEdge], opts: &FilletOptions, id: u64) -> Option<Body> {
+    let ends = |e: forge_topo::EdgeId| (body.edge(e).start, body.edge(e).end);
+    let mut groups: Vec<(Vec<FilletEdge>, Vec<forge_topo::VertexId>)> = Vec::new();
+    for f in want {
+        let (a, b) = ends(f.edge);
+        let (near, far): (Vec<_>, Vec<_>) = groups
+            .into_iter()
+            .partition(|g| g.1.contains(&a) || g.1.contains(&b));
+        groups = far;
+        let mut one = (vec![f.clone()], vec![a, b]);
+        for (e, v) in near {
+            one.0.extend(e);
+            one.1.extend(v);
+        }
+        groups.push(one);
+    }
+    if groups.len() < 2 {
+        return None;
+    }
+    let kind = forge_ops::fillet_kind(body, want[0].edge)?;
+    if want
+        .iter()
+        .any(|f| forge_ops::fillet_kind(body, f.edge) != Some(kind))
+    {
+        return None;
+    }
+    let op = if kind {
+        forge_bool::Op::Intersect
+    } else {
+        forge_bool::Op::Union
+    };
+    let mut done: Option<Body> = None;
+    for (edges, _) in &groups {
+        let round = fillet_with(body, edges, opts, id).ok()?;
+        done = Some(match done {
+            Some(d) => forge_bool::boolean(&d, &round, op, id).ok()?,
+            None => round,
+        });
+    }
+    // bodies with most of their faces in common: what comes back must stand
+    done.filter(|b| forge_topo::check(b).is_empty())
 }
 
 /// A plain extrude's tool as its entities, for the local imprint, which may need no Body of it.

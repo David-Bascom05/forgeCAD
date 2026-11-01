@@ -543,3 +543,67 @@ fn mass_agrees_with_the_mesh_on_a_curve_with_two_arms() {
         );
     }
 }
+
+#[test]
+fn every_fillet_holds_against_the_part_before_it() {
+    let corpus: Vec<(String, Part)> = forge_model::fillets::cases()
+        .into_iter()
+        .map(|(n, p, _)| (n.to_string(), p))
+        .collect();
+    holds("blend", props::blend, &corpus);
+}
+
+/// A check never seen to fail proves nothing: each of the blend checks against a body made wrong
+/// in the way it is there to see.
+#[test]
+fn the_blend_checks_fail_what_they_should() {
+    use forge_math::Point3;
+    use forge_ops::{FilletEdge, FilletOptions, Radius, fillet, fillet_with};
+    use forge_proof::blends::Radii;
+    let m = forge_agent::model::Model::new("b: extrude 40 rect 0 0 100 80\n");
+    let before = m.body().expect("a block").clone();
+    let edge = |p: Point3| {
+        before
+            .edge_ids()
+            .find(|&e| {
+                use forge_geom::CurveGeom;
+                let x = before.edge(e);
+                x.curve.eval(x.range.mid()).distance(p) < 1e-9
+            })
+            .expect("the edge")
+    };
+    let (a, b) = (
+        edge(Point3::new(50.0, 80.0, 40.0)),
+        edge(Point3::new(100.0, 40.0, 40.0)),
+    );
+    let pick = |r: f64| {
+        [a, b].map(|edge| FilletEdge {
+            edge,
+            radius: Radius::Constant(r),
+        })
+    };
+    let good = fillet(&before, &pick(5.0), 1).expect("a mitre");
+    let held = forge_proof::blends::audit(&before, &good, &Radii::List(vec![5.0]), 1);
+    assert_eq!(held.unsupported, 0);
+    assert_eq!(forge_proof::blends::points(&before, &good, 400, 1).wrong, 0);
+    assert!(forge_proof::blends::needless_patches(&before, &good).is_empty());
+    // held to the wrong radius, the balls stand off their supports
+    assert!(forge_proof::blends::audit(&before, &good, &Radii::List(vec![5.01]), 1).unsupported > 0);
+    // a patched corner where two blends meet beside a sharp edge: seen as a patch, and by points
+    let v = before.edge(a).start;
+    let at = if before.vertex(v).point.distance(Point3::new(100.0, 80.0, 40.0)) < 1e-9 {
+        v
+    } else {
+        before.edge(a).end
+    };
+    let opts = FilletOptions {
+        setbacks: vec![(at, None, 6.0)],
+        ..FilletOptions::default()
+    };
+    let patched = fillet_with(&before, &pick(5.0), &opts, 1).expect("a patch");
+    assert!(!forge_proof::blends::needless_patches(&before, &patched).is_empty());
+    assert!(forge_proof::blends::points(&before, &patched, 2000, 1).wrong > 0);
+    // a blend from another part entirely: points the round did not change are claimed by nothing
+    let other = fillet(&before, &pick(9.0), 1).expect("another mitre");
+    assert!(forge_proof::blends::audit(&before, &other, &Radii::List(vec![5.0]), 1).unsupported > 0);
+}
