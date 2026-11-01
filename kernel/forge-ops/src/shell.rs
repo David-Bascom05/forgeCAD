@@ -1,4 +1,4 @@
-use crate::rebuild::{RebuildError, reaches_apex, rebuild};
+use crate::rebuild::{RebuildError, reaches_apex};
 use crate::selfx::crossing;
 use forge_geom::{Cone, Curve, CurveGeom, Cylinder, Line, Plane, Sphere, Surface, SurfaceGeom, Torus};
 use forge_math::{Box2, Interval, dmath, tol};
@@ -75,10 +75,9 @@ pub fn shell(
     };
     let stays = |n: Name| open.contains(&n) && !base.face_by_name(n).is_some_and(|f| strip[f.index()]);
     let open_moved: Vec<bool> = moved.faces.iter().map(|f| stays(f.name)).collect();
-    let changed: Vec<bool> = open_moved.iter().map(|&o| !o).collect();
     for f in (0..moved.faces.len() as u32)
         .map(FaceId)
-        .filter(|f| changed[f.index()])
+        .filter(|f| !open_moved[f.index()])
     {
         let face = moved.face(f);
         let s = face_offset(&moved, f, along(face)).ok_or(ShellError::Collapses { face: face.name })?;
@@ -97,7 +96,7 @@ pub fn shell(
         });
     }
     let before = moved.clone();
-    if let Err(e) = rebuild(&mut moved, &changed) {
+    if let Err(e) = crate::wavefront::rebuild_moving(&mut moved, &|b, f| !stays(b.face(f).name)) {
         // vertices move up to the thickness along a cone's axis: past its apex, the face is gone
         return Err(match apex(&before, thickness).or(apex(&before, -thickness)) {
             Some(f) => ShellError::Collapses {

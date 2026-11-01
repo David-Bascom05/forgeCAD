@@ -594,6 +594,7 @@ fn lap(t: &mut Option<std::time::Instant>, k: usize) {
 thread_local! {
     /// Springs a closed curve crossed an odd number of times are looked at again by their fences.
     static FENCES: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
+    static CHORDS: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
     /// A point touch in this boolean that nothing could judge.
     pub(crate) static UNDECIDED: std::cell::Cell<Option<Point3>> = const { std::cell::Cell::new(None) };
     /// A closed curve crossed springs an odd number of times in this plan.
@@ -602,6 +603,23 @@ thread_local! {
 
 /// `plan_once`; lost its way, once more with the slow search for shallow crossings of springs.
 fn plan(a: &Body, b: &Body, op: Op, scratch: &mut Scratch) -> R<Plan> {
+    match plan_fenced(a, b, op, scratch) {
+        // what floods one way across a tool's edge hovering within tolerance of a face and the other
+        // way along it wants the curve under that edge, however close: an edge of its own
+        Err(BoolError::Internal(w)) if w == "inconsistent classification" => {
+            CHORDS.with(|c| c.set(true));
+            let r = plan_fenced(a, b, op, scratch);
+            CHORDS.with(|c| c.set(false));
+            r.map_err(|e| match e {
+                BoolError::Internal(_) => BoolError::Internal(w),
+                e => e,
+            })
+        }
+        r => r,
+    }
+}
+
+fn plan_fenced(a: &Body, b: &Body, op: Op, scratch: &mut Scratch) -> R<Plan> {
     ODD.with(|o| o.set(false));
     match plan_once(a, b, op, scratch) {
         Err(BoolError::Internal(w)) if ODD.with(|o| o.get()) => {
@@ -2594,7 +2612,8 @@ pub(crate) fn trim(
                 // an edge it crosses only to run within tolerance of it (a chord of a hair) is
                 // one it lies along
                 let hair = || {
-                    curve.eval(t0).distance(p).min(curve.eval(t1).distance(p)) > 4.0 * tol::LINEAR
+                    !CHORDS.with(|c| c.get())
+                        && curve.eval(t0).distance(p).min(curve.eval(t1).distance(p)) > 4.0 * tol::LINEAR
                         && past.iter().any(|&e| on_edge(bodies[k], e, p).is_some())
                 };
                 if past.is_empty() || hair() {
@@ -3355,7 +3374,8 @@ fn plane_meet(pl: &Plane, curve: &Curve, range: Interval, edge: &Curve) -> Optio
         let w = o - c;
         let (b, cc) = (d.dot(w), w.dot(w) - r * r);
         let disc = b * b - cc;
-        if disc.abs() <= 1e-6 * r * r {
+        // (a hair past tangent the line stays within tolerance of the circle: no crossing)
+        if disc.abs() <= (1e-6 * r * r).max(2.0 * r * tol::LINEAR) {
             return None;
         }
         if disc < 0.0 {
@@ -3865,9 +3885,16 @@ pub(crate) fn crossings_near(curve: &Curve, range: Interval, s: &Surface, h: Cur
     if h.contact == Contact::Crossing {
         return vec![h];
     }
-    let w = 1e-2 * range.width().min(1.0);
-    let n = 64;
     let g = |t: f64| s.implicit(curve.eval(t));
+    // out to where the curve has left the tolerance on both sides
+    let mut w = 1e-2 * range.width().min(1.0);
+    while w < 0.25 * range.width()
+        && (g((h.t - w).max(range.lo)).abs() <= 2.0 * tol::LINEAR
+            || g((h.t + w).min(range.hi)).abs() <= 2.0 * tol::LINEAR)
+    {
+        w *= 2.0;
+    }
+    let n = 64;
     let at = |k: usize| (h.t - w + 2.0 * w * k as f64 / n as f64).clamp(range.lo, range.hi);
     // samples within a hair of the surface carry no sign: a true touch flickers around zero
     let dead = 1e-9;

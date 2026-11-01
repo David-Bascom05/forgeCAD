@@ -19,6 +19,7 @@ pub mod strip;
 pub mod sweep;
 pub mod taper;
 pub mod thicken;
+mod wavefront;
 
 pub use chamfer::{ChamferError, ChamferSize, chamfer};
 pub use direct::{DirectError, Rounded, delete_faces, move_faces, offset_faces, replace_face};

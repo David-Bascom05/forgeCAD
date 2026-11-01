@@ -517,8 +517,7 @@ fn conic_quadric(f: &Frame, a: f64, b: f64, range: Interval, s: &Surface) -> Opt
         hits.push(CurveHit { t, point: p, contact });
     }
     // as for a line, a touch is where the value turns within tolerance of the surface: rounding
-    // may keep it off zero, and then no root says so. Where a crossing runs into it within
-    // tolerance, the crossings stand.
+    // may keep it off zero, and then no root says so
     let near = |t: f64| s.distance(curve.eval(t)) <= tol::LINEAR;
     let apart = |x: f64, t: f64| dmath::wrap_tau(x - t + dmath::PI) - dmath::PI;
     for t0 in turns {
@@ -527,7 +526,9 @@ fn conic_quadric(f: &Frame, a: f64, b: f64, range: Interval, s: &Surface) -> Opt
             continue;
         }
         let t = t.min(range.hi);
-        if near(t) && !hits.iter().any(|h| near_between(&near, t + apart(h.t, t), t)) {
+        if near(t) {
+            // the roots beside it that never leave the tolerance are that touch, as for a line
+            hits.retain(|h| !near_between(&near, t + apart(h.t, t), t));
             hits.push(CurveHit {
                 t,
                 point: curve.eval(t),

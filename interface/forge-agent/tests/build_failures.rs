@@ -526,9 +526,13 @@ fn arcs_ending_on_the_axis() {
     // a whole circle tangent to the axis would pinch there
     let e = Model::new("revolve xz axis y circle 4 0 4\n").error;
     assert!(e.is_some_and(|e| e.msg.contains("pinches")));
-    // as does a profile whose corner only touches it: a disc and a cone meeting at their centre
-    let e = Model::new("revolve xz axis y loop line 0 0 6 0 line 6 0 6 2 line 6 2 0 0\n").error;
-    assert!(e.is_some_and(|e| e.msg.contains("pinches")), "built");
+    // a profile whose corner only touches it builds if what it makes closes, or is refused
+    let m = Model::new("revolve xz axis y loop line 0 0 6 0 line 6 0 6 2 line 6 2 0 0\n");
+    match (&m.error, m.body()) {
+        (Some(e), _) => assert!(e.msg.contains("pinches"), "{}", e.msg),
+        (None, Some(b)) => assert!(forge_topo::check(b).is_empty()),
+        _ => panic!("neither"),
+    }
     // not on part of a turn: a wedge's point
     builds("revolve 90 xz axis y loop line 0 0 6 0 line 6 0 6 2 line 6 2 0 0\n");
 }
@@ -793,4 +797,20 @@ extrude add next xy at 0 0 10 rect -5 -5 10 10 in a
     assert!((v - want).abs() < 1e-6 * want, "{v}");
     let v = total(part.regenerate_nary_solids(1).expect("n-ary"));
     assert!((v - want).abs() < 1e-6 * want, "{v}");
+}
+
+/// A tilted cutter whose rim hovers within tolerance of a part's bottom over a chord: under that stretch
+/// the curve where its wall meets the bottom is a new edge all the same, or being in the tool flips across
+/// the rim ("inconsistent classification"). The slit between chord and curve is a hair wide.
+#[test]
+fn a_tilted_cutter_hovering_over_a_face() {
+    let src = "extrude 0.6 z 0 0 1 x 1 0 0 at 0 0 0 circle 0 0 0.4
+extrude cut 0.5 z 0.0174524064 0 -0.9998476952 x 0.9998476952 0 0.0174524064 at 0 0 0.50515927 circle 0 0 0.3
+";
+    builds(src);
+    let v = Model::new(src).mass().unwrap().volume;
+    // the cylinder less the slanted hole: axis length 0.5 at any tilt
+    let pi = std::f64::consts::PI;
+    let want = pi * (0.16 * 0.6 - 0.09 * 0.5);
+    assert!((v - want).abs() < 1e-3 * want, "{v} vs {want}");
 }

@@ -338,13 +338,13 @@ impl Revolver<'_> {
                 made[s.end] += 1;
             }
         }
+        // two segments leaving a point on the axis: a whole turn makes two faces meeting only at it
+        let pinch = self.full
+            && pverts
+                .iter()
+                .enumerate()
+                .any(|(i, &p)| self.on_axis(p) && made[i] == 2);
         for (i, &p) in pverts.iter().enumerate() {
-            // two segments leaving a point on the axis: a whole turn makes two cones meeting at it
-            if self.on_axis(p) && self.full && made[i] == 2 {
-                return Err(RevolveError::Unsupported(
-                    "a profile touching the axis at a point pinches the solid there",
-                ));
-            }
             if self.on_axis(p) && self.full && made[i] == 0 {
                 for c in vid.iter_mut() {
                     c.push(VertexId(u32::MAX));
@@ -483,6 +483,12 @@ impl Revolver<'_> {
                     (sweep(1), sweep(0)),
                 ]);
             }
+        }
+        // (real parts make these, and a seam may hold them together; what does not close is refused)
+        if pinch && !forge_topo::check(&self.body).is_empty() {
+            return Err(RevolveError::Unsupported(
+                "a profile touching the axis at a point pinches the solid there",
+            ));
         }
         Ok(self.body)
     }
