@@ -89,13 +89,37 @@ def volume(s):
 
 
 def build(src):
-    bodies = []
+    bodies, names, last = [], {}, None
+
+    def fuse(a, b):
+        r = BRepAlgoAPI_Fuse(a, b)
+        if not r.IsDone():
+            raise ValueError("fuse")
+        return r.Shape()
+
     for l in src.splitlines():
         t = l.split()
+        if t and t[0].endswith(":"):
+            label, t = t[0][:-1], t[1:]
+        else:
+            label = None
+        if t and t[0] == "combine" and t[1] == "add":
+            a = names[t[2]]
+            for x in t[3:]:
+                b = names.pop(x)
+                bodies[a] = fuse(bodies[a], bodies[b])
+                bodies[b] = None
+                names = {k: (a if v == b else v) for k, v in names.items()}
+                last = a if last == b else last
+            continue
         if not t or t[0] != "extrude":
             raise ValueError("not an extrude")
         allb = t[-2:] == ["in", "all"]
+        target = None
         if allb:
+            t = t[:-2]
+        elif t[-2] == "in":
+            target = names[t[-1]]
             t = t[:-2]
         zi = t.index("z")
         op = t[1] if t[1] in ("add", "cut", "keep", "new") else ""
@@ -121,21 +145,25 @@ def build(src):
         fix.Perform()
         h = up + down
         tool = BRepPrimAPI_MakePrism(fix.Face(), gp_Vec(Z[0] * h, Z[1] * h, Z[2] * h)).Shape()
+        if volume(tool) < 0:
+            # a face wound against its normal makes an inside-out prism, and a boolean with one quietly does nothing
+            tool = tool.Reversed()
         if op == "" or op == "new":
             bodies.append(tool)
+            last = len(bodies) - 1
+            if label:
+                names[label] = last
         elif op == "add":
-            r = BRepAlgoAPI_Fuse(bodies[-1], tool)
-            if not r.IsDone():
-                raise ValueError("fuse")
-            bodies[-1] = r.Shape()
+            i = last if target is None else target
+            bodies[i] = fuse(bodies[i], tool)
         else:
             cls = BRepAlgoAPI_Cut if op == "cut" else BRepAlgoAPI_Common
-            for i in range(len(bodies)) if allb else [len(bodies) - 1]:
+            for i in [j for j, b in enumerate(bodies) if b is not None] if allb else [last if target is None else target]:
                 r = cls(bodies[i], tool)
                 if not r.IsDone():
                     raise ValueError(op)
                 bodies[i] = r.Shape()
-    return bodies
+    return [b for b in bodies if b is not None]
 
 
 def one(job):
