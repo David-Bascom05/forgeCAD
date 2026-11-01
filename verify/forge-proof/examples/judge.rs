@@ -93,7 +93,8 @@ fn main() {
         if let Some(x) = vol {
             o += &format!(",\"vol\":{x},\"area\":{area}");
         }
-        if matches!(v, Verdict::Ok)
+        let multi = matches!(&v, Verdict::Fail(s) if s.starts_with("nary: the part is"));
+        if (multi || matches!(v, Verdict::Ok))
             && let Ok((_, _, b, _, _)) =
                 std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| m.stats()))
         {

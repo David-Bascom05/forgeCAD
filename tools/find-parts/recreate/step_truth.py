@@ -13,6 +13,7 @@ import resource
 import subprocess
 import sys
 import tempfile
+import threading
 import zipfile
 
 MEM = 3 << 30
@@ -21,45 +22,50 @@ MEM = 3 << 30
 def measure(path):
     from OCP.Bnd import Bnd_Box
     from OCP.BRepBndLib import BRepBndLib
-    from OCP.BRepCheck import BRepCheck_Analyzer
     from OCP.BRepGProp import BRepGProp
     from OCP.GProp import GProp_GProps
     from OCP.IFSelect import IFSelect_RetDone
     from OCP.STEPControl import STEPControl_Reader
-    from OCP.TopAbs import TopAbs_FACE, TopAbs_SHELL, TopAbs_SOLID
+    from OCP.TopAbs import TopAbs_FACE, TopAbs_SOLID
     from OCP.TopExp import TopExp_Explorer
-    from OCP.TopoDS import TopoDS
 
     r = STEPControl_Reader()
     if r.ReadFile(path) != IFSelect_RetDone:
         return {"err": "unreadable"}
     r.TransferRoots()
     s = r.OneShape()
-    vol = area = 0.0
-    n = 0
-    valid = True
-    box = Bnd_Box()
+    # the dataset's files can hold exact copies of a part (Part 1..N, one box): a program made one
+    seen = {}
     x = TopExp_Explorer(s, TopAbs_SOLID)
     while x.More():
-        so = TopoDS.Solid_s(x.Current())
+        so = x.Current()
         g = GProp_GProps()
         BRepGProp.VolumeProperties_s(so, g)
-        vol += abs(g.Mass())
+        v = abs(g.Mass())
         g = GProp_GProps()
         BRepGProp.SurfaceProperties_s(so, g)
-        area += g.Mass()
+        a = g.Mass()
+        box = Bnd_Box()
         BRepBndLib.AddOptimal_s(so, box, True, False)
-        valid = valid and BRepCheck_Analyzer(so).IsValid()
-        n += 1
+        lo, hi = box.CornerMin(), box.CornerMax()
+        bb = (lo.X(), lo.Y(), lo.Z(), hi.X(), hi.Y(), hi.Z())
+        seen[(round(v, 3), round(a, 3)) + tuple(round(c, 3) for c in bb)] = (v, a, bb)
+        x.Next()
+    n = sum(1 for _ in seen)
+    copies = 0
+    x = TopExp_Explorer(s, TopAbs_SOLID)
+    while x.More():
+        copies += 1
         x.Next()
     faces = 0
     x = TopExp_Explorer(s, TopAbs_FACE)
     while x.More():
         faces += 1
         x.Next()
-    out = {"solids": n, "vol": vol, "area": area, "faces": faces, "valid": valid}
+    out = {"solids": n, "copies": copies - n, "vol": sum(t[0] for t in seen.values()), "area": sum(t[1] for t in seen.values()), "faces": faces}
     if n:
-        out["bbox"] = list(box.Get())
+        bs = [t[2] for t in seen.values()]
+        out["bbox"] = [min(b[i] for b in bs) for i in range(3)] + [max(b[i] for b in bs) for i in range(3, 6)]
     return out
 
 
@@ -83,13 +89,16 @@ def main():
     timeout = float(opt("--timeout", "120"))
     log = open(out, "a")
     tmp = tempfile.mkdtemp(prefix="truth-", dir=opt("--tmp"))
+    lock = threading.Lock()
 
     def one(i):
         if i not in names:
             return {"id": i, "err": "no step"}
         p = os.path.join(tmp, i + ".step")
         with open(p, "wb") as f:
-            f.write(z.read(names[i]))
+            with lock:
+                data = z.read(names[i])
+            f.write(data)
         try:
             c = subprocess.run([sys.executable, "-I", os.path.abspath(__file__), "--child", p], capture_output=True, text=True, timeout=timeout)
             r = json.loads(c.stdout.strip().splitlines()[-1]) if c.returncode == 0 and c.stdout.strip() else {"err": f"exit {c.returncode}"}
@@ -102,7 +111,6 @@ def main():
 
     jobs = min(int(opt("--jobs", "4")), 4)
     todo = [i for i in ids if i not in done]
-    # z.read is not shared across threads without its lock: ZipFile holds one
     with cf.ThreadPoolExecutor(jobs) as ex:
         for k, r in enumerate(ex.map(one, todo)):
             log.write(json.dumps(r) + "\n")
