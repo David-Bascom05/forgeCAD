@@ -647,28 +647,32 @@ fn check_geometry(body: &Body, known: &Known, out: &mut Vec<Problem>) {
         let mut faces: Vec<FaceId> = edge.coedges.iter().map(|&c| body.coedge_face(c)).collect();
         faces.dedup();
         for f in faces {
-            let s = &body.face(f).surface;
-            let points = body.edge_points(e, 16);
-            let mut worst = 0.0f64;
-            // each point from the one before, where it stays on the face that far; else the search
-            let mut near = None;
-            for &p in &points {
-                let uv = near.map_or_else(|| s.project(p), |uv| s.project_near(p, uv));
-                near = Some(uv);
-                worst = worst.max(s.eval(uv).distance(p));
-            }
-            if worst > band {
-                worst = points.iter().map(|&p| s.distance(p)).fold(0.0, f64::max);
-            }
-            if worst > band {
-                out.push(Problem::EdgeOffFace {
-                    edge: e,
-                    face: f,
-                    distance: worst,
-                });
-            }
+            out.extend(edge_off_face(body, e, f));
         }
     }
+}
+
+/// Edge `e` of face `f`, if it strays from the face by more than its tolerance.
+pub fn edge_off_face(body: &Body, e: EdgeId, f: FaceId) -> Option<Problem> {
+    let band = body.edge(e).tol.max(tol::LINEAR);
+    let s = &body.face(f).surface;
+    let points = body.edge_points(e, 16);
+    let mut worst = 0.0f64;
+    // each point from the one before, where it stays on the face that far; else the search
+    let mut near = None;
+    for &p in &points {
+        let uv = near.map_or_else(|| s.project(p), |uv| s.project_near(p, uv));
+        near = Some(uv);
+        worst = worst.max(s.eval(uv).distance(p));
+    }
+    if worst > band {
+        worst = points.iter().map(|&p| s.distance(p)).fold(0.0, f64::max);
+    }
+    (worst > band).then_some(Problem::EdgeOffFace {
+        edge: e,
+        face: f,
+        distance: worst,
+    })
 }
 
 /// At each coedge's midpoint, step a little to its left on the face (the

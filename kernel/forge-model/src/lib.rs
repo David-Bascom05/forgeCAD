@@ -1421,6 +1421,19 @@ fn op_of(c: Combine) -> Op {
     }
 }
 
+/// A full round's new edges can stray off the old faces they end up on. Only those are asked: all
+/// of `check` here cost bracket 3%, and the round builds them on its new faces.
+fn round_left_off(before: &Body, after: &Body) -> Option<forge_topo::Problem> {
+    let is_new = |f| before.face_by_name(after.face(f).name).is_none();
+    after.edge_ids().find_map(|e| {
+        let faces = after.edge(e).coedges.iter().map(|&c| after.coedge_face(c));
+        let (new, old): (Vec<_>, Vec<_>) = faces.partition(|&f| is_new(f));
+        (!new.is_empty())
+            .then(|| old.iter().find_map(|&f| forge_topo::edge_off_face(after, e, f)))
+            .flatten()
+    })
+}
+
 /// Applies part-changing feature `i` to `body`.
 fn modify(
     features: History<'_>,
@@ -1465,8 +1478,7 @@ fn modify(
                 id,
             )
             .map_err(|error| RegenError::Fillet { feature: i, error })
-            // (the round may leave the side faces' other edges off them: refused, not returned)
-            .and_then(|b| match forge_topo::check(&b).first() {
+            .and_then(|b| match round_left_off(body, &b) {
                 Some(p) => Err(RegenError::NotClosed {
                     feature: i,
                     what: format!("a full round left {p:?}"),
