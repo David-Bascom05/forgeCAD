@@ -23,6 +23,8 @@ pub const TABS: [&str; 5] = ["3D Model", "Sketch", "Inspect", "View", "Manage"];
 
 const TITLE_H: f32 = 36.0;
 const TABS_H: f32 = 34.0;
+/// How long a check goes on before the status bar says it's going on, in ms.
+const CHECK_SHOWS_MS: f64 = 500.0;
 /// A marking menu's dead zone, the ring its wedges light to, how far from it the pointer still
 /// chooses, and how far a flick must go.
 const DEAD_PT: f32 = 10.0;
@@ -215,6 +217,10 @@ pub struct Shell {
     pub sketch_eye: std::collections::HashMap<String, bool>,
     /// The sketch under the pointer in the view.
     pub sketch_hover: Option<ItemId>,
+    /// What the check found of the part: amber in the tree, counted in the status bar.
+    pub flags: Vec<forge_agent::live::Flag>,
+    /// A check's been going on since then.
+    pub checking_since: Option<f64>,
     /// The length unit the part reads in.
     pub units: &'static str,
     /// The part's middle: which way a hole faces in.
@@ -279,6 +285,8 @@ impl Default for Shell {
             sketch_shapes: Vec::new(),
             sketch_eye: Default::default(),
             sketch_hover: None,
+            flags: Vec::new(),
+            checking_since: None,
             units: "mm",
             part_middle: [0.0; 3],
             marking: None,
@@ -877,11 +885,26 @@ impl Shell {
             sans(12.0),
             Color32::WHITE,
         );
-        let right = format!(
-            "{} | {}",
-            if self.failed.is_some() { "error" } else { "valid" },
-            self.units
-        );
+        // the check's word only if it's taking long: a quick one shouldn't flicker
+        let slow = self
+            .checking_since
+            .is_some_and(|t| crate::viewer::now_ms() - t > CHECK_SHOWS_MS);
+        let state = if self.failed.is_some() {
+            "error".to_string()
+        } else if !self.flags.is_empty() {
+            let n = self
+                .flags
+                .iter()
+                .map(|f| f.item)
+                .collect::<std::collections::HashSet<_>>()
+                .len();
+            format!("{n} warning{}", if n == 1 { "" } else { "s" })
+        } else if slow {
+            "checking".to_string()
+        } else {
+            "valid".to_string()
+        };
+        let right = format!("{state} | {}", self.units);
         p.text(
             pos2(s.width() - 10.0, st.center().y),
             Align2::RIGHT_CENTER,

@@ -441,6 +441,13 @@ impl Gui {
                     v.live_drag = false;
                     v.dirty = true;
                 }
+                Event::Checking => {
+                    self.shell.checking_since.get_or_insert(now_ms());
+                }
+                Event::Checked(flags) => {
+                    self.shell.flags = flags;
+                    self.shell.checking_since = None;
+                }
                 Event::SketchPlane(head, got) => {
                     let asked = self.sketch_for.take_if(|a| a.0 == head);
                     match (got, asked) {
@@ -1880,6 +1887,9 @@ impl Gui {
         let again_in = if animating || self.mark_held.is_some() || self.view.as_ref().is_some_and(|v| v.dirty)
         {
             Some(std::time::Duration::ZERO)
+        } else if self.shell.checking_since.is_some() {
+            // to say so if it goes on
+            Some(delay.min(std::time::Duration::from_millis(200)))
         } else if delay == std::time::Duration::MAX {
             None
         } else {

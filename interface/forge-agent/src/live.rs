@@ -9,6 +9,7 @@ use forge_doc::{ItemId, Op};
 use forge_topo::Body;
 use std::collections::VecDeque;
 use std::panic::{AssertUnwindSafe, catch_unwind};
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Condvar, Mutex};
 use std::time::Instant;
 
@@ -59,6 +60,10 @@ pub enum Event<T> {
         adding: bool,
         got: Vec<(String, Result<Vec<forge_doc::sketch::Refd>, String>)>,
     },
+    /// A check of the part has begun, behind whatever else is going on.
+    Checking,
+    /// What the check found of the part as it stood when it began: nothing, if it's sound.
+    Checked(Vec<Flag>),
 }
 
 /// What a UI needs of the part it can't ask the worker for: it parses `src` itself.
@@ -106,6 +111,80 @@ struct Slot<T> {
     /// Values overtaken before they started.
     dropped: u64,
     stop: bool,
+}
+
+/// A feature that left the part failing a validity rule.
+#[derive(Clone, Debug, PartialEq)]
+pub struct Flag {
+    pub item: ItemId,
+    pub rule: &'static str,
+    pub reason: String,
+}
+
+/// The checker's memory: the stages it last finished, and what it found on each by index.
+#[derive(Default)]
+struct Checked {
+    stages: Vec<Arc<crate::model::Stage>>,
+    flags: Vec<(usize, Flag)>,
+}
+
+/// Checks the part as it stands, behind the worker; whatever's still at it is told to stop first.
+fn start_check<T: Send + 'static>(
+    part: &Part,
+    shared: &Arc<Shared<T>>,
+    memory: &Arc<Mutex<Checked>>,
+    running: &mut Option<(Arc<AtomicBool>, std::thread::JoinHandle<()>)>,
+) {
+    if let Some((stop, _)) = running.take() {
+        stop.store(true, Ordering::Relaxed);
+    }
+    let stages = part.model.stages();
+    let ids: Vec<ItemId> = part.model.lines.iter().map(|l| ItemId(l.id)).collect();
+    let stop = Arc::new(AtomicBool::new(false));
+    let (shared, memory, stopping) = (shared.clone(), memory.clone(), stop.clone());
+    let say = move |shared: &Arc<Shared<T>>, e: Event<T>| {
+        shared.slot.lock().expect("the UI is alive").ready.push_back(e);
+        if let Some(f) = &*shared.ready.lock().expect("the UI is alive") {
+            f();
+        }
+    };
+    let thread = std::thread::Builder::new().name("check".into()).spawn(move || {
+        say(&shared, Event::Checking);
+        let (from, kept) = {
+            let m = memory.lock().expect("the checker is alive");
+            let from = crate::model::stages_kept(&stages, &m.stages);
+            let kept: Vec<(usize, Flag)> = m.flags.iter().filter(|f| f.0 < from).cloned().collect();
+            (from, kept)
+        };
+        let found = catch_unwind(AssertUnwindSafe(|| {
+            crate::model::check_stages(&stages, from, &stopping)
+        }));
+        let Ok(forge_model::verify::Verdict::Done(faults)) = found else {
+            return;
+        };
+        let mut flags = kept;
+        for fault in faults {
+            let Some(&item) = ids.get(fault.feature) else {
+                continue;
+            };
+            for i in fault.issues {
+                flags.push((
+                    fault.feature,
+                    Flag {
+                        item,
+                        rule: i.rule,
+                        reason: i.reason,
+                    },
+                ));
+            }
+        }
+        let told: Vec<Flag> = flags.iter().map(|f| f.1.clone()).collect();
+        *memory.lock().expect("the checker is alive") = Checked { stages, flags };
+        say(&shared, Event::Checked(told));
+    });
+    if let Ok(t) = thread {
+        *running = Some((stop, t));
+    }
 }
 
 struct Shared<T> {
@@ -278,7 +357,13 @@ enum Next {
     Stop,
 }
 
-fn run<T>(mut part: Part, mesher: &mut impl FnMut(&Body, Stage) -> T, shared: &Shared<T>) {
+fn run<T: Send + 'static>(
+    mut part: Part,
+    mesher: &mut impl FnMut(&Body, Stage) -> T,
+    shared: &Arc<Shared<T>>,
+) {
+    let memory: Arc<Mutex<Checked>> = Arc::default();
+    let mut checking: Option<(Arc<AtomicBool>, std::thread::JoinHandle<()>)> = None;
     let say = |e: Event<T>| {
         shared.slot.lock().expect("the UI is alive").ready.push_back(e);
         if let Some(f) = &*shared.ready.lock().expect("the UI is alive") {
@@ -306,6 +391,7 @@ fn run<T>(mut part: Part, mesher: &mut impl FnMut(&Body, Stage) -> T, shared: &S
     }
     // sketches stand with no solid yet
     say_facts(&mut part, None, &say);
+    start_check(&part, shared, &memory, &mut checking);
     let mut rolled: Option<ItemId> = None;
     let mut before_preview: Option<crate::model::Saved> = None;
     loop {
@@ -489,6 +575,7 @@ fn run<T>(mut part: Part, mesher: &mut impl FnMut(&Body, Stage) -> T, shared: &S
                     say(Event::Final(out));
                     say_facts(&mut part, lines, &say);
                 }
+                start_check(&part, shared, &memory, &mut checking);
             }
             Next::Value(seq, op) => {
                 let t = Instant::now();
@@ -564,6 +651,25 @@ mod tests {
             forge_topo::mass::mass(b).map(|m| m.volume).unwrap_or(0.0)
         });
         (live, w)
+    }
+
+    #[test]
+    fn a_part_is_checked_behind_the_worker_at_the_start_and_after_each_commit() {
+        let (mut l, _) = start();
+        let said = |e: &Event<f64>| matches!(e, Event::Checked(_));
+        let got = wait(&mut l, said);
+        assert!(
+            got.iter().any(|e| matches!(e, Event::Checked(f) if f.is_empty())),
+            "sound"
+        );
+        let mut doc = forge_doc::Document::parse("");
+        let items = doc.read_items("extrude 5 xy at 0 0 10 rect 0 0 5 5");
+        l.call(vec![Call::Add { before: None, items }]);
+        let got = wait(&mut l, said);
+        assert!(
+            got.iter().any(|e| matches!(e, Event::Checking)),
+            "looked at again"
+        );
     }
 
     #[test]

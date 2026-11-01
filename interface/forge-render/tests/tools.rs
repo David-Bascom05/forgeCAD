@@ -910,4 +910,27 @@ fn a_marked_edge_is_its_full_colour_on_a_shadowed_inner_corner() {
     }
     // the chosen amber undimmed: red well over blue, however dark the corner
     assert!(warmest > 120, "{warmest}");
+fn a_flagged_feature_has_its_mark_and_says_why_and_a_clean_part_has_none() {
+    let Some((mut h, _)) = open(BLOCK, "flags") else {
+        return;
+    };
+    // the worker's look at a sound part: nothing to say, and the bar says valid
+    assert!(h.until(|g| g.shell.checking_since.is_none() && g.shell.flags.is_empty()));
+    assert!(h.gui.shell.place("tree:base:warning").is_none());
+    let id = h.gui.shell.doc.as_ref().unwrap().find("base").unwrap();
+    h.gui.shell.flags = vec![forge_agent::live::Flag {
+        item: id,
+        rule: "loops-cross",
+        reason: "two loops of a face cross".to_string(),
+    }];
+    for _ in 0..3 {
+        h.step();
+    }
+    let at = h.gui.shell.place("tree:base:warning").expect("its mark");
+    // clicking the row selects it
+    h.click_at(at.center().x - 80.0, at.center().y);
+    for _ in 0..3 {
+        h.step();
+    }
+    assert_eq!(h.gui.shell.selected, Some(id));
 }

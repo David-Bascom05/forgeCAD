@@ -305,18 +305,36 @@ impl Shell {
                                 toggle_row = Some(row.id);
                             }
                         }
+                        // a failed build is a red mark, a validity warning an amber triangle
+                        let flags: Vec<&forge_agent::live::Flag> =
+                            self.flags.iter().filter(|f| f.item == row.id).collect();
+                        let beside = if row.kind == "sketch" { 50.0 } else { 26.0 };
+                        let mark =
+                            Rect::from_min_size(pos2(r.right() - beside, r.top() + 5.0), vec2(16.0, 16.0));
                         if why.is_some() {
+                            ui.painter().circle_filled(mark.center(), 7.0, t.error);
                             icons::draw(
                                 ui.painter(),
-                                pos2(r.right() - 26.0, r.top() + 5.0),
-                                16.0,
-                                "warning",
-                                1.5,
-                                t.error,
+                                mark.min + vec2(2.0, 2.0),
+                                12.0,
+                                "close",
+                                2.0,
+                                Color32::WHITE,
                             );
+                            places.push((format!("tree:{}:failed", row.name), mark));
+                        } else if !flags.is_empty() {
+                            icons::draw(ui.painter(), mark.min, 16.0, "warning", 1.5, t.focus);
+                            places.push((format!("tree:{}:warning", row.name), mark));
                         }
                         let tip = match why {
                             Some(w) => format!("{}\n{w}", row.line),
+                            None if !flags.is_empty() => {
+                                let said: Vec<String> = flags
+                                    .iter()
+                                    .map(|f| format!("{} ({})", f.reason, f.rule))
+                                    .collect();
+                                format!("{}\n{}", row.line, said.join("\n"))
+                            }
                             None => row.line.clone(),
                         };
                         let resp = resp.on_hover_text(tip);
