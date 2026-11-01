@@ -2846,8 +2846,21 @@ impl<'a> P<'a> {
     /// A profile and an axis in its plane: `FRAME [axis ..] LOOPS | SKETCH [axis L] [E]`.
     fn axial(&mut self) -> R<(Profile, Axis2)> {
         if let Some(s) = self.sketch() {
+            let line = (self.peek() == "axis")
+                .then(|| self.t.get(self.k + 1).cloned())
+                .flatten()
+                .filter(|t| sketch::is_ref(t));
             let axis = self.axis(Some(s))?;
-            return Ok((self.region(s)?, axis));
+            let at = self.k;
+            // the axis may be one of the region's own edges; drawn on its own, it's no part of one
+            return match (self.region(s), line) {
+                (Ok(p), _) => Ok((p, axis)),
+                (Err(_), Some(l)) => {
+                    self.k = at;
+                    Ok((self.region(&sketch::without_line(s, &l)?)?, axis))
+                }
+                (Err(e), None) => Err(e),
+            };
         }
         let plane = self.frame()?;
         let axis = self.axis(None)?;

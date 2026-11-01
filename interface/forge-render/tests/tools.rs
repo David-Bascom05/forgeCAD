@@ -228,16 +228,148 @@ fn extrude_reads_the_free_sketch() {
     assert!((v - 10.0 * 20.0 * 10.0).abs() < 1e-6, "{v}");
 }
 
+/// A 10 by 20 rectangle 10 out from a line up the sketch's middle, which is drawn as a plain line.
+const TURNED: &str = "sk1: sketch xz\n  rect 10 0 10 20\n  line 0 0 0 30\nend\n";
+
+/// Pappus: the rectangle's area times how far its centre goes round, 15 out.
+fn pappus(turn: f64) -> f64 {
+    200.0 * 15.0 * turn.to_radians()
+}
+
 #[test]
-fn revolve_reads_the_free_sketch() {
-    let Some((mut h, file)) = open(SKETCHED, "revolve") else {
+fn revolve_waits_for_its_axis_and_turns_about_the_sketch_line_picked() {
+    let Some((mut h, file)) = open(TURNED, "revolve") else {
         return;
     };
     button(&mut h, "Revolve");
+    let d = h.gui.shell.dialog.as_ref().unwrap();
+    assert!(d.waiting_for_pick(), "{:?}", d.fields);
+    assert!(h.gui.shell.place("dialog:Axis").is_some() || d.fields.iter().any(|f| f.0 == "Axis"));
+    // the line up the middle, in the view
+    point_at(&mut h, [0.0, 0.0, 15.0]);
+    settle(&mut h);
+    let line = h.gui.shell.dialog.as_ref().unwrap().line();
+    assert_eq!(line, "revolve sk1 axis l5");
+    assert!(
+        h.until(
+            |g| g.shell.dialog.as_ref().unwrap().error.is_none() && g.shell.dialog.as_ref().unwrap().seq > 0
+        ),
+        "{:?}",
+        h.gui.shell.dialog.as_ref().unwrap().error
+    );
     ok(&mut h, "revolve");
     let v = built(&file, "revolve");
-    let want = core::f64::consts::PI * (400.0 - 100.0) * 20.0;
-    assert!((v - want).abs() < want * 0.01, "{v} {want}");
+    assert!((v - pappus(360.0)).abs() < 1e-6 * v, "{v} {}", pappus(360.0));
+}
+
+#[test]
+fn revolve_turns_by_an_angle_either_way_both_ways_or_each_its_own() {
+    for (way, a, b, turn, side) in [
+        ("Forward", "90", "", 90.0, 1.0),
+        ("Back", "90", "", 90.0, -1.0),
+        ("Symmetric", "90", "", 90.0, 0.0),
+        ("Two directions", "90", "45", 135.0, 0.5),
+    ] {
+        let Some((mut h, file)) = open(TURNED, &format!("revolve-{}", way.replace(' ', ""))) else {
+            return;
+        };
+        button(&mut h, "Revolve");
+        point_at(&mut h, [0.0, 0.0, 15.0]);
+        settle(&mut h);
+        h.click("dialog:extents:Angle");
+        settle(&mut h);
+        h.click(&format!("dialog:way:{way}"));
+        settle(&mut h);
+        field(&mut h, "Angle", a);
+        if !b.is_empty() {
+            field(&mut h, "Angle 2", b);
+        }
+        let line = h.gui.shell.dialog.as_ref().unwrap().line();
+        ok(&mut h, way);
+        let text = std::fs::read_to_string(&file).unwrap();
+        let mut m = forge_agent::model::Model::new(&text);
+        let v = m.mass().unwrap().volume;
+        assert!(
+            (v - pappus(turn)).abs() < 1e-6 * v,
+            "{way} {line}: {v} {}",
+            pappus(turn)
+        );
+        // which side of the sketch it went: the body's middle across the plane
+        let b = m.body().unwrap();
+        let bx = b
+            .face_ids()
+            .fold(forge_math::Box3::EMPTY, |a, f| a.hull(&b.face_box(f)));
+        let mid = (bx.y.lo + bx.y.hi) / 2.0;
+        assert!(
+            (side == 0.0 && mid.abs() < 1e-6) || mid * side > 1.0 || (side == 0.5 && mid.abs() > 1.0),
+            "{way} {line}: {bx:?}"
+        );
+        // it reads back as it was chosen
+        let id = h.gui.shell.rows.iter().find(|r| r.kind == "revolve").unwrap().id;
+        h.gui.shell.out.push(Action::Edit(id));
+        assert!(h.until(|g| g.shell.dialog.is_some()));
+        let d = h.gui.shell.dialog.as_ref().unwrap();
+        assert_eq!(d.line(), line, "{:?}", d.fields);
+    }
+}
+
+#[test]
+fn revolve_turns_about_an_origin_axis_from_the_tree() {
+    let part = "sk1: sketch xz\n  rect 10 0 10 20\nend\n";
+    let Some((mut h, file)) = open(part, "revolve-z") else {
+        return;
+    };
+    button(&mut h, "Revolve");
+    h.click("tree:Origin");
+    settle(&mut h);
+    h.click("tree:Z Axis");
+    settle(&mut h);
+    let line = h.gui.shell.dialog.as_ref().unwrap().line();
+    assert!(
+        line.contains("axis 0 0 0 1") || line.contains("axis 0 0 0 -1"),
+        "{line}"
+    );
+    ok(&mut h, "z axis");
+    let v = built(&file, "z axis");
+    assert!((v - pappus(360.0)).abs() < 1e-6 * v, "{v}");
+    // an axis that crosses the sketch's plane says so, and nothing's taken
+    let Some((mut h, _)) = open(part, "revolve-y") else {
+        return;
+    };
+    button(&mut h, "Revolve");
+    h.click("tree:Origin");
+    settle(&mut h);
+    h.click("tree:Y Axis");
+    settle(&mut h);
+    let d = h.gui.shell.dialog.as_ref().unwrap();
+    assert!(
+        d.error.as_deref().is_some_and(|e| e.contains("plane")),
+        "{:?}",
+        d.error
+    );
+    assert!(d.waiting_for_pick());
+}
+
+#[test]
+fn revolve_turns_about_a_straight_edge_of_the_part_in_its_plane() {
+    // a block whose edge at x = -30 runs up the sketch's plane, y = 0
+    let part = "base: extrude 30 rect -40 0 10 20\nsk1: sketch xz\n  rect 10 0 10 20\nend\n";
+    let Some((mut h, file)) = open(part, "revolve-edge") else {
+        return;
+    };
+    let was = built(&file, "before");
+    button(&mut h, "Revolve");
+    point_at(&mut h, [-30.0, 0.0, 15.0]);
+    settle(&mut h);
+    let line = h.gui.shell.dialog.as_ref().unwrap().line();
+    assert!(line.contains("axis -30 "), "{line}");
+    h.click("dialog:op:New");
+    settle(&mut h);
+    ok(&mut h, "edge");
+    let got = built(&file, "edge") - was;
+    // 40 to 50 out from the edge
+    let want = core::f64::consts::PI * (2500.0 - 1600.0) * 20.0;
+    assert!((got - want).abs() < 1e-6 * want, "{got} {want}");
 }
 
 #[test]

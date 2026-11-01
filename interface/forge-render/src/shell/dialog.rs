@@ -48,6 +48,9 @@ pub struct Dialog {
     pub side_settled: bool,
     /// The selections still to come after the one taking clicks.
     pub queue: Vec<(String, &'static str)>,
+    /// A revolve goes all the way round, or by its angle this way.
+    pub full: bool,
+    pub way: Way,
 }
 
 /// How far an extrude goes.
@@ -66,6 +69,47 @@ pub enum Toward {
     Forward,
     Back,
     Both,
+}
+
+/// What a revolve waits for, till it has its axis.
+pub const AXIS_HINT: &str = "Pick a sketch line, a straight edge, or an axis to turn about";
+
+/// A line in the world, as an axis in a sketch plane's own terms: `axis OX OY DX DY`, if it lies
+/// in the plane.
+pub fn axis_in_plane(plane: &forge_math::Frame, at: [f64; 3], dir: [f64; 3]) -> Result<String, String> {
+    let p = plane.point_to_local(forge_math::Point3::new(at[0], at[1], at[2]));
+    let d = plane.vec_to_local(forge_math::Vec3::new(dir[0], dir[1], dir[2]));
+    let len = d.length();
+    if len == 0.0 || p.z.abs() > 1e-6 || d.z.abs() > 1e-9 * len {
+        return Err("The axis must lie in the sketch's plane: pick one that does".to_string());
+    }
+    let f = |x: f64| {
+        let r = (x * 1e9).round() / 1e9;
+        if r == 0.0 { "0".to_string() } else { format!("{r}") }
+    };
+    Ok(format!(
+        "axis {} {} {} {}",
+        f(p.x),
+        f(p.y),
+        f(d.x / len),
+        f(d.y / len)
+    ))
+}
+
+/// The sketch a revolve's profile is on, by name.
+pub fn profile_sketch(d: &Dialog) -> Option<String> {
+    let f = d.fields.iter().find(|f| f.0 == "Profile")?;
+    f.1.split_whitespace().next().map(str::to_string)
+}
+
+/// Which way a revolve turns from its sketch: one way by its angle, the other, half each way, or
+/// an angle each way.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Way {
+    Forward,
+    Back,
+    Symmetric,
+    Two,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -311,6 +355,14 @@ impl Dialog {
                 queue.push(("Path".to_string(), "Pick the sketch to sweep along"));
             }
             "loft" => fields = vec![("Profiles".into(), String::new())],
+            // what it turns and about what are the person's to pick; all the way round to start
+            "revolve" => {
+                fields = vec![
+                    ("Angle".into(), "360".into()),
+                    ("Angle 2".into(), "90".into()),
+                    ("Axis".into(), String::new()),
+                ];
+            }
             // exact by default: only what's picked, unless told to follow the tangent chain
             "fillet" => {
                 fields = vec![
@@ -395,6 +447,8 @@ impl Dialog {
             toward: Toward::Forward,
             surface: String::new(),
             again: false,
+            full: true,
+            way: Way::Forward,
         }
     }
 
@@ -420,6 +474,8 @@ impl Dialog {
             side_settled: false,
             thread: ThreadChoice::default(),
             hole: None,
+            full: true,
+            way: Way::Forward,
         }
     }
 
@@ -431,6 +487,9 @@ impl Dialog {
             self.fields.insert(0, ("Operation".to_string(), String::new()));
         }
         self.read_extent();
+        if self.kind == "revolve" && matches!(self.target, DialogTarget::Edit(_)) {
+            self.read_revolve();
+        }
         // an existing fillet reads back whether it follows the chain
         if self.kind == "fillet" && matches!(self.target, DialogTarget::Edit(_)) {
             let at = self.fields.iter().position(|f| f.0 == "Edges");
@@ -591,13 +650,144 @@ impl Dialog {
 
     /// It reads this sketch, with no plane or profile of its own.
     pub fn on_sketch(&mut self, name: &str) {
+        if self.kind == "revolve" {
+            self.fields.retain(|f| f.0 != "Plane" && f.0 != "Profile");
+            let at = self.fields.iter().position(|f| f.0 == "Axis").unwrap_or_else(|| {
+                self.fields.push(("Axis".to_string(), String::new()));
+                self.fields.len() - 1
+            });
+            self.fields.insert(at, ("Profile".to_string(), name.to_string()));
+            let axis_empty = self.fields.iter().any(|f| f.0 == "Axis" && f.1.is_empty());
+            let taking = self.pick.as_ref().map(|p| p.0.clone());
+            if axis_empty && taking.as_deref() != Some("Axis") && !self.queue.iter().any(|q| q.0 == "Axis") {
+                let ask = ("Axis".to_string(), AXIS_HINT);
+                match taking.as_deref() {
+                    Some("Profile") if name.is_empty() => self.queue.push(ask),
+                    _ => self.pick = Some(ask),
+                }
+            }
+            return;
+        }
         self.fields
             .retain(|f| f.0 != "Plane" && f.0 != "Profile" && f.0 != "Axis");
         self.fields.push(("Profile".to_string(), name.to_string()));
     }
 
+    /// A revolve on a sketch, as its line reads: `revolve [op] [TURN] SKETCH [axis ..] [REGION]`.
+    fn revolve_line(&self) -> Option<String> {
+        if self.kind != "revolve" || self.fields.iter().any(|f| f.0 == "Plane") {
+            return None;
+        }
+        let get = |l: &str| self.fields.iter().find(|f| f.0 == l).map_or("", |f| f.1.trim());
+        let profile = get("Profile");
+        let (sketch, region) = profile.split_once(' ').unwrap_or((profile, ""));
+        let a = self.number_text("Angle", get("Angle"));
+        let turn = match (self.full, self.way) {
+            (true, _) => String::new(),
+            (false, Way::Forward) => a,
+            (false, Way::Back) => format!("two 0 {a}"),
+            (false, Way::Symmetric) => format!("sym {a}"),
+            (false, Way::Two) => format!("two {a} {}", self.number_text("Angle 2", get("Angle 2"))),
+        };
+        let words = [get("Operation"), turn.as_str(), sketch, get("Axis"), region];
+        Some(
+            std::iter::once("revolve")
+                .chain(words.into_iter().filter(|w| !w.is_empty()))
+                .collect::<Vec<_>>()
+                .join(" "),
+        )
+    }
+
+    /// An existing revolve on a sketch: its turn, profile and axis read back into their fields.
+    fn read_revolve(&mut self) {
+        let words: Vec<String> = self
+            .fields
+            .iter()
+            .flat_map(|f| f.1.split_whitespace().map(str::to_string).collect::<Vec<_>>())
+            .collect();
+        let mut k = 0;
+        let op = if words
+            .first()
+            .is_some_and(|w| ["add", "cut", "keep", "new"].contains(&w.as_str()))
+        {
+            k += 1;
+            words[0].clone()
+        } else {
+            String::new()
+        };
+        let num = |w: Option<&String>| {
+            w.is_some_and(|w| w.parse::<f64>().is_ok() || !w.chars().next().is_some_and(char::is_alphabetic))
+        };
+        let (mut full, mut way, mut a, mut b) = (true, Way::Forward, "360".to_string(), "90".to_string());
+        match words.get(k).map(String::as_str) {
+            Some("sym") => {
+                (full, way, a) = (
+                    false,
+                    Way::Symmetric,
+                    words.get(k + 1).cloned().unwrap_or_default(),
+                );
+                k += 2;
+            }
+            Some("two") => {
+                let (x, y) = (
+                    words.get(k + 1).cloned().unwrap_or_default(),
+                    words.get(k + 2).cloned().unwrap_or_default(),
+                );
+                if x == "0" {
+                    (full, way, a) = (false, Way::Back, y);
+                } else {
+                    (full, way, a, b) = (false, Way::Two, x, y);
+                }
+                k += 3;
+            }
+            _ if num(words.get(k)) => {
+                (full, a) = (false, words[k].clone());
+                k += 1;
+            }
+            _ => {}
+        }
+        let Some(sketch) = words.get(k).cloned() else {
+            return;
+        };
+        if panel::fields("revolve", &[sketch.as_str()])
+            .iter()
+            .any(|f| f.0 == "Plane" || f.0 == "Profile")
+        {
+            return;
+        }
+        k += 1;
+        let mut axis = String::new();
+        if words.get(k).is_some_and(|w| w == "axis") {
+            let n = if words.get(k + 1).is_some_and(|w| w.parse::<f64>().is_ok()) {
+                5
+            } else {
+                2
+            };
+            axis = words[k..(k + n).min(words.len())].join(" ");
+            k += n;
+        }
+        let region = words.get(k..).map_or(String::new(), |w| w.join(" "));
+        let profile = if region.is_empty() {
+            sketch
+        } else {
+            format!("{sketch} {region}")
+        };
+        self.full = full;
+        self.way = way;
+        self.fields = vec![
+            ("Operation".to_string(), op),
+            ("Angle".to_string(), a),
+            ("Angle 2".to_string(), b),
+            ("Profile".to_string(), profile),
+            ("Axis".to_string(), axis),
+        ];
+    }
+
     /// The feature's line, from its fields.
     pub fn line(&self) -> String {
+        if let Some(l) = self.revolve_line() {
+            return l;
+        }
         let mut out = self.kind.clone();
         for (label, text) in &self.fields {
             let file = self.file_text(label, text);
@@ -619,6 +809,7 @@ impl Dialog {
                 .as_ref()
                 .is_some_and(|h| h.termination == Termination::Surface && h.surface.is_empty())
             || (self.kind == "extrude" && self.extent == Extent::Surface && self.surface.is_empty())
+            || (self.kind == "revolve" && self.fields.iter().any(|f| f.0 == "Axis" && f.1.trim().is_empty()))
             || (self.kind == "thread"
                 && self.fields.iter().any(|f| f.0 == "Size" && f.1.is_empty())
                 && matches!(self.target, DialogTarget::New(_)))
@@ -1559,6 +1750,8 @@ impl Shell {
                 let mut thread_change: ThreadChange = (None, None, None, None);
                 let mut extent = d.extent;
                 let mut toward = d.toward;
+                let (mut full, mut way) = (d.full, d.way);
+                let revolve = d.kind == "revolve" && !d.fields.iter().any(|f| f.0 == "Plane");
                 if let Some(mut h) = d.hole.clone() {
                     let thread = d.thread.clone();
                     let mut change: ThreadChange = (None, None, None, None);
@@ -1957,7 +2150,7 @@ impl Shell {
                                 | "Path"
                                 | "Target"
                                 | "Tools"
-                        )) || (label == "Axis" && d_kind == "coil");
+                        )) || (label == "Axis" && (d_kind == "coil" || d_kind == "revolve"));
                         if is_pick {
                             let wanted = pick.as_ref().is_some_and(|(l, _)| l == label);
                             let n = match label.as_str() {
@@ -1976,6 +2169,40 @@ impl Shell {
                             continue;
                         }
                         // how far: the kind of extent and the way it goes, then the number if it has one
+                        // how far round: all of it, or an angle one way, the other, both, or each its own
+                        if revolve && label == "Angle 2" && (full || way != Way::Two) {
+                            continue;
+                        }
+                        if revolve && label == "Angle" {
+                            if let Some(k) = small_row(
+                                ui,
+                                &t,
+                                "Extents",
+                                &[("angle", "Angle", !full), ("full", "Full", full)],
+                                "dialog:extents",
+                                &mut places,
+                            ) {
+                                full = k == 1;
+                            }
+                            if full {
+                                continue;
+                            }
+                            if let Some(k) = small_row(
+                                ui,
+                                &t,
+                                "Direction",
+                                &[
+                                    ("forward", "Forward", way == Way::Forward),
+                                    ("backward", "Back", way == Way::Back),
+                                    ("symmetric", "Symmetric", way == Way::Symmetric),
+                                    ("twoway", "Two directions", way == Way::Two),
+                                ],
+                                "dialog:way",
+                                &mut places,
+                            ) {
+                                way = [Way::Forward, Way::Back, Way::Symmetric, Way::Two][k];
+                            }
+                        }
                         if extrude && label == "Distance" {
                             if let Some(k) = small_row(
                                 ui,
@@ -2016,6 +2243,8 @@ impl Shell {
                 }
                 d.extent = extent;
                 d.toward = toward;
+                d.full = full;
+                d.way = way;
                 if let Some(l) = activate {
                     d.activate(&l);
                 }

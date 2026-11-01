@@ -301,12 +301,46 @@ impl Shell {
                     let name = s.item.and_then(|id| self.doc.as_ref().and_then(|d| d.name(id)));
                     let curve = s.curve_names.get(j).cloned();
                     if let (Some(d), Some(name), Some(curve)) = (&mut self.dialog, name, curve) {
+                        let own = super::dialog::profile_sketch(d);
                         let text = if takes == "Path" {
-                            format!("path {name} {curve}")
+                            Ok(format!("path {name} {curve}"))
+                        } else if d.kind == "revolve" && own.as_deref().is_some_and(|o| o != name) {
+                            // a line of another sketch: where it lies, if that's in this one's plane
+                            let ends = (s.curves[j].0.first(), s.curves[j].0.last());
+                            let plane = own.and_then(|o| {
+                                let id = self.doc.as_ref()?.find(&o)?;
+                                shapes.iter().find(|x| x.item == Some(id)).map(|x| x.plane)
+                            });
+                            let straight = |a: &[f64; 3], b: &[f64; 3]| {
+                                let d = [b[0] - a[0], b[1] - a[1], b[2] - a[2]];
+                                let l2 = d.iter().map(|x| x * x).sum::<f64>();
+                                s.curves[j].0.iter().all(|p| {
+                                    let w = [p[0] - a[0], p[1] - a[1], p[2] - a[2]];
+                                    let t = (w[0] * d[0] + w[1] * d[1] + w[2] * d[2]) / l2.max(1e-300);
+                                    (0..3).map(|k| (w[k] - t * d[k]).powi(2)).sum::<f64>() < 1e-12
+                                })
+                            };
+                            match (ends, plane) {
+                                ((Some(a), Some(b)), _) if !straight(a, b) => {
+                                    Err("The axis must be straight: pick a line".to_string())
+                                }
+                                ((Some(a), Some(b)), Some(pl)) => super::dialog::axis_in_plane(
+                                    &pl,
+                                    *a,
+                                    [b[0] - a[0], b[1] - a[1], b[2] - a[2]],
+                                ),
+                                _ => Err("Pick a line for the axis".to_string()),
+                            }
                         } else {
-                            format!("axis {curve}")
+                            Ok(format!("axis {curve}"))
                         };
-                        d.take_pick(&takes, text);
+                        match text {
+                            Ok(t) => {
+                                d.error = None;
+                                d.take_pick(&takes, t);
+                            }
+                            Err(why) => d.error = Some(why),
+                        }
                     }
                 }
             }

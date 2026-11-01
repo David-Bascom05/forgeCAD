@@ -63,7 +63,7 @@ pub fn field_kind(label: &str) -> Option<forge_doc::units::Kind> {
         "Distance" | "Diameter" | "Radius" | "Thickness" | "Depth" | "Length" | "Offset" | "Height"
         | "Pitch" | "Width" | "Value" | "Spacing" | "Seat diameter" | "Seat depth" | "Distance 1"
         | "Distance 2" => Some(Kind::Length),
-        "Angle" | "Sweep" | "Taper" => Some(Kind::Angle),
+        "Angle" | "Angle 2" | "Sweep" | "Taper" => Some(Kind::Angle),
         _ => None,
     }
 }

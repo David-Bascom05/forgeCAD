@@ -1075,6 +1075,15 @@ fn id_of(s: &Sketch, t: &str) -> R<EntityId> {
         .ok_or_else(|| format!("the sketch has no '{t}'"))
 }
 
+/// The sketch with the line `t` left out of its regions, as an axis drawn as a plain line is.
+pub fn without_line(s: &Sketch, t: &str) -> R<Sketch> {
+    let mut o = s.clone();
+    o.solved
+        .set_construction(id_of(s, t)?, true)
+        .map_err(|e| format!("{e:?}"))?;
+    Ok(o)
+}
+
 /// The segment id an entity's profile edges carry: from its kind and count (`l3`), so it
 /// stays put when other kinds are added or dimensions change.
 fn stable(name: &str) -> u64 {

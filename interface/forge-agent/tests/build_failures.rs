@@ -875,6 +875,31 @@ fn a_revolve_closing_a_void_on_its_axis() {
     assert!((v - want).abs() < 3e-3 * want, "{v} {want}");
 }
 
+/// A revolve's axis drawn as a plain line in its sketch is no part of the profile; one of the
+/// profile's own edges stays one.
+#[test]
+fn a_revolve_axis_drawn_as_a_plain_line_or_an_edge_of_the_profile() {
+    let pi = std::f64::consts::PI;
+    let sk = "sk1: sketch xz\n  rect 10 0 10 20\n  line 0 0 0 30\nend\n";
+    let v = Model::new(&format!("{sk}revolve sk1 axis l5\n"))
+        .mass()
+        .unwrap()
+        .volume;
+    assert!((v - pi * 300.0 * 20.0).abs() < 1e-6 * v, "{v}");
+    // with the line not the axis, it's an open chain, said so
+    let m = Model::new(&format!("{sk}revolve sk1 axis 0 0 0 1\n"));
+    assert!(
+        m.error.as_ref().is_some_and(|e| e.msg.contains("open")),
+        "{:?}",
+        m.error
+    );
+    let v = Model::new("sk1: sketch xz\n  rect 10 0 10 20\nend\nrevolve 90 sk1 axis l4\n")
+        .mass()
+        .unwrap()
+        .volume;
+    assert!((v - pi * 100.0 * 20.0 / 4.0).abs() < 1e-6 * v, "{v}");
+}
+
 /// A cut that takes a whole body away, then an add: it goes to the body left, as sequential does; one
 /// run made the add's tool a body of its own (Fusion 51895_0007).
 #[test]

@@ -639,8 +639,55 @@ impl Gui {
             }
             return;
         }
+        let origin_under = self.origin_under();
         let Some(v) = &mut self.view else { return };
         if let Some(d) = &mut self.shell.dialog {
+            // a revolve's axis from the origin's axes or a work axis, in the view or the tree
+            if d.kind == "revolve" && d.pick.as_ref().is_some_and(|p| p.0 == "Axis") {
+                use crate::origin::Item;
+                let clicked = v.nav.clicks != v.clicks;
+                let origin = match self.shell.origin_selected {
+                    Some(i @ (Item::XAxis | Item::YAxis | Item::ZAxis)) => Some(i),
+                    _ => origin_under
+                        .filter(|i| clicked && matches!(i, Item::XAxis | Item::YAxis | Item::ZAxis)),
+                };
+                let work = self
+                    .shell
+                    .selected
+                    .and_then(|id| v.facts.work_axes.iter().find(|w| w.0 == id))
+                    .map(|w| (w.1, w.2));
+                let line = match origin {
+                    Some(Item::XAxis) => Some(([0.0; 3], [1.0, 0.0, 0.0])),
+                    Some(Item::YAxis) => Some(([0.0; 3], [0.0, 1.0, 0.0])),
+                    Some(Item::ZAxis) => Some(([0.0; 3], [0.0, 0.0, 1.0])),
+                    _ => work,
+                };
+                if let Some((at, dir)) = line {
+                    let plane = crate::shell::dialog::profile_sketch(d).and_then(|o| {
+                        let id = self.shell.doc.as_ref()?.find(&o)?;
+                        self.shell
+                            .sketch_shapes
+                            .iter()
+                            .find(|x| x.item == Some(id))
+                            .map(|x| x.plane)
+                    });
+                    match plane.map(|pl| crate::shell::dialog::axis_in_plane(&pl, at, dir)) {
+                        Some(Ok(t)) => {
+                            d.error = None;
+                            d.take_pick("Axis", t);
+                        }
+                        Some(Err(why)) => d.error = Some(why),
+                        None => d.error = Some("Pick the profile first".to_string()),
+                    }
+                    self.shell.origin_selected = None;
+                    self.shell.selected = None;
+                    v.nav.selected.clear();
+                    v.clicked.clear();
+                    v.clicks = v.nav.clicks;
+                    v.dirty = true;
+                    return;
+                }
+            }
             // a feature from the tree, for what takes features: exact where bodies overlap
             let takes = d.pick.as_ref().map(|p| p.0.clone()).unwrap_or_default();
             if matches!(takes.as_str(), "Features" | "Target" | "Tools")
@@ -698,6 +745,40 @@ impl Gui {
                     Some(format!("{name} {}", v.facts.face_refs.get(f as usize)?))
                 };
                 let picked = v.clicked.last().map(|c| c.1);
+                // a straight edge of the part for a revolve's axis, where it lies in the sketch's plane
+                if d.kind == "revolve"
+                    && d.pick.as_ref().is_some_and(|p| p.0 == "Axis")
+                    && let Some(Entity::Edge(x)) = picked
+                {
+                    let plane = crate::shell::dialog::profile_sketch(d).and_then(|o| {
+                        let id = self.shell.doc.as_ref()?.find(&o)?;
+                        self.shell
+                            .sketch_shapes
+                            .iter()
+                            .find(|x| x.item == Some(id))
+                            .map(|x| x.plane)
+                    });
+                    let got = match (v.facts.edge_line.get(x as usize), plane) {
+                        (Some(Some((a, b))), Some(pl)) => crate::shell::dialog::axis_in_plane(
+                            &pl,
+                            *a,
+                            [b[0] - a[0], b[1] - a[1], b[2] - a[2]],
+                        ),
+                        (_, None) => Err("Pick the profile first".to_string()),
+                        _ => Err("The axis must be straight: pick a straight edge".to_string()),
+                    };
+                    match got {
+                        Ok(t) => {
+                            d.error = None;
+                            d.take_pick("Axis", t);
+                        }
+                        Err(why) => d.error = Some(why),
+                    }
+                    v.nav.selected.clear();
+                    v.clicked.clear();
+                    v.dirty = true;
+                    return;
+                }
                 let wants_surface = d.kind == "extrude" && d.extent == crate::shell::dialog::Extent::Surface;
                 const UNNAMED: &str = "No feature owns that face, so it can't be named here. Pick another.";
                 if wants_surface {

@@ -50,6 +50,8 @@ pub struct Facts {
     /// By the body's face index: does it face its own axis, as a bore's wall does?
     pub face_bore: Vec<bool>,
     pub sketches: Vec<SketchShape>,
+    /// Each work axis: its line, a point of it and its direction.
+    pub work_axes: Vec<(ItemId, [f64; 3], [f64; 3])>,
 }
 
 /// A sketch line as it stands in the model, in 3D.
@@ -368,7 +370,31 @@ pub fn facts(model: &mut Model) -> Facts {
         face_radius: radii(model.body()),
         face_bore: bores(model.body()),
         sketches: sketch_shapes(model, model.features.len()),
+        work_axes: work_axes(model, model.built()),
     }
+}
+
+fn work_axes(model: &Model, n: usize) -> Vec<(ItemId, [f64; 3], [f64; 3])> {
+    let h = forge_model::History::new(&model.features, None);
+    (0..n.min(model.features.len()))
+        .filter(|&i| {
+            matches!(
+                model.features[i],
+                forge_model::Feature::Work(forge_model::Work::Axis(_))
+            )
+        })
+        .filter_map(|i| match forge_model::work::datum(h, i) {
+            Ok(forge_model::Datum::Axis(l)) => {
+                let d: forge_math::Vec3 = l.dir.into();
+                Some((
+                    ItemId(model.lines[i].id),
+                    [l.origin.x, l.origin.y, l.origin.z],
+                    [d.x, d.y, d.z],
+                ))
+            }
+            _ => None,
+        })
+        .collect()
 }
 
 fn vertex_refs(body: Option<&forge_topo::Body>) -> Vec<String> {
@@ -488,6 +514,7 @@ pub fn facts_at(model: &Model, n: usize) -> Facts {
         face_radius: radii(model.body_after(n)),
         face_bore: bores(model.body_after(n)),
         sketches: sketch_shapes(model, n),
+        work_axes: work_axes(model, n),
     }
 }
 
