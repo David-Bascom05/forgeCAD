@@ -398,6 +398,8 @@ class Arrangement:
         self.left = {}
         outers, holes = [], []
         for k, lp in enumerate(self.loops):
+            if len(polygon(lp, self)) < 3 and self.pieces[lp[0][0]].kind != "circle":
+                continue  # a curve on another with the same ends: encloses nothing
             (outers if area(lp, self) > 0 else holes).append(k)
         self.faces = []
         for k in outers:
@@ -425,6 +427,11 @@ class Arrangement:
         if ent is not None and p.ent != ent and not any(o == (ent, True) for o in p.others):
             side = -side
         return self.left.get((piece, side > 0))
+
+    def holds(self, region, q):
+        """Is the point in the region (inside its outside, outside its holes)?"""
+        f = self.faces[region]
+        return inside(q, self.loops[f["outer"]], self) and not any(inside(q, self.loops[h], self) for h in f["holes"])
 
     def outermost(self):
         """Regions not inside another region's hole."""

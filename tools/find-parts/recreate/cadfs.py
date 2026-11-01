@@ -148,6 +148,8 @@ class Tr:
         self.alias = {}
         self.used = set()
         self.sketch_ents = {}
+        self.plain = {}
+        self.imprint_off = set()
         self.copies = {}
 
     def val(self, v):
@@ -196,34 +198,39 @@ class Tr:
                     ours.add((round(q[0], 3), round(q[1], 3)))
             if e.r:
                 ours.add(round(e.r, 3))
-        best, score = None, 0
         # the plane it was drawn on rules out look-alike sketches
         try:
             plane = self.carrier(single(f["args"]["sketchPlane"], f["env"]), f["env"])
         except (Unresolved, KeyError, Unsupported):
             plane = None
-        for k, s in enumerate(self.raw.get("sketches", [])):
-            if k in self.used or "sketchMatrix" not in s:
-                continue
-            if isinstance(plane, OnPlane):
-                fr = Frame(s["sketchMatrix"])
-                if plane.dist(fr.o) > 1e-3 or abs(abs(dot(fr.n, plane.n)) - 1) > 1e-6:
+        def choose(on_plane):
+            best, score = None, 0
+            for k, s in enumerate(self.raw.get("sketches", [])):
+                if k in self.used or "sketchMatrix" not in s:
                     continue
-            theirs = set()
-            todo = list(s.get("entities", []))
-            while todo:
-                x = todo.pop()
-                if isinstance(x, dict):
-                    if isinstance(x.get("x"), float) and isinstance(x.get("y"), float):
-                        theirs.add((round(x["x"] * 1000, 3), round(x["y"] * 1000, 3)))
-                    if isinstance(x.get("radius"), float):
-                        theirs.add(round(x["radius"] * 1000, 3))
-                    todo += x.values()
-                elif isinstance(x, list):
-                    todo += x
-            c = len(ours & theirs)
-            if c > score:
-                best, score = k, c
+                if on_plane and isinstance(plane, OnPlane):
+                    fr = Frame(s["sketchMatrix"])
+                    if plane.dist(fr.o) > 1e-3 or abs(abs(dot(fr.n, plane.n)) - 1) > 1e-6:
+                        continue
+                theirs = set()
+                todo = list(s.get("entities", []))
+                while todo:
+                    x = todo.pop()
+                    if isinstance(x, dict):
+                        if isinstance(x.get("x"), float) and isinstance(x.get("y"), float):
+                            theirs.add((round(x["x"] * 1000, 3), round(x["y"] * 1000, 3)))
+                        if isinstance(x.get("radius"), float):
+                            theirs.add(round(x["radius"] * 1000, 3))
+                        todo += x.values()
+                    elif isinstance(x, list):
+                        todo += x
+                n = len(ours & theirs)
+                if n > score:
+                    best, score = k, n
+            return best
+        best = choose(True)
+        if best is None:
+            best = choose(False)
         if best is None or "sketchMatrix" not in self.raw["sketches"][best]:
             raise Unresolved("no sketch record")
         self.used.add(best)
@@ -423,10 +430,36 @@ class Tr:
                 raise Unresolved("profile query " + (q[0] if isinstance(q, tuple) else "?"))
         return by
 
+    def names_outside(self, q, env):
+        """Does this region's query name an edge that is not its own sketch's?"""
+        fid = q[1][0][1].split(".")[0]
+        todo = [q]
+        while todo:
+            x = todo.pop()
+            if isinstance(x, tuple) and x and x[0] == "name":
+                if x[1] not in env:
+                    continue
+                x = self.deref(x, env)
+            if isinstance(x, fs.Call):
+                if x[0] == "makeQuery" and x[1][1] != "IMPRINT":
+                    return True
+                if x[0] == "makeQuery" and x[1][0][1].split(".")[0] != fid:
+                    return True
+                if x[0] == "sQuery" and x[1][0][1].split(".")[0] != fid:
+                    return True
+                todo += list(x[1])
+            elif isinstance(x, dict):
+                todo += list(x.values())
+            elif isinstance(x, list):
+                todo += x
+        return False
+
     def imprinted(self, fid):
         """Onshape imprints a sketch on its plane: regions are also cut by the edges of faces lying in that plane
         and by earlier sketches drawn in it. The sketch's arrangement with those added."""
         base, fr = self.sk[fid]
+        if fid in self.imprint_off:
+            return base
         ents = list(self.sketch_ents[fid])
         have = {e["id"] for e in ents}
         for g, (ga, gfr) in self.sk.items():
@@ -477,7 +510,9 @@ class Tr:
         fid = q[1][0][1].split(".")[0]
         if fid not in self.sk:
             raise Unresolved("an imprint of an unread sketch")
-        a = self.imprinted(fid)
+        self.plain.setdefault(fid, self.sk[fid][0])
+        plain = self.plain[fid]
+        a = self.imprinted(fid) if self.names_outside(q, env) else plain
         self.current_fr = self.sk[fid][1]
         cands = None
         for d in q[1][3].get("disambiguationData", []):
@@ -486,7 +521,29 @@ class Tr:
             for item in d[1][0]:
                 eq, w = self.deref(item[0], env), item[1]
                 rs = self.side_regions(a, eq, w, env)
+                # the sketch alone says which side, where it can: what lies in the plane only cuts that up
+                if a is not plain and len(rs) > 1:
+                    try:
+                        was = self.side_regions(plain, eq, w, env)
+                    except Unresolved:
+                        was = set()
+                    if len(was) == 1:
+                        r0 = next(iter(was))
+                        ps, _ = self.edge_pieces(a, eq, env)
+                        keep = set()
+                        for i in ps:
+                            for side in (1, -1):
+                                r = a.region_at(i, side)
+                                if r is not None and plain.holds(r0, sketch2d.point_within(a.loops[a.faces[r]["outer"]], a)):
+                                    keep.add(r)
+                        rs = keep or rs
                 cands = rs if cands is None else cands & rs
+        if a is not plain and (not cands or len(cands) > 1):
+            # a query that names no piece means its curve was not cut there: the sketch alone, then
+            self.sk[fid] = (plain, self.sk[fid][1])
+            self.imprint_off.add(fid)
+            self.notes.discard("imprint")
+            return self.imprint(q, env)
         if not cands:
             raise Unresolved("no region on that side")
         if len(cands) > 1:
@@ -551,6 +608,9 @@ class Tr:
         on = {a.region_at(i, SIDE * w, name) for i in ps} - {None}
         off = {a.region_at(i, -SIDE * w, name) for i in ps} - {None}
         if on and off:
+            base = self.plain.get(a_id(self, a))
+            if base is not None and base is not a:
+                return on | off  # both, for imprint() to settle against the sketch alone
             self.notes.add("side-by-weight")
         return on or off
 
@@ -952,6 +1012,14 @@ class Tr:
                 getattr(self, f["op"])(f)
         if not self.lines:
             raise Unsupported("no solid feature")
+
+
+def a_id(t, a):
+    """The sketch an arrangement belongs to."""
+    for fid, (x, _) in t.sk.items():
+        if x is a:
+            return fid
+    return None
 
 
 def span(lo, hi):
