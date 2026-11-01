@@ -602,7 +602,7 @@ impl SketchMode {
     }
 
     /// The name of what's nearest a place, of those whose name starts with one of `kinds`, within `reach`.
-    fn entity_near(&self, at: (f64, f64), reach: f64, kinds: &str) -> Option<String> {
+    pub fn entity_near(&self, at: (f64, f64), reach: f64, kinds: &str) -> Option<String> {
         let s = self.solved.as_ref()?;
         let g = &s.solved;
         let mut best: Option<(f64, String)> = None;
@@ -630,6 +630,17 @@ impl SketchMode {
                     let r = g.radius(*id);
                     (((c.x - at.0).powi(2) + (c.y - at.1).powi(2)).sqrt() - r).abs()
                 }
+                Some(Entity::Spline { .. } | Entity::Ellipse { .. }) => g
+                    .spline_samples(*id, 96)
+                    .windows(2)
+                    .map(|w| {
+                        let (p, q) = (w[0], w[1]);
+                        let (dx, dy) = (q.x - p.x, q.y - p.y);
+                        let l = (dx * dx + dy * dy).max(1e-12);
+                        let t = (((at.0 - p.x) * dx + (at.1 - p.y) * dy) / l).clamp(0.0, 1.0);
+                        ((p.x + dx * t - at.0).powi(2) + (p.y + dy * t - at.1).powi(2)).sqrt()
+                    })
+                    .fold(f64::MAX, f64::min),
                 _ => continue,
             };
             if d < reach && best.as_ref().is_none_or(|b| d < b.0) {
@@ -829,10 +840,34 @@ impl SketchMode {
         };
         match (tool, self.pick_at.len()) {
             (SkTool::Spline, n) if n > 0 => {
+                // the curve it'll be, through the pointer too
                 let mut pts = self.pick_at.clone();
                 pts.push(at);
-                for w in pts.windows(2) {
-                    d.lines.push((w[0], w[1]));
+                let words: Vec<String> = self
+                    .picks
+                    .iter()
+                    .cloned()
+                    .chain([format!("{} {}", at.0, at.1)])
+                    .collect();
+                let row = format!("spline {} open", words.join(" "));
+                let mut rows = self.rows.clone();
+                rows.push(row);
+                let curve = self.build(&rows).ok().and_then(|s| {
+                    let n = format!("s{}", self.next_name('s'));
+                    let (_, id) = s.names.iter().find(|x| x.0 == n)?;
+                    Some(s.solved.spline_samples(*id, 64))
+                });
+                match curve {
+                    Some(c) if c.len() > 1 => {
+                        for w in c.windows(2) {
+                            d.lines.push(((w[0].x, w[0].y), (w[1].x, w[1].y)));
+                        }
+                    }
+                    _ => {
+                        for w in pts.windows(2) {
+                            d.lines.push((w[0], w[1]));
+                        }
+                    }
                 }
             }
             (SkTool::Point, _) => {
@@ -1147,7 +1182,7 @@ impl SketchMode {
             }
             SkTool::Coincident => self.pick_two_points(at, reach),
             SkTool::Parallel | SkTool::Perpendicular | SkTool::Tangent => {
-                let kinds = if tool == SkTool::Tangent { "lca" } else { "l" };
+                let kinds = if tool == SkTool::Tangent { "lcase" } else { "l" };
                 if let Some(e) = self.entity_near(at, reach, kinds) {
                     self.picks.push(e);
                     if self.picks.len() == 2 {
@@ -1195,7 +1230,17 @@ impl SketchMode {
     /// What a dimension here would be: the row without its value, and the value as it stands.
     pub fn dimension_at(&self, at: (f64, f64), reach: f64) -> Option<(String, f64)> {
         let s = self.solved.as_ref()?;
-        let e = self.entity_near(at, reach, "lca")?;
+        let e = self.entity_near(at, reach, "lcae")?;
+        if let Some((_, id)) = s.names.iter().find(|n| n.0 == e)
+            && let Some(Entity::Ellipse { .. }) = s.solved.entity(*id)
+        {
+            // its minor semi-axis; the major is a distance from its centre to `e1.m`
+            let Some(Entity::Ellipse { b, .. }) = s.solved.entity(*id) else {
+                return None;
+            };
+            let lo = s.solved.params()[b];
+            return Some((format!("rad {e}"), lo));
+        }
         if e.starts_with('l') {
             let (p, q) = sk::line(s, &e).ok()?;
             Some((
@@ -1221,7 +1266,8 @@ impl SketchMode {
                 (!w.contains(' ')).then_some(w)
             }
             SkTool::Parallel | SkTool::Perpendicular => self.entity_near(at, reach, "l"),
-            SkTool::Tangent | SkTool::Dimension => self.entity_near(at, reach, "lca"),
+            SkTool::Tangent => self.entity_near(at, reach, "lcase"),
+            SkTool::Dimension => self.entity_near(at, reach, "lcae"),
             _ => None,
         }
     }
@@ -1272,6 +1318,11 @@ impl SketchMode {
                 let p = q.point(*id);
                 vec![(p.x, p.y)]
             }
+            Some(Entity::Spline { .. } | Entity::Ellipse { .. }) => q
+                .spline_samples(*id, 96)
+                .into_iter()
+                .map(|p| (p.x, p.y))
+                .collect(),
             _ => Vec::new(),
         }
     }
@@ -2174,6 +2225,20 @@ mod tests {
         m.enter(0.5);
         assert!(m.error.is_none(), "{:?}", m.error);
         assert_eq!(m.rows, ["spline 0 0 10 5 20 0 open"]);
+        // pointing at it finds it, for a tool that takes curves
+        assert_eq!(m.entity_near((10.0, 5.0), 0.5, "s").as_deref(), Some("s1"));
+        // while it's drawn it's the curve itself, not straight legs
+        let mut m2 = mode();
+        m2.set_tool(Some(SkTool::Spline));
+        m2.click((0.0, 0.0), 0.5);
+        m2.click((10.0, 5.0), 0.5);
+        let d = m2.draft((20.0, 0.0), 0.5);
+        assert!(d.lines.len() > 10, "{}", d.lines.len());
+        let bent = d.lines.iter().any(|l| {
+            let mid = (l.0.0 - 10.0).abs() < 5.0;
+            mid && (l.0.1 - 5.0).abs() > 1e-6
+        });
+        assert!(bent);
         // and closed: it has a region
         let mut m = mode();
         m.set_tool(Some(SkTool::Spline));
@@ -2186,6 +2251,21 @@ mod tests {
         assert_eq!(sk::regions(s).len(), 1);
         let (curves, _) = sk::drawing(s);
         assert!(curves[0].0.len() > 10, "drawn as a curve");
+    }
+
+    #[test]
+    fn a_tool_finds_an_ellipse_and_a_dimension_takes_its_minor_axis() {
+        let mut m = mode();
+        m.rows.push("pt 0 0".into());
+        m.rows.push("pt 20 0".into());
+        m.rows.push("ellipse p1 p2 8".into());
+        m.solve();
+        assert!(m.error.is_none(), "{:?}", m.error);
+        assert_eq!(m.entity_near((0.0, 8.0), 0.5, "e").as_deref(), Some("e1"));
+        let (row, v) = m.dimension_at((0.0, 8.0), 0.5).unwrap();
+        assert_eq!(row, "rad e1");
+        assert!((v - 8.0).abs() < 1e-6, "{v}");
+        assert!(m.outline_of("e1").len() > 10);
     }
 
     #[test]

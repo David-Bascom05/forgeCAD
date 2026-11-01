@@ -27,6 +27,13 @@ pub fn plain_error(why: &str) -> String {
             "That thread doesn't fit this cylinder: its diameter must be between the thread's minor and major"
                 .to_string()
         }
+        "edit: Rib(RunsOff)" => {
+            "The rib runs off the part without meeting it on this side: try the other side, or take its ends to the part"
+                .to_string()
+        }
+        "edit: Rib(NoRoom)" => "The rib's path lies inside the part: there's nothing to fill".to_string(),
+        "edit: Rib(BadPath)" => "The rib's path needs joined pieces, and no whole circle".to_string(),
+        "edit: Rib(Corner)" => "The rib's path turns a sharp corner at an arc: only lines can".to_string(),
         "extent: NotCovered" => "The next face doesn't cover the whole profile".to_string(),
         "extent: NoNextFace" => "There's no face ahead to reach".to_string(),
         w if w.contains("the next face in a multi-body part") => {

@@ -426,6 +426,10 @@ impl Gui {
                         && d.seq == f.seq
                     {
                         d.error = f.failure.as_deref().map(crate::shell::panel::plain_error);
+                        // which side fills isn't for a person to find by getting it wrong
+                        if d.error.is_some() && d.try_other_side() {
+                            d.seq = 0;
+                        }
                     }
                     if let Some(Out::Delta(d)) = f.out {
                         v.renderer.live_apply(part, &d);

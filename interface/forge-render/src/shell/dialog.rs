@@ -42,6 +42,8 @@ pub struct Dialog {
     pub thread: ThreadChoice,
     /// A hole's choices; its fields are made from them.
     pub hole: Option<HoleChoice>,
+    /// A rib's other side has been tried by itself; or the person has chosen.
+    pub side_settled: bool,
     /// The selections still to come after the one taking clicks.
     pub queue: Vec<(String, &'static str)>,
 }
@@ -282,6 +284,7 @@ impl Dialog {
             fields,
             pick: pick.map(|(l, why)| (l.to_string(), why)),
             queue,
+            side_settled: false,
             thread: ThreadChoice::default(),
             hole: None,
             sent: None,
@@ -315,6 +318,7 @@ impl Dialog {
             toward: Toward::Forward,
             again: false,
             queue: Vec::new(),
+            side_settled: false,
             thread: ThreadChoice::default(),
             hole: None,
         }
@@ -376,6 +380,25 @@ impl Dialog {
         f.1 = rest;
         self.extent = extent;
         self.toward = toward;
+    }
+
+    /// A rib refused on the side it started on, with nobody having chosen: the other side's
+    /// where it belongs, if either. True if it turned.
+    pub fn try_other_side(&mut self) -> bool {
+        if self.kind != "rib" || self.side_settled {
+            return false;
+        }
+        self.side_settled = true;
+        if let Some(f) = self.fields.iter_mut().find(|f| f.0 == "Flip") {
+            f.1 = if f.1.is_empty() {
+                "flip".to_string()
+            } else {
+                String::new()
+            };
+            self.error = None;
+            return true;
+        }
+        false
     }
 
     /// Sets what a selection has, and goes on to the next one wanted.
@@ -1383,6 +1406,7 @@ impl Shell {
                 let combine = d.kind == "combine";
                 let mut activate = None;
                 let d_kind = d.kind.clone();
+                let mut settled_now = false;
                 let thread = d.thread.clone();
                 let mut thread_change: ThreadChange = (None, None, None, None);
                 let mut extent = d.extent;
@@ -1626,6 +1650,7 @@ impl Shell {
                                 &mut places,
                             ) {
                                 *text = ["", "flip"][k].to_string();
+                                settled_now = true;
                             }
                             continue;
                         }
@@ -1738,6 +1763,7 @@ impl Shell {
                 if let Some(l) = activate {
                     d.activate(&l);
                 }
+                d.side_settled |= settled_now;
                 let (a, b, c, e) = thread_change;
                 if a.is_some() || b.is_some() || c.is_some() || e.is_some() {
                     d.choose_thread(a.as_deref(), b.as_deref(), c.as_deref(), e.as_deref());

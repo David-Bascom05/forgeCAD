@@ -994,12 +994,11 @@ fn a_part_with_an_edge_off_its_face_is_found_too() {
     );
 }
 
-#[test]
-fn rib_runs_along_the_open_sketch_picked() {
-    // a floor and a wall, with a line across the corner between them
-    let part = "floor: extrude 10 rect -30 -30 60 60\nwall: extrude 40 xy at 0 0 10 rect -30 -30 10 60\nsk1: sketch xz\n  line -20 40 20 10\nend\n";
-    let Some((mut h, file)) = open(part, "rib") else {
-        return;
+/// A rib from the sketch's rows by the button, a click at this place: what it adds.
+fn rib_on(base: &str, sketch: &str, at: [f32; 3], tag: &str) -> f64 {
+    let part = format!("{base}sk1: sketch {sketch}\nend\n");
+    let Some((mut h, file)) = open(&part, tag) else {
+        return f64::NAN;
     };
     let was = built(&file, "before");
     button(&mut h, "Rib");
@@ -1007,34 +1006,79 @@ fn rib_runs_along_the_open_sketch_picked() {
         h.gui.shell.dialog.as_ref().unwrap().waiting_for_pick(),
         "nothing from nothing"
     );
-    point_at(&mut h, [0.0, 0.0, 25.0]);
+    point_at(&mut h, at);
     settle(&mut h);
-    let want = h.gui.shell.dialog.as_ref().unwrap().line();
-    assert!(h.until(|g| g.shell.dialog.as_ref().unwrap().sent.as_deref() == Some(want.as_str())));
-    for _ in 0..60 {
+    // the side's found by itself; it settles on what builds
+    let mut last = String::new();
+    for _ in 0..600 {
         h.step();
         std::thread::sleep(std::time::Duration::from_millis(5));
-    }
-    // which side it fills is the person's to say
-    if h.gui.shell.dialog.as_ref().unwrap().error.is_some() {
-        h.click("dialog:flip:The other side");
-        settle(&mut h);
-        let want = h.gui.shell.dialog.as_ref().unwrap().line();
-        assert!(want.contains("flip"), "{want}");
-        assert!(h.until(|g| {
-            let d = g.shell.dialog.as_ref().unwrap();
-            d.sent.as_deref() == Some(want.as_str())
-        }));
-        for _ in 0..60 {
-            h.step();
-            std::thread::sleep(std::time::Duration::from_millis(5));
+        let d = h.gui.shell.dialog.as_ref().unwrap();
+        let now = d.line();
+        if now == last
+            && d.sent.as_deref() == Some(now.as_str())
+            && d.seq > 0
+            && d.side_settled | d.error.is_none()
+        {
+            break;
         }
+        last = now;
     }
-    ok(&mut h, "rib");
-    let text = items(&file).join("\n");
-    assert!(text.contains("sk1 l1"), "{text}");
-    let added = built(&file, "rib") - was;
-    assert!(added > 100.0, "{added}");
+    ok(&mut h, tag);
+    built(&file, tag) - was
+}
+
+const CORNER_X: &str =
+    "floor: extrude 10 rect -30 -30 60 60\nwall: extrude 40 xy at 0 0 10 rect -30 -30 10 60\n";
+const CORNER_Y: &str =
+    "floor: extrude 10 rect -30 -30 60 60\nwall: extrude 40 xy at 0 0 10 rect -30 20 60 10\n";
+
+#[test]
+fn a_rib_fills_the_corner_it_crosses_whichever_way_its_line_was_drawn() {
+    // a wedge of 40 by 30 over a corner, 2 thick: its area over the corner's 1200 mm3
+    let wedge = 0.5 * 40.0 * 30.0 * 2.0;
+    for (sketch, tag) in [
+        ("xz\n  line -20 40 20 10", "rib-a"),
+        ("xz\n  line 20 10 -20 40", "rib-b"),
+    ] {
+        let added = rib_on(CORNER_X, sketch, [0.0, 0.0, 25.0], tag);
+        assert!((added - wedge).abs() < wedge * 0.1, "{tag}: {added} {wedge}");
+    }
+    // the same on another plane, across another wall
+    for (sketch, tag) in [
+        ("yz\n  line 20 40 -20 10", "rib-c"),
+        ("yz\n  line -20 10 20 40", "rib-d"),
+    ] {
+        let added = rib_on(CORNER_Y, sketch, [0.0, 0.0, 25.0], tag);
+        assert!((added - wedge).abs() < wedge * 0.1, "{tag}: {added} {wedge}");
+    }
+    // a chain of two lines is one rib
+    let added = rib_on(
+        CORNER_X,
+        "xz\n  line -20 40 0 25\n  line l1.b 20 10",
+        [-10.0, 0.0, 32.5],
+        "rib-e",
+    );
+    assert!((added - wedge).abs() < wedge * 0.1, "chain: {added}");
+}
+
+#[test]
+fn a_rib_that_cannot_build_says_so_in_words_on_either_side() {
+    // well clear of the part: neither side meets it
+    let part = format!("{CORNER_X}sk1: sketch xz at 0 0 0\n  line 60 60 90 60\nend\n");
+    let Some((mut h, _)) = open(&part, "rib-none") else {
+        return;
+    };
+    button(&mut h, "Rib");
+    point_at(&mut h, [75.0, 0.0, 60.0]);
+    assert!(
+        h.until(|g| g.shell.dialog.as_ref().unwrap().side_settled
+            && g.shell.dialog.as_ref().unwrap().error.is_some()),
+        "{:?}",
+        h.gui.shell.dialog
+    );
+    let d = h.gui.shell.dialog.as_ref().unwrap();
+    assert!(!d.error.as_ref().unwrap().contains("Rib("), "{:?}", d.error);
 }
 
 #[test]
