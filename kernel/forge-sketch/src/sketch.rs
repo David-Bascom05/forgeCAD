@@ -106,8 +106,10 @@ pub enum Constraint {
     /// A control spline's end (0 start, 1 end) runs along the other curve: its first leg is
     /// collinear with the line, or square to the arc's radius there.
     SplineEnd(EntityId, usize, EntityId),
-    /// A line and an ellipse, tangent on the side the line lies at when added.
-    TangentEllipse(EntityId, EntityId),
+    /// The hidden angle a line and an ellipse's tangency goes through (`tangent_ellipse`): along the line.
+    LineAngle(EntityId, usize),
+    /// A line through its start at that angle, tangent to an ellipse on the side it lies at when added.
+    EllipseSupport(EntityId, usize, EntityId),
     /// An ellipse's semi-minor axis.
     EllipseMinor(EntityId, f64),
 }
@@ -426,6 +428,25 @@ impl Sketch {
         }
         self.add_constraint(Constraint::SplineEnd(spline, end, other))
             .map(Some)
+    }
+
+    /// Makes a line tangent to an ellipse, by a hidden angle along the line (two rows, each small
+    /// enough for one dual number).
+    pub fn tangent_ellipse(
+        &mut self,
+        line: EntityId,
+        ellipse: EntityId,
+    ) -> Result<[ConstraintId; 2], SketchError> {
+        let Entity::Line { a, b } = self.rec(line)?.kind else {
+            return Err(SketchError::WrongKind(line));
+        };
+        let d = self.point(b) - self.point(a);
+        let phi = self.params.len();
+        self.params.push(dmath::atan2(d.y, d.x));
+        Ok([
+            self.add_constraint(Constraint::LineAngle(line, phi))?,
+            self.add_constraint(Constraint::EllipseSupport(line, phi, ellipse))?,
+        ])
     }
 
     /// The curve an entity makes as the parameters stand; None for other entities or where its
@@ -787,7 +808,8 @@ impl Sketch {
                     return Err(SketchError::WrongKind(o));
                 }
             }
-            TangentEllipse(l, e) => {
+            LineAngle(l, _) => self.expect_line(l)?,
+            EllipseSupport(l, _, e) => {
                 self.expect_line(l)?;
                 self.expect_ellipse(e)?;
             }
@@ -882,10 +904,14 @@ impl Sketch {
                     [sign(self.signed_dist(&mut loc, c, l).v), 0.0]
                 }
             }
-            Constraint::TangentEllipse(l, e) => {
-                let mut loc = Local::new(x);
-                let (c, ..) = self.ellipse_of(&mut loc, e);
-                [sign(self.signed_dist(&mut loc, c, l).v), 0.0]
+            Constraint::EllipseSupport(l, _, e) => {
+                let (Ok(Entity::Line { a, b }), Ok(Entity::Ellipse { center, .. })) =
+                    (self.rec(l).map(|r| r.kind), self.rec(e).map(|r| r.kind))
+                else {
+                    return [1.0, 0.0];
+                };
+                let (pa, pb, c) = (self.point(a), self.point(b), self.point(center));
+                [sign((pb - pa).cross(c - pa)), 0.0]
             }
             _ => [0.0, 0.0],
         }
@@ -1080,16 +1106,26 @@ impl Sketch {
                     }
                 }
             }
-            TangentEllipse(ln, e) => {
+            LineAngle(ln, phi) => {
                 let (a, b) = self.line(l, ln);
                 let dir = b.sub(a);
-                let len = dir.len();
+                let (sn, cs) = l.var(phi).sin_cos();
+                Rows::one(dir.x * sn - dir.y * cs)
+            }
+            EllipseSupport(ln, phi, e) => {
+                let Ok(Entity::Line { a, .. }) = self.rec(ln).map(|r| r.kind) else {
+                    panic!("validated line");
+                };
+                let at = self.pt(l, a);
+                let (sn, cs) = l.var(phi).sin_cos();
                 let (c, m, ma, mb) = self.ellipse_of(l, e);
                 // the support of the ellipse along the line's normal: a^2 (n.u)^2 + b^2 (n.v)^2
-                let along = dir.dot(m) / (len * ma);
-                let across = dir.cross(m) / (len * ma);
+                let (mx, my) = (m.x / ma, m.y / ma);
+                let along = cs * mx + sn * my;
+                let across = cs * my - sn * mx;
                 let h = (ma * ma * across * across + mb * mb * along * along).sqrt();
-                Rows::one(dir.cross(c.sub(a)) / len - h * rec.data[0])
+                let d = c.sub(at);
+                Rows::one(cs * d.y - sn * d.x - h * rec.data[0])
             }
         };
         (loc, rows)

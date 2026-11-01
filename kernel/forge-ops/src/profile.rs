@@ -406,6 +406,13 @@ impl Segment {
             Segment::Circle { radius, .. } => !(radius > tol::MIN_LENGTH && radius < f64::INFINITY),
         }
     }
+    /// Points telling which side of a line the segment lies on: a line's ends do.
+    pub fn side_samples(&self) -> Vec<Point2> {
+        match *self {
+            Segment::Line { a, b } => vec![a, b],
+            _ => self.samples(32),
+        }
+    }
     /// Points along the segment, for inside/outside tests.
     pub fn samples(&self, n: usize) -> Vec<Point2> {
         if let Segment::Spline(c) = self {

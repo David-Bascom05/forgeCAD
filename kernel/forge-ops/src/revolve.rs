@@ -46,7 +46,7 @@ pub fn revolve(profile: &Profile, axis: Axis2, angle: f64, feature: u64) -> Resu
     let mut side = 0.0f64;
     for l in &profile.loops {
         for (s, _) in &l.segments {
-            for p in s.samples(32) {
+            for p in s.side_samples() {
                 let r = (p - axis.origin).dot(perp2);
                 side = if r.abs() > side.abs() { r } else { side };
             }
@@ -89,7 +89,7 @@ pub fn revolve(profile: &Profile, axis: Axis2, angle: f64, feature: u64) -> Resu
     }
     for l in &profile.loops {
         for (s, _) in &l.segments {
-            for p in s.samples(32) {
+            for p in s.side_samples() {
                 if (p - axis.origin).dot(perp2) * side < -tol::LINEAR {
                     return Err(RevolveError::CrossesAxis);
                 }

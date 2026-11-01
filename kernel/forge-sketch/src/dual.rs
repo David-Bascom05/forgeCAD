@@ -1,9 +1,9 @@
-//! Forward-mode dual numbers over the (at most nine) parameters one
+//! Forward-mode dual numbers over the (at most eight) parameters one
 //! constraint touches, so every residual comes with its exact gradient.
 
 use core::ops::{Add, Div, Mul, Neg, Sub};
 
-pub(crate) const N: usize = 9;
+pub(crate) const N: usize = 8;
 
 #[derive(Clone, Copy, Debug)]
 pub(crate) struct D {
@@ -14,6 +14,20 @@ pub(crate) struct D {
 impl D {
     pub fn c(v: f64) -> D {
         D { v, g: [0.0; N] }
+    }
+    /// Sine and cosine.
+    pub fn sin_cos(self) -> (D, D) {
+        let (s, c) = forge_math::dmath::sin_cos(self.v);
+        (
+            D {
+                v: s,
+                g: self.g.map(|x| x * c),
+            },
+            D {
+                v: c,
+                g: self.g.map(|x| -x * s),
+            },
+        )
     }
     pub fn sqrt(self) -> D {
         let s = self.v.max(0.0).sqrt();

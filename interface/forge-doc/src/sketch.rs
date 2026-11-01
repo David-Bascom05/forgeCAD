@@ -545,11 +545,16 @@ impl B<'_, '_> {
                             }
                             return c.end();
                         }
-                        (Entity::Ellipse { .. }, Entity::Line { .. }) => {
-                            return self.add(k, C::TangentEllipse(b, a));
-                        }
-                        (Entity::Line { .. }, Entity::Ellipse { .. }) => {
-                            return self.add(k, C::TangentEllipse(a, b));
+                        (Entity::Ellipse { .. }, Entity::Line { .. })
+                        | (Entity::Line { .. }, Entity::Ellipse { .. }) => {
+                            let (l, e) = if matches!(kind(self, a), Entity::Line { .. }) {
+                                (a, b)
+                            } else {
+                                (b, a)
+                            };
+                            let ids = self.s.tangent_ellipse(l, e).map_err(bad)?;
+                            self.made.extend(ids.map(|id| (id, k)));
+                            return c.end();
                         }
                         _ => {}
                     }

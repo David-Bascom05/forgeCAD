@@ -480,7 +480,7 @@ fn an_elliptical_arc_holds_its_ends_and_a_line_touches_an_ellipse() {
     }
     t.add_constraint(Constraint::Horizontal(l)).unwrap();
     t.add_constraint(Constraint::EllipseMinor(e, 3.0)).unwrap();
-    t.add_constraint(Constraint::TangentEllipse(l, e)).unwrap();
+    t.tangent_ellipse(l, e).unwrap();
     assert_eq!(t.solve().status, Status::Solved);
     assert!((t.point(a).y - 3.0).abs() < 1e-8, "{:?}", t.point(a));
 }

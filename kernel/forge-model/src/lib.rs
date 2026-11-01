@@ -1912,6 +1912,10 @@ fn seg2(s: &Segment) -> Seg2 {
 }
 
 fn segs(profile: &Profile) -> std::sync::Arc<[Seg2]> {
+    // (of known length, one allocation)
+    if let [l] = &profile.loops[..] {
+        return l.segments.iter().map(|(s, _)| seg2(s)).collect();
+    }
     profile
         .loops
         .iter()
@@ -1943,7 +1947,7 @@ fn shape(f: &Feature) -> Shape {
             let mut side = 0.0f64;
             for l in &profile.loops {
                 for (s, _) in &l.segments {
-                    for p in s.samples(32) {
+                    for p in s.side_samples() {
                         let r = (p - axis.origin).dot(perp);
                         side = if r.abs() > side.abs() { r } else { side };
                     }
