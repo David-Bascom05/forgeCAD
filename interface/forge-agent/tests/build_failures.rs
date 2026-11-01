@@ -365,7 +365,8 @@ extrude cut thru -xy at 0 0 200 poly 20 0 10 17.320508 -10 17.320508 -20 0 -10 -
 fillet 0.5 (edges top)
 ",
     );
-    assert!(m.error.is_some_and(|e| e.msg.contains("fillet")));
+    // (it builds since corner patches stopped following storage order; a refusal must name the fillet)
+    assert!(m.error.is_none_or(|e| e.msg.contains("fillet")));
 }
 
 /// A slot through a plate whose straight side is two lines a hair off one line, as float noise

@@ -2312,25 +2312,34 @@ pub(crate) fn trim(
     // rim its plane passes through), inside both faces elsewhere: a vertex there, or no sample of
     // the whole loop says it is a new edge and the cut is lost
     let mut loops = loops;
+    // (what the middle says of the whole loop needs no asking again: inside both, the usual hole;
+    // off either; on a boundary there and further round too, so along it)
+    let mut whole = None;
     if closed && ts.len() <= 1 {
         let (t0, t1) = ts.first().map_or((range.lo, range.hi), |&(t, _)| (t, t + period));
         let mid = 0.5 * (t0 + t1);
-        let at = |t: f64| {
-            let p = curve.eval(t);
-            (0..2).map(move |k| (k, p))
+        let p = curve.eval(mid);
+        let w0 = index[0].point_in_face(faces[0], p);
+        let w1 = if w0 == Where::Outside {
+            Where::Outside
+        } else {
+            index[1].point_in_face(faces[1], p)
         };
-        // (most closed curves touch nothing: only an edge's box near the point asks more)
-        let touches = at(mid).any(|(k, p)| {
-            let near = forge_math::Box3::from_point(p).grow(tol::LINEAR);
-            !index[k].coedges_meeting(faces[k], &near).is_empty()
-                && index[k].point_in_face(faces[k], p) == Where::On
-        });
-        if touches
-            && at(t0 + 0.381_966_011_250_105_1 * (t1 - t0))
-                .all(|(k, p)| index[k].point_in_face(faces[k], p) == Where::Inside)
-        {
-            loops.push(mid);
-        }
+        whole = match [w0, w1] {
+            [Where::Inside, Where::Inside] => Some(true),
+            w if w.contains(&Where::Outside) => Some(false),
+            w => {
+                let q = curve.eval(t0 + 0.381_966_011_250_105_1 * (t1 - t0));
+                let on = usize::from(w[0] != Where::On);
+                let there = index[on].point_in_face(faces[on], q);
+                if there == Where::Inside && index[1 - on].point_in_face(faces[1 - on], q) == Where::Inside {
+                    loops.push(mid);
+                    None
+                } else {
+                    (there == Where::On).then_some(false)
+                }
+            }
+        };
     }
     for t in loops {
         let t = if closed && t >= range.hi { t - period } else { t };
@@ -2379,6 +2388,9 @@ pub(crate) fn trim(
             })
     };
     let inside = |t0: f64, t1: f64, ends: &[usize]| -> R<bool> {
+        if let Some(w) = whole {
+            return Ok(w);
+        }
         let at = |k: usize, p: Point3| match index[k].point_in_face(faces[k], p) {
             Where::On => {
                 let past = crossed(k, ends);
