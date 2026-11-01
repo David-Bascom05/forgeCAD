@@ -932,7 +932,9 @@ fn along(g: &forge_ops::Segment) -> Vec<Point2> {
             start,
             sweep,
         } => arc(*center, *radius, *start, *sweep),
-        forge_ops::Segment::Circle { center, radius, .. } => arc(*center, *radius, 0.0, core::f64::consts::TAU),
+        forge_ops::Segment::Circle { center, radius, .. } => {
+            arc(*center, *radius, 0.0, core::f64::consts::TAU)
+        }
         forge_ops::Segment::Spline(_) => g.samples(64),
     }
 }
