@@ -1097,3 +1097,111 @@ fn extrude_takes_a_closed_splines_region() {
     ok(&mut h, "spline extrude");
     assert!(built(&file, "spline extrude") > 1000.0);
 }
+
+#[test]
+fn a_hole_goes_round_a_circular_edge_picked() {
+    let part = "base: extrude 20 rect -30 -30 60 60\nboss: extrude 10 xy at 0 0 20 circle 0 0 10\n";
+    let Some((mut h, file)) = open(part, "hconc") else {
+        return;
+    };
+    let was = built(&file, "before");
+    button(&mut h, "Hole");
+    h.click("dialog:place:Concentric");
+    settle(&mut h);
+    assert!(h.gui.shell.dialog.as_ref().unwrap().waiting_for_pick());
+    let c = core::f32::consts::FRAC_1_SQRT_2 * 10.0;
+    point_at(&mut h, [c, -c, 30.0]);
+    settle(&mut h);
+    let line = h.gui.shell.dialog.as_ref().unwrap().line();
+    assert!(line.contains("at 0 0 30"), "{line}");
+    ok(&mut h, "concentric");
+    let got = was - built(&file, "concentric");
+    let want = pi_r2(5.0) * 30.0;
+    assert!((got - want).abs() < want * 0.01, "{got} {want}");
+}
+
+#[test]
+fn a_hole_stands_off_two_edges_of_a_face_by_the_distances_given() {
+    let Some((mut h, file)) = open(BLOCK, "hlin") else {
+        return;
+    };
+    let was = built(&file, "before");
+    button(&mut h, "Hole");
+    h.click("dialog:place:Linear");
+    settle(&mut h);
+    point_at(&mut h, [5.0, -5.0, 20.0]);
+    point_at(&mut h, [30.0, 10.0, 20.0]);
+    point_at(&mut h, [10.0, -30.0, 20.0]);
+    let d = h.gui.shell.dialog.as_mut().unwrap();
+    let l = &mut d.hole.as_mut().unwrap().linear;
+    assert_eq!(l.edges.len(), 2);
+    l.first = "10".to_string();
+    l.second = "15".to_string();
+    d.settle_hole();
+    settle(&mut h);
+    let line = h.gui.shell.dialog.as_ref().unwrap().line();
+    // 10 in from x = 30, 15 in from y = -30
+    assert!(line.contains("at 20 -15 20"), "{line}");
+    ok(&mut h, "linear");
+    let got = was - built(&file, "linear");
+    let want = pi_r2(5.0) * 20.0;
+    assert!((got - want).abs() < want * 0.01, "{got} {want}");
+}
+
+#[test]
+fn a_sketch_from_the_tree_gives_a_hole_all_its_points_and_a_hole_goes_to_a_face_picked() {
+    let part =
+        "base: extrude 20 rect -30 -30 60 60\nsk1: sketch xy at 0 0 20\n  pt 10 10\n  pt -10 -10\nend\n";
+    let Some((mut h, file)) = open(part, "htree") else {
+        return;
+    };
+    let was = built(&file, "before");
+    button(&mut h, "Hole");
+    h.click("tree:sk1");
+    settle(&mut h);
+    let d = h.gui.shell.dialog.as_ref().unwrap();
+    assert!(d.line().contains("sk1 pts centers"), "{}", d.line());
+    ok(&mut h, "tree");
+    let got = was - built(&file, "tree");
+    let want = 2.0 * pi_r2(5.0) * 20.0;
+    assert!((got - want).abs() < want * 0.01, "{got} {want}");
+    // to a face, in a part with a cavity: it stops there
+    let part = "a: extrude 30 rect -30 -30 60 60\nsk1: sketch xy at 0 0 30\n  pt 25 -25\nend\n";
+    let Some((mut h, file)) = open(part, "hto") else {
+        return;
+    };
+    let was = built(&file, "before");
+    button(&mut h, "Hole");
+    point_at(&mut h, [25.0, -25.0, 30.0]);
+    h.click("dialog:end:To");
+    settle(&mut h);
+    assert!(h.gui.shell.dialog.as_ref().unwrap().waiting_for_pick());
+    point_at(&mut h, [30.0, 10.0, 5.0]);
+    settle(&mut h);
+    let line = h.gui.shell.dialog.as_ref().unwrap().line();
+    assert!(line.contains(" to a @f"), "{line}");
+    let d = h.gui.shell.dialog.as_ref().unwrap();
+    let _ = (d, file, was);
+}
+
+#[test]
+fn an_extrude_goes_up_to_a_face_picked() {
+    let part = "floor: extrude 10 rect -30 -30 70 60\nwall: extrude 40 xy at 0 0 10 rect 30 -30 10 60\nroof: extrude 10 xy at 0 0 50 rect -30 -30 70 60\nsk1: sketch xy at 0 0 25\n  rect -5 -5 10 10\nend\n";
+    let Some((mut h, file)) = open(part, "exto") else {
+        return;
+    };
+    let was = built(&file, "before");
+    button(&mut h, "Extrude");
+    h.click("dialog:extent:To Surface");
+    settle(&mut h);
+    assert!(h.gui.shell.dialog.as_ref().unwrap().waiting_for_pick());
+    // the roof's top is the face in view; the line says what it goes to
+    point_at(&mut h, [0.0, 0.0, 60.0]);
+    settle(&mut h);
+    let line = h.gui.shell.dialog.as_ref().unwrap().line();
+    assert!(line.contains("to roof @f"), "{line}");
+    ok(&mut h, "to surface");
+    let got = built(&file, "to surface") - was;
+    // up to z = 60 through the roof's own 10: 25 of open air is what's added
+    assert!((got - 100.0 * 25.0).abs() < 1.0, "{got}");
+}

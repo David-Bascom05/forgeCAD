@@ -36,6 +36,8 @@ pub struct Dialog {
     /// How an extrude's distance is taken, which the file writes with it.
     pub extent: Extent,
     pub toward: Toward,
+    /// The face an extrude goes to, as a line names it.
+    pub surface: String,
     /// + was pressed: OK, then another of these.
     pub again: bool,
     /// A thread's choice from the catalogue.
@@ -54,6 +56,8 @@ pub enum Extent {
     Distance,
     Through,
     Next,
+    /// To a face picked.
+    Surface,
 }
 
 /// Which way it goes from its sketch.
@@ -84,6 +88,77 @@ pub enum Termination {
     Distance,
     Through,
     Next,
+    /// To a face picked.
+    Surface,
+}
+
+/// How a hole's placed.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Placing {
+    Sketch,
+    /// On a face, measured from two of its edges.
+    Linear,
+    /// Round a circular edge.
+    Concentric,
+}
+
+/// A hole placed by distances from two edges of a face: what's been picked.
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct Linear {
+    /// A point of the face, and its normal outward.
+    pub face: Option<([f64; 3], [f64; 3])>,
+    /// Where on the face it was clicked: which side of an edge is in.
+    pub clicked: [f64; 3],
+    /// Each edge's ends.
+    pub edges: Vec<([f64; 3], [f64; 3])>,
+    pub first: String,
+    pub second: String,
+}
+
+fn sub(a: [f64; 3], b: [f64; 3]) -> [f64; 3] {
+    [a[0] - b[0], a[1] - b[1], a[2] - b[2]]
+}
+fn dot3(a: [f64; 3], b: [f64; 3]) -> f64 {
+    a[0] * b[0] + a[1] * b[1] + a[2] * b[2]
+}
+fn cross3(a: [f64; 3], b: [f64; 3]) -> [f64; 3] {
+    [
+        a[1] * b[2] - a[2] * b[1],
+        a[2] * b[0] - a[0] * b[2],
+        a[0] * b[1] - a[1] * b[0],
+    ]
+}
+fn unit3(a: [f64; 3]) -> [f64; 3] {
+    let l = dot3(a, a).sqrt().max(1e-12);
+    [a[0] / l, a[1] / l, a[2] / l]
+}
+
+impl Linear {
+    /// Where the hole's centre is: this far in from each edge, on the face. None if the edges don't
+    /// fix a place.
+    pub fn place(&self, d1: f64, d2: f64) -> Option<[f64; 3]> {
+        let (o, n) = self.face?;
+        let [(a1, b1), (a2, b2)] = self.edges[..] else {
+            return None;
+        };
+        let inward = |a: [f64; 3], b: [f64; 3]| {
+            let v = unit3(cross3(n, sub(b, a)));
+            if dot3(v, sub(self.clicked, a)) >= 0.0 {
+                v
+            } else {
+                v.map(|x| -x)
+            }
+        };
+        let (v1, v2) = (inward(a1, b1), inward(a2, b2));
+        // three planes: the face, and each edge's offset
+        let (r1, r2, r3) = (dot3(n, o), dot3(v1, a1) + d1, dot3(v2, a2) + d2);
+        let (c23, c31, c12) = (cross3(v1, v2), cross3(v2, n), cross3(n, v1));
+        let det = dot3(n, c23);
+        if det.abs() < 1e-9 {
+            return None;
+        }
+        Some([0, 1, 2].map(|k| (c23[k] * r1 + c31[k] * r2 + c12[k] * r3) / det))
+    }
 }
 
 /// What a hole is, as the dialog asks it.
@@ -101,6 +176,15 @@ pub struct HoleChoice {
     pub seat_angle: String,
     pub termination: Termination,
     pub depth: String,
+    /// How it's placed, and what that's picked.
+    pub placing: Placing,
+    pub linear: Linear,
+    /// Round an edge: its centre and axis.
+    pub concentric: Option<([f64; 3], [f64; 3])>,
+    /// Which way it goes, for a frame of its own: against the outward normal unless turned.
+    pub turned: bool,
+    /// The face it goes to, as a line names it.
+    pub surface: String,
     /// The drill's point: none is flat.
     pub point: Option<String>,
     /// What the seat's sizes were last filled from: another screw or seat fills them again.
@@ -120,6 +204,11 @@ impl Default for HoleChoice {
             seat_angle: String::new(),
             termination: Termination::Through,
             depth: "10".to_string(),
+            placing: Placing::Sketch,
+            linear: Linear::default(),
+            concentric: None,
+            turned: false,
+            surface: String::new(),
             point: None,
             seat_from: String::new(),
         }
@@ -296,6 +385,7 @@ impl Dialog {
             first: Vec::new(),
             extent: Extent::Distance,
             toward: Toward::Forward,
+            surface: String::new(),
             again: false,
         }
     }
@@ -316,6 +406,7 @@ impl Dialog {
             first: Vec::new(),
             extent: Extent::Distance,
             toward: Toward::Forward,
+            surface: String::new(),
             again: false,
             queue: Vec::new(),
             side_settled: false,
@@ -447,6 +538,9 @@ impl Dialog {
         }
         if label == "Distance" && self.kind == "extrude" {
             let number = self.number_text(label, text);
+            if self.extent == Extent::Surface {
+                return format!("to {}", self.surface);
+            }
             return match (self.extent, self.toward) {
                 (Extent::Distance, Toward::Forward) => number,
                 (Extent::Distance, Toward::Back) => format!("-{number}"),
@@ -456,6 +550,7 @@ impl Dialog {
                 (Extent::Through, Toward::Both) => "thru both".to_string(),
                 (Extent::Next, Toward::Back) => "next back".to_string(),
                 (Extent::Next, _) => "next".to_string(),
+                (Extent::Surface, _) => String::new(),
             };
         }
         self.number_text(label, text)
@@ -497,6 +592,11 @@ impl Dialog {
     pub fn waiting_for_pick(&self) -> bool {
         self.thread_blocked().is_some()
             || self.seat_wanting()
+            || self
+                .hole
+                .as_ref()
+                .is_some_and(|h| h.termination == Termination::Surface && h.surface.is_empty())
+            || (self.kind == "extrude" && self.extent == Extent::Surface && self.surface.is_empty())
             || (self.kind == "thread"
                 && self.fields.iter().any(|f| f.0 == "Size" && f.1.is_empty())
                 && matches!(self.target, DialogTarget::New(_)))
@@ -637,7 +737,33 @@ impl Dialog {
             Termination::Distance => len(&h.depth),
             Termination::Through => "thru".to_string(),
             Termination::Next => "next".to_string(),
+            Termination::Surface => format!("to {}", h.surface),
         };
+        let frame = |at: [f64; 3], n: [f64; 3]| {
+            let s = if h.turned { 1.0 } else { -1.0 };
+            let z = n.map(|v| {
+                let v = v * s;
+                if v == 0.0 { 0.0 } else { v }
+            });
+            format!("z {} {} {} at {} {} {}", z[0], z[1], z[2], at[0], at[1], at[2])
+        };
+        let placed = match h.placing {
+            Placing::Sketch => None,
+            Placing::Concentric => Some(h.concentric.map_or(String::new(), |(c, n)| frame(c, n))),
+            Placing::Linear => {
+                let number = |t: &str| forge_doc::expr::eval(&len(t), &|_| None).map(|v| v.0).ok();
+                let at = number(&h.linear.first)
+                    .zip(number(&h.linear.second))
+                    .and_then(|(a, b)| h.linear.place(a, b));
+                let n = h.linear.face.map(|f| f.1);
+                Some(at.zip(n).map_or(String::new(), |(at, n)| frame(at, n)))
+            }
+        };
+        if let Some(p) = placed
+            && let Some(f) = self.fields.iter_mut().find(|f| f.0 == "Points")
+        {
+            f.1 = p;
+        }
         let point = match (&h.point, h.termination) {
             (Some(a), Termination::Distance) => format!("pt {}", a.trim()),
             _ => String::new(),
@@ -1417,6 +1543,76 @@ impl Shell {
                     let units = d.units;
                     ui.add_space(4.0);
                     heading(ui, "Placement", &t);
+                    if let Some(k) = text_toggles(
+                        ui,
+                        &t,
+                        &[
+                            ("From Sketch", h.placing == Placing::Sketch),
+                            ("Linear", h.placing == Placing::Linear),
+                            ("Concentric", h.placing == Placing::Concentric),
+                        ],
+                        "dialog:place",
+                        &mut places,
+                    ) {
+                        h.placing = [Placing::Sketch, Placing::Linear, Placing::Concentric][k];
+                        if let Some(f) = d.fields.iter_mut().find(|f| f.0 == "Points") {
+                            f.1.clear();
+                        }
+                    }
+                    match h.placing {
+                        Placing::Concentric => {
+                            let n = h.concentric.is_some() as usize;
+                            pick_row(
+                                ui,
+                                "Round edge",
+                                n,
+                                n == 0,
+                                "Pick a circular edge",
+                                &t,
+                                &mut places,
+                            );
+                        }
+                        Placing::Linear => {
+                            let face = h.linear.face.is_some() as usize;
+                            pick_row(
+                                ui,
+                                "Face",
+                                face,
+                                face == 0,
+                                "Pick the face it goes in",
+                                &t,
+                                &mut places,
+                            );
+                            let n = h.linear.edges.len();
+                            pick_row(
+                                ui,
+                                "Edges",
+                                n,
+                                face == 1 && n < 2,
+                                "Pick two straight edges of it",
+                                &t,
+                                &mut places,
+                            );
+                            field_row(ui, "Distance 1", &mut h.linear.first, units, &t, &mut places);
+                            field_row(ui, "Distance 2", &mut h.linear.second, units, &t, &mut places);
+                        }
+                        Placing::Sketch => {}
+                    }
+                    if h.placing != Placing::Sketch
+                        && let Some(k) = small_row(
+                            ui,
+                            &t,
+                            "Direction",
+                            &[
+                                ("backward", "Into the face", !h.turned),
+                                ("forward", "Out of it", h.turned),
+                            ],
+                            "dialog:turn",
+                            &mut places,
+                        )
+                    {
+                        h.turned = k == 1;
+                    }
                     let points = d
                         .fields
                         .iter()
@@ -1427,15 +1623,17 @@ impl Shell {
                     } else {
                         (!points.is_empty()) as usize
                     };
-                    pick_row(
-                        ui,
-                        "Points",
-                        n,
-                        n == 0,
-                        "Pick sketch points or circle centres",
-                        &t,
-                        &mut places,
-                    );
+                    if h.placing == Placing::Sketch {
+                        pick_row(
+                            ui,
+                            "Points",
+                            n,
+                            n == 0,
+                            "Pick sketch points or circle centres",
+                            &t,
+                            &mut places,
+                        );
+                    }
                     let flipped = points.starts_with("-on ");
                     if points.starts_with("on ") || flipped {
                         let way = small_row(
@@ -1554,11 +1752,29 @@ impl Shell {
                             ("Distance", h.termination == Termination::Distance),
                             ("Through All", h.termination == Termination::Through),
                             ("To Next", h.termination == Termination::Next),
+                            ("To", h.termination == Termination::Surface),
                         ],
                         "dialog:end",
                         &mut places,
                     ) {
-                        h.termination = [Termination::Distance, Termination::Through, Termination::Next][k];
+                        h.termination = [
+                            Termination::Distance,
+                            Termination::Through,
+                            Termination::Next,
+                            Termination::Surface,
+                        ][k];
+                    }
+                    if h.termination == Termination::Surface {
+                        let n = (!h.surface.is_empty()) as usize;
+                        pick_row(
+                            ui,
+                            "To face",
+                            n,
+                            n == 0,
+                            "Pick the face it stops at",
+                            &t,
+                            &mut places,
+                        );
                     }
                     if h.termination == Termination::Distance {
                         field_row(ui, "Depth", &mut h.depth, units, &t, &mut places);
@@ -1731,11 +1947,13 @@ impl Shell {
                                     ("distance", "Distance", extent == Extent::Distance),
                                     ("thruall", "Through All", extent == Extent::Through),
                                     ("tonext", "To Next", extent == Extent::Next),
+                                    ("tosurface", "To Surface", extent == Extent::Surface),
                                 ],
                                 "dialog:extent",
                                 &mut places,
                             ) {
-                                extent = [Extent::Distance, Extent::Through, Extent::Next][k];
+                                extent =
+                                    [Extent::Distance, Extent::Through, Extent::Next, Extent::Surface][k];
                             }
                             if let Some(k) = small_row(
                                 ui,

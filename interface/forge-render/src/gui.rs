@@ -666,8 +666,104 @@ impl Gui {
                 }
                 v.dirty = true;
             }
+            // a sketch from the tree, for a hole on points: all it has
+            if d.kind == "hole"
+                && d.hole
+                    .as_ref()
+                    .is_some_and(|h| h.placing == crate::shell::dialog::Placing::Sketch)
+                && let Some(id) = self.shell.selected.take()
+                && self.shell.rows.iter().any(|r| r.id == id && r.kind == "sketch")
+                && let Some(name) = self.shell.doc.as_ref().and_then(|doc| doc.name(id))
+                && let Some(shape) = self.shell.sketch_shapes.iter().find(|s| s.item == Some(id))
+            {
+                let (o, z): ([f64; 3], forge_math::Vec3) = {
+                    let o = shape.plane.origin;
+                    ([o.x, o.y, o.z], shape.plane.z().into())
+                };
+                let m = v.scene.bounds().0;
+                let toward =
+                    (m[0] as f64 - o[0]) * z.x + (m[1] as f64 - o[1]) * z.y + (m[2] as f64 - o[2]) * z.z;
+                let on = if toward > 0.0 { "on" } else { "-on" };
+                if let Some(f) = d.fields.iter_mut().find(|f| f.0 == "Points") {
+                    f.1 = format!("{on} {name} pts centers");
+                }
+                v.dirty = true;
+            }
             if v.nav.selected != v.clicked {
                 v.clicked = v.nav.selected.clone();
+                // a face that's what it goes to, as a line names it
+                let names = |f: u32| -> Option<String> {
+                    let owner = v.facts.face_item.get(f as usize).copied().flatten()?;
+                    let name = self.shell.doc.as_ref()?.name(owner)?;
+                    Some(format!("{name} {}", v.facts.face_refs.get(f as usize)?))
+                };
+                let picked = v.clicked.last().map(|c| c.1);
+                let wants_surface = d.kind == "extrude" && d.extent == crate::shell::dialog::Extent::Surface;
+                if wants_surface {
+                    if let Some(Entity::Face(f)) = picked
+                        && let Some(t) = names(f)
+                    {
+                        d.surface = t;
+                    }
+                    v.nav.selected.clear();
+                    v.clicked.clear();
+                    v.dirty = true;
+                    v.clicks = v.nav.clicks;
+                    return;
+                }
+                if let Some(h) = &mut d.hole {
+                    use crate::shell::dialog::{Placing, Termination};
+                    let mut took = false;
+                    if h.termination == Termination::Surface
+                        && h.surface.is_empty()
+                        && let Some(Entity::Face(f)) = picked
+                        && let Some(t) = names(f)
+                    {
+                        h.surface = t;
+                        took = true;
+                    }
+                    if !took {
+                        match (h.placing, picked) {
+                            (Placing::Concentric, Some(Entity::Edge(x))) => {
+                                if let Some(Some((c, n, _))) = v.facts.edge_round.get(x as usize) {
+                                    // its axis out of the part
+                                    let m = v.scene.bounds().0;
+                                    let side = (0..3).map(|k| (m[k] as f64 - c[k]) * n[k]).sum::<f64>();
+                                    let out = if side > 0.0 { n.map(|a| -a) } else { *n };
+                                    h.concentric = Some((*c, out));
+                                }
+                            }
+                            (Placing::Linear, Some(Entity::Face(f))) => {
+                                if let Some(Some(p)) = v.facts.face_plane.get(f as usize) {
+                                    h.linear.face = Some(*p);
+                                    h.linear.edges.clear();
+                                    if let Some(q) = v.nav.hit_point() {
+                                        h.linear.clicked = q.map(|a| a as f64);
+                                    }
+                                }
+                            }
+                            (Placing::Linear, Some(Entity::Edge(x))) => {
+                                if h.linear.face.is_some()
+                                    && let Some(Some(l)) = v.facts.edge_line.get(x as usize)
+                                {
+                                    if h.linear.edges.len() >= 2 {
+                                        h.linear.edges.remove(0);
+                                    }
+                                    h.linear.edges.push(*l);
+                                }
+                            }
+                            _ => {}
+                        }
+                    }
+                    if h.placing != Placing::Sketch || took {
+                        d.settle_hole();
+                        v.nav.selected.clear();
+                        v.clicked.clear();
+                        v.dirty = true;
+                        v.clicks = v.nav.clicks;
+                        return;
+                    }
+                }
                 // a field for edges takes edges, one for faces takes faces
                 let wants = d.pick.as_ref().map(|p| p.0.clone()).unwrap_or_default();
                 if d.kind == "thread" {
@@ -1127,7 +1223,7 @@ impl Gui {
                 }
                 // a profile feature starts from a sketch: one there's no feature on, or a new one
                 Action::NewFeature(kind)
-                    if matches!(kind, "extrude" | "revolve" | "hole") && self.free_sketch().is_none() =>
+                    if matches!(kind, "extrude" | "revolve") && self.free_sketch().is_none() =>
                 {
                     self.shell.then_feature = Some(kind);
                     self.start_sketch();
@@ -1138,6 +1234,12 @@ impl Gui {
                     let mut d = Dialog::new_feature(kind).in_units(self.shell.units, names);
                     if kind == "thread" {
                         d.choose_thread(Some("ISO Metric"), None, None, None);
+                    }
+                    // with no sketch to place it on, it's placed on the part
+                    if self.shell.sketch_shapes.is_empty()
+                        && let Some(h) = &mut d.hole
+                    {
+                        h.placing = crate::shell::dialog::Placing::Linear;
                     }
                     if matches!(kind, "extrude" | "revolve")
                         && let Some(name) = self.free_sketch()

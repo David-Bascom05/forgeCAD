@@ -40,6 +40,11 @@ pub struct Facts {
     pub face_names: Vec<u64>,
     pub edge_names: Vec<u64>,
     pub vertex_names: Vec<u64>,
+    /// By the body's edge index: its centre, axis and radius if it's a circle; its ends if a line.
+    pub edge_round: Vec<RoundEdge>,
+    pub edge_line: Vec<LineEdge>,
+    /// By the body's face index: a point of it and its normal outward, if it's a plane.
+    pub face_plane: Vec<LineEdge>,
     /// By the body's face index: its radius, if it's a cylinder.
     pub face_radius: Vec<Option<f64>>,
     /// By the body's face index: does it face its own axis, as a bore's wall does?
@@ -357,6 +362,9 @@ pub fn facts(model: &mut Model) -> Facts {
         face_names: names(model.body()).0,
         edge_names: names(model.body()).1,
         vertex_names: names(model.body()).2,
+        edge_round: edge_shapes(model.body()).0,
+        edge_line: edge_shapes(model.body()).1,
+        face_plane: planes(model.body()),
         face_radius: radii(model.body()),
         face_bore: bores(model.body()),
         sketches: sketch_shapes(model, model.features.len()),
@@ -378,6 +386,55 @@ fn names(body: Option<&forge_topo::Body>) -> (Vec<u64>, Vec<u64>, Vec<u64>) {
         b.edge_ids().map(|e| b.edge(e).name.0).collect(),
         b.vertex_ids().map(|v| b.vertex(v).name.0).collect(),
     )
+}
+
+/// A circular edge's centre, axis and radius.
+pub type RoundEdge = Option<([f64; 3], [f64; 3], f64)>;
+/// Two points: a straight edge's ends, or a plane's point and normal.
+pub type LineEdge = Option<([f64; 3], [f64; 3])>;
+
+fn edge_shapes(body: Option<&forge_topo::Body>) -> (Vec<RoundEdge>, Vec<LineEdge>) {
+    let Some(b) = body else { return Default::default() };
+    let xyz = |p: forge_math::Point3| [p.x, p.y, p.z];
+    let mut round = Vec::new();
+    let mut lines = Vec::new();
+    for e in b.edge_ids() {
+        let g = b.edge(e);
+        match &g.curve {
+            forge_geom::Curve::Circle(c) => {
+                let z: forge_math::Vec3 = c.frame.z().into();
+                round.push(Some((xyz(c.frame.origin), [z.x, z.y, z.z], c.radius)));
+                lines.push(None);
+            }
+            forge_geom::Curve::Line(_) => {
+                round.push(None);
+                lines.push(Some((xyz(b.vertex(g.start).point), xyz(b.vertex(g.end).point))));
+            }
+            _ => {
+                round.push(None);
+                lines.push(None);
+            }
+        }
+    }
+    (round, lines)
+}
+
+fn planes(body: Option<&forge_topo::Body>) -> Vec<LineEdge> {
+    let Some(b) = body else { return Vec::new() };
+    b.face_ids()
+        .map(|f| {
+            let face = b.face(f);
+            match &face.surface {
+                forge_geom::Surface::Plane(p) => {
+                    let z: forge_math::Vec3 = p.frame.z().into();
+                    let s = if face.same_sense { 1.0 } else { -1.0 };
+                    let o = p.frame.origin;
+                    Some(([o.x, o.y, o.z], [z.x * s, z.y * s, z.z * s]))
+                }
+                _ => None,
+            }
+        })
+        .collect()
 }
 
 fn bores(body: Option<&forge_topo::Body>) -> Vec<bool> {
@@ -425,6 +482,9 @@ pub fn facts_at(model: &Model, n: usize) -> Facts {
         face_names: names(model.body_after(n)).0,
         edge_names: names(model.body_after(n)).1,
         vertex_names: names(model.body_after(n)).2,
+        edge_round: edge_shapes(model.body_after(n)).0,
+        edge_line: edge_shapes(model.body_after(n)).1,
+        face_plane: planes(model.body_after(n)),
         face_radius: radii(model.body_after(n)),
         face_bore: bores(model.body_after(n)),
         sketches: sketch_shapes(model, n),

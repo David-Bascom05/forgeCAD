@@ -263,6 +263,11 @@ impl Nav {
         self.modifiers.control_key()
     }
 
+    /// Where in the world the pointer last was on the part.
+    pub fn hit_point(&self) -> Option<[f32; 3]> {
+        self.hit.map(|h| h.point)
+    }
+
     /// Is the answer for where the pointer is still to come?
     pub fn pick_pending(&self) -> bool {
         self.hit_at != Some(self.cursor)
