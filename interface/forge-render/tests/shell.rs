@@ -580,9 +580,11 @@ fn tree_operations_are_tool_calls_that_replay_on_a_fresh_part() {
     let c = h.gui.shell.place("tree:h1").unwrap().center();
     h.right_drag((c.x, c.y), (c.x, c.y));
     step_some(&mut h);
-    assert!(h.gui.shell.row_menu.is_some());
+    assert!(h.gui.shell.marking_row.is_some());
     let id = title_of(&h, "h1").id;
-    h.gui.shell.row_menu = None;
+    h.key(egui::Key::Escape);
+    step_some(&mut h);
+    assert!(h.gui.shell.marking.is_none() && h.gui.shell.marking_row.is_none());
     h.gui.shell.out.push(forge_render::shell::Action::Suppress(id));
     assert!(h.until(|g| g.shell.rows.iter().any(|r| r.suppressed)));
     let off = h.gui.shell.rows.iter().find(|r| r.suppressed).unwrap().clone();
@@ -1411,7 +1413,8 @@ fn esc_backs_out_of_every_mode_one_level_at_a_time() {
     assert!(h.gui.shell.dialog.is_some());
     esc(&mut h);
     at_rest(&h);
-    h.gui.shell.row_menu = Some((base, egui::pos2(400.0, 400.0)));
+    h.gui.shell.marking = Some(egui::pos2(400.0, 400.0));
+    h.gui.shell.marking_row = Some(base);
     step_some(&mut h);
     esc(&mut h);
     at_rest(&h);
@@ -1679,11 +1682,11 @@ fn a_sketch_read_by_features_shows_and_hides_by_its_eye_its_child_eye_and_its_me
     let r = h.gui.shell.place(&format!("tree:{}", row.name)).unwrap();
     h.right_drag((r.center().x, r.center().y), (r.center().x, r.center().y));
     step_some(&mut h);
-    let at = h.gui.shell.row_menu.expect("its menu").1;
-    h.click_at(at.x + 40.0, at.y + 4.0 + 28.0 * 1.5);
+    assert_eq!(h.gui.shell.marking_row, Some(row.id));
+    h.click("mark:Visibility");
     step_some(&mut h);
     assert!(h.gui.shell.sketch_shown(row.id), "from the menu");
-    assert!(h.gui.shell.row_menu.is_none());
+    assert!(h.gui.shell.marking.is_none());
 }
 
 #[test]
@@ -1705,4 +1708,108 @@ fn a_sketch_shows_and_hides_by_the_eye_on_the_row_under_its_feature() {
     h.move_to(0.0, 0.0);
     step_some(&mut h);
     assert!(!eye_shows(&h, id));
+}
+
+#[test]
+fn a_left_drag_is_a_selection_window_and_f4_or_shift_middle_orbits() {
+    let Some((mut h, _)) = file_part(BLOCK) else {
+        return;
+    };
+    let v = h.gui.shell.view_rect;
+    let (cam, size) = h.gui.shell.camera.unwrap();
+    let was = cam;
+    assert_eq!(h.gui.shell.view.tool, NavTool::Select);
+    let px = |w: [f32; 3]| {
+        let u = cam.pixel_of(w, size.0, size.1).unwrap();
+        (v.min.x + u.0, v.min.y + u.1)
+    };
+    let (a, b) = (px([30.0, -30.0, 20.0]), px([-30.0, 30.0, 20.0]));
+    let top = (px([-30.0, -30.0, 20.0]), px([30.0, 30.0, 20.0]));
+    // left to right round the top face only: what's wholly in it, solid
+    let lo = (top.0.0 - 6.0, a.1.min(b.1).min(top.0.1).min(top.1.1) - 6.0);
+    let hi = (top.1.0 + 6.0, a.1.max(b.1).max(top.0.1).max(top.1.1) + 6.0);
+    h.move_to(lo.0, lo.1);
+    h.step();
+    h.button(true);
+    h.step();
+    h.move_to(hi.0, hi.1);
+    step_some(&mut h);
+    assert!(h.gui.shell.window_box.is_some());
+    h.button(false);
+    step_some(&mut h);
+    let camera_now = h.gui.view.as_ref().unwrap().nav.camera;
+    assert_eq!(camera_now, was, "it doesn't orbit");
+    let wholly = h.gui.view.as_ref().unwrap().nav.selected.len();
+    assert!(wholly >= 1, "the top face is in it");
+    // right to left over the same box also takes what it only crosses: the sides
+    h.move_to(hi.0, hi.1);
+    h.step();
+    h.button(true);
+    h.step();
+    h.move_to(lo.0, lo.1);
+    step_some(&mut h);
+    h.button(false);
+    step_some(&mut h);
+    let crossing = h.gui.view.as_ref().unwrap().nav.selected.len();
+    assert!(crossing > wholly, "{crossing} {wholly}");
+    // F4 held: the left button orbits
+    h.gui.hold_orbit(true);
+    h.move_to(v.left() + 40.0, v.bottom() - 40.0);
+    h.step();
+    h.button(true);
+    h.step();
+    h.move_to(v.left() + 120.0, v.bottom() - 40.0);
+    step_some(&mut h);
+    h.button(false);
+    step_some(&mut h);
+    h.gui.hold_orbit(false);
+    assert_ne!(h.gui.view.as_ref().unwrap().nav.camera.yaw, was.yaw);
+}
+
+#[test]
+fn the_marking_menu_fits_where_things_stand_and_takes_a_direction() {
+    use forge_render::shell::sketching::SkTool;
+    let Some((mut h, _)) = file_part(BLOCK) else {
+        return;
+    };
+    // on nothing, the part's commands; the rest in a list
+    let (items, more) = h.gui.shell.marking_items();
+    assert!(items.iter().any(|m| m.0 == "Start Sketch") && !more.is_empty());
+    let id = h.gui.shell.doc.as_ref().unwrap().find("base").unwrap();
+    // on a selection, what's about it
+    h.gui.shell.selected = Some(id);
+    assert!(h.gui.shell.marking_items().0.iter().any(|m| m.0 == "Delete"));
+    h.gui.shell.selected = None;
+    // shown, a click in a wedge's direction takes it, well off its word
+    let c = h.gui.shell.view_rect.center();
+    h.gui.shell.marking = Some(c);
+    step_some(&mut h);
+    assert!(h.gui.shell.place("mark:Start Sketch").is_some());
+    h.click_at(c.x + 22.0, c.y - 22.0);
+    step_some(&mut h);
+    assert!(h.gui.shell.marking.is_none());
+    assert!(h.gui.shell.sketch_pick, "up and right is Start Sketch");
+    h.key(egui::Key::Escape);
+    step_some(&mut h);
+    // in the dead zone a click takes nothing
+    h.gui.shell.marking = Some(c);
+    step_some(&mut h);
+    h.click_at(c.x + 3.0, c.y + 3.0);
+    step_some(&mut h);
+    assert!(h.gui.shell.marking.is_none() && h.gui.shell.dialog.is_none() && !h.gui.shell.sketch_pick);
+    // in a sketch, its tools
+    h.gui.shell.origin_selected = Some(forge_render::origin::Item::XyPlane);
+    h.gui.shell.out.push(Action::StartSketch);
+    assert!(h.until(|g| g.shell.sketch.is_some()));
+    let items = h.gui.shell.marking_items().0;
+    assert!(
+        items
+            .iter()
+            .any(|m| m.0 == "Finish Sketch" && m.2 == Some(Action::FinishSketch))
+    );
+    assert!(
+        items
+            .iter()
+            .any(|m| m.0 == "Line" && m.2 == Some(Action::SketchTool(SkTool::Line)))
+    );
 }

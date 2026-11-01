@@ -110,6 +110,8 @@ pub struct Gui {
     tree_hover_was: Option<forge_doc::ItemId>,
     /// A feature to open once the sketch just finished is in.
     after_sketch: Option<&'static str>,
+    /// When the right button went down in the view, for its menu to show if it stays down.
+    mark_held: Option<f64>,
     /// A sketch's plane has been asked for.
     sketch_for: Option<(String, SketchFor, Vec<String>)>,
     /// The GPU refused something: said once, and no more views are drawn.
@@ -191,7 +193,15 @@ impl Gui {
             tree_hover_was: None,
             sketch_for: None,
             after_sketch: None,
+            mark_held: None,
             gpu_failed,
+        }
+    }
+
+    /// F4: the left button orbits while it's down.
+    pub fn hold_orbit(&mut self, down: bool) {
+        if let Some(v) = &mut self.view {
+            v.nav.orbit_held = down;
         }
     }
 
@@ -821,10 +831,41 @@ impl Gui {
             }
             if let Some((from, to)) = v.nav.marked.take() {
                 // a flick chooses from the marking menu without showing it; a click shows it
-                let items = self.shell.marking_items();
+                let (items, _) = self.shell.marking_items();
+                self.mark_held = None;
                 match Shell::marking_flick(from, to, p) {
-                    Some(k) => self.shell.out.extend(items[k].1),
-                    None => self.shell.marking = Some(egui::pos2(origin.x + to.0 / p, origin.y + to.1 / p)),
+                    Some(k) => {
+                        self.shell.marking = None;
+                        self.shell.out.extend(items[k].2);
+                    }
+                    None => {
+                        self.shell.marking = Some(egui::pos2(origin.x + from.0 / p, origin.y + from.1 / p))
+                    }
+                }
+            }
+            if let Some((a, b)) = v.nav.window.take() {
+                v.dirty = true;
+                let (cam, size) = (v.nav.camera, v.size);
+                let lo = (a.0.min(b.0), a.1.min(b.1));
+                let hi = (a.0.max(b.0), a.1.max(b.1));
+                let wants = self
+                    .shell
+                    .dialog
+                    .as_ref()
+                    .and_then(|d| d.pick.as_ref())
+                    .map_or(String::new(), |p| p.0.clone());
+                let found = window_finds(&v.facts, &cam, size, lo, hi, b.0 < a.0, &wants);
+                if v.nav.ctrl_held() {
+                    v.nav.selected.retain(|s| !found.contains(&s.1));
+                } else {
+                    if !v.nav.shift_held() {
+                        v.nav.selected.clear();
+                    }
+                    for e in found {
+                        if !v.nav.selected.contains(&(0, e)) {
+                            v.nav.selected.push((0, e));
+                        }
+                    }
                 }
             }
             if let Some(at) = v.nav.cube_menu.take() {
@@ -1519,6 +1560,20 @@ impl Gui {
         }
         if let Some(v) = &self.view {
             self.shell.part_middle = v.scene.bounds().0;
+            let (at, p) = (self.shell.view_rect.min, self.pixels_per_point);
+            let on_screen = |q: (f32, f32)| at + egui::vec2(q.0, q.1) / p;
+            self.shell.window_box = v.nav.window_box().map(|(a, b)| (on_screen(a), on_screen(b)));
+            // held still, the menu shows; a flick needn't wait for it
+            match v.nav.marking_from() {
+                Some(from) => {
+                    let t = now_ms();
+                    let since = *self.mark_held.get_or_insert(t);
+                    if t - since > MARK_SHOW_MS && self.shell.marking.is_none() {
+                        self.shell.marking = Some(on_screen(from));
+                    }
+                }
+                None => self.mark_held = None,
+            }
         }
         let sketches = self.shell.sketches_drawn();
         if let Some(v) = &mut self.view
@@ -1713,7 +1768,8 @@ impl Gui {
             .next()
             .map(|v| v.repaint_delay)
             .unwrap_or(std::time::Duration::MAX);
-        let again_in = if animating || self.view.as_ref().is_some_and(|v| v.dirty) {
+        let again_in = if animating || self.mark_held.is_some() || self.view.as_ref().is_some_and(|v| v.dirty)
+        {
             Some(std::time::Duration::ZERO)
         } else if delay == std::time::Duration::MAX {
             None
@@ -1759,6 +1815,72 @@ fn look_at(v: &mut View, plane: forge_math::Frame) {
     let to = crate::nav::sheet_view(v.nav.camera, [z.x as f32, z.y as f32, z.z as f32], &v.nav.orient);
     v.nav.go_to(to);
     v.dirty = true;
+}
+
+/// How long the right button stays down before its menu shows, in ms.
+const MARK_SHOW_MS: f64 = 220.0;
+
+/// What a selection window takes: edges or faces, wholly in it, or touching it too if `crossing`.
+fn window_finds(
+    facts: &Facts,
+    camera: &Camera,
+    size: (u32, u32),
+    lo: (f32, f32),
+    hi: (f32, f32),
+    crossing: bool,
+    wants: &str,
+) -> Vec<Entity> {
+    let edge_px = |k: usize| -> Vec<(f32, f32)> {
+        facts.edge_points[k]
+            .iter()
+            .filter_map(|p| camera.pixel_of(*p, size.0, size.1))
+            .collect()
+    };
+    let inside = |p: &(f32, f32)| p.0 >= lo.0 && p.0 <= hi.0 && p.1 >= lo.1 && p.1 <= hi.1;
+    let takes = |pts: &[(f32, f32)]| {
+        if crossing {
+            pts.iter().any(inside) || pts.windows(2).any(|w| segment_crosses(w[0], w[1], lo, hi))
+        } else {
+            !pts.is_empty() && pts.iter().all(inside)
+        }
+    };
+    if wants == "Edges" {
+        return (0..facts.edge_points.len())
+            .filter(|k| takes(&edge_px(*k)))
+            .map(|k| Entity::Edge(k as u32))
+            .collect();
+    }
+    facts
+        .face_edges
+        .iter()
+        .enumerate()
+        .filter(|(_, edges)| {
+            let pts: Vec<(f32, f32)> = edges.iter().flat_map(|e| edge_px(*e as usize)).collect();
+            if crossing {
+                edges.iter().any(|e| takes(&edge_px(*e as usize)))
+            } else {
+                takes(&pts)
+            }
+        })
+        .map(|(k, _)| Entity::Face(k as u32))
+        .collect()
+}
+
+/// Does this segment touch this box?
+fn segment_crosses(a: (f32, f32), b: (f32, f32), lo: (f32, f32), hi: (f32, f32)) -> bool {
+    let (mut t0, mut t1) = (0.0f32, 1.0f32);
+    for (p, d, min, max) in [(a.0, b.0 - a.0, lo.0, hi.0), (a.1, b.1 - a.1, lo.1, hi.1)] {
+        if d.abs() < 1e-6 {
+            if p < min || p > max {
+                return false;
+            }
+            continue;
+        }
+        let (u, v) = ((min - p) / d, (max - p) / d);
+        t0 = t0.max(u.min(v));
+        t1 = t1.min(u.max(v));
+    }
+    t0 <= t1
 }
 
 /// A picture read back from the target.

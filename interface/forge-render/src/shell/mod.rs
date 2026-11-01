@@ -23,6 +23,15 @@ pub const TABS: [&str; 5] = ["3D Model", "Sketch", "Inspect", "View", "Manage"];
 
 const TITLE_H: f32 = 36.0;
 const TABS_H: f32 = 34.0;
+/// A marking menu's dead zone, the ring its wedges light to, how far from it the pointer still
+/// chooses, and how far a flick must go.
+const DEAD_PT: f32 = 10.0;
+const RING_PT: f32 = 42.0;
+const WEDGE_FAR_PT: f32 = 260.0;
+const FLICK_PT: f32 = 16.0;
+/// One of a marking menu's: its word, its icon, what it does if it can.
+pub type Mark = (&'static str, &'static str, Option<Action>);
+pub type Marks = [Mark; 8];
 const RIBBON_H: f32 = 104.0;
 const SIDE_W: f32 = 270.0;
 const HEAD_H: f32 = 30.0;
@@ -151,7 +160,7 @@ impl Default for ViewState {
             lines: LineMode::Near,
             section: false,
             parallel: true,
-            tool: NavTool::Orbit,
+            tool: NavTool::Select,
             maximized: false,
         }
     }
@@ -200,7 +209,6 @@ pub struct Shell {
     pub renaming: Option<(ItemId, String)>,
     pub renamed: Option<(ItemId, String)>,
     /// The tree's right-click menu: for this row, at this point.
-    pub row_menu: Option<(ItemId, egui::Pos2)>,
     /// What the model's sketches are, in 3D.
     pub sketch_shapes: Vec<forge_agent::handles::SketchShape>,
     /// Sketches told to show or hide, by name. Others show until something reads them.
@@ -213,6 +221,10 @@ pub struct Shell {
     pub part_middle: [f32; 3],
     /// The marking menu's up, centred here.
     pub marking: Option<egui::Pos2>,
+    /// It's for this row of the tree.
+    pub marking_row: Option<ItemId>,
+    /// A selection window being dragged, on screen.
+    pub window_box: Option<(egui::Pos2, egui::Pos2)>,
     /// Sketch mode.
     pub sketch: Option<sketching::SketchMode>,
     /// Waiting for a plane or a face to sketch on.
@@ -264,13 +276,14 @@ impl Default for Shell {
             end_at: None,
             renaming: None,
             renamed: None,
-            row_menu: None,
             sketch_shapes: Vec::new(),
             sketch_eye: Default::default(),
             sketch_hover: None,
             units: "mm",
             part_middle: [0.0; 3],
             marking: None,
+            marking_row: None,
+            window_box: None,
             origin_open: false,
             origin_shown: [false; 7],
             origin_hover: None,
@@ -403,31 +416,115 @@ impl Shell {
 
     /// A menu's up: a press anywhere else only closes it.
     pub fn menu_open(&self) -> bool {
-        self.file_menu || self.cube_menu.is_some() || self.row_menu.is_some() || self.marking.is_some()
+        self.file_menu || self.cube_menu.is_some() || self.marking.is_some()
     }
 
-    /// The marking menu's eight places, clockwise from the top. What's about the selection is there
-    /// only when there's one.
-    pub fn marking_items(&self) -> [(&'static str, Option<Action>); 8] {
-        let f = self
-            .selected
-            .filter(|s| self.rows.iter().any(|r| r.id == *s && !r.suppressed));
-        [
-            ("Undo", Some(Action::Undo)),
-            ("Edit Feature", f.map(Action::Edit)),
-            ("Fit All", Some(Action::FitAll)),
-            ("Suppress", f.map(Action::Suppress)),
-            ("Redo", Some(Action::Redo)),
-            ("Delete", f.map(Action::Delete)),
-            ("Home", Some(Action::Home)),
-            ("Rename", f.map(Action::StartRename)),
-        ]
+    /// The marking menu for where things stand: eight places clockwise from the top, and a list
+    /// under them for the rest.
+    pub fn marking_items(&self) -> (Marks, Vec<Mark>) {
+        const NONE: Mark = ("", "", None);
+        let row = |id: ItemId| -> (Marks, Vec<Mark>) {
+            let off = self.rows.iter().any(|r| r.id == id && r.suppressed);
+            let sketch = self.rows.iter().any(|r| r.id == id && r.kind == "sketch");
+            let mut more: Vec<Mark> = vec![(
+                "Move End of Part Here",
+                "end",
+                (!off).then_some(Action::EndAt(Some(id))),
+            )];
+            if sketch {
+                let word = if self.sketch_shown(id) { "Hide" } else { "Show" };
+                more.push(("Visibility", "eye", Some(Action::SketchVisibility(id))));
+                let _ = word;
+            }
+            (
+                [
+                    ("Edit Feature", "edit", (!off).then_some(Action::Edit(id))),
+                    NONE,
+                    ("Rename", "rename", (!off).then_some(Action::StartRename(id))),
+                    NONE,
+                    ("Delete", "delete", (!off).then_some(Action::Delete(id))),
+                    NONE,
+                    (
+                        if off { "Unsuppress" } else { "Suppress" },
+                        "hide",
+                        Some(if off {
+                            Action::Unsuppress(id)
+                        } else {
+                            Action::Suppress(id)
+                        }),
+                    ),
+                    NONE,
+                ],
+                more,
+            )
+        };
+        if let Some(id) = self.marking_row {
+            return row(id);
+        }
+        if self.dialog.is_some() {
+            return (
+                [
+                    ("OK", "finish", Some(Action::DialogOk)),
+                    NONE,
+                    NONE,
+                    NONE,
+                    ("Cancel", "close", Some(Action::DialogCancel)),
+                    NONE,
+                    NONE,
+                    NONE,
+                ],
+                Vec::new(),
+            );
+        }
+        if let Some(m) = &self.sketch {
+            let _ = m;
+            let tool = |t| self.sketch_tool(t);
+            use sketching::SkTool as K;
+            return (
+                [
+                    ("Finish Sketch", "finish", Some(Action::FinishSketch)),
+                    ("Line", "line", tool(K::Line)),
+                    ("Rectangle", "rectangle", tool(K::Rectangle)),
+                    ("Circle", "circle", tool(K::Circle)),
+                    ("Cancel", "close", Some(Action::CancelSketch)),
+                    ("Arc", "arc", tool(K::Arc)),
+                    ("Dimension", "dim", tool(K::Dimension)),
+                    ("Look At", "lookat", Some(Action::LookAt)),
+                ],
+                vec![
+                    ("Undo", "undo", Some(Action::Undo)),
+                    ("Fit All", "fit", Some(Action::FitAll)),
+                ],
+            );
+        }
+        if let Some(id) = self.selected.filter(|s| self.rows.iter().any(|r| r.id == *s)) {
+            let (mut m, more) = row(id);
+            m[1] = ("Undo", "undo", Some(Action::Undo));
+            m[3] = ("Fit All", "fit", Some(Action::FitAll));
+            return (m, more);
+        }
+        (
+            [
+                ("Undo", "undo", Some(Action::Undo)),
+                ("Start Sketch", "sketch", Some(Action::StartSketch)),
+                ("Extrude", "extrude", Some(Action::NewFeature("extrude"))),
+                ("Fillet", "fillet", Some(Action::NewFeature("fillet"))),
+                ("Redo", "redo", Some(Action::Redo)),
+                ("Hole", "hole", Some(Action::NewFeature("hole"))),
+                ("Home", "home", Some(Action::Home)),
+                ("Fit All", "fit", Some(Action::FitAll)),
+            ],
+            vec![
+                ("Revolve", "revolve", Some(Action::NewFeature("revolve"))),
+                ("Chamfer", "chamfer", Some(Action::NewFeature("chamfer"))),
+            ],
+        )
     }
 
     /// A flick of the right button from `from` to `to`: which of the eight, if it went far enough.
     pub fn marking_flick(from: (f32, f32), to: (f32, f32), scale: f32) -> Option<usize> {
         let (dx, dy) = (to.0 - from.0, to.1 - from.1);
-        if (dx * dx + dy * dy).sqrt() < 30.0 * scale {
+        if (dx * dx + dy * dy).sqrt() < FLICK_PT * scale {
             return None;
         }
         let a = dx.atan2(-dy).rem_euclid(core::f32::consts::TAU);
@@ -476,6 +573,7 @@ impl Shell {
         self.docs_and_status(ui, s, bottom);
         self.navbar(&ctx);
         self.sketches_ui(&ctx);
+        self.window_ui(&ctx);
         self.dim_ui(&ctx);
         self.dialog_ui(&ctx);
         self.sketch_ui(&ctx);
@@ -806,8 +904,8 @@ impl Shell {
         if self.menu_open() {
             self.file_menu = false;
             self.cube_menu = None;
-            self.row_menu = None;
             self.marking = None;
+            self.marking_row = None;
         } else if self.renaming.is_some() {
             self.renaming = None;
         } else if self.dialog.is_some() {
@@ -893,6 +991,13 @@ impl Shell {
         let at = pos2(v.right() - NAVBAR_W - 12.0, v.top() + NAVBAR_TOP);
         let items = [
             (
+                "nav:select",
+                "select",
+                "Select",
+                Action::Tool(NavTool::Select),
+                Some(NavTool::Select),
+            ),
+            (
                 "nav:orbit",
                 "orbit",
                 "Orbit",
@@ -920,7 +1025,7 @@ impl Shell {
             .fixed_pos(at)
             .order(egui::Order::Middle)
             .show(ctx, |ui| {
-                let (bar, _) = ui.allocate_exact_size(vec2(NAVBAR_W, 4.0 * 30.0 + 2.0), Sense::hover());
+                let (bar, _) = ui.allocate_exact_size(vec2(NAVBAR_W, 5.0 * 30.0 + 2.0), Sense::hover());
                 ui.painter().rect_filled(bar, 4.0, t.surface);
                 ui.painter()
                     .rect_stroke(bar, 4.0, Stroke::new(1.0, t.line), StrokeKind::Inside);
@@ -978,39 +1083,6 @@ impl Shell {
     fn menus(&mut self, ctx: &egui::Context) {
         let t = self.theme;
         self.tree_keys(ctx);
-        if let Some((id, at)) = self.row_menu {
-            let off = self.rows.iter().any(|r| r.id == id && r.suppressed);
-            let mut items = vec![
-                ("Edit Feature", (!off).then_some(Action::Edit(id))),
-                ("Rename", (!off).then_some(Action::StartRename(id))),
-                (
-                    if off { "Unsuppress" } else { "Suppress" },
-                    Some(if off {
-                        Action::Unsuppress(id)
-                    } else {
-                        Action::Suppress(id)
-                    }),
-                ),
-                ("Move End of Part Here", (!off).then_some(Action::EndAt(Some(id)))),
-                ("Delete", (!off).then_some(Action::Delete(id))),
-            ];
-            if self.rows.iter().any(|r| r.id == id && r.kind == "sketch") {
-                let word = if self.sketch_shown(id) {
-                    "\u{2713} Visibility"
-                } else {
-                    "Visibility"
-                };
-                items.insert(1, (word, Some(Action::SketchVisibility(id))));
-            }
-            match menu_at(ctx, "row-menu", at, &t, &items) {
-                MenuResult::Chose(a) => {
-                    self.out.push(a);
-                    self.row_menu = None;
-                }
-                MenuResult::Close => self.row_menu = None,
-                MenuResult::Open => {}
-            }
-        }
         self.marking_menu(ctx);
         if self.file_menu {
             let at = pos2(8.0, TITLE_H + TABS_H);
@@ -1098,40 +1170,78 @@ impl Shell {
         }
     }
 
+    /// The marking menu: eight wedges round the place it opened, each its word and icon on a chip,
+    /// chosen by direction; a small dead zone in the middle; what's left over in a list below.
     fn marking_menu(&mut self, ctx: &egui::Context) {
         let Some(c) = self.marking else { return };
         let t = self.theme;
-        let items = self.marking_items();
+        let (items, more) = self.marking_items();
         let mut chose = None;
-        let inner = egui::Area::new(egui::Id::unique("marking"))
-            .fixed_pos(c - vec2(190.0, 110.0))
+        let mut closing = false;
+        let pointer = ctx.input(|i| i.pointer.hover_pos());
+        let wedge = pointer.and_then(|p| {
+            let d = p - c;
+            (d.length() >= DEAD_PT && d.length() <= WEDGE_FAR_PT).then(|| {
+                let a = d.x.atan2(-d.y).rem_euclid(core::f32::consts::TAU);
+                ((a / core::f32::consts::FRAC_PI_4).round() as usize) % 8
+            })
+        });
+        let wedge = wedge.filter(|k| items[*k].2.is_some());
+        egui::Area::new(egui::Id::unique("marking"))
+            .fixed_pos(pos2(0.0, 0.0))
             .order(egui::Order::Foreground)
-            .constrain(true)
             .show(ctx, |ui| {
-                let (whole, _) = ui.allocate_exact_size(vec2(380.0, 220.0), Sense::hover());
-                let mid = whole.center();
-                ui.painter().circle_stroke(mid, 6.0, Stroke::new(1.5, t.ink2));
-                for (k, (label, action)) in items.iter().enumerate() {
+                let p = ui.painter();
+                let around = |a: f32, r: f32| c + vec2(a.sin() * r, -a.cos() * r);
+                // the ring, and the wedge the pointer's in
+                let q = core::f32::consts::FRAC_PI_8;
+                if let Some(k) = wedge {
+                    let mid = k as f32 * core::f32::consts::FRAC_PI_4;
+                    let mut mesh = egui::Mesh::default();
+                    let ink = t.focus.gamma_multiply(0.75);
+                    for s in 0..8 {
+                        let (a0, a1) = (
+                            mid - q + 2.0 * q * s as f32 / 8.0,
+                            mid - q + 2.0 * q * (s + 1) as f32 / 8.0,
+                        );
+                        let base = mesh.vertices.len() as u32;
+                        for pt in [
+                            around(a0, DEAD_PT),
+                            around(a1, DEAD_PT),
+                            around(a1, RING_PT),
+                            around(a0, RING_PT),
+                        ] {
+                            mesh.colored_vertex(pt, ink);
+                        }
+                        mesh.add_triangle(base, base + 1, base + 2);
+                        mesh.add_triangle(base, base + 2, base + 3);
+                    }
+                    p.add(mesh);
+                }
+                p.circle_stroke(c, RING_PT, Stroke::new(1.0, t.ink2.gamma_multiply(0.5)));
+                p.circle_filled(c, DEAD_PT, t.surface);
+                p.circle_stroke(c, DEAD_PT, Stroke::new(1.5, t.ink2));
+                for (k, (label, icon, action)) in items.iter().enumerate() {
                     if label.is_empty() {
                         continue;
                     }
                     let a = k as f32 * core::f32::consts::FRAC_PI_4;
-                    let at = mid + vec2(a.sin() * 130.0, -a.cos() * 80.0);
-                    let r = Rect::from_center_size(at, vec2(112.0, 26.0));
-                    let sense = if action.is_some() {
-                        Sense::click()
-                    } else {
-                        Sense::hover()
-                    };
-                    let resp = ui.interact(r, ui.scope_id().with(k), sense);
-                    resp.widget_info(|| {
-                        egui::WidgetInfo::labeled(egui::Role::Button, action.is_some(), *label)
-                    });
-                    let on = resp.hovered() && action.is_some();
-                    ui.painter()
-                        .rect_filled(r, 4.0, if on { t.on } else { t.surface });
-                    ui.painter()
-                        .rect_stroke(r, 4.0, Stroke::new(1.0, t.line), StrokeKind::Inside);
+                    let g = ui.fonts_mut(|f| f.layout_no_wrap(label.to_string(), sans(12.0), t.ink));
+                    let w = g.size().x + 34.0;
+                    let at = around(a, RING_PT + 8.0);
+                    // standing out from the ring on its own side
+                    let (sx, sy) = (a.sin(), -a.cos());
+                    let mid = at + vec2(sx * w * 0.5, sy * 15.0);
+                    let r = Rect::from_center_size(mid, vec2(w, 28.0));
+                    let on = wedge == Some(k);
+                    let p = ui.painter();
+                    p.rect_filled(r, 4.0, if on { t.on } else { t.surface });
+                    p.rect_stroke(
+                        r,
+                        4.0,
+                        Stroke::new(1.0, if on { t.focus } else { t.line }),
+                        StrokeKind::Inside,
+                    );
                     let ink = if action.is_none() {
                         t.ink2.gamma_multiply(0.55)
                     } else if on {
@@ -1139,25 +1249,86 @@ impl Shell {
                     } else {
                         t.ink
                     };
-                    ui.painter()
-                        .text(at, Align2::CENTER_CENTER, *label, sans(12.0), ink);
+                    icons::draw(p, r.left_top() + vec2(7.0, 6.0), 16.0, icon, 1.5, ink);
+                    p.text(
+                        pos2(r.left() + 28.0, r.center().y),
+                        Align2::LEFT_CENTER,
+                        *label,
+                        sans(12.0),
+                        ink,
+                    );
+                    self.places.push((format!("mark:{label}"), r));
+                }
+                // the rest
+                let mut y = c.y + RING_PT + 60.0;
+                for (label, icon, action) in &more {
+                    let r = Rect::from_min_size(pos2(c.x - 80.0, y), vec2(160.0, 26.0));
+                    let resp = ui.interact(r, ui.scope_id().with(*label), Sense::click());
+                    let p = ui.painter();
+                    p.rect_filled(r, 0.0, if resp.hovered() { t.on } else { t.surface });
+                    p.rect_stroke(r, 0.0, Stroke::new(1.0, t.line), StrokeKind::Inside);
+                    let ink = if action.is_none() { t.ink2 } else { t.ink };
+                    icons::draw(p, r.left_top() + vec2(7.0, 5.0), 16.0, icon, 1.5, ink);
+                    p.text(
+                        pos2(r.left() + 28.0, r.center().y),
+                        Align2::LEFT_CENTER,
+                        *label,
+                        sans(12.0),
+                        ink,
+                    );
                     self.places.push((format!("mark:{label}"), r));
                     if resp.clicked() {
                         chose = *action;
+                        closing = true;
                     }
+                    y += 26.0;
                 }
             });
-        let press_off = ctx.input(|i| {
-            i.pointer.any_pressed()
-                && i.pointer
-                    .interact_pos()
-                    .is_some_and(|p| !inner.response.rect.contains(p))
-        });
+        let clicked = ctx.input(|i| i.pointer.primary_clicked());
+        if clicked && !closing {
+            match wedge {
+                Some(k) => chose = items[k].2,
+                None => closing = true,
+            }
+        }
         if let Some(a) = chose {
             self.out.push(a);
+            closing = true;
+        }
+        if closing {
             self.marking = None;
-        } else if press_off || ctx.input(|i| i.key_pressed(egui::Key::Escape)) {
-            self.marking = None;
+            self.marking_row = None;
+        }
+    }
+
+    /// A selection window: solid when it takes what's wholly in it, dashed when what it crosses too.
+    fn window_ui(&self, ctx: &egui::Context) {
+        let Some((a, b)) = self.window_box else { return };
+        let t = self.theme;
+        let p = ctx
+            .layer_painter(egui::LayerId::new(
+                egui::Order::Middle,
+                egui::Id::unique("window"),
+            ))
+            .with_clip_rect(self.view_rect);
+        let r = Rect::from_two_pos(a, b);
+        p.rect_filled(r, 0.0, t.focus.gamma_multiply(0.12));
+        if b.x >= a.x {
+            p.rect_stroke(r, 0.0, Stroke::new(1.5, t.focus), StrokeKind::Inside);
+        } else {
+            let corners = [
+                r.left_top(),
+                r.right_top(),
+                r.right_bottom(),
+                r.left_bottom(),
+                r.left_top(),
+            ];
+            p.extend(egui::Shape::dashed_line(
+                &corners,
+                Stroke::new(1.5, t.focus),
+                6.0,
+                4.0,
+            ));
         }
     }
 }

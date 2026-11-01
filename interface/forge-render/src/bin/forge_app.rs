@@ -3,7 +3,7 @@
 use forge_render::gui::Headless;
 
 const USAGE: &str = "forge-app [PART | file.fc] [--size WxH] [--times]
-  [--shot FILE.ppm [--scale S] [--light] [--tab N] [--select NAME] [--click NAME].. [--at X Y] [--sketch ROW;ROW..] [--edit NAME] [--draw TOOL X Y] [--view YAW PITCH]]
+  [--shot FILE.ppm [--scale S] [--light] [--tab N] [--select NAME] [--click NAME].. [--at X Y] [--sketch ROW;ROW..] [--edit NAME] [--draw TOOL X Y] [--view YAW PITCH] [--marking]]
   [--present fifo|mailbox|immediate] [--run-for SECONDS] [--spin]
   [--bench]
 PART: a bench part or a .fc file. --times: input-to-present on exit. --shot: one frame, no window.
@@ -23,6 +23,8 @@ struct Args {
     view: Option<(f32, f32)>,
     edit: Option<String>,
     draw: Option<(String, f64, f64)>,
+    /// Shows the marking menu at the view's middle, for a shot.
+    marking: bool,
     bench: bool,
     times: bool,
     present: Option<String>,
@@ -45,6 +47,7 @@ fn args() -> Result<Args, String> {
         view: None,
         edit: None,
         draw: None,
+        marking: false,
         bench: false,
         times: false,
         present: None,
@@ -85,6 +88,7 @@ fn args() -> Result<Args, String> {
                 let p: f32 = v()?.parse().map_err(|_| USAGE)?;
                 a.view = Some((y.to_radians(), p.to_radians()));
             }
+            "--marking" => a.marking = true,
             "--bench" => a.bench = true,
             "--times" => a.times = true,
             "--present" => a.present = Some(v()?),
@@ -316,6 +320,17 @@ fn run() -> Result<(), String> {
         for _ in 0..3 {
             h.step();
             std::thread::sleep(std::time::Duration::from_millis(10));
+        }
+    }
+    if a.marking {
+        h.gui.shell.marking = Some(h.gui.shell.view_rect.center());
+        for _ in 0..3 {
+            h.step();
+        }
+        let c = h.gui.shell.view_rect.center();
+        h.move_to(c.x + 40.0, c.y - 40.0);
+        for _ in 0..3 {
+            h.step();
         }
     }
     if a.bench {

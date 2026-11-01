@@ -25,6 +25,8 @@ const EXPLODE_MS: f64 = 500.0;
 /// What the left button drags in the view.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub enum NavTool {
+    /// The left button selects: a click, or a window.
+    Select,
     #[default]
     Orbit,
     Pan,
@@ -33,6 +35,8 @@ pub enum NavTool {
 
 #[derive(Clone, Copy, Debug, PartialEq)]
 enum Drag {
+    /// A selection window.
+    Window,
     Orbit,
     Pan,
     Zoom,
@@ -74,6 +78,10 @@ pub struct Nav {
     /// The view its home button goes to; none: fit the part from the opening angle.
     pub home_view: Option<Camera>,
     /// It was right-clicked here: the host's menu goes up, once.
+    /// F4 is down: the left button orbits, whatever the tool.
+    pub orbit_held: bool,
+    /// A selection window dragged and let go: from, to.
+    pub window: Option<((f32, f32), (f32, f32))>,
     pub cube_menu: Option<(f32, f32)>,
     /// What part of the cube that click was on.
     pub cube_menu_region: Option<[i8; 3]>,
@@ -176,6 +184,8 @@ impl Nav {
             transition: None,
             cube_hover: None,
             home_view: None,
+            orbit_held: false,
+            window: None,
             cube_menu: None,
             cube_menu_region: None,
             orient: Orient::default(),
@@ -233,6 +243,24 @@ impl Nav {
             });
         }
         out
+    }
+
+    /// The window being dragged: from, to.
+    pub fn window_box(&self) -> Option<((f32, f32), (f32, f32))> {
+        (self.drag == Some(Drag::Window) && self.moved).then_some((self.press_at, self.cursor))
+    }
+
+    /// Held on the right button, for a marking menu: where it began.
+    pub fn marking_from(&self) -> Option<(f32, f32)> {
+        (self.drag == Some(Drag::Mark)).then_some(self.press_at)
+    }
+
+    pub fn shift_held(&self) -> bool {
+        self.modifiers.shift_key()
+    }
+
+    pub fn ctrl_held(&self) -> bool {
+        self.modifiers.control_key()
     }
 
     /// Is the answer for where the pointer is still to come?
@@ -336,7 +364,9 @@ impl Nav {
         }
         let shift = self.modifiers.shift_key();
         self.drag = Some(match button {
+            MouseButton::Left if self.orbit_held => Drag::Orbit,
             MouseButton::Left => match self.tool {
+                NavTool::Select => Drag::Window,
                 NavTool::Orbit => Drag::Orbit,
                 NavTool::Pan => Drag::Pan,
                 NavTool::Zoom => Drag::Zoom,
@@ -365,6 +395,11 @@ impl Nav {
             return false;
         }
         if self.moved {
+            if drag == Some(Drag::Window) {
+                self.window = Some((self.press_at, self.cursor));
+                self.moved = false;
+                return true;
+            }
             self.want_pick = Some(self.cursor);
             return false;
         }
@@ -401,18 +436,20 @@ impl Nav {
                 true
             }
             // a click with a tool up still selects
-            Some(Drag::Orbit | Drag::Pan | Drag::Zoom) if matches!(self.press_button, MouseButton::Left) => {
+            Some(Drag::Window | Drag::Orbit | Drag::Pan | Drag::Zoom)
+                if matches!(self.press_button, MouseButton::Left) =>
+            {
                 self.clicks += 1;
                 let got = self.known_hit().map(|h| (h.placement, h.entity));
-                if self.modifiers.control_key() || self.modifiers.shift_key() {
-                    // adds to the selection, or takes off what's in it
+                if self.modifiers.shift_key() {
+                    if let Some(g) = got
+                        && !self.selected.contains(&g)
+                    {
+                        self.selected.push(g);
+                    }
+                } else if self.modifiers.control_key() {
                     if let Some(g) = got {
-                        match self.selected.iter().position(|s| *s == g) {
-                            Some(at) => {
-                                self.selected.remove(at);
-                            }
-                            None => self.selected.push(g),
-                        }
+                        self.selected.retain(|s| *s != g);
                     }
                 } else {
                     self.selected = got.into_iter().collect();
@@ -445,6 +482,7 @@ impl Nav {
         }
         match drag {
             Drag::Mark => return false,
+            Drag::Window => return true,
             Drag::Orbit => {
                 let pivot = self.pivot.unwrap_or(self.camera.target);
                 self.camera.orbit_about(pivot, dx, dy);

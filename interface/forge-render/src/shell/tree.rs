@@ -434,7 +434,8 @@ impl Shell {
         }
         self.out.extend(child_edit);
         if let Some(m) = menu {
-            self.row_menu = Some(m);
+            self.marking = Some(m.1);
+            self.marking_row = Some(m.0);
         }
         if let Some((id, before)) = moved {
             self.out.push(super::Action::Reorder(id, before));

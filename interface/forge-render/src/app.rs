@@ -408,6 +408,11 @@ impl ApplicationHandler for App {
                 redraw = true;
             }
             WindowEvent::ModifiersChanged(m) => self.mods = m.state(),
+            WindowEvent::KeyboardInput { event, .. }
+                if event.physical_key == PhysicalKey::Code(KeyCode::F4) =>
+            {
+                l.gui.hold_orbit(event.state == ElementState::Pressed);
+            }
             WindowEvent::KeyboardInput { event, .. } if event.state == ElementState::Pressed => {
                 if let PhysicalKey::Code(code) = event.physical_key {
                     let ctrl = self.mods.control_key();
