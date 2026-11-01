@@ -421,3 +421,39 @@ extrude cut 15 z 1 1 0 x -1 1 0.0007 at -3 27 -6 poly 0 15 0 0 18 0
 ",
     );
 }
+
+#[test]
+fn tool_edge_along_two_collinear_edges_rounded_off_their_wall() {
+    builds(
+        "b0: extrude 300 z 0 0 1 x 1 0 0 at 0 0 0 poly 80 90 75 102 70 114 75 120 280 280 300 100
+extrude cut 26 z -0.384615385 0.923076923 0 x 0.923076923 0.384615385 0 at -5 54.583333333 0 poly 92.083333333 0 212.083333333 -150 32.083333333 -150 32.083333333 0
+",
+    );
+}
+
+#[test]
+fn corner_on_a_rim_the_coplanar_edge_all_but_runs_along() {
+    builds(
+        "b0: extrude 9 z 0 0 1 x 1 0 0 at 0 0 0 circle 30 8 3
+extrude add 10 z 0 0 -1 x -1 0 0 at 0 0 0 poly -29.9993 10.9999998 -24 10.9999998 -24 6 -30 6 -36 6 -36 10.9999998
+",
+    );
+}
+
+#[test]
+fn floor_of_a_d_hole_narrower_than_the_usual_probe() {
+    builds(
+        "b0: extrude 4 z 0 0 1 x 1 0 0 at 0 0 0 circle 0 0 12 loop arc 0 0 4 -60 1 line 2.060152300 -3.428669203 2.000000000 -3.464101615
+extrude add 2 z 0 0 -1 x 1 0 0 at 0 0 0 circle 0 0 12
+",
+    );
+}
+
+#[test]
+fn arcs_ending_on_a_wall_a_hair_off_the_cylinder_axis() {
+    builds(
+        "b0: extrude 100 z 0 0 1 x 1 0 0 at 0 0 -50 poly 10 0 10.000001 -30 50 -30 50 0
+extrude cut 5 z 0 -1 0 x -1 0 0 at 0 0 0 loop arc -30 0 25 36.869897646 -73.739795292 arc -30 0 25 -36.869897646 -106.260204708 arc -30 0 25 -143.130102354 -73.739795292 arc -30 0 25 143.130102354 -106.260204708
+",
+    );
+}
