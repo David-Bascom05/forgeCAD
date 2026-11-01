@@ -536,13 +536,12 @@ fn selecting_shows_no_dialog_a_double_click_does_and_cancel_closes_it() {
     }
     h.step();
     h.step();
-    let id = title_of(&h, "boss").id;
-    assert_eq!(h.gui.shell.dialog, Some(id));
+    assert!(h.gui.shell.dialog.is_some());
     assert!(h.gui.shell.place("dialog").is_some());
     h.key(egui::Key::Escape);
     h.step();
     h.step();
-    assert_eq!(h.gui.shell.dialog, None);
+    assert!(h.gui.shell.dialog.is_none());
 }
 
 fn step_some(h: &mut Headless) {
@@ -708,4 +707,134 @@ fn the_right_button_in_the_view_is_the_marking_menu() {
     step_some(&mut h);
     assert!(h.gui.shell.marking.is_none());
     assert_eq!(h.gui.calls, vec![Call::Undo]);
+}
+
+use forge_render::shell::Action;
+
+fn file_part(text: &str) -> Option<(Headless, std::path::PathBuf)> {
+    let dir = std::env::temp_dir().join(format!(
+        "fc-dlg-{}-{:?}",
+        std::process::id(),
+        std::thread::current().id()
+    ));
+    std::fs::create_dir_all(&dir).unwrap();
+    let file = dir.join("p.fc");
+    std::fs::write(&file, text).unwrap();
+    let mut h = Headless::new((1200.0, 800.0), 1.0).ok()?;
+    h.step();
+    h.gui.open(file.to_str().unwrap());
+    h.settle();
+    h.until(|g| g.view.as_ref().is_some_and(|v| !v.facts.face_item.is_empty()));
+    step_some(&mut h);
+    Some((h, file))
+}
+
+const BLOCK: &str = "base: extrude 20 rect -30 -30 60 60\n";
+
+fn set_field(h: &mut Headless, label: &str, text: &str) {
+    let d = h.gui.shell.dialog.as_mut().unwrap();
+    let f = d.fields.iter_mut().find(|f| f.0 == label).unwrap();
+    f.1 = text.to_string();
+}
+
+#[test]
+fn ribbon_buttons_make_features_through_a_dialog_with_a_live_result_and_ok_commits() {
+    let Some((mut h, file)) = file_part(BLOCK) else {
+        return;
+    };
+    h.click("tool:Hole");
+    assert!(h.until(|g| g.shell.dialog.is_some()));
+    let v0 = h.gui.view.as_ref().unwrap().facts.face_item.len();
+    set_field(&mut h, "Plane", "-xy at 5 5 20");
+    h.step();
+    assert!(h.until(
+        |g| g.shell.dialog.as_ref().unwrap().seq > 0 && g.shell.dialog.as_ref().unwrap().error.is_none()
+    ));
+    // nothing's in the file yet
+    assert!(!std::fs::read_to_string(&file).unwrap().contains("hole"));
+    h.gui.shell.out.push(Action::DialogOk);
+    assert!(h.until(|g| g.shell.dialog.is_none()), "{:?}", h.gui.shell.dialog);
+    assert!(h.until(|g| g.shell.rows.len() == 2));
+    assert!(
+        std::fs::read_to_string(&file)
+            .unwrap()
+            .contains("hole 5 -xy at 5 5 20 thru")
+    );
+    assert!(h.until(|g| g.view.as_ref().unwrap().facts.face_item.len() > v0));
+    assert_eq!(h.gui.shell.rows[1].title, "Hole1");
+    // the same call on a fresh part
+    let mut p = Part::new(BLOCK);
+    let want = std::fs::read_to_string(&file).unwrap();
+    for c in h.gui.calls.clone() {
+        assert!(p.call(vec![c], None).ok);
+    }
+    assert_eq!(p.model.src(), want);
+}
+
+#[test]
+fn a_fillet_waits_for_picks_takes_them_from_the_view_and_a_bad_value_says_so() {
+    let Some((mut h, file)) = file_part(BLOCK) else {
+        return;
+    };
+    h.click("tool:Fillet");
+    assert!(h.until(|g| g.shell.dialog.is_some()));
+    step_some(&mut h);
+    let d = h.gui.shell.dialog.as_ref().unwrap();
+    assert!(d.waiting_for_pick(), "it says what it wants");
+    assert_eq!(d.seq, 0, "and builds nothing yet");
+    // an edge picked in the view lands in the field, as the part file names it
+    let v = h.gui.view.as_mut().unwrap();
+    v.nav.selected = vec![(0, forge_render::render::Entity::Edge(0))];
+    v.mark_dirty();
+    h.step();
+    let d = h.gui.shell.dialog.as_ref().unwrap();
+    let edges = d.fields.iter().find(|f| f.0 == "Edges").unwrap().1.clone();
+    assert!(edges.starts_with("@e"), "{edges}");
+    assert!(h.until(|g| g.shell.dialog.as_ref().unwrap().seq > 0));
+    // too big: a clear word, and OK waits on it
+    set_field(&mut h, "Radius", "500");
+    h.step();
+    assert!(h.until(|g| g.shell.dialog.as_ref().unwrap().error.is_some()));
+    // a size that fits commits
+    set_field(&mut h, "Radius", "2");
+    h.step();
+    assert!(h.until(|g| {
+        let d = g.shell.dialog.as_ref().unwrap();
+        d.error.is_none() && d.sent.as_deref().is_some_and(|l| l.starts_with("fillet 2"))
+    }));
+    h.gui.shell.out.push(Action::DialogOk);
+    assert!(h.until(|g| g.shell.dialog.is_none()), "{:?}", h.gui.shell.dialog);
+    assert!(std::fs::read_to_string(&file).unwrap().contains("fillet 2 @e"));
+}
+
+#[test]
+fn editing_a_feature_keeps_its_id_and_cancel_puts_all_back() {
+    let Some((mut h, file)) = file_part(BLOCK) else {
+        return;
+    };
+    let id = title_of(&h, "base").id;
+    h.gui.shell.out.push(Action::Edit(id));
+    assert!(h.until(|g| g.shell.dialog.is_some()));
+    step_some(&mut h);
+    let was = std::fs::read_to_string(&file).unwrap();
+    set_field(&mut h, "Distance", "33");
+    h.step();
+    assert!(h.until(|g| g.shell.dialog.as_ref().unwrap().seq > 0));
+    h.gui.shell.out.push(Action::DialogCancel);
+    assert!(h.until(|g| g.shell.dialog.is_none()));
+    assert_eq!(std::fs::read_to_string(&file).unwrap(), was);
+    // again, OK
+    h.gui.shell.out.push(Action::Edit(id));
+    assert!(h.until(|g| g.shell.dialog.is_some()));
+    step_some(&mut h);
+    set_field(&mut h, "Distance", "33");
+    h.step();
+    h.gui.shell.out.push(Action::DialogOk);
+    assert!(h.until(|g| g.shell.dialog.is_none()));
+    assert!(
+        std::fs::read_to_string(&file)
+            .unwrap()
+            .contains("base: extrude 33")
+    );
+    assert!(h.until(|g| g.shell.rows.first().is_some_and(|r| r.id == id)));
 }

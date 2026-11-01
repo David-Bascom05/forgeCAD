@@ -384,7 +384,7 @@ impl Shell {
         if let Some(id) = opened {
             self.selected = Some(id);
             self.origin_selected = None;
-            self.dialog = Some(id);
+            self.out.push(super::Action::Edit(id));
         }
     }
 

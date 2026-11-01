@@ -78,6 +78,9 @@ enum Job {
     Calls(Vec<Call>),
     /// Look at the part as of this item, or all of it.
     Roll(Option<ItemId>),
+    /// A dialog's values, built and shown with nothing committed; a new one replaces it.
+    Preview(u64, Vec<Call>),
+    PreviewEnd,
 }
 
 struct Slot<T> {
@@ -158,6 +161,26 @@ impl<T: Send + 'static> Live<T> {
     /// Commits tool calls, in turn with the rest.
     pub fn call(&mut self, calls: Vec<Call>) {
         self.job(Job::Calls(calls));
+    }
+
+    /// Builds and shows these calls with nothing committed. Answers as a frame, its number given
+    /// back. A `call` then commits, from where the preview began; `preview_end` goes back there.
+    pub fn preview(&mut self, calls: Vec<Call>) -> u64 {
+        self.seq += 1;
+        let job = Job::Preview(self.seq, calls);
+        let mut s = self.shared.slot.lock().expect("the worker is alive");
+        if matches!(s.jobs.back(), Some(Job::Preview(..))) {
+            s.jobs.pop_back();
+            s.dropped += 1;
+        }
+        s.jobs.push_back(job);
+        drop(s);
+        self.shared.wake.notify_one();
+        self.seq
+    }
+
+    pub fn preview_end(&mut self) {
+        self.job(Job::PreviewEnd);
     }
 
     /// Shows the part as of this item (its end-of-part marker), or all of it. It stays so through
@@ -258,6 +281,7 @@ fn run<T>(mut part: Part, mesher: &mut impl FnMut(&Body, Stage) -> T, shared: &S
         say_facts(&mut part, None, &say);
     }
     let mut rolled: Option<ItemId> = None;
+    let mut before_preview: Option<crate::model::Saved> = None;
     loop {
         let next = {
             let mut s = shared.slot.lock().expect("the UI is alive");
@@ -277,6 +301,61 @@ fn run<T>(mut part: Part, mesher: &mut impl FnMut(&Body, Stage) -> T, shared: &S
         match next {
             Next::Stop => return,
             Next::Job(j) => {
+                if let Job::Preview(seq, calls) = j {
+                    let t = Instant::now();
+                    let base = before_preview.take().unwrap_or_else(|| part.model.save());
+                    part.model.restore(base);
+                    before_preview = Some(part.model.save());
+                    let tried = catch_unwind(AssertUnwindSafe(|| part.preview(calls)));
+                    let failure = match tried {
+                        Ok(Ok(())) => None,
+                        Ok(Err(e)) => Some(e),
+                        Err(_) => {
+                            let fonts = part.model.fonts.take();
+                            part.model = Model::default();
+                            part.model.fonts = fonts;
+                            part.model.update(&good);
+                            before_preview = None;
+                            Some("the kernel panicked on these values".into())
+                        }
+                    };
+                    let rebuild_ms = t.elapsed().as_secs_f64() * 1e3;
+                    let mut frame = Frame {
+                        seq,
+                        out: None,
+                        failure,
+                        rebuild_ms,
+                        kernel_ms: part.model.kernel_ms,
+                        lines: part.model.rebuilt,
+                        finish_ms: 0.0,
+                        mesh_ms: 0.0,
+                    };
+                    if frame.failure.is_none()
+                        && let Some(b) = part.model.body()
+                    {
+                        let t = Instant::now();
+                        match catch_unwind(AssertUnwindSafe(|| mesher(b, Stage::Drag))) {
+                            Ok(out) => frame.out = Some(out),
+                            Err(_) => frame.failure = Some("the mesher panicked on these values".into()),
+                        }
+                        frame.mesh_ms = t.elapsed().as_secs_f64() * 1e3;
+                    }
+                    say(Event::Frame(frame));
+                    continue;
+                }
+                if let Job::PreviewEnd = j {
+                    if let Some(base) = before_preview.take() {
+                        part.model.restore(base);
+                    }
+                    if let Some(b) = part.model.body() {
+                        let out = mesher(b, Stage::Committed);
+                        say(Event::Final(out));
+                    }
+                    continue;
+                }
+                if let Some(base) = before_preview.take() {
+                    part.model.restore(base);
+                }
                 if let Job::Roll(to) = j {
                     rolled = to;
                     let lines = lines_to(&part, rolled);
@@ -293,7 +372,7 @@ fn run<T>(mut part: Part, mesher: &mut impl FnMut(&Body, Stage) -> T, shared: &S
                     continue;
                 }
                 let d = match j {
-                    Job::Roll(_) => unreachable!("taken above"),
+                    Job::Roll(_) | Job::Preview(..) | Job::PreviewEnd => unreachable!("taken above"),
                     Job::Commit(op) => part.drag_commit(op, last_good.take()),
                     Job::Cancel => {
                         last_good = None;
@@ -464,6 +543,51 @@ mod tests {
         assert!(
             got.iter()
                 .any(|e| matches!(e, Event::Final(v) if *v == 40.0 * 30.0 * 15.0))
+        );
+    }
+
+    #[test]
+    fn a_preview_shows_with_nothing_committed_and_a_call_commits_from_the_start() {
+        let (mut l, _) = start();
+        wait(&mut l, |e| matches!(e, Event::Facts(_)));
+        let doc = forge_doc::Document::parse("w = 40\nbase: extrude 10 rect 0 0 w 30\n");
+        let id = doc.find("base").unwrap();
+        let call = |t: &str| Call::SetArg {
+            item: id,
+            arg: 0,
+            text: t.into(),
+        };
+        // the newest wins, and the part shown is that one's
+        let s = l.preview(vec![call("20")]);
+        let got = wait(&mut l, |e| matches!(e, Event::Frame(f) if f.seq == s));
+        assert!(
+            got.iter()
+                .any(|e| matches!(e, Event::Frame(f) if f.seq == s && f.out == Some(40.0 * 30.0 * 20.0)))
+        );
+        let s = l.preview(vec![call("nope")]);
+        let got = wait(&mut l, |e| matches!(e, Event::Frame(f) if f.seq == s));
+        assert!(
+            got.iter()
+                .any(|e| matches!(e, Event::Frame(f) if f.seq == s && f.failure.is_some()))
+        );
+        // ended, it's as it was
+        l.preview_end();
+        let got = wait(&mut l, |e| matches!(e, Event::Final(_)));
+        assert!(
+            got.iter()
+                .any(|e| matches!(e, Event::Final(v) if *v == 40.0 * 30.0 * 10.0))
+        );
+        // previewed then called: one commit, from the original
+        l.preview(vec![call("25")]);
+        l.call(vec![call("30")]);
+        let got = wait(&mut l, |e| matches!(e, Event::Final(_)));
+        assert!(
+            got.iter()
+                .any(|e| matches!(e, Event::Final(v) if *v == 40.0 * 30.0 * 30.0))
+        );
+        assert!(
+            got.iter()
+                .any(|e| matches!(e, Event::Done(d) if d.ok && d.lines == ["set base 1 30"]))
         );
     }
 

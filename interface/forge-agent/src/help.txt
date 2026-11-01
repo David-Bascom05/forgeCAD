@@ -1,4 +1,4 @@
-## act lines add param before edit set dim rm mv undo redo select
+## act lines add param before edit set dim rm mv suppress unsuppress rename undo redo select
 act F 'LINE' 'LINE'..  (or lines on stdin): all apply or none, one reply.
 LINE                   any .fc line goes on the end; a sketch runs to its `end`
 NAME = EXPR [mm|deg]   sets the parameter, or adds it on the end
@@ -8,6 +8,9 @@ set FEAT K TEXT        FEAT's Kth word after the kind
 dim SKETCH ROW VALUE   a dimension: `dim plate dist l1 50` (the row less its value, or its number)
 rm FEAT                the line out; refused while another line names it
 mv FEAT FEAT2|end      FEAT above FEAT2; ids and names stay
+suppress FEAT          FEAT and all that names it out of the build, kept as comments `# ~ID LINE`
+unsuppress ID          that suppressed line back, with its id and so its names
+rename FEAT NAME       a display name in a comment `#: NAME`; references go on using the label
 undo | redo | select REF..   each alone in its act (`measure F sel` reads the selection)
 --base N: refused with a short diff if the part is no longer version N (`query F since N`).
 Reply: `ok v7; +4 faces, volume -120.4 mm3, valid; picked fillet1:4`, or the line, the reason and

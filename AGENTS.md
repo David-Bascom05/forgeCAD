@@ -22,7 +22,8 @@ Tools (CLI `forgecad TOOL F ..`, or MCP; lines on stdin if none given):
 ```
 act F 'LINE'.. [--base N]   all lines or none. Any .fc line goes on the end; also
                             NAME = EXPR | before FEAT LINE | edit FEAT LINE | set FEAT K TEXT |
-                            dim SKETCH ROW VALUE | rm FEAT | mv FEAT FEAT2|end | undo | redo
+                            dim SKETCH ROW VALUE | rm FEAT | mv FEAT FEAT2|end | suppress FEAT |
+                            unsuppress ID | rename FEAT NAME | undo | redo
 query F SEL [--at FEAT]     find entities, for handles: `edges of hole1`, `faces plane normal +z top`
 query F stat|file|check|dims|since N
 measure F REF [REF] | mass | wall

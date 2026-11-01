@@ -32,6 +32,9 @@ pub struct Facts {
     /// By the body's face index: the item that made the face.
     pub face_item: Vec<Option<ItemId>>,
     pub handles: Vec<Handle>,
+    /// By the body's face and edge index: how a part file names each (`@f..`, `@e..`).
+    pub face_refs: Vec<String>,
+    pub edge_refs: Vec<String>,
 }
 
 impl Facts {
@@ -271,7 +274,25 @@ pub fn facts(model: &mut Model) -> Facts {
             per_mm,
         });
     }
-    Facts { face_item, handles }
+    let (face_refs, edge_refs) = refs(model.body());
+    Facts {
+        face_item,
+        handles,
+        face_refs,
+        edge_refs,
+    }
+}
+
+fn refs(body: Option<&forge_topo::Body>) -> (Vec<String>, Vec<String>) {
+    let Some(b) = body else {
+        return (Vec::new(), Vec::new());
+    };
+    let names = crate::select::handles(b);
+    let of = |n: forge_topo::Name| names.get(&n).cloned().unwrap_or_default();
+    (
+        b.face_ids().map(|f| of(b.face(f).name)).collect(),
+        b.edge_ids().map(|e| of(b.edge(e).name)).collect(),
+    )
 }
 
 /// What's known of the part rolled back to `n` lines: its faces' makers, and no numbers on it.
@@ -282,9 +303,12 @@ pub fn facts_at(model: &Model, n: usize) -> Facts {
         .iter()
         .map(|m| m.filter(|&i| i < n).map(|i| ItemId(model.lines[i].id)))
         .collect();
+    let (face_refs, edge_refs) = refs(model.body_after(n));
     Facts {
         face_item,
         handles: Vec::new(),
+        face_refs,
+        edge_refs,
     }
 }
 

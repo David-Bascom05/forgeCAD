@@ -37,6 +37,10 @@ const fn go(name: &'static str, icon: &'static str, action: Action, on: bool) ->
     }
 }
 
+const fn new(name: &'static str, icon: &'static str, kind: &'static str) -> Tool {
+    go(name, icon, Action::NewFeature(kind), false)
+}
+
 fn groups(s: &Shell) -> Vec<Group> {
     let g = |name, big, small| Group { name, big, small };
     let v = s.view;
@@ -45,36 +49,39 @@ fn groups(s: &Shell) -> Vec<Group> {
             g("Sketch", vec![off("Start Sketch", "sketch")], vec![]),
             g(
                 "Create",
-                vec![off("Extrude", "extrude"), off("Revolve", "revolve")],
                 vec![
-                    off("Sweep", "sweep"),
-                    off("Loft", "loft"),
-                    off("Coil", "coil"),
-                    off("Rib", "rib"),
+                    new("Extrude", "extrude", "extrude"),
+                    new("Revolve", "revolve", "revolve"),
+                ],
+                vec![
+                    new("Sweep", "sweep", "sweep"),
+                    new("Loft", "loft", "loft"),
+                    new("Coil", "coil", "coil"),
+                    new("Rib", "rib", "rib"),
                 ],
             ),
             g(
                 "Modify",
                 vec![
-                    off("Hole", "hole"),
-                    off("Fillet", "fillet"),
-                    off("Chamfer", "chamfer"),
+                    new("Hole", "hole", "hole"),
+                    new("Fillet", "fillet", "fillet"),
+                    new("Chamfer", "chamfer", "chamfer"),
                 ],
                 vec![
-                    off("Shell", "shell"),
-                    off("Draft", "draft"),
-                    off("Thread", "thread"),
-                    off("Combine", "combine"),
+                    new("Shell", "shell", "shell"),
+                    new("Draft", "draft", "draft"),
+                    new("Thread", "thread", "thread"),
+                    new("Combine", "combine", "combine"),
                 ],
             ),
             g(
                 "Work Features",
-                vec![off("Plane", "plane")],
-                vec![off("Axis", "axis"), off("Point", "point")],
+                vec![new("Plane", "plane", "plane")],
+                vec![new("Axis", "axis", "axis"), new("Point", "point", "point")],
             ),
             g(
                 "Pattern",
-                vec![off("Linear", "rect")],
+                vec![new("Linear", "rect", "pattern")],
                 vec![off("Circular", "circular"), off("Mirror", "mirror")],
             ),
         ],

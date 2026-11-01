@@ -8,6 +8,7 @@ use crate::mesh::PartMesh;
 use crate::nav::Nav;
 use crate::render::{self, Entity, Mark, Offscreen, Overlay, Renderer, part_info};
 use crate::scene::{Motion, Placement, Scene};
+use crate::shell::dialog::{Dialog, DialogTarget};
 use crate::shell::dim::DimEdit;
 use crate::shell::{Action, Shell};
 use crate::viewcube;
@@ -51,6 +52,8 @@ pub struct View {
     clicks: u32,
     /// What of the origin was drawn last: its picture changes with this.
     origin_was: Vec<(crate::origin::Item, bool)>,
+    /// A dialog's result is what's on the screen.
+    previewing: bool,
     /// A number's being dragged or has just been let go: the picture's the worker's, not the mesh's.
     pub live_drag: bool,
 }
@@ -241,6 +244,7 @@ impl Gui {
             clicked: Vec::new(),
             clicks: 0,
             origin_was: Vec::new(),
+            previewing: false,
             live_drag: false,
         });
         self.shell.view_tex = Some(tex);
@@ -275,6 +279,17 @@ impl Gui {
                 Event::Done(d) => {
                     // the reply's first line says it
                     let first = d.text.lines().next().unwrap_or("").to_string();
+                    if let Some(dlg) = &mut self.shell.dialog
+                        && dlg.awaiting
+                    {
+                        dlg.awaiting = false;
+                        if d.ok {
+                            self.shell.dialog = None;
+                        } else {
+                            dlg.error = Some(d.text.lines().nth(1).unwrap_or(&first).to_string());
+                            self.calls.pop();
+                        }
+                    }
                     if let Some(e) = &mut self.shell.dim {
                         e.error = (!d.ok).then(|| d.text.lines().nth(1).unwrap_or(&first).to_string());
                     }
@@ -285,6 +300,11 @@ impl Gui {
                         && let Some(e) = &mut self.shell.dim
                     {
                         e.error = f.failure.clone();
+                    }
+                    if let Some(d) = &mut self.shell.dialog
+                        && d.seq == f.seq
+                    {
+                        d.error = f.failure.clone();
                     }
                     if let Some(Out::Delta(d)) = f.out {
                         v.renderer.live_apply(part, &d);
@@ -352,11 +372,32 @@ impl Gui {
         )
     }
 
-    /// A click in the view chooses a face's feature; a row of the tree chooses its faces.
+    /// A click in the view chooses a face's feature; a row of the tree chooses its faces. With a
+    /// dialog up, what's clicked goes to the field waiting for picks.
     fn sync_selection(&mut self) {
         let under = self.origin_under();
         self.shell.origin_hover = under;
         let Some(v) = &mut self.view else { return };
+        if let Some(d) = &mut self.shell.dialog {
+            if v.nav.selected != v.clicked {
+                v.clicked = v.nav.selected.clone();
+                let refs: Vec<String> = v
+                    .clicked
+                    .iter()
+                    .filter_map(|&(_, e)| match e {
+                        Entity::Face(f) => v.facts.face_refs.get(f as usize).cloned(),
+                        Entity::Edge(x) => v.facts.edge_refs.get(x as usize).cloned(),
+                        _ => None,
+                    })
+                    .collect();
+                d.picked(&refs);
+                v.dirty = true;
+            }
+            if v.nav.clicks != v.clicks {
+                v.clicks = v.nav.clicks;
+            }
+            return;
+        }
         if v.nav.clicks != v.clicks {
             v.clicks = v.nav.clicks;
             if let Some(i) = under {
@@ -534,7 +575,29 @@ impl Gui {
                 }
                 Action::Edit(id) => {
                     self.shell.selected = Some(id);
-                    self.shell.dialog = Some(id);
+                    let (kind, title) = match self.shell.rows.iter().find(|r| r.id == id) {
+                        Some(r) => (r.kind.clone(), r.title.clone()),
+                        None => continue,
+                    };
+                    let fields = self.shell.fields_of(id);
+                    self.shell.dialog = Some(Dialog::edit(id, &kind, title, fields));
+                    if let Some(v) = &mut self.view {
+                        v.nav.selected.clear();
+                        v.clicked.clear();
+                    }
+                }
+                Action::NewFeature(kind) => {
+                    self.end_preview();
+                    self.shell.dialog = Some(Dialog::new_feature(kind));
+                    if let Some(v) = &mut self.view {
+                        v.nav.selected.clear();
+                        v.clicked.clear();
+                    }
+                }
+                Action::DialogOk => self.dialog_ok(),
+                Action::DialogCancel => {
+                    self.end_preview();
+                    self.shell.dialog = None;
                 }
                 Action::StartRename(id) => self.shell.start_rename(id),
                 Action::Delete(item) => self.tool(Call::Delete { item }),
@@ -559,7 +622,82 @@ impl Gui {
         if let Some((item, name)) = self.shell.renamed.take() {
             self.tool(Call::Rename { item, name });
         }
+        self.dialog_preview();
         host
+    }
+
+    /// What a dialog's fields now say, as a tool call.
+    fn dialog_call(&self) -> Option<Call> {
+        let d = self.shell.dialog.as_ref()?;
+        if d.waiting_for_pick() {
+            return None;
+        }
+        let mut doc = self.shell.doc.clone()?;
+        let mut items = doc.read_items(&d.line());
+        match d.target {
+            DialogTarget::Edit(id) => {
+                let [item] = &mut items[..] else { return None };
+                let old = doc.items.iter().find(|i| i.id == id)?;
+                item.id = id;
+                item.label = old.label.clone();
+                item.note = old.note.clone();
+                Some(Call::Edit { item: item.clone() })
+            }
+            DialogTarget::New(_) => {
+                // a new feature goes in at the end-of-part marker
+                let before = self.shell.end_at.and_then(|e| {
+                    let k = self.shell.doc.as_ref()?.items.iter().position(|i| i.id == e)?;
+                    Some(self.shell.doc.as_ref()?.items.get(k + 1)?.id)
+                });
+                Some(Call::Add { before, items })
+            }
+        }
+    }
+
+    /// Fields changed: the live result of what they say.
+    fn dialog_preview(&mut self) {
+        let Some(d) = &self.shell.dialog else { return };
+        let line = d.line();
+        if d.sent.as_deref() == Some(line.as_str()) || d.awaiting {
+            return;
+        }
+        let call = self.dialog_call();
+        let Some(v) = &mut self.view else { return };
+        let Some(d) = &mut self.shell.dialog else { return };
+        d.sent = Some(line);
+        d.error = None;
+        match call {
+            Some(call) => {
+                d.seq = v.live.preview(vec![call]);
+                v.previewing = true;
+            }
+            // nothing to show yet: what was shown goes
+            None if v.previewing => {
+                v.previewing = false;
+                v.live.preview_end();
+            }
+            None => {}
+        }
+    }
+
+    fn end_preview(&mut self) {
+        if let Some(v) = &mut self.view
+            && v.previewing
+        {
+            v.previewing = false;
+            v.live.preview_end();
+        }
+    }
+
+    /// OK: the same call commits; the dialog waits for the answer.
+    fn dialog_ok(&mut self) {
+        let Some(call) = self.dialog_call() else { return };
+        let Some(v) = &mut self.view else { return };
+        let Some(d) = &mut self.shell.dialog else { return };
+        d.awaiting = true;
+        v.previewing = false;
+        self.calls.push(call.clone());
+        v.live.call(vec![call]);
     }
 
     /// A tool call for the worker, kept for replay.
@@ -752,7 +890,19 @@ impl Gui {
                 Vec::new()
             } else {
                 let mut m: Vec<Mark> = v.nav.marks().into_iter().filter(|m| !m.selected).collect();
-                let of = self.shell.selected.map_or(Vec::new(), |id| v.facts.faces_of(id));
+                // with a dialog up the picks are what's marked
+                if self.shell.dialog.is_some() {
+                    m.extend(v.nav.selected.iter().map(|&(placement, entity)| Mark {
+                        placement,
+                        entity,
+                        selected: true,
+                    }));
+                }
+                let of = self
+                    .shell
+                    .selected
+                    .filter(|_| self.shell.dialog.is_none())
+                    .map_or(Vec::new(), |id| v.facts.faces_of(id));
                 m.extend(of.into_iter().map(|f| Mark {
                     placement: 0,
                     entity: Entity::Face(f),

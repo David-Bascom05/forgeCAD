@@ -973,6 +973,20 @@ impl Part {
         out
     }
 
+    /// Tries calls on the document with nothing logged or written: a dialog's live result. What
+    /// goes back is the caller's, with `model.save` and `restore`; a commit is a `call`.
+    pub fn preview(&mut self, calls: Vec<Call>) -> Result<(), String> {
+        let mut tx = Tx::default();
+        for c in calls {
+            push(&mut self.model.doc, c, &mut tx)?;
+        }
+        self.model.sync_doc();
+        match &self.model.error {
+            Some(f) => Err(f.msg.clone()),
+            None => Ok(()),
+        }
+    }
+
     /// One step of a drag: the value goes into the document and the part rebuilds from what it
     /// changed. Nothing is logged or written until `drag_commit`.
     pub fn drag(&mut self, op: Op) -> Result<(), String> {

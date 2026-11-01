@@ -78,6 +78,10 @@ impl Shell {
     pub(super) fn dim_ui(&mut self, ctx: &egui::Context) {
         let t = self.theme;
         let Some((camera, size)) = self.camera else { return };
+        // a feature's dialog holds its numbers while it's up
+        if self.dialog.is_some() {
+            return;
+        }
         let Some(mut e) = self.dim.take() else { return };
         let ppp = ctx.pixels_per_point();
         let view = self.view_rect;

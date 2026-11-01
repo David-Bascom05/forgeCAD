@@ -3,6 +3,7 @@
 //! desktop app and the browser share it. Buttons never change the document themselves: the host
 //! turns an action into a tool call.
 
+pub mod dialog;
 pub mod dim;
 pub mod icons;
 pub mod panel;
@@ -62,6 +63,11 @@ pub enum Action {
     Close,
     DragWindow,
     ResizeWindow(Edge),
+    /// A ribbon button: a dialog for a new feature of this kind.
+    NewFeature(&'static str),
+    /// A dialog ended: OK, or Cancel.
+    DialogOk,
+    DialogCancel,
     /// What the tree and the marking menu ask of a feature.
     Edit(ItemId),
     Delete(ItemId),
@@ -156,8 +162,8 @@ pub struct Shell {
     pub row_menu: Option<(ItemId, egui::Pos2)>,
     /// The marking menu's up, centred here.
     pub marking: Option<egui::Pos2>,
-    /// The feature whose dialog is up.
-    pub dialog: Option<ItemId>,
+    /// The feature dialog that's up.
+    pub dialog: Option<dialog::Dialog>,
     /// The selected feature's number, on the model.
     pub dim: Option<dim::DimEdit>,
     /// What's on the model and takes the pointer from the view.
@@ -345,7 +351,7 @@ impl Shell {
         self.docs_and_status(ui, s, bottom);
         self.navbar(&ctx);
         self.dim_ui(&ctx);
-        self.dialog(&ctx);
+        self.dialog_ui(&ctx);
         self.resize_edges(ui, s);
         self.menus(&ctx);
     }
@@ -569,9 +575,13 @@ impl Shell {
         );
     }
 
-    fn dialog_rows(&self, id: ItemId) -> Vec<(String, String)> {
-        let Some(doc) = &self.doc else { return Vec::new() };
-        let Some(item) = doc.items.iter().find(|i| i.id == id) else {
+    /// A feature's fields, from the document as it stands.
+    pub fn fields_of(&self, id: ItemId) -> Vec<(String, String)> {
+        let Some(item) = self
+            .doc
+            .as_ref()
+            .and_then(|d| d.items.iter().find(|i| i.id == id))
+        else {
             return Vec::new();
         };
         match &item.body {
@@ -581,89 +591,6 @@ impl Shell {
             }
             Body::Sketch { rows, .. } => rows.iter().filter_map(|r| panel::sketch_row(&r.args)).collect(),
             _ => Vec::new(),
-        }
-    }
-
-    /// A feature's dialog: floats over the view, drags by its title, remembers where it was left,
-    /// scrolls. In step 4 its body is the feature's tabs and collapsing sections (`panel::form`).
-    fn dialog(&mut self, ctx: &egui::Context) {
-        let t = self.theme;
-        let Some(id) = self.dialog else { return };
-        let Some(row) = self.rows.iter().find(|r| r.id == id) else {
-            self.dialog = None;
-            return;
-        };
-        let (title, rows) = (row.title.clone(), self.dialog_rows(id));
-        let mut close = false;
-        let frame = egui::Frame::new()
-            .fill(t.surface)
-            .stroke(Stroke::new(1.0, t.line))
-            .corner_radius(4)
-            .inner_margin(10);
-        let v = self.view_rect;
-        let shown = egui::Window::new(title)
-            .id(egui::Id::unique("feature-dialog"))
-            .collapsible(false)
-            .resizable(true)
-            .default_pos(pos2(v.left() + 16.0, v.top() + 16.0))
-            .default_size(vec2(340.0, 460.0))
-            .min_size(vec2(280.0, 200.0))
-            .frame(frame)
-            .show(ctx, |ui| {
-                let footer = 40.0;
-                let body = ui.available_height() - footer;
-                egui::ScrollArea::vertical()
-                    .id_salt("dialog-body")
-                    .max_height(body)
-                    .auto_shrink([false, false])
-                    .show(ui, |ui| {
-                        for (label, value) in &rows {
-                            let w = ui.available_width();
-                            let (row, _) = ui.allocate_exact_size(vec2(w, 34.0), Sense::hover());
-                            ui.painter().text(
-                                pos2(row.left(), row.center().y),
-                                Align2::LEFT_CENTER,
-                                label,
-                                sans(12.0),
-                                t.ink2,
-                            );
-                            let field = Rect::from_min_size(
-                                pos2(row.left() + 96.0, row.top() + 4.0),
-                                vec2((w - 96.0).max(60.0), 26.0),
-                            );
-                            let mut shown: &str = value;
-                            ui.put(
-                                field,
-                                egui::TextEdit::singleline(&mut shown)
-                                    .font(mono(12.0))
-                                    .desired_width(field.width() - 14.0)
-                                    .margin(vec2(7.0, 6.0)),
-                            );
-                        }
-                    });
-                ui.add_space(8.0);
-                ui.horizontal(|ui| {
-                    ui.add_space((ui.available_width() - 126.0).max(0.0));
-                    if ui
-                        .add_sized(vec2(64.0, 28.0), egui::Button::new("Cancel"))
-                        .clicked()
-                    {
-                        close = true;
-                    }
-                    ui.add_space(6.0);
-                    let ok =
-                        egui::Button::new(egui::RichText::new("OK").font(semi(12.0)).color(Color32::WHITE))
-                            .fill(t.accent);
-                    if ui.add_sized(vec2(56.0, 28.0), ok).clicked() {
-                        close = true;
-                    }
-                });
-            });
-        if let Some(s) = shown {
-            self.note("dialog", s.response.rect);
-        }
-        if close || ctx.input(|i| i.key_pressed(egui::Key::Escape)) {
-            self.dialog = None;
         }
     }
 

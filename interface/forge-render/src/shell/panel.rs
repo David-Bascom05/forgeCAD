@@ -147,21 +147,10 @@ pub fn fields(kind: &str, args: &[&str]) -> Vec<(String, String)> {
                     }
                 }
             }
-            let value = match (w, count) {
-                ("thru", _) => "through".to_string(),
-                ("left", _) => "left".to_string(),
-                (_, Some(0)) => "yes".to_string(),
-                _ => args[start..k].join(" "),
-            };
+            // the keyword stays with its value, so the words join back into the line
+            let value = args[start - 1..k].join(" ");
             // "at X Y Z" belongs with its plane
-            push(
-                if label == "At" { "Plane" } else { label },
-                if label == "At" {
-                    format!("at {value}")
-                } else {
-                    value
-                },
-            );
+            push(if label == "At" { "Plane" } else { label }, value);
         } else if is_number(w) && !main_done {
             push(main_number(kind), w.to_string());
             main_done = true;
@@ -175,6 +164,43 @@ pub fn fields(kind: &str, args: &[&str]) -> Vec<(String, String)> {
         }
     }
     out
+}
+
+/// Which section of a feature's dialog a field belongs to.
+pub fn section(label: &str) -> &'static str {
+    match label {
+        "Operation" | "Hand" | "Flip" | "Smooth" => "Output",
+        "Plane" | "Profile" | "Path" | "Axis" | "On" | "Centre path" | "Rail" => "Placement",
+        _ => "Size",
+    }
+}
+
+/// What a new feature of this kind starts as: its line after the kind, and which field takes picks
+/// from the view, with what it's waiting for. David's dialogs start from what builds where they can.
+pub fn template(kind: &str) -> (&'static str, Option<(&'static str, &'static str)>) {
+    match kind {
+        "extrude" => ("10 xy rect -20 -20 40 40", None),
+        "revolve" => ("xz axis y rect 10 0 10 20", None),
+        "hole" => ("5 -xy at 0 0 0 thru", None),
+        "fillet" => ("2", Some(("Edges", "Pick edges in the view"))),
+        "chamfer" => ("1", Some(("Edges", "Pick edges in the view"))),
+        "shell" => ("2", Some(("Faces", "Pick the faces to open"))),
+        "draft" => ("3 xy", Some(("Faces", "Pick the faces to taper"))),
+        "sweep" => ("xz rect -2 -2 4 4 path line 0 0 0 0 0 40", None),
+        "loft" => (
+            "profile xy rect -10 -10 20 20 profile xy at 0 0 30 circle 0 0 6",
+            None,
+        ),
+        "coil" => ("xz axis y circle 20 0 2 pitch 8 turns 4", None),
+        "rib" => ("2 xz", None),
+        "thread" => ("", Some(("Reference", "Pick a cylinder face"))),
+        "combine" => ("add", Some(("Reference", "Name the bodies to combine"))),
+        "plane" => ("xy at 0 0 10", None),
+        "axis" => ("", Some(("Reference", "Pick an edge or a cylinder"))),
+        "point" => ("", Some(("Reference", "Pick a vertex or an edge"))),
+        "pattern" => ("", Some(("Features", "Name what to copy, then its row"))),
+        _ => ("", None),
+    }
 }
 
 /// A sketch row as label and value.
@@ -286,7 +312,7 @@ mod tests {
             pairs(&[
                 ("Diameter", "5"),
                 ("Plane", "-xy at -20 -10 6"),
-                ("Depth", "through")
+                ("Depth", "thru")
             ])
         );
         assert_eq!(
@@ -303,7 +329,7 @@ mod tests {
         );
         assert_eq!(
             got("pattern", "hole1 lin 1 0 0 3 20"),
-            pairs(&[("Features", "hole1"), ("Linear", "1 0 0 3 20")])
+            pairs(&[("Features", "hole1"), ("Linear", "lin 1 0 0 3 20")])
         );
     }
 
@@ -313,6 +339,27 @@ mod tests {
         assert_eq!(kind_word("fullround"), "Fillet");
         assert_eq!(kind_word("facefillet"), "Fillet");
         assert_eq!(kind_word("sketch"), "Sketch");
+    }
+
+    #[test]
+    fn the_fields_of_every_line_of_every_bench_part_join_back_into_it() {
+        let dir = concat!(env!("CARGO_MANIFEST_DIR"), "/../../tools/bench-parts");
+        let mut lines = 0;
+        for e in std::fs::read_dir(dir).unwrap().flatten() {
+            let src = std::fs::read_to_string(e.path()).unwrap();
+            let doc = forge_doc::Document::parse(&src);
+            for it in &doc.items {
+                let forge_doc::Body::Feature { kind, args } = &it.body else {
+                    continue;
+                };
+                let words: Vec<&str> = args.iter().map(|a| a.text.as_str()).collect();
+                let f = fields(kind, &words);
+                let joined: Vec<&str> = f.iter().map(|x| x.1.as_str()).collect();
+                assert_eq!(joined.join(" "), words.join(" "), "{kind}");
+                lines += 1;
+            }
+        }
+        assert!(lines > 50, "{lines}");
     }
 
     #[test]
