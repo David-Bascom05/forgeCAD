@@ -1324,6 +1324,9 @@ impl<'a> BrepTopo<'a> {
             return None;
         }
         if self.is(u, k) {
+            if out.len() >= MAX_FACES {
+                return None;
+            }
             out.push(u);
             return Some(());
         }
@@ -1369,13 +1372,17 @@ impl<'a> BrepTopo<'a> {
     }
 
     /// Every wire and its edges, each use (TopExp_Explorer, nothing merged).
+    /// One budget of visits and of edges for all of them: many wires over one big shape share it.
     pub fn wires(&self) -> Option<Vec<Vec<Used>>> {
+        let mut budget = 4 * MAX_FACES;
         let mut ws = vec![];
-        self.explore(self.root()?, "Wi", &mut ws)?;
+        self.walk(self.root()?, "Wi", &mut ws, &mut budget, 0)?;
+        let mut left = MAX_FACES;
         ws.into_iter()
             .map(|w| {
                 let mut es = vec![];
-                self.explore(w, "Ed", &mut es)?;
+                self.walk(w, "Ed", &mut es, &mut budget, 0)?;
+                left = left.checked_sub(es.len())?;
                 Some(es)
             })
             .collect()
@@ -1663,5 +1670,29 @@ mod topo_tests {
         let es = topo.edges().expect("edges");
         assert_eq!(es.len(), 1);
         assert!(topo.sample(es[0], 8).is_none());
+    }
+
+    #[test]
+    fn many_wires_over_one_big_shape_share_one_budget() {
+        // a compound of ten thousand edges, and a thousand wires that each hold all of it: a budget
+        // per wire would walk ten million shapes
+        let (e, w) = (10_000, 1_000);
+        let mut t = header("Curves 1\n1 0 0 0 1 0 0\n");
+        t += &format!("TShapes {}\nVe\n1e-07\n0 0 0\n0 0\n\n0101101\n*\n", e + w + 3);
+        for _ in 0..e {
+            t += &format!(
+                "Ed\n 1e-07 1 1 0\n1  1 0 0 1\n0\n\n0101000\n+{0} 0 -{0} 0 *\n",
+                e + w + 3
+            );
+        }
+        let hold: String = (0..e).map(|i| format!("+{} 0 ", w + 3 + i)).collect();
+        t += &format!("Co\n\n1100000\n{hold}*\n");
+        for _ in 0..w {
+            t += &format!("Wi\n\n0101100\n+{} 0 *\n", w + 2);
+        }
+        let all: String = (0..w).map(|i| format!("+{} 0 ", 2 + i)).collect();
+        t += &format!("Co\n\n1100000\n{all}*\n\n+1 0\n");
+        let topo = BrepTopo::new(t.as_bytes()).expect("reads");
+        assert!(topo.wires().is_none());
     }
 }
