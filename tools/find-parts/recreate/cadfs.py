@@ -675,8 +675,10 @@ class Tr:
                 a = self.sk[fid][0]
                 # a spline in no region: the sampled curves may have missed a crossing, and the regions are then not the
                 # sketch's (00409237 cut a third of what it should)
+                # one with a free end bounds nothing anyway (00058990 matches with it left out)
                 used = {i for lp in a.loops for i, _ in lp}
-                if any(p.kind == "poly" and i not in used for i, p in enumerate(a.pieces)):
+                ends = [v for p in a.pieces for v in (p.va, p.vb)]
+                if any(p.kind == "poly" and i not in used and ends.count(p.va) > 1 and ends.count(p.vb) > 1 for i, p in enumerate(a.pieces)):
                     raise Unsupported("a sketch's spline left out of its regions")
                 filt = len(q[1]) > 1 and q[1][1] is True
                 by.setdefault(fid, []).extend(a.not_inner() if filt else range(len(a.faces)))
