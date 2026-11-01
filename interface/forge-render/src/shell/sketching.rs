@@ -229,6 +229,10 @@ pub struct SketchMode {
     params: Vec<(String, String)>,
     /// The length unit it's being read in.
     pub units: &'static str,
+    /// What the constraint tool would pick, with the pointer where it is.
+    pub would_pick: Option<String>,
+    /// The constraint row whose mark the pointer's on.
+    pub glyph_over: Option<String>,
     /// The rows it opened with: nothing changed, nothing to commit.
     opened: Vec<String>,
     /// A dimension's row being changed, when it's one already there.
@@ -311,6 +315,8 @@ impl SketchMode {
             asking: None,
             params,
             units: "mm",
+            would_pick: None,
+            glyph_over: None,
         };
         m.solve();
         m
@@ -1088,6 +1094,90 @@ impl SketchMode {
         }
     }
 
+    /// What this tool would take with the pointer here.
+    pub fn pick_under(&self, at: (f64, f64), reach: f64) -> Option<String> {
+        match self.tool? {
+            SkTool::Coincident => {
+                let (w, _) = self.word_at(at, reach);
+                (!w.contains(' ')).then_some(w)
+            }
+            SkTool::Parallel | SkTool::Perpendicular => self.entity_near(at, reach, "l"),
+            SkTool::Tangent | SkTool::Dimension => self.entity_near(at, reach, "lca"),
+            _ => None,
+        }
+    }
+
+    /// A curve of the sketch as points on its plane, or a place as one point.
+    pub fn outline_of(&self, word: &str) -> Vec<(f64, f64)> {
+        let Some(s) = &self.solved else { return Vec::new() };
+        if word.contains('.') {
+            return sk::point(s, word).map_or(Vec::new(), |p| vec![(p.x, p.y)]);
+        }
+        let Some((_, id)) = s.names.iter().find(|n| n.0 == word) else {
+            return Vec::new();
+        };
+        let q = &s.solved;
+        let around = |c: Point2, r: f64, t0: f64, sweep: f64| -> Vec<(f64, f64)> {
+            (0..=48)
+                .map(|k| {
+                    let t = t0 + sweep * k as f64 / 48.0;
+                    (
+                        c.x + r * forge_math::dmath::cos(t),
+                        c.y + r * forge_math::dmath::sin(t),
+                    )
+                })
+                .collect()
+        };
+        match q.entity(*id) {
+            Some(Entity::Line { a, b }) => {
+                let (a, b) = (q.point(a), q.point(b));
+                vec![(a.x, a.y), (b.x, b.y)]
+            }
+            Some(Entity::Circle { center, .. }) => {
+                around(q.point(center), q.radius(*id), 0.0, core::f64::consts::TAU)
+            }
+            Some(Entity::Arc {
+                center,
+                start,
+                end,
+                ccw,
+            }) => {
+                let (from, to) = if ccw { (start, end) } else { (end, start) };
+                let (c, a, b) = (q.point(center), q.point(from), q.point(to));
+                let t0 = forge_math::dmath::atan2(a.y - c.y, a.x - c.x);
+                let t1 = forge_math::dmath::atan2(b.y - c.y, b.x - c.x);
+                let r = ((a.x - c.x).powi(2) + (a.y - c.y).powi(2)).sqrt();
+                around(c, r, t0, (t1 - t0).rem_euclid(core::f64::consts::TAU))
+            }
+            Some(Entity::Point { .. }) => {
+                let p = q.point(*id);
+                vec![(p.x, p.y)]
+            }
+            _ => Vec::new(),
+        }
+    }
+
+    /// The constraint rows that have a mark: the row, its icon, and the words it ties together.
+    pub fn glyph_rows(&self) -> Vec<(String, &'static str, Vec<String>)> {
+        self.rows
+            .iter()
+            .filter_map(|r| {
+                let t = tokens(r);
+                let icon = match t.first()?.as_str() {
+                    "hor" => "minimize",
+                    "ver" => "axis",
+                    "par" => "parallel",
+                    "perp" => "perp",
+                    "tan" => "tangent",
+                    "co" => "coincident",
+                    "mid" => "point",
+                    _ => return None,
+                };
+                Some((r.clone(), icon, t[1..].to_vec()))
+            })
+            .collect()
+    }
+
     /// How many degrees of freedom are left, and whether it solved.
     pub fn state(&self) -> Option<(usize, bool)> {
         let s = self.solved.as_ref()?;
@@ -1294,6 +1384,57 @@ impl Shell {
             p.circle_stroke(u, 4.0, Stroke::new(1.0, t.ink2));
         }
 
+        // what a tool would take, what it's taken, and what a constraint's mark ties together
+        let mark = |word: &str, wide: f32, ink: Color32| {
+            let pts: Vec<Pos2> = m.outline_of(word).into_iter().filter_map(&screen).collect();
+            if let [one] = pts[..] {
+                p.circle_stroke(one, 6.0, Stroke::new(wide, ink));
+            } else if pts.len() > 1 {
+                p.add(egui::Shape::line(pts, Stroke::new(wide, ink)));
+            }
+        };
+        let hover_at = ctx
+            .input(|i| i.pointer.hover_pos())
+            .filter(|at| view.contains(*at));
+        let glyph_rows = m.glyph_rows();
+        let mut stacked: std::collections::HashMap<String, usize> = Default::default();
+        let mut glyph_over = None;
+        for (row, icon, words) in &glyph_rows {
+            let Some(first) = words.first() else { continue };
+            let pts = m.outline_of(first);
+            let Some(mid) = pts.get(pts.len() / 2).copied().or(pts.first().copied()) else {
+                continue;
+            };
+            let mid = if pts.len() == 2 {
+                ((pts[0].0 + pts[1].0) * 0.5, (pts[0].1 + pts[1].1) * 0.5)
+            } else {
+                mid
+            };
+            let Some(u) = screen(mid) else { continue };
+            let n = stacked.entry(first.clone()).or_default();
+            let chip = Rect::from_min_size(u + vec2(4.0 + *n as f32 * 20.0, 4.0), vec2(18.0, 18.0));
+            *n += 1;
+            p.rect_filled(chip, 3.0, t.surface);
+            p.rect_stroke(chip, 3.0, Stroke::new(1.0, t.line), egui::StrokeKind::Inside);
+            super::icons::draw(&p, chip.min + vec2(2.0, 2.0), 14.0, icon, 1.25, t.ink);
+            self.places.push((format!("sketch:glyph:{row}"), chip));
+            if hover_at.is_some_and(|at| chip.contains(at)) {
+                glyph_over = Some(row.clone());
+                for w in words {
+                    mark(w, 3.0, t.focus);
+                }
+            }
+        }
+        for w in m.picks.iter().filter(|_| {
+            matches!(
+                m.tool,
+                Some(SkTool::Coincident | SkTool::Parallel | SkTool::Perpendicular | SkTool::Tangent)
+            )
+        }) {
+            mark(w, 3.0, t.focus);
+        }
+        m.glyph_over = glyph_over;
+
         // the pointer's for the tool only over the view itself
         let over = ctx.input(|i| i.pointer.hover_pos()).filter(|at| {
             view.contains(*at)
@@ -1306,6 +1447,27 @@ impl Shell {
             m.cursor = cursor;
         }
         let draft_at = cursor.or(m.cursor);
+        m.would_pick = cursor.and_then(|at| m.pick_under(at, reach));
+        if let Some(w) = m.would_pick.clone() {
+            let pts: Vec<Pos2> = m.outline_of(&w).into_iter().filter_map(&screen).collect();
+            if let [one] = pts[..] {
+                p.circle_stroke(one, 6.0, Stroke::new(3.0, t.focus));
+            } else if pts.len() > 1 {
+                p.add(egui::Shape::line(pts, Stroke::new(3.0, t.focus)));
+            }
+            let icon = match m.tool {
+                Some(SkTool::Coincident) => "coincident",
+                Some(SkTool::Parallel) => "parallel",
+                Some(SkTool::Perpendicular) => "perp",
+                Some(SkTool::Tangent) => "tangent",
+                _ => "dim",
+            };
+            if let Some(at) = over {
+                let chip = Rect::from_min_size(at + vec2(14.0, 14.0), vec2(18.0, 18.0));
+                p.rect_filled(chip, 3.0, t.surface);
+                super::icons::draw(&p, chip.min + vec2(2.0, 2.0), 14.0, icon, 1.25, t.focus);
+            }
+        }
         if let (Some(tool), Some(at)) = (m.tool, draft_at) {
             let d = m.draft(at, reach);
             let line = Stroke::new(1.5, ink);

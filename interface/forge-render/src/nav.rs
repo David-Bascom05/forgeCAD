@@ -117,6 +117,27 @@ pub fn region_view_as(camera: Camera, region: [i8; 3], orient: &Orient) -> Camer
     c
 }
 
+/// Square on to a plane, looking along `-z`, with the cube's words upright: the top of the part up,
+/// or looking straight down or up it, as the cube's own view of TOP or BOTTOM.
+pub fn sheet_view(camera: Camera, z: [f32; 3], orient: &Orient) -> Camera {
+    let f = z.map(|v| -v);
+    let top = orient.world([0, 0, 1]).map(|x| x as f32);
+    let up = match dot(f, top) {
+        d if d < -0.999 => orient.world([0, 1, 0]).map(|x| x as f32),
+        d if d > 0.999 => orient.world([0, -1, 0]).map(|x| x as f32),
+        _ => top,
+    };
+    let r = [
+        f[1] * up[2] - f[2] * up[1],
+        f[2] * up[0] - f[0] * up[2],
+        f[0] * up[1] - f[1] * up[0],
+    ];
+    let n = dot(r, r).sqrt().max(1e-6);
+    let mut c = camera;
+    c.look(f, r.map(|x| x / n));
+    c
+}
+
 /// The view from a region of the cube.
 pub fn region_view(mut camera: Camera, region: [i8; 3]) -> Camera {
     let [a, b, c] = region.map(|v| v as f32);

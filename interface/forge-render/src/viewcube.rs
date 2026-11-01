@@ -12,6 +12,11 @@ const CHAMFER: f32 = 0.24;
 /// A mild perspective, so it reads as a solid: the eye's distance in cube half sides.
 const EYE: f32 = 9.0;
 /// The ring round the cube, flat on the screen, and where the arrows are: in shares of the half side.
+/// How far from a corner's and an edge's middle the pointer takes it, in points.
+const CORNER_REACH_PX: f32 = 12.0;
+/// A corner reaches over the ring's inner half, no farther: the ring stays catchable.
+const CORNER_OUT: f32 = 0.73;
+const EDGE_REACH_PX: f32 = 7.0;
 const RING_IN: f32 = 0.72;
 const RING_OUT: f32 = 0.77;
 const ARROW_AT: f32 = 0.84;
@@ -404,6 +409,9 @@ pub fn hit(camera: &Camera, place: &Place, px: (f32, f32)) -> Option<Hit> {
             }
         }
     }
+    if let Some(r) = corner_or_edge(&eye, place, px) {
+        return Some(Hit::Region(r));
+    }
     for (tri, (x, y)) in arrows(&eye, place) {
         // a little more than the triangle, for the hand
         let mid = [
@@ -426,6 +434,70 @@ pub fn hit(camera: &Camera, place: &Place, px: (f32, f32)) -> Option<Hit> {
     let r = (dx * dx + dy * dy).sqrt() / (place.side * 0.5);
     // easier to catch than it is to see
     (r > RING_IN - 0.03 && r < RING_OUT + 0.03).then_some(Hit::Ring)
+}
+
+/// The cube's corners and edges are far easier to hit than they're drawn: a corner first, then an
+/// edge, each well out past its bevel and past the cube's outline, then the faces.
+fn corner_or_edge(eye: &Eye, place: &Place, px: (f32, f32)) -> Option<[i8; 3]> {
+    let out = (px.0 - eye.centre.0).hypot(px.1 - eye.centre.1) / (place.side * 0.5);
+    let (corner_reach, edge_reach) = (CORNER_REACH_PX * place.scale, EDGE_REACH_PX * place.scale);
+    let signs = [-1i8, 1];
+    // where the chamfer's face is, not the sharp corner it cut away
+    let at = |r: [i8; 3]| r.map(|v| v as f32 * (1.0 - CHAMFER / 3.0));
+    if out > CORNER_OUT {
+        return None;
+    }
+    let seen = |r: [i8; 3]| {
+        let n = at(r);
+        let l = dot(n, n).sqrt();
+        eye.sees(n, n.map(|v| v / l))
+    };
+    let mut best: Option<(f32, [i8; 3])> = None;
+    for a in signs {
+        for b in signs {
+            for c in signs {
+                let r = [a, b, c];
+                if !seen(r) {
+                    continue;
+                }
+                let u = eye.px(at(r));
+                let d = (u[0] - px.0).hypot(u[1] - px.1);
+                if d < corner_reach && best.is_none_or(|x| d < x.0) {
+                    best = Some((d, r));
+                }
+            }
+        }
+    }
+    if let Some(b) = best {
+        return Some(b.1);
+    }
+    // the ring keeps what's out by it
+    if out > RING_IN - 0.03 {
+        return None;
+    }
+    for axis in 0..3 {
+        for a in signs {
+            for b in signs {
+                let (mut p, mut q, mut r) = ([0i8; 3], [0i8; 3], [0i8; 3]);
+                let (i, j) = ((axis + 1) % 3, (axis + 2) % 3);
+                (p[i], p[j], q[i], q[j], r[i], r[j]) = (a, b, a, b, a, b);
+                (p[axis], q[axis]) = (-1, 1);
+                if !seen(r) {
+                    continue;
+                }
+                let flat = |r: [i8; 3]| r.map(|v| v as f32);
+                let (u, v) = (eye.px(flat(p)), eye.px(flat(q)));
+                let (ux, uy) = (v[0] - u[0], v[1] - u[1]);
+                let t = (((px.0 - u[0]) * ux + (px.1 - u[1]) * uy) / (ux * ux + uy * uy).max(1e-6))
+                    .clamp(0.0, 1.0);
+                let d = (u[0] + ux * t - px.0).hypot(u[1] + uy * t - px.1);
+                if d < edge_reach && best.is_none_or(|x| d < x.0) {
+                    best = Some((d, r));
+                }
+            }
+        }
+    }
+    best.map(|b| b.1)
 }
 
 struct Pen<'a> {
@@ -659,6 +731,29 @@ fn backing(pen: &mut Pen, at: (f32, f32), r: f32, pal: &Palette) {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_click_just_off_a_corner_takes_it_and_corner_beats_edge_beats_face() {
+        let pl = place();
+        let c = Camera::fit([0.0; 3], 10.0);
+        let c = crate::nav::region_view(c, [1, -1, 1]);
+        let eye = Eye::new(&c, &pl);
+        for r in [[1i8, -1, 1], [1, 1, 1], [-1, -1, 1], [1, -1, -1]] {
+            let u = eye.px(r.map(|v| v as f32 * (1.0 - CHAMFER / 3.0)));
+            let (dx, dy) = (u[0] - eye.centre.0, u[1] - eye.centre.1);
+            let l = dx.hypot(dy).max(1.0);
+            // out from the middle, off the drawn corner
+            let off = (u[0] + dx / l * 3.0 * pl.scale, u[1] + dy / l * 3.0 * pl.scale);
+            assert_eq!(hit(&c, &pl, off), Some(Hit::Region(r)), "{r:?}");
+        }
+        // an edge's middle
+        let (a, b) = (eye.px([1.0, -1.0, 1.0]), eye.px([1.0, 1.0, 1.0]));
+        let mid = ((a[0] + b[0]) / 2.0, (a[1] + b[1]) / 2.0);
+        assert_eq!(hit(&c, &pl, mid), Some(Hit::Region([1, 0, 1])));
+        // and a face's middle stays the face
+        let top = eye.px([0.0, 0.0, 1.0]);
+        assert_eq!(hit(&c, &pl, (top[0], top[1])), Some(Hit::Region([0, 0, 1])));
+    }
 
     fn place() -> Place {
         Place {

@@ -1532,3 +1532,104 @@ fn a_hover_mark_stays_on_every_frame_as_the_pointer_crosses_a_face() {
         );
     }
 }
+
+#[test]
+fn a_constraint_tool_lights_what_it_would_pick_and_a_mark_lights_what_it_ties() {
+    use forge_render::shell::sketching::SkTool;
+    let part = "sk1: sketch xy\n  line 0 0 40 0\n  line 0 20 40 20\n  par l1 l2\nend\n";
+    let Some((mut h, _)) = file_part(part) else {
+        return;
+    };
+    let id = h.gui.shell.doc.as_ref().unwrap().find("sk1").unwrap();
+    h.gui.shell.out.push(Action::Edit(id));
+    assert!(h.until(|g| g.shell.sketch.is_some()));
+    for _ in 0..80 {
+        h.step();
+        std::thread::sleep(std::time::Duration::from_millis(10));
+    }
+    h.gui.shell.out.push(Action::SketchTool(SkTool::Parallel));
+    step_some(&mut h);
+    let (cam, size) = h.gui.shell.camera.unwrap();
+    let r = h.gui.shell.view_rect;
+    let on = cam.pixel_of([20.0, 20.0, 0.0], size.0, size.1).unwrap();
+    h.move_to(r.min.x + on.0, r.min.y + on.1);
+    step_some(&mut h);
+    assert_eq!(
+        h.gui.shell.sketch.as_ref().unwrap().would_pick.as_deref(),
+        Some("l2")
+    );
+    let g = h
+        .gui
+        .shell
+        .place("sketch:glyph:par l1 l2")
+        .expect("the constraint's mark");
+    h.move_to(g.center().x, g.center().y);
+    step_some(&mut h);
+    assert_eq!(
+        h.gui.shell.sketch.as_ref().unwrap().glyph_over.as_deref(),
+        Some("par l1 l2")
+    );
+}
+
+/// Words on the cube's faces toward the eye read left to right and upward.
+fn cube_words_upright(h: &Headless) {
+    use forge_render::viewcube;
+    let v = h.gui.view.as_ref().unwrap();
+    let place = v.nav.cube_place();
+    for l in viewcube::labels(&v.nav.camera, &place, None, &v.nav.orient) {
+        if l.alpha < 0.5 {
+            continue;
+        }
+        let (a, b) = (
+            viewcube::on_face(&v.nav.camera, &place, &l, 0.0, 0.0),
+            viewcube::on_face(&v.nav.camera, &place, &l, 1.0, 0.0),
+        );
+        let c = viewcube::on_face(&v.nav.camera, &place, &l, 0.0, 1.0);
+        assert!(b[0] > a[0], "{} reads backward", l.text);
+        assert!(c[1] < a[1], "{} is upside down", l.text);
+    }
+}
+
+#[test]
+fn a_sketch_opens_with_the_cubes_words_upright_on_every_plane_and_a_face() {
+    use forge_render::origin::Item;
+    for plane in [
+        Some(Item::XyPlane),
+        Some(Item::XzPlane),
+        Some(Item::YzPlane),
+        None,
+    ] {
+        let Some((mut h, _)) = file_part(BLOCK) else {
+            return;
+        };
+        match plane {
+            Some(p) => {
+                h.gui.shell.origin_selected = Some(p);
+                h.gui.shell.out.push(Action::StartSketch);
+            }
+            None => {
+                h.gui.shell.out.push(Action::StartSketch);
+                step_some(&mut h);
+                let c = h.gui.shell.view_rect.center();
+                let (cam, size) = h.gui.shell.camera.unwrap();
+                let on = cam.pixel_of([30.0, 0.0, 10.0], size.0, size.1).unwrap();
+                let r = h.gui.shell.view_rect;
+                let _ = c;
+                h.move_to(r.min.x + on.0, r.min.y + on.1);
+                for _ in 0..30 {
+                    h.step();
+                    std::thread::sleep(std::time::Duration::from_millis(5));
+                }
+                h.button(true);
+                h.step();
+                h.button(false);
+            }
+        }
+        assert!(h.until(|g| g.shell.sketch.is_some()), "{plane:?}");
+        for _ in 0..80 {
+            h.step();
+            std::thread::sleep(std::time::Duration::from_millis(10));
+        }
+        cube_words_upright(&h);
+    }
+}

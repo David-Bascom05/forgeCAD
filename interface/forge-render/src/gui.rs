@@ -1623,12 +1623,8 @@ fn raw_view(t: &Offscreen) -> wgpu::TextureView {
 
 /// Square on to a plane, as if drawing on a sheet.
 fn look_at(v: &mut View, plane: forge_math::Frame) {
-    let (x, z): (forge_math::Vec3, forge_math::Vec3) = (plane.x().into(), plane.z().into());
-    let mut to = v.nav.camera;
-    to.look(
-        [-z.x as f32, -z.y as f32, -z.z as f32],
-        [x.x as f32, x.y as f32, x.z as f32],
-    );
+    let z: forge_math::Vec3 = plane.z().into();
+    let to = crate::nav::sheet_view(v.nav.camera, [z.x as f32, z.y as f32, z.z as f32], &v.nav.orient);
     v.nav.go_to(to);
     v.dirty = true;
 }
