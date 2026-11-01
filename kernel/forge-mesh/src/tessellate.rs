@@ -1915,11 +1915,13 @@ fn strips(
     Some(tris)
 }
 
-
 /// Where point `b` goes to part from `a` at the same place: a hair in from it towards its neighbours
 /// along its own loop.
 fn apart_touching(pts: &[Point2], loops: &[Vec<u32>], a: u32, b: u32) -> Option<Point2> {
-    let lp = loops.iter().find(|l| l.contains(&b) && !l.contains(&a)).or_else(|| loops.iter().find(|l| l.contains(&b)))?;
+    let lp = loops
+        .iter()
+        .find(|l| l.contains(&b) && !l.contains(&a))
+        .or_else(|| loops.iter().find(|l| l.contains(&b)))?;
     let k = lp.iter().position(|&x| x == b)?;
     let n = lp.len();
     let (p, q) = (pts[lp[(k + n - 1) % n] as usize], pts[lp[(k + 1) % n] as usize]);

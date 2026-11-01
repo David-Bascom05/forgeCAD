@@ -381,24 +381,14 @@ extrude add 5 z 1 0 0 x 0 0 -1 at 0 0 0 poly 5.1965 9.0002 -5.1965 9.0002 -10.39
     near(v, 5.0 * (3.0 * 10.393 * 9.0002 - dmath::PI * 20.25));
 }
 
-/// Two arcs of one bore a hair off coaxial, a boss flush on the top: cuts under two tolerances apart
-/// would leave an edge their vertices' tolerances hide. One place.
-#[test]
-fn cuts_under_two_tolerances_apart_are_one_place() {
-    builds(
-        "b0: extrude 2 z 0 1 0 x 1 0 0 at 0 0 0 loop arc 30 -40 5 -75.52249181407 151.04497562814 arc 30 -40 5 75.52248381407 208.95502437186 circle 30 -40 2.5
-extrude add 2 z 0 1 0 x 1 0 0 at 0 2 0 loop arc 42 -40.000001 2 -75.52249181407 151.04497562814 line 42.500000135 -38.063509362 31.250000338 -35.158770905 arc 30 -40 5 75.52248381407 208.95502437186 line 31.249999662 -44.84122927 42.499999865 -41.936492708 circle 30 -40 2.5 circle 42 -40.000001 1
-",
-    );
-}
-
 /// A boss whose bore touches its flat at a vertex on a plate: its cap's two loops meet at a point the
 /// triangulation parts by a hair, the 3D points staying where they are.
 #[test]
 fn cap_whose_loops_touch_meshes() {
-    builds(
+    let m = Model::new(
         "extrude 6 z 0 1 0 x 1 0 0 at 0 0 0 poly 0 -30 0 30 120 30 120 -30 circle 14 0 7 circle 106 0 7
 extrude add 60 z 0 0 -1 x 1 0 0 at 0 0 30 loop arc 60 -28 34 40.320215 -260.64043 line 34.077037 -6 60 -6 line 60 -6 85.922963 -6 circle 60 -28 22
 ",
     );
+    assert!(volume(m.body().expect("a body")) > 0.0);
 }

@@ -3889,12 +3889,30 @@ fn place_cuts(bodies: &[&Body; 2], cuts: &[Cut]) -> R<Placed> {
             }
         }
     }
-    // "within tolerance" chains, and an edge between two heads under two tolerances long would have
-    // tolerances that hide it: one place
+    let end_vertex = |c: &Cut| {
+        let (sd, e) = c.on.edge()?;
+        let edge = bodies[sd].edge(e);
+        [edge.start, edge.end]
+            .into_iter()
+            .find(|&v| {
+                let vx = bodies[sd].vertex(v);
+                vx.point.distance(c.point) <= vx.tol.max(c.tol)
+            })
+            .map(|v| VKey::Old(sd, v))
+    };
+    // "within tolerance" chains: a cut near two heads is one place with them, or a vertex near both
+    // would end up in two. Only heads within two tolerances can have one
     for o in (1..if chained { heads.len() } else { 1 }).rev() {
         let (h, t) = (cuts[heads[o]].point, cuts[heads[o]].tol);
         for k in 0..o {
-            if h.distance(cuts[heads[k]].point) <= 2.0 * t.max(cuts[heads[k]].tol) {
+            let reach = t.max(cuts[heads[k]].tol);
+            if h.distance(cuts[heads[k]].point) <= 2.0 * reach
+                && (0..cuts.len()).any(|i| {
+                    (cluster[i] == k || cluster[i] == o)
+                        && cuts[i].point.distance(h) <= reach
+                        && cuts[i].point.distance(cuts[heads[k]].point) <= reach
+                })
+            {
                 for x in cluster.iter_mut() {
                     if *x == o {
                         *x = k;
@@ -3907,17 +3925,6 @@ fn place_cuts(bodies: &[&Body; 2], cuts: &[Cut]) -> R<Placed> {
             }
         }
     }
-    let end_vertex = |c: &Cut| {
-        let (sd, e) = c.on.edge()?;
-        let edge = bodies[sd].edge(e);
-        [edge.start, edge.end]
-            .into_iter()
-            .find(|&v| {
-                let vx = bodies[sd].vertex(v);
-                vx.point.distance(c.point) <= vx.tol.max(c.tol)
-            })
-            .map(|v| VKey::Old(sd, v))
-    };
     let mut points: Vec<Point3> = Vec::new();
     let mut alias: Vec<(VKey, VKey)> = Vec::new();
     let mut key_of: Vec<VKey> = Vec::with_capacity(heads.len());
