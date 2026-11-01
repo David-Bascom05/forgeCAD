@@ -444,3 +444,39 @@ fn a_round_foot_of_a_boss_is_not_taken_for_a_blend_through_the_part() {
         assert!((v - want).abs() < 1e-5 * want, "{how}: {v} not {want}\n{src}");
     }
 }
+
+#[test]
+fn a_round_ending_where_its_arc_is_tangent_to_a_wall_keeps_to_its_own_arc() {
+    // a boss low against a taller plate, the foot edge beside the wall rounded, then the arc that
+    // leaves on the boss's top: the blend's torus meets the wall in a loop through their touch point,
+    // and the cut there is its short way, up from the touch point to the top
+    let src = "extrude 12 rect 0 0 100 50\nextrude add 8 rect 40 50 20 20\nfillet 1 (edges near 40 50 4)\nfillet 0.5 (edges circle near 39.3 50.7 8)\n";
+    let (r0, r) = (1.0f64, 0.5f64);
+    let base = 100.0 * 50.0 * 12.0 + 20.0 * 20.0 * 8.0 + (1.0 - PI / 4.0) * r0 * r0 * 8.0;
+    let along = 19.0 * (1.0 - PI / 4.0) * r * r;
+    // over the arc: at radius u round its axis, from the line's end to the wall
+    let n = 200_000;
+    let w = r / n as f64;
+    let round: f64 = (0..n)
+        .map(|i| {
+            let u = r0 + (i as f64 + 0.5) * w;
+            let under = r - (r * r - (r0 + r - u) * (r0 + r - u)).sqrt();
+            under * u * (r0 / u).asin()
+        })
+        .sum::<f64>()
+        * w;
+    let want = base - along - round;
+    let m = Model::new(src);
+    if let Some(f) = &m.error {
+        panic!("line {}: {}", m.lines[f.at].no, f.msg);
+    }
+    let part = Part {
+        features: m.features.clone(),
+    };
+    for (how, built) in [("seq", part.regenerate()), ("n-ary", part.regenerate_nary(2))] {
+        let b = built.unwrap_or_else(|e| panic!("{how}: {e:?}"));
+        assert_eq!(forge_topo::check(&b), vec![], "{how}");
+        let v = forge_topo::mass::mass(&b).expect("mass").volume;
+        assert!((v - want).abs() < 1e-5, "{how}: {v} not {want}");
+    }
+}

@@ -1346,7 +1346,7 @@ fn roll(body: &Body, e: EdgeId, r: f64, root: Name) -> R<Rolled> {
         Some(Some((b, sp, s))) => (b, sp, Some(s)),
         _ => (blend, springs, None),
     };
-    Ok(rolled_from(body, e, &l, blend, springs, over, on_rim, root))
+    Ok(rolled_from(body, e, &l, blend, springs, (over, on_rim), root))
 }
 
 fn rolled_from(
@@ -1355,8 +1355,7 @@ fn rolled_from(
     l: &Local,
     blend: Blend,
     springs: [Curve; 2],
-    over: Over,
-    on_rim: Option<usize>,
+    (over, on_rim): (Over, Option<usize>),
     root: Name,
 ) -> Rolled {
     let split = switch_split(body, e, l, &blend, &springs, &over);
@@ -1473,7 +1472,7 @@ fn roll_across(body: &Body, e: EdgeId, other: EdgeId, r: f64, near: Point3, root
     }
     let mut over = [None, None];
     over[s] = Some((beyond, other));
-    Ok(rolled_from(body, e, &l, blend, springs, over, None, root))
+    Ok(rolled_from(body, e, &l, blend, springs, (over, None), root))
 }
 
 /// Where the ball is wider than a face it should rest on, so its foot there lies past that face's
@@ -2934,8 +2933,6 @@ impl Builder {
             let ro = &self.rolled[ri];
             let (a, b) = (xs[j], xs[j + 1]);
             let (curve, ta, tb) = cross_curve(&ro.blend, &self.body.face(f).surface, a.0, b.0)
-                // a chain through a touch point can go round the far way, off the blend's own arc
-                .filter(|(c, ta, tb)| !free || on_contact_arc(&ro.blend, c.eval(0.5 * (ta + tb))))
                 .or_else(|| {
                     // one end where the blend touches the face: walked into it
                     let walk = |x, p| {
@@ -5301,7 +5298,23 @@ fn cross_curve(blend: &Blend, s: &Surface, a: Point3, b: Point3) -> Option<(Curv
                 }
                 return Some((c, ta, ta - (p - up)));
             }
-            None => return Some((c, ta, tb)),
+            None if on_contact_arc(blend, c.eval(0.5 * (ta + tb))) => return Some((c, ta, tb)),
+            // a chain through a touch point, gone round the far way: walked directly
+            None => {
+                let walk =
+                    |x, p| forge_geom::intcurve::towards_touch(&blend.surface, s, x, p, 0.05 * blend.radius);
+                let curve = |c| Curve::Intersection(std::sync::Arc::new(c));
+                return walk(a, b)
+                    .map(|c| {
+                        let hi = c.domain_hi();
+                        (curve(c), 0.0, hi)
+                    })
+                    .or_else(|| {
+                        let c = walk(b, a)?;
+                        let hi = c.domain_hi();
+                        Some((curve(c), hi, 0.0))
+                    });
+            }
         }
     }
     None
