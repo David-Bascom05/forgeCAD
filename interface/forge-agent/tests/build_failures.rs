@@ -603,6 +603,7 @@ fn the_box_of_a_tilted_arc_is_tight() {
 ",
     );
     assert!(m.error.is_none());
+    // the second arc's centre, up its radius, and the profile's
     let top = -12.453333233923 + 30.0 + 10.0;
     let z = m.stats().2.z.hi;
     assert!((z - top).abs() < 0.03, "{z} vs {top}");

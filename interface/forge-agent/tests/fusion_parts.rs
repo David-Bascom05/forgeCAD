@@ -385,12 +385,11 @@ extrude add 5 z 1 0 0 x 0 0 -1 at 0 0 0 poly 5.1965 9.0002 -5.1965 9.0002 -10.39
 /// triangulation parts by a hair, the 3D points staying where they are.
 #[test]
 fn cap_whose_loops_touch_meshes() {
-    let m = Model::new(
+    builds(
         "extrude 6 z 0 1 0 x 1 0 0 at 0 0 0 poly 0 -30 0 30 120 30 120 -30 circle 14 0 7 circle 106 0 7
 extrude add 60 z 0 0 -1 x 1 0 0 at 0 0 30 loop arc 60 -28 34 40.320215 -260.64043 line 34.077037 -6 60 -6 line 60 -6 85.922963 -6 circle 60 -28 22
 ",
     );
-    assert!(volume(m.body().expect("a body")) > 0.0);
 }
 
 // (the hair edge, a line ending within a tolerance of where it meets an arc; volume from `builds` on both paths)
