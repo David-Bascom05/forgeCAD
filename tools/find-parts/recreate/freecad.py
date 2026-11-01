@@ -19,7 +19,7 @@ import zipfile
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import sketch2d
-from cadfs import KernelStop, Unresolved, Unsupported, add, dot, num, vtext
+from cadfs import KernelStop, Unresolved, Unsupported, add, dot, num, unit, vfine, vtext
 from sketch2d import Arrangement
 
 TOL = 2e-3
@@ -377,8 +377,6 @@ class Tr:
         for k in ("TaperAngle", "TaperAngle2", "Offset"):
             if abs(d.flt(name, k)) > 1e-12:
                 raise Unsupported("a pad with " + k)
-        if d.boolean(name, "UseCustomVector") or d.prop(name, "AlongSketchNormal") is not None and not d.boolean(name, "AlongSketchNormal"):
-            raise Unsupported("a pad along a custom direction")
         sk = d.link(name, "Profile")
         if d.types.get(sk) not in FLAT:
             raise Unsupported("a profile not from a sketch")
@@ -397,6 +395,22 @@ class Tr:
                 z = tuple(-x for x in n) if down else n
         t, L, L2 = d.integer(name, "Type"), d.flt(name, "Length"), d.flt(name, "Length2")
         mid = d.boolean(name, "Midplane")
+        along = ""
+        if d.boolean(name, "UseCustomVector"):
+            # the direction is stored as used, a pocket's too: only Reversed turns it. Length runs along it unless AlongSketchNormal
+            e = stored.find("PropertyVector") if stored is not None else None
+            if e is None:
+                raise Unsupported("a pad along a custom direction with none stored")
+            v = unit(tuple(float(e.get(k)) for k in ("valueX", "valueY", "valueZ")))
+            c = dot(v, n)
+            if abs(c) < 1e-9 or t not in (0, 1, 4):
+                raise Unsupported("a pad along a custom direction of this form")
+            down = (c < 0) != rev
+            z = tuple(-x for x in n) if down else n
+            if not d.boolean(name, "AlongSketchNormal"):
+                L, L2 = L * abs(c), L2 * abs(c)
+            if abs(abs(c) - 1) > 1e-12:
+                along = " along " + vfine(v)
         if t == 0:
             head = f"sym {num(L)}" if mid else num(L)
         elif t == 4:
@@ -407,6 +421,7 @@ class Tr:
             head = "next"
         else:
             raise Unsupported(f"a pad or pocket of type {t}")
+        head += along
         return self.profile(name, "cut" if cut else "add", head, down, z)[0]
 
     def revolve(self, name, cut):
