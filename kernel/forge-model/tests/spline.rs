@@ -322,6 +322,22 @@ fn a_loft_closes_on_a_point() {
     .unwrap()
     .0;
     assert!(checked(&b) > 0.0);
+    // ...with the point off the axis: the walls lean, and mass still walks their loops through it
+    let low = Profile {
+        plane: Frame::WORLD.with_origin(Point3::new(0.0, 0.0, 5.5714)),
+        loops: vec![Profile::circle(Point2::ORIGIN, 5.7375, 0)],
+    };
+    let base = prof(vec![Profile::circle(Point2::ORIGIN, 5.7375, 0)]);
+    let b = loft_and_bounds(
+        &[base, low],
+        free,
+        &none,
+        &with([None, Some(at(-0.4319, -1.8793, 11.1429))]),
+        1,
+    )
+    .unwrap()
+    .0;
+    assert!(checked(&b) > 0.0);
     // a dome: walls arrive square to the axis, so the end is a smooth round nose
     let mut dome = at(0.0, 0.0, 8.0);
     dome.dome = Some((Vec3::Z, 2.0));

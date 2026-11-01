@@ -1225,7 +1225,14 @@ impl Skinned {
                 }
             };
             let mut near = (f64::INFINITY, Point2::new(0.5, toward(0.5)));
-            for f in [1.0 / 16.0, 1.0 / 32.0, 1.0 / 64.0, 1.0 / 128.0, 1.0 / 512.0, 1.0 / 2048.0] {
+            for f in [
+                1.0 / 16.0,
+                1.0 / 32.0,
+                1.0 / 64.0,
+                1.0 / 128.0,
+                1.0 / 512.0,
+                1.0 / 2048.0,
+            ] {
                 for i in 0..=16 {
                     let uv = Point2::new(i as f64 / 16.0, toward(f));
                     let e = self.data.point(uv).p.distance_sq(p);
