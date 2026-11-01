@@ -203,6 +203,238 @@ pub fn template(kind: &str) -> (&'static str, Option<(&'static str, &'static str
     }
 }
 
+/// A feature whose profile is written in its own line: what a sketch of it would be.
+#[derive(Clone, Debug, PartialEq)]
+pub struct InlineProfile {
+    /// The sketch's header: its frame.
+    pub head: String,
+    pub rows: Vec<String>,
+    /// Its dimensions, as a person reads them.
+    pub shown: Vec<Shown>,
+    /// The feature's line after the kind, with `{}` where the sketch's name goes.
+    pub rest: String,
+}
+
+/// A dimension to show for a derived sketch: its name and its value as written.
+pub type Shown = (String, String);
+
+#[derive(Default)]
+struct Derive {
+    rows: Vec<String>,
+    shown: Vec<Shown>,
+    lines: usize,
+    circles: usize,
+    arcs: usize,
+    /// Each entity's segment id, as the inline profile numbered it.
+    ids: Vec<String>,
+}
+
+/// a + b, a number where both are, an expression where a parameter's in it.
+fn plus(a: &str, b: &str) -> String {
+    match (a.parse::<f64>(), b.parse::<f64>()) {
+        (Ok(x), Ok(y)) => (x + y).to_string(),
+        _ => format!("({a}+{b})"),
+    }
+}
+
+fn minus(a: &str, b: &str) -> String {
+    match (a.parse::<f64>(), b.parse::<f64>()) {
+        (Ok(x), Ok(y)) => (x - y).to_string(),
+        _ => format!("({a}-({b}))"),
+    }
+}
+
+impl Derive {
+    /// The next entity along the profile, as the inline form numbers it.
+    fn id(&mut self, name: String) {
+        let n = self.ids.len() / 2;
+        self.ids.push(name);
+        self.ids.push(n.to_string());
+    }
+
+    fn dim(&mut self, label: String, row: String, value: &str) {
+        self.rows.push(format!("{row} {value}"));
+        self.shown.push((label, value.to_string()));
+    }
+
+    fn rect(&mut self, w: &[&str]) {
+        let (x, y, wide, high) = (w[0], w[1], w[2], w[3]);
+        let n = self.lines + 1;
+        self.lines += 4;
+        self.rows.push(format!("rect {x} {y} {wide} {high}"));
+        for l in n..n + 4 {
+            self.id(format!("l{l}"));
+        }
+        self.dim("X".into(), format!("hdist o l{n}.a"), x);
+        self.dim("Y".into(), format!("vdist o l{n}.a"), y);
+        self.dim("Width".into(), format!("hdist l{n}.a l{n}.b"), wide);
+        self.dim("Height".into(), format!("vdist l{}.a l{}.b", n + 1, n + 1), high);
+    }
+
+    fn circle(&mut self, w: &[&str]) {
+        let (x, y, r) = (w[0], w[1], w[2]);
+        self.circles += 1;
+        let c = self.circles;
+        self.rows.push(format!("circle {x} {y} {r}"));
+        self.id(format!("c{c}"));
+        self.dim("Center X".into(), format!("hdist o c{c}"), x);
+        self.dim("Center Y".into(), format!("vdist o c{c}"), y);
+        let d = match r.parse::<f64>() {
+            Ok(v) => (v * 2.0).to_string(),
+            Err(_) => format!("(2*({r}))"),
+        };
+        self.dim("Diameter".into(), format!("dia c{c}"), &d);
+    }
+
+    fn poly(&mut self, w: &[&str]) {
+        let n = self.lines + 1;
+        let count = w.len() / 2;
+        self.lines += count;
+        self.rows.push(format!("poly {}", w.join(" ")));
+        for l in n..n + count {
+            self.id(format!("l{l}"));
+        }
+        for k in 0..count {
+            let l = n + k;
+            self.dim(format!("Point {} X", k + 1), format!("hdist o l{l}.a"), w[k * 2]);
+            self.dim(
+                format!("Point {} Y", k + 1),
+                format!("vdist o l{l}.a"),
+                w[k * 2 + 1],
+            );
+        }
+    }
+
+    fn rrect(&mut self, w: &[&str]) {
+        let (x, y, wide, high, r) = (w[0], w[1], w[2], w[3], w[4]);
+        let (x1, y1) = (plus(x, wide), plus(y, high));
+        let (xa, xb, ya, yb) = (plus(x, r), minus(&x1, r), plus(y, r), minus(&y1, r));
+        let n = self.lines + 1;
+        let (l1, l2, l3, l4) = (n, n + 1, n + 2, n + 3);
+        self.lines += 4;
+        let m = self.arcs + 1;
+        self.arcs += 4;
+        for k in 0..4 {
+            self.id(format!("l{}", n + k));
+            self.id(format!("a{}", m + k));
+        }
+        self.rows.push(format!("line {xa} {y} {xb} {y}"));
+        self.rows.push(format!("line {x1} {ya} {x1} {yb}"));
+        self.rows.push(format!("line {xb} {y1} {xa} {y1}"));
+        self.rows.push(format!("line {x} {yb} {x} {ya}"));
+        self.rows.push(format!("arc {xb} {ya} l{l1}.b l{l2}.a"));
+        self.rows.push(format!("arc {xb} {yb} l{l2}.b l{l3}.a"));
+        self.rows.push(format!("arc {xa} {yb} l{l3}.b l{l4}.a"));
+        self.rows.push(format!("arc {xa} {ya} l{l4}.b l{l1}.a"));
+        self.rows.push(format!("hor l{l1} l{l3}"));
+        self.rows.push(format!("ver l{l2} l{l4}"));
+        for (l, a, l2nd) in [(l1, m, l2), (l2, m + 1, l3), (l3, m + 2, l4), (l4, m + 3, l1)] {
+            self.rows.push(format!("tan l{l} a{a}"));
+            self.rows.push(format!("tan a{a} l{l2nd}"));
+        }
+        for a in m + 1..m + 4 {
+            self.rows.push(format!("rad a{a} {r}"));
+        }
+        self.dim("X".into(), format!("hdist o l{l4}.a"), x);
+        self.dim("Y".into(), format!("vdist o l{l1}.a"), y);
+        self.dim("Width".into(), format!("hdist l{l4}.a l{l2}.a"), wide);
+        self.dim("Height".into(), format!("vdist l{l1}.a l{l3}.a"), high);
+        self.dim("Radius".into(), format!("rad a{m}"), r);
+    }
+}
+
+/// Loops as a real sketch: rows of geometry and its constraints, dimensions from the line's numbers.
+pub fn derive(words: &[&str]) -> Option<(Vec<String>, Vec<Shown>)> {
+    let mut d = Derive::default();
+    let mut k = 0;
+    while k < words.len() {
+        let w = words[k];
+        k += 1;
+        let start = k;
+        while k < words.len() && !LOOPS.contains(&words[k]) {
+            k += 1;
+        }
+        let args = &words[start..k];
+        match (w, args.len()) {
+            ("rect", 4) => d.rect(args),
+            ("circle", 3) => d.circle(args),
+            ("rrect", 5) => d.rrect(args),
+            ("poly", n) if n >= 6 && n % 2 == 0 => d.poly(args),
+            _ => return None,
+        }
+    }
+    d.rows.push(format!("ids {}", d.ids.join(" ")));
+    Some((d.rows, d.shown))
+}
+
+/// What an extrude written with its profile inline is as a sketch: its words up to the frame stay on
+/// its line, the frame heads the sketch, the loops become its rows.
+pub fn inline_profile(kind: &str, args: &[&str]) -> Option<InlineProfile> {
+    if kind != "extrude" {
+        return None;
+    }
+    let first_loop = args.iter().position(|w| LOOPS.contains(w))?;
+    // the frame starts at a frame word; a line with none is on xy, with `at` if it says so
+    let frame_word = |w: &&str| is_frame(w) || matches!(*w, "z" | "axes" | "at" | "on" | "-on");
+    let frame = args[..first_loop]
+        .iter()
+        .position(frame_word)
+        .unwrap_or(first_loop);
+    let head = match args[frame..first_loop].join(" ") {
+        h if h.is_empty() => "xy".to_string(),
+        h if h.starts_with("at ") => format!("xy {h}"),
+        h => h,
+    };
+    let (rows, shown) = derive(&args[first_loop..])?;
+    let rest: Vec<&str> = args[..frame].iter().copied().chain(["{}"]).collect();
+    Some(InlineProfile {
+        head,
+        rows,
+        shown,
+        rest: rest.join(" "),
+    })
+}
+
+/// The tool calls that write a feature's inline profile as a sketch line it reads: one commit, whose
+/// lines keep their ids, so nothing else's names move. `rows` are the sketch's rows as they now stand.
+pub fn inline_calls(
+    doc: &forge_doc::Document,
+    id: forge_doc::ItemId,
+    head: &str,
+    rows: &[String],
+    rest: &str,
+) -> Option<Vec<forge_agent::tools::Call>> {
+    use forge_agent::tools::Call;
+    let mut doc = doc.clone();
+    let mut k = 1;
+    while doc.find(&format!("sk{k}")).is_some() {
+        k += 1;
+    }
+    let name = format!("sk{k}");
+    let mut block = format!("{name}: sketch {head}\n");
+    for r in rows {
+        block.push_str(&format!("  {r}\n"));
+    }
+    block.push_str("end\n");
+    let items = doc.read_items(&block);
+    let old = doc.items.iter().find(|i| i.id == id)?.clone();
+    let forge_doc::Body::Feature { kind, .. } = &old.body else {
+        return None;
+    };
+    let mut lines = doc.read_items(&format!("{kind} {}", rest.replace("{}", &name)));
+    let [item] = &mut lines[..] else { return None };
+    item.id = id;
+    item.label = old.label.clone();
+    item.note = old.note.clone();
+    Some(vec![
+        Call::Add {
+            before: Some(id),
+            items,
+        },
+        Call::Edit { item: item.clone() },
+    ])
+}
+
 /// A sketch row as label and value.
 pub fn sketch_row(args: &[String]) -> Option<(String, String)> {
     let (head, tail) = args.split_first()?;
@@ -331,6 +563,175 @@ mod tests {
             got("pattern", "hole1 lin 1 0 0 3 20"),
             pairs(&[("Features", "hole1"), ("Linear", "lin 1 0 0 3 20")])
         );
+    }
+
+    #[test]
+    fn an_inline_profile_reads_as_a_real_sketch_with_a_slot_for_it() {
+        let words = [
+            "cut", "2", "-xy", "at", "0", "5", "6", "rect", "0", "0", "w", "4", "circle", "1", "1", "r",
+        ];
+        let p = inline_profile("extrude", &words).unwrap();
+        assert_eq!(p.head, "-xy at 0 5 6");
+        assert_eq!(p.rows[0], "rect 0 0 w 4");
+        assert!(p.rows.contains(&"hdist l1.a l1.b w".to_string()), "{:?}", p.rows);
+        assert!(p.rows.contains(&"dia c1 (2*(r))".to_string()), "{:?}", p.rows);
+        assert!(p.shown.contains(&("Width".to_string(), "w".to_string())));
+        assert_eq!(p.rest, "cut 2 {}");
+        assert!(
+            inline_profile("extrude", &["5", "plate"]).is_none(),
+            "already a sketch"
+        );
+        let p = inline_profile("extrude", &["sym", "68", "-xz", "circle", "0", "0", "21"]).unwrap();
+        assert_eq!((p.head.as_str(), p.rest.as_str()), ("-xz", "sym 68 {}"));
+        let p = inline_profile("extrude", &["16", "at", "9", "0", "0", "circle", "0", "0", "2"]).unwrap();
+        assert_eq!(p.head, "xy at 9 0 0");
+        assert!(inline_profile("hole", &["5", "xy", "thru"]).is_none());
+    }
+
+    /// All a part's inline profiles written as sketches, each by the calls Finish Sketch makes.
+    fn with_sketches(src: &str) -> (forge_agent::tools::Part, usize, usize, Option<String>) {
+        let mut p = forge_agent::tools::Part::new(src);
+        let ids: Vec<forge_doc::ItemId> = p.model.doc.items.iter().map(|i| i.id).collect();
+        let (mut done, mut left) = (0, 0);
+        for id in ids {
+            let doc = p.model.doc.clone();
+            let Some(it) = doc.items.iter().find(|i| i.id == id) else {
+                continue;
+            };
+            let forge_doc::Body::Feature { kind, args } = &it.body else {
+                continue;
+            };
+            let words: Vec<&str> = args.iter().map(|a| a.text.as_str()).collect();
+            match inline_profile(kind, &words) {
+                Some(ip) => {
+                    let calls = inline_calls(&doc, id, &ip.head, &ip.rows, &ip.rest).unwrap();
+                    let d = p.call(calls, None);
+                    if !d.ok {
+                        return (
+                            p,
+                            done,
+                            left,
+                            Some(format!("{}: {}", doc.text_of(id).unwrap_or_default(), d.text)),
+                        );
+                    }
+                    done += 1;
+                }
+                None => left += (kind == "extrude" && words.iter().any(|w| LOOPS.contains(w))) as usize,
+            }
+        }
+        (p, done, left, None)
+    }
+
+    fn parts() -> Vec<(String, String)> {
+        let root = concat!(env!("CARGO_MANIFEST_DIR"), "/../..");
+        let mut out = Vec::new();
+        for seed in 0..40u64 {
+            out.push((format!("fuzz {seed}"), forge_agent::history::run(seed, 10).src));
+        }
+        for dir in [
+            "tools/bench-parts",
+            "interface/forge-agent/tests/parts",
+            "research/thread-math/stress",
+            "research/loft-ssi/novel",
+        ] {
+            let Ok(rd) = std::fs::read_dir(format!("{root}/{dir}")) else {
+                continue;
+            };
+            for e in rd.flatten() {
+                if e.path().extension().is_some_and(|x| x == "fc") {
+                    out.push((
+                        e.path().display().to_string(),
+                        std::fs::read_to_string(e.path()).unwrap(),
+                    ));
+                }
+            }
+        }
+        out
+    }
+
+    type Shape = (Vec<u64>, Vec<[u64; 3]>, u64);
+
+    fn shape(m: &mut forge_agent::model::Model) -> Shape {
+        let vol = m.mass().map(|p| p.volume).unwrap_or(f64::NAN).to_bits();
+        let b = m.body().expect("a body");
+        let mut v: Vec<[u64; 3]> = b
+            .vertex_ids()
+            .map(|i| {
+                let p = b.vertex(i).point;
+                [p.x.to_bits(), p.y.to_bits(), p.z.to_bits()]
+            })
+            .collect();
+        v.sort_unstable();
+        let mut names: Vec<u64> = b.face_ids().map(|f| b.face(f).name.0).collect();
+        names.sort_unstable();
+        (names, v, vol)
+    }
+
+    #[test]
+    fn a_derived_sketch_builds_the_same_part_to_the_bit() {
+        let (mut bad, mut good, mut done_all, mut left_all) = (Vec::new(), 0, 0, 0);
+        for (name, src) in parts() {
+            let mut a = forge_agent::model::Model::new(&src);
+            if a.error.is_some() {
+                continue;
+            }
+            let (part, done, left, failed) = with_sketches(&src);
+            done_all += done;
+            left_all += left;
+            if let Some(why) = failed {
+                bad.push(format!("{name}: {why}"));
+                continue;
+            }
+            if done == 0 {
+                continue;
+            }
+            let mut b = part.model;
+            let (x, y) = (shape(&mut a), shape(&mut b));
+            if x == y {
+                good += 1;
+            } else {
+                bad.push(format!(
+                    "{name}: faces {} vs {}, names same {}, volume {} vs {}, vertices same {}",
+                    x.0.len(),
+                    y.0.len(),
+                    x.0 == y.0,
+                    f64::from_bits(x.2),
+                    f64::from_bits(y.2),
+                    x.1 == y.1
+                ));
+            }
+        }
+        eprintln!("parts equal {good}; profiles derived {done_all}, left inline {left_all}");
+        assert!(done_all > 100, "{done_all}");
+        // which lines differ, one at a time
+        assert!(good > 5 && bad.is_empty(), "{}", bad.join("\n"));
+    }
+
+    #[test]
+    fn a_derived_sketch_is_fully_constrained() {
+        let num = |t: &str, _w: forge_doc::text::Want| -> Result<f64, String> {
+            t.parse::<f64>().map_err(|e| e.to_string())
+        };
+        for w in [
+            "rect -30 -20 60 40",
+            "circle 3 4 5",
+            "rect 0 0 50 40 circle 20 20 4",
+            "rrect 0 0 60 40 5",
+            "poly 0 0 30 0 40 20 0 25",
+        ] {
+            let words: Vec<&str> = w.split(' ').collect();
+            let (rows, _) = derive(&words).unwrap();
+            assert!(rows.last().unwrap().starts_with("ids "));
+            let toks: Vec<Vec<String>> = rows.iter().map(|r| forge_doc::text::tokens(r)).collect();
+            let s = forge_doc::sketch::build(forge_math::Frame::default(), toks, &num, None)
+                .unwrap_or_else(|e| panic!("{w}: {e}"));
+            assert_eq!(
+                forge_doc::sketch::freedom(&s).0,
+                0,
+                "{w}: {:?}",
+                forge_doc::sketch::freedom(&s).1
+            );
+        }
     }
 
     #[test]

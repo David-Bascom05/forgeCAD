@@ -52,6 +52,8 @@ pub enum Event<T> {
     Doc(DocState),
     /// Which feature made each face and each feature's number, once the part stands.
     Facts(Box<Facts>),
+    /// The plane a sketch's header reads as, or why it doesn't.
+    SketchPlane(String, Result<forge_math::Frame, String>),
 }
 
 /// What a UI needs of the part it can't ask the worker for: it parses `src` itself.
@@ -81,6 +83,8 @@ enum Job {
     /// A dialog's values, built and shown with nothing committed; a new one replaces it.
     Preview(u64, Vec<Call>),
     PreviewEnd,
+    /// The plane a sketch with this header would be on.
+    SketchPlane(String),
 }
 
 struct Slot<T> {
@@ -177,6 +181,11 @@ impl<T: Send + 'static> Live<T> {
         drop(s);
         self.shared.wake.notify_one();
         self.seq
+    }
+
+    /// Asks what plane a sketch with this header would be on: answered by `Event::SketchPlane`.
+    pub fn sketch_plane(&mut self, head: String) {
+        self.job(Job::SketchPlane(head));
     }
 
     pub fn preview_end(&mut self) {
@@ -343,6 +352,26 @@ fn run<T>(mut part: Part, mesher: &mut impl FnMut(&Body, Stage) -> T, shared: &S
                     say(Event::Frame(frame));
                     continue;
                 }
+                if let Job::SketchPlane(head) = j {
+                    let saved = part.model.save();
+                    let items = part.model.doc.read_items(&format!("sketch {head}\nend"));
+                    let id = items.first().map(|i| i.id);
+                    let tried = part.preview(vec![Call::Add { before: None, items }]);
+                    let got = tried.and_then(|()| {
+                        let k = part
+                            .model
+                            .lines
+                            .iter()
+                            .position(|l| Some(l.id) == id.map(|i| i.0));
+                        match k.and_then(|k| part.model.features.get(k)) {
+                            Some(forge_model::Feature::Sketch(s)) => Ok(s.plane),
+                            _ => Err("that isn't a plane".to_string()),
+                        }
+                    });
+                    part.model.restore(saved);
+                    say(Event::SketchPlane(head, got));
+                    continue;
+                }
                 if let Job::PreviewEnd = j {
                     if let Some(base) = before_preview.take() {
                         part.model.restore(base);
@@ -372,7 +401,9 @@ fn run<T>(mut part: Part, mesher: &mut impl FnMut(&Body, Stage) -> T, shared: &S
                     continue;
                 }
                 let d = match j {
-                    Job::Roll(_) | Job::Preview(..) | Job::PreviewEnd => unreachable!("taken above"),
+                    Job::Roll(_) | Job::Preview(..) | Job::PreviewEnd | Job::SketchPlane(_) => {
+                        unreachable!("taken above")
+                    }
                     Job::Commit(op) => part.drag_commit(op, last_good.take()),
                     Job::Cancel => {
                         last_good = None;

@@ -11,6 +11,8 @@ use crate::viewcube::{self, Hit, Place};
 use winit::event::{ElementState, MouseButton, MouseScrollDelta, WindowEvent};
 use winit::keyboard::{KeyCode, ModifiersState};
 
+/// The opening view, and Home's: the cube's front, right, top corner, dead on.
+pub const HOME_CORNER: [i8; 3] = [1, -1, 1];
 /// A press that moves less than this is a click (pixels).
 const CLICK_SLOP: f32 = 4.0;
 /// How long a view change animates (ms).
@@ -93,8 +95,8 @@ pub fn region_view(mut camera: Camera, region: [i8; 3]) -> Camera {
     camera.yaw = if flat > 0.0 {
         b.atan2(a)
     } else {
-        // straight up or down: squared to the nearest side
-        (camera.yaw / core::f32::consts::FRAC_PI_2).round() * core::f32::consts::FRAC_PI_2
+        // straight up or down: FRONT below TOP, and above BOTTOM, so their words read upright
+        -core::f32::consts::FRAC_PI_2
     };
     camera.roll = 0.0;
     camera
@@ -469,7 +471,7 @@ impl Nav {
         let (c, r) = scene.bounds();
         let to = self.home_view.unwrap_or_else(|| {
             let mut to = Camera::fit(c, r);
-            to.yaw = -35f32.to_radians();
+            to = region_view(to, HOME_CORNER);
             if self.camera.parallel {
                 to.set_parallel(true, r);
             }

@@ -96,6 +96,8 @@ impl Shell {
         let mut all_shown = None;
         let mut places: Vec<(String, Rect)> = Vec::new();
         let mut toggle_open = false;
+        let mut toggle_row: Option<ItemId> = None;
+        let mut child_edit: Option<super::Action> = None;
         let mut tree_hover = None;
         let mut menu = None;
         let mut moved = None;
@@ -213,6 +215,10 @@ impl Shell {
                     let mut end_resp = None;
                     let mut row_drag: Option<(usize, egui::Response)> = None;
                     for (k, row) in rows.iter().enumerate() {
+                        if row.tucked {
+                            tops.push(ui.cursor().top());
+                            continue;
+                        }
                         let why = (Some(k) == failed_at)
                             .then(|| failed.as_ref().map(|f| f.1.as_str()))
                             .flatten();
@@ -271,6 +277,23 @@ impl Shell {
                             }
                             typed_name = Some(text);
                         }
+                        if row.sketch.is_some() {
+                            let open = self.open_rows.contains(&row.id);
+                            let chev = Rect::from_min_size(pos2(r.left(), r.top() + 4.0), vec2(16.0, 18.0));
+                            let c = ui.interact(chev, ui.scope_id().with(("chev", k)), Sense::click());
+                            icons::draw(
+                                ui.painter(),
+                                pos2(r.left() + 2.0, r.top() + 7.0),
+                                12.0,
+                                if open { "chevron" } else { "right" },
+                                1.5,
+                                t.ink2,
+                            );
+                            places.push((format!("tree:{}:open", row.name), chev));
+                            if c.clicked() {
+                                toggle_row = Some(row.id);
+                            }
+                        }
                         if why.is_some() {
                             icons::draw(
                                 ui.painter(),
@@ -301,6 +324,40 @@ impl Shell {
                             row_drag = Some((k, resp.clone()));
                         }
                         places.push((format!("tree:{}", row.name), r));
+                        if self.open_rows.contains(&row.id)
+                            && let Some(child) = &row.sketch
+                        {
+                            let (title, on) = match child {
+                                super::SketchChild::Line(id, title) => {
+                                    (title.as_str(), self.selected == Some(*id))
+                                }
+                                super::SketchChild::Inline(_, title) => (title.as_str(), false),
+                            };
+                            let (r, resp) = self.tree_row(
+                                ui,
+                                w,
+                                RowLook {
+                                    label: title,
+                                    icon: "sketch",
+                                    tint: None,
+                                    on,
+                                    dim: false,
+                                    depth: 1.5,
+                                },
+                            );
+                            places.push((format!("tree:{}:sketch", row.name), r));
+                            let edit = match child {
+                                super::SketchChild::Line(id, _) => super::Action::Edit(*id),
+                                super::SketchChild::Inline(..) => super::Action::EditInline(row.id),
+                            };
+                            if resp.double_clicked() || resp.secondary_clicked() {
+                                child_edit = Some(edit);
+                            } else if resp.clicked()
+                                && let super::SketchChild::Line(id, _) = child
+                            {
+                                chosen = Some(Some(*id));
+                            }
+                        }
                         if end_row == Some(k) {
                             end_resp = Some(end_mark(ui, &mut places));
                         }
@@ -345,6 +402,12 @@ impl Shell {
         self.rows = rows;
         self.places.extend(places);
         self.tree_hover = tree_hover;
+        if let Some(id) = toggle_row
+            && !self.open_rows.remove(&id)
+        {
+            self.open_rows.insert(id);
+        }
+        self.out.extend(child_edit);
         if let Some(m) = menu {
             self.row_menu = Some(m);
         }
@@ -397,7 +460,8 @@ impl Shell {
                 let strong = self.origin_hover == Some(i)
                     || self.origin_tree_hover == Some(i)
                     || self.origin_selected == Some(i);
-                (self.origin_shown[k] || strong).then_some((i, strong))
+                // the planes show while one's being picked to sketch on
+                (self.origin_shown[k] || (self.sketch_pick && k < 3) || strong).then_some((i, strong))
             })
             .collect()
     }

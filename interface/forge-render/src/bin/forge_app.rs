@@ -3,7 +3,7 @@
 use forge_render::gui::Headless;
 
 const USAGE: &str = "forge-app [PART | file.fc] [--size WxH] [--times]
-  [--shot FILE.ppm [--scale S] [--light] [--tab N] [--select NAME] [--click NAME].. [--at X Y]]
+  [--shot FILE.ppm [--scale S] [--light] [--tab N] [--select NAME] [--click NAME].. [--at X Y] [--sketch ROW;ROW..] [--view YAW PITCH]]
   [--bench]
 PART: a bench part or a .fc file. --times: input-to-present on exit. --shot: one frame, no window.
 --bench: what clicks and frames cost, no window.";
@@ -18,6 +18,8 @@ struct Args {
     select: Option<String>,
     clicks: Vec<String>,
     at: Option<(f32, f32)>,
+    sketch: Option<String>,
+    view: Option<(f32, f32)>,
     bench: bool,
     times: bool,
 }
@@ -33,6 +35,8 @@ fn args() -> Result<Args, String> {
         select: None,
         clicks: Vec::new(),
         at: None,
+        sketch: None,
+        view: None,
         bench: false,
         times: false,
     };
@@ -55,6 +59,13 @@ fn args() -> Result<Args, String> {
                 let x = v()?.parse().map_err(|_| USAGE)?;
                 let mut v = || it.next().ok_or(format!("{k} takes X Y\n{USAGE}"));
                 a.at = Some((x, v()?.parse().map_err(|_| USAGE)?));
+            }
+            "--sketch" => a.sketch = Some(v()?),
+            "--view" => {
+                let y: f32 = v()?.parse().map_err(|_| USAGE)?;
+                let mut v = || it.next().ok_or(format!("{k} takes YAW PITCH\n{USAGE}"));
+                let p: f32 = v()?.parse().map_err(|_| USAGE)?;
+                a.view = Some((y.to_radians(), p.to_radians()));
             }
             "--bench" => a.bench = true,
             "--times" => a.times = true,
@@ -213,6 +224,28 @@ fn run() -> Result<(), String> {
     h.step();
     for _ in 0..3 {
         h.step();
+    }
+    if let (Some((yaw, pitch)), Some(v)) = (a.view, &mut h.gui.view) {
+        v.nav.camera.yaw = yaw;
+        v.nav.camera.pitch = pitch;
+        v.mark_dirty();
+        h.step();
+        h.step();
+    }
+    if let Some(rows) = &a.sketch {
+        // on the XY plane, with these rows
+        h.gui.shell.origin_selected = Some(forge_render::origin::Item::XyPlane);
+        h.gui.shell.out.push(forge_render::shell::Action::StartSketch);
+        h.until(|g| g.shell.sketch.is_some());
+        if let Some(m) = &mut h.gui.shell.sketch {
+            for r in rows.split(';') {
+                m.add(r.trim().to_string());
+            }
+        }
+        for _ in 0..40 {
+            h.step();
+            std::thread::sleep(std::time::Duration::from_millis(10));
+        }
     }
     if let Some((x, y)) = a.at {
         h.move_to(x, y);

@@ -40,6 +40,7 @@ plate: sketch xy            sketch FRAME | sketch on REF (a planar face); rows t
 end
 extrude 6 plate             its one region; `plate E`: the region E bounds outside
 hole 3 on plate p1 thru     FRAME on a sketch's plane (-on: flipped), at its point
+`ids NAME N ..` keeps those entities' segment ids (so their faces' names) through later edits.
 Rows: `pt P` `line P P` `poly P P.. [open]` `rect X Y W H` `circle P R` `arc C S E [cw]` (+`cons`:
 construction). P: `X Y` or `p1`, `l2.a`|`.b`, `c1` (centre), `o`. Entities count by kind: p l c a.
 A row the rows above imply is an error; `ref dist l1` (no value) is driven. `query F check` shows

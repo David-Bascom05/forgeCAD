@@ -8,6 +8,7 @@ pub mod dim;
 pub mod icons;
 pub mod panel;
 mod ribbon;
+pub mod sketching;
 pub mod theme;
 mod tree;
 
@@ -15,7 +16,7 @@ pub use crate::nav::NavTool;
 use crate::render::LineMode;
 use egui::{Align2, Color32, CornerRadius, Rect, Sense, Stroke, StrokeKind, Ui, pos2, vec2};
 use forge_doc::{Body, Document, ItemId};
-use theme::{Theme, mono, sans, semi};
+use theme::{Theme, medium, mono, sans, semi};
 
 pub const TABS: [&str; 5] = ["3D Model", "Sketch", "Inspect", "View", "Manage"];
 
@@ -63,6 +64,13 @@ pub enum Action {
     Close,
     DragWindow,
     ResizeWindow(Edge),
+    /// Start Sketch: on what's chosen, or wait for a plane or a planar face to be picked.
+    StartSketch,
+    SketchTool(sketching::SkTool),
+    /// A feature's inline profile, in sketch mode.
+    EditInline(ItemId),
+    FinishSketch,
+    CancelSketch,
     /// A ribbon button: a dialog for a new feature of this kind.
     NewFeature(&'static str),
     /// A dialog ended: OK, or Cancel.
@@ -97,6 +105,18 @@ pub struct Row {
     pub line: String,
     /// Out of the build, kept as a comment.
     pub suppressed: bool,
+    /// What it's made from: its sketch, shown under it.
+    pub sketch: Option<SketchChild>,
+    /// A sketch that feature rows carry: not shown at the top.
+    pub tucked: bool,
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub enum SketchChild {
+    /// A `sketch` line, with its title.
+    Line(ItemId, String),
+    /// The profile's in the feature's own line.
+    Inline(panel::InlineProfile, String),
 }
 
 /// What the view shows, for the buttons that reflect it.
@@ -143,6 +163,7 @@ pub struct Shell {
     pub view_tex: Option<egui::TextureId>,
     /// The view cube's words, in the view's device pixels: real type over its picture.
     pub cube_labels: Vec<crate::viewcube::Label>,
+    pub cube_place: Option<crate::viewcube::Place>,
     /// The view's camera and its size in device pixels, for what's drawn on the model.
     pub camera: Option<(crate::camera::Camera, (u32, u32))>,
     /// The Origin folder's open; which of its items are always shown; which is hovered or selected.
@@ -162,6 +183,14 @@ pub struct Shell {
     pub row_menu: Option<(ItemId, egui::Pos2)>,
     /// The marking menu's up, centred here.
     pub marking: Option<egui::Pos2>,
+    /// Sketch mode.
+    pub sketch: Option<sketching::SketchMode>,
+    /// Waiting for a plane or a face to sketch on.
+    pub sketch_pick: bool,
+    /// Feature rows opened to show their sketch.
+    pub open_rows: std::collections::HashSet<ItemId>,
+    /// A new feature waiting for the sketch being drawn.
+    pub then_feature: Option<&'static str>,
     /// The feature dialog that's up.
     pub dialog: Option<dialog::Dialog>,
     /// The selected feature's number, on the model.
@@ -193,7 +222,12 @@ impl Default for Shell {
             cube_menu: None,
             view_tex: None,
             cube_labels: Vec::new(),
+            cube_place: None,
             camera: None,
+            sketch: None,
+            sketch_pick: false,
+            open_rows: Default::default(),
+            then_feature: None,
             tree_hover: None,
             end_at: None,
             renaming: None,
@@ -220,6 +254,16 @@ impl Shell {
     pub fn set_doc(&mut self, src: &str, version: u64, failed: Option<(u64, String)>) {
         let doc = Document::parse(src);
         let mut counts: std::collections::HashMap<String, usize> = std::collections::HashMap::new();
+        let sketch_names: Vec<(ItemId, String)> = doc
+            .items
+            .iter()
+            .filter(|i| matches!(i.body, Body::Sketch { .. }))
+            .filter_map(|i| Some((i.id, doc.name(i.id)?)))
+            .collect();
+        // who uses each sketch
+        let uses = |it: &forge_doc::Item, id: ItemId, name: &str| {
+            it.id != id && it.args().iter().any(|a| a.to == Some(id) || a.text == name)
+        };
         self.rows = doc
             .items
             .iter()
@@ -247,6 +291,24 @@ impl Shell {
                 *count += 1;
                 let title = forge_agent::tools::display_name(note)
                     .map_or_else(|| format!("{word}{count}"), str::to_string);
+                let n_users = |id: ItemId, name: &str| {
+                    doc.items
+                        .iter()
+                        .filter(|o| matches!(o.body, Body::Feature { .. }) && uses(o, id, name))
+                        .count()
+                };
+                let tucked = matches!(it.body, Body::Sketch { .. })
+                    && sketch_names
+                        .iter()
+                        .any(|(id, n)| *id == it.id && n_users(*id, n) == 1);
+                let used = sketch_names.iter().find(|(id, n)| uses(it, *id, n)).cloned();
+                let inline = match &it.body {
+                    Body::Feature { kind, args } => {
+                        let words: Vec<&str> = args.iter().map(|a| a.text.as_str()).collect();
+                        panel::inline_profile(kind, &words)
+                    }
+                    _ => None,
+                };
                 Some(Row {
                     id: it.id,
                     title,
@@ -255,9 +317,33 @@ impl Shell {
                     icon: panel::icon(&kind),
                     kind,
                     suppressed,
+                    sketch: match (used, inline) {
+                        (Some((id, _)), _) => Some(SketchChild::Line(id, String::new())),
+                        (None, Some(p)) => Some(SketchChild::Inline(p, String::new())),
+                        _ => None,
+                    },
+                    tucked,
                 })
             })
             .collect();
+        // a child's title is its sketch's, in the count the tree shows
+        let mut inline_count = self.rows.iter().filter(|r| r.kind == "sketch").count();
+        let titles: Vec<(ItemId, String)> = self.rows.iter().map(|r| (r.id, r.title.clone())).collect();
+        for r in &mut self.rows {
+            match &mut r.sketch {
+                Some(SketchChild::Line(id, title)) => {
+                    *title = titles
+                        .iter()
+                        .find(|t| t.0 == *id)
+                        .map_or(String::new(), |t| t.1.clone());
+                }
+                Some(SketchChild::Inline(_, title)) => {
+                    inline_count += 1;
+                    *title = format!("Sketch{inline_count}");
+                }
+                None => {}
+            }
+        }
         self.failed = failed.map(|(id, why)| (ItemId(id), why));
         if self
             .selected
@@ -352,25 +438,54 @@ impl Shell {
         self.navbar(&ctx);
         self.dim_ui(&ctx);
         self.dialog_ui(&ctx);
+        self.sketch_ui(&ctx);
         self.resize_edges(ui, s);
         self.menus(&ctx);
     }
 
+    /// The cube's words, painted on its faces: each glyph's corners go through the face's own
+    /// projection, so a word foreshortens with its face.
     fn cube_words(&self, ui: &mut Ui, ppp: f32) {
         let t = self.theme;
+        let (Some((camera, _)), Some(place)) = (self.camera, self.cube_place) else {
+            return;
+        };
+        // type sharper than it shows, as the atlas holds it; the word's em is fixed on the face
+        let em_pt = crate::viewcube::LABEL_EM * crate::viewcube::half_side_px(&place) / ppp;
+        let size = (em_pt * 2.0).round().max(8.0);
+        let per = crate::viewcube::LABEL_EM / size;
+        let atlas = ui.fonts_mut(|f| f.font_image_size());
+        let (uw, uh) = (atlas[0] as f32, atlas[1] as f32);
         for l in &self.cube_labels {
             if l.alpha <= 0.0 {
                 continue;
             }
             let ink = if l.hovered { t.on_ink } else { t.ink };
-            let g = ui.fonts_mut(|f| f.layout_no_wrap(l.text.to_string(), semi(l.size), ink));
-            // the text's top left turns about itself: its middle lands on the point
-            let (half, turn) = (g.size() * 0.5, egui::emath::Rot2::from_angle(l.angle));
-            let at = self.view_rect.min + vec2(l.at[0], l.at[1]) / ppp - turn * half;
-            let shape = egui::epaint::TextShape::new(at, g, ink)
-                .with_angle(l.angle)
-                .with_opacity_factor(l.alpha);
-            ui.painter().add(shape);
+            let g = ui.fonts_mut(|f| f.layout_no_wrap(l.text.to_string(), medium(size), ink));
+            let mid = g.mesh_bounds.center();
+            let colour = ink.gamma_multiply(l.alpha);
+            let mut mesh = egui::Mesh::with_texture(egui::TextureId::default());
+            for placed in &g.rows {
+                let m = &placed.row.visuals.mesh;
+                let base = mesh.vertices.len() as u32;
+                for v in &m.vertices {
+                    let p = v.pos + placed.pos.to_vec2();
+                    let px = crate::viewcube::on_face(
+                        &camera,
+                        &place,
+                        l,
+                        (p.x - mid.x) * per,
+                        (mid.y - p.y) * per,
+                    );
+                    mesh.vertices.push(egui::epaint::Vertex {
+                        pos: self.view_rect.min + vec2(px[0], px[1]) / ppp,
+                        uv: pos2(v.uv.x / uw, v.uv.y / uh),
+                        color: colour,
+                    });
+                }
+                mesh.indices.extend(m.indices.iter().map(|i| i + base));
+            }
+            ui.painter().add(egui::Shape::mesh(mesh));
         }
     }
 
@@ -589,7 +704,11 @@ impl Shell {
                 let words: Vec<&str> = args.iter().map(|a| a.text.as_str()).collect();
                 panel::fields(kind, &words)
             }
-            Body::Sketch { rows, .. } => rows.iter().filter_map(|r| panel::sketch_row(&r.args)).collect(),
+            Body::Sketch { rows, .. } => rows
+                .iter()
+                .filter(|r| r.args.first().is_none_or(|w| w != "ids"))
+                .filter_map(|r| panel::sketch_row(&r.args))
+                .collect(),
             _ => Vec::new(),
         }
     }
@@ -832,6 +951,9 @@ impl Shell {
                 let mid = whole.center();
                 ui.painter().circle_stroke(mid, 6.0, Stroke::new(1.5, t.ink2));
                 for (k, (label, action)) in items.iter().enumerate() {
+                    if label.is_empty() {
+                        continue;
+                    }
                     let a = k as f32 * core::f32::consts::FRAC_PI_4;
                     let at = mid + vec2(a.sin() * 130.0, -a.cos() * 80.0);
                     let r = Rect::from_center_size(at, vec2(112.0, 26.0));

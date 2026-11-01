@@ -791,6 +791,8 @@ dependencies = [
  "forge-geom",
  "forge-math",
  "forge-mesh",
+ "forge-model",
+ "forge-sketch",
  "forge-topo",
  "js-sys",
  "rfd",

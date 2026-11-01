@@ -1,6 +1,7 @@
 //! The ribbon's tabs, groups and buttons. A button with no action is drawn disabled: there are no
 //! buttons that pretend.
 
+use super::sketching::SkTool;
 use super::theme::sans;
 use super::{Action, RIBBON_H, Shell, TABS_H, TITLE_H, icons};
 use crate::render::LineMode;
@@ -46,7 +47,11 @@ fn groups(s: &Shell) -> Vec<Group> {
     let v = s.view;
     match s.tab {
         0 => vec![
-            g("Sketch", vec![off("Start Sketch", "sketch")], vec![]),
+            g(
+                "Sketch",
+                vec![go("Start Sketch", "sketch", Action::StartSketch, s.sketch_pick)],
+                vec![],
+            ),
             g(
                 "Create",
                 vec![
@@ -85,38 +90,56 @@ fn groups(s: &Shell) -> Vec<Group> {
                 vec![off("Circular", "circular"), off("Mirror", "mirror")],
             ),
         ],
-        1 => vec![
-            g(
-                "Create",
-                vec![
-                    off("Line", "line"),
-                    off("Circle", "circle"),
-                    off("Arc", "arc"),
-                    off("Rectangle", "rectangle"),
-                ],
-                vec![off("Spline", "spline"), off("Point", "point")],
-            ),
-            g(
-                "Modify",
-                vec![],
-                vec![
-                    off("Trim", "trim"),
-                    off("Offset", "offset"),
-                    off("Mirror", "mirror"),
-                ],
-            ),
-            g(
-                "Constrain",
-                vec![off("Dimension", "dim")],
-                vec![
-                    off("Coincident", "coincident"),
-                    off("Parallel", "parallel"),
-                    off("Perpendicular", "perp"),
-                    off("Tangent", "tangent"),
-                ],
-            ),
-            g("Exit", vec![off("Finish Sketch", "finish")], vec![]),
-        ],
+        1 => {
+            let on = s.sketch.as_ref().and_then(|m| m.tool);
+            let t = |name, icon, tool: SkTool| Tool {
+                name,
+                icon,
+                action: s.sketch_tool(tool),
+                on: on == Some(tool),
+            };
+            vec![
+                g(
+                    "Create",
+                    vec![
+                        t("Line", "line", SkTool::Line),
+                        t("Circle", "circle", SkTool::Circle),
+                        t("Arc", "arc", SkTool::Arc),
+                        t("Rectangle", "rectangle", SkTool::Rectangle),
+                    ],
+                    vec![off("Spline", "spline"), t("Point", "point", SkTool::Point)],
+                ),
+                g(
+                    "Modify",
+                    vec![],
+                    vec![
+                        off("Trim", "trim"),
+                        off("Offset", "offset"),
+                        off("Mirror", "mirror"),
+                    ],
+                ),
+                g(
+                    "Constrain",
+                    vec![t("Dimension", "dim", SkTool::Dimension)],
+                    vec![
+                        t("Coincident", "coincident", SkTool::Coincident),
+                        t("Parallel", "parallel", SkTool::Parallel),
+                        t("Perpendicular", "perp", SkTool::Perpendicular),
+                        t("Tangent", "tangent", SkTool::Tangent),
+                    ],
+                ),
+                g(
+                    "Exit",
+                    vec![Tool {
+                        name: "Finish Sketch",
+                        icon: "finish",
+                        action: s.sketch.as_ref().map(|_| Action::FinishSketch),
+                        on: false,
+                    }],
+                    vec![],
+                ),
+            ]
+        }
         2 => vec![
             g(
                 "Measure",

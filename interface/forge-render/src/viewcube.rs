@@ -379,63 +379,49 @@ const LABELS: [FaceWord; 6] = [
     ("LEFT", [-1.0, 0.0, 0.0], [0.0, -1.0, 0.0], [0.0, 0.0, 1.0]),
 ];
 
-/// A word to set on the widget, in real type by whoever draws text. Pixels, radians clockwise.
+/// A face's word: painted on the face, in real type, by whoever draws text, through `on_face`.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct Label {
     pub text: &'static str,
-    pub at: [f32; 2],
-    pub angle: f32,
-    /// CSS pixels.
-    pub size: f32,
+    /// The face's middle and normal, and which way the word runs and stands on it.
+    pub n: [f32; 3],
+    pub x: [f32; 3],
+    pub y: [f32; 3],
     pub alpha: f32,
     pub hovered: bool,
 }
 
-/// How big face labels are at most, and where they're too small to read (CSS px).
-const LABEL_PX: f32 = 10.0;
-const LABEL_MIN: f32 = 6.0;
-const LABEL_FULL: f32 = 8.0;
-/// A capital's width and height in ems, near enough to fit a word to its face.
-const EM_WIDE: f32 = 0.72;
-const EM_TALL: f32 = 0.72;
+/// A word's em on its face, in cube half sides: the same on every face, so BOTTOM just fits.
+pub const LABEL_EM: f32 = 0.3;
+/// How square-on a face must be for its word to start showing, and to show in full.
+const LABEL_FADE: (f32, f32) = (0.22, 0.42);
 
-/// The words on the widget. A face's word runs along that face's own edge, so it turns with the
-/// cube, and always reads left to right; it's never squashed: it shrinks to fit what's visible of
-/// its face, and fades out only when that's too small to read.
+/// The words on the cube, each a part of its face.
 pub fn labels(camera: &Camera, place: &Place, hover: Option<Hit>) -> Vec<Label> {
     let eye = Eye::new(camera, place);
-    let mut out = Vec::with_capacity(10);
-    let reach = 1.0 - CHAMFER;
-    for (word, n, x, y) in LABELS {
-        if !eye.sees(n, n) {
-            continue;
-        }
-        let mid = eye.px(n);
-        let along = |d: [f32; 3], s: f32| eye.px([0, 1, 2].map(|k| n[k] + d[k] * s));
-        let (x0, x1) = (along(x, -reach), along(x, reach));
-        let (y0, y1) = (along(y, -reach), along(y, reach));
-        let wide = (x1[0] - x0[0]).hypot(x1[1] - x0[1]) / place.scale;
-        let tall = (y1[0] - y0[0]).hypot(y1[1] - y0[1]) / place.scale;
-        let letters = word.len() as f32;
-        let size = LABEL_PX
-            .min(wide * 0.92 / (letters * EM_WIDE))
-            .min(tall * 0.8 / EM_TALL);
-        let mut angle = (x1[1] - x0[1]).atan2(x1[0] - x0[0]);
-        if angle > core::f32::consts::FRAC_PI_2 + 0.02 {
-            angle -= core::f32::consts::PI;
-        } else if angle < -core::f32::consts::FRAC_PI_2 - 0.02 {
-            angle += core::f32::consts::PI;
-        }
-        out.push(Label {
-            text: word,
-            at: mid,
-            angle,
-            size: size.max(LABEL_MIN),
-            alpha: ((size - LABEL_MIN) / (LABEL_FULL - LABEL_MIN)).clamp(0.0, 1.0),
+    LABELS
+        .into_iter()
+        .filter(|(_, n, _, _)| eye.sees(*n, *n))
+        .map(|(text, n, x, y)| Label {
+            text,
+            n,
+            x,
+            y,
+            alpha: ((-dot(n, eye.f) - LABEL_FADE.0) / (LABEL_FADE.1 - LABEL_FADE.0)).clamp(0.0, 1.0),
             hovered: hover == Some(Hit::Region(round(n))),
-        });
-    }
-    out
+        })
+        .collect()
+}
+
+/// A place on a word's face, `a` along it and `b` up it in cube half sides from its middle, in the
+/// widget's own projection: pixels, as the face itself is drawn.
+pub fn on_face(camera: &Camera, place: &Place, l: &Label, a: f32, b: f32) -> [f32; 2] {
+    Eye::new(camera, place).px([0, 1, 2].map(|k| l.n[k] + l.x[k] * a + l.y[k] * b))
+}
+
+/// Pixels of cube half side at the middle: what a word's type is sized from.
+pub fn half_side_px(place: &Place) -> f32 {
+    place.side * 0.5 * SCALE
 }
 
 /// The widget's triangles, for this camera, into `out`. A few thousand at most.
@@ -665,6 +651,43 @@ mod tests {
                     let r = (w[0] - e.centre.0).hypot(w[1] - e.centre.1) / half;
                     assert!(r < RING_IN, "{r}");
                 }
+            }
+        }
+    }
+
+    #[test]
+    fn a_word_is_on_its_face_and_fades_as_the_face_turns_edge_on() {
+        let p = place();
+        // straight on: the word lies square, in full
+        let front = crate::nav::region_view(cam(0.3, 0.2), [0, -1, 0]);
+        let ls = labels(&front, &p, None);
+        let l = ls.iter().find(|l| l.text == "FRONT").unwrap();
+        assert_eq!(l.alpha, 1.0);
+        let (u, v) = (
+            on_face(&front, &p, l, -0.5, 0.0),
+            on_face(&front, &p, l, 0.5, 0.0),
+        );
+        assert!(
+            (u[1] - v[1]).abs() < 1e-3 && v[0] > u[0],
+            "left to right, level: {u:?} {v:?}"
+        );
+        // from a corner, all three read, foreshortened alike
+        let corner = crate::nav::region_view(cam(0.3, 0.2), [1, -1, 1]);
+        let ls = labels(&corner, &p, None);
+        assert_eq!(ls.len(), 3);
+        assert!(ls.iter().all(|l| l.alpha == 1.0), "{ls:?}");
+        // turned near edge-on, it's gone rather than a smear
+        let grazing = cam(-core::f32::consts::FRAC_PI_2 + 1.45, 0.0);
+        let f = labels(&grazing, &p, None).into_iter().find(|l| l.text == "FRONT");
+        assert!(f.is_none_or(|l| l.alpha == 0.0), "{f:?}");
+        // and from every view some word reads in full
+        for yaw in (0..40).map(|k| k as f32 * 0.157) {
+            for pitch in (-8..=8).map(|k| k as f32 * 0.196) {
+                let c = cam(yaw, pitch);
+                assert!(
+                    labels(&c, &p, None).iter().any(|l| l.alpha >= 1.0),
+                    "{yaw} {pitch}"
+                );
             }
         }
     }

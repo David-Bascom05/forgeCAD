@@ -27,6 +27,9 @@ egui = { version = "=0.37.0", default-features = false }
 egui-wgpu = { version = "=0.37.0", default-features = false }
 forge-doc = { path = "../forge-doc" }
 forge-agent = { path = "../forge-agent" }
+forge-math = { path = "../../kernel/forge-math" }
+forge-model = { path = "../../kernel/forge-model" }
+forge-sketch = { path = "../../kernel/forge-sketch" }
 
 # the kernel builds meshes natively; the browser loads them (see README)
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
@@ -34,7 +37,6 @@ rfd = { version = "=0.17.2", default-features = false, features = ["xdg-portal",
 egui-winit = { version = "=0.37.0", default-features = false, features = ["wayland", "x11", "smithay-clipboard"] }
 forge-mesh = { path = "../../kernel/forge-mesh" }
 forge-geom = { path = "../../kernel/forge-geom" }
-forge-math = { path = "../../kernel/forge-math" }
 forge-topo = { path = "../../kernel/forge-topo" }
 
 # already in wgpu's tree on this target: only the entry point names them

@@ -67,6 +67,13 @@ impl Dialog {
         }
     }
 
+    /// It reads this sketch, with no plane or profile of its own.
+    pub fn on_sketch(&mut self, name: &str) {
+        self.fields
+            .retain(|f| f.0 != "Plane" && f.0 != "Profile" && f.0 != "Axis");
+        self.fields.push(("Profile".to_string(), name.to_string()));
+    }
+
     /// The feature's line, from its fields.
     pub fn line(&self) -> String {
         let mut out = self.kind.clone();
@@ -85,6 +92,17 @@ impl Dialog {
         self.pick
             .as_ref()
             .is_some_and(|(l, _)| self.fields.iter().any(|f| f.0 == *l && f.1.trim().is_empty()))
+    }
+
+    /// The feature's profile as a person reads it: its sketch's dimensions, if it's written inline.
+    pub fn sketch_dims(&self) -> Vec<panel::Shown> {
+        let words: Vec<String> = self
+            .fields
+            .iter()
+            .flat_map(|f| f.1.split_whitespace().map(str::to_string))
+            .collect();
+        let words: Vec<&str> = words.iter().map(String::as_str).collect();
+        panel::inline_profile(&self.kind, &words).map_or(Vec::new(), |p| p.shown)
     }
 
     /// What's selected in the view, as the part file names it, goes to the field taking picks.
@@ -107,6 +125,7 @@ impl Shell {
             .inner_margin(10);
         let v = self.view_rect;
         let mut out = None;
+        let mut edit_sketch = false;
         let shown = egui::Window::new(egui::RichText::new(d.title.clone()).font(semi(13.0)))
             .id(egui::Id::unique("feature-dialog"))
             .collapsible(false)
@@ -132,6 +151,7 @@ impl Shell {
                             }
                         }
                         let pick = d.pick.clone();
+                        let dims = d.sketch_dims();
                         for (k, s) in sections.into_iter().enumerate() {
                             egui::CollapsingHeader::new(
                                 egui::RichText::new(s).font(semi(12.0)).color(t.ink2),
@@ -141,6 +161,62 @@ impl Shell {
                             .show_unindented(ui, |ui| {
                                 for (label, text) in d.fields.iter_mut().filter(|f| panel::section(&f.0) == s)
                                 {
+                                    // a profile shows as its sketch, references as a count: never as text
+                                    if label == "Profile" && !dims.is_empty() {
+                                        for (name, value) in &dims {
+                                            let w = ui.available_width();
+                                            let (row, _) =
+                                                ui.allocate_exact_size(vec2(w, 24.0), Sense::hover());
+                                            let (mid, left) = (row.center().y, row.left());
+                                            let p = ui.painter();
+                                            p.text(
+                                                pos2(left, mid),
+                                                Align2::LEFT_CENTER,
+                                                name,
+                                                sans(12.0),
+                                                t.ink2,
+                                            );
+                                            p.text(
+                                                pos2(left + 88.0, mid),
+                                                Align2::LEFT_CENTER,
+                                                value,
+                                                mono(12.0),
+                                                t.ink,
+                                            );
+                                        }
+                                        if ui.button("Edit Sketch").clicked() {
+                                            edit_sketch = true;
+                                        }
+                                        continue;
+                                    }
+                                    if matches!(
+                                        label.as_str(),
+                                        "Edges" | "Faces" | "Reference" | "Features" | "Bodies"
+                                    ) && !text.trim().is_empty()
+                                    {
+                                        let n = forge_doc::text::tokens(text).len();
+                                        let w = ui.available_width();
+                                        let (row, resp) =
+                                            ui.allocate_exact_size(vec2(w, 28.0), Sense::hover());
+                                        let _ = resp.on_hover_text(text.as_str());
+                                        let (mid, left) = (row.center().y, row.left());
+                                        let p = ui.painter();
+                                        p.text(
+                                            pos2(left, mid),
+                                            Align2::LEFT_CENTER,
+                                            label.as_str(),
+                                            sans(12.0),
+                                            t.ink2,
+                                        );
+                                        p.text(
+                                            pos2(left + 88.0, mid),
+                                            Align2::LEFT_CENTER,
+                                            format!("{n} selected"),
+                                            sans(12.0),
+                                            t.ink,
+                                        );
+                                        continue;
+                                    }
                                     let w = ui.available_width();
                                     let (row, _) = ui.allocate_exact_size(vec2(w, 32.0), Sense::hover());
                                     ui.painter().text(
@@ -211,6 +287,10 @@ impl Shell {
         }
         if ctx.input(|i| i.key_pressed(egui::Key::Escape)) {
             out = Some(Action::DialogCancel);
+        }
+        if edit_sketch && let DialogTarget::Edit(id) = d.target {
+            out = Some(Action::DialogCancel);
+            self.out.push(Action::EditInline(id));
         }
         self.dialog = Some(d);
         self.out.extend(out);

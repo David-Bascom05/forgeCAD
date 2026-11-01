@@ -14,6 +14,9 @@ use winit::event_loop::{ActiveEventLoop, ControlFlow, EventLoop, EventLoopProxy}
 use winit::keyboard::{KeyCode, ModifiersState, PhysicalKey};
 use winit::window::{ResizeDirection, Window, WindowId};
 
+/// `--times` says what a frame longer than this spent (ms).
+const SLOW_MS: f64 = 16.0;
+
 struct Live {
     window: Arc<Window>,
     surface: wgpu::Surface<'static>,
@@ -54,6 +57,7 @@ impl App {
     fn draw(&mut self, on_loop: &ActiveEventLoop) {
         let Some(l) = &mut self.live else { return };
         use wgpu::CurrentSurfaceTexture as T;
+        let began = now_ms();
         let frame = match l.surface.get_current_texture() {
             T::Success(f) | T::Suboptimal(f) => f,
             T::Outdated | T::Lost => {
@@ -64,14 +68,30 @@ impl App {
             }
             _ => return,
         };
+        let acquired = now_ms();
         let view = frame.texture.create_view(&Default::default());
         let raw = l.egui.take_egui_input(&l.window);
         let out = l.gui.frame(raw, &view, (l.config.width, l.config.height));
         l.egui.handle_platform_output(&l.window, out.platform);
         l.window.pre_present_notify();
         l.gui.queue().present(frame);
+        let done = now_ms();
         if let Some(at) = l.input_at.take() {
-            l.click_ms.push(now_ms() - at);
+            l.click_ms.push(done - at);
+        }
+        if self.times && done - began > SLOW_MS {
+            let t = out.times;
+            eprintln!(
+                "forge-app: slow frame {:.1} ms: acquire {:.1}, ui {:.1}, view {:.1} (drawn {}), tessellate {:.1}, draw {:.1}, present {:.1}",
+                done - began,
+                acquired - began,
+                t.ui,
+                t.view,
+                t.view_drawn,
+                t.tess,
+                t.draw,
+                done - acquired - t.ui - t.view - t.tess - t.draw
+            );
         }
         self.next = None;
         match out.again_in {
@@ -280,6 +300,25 @@ impl ApplicationHandler for App {
                     at(1.0)
                 );
             }
+        }
+        // while the display connection is still open: what holds it goes first (the clipboard), then
+        // the worker and the GPU's work, then the swapchain, and the window last. After this the
+        // event loop drops its connection with nothing left to use it.
+        if let Some(l) = self.live.take() {
+            let Live {
+                window,
+                surface,
+                gui,
+                egui,
+                ..
+            } = l;
+            drop(egui);
+            let device = gui.device();
+            let _ = device.poll(wgpu::PollType::wait_indefinitely());
+            drop(surface);
+            drop(gui);
+            drop(device);
+            drop(window);
         }
     }
 }

@@ -30,6 +30,7 @@ pub fn build(plane: Frame, rows: Vec<Vec<String>>, num: &Num, was: Option<&Sketc
     for (k, row) in rows.iter().enumerate() {
         b.row(k, row).map_err(|e| format!("`{}`: {e}", row.join(" ")))?;
     }
+    ids_of_rows(&rows)?;
     let written = b.s.params().to_vec();
     if b.s.solve_after(was.map(|w| &w.solved)).status != Status::Solved {
         let a = b.s.analyze();
@@ -118,9 +119,10 @@ fn values_only(plane: Frame, rows: &[Vec<String>], num: &Num, was: &Sketch) -> O
         return None;
     }
     // every token but a dimension's value is a number, a name or a word, as before
-    const WORDS: [&str; 27] = [
-        "pt", "line", "poly", "rect", "circle", "arc", "fix", "co", "hor", "ver", "par", "perp", "tan", "eq",
-        "conc", "mid", "sym", "dist", "hdist", "vdist", "rad", "dia", "ang", "ref", "cw", "cons", "open",
+    const WORDS: [&str; 28] = [
+        "ids", "pt", "line", "poly", "rect", "circle", "arc", "fix", "co", "hor", "ver", "par", "perp",
+        "tan", "eq", "conc", "mid", "sym", "dist", "hdist", "vdist", "rad", "dia", "ang", "ref", "cw",
+        "cons", "open",
     ];
     let fixed = |t: &str| t.parse::<f64>().is_ok() || is_ref(t) || WORDS.contains(&t);
     for (a, b) in rows.iter().zip(&was.rows) {
@@ -252,6 +254,9 @@ impl B<'_, '_> {
             c.t = &row[..row.len() - 1];
         }
         let made = self.names.len();
+        if row[0] == "ids" {
+            return ids_of_rows(std::slice::from_ref(&row.to_vec())).map(|_| ());
+        }
         if row[0] == "ref" {
             let kw = row.get(1).map_or("", |s| s.as_str());
             if !DIMENSIONS.contains(&kw) {
@@ -648,6 +653,35 @@ fn stable(name: &str) -> u64 {
     n << 2 | k
 }
 
+/// Where unlisted entities' ids go in a sketch with an `ids` row: past any a position can be, so a
+/// line drawn later never takes a listed entity's id.
+const UNLISTED: u64 = 1 << 32;
+
+/// `ids NAME N ..`: these entities keep these segment ids, whatever else is added to the sketch.
+/// What a profile written inline had, when it became a sketch: its faces keep their names.
+fn ids_of_rows(rows: &[Vec<String>]) -> R<Vec<(String, u64)>> {
+    let mut out: Vec<(String, u64)> = Vec::new();
+    for row in rows.iter().filter(|r| r.first().is_some_and(|w| w == "ids")) {
+        for pair in row[1..].chunks(2) {
+            let [name, n] = pair else {
+                return Err("ids NAME N ..".into());
+            };
+            let n: u64 = n.parse().map_err(|_| format!("ids: '{n}' is not an id"))?;
+            if n >= UNLISTED {
+                return Err(format!("ids: {n} is too large"));
+            }
+            if out.iter().any(|o| o.0 == *name) {
+                return Err(format!("ids: {name} is listed twice"));
+            }
+            if out.iter().any(|o| o.1 == n) {
+                return Err(format!("ids: two entities have {n}"));
+            }
+            out.push((name.clone(), n));
+        }
+    }
+    Ok(out)
+}
+
 fn name_of(s: &Sketch, id: u64) -> &str {
     s.names
         .iter()
@@ -687,9 +721,29 @@ pub fn profile(s: &Sketch, through: Option<&str>) -> R<Profile> {
                 .ok_or_else(|| format!("{t} is not on the outside of a region"))?
         }
     };
+    let listed = ids_of_rows(&s.rows)?;
     for l in &mut p.loops {
         for g in &mut l.segments {
-            g.1 = stable(name_of(s, g.1));
+            // an arc dimensioned by a sketch made from a line has that radius exactly, not the one
+            // its rounded points give back
+            if !listed.is_empty()
+                && let forge_ops::Segment::Arc { radius, .. } = &mut g.0
+                && let Some(d) = s
+                    .solved
+                    .constraint_ids()
+                    .find_map(|c| match s.solved.constraint(c) {
+                        Some(C::Radius(e, d)) if e.0 == g.1 => Some(d),
+                        _ => None,
+                    })
+            {
+                *radius = d;
+            }
+            let name = name_of(s, g.1);
+            g.1 = match listed.iter().find(|o| o.0 == name) {
+                Some(o) => o.1,
+                None if listed.is_empty() => stable(name),
+                None => stable(name) + UNLISTED,
+            };
         }
     }
     Ok(p)
@@ -838,4 +892,62 @@ pub fn freedom(s: &Sketch) -> (usize, Vec<String>) {
         .map(|n| n.0.clone())
         .collect();
     (a.dof, loose)
+}
+
+#[cfg(test)]
+mod ids_tests {
+    use super::*;
+
+    fn built(rows: &[&str]) -> R<Sketch> {
+        let toks: Vec<Vec<String>> = rows.iter().map(|r| crate::text::tokens(r)).collect();
+        let num = |t: &str, _: Want| t.parse::<f64>().map_err(|e| e.to_string());
+        build(Frame::default(), toks, &num, None)
+    }
+
+    fn seg_ids(s: &Sketch) -> Vec<u64> {
+        let mut v: Vec<u64> = profile(s, None)
+            .unwrap()
+            .loops
+            .iter()
+            .flat_map(|l| l.segments.iter().map(|g| g.1))
+            .collect();
+        v.sort_unstable();
+        v
+    }
+
+    #[test]
+    fn listed_entities_keep_their_ids_and_what_comes_later_can_never_take_one() {
+        let s = built(&["rect 0 0 10 10", "ids l1 0 l2 1 l3 2 l4 3"]).unwrap();
+        assert_eq!(seg_ids(&s), [0, 1, 2, 3]);
+        // a hole added later: its own id, nowhere near; the rest as they were
+        let s = built(&["rect 0 0 10 10", "ids l1 0 l2 1 l3 2 l4 3", "circle 5 5 1"]).unwrap();
+        let v = seg_ids(&s);
+        assert_eq!(&v[..4], [0, 1, 2, 3]);
+        assert!(v[4] >= UNLISTED, "{v:?}");
+        // l1's stable id is 4: listing someone else as 4 doesn't meet it
+        let s = built(&["rect 0 0 10 10", "ids l2 4", "circle 5 5 1"]).unwrap();
+        let v = seg_ids(&s);
+        let mut d = v.clone();
+        d.dedup();
+        assert_eq!(v.len(), d.len(), "{v:?}");
+        // without the row, nothing changes
+        assert_eq!(seg_ids(&built(&["rect 0 0 10 10"]).unwrap()), [4, 8, 12, 16]);
+    }
+
+    #[test]
+    fn two_entities_cannot_share_an_id() {
+        assert!(
+            built(&["rect 0 0 10 10", "ids l1 0 l2 0"])
+                .unwrap_err()
+                .contains("two entities")
+        );
+        assert!(
+            built(&["rect 0 0 10 10", "ids l1 0", "ids l1 1"])
+                .unwrap_err()
+                .contains("twice")
+        );
+        assert!(built(&["rect 0 0 10 10", "ids l1 x"]).is_err());
+        assert!(built(&["rect 0 0 10 10", "ids l1"]).is_err());
+        assert!(built(&["rect 0 0 10 10", "ids l1 99999999999"]).is_err());
+    }
 }
