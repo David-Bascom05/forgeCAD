@@ -42,6 +42,9 @@ pub struct Stats {
     pub pairs: BTreeMap<String, (usize, usize, f64)>,
     /// Edges left off a surface because their faces touch along them.
     pub tangent_off: usize,
+    /// Edges that keep a tolerance above the kernel's, and the largest.
+    pub tolerant_edges: usize,
+    pub max_edge_tol: f64,
 }
 
 pub struct Imported {
@@ -1027,6 +1030,34 @@ fn edge_range(c: &Curve, a: Point3, b: Point3, closed: bool) -> (Interval, f64, 
     }
 }
 
+/// Each edge's measured distance from its faces, where that is more than the kernel's tolerance:
+/// at the points `check` and `certify` will ask about, so they read what was measured here.
+fn record_deviations(body: &mut Body, stats: &mut Stats) {
+    use forge_math::tol::LINEAR;
+    for e in body.edge_ids().collect::<Vec<_>>() {
+        let faces: Vec<_> = body.edge(e).coedges.iter().map(|&c| body.coedge_face(c)).collect();
+        let free_form = matches!(body.edge(e).curve, Curve::Procedural(_) | Curve::Intersection(_))
+            || faces.iter().any(|&f| matches!(body.face(f).surface, Surface::Procedural(_)));
+        let measure = |n: usize| {
+            let pts = body.edge_points(e, n);
+            faces
+                .iter()
+                .map(|&f| {
+                    let s = &body.face(f).surface;
+                    pts.iter().map(|&p| s.distance(p)).fold(0.0, f64::max)
+                })
+                .fold(0.0, f64::max)
+        };
+        let dev = measure(16);
+        let dev = if free_form || dev > LINEAR { dev.max(measure(256)) } else { dev };
+        if dev > LINEAR {
+            body.edges[e.index()].tol = dev;
+            stats.tolerant_edges += 1;
+            stats.max_edge_tol = stats.max_edge_tol.max(dev);
+        }
+    }
+}
+
 /// Reads a whole file. Parts that cannot be read become refusals; the others are returned.
 pub fn import(text: &[u8], lim: &Limits) -> Result<Imported, ImportError> {
     let f = parse(text, lim).map_err(ImportError::Parse)?;
@@ -1132,10 +1163,12 @@ pub fn import(text: &[u8], lim: &Limits) -> Result<Imported, ImportError> {
                 proto.tighten(u.uncertainty.max(1e-3) * 20.0);
                 stats.tangent_off += proto.tangent;
                 proto.outer_first();
+                let mut body = proto.into_body();
+                record_deviations(&mut body, &mut stats);
                 solids.push(Solid {
                     entity: id,
                     name,
-                    body: proto.into_body(),
+                    body,
                 });
             }
             Err(x) => refusals.push(x),

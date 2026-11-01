@@ -130,6 +130,10 @@ impl Proto {
         for &u in l {
             self.walk(u, s, 16, &mut pts);
         }
+        // through a pole the longitude jumps: such a loop bounds a lune, it does not wind
+        if pts.iter().any(|&q| s.singular(q)) {
+            return (0, 0);
+        }
         let (Some(&a), Some(&b)) = (pts.first(), pts.last()) else {
             return (0, 0);
         };
@@ -425,6 +429,65 @@ impl Proto {
             self.tangent += 1;
         }
         self.settle_vertices();
+        self.collapse_slivers(limit);
+    }
+
+    /// An edge shorter than the balls of its ends, or than the tolerance, is a sliver a file's
+    /// gaps left: its two ends become one vertex, and the loops close over it. Nothing moves
+    /// more than the edge's length; at most `limit` in any case.
+    fn collapse_slivers(&mut self, limit: f64) {
+        self.vtol.resize(self.verts.len(), 0.0);
+        let mut merged: Vec<usize> = (0..self.verts.len()).collect();
+        fn find(m: &mut [usize], mut v: usize) -> usize {
+            while m[v] != v {
+                m[v] = m[m[v]];
+                v = m[v];
+            }
+            v
+        }
+        let mut gone = vec![false; self.edges.len()];
+        let mut any = false;
+        for e in 0..self.edges.len() {
+            let ed = &self.edges[e];
+            let (a, b) = (find(&mut merged, ed.start), find(&mut merged, ed.end));
+            if a == b && ed.start != ed.end {
+                gone[e] = true;
+                any = true;
+                continue;
+            }
+            if a == b {
+                continue;
+            }
+            let w = ed.range.width();
+            let len: f64 = (0..4)
+                .map(|k| {
+                    ed.curve
+                        .eval(ed.range.lo + w * k as f64 / 4.0)
+                        .distance(ed.curve.eval(ed.range.lo + w * (k + 1) as f64 / 4.0))
+                })
+                .sum();
+            let small = 2.0 * self.vtol[a].max(self.vtol[b]);
+            if len <= tol::LINEAR.max(small.min(limit)) {
+                merged[b] = a;
+                gone[e] = true;
+                any = true;
+            }
+        }
+        if !any {
+            return;
+        }
+        for f in &mut self.faces {
+            for l in &mut f.loops {
+                l.retain(|u| !gone[u.0]);
+            }
+            f.loops.retain(|l| !l.is_empty());
+        }
+        self.faces.retain(|f| !f.loops.is_empty());
+        for ed in &mut self.edges {
+            ed.start = find(&mut merged, ed.start);
+            ed.end = find(&mut merged, ed.end);
+        }
+        self.settle_vertices();
     }
 
     fn closed_form_edge(&mut self, e: usize, a: &Surface, b: &Surface, limit: f64) -> bool {
@@ -513,11 +576,22 @@ impl Proto {
             if p.distance(d.p) > limit {
                 return false;
             }
+            // surfaces all but touching here would give a curve that wanders: leave the edge be
+            let (na, nb) = (a.gradient(p), b.gradient(p));
+            if na.cross(nb).length() < 0.02 * na.length() * nb.length() {
+                return false;
+            }
             let Some(g) = direction(&a, &b, p) else {
                 return false;
             };
+            let g = if g.dot(d.d1) < 0.0 { -g } else { g };
+            if let Some(&q) = pts.last() {
+                if g.dot(p - q) <= 0.0 {
+                    return false;
+                }
+            }
             pts.push(p);
-            tans.push(if g.dot(d.d1) < 0.0 { -g } else { g });
+            tans.push(g);
         }
         let hi = (pts.len() - if closed { 0 } else { 1 }) as f64;
         // the chain's sag, from where its middles land

@@ -185,7 +185,7 @@ pub fn certify(body: &Body) -> Vec<Problem> {
             let s = &body.face(f).surface;
             let worst = pts.iter().map(|&p| s.distance(p)).fold(0.0, f64::max);
             let known = |p: &Problem| matches!(p, Problem::EdgeOffFace { edge, face, .. } if *edge == e && *face == f);
-            if worst > tol::LINEAR && !out.iter().any(known) {
+            if worst > body.edge(e).tol.max(tol::LINEAR) && !out.iter().any(known) {
                 out.push(Problem::EdgeOffFace {
                     edge: e,
                     face: f,
@@ -296,9 +296,10 @@ fn check_loops(body: &Body, out: &mut Vec<Problem>) {
 }
 
 fn check_geometry(body: &Body, out: &mut Vec<Problem>) {
-    let band = tol::LINEAR;
     for e in body.edge_ids() {
         let edge = body.edge(e);
+        // what the edge was read with, if it came from a file (at least the tolerance)
+        let band = edge.tol.max(tol::LINEAR);
         for (v, t) in [(edge.start, edge.range.lo), (edge.end, edge.range.hi)] {
             let vtol = body.vertex(v).tol;
             let d = body.vertex(v).point.distance(edge.curve.eval(t));

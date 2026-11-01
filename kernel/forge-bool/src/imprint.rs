@@ -79,6 +79,10 @@ pub(crate) trait Src {
     fn vertex_count(&self) -> usize;
     fn vertex(&self, v: VertexId) -> (Point3, f64, Name);
     fn edge(&self, e: EdgeId) -> (&Curve, Interval, VertexId, VertexId, Name);
+    /// How far edge `e` may lie from its faces.
+    fn edge_tol(&self, _e: EdgeId) -> f64 {
+        tol::LINEAR
+    }
     /// Face `f`'s box, where one is kept.
     fn bbox(&self, f: FaceId) -> Option<Box3>;
     /// The tool as a Body, for what only reads Bodies (rare: a tool flush on a face).
@@ -88,6 +92,9 @@ pub(crate) trait Src {
 impl Src for Body {
     fn body(&self) -> std::borrow::Cow<'_, Body> {
         std::borrow::Cow::Borrowed(self)
+    }
+    fn edge_tol(&self, e: EdgeId) -> f64 {
+        Body::edge(self, e).tol
     }
     fn face_count(&self) -> usize {
         self.faces.len()
@@ -1745,6 +1752,10 @@ impl Column<'_> {
                 pieces.push(Piece {
                     curve: car.curve.clone(),
                     range: Interval::new(t0, t1),
+                    tol: match ck {
+                        Ck::Edge(s, e) => self.src(s).edge_tol(e),
+                        _ => tol::LINEAR,
+                    },
                     start: key(v0, &mut points),
                     end: key(v1, &mut points),
                     name,

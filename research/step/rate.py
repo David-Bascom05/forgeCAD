@@ -61,6 +61,7 @@ def verdict(d, t):
         diag = max(1e-9, sum((tb[k + 3] - tb[k]) ** 2 for k in range(3)) ** 0.5)
         out["dbox"] = max(abs(a - b) for a, b in zip(lo + hi, tb)) / diag
     out["match"] = bool(out.get("dvol") is not None and abs(out["dvol"]) < 1e-3 and abs(out["darea"]) < 1e-3)
+    out["match1"] = bool(out.get("dvol") is not None and abs(out["dvol"]) < 1e-2 and abs(out["darea"]) < 1e-2)
     return out
 
 
@@ -102,18 +103,27 @@ def report(paths):
                 syst[sys_]["match"] += 1
                 if v.get("valid"):
                     c["valid+match"] += 1
+            if v.get("match1"):
+                c["match1"] += 1
             if "dvol" in v:
                 c["compared"] += 1
             if v.get("dbox") is not None and v["dbox"] < 1e-3:
                 c["box"] += 1
         n = c["files"] or 1
         print(f"== {path}")
-        print("  ", " ".join(f"{k}={c[k]} ({100*c[k]/n:.1f}%)" for k in ["files", "read", "valid", "compared", "match", "valid+match", "box", "refused", "parse_err", "crash", "timeout"]))
+        print("  ", " ".join(f"{k}={c[k]} ({100*c[k]/n:.1f}%)" for k in ["files", "read", "valid", "compared", "match", "match1", "valid+match", "box", "refused", "parse_err", "crash", "timeout"]))
         print("   problems(files):", probs.most_common(14))
         print("   refused(files):", refs.most_common(14))
         print("   crash:", panics.most_common(6))
         for s, k in sorted(syst.items(), key=lambda x: -x[1]["files"])[:8]:
             print("   system", s, dict(k))
+        ed = collections.defaultdict(collections.Counter)
+        for r in rows:
+            for x in r.get("solids", []):
+                for k, v in x.get("edit", {}).items():
+                    ed[k][v.split(":")[0] if v.startswith(("err", "volume")) else v] += 1
+        for k in sorted(ed):
+            print(f"   edit {k}:", ed[k].most_common(8))
         q = sorted(r.get("coff", 0) for r in rows if r.get("solids"))
         if q:
             pick = lambda f: q[min(len(q) - 1, int(f * len(q)))]

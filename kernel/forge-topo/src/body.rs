@@ -43,6 +43,9 @@ pub struct Edge {
     /// face for a seam).
     pub coedges: Small<CoedgeId, 2>,
     pub name: Name,
+    /// How far the edge may lie from its faces: `tol::LINEAR`, or more on an edge read from a
+    /// file, the deviation measured there. Only import sets it; pieces of an edge inherit it.
+    pub tol: f64,
     /// False once no face uses the edge (after an in-place edit).
     pub alive: bool,
     /// A box holding the edge, worked out on first use.
@@ -513,6 +516,7 @@ impl Body {
                             range: x.range,
                             start,
                             end,
+                            tol: x.tol,
                             coedges: Small::default(),
                             name: x.name,
                             alive: true,
@@ -575,6 +579,7 @@ impl Body {
                             };
                             let (a, b) = (vert(edge.start), vert(edge.end));
                             let e = out.add_edge(edge.curve.clone(), edge.range, a, b, edge.name);
+                            out.edges[e.index()].tol = edge.tol;
                             emap[co.edge.index()] = Some(e);
                             e
                         }
@@ -718,6 +723,7 @@ impl Body {
             end,
             coedges: Small::default(),
             name,
+            tol: forge_math::tol::LINEAR,
             alive: true,
             bbox: Cached::default(),
         });

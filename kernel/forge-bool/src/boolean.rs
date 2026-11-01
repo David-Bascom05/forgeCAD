@@ -143,8 +143,9 @@ pub(crate) fn on_edge(body: &Body, e: EdgeId, p: Point3) -> Option<(f64, f64)> {
     let edge = body.edge(e);
     let s = edge.curve.closest(p, edge.range);
     let d = edge.curve.eval(s).distance(p);
-    if d <= tol::LINEAR {
-        return Some((s, tol::LINEAR));
+    // (an edge read from a file lies within its measured deviation of its faces)
+    if d <= edge.tol {
+        return Some((s, edge.tol));
     }
     let end = if s <= edge.range.lo {
         edge.start
@@ -178,6 +179,8 @@ pub(crate) struct Seg {
 pub(crate) struct Piece {
     pub(crate) curve: Curve,
     pub(crate) range: Interval,
+    /// A piece of an edge read from a file keeps the edge's tolerance.
+    pub(crate) tol: f64,
     pub(crate) start: VKey,
     pub(crate) end: VKey,
     pub(crate) name: Name,
@@ -535,6 +538,7 @@ pub(crate) fn edge_split(
         pieces.push(Piece {
             curve: edge.curve.clone(),
             range: Interval::new(at.0, s),
+            tol: edge.tol,
             start: at.1,
             end: v,
             // a piece is named once kept (`piece_name`)
@@ -942,6 +946,7 @@ fn plan_once(a: &Body, b: &Body, op: Op, scratch: &mut Scratch) -> R<Plan> {
         pieces.push(Piece {
             curve: s.curve.clone(),
             range: s.range,
+            tol: tol::LINEAR,
             start,
             end,
             name: s.name,
@@ -1578,7 +1583,9 @@ pub(crate) fn apply<S: crate::imprint::Src>(a: &mut Body, b: &S, plan: &Plan) {
                             Some((0, e)) => e,
                             _ => {
                                 let (v0, v1) = (vertex(a, pc.start), vertex(a, pc.end));
-                                a.add_edge(pc.curve.clone(), pc.range, v0, v1, pc.name)
+                                let e = a.add_edge(pc.curve.clone(), pc.range, v0, v1, pc.name);
+                                a.edges[e.index()].tol = pc.tol;
+                                e
                             }
                         };
                         emap[p] = Some(e);
@@ -1952,7 +1959,7 @@ pub(crate) fn trim(
                         .vertex(edge.start)
                         .tol
                         .max(body.vertex(edge.end).tol)
-                        .max(tol::LINEAR);
+                        .max(edge.tol);
                     Some(body.edge_box(e).grow(2.0 * slack))
                 };
                 // a fence stands only near its spring: where the other face's surface is analytic,

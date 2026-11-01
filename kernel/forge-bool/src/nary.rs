@@ -1672,6 +1672,7 @@ fn nary_body(
             let piece = |lo: (f64, VKey), hi: (f64, VKey)| Piece {
                 curve: sg.curve.clone(),
                 range: Interval::new(lo.0, hi.0),
+                tol: forge_math::tol::LINEAR,
                 start: lo.1,
                 end: hi.1,
                 name: Name::NONE,
@@ -2741,6 +2742,7 @@ fn nary_body(
                         };
                         let (v0, v1) = (vertex(&mut out, pc.start), vertex(&mut out, pc.end));
                         let e = out.add_edge(pc.curve.clone(), pc.range, v0, v1, pc.name);
+                        out.edges[e.index()].tol = pc.tol;
                         emap[p] = Some(e);
                         e
                     }

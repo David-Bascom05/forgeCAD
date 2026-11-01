@@ -14,6 +14,7 @@ forge-topo = { path = "../forge-topo" }
 [dev-dependencies]
 forge-ops = { path = "../forge-ops" }
 forge-mesh = { path = "../forge-mesh" }
+forge-bool = { path = "../forge-bool" }
 
 [lints]
 workspace = true
