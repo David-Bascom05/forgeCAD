@@ -402,6 +402,19 @@ impl Session {
                             .collect(),
                     ),
                 ));
+                // a body that fails its own check is not to pass as good: written, and said
+                let problems: Vec<_> = m
+                    .solids_after(m.built())
+                    .iter()
+                    .flat_map(|s| check(&s.body))
+                    .collect();
+                if let Some(first) = problems.first() {
+                    text.push_str(&format!(
+                        "\nwarning: the part is not valid: {} problems, first {first:?}",
+                        problems.len()
+                    ));
+                }
+                j.push(("problems", problems.len().into()));
                 // a selector that picks fewer than meant fails quietly otherwise
                 let picks = m.picks();
                 if !picks.is_empty() {
@@ -1109,6 +1122,16 @@ fillet 4 (edges between base wall concave)
     /// A varying fillet law left to its default start gets it written into the file at its
     /// first build, which builds the same part and stays put.
     #[cfg(unix)]
+    /// A body that fails its check is said to, and the build still answers (WHUCAD 100002778, a fillet
+    /// with a name twice); a sound one says nothing.
+    #[test]
+    fn build_warns_of_an_invalid_body() {
+        let dir = Dir::new("invalid");
+        let g = dir.file("b.fc", "extrude 8 rect 0 0 20 10\n");
+        let r = Session::default().run("build", &args(&g, &[]));
+        assert!(r.ok && !r.text.contains("warning"), "{}", r.text);
+    }
+
     #[test]
     fn law_starts_are_written_in() {
         let dir = Dir::new("laws");
