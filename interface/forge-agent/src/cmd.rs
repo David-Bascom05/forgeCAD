@@ -110,26 +110,25 @@ fn import_file(
     let data = std::fs::read(&r).map_err(|e| format!("{name}: {e}"))?;
     let imp =
         forge_step::import(&data, &forge_step::Limits::default()).map_err(|e| format!("{name}: {e}"))?;
-    if let Some(x) = imp.refusals.first() {
-        return Err(format!(
-            "{name}: {} solid(s) refused; #{} {}: {}",
-            imp.refusals.len(),
-            x.entity,
-            x.kind,
-            x.why
-        ));
+    // as a part built here: what reads is imported, a solid that fails the check with the check's
+    // marks, and what was refused is said; only a file with nothing to build is refused
+    let said = |x: &forge_step::Refusal| format!("#{} {}: {}", x.entity, x.kind, x.why);
+    if imp.solids.is_empty() {
+        let first = imp.refusals.first().map_or_else(|| "no solid".to_string(), said);
+        return Err(format!("{name}: nothing could be read; {first}"));
     }
     let mut body = forge_topo::Body::new();
     for s in &imp.solids {
-        let problems = forge_topo::check(&s.body);
-        if let Some(p) = problems.first() {
-            return Err(format!(
-                "{name}: solid #{} is not valid here: {} problem(s), first {p:?}",
-                s.entity,
-                problems.len()
-            ));
-        }
         body.append(&s.body);
+    }
+    if !imp.refusals.is_empty() {
+        let all: Vec<String> = imp.refusals.iter().map(said).collect();
+        body.left_out = Some(format!(
+            "{} of the file's {} solids could not be read and are left out: {}",
+            imp.refusals.len(),
+            imp.refusals.len() + imp.solids.len(),
+            all.join("; ")
+        ));
     }
     let body = std::sync::Arc::new(body);
     if let Ok(mut c) = cache.lock() {
@@ -1488,6 +1487,33 @@ combine cut base lid keep
             "{}",
             c.text
         );
+        // a file with a second solid that cannot be read: the first is imported, the other said
+        let more = text.replacen(
+            "ENDSEC;\nEND-ISO",
+            "#999999=MANIFOLD_SOLID_BREP('',#999998);\nENDSEC;\nEND-ISO",
+            1,
+        );
+        assert_ne!(more, text);
+        std::fs::write(dir.0.join("more.step"), more).expect("write");
+        let part = dir.file("m.fc", "import \"more.step\"\n");
+        let c = s.run("check", &args(&part, &[]));
+        assert!(
+            c.ok && c
+                .text
+                .contains("warning (import-incomplete): 1 of the file's 2 solids"),
+            "{}",
+            c.text
+        );
+        // a solid that fails the check is imported, with the check's own marks
+        // (a side face said the wrong way round: wrong side of its loop, still closed)
+        let k = text.match_indices("ADVANCED_FACE").nth(2).expect("a face").0;
+        let bad = format!("{}{}", &text[..k], text[k..].replacen(".T.)", ".F.)", 1));
+        std::fs::write(dir.0.join("bad.step"), bad).expect("write");
+        let part = dir.file("n.fc", "import \"bad.step\"\n");
+        let b = s.run("build", &args(&part, &[]));
+        assert!(b.ok, "{}", b.text);
+        let c = s.run("check", &args(&part, &[]));
+        assert!(!c.ok && c.text.contains("problems"), "{}", c.text);
         // no file: an error on its line
         let gone = dir.file("q.fc", "import \"nope.step\"\n");
         assert!(!s.run("build", &args(&gone, &[])).ok);

@@ -226,6 +226,13 @@ pub fn tangled(solids: &[forge_model::Solid]) -> Vec<Issue> {
                 entity: None,
             });
         }
+        if let Some(why) = &s.body.left_out {
+            out.push(Issue {
+                rule: "import-incomplete",
+                reason: why.clone(),
+                entity: None,
+            });
+        }
         if let Some(why) = &s.body.unverified {
             out.push(Issue {
                 rule: "import-not-verified",
@@ -1466,6 +1473,12 @@ mod tests {
             tangled(&solids)
                 .iter()
                 .any(|i| i.rule == "import-not-verified" && i.reason.ends_with("why"))
+        );
+        solids[0].body.left_out = Some("gone".into());
+        assert!(
+            tangled(&solids)
+                .iter()
+                .any(|i| i.rule == "import-incomplete" && i.reason == "gone")
         );
     }
     use forge_model::{Part, fillets, suite};

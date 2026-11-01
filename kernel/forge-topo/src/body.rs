@@ -241,6 +241,8 @@ pub struct Body {
     /// What could not be checked of a file's body as read, in plain words: its integrals and mesh
     /// disagree, or one of them cannot be worked out. Imported all the same and said in the check.
     pub unverified: Option<String>,
+    /// What of the file was not read into this body, in plain words: solids the reader refused.
+    pub left_out: Option<String>,
 }
 
 /// Boxes over runs of face ids (a chunk of 16 faces, a block of 16 chunks), each the hull of
@@ -487,6 +489,7 @@ impl Body {
             from_file: self.from_file,
             unplaced: self.unplaced,
             unverified: self.unverified.take(),
+            left_out: self.left_out.take(),
         };
         for (i, mut face) in std::mem::take(&mut self.faces).into_iter().enumerate() {
             if !face.alive {
@@ -561,6 +564,7 @@ impl Body {
         out.from_file = self.from_file;
         out.unplaced = self.unplaced;
         out.unverified = self.unverified.clone();
+        out.left_out = self.left_out.clone();
         out.joins = self.joins.clone();
         out.vertices.reserve(self.vertices.len());
         out.edges.reserve(self.edges.len());
@@ -668,9 +672,13 @@ impl Body {
     pub fn append(&mut self, other: &Body) {
         self.from_file |= other.from_file;
         self.unplaced |= other.unplaced;
-        if self.unverified.is_none() {
-            self.unverified = other.unverified.clone();
-        }
+        let join = |a: &mut Option<String>, b: &Option<String>| {
+            if let Some(b) = b {
+                *a = Some(a.take().map_or_else(|| b.clone(), |a| format!("{a}; {b}")));
+            }
+        };
+        join(&mut self.unverified, &other.unverified);
+        join(&mut self.left_out, &other.left_out);
         for &w in &other.split {
             self.note_split(w);
         }
