@@ -354,8 +354,10 @@ pub fn ulp(part: &Part, seed: u64) -> Option<Finding> {
                 Ok(r) => match forge_topo::check(r).first() {
                     Some(p) => Some((format!("invalid {}", short(&format!("{p:?}"))), String::new())),
                     None => {
+                        // (a vertex between two edges of the same two faces is nothing lost, as in `same`)
                         let (a, b) = (sig(&next), sig(r));
-                        (a != b).then(|| ("topology differs".to_string(), format!("{a} vs {b}")))
+                        (a.merged() != b.merged())
+                            .then(|| ("topology differs".to_string(), format!("{a} vs {b}")))
                     }
                 },
             };

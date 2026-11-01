@@ -606,9 +606,16 @@ fn plan(a: &Body, b: &Body, op: Op, scratch: &mut Scratch) -> R<Plan> {
     match plan_fenced(a, b, op, scratch) {
         // what floods one way across a tool's edge hovering within tolerance of a face and the other
         // way along it wants the curve under that edge, however close: an edge of its own
-        Err(BoolError::Internal(w))
-            if w == "inconsistent classification" || w == "face split crossed itself" =>
-        {
+        Err(BoolError::Internal(w)) if w == "face split crossed itself" => {
+            forge_geom::intersect::KEEP_HAIR_ROOTS.with(|k| k.set(true));
+            let r = plan_fenced(a, b, op, scratch);
+            forge_geom::intersect::KEEP_HAIR_ROOTS.with(|k| k.set(false));
+            r.map_err(|e| match e {
+                BoolError::Internal(_) => BoolError::Internal(w),
+                e => e,
+            })
+        }
+        Err(BoolError::Internal(w)) if w == "inconsistent classification" => {
             CHORDS.with(|c| c.set(true));
             let r = plan_fenced(a, b, op, scratch);
             CHORDS.with(|c| c.set(false));

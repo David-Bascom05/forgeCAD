@@ -526,7 +526,8 @@ fn conic_quadric(f: &Frame, a: f64, b: f64, range: Interval, s: &Surface) -> Opt
             continue;
         }
         let t = t.min(range.hi);
-        if near(t) {
+        let keep = KEEP_HAIR_ROOTS.with(|k| k.get());
+        if near(t) && !(keep && hits.iter().any(|h| near_between(&near, t + apart(h.t, t), t))) {
             // the roots beside it that never leave the tolerance are that touch, as for a line
             hits.retain(|h| !near_between(&near, t + apart(h.t, t), t));
             hits.push(CurveHit {
@@ -539,6 +540,12 @@ fn conic_quadric(f: &Frame, a: f64, b: f64, range: Interval, s: &Surface) -> Opt
     hits.sort_by(|x, y| x.t.total_cmp(&y.t));
     hits.dedup_by(|x, y| x.point.distance(y.point) <= tol::LINEAR);
     Some(CurveSurface::Hits(hits))
+}
+
+thread_local! {
+    /// A conic's two roots a hair apart stay roots, not one touch: a boolean's retry, when a tool's
+    /// vertex lies between them and the touch leaves its face split crossed.
+    pub static KEEP_HAIR_ROOTS: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
 }
 
 /// A parabola on a quadric: Q(P(t)) is a quartic in t, P(t) = o + k t^2 x + t y.
