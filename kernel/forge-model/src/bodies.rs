@@ -1024,6 +1024,29 @@ pub(crate) fn nary(features: History<'_>, threads: usize) -> Result<Vec<Solid>, 
     }
 }
 
+/// Whether the cuts in a run can have left nothing: only if their boxes hull all it had.
+fn may_be_empty(run: &Run) -> bool {
+    let hull = |b: &Body, into: Box3| b.face_ids().fold(into, |x, f| x.hull(&b.face_box(f)));
+    let (mut had, mut cuts) = (
+        match &run.base {
+            Ok(b) => hull(b, Box3::EMPTY),
+            Err(t) => hull(&t.0, Box3::EMPTY),
+        },
+        Box3::EMPTY,
+    );
+    for t in &run.tools {
+        if t.1 == Op::Subtract {
+            cuts = hull(&t.0, cuts);
+        } else {
+            had = hull(&t.0, had);
+        }
+    }
+    let cuts = cuts.grow(tol::LINEAR);
+    !cuts.is_empty()
+        && cuts.contains(Point3::new(had.x.lo, had.y.lo, had.z.lo))
+        && cuts.contains(Point3::new(had.x.hi, had.y.hi, had.z.hi))
+}
+
 fn nary_pass(features: History<'_>, threads: usize) -> Result<Vec<Solid>, RegenError> {
     let (plain, picks) = strip(&features);
     let plain = features.on(&plain);
@@ -1066,6 +1089,14 @@ fn nary_pass(features: History<'_>, threads: usize) -> Result<Vec<Solid>, RegenE
             _ => {
                 let ids: Vec<usize> = runs.iter().map(|r| r.id).collect();
                 let on = targets(&ids, p, i)?;
+                // a cut may have emptied a body, and then this add belongs to what is left, not to it
+                // (one run would make the tool a body of its own): `nary` goes one at a time
+                if runs.len() > 1
+                    && ts.iter().any(|t| op_of(t.1) == Op::Union)
+                    && on.iter().any(|&k| may_be_empty(&runs[k]))
+                {
+                    return Err(RegenError::Empty { feature: i });
+                }
                 // the first body takes the tools themselves, the others copies named apart
                 for &k in on.iter().skip(1) {
                     let run = &mut runs[k];

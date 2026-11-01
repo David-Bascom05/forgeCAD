@@ -873,3 +873,23 @@ fn a_revolve_closing_a_void_on_its_axis() {
     let want = pi * (64.0 * 30.0 - 16.0 * 10.0);
     assert!((v - want).abs() < 3e-3 * want, "{v} {want}");
 }
+
+/// A cut that takes a whole body away, then an add: it goes to the body left, as sequential does; one
+/// run made the add's tool a body of its own (Fusion 51895_0007).
+#[test]
+fn an_add_after_a_cut_emptied_a_body_goes_to_the_body_left() {
+    let m = Model::new(
+        "extrude 34 rect 0 0 100 100
+extrude new 2 at 0 0 40 rect 10 10 50 50
+extrude cut 2 at 0 0 40 rect 10 10 50 50
+extrude add 2 at 0 0 50 rect 0 0 10 10
+",
+    );
+    assert!(m.error.is_none(), "{:?}", m.error.as_ref().map(|e| &e.msg));
+    let part = Part {
+        features: m.features.clone(),
+    };
+    let nary = part.regenerate_nary_solids(1).expect("n-ary");
+    assert_eq!(nary.len(), m.solids_after(m.built()).len());
+    assert_eq!(nary.len(), 1);
+}
