@@ -15,6 +15,7 @@ fn usage() -> ExitCode {
         "usage: forgecad act|query|measure|render|build|check|diff|export FILE [ARGS] [--json] [--base N] [--at FEAT] [--labels SEL] [--px N] [-o OUT]\n       \
          forgecad help [TOPIC]\n       \
          forgecad serve | mcp [--root DIR] [--writable]   (JSON-RPC / MCP on stdio, .fc files under DIR, default .; act only if --writable)\n       \
+         forgecad import FILE.FCStd [-o DIR] [--json]   (each body a part file DIR/<file>.<body>.fc)\n       \
          forgecad demo <out.stl> [chord-mm] | preview <out.json>\nformat and selectors: AGENTS.md, forgecad help"
     );
     ExitCode::from(2)
@@ -119,6 +120,7 @@ fn main() -> ExitCode {
                 _ => usage(),
             }
         }
+        Some("import") if args.len() >= 3 => import(&args[2..]),
         Some("help" | "--help" | "-h") => {
             println!("{}", forge_agent::help::help(&args[2..].join(" ")));
             ExitCode::SUCCESS
@@ -126,6 +128,85 @@ fn main() -> ExitCode {
         Some(c) if COMMANDS.contains(&c) && args.len() >= 3 => command(c, &args[2..]),
         _ => usage(),
     }
+}
+
+fn quoted(s: &str) -> String {
+    let mut o = String::from("\"");
+    for c in s.chars() {
+        match c {
+            '"' => o += "\\\"",
+            '\\' => o += "\\\\",
+            c if (c as u32) < 32 => o += &format!("\\u{:04x}", c as u32),
+            c => o.push(c),
+        }
+    }
+    o + "\""
+}
+
+/// Another system's file as part files, one a body: a line each says what became of it.
+fn import(argv: &[String]) -> ExitCode {
+    let (mut dir, mut json, mut file) = (".".to_string(), false, None);
+    let mut it = argv.iter();
+    while let Some(w) = it.next() {
+        match w.as_str() {
+            "-o" => dir = it.next().cloned().unwrap_or(dir),
+            "--json" => json = true,
+            _ => file = Some(w.clone()),
+        }
+    }
+    let Some(file) = file else { return usage() };
+    let path = std::path::Path::new(&file);
+    let stem = path
+        .file_name()
+        .and_then(|s| s.to_str())
+        .and_then(|s| s.split('.').next())
+        .unwrap_or("part")
+        .to_string();
+    let bodies = match std::fs::read(path)
+        .map_err(|e| e.to_string())
+        .and_then(|d| forge_import::fcstd::translate(&d))
+    {
+        Ok(b) => b,
+        Err(e) => {
+            eprintln!("{file}: {e}");
+            return ExitCode::FAILURE;
+        }
+    };
+    for b in &bodies {
+        let out = std::path::Path::new(&dir).join(format!("{stem}.{}.fc", b.name));
+        if let Some(fc) = &b.fc
+            && let Err(e) = std::fs::write(&out, fc)
+        {
+            eprintln!("{}: {e}", out.display());
+            return ExitCode::FAILURE;
+        }
+        let why = b.fail.as_ref().map_or("", |f| f.why());
+        if json {
+            println!(
+                "{{\"file\":{},\"body\":{},\"status\":\"{}\",\"why\":{},\"approx\":{}}}",
+                quoted(&stem),
+                quoted(&b.name),
+                b.status(),
+                quoted(why),
+                b.approx
+            );
+        } else if b.fc.is_some() {
+            println!(
+                "{}: {} {}{}",
+                b.name,
+                b.status(),
+                out.display(),
+                if why.is_empty() {
+                    String::new()
+                } else {
+                    format!(" ({why})")
+                }
+            );
+        } else {
+            println!("{}: {} ({why})", b.name, b.status());
+        }
+    }
+    ExitCode::SUCCESS
 }
 
 fn command(cmd: &str, argv: &[String]) -> ExitCode {

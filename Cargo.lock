@@ -3,6 +3,12 @@
 version = 4
 
 [[package]]
+name = "adler2"
+version = "2.0.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "320119579fcad9c21884f5c4861d16174d0e06250625266f50fe6898340abefa"
+
+[[package]]
 name = "forge-agent"
 version = "0.1.0"
 dependencies = [
@@ -53,6 +59,7 @@ version = "0.1.0"
 dependencies = [
  "forge-agent",
  "forge-geom",
+ "forge-import",
  "forge-math",
  "forge-mesh",
  "forge-model",
@@ -93,6 +100,20 @@ version = "0.1.0"
 dependencies = [
  "forge-bool",
  "forge-math",
+]
+
+[[package]]
+name = "forge-import"
+version = "0.1.0"
+dependencies = [
+ "forge-agent",
+ "forge-bool",
+ "forge-geom",
+ "forge-math",
+ "forge-step",
+ "forge-topo",
+ "miniz_oxide",
+ "roxmltree",
 ]
 
 [[package]]
@@ -180,3 +201,18 @@ dependencies = [
  "forge-geom",
  "forge-math",
 ]
+
+[[package]]
+name = "miniz_oxide"
+version = "0.8.9"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "1fa76a2c86f704bdb222d66965fb3d63269ce38518b83cb0575fca855ebb6316"
+dependencies = [
+ "adler2",
+]
+
+[[package]]
+name = "roxmltree"
+version = "0.20.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "6c20b6793b5c2fa6553b250154b78d6d0db37e72700ae35fad9387a46f487c97"

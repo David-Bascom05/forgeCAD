@@ -1258,3 +1258,358 @@ pub fn import(text: &[u8], lim: &Limits) -> Result<Imported, ImportError> {
         stats: r.stats,
     })
 }
+
+/// A shape where a file uses it: which, and placed how.
+#[derive(Clone, Copy)]
+pub struct Used {
+    shape: usize,
+    xf: Xf,
+}
+
+/// A `.brep`'s shapes as OpenCascade enumerates them, for reading another system's references to
+/// them (FreeCAD's `Edge7`): the order of `TopExp::MapShapes`, and edges sampled where
+/// `BRepAdaptor_Curve` puts its parameter. Nothing is healed or checked; a curve this cannot
+/// evaluate (offset, parabola, hyperbola) samples as None.
+pub struct BrepTopo<'a> {
+    f: File<'a>,
+}
+
+/// A curve as the file writes it, in its own placement.
+enum Raw {
+    Line([f64; 3], [f64; 3]),
+    /// centre, x, y, radii (a circle's both the same)
+    Conic([f64; 3], [f64; 3], [f64; 3], f64, f64),
+    /// degree, flat knots, homogeneous poles, period (lo, hi) for a periodic one
+    Spline(usize, Vec<f64>, Vec<[f64; 4]>, Option<(f64, f64)>),
+}
+
+impl<'a> BrepTopo<'a> {
+    pub fn new(text: &'a [u8]) -> Option<BrepTopo<'a>> {
+        let f = parse(text)?;
+        let bad = f
+            .shapes
+            .iter()
+            .enumerate()
+            .any(|(i, s)| s.children.iter().any(|c| c.shape <= i + 1));
+        (!bad).then_some(BrepTopo { f })
+    }
+
+    fn root(&self) -> Option<Used> {
+        let l = self.f.locs.get(self.f.root.loc)?;
+        (self.f.root.shape >= 1 && self.f.root.shape <= self.f.shapes.len()).then_some(Used {
+            shape: self.f.root.shape,
+            xf: IDENTITY.then(l),
+        })
+    }
+
+    fn is(&self, u: Used, k: &str) -> bool {
+        match &self.f.shapes[u.shape - 1].kind {
+            Kind::Vertex(_) => k == "Ve",
+            Kind::Edge { .. } => k == "Ed",
+            Kind::Face { .. } => k == "Fa",
+            Kind::Group(g) => *g == k,
+        }
+    }
+
+    /// TopExp_Explorer: depth first, each child in order, not below a match.
+    fn explore(&self, u: Used, k: &str, out: &mut Vec<Used>) -> Option<()> {
+        if out.len() > MAX_FACES {
+            return None;
+        }
+        if self.is(u, k) {
+            out.push(u);
+            return Some(());
+        }
+        for c in &self.f.shapes[u.shape - 1].children {
+            let l = self.f.locs.get(c.loc)?;
+            self.f.shapes.get(c.shape.wrapping_sub(1))?;
+            self.explore(
+                Used {
+                    shape: c.shape,
+                    xf: u.xf.then(l),
+                },
+                k,
+                out,
+            )?;
+        }
+        Some(())
+    }
+
+    /// TopExp::MapShapes: each shape once, at its first place.
+    fn map(&self, u: Used, k: &str) -> Option<Vec<Used>> {
+        let mut all = vec![];
+        self.explore(u, k, &mut all)?;
+        let mut seen = std::collections::BTreeSet::new();
+        Some(
+            all.into_iter()
+                .filter(|x| seen.insert((x.shape, x.xf.key())))
+                .collect(),
+        )
+    }
+
+    pub fn edges(&self) -> Option<Vec<Used>> {
+        self.map(self.root()?, "Ed")
+    }
+
+    pub fn faces(&self) -> Option<Vec<Used>> {
+        self.map(self.root()?, "Fa")
+    }
+
+    pub fn edges_of(&self, face: Used) -> Option<Vec<Used>> {
+        self.map(face, "Ed")
+    }
+
+    /// Every wire and its edges, each use (TopExp_Explorer, nothing merged).
+    pub fn wires(&self) -> Option<Vec<Vec<Used>>> {
+        let mut ws = vec![];
+        self.explore(self.root()?, "Wi", &mut ws)?;
+        ws.into_iter()
+            .map(|w| {
+                let mut es = vec![];
+                self.explore(w, "Ed", &mut es)?;
+                Some(es)
+            })
+            .collect()
+    }
+
+    fn raw(&self, at: usize, depth: u32) -> Option<(Raw, &'static str)> {
+        let mut t = Cur {
+            t: &self.f.toks.t,
+            at,
+        };
+        let k = t.int()?;
+        let p = |t: &mut Cur| Some([t.num()?, t.num()?, t.num()?]);
+        Some(match k {
+            1 => (Raw::Line(p(&mut t)?, gp_dir(p(&mut t)?)?), "line"),
+            2 | 3 => {
+                let o = p(&mut t)?;
+                let n = gp_dir(p(&mut t)?)?;
+                let vx = gp_dir(p(&mut t)?)?;
+                p(&mut t)?;
+                let a = t.num()?;
+                let b = if k == 3 { t.num()? } else { a };
+                // gp_Ax2(P, N, Vx): x = N ^ (Vx ^ N), y = N ^ x, each normalised
+                let (c1, c2) = (vx, n);
+                let x = gp_dir([
+                    n[1] * (c1[0] * c2[1] - c1[1] * c2[0]) - n[2] * (c1[2] * c2[0] - c1[0] * c2[2]),
+                    n[2] * (c1[1] * c2[2] - c1[2] * c2[1]) - n[0] * (c1[0] * c2[1] - c1[1] * c2[0]),
+                    n[0] * (c1[2] * c2[0] - c1[0] * c2[2]) - n[1] * (c1[1] * c2[2] - c1[2] * c2[1]),
+                ])?;
+                let y = gp_dir([
+                    n[1] * x[2] - n[2] * x[1],
+                    n[2] * x[0] - n[0] * x[2],
+                    n[0] * x[1] - n[1] * x[0],
+                ])?;
+                (Raw::Conic(o, x, y, a, b), if k == 2 { "circle" } else { "other" })
+            }
+            6 | 7 => {
+                let rat = t.count()? > 0;
+                let (periodic, deg) = if k == 6 {
+                    (false, t.count()?)
+                } else {
+                    (t.count()? > 0, t.count()?)
+                };
+                let (np, nk) = if k == 6 {
+                    (deg + 1, 0)
+                } else {
+                    (t.count()?, t.count()?)
+                };
+                if deg == 0 || np > nurbs::MAX_CTRL || nk > nurbs::MAX_CTRL {
+                    return None;
+                }
+                let mut poles = Vec::with_capacity(np);
+                for _ in 0..np {
+                    let q = p(&mut t)?;
+                    let w = if rat { t.num()? } else { 1.0 };
+                    poles.push([q[0] * w, q[1] * w, q[2] * w, w]);
+                }
+                let knots: Vec<(f64, usize)> = if k == 6 {
+                    vec![(0.0, deg + 1), (1.0, deg + 1)]
+                } else {
+                    (0..nk)
+                        .map(|_| Some((t.num()?, t.count()?)))
+                        .collect::<Option<_>>()?
+                };
+                let (flat, extra, turn) = flat_knots(deg, &knots, np, periodic)?;
+                let poles: Vec<[f64; 4]> = (0..np + extra).map(|i| poles[(i + np - turn) % np]).collect();
+                if flat.len() != poles.len() + deg + 1 {
+                    return None;
+                }
+                let per = periodic.then(|| (knots[0].0, knots[knots.len() - 1].0));
+                (Raw::Spline(deg, flat, poles, per), "other")
+            }
+            8 => {
+                t.skip(2)?;
+                if depth > MAX_WRAP {
+                    return None;
+                }
+                return self.raw(t.at, depth + 1);
+            }
+            _ => return None,
+        })
+    }
+
+    fn edge_curve(&self, e: Used) -> Option<(usize, Xf, f64, f64)> {
+        let Kind::Edge {
+            curve: Some((c, l, a, b)),
+            ..
+        } = self.f.shapes[e.shape - 1].kind
+        else {
+            return None;
+        };
+        Some((
+            *self.f.curves.get(c.wrapping_sub(1))?,
+            e.xf.then(self.f.locs.get(l)?),
+            a,
+            b,
+        ))
+    }
+
+    /// The curve's kind as GeomAdaptor names it: line, circle, or other.
+    pub fn kind(&self, e: Used) -> &'static str {
+        self.edge_curve(e)
+            .and_then(|(at, ..)| self.raw(at, 0))
+            .map_or("other", |r| r.1)
+    }
+
+    /// `n + 1` points at even steps over the edge's range; a degenerate edge's at its vertex.
+    /// A curve's axes are normalised as OpenCascade's gp_Dir and gp_Ax2 do on reading.
+    pub fn sample(&self, e: Used, n: usize) -> Option<Vec<Point3>> {
+        let place = |xf: &Xf, q: [f64; 3]| {
+            let p = Point3::new(q[0], q[1], q[2]);
+            if xf.r == IDENTITY.r && xf.t == IDENTITY.t {
+                p
+            } else {
+                xf.point(p)
+            }
+        };
+        let s = &self.f.shapes[e.shape - 1];
+        if let Kind::Edge {
+            degenerate: true,
+            curve: None,
+        } = s.kind
+        {
+            let v = s.children.iter().find(|c| c.ori == Ori::F)?;
+            let Kind::Vertex(p) = self.f.shapes.get(v.shape.wrapping_sub(1))?.kind else {
+                return None;
+            };
+            let p = place(&e.xf.then(self.f.locs.get(v.loc)?), [p.x, p.y, p.z]);
+            return Some(vec![p; n + 1]);
+        }
+        let (at, xf, a, b) = self.edge_curve(e)?;
+        let (raw, _) = self.raw(at, 0)?;
+        Some(
+            (0..=n)
+                .map(|i| place(&xf, eval_raw(&raw, a + (b - a) * i as f64 / n as f64)))
+                .collect(),
+        )
+    }
+}
+
+/// gp_Dir: a vector over its length; None for none.
+fn gp_dir(v: [f64; 3]) -> Option<[f64; 3]> {
+    let d = (v[0] * v[0] + v[1] * v[1] + v[2] * v[2]).sqrt();
+    (d > 1e-290).then(|| [v[0] / d, v[1] / d, v[2] / d])
+}
+
+struct Cur<'b, 'a> {
+    t: &'b [&'a str],
+    at: usize,
+}
+
+impl Cur<'_, '_> {
+    fn next(&mut self) -> Option<&str> {
+        let x = self.t.get(self.at).copied();
+        self.at += 1;
+        x
+    }
+
+    fn num(&mut self) -> Option<f64> {
+        self.next()?.parse().ok().filter(|x: &f64| x.is_finite())
+    }
+
+    fn count(&mut self) -> Option<usize> {
+        self.next()?.parse().ok()
+    }
+
+    fn int(&mut self) -> Option<i64> {
+        self.next()?.parse().ok()
+    }
+
+    fn skip(&mut self, n: usize) -> Option<()> {
+        self.at = self.at.checked_add(n)?;
+        (self.at <= self.t.len()).then_some(())
+    }
+}
+
+fn eval_raw(c: &Raw, u: f64) -> [f64; 3] {
+    match c {
+        Raw::Line(o, d) => [o[0] + u * d[0], o[1] + u * d[1], o[2] + u * d[2]],
+        Raw::Conic(o, x, y, ra, rb) => {
+            let (s, co) = dmath::sin_cos(u);
+            let (a1, a2) = (ra * co, rb * s);
+            [
+                a1 * x[0] + a2 * y[0] + o[0],
+                a1 * x[1] + a2 * y[1] + o[1],
+                a1 * x[2] + a2 * y[2] + o[2],
+            ]
+        }
+        Raw::Spline(deg, k, poles, per) => {
+            let deg = *deg;
+            let mut u = u;
+            if let Some((lo, hi)) = *per {
+                let p = hi - lo;
+                if p > 0.0 {
+                    while u > hi {
+                        u -= p;
+                    }
+                    while u < lo {
+                        u += p;
+                    }
+                }
+            }
+            let last = poles.len() - 1;
+            let mut s = deg;
+            while s < last && k[s + 1] <= u {
+                s += 1;
+            }
+            let mut d: Vec<[f64; 4]> = (0..=deg).map(|j| poles[s - deg + j]).collect();
+            for r in 1..=deg {
+                for j in (r..=deg).rev() {
+                    let i = s - deg + j;
+                    let den = k[i + deg - r + 1] - k[i];
+                    let a = if den != 0.0 { (u - k[i]) / den } else { 0.0 };
+                    let prev = d[j - 1];
+                    for (x, p) in d[j].iter_mut().zip(prev) {
+                        *x = p * (1.0 - a) + *x * a;
+                    }
+                }
+            }
+            let w = d[deg][3];
+            [d[deg][0] / w, d[deg][1] / w, d[deg][2] / w]
+        }
+    }
+}
+
+#[cfg(test)]
+mod topo_tests {
+    use super::*;
+
+    /// A wire of a line and a half circle, the circle's edge used twice.
+    const WIRE: &str = "CASCADE Topology V1, (c) Matra-Datavision\nLocations 1\n1\n1 0 0 5\n0 1 0 0\n0 0 1 0\nCurve2ds 0\nCurves 2\n1 0 0 0 1 0 0\n2 0 0 0 0 0 1 1 0 0 0 1 0 2\nPolygon3D 0\nPolygonOnTriangulations 0\nSurfaces 0\nTriangulations 0\n\nTShapes 5\nVe\n1e-07\n-2 0 0\n0 0\n\n0101101\n*\nVe\n1e-07\n2 0 0\n0 0\n\n0101101\n*\nEd\n 1e-07 1 1 0\n1  1 0 -2 2\n0\n\n0101000\n+5 0 -4 0 *\nEd\n 1e-07 1 1 0\n1  2 0 0 3.141592653589793\n0\n\n0101000\n+4 0 -5 0 *\nWi\n\n0101100\n+3 0 -2 0 +2 1 *\n\n+1 0\n";
+
+    #[test]
+    fn edges_in_opencascade_order_and_sampled_at_its_parameters() {
+        let t = BrepTopo::new(WIRE.as_bytes()).expect("reads");
+        let es = t.edges().expect("edges");
+        // the half circle twice, once moved: two places, so two edges in the map
+        assert_eq!(es.len(), 3);
+        assert_eq!(t.kind(es[0]), "line");
+        assert_eq!(t.kind(es[1]), "circle");
+        let p = t.sample(es[0], 2).expect("samples");
+        assert_eq!((p[0].x, p[1].x, p[2].x), (-2.0, 0.0, 2.0));
+        let q = t.sample(es[2], 2).expect("samples");
+        assert!((q[1].x - 5.0).abs() < 1e-15 && (q[1].y - 2.0).abs() < 1e-15);
+        assert_eq!(t.wires().expect("wires")[0].len(), 3);
+    }
+}

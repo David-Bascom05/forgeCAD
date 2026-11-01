@@ -18,6 +18,7 @@ forge-ops = { path = "../../kernel/forge-ops" }
 forge-mesh = { path = "../../kernel/forge-mesh" }
 forge-model = { path = "../../kernel/forge-model" }
 forge-agent = { path = "../forge-agent" }
+forge-import = { path = "../forge-import" }
 
 [lints]
 workspace = true

@@ -1,0 +1,21 @@
+[package]
+name = "forge-import"
+description = "Other systems' part histories as ForgeCAD part files: FreeCAD .FCStd"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[dependencies]
+forge-math = { path = "../../kernel/forge-math" }
+forge-step = { path = "../../kernel/forge-step" }
+forge-topo = { path = "../../kernel/forge-topo" }
+forge-geom = { path = "../../kernel/forge-geom" }
+forge-bool = { path = "../../kernel/forge-bool" }
+forge-agent = { path = "../forge-agent" }
+# a .FCStd is a zip of deflated XML and .brp files
+miniz_oxide = { version = "=0.8.9", default-features = false, features = ["with-alloc"] }
+roxmltree = { version = "=0.20.0", default-features = false, features = ["std"] }
+
+[lints]
+workspace = true

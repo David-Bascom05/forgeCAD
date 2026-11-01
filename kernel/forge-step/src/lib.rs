@@ -2,6 +2,7 @@
 //! Written from the standard's definitions. `import` also takes OpenCascade's `.brep` and IGES solids.
 
 mod brep;
+pub use brep::{BrepTopo, Used};
 pub mod fit;
 mod heal;
 mod iges;
