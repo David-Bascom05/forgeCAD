@@ -392,3 +392,32 @@ extrude add 60 z 0 0 -1 x 1 0 0 at 0 0 30 loop arc 60 -28 34 40.320215 -260.6404
     );
     assert!(volume(m.body().expect("a body")) > 0.0);
 }
+
+// (the hair edge, a line ending within a tolerance of where it meets an arc; volume from `builds` on both paths)
+#[test]
+fn hair_edge_at_the_tolerance_floor_is_valid() {
+    builds(
+        "b0: extrude 2 z 0 1 0 x 1 0 0 at 0 0 0 loop arc 30 -40 5 -75.52249181407 151.04497562814 arc 30 -40 5 75.52248381407 208.95502437186 circle 30 -40 2.5
+extrude add 2 z 0 1 0 x 1 0 0 at 0 2 0 loop arc 42 -40.000001 2 -75.52249181407 151.04497562814 line 42.500000135 -38.063509362 31.250000338 -35.158770905 arc 30 -40 5 75.52248381407 208.95502437186 line 31.249999662 -44.84122927 42.499999865 -41.936492708 circle 30 -40 2.5 circle 42 -40.000001 1
+",
+    );
+}
+
+#[test]
+fn wall_slivers_shallower_than_the_chord_mesh_closed() {
+    builds(
+        "b0: extrude 12 z 0 1 0 x 1 0 0 at 0 0 0 circle 0 0 9 loop arc 0 0 5.0 -1.604491527 3.208983053 line 4.998039616 0.140000000 -2.377776251 4.398429276 arc 0 0 5.0 118.395508473 3.208983053 line -2.620263364 4.258429276 -2.620263364 -4.258429276 arc 0 0 5.0 238.395508473 3.208983053 line -2.377776251 -4.398429276 4.998039616 -0.140000000
+extrude add 4 z 0 1 0 x 1 0 0 at 0 0 0 poly 4.998039616 -0.140000000 4.998039616 0.140000000 -2.377776251 4.398429276 -2.620263364 4.258429276 -2.620263364 -4.258429276 -2.377776251 -4.398429276
+",
+    );
+}
+
+#[test]
+fn slit_left_in_a_face_by_a_tool_edge_meshes() {
+    builds(
+        "b0: extrude 40 z 0 1 0 x 1 0 0 at 0 0 0 poly -10 -20 -10 20 10 20 10 -20
+extrude cut 15 z -1 0 0 x 0 0 -1 at 10 0 0 poly -20 -15 -20 -40 6 -40 6 -27 -9 -27
+extrude cut 15 z 1 1 0 x -1 1 0.0007 at -3 27 -6 poly 0 15 0 0 18 0
+",
+    );
+}

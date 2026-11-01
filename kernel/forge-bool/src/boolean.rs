@@ -2367,7 +2367,7 @@ pub(crate) fn trim(
         let gap = cuts[i].point.distance(cuts[j].point);
         // (a curve radius R stays within t of a tangent for sqrt(8 R t): under a third of a mm unless
         // R is over a metre)
-        if gap <= 2.0 * cuts[i].tol.max(cuts[j].tol) || gap > 0.3 {
+        if gap <= 1.2 * cuts[i].tol.max(cuts[j].tol) || gap > 0.3 {
             continue;
         }
         let wrap = if next == 0 { period } else { 0.0 };

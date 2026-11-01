@@ -3,7 +3,7 @@ use crate::mesh::TriMesh;
 use forge_geom::{Curve, Surface, SurfaceGeom};
 use forge_math::{Point2, dmath};
 use forge_topo::uv::{align_loops, draw_loop_near};
-use forge_topo::{Body, FaceId};
+use forge_topo::{Body, CoedgeId, FaceId};
 
 /// How closely the triangles must follow the exact shape.
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -790,17 +790,25 @@ fn tessellate_face(
     let mut rings: Vec<Vec<Point2>> = Vec::new();
     let mut ring_globals: Vec<Vec<u32>> = Vec::new();
     for &l in &face.loops {
-        // a loop of edges there and back (a tool touched this face along a line) bounds nothing
-        if body
-            .lp(l)
-            .coedges()
-            .all(|c| body.partner(c).is_some_and(|p| body.coedge(p).lp == l))
-        {
+        // edges walked there and back (a tool touched this face along a line) bound nothing
+        let mut walk: Vec<CoedgeId> = Vec::new();
+        for c in body.lp(l).coedges() {
+            if walk.last().is_some_and(|&t| body.partner(t) == Some(c)) {
+                walk.pop();
+            } else {
+                walk.push(c);
+            }
+        }
+        while walk.len() >= 2 && body.partner(walk[0]) == walk.last().copied() {
+            walk.pop();
+            walk.remove(0);
+        }
+        if walk.is_empty() {
             continue;
         }
         let mut samples = Vec::new();
         let mut ids = Vec::new();
-        for c in body.lp(l).coedges() {
+        for c in walk {
             let co = body.coedge(c);
             let s = &edge_samples[co.edge.index()];
             // the edge's samples are already mesh vertices: their points, not evaluated again
@@ -1864,7 +1872,8 @@ fn strips(
         } else {
             arc_step(r, q)
         };
-        ((u1 - u0) * len / (r * step)).ceil().max(1.0) as usize
+        // two at least: one chord across a sliver of a curved face can be the plane's beside it
+        ((u1 - u0) * len / (r * step)).ceil().max(2.0) as usize
     };
     // each row: (u, mesh index), increasing u
     let added = mesh.positions.len();
