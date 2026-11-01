@@ -678,6 +678,11 @@ fn export(features: History<'_>, i: usize, before: Option<&Before>) -> Result<St
             if l.options.apex.iter().flatten().any(|a| a.dome.is_some()) {
                 return Err("a domed loft: OCCT has no such end");
             }
+            if !matches!(l.kind, LoftKind::Ruled) && l.options.apex.iter().any(Option::is_some) {
+                // sections it passes through, by its own curve between them: 2-9% off ours where neither
+                // is wrong (research/spline-loops/apex_volume.py); tests/spline.rs holds the exact volumes
+                return Err("a smooth loft on to a point: OCCT's curve between the sections is its own");
+            }
             let ps: Vec<String> = l.profiles.iter().map(|p| format!("{{{}}}", profile(p))).collect();
             let (ruled, loose) = match l.kind {
                 LoftKind::Ruled => (true, None),

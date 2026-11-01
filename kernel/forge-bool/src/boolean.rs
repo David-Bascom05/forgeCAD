@@ -3776,8 +3776,10 @@ pub(crate) fn crossings_near(curve: &Curve, range: Interval, s: &Surface, h: Cur
     let at = |k: usize| (h.t - w + 2.0 * w * k as f64 / n as f64).clamp(range.lo, range.hi);
     // samples within a hair of the surface carry no sign: a true touch flickers around zero
     let dead = 1e-9;
-    let mut out = Vec::new();
+    let mut out: Vec<CurveHit> = Vec::new();
     let mut last: Option<(f64, f64)> = None;
+    // how far the curve has gone from the surface since the last crossing
+    let mut deep = 0.0_f64;
     for k in 0..=n {
         let t1 = at(k);
         let g1 = g(t1);
@@ -3797,12 +3799,19 @@ pub(crate) fn crossings_near(curve: &Curve, range: Interval, s: &Surface, h: Cur
                 }
             }
             let t = 0.5 * (lo + hi);
-            out.push(CurveHit {
-                t,
-                point: curve.eval(t),
-                contact: Contact::Crossing,
-            });
+            // in and out again by less than a tolerance: still a touch
+            if !out.is_empty() && deep <= tol::LINEAR {
+                out.pop();
+            } else {
+                out.push(CurveHit {
+                    t,
+                    point: curve.eval(t),
+                    contact: Contact::Crossing,
+                });
+            }
+            deep = 0.0;
         }
+        deep = deep.max(g1.abs());
         last = Some((t1, g1));
     }
     out

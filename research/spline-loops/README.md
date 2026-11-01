@@ -47,6 +47,30 @@ squares about each section's centre, which lost none (44 agree, 18 wrong both wa
 OCCT's ThruSections and ACIS's skinning were looked for and not found documented; Onshape's help says
 alignment falls back to "estimated proximity" between vertices when no guides are set.
 
+## A smooth loft on to a point (`apex_volume.py`, measured 2026-11-01)
+Against OCCT's ThruSections these differ by 2-9%, so the volume was checked from the definition. A slice is the
+first section scaled by L(s) about C(s), L and Z natural cubics over the sections' centre distances, so
+V = A0 * integral L^2 Z' ds, exact over the rationals. Mass from the B-rep agrees to 1e-12 in every case.
+```
+                 exact             our mass          OCCT
+cone (no spline assumed)  523.598775598     523.598775598     523.598772
+oblique cone              523.598775598     523.598775598     523.598772
+cone, 3 sections          523.598775598     523.598775598     523.598774
+coaxial                   532.073595780     532.073595780     542.597914   +2.0%
+bulge                     602.606090845     602.606090845     629.135298   +4.4%
+loft_ends/4               881.578653373     881.578653373     926.498360   +5.1%
+loft_ends/36             1143.881052477    1143.881052477    1200.683484   +5.0%
+loft_ends/9              1480.192527371    1480.192527371    1529.071525   +3.3%
+loft_ends/14             2440.898891760    2440.898891760    2537.573438   +4.0%
+loft_ends/20             2048.522605911    2048.522605911    2135.840558   +4.3%
+loft_ends/10             1151.883553986    1151.883553986    1261.373229   +9.5%
+```
+On a cone, where any spline reproducing a line gives one answer, both kernels hold it, so both volumes are right for
+their surfaces. OCCT passes through the sections too (slice radius 4.00001 at the middle of `coaxial`) with its own
+curve between them: on `bulge` radius 5.203 at z 2.5 and 3.717 at z 7.5 where the natural spline has 5.469 and 2.969.
+This proves our B-rep and mass hold the stated definition. It does not prove that definition is Parasolid's: that
+takes real lofts with a STEP volume, and none with an apex has been measured here.
+
 ## Proofs (`lean/`; Lean + Mathlib, the toolchain of research/loft-ssi/shipped)
 `SplineLoops/Certs.lean`, no sorry: coefficients of one sign leave no root (`bern_pos`, `bern2_pos`: `bern_roots`'s
 test and `CurveHull::misses`), the factor in a product of basis polynomials (`bb_mul`: `bern_mul`), and one sign change

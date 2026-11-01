@@ -492,3 +492,75 @@ fn a_loft_runs_between_curved_sections() {
     let three = [a, arch(5.0, 6.0, 5.0), b];
     assert!(checked(&loft(&three, smooth, &plain, 1).unwrap()) > 0.0);
 }
+
+// research/spline-loops/apex_volume.py: the first three lie on one cone, so no spline is assumed
+#[test]
+fn a_smooth_loft_on_to_a_point_has_its_exact_volume() {
+    use forge_math::Point3;
+    use forge_ops::{Apex, LoftGuides, LoftKind, LoftOptions, loft_and_bounds};
+    let c = |o: [f64; 3], r: f64| Profile {
+        plane: Frame::WORLD.with_origin(Point3::new(o[0], o[1], o[2])),
+        loops: vec![Profile::circle(Point2::ORIGIN, r, 0)],
+    };
+    let cases = [
+        (
+            vec![c([0.0, 0.0, 0.0], 5.0), c([0.0, 0.0, 10.0], 2.5)],
+            [0.0, 0.0, 20.0],
+            523.5987755982989,
+        ),
+        (
+            vec![c([0.0, 0.0, 0.0], 5.0), c([1.5, 1.0, 10.0], 2.5)],
+            [3.0, 2.0, 20.0],
+            523.5987755982989,
+        ),
+        (
+            vec![
+                c([0.0, 0.0, 0.0], 5.0),
+                c([0.0, 0.0, 4.0], 4.0),
+                c([0.0, 0.0, 12.0], 2.0),
+            ],
+            [0.0, 0.0, 20.0],
+            523.5987755982989,
+        ),
+        (
+            vec![c([0.0, 0.0, 0.0], 5.0), c([0.0, 0.0, 6.0], 4.0)],
+            [0.0, 0.0, 12.0],
+            532.0735957804828,
+        ),
+        (
+            vec![c([0.0, 0.0, 0.0], 5.0), c([0.0, 0.0, 5.0], 5.0)],
+            [0.0, 0.0, 10.0],
+            602.6060908448279,
+        ),
+    ];
+    for (ps, a, want) in cases {
+        let o = LoftOptions {
+            apex: [
+                None,
+                Some(Apex {
+                    point: Point3::new(a[0], a[1], a[2]),
+                    dome: None,
+                }),
+            ],
+            ..LoftOptions::default()
+        };
+        let free = LoftKind::Smooth {
+            start: None,
+            end: None,
+        };
+        let b = loft_and_bounds(&ps, free, &LoftGuides::None, &o, 1).unwrap().0;
+        let v = checked(&b);
+        assert!((v - want).abs() < 1e-9 * want, "{v} {want}");
+    }
+}
+
+// a flat side within tolerance of a wall's tangent ruling touches it: no sliver of a crossing
+#[test]
+fn a_block_within_tolerance_of_a_wall_touches_it() {
+    use forge_model::adversarial::{canonical, families, outcome};
+    let f = families().into_iter().find(|f| f.0 == "spline_tangent").unwrap();
+    for s in [5, 7, 80, 91, 98, 99] {
+        let k = outcome(&canonical(&(f.1)(s))).kind();
+        assert!(k.is_none(), "{s} {k:?}");
+    }
+}
