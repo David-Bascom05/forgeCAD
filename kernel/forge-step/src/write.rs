@@ -297,10 +297,14 @@ fn seams(body: &Body, f: FaceId) -> (bool, bool) {
             if e.coedges.len() < 2 || body.coedge_face(e.coedges[0]) != body.coedge_face(e.coedges[1]) {
                 continue;
             }
-            let p = l.points[l.coedge_first[k]];
-            let near = |x: f64, a: f64, b: f64| (x - a).abs().min((x - b).abs()) <= 1e-6 * (b - a).abs().max(1e-9);
-            out.0 |= near(p.x, lo.x, hi.x) && !near(p.y, lo.y, hi.y);
-            out.1 |= near(p.y, lo.y, hi.y) && !near(p.x, lo.x, hi.x);
+            let (i, j) = (l.coedge_first[k], l.coedge_first.get(k + 1).copied().unwrap_or(l.points.len()));
+            let run = &l.points[i..j];
+            let along = |x: fn(&Point2) -> f64, a: f64, b: f64| {
+                let eps = 1e-6 * (b - a).abs().max(1e-9);
+                run.iter().all(|q| (x(q) - a).abs() <= eps) || run.iter().all(|q| (x(q) - b).abs() <= eps)
+            };
+            out.0 |= along(|q| q.x, lo.x, hi.x);
+            out.1 |= along(|q| q.y, lo.y, hi.y);
         }
     }
     out

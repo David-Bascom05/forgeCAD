@@ -2,7 +2,7 @@
 """OpenCascade reads STEP files: is each valid, and its volume, area and box. One child per file,
 memory and time capped, so a hostile or huge file costs only itself.
 
-  $VENV/bin/python -I step_read.py [--jobs 4] [--timeout 120] [--fix] FILE..  (or @LIST, or NAME=PATH)
+  $VENV/bin/python -I step_read.py [--jobs 4] [--timeout 120] FILE..  (or @LIST, or NAME=PATH)
 
 One JSON line per file: name, valid, solids, shells, faces, vol, area, box, secs, or err. Files
 are data: nothing in them runs, and the reader runs from where it is, not from beside them.
