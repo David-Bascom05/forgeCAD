@@ -89,13 +89,34 @@ fn quadratic_into(a: f64, b: f64, c: f64, out: &mut impl FnMut(Root)) {
 /// rounding error) come from the derivative's roots and are flagged.
 pub fn real_roots(c: &[f64], lo: f64, hi: f64) -> Vec<Root> {
     let mut out = Vec::with_capacity(c.len());
-    roots_into(c, lo, hi, &mut out);
+    roots_into(c, lo, hi, &mut out, None);
+    out
+}
+
+/// `real_roots`, and to `turns` each end of the range and each place the polynomial turns where its
+/// value is within `slack` of zero but not within rounding: it nearly touches zero there, and no
+/// root may say so.
+pub fn real_roots_turns(c: &[f64], lo: f64, hi: f64, slack: f64, turns: &mut Vec<f64>) -> Vec<Root> {
+    let mut out = Vec::with_capacity(c.len());
+    let t = trim(c);
+    if t.len() >= 4 {
+        roots_into(c, lo, hi, &mut out, Some((slack, turns)));
+        return out;
+    }
+    roots_into(c, lo, hi, &mut out, None);
+    let vertex = (t.len() == 3).then(|| -t[1] / (2.0 * t[2]));
+    for x in [lo, hi].into_iter().chain(vertex.filter(|x| lo < *x && *x < hi)) {
+        let (f, e) = eval_with_bound(t, x);
+        if f.abs() > e && f.abs() <= slack {
+            turns.push(x);
+        }
+    }
     out
 }
 
 /// `real_roots` appended to `out` (which also holds the derivative's roots for a while):
 /// small degrees allocate nothing more.
-fn roots_into(c: &[f64], lo: f64, hi: f64, out: &mut Vec<Root>) {
+fn roots_into(c: &[f64], lo: f64, hi: f64, out: &mut Vec<Root>, mut turns: Option<(f64, &mut Vec<f64>)>) {
     let c = trim(c);
     match c.len() {
         0 | 1 => return,
@@ -131,7 +152,7 @@ fn roots_into(c: &[f64], lo: f64, hi: f64, out: &mut Vec<Root>) {
     };
     // the derivative's roots, borrowed from the end of `out` as cuts
     let mark = out.len();
-    roots_into(d, lo, hi, out);
+    roots_into(d, lo, hi, out, None);
     let (mut cs, ch);
     let cuts: &[f64] = if out.len() - mark + 2 <= SMALL + 2 {
         cs = [0.0; SMALL + 2];
@@ -151,12 +172,20 @@ fn roots_into(c: &[f64], lo: f64, hi: f64, out: &mut Vec<Root>) {
         &ch
     };
     out.truncate(mark);
-    for w in cuts.windows(2) {
+    for (i, w) in cuts.windows(2).enumerate() {
         let (a, b) = (w[0], w[1]);
         let (fa, ea) = eval_with_bound(c, a);
         let (fb, eb) = eval_with_bound(c, b);
         let za = fa.abs() <= ea;
         let zb = fb.abs() <= eb;
+        if let Some((slack, turns)) = &mut turns {
+            if !za && fa.abs() <= *slack {
+                turns.push(a);
+            }
+            if i + 2 == cuts.len() && !zb && fb.abs() <= *slack {
+                turns.push(b);
+            }
+        }
         if za {
             push_root(out, mark, c, d, a);
         }

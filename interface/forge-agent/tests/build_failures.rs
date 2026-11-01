@@ -570,3 +570,24 @@ fn the_box_of_a_tilted_arc_is_tight() {
     let z = m.stats().2.z.hi;
     assert!((z - top).abs() < 0.03, "{z} vs {top}");
 }
+
+/// Equal crossing holes, the second's wall tangent to the first's cap: the curve touches the cap's rim
+/// a few 1e-15 off it, so the closed form saw no root, and the rim got no vertex (FaceWrongSide on the
+/// wall, on a body returned as good).
+#[test]
+fn a_conic_touching_a_rim_within_rounding_gets_a_vertex() {
+    let pi = std::f64::consts::PI;
+    let v = builds(
+        "extrude 14 z 0 -1 0 x 1 0 0 at 0 0 0 rect -8 -5 16 10
+extrude cut 10.5 z 0 1 0 x 1 0 0 at 0 -14 0 circle 0 0 3.5
+extrude cut 12.15 z 1 0 0 x 0 -1 0 at -9 0 0 circle 7 0 3.5
+",
+    );
+    assert!(v < 16.0 * 10.0 * 14.0 - pi * 3.5 * 3.5 * 10.5, "{v}");
+    // a tab whose end edge lies tangent to a rod: the circle touches the tab's slanted faces
+    builds(
+        "extrude sym 60 z 0 -1 0 x 1 0 0 at 0 0 0 circle 0 0 2
+extrude add sym 4 z 1 0 0 x 0 1 0 at 0 0 0 loop line -20 2 -48.7059047745 4.8296291314 arc -50 0 5 75 210 line -48.7059047745 -4.8296291314 -20 -2 line -20 -2 -20 2
+",
+    );
+}

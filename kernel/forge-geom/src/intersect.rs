@@ -448,6 +448,11 @@ fn conic_quadric(f: &Frame, a: f64, b: f64, range: Interval, s: &Surface) -> Opt
     // u = tan(tau / 2) is well conditioned only for |tau| <= pi/2, so solve
     // around t = 0 and around t = pi and keep each half's own roots
     let mut ts: Vec<(f64, Contact)> = Vec::new();
+    let mut turns: Vec<f64> = Vec::new();
+    // the implicit's gradient along the conic, so how far a value within LINEAR of the surface can be
+    // from zero (times 4 for the 1 + u^2 squared multiplied through below)
+    let mmax = m.iter().flatten().fold(0.0f64, |a, x| a.max(x.abs()));
+    let lip = 6.0 * mmax * (o.length() + ex0.length() + ey0.length()) + lv.length();
     for phi in [0.0, dmath::PI] {
         let (sp, cp) = dmath::sin_cos(phi);
         let ex = ex0 * cp + ey0 * sp;
@@ -471,13 +476,17 @@ fn conic_quadric(f: &Frame, a: f64, b: f64, range: Interval, s: &Surface) -> Opt
             2.0 * k2 - 2.0 * k4,
             k0 - k1 + k3,
         ];
-        for r in poly::real_roots(&poly, -1.0, 1.0) {
+        let (mark, slack) = (turns.len(), 4.0 * tol::LINEAR * lip);
+        for r in poly::real_roots_turns(&poly, -1.0, 1.0, slack, &mut turns) {
             let contact = if r.touching {
                 Contact::Touching
             } else {
                 Contact::Crossing
             };
             ts.push((phi + 2.0 * dmath::atan(r.x), contact));
+        }
+        for t in &mut turns[mark..] {
+            *t = phi + 2.0 * dmath::atan(*t);
         }
     }
     let cone_apex = match s {
@@ -502,6 +511,25 @@ fn conic_quadric(f: &Frame, a: f64, b: f64, range: Interval, s: &Surface) -> Opt
             continue; // a root lost to cancellation; the subdivision finds the truth
         }
         hits.push(CurveHit { t, point: p, contact });
+    }
+    // as for a line, a touch is where the value turns within tolerance of the surface: rounding
+    // may keep it off zero, and then no root says so. Where a crossing runs into it within
+    // tolerance, the crossings stand.
+    let near = |t: f64| s.distance(curve.eval(t)) <= tol::LINEAR;
+    let apart = |x: f64, t: f64| dmath::wrap_tau(x - t + dmath::PI) - dmath::PI;
+    for t0 in turns {
+        let t = range.lo + dmath::wrap_tau(t0 - range.lo);
+        if t > range.hi + 1e-12 {
+            continue;
+        }
+        let t = t.min(range.hi);
+        if near(t) && !hits.iter().any(|h| near_between(&near, t + apart(h.t, t), t)) {
+            hits.push(CurveHit {
+                t,
+                point: curve.eval(t),
+                contact: Contact::Touching,
+            });
+        }
     }
     hits.sort_by(|x, y| x.t.total_cmp(&y.t));
     hits.dedup_by(|x, y| x.point.distance(y.point) <= tol::LINEAR);
@@ -1112,6 +1140,30 @@ mod tests {
             assert_eq!(at.len(), 2, "{at:?}");
             assert!((at[0] + rho).abs() < 1e-9 && (at[1] - rho).abs() < 1e-9, "{at:?}");
         }
+    }
+
+    /// Rounding puts the plane a hair off the circle's top: a touch all the same.
+    #[test]
+    fn a_circle_within_tolerance_of_a_plane_touches_it() {
+        let c = Curve::Circle(Circle {
+            frame: Frame::WORLD,
+            radius: 12.7,
+        });
+        let range = Interval::new(0.0, dmath::TAU);
+        for off in [4e-15, 1e-9, 5e-6] {
+            let f = Frame::from_z(Point3::new(0.0, 12.7 + off, 0.0), Vec3::Y.normalize().unwrap());
+            let CurveSurface::Hits(h) = curve_surface(&c, range, &Surface::Plane(Plane::new(f))) else {
+                panic!("hits expected");
+            };
+            assert_eq!(h.len(), 1, "{off}: {h:?}");
+            assert_eq!(h[0].contact, Contact::Touching);
+            assert!((h[0].t - dmath::PI / 2.0).abs() < 1e-3, "{off}: {h:?}");
+        }
+        let f = Frame::from_z(Point3::new(0.0, 12.7 + 1e-3, 0.0), Vec3::Y.normalize().unwrap());
+        assert_eq!(
+            curve_surface(&c, range, &Surface::Plane(Plane::new(f))),
+            CurveSurface::Hits(vec![])
+        );
     }
 
     fn hits(r: LineSurface) -> Vec<LineHit> {
