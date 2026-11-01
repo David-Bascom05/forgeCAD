@@ -366,7 +366,8 @@ class Tr:
         except (Unresolved, KeyError, Unsupported):
             plane = None
         def choose(on_plane):
-            best, score = None, 0
+            # on the plane it was drawn on a sketch needs no point in common: an ellipse's record holds none (00138678)
+            best, score = None, -1 if on_plane and isinstance(plane, OnPlane) else 0
             for k, s in enumerate(self.raw.get("sketches", [])):
                 if k in self.used or "sketchMatrix" not in s:
                     continue
@@ -670,6 +671,11 @@ class Tr:
                 if fid not in self.sk:
                     raise Unresolved("a region of an unread sketch")
                 a = self.sk[fid][0]
+                # a spline in no region: the sampled curves may have missed a crossing, and the regions are then not the
+                # sketch's (00409237 cut a third of what it should)
+                used = {i for lp in a.loops for i, _ in lp}
+                if any(p.kind == "poly" and i not in used for i, p in enumerate(a.pieces)):
+                    raise Unsupported("a sketch's spline left out of its regions")
                 filt = len(q[1]) > 1 and q[1][1] is True
                 by.setdefault(fid, []).extend(a.outermost() if filt else range(len(a.faces)))
                 if len(a.faces) > 1:
@@ -1691,6 +1697,38 @@ def legs_of(fr, path):
     return legs
 
 
+dist2 = math.dist
+
+
+class Thru:
+    """A section's curve: the cubic through its points, as `thru` writes it. Stands where a segment holds its centre."""
+
+    def __init__(self, pts, d0, d1):
+        self.pts, self.d0, self.d1 = list(pts), d0, d1
+
+    def back(self):
+        neg = lambda d: None if d is None else tuple(-x for x in d)
+        return Thru(self.pts[::-1], neg(self.d1), neg(self.d0))
+
+    def flipped(self):
+        """Mirrored in x's axis, as `face` does, and run backwards."""
+        m = lambda q: None if q is None else (q[0], -q[1])
+        return Thru([m(q) for q in self.pts], m(self.d0), m(self.d1)).back()
+
+    def text(self):
+        """Its Bezier pieces as an exact `spline`: the kernel's `thru` spaces its knots by the chord, Parasolid's by its root."""
+        h, ms = sketch2d.fit_tangents(self.pts, self.d0, self.d1)
+        ctrl, knots, at = [self.pts[0]], [0.0] * 4, 0.0
+        for i in range(len(self.pts) - 1):
+            p, q = self.pts[i], self.pts[i + 1]
+            ctrl.append((p[0] + h[i] * ms[0][i] / 3, p[1] + h[i] * ms[1][i] / 3))
+            ctrl.append((q[0] - h[i] * ms[0][i + 1] / 3, q[1] - h[i] * ms[1][i + 1] / 3))
+            ctrl.append(q)
+            at += h[i]
+            knots += [at] * (3 if i + 2 < len(self.pts) else 4)
+        return "spline 3 " + " ".join(f"{fine(a)} {fine(b)}" for a, b in ctrl) + " knots " + " ".join(fine(k) for k in knots)
+
+
 def segs_of(arr, lp):
     """A loop as plain segments in its sketch's plane: (start, end, centre or None, signed sweep). A circle as two arcs."""
     out = []
@@ -1707,7 +1745,14 @@ def segs_of(arr, lp):
         if not fwd:
             s, e = e, s
         if p.kind == "poly":
-            raise Unsupported("a loft between splines")
+            if p.src is not None:
+                t = Thru(*p.src)
+            else:
+                # a stretch of a curve: enough of its points for the cubic through them to stay on it
+                k = p.pts[::4]
+                t = Thru(k + ([p.pts[-1]] if k[-1] != p.pts[-1] else []), None, None)
+            out.append((s, e, t if fwd else t.back(), 0.0))
+            continue
         if p.kind == "arc":
             _, d = p.sweep()
             out.append((s, e, p.c, d if fwd else -d))
@@ -1719,6 +1764,8 @@ def segs_of(arr, lp):
 def seg_samples(s, n=8):
     if s[2] is None:
         return [s[0]]
+    if isinstance(s[2], Thru):
+        return s[2].pts[:-1]
     a0 = math.atan2(s[0][1] - s[2][1], s[0][0] - s[2][0])
     r = math.dist(s[0], s[2])
     return [(s[2][0] + r * math.cos(a0 + s[3] * i / n), s[2][1] + r * math.sin(a0 + s[3] * i / n)) for i in range(n)]
@@ -1733,7 +1780,8 @@ def face(sec, flip):
     sec["fr"] = Frame.of(fr.o, fr.x, tuple(-x for x in fr.y), tuple(-x for x in fr.n))
     m = lambda p: (p[0], -p[1])
     # mirrored in x keeps the sense of each arc's travel reversed twice over: run backwards, then seen from behind
-    sec["loops"] = [[(m(e), m(s), None if c is None else m(c), d) for s, e, c, d in reversed(lp)] for lp in sec["loops"]]
+    mc = lambda c: None if c is None else c.flipped() if isinstance(c, Thru) else m(c)
+    sec["loops"] = [[(m(e), m(s), mc(c), d) for s, e, c, d in reversed(lp)] for lp in sec["loops"]]
 
 
 def whole_circle(lp):
@@ -1779,6 +1827,15 @@ def align(a, b, first=None):
             l = math.hypot(u, v) or 1.0
             s, e = (c[0] + r * u / l, c[1] + r * v / l), (c[0] - r * u / l, c[1] - r * v / l)
             b["loops"][k] = [(s, e, c, d), (e, s, c, d)]
+            continue
+        if len(la) == 1 == len(lb) and isinstance(lb[0][2], Thru) and isinstance(la[0][2], Thru):
+            # a closed curve starts anywhere: at its point nearest the last section's start, as circles do
+            t = lb[0][2]
+            if dist2(t.pts[0], t.pts[-1]) <= 1e-9 and t.d0 is None and t.d1 is None:
+                to = wa(la[0][0])
+                i0 = min(range(len(t.pts) - 1), key=lambda i: math.dist(to, wb(t.pts[i])))
+                pts = t.pts[i0:-1] + t.pts[:i0] + [t.pts[i0]]
+                b["loops"][k] = [(pts[0], pts[0], Thru(pts, None, None), 0.0)]
             continue
         n = len(lb)
         cost = lambda r: sum(math.dist(wa(la[i][0]), wb(lb[(i + r) % n][0])) ** 2 for i in range(n))
@@ -1829,7 +1886,9 @@ def section_text(sec):
     for lp in sec["loops"]:
         parts = []
         for s, e, c, d in lp:
-            if c is None:
+            if isinstance(c, Thru):
+                parts.append(c.text())
+            elif c is None:
                 parts.append(f"line {fine(s[0])} {fine(s[1])} {fine(e[0])} {fine(e[1])}")
             else:
                 a0 = math.degrees(math.atan2(s[1] - c[1], s[0] - c[0]))

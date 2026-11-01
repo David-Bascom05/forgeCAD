@@ -97,6 +97,11 @@ the chord, so a `thru` is not Onshape's curve through the same points.
 every truth here was also taken from a mesh of the same file. Where the two differ by more than 3e-3 a part should not be scored:
 26 of 181 smooth lofts. Neither is ground truth then (the mesh loses faces on some files: 00707398 is 80% off GProp).
 
+Lofts between spline sections in CADFS, 216 parts, truth as above: 27 build; 14 within 1e-3, none worse among those scored, 13 unsettled (ours
+is near the mesh on most of them, which is not a score). 131 do not translate (100 different segment counts, 3 a spline left out of the sketch's
+regions), 58 stop, fail or time out (27 twisted, not diagnosed). The two worst before were not spline faults: 00138678's ellipse sketch took a look-alike
+record's plane; 00409237's cut lost a region, so a spline in no region is now refused.
+
 ## A smooth loft on to a point (`apex_volume.py`)
 A slice is the first section scaled by L(s) about C(s), L and Z natural cubics over the knots, so V = A0 * integral L^2 Z' ds, exact
 over the rationals. Mass from the B-rep agrees to 1e-12 (`tests/spline.rs`). OCCT's ThruSections passes through
