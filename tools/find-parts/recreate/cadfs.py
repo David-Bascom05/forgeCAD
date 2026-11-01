@@ -147,6 +147,7 @@ class Tr:
         self.current = None  # the body the next unscoped line acts on
         self.alias = {}
         self.used = set()
+        self.sketch_ents = {}
         self.copies = {}
 
     def val(self, v):
@@ -182,6 +183,7 @@ class Tr:
         a = Arrangement(f["ents"])
         fr = self.frame_of(f, a)
         self.sk[f["id"]] = (a, fr)
+        self.sketch_ents[f["id"]] = f["ents"]
         if a.approx:
             self.notes.add("approx")
 
@@ -421,11 +423,62 @@ class Tr:
                 raise Unresolved("profile query " + (q[0] if isinstance(q, tuple) else "?"))
         return by
 
+    def imprinted(self, fid):
+        """Onshape imprints a sketch on its plane: regions are also cut by the edges of faces lying in that plane
+        and by earlier sketches drawn in it. The sketch's arrangement with those added."""
+        base, fr = self.sk[fid]
+        ents = list(self.sketch_ents[fid])
+        have = {e["id"] for e in ents}
+        for g, (ga, gfr) in self.sk.items():
+            if g == fid or g not in self.sketch_ents:
+                continue
+            if abs(abs(dot(gfr.n, fr.n)) - 1) > 1e-9 or abs(fr.uvw(gfr.o)[2]) > 1e-6:
+                continue
+            for e in self.sketch_ents[g]:
+                if e.get("construction") or e["kind"] in ("skPoint", "skText"):
+                    continue
+                pts = lambda q: list(fr.uvw(gfr.world(q[0], q[1]))[:2])
+                n = dict(e, id=f"{g}/{e['id']}")
+                try:
+                    for k in ("start", "mid", "end", "center"):
+                        if k in e:
+                            n[k] = pts(e[k])
+                    if "points" in e or "majorAxis" in e:
+                        continue
+                except (TypeError, IndexError):
+                    continue
+                ents.append(n)
+        if self.bodies:
+            st = self.state()
+            planar = {f["h"] for f in st.get("faces", []) if f["n"] and abs(abs(dot(f["n"], fr.n)) - 1) < 1e-9 and all(abs(fr.uvw(p)[2]) < 1e-5 for p in f["p"])}
+            for e in st.get("edges", []):
+                if not planar & set(e["f"]):
+                    continue
+                uv = [fr.uvw(p)[:2] for p in e["p"]]
+                closed = math.dist(uv[0], uv[-1]) < 1e-6
+                if e["k"] == "line":
+                    ents.append({"kind": "skLineSegment", "id": e["h"], "start": list(uv[0]), "end": list(uv[-1])})
+                elif e["k"] == "circle" and closed:
+                    cf = sketch2d.circle_from(uv[0], uv[5], uv[11])
+                    ents.append({"kind": "skCircle", "id": e["h"], "center": list(cf[0]), "radius": cf[1]})
+                elif e["k"] == "circle":
+                    ents.append({"kind": "skArc", "id": e["h"], "start": list(uv[0]), "mid": list(uv[8]), "end": list(uv[-1])})
+                else:
+                    ents.append({"kind": "polyline", "id": e["h"], "points": [list(p) for p in uv]})
+                    self.notes.add("approx")
+        if len(ents) == len(have):
+            return base
+        a = Arrangement(ents)
+        self.sk[fid] = (a, fr)
+        self.notes.add("imprint")
+        return a
+
     def imprint(self, q, env):
         fid = q[1][0][1].split(".")[0]
         if fid not in self.sk:
             raise Unresolved("an imprint of an unread sketch")
-        a = self.sk[fid][0]
+        a = self.imprinted(fid)
+        self.current_fr = self.sk[fid][1]
         cands = None
         for d in q[1][3].get("disambiguationData", []):
             if d[0] != "TD":
@@ -449,6 +502,27 @@ class Tr:
             raise Unresolved("imprint edge form")
         m = eq[1][3]
         s = self.deref(m.get("derivedFrom"), env)
+        if isinstance(s, fs.Call) and s[0] == "makeQuery":
+            # an edge from outside this sketch: what it imprinted lies on its carrier
+            if s[1][1] == "IMPRINT":
+                t = self.deref(s[1][3].get("derivedFrom"), env)
+                if isinstance(t, fs.Call) and t[0] == "sQuery":
+                    n = f"{s[1][0][1].split('.')[0]}/{t[1][2]}"
+                    ps = a.pieces_of(n)
+                    if ps:
+                        return ps, n
+                raise Unresolved("imprint edge source")
+            c = self.carrier(s, env)
+            fr = self.current_fr
+            ps = []
+            for i in a.live:
+                pc = a.pieces[i]
+                q = pc.sample(4)[len(pc.sample(4)) // 2] if pc.kind != "circle" else pc.a
+                if c.dist(fr.world(q[0], q[1])) <= TOL:
+                    ps.append(i)
+            if not ps:
+                raise Unresolved("imprint edge source")
+            return ps, a.pieces[ps[0]].ent
         if not (isinstance(s, fs.Call) and s[0] == "sQuery"):
             raise Unresolved("imprint edge source")
         name = s[1][2]

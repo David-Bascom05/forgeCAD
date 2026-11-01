@@ -477,6 +477,11 @@ def base_of(doc, n):
         s = doc.link(sk, "Support")
         if doc.types.get(s) in SOLID:
             return s
+    # no link at all: these files fused each feature onto the one before it in the document
+    names = list(doc.types)
+    for b in reversed(names[: names.index(n)]):
+        if doc.types[b] in SOLID:
+            return b
     return ""
 
 
