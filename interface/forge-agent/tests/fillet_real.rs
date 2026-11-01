@@ -481,3 +481,25 @@ fn a_round_ending_where_its_arc_is_tangent_to_a_wall_keeps_to_its_own_arc() {
         assert!((v - want).abs() < 1e-5, "{how}: {v} not {want}");
     }
 }
+
+#[test]
+fn a_round_whose_edge_crosses_a_holes_rim_refuses() {
+    // the top edge rounded by 5.1, its spring 5.1 in: a hole's rim comes to 5 of that edge, and would
+    // stay a whole loop of the top face, across the spring
+    let src = "extrude 10 rect 0 0 60 40\nextrude cut 4 z 0 0 1 x 1 0 0 at 0 0 6 circle 3 7 2\nfillet 5.003 (edges near 30 0 10)\n";
+    let m = Model::new(src);
+    let f = m.error.as_ref().expect("refuses");
+    assert_eq!(m.lines[f.at].no, 3, "{}", f.msg);
+    assert!(f.msg.contains("fillet"), "{}", f.msg);
+    // clear of the rim, it builds
+    let m = Model::new(
+        "extrude 10 rect 0 0 60 40\nextrude cut 4 z 0 0 1 x 1 0 0 at 0 0 6 circle 3 7 2\nfillet 4.5 (edges near 30 0 10)\n",
+    );
+    assert!(m.error.is_none());
+    let part = Part {
+        features: m.features.clone(),
+    };
+    for built in [part.regenerate(), part.regenerate_nary(2)] {
+        assert_eq!(forge_topo::check(&built.expect("builds")), vec![]);
+    }
+}

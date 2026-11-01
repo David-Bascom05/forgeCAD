@@ -2326,6 +2326,7 @@ impl Builder {
 
     fn build(mut self) -> R<Body> {
         let was: BTreeSet<Name> = self.body.vertices.iter().map(|v| v.name).collect();
+        let edges_from = self.body.edges.len();
         // each vertex with a coedge arriving there
         let mut verts: BTreeMap<VertexId, CoedgeId> = BTreeMap::new();
         for r in &self.rolled {
@@ -2356,6 +2357,7 @@ impl Builder {
                 groups.entry(f).or_default().insert(group);
             }
         }
+        let touched: Vec<(FaceId, EdgeId)> = by_face.iter().map(|(&f, e)| (f, e[0])).collect();
         by_face.retain(|f, _| groups[f].len() > 1);
         self.rebuild_faces(&springs);
         self.split_slivers();
@@ -2370,6 +2372,17 @@ impl Builder {
                     || (loops_near(&self.body, f) && !forge_topo::sides_of(&self.body, &[f]).is_empty()))
             {
                 return Err(FilletError::Overflow { edge: edges[0] });
+            }
+        }
+        // a spring run across another loop of its face (a hole's rim just past the round's edge)
+        for (f, edge) in touched {
+            // on flats only: on a curved face, its curves cost more than the crossing is worth asking
+            if self.body.face(f).loops.len() > 1
+                && matches!(self.body.face(f).surface, Surface::Plane(_))
+                && !no_width.iter().any(|n| n.0 == f)
+                && spring_crosses_loop(&self.body, f, edges_from)
+            {
+                return Err(FilletError::Overflow { edge });
             }
         }
         self.add_blends(&springs);
@@ -5084,6 +5097,89 @@ fn merge_roots(merges: &[(VertexId, VertexId)]) -> BTreeMap<VertexId, VertexId> 
     }
     let all: Vec<VertexId> = parent.keys().copied().collect();
     all.into_iter().map(|v| (v, root(&parent, v))).collect()
+}
+
+/// Whether an edge of another of a face's loops passes from one side of a new edge to the other, by
+/// more than the tolerance.
+fn spring_crosses_loop(body: &Body, f: FaceId, from: usize) -> bool {
+    let loops = &body.face(f).loops;
+    let edges_of = |l| body.lp(l).coedges().map(|c| body.coedge(c).edge);
+    let surface = &body.face(f).surface;
+    loops.iter().any(|&l| {
+        edges_of(l).filter(|e| e.index() >= from).any(|a| {
+            let ax = body.edge(a);
+            // a rough box for a traced curve: an exact one is dear, and gone with the rebuild
+            let ab = match ax.curve {
+                Curve::Line(_) | Curve::Circle(_) => body.edge_box(a).grow(2.0 * tol::LINEAR),
+                _ => {
+                    let pts = (0..=8).map(|i| ax.curve.eval(ax.range.lo + ax.range.width() * i as f64 / 8.0));
+                    let rough = Box3::from_points(pts);
+                    rough.grow(0.25 * rough.diagonal() + 2.0 * tol::LINEAR)
+                }
+            };
+            loops.iter().filter(|&&o| o != l).any(|&o| {
+                edges_of(o).any(|b| {
+                    if !ab.overlaps(&body.edge_box(b)) {
+                        return false;
+                    }
+                    let bx = body.edge(b);
+                    // on a flat a line's or circle's side of a point is a sum or two
+                    let plane = match surface {
+                        Surface::Plane(_) => body.face_normal(f, forge_math::Point2::ORIGIN).map(|n| n.get()),
+                        _ => None,
+                    };
+                    let height = |p: Point3| {
+                        if let (Some(n), Curve::Line(k)) = (plane, &ax.curve) {
+                            let o = ax.curve.eval(ax.range.lo);
+                            let along = (p - o).dot(k.dir.get());
+                            let long = ax.range.width();
+                            return (along > 1e-9 && along < long - 1e-9)
+                                .then(|| (p - o).dot(n.cross(k.dir.get())));
+                        }
+                        let u = ax.curve.closest(p, ax.range);
+                        if u <= ax.range.lo + 1e-9 || u >= ax.range.hi - 1e-9 {
+                            return None;
+                        }
+                        let d = ax.curve.deriv(u);
+                        let n = match plane {
+                            Some(n) => n,
+                            None => body.face_normal(f, surface.project(d.p))?.get(),
+                        };
+                        let across = n.cross(d.d1).normalize()?;
+                        Some((p - d.p).dot(across.get()))
+                    };
+                    let at = |i: usize, n: usize| {
+                        bx.curve
+                            .eval(bx.range.lo + bx.range.width() * i as f64 / n as f64)
+                    };
+                    // from one side of the new edge to the other between neighbouring points, near it
+                    let scan = |n: usize| {
+                        let (mut crossed, mut least, mut last) = (false, f64::INFINITY, None);
+                        for i in 0..=n {
+                            let p = at(i, n);
+                            let h = height(p);
+                            if let (Some((q, was)), Some(now)) = (last, h) {
+                                let q: Point3 = q;
+                                let was: f64 = was;
+                                crossed |= was * now < 0.0
+                                    && was.abs().min(now.abs()) > tol::LINEAR
+                                    && was.abs() + now.abs() <= 1.5 * q.distance(p);
+                            }
+                            if let Some(now) = h {
+                                least = least.min(now.abs());
+                            }
+                            last = h.map(|now| (p, now));
+                        }
+                        (crossed, least)
+                    };
+                    // the height moves no faster than the curve: far off at a coarse row, it never comes
+                    let (crossed, least) = scan(8);
+                    let step = at(0, 8).distance(at(1, 8)).max(at(3, 8).distance(at(4, 8)));
+                    crossed || (least <= 2.0 * step && scan(64).0)
+                })
+            })
+        })
+    })
 }
 
 /// Whether two edges of a face's loops that share no vertex stand in each other's boxes: only
