@@ -356,8 +356,15 @@ impl Gui {
                     {
                         dlg.awaiting = false;
                         if d.ok {
+                            // + : the same kind again, from the start
+                            let again = match dlg.target {
+                                crate::shell::dialog::DialogTarget::New(kind) if dlg.again => Some(kind),
+                                _ => None,
+                            };
                             self.shell.dialog = None;
+                            self.shell.out.extend(again.map(Action::NewFeature));
                         } else {
+                            dlg.again = false;
                             dlg.error = Some(d.text.lines().nth(1).unwrap_or(&first).to_string());
                             self.calls.pop();
                         }
@@ -870,7 +877,21 @@ impl Gui {
                     if matches!(kind, "extrude" | "revolve")
                         && let Some(name) = self.free_sketch()
                     {
-                        d.on_sketch(&name);
+                        let doc = self.shell.doc.as_ref();
+                        let regions = doc.and_then(|d| d.find(&name)).map_or(0, |id| {
+                            self.shell
+                                .sketch_shapes
+                                .iter()
+                                .find(|s| s.item == Some(id))
+                                .map_or(0, |s| s.regions.len())
+                        });
+                        // which of several is the person's to say
+                        if regions > 1 {
+                            d.on_sketch("");
+                            d.pick = Some(("Profile".to_string(), "Pick a closed region in the view"));
+                        } else {
+                            d.on_sketch(&name);
+                        }
                     }
                     self.shell.dialog = Some(d);
                     if let Some(v) = &mut self.view {

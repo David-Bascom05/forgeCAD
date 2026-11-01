@@ -33,6 +33,32 @@ pub struct Dialog {
     pub params: Vec<String>,
     /// Each number field as first shown and as the file had it: what's untouched goes back as it was.
     pub first: Vec<(String, String, String)>,
+    /// How an extrude's distance is taken, which the file writes with it.
+    pub extent: Extent,
+    pub toward: Toward,
+    /// + was pressed: OK, then another of these.
+    pub again: bool,
+}
+
+/// How far an extrude goes.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Extent {
+    Distance,
+    Through,
+    Next,
+}
+
+/// Which way it goes from its sketch.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Toward {
+    Forward,
+    Back,
+    Both,
+}
+
+/// Does this kind's line start with how it combines with the part?
+fn has_operation(kind: &str) -> bool {
+    matches!(kind, "extrude" | "revolve" | "sweep" | "coil" | "loft")
 }
 
 impl Dialog {
@@ -76,6 +102,9 @@ impl Dialog {
             units: "mm",
             params: Vec::new(),
             first: Vec::new(),
+            extent: Extent::Distance,
+            toward: Toward::Forward,
+            again: false,
         }
     }
 
@@ -93,6 +122,9 @@ impl Dialog {
             units: "mm",
             params: Vec::new(),
             first: Vec::new(),
+            extent: Extent::Distance,
+            toward: Toward::Forward,
+            again: false,
         }
     }
 
@@ -100,6 +132,10 @@ impl Dialog {
     pub fn in_units(mut self, units: &'static str, params: Vec<String>) -> Dialog {
         self.units = units;
         self.params = params;
+        if has_operation(&self.kind) && !self.fields.iter().any(|f| f.0 == "Operation") {
+            self.fields.insert(0, ("Operation".to_string(), String::new()));
+        }
+        self.read_extent();
         for (label, text) in &mut self.fields {
             if let Some(kind) = panel::field_kind(label) {
                 let file = std::mem::take(text);
@@ -110,8 +146,49 @@ impl Dialog {
         self
     }
 
+    /// An extrude read from its file: how its distance is taken, apart from the number.
+    fn read_extent(&mut self) {
+        if self.kind != "extrude" {
+            return;
+        }
+        let Some(f) = self.fields.iter_mut().find(|f| f.0 == "Distance") else {
+            return;
+        };
+        let w: Vec<&str> = f.1.split_whitespace().collect();
+        let (extent, toward, rest) = match w[..] {
+            ["sym", n] => (Extent::Distance, Toward::Both, n.to_string()),
+            ["thru"] => (Extent::Through, Toward::Forward, "10".to_string()),
+            ["thru", "back"] => (Extent::Through, Toward::Back, "10".to_string()),
+            ["thru", "both"] => (Extent::Through, Toward::Both, "10".to_string()),
+            ["next"] => (Extent::Next, Toward::Forward, "10".to_string()),
+            ["next", "back"] => (Extent::Next, Toward::Back, "10".to_string()),
+            [n] if n.starts_with('-') => (Extent::Distance, Toward::Back, n[1..].to_string()),
+            _ => return,
+        };
+        f.1 = rest;
+        self.extent = extent;
+        self.toward = toward;
+    }
+
     /// A field's text, as the file would have it.
     fn file_text(&self, label: &str, text: &str) -> String {
+        if label == "Distance" && self.kind == "extrude" {
+            let number = self.number_text(label, text);
+            return match (self.extent, self.toward) {
+                (Extent::Distance, Toward::Forward) => number,
+                (Extent::Distance, Toward::Back) => format!("-{number}"),
+                (Extent::Distance, Toward::Both) => format!("sym {number}"),
+                (Extent::Through, Toward::Forward) => "thru".to_string(),
+                (Extent::Through, Toward::Back) => "thru back".to_string(),
+                (Extent::Through, Toward::Both) => "thru both".to_string(),
+                (Extent::Next, Toward::Back) => "next back".to_string(),
+                (Extent::Next, _) => "next".to_string(),
+            };
+        }
+        self.number_text(label, text)
+    }
+
+    fn number_text(&self, label: &str, text: &str) -> String {
         let Some(kind) = panel::field_kind(label) else {
             return text.to_string();
         };
@@ -208,6 +285,177 @@ impl Dialog {
     }
 }
 
+/// How wide a dialog's body is.
+const DIALOG_W: f32 = 284.0;
+
+fn heading(ui: &mut egui::Ui, text: &str, t: &super::theme::Theme) {
+    let (r, _) = ui.allocate_exact_size(vec2(DIALOG_W, 18.0), Sense::hover());
+    let g = ui.fonts_mut(|f| f.layout_no_wrap(text.to_string(), semi(12.0), t.ink2));
+    let right = r.left() + g.size().x + 8.0;
+    ui.painter()
+        .galley(pos2(r.left(), r.center().y - g.size().y * 0.5), g, t.ink2);
+    ui.painter()
+        .hline(right..=r.right(), r.center().y, Stroke::new(1.0, t.line));
+}
+
+/// A row of big toggles with their words under them; which was clicked.
+fn toggle_row(
+    ui: &mut egui::Ui,
+    t: &super::theme::Theme,
+    items: &[(&str, &str, bool)],
+    name: &str,
+    places: &mut Vec<(String, Rect)>,
+) -> Option<usize> {
+    let (row, _) = ui.allocate_exact_size(vec2(DIALOG_W, 52.0), Sense::hover());
+    let w = (DIALOG_W - 4.0 * (items.len() as f32 - 1.0)) / items.len() as f32;
+    let mut chose = None;
+    for (k, (icon, word, on)) in items.iter().enumerate() {
+        let r = Rect::from_min_size(row.left_top() + vec2(k as f32 * (w + 4.0), 0.0), vec2(w, 52.0));
+        let resp = ui.interact(r, ui.scope_id().with((name, k)), Sense::click());
+        resp.widget_info(|| egui::WidgetInfo::selected(egui::Role::RadioButton, true, *on, *word));
+        let fill = if *on {
+            t.on
+        } else if resp.hovered() {
+            t.hover
+        } else {
+            t.raised
+        };
+        let p = ui.painter();
+        p.rect_filled(r, 4.0, fill);
+        let edge = if *on { t.on_ink } else { t.line };
+        p.rect_stroke(r, 4.0, Stroke::new(1.0, edge), egui::StrokeKind::Inside);
+        let ink = if *on { t.on_ink } else { t.ink };
+        super::icons::draw(p, pos2(r.center().x - 11.0, r.top() + 6.0), 22.0, icon, 1.5, ink);
+        p.text(
+            pos2(r.center().x, r.bottom() - 11.0),
+            Align2::CENTER_CENTER,
+            *word,
+            sans(11.0),
+            ink,
+        );
+        places.push((format!("{name}:{word}"), r));
+        if resp.clicked() {
+            chose = Some(k);
+        }
+    }
+    chose
+}
+
+/// A selection: what it wants, how many it has, and whether it's what the view's clicks go to.
+fn pick_row(
+    ui: &mut egui::Ui,
+    label: &str,
+    n: usize,
+    waiting: bool,
+    hint: &str,
+    t: &super::theme::Theme,
+    places: &mut Vec<(String, Rect)>,
+) {
+    let (r, resp) = ui.allocate_exact_size(vec2(DIALOG_W, 34.0), Sense::hover());
+    let p = ui.painter();
+    let (edge, fill) = if waiting {
+        (t.focus, t.raised)
+    } else if n > 0 {
+        (t.accent, t.raised)
+    } else {
+        (t.line, t.raised)
+    };
+    p.rect_filled(r, 4.0, fill);
+    p.rect_stroke(
+        r,
+        4.0,
+        Stroke::new(if waiting { 2.0 } else { 1.0 }, edge),
+        egui::StrokeKind::Inside,
+    );
+    super::icons::draw(p, r.left_top() + vec2(8.0, 9.0), 16.0, "select", 1.5, edge);
+    p.text(
+        pos2(r.left() + 32.0, r.center().y),
+        Align2::LEFT_CENTER,
+        label,
+        sans(13.0),
+        t.ink,
+    );
+    let state = if n == 0 {
+        "None selected".to_string()
+    } else {
+        format!("{n} selected")
+    };
+    p.text(
+        pos2(r.right() - 10.0, r.center().y),
+        Align2::RIGHT_CENTER,
+        state,
+        sans(12.0),
+        if n > 0 { t.ink } else { t.ink2 },
+    );
+    if !hint.is_empty() {
+        let _ = resp.on_hover_text(hint);
+    }
+    places.push((format!("dialog:pick:{label}"), r));
+}
+
+fn value_row(ui: &mut egui::Ui, name: &str, value: &str, t: &super::theme::Theme) {
+    let (r, _) = ui.allocate_exact_size(vec2(DIALOG_W, 22.0), Sense::hover());
+    let p = ui.painter();
+    p.text(
+        pos2(r.left(), r.center().y),
+        Align2::LEFT_CENTER,
+        name,
+        sans(12.0),
+        t.ink2,
+    );
+    p.text(
+        pos2(r.left() + FIELD_AT, r.center().y),
+        Align2::LEFT_CENTER,
+        value,
+        mono(12.0),
+        t.ink,
+    );
+}
+
+const FIELD_AT: f32 = 92.0;
+
+/// A named value: its word, its field, its unit when what's typed has none.
+fn field_row(
+    ui: &mut egui::Ui,
+    label: &str,
+    text: &mut String,
+    units: &str,
+    t: &super::theme::Theme,
+    places: &mut Vec<(String, Rect)>,
+) {
+    let (row, _) = ui.allocate_exact_size(vec2(DIALOG_W, 30.0), Sense::hover());
+    ui.painter().text(
+        pos2(row.left(), row.center().y),
+        Align2::LEFT_CENTER,
+        label,
+        sans(13.0),
+        t.ink,
+    );
+    let field = Rect::from_min_size(
+        pos2(row.left() + FIELD_AT, row.top() + 2.0),
+        vec2(DIALOG_W - FIELD_AT, 26.0),
+    );
+    ui.put(
+        field,
+        egui::TextEdit::singleline(text)
+            .font(mono(13.0))
+            .desired_width(field.width() - 14.0)
+            .margin(vec2(7.0, 5.0)),
+    );
+    if let Some(kind) = panel::field_kind(label)
+        && forge_doc::units::is_bare(text)
+    {
+        ui.painter().text(
+            pos2(field.right() - 7.0, field.center().y),
+            Align2::RIGHT_CENTER,
+            forge_doc::units::unit_of(kind, units),
+            mono(11.0),
+            t.ink2,
+        );
+    }
+    places.push((format!("dialog:field:{label}"), field));
+}
+
 impl Shell {
     pub(super) fn dialog_ui(&mut self, ctx: &egui::Context) {
         let t = self.theme;
@@ -215,172 +463,187 @@ impl Shell {
         let frame = egui::Frame::new()
             .fill(t.surface)
             .stroke(Stroke::new(1.0, t.line))
-            .corner_radius(4)
-            .inner_margin(10);
+            .corner_radius(6)
+            .shadow(egui::Shadow {
+                offset: [0, 4],
+                blur: 16,
+                spread: 0,
+                color: Color32::from_black_alpha(90),
+            })
+            .inner_margin(12);
         let v = self.view_rect;
         let mut out = None;
         let mut edit_sketch = false;
-        let shown = egui::Window::new(egui::RichText::new(d.title.clone()).font(semi(13.0)))
+        let mut places: Vec<(String, Rect)> = Vec::new();
+        let shown = egui::Window::new(egui::RichText::new(d.title.clone()).font(semi(14.0)))
             .id(egui::Id::unique("feature-dialog"))
+            .title_bar(false)
             .collapsible(false)
-            .resizable(true)
+            .resizable(false)
+            .movable(true)
             .default_pos(pos2(v.left() + 16.0, v.top() + 16.0))
-            .default_size(vec2(340.0, 420.0))
-            .min_size(vec2(280.0, 180.0))
+            .fixed_size(vec2(DIALOG_W, 0.0))
             .frame(frame)
             .show(ctx, |ui| {
-                let footer = if d.error.is_some() { 76.0 } else { 44.0 };
-                let body = (ui.available_height() - footer).max(60.0);
-                egui::ScrollArea::vertical()
-                    .id_salt("dialog-body")
-                    .max_height(body)
-                    .auto_shrink([false, false])
-                    .show(ui, |ui| {
-                        // sections in the order their fields come; the first always open
-                        let mut sections: Vec<&str> = Vec::new();
-                        for (label, _) in &d.fields {
-                            let s = panel::section(label);
-                            if !sections.contains(&s) {
-                                sections.push(s);
+                ui.spacing_mut().item_spacing.y = 6.0;
+                // the feature, by its icon and name
+                let (head, _) = ui.allocate_exact_size(vec2(DIALOG_W, 30.0), Sense::hover());
+                super::icons::draw(
+                    ui.painter(),
+                    head.left_top() + vec2(0.0, 3.0),
+                    24.0,
+                    panel::icon(&d.kind),
+                    1.5,
+                    t.ink,
+                );
+                ui.painter().text(
+                    pos2(head.left() + 32.0, head.center().y),
+                    Align2::LEFT_CENTER,
+                    panel::kind_word(&d.kind),
+                    semi(15.0),
+                    t.ink,
+                );
+                let pick = d.pick.clone();
+                let dims = d.sketch_dims();
+                let units = d.units;
+                let waiting = d.waiting_for_pick();
+                let extrude = d.kind == "extrude";
+                let mut extent = d.extent;
+                let mut toward = d.toward;
+                for section in ["Input Geometry", "Behavior", "Output"] {
+                    let there = d.fields.iter().any(|f| panel::section(&f.0) == section);
+                    if !there {
+                        continue;
+                    }
+                    ui.add_space(4.0);
+                    heading(ui, section, &t);
+                    for (label, text) in d.fields.iter_mut().filter(|f| panel::section(&f.0) == section) {
+                        if label == "Operation" {
+                            let now = text.clone();
+                            let row = toggle_row(
+                                ui,
+                                &t,
+                                &[
+                                    ("join", "Join", now.is_empty() || now == "add"),
+                                    ("opcut", "Cut", now == "cut"),
+                                    ("intersect", "Intersect", now == "keep"),
+                                    ("newsolid", "New Solid", now == "new"),
+                                ],
+                                "dialog:op",
+                                &mut places,
+                            );
+                            if let Some(k) = row {
+                                *text = ["", "cut", "keep", "new"][k].to_string();
+                            }
+                            continue;
+                        }
+                        if label == "Profile" && !dims.is_empty() {
+                            for (name, value) in &dims {
+                                value_row(ui, name, value, &t);
+                            }
+                            if ui.button("Edit Sketch").clicked() {
+                                edit_sketch = true;
+                            }
+                            continue;
+                        }
+                        let is_pick = matches!(
+                            label.as_str(),
+                            "Edges"
+                                | "Faces"
+                                | "Reference"
+                                | "Features"
+                                | "Bodies"
+                                | "Points"
+                                | "Cylinder"
+                                | "Profile"
+                        );
+                        if is_pick {
+                            let wanted = pick.as_ref().is_some_and(|(l, _)| l == label);
+                            let n = match label.as_str() {
+                                "Points" => text.split_whitespace().count().saturating_sub(3),
+                                "Cylinder" => (!text.trim().is_empty()) as usize,
+                                "Profile" => (!text.trim().is_empty()) as usize,
+                                _ => forge_doc::text::tokens(text).len(),
+                            };
+                            let hint = pick.as_ref().filter(|(l, _)| l == label).map_or("", |(_, w)| *w);
+                            pick_row(ui, label, n, wanted && waiting, hint, &t, &mut places);
+                            continue;
+                        }
+                        // how far: the kind of extent and the way it goes, then the number if it has one
+                        if extrude && label == "Distance" {
+                            if let Some(k) = toggle_row(
+                                ui,
+                                &t,
+                                &[
+                                    ("distance", "Distance", extent == Extent::Distance),
+                                    ("thruall", "Through All", extent == Extent::Through),
+                                    ("tonext", "To Next", extent == Extent::Next),
+                                ],
+                                "dialog:extent",
+                                &mut places,
+                            ) {
+                                extent = [Extent::Distance, Extent::Through, Extent::Next][k];
+                            }
+                            if let Some(k) = toggle_row(
+                                ui,
+                                &t,
+                                &[
+                                    ("forward", "Forward", toward == Toward::Forward),
+                                    ("backward", "Back", toward == Toward::Back),
+                                    ("symmetric", "Symmetric", toward == Toward::Both),
+                                ],
+                                "dialog:dir",
+                                &mut places,
+                            ) {
+                                toward = [Toward::Forward, Toward::Back, Toward::Both][k];
+                            }
+                            if extent != Extent::Distance {
+                                continue;
                             }
                         }
-                        let pick = d.pick.clone();
-                        let dims = d.sketch_dims();
-                        let units = d.units;
-                        for (k, s) in sections.into_iter().enumerate() {
-                            egui::CollapsingHeader::new(
-                                egui::RichText::new(s).font(semi(12.0)).color(t.ink2),
-                            )
-                            .id_salt(s)
-                            .default_open(k < 2)
-                            .show_unindented(ui, |ui| {
-                                for (label, text) in d.fields.iter_mut().filter(|f| panel::section(&f.0) == s)
-                                {
-                                    // a profile shows as its sketch, references as a count: never as text
-                                    if label == "Profile" && !dims.is_empty() {
-                                        for (name, value) in &dims {
-                                            let w = ui.available_width();
-                                            let (row, _) =
-                                                ui.allocate_exact_size(vec2(w, 24.0), Sense::hover());
-                                            let (mid, left) = (row.center().y, row.left());
-                                            let p = ui.painter();
-                                            p.text(
-                                                pos2(left, mid),
-                                                Align2::LEFT_CENTER,
-                                                name,
-                                                sans(12.0),
-                                                t.ink2,
-                                            );
-                                            p.text(
-                                                pos2(left + 88.0, mid),
-                                                Align2::LEFT_CENTER,
-                                                value,
-                                                mono(12.0),
-                                                t.ink,
-                                            );
-                                        }
-                                        if ui.button("Edit Sketch").clicked() {
-                                            edit_sketch = true;
-                                        }
-                                        continue;
-                                    }
-                                    if matches!(
-                                        label.as_str(),
-                                        "Edges" | "Faces" | "Reference" | "Features" | "Bodies"
-                                    ) && !text.trim().is_empty()
-                                    {
-                                        let n = forge_doc::text::tokens(text).len();
-                                        let w = ui.available_width();
-                                        let (row, resp) =
-                                            ui.allocate_exact_size(vec2(w, 28.0), Sense::hover());
-                                        let _ = resp.on_hover_text(text.as_str());
-                                        let (mid, left) = (row.center().y, row.left());
-                                        let p = ui.painter();
-                                        p.text(
-                                            pos2(left, mid),
-                                            Align2::LEFT_CENTER,
-                                            label.as_str(),
-                                            sans(12.0),
-                                            t.ink2,
-                                        );
-                                        p.text(
-                                            pos2(left + 88.0, mid),
-                                            Align2::LEFT_CENTER,
-                                            format!("{n} selected"),
-                                            sans(12.0),
-                                            t.ink,
-                                        );
-                                        continue;
-                                    }
-                                    let w = ui.available_width();
-                                    let (row, _) = ui.allocate_exact_size(vec2(w, 32.0), Sense::hover());
-                                    ui.painter().text(
-                                        pos2(row.left(), row.center().y),
-                                        Align2::LEFT_CENTER,
-                                        label.as_str(),
-                                        sans(12.0),
-                                        t.ink2,
-                                    );
-                                    let field = Rect::from_min_size(
-                                        pos2(row.left() + 88.0, row.top() + 3.0),
-                                        vec2((w - 92.0).max(60.0), 26.0),
-                                    );
-                                    let hint = pick
-                                        .as_ref()
-                                        .filter(|(l, _)| l == label)
-                                        .map_or("", |(_, why)| *why);
-                                    ui.put(
-                                        field,
-                                        egui::TextEdit::singleline(text)
-                                            .font(mono(12.0))
-                                            .hint_text(hint)
-                                            .desired_width(field.width() - 14.0)
-                                            .margin(vec2(7.0, 6.0)),
-                                    );
-                                    if let Some(kind) = panel::field_kind(label)
-                                        && forge_doc::units::is_bare(text)
-                                    {
-                                        ui.painter().text(
-                                            pos2(field.right() - 7.0, field.center().y),
-                                            Align2::RIGHT_CENTER,
-                                            forge_doc::units::unit_of(kind, units),
-                                            mono(11.0),
-                                            t.ink2,
-                                        );
-                                    }
-                                }
-                            });
-                        }
-                    });
+                        field_row(ui, label, text, units, &t, &mut places);
+                    }
+                }
+                d.extent = extent;
+                d.toward = toward;
                 if let Some(why) = &d.error {
-                    ui.add_space(4.0);
-                    let g = ui.fonts_mut(|f| {
-                        f.layout(
-                            why.clone(),
-                            sans(12.0),
-                            Color32::WHITE,
-                            ui.available_width() - 14.0,
-                        )
-                    });
-                    let (r, _) =
-                        ui.allocate_exact_size(vec2(ui.available_width(), g.size().y + 8.0), Sense::hover());
+                    ui.add_space(2.0);
+                    let g =
+                        ui.fonts_mut(|f| f.layout(why.clone(), sans(12.0), Color32::WHITE, DIALOG_W - 14.0));
+                    let (r, _) = ui.allocate_exact_size(vec2(DIALOG_W, g.size().y + 8.0), Sense::hover());
                     ui.painter().rect_filled(r, 4.0, t.error);
                     ui.painter().galley(r.min + vec2(7.0, 4.0), g, Color32::WHITE);
                 }
-                ui.add_space(6.0);
+                ui.add_space(4.0);
                 let can_ok = d.error.is_none() && !d.waiting_for_pick() && !d.awaiting;
                 ui.horizontal(|ui| {
-                    ui.add_space((ui.available_width() - 126.0).max(0.0));
-                    if ui
-                        .add_sized(vec2(64.0, 28.0), egui::Button::new("Cancel"))
-                        .clicked()
-                    {
+                    let new = matches!(d.target, DialogTarget::New(_));
+                    if new {
+                        let r = ui.add_enabled(
+                            can_ok,
+                            egui::Button::new(egui::RichText::new("+").font(semi(15.0)))
+                                .min_size(vec2(30.0, 28.0)),
+                        );
+                        places.push(("dialog:apply".to_string(), r.rect));
+                        if r.on_hover_text("Apply and make another").clicked() {
+                            d.again = true;
+                            out = Some(Action::DialogOk);
+                        }
+                    }
+                    let gap = DIALOG_W - if new { 30.0 + 8.0 } else { 0.0 } - 64.0 - 8.0 - 64.0;
+                    ui.add_space(gap.max(0.0));
+                    let c = ui.add_sized(vec2(64.0, 28.0), egui::Button::new("Cancel"));
+                    places.push(("dialog:cancel".to_string(), c.rect));
+                    if c.clicked() {
                         out = Some(Action::DialogCancel);
                     }
-                    ui.add_space(6.0);
-                    let label = egui::RichText::new("OK").font(semi(12.0)).color(Color32::WHITE);
-                    let ok = egui::Button::new(label).fill(t.accent);
-                    if ui.add_enabled(can_ok, ok).clicked() {
+                    let label = egui::RichText::new("OK").font(semi(13.0)).color(Color32::WHITE);
+                    let ok = ui.add_enabled(
+                        can_ok,
+                        egui::Button::new(label).fill(t.accent).min_size(vec2(64.0, 28.0)),
+                    );
+                    places.push(("dialog:ok".to_string(), ok.rect));
+                    if ok.clicked() {
                         out = Some(Action::DialogOk);
                     }
                 });
@@ -388,6 +651,7 @@ impl Shell {
                     out = Some(Action::DialogOk);
                 }
             });
+        self.places.extend(places);
         if let Some(s) = shown {
             self.note("dialog", s.response.rect);
         }

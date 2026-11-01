@@ -269,3 +269,67 @@ fn a_part_in_inches_takes_and_shows_inches_and_its_geometry_stays() {
     };
     assert_eq!(h2.gui.shell.units, "in");
 }
+
+#[test]
+fn extrude_takes_its_extent_and_way_and_operation_from_toggles_and_plus_opens_another() {
+    let part = "base: extrude 20 rect -30 -30 60 60\nsk1: sketch xy at 0 0 20\n  rect -5 -5 10 10\nend\n";
+    let Some((mut h, file)) = open(part, "toggles") else {
+        return;
+    };
+    let was = built(&file, "before");
+    button(&mut h, "Extrude");
+    h.click("dialog:op:Cut");
+    for _ in 0..3 {
+        h.step();
+    }
+    h.click("dialog:dir:Back");
+    for _ in 0..3 {
+        h.step();
+    }
+    field(&mut h, "Distance", "6");
+    assert_eq!(h.gui.shell.dialog.as_ref().unwrap().line(), "extrude cut -6 sk1");
+    assert!(h.until(|g| {
+        let d = g.shell.dialog.as_ref().unwrap();
+        d.error.is_some() || d.sent.as_deref() == Some("extrude cut -6 sk1")
+    }));
+    ok(&mut h, "cut back");
+    let v = built(&file, "cut back");
+    assert!((was - v - 600.0).abs() < 1e-6, "{was} {v}");
+    // through all, from the toggle; + leaves another up
+    let was = v;
+    let sk2 = "sk2: sketch xy at 0 0 20\n  rect 10 10 5 5\nend\n";
+    let text = std::fs::read_to_string(&file).unwrap() + sk2;
+    let Some((mut h, file)) = open(&text, "toggles2") else {
+        return;
+    };
+    button(&mut h, "Extrude");
+    h.click("dialog:op:Cut");
+    for _ in 0..3 {
+        h.step();
+    }
+    h.click("dialog:extent:Through All");
+    for _ in 0..3 {
+        h.step();
+    }
+    h.click("dialog:dir:Back");
+    assert!(h.until(|g| g.shell.dialog.as_ref().unwrap().line().contains("thru back")));
+    assert!(h.until(|g| g.shell.dialog.as_ref().unwrap().seq > 0));
+    h.until(|g| {
+        g.shell
+            .dialog
+            .as_ref()
+            .is_some_and(|d| d.sent.as_deref() == Some(d.line().as_str()))
+    });
+    h.click("dialog:apply");
+    assert!(
+        h.until(|_| std::fs::read_to_string(&file).unwrap().contains("thru back")),
+        "{:?}",
+        h.gui.shell.dialog
+    );
+    // no free sketch left: another starts with one
+    assert!(
+        h.until(|g| g.shell.sketch_pick || g.shell.sketch.is_some()),
+        "another's on its way"
+    );
+    assert!((was - built(&file, "thru") - 25.0 * 20.0).abs() < 1e-6);
+}

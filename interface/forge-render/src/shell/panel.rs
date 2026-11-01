@@ -181,8 +181,9 @@ pub fn fields(kind: &str, args: &[&str]) -> Vec<(String, String)> {
 pub fn section(label: &str) -> &'static str {
     match label {
         "Operation" | "Hand" | "Flip" | "Smooth" => "Output",
-        "Plane" | "Profile" | "Path" | "Axis" | "On" | "Centre path" | "Rail" => "Placement",
-        _ => "Size",
+        "Plane" | "Profile" | "Path" | "Axis" | "On" | "Centre path" | "Rail" | "Edges" | "Faces"
+        | "Reference" | "Features" | "Bodies" | "Points" | "Cylinder" => "Input Geometry",
+        _ => "Behavior",
     }
 }
 
