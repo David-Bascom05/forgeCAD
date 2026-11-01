@@ -1012,8 +1012,151 @@ pub fn all() -> Vec<(&'static str, Property)> {
         ("certify", certificate),
         ("membership", membership),
         ("effect", effect),
+        ("volume", tool_volume),
         ("ulp", ulp),
     ]
+}
+
+/// How many points each checked feature samples, and how many features of a part are checked.
+const VOLUME_SAMPLES: usize = 1200;
+const VOLUME_FEATURES: usize = 6;
+
+/// A cut or add changes the volume by what its tool has in common with the part, or what it has
+/// beyond it: estimated here by points tested against the part before and the tool's own solids,
+/// no boolean involved. A boolean that loses part of its cut is valid and changes something, so
+/// only this sees it. Beyond 5 sigma of the sampling (and a bound for what the part's mass
+/// integrates to) is a finding.
+pub fn tool_volume(part: &Part, seed: u64) -> Option<Finding> {
+    if forge_model::bodies::multi(&part.features) {
+        return None;
+    }
+    let mut r = Rng::new(seed ^ 0x0701_07E5);
+    let h = forge_model::History::new(&part.features, None);
+    let is_tool = |f: &forge_model::Feature| {
+        !makes_nothing(f)
+            && matches!(
+                f,
+                forge_model::Feature::Extrude { .. }
+                    | forge_model::Feature::Revolve { .. }
+                    | forge_model::Feature::Ball { .. }
+                    | forge_model::Feature::Hole(_)
+                    | forge_model::Feature::Sweep(_)
+                    | forge_model::Feature::Coil(_)
+                    | forge_model::Feature::Loft(_)
+                    | forge_model::Feature::Thread(_)
+                    | forge_model::Feature::Pattern { .. }
+            )
+    };
+    let n = part.features.len();
+    let candidates = (1..n).filter(|&k| is_tool(&part.features[k])).count();
+    let stride = (candidates / VOLUME_FEATURES).max(1);
+    let mut seen = 0;
+    let mut body: Option<Body> = None;
+    for k in 0..n {
+        let next = guarded(|| {
+            forge_model::step(h, k, body.clone())
+                .map_err(|e| short(&format!("{e:?}")))?
+                .ok_or_else(|| "no body".to_string())
+        });
+        let Ok(next) = next else { return None };
+        let check = k > 0 && is_tool(&part.features[k]) && {
+            seen += 1;
+            seen % stride == 0
+        };
+        if check && let Some(before) = &body {
+            let tools =
+                std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| forge_model::feature_tools(h, k)));
+            if let Ok(Ok(tools)) = tools
+                && let Some((want, sigma, got)) = volume_change(before, &next, &tools, &mut r)
+                && (got - want).abs() > 5.0 * sigma + 1e-4 * want.abs().max(got.abs())
+            {
+                return found(
+                    "volume",
+                    format!(
+                        "{} changed the volume by other than its tool",
+                        feature_name(&part.features[k])
+                    ),
+                    format!("feature {k}: changed {got:.4}, sampled {want:.4} +- {sigma:.4}"),
+                );
+            }
+        }
+        body = Some(next);
+    }
+    None
+}
+
+/// The signed volume change expected of the tools (from points), its sampling sigma, and the
+/// change the bodies' masses show. None where a mass or a sample cannot be had.
+fn volume_change(
+    before: &Body,
+    after: &Body,
+    tools: &[(Body, forge_model::Combine)],
+    r: &mut Rng,
+) -> Option<(f64, f64, f64)> {
+    use forge_bool::{Index, Where};
+    use forge_model::Combine;
+    let mass = |b: &Body| forge_topo::mass::mass(&b.compact()).ok().map(|m| m.volume);
+    let (v0, v1) = (mass(before)?, mass(after)?);
+    let op = tools.first()?.1;
+    if tools.iter().any(|t| t.1 != op) || !matches!(op, Combine::Add | Combine::Cut) {
+        return None;
+    }
+    let solids: Vec<Index<'_>> = tools.iter().map(|t| Index::new(&t.0)).collect();
+    let mut bb = solids.first()?.bbox;
+    for s in &solids {
+        bb = bb.hull(&s.bbox);
+    }
+    let ix = Index::new(before);
+    if op == Combine::Cut {
+        let Some(b) = overlap_box(&bb, &ix.bbox) else {
+            return Some((0.0, 0.0, v0 - v1));
+        };
+        bb = b;
+    }
+    let volume = (bb.x.hi - bb.x.lo) * (bb.y.hi - bb.y.lo) * (bb.z.hi - bb.z.lo);
+    if !(volume > 0.0) {
+        return None;
+    }
+    let (mut hits, mut asked) = (0usize, 0usize);
+    let mut tries = 0;
+    while asked < VOLUME_SAMPLES && tries < 3 * VOLUME_SAMPLES {
+        tries += 1;
+        let q = Point3::new(
+            r.range(bb.x.lo, bb.x.hi),
+            r.range(bb.y.lo, bb.y.hi),
+            r.range(bb.z.lo, bb.z.hi),
+        );
+        let w: Vec<Where> = solids.iter().map(|s| s.classify(q)).collect();
+        let b = ix.classify(q);
+        if b == Where::On || w.contains(&Where::On) {
+            continue;
+        }
+        asked += 1;
+        let in_tool = w.contains(&Where::Inside);
+        let in_body = b == Where::Inside;
+        hits += match op {
+            Combine::Cut => in_tool && in_body,
+            _ => in_tool && !in_body,
+        } as usize;
+    }
+    if asked < VOLUME_SAMPLES / 2 {
+        return None;
+    }
+    // (a share of none or all still has an error: one point's worth)
+    let p = (hits as f64 + 1.0) / (asked as f64 + 2.0);
+    let sigma = volume * (p * (1.0 - p) / asked as f64).sqrt();
+    let want = volume * hits as f64 / asked as f64;
+    let got = if op == Combine::Cut { v0 - v1 } else { v1 - v0 };
+    Some((want, sigma, got))
+}
+
+fn overlap_box(a: &forge_math::Box3, b: &forge_math::Box3) -> Option<forge_math::Box3> {
+    a.overlaps(b).then(|| {
+        forge_math::Box3::from_points([
+            Point3::new(a.x.lo.max(b.x.lo), a.y.lo.max(b.y.lo), a.z.lo.max(b.z.lo)),
+            Point3::new(a.x.hi.min(b.x.hi), a.y.hi.min(b.y.hi), a.z.hi.min(b.z.hi)),
+        ])
+    })
 }
 
 /// The smallest history found that still fails `prop` with the same kind at `seed`: features

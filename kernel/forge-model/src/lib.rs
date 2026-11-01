@@ -847,6 +847,14 @@ fn modifies(f: &Feature) -> bool {
     )
 }
 
+/// Feature `i`'s tool solids as the regen combines them, for checks from outside (forge-proof).
+pub fn feature_tools(features: History<'_>, i: usize) -> Result<Vec<(Body, Combine)>, RegenError> {
+    Ok(tools(features, i, true)?
+        .into_iter()
+        .map(|t| (t.0, t.1))
+        .collect())
+}
+
 /// The part (one body) as features before `i` leave it.
 pub(crate) fn part_before(features: History<'_>, i: usize) -> Result<Body, RegenError> {
     let mut body = None;
