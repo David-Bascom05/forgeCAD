@@ -1064,6 +1064,12 @@ pub fn mass_mesh(part: &Part, _seed: u64) -> Option<Finding> {
         let k = f.0 as usize;
         let (want, slack) = limit(ca[k], fa[k]);
         if (area - want).abs() > slack + m.err[1] + 4.0 * sag * body.face_box(f).diagonal() {
+            // (a sliver on a thread's flank can mesh badly at these chords: asked once more, far finer)
+            if let Some(finer) = mesh(sag / 16.0, 0.06)
+                && (area - faces(&finer)[k]).abs() <= m.err[1] + sag * body.face_box(f).diagonal()
+            {
+                continue;
+            }
             return found(
                 "mass",
                 "a face's area differs from the mesh",
@@ -1179,7 +1185,7 @@ fn volume_change(
         bb = b;
     }
     let volume = (bb.x.hi - bb.x.lo) * (bb.y.hi - bb.y.lo) * (bb.z.hi - bb.z.lo);
-    if !(volume > 0.0) {
+    if volume <= 0.0 || volume.is_nan() {
         return None;
     }
     let mut hits = 0.0;
@@ -1205,7 +1211,10 @@ fn volume_change(
     let asked = VOLUME_SAMPLES as f64;
     // (a share of none or all still has an error: one point's worth)
     let p = (hits + 1.0) / (asked + 2.0);
-    let sigma = volume * (p * (1.0 - p) / asked).sqrt();
+    // (points within tolerance of a boundary are only known that far: a slab microns thick)
+    let (dx, dy, dz) = (bb.x.hi - bb.x.lo, bb.y.hi - bb.y.lo, bb.z.hi - bb.z.lo);
+    let band = 2.0 * (dx * dy + dy * dz + dz * dx) * forge_math::tol::LINEAR;
+    let sigma = volume * (p * (1.0 - p) / asked).sqrt() + band;
     let want = volume * hits / asked;
     let got = if op == Combine::Cut { v0 - v1 } else { v1 - v0 };
     Some((want, sigma, got))
