@@ -50,7 +50,7 @@ driven values, each sketch's freedom and conflicting rows. A sketch `on` somethi
 
 ## extrude revolve ball ops op
 [op] is add (default) cut keep (intersect) new (body); `new` for the first solid.
-extrude [op] EXT (FRAME LOOPS | SKETCH [E])    EXT: N [taper A | along X Y Z] | sym N [along X Y Z] | two N M [along X Y Z] | thru [back|both] | next [back] | to FEAT [@face] [off N]
+extrude [op] EXT (FRAME LOOPS | SKETCH [E])    EXT: N [taper A | along X Y Z] | sym N [along X Y Z] | two N M [along X Y Z] | thru [back|both] [along X Y Z] | next [back] | to FEAT [@face] [off N]
   along X Y Z: the walls run that way (world; any length or sense), each end N along the sketch's normal and parallel to it
   taper A: the sides lean in by A going up (negative: out), the profile as drawn at the sketch; ends where it closes up
 revolve [op] [TURN] (FRAME [axis x|y|OX OY DX DY] LOOPS | SKETCH [axis L] [E])    TURN: like EXT, in degrees; default 360

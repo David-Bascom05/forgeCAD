@@ -34,6 +34,9 @@ pub enum Extent {
     TwoSided { forward: f64, back: f64 },
     /// Through everything the part can hold (cuts and intersections only).
     Through(Toward),
+    /// `Through`, travelling along `dir`: as far along the normal as the part reaches, whatever
+    /// it has grown to by then.
+    ThroughAlong { toward: Toward, dir: forge_math::Vec3 },
     /// Up to a plane or a face's surface (extended past the face), then `offset` on past it
     /// (negative: short of it). A plane square to the travel gives a flat end; any other
     /// plane, a sphere, a cylinder or a cone an end on that surface.
@@ -337,6 +340,32 @@ fn positive(v: f64) -> bool {
     v.is_finite() && v > 0.0
 }
 
+/// Heights along `at`'s normal a through-all tool of feature `i` spans: past the part by now.
+fn through_range(
+    features: History,
+    i: usize,
+    at: &forge_math::Frame,
+    toward: Toward,
+    op: crate::Combine,
+) -> Result<(f64, f64), RegenError> {
+    if matches!(op, crate::Combine::New | crate::Combine::Add) {
+        return Err(bad(i)(ExtentError::ThroughJoins));
+    }
+    let reach = hole::reach(features.upto(i));
+    let (mut lo, mut hi) = (0.0f64, 0.0f64);
+    if !reach.is_empty() {
+        for c in corners(&reach) {
+            let t = at.z().dot(c - at.origin);
+            (lo, hi) = (lo.min(t), hi.max(t));
+        }
+    }
+    Ok(match toward {
+        Toward::Forward => (0.0, hi + 1.0),
+        Toward::Back => (lo - 1.0, 0.0),
+        Toward::Both => (lo - 1.0, hi + 1.0),
+    })
+}
+
 /// Feature `i` (an extrude or revolve with any extent) as the plain extrude or revolve it
 /// comes to: a distance from a moved sketch, or an angle from a turned one.
 pub(crate) fn resolve<'a>(features: History<'a>, i: usize) -> Result<Resolved<'a>, RegenError> {
@@ -350,30 +379,32 @@ pub(crate) fn resolve<'a>(features: History<'a>, i: usize) -> Result<Resolved<'a
             extent: Turn::Angle(_),
             ..
         } => Ok(Resolved::Plain(Cow::Borrowed(&features.features[i]), None)),
+        Feature::Extrude {
+            profile,
+            extent: Extent::ThroughAlong { toward, dir },
+            op,
+        } => {
+            let (lo, hi) = through_range(features, i, &profile.plane, *toward, *op)?;
+            Ok(Resolved::Plain(
+                Cow::Owned(Feature::Extrude {
+                    profile: profile.clone(),
+                    extent: Extent::Along {
+                        forward: hi,
+                        back: -lo,
+                        dir: *dir,
+                    },
+                    op: *op,
+                }),
+                None,
+            ))
+        }
         Feature::Extrude { profile, extent, op } => {
             let at = profile.plane;
             let mut material = None;
             let (lo, hi) = match *extent {
                 Extent::Symmetric(d) => (-d / 2.0, d / 2.0),
                 Extent::TwoSided { forward, back } => (-back, forward),
-                Extent::Through(toward) => {
-                    if matches!(op, crate::Combine::New | crate::Combine::Add) {
-                        return Err(err(ExtentError::ThroughJoins));
-                    }
-                    let reach = hole::reach(features.upto(i));
-                    let (mut lo, mut hi) = (0.0f64, 0.0f64);
-                    if !reach.is_empty() {
-                        for c in corners(&reach) {
-                            let t = at.z().dot(c - at.origin);
-                            (lo, hi) = (lo.min(t), hi.max(t));
-                        }
-                    }
-                    match toward {
-                        Toward::Forward => (0.0, hi + 1.0),
-                        Toward::Back => (lo - 1.0, 0.0),
-                        Toward::Both => (lo - 1.0, hi + 1.0),
-                    }
-                }
+                Extent::Through(toward) => through_range(features, i, &at, toward, *op)?,
                 Extent::To { target, offset } => {
                     let s = surface(features, i, &target)?;
                     match square(&s, &at) {
@@ -403,7 +434,10 @@ pub(crate) fn resolve<'a>(features: History<'a>, i: usize) -> Result<Resolved<'a
                             .map(|(f, u)| Resolved::UpTo(f, Box::new(UpTo { next: material, ..u })));
                     }
                 }
-                Extent::Distance(_) | Extent::Tapered { .. } | Extent::Along { .. } => unreachable!(),
+                Extent::Distance(_)
+                | Extent::Tapered { .. }
+                | Extent::Along { .. }
+                | Extent::ThroughAlong { .. } => unreachable!(),
             };
             if !(positive(hi - lo) && lo.is_finite() && hi.is_finite()) {
                 return Err(err(ExtentError::BadSize));

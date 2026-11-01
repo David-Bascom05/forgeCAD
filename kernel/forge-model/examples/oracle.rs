@@ -541,6 +541,17 @@ fn export(features: History<'_>, i: usize, before: Option<&Before>) -> Result<St
                 ),
                 Extent::Symmetric(d) => format!("{{\"sym\":{}}}", num(d)),
                 Extent::TwoSided { forward, back } => format!("{{\"two\":[{},{}]}}", num(forward), num(back)),
+                Extent::ThroughAlong { toward, dir } => format!(
+                    "{{\"through\":\"{}\",\"along\":[{},{},{}]}}",
+                    match toward {
+                        Toward::Forward => "forward",
+                        Toward::Back => "back",
+                        Toward::Both => "both",
+                    },
+                    num(dir.x),
+                    num(dir.y),
+                    num(dir.z)
+                ),
                 Extent::Through(t) => format!(
                     "{{\"through\":\"{}\"}}",
                     match t {

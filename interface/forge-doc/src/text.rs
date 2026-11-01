@@ -2493,13 +2493,21 @@ impl<'a> P<'a> {
             }
             "thru" => {
                 self.k += 1;
-                Extent::Through(if self.eat("back") {
+                let toward = if self.eat("back") {
                     Toward::Back
                 } else if self.eat("both") {
                     Toward::Both
                 } else {
                     Toward::Forward
-                })
+                };
+                if self.eat("along") {
+                    Extent::ThroughAlong {
+                        toward,
+                        dir: Vec3::new(self.num()?, self.num()?, self.num()?),
+                    }
+                } else {
+                    Extent::Through(toward)
+                }
             }
             "next" => {
                 self.k += 1;
@@ -3284,6 +3292,18 @@ impl<'a> W<'a> {
             Extent::TwoSided { forward, back } => {
                 self.word("two");
                 self.nums(&[forward, back]);
+            }
+            Extent::ThroughAlong { toward, dir } => {
+                self.word("thru");
+                match toward {
+                    Toward::Forward => {}
+                    Toward::Back => self.word("back"),
+                    Toward::Both => self.word("both"),
+                }
+                self.word("along");
+                self.num(dir.x);
+                self.num(dir.y);
+                self.num(dir.z);
             }
             Extent::Through(t) => {
                 self.word("thru");

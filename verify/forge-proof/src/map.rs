@@ -159,6 +159,10 @@ impl Map {
                         back: self.len(back),
                     },
                     Extent::Through(t) => Extent::Through(t),
+                    Extent::ThroughAlong { toward, dir } => Extent::ThroughAlong {
+                        toward,
+                        dir: self.vec(dir),
+                    },
                     Extent::ToNext { reverse } => Extent::ToNext { reverse },
                     Extent::To { .. } => return None,
                 },

@@ -491,6 +491,17 @@ fn oblique_tools_cut_and_add() {
         builds("extrude 10 rect -20 -20 40 40\nextrude add 8 along 0.5 0 1 at 0 0 10 rect -5 -5 10 10\n"),
         16000.0 + 800.0,
     );
+    near(
+        builds("extrude 10 rect -20 -20 40 40\nextrude cut thru along 0.5 0 1 circle 0 0 3\n"),
+        16000.0 - 90.0 * dmath::PI,
+    );
+    // through reaches what the part has grown to by then, on either side of the sketch
+    near(
+        builds(
+            "extrude 10 rect -20 -20 40 40\nextrude add 90 at 0 0 10 rect -20 -20 40 40\nextrude cut thru both along 0.1 0 1 at 0 0 5 circle 0 0 3\n",
+        ),
+        160000.0 - 900.0 * dmath::PI,
+    );
     let m = Model::new("extrude 10 along 1 0 0 rect 0 0 8 5\n");
     assert!(m.error.is_some(), "a direction in the sketch's plane");
 }
@@ -557,6 +568,7 @@ fn oblique_extrude_prints_as_written() {
         "extrude 10 along 0.5 0 1 rect 0 0 8 5",
         "extrude sym 10 along 0.5 0 1 rect 0 0 8 5",
         "extrude two 6 4 along 0.5 0 1 rect 0 0 8 5",
+        "extrude cut thru both along 0.5 0 1 circle 0 0 3",
     ] {
         let part = forge_doc::text::parse(src).expect("parses");
         let again = forge_doc::text::parse(&forge_doc::text::print(&part)).expect("reparses");
