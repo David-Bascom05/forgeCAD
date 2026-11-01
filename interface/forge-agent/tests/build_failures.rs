@@ -727,3 +727,20 @@ fn writing_a_law_start_moves_nothing() {
         assert!((before - after).abs() < 1e-9 * before, "{pick}: {before} {after}");
     }
 }
+
+/// A varying radius over a chain runs from the chain's lowest free end, in whatever order the edges
+/// were given and whatever they are named.
+#[test]
+fn a_law_over_a_chain_starts_at_its_lowest_free_end() {
+    let vol = |pick: &str| {
+        let mut m = Model::new(&format!("extrude 30 rect 0 0 100 40\nfillet 4..2 {pick}\n"));
+        assert!(m.error.is_none(), "{pick}");
+        m.mass().unwrap().volume
+    };
+    let a = vol("(edges near 100 20 0) (edges near 50 0 0)");
+    let b = vol("(edges near 50 0 0) (edges near 100 20 0)");
+    assert_eq!(a.to_bits(), b.to_bits());
+    let c = vol("(edges near 100 20 0) (edges near 50 40 0)");
+    let d = vol("(edges near 50 40 0) (edges near 100 20 0)");
+    assert_eq!(c.to_bits(), d.to_bits());
+}

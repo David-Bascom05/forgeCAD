@@ -174,10 +174,7 @@ pattern's one pass works on arenas in order of name (`Body::into_canonical`).
 
 ## Open questions
 
-1. Fillet laws run from the vertex whose name sorts first (`forge_ops::law_start`). Any change
-   to naming can turn a stored variable radius end for end; a geometric rule (or storing the
-   start) would make it stable.
-2. Seq and n-ary still differ where a face splits into several kept pieces (above).
+1. Seq and n-ary still differ where a face splits into several kept pieces (above).
 
 ## References
 

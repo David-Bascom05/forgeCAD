@@ -226,26 +226,29 @@ pub struct FilletOptions {
 /// The vertex each varying law of `edges` runs from. A run is the edges one varying radius was
 /// given to, side by side in `edges`; it is walked from its start, each edge from the end it is
 /// reached by. An edge given one of its ends starts there; the walk starts at the vertex given
-/// for one of the run's edges, else the end of its first edge not shared with the second, else
-/// (a lone edge) the end lowest in x, then y, then z.
-/// Geometric, never by name: renaming cannot turn a law round. An edge the walk misses starts
-/// at its own lowest end, or is refused where its start was given.
+/// for one of the run's edges, else the run's free end lowest in x, then y, then z (a lone edge's
+/// lower end). A chain apart from the rest starts likewise, or is refused where a start was given.
+/// Geometric, never by name or the order given: renaming cannot turn a law round.
 pub fn law_starts(
     body: &Body,
     edges: &[FilletEdge],
     given: &[(EdgeId, VertexId)],
 ) -> R<BTreeMap<EdgeId, VertexId>> {
     let ends = |e: EdgeId| (body.edge(e).start, body.edge(e).end);
+    // lower in x, then y, then z, what a tolerance cannot tell apart counting as level
+    let below = |p: Point3, q: Point3| {
+        [(p.x, q.x), (p.y, q.y), (p.z, q.z)]
+            .into_iter()
+            .find(|(u, w)| (u - w).abs() > tol::LINEAR)
+            .map_or(std::cmp::Ordering::Equal, |(u, w)| u.total_cmp(&w))
+    };
     let lowest = |e: EdgeId| {
         let (a, b) = ends(e);
-        let (p, q) = (body.vertex(a).point, body.vertex(b).point);
-        let key = |p: Point3, q: Point3| {
-            [(p.x, q.x), (p.y, q.y), (p.z, q.z)]
-                .into_iter()
-                .find(|(u, w)| (u - w).abs() > tol::LINEAR)
-                .is_none_or(|(u, w)| u < w)
-        };
-        if key(p, q) { a } else { b }
+        if below(body.vertex(a).point, body.vertex(b).point).is_le() {
+            a
+        } else {
+            b
+        }
     };
     let mut out = BTreeMap::new();
     let mut i = 0;
@@ -263,18 +266,15 @@ pub fn law_starts(
         let from = run
             .iter()
             .find_map(|e| given.iter().find(|g| g.0 == *e).map(|g| g.1));
-        let start = from.or_else(|| match run[..] {
-            [a, b, ..] => {
-                let (s, t) = ends(a);
-                let shared = |v: VertexId| ends(b).0 == v || ends(b).1 == v;
-                match (shared(s), shared(t)) {
-                    (false, true) => Some(s),
-                    (true, false) => Some(t),
-                    _ => None,
-                }
-            }
-            _ => None,
-        });
+        // the run's free ends: used by one edge of it, whatever order it was given in
+        let free_end = |left: &[EdgeId]| {
+            let uses = |v: VertexId| left.iter().filter(|&&e| ends(e).0 == v || ends(e).1 == v).count();
+            left.iter()
+                .flat_map(|&e| [ends(e).0, ends(e).1])
+                .filter(|&v| uses(v) == 1)
+                .min_by(|&v, &w| below(body.vertex(v).point, body.vertex(w).point))
+        };
+        let start = from.or_else(|| free_end(&run));
         let mut reached: Vec<VertexId> = start.into_iter().collect();
         let mut left = run.clone();
         // an edge given one of its own ends starts there, and the walk goes on past it
@@ -289,21 +289,23 @@ pub fn law_starts(
                 None => true,
             }
         });
-        while let Some(k) = left.iter().position(|&e| {
-            let (a, b) = ends(e);
-            reached.contains(&a) || reached.contains(&b)
-        }) {
-            let e = left.remove(k);
-            let (a, b) = ends(e);
-            let (v, w) = if reached.contains(&a) { (a, b) } else { (b, a) };
-            out.insert(e, v);
-            reached.push(w);
-        }
-        for e in left {
+        loop {
+            while let Some(k) = left.iter().position(|&e| {
+                let (a, b) = ends(e);
+                reached.contains(&a) || reached.contains(&b)
+            }) {
+                let e = left.remove(k);
+                let (a, b) = ends(e);
+                let (v, w) = if reached.contains(&a) { (a, b) } else { (b, a) };
+                out.insert(e, v);
+                reached.push(w);
+            }
+            let Some(&e) = left.first() else { break };
             if from.is_some() {
                 return Err(FilletError::BadRadius { edge: e });
             }
-            out.insert(e, lowest(e));
+            // a chain apart from the rest, or a ring, whose free end or lowest vertex starts it
+            reached.push(free_end(&left).unwrap_or_else(|| lowest(e)));
         }
     }
     Ok(out)

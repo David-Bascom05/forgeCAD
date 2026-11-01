@@ -333,9 +333,7 @@ impl Model {
                         })
                     })
                     .collect();
-                let Some(mut picks) = picks else { continue };
-                // in the order the regen hands them over (`forge_model::apply_fillet`): by name
-                picks.sort_by_key(|p| body.edge(p.edge).name);
+                let Some(picks) = picks else { continue };
                 if from
                     || picks.is_empty()
                     || picks[0].radius.constant().is_some()
@@ -346,13 +344,14 @@ impl Model {
                 let Ok(found) = forge_ops::law_starts(body, &picks, &[]) else {
                     continue;
                 };
-                let v = found[&picks[0].edge];
                 // one vertex must give the whole group's starts back (a chain, or one edge), as
                 // the line's `from` gives it: to each edge of the group
-                let given: Vec<_> = picks.iter().map(|p| (p.edge, v)).collect();
-                if forge_ops::law_starts(body, &picks, &given).ok() != Some(found) {
+                let Some(v) = picks.iter().map(|p| found[&p.edge]).find(|&v| {
+                    let given: Vec<_> = picks.iter().map(|p| (p.edge, v)).collect();
+                    forge_ops::law_starts(body, &picks, &given).ok().as_ref() == Some(&found)
+                }) else {
                     continue;
-                }
+                };
                 let p = body.vertex(v).point;
                 let sel = format!("(verts near {} {} {})", near(p.x), near(p.y), near(p.z));
                 if self.refs(i, &sel).ok() != Some(vec![body.vertex(v).name]) {
