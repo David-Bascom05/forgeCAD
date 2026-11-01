@@ -162,7 +162,7 @@ whose entity an upstream edit took away fails, never finds another. Selectors su
 
 ## selectors selector query
 `faces|edges|verts`, then filters in order; inline in parentheses, or `query F SEL [--at FEAT]`.
-plane cyl cone sphere torus blend | line circle curve      kind (fillets: cyl, or torus round a circle)
+plane cyl cone sphere torus blend spline | line circle curve      kind (fillets: cyl, or torus round a circle)
 convex concave smooth                                      how an edge's faces meet
 normal +z | normal A B C | along +x                        plane normal; line direction
 r=3 r<3 r>3   longer 5   shorter 5                         radius; edge length

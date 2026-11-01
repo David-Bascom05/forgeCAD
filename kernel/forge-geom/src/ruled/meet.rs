@@ -25,7 +25,7 @@ pub fn meet_ruled(a: &Surface, b: &Surface) -> Option<SurfaceSurface> {
 /// A wall between one wrapped curve at two radii: the curve, and the radii its carried-on
 /// rulings span.
 fn radial(r: &Ruled) -> Option<(Wrap, Interval)> {
-    let (Rail::Wrap(wa), Rail::Wrap(wb)) = (r.a, r.b) else {
+    let (&Rail::Wrap(wa), &Rail::Wrap(wb)) = (&r.a, &r.b) else {
         return None;
     };
     if wa.flat != wb.flat || wa.unroll != wb.unroll || !wa.coaxial(&wb.axis) {
@@ -168,10 +168,10 @@ impl Ruled {
 
     fn meet(&self, other: &Surface) -> Option<SurfaceSurface> {
         let one = |c: crate::Curve| Some(SurfaceSurface::Curves(vec![(c, Contact::Crossing)]));
-        match (self.a, self.b, other) {
+        match (&self.a, &self.b, other) {
             (
-                Rail::Parabola { curve: ca, range: ra },
-                Rail::Parabola { curve: cb, range: rb },
+                &Rail::Parabola { curve: ca, range: ra },
+                &Rail::Parabola { curve: cb, range: rb },
                 Surface::Plane(p),
             ) => {
                 let (fa, fb) = (&ca.frame, &cb.frame);
@@ -194,7 +194,7 @@ impl Ruled {
                     focal: ca.focal,
                 }))
             }
-            (Rail::Wrap(wa), Rail::Wrap(wb), Surface::Cylinder(c)) => {
+            (&Rail::Wrap(wa), &Rail::Wrap(wb), Surface::Cylinder(c)) => {
                 let (fa, fb) = (&wa.axis, &wb.axis);
                 let z = fa.z();
                 let off = c.frame.origin - fa.origin;
@@ -221,7 +221,7 @@ impl Ruled {
 /// a quartic vanishes. None for any other curve and surface.
 pub fn parabola_wall(par: &Parabola, range: Interval, s: &Surface) -> Option<CurveSurface> {
     let r = ruled(s).filter(|r| r.extruded)?;
-    let (Rail::Parabola { curve: ca, range: ra }, Rail::Parabola { curve: cb, .. }) = (r.a, r.b) else {
+    let (&Rail::Parabola { curve: ca, range: ra }, &Rail::Parabola { curve: cb, .. }) = (&r.a, &r.b) else {
         return None;
     };
     let fa = &ca.frame;

@@ -177,9 +177,6 @@ fn plan(
     if profiles.len() + points < 2 || profiles.is_empty() {
         return Err(LoftError::TooFew);
     }
-    for (index, p) in profiles.iter().enumerate() {
-        crate::skin::curved(p).map_err(|error| LoftError::Profile { index, error })?;
-    }
     if points > 0 && *guides != LoftGuides::None {
         return Err(LoftError::ApexWithGuides);
     }
@@ -497,6 +494,7 @@ fn smooth(
         let k = w / widest * if e == 0 { 1.0 } else { -1.0 };
         let v = |p: Point3| Point3::ORIGIN + (p - foot) * k;
         Ok(Some(match rail(&segs[at][j], f) {
+            Rail::Curve(c) => Rail::Curve(Arc::new(c.mapped(v))),
             Rail::Line { a, b } => Rail::Line { a: v(a), b: v(b) },
             Rail::Arc { circle, start, sweep } => {
                 // a negative scale is the half turn it stands for
@@ -651,6 +649,7 @@ fn smooth(
 /// A segment drawn in plane `f`, by the fraction along it.
 fn rail(s: &Segment, f: &Frame) -> Rail {
     match *s {
+        Segment::Spline(ref c) => Rail::Curve(Arc::new(c.c.mapped(|q| f.point_to_world(q)))),
         Segment::Line { a, b } => Rail::Line {
             a: f.plane_point(a),
             b: f.plane_point(b),
@@ -668,14 +667,14 @@ fn rail(s: &Segment, f: &Frame) -> Rail {
             start,
             sweep,
         },
-        Segment::Circle { .. } | Segment::Spline(_) => unreachable!("prepare splits circles, refuses curves"),
+        Segment::Circle { .. } => unreachable!("prepare splits circles"),
     }
 }
 
 /// The ruled wall between two matched curves; None where it folds over.
 fn wall(ra: Rail, rb: Rail) -> Option<Surface> {
-    match (ra, rb) {
-        (Rail::Line { a: a0, b: a1 }, Rail::Line { a: b0, b: b1 }) => {
+    match (&ra, &rb) {
+        (&Rail::Line { a: a0, b: a1 }, &Rail::Line { a: b0, b: b1 }) => {
             // two in-plane directions that a planar quad never has parallel
             let along = (a1 - a0) + (b1 - b0);
             let across = (b0 - a0) + (b1 - a1);
@@ -704,12 +703,12 @@ fn wall(ra: Rail, rb: Rail) -> Option<Surface> {
             }
         }
         (
-            Rail::Arc {
+            &Rail::Arc {
                 circle: ca,
                 start: sa,
                 sweep: wa,
             },
-            Rail::Arc {
+            &Rail::Arc {
                 circle: cb,
                 start: sb,
                 sweep: wb,

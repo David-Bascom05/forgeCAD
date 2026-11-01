@@ -19,8 +19,10 @@ mod meet;
 pub use meet::{line_wall, meet_ruled, parabola_wall, wrap_wall};
 
 /// One of the two curves a ruled face spans, by the fraction t along it.
-#[derive(Clone, Copy, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq)]
 pub enum Rail {
+    /// A free curve over its whole range.
+    Curve(Arc<crate::spline::Spline>),
     Line {
         a: Point3,
         b: Point3,
@@ -44,6 +46,12 @@ impl Rail {
     /// Point and first two derivatives at fraction t.
     pub fn at(&self, t: f64) -> (Point3, Vec3, Vec3) {
         match *self {
+            Rail::Curve(ref c) => {
+                let r = c.domain();
+                let w = r.width();
+                let d = c.deriv(r.lo + w * t);
+                (d.p, d.d1 * w, d.d2 * (w * w))
+            }
             Rail::Line { a, b } => (a.lerp(b, t), b - a, Vec3::ZERO),
             Rail::Arc { circle, start, sweep } => {
                 let d = circle.deriv(start + sweep * t);
@@ -61,6 +69,12 @@ impl Rail {
     /// Bounds on |C'|, |C''| and |C'''| over the fractions `t` (None for a wrapped curve).
     pub(crate) fn derivative_bounds(&self, t: Interval) -> Option<[f64; 3]> {
         match *self {
+            Rail::Curve(ref c) => {
+                let r = c.domain();
+                let w = r.width();
+                let [a, b, d] = c.derivative_bounds(Interval::new(r.lo + w * t.lo, r.lo + w * t.hi));
+                Some([a * w, b * w * w, d * w * w * w])
+            }
             Rail::Line { a, b } => Some([a.distance(b), 0.0, 0.0]),
             Rail::Arc { circle, sweep, .. } => {
                 let k = circle.radius * sweep.abs();
@@ -78,6 +92,11 @@ impl Rail {
 
     pub(crate) fn bbox(&self, t: Interval) -> Box3 {
         match *self {
+            Rail::Curve(ref c) => {
+                let r = c.domain();
+                let w = r.width();
+                c.bbox(Interval::new(r.lo + w * t.lo, r.lo + w * t.hi))
+            }
             Rail::Line { .. } => Box3::from_points([self.at(t.lo).0, self.at(t.hi).0]),
             Rail::Arc { circle, start, sweep } => {
                 circle.bbox(Interval::new(start + sweep * t.lo, start + sweep * t.hi))
@@ -92,6 +111,7 @@ impl Rail {
 
     pub(crate) fn transformed(&self, f: &Frame) -> Rail {
         match *self {
+            Rail::Curve(ref c) => Rail::Curve(Arc::new(c.mapped(|p| f.point_to_world(p)))),
             Rail::Line { a, b } => Rail::Line {
                 a: f.point_to_world(a),
                 b: f.point_to_world(b),
@@ -127,7 +147,7 @@ impl Rail {
     /// How far past each end the curve can be carried and stay one turn at most.
     pub(crate) fn reach(&self) -> f64 {
         match *self {
-            Rail::Line { .. } | Rail::Parabola { .. } | Rail::Wrap(_) => 0.25,
+            Rail::Line { .. } | Rail::Parabola { .. } | Rail::Wrap(_) | Rail::Curve(_) => 0.25,
             Rail::Arc { sweep, .. } => (0.5 * (forge_math::dmath::TAU / sweep.abs() - 1.0)).clamp(0.0, 0.25),
         }
     }
@@ -174,8 +194,8 @@ impl Ruled {
     pub fn new(a: Rail, b: Rail) -> Option<Ruled> {
         let te = a.reach().min(b.reach());
         let mut r = Ruled {
-            a,
-            b,
+            a: a.clone(),
+            b: b.clone(),
             ext: Box2::new(Interval::new(-te, 1.0 + te), Interval::new(-1.0, 2.0)),
             rows: Vec::new(),
             reach: 0.0,
@@ -184,7 +204,8 @@ impl Ruled {
             id: fresh_id(),
             extruded: false,
         };
-        if let (Rail::Parabola { curve: ca, range: ra }, Rail::Parabola { curve: cb, range: rb }) = (a, b) {
+        if let (&Rail::Parabola { curve: ca, range: ra }, &Rail::Parabola { curve: cb, range: rb }) = (&a, &b)
+        {
             let (fa, fb) = (&ca.frame, &cb.frame);
             let d = fb.origin - fa.origin;
             r.extruded = ra == rb
@@ -275,6 +296,7 @@ impl Ruled {
             Rail::Line { .. } => 0.0,
             Rail::Arc { sweep, .. } => sweep.abs(),
             Rail::Parabola { .. } | Rail::Wrap(_) => 1.0,
+            Rail::Curve(ref c) => c.pieces() as f64,
         };
         let k = (16.0 + 8.0 * sweep(&a).max(sweep(&b))).ceil() as usize;
         r.rows = (0..=k)
@@ -314,7 +336,7 @@ impl Ruled {
 
     /// The two radii of a wall between one wrapped curve at two radii about one axis.
     fn radii(&self) -> Option<(f64, f64)> {
-        let (Rail::Wrap(wa), Rail::Wrap(wb)) = (self.a, self.b) else {
+        let (&Rail::Wrap(wa), &Rail::Wrap(wb)) = (&self.a, &self.b) else {
             return None;
         };
         (wa.flat == wb.flat && wa.axis == wb.axis && wa.unroll == wb.unroll).then_some((wa.radius, wb.radius))
@@ -341,7 +363,7 @@ impl Ruled {
     /// Parameters of the point nearest p within `dom`.
     fn nearest(&self, p: Point3, dom: Box2) -> Point2 {
         if self.extruded
-            && let (Rail::Parabola { curve, range }, Rail::Parabola { curve: cb, .. }) = (self.a, self.b)
+            && let (&Rail::Parabola { curve, range }, &Rail::Parabola { curve: cb, .. }) = (&self.a, &self.b)
         {
             // square to the rulings onto the parabola's plane, then its nearest point there
             let d = cb.frame.origin - curve.frame.origin;
@@ -383,7 +405,7 @@ impl Ruled {
     /// (for a point on it, exact), kept in `dom`; None for any other wall.
     fn unwrapped(&self, p: Point3, dom: Box2) -> Option<(Point2, bool)> {
         let (ra, rb) = self.radii()?;
-        let Rail::Wrap(wa) = self.a else {
+        let Rail::Wrap(wa) = &self.a else {
             return None;
         };
         let l = wa.axis.point_to_local(p);
@@ -675,7 +697,7 @@ impl Procedural for Ruled {
             Rail::Line { .. } => f64::INFINITY,
             Rail::Arc { circle, .. } => circle.radius,
             // curvature |C' x C''| / |C'|^3 at samples, the tightest halved
-            Rail::Parabola { .. } | Rail::Wrap(_) => {
+            Rail::Parabola { .. } | Rail::Wrap(_) | Rail::Curve(_) => {
                 let k = (0..=16)
                     .map(|i| {
                         let (_, d1, d2) = r.at(i as f64 / 16.0);

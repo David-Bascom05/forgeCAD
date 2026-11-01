@@ -13,14 +13,14 @@ use std::sync::Arc;
 
 pub fn extruded(s: &Surface) -> Option<&Extruded> {
     match s {
-        Surface::Procedural(p) => p.as_any().and_then(|x| x.downcast_ref::<Extruded>()),
+        Surface::Procedural(p) if p.spline_wall() => p.as_any().and_then(|x| x.downcast_ref::<Extruded>()),
         _ => None,
     }
 }
 
 pub fn spun(s: &Surface) -> Option<&Spun> {
     match s {
-        Surface::Procedural(p) => p.as_any().and_then(|x| x.downcast_ref::<Spun>()),
+        Surface::Procedural(p) if p.spline_wall() => p.as_any().and_then(|x| x.downcast_ref::<Spun>()),
         _ => None,
     }
 }
@@ -44,7 +44,8 @@ fn curves(out: Vec<(Curve, Contact)>) -> SurfaceSurface {
 /// The closed form for a spline wall against the other surface, in either order; None for any
 /// other pair.
 pub fn meet_spline(a: &Surface, b: &Surface) -> Option<SurfaceSurface> {
-    if !matches!(a, Surface::Procedural(_)) && !matches!(b, Surface::Procedural(_)) {
+    let wall = |s: &Surface| matches!(s, Surface::Procedural(p) if p.spline_wall());
+    if !wall(a) && !wall(b) {
         return None;
     }
     if let Some(e) = extruded(a) {

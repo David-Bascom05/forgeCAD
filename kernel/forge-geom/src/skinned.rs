@@ -185,10 +185,10 @@ impl GuidePath {
         GuidePath {
             pieces: pieces
                 .iter()
-                .map(|&r| {
+                .map(|r| {
                     let len = r.length();
                     at += len;
-                    (r, at - len, len)
+                    (r.clone(), at - len, len)
                 })
                 .collect(),
         }
@@ -209,7 +209,8 @@ impl GuidePath {
 
     /// Point and first two derivatives at arc length p.
     pub fn at(&self, p: f64) -> (Point3, Vec3, Vec3) {
-        let &(r, s0, len) = self.piece(p);
+        let (r, s0, len) = self.piece(p);
+        let (s0, len) = (*s0, *len);
         let (q, d1, d2) = r.at((p - s0) / len);
         (q, d1 / len, d2 / (len * len))
     }
@@ -217,7 +218,8 @@ impl GuidePath {
     fn bbox(&self, p: Interval) -> Box3 {
         let mut b = Box3::EMPTY;
         let n = self.pieces.len();
-        for (i, &(r, s0, len)) in self.pieces.iter().enumerate() {
+        for (i, (r, s0, len)) in self.pieces.iter().enumerate() {
+            let (s0, len) = (*s0, *len);
             // the end pieces carry on past the guide's ends
             let lo = if i == 0 { p.lo } else { p.lo.max(s0) };
             let hi = if i + 1 == n { p.hi } else { p.hi.min(s0 + len) };
@@ -231,8 +233,9 @@ impl GuidePath {
     /// The arc lengths where the guide crosses the plane through `o` square to unit `n`.
     pub fn crossings(&self, o: Point3, n: Vec3) -> Vec<f64> {
         let mut out = Vec::new();
-        for &(r, s0, len) in &self.pieces {
-            let ts: Vec<f64> = match r {
+        for (r, s0, len) in &self.pieces {
+            let (s0, len) = (*s0, *len);
+            let ts: Vec<f64> = match *r {
                 Rail::Line { a, b } => {
                     let (da, db) = (n.dot(a - o), n.dot(b - o));
                     if da == db { vec![] } else { vec![da / (da - db)] }
@@ -262,7 +265,9 @@ impl GuidePath {
                             .collect()
                     }
                 }
-                Rail::Parabola { .. } | Rail::Wrap(_) => unreachable!("guide paths are lines and arcs"),
+                Rail::Parabola { .. } | Rail::Wrap(_) | Rail::Curve(_) => {
+                    unreachable!("guide paths are lines and arcs")
+                }
             };
             out.extend(
                 ts.into_iter()
@@ -280,7 +285,7 @@ impl GuidePath {
             pieces: self
                 .pieces
                 .iter()
-                .map(|&(r, s0, len)| (r.transformed(f), s0, len))
+                .map(|(r, s0, len)| (r.transformed(f), *s0, *len))
                 .collect(),
         }
     }

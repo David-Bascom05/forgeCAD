@@ -113,6 +113,9 @@ fn span(s: &Surface) -> Option<&dyn Span> {
     if let Some(x) = any.downcast_ref::<Skinned>() {
         return Some(x);
     }
+    if !p.spline_wall() {
+        return None;
+    }
     if let Some(x) = any.downcast_ref::<crate::spline::Extruded>() {
         return Some(x);
     }

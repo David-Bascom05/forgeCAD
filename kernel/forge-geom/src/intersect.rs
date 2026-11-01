@@ -338,15 +338,17 @@ pub fn curve_surface_in(
             }
         }
         Curve::Procedural(p) => {
-            let any = p.as_any();
-            if let Some(w) = any.and_then(|a| a.downcast_ref::<crate::wrap::Wrap>())
+            if p.is_spline() {
+                if let Some(c) = p
+                    .as_any()
+                    .and_then(|a| a.downcast_ref::<crate::spline::SplineCurve>())
+                    && let Some(r) = crate::spline::meet::spline_surface(c, range, s)
+                {
+                    return r;
+                }
+            } else if let Some(w) = p.as_any().and_then(|a| a.downcast_ref::<crate::wrap::Wrap>())
                 && let Some(r) =
                     crate::wrap::wrap_surface(w, range, s).or_else(|| crate::ruled::wrap_wall(w, range, s))
-            {
-                return r;
-            }
-            if let Some(c) = any.and_then(|a| a.downcast_ref::<crate::spline::SplineCurve>())
-                && let Some(r) = crate::spline::meet::spline_surface(c, range, s)
             {
                 return r;
             }

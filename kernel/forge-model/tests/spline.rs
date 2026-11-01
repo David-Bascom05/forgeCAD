@@ -440,3 +440,39 @@ fn a_chamfer_runs_along_a_spline_edge() {
     };
     assert!(cut > 0.8 * 0.125 * len && cut < 1.1 * 0.125 * len, "{cut} {len}");
 }
+
+#[test]
+fn a_loft_runs_between_curved_sections() {
+    use forge_math::Point3;
+    use forge_ops::{LoftGuides, LoftKind, loft};
+    let p2 = |x, y| Point2::new(x, y);
+    let arch = |w: f64, h: f64, z: f64| {
+        let c = PlaneSpline::control(2, vec![p2(-w, 0.0), p2(0.0, h), p2(w, 0.0)], None, None).unwrap();
+        Profile {
+            plane: Frame::WORLD.with_origin(Point3::new(0.0, 0.0, z)),
+            loops: vec![ProfileLoop::new(vec![
+                (s(c), 0),
+                (
+                    Segment::Line {
+                        a: p2(w, 0.0),
+                        b: p2(-w, 0.0),
+                    },
+                    1,
+                ),
+            ])],
+        }
+    };
+    // a parabolic arch's area is 2/3 w h here, and a straight blend between same-shaped arches
+    // has area (2/3) w(z) h(z) at each height: integrate it
+    let (a, b) = (arch(6.0, 8.0, 0.0), arch(3.0, 4.0, 10.0));
+    let plain = LoftGuides::None;
+    let v = checked(&loft(&[a.clone(), b.clone()], LoftKind::Ruled, &plain, 1).unwrap());
+    let want = 2.0 / 3.0 * 10.0 * (6.0 * 8.0 + 3.0 * 4.0 + 0.5 * (6.0 * 4.0 + 3.0 * 8.0)) / 3.0;
+    assert!((v - want).abs() < 1e-7 * want, "{v} {want}");
+    let smooth = LoftKind::Smooth {
+        start: None,
+        end: None,
+    };
+    let three = [a, arch(5.0, 6.0, 5.0), b];
+    assert!(checked(&loft(&three, smooth, &plain, 1).unwrap()) > 0.0);
+}

@@ -236,6 +236,7 @@ pub fn surface_kind(s: &Surface) -> &'static str {
         Surface::Cone(_) => "cone",
         Surface::Sphere(_) => "sphere",
         Surface::Torus(_) => "torus",
+        Surface::Procedural(p) if p.spline_wall() => "spline",
         Surface::Procedural(_) => "blend",
     }
 }
@@ -464,7 +465,8 @@ pub fn select(v: &View, sel: &str) -> Result<Vec<Ent>, String> {
         };
         let keep: Box<dyn Fn(&Ent) -> bool> = match t {
             "plane" | "planar" | "cyl" | "cylindrical" | "cone" | "conical" | "sphere" | "spherical"
-            | "torus" | "blend" | "line" | "linear" | "straight" | "circle" | "circular" | "curve" => {
+            | "torus" | "blend" | "spline" | "line" | "linear" | "straight" | "circle" | "circular"
+            | "curve" => {
                 let want = match t {
                     "planar" => "plane",
                     "cylindrical" => "cyl",

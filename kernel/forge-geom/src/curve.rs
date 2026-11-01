@@ -139,6 +139,10 @@ pub trait ProceduralCurve: Send + Sync + std::fmt::Debug {
     fn kinks(&self, _range: Interval) -> Vec<f64> {
         Vec::new()
     }
+    /// Whether this is a spline edge, asked before the costlier `as_any` on hot paths.
+    fn is_spline(&self) -> bool {
+        false
+    }
     /// The curve as itself, for closed forms that know its kind.
     fn as_any(&self) -> Option<&dyn std::any::Any> {
         None

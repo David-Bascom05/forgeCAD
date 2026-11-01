@@ -1545,12 +1545,15 @@ impl SplineCurve {
 /// The spline of a curve made of one.
 pub fn spline_of(c: &crate::Curve) -> Option<&SplineCurve> {
     match c {
-        crate::Curve::Procedural(p) => p.as_any()?.downcast_ref::<SplineCurve>(),
+        crate::Curve::Procedural(p) if p.is_spline() => p.as_any()?.downcast_ref::<SplineCurve>(),
         _ => None,
     }
 }
 
 impl ProceduralCurve for SplineCurve {
+    fn is_spline(&self) -> bool {
+        true
+    }
     fn deriv(&self, t: f64) -> CurveDeriv {
         self.c.deriv(t)
     }

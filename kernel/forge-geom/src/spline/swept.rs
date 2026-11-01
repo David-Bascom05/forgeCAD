@@ -486,6 +486,9 @@ impl Swept {
 }
 
 impl Procedural for Swept {
+    fn spline_wall(&self) -> bool {
+        true
+    }
     fn deriv(&self, uv: Point2) -> SurfDeriv {
         self.at(uv)
     }
