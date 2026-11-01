@@ -700,10 +700,14 @@ fn plan_once(a: &Body, b: &Body, op: Op, scratch: &mut Scratch) -> R<Plan> {
                 near(1)
             );
         }
-        let keeps = |side: Side, c: Where| match (op, side, c) {
-            (Op::Union | Op::Subtract, 0, Where::Outside) | (Op::Intersect, 0, Where::Inside) => true,
-            (Op::Union, 1, Where::Outside) | (Op::Subtract | Op::Intersect, 1, Where::Inside) => true,
-            _ => false,
+        let keeps = |side: Side, c: Where| {
+            matches!(
+                (op, side, c),
+                (Op::Union | Op::Subtract, 0, Where::Outside)
+                    | (Op::Intersect, 0, Where::Inside)
+                    | (Op::Union, 1, Where::Outside)
+                    | (Op::Subtract | Op::Intersect, 1, Where::Inside)
+            )
         };
         // a face a third surface cuts at the touch (a ball's equator on the top the touch lies on)
         // is kept there if any of it round the point is

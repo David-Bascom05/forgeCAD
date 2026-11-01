@@ -408,3 +408,13 @@ extrude cut two 9 9 z 0 0 1 x 1 0 0 poly 8.0000002 150.0000002 -8.0000002 150.00
     .volume;
     assert!((near - exact).abs() < 1e-3 * exact, "{near} {exact}");
 }
+
+/// A ball whose equator lies on a boss's top rim, its lower half inside: a dome on the boss, smooth
+/// at the rim, one valid solid. Main refused it as "no closed solid" over the boss's foot.
+#[test]
+fn a_ball_tangent_to_a_boss_rim_is_a_dome() {
+    let v = builds("extrude 8 circle 0 0 10\nextrude add 8 xy at 0 0 8 circle 0 0 4\nball add 4 xy at 0 0 16\n");
+    let pi = std::f64::consts::PI;
+    let want = 800.0 * pi + 128.0 * pi + 2.0 / 3.0 * pi * 64.0;
+    assert!((v - want).abs() < 1e-6 * want, "{v} vs {want}");
+}

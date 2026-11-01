@@ -1042,7 +1042,9 @@ pub fn mass_mesh(part: &Part, _seed: u64) -> Option<Finding> {
     };
     let limit = |c: f64, f: f64| (f + (f - c) / 3.0, 0.5 * (f - c).abs());
     let (v, dv) = limit(coarse.volume(), fine.volume());
-    if (m.volume - v).abs() > 2.0 * dv + m.err[0] + 3e-5 * m.volume.abs() {
+    // (a mesh of few triangles can stay put from one chord to the next: its sag still counts)
+    let sag = chord / 4.0;
+    if (m.volume - v).abs() > 2.0 * dv + m.err[0] + 0.25 * sag * m.area {
         return found(
             "mass",
             "volume differs from the mesh",
@@ -1061,7 +1063,7 @@ pub fn mass_mesh(part: &Part, _seed: u64) -> Option<Finding> {
     for &(f, area) in &m.faces {
         let k = f.0 as usize;
         let (want, slack) = limit(ca[k], fa[k]);
-        if (area - want).abs() > slack + m.err[1] + 1e-5 * m.area {
+        if (area - want).abs() > slack + m.err[1] + 4.0 * sag * body.face_box(f).diagonal() {
             return found(
                 "mass",
                 "a face's area differs from the mesh",

@@ -526,11 +526,20 @@ fn mass_agrees_with_the_mesh_on_a_curve_with_two_arms() {
             features: m.features.clone(),
         };
         assert!(part.regenerate().is_ok(), "{name} builds");
-        assert!(props::mass_mesh(&part, 1).is_none(), "{name}: {:?}", props::mass_mesh(&part, 1));
+        assert!(
+            props::mass_mesh(&part, 1).is_none(),
+            "{name}: {:?}",
+            props::mass_mesh(&part, 1)
+        );
         // and through the n-ary road
         let body = part.regenerate_nary(1).expect("n-ary builds");
         let m = forge_topo::mass::mass(&body.compact()).expect("a mass");
         let seq = forge_topo::mass::mass(&part.regenerate().unwrap().compact()).expect("a mass");
-        assert!((m.volume - seq.volume).abs() < 1e-6 * seq.volume, "{name}: {} vs {}", m.volume, seq.volume);
+        assert!(
+            (m.volume - seq.volume).abs() < 1e-6 * seq.volume,
+            "{name}: {} vs {}",
+            m.volume,
+            seq.volume
+        );
     }
 }

@@ -444,7 +444,9 @@ impl Way<'_> {
                         let off = p - near;
                         (off - *dir * dir.dot(off)).length() <= reach
                     };
-                    let from_last = last.get().and_then(|seed| chord_on(ps, other, *anchor, *dir, s, seed));
+                    let from_last = last
+                        .get()
+                        .and_then(|seed| chord_on(ps, other, *anchor, *dir, s, seed));
                     let got = from_last.filter(|x| on_arm(x.0)).or_else(|| {
                         chord_on(ps, other, *anchor, *dir, s, ps.project(self.chord_point(s)))
                             .filter(|x| on_arm(x.0))
@@ -480,9 +482,7 @@ impl Way<'_> {
     fn chord_point(&self, s: f64) -> Point3 {
         match self {
             Way::Curve(c) => c.eval(s),
-            Way::Chord {
-                c, anchor, dir, ..
-            } => {
+            Way::Chord { c, anchor, dir, .. } => {
                 let mut p = self.chain_at(s).0;
                 let tight = 4.0 * f64::EPSILON * (1.0 + (p - Point3::ORIGIN).abs_max());
                 for _ in 0..8 {
@@ -863,7 +863,12 @@ fn coedge_pieces<'a>(
             while t0 < hi {
                 // pieces over which the curve turns less than 30 degrees: the distance along
                 // their chord then runs one way
-                let tan = |t: f64| ic.derivs(t).1.normalize().map_or(Vec3::new(0.0, 0.0, 0.0), |d| d.get());
+                let tan = |t: f64| {
+                    ic.derivs(t)
+                        .1
+                        .normalize()
+                        .map_or(Vec3::new(0.0, 0.0, 0.0), |d| d.get())
+                };
                 let tan0 = tan(t0);
                 // the next chain point, or the end when that is a hair away
                 let next = |t: f64| {
