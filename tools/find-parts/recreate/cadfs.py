@@ -1330,7 +1330,7 @@ class Tr:
             i, j = (k, k + 1) if k + 1 < n else (k - 1, k)
             face(s, dot(add(secs[j]["centre"], secs[i]["centre"], -1), s["fr"].n) < 0)
         for k in range(1, n):
-            align(secs[k - 1], secs[k])
+            align(secs[k - 1], secs[k], secs[0] if k > 1 else None)
             secs[k - 1]["matched"] = k > 1 or secs[k - 1].get("matched")
             secs[k]["matched"] = True
         for k in range(n - 1):
@@ -1740,7 +1740,7 @@ def whole_circle(lp):
     return len(lp) == 2 and lp[0][2] is not None and lp[0][2] == lp[1][2] and abs(abs(lp[0][3]) - math.pi) < 1e-12
 
 
-def align(a, b):
+def align(a, b, first=None):
     """Turn b's loops to start where a's do, and put them in a's order. Parasolid's own matching is not recorded: the
     rotation with the least distance between matched vertices, each section about its centre, is the assumption here."""
     if len(a["loops"]) != len(b["loops"]):
@@ -1780,7 +1780,17 @@ def align(a, b):
             continue
         n = len(lb)
         cost = lambda r: sum(math.dist(wa(la[i][0]), wb(lb[(i + r) % n][0])) ** 2 for i in range(n))
-        r = min(range(n), key=cost)
+        least = min(cost(r) for r in range(n))
+        ties = [r for r in range(n) if cost(r) <= least * (1 + 1e-9) + 1e-12]
+        # two rotations alike (a hexagon turned 30 degrees): the source's rulings turn forward about the way the loft
+        # goes, and come back where the first section started (three parts of CADFS, too few to call a rule)
+        go = add(cb, ca, -1)
+        turn = lambda r: dot(cross(wa(la[0][0]), wb(lb[r][0])), go)
+        if len(ties) > 1 and first is not None and k == 0:
+            f0 = add(first["fr"].world(*first["loops"][0][0][0]), first["centre"], -1)
+            near = min(math.dist(f0, wb(lb[r][0])) for r in ties)
+            ties = [r for r in ties if math.dist(f0, wb(lb[r][0])) <= near + 1e-9]
+        r = max(ties, key=turn) if len(ties) > 1 else ties[0]
         b["loops"][k] = lb[r:] + lb[:r]
 
 

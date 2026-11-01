@@ -108,7 +108,7 @@ pub enum LoftKind {
     /// Straight lines from each profile to the next.
     Ruled,
     /// A curvature-continuous blend through all the profiles (a cubic spline at each matched
-    /// point, knots spaced by the distances between the profiles' centres). Free at an end, or
+    /// point, knots spaced by how far apart matched points of the profiles mostly are). Free at an end, or
     /// leaving square to the end profile at `weight` times unit speed.
     Smooth { start: Option<f64>, end: Option<f64> },
 }
@@ -253,7 +253,8 @@ fn plan(
                     let (before, after) = segs.split_at_mut(k);
                     let last = &before[k - 1][first..first + len];
                     let this = &mut after[0][first..first + len];
-                    if !line_up(this, &planes[k], last, &planes[k - 1]) {
+                    let start = (k > 1).then(|| (&before[0][first..first + len], &planes[0]));
+                    if !line_up(this, &planes[k], last, &planes[k - 1], start) {
                         let t = planes[k - 1].plane_point(last[0].start());
                         start_at(this, &planes[k], t);
                     }
@@ -340,7 +341,13 @@ fn plan(
 
 /// A loop rotated so its vertices, each about the loop's middle, lie nearest the last section's in the
 /// least squares sense; false for a circle's two halves, whose start the last section's point settles.
-fn line_up(this: &mut [Segment], plane: &Frame, last: &[Segment], before: &Frame) -> bool {
+fn line_up(
+    this: &mut [Segment],
+    plane: &Frame,
+    last: &[Segment],
+    before: &Frame,
+    start: Option<(&[Segment], &Frame)>,
+) -> bool {
     let round = |l: &[Segment]| matches!(l, [Segment::Arc { center: a, .. }, Segment::Arc { center: b, .. }] if a.distance(*b) <= tol::LINEAR);
     if round(this) {
         return false;
@@ -353,7 +360,31 @@ fn line_up(this: &mut [Segment], plane: &Frame, last: &[Segment], before: &Frame
     let (a, b) = (around(last, before), around(this, plane));
     let n = b.len();
     let cost = |r: usize| (0..n).map(|i| (a[i] - b[(i + r) % n]).length_sq()).sum::<f64>();
-    let best = (0..n).min_by(|&x, &y| cost(x).total_cmp(&cost(y))).unwrap_or(0);
+    let least = (0..n).map(cost).fold(f64::INFINITY, f64::min);
+    // two rotations alike (a hexagon turned 30 degrees): Parasolid's rulings turn forward about the way
+    // the loft goes, and come back to the first section's start (three parts of CADFS, research/spline-loops)
+    let centre = |l: &[Segment], f: &Frame| {
+        l.iter()
+            .fold(Vec3::ZERO, |a, s| a + f.plane_point(s.start()).to_vec())
+            / l.len() as f64
+    };
+    let go = centre(this, plane) - centre(last, before);
+    let mut ties: Vec<usize> = (0..n)
+        .filter(|&r| cost(r) <= least * (1.0 + 1e-9) + 1e-12)
+        .collect();
+    if let (true, Some((first, f))) = (ties.len() > 1, start) {
+        let home = around(first, f)[0];
+        let gap = |r: usize| (home - b[r]).length();
+        let near = ties.iter().map(|&r| gap(r)).fold(f64::INFINITY, f64::min);
+        ties.retain(|&r| gap(r) <= near + 1e-9);
+    }
+    let best = ties
+        .into_iter()
+        .max_by(|&x, &y| {
+            let turn = |r: usize| a[0].cross(b[r]).dot(go);
+            turn(x).total_cmp(&turn(y))
+        })
+        .unwrap_or(0);
     this.rotate_left(best);
     true
 }
@@ -449,8 +480,30 @@ fn smooth(
 ) -> Result<Walls, LoftError> {
     let n = planes.len();
     let mut knots = vec![0.0];
-    for w in centres.windows(2) {
-        knots.push(knots[knots.len() - 1] + w[0].distance(w[1]));
+    for k in 0..n - 1 {
+        // how far apart two sections mostly are: the tenth percentile of the chords between matched
+        // points (research/spline-loops). Sections that share a centre are still apart, and a few long
+        // diagonals do not set the pace
+        let mut chords: Vec<f64> = segs[k]
+            .iter()
+            .zip(&segs[k + 1])
+            .flat_map(|(a, b)| {
+                let (pa, pb) = (a.samples(16), b.samples(16));
+                let (fa, fb) = (planes[k], planes[k + 1]);
+                pa.into_iter()
+                    .zip(pb)
+                    .map(move |(p, q)| fa.plane_point(p).distance(fb.plane_point(q)))
+                    .collect::<Vec<f64>>()
+            })
+            .collect();
+        chords.sort_by(f64::total_cmp);
+        let near = chords.get(chords.len() / 10).copied().unwrap_or(0.0);
+        let d = if near > tol::LINEAR {
+            near
+        } else {
+            centres[k].distance(centres[k + 1])
+        };
+        knots.push(knots[k] + d);
     }
     let dome = |k: usize| apex[k].and_then(|a| a.dome);
     let spline = Arc::new(

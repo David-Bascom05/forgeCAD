@@ -47,30 +47,46 @@ squares about each section's centre, which lost none (44 agree, 18 wrong both wa
 OCCT's ThruSections and ACIS's skinning were looked for and not found documented; Onshape's help says
 alignment falls back to "estimated proximity" between vertices when no guides are set.
 
-## A smooth loft on to a point (`apex_volume.py`, measured 2026-11-01)
-Against OCCT's ThruSections these differ by 2-9%, so the volume was checked from the definition. A slice is the
-first section scaled by L(s) about C(s), L and Z natural cubics over the sections' centre distances, so
-V = A0 * integral L^2 Z' ds, exact over the rationals. Mass from the B-rep agrees to 1e-12 in every case.
-```
-                 exact             our mass          OCCT
-cone (no spline assumed)  523.598775598     523.598775598     523.598772
-oblique cone              523.598775598     523.598775598     523.598772
-cone, 3 sections          523.598775598     523.598775598     523.598774
-coaxial                   532.073595780     532.073595780     542.597914   +2.0%
-bulge                     602.606090845     602.606090845     629.135298   +4.4%
-loft_ends/4               881.578653373     881.578653373     926.498360   +5.1%
-loft_ends/36             1143.881052477    1143.881052477    1200.683484   +5.0%
-loft_ends/9              1480.192527371    1480.192527371    1529.071525   +3.3%
-loft_ends/14             2440.898891760    2440.898891760    2537.573438   +4.0%
-loft_ends/20             2048.522605911    2048.522605911    2135.840558   +4.3%
-loft_ends/10             1151.883553986    1151.883553986    1261.373229   +9.5%
-```
-On a cone, where any spline reproducing a line gives one answer, both kernels hold it, so both volumes are right for
-their surfaces. OCCT passes through the sections too (slice radius 4.00001 at the middle of `coaxial`) with its own
-curve between them: on `bulge` radius 5.203 at z 2.5 and 3.717 at z 7.5 where the natural spline has 5.469 and 2.969.
-This proves our B-rep and mass hold the stated definition. It does not prove that definition is Parasolid's: that
-takes real lofts with a STEP volume, and none with an apex has been measured here.
+## A smooth loft's curve (2026-11-01; scripts in the session, `apex_volume.py` here)
+A natural cubic at each matched point over knots shared by the whole loft, as Parasolid's STEP surfaces show: interior knots
+of multiplicity one at the sections, the same on every wall (58 of 59 lofts), second derivative zero at the ends to the finite
+difference's resolution. What differs is the knots. Ours were the distances between section centres; Parasolid's are not.
+It is not chord length of any one rail, the mean chord, median, rms, harmonic mean, arc-weighted mean, arc length, closest
+distance between sections or Hausdorff distance. Fit on the 25 lofts of the dev half, the tenth percentile of the chords between matched
+points came closest of those tried, and is what `smooth` does; on the 34 held out the knots miss by median 6e-5, p90 0.004,
+worst 0.058. That is a close fit, not Parasolid's rule, which remains unrecovered (it stays near the shortest
+rail in symmetric parts: 1e-4 off it, below every rail on some spans).
+Two rotations with the same least squares cost go forward about the loft's way, then back to the first section's start: 3 parts, all
+exact after it (5e-7, 2e-5, 1e-6), none in the held-out half, so too few to call a rule.
 
+Volume against STEP truth, CADFS sample of 1112 parts by fewest features, "pure" = only sketches and lofts (held-out
+half separately). "many" = 3+ sections, "apex" = to a point with 3+ sections or more, "cone" = one section and a point.
+```
+centres (before)            <=1e-5 <=1e-3 <=1%  <=5%  >5%  stopped untranslated
+many pure, dev                   5     23   31    7    3        7     75
+many pure, held out              6     18   23   12    2       13     61
+many, other ops                  6     17   22    6    7      160    294
+apex pure                        0      0    3    3    1        2     15
+apex, other ops                  0      0    2    0    0        7     31
+cone pure                      215      1    0    0    0        1     18
+tenth percentile (after, before the tie rule)
+many pure, dev                  12     49    5    2    1        7     74
+many pure, held out             17     34    8    2    3       10     61
+many, other ops                  7     37    8    6    2      158    295
+apex pure                        1      3    1    2    0        2     15
+apex, other ops                  0      1    1    0    0        7     31
+cone pure                      215      1    0    0    0        1     18
+```
+The held-out half was seen once under the shortest-chord rule before the tenth percentile was chosen on dev numbers.
+Not measured: 81 lofts between splines and 70 of different segment counts among "many" do not translate (the kernel
+refuses curved sections in a loft; the importer takes no sections of unequal counts), so curves that may matter most are hidden. Remaining worst errors are mostly
+sections off a common axis ("oblique", 00125711 30%) and end conditions: not explained yet.
+
+## A smooth loft on to a point (`apex_volume.py`)
+A slice is the first section scaled by L(s) about C(s), L and Z natural cubics over the knots, so V = A0 * integral L^2 Z' ds, exact
+over the rationals. Mass from the B-rep agrees to 1e-12 (`tests/spline.rs`). OCCT's ThruSections passes through
+the sections with its own curve between them, 2-10% off, so the oracle leaves these lofts out; on one cone, where no spline is
+assumed, all three agree (523.59877560). Against Parasolid, 7 pure parts: 4 within 1e-3, see the table above; too few to say more.
 ## Proofs (`lean/`; Lean + Mathlib, the toolchain of research/loft-ssi/shipped)
 `SplineLoops/Certs.lean`, no sorry: coefficients of one sign leave no root (`bern_pos`, `bern2_pos`: `bern_roots`'s
 test and `CurveHull::misses`), the factor in a product of basis polynomials (`bb_mul`: `bern_mul`), and one sign change

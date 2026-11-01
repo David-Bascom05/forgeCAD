@@ -352,7 +352,7 @@ fn a_loft_closes_on_a_point() {
     .0;
     let v = checked(&b);
     // of revolution: r(s), z(s) a natural cubic with the end slope given (research/spline-loops)
-    let (l, r0): (f64, f64) = (8.0, 5.0);
+    let (l, r0): (f64, f64) = (89.0_f64.sqrt(), 5.0);
     let radial = |s: f64| {
         // r = r0 + b s + d s^3; r(l) = 0, r'(l) = -2
         let d = (r0 - 2.0 * l) / (2.0 * l * l * l);
@@ -525,12 +525,12 @@ fn a_smooth_loft_on_to_a_point_has_its_exact_volume() {
         (
             vec![c([0.0, 0.0, 0.0], 5.0), c([0.0, 0.0, 6.0], 4.0)],
             [0.0, 0.0, 12.0],
-            532.0735957804828,
+            529.0807620221469,
         ),
         (
             vec![c([0.0, 0.0, 0.0], 5.0), c([0.0, 0.0, 5.0], 5.0)],
             [0.0, 0.0, 10.0],
-            602.6060908448279,
+            600.001420177156,
         ),
     ];
     for (ps, a, want) in cases {

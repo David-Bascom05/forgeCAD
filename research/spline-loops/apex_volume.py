@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """Exact volume of a smooth loft ending on a point, from the loft's definition (skinned.rs, loft.rs).
 
-Every matched point of the sections follows the same spline weights over the same knots (the
-distances between section centres, natural at both ends), and a section's shape stays the same,
+Every matched point of the sections follows the same spline weights over the same knots (see
+`spans`, natural at both ends), and a section's shape stays the same,
 so the slice at spline parameter s is the first section's shape scaled by L(s) about C(s). Its area
 is A0 L(s)^2 whatever C(s) does, and with Z(s) the sections' height:
 
@@ -43,14 +43,30 @@ def natural(knots, values):
     return s, out
 
 
-def volume(zs, scale, centres):
-    """V / A0 for sections at heights zs, scaled by `scale`, about `centres`."""
-    r = [sp.Rational(*F(x).as_integer_ratio()) for x in zs]
-    l = [sp.Rational(*F(x).as_integer_ratio()) for x in scale]
-    d = [sp.Rational(*F(math.dist(centres[i], centres[i + 1])).as_integer_ratio()) for i in range(len(zs) - 1)]
+def spans(secs):
+    """The knot spacing: the tenth percentile of the chords between matched points (loft.rs), each circle
+    sampled 16 times along each of its halves."""
+    out = []
+    for (c0, r0), (c1, r1) in zip(secs, secs[1:]):
+        chords = []
+        for i in range(32):
+            t = 2 * math.pi * i / 32
+            a = (c0[0] + r0 * math.cos(t), c0[1] + r0 * math.sin(t), c0[2])
+            b = (c1[0] + r1 * math.cos(t), c1[1] + r1 * math.sin(t), c1[2])
+            chords.append(math.dist(a, b))
+        chords.sort()
+        out.append(chords[len(chords) // 10])
+    return out
+
+
+def volume(secs):
+    """V / A0, A0 the first section's area: secs are (centre, radius), the last radius 0."""
+    rat = lambda x: sp.Rational(*F(x).as_integer_ratio())
+    r = [rat(c[2]) for c, _ in secs]
+    l = [rat(q / secs[0][1]) for _, q in secs]
     k = [sp.Integer(0)]
-    for x in d:
-        k.append(k[-1] + x)
+    for x in spans(secs):
+        k.append(k[-1] + rat(x))
     s, zp = natural(k, r)
     _, lp = natural(k, l)
     v = sp.Integer(0)
@@ -59,26 +75,12 @@ def volume(zs, scale, centres):
     return v
 
 
-def case(name, a0, zs, scale, centres):
-    print(f"{name:14} {sp.N(a0 * volume(zs, scale, centres), 17)}")
+def case(name, secs):
+    print(f"{name:14} {sp.N(math.pi * secs[0][1] ** 2 * volume(secs), 17)}")
 
 
-PI = math.pi
-c = lambda r: PI * r * r
-case("cone", c(5), [0, 10, 20], [1, 0.5, 0], [(0, 0, 0), (0, 0, 10), (0, 0, 20)])
-case("oblique", c(5), [0, 10, 20], [1, 0.5, 0], [(0, 0, 0), (1.5, 1, 10), (3, 2, 20)])
-case("cone3", c(5), [0, 4, 12, 20], [1, 0.8, 0.4, 0], [(0, 0, 0), (0, 0, 4), (0, 0, 12), (0, 0, 20)])
-case("coaxial", c(5), [0, 6, 12], [1, 0.8, 0], [(0, 0, 0), (0, 0, 6), (0, 0, 12)])
-case("bulge", c(5), [0, 5, 10], [1, 1, 0], [(0, 0, 0), (0, 0, 5), (0, 0, 10)])
-
-
-def fam(name, a0, h, apex):
-    case(name, a0, [0, h, apex[2]], [1, 1, 0], [(0, 0, 0), (0, 0, h), apex])
-
-
-fam("loft_ends/4", c(5.7375418119578585), 5.5714364058387025, (-0.43190666517433574, -1.8793479039325582, 11.142872811677405))
-fam("loft_ends/36", c(6.035655681832589), 6.546867153542914, (-3.359234401479008, -0.20352026833032966, 13.093734307085828))
-fam("loft_ends/9", (2 * 4.8700073022898085) ** 2, 10.167761717505304, (0, 0, 20.335523435010607))
-fam("loft_ends/14", (2 * 6.908817681737341) ** 2, 8.331221925881438, (0, 0, 16.662443851762877))
-fam("loft_ends/20", (2 * 6.476891192154389) ** 2, 7.97602611908, (-2.025164525593503, 1.5203169253941375, 15.95205223816))
-fam("loft_ends/10", (2 * 6.883142760469029) ** 2 - (4 - PI) * 1.7207856901172573**2, 4.014817814887112, (0, 0, 8.029635629774225))
+case("cone", [((0, 0, 0), 5), ((0, 0, 10), 2.5), ((0, 0, 20), 0)])
+case("oblique", [((0, 0, 0), 5), ((1.5, 1, 10), 2.5), ((3, 2, 20), 0)])
+case("cone3", [((0, 0, 0), 5), ((0, 0, 4), 4), ((0, 0, 12), 2), ((0, 0, 20), 0)])
+case("coaxial", [((0, 0, 0), 5), ((0, 0, 6), 4), ((0, 0, 12), 0)])
+case("bulge", [((0, 0, 0), 5), ((0, 0, 5), 5), ((0, 0, 10), 0)])
