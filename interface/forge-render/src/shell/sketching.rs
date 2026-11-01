@@ -23,6 +23,20 @@ pub enum SkTool {
     Tangent,
 }
 
+/// What a dimension measures, in the plane: how it's drawn.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub enum Measure {
+    /// Between two points, along this direction.
+    Along((f64, f64), (f64, f64), (f64, f64)),
+    /// A circle's or arc's centre and radius, and whether it reads as a diameter.
+    Round((f64, f64), f64, bool),
+}
+
+/// Dimension lines stand this far off what they measure, then this much more each (points).
+const DIM_OFF: f32 = 26.0;
+const DIM_STEP: f32 = 22.0;
+const ARROW_PT: f32 = 8.0;
+
 /// How close a click must be to take a point or an entity, in points.
 const SNAP_PT: f32 = 9.0;
 /// A line this close to level or plumb is made so.
@@ -189,36 +203,52 @@ impl SketchMode {
     }
 
     /// The dimensions there are: the row's number, its words before the value, the value as written,
-    /// and the place in the plane to show it.
-    pub fn dimensions(&self) -> Vec<(usize, String, String, (f64, f64))> {
+    /// and what it measures.
+    pub fn dimensions(&self) -> Vec<(usize, String, String, Measure)> {
         let Some(s) = &self.solved else { return Vec::new() };
         let at = |w: &str| -> Option<(f64, f64)> { sk::point(s, w).ok().map(|p| (p.x, p.y)) };
-        let mid = |a: (f64, f64), b: (f64, f64)| ((a.0 + b.0) * 0.5, (a.1 + b.1) * 0.5);
         let mut out = Vec::new();
         for (k, row) in self.rows.iter().enumerate() {
             let t = tokens(row);
             let Some((value, words)) = t.split_last() else {
                 continue;
             };
-            let place = match words {
-                [w, a, b] if matches!(w.as_str(), "dist" | "hdist" | "vdist") => {
-                    at(a).zip(at(b)).map(|(p, q)| mid(p, q))
-                }
-                [w, l] if w == "dist" => sk::line(s, l).ok().map(|(p, q)| mid((p.x, p.y), (q.x, q.y))),
-                [w, c] if w == "dia" || w == "rad" => s.names.iter().find(|n| n.0 == *c).map(|(_, id)| {
-                    let (centre, r) = (at(c).unwrap_or((0.0, 0.0)), s.solved.radius(*id));
-                    (
-                        centre.0 + r * core::f64::consts::FRAC_1_SQRT_2,
-                        centre.1 + r * core::f64::consts::FRAC_1_SQRT_2,
-                    )
+            let measure = match words {
+                [w, a, b] if w == "hdist" => at(a).zip(at(b)).map(|(p, q)| Measure::Along(p, q, (1.0, 0.0))),
+                [w, a, b] if w == "vdist" => at(a).zip(at(b)).map(|(p, q)| Measure::Along(p, q, (0.0, 1.0))),
+                [w, a, b] if w == "dist" => at(a).zip(at(b)).map(|(p, q)| {
+                    let (dx, dy) = (q.0 - p.0, q.1 - p.1);
+                    let l = (dx * dx + dy * dy).sqrt().max(1e-12);
+                    Measure::Along(p, q, (dx / l, dy / l))
                 }),
+                [w, l] if w == "dist" => sk::line(s, l).ok().map(|(p, q)| {
+                    let (dx, dy) = (q.x - p.x, q.y - p.y);
+                    let n = (dx * dx + dy * dy).sqrt().max(1e-12);
+                    Measure::Along((p.x, p.y), (q.x, q.y), (dx / n, dy / n))
+                }),
+                [w, c] if w == "dia" || w == "rad" => s
+                    .names
+                    .iter()
+                    .find(|n| n.0 == *c)
+                    .and_then(|(_, id)| Some(Measure::Round(at(c)?, s.solved.radius(*id), w == "dia"))),
                 _ => None,
             };
-            if let Some(p) = place {
-                out.push((k, words.join(" "), value.clone(), p));
+            if let Some(m) = measure {
+                out.push((k, words.join(" "), value.clone(), m));
             }
         }
         out
+    }
+
+    /// The middle of what's drawn, for which side a dimension stands off to.
+    fn middle(&self) -> (f64, f64) {
+        let pts = self.points();
+        if pts.is_empty() {
+            return (0.0, 0.0);
+        }
+        let n = pts.len() as f64;
+        let (x, y) = pts.iter().fold((0.0, 0.0), |a, p| (a.0 + p.1.0, a.1 + p.1.1));
+        (x / n, y / n)
     }
 
     /// Takes the last row back.
@@ -549,6 +579,68 @@ impl Shell {
         ));
         let clip = view;
         let p = p.with_clip_rect(clip);
+
+        // the part ghosted behind the sheet, the cube left alone
+        let sheet =
+            Color32::from_rgb((t.view >> 16) as u8, (t.view >> 8) as u8, t.view as u8).gamma_multiply(0.6);
+        if let Some(place) = self.cube_place {
+            let cube_left = view.min.x + place.at.0 / ppp;
+            let cube_bottom = view.min.y + (place.at.1 + place.side) / ppp + 8.0;
+            p.rect_filled(
+                Rect::from_min_max(view.min, egui::pos2(cube_left, view.max.y)),
+                0.0,
+                sheet,
+            );
+            p.rect_filled(
+                Rect::from_min_max(egui::pos2(cube_left, cube_bottom), view.max),
+                0.0,
+                sheet,
+            );
+        }
+        // a quiet grid on the plane, its step the round number that keeps it open
+        let corners: Vec<(f64, f64)> = [
+            view.left_top(),
+            view.right_top(),
+            view.left_bottom(),
+            view.right_bottom(),
+        ]
+        .into_iter()
+        .filter_map(&to_plane)
+        .collect();
+        if corners.len() == 4 {
+            let (x0, x1) = corners
+                .iter()
+                .fold((f64::MAX, f64::MIN), |a, c| (a.0.min(c.0), a.1.max(c.0)));
+            let (y0, y1) = corners
+                .iter()
+                .fold((f64::MAX, f64::MIN), |a, c| (a.0.min(c.1), a.1.max(c.1)));
+            let want = 18.0 * mm_per_pt;
+            let base = 10f64.powi(want.log10().floor() as i32);
+            let step = [1.0, 2.0, 5.0, 10.0]
+                .into_iter()
+                .map(|m| m * base)
+                .find(|v| *v >= want)
+                .unwrap_or(want);
+            let minor = Stroke::new(1.0, t.ink2.gamma_multiply(0.07));
+            let major = Stroke::new(1.0, t.ink2.gamma_multiply(0.16));
+            let line = |a: (f64, f64), b: (f64, f64), s: Stroke| {
+                if let (Some(u), Some(v)) = (screen(a), screen(b)) {
+                    p.line_segment([u, v], s);
+                }
+            };
+            let mut k = (x0 / step).floor() as i64;
+            while (k as f64) * step <= x1 && (x1 - x0) / step < 400.0 {
+                let x = k as f64 * step;
+                line((x, y0), (x, y1), if k % 5 == 0 { major } else { minor });
+                k += 1;
+            }
+            let mut k = (y0 / step).floor() as i64;
+            while (k as f64) * step <= y1 && (y1 - y0) / step < 400.0 {
+                let y = k as f64 * step;
+                line((x0, y), (x1, y), if k % 5 == 0 { major } else { minor });
+                k += 1;
+            }
+        }
         let ink = t.on_ink;
         let line = Stroke::new(1.5, ink);
         if let Some(s) = &m.solved {
@@ -653,33 +745,98 @@ impl Shell {
             ctx.set_cursor_icon(egui::CursorIcon::Crosshair);
         }
 
-        // its dimensions, as written; a click on one changes it
+        // its dimensions, standing off what they measure, as written; a click on one changes it
         let chips = m.dimensions();
+        let middle = m.middle();
         let mut ask_chip = None;
+        let dim_ink = t.ink2;
+        let (mut left_off, mut right_off) = (0usize, 0usize);
+        let arrow = |p: &egui::Painter, tip: Pos2, from: Pos2| {
+            let way = (tip - from).normalized();
+            let side = vec2(-way.y, way.x);
+            p.add(egui::Shape::convex_polygon(
+                vec![
+                    tip,
+                    tip - way * ARROW_PT + side * 3.0,
+                    tip - way * ARROW_PT - side * 3.0,
+                ],
+                dim_ink,
+                Stroke::NONE,
+            ));
+        };
         egui::Area::new(egui::Id::unique("sketch-dims"))
             .fixed_pos(view.min)
             .order(egui::Order::Middle)
             .constrain(false)
             .show(ctx, |ui| {
-                for (k, words, value, at) in &chips {
-                    let Some(pos) = screen(*at) else { continue };
-                    let g = ui.fonts_mut(|f| f.layout_no_wrap(value.clone(), mono(11.0), t.ink));
+                for (k, words, value, what) in &chips {
+                    let (pos, text) = match *what {
+                        Measure::Along(a, b, d) => {
+                            let span = (b.0 - a.0) * d.0 + (b.1 - a.1) * d.1;
+                            if span.abs() < 1e-9 {
+                                continue;
+                            }
+                            // to the side away from the middle, each past the last on that side
+                            let n = (-d.1, d.0);
+                            let mid = ((a.0 + b.0) * 0.5, (a.1 + b.1) * 0.5);
+                            let outward = (mid.0 - middle.0) * n.0 + (mid.1 - middle.1) * n.1 >= 0.0;
+                            let sign = if outward { 1.0 } else { -1.0 };
+                            let counter = if outward { &mut right_off } else { &mut left_off };
+                            let off = (DIM_OFF + DIM_STEP * *counter as f32) as f64 * mm_per_pt;
+                            *counter += 1;
+                            let along = |q: (f64, f64)| q.0 * n.0 + q.1 * n.1;
+                            let reach = if outward {
+                                along(a).max(along(b))
+                            } else {
+                                along(a).min(along(b))
+                            } + sign * off;
+                            let foot = |q: (f64, f64)| {
+                                let by = reach - along(q);
+                                (q.0 + n.0 * by, q.1 + n.1 * by)
+                            };
+                            let (fa, fb) = (foot(a), foot(b));
+                            let (Some(ua), Some(ub), Some(wa), Some(wb)) =
+                                (screen(a), screen(b), screen(fa), screen(fb))
+                            else {
+                                continue;
+                            };
+                            let line = Stroke::new(1.0, dim_ink);
+                            p.line_segment([ua, wa], Stroke::new(1.0, dim_ink.gamma_multiply(0.5)));
+                            p.line_segment([ub, wb], Stroke::new(1.0, dim_ink.gamma_multiply(0.5)));
+                            p.line_segment([wa, wb], line);
+                            arrow(&p, wa, wb);
+                            arrow(&p, wb, wa);
+                            (wa + (wb - wa) * 0.5, value.clone())
+                        }
+                        Measure::Round(c, r, dia) => {
+                            let on = (
+                                c.0 + r * core::f64::consts::FRAC_1_SQRT_2,
+                                c.1 + r * core::f64::consts::FRAC_1_SQRT_2,
+                            );
+                            let Some(rim) = screen(on) else { continue };
+                            let out = rim + vec2(30.0, -30.0);
+                            p.line_segment([rim, out], Stroke::new(1.0, dim_ink));
+                            arrow(&p, rim, out);
+                            (
+                                out + vec2(10.0, -6.0),
+                                format!("{}{value}", if dia { "\u{D8}" } else { "R" }),
+                            )
+                        }
+                    };
+                    let g = ui.fonts_mut(|f| f.layout_no_wrap(text, mono(12.0), t.ink));
                     let r = Rect::from_center_size(pos, g.size() + vec2(10.0, 6.0));
                     let resp = ui.interact(r, ui.scope_id().with(("dim", *k)), Sense::click());
                     self.view_blocks.push(r);
                     self.places.push((format!("sketch:dim:{words}"), r));
-                    let fill = if resp.hovered() { t.on } else { t.surface };
-                    ui.painter().rect_filled(r, 3.0, fill);
-                    ui.painter()
-                        .rect_stroke(r, 3.0, Stroke::new(1.0, t.line), egui::StrokeKind::Inside);
-                    ui.painter().galley(r.min + vec2(5.0, 3.0), g, t.ink);
+                    p.rect_filled(r, 3.0, if resp.hovered() { t.on } else { t.surface });
+                    p.galley(r.min + vec2(5.0, 3.0), g, t.ink);
                     if resp.clicked() {
                         ask_chip = Some((*k, words.clone(), pos, value.clone()));
                     }
                 }
             });
         if let Some((k, words, pos, value)) = ask_chip {
-            m.asking = Some((words, pos, value));
+            m.asking = Some((words, pos - vec2(12.0, -13.0), value));
             m.asking_row = Some(k);
         }
 
@@ -723,19 +880,18 @@ impl Shell {
             m.undo();
         }
 
-        // what state it's in
-        let word = match (&m.error, m.solved.as_ref().map(|s| sk::freedom(s).0)) {
-            (Some(e), _) => e.clone(),
-            (None, Some(0)) => "Fully constrained".to_string(),
-            (None, Some(n)) => format!("{n} degrees of freedom"),
-            _ => String::new(),
+        // what state it's in, in the status bar; what's wrong, where it's seen
+        self.status = match m.solved.as_ref().map(|s| sk::freedom(s).0) {
+            Some(0) => "Fully constrained".to_string(),
+            Some(n) => format!("{n} degrees of freedom"),
+            None => String::new(),
         };
-        let colour = if m.error.is_some() { t.error } else { t.surface };
-        let ink2 = if m.error.is_some() { Color32::WHITE } else { t.ink };
-        let g = ctx.fonts_mut(|f| f.layout(word, sans(12.0), ink2, 420.0));
-        let chip = Rect::from_min_size(view.min + vec2(12.0, 12.0), g.size() + vec2(14.0, 8.0));
-        p.rect_filled(chip, 4.0, colour);
-        p.galley(chip.min + vec2(7.0, 4.0), g, ink2);
+        if let Some(e) = &m.error {
+            let g = ctx.fonts_mut(|f| f.layout(e.clone(), sans(12.0), Color32::WHITE, 420.0));
+            let chip = Rect::from_min_size(view.min + vec2(12.0, 12.0), g.size() + vec2(14.0, 8.0));
+            p.rect_filled(chip, 4.0, t.error);
+            p.galley(chip.min + vec2(7.0, 4.0), g, Color32::WHITE);
+        }
         self.sketch = Some(m);
     }
 

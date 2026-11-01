@@ -941,8 +941,8 @@ fn an_inline_profile_shows_as_the_features_sketch_and_editing_writes_it_as_a_lin
         h.gui.shell.status
     );
     let now = std::fs::read_to_string(&file).unwrap();
-    assert!(now.contains("sk1: sketch xy"), "{now}");
-    assert!(now.contains("base: extrude 20 sk1"), "{now}");
+    assert!(now.contains("sk1: id 3 sketch xy"), "{now}");
+    assert!(now.contains("base: id 1 extrude 20 sk1"), "{now}");
     // the sketch sits under its feature, and the part's the same, downstream fillet and all
     assert!(h.until(|g| g.shell.rows.iter().any(|r| r.kind == "sketch" && r.tucked)));
     assert!(matches!(title_of(&h, "base").sketch, Some(SketchChild::Line(..))));
@@ -955,7 +955,10 @@ fn an_inline_profile_shows_as_the_features_sketch_and_editing_writes_it_as_a_lin
     // one undo takes both lines back
     h.gui.shell.out.push(Action::Undo);
     assert!(h.until(|g| g.shell.rows.iter().all(|r| r.kind != "sketch")));
-    assert_eq!(std::fs::read_to_string(&file).unwrap().trim(), text.trim());
+    // but for the file's note that an id's been used, so it won't be handed out again
+    let back = std::fs::read_to_string(&file).unwrap();
+    let back: Vec<&str> = back.lines().filter(|l| !l.starts_with("next ")).collect();
+    assert_eq!(back.join("\n"), text.trim());
 }
 
 #[test]

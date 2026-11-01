@@ -3,7 +3,7 @@
 use forge_render::gui::Headless;
 
 const USAGE: &str = "forge-app [PART | file.fc] [--size WxH] [--times]
-  [--shot FILE.ppm [--scale S] [--light] [--tab N] [--select NAME] [--click NAME].. [--at X Y] [--sketch ROW;ROW..] [--view YAW PITCH]]
+  [--shot FILE.ppm [--scale S] [--light] [--tab N] [--select NAME] [--click NAME].. [--at X Y] [--sketch ROW;ROW..] [--edit NAME] [--view YAW PITCH]]
   [--bench]
 PART: a bench part or a .fc file. --times: input-to-present on exit. --shot: one frame, no window.
 --bench: what clicks and frames cost, no window.";
@@ -20,6 +20,7 @@ struct Args {
     at: Option<(f32, f32)>,
     sketch: Option<String>,
     view: Option<(f32, f32)>,
+    edit: Option<String>,
     bench: bool,
     times: bool,
 }
@@ -37,6 +38,7 @@ fn args() -> Result<Args, String> {
         at: None,
         sketch: None,
         view: None,
+        edit: None,
         bench: false,
         times: false,
     };
@@ -61,6 +63,7 @@ fn args() -> Result<Args, String> {
                 a.at = Some((x, v()?.parse().map_err(|_| USAGE)?));
             }
             "--sketch" => a.sketch = Some(v()?),
+            "--edit" => a.edit = Some(v()?),
             "--view" => {
                 let y: f32 = v()?.parse().map_err(|_| USAGE)?;
                 let mut v = || it.next().ok_or(format!("{k} takes YAW PITCH\n{USAGE}"));
@@ -231,6 +234,19 @@ fn run() -> Result<(), String> {
         v.mark_dirty();
         h.step();
         h.step();
+    }
+    if let Some(name) = &a.edit {
+        // a feature's sketch, in sketch mode
+        let id = h.gui.shell.rows.iter().find(|r| r.name == *name).map(|r| r.id);
+        let Some(id) = id else {
+            return Err(format!("no feature {name}"));
+        };
+        h.gui.shell.out.push(forge_render::shell::Action::EditInline(id));
+        h.until(|g| g.shell.sketch.is_some());
+        for _ in 0..40 {
+            h.step();
+            std::thread::sleep(std::time::Duration::from_millis(10));
+        }
     }
     if let Some(rows) = &a.sketch {
         // on the XY plane, with these rows

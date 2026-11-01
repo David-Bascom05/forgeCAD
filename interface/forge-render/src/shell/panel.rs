@@ -281,7 +281,9 @@ impl Derive {
         self.dim("Center Y".into(), format!("vdist o c{c}"), y);
         let d = match r.parse::<f64>() {
             Ok(v) => (v * 2.0).to_string(),
-            Err(_) => format!("(2*({r}))"),
+            // a parameter reads as itself; anything longer keeps its brackets
+            Err(_) if r.chars().all(|c| c.is_alphanumeric() || c == '_') => format!("2*{r}"),
+            Err(_) => format!("2*({r})"),
         };
         self.dim("Diameter".into(), format!("dia c{c}"), &d);
     }
@@ -574,7 +576,7 @@ mod tests {
         assert_eq!(p.head, "-xy at 0 5 6");
         assert_eq!(p.rows[0], "rect 0 0 w 4");
         assert!(p.rows.contains(&"hdist l1.a l1.b w".to_string()), "{:?}", p.rows);
-        assert!(p.rows.contains(&"dia c1 (2*(r))".to_string()), "{:?}", p.rows);
+        assert!(p.rows.contains(&"dia c1 2*r".to_string()), "{:?}", p.rows);
         assert!(p.shown.contains(&("Width".to_string(), "w".to_string())));
         assert_eq!(p.rest, "cut 2 {}");
         assert!(

@@ -805,6 +805,7 @@ impl Gui {
     fn finish_sketch(&mut self) {
         let Some(m) = self.shell.sketch.take() else { return };
         // looked at and left as it was: nothing to commit
+        self.shell.status.clear();
         if m.unchanged() && m.edit != SketchFor::New {
             self.shell.tab = 0;
             return;
