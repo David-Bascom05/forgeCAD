@@ -28,7 +28,7 @@ edge-uses, edge-same-way, edge-degenerate  whole body, always  none needed: the 
 face-no-loops, loop-empty, loop-broken     whole body, always  none needed
 duplicate-name, euler, shell-euler, vertex-fans  whole body    none needed
 vertex-off-edge, vertex-tolerance, edge-off-face  edges not same   full_of_local, edge footprint
-outer-not-first, loops-cross                      faces not same   full_of_local, face footprint
+outer-not-first, loops-cross                      faces not same   full_of_local, face footprint (a plane face's loops-cross runs on all its loops)
 face-wrong-side                        faces not same, and on a plane face only coedges near a change  full_of_local, kept_loop_same_answer
 shells-overlap                         faces changed or within where material changed   material_same_outside, outside_box_no_material
 ```
@@ -51,6 +51,14 @@ No rule could not be made local. The whole-body rules are cheap (under 0.5% of a
 
 Stripped: nothing is assumed of the operation that made the body (the diff finds what changed; a name only picks which old entity to compare
 with); nothing of arena order or ids.
+
+## What it has found
+
+- `loops-cross` (added 2026-10-31: a fillet's rim overshoot got through `check`, which did not test a face's loops against each other): a crossing of the default chords is
+  believed only if the chords drawn 8 times finer cross too; without that, p06075 and a ruled fuzz part were false alarms. 5 of 100 traced-fillet fuzz parts fault at their fillet.
+- `duplicate-name`: threads through cross holes, t06025, t06096: spans of different pieces of one pair of whole faces between the same edges were ranked only within a face
+  pair. Fixed in `nary::name_spans`. A name only at a mid stage, gone once finished (t06032), is not a fault: `verify::stage` asks the finished stage.
+- `vertex-tolerance`: Fusion 40887_454ffc48_0010, an edge about 2e-5 long.
 
 ## Why only some coedges of a plane face
 

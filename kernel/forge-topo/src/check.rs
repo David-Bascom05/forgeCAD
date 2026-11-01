@@ -683,15 +683,18 @@ fn check_sides_of(body: &Body, faces: &[FaceId], known: Option<&Known>, out: &mu
         {
             out.push(Problem::OuterNotFirst { face: f });
         }
-        if loops_cross(&loops) {
-            out.push(Problem::LoopsCross { face: f });
-        }
         // probe a small fraction of the face's shortest edge so narrow faces are not stepped across
         let shortest = loops
             .iter()
             .flat_map(|l| l.coedges.iter())
             .map(|&c| edge_length(body, body.coedge(c).edge))
             .fold(f64::INFINITY, f64::min);
+        // drawn finely before it is believed: two chords of curved loops close by may cross where the loops do not
+        if loops_cross(&loops)
+            && loops_cross(fine.get_or_init(|| face_uv_loops_with(body, f, |e| 8 * default_segments(e))))
+        {
+            out.push(Problem::LoopsCross { face: f });
+        }
         let step = (0.05 * shortest).min(0.1);
         let boxes = loop_boxes(&loops);
         let in_loops = |p: Point2| in_boxed_loops(p, &loops, &boxes);

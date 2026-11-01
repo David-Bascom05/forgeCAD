@@ -3260,6 +3260,45 @@ fn name_spans(
             }
         }
     }
+    // across face pairs too: spans of different pieces of one pair of wholes between the same edges
+    let frame_of = |si: usize| {
+        let sg = &segs[si];
+        let (fa, fb) = (
+            tools[sg.sides[0]].face(sg.faces[0]),
+            tools[sg.sides[1]].face(sg.faces[1]),
+        );
+        crate::boolean::surface_frame(if fa.name.whole() <= fb.name.whole() {
+            &fa.surface
+        } else {
+            &fb.surface
+        })
+    };
+    // (a rank can land on a name another pair's rank took: again, until none is left alike)
+    for _ in 0..8 {
+        let mut all: Vec<(Name, usize, usize)> = (0..segs.len())
+            .flat_map(|si| (first[si]..first[si + 1]).map(move |i| (i, si)))
+            .filter(|&(i, _)| live[i])
+            .map(|(i, si)| (spans[i].name, i, si))
+            .collect();
+        all.sort_unstable();
+        if all.windows(2).all(|w| w[0].0 != w[1].0) {
+            break;
+        }
+        for alike in all.chunk_by(|a, b| a.0 == b.0).filter(|g| g.len() > 1) {
+            let frame = frame_of(alike[0].2);
+            names.clear();
+            names.extend(alike.iter().map(|x| x.0));
+            crate::boolean::rank_names(&mut names, &|w| {
+                let (_, i, si) = alike[w];
+                let (sg, sp) = (&segs[si], &spans[i]);
+                let range = sp.ends.map_or(sg.range, |[lo, hi]| Interval::new(lo.0, hi.0));
+                frame.point_to_local(crate::boolean::curve_at(&sg.curve, range, sp.ends.is_some()))
+            });
+            for (x, &n) in alike.iter().zip(&names) {
+                spans[x.1].name = n;
+            }
+        }
+    }
 }
 
 /// Pieces among `ps` (sorted) with the same ends along the same curve as a lower one: by piece,
