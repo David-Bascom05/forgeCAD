@@ -95,8 +95,7 @@ fn main() {
         }
         let multi = matches!(&v, Verdict::Fail(s) if s.starts_with("nary: the part is"));
         if (multi || matches!(v, Verdict::Ok))
-            && let Ok((_, _, b, _, _)) =
-                std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| m.stats()))
+            && let Ok((_, _, b, _, _)) = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| m.stats()))
         {
             let (x, y, z) = (b.x, b.y, b.z);
             o += &format!(

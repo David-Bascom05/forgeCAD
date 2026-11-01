@@ -14,7 +14,13 @@ fn pts(p: &[Point3]) -> String {
 
 fn esc(s: &str) -> String {
     s.chars()
-        .map(|c| if c == '"' || c == '\\' || (c as u32) < 32 { ' ' } else { c })
+        .map(|c| {
+            if c == '"' || c == '\\' || (c as u32) < 32 {
+                ' '
+            } else {
+                c
+            }
+        })
         .collect()
 }
 
@@ -69,7 +75,11 @@ fn dump(m: &Model) -> String {
             Ent::Vert(_) => {}
         }
     }
-    format!("{o},\"edges\":[{}],\"faces\":[{}]}}", edges.join(","), faces.join(","))
+    format!(
+        "{o},\"edges\":[{}],\"faces\":[{}]}}",
+        edges.join(","),
+        faces.join(",")
+    )
 }
 
 fn main() {
