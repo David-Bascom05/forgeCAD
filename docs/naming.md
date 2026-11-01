@@ -168,7 +168,9 @@ per entity of the part, so in practice it fails. Old short handles are refused w
 A feature's result names nothing after the order in its input's arenas (`tests/arena_order.rs`):
 a fillet or chamfer takes its edges by name, whatever order a selector gave them; ties among new
 vertices break in the frame of the least-named face, not the first in the arena; a chamfer numbers what
-it makes at a corner from the corner's least-named face. Measured in research/names-arena.
+it makes at a corner from the corner's least-named face. Measured in research/names-arena. Nor do
+points, to the bit: a boolean meets faces in order of name, and a feature changing a finished part or a
+pattern's one pass works on arenas in order of name (`Body::into_canonical`).
 
 ## Open questions
 
@@ -176,9 +178,6 @@ it makes at a corner from the corner's least-named face. Measured in research/na
    to naming can turn a stored variable radius end for end; a geometric rule (or storing the
    start) would make it stable.
 2. Seq and n-ary still differ where a face splits into several kept pieces (above).
-3. Arena order: jack's wrapped text still names otherwise on a reversed stage, around a cylinder's
-   seam; cause not found. Frame's `htb` revolve names a vertex otherwise on a body rebuilt by the skip path
-   (research/rebuild), and neither reversing the arenas nor a 1e-13 nudge reproduces it.
 
 ## References
 

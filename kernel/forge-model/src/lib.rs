@@ -835,7 +835,12 @@ fn step_on(features: History<'_>, i: usize, mut body: Option<Body>) -> Result<Op
     if modifies(f) {
         let b = body.ok_or(RegenError::NothingToCombine { feature: i })?;
         // a part-changing feature works on the finished part
-        let b = modify(features, f, i, &finish(b), 1)?;
+        let b = if matches!(f, Feature::Fillet { .. }) {
+            finish(b)
+        } else {
+            finish_canonical(b)
+        };
+        let b = modify(features, f, i, &b, 1)?;
         if trace::on() {
             trace::step(i, &b, None);
         }
@@ -877,7 +882,7 @@ fn step_on(features: History<'_>, i: usize, mut body: Option<Body>) -> Result<Op
         }
     } else if !tools.is_empty() {
         // a pattern's copies all in one pass
-        let base = if b.dead > 0 { b.into_compact() } else { b };
+        let base = b.into_canonical();
         let mut all = vec![&base];
         all.extend(tools.iter().map(|t| &t.0));
         let ops: Vec<Op> = tools.iter().map(|t| op_of(t.1)).collect();
@@ -1361,6 +1366,11 @@ fn nary_run(
 pub fn finish(mut b: Body) -> Body {
     forge_bool::unify(&mut b);
     b.into_compact()
+}
+
+/// `finish` for a feature to work on: arenas in order of name, so what it makes follows no history.
+pub(crate) fn finish_canonical(b: Body) -> Body {
+    finish(b).into_canonical()
 }
 
 /// `b` unified; compacted only once most of it is dead, as after a boolean (a feature that

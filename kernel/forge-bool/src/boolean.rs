@@ -632,7 +632,9 @@ fn plan_once(a: &Body, b: &Body, op: Op, scratch: &mut Scratch) -> R<Plan> {
     let mut imprints: Vec<Imprint> = Vec::new();
     let mut touching: Vec<Touch> = Vec::new();
     let b_box = index[1].bbox;
-    let near_b: Vec<FaceId> = a.faces_where(|x| x.overlaps(&b_box)).collect();
+    let mut near_b: Vec<FaceId> = a.faces_where(|x| x.overlaps(&b_box)).collect();
+    // what a boolean makes must not follow the order in the arenas, to the bit
+    near_b.sort_unstable_by_key(|&f| a.face(f).name);
     let b_boxes: Vec<Box3> = (0..b.faces.len() as u32)
         .map(|f| index[1].face_box(FaceId(f)))
         .collect();

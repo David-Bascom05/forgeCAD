@@ -489,6 +489,7 @@ fn modify_on(
 ) -> Result<(), RegenError> {
     let f = &plain[i];
     let all = names(f);
+    let fillet = matches!(f, Feature::Fillet { .. });
     // finished, as `step` hands a part-changing feature its part: finishing renames what it joins,
     // and the feature's names are those, so one not found yet may be on any body
     let missing = |solids: &[Solid], on: &[usize]| {
@@ -502,7 +503,12 @@ fn modify_on(
         None => on.clone(),
     };
     for k in finishing {
-        solids[k].body = crate::finish(std::mem::take(&mut solids[k].body));
+        let b = std::mem::take(&mut solids[k].body);
+        solids[k].body = if fillet {
+            crate::finish(b)
+        } else {
+            crate::finish_canonical(b)
+        };
     }
     on = named_targets(solids, p, &all, i)?;
     // a name on no body this feature works on is an error, never a step left out
@@ -635,7 +641,7 @@ fn combine(
     if bodies.is_empty() {
         return Ok(b);
     }
-    let base = if b.dead > 0 { b.into_compact() } else { b };
+    let base = b.into_canonical();
     let mut all = vec![&base];
     all.extend(bodies);
     let root = salt.map_or(cut_root(i), |s| salted(cut_root(i), "body", s));

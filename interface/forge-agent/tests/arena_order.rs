@@ -1,5 +1,5 @@
-//! No name may follow the order in a body's arenas: each feature on its stage against the same stage
-//! with its arenas reversed. Jack's text is left out, a known open case (docs/naming.md).
+//! Nothing a feature makes may follow the order in a body's arenas, to the bit: each feature on its
+//! stage against the same stage with its arenas reversed.
 use forge_agent::bench;
 use forge_model::{History, Solid, step_solids};
 
@@ -34,7 +34,7 @@ fn differs(a: &forge_topo::Body, b: &forge_topo::Body) -> Option<String> {
             }
             Some(q) => {
                 if let (Some(p), Some(q)) = (p, q)
-                    && (*p - *q).length() > 1e-7
+                    && p != q
                 {
                     return Some(format!("{k:?} at {p:?} and {q:?}"));
                 }
@@ -83,7 +83,7 @@ fn reversed(b: &forge_topo::Body) -> forge_topo::Body {
 
 #[test]
 fn names_do_not_follow_arena_order() {
-    for part in ["valve", "conrod", "bracket", "quadarm", "hub", "clamp"] {
+    for part in bench::NAMES {
         let m = bench::model(bench::src(part).expect("a bench part"));
         let ids: Vec<u64> = m.lines.iter().map(|l| l.id).collect();
         for i in 0..m.built() {

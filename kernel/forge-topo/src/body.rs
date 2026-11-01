@@ -391,6 +391,62 @@ impl Body {
         self.compact_owned(|f, _| group[f], group.len())
     }
 
+    /// `into_compact` with faces and edges in order of name: what is made from this body
+    /// does not follow the order things happened to be made in, to the bit.
+    pub fn into_canonical(self) -> Body {
+        let mut b = if self.dead > 0 { self.into_compact() } else { self };
+        // (name, index) sorted, and each index's place: nothing to do if already in order
+        fn order(names: impl Iterator<Item = Name>, keys: &mut Vec<(Name, u32)>, map: &mut Vec<u32>) -> bool {
+            keys.clear();
+            keys.extend(names.zip(0u32..));
+            if keys.is_sorted_by_key(|k| k.0) {
+                return false;
+            }
+            keys.sort_unstable();
+            map.clear();
+            map.resize(keys.len(), 0);
+            for (to, k) in keys.iter().enumerate() {
+                map[k.1 as usize] = to as u32;
+            }
+            true
+        }
+        // moved, not copied: a surface or a curve costs something to clone
+        fn permute<T>(v: &mut [T], map: &mut [u32]) {
+            for i in 0..v.len() {
+                while map[i] as usize != i {
+                    let to = map[i] as usize;
+                    v.swap(i, to);
+                    map.swap(i, to);
+                }
+            }
+        }
+        let (mut keys, mut map) = (Vec::new(), Vec::new());
+        if order(b.edges.iter().map(|e| e.name), &mut keys, &mut map) {
+            for c in &mut b.coedges {
+                c.edge = EdgeId(map[c.edge.index()]);
+            }
+            permute(&mut b.edges, &mut map);
+            // an index over a face's edges knows them by id
+            for f in &mut b.faces {
+                f.query.clear();
+            }
+        }
+        if order(b.faces.iter().map(|f| f.name), &mut keys, &mut map) {
+            for l in &mut b.loops {
+                l.face = FaceId(map[l.face.index()]);
+            }
+            for s in &mut b.shells {
+                for f in &mut s.faces {
+                    *f = FaceId(map[f.index()]);
+                }
+                s.faces.sort_unstable();
+            }
+            permute(&mut b.faces, &mut map);
+            b.hulls = Cached::default();
+        }
+        b
+    }
+
     /// `into_compact`, each face kept in its shell, for edits that join faces of one shell but
     /// never part or join shells.
     pub fn compact_in_shells(self) -> Body {
