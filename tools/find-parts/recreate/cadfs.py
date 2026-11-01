@@ -917,6 +917,9 @@ class Tr:
             if base is not None and base is not a:
                 return on | off  # both, for imprint() to settle against the sketch alone
             self.notes.add("side-by-weight")
+            # an arc drawn clockwise is still counter-clockwise in Parasolid: the weight's side is of that (5 parts of 225, all 5 exact after)
+            if any(a.pieces[i].kind == "arc" and not a.pieces[i].ccw for i in ps):
+                return off
         return on or off
 
     def loop_text(self, a, lp, flip):
