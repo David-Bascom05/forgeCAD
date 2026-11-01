@@ -23,6 +23,7 @@ class Piece:
     def __init__(self, ent, kind, a, b, c=None, r=0.0, ccw=True, pts=None):
         self.ent, self.kind, self.a, self.b, self.c, self.r, self.ccw, self.pts = ent, kind, a, b, c, r, ccw, pts
         self.others = []  # entities drawn over this one, and whether they run the same way
+        self.src = None  # a fit spline's own points and end derivatives, while the piece is the whole of it
 
     def sweep(self):
         a0 = math.atan2(self.a[1] - self.c[1], self.a[0] - self.c[0])
@@ -70,15 +71,41 @@ def curve_dist(pc, p):
     return best
 
 
-def spline_points(pts, d0=None, d1=None, per=24):
-    """A C2 cubic through pts by chord length, with the given end derivatives or natural ends."""
+def fit_tangents(pts, d0=None, d1=None):
+    """A sketch fit spline as Parasolid draws it: knots spaced by the square root of the chord (centripetal, read from STEP
+    surfaces), periodic when it closes, natural or with the given end derivatives if not. (spans, tangent at each point.)"""
     n = len(pts) - 1
     if n < 1:
         raise Unsupported("spline of one point")
-    h = [max(dist(pts[i], pts[i + 1]), 1e-12) for i in range(n)]
-    out = [pts[0]]
+    h = [max(dist(pts[i], pts[i + 1]), 1e-12) ** 0.5 for i in range(n)]
+    # the parameter runs 0..1 over the whole curve: an end derivative is per that (a two point spline's control points in STEP)
+    h = [x / sum(h) for x in h]
+    closed = n > 2 and dist(pts[0], pts[n]) <= 1e-9 and d0 is None and d1 is None
     ms = []
     for k in (0, 1):
+        if closed:
+            A = [[0.0] * n for _ in range(n)]
+            r = [0.0] * n
+            for i in range(n):
+                h0, h1 = h[i - 1], h[i]
+                A[i][(i - 1) % n] += h1
+                A[i][i] += 2 * (h0 + h1)
+                A[i][(i + 1) % n] += h0
+                r[i] = 3 * (h1 * (pts[i][k] - pts[i - 1 if i else n - 1][k]) / h0 + h0 * (pts[i + 1][k] - pts[i][k]) / h1)
+            for c in range(n):
+                q = max(range(c, n), key=lambda x: abs(A[x][c]))
+                A[c], A[q], r[c], r[q] = A[q], A[c], r[q], r[c]
+                for x in range(c + 1, n):
+                    w = A[x][c] / A[c][c]
+                    if w:
+                        for y in range(c, n):
+                            A[x][y] -= w * A[c][y]
+                        r[x] -= w * r[c]
+            m = [0.0] * n
+            for c in range(n - 1, -1, -1):
+                m[c] = (r[c] - sum(A[c][y] * m[y] for y in range(c + 1, n))) / A[c][c]
+            ms.append(m + [m[0]])
+            continue
         # tridiagonal for first derivatives
         a, b, c, r = [0.0] * (n + 1), [0.0] * (n + 1), [0.0] * (n + 1), [0.0] * (n + 1)
         for i in range(1, n):
@@ -101,7 +128,14 @@ def spline_points(pts, d0=None, d1=None, per=24):
         for i in range(n - 1, -1, -1):
             m[i] = (r[i] - c[i] * m[i + 1]) / b[i]
         ms.append(m)
-    for i in range(n):
+    return h, ms
+
+
+def spline_points(pts, d0=None, d1=None, per=24):
+    """Points along a sketch's fit spline."""
+    h, ms = fit_tangents(pts, d0, d1)
+    out = [pts[0]]
+    for i in range(len(pts) - 1):
         for j in range(1, per + 1):
             t = j / per
             h00, h10, h01, h11 = 2 * t**3 - 3 * t**2 + 1, t**3 - 2 * t**2 + t, -2 * t**3 + 3 * t**2, t**3 - t**2
@@ -150,6 +184,7 @@ def entities(ents):
             d0, d1 = e.get("startDerivative"), e.get("endDerivative")
             sp = spline_points(pts, d0, d1)
             p = Piece(e["id"], "poly", sp[0], sp[-1], pts=sp)
+            p.src = (pts, d0, d1)
             approx = approx or not e.get("construction")
         elif k == "polyline":
             pts = [tuple(x) for x in e["points"]]
@@ -315,6 +350,8 @@ def split(p, pts):
             cur = [v]
     if len(cur) > 1:
         out.append(Piece(p.ent, "poly", cur[0], cur[-1], pts=cur))
+    if len(out) == 1:
+        out[0].src = p.src
     return out
 
 
