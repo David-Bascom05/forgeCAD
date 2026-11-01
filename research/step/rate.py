@@ -34,26 +34,20 @@ def run(bin_, data, timeout, flags):
 
 
 def verdict(d, t):
-    """Whether ours matches OCCT's truth, summing solids (copies dropped on both sides)."""
+    """Whether ours matches OCCT's truth, summing solids."""
     if "crash" in d or "err" in d or not d.get("solids"):
         return {}
     s = d["solids"]
     bad = any(x["problems"] for x in s)
-    # the same solid repeated: as OCCT's truth drops exact copies, so here
-    seen = {}
-    for x in s:
-        if x["vol"] is None or x["area"] is None:
-            seen = None
-            break
-        seen[(round(abs(x["vol"]), 3), round(x["area"], 3)) + tuple(round(c, 3) for c in (x["box"] or []))] = x
+    seen = None if any(x["vol"] is None or x["area"] is None for x in s) else s
     out = {"valid": not bad, "massok": seen is not None}
     if seen is None or not t:
         return out
-    vol = sum(abs(x["vol"]) for x in seen.values())
-    area = sum(x["area"] for x in seen.values())
+    vol = sum(abs(x["vol"]) for x in seen)
+    area = sum(x["area"] for x in seen)
     out["dvol"] = (vol - t["vol"]) / t["vol"] if t.get("vol") else None
     out["darea"] = (area - t["area"]) / t["area"] if t.get("area") else None
-    boxes = [x["box"] for x in seen.values() if x["box"]]
+    boxes = [x["box"] for x in seen if x["box"]]
     tb = t.get("bbox") or t.get("box")
     if boxes and tb and len(boxes) == len(seen):
         lo = [min(b[k] for b in boxes) for k in range(3)]

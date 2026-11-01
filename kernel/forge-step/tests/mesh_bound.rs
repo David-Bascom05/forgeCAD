@@ -5,7 +5,14 @@ use forge_step::{Limits, import};
 
 /// A body of revolution of two faces joined along two meridians that end on the axis.
 fn lens() -> String {
-    let generator = [(0.0, -0.36), (0.18, -0.3), (0.32, -0.13), (0.32, 0.12), (0.18, 0.29), (0.0, 0.35)];
+    let generator = [
+        (0.0, -0.36),
+        (0.18, -0.3),
+        (0.32, -0.13),
+        (0.32, 0.12),
+        (0.18, 0.29),
+        (0.0, 0.35),
+    ];
     let mut out = String::from(
         "ISO-10303-21;HEADER;ENDSEC;DATA;
 #1=(LENGTH_UNIT()NAMED_UNIT(*)SI_UNIT(.MILLI.,.METRE.));
@@ -28,7 +35,13 @@ fn lens() -> String {
         let (s, c) = angle.sin_cos();
         let mut t = String::new();
         for (k, (r, z)) in generator.iter().enumerate() {
-            t += &format!("#{}=CARTESIAN_POINT('',({},{},{}));\n", id + 1 + k as u32, r * c, r * s, z);
+            t += &format!(
+                "#{}=CARTESIAN_POINT('',({},{},{}));\n",
+                id + 1 + k as u32,
+                r * c,
+                r * s,
+                z
+            );
         }
         t + &format!(
             "#{id}=B_SPLINE_CURVE_WITH_KNOTS('',5,(#{},#{},#{},#{},#{},#{}),.UNSPECIFIED.,.F.,.U.,(6,6),(1.9,2.8),.UNSPECIFIED.);\n",
@@ -71,7 +84,13 @@ fn a_face_reaching_its_axis_meshes_or_says_why() {
     let body = &got.solids[0].body;
     // a chord that asks for millions of grid points: before the bound this took gigabytes
     let chord = 1e-8 * body.faces_box().diagonal();
-    if let Ok(m) = tessellate(body, &Quality { chord, ..Quality::default() }) {
+    if let Ok(m) = tessellate(
+        body,
+        &Quality {
+            chord,
+            ..Quality::default()
+        },
+    ) {
         assert!(m.positions.len() < 1 << 20, "{}", m.positions.len());
     }
 }

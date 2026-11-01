@@ -10,10 +10,10 @@ repository.workspace = true
 forge-math = { path = "../forge-math" }
 forge-geom = { path = "../forge-geom" }
 forge-topo = { path = "../forge-topo" }
+forge-mesh = { path = "../forge-mesh" }
 
 [dev-dependencies]
 forge-ops = { path = "../forge-ops" }
-forge-mesh = { path = "../forge-mesh" }
 forge-bool = { path = "../forge-bool" }
 
 [lints]

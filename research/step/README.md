@@ -27,3 +27,21 @@ OCCT read frame and jack as invalid, with edges at a thread's run-out tip a turn
 wedge of a face (the run-out) can pass between a coarse cell's samples, so the cell was never
 refined and the surface was 2 mm wrong there, with an error of 3e-5 reported. The fit now also
 checks points along the loops.
+
+## Import: wrong with nothing to show for it
+
+Sweeping real files against OCCT (`rate.py`), twelve read as valid and 10% or more off. Compared with
+OCCT's adaptive mass, OCCT's own mesh and ours, face by face:
+
+- Two read wrong: `net_of` divided rational control points by their weights twice (`bezier_data` gives
+  each its own), so surfaces moved from arcs missed their edges, 0.27 mm on an arc of radius 6. Fixed.
+- Several were `mass` going wrong near a pole on a revolved face with edges a little off it: the angle
+  wanders there, a Chebyshev fit was read far outside its box and came to 1e58. The fit is no longer
+  read outside its box, and `mass` refuses a negative face area or a volume past the box. What is left
+  of this can stay a few percent out, so `measures_agree` in `read.rs` holds the integrals against
+  a mesh on import and refuses the body past 2% (plus what a chord can stray over the area).
+- Some were the judge: copies dropped on one side only, a truth from OCCT's non-adaptive volume (the
+  CADFS truth was re-run), or OCCT disagreeing with itself (adaptive against its own mesh).
+
+Rerun: `rate.py` and `tools/occt/step_read.py`, with the datasets outside the repo.
+

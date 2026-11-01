@@ -1186,6 +1186,42 @@ fn record_deviations(body: &mut Body, stats: &mut Stats) {
     }
 }
 
+/// A body whose integrals and mesh disagree is refused: on a file's geometry the integrals can go
+/// wrong with nothing to show for it (`research/step/README.md`). Where either cannot answer, it
+/// says so when asked and there is nothing to compare.
+fn measures_agree(body: &Body) -> Result<(), String> {
+    let chord = 5e-4 * body.faces_box().diagonal();
+    let (Ok(m), Ok(mesh)) = (
+        forge_topo::mass::mass_rel(body, 1e-6),
+        forge_mesh::tessellate(
+            body,
+            &forge_mesh::Quality {
+                chord,
+                ..forge_mesh::Quality::default()
+            },
+        ),
+    ) else {
+        return Ok(());
+    };
+    let (mut volume, mut area) = (0.0, 0.0);
+    for t in &mesh.triangles {
+        let [a, b, c] = t.map(|i| mesh.positions[i as usize] - Point3::ORIGIN);
+        let n = (b - a).cross(c - a);
+        area += 0.5 * n.length();
+        volume += a.dot(n) / 6.0;
+    }
+    // a mesh strays by its chord at most, over the whole area
+    if (m.volume - volume).abs() > 0.02 * volume.abs() + 0.5 * area * chord
+        || (m.area - area).abs() > 0.02 * area
+    {
+        return Err(format!(
+            "its volume and area integrate to {} and {}, its mesh says {volume} and {area}",
+            m.volume, m.area
+        ));
+    }
+    Ok(())
+}
+
 /// Reads a whole file. Parts that cannot be read become refusals; the others are returned.
 pub fn import(text: &[u8], lim: &Limits) -> Result<Imported, ImportError> {
     let f = parse(text, lim).map_err(ImportError::Parse)?;
@@ -1297,6 +1333,14 @@ pub fn import(text: &[u8], lim: &Limits) -> Result<Imported, ImportError> {
                 proto.outer_first();
                 let mut body = proto.into_body();
                 record_deviations(&mut body, &mut stats);
+                if let Err(why) = measures_agree(&body) {
+                    refusals.push(Refusal {
+                        entity: id,
+                        kind: f.name(&r).to_string(),
+                        why,
+                    });
+                    continue;
+                }
                 solids.push(Solid {
                     entity: id,
                     name,
