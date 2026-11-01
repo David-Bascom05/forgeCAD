@@ -156,8 +156,9 @@ pub fn rebuild_some(body: &mut Body, verts: &[bool], edges: &[bool]) -> Result<(
         let shift = ps
             .distance(old_pts[vs.index()])
             .max(pe.distance(old_pts[ve.index()]));
-        let (curve, range) =
-            edge_curve(&a, &b, &oc, or, ps, pe, closed, shift).ok_or(RebuildError::Edge { edge: name })?;
+        let (curve, range) = edge_curve(&a, &b, &oc, or, ps, pe, closed, shift)
+            .or_else(|| moved_conic(&a, &b, &oc, ps, pe, closed))
+            .ok_or(RebuildError::Edge { edge: name })?;
         // the edge must still run the way it did
         let (nd, od) = (curve.deriv(range.mid()).d1, oc.deriv(or.mid()).d1);
         if !closed && (nd.dot(od) <= 0.0 || ps.distance(pe) <= tol::LINEAR) {
@@ -413,6 +414,33 @@ impl ProceduralCurve for Backwards {
     fn kinks(&self, range: Interval) -> Vec<f64> {
         self.0.kinks(flip(range)).into_iter().rev().map(|t| -t).collect()
     }
+}
+
+/// A line or circle moved to its new ends, if it lies on both surfaces then: where the surfaces
+/// are tangent along it (a fillet offset with its neighbour) no intersection can find it.
+fn moved_conic(
+    a: &Surface,
+    b: &Surface,
+    oc: &Curve,
+    ps: Point3,
+    pe: Point3,
+    closed: bool,
+) -> Option<(Curve, Interval)> {
+    let c = match oc {
+        Curve::Line(_) => Curve::Line(Line::through(ps, pe)?),
+        Curve::Circle(k) => {
+            let z = k.frame.z();
+            let o = k.frame.origin + z * z.dot(ps - k.frame.origin);
+            let radial = ps - o;
+            Curve::Circle(Circle {
+                frame: Frame::from_zx(o, z, k.frame.x().get())?,
+                radius: radial.length(),
+            })
+        }
+        _ => return None,
+    };
+    let range = fit(&c, ps, pe, closed)?;
+    on_both(&c, range, a, b).then_some((c, range))
 }
 
 /// Whether the curve over `range` lies on both surfaces.

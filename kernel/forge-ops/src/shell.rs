@@ -1,6 +1,6 @@
 use crate::rebuild::{RebuildError, reaches_apex, rebuild};
 use crate::selfx::crossing;
-use forge_geom::{Cone, Cylinder, Plane, Sphere, Surface, Torus};
+use forge_geom::{Cone, Curve, CurveGeom, Cylinder, Line, Plane, Sphere, Surface, SurfaceGeom, Torus};
 use forge_math::{Box2, Interval, dmath, tol};
 use forge_topo::{Body, EdgeId, FaceId, Name, Problem, VertexId, check_against};
 
@@ -13,10 +13,6 @@ pub enum ShellError {
     },
     /// Every face was opened: nothing would be left.
     AllOpen,
-    /// Two opened faces share this edge (not supported yet).
-    AdjacentOpen {
-        edge: Name,
-    },
     /// The thickness reaches past this face's centre of curvature: its offset vanishes.
     Collapses {
         face: Name,
@@ -58,12 +54,12 @@ pub fn shell(
     if opened.iter().all(|&o| o) {
         return Err(ShellError::AllOpen);
     }
-    for e in base.edge_ids() {
-        let edge = base.edge(e);
-        if edge.coedges.iter().all(|&c| opened[base.coedge_face(c).index()]) {
-            return Err(ShellError::AdjacentOpen { edge: edge.name });
-        }
-    }
+    // an opened plane all of whose edges its neighbours leave tangentially: their offsets never reach
+    // it, so it moves with them and the wall ends in strips square to it (`rim_strips`)
+    let strip: Vec<bool> = base
+        .face_ids()
+        .map(|f| opened[f.index()] && rolls_off_all_round(&base, f, &opened))
+        .collect();
     let shift = if outward { thickness } else { -thickness };
     let along = |f: &forge_topo::Face| if f.same_sense { shift } else { -shift };
     // faces whose offsets vanish go, and their neighbours meet instead
@@ -77,7 +73,8 @@ pub fn shell(
     } else {
         base.clone()
     };
-    let open_moved: Vec<bool> = moved.faces.iter().map(|f| open.contains(&f.name)).collect();
+    let stays = |n: Name| open.contains(&n) && !base.face_by_name(n).is_some_and(|f| strip[f.index()]);
+    let open_moved: Vec<bool> = moved.faces.iter().map(|f| stays(f.name)).collect();
     let changed: Vec<bool> = open_moved.iter().map(|&o| !o).collect();
     for f in (0..moved.faces.len() as u32)
         .map(FaceId)
@@ -162,6 +159,7 @@ pub fn shell(
     };
     let emap_out = copy(outer, false, outer_new, &mut out);
     let emap_in = copy(inner, true, inner_new, &mut out);
+    let mut links: std::collections::HashMap<(VertexId, VertexId), EdgeId> = std::collections::HashMap::new();
     for f in base.face_ids() {
         if !opened[f.index()] {
             continue;
@@ -175,34 +173,44 @@ pub fn shell(
             return Err(ShellError::Collapses { face: face.name });
         }
         for (k, (&lo, &li)) in outer.face(fo).loops.iter().zip(&inner.face(fi).loops).enumerate() {
-            let rim = out.add_face(
+            let pairs: Vec<_> = outer.lp(lo).coedges().zip(inner.lp(li).coedges()).collect();
+            if pairs.len() != outer.lp(lo).coedges().len() || pairs.len() != inner.lp(li).coedges().len() {
+                return Err(ShellError::Collapses { face: face.name });
+            }
+            let mut wall = Rims {
+                out: &mut out,
                 shell,
-                face.surface.clone(),
-                face.same_sense,
-                face.name.with_name(root).with_str("rim").with(k as u64),
-            );
-            let uses = |b: &Body, l, map: &[Option<EdgeId>]| -> Vec<(EdgeId, bool)> {
-                b.lp(l)
-                    .coedges()
-                    .map(|c| {
-                        let co = b.coedge(c);
-                        (map[co.edge.index()].expect("shared with a kept face"), co.forward)
-                    })
-                    .collect()
+                links: &mut links,
+                emap_out: &emap_out,
+                emap_in: &emap_in,
+                outer,
+                inner,
+                name: face.name.with_name(root).with_str("rim").with(k as u64),
             };
-            let front = uses(outer, lo, &emap_out);
-            let mut back: Vec<(EdgeId, bool)> = uses(inner, li, &emap_in)
-                .into_iter()
-                .map(|(e, fw)| (e, !fw))
-                .collect();
-            back.reverse();
-            // the rim round a hole of the open face has the inner skin's loop outside
-            if k == 0 {
-                out.add_loop(rim, &front);
-                out.add_loop(rim, &back);
+            if strip[f.index()] {
+                wall.strips(face, &pairs)?;
+                continue;
+            }
+            // edges the rim stops at: the other side of them is open too
+            let shared = |c: forge_topo::CoedgeId| {
+                let e = base.face_by_name(face.name).map(|g| {
+                    let at = base.face(g).loops[k];
+                    let i = pairs.iter().position(|p| p.0 == c).unwrap_or(0);
+                    base.coedge(base.lp(at).coedges().nth(i).expect("as many coedges"))
+                        .edge
+                });
+                e.is_some_and(|e| {
+                    base.edge(e)
+                        .coedges
+                        .iter()
+                        .all(|&o| opened[base.coedge_face(o).index()])
+                })
+            };
+            let free: Vec<bool> = pairs.iter().map(|p| !shared(p.0)).collect();
+            if free.iter().all(|&x| x) {
+                wall.band(face, &pairs, k)?;
             } else {
-                out.add_loop(rim, &back);
-                out.add_loop(rim, &front);
+                wall.runs(face, &pairs, &free)?;
             }
         }
     }
@@ -220,6 +228,258 @@ pub fn shell(
         return Err(ShellError::Invalid(problems));
     }
     Ok(out)
+}
+
+/// Whether every edge of `f`, an opened plane, is a smooth one to a face that stays, on a line or circle.
+fn rolls_off_all_round(body: &Body, f: FaceId, opened: &[bool]) -> bool {
+    let face = body.face(f);
+    let Surface::Plane(_) = &face.surface else {
+        return false;
+    };
+    let n = face
+        .surface
+        .gradient(face.surface.eval(forge_math::Point2::new(0.0, 0.0)));
+    face.loops.iter().all(|&l| {
+        body.lp(l).coedges().all(|c| {
+            let e = body.edge(body.coedge(c).edge);
+            let Some(o) = body.partner(c) else { return false };
+            let g = body.coedge_face(o);
+            let q = e.curve.eval(e.range.mid());
+            matches!(e.curve, Curve::Line(_) | Curve::Circle(_))
+                && !opened[g.index()]
+                && body.face(g).surface.gradient(q).cross(n).length() <= 1e-6
+        })
+    })
+}
+
+/// The faces closing a wall where a face was opened, between its two skins.
+struct Rims<'a> {
+    out: &'a mut Body,
+    shell: forge_topo::ShellId,
+    links: &'a mut std::collections::HashMap<(VertexId, VertexId), EdgeId>,
+    emap_out: &'a [Option<EdgeId>],
+    emap_in: &'a [Option<EdgeId>],
+    outer: &'a Body,
+    inner: &'a Body,
+    name: Name,
+}
+
+type Pair = (forge_topo::CoedgeId, forge_topo::CoedgeId);
+
+impl Rims<'_> {
+    /// An opened face's edge in the result, on each skin, the way the face runs it.
+    fn uses(&self, p: Pair) -> Option<((EdgeId, bool), (EdgeId, bool))> {
+        let (a, b) = (self.outer.coedge(p.0), self.inner.coedge(p.1));
+        Some((
+            (self.emap_out[a.edge.index()]?, a.forward),
+            (self.emap_in[b.edge.index()]?, b.forward),
+        ))
+    }
+
+    fn head(&self, u: (EdgeId, bool)) -> VertexId {
+        let e = self.out.edge(u.0);
+        if u.1 { e.end } else { e.start }
+    }
+
+    fn tail(&self, u: (EdgeId, bool)) -> VertexId {
+        let e = self.out.edge(u.0);
+        if u.1 { e.start } else { e.end }
+    }
+
+    /// The edge from `a` on one skin to `b` on the other, one for all the faces it borders: along
+    /// `on` if given (the edge of two opened faces), else straight. As a use from `a` to `b`.
+    fn link(
+        &mut self,
+        a: VertexId,
+        b: VertexId,
+        on: Option<&Curve>,
+        name: Name,
+    ) -> Result<(EdgeId, bool), ShellError> {
+        if let Some(&e) = self.links.get(&(a, b)) {
+            return Ok((e, true));
+        }
+        if let Some(&e) = self.links.get(&(b, a)) {
+            return Ok((e, false));
+        }
+        let (p, q) = (self.out.vertex(a).point, self.out.vertex(b).point);
+        let fail = ShellError::Collapses { face: self.name };
+        let (curve, range) = match on {
+            Some(Curve::Circle(k)) => {
+                let at = |x: forge_math::Point3| {
+                    let v = x - k.frame.origin;
+                    dmath::atan2(v.dot(k.frame.y().get()), v.dot(k.frame.x().get()))
+                };
+                let (s, mut t) = (at(p), at(q));
+                if t < s {
+                    t += dmath::TAU;
+                }
+                if t - s > dmath::PI {
+                    return Err(fail);
+                }
+                (Curve::Circle(*k), Interval::new(s, t))
+            }
+            Some(Curve::Line(_)) | None => {
+                let d = q - p;
+                let dir = d.normalize().ok_or(fail)?;
+                (Curve::Line(Line::new(p, dir)), Interval::new(0.0, d.length()))
+            }
+            Some(_) => return Err(fail),
+        };
+        let e = self.out.add_edge(curve, range, a, b, name);
+        self.links.insert((a, b), e);
+        Ok((e, true))
+    }
+
+    /// A whole band on the face's own surface, between a loop on each skin.
+    fn band(&mut self, face: &forge_topo::Face, pairs: &[Pair], k: usize) -> Result<(), ShellError> {
+        let rim = self
+            .out
+            .add_face(self.shell, face.surface.clone(), face.same_sense, self.name);
+        let all: Vec<_> = pairs.iter().filter_map(|&p| self.uses(p)).collect();
+        if all.len() != pairs.len() {
+            return Err(ShellError::Collapses { face: face.name });
+        }
+        let front: Vec<_> = all.iter().map(|u| u.0).collect();
+        let back: Vec<_> = all.iter().rev().map(|u| (u.1.0, !u.1.1)).collect();
+        // the rim round a hole of the open face has the inner skin's loop outside
+        if k == 0 {
+            self.out.add_loop(rim, &front);
+            self.out.add_loop(rim, &back);
+        } else {
+            self.out.add_loop(rim, &back);
+            self.out.add_loop(rim, &front);
+        }
+        Ok(())
+    }
+
+    /// Bands on the face's own surface, one for each run of edges `free`: they end along the edges
+    /// it shares with other opened faces.
+    fn runs(&mut self, face: &forge_topo::Face, pairs: &[Pair], free: &[bool]) -> Result<(), ShellError> {
+        let n = pairs.len();
+        let Some(begin) = (0..n).find(|&i| free[i] && !free[(i + n - 1) % n]) else {
+            return Ok(()); // open all round: nothing of its wall is left
+        };
+        let shared_curve = |i: usize| self.outer.edge(self.outer.coedge(pairs[i].0).edge).curve.clone();
+        let mut i = begin;
+        let mut count = 0;
+        loop {
+            if !free[i] {
+                i = (i + 1) % n;
+                count += 1;
+                if count >= n {
+                    break;
+                }
+                continue;
+            }
+            let start = i;
+            let mut run = Vec::new();
+            while free[i] && run.len() < n {
+                run.push(
+                    self.uses(pairs[i])
+                        .ok_or(ShellError::Collapses { face: face.name })?,
+                );
+                i = (i + 1) % n;
+                count += 1;
+            }
+            let before = shared_curve((start + n - 1) % n);
+            let after = shared_curve(i);
+            let last = run[run.len() - 1];
+            let (out_end, in_end) = (self.head(last.0), self.head(last.1));
+            let (out_start, in_start) = (self.tail(run[0].0), self.tail(run[0].1));
+            let there = self.link(
+                out_end,
+                in_end,
+                Some(&after),
+                self.out.vertex(out_end).name.with_str("link"),
+            )?;
+            let back = self.link(
+                in_start,
+                out_start,
+                Some(&before),
+                self.out.vertex(out_start).name.with_str("link"),
+            )?;
+            let name = self.name.with(start as u64);
+            let rim = self
+                .out
+                .add_face(self.shell, face.surface.clone(), face.same_sense, name);
+            let mut uses: Vec<(EdgeId, bool)> = run.iter().map(|u| u.0).collect();
+            uses.push(there);
+            uses.extend(run.iter().rev().map(|u| (u.1.0, !u.1.1)));
+            uses.push(back);
+            self.out.add_loop(rim, &uses);
+            if count >= n {
+                break;
+            }
+        }
+        Ok(())
+    }
+
+    /// Where an opened plane's neighbours leave it tangentially, the wall ends in a strip square to
+    /// it at each edge, facing in over the opening.
+    fn strips(&mut self, face: &forge_topo::Face, pairs: &[Pair]) -> Result<(), ShellError> {
+        let fail = ShellError::Collapses { face: face.name };
+        let Surface::Plane(pl) = &face.surface else {
+            return Err(fail);
+        };
+        let n = if face.same_sense {
+            pl.frame.z()
+        } else {
+            -pl.frame.z()
+        };
+        // an opened face's coedges on the skin holding its true place
+        let at_plane = if self
+            .outer
+            .face_by_name(face.name)
+            .is_some_and(|f| self.outer.face(f).surface == face.surface)
+        {
+            self.outer
+        } else {
+            self.inner
+        };
+        for (i, &p) in pairs.iter().enumerate() {
+            let u = self.uses(p).ok_or(fail.clone())?;
+            let c = if std::ptr::eq(at_plane, self.outer) {
+                p.0
+            } else {
+                p.1
+            };
+            let co = at_plane.coedge(c);
+            let edge = at_plane.edge(co.edge);
+            let d = edge.curve.deriv(edge.range.mid());
+            let along = if co.forward { d.d1 } else { -d.d1 };
+            let facing = n.cross(along);
+            let surface = match &edge.curve {
+                Curve::Line(l) => {
+                    let z = l.dir.cross(n.get()).normalize().ok_or(fail.clone())?;
+                    Surface::Plane(Plane::new(forge_math::Frame::from_z(l.origin, z)))
+                }
+                Curve::Circle(k) => Surface::Cylinder(Cylinder {
+                    frame: k.frame,
+                    radius: k.radius,
+                }),
+                _ => return Err(fail),
+            };
+            let same = surface.gradient(d.p).dot(facing) > 0.0;
+            let name = self.name.with(i as u64);
+            let rim = self.out.add_face(self.shell, surface, same, name);
+            let (out_end, in_end) = (self.head(u.0), self.head(u.1));
+            let (out_start, in_start) = (self.tail(u.0), self.tail(u.1));
+            let there = self.link(
+                out_end,
+                in_end,
+                None,
+                self.out.vertex(out_end).name.with_str("link"),
+            )?;
+            let back = self.link(
+                in_start,
+                out_start,
+                None,
+                self.out.vertex(out_start).name.with_str("link"),
+            )?;
+            self.out.add_loop(rim, &[u.0, there, (u.1.0, !u.1.1), back]);
+        }
+        Ok(())
+    }
 }
 
 /// `body` without the faces flagged `gone`, each a strip whose two long sides' faces now meet in
