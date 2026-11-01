@@ -1160,6 +1160,25 @@ fn tessellate_face(
         },
     ) {
         Ok(t) => t,
+        // loops touching at a point (the solid is sound round it): in the plane of the triangulation
+        // only, each copy of the point a hair along its own loop
+        Err(CdtError::DuplicatePoint { a, b }) if apart_touching(&scaled, &loops, a, b).is_some() => {
+            let mut parted = scaled.clone();
+            let mut tried = Err(CdtError::DuplicatePoint { a, b });
+            let mut at = (a, b);
+            for _ in 0..16 {
+                let Some(q) = apart_touching(&parted, &loops, at.0, at.1) else {
+                    break;
+                };
+                parted[at.1 as usize] = q;
+                tried = triangulate_refined(&parted, &loops, &interior, Some(&strays));
+                match &tried {
+                    Err(CdtError::DuplicatePoint { a, b }) => at = (*a, *b),
+                    _ => break,
+                }
+            }
+            tried?
+        }
         Err(e) => {
             if let Some(path) = std::env::var_os("FORGE_CDT_DUMP") {
                 let pts: Vec<String> = scaled.iter().map(|p| format!("{:e},{:e}", p.x, p.y)).collect();
@@ -1894,6 +1913,19 @@ fn strips(
         }
     }
     Some(tris)
+}
+
+
+/// Where point `b` goes to part from `a` at the same place: a hair in from it towards its neighbours
+/// along its own loop.
+fn apart_touching(pts: &[Point2], loops: &[Vec<u32>], a: u32, b: u32) -> Option<Point2> {
+    let lp = loops.iter().find(|l| l.contains(&b) && !l.contains(&a)).or_else(|| loops.iter().find(|l| l.contains(&b)))?;
+    let k = lp.iter().position(|&x| x == b)?;
+    let n = lp.len();
+    let (p, q) = (pts[lp[(k + n - 1) % n] as usize], pts[lp[(k + 1) % n] as usize]);
+    let at = pts[b as usize];
+    let mid = Point2::new(0.5 * (p.x + q.x), 0.5 * (p.y + q.y));
+    Some(at.lerp(mid, 1e-7))
 }
 
 #[cfg(test)]

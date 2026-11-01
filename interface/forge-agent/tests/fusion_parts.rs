@@ -391,3 +391,14 @@ extrude add 2 z 0 1 0 x 1 0 0 at 0 2 0 loop arc 42 -40.000001 2 -75.52249181407 
 ",
     );
 }
+
+/// A boss whose bore touches its flat at a vertex on a plate: its cap's two loops meet at a point the
+/// triangulation parts by a hair, the 3D points staying where they are.
+#[test]
+fn cap_whose_loops_touch_meshes() {
+    builds(
+        "extrude 6 z 0 1 0 x 1 0 0 at 0 0 0 poly 0 -30 0 30 120 30 120 -30 circle 14 0 7 circle 106 0 7
+extrude add 60 z 0 0 -1 x 1 0 0 at 0 0 30 loop arc 60 -28 34 40.320215 -260.64043 line 34.077037 -6 60 -6 line 60 -6 85.922963 -6 circle 60 -28 22
+",
+    );
+}
