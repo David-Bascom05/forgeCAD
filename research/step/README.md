@@ -127,3 +127,11 @@ CONTEXT_DEPENDENT_SHAPE_REPRESENTATION are not applied, so copies are missing an
 the same. `assembly_asks` counts what a file asks that this leaves undone, placements that move and parts used twice, and
 such a body is flagged `assembly-not-placed` in the check. A placement onto itself asks nothing: all 59 Onshape files of the CADFS
 set with a MAPPED_ITEM are these, and match OCCT. Reading placements is David's call.
+
+## IGES
+
+`kernel/forge-step/src/iges.rs` reads IGES 5.3's boundary-representation entities (186 and down), written from the
+specification, sharing `finish` with STEP. A file of trimmed surfaces (144, 143) has no topology and is refused by name;
+sewing them is not done. Measured only against OCCT-written files: 300 written by `IGESControl_Writer` in BREP mode from STEP files of
+the sets above, so a real system's IGES is untested. A loop runs round on the surface's own side, so a face against its
+surface takes it reversed. OCCT writes clockwise arcs as a mirrored matrix on the curve.

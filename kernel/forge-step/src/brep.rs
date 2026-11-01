@@ -34,20 +34,38 @@ fn refuse<T>(entity: usize, kind: &str, why: impl Into<String>) -> R<T> {
 
 /// A placement: rotation by rows, then translation. `rigid` is false for a scale or a mirror.
 #[derive(Clone, Copy)]
-struct Xf {
+pub(crate) struct Xf {
     r: [[f64; 3]; 3],
     t: [f64; 3],
     rigid: bool,
 }
 
-const IDENTITY: Xf = Xf {
+pub(crate) const IDENTITY: Xf = Xf {
     r: [[1.0, 0.0, 0.0], [0.0, 1.0, 0.0], [0.0, 0.0, 1.0]],
     t: [0.0; 3],
     rigid: true,
 };
 
 impl Xf {
-    fn new(r: [[f64; 3]; 3], t: [f64; 3]) -> Xf {
+    pub(crate) const IDENTITY: Xf = IDENTITY;
+
+    /// Whether it mirrors.
+    pub(crate) fn mirrors(&self) -> bool {
+        let r = &self.r;
+        r[0][0] * (r[1][1] * r[2][2] - r[1][2] * r[2][1]) - r[0][1] * (r[1][0] * r[2][2] - r[1][2] * r[2][0])
+            + r[0][2] * (r[1][0] * r[2][1] - r[1][1] * r[2][0])
+            < 0.0
+    }
+
+    /// Lengths kept, whichever hand.
+    pub(crate) fn no_scale(&self) -> bool {
+        let dot = |a: [f64; 3], b: [f64; 3]| a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
+        (0..3).all(|i| {
+            (0..3).all(|j| (dot(self.r[i], self.r[j]) - if i == j { 1.0 } else { 0.0 }).abs() <= 1e-6)
+        })
+    }
+
+    pub(crate) fn new(r: [[f64; 3]; 3], t: [f64; 3]) -> Xf {
         let dot = |a: [f64; 3], b: [f64; 3]| a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
         let orthonormal =
             (0..3).all(|i| (0..3).all(|j| (dot(r[i], r[j]) - if i == j { 1.0 } else { 0.0 }).abs() <= 1e-9));
@@ -60,18 +78,18 @@ impl Xf {
         Xf { r, t, rigid }
     }
 
-    fn vec(&self, v: Vec3) -> Vec3 {
+    pub(crate) fn vec(&self, v: Vec3) -> Vec3 {
         let f = |k: usize| self.r[k][0] * v.x + self.r[k][1] * v.y + self.r[k][2] * v.z;
         Vec3::new(f(0), f(1), f(2))
     }
 
-    fn point(&self, p: Point3) -> Point3 {
+    pub(crate) fn point(&self, p: Point3) -> Point3 {
         let v = self.vec(Vec3::new(p.x, p.y, p.z));
         Point3::new(v.x + self.t[0], v.y + self.t[1], v.z + self.t[2])
     }
 
     /// `self` after `o`.
-    fn then(&self, o: &Xf) -> Xf {
+    pub(crate) fn then(&self, o: &Xf) -> Xf {
         let mut r = [[0.0; 3]; 3];
         for (i, row) in r.iter_mut().enumerate() {
             for (j, x) in row.iter_mut().enumerate() {
@@ -1056,7 +1074,13 @@ impl Read<'_> {
     }
 }
 
-fn spline_curve(entity: usize, deg: usize, knots: &[f64], pts: &[Point3], w: Option<&[f64]>) -> R<Curve> {
+pub(crate) fn spline_curve(
+    entity: usize,
+    deg: usize,
+    knots: &[f64],
+    pts: &[Point3],
+    w: Option<&[f64]>,
+) -> R<Curve> {
     let Some(s) = Spline::from_nurbs(deg, knots, pts, w) else {
         return refuse(
             entity,

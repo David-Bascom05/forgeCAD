@@ -135,7 +135,7 @@ quoted STRING and PATH (a .ttf/.otf beside the file); SIZE the em (capitals ~0.7
 the origin along x, letters up y, DEPTH along z (cut: into the part). wrap R: round a cylinder about z
 
 ## import step
-import [new|add|cut] PATH   a solid from a STEP or OpenCascade .brep file beside the part file, quoted: every solid in it,
+import [new|add|cut] PATH   a solid from a STEP, OpenCascade .brep or IGES file beside the part file, quoted: every solid in it,
 as one body whose faces, edges and vertices have names you can use; features can follow. Exact surfaces
 stay exact; edges keep the deviation the file gave them. A file it cannot read is refused by entity.
 

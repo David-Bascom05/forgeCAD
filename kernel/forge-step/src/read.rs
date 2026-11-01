@@ -66,6 +66,8 @@ pub enum ImportError {
     Parse(ParseError),
     /// A `.brep` that does not read as one.
     Brep,
+    /// An IGES file that does not read as one.
+    Iges,
     NoSolids,
 }
 
@@ -74,6 +76,7 @@ impl std::fmt::Display for ImportError {
         match self {
             ImportError::Parse(e) => write!(f, "{e}"),
             ImportError::Brep => write!(f, "not a readable OpenCascade .brep file"),
+            ImportError::Iges => write!(f, "not a readable IGES file"),
             ImportError::NoSolids => write!(f, "the file holds no solid"),
         }
     }
@@ -1101,7 +1104,7 @@ impl Build<'_, '_> {
 
 /// The edge's parameter range from its end points on its curve, how far they lie from it, and
 /// whether they come the other way along it than the file says.
-fn edge_range(c: &Curve, a: Point3, b: Point3, closed: bool) -> (Interval, f64, bool) {
+pub(crate) fn edge_range(c: &Curve, a: Point3, b: Point3, closed: bool) -> (Interval, f64, bool) {
     let d = c.domain();
     match d.period {
         Some(p) => {
@@ -1362,6 +1365,9 @@ pub(crate) fn finish(
 pub fn import(text: &[u8], lim: &Limits) -> Result<Imported, ImportError> {
     if crate::brep::is_brep(text) {
         return crate::brep::import(text, lim);
+    }
+    if crate::iges::is_iges(text) {
+        return crate::iges::import(text, lim);
     }
     read_file(text, lim, false)
 }
