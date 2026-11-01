@@ -113,6 +113,23 @@ fn near(a: f64, b: f64) -> bool {
     (a - b).abs() <= 1e-4 * b.abs().max(1.0)
 }
 
+/// Overlapping bodies in one Body sum past the box round them all, and that is no error: the check
+/// on a volume gone wrong takes each shell's own box.
+#[test]
+fn overlapping_solids_measure_past_their_joint_box() {
+    let solid = |corner: Point3, h: f64| {
+        Part {
+            features: vec![block(corner, 60.0, 60.0, h, Combine::New)],
+        }
+        .regenerate()
+        .expect("builds")
+    };
+    let mut b = solid(p3(0.0, 0.0, 0.0), 20.0);
+    b.append(&solid(p3(0.0, 0.0, 15.0), 5.0));
+    let m = forge_topo::mass::mass(&b).expect("two overlapping solids have a mass");
+    assert!((m.volume - 60.0 * 60.0 * 25.0).abs() < 1e-6, "{}", m.volume);
+}
+
 #[test]
 fn a_new_solid_is_a_body_of_its_own() {
     // overlapping bodies stay apart

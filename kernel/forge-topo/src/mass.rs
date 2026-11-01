@@ -123,10 +123,25 @@ pub fn mass_rel(body: &Body, rel: f64) -> Result<MassProps, MassError> {
         faces.push((f, v[10]));
     }
     let vol = t[0];
-    let bx = body
-        .face_ids()
-        .fold(forge_math::Box3::EMPTY, |b, f| b.hull(&body.face_box(f)));
-    if vol.abs() > 1.01 * bx.x.width() * bx.y.width() * bx.z.width() {
+    // shells may overlap (`extrude new`), so their volumes add up past one box round them all: each
+    // shell's own box, summed. Empty boxes (a shell with every face removed) count nothing.
+    let room: f64 = body
+        .shells
+        .iter()
+        .map(|s| {
+            let bx = s
+                .faces
+                .iter()
+                .filter(|&&f| body.face(f).alive)
+                .fold(forge_math::Box3::EMPTY, |b, &f| b.hull(&body.face_box(f)));
+            if bx.is_empty() {
+                0.0
+            } else {
+                bx.x.width() * bx.y.width() * bx.z.width()
+            }
+        })
+        .sum();
+    if vol.abs() > 1.01 * room {
         return Err(MassError {
             face: FaceId(0),
             why: "the volume came out larger than the body's box",
