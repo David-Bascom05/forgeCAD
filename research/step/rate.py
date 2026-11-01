@@ -40,7 +40,8 @@ def verdict(d, t):
     s = d["solids"]
     bad = any(x["problems"] for x in s)
     seen = None if any(x["vol"] is None or x["area"] is None for x in s) else s
-    out = {"valid": not bad, "massok": seen is not None}
+    # a body the reader could not check is imported with a warning: never counted as matching
+    out = {"valid": not bad, "massok": seen is not None, "warned": any(x.get("warn") for x in s)}
     if seen is None or not t:
         return out
     vol = sum(abs(x["vol"]) for x in seen)
@@ -92,10 +93,12 @@ def report(paths):
             for x in r["solids"]:
                 for k in x["problems"]:
                     probs[k] += 1
+            if v.get("warned"):
+                c["warned"] += 1
             if v.get("match"):
                 c["match"] += 1
                 syst[sys_]["match"] += 1
-                if v.get("valid"):
+                if v.get("valid") and not v.get("warned"):
                     c["valid+match"] += 1
             if v.get("match1"):
                 c["match1"] += 1
@@ -106,6 +109,7 @@ def report(paths):
         n = c["files"] or 1
         print(f"== {path}")
         print("  ", " ".join(f"{k}={c[k]} ({100*c[k]/n:.1f}%)" for k in ["files", "read", "valid", "compared", "match", "match1", "valid+match", "box", "refused", "parse_err", "crash", "timeout"]))
+        print(f"   matching {100*c['valid+match']/n:.1f}% / warned {100*c['warned']/n:.1f}% / refused {100*c['refused']/n:.1f}%")
         print("   problems(files):", probs.most_common(14))
         print("   refused(files):", refs.most_common(14))
         print("   crash:", panics.most_common(6))

@@ -813,6 +813,11 @@ impl Session {
         if let Some(f) = &m.error {
             text.push_str(&format!("\nline {} does not build: {}", m.lines[f.at].no, f.msg));
         }
+        // what a file's body leaves undone: said, not failed
+        let warned = crate::model::tangled(m.solids_after(m.built()));
+        for w in &warned {
+            text.push_str(&format!("\nwarning ({}): {}", w.rule, w.reason));
+        }
         let mut sketches = Vec::new();
         for (i, f) in m.features.iter().enumerate() {
             if let forge_model::Feature::Sketch(s) = f {
@@ -861,6 +866,10 @@ impl Session {
             json: Json::obj(vec![
                 ("ok", ok.into()),
                 ("bad", Json::Arr(list)),
+                (
+                    "warnings",
+                    Json::Arr(warned.into_iter().map(|w| Json::from(w.rule)).collect()),
+                ),
                 ("sketches", Json::Arr(sketches)),
             ]),
             png: None,
@@ -1466,7 +1475,19 @@ combine cut base lid keep
         let want = 8000.0 - forge_math::dmath::PI * 4.0 * 10.0;
         assert!(r.text.contains(&format!("volume {want:.1}")), "{}", r.text);
         let c = s.run("check", &args(&part, &[]));
-        assert!(c.ok, "{}", c.text);
+        assert!(c.ok && !c.text.contains("warning"), "{}", c.text);
+        // a file with its first point lifted: its integrals and mesh disagree, imported and warned
+        let text = String::from_utf8(std::fs::read(&step).expect("read")).expect("text");
+        let off = text.replacen("(0.,0.,0.)", "(0.,0.,4.)", 1);
+        assert_ne!(off, text);
+        std::fs::write(dir.0.join("off.step"), off).expect("write");
+        let warned = dir.file("w.fc", "import \"off.step\"\n");
+        let c = s.run("check", &args(&warned, &[]));
+        assert!(
+            c.ok && c.text.contains("warning (import-not-verified)"),
+            "{}",
+            c.text
+        );
         // no file: an error on its line
         let gone = dir.file("q.fc", "import \"nope.step\"\n");
         assert!(!s.run("build", &args(&gone, &[])).ok);

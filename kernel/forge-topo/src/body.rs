@@ -238,6 +238,9 @@ pub struct Body {
     /// The file places its parts as an assembly, which is not read: each solid is here once, where it
     /// stands in its own part. Said in the check, as it can be wrong with nothing else to show for it.
     pub unplaced: bool,
+    /// What could not be checked of a file's body as read, in plain words: its integrals and mesh
+    /// disagree, or one of them cannot be worked out. Imported all the same and said in the check.
+    pub unverified: Option<String>,
 }
 
 /// Boxes over runs of face ids (a chunk of 16 faces, a block of 16 chunks), each the hull of
@@ -483,6 +486,7 @@ impl Body {
             split: std::mem::take(&mut self.split),
             from_file: self.from_file,
             unplaced: self.unplaced,
+            unverified: self.unverified.take(),
         };
         for (i, mut face) in std::mem::take(&mut self.faces).into_iter().enumerate() {
             if !face.alive {
@@ -556,6 +560,7 @@ impl Body {
         let mut out = Body::new();
         out.from_file = self.from_file;
         out.unplaced = self.unplaced;
+        out.unverified = self.unverified.clone();
         out.joins = self.joins.clone();
         out.vertices.reserve(self.vertices.len());
         out.edges.reserve(self.edges.len());
@@ -663,6 +668,9 @@ impl Body {
     pub fn append(&mut self, other: &Body) {
         self.from_file |= other.from_file;
         self.unplaced |= other.unplaced;
+        if self.unverified.is_none() {
+            self.unverified = other.unverified.clone();
+        }
         for &w in &other.split {
             self.note_split(w);
         }

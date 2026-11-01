@@ -1207,17 +1207,24 @@ fn heal_limit(uncertainty: f64, size: f64) -> f64 {
 
 const TOO_LONG: &str = "its surfaces would take too long to measure";
 
-/// A body whose integrals and mesh disagree is refused: on a file's geometry the integrals can go
-/// wrong with nothing to show for it (`research/step/README.md`). So is one that cannot be meshed
-/// even coarsely, with nothing to check it by and nothing to show, and so is one whose integrals
-/// cannot answer.
-fn measures_agree(body: &Body) -> Result<(), String> {
+/// What a body as read cannot be checked by, in plain words: its integrals and mesh disagree (on a
+/// file's geometry the integrals can go wrong with nothing to show for it, `research/step/README.md`),
+/// or one of them cannot be worked out. Such a body is imported with the warning, not refused; only a
+/// budget run out refuses it.
+fn measures_agree(body: &Body) -> Result<Option<String>, String> {
     let m = forge_topo::mass::mass_rel(body, 1e-6);
     if forge_geom::budget::over() {
         return Err(TOO_LONG.into());
     }
-    // nothing to check it by, or to tell its mass by: no pass
-    let m = m.map_err(|e| format!("its volume cannot be worked out: {}", e.why))?;
+    let m = match m {
+        Ok(m) => m,
+        Err(e) => {
+            return Ok(Some(format!(
+                "its volume cannot be worked out ({}), so nothing it measures is checked",
+                e.why
+            )));
+        }
+    };
     let mesh_at = |chord: f64| {
         forge_mesh::tessellate::tessellate_tolerant(
             body,
@@ -1233,7 +1240,19 @@ fn measures_agree(body: &Body) -> Result<(), String> {
         Err(_) => match mesh_at(5e-3 * diagonal) {
             Ok(x) => (x, 5e-3 * diagonal),
             Err(_) if forge_geom::budget::over() => return Err(TOO_LONG.into()),
-            Err(e) => return Err(format!("it cannot be meshed: {e:?}")),
+            Err(forge_mesh::TessError::Face { error, .. }) => {
+                use forge_mesh::CdtError as E;
+                let why = match error {
+                    E::ConstraintsIntersect { .. } => "its edges cross",
+                    E::ConstraintThroughPoint { .. } => "an edge runs through a corner",
+                    E::DuplicatePoint { .. } => "two of its corners fall together",
+                    E::BadLoop { .. } => "a loop of it has no area",
+                    _ => "its boundary does not close",
+                };
+                return Ok(Some(format!(
+                    "a face of it cannot be drawn ({why}), so its volume is not checked against a drawing"
+                )));
+            }
         },
     };
     let (mut volume, mut area) = (0.0, 0.0);
@@ -1253,12 +1272,13 @@ fn measures_agree(body: &Body) -> Result<(), String> {
     if (m.volume - volume).abs() > 0.01 * volume.abs() + 0.5 * curved * chord
         || (m.area - area).abs() > 0.01 * area
     {
-        return Err(format!(
-            "its volume and area integrate to {} and {}, its mesh says {volume} and {area}",
+        return Ok(Some(format!(
+            "its volume and area work out to {:.6e} and {:.6e}, but drawn they come to {volume:.6e} \
+             and {area:.6e}: one of the two is wrong, and which is not known",
             m.volume, m.area
-        ));
+        )));
     }
-    Ok(())
+    Ok(None)
 }
 
 /// How many placements a file gives that move a part, and how many extra uses of a part or of a
@@ -1357,7 +1377,7 @@ pub(crate) fn finish(
     record_deviations(&mut body, stats);
     let agree = measures_agree(&body);
     forge_geom::budget::end();
-    agree?;
+    body.unverified = agree?;
     Ok(body)
 }
 

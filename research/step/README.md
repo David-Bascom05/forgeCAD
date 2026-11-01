@@ -39,8 +39,10 @@ OCCT's adaptive mass, OCCT's own mesh and ours, face by face:
   wanders there, a Chebyshev fit was read far outside its box and came to 1e58. A face whose loop
   leaves the fit's box is measured again by columns alone, and `mass` refuses a negative face area or a volume past the box. What is left
   of this can stay a few percent out, so `measures_agree` in `read.rs` holds the integrals against
-  a mesh on import and refuses the body past 1% (plus what a chord can stray over its curved area), and
-  one that cannot be meshed even coarsely.
+  a mesh on import. Past 1% (plus what a chord can stray over its curved area), or where either cannot
+  be worked out, the body is imported with a warning in words (`Body::unverified`, shown in the check as
+  `import-not-verified`) and never counted as matching by `rate.py`; only a budget run out refuses it
+  (David, 2026-11-01: "import with warning").
 - Some were the judge: copies dropped on one side only, a truth from OCCT's non-adaptive volume (the
   CADFS truth was re-run), or OCCT disagreeing with itself (adaptive against its own mesh).
 

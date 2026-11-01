@@ -195,8 +195,8 @@ fn main() {
             ed = edits(&s.body, vol);
         }
         solids.push(format!(
-            "{{\"edit\":{{{ed}}},\"id\":{},\"faces\":{},\"edges\":{},\"problems\":{{{}}},\"first\":\"{}\",\"vol\":{},\"area\":{},\"merr\":\"{}\",\"box\":{}}}",
-            s.entity, s.body.faces.len(), s.body.edges.len(), kj.join(","), esc(&first).chars().take(120).collect::<String>(), num(vol), num(area), esc(&merr), bx
+            "{{\"edit\":{{{ed}}},\"warn\":\"{}\",\"id\":{},\"faces\":{},\"edges\":{},\"problems\":{{{}}},\"first\":\"{}\",\"vol\":{},\"area\":{},\"merr\":\"{}\",\"box\":{}}}",
+            esc(s.body.unverified.as_deref().unwrap_or("")).chars().take(120).collect::<String>(), s.entity, s.body.faces.len(), s.body.edges.len(), kj.join(","), esc(&first).chars().take(120).collect::<String>(), num(vol), num(area), esc(&merr), bx
         ));
     }
     let mut refs: BTreeMap<String, usize> = BTreeMap::new();

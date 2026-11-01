@@ -211,7 +211,8 @@ pub fn check_stages(stages: &[Arc<Stage>], from: usize, stop: &AtomicBool) -> Ve
 
 /// What the reader of a file's body leaves undone, said and not left to look fine: faces that only mesh
 /// drawn as they are (`tessellate_tolerant`), the picture of them parting from the next face by what the
-/// file's edges miss by, and an assembly's placements, which are not read.
+/// file's edges miss by, an assembly's placements, which are not read, and a body the reader could not
+/// check, loaded as it reads.
 pub fn tangled(solids: &[forge_model::Solid]) -> Vec<Issue> {
     let mut out = Vec::new();
     for s in solids.iter().filter(|s| s.body.from_file) {
@@ -222,6 +223,15 @@ pub fn tangled(solids: &[forge_model::Solid]) -> Vec<Issue> {
                          once, where it stands in its own part, so copies are missing and parts may be \
                          out of place"
                     .to_string(),
+                entity: None,
+            });
+        }
+        if let Some(why) = &s.body.unverified {
+            out.push(Issue {
+                rule: "import-not-verified",
+                reason: format!(
+                    "this body from the file could not be checked, and is loaded as it reads: {why}"
+                ),
                 entity: None,
             });
         }
@@ -1451,6 +1461,12 @@ mod tests {
         assert!(said[0].entity.is_some());
         solids[0].body.unplaced = true;
         assert!(tangled(&solids).iter().any(|i| i.rule == "assembly-not-placed"));
+        solids[0].body.unverified = Some("why".into());
+        assert!(
+            tangled(&solids)
+                .iter()
+                .any(|i| i.rule == "import-not-verified" && i.reason.ends_with("why"))
+        );
     }
     use forge_model::{Part, fillets, suite};
 
