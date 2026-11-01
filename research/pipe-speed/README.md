@@ -149,8 +149,10 @@ whole n-sided blend per iteration.
   a small round's radius: from a seed at a narrow loop's tip a chain ran past its own start, and on `p00158` (a 1 mm hole down a
   wall, loop 52.6 mm by a direct count) closed at 73.8 mm. Crank 390M to 275M.
 - Checked against the octree in real regens, with a temporary patch that traced both ways and compared (all bench parts;
-  `fuzz/gen_ruled.py`, 300 parts, 1412 traces): 1391 the same. All 15 branches only the octree found lie 2-8 mm off the wall
-  (`off`, measured from the wall's nearest point): false zeros of the implicit past the carried-on wall, where its foot is clamped.
+  `fuzz/gen_ruled.py`, 300 parts, 1410 traces; the bench's 58 all the same): 1391 the same. In 14 traces the octree alone found
+  15 branches, each off the wall by more than 1e-3 (`off`, measured from the wall's nearest point; those looked at were 2-8 mm):
+  false zeros of the implicit past the carried-on wall, where its foot is clamped. In 5 the counts differ with no point of any
+  chain inside the region (p00045, p00139, p00143, p00291 octree 1, named 0; p00106 octree 1, named 2): chains in the margin only.
   Not one branch on the wall was lost.
 
 Against the trim of curves on lofts (`subdivide_pieces`), tried and dropped: pruning first by the guiding cubic plus its error
@@ -162,3 +164,12 @@ Seed 27 of the history test no longer needs the n-ary name fallback after these,
 `fuzz/gen_ruled.py` also found a fault in `forge_topo::mass`, on main as here and not touched: on ruled lofts with holes its volume differs from the
 mesh's by up to 1% (p00137: mass 96871 or 97655 by which chain the curve has, mesh 97771.64 and 97771.65 either way), and it gives 0 on p00215. 12
 of 300 parts differ in `mass` between main and this; their meshes agree to 1e-7, so the geometry is the same.
+
+## Curve search (after the seeds)
+
+- `bisect_sign`: Illinois steps, stopping at a value under 1e-13, not bisection to rounding (30-odd curve evaluations per crossing): mixed
+  1555M to 1487M, volute 1057M to 1032M. Results move in the last bits on 17 of the bench's bit lines.
+- `subdivide_pieces`: a traced curve's piece with reach over 4 (1e-5 + sag) reads the guiding cubic, its error added to the reach. Bits as the
+  line above. Mixed to 1468M, volute to 1011M, crank 275M to 265M. As a first test ahead of the exact one instead, against analytic surfaces,
+  it made mixed 5% slower: the pieces rarely prune there.
+- Dropped: a radial reject in `Screw::within` (no change on jack, frame, gearbox, valve).
