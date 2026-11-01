@@ -1196,6 +1196,7 @@ impl Shell {
                             egui::TextEdit::singleline(&mut f.text)
                                 .id(id)
                                 .font(mono(12.0))
+                                .text_color(t.ink)
                                 .margin(vec2(6.0, 5.0))
                                 .desired_width(FIELD_W - 12.0),
                         );
@@ -1241,6 +1242,11 @@ impl Shell {
         // its dimensions, standing off what they measure, as written; a click on one changes it
         let chips = m.dimensions();
         let middle = m.middle();
+        let values_of = m.params.clone();
+        let shown_value = |text: &str| match num_of(&values_of)(text, Want::Len) {
+            Ok(v) => forge_agent::short(v),
+            Err(_) => text.to_string(),
+        };
         let mut ask_chip = None;
         let dim_ink = t.ink2;
         let (mut left_off, mut right_off) = (0usize, 0usize);
@@ -1299,7 +1305,7 @@ impl Shell {
                             p.line_segment([wa, wb], line);
                             arrow(&p, wa, wb);
                             arrow(&p, wb, wa);
-                            (wa + (wb - wa) * 0.5, value.clone())
+                            (wa + (wb - wa) * 0.5, shown_value(value))
                         }
                         Measure::Round(c, r, dia) => {
                             let on = (
@@ -1312,13 +1318,19 @@ impl Shell {
                             arrow(&p, rim, out);
                             (
                                 out + vec2(10.0, -6.0),
-                                format!("{}{value}", if dia { "\u{D8}" } else { "R" }),
+                                format!("{}{}", if dia { "\u{D8}" } else { "R" }, shown_value(value)),
                             )
                         }
                     };
                     let g = ui.fonts_mut(|f| f.layout_no_wrap(text, mono(12.0), t.ink));
                     let r = Rect::from_center_size(pos, g.size() + vec2(10.0, 6.0));
                     let resp = ui.interact(r, ui.scope_id().with(("dim", *k)), Sense::click());
+                    // the number's what's shown; what it's written as is here and in its field
+                    let resp = if value.parse::<f64>().is_err() {
+                        resp.on_hover_text(value)
+                    } else {
+                        resp
+                    };
                     self.view_blocks.push(r);
                     self.places.push((format!("sketch:dim:{words}"), r));
                     p.rect_filled(r, 3.0, if resp.hovered() { t.on } else { t.surface });
@@ -1374,7 +1386,15 @@ impl Shell {
         }
 
         // what state it's in, in the status bar; what's wrong, where it's seen
+        let drawing = match m.tool.filter(|_| !m.pick_at.is_empty()) {
+            Some(SkTool::Line) => Some("Drawing a line"),
+            Some(SkTool::Rectangle) => Some("Drawing a rectangle"),
+            Some(SkTool::Circle) => Some("Drawing a circle"),
+            Some(SkTool::Arc) => Some("Drawing an arc"),
+            _ => None,
+        };
         self.status = match m.solved.as_ref().map(|s| sk::freedom(s).0) {
+            _ if drawing.is_some() => drawing.unwrap_or_default().to_string(),
             Some(0) => "Fully constrained".to_string(),
             Some(n) => format!("{n} degrees of freedom"),
             None => String::new(),

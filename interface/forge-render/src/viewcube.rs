@@ -791,7 +791,7 @@ mod tests {
     }
 
     /// Every face given every name, with every up that's square to it.
-    fn all_orients() -> Vec<(Orient, [i8; 3], [i8; 3], [i8; 3])> {
+    fn all_orients() -> Vec<(Orient, [i8; 3], [i8; 3])> {
         let axes: Vec<[i8; 3]> = FACE_NAMES.iter().map(|f| f.1).collect();
         let mut out = Vec::new();
         for &face in &axes {
@@ -800,7 +800,7 @@ mod tests {
                     .iter()
                     .filter(|u| (0..3).map(|k| u[k] * face[k]).sum::<i8>() == 0)
                 {
-                    out.push((Orient::with_face(face, name, up), face, name, up));
+                    out.push((Orient::with_face(face, name, up), face, name));
                 }
             }
         }
@@ -814,7 +814,7 @@ mod tests {
         kinds.sort_by_key(|o| o.words());
         kinds.dedup();
         assert_eq!(kinds.len(), 24);
-        for (o, face, name, _) in &all {
+        for (o, face, name) in &all {
             assert_eq!(o.named(*face), *name, "the chosen face has its name");
             for &(_, n) in &FACE_NAMES {
                 let w = o.world(n);
