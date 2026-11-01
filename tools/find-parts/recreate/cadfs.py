@@ -313,6 +313,7 @@ class Tr:
         self.plain = {}
         self.imprint_off = set()
         self.copies = {}
+        self.made = {}
 
     def val(self, v):
         if isinstance(v, float):
@@ -994,7 +995,14 @@ class Tr:
             for pi, prof in enumerate(a.merged(sorted(set(regs)))):
                 loops = " ".join(self.loop_text(a, lp, flip) for lp in prof)
                 ents = {a.pieces[i].ent for lp in prof for i, _ in lp}
+                # a new body the same as one already made: the source's file holds one solid for such copies
+                same = (kind, head, frame_text, tail, loops, after)
+                if op == "new" and same in self.made:
+                    self.current = self.made[same]
+                    continue
                 label, this, scope = self.solid_line(op, ents, fid_out)
+                if label:
+                    self.made[same] = self.current
                 self.lines.append(f"{label}{kind} {this + ' ' if this else ''}{head} {frame_text} {tail}{loops}{after}{scope}")
 
     def extrude(self, f):
@@ -1524,6 +1532,9 @@ class Tr:
         for q in qunion(a["entities"]):
             b = self.body_of(q, env)
             if a.get("makeCopy") is True:
+                if by == "by 0 0 0":  # a copy on itself is one solid in the source's file
+                    self.copies[(f["id"], "1", b)] = b
+                    continue
                 self.names += 1
                 n = f"b{self.names}"
                 self.lines.append(f"{n}: copybody {by} in {b}")
