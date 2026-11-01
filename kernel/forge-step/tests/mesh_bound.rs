@@ -1,5 +1,6 @@
 //! A file's small face must not cost a viewer the machine: what a procedural face asks of the mesher
 //! is bounded, and past that it says why.
+use forge_math::dmath;
 use forge_mesh::{Quality, tessellate};
 use forge_step::{Limits, import};
 
@@ -32,7 +33,7 @@ fn lens() -> String {
     );
     // the surface's own generator, then a meridian a third of a turn round either way
     let curve = |id: u32, angle: f64| {
-        let (s, c) = angle.sin_cos();
+        let (s, c) = dmath::sin_cos(angle);
         let mut t = String::new();
         for (k, (r, z)) in generator.iter().enumerate() {
             t += &format!(
@@ -53,7 +54,7 @@ fn lens() -> String {
             id + 6
         )
     };
-    let third = 2.0 * std::f64::consts::PI / 3.0;
+    let third = dmath::TAU / 3.0;
     out += &curve(20, 0.0);
     out += &curve(30, third);
     out += &curve(40, 2.0 * third);

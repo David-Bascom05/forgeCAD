@@ -245,11 +245,24 @@ impl Proto {
         Some(self.split_edge(e, t))
     }
 
-    /// The edge from `a` to `b` along an iso line of the surface.
-    fn seam_edge(&mut self, s: &Surface, dir: usize, a: usize, b: usize) -> Option<usize> {
+    /// The edge from `a` to `b` along an iso line of the surface. `into`, when given, is the way
+    /// the face lies from `a`: a circle's arc goes that way round, long or short.
+    fn seam_edge(
+        &mut self,
+        s: &Surface,
+        dir: usize,
+        a: usize,
+        b: usize,
+        into: Option<Vec3>,
+    ) -> Option<usize> {
         let (pa, pb) = (self.verts[a].0, self.verts[b].0);
         let name = self.fresh();
-        let (curve, range) = iso_curve(s, dir, pa, pb)?;
+        let (mut curve, mut range) = iso_curve(s, dir, pa, pb)?;
+        if let (Curve::Circle(k), Some(into)) = (&curve, into)
+            && curve.deriv(range.lo).d1.dot(into) < 0.0
+        {
+            (curve, range) = other_way(k, pa, pb)?;
+        }
         self.edges.push(PEdge {
             curve,
             range,
@@ -355,13 +368,23 @@ impl Proto {
             return Err("no place on the second rim for a seam".into());
         };
         // the rim may have been edited: look the loops up afresh
-        let seam = self
-            .seam_edge(&s, dir, va, vb)
-            .ok_or("the surface has no seam curve")?;
         let (mut la, mut lb) = (self.faces[f].loops[a].clone(), self.faces[f].loops[b].clone());
         if !self.start_at(&mut la, va) || !self.start_at(&mut lb, vb) {
             return Err("a rim does not pass its seam's vertex".into());
         }
+        // the face lies to the left of its rim, seen from outside
+        let into = {
+            let (e, fw) = la[0];
+            let x = &self.edges[e];
+            let d = x.curve.deriv(if fw { x.range.lo } else { x.range.hi }).d1;
+            let along = if fw { d } else { -d };
+            let n = s.normal(s.project(self.verts[va].0)).map(Vec3::from);
+            let sign = if self.faces[f].same_sense { 1.0 } else { -1.0 };
+            n.map(|n| (n * sign).cross(along))
+        };
+        let seam = self
+            .seam_edge(&s, dir, va, vb, into)
+            .ok_or("the surface has no seam curve")?;
         let mut joined = la;
         joined.push((seam, true));
         joined.extend(lb);
@@ -394,11 +417,64 @@ impl Proto {
                 e.start != e.end && same(param(p, e.start), at) && same(param(p, e.end), at)
             })
         };
+        // what the face's other loops cover: a seam through a hole, or touching it, is no seam
+        let mut holes: Vec<(f64, f64)> = Vec::new();
+        for (l, lp) in self.faces[f].loops.iter().enumerate() {
+            if l == a || l == b {
+                continue;
+            }
+            let (mut lo, mut hi, mut last) = (f64::INFINITY, f64::NEG_INFINITY, None::<f64>);
+            for &(e, _) in lp {
+                let x = &self.edges[e];
+                for k in 0..=8 {
+                    let q = s.project(x.curve.eval(x.range.lo + x.range.width() * f64::from(k) / 8.0));
+                    let mut t = if dir == 0 { q.x } else { q.y };
+                    if let Some(w) = last {
+                        t -= ((t - w) / period).round() * period;
+                    }
+                    last = Some(t);
+                    lo = lo.min(t);
+                    hi = hi.max(t);
+                }
+            }
+            if lo <= hi {
+                holes.push((lo, hi));
+            }
+        }
+        let margin = 1e-6 * period;
+        let clear = |at: f64| {
+            holes.iter().all(|&(lo, hi)| {
+                let x = at - ((at - lo + margin) / period).floor() * period;
+                x > hi + margin && x < lo + period - margin
+            })
+        };
         let rim = self.faces[f].loops[a].clone();
         for &u in &rim {
             let v = self.start_of(u);
             let at = param(self, v);
-            if !along(self, a, at) && !along(self, b, at) {
+            if clear(at) && !along(self, a, at) && !along(self, b, at) {
+                return v;
+            }
+        }
+        // the middle of the widest stretch clear of them
+        if !holes.is_empty() {
+            let mut h = holes.clone();
+            h.sort_by(|x, y| x.0.total_cmp(&y.0));
+            let (first, mut reach) = (h[0].0, h[0].1);
+            let (mut wide, mut mid) = (-1.0_f64, 0.0);
+            for &(lo, hi) in h
+                .iter()
+                .skip(1)
+                .chain(std::iter::once(&(first + period, first + period)))
+            {
+                if lo - reach > wide {
+                    (wide, mid) = (lo - reach, 0.5 * (lo + reach));
+                }
+                reach = reach.max(hi);
+            }
+            if wide > 2.0 * margin
+                && let Some(v) = self.pick_vertex_on(f, a, dir, mid)
+            {
                 return v;
             }
         }
@@ -439,7 +515,7 @@ impl Proto {
         }
         let va = self.start_of(self.faces[f].loops[a][0]);
         let seam = self
-            .seam_edge(&s, dir, va, vp)
+            .seam_edge(&s, dir, va, vp, None)
             .ok_or("the surface has no seam curve")?;
         let mut l = self.faces[f].loops[a].clone();
         l.push((seam, true));
@@ -495,8 +571,8 @@ impl Proto {
                 .ok_or("no place on the rim for a second meridian")?,
         };
         let (s0, s1) = (
-            self.seam_edge(&s, 0, va, pole).ok_or("no meridian")?,
-            self.seam_edge(&s, 0, vb, pole).ok_or("no meridian")?,
+            self.seam_edge(&s, 0, va, pole, None).ok_or("no meridian")?,
+            self.seam_edge(&s, 0, vb, pole, None).ok_or("no meridian")?,
         );
         let mut l = self.faces[f].loops[a].clone();
         if !self.start_at(&mut l, va) {
@@ -1073,6 +1149,26 @@ fn iso_curve(s: &Surface, dir: usize, a: Point3, b: Point3) -> Option<(Curve, In
         }
         _ => None,
     }
+}
+
+/// The arc of a circle from `a` to `b` the way against its parameter.
+fn other_way(k: &Circle, a: Point3, b: Point3) -> Option<(Curve, Interval)> {
+    let frame = Frame::from_zx(
+        k.frame.origin,
+        (-Vec3::from(k.frame.z())).normalize()?,
+        k.frame.x().into(),
+    )?;
+    let c = Curve::Circle(Circle {
+        frame,
+        radius: k.radius,
+    });
+    let d = c.domain();
+    let whole = Interval::new(d.lo, d.hi);
+    let (t0, mut t1) = (c.closest(a, whole), c.closest(b, whole));
+    if t1 <= t0 {
+        t1 += d.period?;
+    }
+    Some((c, Interval::new(t0, t1)))
 }
 
 /// The arc of `c` from `a` to `b` the way its parameter runs, or the curve reversed in effect:
