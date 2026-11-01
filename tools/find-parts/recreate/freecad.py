@@ -198,7 +198,7 @@ def bspline_points(e):
 def closed_wires(ents):
     """FreeCAD's Sketch::toShape: from the first edge left, pull in the first edge in document order that meets the wire's
     last or first vertex, until nothing meets or the wire closes. So at a junction the order decides, and a wire can
-    end open; vertices meet within Precision::Confusion. Returns the closed wires as lists of entity ids."""
+    end open; vertices meet within Precision::Confusion. Checked on 0.18 to 0.21 files. Returns the closed wires as lists of entity ids."""
     conf = 1e-7
     same = lambda p, q: math.dist(p, q) <= conf
     left = []
@@ -347,8 +347,10 @@ class Tr:
         ents = self.profile_ents(sk, fr)
         wires = closed_wires(ents)
         wired = {i for w in wires for i in w}
-        a = Arrangement([e for e in ents if e["id"] in wired or e.get("construction")])
-        regs = wire_regions(a, ents, wires)
+        a = Arrangement(ents)
+        # older files wire a sketch some other way (a line drawn twice closes there, not here): if the wires do not account
+        # for every curve, its regions are all there is to go on
+        regs = wire_regions(a, ents, wires) if all(e.get("construction") or e["id"] in wired for e in ents) else even_regions(a)
         if not regs:
             raise Unresolved("a sketch with no closed region")
         frame = f"z {vtext(frame_z)} x {vtext(fr.x)} at {vtext(fr.o)}"
@@ -383,10 +385,13 @@ class Tr:
         z = tuple(-x for x in n) if down else n
         stored = d.prop(name, "Direction")
         if d.types.get(sk) != "Sketcher::SketchObject" and stored is not None and stored.find("PropertyVector") is not None:
-            # a shape's plane may face either way; the feature records which way it went
+            # a shape's plane may face either way; the feature records which way it went, or 1 1 1 if it never wrote it
             e = stored.find("PropertyVector")
-            z = tuple(float(e.get(k)) for k in ("valueX", "valueY", "valueZ"))
-            down = dot(z, n) < 0
+            v = tuple(float(e.get(k)) for k in ("valueX", "valueY", "valueZ"))
+            l = math.sqrt(dot(v, v))
+            if l > 0 and abs(abs(dot(v, n)) / l - 1) < 1e-9:
+                down = dot(v, n) < 0
+                z = tuple(-x for x in n) if down else n
         t, L, L2 = d.integer(name, "Type"), d.flt(name, "Length"), d.flt(name, "Length2")
         mid = d.boolean(name, "Midplane")
         if t == 0:
@@ -475,10 +480,21 @@ class Tr:
                     # the part's spline is a polyline here, so its edge is many short ones the blend cannot round as one
                     raise Unsupported("a blend along a spline")
                 # one of ours can span several of theirs (a seam, a split circle): its middle stretch decides
-                lo = [min(q[k] for q in poly) - TOL for k in range(3)]
-                hi = [max(q[k] for q in poly) + TOL for k in range(3)]
+                # their samples are chords: on a big circle the curve between them lies further off than TOL
+                tol = TOL + sag(poly)
+                lo = [min(q[k] for q in poly) - tol for k in range(3)]
+                hi = [max(q[k] for q in poly) + tol for k in range(3)]
                 inbox = lambda p: all(lo[k] <= p[k] <= hi[k] for k in range(3))
-                hits = [e for e in st.get("edges", []) if any(inbox(p) and near(p, poly) <= TOL for p in e["p"][4:13:4])]
+                hits = [e for e in st.get("edges", []) if any(inbox(p) and near(p, poly, tol) <= tol for p in e["p"][4:13:4])]
+                if not hits and self.approx:
+                    # where a polyline stands in for a spline, what it meets moves a little: the nearest within the part's slack
+                    box = self.truth.get(base, {}).get("bbox") or [0.0] * 6
+                    slack = 1e-3 * math.dist(box[:3], box[3:])
+                    scored = sorted(((max(near(p, poly, 0.0) for p in e["p"][4:13:4]), e["h"]) for e in st.get("edges", [])), key=lambda x: x[0])
+                    if scored and scored[0][0] <= slack:
+                        # only a clear winner: a second edge as close would be a guess
+                        close = [h for d, h in scored if d <= scored[0][0] + 1e-9]
+                        hits = [e for e in st["edges"] if e["h"] in close]
                 if not hits:
                     if not all_edges:
                         raise Unresolved("no edge where the base's edge lies")
@@ -613,7 +629,15 @@ def doc_approx(d, name):
     return p is not None and any(g.get("type") == "Part::GeomBSplineCurve" for g in p.find("GeometryList").findall("Geometry"))
 
 
-def near(p, poly):
+def sag(poly):
+    """How far a sampled curve's chords stray from it: half the bow of two steps."""
+    i = len(poly) // 2
+    if i == 0 or i + 1 >= len(poly):
+        return 0.0
+    return near(poly[i], [poly[i - 1], poly[i + 1]], 0.0) / 2
+
+
+def near(p, poly, enough=TOL):
     best = math.inf
     for a, b in zip(poly, poly[1:]):
         e = add(b, a, -1)
@@ -621,7 +645,7 @@ def near(p, poly):
         t = 0.0 if l2 == 0 else max(0.0, min(1.0, dot(add(p, a, -1), e) / l2))
         q = add(a, e, t)
         best = min(best, math.dist(p, q))
-        if best <= TOL:
+        if best <= enough:
             return best
     return best
 
