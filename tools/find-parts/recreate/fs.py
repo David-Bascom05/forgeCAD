@@ -176,6 +176,19 @@ def statements(block):
     return out
 
 
+def closed(v, env):
+    """A value with the names it uses replaced as they stand now: a scope's `subQ0` is that scope's, and the next scope's reuses the name."""
+    if isinstance(v, Call):
+        return Call((v[0], [closed(x, env) for x in v[1]]))
+    if isinstance(v, tuple) and len(v) == 2 and v[0] == "name":
+        return env.get(v[1], v)
+    if isinstance(v, list):
+        return [closed(x, env) for x in v]
+    if isinstance(v, dict):
+        return {k: closed(x, env) for k, x in v.items()}
+    return v
+
+
 def program(text):
     """Features in order: {op, id, args, env, ents (sketch)}. env: the block's query variables."""
     i = text.find("precondition")
@@ -194,7 +207,7 @@ def program(text):
             elif m and m.group(1) == "initialGuess":
                 continue
             elif m and not k:
-                env[m.group(1)] = expr(m.group(2))
+                env[m.group(1)] = closed(expr(m.group(2)), env)
             elif k and k.group(1) in OPS:
                 c = expr(line)
                 feat = {"op": c[0], "id": c[1][1][1], "args": c[1][2], "env": env}
