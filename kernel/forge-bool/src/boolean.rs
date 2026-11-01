@@ -3889,19 +3889,12 @@ fn place_cuts(bodies: &[&Body; 2], cuts: &[Cut]) -> R<Placed> {
             }
         }
     }
-    // "within tolerance" chains: a cut near two heads is one place with them, or a vertex near both
-    // would end up in two. Only heads within two tolerances can have one
+    // "within tolerance" chains, and an edge between two heads under two tolerances long would have
+    // tolerances that hide it: one place
     for o in (1..if chained { heads.len() } else { 1 }).rev() {
         let (h, t) = (cuts[heads[o]].point, cuts[heads[o]].tol);
         for k in 0..o {
-            let reach = t.max(cuts[heads[k]].tol);
-            if h.distance(cuts[heads[k]].point) <= 2.0 * reach
-                && (0..cuts.len()).any(|i| {
-                    (cluster[i] == k || cluster[i] == o)
-                        && cuts[i].point.distance(h) <= reach
-                        && cuts[i].point.distance(cuts[heads[k]].point) <= reach
-                })
-            {
+            if h.distance(cuts[heads[k]].point) <= 2.0 * t.max(cuts[heads[k]].tol) {
                 for x in cluster.iter_mut() {
                     if *x == o {
                         *x = k;
