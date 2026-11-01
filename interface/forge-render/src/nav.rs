@@ -235,6 +235,11 @@ impl Nav {
         out
     }
 
+    /// Is the answer for where the pointer is still to come?
+    pub fn pick_pending(&self) -> bool {
+        self.hit_at != Some(self.cursor)
+    }
+
     /// What's marked, in words for the overlay.
     pub fn marked_text(&self) -> String {
         let marks = self.marks();

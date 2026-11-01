@@ -29,9 +29,17 @@ fn point_at(h: &mut Headless, world: [f32; 3]) {
     let on = cam.pixel_of(world, size.0, size.1).unwrap();
     let r = h.gui.shell.view_rect;
     h.move_to(r.min.x + on.0, r.min.y + on.1);
-    for _ in 0..30 {
+    // what's under it known, as a hand gives it time to be; a sketch has no mark to wait for
+    let mut waited = 0;
+    loop {
         h.step();
         std::thread::sleep(std::time::Duration::from_millis(5));
+        waited += 1;
+        let v = h.gui.view.as_ref().unwrap();
+        let known = v.nav.marks().iter().any(|m| !m.selected) && !v.nav.pick_pending();
+        if (known && waited > 10) || waited > 120 {
+            break;
+        }
     }
     h.button(true);
     h.step();
@@ -212,9 +220,7 @@ fn the_tools_with_no_passing_test_are_off() {
     let Some(mut h) = open(BLOCK, "off").map(|o| o.0) else {
         return;
     };
-    for name in [
-        "Sweep", "Loft", "Coil", "Rib", "Shell", "Combine", "Plane", "Axis", "Point", "Linear",
-    ] {
+    for name in ["Rib", "Shell"] {
         h.click(&format!("tool:{name}"));
         for _ in 0..3 {
             h.step();
@@ -332,4 +338,222 @@ fn extrude_takes_its_extent_and_way_and_operation_from_toggles_and_plus_opens_an
         "another's on its way"
     );
     assert!((was - built(&file, "thru") - 25.0 * 20.0).abs() < 1e-6);
+}
+
+fn settle(h: &mut Headless) {
+    for _ in 0..10 {
+        h.step();
+    }
+}
+
+fn items(file: &std::path::Path) -> Vec<String> {
+    std::fs::read_to_string(file)
+        .unwrap()
+        .lines()
+        .map(str::to_string)
+        .collect()
+}
+
+#[test]
+fn sweep_takes_a_region_then_a_sketch_to_follow() {
+    let part = "sk1: sketch xy\n  circle 0 0 5\nend\nsk2: sketch xz\n  line 0 0 0 40\nend\n";
+    let Some((mut h, file)) = open(part, "sweep") else {
+        return;
+    };
+    button(&mut h, "Sweep");
+    assert!(
+        h.gui.shell.dialog.as_ref().unwrap().waiting_for_pick(),
+        "nothing from nothing"
+    );
+    point_at(&mut h, [2.0, 2.0, 0.0]);
+    point_at(&mut h, [0.0, 0.0, 20.0]);
+    ok(&mut h, "sweep");
+    let v = built(&file, "sweep");
+    let want = core::f64::consts::PI * 25.0 * 40.0;
+    assert!((v - want).abs() < want * 0.01, "{v} {want}");
+}
+
+#[test]
+fn loft_takes_two_regions_in_order() {
+    let part =
+        "sk1: sketch xy\n  rect -10 -10 20 20\nend\nsk2: sketch xy at 0 0 30\n  rect -5 -5 10 10\nend\n";
+    let Some((mut h, file)) = open(part, "loft") else {
+        return;
+    };
+    button(&mut h, "Loft");
+    assert!(h.gui.shell.dialog.as_ref().unwrap().waiting_for_pick());
+    point_at(&mut h, [8.0, -8.0, 0.0]);
+    assert!(
+        h.gui.shell.dialog.as_ref().unwrap().waiting_for_pick(),
+        "one's not a loft"
+    );
+    point_at(&mut h, [0.0, 0.0, 30.0]);
+    ok(&mut h, "loft");
+    let v = built(&file, "loft");
+    // a frustum: 30/3 * (400 + 100 + 200)
+    assert!((v - 7000.0).abs() < 70.0, "{v}");
+}
+
+#[test]
+fn coil_takes_a_region_and_a_line_of_its_sketch_to_turn_about() {
+    let part = "sk1: sketch xz\n  circle 20 0 2\n  line 0 -30 0 30 cons\nend\n";
+    let Some((mut h, file)) = open(part, "coil") else {
+        return;
+    };
+    button(&mut h, "Coil");
+    assert!(h.gui.shell.dialog.as_ref().unwrap().waiting_for_pick());
+    point_at(&mut h, [20.0, 0.0, 0.0]);
+    point_at(&mut h, [0.0, 0.0, 25.0]);
+    settle(&mut h);
+    ok(&mut h, "coil");
+    let text = items(&file).join("\n");
+    assert!(text.contains("axis l1"), "{text}");
+    assert!(built(&file, "coil") > 100.0);
+}
+
+#[test]
+fn linear_pattern_copies_the_feature_picked_along_the_way_chosen() {
+    let part = "base: extrude 10 rect -60 -60 120 120\nboss: extrude 5 xy at 0 0 10 rect 0 0 10 10\n";
+    let Some((mut h, file)) = open(part, "pattern") else {
+        return;
+    };
+    let was = built(&file, "before");
+    button(&mut h, "Linear");
+    assert!(h.gui.shell.dialog.as_ref().unwrap().waiting_for_pick());
+    point_at(&mut h, [5.0, 5.0, 15.0]);
+    h.click("dialog:way:Y");
+    settle(&mut h);
+    field(&mut h, "Count", "3");
+    field(&mut h, "Spacing", "20");
+    ok(&mut h, "pattern");
+    let text = items(&file).join("\n");
+    assert!(text.contains("pattern boss lin 0 1 0 3 20"), "{text}");
+    let v = built(&file, "pattern");
+    assert!((v - was - 2.0 * 500.0).abs() < 1e-6, "{was} {v}");
+}
+
+#[test]
+fn combine_joins_the_bodies_picked() {
+    let part = "a: extrude 10 rect 0 0 20 20\nb: extrude new 10 rect 25 0 20 20\n";
+    let Some((mut h, file)) = open(part, "combine") else {
+        return;
+    };
+    button(&mut h, "Combine");
+    assert!(h.gui.shell.dialog.as_ref().unwrap().waiting_for_pick());
+    point_at(&mut h, [15.0, 3.0, 10.0]);
+    point_at(&mut h, [40.0, 3.0, 10.0]);
+    ok(&mut h, "combine");
+    let text = items(&file).join("\n");
+    assert!(text.contains("combine add a b"), "{text}");
+    let v = built(&file, "combine");
+    assert!((v - 2.0 * 20.0 * 20.0 * 10.0).abs() < 1e-6, "{v}");
+}
+
+#[test]
+fn plane_axis_and_point_come_from_what_is_picked() {
+    for (tool, at, word) in [
+        ("Plane", [0.0f32, 0.0, 20.0], "plane off base @f"),
+        ("Axis", [30.0, 0.0, 20.0], "axis base @e"),
+        ("Point", [30.0, 0.0, 20.0], "point mid base @e"),
+    ] {
+        let Some((mut h, file)) = open(BLOCK, tool) else {
+            return;
+        };
+        let was = built(&file, "before");
+        button(&mut h, tool);
+        assert!(h.gui.shell.dialog.as_ref().unwrap().waiting_for_pick(), "{tool}");
+        point_at(&mut h, at);
+        ok(&mut h, tool);
+        let text = items(&file).join("\n");
+        assert!(text.contains(word), "{tool}: {text}");
+        assert_eq!(
+            built(&file, tool).to_bits(),
+            was.to_bits(),
+            "{tool} adds no solid"
+        );
+    }
+}
+
+fn to_next(part: &str, tag: &str, cut: bool, back: bool) -> (Result<f64, String>, String) {
+    let Some((mut h, file)) = open(part, tag) else {
+        return (Err("no GPU".into()), String::new());
+    };
+    button(&mut h, "Extrude");
+    if cut {
+        h.click("dialog:op:Cut");
+        settle(&mut h);
+    }
+    h.click("dialog:extent:To Next");
+    settle(&mut h);
+    if back {
+        h.click("dialog:dir:Back");
+        settle(&mut h);
+    }
+    let line = h.gui.shell.dialog.as_ref().unwrap().line();
+    let want = line.clone();
+    h.until(|g| {
+        let d = g.shell.dialog.as_ref().unwrap();
+        d.sent.as_deref() == Some(want.as_str()) && d.seq > 0
+    });
+    for _ in 0..100 {
+        h.step();
+        std::thread::sleep(std::time::Duration::from_millis(5));
+    }
+    let d = h.gui.shell.dialog.as_ref().unwrap();
+    if let Some(e) = &d.error {
+        return (Err(e.clone()), line);
+    }
+    h.gui.shell.out.push(Action::DialogOk);
+    assert!(
+        h.until(|g| g.shell.dialog.is_none()),
+        "{line}: {:?}",
+        h.gui.shell.dialog
+    );
+    (Ok(built(&file, &line)), line)
+}
+
+#[test]
+fn to_next_stops_at_the_next_face_either_way_or_says_there_is_none() {
+    // one body, a C on its side: a floor at z 0..10, a roof at z 40..50, a wall joining them at x 30..40
+    let c = "c: extrude 60 yz at -30 0 0 axis y poly -30 0 -30 0 -30 0\n";
+    let _ = c;
+    let body = "floor: extrude 10 rect -30 -30 70 60\nwall: extrude 40 xy at 0 0 10 rect 30 -30 10 60\nroof: extrude 10 xy at 0 0 50 rect -30 -30 70 60\n";
+    let on_plane = |z: f32| format!("{body}sk1: sketch xy at 0 0 {z}\n  rect -5 -5 10 10\nend\n");
+    let base = 70.0 * 60.0 * 10.0 * 2.0 + 10.0 * 60.0 * 40.0;
+    let area = 100.0;
+    // up from 25 to the roof's underside at 50; down to the floor's top at 10
+    let (up, l) = to_next(&on_plane(25.0), "next-up", false, false);
+    assert!(
+        (up.clone().unwrap() - (base + area * 25.0)).abs() < 1e-6,
+        "{l}: {up:?}"
+    );
+    // the kernel's `next back` refuses this today (raised with a repro): it must say so plainly, and
+    // once it's fixed this should stop at the floor, at base + area * 15
+    let (down, l) = to_next(&on_plane(25.0), "next-down", false, true);
+    assert!(
+        down.as_ref().is_err_and(|w| !w.contains("extent:"))
+            || down
+                .as_ref()
+                .is_ok_and(|v| (v - (base + area * 15.0)).abs() < 1e-6),
+        "{l}: {down:?}"
+    );
+    // from the floor's top, up to the roof
+    let (r, l) = to_next(&on_plane(10.0), "next-face", false, false);
+    assert!(
+        (r.clone().unwrap() - (base + area * 40.0)).abs() < 1e-6,
+        "{l}: {r:?}"
+    );
+    // a cut down from the top of a block into a pocket's floor: a cavity below stops it
+    let cavity = "a: extrude 30 rect -30 -30 60 60\np: extrude cut 10 xy at 0 0 10 rect -20 -20 40 40\nsk1: sketch xy at 0 0 30\n  rect -5 -5 10 10\nend\n";
+    let block = 60.0 * 60.0 * 30.0 - 40.0 * 40.0 * 10.0;
+    let (r, l) = to_next(cavity, "next-cut", true, true);
+    assert!(
+        (r.clone().unwrap() - (block - area * 10.0)).abs() < 1e-6,
+        "{l}: {r:?}"
+    );
+    // nothing to reach: it says so, and nothing's written
+    let alone = "a: extrude 10 rect -30 -30 60 60\nsk1: sketch xy at 0 0 20\n  rect -5 -5 10 10\nend\n";
+    let (r, l) = to_next(alone, "next-none", false, false);
+    let why = r.expect_err(&l);
+    assert!(!why.is_empty() && !why.contains("Rebuild"), "{l}: {why}");
 }

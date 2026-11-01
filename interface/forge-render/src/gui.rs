@@ -383,7 +383,7 @@ impl Gui {
                     if let Some(d) = &mut self.shell.dialog
                         && d.seq == f.seq
                     {
-                        d.error = f.failure.clone();
+                        d.error = f.failure.as_deref().map(crate::shell::panel::plain_error);
                     }
                     if let Some(Out::Delta(d)) = f.out {
                         v.renderer.live_apply(part, &d);
@@ -560,6 +560,74 @@ impl Gui {
                         };
                         let size = (!by_hole).then(|| format!("M{}", (r * 2.0).round()));
                         d.thread_on(on, size.or(Some("M6".to_string())));
+                    }
+                    v.dirty = true;
+                    v.clicks = v.nav.clicks;
+                    return;
+                }
+                // features by a face they made; references, on the part as it stands
+                if matches!(wants.as_str(), "Features" | "Target" | "Tools") {
+                    if let Some(&(_, Entity::Face(f))) = v.clicked.last()
+                        && let Some(owner) = v.facts.face_item.get(f as usize).copied().flatten()
+                        && let Some(doc) = &self.shell.doc
+                        && let Some(name) = doc.name(owner)
+                    {
+                        if wants == "Target" {
+                            d.take_pick("Target", name);
+                        } else {
+                            let had = d
+                                .fields
+                                .iter()
+                                .find(|f| f.0 == wants)
+                                .map_or(String::new(), |f| f.1.clone());
+                            let mut names: Vec<String> = had.split_whitespace().map(str::to_string).collect();
+                            match names.iter().position(|n| *n == name) {
+                                Some(k) => {
+                                    names.remove(k);
+                                }
+                                None => names.push(name),
+                            }
+                            d.take_pick(&wants, names.join(" "));
+                        }
+                    }
+                    v.nav.selected.clear();
+                    v.clicked.clear();
+                    v.dirty = true;
+                    v.clicks = v.nav.clicks;
+                    return;
+                }
+                if matches!(d.kind.as_str(), "plane" | "axis" | "point") {
+                    let last = self
+                        .shell
+                        .rows
+                        .iter()
+                        .rev()
+                        .find(|r| {
+                            !r.suppressed && !matches!(r.kind.as_str(), "sketch" | "plane" | "axis" | "point")
+                        })
+                        .map(|r| r.id)
+                        .and_then(|id| self.shell.doc.as_ref().and_then(|doc| doc.name(id)));
+                    if let (Some(&(_, e)), Some(feat)) = (v.clicked.last(), last) {
+                        let text = match (d.kind.as_str(), e) {
+                            ("plane" | "axis", Entity::Face(f)) => {
+                                v.facts.face_refs.get(f as usize).map(|h| format!("{feat} {h}"))
+                            }
+                            ("axis", Entity::Edge(x)) => {
+                                v.facts.edge_refs.get(x as usize).map(|h| format!("{feat} {h}"))
+                            }
+                            ("point", Entity::Edge(x)) => v
+                                .facts
+                                .edge_refs
+                                .get(x as usize)
+                                .map(|h| format!("mid {feat} {h}")),
+                            ("point", Entity::Vertex(k)) => {
+                                v.facts.vertex_refs.get(k as usize).map(|h| format!("{feat} {h}"))
+                            }
+                            _ => None,
+                        };
+                        if let Some(text) = text {
+                            d.take_pick("Reference", text);
+                        }
                     }
                     v.dirty = true;
                     v.clicks = v.nav.clicks;
@@ -1818,6 +1886,16 @@ impl Headless {
             },
             button: MouseButton::Right,
         });
+    }
+
+    /// A left click here.
+    pub fn click_at(&mut self, x: f32, y: f32) {
+        self.move_to(x, y);
+        self.step();
+        self.button(true);
+        self.step();
+        self.button(false);
+        self.step();
     }
 
     /// A right click where the pointer is, with no move first.

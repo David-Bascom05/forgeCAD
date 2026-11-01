@@ -824,6 +824,20 @@ pub fn regions(s: &Sketch) -> Vec<Region> {
         .collect()
 }
 
+/// Each curve's name, in the order `drawing` gives them.
+pub fn curve_names(s: &Sketch) -> Vec<String> {
+    let q = &s.solved;
+    q.entity_ids()
+        .filter(|id| {
+            matches!(
+                q.entity(*id),
+                Some(Entity::Line { .. } | Entity::Circle { .. } | Entity::Arc { .. })
+            )
+        })
+        .map(|id| name_of(s, id.0).to_string())
+        .collect()
+}
+
 /// What it draws: each curve as points, whether it's construction; and its end points.
 pub fn drawing(s: &Sketch) -> (Vec<(Vec<Point2>, bool)>, Vec<Point2>) {
     let q = &s.solved;

@@ -35,6 +35,7 @@ pub struct Facts {
     /// By the body's face and edge index: how a part file names each (`@f..`, `@e..`).
     pub face_refs: Vec<String>,
     pub edge_refs: Vec<String>,
+    pub vertex_refs: Vec<String>,
     /// By the body's face index: its radius, if it's a cylinder.
     pub face_radius: Vec<Option<f64>>,
     pub sketches: Vec<SketchShape>,
@@ -48,6 +49,8 @@ pub struct SketchShape {
     /// Each curve as points, and whether it's construction.
     pub curves: Vec<(Vec<[f64; 3]>, bool)>,
     pub points: Vec<[f64; 3]>,
+    /// Each of `curves`' names.
+    pub curve_names: Vec<String>,
     /// The places a line reading it can name, as it would name them.
     pub named: Vec<(String, [f64; 3])>,
     pub regions: Vec<RegionShape>,
@@ -80,6 +83,7 @@ fn sketch_shapes(model: &Model, n: usize) -> Vec<SketchShape> {
                     .map(|(c, faint)| (c.into_iter().map(up).collect(), faint))
                     .collect(),
                 points: points.into_iter().map(up).collect(),
+                curve_names: forge_doc::sketch::curve_names(s),
                 named: forge_doc::sketch::named_points(s)
                     .into_iter()
                     .map(|(n, p)| (n, up(p)))
@@ -343,9 +347,18 @@ pub fn facts(model: &mut Model) -> Facts {
         handles,
         face_refs,
         edge_refs,
+        vertex_refs: vertex_refs(model.body()),
         face_radius: radii(model.body()),
         sketches: sketch_shapes(model, model.features.len()),
     }
+}
+
+fn vertex_refs(body: Option<&forge_topo::Body>) -> Vec<String> {
+    let Some(b) = body else { return Vec::new() };
+    let names = crate::select::handles(b);
+    b.vertex_ids()
+        .map(|v| names.get(&b.vertex(v).name).cloned().unwrap_or_default())
+        .collect()
 }
 
 fn radii(body: Option<&forge_topo::Body>) -> Vec<Option<f64>> {
@@ -384,6 +397,7 @@ pub fn facts_at(model: &Model, n: usize) -> Facts {
         handles: Vec::new(),
         face_refs,
         edge_refs,
+        vertex_refs: vertex_refs(model.body_after(n)),
         face_radius: radii(model.body_after(n)),
         sketches: sketch_shapes(model, n),
     }

@@ -1633,3 +1633,55 @@ fn a_sketch_opens_with_the_cubes_words_upright_on_every_plane_and_a_face() {
         cube_words_upright(&h);
     }
 }
+
+fn eye_shows(h: &Headless, id: forge_doc::ItemId) -> bool {
+    let k = h
+        .gui
+        .shell
+        .sketch_shapes
+        .iter()
+        .position(|s| s.item == Some(id))
+        .unwrap();
+    h.gui.shell.sketches_drawn().iter().any(|d| d.0 == k)
+}
+
+#[test]
+fn a_sketch_read_by_features_shows_and_hides_by_its_eye_its_child_eye_and_its_menu() {
+    let Some(mut h) = app() else { return };
+    assert!(h.until(|g| !g.shell.sketch_shapes.is_empty()));
+    step_some(&mut h);
+    let row = h
+        .gui
+        .shell
+        .rows
+        .iter()
+        .find(|r| r.kind == "sketch")
+        .unwrap()
+        .clone();
+    assert!(
+        !h.gui.shell.sketch_shown(row.id),
+        "bracket's sketch is read: hidden"
+    );
+    // its own eye
+    h.move_to(0.0, 0.0);
+    step_some(&mut h);
+    assert!(!eye_shows(&h, row.id));
+    h.click(&format!("tree:{}:eye", row.name));
+    step_some(&mut h);
+    assert!(eye_shows(&h, row.id), "the eye shows it");
+    assert!(h.gui.shell.sketch_shown(row.id));
+    h.click(&format!("tree:{}:eye", row.name));
+    step_some(&mut h);
+    h.move_to(0.0, 0.0);
+    step_some(&mut h);
+    assert!(!eye_shows(&h, row.id), "and hides it");
+    // the menu's Visibility
+    let r = h.gui.shell.place(&format!("tree:{}", row.name)).unwrap();
+    h.right_drag((r.center().x, r.center().y), (r.center().x, r.center().y));
+    step_some(&mut h);
+    let at = h.gui.shell.row_menu.expect("its menu").1;
+    h.click_at(at.x + 40.0, at.y + 4.0 + 28.0 * 1.5);
+    step_some(&mut h);
+    assert!(h.gui.shell.sketch_shown(row.id), "from the menu");
+    assert!(h.gui.shell.row_menu.is_none());
+}

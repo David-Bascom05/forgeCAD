@@ -20,12 +20,24 @@ fn is_number(w: &str) -> bool {
         || w.chars().all(|c| c.is_ascii_digit() || ".+-*/".contains(c))
 }
 
+/// What the kernel said, in words for a person.
+pub fn plain_error(why: &str) -> String {
+    match why.trim() {
+        "extent: NotCovered" => "The next face doesn't cover the whole profile".to_string(),
+        "extent: NoNextFace" => "There's no face ahead to reach".to_string(),
+        w if w.contains("the next face in a multi-body part") => {
+            "To Next can't look across separate bodies yet".to_string()
+        }
+        w => w.to_string(),
+    }
+}
+
 /// What a field of this name measures, if it's a number.
 pub fn field_kind(label: &str) -> Option<forge_doc::units::Kind> {
     use forge_doc::units::Kind;
     match label {
         "Distance" | "Diameter" | "Radius" | "Thickness" | "Depth" | "Length" | "Offset" | "Height"
-        | "Pitch" | "Width" | "Value" => Some(Kind::Length),
+        | "Pitch" | "Width" | "Value" | "Spacing" => Some(Kind::Length),
         "Angle" | "Sweep" | "Taper" => Some(Kind::Angle),
         _ => None,
     }
@@ -181,8 +193,10 @@ pub fn fields(kind: &str, args: &[&str]) -> Vec<(String, String)> {
 pub fn section(label: &str) -> &'static str {
     match label {
         "Operation" | "Hand" | "Flip" | "Smooth" => "Output",
-        "Plane" | "Profile" | "Path" | "Axis" | "On" | "Centre path" | "Rail" | "Edges" | "Faces"
-        | "Reference" | "Features" | "Bodies" | "Points" | "Cylinder" => "Input Geometry",
+        "Plane" | "Profile" | "Profiles" | "Path" | "Axis" | "On" | "Centre path" | "Rail" | "Edges"
+        | "Faces" | "Reference" | "Features" | "Bodies" | "Points" | "Cylinder" | "Target" | "Tools" => {
+            "Input Geometry"
+        }
         _ => "Behavior",
     }
 }
@@ -198,19 +212,22 @@ pub fn template(kind: &str) -> (&'static str, Option<(&'static str, &'static str
         "chamfer" => ("1", Some(("Edges", "Pick edges in the view"))),
         "shell" => ("2", Some(("Faces", "Pick the faces to open"))),
         "draft" => ("3 xy", Some(("Faces", "Pick the faces to taper"))),
-        "sweep" => ("xz rect -2 -2 4 4 path line 0 0 0 0 0 40", None),
+        "sweep" => ("", Some(("Profile", "Pick a closed region in the view"))),
         "loft" => (
-            "profile xy rect -10 -10 20 20 profile xy at 0 0 30 circle 0 0 6",
-            None,
+            "",
+            Some(("Profiles", "Pick two or more closed regions, in order")),
         ),
-        "coil" => ("xz axis y circle 20 0 2 pitch 8 turns 4", None),
+        "coil" => ("", Some(("Profile", "Pick a closed region in the view"))),
         "rib" => ("2 xz", None),
         "thread" => ("", Some(("Cylinder", "Pick a cylinder face or a hole"))),
-        "combine" => ("add", Some(("Reference", "Name the bodies to combine"))),
-        "plane" => ("xy at 0 0 10", None),
+        "combine" => ("", Some(("Target", "Pick the body to keep"))),
+        "plane" => ("", Some(("Reference", "Pick a planar face"))),
         "axis" => ("", Some(("Reference", "Pick an edge or a cylinder"))),
-        "point" => ("", Some(("Reference", "Pick a vertex or an edge"))),
-        "pattern" => ("", Some(("Features", "Name what to copy, then its row"))),
+        "point" => (
+            "",
+            Some(("Reference", "Pick a vertex, or an edge for its middle")),
+        ),
+        "pattern" => ("", Some(("Features", "Pick the features to copy"))),
         _ => ("", None),
     }
 }

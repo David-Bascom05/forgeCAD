@@ -38,6 +38,8 @@ pub struct Dialog {
     pub toward: Toward,
     /// + was pressed: OK, then another of these.
     pub again: bool,
+    /// The selections still to come after the one taking clicks.
+    pub queue: Vec<(String, &'static str)>,
 }
 
 /// How far an extrude goes.
@@ -71,8 +73,46 @@ impl Dialog {
         {
             fields.push((label.to_string(), String::new()));
         }
+        let mut queue: Vec<(String, &'static str)> = Vec::new();
         // the line reads in their order: size, where, how far
         match kind {
+            "sweep" => {
+                fields = vec![("Profile".into(), String::new()), ("Path".into(), String::new())];
+                queue.push(("Path".to_string(), "Pick the sketch to sweep along"));
+            }
+            "loft" => fields = vec![("Profiles".into(), String::new())],
+            "coil" => {
+                fields = vec![
+                    ("Profile".into(), String::new()),
+                    ("Axis".into(), String::new()),
+                    ("Pitch".into(), "8".into()),
+                    ("Turns".into(), "4".into()),
+                ];
+                queue.push(("Axis".to_string(), "Pick a line of its sketch to turn about"));
+            }
+            "pattern" => {
+                fields = vec![
+                    ("Features".into(), String::new()),
+                    ("Direction".into(), "lin 1 0 0".into()),
+                    ("Count".into(), "3".into()),
+                    ("Spacing".into(), "20".into()),
+                ];
+            }
+            "combine" => {
+                fields = vec![
+                    ("Operation".into(), "add".into()),
+                    ("Target".into(), String::new()),
+                    ("Tools".into(), String::new()),
+                ];
+                queue.push(("Tools".to_string(), "Pick the bodies to combine with it"));
+            }
+            "plane" => {
+                fields = vec![
+                    ("Reference".into(), String::new()),
+                    ("Offset".into(), "10".into()),
+                ];
+            }
+            "axis" | "point" => fields = vec![("Reference".into(), String::new())],
             "hole" => {
                 fields = vec![
                     ("Diameter".to_string(), "5".to_string()),
@@ -95,6 +135,7 @@ impl Dialog {
             title: panel::kind_word(kind),
             fields,
             pick: pick.map(|(l, why)| (l.to_string(), why)),
+            queue,
             sent: None,
             seq: 0,
             error: None,
@@ -125,6 +166,7 @@ impl Dialog {
             extent: Extent::Distance,
             toward: Toward::Forward,
             again: false,
+            queue: Vec::new(),
         }
     }
 
@@ -170,8 +212,47 @@ impl Dialog {
         self.toward = toward;
     }
 
+    /// Sets what a selection has, and goes on to the next one wanted.
+    pub fn take_pick(&mut self, label: &str, text: String) {
+        if let Some(f) = self.fields.iter_mut().find(|f| f.0 == label) {
+            f.1 = text;
+        }
+        self.next_pick();
+    }
+
+    fn next_pick(&mut self) {
+        let done = self
+            .pick
+            .as_ref()
+            .is_some_and(|(l, _)| self.fields.iter().any(|f| f.0 == *l && !f.1.trim().is_empty()));
+        if done && !self.queue.is_empty() {
+            self.pick = Some(self.queue.remove(0));
+        }
+    }
+
+    /// The selection a row of it says should take clicks now.
+    pub fn activate(&mut self, label: &str) {
+        let active = self.pick.as_ref().is_some_and(|(l, _)| l == label);
+        if let (false, Some(k)) = (active, self.queue.iter().position(|q| q.0 == label)) {
+            let next = self.queue.remove(k);
+            if let Some(was) = self.pick.replace(next) {
+                self.queue.push(was);
+            }
+        }
+    }
+
     /// A field's text, as the file would have it.
     fn file_text(&self, label: &str, text: &str) -> String {
+        match (self.kind.as_str(), label) {
+            ("plane", "Reference") if !text.trim().is_empty() => return format!("off {}", text.trim()),
+            ("coil", "Pitch") if !text.trim_start().starts_with("pitch") => {
+                return format!("pitch {}", self.number_text(label, text));
+            }
+            ("coil", "Turns") if !text.trim_start().starts_with("turns") => {
+                return format!("turns {}", text.trim());
+            }
+            _ => {}
+        }
         if label == "Distance" && self.kind == "extrude" {
             let number = self.number_text(label, text);
             return match (self.extent, self.toward) {
@@ -225,6 +306,15 @@ impl Dialog {
         self.pick
             .as_ref()
             .is_some_and(|(l, _)| self.fields.iter().any(|f| f.0 == *l && f.1.trim().is_empty()))
+            || self
+                .queue
+                .iter()
+                .any(|(l, _)| self.fields.iter().any(|f| f.0 == *l && f.1.trim().is_empty()))
+            || (self.kind == "loft"
+                && self
+                    .fields
+                    .iter()
+                    .any(|f| f.0 == "Profiles" && f.1.matches("profile").count() < 2))
     }
 
     /// The feature's profile as a person reads it: its sketch's dimensions, if it's written inline.
@@ -279,7 +369,8 @@ impl Dialog {
 
     pub fn picked(&mut self, refs: &[String]) {
         let Some((label, _)) = &self.pick else { return };
-        if let Some(f) = self.fields.iter_mut().find(|f| f.0 == *label) {
+        let label = label.clone();
+        if let Some(f) = self.fields.iter_mut().find(|f| f.0 == label) {
             f.1 = refs.join(" ");
         }
     }
@@ -350,8 +441,8 @@ fn pick_row(
     hint: &str,
     t: &super::theme::Theme,
     places: &mut Vec<(String, Rect)>,
-) {
-    let (r, resp) = ui.allocate_exact_size(vec2(DIALOG_W, 34.0), Sense::hover());
+) -> bool {
+    let (r, resp) = ui.allocate_exact_size(vec2(DIALOG_W, 34.0), Sense::click());
     let p = ui.painter();
     let (edge, fill) = if waiting {
         (t.focus, t.raised)
@@ -387,10 +478,12 @@ fn pick_row(
         sans(12.0),
         if n > 0 { t.ink } else { t.ink2 },
     );
+    let clicked = resp.clicked();
     if !hint.is_empty() {
         let _ = resp.on_hover_text(hint);
     }
     places.push((format!("dialog:pick:{label}"), r));
+    clicked
 }
 
 fn value_row(ui: &mut egui::Ui, name: &str, value: &str, t: &super::theme::Theme) {
@@ -508,6 +601,9 @@ impl Shell {
                 let units = d.units;
                 let waiting = d.waiting_for_pick();
                 let extrude = d.kind == "extrude";
+                let combine = d.kind == "combine";
+                let mut activate = None;
+                let d_kind = d.kind.clone();
                 let mut extent = d.extent;
                 let mut toward = d.toward;
                 for section in ["Input Geometry", "Behavior", "Output"] {
@@ -520,20 +616,48 @@ impl Shell {
                     for (label, text) in d.fields.iter_mut().filter(|f| panel::section(&f.0) == section) {
                         if label == "Operation" {
                             let now = text.clone();
+                            let three = [
+                                ("join", "Join", now == "add"),
+                                ("opcut", "Cut", now == "cut"),
+                                ("intersect", "Intersect", now == "keep"),
+                            ];
+                            let four = [
+                                ("join", "Join", now.is_empty() || now == "add"),
+                                ("opcut", "Cut", now == "cut"),
+                                ("intersect", "Intersect", now == "keep"),
+                                ("newsolid", "New Solid", now == "new"),
+                            ];
                             let row = toggle_row(
                                 ui,
                                 &t,
-                                &[
-                                    ("join", "Join", now.is_empty() || now == "add"),
-                                    ("opcut", "Cut", now == "cut"),
-                                    ("intersect", "Intersect", now == "keep"),
-                                    ("newsolid", "New Solid", now == "new"),
-                                ],
+                                if combine { &three[..] } else { &four[..] },
                                 "dialog:op",
                                 &mut places,
                             );
                             if let Some(k) = row {
-                                *text = ["", "cut", "keep", "new"][k].to_string();
+                                *text = if combine {
+                                    ["add", "cut", "keep"][k].to_string()
+                                } else {
+                                    ["", "cut", "keep", "new"][k].to_string()
+                                };
+                            }
+                            continue;
+                        }
+                        if label == "Direction" {
+                            let now = text.clone();
+                            let row = toggle_row(
+                                ui,
+                                &t,
+                                &[
+                                    ("axisx", "X", now == "lin 1 0 0"),
+                                    ("axisy", "Y", now == "lin 0 1 0"),
+                                    ("axisz", "Z", now == "lin 0 0 1"),
+                                ],
+                                "dialog:way",
+                                &mut places,
+                            );
+                            if let Some(k) = row {
+                                *text = ["lin 1 0 0", "lin 0 1 0", "lin 0 0 1"][k].to_string();
                             }
                             continue;
                         }
@@ -546,7 +670,7 @@ impl Shell {
                             }
                             continue;
                         }
-                        let is_pick = matches!(
+                        let is_pick = (matches!(
                             label.as_str(),
                             "Edges"
                                 | "Faces"
@@ -556,17 +680,26 @@ impl Shell {
                                 | "Points"
                                 | "Cylinder"
                                 | "Profile"
-                        );
+                                | "Profiles"
+                                | "Path"
+                                | "Target"
+                                | "Tools"
+                        )) || (label == "Axis" && d_kind == "coil");
                         if is_pick {
                             let wanted = pick.as_ref().is_some_and(|(l, _)| l == label);
                             let n = match label.as_str() {
                                 "Points" => text.split_whitespace().count().saturating_sub(3),
                                 "Cylinder" => (!text.trim().is_empty()) as usize,
-                                "Profile" => (!text.trim().is_empty()) as usize,
+                                "Profile" | "Path" | "Axis" | "Reference" | "Target" => {
+                                    (!text.trim().is_empty()) as usize
+                                }
+                                "Profiles" => text.matches("profile").count(),
                                 _ => forge_doc::text::tokens(text).len(),
                             };
                             let hint = pick.as_ref().filter(|(l, _)| l == label).map_or("", |(_, w)| *w);
-                            pick_row(ui, label, n, wanted && waiting, hint, &t, &mut places);
+                            if pick_row(ui, label, n, wanted && waiting, hint, &t, &mut places) {
+                                activate = Some(label.clone());
+                            }
                             continue;
                         }
                         // how far: the kind of extent and the way it goes, then the number if it has one
@@ -606,6 +739,9 @@ impl Shell {
                 }
                 d.extent = extent;
                 d.toward = toward;
+                if let Some(l) = activate {
+                    d.activate(&l);
+                }
                 if let Some(why) = &d.error {
                     ui.add_space(2.0);
                     let g =

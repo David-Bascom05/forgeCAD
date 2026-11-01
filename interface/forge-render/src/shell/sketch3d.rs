@@ -74,28 +74,24 @@ fn fill(p: &egui::Painter, loops: &[Vec<Pos2>], ink: Color32) {
 impl Shell {
     /// Does it show? As told, else until something reads it.
     pub fn sketch_shown(&self, id: ItemId) -> bool {
-        let told = self
-            .rows
-            .iter()
-            .find(|r| r.id == id)
-            .and_then(|r| self.sketch_eye.get(&r.name));
-        told.copied().unwrap_or_else(|| {
-            let Some(doc) = &self.doc else { return true };
-            let name = doc.name(id);
-            !doc.items.iter().any(|i| {
-                i.id != id
-                    && i.args()
-                        .iter()
-                        .any(|a| a.to == Some(id) || Some(&a.text) == name.as_ref())
-            })
+        let Some(doc) = &self.doc else { return true };
+        let name = doc.name(id);
+        if let Some(told) = name.as_ref().and_then(|n| self.sketch_eye.get(n)) {
+            return *told;
+        }
+        !doc.items.iter().any(|i| {
+            i.id != id
+                && i.args()
+                    .iter()
+                    .any(|a| a.to == Some(id) || Some(&a.text) == name.as_ref())
         })
     }
 
     /// A sketch's eye turned: what it now is.
     pub fn toggle_sketch(&mut self, id: ItemId) {
         let now = !self.sketch_shown(id);
-        if let Some(r) = self.rows.iter().find(|r| r.id == id) {
-            self.sketch_eye.insert(r.name.clone(), now);
+        if let Some(n) = self.doc.as_ref().and_then(|d| d.name(id)) {
+            self.sketch_eye.insert(n, now);
         }
     }
 
@@ -120,9 +116,14 @@ impl Shell {
 
     /// Does the open dialog take a sketch's region for its profile?
     fn picks_region(&self) -> bool {
-        self.dialog
-            .as_ref()
-            .is_some_and(|d| matches!(d.target, super::dialog::DialogTarget::New("extrude" | "revolve")))
+        self.dialog.as_ref().is_some_and(|d| {
+            let active = d.pick.as_ref().map(|p| p.0.as_str());
+            match d.target {
+                super::dialog::DialogTarget::New("extrude" | "revolve") => true,
+                super::dialog::DialogTarget::New(_) => matches!(active, Some("Profile" | "Profiles")),
+                _ => false,
+            }
+        })
     }
 
     fn picks_points(&self) -> bool {
@@ -271,6 +272,46 @@ impl Shell {
         if !picking && was.is_none() {
             self.sketch_hover = near.map(|n| n.1);
         }
+        // a sketch for a path, or one of its lines for an axis
+        let takes_curve = self.dialog.as_ref().and_then(|d| {
+            d.pick
+                .as_ref()
+                .filter(|p| matches!(p.0.as_str(), "Path" | "Axis"))
+                .map(|p| p.0.clone())
+        });
+        if let (Some(takes), Some(at)) = (takes_curve, pointer) {
+            let mut best: Option<(f32, usize, usize)> = None;
+            for (i, s) in shapes.iter().enumerate() {
+                for (j, (c, _)) in s.curves.iter().enumerate() {
+                    let Some(pts) = up(c) else { continue };
+                    for w in pts.windows(2) {
+                        let gap = to_line_gap(at, w[0], w[1]);
+                        if gap < NEAR_PT && best.is_none_or(|b| gap < b.0) {
+                            best = Some((gap, i, j));
+                        }
+                    }
+                }
+            }
+            if let Some((_, i, j)) = best {
+                let s = &shapes[i];
+                if let Some(pts) = up(&s.curves[j].0) {
+                    p.add(egui::Shape::line(pts, egui::Stroke::new(3.0, t.focus)));
+                }
+                if ctx.input(|e| e.pointer.primary_clicked()) {
+                    let name = s.item.and_then(|id| self.doc.as_ref().and_then(|d| d.name(id)));
+                    let curve = s.curve_names.get(j).cloned();
+                    if let (Some(d), Some(name), Some(curve)) = (&mut self.dialog, name, curve) {
+                        let text = if takes == "Path" {
+                            format!("path {name} {curve}")
+                        } else {
+                            format!("axis {curve}")
+                        };
+                        d.take_pick(&takes, text);
+                    }
+                }
+            }
+            self.sketch_hover = None;
+        }
         if let Some((_, id, through, loops)) = &under {
             fill(&p, loops, t.focus.gamma_multiply(0.4));
             if ctx.input(|i| i.pointer.primary_clicked()) {
@@ -280,7 +321,23 @@ impl Shell {
                     .find(|s| s.item == Some(*id))
                     .is_some_and(|s| s.regions.len() > 1);
                 if let (Some(d), Some(name)) = (&mut self.dialog, name) {
-                    d.on_sketch(&if many { format!("{name} {through}") } else { name });
+                    let word = if many { format!("{name} {through}") } else { name };
+                    let takes = d.pick.as_ref().map(|p| p.0.clone());
+                    match takes.as_deref() {
+                        Some("Profiles") => {
+                            let had = d
+                                .fields
+                                .iter()
+                                .find(|f| f.0 == "Profiles")
+                                .map_or(String::new(), |f| f.1.clone());
+                            let next = format!("{had} profile {word}");
+                            d.take_pick("Profiles", next.trim().to_string());
+                        }
+                        Some("Profile") if d.kind != "extrude" && d.kind != "revolve" => {
+                            d.take_pick("Profile", word);
+                        }
+                        _ => d.on_sketch(&word),
+                    }
                 }
             }
         }

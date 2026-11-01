@@ -60,10 +60,14 @@ impl Shell {
         (r, resp)
     }
 
+    fn eye_rect(row: Rect) -> Rect {
+        Rect::from_min_size(pos2(row.right() - 28.0, row.top() + 3.0), vec2(20.0, 20.0))
+    }
+
     /// An eye at a row's right: shown or hidden, kept apart from the row's own click.
     fn eye(&self, ui: &mut Ui, row: Rect, key: usize, shown: bool) -> bool {
         let t = self.theme;
-        let r = Rect::from_min_size(pos2(row.right() - 28.0, row.top() + 3.0), vec2(20.0, 20.0));
+        let r = Self::eye_rect(row);
         let resp = ui.interact(r, ui.scope_id().with(("eye", key)), Sense::click());
         let tip = if shown { "Hide" } else { "Show" };
         let resp = resp.on_hover_text(tip);
@@ -247,7 +251,7 @@ impl Shell {
                             if self.eye(ui, r, 1000 + k, shown) {
                                 self.out.push(super::Action::SketchVisibility(row.id));
                             }
-                            places.push((format!("tree:{}:eye", row.name), r));
+                            places.push((format!("tree:{}:eye", row.name), Self::eye_rect(r)));
                         }
                         if row.suppressed {
                             let y = r.center().y;
@@ -358,6 +362,7 @@ impl Shell {
                                 if self.eye(ui, r, 2000 + k, shown) {
                                     self.out.push(super::Action::SketchVisibility(*id));
                                 }
+                                places.push((format!("tree:{}:sketch:eye", row.name), Self::eye_rect(r)));
                                 if resp.hovered() {
                                     tree_hover = Some(*id);
                                 }
