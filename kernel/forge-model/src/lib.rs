@@ -1114,7 +1114,10 @@ fn modify(
             .map_err(|error| RegenError::Fillet { feature: i, error })
         }
         Feature::Chamfer { edges, size } => {
-            chamfer(body, edges, *size, id).map_err(|error| RegenError::Chamfer { feature: i, error })
+            // a selector gives edges in arena order, which must not name anything
+            let mut edges = edges.clone();
+            edges.sort();
+            chamfer(body, &edges, *size, id).map_err(|error| RegenError::Chamfer { feature: i, error })
         }
         Feature::Shell {
             thickness,
@@ -1200,6 +1203,8 @@ fn apply_fillet(
             radius: radius.clone(),
         });
     }
+    // a selector gives edges in arena order, which must not name anything
+    want.sort_by_key(|e| body.edge(e.edge).name);
     let opts = FilletOptions {
         starts: starts
             .iter()

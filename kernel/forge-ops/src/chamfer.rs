@@ -339,7 +339,12 @@ impl Work {
         let vname = src.vertex(v).name;
         let unsupported = |what| ChamferError::Unsupported { edge: vname, what };
         // faces and edge ends in turn round the vertex: face i lies between end i-1 and end i
-        let mut ring: Vec<(FaceId, CoedgeId, CoedgeId)> = vec![around[0]];
+        // from the least-named face: what follows is numbered in this order, the arenas' is no name
+        let first = around
+            .iter()
+            .min_by_key(|c| src.face(c.0).name)
+            .expect("a vertex in use");
+        let mut ring: Vec<(FaceId, CoedgeId, CoedgeId)> = vec![*first];
         while ring.len() <= around.len() {
             let out = ring.last().expect("started").2;
             let Some(back) = src.partner(out) else {

@@ -1907,7 +1907,7 @@ impl Column<'_> {
                 }
             }
         }
-        let vnames = vertex_names(&points, marks, Name::feature(0), &part_frame(self.a), None);
+        let vnames = vertex_names(&points, marks, Name::feature(0), || part_frame(self.a), None);
         let vname = |v: VKey| match v {
             VKey::Old(s, id) => self.src(s).vertex(id).2,
             VKey::New(i) => vnames[i as usize],

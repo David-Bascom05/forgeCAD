@@ -737,7 +737,7 @@ fn plan(a: &Body, b: &Body, op: Op, scratch: &mut Scratch) -> R<Plan> {
         &|sd, e| bodies[sd].edge(e).name,
         &mut marks,
     );
-    let mut vnames = vertex_names(&new_points, marks, root, &part_frame(a), None);
+    let mut vnames = vertex_names(&new_points, marks, root, || part_frame(a), None);
     // a piece of a cut edge keeps the whole edge's name, so an earlier boolean that cut it may
     // have named the vertex it made from the same marks: then a name here passes over the ends
     // of the edges cut (rare: looked for only at the new vertices' own edges)
@@ -2457,11 +2457,11 @@ pub(crate) fn cut_marks(
     }
 }
 
-/// The part's own frame, where ties among new vertices are broken: its first face's surface's,
-/// so it turns and moves with the part.
+/// The part's own frame, where ties among new vertices are broken: its least-named face's surface's,
+/// so it turns and moves with the part and does not follow the order in the arenas.
 pub(crate) fn part_frame(b: &Body) -> forge_math::Frame {
     b.face_ids()
-        .next()
+        .min_by_key(|&f| b.face(f).name)
         .map_or(forge_math::Frame::WORLD, |f| surface_frame(&b.face(f).surface))
 }
 
@@ -2500,7 +2500,7 @@ pub(crate) fn vertex_names(
     points: &[Point3],
     marks: Vec<(u32, Name, Name)>,
     root: Name,
-    frame: &forge_math::Frame,
+    frame: impl Fn() -> forge_math::Frame,
     held: Option<&[bool]>,
 ) -> Vec<Name> {
     let held = |i: usize| held.is_none_or(|h| h[i]);
@@ -2566,7 +2566,8 @@ pub(crate) fn vertex_names(
             let first = if a != b {
                 a < b
             } else {
-                !ranked_pair(frame.point_to_local(points[j]), frame.point_to_local(points[i]))
+                let f = frame();
+                !ranked_pair(f.point_to_local(points[j]), f.point_to_local(points[i]))
             };
             let (lo, hi) = if first { (i, j) } else { (j, i) };
             out[lo] = keys[lo].with(0);
@@ -2577,7 +2578,8 @@ pub(crate) fn vertex_names(
         by_second.sort_unstable();
         let mut rank = 0u64;
         for sub in by_second.chunk_by(|a, b| a.0 == b.0) {
-            let pts: Vec<Point3> = sub.iter().map(|x| frame.point_to_local(points[x.1])).collect();
+            let f = frame();
+            let pts: Vec<Point3> = sub.iter().map(|x| f.point_to_local(points[x.1])).collect();
             for (x, r) in sub.iter().zip(ranked(&pts)) {
                 out[x.1] = keys[x.1].with(rank + r);
             }

@@ -163,12 +163,22 @@ where two entities of one kind share them. A handle whose entity an upstream edi
 finds another entity only if that one shares the kind and all the digits: about one in 2^32
 per entity of the part, so in practice it fails. Old short handles are refused with a hint.
 
+## Arena order
+
+A feature's result names nothing after the order in its input's arenas (`tests/arena_order.rs`):
+a fillet or chamfer takes its edges by name, whatever order a selector gave them; ties among new
+vertices break in the frame of the least-named face, not the first in the arena; a chamfer numbers what
+it makes at a corner from the corner's least-named face. Measured in research/names-arena.
+
 ## Open questions
 
 1. Fillet laws run from the vertex whose name sorts first (`forge_ops::law_start`). Any change
    to naming can turn a stored variable radius end for end; a geometric rule (or storing the
    start) would make it stable.
 2. Seq and n-ary still differ where a face splits into several kept pieces (above).
+3. Arena order: jack's wrapped text still names otherwise on a reversed stage, around a cylinder's
+   seam; cause not found. Frame's `htb` revolve names a vertex otherwise on a body rebuilt by the skip path
+   (research/rebuild), and neither reversing the arenas nor a 1e-13 nudge reproduces it.
 
 ## References
 

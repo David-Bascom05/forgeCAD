@@ -2551,7 +2551,7 @@ fn nary_body(
         &found,
         marks,
         root,
-        &crate::boolean::part_frame(tools[0]),
+        || crate::boolean::part_frame(tools[0]),
         Some(&held),
     );
     let seams: Vec<Name> = seam_spans
