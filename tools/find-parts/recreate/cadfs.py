@@ -400,6 +400,9 @@ class Tr:
                 a = self.sk[fid][0]
                 filt = len(q[1]) > 1 and q[1][1] is True
                 by.setdefault(fid, []).extend(a.outermost() if filt else range(len(a.faces)))
+                if len(a.faces) > 1:
+                    # the query says "all", which does not always hold for sketches of many regions
+                    self.notes.add("all-regions")
             elif isinstance(q, fs.Call) and q[0] == "makeQuery" and q[1][1] == "IMPRINT" and q[1][2] == ("name", "FACE"):
                 fid, r = self.imprint(q, env)
                 by.setdefault(fid, []).append(r)

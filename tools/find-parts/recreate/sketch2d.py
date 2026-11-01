@@ -426,7 +426,7 @@ class Arrangement:
         """Regions not inside another region's hole."""
         out = []
         for i, f in enumerate(self.faces):
-            pt = point_of(self.loops[f["outer"]], self)
+            pt = point_within(self.loops[f["outer"]], self)
             if not any(j != i and inside(pt, self.loops[g["outer"]], self) and g["area"] > f["area"] for j, g in enumerate(self.faces)):
                 out.append(i)
         return out
@@ -547,6 +547,15 @@ def inside(q, lp, arr):
         if (a[1] > q[1]) != (b[1] > q[1]) and q[0] < (b[0] - a[0]) * (q[1] - a[1]) / (b[1] - a[1]) + a[0]:
             c = not c
     return c
+
+
+def point_within(lp, arr):
+    """A point just inside a counter-clockwise loop: off the boundary any neighbouring region shares."""
+    ps = polygon(lp, arr)
+    a, b = ps[0], ps[1]
+    l = max(dist(a, b), 1e-12)
+    d = min(1e-4, l / 8)
+    return ((a[0] + b[0]) / 2 - d * (b[1] - a[1]) / l, (a[1] + b[1]) / 2 + d * (b[0] - a[0]) / l)
 
 
 def point_of(lp, arr):
