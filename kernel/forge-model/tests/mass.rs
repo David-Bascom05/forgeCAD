@@ -175,3 +175,47 @@ fn finished_parts_by_hand() {
     }
     assert!(n >= 20, "{n}");
 }
+
+#[test]
+fn a_spheroid_by_its_quarter_turns_or_part_of_a_turn() {
+    use forge_geom::spline::PlaneSpline;
+    for ang in [dmath::TAU, 1.5 * PI, 1.0, 2.5] {
+        let e = PlaneSpline::ellipse(Point2::ORIGIN, 5.0, 8.0, 0.0, -0.5 * PI, PI).unwrap();
+        let l = ProfileLoop::new(vec![
+            (Segment::Spline(std::sync::Arc::new(e)), 0),
+            line([0.0, 8.0], [0.0, -8.0], 1),
+        ]);
+        let m = mass(&revolve(&profile(l), Y, ang, 1).unwrap()).unwrap();
+        let want = 4.0 / 3.0 * PI * 25.0 * 8.0 * ang / dmath::TAU;
+        assert!(
+            (m.volume - want).abs() < 1e-9 * want,
+            "{ang}: {} {want}",
+            m.volume
+        );
+    }
+}
+
+#[test]
+fn a_ball_by_part_of_a_turn_past_a_half() {
+    let l = ProfileLoop::new(vec![
+        (
+            Segment::Arc {
+                center: Point2::ORIGIN,
+                radius: 5.0,
+                start: -0.5 * PI,
+                sweep: PI,
+            },
+            0,
+        ),
+        line([0.0, 5.0], [0.0, -5.0], 1),
+    ]);
+    for ang in [1.5 * PI, 1.9 * PI] {
+        let m = mass(&revolve(&profile(l.clone()), Y, ang, 1).unwrap()).unwrap();
+        let want = 4.0 / 3.0 * PI * 125.0 * ang / dmath::TAU;
+        assert!(
+            (m.volume - want).abs() < 1e-9 * want,
+            "{ang}: {} {want}",
+            m.volume
+        );
+    }
+}

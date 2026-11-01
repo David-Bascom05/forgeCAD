@@ -11,14 +11,14 @@ use crate::surface::Surface;
 use forge_math::{Frame, Interval, Point3, Vec3, tol};
 use std::sync::Arc;
 
-pub(crate) fn extruded(s: &Surface) -> Option<&Extruded> {
+pub fn extruded(s: &Surface) -> Option<&Extruded> {
     match s {
         Surface::Procedural(p) => p.as_any().and_then(|x| x.downcast_ref::<Extruded>()),
         _ => None,
     }
 }
 
-pub(crate) fn spun(s: &Surface) -> Option<&Spun> {
+pub fn spun(s: &Surface) -> Option<&Spun> {
     match s {
         Surface::Procedural(p) => p.as_any().and_then(|x| x.downcast_ref::<Spun>()),
         _ => None,

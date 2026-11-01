@@ -393,7 +393,7 @@ impl Segment {
         match *self {
             Segment::Spline(ref c) => {
                 let (b, r) = (c.c.bbox(c.c.domain()), tol::MIN_LENGTH);
-                !(b.x.width() > r || b.y.width() > r) || !b.diagonal().is_finite()
+                !(b.x.width() > r || b.y.width() > r) || !b.diagonal().is_finite() || !c.c.is_regular()
             }
             // written to be true for NaN or infinite sizes too
             Segment::Line { a, b } => !(a.distance(b) > tol::MIN_LENGTH && a.distance(b) < f64::INFINITY),

@@ -658,31 +658,32 @@ impl Spline {
         out
     }
 
-    /// Whether the derivative stays away from zero over `range`, turning less than a half turn
-    /// per piece: from the Bernstein points of a piece's first differences.
+    /// Whether the curve has no cusp or stationary point.
+    pub fn is_regular(&self) -> bool {
+        self.regular_over(self.domain())
+    }
+
+    /// Whether the derivative stays away from zero over `range`: a cusp shows as the speed all but
+    /// gone with the direction turned back (a sharp bend at speed is no cusp).
     pub(crate) fn regular_over(&self, range: Interval) -> bool {
         for (i, s0, s1) in self.over(range) {
-            let n = 8;
-            let (mut last, mut size): (Option<Vec3>, f64) = (None, 0.0);
-            for k in 0..=n {
-                let s = s0 + (s1 - s0) * k as f64 / n as f64;
-                let t = self.breaks[i] + s * (self.breaks[i + 1] - self.breaks[i]);
-                let d = self.deriv(t).d1;
-                size = size.max(d.length());
-                if d.length() <= 1e-9 * size {
-                    return false;
-                }
-                if let Some(l) = last
-                    && l.dot(d) < 0.0
-                {
-                    return false;
-                }
-                last = Some(d);
+            let n = 16;
+            let (a, h) = (self.breaks[i], self.breaks[i + 1] - self.breaks[i]);
+            let ds: Vec<Vec3> = (0..=n)
+                .map(|k| self.deriv(a + h * (s0 + (s1 - s0) * k as f64 / n as f64)).d1)
+                .collect();
+            let size = ds.iter().fold(0.0f64, |m, d| m.max(d.length()));
+            if ds.iter().any(|d| d.length() <= 1e-9 * size) || size == 0.0 {
+                return false;
             }
-            let wmin = self.part(i, s0, s1)[..=self.degree]
-                .iter()
-                .fold(f64::INFINITY, |m, h| m.min(h[3]));
-            if wmin <= 0.0 {
+            if ds
+                .windows(2)
+                .any(|w| w[0].dot(w[1]) < 0.0 && w[0].length().min(w[1].length()) < 0.05 * size)
+            {
+                return false;
+            }
+            let w = self.part(i, s0, s1);
+            if w[..=self.degree].iter().any(|q| q[3] <= 0.0) {
                 return false;
             }
         }

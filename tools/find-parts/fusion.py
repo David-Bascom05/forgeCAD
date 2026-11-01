@@ -7,8 +7,7 @@ stays out of the repo (see research/find-parts/README.md for the licences); run 
 
   fusion.py FILE.json ... --out DIR [--mm SCALE]    write DIR/<stem>.fc, DIR/<stem>.json (truth)
 
-Exact curves: lines, arcs, circles. Ellipses and splines have no row in a part file: they become
-fine polylines and the part is marked approx.
+Exact curves: lines, arcs, circles, ellipses and B-splines (their own data, marked curve).
 """
 import json
 import math
@@ -99,6 +98,7 @@ class Edge:
     def __init__(self, c):
         t = c["type"]
         self.approx = False
+        self.curved = False
         if t == "Line3D":
             self.kind = "line"
             self.a, self.b = self.mm(c["start_point"]), self.mm(c["end_point"])
@@ -129,8 +129,8 @@ class Edge:
             else:
                 self.sweep = ccw if tom < ccw else -cw
         elif t in ("Ellipse3D", "EllipticalArc3D"):
-            self.kind = "poly"
-            self.approx = True
+            self.kind = "ellipse"
+            self.curved = True
             ce, mx = self.mm(c["center_point"]), vec(c["major_axis"])
             A, B = c["major_axis_radius"] * MM, c["minor_axis_radius"] * MM
             n = vec(c["normal"])
@@ -138,14 +138,16 @@ class Edge:
             a0, a1 = c.get("start_angle", 0.0), c.get("end_angle", 2 * math.pi)
             if t == "EllipticalArc3D" and "start_angle" not in c:
                 raise Unsupported("elliptical arc without angles")
+            self.ell = (ce, mx, my, A, B, a0, a1)
             self.pts = [
                 (ce[0] + A * math.cos(u) * mx[0] + B * math.sin(u) * my[0], ce[1] + A * math.cos(u) * mx[1] + B * math.sin(u) * my[1], ce[2])
                 for u in [a0 + (a1 - a0) * i / 48 for i in range(49)]
             ]
             self.a, self.b = self.pts[0], self.pts[-1]
         elif t == "NurbsCurve3D":
-            self.kind = "poly"
-            self.approx = True
+            self.kind = "spline"
+            self.curved = True
+            self.nurbs = (c["degree"], c["knots"], [tuple(x * MM for x in vec(p)) for p in c["control_points"]], c.get("weights"))
             self.pts = [tuple(x * MM for x in p) for p in nurbs_points(c)]
             if c.get("periodic"):
                 self.pts[-1] = self.pts[0]
@@ -418,12 +420,44 @@ def regions(profiles):
     return out
 
 
+def emit_ellipse(e, rev, f, whole):
+    """An ellipse or arc of one in frame f: its axes mapped, the angles running as they then do."""
+    ce, mx, my, A, B, a0, a1 = e.ell
+    o, x, y = f(ce), f(add(ce, mx, 1.0)), f(add(ce, my, 1.0))
+    xv, yv = (x[0] - o[0], x[1] - o[1]), (y[0] - o[0], y[1] - o[1])
+    rot = math.degrees(math.atan2(xv[1], xv[0]))
+    sign = 1.0 if xv[0] * yv[1] - xv[1] * yv[0] > 0 else -1.0
+    if whole:
+        return f"ellipse {num(o[0])} {num(o[1])} {fine(A)} {fine(B)} {fine(rot)}"
+    st, sw = math.degrees(a0) * sign, math.degrees(a1 - a0) * sign
+    if rev:
+        st, sw = st + sw, -sw
+    return f"ell {num(o[0])} {num(o[1])} {fine(A)} {fine(B)} {fine(rot)} {fine(st)} {fine(sw)}"
+
+
+def emit_spline(e, rev, f, p, q):
+    """B-spline data in frame f, its ends on the joints p and q."""
+    d, k, cp, w = e.nurbs
+    pts = [f(c) for c in cp]
+    if rev:
+        pts, k = pts[::-1], [k[0] + k[-1] - x for x in reversed(k)]
+        w = w[::-1] if w else w
+    pts[0], pts[-1] = p, q
+    t = f"spline {d} " + " ".join(f"{fine(a)} {fine(b)}" for a, b in pts[:1] + pts[1:-1] + pts[-1:])
+    t += " knots " + " ".join(f"{x:.15f}" for x in k)
+    if w and any(abs(x - 1.0) > 1e-12 for x in w):
+        t += " weights " + " ".join(f"{x:.15f}" for x in w)
+    return t
+
+
 def emit_loop(loop, f):
     """A loop's text in frame f (maps sketch points to the frame's x, y)."""
     if len(loop) == 1 and loop[0][0].kind == "circle":
         e = loop[0][0]
         c = f(e.c)
         return f"circle {num(c[0])} {num(c[1])} {num(e.r)}"
+    if len(loop) == 1 and loop[0][0].kind == "ellipse" and math.dist(loop[0][0].a[:2], loop[0][0].b[:2]) < EPS:
+        return emit_ellipse(loop[0][0], False, f, True)
     # the data's curve ends can be 1e-5 mm apart (Fusion's tolerance; DeepCAD keeps 8 decimals): as an
     # importer heals such gaps, curves meeting share one point and each arc is refit through its two
     ns = [(f(e.b if rev else e.a), f(e.a if rev else e.b)) for e, rev in loop]
@@ -458,12 +492,16 @@ def emit_loop(loop, f):
                 if abs(abs(sw) - 2 * math.pi) > 1e-6:
                     sw = math.radians(dg)
             parts.append(f"arc {num(c[0])} {num(c[1])} {fine(r)} {fine(a0)} {fine(math.degrees(sw))}")
+        elif e.kind == "spline":
+            parts.append(emit_spline(e, rev, f, p, q))
+        elif e.kind == "ellipse":
+            parts.append(emit_ellipse(e, rev, f, False))
         else:
             ps = list(map(f, e.sample(rev)))
             ps[0], ps[-1] = p, q
             for a, b in zip(ps, ps[1:]):
                 parts.append(f"line {num(a[0])} {num(a[1])} {num(b[0])} {num(b[1])}")
-    if all(e.kind != "arc" for e, _ in loop):
+    if all(e.kind == "line" for e, _ in loop):
         pts = [x.split()[1:3] for x in parts]
         return "poly " + " ".join(f"{x} {y}" for x, y in pts)
     return "loop " + " ".join(parts)
@@ -683,6 +721,8 @@ def translate(d):
                     for ed, _ in lp:
                         if ed.approx:
                             notes.add("approx")
+                        if ed.curved:
+                            notes.add("curve")
                         lift = ed.c[2] if ed.kind in ("circle", "arc") else ed.a[2]
                 # the slab from -down to up along the normal: from the frame turned over when it
                 # all lies below, from a shifted origin when it does not reach the plane

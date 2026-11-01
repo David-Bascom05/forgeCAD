@@ -628,10 +628,14 @@ fn d1(s: &Surface, uv: Point2) -> forge_geom::surface::SurfDeriv {
 /// own search is costly and stops short of full precision: Newton steps from a nearby point's
 /// parameters (or from the search's answer) go straight there.
 fn foot(s: &Surface, p: Point3, near: Option<Point2>) -> (Point2, f64) {
-    let Surface::Procedural(_) = s else {
+    let direct = match s {
+        Surface::Procedural(pr) => pr.direct(),
+        _ => true,
+    };
+    if direct {
         let q = s.project(p);
         return (q, s.eval(q).distance(p));
-    };
+    }
     let newton = |mut uv: Point2| -> Option<(Point2, f64)> {
         for _ in 0..12 {
             let d = d1(s, uv);
@@ -1030,7 +1034,13 @@ struct LoopTrace<'a> {
     wind: [i64; 2],
 }
 
-fn trace_loop<'a>(body: &'a Body, s: &Surface, lp: LoopId, rel: f64) -> Result<LoopTrace<'a>, &'static str> {
+fn trace_loop<'a>(
+    body: &'a Body,
+    s: &Surface,
+    lp: LoopId,
+    rel: f64,
+    sigma: f64,
+) -> Result<LoopTrace<'a>, &'static str> {
     let per = periods(s);
     let cos: Vec<CoedgeId> = body.lp(lp).coedges().collect();
     let sing: Vec<bool> = cos
@@ -1045,6 +1055,7 @@ fn trace_loop<'a>(body: &'a Body, s: &Surface, lp: LoopId, rel: f64) -> Result<L
     let mut runs: Vec<Vec<Piece<'a>>> = Vec::new();
     let mut jumps = Vec::new();
     let mut prev: Option<[f64; 2]> = None;
+    let mut rise = 0.0;
     let mut seed: Option<Point2> = None;
     let jump = |a: [f64; 2], b: [f64; 2]| {
         let d = [
@@ -1067,13 +1078,27 @@ fn trace_loop<'a>(body: &'a Body, s: &Surface, lp: LoopId, rel: f64) -> Result<L
                 if fresh && j == 0 && sing[k] {
                     jumps.extend(jump(r, pc.n[0].uv));
                 }
+                let across = fresh && j == 0 && sing[k] && per[0].is_some() && rise != 0.0;
                 for a in 0..2 {
-                    let d = near(pc.n[0].uv[a], r[a], per[a]) - pc.n[0].uv[a];
+                    let mut at = near(pc.n[0].uv[a], r[a], per[a]);
+                    // through a pole the angle jumps, and which way is the face's side: walking
+                    // up v with the face on the left, the next stretch lies at a lesser angle
+                    if across && a == 0 && (at - r[0]).abs() > 1e-9 {
+                        let p = per[0].expect("just checked");
+                        let want_less = rise * sigma > 0.0;
+                        if want_less && at > r[0] {
+                            at -= p;
+                        } else if !want_less && at < r[0] {
+                            at += p;
+                        }
+                    }
+                    let d = at - pc.n[0].uv[a];
                     if d != 0.0 {
                         pc.n.iter_mut().for_each(|q| q.uv[a] += d);
                     }
                 }
             }
+            rise = pc.n[pc.n.len() - 1].uv[1] - pc.n[0].uv[1];
             prev = Some(pc.n[pc.n.len() - 1].uv);
             runs.last_mut().expect("a run").push(pc);
         }
@@ -1929,7 +1954,7 @@ fn face_integrals(body: &Body, f: FaceId, c: Point3, size: f64, rel: f64) -> Res
     let loops: Vec<LoopTrace> = face
         .loops
         .iter()
-        .map(|&l| trace_loop(body, s, l, rel))
+        .map(|&l| trace_loop(body, s, l, rel, sigma))
         .collect::<Result<_, _>>()?;
     let per = periods(s);
     let wind = |a: usize| loops.iter().map(|l| l.wind[a]).sum::<i64>();

@@ -212,6 +212,11 @@ pub trait Procedural: Send + Sync + std::fmt::Debug {
     fn as_any(&self) -> Option<&dyn std::any::Any> {
         None
     }
+    /// Whether `project` is exact and cheap, so a walk along a curve on the surface needs no Newton
+    /// steps from the point before (which past a pole could land on the far side of the axis).
+    fn direct(&self) -> bool {
+        false
+    }
     /// That no point of its domain is singular.
     fn regular(&self) -> bool {
         false

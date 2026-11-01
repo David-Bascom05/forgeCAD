@@ -73,6 +73,14 @@ impl Spun {
             poles,
         })
     }
+    /// The surface reflected, `frame` being the mirror image of its frame with y negated: every
+    /// angle runs the other way, the section and the sense of its normal stay.
+    pub fn reflected(&self, frame: Frame) -> Spun {
+        let mut s = self.clone();
+        s.id = fresh_id();
+        s.frame = frame;
+        s
+    }
     pub fn surface(self) -> Surface {
         Surface::Procedural(Proc(Arc::new(self)))
     }
@@ -186,6 +194,9 @@ impl Procedural for Spun {
     }
     fn regular(&self) -> bool {
         !self.poles
+    }
+    fn direct(&self) -> bool {
+        true
     }
     fn as_any(&self) -> Option<&dyn std::any::Any> {
         Some(self)

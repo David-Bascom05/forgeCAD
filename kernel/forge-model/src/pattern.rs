@@ -312,9 +312,12 @@ fn curve(m: &Motion, c: &Curve) -> Result<Curve, PatternError> {
             c.sag,
         ))),
         Curve::Procedural(_) => {
-            return Err(PatternError::Unsupported(
-                "mirroring a curve built by construction",
-            ));
+            let Some(c) = forge_geom::spline::spline_of(c) else {
+                return Err(PatternError::Unsupported(
+                    "mirroring a curve built by construction",
+                ));
+            };
+            forge_geom::spline::SplineCurve::curve(std::sync::Arc::new(c.c.mapped(|p| m.point(p))), c.dom)
         }
     })
 }
@@ -349,9 +352,16 @@ fn surface(m: &Motion, s: &Surface) -> Result<Surface, PatternError> {
             Surface::Torus(c)
         }
         Surface::Procedural(_) => {
-            return Err(PatternError::Unsupported(
-                "mirroring a surface built by construction",
-            ));
+            use forge_geom::spline::meet::{extruded, spun};
+            if let Some(e) = extruded(s) {
+                e.reflected(m.frame(e.frame(), true)).surface()
+            } else if let Some(r) = spun(s) {
+                r.reflected(m.frame(r.frame(), true)).surface()
+            } else {
+                return Err(PatternError::Unsupported(
+                    "mirroring a surface built by construction",
+                ));
+            }
         }
     })
 }

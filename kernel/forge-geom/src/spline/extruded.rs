@@ -126,6 +126,19 @@ impl Extruded {
     pub fn reach(&self) -> Interval {
         self.ext
     }
+    /// The wall reflected, `frame` being the mirror image of its frame with y negated: the section
+    /// has its y negated and runs the other way, so the natural normal is the old one reflected.
+    pub fn reflected(&self, frame: Frame) -> Extruded {
+        let c = self.c.mapped(|p| Point3::new(p.x, -p.y, p.z)).reversed();
+        let mut s = self.clone();
+        s.id = fresh_id();
+        s.frame = frame;
+        s.c = Arc::new(c);
+        let d = self.c.domain();
+        s.ext = Interval::new(d.lo + d.hi - self.ext.hi, d.lo + d.hi - self.ext.lo);
+        s.whole = s.c.bbox(s.ext);
+        s
+    }
     /// The bottom-up curve of the section at height v, in world coordinates.
     pub fn at_height(&self, v: f64) -> Spline {
         let f = self.frame.with_origin(self.frame.origin + self.frame.z() * v);
