@@ -335,7 +335,7 @@ impl Proto {
         // the seam runs across the direction the rims wind in
         let dir = usize::from(w.0 == 0);
         let s = self.faces[f].surface.clone();
-        let va = self.start_of(self.faces[f].loops[a][0]);
+        let va = self.seam_start(f, a, b, dir, &s);
         let uva = s.project(self.verts[va].0);
         let at = if dir == 0 { uva.x } else { uva.y };
         let Some(vb) = self.pick_vertex_on(f, b, dir, at) else {
@@ -357,6 +357,51 @@ impl Proto {
         self.faces[f].loops.remove(hi);
         self.faces[f].loops[lo] = joined;
         Ok(())
+    }
+
+    /// Where on rim `a` a seam can start: at a vertex whose parameter no edge of either rim runs
+    /// along (a seam lying on a slot's side would double back on it), or the middle of the rim's
+    /// longest edge.
+    fn seam_start(&mut self, f: usize, a: usize, b: usize, dir: usize, s: &Surface) -> usize {
+        let param = |p: &Proto, v: usize| {
+            let q = s.project(p.verts[v].0);
+            if dir == 0 { q.x } else { q.y }
+        };
+        let period = {
+            let d = s.domain();
+            (if dir == 0 { d.u.period } else { d.v.period }).unwrap_or(dmath::TAU)
+        };
+        let same = |x: f64, y: f64| {
+            let r = (x - y) / period;
+            ((r - r.round()) * period).abs() <= 1e-7
+        };
+        let along = |p: &Proto, l: usize, at: f64| {
+            p.faces[f].loops[l].iter().any(|&u| {
+                let e = &p.edges[u.0];
+                e.start != e.end && same(param(p, e.start), at) && same(param(p, e.end), at)
+            })
+        };
+        let rim = self.faces[f].loops[a].clone();
+        for &u in &rim {
+            let v = self.start_of(u);
+            let at = param(self, v);
+            if !along(self, a, at) && !along(self, b, at) {
+                return v;
+            }
+        }
+        // the edge that moves furthest round, cut at its middle
+        let mut best = (rim[0].0, -1.0_f64);
+        for &u in &rim {
+            let e = &self.edges[u.0];
+            let (x, y) = (param(self, e.start), param(self, e.end));
+            let r = (x - y) / period;
+            let moved = if e.start == e.end { period } else { ((r - r.round()) * period).abs() };
+            if moved > best.1 {
+                best = (u.0, moved);
+            }
+        }
+        let t = self.edges[best.0].range.mid();
+        self.split_edge(best.0, t)
     }
 
     /// One rim: a seam to the pole beyond it, on the face's side.
