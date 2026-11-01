@@ -147,6 +147,7 @@ pub fn chamfer(body: &Body, edges: &[Name], size: ChamferSize, feature: u64) -> 
         corner_path: HashMap::new(),
         cap: HashMap::new(),
         patches: Vec::new(),
+        gone: Vec::new(),
     };
     for &v in &affected {
         w.vertex(&src, &bevels, &bevel_of, v, &corners[&v], root)?;
@@ -185,10 +186,10 @@ pub fn chamfer(body: &Body, edges: &[Name], size: ChamferSize, feature: u64) -> 
                 what: "a closed edge cut open at its vertex",
             });
         }
-        if moved {
+        if moved && !w.gone.contains(&e) {
             w.fit_e.push(e);
         }
-        if bevel_of.contains_key(&e) {
+        if bevel_of.contains_key(&e) || w.gone.contains(&e) {
             w.out.edges[e.index()].alive = false;
         }
     }
@@ -202,7 +203,9 @@ pub fn chamfer(body: &Body, edges: &[Name], size: ChamferSize, feature: u64) -> 
                     Some(&ce) => ce,
                     None => co.edge,
                 };
-                uses.push((e, co.forward));
+                if !w.gone.contains(&e) {
+                    uses.push((e, co.forward));
+                }
                 if let Some(p) = w.corner_path.get(&c) {
                     uses.extend(p.iter().copied());
                 }
@@ -245,6 +248,8 @@ pub fn chamfer(body: &Body, edges: &[Name], size: ChamferSize, feature: u64) -> 
         w.out.add_loop(p, &uses);
     }
 
+    // a chamfer that took an edge whole and left a body that isn't one is still too large
+    let took = w.gone.first().map(|&e| src.edge(e).name);
     let Work {
         mut out,
         solve_v,
@@ -273,6 +278,9 @@ pub fn chamfer(body: &Body, edges: &[Name], size: ChamferSize, feature: u64) -> 
     if let Some((a, _)) = crossing(&out, &flagged) {
         return Err(ChamferError::Overflows { face: a });
     }
+    if let (false, Some(edge)) = (problems.is_empty(), took) {
+        return Err(ChamferError::TooLarge { edge });
+    }
     if !problems.is_empty() {
         return Err(ChamferError::Invalid(problems));
     }
@@ -293,6 +301,8 @@ struct Work {
     cap: HashMap<End, (FaceId, Path)>,
     /// Corner patches and their edges in order round them.
     patches: Vec<(FaceId, [EdgeId; 3])>,
+    /// Untouched edges the chamfer reaches the far end of: gone, that end the corner.
+    gone: Vec<EdgeId>,
 }
 
 fn reverse(p: &[(EdgeId, bool)]) -> Path {
@@ -468,8 +478,24 @@ impl Work {
                 let bi = bev[i0].expect("chamfered");
                 let (e, at) = ends[i0];
                 let c = &bevels[bi].surface;
-                let p = self.vertex_at(along(ends[i1], c)?, name("v"));
-                let q = self.vertex_at(along(ends[i2], c)?, name("v"));
+                // the plane through an untouched edge's far vertex takes the whole edge: that vertex is
+                // the corner (a chamfer beside an earlier one of the same size), unless it moves too
+                let mut corner = |end: End, name: Name| -> Result<VertexId, ChamferError> {
+                    let x = along(end, c)?;
+                    let edge = src.edge(end.0);
+                    let far = if end.1 { edge.end } else { edge.start };
+                    let fixed = !bevels.iter().any(|b| {
+                        let be = src.edge(b.edge);
+                        be.start == far || be.end == far
+                    });
+                    if fixed && far != v && x.distance(src.vertex(far).point) <= tol::LINEAR {
+                        self.gone.push(end.0);
+                        return Ok(far);
+                    }
+                    Ok(self.vertex_at(x, name))
+                };
+                let p = corner(ends[i1], name("v"))?;
+                let q = corner(ends[i2], name("v"))?;
                 self.end_vertex.insert(ends[i1], p);
                 self.end_vertex.insert(ends[i2], q);
                 self.contact.insert((e, at, f[i0]), q);

@@ -960,3 +960,18 @@ chamfer 1 (edges near 22.5 15 10)
     let m = v.mass().expect("a mass").volume;
     assert!((m - 6244.40983).abs() < 1e-4, "{m}");
 }
+
+/// A chamfer beside an earlier one of the same size: its plane runs through the far end of the edge the first
+/// left at the corner, so that edge goes and its far vertex is the corner (was TooLarge, an edge of length 0).
+/// By hand: 1000 - 5 - (5 - 1/3), each cut 1/2 x 10, less the 1/3 the two share.
+#[test]
+fn a_chamfer_beside_an_equal_one_takes_the_short_edge_between() {
+    let mut v = Model::new(
+        "extrude 10 rect 0 0 10 10\nchamfer 1 (edges near 5 0 10)\nchamfer 1 (edges near 10 5 10)\n",
+    );
+    assert!(v.error.is_none(), "{:?}", v.error.as_ref().map(|e| &e.msg));
+    let b = v.body().expect("a body");
+    assert!(forge_topo::check(b).is_empty(), "{:?}", forge_topo::check(b));
+    let m = v.mass().expect("a mass").volume;
+    assert!((m - (990.0 + 1.0 / 3.0)).abs() < 1e-6, "{m}");
+}
