@@ -94,7 +94,8 @@ fn edits(b: &forge_topo::Body, vol: f64) -> String {
             .windows(2)
             .map(|w| w[0].distance(w[1]))
             .sum::<f64>();
-        let r = (0.2 * len).min(0.05 * small).max(1e-3);
+        // a size that means something beside the edge's own error
+        let r = (0.2 * len).min(0.05 * small).max(20.0 * x.tol);
         let dir = x.curve.deriv(x.range.mid()).d1.normalize().unwrap_or(UnitVec3::Z);
         let z = dir.any_perpendicular();
         let near = trial(vol, move || {
@@ -170,23 +171,23 @@ fn main() {
             }
         };
         let mut bx = "null".to_string();
-        if !flag("--no-box") {
-            if let Ok(m) = tessellate(
+        if !flag("--no-box")
+            && let Ok(m) = tessellate(
                 &s.body,
                 &Quality {
-                    chord: 0.05,
+                    chord: (2e-4 * s.body.faces_box().diagonal()).min(0.05),
                     ..Quality::default()
                 },
-            ) {
-                let (mut lo, mut hi) = ([f64::INFINITY; 3], [f64::NEG_INFINITY; 3]);
-                for p in &m.positions {
-                    for (k, c) in [p.x, p.y, p.z].into_iter().enumerate() {
-                        lo[k] = lo[k].min(c);
-                        hi[k] = hi[k].max(c);
-                    }
+            )
+        {
+            let (mut lo, mut hi) = ([f64::INFINITY; 3], [f64::NEG_INFINITY; 3]);
+            for p in &m.positions {
+                for (k, c) in [p.x, p.y, p.z].into_iter().enumerate() {
+                    lo[k] = lo[k].min(c);
+                    hi[k] = hi[k].max(c);
                 }
-                bx = format!("[{},{},{},{},{},{}]", lo[0], lo[1], lo[2], hi[0], hi[1], hi[2]);
             }
+            bx = format!("[{},{},{},{},{},{}]", lo[0], lo[1], lo[2], hi[0], hi[1], hi[2]);
         }
         let mut ed = String::new();
         if flag("--edit") && kinds.is_empty() && vol.is_finite() && vol > 0.0 {

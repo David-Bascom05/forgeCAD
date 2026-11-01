@@ -431,6 +431,7 @@ impl Proto {
     /// intersection curve through the file's points pulled onto both. Faces that touch along
     /// the edge have no such curve, and it stays as it is. A file's error shifts the edge by no
     /// more than that error, and `limit` bounds it.
+    #[allow(clippy::needless_range_loop)]
     pub fn tighten(&mut self, limit: f64) {
         let adj = self.faces_of_edges();
         for e in 0..self.edges.len() {
@@ -469,8 +470,7 @@ impl Proto {
         }
         let mut gone = vec![false; self.edges.len()];
         let mut any = false;
-        for e in 0..self.edges.len() {
-            let ed = &self.edges[e];
+        for (e, ed) in self.edges.iter().enumerate() {
             let (a, b) = (find(&mut merged, ed.start), find(&mut merged, ed.end));
             if a == b && ed.start != ed.end {
                 gone[e] = true;
@@ -614,10 +614,10 @@ impl Proto {
                 return false;
             };
             let g = if g.dot(d.d1) < 0.0 { -g } else { g };
-            if let Some(&q) = pts.last() {
-                if g.dot(p - q) <= 0.0 {
-                    return false;
-                }
+            if let Some(&q) = pts.last()
+                && g.dot(p - q) <= 0.0
+            {
+                return false;
             }
             pts.push(p);
             tans.push(g);

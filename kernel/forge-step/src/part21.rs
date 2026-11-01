@@ -321,17 +321,16 @@ impl<'a> P<'a> {
             };
             match w {
                 b"FILE_SCHEMA" => {
-                    if let Some(Value::List(a, n)) = args.first() {
-                        if let Some(v) = self
+                    if let Some(Value::List(a, n)) = args.first()
+                        && let Some(v) = self
                             .f
                             .values
                             .get(*a as usize..(*a + *n) as usize)
                             .and_then(|r| r.first())
-                        {
-                            let s = text(v);
-                            let name = s.split(|c: char| c == ' ' || c == '{').next().unwrap_or("");
-                            self.f.schema = name.to_ascii_uppercase();
-                        }
+                    {
+                        let s = text(v);
+                        let name = s.split([' ', '{']).next().unwrap_or("");
+                        self.f.schema = name.to_ascii_uppercase();
                     }
                 }
                 b"FILE_NAME" => {

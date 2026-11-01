@@ -45,6 +45,7 @@ struct Seeds {
     scale: (f64, f64),
 }
 
+#[allow(clippy::needless_range_loop)]
 /// The live basis functions at `t` and their first two derivatives, from Cox and de Boor's
 /// recurrence: `out[d][j]` is derivative d of function `span - p + j`.
 fn basis(knots: &[f64], p: usize, span: usize, t: f64, out: &mut [[f64; MAX_DEGREE + 1]; 3]) {
@@ -68,8 +69,8 @@ fn basis(knots: &[f64], p: usize, span: usize, t: f64, out: &mut [[f64; MAX_DEGR
         }
         ndu[j][j] = saved;
     }
-    for j in 0..=p {
-        out[0][j] = ndu[j][p];
+    for (o, n) in out[0].iter_mut().zip(ndu.iter()).take(p + 1) {
+        *o = n[p];
     }
     // N'[i, k] = k (N[i, k - 1] / (u[i + k] - u[i]) - N[i + 1, k - 1] / (u[i + k + 1] - u[i + 1]));
     // the second derivative is the same over the degree below's first derivatives

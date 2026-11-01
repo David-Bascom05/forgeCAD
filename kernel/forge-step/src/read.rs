@@ -100,6 +100,9 @@ struct Reader<'a> {
 
 const MAX_WRAP: u32 = 16;
 
+/// A curve as degree, knots, points and weights.
+type Net = (usize, Vec<f64>, Vec<Point3>, Vec<f64>);
+
 fn kw<'x>(f: &File<'x>, id: u32) -> Option<&'x str> {
     let r = f.records_of(id)?;
     Some(f.name(r.first()?))
@@ -117,6 +120,10 @@ fn number(f: &File, v: &Value) -> Option<f64> {
         Value::Typed(_, at) => f.values.get(at as usize).and_then(|x| number(f, x)),
         _ => None,
     }
+}
+
+fn positive(x: f64) -> bool {
+    x > 0.0
 }
 
 fn enum_of<'x>(f: &File<'x>, v: &Value) -> Option<&'x str> {
@@ -368,7 +375,7 @@ impl<'a> Reader<'a> {
         if has("BEZIER_") {
             if n != deg + 1 {
                 // pieces of `deg` joined end to end
-                if (n - 1) % deg != 0 {
+                if !(n - 1).is_multiple_of(deg) {
                     return refuse(id, kind, "a Bezier with the wrong number of points");
                 }
                 let mut k = vec![0.0; deg + 1];
@@ -424,9 +431,7 @@ impl<'a> Reader<'a> {
         let base = rs.iter().find(|r| {
             let n = f.name(r);
             n == "B_SPLINE_CURVE"
-                || (rs.len() == 1
-                    && n.starts_with(|c: char| c == 'B' || c == 'U' || c == 'Q')
-                    && n.ends_with("_CURVE")
+                || (rs.len() == 1 && n.starts_with(['B', 'U', 'Q']) && n.ends_with("_CURVE")
                     || n == "B_SPLINE_CURVE_WITH_KNOTS")
         });
         let Some(base) = base else {
@@ -523,7 +528,7 @@ impl<'a> Reader<'a> {
                 let a = self.args_of(id, "CIRCLE")?;
                 let frame = self.placement(self.reference(id, "CIRCLE", a.get(1))?)?;
                 let radius = self.real(id, "CIRCLE", a.get(2))? * m;
-                if !(radius > 0.0) {
+                if !positive(radius) {
                     return refuse(id, "CIRCLE", "radius not positive");
                 }
                 Ok(Curve::Circle(Circle { frame, radius }))
@@ -535,7 +540,7 @@ impl<'a> Reader<'a> {
                     self.real(id, "ELLIPSE", a.get(2))? * m,
                     self.real(id, "ELLIPSE", a.get(3))? * m,
                 );
-                if !(major > 0.0 && minor > 0.0) {
+                if !(positive(major) && positive(minor)) {
                     return refuse(id, "ELLIPSE", "a semi-axis not positive");
                 }
                 Ok(Curve::Ellipse(Ellipse { frame, major, minor }))
@@ -556,7 +561,7 @@ impl<'a> Reader<'a> {
                     self.real(id, "HYPERBOLA", a.get(2))? * m,
                     self.real(id, "HYPERBOLA", a.get(3))? * m,
                 );
-                if !(x > 0.0 && y > 0.0) {
+                if !(positive(x) && positive(y)) {
                     return refuse(id, "HYPERBOLA", "a semi-axis not positive");
                 }
                 Ok(Curve::Hyperbola(Hyperbola { frame, a: x, b: y }))
@@ -617,7 +622,7 @@ impl<'a> Reader<'a> {
                 let a = self.args_of(id, name)?;
                 let frame = self.placement(self.reference(id, name, a.get(1))?)?;
                 let radius = self.real(id, name, a.get(2))? * m;
-                if !(radius > 0.0) {
+                if !positive(radius) {
                     return refuse(id, name, "radius not positive");
                 }
                 Ok(Surface::Cylinder(Cylinder { frame, radius }))
@@ -636,7 +641,7 @@ impl<'a> Reader<'a> {
                 let a = self.args_of(id, name)?;
                 let frame = self.placement(self.reference(id, name, a.get(1))?)?;
                 let radius = self.real(id, name, a.get(2))? * m;
-                if !(radius > 0.0) {
+                if !positive(radius) {
                     return refuse(id, name, "radius not positive");
                 }
                 Ok(Surface::Sphere(Sphere { frame, radius }))
@@ -648,10 +653,10 @@ impl<'a> Reader<'a> {
                     self.real(id, name, a.get(2))? * m,
                     self.real(id, name, a.get(3))? * m,
                 );
-                if name == "TOROIDAL_SURFACE" {
-                    if let Some(t) = Torus::new(frame, major, minor) {
-                        return Ok(Surface::Torus(t));
-                    }
+                if name == "TOROIDAL_SURFACE"
+                    && let Some(t) = Torus::new(frame, major, minor)
+                {
+                    return Ok(Surface::Torus(t));
                 }
                 // a spindle torus: its outer or inner part, a circle turned about the axis
                 let outer = a.get(4).and_then(|v| logical(f, v)).unwrap_or(true);
@@ -739,7 +744,7 @@ impl<'a> Reader<'a> {
 
     /// A curve's control net, or the error, for surfaces built by moving it. Conics become
     /// rational splines (exact) through `Spline::ellipse`; a line, two points.
-    fn generator(&mut self, id: u32, kind: &str, curve: u32) -> R<(usize, Vec<f64>, Vec<Point3>, Vec<f64>)> {
+    fn generator(&mut self, id: u32, kind: &str, curve: u32) -> R<Net> {
         let c = self.curve(curve)?;
         match &c {
             Curve::Line(l) => {
@@ -809,13 +814,7 @@ impl<'a> Reader<'a> {
     }
 
     /// `pts` with weights turned about an axis by rational quadratic quarter-turns.
-    fn turned(
-        &self,
-        id: u32,
-        kind: &str,
-        axis: (Point3, Vec3),
-        (deg, knots, pts, w): (usize, Vec<f64>, Vec<Point3>, Vec<f64>),
-    ) -> R<Surface> {
+    fn turned(&self, id: u32, kind: &str, axis: (Point3, Vec3), (deg, knots, pts, w): Net) -> R<Surface> {
         let (o, z) = axis;
         // nine points round: four quarters, weights 1 and sqrt(1/2)
         let s = 0.5_f64.sqrt();
@@ -879,7 +878,7 @@ impl<'a> Reader<'a> {
 
     /// The spindle torus's outer or inner arc of its tube turned about the axis.
     fn spindle(&self, id: u32, name: &str, frame: Frame, major: f64, minor: f64, outer: bool) -> R<Surface> {
-        if !(minor > 0.0) {
+        if !positive(minor) {
             return refuse(id, name, "minor radius not positive");
         }
         if major > minor + forge_math::tol::MIN_LENGTH {
@@ -907,7 +906,7 @@ impl<'a> Reader<'a> {
 }
 
 /// A spline's Bezier pieces as a clamped B-spline's knots, points and weights.
-fn net_of(s: &Spline) -> (usize, Vec<f64>, Vec<Point3>, Vec<f64>) {
+fn net_of(s: &Spline) -> Net {
     let (deg, breaks, h) = s.bezier_data();
     let mut knots = vec![breaks[0]; deg + 1];
     for b in &breaks[1..breaks.len() - 1] {
