@@ -4,7 +4,7 @@
 //! a seam meant to be smooth share a normal.
 
 use forge_bool::{Index, Where};
-use forge_geom::{CurveGeom, Surface, SurfaceGeom};
+use forge_geom::{Curve, CurveGeom, Surface, SurfaceGeom};
 use forge_math::rng::Rng;
 use forge_math::{Point2, Point3, UnitVec3, Vec3};
 use forge_topo::{Body, EdgeId, FaceId, Name};
@@ -301,6 +301,74 @@ fn spine_near(s: &Surface, p: Point3) -> Option<Point3> {
         Surface::Sphere(sp) => Some(sp.frame.origin),
         _ => None,
     }
+}
+
+/// Where a new round's rim passes along an old face that runs on into its ball: the ball rests on
+/// that rim only where the face beyond falls away from it. A rim is an edge along the round (a line
+/// down a cylinder, a circle round a torus); the face beyond is asked a step in from it.
+pub fn ridges(before: &Body, after: &Body) -> Vec<Point3> {
+    let old: std::collections::BTreeSet<_> = before.face_ids().map(|f| before.face(f).name).collect();
+    let mut out = Vec::new();
+    for f in after.face_ids() {
+        let face = after.face(f);
+        let radius = match &face.surface {
+            Surface::Cylinder(c) => c.radius,
+            Surface::Torus(t) => t.minor,
+            _ => continue,
+        };
+        if old.contains(&face.name) {
+            continue;
+        }
+        for &lp in &face.loops {
+            for c in after.lp(lp).coedges() {
+                let e = after.coedge(c).edge;
+                let x = after.edge(e);
+                let along = match (&face.surface, &x.curve) {
+                    (Surface::Cylinder(s), Curve::Line(k)) => {
+                        k.dir.get().cross(s.frame.z().get()).length() < 1e-9
+                    }
+                    (Surface::Torus(s), Curve::Circle(k)) => {
+                        k.frame.z().get().cross(s.frame.z().get()).length() < 1e-9
+                    }
+                    _ => false,
+                };
+                let Some(other) = after.partner(c).map(|p| (p, after.coedge_face(p))) else {
+                    continue;
+                };
+                if !along || after.face(other.1).surface == face.surface {
+                    continue;
+                }
+                let d = x.curve.deriv(x.range.mid());
+                let Some(centre) = spine_near(&face.surface, d.p) else {
+                    continue;
+                };
+                let s = &after.face(other.1).surface;
+                let Some(n) = after.face_normal(other.1, s.project(d.p)) else {
+                    continue;
+                };
+                let Some(walk) = d.d1.normalize() else {
+                    continue;
+                };
+                // a face lies to the left of its coedge, seen from outside
+                let sign = if after.coedge(other.0).forward { 1.0 } else { -1.0 };
+                let step = 1e-3 * radius;
+                let q = d.p + n.get().cross(walk.get()) * (sign * step);
+                let on = s.eval(s.project(q));
+                // the centre on the ball's own side of that face: in the material for a convex round
+                let Some(own) = after.face_normal(f, face.surface.project(d.p)) else {
+                    continue;
+                };
+                let convex = own.get().dot(d.p - centre) > 0.0;
+                let above = (centre - on).dot(n.get());
+                if (if convex { above < 0.0 } else { above > 0.0 })
+                    && on.distance(centre) < radius - 1e-2 * step
+                {
+                    out.push(d.p);
+                }
+            }
+        }
+    }
+    out
 }
 
 /// Random points near the blends of a fillet, each judged by the ball surfaces. A point the part

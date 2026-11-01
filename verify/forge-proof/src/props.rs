@@ -1054,6 +1054,13 @@ pub fn blend(part: &Part, seed: u64) -> Option<Finding> {
                 format!("feature {k}, sine {:e} at {:?}", a.worst_kink, a.kink_at),
             );
         }
+        if let Some(at) = crate::blends::ridges(&before, &after).first() {
+            return found(
+                "blend",
+                "a ball rests on a rim the face beyond runs into",
+                format!("feature {k}, at {at:?}"),
+            );
+        }
         let pts = crate::blends::points(&before, &after, 200, seed);
         if pts.wrong > 0 {
             return found(

@@ -556,6 +556,53 @@ fn every_fillet_holds_against_the_part_before_it() {
 /// A check never seen to fail proves nothing: each of the blend checks against a body made wrong
 /// in the way it is there to see.
 #[test]
+fn the_ridge_check_tells_a_ball_on_a_ridge_from_one_on_a_true_rim() {
+    use forge_proof::blends::ridges;
+    let body = |src: &str| {
+        let m = forge_agent::model::Model::new(src);
+        assert!(
+            m.error.is_none(),
+            "{src}: {:?}",
+            m.error.as_ref().map(|f| f.msg.clone())
+        );
+        m.body().expect("a body").clone()
+    };
+    // a ring of a shallow dome: wall, then short flats rising inward. An arc of radius 2 from the
+    // wall ends on the first ridge, with the ball's centre under the top: the next flat runs into it
+    let (wx, wy) = (31.7f64, 11.5f64);
+    let ridge = (31.26f64, 11.53f64);
+    let cy = ridge.1 - (4.0f64 - (ridge.0 - (wx - 2.0)) * (ridge.0 - (wx - 2.0))).sqrt();
+    let cx = wx - 2.0;
+    let rest = |from: (f64, f64)| {
+        format!(
+            "line {} {} 30 11.6 line 30 11.6 25 11.6 line 25 11.6 25 0 line 25 0 {wx} 0",
+            from.0, from.1
+        )
+    };
+    let sharp = format!(
+        "revolve z 0 0 1 x 1 0 0 at 0 0 0 axis 0 0 0 1 loop line {wx} 0 {wx} {wy} line {wx} {wy} {} {} {}\n",
+        ridge.0,
+        ridge.1,
+        rest(ridge)
+    );
+    let a1 = forge_math::dmath::atan2(ridge.1 - cy, ridge.0 - cx).to_degrees();
+    let rounded = format!(
+        "revolve z 0 0 1 x 1 0 0 at 0 0 0 axis 0 0 0 1 loop line {wx} 0 {wx} {cy} arc {cx} {cy} 2 0 {a1} {}\n",
+        rest(ridge)
+    );
+    let (before, after) = (body(&sharp), body(&rounded));
+    assert!(
+        !ridges(&before, &after).is_empty(),
+        "a ridge the next flat covers"
+    );
+    // past the wall's far side: a plate 1 thick, ball 2, its far face falling away
+    let plate = body("b: extrude 20 rect 0 0 1 30\n");
+    let m = forge_agent::model::Model::new("b: extrude 20 rect 0 0 1 30\nfillet 2 (edges near 0 15 20)\n");
+    let rim = m.body().expect("a ball past the wall").clone();
+    assert!(ridges(&plate, &rim).is_empty(), "a true rim");
+}
+
+#[test]
 fn the_blend_checks_fail_what_they_should() {
     use forge_math::Point3;
     use forge_ops::{FilletEdge, FilletOptions, Radius, fillet, fillet_with};
