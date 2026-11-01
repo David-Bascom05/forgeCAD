@@ -569,6 +569,9 @@ fn inside(p: Point2, poly: &[Point2]) -> bool {
 /// extrude's every joint: an arc's direction comes from the joint, its neighbour's end, without trig
 /// when it meets a line.)
 fn doubles_back(a: &Segment, b: &Segment) -> bool {
+    if matches!(a, Segment::Spline(_)) || matches!(b, Segment::Spline(_)) {
+        return false;
+    }
     let at = match (a, b) {
         (Segment::Line { b: p, .. }, _) => *p,
         (_, Segment::Line { a: p, .. }) => *p,
@@ -579,7 +582,7 @@ fn doubles_back(a: &Segment, b: &Segment) -> bool {
         match *s {
             Segment::Line { a, b } => b - a,
             Segment::Arc { center, sweep, .. } => (at - center).perp() * sweep.signum(),
-            Segment::Circle { .. } => Vec2::new(1.0, 0.0),
+            Segment::Circle { .. } | Segment::Spline(_) => Vec2::new(1.0, 0.0),
         }
     };
     let (u, v) = (dir(a), dir(b));
@@ -595,7 +598,7 @@ fn blunt_cusps(l: &ProfileLoop) -> ProfileLoop {
     let length = |s: &Segment| match *s {
         Segment::Line { a, b } => a.distance(b),
         Segment::Arc { radius, sweep, .. } => radius * sweep.abs(),
-        Segment::Circle { .. } => 0.0,
+        Segment::Circle { .. } | Segment::Spline(_) => 0.0,
     };
     // `s` along the segment back from its end, or on from its start
     let at = |seg: &Segment, end: bool, s: f64| -> Point2 {
@@ -614,6 +617,7 @@ fn blunt_cusps(l: &ProfileLoop) -> ProfileLoop {
                 arc_point(center, radius, if end { start + sweep - w } else { start + w })
             }
             Segment::Circle { center, .. } => center,
+            Segment::Spline(_) => unreachable!("curves are never doubled back here"),
         }
     };
     let cut = |seg: &Segment, end: bool, s: f64| -> Segment {
@@ -640,13 +644,13 @@ fn blunt_cusps(l: &ProfileLoop) -> ProfileLoop {
                     sweep: sweep - w,
                 }
             }
-            c => c,
+            ref c => c.clone(),
         }
     };
     let mut out = l.segments.clone();
     for i in 0..n {
         let j = (i + 1) % n;
-        let (a, b) = (out[i].0, out[j].0);
+        let (a, b) = (out[i].0.clone(), out[j].0.clone());
         if !doubles_back(&a, &b) {
             continue;
         }

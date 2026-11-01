@@ -38,7 +38,9 @@ fn ends_dir(s: &Segment) -> (Vec2, Vec2) {
             };
             (t(start), t(start + sweep))
         }
-        Segment::Circle { .. } => unreachable!("a circle is alone in its loop"),
+        Segment::Circle { .. } | Segment::Spline(_) => {
+            unreachable!("a circle is alone in its loop; curves are refused")
+        }
     }
 }
 
@@ -64,7 +66,9 @@ fn meet(a: &Segment, b: &Segment, d: f64, near: Point2) -> Option<Point2> {
             sweep,
             ..
         } => C::O(center, if sweep > 0.0 { radius - d } else { radius + d }),
-        Segment::Circle { .. } => unreachable!("a circle is alone in its loop"),
+        Segment::Circle { .. } | Segment::Spline(_) => {
+            unreachable!("a circle is alone in its loop; curves are refused")
+        }
     };
     let on_line = |p: Point2, t: Vec2, c: Point2, r: f64| {
         let f = p - c;
@@ -141,6 +145,7 @@ fn offset(segs: &[(Segment, u64)], d: f64) -> Option<Vec<Moved>> {
     for i in 0..n {
         let (p, q) = (joints[i], joints[(i + 1) % n]);
         out.push(match segs[i].0 {
+            Segment::Spline(_) => unreachable!("curves are refused"),
             Segment::Line { a, b } => {
                 let t = unit(b - a);
                 Moved {
@@ -215,6 +220,7 @@ fn next_event(p: &Profile, sign: f64, reach: f64) -> Option<f64> {
 
 fn wall(s: &Segment, frame: &Frame) -> (Surface, bool, Curve, Interval, bool) {
     match *s {
+        Segment::Spline(_) => unreachable!("curves are refused"),
         Segment::Line { a, b } => {
             let (pa, pb) = (frame.plane_point(a), frame.plane_point(b));
             let line = Line::through(pa, pb).expect("a line of some length");
@@ -393,6 +399,7 @@ fn slab(p: &Profile, d: f64, h: f64, angle: f64, root: Name) -> Result<Body, Tap
 /// The solids of a tapered extrude, to be joined: `angle` leans the sides in going up (negative:
 /// out), the profile as drawn at the sketch.
 pub fn tapered(profile: &Profile, distance: f64, angle: f64, feature: u64) -> Result<Vec<Body>, TaperError> {
+    crate::skin::curved(profile).map_err(|e| TaperError::Extrude(ExtrudeError::Profile(e)))?;
     let b = extrude(profile, distance, feature).map_err(TaperError::Extrude)?;
     let root = Name::feature(feature);
     let caps = [root.with_str("start"), root.with_str("end")];
@@ -447,7 +454,7 @@ pub fn tapered(profile: &Profile, distance: f64, angle: f64, feature: u64) -> Re
                 .iter()
                 .zip(&l.segments)
                 .filter(|(x, _)| x.length > 2.0 * GONE)
-                .map(|(x, s)| (x.seg, s.1))
+                .map(|(x, s)| (x.seg.clone(), s.1))
                 .collect();
             if kept.is_empty() {
                 continue;

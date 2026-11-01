@@ -678,7 +678,7 @@ impl Spline {
             }
             if ds
                 .windows(2)
-                .any(|w| w[0].dot(w[1]) < 0.0 && w[0].length().min(w[1].length()) < 0.05 * size)
+                .any(|w| w[0].dot(w[1]) < 0.0 && w[0].length().min(w[1].length()) < 1e-3 * size)
             {
                 return false;
             }
