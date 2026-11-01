@@ -670,3 +670,39 @@ extrude add 20 z 0 0 1 x 1 0 0 at -50 0 0 circle 50 0 47 circle 50 0 30
 ",
     );
 }
+
+/// Two opened faces side by side: the rims end along the edge they share. A square tube's corner
+/// cut open, against its closed form.
+#[test]
+fn a_shell_with_two_opened_faces_side_by_side() {
+    let v = builds(
+        "extrude 16 rect -10 -10 20 20
+shell 2 (faces plane normal +z) (faces plane normal +x)
+",
+    );
+    let want = 20.0 * 20.0 * 16.0 - 18.0 * 16.0 * 14.0;
+    assert!((v - want).abs() < 1e-3 * want, "{v} vs {want}");
+}
+
+/// A block with every edge rounded, its top opened: the walls leave the top tangentially, so the
+/// offsets never reach it, and they end in strips square to it, one wall thick.
+#[test]
+fn a_shell_opening_a_face_its_neighbours_leave_tangentially() {
+    let v = builds(
+        "extrude 40 rect 0 0 100 60
+fillet 5 (edges)
+shell 2 (faces plane normal +z)
+",
+    );
+    // the skin's area less the opening, times the wall, about
+    assert!(v > 0.0, "{v}");
+    // a rod's rounded end, its other end opened: the circle between tangent faces moves with them
+    let pi = std::f64::consts::PI;
+    let v = builds(
+        "extrude 30 at 0 0 0 circle 0 0 40
+fillet 20 (edges circle top)
+shell 5 (faces plane normal -z)
+",
+    );
+    assert!(v > 0.0 && v < pi * 1600.0 * 30.0 * 0.6, "{v}");
+}

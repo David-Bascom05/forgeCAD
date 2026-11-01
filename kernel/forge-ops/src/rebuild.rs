@@ -123,6 +123,12 @@ pub fn rebuild_some(body: &mut Body, verts: &[bool], edges: &[bool]) -> Result<(
                 .iter()
                 .filter(|s| !same_surface(s, a) && !same_surface(s, b))
                 .collect();
+            // all of them offset alike (a fillet with its neighbours): straight along the normal
+            let q = p0 - a.gradient(p0) * a.implicit(p0);
+            if cons.iter().all(|s| s.implicit(q).abs() <= 1e-2 * tol::LINEAR) {
+                p = q;
+                break;
+            }
             let (oc, or) = &old[e.index()];
             if let Some(q) = along_tangent(a, &rest, oc, *or, p0) {
                 p = q;
@@ -147,8 +153,8 @@ pub fn rebuild_some(body: &mut Body, verts: &[bool], edges: &[bool]) -> Result<(
         let closed = vs == ve;
         let a = body.face(fs[0]).surface.clone();
         let b = match fs.get(1) {
-            Some(&f) => body.face(f).surface.clone(),
-            None => meridian(&a, oc.eval(or.mid())).ok_or(RebuildError::Edge { edge: name })?,
+            Some(&f) => Some(body.face(f).surface.clone()),
+            None => meridian(&a, oc.eval(or.mid())),
         };
         if !closed && ps.distance(pe) <= tol::LINEAR {
             return Err(RebuildError::Collapsed { edge: name });
@@ -156,8 +162,11 @@ pub fn rebuild_some(body: &mut Body, verts: &[bool], edges: &[bool]) -> Result<(
         let shift = ps
             .distance(old_pts[vs.index()])
             .max(pe.distance(old_pts[ve.index()]));
-        let (curve, range) = edge_curve(&a, &b, &oc, or, ps, pe, closed, shift)
-            .or_else(|| moved_conic(&a, &b, &oc, ps, pe, closed))
+        // (a seam on a procedural surface round an axis has no meridian to meet)
+        let (curve, range) = b
+            .as_ref()
+            .and_then(|b| edge_curve(&a, b, &oc, or, ps, pe, closed, shift))
+            .or_else(|| moved_conic(&a, b.as_ref().unwrap_or(&a), &oc, ps, pe, closed))
             .ok_or(RebuildError::Edge { edge: name })?;
         // the edge must still run the way it did
         let (nd, od) = (curve.deriv(range.mid()).d1, oc.deriv(or.mid()).d1);

@@ -173,10 +173,6 @@ pub fn shell(
             return Err(ShellError::Collapses { face: face.name });
         }
         for (k, (&lo, &li)) in outer.face(fo).loops.iter().zip(&inner.face(fi).loops).enumerate() {
-            let pairs: Vec<_> = outer.lp(lo).coedges().zip(inner.lp(li).coedges()).collect();
-            if pairs.len() != outer.lp(lo).coedges().len() || pairs.len() != inner.lp(li).coedges().len() {
-                return Err(ShellError::Collapses { face: face.name });
-            }
             let mut wall = Rims {
                 out: &mut out,
                 shell,
@@ -187,28 +183,25 @@ pub fn shell(
                 inner,
                 name: face.name.with_name(root).with_str("rim").with(k as u64),
             };
-            if strip[f.index()] {
-                wall.strips(face, &pairs)?;
+            // edges the rim stops at: the other side of them is open too
+            let free: Vec<bool> = base
+                .lp(face.loops[k])
+                .coedges()
+                .map(|c| {
+                    let e = base.edge(base.coedge(c).edge);
+                    !e.coedges.iter().all(|&o| opened[base.coedge_face(o).index()])
+                })
+                .collect();
+            if !strip[f.index()] && free.iter().all(|&x| x) {
+                wall.band(face, lo, li, k)?;
                 continue;
             }
-            // edges the rim stops at: the other side of them is open too
-            let shared = |c: forge_topo::CoedgeId| {
-                let e = base.face_by_name(face.name).map(|g| {
-                    let at = base.face(g).loops[k];
-                    let i = pairs.iter().position(|p| p.0 == c).unwrap_or(0);
-                    base.coedge(base.lp(at).coedges().nth(i).expect("as many coedges"))
-                        .edge
-                });
-                e.is_some_and(|e| {
-                    base.edge(e)
-                        .coedges
-                        .iter()
-                        .all(|&o| opened[base.coedge_face(o).index()])
-                })
-            };
-            let free: Vec<bool> = pairs.iter().map(|p| !shared(p.0)).collect();
-            if free.iter().all(|&x| x) {
-                wall.band(face, &pairs, k)?;
+            let pairs: Vec<_> = outer.lp(lo).coedges().zip(inner.lp(li).coedges()).collect();
+            if pairs.len() != free.len() || outer.lp(lo).coedges().len() != inner.lp(li).coedges().len() {
+                return Err(ShellError::Collapses { face: face.name });
+            }
+            if strip[f.index()] {
+                wall.strips(face, &pairs)?;
             } else {
                 wall.runs(face, &pairs, &free)?;
             }
@@ -331,16 +324,33 @@ impl Rims<'_> {
     }
 
     /// A whole band on the face's own surface, between a loop on each skin.
-    fn band(&mut self, face: &forge_topo::Face, pairs: &[Pair], k: usize) -> Result<(), ShellError> {
+    fn band(
+        &mut self,
+        face: &forge_topo::Face,
+        lo: forge_topo::LoopId,
+        li: forge_topo::LoopId,
+        k: usize,
+    ) -> Result<(), ShellError> {
         let rim = self
             .out
             .add_face(self.shell, face.surface.clone(), face.same_sense, self.name);
-        let all: Vec<_> = pairs.iter().filter_map(|&p| self.uses(p)).collect();
-        if all.len() != pairs.len() {
-            return Err(ShellError::Collapses { face: face.name });
-        }
-        let front: Vec<_> = all.iter().map(|u| u.0).collect();
-        let back: Vec<_> = all.iter().rev().map(|u| (u.1.0, !u.1.1)).collect();
+        let uses = |b: &Body, l, map: &[Option<EdgeId>]| -> Option<Vec<(EdgeId, bool)>> {
+            b.lp(l)
+                .coedges()
+                .map(|c| {
+                    let co = b.coedge(c);
+                    Some((map[co.edge.index()]?, co.forward))
+                })
+                .collect()
+        };
+        let fail = || ShellError::Collapses { face: face.name };
+        let front = uses(self.outer, lo, self.emap_out).ok_or_else(fail)?;
+        let mut back: Vec<(EdgeId, bool)> = uses(self.inner, li, self.emap_in)
+            .ok_or_else(fail)?
+            .into_iter()
+            .map(|(e, fw)| (e, !fw))
+            .collect();
+        back.reverse();
         // the rim round a hole of the open face has the inner skin's loop outside
         if k == 0 {
             self.out.add_loop(rim, &front);
@@ -699,10 +709,12 @@ mod tests {
         let s = shell(&b, 1.0, false, &[top], 2).unwrap();
         assert_eq!(s.shells.len(), 1);
         // the corners vanish, but the hole's wall grows through the inner skin
-        assert!(matches!(
-            shell(&b, 5.0, false, &[top], 2),
-            Err(ShellError::SelfIntersecting { .. })
-        ));
+        let got = shell(&b, 5.0, false, &[top], 2);
+        assert!(
+            matches!(got, Err(ShellError::SelfIntersecting { .. })),
+            "{:?}",
+            got.map(|b| b.faces.len())
+        );
         assert!(shell(&b, 2.0, true, &[top], 2).is_ok());
     }
 
