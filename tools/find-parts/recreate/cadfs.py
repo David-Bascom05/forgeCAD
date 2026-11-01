@@ -1806,17 +1806,17 @@ class Thru:
         return Thru([m(q) for q in self.pts], m(self.d0), m(self.d1)).back()
 
     def text(self):
-        """Its Bezier pieces as an exact `spline`: the kernel's `thru` spaces its knots by the chord, Parasolid's by its root."""
-        h, ms = sketch2d.fit_tangents(self.pts, self.d0, self.d1)
-        ctrl, knots, at = [self.pts[0]], [0.0] * 4, 0.0
-        for i in range(len(self.pts) - 1):
-            p, q = self.pts[i], self.pts[i + 1]
-            ctrl.append((p[0] + h[i] * ms[0][i] / 3, p[1] + h[i] * ms[1][i] / 3))
-            ctrl.append((q[0] - h[i] * ms[0][i + 1] / 3, q[1] - h[i] * ms[1][i + 1] / 3))
-            ctrl.append(q)
-            at += h[i]
-            knots += [at] * (3 if i + 2 < len(self.pts) else 4)
-        return "spline 3 " + " ".join(f"{fine(a)} {fine(b)}" for a, b in ctrl) + " knots " + " ".join(fine(k) for k in knots)
+        """As `thru`: the kernel's fit is Parasolid's (centripetal, periodic when it closes). An end derivative here is per
+        the whole curve's parameter running 0..1; the kernel's parameter runs as long as the chords together."""
+        closed = len(self.pts) > 3 and math.dist(self.pts[0], self.pts[-1]) <= 1e-9
+        if closed and (self.d0 is not None or self.d1 is not None):
+            raise Unsupported("a closed fit spline with end derivatives")
+        length = sum(math.dist(p, q) for p, q in zip(self.pts, self.pts[1:]))
+        out = "thru " + " ".join(f"{fine(a)} {fine(b)}" for a, b in self.pts)
+        for word, d in (("from", self.d0), ("to", self.d1)):
+            if d is not None:
+                out += f" {word} {fine(d[0] / length)} {fine(d[1] / length)}"
+        return out
 
 
 def segs_of(arr, lp):

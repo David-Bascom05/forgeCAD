@@ -566,3 +566,174 @@ fn a_spatial_spine_turns_without_twist() {
         sp.end_turn(probe)
     );
 }
+
+type Bez = [(f64, f64); 4];
+
+/// A cubic's Bezier pieces, from its control form (each break to the degree).
+fn beziers(s: &Spline) -> Vec<Bez> {
+    let (_, _, p, _) = s.control_form();
+    (0..s.pieces())
+        .map(|i| std::array::from_fn(|k| (p[3 * i + k].x, p[3 * i + k].y)))
+        .collect()
+}
+
+fn halves(b: &Bez) -> (Bez, Bez) {
+    let m = |p: (f64, f64), q: (f64, f64)| ((p.0 + q.0) / 2.0, (p.1 + q.1) / 2.0);
+    let (a, c, e) = (m(b[0], b[1]), m(b[1], b[2]), m(b[2], b[3]));
+    let (f, g) = (m(a, c), m(c, e));
+    let h = m(f, g);
+    ([b[0], a, f, h], [h, g, e, b[3]])
+}
+
+fn boxes_apart(a: &Bez, b: &Bez) -> bool {
+    let bx = |z: &Bez, k: fn(&(f64, f64)) -> f64| {
+        z.iter()
+            .map(k)
+            .fold((f64::INFINITY, f64::NEG_INFINITY), |(lo, hi), v| {
+                (lo.min(v), hi.max(v))
+            })
+    };
+    let apart = |k: fn(&(f64, f64)) -> f64| {
+        let (x, y) = (bx(a, k), bx(b, k));
+        x.1 < y.0 || y.1 < x.0
+    };
+    apart(|p| p.0) || apart(|p| p.1)
+}
+
+/// Every hodograph control point of the pieces strictly on one side of a line through the
+/// origin: together they run one way along its normal, so they can't meet themselves again.
+fn one_way(pieces: &[&Bez]) -> bool {
+    let d: Vec<(f64, f64)> = pieces
+        .iter()
+        .flat_map(|b| (0..3).map(move |k| (b[k + 1].0 - b[k].0, b[k + 1].1 - b[k].1)))
+        .collect();
+    let s = d.iter().fold((0.0, 0.0), |a, v| {
+        let l = (v.0 * v.0 + v.1 * v.1).sqrt().max(1e-300);
+        (a.0 + v.0 / l, a.1 + v.1 / l)
+    });
+    d.iter().all(|v| v.0 * s.0 + v.1 * s.1 > 0.0)
+}
+
+/// Proven not to meet: boxes apart, or (`touching` at a's end and b's start) one way together.
+fn apart(a: &Bez, b: &Bez, touching: bool, depth: u32) -> bool {
+    if boxes_apart(a, b) || (touching && one_way(&[a, b])) {
+        return true;
+    }
+    if depth == 0 {
+        return false;
+    }
+    let ((a0, a1), (b0, b1)) = (halves(a), halves(b));
+    apart(&a0, &b0, false, depth - 1)
+        && apart(&a0, &b1, false, depth - 1)
+        && apart(&a1, &b1, false, depth - 1)
+        && apart(&a1, &b0, touching, depth - 1)
+}
+
+/// An open cubic proven never to cross itself: split into arcs that each run one way, then
+/// every pair of arcs apart.
+fn simple(s: &Spline) -> bool {
+    let mut arcs = Vec::new();
+    let mut todo: Vec<(Bez, u32)> = beziers(s).into_iter().rev().map(|b| (b, 20)).collect();
+    while let Some((b, d)) = todo.pop() {
+        if one_way(&[&b]) {
+            arcs.push(b);
+        } else if d == 0 {
+            return false;
+        } else {
+            let (x, y) = halves(&b);
+            todo.push((y, d - 1));
+            todo.push((x, d - 1));
+        }
+    }
+    (0..arcs.len()).all(|i| (i + 1..arcs.len()).all(|j| apart(&arcs[i], &arcs[j], j == i + 1, 24)))
+}
+
+/// What `through` gave before it was centripetal: the knots spaced by the distances themselves.
+fn by_the_chord(p: &[Point3]) -> Spline {
+    let n = p.len();
+    let mut t = vec![0.0; n];
+    for i in 1..n {
+        t[i] = t[i - 1] + p[i].distance(p[i - 1]);
+    }
+    let h = |i: usize| t[i + 1] - t[i];
+    let dp = |i: usize| (p[i + 1] - p[i]) / h(i);
+    let mut rows = vec![(0.0, 2.0, 1.0, dp(0) * 3.0)];
+    for i in 1..n - 1 {
+        rows.push((
+            h(i),
+            2.0 * (h(i - 1) + h(i)),
+            h(i - 1),
+            (dp(i - 1) * h(i) + dp(i) * h(i - 1)) * 3.0,
+        ));
+    }
+    rows.push((1.0, 2.0, 0.0, dp(n - 2) * 3.0));
+    let m = tridiagonal(&rows);
+    let mut out = Vec::new();
+    for i in 0..n - 1 {
+        let (a, b) = (p[i], p[i + 1]);
+        for q in [a, a + m[i] * (h(i) / 3.0), b - m[i + 1] * (h(i) / 3.0), b] {
+            out.push([q.x, q.y, q.z, 1.0]);
+        }
+    }
+    Spline::from_pieces(3, t, out).unwrap()
+}
+
+#[test]
+fn through_a_sharp_turn_the_fit_never_crosses_itself_where_the_chord_fit_did() {
+    // out 8 along, back past the start, then down: the turn at (8, 3) is sharp
+    let p = pts(&[(0.0, 0.0), (8.0, 3.0), (-2.0, -3.0), (-2.0, -10.0)]);
+    let s = Spline::through(&p, None, None).unwrap();
+    assert!(simple(&s), "the fit crosses itself");
+    // the chord fit's first two pieces cross: the crossing found and refined, inside both
+    let c = by_the_chord(&p);
+    let b = beziers(&c);
+    let at = |z: &Bez, u: f64| {
+        let w = [
+            (1.0 - u).powi(3),
+            3.0 * (1.0 - u).powi(2) * u,
+            3.0 * (1.0 - u) * u * u,
+            u.powi(3),
+        ];
+        (0..4).fold((0.0, 0.0), |a, k| (a.0 + w[k] * z[k].0, a.1 + w[k] * z[k].1))
+    };
+    let d = |z: &Bez, u: f64| {
+        let w = [(1.0 - u).powi(2), 2.0 * (1.0 - u) * u, u * u];
+        (0..3).fold((0.0, 0.0), |a, k| {
+            (
+                a.0 + 3.0 * w[k] * (z[k + 1].0 - z[k].0),
+                a.1 + 3.0 * w[k] * (z[k + 1].1 - z[k].1),
+            )
+        })
+    };
+    let n = 400;
+    let mut best = (f64::INFINITY, 0.0, 0.0);
+    for i in 1..n {
+        for j in 1..n {
+            let (u, v) = (i as f64 / n as f64, j as f64 / n as f64);
+            let (x, y) = (at(&b[0], u), at(&b[1], v));
+            let g = ((x.0 - y.0).powi(2) + (x.1 - y.1).powi(2)).sqrt();
+            // away from where the two pieces join
+            if g < best.0 && u < 0.9 && v > 0.1 {
+                best = (g, u, v);
+            }
+        }
+    }
+    let (_, mut u, mut v) = best;
+    for _ in 0..30 {
+        let (x, y) = (at(&b[0], u), at(&b[1], v));
+        let (f, g) = (x.0 - y.0, x.1 - y.1);
+        let (da, db) = (d(&b[0], u), d(&b[1], v));
+        let det = -da.0 * db.1 + da.1 * db.0;
+        u -= (-db.1 * f + db.0 * g) / det;
+        v -= (-da.1 * f + da.0 * g) / det;
+    }
+    let (x, y) = (at(&b[0], u), at(&b[1], v));
+    let (da, db) = (d(&b[0], u), d(&b[1], v));
+    assert!(
+        ((x.0 - y.0).powi(2) + (x.1 - y.1).powi(2)).sqrt() < 1e-12,
+        "{x:?} {y:?}"
+    );
+    assert!(0.0 < u && u < 1.0 && 0.0 < v && v < 1.0, "{u} {v}");
+    assert!((da.0 * db.1 - da.1 * db.0).abs() > 1.0, "a crossing, not a touch");
+    assert!(!simple(&c));
+}

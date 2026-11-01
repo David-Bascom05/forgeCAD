@@ -91,8 +91,8 @@ sections off a common axis ("oblique", 00125711 30%) and end conditions: not exp
 A sketch's fit spline in Onshape is centripetal: knots by the square root of the chord, periodic when it closes. On 00500055 the
 STEP section's area is 1259.51, this gives 1259.47 and matches its box to 1e-3; chord length gives 1530.92, uniform 1206.31. One part
 checked this closely; a sweep of the fit-spline extrudes is the wider test. An end derivative is per a parameter running 0..1 over the whole curve (00181673:
-control point = end + derivative / 3, exactly). The importer samples them so; the kernel's `thru` still spaces by
-the chord, so a `thru` is not Onshape's curve through the same points.
+control point = end + derivative / 3, exactly). The kernel's `thru` is centripetal too (2026-11-01, for every fit through
+points), so the importer writes `thru` with the derivative over the chords' total, the kernel's parameter.
 `BRepGProp` on a STEP misreads some faces: 00500055's wall integrates by divergence to 41984 = area x height / 3 where GProp says 27289. So
 every truth here was also taken from a mesh of the same file. Where the two differ by more than 3e-3 a part should not be scored:
 26 of 181 smooth lofts. Neither is ground truth then (the mesh loses faces on some files: 00707398 is 80% off GProp).

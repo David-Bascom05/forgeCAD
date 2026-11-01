@@ -335,21 +335,27 @@ impl Spline {
         Spline::from_pieces(degree, breaks, pts)
     }
 
-    /// The cubic through `pts` with parameter the chord length, curvature continuous: closed if
-    /// first and last are the same point, else natural at an end with no slope given.
+    /// The cubic through `pts`, curvature continuous, its knots spaced by the square root of the
+    /// distance between points (centripetal) and scaled to run as long as those distances together:
+    /// closed and periodic if first and last are the same point, else natural at an end with no
+    /// slope given. A slope given is per that parameter.
     pub fn through(pts: &[Point3], from: Option<Vec3>, to: Option<Vec3>) -> Option<Spline> {
         let n = pts.len();
         if n < 2 {
             return None;
         }
         let mut t = vec![0.0; n];
+        let mut length = 0.0;
         for i in 1..n {
             let h = pts[i].distance(pts[i - 1]);
             if h <= tol::LINEAR {
                 return None;
             }
-            t[i] = t[i - 1] + h;
+            length += h;
+            t[i] = t[i - 1] + h.sqrt();
         }
+        let scale = length / t[n - 1];
+        t.iter_mut().for_each(|x| *x *= scale);
         let closed = n > 2 && pts[0].distance(pts[n - 1]) <= tol::LINEAR;
         let h = |i: usize| t[i + 1] - t[i];
         let dp = |i: usize| (pts[i + 1] - pts[i]) / h(i);
