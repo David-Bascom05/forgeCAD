@@ -55,7 +55,10 @@ with); nothing of arena order or ids.
 ## What it has found
 
 - `loops-cross` (added 2026-10-31: a fillet's rim overshoot got through `check`, which did not test a face's loops against each other): a crossing of the default chords is
-  believed only if the chords drawn 8 times finer cross too; without that, p06075 and a ruled fuzz part were false alarms. 5 of 100 traced-fillet fuzz parts fault at their fillet.
+  believed only if the chords drawn 8 times finer cross too, at more than about 6 degrees. Without the first, p06075 and a ruled fuzz part were false alarms; without the second, a cylinder
+  tangent inside another (scoreboard `parallel_tangent_inside`), whose chords cross beside the touch at any resolution. So a crossing shallower than 6 degrees is not found. A chord whose middle on the surface lies further from its ends than they are apart is left out: history seed 30's screw face is drawn a whole turn off at one
+  join, one chord long in parameters between ends that are one point (the face is sound, and meshes).
+  5 of 100 traced-fillet fuzz parts fault at their fillet.
 - `duplicate-name`: threads through cross holes, t06025, t06096: spans of different pieces of one pair of whole faces between the same edges were ranked only within a face
   pair. Fixed in `nary::name_spans`. A name only at a mid stage, gone once finished (t06032), is not a fault: `verify::stage` asks the finished stage.
 - `vertex-tolerance`: Fusion 40887_454ffc48_0010, an edge about 2e-5 long.

@@ -1,6 +1,9 @@
 use crate::body::{Body, CoedgeId, EdgeId, FaceId, LoopId, ShellId, VertexId};
 use crate::name::Name;
-use crate::uv::{UvLoop, default_segments, face_uv_loops_with, loops_cross, point_in_loops, unwrap_near};
+use crate::uv::{
+    UvLoop, default_segments, face_uv_loops_with, loops_cross, loops_cross_steeply, point_in_loops,
+    unwrap_near,
+};
 use forge_geom::intersect::{Contact, CurveSurface, curve_surface};
 use forge_geom::{Curve, CurveGeom, Line, SurfaceGeom};
 use forge_math::{Box3, Interval, Point2, Point3, Vec3, tol};
@@ -691,7 +694,10 @@ fn check_sides_of(body: &Body, faces: &[FaceId], known: Option<&Known>, out: &mu
             .fold(f64::INFINITY, f64::min);
         // drawn finely before it is believed: two chords of curved loops close by may cross where the loops do not
         if loops_cross(&loops)
-            && loops_cross(fine.get_or_init(|| face_uv_loops_with(body, f, |e| 8 * default_segments(e))))
+            && loops_cross_steeply(
+                fine.get_or_init(|| face_uv_loops_with(body, f, |e| 8 * default_segments(e))),
+                &|uv| surface.eval(uv),
+            )
         {
             out.push(Problem::LoopsCross { face: f });
         }

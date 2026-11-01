@@ -469,36 +469,55 @@ fn column_runs(loops: &[UvLoop], segs: &[(u32, u32)], lo: f64, hi: f64) -> (Vec<
 
 /// Whether two segments of a face's loops cross properly (not at a shared end).
 pub fn loops_cross(loops: &[UvLoop]) -> bool {
-    let segs: Vec<(Point2, Point2)> = loops
-        .iter()
-        .flat_map(|l| {
-            let n = l.points.len();
-            (0..n).map(move |i| (l.points[i], l.points[(i + 1) % n]))
-        })
-        .filter(|s| s.0 != s.1)
-        .collect();
+    first_cross(loops, &|_, _| true)
+}
+
+/// `loops_cross`, believing only a crossing of two real chords at more than about 6 degrees. The chords of two
+/// curves touching, tangent, cross beside the touch however finely they are drawn, at about the angle each turns by per
+/// chord. A chord whose middle on the surface `at` is further from its ends than they are apart is no piece of boundary:
+/// a loop drawn a whole turn of a screw off, where it joins, its ends one point.
+pub fn loops_cross_steeply(loops: &[UvLoop], at: &dyn Fn(Point2) -> Point3) -> bool {
+    let real = |s: (Point2, Point2)| {
+        let (p, q) = (at(s.0), at(s.1));
+        at(s.0.lerp(s.1, 0.5)).distance(p.lerp(q, 0.5)) <= p.distance(q)
+    };
+    first_cross(loops, &|s, t| {
+        let (u, v) = (s.1 - s.0, t.1 - t.0);
+        let cross = u.x * v.y - u.y * v.x;
+        cross * cross >= 0.01 * (u.x * u.x + u.y * u.y) * (v.x * v.x + v.y * v.y) && real(s) && real(t)
+    })
+}
+
+fn first_cross(loops: &[UvLoop], counts: &dyn Fn((Point2, Point2), (Point2, Point2)) -> bool) -> bool {
     // swept along u: only segments whose u spans overlap are compared
-    let mut segs = segs;
-    segs.sort_by(|p, q| p.0.x.min(p.1.x).total_cmp(&q.0.x.min(q.1.x)));
+    let mut segs: Vec<(f64, f64, Point2, Point2)> =
+        Vec::with_capacity(loops.iter().map(|l| l.points.len()).sum());
+    for l in loops {
+        let n = l.points.len();
+        for i in 0..n {
+            let (p, q) = (l.points[i], l.points[(i + 1) % n]);
+            if p != q {
+                segs.push((p.x.min(q.x), p.x.max(q.x), p, q));
+            }
+        }
+    }
+    segs.sort_unstable_by(|p, q| p.0.total_cmp(&q.0));
     let opposite = |p: f64, q: f64| (p < 0.0 && q > 0.0) || (p > 0.0 && q < 0.0);
+    let orient = forge_math::predicates::orient2d;
     for i in 0..segs.len() {
-        let reach = segs[i].0.x.max(segs[i].1.x);
-        for j in i + 1..segs.len() {
-            if segs[j].0.x.min(segs[j].1.x) > reach {
+        let (_, reach, a, b) = segs[i];
+        let (ylo, yhi) = (a.y.min(b.y), a.y.max(b.y));
+        for &(lo, _, c, d) in &segs[i + 1..] {
+            if lo > reach {
                 break;
             }
-            let ((a, b), (c, d)) = (segs[i], segs[j]);
-            let apart = |p: f64, q: f64, r: f64, t: f64| p.max(q) < r.min(t) || r.max(t) < p.min(q);
-            if apart(a.y, b.y, c.y, d.y) || a == c || a == d || b == c || b == d {
+            if yhi < c.y.min(d.y) || d.y.max(c.y) < ylo || a == c || a == d || b == c || b == d {
                 continue;
             }
-            if opposite(
-                forge_math::predicates::orient2d(a, b, c),
-                forge_math::predicates::orient2d(a, b, d),
-            ) && opposite(
-                forge_math::predicates::orient2d(c, d, a),
-                forge_math::predicates::orient2d(c, d, b),
-            ) {
+            if opposite(orient(a, b, c), orient(a, b, d))
+                && opposite(orient(c, d, a), orient(c, d, b))
+                && counts((a, b), (c, d))
+            {
                 return true;
             }
         }
