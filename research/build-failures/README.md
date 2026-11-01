@@ -117,3 +117,14 @@ boundary counts half, or a tool a few microns thick loses its share). `mass`: ma
 the sag apart, the volume and each face's area, the slack from the meshes' difference and the fine mesh's sag. Both
 were set by running them on the Fusion parts, the bench parts and fuzz seeds; every disagreement left was traced by
 a third, finer mesh or by hand. `verify/forge-proof/examples/propdir.rs` runs either over a directory.
+
+## Fusion 360 Gallery, second batch
+
+Each from a failing part, shrunk, then restated in own numbers in `interface/forge-agent/tests/fusion_parts.rs`:
+
+- `check.rs`, vertex tolerance: 1.1 x LINEAR. Six parts had a vertex grown 1e-14 to 9e-10 mm past LINEAR by rounding, next to an edge under two tolerances long. The same edge is legal at LINEAR exactly, so the rule stepped on rounding. 137053 is 1.7e-7 mm past (1.017 x LINEAR), so 1.001 was not enough.
+- `plane_cylinder`, lines under cos 1e-6: a wall 1e-6 off over 21 mm gave a 25.4 radius cylinder an ellipse millions of radii long (41032). Error of the tangent lines is (t cos)^2 / r: 4e-8 at t = 1000, r = 25.
+- `clear_step`, floor 2 x LINEAR, halving: the floor of a D-hole 8e-5 wide (137053). Undoing it changed instructions on patterns, coplanar and housing by under 0.03%.
+- Shallow crossings floor at 1.2 tolerances, down from 4: lowered in steps against the failing list; 2 left 39306_0031.
+
+Tried and dropped: retrying a classification conflict with cut heads merged at two tolerances (no part built; two conflicts became ZeroThickness refusals, since the crossing beside the head still needs an edge on the other face); a chain search for a crossing on a tangent edge (26086: the cut appears, but settling moves it 6e-3).
