@@ -881,3 +881,33 @@ fn flipping_a_hole_sends_it_the_other_way_and_there_it_says_so() {
     let now = h.gui.shell.dialog.as_ref().unwrap().line();
     assert_ne!(now.contains(" -on sk1 "), was_on, "{line} {now}");
 }
+
+#[test]
+fn a_marked_edge_is_its_full_colour_on_a_shadowed_inner_corner() {
+    // the deep corner where a wall meets a floor: the occlusion is at its darkest here
+    let part = "floor: extrude 10 rect -30 -30 60 60\nwall: extrude 40 xy at 0 0 10 rect -30 -30 10 60\n";
+    let Some((mut h, _)) = open(part, "edgeglow") else {
+        return;
+    };
+    button(&mut h, "Fillet");
+    point_at(&mut h, [-20.0, 15.0, 10.0]);
+    assert!(
+        !h.gui.view.as_ref().unwrap().nav.selected.is_empty(),
+        "the edge is picked"
+    );
+    settle(&mut h);
+    let (cam, size) = h.gui.shell.camera.unwrap();
+    let r = h.gui.shell.view_rect;
+    let on = cam.pixel_of([-20.0, 15.0, 10.0], size.0, size.1).unwrap();
+    let img = h.gui_pixels();
+    let (cx, cy) = ((r.min.x + on.0) as usize, (r.min.y + on.1) as usize);
+    let mut warmest = 0;
+    for dy in 0..5 {
+        for dx in 0..5 {
+            let p = img.at(cx + dx - 2, cy + dy - 2);
+            warmest = warmest.max(p[0] as i32 - p[2] as i32);
+        }
+    }
+    // the chosen amber undimmed: red well over blue, however dark the corner
+    assert!(warmest > 120, "{warmest}");
+}

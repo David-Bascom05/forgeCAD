@@ -367,6 +367,12 @@ fn edge_mark_vs(@builtin(vertex_index) vi: u32, @location(0) at: u32) -> Mark {
     return Mark(line_corner(vi, placements[at & ~SELECTED_BIT], g.px.w), colour);
 }
 
+// a dark band behind a marked edge, so it reads on anything
+@vertex
+fn edge_halo_vs(@builtin(vertex_index) vi: u32, @location(0) at: u32) -> Mark {
+    return Mark(line_corner(vi, placements[at & ~SELECTED_BIT], g.px.w * 2.5), vec4f(0.0, 0.0, 0.0, 0.75));
+}
+
 @fragment
 fn mark_fs(in: Mark) -> @location(0) vec4f {
     return in.colour;

@@ -120,22 +120,21 @@ fn bench(h: &mut Headless) {
     worst = worst.max(t.elapsed().as_secs_f64() * 1e3);
     println!("worst frame while a part opens: {worst:.2} ms");
     // what a first look costs: each dialog's and menu's first frames against its second time
-    let timed =
-        |h: &mut Headless, name: &str, open: &dyn Fn(&mut Headless), shut: &dyn Fn(&mut Headless)| {
-            let mut cost = [0.0f64; 2];
-            for c in &mut cost {
-                open(h);
-                for _ in 0..3 {
-                    let o = h.step();
-                    *c = c.max(o.times.ui + o.times.tess + o.times.draw);
-                }
-                shut(h);
-                for _ in 0..2 {
-                    h.step();
-                }
+    let timed = |h: &mut Headless, name: &str, open: &dyn Fn(&mut Headless), shut: &dyn Fn(&mut Headless)| {
+        let mut cost = [0.0f64; 2];
+        for c in &mut cost {
+            open(h);
+            for _ in 0..3 {
+                let o = h.step();
+                *c = c.max(o.times.ui + o.times.tess + o.times.draw);
             }
-            println!("first look at {name}: {:.2} ms, again {:.2} ms", cost[0], cost[1]);
-        };
+            shut(h);
+            for _ in 0..2 {
+                h.step();
+            }
+        }
+        println!("first look at {name}: {:.2} ms, again {:.2} ms", cost[0], cost[1]);
+    };
     use forge_render::shell::Action as A;
     let shut: &dyn Fn(&mut Headless) = &|h| h.gui.shell.out.push(A::DialogCancel);
     for kind in ["extrude", "hole", "thread", "fillet", "pattern", "coil"] {

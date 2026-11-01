@@ -209,7 +209,9 @@ pub struct Renderer {
     pub section: Option<[f32; 4]>,
     face_mark: wgpu::RenderPipeline,
     face_mark_exact: wgpu::RenderPipeline,
-    edge_mark: wgpu::RenderPipeline,
+    /// Marked edges over everything, after shading: a dark band, then the colour.
+    edge_top: wgpu::RenderPipeline,
+    edge_halo: wgpu::RenderPipeline,
     dot: wgpu::RenderPipeline,
     marks: wgpu::Buffer,
     pick: PickState,
@@ -694,12 +696,20 @@ impl Renderer {
             msaa,
             &over,
         );
-        let edge_mark = pipeline(
+        let edge_top = pipeline(
             ("edge_mark_vs", "mark_fs"),
             &line_buffers,
             None,
-            &tests,
-            msaa,
+            &None,
+            one,
+            &over,
+        );
+        let edge_halo = pipeline(
+            ("edge_halo_vs", "mark_fs"),
+            &line_buffers,
+            None,
+            &None,
+            one,
             &over,
         );
         let dot = pipeline(("dot_vs", "dot_fs"), &[], None, &tests, msaa, &over);
@@ -936,7 +946,8 @@ impl Renderer {
             section: None,
             face_mark,
             face_mark_exact,
-            edge_mark,
+            edge_top,
+            edge_halo,
             dot,
             marks,
             pick,
@@ -1492,25 +1503,32 @@ impl Renderer {
                 k..k + 1,
             );
         }
-        pass.set_pipeline(&self.edge_mark);
-        pass.set_vertex_buffer(0, self.marks.slice(..));
-        pass.set_index_buffer(self.line_indices.slice(..), wgpu::IndexFormat::Uint32);
-        for (k, m) in marks.iter().take(MARKS).enumerate() {
-            let k = k as u32;
-            let part = scene.placements[m.placement as usize].part;
-            let Some(lod) = scene.lod_on_screen(m.placement) else {
-                continue;
-            };
-            let lod = self.pick_lod(part, lod);
-            if let Entity::Edge(e) = m.entity
-                && let Some(r) = self.index[part as usize][lod].edges.iter().find(|r| r.edge == e)
-            {
-                let first = self.lods[part as usize][lod].first_segment + r.first;
-                pass.draw_indexed(0..r.count * 6, first as i32 * 4, k..k + 1);
-            }
-        }
         pass.set_pipeline(&self.dot);
         pass.draw(0..DOTS as u32 * 6, 0..1);
+    }
+
+    /// Marked edges and corners, over the finished picture: nothing shades or hides them.
+    fn draw_edges_on_top(&self, pass: &mut wgpu::RenderPass<'_>, scene: &Scene, marks: &[Mark]) {
+        pass.set_bind_group(0, &self.binds, &[]);
+        pass.set_vertex_buffer(0, self.marks.slice(..));
+        pass.set_index_buffer(self.line_indices.slice(..), wgpu::IndexFormat::Uint32);
+        for pipeline in [&self.edge_halo, &self.edge_top] {
+            pass.set_pipeline(pipeline);
+            for (k, m) in marks.iter().take(MARKS).enumerate() {
+                let k = k as u32;
+                let part = scene.placements[m.placement as usize].part;
+                let Some(lod) = scene.lod_on_screen(m.placement) else {
+                    continue;
+                };
+                let lod = self.pick_lod(part, lod);
+                if let Entity::Edge(e) = m.entity
+                    && let Some(r) = self.index[part as usize][lod].edges.iter().find(|r| r.edge == e)
+                {
+                    let first = self.lods[part as usize][lod].first_segment + r.first;
+                    pass.draw_indexed(0..r.count * 6, first as i32 * 4, k..k + 1);
+                }
+            }
+        }
     }
 
     /// Reads back any GPU times the GPU has finished.
@@ -1795,6 +1813,25 @@ impl Renderer {
             pass.set_bind_group(1, &t.read_smooth, &[]);
             pass.set_pipeline(&self.ao_pipe.apply);
             pass.draw(0..3, 0..1);
+        }
+        if overlay.marks.iter().any(|m| matches!(m.entity, Entity::Edge(_))) {
+            let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+                label: Some("marked edges"),
+                color_attachments: &[Some(wgpu::RenderPassColorAttachment {
+                    view: target,
+                    depth_slice: None,
+                    resolve_target: None,
+                    ops: wgpu::Operations {
+                        load: wgpu::LoadOp::Load,
+                        store: wgpu::StoreOp::Store,
+                    },
+                })],
+                depth_stencil_attachment: None,
+                timestamp_writes: None,
+                occlusion_query_set: None,
+                multiview_mask: None,
+            });
+            self.draw_edges_on_top(&mut pass, scene, overlay.marks);
         }
         if hud.is_some() {
             let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
