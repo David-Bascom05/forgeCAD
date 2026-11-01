@@ -31,6 +31,7 @@ NEEDS = {"PartDesign::Pad", "PartDesign::Pocket", "PartDesign::Revolution", "Par
 class Doc:
     def __init__(self, data):
         self.z = zipfile.ZipFile(io.BytesIO(data))
+        self.volumes = None
         info = self.z.getinfo("Document.xml")
         if info.file_size > 64 << 20:
             raise Unsupported("a huge document")
@@ -458,6 +459,19 @@ def near(p, poly):
     return best
 
 
+def alone(doc, n):
+    """A feature of an older file whose stored result is just its own tool has no base."""
+    p = doc.prop(n, "AddSubShape")
+    if p is None:
+        p = doc.prop(n, "AddShape")
+    e = p.find("Part") if p is not None else None
+    a, b = (e.get("file") if e is not None else None), doc.shape_file(n)
+    if not a or not b or doc.volumes is None:
+        return False
+    va, vb = doc.volumes.get(a), doc.volumes.get(b)
+    return va is not None and vb is not None and abs(va - vb) <= 1e-6 * max(vb, 1e-12)
+
+
 def base_of(doc, n):
     """The feature before n: older files without BaseFeature say it through a blend's Base, a pattern's
     original, or the solid its sketch sits on."""
@@ -478,6 +492,8 @@ def base_of(doc, n):
         if doc.types.get(s) in SOLID:
             return s
     # no link at all: these files fused each feature onto the one before it in the document
+    if alone(doc, n):
+        return ""
     names = list(doc.types)
     for b in reversed(names[: names.index(n)]):
         if doc.types[b] in SOLID:
@@ -507,6 +523,23 @@ def main():
         print(json.dumps({"file": stem, "body": "", "status": "untranslated", "cls": "importer", "why": "unreadable: " + repr(x)[:60]}))
         return
     bodies = [n for n, t in doc.types.items() if t == "PartDesign::Body"]
+    legacy = [n for n, t in doc.types.items() if t in SOLID and doc.prop(n, "BaseFeature") is None]
+    if legacy:
+        files = {}
+        for n in legacy:
+            for k in ("Shape", "AddShape", "AddSubShape"):
+                p = doc.prop(n, k)
+                e = p.find("Part") if p is not None else None
+                if e is not None and e.get("file"):
+                    files[e.get("file")] = e.get("file")
+        try:
+            with tempfile.NamedTemporaryFile("w", suffix=".json", dir=opt("--tmp")) as f:
+                json.dump({"shapes": files, "subs": {}}, f)
+                f.flush()
+                p = subprocess.run([opt("--truth"), "-I", os.path.join(HERE, "fcstd_truth.py"), path, f.name], capture_output=True, text=True, timeout=600)
+            doc.volumes = {k: v.get("vol") for k, v in json.loads(p.stdout).items()}
+        except (subprocess.TimeoutExpired, ValueError):
+            pass
     # older files: a chain of features with no body; each end of a chain is a part
     inbody = {x for b in bodies for x in doc.links(b, "Group")}
     based = {base_of(doc, n) for n, t in doc.types.items() if t in SOLID}
