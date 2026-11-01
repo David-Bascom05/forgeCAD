@@ -820,28 +820,33 @@ impl<'a> Reader<'a> {
         let s = 0.5_f64.sqrt();
         let mut net = Vec::with_capacity(pts.len() * 9);
         let mut ws = Vec::with_capacity(pts.len() * 9);
-        for (i, p) in pts.iter().enumerate() {
-            let along = z.dot(*p - o);
-            let c = o + z * along;
-            let r = *p - c;
-            let t = z.cross(r);
-            for k in 0..9 {
-                let (a, b, wt) = match k {
-                    0 | 8 => (1.0, 0.0, 1.0),
-                    1 => (1.0, 1.0, s),
-                    2 => (0.0, 1.0, 1.0),
-                    3 => (-1.0, 1.0, s),
-                    4 => (-1.0, 0.0, 1.0),
-                    5 => (-1.0, -1.0, s),
-                    6 => (0.0, -1.0, 1.0),
-                    _ => (1.0, -1.0, s),
+        // as the standard has it: u the angle, v along the curve (the natural normal depends on it)
+        for k in 0..9 {
+            let (ca, cb, wt) = match k {
+                0 | 8 => (1.0, 0.0, 1.0),
+                1 => (1.0, 1.0, s),
+                2 => (0.0, 1.0, 1.0),
+                3 => (-1.0, 1.0, s),
+                4 => (-1.0, 0.0, 1.0),
+                5 => (-1.0, -1.0, s),
+                6 => (0.0, -1.0, 1.0),
+                _ => (1.0, -1.0, s),
+            };
+            for (i, p) in pts.iter().enumerate() {
+                let c = o + z * z.dot(*p - o);
+                let r = *p - c;
+                // a generator ending on the axis, within the file's tolerance, ends on it: a pole
+                let r = if r.length() <= self.u.uncertainty {
+                    Vec3::ZERO
+                } else {
+                    r
                 };
-                net.push(c + r * a + t * b);
+                net.push(c + r * ca + z.cross(r) * cb);
                 ws.push(w[i] * wt);
             }
         }
         let pi = dmath::PI;
-        let v = vec![
+        let angle = vec![
             0.0,
             0.0,
             0.0,
@@ -855,7 +860,7 @@ impl<'a> Reader<'a> {
             2.0 * pi,
             2.0 * pi,
         ];
-        match Nurbs::new((deg, 2), (knots, v), (pts.len(), 9), &net, Some(&ws)) {
+        match Nurbs::new((2, deg), (angle, knots), (9, pts.len()), &net, Some(&ws)) {
             Some(n) => Ok(n.surface()),
             None => refuse(id, kind, "no surface from its curve"),
         }

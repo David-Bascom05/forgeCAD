@@ -142,6 +142,16 @@ impl Proto {
         if pts.iter().any(|&q| s.singular(q)) {
             return (0, 0);
         }
+        let poles: Vec<Point3> = [(0, false), (0, true), (1, false), (1, true)]
+            .iter()
+            .filter_map(|&(d, up)| pole_of(s, d, up))
+            .collect();
+        if l.iter().any(|&u| {
+            let p = self.verts[self.start_of(u)].0;
+            poles.iter().any(|q| q.distance(p) <= 2.0 * tol::LINEAR.max(1e-4))
+        }) {
+            return (0, 0);
+        }
         let (Some(&a), Some(&b)) = (pts.first(), pts.last()) else {
             return (0, 0);
         };
@@ -395,7 +405,11 @@ impl Proto {
             let e = &self.edges[u.0];
             let (x, y) = (param(self, e.start), param(self, e.end));
             let r = (x - y) / period;
-            let moved = if e.start == e.end { period } else { ((r - r.round()) * period).abs() };
+            let moved = if e.start == e.end {
+                period
+            } else {
+                ((r - r.round()) * period).abs()
+            };
             if moved > best.1 {
                 best = (u.0, moved);
             }
