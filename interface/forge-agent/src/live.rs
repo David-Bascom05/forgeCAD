@@ -795,7 +795,7 @@ mod tests {
             last = l.drag(w.op(format!("{}", 40 + k)));
         }
         let got = wait(&mut l, |e| matches!(e, Event::Frame(f) if f.seq == last));
-        let Some(Event::Frame(f)) = got.last() else {
+        let Some(Event::Frame(f)) = got.iter().rfind(|e| matches!(e, Event::Frame(_))) else {
             panic!("a frame")
         };
         assert_eq!(f.out, Some(89.0 * 30.0 * 10.0));
@@ -816,13 +816,13 @@ mod tests {
         let (mut l, w) = start();
         let s = l.drag(w.op("nope".into()));
         let got = wait(&mut l, |e| matches!(e, Event::Frame(f) if f.seq == s));
-        let Some(Event::Frame(f)) = got.last() else {
+        let Some(Event::Frame(f)) = got.iter().rfind(|e| matches!(e, Event::Frame(_))) else {
             panic!("a frame")
         };
         assert!(f.out.is_none() && f.failure.is_some(), "{f:?}");
         let s = l.drag(w.op("50".into()));
         let got = wait(&mut l, |e| matches!(e, Event::Frame(f) if f.seq == s));
-        let Some(Event::Frame(f)) = got.last() else {
+        let Some(Event::Frame(f)) = got.iter().rfind(|e| matches!(e, Event::Frame(_))) else {
             panic!("a frame")
         };
         assert_eq!(f.out, Some(15000.0));
