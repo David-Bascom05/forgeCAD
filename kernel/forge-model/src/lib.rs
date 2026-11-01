@@ -1465,6 +1465,14 @@ fn modify(
                 id,
             )
             .map_err(|error| RegenError::Fillet { feature: i, error })
+            // (the round may leave the side faces' other edges off them: refused, not returned)
+            .and_then(|b| match forge_topo::check(&b).first() {
+                Some(p) => Err(RegenError::NotClosed {
+                    feature: i,
+                    what: format!("a full round left {p:?}"),
+                }),
+                None => Ok(b),
+            })
         }
         Feature::Chamfer { edges, size } => {
             // a selector gives edges in arena order, which must not name anything

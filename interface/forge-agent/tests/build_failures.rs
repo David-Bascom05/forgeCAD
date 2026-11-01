@@ -442,6 +442,29 @@ ball add 3.6 -xz at 17.98 {y} 10
     }
 }
 
+/// A full round whose side face keeps edges it no longer holds: refused, not a body 5 off its face
+/// (repros/check-edge-off-face.fc).
+#[test]
+fn full_round_leaving_an_edge_off_its_face_is_refused() {
+    let m = Model::new(
+        "L0: extrude 8.52 rect 0 0 53.78 114.36
+L1: split plane z 0.951 0.258 0.172 at 37.9 60.16 6.25 +
+L2: movebody by 35.98 2.3 -10.61 rot 38.28 57.24 4.26 0 0 1 42.91
+L3: fillet 3.04..2.35 from (verts near 35.53 135.81 -10.61) (edges near 61.7 86.03 -10.61) (edges convex near 24.74 125.78 -10.61)
+L5: movebody by 158.74 119.01 26.09
+L8: sweep cut z 0 0 -1 x -1 0 0 at 221.81 208.74 99.68 rrect -12.99 -12.99 25.98 25.98 3.9 path line 221.81 208.74 99.68 221.81 208.74 10.52000000000001 arc z 0 1 0 x 1 0 0 at 192.41 208.74 10.52000000000001 29.4 0 30 line 217.87114687126248 208.74 -4.179999999999987 186.24614687126248 208.74 -58.956106789365734
+len0 = 13.04
+L11: extrude add 78.13 z 0.826 0.52 0.217 at 263.16 180.65 20.27 loop line -30.04 0 30.04 0 arc 0 0 30.04 0 180
+L12: fillet 0.06 (edges convex circle of L8)
+L17: offset -4.58 (faces near 209.64 238.28 19.73)
+L19: hole 21.99 z 0 0 -1 at 162.07 252.77 37.23 34.89 pt 118 thread 26.39 3.5
+L25: fullround (faces near 195.14 231.14 24) (faces near 204.84 236.72 19.73) (faces near 198.43 232.31 15.48)
+",
+    );
+    let e = m.error.as_ref().expect("refused");
+    assert!(e.msg.contains("full round"), "{}", e.msg);
+}
+
 /// Rays past a lemon must not count the apple its quartic also holds: a point in a corner of the
 /// box was inside (WHUCAD 100003006, one point in 13).
 #[test]
