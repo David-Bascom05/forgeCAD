@@ -102,6 +102,10 @@ is near the mesh on most of them, which is not a score). 131 do not translate (1
 regions), 58 stop, fail or time out (27 twisted, not diagnosed). The two worst before were not spline faults: 00138678's ellipse sketch took a look-alike
 record's plane; 00409237's cut lost a region, so a spline in no region is now refused.
 
+Sections of different counts: circles against polygons of one count translate only where the circle's in-line cuts are also even, so that both readings of STEP agree: 6 parts of 190, all
+6 within 1e-3. Everything else stays refused. Cutting a polygon of fewer sides to the fullest's count by perimeter fraction was tried (read from 00377891, 3 to 7 sides): 31 built, 16 within 1e-3
+and 15 from 0.1% to 4.85% off, and section vertices often missed STEP's, even on that part (the triangle, 4 of 7). Parasolid's matching there is not recovered.
+
 ## A smooth loft on to a point (`apex_volume.py`)
 A slice is the first section scaled by L(s) about C(s), L and Z natural cubics over the knots, so V = A0 * integral L^2 Z' ds, exact
 over the rationals. Mass from the B-rep agrees to 1e-12 (`tests/spline.rs`). OCCT's ThruSections passes through

@@ -1338,10 +1338,24 @@ class Tr:
         for k, s in enumerate(secs if n > 1 else []):
             i, j = (k, k + 1) if k + 1 < n else (k - 1, k)
             face(s, dot(add(secs[j]["centre"], secs[i]["centre"], -1), s["fr"].n) < 0)
-        for k in range(1, n):
-            align(secs[k - 1], secs[k], secs[0] if k > 1 else None)
-            secs[k - 1]["matched"] = k > 1 or secs[k - 1].get("matched")
-            secs[k]["matched"] = True
+        sizes = [len(x["loops"][0]) for x in secs]
+        if n > 2 and max(sizes) > 2 and any(whole_circle(x["loops"][0]) for x in secs) and all(
+            whole_circle(x["loops"][0]) or z == max(sizes) for x, z in zip(secs, sizes)
+        ):
+            # circles and polygons of one count: the circles are cut where a polygon's corners point, so a polygon goes
+            # first and the rest follow outward. Only where those cuts are even: otherwise STEP's aren't all in line (00874049)
+            m = sizes.index(max(sizes))
+            for x in secs:
+                x["even"] = True
+            for k in range(m - 1, -1, -1):
+                align(secs[k + 1], secs[k])
+            for k in range(m + 1, n):
+                align(secs[k - 1], secs[k])
+        else:
+            for k in range(1, n):
+                align(secs[k - 1], secs[k], secs[0] if k > 1 else None)
+                secs[k - 1]["matched"] = k > 1 or secs[k - 1].get("matched")
+                secs[k]["matched"] = True
         for k in range(n - 1):
             a0, b0 = secs[k], secs[k + 1]
             off = add(b0["centre"], a0["centre"], -1)
@@ -1815,6 +1829,8 @@ def align(a, b, first=None):
             if whole_circle(lb):
                 b["loops"][k] = split_circle(lb, la, fa, ca, fb, cb)
                 b["split"] = True
+                if b.get("even") and any(abs(abs(g[3]) - 2 * math.pi / len(la)) > 1e-3 for g in b["loops"][k]):
+                    raise Unsupported("a loft between profiles of different segment counts")
             elif whole_circle(la) and not a.get("matched"):
                 a["loops"][k] = split_circle(la, lb, fb, cb, fa, ca)
                 a["split"] = True
