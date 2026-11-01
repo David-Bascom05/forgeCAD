@@ -107,6 +107,7 @@ fn groups(s: &Shell) -> Vec<Group> {
                         t("Circle", "circle", SkTool::Circle),
                         t("Arc", "arc", SkTool::Arc),
                         t("Rectangle", "rectangle", SkTool::Rectangle),
+                        t("Project Geometry", "project", SkTool::Project),
                     ],
                     vec![off("Spline", "spline"), t("Point", "point", SkTool::Point)],
                 ),

@@ -1840,3 +1840,156 @@ fn a_held_right_button_shows_its_menu_and_a_quick_flick_never_does() {
     step_some(&mut h);
     assert!(h.gui.shell.marking.is_none());
 }
+
+/// Where a point of the world is on the screen.
+fn screen_of(h: &Headless, p: [f32; 3]) -> (f32, f32) {
+    let (camera, size) = h.gui.shell.camera.unwrap();
+    let px = camera.pixel_of(p, size.0, size.1).unwrap();
+    let v = h.gui.shell.view_rect;
+    (v.min.x + px.0, v.min.y + px.1)
+}
+
+fn press_at(h: &mut Headless, at: (f32, f32)) {
+    h.move_to(at.0, at.1);
+    step_some(h);
+    h.button(true);
+    h.step();
+    h.button(false);
+    step_some(h);
+}
+
+#[test]
+fn project_geometry_takes_clicks_in_the_view_and_what_it_writes_is_the_files_and_extrudes() {
+    use forge_render::shell::sketching::SkTool;
+    let Some((mut h, file)) = file_part(BLOCK) else {
+        return;
+    };
+    h.gui.shell.origin_selected = Some(forge_render::origin::Item::XyPlane);
+    h.gui.shell.out.push(Action::StartSketch);
+    assert!(h.until(|g| g.shell.sketch.is_some()), "{}", h.gui.shell.status);
+    assert!(h.until(|g| g.view.as_ref().unwrap().nav.camera.axes().0[2] < -0.999));
+    step_some(&mut h);
+    assert!(h.gui.shell.place("tool:Project Geometry").is_some());
+    h.click("tool:Project Geometry");
+    assert!(h.until(|g| g.shell.sketch.as_ref().unwrap().tool == Some(SkTool::Project)));
+    step_some(&mut h);
+
+    // an edge: the top's right side
+    let edge = screen_of(&h, [30.0, 0.0, 20.0]);
+    press_at(&mut h, edge);
+    assert!(
+        h.until(|g| !g.shell.sketch.as_ref().unwrap().rows.is_empty()),
+        "{:?}",
+        h.gui.shell.sketch.as_ref().unwrap().error
+    );
+    let m = h.gui.shell.sketch.as_ref().unwrap();
+    assert_eq!(m.rows.len(), 1, "{:?}", m.rows);
+    assert!(m.rows[0].starts_with("project @e"), "{:?}", m.rows);
+    let s = m.solved.as_ref().unwrap();
+    assert_eq!(s.point("j1.a").unwrap().x, 30.0);
+    assert_eq!(s.point("j1.b").unwrap().x, 30.0);
+
+    // a face: its other three edges, each by its handle, the one that's there not again
+    let (cx, cy) = {
+        let c = h.gui.shell.view_rect.center();
+        (c.x, c.y)
+    };
+    press_at(&mut h, (cx, cy));
+    assert!(
+        h.until(|g| g.shell.sketch.as_ref().unwrap().rows.len() == 2),
+        "{:?}",
+        h.gui.shell.sketch.as_ref().unwrap().rows
+    );
+    let m = h.gui.shell.sketch.as_ref().unwrap();
+    assert_eq!(m.rows[1].split(' ').count(), 4, "{:?}", m.rows);
+    assert!(m.error.is_none(), "{:?}", m.error);
+    assert_eq!(forge_doc::sketch::freedom(m.solved.as_ref().unwrap()).0, 0);
+
+    // clicking it again adds nothing
+    press_at(&mut h, (cx, cy));
+    step_some(&mut h);
+    assert_eq!(h.gui.shell.sketch.as_ref().unwrap().rows.len(), 2);
+
+    // a new line drawn from a projected corner takes the point, not a place near it
+    h.gui.shell.out.push(Action::SketchTool(SkTool::Point));
+    step_some(&mut h);
+    let corner = screen_of(&h, [30.0, 30.0, 0.0]);
+    press_at(&mut h, corner);
+    let m = h.gui.shell.sketch.as_ref().unwrap();
+    assert!(
+        m.rows.last().unwrap().contains(".a") || m.rows.last().unwrap().contains(".b"),
+        "{:?}",
+        m.rows
+    );
+    h.gui.shell.sketch.as_mut().unwrap().undo();
+
+    h.gui.shell.out.push(Action::FinishSketch);
+    assert!(
+        h.until(|g| g.shell.rows.iter().any(|r| r.kind == "sketch")),
+        "{:?} {}",
+        h.gui.calls,
+        h.gui.shell.status
+    );
+    let text = std::fs::read_to_string(&file).unwrap();
+    assert!(text.contains("project @e"), "{text}");
+    // a replay makes the same file, and the profile extrudes to the block's outline
+    let mut p = Part::new(BLOCK);
+    for c in h.gui.calls.clone() {
+        assert!(p.call(vec![c], None).ok);
+    }
+    assert_eq!(p.model.src(), text);
+    let done = p.act("extrude new 5 sketch1", None);
+    assert!(done.ok, "{}", done.text);
+    assert_eq!(p.model.mass().unwrap().volume, 60.0 * 60.0 * 25.0);
+
+    // opened again from the tree, it reads what it projects from the part
+    let id = h.gui.shell.rows.iter().find(|r| r.kind == "sketch").unwrap().id;
+    h.gui.shell.out.push(Action::Edit(id));
+    assert!(h.until(|g| g.shell.sketch.is_some()), "{}", h.gui.shell.status);
+    let m = h.gui.shell.sketch.as_ref().unwrap();
+    assert!(m.error.is_none(), "{:?}", m.error);
+    assert_eq!(m.rows.len(), 2);
+    assert!(m.unchanged());
+}
+
+#[test]
+fn project_geometry_takes_what_a_window_holds_and_the_right_button_writes_nothing() {
+    use forge_render::shell::sketching::SkTool;
+    let Some((mut h, _)) = file_part(BLOCK) else {
+        return;
+    };
+    h.gui.shell.origin_selected = Some(forge_render::origin::Item::XyPlane);
+    h.gui.shell.out.push(Action::StartSketch);
+    assert!(h.until(|g| g.shell.sketch.is_some()), "{}", h.gui.shell.status);
+    assert!(h.until(|g| g.view.as_ref().unwrap().nav.camera.axes().0[2] < -0.999));
+    step_some(&mut h);
+    h.gui.shell.out.push(Action::SketchTool(SkTool::Project));
+    step_some(&mut h);
+    let c = h.gui.shell.view_rect.center();
+    h.move_to(c.x, c.y);
+    step_some(&mut h);
+    h.right_click_here();
+    step_some(&mut h);
+    assert!(h.gui.shell.marking.is_some());
+    h.key(egui::Key::Escape);
+    step_some(&mut h);
+    assert!(h.gui.shell.sketch.as_ref().unwrap().rows.is_empty());
+    assert_eq!(h.gui.shell.sketch.as_ref().unwrap().tool, Some(SkTool::Project));
+    // a left drag across the top: a window, right to left, and the top's outline comes in
+    h.move_to(c.x + 40.0, c.y + 40.0);
+    step_some(&mut h);
+    h.button(true);
+    h.step();
+    h.move_to(c.x - 40.0, c.y - 40.0);
+    step_some(&mut h);
+    h.button(false);
+    assert!(
+        h.until(|g| !g.shell.sketch.as_ref().unwrap().rows.is_empty()),
+        "{:?}",
+        h.gui.shell.sketch.as_ref().unwrap().error
+    );
+    let m = h.gui.shell.sketch.as_ref().unwrap();
+    assert!(m.error.is_none(), "{:?}", m.error);
+    assert_eq!(m.rows.len(), 1, "{:?}", m.rows);
+    assert_eq!(m.rows[0].split(' ').count(), 5, "{:?}", m.rows);
+}

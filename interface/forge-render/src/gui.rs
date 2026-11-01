@@ -10,7 +10,7 @@ use crate::scene::{Motion, Placement, Scene};
 use crate::shell::SketchChild;
 use crate::shell::dialog::{Dialog, DialogTarget};
 use crate::shell::dim::DimEdit;
-use crate::shell::sketching::{SketchFor, SketchMode};
+use crate::shell::sketching::{SkTool, SketchFor, SketchMode, project_refs};
 use crate::shell::{Action, Shell};
 use crate::viewcube;
 use crate::viewer::now_ms;
@@ -116,6 +116,8 @@ pub struct Gui {
     mark_held: Option<f64>,
     /// A sketch's plane has been asked for.
     sketch_for: Option<(String, SketchFor, Vec<String>)>,
+    /// What the `project` rows of the sketch being opened come to.
+    sketch_sources: std::collections::HashMap<String, Result<Vec<forge_doc::sketch::Refd>, String>>,
     /// The GPU refused something: said once, and no more views are drawn.
     gpu_failed: Arc<std::sync::Mutex<Option<String>>>,
 }
@@ -142,6 +144,23 @@ impl View {
     pub fn mark_dirty(&mut self) {
         self.dirty = true;
     }
+}
+
+/// The line a sketch reads the part above: its own, or where a new one would go.
+fn place_of(shell: &Shell, edit: &SketchFor) -> Option<forge_doc::ItemId> {
+    match edit {
+        SketchFor::Line(id) | SketchFor::Inline(id, _) => Some(*id),
+        SketchFor::New => {
+            let (doc, end) = (shell.doc.as_ref()?, shell.end_at?);
+            let mut lines = doc.features().map(|i| i.id);
+            lines.find(|&i| i == end)?;
+            lines.next()
+        }
+    }
+}
+
+fn sketch_place(shell: &Shell) -> Option<forge_doc::ItemId> {
+    place_of(shell, &shell.sketch.as_ref()?.edit)
 }
 
 impl Gui {
@@ -194,6 +213,7 @@ impl Gui {
             target_px: (1, 1),
             tree_hover_was: None,
             sketch_for: None,
+            sketch_sources: Default::default(),
             after_sketch: None,
             mark_held: None,
             gpu_failed,
@@ -427,6 +447,9 @@ impl Gui {
                         (Ok(plane), Some((head, edit, rows))) => {
                             let mut m = SketchMode::new(edit, head, plane, rows, self.shell.doc.as_ref());
                             m.units = self.shell.units;
+                            if m.rows.iter().any(|r| project_refs(r).is_some()) {
+                                m.take_sources(std::mem::take(&mut self.sketch_sources));
+                            }
                             self.shell.sketch = Some(m);
                             self.shell.origin_selected = None;
                             self.shell.tab = 1;
@@ -436,6 +459,16 @@ impl Gui {
                         }
                         (Err(why), Some(_)) => self.shell.status = why,
                         _ => {}
+                    }
+                }
+                Event::SketchSources { adding: false, got } => {
+                    self.sketch_sources = got.into_iter().collect()
+                }
+                Event::SketchSources { adding: true, got } => {
+                    if let Some(m) = &mut self.shell.sketch {
+                        for (words, r) in got {
+                            m.project(words, r);
+                        }
                     }
                 }
                 Event::Facts(f) => {
@@ -502,7 +535,12 @@ impl Gui {
     /// dialog up, what's clicked goes to the field waiting for picks.
     fn sync_selection(&mut self) {
         // in a sketch only the sketch answers the pointer; the model's for what's looked at
-        if self.shell.sketch.is_some() {
+        if self
+            .shell
+            .sketch
+            .as_ref()
+            .is_some_and(|m| m.tool != Some(SkTool::Project))
+        {
             self.shell.origin_hover = None;
             if let Some(v) = &mut self.view {
                 v.clicks = v.nav.clicks;
@@ -551,6 +589,36 @@ impl Gui {
             let on_face = face.filter(|_| clicked).map(|f| format!("on {f}"));
             if let Some(h) = plane.map(|i| i.reference().to_string()).or(on_face) {
                 self.ask_plane(h, SketchFor::New, Vec::new());
+            }
+            return;
+        }
+        if self
+            .shell
+            .sketch
+            .as_ref()
+            .is_some_and(|m| m.tool == Some(SkTool::Project))
+        {
+            let at = sketch_place(&self.shell);
+            let Some(v) = &mut self.view else { return };
+            v.clicks = v.nav.clicks;
+            if v.nav.selected != v.clicked {
+                // a click's one, or all a window took
+                let refs: Vec<String> = v
+                    .nav
+                    .selected
+                    .iter()
+                    .filter_map(|&(_, e)| match e {
+                        Entity::Face(f) => v.facts.face_refs.get(f as usize).cloned(),
+                        Entity::Edge(x) => v.facts.edge_refs.get(x as usize).cloned(),
+                        Entity::Vertex(_) => None,
+                    })
+                    .collect();
+                v.nav.selected.clear();
+                v.clicked.clear();
+                if !refs.is_empty() {
+                    v.live.sketch_sources(at, refs, true);
+                }
+                v.dirty = true;
             }
             return;
         }
@@ -814,7 +882,14 @@ impl Gui {
             WindowEvent::MouseInput {
                 button: MouseButton::Left,
                 ..
-            } if self.shell.sketch.as_ref().is_some_and(|m| m.tool.is_some()) => None,
+            } if self
+                .shell
+                .sketch
+                .as_ref()
+                .is_some_and(|m| m.tool.is_some_and(|t| t != SkTool::Project)) =>
+            {
+                None
+            }
             WindowEvent::MouseInput { state, .. } => match state {
                 ElementState::Pressed if self.over_view => {
                     self.captured = true;
@@ -1142,8 +1217,13 @@ impl Gui {
 
     fn ask_plane(&mut self, head: String, edit: SketchFor, rows: Vec<String>) {
         self.shell.sketch_pick = false;
+        let at = place_of(&self.shell, &edit);
+        let refs: Vec<String> = rows.iter().filter_map(|r| project_refs(r)).collect();
         self.sketch_for = Some((head.clone(), edit, rows));
         if let Some(v) = &mut self.view {
+            if !refs.is_empty() {
+                v.live.sketch_sources(at, refs, false);
+            }
             v.live.sketch_plane(head);
         }
     }
@@ -1553,7 +1633,7 @@ impl Gui {
         }
         let was_selected = self.shell.selected;
         let shell = &mut self.shell;
-        let output = self.ctx.run_ui(raw, |ui| shell.ui(ui));
+        let mut output = self.ctx.run_ui(raw, |ui| shell.ui(ui));
         if self.shell.selected != was_selected
             && let Some(v) = &mut self.view
         {
@@ -1682,7 +1762,12 @@ impl Gui {
             let marks = if v.live_drag {
                 Vec::new()
             } else {
-                let quiet = self.shell.sketch.is_some() || self.shell.sketch_hover.is_some();
+                let quiet = self
+                    .shell
+                    .sketch
+                    .as_ref()
+                    .is_some_and(|m| m.tool != Some(SkTool::Project))
+                    || self.shell.sketch_hover.is_some();
                 let mut m: Vec<Mark> = v
                     .nav
                     .marks()
@@ -1737,12 +1822,13 @@ impl Gui {
         let prims = self.ctx.tessellate(output.shapes, output.pixels_per_point);
         times.tess = now_ms() - t2;
         let t3 = now_ms();
-        if let Some(w) = self.warm_textures.take() {
+        if let Some(mut w) = self.warm_textures.take() {
             for (id, deltas) in &w.set {
                 for d in deltas.iter() {
                     self.egui.update_texture(&self.device, &self.queue, *id, d);
                 }
             }
+            w.clear();
         }
         for (id, deltas) in &output.textures_delta.set {
             for d in deltas.iter() {
@@ -1782,6 +1868,7 @@ impl Gui {
         for id in &output.textures_delta.free {
             self.egui.free_texture(id);
         }
+        output.textures_delta.clear();
         times.draw = now_ms() - t3;
 
         let delay = output

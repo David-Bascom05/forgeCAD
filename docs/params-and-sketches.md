@@ -57,6 +57,22 @@ end
 - A sketch placed `on` a plane, sketch or face keeps that reference (`Sketch.on`), printed
   back as written and re-resolved every time the line is read, so it follows its plane.
 
+## Projected geometry
+
+A `project REF..` row lays 3D geometry on the sketch's plane: edges, a face's boundary edges,
+vertices, work points. It is read from the part above the sketch every time the line is read, so
+it follows edits there, and each point it makes is `Fixed`, so it adds no freedom. Points within
+LINEAR are one point, so a loop's ends and a line drawn from one are shared, not near.
+
+- Results count on their own (`j1`, `j2`..) whatever each comes to, so an edge turning end-on
+  can't renumber the lines drawn below it: a row still naming `j1` as a line fails instead.
+- A face or selector can give more or fewer curves after an edit, so its results have no names a
+  row can write; they still join profiles, and their faces take their names from the source edge.
+  The app expands a clicked face to its edges' handles, which rows can name.
+- What a sketch holds exactly is made; what it can't (a tilted circle's ellipse, a general curve)
+  is refused. Nothing is approximated.
+- A source an edit took away is an error at the sketch's line naming the row.
+
 ## References
 
 Profile segments from a sketch carry ids from the entity's kind and count (`l3`, `c1`), not

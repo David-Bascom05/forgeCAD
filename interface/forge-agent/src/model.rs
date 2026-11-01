@@ -853,9 +853,9 @@ impl Model {
             } else if let Some(f) = body.face_by_name(n) {
                 one = false;
                 edges.extend(
-                    select::edges_of_face(body, f)
-                        .into_iter()
-                        .filter(|&e| select::faces_of_edge(body, e).len() > 1 || body.edge(e).coedges.len() < 2),
+                    select::edges_of_face(body, f).into_iter().filter(|&e| {
+                        select::faces_of_edge(body, e).len() > 1 || body.edge(e).coedges.len() < 2
+                    }),
                 );
             } else if let Some(v) = body.vertex_ids().find(|&v| body.vertex(v).name == n) {
                 sources.push((n, sketch::Source::Point(body.vertex(v).point)));
@@ -904,6 +904,31 @@ impl Model {
             own: &|_, n| n,
         };
         text::sources_of(&b, toks)
+    }
+
+    /// `sources_at`, each source on its own, with the handle that names it: what a click writes.
+    pub fn sources_named(
+        &self,
+        at: Option<u64>,
+        toks: &[String],
+    ) -> Result<(String, Vec<sketch::Refd>), String> {
+        let refs = self.sources_at(at, toks)?;
+        let i = at
+            .and_then(|id| self.lines.iter().position(|l| l.id == id))
+            .unwrap_or(self.built())
+            .min(self.built());
+        let body = self.body_after(i).ok_or("nothing is built above this line")?;
+        let names = select::handles(body);
+        let mut words = Vec::new();
+        let mut each = Vec::new();
+        for (n, s) in refs.into_iter().flat_map(|r| r.sources) {
+            words.push(names.get(&n).cloned().ok_or("a source with no handle")?);
+            each.push(sketch::Refd {
+                sources: vec![(n, s)],
+                one: true,
+            });
+        }
+        Ok((words.join(" "), each))
     }
 
     /// Resolves a line's `@handle` or `(selector)` against the part before line `i`.

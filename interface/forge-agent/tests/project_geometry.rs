@@ -3,7 +3,7 @@
 use forge_agent::model::Model;
 use forge_agent::tools::Part;
 use forge_doc::sketch;
-use forge_math::Point2;
+use forge_math::{Point2, dmath};
 use forge_model::Feature;
 use forge_sketch::Entity;
 
@@ -14,7 +14,11 @@ fn model(src: &str) -> Model {
 }
 
 fn sketch_named<'a>(m: &'a Model, label: &str) -> &'a forge_model::Sketch {
-    let i = m.lines.iter().position(|l| l.label.as_deref() == Some(label)).unwrap();
+    let i = m
+        .lines
+        .iter()
+        .position(|l| l.label.as_deref() == Some(label))
+        .unwrap();
     let Feature::Sketch(s) = &m.features[i] else {
         panic!("{label} is no sketch")
     };
@@ -59,7 +63,10 @@ fn a_straight_edge_gives_the_same_line_and_end_on_a_point() {
     let top = handles(&m0, "(edges along +x top back)");
     let up = handles(&m0, "(edges along +z left back)");
     assert_eq!((top.len(), up.len()), (1, 1), "{top:?} {up:?}");
-    let src = format!("{BLOCK}sk: sketch xy at 0 0 50\n  project {} {}\nend\n", top[0], up[0]);
+    let src = format!(
+        "{BLOCK}sk: sketch xy at 0 0 50\n  project {} {}\nend\n",
+        top[0], up[0]
+    );
     let m = model(&src);
     let s = sketch_named(&m, "sk");
     assert!(matches!(entity(s, "j1"), Entity::Line { .. }));
@@ -96,7 +103,10 @@ fn results_hold_no_freedom_and_a_new_line_closes_on_them_exactly() {
 fn a_face_gives_its_boundary_and_extrudes_to_its_exact_volume() {
     let m0 = model(BLOCK);
     let top = handles(&m0, "(faces plane normal +z top)");
-    let src = format!("{BLOCK}sk: sketch xy at 0 0 30\n  project {}\nend\next: extrude new 5 sk\n", top[0]);
+    let src = format!(
+        "{BLOCK}sk: sketch xy at 0 0 30\n  project {}\nend\next: extrude new 5 sk\n",
+        top[0]
+    );
     let mut m = Model::new(&src);
     assert!(m.error.is_none(), "{:?}", m.error);
     close(volume(&mut m), 40.0 * 30.0 * 10.0 + 40.0 * 30.0 * 5.0);
@@ -108,7 +118,10 @@ fn a_face_with_a_hole_and_an_arc_keeps_them_exact() {
     let src = "base: extrude 10 rrect 0 0 40 30 5\nhole 8 -xy at 20 15 10 thru\n";
     let m0 = model(src);
     let top = handles(&m0, "(faces plane normal +z top)");
-    let full = format!("{src}sk: sketch xy at 0 0 30\n  project {}\nend\next: extrude new 5 sk\n", top[0]);
+    let full = format!(
+        "{src}sk: sketch xy at 0 0 30\n  project {}\nend\next: extrude new 5 sk\n",
+        top[0]
+    );
     let mut m = Model::new(&full);
     assert!(m.error.is_none(), "{:?}", m.error);
     let area = 40.0 * 30.0 - (4.0 - core::f64::consts::PI) * 25.0 - core::f64::consts::PI * 16.0;
@@ -124,13 +137,22 @@ fn circles_are_exact_square_on_and_lines_edge_on_and_refused_tilted() {
     let rim = handles(&m0, "(edges circle top)");
     assert_eq!(rim.len(), 1);
     // parallel: the circle
-    let m = model(&format!("{src}sk: sketch xy at 0 0 50\n  project {}\nend\n", rim[0]));
+    let m = model(&format!(
+        "{src}sk: sketch xy at 0 0 50\n  project {}\nend\n",
+        rim[0]
+    ));
     let s = sketch_named(&m, "sk");
     assert!(matches!(entity(s, "j1"), Entity::Circle { .. }));
     assert_eq!((at(s, "j1").x, at(s, "j1").y), (20.0, 15.0));
-    assert_eq!(s.solved.radius(s.names.iter().find(|n| n.0 == "j1").unwrap().1), 4.0);
+    assert_eq!(
+        s.solved.radius(s.names.iter().find(|n| n.0 == "j1").unwrap().1),
+        4.0
+    );
     // upside down too
-    let m = model(&format!("{src}sk: sketch -xy at 0 0 50\n  project {}\nend\n", rim[0]));
+    let m = model(&format!(
+        "{src}sk: sketch -xy at 0 0 50\n  project {}\nend\n",
+        rim[0]
+    ));
     let s = sketch_named(&m, "sk");
     assert_eq!((at(s, "j1").x, at(s, "j1").y), (20.0, -15.0));
     // square on: a line its diameter long
@@ -144,7 +166,10 @@ fn circles_are_exact_square_on_and_lines_edge_on_and_refused_tilted() {
     close(b.y, 10.0);
     // tilted: refused, naming the row
     let e = error_of(&format!("{src}sk: sketch z 0 1 1\n  project {}\nend\n", rim[0]));
-    assert!(e.contains("project") && e.contains("ellipse") && e.contains("45.000"), "{e}");
+    assert!(
+        e.contains("project") && e.contains("ellipse") && e.contains("45.000"),
+        "{e}"
+    );
 }
 
 #[test]
@@ -167,7 +192,10 @@ fn an_arc_keeps_its_way_round_from_either_side() {
     let m0 = model(src);
     let arc = handles(&m0, "(edges circle top near 40 30 10)");
     for (frame, ccw) in [("xy", true), ("-xy", false)] {
-        let m = model(&format!("{src}sk: sketch {frame} at 0 0 50\n  project {}\nend\n", arc[0]));
+        let m = model(&format!(
+            "{src}sk: sketch {frame} at 0 0 50\n  project {}\nend\n",
+            arc[0]
+        ));
         let s = sketch_named(&m, "sk");
         let Entity::Arc { ccw: way, .. } = entity(s, "j1") else {
             panic!("an arc")
@@ -180,17 +208,31 @@ fn an_arc_keeps_its_way_round_from_either_side() {
 fn it_follows_an_edit_above_and_says_so_when_the_source_goes() {
     let mut p = Part::new("w = 40\nbase: extrude 10 rect 0 0 w 30\n");
     let edge = handles(&p.model, "(edges along +y top right)");
-    assert!(p.act(&format!("sk: sketch xy at 0 0 30\n project {}\nend", edge[0]), None).ok);
+    assert!(
+        p.act(
+            &format!("sk: sketch xy at 0 0 30\n project {}\nend", edge[0]),
+            None
+        )
+        .ok
+    );
     let s = sketch_named(&p.model, "sk");
     assert_eq!(at(s, "j1.a").x, 40.0);
     let done = p.act("w = 60", None);
     assert!(done.ok, "{}", done.text);
     let s = sketch_named(&p.model, "sk");
-    assert_eq!((at(s, "j1.a").x, at(s, "j1.b").x), (60.0, 60.0), "re-derived from the edit");
+    assert_eq!(
+        (at(s, "j1.a").x, at(s, "j1.b").x),
+        (60.0, 60.0),
+        "re-derived from the edit"
+    );
     // a chamfer takes the edge: the edit is refused, naming the row
     let cut = p.act(&format!("before sk chamfer 1 {}", edge[0]), None);
     assert!(!cut.ok, "{}", cut.text);
-    assert!(cut.text.contains("project") && cut.text.contains(&edge[0]), "{}", cut.text);
+    assert!(
+        cut.text.contains("project") && cut.text.contains(&edge[0]),
+        "{}",
+        cut.text
+    );
     // the same by hand in the file: an error at the row's line, and nothing frozen below it
     let hand = format!(
         "w = 60\nbase: extrude 10 rect 0 0 w 30\nchamfer 1 {0}\nsk: sketch xy at 0 0 30\n project {0}\nend\n",
@@ -208,7 +250,10 @@ fn a_face_follows_a_new_edge_and_its_extrusions_faces_keep_their_names() {
     let src = "base: id 1 extrude 10 rect 0 0 40 30\n";
     let m0 = model(src);
     let top = handles(&m0, "(faces plane normal +z top)");
-    let tail = format!("sk: id 5 sketch xy at 0 0 30\n  project {}\nend\next: id 6 extrude new 5 sk\n", top[0]);
+    let tail = format!(
+        "sk: id 5 sketch xy at 0 0 30\n  project {}\nend\next: id 6 extrude new 5 sk\n",
+        top[0]
+    );
     let mut m = Model::new(&format!("{src}{tail}"));
     assert!(m.error.is_none(), "{:?}", m.error);
     let faces = |m: &Model| -> Vec<u64> {
@@ -224,10 +269,7 @@ fn a_face_follows_a_new_edge_and_its_extrusions_faces_keep_their_names() {
     assert_eq!(now.len(), before.len() + 1);
     let kept = before.iter().filter(|n| now.contains(n)).count();
     assert!(kept >= 4, "{kept} of {}", before.len());
-    close(
-        volume(&mut after) - volume(&mut m),
-        -2.0 * (10.0 + 5.0),
-    );
+    close(volume(&mut after) - volume(&mut m), -2.0 * (10.0 + 5.0));
 }
 
 #[test]
@@ -235,14 +277,24 @@ fn rows_cannot_name_what_can_change_in_number_but_can_name_edges_listed() {
     let src = "base: extrude 10 rect 0 0 40 30\n";
     let m0 = model(src);
     let top = handles(&m0, "(faces plane normal +z top)");
-    let e = error_of(&format!("{src}sk: sketch xy at 0 0 30\n  project {}\n  dist j1 40\nend\n", top[0]));
+    let e = error_of(&format!(
+        "{src}sk: sketch xy at 0 0 30\n  project {}\n  dist j1 40\nend\n",
+        top[0]
+    ));
     assert!(e.contains("list the edges"), "{e}");
     let edges = handles(&m0, "(edges of base line top)");
     let m = model(&format!(
         "{src}sk: sketch xy at 0 0 30\n  project {}\n  pt 5 5\n  dist j1.a p1 4\nend\nextrude new 5 sk\n",
         edges.join(" ")
     ));
-    assert_eq!(sketch_named(&m, "sk").names.iter().filter(|n| n.0.starts_with('j')).count(), 4);
+    assert_eq!(
+        sketch_named(&m, "sk")
+            .names
+            .iter()
+            .filter(|n| n.0.starts_with('j'))
+            .count(),
+        4
+    );
 }
 
 #[test]
@@ -271,7 +323,10 @@ fn construction_and_constraints_work_on_results() {
     assert_eq!(sketch::freedom(s).0, 0);
     close(at(s, "p1").y, 7.0);
     // a result is held: a dimension against what it's held to is refused
-    let bad = format!("{BLOCK}sk: sketch xy at 0 0 10\n  project {}\n  dist j1 41\nend\n", e[0]);
+    let bad = format!(
+        "{BLOCK}sk: sketch xy at 0 0 10\n  project {}\n  dist j1 41\nend\n",
+        e[0]
+    );
     assert!(error_of(&bad).contains("does not solve"), "{}", error_of(&bad));
 }
 
@@ -279,7 +334,10 @@ fn construction_and_constraints_work_on_results() {
 fn the_file_reads_back_the_same_and_a_dimension_elsewhere_keeps_it() {
     let m0 = model(BLOCK);
     let e = handles(&m0, "(edges along +x top front)");
-    let src = format!("{BLOCK}sk: sketch xy at 0 0 10\n  project {}\n  pt 5 5\n  dist j1.a p1 9\nend\n", e[0]);
+    let src = format!(
+        "{BLOCK}sk: sketch xy at 0 0 10\n  project {}\n  pt 5 5\n  dist j1.a p1 9\nend\n",
+        e[0]
+    );
     let mut p = Part::new(&src);
     assert!(p.model.error.is_none());
     let printed = p.model.src().to_string();
@@ -296,7 +354,10 @@ fn the_file_reads_back_the_same_and_a_dimension_elsewhere_keeps_it() {
 struct Rng(u64);
 impl Rng {
     fn next(&mut self) -> f64 {
-        self.0 = self.0.wrapping_mul(6364136223846793005).wrapping_add(1442695040888963407);
+        self.0 = self
+            .0
+            .wrapping_mul(6364136223846793005)
+            .wrapping_add(1442695040888963407);
         ((self.0 >> 33) as f64) / (1u64 << 31) as f64
     }
     fn range(&mut self, a: f64, b: f64) -> f64 {
@@ -366,4 +427,63 @@ fn random_rims_stay_exact_circles_on_random_parallel_planes() {
         let want = core::f64::consts::PI * rad * rad * 12.0;
         assert!((v - want).abs() < 1e-8 * want, "{v} {want}");
     }
+}
+
+#[test]
+fn random_rims_on_turned_parallel_planes_edge_on_planes_and_tilted_ones() {
+    let mut r = Rng(13);
+    for _ in 0..100 {
+        let (cx, cy, rad) = (r.range(-30.0, 30.0), r.range(-30.0, 30.0), r.range(0.5, 10.0));
+        let src = format!("base: extrude 10 circle {cx:?} {cy:?} {rad:?}\n");
+        let m0 = model(&src);
+        let rim = handles(&m0, "(edges circle top)");
+        // turned in its own plane: a circle, the centre carried round
+        let t = r.range(0.0, core::f64::consts::TAU);
+        let (c, s) = (dmath::cos(t), dmath::sin(t));
+        let m = model(&format!(
+            "{src}sk: sketch z 0 0 1 x {c:?} {s:?} 0\n  project {}\nend\n",
+            rim[0]
+        ));
+        let q = sketch_named(&m, "sk");
+        let e = at(q, "j1");
+        assert!(matches!(entity(q, "j1"), Entity::Circle { .. }));
+        assert!((e.x - (cx * c + cy * s)).abs() < 1e-11 && (e.y - (cy * c - cx * s)).abs() < 1e-11);
+        // a plane holding z, at any turn: a line a diameter long through the centre, at height 10
+        let m = model(&format!(
+            "{src}sk: sketch z {c:?} {s:?} 0 x 0 0 1\n  project {}\nend\n",
+            rim[0]
+        ));
+        let q = sketch_named(&m, "sk");
+        let (a, b) = (at(q, "j1.a"), at(q, "j1.b"));
+        assert!((a.distance(b) - 2.0 * rad).abs() < 1e-11, "{a:?} {b:?}");
+        assert!(
+            (a.x - 10.0).abs() < 1e-11 && (b.x - 10.0).abs() < 1e-11,
+            "{a:?} {b:?}"
+        );
+        // tilted: always refused, whatever the angle's size
+        let tilt = r.range(1.0, 89.0).to_radians();
+        let e = error_of(&format!(
+            "{src}sk: sketch z {:?} 0 {:?}\n  project {}\nend\n",
+            dmath::sin(tilt),
+            dmath::cos(tilt),
+            rim[0]
+        ));
+        assert!(e.contains("ellipse"), "{e}");
+    }
+}
+
+#[test]
+fn a_sketch_on_a_plane_above_carries_its_results_when_the_plane_moves() {
+    let src = "h = 30\nbase: extrude 10 rect 0 0 40 30\nwp: plane xy at 0 0 h\n";
+    let m0 = model(src);
+    let e = handles(&m0, "(edges along +x top front)");
+    let mut p = Part::new(&format!("{src}sk: sketch on wp\n  project {}\nend\n", e[0]));
+    assert!(p.model.error.is_none(), "{:?}", p.model.error);
+    let before = sketch_named(&p.model, "sk").plane.origin.z;
+    assert_eq!(before, 30.0);
+    assert!(p.act("h = 12", None).ok);
+    let q = sketch_named(&p.model, "sk");
+    assert_eq!(q.plane.origin.z, 12.0);
+    let a = q.plane.plane_point(at(q, "j1.a"));
+    assert_eq!((a.y, a.z), (0.0, 12.0));
 }

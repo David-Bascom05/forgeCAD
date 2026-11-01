@@ -102,7 +102,10 @@ fn flat(plane: &Frame, s: &Source) -> R<Flat> {
             if l.dir.get().cross(z).length() <= tol::ANGULAR {
                 return Ok(Flat::Point(in_plane(plane, l.origin)));
             }
-            Err("an axis has no ends, so it makes no line here unless seen end-on; project an edge along it".into())
+            Err(
+                "an axis has no ends, so it makes no line here unless seen end-on; project an edge along it"
+                    .into(),
+            )
         }
         Source::Edge {
             curve,
@@ -462,7 +465,7 @@ impl B<'_, '_> {
                 end,
                 ccw,
             } => self.s.add_arc(center, start, end, ccw),
-            Entity::Point { .. } => unreachable!("returned above"),
+            _ => unreachable!("only those are made above"),
         }
         .map_err(bad)?;
         if matches!(f, Flat::Circle(..)) {
@@ -1076,7 +1079,7 @@ fn id_of(s: &Sketch, t: &str) -> R<EntityId> {
 /// stays put when other kinds are added or dimensions change.
 fn stable(name: &str) -> u64 {
     if let Some(h) = name.strip_prefix('#') {
-        return (u64::from_str_radix(h, 16).unwrap_or(0) >> 3) << 2 | 3 | 1 << 62;
+        return (u64::from_str_radix(h, 16).unwrap_or(0) >> 20) << 2 | 3 | 1 << 46;
     }
     let n: u64 = name[1..].parse().unwrap_or(0);
     let k = match name.as_bytes()[0] {
@@ -1151,7 +1154,10 @@ pub fn profile(s: &Sketch, through: Option<&str>) -> R<Profile> {
         None => {
             let outs: Vec<&str> = ps
                 .iter()
-                .map(|p| name_of(s, p.loops[0].segments[0].1 & !PIECE))
+                .map(|p| match name_of(s, p.loops[0].segments[0].1 & !PIECE) {
+                    n if n.starts_with('#') => "(a face's curve: list its edges in `project` to name it)",
+                    n => n,
+                })
                 .collect();
             return Err(format!(
                 "the sketch has {} regions; name one by an entity on its outside: {}",
@@ -1235,7 +1241,7 @@ fn along(g: &forge_ops::Segment) -> Vec<Point2> {
 pub fn named_points(s: &Sketch) -> Vec<(String, Point2)> {
     let q = &s.solved;
     let mut out = Vec::new();
-    for (name, id) in &s.names {
+    for (name, id) in s.names.iter().filter(|n| !n.0.starts_with('#')) {
         match q.entity(*id) {
             Some(Entity::Point { .. }) if name != "o" => out.push((name.clone(), q.point(*id))),
             Some(Entity::Line { a, b }) => {
@@ -1263,7 +1269,14 @@ pub fn regions(s: &Sketch) -> Vec<Region> {
     };
     ps.iter()
         .map(|p| Region {
-            through: name_of(s, p.loops[0].segments[0].1).to_string(),
+            // one no row can name (a face's projected curves) leaves it to be the sketch's only region
+            through: p.loops[0]
+                .segments
+                .iter()
+                .map(|g| name_of(s, g.1 & !PIECE))
+                .find(|n| !n.starts_with('#'))
+                .unwrap_or("")
+                .to_string(),
             loops: p
                 .loops
                 .iter()
@@ -1618,14 +1631,14 @@ mod ids_tests {
             panic!("a line")
         };
         assert!((p.distance(q) - 12.0).abs() < 1e-12);
-        let par = forge_geom::Parabola {
-            frame: z,
-            focal: 1.0,
-        };
+        let par = forge_geom::Parabola { frame: z, focal: 1.0 };
         let g = edge(Curve::Parabola(par), Interval::new(-1.0, 1.0), a, b);
         assert!(flat(&z, &g).unwrap_err().contains("general curve"));
         // a circle one hair off parallel is still it; further, an ellipse named by its tilt
-        let k = Curve::Circle(Circle { frame: z, radius: 10.0 });
+        let k = Curve::Circle(Circle {
+            frame: z,
+            radius: 10.0,
+        });
         let round = |c: f64| {
             flat(
                 &at_tilt(c),

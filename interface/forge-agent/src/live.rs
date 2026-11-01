@@ -54,6 +54,11 @@ pub enum Event<T> {
     Facts(Box<Facts>),
     /// The plane a sketch's header reads as, or why it doesn't.
     SketchPlane(String, Result<forge_math::Frame, String>),
+    /// What `project` rows' references come to. `adding`: a click's, each source named by a handle.
+    SketchSources {
+        adding: bool,
+        got: Vec<(String, Result<Vec<forge_doc::sketch::Refd>, String>)>,
+    },
 }
 
 /// What a UI needs of the part it can't ask the worker for: it parses `src` itself.
@@ -85,6 +90,12 @@ enum Job {
     PreviewEnd,
     /// The plane a sketch with this header would be on.
     SketchPlane(String),
+    /// `project` references as a sketch before this item (or on the end) would read them.
+    SketchSources {
+        at: Option<ItemId>,
+        rows: Vec<String>,
+        adding: bool,
+    },
 }
 
 struct Slot<T> {
@@ -186,6 +197,11 @@ impl<T: Send + 'static> Live<T> {
     /// Asks what plane a sketch with this header would be on: answered by `Event::SketchPlane`.
     pub fn sketch_plane(&mut self, head: String) {
         self.job(Job::SketchPlane(head));
+    }
+
+    /// Asks what `project` references come to before this item: answered by `Event::SketchSources`.
+    pub fn sketch_sources(&mut self, at: Option<ItemId>, rows: Vec<String>, adding: bool) {
+        self.job(Job::SketchSources { at, rows, adding });
     }
 
     pub fn preview_end(&mut self) {
@@ -373,6 +389,26 @@ fn run<T>(mut part: Part, mesher: &mut impl FnMut(&Body, Stage) -> T, shared: &S
                     say(Event::SketchPlane(head, got));
                     continue;
                 }
+                if let Job::SketchSources { at, rows, adding } = j {
+                    let at = at.map(|i| i.0);
+                    let got = rows
+                        .into_iter()
+                        .map(|r| {
+                            let toks = forge_doc::text::tokens(&r);
+                            if adding {
+                                match part.model.sources_named(at, &toks) {
+                                    Ok((words, refs)) => (words, Ok(refs)),
+                                    Err(e) => (r, Err(e)),
+                                }
+                            } else {
+                                let got = part.model.sources_at(at, &toks);
+                                (r, got)
+                            }
+                        })
+                        .collect();
+                    say(Event::SketchSources { adding, got });
+                    continue;
+                }
                 if let Job::PreviewEnd = j {
                     if let Some(base) = before_preview.take() {
                         part.model.restore(base);
@@ -402,7 +438,11 @@ fn run<T>(mut part: Part, mesher: &mut impl FnMut(&Body, Stage) -> T, shared: &S
                     continue;
                 }
                 let d = match j {
-                    Job::Roll(_) | Job::Preview(..) | Job::PreviewEnd | Job::SketchPlane(_) => {
+                    Job::Roll(_)
+                    | Job::Preview(..)
+                    | Job::PreviewEnd
+                    | Job::SketchPlane(_)
+                    | Job::SketchSources { .. } => {
                         unreachable!("taken above")
                     }
                     Job::Commit(op) => part.drag_commit(op, last_good.take()),

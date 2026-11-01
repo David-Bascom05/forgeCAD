@@ -23,6 +23,8 @@ pub struct Theme {
     pub selection: Color32,
     /// Sketches in the view: apart from the part, the view and what's lit, in either theme.
     pub sketch: Color32,
+    /// Sketch geometry projected from the part.
+    pub projected: Color32,
 }
 
 const fn c(x: u32) -> Color32 {
@@ -48,6 +50,7 @@ pub const DARK: Theme = Theme {
     focus: c(0xE0A21B),
     error: c(0xE0554A),
     selection: c(0x2C4A6B),
+    projected: c(0xD9C24A),
 };
 
 pub const LIGHT: Theme = Theme {
@@ -69,6 +72,7 @@ pub const LIGHT: Theme = Theme {
     focus: c(0xE0A21B),
     error: c(0xB83A30),
     selection: c(0xB9D2EC),
+    projected: c(0x9A7A00),
 };
 
 pub fn sans(size: f32) -> FontId {

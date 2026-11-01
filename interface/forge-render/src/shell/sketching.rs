@@ -8,6 +8,7 @@ use forge_doc::text::{Want, tokens};
 use forge_doc::{Document, ItemId, expr, sketch as sk};
 use forge_math::{Frame, Point2};
 use forge_sketch::{Entity, Status};
+use std::collections::HashMap;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum SkTool {
@@ -21,6 +22,8 @@ pub enum SkTool {
     Parallel,
     Perpendicular,
     Tangent,
+    /// Edges and faces clicked in the view become `project` rows.
+    Project,
 }
 
 /// A value on screen as an entity's being drawn: live until typed in, then what the entity obeys.
@@ -247,6 +250,16 @@ pub struct SketchMode {
     first_rows: Vec<String>,
     /// Where the pointer last was on the plane: typing leaves it, the preview stays.
     cursor: Option<(f64, f64)>,
+    /// What each `project` row's references come to, from the worker that holds the part.
+    pub sources: HashMap<String, Result<Vec<sk::Refd>, String>>,
+}
+
+/// A `project` row's references, its words after the word.
+pub fn project_refs(row: &str) -> Option<String> {
+    let t = tokens(row);
+    let (first, rest) = t.split_first()?;
+    let rest = rest.strip_suffix(&["cons".to_string()]).unwrap_or(rest);
+    (first == "project").then(|| rest.join(" "))
 }
 
 /// A row added, for tests and the status bar.
@@ -306,6 +319,7 @@ impl SketchMode {
             active: 0,
             first_rows: Vec::new(),
             cursor: None,
+            sources: HashMap::new(),
             rows,
             tool: None,
             picks: Vec::new(),
@@ -324,7 +338,53 @@ impl SketchMode {
 
     fn build(&self, rows: &[String]) -> Result<forge_model::Sketch, String> {
         let toks: Vec<Vec<String>> = rows.iter().map(|r| tokens(r)).collect();
-        sk::build(self.plane, toks, &num_of(&self.params), self.solved.as_ref())
+        let src = |t: &[String]| match self.sources.get(&t.join(" ")) {
+            Some(got) => got.clone(),
+            None => Err("still reading the part".to_string()),
+        };
+        sk::build_on(
+            self.plane,
+            toks,
+            &num_of(&self.params),
+            &src,
+            self.solved.as_ref(),
+        )
+    }
+
+    /// Takes in what the rows it opened with project, and solves with them.
+    pub fn take_sources(&mut self, got: HashMap<String, Result<Vec<sk::Refd>, String>>) {
+        self.sources = got;
+        self.solve();
+    }
+
+    /// Writes a `project` row for what a click named, each source by its handle, leaving out what's
+    /// already projected. A source a sketch can't hold is refused here, the row not written.
+    pub fn project(&mut self, words: String, got: Result<Vec<sk::Refd>, String>) -> bool {
+        let refs = match got {
+            Ok(r) => r,
+            Err(e) => {
+                self.error = Some(e);
+                return false;
+            }
+        };
+        let have: Vec<String> = self
+            .rows
+            .iter()
+            .filter_map(|r| project_refs(r))
+            .flat_map(|r| tokens(&r))
+            .collect();
+        let fresh: Vec<(String, sk::Refd)> = tokens(&words)
+            .into_iter()
+            .zip(refs)
+            .filter(|(w, _)| !have.contains(w))
+            .collect();
+        if fresh.is_empty() {
+            return false;
+        }
+        let key = fresh.iter().map(|f| f.0.as_str()).collect::<Vec<_>>().join(" ");
+        self.sources
+            .insert(key.clone(), Ok(fresh.into_iter().map(|f| f.1).collect()));
+        self.add(format!("project {key}"))
     }
 
     fn solve(&mut self) {
@@ -491,7 +551,7 @@ impl SketchMode {
         let Some(s) = &self.solved else { return Vec::new() };
         let mut out = Vec::new();
         let g = &s.solved;
-        for (name, id) in &s.names {
+        for (name, id) in s.names.iter().filter(|n| !n.0.starts_with('#')) {
             let mut put = |n: String, p: Point2| out.push((n, (p.x, p.y)));
             match g.entity(*id) {
                 Some(Entity::Point { .. }) => put(name.clone(), g.point(*id)),
@@ -507,7 +567,7 @@ impl SketchMode {
                     put(format!("{name}.a"), g.point(start));
                     put(format!("{name}.b"), g.point(end));
                 }
-                None => {}
+                _ => {}
             }
         }
         out
@@ -519,7 +579,14 @@ impl SketchMode {
         let g = &s.solved;
         let mut best: Option<(f64, String)> = None;
         for (name, id) in &s.names {
-            if !name.starts_with(|c| kinds.contains(c)) {
+            // a projected one goes by what it came to
+            let kind = match g.entity(*id) {
+                Some(Entity::Line { .. }) if name.starts_with('j') => 'l',
+                Some(Entity::Circle { .. }) if name.starts_with('j') => 'c',
+                Some(Entity::Arc { .. }) if name.starts_with('j') => 'a',
+                _ => name.chars().next().unwrap_or('?'),
+            };
+            if !kinds.contains(kind) {
                 continue;
             }
             let d = match g.entity(*id) {
@@ -624,7 +691,7 @@ impl SketchMode {
         let mid = s
             .names
             .iter()
-            .filter(|n| n.0.starts_with('l'))
+            .filter(|n| n.0.starts_with(['l', 'j']))
             .filter_map(|n| {
                 let (a, b) = sk::line(s, &n.0).ok()?;
                 let m = ((a.x + b.x) * 0.5, (a.y + b.y) * 0.5);
@@ -701,7 +768,7 @@ impl SketchMode {
         let Some(s) = &self.solved else { return Vec::new() };
         s.names
             .iter()
-            .filter(|n| n.0.starts_with('l'))
+            .filter(|n| n.0.starts_with(['l', 'j']))
             .filter_map(|n| {
                 let (a, b) = sk::line(s, &n.0).ok()?;
                 let (x, y) = (b.x - a.x, b.y - a.y);
@@ -808,7 +875,7 @@ impl SketchMode {
                 if let Some(arc) = from
                     .strip_suffix(".b")
                     .or(from.strip_suffix(".a"))
-                    .filter(|w| w.starts_with('a'))
+                    .filter(|w| w.starts_with(['a', 'j']))
                     && let Some(s) = &self.solved
                     && let Some((_, id)) = s.names.iter().find(|x| x.0 == arc)
                     && let Some(Entity::Arc { center, .. }) = s.solved.entity(*id)
@@ -1056,7 +1123,7 @@ impl SketchMode {
                     }
                 }
             }
-            SkTool::Dimension => {}
+            SkTool::Dimension | SkTool::Project => {}
         }
     }
 
@@ -1320,6 +1387,12 @@ impl Shell {
         if let Some(s) = &m.solved {
             let g = &s.solved;
             for (name, id) in &s.names {
+                // what's projected has its own colour
+                let (ink, line) = if sk::is_projected(name) {
+                    (t.projected, Stroke::new(1.5, t.projected))
+                } else {
+                    (ink, line)
+                };
                 match g.entity(*id) {
                     Some(Entity::Line { a, b }) => {
                         let (pa, pb) = (g.point(a), g.point(b));
@@ -1373,7 +1446,7 @@ impl Shell {
                     Some(Entity::Point { .. }) if name != "o" => {
                         let q = g.point(*id);
                         if let Some(u) = screen((q.x, q.y)) {
-                            p.circle_filled(u, 3.0, t.focus);
+                            p.circle_filled(u, 3.0, if sk::is_projected(name) { ink } else { t.focus });
                         }
                     }
                     _ => {}
@@ -1779,6 +1852,7 @@ impl Shell {
             Some(SkTool::Rectangle) => Some("Drawing a rectangle"),
             Some(SkTool::Circle) => Some("Drawing a circle"),
             Some(SkTool::Arc) => Some("Drawing an arc"),
+            Some(SkTool::Project) => Some("Click edges or faces to project them"),
             _ => None,
         };
         self.status = match m.solved.as_ref().map(|s| sk::freedom(s).0) {
@@ -1813,6 +1887,61 @@ mod tests {
 
     fn mode() -> SketchMode {
         SketchMode::new(SketchFor::New, "xy".into(), Frame::default(), Vec::new(), None)
+    }
+
+    #[test]
+    fn a_click_a_sketch_cannot_hold_writes_no_row_and_says_why() {
+        use forge_geom::{Circle, Curve};
+        use forge_math::{Interval, Point3, Vec3};
+        use forge_topo::Name;
+        let mut m = mode();
+        let tilted = Frame::from_z(Point3::ORIGIN, Vec3::new(0.0, 1.0, 1.0).normalize().unwrap());
+        let start = tilted.plane_point(Point2::new(5.0, 0.0));
+        let rim = sk::Source::Edge {
+            curve: Curve::Circle(Circle {
+                frame: tilted,
+                radius: 5.0,
+            }),
+            range: Interval::new(0.0, core::f64::consts::TAU),
+            start,
+            end: start,
+            closed: true,
+        };
+        let refd = sk::Refd {
+            sources: vec![(Name(1), rim)],
+            one: true,
+        };
+        assert!(!m.project("@e12345678".into(), Ok(vec![refd])));
+        assert!(m.rows.is_empty(), "{:?}", m.rows);
+        assert!(m.error.as_deref().unwrap().contains("ellipse"), "{:?}", m.error);
+        assert!(!m.project("@e12345678".into(), Err("gone".into())));
+        assert_eq!(m.error.as_deref(), Some("gone"));
+    }
+
+    #[test]
+    fn what_a_face_row_projects_shows_but_is_not_offered_to_rows() {
+        use forge_math::Point3;
+        use forge_topo::Name;
+        let mut m = mode();
+        let line = sk::Source::Edge {
+            curve: forge_geom::Curve::Line(forge_geom::Line {
+                origin: Point3::ORIGIN,
+                dir: forge_math::Vec3::new(1.0, 0.0, 0.0).normalize().unwrap(),
+            }),
+            range: forge_math::Interval::new(0.0, 10.0),
+            start: Point3::ORIGIN,
+            end: Point3::new(10.0, 0.0, 0.0),
+            closed: false,
+        };
+        let refd = sk::Refd {
+            sources: vec![(Name(7), line)],
+            one: false,
+        };
+        m.sources.insert("@f12345678".into(), Ok(vec![refd]));
+        assert!(m.add("project @f12345678".into()), "{:?}", m.error);
+        assert_eq!(m.solved.as_ref().unwrap().names.len(), 1);
+        assert!(m.points().is_empty());
+        assert_eq!(m.entity_near((5.0, 0.0), 1.0, "l"), None);
     }
 
     #[test]
