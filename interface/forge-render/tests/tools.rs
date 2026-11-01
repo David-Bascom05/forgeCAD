@@ -1165,23 +1165,30 @@ fn a_sketch_from_the_tree_gives_a_hole_all_its_points_and_a_hole_goes_to_a_face_
     let got = was - built(&file, "tree");
     let want = 2.0 * pi_r2(5.0) * 20.0;
     assert!((got - want).abs() < want * 0.01, "{got} {want}");
-    // to a face, in a part with a cavity: it stops there
-    let part = "a: extrude 30 rect -30 -30 60 60\nsk1: sketch xy at 0 0 30\n  pt 25 -25\nend\n";
+    // to a step of the part, off to the side of the hole: it stops at that step's height
+    let part = "a: extrude 30 rect -30 -30 60 60
+step: extrude cut 10 xy at 0 0 20 rect 0 -30 30 60
+sk1: sketch xy at 0 0 30
+  pt -15 0
+end
+";
     let Some((mut h, file)) = open(part, "hto") else {
         return;
     };
     let was = built(&file, "before");
     button(&mut h, "Hole");
-    point_at(&mut h, [25.0, -25.0, 30.0]);
+    point_at(&mut h, [-15.0, 0.0, 30.0]);
     h.click("dialog:end:To");
     settle(&mut h);
     assert!(h.gui.shell.dialog.as_ref().unwrap().waiting_for_pick());
-    point_at(&mut h, [30.0, 10.0, 5.0]);
+    point_at(&mut h, [15.0, 0.0, 20.0]);
     settle(&mut h);
     let line = h.gui.shell.dialog.as_ref().unwrap().line();
-    assert!(line.contains(" to a @f"), "{line}");
-    let d = h.gui.shell.dialog.as_ref().unwrap();
-    let _ = (d, file, was);
+    assert!(line.contains(" to step @f"), "{line}");
+    ok(&mut h, "to a face");
+    let got = was - built(&file, "to a face");
+    let want = pi_r2(5.0) * 10.0;
+    assert!((got - want).abs() < want * 0.01, "{got} {want}");
 }
 
 #[test]
