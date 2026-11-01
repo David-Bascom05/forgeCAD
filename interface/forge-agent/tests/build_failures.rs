@@ -556,6 +556,11 @@ fn arcs_ending_on_the_axis() {
         (None, Some(b)) => assert!(forge_topo::check(b).is_empty()),
         _ => panic!("neither"),
     }
+    // as a cut it is a tool, and what it leaves is sound: a cone standing on the flat (WHUCAD 100002292)
+    let v = builds(
+        "extrude 4 rect -10 -10 20 20\nrevolve cut xz axis y loop line 0 0 6 0 line 6 0 6 2 line 6 2 0 0\n",
+    );
+    assert!((v - (1600.0 - 48.0 * std::f64::consts::PI)).abs() < 2.0, "{v}");
     // not on part of a turn: a wedge's point
     builds("revolve 90 xz axis y loop line 0 0 6 0 line 6 0 6 2 line 6 2 0 0\n");
 }

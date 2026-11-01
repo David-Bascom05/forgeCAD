@@ -36,6 +36,27 @@ impl From<ProfileError> for RevolveError {
 /// the second half-turn had stay as aliases); a profile with a cone, sphere or torus in it gives
 /// two half-turn faces per segment.
 pub fn revolve(profile: &Profile, axis: Axis2, angle: f64, feature: u64) -> Result<Body, RevolveError> {
+    build(profile, axis, angle, feature, false)
+}
+
+/// `revolve` for a tool that cuts: a profile touching the axis at a point is no solid of its own but
+/// cuts as one (a drill point against a flat bottom); what the cut leaves is checked as any other.
+pub fn revolve_cutter(
+    profile: &Profile,
+    axis: Axis2,
+    angle: f64,
+    feature: u64,
+) -> Result<Body, RevolveError> {
+    build(profile, axis, angle, feature, true)
+}
+
+fn build(
+    profile: &Profile,
+    axis: Axis2,
+    angle: f64,
+    feature: u64,
+    cutter: bool,
+) -> Result<Body, RevolveError> {
     if !(angle > tol::ANGULAR && angle <= dmath::TAU + tol::ANGULAR) {
         return Err(RevolveError::BadAngle);
     }
@@ -69,6 +90,7 @@ pub fn revolve(profile: &Profile, axis: Axis2, angle: f64, feature: u64) -> Resu
         rf,
         angles: vec![0.0, if full { dmath::PI } else { angle }],
         full,
+        cutter,
         root: Name::feature(feature),
         body: Body::new(),
     };
@@ -110,6 +132,7 @@ struct Revolver<'a> {
     /// (and from the last back to the first on a whole turn).
     angles: Vec<f64>,
     full: bool,
+    cutter: bool,
     root: Name,
     body: Body,
 }
@@ -494,7 +517,7 @@ impl Revolver<'_> {
             self.body.rebuild_shells();
         }
         // (real parts make these, and a seam may hold them together; what does not close is refused)
-        if pinch && !forge_topo::check(&self.body).is_empty() {
+        if pinch && !self.cutter && !forge_topo::check(&self.body).is_empty() {
             return Err(RevolveError::Unsupported(
                 "a profile touching the axis at a point pinches the solid there",
             ));

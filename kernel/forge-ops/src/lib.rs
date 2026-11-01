@@ -32,7 +32,7 @@ pub use glyph::{GlyphError, GlyphSeg, Place, glyph};
 pub use loft::{Apex, LoftError, LoftGuides, LoftKind, LoftOptions, loft, loft_and_bounds, loft_bounds};
 pub use profile::{Profile, ProfileError, ProfileLoop, Segment, Touch};
 pub use rebuild::RebuildError;
-pub use revolve::{Axis2, RevolveError, revolve};
+pub use revolve::{Axis2, RevolveError, revolve, revolve_cutter};
 pub use shell::{ShellError, shell};
 pub use strip::{face_fillet, full_round};
 pub use sweep::{

@@ -37,7 +37,7 @@ use forge_math::{Frame, Point2, Vec2, dmath};
 use forge_ops::{
     Axis2, ChamferError, ChamferSize, DraftError, ExtrudeError, FilletEdge, FilletError, FilletOptions,
     Profile, ProfileLoop, Radius, RevolveError, Segment, ShellError, chamfer, draft, extrude, face_fillet,
-    fillet_with, full_round, revolve, shell,
+    fillet_with, full_round, revolve, revolve_cutter, shell,
 };
 use forge_topo::{Body, Name};
 pub use hole::{End, Head, Hole, HoleError, Thread};
@@ -2044,7 +2044,12 @@ fn tool(i: usize, id: u64, f: &Feature, build: bool) -> Result<Tool, RegenError>
             extent: Turn::Angle(angle),
             op,
         } => (
-            revolve(profile, *axis, *angle, id).map_err(|error| RegenError::Revolve { feature: i, error })?,
+            if *op == Combine::Cut {
+                revolve_cutter
+            } else {
+                revolve
+            }(profile, *axis, *angle, id)
+            .map_err(|error| RegenError::Revolve { feature: i, error })?,
             *op,
             shape(f),
         ),
