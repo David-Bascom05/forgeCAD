@@ -228,10 +228,11 @@ impl App {
         if self.times && done - began > SLOW_MS {
             let t = out.times;
             eprintln!(
-                "forge-app: slow frame {:.1} ms: acquire {:.1}, ui {:.1}, view {:.1} (drawn {}), tessellate {:.1}, draw {:.1}, platform {output_ms:.1}",
+                "forge-app: slow frame {:.1} ms: acquire {:.1}, ui {:.1} (the worker's answers {:.1}), view {:.1} (drawn {}), tessellate {:.1}, draw {:.1}, platform {output_ms:.1}",
                 done - began,
                 acquired - began,
                 t.ui,
+                t.events,
                 t.view,
                 t.view_drawn,
                 t.tess,

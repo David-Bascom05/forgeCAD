@@ -135,6 +135,42 @@ fn bench(h: &mut Headless) {
         }
         println!("first look at {name}: {:.2} ms, again {:.2} ms", cost[0], cost[1]);
     };
+    // a commit's frame: what taking in the new part costs, by what it is
+    for part in ["bracket", "gearbox"] {
+        h.gui.open(part);
+        h.settle();
+        for _ in 0..20 {
+            h.step();
+        }
+        let Some(id) = h
+            .gui
+            .shell
+            .rows
+            .iter()
+            .find(|r| r.kind == "extrude")
+            .map(|r| r.id)
+        else {
+            continue;
+        };
+        let start = std::time::Instant::now();
+        h.gui.shell.out.push(forge_render::shell::Action::Suppress(id));
+        let (mut worst, mut ui, mut view, mut tess, mut draw) = (0.0f64, 0.0f64, 0.0f64, 0.0f64, 0.0f64);
+        while start.elapsed().as_secs_f64() < 6.0 {
+            let o = h.step();
+            let t = o.times;
+            if t.events > worst {
+                worst = t.events;
+            }
+            ui = ui.max(t.ui);
+            view = view.max(t.view);
+            tess = tess.max(t.tess);
+            draw = draw.max(t.draw);
+            std::thread::sleep(std::time::Duration::from_millis(2));
+        }
+        println!(
+            "a commit on {part}: worst worker's answers {worst:.2}, ui {ui:.2}, view {view:.2}, tess {tess:.2}, draw {draw:.2} ms"
+        );
+    }
     use forge_render::shell::Action as A;
     let shut: &dyn Fn(&mut Headless) = &|h| h.gui.shell.out.push(A::DialogCancel);
     for kind in ["extrude", "hole", "thread", "fillet", "pattern", "coil"] {

@@ -67,6 +67,8 @@ pub struct View {
 /// A frame's times, in milliseconds.
 #[derive(Clone, Copy, Debug, Default)]
 pub struct Times {
+    /// Of `ui`, taking in what the worker's said: a new part's mesh goes to the GPU here.
+    pub events: f64,
     pub ui: f64,
     pub tess: f64,
     pub view: f64,
@@ -1529,6 +1531,7 @@ impl Gui {
         }
         self.take_loaded();
         self.take_live();
+        times.events = now_ms() - t0;
         let mut animating = false;
         if let Some(v) = &mut self.view {
             if v.nav.tick(now_ms()) {
