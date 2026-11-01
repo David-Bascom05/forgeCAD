@@ -23,6 +23,53 @@ pub enum SkTool {
     Tangent,
 }
 
+/// A value on screen as an entity's being drawn: live until typed in, then what the entity obeys.
+#[derive(Clone, Debug, PartialEq)]
+pub struct Field {
+    pub label: &'static str,
+    pub text: String,
+    pub locked: bool,
+}
+
+/// A relation the click will make, shown by the cursor as it's found.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Glyph {
+    Coincident,
+    Midpoint,
+    Horizontal,
+    Vertical,
+    Parallel,
+    Perpendicular,
+    Tangent,
+}
+
+/// What the next click would make: the entity as it will be, and what to write.
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct Draft {
+    pub lines: Vec<((f64, f64), (f64, f64))>,
+    pub circle: Option<((f64, f64), f64)>,
+    /// Centre, radius, start and end angles, counter-clockwise.
+    pub arc: Option<((f64, f64), f64, f64, f64)>,
+    pub rows: Vec<String>,
+    pub glyphs: Vec<(Glyph, (f64, f64))>,
+    /// Each field's live value and where it sits.
+    pub values: Vec<(f64, (f64, f64))>,
+    /// A line chain goes on from here.
+    pub end: Option<(String, (f64, f64))>,
+}
+
+/// A point snapped to: its word, where it is, what it's tied by, the rows that needs.
+type Snap = (String, (f64, f64), Glyph, Vec<String>);
+
+/// How near an angle (radians, about 3 degrees) a line must be to be taken as level, plumb or
+/// parallel.
+const INFER: f64 = 0.052;
+const FIELD_W: f32 = 74.0;
+
+fn tidy(v: f64) -> f64 {
+    (v * 100.0).round() / 100.0
+}
+
 /// What a dimension measures, in the plane: how it's drawn.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub enum Measure {
@@ -39,8 +86,6 @@ const ARROW_PT: f32 = 8.0;
 
 /// How close a click must be to take a point or an entity, in points.
 const SNAP_PT: f32 = 9.0;
-/// A line this close to level or plumb is made so.
-const SQUARE_TO: f64 = 0.05;
 const CIRCLE_STEPS: usize = 64;
 
 /// What Finish Sketch changes.
@@ -76,6 +121,14 @@ pub struct SketchMode {
     opened: Vec<String>,
     /// A dimension's row being changed, when it's one already there.
     asking_row: Option<usize>,
+    /// The values on screen for what's being drawn.
+    pub fields: Vec<Field>,
+    /// Which field takes the keyboard next.
+    want_focus: Option<usize>,
+    /// Rows a snapped first point needs written before the entity's.
+    first_rows: Vec<String>,
+    /// Where the pointer last was on the plane: typing leaves it, the preview stays.
+    cursor: Option<(f64, f64)>,
 }
 
 /// A row added, for tests and the status bar.
@@ -130,6 +183,10 @@ impl SketchMode {
             plane,
             opened: rows.clone(),
             asking_row: None,
+            fields: Vec::new(),
+            want_focus: None,
+            first_rows: Vec::new(),
+            cursor: None,
             rows,
             tool: None,
             picks: Vec::new(),
@@ -277,6 +334,8 @@ impl SketchMode {
         self.pick_at.clear();
         self.asking = None;
         self.asking_row = None;
+        self.fields.clear();
+        self.first_rows.clear();
     }
 
     /// Esc: what's half done goes, then the tool.
@@ -286,6 +345,8 @@ impl SketchMode {
             self.pick_at.clear();
             self.asking = None;
             self.asking_row = None;
+            self.fields.clear();
+            self.first_rows.clear();
         } else {
             self.tool = None;
         }
@@ -370,79 +431,397 @@ impl SketchMode {
         }
     }
 
+    /// A field's value: what's typed if it's locked, a number or an expression over the parameters.
+    fn locked(&self, k: usize, want: Want) -> Option<f64> {
+        let f = self.fields.get(k).filter(|f| f.locked)?;
+        num_of(&self.params)(f.text.trim(), want).ok()
+    }
+
+    fn next_name(&self, kind: char) -> usize {
+        self.solved.as_ref().map_or(1, |s| {
+            s.names.iter().filter(|n| n.0.starts_with(kind)).count() + 1
+        })
+    }
+
+    /// The fields each tool shows at each stage.
+    fn fields_for(tool: SkTool, picked: usize) -> Vec<Field> {
+        let f = |label| Field {
+            label,
+            text: String::new(),
+            locked: false,
+        };
+        match (tool, picked) {
+            (SkTool::Line, 1) => vec![f("Length"), f("Angle")],
+            (SkTool::Rectangle, 1) => vec![f("Width"), f("Height")],
+            (SkTool::Circle, 1) => vec![f("Diameter")],
+            (SkTool::Arc, 1) => vec![f("Radius")],
+            (SkTool::Arc, 2) => vec![f("Sweep")],
+            _ => Vec::new(),
+        }
+    }
+
+    fn stage(&mut self) {
+        if let Some(t) = self.tool {
+            self.fields = Self::fields_for(t, self.pick_at.len());
+            self.want_focus = (!self.fields.is_empty()).then_some(0);
+        }
+    }
+
+    /// What's under a place: a point of the sketch, a line's middle, or nothing, with the rows it takes.
+    fn snap(&self, at: (f64, f64), reach: f64) -> Option<Snap> {
+        let d = |p: (f64, f64)| ((p.0 - at.0).powi(2) + (p.1 - at.1).powi(2)).sqrt();
+        let near = self
+            .points()
+            .into_iter()
+            .map(|(n, p)| (d(p), n, p))
+            .filter(|c| c.0 < reach)
+            .min_by(|a, b| a.0.total_cmp(&b.0));
+        if let Some((_, n, p)) = near {
+            return Some((n, p, Glyph::Coincident, Vec::new()));
+        }
+        let s = self.solved.as_ref()?;
+        let mid = s
+            .names
+            .iter()
+            .filter(|n| n.0.starts_with('l'))
+            .filter_map(|n| {
+                let (a, b) = sk::line(s, &n.0).ok()?;
+                let m = ((a.x + b.x) * 0.5, (a.y + b.y) * 0.5);
+                (d(m) < reach).then(|| (n.0.clone(), m))
+            })
+            .next();
+        let (l, m) = mid?;
+        // the middle becomes a real point, tied to it, only when it's used
+        let p = format!("p{}", self.next_name('p'));
+        let rows = vec![format!("pt {} {}", m.0, m.1), format!("mid {p} {l}")];
+        Some((p, m, Glyph::Midpoint, rows))
+    }
+
+    /// The other lines of the sketch, with their directions.
+    fn line_ways(&self) -> Vec<(String, (f64, f64))> {
+        let Some(s) = &self.solved else { return Vec::new() };
+        s.names
+            .iter()
+            .filter(|n| n.0.starts_with('l'))
+            .filter_map(|n| {
+                let (a, b) = sk::line(s, &n.0).ok()?;
+                let (x, y) = (b.x - a.x, b.y - a.y);
+                let l = (x * x + y * y).sqrt();
+                (l > 1e-9).then(|| (n.0.clone(), (x / l, y / l)))
+            })
+            .collect()
+    }
+
+    /// What the next click would make, with the pointer here.
+    pub fn draft(&self, at: (f64, f64), reach: f64) -> Draft {
+        let mut d = Draft::default();
+        let Some(tool) = self.tool else { return d };
+        let n = |v: f64| v.to_string();
+        let snapped = self.snap(at, reach);
+        if let Some((_, p, g, _)) = &snapped {
+            d.glyphs.push((*g, *p));
+        }
+        let point_of = |d: &mut Draft, free: (f64, f64)| -> (String, (f64, f64)) {
+            match &snapped {
+                Some((w, p, _, rows)) => {
+                    d.rows.extend(rows.iter().cloned());
+                    (w.clone(), *p)
+                }
+                None => {
+                    let p = (tidy(free.0), tidy(free.1));
+                    (format!("{} {}", n(p.0), n(p.1)), p)
+                }
+            }
+        };
+        match (tool, self.pick_at.len()) {
+            (SkTool::Point, _) => {
+                let (w, p) = point_of(&mut d, at);
+                d.rows.push(format!("pt {w}"));
+                d.end = Some((String::new(), p));
+            }
+            (SkTool::Line, 1) => {
+                let a = self.pick_at[0];
+                let from = self.picks[0].clone();
+                let line = format!("l{}", self.next_name('l'));
+                let (len_on, ang_on) = (self.locked(0, Want::Len), self.locked(1, Want::Len));
+                let mut relation = Vec::new();
+                let free = snapped.as_ref().map_or(at, |s| s.1);
+                let (mut dx, mut dy) = (free.0 - a.0, free.1 - a.1);
+                let mut length = (dx * dx + dy * dy).sqrt();
+                let mut typed = false;
+                if let Some(deg) = ang_on {
+                    let r = deg * core::f64::consts::PI / 180.0;
+                    (dx, dy) = (
+                        forge_math::dmath::cos(r) * length.max(1e-9),
+                        forge_math::dmath::sin(r) * length.max(1e-9),
+                    );
+                    typed = true;
+                } else if snapped.is_none() && length > 1e-9 {
+                    // level, plumb, or along or square to a line that's there
+                    let unit = (dx / length, dy / length);
+                    if unit.1.abs() < INFER {
+                        dy = 0.0;
+                        d.glyphs.push((Glyph::Horizontal, (a.0 + dx, a.1)));
+                        relation.push(format!("hor {line}"));
+                    } else if unit.0.abs() < INFER {
+                        dx = 0.0;
+                        d.glyphs.push((Glyph::Vertical, (a.0, a.1 + dy)));
+                        relation.push(format!("ver {line}"));
+                    } else {
+                        for (o, w) in self.line_ways() {
+                            let cross = unit.0 * w.1 - unit.1 * w.0;
+                            let dot = unit.0 * w.0 + unit.1 * w.1;
+                            if cross.abs() < INFER {
+                                let s = dx * w.0 + dy * w.1;
+                                (dx, dy) = (w.0 * s, w.1 * s);
+                                d.glyphs.push((Glyph::Parallel, (a.0 + dx, a.1 + dy)));
+                                relation.push(format!("par {line} {o}"));
+                                break;
+                            }
+                            if dot.abs() < INFER {
+                                let s = -dx * w.1 + dy * w.0;
+                                (dx, dy) = (-w.1 * s, w.0 * s);
+                                d.glyphs.push((Glyph::Perpendicular, (a.0 + dx, a.1 + dy)));
+                                relation.push(format!("perp {line} {o}"));
+                                break;
+                            }
+                        }
+                    }
+                    length = (dx * dx + dy * dy).sqrt();
+                }
+                if let Some(v) = len_on {
+                    let l = length.max(1e-9);
+                    (dx, dy) = (dx / l * v, dy / l * v);
+                    length = v;
+                }
+                // from a tangent end, within a hair: tangent
+                if let Some(arc) = from
+                    .strip_suffix(".b")
+                    .or(from.strip_suffix(".a"))
+                    .filter(|w| w.starts_with('a'))
+                    && let Some(s) = &self.solved
+                    && let Some((_, id)) = s.names.iter().find(|x| x.0 == arc)
+                    && let Some(Entity::Arc { center, .. }) = s.solved.entity(*id)
+                {
+                    let c = s.solved.point(center);
+                    let (rx, ry) = (a.0 - c.x, a.1 - c.y);
+                    let r = (rx * rx + ry * ry).sqrt().max(1e-9);
+                    if ((dx * rx + dy * ry) / (r * length.max(1e-9))).abs() < INFER {
+                        d.glyphs.push((Glyph::Tangent, a));
+                        relation.push(format!("tan {line} {arc}"));
+                    }
+                }
+                let end = (a.0 + dx, a.1 + dy);
+                let keeps_snap = snapped.is_some() && len_on.is_none() && !typed;
+                let (word, end) = if keeps_snap {
+                    point_of(&mut d, at)
+                } else {
+                    let e = if len_on.is_some() || typed {
+                        end
+                    } else {
+                        (tidy(end.0), tidy(end.1))
+                    };
+                    (format!("{} {}", n(e.0), n(e.1)), e)
+                };
+                d.rows.extend(self.first_rows.iter().cloned());
+                d.rows.push(format!("line {from} {word}"));
+                d.rows.extend(relation);
+                if let Some(f) = self.fields.first().filter(|f| f.locked) {
+                    d.rows.push(format!("dist {line} {}", f.text.trim()));
+                }
+                d.lines.push((a, end));
+                let mid = ((a.0 + end.0) * 0.5, (a.1 + end.1) * 0.5);
+                d.values.push((length, mid));
+                let deg = forge_math::dmath::atan2(end.1 - a.1, end.0 - a.0) * 180.0 / core::f64::consts::PI;
+                d.values.push((deg, end));
+                d.end = Some((format!("{line}.b"), end));
+            }
+            (SkTool::Rectangle, 1) => {
+                let a = self.pick_at[0];
+                let c = snapped.as_ref().map_or(at, |s| s.1);
+                let (sx, sy) = (
+                    if c.0 < a.0 { -1.0 } else { 1.0 },
+                    if c.1 < a.1 { -1.0 } else { 1.0 },
+                );
+                let w = self.locked(0, Want::Len).unwrap_or(tidy((c.0 - a.0).abs()));
+                let h = self.locked(1, Want::Len).unwrap_or(tidy((c.1 - a.1).abs()));
+                let b = (a.0 + sx * w, a.1 + sy * h);
+                let (x, y) = (a.0.min(b.0), a.1.min(b.1));
+                let l = self.next_name('l');
+                d.rows.extend(self.first_rows.iter().cloned());
+                d.rows.push(format!("rect {} {} {} {}", n(x), n(y), n(w), n(h)));
+                if !self.picks[0].contains(' ') {
+                    // the corner it started from is the point it snapped to
+                    let corner = match (sx > 0.0, sy > 0.0) {
+                        (true, true) => l,
+                        (false, true) => l + 1,
+                        (false, false) => l + 2,
+                        (true, false) => l + 3,
+                    };
+                    d.rows.push(format!("co l{corner}.a {}", self.picks[0]));
+                }
+                if let Some(f) = self.fields.first().filter(|f| f.locked) {
+                    d.rows.push(format!("hdist l{l}.a l{l}.b {}", f.text.trim()));
+                }
+                if let Some(f) = self.fields.get(1).filter(|f| f.locked) {
+                    d.rows
+                        .push(format!("vdist l{0}.a l{0}.b {1}", l + 1, f.text.trim()));
+                }
+                let corners = [(x, y), (x + w, y), (x + w, y + h), (x, y + h)];
+                for k in 0..4 {
+                    d.lines.push((corners[k], corners[(k + 1) % 4]));
+                }
+                d.values.push((w, (x + w * 0.5, y)));
+                d.values.push((h, (x + w, y + h * 0.5)));
+                d.end = Some((String::new(), b));
+            }
+            (SkTool::Circle, 1) => {
+                let c = self.pick_at[0];
+                let free = snapped.as_ref().map_or(at, |s| s.1);
+                let r = self.locked(0, Want::Len).map_or(
+                    tidy(((free.0 - c.0).powi(2) + (free.1 - c.1).powi(2)).sqrt()),
+                    |v| v / 2.0,
+                );
+                let name = self.next_name('c');
+                d.rows.extend(self.first_rows.iter().cloned());
+                d.rows.push(format!("circle {} {}", self.picks[0], n(r)));
+                if let Some(f) = self.fields.first().filter(|f| f.locked) {
+                    d.rows.push(format!("dia c{name} {}", f.text.trim()));
+                }
+                d.circle = Some((c, r));
+                d.values.push((r * 2.0, (c.0 + r, c.1)));
+                d.end = Some((String::new(), c));
+            }
+            (SkTool::Arc, 1) => {
+                let c = self.pick_at[0];
+                let free = snapped.as_ref().map_or(at, |s| s.1);
+                let (rx, ry) = (free.0 - c.0, free.1 - c.1);
+                let r = (rx * rx + ry * ry).sqrt();
+                let radius = self.locked(0, Want::Len).unwrap_or(r);
+                d.circle = Some((c, radius));
+                d.values.push((radius, (c.0 + rx * 0.5, c.1 + ry * 0.5)));
+                let s = radius / r.max(1e-9);
+                d.end = Some((String::new(), (c.0 + rx * s, c.1 + ry * s)));
+            }
+            (SkTool::Arc, 2) => {
+                let (c, st) = (self.pick_at[0], self.pick_at[1]);
+                let radius = ((st.0 - c.0).powi(2) + (st.1 - c.1).powi(2)).sqrt();
+                let t0 = forge_math::dmath::atan2(st.1 - c.1, st.0 - c.0);
+                let free = snapped.as_ref().map_or(at, |s| s.1);
+                let mut t1 = forge_math::dmath::atan2(free.1 - c.1, free.0 - c.0);
+                if t1 <= t0 {
+                    t1 += core::f64::consts::TAU;
+                }
+                let deg = core::f64::consts::PI / 180.0;
+                if let Some(v) = self.locked(0, Want::Len) {
+                    t1 = t0 + v * deg;
+                }
+                let end = (
+                    c.0 + radius * forge_math::dmath::cos(t1),
+                    c.1 + radius * forge_math::dmath::sin(t1),
+                );
+                d.arc = Some((c, radius, t0, t1));
+                d.rows.extend(self.first_rows.iter().cloned());
+                d.rows.push(format!(
+                    "arc {} {} {} {}",
+                    self.picks[0],
+                    self.picks[1],
+                    n(end.0),
+                    n(end.1)
+                ));
+                d.values.push(((t1 - t0) / deg, end));
+                d.end = Some((String::new(), end));
+            }
+            _ => {}
+        }
+        d
+    }
+
+    /// Places what's drafted, all its rows or none.
+    fn place(&mut self, d: Draft) -> bool {
+        let mut next = self.rows.clone();
+        next.extend(d.rows);
+        match self.build(&next) {
+            Ok(s) => {
+                self.rows = next;
+                self.solved = Some(s);
+                self.error = None;
+                true
+            }
+            Err(e) => {
+                self.error = Some(e);
+                false
+            }
+        }
+    }
+
+    /// Enter: what's drafted goes down where the pointer is.
+    pub fn enter(&mut self, reach: f64) {
+        if let Some(at) = self.cursor {
+            self.click(at, reach);
+        }
+    }
+
     /// A click for the tool, at this place in the plane, `reach` being what's near in mm.
     pub fn click(&mut self, at: (f64, f64), reach: f64) {
         let Some(tool) = self.tool else { return };
         match tool {
             SkTool::Point => {
-                let (w, _) = self.word_at(at, reach);
-                self.add(format!("pt {w}"));
+                let d = self.draft(at, reach);
+                self.place(d);
             }
-            SkTool::Line => {
-                let (w, p) = self.word_at(at, reach);
-                if let (Some(from), Some(was)) = (self.picks.last().cloned(), self.pick_at.last().copied()) {
-                    if !self.add(format!("line {from} {w}")) {
-                        return;
-                    }
-                    let last = self.last_named('l');
-                    // level or plumb within a hair is meant so
-                    if let Some(l) = &last {
-                        let (dx, dy) = (p.0 - was.0, p.1 - was.1);
-                        let span = dx.abs().max(dy.abs()).max(1e-9);
-                        if dy.abs() / span < SQUARE_TO {
-                            self.add(format!("hor {l}"));
-                        } else if dx.abs() / span < SQUARE_TO {
-                            self.add(format!("ver {l}"));
+            SkTool::Line | SkTool::Rectangle | SkTool::Circle | SkTool::Arc => {
+                let first = self.pick_at.is_empty() || (tool == SkTool::Arc && self.pick_at.len() < 2);
+                if first {
+                    if tool == SkTool::Arc && self.pick_at.len() == 1 {
+                        // the start, on the circle the radius says
+                        let d = self.draft(at, reach);
+                        let Some((_, p)) = d.end else { return };
+                        if let Some(f) = self.fields.first().filter(|f| f.locked) {
+                            self.first_rows
+                                .push(format!("rad a{} {}", self.next_name('a'), f.text.trim()));
+                        }
+                        self.picks.push(format!("{} {}", p.0, p.1));
+                        self.pick_at.push(p);
+                    } else {
+                        match self.snap(at, reach) {
+                            Some((w, p, _, rows)) => {
+                                self.first_rows = rows;
+                                self.picks.push(w);
+                                self.pick_at.push(p);
+                            }
+                            None => {
+                                let p = (tidy(at.0), tidy(at.1));
+                                self.picks.push(format!("{} {}", p.0, p.1));
+                                self.pick_at.push(p);
+                            }
                         }
                     }
-                    // on from where this one ended
-                    self.picks = vec![last.map_or(w, |l| format!("{l}.b"))];
-                    self.pick_at = vec![p];
+                    self.stage();
+                    return;
+                }
+                let d = self.draft(at, reach);
+                let end = d.end.clone();
+                // an arc's radius is written after its row
+                let trailing: Vec<String> = if tool == SkTool::Arc {
+                    std::mem::take(&mut self.first_rows)
                 } else {
+                    self.first_rows.clear();
+                    Vec::new()
+                };
+                let mut d = d;
+                d.rows.extend(trailing);
+                if !self.place(d) {
+                    return;
+                }
+                self.picks.clear();
+                self.pick_at.clear();
+                self.fields.clear();
+                // a line chain goes on from where it ended
+                if let (SkTool::Line, Some((w, p))) = (tool, end) {
                     self.picks.push(w);
                     self.pick_at.push(p);
-                }
-            }
-            SkTool::Rectangle => {
-                let (_, p) = self.word_at(at, 0.0);
-                if let Some(&a) = self.pick_at.first() {
-                    let (x, y) = (a.0.min(p.0), a.1.min(p.1));
-                    let (w, h) = ((a.0 - p.0).abs(), (a.1 - p.1).abs());
-                    if w > 0.0 && h > 0.0 {
-                        let s = forge_agent::short;
-                        self.add(format!("rect {} {} {} {}", s(x), s(y), s(w), s(h)));
-                    }
-                    self.pick_at.clear();
-                } else {
-                    self.pick_at.push(p);
-                }
-            }
-            SkTool::Circle => {
-                if let (Some(c), Some(ca)) = (self.picks.first().cloned(), self.pick_at.first().copied()) {
-                    let r = ((at.0 - ca.0).powi(2) + (at.1 - ca.1).powi(2)).sqrt();
-                    if r > 0.0 {
-                        self.add(format!(
-                            "circle {c} {}",
-                            forge_agent::short((r * 100.0).round() / 100.0)
-                        ));
-                    }
-                    self.picks.clear();
-                    self.pick_at.clear();
-                } else {
-                    let (w, p) = self.word_at(at, reach);
-                    self.picks.push(w);
-                    self.pick_at.push(p);
-                }
-            }
-            SkTool::Arc => {
-                let (w, p) = self.word_at(at, reach);
-                self.picks.push(w);
-                self.pick_at.push(p);
-                if self.picks.len() == 3 {
-                    let row = format!("arc {} {} {}", self.picks[0], self.picks[1], self.picks[2]);
-                    self.add(row);
-                    self.picks.clear();
-                    self.pick_at.clear();
+                    self.stage();
                 }
             }
             SkTool::Coincident => self.pick_two_points(at, reach),
@@ -498,15 +877,6 @@ impl SketchMode {
                 Some((format!("rad {e}"), r))
             }
         }
-    }
-
-    fn last_named(&self, kind: char) -> Option<String> {
-        let s = self.solved.as_ref()?;
-        s.names
-            .iter()
-            .rev()
-            .find(|n| n.0.starts_with(kind))
-            .map(|n| n.0.clone())
     }
 
     /// How many degrees of freedom are left, and whether it solved.
@@ -580,6 +950,10 @@ impl Shell {
         let clip = view;
         let p = p.with_clip_rect(clip);
 
+        let under = p.clone();
+        let p = ctx
+            .layer_painter(egui::LayerId::background())
+            .with_clip_rect(clip);
         // the part ghosted behind the sheet, the cube left alone
         let sheet =
             Color32::from_rgb((t.view >> 16) as u8, (t.view >> 8) as u8, t.view as u8).gamma_multiply(0.6);
@@ -641,6 +1015,7 @@ impl Shell {
                 k += 1;
             }
         }
+        let p = under;
         let ink = t.on_ink;
         let line = Stroke::new(1.5, ink);
         if let Some(s) = &m.solved {
@@ -718,22 +1093,139 @@ impl Shell {
                     .is_none_or(|l| l.order == egui::Order::Background)
         });
         let cursor = over.and_then(to_plane);
-        if let (Some(tool), Some(at)) = (m.tool, cursor) {
-            // what the next click would do
-            let rubber = Stroke::new(1.0, t.focus);
-            if matches!(
-                tool,
-                SkTool::Line | SkTool::Circle | SkTool::Rectangle | SkTool::Arc
-            ) && let Some(&from) = m.pick_at.last()
-                && let (Some(u), Some(v)) = (screen(from), screen(at))
+        if cursor.is_some() {
+            m.cursor = cursor;
+        }
+        let draft_at = cursor.or(m.cursor);
+        if let (Some(tool), Some(at)) = (m.tool, draft_at) {
+            let d = m.draft(at, reach);
+            let line = Stroke::new(1.5, ink);
+            for (a, b) in &d.lines {
+                if let (Some(u), Some(v)) = (screen(*a), screen(*b)) {
+                    p.line_segment([u, v], line);
+                    p.circle_filled(u, 2.5, ink);
+                    p.circle_filled(v, 2.5, ink);
+                }
+            }
+            let round = |c: (f64, f64), r: f64, t0: f64, t1: f64| -> Vec<Pos2> {
+                (0..=CIRCLE_STEPS)
+                    .filter_map(|k| {
+                        let v = t0 + (t1 - t0) * k as f64 / CIRCLE_STEPS as f64;
+                        screen((
+                            c.0 + r * forge_math::dmath::cos(v),
+                            c.1 + r * forge_math::dmath::sin(v),
+                        ))
+                    })
+                    .collect()
+            };
+            if let Some((c, r)) = d.circle {
+                p.add(egui::Shape::line(round(c, r, 0.0, core::f64::consts::TAU), line));
+                if let Some(u) = screen(c) {
+                    p.circle_filled(u, 2.5, ink);
+                }
+            }
+            if let Some((c, r, t0, t1)) = d.arc {
+                p.add(egui::Shape::line(round(c, r, t0, t1), line));
+            }
+            // middles of lines near the pointer, quietly
+            if let Some(s) = &m.solved {
+                for (name, _) in s.names.iter().filter(|n| n.0.starts_with('l')) {
+                    if let Ok((a, b)) = sk::line(s, name)
+                        && let Some(u) = screen(((a.x + b.x) * 0.5, (a.y + b.y) * 0.5))
+                        && over.is_some_and(|o| (o - u).length() < 60.0)
+                    {
+                        p.circle_stroke(u, 2.5, Stroke::new(1.0, t.ink2));
+                    }
+                }
+            }
+            // what the click will tie it to
+            for (k, (g, at)) in d.glyphs.iter().enumerate() {
+                let Some(u) = screen(*at) else { continue };
+                let name = match g {
+                    Glyph::Coincident => "coincident",
+                    Glyph::Midpoint => "point",
+                    Glyph::Horizontal => "minimize",
+                    Glyph::Vertical => "axis",
+                    Glyph::Parallel => "parallel",
+                    Glyph::Perpendicular => "perp",
+                    Glyph::Tangent => "tangent",
+                };
+                if matches!(g, Glyph::Coincident | Glyph::Midpoint) {
+                    p.circle_stroke(u, 5.0, Stroke::new(1.5, t.focus));
+                }
+                let chip = Rect::from_min_size(u + vec2(10.0 + k as f32 * 20.0, 8.0), vec2(18.0, 18.0));
+                p.rect_filled(chip, 3.0, t.surface);
+                super::icons::draw(&p, chip.min + vec2(2.0, 2.0), 14.0, name, 1.25, t.focus);
+            }
+            if m.pick_at.is_empty()
+                && matches!(
+                    tool,
+                    SkTool::Line | SkTool::Rectangle | SkTool::Circle | SkTool::Arc
+                )
             {
-                p.line_segment([u, v], rubber);
+                let (_, q) = m.word_at(at, reach);
+                if let Some(u) = screen(q) {
+                    p.circle_filled(u, 2.5, ink);
+                }
             }
-            let (_, snap) = m.word_at(at, reach);
-            if let Some(u) = screen(snap) {
-                p.circle_stroke(u, 5.0, rubber);
+
+            // the values, live until typed in
+            let want = m.want_focus.take();
+            let mut tab = false;
+            let mut enter = false;
+            let values = d.values.clone();
+            for (k, f) in m.fields.iter_mut().enumerate() {
+                let Some((value, at)) = values.get(k).copied() else {
+                    continue;
+                };
+                if !f.locked {
+                    f.text = forge_agent::short(value);
+                }
+                let Some(u) = screen(at) else { continue };
+                let id = egui::Id::unique("sketch-field").with(k);
+                egui::Area::new(id.with("area"))
+                    .fixed_pos(u + vec2(-FIELD_W * 0.5, 10.0))
+                    .order(egui::Order::Foreground)
+                    .show(ctx, |ui| {
+                        let (r, _) = ui.allocate_exact_size(vec2(FIELD_W, 24.0), Sense::hover());
+                        ui.painter().rect_filled(r, 4.0, t.surface);
+                        let edge = if f.locked { t.focus } else { t.line };
+                        let resp = ui.put(
+                            r,
+                            egui::TextEdit::singleline(&mut f.text)
+                                .id(id)
+                                .font(mono(12.0))
+                                .margin(vec2(6.0, 5.0))
+                                .desired_width(FIELD_W - 12.0),
+                        );
+                        ui.painter()
+                            .rect_stroke(r, 4.0, Stroke::new(1.0, edge), egui::StrokeKind::Inside);
+                        self.places.push((format!("sketch:field:{}", f.label), r));
+                        if resp.changed() {
+                            f.locked = true;
+                        }
+                        if want == Some(k) {
+                            resp.request_focus();
+                        }
+                        if resp.has_focus() {
+                            tab |= ui.input_mut(|i| i.consume_key(egui::Modifiers::NONE, egui::Key::Tab));
+                            enter |= ui.input(|i| i.key_pressed(egui::Key::Enter));
+                        } else if resp.lost_focus() {
+                            enter |= ui.input(|i| i.key_pressed(egui::Key::Enter));
+                        }
+                    });
             }
-            if ctx.input(|i| i.pointer.primary_clicked()) && self.modal_clear() {
+            if tab && !m.fields.is_empty() {
+                let at = ctx.memory(|mem| {
+                    (0..m.fields.len()).find(|k| mem.has_focus(egui::Id::unique("sketch-field").with(*k)))
+                });
+                m.want_focus = Some(at.map_or(0, |k| (k + 1) % m.fields.len()));
+            }
+            if enter && !m.pick_at.is_empty() {
+                m.enter(reach);
+            }
+
+            if cursor.is_some() && ctx.input(|i| i.pointer.primary_clicked()) && self.modal_clear() {
                 if tool == SkTool::Dimension {
                     if let (Some((row, value)), Some(pos)) = (m.dimension_at(at, reach), over) {
                         m.asking = Some((row, pos, forge_agent::short(value)));
@@ -920,8 +1412,8 @@ mod tests {
         m.set_tool(Some(SkTool::Line));
         m.click((0.0, 0.0), 0.5);
         m.click((20.0, 0.3), 0.5);
-        m.click((20.0, 10.0), 0.5);
-        assert_eq!(m.rows[0], "line 0 0 20 0.3");
+        m.click((20.1, 10.0), 0.5);
+        assert_eq!(m.rows[0], "line 0 0 20 0");
         assert!(m.rows.contains(&"hor l1".to_string()), "{:?}", m.rows);
         assert!(m.rows.contains(&"line l1.b 20 10".to_string()), "{:?}", m.rows);
         assert!(m.rows.contains(&"ver l2".to_string()), "{:?}", m.rows);
@@ -933,6 +1425,122 @@ mod tests {
         assert_eq!(m.tool, Some(SkTool::Line));
         m.escape();
         assert_eq!(m.tool, None);
+    }
+
+    #[test]
+    fn the_draft_is_the_entity_as_it_will_be_and_typed_values_lock_it_and_become_dimensions() {
+        let params = Document::parse("w = 30\n");
+        let mut m = SketchMode::new(
+            SketchFor::New,
+            "xy".into(),
+            Frame::default(),
+            Vec::new(),
+            Some(&params),
+        );
+        // a line follows the pointer, with its length and angle live
+        m.set_tool(Some(SkTool::Line));
+        m.click((0.0, 0.0), 0.5);
+        let d = m.draft((30.0, 40.0), 0.5);
+        assert_eq!(d.lines, [((0.0, 0.0), (30.0, 40.0))]);
+        assert!((d.values[0].0 - 50.0).abs() < 1e-9);
+        assert_eq!(m.fields.len(), 2);
+        // a parameter typed for its length: the preview obeys, the row says so
+        m.fields[0].text = "w".into();
+        m.fields[0].locked = true;
+        let d = m.draft((30.0, 40.0), 0.5);
+        let (_, end) = d.lines[0];
+        assert!(
+            ((end.0 * end.0 + end.1 * end.1).sqrt() - 30.0).abs() < 1e-9,
+            "{end:?}"
+        );
+        assert!(d.rows.contains(&"dist l1 w".to_string()), "{:?}", d.rows);
+        m.click((30.0, 40.0), 0.5);
+        assert!(m.error.is_none(), "{:?}", m.error);
+        assert!(m.rows.contains(&"dist l1 w".to_string()));
+        m.escape();
+        m.escape();
+
+        // a rectangle's sides, four, width and height live and typed
+        m.set_tool(Some(SkTool::Rectangle));
+        m.click((100.0, 100.0), 0.5);
+        m.fields[1].text = "12".into();
+        m.fields[1].locked = true;
+        let d = m.draft((120.0, 130.0), 0.5);
+        assert_eq!(d.lines.len(), 4);
+        assert_eq!(d.values[1].0, 12.0);
+        m.click((120.0, 130.0), 0.5);
+        assert!(
+            m.rows
+                .iter()
+                .any(|r| r.starts_with("vdist") && r.ends_with(" 12")),
+            "{:?}",
+            m.rows
+        );
+        assert!(m.error.is_none(), "{:?}", m.error);
+
+        // a circle by its diameter
+        m.set_tool(Some(SkTool::Circle));
+        m.click((200.0, 0.0), 0.5);
+        assert_eq!(m.draft((205.0, 0.0), 0.5).circle, Some(((200.0, 0.0), 5.0)));
+        m.fields[0].text = "8".into();
+        m.fields[0].locked = true;
+        m.click((205.0, 0.0), 0.5);
+        assert!(m.rows.contains(&"circle 200 0 4".to_string()), "{:?}", m.rows);
+        assert!(m.rows.iter().any(|r| r.starts_with("dia c1 8")), "{:?}", m.rows);
+
+        // an arc: its radius, then its sweep
+        m.set_tool(Some(SkTool::Arc));
+        m.click((300.0, 0.0), 0.5);
+        assert_eq!(m.fields[0].label, "Radius");
+        m.click((310.0, 0.0), 0.5);
+        assert_eq!(m.fields[0].label, "Sweep");
+        m.fields[0].text = "90".into();
+        m.fields[0].locked = true;
+        let d = m.draft((300.0, 50.0), 0.5);
+        let (_, r, t0, t1) = d.arc.unwrap();
+        assert!((r - 10.0).abs() < 1e-9 && ((t1 - t0) - core::f64::consts::FRAC_PI_2).abs() < 1e-9);
+        m.click((300.0, 50.0), 0.5);
+        assert!(m.error.is_none(), "{:?}", m.error);
+        assert!(m.rows.iter().any(|r| r.starts_with("arc ")), "{:?}", m.rows);
+    }
+
+    #[test]
+    fn it_infers_as_it_goes_and_applies_on_the_click() {
+        let mut m = mode();
+        m.rows.push("line 0 0 30 40".into());
+        m.solve();
+        m.set_tool(Some(SkTool::Line));
+        // from the line's far end, over its middle: tied to it, a real point
+        m.click((100.0, 0.0), 0.5);
+        let d = m.draft((15.1, 20.1), 0.5);
+        assert!(d.glyphs.iter().any(|g| g.0 == Glyph::Midpoint), "{:?}", d.glyphs);
+        m.click((15.1, 20.1), 0.5);
+        assert!(m.rows.contains(&"mid p1 l1".to_string()), "{:?}", m.rows);
+        assert!(m.error.is_none(), "{:?}", m.error);
+        let (a, b) = sk::line(m.solved.as_ref().unwrap(), "l2").unwrap();
+        let _ = a;
+        assert!((b.x - 15.0).abs() < 1e-9 && (b.y - 20.0).abs() < 1e-9, "{b:?}");
+        m.escape();
+        // parallel to it, from somewhere else
+        m.click((200.0, 200.0), 0.5);
+        let d = m.draft((230.2, 240.1), 0.5);
+        assert!(d.glyphs.iter().any(|g| g.0 == Glyph::Parallel), "{:?}", d.glyphs);
+        // and level
+        let d = m.draft((250.0, 200.5), 0.5);
+        assert!(d.glyphs.iter().any(|g| g.0 == Glyph::Horizontal));
+        assert_eq!(d.lines[0].1, (250.0, 200.0));
+    }
+
+    #[test]
+    fn a_midpoint_adds_nothing_to_a_sketch_until_it_is_used() {
+        let mut m = mode();
+        m.rows.push("line 0 0 30 40".into());
+        m.solve();
+        let before = m.rows.clone();
+        m.set_tool(Some(SkTool::Line));
+        let d = m.draft((15.0, 20.0), 0.5);
+        assert!(d.glyphs.iter().any(|g| g.0 == Glyph::Midpoint));
+        assert_eq!(m.rows, before, "looking at one writes nothing");
     }
 
     #[test]

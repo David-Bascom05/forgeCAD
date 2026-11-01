@@ -3,7 +3,7 @@
 use forge_render::gui::Headless;
 
 const USAGE: &str = "forge-app [PART | file.fc] [--size WxH] [--times]
-  [--shot FILE.ppm [--scale S] [--light] [--tab N] [--select NAME] [--click NAME].. [--at X Y] [--sketch ROW;ROW..] [--edit NAME] [--view YAW PITCH]]
+  [--shot FILE.ppm [--scale S] [--light] [--tab N] [--select NAME] [--click NAME].. [--at X Y] [--sketch ROW;ROW..] [--edit NAME] [--draw TOOL X Y] [--view YAW PITCH]]
   [--bench]
 PART: a bench part or a .fc file. --times: input-to-present on exit. --shot: one frame, no window.
 --bench: what clicks and frames cost, no window.";
@@ -21,6 +21,7 @@ struct Args {
     sketch: Option<String>,
     view: Option<(f32, f32)>,
     edit: Option<String>,
+    draw: Option<(String, f64, f64)>,
     bench: bool,
     times: bool,
 }
@@ -39,6 +40,7 @@ fn args() -> Result<Args, String> {
         sketch: None,
         view: None,
         edit: None,
+        draw: None,
         bench: false,
         times: false,
     };
@@ -64,6 +66,12 @@ fn args() -> Result<Args, String> {
             }
             "--sketch" => a.sketch = Some(v()?),
             "--edit" => a.edit = Some(v()?),
+            "--draw" => {
+                let tool = v()?;
+                let x = it.next().and_then(|w| w.parse().ok()).ok_or(USAGE)?;
+                let y = it.next().and_then(|w| w.parse().ok()).ok_or(USAGE)?;
+                a.draw = Some((tool, x, y));
+            }
             "--view" => {
                 let y: f32 = v()?.parse().map_err(|_| USAGE)?;
                 let mut v = || it.next().ok_or(format!("{k} takes YAW PITCH\n{USAGE}"));
@@ -262,6 +270,16 @@ fn run() -> Result<(), String> {
             h.step();
             std::thread::sleep(std::time::Duration::from_millis(10));
         }
+    }
+    if let (Some((tool, x, y)), Some(m)) = (&a.draw, &mut h.gui.shell.sketch) {
+        use forge_render::shell::sketching::SkTool as T;
+        m.set_tool(Some(match tool.as_str() {
+            "rect" => T::Rectangle,
+            "circle" => T::Circle,
+            "arc" => T::Arc,
+            _ => T::Line,
+        }));
+        m.click((*x, *y), 0.0);
     }
     if let Some((x, y)) = a.at {
         h.move_to(x, y);

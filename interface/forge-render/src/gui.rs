@@ -95,6 +95,8 @@ pub struct Gui {
     /// Tool calls made, for replay.
     pub calls: Vec<Call>,
     pixels_per_point: f32,
+    /// The font atlas from before the first frame, still to go to the GPU.
+    warm_textures: Option<egui::TexturesDelta>,
     /// The window, in device pixels.
     target_px: (u32, u32),
     tree_hover_was: Option<forge_doc::ItemId>,
@@ -149,6 +151,10 @@ impl Gui {
         let ctx = egui::Context::default();
         ctx.set_fonts(crate::shell::theme::fonts());
         let egui = egui_wgpu::Renderer::new(&device, format, egui_wgpu::RendererOptions::default());
+        // the type's first layout takes 40 ms or so: before the first frame, not in it
+        let mut warm_shell = Shell::default();
+        let warm = ctx.run_ui(egui::RawInput::default(), |ui| warm_shell.ui(ui));
+        warm_shell.out.clear();
         Gui {
             ctx,
             egui,
@@ -163,6 +169,7 @@ impl Gui {
             over_view: false,
             calls: Vec::new(),
             pixels_per_point: 1.0,
+            warm_textures: Some(warm.textures_delta),
             target_px: (1, 1),
             tree_hover_was: None,
             sketch_for: None,
@@ -1162,6 +1169,13 @@ impl Gui {
         let prims = self.ctx.tessellate(output.shapes, output.pixels_per_point);
         times.tess = now_ms() - t2;
         let t3 = now_ms();
+        if let Some(w) = self.warm_textures.take() {
+            for (id, deltas) in &w.set {
+                for d in deltas.iter() {
+                    self.egui.update_texture(&self.device, &self.queue, *id, d);
+                }
+            }
+        }
         for (id, deltas) in &output.textures_delta.set {
             for d in deltas.iter() {
                 self.egui.update_texture(&self.device, &self.queue, *id, d);

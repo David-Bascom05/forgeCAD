@@ -72,9 +72,13 @@ impl App {
         let view = frame.texture.create_view(&Default::default());
         let raw = l.egui.take_egui_input(&l.window);
         let out = l.gui.frame(raw, &view, (l.config.width, l.config.height));
+        let drawn = now_ms();
         l.egui.handle_platform_output(&l.window, out.platform);
+        let output_ms = now_ms() - drawn;
         l.window.pre_present_notify();
+        let t = now_ms();
         l.gui.queue().present(frame);
+        let present_ms = now_ms() - t;
         let done = now_ms();
         if let Some(at) = l.input_at.take() {
             l.click_ms.push(done - at);
@@ -82,7 +86,7 @@ impl App {
         if self.times && done - began > SLOW_MS {
             let t = out.times;
             eprintln!(
-                "forge-app: slow frame {:.1} ms: acquire {:.1}, ui {:.1}, view {:.1} (drawn {}), tessellate {:.1}, draw {:.1}, present {:.1}",
+                "forge-app: slow frame {:.1} ms: acquire {:.1}, ui {:.1}, view {:.1} (drawn {}), tessellate {:.1}, draw {:.1}, platform {output_ms:.1}, present call {present_ms:.1}",
                 done - began,
                 acquired - began,
                 t.ui,
@@ -90,7 +94,6 @@ impl App {
                 t.view_drawn,
                 t.tess,
                 t.draw,
-                done - acquired - t.ui - t.view - t.tess - t.draw
             );
         }
         self.next = None;
