@@ -1952,6 +1952,34 @@ pub(crate) fn trim(
                     }
                     continue;
                 }
+                // an edge read from a file may lie off its faces, and two faces touching along it
+                // need not meet at all: where it passes through the other surface, the curve ends
+                // there too, for both of its faces alike
+                if edge.tol > tol::LINEAR {
+                    let other = &bodies[1 - k].face(faces[1 - k]).surface;
+                    if let CurveSurface::Hits(hits) = curve_surface(&edge.curve, edge.range, other) {
+                        for h in hits {
+                            let t = curve.closest(h.point, range);
+                            let d = curve.eval(t).distance(h.point);
+                            let box_other = index[1 - k].face_box(faces[1 - k]);
+                            if d <= edge.tol
+                                && box_other.grow(edge.tol).contains(h.point)
+                                && index[1 - k].point_in_face(faces[1 - k], h.point) != Where::Outside
+                            {
+                                ts.push((t, cuts.len()));
+                                cuts.push(Cut {
+                                    pair: Name::NONE,
+                                    on: CutOn::Edge(side, e),
+                                    s: h.t,
+                                    point: h.point,
+                                    tol: edge.tol,
+                                    touch: branches[1],
+                                });
+                            }
+                        }
+                    }
+                    continue;
+                }
                 let across = across(body, f, c)?;
                 // only hits on the edge count: within its ends' tolerance of its box
                 let near = || {
