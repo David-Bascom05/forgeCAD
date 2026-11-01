@@ -48,7 +48,8 @@ def measure(path):
     ex = TopExp_Explorer(s, TopAbs_SOLID)
     while ex.More():
         g = GProp_GProps()
-        BRepGProp.VolumeProperties_s(TopoDS.Solid(ex.Current()), g)
+        # adaptive: the default rule was 2% out on a long spline face (frame's threads)
+        BRepGProp.VolumeProperties_s(TopoDS.Solid(ex.Current()), g, 1e-4, False, False)
         vol += abs(g.Mass())
         g = GProp_GProps()
         BRepGProp.SurfaceProperties_s(TopoDS.Solid(ex.Current()), g)

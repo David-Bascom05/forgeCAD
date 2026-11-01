@@ -20,13 +20,10 @@ SURFACE_OF_REVOLUTION. No PCURVE or SEAM_CURVE in these samples, so the reader b
 curves. Lengths come in metres (Onshape), centimetres (Fusion), mm and inches; uncertainty from
 1e-8 to 1e-2. 12-22% of files hold more than one solid.
 
-## Export: open
+## Export: a fit's blind spot, found through a reader
 
-OCCT reads 13 of 15 bench parts valid with volume and area matching (`tools/occt/step_read.py`).
-frame (volume -1.84%) and jack (-0.39%) do not. Repro: `benchparts resolve frame F.fc`,
-`forgecad export F.fc`, `step_read.py F.step`; on the two thread faces OCCT reports two edges
-at the run-out tip with tolerance about 0.9 mm (jack 1.5 mm) and pcurves at u = t + 2 pi, a turn
-away. The SURFACE_CURVE pcurves in our file have u = t and lie on the fitted surface: read the
-file's first control points. Our own surface, its loop drawing and whole-surface `project` hold
-those edges within 1e-8 mm. So OCCT drops our pcurves on these edges and projects again; why is
-not known. Changing OCCT's read options from Python had no effect on the result.
+OCCT read frame and jack as invalid, with edges at a thread's run-out tip a turn away and 0.9 to
+1.5 mm off, and we first took that for OCCT re-projecting our pcurves. It was our fit: a thin
+wedge of a face (the run-out) can pass between a coarse cell's samples, so the cell was never
+refined and the surface was 2 mm wrong there, with an error of 3e-5 reported. The fit now also
+checks points along the loops.

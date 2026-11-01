@@ -232,6 +232,7 @@ pub fn fit_surface(s: &Surface, uv: Box2, tol: f64, keep: &FaceMask) -> SurfaceF
     };
     let mut net = grid(&us, &vs);
     let mut error = 0.0;
+    let rim = keep.boundary(1024);
     // the distance from the surface: parameters missing by more can still lie on it, as near a
     // patch's corner where its parametrisation is only continuous
     let off = |q: Point3, at: Point2| {
@@ -288,6 +289,23 @@ pub fn fit_surface(s: &Surface, uv: Box2, tol: f64, keep: &FaceMask) -> SurfaceF
                             ev[j] = ev[j].max(e);
                         }
                     }
+                }
+            }
+        }
+        // along the loops, where a thin stretch of face can fall between a cell's samples: the
+        // longer way across the cell is split
+        for &q in &rim {
+            let i = us.partition_point(|&x| x <= q.x).clamp(1, us.len() - 1) - 1;
+            let j = vs.partition_point(|&x| x <= q.y).clamp(1, vs.len() - 1) - 1;
+            let (m, k) = (us[i + 1] - us[i], vs[j + 1] - vs[j]);
+            let (a, b, c, d) = (&net[i][j], &net[i + 1][j], &net[i][j + 1], &net[i + 1][j + 1]);
+            let e = off(patch(a, b, c, d, m, k, (q.x - us[i]) / m, (q.y - vs[j]) / k), q);
+            worst = worst.max(e);
+            if e > 0.5 * tol {
+                if a.p.distance(b.p) >= a.p.distance(c.p) {
+                    eu[i] = eu[i].max(e);
+                } else {
+                    ev[j] = ev[j].max(e);
                 }
             }
         }
