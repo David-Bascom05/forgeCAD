@@ -272,7 +272,8 @@ fn adds(features: crate::History<'_>, i: usize) -> Vec<Box3> {
         Feature::Sweep(_) | Feature::Coil(_) | Feature::Loft(_) => {
             crate::swept::reach_of(features, i).into_iter().collect()
         }
-        Feature::Thread(_) | Feature::Text(_) => crate::tools(features, i, true)
+        Feature::Text(t) if matches!(t.op, Combine::Cut | Combine::Keep) => vec![],
+        Feature::Text(_) => crate::tools(features, i, true)
             .map(|ts| {
                 ts.iter()
                     .filter(|t| !matches!(t.1, Combine::Cut | Combine::Keep))
