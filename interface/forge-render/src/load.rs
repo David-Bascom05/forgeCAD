@@ -53,6 +53,10 @@ fn build(part: &str) -> Result<PartMesh, String> {
 /// The mesh of a part, and whether it came from the cache.
 pub fn open(part: &str, use_cache: bool) -> Result<(PartMesh, bool), String> {
     let src = source(part)?;
+    // a new part has nothing to build yet
+    if src.trim().is_empty() {
+        return Ok((PartMesh::empty(), false));
+    }
     if use_cache && let Some(m) = cache::load(&src) {
         return Ok((m, true));
     }

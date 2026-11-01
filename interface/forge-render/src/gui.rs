@@ -4,7 +4,6 @@
 
 use crate::camera::Camera;
 use crate::live::{self, Out};
-use crate::mesh::PartMesh;
 use crate::nav::Nav;
 use crate::render::{self, Entity, Mark, Offscreen, Overlay, Renderer, part_info};
 use crate::scene::{Motion, Placement, Scene};
@@ -34,8 +33,10 @@ struct Loaded {
     /// Its file, if it has one.
     file: Option<String>,
     name: String,
-    mesh: PartMesh,
     part: Part,
+    scene: Scene,
+    /// Its pipelines take tens of milliseconds to make: on the loader's thread, never in a frame.
+    renderer: Renderer,
 }
 
 /// The part in view.
@@ -94,6 +95,8 @@ pub struct Gui {
     /// The view holds the pointer: a press began in it.
     captured: bool,
     over_view: bool,
+    /// Where the pointer last was, in window pixels.
+    pointer_px: Option<PhysicalPosition<f64>>,
     /// Tool calls made, for replay.
     pub calls: Vec<Call>,
     pixels_per_point: f32,
@@ -143,6 +146,7 @@ impl Gui {
         adapter: wgpu::AdapterInfo,
         format: wgpu::TextureFormat,
         waker: Waker,
+        scale: f32,
     ) -> Gui {
         // never panic from a thread the GPU reports on: say it, and the window stays up
         let gpu_failed: Arc<std::sync::Mutex<Option<String>>> = Arc::default();
@@ -157,7 +161,13 @@ impl Gui {
         let egui = egui_wgpu::Renderer::new(&device, format, egui_wgpu::RendererOptions::default());
         // the type's first layout takes 40 ms or so: before the first frame, not in it
         let mut warm_shell = Shell::default();
-        let warm = ctx.run_ui(egui::RawInput::default(), |ui| warm_shell.ui(ui));
+        let mut warm_input = egui::RawInput::default();
+        warm_input
+            .viewports
+            .entry(egui::ViewportId::ROOT)
+            .or_default()
+            .native_pixels_per_point = Some(scale);
+        let warm = ctx.run_ui(warm_input, |ui| warm_shell.ui(ui));
         warm_shell.out.clear();
         Gui {
             ctx,
@@ -171,6 +181,7 @@ impl Gui {
             waker,
             captured: false,
             over_view: false,
+            pointer_px: None,
             calls: Vec::new(),
             pixels_per_point: 1.0,
             warm_textures: Some(warm.textures_delta),
@@ -183,21 +194,39 @@ impl Gui {
         }
     }
 
+    pub fn is_loading(&self) -> bool {
+        self.loading.is_some()
+    }
+
     /// Opens a part in the background: the window never waits on the kernel.
     pub fn open(&mut self, path: &str) {
         let (send, recv) = channel();
         self.loading = Some(recv);
         let (path, waker) = (path.to_string(), self.waker.clone());
         self.shell.status = format!("Opening {}", name_of(&path));
+        let (device, queue, adapter) = (self.device.clone(), self.queue.clone(), self.adapter.clone());
         std::thread::spawn(move || {
             let got = (|| {
                 let (mesh, _) = crate::load::open(&path, true)?;
                 let part = crate::load::tool_part(&path)?;
+                let parts = [mesh];
+                let mut scene = Scene::new(&part_info(&parts), vec![Placement::at(0, [0.0; 3])]);
+                scene.set_explode(0.0);
+                let renderer = Renderer::new(
+                    device,
+                    queue,
+                    adapter,
+                    render::OFFSCREEN,
+                    (16, 16),
+                    &parts,
+                    &scene,
+                );
                 Ok(Loaded {
                     file: path.ends_with(".fc").then(|| path.clone()),
                     name: name_of(&path),
-                    mesh,
                     part,
+                    scene,
+                    renderer,
                 })
             })();
             let _ = send.send(got);
@@ -220,25 +249,21 @@ impl Gui {
                 return;
             }
         };
-        let parts = [l.mesh];
-        let mut scene = Scene::new(&part_info(&parts), vec![Placement::at(0, [0.0; 3])]);
+        let (scene, mut renderer) = (l.scene, l.renderer);
         let (center, radius) = scene.bounds();
-        scene.set_explode(0.0);
         let size = self.view_px();
         eprintln!(
             "forge-app: opening {} with a view of {}x{}",
             l.name, size.0, size.1
         );
-        let camera = view_camera(center, radius, self.shell.view.parallel, size);
-        let mut renderer = Renderer::new(
-            self.device.clone(),
-            self.queue.clone(),
-            self.adapter.clone(),
-            render::OFFSCREEN,
-            size,
-            &parts,
-            &scene,
-        );
+        // an empty part's view holds its planes whole
+        let fit = if l.part.model.lines.is_empty() {
+            radius * 1.6
+        } else {
+            radius
+        };
+        let camera = view_camera(center, fit, self.shell.view.parallel, size);
+        renderer.resize(size);
         self.theme_view(&mut renderer);
         let target = Offscreen::new(&self.device, size);
         let raw = raw_view(&target);
@@ -423,7 +448,7 @@ impl Gui {
             .filter(|(k, i)| {
                 self.shell.origin_shown[*k]
                     || self.shell.origin_selected == Some(*i)
-                    || (self.shell.sketch_pick && *k < 3)
+                    || (self.shell.rows.is_empty() && *k < 3)
             })
             .map(|(_, i)| i)
             .collect();
@@ -454,7 +479,8 @@ impl Gui {
             });
             v.nav.selected.clear();
             v.clicked.clear();
-            let plane = under.filter(|i| {
+            let chosen = self.shell.origin_selected.take();
+            let plane = chosen.or(under.filter(|_| clicked)).filter(|i| {
                 matches!(
                     i,
                     crate::origin::Item::XyPlane
@@ -462,11 +488,8 @@ impl Gui {
                         | crate::origin::Item::YzPlane
                 )
             });
-            if clicked
-                && let Some(h) = plane
-                    .map(|i| i.reference().to_string())
-                    .or(face.map(|f| format!("on {f}")))
-            {
+            let on_face = face.filter(|_| clicked).map(|f| format!("on {f}"));
+            if let Some(h) = plane.map(|i| i.reference().to_string()).or(on_face) {
                 self.ask_plane(h, SketchFor::New, Vec::new());
             }
             return;
@@ -519,8 +542,48 @@ impl Gui {
         }
     }
 
+    /// Is the view what's under this place, with nothing of the chrome over it?
+    fn view_is_at(&self, position: PhysicalPosition<f64>) -> bool {
+        let p = self.pixels_per_point;
+        let at = egui::pos2(position.x as f32 / p, position.y as f32 / p);
+        self.shell.view_rect.contains(at)
+            && !self.shell.menu_open()
+            && !self.ctx.egui_is_using_pointer()
+            && !self.shell.view_blocks.iter().any(|r| r.contains(at))
+            && self
+                .ctx
+                .layer_id_at(at)
+                .is_none_or(|l| l.order == egui::Order::Background)
+    }
+
     /// What one window event means for the view, if it's the view's.
     pub fn view_event(&mut self, event: &WindowEvent) {
+        // a press decides from where the pointer is now: a menu may have closed, a dialog gone, since
+        // it last moved
+        if let WindowEvent::MouseInput {
+            state: ElementState::Pressed,
+            device_id,
+            ..
+        } = event
+            && !self.captured
+            && let Some(position) = self.pointer_px
+        {
+            let device_id = *device_id;
+            let over = self.view_is_at(position);
+            let was = std::mem::replace(&mut self.over_view, over);
+            if over && !was {
+                let moved = WindowEvent::CursorMoved { device_id, position };
+                self.over_view = true;
+                self.view_event(&moved);
+            }
+        }
+        let over_now = match event {
+            WindowEvent::CursorMoved { position, .. } => {
+                self.pointer_px = Some(*position);
+                self.view_is_at(*position)
+            }
+            _ => false,
+        };
         let Some(v) = &mut self.view else { return };
         let p = self.pixels_per_point;
         let origin = self.shell.view_rect.min;
@@ -532,17 +595,8 @@ impl Gui {
                 return;
             }
             WindowEvent::CursorMoved { device_id, position } => {
-                let at = egui::pos2(position.x as f32 / p, position.y as f32 / p);
-                let over = self.shell.view_rect.contains(at)
-                    && !self.shell.menu_open()
-                    && !self.ctx.egui_is_using_pointer()
-                    && !self.shell.view_blocks.iter().any(|r| r.contains(at))
-                    && self
-                        .ctx
-                        .layer_id_at(at)
-                        .is_none_or(|l| l.order == egui::Order::Background);
-                if self.captured || over {
-                    self.over_view = over;
+                if self.captured || over_now {
+                    self.over_view = over_now;
                     Some(WindowEvent::CursorMoved {
                         device_id: *device_id,
                         position: to_view(position.x, position.y),
@@ -596,6 +650,7 @@ impl Gui {
             if let Some(at) = v.nav.cube_menu.take() {
                 self.shell.cube_region = v.nav.cube_menu_region.take();
                 self.shell.cube_menu = Some(egui::pos2(origin.x + at.0 / p, origin.y + at.1 / p));
+                self.shell.cube_menu_fresh = true;
             }
         }
     }
@@ -1395,6 +1450,7 @@ impl Headless {
             adapter.get_info(),
             HEADLESS_FORMAT,
             Arc::new(|| {}),
+            scale,
         );
         Ok(Headless {
             gui,
@@ -1510,15 +1566,27 @@ impl Headless {
         });
     }
 
+    /// A right click where the pointer is, with no move first.
+    pub fn right_click_here(&mut self) {
+        self.other_button(true);
+        self.step();
+        self.other_button(false);
+        self.step();
+    }
+
     /// A key press and release.
     pub fn key(&mut self, key: egui::Key) {
+        self.key_with(key, Default::default());
+    }
+
+    pub fn key_with(&mut self, key: egui::Key, modifiers: egui::Modifiers) {
         for pressed in [true, false] {
             self.pending.push(egui::Event::Key {
                 key,
                 physical_key: None,
                 pressed,
                 repeat: false,
-                modifiers: Default::default(),
+                modifiers,
             });
         }
     }

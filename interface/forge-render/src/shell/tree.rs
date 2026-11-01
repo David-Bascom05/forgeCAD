@@ -460,8 +460,8 @@ impl Shell {
                 let strong = self.origin_hover == Some(i)
                     || self.origin_tree_hover == Some(i)
                     || self.origin_selected == Some(i);
-                // the planes show while one's being picked to sketch on
-                (self.origin_shown[k] || (self.sketch_pick && k < 3) || strong).then_some((i, strong))
+                // an empty part shows its planes, to start on; after that, only what's asked for
+                (self.origin_shown[k] || (self.rows.is_empty() && k < 3) || strong).then_some((i, strong))
             })
             .collect()
     }

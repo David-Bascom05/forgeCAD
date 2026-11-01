@@ -164,6 +164,8 @@ pub struct Shell {
     pub places: Vec<(String, Rect)>,
     /// The view cube's right-click menu, at this point.
     pub cube_menu: Option<egui::Pos2>,
+    /// The press that opened it is still to come through the frame: it isn't a press outside it.
+    pub cube_menu_fresh: bool,
     /// What part of the cube it's for.
     pub cube_region: Option<[i8; 3]>,
     /// The part's picture, drawn by the renderer this same frame.
@@ -227,6 +229,7 @@ impl Default for Shell {
             view_rect: Rect::ZERO,
             places: Vec::new(),
             cube_menu: None,
+            cube_menu_fresh: false,
             cube_region: None,
             view_tex: None,
             cube_labels: Vec::new(),
@@ -928,13 +931,14 @@ impl Shell {
                 },
                 Some(Action::Parallel(false)),
             ));
+            let fresh = std::mem::take(&mut self.cube_menu_fresh);
             match menu_at(ctx, "cube-menu", at, &t, &items) {
                 MenuResult::Chose(a) => {
                     self.out.push(a);
                     self.cube_menu = None;
                 }
-                MenuResult::Close => self.cube_menu = None,
-                MenuResult::Open => {}
+                MenuResult::Close if !fresh => self.cube_menu = None,
+                MenuResult::Close | MenuResult::Open => {}
             }
         }
     }

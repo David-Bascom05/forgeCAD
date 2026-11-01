@@ -117,8 +117,14 @@ impl App {
                     let (send, recv) = std::sync::mpsc::channel();
                     self.dialog = Some(recv);
                     let proxy = self.proxy.clone();
+                    let new = matches!(a, Action::New);
                     std::thread::spawn(move || {
-                        let _ = send.send(crate::app::open_dialog());
+                        let chosen = if new {
+                            crate::app::new_dialog()
+                        } else {
+                            crate::app::open_dialog()
+                        };
+                        let _ = send.send(chosen);
                         let _ = proxy.send_event(());
                     });
                 }
@@ -127,6 +133,21 @@ impl App {
         }
         l.gui.shell.view.maximized = l.window.is_maximized();
     }
+}
+
+/// The system's dialog for where a new part goes; it starts as an empty file.
+fn new_dialog() -> Option<String> {
+    let f = rfd::FileDialog::new()
+        .add_filter("Parts", &["fc"])
+        .set_file_name("Part.fc")
+        .save_file()?;
+    let f = if f.extension().is_some() {
+        f
+    } else {
+        f.with_extension("fc")
+    };
+    std::fs::write(&f, "").ok()?;
+    Some(f.to_string_lossy().into_owned())
 }
 
 /// The system's file dialog.
@@ -173,7 +194,8 @@ impl ApplicationHandler for App {
         let waker: Waker = Arc::new(move || {
             let _ = proxy.send_event(());
         });
-        let mut gui = Gui::new(device, queue, adapter.get_info(), config.format, waker);
+        let scale = window.scale_factor() as f32;
+        let mut gui = Gui::new(device, queue, adapter.get_info(), config.format, waker, scale);
         if let Some(f) = self.file.take() {
             gui.open(&f);
         }

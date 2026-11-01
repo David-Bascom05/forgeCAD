@@ -93,6 +93,19 @@ fn pct(mut v: Vec<f64>, p: f64) -> f64 {
 }
 
 fn bench(h: &mut Headless) {
+    // opening another part: no frame waits for it, the one that takes it up is the worst
+    h.gui.open("bracket");
+    let (mut worst, start) = (0.0f64, std::time::Instant::now());
+    while h.gui.is_loading() && start.elapsed().as_secs() < 30 {
+        let t = std::time::Instant::now();
+        h.step();
+        worst = worst.max(t.elapsed().as_secs_f64() * 1e3);
+    }
+    let t = std::time::Instant::now();
+    h.step();
+    worst = worst.max(t.elapsed().as_secs_f64() * 1e3);
+    println!("worst frame while a part opens: {worst:.2} ms");
+
     let now = forge_render::viewer::now_ms;
     let names: Vec<String> = h
         .gui
@@ -262,7 +275,7 @@ fn run() -> Result<(), String> {
         h.gui.shell.out.push(forge_render::shell::Action::StartSketch);
         h.until(|g| g.shell.sketch.is_some());
         if let Some(m) = &mut h.gui.shell.sketch {
-            for r in rows.split(';') {
+            for r in rows.split(';').filter(|r| !r.trim().is_empty()) {
                 m.add(r.trim().to_string());
             }
         }

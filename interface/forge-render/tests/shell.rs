@@ -852,7 +852,6 @@ fn a_sketch_starts_on_a_plane_solves_as_it_goes_and_finish_commits_one_call_that
     h.click("tool:Start Sketch");
     step_some(&mut h);
     assert!(h.gui.shell.sketch_pick);
-    assert!(h.gui.shell.origin_drawn().len() >= 3);
     h.key(egui::Key::Escape);
     h.gui.shell.sketch_pick = false;
     // on the XY plane, chosen from the tree
@@ -1072,4 +1071,159 @@ fn the_cube_can_name_its_faces_and_set_home_and_they_stay_with_the_file() {
     step_some(&mut h);
     assert_eq!(h.gui.view.as_ref().unwrap().nav.orient, Default::default());
     let _ = std::fs::remove_file(&view_file);
+}
+
+#[test]
+fn a_press_finds_what_is_under_it_with_no_move_since_a_menu_closed() {
+    let Some(mut h) = app() else { return };
+    let (v, place) = {
+        let g = &h.gui;
+        (g.shell.view_rect, g.view.as_ref().unwrap().nav.cube_place())
+    };
+    let mid = (
+        v.left() + place.at.0 + place.side * 0.5,
+        v.top() + place.at.1 + place.side * 0.5,
+    );
+    h.right_drag(mid, mid);
+    step_some(&mut h);
+    assert!(h.gui.shell.cube_menu.is_some(), "the first right-click");
+    h.key(egui::Key::Escape);
+    step_some(&mut h);
+    assert!(h.gui.shell.cube_menu.is_none());
+    // the pointer hasn't moved, and the last it knew the view was under the menu
+    h.right_click_here();
+    step_some(&mut h);
+    assert!(
+        h.gui.shell.cube_menu.is_some(),
+        "the second, with no move between"
+    );
+}
+
+#[test]
+fn drawing_tabs_through_its_dimensions_from_the_start_and_typing_goes_in_the_active_one() {
+    use forge_render::shell::sketching::SkTool;
+    let Some((mut h, _)) = file_part(BLOCK) else {
+        return;
+    };
+    h.gui.shell.origin_selected = Some(forge_render::origin::Item::XyPlane);
+    h.gui.shell.out.push(Action::StartSketch);
+    assert!(h.until(|g| g.shell.sketch.is_some()));
+    h.gui.shell.out.push(Action::SketchTool(SkTool::Rectangle));
+    step_some(&mut h);
+    let v = h.gui.shell.view_rect;
+    let c = v.center();
+    h.move_to(c.x - 60.0, c.y - 40.0);
+    step_some(&mut h);
+    h.button(true);
+    h.step();
+    h.button(false);
+    step_some(&mut h);
+    h.move_to(c.x + 60.0, c.y + 40.0);
+    step_some(&mut h);
+    let m = h.gui.shell.sketch.as_ref().unwrap();
+    assert_eq!(
+        (m.fields.len(), m.active),
+        (2, 0),
+        "width's active, with no click"
+    );
+    assert!(h.gui.shell.place("sketch:field:Width").is_some());
+    // type straight in; Tab to the height; Shift+Tab back; Enter places it
+    h.text("25");
+    step_some(&mut h);
+    let m = h.gui.shell.sketch.as_ref().unwrap();
+    assert!(m.fields[0].locked && m.fields[0].text == "25", "{:?}", m.fields);
+    h.key(egui::Key::Tab);
+    step_some(&mut h);
+    assert_eq!(h.gui.shell.sketch.as_ref().unwrap().active, 1);
+    h.text("7");
+    step_some(&mut h);
+    h.key_with(egui::Key::Tab, egui::Modifiers::SHIFT);
+    step_some(&mut h);
+    assert_eq!(h.gui.shell.sketch.as_ref().unwrap().active, 0);
+    h.key(egui::Key::Enter);
+    step_some(&mut h);
+    let m = h.gui.shell.sketch.as_ref().unwrap();
+    assert!(
+        m.rows
+            .iter()
+            .any(|r| r.starts_with("hdist") && r.ends_with(" 25")),
+        "{:?}",
+        m.rows
+    );
+    assert!(
+        m.rows.iter().any(|r| r.starts_with("vdist") && r.ends_with(" 7")),
+        "{:?}",
+        m.rows
+    );
+    assert!(m.error.is_none(), "{:?}", m.error);
+}
+
+#[test]
+fn origin_planes_show_in_an_empty_part_only_and_a_tree_plane_starts_a_sketch() {
+    use forge_render::origin::Item;
+    let mut s = forge_render::shell::Shell::default();
+    assert_eq!(s.origin_drawn().len(), 3, "an empty part shows them, to start on");
+    s.set_doc(BLOCK, 1, None);
+    assert!(
+        s.origin_drawn().is_empty(),
+        "once there's anything, they're hidden"
+    );
+    let Some((mut h, _)) = file_part(BLOCK) else {
+        return;
+    };
+    h.gui.shell.out.push(Action::StartSketch);
+    step_some(&mut h);
+    assert!(h.gui.shell.sketch_pick);
+    assert!(h.gui.shell.origin_drawn().is_empty(), "not forced on");
+    h.click("tree:Origin");
+    step_some(&mut h);
+    h.click("tree:XZ Plane");
+    assert!(h.until(|g| g.shell.sketch.is_some()), "{}", h.gui.shell.status);
+    assert_eq!(
+        h.gui.shell.sketch.as_ref().unwrap().head,
+        Item::XzPlane.reference()
+    );
+}
+
+#[test]
+fn a_new_part_starts_empty_with_its_planes_and_its_first_sketch_makes_a_solid() {
+    use forge_render::origin::Item;
+    let Some((mut h, path)) = file_part("") else {
+        return;
+    };
+    assert!(h.gui.shell.rows.is_empty());
+    assert_eq!(h.gui.shell.origin_drawn().len(), 3);
+    h.gui.shell.out.push(Action::StartSketch);
+    step_some(&mut h);
+    assert!(h.gui.shell.sketch_pick);
+    h.click("tree:Origin");
+    step_some(&mut h);
+    h.click("tree:XY Plane");
+    assert!(h.until(|g| g.shell.sketch.is_some()), "{}", h.gui.shell.status);
+    assert_eq!(
+        h.gui.shell.sketch.as_ref().unwrap().head,
+        Item::XyPlane.reference()
+    );
+    let m = h.gui.shell.sketch.as_mut().unwrap();
+    for r in [
+        "line 0 0 40 0",
+        "line l1.b 40 30",
+        "line l2.b 0 30",
+        "line l3.b l1.a",
+    ] {
+        assert!(m.add(r.to_string()), "{r}: {:?}", m.error);
+    }
+    step_some(&mut h);
+    h.gui.shell.out.push(Action::FinishSketch);
+    assert!(h.until(|g| !g.shell.rows.is_empty()), "{}", h.gui.shell.status);
+    // off the tree row it was chosen from
+    let c = h.gui.shell.view_rect.center();
+    h.move_to(c.x, c.y);
+    step_some(&mut h);
+    assert!(
+        h.gui.shell.origin_drawn().is_empty(),
+        "the planes go with the first feature"
+    );
+    let written = std::fs::read_to_string(&path).unwrap();
+    assert!(written.contains("sketch"), "{written}");
 }

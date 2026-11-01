@@ -87,6 +87,25 @@ pub struct PartMesh {
     pub lods: Vec<Lod>,
 }
 
+impl PartMesh {
+    /// What an empty part shows: nothing, in a view the size of a hand part.
+    pub fn empty() -> PartMesh {
+        PartMesh {
+            center: [0.0; 3],
+            radius: 60.0,
+            lods: vec![Lod {
+                chord: 0.1,
+                vertices: Vec::new(),
+                indices: Vec::new(),
+                segments: Vec::new(),
+                fins: 0,
+                faces: Vec::new(),
+                edges: Vec::new(),
+            }],
+        }
+    }
+}
+
 struct Reader<'a>(&'a [u8]);
 
 impl Reader<'_> {

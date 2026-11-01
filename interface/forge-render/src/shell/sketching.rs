@@ -52,8 +52,8 @@ pub struct Draft {
     pub arc: Option<((f64, f64), f64, f64, f64)>,
     pub rows: Vec<String>,
     pub glyphs: Vec<(Glyph, (f64, f64))>,
-    /// Each field's live value and where it sits.
-    pub values: Vec<(f64, (f64, f64))>,
+    /// Each field's live value and the dimension it is.
+    pub values: Vec<(f64, Measure)>,
     /// A line chain goes on from here.
     pub end: Option<(String, (f64, f64))>,
 }
@@ -77,6 +77,114 @@ pub enum Measure {
     Along((f64, f64), (f64, f64), (f64, f64)),
     /// A circle's or arc's centre and radius, and whether it reads as a diameter.
     Round((f64, f64), f64, bool),
+    /// About a centre, from one angle to another (radians), at this radius.
+    Sweep((f64, f64), f64, f64, f64),
+}
+
+/// How dimensions are drawn: which way they stand off, and how far the last ones went.
+struct DimPen<'a> {
+    p: &'a egui::Painter,
+    screen: &'a dyn Fn((f64, f64)) -> Option<Pos2>,
+    middle: (f64, f64),
+    mm_per_pt: f64,
+    ink: Color32,
+    /// How many have stood off to each side so far.
+    sides: (usize, usize),
+}
+
+impl DimPen<'_> {
+    fn arrow(&self, tip: Pos2, from: Pos2) {
+        let way = (tip - from).normalized();
+        let side = vec2(-way.y, way.x);
+        self.p.add(egui::Shape::convex_polygon(
+            vec![
+                tip,
+                tip - way * ARROW_PT + side * 3.0,
+                tip - way * ARROW_PT - side * 3.0,
+            ],
+            self.ink,
+            Stroke::NONE,
+        ));
+    }
+
+    /// Draws a dimension's lines; where its value sits.
+    fn draw(&mut self, what: Measure) -> Option<Pos2> {
+        let (screen, ink) = (self.screen, self.ink);
+        let line = Stroke::new(1.0, ink);
+        match what {
+            Measure::Along(a, b, d) => {
+                let span = (b.0 - a.0) * d.0 + (b.1 - a.1) * d.1;
+                if span.abs() < 1e-9 {
+                    return None;
+                }
+                // to the side away from the middle, each past the last on that side
+                let n = (-d.1, d.0);
+                let mid = ((a.0 + b.0) * 0.5, (a.1 + b.1) * 0.5);
+                let outward = (mid.0 - self.middle.0) * n.0 + (mid.1 - self.middle.1) * n.1 >= 0.0;
+                let sign = if outward { 1.0 } else { -1.0 };
+                let counter = if outward {
+                    &mut self.sides.1
+                } else {
+                    &mut self.sides.0
+                };
+                let off = (DIM_OFF + DIM_STEP * *counter as f32) as f64 * self.mm_per_pt;
+                *counter += 1;
+                let along = |q: (f64, f64)| q.0 * n.0 + q.1 * n.1;
+                let reach = if outward {
+                    along(a).max(along(b))
+                } else {
+                    along(a).min(along(b))
+                } + sign * off;
+                let foot = |q: (f64, f64)| {
+                    let by = reach - along(q);
+                    (q.0 + n.0 * by, q.1 + n.1 * by)
+                };
+                let (ua, ub, wa, wb) = (screen(a)?, screen(b)?, screen(foot(a))?, screen(foot(b))?);
+                let faint = Stroke::new(1.0, ink.gamma_multiply(0.5));
+                self.p.line_segment([ua, wa], faint);
+                self.p.line_segment([ub, wb], faint);
+                self.p.line_segment([wa, wb], line);
+                self.arrow(wa, wb);
+                self.arrow(wb, wa);
+                Some(wa + (wb - wa) * 0.5)
+            }
+            Measure::Round(c, r, _) => {
+                let on = (
+                    c.0 + r * core::f64::consts::FRAC_1_SQRT_2,
+                    c.1 + r * core::f64::consts::FRAC_1_SQRT_2,
+                );
+                let rim = screen(on)?;
+                let out = rim + vec2(30.0, -30.0);
+                self.p.line_segment([rim, out], line);
+                self.arrow(rim, out);
+                Some(out + vec2(10.0, -6.0))
+            }
+            Measure::Sweep(c, r, t0, t1) => {
+                let at = |t: f64| {
+                    screen((
+                        c.0 + r * forge_math::dmath::cos(t),
+                        c.1 + r * forge_math::dmath::sin(t),
+                    ))
+                };
+                let steps = 32;
+                let pts: Vec<Pos2> = (0..=steps)
+                    .filter_map(|k| at(t0 + (t1 - t0) * k as f64 / steps as f64))
+                    .collect();
+                if pts.len() < 2 {
+                    return None;
+                }
+                let faint = Stroke::new(1.0, ink.gamma_multiply(0.5));
+                if let Some(u) = screen(c) {
+                    self.p.line_segment([u, pts[0]], faint);
+                    self.p.line_segment([u, pts[pts.len() - 1]], faint);
+                }
+                self.p.add(egui::Shape::line(pts.clone(), line));
+                self.arrow(pts[pts.len() - 1], pts[pts.len() - 2]);
+                self.arrow(pts[0], pts[1]);
+                at((t0 + t1) * 0.5)
+            }
+        }
+    }
 }
 
 /// Dimension lines stand this far off what they measure, then this much more each (points).
@@ -125,6 +233,8 @@ pub struct SketchMode {
     pub fields: Vec<Field>,
     /// Which field takes the keyboard next.
     want_focus: Option<usize>,
+    /// The field that has the keyboard.
+    pub active: usize,
     /// Rows a snapped first point needs written before the entity's.
     first_rows: Vec<String>,
     /// Where the pointer last was on the plane: typing leaves it, the preview stays.
@@ -185,6 +295,7 @@ impl SketchMode {
             asking_row: None,
             fields: Vec::new(),
             want_focus: None,
+            active: 0,
             first_rows: Vec::new(),
             cursor: None,
             rows,
@@ -631,9 +742,14 @@ impl SketchMode {
                 }
                 d.lines.push((a, end));
                 let mid = ((a.0 + end.0) * 0.5, (a.1 + end.1) * 0.5);
-                d.values.push((length, mid));
-                let deg = forge_math::dmath::atan2(end.1 - a.1, end.0 - a.0) * 180.0 / core::f64::consts::PI;
-                d.values.push((deg, end));
+                let way = (dx / length.max(1e-9), dy / length.max(1e-9));
+                d.values.push((length, Measure::Along(a, end, way)));
+                let angle = forge_math::dmath::atan2(end.1 - a.1, end.0 - a.0);
+                d.values.push((
+                    angle * 180.0 / core::f64::consts::PI,
+                    Measure::Sweep(a, length * 0.5, 0.0, angle),
+                ));
+                let _ = mid;
                 d.end = Some((format!("{line}.b"), end));
             }
             (SkTool::Rectangle, 1) => {
@@ -671,8 +787,9 @@ impl SketchMode {
                 for k in 0..4 {
                     d.lines.push((corners[k], corners[(k + 1) % 4]));
                 }
-                d.values.push((w, (x + w * 0.5, y)));
-                d.values.push((h, (x + w, y + h * 0.5)));
+                d.values.push((w, Measure::Along((x, y), (x + w, y), (1.0, 0.0))));
+                d.values
+                    .push((h, Measure::Along((x + w, y), (x + w, y + h), (0.0, 1.0))));
                 d.end = Some((String::new(), b));
             }
             (SkTool::Circle, 1) => {
@@ -689,7 +806,7 @@ impl SketchMode {
                     d.rows.push(format!("dia c{name} {}", f.text.trim()));
                 }
                 d.circle = Some((c, r));
-                d.values.push((r * 2.0, (c.0 + r, c.1)));
+                d.values.push((r * 2.0, Measure::Round(c, r, true)));
                 d.end = Some((String::new(), c));
             }
             (SkTool::Arc, 1) => {
@@ -699,7 +816,7 @@ impl SketchMode {
                 let r = (rx * rx + ry * ry).sqrt();
                 let radius = self.locked(0, Want::Len).unwrap_or(r);
                 d.circle = Some((c, radius));
-                d.values.push((radius, (c.0 + rx * 0.5, c.1 + ry * 0.5)));
+                d.values.push((radius, Measure::Round(c, radius, false)));
                 let s = radius / r.max(1e-9);
                 d.end = Some((String::new(), (c.0 + rx * s, c.1 + ry * s)));
             }
@@ -729,7 +846,8 @@ impl SketchMode {
                     n(end.0),
                     n(end.1)
                 ));
-                d.values.push(((t1 - t0) / deg, end));
+                d.values
+                    .push(((t1 - t0) / deg, Measure::Sweep(c, radius * 1.15, t0, t1)));
                 d.end = Some((String::new(), end));
             }
             _ => {}
@@ -1169,59 +1287,99 @@ impl Shell {
                 }
             }
 
-            // the values, live until typed in
-            let want = m.want_focus.take();
-            let mut tab = false;
-            let mut enter = false;
+            // the values are dimensions, live until typed in, each edited where it sits
+            let draft_mid = {
+                let pts: Vec<(f64, f64)> = d.lines.iter().flat_map(|l| [l.0, l.1]).collect();
+                if pts.is_empty() {
+                    at
+                } else {
+                    let n = pts.len() as f64;
+                    let sum = pts.iter().fold((0.0, 0.0), |a, q| (a.0 + q.0, a.1 + q.1));
+                    (sum.0 / n, sum.1 / n)
+                }
+            };
+            let mut pen = DimPen {
+                p: &p,
+                screen: &screen,
+                middle: draft_mid,
+                mm_per_pt,
+                ink: t.on_ink,
+                sides: (0, 0),
+            };
             let values = d.values.clone();
+            let n_fields = m.fields.len();
+            let self_clear = self.modal_clear();
+            if let Some(k) = m.want_focus.take() {
+                m.active = k;
+            }
+            let active = m.active.min(n_fields.saturating_sub(1));
+            let enter = ctx.input(|i| i.key_pressed(egui::Key::Enter)) && self_clear;
             for (k, f) in m.fields.iter_mut().enumerate() {
-                let Some((value, at)) = values.get(k).copied() else {
+                let Some((value, what)) = values.get(k).copied() else {
                     continue;
                 };
+                let Some(at_px) = pen.draw(what) else { continue };
                 if !f.locked {
                     f.text = forge_agent::short(value);
                 }
-                let Some(u) = screen(at) else { continue };
                 let id = egui::Id::unique("sketch-field").with(k);
                 egui::Area::new(id.with("area"))
-                    .fixed_pos(u + vec2(-FIELD_W * 0.5, 10.0))
+                    .fixed_pos(at_px - vec2(FIELD_W * 0.5, 12.0))
                     .order(egui::Order::Foreground)
                     .fade_in(false)
                     .show(ctx, |ui| {
                         let (r, _) = ui.allocate_exact_size(vec2(FIELD_W, 24.0), Sense::hover());
-                        ui.painter().rect_filled(r, 4.0, t.surface);
-                        let edge = if f.locked { t.focus } else { t.line };
+                        ui.visuals_mut().selection.stroke.color = t.on_ink;
+                        ui.visuals_mut().selection.bg_fill = t.on;
+                        ui.painter().rect_filled(r, 3.0, t.surface);
+                        let on = k == active;
+                        let edge = if on {
+                            t.focus
+                        } else if f.locked {
+                            t.ink2
+                        } else {
+                            t.line
+                        };
                         let resp = ui.put(
                             r,
                             egui::TextEdit::singleline(&mut f.text)
                                 .id(id)
                                 .font(mono(12.0))
                                 .text_color(t.ink)
+                                .align(egui::Align2::CENTER_CENTER)
                                 .margin(vec2(6.0, 5.0))
-                                .desired_width(FIELD_W - 12.0),
+                                .desired_width(FIELD_W - 12.0)
+                                .lock_focus(true)
+                                .frame(egui::Frame::NONE),
                         );
                         ui.painter()
-                            .rect_stroke(r, 4.0, Stroke::new(1.0, edge), egui::StrokeKind::Inside);
+                            .rect_stroke(r, 3.0, Stroke::new(1.0, edge), egui::StrokeKind::Inside);
                         self.places.push((format!("sketch:field:{}", f.label), r));
                         if resp.changed() {
                             f.locked = true;
                         }
-                        if want == Some(k) {
+                        if on && !resp.has_focus() && !resp.lost_focus() {
                             resp.request_focus();
                         }
-                        if resp.has_focus() {
-                            tab |= ui.input_mut(|i| i.consume_key(egui::Modifiers::NONE, egui::Key::Tab));
-                            enter |= ui.input(|i| i.key_pressed(egui::Key::Enter));
-                        } else if resp.lost_focus() {
-                            enter |= ui.input(|i| i.key_pressed(egui::Key::Enter));
+                        // what's live goes when something's typed
+                        if on && !f.locked {
+                            let mut st =
+                                egui::text_edit::TextEditState::load(ui.ctx(), id).unwrap_or_default();
+                            let all = egui::text::CCursorRange::two(
+                                egui::text::CCursor::new(0),
+                                egui::text::CCursor::new(f.text.chars().count()),
+                            );
+                            st.cursor.set_char_range(Some(all));
+                            st.store(ui.ctx(), id);
                         }
                     });
             }
-            if tab && !m.fields.is_empty() {
-                let at = ctx.memory(|mem| {
-                    (0..m.fields.len()).find(|k| mem.has_focus(egui::Id::unique("sketch-field").with(*k)))
-                });
-                m.want_focus = Some(at.map_or(0, |k| (k + 1) % m.fields.len()));
+            if n_fields > 0 {
+                let back = ctx.input_mut(|i| i.consume_key(egui::Modifiers::SHIFT, egui::Key::Tab));
+                let on = ctx.input_mut(|i| i.consume_key(egui::Modifiers::NONE, egui::Key::Tab));
+                if on || back {
+                    m.active = (active + if back { n_fields - 1 } else { 1 }) % n_fields;
+                }
             }
             if enter && !m.pick_at.is_empty() {
                 m.enter(reach);
@@ -1248,20 +1406,13 @@ impl Shell {
             Err(_) => text.to_string(),
         };
         let mut ask_chip = None;
-        let dim_ink = t.ink2;
-        let (mut left_off, mut right_off) = (0usize, 0usize);
-        let arrow = |p: &egui::Painter, tip: Pos2, from: Pos2| {
-            let way = (tip - from).normalized();
-            let side = vec2(-way.y, way.x);
-            p.add(egui::Shape::convex_polygon(
-                vec![
-                    tip,
-                    tip - way * ARROW_PT + side * 3.0,
-                    tip - way * ARROW_PT - side * 3.0,
-                ],
-                dim_ink,
-                Stroke::NONE,
-            ));
+        let mut pen = DimPen {
+            p: &p,
+            screen: &screen,
+            middle,
+            mm_per_pt,
+            ink: t.ink2,
+            sides: (0, 0),
         };
         egui::Area::new(egui::Id::unique("sketch-dims"))
             .fixed_pos(view.min)
@@ -1269,58 +1420,11 @@ impl Shell {
             .constrain(false)
             .show(ctx, |ui| {
                 for (k, words, value, what) in &chips {
-                    let (pos, text) = match *what {
-                        Measure::Along(a, b, d) => {
-                            let span = (b.0 - a.0) * d.0 + (b.1 - a.1) * d.1;
-                            if span.abs() < 1e-9 {
-                                continue;
-                            }
-                            // to the side away from the middle, each past the last on that side
-                            let n = (-d.1, d.0);
-                            let mid = ((a.0 + b.0) * 0.5, (a.1 + b.1) * 0.5);
-                            let outward = (mid.0 - middle.0) * n.0 + (mid.1 - middle.1) * n.1 >= 0.0;
-                            let sign = if outward { 1.0 } else { -1.0 };
-                            let counter = if outward { &mut right_off } else { &mut left_off };
-                            let off = (DIM_OFF + DIM_STEP * *counter as f32) as f64 * mm_per_pt;
-                            *counter += 1;
-                            let along = |q: (f64, f64)| q.0 * n.0 + q.1 * n.1;
-                            let reach = if outward {
-                                along(a).max(along(b))
-                            } else {
-                                along(a).min(along(b))
-                            } + sign * off;
-                            let foot = |q: (f64, f64)| {
-                                let by = reach - along(q);
-                                (q.0 + n.0 * by, q.1 + n.1 * by)
-                            };
-                            let (fa, fb) = (foot(a), foot(b));
-                            let (Some(ua), Some(ub), Some(wa), Some(wb)) =
-                                (screen(a), screen(b), screen(fa), screen(fb))
-                            else {
-                                continue;
-                            };
-                            let line = Stroke::new(1.0, dim_ink);
-                            p.line_segment([ua, wa], Stroke::new(1.0, dim_ink.gamma_multiply(0.5)));
-                            p.line_segment([ub, wb], Stroke::new(1.0, dim_ink.gamma_multiply(0.5)));
-                            p.line_segment([wa, wb], line);
-                            arrow(&p, wa, wb);
-                            arrow(&p, wb, wa);
-                            (wa + (wb - wa) * 0.5, shown_value(value))
-                        }
-                        Measure::Round(c, r, dia) => {
-                            let on = (
-                                c.0 + r * core::f64::consts::FRAC_1_SQRT_2,
-                                c.1 + r * core::f64::consts::FRAC_1_SQRT_2,
-                            );
-                            let Some(rim) = screen(on) else { continue };
-                            let out = rim + vec2(30.0, -30.0);
-                            p.line_segment([rim, out], Stroke::new(1.0, dim_ink));
-                            arrow(&p, rim, out);
-                            (
-                                out + vec2(10.0, -6.0),
-                                format!("{}{}", if dia { "\u{D8}" } else { "R" }, shown_value(value)),
-                            )
-                        }
+                    let Some(pos) = pen.draw(*what) else { continue };
+                    let text = match what {
+                        Measure::Round(_, _, true) => format!("\u{D8}{}", shown_value(value)),
+                        Measure::Round(_, _, false) => format!("R{}", shown_value(value)),
+                        _ => shown_value(value),
                     };
                     let g = ui.fonts_mut(|f| f.layout_no_wrap(text, mono(12.0), t.ink));
                     let r = Rect::from_center_size(pos, g.size() + vec2(10.0, 6.0));
