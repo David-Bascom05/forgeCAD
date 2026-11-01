@@ -1231,7 +1231,9 @@ impl Shell {
                     let at = around(a, RING_PT + 8.0);
                     // standing out from the ring on its own side
                     let (sx, sy) = (a.sin(), -a.cos());
-                    let mid = at + vec2(sx * w * 0.5, sy * 15.0);
+                    // top and bottom stand clear of their neighbours
+                    let lift = if sx.abs() < 0.1 { 24.0 } else { 8.0 };
+                    let mid = at + vec2(sx * w * 0.5, sy * lift);
                     let r = Rect::from_center_size(mid, vec2(w, 28.0));
                     let on = wedge == Some(k);
                     let p = ui.painter();

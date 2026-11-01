@@ -681,10 +681,11 @@ fn thread_rows(ui: &mut egui::Ui, c: &ThreadChoice, t: &super::theme::Theme, out
         .into_iter()
         .map(|f| {
             let cut = th::catalogue().iter().any(|x| x.family == f && x.modeled);
-            let words = if cut {
-                f.to_string()
-            } else {
-                format!("{f} (can't be cut yet)")
+            let words = match (cut, th::checked(f)) {
+                (true, true) => f.to_string(),
+                (true, false) => format!("{f} (sizes not all checked)"),
+                (false, true) => format!("{f} (can't be cut yet)"),
+                (false, false) => format!("{f} (can't be cut yet; sizes not all checked)"),
             };
             (f.to_string(), words, !cut)
         })
