@@ -101,13 +101,16 @@ Fusion 360 Gallery (`reconstruction/*.json`, with a STEP per extrude under the s
 CADFS (Onshape, `sketch_raw` and programs):
 
 - A region query is `IMPRINT FACE` with `TD([[edge, weight]])`. An edge `IMPRINT EDGE derivedFrom entity` may carry its own
-  `TD([[vertex, weight]])`, usually `INTERSECT VERTEX` of two entities: that names which piece of a split entity. Which end the
-  vertex's weight means is measured next.
+  `TD([[vertex, weight]])`, usually `INTERSECT VERTEX` of two entities, in about 40% of a sample's items. Reading it as "the
+  piece beside that vertex" gave 1 match and 16 wrong on the pilot's unsettled parts, whichever end the weight was taken to mean,
+  so it is not used and those parts stay untranslated. What it means is open.
+- Imprinting a sketch on its plane when an edge bounds nothing alone gave 1 match and 3 wrong on the pilot: not used.
+- A profile from a solid's face extrudes along the face's outward normal: 8 match, against 1 the other way.
 - A loft's `isStart` is not the array's order: `CAP_FACE`'s OSD names the profile. `capPos` is the section's index.
 - A lofted wall's rulings (read from the STEP's B-spline control points): each straight side runs to the arc between the
   points of a circle in line with its corners, at the same fraction along both.
-- A circle's seam in a loft is not in the history. Off one axis it twists the wall and moves the volume by tens of percent (one
-  part, 84 degrees, read from the rulings), so those lofts are left untranslated.
+- A circle's seam in a loft is not in the history. Off one axis it twists the wall and moves the volume by tens of percent, so
+  those lofts are left untranslated until the seam rule measured on `spline-1` is on main (`research/spline-loops/seam.py`).
 - A closed sweep has no caps in the source; two halves meeting at the far side give the same solid.
 
 ## Reproduce

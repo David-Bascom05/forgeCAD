@@ -22,7 +22,6 @@ import sketch2d
 from sketch2d import Arrangement, Unsupported, curve_dist, meets
 
 TOL = 2e-4  # mm: a sample this close lies on its carrier
-VSIDE = int(os.environ.get("VSIDE", "1"))  # TD weight of a vertex on an edge: +1 the piece starts there
 SIDE = 1  # TD weight +1: the region on this side of the entity (+1 left)
 SUPPORTED = {"sweep", "loft", "sketch", "extrude", "revolve", "fillet", "chamfer", "shell", "cPlane", "cPoint", "assignVariable", "hole", "mirror", "circularPattern", "transform", "booleanBodies"}
 PLANES = {"Front": ((0.0, -1.0, 0.0), (1.0, 0.0, 0.0)), "Top": ((0.0, 0.0, 1.0), (1.0, 0.0, 0.0)), "Right": ((1.0, 0.0, 0.0), (0.0, 1.0, 0.0))}
@@ -794,8 +793,7 @@ class Tr:
             raise Unresolved("an imprint of an unread sketch")
         self.plain.setdefault(fid, self.sk[fid][0])
         plain = self.plain[fid]
-        # a line on a face bounds nothing by itself: the face's own edges are what close it
-        a = self.imprinted(fid) if self.names_outside(q, env) or self.bounds_nothing(plain, q, env) else plain
+        a = self.imprinted(fid) if self.names_outside(q, env) else plain
         self.current_fr = self.sk[fid][1]
         cands = None
         for d in q[1][3].get("disambiguationData", []):
@@ -832,17 +830,6 @@ class Tr:
         if len(cands) > 1:
             raise Unresolved("a region the query does not settle")
         return fid, next(iter(cands))
-
-    def bounds_nothing(self, a, q, env):
-        for d in q[1][3].get("disambiguationData", []):
-            if d[0] == "TD":
-                for item in d[1][0]:
-                    try:
-                        self.edge_pieces(a, item[0], env)
-                    except Unresolved as x:
-                        if "bounds nothing" in str(x):
-                            return True
-        return False
 
     def edge_pieces(self, a, eq, env):
         """The arrangement pieces an imprint edge query can be, its neighbours narrowing it down."""
@@ -888,11 +875,8 @@ class Tr:
             for it in d[1][0]:
                 v = self.deref(it[0], env)
                 if isinstance(v, fs.Call) and v[0] == "makeQuery" and v[1][2] == ("name", "VERTEX"):
-                    # the piece beside a vertex; its weight says which end, as on a region's side
-                    vs = self.vertices_of(a, v, env)
-                    keep = [i for i in ps if {a.pieces[i].va, a.pieces[i].vb} & vs]
-                    end = [i for i in keep if (a.pieces[i].va if it[1] * VSIDE > 0 else a.pieces[i].vb) in vs]
-                    ps = end or keep or ps
+                    # measured on the pilot: naming the piece by this vertex gave 1 match and 16 wrong, its weight's
+                    # sign changing nothing. What the weight means is not known, so the query stays unsettled
                     continue
                 try:
                     others, _ = self.edge_pieces(a, it[0], env)
@@ -902,32 +886,6 @@ class Tr:
                 keep = [i for i in ps if {a.pieces[i].va, a.pieces[i].vb} & near]
                 ps = keep or ps
         return ps, name
-
-    def vertices_of(self, a, q, env):
-        """The arrangement's vertices a query can be: an edge's ends, or what two such sets share."""
-        q = self.deref(q, env)
-        if not isinstance(q, fs.Call):
-            return set()
-        if q[0] == "sQuery":
-            name = q[1][2]
-            ps = a.pieces_of(name)
-            if not ps:
-                e = a.every.get(name) or end_point(a, name)
-                return {a.vert(e.a)} if e is not None and e.kind == "point" else set()
-            return {v for i in ps for v in (a.pieces[i].va, a.pieces[i].vb)}
-        if q[0] != "makeQuery":
-            return set()
-        m = q[1][3] if len(q[1]) > 3 else {}
-        src = m.get("derivedFrom")
-        if q[1][1] == "INTERSECT" and isinstance(src, list):
-            out = None
-            for x in src:
-                v = self.vertices_of(a, x, env)
-                out = v if out is None else out & v
-            return out or set()
-        if q[1][1] == "IMPRINT" and src is not None:
-            return self.vertices_of(a, src, env)
-        return set()
 
     def side_regions(self, a, eq, w, env):
         ps, name = self.edge_pieces(a, eq, env)
