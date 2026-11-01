@@ -11,7 +11,8 @@ const RELY_ON_NAME_FALLBACK: &[u64] = &[8];
 
 #[test]
 fn every_kind_has_a_maker() {
-    for k in KINDS {
+    // an import needs a file: its round trips are forge-step's and the session's tests
+    for k in KINDS.iter().filter(|k| k.name != "import") {
         assert!(
             MAKERS.iter().any(|m| m.name == k.name),
             "no history maker for '{}': add a row to forge_agent::history::MAKERS",

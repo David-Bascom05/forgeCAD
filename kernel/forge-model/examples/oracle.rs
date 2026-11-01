@@ -916,6 +916,7 @@ fn export(features: History<'_>, i: usize, before: Option<&Before>) -> Result<St
             }
             Edit::Move { .. } => Err("move faces: OCCT has no operation that moves faces"),
         },
+        Feature::Import(_) => Err("import: a body read from a file, no operation to rebuild it by"),
         Feature::Text(t) => {
             // the outlines as our layout sets them (OCCT's own text builder needs a font file
             // and lays text out its own way); the solids are OCCT's
@@ -1452,6 +1453,7 @@ mod tests {
             Feature::Sketch(_) => "sketch",
             Feature::Thread(_) => "thread",
             Feature::Text(_) => "text",
+            Feature::Import(_) => "import",
             Feature::Work(_) => "work",
             Feature::Body(b) => match &**b {
                 BodyFeature::In { feature, .. } => kind(feature),

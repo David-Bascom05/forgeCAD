@@ -1859,6 +1859,33 @@ fn runs_along(body: &Body, e: EdgeId, curve: &Curve, range: Interval) -> bool {
     curve.eval(curve.closest(m, range)).distance(m) <= tol::LINEAR.max(body.vertex(edge.start).tol)
 }
 
+/// Where a tolerant edge passes through the other face, as (on the curve, on the edge, point).
+/// Out of line: no edge outside an imported body comes here, and `trim` is hot.
+#[cold]
+#[inline(never)]
+fn tolerant_cuts(
+    edge: &forge_topo::Edge,
+    curve: &Curve,
+    range: Interval,
+    (body, index, face): (&Body, &Index, FaceId),
+) -> Vec<(f64, f64, Point3)> {
+    let mut out = Vec::new();
+    let band = edge.tol;
+    let CurveSurface::Hits(hits) = curve_surface(&edge.curve, edge.range, &body.face(face).surface) else {
+        return out;
+    };
+    for h in hits {
+        let t = curve.closest(h.point, range);
+        if curve.eval(t).distance(h.point) <= band
+            && index.face_box(face).grow(band).contains(h.point)
+            && index.point_in_face(face, h.point) != Where::Outside
+        {
+            out.push((t, h.t, h.point));
+        }
+    }
+    out
+}
+
 /// Cuts `curve` (on both faces' surfaces) where it crosses either face's
 /// boundary and records the pieces lying inside both faces.
 #[allow(clippy::too_many_arguments)]
@@ -1956,27 +1983,17 @@ pub(crate) fn trim(
                 // need not meet at all: where it passes through the other surface, the curve ends
                 // there too, for both of its faces alike
                 if edge.tol > tol::LINEAR {
-                    let other = &bodies[1 - k].face(faces[1 - k]).surface;
-                    if let CurveSurface::Hits(hits) = curve_surface(&edge.curve, edge.range, other) {
-                        for h in hits {
-                            let t = curve.closest(h.point, range);
-                            let d = curve.eval(t).distance(h.point);
-                            let box_other = index[1 - k].face_box(faces[1 - k]);
-                            if d <= edge.tol
-                                && box_other.grow(edge.tol).contains(h.point)
-                                && index[1 - k].point_in_face(faces[1 - k], h.point) != Where::Outside
-                            {
-                                ts.push((t, cuts.len()));
-                                cuts.push(Cut {
-                                    pair: Name::NONE,
-                                    on: CutOn::Edge(side, e),
-                                    s: h.t,
-                                    point: h.point,
-                                    tol: edge.tol,
-                                    touch: branches[1],
-                                });
-                            }
-                        }
+                    let other = (bodies[1 - k], index[1 - k], faces[1 - k]);
+                    for (t, s, point) in tolerant_cuts(edge, &curve, range, other) {
+                        ts.push((t, cuts.len()));
+                        cuts.push(Cut {
+                            pair: Name::NONE,
+                            on: CutOn::Edge(side, e),
+                            s,
+                            point,
+                            tol: edge.tol,
+                            touch: branches[1],
+                        });
                     }
                     continue;
                 }
