@@ -865,7 +865,15 @@ pub const KINDS: &[Kind] = &[
                 profiles,
                 kind,
                 guides,
-                options: forge_ops::LoftOptions { apex, align, seams },
+                options: forge_ops::LoftOptions {
+                    apex,
+                    align,
+                    seams: if seams.iter().any(Option::is_some) {
+                        seams
+                    } else {
+                        Vec::new()
+                    },
+                },
                 op,
             })))
         },

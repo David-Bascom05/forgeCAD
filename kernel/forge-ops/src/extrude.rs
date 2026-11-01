@@ -176,12 +176,13 @@ impl<'a, B: Sink> Builder<'a, B> {
             .add_face(Surface::Plane(bottom_plane), false, self.start_name);
         let top = self.body.add_face(Surface::Plane(top_plane), true, self.end_name);
 
-        for li in 0..self.profile.loops.len() {
-            let segs = self.profile.loops[li].segments.clone();
+        let profile = self.profile;
+        for l in &profile.loops {
+            let segs = &l.segments;
             let walls = if let [(Segment::Circle { center, radius, ccw }, id)] = segs[..] {
                 vec![self.circle_wall(center, radius, ccw, id)]
             } else {
-                self.chain_walls(&segs)
+                self.chain_walls(segs)
             };
             let top_uses: Vec<(EdgeId, bool)> = walls.iter().map(|w| (w.top, w.forward)).collect();
             let bottom_uses: Vec<(EdgeId, bool)> =

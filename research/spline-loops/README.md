@@ -34,6 +34,26 @@ WHUCAD: fit splines. FreeCAD: B-splines, some periodic.
 its `Span` trait: their Lean-proved certificates need only positive weights and the patch form, both
 held here (research/loft-ssi/shipped). What has no closed form goes there first, then the tracer.
 
+## Loft seams (`seam.py`; `align auto`, `kernel/forge-ops/src/loft.rs`)
+Parasolid's seam between circles is not in a loft's history, and it changes the volume by tens of percent.
+From the rulings in Onshape's STEP (periodic ruled B-spline walls, the seam at the middle of the first and
+last control rows), 19 circle-to-circle walls in 12 parts of CADFS: a section's seam is the point on it
+nearest the last section's seam, within 0.6 degrees on every wall; run the other way it misses by up to 180
+degrees. The first section starts on its circle's own axis, which fits `ey x n` (`ex x n` for n along y) up to
+sign; world-axis dependent, so it is the importer's `seam X Y`, not the kernel's rule.
+Polygons do not follow it: over the 119 lofts translated by the importer (`polyseam` in the session,
+the part's STEP volume as truth) nearest-vertex lost 2 parts (00420299, 00753783) against rotating by least
+squares about each section's centre, which lost none (44 agree, 18 wrong both ways, 1 refused).
+OCCT's ThruSections and ACIS's skinning were looked for and not found documented; Onshape's help says
+alignment falls back to "estimated proximity" between vertices when no guides are set.
+
+## Proofs (`lean/`; Lean + Mathlib, the toolchain of research/loft-ssi/shipped)
+`SplineLoops/Certs.lean`, no sorry: coefficients of one sign leave no root (`bern_pos`, `bern2_pos`: `bern_roots`'s
+test and `CurveHull::misses`), the factor in a product of basis polynomials (`bb_mul`: `bern_mul`), and one sign change
+among the coefficients keeps a polynomial at or above zero once there (`one_change_stays`: what `crossings` takes
+to mean one root). The patch form and hull of a piece are research/loft-ssi/shipped's. Not proved: rounding.
+    lake env lean SplineLoops/Certs.lean
+
 ## Measured
 `kernel/forge-geom/examples/spline_plane.rs` (cargo run --release -p forge-geom --example
 spline_plane), 400 random planes on degree 2/3/5 walls: closed form worst 2.5e-14 mm off either

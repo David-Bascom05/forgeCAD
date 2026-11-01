@@ -1650,12 +1650,12 @@ mod tests {
         } else {
             rails
                 .iter()
-                .map(|x| match *x {
+                .map(|x| match x {
                     Rail::Arc { circle, .. } => Rail::Line {
                         a: circle.frame.origin - Vec3::X * circle.radius,
                         b: circle.frame.origin + Vec3::X * circle.radius,
                     },
-                    l => l,
+                    l => l.clone(),
                 })
                 .collect()
         };
@@ -1682,7 +1682,7 @@ mod tests {
                         start: r.range(-3.0, 3.0),
                         sweep: if r.bool() { sweep } else { -sweep },
                     },
-                    l => l,
+                    l => l.clone(),
                 })
                 .collect();
             let mut d = Data::new(rails, slopes, spline, Vec::new());
