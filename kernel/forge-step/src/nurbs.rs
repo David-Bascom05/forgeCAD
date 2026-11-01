@@ -7,8 +7,8 @@ use forge_geom::{Domain2, Surface};
 use forge_math::{Box2, Box3, Frame, Interval, Point2, Point3, Vec3};
 use std::sync::{Arc, OnceLock};
 
-/// The highest degree taken. STEP has no limit; none surveyed passes 8.
-pub const MAX_DEGREE: usize = 25;
+/// The highest degree taken: as the kernel's curves'. STEP has no limit; none surveyed passes 8.
+pub const MAX_DEGREE: usize = forge_geom::spline::MAX_DEGREE;
 /// The most control points taken.
 pub const MAX_CTRL: usize = 4 << 20;
 
@@ -25,13 +25,22 @@ pub struct Nurbs {
     nv: usize,
     closed: (bool, bool),
     seeds: Arc<OnceLock<Seeds>>,
+    tree: Arc<OnceLock<Tree>>,
+}
+
+/// A tree of boxes over the surface's knot cells, for the nearest point anywhere on it: a net can
+/// have thousands of cells on a part that winds near itself, like a thread.
+#[derive(Debug)]
+struct Tree {
+    /// Node i's box, and its children (0: a leaf, whose cell is `leaf`).
+    nodes: Vec<(Box3, u32, u32, (u32, u32))>,
+    us: Vec<(f64, f64, usize)>,
+    vs: Vec<(f64, f64, usize)>,
 }
 
 #[derive(Debug)]
 struct Seeds {
-    /// A grid of surface points, and the radius of curvature and lengths per parameter it shows.
-    uvs: Vec<Point2>,
-    pts: Vec<Point3>,
+    /// What a grid of surface points shows: the radius of curvature and lengths per parameter.
     radius: f64,
     scale: (f64, f64),
 }
@@ -153,6 +162,7 @@ impl Nurbs {
             nv,
             closed: (false, false),
             seeds: Arc::new(OnceLock::new()),
+            tree: Arc::new(OnceLock::new()),
         };
         n.closed = n.find_closed();
         Some(n)
@@ -257,8 +267,6 @@ impl Nurbs {
             // about two points a control point's span, within reason
             let grid = |n: usize, p: usize| (2 * (n - p) + 1).clamp(9, 65);
             let (a, b) = (grid(self.nu, self.p), grid(self.nv, self.q));
-            let mut uvs = Vec::with_capacity(a * b);
-            let mut pts = Vec::with_capacity(a * b);
             let (mut radius, mut lu, mut lv) = (f64::INFINITY, 0.0_f64, 0.0_f64);
             for i in 0..a {
                 let u = du.lo + du.width() * i as f64 / (a - 1) as f64;
@@ -266,8 +274,6 @@ impl Nurbs {
                     let v = dv.lo + dv.width() * j as f64 / (b - 1) as f64;
                     let uv = Point2::new(u, v);
                     let d = self.eval_all(uv);
-                    uvs.push(uv);
-                    pts.push(d.p);
                     let (n, area) = {
                         let c = d.du.cross(d.dv);
                         let l = c.length();
@@ -286,8 +292,6 @@ impl Nurbs {
                 }
             }
             Seeds {
-                uvs,
-                pts,
                 radius: radius.max(forge_math::tol::LINEAR),
                 scale: (lu.max(forge_math::tol::LINEAR), lv.max(forge_math::tol::LINEAR)),
             }
@@ -334,17 +338,107 @@ impl Nurbs {
         best
     }
 
+    fn tree(&self) -> &Tree {
+        self.tree.get_or_init(|| {
+            // the non-empty knot spans of a direction: (lo, hi, span index)
+            let spans = |k: &[f64], d: usize, n: usize| -> Vec<(f64, f64, usize)> {
+                (d..n).filter(|&i| k[i + 1] > k[i]).map(|i| (k[i], k[i + 1], i)).collect()
+            };
+            let (us, vs) = (spans(&self.u, self.p, self.nu), spans(&self.v, self.q, self.nv));
+            let mut nodes = Vec::with_capacity(2 * us.len() * vs.len());
+            self.build(&us, &vs, (0, us.len()), (0, vs.len()), &mut nodes);
+            Tree { nodes, us, vs }
+        })
+    }
+
+    /// The node over cells [a, b) x [c, d): its children first, so its box is their hull.
+    fn build(
+        &self,
+        us: &[(f64, f64, usize)],
+        vs: &[(f64, f64, usize)],
+        (a, b): (usize, usize),
+        (c, d): (usize, usize),
+        out: &mut Vec<(Box3, u32, u32, (u32, u32))>,
+    ) -> u32 {
+        let (l, r, leaf, bx);
+        if b - a == 1 && d - c == 1 {
+            let (si, sj) = (us[a].2, vs[c].2);
+            let (mut lo, mut hi) = ([f64::INFINITY; 3], [f64::NEG_INFINITY; 3]);
+            for i in si - self.p..=si {
+                for j in sj - self.q..=sj {
+                    let q = self.net[i * self.nv + j];
+                    for x in 0..3 {
+                        let v = q[x] / q[3];
+                        lo[x] = lo[x].min(v);
+                        hi[x] = hi[x].max(v);
+                    }
+                }
+            }
+            bx = Box3 {
+                x: Interval::new(lo[0], hi[0]),
+                y: Interval::new(lo[1], hi[1]),
+                z: Interval::new(lo[2], hi[2]),
+            };
+            (l, r, leaf) = (0, 0, (a as u32, c as u32));
+        } else {
+            let (x, y) = if b - a >= d - c {
+                let m = a + (b - a) / 2;
+                (self.build(us, vs, (a, m), (c, d), out), self.build(us, vs, (m, b), (c, d), out))
+            } else {
+                let m = c + (d - c) / 2;
+                (self.build(us, vs, (a, b), (c, m), out), self.build(us, vs, (a, b), (m, d), out))
+            };
+            bx = out[x as usize].0.hull(&out[y as usize].0);
+            (l, r, leaf) = (x, y, (0, 0));
+        }
+        out.push((bx, l, r, leaf));
+        out.len() as u32 - 1
+    }
+
+    /// The nearest point of the whole surface: cells in order of their boxes' distance, Newton
+    /// from each middle, until no box left can beat what was found.
     fn nearest(&self, p: Point3) -> (Point2, f64) {
-        let s = self.seeds();
-        // the two nearest seeds that are far apart in parameters: a surface can fold near itself
-        let (mut a, mut fa) = (0usize, f64::INFINITY);
-        for (i, q) in s.pts.iter().enumerate() {
-            let d = q.distance_sq(p);
-            if d < fa {
-                (a, fa) = (i, d);
+        let t = self.tree();
+        let gap = |b: &Box3| {
+            let d = |i: Interval, x: f64| (i.lo - x).max(x - i.hi).max(0.0);
+            let (a, c, e) = (d(b.x, p.x), d(b.y, p.y), d(b.z, p.z));
+            a * a + c * c + e * e
+        };
+        let mut best = (Point2::new(t.us[0].0, t.vs[0].0), f64::INFINITY);
+        let mut stack: Vec<(f64, u32)> = Vec::with_capacity(32);
+        stack.push((0.0, t.nodes.len() as u32 - 1));
+        // Newton's cost bounds the search on a net all at one place
+        let mut tries = 0;
+        while let Some((g, n)) = stack.pop() {
+            if g >= best.1 || tries >= 64 {
+                continue;
+            }
+            if best.1 <= 1e-20 {
+                break;
+            }
+            let (b, l, r, leaf) = &t.nodes[n as usize];
+            let _ = b;
+            if *l == 0 && *r == 0 {
+                let (i, j) = (leaf.0 as usize, leaf.1 as usize);
+                let start = Point2::new(0.5 * (t.us[i].0 + t.us[i].1), 0.5 * (t.vs[j].0 + t.vs[j].1));
+                let found = self.newton(p, start);
+                tries += 1;
+                if found.1 < best.1 {
+                    best = found;
+                }
+            } else {
+                let (gl, gr) = (gap(&t.nodes[*l as usize].0), gap(&t.nodes[*r as usize].0));
+                // the nearer box on top
+                if gl <= gr {
+                    stack.push((gr, *r));
+                    stack.push((gl, *l));
+                } else {
+                    stack.push((gl, *l));
+                    stack.push((gr, *r));
+                }
             }
         }
-        self.newton(p, s.uvs[a])
+        best
     }
 }
 
@@ -369,8 +463,9 @@ impl Procedural for Nurbs {
     }
     fn project_near(&self, p: Point3, near: Point2) -> Point2 {
         let (uv, d) = self.newton(p, near);
-        // a poor walk from there: the search over the whole surface
-        if d > 1e-8 {
+        // a poor walk from there: the search over the whole surface (a point a file left beside
+        // the surface, by up to its own tolerance, is a fair walk)
+        if d > 1e-4 {
             let (w, e) = self.nearest(p);
             if e < d {
                 return w;
@@ -433,6 +528,7 @@ impl Procedural for Nurbs {
         let mut n = self.clone();
         n.net = Arc::new(net);
         n.seeds = Arc::new(OnceLock::new());
+        n.tree = Arc::new(OnceLock::new());
         Proc(Arc::new(n))
     }
     fn uv_scale(&self) -> (f64, f64) {

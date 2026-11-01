@@ -1044,7 +1044,15 @@ fn record_deviations(body: &mut Body, stats: &mut Stats) {
                 .iter()
                 .map(|&f| {
                     let s = &body.face(f).surface;
-                    pts.iter().map(|&p| s.distance(p)).fold(0.0, f64::max)
+                    // each point from the one before, where the walk holds
+                    let mut near = None;
+                    let mut worst = 0.0_f64;
+                    for &p in &pts {
+                        let uv = near.map_or_else(|| s.project(p), |uv| s.project_near(p, uv));
+                        near = Some(uv);
+                        worst = worst.max(s.eval(uv).distance(p));
+                    }
+                    worst
                 })
                 .fold(0.0, f64::max)
         };
