@@ -911,3 +911,16 @@ c1: extrude cut 87.6754 z -0.927984340469 0.326558636907 0.179456179902 x -0.189
         assert!(p.err[0] <= 1e-3 * p.volume.abs(), "{} +- {}", p.volume, p.err[0]);
     }
 }
+
+/// A cut that starts on a face and runs away from the part removes nothing: its face is still the
+/// block's, or a pick on it finds no maker.
+#[test]
+fn a_cut_removing_nothing_leaves_each_face_its_maker() {
+    let m = Model::new("extrude 30 rect -30 -30 60 60\nextrude cut 10 at 0 0 30 rect -10 -10 20 20\n");
+    assert!(m.error.is_none(), "{:?}", m.error.as_ref().map(|e| &e.msg));
+    let b = m.body().expect("a body");
+    let makers = m.face_makers();
+    for f in b.face_ids() {
+        assert_eq!(makers[f.index()], Some(0), "{f:?}");
+    }
+}

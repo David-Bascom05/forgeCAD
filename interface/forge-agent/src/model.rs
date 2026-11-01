@@ -777,15 +777,31 @@ impl Model {
 
     /// The same of the part after `n` lines.
     pub fn face_makers_at(&self, n: usize) -> Vec<Option<usize>> {
-        let origin = self.origin(n);
         let Some(b) = self.body_after(n) else {
             return Vec::new();
         };
+        let origin = self.joined_origin(n, b);
         let mut out = vec![None; b.faces.len()];
         for f in b.face_ids() {
             out[f.index()] = origin.get(&b.face(f).name).and_then(|m| m.last().copied());
         }
         out
+    }
+
+    /// `origin`, on the finished `body`: a joined face was made by every feature that made one of its
+    /// pieces (a cut that only touches splits a face, and the finish joins it again).
+    fn joined_origin(&self, n: usize, body: &Body) -> select::Lineage {
+        let mut origin = self.origin(n);
+        for &(piece, whole) in &body.joins.aliases {
+            if let Some(mut o) = origin.get(&piece).cloned() {
+                let w = origin.entry(whole).or_default();
+                o.append(w);
+                o.sort_unstable();
+                o.dedup();
+                *w = o;
+            }
+        }
+        origin
     }
 
     /// The index of the feature a reference names, among the first `n`.
@@ -826,17 +842,7 @@ impl Model {
     pub fn select(&self, sel: &str, n: Option<usize>) -> Result<(&Body, Vec<Ent>), String> {
         let n = n.unwrap_or(self.built()).min(self.built());
         let body = self.body_after(n).ok_or("no part yet")?;
-        // a joined face was made by every feature that made one of its pieces
-        let mut origin = self.origin(n);
-        for &(piece, whole) in &body.joins.aliases {
-            if let Some(mut o) = origin.get(&piece).cloned() {
-                let w = origin.entry(whole).or_default();
-                o.append(w);
-                o.sort_unstable();
-                o.dedup();
-                *w = o;
-            }
-        }
+        let origin = self.joined_origin(n, body);
         let feat = |r: &str| self.feat(n, r);
         let body_of = |e: Ent| self.body_of(n, e);
         let ents = select::select(
