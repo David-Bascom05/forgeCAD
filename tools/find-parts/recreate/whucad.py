@@ -251,8 +251,18 @@ class Tr(FT):
         else:
             cs = self.items(g[0])
             c = cs[0][1] if cs else None
+            if isinstance(c, Any):
+                c = c.cs[0]
+            if isinstance(c, Swept) and c.piece.kind == "line":
+                # a flat side: the plane through its sketch line and the extrude's direction
+                fr, e = c.fr, c.piece
+                p, q = fr.world(*e.a), fr.world(*e.b)
+                d = add(q, p, -1)
+                k = (d[1] * fr.n[2] - d[2] * fr.n[1], d[2] * fr.n[0] - d[0] * fr.n[2], d[0] * fr.n[1] - d[1] * fr.n[0])
+                l = math.sqrt(dot(k, k))
+                c = OnPlane(p, tuple(x / l for x in k))
             if not isinstance(c, OnPlane):
-                raise Unsupported("a mirror in a side face")
+                raise Unsupported("a mirror in a curved face")
             n, o = c.n, c.o
         self.lines.append(f"pattern body mirror z {vtext(n)} at {vtext(o)}")
 
