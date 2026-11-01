@@ -930,3 +930,17 @@ fn a_cut_removing_nothing_leaves_each_face_its_maker() {
         assert_eq!(makers[f.index()], Some(0), "{f:?}");
     }
 }
+
+/// A flat side crossing a round end a hair past the inner corner: the stretch of the end between them is
+/// shorter than the tolerance's reach, was taken as on the tool's edge and never imprinted, and the
+/// tool's floor came out a slit (false ZeroThickness; WHUCAD 100003369 had this).
+#[test]
+fn a_stretch_shorter_than_the_tolerance_between_two_crossings_is_imprinted() {
+    let src = "extrude 0.1 loop arc 0.09 0 0.09 180 180 arc 0.162 0 0.018 0 180 arc 0.09 0 0.054 0 -180 arc 0.018 0 0.018 0 180
+extrude add 0.03 loop arc 0.098588751 0.0072 0.063498271 -173.489291243 170.489291243 line 0.162 0.003876757 0.0355 0
+";
+    builds(src);
+    let v = Model::new(src).mass().expect("a mass").volume;
+    // the banana 0.1 high, and the part of the D past its hollow 0.03 high: areas on a fine grid
+    assert!((v - 0.00105669).abs() < 1e-3 * 0.00105669, "{v}");
+}

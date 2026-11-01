@@ -3664,6 +3664,7 @@ pub(crate) fn imprint(
             let edge = sb.edge(e);
             let (reach, grow) = (sb.edge_box(e), slack(sb, e));
             let mut ts: Vec<f64> = Vec::new();
+            let mut crossed: Vec<(f64, EdgeId)> = Vec::new();
             for &l2 in &db.face(dst_face).loops {
                 for c2 in db.lp(l2).coedges() {
                     let e2 = db.coedge(c2).edge;
@@ -3732,6 +3733,7 @@ pub(crate) fn imprint(
                                 touch: false,
                             });
                             ts.push(h.t);
+                            crossed.push((h.t, e2));
                         }
                     }
                 }
@@ -3766,6 +3768,20 @@ pub(crate) fn imprint(
                         o => o,
                     },
                     o => o,
+                };
+                // a stretch shorter than two tolerances, between crossings: on one side of the edges it ends on
+                let place = if place == Where::On
+                    && edge.curve.eval(w[0]).distance(edge.curve.eval(w[1])) <= 2.0 * tol::LINEAR
+                {
+                    let ends: Vec<EdgeId> = crossed
+                        .iter()
+                        .filter(|c| c.0 == w[0] || c.0 == w[1])
+                        .map(|c| c.1)
+                        .collect();
+                    let p = edge.curve.eval(0.5 * (w[0] + w[1]));
+                    index[dst].point_in_face_past(dst_face, p, &ends)
+                } else {
+                    place
                 };
                 match place {
                     Where::Inside => imprints.push(Imprint {
