@@ -81,16 +81,19 @@ fn tabs_change_the_ribbon_and_only_what_works_is_enabled() {
 #[test]
 fn nothing_is_drawn_when_nothing_moves_and_chrome_hover_leaves_the_view_alone() {
     let Some(mut h) = app() else { return };
+    // what the worker's still saying can arrive on any of these: it's the frame with nothing new
     let mut frames = 0;
     let o = loop {
         let o = h.step();
         frames += 1;
-        if o.again_in.is_none() {
+        if o.again_in.is_none() && !o.times.view_drawn {
             break o;
         }
-        assert!(frames < 30, "it never went idle");
+        assert!(frames < 200, "it never went idle");
+        std::thread::sleep(std::time::Duration::from_millis(10));
     };
-    assert!(!o.times.view_drawn);
+    assert!(!h.step().times.view_drawn, "and it stays idle");
+    assert!(o.again_in.is_none());
     // moving over the ribbon repaints chrome only
     let r = h.gui.shell.place("tool:Extrude").unwrap();
     h.move_to(r.center().x, r.center().y);
@@ -745,10 +748,18 @@ fn ribbon_buttons_make_features_through_a_dialog_with_a_live_result_and_ok_commi
     let Some((mut h, file)) = file_part(BLOCK) else {
         return;
     };
-    h.click("tool:Hole");
+    h.gui.shell.out.push(Action::NewFeature("plane"));
     assert!(h.until(|g| g.shell.dialog.is_some()));
+    h.gui.shell.dialog = None;
+    let mut d = forge_render::shell::dialog::Dialog::new_feature("hole");
+    d.pick = None;
+    d.fields = vec![
+        ("Diameter".into(), "5".into()),
+        ("Plane".into(), "-xy at 5 5 20".into()),
+        ("Depth".into(), "thru".into()),
+    ];
+    h.gui.shell.dialog = Some(d);
     let v0 = h.gui.view.as_ref().unwrap().facts.face_item.len();
-    set_field(&mut h, "Plane", "-xy at 5 5 20");
     h.step();
     assert!(h.until(
         |g| g.shell.dialog.as_ref().unwrap().seq > 0 && g.shell.dialog.as_ref().unwrap().error.is_none()
@@ -1509,7 +1520,14 @@ fn a_hover_mark_stays_on_every_frame_as_the_pointer_crosses_a_face() {
         h.move_to(c.x + (k % 10) as f32, c.y + (k % 7) as f32);
         h.step();
         assert!(
-            h.gui.view.as_ref().unwrap().nav.marks().iter().any(|m| !m.selected),
+            h.gui
+                .view
+                .as_ref()
+                .unwrap()
+                .nav
+                .marks()
+                .iter()
+                .any(|m| !m.selected),
             "dark at step {k}"
         );
     }

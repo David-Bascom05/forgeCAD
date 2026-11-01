@@ -125,6 +125,65 @@ impl Shell {
             .is_some_and(|d| matches!(d.target, super::dialog::DialogTarget::New("extrude" | "revolve")))
     }
 
+    fn picks_points(&self) -> bool {
+        self.dialog
+            .as_ref()
+            .is_some_and(|d| matches!(d.target, super::dialog::DialogTarget::New("hole")))
+    }
+
+    /// Placing a hole: every place of every sketch shows, chosen ones lit, and a click takes one.
+    fn points_ui(
+        &mut self,
+        ctx: &egui::Context,
+        shapes: &[forge_agent::handles::SketchShape],
+        pointer: Option<Pos2>,
+        screen: &impl Fn([f64; 3]) -> Option<Pos2>,
+    ) {
+        let (t, view) = (self.theme, self.view_rect);
+        let p = ctx
+            .layer_painter(egui::LayerId::background())
+            .with_clip_rect(view);
+        let chosen = self
+            .dialog
+            .as_ref()
+            .and_then(|d| d.fields.iter().find(|f| f.0 == "Points"))
+            .map_or(String::new(), |f| f.1.clone());
+        let mut near: Option<(f32, usize, usize, Pos2)> = None;
+        for (i, s) in shapes.iter().enumerate() {
+            let Some(name) = s.item.and_then(|id| self.doc.as_ref().and_then(|d| d.name(id))) else {
+                continue;
+            };
+            let words: Vec<&str> = chosen.split_whitespace().collect();
+            for (j, (point, w)) in s.named.iter().enumerate() {
+                let Some(u) = screen(*w) else { continue };
+                let on = words.get(1) == Some(&name.as_str()) && words[3..].contains(&point.as_str());
+                p.circle_filled(u, if on { 6.0 } else { 4.0 }, if on { t.focus } else { t.sketch });
+                p.circle_stroke(u, if on { 6.0 } else { 4.0 }, egui::Stroke::new(1.0, t.surface));
+                if let Some(at) = pointer {
+                    let gap = at.distance(u);
+                    if gap < 10.0 && near.is_none_or(|n| gap < n.0) {
+                        near = Some((gap, i, j, u));
+                    }
+                }
+            }
+        }
+        let Some((_, i, j, u)) = near else { return };
+        p.circle_stroke(u, 8.0, egui::Stroke::new(2.0, t.focus));
+        if ctx.input(|e| e.pointer.primary_clicked()) {
+            let s = &shapes[i];
+            let name = s.item.and_then(|id| self.doc.as_ref().and_then(|d| d.name(id)));
+            // the way in: `on` drills along the sketch's normal, `-on` against it
+            let z: forge_math::Vec3 = s.plane.z().into();
+            let o = s.plane.origin;
+            let m = self.part_middle;
+            let toward = (m[0] as f64 - o.x) * z.x + (m[1] as f64 - o.y) * z.y + (m[2] as f64 - o.z) * z.z;
+            let on = if toward > 0.0 { "on" } else { "-on" };
+            if let (Some(d), Some(name)) = (&mut self.dialog, name) {
+                d.toggle_point(&name, &s.named[j].0, on);
+            }
+        }
+    }
+
     pub(super) fn sketches_ui(&mut self, ctx: &egui::Context) {
         // a press stays with what it was on: its release is what chooses
         let was = self.sketch_hover.filter(|_| ctx.input(|i| i.pointer.any_down()));
@@ -153,6 +212,9 @@ impl Shell {
             })
             .filter(|_| !ctx.input(|i| i.pointer.any_down()));
         let shapes = std::mem::take(&mut self.sketch_shapes);
+        if self.picks_points() {
+            self.points_ui(ctx, &shapes, pointer, &screen);
+        }
         let picking = self.picks_region();
         let p = ctx
             .layer_painter(egui::LayerId::background())

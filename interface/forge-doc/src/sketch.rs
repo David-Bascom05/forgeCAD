@@ -782,6 +782,31 @@ fn along(g: &forge_ops::Segment) -> Vec<Point2> {
     }
 }
 
+/// The places a line can name: points, lines' ends, circles' and arcs' centres and arcs' ends.
+pub fn named_points(s: &Sketch) -> Vec<(String, Point2)> {
+    let q = &s.solved;
+    let mut out = Vec::new();
+    for (name, id) in &s.names {
+        match q.entity(*id) {
+            Some(Entity::Point { .. }) if name != "o" => out.push((name.clone(), q.point(*id))),
+            Some(Entity::Line { a, b }) => {
+                out.push((format!("{name}.a"), q.point(a)));
+                out.push((format!("{name}.b"), q.point(b)));
+            }
+            Some(Entity::Circle { center, .. }) => out.push((name.clone(), q.point(center))),
+            Some(Entity::Arc {
+                center, start, end, ..
+            }) => {
+                out.push((name.clone(), q.point(center)));
+                out.push((format!("{name}.a"), q.point(start)));
+                out.push((format!("{name}.b"), q.point(end)));
+            }
+            _ => {}
+        }
+    }
+    out
+}
+
 /// The closed regions it has now: none if what's drawn doesn't close.
 pub fn regions(s: &Sketch) -> Vec<Region> {
     let Ok(ps) = forge_sketch::profiles(&s.solved) else {

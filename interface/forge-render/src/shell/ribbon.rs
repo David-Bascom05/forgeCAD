@@ -58,11 +58,12 @@ fn groups(s: &Shell) -> Vec<Group> {
                     new("Extrude", "extrude", "extrude"),
                     new("Revolve", "revolve", "revolve"),
                 ],
+                // off till each starts from what's picked and has its test in tests/tools.rs
                 vec![
-                    new("Sweep", "sweep", "sweep"),
-                    new("Loft", "loft", "loft"),
-                    new("Coil", "coil", "coil"),
-                    new("Rib", "rib", "rib"),
+                    off("Sweep", "sweep"),
+                    off("Loft", "loft"),
+                    off("Coil", "coil"),
+                    off("Rib", "rib"),
                 ],
             ),
             g(
@@ -73,20 +74,20 @@ fn groups(s: &Shell) -> Vec<Group> {
                     new("Chamfer", "chamfer", "chamfer"),
                 ],
                 vec![
-                    new("Shell", "shell", "shell"),
+                    off("Shell", "shell"),
                     new("Draft", "draft", "draft"),
                     new("Thread", "thread", "thread"),
-                    new("Combine", "combine", "combine"),
+                    off("Combine", "combine"),
                 ],
             ),
             g(
                 "Work Features",
-                vec![new("Plane", "plane", "plane")],
-                vec![new("Axis", "axis", "axis"), new("Point", "point", "point")],
+                vec![off("Plane", "plane")],
+                vec![off("Axis", "axis"), off("Point", "point")],
             ),
             g(
                 "Pattern",
-                vec![new("Linear", "rect", "pattern")],
+                vec![off("Linear", "rect")],
                 vec![off("Circular", "circular"), off("Mirror", "mirror")],
             ),
         ],

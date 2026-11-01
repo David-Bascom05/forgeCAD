@@ -40,6 +40,24 @@ impl Dialog {
         {
             fields.push((label.to_string(), String::new()));
         }
+        // the line reads in their order: size, where, how far
+        match kind {
+            "hole" => {
+                fields = vec![
+                    ("Diameter".to_string(), "5".to_string()),
+                    ("Points".to_string(), String::new()),
+                    ("Depth".to_string(), "thru".to_string()),
+                ];
+            }
+            "thread" => {
+                fields = vec![
+                    ("Size".to_string(), String::new()),
+                    ("Cylinder".to_string(), String::new()),
+                    ("Length".to_string(), "full".to_string()),
+                ];
+            }
+            _ => {}
+        }
         Dialog {
             target: DialogTarget::New(kind),
             kind: kind.to_string(),
@@ -106,6 +124,44 @@ impl Dialog {
     }
 
     /// What's selected in the view, as the part file names it, goes to the field taking picks.
+    /// A hole's point: on or off the list; another sketch's starts the list again. `on` says which
+    /// way the sketch faces into the part.
+    pub fn toggle_point(&mut self, sketch: &str, point: &str, on: &str) {
+        let Some(f) = self.fields.iter_mut().find(|f| f.0 == "Points") else {
+            return;
+        };
+        let head = format!("{on} {sketch} pts");
+        let mut points: Vec<String> = match f.1.strip_prefix(&head) {
+            Some(rest) => rest.split_whitespace().map(str::to_string).collect(),
+            None => Vec::new(),
+        };
+        if let Some(k) = points.iter().position(|p| p == point) {
+            points.remove(k);
+        } else {
+            points.push(point.to_string());
+        }
+        f.1 = if points.is_empty() {
+            String::new()
+        } else {
+            format!("{head} {}", points.join(" "))
+        };
+    }
+
+    /// A thread's cylinder, and the size that fits it till one's typed.
+    pub fn thread_on(&mut self, on: String, size: Option<String>) {
+        for f in &mut self.fields {
+            if f.0 == "Cylinder" {
+                f.1.clone_from(&on);
+            }
+            if f.0 == "Size"
+                && f.1.is_empty()
+                && let Some(s) = &size
+            {
+                f.1.clone_from(s);
+            }
+        }
+    }
+
     pub fn picked(&mut self, refs: &[String]) {
         let Some((label, _)) = &self.pick else { return };
         if let Some(f) = self.fields.iter_mut().find(|f| f.0 == *label) {

@@ -181,7 +181,7 @@ pub fn template(kind: &str) -> (&'static str, Option<(&'static str, &'static str
     match kind {
         "extrude" => ("10 xy rect -20 -20 40 40", None),
         "revolve" => ("xz axis y rect 10 0 10 20", None),
-        "hole" => ("5 -xy at 0 0 0 thru", None),
+        "hole" => ("5 thru", Some(("Points", "Pick sketch points or circle centres"))),
         "fillet" => ("2", Some(("Edges", "Pick edges in the view"))),
         "chamfer" => ("1", Some(("Edges", "Pick edges in the view"))),
         "shell" => ("2", Some(("Faces", "Pick the faces to open"))),
@@ -193,7 +193,7 @@ pub fn template(kind: &str) -> (&'static str, Option<(&'static str, &'static str
         ),
         "coil" => ("xz axis y circle 20 0 2 pitch 8 turns 4", None),
         "rib" => ("2 xz", None),
-        "thread" => ("", Some(("Reference", "Pick a cylinder face"))),
+        "thread" => ("", Some(("Cylinder", "Pick a cylinder face or a hole"))),
         "combine" => ("add", Some(("Reference", "Name the bodies to combine"))),
         "plane" => ("xy at 0 0 10", None),
         "axis" => ("", Some(("Reference", "Pick an edge or a cylinder"))),

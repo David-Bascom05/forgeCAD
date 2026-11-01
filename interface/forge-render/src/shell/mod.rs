@@ -205,6 +205,8 @@ pub struct Shell {
     pub sketch_eye: std::collections::HashMap<String, bool>,
     /// The sketch under the pointer in the view.
     pub sketch_hover: Option<ItemId>,
+    /// The part's middle: which way a hole faces in.
+    pub part_middle: [f32; 3],
     /// The marking menu's up, centred here.
     pub marking: Option<egui::Pos2>,
     /// Sketch mode.
@@ -262,6 +264,7 @@ impl Default for Shell {
             sketch_shapes: Vec::new(),
             sketch_eye: Default::default(),
             sketch_hover: None,
+            part_middle: [0.0; 3],
             marking: None,
             origin_open: false,
             origin_shown: [false; 7],

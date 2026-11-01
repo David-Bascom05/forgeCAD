@@ -531,6 +531,28 @@ impl Gui {
                 v.clicked = v.nav.selected.clone();
                 // a field for edges takes edges, one for faces takes faces
                 let wants = d.pick.as_ref().map(|p| p.0.clone()).unwrap_or_default();
+                if d.kind == "thread" {
+                    // the cylinder picked, and what made it: a hole's thread is the hole's
+                    if let Some(&(_, Entity::Face(f))) = v.clicked.last()
+                        && let Some(Some(r)) = v.facts.face_radius.get(f as usize)
+                        && let Some(handle) = v.facts.face_refs.get(f as usize)
+                        && let Some(owner) = v.facts.face_item.get(f as usize).copied().flatten()
+                        && let Some(doc) = &self.shell.doc
+                        && let Some(name) = doc.name(owner)
+                    {
+                        let by_hole = self.shell.rows.iter().any(|r| r.id == owner && r.kind == "hole");
+                        let on = if by_hole {
+                            format!("hole {name}")
+                        } else {
+                            format!("face {name} {handle}")
+                        };
+                        let size = (!by_hole).then(|| format!("M{}", (r * 2.0).round()));
+                        d.thread_on(on, size.or(Some("M6".to_string())));
+                    }
+                    v.dirty = true;
+                    v.clicks = v.nav.clicks;
+                    return;
+                }
                 let refs: Vec<String> = v
                     .clicked
                     .iter()
@@ -828,7 +850,7 @@ impl Gui {
                 }
                 // a profile feature starts from a sketch: one there's no feature on, or a new one
                 Action::NewFeature(kind)
-                    if matches!(kind, "extrude" | "revolve") && self.free_sketch().is_none() =>
+                    if matches!(kind, "extrude" | "revolve" | "hole") && self.free_sketch().is_none() =>
                 {
                     self.shell.then_feature = Some(kind);
                     self.start_sketch();
@@ -1312,6 +1334,9 @@ impl Gui {
         {
             v.origin_was = drawn;
             v.dirty = true;
+        }
+        if let Some(v) = &self.view {
+            self.shell.part_middle = v.scene.bounds().0;
         }
         let sketches = self.shell.sketches_drawn();
         if let Some(v) = &mut self.view
