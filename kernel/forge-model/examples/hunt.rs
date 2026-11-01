@@ -1,4 +1,4 @@
-//! cargo run --release -p forge-model --example hunt -- [seeds per family] [--literals]
+//! cargo run --release -p forge-model --example hunt -- [seeds per family] [--literals] [--family a,b]
 //! Runs every adversarial family (and suite fuzz), shrinks each failure to a
 //! minimal history, dedups by (family, failure kind), and prints a catalogue.
 use forge_model::adversarial::{canonical, families, handled, literal, outcome, shrink};
@@ -19,11 +19,20 @@ fn main() {
         .cloned();
     std::panic::set_hook(Box::new(|_| {}));
     let t0 = Instant::now();
+    // --family a,b: those only
+    let only: Option<Vec<String>> = args
+        .iter()
+        .position(|a| a == "--family")
+        .and_then(|i| args.get(i + 1))
+        .map(|f| f.split(',').map(str::to_string).collect());
     let mut gens: Vec<(String, Generator)> = families()
         .into_iter()
+        .filter(|f| only.as_ref().is_none_or(|o| o.iter().any(|x| x == f.0)))
         .map(|(n, f)| (n.to_string(), Box::new(f) as Generator))
         .collect();
-    gens.push(("fuzz".to_string(), Box::new(|s| suite::fuzz(s + 1, 40))));
+    if only.is_none() {
+        gens.push(("fuzz".to_string(), Box::new(|s| suite::fuzz(s + 1, 40))));
+    }
     // (family, kind) -> (hits, minimal part)
     let mut found: BTreeMap<(String, String), (usize, Part)> = BTreeMap::new();
     let mut runs = 0;

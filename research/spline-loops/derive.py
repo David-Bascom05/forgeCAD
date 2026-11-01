@@ -89,3 +89,17 @@ assert abs(sp.N(eq.subs(vals), 40)) < 1e-35
 vals = {th: sp.Rational(-7, 10), d: sp.Rational(3, 2), s: sp.Rational(5, 7)}
 assert abs(sp.N(eq.subs(vals), 40)) < 1e-35
 print("6 ellipse arc: rational quadratic with w = cos(d/2), P1 = (a cos(m)/w, b sin(m)/w)")
+
+# 7. A section carried by a turn at rate w: S = P + R q with R' = [w] R. So S_v = P' + w x R q and
+#    S_vv = P'' + w' x R q + w x (w x R q). The rate of a planar spine's tangent, and of the rotation-
+#    minimizing frame: w = (C' x C'') / |C'|^2, w' = (C' x C''') / |C'|^2 - 2 w (C'.C'') / |C'|^2.
+v = sp.symbols("v")
+C = sp.Matrix([sp.Function(n)(v) for n in "xyz"])
+d1, d2, d3 = C.diff(v), C.diff(v, 2), C.diff(v, 3)
+l2 = d1.dot(d1)
+w = d1.cross(d2) / l2
+dw = d1.cross(d3) / l2 - w * (2 * d1.dot(d2) / l2)
+assert sp.simplify(w.diff(v) - dw) == sp.zeros(3, 1)
+T = d1 / sp.sqrt(l2)
+assert sp.simplify(T.diff(v) - w.cross(T)) == sp.zeros(3, 1)
+print("7 turn rate: w = C' x C'' / |C'|^2 turns the tangent; w' as swept.rs has it")
