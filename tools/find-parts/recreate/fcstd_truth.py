@@ -23,7 +23,7 @@ from OCP.GProp import GProp_GProps
 from OCP.OCP.collections import IndexedMap_TopoDS_Shape_TopTools_ShapeMapHasher as ShapeMap
 from OCP.TopAbs import TopAbs_EDGE, TopAbs_FACE, TopAbs_SOLID
 from OCP.TopExp import TopExp, TopExp_Explorer
-from OCP.TopoDS import TopoDS_Shape
+from OCP.TopoDS import TopoDS, TopoDS_Shape
 
 N = 256
 
@@ -36,7 +36,7 @@ def read(path):
 
 
 def edge_points(e):
-    c = BRepAdaptor_Curve(e)
+    c = BRepAdaptor_Curve(TopoDS.Edge(e))
     a, b = c.FirstParameter(), c.LastParameter()
     out = []
     for i in range(N + 1):

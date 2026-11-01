@@ -60,6 +60,8 @@ class Doc:
 
     def link(self, obj, name):
         p = self.prop(obj, name)
+        if p is None and name == "Profile":
+            p = self.prop(obj, "Sketch")  # older files
         if p is None:
             return ""
         e = p.find("Link")
@@ -152,11 +154,43 @@ def sketch_ents(doc, name):
                 a1 += 2 * math.pi
             pt = lambda a: [c[0] + r * math.cos(xu + nz * a), c[1] + r * math.sin(xu + nz * a)]
             ents.append({"kind": "skArc", "id": f"e{k}", "start": pt(a0), "mid": pt((a0 + a1) / 2), "end": pt(a1), "construction": con})
+        elif t == "Part::GeomBSplineCurve":
+            e = g.find("BSplineCurve")
+            if e.get("IsPeriodic") == "1":
+                raise Unsupported("a periodic spline")
+            ents.append({"kind": "polyline", "id": f"e{k}", "points": bspline_points(e), "construction": con})
         elif t == "Part::GeomPoint":
             continue
         elif not con:
             raise Unsupported("sketch curve " + t.split("::")[-1])
     return ents
+
+
+def bspline_points(e):
+    """A fine polyline along a non-periodic NURBS: the part is then marked approx."""
+    deg = int(e.get("Degree"))
+    cp = [(float(p.get("X")), float(p.get("Y")), float(p.get("Weight", "1"))) for p in e.findall("Pole")]
+    k = []
+    for x in e.findall("Knot"):
+        k += [float(x.get("Value"))] * int(x.get("Mult"))
+    def at(u):
+        s = deg
+        while s < len(cp) - 1 and k[s + 1] <= u:
+            s += 1
+        d = [(cp[s - deg + j][0] * cp[s - deg + j][2], cp[s - deg + j][1] * cp[s - deg + j][2], cp[s - deg + j][2]) for j in range(deg + 1)]
+        for r in range(1, deg + 1):
+            for j in range(deg, r - 1, -1):
+                i = s - deg + j
+                den = k[i + deg - r + 1] - k[i]
+                a = (u - k[i]) / den if den else 0.0
+                d[j] = tuple(p * (1 - a) + q * a for p, q in zip(d[j - 1], d[j]))
+        return [d[deg][0] / d[deg][2], d[deg][1] / d[deg][2]]
+    lo, hi = k[deg], k[len(cp)]
+    spans = sorted({x for x in k if lo <= x <= hi})
+    us = []
+    for a, b in zip(spans, spans[1:]):
+        us += [a + (b - a) * i / 16 for i in range(16)]
+    return [at(u) for u in us] + [at(hi)]
 
 
 def even_regions(a):
@@ -177,6 +211,7 @@ class Tr:
         self.labels = {}
         self.topo = None
         self.bodies = 0
+        self.approx = False
 
     def state(self):
         if self.topo is None:
@@ -288,7 +323,11 @@ class Tr:
             if sub not in data:
                 raise Unresolved("a blend on " + sub[:4] + " not sampled")
             for poly in data[sub]:
-                hits = [e for e in st.get("edges", []) if all(near(p, poly) <= TOL for p in e["p"][::4])]
+                # one of ours can span several of theirs (a seam, a split circle): its middle stretch decides
+                lo = [min(q[k] for q in poly) - TOL for k in range(3)]
+                hi = [max(q[k] for q in poly) + TOL for k in range(3)]
+                inbox = lambda p: all(lo[k] <= p[k] <= hi[k] for k in range(3))
+                hits = [e for e in st.get("edges", []) if any(inbox(p) and near(p, poly) <= TOL for p in e["p"][4:13:4])]
                 if not hits:
                     if not all_edges:
                         raise Unresolved("no edge where the base's edge lies")
@@ -348,6 +387,8 @@ class Tr:
             t = d.types[name]
             if t not in NEEDS:
                 raise Unsupported("feature " + t.split("::")[-1])
+            if doc_approx(d, name):
+                self.approx = True
         for name in chain:
             t = d.types[name]
             if t in ("PartDesign::Pad", "PartDesign::Pocket"):
@@ -391,6 +432,12 @@ class Tr:
             self.lines += ls
 
 
+def doc_approx(d, name):
+    sk = d.link(name, "Profile")
+    p = d.prop(sk, "Geometry") if sk in d.props else None
+    return p is not None and any(g.get("type") == "Part::GeomBSplineCurve" for g in p.find("GeometryList").findall("Geometry"))
+
+
 def near(p, poly):
     best = math.inf
     for a, b in zip(poly, poly[1:]):
@@ -404,14 +451,36 @@ def near(p, poly):
     return best
 
 
+def base_of(doc, n):
+    """The feature before n: older files without BaseFeature say it through a blend's Base, a pattern's
+    original, or the solid its sketch sits on."""
+    b = doc.link(n, "BaseFeature")
+    if b:
+        return b
+    if doc.prop(n, "BaseFeature") is not None:
+        return ""
+    b = doc.link(n, "Base")
+    if b in doc.types and doc.types[b] in SOLID:
+        return b
+    o = doc.links(n, "Originals")
+    if o:
+        return o[-1]
+    sk = doc.link(n, "Profile")
+    if sk in doc.props:
+        s = doc.link(sk, "Support")
+        if doc.types.get(s) in SOLID:
+            return s
+    return ""
+
+
 def chain_of(doc, body):
-    tip = doc.link(body, "Tip")
+    tip = doc.link(body, "Tip") if doc.types[body] == "PartDesign::Body" else body
     out = []
     while tip:
         if doc.types.get(tip) not in SOLID:
             raise Unsupported("a chain through " + str(doc.types.get(tip)))
         out.append(tip)
-        tip = doc.link(tip, "BaseFeature")
+        tip = base_of(doc, tip)
     return out[::-1]
 
 
@@ -426,6 +495,11 @@ def main():
         print(json.dumps({"file": stem, "body": "", "status": "untranslated", "cls": "importer", "why": "unreadable: " + repr(x)[:60]}))
         return
     bodies = [n for n, t in doc.types.items() if t == "PartDesign::Body"]
+    # older files: a chain of features with no body; each end of a chain is a part
+    inbody = {x for b in bodies for x in doc.links(b, "Group")}
+    based = {base_of(doc, n) for n, t in doc.types.items() if t in SOLID}
+    loose = [n for n, t in doc.types.items() if t in SOLID and n not in based and n not in inbody]
+    bodies += loose
     for b in bodies:
         r = {"file": stem, "body": b, "status": "translated", "notes": [], "why": "", "features": []}
         t = None
@@ -465,6 +539,8 @@ def main():
         except (KeyError, IndexError, TypeError, ValueError, ZeroDivisionError, AttributeError, RecursionError) as x:
             r.update(status="untranslated", cls="importer", why="bug: " + repr(x)[:70])
         if t is not None:
+            if t.approx:
+                r["notes"].append("approx")
             if t.topo is not None:
                 t.topo.kill()
                 t.topo.wait()

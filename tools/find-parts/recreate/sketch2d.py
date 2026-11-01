@@ -151,6 +151,10 @@ def entities(ents):
             sp = spline_points(pts, d0, d1)
             p = Piece(e["id"], "poly", sp[0], sp[-1], pts=sp)
             approx = approx or not e.get("construction")
+        elif k == "polyline":
+            pts = [tuple(x) for x in e["points"]]
+            p = Piece(e["id"], "poly", pts[0], pts[-1], pts=pts)
+            approx = approx or not e.get("construction")
         elif k == "skPoint":
             every[e["id"]] = Piece(e["id"], "point", tuple(e["position"]), tuple(e["position"]))
             continue
