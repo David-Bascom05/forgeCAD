@@ -524,7 +524,8 @@ pub(crate) fn edge_split(
             }
         }
     }
-    splits.sort_by(|x, y| x.0.total_cmp(&y.0));
+    // (ties by vertex: two cuts at one place alternating between two vertices would walk out and back)
+    splits.sort_by(|x, y| x.0.total_cmp(&y.0).then(x.1.cmp(&y.1)));
     splits.dedup_by(|x, y| x.1 == y.1);
     let (vs, ve) = (
         resolve(VKey::Old(side, edge.start)),
@@ -595,6 +596,9 @@ thread_local! {
     /// Springs a closed curve crossed an odd number of times are looked at again by their fences.
     static FENCES: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
     static CHORDS: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
+    /// A line along a straight edge crosses it where the surfaces say: the retry when the two are a
+    /// tolerance apart and running them together leaves a stub of nothing.
+    static NO_RUN_ON: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
     /// A point touch in this boolean that nothing could judge.
     pub(crate) static UNDECIDED: std::cell::Cell<Option<Point3>> = const { std::cell::Cell::new(None) };
     /// A closed curve crossed springs an odd number of times in this plan.
@@ -626,7 +630,13 @@ fn plan(a: &Body, b: &Body, op: Op, scratch: &mut Scratch) -> R<Plan> {
                     return r;
                 }
             }
-            Err(BoolError::Internal(w))
+            NO_RUN_ON.with(|c| c.set(true));
+            let r = plan_fenced(a, b, op, scratch);
+            NO_RUN_ON.with(|c| c.set(false));
+            r.map_err(|e| match e {
+                BoolError::Internal(_) => BoolError::Internal(w),
+                e => e,
+            })
         }
         r => r,
     }
@@ -2102,7 +2112,8 @@ pub(crate) fn trim(
                 // surfaces round off: a hair of tilt puts the crossing anywhere along them
                 let hits = match found {
                     CurveSurface::Hits(h)
-                        if !matches!((&curve, &edge.curve), (Curve::Line(a), Curve::Line(b))
+                        if NO_RUN_ON.with(|c| c.get())
+                            || !matches!((&curve, &edge.curve), (Curve::Line(a), Curve::Line(b))
                                 if a.dir.get().cross(b.dir.get()).length() <= 1e-6)
                             || ![edge.start, edge.end].into_iter().all(|v| {
                                 let vx = body.vertex(v);
