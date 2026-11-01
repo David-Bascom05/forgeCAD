@@ -2004,24 +2004,21 @@ pub(crate) fn trim(
                 };
                 // a line and a straight edge with both its ends on it run together, however their
                 // surfaces round off: a hair of tilt puts the crossing anywhere along them
-                let found = match found {
-                    CurveSurface::Hits(_)
-                        if matches!((&curve, &edge.curve), (Curve::Line(_), Curve::Line(_)))
-                            && [edge.start, edge.end].into_iter().all(|v| {
+                let hits = match found {
+                    CurveSurface::Hits(h)
+                        if !matches!((&curve, &edge.curve), (Curve::Line(a), Curve::Line(b))
+                                if a.dir.get().cross(b.dir.get()).length() <= 1e-6)
+                            || ![edge.start, edge.end].into_iter().all(|v| {
                                 let vx = body.vertex(v);
                                 curve.eval(curve.closest(vx.point, range)).distance(vx.point) <= vx.tol
                             }) =>
                     {
-                        CurveSurface::OnSurface
+                        h
                     }
-                    f => f,
-                };
-                let hits = match found {
-                    CurveSurface::Hits(h) => h,
                     // the curve runs along this edge: cut it at the edge's ends; the stretch along
                     // the edge is boundary, not a new edge (the faces either side of it meet the
                     // other body there, and their own pairs decide what happens)
-                    CurveSurface::OnSurface | CurveSurface::Overlap => {
+                    _ => {
                         let g = body.partner(c).map(|o| body.coedge_face(o));
                         let seam = g == Some(f);
                         // beside a face on the other face's surface, coplanar imprinting does it
@@ -3544,9 +3541,20 @@ pub(crate) fn imprint(
                     };
                     // this edge's end on e2 without a crossing there (a corner on a rim it all but
                     // runs along): e2 ends there too, or the two come out in different pieces
-                    for v in [edge.start, edge.end] {
+                    let straight = matches!(
+                        (&edge.curve, &db.edge(e2).curve),
+                        (Curve::Line(_), Curve::Line(_))
+                    );
+                    for v in [edge.start, edge.end].into_iter().filter(|_| !straight) {
                         let p = sb.vertex(v).point;
-                        if let Some((s2, tol)) = on_edge(db, e2, p) {
+                        let end =
+                            |w: VertexId| db.vertex(w).point.distance(p) <= db.vertex(w).tol.max(tol::LINEAR);
+                        let e2_ends = db.edge(e2);
+                        if db.edge_box(e2).grow(grow + slack(db, e2)).contains(p)
+                            && !end(e2_ends.start)
+                            && !end(e2_ends.end)
+                            && let Some((s2, tol)) = on_edge(db, e2, p)
+                        {
                             cuts.push(Cut {
                                 pair: Name::NONE,
                                 on: CutOn::Edge(sides[dst], e2),
