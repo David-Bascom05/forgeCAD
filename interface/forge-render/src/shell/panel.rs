@@ -41,7 +41,7 @@ pub fn field_kind(label: &str) -> Option<forge_doc::units::Kind> {
     use forge_doc::units::Kind;
     match label {
         "Distance" | "Diameter" | "Radius" | "Thickness" | "Depth" | "Length" | "Offset" | "Height"
-        | "Pitch" | "Width" | "Value" | "Spacing" => Some(Kind::Length),
+        | "Pitch" | "Width" | "Value" | "Spacing" | "Seat diameter" | "Seat depth" => Some(Kind::Length),
         "Angle" | "Sweep" | "Taper" => Some(Kind::Angle),
         _ => None,
     }

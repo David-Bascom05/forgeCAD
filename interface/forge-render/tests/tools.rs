@@ -669,3 +669,109 @@ fn a_thread_on_a_hole_made_cylinder_and_on_any_diameter_comes_from_the_catalogue
     assert!(d.line().starts_with("thread 0.75-10 face"), "{}", d.line());
     assert!(d.line().contains("full left class 1A"), "{}", d.line());
 }
+
+const FOR_HOLES: &str = "base: extrude 20 rect -30 -30 60 60\nsk1: sketch xy at 0 0 20\n  pt 10 10\nend\n";
+
+/// A hole dialog with its point picked.
+fn hole_at_point(tag: &str) -> Option<(Headless, std::path::PathBuf, f64)> {
+    let (mut h, file) = open(FOR_HOLES, tag)?;
+    let was = built(&file, "before");
+    button(&mut h, "Hole");
+    point_at(&mut h, [10.0, 10.0, 20.0]);
+    Some((h, file, was))
+}
+
+fn pi_r2(d: f64) -> f64 {
+    core::f64::consts::PI * d * d / 4.0
+}
+
+#[test]
+fn a_clearance_hole_comes_from_its_fastener_and_fit() {
+    let Some((mut h, file, was)) = hole_at_point("clear") else {
+        return;
+    };
+    h.click("dialog:holekind:Clearance");
+    settle(&mut h);
+    let d = h.gui.shell.dialog.as_ref().unwrap();
+    assert!(
+        d.line().starts_with("hole M6 normal -on sk1 pts p1 thru"),
+        "{}",
+        d.line()
+    );
+    ok(&mut h, "clearance");
+    // ISO 273 normal for M6 is 6.6
+    let v = built(&file, "clearance");
+    assert!((was - v - pi_r2(6.6) * 20.0).abs() < 1.0, "{was} {v}");
+}
+
+#[test]
+fn a_tapped_hole_is_drilled_to_its_threads_tap_size_and_says_its_class() {
+    let Some((mut h, file, was)) = hole_at_point("tapped") else {
+        return;
+    };
+    h.click("dialog:holekind:Tapped");
+    settle(&mut h);
+    let d = h.gui.shell.dialog.as_mut().unwrap();
+    d.choose_thread(None, Some("M8"), None, Some("6H"));
+    d.settle_hole();
+    h.step();
+    let line = h.gui.shell.dialog.as_ref().unwrap().line();
+    assert!(
+        line.contains("thread M8x1.25") && line.contains("class 6H"),
+        "{line}"
+    );
+    assert!(line.starts_with("hole 6.75 "), "{line}");
+    ok(&mut h, "tapped");
+    let v = built(&file, "tapped");
+    assert!((was - v - pi_r2(6.75) * 20.0).abs() < 1.0, "{was} {v}");
+    // it reads back as chosen
+    let id = h.gui.shell.doc.as_ref().unwrap().items.last().unwrap().id;
+    h.gui.shell.out.push(Action::Edit(id));
+    assert!(h.until(|g| g.shell.dialog.is_some()));
+    let d = h.gui.shell.dialog.as_ref().unwrap();
+    assert_eq!(
+        d.hole.as_ref().unwrap().kind,
+        forge_render::shell::dialog::HoleKind::Tapped
+    );
+    assert_eq!(
+        (d.thread.designation.as_str(), d.thread.class.as_str()),
+        ("M8x1.25", "6H")
+    );
+    assert_eq!(d.line(), line, "the same line back");
+}
+
+#[test]
+fn a_seat_and_a_depth_and_a_point_are_cut_as_chosen() {
+    let Some((mut h, file, was)) = hole_at_point("seat") else {
+        return;
+    };
+    h.click("dialog:seat:Counterbore");
+    settle(&mut h);
+    h.click("dialog:end:Distance");
+    settle(&mut h);
+    h.click("dialog:point:Angled 118");
+    settle(&mut h);
+    let line = h.gui.shell.dialog.as_ref().unwrap().line();
+    assert!(line.contains("cb 10 5 10 pt 118"), "{line}");
+    ok(&mut h, "counterbored");
+    let v = built(&file, "counterbored");
+    // 5 of the seat, 5 more of the hole to its depth, and the point
+    let plain = pi_r2(10.0) * 5.0 + pi_r2(5.0) * 5.0;
+    assert!(was - v > plain && was - v < plain + 30.0, "{was} {v} {plain}");
+}
+
+#[test]
+fn flipping_a_hole_sends_it_the_other_way_and_there_it_says_so() {
+    let Some((mut h, _, _)) = hole_at_point("flip") else {
+        return;
+    };
+    h.click("dialog:flip:Flipped");
+    settle(&mut h);
+    let line = h.gui.shell.dialog.as_ref().unwrap().line();
+    assert!(line.contains(" -on sk1 ") || line.contains(" on sk1 "), "{line}");
+    let was_on = line.contains(" -on sk1 ");
+    h.click("dialog:flip:As placed");
+    settle(&mut h);
+    let now = h.gui.shell.dialog.as_ref().unwrap().line();
+    assert_ne!(now.contains(" -on sk1 "), was_on, "{line} {now}");
+}

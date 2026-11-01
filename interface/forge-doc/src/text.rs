@@ -396,6 +396,10 @@ pub const KINDS: &[Kind] = &[
             } else {
                 std.and_then(|s| s.thread())
             };
+            // what it's to be gauged to: said on the line, nothing built from it
+            if p.eat("class") {
+                p.next()?;
+            }
             Ok(Feature::Hole(Box::new(Hole {
                 at,
                 diameter,

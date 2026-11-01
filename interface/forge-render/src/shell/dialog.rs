@@ -40,6 +40,8 @@ pub struct Dialog {
     pub again: bool,
     /// A thread's choice from the catalogue.
     pub thread: ThreadChoice,
+    /// A hole's choices; its fields are made from them.
+    pub hole: Option<HoleChoice>,
     /// The selections still to come after the one taking clicks.
     pub queue: Vec<(String, &'static str)>,
 }
@@ -58,6 +60,87 @@ pub enum Toward {
     Forward,
     Back,
     Both,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum HoleKind {
+    Simple,
+    Clearance,
+    Tapped,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Seat {
+    None,
+    Counterbore,
+    Spotface,
+    Countersink,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Termination {
+    Distance,
+    Through,
+    Next,
+}
+
+/// What a hole is, as the dialog asks it.
+#[derive(Clone, Debug, PartialEq)]
+pub struct HoleChoice {
+    pub kind: HoleKind,
+    /// A simple hole's diameter, as typed.
+    pub diameter: String,
+    /// A clearance hole's screw and how it fits.
+    pub screw: String,
+    pub fit: &'static str,
+    pub seat: Seat,
+    pub seat_diameter: String,
+    pub seat_depth: String,
+    pub seat_angle: String,
+    pub termination: Termination,
+    pub depth: String,
+    /// The drill's point: none is flat.
+    pub point: Option<String>,
+}
+
+impl Default for HoleChoice {
+    fn default() -> HoleChoice {
+        HoleChoice {
+            kind: HoleKind::Simple,
+            diameter: "5".to_string(),
+            screw: "M6".to_string(),
+            fit: "normal",
+            seat: Seat::None,
+            seat_diameter: "10".to_string(),
+            seat_depth: "5".to_string(),
+            seat_angle: "90".to_string(),
+            termination: Termination::Through,
+            depth: "10".to_string(),
+            point: None,
+        }
+    }
+}
+
+/// A hole's fields, in the order its line reads them.
+fn hole_fields(place: String) -> Vec<(String, String)> {
+    ["Diameter", "Points", "Seat", "Depth", "Point", "Thread", "Class"]
+        .into_iter()
+        .map(|l| {
+            (
+                l.to_string(),
+                if l == "Points" {
+                    place.clone()
+                } else {
+                    String::new()
+                },
+            )
+        })
+        .collect()
+}
+
+/// Screw sizes a clearance hole can be for, from the kernel's table.
+fn screws() -> Vec<&'static str> {
+    forge_model::standard::SCREWS.iter().map(|s| s.name).collect()
 }
 
 /// A thread from the catalogue: type, size, designation, class; and which way it's gauged.
@@ -152,11 +235,9 @@ impl Dialog {
             }
             "axis" | "point" => fields = vec![("Reference".into(), String::new())],
             "hole" => {
-                fields = vec![
-                    ("Diameter".to_string(), "5".to_string()),
-                    ("Points".to_string(), String::new()),
-                    ("Depth".to_string(), "thru".to_string()),
-                ];
+                fields = hole_fields(String::new());
+                fields[0].1 = "5".to_string();
+                fields[3].1 = "thru".to_string();
             }
             "thread" => {
                 fields = vec![
@@ -177,6 +258,7 @@ impl Dialog {
             pick: pick.map(|(l, why)| (l.to_string(), why)),
             queue,
             thread: ThreadChoice::default(),
+            hole: None,
             sent: None,
             seq: 0,
             error: None,
@@ -209,6 +291,7 @@ impl Dialog {
             again: false,
             queue: Vec::new(),
             thread: ThreadChoice::default(),
+            hole: None,
         }
     }
 
@@ -220,6 +303,19 @@ impl Dialog {
             self.fields.insert(0, ("Operation".to_string(), String::new()));
         }
         self.read_extent();
+        if self.kind == "hole" {
+            self.first.clear();
+            self.thread.internal = true;
+            match self.target {
+                DialogTarget::Edit(_) => self.read_hole(),
+                DialogTarget::New(_) => {
+                    self.choose_thread(Some("ISO Metric"), Some("M6"), None, None);
+                    self.hole = Some(HoleChoice::default());
+                    self.settle_hole();
+                }
+            }
+            return self;
+        }
         if self.kind == "thread" && matches!(self.target, DialogTarget::Edit(_)) {
             self.read_thread();
         }
@@ -289,6 +385,7 @@ impl Dialog {
     /// A field's text, as the file would have it.
     fn file_text(&self, label: &str, text: &str) -> String {
         match (self.kind.as_str(), label) {
+            ("hole", _) if self.hole.is_some() => return text.to_string(),
             ("plane", "Reference") if !text.trim().is_empty() => return format!("off {}", text.trim()),
             ("coil", "Pitch") if !text.trim_start().starts_with("pitch") => {
                 return format!("pitch {}", self.number_text(label, text));
@@ -385,6 +482,14 @@ impl Dialog {
         let Some(f) = self.fields.iter_mut().find(|f| f.0 == "Points") else {
             return;
         };
+        // once flipped, it stays flipped
+        let on = if f.1.starts_with("-on ") {
+            "-on"
+        } else if f.1.starts_with("on ") {
+            "on"
+        } else {
+            on
+        };
         let head = format!("{on} {sketch} pts");
         let mut points: Vec<String> = match f.1.strip_prefix(&head) {
             Some(rest) => rest.split_whitespace().map(str::to_string).collect(),
@@ -400,6 +505,163 @@ impl Dialog {
         } else {
             format!("{head} {}", points.join(" "))
         };
+    }
+
+    /// The hole's fields, from what's chosen. A typed length reads in the part's unit.
+    pub fn settle_hole(&mut self) {
+        let Some(h) = self.hole.clone() else { return };
+        let is_param = |w: &str| self.params.iter().any(|p| p == w);
+        let len =
+            |t: &str| forge_doc::units::field_file(t, forge_doc::units::Kind::Length, self.units, &is_param);
+        let tapped = self.thread.entry().filter(|_| h.kind == HoleKind::Tapped);
+        let size = match h.kind {
+            HoleKind::Simple => len(&h.diameter),
+            HoleKind::Clearance => format!("{} {}", h.screw, h.fit),
+            // the drill's the major less the pitch
+            HoleKind::Tapped => tapped.map_or(String::new(), |t| {
+                forge_doc::units::trim((t.major - t.pitch).max(0.1))
+            }),
+        };
+        let seat = match h.seat {
+            Seat::None => String::new(),
+            Seat::Counterbore | Seat::Spotface => {
+                format!("cb {} {}", len(&h.seat_diameter), len(&h.seat_depth))
+            }
+            Seat::Countersink => format!("cs {} {}", len(&h.seat_diameter), h.seat_angle.trim()),
+        };
+        let end = match h.termination {
+            Termination::Distance => len(&h.depth),
+            Termination::Through => "thru".to_string(),
+            Termination::Next => "next".to_string(),
+        };
+        let point = match (&h.point, h.termination) {
+            (Some(a), Termination::Distance) => format!("pt {}", a.trim()),
+            _ => String::new(),
+        };
+        let thread = tapped.map_or(String::new(), |t| match &t.spec {
+            Some(s) => format!("thread {s}"),
+            None => format!("thread {} {}", t.major, t.pitch),
+        });
+        let class = match (h.kind, self.thread.class.as_str()) {
+            (HoleKind::Tapped, c) if !c.is_empty() && c != "-" => format!("class {c}"),
+            _ => String::new(),
+        };
+        for f in &mut self.fields {
+            f.1 = match f.0.as_str() {
+                "Diameter" => size.clone(),
+                "Seat" => seat.clone(),
+                "Depth" => end.clone(),
+                "Point" => point.clone(),
+                "Thread" => thread.clone(),
+                "Class" => class.clone(),
+                _ => continue,
+            };
+        }
+    }
+
+    /// A hole's line read back into its choices, to edit it.
+    fn read_hole(&mut self) {
+        let line: Vec<String> = self
+            .fields
+            .iter()
+            .flat_map(|f| forge_doc::text::tokens(&f.1))
+            .collect();
+        let mut h = HoleChoice::default();
+        let mut k = 0;
+        let word = |k: usize| line.get(k).map_or("", |w| w.as_str());
+        if forge_model::standard::screw(word(0)).is_some() {
+            h.kind = HoleKind::Clearance;
+            h.screw = word(0).to_string();
+            k = 1;
+            if matches!(word(k), "iso" | "ansi") {
+                k += 1;
+            }
+            match word(k) {
+                "close" => (h.fit, k) = ("close", k + 1),
+                "normal" => (h.fit, k) = ("normal", k + 1),
+                "loose" => (h.fit, k) = ("loose", k + 1),
+                _ => {}
+            }
+        } else if !word(0).is_empty() {
+            h.diameter = word(0).to_string();
+            k = 1;
+        }
+        // where: a frame or a sketch's points, up to the seat or the end
+        let from = k;
+        while k < line.len()
+            && !matches!(word(k), "cb" | "cs" | "thru" | "next" | "to")
+            && !(k > from
+                && word(from) != "on"
+                && word(from) != "-on"
+                && word(k - 1) != "at"
+                && k >= from + if word(from + 1) == "at" { 5 } else { 1 })
+        {
+            if (word(from) == "on" || word(from) == "-on") && k > from + 2 && word(k).parse::<f64>().is_ok() {
+                break;
+            }
+            k += 1;
+        }
+        let place = line[from..k].join(" ");
+        match word(k) {
+            "cb" => {
+                h.seat = Seat::Counterbore;
+                h.seat_diameter = word(k + 1).to_string();
+                h.seat_depth = word(k + 2).to_string();
+                k += 3;
+            }
+            "cs" => {
+                h.seat = Seat::Countersink;
+                h.seat_diameter = word(k + 1).to_string();
+                h.seat_angle = word(k + 2).to_string();
+                k += 3;
+            }
+            _ => {}
+        }
+        match word(k) {
+            "thru" => {
+                h.termination = Termination::Through;
+                k += 1;
+            }
+            "next" => {
+                h.termination = Termination::Next;
+                k += 1;
+            }
+            "" => {}
+            w => {
+                h.termination = Termination::Distance;
+                h.depth = w.to_string();
+                k += 1;
+            }
+        }
+        if word(k) == "pt" {
+            h.point = Some(word(k + 1).to_string());
+            k += 2;
+        }
+        if word(k) == "thread" {
+            h.kind = HoleKind::Tapped;
+            let spec = word(k + 1).to_string();
+            let major = word(k + 1).parse::<f64>().ok();
+            let pitch = word(k + 2).parse::<f64>().ok();
+            let found = forge_doc::threads::catalogue().iter().find(|t| {
+                t.spec.as_deref() == Some(spec.as_str())
+                    || major
+                        .zip(pitch)
+                        .is_some_and(|(a, b)| t.major == a && t.pitch == b)
+            });
+            k += if major.is_some() { 3 } else { 2 };
+            if let Some(t) = found {
+                self.thread.family = t.family.to_string();
+                self.thread.size.clone_from(&t.size);
+                self.thread.designation.clone_from(&t.designation);
+            }
+        }
+        self.thread.internal = true;
+        if word(k) == "class" {
+            self.thread.class = word(k + 1).to_string();
+        }
+        self.fields = hole_fields(place);
+        self.hole = Some(h);
+        self.settle_hole();
     }
 
     /// A thread's cylinder, and the size of the chosen type that fits it.
@@ -709,6 +971,120 @@ fn thread_rows(ui: &mut egui::Ui, c: &ThreadChoice, t: &super::theme::Theme, out
     out.3 = dropdown(ui, t, "Class", &c.class, &classes);
 }
 
+/// A row of worded toggles, side by side.
+fn text_toggles(
+    ui: &mut egui::Ui,
+    t: &super::theme::Theme,
+    items: &[(&str, bool)],
+    name: &str,
+    places: &mut Vec<(String, Rect)>,
+) -> Option<usize> {
+    let (row, _) = ui.allocate_exact_size(vec2(DIALOG_W, 26.0), Sense::hover());
+    let w = (DIALOG_W - 3.0 * (items.len() as f32 - 1.0)) / items.len() as f32;
+    let mut chose = None;
+    for (k, (word, on)) in items.iter().enumerate() {
+        let r = Rect::from_min_size(row.left_top() + vec2(k as f32 * (w + 3.0), 0.0), vec2(w, 26.0));
+        let resp = ui.interact(r, ui.scope_id().with((name, k)), Sense::click());
+        let fill = if *on {
+            t.on
+        } else if resp.hovered() {
+            t.hover
+        } else {
+            t.raised
+        };
+        let p = ui.painter();
+        p.rect_filled(r, 3.0, fill);
+        p.rect_stroke(
+            r,
+            3.0,
+            Stroke::new(1.0, if *on { t.on_ink } else { t.line }),
+            egui::StrokeKind::Inside,
+        );
+        p.text(
+            r.center(),
+            Align2::CENTER_CENTER,
+            *word,
+            sans(11.0),
+            if *on { t.on_ink } else { t.ink },
+        );
+        places.push((format!("{name}:{word}"), r));
+        if resp.clicked() {
+            chose = Some(k);
+        }
+    }
+    chose
+}
+
+/// The hole in section, as a sketch of what's chosen: not to scale.
+fn hole_section(ui: &mut egui::Ui, h: &HoleChoice, t: &super::theme::Theme) {
+    let (r, _) = ui.allocate_exact_size(vec2(DIALOG_W, 92.0), Sense::hover());
+    let p = ui.painter();
+    p.rect_filled(r, 3.0, t.field);
+    let (top, bottom, mid) = (r.top() + 10.0, r.bottom() - 6.0, r.center().x);
+    let half = 12.0;
+    let end = if h.termination == Termination::Distance {
+        bottom - 22.0
+    } else {
+        bottom
+    };
+    let metal = t.ink2.gamma_multiply(0.45);
+    let (left, right) = (r.left() + 60.0, r.right() - 60.0);
+    p.rect_filled(
+        Rect::from_min_max(pos2(left, top), pos2(right, bottom)),
+        0.0,
+        metal,
+    );
+    let hole = t.field;
+    p.rect_filled(
+        Rect::from_min_max(pos2(mid - half, top), pos2(mid + half, end)),
+        0.0,
+        hole,
+    );
+    match h.seat {
+        Seat::Counterbore | Seat::Spotface => {
+            let deep = if h.seat == Seat::Spotface { 5.0 } else { 18.0 };
+            p.rect_filled(
+                Rect::from_min_max(pos2(mid - 24.0, top), pos2(mid + 24.0, top + deep)),
+                0.0,
+                hole,
+            );
+        }
+        Seat::Countersink => {
+            p.add(egui::Shape::convex_polygon(
+                vec![
+                    pos2(mid - 24.0, top),
+                    pos2(mid + 24.0, top),
+                    pos2(mid + half, top + 12.0),
+                    pos2(mid - half, top + 12.0),
+                ],
+                hole,
+                Stroke::NONE,
+            ));
+        }
+        Seat::None => {}
+    }
+    if h.termination == Termination::Distance && h.point.is_some() {
+        p.add(egui::Shape::convex_polygon(
+            vec![
+                pos2(mid - half, end),
+                pos2(mid + half, end),
+                pos2(mid, end + 12.0),
+            ],
+            hole,
+            Stroke::NONE,
+        ));
+    }
+    if h.kind == HoleKind::Tapped {
+        let mut y = top + 20.0;
+        while y < end - 2.0 {
+            for x in [mid - half - 3.0, mid + half + 3.0] {
+                p.line_segment([pos2(x - 3.0, y), pos2(x + 3.0, y)], Stroke::new(1.0, t.ink));
+            }
+            y += 6.0;
+        }
+    }
+}
+
 /// A row of small icon buttons after its word: for options that don't earn a big toggle.
 fn small_row(
     ui: &mut egui::Ui,
@@ -930,7 +1306,170 @@ impl Shell {
                 let mut thread_change: ThreadChange = (None, None, None, None);
                 let mut extent = d.extent;
                 let mut toward = d.toward;
+                if let Some(mut h) = d.hole.clone() {
+                    let thread = d.thread.clone();
+                    let mut change: ThreadChange = (None, None, None, None);
+                    let units = d.units;
+                    ui.add_space(4.0);
+                    heading(ui, "Placement", &t);
+                    let points = d
+                        .fields
+                        .iter()
+                        .find(|f| f.0 == "Points")
+                        .map_or(String::new(), |f| f.1.clone());
+                    let n = if points.starts_with("on ") || points.starts_with("-on ") {
+                        points.split_whitespace().count().saturating_sub(3)
+                    } else {
+                        (!points.is_empty()) as usize
+                    };
+                    pick_row(
+                        ui,
+                        "Points",
+                        n,
+                        n == 0,
+                        "Pick sketch points or circle centres",
+                        &t,
+                        &mut places,
+                    );
+                    let flipped = points.starts_with("-on ");
+                    if points.starts_with("on ") || flipped {
+                        let way = small_row(
+                            ui,
+                            &t,
+                            "Direction",
+                            &[
+                                ("forward", "As placed", !flipped),
+                                ("backward", "Flipped", flipped),
+                            ],
+                            "dialog:flip",
+                            &mut places,
+                        );
+                        if let Some(k) = way {
+                            let rest = points.split_once(' ').map_or("", |p| p.1);
+                            let now = if k == 1 {
+                                format!("-on {rest}")
+                            } else {
+                                format!("on {rest}")
+                            };
+                            if let Some(f) = d.fields.iter_mut().find(|f| f.0 == "Points") {
+                                f.1 = now;
+                            }
+                        }
+                    }
+                    ui.add_space(4.0);
+                    heading(ui, "Type", &t);
+                    if let Some(k) = text_toggles(
+                        ui,
+                        &t,
+                        &[
+                            ("Simple", h.kind == HoleKind::Simple),
+                            ("Clearance", h.kind == HoleKind::Clearance),
+                            ("Tapped", h.kind == HoleKind::Tapped),
+                        ],
+                        "dialog:holekind",
+                        &mut places,
+                    ) {
+                        h.kind = [HoleKind::Simple, HoleKind::Clearance, HoleKind::Tapped][k];
+                    }
+                    match h.kind {
+                        HoleKind::Simple => {
+                            field_row(ui, "Diameter", &mut h.diameter, units, &t, &mut places);
+                        }
+                        HoleKind::Clearance => {
+                            let items: Vec<(String, String, bool)> = screws()
+                                .into_iter()
+                                .map(|s| (s.to_string(), s.to_string(), false))
+                                .collect();
+                            if let Some(s) = dropdown(ui, &t, "Fastener", &h.screw, &items) {
+                                h.screw = s;
+                            }
+                            let fits: Vec<(String, String, bool)> = ["close", "normal", "loose"]
+                                .into_iter()
+                                .map(|f| (f.to_string(), f.to_string(), false))
+                                .collect();
+                            if let Some(f) = dropdown(ui, &t, "Fit", h.fit, &fits) {
+                                h.fit = match f.as_str() {
+                                    "close" => "close",
+                                    "loose" => "loose",
+                                    _ => "normal",
+                                };
+                            }
+                        }
+                        HoleKind::Tapped => {
+                            thread_rows(ui, &thread, &t, &mut change);
+                            let drill = thread.entry().map_or(String::new(), |e| {
+                                format!("{} mm", forge_doc::units::trim((e.major - e.pitch).max(0.1)))
+                            });
+                            value_row(ui, "Tap drill", &drill, &t);
+                        }
+                    }
+                    ui.add_space(4.0);
+                    heading(ui, "Seat", &t);
+                    if let Some(k) = text_toggles(
+                        ui,
+                        &t,
+                        &[
+                            ("None", h.seat == Seat::None),
+                            ("Counterbore", h.seat == Seat::Counterbore),
+                            ("Spotface", h.seat == Seat::Spotface),
+                            ("Countersink", h.seat == Seat::Countersink),
+                        ],
+                        "dialog:seat",
+                        &mut places,
+                    ) {
+                        h.seat = [Seat::None, Seat::Counterbore, Seat::Spotface, Seat::Countersink][k];
+                        if h.seat == Seat::Spotface {
+                            h.seat_depth = "1".to_string();
+                        }
+                    }
+                    if h.seat != Seat::None {
+                        field_row(ui, "Seat diameter", &mut h.seat_diameter, units, &t, &mut places);
+                        if h.seat == Seat::Countersink {
+                            field_row(ui, "Angle", &mut h.seat_angle, units, &t, &mut places);
+                        } else {
+                            field_row(ui, "Seat depth", &mut h.seat_depth, units, &t, &mut places);
+                        }
+                    }
+                    ui.add_space(4.0);
+                    heading(ui, "Termination", &t);
+                    if let Some(k) = text_toggles(
+                        ui,
+                        &t,
+                        &[
+                            ("Distance", h.termination == Termination::Distance),
+                            ("Through All", h.termination == Termination::Through),
+                            ("To Next", h.termination == Termination::Next),
+                        ],
+                        "dialog:end",
+                        &mut places,
+                    ) {
+                        h.termination = [Termination::Distance, Termination::Through, Termination::Next][k];
+                    }
+                    if h.termination == Termination::Distance {
+                        field_row(ui, "Depth", &mut h.depth, units, &t, &mut places);
+                        if let Some(k) = text_toggles(
+                            ui,
+                            &t,
+                            &[("Flat", h.point.is_none()), ("Angled 118", h.point.is_some())],
+                            "dialog:point",
+                            &mut places,
+                        ) {
+                            h.point = (k == 1).then(|| "118".to_string());
+                        }
+                    }
+                    hole_section(ui, &h, &t);
+                    d.hole = Some(h);
+                    let (a, b, c, e) = change;
+                    if a.is_some() || b.is_some() || c.is_some() || e.is_some() {
+                        d.choose_thread(a.as_deref(), b.as_deref(), c.as_deref(), e.as_deref());
+                    }
+                    d.settle_hole();
+                }
+                let hole_up = d.hole.is_some();
                 for section in ["Input Geometry", "Behavior", "Output"] {
+                    if hole_up {
+                        break;
+                    }
                     let there = d.fields.iter().any(|f| panel::section(&f.0) == section);
                     if !there {
                         continue;
