@@ -606,7 +606,9 @@ fn plan(a: &Body, b: &Body, op: Op, scratch: &mut Scratch) -> R<Plan> {
     match plan_fenced(a, b, op, scratch) {
         // what floods one way across a tool's edge hovering within tolerance of a face and the other
         // way along it wants the curve under that edge, however close: an edge of its own
-        Err(BoolError::Internal(w)) if w == "inconsistent classification" => {
+        Err(BoolError::Internal(w))
+            if w == "inconsistent classification" || w == "face split crossed itself" =>
+        {
             CHORDS.with(|c| c.set(true));
             let r = plan_fenced(a, b, op, scratch);
             CHORDS.with(|c| c.set(false));
@@ -1784,13 +1786,13 @@ pub(crate) fn crack_tip(bodies: [&Body; 2], index: [&Index; 2], t: &Touch, any: 
     };
     let dirs: Vec<Vec3> = match t.dir {
         Some(d) => match n.cross(d).normalize() {
-            Some(w) => vec![w.get(), -w.get(), n.get(), -n.get()],
+            Some(w) => vec![w.get(), -w.get()],
             None => return false,
         },
         None => {
             let fr = Frame::from_z(t.at, n);
             let (x, y) = (fr.x().get(), fr.y().get());
-            vec![x, -x, y, -y, n.get(), -n.get()]
+            vec![x, -x, y, -y]
         }
     };
     // (a part a few units across holds these steps too)
@@ -1807,6 +1809,10 @@ pub(crate) fn crack_tip(bodies: [&Body; 2], index: [&Index; 2], t: &Touch, any: 
                 x == Where::Inside && y == Where::Inside
             };
             inside || (x == Where::On && y == Where::On)
+        }) || [n.get(), -n.get()].iter().any(|&w| {
+            // or square to the face: flush up to the point (a dome's base on the top its rim touches)
+            let q = t.at + w * d;
+            index[0].classify(q) == Where::On && index[1].classify(q) == Where::On
         })
     })
 }
@@ -3380,8 +3386,7 @@ fn plane_meet(pl: &Plane, curve: &Curve, range: Interval, edge: &Curve) -> Optio
         let w = o - c;
         let (b, cc) = (d.dot(w), w.dot(w) - r * r);
         let disc = b * b - cc;
-        // (a hair past tangent the line stays within tolerance of the circle: no crossing)
-        if disc.abs() <= (1e-6 * r * r).max(2.0 * r * tol::LINEAR) {
+        if disc.abs() <= 1e-6 * r * r {
             return None;
         }
         if disc < 0.0 {
@@ -3892,9 +3897,10 @@ pub(crate) fn crossings_near(curve: &Curve, range: Interval, s: &Surface, h: Cur
         return vec![h];
     }
     let g = |t: f64| s.implicit(curve.eval(t));
-    // out to where the curve has left the tolerance on both sides
+    // out to where the curve has left the tolerance on both sides, when the retry wants those crossings
     let mut w = 1e-2 * range.width().min(1.0);
-    while w < 0.25 * range.width()
+    while CHORDS.with(|c| c.get())
+        && w < 0.25 * range.width()
         && (g((h.t - w).max(range.lo)).abs() <= 2.0 * tol::LINEAR
             || g((h.t + w).min(range.hi)).abs() <= 2.0 * tol::LINEAR)
     {
