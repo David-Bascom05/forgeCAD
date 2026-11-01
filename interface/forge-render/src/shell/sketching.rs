@@ -567,7 +567,22 @@ impl SketchMode {
                     put(format!("{name}.a"), g.point(start));
                     put(format!("{name}.b"), g.point(end));
                 }
-                _ => {}
+                Some(Entity::Spline { .. }) => {
+                    if let Some(pts) = g.spline_points(*id) {
+                        for (k, p) in pts.iter().enumerate() {
+                            put(format!("{name}.{k}"), g.point(*p));
+                        }
+                        if let (Some(a), Some(b)) = (pts.first(), pts.last()) {
+                            put(format!("{name}.a"), g.point(*a));
+                            put(format!("{name}.b"), g.point(*b));
+                        }
+                    }
+                }
+                Some(Entity::Ellipse { center, major, .. }) => {
+                    put(format!("{name}.c"), g.point(center));
+                    put(format!("{name}.m"), g.point(major));
+                }
+                None => {}
             }
         }
         out
