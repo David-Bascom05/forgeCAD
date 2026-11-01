@@ -58,6 +58,10 @@ pub enum Action {
     LookAt,
     /// A sketch's eye.
     SketchVisibility(ItemId),
+    /// Back out of picking a plane.
+    CancelPick,
+    /// Nothing chosen.
+    Deselect,
     Home,
     SetHome,
     /// Home is this part of the cube's view.
@@ -191,7 +195,7 @@ pub struct Shell {
     /// The end-of-part marker: after this feature, or at the end.
     pub end_at: Option<ItemId>,
     /// A row's name being typed; a name typed, for the tool.
-    renaming: Option<(ItemId, String)>,
+    pub renaming: Option<(ItemId, String)>,
     pub renamed: Option<(ItemId, String)>,
     /// The tree's right-click menu: for this row, at this point.
     pub row_menu: Option<(ItemId, egui::Pos2)>,
@@ -219,7 +223,7 @@ pub struct Shell {
     pub view_blocks: Vec<Rect>,
     /// What was typed for it, committed with Enter.
     pub dim_typed: Option<String>,
-    file_menu: bool,
+    pub file_menu: bool,
     style_set: Option<bool>,
 }
 
@@ -456,6 +460,7 @@ impl Shell {
         }
         self.cube_words(ui, ppp);
         self.title_bar(ui, s.width());
+        self.escape_one_level(&ctx);
         self.tabs_row(ui, s.width());
         self.ribbon(ui, s.width());
         self.side(ui, side);
@@ -465,6 +470,7 @@ impl Shell {
         self.dim_ui(&ctx);
         self.dialog_ui(&ctx);
         self.sketch_ui(&ctx);
+        self.mode_bar(&ctx);
         self.resize_edges(ui, s);
         self.menus(&ctx);
     }
@@ -776,6 +782,100 @@ impl Shell {
             mono(12.0),
             Color32::WHITE,
         );
+    }
+
+    /// Esc backs out one level, wherever one is: never two, and never none.
+    fn escape_one_level(&mut self, ctx: &egui::Context) {
+        if !ctx.input(|i| i.key_pressed(egui::Key::Escape)) {
+            return;
+        }
+        // these take it themselves, knowing what they had
+        if self.dim.as_ref().is_some_and(|d| d.dragging) || self.dim_field_focused(ctx) {
+            return;
+        }
+        ctx.input_mut(|i| i.consume_key(egui::Modifiers::NONE, egui::Key::Escape));
+        if self.menu_open() {
+            self.file_menu = false;
+            self.cube_menu = None;
+            self.row_menu = None;
+            self.marking = None;
+        } else if self.renaming.is_some() {
+            self.renaming = None;
+        } else if self.dialog.is_some() {
+            self.out.push(Action::DialogCancel);
+        } else if let Some(m) = &mut self.sketch {
+            if m.has_tool() {
+                m.escape();
+            } else if m.has_changes() {
+                self.out.push(Action::FinishSketch);
+            } else {
+                self.out.push(Action::CancelSketch);
+            }
+        } else if self.sketch_pick {
+            self.out.push(Action::CancelPick);
+        } else if self.selected.is_some() || self.origin_selected.is_some() {
+            self.out.push(Action::Deselect);
+        }
+    }
+
+    fn dim_field_focused(&self, ctx: &egui::Context) -> bool {
+        self.sketch.is_none()
+            && self.dialog.is_none()
+            && self.renaming.is_none()
+            && ctx.memory(|m| m.focused().is_some())
+    }
+
+    /// While a mode's waiting on something: what, and the way out, over the view.
+    fn mode_bar(&mut self, ctx: &egui::Context) {
+        let (text, finish, cancel) = if self.sketch_pick {
+            (
+                "Pick a plane, a planar face, or a sketch to edit".to_string(),
+                None,
+                Action::CancelPick,
+            )
+        } else if let Some(m) = &self.sketch {
+            let what = if m.is_new() {
+                "New sketch"
+            } else {
+                "Editing sketch"
+            };
+            (what.to_string(), Some(Action::FinishSketch), Action::CancelSketch)
+        } else {
+            return;
+        };
+        let t = self.theme;
+        let v = self.view_rect;
+        let mut out = None;
+        egui::Area::new(egui::Id::unique("mode-bar"))
+            .pivot(Align2::CENTER_TOP)
+            .fixed_pos(pos2(v.center().x, v.top() + 10.0))
+            .order(egui::Order::Foreground)
+            .show(ctx, |ui| {
+                egui::Frame::NONE
+                    .fill(t.surface)
+                    .stroke(Stroke::new(1.0, t.line))
+                    .corner_radius(4.0)
+                    .inner_margin(vec2(10.0, 6.0))
+                    .show(ui, |ui| {
+                        ui.horizontal(|ui| {
+                            ui.label(egui::RichText::new(text).font(sans(13.0)).color(t.ink));
+                            ui.add_space(8.0);
+                            if let Some(f) = finish {
+                                let r = ui.button(egui::RichText::new("Finish").font(sans(13.0)));
+                                self.places.push(("mode:finish".into(), r.rect));
+                                if r.clicked() {
+                                    out = Some(f);
+                                }
+                            }
+                            let r = ui.button(egui::RichText::new("Cancel").font(sans(13.0)));
+                            self.places.push(("mode:cancel".into(), r.rect));
+                            if r.clicked() {
+                                out = Some(cancel);
+                            }
+                        });
+                    });
+            });
+        self.out.extend(out);
     }
 
     fn navbar(&mut self, ctx: &egui::Context) {

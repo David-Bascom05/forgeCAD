@@ -21,6 +21,8 @@ pub struct Theme {
     pub focus: Color32,
     pub error: Color32,
     pub selection: Color32,
+    /// Sketches in the view: apart from the part, the view and what's lit, in either theme.
+    pub sketch: Color32,
 }
 
 const fn c(x: u32) -> Color32 {
@@ -42,6 +44,7 @@ pub const DARK: Theme = Theme {
     view: 0x12171D,
     on: c(0x1B2838),
     on_ink: c(0x9CC3EA),
+    sketch: c(0xFF2E9A),
     focus: c(0xE0A21B),
     error: c(0xE0554A),
     selection: c(0x2C4A6B),
@@ -62,6 +65,7 @@ pub const LIGHT: Theme = Theme {
     view: 0xDDE2E8,
     on: c(0xE3ECF5),
     on_ink: c(0x1D4470),
+    sketch: c(0xC4006E),
     focus: c(0xE0A21B),
     error: c(0xB83A30),
     selection: c(0xB9D2EC),

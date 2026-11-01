@@ -486,6 +486,22 @@ impl Gui {
             });
             v.nav.selected.clear();
             v.clicked.clear();
+            // a sketch chosen, here or in the tree: that's the one to edit
+            let sketch_row = |id: Option<forge_doc::ItemId>| {
+                id.filter(|id| self.shell.rows.iter().any(|r| r.id == *id && r.kind == "sketch"))
+            };
+            let picked_sketch = sketch_row(self.shell.selected)
+                .or_else(|| sketch_row(self.shell.sketch_hover.filter(|_| clicked)));
+            if self.shell.selected.take().is_some() && picked_sketch.is_none() {
+                self.shell.status =
+                    "That's a feature. Pick a plane, a planar face, or a sketch to edit".to_string();
+            }
+            if let Some(id) = picked_sketch {
+                self.shell.sketch_pick = false;
+                self.shell.selected = Some(id);
+                self.edit_sketch(id);
+                return;
+            }
             let chosen = self.shell.origin_selected.take();
             let plane = chosen.or(under.filter(|_| clicked)).filter(|i| {
                 matches!(
@@ -689,12 +705,6 @@ impl Gui {
             _ => v.nav.key(code, &v.scene),
         };
         self.shell.view.section = v.nav.section.is_some();
-        if code == K::Escape && self.shell.sketch.is_none() {
-            self.shell.sketch_pick = false;
-            self.shell.selected = None;
-            self.shell.origin_selected = None;
-            self.shell.marking = None;
-        }
         v.dirty |= changed;
         changed
     }
@@ -773,6 +783,22 @@ impl Gui {
                 Action::CancelSketch => {
                     self.shell.sketch = None;
                     self.shell.then_feature = None;
+                    self.shell.tab = 0;
+                    self.shell.status.clear();
+                }
+                Action::CancelPick => {
+                    self.shell.sketch_pick = false;
+                    self.shell.then_feature = None;
+                    self.shell.status.clear();
+                }
+                Action::Deselect => {
+                    self.shell.selected = None;
+                    self.shell.origin_selected = None;
+                    if let Some(v) = &mut self.view {
+                        v.nav.selected.clear();
+                        v.clicked.clear();
+                        v.dirty = true;
+                    }
                 }
                 Action::EditInline(id) => self.edit_inline(id),
                 Action::FinishSketch => self.finish_sketch(),
@@ -874,7 +900,9 @@ impl Gui {
             Some(h) => self.ask_plane(h, SketchFor::New, Vec::new()),
             None => {
                 self.shell.sketch_pick = true;
-                self.shell.status = "Pick a plane or a planar face to sketch on".to_string();
+                self.shell.selected = None;
+                self.shell.status =
+                    "Pick a plane, a planar face, or a sketch to edit. Esc cancels".to_string();
             }
         }
     }
@@ -923,6 +951,13 @@ impl Gui {
 
     fn finish_sketch(&mut self) {
         let Some(m) = self.shell.sketch.take() else { return };
+        // nothing drawn: nothing to keep
+        if m.is_new() && m.rows.is_empty() {
+            self.shell.then_feature = None;
+            self.shell.tab = 0;
+            self.shell.status.clear();
+            return;
+        }
         // looked at and left as it was: nothing to commit
         self.shell.status.clear();
         if m.unchanged() && m.edit != SketchFor::New {
@@ -1333,8 +1368,8 @@ impl Gui {
                     let Some(s) = self.shell.sketch_shapes.get(k) else {
                         continue;
                     };
-                    let ink = if lit { t.focus } else { t.on_ink };
-                    let wide = px * if lit { 2.25 } else { 1.5 };
+                    let ink = if lit { t.focus } else { t.sketch };
+                    let wide = px * if lit { 3.0 } else { 2.25 };
                     let dim = if lit { 0.5 } else { 0.18 };
                     for (curve, faint) in &s.curves {
                         let pts: Vec<[f32; 3]> = curve
@@ -1513,6 +1548,19 @@ fn look_at(v: &mut View, plane: forge_math::Frame) {
     );
     v.nav.go_to(to);
     v.dirty = true;
+}
+
+/// A picture read back from the target.
+pub struct Pixels {
+    width: usize,
+    bytes: Vec<u8>,
+}
+
+impl Pixels {
+    pub fn at(&self, x: usize, y: usize) -> [u8; 3] {
+        let k = (y * self.width + x) * 3;
+        [self.bytes[k], self.bytes[k + 1], self.bytes[k + 2]]
+    }
 }
 
 /// The app with no window: input by hand, a texture for a target. What `--shot`, `--bench` and the
@@ -1728,6 +1776,25 @@ impl Headless {
     }
 
     /// The frame as PPM bytes.
+    /// What's on the target now, to read pixels of.
+    pub fn gui_pixels(&self) -> Pixels {
+        let ppm = self.ppm();
+        // P6, width and height, 255, then the bytes
+        let mut parts = ppm.splitn(4, |b| *b == b'\n');
+        let _ = parts.next();
+        let dims = parts.next().unwrap_or_default();
+        let width = String::from_utf8_lossy(dims)
+            .split(' ')
+            .next()
+            .and_then(|w| w.parse().ok())
+            .unwrap_or(1);
+        let _ = parts.next();
+        Pixels {
+            width,
+            bytes: parts.next().unwrap_or_default().to_vec(),
+        }
+    }
+
     pub fn ppm(&self) -> Vec<u8> {
         let (w, h) = self.px();
         let row = (w * 4).next_multiple_of(wgpu::COPY_BYTES_PER_ROW_ALIGNMENT);

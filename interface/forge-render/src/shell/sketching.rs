@@ -451,6 +451,18 @@ impl SketchMode {
         self.first_rows.clear();
     }
 
+    pub fn has_tool(&self) -> bool {
+        self.tool.is_some() || !self.picks.is_empty() || self.asking.is_some()
+    }
+
+    pub fn has_changes(&self) -> bool {
+        self.rows != self.opened
+    }
+
+    pub fn is_new(&self) -> bool {
+        self.edit == SketchFor::New
+    }
+
     /// Esc: what's half done goes, then the tool.
     pub fn escape(&mut self) {
         if !self.picks.is_empty() || self.asking.is_some() {
@@ -1203,7 +1215,7 @@ impl Shell {
             }
         }
         let p = under;
-        let ink = t.on_ink;
+        let ink = t.sketch;
         let line = Stroke::new(1.5, ink);
         if let Some(s) = &m.solved {
             let g = &s.solved;
@@ -1548,9 +1560,6 @@ impl Shell {
                 None => m.add(row),
             };
             m.asking = None;
-        }
-        if ctx.input(|i| i.key_pressed(egui::Key::Escape)) {
-            m.escape();
         }
         if ctx.input(|i| i.modifiers.command && i.key_pressed(egui::Key::Z))
             && !ctx.egui_wants_keyboard_input()

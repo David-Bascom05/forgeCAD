@@ -285,9 +285,6 @@ impl Shell {
         if let Some(s) = shown {
             self.note("dialog", s.response.rect);
         }
-        if ctx.input(|i| i.key_pressed(egui::Key::Escape)) {
-            out = Some(Action::DialogCancel);
-        }
         if edit_sketch && let DialogTarget::Edit(id) = d.target {
             out = Some(Action::DialogCancel);
             self.out.push(Action::EditInline(id));

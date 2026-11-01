@@ -201,7 +201,8 @@ impl Nav {
             })
             .collect();
         if self.drag.is_none()
-            && let Some(h) = self.hit.filter(|_| self.hit_at == Some(self.cursor))
+            // the last answer stands till the next one comes: the mark doesn't blink as the pointer moves
+            && let Some(h) = self.hit.filter(|_| self.hit_at.is_some())
             && !self.selected.contains(&(h.placement, h.entity))
         {
             out.push(Mark {

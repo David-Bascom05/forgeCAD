@@ -190,9 +190,12 @@ pub struct Palette {
     pub ink: [f32; 3],
     pub line: [f32; 3],
     pub focus: [f32; 3],
+    /// What a control floating over the part stands on.
+    pub backing: [f32; 3],
 }
 
 pub const DARK: Palette = Palette {
+    backing: rgb(0x171C22),
     face: rgb(0x2A313B),
     hover: rgb(0x16304F),
     hover_ink: rgb(0x9CC3EA),
@@ -202,6 +205,7 @@ pub const DARK: Palette = Palette {
 };
 
 pub const LIGHT: Palette = Palette {
+    backing: rgb(0xFFFFFF),
     face: rgb(0xF7F8FA),
     hover: rgb(0xE3ECF5),
     hover_ink: rgb(0x1D4470),
@@ -573,13 +577,16 @@ pub fn draw(camera: &Camera, place: &Place, hover: Option<Hit>, pal: &Palette, o
     }
 
     let stroke = |on: bool| {
-        let c = if on { pal.hover_ink } else { pal.line };
+        let c = if on { pal.hover_ink } else { pal.ink };
         [c[0], c[1], c[2], 1.0]
     };
 
+    // what floats over the part stands on a disc of its own, legible over any colour
+    let disc = 11.0 * place.scale;
     // home: a small house
     let h = home_at(place);
     let s = 5.5 * place.scale;
+    backing(&mut pen, h, disc, pal);
     let house = [[h.0 - s, h.1 - 0.1 * s], [h.0, h.1 - s], [h.0 + s, h.1 - 0.1 * s]];
     let walls = [
         [h.0 - 0.7 * s, h.1 - 0.3 * s],
@@ -594,6 +601,7 @@ pub fn draw(camera: &Camera, place: &Place, hover: Option<Hit>, pal: &Palette, o
     if eye.square_on() {
         for clockwise in [true, false] {
             let r = roll_at(place, clockwise);
+            backing(&mut pen, r, disc, pal);
             let c = stroke(hover == Some(Hit::Roll(clockwise)));
             let radius = 5.5 * place.scale;
             let dir = if clockwise { 1.0 } else { -1.0 };
@@ -622,9 +630,30 @@ pub fn draw(camera: &Camera, place: &Place, hover: Option<Hit>, pal: &Palette, o
         for (tri, (x, y)) in arrows(&eye, place) {
             let on = hover == Some(Hit::Step(x, y));
             let c = if on { pal.focus } else { pal.line };
-            pen.fill(&tri, [c[0], c[1], c[2], if on { 0.9 } else { 0.4 }]);
+            let mid = [
+                (tri[0][0] + tri[1][0] + tri[2][0]) / 3.0,
+                (tri[0][1] + tri[1][1] + tri[2][1]) / 3.0,
+            ];
+            let span = (tri[0][0] - mid[0]).hypot(tri[0][1] - mid[1]);
+            backing(&mut pen, (mid[0], mid[1]), span * 1.5, pal);
+            pen.fill(&tri, [c[0], c[1], c[2], 1.0]);
         }
     }
+}
+
+/// A solid disc with a rim, for a control to stand on.
+fn backing(pen: &mut Pen, at: (f32, f32), r: f32, pal: &Palette) {
+    let around = |rad: f32| -> Vec<[f32; 2]> {
+        (0..=24)
+            .map(|k| {
+                let t = k as f32 / 24.0 * core::f32::consts::TAU;
+                [at.0 + t.cos() * rad, at.1 + t.sin() * rad]
+            })
+            .collect()
+    };
+    let (b, l) = (pal.backing, pal.line);
+    pen.fill(&around(r), [b[0], b[1], b[2], 0.92]);
+    pen.polyline(&around(r), 1.0, [l[0], l[1], l[2], 0.9]);
 }
 
 #[cfg(test)]

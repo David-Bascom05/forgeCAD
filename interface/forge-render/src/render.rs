@@ -208,6 +208,7 @@ pub struct Renderer {
     /// The cutting plane (a, b, c, d: cut away where a x + b y + c z + d > 0).
     pub section: Option<[f32; 4]>,
     face_mark: wgpu::RenderPipeline,
+    face_mark_exact: wgpu::RenderPipeline,
     edge_mark: wgpu::RenderPipeline,
     dot: wgpu::RenderPipeline,
     marks: wgpu::Buffer,
@@ -684,6 +685,15 @@ impl Renderer {
             msaa,
             &over,
         );
+        let same_depth = depth_state(false, wgpu::CompareFunction::Equal);
+        let face_mark_exact = pipeline(
+            ("face_mark_exact_vs", "exact_mark_fs"),
+            &mark_buffers,
+            back_culled,
+            &same_depth,
+            msaa,
+            &over,
+        );
         let edge_mark = pipeline(
             ("edge_mark_vs", "mark_fs"),
             &line_buffers,
@@ -925,6 +935,7 @@ impl Renderer {
             line_cut,
             section: None,
             face_mark,
+            face_mark_exact,
             edge_mark,
             dot,
             marks,
@@ -1293,26 +1304,34 @@ impl Renderer {
             return;
         }
         pass.set_vertex_buffer(1, self.marks.slice(..));
-        pass.set_pipeline(&self.face_mark);
         pass.set_vertex_buffer(0, self.vertices.slice(..));
         pass.set_index_buffer(self.indices.slice(..), wgpu::IndexFormat::Uint32);
+        let live = self.live_part();
         for (k, m) in marks.iter().take(MARKS).enumerate() {
             let k = k as u32;
             let part = scene.placements[m.placement as usize].part;
             let Some(lod) = scene.lod_on_screen(m.placement) else {
                 continue;
             };
-            let lod = self.pick_lod(part, lod);
-            if let Entity::Face(f) = m.entity
-                && let Some(r) = self.index[part as usize][lod].faces.iter().find(|r| r.face == f)
-            {
-                let l = self.lods[part as usize][lod];
-                pass.draw_indexed(
-                    l.first_index + r.first_tri * 3..l.first_index + (r.first_tri + r.tris) * 3,
-                    l.base_vertex,
-                    k..k + 1,
-                );
-            }
+            let Entity::Face(f) = m.entity else { continue };
+            // what the surface drew, if this is it: its own level, from the same buffers
+            let found = |lod: usize| self.index[part as usize][lod].faces.iter().find(|r| r.face == f);
+            let same = found(lod as usize).filter(|_| Some(part) != live);
+            let (pipeline, lod, r) = match same {
+                Some(r) => (&self.face_mark_exact, lod as usize, r),
+                None => {
+                    let lod = self.pick_lod(part, lod);
+                    let Some(r) = found(lod) else { continue };
+                    (&self.face_mark, lod, r)
+                }
+            };
+            pass.set_pipeline(pipeline);
+            let l = self.lods[part as usize][lod];
+            pass.draw_indexed(
+                l.first_index + r.first_tri * 3..l.first_index + (r.first_tri + r.tris) * 3,
+                l.base_vertex,
+                k..k + 1,
+            );
         }
         pass.set_pipeline(&self.edge_mark);
         pass.set_vertex_buffer(0, self.marks.slice(..));

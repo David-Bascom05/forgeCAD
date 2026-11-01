@@ -1341,3 +1341,176 @@ fn in_a_sketch_faces_do_not_answer_the_pointer_and_orbiting_stays_put_until_look
         was.yaw
     );
 }
+
+fn esc(h: &mut Headless) {
+    h.key(egui::Key::Escape);
+    step_some(h);
+}
+
+fn at_rest(h: &Headless) {
+    let s = &h.gui.shell;
+    assert!(
+        !s.sketch_pick && s.sketch.is_none() && s.dialog.is_none() && !s.menu_open() && s.renaming.is_none(),
+        "pick {} sketch {} dialog {} menu {}",
+        s.sketch_pick,
+        s.sketch.is_some(),
+        s.dialog.is_some(),
+        s.menu_open()
+    );
+}
+
+#[test]
+fn esc_backs_out_of_every_mode_one_level_at_a_time() {
+    use forge_render::shell::sketching::SkTool;
+    let Some((mut h, _)) = file_part(TWO_SKETCHES) else {
+        return;
+    };
+    let base = h.gui.shell.doc.as_ref().unwrap().find("base").unwrap();
+    // picking a plane
+    h.gui.shell.out.push(Action::StartSketch);
+    step_some(&mut h);
+    assert!(h.gui.shell.sketch_pick);
+    assert!(h.gui.shell.place("mode:cancel").is_some(), "a visible way out");
+    esc(&mut h);
+    at_rest(&h);
+    // in a sketch with a half-drawn line: the line, the tool, then the sketch
+    h.gui.shell.origin_selected = Some(forge_render::origin::Item::XyPlane);
+    h.gui.shell.out.push(Action::StartSketch);
+    assert!(h.until(|g| g.shell.sketch.is_some()));
+    h.gui.shell.out.push(Action::SketchTool(SkTool::Line));
+    step_some(&mut h);
+    h.gui.shell.sketch.as_mut().unwrap().click((1.0, 1.0), 0.5);
+    assert!(h.gui.shell.place("mode:finish").is_some());
+    assert!(h.gui.shell.place("mode:cancel").is_some());
+    esc(&mut h);
+    assert!(
+        h.gui.shell.sketch.as_ref().unwrap().tool.is_some(),
+        "only what was half drawn"
+    );
+    esc(&mut h);
+    assert!(
+        h.gui.shell.sketch.as_ref().unwrap().tool.is_none(),
+        "then the tool"
+    );
+    esc(&mut h);
+    at_rest(&h);
+    // a dialog; each menu; a rename; a selection
+    h.gui.shell.out.push(Action::NewFeature("fillet"));
+    step_some(&mut h);
+    assert!(h.gui.shell.dialog.is_some());
+    esc(&mut h);
+    at_rest(&h);
+    h.gui.shell.row_menu = Some((base, egui::pos2(400.0, 400.0)));
+    step_some(&mut h);
+    esc(&mut h);
+    at_rest(&h);
+    h.gui.shell.cube_menu = Some(egui::pos2(400.0, 400.0));
+    step_some(&mut h);
+    esc(&mut h);
+    at_rest(&h);
+    h.gui.shell.marking = Some(egui::pos2(400.0, 400.0));
+    step_some(&mut h);
+    esc(&mut h);
+    at_rest(&h);
+    h.gui.shell.file_menu = true;
+    step_some(&mut h);
+    esc(&mut h);
+    at_rest(&h);
+    h.gui.shell.out.push(Action::StartRename(base));
+    step_some(&mut h);
+    assert!(h.gui.shell.renaming.is_some());
+    esc(&mut h);
+    at_rest(&h);
+    h.gui.shell.selected = Some(base);
+    step_some(&mut h);
+    esc(&mut h);
+    assert_eq!(h.gui.shell.selected, None);
+}
+
+#[test]
+fn picking_a_sketch_while_starting_one_opens_it_and_cancel_always_leaves() {
+    let Some((mut h, _)) = file_part(TWO_SKETCHES) else {
+        return;
+    };
+    h.gui.shell.out.push(Action::StartSketch);
+    step_some(&mut h);
+    assert!(h.gui.shell.sketch_pick);
+    // a feature isn't something to sketch on: still picking, and it says so
+    h.click("tree:base");
+    step_some(&mut h);
+    assert!(h.gui.shell.sketch_pick);
+    assert!(h.gui.shell.status.contains("feature"), "{}", h.gui.shell.status);
+    h.click("tree:sk2");
+    assert!(h.until(|g| g.shell.sketch.is_some()), "{}", h.gui.shell.status);
+    assert!(!h.gui.shell.sketch_pick);
+    assert!(!h.gui.shell.sketch.as_ref().unwrap().is_new());
+    h.click("mode:cancel");
+    step_some(&mut h);
+    at_rest(&h);
+    // and a new sketch with nothing drawn leaves nothing behind
+    let n = h.gui.shell.rows.len();
+    h.gui.shell.origin_selected = Some(forge_render::origin::Item::XyPlane);
+    h.gui.shell.out.push(Action::StartSketch);
+    assert!(h.until(|g| g.shell.sketch.is_some()));
+    h.click("mode:finish");
+    step_some(&mut h);
+    at_rest(&h);
+    assert_eq!(h.gui.shell.rows.len(), n);
+}
+
+/// A chosen face's fill in the middle of the view, turned a little at a time: every pixel of a patch
+/// of it carries the fill, on a flat face and a curved one, whatever level of detail is showing.
+#[test]
+fn a_faces_fill_has_no_holes_as_the_view_turns() {
+    for (part, flat) in [(BLOCK, true), ("base: extrude 40 circle 0 0 30\n", false)] {
+        let Some((mut h, _)) = file_part(part) else {
+            return;
+        };
+        let id = h.gui.shell.doc.as_ref().unwrap().find("base").unwrap();
+        h.gui.shell.selected = Some(id);
+        for k in 0..24 {
+            let v = h.gui.view.as_mut().unwrap();
+            v.nav.camera.yaw = 0.3 + k as f32 * 0.17;
+            v.nav.camera.pitch = 0.5;
+            v.nav.camera.dist *= if k % 2 == 0 { 0.93 } else { 1.0 / 0.93 };
+            v.mark_dirty();
+            step_some(&mut h);
+            let img = h.gui_pixels();
+            let (w, c) = (h.gui.shell.camera.unwrap().1, h.gui.shell.view_rect);
+            let _ = w;
+            let (mid_x, mid_y) = (c.center().x as usize, c.center().y as usize);
+            let mut plain = 0;
+            for dy in 0..30 {
+                for dx in 0..30 {
+                    let p = img.at(mid_x - 15 + dx, mid_y - 15 + dy);
+                    // the chosen fill is warm: red well over blue, where bare metal is grey
+                    if (p[0] as i32) - (p[2] as i32) < 18 {
+                        plain += 1;
+                    }
+                }
+            }
+            assert_eq!(
+                plain, 0,
+                "flat {flat}, turn {k}: {plain} of 900 pixels without the fill"
+            );
+        }
+    }
+}
+
+#[test]
+fn a_hover_mark_stays_on_every_frame_as_the_pointer_crosses_a_face() {
+    let Some((mut h, _)) = file_part(BLOCK) else {
+        return;
+    };
+    let c = h.gui.shell.view_rect.center();
+    h.move_to(c.x, c.y);
+    assert!(h.until(|g| g.view.as_ref().unwrap().nav.marks().iter().any(|m| !m.selected)));
+    for k in 0..40 {
+        h.move_to(c.x + (k % 10) as f32, c.y + (k % 7) as f32);
+        h.step();
+        assert!(
+            h.gui.view.as_ref().unwrap().nav.marks().iter().any(|m| !m.selected),
+            "dark at step {k}"
+        );
+    }
+}

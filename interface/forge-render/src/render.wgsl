@@ -45,7 +45,7 @@ fn unoct(v: vec2f) -> vec3f {
 }
 
 struct Shaded {
-    @builtin(position) clip: vec4f,
+    @invariant @builtin(position) clip: vec4f,
     @location(0) p: vec3f,
     @location(1) n: vec3f,
     // rgb, and how metal
@@ -336,6 +336,23 @@ struct Mark {
 
 fn mark_colour(selected: bool) -> vec4f {
     return select(HOVER, CHOSEN, selected);
+}
+
+struct ExactMark {
+    @invariant @builtin(position) clip: vec4f,
+    @location(0) colour: vec4f,
+}
+
+// the very triangles the surface drew, at the very depth: the fill can't fight it
+@vertex
+fn face_mark_exact_vs(@location(0) p: vec3f, @location(2) at: u32) -> ExactMark {
+    let w = place(placements[at & ~SELECTED_BIT], p);
+    return ExactMark(g.view_proj * vec4f(w, 1.0), mark_colour((at & SELECTED_BIT) != 0u));
+}
+
+@fragment
+fn exact_mark_fs(in: ExactMark) -> @location(0) vec4f {
+    return in.colour;
 }
 
 @vertex

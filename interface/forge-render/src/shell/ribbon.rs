@@ -146,7 +146,12 @@ fn groups(s: &Shell) -> Vec<Group> {
                         action: s.sketch.as_ref().map(|_| Action::FinishSketch),
                         on: false,
                     }],
-                    vec![],
+                    vec![Tool {
+                        name: "Cancel",
+                        icon: "close",
+                        action: s.sketch.as_ref().map(|_| Action::CancelSketch),
+                        on: false,
+                    }],
                 ),
             ]
         }
