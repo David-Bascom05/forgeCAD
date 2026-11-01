@@ -1,5 +1,6 @@
 use crate::cdt::{CdtError, Refine, Triangulation, triangulate_refined, zip};
 use crate::mesh::TriMesh;
+use forge_geom::CurveGeom;
 use forge_geom::{Curve, Surface, SurfaceGeom};
 use forge_math::{Point2, dmath};
 use forge_topo::uv::{align_loops, draw_loop_near};
@@ -654,17 +655,39 @@ pub fn tessellate(body: &Body, q: &Quality) -> Result<TriMesh, TessError> {
     // touching a line, or nearly tangent where they meet) gets its edges cut finer, so their
     // chords follow them closer, until they no longer do
     let mut finer = vec![1usize; body.edges.len()];
+    let mut pins: Vec<Vec<f64>> = vec![Vec::new(); body.edges.len()];
     let mut rounds = 0;
     loop {
-        match tessellate_with(body, q, &finer) {
+        match tessellate_with(body, q, &finer, &pins) {
             Err(TessError::Face {
                 face,
                 error: CdtError::ConstraintsIntersect { .. },
             }) if rounds < 6 => {
+                let radius = |e: forge_topo::EdgeId| match &body.edge(e).curve {
+                    Curve::Circle(c) => c.radius,
+                    _ => f64::INFINITY,
+                };
+                let tightest = body
+                    .face(face)
+                    .loops
+                    .iter()
+                    .flat_map(|&l| body.lp(l).coedges())
+                    .map(|c| radius(body.coedge(c).edge))
+                    .fold(f64::INFINITY, f64::min);
                 for &l in &body.face(face).loops {
                     for c in body.lp(l).coedges() {
-                        finer[body.coedge(c).edge.index()] *= 2;
+                        // circles tangent at a shared vertex: halving both keeps their first chords
+                        // crossed, so past two rounds the tightest stays as it is
+                        let e = body.coedge(c).edge;
+                        if rounds < 2 || radius(e) > tightest {
+                            finer[e.index()] *= 2;
+                        }
                     }
+                }
+                // edges touching with no vertex there (a hole tangent inside a face's rim): chords
+                // cross near the point at any fineness, unless each has a sample at it
+                if rounds == 1 {
+                    pin_touches(body, face, &mut pins);
                 }
                 rounds += 1;
             }
@@ -673,7 +696,62 @@ pub fn tessellate(body: &Body, q: &Quality) -> Result<TriMesh, TessError> {
     }
 }
 
-fn tessellate_with(body: &Body, q: &Quality, finer: &[usize]) -> Result<TriMesh, TessError> {
+/// A parameter on each of two edges of face `f` where they touch away from their ends.
+fn pin_touches(body: &Body, f: forge_topo::FaceId, pins: &mut [Vec<f64>]) {
+    const N: usize = 256;
+    let mut edges: Vec<forge_topo::EdgeId> = Vec::new();
+    for &l in &body.face(f).loops {
+        edges.extend(body.lp(l).coedges().map(|c| body.coedge(c).edge));
+    }
+    edges.sort_unstable_by_key(|e| e.index());
+    edges.dedup();
+    if edges.len() > 64 {
+        return;
+    }
+    let at = |r: forge_math::Interval, k: usize| r.lo + r.width() * (k as f64 + 0.5) / N as f64;
+    let sampled: Vec<Vec<forge_math::Point3>> = edges
+        .iter()
+        .map(|&e| {
+            let d = body.edge(e);
+            (0..N).map(|k| d.curve.eval(at(d.range, k))).collect()
+        })
+        .collect();
+    for i in 0..edges.len() {
+        for j in i + 1..edges.len() {
+            let (a, b) = (body.edge(edges[i]), body.edge(edges[j]));
+            let (mut d2, mut ka, mut kb) = (f64::INFINITY, 0, 0);
+            for (x, p) in sampled[i].iter().enumerate() {
+                for (y, q) in sampled[j].iter().enumerate() {
+                    let d = p.distance_sq(*q);
+                    if d < d2 {
+                        (d2, ka, kb) = (d, x, y);
+                    }
+                }
+            }
+            let (mut ta, mut tb) = (at(a.range, ka), at(b.range, kb));
+            for _ in 0..8 {
+                tb = b.curve.closest(a.curve.eval(ta), b.range);
+                ta = a.curve.closest(b.curve.eval(tb), a.range);
+            }
+            let inside =
+                |t: f64, r: forge_math::Interval| t > r.lo + 1e-6 * r.width() && t < r.hi - 1e-6 * r.width();
+            if a.curve.eval(ta).distance(b.curve.eval(tb)) <= 2.0 * forge_math::tol::LINEAR
+                && inside(ta, a.range)
+                && inside(tb, b.range)
+            {
+                pins[edges[i].index()].push(ta);
+                pins[edges[j].index()].push(tb);
+            }
+        }
+    }
+}
+
+fn tessellate_with(
+    body: &Body,
+    q: &Quality,
+    finer: &[usize],
+    pins: &[Vec<f64>],
+) -> Result<TriMesh, TessError> {
     let mut mesh = TriMesh::default();
     let vertex_index: Vec<u32> = body.vertices.iter().map(|v| mesh.add_vertex(v.point)).collect();
 
@@ -695,6 +773,10 @@ fn tessellate_with(body: &Body, q: &Quality, finer: &[usize]) -> Result<TriMesh,
             s.push((t, mesh.add_vertex(p)));
         }
         s.push((edge.range.hi, vertex_index[edge.end.index()]));
+        for &t in &pins[e.index()] {
+            let k = s.partition_point(|x| x.0 < t);
+            s.insert(k, (t, mesh.add_vertex(edge.curve.eval(t))));
+        }
         edge_samples.push(s);
     }
 

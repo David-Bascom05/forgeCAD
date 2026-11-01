@@ -50,3 +50,22 @@ fn frame() {
 fn balls_at_pole() {
     meshes(include_str!("parts/balls-at-pole.fc"));
 }
+
+/// A hole tangent inside a rim with no vertex there, and rims tangent at a shared vertex: the chords
+/// cross at any fineness unless each edge has a sample at the point, or the tighter one stays coarse
+/// (WHUCAD 100002382, 100002741).
+#[test]
+fn circles_touching_inside_a_face() {
+    for src in [
+        "extrude 9 z 0 0 1 x 1 0 0 at -1 0 0 circle 0.95 0 0.95\n\
+revolve add  z 1 0 0 x 0 1 0 at 0 0 9 axis 0 1 0 -1 loop line 0 0 1 0 line 1 0 0 1 line 0 1 0 0\n",
+        "extrude 7 z 0 0 1 x 1 0 0 at -2 0 0 circle 2 0 2\n\
+fillet 0.5 (edges top)\n\
+extrude add 2 z 0 0 1 x 1 0 0 at -1.5 0 7 circle 1.45 0 1.45\n",
+    ] {
+        let m = Model::new(src);
+        assert!(m.error.is_none(), "{:?}", m.error.as_ref().map(|e| &e.msg));
+        let mesh = tessellate(&m.body().expect("a body").compact(), &Quality::default()).expect("meshes");
+        assert!(mesh.open_edges().is_empty());
+    }
+}
