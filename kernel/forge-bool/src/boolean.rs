@@ -3940,8 +3940,8 @@ pub(crate) fn crossings_near(curve: &Curve, range: Interval, s: &Surface, h: Cur
                 }
             }
             let t = 0.5 * (lo + hi);
-            // in and out again by less than a tolerance: still a touch
-            if !out.is_empty() && deep <= tol::LINEAR {
+            // in and out again by less than a tolerance: still a touch, but the retry wants those
+            if !out.is_empty() && deep <= tol::LINEAR && !CHORDS.with(|c| c.get()) {
                 out.pop();
             } else {
                 out.push(CurveHit {
