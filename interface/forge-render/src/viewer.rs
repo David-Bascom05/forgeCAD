@@ -183,6 +183,7 @@ impl Viewer {
             cube: Some((self.nav.cube_place(), self.nav.cube_hover)),
             marks: &marks,
             world: &[],
+            behind: &[],
         };
         let drawn = self
             .renderer

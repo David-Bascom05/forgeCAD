@@ -14,7 +14,7 @@ const DEPTH: wgpu::TextureFormat = wgpu::TextureFormat::Depth32Float;
 const TIMERS: usize = 4;
 /// The view cube's triangles, at most (viewcube's test holds it under).
 const CUBE_BYTES: u64 = 24 * 3 * 4096;
-const WORLD_BYTES: u64 = 28 * 3 * 512;
+const WORLD_BYTES: u64 = 28 * 6 * 16384;
 const HUD_CHARS: usize = 256;
 /// Characters per row of the overlay (render.wgsl).
 const HUD_COLUMNS: usize = 85;
@@ -133,6 +133,8 @@ pub struct Overlay<'a> {
     pub marks: &'a [Mark],
     /// Translucent triangles in the world: the part hides them where it's nearer.
     pub world: &'a [crate::origin::WorldVert],
+    /// Drawn only where the part is nearer: what's behind it, seen dimly through.
+    pub behind: &'a [crate::origin::WorldVert],
 }
 
 /// A B-rep entity of a part.
@@ -195,6 +197,7 @@ pub struct Renderer {
     cube: wgpu::RenderPipeline,
     cube_verts: wgpu::Buffer,
     world: wgpu::RenderPipeline,
+    world_behind: wgpu::RenderPipeline,
     world_verts: wgpu::Buffer,
     /// The view's flat background, and the view cube's colours: linear.
     pub back_colour: [f32; 3],
@@ -642,6 +645,15 @@ impl Renderer {
             attributes: &wgpu::vertex_attr_array![0 => Float32x3, 1 => Float32x4],
         })];
         let world = pipeline(("world_vs", "cube_fs"), &world_buffers, None, &tests, msaa, &over);
+        let further = depth_state(false, wgpu::CompareFunction::Less);
+        let world_behind = pipeline(
+            ("world_vs", "cube_fs"),
+            &world_buffers,
+            None,
+            &further,
+            msaa,
+            &over,
+        );
         let world_verts = device.create_buffer(&wgpu::BufferDescriptor {
             label: Some("world"),
             size: WORLD_BYTES,
@@ -904,6 +916,7 @@ impl Renderer {
             cube,
             cube_verts,
             world,
+            world_behind,
             world_verts,
             back_colour: crate::viewcube::rgb(0x12171D),
             cube_palette: crate::viewcube::DARK,
@@ -1374,10 +1387,13 @@ impl Renderer {
 
         let mut bytes = globals_bytes(&view, self.size, self.back_colour, hud.unwrap_or(""));
         let cube_verts = self.write_cube(camera, &overlay);
-        let world_count = (overlay.world.len() as u64).min(WORLD_BYTES / 28) as u32;
-        if world_count > 0 {
-            let mut b = Vec::with_capacity(world_count as usize * 28);
-            for v in &overlay.world[..world_count as usize] {
+        let room = (WORLD_BYTES / 28) as usize;
+        let world_count = overlay.world.len().min(room) as u32;
+        let behind_count = overlay.behind.len().min(room - world_count as usize) as u32;
+        if world_count + behind_count > 0 {
+            let mut b = Vec::with_capacity((world_count + behind_count) as usize * 28);
+            let front = &overlay.world[..world_count as usize];
+            for v in front.iter().chain(&overlay.behind[..behind_count as usize]) {
                 for x in v.at.iter().chain(&v.colour) {
                     b.extend_from_slice(&x.to_le_bytes());
                 }
@@ -1535,6 +1551,11 @@ impl Renderer {
                 pass.set_pipeline(&self.world);
                 pass.set_vertex_buffer(0, self.world_verts.slice(..));
                 pass.draw(0..world_count, 0..1);
+            }
+            if behind_count > 0 {
+                pass.set_pipeline(&self.world_behind);
+                pass.set_vertex_buffer(0, self.world_verts.slice(..));
+                pass.draw(world_count..world_count + behind_count, 0..1);
             }
             if cube_verts > 0 {
                 pass.set_pipeline(&self.cube);

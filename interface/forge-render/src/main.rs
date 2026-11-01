@@ -266,6 +266,7 @@ fn headless(a: &Args, mut s: Stage) -> Result<(), String> {
                 cube: Some((nav.cube_place(), None)),
                 marks: &marks,
                 world: &[],
+                behind: &[],
             };
             drawn = r.frame(&target.view, &mut s.scene, &s.camera, overlay);
             r.wait();
@@ -299,6 +300,7 @@ fn headless(a: &Args, mut s: Stage) -> Result<(), String> {
                 cube: Some((place, None)),
                 marks: &[],
                 world: &[],
+                behind: &[],
             };
             if a.hover {
                 let p = now_ms();

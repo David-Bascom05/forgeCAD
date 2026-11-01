@@ -57,6 +57,7 @@ pub struct View {
     clicks: u32,
     /// What of the origin was drawn last: its picture changes with this.
     origin_was: Vec<(crate::origin::Item, bool)>,
+    sketches_was: Vec<(usize, bool)>,
     /// A dialog's result is what's on the screen.
     previewing: bool,
     /// A number's being dragged or has just been let go: the picture's the worker's, not the mesh's.
@@ -306,6 +307,7 @@ impl Gui {
             clicked: Vec::new(),
             clicks: 0,
             origin_was: Vec::new(),
+            sketches_was: Vec::new(),
             previewing: false,
             live_drag: false,
         });
@@ -407,6 +409,7 @@ impl Gui {
                     if let Some(kind) = self.after_sketch.take() {
                         self.shell.out.push(Action::NewFeature(kind));
                     }
+                    v.dirty |= f.sketches != self.shell.sketch_shapes;
                     v.facts = *f;
                     self.shell.sketch_shapes = v.facts.sketches.clone();
                     // what's marked for the selection reads these
@@ -1267,6 +1270,13 @@ impl Gui {
             v.origin_was = drawn;
             v.dirty = true;
         }
+        let sketches = self.shell.sketches_drawn();
+        if let Some(v) = &mut self.view
+            && v.sketches_was != sketches
+        {
+            v.sketches_was = sketches;
+            v.dirty = true;
+        }
         let want_view = self.view_px();
         if let Some(v) = &mut self.view {
             if want_view != v.size {
@@ -1309,6 +1319,38 @@ impl Gui {
                     *strong,
                     &mut world,
                 );
+            }
+            let mut behind = Vec::new();
+            {
+                let (t, px) = (self.shell.theme, self.pixels_per_point);
+                let rgba = |c: egui::Color32, a: f32| {
+                    let hex = (c.r() as u32) << 16 | (c.g() as u32) << 8 | c.b() as u32;
+                    let rgb = viewcube::rgb(hex);
+                    [rgb[0], rgb[1], rgb[2], a]
+                };
+                let (cam, size) = (&v.nav.camera, v.size);
+                for &(k, lit) in &v.sketches_was {
+                    let Some(s) = self.shell.sketch_shapes.get(k) else {
+                        continue;
+                    };
+                    let ink = if lit { t.focus } else { t.on_ink };
+                    let wide = px * if lit { 2.25 } else { 1.5 };
+                    let dim = if lit { 0.5 } else { 0.18 };
+                    for (curve, faint) in &s.curves {
+                        let pts: Vec<[f32; 3]> = curve
+                            .iter()
+                            .map(|p| [p[0] as f32, p[1] as f32, p[2] as f32])
+                            .collect();
+                        let a = if *faint { 0.5 } else { 1.0 };
+                        crate::origin::polyline(&pts, wide, rgba(ink, a), cam, size, &mut world);
+                        crate::origin::polyline(&pts, wide, rgba(ink, a * dim), cam, size, &mut behind);
+                    }
+                    for p in &s.points {
+                        let at = [p[0] as f32, p[1] as f32, p[2] as f32];
+                        crate::origin::disc(at, px * 4.5, rgba(ink, 1.0), cam, size, &mut world);
+                        crate::origin::disc(at, px * 4.5, rgba(ink, dim), cam, size, &mut behind);
+                    }
+                }
             }
             let marks = if v.live_drag {
                 Vec::new()
@@ -1355,6 +1397,7 @@ impl Gui {
                 cube: Some((v.nav.cube_place(), v.nav.cube_hover)),
                 marks: &marks,
                 world: &world,
+                behind: &behind,
             };
             v.renderer
                 .frame(&v.target.view, &mut v.scene, &v.nav.camera, overlay);

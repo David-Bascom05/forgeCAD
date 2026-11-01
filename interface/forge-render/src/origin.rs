@@ -243,6 +243,77 @@ pub fn hit(
     got.map(|g| g.1)
 }
 
+fn minus(a: [f32; 3], b: [f32; 3]) -> [f32; 3] {
+    [a[0] - b[0], a[1] - b[1], a[2] - b[2]]
+}
+
+/// How long a pixel is at this place in the world.
+fn pixel_there(p: [f32; 3], camera: &Camera, size: (u32, u32)) -> f32 {
+    let to = minus(p, camera.eye());
+    (to[0] * to[0] + to[1] * to[1] + to[2] * to[2]).sqrt() * (camera.fovy * 0.5).tan() * 2.0 / size.1 as f32
+}
+
+/// A line through these points, this many pixels wide, facing the eye.
+pub fn polyline(
+    points: &[[f32; 3]],
+    px: f32,
+    colour: [f32; 4],
+    camera: &Camera,
+    size: (u32, u32),
+    out: &mut Vec<WorldVert>,
+) {
+    for w in points.windows(2) {
+        let (a, b) = (w[0], w[1]);
+        let way = minus(b, a);
+        let view = minus(a, camera.eye());
+        let n = [
+            way[1] * view[2] - way[2] * view[1],
+            way[2] * view[0] - way[0] * view[2],
+            way[0] * view[1] - way[1] * view[0],
+        ];
+        let len = (n[0] * n[0] + n[1] * n[1] + n[2] * n[2]).sqrt();
+        if len < 1e-9 {
+            continue;
+        }
+        let half = |p: [f32; 3]| pixel_there(p, camera, size) * px * 0.5 / len;
+        let (ha, hb) = (half(a), half(b));
+        let corners = [
+            along(a, n, -ha),
+            along(b, n, -hb),
+            along(b, n, hb),
+            along(a, n, ha),
+        ];
+        for k in [0, 1, 2, 0, 2, 3] {
+            out.push(WorldVert {
+                at: corners[k],
+                colour,
+            });
+        }
+    }
+}
+
+/// A dot, this many pixels across, facing the eye.
+pub fn disc(
+    p: [f32; 3],
+    px: f32,
+    colour: [f32; 4],
+    camera: &Camera,
+    size: (u32, u32),
+    out: &mut Vec<WorldVert>,
+) {
+    let (_, r, u) = camera.axes();
+    let radius = pixel_there(p, camera, size) * px * 0.5;
+    let rim = |k: usize| {
+        let (s, c) = (k as f32 * core::f32::consts::TAU / 8.0).sin_cos();
+        along(along(p, r, c * radius), u, s * radius)
+    };
+    for k in 0..8 {
+        for at in [p, rim(k), rim(k + 1)] {
+            out.push(WorldVert { at, colour });
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

@@ -2,7 +2,7 @@
 //! picked for a feature that reads one.
 
 use super::Shell;
-use egui::{Color32, Pos2, Stroke};
+use egui::{Color32, Pos2};
 use forge_doc::ItemId;
 
 /// How near a curve the pointer chooses it, in points.
@@ -99,6 +99,25 @@ impl Shell {
         }
     }
 
+    /// The sketches to draw in the view, each with whether it's lit: not the one being edited, which
+    /// the sketch mode draws on top.
+    pub fn sketches_drawn(&self) -> Vec<(usize, bool)> {
+        let drawing = match self.sketch.as_ref().map(|m| &m.edit) {
+            Some(super::sketching::SketchFor::Line(id)) => Some(*id),
+            _ => None,
+        };
+        self.sketch_shapes
+            .iter()
+            .enumerate()
+            .filter_map(|(k, s)| {
+                let id = s.item?;
+                let lit =
+                    self.selected == Some(id) || self.tree_hover == Some(id) || self.sketch_hover == Some(id);
+                ((self.sketch_shown(id) || lit) && drawing != Some(id)).then_some((k, lit))
+            })
+            .collect()
+    }
+
     /// Does the open dialog take a sketch's region for its profile?
     fn picks_region(&self) -> bool {
         self.dialog
@@ -189,34 +208,6 @@ impl Shell {
         }
         if !picking && was.is_none() {
             self.sketch_hover = near.map(|n| n.1);
-        }
-        for s in &shapes {
-            let Some(id) = s.item else { continue };
-            let strong = self.selected == Some(id);
-            let lit = strong || self.tree_hover == Some(id) || self.sketch_hover == Some(id);
-            if !(self.sketch_shown(id) || lit) || drawing == Some(id) {
-                continue;
-            }
-            let ink = if lit { t.focus } else { t.on_ink };
-            let line = Stroke::new(if lit { 2.0 } else { 1.25 }, ink);
-            for (c, faint) in &s.curves {
-                let Some(pts) = up(c) else { continue };
-                if *faint {
-                    p.add(egui::Shape::dashed_line(
-                        &pts,
-                        Stroke::new(1.0, ink.gamma_multiply(0.6)),
-                        5.0,
-                        4.0,
-                    ));
-                } else {
-                    p.add(egui::Shape::line(pts, line));
-                }
-            }
-            for q in &s.points {
-                if let Some(u) = screen(*q) {
-                    p.circle_filled(u, 2.25, ink);
-                }
-            }
         }
         if let Some((_, id, through, loops)) = &under {
             fill(&p, loops, t.focus.gamma_multiply(0.4));
