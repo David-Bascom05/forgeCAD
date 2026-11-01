@@ -618,7 +618,11 @@ impl Session {
                 .map(|w| one(m, w))
                 .collect::<Result<Vec<Ent>, String>>()?,
         };
-        let exact = m.mass().ok().cloned();
+        let mass = m.mass().cloned();
+        let (exact, inexact) = match mass {
+            Ok(x) => (Some(x), None),
+            Err(why) => (None, Some(why)),
+        };
         let (body, mesh) = m.ready()?;
         let mut pairs: Vec<(&str, f64)> = match words[..] {
             ["mass"] => match &exact {
@@ -667,13 +671,18 @@ impl Session {
         {
             pairs.iter_mut().filter(|p| p.0 == "area").for_each(|p| p.1 = a);
         }
-        let text = pairs
+        let mut text = pairs
             .iter()
             .map(|(k, v)| format!("{k} {}", short(*v)))
             .collect::<Vec<_>>()
             .join(" ");
         let mut j = vec![("ok", true.into())];
         j.extend(pairs.iter().map(|&(k, v)| (k, Json::Num(v))));
+        // from the mesh, and why not from the surfaces
+        if let (["mass"], Some(why)) = (&words[..], &inexact) {
+            text.push_str(&format!(" (from the mesh: {why})"));
+            j.push(("why", why.as_str().into()));
+        }
         Ok(Reply {
             ok: true,
             text,

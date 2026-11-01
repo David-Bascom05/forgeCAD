@@ -176,7 +176,60 @@ impl Default for Model {
 /// rebuild, never on the way to a frame. `from` may be the first stage that is not the same `Arc` as last time;
 /// what was found before it stands. `stop` set: it gives up with `Verdict::Stopped`.
 pub fn check_stages(stages: &[Arc<Stage>], from: usize, stop: &AtomicBool) -> Verdict {
-    faults(stages.iter().map(|s| &s.solids[..]), from, stop)
+    let found = faults(stages.iter().map(|s| &s.solids[..]), from, stop);
+    let Verdict::Done(mut list) = found else {
+        return found;
+    };
+    let mut before = from
+        .checked_sub(1)
+        .map_or(Vec::new(), |k| tangled(&stages[k].solids));
+    for (i, s) in stages.iter().enumerate().skip(from) {
+        if stop.load(std::sync::atomic::Ordering::Relaxed) {
+            return Verdict::Stopped;
+        }
+        let now = tangled(&s.solids);
+        let fresh: Vec<Issue> = now.iter().filter(|x| !before.contains(x)).cloned().collect();
+        if !fresh.is_empty() {
+            match list.iter_mut().find(|f| f.feature == i) {
+                Some(f) => f.issues.extend(fresh),
+                None => {
+                    let at = list.partition_point(|f| f.feature < i);
+                    list.insert(
+                        at,
+                        forge_model::verify::Fault {
+                            feature: i,
+                            issues: fresh,
+                        },
+                    );
+                }
+            }
+        }
+        before = now;
+    }
+    Verdict::Done(list)
+}
+
+/// Faces of a file's body that only mesh drawn as they are (`tessellate_tolerant`): the picture of them
+/// parts from the next face by what the file's edges miss by. It is said, not left to look fine.
+pub fn tangled(solids: &[forge_model::Solid]) -> Vec<Issue> {
+    solids
+        .iter()
+        .filter(|s| s.body.from_file)
+        .filter_map(|s| {
+            let body = s.body.compact();
+            let q = forge_mesh::Quality::default();
+            match forge_mesh::tessellate(&body, &q) {
+                Err(e @ forge_mesh::TessError::Face { face, .. }) if e.tangled() => Some(Issue {
+                    rule: "tangled-face",
+                    reason: "this face's edges from the file cross within their tolerance: it is drawn \
+                             as they are, with a small crack to the next face"
+                        .to_string(),
+                    entity: Some(forge_topo::Entity::Face(body.face(face).name)),
+                }),
+                _ => None,
+            }
+        })
+        .collect()
 }
 
 /// How many leading stages are the same as in `checked`: where `check_stages` goes on from.
@@ -191,9 +244,11 @@ pub fn stages_kept(stages: &[Arc<Stage>], checked: &[Arc<Stage>]) -> usize {
 /// The full check of what the last stage holds, for a save. Finds what `check_stages` does on the last stage and
 /// takes nothing from earlier ones; empty is a part fit to save without a warning.
 pub fn check_for_save(stages: &[Arc<Stage>]) -> Vec<Issue> {
-    stages
-        .last()
-        .map_or(Vec::new(), |s| forge_model::verify::full(&s.solids))
+    stages.last().map_or(Vec::new(), |s| {
+        let mut all = forge_model::verify::full(&s.solids);
+        all.extend(tangled(&s.solids));
+        all
+    })
 }
 
 impl Model {
@@ -1360,6 +1415,31 @@ mod tests {
     }
 
     use super::*;
+
+    /// Two top corners swapped: a boundary that crosses itself, flagged on a file's body only (on a
+    /// part made here the mesh refuses it, and the check is what says why).
+    #[test]
+    fn a_files_tangled_face_is_said_not_hidden() {
+        use forge_math::{Frame, Point2};
+        let profile = forge_ops::Profile {
+            plane: Frame::WORLD,
+            loops: vec![forge_ops::Profile::rectangle(Point2::ORIGIN, 4.0, 2.0, 0)],
+        };
+        let mut body = forge_ops::extrude(&profile, 1.0, 1).unwrap();
+        let top: Vec<usize> = (0..body.vertices.len())
+            .filter(|&v| body.vertices[v].point.z > 0.5 && body.vertices[v].point.x > 2.0)
+            .collect();
+        let (a, b) = (body.vertices[top[0]].point, body.vertices[top[1]].point);
+        body.vertices[top[0]].point = b;
+        body.vertices[top[1]].point = a;
+        let mut solids = vec![Solid { id: 0, body }];
+        assert!(tangled(&solids).is_empty());
+        solids[0].body.from_file = true;
+        let said = tangled(&solids);
+        assert_eq!(said.len(), 1);
+        assert_eq!(said[0].rule, "tangled-face");
+        assert!(said[0].entity.is_some());
+    }
     use forge_model::{Part, fillets, suite};
 
     fn finished(m: &Model) -> Body {

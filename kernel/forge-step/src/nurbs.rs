@@ -4,7 +4,7 @@
 use forge_geom::curve::Domain1;
 use forge_geom::surface::{Proc, Procedural, SurfDeriv};
 use forge_geom::{Domain2, Surface};
-use forge_math::{Box2, Box3, Frame, Interval, Point2, Point3, Vec3};
+use forge_math::{Box2, Box3, Frame, Interval, Point2, Point3, UnitVec3, Vec3};
 use std::sync::{Arc, OnceLock};
 
 /// The highest degree taken: as the kernel's curves'. STEP has no limit; none surveyed passes 8.
@@ -26,6 +26,7 @@ pub struct Nurbs {
     closed: (bool, bool),
     seeds: Arc<OnceLock<Seeds>>,
     tree: Arc<OnceLock<Tree>>,
+    poles: Arc<OnceLock<(Vec<Point3>, f64)>>,
 }
 
 /// A tree of boxes over the surface's knot cells, for the nearest point anywhere on it: a net can
@@ -184,6 +185,7 @@ impl Nurbs {
             closed: (false, false),
             seeds: Arc::new(OnceLock::new()),
             tree: Arc::new(OnceLock::new()),
+            poles: Arc::new(OnceLock::new()),
         };
         n.closed = n.find_closed();
         Some(n)
@@ -191,6 +193,34 @@ impl Nurbs {
 
     pub fn surface(self) -> Surface {
         Surface::Procedural(Proc(Arc::new(self)))
+    }
+
+    /// Whether p is at a side of the net that is all one point (a revolved face reaching its axis),
+    /// as near as a file's edges come: its parameter there means nothing, and rounding's normal
+    /// is noise. Edges a little off the axis would otherwise take any angle from there.
+    fn on_pole(&self, p: Point3) -> bool {
+        let (poles, r) = self.poles.get_or_init(|| {
+            let at = |i: usize, j: usize| {
+                let c = self.net[i * self.nv + j];
+                Point3::new(c[0] / c[3], c[1] / c[3], c[2] / c[3])
+            };
+            let tol = forge_math::tol::LINEAR;
+            let one = |pts: Vec<Point3>| pts.iter().all(|q| q.distance(pts[0]) <= tol).then(|| pts[0]);
+            let sides = [
+                one((0..self.nu).map(|i| at(i, 0)).collect()),
+                one((0..self.nu).map(|i| at(i, self.nv - 1)).collect()),
+                one((0..self.nv).map(|j| at(0, j)).collect()),
+                one((0..self.nv).map(|j| at(self.nu - 1, j)).collect()),
+            ];
+            let size = Box3::from_points(
+                (0..self.nu)
+                    .flat_map(|i| (0..self.nv).map(move |j| (i, j)))
+                    .map(|(i, j)| at(i, j)),
+            )
+            .diagonal();
+            (sides.into_iter().flatten().collect(), (1e-5 * size).max(tol))
+        });
+        poles.iter().any(|q| q.distance(p) <= *r)
     }
 
     /// Whether the surface's ends in a parameter are one curve, taken as periodic there. Checked
@@ -236,6 +266,7 @@ impl Nurbs {
     }
 
     fn eval_all(&self, uv: Point2) -> SurfDeriv {
+        forge_geom::budget::spend();
         let uv = self.wrap(uv);
         let (su, sv) = (
             span_of(&self.u, self.p, self.nu, uv.x),
@@ -476,6 +507,13 @@ impl Procedural for Nurbs {
     fn deriv(&self, uv: Point2) -> SurfDeriv {
         self.eval_all(uv)
     }
+    fn normal(&self, uv: Point2) -> Option<UnitVec3> {
+        let d = self.eval_all(uv);
+        if self.on_pole(d.p) {
+            return None;
+        }
+        d.du.cross(d.dv).normalize()
+    }
     fn domain(&self) -> Domain2 {
         let (du, dv) = self.dom();
         let d = |i: Interval, c: bool| Domain1 {
@@ -503,6 +541,19 @@ impl Procedural for Nurbs {
         }
         uv
     }
+    fn value_near(&self, p: Point3, uv: Option<Point2>) -> Option<(f64, Vec3, Point2)> {
+        let (at, d2) = match uv.map(|near| self.newton(p, near)) {
+            // a poor walk from there: the search over the whole surface
+            Some((at, d2)) if d2 <= 1e-8 => (at, d2),
+            _ => self.nearest(p),
+        };
+        let q = self.eval_all(at);
+        let n = q.du.cross(q.dv);
+        let side = n.dot(p - q.p);
+        let d = d2.sqrt();
+        let g = n.normalize().map_or(Vec3::ZERO, Vec3::from);
+        Some((if side < 0.0 { -d } else { d }, g, at))
+    }
     /// The hull of the control points live over the box, which holds the surface where the
     /// weights are positive (as `new` makes sure).
     fn bbox(&self, uv: Box2) -> Box3 {
@@ -518,11 +569,27 @@ impl Procedural for Nurbs {
         let (mut lo, mut hi) = ([f64::INFINITY; 3], [f64::NEG_INFINITY; 3]);
         for i in a0..=a1.min(self.nu - 1) {
             for j in b0..=b1.min(self.nv - 1) {
+                // straight in v with one weight along it (an extrusion, its net a long way past
+                // any part): the points where the box's v ends fall, not the net's far ends
                 let c = self.net[i * self.nv + j];
-                for x in 0..3 {
-                    let v = c[x] / c[3];
-                    lo[x] = lo[x].min(v);
-                    hi[x] = hi[x].max(v);
+                let mut one = |c: [f64; 4]| {
+                    for x in 0..3 {
+                        let v = c[x] / c[3];
+                        lo[x] = lo[x].min(v);
+                        hi[x] = hi[x].max(v);
+                    }
+                };
+                if (self.q, self.nv) == (1, 2) && self.net[i * 2][3] == self.net[i * 2 + 1][3] {
+                    let (a, b) = (self.net[i * 2], self.net[i * 2 + 1]);
+                    let (v0, v1) = (self.v[1], self.v[2]);
+                    let at = |t: f64| {
+                        let s = (t.clamp(v0, v1) - v0) / (v1 - v0);
+                        [0, 1, 2, 3].map(|k| a[k] + (b[k] - a[k]) * s)
+                    };
+                    one(at(uv.v.lo));
+                    one(at(uv.v.hi));
+                } else {
+                    one(c);
                 }
             }
         }
@@ -557,6 +624,7 @@ impl Procedural for Nurbs {
             .collect();
         let mut n = self.clone();
         n.net = Arc::new(net);
+        n.poles = Arc::new(OnceLock::new());
         n.seeds = Arc::new(OnceLock::new());
         n.tree = Arc::new(OnceLock::new());
         Proc(Arc::new(n))
@@ -585,6 +653,53 @@ impl Procedural for Nurbs {
 mod tests {
     use super::*;
     use forge_geom::SurfaceGeom;
+
+    /// A side of the net all at one point: no normal there or near it, whatever rounding says.
+    #[test]
+    fn a_pole_has_no_normal_near_it() {
+        let mut pts = Vec::new();
+        for i in 0..4 {
+            let (s, c) = forge_math::dmath::sin_cos(i as f64);
+            pts.push(Point3::new(1e-17 * c, 1e-17 * s, 1.0));
+            pts.push(Point3::new(c, s, 0.0));
+        }
+        let n = Nurbs::new(
+            (1, 1),
+            (vec![0., 0., 1., 2., 3., 3.], vec![0., 0., 1., 1.]),
+            (4, 2),
+            &pts,
+            None,
+        )
+        .unwrap();
+        assert!(Procedural::normal(&n, Point2::new(1.5, 0.0)).is_none());
+        assert!(Procedural::normal(&n, Point2::new(1.5, 1e-7)).is_none());
+        assert!(Procedural::normal(&n, Point2::new(1.5, 0.5)).is_some());
+    }
+
+    /// An extrusion's net reaches far past any part: a box over a little of it is that little.
+    #[test]
+    fn an_extrusions_box_is_of_the_part_not_its_net() {
+        let reach = 1e6;
+        let mut pts = Vec::new();
+        for x in [0.0, 1.0, 2.0] {
+            pts.push(Point3::new(x, x * x, -reach));
+            pts.push(Point3::new(x, x * x, reach));
+        }
+        let n = Nurbs::new(
+            (2, 1),
+            (vec![0., 0., 0., 1., 1., 1.], vec![-reach, -reach, reach, reach]),
+            (3, 2),
+            &pts,
+            None,
+        )
+        .unwrap();
+        let b = Procedural::bbox(&n, Box2::new(Interval::new(0.0, 1.0), Interval::new(0.25, 0.5)));
+        assert!(
+            (b.z.lo - 0.25).abs() < 1e-9 && (b.z.hi - 0.5).abs() < 1e-9,
+            "{b:?}"
+        );
+        assert!(b.x.lo == 0.0 && b.x.hi == 2.0 && b.y.hi == 4.0, "{b:?}");
+    }
 
     /// A bicubic patch with knots inside and a weight off one, and a sphere octant's rational net.
     fn patch() -> Nurbs {

@@ -232,6 +232,9 @@ pub struct Body {
     /// The full names of edges a split left in several pieces, sorted: so the one piece left
     /// of such an edge gets its whole name back (`sole_survivors`).
     pub split: Vec<Name>,
+    /// Read from a file, whose edges may meet only within their tolerance: only such a body may be
+    /// meshed with a boundary that crosses itself (`tessellate_tolerant`). Ours never.
+    pub from_file: bool,
 }
 
 /// Boxes over runs of face ids (a chunk of 16 faces, a block of 16 chunks), each the hull of
@@ -475,6 +478,7 @@ impl Body {
             shells: Vec::new(),
             hulls: Cached::default(),
             split: std::mem::take(&mut self.split),
+            from_file: self.from_file,
         };
         for (i, mut face) in std::mem::take(&mut self.faces).into_iter().enumerate() {
             if !face.alive {
@@ -546,6 +550,7 @@ impl Body {
     /// A compacted copy, faces with one `group` value in one shell.
     fn compact_by(&self, group: &[usize]) -> Body {
         let mut out = Body::new();
+        out.from_file = self.from_file;
         out.joins = self.joins.clone();
         out.vertices.reserve(self.vertices.len());
         out.edges.reserve(self.edges.len());
@@ -651,6 +656,7 @@ impl Body {
 
     /// Adds `other`'s entities after this body's, renumbered, its shells kept apart.
     pub fn append(&mut self, other: &Body) {
+        self.from_file |= other.from_file;
         for &w in &other.split {
             self.note_split(w);
         }

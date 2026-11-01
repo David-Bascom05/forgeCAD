@@ -130,6 +130,44 @@ fn overlapping_solids_measure_past_their_joint_box() {
     assert!((m.volume - 60.0 * 60.0 * 25.0).abs() < 1e-6, "{}", m.volume);
 }
 
+/// A body read from a file stays one through the regen that imports it, and cut too: that is what
+/// lets it be meshed though a file's edges cross.
+#[test]
+fn an_imported_body_stays_from_a_file() {
+    let mut read = Part {
+        features: vec![block(p3(0.0, 0.0, 0.0), 10.0, 10.0, 10.0, Combine::New)],
+    }
+    .regenerate()
+    .expect("builds");
+    read.from_file = true;
+    let import = Feature::Import(Box::new(forge_model::Import {
+        file: "x.step".into(),
+        op: Combine::New,
+        body: Some(std::sync::Arc::new(read)),
+    }));
+    let alone = Part {
+        features: vec![import.clone()],
+    }
+    .regenerate()
+    .expect("imports");
+    assert!(alone.from_file);
+    let cut = Part {
+        features: vec![import, block(p3(2.0, 2.0, 5.0), 2.0, 2.0, 5.0, Combine::Cut)],
+    }
+    .regenerate()
+    .expect("cuts");
+    assert!(cut.from_file);
+    // a part made here is not
+    assert!(
+        !Part {
+            features: vec![block(p3(0.0, 0.0, 0.0), 10.0, 10.0, 10.0, Combine::New)],
+        }
+        .regenerate()
+        .unwrap()
+        .from_file
+    );
+}
+
 #[test]
 fn a_new_solid_is_a_body_of_its_own() {
     // overlapping bodies stay apart

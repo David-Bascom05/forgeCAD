@@ -54,3 +54,58 @@ missed each other by far more where the edge runs past the part of the surface t
 with the reader's measure and states the larger number (`Export::uncertainty`). The fit itself is
 not tightened yet.
 
+## Import: refused for the mesher's sake (2026-11-01)
+
+The check that integrals and mesh agree refused 203 of 6514 files; most of them were good. Four causes, and
+none was what the refusal text suggested. Each was found by comparing per face with OCCT's adaptive
+area and OCCT's mesh; neither of those is truth on its own.
+
+- A linear extrusion's net reaches 1e6 past any part, and `Nurbs::bbox` took it whole. A body's box was
+  2e6 across, so a chord of `5e-4 * diagonal` was 1000 mm. The box now takes the v asked for.
+- Healing's `limit` was `20 * uncertainty`. A normalised part keeps the figure of its far larger
+  original, 0.1 on a part of size 1, and `closed_form_edge` moved edges to where two planes met 0.06 away,
+  further than the edges were long. Then `collapse_slivers` dropped their neighbours and faces lost their
+  area in the mesh only, as `mass` integrates curves and the mesh uses vertices. The limit is now also at most
+  0.2% of the part. That figure was tried once and not tuned.
+- At a pole in all but rounding, `line_curvatures` divided noise by a square of noise and asked for a
+  million grid steps both ways. `1e-8` is well above rounding and well below any real ratio of |S_u| to |S_v|.
+- Crossing chords, chords through points, two points in one place: a file's edges meet only within their
+  tolerance. `triangulate_within(.., tangled)` cuts chords where they cross and takes what an odd number of
+  chords part from the outside. An earlier try merged the nearest ends of what crossed, as far as 2% of
+  the face, and was dropped: 49 files still failed, with a guessed reach. `tessellate` stays strict, so a
+  kernel bug on our own parts still shows; only import's check and the viewers use `tessellate_tolerant`.
+
+`Limits::max_evals` is 1 << 25, spent by healing and the check of one solid; only `Nurbs::eval_all` counts,
+so no part made here spends any. Counted over 6514 files of Fusion, CADFS and WHU: p99 3e5 evaluations, p99.9
+1.9e6, then 2e7, 4.6e7 and 9e7 on three small WHU files, the last two past the budget. Our own largest export
+(valve, 25 MB) spends 1.2e7. An evaluation costs 200 to 500 ns on a loaded laptop, so the budget is 7 to 17 s of work; the
+two files that hit it are refused in 8 and 10 s. It is not a bound on the whole read: parsing and what does not
+evaluate a spline surface are not counted (see the sweep's read times). The first try, surface points in `mass`, bounded nothing: a file took 36 s
+on 20 000 points, each a whole search of the surface.
+To count again, print `budget::left` after `measures_agree` over the sweep.
+
+A revolved spline's mass was 2-6% over, the mesh matching OCCT: 18 of the 35 refusals left. `foot`'s Newton
+stepped past the end of a surface that holds at its ends (`Nurbs::wrap` clamps) and, its point no longer
+moving, stopped there, so a loop's parameters ran up to 7% of the face past the end and the integrals
+counted area that is not there. `foot` now holds such a point at the end; a surface that really does run on
+past its domain is left alone. Parts made here match Pappus by hand (`measure mass`, rectangle, circle,
+ellipse and a 90 degree turn, to the digits printed), so only files were affected.
+
+Two findings from the files left. `LoopsCross` flagged 48 WHU files once `check` was drawn finely; over each
+crossing's depth (an end of each chord past the other) 38 were a corner on another loop's line to rounding, or
+past it by less than the kernel's tolerance or the edges' own: not a fault, and the check now takes that band.
+10 remain real, with holes crossing by up to 4e-4, four of them bad to OCCT as well. And `chain_edge`
+made intersection curves through surfaces that all but touch between the chain's points: a middle's
+refine went 0.01 away on links of 0.006, the curve wandered (0.089 long sampled coarsely, 0.15 finely) and a
+mesh could come out five times too large. Such an edge now keeps the file's curve.
+
+Round trip (`interface/forge-agent/tests/bench_roundtrip.rs`): a fit's edges lie up to `Options::tol` (1e-4) off it,
+past `tighten`'s 5e-6, so each became a chain with a search at each point, on nets of a thousand spans: crank took over
+80 s to read back. An edge within 20 times the kernel's tolerance of a spline surface now keeps its curve: 0.9 s.
+And `fit_surface` checked its loops by the distance to the surface anywhere, and a fit can slide along the
+surface and leave a loop off itself: on jack 0.0103 mm, by OCCT's projection as well as ours. Along the loops it now goes
+by parameters: 1e-4 on every bench part.
+
+A body whose mass cannot be worked out is refused: the check has nothing to compare with, and that is no pass.
+`mass` keeps its own refusal of an integral that did not settle for parts made here; on a file's body the bound holds
+the gaps the file leaves, and the mesh is what checks it.

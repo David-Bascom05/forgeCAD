@@ -1,4 +1,4 @@
-use crate::cdt::{CdtError, Refine, Triangulation, triangulate_refined, zip};
+use crate::cdt::{CdtError, Refine, Triangulation, triangulate_within, zip};
 use crate::mesh::TriMesh;
 use forge_geom::CurveGeom;
 use forge_geom::{Curve, Surface, SurfaceGeom};
@@ -114,12 +114,15 @@ fn interior_steps(s: &Surface, q: &Quality) -> Option<(f64, f64)> {
 /// Bounds on the normal curvature of chords running mostly along u and mostly along v at a
 /// regular point (zero at a singular one): each line's own, plus the twist between them.
 fn line_curvatures(d: &forge_geom::surface::SurfDeriv) -> (f64, f64) {
-    let Some(n) = d.du.cross(d.dv).normalize() else {
+    let cross = d.du.cross(d.dv);
+    let Some(n) = cross.normalize() else {
         return (0.0, 0.0);
     };
     let n = n.get();
     let (e, g) = (d.du.dot(d.du), d.dv.dot(d.dv));
-    if e <= 0.0 || g <= 0.0 {
+    // on a pole in all but rounding (a file's revolved face): that normal is noise, over a square
+    // of noise, and would ask for a million steps both ways
+    if e <= 0.0 || g <= 0.0 || cross.length() <= 1e-8 * e.max(g) {
         return (0.0, 0.0);
     }
     let twist = (d.duv.dot(n) / (e * g).sqrt()).abs();
@@ -651,14 +654,52 @@ pub fn tessellate(body: &Body, q: &Quality) -> Result<TriMesh, TessError> {
     if body.dead > 0 {
         return tessellate(&body.compact(), q);
     }
-    // a face whose boundary chords cross (two of its edges running close, as a curve all but
-    // touching a line, or nearly tangent where they meet) gets its edges cut finer, so their
-    // chords follow them closer, until they no longer do
+    cut_finer(body, q).map_err(|x| x.0)
+}
+
+/// `tessellate`, but a body from a file (`Body::from_file`), whose edges may meet only within their
+/// tolerance and so cross where its faces are laid flat, has those faces drawn as they are: the mesh
+/// parts from the next face by that little there instead of failing. On a body made here a crossing
+/// is a bug, and it stays an error.
+pub fn tessellate_tolerant(body: &Body, q: &Quality) -> Result<TriMesh, TessError> {
+    if !body.from_file {
+        return tessellate(body, q);
+    }
+    if body.dead > 0 {
+        return tessellate_tolerant(&body.compact(), q);
+    }
+    match cut_finer(body, q) {
+        Err((e, finer, pins)) if e.tangled() => tessellate_with(body, q, &finer, &pins, true),
+        r => r.map_err(|x| x.0),
+    }
+}
+
+/// What failed, with how finely its edges had been cut and where they had been pinned.
+type Failed = (TessError, Vec<usize>, Vec<Vec<f64>>);
+
+impl TessError {
+    /// A boundary that crosses or repeats itself or has two points in one place.
+    pub fn tangled(&self) -> bool {
+        let TessError::Face { error, .. } = self;
+        matches!(
+            error,
+            CdtError::ConstraintsIntersect { .. }
+                | CdtError::ConstraintThroughPoint { .. }
+                | CdtError::DuplicatePoint { .. }
+                | CdtError::BadLoop { .. }
+        )
+    }
+}
+
+// a face whose boundary chords cross (two of its edges running close, as a curve all but
+// touching a line, or nearly tangent where they meet) gets its edges cut finer, so their
+// chords follow them closer, until they no longer do
+fn cut_finer(body: &Body, q: &Quality) -> Result<TriMesh, Failed> {
     let mut finer = vec![1usize; body.edges.len()];
     let mut pins: Vec<Vec<f64>> = vec![Vec::new(); body.edges.len()];
     let mut rounds = 0;
     loop {
-        match tessellate_with(body, q, &finer, &pins) {
+        match tessellate_with(body, q, &finer, &pins, false) {
             Err(TessError::Face {
                 face,
                 error: CdtError::ConstraintsIntersect { .. },
@@ -691,7 +732,8 @@ pub fn tessellate(body: &Body, q: &Quality) -> Result<TriMesh, TessError> {
                 }
                 rounds += 1;
             }
-            r => return r,
+            Err(e) => return Err((e, finer, pins)),
+            Ok(m) => return Ok(m),
         }
     }
 }
@@ -751,6 +793,7 @@ fn tessellate_with(
     q: &Quality,
     finer: &[usize],
     pins: &[Vec<f64>],
+    mend: bool,
 ) -> Result<TriMesh, TessError> {
     let mut mesh = TriMesh::default();
     let vertex_index: Vec<u32> = body.vertices.iter().map(|v| mesh.add_vertex(v.point)).collect();
@@ -832,11 +875,11 @@ fn tessellate_with(
     for f in body.face_ids() {
         // a cone is unrolled only to reach its apex cleanly; unrolled, two coarse chords of
         // curves meeting at a sharp corner can cross (in its parameters both run straight)
-        match tessellate_face(body, f, &edge_samples, &segments, q, true, &mut mesh) {
+        match tessellate_face(body, f, &edge_samples, &segments, q, (true, mend), &mut mesh) {
             Err(CdtError::ConstraintsIntersect { .. })
                 if matches!(body.face(f).surface, Surface::Cone(_)) =>
             {
-                tessellate_face(body, f, &edge_samples, &segments, q, false, &mut mesh)
+                tessellate_face(body, f, &edge_samples, &segments, q, (false, mend), &mut mesh)
             }
             r => r,
         }
@@ -855,7 +898,7 @@ fn tessellate_face(
     edge_samples: &[Vec<(f64, u32)>],
     segments: &Segments,
     q: &Quality,
-    unroll: bool,
+    (unroll, mend): (bool, bool),
     mesh: &mut TriMesh,
 ) -> Result<(), CdtError> {
     let face = body.face(f);
@@ -1261,7 +1304,7 @@ fn tessellate_face(
         _ => None,
     };
     let tri = match zipped.map_or_else(
-        || triangulate_refined(&scaled, &loops, &interior, Some(&strays)),
+        || triangulate_within(&scaled, &loops, &interior, Some(&strays), false),
         |triangles| {
             Ok(Triangulation {
                 points: Vec::new(),
@@ -1281,14 +1324,20 @@ fn tessellate_face(
                     break;
                 };
                 parted[at.1 as usize] = q;
-                tried = triangulate_refined(&parted, &loops, &interior, Some(&strays));
+                tried = triangulate_within(&parted, &loops, &interior, Some(&strays), false);
                 match &tried {
                     Err(CdtError::DuplicatePoint { a, b }) => at = (*a, *b),
                     _ => break,
                 }
             }
-            tried?
+            match tried {
+                Err(_) if mend => triangulate_within(&scaled, &loops, &interior, Some(&strays), true)?,
+                t => t?,
+            }
         }
+        // a file's edges that meet only within their tolerance can cross in the plane of the
+        // triangulation: drawn as they are, the mesh parts from the next face by that little
+        Err(_) if mend => triangulate_within(&scaled, &loops, &interior, Some(&strays), true)?,
         Err(e) => {
             if let Some(path) = std::env::var_os("FORGE_CDT_DUMP") {
                 let pts: Vec<String> = scaled.iter().map(|p| format!("{:e},{:e}", p.x, p.y)).collect();
@@ -2047,6 +2096,67 @@ mod tests {
     use forge_math::rng::Rng;
     use forge_math::{Frame, Point3, Vec3};
     use forge_ops::{Profile, extrude};
+
+    /// On a pole in all but rounding, the normal is noise: it must not ask for a million steps.
+    #[test]
+    fn a_noisy_pole_asks_for_no_steps() {
+        let d = forge_geom::surface::SurfDeriv {
+            p: Point3::ORIGIN,
+            du: Vec3::new(1e-16, 0.0, 0.0),
+            dv: Vec3::new(0.0, 1.0, 0.0),
+            duu: Vec3::new(0.0, 0.0, 1e-16),
+            duv: Vec3::new(0.0, 0.0, 1e-16),
+            dvv: Vec3::new(0.0, 0.0, 1.0),
+        };
+        assert_eq!(line_curvatures(&d), (0.0, 0.0));
+        // a tight bend away from any pole still counts
+        let d = forge_geom::surface::SurfDeriv {
+            du: Vec3::new(1e-3, 0.0, 0.0),
+            duu: Vec3::new(0.0, 0.0, 1e-3),
+            ..d
+        };
+        assert!(line_curvatures(&d).0 > 100.0);
+    }
+
+    /// Top corners swapped: a boundary that crosses itself. An error, unless the body is from a file;
+    /// then drawn as it is, what it parts being the bow tie's two triangles.
+    #[test]
+    fn a_crossing_boundary_fails_or_is_drawn_as_it_is() {
+        let p = Profile {
+            plane: Frame::WORLD,
+            loops: vec![Profile::rectangle(Point2::ORIGIN, 4.0, 2.0, 0)],
+        };
+        let mut b = extrude(&p, 1.0, 1).unwrap();
+        let top: Vec<usize> = (0..b.vertices.len())
+            .filter(|&v| b.vertices[v].point.z > 0.5)
+            .collect();
+        let mut at: Vec<Point3> = top.iter().map(|&v| b.vertices[v].point).collect();
+        at.sort_by(|a, c| (a.x, a.y).partial_cmp(&(c.x, c.y)).unwrap());
+        // the two on x = high change places
+        let (p0, p1) = (at[2], at[3]);
+        for &v in &top {
+            let q = b.vertices[v].point;
+            if q == p0 {
+                b.vertices[v].point = p1;
+            } else if q == p1 {
+                b.vertices[v].point = p0;
+            }
+        }
+        let q = Quality::default();
+        assert!(tessellate(&b, &q).is_err());
+        // on a body made here a crossing stays an error
+        assert!(tessellate_tolerant(&b, &q).is_err());
+        b.from_file = true;
+        assert!(tessellate(&b, &q).is_err());
+        let m = tessellate_tolerant(&b, &q).unwrap();
+        let top_area: f64 = m
+            .triangles
+            .iter()
+            .filter(|t| t.iter().all(|&i| m.positions[i as usize].z > 0.5))
+            .map(|&t| 0.5 * m.triangle_normal(t).length())
+            .sum();
+        assert!(top_area > 0.0 && top_area < 8.0, "{top_area}");
+    }
 
     fn closed(m: &TriMesh) {
         let open = m.open_edges();

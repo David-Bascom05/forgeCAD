@@ -698,7 +698,7 @@ impl Proto {
     pub fn tighten(&mut self, limit: f64) {
         let adj = self.faces_of_edges();
         for e in 0..self.edges.len() {
-            if adj[e].len() != 2 {
+            if adj[e].len() != 2 || forge_geom::budget::over() {
                 continue;
             }
             let (a, b) = (
@@ -709,7 +709,16 @@ impl Proto {
             if dev <= 0.5 * tol::LINEAR {
                 continue;
             }
-            if self.closed_form_edge(e, &a, &b, limit) || self.chain_edge(e, a, b, limit) {
+            if self.closed_form_edge(e, &a, &b, limit) {
+                continue;
+            }
+            // near enough on a spline surface: a chain there is a search at every point of it, on
+            // what may be a fit of a thousand spans, for an edge that is already as good as the fit
+            let spline = matches!(a, Surface::Procedural(_)) || matches!(b, Surface::Procedural(_));
+            if spline && dev <= 20.0 * tol::LINEAR {
+                continue;
+            }
+            if self.chain_edge(e, a, b, limit) {
                 continue;
             }
             self.tangent += 1;
@@ -891,6 +900,11 @@ impl Proto {
         for k in 0..pts.len() - 1 {
             let m = pts[k] + (pts[k + 1] - pts[k]) * 0.5;
             if let Some(q) = refine(&a, &b, m) {
+                // landing further than the links are long: the surfaces all but touch between
+                // these points too, and the curve would wander there
+                if q.distance(m) > 0.25 * pts[k].distance(pts[k + 1]) {
+                    return false;
+                }
                 sag = sag.max(q.distance(m));
             }
         }
@@ -931,6 +945,102 @@ impl Proto {
         }
     }
 
+    /// A vertex where separate fans of faces only touch (two cones point to point, a corner on a
+    /// wall) is one vertex to a file and to a body one for each fan. Nothing moves.
+    pub fn split_fans(&mut self) {
+        // every use of an edge, and its other use where it has just one
+        let mut uses: Vec<(usize, usize, usize)> = Vec::new();
+        let mut of_edge: Vec<Vec<usize>> = vec![Vec::new(); self.edges.len()];
+        for (fi, f) in self.faces.iter().enumerate() {
+            for (li, l) in f.loops.iter().enumerate() {
+                for (k, x) in l.iter().enumerate() {
+                    of_edge[x.0].push(uses.len());
+                    uses.push((fi, li, k));
+                }
+            }
+        }
+        let at = |u: usize| {
+            let (f, l, k) = uses[u];
+            self.faces[f].loops[l][k]
+        };
+        // each use with the use leaving the same vertex next round it: back along its loop, and
+        // across that edge. Uses in one set are one fan.
+        let mut set: Vec<usize> = (0..uses.len()).collect();
+        fn root(m: &mut [usize], mut x: usize) -> usize {
+            while m[x] != x {
+                m[x] = m[m[x]];
+                x = m[x];
+            }
+            x
+        }
+        let mut index = std::collections::HashMap::new();
+        for (u, &t) in uses.iter().enumerate() {
+            index.insert(t, u);
+        }
+        // an edge not used twice over (a file's own break) leaves its vertices as they are
+        let mut leave = vec![false; self.verts.len()];
+        for (e, list) in of_edge.iter().enumerate() {
+            if list.len() != 2 || at(list[0]).1 == at(list[1]).1 {
+                leave[self.edges[e].start] = true;
+                leave[self.edges[e].end] = true;
+            }
+        }
+        for (u, &(f, l, k)) in uses.iter().enumerate() {
+            let n = self.faces[f].loops[l].len();
+            let before = index[&(f, l, (k + n - 1) % n)];
+            if let [a, b] = of_edge[at(before).0][..] {
+                let across = if a == before { b } else { a };
+                let (x, y) = (root(&mut set, u), root(&mut set, across));
+                set[x] = y;
+            }
+        }
+        // the first fan at a vertex keeps it, each other has its own copy
+        let mut owner: std::collections::HashMap<usize, usize> = std::collections::HashMap::new();
+        let mut copy: std::collections::BTreeMap<usize, usize> = std::collections::BTreeMap::new();
+        self.vtol.resize(self.verts.len(), 0.0);
+        for u in 0..uses.len() {
+            let (e, fw) = at(u);
+            let v = if fw {
+                self.edges[e].start
+            } else {
+                self.edges[e].end
+            };
+            if leave[v] {
+                continue;
+            }
+            let r = root(&mut set, u);
+            let first = *owner.entry(v).or_insert(r);
+            if first == r {
+                continue;
+            }
+            if let std::collections::btree_map::Entry::Vacant(s) = copy.entry(r) {
+                let name = {
+                    self.made += 1;
+                    self.salt.with_str("heal").with(self.made)
+                };
+                s.insert(self.verts.len());
+                self.verts.push((self.verts[v].0, name));
+                self.vtol.push(self.vtol[v]);
+            }
+        }
+        if copy.is_empty() {
+            return;
+        }
+        let moved: Vec<(usize, bool, usize)> = (0..uses.len())
+            .filter_map(|u| {
+                let (e, fw) = at(u);
+                copy.get(&root(&mut set, u)).map(|&v| (e, fw, v))
+            })
+            .collect();
+        for (e, fw, v) in moved {
+            if fw {
+                self.edges[e].start = v;
+            } else {
+                self.edges[e].end = v;
+            }
+        }
+    }
+
     /// Puts a plane's outer loop first, as bodies have it: the largest area.
     pub fn outer_first(&mut self) {
         for f in 0..self.faces.len() {
@@ -960,6 +1070,7 @@ impl Proto {
     /// The body: vertices no edge uses are left out.
     pub fn into_body(self) -> Body {
         let mut body = Body::new();
+        body.from_file = true;
         let mut map: Vec<Option<VertexId>> = vec![None; self.verts.len()];
         let used: Vec<bool> = {
             let mut u = vec![false; self.edges.len()];
@@ -1295,5 +1406,96 @@ impl ProceduralCurve for Iso {
             up: self.up,
             span: self.span,
         }))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use forge_geom::Plane;
+    use forge_math::Frame;
+
+    /// Two tetrahedra touching only at a corner: one vertex in the file, two fans of faces.
+    fn tetrahedra() -> Proto {
+        let mut p = Proto::default();
+        let at = [
+            (0.0, 0.0, 0.0),
+            (1.0, 0.0, 1.0),
+            (0.0, 1.0, 1.0),
+            (-1.0, -1.0, 1.0),
+            (1.0, 0.0, -1.0),
+            (0.0, 1.0, -1.0),
+            (-1.0, -1.0, -1.0),
+        ];
+        for (i, q) in at.iter().enumerate() {
+            p.verts
+                .push((Point3::new(q.0, q.1, q.2), Name::feature(1 + i as u64)));
+        }
+        let mut edges = std::collections::BTreeMap::new();
+        for tet in [[0usize, 1, 2, 3], [0, 4, 5, 6]] {
+            let inside = tet
+                .iter()
+                .fold(Vec3::ZERO, |s, &v| s + (p.verts[v].0 - Point3::ORIGIN) * 0.25);
+            let inside = Point3::ORIGIN + inside;
+            for skip in 0..4 {
+                let tri: Vec<usize> = (0..4).filter(|&k| k != skip).map(|k| tet[k]).collect();
+                let (a, b, c) = (p.verts[tri[0]].0, p.verts[tri[1]].0, p.verts[tri[2]].0);
+                let n = (b - a).cross(c - a);
+                let out = n.dot(a - inside) > 0.0;
+                let order = if out {
+                    [tri[0], tri[1], tri[2]]
+                } else {
+                    [tri[0], tri[2], tri[1]]
+                };
+                let n = if out { n } else { -n };
+                let mut l = Vec::new();
+                for k in 0..3 {
+                    let (x, y) = (order[k], order[(k + 1) % 3]);
+                    let e = *edges.entry((x.min(y), x.max(y))).or_insert_with(|| {
+                        let (lo, hi) = (p.verts[x.min(y)].0, p.verts[x.max(y)].0);
+                        let line = Line {
+                            origin: lo,
+                            dir: (hi - lo).normalize().unwrap(),
+                        };
+                        p.edges.push(PEdge {
+                            curve: Curve::Line(line),
+                            range: Interval::new(0.0, lo.distance(hi)),
+                            start: x.min(y),
+                            end: x.max(y),
+                            name: Name::feature(100 + p.edges.len() as u64),
+                        });
+                        p.edges.len() - 1
+                    });
+                    l.push((e, x < y));
+                }
+                p.faces.push(PFace {
+                    surface: Surface::Plane(Plane {
+                        frame: Frame::from_z(a, n.normalize().unwrap()),
+                    }),
+                    same_sense: true,
+                    name: Name::feature(200 + p.faces.len() as u64),
+                    shell: 0,
+                    loops: vec![l],
+                });
+            }
+        }
+        p.shells = 1;
+        p
+    }
+
+    #[test]
+    fn solids_touching_at_a_corner_get_a_vertex_each() {
+        let touching = |b: &Body| {
+            forge_topo::check(b)
+                .iter()
+                .any(|x| matches!(x, forge_topo::Problem::VertexFans { .. }))
+        };
+        assert!(touching(&tetrahedra().into_body()));
+        let mut q = tetrahedra();
+        let (before, n) = (q.verts.len(), q.edges.len());
+        q.split_fans();
+        assert_eq!((q.verts.len(), q.edges.len()), (before + 1, n));
+        assert_eq!(q.verts[before].0, Point3::ORIGIN);
+        assert!(!touching(&q.into_body()));
     }
 }

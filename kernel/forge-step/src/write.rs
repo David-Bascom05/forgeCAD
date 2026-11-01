@@ -811,10 +811,16 @@ pub fn export(body: &Body, opt: &Options) -> Result<Export, ExportError> {
     // miss each other by more than either strays from what it stands for
     let stated = forge_math::tol::LINEAR.max(opt.tol);
     let mut uncertainty = stated;
-    if face_fits.count + edge_fits.count > 0
-        && let Ok(gap) = crate::read::curve_off_surface(text.as_bytes(), &crate::part21::Limits::default())
-        && gap > stated
-    {
+    // (nor can it say less than a fit left: one short of `tol` on its cells)
+    let gap = if face_fits.count + edge_fits.count > 0 {
+        crate::read::curve_off_surface(text.as_bytes(), &crate::part21::Limits::default())
+            .unwrap_or(0.0)
+            .max(face_fits.error)
+            .max(edge_fits.error)
+    } else {
+        0.0
+    };
+    if gap > stated {
         uncertainty = 1.01 * gap;
         let (mut a, mut b) = (String::from("LENGTH_MEASURE("), String::from("LENGTH_MEASURE("));
         real(&mut a, stated);

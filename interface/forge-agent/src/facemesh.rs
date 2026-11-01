@@ -3,7 +3,8 @@
 
 use forge_geom::{Surface, SurfaceGeom};
 use forge_math::{Box3, Point2, Point3};
-use forge_mesh::{Quality, TriMesh, tessellate};
+use forge_mesh::tessellate::tessellate_tolerant;
+use forge_mesh::{Quality, TriMesh};
 use forge_topo::{Body, FaceId, Name};
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -61,6 +62,7 @@ pub fn key(body: &Body, f: FaceId) -> Name {
 pub fn alone(body: &Body, f: FaceId) -> Body {
     let face = body.face(f);
     let mut b = Body::new();
+    b.from_file = body.from_file;
     let shell = b.add_shell();
     let nf = b.add_face(shell, face.surface.clone(), face.same_sense, face.name);
     let (mut vs, mut es) = (HashMap::new(), HashMap::new());
@@ -91,7 +93,7 @@ fn mesh_face(body: &Body, f: FaceId) -> Option<Arc<FaceMesh>> {
         chord: 0.05,
         ..Quality::default()
     };
-    let mut mesh = tessellate(&alone(body, f), &q).ok()?;
+    let mut mesh = tessellate_tolerant(&alone(body, f), &q).ok()?;
     let (mut volume, mut area) = (0.0, 0.0);
     for t in &mesh.triangles {
         let [a, b, c] = t.map(|i| mesh.positions[i as usize] - Point3::ORIGIN);

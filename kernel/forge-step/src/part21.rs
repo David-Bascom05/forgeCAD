@@ -9,6 +9,9 @@ pub struct Limits {
     pub max_bytes: usize,
     pub max_values: usize,
     pub max_instances: usize,
+    /// Evaluations of a file's spline surfaces one solid's check may spend (`forge_geom::budget`;
+    /// measured, `research/step/README.md`).
+    pub max_evals: u64,
 }
 
 impl Default for Limits {
@@ -17,6 +20,7 @@ impl Default for Limits {
             max_bytes: 2 << 30,
             max_values: 64 << 20,
             max_instances: 16 << 20,
+            max_evals: 1 << 25,
         }
     }
 }

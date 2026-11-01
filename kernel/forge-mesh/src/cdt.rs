@@ -73,6 +73,8 @@ struct Mesh {
     inside: Vec<bool>,
     /// Reused work list for legalize, so inserting a point allocates nothing.
     stack: Vec<(u32, usize)>,
+    /// The constraint the last `insert_constraint` to fail ran into.
+    hit: (u32, u32),
 }
 
 enum Location {
@@ -357,6 +359,7 @@ impl Mesh {
     fn insert_constraint(&mut self, a: u32, b: u32, ext: impl Fn(u32) -> u32) -> Result<(), CdtError> {
         let err_cross = || CdtError::ConstraintsIntersect { a: ext(a), b: ext(b) };
         if let Some((t, i)) = self.has_edge(a, b) {
+            self.hit = (a, b);
             return self.mark(t, i, err_cross);
         }
         let (pa, pb) = (self.p(a), self.p(b));
@@ -402,6 +405,7 @@ impl Mesh {
                 .ok_or(CdtError::Internal("walk lost edge"))?;
             debug_assert_eq!(tc, t);
             if self.tris[tc as usize].c[ic] {
+                self.hit = (left, right);
                 return Err(err_cross());
             }
             crossed.push_back((left, right));
@@ -504,6 +508,87 @@ impl Mesh {
             }
         }
         Ok(())
+    }
+
+    /// A boundary that crosses, overlaps and repeats itself, drawn in as it is: chords are cut where
+    /// they cross or pass through a point. Each chord's uses are counted, and one used an even
+    /// number of times bounds nothing (a slit, a loop there and back).
+    fn insert_tangled(&mut self, chords: Vec<(u32, u32)>) -> Result<(), CdtError> {
+        let mut uses: std::collections::BTreeMap<(u32, u32), u32> = std::collections::BTreeMap::new();
+        let key = |a: u32, b: u32| (a.min(b), a.max(b));
+        let mut budget = 64 * chords.len() + 1024;
+        let mut todo = chords;
+        todo.reverse();
+        while let Some((a, b)) = todo.pop() {
+            if a == b {
+                continue;
+            }
+            budget = budget
+                .checked_sub(1)
+                .ok_or(CdtError::Internal("a tangled boundary did not untangle"))?;
+            match self.insert_constraint(a, b, |v| v) {
+                Ok(()) => *uses.entry(key(a, b)).or_insert(0) += 1,
+                Err(CdtError::ConstraintThroughPoint { point, .. }) => {
+                    todo.push((point, b));
+                    todo.push((a, point));
+                }
+                // the same chord again
+                Err(CdtError::ConstraintsIntersect { .. }) if key(self.hit.0, self.hit.1) == key(a, b) => {
+                    *uses.entry(key(a, b)).or_insert(0) += 1;
+                }
+                Err(CdtError::ConstraintsIntersect { .. }) => {
+                    let (l, r) = self.hit;
+                    let (pa, pb, pl, pr) = (self.p(a), self.p(b), self.p(l), self.p(r));
+                    let (dl, dr) = (orient2d(pa, pb, pl), orient2d(pa, pb, pr));
+                    let x = pl.lerp(pr, dl / (dl - dr));
+                    let (t, i) = self
+                        .has_edge(l, r)
+                        .ok_or(CdtError::Internal("crossed edge vanished"))?;
+                    self.unmark(t, i);
+                    let n = uses.remove(&key(l, r)).unwrap_or(1);
+                    let loc = self
+                        .locate(x)
+                        .ok_or(CdtError::Internal("point location failed"))?;
+                    let w = match loc {
+                        // on a corner, to the last bit: the chords go through it
+                        Location::Vertex(w) => w,
+                        loc => {
+                            let w = self.pts.len() as u32;
+                            self.pts.push(x);
+                            self.vtri.push(0);
+                            self.insert(w, loc);
+                            w
+                        }
+                    };
+                    todo.push((w, b));
+                    todo.push((a, w));
+                    for _ in 0..n {
+                        todo.push((w, r));
+                        todo.push((l, w));
+                    }
+                }
+                Err(e) => return Err(e),
+            }
+        }
+        for (&(a, b), &n) in &uses {
+            if n % 2 == 0 {
+                let (t, i) = self
+                    .has_edge(a, b)
+                    .ok_or(CdtError::Internal("a boundary chord vanished"))?;
+                self.unmark(t, i);
+            }
+        }
+        Ok(())
+    }
+
+    fn unmark(&mut self, t: u32, i: usize) {
+        self.tris[t as usize].c[i] = false;
+        let u = self.tris[t as usize].n[i];
+        if u != NONE
+            && let Some(k) = (0..3).find(|&k| self.tris[u as usize].n[k] == t)
+        {
+            self.tris[u as usize].c[k] = false;
+        }
     }
 
     /// Inserts an interior point where it lands inside the region, clear of the boundary and of
@@ -732,6 +817,19 @@ pub fn triangulate_refined(
     interior: &[Point2],
     refine: Option<&dyn Refine>,
 ) -> Result<Triangulation, CdtError> {
+    triangulate_within(points, loops, interior, refine, false)
+}
+
+/// `triangulate_refined`. `tangled`: a boundary that crosses or repeats itself or has two points in one place is no error.
+/// The region is what an odd number of chords parts from the outside, its chords cut where they
+/// cross, with a point there (after the input points) that the face's neighbours do not have.
+pub fn triangulate_within(
+    points: &[Point2],
+    loops: &[Vec<u32>],
+    interior: &[Point2],
+    refine: Option<&dyn Refine>,
+    tangled: bool,
+) -> Result<Triangulation, CdtError> {
     let n = points.len() as u32;
     for (i, p) in points.iter().enumerate() {
         if !(p.x.is_finite() && p.y.is_finite()) {
@@ -739,14 +837,14 @@ pub fn triangulate_refined(
         }
     }
     for (li, lp) in loops.iter().enumerate() {
-        if lp.len() < 3 {
+        if lp.len() < 3 && !tangled {
             return Err(CdtError::BadLoop { loop_index: li });
         }
         for k in 0..lp.len() {
             if lp[k] >= n {
                 return Err(CdtError::BadIndex { index: lp[k] });
             }
-            if lp[k] == lp[(k + 1) % lp.len()] {
+            if lp[k] == lp[(k + 1) % lp.len()] && !tangled {
                 return Err(CdtError::BadLoop { loop_index: li });
             }
         }
@@ -791,8 +889,11 @@ pub fn triangulate_refined(
         last: 0,
         inside: Vec::new(),
         stack: Vec::new(),
+        hit: (NONE, NONE),
     };
     let ext = |v: u32| v.wrapping_sub(SUPER);
+    // a tangled boundary's second point in one place stands for the first
+    let mut same_as: Vec<(u32, u32)> = Vec::new();
 
     mesh.pts.extend_from_slice(points);
     mesh.vtri.resize(mesh.pts.len(), 0);
@@ -803,6 +904,7 @@ pub fn triangulate_refined(
             .locate(p)
             .ok_or(CdtError::Internal("point location failed"))?
         {
+            Location::Vertex(w) if tangled => same_as.push((v, w)),
             Location::Vertex(w) => {
                 return Err(CdtError::DuplicatePoint {
                     a: ext(w),
@@ -812,11 +914,25 @@ pub fn triangulate_refined(
             loc => mesh.insert(v, loc),
         }
     }
-    for lp in loops {
-        for k in 0..lp.len() {
-            let a = lp[k] + SUPER;
-            let b = lp[(k + 1) % lp.len()] + SUPER;
-            mesh.insert_constraint(a, b, ext)?;
+    if tangled {
+        same_as.sort_unstable();
+        let one = |v: u32| {
+            same_as
+                .binary_search_by_key(&v, |x| x.0)
+                .map_or(v, |k| same_as[k].1)
+        };
+        let chords = loops
+            .iter()
+            .flat_map(|lp| (0..lp.len()).map(|k| (one(lp[k] + SUPER), one(lp[(k + 1) % lp.len()] + SUPER))))
+            .collect();
+        mesh.insert_tangled(chords)?;
+    } else {
+        for lp in loops {
+            for k in 0..lp.len() {
+                let a = lp[k] + SUPER;
+                let b = lp[(k + 1) % lp.len()] + SUPER;
+                mesh.insert_constraint(a, b, ext)?;
+            }
         }
     }
 
@@ -860,6 +976,9 @@ pub fn triangulate_refined(
         for _ in 0..200 {
             if mesh.pts.len() > budget {
                 return Err(CdtError::Internal("refinement did not settle"));
+            }
+            if forge_geom::budget::over() {
+                return Err(CdtError::Internal("refinement would take too long"));
             }
             mids.clear();
             let first_new = mesh.pts.len() as u32;
@@ -967,6 +1086,82 @@ mod tests {
     use super::*;
     use forge_math::dmath;
     use forge_math::rng::Rng;
+
+    fn tangled(pts: &[(f64, f64)], loops: &[&[u32]]) -> f64 {
+        let points: Vec<Point2> = pts.iter().map(|p| Point2::new(p.0, p.1)).collect();
+        let loops: Vec<Vec<u32>> = loops.iter().map(|l| l.to_vec()).collect();
+        let t = triangulate_within(&points, &loops, &[], None, true).unwrap();
+        t.triangles
+            .iter()
+            .map(|v| {
+                let [a, b, c] = v.map(|i| t.points[i as usize]);
+                assert!(orient2d(a, b, c) > 0.0);
+                0.5 * (b - a).cross(c - a)
+            })
+            .sum()
+    }
+
+    #[test]
+    fn a_tangled_boundary_is_what_an_odd_number_of_chords_parts() {
+        let close = |a: f64, b: f64| assert!((a - b).abs() < 1e-12, "{a} {b}");
+        // a bow tie: two triangles of a quarter each
+        close(
+            tangled(&[(0., 0.), (1., 1.), (1., 0.), (0., 1.)], &[&[0, 1, 2, 3]]),
+            0.5,
+        );
+        // a square with a slit in and out
+        close(
+            tangled(
+                &[(0., 0.), (2., 0.), (2., 2.), (1., 2.), (1., 1.), (0., 2.)],
+                &[&[0, 1, 2, 3, 4, 3, 5]],
+            ),
+            4.0,
+        );
+        // a loop there and back bounds nothing, whatever else there is
+        let square = [(0., 0.), (1., 0.), (1., 1.), (0., 1.), (0.2, 0.2), (0.8, 0.8)];
+        close(tangled(&square, &[&[0, 1, 2, 3], &[4, 5]]), 1.0);
+        // a corner of a hole on the boundary, and a chord through a point
+        close(
+            tangled(
+                &[
+                    (0., 0.),
+                    (2., 0.),
+                    (2., 2.),
+                    (0., 2.),
+                    (1., 0.),
+                    (1.5, 1.),
+                    (0.5, 1.),
+                ],
+                &[&[0, 1, 2, 3], &[4, 5, 6]],
+            ),
+            3.5,
+        );
+        // two points in one place
+        close(
+            tangled(
+                &[(0., 0.), (1., 0.), (1., 1.), (1., 1.), (0., 1.)],
+                &[&[0, 1, 2, 3, 4]],
+            ),
+            1.0,
+        );
+        // a hole out past the boundary, overlapped by half
+        close(
+            tangled(
+                &[
+                    (0., 0.),
+                    (2., 0.),
+                    (2., 2.),
+                    (0., 2.),
+                    (1., 0.5),
+                    (3., 0.5),
+                    (3., 1.5),
+                    (1., 1.5),
+                ],
+                &[&[0, 1, 2, 3], &[4, 5, 6, 7]],
+            ),
+            4.0 - 1.0 + 1.0,
+        );
+    }
 
     fn shoelace(pts: &[Point2], lp: &[u32]) -> f64 {
         (0..lp.len())

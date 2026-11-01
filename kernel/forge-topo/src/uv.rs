@@ -472,19 +472,29 @@ pub fn loops_cross(loops: &[UvLoop]) -> bool {
     first_cross(loops, &|_, _| true)
 }
 
-/// `loops_cross`, believing only a crossing of two real chords at more than about 6 degrees. The chords of two
-/// curves touching, tangent, cross beside the touch however finely they are drawn, at about the angle each turns by per
-/// chord. A chord whose middle on the surface `at` is further from its ends than they are apart is no piece of boundary:
-/// a loop drawn a whole turn of a screw off, where it joins, its ends one point.
-pub fn loops_cross_steeply(loops: &[UvLoop], at: &dyn Fn(Point2) -> Point3) -> bool {
+/// `loops_cross`, believing only a crossing of two real chords at more than about 6 degrees, deeper than
+/// `band`: an end of each chord further than that past the other. The chords of two curves touching, tangent,
+/// cross beside the touch however finely they are drawn, at about the angle each turns in a chord; a corner of
+/// one loop on another's line is on it, to rounding; and edges a file gives within their tolerance cross by no
+/// more than that. A chord whose middle on the surface `at` is further from its ends than they are apart is no
+/// piece of a loop drawn a whole turn of a screw off, where it joins, its ends one point.
+pub fn loops_cross_steeply(loops: &[UvLoop], at: &dyn Fn(Point2) -> Point3, band: f64) -> bool {
     let real = |s: (Point2, Point2)| {
         let (p, q) = (at(s.0), at(s.1));
         at(s.0.lerp(s.1, 0.5)).distance(p.lerp(q, 0.5)) <= p.distance(q)
     };
+    let off = |p: Point3, a: Point3, b: Point3| {
+        let w = b - a;
+        let t = ((p - a).dot(w) / w.dot(w)).clamp(0.0, 1.0);
+        (a + w * t).distance(p)
+    };
     first_cross(loops, &|s, t| {
         let (u, v) = (s.1 - s.0, t.1 - t.0);
         let cross = u.x * v.y - u.y * v.x;
-        cross * cross >= 0.01 * (u.x * u.x + u.y * u.y) * (v.x * v.x + v.y * v.y) && real(s) && real(t)
+        cross * cross >= 0.01 * (u.x * u.x + u.y * u.y) * (v.x * v.x + v.y * v.y) && real(s) && real(t) && {
+            let [a, b, c, d] = [s.0, s.1, t.0, t.1].map(at);
+            off(a, c, d).min(off(b, c, d)).min(off(c, a, b)).min(off(d, a, b)) > band
+        }
     })
 }
 
@@ -523,4 +533,29 @@ fn first_cross(loops: &[UvLoop], counts: &dyn Fn((Point2, Point2), (Point2, Poin
         }
     }
     false
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// A corner on another loop's line to rounding, or past it by less than the band, is no crossing;
+    /// past it by more is.
+    #[test]
+    fn a_crossing_is_believed_only_past_the_band() {
+        let lp = |pts: &[(f64, f64)]| UvLoop {
+            points: pts.iter().map(|p| Point2::new(p.0, p.1)).collect(),
+            sample_of: Vec::new(),
+            coedge_first: Vec::new(),
+            coedges: Vec::new(),
+        };
+        let at = |p: Point2| Point3::new(p.x, p.y, 0.0);
+        let outer = [(0.0, 0.0), (4.0, 0.0), (4.0, 4.0), (0.0, 4.0)];
+        let hole = |d: f64| [(1.0, 2.0), (3.0, 2.0), (2.0, 4.0 + d)];
+        for (d, crosses) in [(1e-15, false), (1e-6, false), (1e-3, true)] {
+            let loops = [lp(&outer), lp(&hole(d))];
+            assert!(loops_cross(&loops), "{d}");
+            assert_eq!(loops_cross_steeply(&loops, &at, 1e-5), crosses, "{d}");
+        }
+    }
 }

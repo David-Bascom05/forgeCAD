@@ -5,7 +5,7 @@ use crate::render::Entity;
 use crate::scene::Scene;
 use forge_agent::measure as kernel;
 use forge_agent::select::Ent;
-use forge_mesh::{Quality, TriMesh, tessellate};
+use forge_mesh::{Quality, TriMesh};
 use forge_topo::{Body, EdgeId, FaceId, VertexId};
 use std::collections::HashMap;
 use std::sync::mpsc::{Receiver, Sender, channel};
@@ -64,7 +64,8 @@ impl Measurer {
                 }
                 let got = bodies.entry(a.part.clone()).or_insert_with(|| {
                     let body = crate::load::body(&a.part)?;
-                    let mesh = tessellate(&body, &Quality::default()).map_err(|e| format!("{e:?}"))?;
+                    let mesh = forge_mesh::tessellate::tessellate_tolerant(&body, &Quality::default())
+                        .map_err(|e| format!("{e:?}"))?;
                     Ok((body, mesh))
                 });
                 let text = match got {
@@ -135,7 +136,7 @@ mod tests {
         let _ = body;
         let m = forge_agent::bench::model("extrude 20 rect -50 -30 100 60");
         let body = m.body().unwrap().clone();
-        let mesh = tessellate(&body, &Quality::default()).unwrap();
+        let mesh = forge_mesh::tessellate(&body, &Quality::default()).unwrap();
         // the top face
         let top = body
             .face_ids()

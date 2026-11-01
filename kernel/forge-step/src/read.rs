@@ -10,7 +10,7 @@ use forge_geom::{
     Circle, Cone, Curve, CurveGeom, Cylinder, Ellipse, Hyperbola, Line, Parabola, Plane, Sphere, Surface,
     Torus,
 };
-use forge_math::{Frame, Interval, Point3, UnitVec3, Vec3, dmath};
+use forge_math::{Box3, Frame, Interval, Point3, UnitVec3, Vec3, dmath};
 use forge_topo::{Body, Name};
 use std::collections::BTreeMap;
 
@@ -1186,16 +1186,28 @@ fn record_deviations(body: &mut Body, stats: &mut Stats) {
     }
 }
 
+/// How far healing may move an edge: from a file's stated uncertainty, but never much of the part.
+/// A normalised part keeps the figure of a far larger original, as much as a tenth of its size, and
+/// an edge then went to where two other planes meet, further off than it was long.
+fn heal_limit(uncertainty: f64, size: f64) -> f64 {
+    (uncertainty.max(1e-3) * 20.0).min(2e-3 * size)
+}
+
+const TOO_LONG: &str = "its surfaces would take too long to measure";
+
 /// A body whose integrals and mesh disagree is refused: on a file's geometry the integrals can go
 /// wrong with nothing to show for it (`research/step/README.md`). So is one that cannot be meshed
-/// even coarsely, with nothing to check it by and nothing to show. Where the integrals cannot
-/// answer they say so when asked.
+/// even coarsely, with nothing to check it by and nothing to show, and so is one whose integrals
+/// cannot answer.
 fn measures_agree(body: &Body) -> Result<(), String> {
-    let Ok(m) = forge_topo::mass::mass_rel(body, 1e-6) else {
-        return Ok(());
-    };
+    let m = forge_topo::mass::mass_rel(body, 1e-6);
+    if forge_geom::budget::over() {
+        return Err(TOO_LONG.into());
+    }
+    // nothing to check it by, or to tell its mass by: no pass
+    let m = m.map_err(|e| format!("its volume cannot be worked out: {}", e.why))?;
     let mesh_at = |chord: f64| {
-        forge_mesh::tessellate(
+        forge_mesh::tessellate::tessellate_tolerant(
             body,
             &forge_mesh::Quality {
                 chord,
@@ -1208,6 +1220,7 @@ fn measures_agree(body: &Body) -> Result<(), String> {
         Ok(x) => (x, 5e-4 * diagonal),
         Err(_) => match mesh_at(5e-3 * diagonal) {
             Ok(x) => (x, 5e-3 * diagonal),
+            Err(_) if forge_geom::budget::over() => return Err(TOO_LONG.into()),
             Err(e) => return Err(format!("it cannot be meshed: {e:?}")),
         },
     };
@@ -1346,8 +1359,11 @@ fn read_file(text: &[u8], lim: &Limits, only_measure: bool) -> Result<Imported, 
                 if only_measure {
                     continue;
                 }
+                // healing, then the check, on one budget
+                forge_geom::budget::begin(lim.max_evals);
                 proto.split_closed_splines();
                 if let Err(why) = proto.add_seams() {
+                    forge_geom::budget::end();
                     refusals.push(Refusal {
                         entity: id,
                         kind: f.name(&r).to_string(),
@@ -1355,12 +1371,16 @@ fn read_file(text: &[u8], lim: &Limits, only_measure: bool) -> Result<Imported, 
                     });
                     continue;
                 }
-                proto.tighten(u.uncertainty.max(1e-3) * 20.0);
+                let size = Box3::from_points(proto.verts.iter().map(|v| v.0)).diagonal();
+                proto.tighten(heal_limit(u.uncertainty, size));
                 stats.tangent_off += proto.tangent;
+                proto.split_fans();
                 proto.outer_first();
                 let mut body = proto.into_body();
                 record_deviations(&mut body, &mut stats);
-                if let Err(why) = measures_agree(&body) {
+                let agree = measures_agree(&body);
+                forge_geom::budget::end();
+                if let Err(why) = agree {
                     refusals.push(Refusal {
                         entity: id,
                         kind: f.name(&r).to_string(),
@@ -1392,6 +1412,13 @@ fn read_file(text: &[u8], lim: &Limits, only_measure: bool) -> Result<Imported, 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn healing_never_moves_an_edge_far_on_a_small_part() {
+        assert_eq!(heal_limit(0.005, 1.0), 0.002);
+        assert_eq!(heal_limit(0.005, 1000.0), 0.1);
+        assert_eq!(heal_limit(1e-7, 1000.0), 0.02);
+    }
 
     /// A rational curve's net is the curve's: its points each their own, as the weights expect.
     #[test]

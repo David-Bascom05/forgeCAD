@@ -299,7 +299,8 @@ pub fn fit_surface(s: &Surface, uv: Box2, tol: f64, keep: &FaceMask) -> SurfaceF
             let j = vs.partition_point(|&x| x <= q.y).clamp(1, vs.len() - 1) - 1;
             let (m, k) = (us[i + 1] - us[i], vs[j + 1] - vs[j]);
             let (a, b, c, d) = (&net[i][j], &net[i + 1][j], &net[i][j + 1], &net[i + 1][j + 1]);
-            let e = off(patch(a, b, c, d, m, k, (q.x - us[i]) / m, (q.y - vs[j]) / k), q);
+            // here by its parameters: a value elsewhere on the surface leaves the loop off the fit
+            let e = patch(a, b, c, d, m, k, (q.x - us[i]) / m, (q.y - vs[j]) / k).distance(s.eval(q));
             worst = worst.max(e);
             if e > 0.5 * tol {
                 if a.p.distance(b.p) >= a.p.distance(c.p) {

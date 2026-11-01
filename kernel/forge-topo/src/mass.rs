@@ -153,7 +153,8 @@ pub fn mass_rel(body: &Body, rel: f64) -> Result<MassProps, MassError> {
     }
     // the rules did not settle: what they give is off by that much, and a number here reads as measured.
     // (Real parts' bound stays under 1e-4 of the volume; p09444's blend said 10%, a wrong volume by .6%.)
-    if e[0] > 1e-3 * vol.abs() {
+    // (A file's bound holds the gaps it leaves between edges and faces, and an import's mesh checks it.)
+    if e[0] > 1e-3 * vol.abs() && !body.from_file {
         return Err(MassError {
             face: loosest.0,
             why: "the face's integral did not settle",
@@ -478,6 +479,9 @@ enum Way<'a> {
         /// Where one of the surfaces is procedural (0: a, 1: b), the point is solved in its
         /// parameters (its own implicit value is a search), from the last point's.
         on: Option<(usize, std::cell::Cell<Option<Point2>>)>,
+        /// Where each surface's nearest point last was: without a start, a file's spline surface
+        /// searches itself whole for every one.
+        near: [std::cell::Cell<Option<Point2>>; 2],
     },
 }
 
@@ -548,11 +552,22 @@ impl Way<'_> {
     fn chord_point(&self, s: f64) -> Point3 {
         match self {
             Way::Curve(c) => c.eval(s),
-            Way::Chord { c, anchor, dir, .. } => {
+            Way::Chord {
+                c, anchor, dir, near, ..
+            } => {
                 let mut p = self.chain_at(s).0;
                 let tight = 4.0 * f64::EPSILON * (1.0 + (p - Point3::ORIGIN).abs_max());
+                let value = |x: &Surface, at: &std::cell::Cell<Option<Point2>>, p: Point3| {
+                    if let Surface::Procedural(pr) = x
+                        && let Some((f, g, uv)) = pr.value_near(p, at.get())
+                    {
+                        at.set(Some(uv));
+                        return (f, g);
+                    }
+                    x.implicit_gradient(p)
+                };
                 for _ in 0..8 {
-                    let ((fa, ga), (fb, gb)) = (c.a.implicit_gradient(p), c.b.implicit_gradient(p));
+                    let ((fa, ga), (fb, gb)) = (value(&c.a, &near[0], p), value(&c.b, &near[1], p));
                     let fs = dir.dot(p - *anchor) - s;
                     if fa.abs().max(fb.abs()).max(fs.abs()) <= tight {
                         break;
@@ -690,6 +705,20 @@ fn foot(s: &Surface, p: Point3, near: Option<Point2>) -> (Point2, f64) {
                 // within the surface's own parameters: past them a surface may meet itself again
                 // (a screw's straight profile run on along its axis)
                 let dom = s.domain();
+                // a surface that stops at its ends (a file's spline, held at its last point)
+                // leaves a last step past them that means nothing: a loop's parameters there
+                // would integrate what is not there, 6% of a face off a revolved spline's end
+                let clamp = |x: f64, d: forge_geom::Domain1| {
+                    if d.period.is_some() {
+                        x
+                    } else {
+                        x.clamp(d.lo, d.hi)
+                    }
+                };
+                let held = Point2::new(clamp(uv.x, dom.u), clamp(uv.y, dom.v));
+                if held != uv && s.eval(held) == s.eval(uv) {
+                    uv = held;
+                }
                 let inside = [(uv.x, dom.u), (uv.y, dom.v)].iter().all(|&(x, d)| {
                     let slack = 0.1 * (d.hi - d.lo);
                     d.period.is_some() || !slack.is_finite() || (d.lo - slack..=d.hi + slack).contains(&x)
@@ -854,6 +883,10 @@ fn refine<'a>(
     rev: bool,
     out: &mut Vec<Piece<'a>>,
 ) {
+    // `face_integrals` says so, once back
+    if forge_geom::budget::over() {
+        return;
+    }
     let mut push = |pc: Piece<'a>, seed: &mut Option<Point2>| {
         *seed = Some(uv(if rev { &pc.n[0] } else { &pc.n[pc.n.len() - 1] }));
         out.push(pc);
@@ -1016,6 +1049,7 @@ fn coedge_pieces<'a>(
                     dir,
                     knots,
                     on,
+                    near: Default::default(),
                 });
                 ways.push((way, 0.0, s1, false));
                 t0 = t1;
@@ -1058,6 +1092,9 @@ fn coedge_pieces<'a>(
     let mut out = Vec::new();
     for (way, a, b, whole) in ways {
         refine(s, &way, (a, b), whole, rel, 8, seed, rev, &mut out);
+    }
+    if forge_geom::budget::over() {
+        return Err(TOO_LONG);
     }
     if rev {
         for p in &mut out {
@@ -1992,6 +2029,8 @@ fn integrate(cx: &Ctx, pc: &Piece, u: &mut Acc, last: bool) -> Option<()> {
     Some(())
 }
 
+const TOO_LONG: &str = "it would take too long to integrate";
+
 /// A face's integrals (flux of each moment's field, then area) and their error bounds.
 /// `size` sets the scale below which a piece's share is negligible.
 fn face_integrals(body: &Body, f: FaceId, c: Point3, size: f64, rel: f64) -> Result<(F, F), &'static str> {
@@ -2007,6 +2046,9 @@ fn face_integrals(body: &Body, f: FaceId, c: Point3, size: f64, rel: f64) -> Res
         .iter()
         .map(|&l| trace_loop(body, s, l, rel, sigma))
         .collect::<Result<_, _>>()?;
+    if forge_geom::budget::over() {
+        return Err(TOO_LONG);
+    }
     let per = periods(s);
     let wind = |a: usize| loops.iter().map(|l| l.wind[a]).sum::<i64>();
     let winds = |a: usize| loops.iter().any(|l| l.wind[a] != 0);
@@ -2218,6 +2260,9 @@ fn face_integrals(body: &Body, f: FaceId, c: Point3, size: f64, rel: f64) -> Res
                 for pc in run {
                     let mut work = vec![(8u32, None)];
                     while let Some((depth, piece)) = work.pop() {
+                        if forge_geom::budget::over() {
+                            return Err(TOO_LONG);
+                        }
                         let pc = piece.as_ref().unwrap_or(pc);
                         // made finer while the face's budget lasts
                         match integrate(&cx, pc, &mut u, depth == 0 || cx.panels.get() == 0) {
@@ -2438,6 +2483,61 @@ fn eigen(m: [[f64; 3]; 3]) -> ([f64; 3], [Vec3; 3]) {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// A cylinder of a file: past its ends it stays at them.
+    #[derive(Debug)]
+    struct Held;
+    impl forge_geom::surface::Procedural for Held {
+        fn deriv(&self, uv: Point2) -> forge_geom::surface::SurfDeriv {
+            let (s, c) = dmath::sin_cos(uv.x);
+            forge_geom::surface::SurfDeriv {
+                p: Point3::new(c, s, uv.y.clamp(0.0, 1.0)),
+                du: Vec3::new(-s, c, 0.0),
+                dv: Vec3::new(0.0, 0.0, 1.0),
+                duu: Vec3::new(-c, -s, 0.0),
+                duv: Vec3::ZERO,
+                dvv: Vec3::ZERO,
+            }
+        }
+        fn domain(&self) -> forge_geom::Domain2 {
+            let d = |hi| forge_geom::Domain1 {
+                lo: 0.0,
+                hi,
+                period: None,
+            };
+            forge_geom::Domain2 { u: d(6.0), v: d(1.0) }
+        }
+        fn project(&self, _: Point3) -> Point2 {
+            Point2::new(0.5, 0.5)
+        }
+        fn bbox(&self, _: forge_math::Box2) -> forge_math::Box3 {
+            forge_math::Box3::EMPTY
+        }
+        fn implicit(&self, _: Point3) -> f64 {
+            0.0
+        }
+        fn gradient(&self, _: Point3) -> Vec3 {
+            Vec3::X
+        }
+        fn transformed(&self, _: &forge_math::Frame) -> forge_geom::surface::Proc {
+            forge_geom::surface::Proc(std::sync::Arc::new(Held))
+        }
+        fn mesh_radius(&self) -> f64 {
+            1.0
+        }
+    }
+
+    /// A point just past where a surface stops has its foot at the end, not where Newton's last
+    /// step went: a loop out there integrated what is not there.
+    #[test]
+    fn a_foot_stays_on_a_surface_that_stops() {
+        let s = Surface::Procedural(forge_geom::surface::Proc(std::sync::Arc::new(Held)));
+        let (uv, gap) = foot(&s, Point3::new(1.0, 0.0, 1.0), Some(Point2::new(0.0, 0.7)));
+        assert!(uv.y <= 1.0, "{uv:?}");
+        assert!(gap <= 1e-9, "{gap}");
+        let (uv, _) = foot(&s, Point3::new(1.0, 0.0, 1.0 + 1e-6), Some(Point2::new(0.0, 0.7)));
+        assert!(uv.y <= 1.0, "{uv:?}");
+    }
 
     #[test]
     fn fejer_rules_integrate_and_differentiate() {

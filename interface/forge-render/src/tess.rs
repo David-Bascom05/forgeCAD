@@ -4,7 +4,8 @@
 use crate::mesh::{ALWAYS, EdgeRange, FaceRange, Lod, PartMesh, SEGMENT, VERTEX};
 use forge_geom::{CurveGeom, SurfaceGeom};
 use forge_math::{Point3, Vec3};
-use forge_mesh::{Quality, TessError, tessellate};
+use forge_mesh::tessellate::tessellate_tolerant;
+use forge_mesh::{Quality, TessError};
 use forge_topo::{Body, EdgeId, FaceId};
 use std::collections::HashMap;
 
@@ -132,7 +133,7 @@ pub fn build_lod(body: &Body, q: &Quality) -> Result<Lod, TessError> {
     } else {
         body
     };
-    let m = tessellate(body, q)?;
+    let m = tessellate_tolerant(body, q)?;
 
     // triangles by face
     let nf = body.faces.len();
@@ -425,7 +426,7 @@ mod tests {
     fn every_triangle_keeps_its_face_and_every_edge_its_polyline() {
         let body = crank();
         let q = Quality::default();
-        let m = tessellate(&body, &q).unwrap();
+        let m = forge_mesh::tessellate(&body, &q).unwrap();
         let l = build_lod(&body, &q).unwrap();
         assert_eq!(l.tris() as usize, m.triangles.len());
         let mut want = m.face_of.clone();

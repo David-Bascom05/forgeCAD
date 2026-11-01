@@ -712,6 +712,16 @@ fn check_sides_of(body: &Body, faces: &[FaceId], known: Option<&Known>, out: &mu
             && loops_cross_steeply(
                 fine.get_or_init(|| face_uv_loops_with(body, f, |e| 8 * default_segments(e))),
                 &|uv| surface.eval(uv),
+                // a file's edges meet within their tolerance; ours are to meet
+                if body.from_file {
+                    loops
+                        .iter()
+                        .flat_map(|l| l.coedges.iter())
+                        .map(|&c| body.edge(body.coedge(c).edge).tol)
+                        .fold(tol::LINEAR, f64::max)
+                } else {
+                    0.0
+                },
             )
         {
             out.push(Problem::LoopsCross { face: f });

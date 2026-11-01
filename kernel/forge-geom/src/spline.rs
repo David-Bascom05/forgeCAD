@@ -683,6 +683,10 @@ impl Spline {
     pub fn derivative_bounds(&self, range: Interval) -> [f64; 3] {
         let mut out = [0.0f64; 3];
         for (i, s0, s1) in self.over(range) {
+            // (a range ending past a break by rounding: nothing there, and a scale of 1 / 0)
+            if s1 <= s0 {
+                continue;
+            }
             let h = self.breaks[i + 1] - self.breaks[i];
             let k = s1 - s0;
             let p = self.degree;

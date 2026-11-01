@@ -96,6 +96,39 @@ fn a_face_reaching_its_axis_meshes_or_says_why() {
     }
 }
 
+/// A check that would cost more than a file's solid is allowed stops and says so, in a mesh and in
+/// the integrals alike, instead of running on.
+#[test]
+fn a_solid_past_its_budget_is_refused_by_name() {
+    let tiny = Limits {
+        max_evals: 100,
+        ..Limits::default()
+    };
+    let got = import(lens().as_bytes(), &tiny).expect("reads");
+    assert!(got.solids.is_empty());
+    assert!(got.refusals[0].why.contains("too long"), "{:?}", got.refusals);
+    // and with a budget it can meet, it reads
+    let fine = import(lens().as_bytes(), &Limits::default()).expect("reads");
+    assert_eq!(fine.solids.len(), 1);
+    assert!(!forge_geom::budget::over());
+
+    let body = &fine.solids[0].body;
+    forge_geom::budget::begin(100);
+    let mass = forge_topo::mass::mass_rel(body, 1e-6);
+    forge_geom::budget::begin(100);
+    let mesh = tessellate(body, &Quality::default());
+    forge_geom::budget::end();
+    assert!(mass.is_err(), "{mass:?}");
+    assert!(mesh.is_err());
+    // wherever the budget runs out, an answer or an error, no panic
+    for k in 6..22 {
+        forge_geom::budget::begin(1 << k);
+        let _ = forge_topo::mass::mass_rel(body, 1e-6);
+        let _ = tessellate(body, &Quality::default());
+    }
+    forge_geom::budget::end();
+}
+
 /// What an exported file says of its accuracy holds for its own edges and faces.
 #[test]
 fn an_export_states_what_it_holds_to() {
