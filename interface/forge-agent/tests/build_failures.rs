@@ -894,10 +894,11 @@ extrude add 2 at 0 0 50 rect 0 0 10 10
     assert_eq!(nary.len(), 1);
 }
 
-/// A blend's integral that does not settle says so: its bound was 10% of the volume, the volume .6% off
-/// and returned as measured (fuzz p09444).
+/// A cut nearly tangent to a blend: a step of the chord walk landed on the far side of the tube, the
+/// face's integral never settled, and its bound said 10% (fuzz p09444). This one settles on what the
+/// mesh says.
 #[test]
-fn an_integral_that_did_not_settle_is_no_volume() {
+fn a_cut_nearly_tangent_to_a_blend_has_a_volume() {
     let m = Model::new(
         "body: extrude 33.8538 z 0 0 1 x 1 0 0 at 0 0 0 circle 0 0 18.6873
 boss: extrude add 34.7602 z -0.372619194143 -0.813273460032 -0.446924171828 x 0 -0.481607449972 0.876387051554 at -4.34617495356 1.52942340372 14.4425234406 circle 0 0 10.5378
@@ -906,10 +907,15 @@ c0: extrude cut 43.8377 z -0.234138759071 -0.811155896008 0.535915248777 x -0 0.
 c1: extrude cut 87.6754 z -0.927984340469 0.326558636907 0.179456179902 x -0.18986516855 0 -0.981810174001 at 19.4999129356 -20.4673606945 -2.5085832624 circle 1.02307 -1.47558 3.04561528
 ",
     );
-    let b = m.body().expect("builds");
-    if let Ok(p) = forge_topo::mass::mass(&b.compact()) {
-        assert!(p.err[0] <= 1e-3 * p.volume.abs(), "{} +- {}", p.volume, p.err[0]);
-    }
+    let b = m.body().expect("builds").compact();
+    let p = forge_topo::mass::mass(&b).expect("a mass");
+    assert!(p.err[0] <= 1e-5 * p.volume, "{} +- {}", p.volume, p.err[0]);
+    let q = forge_mesh::Quality {
+        chord: 0.01,
+        ..forge_mesh::Quality::default()
+    };
+    let v = forge_mesh::tessellate(&b, &q).expect("mesh").volume();
+    assert!((p.volume - v).abs() <= 1e-3 * v, "{} vs the mesh's {v}", p.volume);
 }
 
 /// A cut that starts on a face and runs away from the part removes nothing: its face is still the

@@ -555,7 +555,8 @@ impl Way<'_> {
             Way::Chord {
                 c, anchor, dir, near, ..
             } => {
-                let mut p = self.chain_at(s).0;
+                let (start, reach) = self.chain_at(s);
+                let mut p = start;
                 let tight = 4.0 * f64::EPSILON * (1.0 + (p - Point3::ORIGIN).abs_max());
                 let value = |x: &Surface, at: &std::cell::Cell<Option<Point2>>, p: Point3| {
                     if let Surface::Procedural(pr) = x
@@ -578,7 +579,12 @@ impl Way<'_> {
                     if det.abs() <= 1e-14 {
                         break;
                     }
-                    p += (bc * -fa + ca * -fb + ab * -fs) / det;
+                    let step = (bc * -fa + ca * -fb + ab * -fs) / det;
+                    // nearly tangent, a step can land on the far side of a tube: the chain knows better
+                    if (p + step - start).length() > reach {
+                        break;
+                    }
+                    p += step;
                 }
                 p
             }
