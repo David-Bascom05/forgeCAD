@@ -744,3 +744,53 @@ fn a_law_over_a_chain_starts_at_its_lowest_free_end() {
     let d = vol("(edges near 50 40 0) (edges near 100 20 0)");
     assert_eq!(c.to_bits(), d.to_bits());
 }
+
+/// To the next face backwards, as forwards with the frame flipped: a floor, a wall and a roof, and a
+/// block from mid air down to the floor or up to the roof, both ways round.
+#[test]
+fn to_next_backwards() {
+    let base = "extrude 10 rect -30 -30 60 60
+extrude add 50 at 0 0 10 rect -30 -30 5 60
+extrude add 10 at 0 0 50 rect -30 -30 60 60
+";
+    let full = 60.0 * 60.0 * 10.0 * 2.0 + 5.0 * 60.0 * 40.0;
+    let back = builds(&format!(
+        "{base}extrude next back xy at 0 0 25 rect -5 -5 10 10\n"
+    ));
+    let flip = builds(&format!("{base}extrude next -xy at 0 0 25 rect -5 -5 10 10\n"));
+    assert!((back - flip).abs() < 1e-6 * back, "{back} {flip}");
+    assert!((back - (full + 100.0 * 15.0)).abs() < 1e-3 * back, "{back}");
+    let up = builds(&format!("{base}extrude next xy at 0 0 25 rect -5 -5 10 10\n"));
+    assert!((up - (full + 100.0 * 25.0)).abs() < 1e-3 * up, "{up}");
+    // a cut from inside, and a slanted roof over it
+    let cut = builds(&format!(
+        "{base}extrude cut next back xy at 0 0 5 rect -5 -5 10 10\n"
+    ));
+    assert!((cut - (full - 100.0 * 5.0)).abs() < 1e-3 * cut, "{cut}");
+}
+
+/// To the next face in a part of several bodies: of whichever body comes first along the rays.
+#[test]
+fn to_next_among_bodies() {
+    let m = Model::new(
+        "a: extrude new 10 rect -30 -30 60 60
+b: extrude new 10 at 0 0 40 rect -30 -30 60 60
+extrude add next xy at 0 0 10 rect -5 -5 10 10 in a
+",
+    );
+    assert!(m.error.is_none(), "{:?}", m.error.as_ref().map(|e| e.msg.clone()));
+    let part = Part {
+        features: m.features.clone(),
+    };
+    let total = |solids: Vec<forge_model::Solid>| -> f64 {
+        solids
+            .iter()
+            .map(|s| forge_topo::mass::mass(&s.body).unwrap().volume)
+            .sum()
+    };
+    let want = 2.0 * 36000.0 + 100.0 * 30.0;
+    let v = total(part.regenerate_solids().expect("seq"));
+    assert!((v - want).abs() < 1e-6 * want, "{v}");
+    let v = total(part.regenerate_nary_solids(1).expect("n-ary"));
+    assert!((v - want).abs() < 1e-6 * want, "{v}");
+}

@@ -1876,7 +1876,17 @@ fn tools(features: History<'_>, i: usize, build: bool) -> Result<Vec<Tool>, Rege
                 }
             };
             if let (true, Some(m)) = (build, next) {
-                let end = Name::feature(features.id(i)).with_str("end");
+                // what reaches the next face: backwards, the tool's start cap (its end is where the
+                // line's frame is)
+                let back = matches!(
+                    &features[i],
+                    Feature::Extrude {
+                        extent: Extent::ToNext { reverse: true },
+                        ..
+                    }
+                );
+                let cap = if back { "start" } else { "end" };
+                let end = Name::feature(features.id(i)).with_str(cap);
                 upto::verify_next(features, i, (&t.0, &t.2), &names, &[end], &m)?;
             }
             Ok(vec![t])

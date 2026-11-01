@@ -233,11 +233,6 @@ fn earlier(features: History<'_>, i: usize) -> Result<Vec<(usize, Shape, Op)>, R
         .iter()
         .rposition(crate::starts)
         .ok_or(bad(ExtentError::NoNextFace))?;
-    if crate::bodies::multi(&features[..i]) {
-        return Err(bad(ExtentError::Unsupported(
-            "the next face in a multi-body part",
-        )));
-    }
     let mut out = Vec::new();
     for k in start..i {
         out.extend(
@@ -272,6 +267,34 @@ fn next(
             found = Some(s);
         }
         let (s, material) = found.ok_or(bad(i)(ExtentError::NoNextFace))?;
+        return Ok((
+            s.clone(),
+            Next {
+                material,
+                surface: s,
+                tools: Vec::new(),
+                part: Some(std::sync::Arc::new(part)),
+            },
+        ));
+    }
+    if crate::bodies::multi(&features[..i]) {
+        // whichever body comes first along the rays; the one holding that face is what it is proved on
+        let solids = crate::bodies::sequential(features.upto(i))?;
+        let bodies: Vec<&forge_topo::Body> = solids.iter().map(|s| &s.body).collect();
+        let mut found: Option<(Surface, bool)> = None;
+        for &p in from {
+            let s = crate::upto::next_face_among(&bodies, p, d).map_err(bad(i))?;
+            if found.as_ref().is_some_and(|f| *f != s) {
+                return Err(bad(i)(ExtentError::Ambiguous));
+            }
+            found = Some(s);
+        }
+        let (s, material) = found.ok_or(bad(i)(ExtentError::NoNextFace))?;
+        let part = bodies
+            .iter()
+            .find(|b| b.face_ids().any(|f| b.face(f).surface == s))
+            .map(|b| crate::finish((*b).clone()))
+            .ok_or(bad(i)(ExtentError::NoNextFace))?;
         return Ok((
             s.clone(),
             Next {

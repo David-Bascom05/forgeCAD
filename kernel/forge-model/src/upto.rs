@@ -1152,6 +1152,44 @@ pub(crate) fn next_face_of(part: &Body, o: Point3, d: UnitVec3) -> Result<(Surfa
     })
 }
 
+/// `next_face_of` over several bodies: in any of them counts as in the part.
+pub(crate) fn next_face_among(
+    parts: &[&Body],
+    o: Point3,
+    d: UnitVec3,
+) -> Result<(Surface, bool), ExtentError> {
+    let ixs: Vec<forge_bool::Index> = parts.iter().map(|b| forge_bool::Index::new(b)).collect();
+    let line = forge_geom::Line::new(o, d);
+    let mut cand = Vec::new();
+    for (part, ix) in parts.iter().zip(&ixs) {
+        for f in part.face_ids() {
+            if !ray_meets(&ix.face_box(f), o, d.get()) {
+                continue;
+            }
+            let surface = &part.face(f).surface;
+            if let forge_geom::intersect::LineSurface::Hits(hs) =
+                forge_geom::intersect::line_surface(&line, surface)
+            {
+                for h in hs {
+                    if h.t > tol::LINEAR && ix.point_in_face(f, h.point) != forge_bool::Where::Outside {
+                        cand.push((h.t, Some(surface.clone())));
+                    }
+                }
+            }
+        }
+    }
+    first_change(cand, o, d.get(), |p| {
+        let w: Vec<_> = ixs.iter().map(|ix| ix.classify(p)).collect();
+        if w.contains(&forge_bool::Where::Inside) {
+            Some(true)
+        } else if w.contains(&forge_bool::Where::On) {
+            None
+        } else {
+            Some(false)
+        }
+    })
+}
+
 /// Of the hits along the ray, the first surface where being in the part changes, and whether
 /// the ray started in it.
 fn first_change(
