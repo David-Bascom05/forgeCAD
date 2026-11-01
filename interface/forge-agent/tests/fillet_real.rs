@@ -503,3 +503,26 @@ fn a_round_whose_edge_crosses_a_holes_rim_refuses() {
         assert_eq!(forge_topo::check(&built.expect("builds")), vec![]);
     }
 }
+
+#[test]
+fn a_convex_and_a_concave_round_passing_on_a_narrow_step_refuse() {
+    // a boss on a disc: the step between is 15 and the two rounds of 9.5 need 19. Their boolean is a
+    // solid with the step's flat facing down under an overhang, valid and not what was asked
+    let lines = "extrude 15 circle 0 0 30\nextrude add 60 z 0 0 1 x 1 0 0 at 0 0 15 circle 0 0 15\n";
+    let refused = Model::new(&format!(
+        "{lines}fillet 9.5 (edges circle r=30 near 30 0 15) (edges circle r=15 near 15 0 15)\n"
+    ));
+    let f = refused.error.as_ref().expect("refuses");
+    assert_eq!(refused.lines[f.at].no, 3, "{}", f.msg);
+    // with room they build: each ring a torus, the flat still up
+    let m = Model::new(&format!(
+        "{lines}fillet 7 (edges circle r=30 near 30 0 15) (edges circle r=15 near 15 0 15)\n"
+    ));
+    assert!(m.error.is_none());
+    let part = Part {
+        features: m.features.clone(),
+    };
+    for built in [part.regenerate(), part.regenerate_nary(2)] {
+        assert_eq!(forge_topo::check(&built.expect("builds")), vec![]);
+    }
+}

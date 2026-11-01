@@ -1701,6 +1701,28 @@ fn blend_through(before: &Body, after: &Body) -> Option<forge_math::Point3> {
     None
 }
 
+/// Whether a flat the part had now faces the other way: a concave round overhanging where a convex
+/// one took the material under it (the two need more of the flat between them than there is, and
+/// an S-blend, not their boolean, is what joins them). The body stands; it is not what was asked.
+fn face_turned(before: &Body, after: &Body) -> bool {
+    let normal = |b: &Body, f: forge_topo::FaceId| match &b.face(f).surface {
+        forge_geom::Surface::Plane(p) => {
+            let n = p.normal_vec();
+            Some(if b.face(f).same_sense { n } else { -n })
+        }
+        _ => None,
+    };
+    let was: std::collections::BTreeMap<forge_topo::Name, _> = before
+        .face_ids()
+        .filter_map(|f| Some((before.face(f).name, normal(before, f)?)))
+        .collect();
+    after.face_ids().any(|f| {
+        normal(after, f)
+            .zip(was.get(&after.face(f).name))
+            .is_some_and(|(n, w)| n.dot(*w) < 0.0)
+    })
+}
+
 /// Rounds that overlap with no vertex between them (a plate rounded on both sides past half its
 /// width): each group of edges sharing vertices rounds by itself, and what each takes away (or
 /// adds, where they are concave) is taken from the part together, leaving a ridge where the blends cut.
@@ -1744,7 +1766,7 @@ fn overlapping_rounds(body: &Body, want: &[FilletEdge], opts: &FilletOptions, id
         let fill = fillet_with(body, &pick(false), opts, id).ok()?;
         let taken = forge_bool::boolean(body, &cut, forge_bool::Op::Subtract, id).ok()?;
         let done = forge_bool::boolean(&fill, &taken, forge_bool::Op::Subtract, id).ok()?;
-        return forge_topo::check(&done).is_empty().then_some(done);
+        return (forge_topo::check(&done).is_empty() && !face_turned(body, &done)).then_some(done);
     }
     let op = if kinds[0] == Some(true) {
         forge_bool::Op::Intersect
