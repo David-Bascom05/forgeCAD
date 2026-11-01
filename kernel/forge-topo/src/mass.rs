@@ -113,9 +113,25 @@ pub fn mass_rel(body: &Body, rel: f64) -> Result<MassProps, MassError> {
             t[k] += v[k];
             e[k] += er[k];
         }
+        // an integral past what geometry allows is no measurement: a loop's parameters went wrong
+        if !v[10].is_finite() || v[10] < -size * size * 1e-6 {
+            return Err(MassError {
+                face: f,
+                why: "the face's area came out negative",
+            });
+        }
         faces.push((f, v[10]));
     }
     let vol = t[0];
+    let bx = body
+        .face_ids()
+        .fold(forge_math::Box3::EMPTY, |b, f| b.hull(&body.face_box(f)));
+    if vol.abs() > 1.01 * bx.x.width() * bx.y.width() * bx.z.width() {
+        return Err(MassError {
+            face: FaceId(0),
+            why: "the volume came out larger than the body's box",
+        });
+    }
     let g = Vec3::new(t[1], t[2], t[3]) / vol;
     // second moments about the centroid
     let s = |i: usize, j: usize| {
@@ -1738,6 +1754,14 @@ impl Ctx<'_> {
                 (g, phi, [0.0; NF])
             }
             Inner::Cheb(ref ch, all) => {
+                // a fit holds just past its box, and blows up not far beyond (a loop near a pole,
+                // where the angle wanders): out there, the column itself
+                let off =
+                    |x: f64, (lo, hi): (f64, f64)| x < lo - 1e-3 * (hi - lo) || x > hi + 1e-3 * (hi - lo);
+                if off(a, all.0) || off(b, all.1) {
+                    let (v, e) = self.adapt(self.a0, a, b, 12);
+                    return (v, [0.0; NF], e);
+                }
                 let (g, e) = Cheb::sum(ch, all, a, b);
                 (g, [0.0; NF], e)
             }

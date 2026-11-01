@@ -924,7 +924,8 @@ fn net_of(s: &Spline) -> Net {
         if i > 0 && i % (deg + 1) == 0 {
             continue;
         }
-        pts.push(Point3::new(c[0] / c[3], c[1] / c[3], c[2] / c[3]));
+        // (each point its own, not times its weight: `bezier_data`)
+        pts.push(Point3::new(c[0], c[1], c[2]));
         w.push(c[3]);
     }
     (deg, knots, pts, w)
@@ -1315,4 +1316,23 @@ pub fn import(text: &[u8], lim: &Limits) -> Result<Imported, ImportError> {
         system: f.system.clone(),
         stats,
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// A rational curve's net is the curve's: its points each their own, as the weights expect.
+    #[test]
+    fn an_arcs_net_stays_on_its_circle() {
+        let (r, a) = (6.0, 0.5);
+        let s = Spline::ellipse(Point3::ORIGIN, Vec3::X * r, Vec3::Y * r, a, a).unwrap();
+        let (deg, knots, pts, w) = net_of(&s);
+        let back = Spline::from_nurbs(deg, &knots, &pts, Some(&w)).unwrap();
+        let c = SplineCurve::curve(std::sync::Arc::new(back), s.domain());
+        for k in 0..=16 {
+            let p = c.eval(s.domain().lo + s.domain().width() * k as f64 / 16.0);
+            assert!((Vec3::new(p.x, p.y, p.z).length() - r).abs() < 1e-12, "{p:?}");
+        }
+    }
 }
