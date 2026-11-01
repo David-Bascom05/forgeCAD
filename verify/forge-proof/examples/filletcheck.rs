@@ -34,9 +34,10 @@ fn main() {
         };
         let (off, pk) = blends::patch_seams(a, b);
         let needless = blends::needless_patches(a, b).len();
+        let ridges = blends::ridges(a, b);
         audits.push(format!(
-            "{{\"f\":{k},\"r\":[{lo},{hi}],\"faces\":{},\"pts\":{},\"gap\":{:e},\"unsup\":{},\"kink\":{:e},\"at\":\"{:?}\",\"kink_at\":\"{:?}\",\"tried\":{},\"wrong\":{},\"wrong_at\":\"{:?}\",\"patch_off\":{off:e},\"patch_kink\":{pk:e},\"needless\":{needless}}}",
-            x.faces, x.points, x.worst_gap, x.unsupported, x.worst_kink, x.worst_at, x.kink_at, y.tried, y.wrong, y.worst
+            "{{\"f\":{k},\"r\":[{lo},{hi}],\"faces\":{},\"pts\":{},\"gap\":{:e},\"unsup\":{},\"kink\":{:e},\"at\":\"{:?}\",\"kink_at\":\"{:?}\",\"tried\":{},\"wrong\":{},\"wrong_at\":\"{:?}\",\"patch_off\":{off:e},\"patch_kink\":{pk:e},\"needless\":{needless},\"ridges\":{},\"ridge_at\":\"{:?}\"}}",
+            x.faces, x.points, x.worst_gap, x.unsupported, x.worst_kink, x.worst_at, x.kink_at, y.tried, y.wrong, y.worst, ridges.len(), ridges.first()
         ));
     }
     let part = Part {

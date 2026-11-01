@@ -304,8 +304,9 @@ fn spine_near(s: &Surface, p: Point3) -> Option<Point3> {
 }
 
 /// Where a new round's rim passes along an old face that runs on into its ball: the ball rests on
-/// that rim only where the face beyond falls away from it. A rim is an edge along the round (a line
-/// down a cylinder, a circle round a torus); the face beyond is asked a step in from it.
+/// that rim only where the face beyond falls away from it. A rim is an old edge along the round (a
+/// line down a cylinder, a circle round a torus); the face beyond is asked a step towards the foot
+/// of the ball's centre on it: leading onto the face, with the centre on the ball's side, it is in the way.
 pub fn ridges(before: &Body, after: &Body) -> Vec<Point3> {
     let old: std::collections::BTreeSet<_> = before.face_ids().map(|f| before.face(f).name).collect();
     let mut out = Vec::new();
@@ -335,7 +336,8 @@ pub fn ridges(before: &Body, after: &Body) -> Vec<Point3> {
                 let Some(other) = after.partner(c).map(|p| (p, after.coedge_face(p))) else {
                     continue;
                 };
-                if !along || after.face(other.1).surface == face.surface {
+                // two new rounds may meet at a ridge where no ball rests on both: only an old face blocks
+                if !along || !old.contains(&after.face(other.1).name) {
                     continue;
                 }
                 let d = x.curve.deriv(x.range.mid());
@@ -343,25 +345,41 @@ pub fn ridges(before: &Body, after: &Body) -> Vec<Point3> {
                     continue;
                 };
                 let s = &after.face(other.1).surface;
-                let Some(n) = after.face_normal(other.1, s.project(d.p)) else {
+                let uv = s.project(centre);
+                let foot = s.eval(uv);
+                let Some(n) = after.face_normal(other.1, uv) else {
                     continue;
                 };
-                let Some(walk) = d.d1.normalize() else {
+                let Some(towards) = (foot - d.p).normalize() else {
                     continue;
                 };
-                // a face lies to the left of its coedge, seen from outside
-                let sign = if after.coedge(other.0).forward { 1.0 } else { -1.0 };
-                let step = 1e-3 * radius;
-                let q = d.p + n.get().cross(walk.get()) * (sign * step);
-                let on = s.eval(s.project(q));
                 // the centre on the ball's own side of that face: in the material for a convex round
                 let Some(own) = after.face_normal(f, face.surface.project(d.p)) else {
                     continue;
                 };
                 let convex = own.get().dot(d.p - centre) > 0.0;
-                let above = (centre - on).dot(n.get());
-                if (if convex { above < 0.0 } else { above > 0.0 })
-                    && on.distance(centre) < radius - 1e-2 * step
+                let above = (centre - foot).dot(n.get());
+                let step = s.eval(s.project(d.p + towards.get() * (1e-3 * radius)));
+                let loops = forge_topo::uv::face_uv_loops(after, other.1);
+                // a rim the part had: a new edge there is the round cut off by a wall it passes through.
+                // Tangent there to the face it took, the ball is as wide as that face and rests on it.
+                let was = before.edge_ids().find(|&g| {
+                    let y = before.edge(g);
+                    y.curve.eval(y.curve.closest(d.p, y.range)).distance(d.p) <= forge_math::tol::LINEAR
+                });
+                let was_edge = was.is_some_and(|g| {
+                    !before.edge(g).coedges.iter().any(|&k| {
+                        let w = before.coedge_face(k);
+                        let sw = &before.face(w).surface;
+                        before
+                            .face_normal(w, sw.project(d.p))
+                            .is_some_and(|m| m.get().cross(own.get()).length() < 1e-6)
+                    })
+                });
+                if was_edge
+                    && (if convex { above < 0.0 } else { above > 0.0 })
+                    && foot.distance(centre) < radius - forge_math::tol::LINEAR
+                    && forge_topo::uv::point_in_loops(s.project(step), &loops)
                 {
                     out.push(d.p);
                 }
