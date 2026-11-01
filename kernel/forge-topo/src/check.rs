@@ -325,10 +325,11 @@ fn same_span(a: &Body, e: EdgeId, b: &Body, o: EdgeId) -> bool {
         && x.curve == y.curve
 }
 
-/// All `check_geometry` reads of an edge: its span, its ends' tolerances and its faces' surfaces.
+/// All `check_geometry` reads of an edge: its span, its own and its ends' tolerances and its faces' surfaces.
 fn same_edge(a: &Body, e: EdgeId, b: &Body, o: EdgeId) -> bool {
     let (x, y) = (a.edge(e), b.edge(o));
     same_span(a, e, b, o)
+        && x.tol == y.tol
         && a.vertex(x.start).tol == b.vertex(y.start).tol
         && a.vertex(x.end).tol == b.vertex(y.end).tol
         && x.coedges.len() == y.coedges.len()

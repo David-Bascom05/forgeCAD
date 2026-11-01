@@ -405,6 +405,22 @@ fn stages_of_the_bench_pass_and_a_fault_is_named() {
 }
 
 #[test]
+fn an_edge_held_to_less_than_it_was_is_measured_again() {
+    let mut loose = stages_of(BODIES).pop().expect("stages");
+    let v = loose.edges[0].start;
+    loose.vertices[v.index()].point = loose.vertices[v.index()].point + Vec3::new(1e-3, 0.0, 0.0);
+    loose.edges.iter_mut().for_each(|e| e.tol = 1e-2);
+    assert_eq!(check(&afresh(&loose)), vec![], "within what it may stray");
+    let mut tight = loose.clone();
+    tight
+        .edges
+        .iter_mut()
+        .for_each(|e| e.tol = forge_math::tol::LINEAR);
+    assert!(!check(&afresh(&tight)).is_empty(), "past what it may stray");
+    same_answer(&tight, &loose, "tolerance tightened", &mut BTreeSet::new());
+}
+
+#[test]
 fn a_worker_can_hold_the_stages() {
     fn across_threads<T: Send + Sync>() {}
     across_threads::<std::sync::Arc<forge_agent::model::Stage>>();
