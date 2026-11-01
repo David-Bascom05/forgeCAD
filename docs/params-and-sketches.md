@@ -69,8 +69,15 @@ LINEAR are one point, so a loop's ends and a line drawn from one are shared, not
 - A face or selector can give more or fewer curves after an edit, so its results have no names a
   row can write; they still join profiles, and their faces take their names from the source edge.
   The app expands a clicked face to its edges' handles, which rows can name.
-- What a sketch holds exactly is made; what it can't (a tilted circle's ellipse, a general curve)
-  is refused. Nothing is approximated.
+- Lines, circles and ellipses project exactly: a circle or ellipse is O + cos t A + sin t B in the
+  plane (A, B its semi-axes laid flat), an ellipse whose axes are where |A cos t + B sin t| is
+  greatest and least, tan 2t = 2 A.B / (|A|^2 - |B|^2); an arc's ends are where the part has them,
+  its axes stretched the hair (at most 10 LINEAR) that puts both on it.
+- Any other curve has no exact image. It is refused unless the row ends `approx TOL`: then the
+  cubic through 4, 8, .. 512 equally spaced points of it, the first count whose distance from the
+  image both ways (three points a span, each against the nearest point of the other found by
+  search) is within TOL. The app writes such curves in a row of their own, `approx 0.001`, so a
+  fitted result is never silent.
 - A source an edit took away is an error at the sketch's line naming the row.
 
 ## References

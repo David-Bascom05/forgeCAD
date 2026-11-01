@@ -55,6 +55,28 @@ fn handles(m: &Model, sel: &str) -> Vec<String> {
         .collect()
 }
 
+/// An ellipse's centre, major end and semi-minor axis.
+fn ellipse_of(s: &forge_model::Sketch, t: &str) -> (Point2, Point2, f64) {
+    let Entity::Ellipse { center, major, b, .. } = entity(s, t) else {
+        panic!("{t} is no ellipse: {:?}", entity(s, t))
+    };
+    (
+        s.solved.point(center),
+        s.solved.point(major),
+        s.solved.params()[b],
+    )
+}
+
+/// How far a point is off an ellipse, in millimetres near it.
+fn on_ellipse(s: &forge_model::Sketch, t: &str, p: Point2) -> f64 {
+    let (c, m, b) = ellipse_of(s, t);
+    let a = c.distance(m);
+    let (ux, uy) = ((m.x - c.x) / a, (m.y - c.y) / a);
+    let (dx, dy) = (p.x - c.x, p.y - c.y);
+    let (u, v) = (dx * ux + dy * uy, dy * ux - dx * uy);
+    ((u * u / (a * a) + v * v / (b * b)).sqrt() - 1.0).abs() * a
+}
+
 const BLOCK: &str = "base: extrude 10 rect 0 0 40 30\n";
 
 #[test]
@@ -131,7 +153,7 @@ fn a_face_with_a_hole_and_an_arc_keeps_them_exact() {
 }
 
 #[test]
-fn circles_are_exact_square_on_and_lines_edge_on_and_refused_tilted() {
+fn circles_are_exact_square_on_lines_edge_on_and_ellipses_tilted() {
     let src = "base: extrude 10 rect 0 0 40 30\nhole 8 -xy at 20 15 10 thru\n";
     let m0 = model(src);
     let rim = handles(&m0, "(edges circle top)");
@@ -164,12 +186,14 @@ fn circles_are_exact_square_on_and_lines_edge_on_and_refused_tilted() {
     close(a.x.min(b.x), 16.0);
     close(a.y, 10.0);
     close(b.y, 10.0);
-    // tilted: refused, naming the row
-    let e = error_of(&format!("{src}sk: sketch z 0 1 1\n  project {}\nend\n", rim[0]));
-    assert!(
-        e.contains("project") && e.contains("ellipse") && e.contains("45.000"),
-        "{e}"
-    );
+    // tilted 45 degrees: the ellipse, major 4 along x, minor 4 cos 45
+    let m = model(&format!("{src}sk: sketch z 0 1 1\n  project {}\nend\n", rim[0]));
+    let s = sketch_named(&m, "sk");
+    let (c, maj, b) = ellipse_of(s, "j1");
+    let want = s.plane.point_to_local(forge_math::Point3::new(20.0, 15.0, 10.0));
+    assert!(c.distance(Point2::new(want.x, want.y)) < 1e-12);
+    close(c.distance(maj), 4.0);
+    close(b, 4.0 * 0.5f64.sqrt());
 }
 
 #[test]
@@ -460,15 +484,28 @@ fn random_rims_on_turned_parallel_planes_edge_on_planes_and_tilted_ones() {
             (a.x - 10.0).abs() < 1e-11 && (b.x - 10.0).abs() < 1e-11,
             "{a:?} {b:?}"
         );
-        // tilted: always refused, whatever the angle's size
+        // tilted: an exact ellipse, every point of the rim on it, and what it bounds extrudes to
+        // the rim's area times the cosine
         let tilt = r.range(1.0, 89.0).to_radians();
-        let e = error_of(&format!(
-            "{src}sk: sketch z {:?} 0 {:?}\n  project {}\nend\n",
-            dmath::sin(tilt),
-            dmath::cos(tilt),
+        let (st, ct) = (dmath::sin(tilt), dmath::cos(tilt));
+        let mut m = Model::new(&format!(
+            "{src}sk: sketch z {st:?} 0 {ct:?} at 0 0 30\n  project {}\nend\nextrude new 2 sk\n",
             rim[0]
         ));
-        assert!(e.contains("ellipse"), "{e}");
+        assert!(m.error.is_none(), "{:?}", m.error);
+        let q = sketch_named(&m, "sk");
+        let (c0, maj, b) = ellipse_of(q, "j1");
+        close(c0.distance(maj), rad);
+        assert!((b - rad * ct).abs() < 1e-11, "{b} {}", rad * ct);
+        for k in 0..32 {
+            let a = k as f64 * dmath::TAU / 32.0;
+            let p = forge_math::Point3::new(cx + rad * dmath::cos(a), cy + rad * dmath::sin(a), 10.0);
+            let l = q.plane.point_to_local(p);
+            assert!(on_ellipse(q, "j1", Point2::new(l.x, l.y)) < 1e-10);
+        }
+        let v = volume(&mut m);
+        let want = core::f64::consts::PI * rad * rad * 10.0 + core::f64::consts::PI * rad * rad * ct * 2.0;
+        assert!((v - want).abs() < 1e-7 * want, "{v} {want}");
     }
 }
 
@@ -486,4 +523,179 @@ fn a_sketch_on_a_plane_above_carries_its_results_when_the_plane_moves() {
     assert_eq!(q.plane.origin.z, 12.0);
     let a = q.plane.plane_point(at(q, "j1.a"));
     assert_eq!((a.y, a.z), (0.0, 12.0));
+}
+
+const FILLETED: &str = "base: extrude 10 rect 0 0 40 30\nfillet 3 (edges along +z right back)\n";
+
+#[test]
+fn a_fillet_face_projects_exactly_parallel_square_on_and_tilted() {
+    let m0 = model(FILLETED);
+    let face = handles(&m0, "(faces cyl)");
+    assert_eq!(face.len(), 1);
+    // parallel: the quarter arc, its tangent edges end-on at its ends
+    let m = model(&format!(
+        "{FILLETED}sk: sketch xy at 0 0 20\n  project {}\nend\n",
+        face[0]
+    ));
+    let s = sketch_named(&m, "sk");
+    assert_eq!(sketch::freedom(s).0, 0);
+    let mut arcs: Vec<_> = s
+        .names
+        .iter()
+        .filter(|n| matches!(s.solved.entity(n.1), Some(Entity::Arc { .. })))
+        .map(|n| n.1)
+        .collect();
+    arcs.dedup();
+    assert_eq!(arcs.len(), 1, "the top and bottom arcs are one: {:?}", s.names);
+    // tilted: ellipse arcs, top and bottom apart; tangent lines as lines
+    let m = model(&format!(
+        "{FILLETED}sk: sketch z 0 1 1\n  project {}\nend\n",
+        face[0]
+    ));
+    let s = sketch_named(&m, "sk");
+    assert_eq!(sketch::freedom(s).0, 0);
+    let ell: Vec<_> = s
+        .names
+        .iter()
+        .filter(|n| matches!(s.solved.entity(n.1), Some(Entity::Ellipse { ends: Some(_), .. })))
+        .collect();
+    assert_eq!(ell.len(), 2, "{:?}", s.names);
+    for (n, _) in &ell {
+        let (c, maj, b) = ellipse_of(s, n);
+        close(c.distance(maj), 3.0);
+        close(b, 3.0 * 0.5f64.sqrt());
+    }
+}
+
+#[test]
+fn a_filleted_top_face_on_a_tilted_plane_extrudes_to_its_area_times_the_cosine() {
+    let m0 = model(FILLETED);
+    let top = handles(&m0, "(faces plane normal +z top)");
+    let area = 40.0 * 30.0 - (9.0 - 9.0 * core::f64::consts::PI / 4.0);
+    for (dir, cos) in [
+        ("z 0 1 1", 0.5f64.sqrt()),
+        ("z 1 2 3", 3.0 / 14f64.sqrt()),
+        ("xy", 1.0),
+    ] {
+        let mut m = Model::new(&format!(
+            "{FILLETED}sk: sketch {dir} at 0 0 40\n  project {}\nend\next: extrude new 5 sk\n",
+            top[0]
+        ));
+        assert!(m.error.is_none(), "{dir}: {:?}", m.error);
+        let v = volume(&mut m) - 40.0 * 30.0 * 10.0 + (9.0 - 9.0 * core::f64::consts::PI / 4.0) * 10.0;
+        assert!(
+            (v - area * cos * 5.0).abs() < 1e-7 * v,
+            "{dir}: {v} {}",
+            area * cos * 5.0
+        );
+    }
+}
+
+const VARIABLE: &str = "base: extrude 10 rect 0 0 40 30\nfillet 2..4 (edges along +x top front)\n";
+
+#[test]
+fn a_blend_edge_is_refused_without_approx_and_fitted_within_it_with() {
+    let m0 = model(VARIABLE);
+    let face = handles(&m0, "(faces blend)");
+    assert_eq!(face.len(), 1);
+    let e = error_of(&format!(
+        "{VARIABLE}sk: sketch xy at 0 0 20\n  project {}\nend\n",
+        face[0]
+    ));
+    assert!(e.contains("approx TOL"), "{e}");
+    // the top's spring curve: where the ball meets the top, y = r = 2 + x / 20
+    let spring = handles(&m0, "(edges curve top)");
+    assert_eq!(spring.len(), 1);
+    for tol in [0.01, 0.001, 0.0001] {
+        let m = model(&format!(
+            "{VARIABLE}sk: sketch xy at 0 0 20\n  project {} approx {tol}\nend\n",
+            spring[0]
+        ));
+        let s = sketch_named(&m, "sk");
+        assert_eq!(sketch::freedom(s).0, 0);
+        let id = s.names.iter().find(|n| n.0 == "j1").unwrap().1;
+        assert!(matches!(s.solved.entity(id), Some(Entity::Spline { .. })));
+        let pts = s.solved.spline_samples(id, 4001);
+        let worst = pts
+            .iter()
+            .map(|p| (p.y - (2.0 + p.x / 20.0)).abs())
+            .fold(0.0, f64::max);
+        assert!(worst <= tol, "{tol}: {worst}");
+        assert!(pts.iter().all(|p| (-1e-9..=40.0 + 1e-9).contains(&p.x)));
+    }
+}
+
+#[test]
+fn a_blended_top_face_fitted_extrudes_within_its_tolerance_and_its_rows_say_approx() {
+    let m0 = model(VARIABLE);
+    let top = handles(&m0, "(faces plane normal +z top)");
+    let mut base = model(VARIABLE);
+    let v0 = volume(&mut base);
+    let mut p = Part::new(VARIABLE);
+    let done = p.act(
+        &format!("sk: sketch xy at 0 0 20\n project {} approx 0.001\nend", top[0]),
+        None,
+    );
+    assert!(done.ok, "{}", done.text);
+    assert!(p.model.src().contains("approx 0.001"));
+    let done = p.act("extrude new 5 sk", None);
+    assert!(done.ok, "{}", done.text);
+    // the top is 40 by 30 less the fillet's strip, 2 to 4 wide: 40 * 3 mm2
+    let v = p.model.mass().unwrap().volume - v0;
+    let want = (40.0 * 30.0 - 120.0) * 5.0;
+    assert!((v - want).abs() <= 5.0 * 0.001 * 140.0, "{v} {want}");
+    // a rebuild after the radius changes follows it
+    let done = p.act("edit fillet1 fillet 2..6 (edges along +x top front)", None);
+    assert!(done.ok, "{}", done.text);
+    let v = p.model.mass().unwrap().volume
+        - volume(&mut model(
+            "base: extrude 10 rect 0 0 40 30\nfillet 2..6 (edges along +x top front)\n",
+        ));
+    let want = (40.0 * 30.0 - 160.0) * 5.0;
+    assert!((v - want).abs() <= 5.0 * 0.001 * 140.0, "{v} {want}");
+}
+
+#[test]
+fn random_fillets_on_random_tilted_planes_project_exactly() {
+    let mut r = Rng(29);
+    for _ in 0..60 {
+        let (w, d, h) = (r.range(20.0, 60.0), r.range(20.0, 60.0), r.range(5.0, 20.0));
+        let rad = r.range(0.5, 4.5);
+        let src =
+            format!("base: extrude {h:?} rect 0 0 {w:?} {d:?}\nfillet {rad:?} (edges along +z right back)\n");
+        let m0 = model(&src);
+        let face = handles(&m0, "(faces cyl)");
+        let (nx, ny, nz) = (r.range(-1.0, 1.0), r.range(-1.0, 1.0), r.range(0.3, 1.0));
+        let m = model(&format!(
+            "{src}sk: sketch z {nx:?} {ny:?} {nz:?} at 1 2 {:?}\n  project {}\nend\n",
+            h + 10.0,
+            face[0]
+        ));
+        let s = sketch_named(&m, "sk");
+        assert_eq!(sketch::freedom(s).0, 0);
+        // every point of each rim arc lies on its ellipse, between its ends
+        let (cx, cy) = (w - rad, d - rad);
+        for (z, n) in [(0.0, 0usize), (h, 1)] {
+            let names: Vec<&String> = s
+                .names
+                .iter()
+                .filter(|q| matches!(s.solved.entity(q.1), Some(Entity::Ellipse { .. })))
+                .map(|q| &q.0)
+                .collect();
+            let mut best = f64::MAX;
+            for t in &names {
+                let worst = (0..=16)
+                    .map(|k| {
+                        let a = k as f64 * dmath::FRAC_PI_2 / 16.0;
+                        let p =
+                            forge_math::Point3::new(cx + rad * dmath::cos(a), cy + rad * dmath::sin(a), z);
+                        let l = s.plane.point_to_local(p);
+                        on_ellipse(s, t, Point2::new(l.x, l.y))
+                    })
+                    .fold(0.0, f64::max);
+                best = best.min(worst);
+            }
+            assert!(best < 1e-9, "rim {n}: {best}");
+        }
+    }
 }

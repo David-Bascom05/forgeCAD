@@ -3,7 +3,7 @@
 //! from it. Grammar in AGENTS.md.
 
 use crate::text::Want;
-use forge_geom::{Circle, Curve, Line};
+use forge_geom::{Circle, Curve, CurveGeom, Line};
 use forge_math::{Frame, Interval, Point2, Point3, dmath, tol};
 use forge_model::Sketch;
 use forge_ops::{PathSeg, Profile};
@@ -40,7 +40,7 @@ pub struct Refd {
 pub type Sources<'a> = dyn Fn(&[String]) -> R<Vec<Refd>> + 'a;
 
 /// A source laid in the plane.
-#[derive(Clone, Copy, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq)]
 enum Flat {
     Point(Point2),
     Line(Point2, Point2),
@@ -51,6 +51,15 @@ enum Flat {
         end: Point2,
         ccw: bool,
     },
+    /// One end of its major axis at `major`, semi-minor `b`; an arc of it between `ends`.
+    Ellipse {
+        center: Point2,
+        major: Point2,
+        b: f64,
+        ends: Option<(Point2, Point2, bool)>,
+    },
+    /// The cubic through these points, fitted to a curve no sketch entity holds exactly.
+    Spline(Vec<Point2>, bool),
 }
 
 fn in_plane(plane: &Frame, p: Point3) -> Point2 {
@@ -91,11 +100,143 @@ fn edge_on(plane: &Frame, f: &Frame, (a, b): (f64, f64), range: Interval, ends: 
     })
 }
 
+/// A circle's or ellipse's image, O + cos t A + sin t B in the plane: an ellipse (A, B conjugate
+/// semi-diameters), its axes where |A cos t + B sin t| is greatest and least.
+fn conic(plane: &Frame, f: &Frame, (a, b): (f64, f64), ends: Option<(Point3, Point3)>) -> R<Flat> {
+    let (px, py) = (plane.x().get(), plane.y().get());
+    let (x, y) = (f.x().get() * a, f.y().get() * b);
+    let (ax, ay, bx, by) = (x.dot(px), x.dot(py), y.dot(px), y.dot(py));
+    let th = 0.5 * dmath::atan2(2.0 * (ax * bx + ay * by), ax * ax + ay * ay - bx * bx - by * by);
+    let (s, c) = dmath::sin_cos(th);
+    let (mx, my) = (ax * c + bx * s, ay * c + by * s);
+    let (nx, ny) = (bx * c - ax * s, by * c - ay * s);
+    let (ma, mb) = ((mx * mx + my * my).sqrt(), (nx * nx + ny * ny).sqrt());
+    let center = in_plane(plane, f.origin);
+    let ccw = ax * by - ay * bx > 0.0;
+    let (ux, uy) = (mx / ma, my / ma);
+    let Some((p, q)) = ends else {
+        return Ok(Flat::Ellipse {
+            center,
+            major: Point2::new(center.x + mx, center.y + my),
+            b: mb,
+            ends: None,
+        });
+    };
+    let (p, q) = (in_plane(plane, p), in_plane(plane, q));
+    // each end along the axes, squared
+    let uv = |r: Point2| {
+        let (dx, dy) = (r.x - center.x, r.y - center.y);
+        let (u, v) = (dx * ux + dy * uy, dy * ux - dx * uy);
+        (u * u, v * v)
+    };
+    let ((u1, v1), (u2, v2)) = (uv(p), uv(q));
+    let off = |a: f64, b: f64, (u, v): (f64, f64)| ((u / (a * a) + v / (b * b)).sqrt() - 1.0).abs() * a;
+    // ends a boolean settled off the curve: the axes stretched the hair that puts both on it
+    let (na, nb) = if off(ma, mb, (u1, v1)).max(off(ma, mb, (u2, v2))) <= 1e-11 {
+        (ma, mb)
+    } else {
+        let det = u1 * v2 - u2 * v1;
+        let (ia, ib) = if det.abs() > 1e-6 * (u1 + u2) * (v1 + v2) {
+            ((v2 - v1) / det, (u1 - u2) / det)
+        } else {
+            // ends alike about an axis: one equation, the major kept
+            let ia = 1.0 / (ma * ma);
+            (ia, (1.0 - u1 * ia) / v1.max(1e-300))
+        };
+        let (na, nb) = (1.0 / ia.sqrt(), 1.0 / ib.sqrt());
+        if !(na.is_finite() && nb.is_finite())
+            || (na - ma).abs().max((nb - mb).abs()) > 10.0 * tol::LINEAR
+            || off(na, nb, (u1, v1)).max(off(na, nb, (u2, v2))) > 1e-10
+        {
+            return Err("the ends of this edge are not on its curve, as projected".into());
+        }
+        (na, nb)
+    };
+    Ok(Flat::Ellipse {
+        center,
+        major: Point2::new(center.x + ux * na, center.y + uy * na),
+        b: nb,
+        ends: Some((p, q, ccw)),
+    })
+}
+
+/// The cubic through points of a curve's image, as many as hold it within `tol` of the image both
+/// ways (each found by search over the other's parameter), or why none does at 512 points.
+fn fit(
+    plane: &Frame,
+    curve: &Curve,
+    range: Interval,
+    ends: (Point3, Point3),
+    closed: bool,
+    tol: f64,
+) -> R<Flat> {
+    let at = |t: f64| in_plane(plane, curve.eval(t));
+    let near = |p: Point2, f: &dyn Fn(f64) -> Point2, lo: f64, hi: f64| {
+        let d = |t: f64| f(t).distance(p);
+        let k = (0..=16)
+            .map(|i| lo + (hi - lo) * i as f64 / 16.0)
+            .min_by(|a, b| d(*a).total_cmp(&d(*b)))
+            .expect("samples");
+        let w = (hi - lo) / 16.0;
+        let (mut a, mut b) = ((k - w).max(lo), (k + w).min(hi));
+        for _ in 0..60 {
+            let (m1, m2) = (a + (b - a) / 3.0, b - (b - a) / 3.0);
+            if d(m1) < d(m2) {
+                b = m2;
+            } else {
+                a = m1;
+            }
+        }
+        d(0.5 * (a + b)).min(d(k))
+    };
+    let mut n = 4;
+    while n <= 512 {
+        let ts: Vec<f64> = (0..=n)
+            .map(|i| range.lo + range.width() * i as f64 / n as f64)
+            .collect();
+        let mut pts: Vec<Point2> = ts.iter().map(|&t| at(t)).collect();
+        // the ends where the part has them, so neighbours share them
+        (pts[0], pts[n]) = (in_plane(plane, ends.0), in_plane(plane, ends.1));
+        let mut knots = vec![0.0];
+        for i in 1..=n {
+            knots.push(knots[i - 1] + pts[i].distance(pts[i - 1]));
+        }
+        let made = forge_geom::spline::PlaneSpline::through(pts.clone(), None, None);
+        let Some(sp) = made else {
+            return Err("the curve's image doubles back on itself here; it has no spline through it".into());
+        };
+        let lo = sp.c.domain().lo;
+        let on = |u: f64| {
+            let q = sp.c.point(u);
+            Point2::new(q.x, q.y)
+        };
+        let mut worst = 0.0f64;
+        for i in 0..n {
+            for j in 1..4 {
+                let f = j as f64 / 4.0;
+                let u = lo + knots[i] + (knots[i + 1] - knots[i]) * f;
+                worst = worst.max(near(on(u), &at, ts[i], ts[i + 1]));
+                let t = ts[i] + (ts[i + 1] - ts[i]) * f;
+                worst = worst.max(near(at(t), &on, lo + knots[i], lo + knots[i + 1]));
+            }
+        }
+        if worst <= tol {
+            if closed {
+                pts.pop();
+            }
+            return Ok(Flat::Spline(pts, closed));
+        }
+        n *= 2;
+    }
+    Err(format!(
+        "no spline of 512 points or fewer holds this curve's image within {tol}: take a larger `approx`"
+    ))
+}
+
 /// A source's exact image on the plane, or why it has none a sketch can hold. The tests of
 /// parallel and edge-on go by how far the true image strays from what's made: at most LINEAR.
-fn flat(plane: &Frame, s: &Source) -> R<Flat> {
+fn flat(plane: &Frame, s: &Source, approx: Option<f64>) -> R<Flat> {
     let z = plane.z().get();
-    let degrees = |cos: f64| dmath::acos(cos.abs().min(1.0)) * 180.0 / dmath::PI;
     match s {
         Source::Point(p) => Ok(Flat::Point(in_plane(plane, *p))),
         Source::Axis(l) => {
@@ -128,10 +269,7 @@ fn flat(plane: &Frame, s: &Source) -> R<Flat> {
                     return edge_on(plane, &k.frame, (k.radius, k.radius), *range, (*start, *end));
                 }
                 if k.radius * (1.0 - cos.abs()) > tol::LINEAR {
-                    return Err(format!(
-                        "a circle {:.3} degrees off the sketch's plane projects to an ellipse, which `project` does not make yet",
-                        degrees(cos)
-                    ));
+                    return conic(plane, &k.frame, (k.radius, k.radius), (!*closed).then_some((*start, *end)));
                 }
                 let center = in_plane(plane, k.frame.origin);
                 if *closed {
@@ -158,11 +296,23 @@ fn flat(plane: &Frame, s: &Source) -> R<Flat> {
                 if e.major * e.frame.z().get().dot(z).abs() <= tol::LINEAR {
                     return edge_on(plane, &e.frame, (e.major, e.minor), *range, (*start, *end));
                 }
-                Err("an ellipse projects to an ellipse unless seen edge-on, which `project` does not make yet".into())
+                conic(plane, &e.frame, (e.major, e.minor), (!*closed).then_some((*start, *end)))
             }
-            _ => Err("this edge is a general curve, and `project` does not make its image".into()),
+            _ => match approx {
+                Some(tol) => fit(plane, curve, *range, (*start, *end), *closed, tol),
+                None => Err(
+                    "this edge is a general curve: no sketch entity holds its image exactly; `approx TOL` at the row's end fits a spline within TOL mm"
+                        .into(),
+                ),
+            },
         },
     }
+}
+
+/// Whether a source has no exact image on the plane, only a fitted one (`approx TOL`).
+pub fn needs_fit(plane: &Frame, s: &Source) -> bool {
+    matches!(s, Source::Edge { curve, .. } if !matches!(curve, Curve::Line(_) | Curve::Circle(_) | Curve::Ellipse(_)))
+        && flat(plane, s, None).is_err()
 }
 
 /// Builds a sketch's rows on `plane` and solves it from the coordinates as written.
@@ -427,6 +577,56 @@ impl B<'_, '_> {
 
     /// The entity for a laid-flat source: the one already made if the same again.
     fn laid(&mut self, k: usize, f: Flat) -> R<EntityId> {
+        if let Flat::Spline(pts, closed) = &f {
+            let ids = pts.iter().map(|&p| self.pin(k, p)).collect::<R<Vec<_>>>()?;
+            return self.s.add_spline(&ids, *closed).map_err(bad);
+        }
+        if let Flat::Ellipse {
+            center,
+            major,
+            b,
+            ends,
+        } = f
+        {
+            let (c, m) = (self.pin(k, center)?, self.pin(k, major)?);
+            let ends = match ends {
+                Some((p, q, ccw)) => Some((self.pin(k, p)?, self.pin(k, q)?, ccw)),
+                None => None,
+            };
+            let same = |s: &forge_sketch::Sketch, e: EntityId| match s.entity(e) {
+                Some(Entity::Ellipse {
+                    center,
+                    major,
+                    b: r,
+                    ends: x,
+                }) => {
+                    let ends_same = match (x, ends) {
+                        (None, None) => true,
+                        (Some((p, q, w)), Some((p2, q2, w2))) => {
+                            (p, q, w) == (p2, q2, w2) || (p, q, w) == (q2, p2, !w2)
+                        }
+                        _ => false,
+                    };
+                    center == c && major == m && (s.params()[r] - b).abs() <= tol::LINEAR && ends_same
+                }
+                _ => false,
+            };
+            if let Some(&e) = self.flats.iter().find(|&&e| same(&self.s, e)) {
+                return Ok(e);
+            }
+            let e = match ends {
+                Some((p, q, ccw)) => self.s.add_ellipse_arc(c, m, b, p, q, ccw),
+                None => self.s.add_ellipse(c, m, b),
+            }
+            .map_err(bad)?;
+            // an arc's ends, held, hold its minor axis
+            if ends.is_none() {
+                self.add(k, C::EllipseMinor(e, b))?;
+            }
+            self.flats.push(e);
+            return Ok(e);
+        }
+        let r = if let Flat::Circle(_, r) = f { r } else { 0.0 };
         let kind = match f {
             Flat::Point(p) => return self.pin(k, p),
             Flat::Line(a, b) => {
@@ -451,8 +651,8 @@ impl B<'_, '_> {
                 end: self.pin(k, end)?,
                 ccw,
             },
+            Flat::Ellipse { .. } | Flat::Spline(..) => unreachable!("made above"),
         };
-        let r = if let Flat::Circle(_, r) = f { r } else { 0.0 };
         if let Some(&e) = self.flats.iter().find(|&&e| same_flat(&self.s, e, kind, r)) {
             return Ok(e);
         }
@@ -468,7 +668,7 @@ impl B<'_, '_> {
             _ => unreachable!("only those are made above"),
         }
         .map_err(bad)?;
-        if matches!(f, Flat::Circle(..)) {
+        if matches!(kind, Entity::Circle { .. }) {
             self.add(k, C::Radius(e, r))?;
         }
         self.flats.push(e);
@@ -480,10 +680,21 @@ impl B<'_, '_> {
         if c.done() {
             return Err("project needs an edge, face, vertex or work point".into());
         }
-        let refs = (self.src)(&c.t[c.k..])?;
+        // `approx TOL` at the end: what has no exact image is fitted within TOL, and says so
+        let mut toks = &c.t[c.k..];
+        let mut approx = None;
+        if toks.len() > 2 && toks[toks.len() - 2] == "approx" {
+            let t = (self.num)(&toks[toks.len() - 1], Want::Len)?;
+            if !(t >= 1e-6 && t.is_finite()) {
+                return Err("approx takes a tolerance of 0.000001 mm or more".into());
+            }
+            approx = Some(t);
+            toks = &toks[..toks.len() - 2];
+        }
+        let refs = (self.src)(toks)?;
         for r in refs {
             for (n, s) in &r.sources {
-                let e = self.laid(k, flat(&self.s.plane, s)?)?;
+                let e = self.laid(k, flat(&self.s.plane, s, approx)?)?;
                 if r.one {
                     self.name('j', e);
                 } else {
@@ -1768,22 +1979,25 @@ mod ids_tests {
         let (a, b) = (Point3::new(6.0, 0.0, 0.0), Point3::new(-6.0, 0.0, 0.0));
         let whole = Interval::new(0.0, dmath::TAU);
         let source = edge(Curve::Ellipse(e), whole, a, a);
-        assert!(flat(&z, &source).unwrap_err().contains("ellipse"));
+        assert!(matches!(
+            flat(&z, &source, None),
+            Ok(Flat::Ellipse { b: 3.0, .. })
+        ));
         // from the side (y up the sketch's normal), its major across
         let side = Frame::from_z(Point3::ORIGIN, Vec3::new(0.0, 1.0, 0.0).normalize().unwrap());
-        let Flat::Line(p, q) = flat(&side, &source).unwrap() else {
+        let Flat::Line(p, q) = flat(&side, &source, None).unwrap() else {
             panic!("a line")
         };
         assert!((p.distance(q) - 12.0).abs() < 1e-12, "{p:?} {q:?}");
         // a half of it from the same side: from end to end, the far ends
         let half = edge(Curve::Ellipse(e), Interval::new(0.0, dmath::PI), a, b);
-        let Flat::Line(p, q) = flat(&side, &half).unwrap() else {
+        let Flat::Line(p, q) = flat(&side, &half, None).unwrap() else {
             panic!("a line")
         };
         assert!((p.distance(q) - 12.0).abs() < 1e-12);
         let par = forge_geom::Parabola { frame: z, focal: 1.0 };
         let g = edge(Curve::Parabola(par), Interval::new(-1.0, 1.0), a, b);
-        assert!(flat(&z, &g).unwrap_err().contains("general curve"));
+        assert!(flat(&z, &g, None).unwrap_err().contains("general curve"));
         // a circle one hair off parallel is still it; further, an ellipse named by its tilt
         let k = Curve::Circle(Circle {
             frame: z,
@@ -1799,10 +2013,11 @@ mod ids_tests {
                     end: Point3::new(10.0, 0.0, 0.0),
                     closed: true,
                 },
+                None,
             )
         };
         assert!(matches!(round(1.0 - 1e-7), Ok(Flat::Circle(..))));
-        assert!(round(1.0 - 1e-5).unwrap_err().contains("ellipse"));
+        assert!(matches!(round(1.0 - 1e-5), Ok(Flat::Ellipse { ends: None, .. })));
         assert!(matches!(round(1e-7), Ok(Flat::Line(..))));
     }
 

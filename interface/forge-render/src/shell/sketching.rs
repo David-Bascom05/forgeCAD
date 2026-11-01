@@ -261,6 +261,10 @@ pub fn project_refs(row: &str) -> Option<String> {
     let t = tokens(row);
     let (first, rest) = t.split_first()?;
     let rest = rest.strip_suffix(&["cons".to_string()]).unwrap_or(rest);
+    let rest = match rest {
+        [refs @ .., w, _] if w == "approx" => refs,
+        _ => rest,
+    };
     (first == "project").then(|| rest.join(" "))
 }
 
@@ -383,10 +387,21 @@ impl SketchMode {
         if fresh.is_empty() {
             return false;
         }
-        let key = fresh.iter().map(|f| f.0.as_str()).collect::<Vec<_>>().join(" ");
-        self.sources
-            .insert(key.clone(), Ok(fresh.into_iter().map(|f| f.1).collect()));
-        self.add(format!("project {key}"))
+        // what has only a fitted image goes in a row of its own that says how near it is held
+        let (fitted, exact): (Vec<_>, Vec<_>) = fresh
+            .into_iter()
+            .partition(|f| f.1.sources.iter().any(|s| sk::needs_fit(&self.plane, &s.1)));
+        let mut ok = true;
+        for (part, tail) in [(exact, ""), (fitted, " approx 0.001")] {
+            if part.is_empty() {
+                continue;
+            }
+            let key = part.iter().map(|f| f.0.as_str()).collect::<Vec<_>>().join(" ");
+            self.sources
+                .insert(key.clone(), Ok(part.into_iter().map(|f| f.1).collect()));
+            ok &= self.add(format!("project {key}{tail}"));
+        }
+        ok
     }
 
     fn solve(&mut self) {
@@ -2007,7 +2022,29 @@ mod tests {
 
     #[test]
     fn a_click_a_sketch_cannot_hold_writes_no_row_and_says_why() {
-        use forge_geom::{Circle, Curve};
+        use forge_geom::Line;
+        use forge_math::{Point3, Vec3};
+        use forge_topo::Name;
+        let mut m = mode();
+        // an axis lying along the plane: no ends to make a line of
+        let axis = sk::Source::Axis(Line {
+            origin: Point3::ORIGIN,
+            dir: Vec3::new(1.0, 0.0, 0.0).normalize().unwrap(),
+        });
+        let refd = sk::Refd {
+            sources: vec![(Name(1), axis)],
+            one: true,
+        };
+        assert!(!m.project("@e12345678".into(), Ok(vec![refd])));
+        assert!(m.rows.is_empty(), "{:?}", m.rows);
+        assert!(m.error.as_deref().unwrap().contains("no ends"), "{:?}", m.error);
+        assert!(!m.project("@e12345678".into(), Err("gone".into())));
+        assert_eq!(m.error.as_deref(), Some("gone"));
+    }
+
+    #[test]
+    fn a_tilted_circle_is_an_ellipse_and_a_general_curve_a_row_of_its_own_marked_approx() {
+        use forge_geom::{Circle, Curve, Parabola};
         use forge_math::{Interval, Point3, Vec3};
         use forge_topo::Name;
         let mut m = mode();
@@ -2023,15 +2060,34 @@ mod tests {
             end: start,
             closed: true,
         };
-        let refd = sk::Refd {
-            sources: vec![(Name(1), rim)],
+        let par = Curve::Parabola(Parabola {
+            frame: Frame::default().with_origin(Point3::new(20.0, 0.0, 0.0)),
+            focal: 2.0,
+        });
+        let bent = sk::Source::Edge {
+            start: forge_geom::CurveGeom::eval(&par, -3.0),
+            end: forge_geom::CurveGeom::eval(&par, 3.0),
+            curve: par,
+            range: Interval::new(-3.0, 3.0),
+            closed: false,
+        };
+        let one = |s| sk::Refd {
+            sources: vec![(Name(1), s)],
             one: true,
         };
-        assert!(!m.project("@e12345678".into(), Ok(vec![refd])));
-        assert!(m.rows.is_empty(), "{:?}", m.rows);
-        assert!(m.error.as_deref().unwrap().contains("ellipse"), "{:?}", m.error);
-        assert!(!m.project("@e12345678".into(), Err("gone".into())));
-        assert_eq!(m.error.as_deref(), Some("gone"));
+        assert!(
+            m.project("@e1111aaaa @e2222bbbb".into(), Ok(vec![one(rim), one(bent)])),
+            "{:?}",
+            m.error
+        );
+        assert_eq!(m.rows, ["project @e1111aaaa", "project @e2222bbbb approx 0.001"]);
+        let s = m.solved.as_ref().unwrap();
+        let kinds: Vec<_> = s.names.iter().map(|n| s.solved.entity(n.1).unwrap()).collect();
+        assert!(
+            matches!(kinds[0], Entity::Ellipse { ends: None, .. }),
+            "{kinds:?}"
+        );
+        assert!(matches!(kinds[1], Entity::Spline { .. }), "{kinds:?}");
     }
 
     #[test]

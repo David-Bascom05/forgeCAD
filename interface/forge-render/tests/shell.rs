@@ -1997,3 +1997,101 @@ fn project_geometry_takes_what_a_window_holds_and_the_right_button_writes_nothin
     assert_eq!(m.rows.len(), 1, "{:?}", m.rows);
     assert_eq!(m.rows[0].split(' ').count(), 5, "{:?}", m.rows);
 }
+
+const FILLETED: &str = "base: extrude 20 rect -30 -30 60 60\nfillet 8 (edges along +z right front)\nfillet 4..8 (edges along +x top back)\nsk: sketch z 1 -1 2 at 0 0 40\n  pt 0 0\nend\nflat: sketch xy at 0 0 40\n  pt 0 0\nend\n";
+
+/// Opens sketch `name` from the tree with Project Geometry on.
+fn project_in(h: &mut Headless, name: &str) {
+    use forge_render::shell::sketching::SkTool;
+    let id = h.gui.shell.doc.as_ref().unwrap().find(name).unwrap();
+    h.gui.shell.out.push(Action::Edit(id));
+    assert!(h.until(|g| g.shell.sketch.is_some()), "{}", h.gui.shell.status);
+    for _ in 0..80 {
+        h.step();
+        std::thread::sleep(std::time::Duration::from_millis(5));
+    }
+    h.gui.shell.out.push(Action::SketchTool(SkTool::Project));
+    step_some(h);
+}
+
+#[test]
+fn project_geometry_takes_a_fillets_faces_tilted_and_parallel_exact_where_it_can_and_says_approx_where_not() {
+    let Some((mut h, file)) = file_part(FILLETED) else {
+        return;
+    };
+    let r8 = 8.0 * 0.5f32.sqrt();
+    // the round corner and the varying blend's middle, on a plane tilted from both
+    project_in(&mut h, "sk");
+    let corner = screen_of(&h, [22.0 + r8, -22.0 - r8, 10.0]);
+    press_at(&mut h, corner);
+    assert!(
+        h.until(|g| g.shell.sketch.as_ref().unwrap().rows.len() == 2),
+        "{:?} {:?}",
+        h.gui.shell.sketch.as_ref().unwrap().rows,
+        h.gui.shell.sketch.as_ref().unwrap().error
+    );
+    let m = h.gui.shell.sketch.as_ref().unwrap();
+    assert!(m.error.is_none(), "{:?}", m.error);
+    assert!(
+        !m.rows[1].contains("approx"),
+        "an exact face is written exact: {:?}",
+        m.rows
+    );
+    let s = m.solved.as_ref().unwrap();
+    let ellipses = s
+        .names
+        .iter()
+        .filter(|n| matches!(s.solved.entity(n.1), Some(forge_sketch::Entity::Ellipse { .. })))
+        .count();
+    assert_eq!(ellipses, 2, "{:?}", s.names);
+    let blend = screen_of(
+        &h,
+        [0.0, 30.0 - 6.0 + 6.0 * 0.5f32.sqrt(), 14.0 + 6.0 * 0.5f32.sqrt()],
+    );
+    press_at(&mut h, blend);
+    assert!(
+        h.until(|g| g.shell.sketch.as_ref().unwrap().rows.len() > 2),
+        "{:?} {:?}",
+        h.gui.shell.sketch.as_ref().unwrap().rows,
+        h.gui.shell.sketch.as_ref().unwrap().error
+    );
+    let m = h.gui.shell.sketch.as_ref().unwrap();
+    assert!(m.error.is_none(), "{:?}", m.error);
+    assert!(m.rows.iter().any(|r| r.ends_with("approx 0.001")), "{:?}", m.rows);
+    assert!(
+        m.rows
+            .iter()
+            .all(|r| !r.starts_with("project") || r.ends_with("approx 0.001") || !r.contains("approx"))
+    );
+    // only the sketch's own point is free
+    assert_eq!(
+        forge_doc::sketch::freedom(m.solved.as_ref().unwrap()),
+        (2, vec!["p1".to_string()])
+    );
+    h.gui.shell.out.push(Action::FinishSketch);
+    assert!(h.until(|g| g.shell.sketch.is_none()));
+    assert!(h.until(|_| std::fs::read_to_string(&file).unwrap().contains("approx 0.001")));
+
+    // parallel to the round: one exact arc
+    project_in(&mut h, "flat");
+    let corner = screen_of(&h, [22.0 + r8, -22.0 - r8, 20.0]);
+    press_at(&mut h, corner);
+    assert!(
+        h.until(|g| g.shell.sketch.as_ref().unwrap().rows.len() == 2),
+        "{:?}",
+        h.gui.shell.sketch.as_ref().unwrap().error
+    );
+    let s = h.gui.shell.sketch.as_ref().unwrap().solved.clone().unwrap();
+    let arc = s
+        .names
+        .iter()
+        .find(|n| matches!(s.solved.entity(n.1), Some(forge_sketch::Entity::Arc { .. })))
+        .unwrap();
+    assert_eq!(s.solved.radius(arc.1), 8.0);
+    h.gui.shell.out.push(Action::FinishSketch);
+    assert!(h.until(|g| g.shell.sketch.is_none()));
+    // what the app wrote builds the same in a fresh part
+    let text = std::fs::read_to_string(&file).unwrap();
+    let m = forge_agent::model::Model::new(&text);
+    assert!(m.error.is_none(), "{:?}\n{text}", m.error);
+}
