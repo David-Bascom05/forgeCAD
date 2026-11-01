@@ -458,17 +458,17 @@ fn arcs_ending_on_the_axis() {
     let revolved = |rc: f64, a: f64| {
         let n = 200_000;
         let (mut v, mut area) = (0.0, 0.0);
-        let pi = std::f64::consts::PI;
+        let pi = forge_math::dmath::PI;
         for k in 0..n {
             let t = -a + 2.0 * a * (k as f64 + 0.5) / n as f64;
-            let (r, h) = (rc + 13.0 * t.cos(), 2.0 * a / n as f64);
-            v += pi * r * r * 13.0 * t.cos() * h;
+            let (r, h) = (rc + 13.0 * forge_math::dmath::cos(t), 2.0 * a / n as f64);
+            v += pi * r * r * 13.0 * forge_math::dmath::cos(t) * h;
             area += 2.0 * pi * r * 13.0 * h;
         }
         (v, area)
     };
-    let a = (5.0f64 / 13.0).acos();
-    let deg = a.to_degrees();
+    let a = forge_math::dmath::acos(5.0 / 13.0);
+    let deg = a * 180.0 / forge_math::dmath::PI;
     for (src, rc, half) in [
         (
             format!(
@@ -532,4 +532,18 @@ hole 8 z 0 0 -1 x 1 0 0 at 0 0 15 thru
     );
     let want = 1600.0 * 15.0 - pi * 16.0 * 15.0;
     assert!((v - want).abs() < 2e-3 * want, "sweep {v} vs {want}");
+}
+
+/// The box an arc in a tilted plane reports is the arc's own, not the bound of it: a sweep over a
+/// long arc read 0.85 too tall (volume and area right all along).
+#[test]
+fn the_box_of_a_tilted_arc_is_tight() {
+    let mut m = Model::new(
+        "sweep z 0 -1 0 x 1 0 0 at 0 0 0 circle 0 0 10 path line 0 0 0 0 40 0 arc z 1 0 0 x 0 0 -1 at 0 40 45 45 0 40 arc z -1 0 0 x 0 -0.642787609687 0.766044443119 at 0 88.20907072649 -12.453333233923 30 0 80 arc z 1 0 0 x 0 -0.642787609687 -0.766044443119 at 0 396.747123376029 355.247999463186 450 0 12 line 0 185.484920122378 -42.078417323331 0 198.729134015262 -49.120490765119
+",
+    );
+    assert!(m.error.is_none());
+    let top = -12.453333233923 + 30.0 + 10.0;
+    let z = m.stats().2.z.hi;
+    assert!((z - top).abs() < 0.03, "{z} vs {top}");
 }

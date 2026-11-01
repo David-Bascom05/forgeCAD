@@ -670,11 +670,10 @@ impl Model {
                         for &l in &b.face(*f).loops {
                             for c in b.lp(l).coedges() {
                                 let e = b.coedge(c).edge;
-                                // a line's or circle's box is tight; other curves' boxes are bounds
-                                bb = match b.edge(e).curve {
-                                    forge_geom::Curve::Line(_) | forge_geom::Curve::Circle(_) => {
-                                        bb.hull(&b.edge_box(e))
-                                    }
+                                // a line's box is tight, a circle's has its own; other curves' are bounds
+                                bb = match &b.edge(e).curve {
+                                    forge_geom::Curve::Line(_) => bb.hull(&b.edge_box(e)),
+                                    forge_geom::Curve::Circle(c) => bb.hull(&c.tight_box(b.edge(e).range)),
                                     _ => b
                                         .edge_points(e, 64)
                                         .into_iter()

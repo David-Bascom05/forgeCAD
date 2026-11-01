@@ -290,6 +290,30 @@ impl CurveGeom for Circle {
     }
 }
 
+impl Circle {
+    /// The box of an arc exactly, tilted or not: `bbox` is a bound, as it takes x and y apart.
+    pub fn tight_box(&self, range: Interval) -> Box3 {
+        let (x, y, o) = (self.frame.x().get(), self.frame.y().get(), self.frame.origin);
+        let at = |t: f64| {
+            let (sn, cs) = dmath::sin_cos(t);
+            o + x * (self.radius * cs) + y * (self.radius * sn)
+        };
+        let mut b = Box3::from_points([at(range.lo), at(range.hi)]);
+        for (a, c) in [(x.x, y.x), (x.y, y.y), (x.z, y.z)] {
+            // an axis's extremes round the circle: half a turn apart
+            let phi = dmath::atan2(c, a);
+            for k in [0.0, dmath::PI] {
+                let t = phi + k;
+                let t = t + dmath::TAU * ((range.lo - t) / dmath::TAU).ceil();
+                if t <= range.hi {
+                    b = b.hull(&Box3::from_point(at(t)));
+                }
+            }
+        }
+        b
+    }
+}
+
 /// Box of origin + X x + Y y, with X and Y given as intervals.
 fn conic_box(f: &Frame, xs: Interval, ys: Interval) -> Box3 {
     let (x, y, o) = (f.x().get(), f.y().get(), f.origin);

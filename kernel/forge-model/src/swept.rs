@@ -91,6 +91,49 @@ pub fn op(f: &Feature) -> Option<Combine> {
     }
 }
 
+/// A box round what sweep, coil or loft `i` adds, none if it cuts or cannot be built: without
+/// building it (a through cut sizes itself by this, on every regen).
+pub(crate) fn reach_of(features: History<'_>, i: usize) -> Option<Box3> {
+    match &features[i] {
+        Feature::Sweep(s) if adds(s.op) => {
+            let (profile, path) = match s.ends {
+                PathEnds::Extended { start, end } => extended(&s.profile, &s.path, start, end, i).ok()?,
+                _ => (s.profile.clone(), s.path.clone()),
+            };
+            Some(path_box(&path).grow(profile_reach(&profile, path.first()?.start())))
+        }
+        Feature::Coil(c) if adds(c.op) => {
+            let winding = |pitch: f64, turns: f64| Winding {
+                pitch,
+                turns,
+                taper: c.taper,
+                handed: c.handed,
+            };
+            let w = match &c.size {
+                CoilSize::PitchTurns { pitch, turns } => winding(*pitch, *turns),
+                CoilSize::TurnsHeight { turns, height } => winding(height / turns, *turns),
+                CoilSize::PitchHeight { pitch, height } => winding(*pitch, height / pitch),
+                CoilSize::To {
+                    pitch,
+                    target,
+                    offset,
+                    ..
+                } => {
+                    let w = winding(*pitch, 1.0);
+                    winding(*pitch, turns_to(features, i, c, &w, target, *offset).ok()?.0)
+                }
+            };
+            Some(coil_box(&coil_motion(&c.profile, c.axis, &w).ok()?))
+        }
+        Feature::Loft(l) if adds(l.op) => loft_bounds(&l.profiles, l.kind, &l.guides).ok(),
+        _ => None,
+    }
+}
+
+fn adds(op: Combine) -> bool {
+    matches!(op, Combine::New | Combine::Add)
+}
+
 /// The tool of sweep, coil or loft `i` (its solid empty unless `build`).
 pub(crate) fn tool_of(features: History<'_>, i: usize, build: bool) -> Result<Tool, RegenError> {
     let id = features.id(i);
