@@ -1244,6 +1244,14 @@ pub fn named_points(s: &Sketch) -> Vec<(String, Point2)> {
     for (name, id) in s.names.iter().filter(|n| !n.0.starts_with('#')) {
         match q.entity(*id) {
             Some(Entity::Point { .. }) if name != "o" => out.push((name.clone(), q.point(*id))),
+            Some(Entity::Spline { .. }) => {
+                if let Some(pts) = q.spline_points(*id) {
+                    for (k, p) in pts.iter().enumerate() {
+                        out.push((format!("{name}.{k}"), q.point(*p)));
+                    }
+                }
+            }
+            Some(Entity::Ellipse { center, .. }) => out.push((format!("{name}.c"), q.point(center))),
             Some(Entity::Line { a, b }) => {
                 out.push((format!("{name}.a"), q.point(a)));
                 out.push((format!("{name}.b"), q.point(b)));
@@ -1293,7 +1301,13 @@ pub fn curve_names(s: &Sketch) -> Vec<String> {
         .filter(|id| {
             matches!(
                 q.entity(*id),
-                Some(Entity::Line { .. } | Entity::Circle { .. } | Entity::Arc { .. })
+                Some(
+                    Entity::Line { .. }
+                        | Entity::Circle { .. }
+                        | Entity::Arc { .. }
+                        | Entity::Spline { .. }
+                        | Entity::Ellipse { .. }
+                )
             )
         })
         .map(|id| name_of(s, id.0).to_string())
@@ -1307,6 +1321,18 @@ pub fn drawing(s: &Sketch) -> (Vec<(Vec<Point2>, bool)>, Vec<Point2>) {
     for id in q.entity_ids() {
         let faint = q.is_construction(id);
         let g = match q.entity(id) {
+            Some(Entity::Spline { .. }) => {
+                if let Some(pts) = q.spline_points(id) {
+                    points.extend(pts.iter().map(|p| q.point(*p)));
+                }
+                curves.push((q.spline_samples(id, 64), faint));
+                continue;
+            }
+            Some(Entity::Ellipse { center, .. }) => {
+                points.push(q.point(center));
+                curves.push((q.spline_samples(id, 64), faint));
+                continue;
+            }
             Some(Entity::Line { a, b }) => {
                 points.extend([q.point(a), q.point(b)]);
                 forge_ops::Segment::Line {

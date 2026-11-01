@@ -17,6 +17,8 @@ pub enum SkTool {
     Arc,
     Rectangle,
     Point,
+    /// Through the points clicked: Enter ends it open, a click on its first point closes it.
+    Spline,
     Dimension,
     Coincident,
     Parallel,
@@ -532,6 +534,17 @@ impl SketchMode {
         self.edit == SketchFor::New
     }
 
+    /// A spline being drawn: ends it, open, if it has points enough.
+    pub fn finish_spline(&mut self, closed: bool) {
+        if self.picks.len() >= 2 {
+            let open = if closed { "" } else { " open" };
+            let row = format!("spline {}{open}", self.picks.join(" "));
+            self.add(row);
+        }
+        self.picks.clear();
+        self.pick_at.clear();
+    }
+
     /// Esc: what's half done goes, then the tool.
     pub fn escape(&mut self) {
         if !self.picks.is_empty() || self.asking.is_some() {
@@ -815,6 +828,13 @@ impl SketchMode {
             }
         };
         match (tool, self.pick_at.len()) {
+            (SkTool::Spline, n) if n > 0 => {
+                let mut pts = self.pick_at.clone();
+                pts.push(at);
+                for w in pts.windows(2) {
+                    d.lines.push((w[0], w[1]));
+                }
+            }
             (SkTool::Point, _) => {
                 let (w, p) = point_of(&mut d, at);
                 d.rows.push(format!("pt {w}"));
@@ -1054,6 +1074,10 @@ impl SketchMode {
 
     /// Enter: what's drafted goes down where the pointer is.
     pub fn enter(&mut self, reach: f64) {
+        if self.tool == Some(SkTool::Spline) {
+            self.finish_spline(false);
+            return;
+        }
         if let Some(at) = self.cursor {
             self.click(at, reach);
         }
@@ -1139,6 +1163,19 @@ impl SketchMode {
                 }
             }
             SkTool::Dimension | SkTool::Project => {}
+            SkTool::Spline => {
+                // its first point again closes it, once it has a shape
+                if self.pick_at.len() >= 3
+                    && ((self.pick_at[0].0 - at.0).powi(2) + (self.pick_at[0].1 - at.1).powi(2)).sqrt()
+                        < reach
+                {
+                    self.finish_spline(true);
+                    return;
+                }
+                let (w, p) = self.word_at(at, reach);
+                self.picks.push(w);
+                self.pick_at.push(p);
+            }
         }
     }
 
@@ -1416,6 +1453,14 @@ impl Shell {
                             p.circle_filled(u, 2.5, ink);
                             p.circle_filled(v, 2.5, ink);
                         }
+                    }
+                    Some(Entity::Spline { .. } | Entity::Ellipse { .. }) => {
+                        let pts: Vec<Pos2> = g
+                            .spline_samples(*id, CIRCLE_STEPS * 2)
+                            .into_iter()
+                            .filter_map(|q| screen((q.x, q.y)))
+                            .collect();
+                        p.add(egui::Shape::line(pts, line));
                     }
                     Some(Entity::Circle { center, .. }) => {
                         let (c, r) = (g.point(center), g.radius(*id));
@@ -1724,7 +1769,12 @@ impl Shell {
                     m.active = (active + if back { n_fields - 1 } else { 1 }) % n_fields;
                 }
             }
-            if enter && !m.pick_at.is_empty() {
+            if (enter
+                || (n_fields == 0
+                    && ctx.input(|i| i.key_pressed(egui::Key::Enter))
+                    && m.tool == Some(SkTool::Spline)))
+                && !m.pick_at.is_empty()
+            {
                 m.enter(reach);
             }
 
@@ -2111,6 +2161,31 @@ mod tests {
             .unwrap();
         let (_, b) = sk::line(s, &line).unwrap();
         assert!((b.x - t.0).abs() < 1e-6 && (b.y - t.1).abs() < 1e-6, "{b:?}");
+    }
+
+    #[test]
+    fn a_spline_takes_points_till_enter_or_its_first_point_again() {
+        let mut m = mode();
+        m.set_tool(Some(SkTool::Spline));
+        for p in [(0.0, 0.0), (10.0, 5.0), (20.0, 0.0)] {
+            m.click(p, 0.5);
+        }
+        assert!(m.rows.is_empty(), "not till it's ended");
+        m.enter(0.5);
+        assert!(m.error.is_none(), "{:?}", m.error);
+        assert_eq!(m.rows, ["spline 0 0 10 5 20 0 open"]);
+        // and closed: it has a region
+        let mut m = mode();
+        m.set_tool(Some(SkTool::Spline));
+        for p in [(0.0, 0.0), (10.0, 0.0), (10.0, 10.0), (0.0, 10.0), (0.0, 0.1)] {
+            m.click(p, 0.5);
+        }
+        assert!(m.error.is_none(), "{:?}", m.error);
+        assert_eq!(m.rows, ["spline 0 0 10 0 10 10 0 10"]);
+        let s = m.solved.as_ref().unwrap();
+        assert_eq!(sk::regions(s).len(), 1);
+        let (curves, _) = sk::drawing(s);
+        assert!(curves[0].0.len() > 10, "drawn as a curve");
     }
 
     #[test]

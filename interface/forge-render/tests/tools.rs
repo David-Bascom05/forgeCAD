@@ -1036,3 +1036,20 @@ fn rib_runs_along_the_open_sketch_picked() {
     let added = built(&file, "rib") - was;
     assert!(added > 100.0, "{added}");
 }
+
+#[test]
+fn extrude_takes_a_closed_splines_region() {
+    let part = "sk1: sketch xy\n  spline 0 0 40 0 40 40 0 40\nend\n";
+    let Some((mut h, file)) = open(part, "spl") else {
+        return;
+    };
+    assert!(h.until(|g| {
+        g.shell
+            .sketch_shapes
+            .first()
+            .is_some_and(|s| s.curves[0].0.len() > 10)
+    }));
+    button(&mut h, "Extrude");
+    ok(&mut h, "spline extrude");
+    assert!(built(&file, "spline extrude") > 1000.0);
+}
