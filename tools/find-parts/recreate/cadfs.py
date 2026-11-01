@@ -679,7 +679,7 @@ class Tr:
                 if any(p.kind == "poly" and i not in used for i, p in enumerate(a.pieces)):
                     raise Unsupported("a sketch's spline left out of its regions")
                 filt = len(q[1]) > 1 and q[1][1] is True
-                by.setdefault(fid, []).extend(a.outermost() if filt else range(len(a.faces)))
+                by.setdefault(fid, []).extend(a.not_inner() if filt else range(len(a.faces)))
                 if len(a.faces) > 1:
                     # the query says "all", which does not always hold for sketches of many regions
                     self.notes.add("all-regions")

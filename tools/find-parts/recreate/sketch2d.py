@@ -479,6 +479,16 @@ class Arrangement:
                 out.append(i)
         return out
 
+    def not_inner(self):
+        """qSketchRegion(.., true): the regions with a vertex on the sketch's outside. Those inside a closed run of curves that
+        touches the outside nowhere are its inner loops (Onshape: shares no vertex or edge with what encloses it)."""
+        ends = lambda lp: {v for he in lp for v in (self.pieces[he[0]].va, self.pieces[he[0]].vb)}
+        out = set()
+        for f in self.faces:
+            for k in [f["outer"]] + f["holes"]:
+                out |= {v for he in self.loops[k] if self.left.get((he[0], not he[1])) is None for v in ends([he])}
+        return [i for i, f in enumerate(self.faces) if ends(self.loops[f["outer"]]) & out]
+
     def merged(self, regions):
         """The boundary of a set of regions as profiles: [outer loop, hole loop..], each loop of half-edges."""
         rs = set(regions)
