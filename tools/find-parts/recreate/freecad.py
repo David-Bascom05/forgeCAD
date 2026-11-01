@@ -24,10 +24,10 @@ from sketch2d import Arrangement
 
 TOL = 2e-3
 HERE = os.path.dirname(os.path.abspath(__file__))
-SOLID = {"PartDesign::Pad", "PartDesign::Pocket", "PartDesign::Revolution", "PartDesign::Groove", "PartDesign::Fillet", "PartDesign::Chamfer", "PartDesign::Mirrored", "PartDesign::PolarPattern", "PartDesign::LinearPattern", "PartDesign::Hole", "PartDesign::Loft", "PartDesign::Pipe", "PartDesign::AdditiveLoft", "PartDesign::AdditivePipe", "PartDesign::SubtractiveLoft", "PartDesign::SubtractivePipe", "PartDesign::Draft", "PartDesign::Thickness", "PartDesign::MultiTransform", "PartDesign::Scaled", "PartDesign::AdditiveBox", "PartDesign::AdditiveCylinder", "PartDesign::Boolean", "PartDesign::Helix", "PartDesign::AdditiveHelix", "PartDesign::SubtractiveHelix", "PartDesign::FeatureBase", "PartDesign::SubtractiveBox", "PartDesign::SubtractiveCylinder", "PartDesign::AdditiveSphere", "PartDesign::SubtractiveSphere", "PartDesign::AdditiveCone", "PartDesign::SubtractiveCone", "PartDesign::AdditiveTorus", "PartDesign::SubtractiveTorus", "PartDesign::AdditivePrism", "PartDesign::SubtractivePrism", "PartDesign::AdditiveWedge", "PartDesign::SubtractiveWedge", "PartDesign::AdditiveEllipsoid", "PartDesign::SubtractiveEllipsoid", "Part::Revolution", "Part::Box", "Part::Cylinder"}
+SOLID = {"PartDesign::Pad", "PartDesign::Pocket", "PartDesign::Revolution", "PartDesign::Groove", "PartDesign::Fillet", "PartDesign::Chamfer", "PartDesign::Mirrored", "PartDesign::PolarPattern", "PartDesign::LinearPattern", "PartDesign::Hole", "PartDesign::Loft", "PartDesign::Pipe", "PartDesign::AdditiveLoft", "PartDesign::AdditivePipe", "PartDesign::SubtractiveLoft", "PartDesign::SubtractivePipe", "PartDesign::Draft", "PartDesign::Thickness", "PartDesign::MultiTransform", "PartDesign::Scaled", "PartDesign::AdditiveBox", "PartDesign::AdditiveCylinder", "PartDesign::Boolean", "PartDesign::Helix", "PartDesign::AdditiveHelix", "PartDesign::SubtractiveHelix", "PartDesign::FeatureBase", "PartDesign::SubtractiveBox", "PartDesign::SubtractiveCylinder", "PartDesign::AdditiveSphere", "PartDesign::SubtractiveSphere", "PartDesign::AdditiveCone", "PartDesign::SubtractiveCone", "PartDesign::AdditiveTorus", "PartDesign::SubtractiveTorus", "PartDesign::AdditivePrism", "PartDesign::SubtractivePrism", "PartDesign::AdditiveWedge", "PartDesign::SubtractiveWedge", "PartDesign::AdditiveEllipsoid", "PartDesign::SubtractiveEllipsoid", "Part::Revolution", "Part::Box", "Part::Cylinder", "Part::Cut", "Part::Fuse", "Part::Common", "Part::MultiFuse", "Part::MultiCommon", "Part::Sphere"}
 TRANSFORMS = {"PartDesign::PolarPattern", "PartDesign::LinearPattern", "PartDesign::Mirrored"}
 FLAT = {"Sketcher::SketchObject", "Part::Part2DObjectPython"}  # what a pad's profile can be; only a sketch has rows, the rest a stored shape
-NEEDS = {"PartDesign::Hole", "PartDesign::MultiTransform", "PartDesign::AdditiveBox", "PartDesign::SubtractiveBox", "PartDesign::AdditiveCylinder", "PartDesign::SubtractiveCylinder", "Part::Revolution", "Part::Box", "Part::Cylinder", "PartDesign::Pad", "PartDesign::Pocket", "PartDesign::Revolution", "PartDesign::Groove", "PartDesign::Fillet", "PartDesign::Chamfer", "PartDesign::Mirrored", "PartDesign::PolarPattern", "PartDesign::LinearPattern"}
+NEEDS = {"Part::Cut", "Part::Fuse", "Part::Common", "Part::MultiFuse", "Part::MultiCommon", "Part::Sphere", "PartDesign::Hole", "PartDesign::MultiTransform", "PartDesign::AdditiveBox", "PartDesign::SubtractiveBox", "PartDesign::AdditiveCylinder", "PartDesign::SubtractiveCylinder", "Part::Revolution", "Part::Box", "Part::Cylinder", "PartDesign::Pad", "PartDesign::Pocket", "PartDesign::Revolution", "PartDesign::Groove", "PartDesign::Fillet", "PartDesign::Chamfer", "PartDesign::Mirrored", "PartDesign::PolarPattern", "PartDesign::LinearPattern"}
 
 
 class Doc:
@@ -296,6 +296,7 @@ class Tr:
         self.bodies = 0
         self.approx = False
         self.steps = []
+        self.tree = 0
 
     def state(self):
         if self.topo is None:
@@ -365,7 +366,7 @@ class Tr:
             if self.bodies == 0:
                 if op == "cut":
                     raise Unsupported("first feature cuts")
-                this = ""
+                this = "new" if self.tree else ""
                 self.bodies = 1
             k = "revolve" if tail else "extrude"
             out.append(f"{k} {this + ' ' if this else ''}{head} {frame} {tail}{loops}")
@@ -453,6 +454,60 @@ class Tr:
             head = "sym " + head if head else head
         tail = f"axis {num(u)} {num(v)} {num(du)} {num(dv)} "
         return self.profile(name, "add", head, False, fr.n, tail, sk=sk)[0]
+
+    def part_tree(self, name):
+        """A Part workbench solid and what it is made of, as bodies and combines. Tools first, so the base is the last body
+        made and the lines after it act on that. Returns (lines, the result's label)."""
+        d, t = self.doc, self.doc.types.get(name)
+        if t in ("Part::Cut", "Part::Fuse", "Part::Common", "Part::MultiFuse", "Part::MultiCommon"):
+            pl = d.placement(name)
+            if any(abs(x) > 1e-9 for x in pl[0]) or abs(abs(pl[1][3]) - 1) > 1e-9:
+                raise Unsupported("a moved Part boolean")
+            if t in ("Part::MultiFuse", "Part::MultiCommon"):
+                kids = d.links(name, "Shapes")
+            else:
+                kids = [d.link(name, "Base"), d.link(name, "Tool")]
+            if len(kids) < 2 or not all(kids):
+                raise Unsupported("a Part boolean short of shapes")
+            labs = [self.part_tree(k) for k in kids[1:] + kids[:1]]
+            word = {"Part::Cut": "cut", "Part::Common": "keep", "Part::MultiCommon": "keep"}.get(t, "add")
+            self.lines.append(f"combine {word} {labs[-1]} " + " ".join(labs[:-1]))
+            return labs[-1]
+        if t == "PartDesign::Body" or t in SOLID and not t.startswith("Part::"):
+            # a PartDesign chain as one shape of the tree: a body of its own, what follows it acting on it
+            sub = chain_of(d, name)
+            self.tree += 1
+            self.bodies = 0
+            first = len(self.lines)
+            for n in sub:
+                self.step(n)
+            head = self.lines[first]
+            self.bodies = 1
+            if ":" not in head.split(" ")[0]:
+                raise Unsupported("a PartDesign shape in a Part tree with no label")
+            return head.split(":")[0]
+        if t == "Part::Revolution":
+            ls = self.part_revolve(name)
+        elif t in ("Part::Box", "Part::Cylinder"):
+            ls = self.part_solid(name, t)
+        elif t == "Part::Sphere":
+            if abs(d.flt(name, "Angle1", -90.0) + 90) > 1e-9 or abs(d.flt(name, "Angle2", 90.0) - 90) > 1e-9 or abs(d.flt(name, "Angle3", 360.0) - 360) > 1e-9:
+                raise Unsupported("a part of a sphere")
+            fr = Frame(d.placement(name))
+            ls = [f"ball {num(d.flt(name, 'Radius'))} z {vtext(fr.n)} x {vtext(fr.x)} at {vtext(fr.o)}"]
+        else:
+            raise Unsupported("a Part tree through " + str(t))
+        if len(ls) != 1:
+            raise Unsupported("a Part solid of several regions")
+        self.tree += 1
+        lab = f"p{self.tree}"
+        word, rest = ls[0].split(" ", 1)
+        if self.tree > 1:
+            # after the first, each its own body
+            rest = rest[4:] if rest.startswith("add ") else rest
+            ls = [f"{word} new {rest}"]
+        self.lines.append(f"{lab}: {ls[0]}")
+        return lab
 
     def part_solid(self, name, t):
         """Part workbench primitives, on their placement. An add: only ever the first in a chain here."""
@@ -615,44 +670,49 @@ class Tr:
             if doc_approx(d, name):
                 self.approx = True
         for name in chain:
-            t = d.types[name]
-            if t == "Part::Revolution":
-                ls = self.part_revolve(name)
-            elif t in ("Part::Box", "Part::Cylinder"):
-                ls = self.part_solid(name, t)
-            elif t in ("PartDesign::Pad", "PartDesign::Pocket"):
-                ls = self.pad(name, t.endswith("Pocket"))
-            elif t in ("PartDesign::Revolution", "PartDesign::Groove"):
-                ls = self.revolve(name, t.endswith("Groove"))
-            elif t == "PartDesign::Fillet":
-                ls = self.blend(name, f"fillet {num(d.flt(name, 'Radius'))}", d.boolean(name, "UseAllEdges"))
-            elif t == "PartDesign::Chamfer":
-                if d.integer(name, "ChamferType") != 0:
-                    raise Unsupported("an unequal chamfer")
-                ls = self.blend(name, f"chamfer {num(d.flt(name, 'Size'))}", d.boolean(name, "UseAllEdges"))
-            elif t in TRANSFORMS:
-                ls = [self.transform(name, t, self.originals(name))]
-            elif t == "PartDesign::MultiTransform":
-                ls, src = [], self.originals(name)
-                for k, m in enumerate(d.links(name, "Transformations")):
-                    if d.types.get(m) not in TRANSFORMS:
-                        raise Unsupported("a multi-transform with " + str(d.types.get(m)).split("::")[-1])
-                    ls.append(f"m{len(self.labels)}x{k}: " + self.transform(m, d.types[m], src))
-                    src += f" m{len(self.labels)}x{k}"
-            elif t == "PartDesign::Hole":
-                ls = self.hole(name)
-            elif t in ("PartDesign::AdditiveBox", "PartDesign::SubtractiveBox", "PartDesign::AdditiveCylinder", "PartDesign::SubtractiveCylinder"):
-                ls = self.primitive(name, t)
-            if t == "PartDesign::MultiTransform":
-                self.labels[name] = ls[-1].split(":")[0]  # already labelled, each its own
-            else:
-                # a feature of several lines (regions that do not touch): a pattern of it needs them all
-                base = f"t{len(self.labels)}"
-                names = [base if k == 0 else f"{base}x{k}" for k in range(len(ls))]
-                self.labels[name] = " ".join(names)
-                ls = [f"{n}: {l}" for n, l in zip(names, ls)]
-            self.lines += ls
-            self.steps.append((name, len(self.lines)))
+            self.step(name)
+
+    def step(self, name):
+        d = self.doc
+        t = d.types[name]
+        if t.startswith("Part::"):
+            ls, root = [], self.part_tree(name)
+        elif t in ("PartDesign::Pad", "PartDesign::Pocket"):
+            ls = self.pad(name, t.endswith("Pocket"))
+        elif t in ("PartDesign::Revolution", "PartDesign::Groove"):
+            ls = self.revolve(name, t.endswith("Groove"))
+        elif t == "PartDesign::Fillet":
+            ls = self.blend(name, f"fillet {num(d.flt(name, 'Radius'))}", d.boolean(name, "UseAllEdges"))
+        elif t == "PartDesign::Chamfer":
+            if d.integer(name, "ChamferType") != 0:
+                raise Unsupported("an unequal chamfer")
+            ls = self.blend(name, f"chamfer {num(d.flt(name, 'Size'))}", d.boolean(name, "UseAllEdges"))
+        elif t in TRANSFORMS:
+            ls = [self.transform(name, t, self.originals(name))]
+        elif t == "PartDesign::MultiTransform":
+            ls, src = [], self.originals(name)
+            for k, m in enumerate(d.links(name, "Transformations")):
+                if d.types.get(m) not in TRANSFORMS:
+                    raise Unsupported("a multi-transform with " + str(d.types.get(m)).split("::")[-1])
+                ls.append(f"m{len(self.labels)}x{k}: " + self.transform(m, d.types[m], src))
+                src += f" m{len(self.labels)}x{k}"
+        elif t == "PartDesign::Hole":
+            ls = self.hole(name)
+        elif t in ("PartDesign::AdditiveBox", "PartDesign::SubtractiveBox", "PartDesign::AdditiveCylinder", "PartDesign::SubtractiveCylinder"):
+            ls = self.primitive(name, t)
+        if t.startswith("Part::"):
+            self.labels[name] = root
+            self.bodies = 1
+        elif t == "PartDesign::MultiTransform":
+            self.labels[name] = ls[-1].split(":")[0]  # already labelled, each its own
+        else:
+            # a feature of several lines (regions that do not touch): a pattern of it needs them all
+            base = f"t{len(self.labels)}"
+            names = [base if k == 0 else f"{base}x{k}" for k in range(len(ls))]
+            self.labels[name] = " ".join(names)
+            ls = [f"{n}: {l}" for n, l in zip(names, ls)]
+        self.lines += ls
+        self.steps.append((name, len(self.lines)))
 
 
 def line_or_circle(poly):
@@ -774,6 +834,29 @@ def base_of(doc, n):
     return ""
 
 
+def tree_members(doc, chain):
+    """A chain's features and, through any Part boolean under it, every chain those are made of."""
+    out, todo = [], list(chain)
+    while todo:
+        c = todo.pop()
+        if c in out:
+            continue
+        out.append(c)
+        t = doc.types.get(c, "")
+        if t in ("Part::MultiFuse", "Part::MultiCommon"):
+            kids = doc.links(c, "Shapes")
+        elif t in ("Part::Cut", "Part::Fuse", "Part::Common"):
+            kids = [doc.link(c, "Base"), doc.link(c, "Tool")]
+        else:
+            kids = []
+        for k in kids:
+            try:
+                todo += chain_of(doc, k) if doc.types.get(k, "").startswith(("PartDesign", )) else [k]
+            except Unsupported:
+                pass
+    return out
+
+
 def chain_of(doc, body):
     tip = doc.link(body, "Tip") if doc.types[body] == "PartDesign::Body" else body
     out = []
@@ -833,12 +916,13 @@ def main():
             r["features"] = [doc.types[c].split("::")[-1] for c in chain]
             tip = chain[-1]
             want = {"shapes": {tip: doc.shape_file(tip)}, "subs": {}, "wires": []}
-            for c in chain:
+            members = tree_members(doc, chain)
+            for c in members:
                 sk = doc.link(c, "Profile")
                 if doc.types.get(sk) == "Part::Part2DObjectPython":
                     want["shapes"][sk] = doc.shape_file(sk)
                     want["wires"].append(sk)
-            for c in chain:
+            for c in members:
                 if doc.types[c] in ("PartDesign::Fillet", "PartDesign::Chamfer"):
                     base = doc.link(c, "Base")
                     want["shapes"][base] = doc.shape_file(base)
