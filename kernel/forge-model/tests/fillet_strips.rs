@@ -356,3 +356,92 @@ fn foot_of_a_rib_on_a_cone() {
             .is_empty()
     );
 }
+
+/// The same rib along the seam of the cone, so symmetric that both ends of the ball's stretch over
+/// it are one section. The rib's turn about the axis changes nothing, so the volume is the same.
+#[test]
+fn foot_of_a_rib_over_a_cones_seam() {
+    use forge_math::Vec2;
+    use forge_ops::{Axis2, ProfileLoop, Segment, revolve};
+    let line = |a: (f64, f64), b: (f64, f64), id| {
+        (
+            Segment::Line {
+                a: Point2::new(a.0, a.1),
+                b: Point2::new(b.0, b.1),
+            },
+            id,
+        )
+    };
+    let plane = Frame::from_zx(Point3::ORIGIN, -UnitVec3::Y, Vec3::X).expect("frame");
+    let hub = revolve(
+        &Profile {
+            plane,
+            loops: vec![ProfileLoop::new(vec![
+                line((0.0, -5.0), (84.0, -5.0), 0),
+                line((84.0, -5.0), (84.0, 2.0), 1),
+                line((84.0, 2.0), (30.0, 20.0), 2),
+                line((30.0, 20.0), (0.0, 20.0), 3),
+                line((0.0, 20.0), (0.0, -5.0), 4),
+            ])],
+        },
+        Axis2 {
+            origin: Point2::ORIGIN,
+            dir: Vec2::new(0.0, 1.0),
+        },
+        std::f64::consts::TAU,
+        1,
+    )
+    .expect("hub");
+    let pi = std::f64::consts::PI;
+    let (x0, x1, h) = (35.0, 75.0, 2.0);
+    let rib = extrude(
+        &Profile {
+            plane: Frame::from_zx(Point3::ORIGIN, UnitVec3::Z, Vec3::X).expect("frame"),
+            loops: vec![ProfileLoop::new(vec![
+                line((x0 + h, -h), (x1 - h, -h), 0),
+                (
+                    Segment::Arc {
+                        center: Point2::new(x1 - h, 0.0),
+                        radius: h,
+                        start: -pi / 2.0,
+                        sweep: pi,
+                    },
+                    1,
+                ),
+                line((x1 - h, h), (x0 + h, h), 2),
+                (
+                    Segment::Arc {
+                        center: Point2::new(x0 + h, 0.0),
+                        radius: h,
+                        start: pi / 2.0,
+                        sweep: pi,
+                    },
+                    3,
+                ),
+            ])],
+        },
+        30.0,
+        2,
+    )
+    .expect("rib");
+    let body = boolean(&hub, &rib, Op::Union, 3).expect("union");
+    let foot: Vec<FilletEdge> = body
+        .edge_ids()
+        .filter(|&e| forge_ops::fillet_kind(&body, e) == Some(false))
+        .map(|edge| FilletEdge {
+            edge,
+            radius: Radius::Constant(2.0),
+        })
+        .collect();
+    let b = fillet(&body, &foot, 9).expect("rounds");
+    assert!(forge_topo::check(&b).is_empty());
+    let volume = |x: &forge_topo::Body| forge_topo::mass::mass(x).expect("mass").volume;
+    let added = volume(&b) - volume(&body);
+    assert!((added - 76.8696).abs() < 1e-3, "added {added}");
+    assert!(
+        tessellate(&b, &Quality::default())
+            .expect("meshes")
+            .open_edges()
+            .is_empty()
+    );
+}
