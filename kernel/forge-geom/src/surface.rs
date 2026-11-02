@@ -222,6 +222,10 @@ pub trait Procedural: Send + Sync + std::fmt::Debug {
     fn foot_near(&self, _p: Point3, _uv: Point2) -> Option<Point2> {
         None
     }
+    /// The surface this one stands at a distance from, whose nearest point says what it does.
+    fn under(&self) -> Option<&Proc> {
+        None
+    }
     /// Whether `foot_near` has an answer on this surface.
     fn has_foot_near(&self) -> bool {
         false

@@ -153,6 +153,9 @@ impl Offset {
 }
 
 impl Procedural for Offset {
+    fn under(&self) -> Option<&Proc> {
+        Some(&self.base)
+    }
     fn kind(&self) -> &'static str {
         "offset"
     }

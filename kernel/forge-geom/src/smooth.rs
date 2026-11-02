@@ -5,7 +5,7 @@ use crate::curve::{Curve, CurveDeriv, CurveGeom, Domain1, ProcCurve, ProceduralC
 use crate::intcurve::IntCurve;
 use crate::surface::Surface;
 use forge_math::{Box3, Frame, Interval, Point3, Vec3, tol};
-use std::sync::Arc;
+use std::sync::{Arc, OnceLock};
 
 impl Curve {
     /// Whether the first derivative is exact (an intersection curve's is its guiding cubic's).
@@ -126,6 +126,8 @@ pub struct ChordCurve {
     stretches: Vec<Stretch>,
     /// u at the end (a closed curve's period).
     len: f64,
+    /// Where the curve's foot on a surface it stands off passes a join of it, made on first use.
+    joins: OnceLock<Vec<f64>>,
 }
 
 #[derive(Debug, Clone)]
@@ -180,11 +182,69 @@ impl ChordCurve {
             ic,
             stretches,
             len: u0,
+            joins: OnceLock::new(),
         })
     }
 
     pub fn curve(self) -> Curve {
         Curve::Procedural(ProcCurve(Arc::new(self)))
+    }
+
+    /// The u where the curve's foot on a surface it stands off passes a join of that surface, a knot
+    /// of a spline wall, say. The surface's curvature changes slope there, and off the surface the
+    /// curve's speed does too, the harder the nearer the distance is to the radius of curvature: a
+    /// point an integrator walking u has to stop at.
+    fn foot_joins(&self) -> &[f64] {
+        self.joins.get_or_init(|| {
+            let mut out = Vec::new();
+            for s in [&self.ic.a, &self.ic.b] {
+                let Surface::Procedural(p) = s else { continue };
+                let Some(base) = p.under() else { continue };
+                let d = base.domain();
+                for (axis, range, period) in [(0, d.u, d.u.period), (1, d.v, d.v.period)] {
+                    if !(range.lo.is_finite() && range.hi.is_finite()) {
+                        continue;
+                    }
+                    let whole = Interval::new(range.lo, range.hi);
+                    let joins = if axis == 0 {
+                        base.u_kinks(whole)
+                    } else {
+                        base.v_kinks(whole)
+                    };
+                    if joins.is_empty() {
+                        continue;
+                    }
+                    let foot = |t: f64| {
+                        let q = base.project(self.ic.eval(t));
+                        if axis == 0 { q.x } else { q.y }
+                    };
+                    let mut f0 = foot(0.0);
+                    for k in 0..self.ic.domain_hi() as usize {
+                        let f1 = foot((k + 1) as f64);
+                        // (not across a closed surface's seam)
+                        if period.is_none_or(|w| (f1 - f0).abs() < 0.5 * w) {
+                            let (lo, up) = (f0.min(f1), f0.max(f1));
+                            let first = joins.partition_point(|&j| j <= lo);
+                            for &j in joins[first..].iter().take_while(|&&j| j < up) {
+                                let (mut a, mut b) = (k as f64, (k + 1) as f64);
+                                for _ in 0..40 {
+                                    let m = 0.5 * (a + b);
+                                    if (foot(m) - j) * (f1 - f0) < 0.0 {
+                                        a = m;
+                                    } else {
+                                        b = m;
+                                    }
+                                }
+                                out.push(self.u_of(0.5 * (a + b)));
+                            }
+                        }
+                        f0 = f1;
+                    }
+                }
+            }
+            out.sort_by(f64::total_cmp);
+            out
+        })
     }
 
     /// u moved by periods into [0, len) on a closed curve.
@@ -384,6 +444,7 @@ impl ProceduralCurve for ChordCurve {
                 })
                 .collect(),
             len: self.len,
+            joins: OnceLock::new(),
         }))
     }
     fn speed_bound(&self, range: Interval) -> f64 {
@@ -434,6 +495,21 @@ impl ProceduralCurve for ChordCurve {
             }
             k += 1;
         }
+        let turns = if self.ic.closed {
+            ((range.hi - base) / self.len).ceil() as usize
+        } else {
+            1
+        };
+        for n in 0..turns {
+            let shift = base + self.len * n as f64;
+            out.extend(
+                self.foot_joins()
+                    .iter()
+                    .map(|j| j + shift)
+                    .filter(|&u| u > range.lo && u < range.hi),
+            );
+        }
+        out.sort_by(f64::total_cmp);
         out
     }
 }

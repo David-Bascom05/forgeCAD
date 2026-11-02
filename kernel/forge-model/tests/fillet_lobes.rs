@@ -51,22 +51,24 @@ fn rounds_on_a_lobed_rim_take_their_closed_form() {
             (x.curve.eval(x.range.mid()).z - 12.0).abs() < 1e-6
         })
         .collect();
-    let r = 4.0;
-    let picks: Vec<FilletEdge> = rim
-        .iter()
-        .map(|&edge| FilletEdge {
-            edge,
-            radius: Radius::Constant(r),
-        })
-        .collect();
-    let done = fillet(&b, &picks, 9).expect("rounds");
-    assert!(forge_topo::check(&done).is_empty());
-    let want = r * r * (1.0 - FRAC_PI_4) * (length - TAU * k * r);
-    let got = before.volume - forge_topo::mass::mass(&done).expect("mass").volume;
-    assert!(
-        (got - want).abs() < 1e-3 * want,
-        "r {r}: took {got}, closed form {want}"
-    );
-    let mesh = tessellate(&done, &Quality::default()).expect("meshes");
-    assert!(mesh.open_edges().is_empty());
+    for r in [4.0, 5.5] {
+        let picks: Vec<FilletEdge> = rim
+            .iter()
+            .map(|&edge| FilletEdge {
+                edge,
+                radius: Radius::Constant(r),
+            })
+            .collect();
+        let done = fillet(&b, &picks, 9).expect("rounds");
+        assert!(forge_topo::check(&done).is_empty());
+        let want = r * r * (1.0 - FRAC_PI_4) * (length - TAU * k * r);
+        let got = before.volume - forge_topo::mass::mass(&done).expect("mass").volume;
+        // the spine's speed changes slope at the wall's knots, the harder the nearer r is to the tips'
+        assert!(
+            (got - want).abs() < 1e-6 * want,
+            "r {r}: took {got}, closed form {want}"
+        );
+        let mesh = tessellate(&done, &Quality::default()).expect("meshes");
+        assert!(mesh.open_edges().is_empty());
+    }
 }
