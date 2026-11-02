@@ -1348,7 +1348,12 @@ impl Pipe {
 
     /// The parameters of p, in the normal plane of the spine at u.
     fn across(&self, p: Point3, u: f64) -> Point2 {
-        match self.cross(u) {
+        self.across_at(p, u, self.spine.eval(u))
+    }
+
+    /// `across`, the spine's point at u known.
+    fn across_at(&self, p: Point3, u: f64, c: Point3) -> Point2 {
+        match self.cross_at(c) {
             Some((c, e1, e2, th)) => {
                 let q = p - c;
                 Point2::new(u, dmath::atan2(q.dot(e2), q.dot(e1)) / th)
@@ -1437,10 +1442,15 @@ impl Procedural for Pipe {
     /// where p lies the radius from it (it is then on the pipe about there); else the search.
     fn project_near(&self, p: Point3, near: Point2) -> Point2 {
         match spine_refine(&self.spine, p, near.x) {
-            Some(u) if (p.distance(self.spine.eval(u)) - self.radius).abs() <= tol::LINEAR => {
-                self.across(p, u)
+            Some(u) => {
+                let c = self.spine.eval(u);
+                if (p.distance(c) - self.radius).abs() <= tol::LINEAR {
+                    self.across_at(p, u, c)
+                } else {
+                    self.project(p)
+                }
             }
-            _ => self.project(p),
+            None => self.project(p),
         }
     }
     fn bbox(&self, uv: Box2) -> Box3 {
