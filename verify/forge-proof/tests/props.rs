@@ -654,3 +654,93 @@ fn the_blend_checks_fail_what_they_should() {
     let other = fillet(&before, &pick(9.0), 1).expect("another mitre");
     assert!(forge_proof::blends::audit(&before, &other, &Radii::List(vec![5.0]), 1).unsupported > 0);
 }
+
+/// A thin blade with round corners running out over a disc's rim. Rounds at its foot wider than the
+/// flat at its narrow end mitre there, some resting on an edge of the blade carried on past its end by
+/// less than the radius. The audit says so as such, and still refuses another radius.
+#[test]
+fn audit_tells_a_mitre_on_a_rim_carried_on() {
+    use forge_bool::{Op, boolean};
+    use forge_math::{Frame, Point2, Point3, UnitVec3, Vec2, Vec3};
+    use forge_ops::{
+        Axis2, FilletEdge, Profile, ProfileLoop, Radius, Segment, extrude, fillet, fillet_kind, revolve,
+    };
+    use forge_proof::blends::Radii;
+    use std::f64::consts::{PI, TAU};
+    let line = |a: (f64, f64), b: (f64, f64), id: u64| {
+        (
+            Segment::Line {
+                a: Point2::new(a.0, a.1),
+                b: Point2::new(b.0, b.1),
+            },
+            id,
+        )
+    };
+    let hub = revolve(
+        &Profile {
+            plane: Frame::from_zx(Point3::ORIGIN, -UnitVec3::Y, Vec3::X).expect("frame"),
+            loops: vec![ProfileLoop::new(vec![
+                line((0.0, -5.0), (84.0, -5.0), 0),
+                line((84.0, -5.0), (84.0, 2.0), 1),
+                line((84.0, 2.0), (30.0, 20.0), 2),
+                line((30.0, 20.0), (0.0, 20.0), 3),
+                line((0.0, 20.0), (0.0, -5.0), 4),
+            ])],
+        },
+        Axis2 {
+            origin: Point2::ORIGIN,
+            dir: Vec2::Y,
+        },
+        TAU,
+        1,
+    )
+    .expect("hub");
+    let (a, b, c) = (28.4, 0.4, 1.6);
+    let arc = |x: f64, y: f64, start: f64, id| {
+        (
+            Segment::Arc {
+                center: Point2::new(x, y),
+                radius: c,
+                start,
+                sweep: PI / 2.0,
+            },
+            id,
+        )
+    };
+    let outline = ProfileLoop::new(vec![
+        line((-a, -2.0), (a, -2.0), 0),
+        arc(a, -b, -PI / 2.0, 1),
+        line((30.0, -b), (30.0, b), 2),
+        arc(a, b, 0.0, 3),
+        line((a, 2.0), (-a, 2.0), 4),
+        arc(-a, b, PI / 2.0, 5),
+        line((-30.0, b), (-30.0, -b), 6),
+        arc(-a, -b, PI, 7),
+    ]);
+    let x = Vec3::new(1.0, 1.0, 0.0);
+    let centre = Point3::ORIGIN + x.normalize().expect("unit").get() * 55.0;
+    let blade = extrude(
+        &Profile {
+            plane: Frame::from_zx(centre, UnitVec3::Z, x).expect("frame"),
+            loops: vec![outline],
+        },
+        60.0,
+        2,
+    )
+    .expect("blade");
+    let before = boolean(&hub, &blade, Op::Union, 3).expect("union");
+    let root: Vec<FilletEdge> = before
+        .edge_ids()
+        .filter(|&e| fillet_kind(&before, e) == Some(false))
+        .map(|edge| FilletEdge {
+            edge,
+            radius: Radius::Constant(1.5),
+        })
+        .collect();
+    let done = fillet(&before, &root, 9).expect("rounds");
+    let held = forge_proof::blends::audit(&before, &done, &Radii::List(vec![1.5]), 1);
+    assert_eq!(held.unsupported, 0);
+    assert!(held.carried > 0);
+    assert!(held.worst_carried < 0.5);
+    assert!(forge_proof::blends::audit(&before, &done, &Radii::List(vec![1.51]), 1).unsupported > 0);
+}

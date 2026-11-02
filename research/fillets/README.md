@@ -80,3 +80,11 @@ result moves with how the radius falls on the grid at coarser steps. No kernel c
 steps is about 2%, from how the radius falls on the grid, and it stands about 1.5% high: over 8 steps it gave 1118.7 against
 1101.83 exact on the first scene, and over 7 steps 840.1 against 829.65 on the narrower rim. These are what the numbers in
 `fillet_strips.rs` were held against.
+
+## Balls resting on a support carried on past its end (2026-11-02)
+
+`blends::audit` counts these as `carried`, not `unsupported`. Why that is sound, measured on 19 fillets in 17 parts with 1 to 18 such points each (largest distance off the support as it stands 0.12 at r 2):
+- OCCT's own fillet of the same body (`occt_fillet.py`) builds on 10 of the 17, 8 of them valid. On those 8, away from corners our points lie on its surface to within 0.01, which is the fit of the STEP file. Within 1.5 r of a corner they differ by up to 0.27 at r 2, and added volume by 0.1 to 0.4%, on lofted walls: past a wall's end, what the surface is carried on as is a choice, and the two kernels choose differently. Which is better there is not settled by this.
+- A control with plane walls and skew corners agrees with OCCT everywhere, added volume to 5e-8. It also lies up to 0.335 outside the ball's closing at r 2 (`closure_body.rs`, functions to paste into a bridge): that is what a mitre is. So being outside the closing by that much is not itself a fault.
+- OCCT refuses the other 7. They are judged by the closure only: nothing out by more than the control's mitre on the 17 parts' flagged points (0.206 at r 2).
+The bound of four radii on a line's or circle's carry was set to admit one case, a 0.2 long flat end with r 1, off by 3.5e-4; OCCT's surface agrees there on the sibling case it builds. It is a choice, not a derived limit: `worst_carried` reports what passed.

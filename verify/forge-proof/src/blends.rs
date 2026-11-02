@@ -22,6 +22,10 @@ pub struct Audit {
     pub worst_at: Option<Point3>,
     /// Points whose ball rests on fewer than two supports within `GAP`.
     pub unsupported: usize,
+    /// Points whose ball rests on a support only carried on past its end (`gaps`): a mitre's blends do
+    /// beside a wall's corner, or a rim's. How far off the support as it stands, at the worst.
+    pub carried: usize,
+    pub worst_carried: f64,
     /// Worst sine of the angle across a seam meant to be smooth (`SMOOTH`).
     pub worst_kink: f64,
     pub kink_at: Option<Point3>,
@@ -106,8 +110,18 @@ fn face_points(b: &Body, f: FaceId, want: usize, rng: &mut Rng) -> Vec<(Point3, 
 }
 
 /// A support's distance from `c` to `r`: faces by their surfaces (the ball may run past a face's
-/// end, onto the surface carried on), edges by their curves.
-fn gaps(before: &Body, after: &Body, own: FaceId, new: &[FaceId], c: Point3, r: f64) -> Vec<f64> {
+/// end, onto the surface carried on), edges by their curves. With `carry`, what a mitre's blend may
+/// also rest on: past a loft wall's box the tangent there (off it by under a radius), past
+/// a line's or circle's end the curve carried on, up to four radii (a short edge, a ball wider than it).
+fn gaps(
+    before: &Body,
+    after: &Body,
+    own: FaceId,
+    new: &[FaceId],
+    c: Point3,
+    r: f64,
+    carry: bool,
+) -> Vec<f64> {
     let reach = forge_math::Box3::from_point(c).grow(3.0 * r);
     let mut out = Vec::new();
     // a blend may rest on another of the fillet's own, one kind rounding first
@@ -124,13 +138,11 @@ fn gaps(before: &Body, after: &Body, own: FaceId, new: &[FaceId], c: Point3, r: 
         }
         let s = &before.face(f).surface;
         let foot = s.eval(s.project(c));
-        // past a loft wall's carried-on box its distance is to the tangent there, which a mitre's
-        // blend rests on where it runs on beyond the wall's corner
-        let beyond = match s {
-            Surface::Procedural(_) => (s.implicit(c).abs() - r).abs(),
-            _ => f64::INFINITY,
-        };
-        out.push((foot.distance(c) - r).abs().min(beyond));
+        let gap = (foot.distance(c) - r).abs();
+        out.push(match s {
+            Surface::Procedural(_) if carry && gap <= r => gap.min((s.implicit(c).abs() - r).abs()),
+            _ => gap,
+        });
     }
     for e in before.edge_ids() {
         if !before.edge_box(e).overlaps(&reach) {
@@ -138,7 +150,18 @@ fn gaps(before: &Body, after: &Body, own: FaceId, new: &[FaceId], c: Point3, r: 
         }
         let x = before.edge(e);
         let foot = x.curve.eval(x.curve.closest(c, x.range));
-        out.push((foot.distance(c) - r).abs());
+        let on = match &x.curve {
+            Curve::Line(_) | Curve::Circle(_) if carry => {
+                let past = x.curve.eval(x.curve.closest(c, x.curve.full_range(1e6)));
+                if past.distance(foot) <= 4.0 * r {
+                    past
+                } else {
+                    foot
+                }
+            }
+            _ => foot,
+        };
+        out.push((on.distance(c) - r).abs());
     }
     out.sort_by(f64::total_cmp);
     out
@@ -173,7 +196,7 @@ pub fn audit(before: &Body, after: &Body, r: &Radii, seed: u64) -> Audit {
             };
             let gap = match var {
                 Some((c, radius)) => {
-                    let g = gaps(before, after, f, &new, c, radius);
+                    let g = gaps(before, after, f, &new, c, radius, false);
                     (p.distance(c) - radius)
                         .abs()
                         .max(g.get(1).copied().unwrap_or(f64::INFINITY))
@@ -191,10 +214,23 @@ pub fn audit(before: &Body, after: &Body, r: &Radii, seed: u64) -> Audit {
                         (Some(x), Radii::Range(lo, hi)) => (x >= lo - GAP && x <= hi + GAP).then_some(x),
                         _ => None,
                     };
+                    let mut rested = |r: &Radii| {
+                        let gap = ball_gap(before, after, f, &new, p, n.get(), r, false);
+                        if gap <= GAP {
+                            return gap;
+                        }
+                        let on = ball_gap(before, after, f, &new, p, n.get(), r, true);
+                        if on > GAP {
+                            return gap;
+                        }
+                        out.carried += 1;
+                        out.worst_carried = out.worst_carried.max(gap);
+                        on
+                    };
                     match (own, asked) {
                         (Some(_), None) => f64::INFINITY,
-                        (_, Some(x)) => ball_gap(before, after, f, &new, p, n.get(), &Radii::List(vec![x])),
-                        _ => ball_gap(before, after, f, &new, p, n.get(), r),
+                        (_, Some(x)) => rested(&Radii::List(vec![x])),
+                        _ => rested(r),
                     }
                 }
             };
@@ -230,9 +266,19 @@ pub fn audit(before: &Body, after: &Body, r: &Radii, seed: u64) -> Audit {
 
 /// The gap between a ball on either side of the point and its second-best support, the better
 /// side's, at the radius in `r` that suits it best.
-fn ball_gap(before: &Body, after: &Body, own: FaceId, new: &[FaceId], p: Point3, n: Vec3, r: &Radii) -> f64 {
+#[allow(clippy::too_many_arguments)]
+fn ball_gap(
+    before: &Body,
+    after: &Body,
+    own: FaceId,
+    new: &[FaceId],
+    p: Point3,
+    n: Vec3,
+    r: &Radii,
+    carry: bool,
+) -> f64 {
     let at = |side: f64, r: f64| {
-        let g = gaps(before, after, own, new, p + n * (side * r), r);
+        let g = gaps(before, after, own, new, p + n * (side * r), r, carry);
         g.get(1).copied().unwrap_or(f64::INFINITY)
     };
     let mut best = f64::INFINITY;
