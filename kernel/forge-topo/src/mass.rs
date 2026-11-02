@@ -1919,7 +1919,15 @@ impl Ctx<'_> {
                 for &(t, w) in rule {
                     axpy(&mut g, 0.5 * x * w, &self.f(self.a0 + 0.5 * x * (1.0 + t), b));
                 }
-                (g, [0.0; NF], [0.0; NF])
+                let mut e = [0.0; NF];
+                // a rule's degree holds for the moments; on a twisted ruled wall the area's square root
+                // is no polynomial, and the rule below this one says how far off it may be
+                if matches!(self.s, Surface::Procedural(_)) {
+                    let at = |t: f64| self.f(self.a0 + 0.5 * x * (1.0 + t), b)[10];
+                    let (t, _) = GL2[1];
+                    e[10] = (g[10] - 0.5 * x * (at(-t) + at(t))).abs();
+                }
+                (g, [0.0; NF], e)
             }
             Inner::Fourier { k, ref along } => {
                 // the Fourier coefficients along a at this b
