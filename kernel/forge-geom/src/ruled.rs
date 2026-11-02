@@ -9,7 +9,7 @@
 //! off the face projects to parameters off the face.
 
 use crate::curve::{Circle, CurveGeom, Domain1, Parabola};
-use crate::screw::{fresh_id, polish, remembered};
+use crate::screw::{KeptSeeds, fresh_id, polish, remembered};
 use crate::surface::{Domain2, Proc, Procedural, ShapeBounds, SurfDeriv, Surface};
 use crate::wrap::Wrap;
 use forge_math::{Box2, Box3, Frame, Interval, Point2, Point3, Vec3, tol};
@@ -161,6 +161,8 @@ pub struct Ruled {
     ext: Box2,
     /// Rulings (t, A(t), B(t) - A(t)) at even steps over `ext.u`, seeding nearest-point searches.
     rows: Vec<(f64, Point3, Vec3)>,
+    /// The same at the two ends of `ext.u`, read off the rails.
+    ends: [(f64, Point3, Vec3); 2],
     /// How far a point of the carried-on surface can lie from the nearest of `rows`.
     reach: f64,
     scale: (f64, f64),
@@ -198,6 +200,7 @@ impl Ruled {
             b: b.clone(),
             ext: Box2::new(Interval::new(-te, 1.0 + te), Interval::new(-1.0, 2.0)),
             rows: Vec::new(),
+            ends: [(0.0, Point3::ORIGIN, Vec3::ZERO); 2],
             reach: 0.0,
             scale: (a.length().max(b.length()), 0.0),
             radius: f64::INFINITY,
@@ -310,6 +313,7 @@ impl Ruled {
                 (t, pa, b.at(t).0 - pa)
             })
             .collect();
+        r.ends = r.rail_ends();
         // between two rows a point at s moves (1 - s) of one rail's step and s of the other's,
         // at most half of it to the nearer row (0.75: a step's arc, not its chord)
         let carried =
@@ -364,8 +368,16 @@ impl Ruled {
         }
     }
 
-    /// Parameters of the point nearest p within `dom`.
-    fn nearest(&self, p: Point3, dom: Box2) -> Point2 {
+    fn rail_ends(&self) -> [(f64, Point3, Vec3); 2] {
+        [self.ext.u.lo, self.ext.u.hi].map(|t| {
+            let (pa, _, _) = self.a.at(t);
+            (t, pa, self.b.at(t).0 - pa)
+        })
+    }
+
+    /// Parameters of the point nearest p on the carried-on surface.
+    fn nearest(&self, p: Point3) -> Point2 {
+        let dom = self.ext;
         if self.extruded
             && let (&Rail::Parabola { curve, range }, &Rail::Parabola { curve: cb, .. }) = (&self.a, &self.b)
         {
@@ -378,31 +390,62 @@ impl Ruled {
             let s = (d.dot(p - self.a.at(t).0) / d.length_sq()).clamp(dom.v.lo, dom.v.hi);
             return Point2::new(t, s);
         }
-        let mut best = (f64::INFINITY, Point2::new(dom.u.mid(), dom.v.mid()));
-        if let Some((uv, on)) = self.unwrapped(p, dom) {
-            if on {
-                return uv;
-            }
-            best = (self.point(uv).p.distance_sq(p), uv);
-        }
-        let mut take = |t: f64, pa: Point3, d: Vec3| {
-            let w = p - pa;
-            let s = (w.dot(d) / d.length_sq()).clamp(dom.v.lo, dom.v.hi);
-            let e = (w - d * s).length_sq();
-            if e < best.0 {
-                best = (e, Point2::new(t, s));
-            }
+        let start = match self.unwrapped(p, dom) {
+            Some((uv, true)) => return uv,
+            Some((uv, false)) => self.scan(p, (self.point(uv).p.distance_sq(p), uv)).0,
+            None => self.seed(p),
         };
-        for &(t, pa, d) in &self.rows {
-            if dom.u.contains(t) {
-                take(t, pa, d);
+        polish(&|uv| self.point(uv), p, start, dom, None).0
+    }
+
+    /// Where on its ruling p is nearest and how near, for one of `rows` or `ends`.
+    fn on_ruling(&self, p: Point3, &(t, pa, d): &(f64, Point3, Vec3)) -> (f64, Point2) {
+        let w = p - pa;
+        let s = (w.dot(d) / d.length_sq()).clamp(self.ext.v.lo, self.ext.v.hi);
+        ((w - d * s).length_sq(), Point2::new(t, s))
+    }
+
+    /// The nearest of the rulings (the first, in a tie), better than `best` so far, and for
+    /// `seed` which it is, its squared distance, the next nearest's and the size of the numbers.
+    fn scan(&self, p: Point3, mut best: (f64, Point2)) -> (Point2, usize, f64, f64, f64) {
+        let (mut at, mut next, mut size) = (usize::MAX, f64::INFINITY, 0.0f64);
+        let rows = self
+            .rows
+            .iter()
+            .enumerate()
+            .filter(|(_, r)| self.ext.u.contains(r.0));
+        let ends = self
+            .ends
+            .iter()
+            .enumerate()
+            .map(|(k, r)| (self.rows.len() + k, r));
+        for (k, r) in rows.chain(ends) {
+            let (e, uv) = self.on_ruling(p, r);
+            if e < best.0 {
+                next = next.min(best.0);
+                (best, at) = ((e, uv), k);
+            } else {
+                next = next.min(e);
             }
+            size = size.max(2.0 * (p - r.1).length_sq() + 8.0 * r.2.length_sq());
         }
-        for t in [dom.u.lo, dom.u.hi] {
-            let (pa, _, _) = self.a.at(t);
-            take(t, pa, self.b.at(t).0 - pa);
+        (best.1, at, best.0, next, size)
+    }
+
+    /// `scan`'s answer, without looking at every ruling while p stays near where it last looked.
+    fn seed(&self, p: Point3) -> Point2 {
+        if let Some([k, _]) = KeptSeeds::get(self.id, p) {
+            let n = self.rows.len();
+            return self
+                .on_ruling(p, if k < n { &self.rows[k] } else { &self.ends[k - n] })
+                .1;
         }
-        polish(&|uv| self.point(uv), p, best.1, dom, None).0
+        let far = (f64::INFINITY, Point2::new(self.ext.u.mid(), self.ext.v.mid()));
+        let (uv, k, best, next, size) = self.scan(p, far);
+        if k != usize::MAX {
+            KeptSeeds::put(self.id, p, [k, 0], &[(best, next)], size);
+        }
+        uv
     }
 
     /// A wrapped wall's parameters of a point, read straight off its turn, height and radius
@@ -434,7 +477,7 @@ impl Ruled {
     /// Signed distance to the carried-on surface and its gradient.
     fn value(&self, p: Point3) -> (f64, Vec3) {
         remembered(self.id, p, || {
-            let uv = self.nearest(p, self.ext);
+            let uv = self.nearest(p);
             let d = self.point(uv);
             // at an apex, the normal just off it
             let n = d.du.cross(d.dv).normalize().or_else(|| {
@@ -520,7 +563,7 @@ impl Procedural for Ruled {
         Domain2 { u: unit, v: unit }
     }
     fn project(&self, p: Point3) -> Point2 {
-        self.nearest(p, self.ext)
+        self.nearest(p)
     }
     fn project_near(&self, p: Point3, uv: Point2) -> Point2 {
         // a point lying on the surface is its own nearest point: Newton from nearby finds it
@@ -528,7 +571,7 @@ impl Procedural for Ruled {
         if d.p.distance(p) <= tol::LINEAR {
             q
         } else {
-            self.nearest(p, self.ext)
+            self.nearest(p)
         }
     }
     fn bbox(&self, uv: Box2) -> Box3 {
@@ -672,6 +715,7 @@ impl Procedural for Ruled {
             .iter()
             .map(|&(t, p, d)| (t, f.point_to_world(p), f.vec_to_world(d)))
             .collect();
+        r.ends = r.rail_ends();
         Proc(Arc::new(r))
     }
     fn uv_scale(&self) -> (f64, f64) {
@@ -780,6 +824,31 @@ mod tests {
             close((at(h, 0.0).du - at(-h, 0.0).du) / (2.0 * h), d.duu);
             close((at(0.0, h).du - at(0.0, -h).du) / (2.0 * h), d.duv);
         }
+    }
+
+    #[test]
+    fn a_seed_kept_from_a_nearby_point_is_the_ruling_a_scan_picks() {
+        let mut r = Rng::new(733);
+        let (mut steps, mut crossed) = (0, 0);
+        for _ in 0..60 {
+            let s = random_ruled(&mut r);
+            let far = (f64::INFINITY, Point2::new(s.ext.u.mid(), s.ext.v.mid()));
+            let d = s.point(rand_uv(&mut r));
+            let mut p = d.p + d.du.cross(d.dv).normalize().unwrap() * r.range(-1.0, 1.0);
+            let mut last = usize::MAX;
+            // small steps stay on one ruling, then cross to the next; the odd large one jumps
+            for k in 0..400 {
+                let h = if k % 50 == 49 { 2.0 } else { 0.02 };
+                p += Vec3::new(r.range(-h, h), r.range(-h, h), r.range(-h, h));
+                let (want, at, ..) = s.scan(p, far);
+                assert_eq!(s.seed(p), want, "{s:?} {p:?}");
+                steps += 1;
+                crossed += usize::from(at != last);
+                last = at;
+            }
+        }
+        // the walks did cross from ruling to ruling
+        assert!(crossed > 200 && crossed < steps / 2, "{crossed} of {steps}");
     }
 
     #[test]

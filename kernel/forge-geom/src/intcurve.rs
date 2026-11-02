@@ -240,9 +240,14 @@ impl IntCurve {
     }
 
     /// First and second derivative with respect to t (the chain spacing sets its scale).
-    pub fn derivs(&self, t: f64) -> (Point3, Vec3, Vec3) {
+    fn derivs(&self, t: f64) -> (Point3, Vec3, Vec3) {
         let (p, d1, d2) = self.hermite(t);
         (self.onto(p, t), d1, d2)
+    }
+
+    /// The guiding cubic's derivative at t, no surfaces asked (`derivs`' first derivative).
+    pub fn guide_tangent(&self, t: f64) -> Vec3 {
+        self.hermite(t).1
     }
 
     /// Bound on |dP/dt| over the curve.

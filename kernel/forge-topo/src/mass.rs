@@ -973,8 +973,7 @@ fn coedge_pieces<'a>(
                 // pieces over which the curve turns less than 30 degrees: the distance along
                 // their chord then runs one way
                 let tan = |t: f64| {
-                    ic.derivs(t)
-                        .1
+                    ic.guide_tangent(t)
                         .normalize()
                         .map_or(Vec3::new(0.0, 0.0, 0.0), |d| d.get())
                 };

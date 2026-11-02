@@ -5361,9 +5361,12 @@ fn loops_touch(body: &Body, f: FaceId) -> bool {
         let n = 32;
         let w = x.range.width() / n as f64;
         let best = (0..=n)
-            .map(|i| x.range.lo + i as f64 * w)
-            .min_by(|&p, &q| gap(p).total_cmp(&gap(q)))
-            .unwrap_or(x.range.lo);
+            .map(|i| {
+                let t = x.range.lo + i as f64 * w;
+                (t, gap(t))
+            })
+            .min_by(|p, q| p.1.total_cmp(&q.1))
+            .map_or(x.range.lo, |b| b.0);
         let (mut lo, mut hi) = ((best - w).max(x.range.lo), (best + w).min(x.range.hi));
         let phi = 0.618_033_988_749_894_8;
         for _ in 0..32 {

@@ -10,7 +10,7 @@
 
 use crate::curve::{CurveDeriv, Domain1, ProcCurve, ProceduralCurve};
 use crate::ruled::{Rail, principal_max};
-use crate::screw::{fresh_id, polish, remembered};
+use crate::screw::{KeptSeeds, fresh_id, polish, remembered};
 use crate::surface::{Domain2, Proc, Procedural, ShapeBounds, SurfDeriv, Surface};
 use forge_math::{Box2, Box3, Frame, Interval, Point2, Point3, Vec3, tol};
 use std::sync::Arc;
@@ -957,6 +957,15 @@ impl Hull {
     }
 }
 
+/// The first of the grid's points `keep` allows that is nearest, and its distance.
+#[inline]
+fn first_nearest(dist: &[f64; ROWS], keep: impl Fn(usize) -> bool, none: usize) -> (usize, f64) {
+    (0..ROWS)
+        .filter(|&m| keep(m))
+        .map(|m| (m, dist[m]))
+        .fold((none, f64::INFINITY), |b, x| if x.1 < b.1 { x } else { b })
+}
+
 impl Skinned {
     /// The control points of the face's piece over `uv` (inside its domain); see `Hull`.
     pub(crate) fn hull(&self, uv: Box2) -> Option<Hull> {
@@ -1182,26 +1191,46 @@ impl Skinned {
         (d.p.distance(p) <= 0.1 * tol::LINEAR).then_some((uv, d))
     }
 
-    fn solve(&self, p: Point3) -> (Point2, SurfDeriv) {
-        if let Some(r) = self.at_pole(p) {
-            return r;
+    /// The nearest grid point a search may start from (a row at an apex is one point for every u:
+    /// no start) and, on a sharp surface, the nearest away from that one's neighbours (MAX if none).
+    fn seeds_near(&self, p: Point3) -> [usize; 2] {
+        if let Some(seeds) = KeptSeeds::get(self.id, p) {
+            return seeds;
         }
         let mut dist = [0.0; ROWS];
         for (d, q) in dist.iter_mut().zip(&self.pts) {
             *d = q.distance_sq(p);
         }
-        let nearest = |keep: &dyn Fn(usize) -> bool, none: usize| {
-            (0..ROWS)
-                .filter(|&m| keep(m))
-                .map(|m| (m, dist[m]))
-                .fold((none, f64::INFINITY), |b, x| if x.1 < b.1 { x } else { b })
-        };
-        // a row at an apex is one point for every u: no start for a search
         let w = GRID.1 + 1;
-        let (k, _) = match self.pole {
-            Some(j) => nearest(&|m| m % w != j, 0),
-            None => nearest(&|_| true, 0),
+        // a row at an apex is one point for every u: no start for a search
+        let pole = self.pole.unwrap_or(usize::MAX);
+        let (k, b0) = first_nearest(&dist, |m| m % w != pole, 0);
+        let (i0, j0) = ((k / w) as i64, (k % w) as i64);
+        let away = |m: usize| ((m / w) as i64 - i0).abs() > 1 || ((m % w) as i64 - j0).abs() > 1;
+        let (far, b1) = if self.sharp {
+            first_nearest(&dist, away, usize::MAX)
+        } else {
+            (usize::MAX, f64::INFINITY)
         };
+        let seeds = [k, far];
+        if KeptSeeds::settled(self.id, p, seeds, f64::INFINITY) {
+            let n0 = first_nearest(&dist, |m| m != k && m % w != pole, 0).1;
+            let n1 = if self.sharp {
+                first_nearest(&dist, |m| m != far && away(m), 0).1
+            } else {
+                f64::INFINITY
+            };
+            let size = dist.iter().fold(0.0f64, |a, &d| a.max(d));
+            KeptSeeds::put(self.id, p, seeds, &[(b0, n0), (b1, n1)], 2.0 * size);
+        }
+        seeds
+    }
+
+    fn solve(&self, p: Point3) -> (Point2, SurfDeriv) {
+        if let Some(r) = self.at_pole(p) {
+            return r;
+        }
+        let [k, far] = self.seeds_near(p);
         let from = |k: usize| {
             polish(
                 &|uv| self.point(uv),
@@ -1248,15 +1277,10 @@ impl Skinned {
                 best = alt;
             }
         }
-        let (i0, j0) = ((k / w) as i64, (k % w) as i64);
-        let other = nearest(
-            &|m| ((m / w) as i64 - i0).abs() > 1 || ((m % w) as i64 - j0).abs() > 1,
-            k,
-        );
-        if other.1.is_infinite() {
+        if far == usize::MAX {
             return best;
         }
-        let alt = from(other.0);
+        let alt = from(far);
         if alt.1.p.distance_sq(p) < best.1.p.distance_sq(p) {
             alt
         } else {
@@ -1796,6 +1820,30 @@ mod tests {
         for (x, y) in a.iter().zip(&b).take(5) {
             assert!((x[2] - y[2]).abs() < 1e-6, "{x:?} {y:?}");
         }
+    }
+
+    #[test]
+    fn seeds_kept_from_a_nearby_point_are_what_a_fresh_search_picks() {
+        let mut r = Rng::new(731);
+        let mut steps = 0;
+        for _ in 0..40 {
+            let (rails, sp, slopes) = random(&mut r);
+            let k = r.below(sp.knots().len() - 1);
+            let Some(s) = Skinned::new(rails, slopes, sp, k, vec![]) else {
+                continue;
+            };
+            let d = s.domain();
+            let mut p = s.point(Point2::new(r.range(0.0, 1.0), r.range(d.v.lo, d.v.hi))).p;
+            for k in 0..200 {
+                let h = if k % 40 == 39 { 2.0 } else { 0.02 };
+                p += Vec3::new(r.range(-h, h), r.range(-h, h), r.range(-h, h));
+                let mut fresh = s.clone();
+                fresh.id = fresh_id();
+                assert_eq!(s.seeds_near(p), fresh.seeds_near(p), "{p:?}");
+                steps += 1;
+            }
+        }
+        assert!(steps > 2000, "{steps}");
     }
 
     #[test]

@@ -1074,24 +1074,90 @@ pub(crate) fn fresh_id() -> u64 {
     NEXT.fetch_add(1, std::sync::atomic::Ordering::Relaxed)
 }
 
+/// Which of 256 slots a query on surface `id` at the point with these coordinate bits goes in.
+pub(crate) fn seen_slot(id: u64, key: [u64; 3]) -> usize {
+    let mix =
+        (key[0] ^ key[1].rotate_left(21) ^ key[2].rotate_left(42) ^ id).wrapping_mul(0x9e37_79b9_7f4a_7c15);
+    (mix >> 56) as usize
+}
+
 /// The implicit value and gradient of surface `id` at p, solved by `solve` unless this thread
-/// just asked for the same (tracing asks for both, one after the other).
+/// asked for the same lately (tracing asks for both, one after the other; a pipe's section asks
+/// again at the same centres). The answer is a function of the two, so this can't change it.
 pub(crate) fn remembered(id: u64, p: Point3, solve: impl FnOnce() -> (f64, Vec3)) -> (f64, Vec3) {
+    type Answer = std::cell::Cell<(u64, [u64; 3], f64, Vec3)>;
     thread_local! {
-        static LAST: std::cell::Cell<(u64, Point3, f64, Vec3)> = const {
-            std::cell::Cell::new((0, Point3::ORIGIN, 0.0, Vec3::ZERO))
-        };
+        // on the heap, and made on first use: every thread starts with its thread locals in place,
+        // and most never ask
+        static SEEN: Box<[Answer; 256]> =
+            Box::new([const { std::cell::Cell::new((0, [0; 3], 0.0, Vec3::ZERO)) }; 256]);
     }
-    LAST.with(|last| {
-        let (k, q, f, g) = last.get();
-        if k == id && q == p {
+    let key = [p.x.to_bits(), p.y.to_bits(), p.z.to_bits()];
+    let mix =
+        (key[0] ^ key[1].rotate_left(21) ^ key[2].rotate_left(42) ^ id).wrapping_mul(0x9e37_79b9_7f4a_7c15);
+    let slot = (mix >> 56) as usize;
+    SEEN.with(|seen| {
+        let (k, q, f, g) = seen[slot].get();
+        if k == id && q == key {
             return (f, g);
         }
         let (f, g) = solve();
-        last.set((id, p, f, g));
+        seen[slot].set((id, key, f, g));
         (f, g)
     })
 }
+
+/// Seeds of surface `id` kept from a search over fixed points or segments (the first of the
+/// nearest, in a tie), reused while the query stays near. Distance to a fixed set is 1-Lipschitz
+/// in p, so the nearest stays the nearest while p moves less than half the gap to the next (less
+/// what rounding could hide: each squared distance holds within 1e-13 of the numbers' size
+/// squared, and the one kept must beat the other by more than that). The same seed the search
+/// would pick, so the same bits.
+pub(crate) struct KeptSeeds;
+
+impl KeptSeeds {
+    const SLOTS: usize = 16;
+
+    fn with<R>(f: impl FnOnce(&[KeptSlot; Self::SLOTS]) -> R) -> R {
+        thread_local! {
+            static KEPT: [KeptSlot; KeptSeeds::SLOTS] = const {
+                [const { std::cell::Cell::new((0, Point3::ORIGIN, [0; 2], -1.0)) }; KeptSeeds::SLOTS]
+            };
+        }
+        KEPT.with(|k| f(k))
+    }
+
+    /// The seeds kept for `id`, if p is still near enough for them.
+    pub(crate) fn get(id: u64, p: Point3) -> Option<[usize; 2]> {
+        let (k, q, seeds, room) = Self::with(|l| l[id as usize % Self::SLOTS].get());
+        (k == id && q.distance_sq(p) <= room).then_some(seeds)
+    }
+
+    /// Whether the search just made found what the last one on `id` did from within `near`
+    /// (squared). Only then is working out how far the answer holds worth its cost: queries that
+    /// jump about never ask again.
+    pub(crate) fn settled(id: u64, p: Point3, seeds: [usize; 2], near: f64) -> bool {
+        let last = Self::with(|l| l[id as usize % Self::SLOTS].replace((id, p, seeds, -1.0)));
+        last.0 == id && last.2 == seeds && last.1.distance_sq(p) <= near
+    }
+
+    /// Keep seeds found at p, with how far p can move for each `(best, next)` squared distances.
+    pub(crate) fn put(id: u64, p: Point3, seeds: [usize; 2], gaps: &[(f64, f64)], size: f64) {
+        let slack = 1e-13 * size;
+        let gap = gaps
+            .iter()
+            .map(|&(best, next)| {
+                (next - slack).max(0.0).sqrt() - (best + slack).sqrt() - (2.0 * slack).sqrt()
+            })
+            .fold(f64::INFINITY, f64::min);
+        if gap > 0.0 {
+            let room = 0.49 * gap;
+            Self::with(|l| l[id as usize % Self::SLOTS].set((id, p, seeds, room * room)));
+        }
+    }
+}
+
+type KeptSlot = std::cell::Cell<(u64, Point3, [usize; 2], f64)>;
 
 /// Parameters of the point of a patch nearest p, and the point, by Newton steps on |S - p|^2
 /// from `uv` (whose point `at` may already be known), kept inside `dom` (at a side, only along

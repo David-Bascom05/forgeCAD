@@ -7,6 +7,7 @@
 
 use crate::curve::{Circle, Curve, CurveDeriv, CurveGeom, Domain1, Line, ProcCurve, ProceduralCurve};
 use crate::intersect::{SurfaceSurface, plane_surface};
+use crate::screw::{fresh_id, seen_slot};
 use crate::smooth::ChordCurve;
 use crate::surface::{Cylinder, Domain2, Plane, Proc, Procedural, SurfDeriv, Surface, SurfaceGeom, Torus};
 use crate::varblend::VarBlend;
@@ -70,6 +71,7 @@ pub fn offset(s: &Surface, d: f64) -> Option<Surface> {
 pub struct Offset {
     base: Proc,
     d: f64,
+    id: u64,
 }
 
 impl Offset {
@@ -87,7 +89,46 @@ impl Offset {
         Some(Surface::Procedural(Proc(Arc::new(Offset {
             base: base.clone(),
             d,
+            id: fresh_id(),
         }))))
+    }
+
+    /// The base's parameters and normal at p, from one projection (a base's is the costly part),
+    /// and the value at p once something has asked for it.
+    fn at(&self, p: Point3, value: bool) -> Option<(f64, Vec3)> {
+        type Seen = std::cell::Cell<(u64, [u64; 3], Point2, Vec3, f64)>;
+        thread_local! {
+            // on the heap, and made on first use, as `remembered`'s
+            static SEEN: Box<[Seen; 256]> = Box::new(
+                [const { std::cell::Cell::new((0, [0; 3], Point2::new(0.0, 0.0), Vec3::ZERO, f64::NAN)) }; 256],
+            );
+        }
+        let key = [p.x.to_bits(), p.y.to_bits(), p.z.to_bits()];
+        let slot = seen_slot(self.id, key);
+        let (k, q, mut uv, mut n, mut f) = SEEN.with(|s| s[slot].get());
+        if k != self.id || q != key {
+            uv = self.base.project(p);
+            n = self.base.normal(uv)?.get();
+            f = f64::NAN;
+        } else if !value || !f.is_nan() {
+            return Some((f, n));
+        }
+        if value {
+            f = n.dot(p - self.place(uv));
+        }
+        SEEN.with(|s| s[slot].set((self.id, key, uv, n, f)));
+        Some((f, n))
+    }
+
+    /// The point alone (`first`'s).
+    fn place(&self, uv: Point2) -> Point3 {
+        let b = self.base.deriv(uv);
+        let n = b.du.cross(b.dv);
+        let len = n.length();
+        if len == 0.0 {
+            return b.p;
+        }
+        b.p + (n / len) * self.d
     }
 
     /// The point, du and dv, from the base's derivatives and its normal's (Weingarten).
@@ -111,7 +152,7 @@ impl Procedural for Offset {
         "offset"
     }
     fn point(&self, uv: Point2) -> Point3 {
-        self.first(uv).0
+        self.place(uv)
     }
     fn deriv(&self, uv: Point2) -> SurfDeriv {
         let (p, du, dv) = self.first(uv);
@@ -144,21 +185,21 @@ impl Procedural for Offset {
         self.base.bbox(uv).grow(self.d.abs())
     }
     fn implicit(&self, p: Point3) -> f64 {
-        let uv = self.project(p);
-        match self.base.normal(uv) {
-            Some(n) => n.dot(p - self.first(uv).0),
-            None => self.base.implicit(p) - self.d,
-        }
+        self.at(p, true)
+            .map_or_else(|| self.base.implicit(p) - self.d, |v| v.0)
     }
     fn gradient(&self, p: Point3) -> Vec3 {
-        self.base
-            .normal(self.project(p))
-            .map_or_else(|| self.base.gradient(p), |n| n.get())
+        self.at(p, false).map_or_else(|| self.base.gradient(p), |v| v.1)
+    }
+    fn implicit_gradient(&self, p: Point3) -> (f64, Vec3) {
+        self.at(p, true)
+            .unwrap_or_else(|| (self.base.implicit(p) - self.d, self.base.gradient(p)))
     }
     fn transformed(&self, f: &Frame) -> Proc {
         Proc(Arc::new(Offset {
             base: self.base.transformed(f),
             d: self.d,
+            id: fresh_id(),
         }))
     }
     fn uv_scale(&self) -> (f64, f64) {
