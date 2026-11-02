@@ -30,6 +30,11 @@ pub enum LoftError {
         want: usize,
         got: usize,
     },
+    /// A smooth loft through more sections than its spline can sum.
+    TooManySections {
+        sections: usize,
+        most: usize,
+    },
     /// Profiles `index` and `index + 1` meet, or lie on one plane: a ruling between them has
     /// no length.
     Degenerate {
@@ -503,6 +508,12 @@ fn smooth(
             centres[k].distance(centres[k + 1])
         };
         knots.push(knots[k] + d);
+    }
+    if knots.len() > forge_geom::skinned::MAX_SECTIONS {
+        return Err(LoftError::TooManySections {
+            sections: knots.len(),
+            most: forge_geom::skinned::MAX_SECTIONS,
+        });
     }
     let dome = |k: usize| apex[k].and_then(|a| a.dome);
     let spline = Arc::new(

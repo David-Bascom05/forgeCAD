@@ -16,7 +16,9 @@ use forge_math::{Box2, Box3, Frame, Interval, Point2, Point3, Vec3, tol};
 use std::sync::Arc;
 
 /// The most data a spline sums: sections, and a slope at each end.
-const MAX: usize = 16;
+const MAX: usize = 34;
+/// The most sections a spline runs through.
+pub const MAX_SECTIONS: usize = MAX - 2;
 
 /// Each datum's weight in a value and its first two derivatives.
 type Weights = [[f64; 3]; MAX];
@@ -33,7 +35,7 @@ pub struct Spline {
 }
 
 impl Spline {
-    /// None unless the knots increase, or for more than 14 of them.
+    /// None unless the knots increase, or for more than `MAX_SECTIONS` of them.
     pub fn new(knots: Vec<f64>, start_slope: bool, end_slope: bool) -> Option<Spline> {
         let n = knots.len();
         if n < 2
