@@ -7111,6 +7111,7 @@ fn ball_patch(input: &CornerInput, hole: &[HoleSide], centre: Point3) -> Option<
 /// both lying on one surface: alternate nearest points until they meet.
 fn crossing(a: &Curve, mut t: f64, b: &Curve, range: Interval) -> Option<f64> {
     let window = search_window(a, t, 1e3);
+    let start = t;
     for _ in 0..100 {
         let p = a.eval(t);
         let q = b.eval(b.closest(p, range));
@@ -7141,7 +7142,27 @@ fn crossing(a: &Curve, mut t: f64, b: &Curve, range: Interval) -> Option<f64> {
         t = (t + (rb * ab - ra * bb) / det).clamp(window.lo, window.hi);
         s = (s + (rb * aa - ra * ab) / det).clamp(range.lo, range.hi);
     }
-    (a.eval(t).distance(b.eval(s)) <= tol::LINEAR).then_some(t)
+    if a.eval(t).distance(b.eval(s)) <= tol::LINEAR {
+        return Some(t);
+    }
+    // round a tight bend a spring's derivative is too rough for Newton: the least gap, by golden section
+    let gap = |t: f64| {
+        let p = a.eval(t);
+        b.eval(b.closest(p, range)).distance(p)
+    };
+    let around = search_window(a, start, 8.0 * gap(start));
+    let (mut lo, mut hi) = (around.lo, around.hi);
+    let phi = 0.618_033_988_749_894_8;
+    for _ in 0..64 {
+        let (c, d) = (hi - phi * (hi - lo), lo + phi * (hi - lo));
+        if gap(c) < gap(d) {
+            hi = d;
+        } else {
+            lo = c;
+        }
+    }
+    let t = 0.5 * (lo + hi);
+    (gap(t) <= tol::LINEAR).then_some(t)
 }
 
 /// The centre of a ball of radius `r` on the two faces, in the plane across the edge at `l.p`: the

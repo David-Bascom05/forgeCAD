@@ -746,7 +746,7 @@ fn round_blend(
                 offset(&sb, db).ok_or(err.clone())?,
             );
             let c0 = pm - normal(m, pm).ok_or(err.clone())?.get() * (s * -r);
-            let spine = spine(&oa, &om, c0, region.grow(4.0 * r)).ok_or(err.clone())?;
+            let spine = spine(&oa, &om, c0, region.grow(4.0 * r), r).ok_or(err.clone())?;
             // the same ball all along when the spine runs on side b's offset too; else the
             // radius changes along (the sides close in or open out)
             let range = spine.full_range(1e6);

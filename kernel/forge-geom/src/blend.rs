@@ -436,7 +436,7 @@ pub fn closed_form(a: &Surface, b: &Surface) -> Option<Vec<Curve>> {
 
 /// The branch of the intersection of `a` and `b` passing nearest `near`, in
 /// closed form where the pair has one, traced within `region` otherwise.
-pub fn spine(a: &Surface, b: &Surface, near: Point3, region: Box3) -> Option<Curve> {
+pub fn spine(a: &Surface, b: &Surface, near: Point3, region: Box3, r: f64) -> Option<Curve> {
     let closed = closed_form(a, b);
     let dist = |c: &Curve| {
         let r = c.full_range(1e6);
@@ -452,7 +452,7 @@ pub fn spine(a: &Surface, b: &Surface, near: Point3, region: Box3) -> Option<Cur
     pick(
         traced
             .into_iter()
-            .map(|c| Curve::Intersection(Arc::new(c)))
+            .map(|c| Curve::Intersection(Arc::new(c.refined(r))))
             .collect(),
     )
 }
@@ -483,6 +483,8 @@ pub fn spine_closest(spine: &Curve, p: Point3) -> f64 {
 /// An intersection spine's parameter from t on, stepped along the exact direction (the chain's
 /// own tangent is an interpolation) until p's offset along it is gone, and whether it was.
 fn intersection_refine(ic: &crate::intcurve::IntCurve, spine: &Curve, p: Point3, mut t: f64) -> (f64, bool) {
+    let from = t;
+    let mut last = f64::INFINITY;
     for _ in 0..12 {
         let d = spine.deriv(t);
         let Some(dir) = crate::intcurve::direction(&ic.a, &ic.b, d.p) else {
@@ -495,9 +497,46 @@ fn intersection_refine(ic: &crate::intcurve::IntCurve, spine: &Curve, p: Point3,
         }
         let along = (p - d.p).dot(dir);
         t += along / speed;
-        if along.abs() <= 1e-3 * tol::LINEAR {
+        last = along.abs();
+        if last <= 1e-3 * tol::LINEAR {
             return (t, true);
         }
+    }
+    if last <= tol::LINEAR {
+        return (t, false);
+    }
+    // far out from a tight bend that creeps, at the radius times the curvature a step, or runs away:
+    // p - c(t) changes sign along the curve either side of the answer, so bisect that
+    let hi = ic.domain_hi();
+    let along = |u: f64| {
+        let c = spine.eval(u);
+        let d = crate::intcurve::direction(&ic.a, &ic.b, c)?;
+        let g = spine.deriv(u).d1;
+        Some((p - c).dot(if d.dot(g) < 0.0 { -d } else { d }))
+    };
+    let at = |u: f64| if ic.closed { u } else { u.clamp(0.0, hi) };
+    for w in [1.0, 2.0, 4.0, 8.0] {
+        let (mut a, mut b) = (at(from - w), at(from + w));
+        let (Some(fa), Some(fb)) = (along(a), along(b)) else {
+            continue;
+        };
+        // going up the curve p falls behind: along runs from above zero to below
+        if fa <= 0.0 || fb >= 0.0 {
+            continue;
+        }
+        for _ in 0..48 {
+            let m = 0.5 * (a + b);
+            let Some(fm) = along(m) else { break };
+            if fm.abs() <= 1e-3 * tol::LINEAR {
+                return (m, true);
+            }
+            if fm > 0.0 {
+                a = m;
+            } else {
+                b = m;
+            }
+        }
+        return (0.5 * (a + b), true);
     }
     (t, false)
 }
@@ -545,7 +584,7 @@ impl Blend {
     pub fn new(a: &Surface, b: &Surface, da: f64, db: f64, near: Point3, region: Box3) -> Option<Blend> {
         let radius = da.abs();
         let (oa, ob) = (offset(a, da)?, offset(b, db)?);
-        let spine = spine(&oa, &ob, near, region)?;
+        let spine = spine(&oa, &ob, near, region, radius)?;
         let surface = match &spine {
             Curve::Line(l) => {
                 let c = l.origin;

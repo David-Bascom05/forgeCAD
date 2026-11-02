@@ -102,6 +102,53 @@ impl IntCurve {
         }
     }
 
+    /// The chain with each step that turns by more than about 10 degrees, on a bend tight for a ball of
+    /// radius `r` about the curve, halved until none does: the fixed step of a trace follows the curve's
+    /// reach over its box, not its tightest bend, and a chain too coarse there has the nearest points of
+    /// a ball's surface in the wrong place. Self if no step does.
+    pub fn refined(self, r: f64) -> IntCurve {
+        let mut pts = self.pts.clone();
+        for _ in 0..6 {
+            let n = pts.len();
+            if !(2..=20000).contains(&n) {
+                break;
+            }
+            let dirs: Vec<Option<Vec3>> = pts.iter().map(|&p| direction(&self.a, &self.b, p)).collect();
+            let segs = if self.closed { n } else { n - 1 };
+            let mut next = Vec::with_capacity(n);
+            let mut added = false;
+            for i in 0..segs {
+                let (p, q) = (pts[i], pts[(i + 1) % n]);
+                next.push(p);
+                // the angle over the step's length is the curvature
+                let turns = matches!((dirs[i], dirs[(i + 1) % n]), (Some(u), Some(v))
+                    if u.dot(v).abs() < 0.985 && u.cross(v).length() * r > 0.25 * p.distance(q));
+                let m = p.lerp(q, 0.5);
+                if turns
+                    && let Some(x) = refine(&self.a, &self.b, m)
+                    && x.distance(m) <= p.distance(q)
+                    && x.distance(p) > 0.0
+                    && x.distance(q) > 0.0
+                {
+                    next.push(x);
+                    added = true;
+                }
+            }
+            if !self.closed {
+                next.push(pts[n - 1]);
+            }
+            pts = next;
+            if !added {
+                break;
+            }
+        }
+        if pts.len() == self.pts.len() {
+            return self;
+        }
+        let step = pts.windows(2).map(|w| w[0].distance(w[1])).fold(0.0, f64::max);
+        finish(&self.a, &self.b, pts, self.closed, step)
+    }
+
     /// The chain carried on past its end (or its start) to `p`, a point on both surfaces, by walking
     /// on along them, with how many segments now come before the old chain. None if the branch doesn't
     /// lead there.

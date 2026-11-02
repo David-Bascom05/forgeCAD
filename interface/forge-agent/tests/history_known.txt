@@ -9,5 +9,4 @@ boolean: internal error: inconsistent classification
 # it then rebuilds feature by feature (forge_model::nary_name_fallbacks). Seeds 3 and 27's class:
 # not a failure here any more; tests/history.rs lists the seeds that rely on it, which only shrinks
 # on main 947e420 with bugs-3 alone too (not from this integration's other branches): filed to unblock it
-fillet: invalid EdgeOffFace  # seed 32: a variable fillet after a thicken cut, then a fillet near it
 # seeds that picking by name brought up; these parts fail on main too, whatever the arena order
