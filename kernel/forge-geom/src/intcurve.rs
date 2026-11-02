@@ -708,6 +708,11 @@ fn walk(
     // a helix winds many times its box's size
     let max = (64.0 * bounds.diagonal() / step) as usize + 4096;
     // how far the chain has come: a chain back within reach of p0 after this has closed
+    // a wall made by a loft or a sweep may run all but tangent to what it meets; analytic pairs reach here
+    // only where the closed form gave up, and a round's own surfaces keep the steps their springs were fitted to
+    let wall = |s: &Surface| matches!(s, Surface::Procedural(p) if !matches!(p.kind(), "offset" | "blend" | "blend fence" | "variable blend" | "corner patch"));
+    let round = |s: &Surface| matches!(s, Surface::Procedural(_)) && !wall(s);
+    let tips = (wall(a) || wall(b)) && !round(a) && !round(b);
     let mut come = 0.0;
     let mut d0 = None;
     // the curve's direction at p, already asked of the surfaces when p was reached
@@ -747,7 +752,8 @@ fn walk(
                 let there = direction(a, b, q);
                 let cos = there.map_or(1.0, |t| t.dot(d) * way);
                 // (na x nb runs on round a tip: a step clean over one lands on it running backwards)
-                if h <= step * TURN_LEAST
+                if !tips
+                    || h <= step * TURN_LEAST
                     || cos >= TURN_COS
                     || !(all_but_touch(a.gradient(p), b.gradient(p))
                         || all_but_touch(a.gradient(q), b.gradient(q)))
