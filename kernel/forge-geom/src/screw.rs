@@ -1242,7 +1242,10 @@ pub(crate) fn polish(
                 }
                 let dn = s(next);
                 let fnext = (dn.p - p).length_sq();
-                if fnext < f || (tiny && fnext <= f) {
+                // off the surface a step this small is lost in the distance's rounding, a part in
+                // 1e16 of its square, though the foot is still 1e-8 of the distance out: Newton's
+                // step is right regardless
+                if fnext < f || (tiny && (fnext <= f || k == 0)) {
                     (uv, d, f, taken) = (next, dn, fnext, true);
                     break;
                 }

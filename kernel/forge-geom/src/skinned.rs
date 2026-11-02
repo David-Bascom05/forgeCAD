@@ -1464,6 +1464,13 @@ impl Procedural for Skinned {
     fn gradient(&self, p: Point3) -> Vec3 {
         self.value(p).1
     }
+    fn has_foot_near(&self) -> bool {
+        !self.sharp && self.pole.is_none()
+    }
+    fn foot_near(&self, p: Point3, uv: Point2) -> Option<Point2> {
+        self.has_foot_near()
+            .then(|| polish(&|uv| self.point(uv), p, uv, self.search(), None).0)
+    }
     fn gradient_turn(&self, p: Point3, v: Vec3) -> Option<Vec3> {
         let (q, d) = self.solve(p);
         let dom = self.search();

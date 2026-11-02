@@ -705,6 +705,13 @@ impl Procedural for Ruled {
     fn gradient(&self, p: Point3) -> Vec3 {
         self.value(p).1
     }
+    fn has_foot_near(&self) -> bool {
+        !self.extruded && self.radii().is_none()
+    }
+    fn foot_near(&self, p: Point3, uv: Point2) -> Option<Point2> {
+        self.has_foot_near()
+            .then(|| polish(&|uv| self.point(uv), p, uv, self.ext, None).0)
+    }
     fn gradient_turn(&self, p: Point3, v: Vec3) -> Option<Vec3> {
         let uv = self.nearest(p);
         let dom = self.ext;

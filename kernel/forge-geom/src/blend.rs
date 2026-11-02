@@ -196,6 +196,22 @@ impl Procedural for Offset {
     fn gradient(&self, p: Point3) -> Vec3 {
         self.at(p, false).map_or_else(|| self.base.gradient(p), |v| v.1)
     }
+    fn walks(&self) -> bool {
+        self.base.has_foot_near()
+    }
+    fn value_near(&self, p: Point3, uv: Option<Point2>) -> Option<(f64, Vec3, Point2)> {
+        if !self.base.has_foot_near() {
+            return None;
+        }
+        // a foot from nearby that is not this offset's distance from p may be another sheet's: a
+        // point on or near the offset has its foot at d, and the search settles anything else
+        let near = uv
+            .and_then(|uv| self.base.foot_near(p, uv))
+            .filter(|&q| (self.base.point(q).distance(p) - self.d.abs()).abs() <= 1e-2);
+        let q = near.unwrap_or_else(|| self.base.project(p));
+        let n = self.base.normal(q)?.get();
+        Some((n.dot(p - self.place(q)), n, q))
+    }
     fn gradient_turn(&self, p: Point3, v: Vec3) -> Option<Vec3> {
         // the same normals as the base's, at the same feet
         self.base.gradient_turn(p, v)

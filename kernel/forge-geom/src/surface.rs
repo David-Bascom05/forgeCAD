@@ -216,6 +216,21 @@ pub trait Procedural: Send + Sync + std::fmt::Debug {
     fn value_near(&self, _p: Point3, _uv: Option<Point2>) -> Option<(f64, Vec3, Point2)> {
         None
     }
+    /// The nearest point's parameters for a point anywhere near the surface, by Newton from `uv`,
+    /// for surfaces whose own search is costly. The caller's `uv` makes it a function of its
+    /// arguments alone. None where the surface has no such way.
+    fn foot_near(&self, _p: Point3, _uv: Point2) -> Option<Point2> {
+        None
+    }
+    /// Whether `foot_near` has an answer on this surface.
+    fn has_foot_near(&self) -> bool {
+        false
+    }
+    /// Whether a walk gains by passing `value_near` its last parameters (an offset, whose every
+    /// value is a search of its base from nothing).
+    fn walks(&self) -> bool {
+        false
+    }
     /// A box guaranteed to contain the surface over the parameter box.
     fn bbox(&self, uv: Box2) -> Box3;
     /// Points of every branch of the surface's intersection with `other` in `region`, for the

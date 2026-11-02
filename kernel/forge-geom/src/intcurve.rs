@@ -39,9 +39,38 @@ impl PartialEq for IntCurve {
 
 /// Pulls `p` onto both surfaces: the minimum-norm Newton step for the two
 /// implicit equations, repeated. None when the surfaces are tangent there.
-pub fn refine(a: &Surface, b: &Surface, mut p: Point3) -> Option<Point3> {
+pub fn refine(a: &Surface, b: &Surface, p: Point3) -> Option<Point3> {
+    refine_by(a, b, p, |p| (a.implicit_gradient(p), b.implicit_gradient(p)))
+}
+
+/// A surface's value and gradient at p, started from the caller's parameters where it can, which
+/// it leaves at p's. A walk's last feet are nearer than any search's seed, and passing them makes
+/// the answer depend on the walk alone, whichever thread runs it.
+fn value_from(s: &Surface, p: Point3, near: &mut Option<Point2>) -> (f64, Vec3) {
+    if let Surface::Procedural(pr) = s
+        && pr.walks()
+        && let Some((f, g, uv)) = pr.value_near(p, *near)
+    {
+        *near = Some(uv);
+        return (f, g);
+    }
+    s.implicit_gradient(p)
+}
+
+/// `refine`, each surface's search carrying on from `near`.
+fn refine_from(a: &Surface, b: &Surface, p: Point3, near: &mut [Option<Point2>; 2]) -> Option<Point3> {
+    let [na, nb] = near;
+    refine_by(a, b, p, |p| (value_from(a, p, na), value_from(b, p, nb)))
+}
+
+fn refine_by(
+    a: &Surface,
+    b: &Surface,
+    mut p: Point3,
+    mut values: impl FnMut(Point3) -> ((f64, Vec3), (f64, Vec3)),
+) -> Option<Point3> {
     for _ in 0..40 {
-        let ((ga, na), (gb, nb)) = (a.implicit_gradient(p), b.implicit_gradient(p));
+        let ((ga, na), (gb, nb)) = values(p);
         if ga.abs() <= 1e-3 * tol::LINEAR && gb.abs() <= 1e-3 * tol::LINEAR {
             return Some(p);
         }
@@ -759,6 +788,12 @@ fn walk(
 ) -> Option<(Vec<Point3>, bool)> {
     let mut pts = vec![p0];
     let mut p = p0;
+    let walks = [a, b]
+        .iter()
+        .any(|s| matches!(s, Surface::Procedural(pr) if pr.walks()));
+    // where the walk last stood on each surface, and where the last step tried landed
+    let feet = std::cell::Cell::new([None; 2]);
+    let landed = std::cell::Cell::new([None; 2]);
     // a helix winds many times its box's size
     let max = (64.0 * bounds.diagonal() / step) as usize + 4096;
     // how far the chain has come: a chain back within reach of p0 after this has closed
@@ -795,7 +830,16 @@ fn walk(
         // over along the chain
         let ahead = |d: Vec3, h: f64, least: f64| {
             let guess = p + d * h;
-            refine(a, b, guess).filter(|&q| (q - p).dot(d) > least * h && q.distance(guess) <= h)
+            let far = |q: &Point3| (*q - p).dot(d) > least * h && q.distance(guess) <= h;
+            if !walks {
+                return refine(a, b, guess).filter(far);
+            }
+            let mut here = feet.get();
+            let q = refine_from(a, b, guess, &mut here).filter(far);
+            if q.is_some() {
+                landed.set(here);
+            }
+            q
         };
         // a step over which the curve turns sharply (past a place where the surfaces all but touch)
         // is retried shorter too, as far as TURN_LEAST; the step that turned stands if none shorter lands
@@ -889,6 +933,9 @@ fn walk(
             return Some((pts, false));
         }
         p = q;
+        if walks {
+            feet.set(landed.get());
+        }
         here = there;
     }
     stalled(pts, p)
