@@ -68,3 +68,10 @@ Refused on purpose: 100001816, whose STEP truth has its round inside the cavity;
 
 Rounds meeting at a ridge where no ball rests on both outer faces: exact on CADFS 00476278 and 00438053
 (OCCT's STEP), WHUCAD 100003117 at 2.7e-6; no part shows the ridge itself wrong. Kept.
+
+## Rolling on a strip no edge runs along (night 2026-11-02)
+
+`closing.rs` is an independent reference for `fillet_strips.rs`: the added volume of a ball's closing of a block with a
+rounded rim and a boss standing over it, on a grid (`rustc -O closing.rs; closing 3 40 12 5 0.08`, args rim radius, boss
+y, boss radius, ball radius, step). It gave 1100.8 mm3 at step 0.08 against 1101.83 from the kernel's exact mass; the
+result moves with how the radius falls on the grid at coarser steps. No kernel code is shared.

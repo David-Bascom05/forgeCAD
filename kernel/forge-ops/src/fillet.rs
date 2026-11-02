@@ -1488,15 +1488,20 @@ fn roll(body: &Body, e: EdgeId, r: f64, root: Name) -> R<Rolled> {
         return Err(FilletError::NotAnEdge { edge: e });
     }
     let l = local(body, e, r, body.edge(e).range.mid())?;
-    let near = l.p + l.toward * r;
+    let flat = l.p + l.toward * r;
+    let far = flat.distance(l.p);
     // in a narrow wedge the centre stands far from the edge, and the faces' curving over that
     // distance moves it by more than the radius
-    let far = near.distance(l.p);
+    let near = if far > 1.5 * r {
+        rolled_centre(body, &l, r).unwrap_or(flat)
+    } else {
+        flat
+    };
     let region = body.edge_box(e).grow((4.0 * r).max(1.5 * far) + tol::LINEAR);
     let blend = blend_of(body, l.faces, [l.sign[0] * r, l.sign[1] * r], l.p, near, region)
         .ok_or(FilletError::NoBlend { edge: e })?;
     let tm = spine_closest(&blend.spine, l.p);
-    if blend.spine.eval(tm).distance(near) > r.max(0.5 * far) {
+    if blend.spine.eval(tm).distance(near) > r {
         return Err(FilletError::NoBlend { edge: e });
     }
     let springs = [
@@ -2714,7 +2719,18 @@ impl Builder {
                     other => other,
                 }
             }
-            [a, b] if self.is_joint(&ring, a, b) => self.joint(v, &ring, a, b),
+            [a, b] if self.is_joint(&ring, a, b) => {
+                // the section may lie where only the other blend's spring crosses a smooth edge
+                let saved = (self.trims.clone(), self.paths.clone(), self.g_ends.clone());
+                self.joint(v, &ring, a, b).or_else(|e| {
+                    (self.trims, self.paths, self.g_ends) = saved.clone();
+                    self.collapsing = true;
+                    self.joint(v, &ring, b, a).or_else(|_| {
+                        (self.trims, self.paths, self.g_ends) = saved;
+                        self.strip_joint(v, &ring, a, b).map_err(|_| e)
+                    })
+                })
+            }
             [a, b] if self.mitres(v, &ring, a, b) => self
                 .mitre(v, &ring, a, b)
                 .map_err(|_| FilletError::Mitre { vertex: v }),
@@ -3468,8 +3484,17 @@ impl Builder {
         let t0 = self.end_t(ra, ring[ia].cin, vp);
         let mut ta = None;
         let mut any = None;
+        // a smooth edge a blend rests beyond, which its spring does not cross here: the ball passes
+        // it by, its strip narrowing away to nothing at v
+        let passed = |b: &Self, c: CoedgeId, s: usize, sb: usize| {
+            let g = b.body.coedge(c).edge;
+            let x = b.body.edge(g);
+            let rests = |ri: usize, s: usize| b.rolled[ri].over[s].is_some_and(|o| o.1 == g);
+            (rests(ra, s) || rests(rb, sb))
+                && crossing(&b.rolled[ra].springs[s], t0, &x.curve, x.range).is_none()
+        };
         // a variable chain's section is its blends' shared end; edges between surfaces pass through its feet
-        for (edges, s) in [(&p_edges, sa), (&x_edges, 1 - sa)] {
+        for (edges, s, s_b) in [(&p_edges, sa, sb), (&x_edges, 1 - sa, 1 - sb)] {
             if var {
                 let foot = self.rolled[ra].springs[s].eval(t0);
                 for &c in edges.iter() {
@@ -3488,6 +3513,9 @@ impl Builder {
                 continue;
             }
             for &c in edges.iter() {
+                if passed(self, c, s, s_b) {
+                    continue;
+                }
                 let e = self.body.edge(self.body.coedge(c).edge);
                 let (f0, f1) = (
                     self.body.coedge_face(e.coedges[0]),
@@ -3539,10 +3567,13 @@ impl Builder {
                 if let Some((_, g)) = self.rolled[ri].over[side] {
                     let gx = self.body.edge(g);
                     let t = gx.curve.closest(q, gx.range);
-                    if gx.curve.eval(t).distance(q) > tol::LINEAR {
+                    if gx.curve.eval(t).distance(q) <= tol::LINEAR {
+                        self.g_ends.entry((ri, side)).or_default().push(GEnd::Cut(t, qv));
+                    } else if gx.start == v || gx.end == v {
+                        self.g_ends.entry((ri, side)).or_default().push(GEnd::Gone(v));
+                    } else {
                         return Err(err);
                     }
-                    self.g_ends.entry((ri, side)).or_default().push(GEnd::Cut(t, qv));
                 }
             }
         }
@@ -3567,6 +3598,11 @@ impl Builder {
             let mut on_b: Vec<(f64, VertexId, usize)> = Vec::new();
             let mut at_foot: Vec<usize> = Vec::new();
             for (m, &c) in edges.iter().enumerate() {
+                if passed(self, c, s_a, s_b) {
+                    self.collapsing = true;
+                    at_foot.push(m);
+                    continue;
+                }
                 let e = self.body.edge(self.body.coedge(c).edge);
                 let (curve, range, ename) = (e.curve.clone(), e.range, e.name.whole());
                 // a variable blend's spring stops at the section: the crossing may be b's
@@ -3708,6 +3744,170 @@ impl Builder {
         let eb = self.rolled[rb].edge;
         self.ends.insert((ea, self.arrives_at_end(ring[ia].cin)), end_a);
         self.ends.insert((eb, self.arrives_at_end(ring[ib].cin)), end_b);
+        Ok(())
+    }
+
+    /// Two blends of a chain at `v`, a smooth edge between their faces there, where one blend rests
+    /// on the face it comes from and the other past its strip, beyond the strip's far smooth edge:
+    /// their balls differ. Between them the ball rolls on the strip itself, with no edge of its own
+    /// under it (a boss's foot running from a wall over a rounded rim onto the top, the rim's round
+    /// reached only by a ball wider than it). That stretch is a face of its own, from the section where
+    /// the first spring crosses the smooth edge at `v` to the one where the second crosses the far one.
+    fn strip_joint(&mut self, v: VertexId, ring: &[Corner], a: usize, b: usize) -> R<()> {
+        let err = FilletError::Corner { vertex: v };
+        if ring.len() != 3 {
+            return Err(err);
+        }
+        // ring order: ia, then the smooth edge's corner, then ib
+        let (ia, ib) = if (a + 2) % 3 == b { (a, b) } else { (b, a) };
+        let mid_corner = (ia + 1) % 3;
+        let (ra, rb) = (
+            self.filleted(ring[ia].cin).ok_or(err.clone())?,
+            self.filleted(ring[ib].cin).ok_or(err.clone())?,
+        );
+        let (sa, sb) = (self.side(ring[ia].cin), self.side(ring[mid_corner].cout));
+        let g1c = ring[mid_corner].cin;
+        let plain = |r: &Rolled| r.var.is_none() && r.cliff.is_none();
+        if !plain(&self.rolled[ra]) || !plain(&self.rolled[rb]) {
+            return Err(err);
+        }
+        if self.rolled[ra].over[1 - sa].is_some() || self.rolled[rb].over[1 - sb].is_some() {
+            return Err(err);
+        }
+        // which blend rests past its strip: `up` its strip comes after the smooth edge in the ring
+        let (up, (rs, ss), (ro, so)) = match (self.rolled[ra].over[sa], self.rolled[rb].over[sb]) {
+            (None, Some(_)) => (true, (ra, sa), (rb, sb)),
+            (Some(_), None) => (false, (rb, sb), (ra, sa)),
+            _ => return Err(err),
+        };
+        let (_, g2) = self.rolled[ro].over[so].ok_or(err.clone())?;
+        let vp = self.body.vertex(v).point;
+        let (es, eo) = (self.rolled[rs].edge, self.rolled[ro].edge);
+        let r = self.rolled[rs].blend.radius;
+        if (self.rolled[ro].blend.radius - r).abs() > tol::LINEAR {
+            return Err(err);
+        }
+        let g1 = self.body.edge(self.body.coedge(g1c).edge).clone();
+        let ts0 = spine_closest(&self.rolled[rs].blend.spine, vp);
+        let t1 = crossing(&self.rolled[rs].springs[ss], ts0, &g1.curve, g1.range).ok_or(err.clone())?;
+        let c1 = self.rolled[rs].blend.spine.eval(t1);
+        let foot1 = self.rolled[rs].springs[ss].eval(t1);
+        let x1 = self.rolled[rs].springs[1 - ss].eval(t1);
+        let g2x = self.body.edge(g2).clone();
+        let to0 = spine_closest(&self.rolled[ro].blend.spine, c1);
+        let t2 = crossing(&self.rolled[ro].springs[so], to0, &g2x.curve, g2x.range).ok_or(err.clone())?;
+        let c2 = self.rolled[ro].blend.spine.eval(t2);
+        let foot2 = self.rolled[ro].springs[so].eval(t2);
+        let x2 = self.rolled[ro].springs[1 - so].eval(t2);
+        // the ball on the strip and the face all these rest on
+        let l = local(&self.body, eo, r, self.body.edge(eo).range.mid())?;
+        let (strip, far) = (l.faces[so], l.faces[1 - so]);
+        let region = self
+            .body
+            .edge_box(es)
+            .hull(&self.body.edge_box(eo))
+            .grow(4.0 * r + c1.distance(c2) + tol::LINEAR);
+        let blend = Blend::new(
+            &self.body.face(strip).surface,
+            &self.body.face(far).surface,
+            l.sign[so] * r,
+            l.sign[1 - so] * r,
+            c1,
+            region,
+        )
+        .ok_or(err.clone())?;
+        let tc1 = spine_closest(&blend.spine, c1);
+        // the short way between the sections, round a closed spine
+        let tc2 = tc1 + along(spine_closest(&blend.spine, c2) - tc1, blend.spine.domain().period);
+        let (on_strip, on_far) = (
+            blend.spring(true).ok_or(err.clone())?,
+            blend.spring(false).ok_or(err.clone())?,
+        );
+        for (q, w) in [
+            (blend.spine.eval(tc1), c1),
+            (blend.spine.eval(tc2), c2),
+            (on_strip.eval(tc1), foot1),
+            (on_strip.eval(tc2), foot2),
+            (on_far.eval(tc1), x1),
+            (on_far.eval(tc2), x2),
+        ] {
+            if q.distance(w) > tol::LINEAR {
+                return Err(err);
+            }
+        }
+        let (ns, no) = (self.rolled[rs].base, self.rolled[ro].base);
+        let vname = self.body.vertex(v).name;
+        let name = self
+            .root
+            .with_str("strip")
+            .with_name(vname)
+            .with_name(ns)
+            .with_name(no);
+        let (p1v, x1v, p2v, x2v) = (
+            self.body.add_vertex(foot1, name.with_str("p1")),
+            self.body.add_vertex(x1, name.with_str("x1")),
+            self.body.add_vertex(foot2, name.with_str("p2")),
+            self.body.add_vertex(x2, name.with_str("x2")),
+        );
+        self.trim(g1c, foot1, p1v, es, None)?;
+        let tg2 = g2x.curve.closest(foot2, g2x.range);
+        self.g_ends.entry((ro, so)).or_default().push(GEnd::Cut(tg2, p2v));
+        let spring_p = self.edge_between(on_strip.clone(), tc1, tc2, p1v, p2v, name.with_str("sp"));
+        let spring_x = self.edge_between(on_far.clone(), tc1, tc2, x1v, x2v, name.with_str("sx"));
+        let (c, angle) = blend.section(tc1).ok_or(err.clone())?;
+        let sec1 = self.body.add_edge(
+            Curve::Circle(c),
+            Interval::new(0.0, angle),
+            p1v,
+            x1v,
+            name.with_str("s1"),
+        );
+        let (c, angle) = blend.section(tc2).ok_or(err.clone())?;
+        let sec2 = self.body.add_edge(
+            Curve::Circle(c),
+            Interval::new(0.0, angle),
+            p2v,
+            x2v,
+            name.with_str("s2"),
+        );
+        let rev = |u: (EdgeId, bool)| (u.0, !u.1);
+        // the faces' walks and the patch's, opposite
+        let surface = blend.surface.clone();
+        let same_sense = self.rolled[ro].convex;
+        let uses = if up {
+            self.paths.insert(g1c, vec![spring_p]);
+            self.paths.insert(ring[ib].cin, vec![rev(spring_x)]);
+            vec![rev(spring_p), (sec1, true), spring_x, (sec2, false)]
+        } else {
+            self.paths.insert(ring[ia].cin, vec![rev(spring_p)]);
+            self.paths.insert(ring[ib].cin, vec![spring_x]);
+            vec![spring_p, (sec2, true), rev(spring_x), (sec1, false)]
+        };
+        self.rechain.insert(strip);
+        self.touched.insert(strip);
+        self.touched.insert(far);
+        self.patches.push((surface, same_sense, name, uses));
+        let mut end_s = SpringEnd {
+            v: [v; 2],
+            t: [t1; 2],
+            path: vec![if up { (sec1, false) } else { (sec1, true) }],
+        };
+        end_s.v[ss] = p1v;
+        end_s.v[1 - ss] = x1v;
+        let mut end_o = SpringEnd {
+            v: [v; 2],
+            t: [t2; 2],
+            path: vec![if up { (sec2, true) } else { (sec2, false) }],
+        };
+        end_o.v[so] = p2v;
+        end_o.v[1 - so] = x2v;
+        let (cs, co) = if up {
+            (ring[ia].cin, ring[ib].cin)
+        } else {
+            (ring[ib].cin, ring[ia].cin)
+        };
+        self.ends.insert((es, self.arrives_at_end(cs)), end_s);
+        self.ends.insert((eo, self.arrives_at_end(co)), end_o);
         Ok(())
     }
 
@@ -5795,6 +5995,29 @@ fn crossing(a: &Curve, mut t: f64, b: &Curve, range: Interval) -> Option<f64> {
     }
     let p = a.eval(t);
     (b.eval(b.closest(p, range)).distance(p) <= tol::LINEAR).then_some(t)
+}
+
+/// The centre of a ball of radius `r` on the two faces, in the plane across the edge at `l.p`: the
+/// ball grown from nothing at the edge, so it stays on this branch of the offsets' meet.
+fn rolled_centre(body: &Body, l: &Local, r: f64) -> Option<Point3> {
+    let across = Surface::Plane(forge_geom::Plane {
+        frame: Frame::from_z(l.p, l.tangent),
+    });
+    let mut c = l.p + l.toward * (r / 16.0);
+    for k in (0..5).rev() {
+        let rho = r / f64::from(1 << k);
+        let offs = [
+            (body.face(l.faces[0]).surface.clone(), l.sign[0] * rho),
+            (body.face(l.faces[1]).surface.clone(), l.sign[1] * rho),
+            (across.clone(), 0.0),
+        ];
+        let at = three_offsets(&offs, c)?;
+        c = l.p + (at - l.p) * 2.0;
+        if k == 0 {
+            return Some(at);
+        }
+    }
+    None
 }
 
 /// The point on all three offset surfaces, by Newton from `p`.
