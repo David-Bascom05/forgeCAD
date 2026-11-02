@@ -128,6 +128,8 @@ pub enum Lost {
     DegenerateEdge { face: FaceRef },
     /// A merged region of this face matches none it was merged from.
     MergedRegion { face: FaceRef },
+    /// A retry after losing the way made a body `check` faults.
+    RetryInvalid,
     /// An open curve inside both faces that crosses no edge of either.
     Uncut { a: FaceRef, b: FaceRef, at: Point3 },
 }
@@ -148,6 +150,7 @@ impl std::fmt::Display for Lost {
             Lost::NoNormal { face } => write!(f, "no normal at a point of {face}"),
             Lost::DegenerateEdge { face } => write!(f, "degenerate edge on {face}"),
             Lost::MergedRegion { face } => write!(f, "merged region of no old one on {face}"),
+            Lost::RetryInvalid => write!(f, "a retry after losing the way left an invalid body"),
             Lost::Uncut { a, b, at } => write!(
                 f,
                 "a curve between {a} and {b} through ({:.6}, {:.6}, {:.6}) meets no edge of either",
@@ -516,6 +519,7 @@ fn imprinted<'b, S: crate::imprint::Src>(
 
 fn general(target: &mut Body, b: &Body, op: Op) -> R<()> {
     UNDECIDED.with(|u| u.set(None));
+    RETRIED.with(|r| r.set(false));
     let mut scratch = SCRATCH.with(|s| s.take());
     let plan = plan(target, b, op, &mut scratch)?;
     let mut clock = phases_on().then(std::time::Instant::now);
@@ -535,7 +539,12 @@ fn general(target: &mut Body, b: &Body, op: Op) -> R<()> {
     lap(&mut clock, 6);
     scratch.keep(plan);
     SCRATCH.with(|s| s.replace(scratch));
-    undecided_touch(target)
+    undecided_touch(target)?;
+    // what such a way made is not taken on trust: it is the case most likely to have gone wrong
+    if RETRIED.with(|r| r.get()) && !forge_topo::check(&target.compact()).is_empty() {
+        return Err(BoolError::lost(Lost::RetryInvalid));
+    }
+    Ok(())
 }
 
 /// A touch nothing could judge that left a face on its wrong side (ulps off the sound case): refused
@@ -814,6 +823,8 @@ thread_local! {
     /// to the tube: a box as tall as the ring is wide sets the tracer's cells too coarse for a small
     /// hole's lobes on the tube. And a curve's hit on a spring's fence moved onto the spring.
     static CAREFUL: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
+    /// This plan took a dear way round: it lost its way once, or an edge held by no surface was crossed.
+    static RETRIED: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
     /// A closed curve crossed springs an odd number of times in this plan.
     static ODD: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
 }
@@ -825,6 +836,7 @@ fn plan(a: &Body, b: &Body, op: Op, scratch: &mut Scratch) -> R<Plan> {
     };
     match plan_retried(a, b, op, scratch) {
         Err(BoolError::Internal(w)) if curved(a) || curved(b) => {
+            RETRIED.with(|r| r.set(true));
             CAREFUL.with(|c| c.set(true));
             let r = plan_retried(a, b, op, scratch);
             CAREFUL.with(|c| c.set(false));
@@ -849,6 +861,7 @@ fn plan_retried(a: &Body, b: &Body, op: Op, scratch: &mut Scratch) -> R<Plan> {
                 Lost::InconsistentClassification { .. } | Lost::SplitCrossed { .. }
             ) =>
         {
+            RETRIED.with(|r| r.set(true));
             let crossed = matches!(*w, Lost::SplitCrossed { .. });
             for (absorb, chords) in [(crossed, !crossed), (!crossed, crossed)] {
                 forge_geom::intersect::ABSORB_HAIR_ROOTS.with(|k| k.set(absorb));
@@ -2269,7 +2282,7 @@ pub(crate) fn trim(
                         if let Some((s, tol)) = on_edge(body, e, h.point) {
                             let other = index[1 - k].face_box(faces[1 - k]);
                             if other.grow(tol::LINEAR).contains(h.point)
-                                && (other.contains(h.point)
+                                && ((other.contains(h.point) && !CAREFUL.with(|c| c.get()))
                                     || index[1 - k].point_in_face(faces[1 - k], h.point) != Where::Outside)
                             {
                                 ts.push((h.t, cuts.len()));
@@ -2320,9 +2333,10 @@ pub(crate) fn trim(
                 let on_spring = matches!(&edge.curve, Curve::Procedural(pc)
                         if pc.0.as_any().is_some_and(|a| a.is::<forge_geom::blend::Spring>()))
                     && (!matches!(other_surface, Surface::Procedural(_)) || !holds_edge(&across, edge));
-                doubtful |= !on_spring
+                let bends = !on_spring
                     && !matches!(edge.curve, Curve::Line(_) | Curve::Circle(_) | Curve::Ellipse(_))
                     && !holds_edge(&across, edge);
+                doubtful |= bends;
                 let found = if on_spring {
                     fenced.push((k, e));
                     // (a crossing lies on the other face too: in its box)
@@ -2361,6 +2375,9 @@ pub(crate) fn trim(
                             }
                         }
                     }
+                } else if bends {
+                    RETRIED.with(|r| r.set(true));
+                    CurveSurface::Hits(crossing_on_face(&curve, range, body, f, edge))
                 } else {
                     curve_surface_in(&curve, range, &across, near)
                 };
@@ -2444,7 +2461,7 @@ pub(crate) fn trim(
                     let smooth = || {
                         let (x, y) = (body.face(f).surface.gradient(h.point), across.gradient(h.point));
                         let c = x.cross(y);
-                        c.dot(c) <= 1e-8 * x.dot(x) * y.dot(y)
+                        c.dot(c) <= 1e-6 * x.dot(x) * y.dot(y)
                     };
                     index[1 - k]
                         .face_box(faces[1 - k])
@@ -2477,7 +2494,7 @@ pub(crate) fn trim(
                     let p = edge.curve.eval(edge.curve.closest(h.point, edge.range));
                     let normal = |g: FaceId| body.face_normal(g, body.face(g).surface.project(p));
                     let smooth = body.partner(c).map(|o| body.coedge_face(o)).is_some_and(|g| {
-                        matches!((normal(f), normal(g)), (Some(a), Some(b)) if a.cross(b).length() <= 1e-4)
+                        matches!((normal(f), normal(g)), (Some(a), Some(b)) if a.cross(b).length() <= 1e-3)
                     });
                     let t = curve.closest(p, range);
                     if smooth && p.distance(h.point) <= 1e-3 && curve.eval(t).distance(p) <= tol::LINEAR {
@@ -2513,7 +2530,7 @@ pub(crate) fn trim(
                     });
                     if let Some(((s, tol), h)) = on
                         && other.grow(tol::LINEAR).contains(h.point)
-                        && (!(grazing || !other.contains(h.point))
+                        && ((!(grazing || !other.contains(h.point)) && !CAREFUL.with(|c| c.get()))
                             || index[1 - k].point_in_face(faces[1 - k], h.point) != Where::Outside)
                     {
                         ts.push((h.t, cuts.len()));
@@ -3795,7 +3812,7 @@ fn plane_meet(pl: &Plane, curve: &Curve, range: Interval, edge: &Curve) -> Optio
 /// square to the face at the edge's middle, does not when the edge bends in the face.
 fn holds_edge(across: &Surface, edge: &forge_topo::Edge) -> bool {
     !matches!(across, Surface::Plane(_))
-        || [0.0, 0.25, 0.75, 1.0]
+        || [0.25, 0.75]
             .iter()
             .all(|&x| across.distance(edge.curve.eval(edge.range.lo + edge.range.width() * x)) <= tol::LINEAR)
 }
@@ -6139,6 +6156,57 @@ pub(crate) fn meet_region(ba: &Box3, bb: &Box3, sa: &Surface, sb: &Surface) -> B
     })
 }
 
+/// Where a curve on face f crosses an edge of f that no surface stands across: both lie on the face,
+/// so the curve's side of the edge changes sign.
+#[cold]
+fn crossing_on_face(
+    curve: &Curve,
+    range: Interval,
+    body: &Body,
+    f: FaceId,
+    edge: &forge_topo::Edge,
+) -> Vec<CurveHit> {
+    let face = body.face(f);
+    let side = |t: f64| {
+        let p = curve.eval(t);
+        let s = edge.curve.closest(p, edge.range);
+        let d = edge.curve.deriv(s);
+        let n = face.surface.gradient(d.p);
+        ((p - d.p).dot(n.cross(d.d1)), p.distance(d.p), s)
+    };
+    const N: usize = 256;
+    let at = |k: usize| range.lo + range.width() * k as f64 / N as f64;
+    let mut hits = Vec::new();
+    let mut a = side(at(0));
+    for k in 0..N {
+        let b = side(at(k + 1));
+        if a.0 * b.0 < 0.0 {
+            let (mut lo, mut hi, mut gl) = (at(k), at(k + 1), a.0);
+            for _ in 0..50 {
+                let m = 0.5 * (lo + hi);
+                let g = side(m).0;
+                if g * gl > 0.0 {
+                    (lo, gl) = (m, g);
+                } else {
+                    hi = m;
+                }
+            }
+            let t = 0.5 * (lo + hi);
+            let r = side(t);
+            // on the edge between its ends, not where the side flips past an end
+            if r.1 <= tol::LINEAR && r.2 > edge.range.lo && r.2 < edge.range.hi {
+                hits.push(CurveHit {
+                    t,
+                    point: curve.eval(t),
+                    contact: Contact::Crossing,
+                });
+            }
+        }
+        a = b;
+    }
+    hits
+}
+
 #[cfg(test)]
 mod way_back_tests {
     use super::*;
@@ -6154,5 +6222,76 @@ mod way_back_tests {
             let alone = clockwise(theta, |j| j == 7, [Ok(twin)].into_iter()).unwrap();
             assert_eq!(alone.map(|w| w.1), Some(7), "{off}");
         }
+    }
+}
+
+#[cfg(test)]
+mod bent_edge_tests {
+    use super::*;
+    use forge_geom::{Circle, Line};
+    use forge_topo::Edge;
+
+    fn on_plane() -> (Body, FaceId) {
+        let mut b = Body::new();
+        let shell = b.add_shell();
+        let f = b.add_face(
+            shell,
+            Surface::Plane(Plane::new(Frame::WORLD)),
+            true,
+            Name::feature(1),
+        );
+        (b, f)
+    }
+
+    fn edge(b: &mut Body, curve: Curve, range: Interval) -> Edge {
+        let (p, q) = (curve.eval(range.lo), curve.eval(range.hi));
+        let (u, v) = (
+            b.add_vertex(p, Name::feature(2)),
+            b.add_vertex(q, Name::feature(3)),
+        );
+        let e = b.add_edge(curve, range, u, v, Name::feature(4));
+        b.edge(e).clone()
+    }
+
+    /// A quarter of a circle in a plane, and the plane square to it at its middle: it holds the middle only.
+    /// The curve's side of the edge finds the crossing, at its true place and only on the edge.
+    #[test]
+    fn a_crossing_with_an_edge_no_plane_holds_is_found_on_the_face() {
+        let (mut b, f) = on_plane();
+        let arc = Curve::Circle(Circle {
+            frame: Frame::WORLD,
+            radius: 10.0,
+        });
+        let e = edge(&mut b, arc, Interval::new(0.0, dmath::FRAC_PI_2));
+        let mid = e.curve.eval(e.range.mid());
+        let across = Surface::Plane(Plane::new(Frame::from_z(
+            mid,
+            e.curve.deriv(e.range.mid()).d1.normalize().unwrap(),
+        )));
+        assert!(!holds_edge(&across, &e));
+
+        // the line y = 6 meets the circle at x = 8; the line y = -6 meets only its other half
+        let range = Interval::new(-20.0, 20.0);
+        let line = |y: f64| Curve::Line(Line::new(Point3::new(0.0, y, 0.0), Vec3::X.normalize().unwrap()));
+        let hits = crossing_on_face(&line(6.0), range, &b, f, &e);
+        assert_eq!(hits.len(), 1);
+        assert!(
+            hits[0].point.distance(Point3::new(8.0, 6.0, 0.0)) <= 1e-9,
+            "{:?}",
+            hits[0].point
+        );
+        assert!(crossing_on_face(&line(-6.0), range, &b, f, &e).is_empty());
+    }
+
+    #[test]
+    fn a_line_in_the_plane_across_it_is_held() {
+        let (mut b, _) = on_plane();
+        let straight = Curve::Line(Line::new(Point3::ORIGIN, Vec3::X.normalize().unwrap()));
+        let e = edge(&mut b, straight, Interval::new(0.0, 5.0));
+        let across = Surface::Plane(Plane::new(Frame::from_z(
+            Point3::ORIGIN,
+            Vec3::Y.normalize().unwrap(),
+        )));
+        assert!(holds_edge(&across, &e));
     }
 }
