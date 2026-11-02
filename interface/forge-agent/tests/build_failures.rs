@@ -1102,3 +1102,65 @@ fn a_round_between_eccentric_discs_has_its_mass() {
         got.volume
     );
 }
+
+/// A curved blade with round ends on a hub, its end running over the hub's concave round. The round
+/// and the extended end meet in a loop with a kink: tracing one way stopped short of the kink and the
+/// other way got past it and closed, and the two joined ran round the loop twice.
+#[test]
+fn a_loop_traced_closed_on_the_way_back_is_not_run_round_twice() {
+    use forge_math::dmath;
+    let frame = |z: f64, deg: f64| {
+        let a = deg.to_radians();
+        format!("z 0 0 1 x {} {} 0 at 0 0 {z}", dmath::cos(a), dmath::sin(a))
+    };
+    let blade = |cx: f64, r: f64, t: f64| {
+        let at = |deg: f64| {
+            (
+                cx + r * dmath::cos(deg.to_radians()),
+                r * dmath::sin(deg.to_radians()),
+            )
+        };
+        let (s, e) = (at(74.0), at(162.0));
+        format!(
+            "loop arc {cx} 0 {} 74 88 arc {} {} {t} 162 180 arc {cx} 0 {} 162 -88 arc {} {} {t} 254 180",
+            r + t,
+            e.0,
+            e.1,
+            r - t,
+            s.0,
+            s.1
+        )
+    };
+    let round = 34f64;
+    let (top, drop) = (39f64, 39f64 - 5.42);
+    let a = dmath::asin(drop / round);
+    let (x, z) = (20.0 + round - round * dmath::cos(a), top - round * dmath::sin(a));
+    let hub = format!(
+        "hub: revolve xz axis y loop line 0 -16 24 -16 line 24 -16 24 0 line 24 0 92 0 line 92 0 92 2.6 line 92 2.6 {x} {z} \
+         arc {} {top} {round} {} {} line 20 {top} 20 46 line 20 46 0 46 line 0 46 0 -16\n",
+        20.0 + round,
+        180.0 + a.to_degrees(),
+        -a.to_degrees()
+    );
+    let volume = |turn: f64| {
+        let loft = format!(
+            "blade: loft smooth profile {} {} profile {} {} profile {} {}\n",
+            frame(1.5, turn),
+            blade(41.0, 61.0, 1.5),
+            frame(23.0, turn - 10.0),
+            blade(40.0, 69.0, 1.275),
+            frame(45.0, turn - 26.0),
+            blade(40.0, 81.0, 1.05)
+        );
+        let m = Model::new(&format!("{hub}{loft}"));
+        assert!(m.error.is_none(), "{:?}", m.error.as_ref().map(|e| &e.msg));
+        let body = m.body().unwrap().clone();
+        assert!(forge_topo::check(&body).is_empty());
+        forge_topo::mass::mass(&body).unwrap().volume
+    };
+    let (a, b) = (volume(-47.0), volume(-60.0));
+    // turned about the hub's axis it is the same solid
+    assert!((a - b).abs() < 1e-5, "{a} {b}");
+    // OpenCascade reads the exported solid at 245091.55
+    assert!((a - 245091.54).abs() < 0.05, "{a}");
+}

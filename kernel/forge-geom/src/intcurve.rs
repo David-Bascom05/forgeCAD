@@ -616,7 +616,18 @@ pub fn trace(a: &Surface, b: &Surface, region: Box3) -> Option<Vec<IntCurve>> {
             cover(curves.last().expect("just pushed"), &mut covered);
             continue;
         }
-        let mut back = march(a, b, p0, -1.0, step, &grown)?.0;
+        let (mut back, closed) = march(a, b, p0, -1.0, step, &grown)?;
+        // forward stopped short at a kink the way back got past: the way back is the whole loop if it
+        // ran over forward's way, and joining the two would run round it twice (a forward that never
+        // left its seed says nothing: back may only have come by the seed; forward's last few points
+        // may have wandered off at the kink)
+        let over = |p: &&Point3| back.iter().any(|q| q.distance(**p) <= 1.5 * step);
+        if closed && forward.0.len() > 2 && 4 * forward.0.iter().filter(over).count() >= 3 * forward.0.len() {
+            back.pop();
+            curves.push(finish(a, b, back, true, step));
+            cover(curves.last().expect("just pushed"), &mut covered);
+            continue;
+        }
         back.reverse();
         back.pop();
         back.extend(forward.0);
