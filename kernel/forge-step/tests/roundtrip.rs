@@ -1,6 +1,6 @@
 //! Bodies out to a file and back; files damaged every way, for no panic.
 use forge_math::rng::Rng;
-use forge_math::{Frame, Point2, Vec2, dmath};
+use forge_math::{Frame, Point2, Point3, Vec2, Vec3, dmath};
 use forge_ops::{Axis2, Profile, ProfileLoop, Segment, extrude, revolve};
 use forge_step::{Limits, Options, export, import};
 use forge_topo::{Body, check, mass::mass};
@@ -237,4 +237,52 @@ fn circles_of_references_are_refused() {
         "{:?}",
         i.refusals
     );
+}
+
+/// A shallow dome turned from an arc whose circle crosses the axis: a spindle torus's outer part, and
+/// the part it reads back as, volume and all.
+#[test]
+fn a_dome_on_a_spindle_comes_back_the_same() {
+    // the centre that puts the arc through (125, 2) and (0, 40)
+    const CX: f64 = 116.01020408163265;
+    const CY: f64 = 197.0204081632653;
+    let outline = ProfileLoop::new(vec![
+        line((0.0, 0.0), (125.0, 0.0), 0),
+        line((125.0, 0.0), (125.0, 2.0), 1),
+        (
+            Segment::Arc {
+                center: Point2::new(CX, CY),
+                radius: (CX * CX + (CY - 40.0) * (CY - 40.0)).sqrt(),
+                start: dmath::atan2(2.0 - CY, 125.0 - CX),
+                sweep: dmath::atan2(40.0 - CY, -CX) - dmath::atan2(2.0 - CY, 125.0 - CX),
+            },
+            2,
+        ),
+        line((0.0, 40.0), (0.0, 0.0), 3),
+    ]);
+    let plane = Frame::from_axes(Point3::ORIGIN, Vec3::X, Vec3::Z, -Vec3::Y).unwrap();
+    let dome = revolve(
+        &Profile {
+            plane,
+            loops: vec![outline],
+        },
+        Y,
+        dmath::TAU,
+        1,
+    )
+    .unwrap();
+    assert_eq!(check(&dome), vec![]);
+    let x = export(&dome, &Options::default()).unwrap();
+    let got = import(x.text.as_bytes(), &Limits::default()).unwrap();
+    assert!(got.refusals.is_empty(), "{:?}", got.refusals);
+    let back = &got.solids[0].body;
+    assert_eq!(check(back), vec![]);
+    let turned = |b: &Body| {
+        b.face_ids()
+            .filter(|&f| matches!(b.face(f).surface, forge_geom::Surface::Torus(_)))
+            .count()
+    };
+    assert_eq!(turned(&dome), turned(back));
+    let (a, b) = (mass(&dome).unwrap().volume, mass(back).unwrap().volume);
+    assert!((a - b).abs() <= 1e-6 * a, "{a} became {b}");
 }

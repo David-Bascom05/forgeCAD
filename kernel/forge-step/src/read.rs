@@ -667,8 +667,12 @@ impl<'a> Reader<'a> {
                 {
                     return Ok(Surface::Torus(t));
                 }
-                // a spindle torus: its outer or inner part, a circle turned about the axis
+                // a spindle torus: its outer part, or the inner part across the axis, as a revolve makes
+                // them; a circle turned about the axis only for radii too near to be one
                 let outer = a.get(4).and_then(|v| logical(f, v)).unwrap_or(true);
+                if let Some(t) = Torus::spindle(frame, if outer { major } else { -major }, minor) {
+                    return Ok(Surface::Torus(t));
+                }
                 self.spindle(id, name, frame, major, minor, outer)
             }
             "SURFACE_OF_LINEAR_EXTRUSION" => self.extrusion(id),
