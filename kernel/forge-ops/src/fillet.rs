@@ -743,7 +743,20 @@ fn fillet_on(body: &Body, edges: &[FilletEdge], opts: &FilletOptions, feature: u
         }
         let mid = body.edge(e).range.mid();
         let other = split_edge(&mut body, e, mid);
-        let (first, second) = fe.radius.halves();
+        let (mut first, mut second) = fe.radius.halves();
+        // a law that ends at another radius than it began cannot run round: each half holds its end's
+        let p = fe.radius.points();
+        if let [(0.0, a), .., (1.0, b)] = p[..]
+            && a != b
+        {
+            for half in [&mut first, &mut second] {
+                if let Some(Radius::Points(q)) = half
+                    && let [(_, r)] = q[..]
+                {
+                    *half = Some(Radius::Constant(r));
+                }
+            }
+        }
         for (edge, radius) in [(e, first), (other, second)] {
             match radius {
                 Some(radius) => picked.push(FilletEdge { edge, radius }),
@@ -2188,7 +2201,9 @@ fn chain_law(
         };
         let mut pts: Vec<(f64, f64)> = pick.points().iter().map(|&(f, x)| (at(f), x)).collect();
         pts.sort_by(|a, b| a.0.total_cmp(&b.0));
-        own.push((pts, pick.constant()));
+        // (one point of a law, on a half of a closed edge, is no radius held along that half)
+        let held = if pts.len() > 1 { pick.constant() } else { None };
+        own.push((pts, held));
     }
     let Some(first) = (0..n).find(|&i| own[i].1.is_some()) else {
         return free_law(chain, ranges, whole, own.into_iter().flat_map(|o| o.0).collect());

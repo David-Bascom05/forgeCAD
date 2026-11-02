@@ -486,7 +486,9 @@ fn rounds(
                 }
             }
         };
-        smooth |= matches!(r, Radius::Points(p) if p.len() > 2);
+        // (OCCT takes a radius at an edge's ends: a law round a closed edge is one radius to it)
+        smooth |=
+            r.constant().is_none() && ed.start == ed.end || matches!(r, Radius::Points(p) if p.len() > 2);
         ends.extend([(ed.start, at(0.0)), (ed.end, at(1.0))]);
         let law: Vec<String> = pts
             .iter()
@@ -767,7 +769,10 @@ fn export(features: History<'_>, i: usize, before: Option<&Before>) -> Result<St
             let b = need()?;
             let ids: Result<Vec<EdgeId>, _> = edges.iter().map(|e| b.edge(e.0)).collect();
             let (es, smooth, odd) = rounds(b, edges, starts)?;
-            let varies = edges.iter().any(|e| e.1.constant().is_none());
+            // (radii differing along a chain, OCCT blends over its edges; ours in a short zone at the joint)
+            let varies = edges
+                .iter()
+                .any(|e| e.1.constant().is_none() || e.1.constant() != edges[0].1.constant());
             let loose = if !setbacks.is_empty() {
                 Some("fillet setbacks: OCCT blends corners its own way")
             } else if varies && b.runs_on(&ids?) {

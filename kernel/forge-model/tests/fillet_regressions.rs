@@ -271,3 +271,36 @@ fn seam_split_below_the_spring_is_one_edge() {
     let got = forge_topo::mass::mass(&b).expect("mass").volume - before;
     assert!((got - added).abs() < 1e-6, "added {got}, want {added}");
 }
+
+/// A law on a closed rim, given through points on one half only, runs round the rim through them; a
+/// half holding one point of it does not hold that radius (it took the rim at 1.4 all round).
+#[test]
+fn a_law_on_a_closed_rim_is_periodic() {
+    use forge_math::{Frame, Point2, Point3, Vec3};
+    use forge_ops::{FilletEdge, Profile, Radius, extrude, fillet_with};
+    let plane = Frame::from_axes(Point3::ORIGIN, Vec3::X, Vec3::Y, Vec3::Z).unwrap();
+    let post = extrude(
+        &Profile {
+            plane,
+            loops: vec![Profile::circle(Point2::ORIGIN, 3.0, 0)],
+        },
+        5.0,
+        1,
+    )
+    .unwrap();
+    let rim = post
+        .edge_ids()
+        .find(|&e| post.edge_points(e, 8).iter().all(|p| (p.z - 5.0).abs() < 1e-9))
+        .unwrap();
+    let round = |radius| {
+        let list = [FilletEdge { edge: rim, radius }];
+        fillet_with(&post, &list, &Default::default(), 2)
+    };
+    let volume = |b: &forge_topo::Body| forge_topo::mass::mass(b).unwrap().volume;
+    let half = volume(&round(Radius::Points(vec![(0.0, 0.6), (0.5, 1.4)])).unwrap());
+    let whole = volume(&round(Radius::Points(vec![(0.0, 0.6), (0.5, 1.4), (1.0, 0.6)])).unwrap());
+    assert!((half - whole).abs() < 1e-6, "{half} {whole}");
+    // between the rims at the two radii, not at either
+    let at = |r: f64| volume(&round(Radius::Constant(r)).unwrap());
+    assert!(half > at(1.4) + 1.0 && half < at(0.6) - 1.0, "{half}");
+}
