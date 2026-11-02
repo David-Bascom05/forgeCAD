@@ -423,12 +423,136 @@ fn fillet_picked(body: &Body, edges: &[FilletEdge], opts: &FilletOptions, featur
     });
     // a spring crossing a round face's seam meets a line that is no boundary at all: with the seam
     // moved round to where nothing is, the blend never sees it
-    if matches!(e, FilletError::Overflow { .. } | FilletError::Corner { .. })
-        && let Some(b) = reseamed(body, edges)
+    let seams = matches!(e, FilletError::Overflow { .. } | FilletError::Corner { .. })
+        .then(|| reseamed(body, edges))
+        .flatten();
+    if let Some(b) = &seams
+        && let Ok(done) = fillet_on(b, edges, opts, feature)
     {
-        return fillet_on(&b, edges, opts, feature).map_err(|_| e);
+        return Ok(done);
+    }
+    // an edge a vertex splits for no reason (a boolean's, with nothing else there) stops a spring
+    // that crosses its other piece: whole, the corner sees the edge the spring crosses
+    if matches!(e, FilletError::Corner { .. })
+        && opts.setbacks.is_empty()
+        && opts.starts.is_empty()
+        && let Some(b) = joined_pieces(seams.as_ref().unwrap_or(body), edges)
+        && let Ok(done) = fillet_on(&b, edges, opts, feature)
+        && forge_topo::check(&done).is_empty()
+    {
+        return Ok(done);
     }
     Err(e)
+}
+
+/// The body with each unpicked edge whole where only its two pieces meet at a vertex, one curve
+/// and the same two faces either side. None if there is no such vertex.
+fn joined_pieces(body: &Body, edges: &[FilletEdge]) -> Option<Body> {
+    let mut b = if body.dead > 0 {
+        body.compact()
+    } else {
+        body.clone()
+    };
+    let picked: BTreeSet<EdgeId> = edges.iter().map(|f| f.edge).collect();
+    let at = edges_at(&b);
+    let mut moved = false;
+    // an edge gone into another: the vertex at its far end now has that one
+    let mut into: BTreeMap<EdgeId, EdgeId> = BTreeMap::new();
+    for pair in at.values() {
+        let &[p, q] = &pair[..] else { continue };
+        let now = |mut e: EdgeId| {
+            while let Some(&n) = into.get(&e) {
+                e = n;
+            }
+            e
+        };
+        let (p, q) = (now(p), now(q));
+        if p == q || picked.contains(&p) || picked.contains(&q) {
+            continue;
+        }
+        // kept whatever order the edges are stored in
+        let (keep, go) = if b.edge(p).name < b.edge(q).name {
+            (p, q)
+        } else {
+            (q, p)
+        };
+        if join_edge(&mut b, keep, go).is_some() {
+            into.insert(go, keep);
+            moved = true;
+        }
+    }
+    moved.then_some(b)
+}
+
+/// Runs `keep` on over `go`, which goes: only if both lie on one line or circle, meet at one vertex
+/// and are walked by the same loops.
+fn join_edge(b: &mut Body, keep: EdgeId, go: EdgeId) -> Option<()> {
+    let (x, y) = (b.edge(keep).clone(), b.edge(go).clone());
+    if x.start == x.end || y.start == y.end || !matches!(x.curve, Curve::Line(_) | Curve::Circle(_)) {
+        return None;
+    }
+    let lps = |e: &forge_topo::Edge| {
+        let mut l: Vec<_> = e.coedges.iter().map(|&c| b.coedge(c).lp).collect();
+        l.sort_unstable();
+        l
+    };
+    if lps(&x) != lps(&y) {
+        return None;
+    }
+    let (w, far) = if y.start == x.end || y.start == x.start {
+        (y.start, y.end)
+    } else {
+        (y.end, y.start)
+    };
+    if far == x.start || far == x.end {
+        return None;
+    }
+    let on = |p: Point3| {
+        let wide = match x.curve.domain().period {
+            Some(period) => Interval::new(x.range.lo, x.range.lo + period),
+            None => x.range.grow(1e3 + y.range.width()),
+        };
+        let t = x.curve.closest(p, wide);
+        (x.curve.eval(t).distance(p) <= 1e-3 * tol::LINEAR).then_some(t)
+    };
+    let mid = y.curve.eval(y.range.mid());
+    let (t_far, _) = (on(b.vertex(far).point)?, on(mid)?);
+    let at_end = w == x.end;
+    // a circle's piece runs on past the kept one's end, whichever way the parameter wraps
+    let t_far = match x.curve.domain().period {
+        Some(period) if at_end => x.range.hi + (t_far - x.range.hi).rem_euclid(period),
+        Some(period) => x.range.lo - (x.range.lo - t_far).rem_euclid(period),
+        None => t_far,
+    };
+    if (at_end && t_far <= x.range.hi) || (!at_end && t_far >= x.range.lo) {
+        return None;
+    }
+    let mut loops: Vec<_> = y
+        .coedges
+        .iter()
+        .map(|&c| (b.coedge_face(c), b.coedge(c).lp))
+        .collect();
+    loops.sort_unstable();
+    loops.dedup();
+    let edge = &mut b.edges[keep.index()];
+    if at_end {
+        edge.end = far;
+        edge.range.hi = t_far;
+    } else {
+        edge.start = far;
+        edge.range.lo = t_far;
+    }
+    edge.bbox.clear();
+    for (f, l) in loops {
+        let uses: Vec<(EdgeId, bool)> = b
+            .lp(l)
+            .coedges()
+            .map(|c| (b.coedge(c).edge, b.coedge(c).forward))
+            .filter(|u| u.0 != go)
+            .collect();
+        b.replace_loop(f, l, &uses);
+    }
+    Some(())
 }
 
 /// The body with the seam of each round face beside a filleted edge moved to the middle of the

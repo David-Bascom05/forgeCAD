@@ -134,3 +134,140 @@ fn run_outs_do_not_wrap_round_a_circle() {
     let mesh = tessellate(&b, &Quality::default()).expect("tessellates");
     assert!(mesh.open_edges().is_empty(), "open mesh");
 }
+
+/// A round at the foot of a stadium boss, whose tangent edge between flat and arc has a vertex with
+/// nothing else there, nearer the plate than the radius: the spring crosses that edge's upper piece,
+/// so the edge counts as whole. The volume added has a closed form (Pappus for the arcs).
+#[test]
+fn seam_split_below_the_spring_is_one_edge() {
+    use forge_bool::{Op, boolean};
+    use forge_math::{Frame, Point2, Vec3};
+    use forge_ops::{Profile, ProfileLoop, Segment, extrude};
+    use forge_topo::Body;
+    let (l, rb, h, r) = (20.0, 5.0, 10.0, 3.0);
+    let at_z = |z: f64| Frame::from_z(Point3::new(0.0, 0.0, z), forge_math::UnitVec3::Z);
+    let plate = extrude(
+        &Profile {
+            plane: at_z(0.0),
+            loops: vec![Profile::rectangle(Point2::new(-30.0, -20.0), 60.0, 40.0, 0)],
+        },
+        5.0,
+        1,
+    )
+    .expect("plate");
+    let pi = std::f64::consts::PI;
+    let boss = extrude(
+        &Profile {
+            plane: at_z(5.0),
+            loops: vec![ProfileLoop::new(vec![
+                (
+                    Segment::Line {
+                        a: Point2::new(0.0, -rb),
+                        b: Point2::new(l, -rb),
+                    },
+                    0,
+                ),
+                (
+                    Segment::Arc {
+                        center: Point2::new(l, 0.0),
+                        radius: rb,
+                        start: -pi / 2.0,
+                        sweep: pi,
+                    },
+                    1,
+                ),
+                (
+                    Segment::Line {
+                        a: Point2::new(l, rb),
+                        b: Point2::new(0.0, rb),
+                    },
+                    2,
+                ),
+                (
+                    Segment::Arc {
+                        center: Point2::ORIGIN,
+                        radius: rb,
+                        start: pi / 2.0,
+                        sweep: pi,
+                    },
+                    3,
+                ),
+            ])],
+        },
+        h,
+        2,
+    )
+    .expect("boss");
+    let mut body: Body = boolean(&plate, &boss, Op::Union, 3).expect("union");
+    let before = forge_topo::mass::mass(&body).expect("mass").volume;
+    // an edge up the wall where flat meets arc, in two with its lower piece 1 long
+    let seam = body
+        .edge_ids()
+        .find(|&e| {
+            let x = body.edge(e);
+            let (a, b) = (body.vertex(x.start).point, body.vertex(x.end).point);
+            (a - b).cross(Vec3::Z).length() < 1e-9 && a.z.min(b.z) > 4.0
+        })
+        .expect("the seam");
+    let x = body.edge(seam).clone();
+    let up = x.curve.deriv(x.range.mid()).d1.z > 0.0;
+    let cut = if up { x.range.lo + 1.0 } else { x.range.hi - 1.0 };
+    let m = body.add_vertex(x.curve.eval(cut), x.name.with_str("half"));
+    let other = body.add_edge(
+        x.curve.clone(),
+        forge_math::Interval::new(cut, x.range.hi),
+        m,
+        x.end,
+        x.name.with_str("half"),
+    );
+    {
+        let edge = &mut body.edges[seam.index()];
+        edge.range.hi = cut;
+        edge.end = m;
+        edge.bbox.clear();
+    }
+    for c in x.coedges.iter().copied().collect::<Vec<_>>() {
+        let (f, lp) = (body.coedge_face(c), body.coedge(c).lp);
+        let uses: Vec<_> = body
+            .lp(lp)
+            .coedges()
+            .flat_map(|d| {
+                let co = body.coedge(d);
+                match (co.edge == seam, co.forward) {
+                    (true, true) => vec![(seam, true), (other, true)],
+                    (true, false) => vec![(other, false), (seam, false)],
+                    _ => vec![(co.edge, co.forward)],
+                }
+            })
+            .collect();
+        body.replace_loop(f, lp, &uses);
+    }
+    let foot: Vec<FilletEdge> = body
+        .edge_ids()
+        .filter(|&e| {
+            let x = body.edge(e);
+            let (a, b) = (x.curve.eval(x.range.lo), x.curve.eval(x.range.mid()));
+            (a.z - 5.0).abs() < 1e-9
+                && (b.z - 5.0).abs() < 1e-9
+                && forge_ops::fillet_kind(&body, e) == Some(false)
+        })
+        .map(|edge| FilletEdge {
+            edge,
+            radius: Radius::Constant(r),
+        })
+        .collect();
+    assert_eq!(foot.len(), 4);
+    let b = fillet(&body, &foot, 999).expect("rounds");
+    assert!(forge_topo::check(&b).is_empty());
+    assert!(
+        tessellate(&b, &Quality::default())
+            .expect("meshes")
+            .open_edges()
+            .is_empty()
+    );
+    let area = r * r * (1.0 - pi / 4.0);
+    let moment = r * r * r * (5.0 / 6.0 - pi / 4.0);
+    let added = 2.0 * l * area + 2.0 * pi * (rb * area + moment);
+    let got = forge_topo::mass::mass(&b).expect("mass").volume - before;
+    assert!((got - added).abs() < 1e-6, "added {got}, want {added}");
+}
