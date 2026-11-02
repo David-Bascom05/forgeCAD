@@ -165,6 +165,10 @@ pub trait Procedural: Send + Sync + std::fmt::Debug {
         "procedural"
     }
     fn deriv(&self, uv: Point2) -> SurfDeriv;
+    /// This surface as a span of a loft's wall, where it is one.
+    fn as_skinned(&self) -> Option<&crate::skinned::Skinned> {
+        None
+    }
     /// The point alone (meshing evaluates many more points than derivatives).
     fn point(&self, uv: Point2) -> Point3 {
         self.deriv(uv).p
@@ -724,6 +728,21 @@ impl SurfaceGeom for Torus {
 }
 
 impl Surface {
+    /// Whether the two are one surface, though held apart: the same object, or two spans of one
+    /// loft wall, whose sums are the same function of their parameters.
+    pub fn one_with(&self, other: &Surface) -> bool {
+        if self == other {
+            return true;
+        }
+        match (self, other) {
+            (Surface::Procedural(a), Surface::Procedural(b)) => a
+                .as_skinned()
+                .zip(b.as_skinned())
+                .is_some_and(|(x, y)| x.one_wall(y)),
+            _ => false,
+        }
+    }
+
     /// `project` for a point of the surface near the one at `near` (see `Procedural::project_near`).
     pub fn project_near(&self, p: Point3, near: Point2) -> Point2 {
         match self {

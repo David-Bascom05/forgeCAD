@@ -488,7 +488,7 @@ fn joined_pieces(body: &Body, edges: &[FilletEdge]) -> Option<Body> {
 /// and are walked by the same loops.
 fn join_edge(b: &mut Body, keep: EdgeId, go: EdgeId) -> Option<()> {
     let (x, y) = (b.edge(keep).clone(), b.edge(go).clone());
-    if x.start == x.end || y.start == y.end || !matches!(x.curve, Curve::Line(_) | Curve::Circle(_)) {
+    if x.start == x.end || y.start == y.end {
         return None;
     }
     let lps = |e: &forge_topo::Edge| {
@@ -507,17 +507,31 @@ fn join_edge(b: &mut Body, keep: EdgeId, go: EdgeId) -> Option<()> {
     if far == x.start || far == x.end {
         return None;
     }
-    let on = |p: Point3| {
-        let wide = match x.curve.domain().period {
-            Some(period) => Interval::new(x.range.lo, x.range.lo + period),
-            None => x.range.grow(1e3 + y.range.width()),
-        };
-        let t = x.curve.closest(p, wide);
-        (x.curve.eval(t).distance(p) <= 1e-3 * tol::LINEAR).then_some(t)
-    };
-    let mid = y.curve.eval(y.range.mid());
-    let (t_far, _) = (on(b.vertex(far).point)?, on(mid)?);
     let at_end = w == x.end;
+    let t_far = if matches!(x.curve, Curve::Line(_) | Curve::Circle(_)) {
+        let on = |p: Point3| {
+            let wide = match x.curve.domain().period {
+                Some(period) => Interval::new(x.range.lo, x.range.lo + period),
+                None => x.range.grow(1e3 + y.range.width()),
+            };
+            let t = x.curve.closest(p, wide);
+            (x.curve.eval(t).distance(p) <= 1e-3 * tol::LINEAR).then_some(t)
+        };
+        on(y.curve.eval(y.range.mid()))?;
+        on(b.vertex(far).point)?
+    } else {
+        // pieces of one traced curve: the second takes up where the first stops
+        let (near_t, far_t) = if y.start == w {
+            (y.range.lo, y.range.hi)
+        } else {
+            (y.range.hi, y.range.lo)
+        };
+        let own = if at_end { x.range.hi } else { x.range.lo };
+        if x.curve != y.curve || (near_t - own).abs() > 1e-9 * (1.0 + own.abs()) {
+            return None;
+        }
+        far_t
+    };
     // a circle's piece runs on past the kept one's end, whichever way the parameter wraps
     let t_far = match x.curve.domain().period {
         Some(period) if at_end => x.range.hi + (t_far - x.range.hi).rem_euclid(period),
@@ -1462,11 +1476,14 @@ fn roll(body: &Body, e: EdgeId, r: f64, root: Name) -> R<Rolled> {
     }
     let l = local(body, e, r, body.edge(e).range.mid())?;
     let near = l.p + l.toward * r;
-    let region = body.edge_box(e).grow(4.0 * r + tol::LINEAR);
+    // in a narrow wedge the centre stands far from the edge, and the faces' curving over that
+    // distance moves it by more than the radius
+    let far = near.distance(l.p);
+    let region = body.edge_box(e).grow((4.0 * r).max(1.5 * far) + tol::LINEAR);
     let blend = blend_of(body, l.faces, [l.sign[0] * r, l.sign[1] * r], l.p, near, region)
         .ok_or(FilletError::NoBlend { edge: e })?;
     let tm = spine_closest(&blend.spine, l.p);
-    if blend.spine.eval(tm).distance(near) > r {
+    if blend.spine.eval(tm).distance(near) > r.max(0.5 * far) {
         return Err(FilletError::NoBlend { edge: e });
     }
     let springs = [
@@ -3446,7 +3463,8 @@ impl Builder {
                         self.body.coedge_face(e.coedges[0]),
                         self.body.coedge_face(e.coedges[1]),
                     );
-                    let change = f0 != f1 && self.body.face(f0).surface != self.body.face(f1).surface;
+                    let change =
+                        f0 != f1 && !self.body.face(f0).surface.one_with(&self.body.face(f1).surface);
                     if change && e.curve.eval(e.curve.closest(foot, e.range)).distance(foot) > tol::LINEAR {
                         return Err(err);
                     }
@@ -3460,7 +3478,7 @@ impl Builder {
                     self.body.coedge_face(e.coedges[0]),
                     self.body.coedge_face(e.coedges[1]),
                 );
-                let change = f0 != f1 && self.body.face(f0).surface != self.body.face(f1).surface;
+                let change = f0 != f1 && !self.body.face(f0).surface.one_with(&self.body.face(f1).surface);
                 if !change && any.is_some() {
                     continue;
                 }

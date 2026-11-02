@@ -1158,6 +1158,18 @@ impl Skinned {
         Some(s)
     }
 
+    /// Whether this and `o` sum the same data, so are spans of one function. Walls pulled by guides
+    /// are left apart.
+    pub fn one_wall(&self, o: &Skinned) -> bool {
+        let (a, b) = (&self.data, &o.data);
+        a.shifts.is_empty()
+            && b.shifts.is_empty()
+            && a.spline.knots == b.spline.knots
+            && a.rails == b.rails
+            && a.slopes == b.slopes
+            && a.ramps == b.ramps
+    }
+
     pub fn surface(self) -> Surface {
         Surface::Procedural(Proc(Arc::new(self)))
     }
@@ -1362,6 +1374,9 @@ impl Skinned {
 impl Procedural for Skinned {
     fn kind(&self) -> &'static str {
         "loft"
+    }
+    fn as_skinned(&self) -> Option<&Skinned> {
+        Some(self)
     }
     fn direct(&self) -> bool {
         self.pole.is_some()
