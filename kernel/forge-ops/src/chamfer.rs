@@ -95,17 +95,6 @@ pub fn chamfer_with(
     let root = Name::feature(feature);
     let mut bevels: Vec<Bevel> = Vec::new();
     let mut bevel_of: HashMap<EdgeId, usize> = HashMap::new();
-    for &name in edges {
-        let e = src
-            .edge_by_name(name)
-            .ok_or(ChamferError::NoSuchEdge { edge: name })?;
-        if bevel_of.contains_key(&e) {
-            continue;
-        }
-        bevel_of.insert(e, bevels.len());
-        bevels.push(bevel(&src, e, size, root)?);
-    }
-
     // corners: per vertex, (face, coedge arriving, coedge leaving) for each loop passing through it
     let mut corners: HashMap<VertexId, Vec<(FaceId, CoedgeId, CoedgeId)>> = HashMap::new();
     for l in src.loop_ids() {
@@ -118,6 +107,25 @@ pub fn chamfer_with(
                 .push((src.lp(l).face, c, next));
         }
     }
+    let mut picks: Vec<EdgeId> = Vec::with_capacity(edges.len());
+    for &name in edges {
+        picks.push(
+            src.edge_by_name(name)
+                .ok_or(ChamferError::NoSuchEdge { edge: name })?,
+        );
+    }
+    let mut at = 0;
+    while at < picks.len() {
+        let e = picks[at];
+        at += 1;
+        if bevel_of.contains_key(&e) {
+            continue;
+        }
+        bevel_of.insert(e, bevels.len());
+        bevels.push(bevel(&src, e, size, root)?);
+        picks.extend(run_on(&src, e, &corners));
+    }
+
     let mut affected: Vec<VertexId> = Vec::new();
     for b in &bevels {
         let edge = src.edge(b.edge);
@@ -399,6 +407,35 @@ impl Work {
         let bev: Vec<Option<usize>> = ends.iter().map(|e| bevel_of.get(&e.0).copied()).collect();
         if ring.len() == 4 {
             return self.through_seam(src, bevels, &f, &ends, &bev, vname, root);
+        }
+        if let ([f0, f1], [(e0, at0), (e1, at1)], [Some(b0), Some(b1)]) = (&f[..], &ends[..], &bev[..]) {
+            // two arcs of one rim between the same two faces: one section across both
+            if !same_bevel(&bevels[*b0].surface, &bevels[*b1].surface) {
+                return Err(unsupported("two bevels that meet out of line"));
+            }
+            let pick = |x: FaceId| {
+                let pts = if *at0 {
+                    bevels[*b0].at_start
+                } else {
+                    bevels[*b0].at_end
+                };
+                if x == bevels[*b0].a { pts[0] } else { pts[1] }
+            };
+            let mut n = 0;
+            let mut name = |kind: &str| {
+                n += 1;
+                vname.with_name(root).with_str(kind).with(n)
+            };
+            let q = self.vertex_at(pick(*f1), name("v"));
+            let r = self.vertex_at(pick(*f0), name("v"));
+            for (e, at) in [(*e0, *at0), (*e1, *at1)] {
+                self.contact.insert((e, at, *f1), q);
+                self.contact.insert((e, at, *f0), r);
+            }
+            let j = self.edge_between(q, r, name("e"));
+            self.cap.insert((*e0, *at0), (*f1, vec![(j, true)]));
+            self.cap.insert((*e1, *at1), (*f1, vec![(j, true)]));
+            return Ok(());
         }
         if ring.len() != 3 {
             return Err(unsupported("a vertex where other than three faces meet"));
@@ -703,7 +740,7 @@ impl Work {
             a.surface == b.surface && a.same_sense == b.same_sense
         };
         let [f0, f1, f2, f3] = [f[i], f[i + 1], f[i + 2], f[(i + 3) % 4]];
-        if !halves(f1, f2) || !halves(f3, f0) || bevels[b0].surface != bevels[b2].surface {
+        if !halves(f1, f2) || !halves(f3, f0) || !same_bevel(&bevels[b0].surface, &bevels[b2].surface) {
             return Err(unsupported("a vertex where other than three faces meet"));
         }
         let ((e0, at0), (e2, at2)) = (ends[i], ends[i + 2]);
@@ -728,6 +765,67 @@ impl Work {
         self.cap.insert((e0, at0), (f1, vec![(j, true)]));
         self.cap.insert((e2, at2), (f2, vec![(j, true)]));
         Ok(())
+    }
+}
+
+/// The edges carrying on from `e` past a seam, as a rim in two halves does: between the same two
+/// surfaces, the only other edge at its vertex with them. A pick is of the rim, as a fillet's is.
+fn run_on(
+    src: &Body,
+    e: EdgeId,
+    corners: &HashMap<VertexId, Vec<(FaceId, CoedgeId, CoedgeId)>>,
+) -> Vec<EdgeId> {
+    let edge = src.edge(e);
+    let sides =
+        |x: &forge_topo::Edge| -> Vec<FaceId> { x.coedges.iter().map(|&c| src.coedge_face(c)).collect() };
+    let same = |a: FaceId, b: FaceId| {
+        let (a, b) = (src.face(a), src.face(b));
+        a.surface == b.surface && a.same_sense == b.same_sense
+    };
+    let mine = sides(edge);
+    let [p, q] = mine[..] else { return Vec::new() };
+    let mut out: Vec<EdgeId> = [edge.start, edge.end]
+        .iter()
+        .flat_map(|v| corners.get(v).into_iter().flatten())
+        .map(|c| src.coedge(c.1).edge)
+        .filter(|&o| {
+            if o == e {
+                return false;
+            }
+            let x = src.edge(o);
+            let theirs = sides(x);
+            matches!(theirs[..], [r, t] if r != t && p != q
+                    && ((same(p, r) && same(q, t)) || (same(p, t) && same(q, r))))
+                && same_run(&x.curve, &edge.curve)
+        })
+        .collect();
+    out.sort_unstable();
+    out.dedup();
+    out
+}
+
+/// One rim's two halves can differ in their radius's last bits, however they were made.
+fn same_run(a: &Curve, b: &Curve) -> bool {
+    match (a, b) {
+        (Curve::Circle(p), Curve::Circle(q)) => {
+            p.frame.origin.distance(q.frame.origin) <= tol::LINEAR
+                && (p.frame.z().get() - q.frame.z().get()).length() <= tol::ANGULAR
+                && (p.radius - q.radius).abs() <= tol::LINEAR
+        }
+        _ => a == b,
+    }
+}
+
+/// Two halves' bevels as one surface, as `same_run`.
+fn same_bevel(a: &Surface, b: &Surface) -> bool {
+    match (a, b) {
+        (Surface::Cone(p), Surface::Cone(q)) => {
+            p.frame.origin.distance(q.frame.origin) <= tol::LINEAR
+                && (p.frame.z().get() - q.frame.z().get()).length() <= tol::ANGULAR
+                && (p.radius - q.radius).abs() <= tol::LINEAR
+                && (p.sin_a() - q.sin_a()).abs() <= tol::ANGULAR
+        }
+        _ => a == b,
     }
 }
 
