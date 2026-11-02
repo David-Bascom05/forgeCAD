@@ -427,7 +427,7 @@ fn kronrod_piece<'a>(
             d: [du * half, dv * half],
             p: cp,
             speed: cd1.length() * half,
-            gap: sd.p.distance(cp),
+            gap: sd.p.distance(cp).max(way.off()),
         });
     }
     if rev {
@@ -453,7 +453,7 @@ fn exact(s: &Surface, way: &Way) -> bool {
     surface
         && match way {
             Way::Curve(Curve::Procedural(c)) => c.exact_d1(),
-            Way::Curve(_) => true,
+            Way::Curve(_) | Way::Bridge { .. } => true,
             // the tangent is exact where both gradients are, or one gradient and the other's
             // own normal
             Way::Chord { c, on, .. } => match on {
@@ -466,9 +466,22 @@ fn exact(s: &Surface, way: &Way) -> bool {
         }
 }
 
+/// Where the normals of an intersection edge's two surfaces are nearer parallel than this sine, its
+/// tangent is not walked: at 1e-2 the ten rims measured came to 1.5e-8 of their area, the error cubic
+/// in the bridge's length (1e-3 lands among the rounding, 3e-2 is 27 times worse).
+const SIN_TOUCH: f64 = 1e-2;
+
 /// A way to walk an edge with a smooth parameter.
 enum Way<'a> {
     Curve(&'a Curve),
+    /// The last hair of a curve running into a point where its surfaces touch: there the normals'
+    /// cross product is rounding and no plane cuts the curve cleanly, so a straight step from where
+    /// they still say. `off` is how far the curve strays from the line, carried as a gap into the error.
+    Bridge {
+        a: Point3,
+        d: Vec3,
+        off: f64,
+    },
     /// An intersection curve's own parameter only joins smoothly at its chain points; this one
     /// is the distance along a fixed direction, the point solved exactly onto both surfaces.
     Chord {
@@ -486,9 +499,18 @@ enum Way<'a> {
 }
 
 impl Way<'_> {
+    /// How far the edge itself may be from this way's point.
+    fn off(&self) -> f64 {
+        match self {
+            Way::Bridge { off, .. } => *off,
+            _ => 0.0,
+        }
+    }
+
     fn at(&self, s: f64) -> Point3 {
         match self {
             Way::Curve(c) => c.eval(s),
+            Way::Bridge { a, d, .. } => *a + *d * s,
             Way::Chord { .. } => self.deriv_on(s).0,
         }
     }
@@ -500,6 +522,7 @@ impl Way<'_> {
                 let (p, d) = c.deriv1(s);
                 (p, d, None)
             }
+            Way::Bridge { a, d, .. } => (*a + *d * s, *d, None),
             Way::Chord {
                 c, anchor, dir, on, ..
             } => {
@@ -552,6 +575,7 @@ impl Way<'_> {
     fn chord_point(&self, s: f64) -> Point3 {
         match self {
             Way::Curve(c) => c.eval(s),
+            Way::Bridge { a, d, .. } => *a + *d * s,
             Way::Chord {
                 c, anchor, dir, near, ..
             } => {
@@ -659,7 +683,7 @@ fn points(
         Node {
             uv: [q.x, q.y],
             p,
-            gap,
+            gap: gap.max(way.off()),
             ..Node::default()
         }
     };
@@ -968,6 +992,50 @@ fn coedge_pieces<'a>(
                     k.clamp(0, n - 1)
                 }) as usize
             };
+            // where the surfaces touch at an end of the edge (two rims' crown), stop where they
+            // still cross: past that the curve's tangent is noise
+            let sin = |t: f64| {
+                let p = ic.eval(t);
+                let (na, nb) = (ic.a.gradient(p), ic.b.gradient(p));
+                na.cross(nb).length() / (na.length() * nb.length()).max(1e-300)
+            };
+            let inward = |end: f64, into: f64| -> f64 {
+                if sin(end) >= SIN_TOUCH {
+                    return end;
+                }
+                let (mut near, mut far) = (end, end);
+                while (far - end) * into < (hi - lo) && sin(far) < SIN_TOUCH {
+                    near = far;
+                    far = (far + into).clamp(lo, hi);
+                }
+                for _ in 0..40 {
+                    let m = 0.5 * (near + far);
+                    if sin(m) < SIN_TOUCH {
+                        near = m;
+                    } else {
+                        far = m;
+                    }
+                }
+                far
+            };
+            let (from, to) = (inward(lo, 1.0), inward(hi, -1.0));
+            let (from, to) = if from < to { (from, to) } else { (lo, hi) };
+            let bridge = |x: f64, y: f64, ways: &mut Vec<(Rc<Way<'a>>, f64, f64, bool)>| {
+                let (a, b) = (ic.eval(x), ic.eval(y));
+                if let Some(d) = (b - a).normalize() {
+                    let off = [0.25, 0.5, 0.75]
+                        .iter()
+                        .map(|&f| ic.eval(x + (y - x) * f).distance(a + (b - a) * f))
+                        .fold(0.0, f64::max);
+                    let way = Way::Bridge { a, d: d.get(), off };
+                    ways.push((Rc::new(way), 0.0, a.distance(b), false));
+                }
+            };
+            if from > lo {
+                bridge(lo, from, &mut ways);
+            }
+            let end = hi;
+            let (lo, hi) = (from, to);
             let mut t0 = lo;
             while t0 < hi {
                 // pieces over which the curve turns less than 30 degrees: the distance along
@@ -1058,6 +1126,9 @@ fn coedge_pieces<'a>(
                 });
                 ways.push((way, 0.0, s1, false));
                 t0 = t1;
+            }
+            if to < end {
+                bridge(to, end, &mut ways);
             }
         }
         curve => {
@@ -1966,6 +2037,9 @@ struct Acc {
     phi: F,
     area: f64,
     db: f64,
+    /// Summed |w d G| and |w d|: their ratio is G's size along the run.
+    g: F,
+    dabs: f64,
 }
 
 /// Adds a piece's share to `u`, or None (adding nothing) when its integrand is not resolved and
@@ -1978,7 +2052,7 @@ fn integrate(cx: &Ctx, pc: &Piece, u: &mut Acc, last: bool) -> Option<()> {
     let flat = pc.n.iter().all(|q| q.d[1 - ax].abs() <= 1e-12 * (1.0 + big));
     let (mut sum, mut phis, mut abs) = ([0.0; NF], [0.0; NF], [0.0; NF]);
     let (mut tail, mut e, mut gauss) = ([[0.0; NF]; 2], [0.0; NF], [0.0; NF]);
-    let (mut area, mut db) = (0.0, 0.0);
+    let (mut area, mut db, mut dabs) = (0.0, 0.0, 0.0);
     for (k, q) in pc.n.iter().enumerate() {
         let (a, d) = (q.uv[ax], q.d[1 - ax]);
         let wk = kr.map_or_else(|| r.w[k], |kr| kr.w[k]);
@@ -2002,6 +2076,7 @@ fn integrate(cx: &Ctx, pc: &Piece, u: &mut Acc, last: bool) -> Option<()> {
             abs[m] += (w * d * g[m]).abs();
             e[m] += (w * d * ge[m]).abs();
         }
+        dabs += (w * d).abs();
         match kr {
             Some(kr) => axpy(&mut gauss, kr.g[k] * pc.sign * d, &g),
             None => {
@@ -2028,7 +2103,9 @@ fn integrate(cx: &Ctx, pc: &Piece, u: &mut Acc, last: bool) -> Option<()> {
         u.s[m] += sum[m];
         u.phi[m] += phis[m];
         u.e[m] += e[m] + est[m];
+        u.g[m] += abs[m];
     }
+    u.dabs += dabs;
     u.area += area;
     u.db += db;
     Some(())
@@ -2301,6 +2378,23 @@ fn face_integrals(body: &Body, f: FaceId, c: Point3, size: f64, rel: f64) -> Res
             total[m] += u.s[m];
             err[m] += u.e[m];
         }
+    }
+    // a closed loop's b comes back to where it began, a period or so along: what its derivatives
+    // summed to beyond that they got wrong, whatever the rules thought of them, times G
+    let mut at = 0;
+    for l in &loops {
+        if let ([_], Some(u)) = (&l.runs[..], units.get(at))
+            && u.dabs > 0.0
+        {
+            let left = match per[1 - ax] {
+                Some(p) => u.db - p * (u.db / p).round(),
+                None => u.db,
+            };
+            for (e, g) in err.iter_mut().zip(&u.g) {
+                *e += left.abs() * g / u.dabs;
+            }
+        }
+        at += l.runs.len();
     }
     let want = sigma * sgn;
     if let Some(p) = per[ax] {
