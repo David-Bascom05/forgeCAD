@@ -561,6 +561,7 @@ pub fn nary_with(
     crate::boolean::UNDECIDED.with(|u| u.set(None));
     let mut out = nary_body(tools, ops, shapes, batch, threads, root)?;
     crate::boolean::undecided_touch(&out)?;
+    crate::boolean::refuse_strays(&out, 0)?;
     // pieces left touching at a point keep a vertex each: where walking round a vertex from one
     // coedge leaving it (back along its loop, across to the partner) misses some of the others
     let nv = out.vertices.len();

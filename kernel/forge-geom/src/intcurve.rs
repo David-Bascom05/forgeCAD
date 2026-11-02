@@ -355,6 +355,13 @@ impl IntCurve {
         })
     }
 
+    /// Whether the curve strays from its chain by more than a quarter of its longest chord (a chord
+    /// over a half turn is off by half of itself): the chain has not drawn it there, and only a
+    /// closer look says what an edge on it really does.
+    pub fn strays(&self) -> bool {
+        self.sag > 0.25 * 2.0 * (self.reach() - self.sag)
+    }
+
     /// The squared distance from p to the nearest chain sample.
     pub fn nearest_sample_sq(&self, p: Point3) -> f64 {
         self.pts

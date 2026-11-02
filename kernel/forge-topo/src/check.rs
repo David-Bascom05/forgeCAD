@@ -421,6 +421,7 @@ fn check_known(body: &Body, known: &Known) -> Vec<Problem> {
     check_edges(body, &mut out);
     check_loops(body, &mut out);
     check_geometry(body, known, &mut out);
+    out.extend(stray_edges(body));
     if out.is_empty() {
         check_sides(body, known, &mut out);
     }
@@ -436,6 +437,53 @@ fn check_known(body: &Body, known: &Known) -> Vec<Problem> {
     {
         check_shell_euler(body, &mut out);
         check_fans(body, &mut out);
+    }
+    out
+}
+
+/// Edges on a traced curve that strays from its chain (`IntCurve::strays`) looked at closely: 16
+/// points along one and a loop drawn by its chain can pass where the edge leaves its face or
+/// crosses its own face's boundary, which the mesher and mass then cannot use.
+pub fn stray_edges(body: &Body) -> Vec<Problem> {
+    stray_edges_from(body, 0)
+}
+
+/// `stray_edges`, of the edges made since the body had `first` (a boolean's own).
+pub fn stray_edges_from(body: &Body, first: usize) -> Vec<Problem> {
+    let mut out = Vec::new();
+    let mut faces: Vec<FaceId> = Vec::new();
+    for i in first..body.edges.len() {
+        let e = EdgeId(i as u32);
+        let edge = body.edge(e);
+        if !edge.alive {
+            continue;
+        }
+        if !matches!(&edge.curve, Curve::Intersection(c) if c.strays()) {
+            continue;
+        }
+        let pts = body.edge_points(e, 256);
+        for &c in &edge.coedges {
+            let f = body.coedge_face(c);
+            if !faces.contains(&f) {
+                faces.push(f);
+            }
+            let s = &body.face(f).surface;
+            let worst = pts.iter().map(|&p| s.distance(p)).fold(0.0, f64::max);
+            if worst > edge.tol.max(tol::LINEAR) {
+                out.push(Problem::EdgeOffFace {
+                    edge: e,
+                    face: f,
+                    distance: worst,
+                });
+            }
+        }
+    }
+    for f in faces {
+        let loops = face_uv_loops_with(body, f, |e| 4 * default_segments(e));
+        let s = &body.face(f).surface;
+        if loops_cross(&loops) && loops_cross_steeply(&loops, &|uv| s.eval(uv), 0.0) {
+            out.push(Problem::LoopsCross { face: f });
+        }
     }
     out
 }

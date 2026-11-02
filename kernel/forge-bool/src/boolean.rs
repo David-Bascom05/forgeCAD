@@ -426,10 +426,26 @@ pub fn boolean_into(target: &mut Body, b: &Body, op: Op, _feature: u64) -> R<()>
     #[cfg(debug_assertions)]
     let before = target.compact();
     if !imprinted(target, b, || std::borrow::Cow::Borrowed(b), op) {
+        let first = target.edges.len();
         general(target, b, op)?;
+        refuse_strays(target, first)?;
     }
     #[cfg(debug_assertions)]
     faces_survive(&before, b, op, &target.compact());
+    Ok(())
+}
+
+/// A result with an edge that leaves its face or crosses its face's boundary, seen only by looking
+/// closely at a traced curve that strays from its chain, is refused: it would not mesh.
+pub(crate) fn refuse_strays(body: &Body, first: usize) -> R<()> {
+    use forge_topo::check::Problem;
+    for p in forge_topo::check::stray_edges_from(body, first) {
+        if let Problem::EdgeOffFace { face, .. } | Problem::LoopsCross { face } = p {
+            return Err(BoolError::lost(Lost::SplitCrossed {
+                face: FaceRef::of(body, face),
+            }));
+        }
+    }
     Ok(())
 }
 
@@ -472,7 +488,9 @@ pub fn boolean_unlinked(target: &mut Body, b: forge_topo::Unlinked, op: Op) -> R
     if imprinted(target, &b, || std::borrow::Cow::Owned(b.clone().into_body()), op) {
         return Ok(());
     }
-    general(target, &b.into_body(), op)
+    let first = target.edges.len();
+    general(target, &b.into_body(), op)?;
+    refuse_strays(target, first)
 }
 
 /// Whether the local-imprint path did the boolean (the mode lets it run and it covers the tool);
