@@ -377,7 +377,8 @@ pub fn face_box(body: &Body, f: FaceId) -> Box2 {
         if dom.period.is_some() {
             (a - m, b + m)
         } else {
-            ((a - m).max(dom.lo), (b + m).min(dom.hi))
+            // a face may run past the domain a procedural surface states, onto its carried-on part
+            ((a - m).max(dom.lo.min(a)), (b + m).min(dom.hi.max(b)))
         }
     };
     let (su, sv) = seams(body, f);

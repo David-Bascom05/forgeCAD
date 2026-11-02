@@ -1052,3 +1052,19 @@ fn a_closed_spline_turned_has_its_volume() {
     let again = forge_topo::mass::mass(&back.solids[0].body).unwrap().volume;
     assert!((again - want).abs() < 1e-5 * want, "{again} {want}");
 }
+
+/// A blade's root rounded where its long walls and ends mitre: the wall runs a little past the loft's
+/// end, and its fit in a file has to go with it or the file's edges lie off their faces.
+#[test]
+fn a_mitred_wall_past_a_lofts_end_is_all_in_the_file() {
+    let m = Model::new(
+        "base: extrude 10 rect -40 -40 80 80\n\
+         b: loft smooth profile z 0 0 1 x 1 0 0 at 0 0 5 rect -25 -3 50 6 profile z 0 0 1 x 1 0 0 at 0 0 30 rect -22 -3 44 6 \
+         profile z 0 0 1 x 1 0 0 at 0 0 60 rect -18 -3 36 6\n\
+         fillet 1.5 (edges between base b)\n",
+    );
+    assert!(m.error.is_none(), "{:?}", m.error.as_ref().map(|e| &e.msg));
+    let b = m.body().expect("a body");
+    let file = forge_step::write::export(b, &forge_step::write::Options::default()).unwrap();
+    assert!(file.uncertainty < 2e-3, "{}", file.uncertainty);
+}
