@@ -601,12 +601,34 @@ thread_local! {
     static NO_RUN_ON: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
     /// A point touch in this boolean that nothing could judge.
     pub(crate) static UNDECIDED: std::cell::Cell<Option<Point3>> = const { std::cell::Cell::new(None) };
+    /// A torus's box in a pair's region held to the tube: a box as tall as the ring is wide sets the
+    /// tracer's cells too coarse for a small hole's lobes on the tube, and a lost lobe shows as lost way.
+    static SNUG: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
     /// A closed curve crossed springs an odd number of times in this plan.
     static ODD: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
 }
 
-/// `plan_once`; lost its way, once more with the slow search for shallow crossings of springs.
 fn plan(a: &Body, b: &Body, op: Op, scratch: &mut Scratch) -> R<Plan> {
+    let torus = |x: &Body| {
+        x.face_ids()
+            .any(|f| matches!(x.face(f).surface, Surface::Torus(_)))
+    };
+    match plan_retried(a, b, op, scratch) {
+        Err(BoolError::Internal(w)) if torus(a) || torus(b) => {
+            SNUG.with(|c| c.set(true));
+            let r = plan_retried(a, b, op, scratch);
+            SNUG.with(|c| c.set(false));
+            r.map_err(|e| match e {
+                BoolError::Internal(_) => BoolError::Internal(w),
+                e => e,
+            })
+        }
+        r => r,
+    }
+}
+
+/// `plan_once`; lost its way, once more with the slow search for shallow crossings of springs.
+fn plan_retried(a: &Body, b: &Body, op: Op, scratch: &mut Scratch) -> R<Plan> {
     match plan_fenced(a, b, op, scratch) {
         // what floods one way across a tool's edge hovering within tolerance of a face and the other
         // way along it wants the curve under that edge, however close: an edge of its own (chords).
@@ -5743,13 +5765,26 @@ pub(crate) fn half_chord(piece: &Piece) -> f64 {
         .max(1e-3)
 }
 
-/// The box a pair's meet is sought in: the face boxes' overlap, but a torus's whole box where a
+/// The box a pair's meet is sought in: the face boxes' overlap, but the box of the whole torus where a
 /// face is a piece of one (its tight box only says whether the pair can meet; marching a meet
 /// clipped to it costs more pieces).
 pub(crate) fn meet_region(ba: &Box3, bb: &Box3, sa: &Surface, sb: &Surface) -> Box3 {
     let whole = |s: &Surface, b: &Box3| match s {
         // (a lemon's major is negative)
-        Surface::Torus(t) => Box3::from_point(t.frame.origin).grow(t.major.abs() + t.minor),
+        Surface::Torus(t) if !SNUG.with(|c| c.get()) => {
+            Box3::from_point(t.frame.origin).grow(t.major.abs() + t.minor)
+        }
+        // its tube's circle, across the axis only, and the tube round it
+        Surface::Torus(t) => {
+            let z = t.frame.z().get();
+            let half = |a: f64| t.major.abs() * (1.0 - a * a).max(0.0).sqrt() + t.minor;
+            let o = t.frame.origin;
+            Box3 {
+                x: Interval::new(o.x - half(z.x), o.x + half(z.x)),
+                y: Interval::new(o.y - half(z.y), o.y + half(z.y)),
+                z: Interval::new(o.z - half(z.z), o.z + half(z.z)),
+            }
+        }
         _ => *b,
     };
     let r = overlap(&whole(sa, ba), &whole(sb, bb));

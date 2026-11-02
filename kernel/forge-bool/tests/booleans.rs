@@ -400,3 +400,91 @@ fn blocks_touching_at_a_corner() {
         assert!((volume(&u) - 2000.0).abs() < 1e-6, "{}", volume(&u));
     }
 }
+
+/// A hole of the concave round's own radius on its centre circle, so tangent to the wall above the
+/// round: the same hole wherever round the part it goes, its two lobes on the torus both found.
+#[test]
+fn a_hole_on_a_rounds_centre_circle_at_any_angle() {
+    let arc = Segment::Arc {
+        center: Point2::new(55.0, -15.0),
+        radius: 1.0,
+        start: -dmath::FRAC_PI_2,
+        sweep: -dmath::FRAC_PI_2,
+    };
+    let at = |x: f64, y: f64| Point2::new(x, y);
+    let seg = |a: Point2, b: Point2| Segment::Line { a, b };
+    let outline = vec![
+        (seg(at(0.0, -22.0), at(60.0, -22.0)), 0),
+        (seg(at(60.0, -22.0), at(60.0, -16.0)), 1),
+        (seg(at(60.0, -16.0), at(55.0, -16.0)), 2),
+        (arc, 3),
+        (seg(at(54.0, -15.0), at(54.0, 10.0)), 4),
+        (seg(at(54.0, 10.0), at(0.0, 10.0)), 5),
+        (seg(at(0.0, 10.0), at(0.0, -22.0)), 6),
+    ];
+    let plane = Frame::from_axes(Point3::ORIGIN, Vec3::X, Vec3::Z, -Vec3::Y).unwrap();
+    let axis = Axis2 {
+        origin: Point2::ORIGIN,
+        dir: Vec2::Y,
+    };
+    let part = revolve(
+        &Profile {
+            plane,
+            loops: vec![ProfileLoop::new(outline)],
+        },
+        axis,
+        dmath::TAU,
+        1,
+    )
+    .unwrap();
+    // what the hole takes, column by column over its disc: wall above 54, then the round, then the floor
+    let n = 2000;
+    let mut taken = 0.0;
+    for i in 0..n {
+        for j in 0..n {
+            let h = 2.0 / n as f64;
+            let (x, y) = (-1.0 + (i as f64 + 0.5) * h, -1.0 + (j as f64 + 0.5) * h);
+            if x * x + y * y > 1.0 {
+                continue;
+            }
+            let rho = ((55.0 + x) * (55.0 + x) + y * y).sqrt();
+            let top = if rho <= 54.0 {
+                10.0
+            } else if rho < 55.0 {
+                -15.0 - (1.0 - (55.0 - rho) * (55.0 - rho)).sqrt()
+            } else {
+                -16.0
+            };
+            taken += (top + 22.0) * h * h;
+        }
+    }
+    let whole = volume(&part);
+    for k in 0..36 {
+        let a = dmath::TAU * k as f64 / 36.0 + 0.168;
+        let (c, s) = (dmath::cos(a), dmath::sin(a));
+        let x = Vec3::new(-s, c, 0.0);
+        let frame = Frame::from_axes(
+            Point3::new(55.0 * c, 55.0 * s, -30.0),
+            x,
+            Vec3::Z.cross(x),
+            Vec3::Z,
+        )
+        .unwrap();
+        let hole = extrude(
+            &Profile {
+                plane: frame,
+                loops: vec![Profile::circle(Point2::ORIGIN, 1.0, 0)],
+            },
+            50.0,
+            2,
+        )
+        .unwrap();
+        let cut = boolean(&part, &hole, Op::Subtract, 3).unwrap_or_else(|e| panic!("at {k}: {e}"));
+        valid(&cut);
+        assert!(
+            (whole - volume(&cut) - taken).abs() < 2e-2,
+            "at {k}: {} not {taken}",
+            whole - volume(&cut)
+        );
+    }
+}
