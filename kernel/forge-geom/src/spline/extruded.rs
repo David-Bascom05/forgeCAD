@@ -2,7 +2,7 @@
 //! value is the signed distance to C in that plane, whatever the height.
 
 use super::{Spline, SplineCurve};
-use crate::screw::{fresh_id, remembered};
+use crate::screw::{fresh_id, normal_turn, remembered};
 use crate::surface::{Domain2, Proc, Procedural, ShapeBounds, SurfDeriv, Surface};
 use forge_math::{Box2, Box3, Frame, Interval, Point2, Point3, Vec2, Vec3, tol};
 use std::sync::Arc;
@@ -243,6 +243,13 @@ impl Procedural for Extruded {
                 period: None,
             },
         }
+    }
+    fn gradient_turn(&self, p: Point3, v: Vec3) -> Option<Vec3> {
+        // (held at the section's end the foot does not move, and a difference says so)
+        let q = self.project(p);
+        (q.x > self.ext.lo && q.x < self.ext.hi)
+            .then(|| normal_turn(&Procedural::deriv(self, q), p, v))
+            .flatten()
     }
     fn project(&self, p: Point3) -> Point2 {
         let (q, z) = self.local(p);

@@ -51,7 +51,13 @@ fn rounds_on_a_lobed_rim_take_their_closed_form() {
             (x.curve.eval(x.range.mid()).z - 12.0).abs() < 1e-6
         })
         .collect();
-    for r in [4.0, 5.5] {
+    // (at 6 the spine's radius is about 0.2, and the wall's speed along it nearly a pole)
+    #[cfg(not(target_arch = "wasm32"))]
+    let radii = [(4.0, 1e-9), (5.5, 1e-9), (6.0, 1e-6)];
+    // (unoptimized there, each takes most of a minute)
+    #[cfg(target_arch = "wasm32")]
+    let radii = [(5.5, 1e-9)];
+    for (r, within) in radii {
         let picks: Vec<FilletEdge> = rim
             .iter()
             .map(|&edge| FilletEdge {
@@ -63,9 +69,8 @@ fn rounds_on_a_lobed_rim_take_their_closed_form() {
         assert!(forge_topo::check(&done).is_empty());
         let want = r * r * (1.0 - FRAC_PI_4) * (length - TAU * k * r);
         let got = before.volume - forge_topo::mass::mass(&done).expect("mass").volume;
-        // the spine's speed changes slope at the wall's knots, the harder the nearer r is to the tips'
         assert!(
-            (got - want).abs() < 1e-6 * want,
+            (got - want).abs() < within * want,
             "r {r}: took {got}, closed form {want}"
         );
         let mesh = tessellate(&done, &Quality::default()).expect("meshes");
