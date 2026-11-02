@@ -665,7 +665,7 @@ fn march(
             {
                 break q;
             }
-            return None;
+            return stalled(pts, p);
         };
         if k > 2 && q.distance(p0) <= 0.75 * step {
             pts.push(p0);
@@ -677,7 +677,31 @@ fn march(
         }
         p = q;
     }
-    None
+    stalled(pts, p)
+}
+
+thread_local! {
+    /// Where branches have stalled, while a caller is noting them: a stall then ends its branch
+    /// rather than the trace.
+    static STALLS: std::cell::RefCell<Option<Vec<Point3>>> = const { std::cell::RefCell::new(None) };
+}
+
+fn stalled(pts: Vec<Point3>, p: Point3) -> Option<(Vec<Point3>, bool)> {
+    STALLS.with(|s| {
+        s.borrow_mut().as_mut().map(|v| {
+            v.push(p);
+            (pts, false)
+        })
+    })
+}
+
+/// `trace`, where a branch that stalls ends there, with the points it stalled at. The branch's other
+/// stretches are seeded and traced by themselves.
+pub fn trace_past_stalls(a: &Surface, b: &Surface, region: Box3) -> Option<(Vec<IntCurve>, Vec<Point3>)> {
+    STALLS.with(|s| *s.borrow_mut() = Some(Vec::new()));
+    let curves = trace(a, b, region);
+    let stalls = STALLS.with(|s| s.borrow_mut().take()).unwrap_or_default();
+    Some((curves?, stalls))
 }
 
 /// Whether a procedural surface stops at p going along d: a short step on lies off it by about

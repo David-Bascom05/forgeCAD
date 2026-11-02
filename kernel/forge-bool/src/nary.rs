@@ -925,10 +925,19 @@ fn nary_body(
                     // where either face is buried there is no curve to find
                     SurfaceSurface::NotAnalytic if buried(i, &region) || buried(j, &region) => continue,
                     SurfaceSurface::NotAnalytic => {
-                        return Err(BoolError::unhandled(Unhandled::NoClosedForm {
-                            a: FaceRef::of(a, fa),
-                            b: FaceRef::of(b, fb),
-                        }));
+                        let off = |p: Point3| {
+                            ia.point_in_face(fa, p) == crate::classify::Where::Outside
+                                || ib.point_in_face(fb, p) == crate::classify::Where::Outside
+                        };
+                        match ssi::past_stalls(sa, sb, region, off) {
+                            Some(cs) => cs,
+                            None => {
+                                return Err(BoolError::unhandled(Unhandled::NoClosedForm {
+                                    a: FaceRef::of(a, fa),
+                                    b: FaceRef::of(b, fb),
+                                }));
+                            }
+                        }
                     }
                     SurfaceSurface::Curves(cs) => cs,
                 };

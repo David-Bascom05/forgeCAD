@@ -199,6 +199,26 @@ pub fn searched(a: &Surface, b: &Surface, region: Box3) -> SurfaceSurface {
     r
 }
 
+/// Where two surfaces the search gave up on meet, when every point it stalled at is `off` the faces in
+/// question: the surfaces go on past the faces, and a near-touch there is none of a boolean's business.
+#[cold]
+pub(crate) fn past_stalls(
+    a: &Surface,
+    b: &Surface,
+    region: Box3,
+    off: impl Fn(Point3) -> bool,
+) -> Option<Vec<(Curve, Contact)>> {
+    if forge_geom::sheet::apex_met(a, b, &region) {
+        return None;
+    }
+    let (curves, stalls) = forge_geom::intcurve::trace_past_stalls(a, b, region)?;
+    if stalls.is_empty() || !stalls.into_iter().all(off) {
+        return None;
+    }
+    let curve = |c| (Curve::Intersection(std::sync::Arc::new(c)), Contact::Crossing);
+    Some(curves.into_iter().map(curve).collect())
+}
+
 fn search(a: &Surface, b: &Surface, region: Box3) -> SurfaceSurface {
     // a spindle's algebra holds its other sheet too; the tracer's implicit, a distance with the
     // axis distance not negative, vanishes on the used sheet only
@@ -591,6 +611,42 @@ mod tests {
                         assert!(ic.a == s, "an answer for another surface");
                     }
                 }
+            }
+        }
+    }
+
+    /// A rod lying on a rounded plate's top plane touches the rim's torus where its bottom line crosses
+    /// the rim's crown. Off the faces that stops nothing; on them it is still a refusal.
+    #[test]
+    fn a_stall_counts_only_on_the_faces() {
+        use forge_geom::Torus;
+        use forge_math::Vec3;
+        let (o, y) = (
+            Point3::new(-197.12941588811063, -6.0, 45.512016370977626),
+            -Vec3::Y,
+        );
+        let frame = Frame::from_axes(o, Vec3::X, Vec3::Z, y).unwrap();
+        let torus = Surface::Torus(Torus::new(frame, 49.0, 6.0).unwrap());
+        let along = Vec3::new(-0.9841236656984402, 0.0, -0.1774841136898307);
+        let rod = Surface::Cylinder(Cylinder {
+            frame: Frame::from_z(
+                Point3::new(-21.65393134863068, 10.000000000000002, 120.06790834721227),
+                along.normalize().unwrap(),
+            ),
+            radius: 10.0,
+        });
+        let region = Box3::from_points([
+            Point3::new(-206.39862274227644, -0.22540519861131517, 87.06967569277985),
+            Point3::new(-142.12940588811063, 9.994697390738665, 100.51202637097762),
+        ]);
+        assert!(forge_geom::intcurve::trace(&rod, &torus, region).is_none());
+        let got = past_stalls(&rod, &torus, region, |_| true);
+        assert!(past_stalls(&rod, &torus, region, |_| false).is_none());
+        for (c, _) in got.expect("the branches off the touch") {
+            let d = c.domain();
+            for i in 0..=20 {
+                let p = c.eval(d.lo + (d.hi - d.lo) * i as f64 / 20.0);
+                assert!(rod.distance(p) <= 1e-4 && torus.distance(p) <= 1e-4);
             }
         }
     }

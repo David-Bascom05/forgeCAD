@@ -899,10 +899,20 @@ fn plan_once(a: &Body, b: &Body, op: Op, scratch: &mut Scratch) -> R<Plan> {
                     continue;
                 }
                 SurfaceSurface::NotAnalytic => {
-                    return Err(BoolError::unhandled(Unhandled::NoClosedForm {
-                        a: FaceRef::of(a, fa),
-                        b: FaceRef::of(b, fb),
-                    }));
+                    let off = |p: Point3| {
+                        index[0].point_in_face(fa, p) == Where::Outside
+                            || index[1].point_in_face(fb, p) == Where::Outside
+                    };
+                    let box_ = meet_region(&ba, &b_boxes[fb.index()], sa, sb);
+                    match ssi::past_stalls(sa, sb, box_, off) {
+                        Some(cs) => cs,
+                        None => {
+                            return Err(BoolError::unhandled(Unhandled::NoClosedForm {
+                                a: FaceRef::of(a, fa),
+                                b: FaceRef::of(b, fb),
+                            }));
+                        }
+                    }
                 }
                 SurfaceSurface::Curves(cs) => cs,
             };
