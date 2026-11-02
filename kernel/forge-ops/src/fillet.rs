@@ -224,6 +224,9 @@ pub struct FilletOptions {
     /// Where two blends' springs cross on the face between them, one blend of the faces beyond
     /// takes that face whole. Asked only after the two have refused to stand side by side.
     pub across: bool,
+    /// Springs are tested against seams of their faces and may cross them. Asked only after a refusal:
+    /// it costs a walk along every spring beside a seam, and few reach one.
+    pub seams: bool,
 }
 
 /// The vertex each varying law of `edges` runs from. A run is the edges one varying radius was
@@ -332,6 +335,18 @@ pub fn fillet(body: &Body, edges: &[FilletEdge], feature: u64) -> R<Body> {
     {
         return Ok(done);
     }
+    // a spring over a seam between samples comes out as loops that cross
+    let seams = FilletOptions {
+        seams: true,
+        ..FilletOptions::default()
+    };
+    if let Ok(b) = fillet_with(body, edges, &seams, feature)
+        && forge_topo::check_against(&b, body)
+            .iter()
+            .all(|p| matches!(p, forge_topo::Problem::DuplicateName { .. }))
+    {
+        return Ok(b);
+    }
     Err(FilletError::Invalid(problems))
 }
 
@@ -352,6 +367,17 @@ pub fn fillet_with(body: &Body, edges: &[FilletEdge], opts: &FilletOptions, feat
             }
             Err(e @ FilletError::Crossed { .. }) => return Err(e),
             Err(_) => {}
+        }
+        if !opts.seams {
+            let seams = FilletOptions {
+                seams: true,
+                ..opts.clone()
+            };
+            if let Ok(b) = fillet_picked(body, edges, &seams, feature)
+                && forge_topo::check(&b).is_empty()
+            {
+                return Ok(b);
+            }
         }
     }
     if let Err(FilletError::Overflow { edge } | FilletError::NoBlend { edge }) = got
@@ -396,6 +422,7 @@ fn fillet_picked(body: &Body, edges: &[FilletEdge], opts: &FilletOptions, featur
         let rest = FilletOptions {
             stops,
             only: opts.only,
+            seams: opts.seams,
             ..FilletOptions::default()
         };
         return fillet_with(&done, &then, &rest, feature);
@@ -872,6 +899,7 @@ fn fillet_on(body: &Body, edges: &[FilletEdge], opts: &FilletOptions, feature: u
                 .collect();
             let mut b = Builder::new(body, rolled, root);
             b.free_ends = opts.only || !opts.stops.is_empty();
+            b.cross_seam = opts.seams;
             b.setbacks = opts.setbacks.clone();
             b.pivots = pivots;
             return b.build();
@@ -2440,6 +2468,10 @@ struct Builder {
     ends: BTreeMap<(EdgeId, bool), SpringEnd>,
     /// New end (vertex, parameter) of an unfilleted edge cut back at one end (true: its end).
     trims: BTreeMap<(EdgeId, bool), (VertexId, f64)>,
+    /// Whether springs are tested against their faces' seams (`FilletOptions::seams`).
+    cross_seam: bool,
+    /// Trims (as in `trims`) reaching past where the edge's traced curve stops: it is walked on to them.
+    carried: BTreeSet<(EdgeId, bool)>,
     /// Edges to insert after an arriving coedge, closing that face corner.
     paths: BTreeMap<CoedgeId, Vec<(EdgeId, bool)>>,
     touched: BTreeSet<FaceId>,
@@ -2478,9 +2510,9 @@ struct Builder {
     free_end: Option<EdgeId>,
     /// Whether a chain may go on unpicked here: `only`, or a second round's stops.
     free_ends: bool,
-    /// Blend sides whose spring a mitre carries on past its face's corner: the face grows over a
-    /// plane or surface carried on to meet it.
-    overrun: BTreeSet<(usize, usize)>,
+    /// Blend sides whose spring a mitre carries on past its face's corner, with the spring's parameter
+    /// at the corner: the face grows over its surface carried on to meet the other blend.
+    overrun: BTreeMap<(usize, usize), Vec<f64>>,
 }
 
 /// An arc of a face's rim whose radius the ball's is: its centre stays put while it turns about
@@ -2520,6 +2552,8 @@ impl Builder {
             pos,
             ends: BTreeMap::new(),
             trims: BTreeMap::new(),
+            cross_seam: false,
+            carried: BTreeSet::new(),
             paths: BTreeMap::new(),
             touched: BTreeSet::new(),
             dropped: BTreeSet::new(),
@@ -2538,7 +2572,7 @@ impl Builder {
             unsure: false,
             free_end: None,
             free_ends: false,
-            overrun: BTreeSet::new(),
+            overrun: BTreeMap::new(),
         }
     }
 
@@ -2620,7 +2654,7 @@ impl Builder {
         let free_end = self.free_end;
         let first = self.rolled.first().map(|r| r.edge);
         self.collapse(no_width);
-        let out = self.body.into_compact();
+        let mut out = self.body.into_compact();
         // new vertices sharing a name: a corner reached two ways, from pieces of one face. Which
         // should keep it nothing here can say stably, so such a corner refuses.
         let mut new: Vec<Name> = out
@@ -2630,10 +2664,42 @@ impl Builder {
             .filter(|n| !was.contains(n))
             .collect();
         new.sort_unstable();
+        // new vertices sharing a name: told apart in order along x, y, z
         if new.windows(2).any(|w| w[0] == w[1]) {
-            return Err(FilletError::Overflow {
-                edge: first.unwrap_or(EdgeId(0)),
-            });
+            for &name in new
+                .windows(2)
+                .filter(|w| w[0] == w[1])
+                .map(|w| &w[0])
+                .collect::<BTreeSet<_>>()
+            {
+                let mut same: Vec<usize> = (0..out.vertices.len())
+                    .filter(|&i| out.vertices[i].name == name)
+                    .collect();
+                let key = |i: &usize| {
+                    let p = out.vertices[*i].point;
+                    [p.x, p.y, p.z]
+                };
+                same.sort_by(|a, b| key(a).partial_cmp(&key(b)).unwrap_or(std::cmp::Ordering::Equal));
+                for (k, i) in same.into_iter().enumerate().skip(1) {
+                    out.vertices[i].name = name.with(k as u64);
+                }
+            }
+            // and the edges named from them
+            let mut seen: BTreeMap<Name, Vec<usize>> = BTreeMap::new();
+            for (i, e) in out.edges.iter().enumerate() {
+                seen.entry(e.name).or_default().push(i);
+            }
+            for mut same in seen.into_values().filter(|v| v.len() > 1) {
+                let key = |i: &usize| {
+                    let e = &out.edges[*i];
+                    let p = e.curve.eval(e.range.mid());
+                    [p.x, p.y, p.z]
+                };
+                same.sort_by(|a, b| key(a).partial_cmp(&key(b)).unwrap_or(std::cmp::Ordering::Equal));
+                for (k, i) in same.into_iter().enumerate().skip(1) {
+                    out.edges[i].name = out.edges[i].name.with(k as u64);
+                }
+            }
         }
         // no edge so short should stand
         if let Some(e) = first
@@ -2759,10 +2825,10 @@ impl Builder {
             }
             [h] => {
                 // the ball may run off a short or narrow face there: then it rolls on over the next
-                let (trims, paths) = (self.trims.clone(), self.paths.clone());
+                let (trims, paths, carried) = (self.trims.clone(), self.paths.clone(), self.carried.clone());
                 match self.run_out(v, &ring, h) {
                     Err(FilletError::Overflow { .. }) => {
-                        (self.trims, self.paths) = (trims, paths);
+                        (self.trims, self.paths, self.carried) = (trims, paths, carried);
                         self.roll_over(v, &ring, h)
                     }
                     other => other,
@@ -3140,6 +3206,26 @@ impl Builder {
                 && inside_face(&self.body, f, &e.curve, ext)
             {
                 t = u;
+            }
+            // a traced curve stops where its trace did, but the surfaces go on
+            if e.curve.eval(t).distance(p) > tol::LINEAR
+                && let Curve::Intersection(ic) = &e.curve
+                && let Some((on, before)) = ic.carried_to(p, at_end)
+            {
+                let shift = before as f64;
+                let on = Curve::Intersection(Arc::new(on));
+                let full = on.domain();
+                let hi = if at_end { full.hi } else { 0.0 };
+                let ext = if at_end {
+                    Interval::new(v, hi)
+                } else {
+                    Interval::new(0.0, v + shift)
+                };
+                if inside_face(&self.body, f, &on, ext) {
+                    self.carried.insert((co.edge, at_end));
+                    self.trims.insert((co.edge, at_end), (x, hi));
+                    return Ok(());
+                }
             }
         }
         if e.curve.eval(t).distance(p) > tol::LINEAR {
@@ -4563,6 +4649,14 @@ impl Builder {
                 path_b.push((cut, !fwd));
             }
         }
+        if !same {
+            let (key, corner) = if a_far {
+                ((rb, sb), qb_t)
+            } else {
+                ((ra, 1 - sa), qa_t)
+            };
+            self.overrun.entry(key).or_default().push(corner);
+        }
         path_a.push((m, m_fwd));
         // blend a: its side on face a ends at P, its other at Q or X
         let mut end_a = SpringEnd {
@@ -5060,6 +5154,11 @@ impl Builder {
 
     /// The spring edges of every blend, indexed like `rolled`.
     fn make_springs(&mut self) -> R<Vec<[Springs; 2]>> {
+        let seams = if self.cross_seam {
+            self.cross_seams()?
+        } else {
+            SeamCrossings::new()
+        };
         let mut out = Vec::with_capacity(self.rolled.len());
         for i in 0..self.rolled.len() {
             let e = self.rolled[i].edge;
@@ -5067,28 +5166,11 @@ impl Builder {
             let mut pair = Vec::with_capacity(2);
             for side in 0..2 {
                 // a vertex no corner rule closed leaves the edge without an end
-                let (Some(s), Some(t)) = (self.ends.get(&(e, false)), self.ends.get(&(e, true))) else {
+                let Some(((v0, t0), (v1, t1))) = self.spring_span(i, side) else {
                     return Err(FilletError::Overflow { edge: e });
                 };
                 let ro = &self.rolled[i];
                 let curve = ro.springs[side].clone();
-                // the spring runs with the spine: from the edge's start when aligned
-                let ((v0, t0), (v1, t1)) = if ro.aligned {
-                    ((s.v[side], s.t[side]), (t.v[side], t.t[side]))
-                } else {
-                    ((t.v[side], t.t[side]), (s.v[side], s.t[side]))
-                };
-                let t1 = match curve.domain().period {
-                    Some(p) => {
-                        let w = (t1 - t0).rem_euclid(p);
-                        if closed && w * curve.deriv(t0).d1.length() <= tol::LINEAR {
-                            t0 + p
-                        } else {
-                            t0 + w
-                        }
-                    }
-                    None => t1,
-                };
                 if (!closed && curve.eval(t0).distance(curve.eval(t1)) <= tol::LINEAR) || t1 <= t0 {
                     return Err(FilletError::Overflow { edge: e });
                 }
@@ -5096,8 +5178,19 @@ impl Builder {
                 let face = over.map_or(ro.faces[side], |o| o.0);
                 let name = Name::NONE.with_set(&[ro.name, self.body.face(face).name]);
                 // where the spring leaves its face and comes back, the ball rolls over what lies between
-                let inside = self.overrun.contains(&(i, side))
-                    || inside_face(&self.body, face, &curve, Interval::new(t0, t1));
+                let across = seams.get(&(i, side));
+                // what a mitre carries on past the corner is off the face as it was, and meant to be
+                let mut kept = Interval::new(t0, t1);
+                for &q in self.overrun.get(&(i, side)).into_iter().flatten() {
+                    if q > kept.lo && q < kept.hi {
+                        if q - t0 < t1 - q {
+                            kept.lo = q;
+                        } else {
+                            kept.hi = q;
+                        }
+                    }
+                }
+                let inside = across.is_some() || inside_face(&self.body, face, &curve, kept);
                 let rim = (ro.cliff == Some(side) || !inside)
                     && along_rim(&self.body, face, &curve, Interval::new(t0, t1));
                 self.collapsing |= rim;
@@ -5112,6 +5205,46 @@ impl Builder {
                 } else {
                     self.excursions(i, side, Interval::new(t0, t1))?
                 };
+                if let Some(list) = across {
+                    // its stretches, turn about on the face and on the one across each seam
+                    let mut stops = vec![(v0, t0)];
+                    stops.extend(list.iter().map(|&(t, v, _)| (v, t)));
+                    stops.push((v1, t1));
+                    let stretch = |k: usize| Interval::new(stops[k].1, stops[k + 1].1);
+                    let starts_home = inside_face(&self.body, face, &curve, stretch(0));
+                    let mut pieces = Vec::with_capacity(stops.len() - 1);
+                    let mut mine = Vec::new();
+                    let dir = self.rolled[i].forward[side] == self.rolled[i].aligned;
+                    for k in 0..stops.len() - 1 {
+                        let on_home = starts_home == (k % 2 == 0);
+                        // the far face of the crossing bounding this stretch
+                        let far = list[if k < list.len() { k } else { k - 1 }].2;
+                        let on = if on_home { face } else { far };
+                        if stretch(k).hi <= stretch(k).lo || !inside_face(&self.body, on, &curve, stretch(k))
+                        {
+                            return Err(FilletError::Overflow { edge: e });
+                        }
+                        let name = if k == 0 { name } else { name.with(k as u64) };
+                        let piece =
+                            self.body
+                                .add_edge(curve.clone(), stretch(k), stops[k].0, stops[k + 1].0, name);
+                        pieces.push(piece);
+                        if on_home {
+                            mine.push(piece);
+                        } else {
+                            self.extra.entry(far).or_default().extend(walk(&[piece], dir));
+                            self.rechain.insert(far);
+                            self.touched.insert(far);
+                        }
+                    }
+                    self.rechain.insert(face);
+                    pair.push(Springs {
+                        pieces,
+                        home: mine,
+                        gaps: Vec::new(),
+                    });
+                    continue;
+                }
                 let mut stops = vec![(v0, t0)];
                 for x in &trips {
                     stops.push((x.v_out, x.t_out));
@@ -5156,6 +5289,7 @@ impl Builder {
                     self.rechain.insert(face);
                 }
                 pair.push(Springs {
+                    home: pieces.clone(),
                     pieces,
                     gaps: trips.into_iter().map(|x| x.gap).collect(),
                 });
@@ -5268,6 +5402,156 @@ impl Builder {
             });
         }
         Ok(trips)
+    }
+
+    /// Where a spring crosses an edge of its face with the same surface across it (a seam) it stays on
+    /// that surface, and no surface says where. Those edges crossed an even number of times, by all the
+    /// springs together, have what lies between each two crossings taken out: the faces either side
+    /// open into each other there, each spring's stretches lying on the face they are on. Per spring,
+    /// its crossings in order with their vertices. (An edge crossed once is left alone: a spring running
+    /// a little past its face at a mitre, on the same function.)
+    fn cross_seams(&mut self) -> R<SeamCrossings> {
+        // per seam edge: parameter on it, then the spring, its parameter and the point
+        let mut found: BTreeMap<EdgeId, Vec<SeamHit>> = BTreeMap::new();
+        for i in 0..self.rolled.len() {
+            for side in 0..2 {
+                let ro = &self.rolled[i];
+                if ro.over[side].is_some() || ro.cliff == Some(side) {
+                    continue;
+                }
+                let Some(((_, t0), (_, t1))) = self.spring_span(i, side) else {
+                    continue;
+                };
+                let (range, home) = (Interval::new(t0, t1), ro.faces[side]);
+                let (fx, spring) = (self.body.face(home), &ro.springs[side]);
+                let slack = 1e-6 * range.width();
+                let reach = spring.bbox(range).grow(tol::LINEAR);
+                for &l in &fx.loops {
+                    for c in self.body.lp(l).coedges() {
+                        let g = self.body.coedge(c).edge;
+                        if !self.body.edge_box(g).overlaps(&reach) {
+                            continue;
+                        }
+                        let Some(across) = self.body.partner(c).map(|p| self.body.coedge_face(p)) else {
+                            continue;
+                        };
+                        if across == home
+                            || self.dropped.contains(&c)
+                            || self.which.contains_key(&g)
+                            || !self.body.face(across).surface.one_with(&fx.surface)
+                        {
+                            continue;
+                        }
+                        let gx = self.body.edge(g);
+                        // which side of g, in the face's tangent plane, where its nearest point is within it
+                        let side_of = |t: f64| {
+                            let p = spring.eval(t);
+                            let u = gx.curve.closest(p, gx.range);
+                            let d = gx.curve.deriv(u);
+                            let n = self.body.face_normal(home, fx.surface.project(d.p))?;
+                            Some((
+                                (p - d.p).dot(n.get().cross(d.d1)),
+                                u > gx.range.lo && u < gx.range.hi,
+                            ))
+                        };
+                        let n = 128;
+                        let at = |k: usize| range.lo + range.width() * k as f64 / n as f64;
+                        let list = found.entry(g).or_default();
+                        let mut last = side_of(at(0));
+                        for k in 1..=n {
+                            let now = side_of(at(k));
+                            if let (Some((a, ia)), Some((b, ib))) = (last, now)
+                                && a * b < 0.0
+                                && (ia || ib)
+                                && let Some(t) =
+                                    crossing(spring, 0.5 * (at(k - 1) + at(k)), &gx.curve, gx.range)
+                                && t > range.lo + slack
+                                && t < range.hi - slack
+                            {
+                                let p = spring.eval(t);
+                                list.push((gx.curve.closest(p, gx.range), i, side, t, p));
+                            }
+                            last = now;
+                        }
+                    }
+                }
+            }
+        }
+        let mut out: SeamCrossings = BTreeMap::new();
+        for (g, mut list) in found {
+            if list.is_empty()
+                || list.len() % 2 == 1
+                || self.trims.contains_key(&(g, true))
+                || self.trims.contains_key(&(g, false))
+            {
+                continue;
+            }
+            list.sort_by(|a, b| a.0.total_cmp(&b.0));
+            let gx = self.body.edge(g).clone();
+            let mut verts = Vec::with_capacity(list.len());
+            for (k, &(u, i, side, t, p)) in list.iter().enumerate() {
+                let name = Name::NONE
+                    .with_set(&[self.rolled[i].name, gx.name])
+                    .with(k as u64);
+                let v = self.body.add_vertex(p, name);
+                verts.push((u, v));
+                let across = gx
+                    .coedges
+                    .iter()
+                    .map(|&c| self.body.coedge_face(c))
+                    .find(|&f| f != self.rolled[i].faces[side])
+                    .ok_or(FilletError::Overflow { edge: g })?;
+                out.entry((i, side)).or_default().push((t, v, across));
+            }
+            // the seam keeps its first piece; each later one is a new edge, in both its faces
+            self.trims.insert((g, true), (verts[0].1, verts[0].0));
+            for (k, w) in verts[1..].chunks(2).enumerate() {
+                let hi = w.get(1).map_or(gx.range.hi, |x| x.0);
+                let end = w.get(1).map_or(gx.end, |x| x.1);
+                let name = gx.name.with_str("seam").with(k as u64);
+                let piece =
+                    self.body
+                        .add_edge(gx.curve.clone(), Interval::new(w[0].0, hi), w[0].1, end, name);
+                for &c in &gx.coedges {
+                    let f = self.body.coedge_face(c);
+                    let use_ = (piece, self.body.coedge(c).forward);
+                    self.extra.entry(f).or_default().push(use_);
+                    self.rechain.insert(f);
+                    self.touched.insert(f);
+                }
+            }
+        }
+        for list in out.values_mut() {
+            list.sort_by(|a, b| a.0.total_cmp(&b.0));
+        }
+        Ok(out)
+    }
+
+    /// Where spring `side` of blend `i` starts and stops, in its own direction.
+    fn spring_span(&self, i: usize, side: usize) -> Option<((VertexId, f64), (VertexId, f64))> {
+        let ro = &self.rolled[i];
+        let (s, t) = (
+            self.ends.get(&(ro.edge, false))?,
+            self.ends.get(&(ro.edge, true))?,
+        );
+        let ((v0, t0), (v1, t1)) = if ro.aligned {
+            ((s.v[side], s.t[side]), (t.v[side], t.t[side]))
+        } else {
+            ((t.v[side], t.t[side]), (s.v[side], s.t[side]))
+        };
+        let closed = self.body.edge(ro.edge).start == self.body.edge(ro.edge).end;
+        let t1 = match ro.springs[side].domain().period {
+            Some(p) => {
+                let w = (t1 - t0).rem_euclid(p);
+                if closed && w * ro.springs[side].deriv(t0).d1.length() <= tol::LINEAR {
+                    t0 + p
+                } else {
+                    t0 + w
+                }
+            }
+            None => t1,
+        };
+        Some(((v0, t0), (v1, t1)))
     }
 
     /// The blend's cut walked across the faces from `entry`, on the edge of `cur` (which
@@ -5558,6 +5842,28 @@ impl Builder {
     }
 
     fn trim_edges(&mut self) -> R<()> {
+        for (e, at_end) in std::mem::take(&mut self.carried) {
+            let &(v, _) = self
+                .trims
+                .get(&(e, at_end))
+                .ok_or(FilletError::Overflow { edge: e })?;
+            let p = self.body.vertex(v).point;
+            let Curve::Intersection(ic) = &self.body.edge(e).curve else {
+                return Err(FilletError::Overflow { edge: e });
+            };
+            let (on, before) = ic
+                .carried_to(p, at_end)
+                .ok_or(FilletError::Overflow { edge: e })?;
+            let shift = before as f64;
+            let edge = &mut self.body.edges[e.index()];
+            edge.range = Interval::new(edge.range.lo + shift, edge.range.hi + shift);
+            let hi = on.domain_hi();
+            edge.curve = Curve::Intersection(Arc::new(on));
+            if let Some(other) = self.trims.get_mut(&(e, !at_end)) {
+                other.1 += shift;
+            }
+            self.trims.insert((e, at_end), (v, if at_end { hi } else { 0.0 }));
+        }
         let trims: Vec<((EdgeId, bool), (VertexId, f64))> =
             self.trims.iter().map(|(k, v)| (*k, *v)).collect();
         for ((e, at_end), (v, t)) in trims {
@@ -5620,10 +5926,7 @@ impl Builder {
                             let s = usize::from(self.rolled[i].coedges[0] != c);
                             // a strip the ball rolled past goes; its spring is on the face beyond
                             if self.rolled[i].over[s].is_none() {
-                                uses.extend(walk(
-                                    &springs[i][s].pieces,
-                                    co.forward == self.rolled[i].aligned,
-                                ));
+                                uses.extend(walk(&springs[i][s].home, co.forward == self.rolled[i].aligned));
                             }
                         }
                         None => uses.push((co.edge, co.forward)),
@@ -5675,10 +5978,18 @@ impl Builder {
     }
 }
 
+/// A spring over a seam: the seam's parameter, the blend, its side, the spring's parameter, the point.
+type SeamHit = (f64, usize, usize, f64, Point3);
+
+/// Per spring (blend, side), where it crosses a seam: its parameter, the new vertex, the face across.
+type SeamCrossings = BTreeMap<(usize, usize), Vec<(f64, VertexId, FaceId)>>;
+
 /// A spring's edges in its parameter's order, and between each two the path the blend
 /// takes (walking the spring with its parameter) where the spring was off its face.
 struct Springs {
     pieces: Vec<EdgeId>,
+    /// Those on the blend's own face (the others lie across a seam of it).
+    home: Vec<EdgeId>,
     gaps: Vec<Vec<(EdgeId, bool)>>,
 }
 
@@ -6330,7 +6641,28 @@ fn crossing(a: &Curve, mut t: f64, b: &Curve, range: Interval) -> Option<f64> {
         t = a.closest(q, window);
     }
     let p = a.eval(t);
-    (b.eval(b.closest(p, range)).distance(p) <= tol::LINEAR).then_some(t)
+    let mut s = b.closest(p, range);
+    if b.eval(s).distance(p) <= tol::LINEAR {
+        return Some(t);
+    }
+    // curves crossing at a shallow angle: projecting back and forth creeps there at the angle's cos^2
+    // a step, Newton on the two parameters does not
+    for _ in 0..30 {
+        let (da, db) = (a.deriv(t), b.deriv(s));
+        let r = da.p - db.p;
+        if r.length() <= 1e-3 * tol::LINEAR {
+            return Some(t);
+        }
+        let (aa, ab, bb) = (da.d1.dot(da.d1), da.d1.dot(db.d1), db.d1.dot(db.d1));
+        let det = aa * bb - ab * ab;
+        if det <= 1e-12 * aa * bb {
+            return None;
+        }
+        let (ra, rb) = (r.dot(da.d1), r.dot(db.d1));
+        t = (t + (rb * ab - ra * bb) / det).clamp(window.lo, window.hi);
+        s = (s + (rb * aa - ra * ab) / det).clamp(range.lo, range.hi);
+    }
+    (a.eval(t).distance(b.eval(s)) <= tol::LINEAR).then_some(t)
 }
 
 /// The centre of a ball of radius `r` on the two faces, in the plane across the edge at `l.p`: the
@@ -6483,6 +6815,16 @@ mod tests {
         assert_eq!(m[&v(5)], root);
         assert!(!m.contains_key(&root));
         assert!(!m.contains_key(&v(4)));
+    }
+
+    #[test]
+    fn curves_crossing_at_a_shallow_angle_meet() {
+        use forge_geom::Line;
+        let a = Curve::Line(Line::new(Point3::ORIGIN, UnitVec3::X));
+        let d = Vec3::new(1.0, 0.002, 0.0).normalize().expect("unit");
+        let b = Curve::Line(Line::new(Point3::new(10.0, 0.0, 0.0), d));
+        let t = crossing(&a, 3.0, &b, Interval::new(-100.0, 100.0)).expect("they cross");
+        assert!((t - 10.0).abs() < 1e-6, "crossed at {t}");
     }
 
     #[test]

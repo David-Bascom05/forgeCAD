@@ -102,6 +102,43 @@ impl IntCurve {
         }
     }
 
+    /// The chain carried on past its end (or its start) to `p`, a point on both surfaces, by walking
+    /// on along them, with how many segments now come before the old chain. None if the branch doesn't
+    /// lead there.
+    pub fn carried_to(&self, p: Point3, at_end: bool) -> Option<(IntCurve, usize)> {
+        if self.closed {
+            return None;
+        }
+        let (from, out) = if at_end {
+            (*self.pts.last()?, *self.tans.last()?)
+        } else {
+            (*self.pts.first()?, -*self.tans.first()?)
+        };
+        let left = from.distance(p);
+        if left <= tol::LINEAR {
+            return None;
+        }
+        let on = towards_touch(&self.a, &self.b, from, p, left / 16.0)?;
+        if (on.pts[1] - from).dot(out) <= 0.0 {
+            return None;
+        }
+        let sag = self.sag.max(on.sag);
+        let n = on.pts.len() - 1;
+        let joined = if at_end {
+            (
+                [&self.pts[..], &on.pts[1..]].concat(),
+                [&self.tans[..], &on.tans[1..]].concat(),
+            )
+        } else {
+            let pts: Vec<Point3> = on.pts[1..].iter().rev().chain(&self.pts).copied().collect();
+            let back = on.tans[1..].iter().rev().map(|&t| -t);
+            let tans: Vec<Vec3> = back.chain(self.tans.iter().copied()).collect();
+            (pts, tans)
+        };
+        let curve = IntCurve::new(self.a.clone(), self.b.clone(), joined.0, joined.1, false, sag);
+        Some((curve, if at_end { 0 } else { n }))
+    }
+
     pub fn segments(&self) -> usize {
         if self.closed {
             self.pts.len()
