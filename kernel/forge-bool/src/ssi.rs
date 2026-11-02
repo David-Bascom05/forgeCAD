@@ -116,8 +116,14 @@ fn nearly_flush(a: &Surface, b: &Surface, region: &Box3) -> Option<SurfaceSurfac
 /// Pairs searched: a boolean meets one pair several times over the same region, and a drag meets over again every
 /// pair it did not move. `search` is a function of the two surfaces and the region and of nothing else, and a key
 /// holds them whole, to the bit, so an answer found stands (research/drag-speed).
-#[derive(Clone, PartialEq, Eq, Hash)]
+#[derive(Clone, PartialEq, Eq)]
 struct Met([forge_geom::surface::Bits; 2], [u64; 6]);
+// the map compares whole keys, and the region all but says which: the surfaces' 30 words add nothing
+impl std::hash::Hash for Met {
+    fn hash<H: std::hash::Hasher>(&self, h: &mut H) {
+        self.1.iter().for_each(|&x| h.write_u64(x));
+    }
+}
 fn met(a: &Surface, b: &Surface, r: &Box3) -> Met {
     Met(
         [a.bits(), b.bits()],

@@ -4,7 +4,7 @@
 use crate::curve::{Curve, CurveDeriv, CurveGeom, Domain1, ProcCurve, ProceduralCurve};
 use crate::intcurve::IntCurve;
 use crate::surface::Surface;
-use forge_math::{Box3, Frame, Interval, Point3, Vec3, tol};
+use forge_math::{Box3, Frame, Interval, Point2, Point3, Vec3, tol};
 use std::sync::{Arc, OnceLock};
 
 impl Curve {
@@ -218,9 +218,14 @@ impl ChordCurve {
                         let q = base.project(self.ic.eval(t));
                         if axis == 0 { q.x } else { q.y }
                     };
-                    let mut f0 = foot(0.0);
+                    // the chain's points are on the curve near enough to say which steps cross, and
+                    // each foot starts from the last
+                    let at = |q: Point2| if axis == 0 { q.x } else { q.y };
+                    let n = self.ic.pts.len();
+                    let mut q0 = base.project(self.ic.pts[0]);
                     for k in 0..self.ic.domain_hi() as usize {
-                        let f1 = foot((k + 1) as f64);
+                        let q1 = base.project_near(self.ic.pts[(k + 1) % n], q0);
+                        let (f0, f1) = (at(q0), at(q1));
                         // (not across a closed surface's seam)
                         if period.is_none_or(|w| (f1 - f0).abs() < 0.5 * w) {
                             let (lo, up) = (f0.min(f1), f0.max(f1));
@@ -238,7 +243,7 @@ impl ChordCurve {
                                 out.push(self.u_of(0.5 * (a + b)));
                             }
                         }
-                        f0 = f1;
+                        q0 = q1;
                     }
                 }
             }
@@ -247,6 +252,27 @@ impl ChordCurve {
         })
     }
 
+    /// `foot_joins` over `range`, a closed curve's a period on or more as the stretches', in with `out`.
+    fn add_joins(&self, range: Interval, base: f64, out: &mut Vec<f64>) {
+        if self.foot_joins().is_empty() {
+            return;
+        }
+        let turns = if self.ic.closed {
+            ((range.hi - base) / self.len).ceil() as usize
+        } else {
+            1
+        };
+        for n in 0..turns {
+            let shift = base + self.len * n as f64;
+            out.extend(
+                self.foot_joins()
+                    .iter()
+                    .map(|j| j + shift)
+                    .filter(|&u| u > range.lo && u < range.hi),
+            );
+        }
+        out.sort_unstable_by(|x, y| x.total_cmp(y));
+    }
     /// u moved by periods into [0, len) on a closed curve.
     fn wrap(&self, u: f64) -> f64 {
         if self.ic.closed && !(0.0..self.len).contains(&u) {
@@ -483,7 +509,8 @@ impl ProceduralCurve for ChordCurve {
         } else {
             0.0
         };
-        let mut k = 0;
+        // (asked again and again about a short range: from where it starts)
+        let mut k = self.stretches.partition_point(|s| base + s.u0 <= range.lo);
         loop {
             let s = &self.stretches[k % self.stretches.len()];
             let u = base + s.u0 + self.len * (k / self.stretches.len()) as f64;
@@ -495,21 +522,7 @@ impl ProceduralCurve for ChordCurve {
             }
             k += 1;
         }
-        let turns = if self.ic.closed {
-            ((range.hi - base) / self.len).ceil() as usize
-        } else {
-            1
-        };
-        for n in 0..turns {
-            let shift = base + self.len * n as f64;
-            out.extend(
-                self.foot_joins()
-                    .iter()
-                    .map(|j| j + shift)
-                    .filter(|&u| u > range.lo && u < range.hi),
-            );
-        }
-        out.sort_by(f64::total_cmp);
+        self.add_joins(range, base, &mut out);
         out
     }
 }
