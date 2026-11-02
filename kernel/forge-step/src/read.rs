@@ -1356,6 +1356,15 @@ fn measure_gaps(proto: &Proto, stats: &mut Stats) {
 
 /// From a read file's topology to a body: seams, edges tightened, checked; healing and the check on
 /// one budget. `uncertainty`: what the file says of itself.
+/// Whether every shell but the largest bounds negative volume.
+fn voids_inward(body: &Body) -> bool {
+    let v: Vec<f64> = (0..body.shells.len())
+        .map(|i| forge_topo::mass::shell_volume(body, forge_topo::ShellId(i as u32)))
+        .collect();
+    let most = v.iter().fold(0.0f64, |m, x| m.max(x.abs()));
+    v.iter().filter(|x| x.abs() < most).all(|&x| x < 0.0)
+}
+
 pub(crate) fn finish(
     mut proto: Proto,
     uncertainty: f64,
@@ -1451,53 +1460,65 @@ fn read_file(text: &[u8], lim: &Limits, only_measure: bool) -> Result<Imported, 
             Some(Value::Str(a, n)) => f.str_of(*a, *n).to_string(),
             _ => String::new(),
         };
-        let mut b = Build {
-            r: &mut reader,
-            p: Proto {
+        // a void's faces first as they stand (the files of every system measured, research/step-voids)
+        let mut void_flip = true;
+        loop {
+            let mut b = Build {
+                r: &mut reader,
+                p: Proto {
+                    salt: Name::feature(u64::from(id)).with_str("step"),
+                    ..Proto::default()
+                },
+                verts: BTreeMap::new(),
+                edges: BTreeMap::new(),
+                stats: &mut stats,
                 salt: Name::feature(u64::from(id)).with_str("step"),
-                ..Proto::default()
-            },
-            verts: BTreeMap::new(),
-            edges: BTreeMap::new(),
-            stats: &mut stats,
-            salt: Name::feature(u64::from(id)).with_str("step"),
-        };
-        let built = (|| {
-            let a = f.args(&r);
-            let outer = b.r.reference(id, "solid", a.get(1))?;
-            b.shell(outer, false)?;
-            if f.name(&r) == "BREP_WITH_VOIDS" {
-                for v in b.r.list(id, "solid", a.get(2))? {
-                    let vid = b.r.reference(id, "solid", Some(v))?;
-                    b.shell(vid, false)?;
-                }
-            }
-            Ok(())
-        })();
-        let proto = b.p;
-        match built {
-            Ok(()) => {
-                if only_measure {
-                    measure_gaps(&proto, &mut stats);
-                    continue;
-                }
-                match finish(proto, u.uncertainty, lim, &mut stats) {
-                    Ok(mut body) => {
-                        body.unplaced = stats.assembly > 0;
-                        solids.push(Solid {
-                            entity: id,
-                            name,
-                            body,
-                        })
+            };
+            let built = (|| {
+                let a = f.args(&r);
+                let outer = b.r.reference(id, "solid", a.get(1))?;
+                b.shell(outer, false)?;
+                if f.name(&r) == "BREP_WITH_VOIDS" {
+                    for v in b.r.list(id, "solid", a.get(2))? {
+                        let vid = b.r.reference(id, "solid", Some(v))?;
+                        b.shell(vid, void_flip)?;
                     }
-                    Err(why) => refusals.push(Refusal {
-                        entity: id,
-                        kind: f.name(&r).to_string(),
-                        why,
-                    }),
                 }
+                Ok(())
+            })();
+            let proto = b.p;
+            match built {
+                Ok(()) => {
+                    if only_measure {
+                        measure_gaps(&proto, &mut stats);
+                        break;
+                    }
+                    let done = finish(proto, u.uncertainty, lim, &mut stats);
+                    // files differ on what a void's .F. turns: a void must bound negative volume
+                    if void_flip && f.name(&r) == "BREP_WITH_VOIDS" && !done.as_ref().is_ok_and(voids_inward)
+                    {
+                        void_flip = false;
+                        continue;
+                    }
+                    match done {
+                        Ok(mut body) => {
+                            body.unplaced = stats.assembly > 0;
+                            solids.push(Solid {
+                                entity: id,
+                                name,
+                                body,
+                            })
+                        }
+                        Err(why) => refusals.push(Refusal {
+                            entity: id,
+                            kind: f.name(&r).to_string(),
+                            why,
+                        }),
+                    }
+                }
+                Err(x) => refusals.push(x),
             }
-            Err(x) => refusals.push(x),
+            break;
         }
     }
     if solids.is_empty() && refusals.is_empty() && !only_measure {

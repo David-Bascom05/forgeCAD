@@ -286,3 +286,39 @@ fn a_dome_on_a_spindle_comes_back_the_same() {
     let (a, b) = (mass(&dome).unwrap().volume, mass(back).unwrap().volume);
     assert!((a - b).abs() <= 1e-6 * a, "{a} became {b}");
 }
+
+/// A block with a cavity: the void's shell reads as a void whichever way a file's flag turns it.
+#[test]
+fn a_cavity_comes_back_a_cavity() {
+    let flat = |x, y, z, w, d, h, id| {
+        let plane = Frame::from_axes(Point3::new(x, y, z), Vec3::X, Vec3::Y, Vec3::Z).unwrap();
+        let loops = vec![Profile::rectangle(Point2::ORIGIN, w, d, id)];
+        extrude(&Profile { plane, loops }, h, id).unwrap()
+    };
+    let block = flat(0.0, 0.0, 0.0, 40.0, 40.0, 40.0, 1);
+    let hole = flat(10.0, 10.0, 10.0, 20.0, 20.0, 10.0, 2);
+    let part = forge_bool::boolean(&block, &hole, forge_bool::Op::Subtract, 3).unwrap();
+    let want = 64000.0 - 4000.0;
+    assert!((mass(&part).unwrap().volume - want).abs() < 1e-6);
+    let text = export(&part, &Options::default()).unwrap().text;
+    assert!(text.contains("BREP_WITH_VOIDS"));
+    for file in [
+        text.clone(),
+        text.lines()
+            .map(|l| {
+                if l.contains("ORIENTED_CLOSED_SHELL") {
+                    l.replace(",.F.)", ",.T.)")
+                } else {
+                    l.to_string()
+                }
+            })
+            .collect::<Vec<_>>()
+            .join("\n"),
+    ] {
+        let got = import(file.as_bytes(), &Limits::default()).unwrap();
+        assert!(got.refusals.is_empty(), "{:?}", got.refusals);
+        let back = &got.solids[0].body;
+        assert_eq!(check(back), vec![]);
+        assert!((mass(back).unwrap().volume - want).abs() < 1e-6);
+    }
+}
