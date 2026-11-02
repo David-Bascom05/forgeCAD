@@ -88,3 +88,9 @@ steps is about 2%, from how the radius falls on the grid, and it stands about 1.
 - A control with plane walls and skew corners agrees with OCCT everywhere, added volume to 5e-8. It also lies up to 0.335 outside the ball's closing at r 2 (`closure_body.rs`, functions to paste into a bridge): that is what a mitre is. So being outside the closing by that much is not itself a fault.
 - OCCT refuses the other 7. They are judged by the closure only: nothing out by more than the control's mitre on the 17 parts' flagged points (0.206 at r 2).
 The bound of four radii on a line's or circle's carry was set to admit one case, a 0.2 long flat end with r 1, off by 3.5e-4; OCCT's surface agrees there on the sibling case it builds. It is a choice, not a derived limit: `worst_carried` reports what passed.
+
+## The bound on a refusal's retries
+
+`walk_tests` in `fillet.rs`. Run on the logged failure cases (not in this repo). Counting every foot test, a fixed 5000 lost 4 of the parts that build by a walk, and 2000 + 400 per edge picked lost 8: what those spend is on planes and cylinders, which cost almost nothing. The time goes in nearest points on loft walls (Skinned 58% and more of a slow refusal's profile), so only work on procedural faces counts.
+
+With 4000 + 200 per edge on 861 logged failures: total time 2622 s to 2052 s, one part loses one round it had built, and none goes from built to refused. Every part's census result is unchanged. Slow refusals also stood on two loops that did nothing, now stopped: `crossing` going on after its alternating projections had stopped moving, and each retry of what `minority_first` left over running its own retries.

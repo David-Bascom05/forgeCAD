@@ -402,7 +402,11 @@ pub fn fillet_with(body: &Body, edges: &[FilletEdge], opts: &FilletOptions, feat
         } else {
             &[(opts.seams, true)]
         };
+        WALK_LEFT.with(|w| w.set(walk_tests(edges.len())));
         for &(seams, rims) in tries {
+            if !walk_spend(0) {
+                break;
+            }
             let tried = FilletOptions {
                 seams,
                 rims,
@@ -460,6 +464,8 @@ fn fillet_picked(body: &Body, edges: &[FilletEdge], opts: &FilletOptions, featur
             stops,
             only: opts.only,
             seams: opts.seams,
+            walk: opts.walk,
+            rims: opts.rims,
             ..FilletOptions::default()
         };
         return fillet_with(&done, &then, &rest, feature);
@@ -2206,8 +2212,11 @@ fn foot_on(body: &Body, l: &Local, s: usize, q: Point3) -> bool {
 /// Whether point `p` lies within face `f`, seen from its surface: a foot just off a face is on the
 /// face beyond a smooth edge, whichever surface it was worked out on.
 fn in_face(body: &Body, f: FaceId, p: Point3) -> bool {
+    in_loops(body, f, &forge_topo::uv::face_uv_loops(body, f), p)
+}
+
+fn in_loops(body: &Body, f: FaceId, loops: &UvLoops, p: Point3) -> bool {
     let surface = &body.face(f).surface;
-    let loops = forge_topo::uv::face_uv_loops(body, f);
     let d = surface.domain();
     let uv = surface.project(p);
     let shifts = |p: Option<f64>| match p {
@@ -2217,7 +2226,7 @@ fn in_face(body: &Body, f: FaceId, p: Point3) -> bool {
     shifts(d.u.period).iter().any(|&du| {
         shifts(d.v.period)
             .iter()
-            .any(|&dv| forge_topo::uv::point_in_loops(forge_math::Point2::new(uv.x + du, uv.y + dv), &loops))
+            .any(|&dv| forge_topo::uv::point_in_loops(forge_math::Point2::new(uv.x + du, uv.y + dv), loops))
     })
 }
 
@@ -2602,6 +2611,32 @@ struct Corner {
 
 /// A new face closing a corner: surface, same sense, name, its loop.
 type Patch = (Surface, bool, Name, Vec<(EdgeId, bool)>);
+
+/// The work a refused fillet's retries may do between them, in foot tests, so that a refusal stays
+/// cheap: a count, not a time, so that what refuses is the same everywhere. Only what is dear counts,
+/// work on procedural faces. Measured on the parts that build by a walk (research/fillets/README.md).
+fn walk_tests(picked: usize) -> u32 {
+    4000 + 200 * picked.min(1000) as u32
+}
+
+thread_local! {
+    static WALK_LEFT: std::cell::Cell<u32> = const { std::cell::Cell::new(0) };
+}
+
+/// Takes `n` from what the retries have left; whether any is left.
+fn walk_spend(n: u32) -> bool {
+    WALK_LEFT.with(|w| {
+        let left = w.get().saturating_sub(n);
+        w.set(left);
+        left > 0
+    })
+}
+/// What a refused joint counts as, in foot tests.
+const JOINT_TESTS: u32 = 200;
+/// What tracing a new stretch's blend counts as, in foot tests.
+const BLEND_TESTS: u32 = 100;
+
+type UvLoops = Vec<forge_topo::uv::UvLoop>;
 
 #[derive(Clone)]
 struct Builder {
@@ -3111,6 +3146,13 @@ impl Builder {
                         (self.trims, self.paths, self.g_ends) = saved.clone();
                         // a walk costs far more than these: only in the retry after a refusal
                         if !self.opening {
+                            return Err(e);
+                        }
+                        // both joints refused, at what they cost on a loft's springs
+                        let dear = ring
+                            .iter()
+                            .any(|k| matches!(self.body.face(k.face).surface, Surface::Procedural(_)));
+                        if dear && !walk_spend(JOINT_TESTS) {
                             return Err(e);
                         }
                         let more = (
@@ -4350,6 +4392,8 @@ impl Builder {
         let mut t_start = t;
         let mut walked = 0.0;
         let mut seemed = false;
+        // the faces' loops, worked out once: they are what a foot's test costs on a loft wall
+        let loops: std::cell::RefCell<BTreeMap<FaceId, UvLoops>> = std::cell::RefCell::new(BTreeMap::new());
         for _ in 0..64 {
             if wants.contains(&faces) {
                 break;
@@ -4357,7 +4401,18 @@ impl Builder {
             // first foot off its face, going on from t
             let speed = blend.spine.deriv(t).d1.length().max(1e-12);
             let dt = (0.125 * r / speed) * if up { 1.0 } else { -1.0 };
-            let foot_off = |t: f64| (0..2).find(|&i| !in_face(body, faces[i], springs[i].eval(t)));
+            let foot_off = |t: f64| {
+                // (only a procedural face's nearest point costs anything to speak of)
+                let dear = |i: usize| matches!(body.face(faces[i]).surface, Surface::Procedural(_));
+                walk_spend(u32::from(dear(0)) + u32::from(dear(1)));
+                (0..2).find(|&i| {
+                    let mut known = loops.borrow_mut();
+                    let l = known
+                        .entry(faces[i])
+                        .or_insert_with(|| forge_topo::uv::face_uv_loops(body, faces[i]));
+                    !in_loops(body, faces[i], l, springs[i].eval(t))
+                })
+            };
             // (a foot that has just crossed lies on the edge between)
             if crossed.is_empty() && !seemed && foot_off(t).is_some() {
                 return Err(err);
@@ -4365,6 +4420,9 @@ impl Builder {
             let mut hit = None;
             let (mut lo, mut u) = (t, t);
             while walked < reach {
+                if !walk_spend(0) {
+                    return Err(err);
+                }
                 let n = u + dt;
                 if foot_off(n).is_some() {
                     hit = Some(n);
@@ -4439,6 +4497,12 @@ impl Builder {
             off[i] *= sense(faces[i]) * sense(across);
             faces[i] = across;
             let s = |f: FaceId| &body.face(f).surface;
+            if faces
+                .iter()
+                .any(|&f| matches!(body.face(f).surface, Surface::Procedural(_)))
+            {
+                walk_spend(BLEND_TESTS);
+            }
             // (asked about what the ball can reach from here: a trace over the whole chain costs far more)
             let around = Box3::from_point(centre).grow(8.0 * r);
             blend =
@@ -7118,7 +7182,13 @@ fn crossing(a: &Curve, mut t: f64, b: &Curve, range: Interval) -> Option<f64> {
         if p.distance(q) <= 1e-3 * tol::LINEAR {
             return Some(t);
         }
-        t = a.closest(q, window);
+        // stopped short of the other curve: more of the same changes nothing
+        let next = a.closest(q, window);
+        let still = (next - t).abs() <= 1e-14 * (1.0 + t.abs());
+        t = next;
+        if still {
+            break;
+        }
     }
     let p = a.eval(t);
     let mut s = b.closest(p, range);
