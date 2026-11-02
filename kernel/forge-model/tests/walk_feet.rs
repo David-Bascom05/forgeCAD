@@ -92,23 +92,30 @@ fn bits(b: &Body) -> Vec<u64> {
     out
 }
 
+/// On a thread of its own where there are threads (wasm has one): what ran before stays behind.
+fn fresh<T: Send>(f: impl FnOnce() -> T + Send) -> T {
+    #[cfg(not(target_arch = "wasm32"))]
+    return std::thread::scope(|s| s.spawn(f).join().unwrap());
+    #[cfg(target_arch = "wasm32")]
+    f()
+}
+
 #[test]
 fn a_round_on_a_lofted_wall_has_the_same_bits_on_any_thread_after_anything() {
     let joined = plate_and_blade();
-    let alone = std::thread::scope(|s| s.spawn(|| bits(&round(&joined, 2.0))).join().unwrap());
-    let after_another = std::thread::scope(|s| {
-        s.spawn(|| {
-            round(&joined, 1.5);
-            bits(&round(&joined, 2.0))
-        })
-        .join()
-        .unwrap()
+    let alone = fresh(|| bits(&round(&joined, 2.0)));
+    let after_another = fresh(|| {
+        round(&joined, 1.5);
+        bits(&round(&joined, 2.0))
     });
     assert_eq!(alone, after_another);
-    let together: Vec<Vec<u64>> = std::thread::scope(|s| {
-        let runs: Vec<_> = (0..4).map(|_| s.spawn(|| bits(&round(&joined, 2.0)))).collect();
-        runs.into_iter().map(|r| r.join().unwrap()).collect()
-    });
-    assert!(together.iter().all(|b| *b == alone));
+    #[cfg(not(target_arch = "wasm32"))]
+    {
+        let together: Vec<Vec<u64>> = std::thread::scope(|s| {
+            let runs: Vec<_> = (0..4).map(|_| s.spawn(|| bits(&round(&joined, 2.0)))).collect();
+            runs.into_iter().map(|r| r.join().unwrap()).collect()
+        });
+        assert!(together.iter().all(|b| *b == alone));
+    }
     assert_eq!(bits(&round(&joined, 2.0)), alone);
 }
