@@ -898,9 +898,60 @@ fn resolved(pc: &Piece, rel: f64) -> bool {
     })
 }
 
-/// [lo, hi] on 12 points if 4 already draw it, else on 36 if 12 do, else in halves. Pieces go
-/// out in the order the loop walks them (backwards if `rev`), each one's surface parameters
-/// found from where the last one ended (`seed`).
+/// How far the coarser rule's interpolant misses the piece's other points, in u and in v.
+fn trace_miss(pc: &Piece) -> [f64; 2] {
+    let m = pc.n.len();
+    let (r, rc) = (rule(m), rule(m / 3));
+    std::array::from_fn(|a| {
+        (0..m)
+            .filter(|j| j % 3 != 1)
+            .map(|j| {
+                let x = r.x[j];
+                let (mut num, mut den) = (0.0, 0.0);
+                for k in 0..m / 3 {
+                    let c = rc.lam[k] / (x - rc.x[k]);
+                    num += c * pc.n[3 * k + 1].uv[a];
+                    den += c;
+                }
+                (num / den - pc.n[j].uv[a]).abs()
+            })
+            .fold(0.0, f64::max)
+    })
+}
+
+/// A piece whose trace is known only to `miss` in the surface's parameters: its boundary may be off
+/// by that much, carried into the error as a gap between edge and surface.
+fn carry_miss(s: &Surface, pc: &mut Piece, miss: [f64; 2]) {
+    let m = pc.n.len();
+    let d = d1(s, uv(&pc.n[m / 2]));
+    let off = 2.0 * (miss[0] * d.du.length() + miss[1] * d.dv.length());
+    let r = rule(m);
+    let p0 = pc.n[0].p;
+    let speeds: Vec<f64> = (0..m)
+        .map(|i| {
+            let row = &r.d[i * m..(i + 1) * m];
+            row.iter()
+                .zip(&pc.n)
+                .fold(Vec3::ZERO, |acc, (w, q)| acc + (q.p - p0) * *w)
+                .length()
+        })
+        .collect();
+    for (q, v) in pc.n.iter_mut().zip(speeds) {
+        q.gap = q.gap.max(off);
+        q.speed = v;
+    }
+}
+
+/// Past this miss in parameters, a miss that halving does not shrink is still the trace's shape (a
+/// kink, say) and worth following; under it, on the parts measured, it is the surface's own noise
+/// (research/mass-noise-floor).
+const NOISE_MISS: f64 = 1e-9;
+
+/// [lo, hi] on 12 points if 4 already draw it, else on 36 if 12 do, else in halves until they do,
+/// or until halving stops helping: an offset surface's nearest points hold to a part in 1e11 or so,
+/// and no finer piece draws that. Pieces go out in the order the loop walks them (backwards if
+/// `rev`), each one's surface parameters found from where the last one ended (`seed`). `parent` is
+/// the enclosing piece's miss.
 #[allow(clippy::too_many_arguments)]
 fn refine<'a>(
     s: &Surface,
@@ -909,6 +960,7 @@ fn refine<'a>(
     whole: bool,
     rel: f64,
     depth: u32,
+    parent: [f64; 2],
     seed: &mut Option<Point2>,
     rev: bool,
     out: &mut Vec<Piece<'a>>,
@@ -949,8 +1001,15 @@ fn refine<'a>(
         push(pc, seed);
         return;
     }
-    let pc = finer(s, &pc).pop().expect("one piece");
-    if depth == 0 || resolved(&pc, rel) {
+    let mut pc = finer(s, &pc).pop().expect("one piece");
+    if resolved(&pc, rel) {
+        push(pc, seed);
+        return;
+    }
+    let miss = trace_miss(&pc);
+    let floor = (0..2).all(|a| miss[a] >= 0.5 * parent[a] && miss[a] <= NOISE_MISS);
+    if depth == 0 || floor {
+        carry_miss(s, &mut pc, miss);
         push(pc, seed);
         return;
     }
@@ -961,7 +1020,7 @@ fn refine<'a>(
         [(lo, mid), (mid, hi)]
     };
     for h in halves {
-        refine(s, way, h, false, rel, depth - 1, seed, rev, out);
+        refine(s, way, h, false, rel, depth - 1, miss, seed, rev, out);
     }
 }
 
@@ -1167,7 +1226,18 @@ fn coedge_pieces<'a>(
     }
     let mut out = Vec::new();
     for (way, a, b, whole) in ways {
-        refine(s, &way, (a, b), whole, rel, 8, seed, rev, &mut out);
+        refine(
+            s,
+            &way,
+            (a, b),
+            whole,
+            rel,
+            8,
+            [f64::INFINITY; 2],
+            seed,
+            rev,
+            &mut out,
+        );
     }
     if forge_geom::budget::over() {
         return Err(TOO_LONG);
