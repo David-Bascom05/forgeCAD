@@ -55,21 +55,40 @@ pub fn draft(body: &Body, faces: &[Name], neutral: &Frame, angle: f64) -> Result
     let pull = neutral.z();
     let np = Plane::new(*neutral);
     let mut changed = vec![false; out.faces.len()];
-    for &name in faces {
+    let mut faces: Vec<Name> = faces.to_vec();
+    for &name in &faces {
         let f = out
             .face_by_name(name)
             .ok_or(DraftError::NoSuchFace { face: name })?;
         changed[f.index()] = true;
     }
-    for &name in faces {
+    // the rest of a wall running on smoothly goes with it, as a chain goes with a fillet: what has a
+    // drafted form, a plane or a surface round the pull; a blend still has to come after
+    let mut at = 0;
+    while at < faces.len() {
+        let f = out
+            .face_by_name(faces[at])
+            .ok_or(DraftError::NoSuchFace { face: faces[at] })?;
+        at += 1;
+        for g in tangent_neighbours(&out, f, &changed) {
+            if matches!(
+                out.face(g).surface,
+                Surface::Plane(_) | Surface::Cylinder(_) | Surface::Cone(_)
+            ) {
+                changed[g.index()] = true;
+                faces.push(out.face(g).name);
+            }
+        }
+    }
+    for &name in &faces {
         let f = out
             .face_by_name(name)
             .ok_or(DraftError::NoSuchFace { face: name })?;
-        if tangent_neighbour(&out, f, &changed) {
+        if !tangent_neighbours(&out, f, &changed).is_empty() {
             return Err(DraftError::Tangent { face: name });
         }
     }
-    for &name in faces {
+    for &name in &faces {
         let f = out
             .face_by_name(name)
             .ok_or(DraftError::NoSuchFace { face: name })?;
@@ -94,28 +113,31 @@ pub fn draft(body: &Body, faces: &[Name], neutral: &Frame, angle: f64) -> Result
 }
 
 /// Whether face `f` meets a face not in `changed` tangentially along an edge.
-fn tangent_neighbour(body: &Body, f: FaceId, changed: &[bool]) -> bool {
-    body.face(f)
+fn tangent_neighbours(body: &Body, f: FaceId, changed: &[bool]) -> Vec<FaceId> {
+    let mut out: Vec<FaceId> = body
+        .face(f)
         .loops
         .iter()
         .flat_map(|&l| body.lp(l).coedges())
-        .any(|c| {
-            let Some(g) = body.partner(c).map(|o| body.coedge_face(o)) else {
-                return false;
-            };
+        .filter_map(|c| {
+            let g = body.partner(c).map(|o| body.coedge_face(o))?;
             // two planes meeting smoothly are one plane split: tilting one only makes a crease
             let planes = matches!(
                 (&body.face(f).surface, &body.face(g).surface),
                 (Surface::Plane(_), Surface::Plane(_))
             );
             if g == f || changed[g.index()] || planes {
-                return false;
+                return None;
             }
             let e = body.edge(body.coedge(c).edge);
             let p = e.curve.eval(e.range.mid());
             let normal = |h: FaceId| body.face_normal(h, body.face(h).surface.project(p));
-            matches!((normal(f), normal(g)), (Some(a), Some(b)) if a.cross(b).length() <= 1e-6)
+            matches!((normal(f), normal(g)), (Some(a), Some(b)) if a.cross(b).length() <= 1e-6).then_some(g)
         })
+        .collect();
+    out.sort_unstable();
+    out.dedup();
+    out
 }
 
 pub(crate) fn drafted(
