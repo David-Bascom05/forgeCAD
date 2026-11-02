@@ -73,3 +73,128 @@ fn foot_of_a_boss_over_a_rounded_rim() {
     assert!(mesh.open_edges().is_empty());
     assert!((mesh.volume() - volume(&b)).abs() < 1e-4 * volume(&b));
 }
+
+/// A rectangular boss's foot rounded all round, the mitres at its corners running up the corners'
+/// edges, one of which a vertex splits nearer the plate than the radius. The result is that of the
+/// edge whole.
+#[test]
+fn mitre_past_a_stray_vertex_on_the_sharp_edge() {
+    let at = |z: f64| Frame::from_zx(Point3::new(0.0, 0.0, z), UnitVec3::Z, Vec3::X).expect("frame");
+    let plate = extrude(
+        &Profile {
+            plane: at(0.0),
+            loops: vec![Profile::rectangle(Point2::new(-40.0, -40.0), 80.0, 80.0, 0)],
+        },
+        5.0,
+        1,
+    )
+    .expect("plate");
+    let boss = extrude(
+        &Profile {
+            plane: at(5.0),
+            loops: vec![Profile::rectangle(Point2::new(-10.0, -10.0), 20.0, 20.0, 0)],
+        },
+        10.0,
+        2,
+    )
+    .expect("boss");
+    let whole = boolean(&plate, &boss, Op::Union, 3).expect("union");
+    let foot = |b: &forge_topo::Body| -> Vec<FilletEdge> {
+        b.edge_ids()
+            .filter(|&e| {
+                let x = b.edge(e);
+                (x.curve.eval(x.range.mid()).z - 5.0).abs() < 1e-9
+                    && forge_ops::fillet_kind(b, e) == Some(false)
+            })
+            .map(|edge| FilletEdge {
+                edge,
+                radius: Radius::Constant(3.0),
+            })
+            .collect()
+    };
+    let want = fillet(&whole, &foot(&whole), 9).expect("rounds whole");
+    let mut split = whole.clone();
+    let up = split
+        .edge_ids()
+        .find(|&e| {
+            let x = split.edge(e);
+            let (p, q) = (x.curve.eval(x.range.lo), x.curve.eval(x.range.hi));
+            (p.z - q.z).abs() > 9.0 && p.x > 9.0 && p.y > 9.0 && p.x < 11.0
+        })
+        .expect("the corner's edge");
+    let x = split.edge(up).clone();
+    let rising = x.curve.deriv(x.range.mid()).d1.z > 0.0;
+    let cut = if rising {
+        x.range.lo + 1.0
+    } else {
+        x.range.hi - 1.0
+    };
+    let m = split.add_vertex(x.curve.eval(cut), x.name.with_str("half"));
+    let other = split.add_edge(
+        x.curve.clone(),
+        forge_math::Interval::new(cut, x.range.hi),
+        m,
+        x.end,
+        x.name.with_str("half"),
+    );
+    {
+        let edge = &mut split.edges[up.index()];
+        edge.range.hi = cut;
+        edge.end = m;
+        edge.bbox.clear();
+    }
+    for c in x.coedges.iter().copied().collect::<Vec<_>>() {
+        let (f, lp) = (split.coedge_face(c), split.coedge(c).lp);
+        let uses: Vec<_> = split
+            .lp(lp)
+            .coedges()
+            .flat_map(|d| {
+                let co = split.coedge(d);
+                match (co.edge == up, co.forward) {
+                    (true, true) => vec![(up, true), (other, true)],
+                    (true, false) => vec![(other, false), (up, false)],
+                    _ => vec![(co.edge, co.forward)],
+                }
+            })
+            .collect();
+        split.replace_loop(f, lp, &uses);
+    }
+    let got = fillet(&split, &foot(&split), 9).expect("rounds split");
+    assert!(forge_topo::check(&got).is_empty());
+    let volume = |x: &forge_topo::Body| forge_topo::mass::mass(x).expect("mass").volume;
+    assert!((volume(&got) - volume(&want)).abs() < 1e-9 * volume(&want));
+}
+
+/// Every edge of a disc picked at once, its seam among them: the seam has nothing to round, and the
+/// two rims round as they would alone. The volume taken has a closed form (Pappus).
+#[test]
+fn a_seam_picked_with_the_rest_is_left_alone() {
+    let (big, h, r) = (20.0, 10.0, 2.0);
+    let at = Frame::from_zx(Point3::ORIGIN, UnitVec3::Z, Vec3::X).expect("frame");
+    let disc = extrude(
+        &Profile {
+            plane: at,
+            loops: vec![Profile::circle(Point2::ORIGIN, big, 0)],
+        },
+        h,
+        1,
+    )
+    .expect("disc");
+    let all: Vec<FilletEdge> = disc
+        .edge_ids()
+        .map(|edge| FilletEdge {
+            edge,
+            radius: Radius::Constant(r),
+        })
+        .collect();
+    assert!(all.len() > 2);
+    let b = fillet(&disc, &all, 9).expect("rounds");
+    assert!(forge_topo::check(&b).is_empty());
+    let volume = |x: &forge_topo::Body| forge_topo::mass::mass(x).expect("mass").volume;
+    let pi = std::f64::consts::PI;
+    let area = r * r * (1.0 - pi / 4.0);
+    let moment = r * r * r * (5.0 / 6.0 - pi / 4.0);
+    let taken = 2.0 * std::f64::consts::TAU * (big * area - moment);
+    let got = volume(&disc) - volume(&b);
+    assert!((got - taken).abs() < 1e-6 * taken, "took {got}, want {taken}");
+}

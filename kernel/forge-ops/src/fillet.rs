@@ -433,12 +433,15 @@ fn fillet_picked(body: &Body, edges: &[FilletEdge], opts: &FilletOptions, featur
     }
     // an edge a vertex splits for no reason (a boolean's, with nothing else there) stops a spring
     // that crosses its other piece: whole, the corner sees the edge the spring crosses
-    if matches!(e, FilletError::Corner { .. })
-        && opts.setbacks.is_empty()
+    if matches!(
+        e,
+        FilletError::Corner { .. } | FilletError::Mitre { .. } | FilletError::Overflow { .. }
+    ) && opts.setbacks.is_empty()
         && opts.starts.is_empty()
         && let Some(b) = joined_pieces(seams.as_ref().unwrap_or(body), edges)
         && let Ok(done) = fillet_on(&b, edges, opts, feature)
         && forge_topo::check(&done).is_empty()
+        && forge_topo::mass::mass(&done).is_ok()
     {
         return Ok(done);
     }
@@ -718,7 +721,22 @@ fn fillet_on(body: &Body, edges: &[FilletEdge], opts: &FilletOptions, feature: u
             a != b && same_surface(&body, a, b)
         }
     };
-    let kept: Vec<FilletEdge> = edges.iter().filter(|fe| !flush(fe.edge)).cloned().collect();
+    // nor has one its faces meet tangent along (a revolve's seam, picked with all the edges)
+    let tangent = |fe: &FilletEdge| {
+        let x = body.edge(fe.edge);
+        [0.1, 0.5, 0.9].iter().all(|&u| {
+            let t = x.range.lo + u * x.range.width();
+            matches!(
+                local(&body, fe.edge, fe.radius.max(), t),
+                Err(FilletError::Smooth { .. })
+            )
+        })
+    };
+    let kept: Vec<FilletEdge> = edges
+        .iter()
+        .filter(|fe| !flush(fe.edge) && !tangent(fe))
+        .cloned()
+        .collect();
     if let (Some(fe), true) = (edges.first(), kept.is_empty()) {
         return Err(FilletError::Smooth { edge: fe.edge });
     }
@@ -1062,15 +1080,32 @@ fn out_of(body: &Body, e: EdgeId, v: VertexId) -> Vec<Vec3> {
     let x = body.edge(e);
     let mut t = Vec::new();
     if x.start == v {
-        t.push(x.curve.deriv(x.range.lo).d1);
+        t.extend(end_tangent(body, e, v, false));
     }
     if x.end == v {
-        t.push(-x.curve.deriv(x.range.hi).d1);
+        t.extend(end_tangent(body, e, v, true));
     }
-    t.into_iter()
-        .filter_map(|d| d.normalize())
-        .map(|u| u.get())
-        .collect()
+    t
+}
+
+/// The unit tangent of `e` out of `v`, at its end or its start. A traced curve's end tangent is only
+/// as good as its trace: the surfaces' normals there give the exact one.
+fn end_tangent(body: &Body, e: EdgeId, v: VertexId, end: bool) -> Option<Vec3> {
+    let x = body.edge(e);
+    let d = if end {
+        -x.curve.deriv(x.range.hi).d1
+    } else {
+        x.curve.deriv(x.range.lo).d1
+    };
+    if let (Curve::Intersection(_), [c0, c1]) = (&x.curve, &x.coedges[..]) {
+        let p = body.vertex(v).point;
+        let n = |c: CoedgeId| body.face(body.coedge_face(c)).surface.gradient(p);
+        if let Some(u) = n(*c0).cross(n(*c1)).normalize() {
+            let u = u.get();
+            return Some(if u.dot(d) < 0.0 { -u } else { u });
+        }
+    }
+    d.normalize().map(|u| u.get())
 }
 
 /// Whether two edges leave a vertex the opposite way, within LINEAR over the radius.
@@ -1106,25 +1141,7 @@ fn chains(body: &Body, all: &[(EdgeId, f64)]) -> Vec<Chain> {
         }
         let [a, b] = ends[..] else { continue };
         let r = scale[&a.0].max(scale[&b.0]);
-        let tan = |(e, end): (EdgeId, bool)| {
-            let x = body.edge(e);
-            let d = if end {
-                -x.curve.deriv(x.range.hi).d1
-            } else {
-                x.curve.deriv(x.range.lo).d1
-            };
-            // a traced curve's end tangent is only as good as its trace: the surfaces' normals
-            // there give the exact one
-            if let (Curve::Intersection(_), [c0, c1]) = (&x.curve, &x.coedges[..]) {
-                let p = body.vertex(v).point;
-                let n = |c: CoedgeId| body.face(body.coedge_face(c)).surface.gradient(p);
-                if let Some(u) = n(*c0).cross(n(*c1)).normalize() {
-                    let u = u.get();
-                    return Some(if u.dot(d) < 0.0 { -u } else { u });
-                }
-            }
-            d.normalize().map(|u| u.get())
-        };
+        let tan = |(e, end): (EdgeId, bool)| end_tangent(body, e, v, end);
         let (Some(ta), Some(tb)) = (tan(a), tan(b)) else {
             continue;
         };
@@ -1498,12 +1515,16 @@ fn roll(body: &Body, e: EdgeId, r: f64, root: Name) -> R<Rolled> {
         flat
     };
     let region = body.edge_box(e).grow((4.0 * r).max(1.5 * far) + tol::LINEAR);
-    let blend = blend_of(body, l.faces, [l.sign[0] * r, l.sign[1] * r], l.p, near, region)
+    let of = |near: Point3| blend_of(body, l.faces, [l.sign[0] * r, l.sign[1] * r], l.p, near, region);
+    let blend = of(near)
+        .filter(|b| b.spine.eval(spine_closest(&b.spine, l.p)).distance(near) <= r)
+        .or_else(|| {
+            // the faces curve enough to move the centre off the normals' estimate: it is where the
+            // ball grows to, which the spine must pass through
+            let c = rolled_centre(body, &l, r)?;
+            of(c).filter(|b| b.spine.eval(spine_closest(&b.spine, c)).distance(c) <= tol::LINEAR)
+        })
         .ok_or(FilletError::NoBlend { edge: e })?;
-    let tm = spine_closest(&blend.spine, l.p);
-    if blend.spine.eval(tm).distance(near) > r {
-        return Err(FilletError::NoBlend { edge: e });
-    }
     let springs = [
         blend.spring(true).ok_or(FilletError::NoBlend { edge: e })?,
         blend.spring(false).ok_or(FilletError::NoBlend { edge: e })?,
@@ -2432,6 +2453,9 @@ struct Builder {
     /// becomes the second, and the edge between goes.
     merged: Vec<(VertexId, VertexId)>,
     collapsing: bool,
+    /// A corner was closed in a way that only the result can vouch for: the body must pass its
+    /// check and have a mass.
+    unsure: bool,
     /// An edge whose blend ran out beside a tangent chain going on unpicked.
     free_end: Option<EdgeId>,
     /// Whether a chain may go on unpicked here: `only`, or a second round's stops.
@@ -2493,6 +2517,7 @@ impl Builder {
             gone_faces: Vec::new(),
             merged: Vec::new(),
             collapsing: false,
+            unsure: false,
             free_end: None,
             free_ends: false,
             overrun: BTreeSet::new(),
@@ -2573,6 +2598,7 @@ impl Builder {
             return Err(FilletError::Corner { vertex: s.0 });
         }
         let closed_up = self.collapsing;
+        let unsure = self.unsure;
         let free_end = self.free_end;
         let first = self.rolled.first().map(|r| r.edge);
         self.collapse(no_width);
@@ -2609,6 +2635,11 @@ impl Builder {
         }
         // these paths are rare, and a face closed up wrongly must not come back as a part
         if closed_up && !forge_topo::check(&out).is_empty() {
+            return Err(FilletError::Overflow {
+                edge: first.unwrap_or(EdgeId(0)),
+            });
+        }
+        if unsure && (!forge_topo::check(&out).is_empty() || forge_topo::mass::mass(&out).is_err()) {
             return Err(FilletError::Overflow {
                 edge: first.unwrap_or(EdgeId(0)),
             });
@@ -2724,16 +2755,27 @@ impl Builder {
                 let saved = (self.trims.clone(), self.paths.clone(), self.g_ends.clone());
                 self.joint(v, &ring, a, b).or_else(|e| {
                     (self.trims, self.paths, self.g_ends) = saved.clone();
-                    self.collapsing = true;
+                    self.unsure = true;
                     self.joint(v, &ring, b, a).or_else(|_| {
                         (self.trims, self.paths, self.g_ends) = saved;
                         self.strip_joint(v, &ring, a, b).map_err(|_| e)
                     })
                 })
             }
-            [a, b] if self.mitres(v, &ring, a, b) => self
-                .mitre(v, &ring, a, b)
-                .map_err(|_| FilletError::Mitre { vertex: v }),
+            [a, b] if self.mitres(v, &ring, a, b) => {
+                let saved = (self.trims.clone(), self.paths.clone(), self.g_ends.clone());
+                self.mitre(v, &ring, a, b).or_else(|_| {
+                    // an edge tangent here though sharp further on leaves the blends continuing
+                    // each other at this vertex: no mitre, a joint
+                    (self.trims, self.paths, self.g_ends) = saved;
+                    if !self.continues_here(v, &ring, a, b) {
+                        return Err(FilletError::Mitre { vertex: v });
+                    }
+                    self.unsure = true;
+                    self.joint(v, &ring, a, b)
+                        .map_err(|_| FilletError::Mitre { vertex: v })
+                })
+            }
             _ => {
                 let ring = self.rest_ring(v, ring)?;
                 self.corner(v, &ring)
@@ -2944,6 +2986,37 @@ impl Builder {
             let x = self.body.edge(e);
             self.body.coedge_face(x.coedges[0]) == self.body.coedge_face(x.coedges[1])
                 || is_smooth(&self.body, e, ra.blend.radius)
+        })
+    }
+
+    /// Whether two blends of one radius and kind run straight on through `v`, every other edge's
+    /// faces tangent at `v` itself.
+    fn continues_here(&self, v: VertexId, ring: &[Corner], a: usize, b: usize) -> bool {
+        let (ra, rb) = (
+            &self.rolled[self.filleted(ring[a].cin).expect("hot")],
+            &self.rolled[self.filleted(ring[b].cin).expect("hot")],
+        );
+        let r = ra.blend.radius;
+        if (rb.blend.radius - r).abs() > tol::LINEAR || ra.convex != rb.convex {
+            return false;
+        }
+        let p = self.body.vertex(v).point;
+        let (ta, tb) = (out_of(&self.body, ra.edge, v), out_of(&self.body, rb.edge, v));
+        // traced edges' end tangents are only as good as their trace
+        if !ta.iter().any(|x| tb.iter().any(|y| (*x + *y).length() <= 1e-4)) {
+            return false;
+        }
+        (0..ring.len()).filter(|&j| j != a && j != b).all(|j| {
+            let e = self.body.edge(self.body.coedge(ring[j].cin).edge);
+            let n: Vec<_> = e
+                .coedges
+                .iter()
+                .filter_map(|&c| {
+                    let f = self.body.coedge_face(c);
+                    self.body.face_normal(f, self.body.face(f).surface.project(p))
+                })
+                .collect();
+            n.len() == 2 && n[0].cross(n[1]).length() * r <= tol::LINEAR && n[0].dot(n[1]) > 0.0
         })
     }
 
@@ -3599,7 +3672,7 @@ impl Builder {
             let mut at_foot: Vec<usize> = Vec::new();
             for (m, &c) in edges.iter().enumerate() {
                 if passed(self, c, s_a, s_b) {
-                    self.collapsing = true;
+                    self.unsure = true;
                     at_foot.push(m);
                     continue;
                 }
@@ -3886,6 +3959,7 @@ impl Builder {
         self.rechain.insert(strip);
         self.touched.insert(strip);
         self.touched.insert(far);
+        self.unsure = true;
         self.patches.push((surface, same_sense, name, uses));
         let mut end_s = SpringEnd {
             v: [v; 2],
