@@ -526,6 +526,7 @@ pub fn trace(a: &Surface, b: &Surface, region: Box3) -> Option<Vec<IntCurve>> {
     };
     let mut covered: Vec<u64> = Vec::new();
     let cover = |c: &IntCurve, covered: &mut Vec<u64>| {
+        let start = covered.len();
         for &p in &c.pts {
             for dx in [-leaf, 0.0, leaf] {
                 for dy in [-leaf, 0.0, leaf] {
@@ -535,8 +536,29 @@ pub fn trace(a: &Surface, b: &Surface, region: Box3) -> Option<Vec<IntCurve>> {
                 }
             }
         }
-        covered.sort_unstable();
-        covered.dedup();
+        // a short list is sorted again whole; a long one (a part with many branches) has this merged in
+        if start < 4096 {
+            covered.sort_unstable();
+            covered.dedup();
+            return;
+        }
+        let mut new = covered.split_off(start);
+        new.sort_unstable();
+        let old = std::mem::take(covered);
+        covered.reserve(old.len() + new.len());
+        let (mut i, mut j) = (0, 0);
+        while i < old.len() || j < new.len() {
+            let x = if j == new.len() || (i < old.len() && old[i] <= new[j]) {
+                i += 1;
+                old[i - 1]
+            } else {
+                j += 1;
+                new[j - 1]
+            };
+            if covered.last() != Some(&x) {
+                covered.push(x);
+            }
+        }
     };
     for s in seeds {
         if covered.binary_search(&key(s)).is_ok() {
