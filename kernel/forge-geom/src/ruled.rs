@@ -9,7 +9,7 @@
 //! off the face projects to parameters off the face.
 
 use crate::curve::{Circle, CurveGeom, Domain1, Parabola};
-use crate::screw::{KeptSeeds, fresh_id, polish, remembered};
+use crate::screw::{KeptSeeds, fresh_id, normal_turn, polish, remembered};
 use crate::surface::{Domain2, Proc, Procedural, ShapeBounds, SurfDeriv, Surface};
 use crate::wrap::Wrap;
 use forge_math::{Box2, Box3, Frame, Interval, Point2, Point3, Vec3, tol};
@@ -705,6 +705,12 @@ impl Procedural for Ruled {
     fn gradient(&self, p: Point3) -> Vec3 {
         self.value(p).1
     }
+    fn gradient_turn(&self, p: Point3, v: Vec3) -> Option<Vec3> {
+        let uv = self.nearest(p);
+        let dom = self.ext;
+        let free = uv.x > dom.u.lo && uv.x < dom.u.hi && uv.y > dom.v.lo && uv.y < dom.v.hi;
+        free.then(|| normal_turn(&self.point(uv), p, v)).flatten()
+    }
     fn transformed(&self, f: &Frame) -> Proc {
         let mut r = self.clone();
         r.id = fresh_id();
@@ -849,6 +855,27 @@ mod tests {
         }
         // the walks did cross from ruling to ruling
         assert!(crossed > 200 && crossed < steps / 2, "{crossed} of {steps}");
+    }
+
+    #[test]
+    fn the_normals_turn_is_the_difference_of_nearby_normals() {
+        let mut r = Rng::new(811);
+        for _ in 0..200 {
+            let s = random_ruled(&mut r);
+            let d = s.point(rand_uv(&mut r));
+            let Some(n) = d.du.cross(d.dv).normalize() else {
+                continue;
+            };
+            let p = d.p + n * r.range(-0.2, 0.2);
+            let v = Vec3::new(r.range(-1.0, 1.0), r.range(-1.0, 1.0), r.range(-1.0, 1.0));
+            let Some(t) = s.gradient_turn(p, v) else {
+                continue;
+            };
+            // wide enough that the searches' stopping tolerance does not show
+            let h = 1e-3;
+            let fd = (s.value(p + v * h).1 - s.value(p - v * h).1) / (2.0 * h);
+            assert!((t - fd).length() < 1e-4 * (1.0 + fd.length()), "{t:?} {fd:?}");
+        }
     }
 
     #[test]

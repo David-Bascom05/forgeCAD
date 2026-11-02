@@ -1074,6 +1074,30 @@ pub(crate) fn fresh_id() -> u64 {
     NEXT.fetch_add(1, std::sync::atomic::Ordering::Relaxed)
 }
 
+/// How the unit normal at the nearest point turns as p moves along v, from that point's derivatives
+/// `d`: the foot moves by (g - dist h)^-1 (v . S_i), g and h the first and second fundamental forms,
+/// and the normal by -h g^-1 S. A difference of two searches gets this with their rounding over
+/// its step, 1e-8 or so of it; this has the rounding of one. None where the normal is not defined
+/// or the foot does not move freely (the distance's Hessian is singular at the evolute).
+pub(crate) fn normal_turn(d: &SurfDeriv, p: Point3, v: Vec3) -> Option<Vec3> {
+    let n = d.du.cross(d.dv).normalize()?.get();
+    let dist = (p - d.p).dot(n);
+    let (e, f, g) = (d.du.dot(d.du), d.du.dot(d.dv), d.dv.dot(d.dv));
+    let (l, m, k) = (d.duu.dot(n), d.duv.dot(n), d.dvv.dot(n));
+    let (x, y) = forge_math::linalg::solve2(
+        e - dist * l,
+        f - dist * m,
+        f - dist * m,
+        g - dist * k,
+        v.dot(d.du),
+        v.dot(d.dv),
+    )?;
+    // h (x, y), as coefficients on S_u, S_v through g^-1
+    let (hx, hy) = (l * x + m * y, m * x + k * y);
+    let (a, b) = forge_math::linalg::solve2(e, f, f, g, hx, hy)?;
+    Some(-(d.du * a + d.dv * b))
+}
+
 /// Which of 256 slots a query on surface `id` at the point with these coordinate bits goes in.
 pub(crate) fn seen_slot(id: u64, key: [u64; 3]) -> usize {
     let mix =

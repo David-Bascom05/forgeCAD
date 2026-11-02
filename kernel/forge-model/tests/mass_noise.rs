@@ -37,8 +37,15 @@ fn lens(big: f64, w: f64, curves: bool) -> ProfileLoop {
     ProfileLoop::new(vec![side(-c, dmath::FRAC_PI_2, 0), side(c, -dmath::FRAC_PI_2, 1)])
 }
 
+#[derive(Clone, Copy, Debug)]
+enum Wall {
+    Ruled,
+    Skinned,
+    Cylinder,
+}
+
 /// A lens post on a plate, the foot rounded by `f`: blends on two sides meeting along a mitre.
-fn post(big: f64, w: f64, f: f64, lofted: bool) -> Option<Body> {
+fn post(big: f64, w: f64, f: f64, wall: Wall) -> Option<Body> {
     let at = |z: f64, loops: Vec<ProfileLoop>| Profile {
         plane: Frame::from_axes(Point3::new(0.0, 0.0, z), Vec3::X, Vec3::Y, Vec3::Z).unwrap(),
         loops,
@@ -48,14 +55,24 @@ fn post(big: f64, w: f64, f: f64, lofted: bool) -> Option<Body> {
         vec![Profile::rectangle(Point2::new(-80.0, -80.0), 160.0, 160.0, 0)],
     );
     let plate = extrude(&plate, 20.0, 1).unwrap();
-    let post = if lofted {
-        let ends = [
-            at(-5.0, vec![lens(big, w, true)]),
-            at(40.0, vec![lens(big, w, true)]),
-        ];
-        loft(&ends, LoftKind::Ruled, &LoftGuides::None, 2).unwrap()
-    } else {
-        extrude(&at(-5.0, vec![lens(big, w, false)]), 45.0, 2).unwrap()
+    let post = match wall {
+        Wall::Ruled => {
+            let ends = [
+                at(-5.0, vec![lens(big, w, true)]),
+                at(40.0, vec![lens(big, w, true)]),
+            ];
+            loft(&ends, LoftKind::Ruled, &LoftGuides::None, 2).unwrap()
+        }
+        // a spline through three evenly spaced equal sections is the straight wall itself
+        Wall::Skinned => {
+            let rings = [-5.0, 17.5, 40.0].map(|z| at(z, vec![lens(big, w, false)]));
+            let kind = LoftKind::Smooth {
+                start: None,
+                end: None,
+            };
+            loft(&rings, kind, &LoftGuides::None, 2).unwrap()
+        }
+        Wall::Cylinder => extrude(&at(-5.0, vec![lens(big, w, false)]), 45.0, 2).unwrap(),
     };
     let u = boolean(&plate, &post, Op::Union, 3).unwrap();
     let foot: Vec<FilletEdge> = u
@@ -84,15 +101,25 @@ fn blends_meeting_on_a_lofted_post_are_their_analytic_twin() {
         (60.0, 25.0, 3.0),
         (30.0, 18.0, 1.5),
     ] {
-        let exact = mass(&post(big, w, f, false).unwrap()).unwrap();
-        let m = mass(&post(big, w, f, true).unwrap()).unwrap();
-        let (dv, da) = ((m.volume - exact.volume).abs(), (m.area - exact.area).abs());
-        assert!(dv > 0.0, "the twins should come by different paths");
-        assert!(
-            dv <= m.err[0] + exact.err[0],
-            "volume off {dv}, bound {}",
-            m.err[0]
-        );
-        assert!(da <= m.err[1] + exact.err[1], "area off {da}, bound {}", m.err[1]);
+        let exact = mass(&post(big, w, f, Wall::Cylinder).unwrap()).unwrap();
+        for wall in [Wall::Ruled, Wall::Skinned] {
+            let m = mass(&post(big, w, f, wall).unwrap()).unwrap();
+            let (dv, da) = ((m.volume - exact.volume).abs(), (m.area - exact.area).abs());
+            eprintln!(
+                "{wall:?} {big} {w} {f} volume off {dv:.2e} bound {:.2e} {:.2e}, area off {da:.2e} bound {:.2e} {:.2e}",
+                m.err[0], exact.err[0], m.err[1], exact.err[1]
+            );
+            assert!(dv > 0.0, "the twins should come by different paths");
+            assert!(
+                dv <= m.err[0] + exact.err[0],
+                "{wall:?} volume off {dv}, bound {}",
+                m.err[0]
+            );
+            assert!(
+                da <= m.err[1] + exact.err[1],
+                "{wall:?} area off {da}, bound {}",
+                m.err[1]
+            );
+        }
     }
 }

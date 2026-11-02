@@ -236,6 +236,10 @@ pub trait Procedural: Send + Sync + std::fmt::Debug {
     fn implicit_gradient(&self, p: Point3) -> (f64, Vec3) {
         (self.implicit(p), self.gradient(p))
     }
+    /// The derivative of `gradient` at p along v, for surfaces that know it in closed form.
+    fn gradient_turn(&self, _p: Point3, _v: Vec3) -> Option<Vec3> {
+        None
+    }
     /// Whether |implicit(p)| <= r, for surfaces that can often tell without the value.
     fn within(&self, p: Point3, r: f64) -> bool {
         self.implicit(p).abs() <= r

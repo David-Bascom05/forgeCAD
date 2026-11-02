@@ -191,6 +191,10 @@ impl Procedural for Offset {
     fn gradient(&self, p: Point3) -> Vec3 {
         self.at(p, false).map_or_else(|| self.base.gradient(p), |v| v.1)
     }
+    fn gradient_turn(&self, p: Point3, v: Vec3) -> Option<Vec3> {
+        // the same normals as the base's, at the same feet
+        self.base.gradient_turn(p, v)
+    }
     fn implicit_gradient(&self, p: Point3) -> (f64, Vec3) {
         self.at(p, true)
             .unwrap_or_else(|| (self.base.implicit(p) - self.d, self.base.gradient(p)))

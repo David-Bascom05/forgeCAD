@@ -101,6 +101,9 @@ impl Surface {
                 unit(self.gradient(p), v - dr * t.major, d.length())
             }
             Surface::Procedural(s) => {
+                if let Some(t) = s.gradient_turn(p, v) {
+                    return t;
+                }
                 let (len, h) = (v.length(), 1e-6 * (1.0 + (p - Point3::ORIGIN).abs_max()));
                 if len == 0.0 {
                     return Vec3::ZERO;
