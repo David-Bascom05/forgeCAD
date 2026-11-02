@@ -206,6 +206,30 @@ impl Procedural for Offset {
         if !self.base.has_foot_near() {
             return None;
         }
+        // the same point from the same start comes round again (a pipe's sections ask at the same
+        // centres): both go in the key, so the answer is a function of them
+        type Seen = std::cell::Cell<(u64, [u64; 5], f64, Vec3, Point2)>;
+        thread_local! {
+            static SEEN: Box<[Seen; 256]> = Box::new(
+                [const { std::cell::Cell::new((0, [0; 5], 0.0, Vec3::ZERO, Point2::new(0.0, 0.0))) }; 256],
+            );
+        }
+        let start = uv.unwrap_or(Point2::new(f64::NAN, f64::NAN));
+        let key = [
+            p.x.to_bits(),
+            p.y.to_bits(),
+            p.z.to_bits(),
+            start.x.to_bits(),
+            start.y.to_bits(),
+        ];
+        let slot = seen_slot(
+            self.id ^ key[3] ^ key[4].rotate_left(32),
+            [key[0], key[1], key[2]],
+        );
+        let (k, q, f, n, foot) = SEEN.with(|s| s[slot].get());
+        if k == self.id && q == key {
+            return Some((f, n, foot));
+        }
         // a foot from nearby that is not this offset's distance from p may be another sheet's: a
         // point on or near the offset has its foot at d, and the search settles anything else
         let near = uv
@@ -213,7 +237,9 @@ impl Procedural for Offset {
             .filter(|&q| (self.base.point(q).distance(p) - self.d.abs()).abs() <= 1e-2);
         let q = near.unwrap_or_else(|| self.base.project(p));
         let n = self.base.normal(q)?.get();
-        Some((n.dot(p - self.place(q)), n, q))
+        let f = n.dot(p - self.place(q));
+        SEEN.with(|s| s[slot].set((self.id, key, f, n, q)));
+        Some((f, n, q))
     }
     fn gradient_turn(&self, p: Point3, v: Vec3) -> Option<Vec3> {
         // the same normals as the base's, at the same feet
