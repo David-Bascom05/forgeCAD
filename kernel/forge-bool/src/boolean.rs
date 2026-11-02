@@ -3726,12 +3726,17 @@ fn plane_meet(pl: &Plane, curve: &Curve, range: Interval, edge: &Curve) -> Optio
     Some(hits)
 }
 
-/// Whether face `f` rolls off plane `other` along one of its edges: a blend meeting a face on
-/// that plane tangentially. The plane only touches the blend there (an arc stays to one side of
-/// its tangent), and that touch is the edge; traced, it would come out a hair off it.
+/// Whether face `f` rolls off `other` along one of its edges: a blend meeting a face on that surface
+/// tangentially. The surface only touches the blend there (an arc stays to one side of its tangent,
+/// and a ball of a legal radius to one side of a curved surface it rolls on), and that touch is the
+/// edge; traced, it would come out a hair off it.
 pub(crate) fn rolls_off(body: &Body, f: FaceId, other: &Surface) -> bool {
-    if !matches!(other, Surface::Plane(_)) || matches!(body.face(f).surface, Surface::Plane(_)) {
-        return false;
+    let own = &body.face(f).surface;
+    match (other, own) {
+        (Surface::Plane(_), Surface::Plane(_)) => return false,
+        (Surface::Plane(_), _) => {}
+        (_, Surface::Procedural(b)) if matches!(b.kind(), "blend" | "variable blend") => {}
+        _ => return false,
     }
     body.face(f)
         .loops
@@ -3742,7 +3747,10 @@ pub(crate) fn rolls_off(body: &Body, f: FaceId, other: &Surface) -> bool {
                 return false;
             };
             let s = &body.face(g).surface;
-            if g == f || !matches!(s, Surface::Plane(_)) || !ssi::coincident(s, other) {
+            if g == f
+                || std::mem::discriminant(s) != std::mem::discriminant(other)
+                || !ssi::coincident(s, other)
+            {
                 return false;
             }
             let e = body.edge(body.coedge(c).edge);
