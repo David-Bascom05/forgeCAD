@@ -20,8 +20,8 @@ fn stack(n: usize) -> Vec<Profile> {
 }
 
 #[test]
-fn a_smooth_loft_through_thirty_sections() {
-    let n = 30;
+fn a_smooth_loft_through_ninety_sections() {
+    let n = 90;
     let b = loft(
         &stack(n),
         LoftKind::Smooth {
@@ -33,7 +33,7 @@ fn a_smooth_loft_through_thirty_sections() {
     )
     .unwrap();
     assert_eq!(check(&b), vec![]);
-    // Simpson over the radius law, which the spline through 30 sections follows closely
+    // Simpson over the radius law, which the spline through 90 sections follows closely
     let m = 2000;
     let h = (n - 1) as f64 / m as f64;
     let area = |z: f64| dmath::PI * radius(z) * radius(z);

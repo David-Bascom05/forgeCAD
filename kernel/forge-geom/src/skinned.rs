@@ -16,7 +16,7 @@ use forge_math::{Box2, Box3, Frame, Interval, Point2, Point3, Vec3, tol};
 use std::sync::Arc;
 
 /// The most data a spline sums: sections, and a slope at each end.
-const MAX: usize = 34;
+const MAX: usize = 102;
 /// The most sections a spline runs through.
 pub const MAX_SECTIONS: usize = MAX - 2;
 
