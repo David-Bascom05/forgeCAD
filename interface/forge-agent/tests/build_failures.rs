@@ -1018,3 +1018,37 @@ fn three_chamfers_at_a_corner_meet_at_a_point_when_asked() {
     assert_eq!(p.body().expect("a body").faces.len(), 26);
     assert!(p.mass().expect("a mass").volume < 946.0);
 }
+
+/// A closed spline turned about an axis: its integrals have to stop at the section's knots, where the
+/// spline has only two derivatives, or they do not settle (refused here, 0.7% off read back from a
+/// file). Pappus, from the same spline extruded: its area and its centroid.
+#[test]
+fn a_closed_spline_turned_has_its_volume() {
+    use forge_math::dmath;
+    let pts: Vec<String> = (0..=60)
+        .map(|k| {
+            let t = k as f64 * dmath::TAU / 60.0;
+            let x = 12.0 * dmath::cos(t) - 2.0 * dmath::cos(4.0 * t) + 40.0;
+            let y = 12.0 * dmath::sin(t) - 2.0 * dmath::sin(4.0 * t);
+            format!("{x:.6} {y:.6}")
+        })
+        .collect();
+    let loop_ = pts.join(" ");
+    let mut flat = Model::new(&format!("extrude 10 thru {loop_}\n"));
+    assert!(flat.error.is_none(), "{:?}", flat.error.as_ref().map(|e| &e.msg));
+    let m = flat.mass().expect("a mass");
+    let want = dmath::TAU * m.centroid.x * m.volume / 10.0;
+    let mut turned = Model::new(&format!("revolve xz axis y thru {loop_}\n"));
+    assert!(
+        turned.error.is_none(),
+        "{:?}",
+        turned.error.as_ref().map(|e| &e.msg)
+    );
+    let v = turned.mass().expect("a mass").volume;
+    assert!((v - want).abs() < 1e-5, "{v} {want}");
+    let b = turned.body().expect("a body");
+    let file = forge_step::write::export(b, &forge_step::write::Options::default()).unwrap();
+    let back = forge_step::read::import(file.text.as_bytes(), &forge_step::Limits::default()).unwrap();
+    let again = forge_topo::mass::mass(&back.solids[0].body).unwrap().volume;
+    assert!((again - want).abs() < 1e-5 * want, "{again} {want}");
+}

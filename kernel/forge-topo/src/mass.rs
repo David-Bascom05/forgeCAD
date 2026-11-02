@@ -2385,17 +2385,23 @@ fn face_integrals(body: &Body, f: FaceId, c: Point3, size: f64, rel: f64) -> Res
         let mut cuts = p.u_kinks(forge_math::Interval::new(u.0, u.1));
         cuts.insert(0, u.0);
         cuts.push(u.1);
+        let v = if ax == 0 { all.1 } else { all.0 };
+        let mut vcuts = p.v_kinks(forge_math::Interval::new(v.0, v.1));
+        vcuts.insert(0, v.0);
+        vcuts.push(v.1);
         let mut tiles = Vec::new();
-        let mut left = 20_000 + 400 * cuts.len();
+        let mut left = 20_000 + 400 * cuts.len() * vcuts.len();
         let fit = ahi > alo
             && bhi > blo
             && cuts.windows(2).all(|w| {
-                let (a, b) = if ax == 0 {
-                    ((w[0], w[1]), all.1)
-                } else {
-                    (all.0, (w[0], w[1]))
-                };
-                Cheb::tiles(&cx, a, b, &mut left, &mut tiles).is_some()
+                vcuts.windows(2).all(|x| {
+                    let (a, b) = if ax == 0 {
+                        ((w[0], w[1]), (x[0], x[1]))
+                    } else {
+                        ((x[0], x[1]), (w[0], w[1]))
+                    };
+                    Cheb::tiles(&cx, a, b, &mut left, &mut tiles).is_some()
+                })
             });
         if fit {
             cx.inner = Inner::Cheb(tiles, all);

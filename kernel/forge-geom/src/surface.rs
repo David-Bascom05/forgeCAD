@@ -289,6 +289,10 @@ pub trait Procedural: Send + Sync + std::fmt::Debug {
     }
     /// The u inside `u` where the surface is only once differentiable along u (a traced
     /// spine's chain points), for integrators that need smooth pieces.
+    /// `u_kinks`, along v.
+    fn v_kinks(&self, _v: Interval) -> Vec<f64> {
+        Vec::new()
+    }
     fn u_kinks(&self, _u: Interval) -> Vec<f64> {
         Vec::new()
     }

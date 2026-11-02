@@ -314,6 +314,14 @@ impl Procedural for Spun {
             [r, c1, c2, c3],
         ))
     }
+    fn v_kinks(&self, v: Interval) -> Vec<f64> {
+        self.c
+            .breaks()
+            .iter()
+            .copied()
+            .filter(|&b| b > v.lo && b < v.hi)
+            .collect()
+    }
     fn u_kinks(&self, _u: Interval) -> Vec<f64> {
         Vec::new()
     }

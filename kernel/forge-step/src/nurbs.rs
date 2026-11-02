@@ -503,9 +503,19 @@ impl Nurbs {
     }
 }
 
+/// A knot vector's values strictly inside `r`, each once.
+fn distinct_inside(knots: &[f64], r: Interval) -> Vec<f64> {
+    let mut out: Vec<f64> = knots.iter().copied().filter(|&k| k > r.lo && k < r.hi).collect();
+    out.dedup();
+    out
+}
+
 impl Procedural for Nurbs {
     fn kind(&self) -> &'static str {
         "nurbs"
+    }
+    fn v_kinks(&self, v: Interval) -> Vec<f64> {
+        distinct_inside(&self.v[self.q + 1..self.nv], v)
     }
     fn deriv(&self, uv: Point2) -> SurfDeriv {
         self.eval_all(uv)
@@ -642,13 +652,7 @@ impl Procedural for Nurbs {
         true
     }
     fn u_kinks(&self, u: Interval) -> Vec<f64> {
-        let mut k: Vec<f64> = self.u[self.p + 1..self.nu]
-            .iter()
-            .copied()
-            .filter(|&x| x > u.lo && x < u.hi)
-            .collect();
-        k.dedup();
-        k
+        distinct_inside(&self.u[self.p + 1..self.nu], u)
     }
 }
 
