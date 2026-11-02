@@ -5037,6 +5037,28 @@ impl Builder {
         };
         let (qa_t, qa) = hit(ra, 1 - sa, ring[b].face, ta0).ok_or(err.clone())?;
         let (qb_t, qb) = hit(rb, sb, ring[c].face, tb0).ok_or(err.clone())?;
+        // walls all but tangent along the sharp edge cross again beside it (near-tangent arcs meet
+        // twice): the nearest hit can be that one. The far point is where the spring crosses the edge
+        let sharp = self.body.edge(self.body.coedge(ring[c].cin).edge).clone();
+        let off_edge = |q: Point3| sharp.curve.eval(sharp.curve.closest(q, sharp.range)).distance(q);
+        let beside = off_edge(qa) > tol::LINEAR || off_edge(qb) > tol::LINEAR;
+        let (qa_t, qa, qb_t, qb, ta, tb, p) = if beside {
+            let (a2, b2) = (
+                crossing_edge(&self.rolled[ra].springs[1 - sa], ta0, reach, &off_edge).unwrap_or((qa_t, qa)),
+                crossing_edge(&self.rolled[rb].springs[sb], tb0, reach, &off_edge).unwrap_or((qb_t, qb)),
+            );
+            // and so may the springs: the mitre runs to the crossing the far point's curve reaches
+            let far = if a2.1.distance(vp) > b2.1.distance(vp) { a2.1 } else { b2.1 };
+            let (x, y) = (&self.rolled[ra].springs[sa], &self.rolled[rb].springs[1 - sb]);
+            let (m, n) = (&self.rolled[ra].blend, &self.rolled[rb].blend);
+            let (ta, tb, p) = std::iter::once((ta, tb, p))
+                .chain(springs_cross(x, ta0, y, tb0, reach))
+                .find(|r| blends_meet(m, n, far, r.2).is_some())
+                .unwrap_or((ta, tb, p));
+            (a2.0, a2.1, b2.0, b2.1, ta, tb, p)
+        } else {
+            (qa_t, qa, qb_t, qb, ta, tb, p)
+        };
         let names = |me: &Self, j: usize, w: usize, base: Name| {
             me.vertex_name(v, &[me.face_name(ring[j].face), me.face_name(ring[w].face), base])
         };
@@ -6992,6 +7014,52 @@ fn cross_curve(blend: &Blend, s: &Surface, a: Point3, b: Point3) -> Option<(Curv
         }
     }
     None
+}
+
+/// The local leasts of `d` along c near t, each refined from the samples' bracket.
+#[cold]
+fn least_along(c: &Curve, t: f64, reach: f64, d: &dyn Fn(Point3) -> f64) -> Vec<f64> {
+    const N: usize = 1024;
+    let w = search_window(c, t, reach);
+    let at = |k: usize| w.lo + w.width() * k as f64 / N as f64;
+    let v: Vec<f64> = (0..=N).map(|k| d(c.eval(at(k)))).collect();
+    (1..N)
+        .filter(|&k| v[k] <= v[k - 1] && v[k] <= v[k + 1])
+        .map(|k| {
+            let (mut lo, mut hi) = (at(k - 1), at(k + 1));
+            for _ in 0..80 {
+                let (m1, m2) = (lo + (hi - lo) * 0.382, lo + (hi - lo) * 0.618);
+                if d(c.eval(m1)) < d(c.eval(m2)) {
+                    hi = m2;
+                } else {
+                    lo = m1;
+                }
+            }
+            0.5 * (lo + hi)
+        })
+        .collect()
+}
+
+/// Where a spring crosses an edge, `off` the distance from it; the crossing nearest t.
+#[cold]
+fn crossing_edge(c: &Curve, t: f64, reach: f64, off: &dyn Fn(Point3) -> f64) -> Option<(f64, Point3)> {
+    least_along(c, t, reach, off)
+        .into_iter()
+        .filter(|&x| off(c.eval(x)) <= 2.0 * tol::LINEAR)
+        .min_by(|p, q| (p - t).abs().total_cmp(&(q - t).abs()))
+        .map(|x| (x, c.eval(x)))
+}
+
+/// All the places two springs cross near ta and tb.
+#[cold]
+fn springs_cross(a: &Curve, ta: f64, b: &Curve, tb: f64, reach: f64) -> Vec<(f64, f64, Point3)> {
+    let wb = search_window(b, tb, reach);
+    let d = |p: Point3| b.eval(b.closest(p, wb)).distance(p);
+    least_along(a, ta, reach, &d)
+        .into_iter()
+        .filter(|&x| d(a.eval(x)) <= 1e-7)
+        .map(|x| (x, b.closest(a.eval(x), wb), a.eval(x)))
+        .collect()
 }
 
 /// Where two curves on one surface cross, from parameters near `ta` and `tb`: both parameters and

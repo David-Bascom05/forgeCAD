@@ -100,3 +100,14 @@ With 4000 + 200 per edge on 861 logged failures: total time 2622 s to 2052 s, on
 `kernel/forge-geom/src/tube.rs`: the rim as a surface of no thickness, its offset a tube, recipe from research's rim rail (nearest point on the whole curve; implicit `|p - q| - r`). `closing4.rs` is the grid reference for `fillet_rims.rs`: on the first scene it gives 96.99, 103.41, 104.86, 106.04 at cells of 0.1, 0.0625, 0.05, 0.04, going to about 111; the kernel's 113.76 includes 1.11 of mitre at the far end's two corners (r^3 (2 - 1/3 - pi/2) (1 - pi/4) each), which a closing has not. The test's sharper check is each ball's distance to the wall, worked out from the wall's shape alone.
 
 On rims that are themselves traced curves the rail works but its trace costs more than a refusal may: 2 logged parts went from a refusal in 11 s to over 90 s, none built. Those rims are left out. Also measured on the logged Corner failures and dropped for no part gained: ending a walk on a rim from a plain blend (315 cases, none moved), a rim's out-and-back with the wall in two, more than two passes of rim splits. A top falling steeply enough that the ball would touch it past the rim stays refused: `blocked_beyond` is right there. A top falling gently goes by `excursions`, which trims the round by the top carried on, and that is a valid body of another shape.
+
+## Rounds at a rail between near-tangent walls
+
+The scene of `kernel/forge-model/tests/fillet_mitres.rs`: walls half a degree apart at a leaning rail, arcs 30 and 80 at the floor, 40 and 70 at the top. Volume taken, `occt_fillet.py`, and how far a ball off each round stands from the floor and walls, `occt_balls.py` (worst of about 500 to 900 points):
+```
+r   ours       OCCT       ball, ours   ball, OCCT
+2   37.540     37.506     1.6e-4       6.7e-4
+4   148.55     148.34
+6   330.630    329.887    4.2e-4       1.5e-2
+```
+OCCT was valid at all three, and tightening its `SetParams` to 1e-7 did not move it. Ours through a STEP file; on our own surfaces the same ball test holds to under 1e-7, which is the test's bound. So the gap to OCCT is its surface, and the test takes OCCT's volume only to 0.3%.
