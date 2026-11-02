@@ -4520,17 +4520,28 @@ fn by_chords(
             w.0 = c;
         }
     }
-    Ok(clockwise(theta, ways.iter().map(|&w| Ok(w)))?.map_or(i, |w| w.1))
+    let back = (half[i].0, !half[i].1);
+    Ok(clockwise(theta, |j| half[j] == back, ways.iter().map(|&w| Ok(w)))?.map_or(i, |w| w.1))
 }
 
 /// Of the ways out of a vertex (uv direction, half-edge), the one just clockwise of the way
-/// back `theta`.
-fn clockwise(theta: Vec2, ways: impl Iterator<Item = R<(Vec2, usize)>>) -> R<Option<(Vec2, usize)>> {
+/// back `theta`. `back` tells that way's own half-edge: it lies at theta whichever side rounding puts
+/// it (its direction need not equal theta to the bit), so it comes last.
+fn clockwise(
+    theta: Vec2,
+    back: impl Fn(usize) -> bool,
+    ways: impl Iterator<Item = R<(Vec2, usize)>>,
+) -> R<Option<(Vec2, usize)>> {
     let after = |x: Vec2, y: Vec2| angle_cmp(x, y) == std::cmp::Ordering::Greater;
     let mut best: Option<(Vec2, usize)> = None;
     let mut top: Option<(Vec2, usize)> = None;
+    let mut back_way = None;
     for w in ways {
         let (a, j) = w?;
+        if back(j) {
+            back_way = Some((a, j));
+            continue;
+        }
         if after(theta, a) && best.is_none_or(|b| after(a, b.0)) {
             best = Some((a, j));
         }
@@ -4538,7 +4549,7 @@ fn clockwise(theta: Vec2, ways: impl Iterator<Item = R<(Vec2, usize)>>) -> R<Opt
             top = Some((a, j));
         }
     }
-    Ok(best.or(top))
+    Ok(best.or(top).or(back_way))
 }
 
 pub(crate) fn uv_dir(body: &Body, f: FaceId, p: &Piece, forward: bool, at_end: bool) -> R<Vec2> {
@@ -4846,7 +4857,8 @@ pub(crate) fn split_face(
         // it), not only where a cut touched an edge
         let theta = dir(i, true)?;
         let ways = || out.iter().map(|&(_, k)| Ok((dir(k, false)?, k)));
-        let (c, j) = clockwise(theta, ways())?.unwrap_or((theta, i));
+        let back = (half[i].0, !half[i].1);
+        let (c, j) = clockwise(theta, |j| half[j] == back, ways())?.unwrap_or((theta, i));
         if !tied(pieces, &half, out, i, theta, (c, j), ways())? {
             return Ok(j);
         }
@@ -6043,4 +6055,22 @@ pub(crate) fn meet_region(ba: &Box3, bb: &Box3, sa: &Surface, sb: &Surface) -> B
     } else {
         tol::LINEAR
     })
+}
+
+#[cfg(test)]
+mod way_back_tests {
+    use super::*;
+
+    #[test]
+    fn the_way_straight_back_comes_last_whichever_side_rounding_puts_it() {
+        let theta = Vec2::new(0.0096, 0.0);
+        let other = (Vec2::new(0.0, -1.0), 5);
+        for off in [-1e-17, 0.0, 1e-17] {
+            let twin = (Vec2::new(0.0096, off), 7);
+            let got = clockwise(theta, |j| j == 7, [Ok(other), Ok(twin)].into_iter()).unwrap();
+            assert_eq!(got.map(|w| w.1), Some(5), "{off}");
+            let alone = clockwise(theta, |j| j == 7, [Ok(twin)].into_iter()).unwrap();
+            assert_eq!(alone.map(|w| w.1), Some(7), "{off}");
+        }
+    }
 }
