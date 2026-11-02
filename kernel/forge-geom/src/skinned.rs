@@ -1336,6 +1336,9 @@ impl Skinned {
 }
 
 impl Procedural for Skinned {
+    fn kind(&self) -> &'static str {
+        "loft"
+    }
     fn direct(&self) -> bool {
         self.pole.is_some()
     }

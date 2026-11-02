@@ -645,6 +645,9 @@ impl Screw {
 }
 
 impl Procedural for Screw {
+    fn kind(&self) -> &'static str {
+        "screw"
+    }
     fn exact_d1(&self) -> bool {
         true
     }
@@ -1013,6 +1016,9 @@ impl Fence {
 }
 
 impl Procedural for Fence {
+    fn kind(&self) -> &'static str {
+        "screw fence"
+    }
     fn exact_d1(&self) -> bool {
         true
     }

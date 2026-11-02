@@ -30,16 +30,147 @@ pub enum Op {
     Intersect,
 }
 
+/// A face of an input to a boolean, as a refusal names it.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct FaceRef {
+    pub name: Name,
+    /// The kind of surface it lies on.
+    pub surface: &'static str,
+    /// The middle of its box.
+    pub near: Point3,
+}
+
+impl FaceRef {
+    #[cold]
+    pub(crate) fn of(body: &Body, f: FaceId) -> FaceRef {
+        let face = body.face(f);
+        FaceRef {
+            name: face.name,
+            surface: face.surface.kind(),
+            near: body.face_box(f).center(),
+        }
+    }
+}
+
+impl std::fmt::Display for FaceRef {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let p = self.near;
+        write!(
+            f,
+            "the {} face {:?} near ({:.3}, {:.3}, {:.3})",
+            self.surface, self.name, p.x, p.y, p.z
+        )
+    }
+}
+
+/// A configuration the kernel does not handle yet.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub enum Unhandled {
+    /// Two faces close enough to meet whose surfaces have no closed form and defeat the tracer.
+    NoClosedForm { a: FaceRef, b: FaceRef },
+    /// Two faces meet in an open curve that cannot be bounded.
+    OpenCurve { a: FaceRef, b: FaceRef },
+    /// A face would be split through a point where its surface has no normal.
+    SplitThroughSingular { face: FaceRef },
+    /// A face no curve touches lies on the other body's boundary, so nothing says if it stays.
+    UntouchedOnOther { face: FaceRef },
+    /// Two vertices of one tool meet where a cut runs.
+    ToolVerticesMeet { at: Point3 },
+    /// Every point the n-ary pass could judge a region by lies on another tool's edge.
+    ProbeOnToolEdge { face: FaceRef },
+}
+
+impl std::fmt::Display for Unhandled {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Unhandled::NoClosedForm { a, b } => {
+                write!(f, "surface pair without a closed form: {a} and {b}")
+            }
+            Unhandled::OpenCurve { a, b } => {
+                write!(f, "open curve without a closed form: {a} and {b}")
+            }
+            Unhandled::SplitThroughSingular { face } => {
+                write!(f, "split through a singular point of {face}")
+            }
+            Unhandled::UntouchedOnOther { face } => {
+                write!(f, "{face}, untouched, lies on the other body")
+            }
+            Unhandled::ToolVerticesMeet { at } => write!(
+                f,
+                "two vertices of one tool meet at a cut at ({:.3}, {:.3}, {:.3})",
+                at.x, at.y, at.z
+            ),
+            Unhandled::ProbeOnToolEdge { face } => {
+                write!(f, "every point of a region of {face} lies on another tool's edge")
+            }
+        }
+    }
+}
+
+/// Something that should not happen with valid inputs: the boolean lost its way here.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub enum Lost {
+    /// Two regions of one body joined across `across` were found on different sides of the other.
+    InconsistentClassification { a: FaceRef, b: FaceRef, across: Point3 },
+    /// The curves splitting a face did not walk into closed cycles.
+    SplitOpen { face: FaceRef },
+    /// The cycles splitting a face cross.
+    SplitCrossed { face: FaceRef },
+    /// A hole cycle of a split face lies in none of its regions.
+    HoleOutside { face: FaceRef },
+    /// A split left a cycle with no pieces, or a region with no loops.
+    EmptyCycle { face: FaceRef },
+    /// No point could be found inside a region of the face.
+    NoInteriorPoint { face: FaceRef },
+    /// The face's surface has no normal at a point of a region or edge there.
+    NoNormal { face: FaceRef },
+    /// An edge of this face has no direction to build a surface across it from.
+    DegenerateEdge { face: FaceRef },
+    /// A merged region of this face matches none it was merged from.
+    MergedRegion { face: FaceRef },
+}
+
+impl std::fmt::Display for Lost {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Lost::InconsistentClassification { a, b, across } => write!(
+                f,
+                "inconsistent classification across ({:.3}, {:.3}, {:.3}), between {a} and {b}",
+                across.x, across.y, across.z
+            ),
+            Lost::SplitOpen { face } => write!(f, "face split did not close on {face}"),
+            Lost::SplitCrossed { face } => write!(f, "face split crossed itself on {face}"),
+            Lost::HoleOutside { face } => write!(f, "hole outside every region of {face}"),
+            Lost::EmptyCycle { face } => write!(f, "empty cycle on {face}"),
+            Lost::NoInteriorPoint { face } => write!(f, "no interior point of a region of {face}"),
+            Lost::NoNormal { face } => write!(f, "no normal at a point of {face}"),
+            Lost::DegenerateEdge { face } => write!(f, "degenerate edge on {face}"),
+            Lost::MergedRegion { face } => write!(f, "merged region of no old one on {face}"),
+        }
+    }
+}
+
 #[derive(Clone, Debug, PartialEq)]
 pub enum BoolError {
     /// A configuration the kernel does not handle yet.
-    Unsupported(&'static str),
+    Unsupported(Box<Unhandled>),
     /// Something that should not happen with valid inputs.
-    Internal(&'static str),
+    Internal(Box<Lost>),
     /// The result would have material of zero thickness at `at`: the solids touch there
     /// exactly (a ball resting on a face, rods tangent along a line, blocks meeting at an
     /// edge) and both sides of the touch are kept, so the result is not a manifold solid.
     ZeroThickness { at: Point3 },
+}
+
+impl BoolError {
+    #[cold]
+    pub(crate) fn lost(l: Lost) -> BoolError {
+        BoolError::Internal(Box::new(l))
+    }
+    #[cold]
+    pub(crate) fn unhandled(u: Unhandled) -> BoolError {
+        BoolError::Unsupported(Box::new(u))
+    }
 }
 
 impl std::fmt::Display for BoolError {
@@ -634,9 +765,12 @@ fn plan_retried(a: &Body, b: &Body, op: Op, scratch: &mut Scratch) -> R<Plan> {
         // way along it wants the curve under that edge, however close: an edge of its own (chords).
         // A conic a hair past tangent is either two crossings or one touch: the other reading (absorb)
         Err(BoolError::Internal(w))
-            if w == "inconsistent classification" || w == "face split crossed itself" =>
+            if matches!(
+                *w,
+                Lost::InconsistentClassification { .. } | Lost::SplitCrossed { .. }
+            ) =>
         {
-            let crossed = w == "face split crossed itself";
+            let crossed = matches!(*w, Lost::SplitCrossed { .. });
             for (absorb, chords) in [(crossed, !crossed), (!crossed, crossed)] {
                 forge_geom::intersect::ABSORB_HAIR_ROOTS.with(|k| k.set(absorb));
                 CHORDS.with(|c| c.set(chords));
@@ -730,7 +864,10 @@ fn plan_once(a: &Body, b: &Body, op: Op, scratch: &mut Scratch) -> R<Plan> {
                     continue;
                 }
                 SurfaceSurface::NotAnalytic => {
-                    return Err(BoolError::Unsupported("surface pair without a closed form"));
+                    return Err(BoolError::unhandled(Unhandled::NoClosedForm {
+                        a: FaceRef::of(a, fa),
+                        b: FaceRef::of(b, fb),
+                    }));
                 }
                 SurfaceSurface::Curves(cs) => cs,
             };
@@ -2001,7 +2138,12 @@ pub(crate) fn trim(
             },
             Curve::Parabola(p) => Interval::new(-reach(&p.frame), reach(&p.frame)),
             Curve::Hyperbola(h) => Interval::new(-reach(&h.frame) / h.b, reach(&h.frame) / h.b),
-            _ => return Err(BoolError::Unsupported("open curve without a closed form")),
+            _ => {
+                return Err(BoolError::unhandled(Unhandled::OpenCurve {
+                    a: FaceRef::of(bodies[0], faces[0]),
+                    b: FaceRef::of(bodies[1], faces[1]),
+                }));
+            }
         }
     };
     let first = cuts.len();
@@ -3571,9 +3713,11 @@ pub(crate) fn across(body: &Body, f: FaceId, c: forge_topo::CoedgeId) -> R<Surfa
     let t = edge.range.mid();
     let d = edge.curve.deriv(t);
     let s = &body.face(f).surface;
-    let n = s
-        .normal(s.project(d.p))
-        .ok_or(BoolError::Internal("edge at a singular point"))?;
+    let n = s.normal(s.project(d.p)).ok_or_else(|| {
+        BoolError::lost(Lost::NoNormal {
+            face: FaceRef::of(body, f),
+        })
+    })?;
     // a surface through the edge, across this one: the edge's own plane for a conic (the
     // cylinder on a circle lying in a planar face or touching it), or the plane holding a line
     // and the normal
@@ -3594,7 +3738,11 @@ pub(crate) fn across(body: &Body, f: FaceId, c: forge_topo::CoedgeId) -> R<Surfa
                 let lean = (1.0 - (e.minor / e.major) * (e.minor / e.major)).max(0.0).sqrt();
                 let axis = (e.frame.z() * (e.minor / e.major) + e.frame.x() * lean)
                     .normalize()
-                    .ok_or(BoolError::Internal("degenerate edge"))?;
+                    .ok_or_else(|| {
+                        BoolError::lost(Lost::DegenerateEdge {
+                            face: FaceRef::of(body, f),
+                        })
+                    })?;
                 Surface::Cylinder(Cylinder {
                     frame: Frame::from_z(e.frame.origin, axis),
                     radius: e.minor,
@@ -3613,14 +3761,19 @@ pub(crate) fn across(body: &Body, f: FaceId, c: forge_topo::CoedgeId) -> R<Surfa
                 };
                 match forge_geom::ruled::Ruled::new(rail(-h), rail(h)) {
                     Some(w) => w.surface(),
-                    None => return Err(BoolError::Internal("degenerate edge")),
+                    None => {
+                        return Err(BoolError::lost(Lost::DegenerateEdge {
+                            face: FaceRef::of(body, f),
+                        }));
+                    }
                 }
             }
             _ => {
-                let z =
-                    d.d1.cross(n.get())
-                        .normalize()
-                        .ok_or(BoolError::Internal("degenerate edge"))?;
+                let z = d.d1.cross(n.get()).normalize().ok_or_else(|| {
+                    BoolError::lost(Lost::DegenerateEdge {
+                        face: FaceRef::of(body, f),
+                    })
+                })?;
                 Surface::Plane(Plane::new(Frame::from_z(d.p, z)))
             }
         })
@@ -4357,12 +4510,20 @@ pub(crate) fn uv_dir(body: &Body, f: FaceId, p: &Piece, forward: bool, at_end: b
         let n = face
             .surface
             .normal(Point2::new(uv.x, uv.y + step))
-            .ok_or(BoolError::Unsupported("split through a singular point"))?
+            .ok_or_else(|| {
+                BoolError::unhandled(Unhandled::SplitThroughSingular {
+                    face: FaceRef::of(body, f),
+                })
+            })?
             .get();
         let helper = if n.x.abs() < 0.9 { Vec3::X } else { Vec3::Y };
         let e1 = (helper - n * helper.dot(n))
             .normalize()
-            .ok_or(BoolError::Unsupported("split through a singular point"))?
+            .ok_or_else(|| {
+                BoolError::unhandled(Unhandled::SplitThroughSingular {
+                    face: FaceRef::of(body, f),
+                })
+            })?
             .get();
         let (a, b) = (dir.dot(e1), dir.dot(n.cross(e1)));
         return Ok(Vec2::new(if face.same_sense { a } else { -a }, b));
@@ -4383,7 +4544,13 @@ pub(crate) fn uv_dir(body: &Body, f: FaceId, p: &Piece, forward: bool, at_end: b
 #[cold]
 fn round_point(face: &forge_topo::Face, p: &Piece, t: f64, uv: Point2, from_lo: bool) -> R<Vec2> {
     if !matches!(face.surface, Surface::Cone(_) | Surface::Sphere(_)) {
-        return Err(BoolError::Unsupported("split through a singular point"));
+        return Err(BoolError::unhandled(Unhandled::SplitThroughSingular {
+            face: FaceRef {
+                name: face.name,
+                surface: face.surface.kind(),
+                near: p.curve.eval(t),
+            },
+        }));
     }
     let step = 1e-3 * p.range.width();
     let near = face
@@ -4647,7 +4814,9 @@ pub(crate) fn split_face(
             cyc.push(i);
             i = next(i)?;
             if cyc.len() > half.len() {
-                return Err(BoolError::Internal("face split did not close"));
+                return Err(BoolError::lost(Lost::SplitOpen {
+                    face: FaceRef::of(body, f),
+                }));
             }
         }
         if i != s {
@@ -4672,7 +4841,9 @@ pub(crate) fn split_face(
                     );
                 }
             }
-            return Err(BoolError::Internal("face split crossed itself"));
+            return Err(BoolError::lost(Lost::SplitCrossed {
+                face: FaceRef::of(body, f),
+            }));
         }
         cycles.push(cyc);
     }
@@ -4697,7 +4868,7 @@ pub(crate) fn split_face(
             true => Some(Cycle::Hole),
             false => None,
         };
-        if let Some((regions, open)) = plane_split(pl, face.same_sense, walks, kind, pieces, outer)? {
+        if let Some((regions, open)) = plane_split(body, f, pl, walks, kind, pieces, outer)? {
             return Ok(Split {
                 regions,
                 open,
@@ -4995,7 +5166,11 @@ pub(crate) fn split_face(
                         .filter_map(|&o| Some((polys[o].as_deref()?, boxes[o]?)))
                         .collect()
                 });
-                clear_point(cands, outlines).ok_or(BoolError::Internal("empty cycle"))?
+                clear_point(cands, outlines).ok_or_else(|| {
+                    BoolError::lost(Lost::EmptyCycle {
+                        face: FaceRef::of(body, f),
+                    })
+                })?
             }
         };
         // the smallest outline holding it; the untouched outer loop (no outline) holds every hole.
@@ -5047,7 +5222,9 @@ pub(crate) fn split_face(
                     );
                 }
             }
-            return Err(BoolError::Internal("hole outside every region"));
+            return Err(BoolError::lost(Lost::HoleOutside {
+                face: FaceRef::of(body, f),
+            }));
         };
         regions[region_of[host]].push(cyc.iter().map(|&i| half[i]).collect());
     }
@@ -5105,14 +5282,15 @@ enum Cycle {
 /// is undecided (a ray through a vertex at every angle tried), for the drawn split to do.
 #[allow(clippy::type_complexity)]
 fn plane_split(
+    body: &Body,
+    f: FaceId,
     pl: &Plane,
-    same_sense: bool,
     mut walks: Vec<Walk>,
     kind: impl Fn(usize) -> Option<Cycle>,
     pieces: &[Piece],
     outer: bool,
 ) -> R<Option<(Vec<Region>, Vec<Walk>)>> {
-    let n = pl.frame.z().get() * if same_sense { 1.0 } else { -1.0 };
+    let n = pl.frame.z().get() * if body.face(f).same_sense { 1.0 } else { -1.0 };
     let mut areas: Vec<f64> = Vec::with_capacity(walks.len());
     for (k, w) in walks.iter().enumerate() {
         areas.push(match kind(k) {
@@ -5150,7 +5328,11 @@ fn plane_split(
                     .iter()
                     .copied()
                     .max_by(|a, b| size(a).total_cmp(&size(b)))
-                    .ok_or(BoolError::Internal("empty cycle"))?;
+                    .ok_or_else(|| {
+                        BoolError::lost(Lost::EmptyCycle {
+                            face: FaceRef::of(body, f),
+                        })
+                    })?;
                 let pc = &pieces[h.0];
                 let d = pc.curve.deriv(pc.range.mid());
                 let along = if h.1 { d.d1 } else { -d.d1 };
@@ -5182,7 +5364,11 @@ fn plane_split(
         match host {
             Some(r) => regions[r].push(w),
             None if !outer => open.push(w),
-            None => return Err(BoolError::Internal("hole outside every region")),
+            None => {
+                return Err(BoolError::lost(Lost::HoleOutside {
+                    face: FaceRef::of(body, f),
+                }));
+            }
         }
     }
     Ok(Some((regions, open)))
@@ -5501,7 +5687,11 @@ fn classify_specs(
                             if debug_on() {
                                 debug_conflict(bodies, specs, pieces, class, i, j, p);
                             }
-                            return Err(BoolError::Internal("inconsistent classification"));
+                            return Err(BoolError::lost(Lost::InconsistentClassification {
+                                a: FaceRef::of(bodies[specs[i].side], specs[i].from),
+                                b: FaceRef::of(bodies[specs[j].side], specs[j].from),
+                                across: pieces[p].curve.eval(pieces[p].range.mid()),
+                            }));
                         }
                         _ => {}
                     }
@@ -5521,8 +5711,11 @@ fn classify_specs(
             continue;
         }
         let s = &specs[i];
-        let probe =
-            interior_point(bodies[s.side], s, pieces).ok_or(BoolError::Internal("no interior point"))?;
+        let probe = interior_point(bodies[s.side], s, pieces).ok_or_else(|| {
+            BoolError::lost(Lost::NoInteriorPoint {
+                face: FaceRef::of(bodies[s.side], s.from),
+            })
+        })?;
         if specs_on() {
             eprintln!(
                 "  RAY spec {i} probe {probe:?} -> {:?}",
@@ -5550,7 +5743,9 @@ fn classify_specs(
                         bodies[s.side].face(s.from).surface
                     );
                 }
-                return Err(BoolError::Unsupported("untouched face lies on the other body"));
+                return Err(BoolError::unhandled(Unhandled::UntouchedOnOther {
+                    face: FaceRef::of(bodies[s.side], s.from),
+                }));
             }
         });
         spread(&mut class, i)?;

@@ -102,6 +102,20 @@ pub enum Surface {
     Procedural(Proc),
 }
 
+impl Surface {
+    /// What kind of surface this is, in a word, for a refusal to name.
+    pub fn kind(&self) -> &'static str {
+        match self {
+            Surface::Plane(_) => "plane",
+            Surface::Cylinder(_) => "cylinder",
+            Surface::Cone(_) => "cone",
+            Surface::Sphere(_) => "sphere",
+            Surface::Torus(_) => "torus",
+            Surface::Procedural(p) => p.kind(),
+        }
+    }
+}
+
 /// A surface to the bit, or the procedural one it is by its address (whoever keeps these holds the surface too,
 /// so the address stays its own). Equal only for surfaces that answer every question alike.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
@@ -146,6 +160,10 @@ impl Surface {
 /// a pipe along an exact spine, a corner patch spanning exact boundary curves. Exact: points are
 /// solved for to full precision from the definition, never read off an approximation.
 pub trait Procedural: Send + Sync + std::fmt::Debug {
+    /// What kind of surface this is, in a word, for a refusal to name.
+    fn kind(&self) -> &'static str {
+        "procedural"
+    }
     fn deriv(&self, uv: Point2) -> SurfDeriv;
     /// The point alone (meshing evaluates many more points than derivatives).
     fn point(&self, uv: Point2) -> Point3 {

@@ -2497,6 +2497,9 @@ fn principal_max(d: &SurfDeriv) -> f64 {
 }
 
 impl Procedural for VarBlend {
+    fn kind(&self) -> &'static str {
+        "variable blend"
+    }
     fn exact_d1(&self) -> bool {
         true
     }
@@ -2772,6 +2775,9 @@ impl Fence {
 }
 
 impl Procedural for Fence {
+    fn kind(&self) -> &'static str {
+        "blend fence"
+    }
     fn deriv(&self, uv: Point2) -> SurfDeriv {
         let (q, c) = self.at(uv.x);
         let w = uv.y;

@@ -486,6 +486,9 @@ impl Swept {
 }
 
 impl Procedural for Swept {
+    fn kind(&self) -> &'static str {
+        "swept spline"
+    }
     fn spline_wall(&self) -> bool {
         true
     }

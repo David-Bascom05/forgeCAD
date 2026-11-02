@@ -1253,7 +1253,7 @@ pub fn explain(e: &RegenError) -> (String, String) {
             hint("this cannot be made: move one apart, or overlap them"),
         ),
         Boolean { error, .. } => (
-            format!("boolean: {error:?}"),
+            format!("boolean: {error}"),
             hint("move or resize the tool so it does not just touch the part"),
         ),
         Fillet {

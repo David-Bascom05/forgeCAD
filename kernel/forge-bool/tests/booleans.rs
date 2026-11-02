@@ -488,3 +488,26 @@ fn a_hole_on_a_rounds_centre_circle_at_any_angle() {
         );
     }
 }
+
+/// A refusal says what failed and where, in words an agent can act on.
+#[test]
+fn a_refusal_names_its_faces() {
+    let a = ball(Point3::ORIGIN, 5.0, 1);
+    let face = a.face_ids().next().unwrap();
+    let at = forge_bool::FaceRef {
+        name: a.face(face).name,
+        surface: a.face(face).surface.kind(),
+        near: Point3::new(1.0, 2.0, 3.0),
+    };
+    let e =
+        forge_bool::BoolError::Unsupported(Box::new(forge_bool::Unhandled::NoClosedForm { a: at, b: at }));
+    let said = e.to_string();
+    assert!(
+        said.contains("without a closed form") && said.contains("sphere"),
+        "{said}"
+    );
+    assert!(
+        said.contains("(1.000, 2.000, 3.000)") && said.contains(&format!("{:?}", at.name)),
+        "{said}"
+    );
+}

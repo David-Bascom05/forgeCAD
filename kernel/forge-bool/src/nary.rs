@@ -14,9 +14,9 @@
 //! a part grown to thousands of faces.
 
 use crate::boolean::{
-    BoolError, Cut, CutOn, Imprint, Op, Piece, R, Seg, Side, Touch, VKey, Walk, branches_meet,
-    crossings_near, edge_split, grown_tols, imprint, lean, local_class, on_edge, overlap, settle, split_face,
-    touches, trim,
+    BoolError, Cut, CutOn, FaceRef, Imprint, Lost, Op, Piece, R, Seg, Side, Touch, Unhandled, VKey, Walk,
+    branches_meet, crossings_near, edge_split, grown_tols, imprint, lean, local_class, on_edge, overlap,
+    settle, split_face, touches, trim,
 };
 use crate::classify::{Index, Where};
 use crate::shape::{Member, Shape};
@@ -925,7 +925,10 @@ fn nary_body(
                     // where either face is buried there is no curve to find
                     SurfaceSurface::NotAnalytic if buried(i, &region) || buried(j, &region) => continue,
                     SurfaceSurface::NotAnalytic => {
-                        return Err(BoolError::Unsupported("surface pair without a closed form"));
+                        return Err(BoolError::unhandled(Unhandled::NoClosedForm {
+                            a: FaceRef::of(a, fa),
+                            b: FaceRef::of(b, fb),
+                        }));
                     }
                     SurfaceSurface::Curves(cs) => cs,
                 };
@@ -1445,7 +1448,7 @@ fn nary_body(
         for &o in os.iter() {
             let VKey::Old(sd, _) = o else { unreachable!() };
             if sides.contains(&sd) {
-                return Err(BoolError::Unsupported("two vertices of one tool meet at a cut"));
+                return Err(BoolError::unhandled(Unhandled::ToolVerticesMeet { at: heads[k] }));
             }
             sides.push(sd);
             if o != key {
@@ -2026,9 +2029,11 @@ fn nary_body(
         // tool's face lies on it; Err(k) when the point is on tool k's boundary but not on a face of
         // k lying on this one (a tangency or an edge of k): another point must decide
         let judge = |p: Point3| -> R<Result<Seen, Side>> {
-            let normal = body
-                .face_normal(r.face, face.surface.project(p))
-                .ok_or(BoolError::Internal("no normal at a region's point"))?;
+            let normal = body.face_normal(r.face, face.surface.project(p)).ok_or_else(|| {
+                BoolError::lost(Lost::NoNormal {
+                    face: FaceRef::of(body, r.face),
+                })
+            })?;
             let mut inner = vec![false; n];
             let mut outer = vec![false; n];
             inner[r.side] = true;
@@ -2069,7 +2074,11 @@ fn nary_body(
                         let other = tools[k];
                         let m = other
                             .face_normal(g, other.face(g).surface.project(p))
-                            .ok_or(BoolError::Internal("no normal at a region's point"))?;
+                            .ok_or_else(|| {
+                                BoolError::lost(Lost::NoNormal {
+                                    face: FaceRef::of(other, g),
+                                })
+                            })?;
                         on_face = true;
                         // the other tool's material is behind its face
                         if m.dot(normal.get()) > 0.0 {
@@ -2107,9 +2116,11 @@ fn nary_body(
             None => {
                 // near-tangent faces: the whole region is within tolerance of tool k; which side of
                 // k it is on shows where it meets k, by its lean off k's face there
-                let p = *candidates
-                    .first()
-                    .ok_or(BoolError::Internal("no interior point"))?;
+                let p = *candidates.first().ok_or_else(|| {
+                    BoolError::lost(Lost::NoInteriorPoint {
+                        face: FaceRef::of(body, r.face),
+                    })
+                })?;
                 let mut v = None;
                 if let Ok(Err(k)) = judge(p)
                     && let Some(inside) = lean(r, k)
@@ -2150,7 +2161,9 @@ fn nary_body(
                                 r.side, r.face
                             );
                         }
-                        return Err(BoolError::Unsupported("region probe on another tool's edge"));
+                        return Err(BoolError::unhandled(Unhandled::ProbeOnToolEdge {
+                            face: FaceRef::of(body, r.face),
+                        }));
                     }
                 }
             }
@@ -2385,16 +2398,21 @@ fn nary_body(
         regions
             .into_iter()
             .map(|loops| {
-                let first = *loops
-                    .first()
-                    .and_then(|l| l.first())
-                    .ok_or(BoolError::Internal("empty region"))?;
+                let first = *loops.first().and_then(|l| l.first()).ok_or_else(|| {
+                    BoolError::lost(Lost::EmptyCycle {
+                        face: FaceRef::of(tools[side], f),
+                    })
+                })?;
                 let old = owner(first)
                     .or_else(|| {
                         rr.clone()
                             .find(|&ri| regs[ri].loops.iter().flatten().any(|&h| h == first))
                     })
-                    .ok_or(BoolError::Internal("merged region of no old one"))?;
+                    .ok_or_else(|| {
+                        BoolError::lost(Lost::MergedRegion {
+                            face: FaceRef::of(tools[side], f),
+                        })
+                    })?;
                 Ok((loops, class[old]))
             })
             .collect::<R<Vec<_>>>()

@@ -504,6 +504,9 @@ impl Nurbs {
 }
 
 impl Procedural for Nurbs {
+    fn kind(&self) -> &'static str {
+        "nurbs"
+    }
     fn deriv(&self, uv: Point2) -> SurfDeriv {
         self.eval_all(uv)
     }

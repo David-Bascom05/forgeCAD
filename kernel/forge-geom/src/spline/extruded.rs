@@ -203,6 +203,9 @@ impl crate::loftmeet::Span for Extruded {
 }
 
 impl Procedural for Extruded {
+    fn kind(&self) -> &'static str {
+        "extruded spline"
+    }
     fn spline_wall(&self) -> bool {
         true
     }

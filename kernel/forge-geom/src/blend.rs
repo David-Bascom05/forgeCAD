@@ -107,6 +107,9 @@ impl Offset {
 }
 
 impl Procedural for Offset {
+    fn kind(&self) -> &'static str {
+        "offset"
+    }
     fn point(&self, uv: Point2) -> Point3 {
         self.first(uv).0
     }
@@ -1024,6 +1027,9 @@ impl Fence {
 }
 
 impl Procedural for Fence {
+    fn kind(&self) -> &'static str {
+        "blend fence"
+    }
     fn deriv(&self, uv: Point2) -> SurfDeriv {
         let q = ProceduralCurve::deriv(&self.spring, uv.x);
         let c = self.spring.spine.deriv(uv.x);
@@ -1318,6 +1324,9 @@ impl Pipe {
 }
 
 impl Procedural for Pipe {
+    fn kind(&self) -> &'static str {
+        "blend"
+    }
     fn point(&self, uv: Point2) -> Point3 {
         Pipe::point(self, uv)
     }

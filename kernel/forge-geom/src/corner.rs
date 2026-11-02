@@ -2191,6 +2191,9 @@ fn meets(b: &Box2, p: Point2, q: Point2) -> bool {
 }
 
 impl Procedural for HolePatch {
+    fn kind(&self) -> &'static str {
+        "corner patch"
+    }
     fn whole_box(&self) -> bool {
         true
     }

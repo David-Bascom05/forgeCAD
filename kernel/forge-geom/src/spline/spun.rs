@@ -186,6 +186,9 @@ impl crate::loftmeet::Span for Spun {
 }
 
 impl Procedural for Spun {
+    fn kind(&self) -> &'static str {
+        "spun spline"
+    }
     fn spline_wall(&self) -> bool {
         true
     }

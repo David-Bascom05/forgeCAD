@@ -2,8 +2,8 @@
 # known. Each has a shrunk part file in the report that added it. tests/history.rs fails when a
 # line here no longer matches any failure: remove it then, so the list only shrinks.
 # booleans losing their way (after fillets, on lofts, sweeps, coils, holes)
-boolean: Internal("face split crossed itself")
-boolean: Internal("inconsistent classification")
+boolean: internal error: face split crossed itself
+boolean: internal error: inconsistent classification
 # booleans and finishing ops leaving an invalid solid
 # the n-ary regen names split faces and edges unlike the sequential one, so later references miss:
 # it then rebuilds feature by feature (forge_model::nary_name_fallbacks). Seeds 3 and 27's class:

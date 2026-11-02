@@ -496,6 +496,9 @@ fn lerp_box(a: &Box3, b: &Box3, s: f64) -> Box3 {
 }
 
 impl Procedural for Ruled {
+    fn kind(&self) -> &'static str {
+        "ruled"
+    }
     fn exact_d1(&self) -> bool {
         true
     }
