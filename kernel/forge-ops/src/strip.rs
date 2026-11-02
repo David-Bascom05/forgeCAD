@@ -4,7 +4,9 @@
 //! two sides away with the ball that touches all three, its radius changing where the sides
 //! close in.
 
-use crate::fillet::{FilletEdge, FilletError, Radius, chain_loops, fillet, inside_face, nearest_hit};
+use crate::fillet::{
+    FilletEdge, FilletError, FilletOptions, Radius, chain_loops, fillet_with, inside_face, nearest_hit,
+};
 use forge_geom::blend::{Blend, closed_form, foot, offset, spine, spine_closest};
 use forge_geom::varblend::{Guide, VarBlend};
 use forge_geom::{Circle, Curve, CurveGeom, Cylinder, Surface, SurfaceGeom, Torus};
@@ -45,7 +47,7 @@ pub fn face_fillet(body: &Body, first: &[FaceId], second: &[FaceId], radius: f64
                 radius: Radius::Constant(radius),
             })
             .collect();
-        return fillet(&body, &edges, feature);
+        return fillet_with(&body, &edges, &FilletOptions::default(), feature);
     }
     // the band joining them: four-sided faces in neither set, in a row from a across to b
     // (a chamfer and a land, a bevel of several facets) or side by side along between them

@@ -130,6 +130,9 @@ pub enum FilletError {
     /// (Inside `fillet_with` only.) A spring leaves its face over this edge and comes back over
     /// it: the edge's middle goes, so it is split at `at` and the fillet tried again.
     SplitFirst { edge: EdgeId, at: f64 },
+    /// The round was built and the result fails `forge_topo::check` here: no body rather than a
+    /// wrong one. Mass and every later boolean on such a body are not to be trusted.
+    Invalid(Vec<forge_topo::Problem>),
 }
 
 type R<T> = Result<T, FilletError>;
@@ -320,7 +323,16 @@ pub fn fillet_kind(body: &Body, e: EdgeId) -> Option<bool> {
 /// Rounds `edges` of `body`, each with its own radius, in one operation.
 /// `feature` is the history id the new faces, edges and vertices are named from.
 pub fn fillet(body: &Body, edges: &[FilletEdge], feature: u64) -> R<Body> {
-    fillet_with(body, edges, &FilletOptions::default(), feature)
+    let done = fillet_with(body, edges, &FilletOptions::default(), feature)?;
+    let problems = forge_topo::check_against(&done, body);
+    // pieces split apart can share a name until they are joined, as a boolean's can
+    if problems
+        .iter()
+        .all(|p| matches!(p, forge_topo::Problem::DuplicateName { .. }))
+    {
+        return Ok(done);
+    }
+    Err(FilletError::Invalid(problems))
 }
 
 /// `fillet` with laws started at given vertices and corners set back by given distances.
