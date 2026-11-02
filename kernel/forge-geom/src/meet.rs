@@ -1165,6 +1165,42 @@ pub fn intersect(a: &Surface, b: &Surface, region: Box3) -> Option<SurfaceSurfac
             None => break,
         }
     }
+    // the discriminant keeps its sign where two pairs of roots come at once (a tube's two sides, with
+    // the axes in one plane, so the host symmetric about it): a root count that changes with no event
+    // between is an event the sign test missed, a multiple one, found by the count
+    let axes_meet = match (axis_of(&eq.host), axis_of(&other)) {
+        (Some((p, a)), Some((q, b))) => {
+            let n = a.get().cross(b.get());
+            n.length() > tol::ANGULAR && n.dot(q - p).abs() <= tol::LINEAR * n.length()
+        }
+        _ => false,
+    };
+    if matches!(form, Form::Poly4 | Form::Trig2) && axes_meet {
+        let at = |k: usize| dmath::TAU * k as f64 / 64.0;
+        let mut found = Vec::new();
+        let mut ch = eq.count(at(0));
+        for k in 0..64 {
+            let (mut lo, mut hi) = (at(k), at(k + 1));
+            let cl = ch;
+            ch = eq.count(hi);
+            if cl == ch || events.iter().any(|e| e.0 >= lo - 1e-6 && e.0 <= hi + 1e-6) {
+                continue;
+            }
+            for _ in 0..60 {
+                let m = 0.5 * (lo + hi);
+                if eq.count(m) == cl {
+                    lo = m;
+                } else {
+                    hi = m;
+                }
+            }
+            found.push((0.5 * (lo + hi), true));
+        }
+        if !found.is_empty() {
+            events.extend(found);
+            events.sort_by(|p, q| p.0.total_cmp(&q.0));
+        }
+    }
     // two events polished onto one point: the isolation was off somewhere
     if events.windows(2).any(|w| w[1].0 - w[0].0 <= 1e-9) {
         return None;

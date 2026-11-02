@@ -650,4 +650,33 @@ mod tests {
             }
         }
     }
+
+    /// A rod crossing a torus's axis meets the tube in two lobes, one each side, and on the rod's rulings
+    /// the tube's two sides come and go together: the quartic's discriminant only touches zero there.
+    #[test]
+    fn a_rod_across_a_torus_axis_meets_it() {
+        use forge_geom::Torus;
+        use forge_math::Vec3;
+        let torus = Surface::Torus(Torus::new(Frame::WORLD, 34.0, 3.0).unwrap());
+        for (z, r) in [(4.0, 9.0), (4.0, 8.0), (2.0, 9.0)] {
+            let rod = Surface::Cylinder(Cylinder {
+                frame: Frame::from_axes(Point3::new(0.0, 22.0, z), Vec3::X, -Vec3::Z, Vec3::Y).unwrap(),
+                radius: r,
+            });
+            let region = Box3::from_points([Point3::new(-40.0, 15.0, -5.0), Point3::new(40.0, 45.0, 15.0)]);
+            let SurfaceSurface::Curves(cs) = surfaces_in(&rod, &torus, region) else {
+                panic!("{z} {r}: they meet");
+            };
+            assert_eq!(cs.len(), 2, "{z} {r}");
+            let sides: Vec<f64> = cs
+                .iter()
+                .map(|(c, _)| {
+                    let d = c.domain();
+                    let lo = if d.lo.is_finite() { d.lo } else { 0.0 };
+                    c.eval(lo + 0.3 * (d.hi - lo)).x
+                })
+                .collect();
+            assert!(sides[0] * sides[1] < 0.0, "{sides:?}");
+        }
+    }
 }
