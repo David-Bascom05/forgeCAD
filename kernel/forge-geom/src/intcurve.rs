@@ -842,9 +842,17 @@ fn walk(
                 h *= 0.5;
                 continue;
             }
-            if let Some(q) =
-                along.and_then(|u| [1.0, 2.0, 4.0].into_iter().find_map(|m| ahead(u, step * m, 0.5)))
-            {
+            // (the same curve carrying on past a touch, running the way the chain was going: not
+            // another arm of it that a long step happened to land on)
+            let carried = along.and_then(|u| {
+                [1.0, 2.0, 4.0].into_iter().find_map(|m| {
+                    ahead(u, step * m, 0.5).filter(|&q| {
+                        let chord = (q - p).normalize().map_or(u, |c| c.get());
+                        direction(a, b, q).is_none_or(|t| t.dot(chord).abs() >= 0.866)
+                    })
+                })
+            });
+            if let Some(q) = carried {
                 break (q, direction(a, b, q));
             }
             // a procedural surface may stop at its face's rim: the branch ends there (any part
