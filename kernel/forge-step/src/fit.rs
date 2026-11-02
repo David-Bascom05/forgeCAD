@@ -13,6 +13,9 @@ pub const DEFAULT_TOL: f64 = 1e-4;
 /// and stated.
 const MAX_SPANS: usize = 8192;
 const MAX_CELLS: usize = 1 << 16;
+/// The narrowest span of a curve, as a part of its range: a traced curve can jump where its surfaces
+/// all but touch, and halving across a jump stops only when the knots run together and make no curve.
+const MIN_SPAN: f64 = 1e-9;
 
 /// A curve as a clamped cubic B-spline.
 pub struct CurveFit {
@@ -177,7 +180,7 @@ pub fn fit_curve(c: &Curve, range: Interval, tol: f64) -> CurveFit {
                 .fold(0.0, f64::max);
             worst = worst.max(e);
             next.push(w[0]);
-            if e > tol && ts.len() < MAX_SPANS {
+            if e > tol && ts.len() < MAX_SPANS && h > MIN_SPAN * (range.hi - range.lo) {
                 next.push(w[0] + 0.5 * h);
             }
         }
@@ -636,4 +639,64 @@ pub fn close_net(fit: &mut SurfaceFit, seam: (bool, bool)) {
 pub struct Fit {
     pub count: usize,
     pub error: f64,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use forge_geom::curve::{CurveDeriv, Domain1, ProcCurve, ProceduralCurve};
+    use forge_geom::spline::Spline;
+    use forge_math::{Box3, Frame};
+
+    /// A straight run with a step of 1e-3 part way along, as a curve traced to a near-tangency has.
+    #[derive(Debug)]
+    struct Stepped;
+    impl ProceduralCurve for Stepped {
+        fn deriv(&self, t: f64) -> CurveDeriv {
+            let y = if t < 34.96980583364 { 0.0 } else { 1e-3 };
+            CurveDeriv {
+                p: Point3::new(t, y, 0.0),
+                d1: Vec3::X,
+                d2: Vec3::ZERO,
+            }
+        }
+        fn domain(&self) -> Domain1 {
+            Domain1 {
+                lo: 0.0,
+                hi: 35.0,
+                period: None,
+            }
+        }
+        fn closest(&self, p: Point3, _: Interval) -> f64 {
+            p.x
+        }
+        fn bbox(&self, _: Interval) -> Box3 {
+            Box3::from_points([Point3::ORIGIN, Point3::new(35.0, 1e-3, 0.0)])
+        }
+        fn transformed(&self, _: &Frame) -> ProcCurve {
+            ProcCurve(std::sync::Arc::new(Stepped))
+        }
+        fn speed_bound(&self, _: Interval) -> f64 {
+            1.0
+        }
+        fn segments(&self, _: Interval, _: f64) -> usize {
+            1
+        }
+    }
+
+    #[test]
+    fn a_curve_that_jumps_still_makes_a_spline() {
+        let c = Curve::Procedural(ProcCurve(std::sync::Arc::new(Stepped)));
+        let f = fit_curve(&c, Interval::new(0.0, 35.0), DEFAULT_TOL);
+        assert!(f.knots.windows(2).all(|w| w[1] > w[0]));
+        assert!(f.knots.len() < 200, "{} knots", f.knots.len());
+        assert!(f.error > DEFAULT_TOL && f.error <= 1e-3, "{}", f.error);
+        let all: Vec<f64> = f
+            .knots
+            .iter()
+            .zip(&f.mults)
+            .flat_map(|(&k, &m)| std::iter::repeat_n(k, m as usize))
+            .collect();
+        assert!(Spline::from_nurbs(3, &all, &f.ctrl, None).is_some());
+    }
 }
