@@ -1464,6 +1464,17 @@ pub fn intersect(a: &Surface, b: &Surface, region: Box3) -> Option<SurfaceSurfac
                 }
             }
         }
+        // a link across the region far longer than the walk's spacing joined a root to another (a mirror
+        // pair's, where the discriminant lies flat and its rounding makes a false event): both ends lie on
+        // both surfaces, so nothing else would tell. The tracer has it
+        let near = region.grow(2.0 * step);
+        let m = chain.len();
+        if joins.iter().any(|&j| {
+            let (p, q) = (chain[(j + m - 1) % m], chain[j % m]);
+            p.distance_sq(q) > 64.0 * step * step && (near.contains(p) || near.contains(q))
+        }) {
+            return None;
+        }
         // links much shorter than the step (where u eases into a turn) would only make
         // slivers: such a point goes when its neighbours stay within reach of each other
         let mut kept: Vec<Point3> = Vec::with_capacity(chain.len());
