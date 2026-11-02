@@ -445,3 +445,140 @@ fn foot_of_a_rib_over_a_cones_seam() {
             .is_empty()
     );
 }
+
+/// A wall on a floor whose height falls below the ball along the edge: past where the spring reaches
+/// the wall's top the ball rests on the top's edge, and the top meets the round along that edge.
+/// Reference: the section's area integrated along the edge, taken square to it; the rim's slope
+/// makes that an estimate, good to about 1%.
+#[test]
+fn wall_falling_below_the_ball() {
+    use forge_ops::{ProfileLoop, Segment};
+    let at = Frame::from_zx(Point3::new(0.0, 0.0, -5.0), UnitVec3::Z, Vec3::X).expect("frame");
+    let plate = extrude(
+        &Profile {
+            plane: at,
+            loops: vec![Profile::rectangle(Point2::new(0.0, -40.0), 30.0, 60.0, 0)],
+        },
+        5.0,
+        1,
+    )
+    .expect("plate");
+    let plane = Frame::from_zx(Point3::ORIGIN, -UnitVec3::Y, Vec3::X).expect("frame");
+    let line = |a: (f64, f64), b: (f64, f64), id| {
+        (
+            Segment::Line {
+                a: Point2::new(a.0, a.1),
+                b: Point2::new(b.0, b.1),
+            },
+            id,
+        )
+    };
+    let (h0, h1, r) = (10.0, 1.0, 3.0);
+    let wedge = extrude(
+        &Profile {
+            plane,
+            loops: vec![ProfileLoop::new(vec![
+                line((0.0, -1.0), (30.0, -1.0), 0),
+                line((30.0, -1.0), (30.0, h1), 1),
+                line((30.0, h1), (0.0, h0), 2),
+                line((0.0, h0), (0.0, -1.0), 3),
+            ])],
+        },
+        10.0,
+        2,
+    )
+    .expect("wedge");
+    let body = boolean(&plate, &wedge, Op::Union, 3).expect("union");
+    let foot: Vec<FilletEdge> = body
+        .edge_ids()
+        .filter(|&e| {
+            let x = body.edge(e);
+            let (p, q) = (x.curve.eval(x.range.lo), x.curve.eval(x.range.hi));
+            p.z.abs() < 1e-9 && q.z.abs() < 1e-9 && p.y.abs() < 1e-9 && q.y.abs() < 1e-9
+        })
+        .map(|edge| FilletEdge {
+            edge,
+            radius: Radius::Constant(r),
+        })
+        .collect();
+    assert_eq!(foot.len(), 1);
+    let b = fillet(&body, &foot, 9).expect("rounds");
+    assert!(forge_topo::check(&b).is_empty());
+    let volume = |x: &forge_topo::Body| forge_topo::mass::mass(x).expect("mass").volume;
+    let added = volume(&b) - volume(&body);
+    assert!((added / 54.785 - 1.0).abs() < 0.01, "added {added}");
+    let fine = Quality {
+        chord: 0.001,
+        ..Default::default()
+    };
+    let mesh = tessellate(&b, &fine).expect("meshes");
+    assert!(mesh.open_edges().is_empty());
+    assert!((mesh.volume() - volume(&b)).abs() < 1e-4 * volume(&b));
+}
+
+/// A boss just reaching over the rim onto the top: the edge of its foot on the top is short, and the
+/// ball rests on the top from well before it to well after, so that edge's blend and the rim's either
+/// side have no stretch of their own. Reference as above: the closing's mean, over the kernel's
+/// by about what it stands over the exact volume of the first scene.
+#[test]
+fn walk_passes_over_a_short_blend() {
+    let at = |z: f64| Frame::from_zx(Point3::new(0.0, 0.0, z), UnitVec3::Z, Vec3::X).expect("frame");
+    let block = extrude(
+        &Profile {
+            plane: at(0.0),
+            loops: vec![Profile::rectangle(Point2::new(-50.0, 0.0), 100.0, 30.0, 0)],
+        },
+        30.0,
+        1,
+    )
+    .expect("block");
+    let rim = block
+        .edge_ids()
+        .find(|&e| {
+            let x = block.edge(e);
+            [x.range.lo, x.range.hi].iter().all(|&t| {
+                let p = x.curve.eval(t);
+                (p.y - 30.0).abs() < 1e-9 && (p.z - 30.0).abs() < 1e-9
+            })
+        })
+        .expect("the rim");
+    let rounded = fillet(
+        &block,
+        &[FilletEdge {
+            edge: rim,
+            radius: Radius::Constant(3.0),
+        }],
+        2,
+    )
+    .expect("the rim's round");
+    let boss = extrude(
+        &Profile {
+            plane: at(0.0),
+            loops: vec![Profile::circle(Point2::new(0.0, 40.0), 13.5, 0)],
+        },
+        60.0,
+        3,
+    )
+    .expect("boss");
+    let body = boolean(&rounded, &boss, Op::Union, 4).expect("union");
+    let foot: Vec<FilletEdge> = body
+        .edge_ids()
+        .filter(|&e| forge_ops::fillet_kind(&body, e) == Some(false))
+        .map(|edge| FilletEdge {
+            edge,
+            radius: Radius::Constant(5.0),
+        })
+        .collect();
+    let b = fillet(&body, &foot, 9).expect("rounds");
+    assert!(forge_topo::check(&b).is_empty());
+    let volume = |x: &forge_topo::Body| forge_topo::mass::mass(x).expect("mass").volume;
+    let added = volume(&b) - volume(&body);
+    assert!((added - 1015.1466).abs() < 0.01, "added {added}");
+    let fine = Quality {
+        chord: 0.001,
+        ..Default::default()
+    };
+    let mesh = tessellate(&b, &fine).expect("meshes");
+    assert!(mesh.open_edges().is_empty());
+    assert!((mesh.volume() - volume(&b)).abs() < 1e-4 * volume(&b));
+}
