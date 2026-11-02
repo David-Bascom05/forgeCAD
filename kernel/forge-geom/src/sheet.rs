@@ -24,7 +24,8 @@ pub fn apices(t: &Torus) -> [Point3; 2] {
 
 /// `r`, the answer for `t` and `other`, kept to `t`'s used sheet when `t` is a spindle: NotAnalytic
 /// when `other` passes through an apex (a branch may change sheets there, and curves cannot end at
-/// an apex vertex yet) or a curve is not one that can be sampled whole.
+/// an apex vertex yet; the search goes on to the tracer unless the apex is in its region) or a curve
+/// is not one that can be sampled whole.
 pub fn used(t: &Torus, other: &Surface, r: SurfaceSurface) -> SurfaceSurface {
     if !t.is_spindle() || matches!(r, SurfaceSurface::Empty | SurfaceSurface::NotAnalytic) {
         return r;
@@ -76,6 +77,14 @@ pub fn used_by(a: &Surface, b: &Surface, mut r: SurfaceSurface) -> SurfaceSurfac
         r = used(t, a, r);
     }
     r
+}
+
+/// Whether either is a spindle torus with the other through an apex inside `region`: the one case the
+/// tracer may not take. Its implicit, sqrt((rho - R)^2 + z^2) - r with rho not negative, vanishes on the
+/// used sheet only, so away from an apex it stays there (research/spindle-priorart).
+pub fn apex_met(a: &Surface, b: &Surface, region: &forge_math::Box3) -> bool {
+    let met = |s: &Surface, o: &Surface| matches!(s, Surface::Torus(t) if t.is_spindle() && apices(t).iter().any(|&p| region.grow(tol::LINEAR).contains(p) && o.distance(p) <= tol::LINEAR));
+    met(a, b) || met(b, a)
 }
 
 /// Whether either is a spindle torus.

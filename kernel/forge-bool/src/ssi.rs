@@ -165,13 +165,9 @@ pub fn searched_keeps(most: usize) {
 
 /// Where two surfaces with no closed form meet in `region`: by marching or tracing.
 pub fn searched(a: &Surface, b: &Surface, region: Box3) -> SurfaceSurface {
-    // of a spindle only the sheet off the axis is there: the closed forms, kept to it by a sign
-    // test (forge_geom::sheet). The tracer follows the whole quartic, so a pair it would take stays
-    // a clear refusal rather than a boolean that quietly misses (research/spindle-priorart)
-    if forge_geom::sheet::spindle_in(a, b) {
-        return forge_geom::meet::intersect(a, b, region).map_or(SurfaceSurface::NotAnalytic, |r| {
-            forge_geom::sheet::used_by(a, b, r)
-        });
+    // an apex in the region: a branch may change sheets there, and curves cannot end at one yet
+    if forge_geom::sheet::apex_met(a, b, &region) {
+        return SurfaceSurface::NotAnalytic;
     }
     if forge_geom::screw::misses(a, b, region) {
         return SurfaceSurface::Empty;
@@ -204,7 +200,11 @@ pub fn searched(a: &Surface, b: &Surface, region: Box3) -> SurfaceSurface {
 }
 
 fn search(a: &Surface, b: &Surface, region: Box3) -> SurfaceSurface {
-    let met = forge_geom::meet::intersect(a, b, region).or_else(|| forge_geom::loftmeet::meet(a, b, region));
+    // a spindle's algebra holds its other sheet too; the tracer's implicit, a distance with the
+    // axis distance not negative, vanishes on the used sheet only
+    let met = forge_geom::meet::intersect(a, b, region)
+        .map(|r| forge_geom::sheet::used_by(a, b, r))
+        .or_else(|| forge_geom::loftmeet::meet(a, b, region));
     match met {
         Some(r) if r != SurfaceSurface::NotAnalytic => r,
         _ => match forge_geom::intcurve::trace(a, b, region) {

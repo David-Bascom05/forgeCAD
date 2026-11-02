@@ -490,7 +490,7 @@ fn classify_beside_a_lemon() {
 
 /// A revolved arc ending on the axis, its centre off it: the tube of a torus reaching through its
 /// axis, centre on the arc's side (an apple) or across (a lemon, once built as a sphere, invalid).
-/// A boolean on one is refused for now: the closed forms and the tracer go round the whole tube.
+/// A boolean through its apex is refused for now: a branch may change sheets there.
 #[test]
 fn arcs_ending_on_the_axis() {
     let mass = |src: &str| {

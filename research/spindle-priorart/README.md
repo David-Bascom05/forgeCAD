@@ -142,3 +142,12 @@ curve through an apex". The tracer in (u, v) is a separate and larger job.
 - **Policy question for David:** standalone full horn tori are true pinches. Refusing them is
   consistent with "true pinches stay refused". If so, score them on the progress page as policy
   refusals, not as failures.
+
+## Later: recommendation 3 is superseded
+
+Tracer pairs need no march in the torus's (u, v). `Surface::implicit` for a torus is sqrt((rho - R)^2 + z^2) - r with
+rho = sqrt(x^2 + y^2) >= 0: in the half plane rho >= 0 its zero set is one arc of one circle, the used sheet, for either
+sign of R. The other sheet appears only when that is squared into the quartic. rho is 1-Lipschitz, so the octree's reject
+test stands; the gradient is discontinuous only on the axis. So `ssi::searched` refuses only an apex in the region
+(`sheet::apex_met`), where a branch may change sheets, and traces the rest. Barrels cut along the axis, across it and by
+slots are in interface/forge-agent/tests/spindle_cuts.rs, judged by the definition at 20000 points and a slice integral.

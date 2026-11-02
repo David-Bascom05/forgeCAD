@@ -170,3 +170,149 @@ fn spindles_cut_by_a_cylinder_along_the_axis() {
         });
     }
 }
+
+// A barrel: the lemon's arc between heights -h and h, capped flat, its apices off the part.
+const BARREL: (f64, f64, f64) = (40.0, 70.0, 30.0); // R (across the axis), r, half height
+fn barrel() -> String {
+    let (cr, r, h) = BARREL;
+    let a = dmath::asin(h / r) * 180.0 / std::f64::consts::PI;
+    let w = (r * r - h * h).sqrt() - cr;
+    format!(
+        "revolve xz axis y loop arc {} 0 {r} {} {} line {w} {h} 0 {h} line 0 {h} 0 {} line 0 {} {w} {}\n",
+        -cr,
+        -a,
+        2.0 * a,
+        -h,
+        -h,
+        -h
+    )
+}
+fn in_barrel(p: Point3) -> bool {
+    let (cr, r, h) = BARREL;
+    p.z.abs() < h && (p.x * p.x + p.y * p.y).sqrt() < (r * r - p.z * p.z).sqrt() - cr
+}
+fn barrel_agrees(src: &str, kept: impl Fn(Point3) -> bool) -> f64 {
+    let mut m = Model::new(src);
+    assert!(m.error.is_none(), "{:?}", m.error.as_ref().map(|e| &e.msg));
+    let b = m.body().expect("a body");
+    assert!(forge_topo::check(b).is_empty(), "{:?}", forge_topo::check(b));
+    let ix = Index::new(b);
+    let (mut seed, mut bad, mut n) = (0x9E37_79B9_7F4A_7C15u64, Vec::new(), 0);
+    let mut next = || {
+        seed ^= seed << 13;
+        seed ^= seed >> 7;
+        seed ^= seed << 17;
+        (seed >> 11) as f64 / (1u64 << 53) as f64
+    };
+    for _ in 0..20000 {
+        let p = Point3::new(70.0 * next() - 35.0, 70.0 * next() - 35.0, 70.0 * next() - 35.0);
+        let want = in_barrel(p) && kept(p);
+        let h = 1e-6;
+        let firm = [-h, h].iter().all(|&e| {
+            [
+                Point3::new(p.x + e, p.y, p.z),
+                Point3::new(p.x, p.y + e, p.z),
+                Point3::new(p.x, p.y, p.z + e),
+            ]
+            .iter()
+            .all(|&q| (in_barrel(q) && kept(q)) == want)
+        });
+        let got = ix.classify(p);
+        n += 1;
+        if firm && got != Where::On && (got == Where::Inside) != want {
+            bad.push(p);
+        }
+    }
+    assert!(
+        bad.is_empty(),
+        "{} of {n} disagree, first {:?}",
+        bad.len(),
+        bad.first()
+    );
+    m.mass().expect("a mass").volume
+}
+/// Barrel on y < c: integral over z of the area of the disc of radius a(z) with y < c.
+fn barrel_below(c: f64) -> f64 {
+    let (cr, r, h) = BARREL;
+    let n = 20000;
+    let seg = |z: f64| {
+        let a = (r * r - z * z).sqrt() - cr;
+        if c >= a {
+            return std::f64::consts::PI * a * a;
+        }
+        if c <= -a {
+            return 0.0;
+        }
+        // the disc's part below y = c
+        a * a * (std::f64::consts::PI - dmath::acos(c / a)) + c * (a * a - c * c).sqrt()
+    };
+    let d = 2.0 * h / n as f64;
+    (0..=n)
+        .map(|i| {
+            seg(-h + d * i as f64)
+                * if i == 0 || i == n {
+                    1.0
+                } else if i % 2 == 1 {
+                    4.0
+                } else {
+                    2.0
+                }
+        })
+        .sum::<f64>()
+        * d
+        / 3.0
+}
+#[test]
+fn a_barrel_cut_by_planes_along_its_axis() {
+    // through the axis, near it, across it, and tangent to the waist of the arc
+    let (cr, r, _) = BARREL;
+    for c in [0.0, 1e-3, 3.0, -6.0, 20.0, 29.5, r - cr - 1e-3] {
+        let src = barrel() + &format!("extrude cut {} xz at 0 50 0 rect -50 -50 100 100\n", 50.0 - c);
+        let v = barrel_agrees(&src, |p| p.y < c);
+        let e = barrel_below(c);
+        assert!((v - e).abs() < 1e-5 * e, "{c}: {v} {e}");
+    }
+}
+#[test]
+fn a_barrel_with_a_slot_and_a_cross_hole() {
+    let src = barrel() + "extrude cut 100 xz at 0 50 0 rect -5 -40 10 80\n";
+    barrel_agrees(&src, |p| p.x.abs() > 5.0);
+    let src = barrel() + "extrude cut 100 xz at 0 50 8 circle 0 0 6\n";
+    barrel_agrees(&src, |p| (p.x * p.x + (p.z - 8.0) * (p.z - 8.0)).sqrt() > 6.0);
+    let src = barrel() + "extrude cut 100 xz at 11 50 8 circle 0 0 6\n";
+    barrel_agrees(&src, |p| {
+        ((p.x - 11.0) * (p.x - 11.0) + (p.z - 8.0) * (p.z - 8.0)).sqrt() > 6.0
+    });
+}
+
+#[test]
+fn spindles_cut_by_planes_just_off_an_apex() {
+    for lemon in [true, false] {
+        for c in [1.0, 0.1, 0.01, 1e-3, 1e-4, -1e-3] {
+            let src =
+                spindle(lemon) + &format!("extrude cut {} xz at 0 50 0 rect -50 -50 100 100\n", 50.0 - c);
+            agrees(&src, lemon, |p| p.y < c);
+        }
+    }
+}
+
+/// A barrel against a smooth loft running in through its side, the pair only the tracer can do:
+/// what the two make together and what they share add up to the two alone.
+#[test]
+fn a_barrel_and_a_loft_add_up() {
+    let arm = "smooth profile yz at -5 0 3 circle 0 0 7 profile yz at 25 0 6 circle 0 0 6 profile yz at 70 0 9 circle 0 0 5\n";
+    let mass = |src: String| {
+        let mut m = Model::new(&src);
+        assert!(m.error.is_none(), "{:?}", m.error.as_ref().map(|e| &e.msg));
+        assert!(forge_topo::check(m.body().expect("a body")).is_empty());
+        m.mass().expect("a mass").volume
+    };
+    let a = mass(barrel());
+    let b = mass(format!("loft {arm}"));
+    let or = mass(barrel() + &format!("loft add {arm}"));
+    let and = mass(barrel() + &format!("loft keep {arm}"));
+    let less = mass(barrel() + &format!("loft cut {arm}"));
+    assert!((or + and - a - b).abs() < 1e-6 * (a + b), "{or} {and} {a} {b}");
+    assert!((less + and - a).abs() < 1e-6 * a, "{less} {and} {a}");
+    assert!(and > 0.0 && and < b && less < a);
+}
