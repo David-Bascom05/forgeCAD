@@ -1192,8 +1192,10 @@ fn coedge_pieces<'a>(
         }
         curve => {
             // a whole circle or ellipse: one piece round its period
+            // (not on a procedural surface: its parameters round the curve need not be near trigonometric)
             let whole = matches!(curve, Curve::Circle(_) | Curve::Ellipse(_))
-                && range.width() >= dmath::TAU * (1.0 - 1e-12);
+                && range.width() >= dmath::TAU * (1.0 - 1e-12)
+                && !matches!(s, Surface::Procedural(_));
             let k = match curve {
                 _ if whole => 1.0,
                 Curve::Circle(_) | Curve::Ellipse(_) => (range.width() / dmath::FRAC_PI_2).ceil().max(1.0),

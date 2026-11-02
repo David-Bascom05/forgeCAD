@@ -1068,3 +1068,37 @@ fn a_mitred_wall_past_a_lofts_end_is_all_in_the_file() {
     let file = forge_step::write::export(b, &forge_step::write::Options::default()).unwrap();
     assert!(file.uncertainty < 2e-3, "{}", file.uncertainty);
 }
+
+/// A round between two discs a little off centre from each other: its blend runs on a traced spine,
+/// and the circle on its foot goes round the blend's parameter unevenly. Its mass has to settle.
+#[test]
+fn a_round_between_eccentric_discs_has_its_mass() {
+    let m = Model::new(
+        "extrude 0.125 at -0.3127 0 0 circle 0.316 0 0.316\n\
+         extrude add 0.03 at -0.3751 0 0 circle 0.379 0 0.379\n\
+         fillet 0.0625 (edges concave)\n",
+    );
+    assert!(m.error.is_none(), "{:?}", m.error.as_ref().map(|e| &e.msg));
+    let b = m.body().expect("a body");
+    let got = forge_topo::mass::mass(b).expect("a mass");
+    // the loop's closure reports how far the rules round the circle miss the turn
+    assert!(got.err[0] < 1e-4 * got.volume, "{} of {}", got.err[0], got.volume);
+    let q = Quality {
+        chord: 0.0001,
+        ..Quality::default()
+    };
+    let mesh = tessellate(b, &q).unwrap();
+    let meshed: f64 = mesh
+        .triangles
+        .iter()
+        .map(|t| {
+            let [p, r, s] = t.map(|i| mesh.positions[i as usize].to_vec());
+            p.dot(r.cross(s)) / 6.0
+        })
+        .sum();
+    assert!(
+        (got.volume - meshed).abs() < 1e-3 * got.volume,
+        "{} {meshed}",
+        got.volume
+    );
+}
