@@ -4463,6 +4463,8 @@ impl Builder {
                 .loops
                 .iter()
                 .flat_map(|&l| body.lp(l).coedges())
+                // an edge whose box is too far off needs no search along it
+                .filter(|&c| body.edge_box(body.coedge(c).edge).grow(0.05 * r).contains(q))
                 .map(|c| {
                     let e = body.edge(body.coedge(c).edge);
                     (e.curve.eval(e.curve.closest(q, e.range)).distance(q), c)

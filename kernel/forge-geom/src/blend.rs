@@ -12,7 +12,7 @@ use crate::smooth::ChordCurve;
 use crate::surface::{Cylinder, Domain2, Plane, Proc, Procedural, SurfDeriv, Surface, SurfaceGeom, Torus};
 use crate::varblend::VarBlend;
 use forge_math::{Box2, Box3, Frame, Interval, Point2, Point3, UnitVec3, Vec2, Vec3, dmath, tol};
-use std::sync::{Arc, OnceLock};
+use std::sync::{Arc, Mutex, OnceLock};
 
 /// The surface moved by `d` along its natural normal, where that is the same
 /// kind of surface (None where the offset collapses or self-intersects).
@@ -730,6 +730,7 @@ impl Blend {
             on,
             smooth: OnceLock::new(),
             samples: OnceLock::new(),
+            scan: Default::default(),
         })))
     }
 }
@@ -787,6 +788,9 @@ pub struct Spring {
     smooth: OnceLock<Option<(Curve, Arc<ChordCurve>)>>,
     /// Points along the whole spring with their parameters, made on first use (`can_cross`).
     samples: OnceLock<Vec<(f64, Point3)>>,
+    /// The points `closest` last scanned, and over what: finding where two curves cross asks again
+    /// and again over one range, and each of these points is a search on the surfaces.
+    scan: Mutex<Option<(Interval, Arc<[Point3]>)>>,
 }
 
 impl Spring {
@@ -801,6 +805,7 @@ impl Spring {
                 on: None,
                 smooth: OnceLock::new(),
                 samples: OnceLock::new(),
+                scan: Default::default(),
             },
         })))
     }
@@ -940,6 +945,22 @@ impl Spring {
         Some(out)
     }
 
+    /// Evenly spaced points over `range`, as many as its bend asks for, within limits.
+    fn scanned(&self, range: Interval) -> Arc<[Point3]> {
+        if let Some((r, points)) = &*self.scan.lock().unwrap()
+            && r.lo.to_bits() == range.lo.to_bits()
+            && r.hi.to_bits() == range.hi.to_bits()
+        {
+            return points.clone();
+        }
+        let n = self.segments(range, 1e-2).clamp(16, 256);
+        let points: Arc<[Point3]> = (0..=n)
+            .map(|i| self.at((range.lo + range.width() * i as f64 / n as f64).min(range.hi)))
+            .collect();
+        *self.scan.lock().unwrap() = Some((range, points.clone()));
+        points
+    }
+
     fn at(&self, t: f64) -> Point3 {
         foot(&self.surface, self.d, self.spine.eval(t))
     }
@@ -1001,6 +1022,7 @@ impl ProceduralCurve for Spring {
                     on: self.on.as_ref().map(|(s, v)| (s.smooth().clone(), *v)),
                     smooth: OnceLock::new(),
                     samples: OnceLock::new(),
+                    scan: Default::default(),
                 })));
                 Some((twin, c))
             })
@@ -1016,11 +1038,12 @@ impl ProceduralCurve for Spring {
         self.spine.domain()
     }
     fn closest(&self, p: Point3, range: Interval) -> f64 {
-        let n = self.segments(range, 1e-2).clamp(16, 256);
+        let points = self.scanned(range);
+        let n = points.len() - 1;
         let at = |i: usize| (range.lo + range.width() * i as f64 / n as f64).min(range.hi);
         let mut best = (f64::INFINITY, 0);
-        for i in 0..=n {
-            let d = self.at(at(i)).distance_sq(p);
+        for (i, q) in points.iter().enumerate() {
+            let d = q.distance_sq(p);
             if d < best.0 {
                 best = (d, i);
             }
@@ -1064,6 +1087,7 @@ impl ProceduralCurve for Spring {
             on: None,
             smooth: OnceLock::new(),
             samples: OnceLock::new(),
+            scan: Default::default(),
         }))
     }
     fn speed_bound(&self, range: Interval) -> f64 {
@@ -1167,6 +1191,7 @@ impl Procedural for Fence {
                 on: None,
                 smooth: OnceLock::new(),
                 samples: OnceLock::new(),
+                scan: Default::default(),
             },
         }))
     }
