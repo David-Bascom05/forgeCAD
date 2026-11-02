@@ -124,7 +124,13 @@ fn gaps(before: &Body, after: &Body, own: FaceId, new: &[FaceId], c: Point3, r: 
         }
         let s = &before.face(f).surface;
         let foot = s.eval(s.project(c));
-        out.push((foot.distance(c) - r).abs());
+        // past a loft wall's carried-on box its distance is to the tangent there, which a mitre's
+        // blend rests on where it runs on beyond the wall's corner
+        let beyond = match s {
+            Surface::Procedural(_) => (s.implicit(c).abs() - r).abs(),
+            _ => f64::INFINITY,
+        };
+        out.push((foot.distance(c) - r).abs().min(beyond));
     }
     for e in before.edge_ids() {
         if !before.edge_box(e).overlaps(&reach) {

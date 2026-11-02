@@ -75,3 +75,8 @@ Rounds meeting at a ridge where no ball rests on both outer faces: exact on CADF
 rounded rim and a boss standing over it, on a grid (`rustc -O closing.rs; closing 3 40 12 5 0.08`, args rim radius, boss
 y, boss radius, ball radius, step). It gave 1100.8 mm3 at step 0.08 against 1101.83 from the kernel's exact mass; the
 result moves with how the radius falls on the grid at coarser steps. No kernel code is shared.
+
+`closing_rib.rs` is the same for a rib on a cone (`closing_rib 2 0.08`, args ball radius, step). The closing's noise at these
+steps is about 2%, from how the radius falls on the grid, and it stands about 1.5% high: over 8 steps it gave 1118.7 against
+1101.83 exact on the first scene, and over 7 steps 840.1 against 829.65 on the narrower rim. These are what the numbers in
+`fillet_strips.rs` were held against.

@@ -2030,6 +2030,24 @@ fn foot_on(body: &Body, l: &Local, s: usize, q: Point3) -> bool {
     surface.eval(surface.project(q)).distance(q) > tol::LINEAR || on_face(body, f, q)
 }
 
+/// Whether point `p` lies within face `f`, seen from its surface: a foot just off a face is on the
+/// face beyond a smooth edge, whichever surface it was worked out on.
+fn in_face(body: &Body, f: FaceId, p: Point3) -> bool {
+    let surface = &body.face(f).surface;
+    let loops = forge_topo::uv::face_uv_loops(body, f);
+    let d = surface.domain();
+    let uv = surface.project(p);
+    let shifts = |p: Option<f64>| match p {
+        Some(p) => vec![0.0, -p, p],
+        None => vec![0.0],
+    };
+    shifts(d.u.period).iter().any(|&du| {
+        shifts(d.v.period)
+            .iter()
+            .any(|&dv| forge_topo::uv::point_in_loops(forge_math::Point2::new(uv.x + du, uv.y + dv), &loops))
+    })
+}
+
 /// Whether point `p` (on or near face `f`'s surface) lies within the face.
 fn on_face(body: &Body, f: FaceId, p: Point3) -> bool {
     let loops = forge_topo::uv::face_uv_loops(body, f);
@@ -2757,8 +2775,19 @@ impl Builder {
                     (self.trims, self.paths, self.g_ends) = saved.clone();
                     self.unsure = true;
                     self.joint(v, &ring, b, a).or_else(|_| {
-                        (self.trims, self.paths, self.g_ends) = saved;
-                        self.strip_joint(v, &ring, a, b).map_err(|_| e)
+                        (self.trims, self.paths, self.g_ends) = saved.clone();
+                        let more = (
+                            self.dropped.clone(),
+                            self.extra.clone(),
+                            self.rechain.clone(),
+                            self.patches.len(),
+                        );
+                        self.walk_joint(v, &ring, a, b).or_else(|_| {
+                            (self.trims, self.paths, self.g_ends) = saved;
+                            (self.dropped, self.extra, self.rechain) = (more.0, more.1, more.2);
+                            self.patches.truncate(more.3);
+                            self.walk_joint(v, &ring, b, a).map_err(|_| e)
+                        })
                     })
                 })
             }
@@ -3820,169 +3849,398 @@ impl Builder {
         Ok(())
     }
 
-    /// Two blends of a chain at `v`, a smooth edge between their faces there, where one blend rests
-    /// on the face it comes from and the other past its strip, beyond the strip's far smooth edge:
-    /// their balls differ. Between them the ball rolls on the strip itself, with no edge of its own
-    /// under it (a boss's foot running from a wall over a rounded rim onto the top, the rim's round
-    /// reached only by a ball wider than it). That stretch is a face of its own, from the section where
-    /// the first spring crosses the smooth edge at `v` to the one where the second crosses the far one.
-    fn strip_joint(&mut self, v: VertexId, ring: &[Corner], a: usize, b: usize) -> R<()> {
+    /// Two blends of a chain at `v` whose balls differ there: what the ball rests on changes along
+    /// the chain at sections with no relation to its vertices. It is walked from the middle of `ia`'s
+    /// blend towards `ib`'s: wherever a foot leaves its face over a smooth edge, the ball goes on over
+    /// the face beyond, until it rests on what `ib`'s blend rests on. Each stretch between two of
+    /// these sections that no edge runs under is a face of its own. What lies under them goes: from `v`
+    /// outwards, each edge is cut where a foot crossed it, or goes whole with its far end looked at
+    /// in turn.
+    fn walk_joint(&mut self, v: VertexId, ring: &[Corner], ia: usize, ib: usize) -> R<()> {
         let err = FilletError::Corner { vertex: v };
-        if ring.len() != 3 {
-            return Err(err);
-        }
-        // ring order: ia, then the smooth edge's corner, then ib
-        let (ia, ib) = if (a + 2) % 3 == b { (a, b) } else { (b, a) };
-        let mid_corner = (ia + 1) % 3;
+        let k = ring.len();
         let (ra, rb) = (
             self.filleted(ring[ia].cin).ok_or(err.clone())?,
             self.filleted(ring[ib].cin).ok_or(err.clone())?,
         );
-        let (sa, sb) = (self.side(ring[ia].cin), self.side(ring[mid_corner].cout));
-        let g1c = ring[mid_corner].cin;
+        let sa = self.side(ring[ia].cin);
+        let sb = self.side(ring[(ib + k - 1) % k].cout);
         let plain = |r: &Rolled| r.var.is_none() && r.cliff.is_none();
         if !plain(&self.rolled[ra]) || !plain(&self.rolled[rb]) {
             return Err(err);
         }
-        if self.rolled[ra].over[1 - sa].is_some() || self.rolled[rb].over[1 - sb].is_some() {
+        let r = self.rolled[ra].blend.radius;
+        if (self.rolled[rb].blend.radius - r).abs() > tol::LINEAR {
             return Err(err);
         }
-        // which blend rests past its strip: `up` its strip comes after the smooth edge in the ring
-        let (up, (rs, ss), (ro, so)) = match (self.rolled[ra].over[sa], self.rolled[rb].over[sb]) {
-            (None, Some(_)) => (true, (ra, sa), (rb, sb)),
-            (Some(_), None) => (false, (rb, sb), (ra, sa)),
-            _ => return Err(err),
-        };
-        let (_, g2) = self.rolled[ro].over[so].ok_or(err.clone())?;
+        let (ea, eb) = (self.rolled[ra].edge, self.rolled[rb].edge);
         let vp = self.body.vertex(v).point;
-        let (es, eo) = (self.rolled[rs].edge, self.rolled[ro].edge);
-        let r = self.rolled[rs].blend.radius;
-        if (self.rolled[ro].blend.radius - r).abs() > tol::LINEAR {
-            return Err(err);
-        }
-        let g1 = self.body.edge(self.body.coedge(g1c).edge).clone();
-        let ts0 = spine_closest(&self.rolled[rs].blend.spine, vp);
-        let t1 = crossing(&self.rolled[rs].springs[ss], ts0, &g1.curve, g1.range).ok_or(err.clone())?;
-        let c1 = self.rolled[rs].blend.spine.eval(t1);
-        let foot1 = self.rolled[rs].springs[ss].eval(t1);
-        let x1 = self.rolled[rs].springs[1 - ss].eval(t1);
-        let g2x = self.body.edge(g2).clone();
-        let to0 = spine_closest(&self.rolled[ro].blend.spine, c1);
-        let t2 = crossing(&self.rolled[ro].springs[so], to0, &g2x.curve, g2x.range).ok_or(err.clone())?;
-        let c2 = self.rolled[ro].blend.spine.eval(t2);
-        let foot2 = self.rolled[ro].springs[so].eval(t2);
-        let x2 = self.rolled[ro].springs[1 - so].eval(t2);
-        // the ball on the strip and the face all these rest on
-        let l = local(&self.body, eo, r, self.body.edge(eo).range.mid())?;
-        let (strip, far) = (l.faces[so], l.faces[1 - so]);
-        let region = self
-            .body
-            .edge_box(es)
-            .hull(&self.body.edge_box(eo))
-            .grow(4.0 * r + c1.distance(c2) + tol::LINEAR);
-        let blend = Blend::new(
-            &self.body.face(strip).surface,
-            &self.body.face(far).surface,
-            l.sign[so] * r,
-            l.sign[1 - so] * r,
-            c1,
-            region,
-        )
-        .ok_or(err.clone())?;
-        let tc1 = spine_closest(&blend.spine, c1);
-        // the short way between the sections, round a closed spine
-        let tc2 = tc1 + along(spine_closest(&blend.spine, c2) - tc1, blend.spine.domain().period);
-        let (on_strip, on_far) = (
-            blend.spring(true).ok_or(err.clone())?,
-            blend.spring(false).ok_or(err.clone())?,
-        );
-        for (q, w) in [
-            (blend.spine.eval(tc1), c1),
-            (blend.spine.eval(tc2), c2),
-            (on_strip.eval(tc1), foot1),
-            (on_strip.eval(tc2), foot2),
-            (on_far.eval(tc1), x1),
-            (on_far.eval(tc2), x2),
-        ] {
-            if q.distance(w) > tol::LINEAR {
+        let body = &self.body;
+        let sense = |f: FaceId| if body.face(f).same_sense { 1.0 } else { -1.0 };
+        // per side of a's blend: the face under the foot, and which way the surface's offset runs
+        let on = |ro: &Rolled, s: usize| ro.over[s].map_or(ro.faces[s], |o| o.0);
+        let mut faces = [on(&self.rolled[ra], 0), on(&self.rolled[ra], 1)];
+        let mut off = [self.rolled[ra].blend.da, self.rolled[ra].blend.db];
+        // a's side i against b's
+        let b_side = |i: usize| if i == sa { sb } else { 1 - sb };
+        let want = [on(&self.rolled[rb], b_side(0)), on(&self.rolled[rb], b_side(1))];
+        let reach = 8.0 * r + body.edge_box(ea).hull(&body.edge_box(eb)).diagonal();
+        let region = body.edge_box(ea).hull(&body.edge_box(eb)).grow(reach);
+        let mut blend = self.rolled[ra].blend.clone();
+        let mut springs = self.rolled[ra].springs.clone();
+        let x = body.edge(ea);
+        let mut t = spine_closest(&blend.spine, x.curve.eval(x.range.mid()));
+        let t_v = spine_closest(&blend.spine, vp);
+        let mut up = along(t_v - t, blend.spine.domain().period) >= 0.0;
+        // the stretches: each its blend, springs, and parameters from its start section to its end
+        let mut stretches: Vec<(Blend, [Curve; 2], f64, f64)> = Vec::new();
+        // the sections' (t on the stretch before, and the crossing it made: side, coedge, foot)
+        let mut crossed: Vec<(EdgeId, CoedgeId, usize, Point3)> = Vec::new();
+        let mut t_start = t;
+        let mut walked = 0.0;
+        for _ in 0..16 {
+            if faces == want {
+                break;
+            }
+            // first foot off its face, going on from t
+            let speed = blend.spine.deriv(t).d1.length().max(1e-12);
+            let dt = (0.125 * r / speed) * if up { 1.0 } else { -1.0 };
+            let foot_off = |t: f64| (0..2).find(|&i| !in_face(body, faces[i], springs[i].eval(t)));
+            // (a foot that has just crossed lies on the edge between)
+            if crossed.is_empty() && foot_off(t).is_some() {
                 return Err(err);
             }
+            let mut hit = None;
+            let (mut lo, mut u) = (t, t);
+            while walked < reach {
+                let n = u + dt;
+                if foot_off(n).is_some() {
+                    hit = Some(n);
+                    break;
+                }
+                walked += 0.125 * r;
+                (lo, u) = (n, n);
+            }
+            let mut hi = hit.ok_or(err.clone())?;
+            for _ in 0..48 {
+                let m = 0.5 * (lo + hi);
+                if foot_off(m).is_some() {
+                    hi = m;
+                } else {
+                    lo = m;
+                }
+            }
+            let i = foot_off(hi).ok_or(err.clone())?;
+            let q = springs[i].eval(hi);
+            // the edge it left over, and exactly where: of the edges there, the one with the face
+            // the foot goes on over (near a vertex of several faces, not always the nearest)
+            let ahead = springs[i].eval(hi + 0.25 * dt);
+            let mut edges: Vec<(f64, CoedgeId)> = body
+                .face(faces[i])
+                .loops
+                .iter()
+                .flat_map(|&l| body.lp(l).coedges())
+                .map(|c| {
+                    let e = body.edge(body.coedge(c).edge);
+                    (e.curve.eval(e.curve.closest(q, e.range)).distance(q), c)
+                })
+                .filter(|x| x.0 <= 1e-3 * r)
+                .collect();
+            edges.sort_by(|a, b| a.0.total_cmp(&b.0));
+            let (_, c) = edges
+                .iter()
+                .copied()
+                .find(|x| {
+                    body.partner(x.1)
+                        .is_some_and(|p| in_face(body, body.coedge_face(p), ahead))
+                })
+                .ok_or(err.clone())?;
+            let g = body.coedge(c).edge;
+            let gx = body.edge(g);
+            let at = crossing(&springs[i], hi, &gx.curve, gx.range).unwrap_or(hi);
+            let foot = springs[i].eval(at);
+            if gx.curve.eval(gx.curve.closest(foot, gx.range)).distance(foot) > tol::LINEAR {
+                return Err(err);
+            }
+            let across = body.coedge_face(body.partner(c).ok_or(err.clone())?);
+            let normal = |f: FaceId| body.face_normal(f, body.face(f).surface.project(foot));
+            let (n0, n1) = normal(faces[i]).zip(normal(across)).ok_or(err.clone())?;
+            if n0.cross(n1).length() * r > tol::LINEAR || n0.dot(n1.get()) <= 0.0 {
+                return Err(err);
+            }
+            let centre = blend.spine.eval(at);
+            let tangent = blend.spine.deriv(at).d1;
+            stretches.push((blend.clone(), springs.clone(), t_start, at));
+            crossed.push((g, c, i, foot));
+            off[i] *= sense(faces[i]) * sense(across);
+            faces[i] = across;
+            let s = |f: FaceId| &body.face(f).surface;
+            blend =
+                Blend::new(s(faces[0]), s(faces[1]), off[0], off[1], centre, region).ok_or(err.clone())?;
+            springs = [
+                blend.spring(true).ok_or(err.clone())?,
+                blend.spring(false).ok_or(err.clone())?,
+            ];
+            t = spine_closest(&blend.spine, centre);
+            if blend.spine.eval(t).distance(centre) > tol::LINEAR {
+                return Err(err);
+            }
+            up = blend.spine.deriv(t).d1.dot(tangent) > 0.0;
+            t_start = t;
         }
-        let (ns, no) = (self.rolled[rs].base, self.rolled[ro].base);
-        let vname = self.body.vertex(v).name;
+        if faces != want {
+            return Err(err);
+        }
+        // the edgeless stretches traced again, each over its own length: a trace's accuracy goes
+        // with the size of the region it was asked about
+        for s in stretches.iter_mut().skip(1) {
+            let (c0, c1) = (s.0.spine.eval(s.2), s.0.spine.eval(s.3));
+            let tight = Box3::from_points([c0, c1]).grow(4.0 * r + tol::LINEAR);
+            let b = Blend::new(&s.0.a, &s.0.b, s.0.da, s.0.db, c0, tight).ok_or(err.clone())?;
+            let t0 = spine_closest(&b.spine, c0);
+            let t1 = t0 + along(spine_closest(&b.spine, c1) - t0, b.spine.domain().period);
+            if b.spine.eval(t0).distance(c0) > tol::LINEAR || b.spine.eval(t1).distance(c1) > tol::LINEAR {
+                return Err(err);
+            }
+            let sp = [
+                b.spring(true).ok_or(err.clone())?,
+                b.spring(false).ok_or(err.clone())?,
+            ];
+            *s = (b, sp, t0, t1);
+        }
+        // where the last stretch hands over to b's blend; with no crossing, at the vertex
+        let last = crossed.len();
+        let at_b = if last == 0 {
+            blend.spine.eval(t_v)
+        } else {
+            blend.spine.eval(t)
+        };
+        let tb = spine_closest(&self.rolled[rb].blend.spine, at_b);
+        if self.rolled[rb].blend.spine.eval(tb).distance(at_b) > tol::LINEAR {
+            return Err(err);
+        }
+        // the sections, in order: (blend on its start side, t on it, its two feet by a's side)
+        let n_sec = last.max(1);
+        let sec_of = |j: usize| -> (&Blend, f64, &[Curve; 2]) {
+            if last == 0 {
+                (&self.rolled[ra].blend, t_v, &self.rolled[ra].springs)
+            } else {
+                let s = &stretches[j];
+                (&s.0, s.3, &s.1)
+            }
+        };
         let name = self
             .root
-            .with_str("strip")
-            .with_name(vname)
-            .with_name(ns)
-            .with_name(no);
-        let (p1v, x1v, p2v, x2v) = (
-            self.body.add_vertex(foot1, name.with_str("p1")),
-            self.body.add_vertex(x1, name.with_str("x1")),
-            self.body.add_vertex(foot2, name.with_str("p2")),
-            self.body.add_vertex(x2, name.with_str("x2")),
-        );
-        self.trim(g1c, foot1, p1v, es, None)?;
-        let tg2 = g2x.curve.closest(foot2, g2x.range);
-        self.g_ends.entry((ro, so)).or_default().push(GEnd::Cut(tg2, p2v));
-        let spring_p = self.edge_between(on_strip.clone(), tc1, tc2, p1v, p2v, name.with_str("sp"));
-        let spring_x = self.edge_between(on_far.clone(), tc1, tc2, x1v, x2v, name.with_str("sx"));
-        let (c, angle) = blend.section(tc1).ok_or(err.clone())?;
-        let sec1 = self.body.add_edge(
-            Curve::Circle(c),
-            Interval::new(0.0, angle),
-            p1v,
-            x1v,
-            name.with_str("s1"),
-        );
-        let (c, angle) = blend.section(tc2).ok_or(err.clone())?;
-        let sec2 = self.body.add_edge(
-            Curve::Circle(c),
-            Interval::new(0.0, angle),
-            p2v,
-            x2v,
-            name.with_str("s2"),
-        );
-        let rev = |u: (EdgeId, bool)| (u.0, !u.1);
-        // the faces' walks and the patch's, opposite
-        let surface = blend.surface.clone();
-        let same_sense = self.rolled[ro].convex;
-        let uses = if up {
-            self.paths.insert(g1c, vec![spring_p]);
-            self.paths.insert(ring[ib].cin, vec![rev(spring_x)]);
-            vec![rev(spring_p), (sec1, true), spring_x, (sec2, false)]
-        } else {
-            self.paths.insert(ring[ia].cin, vec![rev(spring_p)]);
-            self.paths.insert(ring[ib].cin, vec![spring_x]);
-            vec![spring_p, (sec2, true), rev(spring_x), (sec1, false)]
+            .with_str("walk")
+            .with_name(body.vertex(v).name)
+            .with_name(self.rolled[ra].base)
+            .with_name(self.rolled[rb].base);
+        let mut plan: Vec<([Point3; 2], (forge_geom::Circle, f64))> = Vec::with_capacity(n_sec);
+        for j in 0..n_sec {
+            let (b, u, sp) = sec_of(j);
+            // the section as the stretch with no edge of its own traces it, so that it lies on that
+            // stretch's face, which has only its own trace to answer to
+            let own = if j >= 1 {
+                Some((&stretches[j].0, stretches[j].3))
+            } else if last > 1 {
+                Some((&stretches[1].0, stretches[1].2))
+            } else {
+                None
+            };
+            let (from, at) = own.unwrap_or((b, u));
+            plan.push((
+                [sp[0].eval(u), sp[1].eval(u)],
+                from.section(at).ok_or(err.clone())?,
+            ));
+        }
+        let mut nodes: Vec<[VertexId; 2]> = Vec::with_capacity(n_sec);
+        let mut secs = Vec::with_capacity(n_sec);
+        for (j, (feet, (circle, angle))) in plan.into_iter().enumerate() {
+            let n = name.with(j as u64);
+            let v0 = self.body.add_vertex(feet[0], n.with_str("a"));
+            let v1 = self.body.add_vertex(feet[1], n.with_str("b"));
+            let e = self.body.add_edge(
+                Curve::Circle(circle),
+                Interval::new(0.0, angle),
+                v0,
+                v1,
+                n.with_str("s"),
+            );
+            nodes.push([v0, v1]);
+            secs.push(e);
+        }
+        let px = sa;
+        let p_to_x = sa == 0;
+        // the stretches between sections: faces walk their springs, a patch takes the blend
+        for j in 1..last {
+            let (b, sp, _, t1) = &stretches[j];
+            let t0 = stretches[j].2;
+            let (fp, fx) = (
+                self.stretch_face(&crossed, j, px, ra),
+                self.stretch_face(&crossed, j, 1 - px, ra),
+            );
+            let n = name.with(j as u64);
+            let (sc, surface) = (sp.clone(), b.surface.clone());
+            let wp = self.edge_between(
+                sc[px].clone(),
+                t0,
+                *t1,
+                nodes[j - 1][px],
+                nodes[j][px],
+                n.with_str("p"),
+            );
+            let wx = self.edge_between(
+                sc[1 - px].clone(),
+                t0,
+                *t1,
+                nodes[j - 1][1 - px],
+                nodes[j][1 - px],
+                n.with_str("x"),
+            );
+            self.extra.entry(fp).or_default().push(wp);
+            self.extra.entry(fx).or_default().push((wx.0, !wx.1));
+            self.rechain.insert(fp);
+            self.rechain.insert(fx);
+            self.touched.insert(fp);
+            self.touched.insert(fx);
+            let uses = vec![(wp.0, !wp.1), (secs[j - 1], p_to_x), wx, (secs[j], !p_to_x)];
+            let convex = self.rolled[ra].convex;
+            self.patches.push((surface, convex, n.with_str("patch"), uses));
+        }
+        // the blends' ends
+        let t_a = if last == 0 { t_v } else { stretches[0].3 };
+        let mut end_a = SpringEnd {
+            v: [v; 2],
+            t: [t_a; 2],
+            path: vec![(secs[0], !p_to_x)],
         };
-        self.rechain.insert(strip);
-        self.touched.insert(strip);
-        self.touched.insert(far);
+        end_a.v[sa] = nodes[0][sa];
+        end_a.v[1 - sa] = nodes[0][1 - sa];
+        let mut end_b = SpringEnd {
+            v: [v; 2],
+            t: [tb; 2],
+            path: vec![(secs[n_sec - 1], p_to_x)],
+        };
+        end_b.v[sb] = nodes[n_sec - 1][sa];
+        end_b.v[1 - sb] = nodes[n_sec - 1][1 - sa];
+        self.ends.insert((ea, self.arrives_at_end(ring[ia].cin)), end_a);
+        self.ends.insert((eb, self.arrives_at_end(ring[ib].cin)), end_b);
+        let rests: Vec<((usize, usize), EdgeId)> = [(ra, 0), (ra, 1), (rb, 0), (rb, 1)]
+            .into_iter()
+            .filter_map(|(ri, s)| self.rolled[ri].over[s].map(|o| ((ri, s), o.1)))
+            .collect();
+        let mut ended: BTreeSet<(usize, usize)> = BTreeSet::new();
+        let spines: Vec<Curve> = stretches
+            .iter()
+            .map(|x| x.0.spine.clone())
+            .chain([
+                self.rolled[ra].blend.spine.clone(),
+                self.rolled[rb].blend.spine.clone(),
+            ])
+            .collect();
+        // a point the ball passes over
+        let under = |q: Point3| {
+            spines
+                .iter()
+                .any(|sp| sp.eval(spine_closest(sp, q)).distance(q) <= 2.0 * r)
+        };
+        // each edge a foot crossed is cut there, what lies behind the foot going: a face walks the
+        // springs on its P side from a to b, and on its X side from b to a
+        let mut queue = vec![ring[0].cin];
+        let mut seen = BTreeSet::from([v]);
+        let mut cut = BTreeSet::new();
+        for (j, &(g, c, i, foot)) in crossed.iter().enumerate() {
+            let node = nodes[j][i];
+            let behind = if i == px {
+                self.body.partner(c).ok_or(err.clone())?
+            } else {
+                c
+            };
+            cut.insert(g);
+            for &(rs, _) in rests.iter().filter(|x| x.1 == g) {
+                let x = self.body.edge(g);
+                let t = x.curve.closest(foot, x.range);
+                self.g_ends.entry(rs).or_default().push(GEnd::Cut(t, node));
+                ended.insert(rs);
+            }
+            if rests.iter().all(|x| x.1 != g) {
+                self.trim(behind, foot, node, ea, None)?;
+            }
+            // (an edge cut twice runs on behind this foot to the other cut, not to its own end)
+            if under(self.body.vertex(self.body.coedge_end(behind)).point)
+                && seen.insert(self.body.coedge_end(behind))
+            {
+                queue.push(behind);
+            }
+        }
+        // what lay under them: from v outwards, any edge not cut goes whole
+        while let Some(arrive) = queue.pop() {
+            if seen.len() > 32 {
+                return Err(err);
+            }
+            let around = self.corners(arrive).ok_or(err.clone())?;
+            for corner in around {
+                let c = corner.cin;
+                let e = self.body.coedge(c).edge;
+                self.rechain.insert(corner.face);
+                self.touched.insert(corner.face);
+                if e == ea || e == eb || cut.contains(&e) {
+                    continue;
+                }
+                if self.which.contains_key(&e) {
+                    return Err(err);
+                }
+                let w = self.body.coedge_end(c);
+                if let Some(&(rs, _)) = rests.iter().find(|x| x.1 == e) {
+                    self.g_ends.entry(rs).or_default().push(GEnd::Gone(w));
+                    ended.insert(rs);
+                    continue;
+                }
+                let far = self.body.partner(c).ok_or(err.clone())?;
+                // running on past the ball: cut by the walk at its other end, or the check refuses
+                if !under(self.body.vertex(self.body.coedge_end(far)).point) {
+                    continue;
+                }
+                self.drop_whole(e);
+                if seen.insert(self.body.coedge_end(far)) {
+                    queue.push(far);
+                }
+            }
+        }
+        // an edge rested beyond that this end did not reach: its strip ends at its nearer vertex
+        for &(rs, g) in &rests {
+            if !ended.contains(&rs) {
+                let x = self.body.edge(g);
+                let w = [x.start, x.end]
+                    .into_iter()
+                    .min_by(|&p, &q| {
+                        let d = |u: VertexId| self.body.vertex(u).point.distance(vp);
+                        d(p).total_cmp(&d(q))
+                    })
+                    .ok_or(err.clone())?;
+                self.g_ends.entry(rs).or_default().push(GEnd::Gone(w));
+            }
+        }
         self.unsure = true;
-        self.patches.push((surface, same_sense, name, uses));
-        let mut end_s = SpringEnd {
-            v: [v; 2],
-            t: [t1; 2],
-            path: vec![if up { (sec1, false) } else { (sec1, true) }],
-        };
-        end_s.v[ss] = p1v;
-        end_s.v[1 - ss] = x1v;
-        let mut end_o = SpringEnd {
-            v: [v; 2],
-            t: [t2; 2],
-            path: vec![if up { (sec2, true) } else { (sec2, false) }],
-        };
-        end_o.v[so] = p2v;
-        end_o.v[1 - so] = x2v;
-        let (cs, co) = if up {
-            (ring[ia].cin, ring[ib].cin)
-        } else {
-            (ring[ib].cin, ring[ia].cin)
-        };
-        self.ends.insert((es, self.arrives_at_end(cs)), end_s);
-        self.ends.insert((eo, self.arrives_at_end(co)), end_o);
         Ok(())
+    }
+
+    /// The face under side `side`'s foot along stretch `j`: the blend's own, past each crossing.
+    fn stretch_face(
+        &self,
+        crossed: &[(EdgeId, CoedgeId, usize, Point3)],
+        j: usize,
+        side: usize,
+        ra: usize,
+    ) -> FaceId {
+        let ro = &self.rolled[ra];
+        let mut f = ro.over[side].map_or(ro.faces[side], |o| o.0);
+        for x in &crossed[..j] {
+            if x.2 == side {
+                f = self.body.partner(x.1).map_or(f, |p| self.body.coedge_face(p));
+            }
+        }
+        f
     }
 
     /// The blend beside pivot `p` ends at `v`, an end of the arc: at the section through the
@@ -5384,7 +5642,11 @@ impl Builder {
             if let Some(x) = self.extra.get(&f) {
                 pending.extend(x.iter().copied());
             }
-            for lp in chain_loops(&self.body, &pending) {
+            let chained = chain_loops(&self.body, &pending);
+            if self.rechain.contains(&f) && chained.is_empty() {
+                self.gone_faces.push(f);
+            }
+            for lp in chained {
                 self.body.add_loop(f, &lp);
             }
             let face = &mut self.body.faces[f.index()];
