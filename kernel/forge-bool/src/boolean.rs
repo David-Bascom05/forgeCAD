@@ -128,6 +128,8 @@ pub enum Lost {
     DegenerateEdge { face: FaceRef },
     /// A merged region of this face matches none it was merged from.
     MergedRegion { face: FaceRef },
+    /// An open curve inside both faces that crosses no edge of either.
+    Uncut { a: FaceRef, b: FaceRef, at: Point3 },
 }
 
 impl std::fmt::Display for Lost {
@@ -146,6 +148,11 @@ impl std::fmt::Display for Lost {
             Lost::NoNormal { face } => write!(f, "no normal at a point of {face}"),
             Lost::DegenerateEdge { face } => write!(f, "degenerate edge on {face}"),
             Lost::MergedRegion { face } => write!(f, "merged region of no old one on {face}"),
+            Lost::Uncut { a, b, at } => write!(
+                f,
+                "a curve between {a} and {b} through ({:.6}, {:.6}, {:.6}) meets no edge of either",
+                at.x, at.y, at.z
+            ),
         }
     }
 }
@@ -2198,6 +2205,8 @@ pub(crate) fn trim(
     let mut along: Vec<(Side, EdgeId, bool)> = Vec::new();
     // springs crossed by the spring against the other surface
     let mut fenced: Vec<(usize, EdgeId)> = Vec::new();
+    // an edge met through a plane that need not hold it
+    let mut doubtful = false;
     // a traced branch's ends, where it may stop on an edge
     let ends = (!closed && domain.lo.is_finite() && domain.hi.is_finite())
         .then(|| [range.lo, range.hi].map(|t| (t, curve.eval(t))));
@@ -2273,7 +2282,10 @@ pub(crate) fn trim(
                 let other_surface = &bodies[1 - k].face(faces[1 - k]).surface;
                 let on_spring = matches!(&edge.curve, Curve::Procedural(pc)
                         if pc.0.as_any().is_some_and(|a| a.is::<forge_geom::blend::Spring>()))
-                    && !matches!(other_surface, Surface::Procedural(_));
+                    && (!matches!(other_surface, Surface::Procedural(_)) || !holds_edge(&across, edge));
+                doubtful |= !on_spring
+                    && !matches!(edge.curve, Curve::Line(_) | Curve::Circle(_) | Curve::Ellipse(_))
+                    && !holds_edge(&across, edge);
                 let found = if on_spring {
                     fenced.push((k, e));
                     // (a crossing lies on the other face too: in its box)
@@ -2675,6 +2687,22 @@ pub(crate) fn trim(
                 });
             }
         }
+    }
+    // an open curve inside both faces leaves them somewhere, and an edge that no surface stands across
+    // may not say where: with no cut at all, refused, not dropped along with whatever it bounds
+    if doubtful
+        && ts.is_empty()
+        && !closed
+        && let Some(p) = (1..8)
+            .map(|i| curve.eval(range.lo + range.width() * i as f64 / 8.0))
+            .filter(|&p| (0..2).all(|k| index[k].face_box(faces[k]).contains(p)))
+            .find(|&p| (0..2).all(|k| index[k].point_in_face(faces[k], p) == Where::Inside))
+    {
+        return Err(BoolError::lost(Lost::Uncut {
+            a: FaceRef::of(bodies[0], faces[0]),
+            b: FaceRef::of(bodies[1], faces[1]),
+            at: p,
+        }));
     }
     ts.sort_by(|x, y| x.0.total_cmp(&y.0));
     if debug_on() {
@@ -3724,6 +3752,15 @@ fn plane_meet(pl: &Plane, curve: &Curve, range: Interval, edge: &Curve) -> Optio
     hits.sort_by(|x, y| x.t.total_cmp(&y.t));
     hits.dedup_by(|x, y| x.point.distance(y.point) <= tol::LINEAR);
     Some(hits)
+}
+
+/// Whether a surface standing across a face holds this whole edge. The plane `across` falls back on,
+/// square to the face at the edge's middle, does not when the edge bends in the face.
+fn holds_edge(across: &Surface, edge: &forge_topo::Edge) -> bool {
+    !matches!(across, Surface::Plane(_))
+        || [0.0, 0.25, 0.75, 1.0]
+            .iter()
+            .all(|&x| across.distance(edge.curve.eval(edge.range.lo + edge.range.width() * x)) <= tol::LINEAR)
 }
 
 /// Whether face `f` rolls off `other` along one of its edges: a blend meeting a face on that surface

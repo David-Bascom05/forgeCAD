@@ -3,7 +3,8 @@
 use forge_agent::model::Model;
 use forge_math::{Point3, dmath};
 
-const BASE: &str = "base: revolve xz axis y loop line 0 -20 60 -20 line 60 -20 60 2 line 60 2 0 14 line 0 14 0 -20\n";
+const BASE: &str =
+    "base: revolve xz axis y loop line 0 -20 60 -20 line 60 -20 60 2 line 60 2 0 14 line 0 14 0 -20\n";
 
 fn frame(z: f64, deg: f64) -> String {
     let (s, c) = dmath::sin_cos(deg.to_radians());
@@ -25,13 +26,17 @@ fn corners(m: &mut Model, z: f64) -> Vec<Point3> {
         if zs.min(ze) > z || zs.max(ze) < z || (zs - ze).abs() < 1.0 {
             continue;
         }
-        let i = pts.windows(2).position(|w| w[0].z.min(w[1].z) <= z && w[0].z.max(w[1].z) >= z);
+        let i = pts
+            .windows(2)
+            .position(|w| w[0].z.min(w[1].z) <= z && w[0].z.max(w[1].z) >= z);
         let w = &pts[i.expect("it crosses z")..];
         out.push(w[0].lerp(w[1], (z - w[0].z) / (w[1].z - w[0].z)));
     }
     // round the section from the first
     let f = out[0];
-    let turn = |p: &Point3| (f.x * p.y - f.y * p.x).atan2(f.x * p.x + f.y * p.y).rem_euclid(std::f64::consts::TAU);
+    let turn = |p: &Point3| {
+        dmath::atan2(f.x * p.y - f.y * p.x, f.x * p.x + f.y * p.y).rem_euclid(std::f64::consts::TAU)
+    };
     out.sort_by(|p, q| turn(p).total_cmp(&turn(q)));
     out
 }
@@ -56,7 +61,7 @@ fn inside_cone(m: &mut Model) -> f64 {
                 let h = 1e-4;
                 let (a, b) = (at(s + h, t) - at(s - h, t), at(s, t + h) - at(s, t - h));
                 let area = (a.x * b.y - a.y * b.x).abs() / (4.0 * h * h);
-                if z < 14.0 - 0.2 * p.x.hypot(p.y) {
+                if z < 14.0 - 0.2 * (p.x * p.x + p.y * p.y).sqrt() {
                     v += area * dz / (nu * nv) as f64;
                 }
             }

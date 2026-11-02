@@ -9,7 +9,7 @@ use forge_topo::{Body, Name};
 fn a_faces_fit_box_covers_it_past_the_stated_domain() {
     let f = |z: f64| format!("profile z 0 0 1 x 1 0 0 at 0 0 {z} rect -10 -5 20 10 ");
     let src = format!("loft smooth {}{}{}\n", f(0.0), f(20.0), f(45.0));
-    let mut m = Model::new(&src);
+    let m = Model::new(&src);
     assert!(m.error.is_none(), "{:?}", m.error.map(|e| e.msg));
     let loft = m.body().expect("a body");
     let wall = loft

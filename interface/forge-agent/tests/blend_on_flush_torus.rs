@@ -5,7 +5,8 @@ use forge_bool::{Op, boolean};
 use forge_math::dmath;
 use forge_topo::Body;
 
-const PROFILE: &str = "loop line 0 30 0 -100 line 0 -100 50 -100 arc 150 -100 100 180 -90 line 150 0 150 30 line 150 30 0 30";
+const PROFILE: &str =
+    "loop line 0 30 0 -100 line 0 -100 50 -100 arc 150 -100 100 180 -90 line 150 0 150 30 line 150 30 0 30";
 
 fn body(src: &str) -> (Body, f64) {
     let mut m = Model::new(src);
@@ -19,11 +20,17 @@ fn a_round_touches_the_flush_torus_and_does_not_cut_it() {
     let (ring, whole) = body(&format!("w = 1\nh = 2\nrevolve xz axis y {PROFILE}\n"));
     let copy = |k: usize| {
         let (s, c) = dmath::sin_cos((120.0 * k as f64).to_radians());
-        let part = format!("revolve 60 z {s} {} 0 x {c} {s} 0 at 0 0 0 axis y {PROFILE}\n", -c);
+        let part = format!(
+            "revolve 60 z {s} {} 0 x {c} {s} 0 at 0 0 0 axis y {PROFILE}\n",
+            -c
+        );
         let box_ = format!("extrude 80 z 0 0 1 x {c} {s} 0 at 0 0 -70 rect 95 45 20 6\n");
         // a body's names come from its features' lines: copies with lines of their own
         let lines: String = (0..10 * (k + 1)).map(|i| format!("param{i} = 1\n")).collect();
-        (part.clone(), format!("{lines}{part}{box_}fillet 2 (edges concave)\n"))
+        (
+            part.clone(),
+            format!("{lines}{part}{box_}fillet 2 (edges concave)\n"),
+        )
     };
     let (_, wedge) = body(&copy(0).0);
     assert!((wedge - whole / 6.0).abs() < 1e-3, "{wedge} {whole}");
