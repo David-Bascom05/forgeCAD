@@ -253,6 +253,12 @@ pub trait Procedural: Send + Sync + std::fmt::Debug {
     /// radius until a bound is proven (their results are checked for self-intersection): not
     /// a bound.
     fn mesh_radius(&self) -> f64;
+    /// How far the surface moves along its normal by `d` before it pinches, about: its tightest
+    /// radius, unless it knows which of its bends curve towards that side.
+    fn offset_reach(&self, d: f64) -> f64 {
+        let _ = d;
+        self.mesh_radius()
+    }
     /// A radius of curvature no larger than the surface's tightest anywhere, proven; None when
     /// none is known.
     fn min_radius(&self) -> Option<f64> {

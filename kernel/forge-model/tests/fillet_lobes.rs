@@ -9,9 +9,10 @@ use forge_topo::Body;
 use std::f64::consts::{FRAC_PI_4, PI, TAU};
 use std::sync::Arc;
 
-/// A cycloidal disc: a closed spline through an offset epitrochoid, 15 lobes, tips of radius 6.94.
+/// A cycloidal disc: a closed spline through an offset epitrochoid, 15 lobes, tips of radius 6.2,
+/// valleys of radius 4.6.
 fn disc() -> Body {
-    let (pins, ring, roller, e) = (16.0, 60.0, 7.0, 2.2);
+    let (pins, ring, roller, e) = (16.0, 48.0, 4.05, 2.0);
     let at = |t: f64| {
         let psi = dmath::atan2(
             dmath::sin((1.0 - pins) * t),
@@ -35,7 +36,8 @@ fn disc() -> Body {
 /// A constant round on a convex plane rim takes away its section, a square corner less a quarter
 /// circle, swept along the rim: by Pappus with the rim's turning, r^2 (1 - pi/4) (L - 2 pi k r), k the
 /// section's centroid off the wall over r, whatever the rim's shape. The traced spine must bend as
-/// tight as tip radius less r, and the spring runs far faster than the spine round a tip.
+/// tight as tip radius less r, and the spring runs far faster than the spine round a tip. The radius
+/// passes the valleys' less a margin: moving in, they open out, and only the tips can pinch.
 #[test]
 fn rounds_on_a_lobed_rim_take_their_closed_form() {
     let b = disc();
@@ -49,7 +51,7 @@ fn rounds_on_a_lobed_rim_take_their_closed_form() {
             (x.curve.eval(x.range.mid()).z - 12.0).abs() < 1e-6
         })
         .collect();
-    let r = 5.0;
+    let r = 4.0;
     let picks: Vec<FilletEdge> = rim
         .iter()
         .map(|&edge| FilletEdge {

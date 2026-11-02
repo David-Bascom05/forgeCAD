@@ -325,6 +325,31 @@ impl Procedural for Extruded {
     fn min_radius(&self) -> Option<f64> {
         None
     }
+    /// Only bends curving towards the side it moves to pinch: a disc's lobes rounded from inside
+    /// are limited by their tips, not by the valleys between them.
+    fn offset_reach(&self, d: f64) -> f64 {
+        let b = self.c.breaks();
+        let mut least = f64::INFINITY;
+        for w in b.windows(2) {
+            for i in 0..8 {
+                let t = w[0] + (w[1] - w[0]) * i as f64 / 8.0;
+                let c = self.c.deriv(t);
+                let l2 = c.d1.dot(c.d1);
+                if l2 <= 0.0 {
+                    continue;
+                }
+                // towards the centre of curvature, over the radius
+                let bend = (c.d2 - c.d1 * (c.d1.dot(c.d2) / l2)) / l2;
+                let f = &self.frame;
+                let p = f.origin + f.x() * c.p.x + f.y() * c.p.y + f.z() * self.height.mid();
+                let toward = f.x() * bend.x + f.y() * bend.y;
+                if toward.dot(self.gradient(p)) * d > 0.0 {
+                    least = least.min(1.0 / bend.length().max(1e-300));
+                }
+            }
+        }
+        least
+    }
     fn shape_bounds(&self, uv: Box2) -> Option<ShapeBounds> {
         let [_, c2, c3] = self.c.derivative_bounds(uv.u);
         let mid = Point2::new(uv.u.mid(), uv.v.mid());

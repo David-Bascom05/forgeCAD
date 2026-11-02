@@ -77,7 +77,7 @@ pub struct Offset {
 impl Offset {
     /// `base` moved `d` along its normal, or None where that passes its tightest curvature.
     pub fn surface(base: &Proc, d: f64) -> Option<Surface> {
-        Self::surface_over(base, d, base.mesh_radius())
+        Self::surface_over(base, d, base.offset_reach(d))
     }
 
     /// `surface`, refused only where it passes `min_radius` (the tightest over a face's stretch,
