@@ -687,6 +687,22 @@ fn march(
     step: f64,
     bounds: &Box3,
 ) -> Option<(Vec<Point3>, bool)> {
+    // a chain that crawls into a cone's apex or retraces itself finds no way on: its first return closes it
+    let mut back = None;
+    walk(a, b, p0, sign, step, bounds, &mut back).or_else(|| back.map(|pts| (pts, true)))
+}
+
+/// `march`, where a loop closes only having left and running the way it set out; `back` is the chain as
+/// far as its first return within reach, whichever way.
+fn walk(
+    a: &Surface,
+    b: &Surface,
+    p0: Point3,
+    sign: f64,
+    step: f64,
+    bounds: &Box3,
+    back: &mut Option<Vec<Point3>>,
+) -> Option<(Vec<Point3>, bool)> {
     let mut pts = vec![p0];
     let mut p = p0;
     // a helix winds many times its box's size
@@ -696,7 +712,7 @@ fn march(
     let mut d0 = None;
     // the curve's direction at p, already asked of the surfaces when p was reached
     let mut here = direction(a, b, p);
-    for _ in 0..max {
+    for k in 0..max {
         // the way the chain was going: where the surfaces touch on the curve their normals' cross
         // product vanishes and may turn over, and the chain carries on regardless
         let along = pts
@@ -790,7 +806,13 @@ fn march(
         come += q.distance(p);
         // (running the other way it is passing p0 on the far arm of a narrow tip, not closing)
         let first = *d0.get_or_insert(d);
-        if come > 2.0 * step && q.distance(p0) <= 0.75 * step && d.dot(first) > 0.0 {
+        let near = q.distance(p0) <= 0.75 * step;
+        if near && k > 2 && back.is_none() {
+            let mut so_far = pts.clone();
+            so_far.push(p0);
+            *back = Some(so_far);
+        }
+        if near && come > 2.0 * step && d.dot(first) > 0.0 {
             pts.push(p0);
             return Some((pts, true));
         }
