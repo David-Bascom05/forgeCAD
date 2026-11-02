@@ -420,10 +420,47 @@ pub fn boolean(a: &Body, b: &Body, op: Op, feature: u64) -> R<Body> {
 /// as tombstones until `Body::compact`. Names do not depend on `_feature`: what the boolean makes
 /// is named by what meets there, as the n-ary boolean names it.
 pub fn boolean_into(target: &mut Body, b: &Body, op: Op, _feature: u64) -> R<()> {
-    if imprinted(target, b, || std::borrow::Cow::Borrowed(b), op) {
-        return Ok(());
+    #[cfg(debug_assertions)]
+    let before = target.compact();
+    if !imprinted(target, b, || std::borrow::Cow::Borrowed(b), op) {
+        general(target, b, op)?;
     }
-    general(target, b, op)
+    #[cfg(debug_assertions)]
+    faces_survive(&before, b, op, &target.compact());
+    Ok(())
+}
+
+/// In tests, a check `check` cannot make: a result may be a sound solid and still have lost an operand.
+/// A point on a face of an operand, asked of the other operand, says what the result must be there. One
+/// point per face (research/boolean-check: caught every dropped curve and no false alarm on 1777 booleans).
+#[cfg(debug_assertions)]
+fn faces_survive(a: &Body, b: &Body, op: Op, r: &Body) {
+    // (one `check` faults is reported already)
+    if !forge_topo::check(r).is_empty() {
+        return;
+    }
+    let (ia, ib, ir) = (Index::new(a), Index::new(b), Index::new(r));
+    for (first, body, own, other) in [(true, a, &ia, &ib), (false, b, &ib, &ia)] {
+        for f in body.face_ids() {
+            let Some(p) = face_point(body, f) else { continue };
+            let inside = match other.classify(p) {
+                Where::On => continue,
+                w => w == Where::Inside,
+            };
+            let want = match (op, first, inside) {
+                (Op::Union, _, false) | (Op::Subtract, true, false) => Where::On,
+                (Op::Subtract, false, true) | (Op::Intersect, _, true) => Where::On,
+                (Op::Union, _, true) => Where::Inside,
+                _ => Where::Outside,
+            };
+            // (a point its own body does not hold on the face is no evidence: a loop's inner side can miss)
+            let got = ir.classify(p);
+            assert!(
+                got == want || own.classify(p) != Where::On,
+                "{op:?}: a point of a face of an operand at {p:?} is {got:?} in the result, not {want:?}"
+            );
+        }
+    }
 }
 
 /// `boolean_into` with the tool as its entities (`forge_ops::extrude_unlinked`): the Body is
