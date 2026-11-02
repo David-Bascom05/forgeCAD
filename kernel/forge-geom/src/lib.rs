@@ -20,6 +20,7 @@ pub mod spline;
 pub mod surface;
 #[doc(hidden)]
 pub mod testing;
+pub mod tube;
 pub mod varblend;
 pub mod wrap;
 

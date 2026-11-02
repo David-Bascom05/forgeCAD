@@ -62,7 +62,12 @@ pub fn offset(s: &Surface, d: f64) -> Option<Surface> {
                 minor: t.minor + d,
             })
         }
-        Surface::Procedural(p) => return Offset::surface(p, d),
+        Surface::Procedural(p) => {
+            if let Some(t) = p.as_any().and_then(|x| x.downcast_ref::<crate::tube::Tube>()) {
+                return t.grown(d);
+            }
+            return Offset::surface(p, d);
+        }
     })
 }
 
@@ -1192,11 +1197,27 @@ pub struct Pipe {
     pub d_first: f64,
     pub d_second: f64,
     pub radius: f64,
+    /// Where the blend was asked for.
+    near: Point3,
     /// `smooth`'s pipe, made on first use.
     smooth: OnceLock<Option<Surface>>,
 }
 
 impl Pipe {
+    /// The surface of no thickness it rests on, if it does, and the point that says which side.
+    fn rail_side(&self) -> Option<(&Surface, Point3)> {
+        let rail = |s: &Surface| match s {
+            Surface::Cylinder(k) => k.radius == 0.0,
+            Surface::Torus(k) => k.minor == 0.0,
+            Surface::Procedural(p) => p.as_any().is_some_and(|x| x.is::<crate::tube::Tube>()),
+            _ => false,
+        };
+        [&self.first, &self.second]
+            .into_iter()
+            .find(|s| rail(s))
+            .map(|s| (s, self.near))
+    }
+
     /// Contact order is chosen so the natural normal points away from the spine.
     pub fn build(spine: Curve, a: Surface, b: Surface, da: f64, db: f64, near: Point3) -> Option<Proc> {
         let mut p = Pipe {
@@ -1206,6 +1227,7 @@ impl Pipe {
             d_first: da,
             d_second: db,
             radius: da.abs(),
+            near,
             smooth: OnceLock::new(),
         };
         let t = p.spine.closest(near, p.spine.full_range(1e6));
@@ -1453,6 +1475,7 @@ impl Procedural for Pipe {
                     d_first: self.d_first,
                     d_second: self.d_second,
                     radius: self.radius,
+                    near: self.near,
                     smooth: OnceLock::new(),
                 }))))
             })
@@ -1475,6 +1498,17 @@ impl Procedural for Pipe {
         }
     }
     fn project(&self, p: Point3) -> Point2 {
+        // a point of a rail stands as near the far side of a spine closed round that rail: the
+        // side this blend was asked for is the one
+        if let Some((rail, near)) = self.rail_side()
+            && rail.implicit(p).abs() <= tol::LINEAR
+            && let Some(u) = spine_refine(&self.spine, p, spine_closest(&self.spine, near))
+        {
+            let c = self.spine.eval(u);
+            if (p.distance(c) - self.radius).abs() <= tol::LINEAR {
+                return self.across_at(p, u, c);
+            }
+        }
         self.across(p, spine_closest(&self.spine, p))
     }
     /// From the spine at near's u, Newton to the spine point whose normal plane holds p, kept
@@ -1532,6 +1566,7 @@ impl Procedural for Pipe {
             d_first: self.d_first,
             d_second: self.d_second,
             radius: self.radius,
+            near: f.point_to_world(self.near),
             smooth: OnceLock::new(),
         }))
     }

@@ -1806,7 +1806,22 @@ fn cliff(
                         major: k.radius,
                         minor: 0.0,
                     }),
-                    _ => continue,
+                    // (the retries alone: a rim of any other shape costs a trace of nearest points, and
+                    // on a traced rim those cost more than a refusal may)
+                    Curve::Intersection(_) | Curve::Procedural(_) => continue,
+                    _ if !rims => continue,
+                    // (the ball at this edge touches it within a radius of its centre, and that
+                    // lies within two of the edge or of `near`)
+                    k if [l.p, near]
+                        .iter()
+                        .all(|&p| k.eval(k.closest(p, x.range)).distance(p) > 3.0 * r) =>
+                    {
+                        continue;
+                    }
+                    k => match forge_geom::tube::Tube::rail(k, x.range) {
+                        Some(t) => t,
+                        None => continue,
+                    },
                 };
                 let Some(mut b) = Blend::new(other, &rail, l.sign[1 - s] * r, r, near, region) else {
                     continue;
@@ -2124,10 +2139,7 @@ fn rim_split(body: &Body, r: &Rolled) -> Option<f64> {
             for c in body.lp(l).coedges() {
                 let g = body.coedge(c).edge;
                 let gx = body.edge(g);
-                if g == r.edge
-                    || !matches!(gx.curve, Curve::Line(_) | Curve::Circle(_))
-                    || [gx.start, gx.end].iter().any(|&w| w == x.start || w == x.end)
-                {
+                if g == r.edge || [gx.start, gx.end].iter().any(|&w| w == x.start || w == x.end) {
                     continue;
                 }
                 let side = |t: f64| {
