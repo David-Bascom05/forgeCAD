@@ -1090,8 +1090,21 @@ fn coedge_pieces<'a>(
                     ways.push((Rc::new(way), 0.0, a.distance(b), false));
                 }
             };
+            // a link at a time: a chain that resolves the curve's last turn is nearer than one chord
+            let links = |x: f64, y: f64, ways: &mut Vec<(Rc<Way<'a>>, f64, f64, bool)>| {
+                let mut a = x;
+                let mut k = x.floor() + 1.0;
+                while k < y - 1e-9 {
+                    if k - a > 1e-9 {
+                        bridge(a, k, ways);
+                        a = k;
+                    }
+                    k += 1.0;
+                }
+                bridge(a, y, ways);
+            };
             if from > lo {
-                bridge(lo, from, &mut ways);
+                links(lo, from, &mut ways);
             }
             let end = hi;
             let (lo, hi) = (from, to);
@@ -1187,7 +1200,7 @@ fn coedge_pieces<'a>(
                 t0 = t1;
             }
             if to < end {
-                bridge(to, end, &mut ways);
+                links(to, end, &mut ways);
             }
         }
         curve => {

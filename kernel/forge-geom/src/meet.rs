@@ -214,6 +214,25 @@ impl Eqn {
         }
     }
 
+    /// Whether the curve rounds a tip between two of its points close together, a tip being where the
+    /// surfaces all but touch: na x nb runs on round it, so a link clean over one has the curve running
+    /// backwards at its far end. (A tight curve where they cross well is the walk's spacing to judge.)
+    fn turns(&self, p: Point3, q: Point3) -> bool {
+        let grads = |x: Point3| (self.host.gradient(x), self.alg.grad(x).1);
+        let ((a, b), (c, d)) = (grads(p), grads(q));
+        let near = crate::intcurve::all_but_touch(a, b) || crate::intcurve::all_but_touch(c, d);
+        let (u, v) = (a.cross(b), c.cross(d));
+        let (lu, lv) = (u.length(), v.length());
+        if !near || u.dot(v) >= crate::intcurve::TURN_COS * lu * lv {
+            return false;
+        }
+        // (a link in line with the curve at both ends runs through a point where branches cross)
+        let c = q - p;
+        let lc = c.length();
+        u.dot(c).abs() < crate::intcurve::TURN_COS * lu * lc
+            || v.dot(c).abs() < crate::intcurve::TURN_COS * lv * lc
+    }
+
     fn periodic(&self) -> bool {
         matches!(self.form, Form::Trig1 | Form::Trig2)
     }
@@ -1014,12 +1033,18 @@ impl Piece {
             let chord = p.distance(back);
             // a link turns at most about 20 degrees from the one before (unless it is
             // already much the shorter: a long link's chord leaves the tangent itself)
-            let bent = pts.len() > 1 && {
+            let (bent, short) = if pts.len() > 1 {
                 let (d0, d1) = (back - pts[pts.len() - 2], p - back);
-                chord > 0.5 * d0.length() && d0.dot(d1) < 0.94 * d0.length() * chord
+                let l0 = d0.length();
+                let off = d0.dot(d1) < 0.94 * l0 * chord;
+                (off && chord > 0.5 * l0, off && chord <= 0.5 * l0)
+            } else {
+                (false, false)
             };
             let reach = away(back).min(away(p));
-            if chord > 1.5 * reach || bent {
+            // a link much the shorter may turn further, but not round a tip (a hair of the step excepted)
+            let turned = short && chord > step * crate::intcurve::TURN_LEAST && eq.turns(back, p);
+            if chord > 1.5 * reach || bent || turned {
                 if dsig <= 1e-9 {
                     return None; // the root jumps: something the events did not see
                 }
@@ -1446,7 +1471,9 @@ pub fn intersect(a: &Surface, b: &Surface, region: Box3) -> Option<SurfaceSurfac
             let p = chain[i];
             let next = chain[(i + 1) % chain.len()];
             match kept.last() {
-                Some(&q) if q.distance(p) < 0.2 * step && q.distance(next) <= 1.5 * step => {}
+                Some(&q)
+                    if q.distance(p) < 0.2 * step && q.distance(next) <= 1.5 * step && !eq.turns(q, next) => {
+                }
                 _ => kept.push(p),
             }
         }

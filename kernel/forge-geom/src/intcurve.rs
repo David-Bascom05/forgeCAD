@@ -672,6 +672,11 @@ fn near_chain(c: &IntCurve, p: Point3, step: f64) -> bool {
     c.pts.iter().any(|q| q.distance(p) <= 1.5 * step)
 }
 
+/// A chain step turns through less than 30 degrees (past that, what follows the chain loses its way:
+/// mass walks stretches turning less than that), down to TURN_LEAST of the step.
+pub(crate) const TURN_COS: f64 = 0.866;
+pub(crate) const TURN_LEAST: f64 = 1.0 / 1024.0;
+
 /// Points from p0 in direction `sign`, until leaving `bounds` (true) or
 /// closing back on p0 (returns closed = true).
 fn march(
@@ -685,8 +690,13 @@ fn march(
     let mut pts = vec![p0];
     let mut p = p0;
     // a helix winds many times its box's size
-    let max = (64.0 * bounds.diagonal() / step) as usize + 16;
-    for k in 0..max {
+    let max = (64.0 * bounds.diagonal() / step) as usize + 4096;
+    // how far the chain has come: a chain back within reach of p0 after this has closed
+    let mut come = 0.0;
+    let mut d0 = None;
+    // the curve's direction at p, already asked of the surfaces when p was reached
+    let mut here = direction(a, b, p);
+    for _ in 0..max {
         // the way the chain was going: where the surfaces touch on the curve their normals' cross
         // product vanishes and may turn over, and the chain carries on regardless
         let along = pts
@@ -694,11 +704,15 @@ fn march(
             .checked_sub(2)
             .and_then(|i| (p - pts[i]).normalize())
             .map(|u| u.get());
-        let d = match (direction(a, b, p), along) {
+        let d = match (here, along) {
             (Some(d), Some(u)) if d.dot(u) * sign < 0.0 => -d * sign,
             (Some(d), _) => d * sign,
             (None, Some(u)) => u,
             (None, None) => return None,
+        };
+        let way = match here {
+            Some(t) if t.dot(d) < 0.0 => -1.0,
+            _ => 1.0,
         };
         // a predictor along the tangent, then back onto both surfaces in the plane across it;
         // a step that lands behind, short or far from its guess jumped (a corner of a surface's
@@ -708,10 +722,45 @@ fn march(
             let guess = p + d * h;
             refine(a, b, guess).filter(|&q| (q - p).dot(d) > least * h && q.distance(guess) <= h)
         };
+        // a step over which the curve turns sharply (past a place where the surfaces all but touch)
+        // is retried shorter too, as far as TURN_LEAST; the step that turned stands if none shorter lands
+        let mut turned = None;
         let mut h = step;
         let q = loop {
             if let Some(q) = ahead(d, h, 0.5) {
-                break q;
+                let there = direction(a, b, q);
+                let cos = there.map_or(1.0, |t| t.dot(d) * way);
+                // (na x nb runs on round a tip: a step clean over one lands on it running backwards)
+                if h <= step * TURN_LEAST
+                    || cos >= TURN_COS
+                    || !(all_but_touch(a.gradient(p), b.gradient(p))
+                        || all_but_touch(a.gradient(q), b.gradient(q)))
+                {
+                    break (q, there);
+                }
+                // running on as before just past here, the curve passes through a point where its
+                // branches cross, and takes neither turn
+                if turned.is_none()
+                    && ahead(d, 2.0 * h, 0.5)
+                        .and_then(|x| direction(a, b, x))
+                        .is_some_and(|t| t.dot(d).abs() >= TURN_COS)
+                {
+                    break (q, there);
+                }
+                // a turn that a shorter step does not lessen is the normals' rounding, not the curve's
+                if let Some((last, _, _)) = turned
+                    && last > 0.0
+                    && cos <= last
+                {
+                    let (_, q, there) = turned.expect("just seen");
+                    break (q, there);
+                }
+                turned = Some((cos, q, there));
+                h *= 0.5;
+                continue;
+            }
+            if let Some((_, q, there)) = turned {
+                break (q, there);
             }
             if h > step / 64.0 {
                 h *= 0.5;
@@ -720,7 +769,7 @@ fn march(
             if let Some(q) =
                 along.and_then(|u| [1.0, 2.0, 4.0].into_iter().find_map(|m| ahead(u, step * m, 0.5)))
             {
-                break q;
+                break (q, direction(a, b, q));
             }
             // a procedural surface may stop at its face's rim: the branch ends there (any part
             // of it back on the face is seeded and traced from there)
@@ -733,11 +782,15 @@ fn march(
                 .into_iter()
                 .find_map(|m| ahead(d, step * m, 0.0))
             {
-                break q;
+                break (q, direction(a, b, q));
             }
             return stalled(pts, p);
         };
-        if k > 2 && q.distance(p0) <= 0.75 * step {
+        let (q, there) = q;
+        come += q.distance(p);
+        // (running the other way it is passing p0 on the far arm of a narrow tip, not closing)
+        let first = *d0.get_or_insert(d);
+        if come > 2.0 * step && q.distance(p0) <= 0.75 * step && d.dot(first) > 0.0 {
             pts.push(p0);
             return Some((pts, true));
         }
@@ -746,6 +799,7 @@ fn march(
             return Some((pts, false));
         }
         p = q;
+        here = there;
     }
     stalled(pts, p)
 }
@@ -772,6 +826,13 @@ pub fn trace_past_stalls(a: &Surface, b: &Surface, region: Box3) -> Option<(Vec<
     let curves = trace(a, b, region);
     let stalls = STALLS.with(|s| s.borrow_mut().take()).unwrap_or_default();
     Some((curves?, stalls))
+}
+
+/// Whether the surfaces' normals at p are near parallel, as at a curve's narrow tip, but not so near
+/// that na x nb is rounding (they touch along the curve: it says nothing of the way on).
+pub(crate) fn all_but_touch(na: Vec3, nb: Vec3) -> bool {
+    let (x, l) = (na.cross(nb).length(), na.length() * nb.length());
+    x < 0.05 * l && x > 2e-4 * l
 }
 
 /// Whether a procedural surface stops at p going along d: a short step on lies off it by about
