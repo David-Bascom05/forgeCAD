@@ -288,6 +288,40 @@ pub(crate) fn on_edge(body: &Body, e: EdgeId, p: Point3) -> Option<(f64, f64)> {
     (d <= body.vertex(end).tol).then_some((s, d))
 }
 
+/// A curve crossing a spring: where it crosses the spring's fence may be a little off it, the fence
+/// only following the spring, and further the shallower they cross. Both curves lie on the blend, so
+/// `h` moved along the two to where they meet, if they do.
+#[cold]
+fn onto_spring(curve: &Curve, range: Interval, edge: &forge_topo::Edge, h: CurveHit) -> Option<CurveHit> {
+    let spring = matches!(&edge.curve, Curve::Procedural(pc)
+        if pc.0.as_any().is_some_and(|a| a.is::<forge_geom::blend::Spring>()));
+    if !spring {
+        return None;
+    }
+    let mut s = edge.curve.closest(h.point, edge.range);
+    if edge.curve.eval(s).distance(h.point) > 0.2 {
+        return None;
+    }
+    let mut t = h.t;
+    for _ in 0..8 {
+        let (c, e) = (curve.deriv(t), edge.curve.deriv(s));
+        let r = c.p - e.p;
+        if r.length() <= 0.1 * edge.tol.min(tol::LINEAR) {
+            return (range.contains(t) && edge.range.contains(s)).then_some(CurveHit { t, point: e.p, ..h });
+        }
+        // least squares on the two tangents
+        let (aa, ab, bb) = (c.d1.dot(c.d1), c.d1.dot(e.d1), e.d1.dot(e.d1));
+        let det = aa * bb - ab * ab;
+        if det <= 1e-12 * aa * bb {
+            return None;
+        }
+        let (x, y) = (-c.d1.dot(r), e.d1.dot(r));
+        t += (bb * x + ab * y) / det;
+        s += (ab * x + aa * y) / det;
+    }
+    None
+}
+
 pub(crate) struct Seg {
     pub(crate) curve: Curve,
     pub(crate) range: Interval,
@@ -732,23 +766,24 @@ thread_local! {
     static NO_RUN_ON: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
     /// A point touch in this boolean that nothing could judge.
     pub(crate) static UNDECIDED: std::cell::Cell<Option<Point3>> = const { std::cell::Cell::new(None) };
-    /// A torus's box in a pair's region held to the tube: a box as tall as the ring is wide sets the
-    /// tracer's cells too coarse for a small hole's lobes on the tube, and a lost lobe shows as lost way.
-    static SNUG: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
+    /// The dearer care that lost way asks for, on one more try. A torus's box in a pair's region held
+    /// to the tube: a box as tall as the ring is wide sets the tracer's cells too coarse for a small
+    /// hole's lobes on the tube. And a curve's hit on a spring's fence moved onto the spring.
+    static CAREFUL: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
     /// A closed curve crossed springs an odd number of times in this plan.
     static ODD: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
 }
 
 fn plan(a: &Body, b: &Body, op: Op, scratch: &mut Scratch) -> R<Plan> {
-    let torus = |x: &Body| {
+    let curved = |x: &Body| {
         x.face_ids()
-            .any(|f| matches!(x.face(f).surface, Surface::Torus(_)))
+            .any(|f| matches!(x.face(f).surface, Surface::Torus(_) | Surface::Procedural(_)))
     };
     match plan_retried(a, b, op, scratch) {
-        Err(BoolError::Internal(w)) if torus(a) || torus(b) => {
-            SNUG.with(|c| c.set(true));
+        Err(BoolError::Internal(w)) if curved(a) || curved(b) => {
+            CAREFUL.with(|c| c.set(true));
             let r = plan_retried(a, b, op, scratch);
-            SNUG.with(|c| c.set(false));
+            CAREFUL.with(|c| c.set(false));
             r.map_err(|e| match e {
                 BoolError::Internal(_) => BoolError::Internal(w),
                 e => e,
@@ -2410,7 +2445,14 @@ pub(crate) fn trim(
                     // says so cheaply; a grazing crossing, or one within two tolerances of the
                     // box's side (where a face's own boundary lies), is checked exactly
                     let other = index[1 - k].face_box(faces[1 - k]);
-                    if let Some((s, tol)) = on_edge(body, e, h.point)
+                    let on = on_edge(body, e, h.point).map(|o| (o, h)).or_else(|| {
+                        if !CAREFUL.with(|c| c.get()) || !body.edge_box(e).grow(0.2).contains(h.point) {
+                            return None;
+                        }
+                        let h = onto_spring(&curve, range, edge, h)?;
+                        on_edge(body, e, h.point).map(|o| (o, h))
+                    });
+                    if let Some(((s, tol), h)) = on
                         && other.grow(tol::LINEAR).contains(h.point)
                         && (!(grazing || !other.contains(h.point))
                             || index[1 - k].point_in_face(faces[1 - k], h.point) != Where::Outside)
@@ -5966,7 +6008,7 @@ pub(crate) fn half_chord(piece: &Piece) -> f64 {
 pub(crate) fn meet_region(ba: &Box3, bb: &Box3, sa: &Surface, sb: &Surface) -> Box3 {
     let whole = |s: &Surface, b: &Box3| match s {
         // (a lemon's major is negative)
-        Surface::Torus(t) if !SNUG.with(|c| c.get()) => {
+        Surface::Torus(t) if !CAREFUL.with(|c| c.get()) => {
             Box3::from_point(t.frame.origin).grow(t.major.abs() + t.minor)
         }
         // its tube's circle, across the axis only, and the tube round it
