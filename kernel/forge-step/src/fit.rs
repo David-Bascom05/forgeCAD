@@ -5,6 +5,7 @@ use crate::write::FaceMask;
 use forge_geom::surface::SurfDeriv;
 use forge_geom::{Curve, CurveGeom, Surface, SurfaceGeom};
 use forge_math::{Box2, Interval, Point2, Point3, Vec3};
+use std::collections::HashMap;
 
 /// How far a fitted curve or surface may stray from the exact one, in mm.
 pub const DEFAULT_TOL: f64 = 1e-4;
@@ -156,11 +157,16 @@ pub fn fit_pcurve(c: &Curve, anchors: &[(f64, Point2)], s: &Surface, tol: f64) -
 /// `c` over `range`, within `tol` at samples of each piece, its parameter kept.
 pub fn fit_curve(c: &Curve, range: Interval, tol: f64) -> CurveFit {
     let mut ts = vec![range.lo, range.hi];
-    // pieces at the curve's own smooth stretches would be sharper, but a kink only costs spans
-    let at = |t: f64| {
-        let d = c.deriv(t);
-        (d.p, d.d1)
+    // pieces at the curve's own smooth stretches would be sharper, but a kink only costs spans.
+    // A curve's point can be costly and most stretches stay as they were from round to round
+    let mut known = HashMap::new();
+    let mut at = |t: f64| {
+        *known.entry(t.to_bits()).or_insert_with(|| {
+            let d = c.deriv(t);
+            (d.p, d.d1)
+        })
     };
+    let mut misses = HashMap::new();
     let mut error = 0.0_f64;
     // start from a few pieces: a curve can close on itself and look straight at its ends
     for _ in 0..2 {
@@ -172,12 +178,15 @@ pub fn fit_curve(c: &Curve, range: Interval, tol: f64) -> CurveFit {
         let mut next = Vec::with_capacity(ts.len());
         let mut worst = 0.0_f64;
         for w in ts.windows(2) {
-            let (a, b) = (at(w[0]), at(w[1]));
+            let e = *misses.entry((w[0].to_bits(), w[1].to_bits())).or_insert_with(|| {
+                let (a, b) = (at(w[0]), at(w[1]));
+                let h = w[1] - w[0];
+                [0.25, 0.5, 0.75]
+                    .iter()
+                    .map(|&s| hermite(a.0, a.1, b.0, b.1, h, s).distance(c.eval(w[0] + h * s)))
+                    .fold(0.0, f64::max)
+            });
             let h = w[1] - w[0];
-            let e = [0.25, 0.5, 0.75]
-                .iter()
-                .map(|&s| hermite(a.0, a.1, b.0, b.1, h, s).distance(c.eval(w[0] + h * s)))
-                .fold(0.0, f64::max);
             worst = worst.max(e);
             next.push(w[0]);
             if e > tol && ts.len() < MAX_SPANS && h > MIN_SPAN * (range.hi - range.lo) {
@@ -227,22 +236,36 @@ pub fn fit_surface(s: &Surface, uv: Box2, tol: f64, keep: &FaceMask) -> SurfaceF
     if bounded_domain(s) {
         return fit_inside(s, uv, tol, keep);
     }
-    let node = |u: f64, v: f64| s.deriv(Point2::new(u, v));
-    let grid = |us: &[f64], vs: &[f64]| -> Vec<Vec<SurfDeriv>> {
+    // a surface's point can be costly and most of the grid stays as it was from round to round
+    let mut nodes = HashMap::new();
+    let mut grid = |us: &[f64], vs: &[f64]| -> Vec<Vec<SurfDeriv>> {
         us.iter()
-            .map(|&u| vs.iter().map(|&v| node(u, v)).collect())
+            .map(|&u| {
+                vs.iter()
+                    .map(|&v| {
+                        *nodes
+                            .entry((u.to_bits(), v.to_bits()))
+                            .or_insert_with(|| s.deriv(Point2::new(u, v)))
+                    })
+                    .collect()
+            })
             .collect()
     };
     let mut net = grid(&us, &vs);
     let mut error = 0.0;
-    let rim = keep.boundary(1024);
+    let rim: Vec<(Point2, Point3)> = keep.boundary(1024).into_iter().map(|q| (q, s.eval(q))).collect();
+    let values = std::cell::RefCell::new(HashMap::new());
     // the distance from the surface: parameters missing by more can still lie on it, as near a
     // patch's corner where its parametrisation is only continuous
     let off = |q: Point3, at: Point2| {
         if !keep.any(at.x, at.x, at.y, at.y) {
             return 0.0;
         }
-        let e = q.distance(s.eval(at));
+        let there = *values
+            .borrow_mut()
+            .entry((at.x.to_bits(), at.y.to_bits()))
+            .or_insert_with(|| s.eval(at));
+        let e = q.distance(there);
         if e > 0.25 * tol { e.min(s.distance(q)) } else { e }
     };
     for _ in 0..16 {
@@ -297,13 +320,13 @@ pub fn fit_surface(s: &Surface, uv: Box2, tol: f64, keep: &FaceMask) -> SurfaceF
         }
         // along the loops, where a thin stretch of face can fall between a cell's samples: the
         // longer way across the cell is split
-        for &q in &rim {
+        for &(q, on) in &rim {
             let i = us.partition_point(|&x| x <= q.x).clamp(1, us.len() - 1) - 1;
             let j = vs.partition_point(|&x| x <= q.y).clamp(1, vs.len() - 1) - 1;
             let (m, k) = (us[i + 1] - us[i], vs[j + 1] - vs[j]);
             let (a, b, c, d) = (&net[i][j], &net[i + 1][j], &net[i][j + 1], &net[i + 1][j + 1]);
             // here by its parameters: a value elsewhere on the surface leaves the loop off the fit
-            let e = patch(a, b, c, d, m, k, (q.x - us[i]) / m, (q.y - vs[j]) / k).distance(s.eval(q));
+            let e = patch(a, b, c, d, m, k, (q.x - us[i]) / m, (q.y - vs[j]) / k).distance(on);
             worst = worst.max(e);
             if e > 0.5 * tol {
                 if a.p.distance(b.p) >= a.p.distance(c.p) {
