@@ -127,8 +127,8 @@ fn span(s: &Surface) -> Option<&dyn Span> {
 pub fn meet(a: &Surface, b: &Surface, region: Box3) -> Option<SurfaceSurface> {
     let pair = match (span(a), span(b)) {
         (Some(x), Some(y)) => Pair::Spans(x, y),
-        (Some(x), None) => Pair::Quad(x, quadric(b)?),
-        (None, Some(y)) => Pair::Quad(y, quadric(a)?),
+        (Some(x), None) => Pair::Quad(x, quadric(b)?, b),
+        (None, Some(y)) => Pair::Quad(y, quadric(a)?, a),
         (None, None) => return None,
     };
     let leaf = (region.diagonal() / 64.0).max(10.0 * tol::LINEAR);
@@ -175,7 +175,7 @@ enum Stop {
 
 enum Pair<'a> {
     Spans(&'a dyn Span, &'a dyn Span),
-    Quad(&'a dyn Span, Alg),
+    Quad(&'a dyn Span, Alg, &'a Surface),
 }
 
 fn halves(p: Box2, h: &Patch) -> [Box2; 2] {
@@ -216,6 +216,13 @@ fn apart(x: &Patch, y: &Patch, gap: f64) -> bool {
 }
 
 impl Pair<'_> {
+    fn other_nappe(&self, p: Point3) -> bool {
+        match self {
+            Pair::Quad(_, _, Surface::Cone(c)) => c.radius_at(c.frame.point_to_local(p).z) < 0.0,
+            _ => false,
+        }
+    }
+
     /// Parameters near every place the two may meet in `region` (u, v of the span, then of the other
     /// span); None past the budget or where a span has no hull.
     fn seeds(&self, region: Box3, leaf: f64) -> Option<Vec<[f64; 4]>> {
@@ -249,7 +256,7 @@ impl Pair<'_> {
                     }
                 }
             }
-            Pair::Quad(a, q) => {
+            Pair::Quad(a, q, _) => {
                 let mut stack = a.pieces();
                 while let Some(x) = stack.pop() {
                     tests += 1;
@@ -294,7 +301,7 @@ impl Pair<'_> {
                     [p.du.length(), p.dv.length(), q.du.length(), q.dv.length()],
                 )
             }
-            Pair::Quad(a, q) => {
+            Pair::Quad(a, q, _) => {
                 let p = a.at(Point2::new(x[0], x[1]));
                 let (h, g) = q.grad(p.p);
                 (
@@ -345,7 +352,7 @@ impl Pair<'_> {
         let on = |s: &dyn Span, u: f64, v: f64| s.carried().contains(Point2::new(u, v));
         match *self {
             Pair::Spans(a, b) => on(a, x[0], x[1]) && on(b, x[2], x[3]),
-            Pair::Quad(a, _) => on(a, x[0], x[1]),
+            Pair::Quad(a, ..) => on(a, x[0], x[1]),
         }
     }
 
@@ -360,7 +367,7 @@ impl Pair<'_> {
         };
         let (a, b) = match *self {
             Pair::Spans(a, b) => (a, Some(b)),
-            Pair::Quad(a, _) => (a, None),
+            Pair::Quad(a, ..) => (a, None),
         };
         let (d0, d1) = local(&a.at(Point2::new(x[0], x[1])));
         let (d2, d3) = b.map_or((0.0, 0.0), |b| local(&b.at(Point2::new(x[2], x[3]))));
@@ -389,7 +396,9 @@ impl Pair<'_> {
         const CHUNK: usize = 16;
         for &s in seeds {
             let (x0, p0) = self.newton(s).ok_or(Stop::Fail)?;
-            if !self.inside(&x0) || !grown.contains(p0) {
+            // a cone's equation holds its other nappe too; a branch on it stays on it, the two meet only
+            // at the apex, where a step finds no direction and the tracer takes over
+            if !self.inside(&x0) || !grown.contains(p0) || self.other_nappe(p0) {
                 continue;
             }
             // a seed on a traced branch (on its chords, running along them) repeats it; one merely
