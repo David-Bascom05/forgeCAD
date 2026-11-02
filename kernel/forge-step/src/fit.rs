@@ -72,15 +72,22 @@ pub fn fit_pcurve(c: &Curve, anchors: &[(f64, Point2)], s: &Surface, tol: f64) -
         Point2::new(fix(uv.x, by.x, dom.u.period), fix(uv.y, by.y, dom.v.period))
     };
     // the parameters' rate along the curve, from its tangent in the surface's tangent plane
+    // asked again of a point every round of splitting, as `fit_curve`'s spans are
+    let rates = std::cell::RefCell::new(HashMap::new());
     let rate = |t: f64, uv: Point2| -> (f64, f64) {
-        let (d, q) = (c.deriv(t), s.deriv(uv));
-        let (e, f, g) = (q.du.dot(q.du), q.du.dot(q.dv), q.dv.dot(q.dv));
-        let det = e * g - f * f;
-        if det <= 1e-14 * e * g || det == 0.0 {
-            return (0.0, 0.0);
-        }
-        let (a, b) = (d.d1.dot(q.du), d.d1.dot(q.dv));
-        ((g * a - f * b) / det, (e * b - f * a) / det)
+        *rates
+            .borrow_mut()
+            .entry((t.to_bits(), uv.x.to_bits(), uv.y.to_bits()))
+            .or_insert_with(|| {
+                let (d, q) = (c.deriv(t), s.deriv(uv));
+                let (e, f, g) = (q.du.dot(q.du), q.du.dot(q.dv), q.dv.dot(q.dv));
+                let det = e * g - f * f;
+                if det <= 1e-14 * e * g || det == 0.0 {
+                    return (0.0, 0.0);
+                }
+                let (a, b) = (d.d1.dot(q.du), d.d1.dot(q.dv));
+                ((g * a - f * b) / det, (e * b - f * a) / det)
+            })
     };
     let locate = |t: f64, by: Point2| near(s.project_near(c.eval(t), by), by);
     let closed = match (c, s) {
@@ -117,14 +124,17 @@ pub fn fit_pcurve(c: &Curve, anchors: &[(f64, Point2)], s: &Surface, tol: f64) -
             c0 * a.1.y + c1 * h * ra.1 + c2 * b.1.y + c3 * h * rb.1,
         )
     };
+    let mut misses = HashMap::new();
     for _ in 0..20 {
         let mut next = Vec::with_capacity(pts.len() * 2);
         for k in 0..pts.len() - 1 {
             let (a, b) = (pts[k], pts[k + 1]);
             next.push(a);
             let tm = 0.5 * (a.0 + b.0);
-            let m = herm2(a, b, 0.5);
-            let miss = s.eval(m).distance(c.eval(tm));
+            let key = [a.0, a.1.x, a.1.y, b.0, b.1.x, b.1.y].map(f64::to_bits);
+            let miss = *misses
+                .entry(key)
+                .or_insert_with(|| s.eval(herm2(a, b, 0.5)).distance(c.eval(tm)));
             if miss > tol && pts.len() < MAX_SPANS {
                 next.push((tm, locate(tm, a.1)));
             }
