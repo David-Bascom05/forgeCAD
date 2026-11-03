@@ -612,29 +612,44 @@ fn corners(
                 _ => None,
             };
             if let Some((gap, automatic)) = seam {
-                let start = q0.distance(v) <= TOL;
+                // which wall is trimmed goes by the part, not by the order the flanges came in:
+                // the one on the shorter edge; on edges of one length, the one whose edge starts
+                // at the corner (the outline counter-clockwise), so a square box turns alike at
+                // every corner
+                let e1 = p0.distance(p1);
+                let e2 = q0.distance(q1);
+                let first_is_cut = if (e1 - e2).abs() > TOL {
+                    e1 < e2
+                } else {
+                    p0.distance(v) <= TOL
+                };
+                let (bt, jt, jo, start) = if first_is_cut {
+                    (b1, j1, j2, p0.distance(v) <= TOL)
+                } else {
+                    (b2, j2, j1, q0.distance(v) <= TOL)
+                };
                 let (y0, y1) = if start {
                     (-t, t + gap)
                 } else {
-                    (b2.len - t - gap, b2.len + t)
+                    (bt.len - t - gap, bt.len + t)
                 };
-                let far = sheet.walls[b2.b]
+                let far = sheet.walls[bt.b]
                     .outline
                     .iter()
                     .flat_map(|l| &l.segments)
                     .flat_map(|(g, _)| g.samples(8))
-                    .map(|p| b2.jb.local(p).x)
+                    .map(|p| bt.jb.local(p).x)
                     .fold(0.0, f64::max)
                     + t;
-                let reach = b2.theta * (joint_radius(sheet, b2) + t) + t;
-                let lp = rect(-reach, y0, far, y1, [0, 1, 2, 3], &b2.jb);
+                let reach = bt.theta * (joint_radius(sheet, bt) + t) + t;
+                let lp = rect(-reach, y0, far, y1, [0, 1, 2, 3], &bt.jb);
                 out.push((
-                    CutSrc::Corner(j2.id, j1.id),
-                    sheet.walls[b2.b].id,
+                    CutSrc::Corner(jt.id, jo.id),
+                    sheet.walls[bt.b].id,
                     lp,
                     CornerMade {
-                        joints: [j2.id, j1.id],
-                        wall: sheet.walls[b2.b].id,
+                        joints: [jt.id, jo.id],
+                        wall: sheet.walls[bt.b].id,
                         kind: CornerKind::Open { gap },
                         size: t + gap,
                         automatic,
