@@ -5,6 +5,7 @@
 use forge_agent::select::{self, Lineage};
 use forge_model::{Feature, History, RegenError, Solid, step_solids};
 use forge_topo::{Body, FaceId, Name};
+use std::any::Any;
 use std::cell::OnceCell;
 use std::collections::HashMap;
 use std::rc::Rc;
@@ -66,6 +67,9 @@ pub struct Cache {
     pub measured: Option<(Rc<Stage>, crate::Measure)>,
     /// An assembly's loaded parts, solver and checker, kept between runs (`asm.rs`).
     pub asm: Option<Box<crate::asm::AsmCache>>,
+    /// Work done outside the kernel's history (a sheet's builds and shop checks), by a key
+    /// that holds everything it read.
+    memo: HashMap<String, Rc<dyn Any>>,
 }
 
 pub struct Builder {
@@ -85,6 +89,10 @@ pub struct Builder {
     pub kernel_ms: f64,
     pub rebuilt: usize,
     pub reused: usize,
+    /// The memo entries this run used or made: what the next run keeps.
+    memo: HashMap<String, Rc<dyn Any>>,
+    /// Memo entries worked out afresh this run.
+    pub remade: usize,
 }
 
 impl Builder {
@@ -101,7 +109,30 @@ impl Builder {
             kernel_ms: 0.0,
             rebuilt: 0,
             reused: 0,
+            memo: HashMap::new(),
+            remade: 0,
         }
+    }
+
+    /// The value `key` stands for: the last run's or this one's if either worked it out (only
+    /// while building, as stages are), else `make`'s, kept for the next run.
+    pub fn memo<T: Clone + 'static>(&mut self, key: String, make: impl FnOnce() -> T) -> T {
+        if let Some(v) = self.memo.get(&key).and_then(|v| v.downcast_ref::<T>()) {
+            return v.clone();
+        }
+        if let Some(v) = self.cache.memo.remove(&key)
+            && let Some(t) = v.downcast_ref::<T>()
+        {
+            let t = t.clone();
+            self.memo.insert(key, v);
+            return t;
+        }
+        let t = make();
+        self.remade += 1;
+        if self.building {
+            self.memo.insert(key, Rc::new(t.clone()));
+        }
+        t
     }
 
     pub fn into_cache(self) -> Cache {
@@ -111,6 +142,7 @@ impl Builder {
             stages: self.stages,
             measured: self.cache.measured,
             asm: self.cache.asm,
+            memo: self.memo,
         }
     }
 

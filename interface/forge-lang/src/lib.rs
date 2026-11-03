@@ -108,6 +108,9 @@ pub struct Run {
     pub timings: Timings,
     pub rebuilt: usize,
     pub reused: usize,
+    /// Work outside the kernel's history (a sheet's builds and shop checks) done afresh, not
+    /// taken from the last run.
+    pub remade: usize,
     /// The finished part, for rendering.
     pub body: Option<forge_topo::Body>,
     /// Params whose values evaluation observed: editing one re-runs, any other re-reads.
@@ -147,6 +150,7 @@ pub fn run(src: &str, opts: Options, cache: Cache) -> (Run, Cache) {
                     timings,
                     rebuilt: 0,
                     reused: 0,
+                    remade: 0,
                     body: None,
                     observed: Default::default(),
                     sheets: vec![],
@@ -214,6 +218,7 @@ pub fn run(src: &str, opts: Options, cache: Cache) -> (Run, Cache) {
         timings,
         rebuilt,
         reused,
+        remade: ev.b.remade,
         body,
         observed: std::mem::take(&mut ev.observed),
         sheets: sheet::outputs(&ev),

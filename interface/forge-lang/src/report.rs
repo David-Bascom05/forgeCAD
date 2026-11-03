@@ -138,6 +138,7 @@ pub fn json(run: &Run, src: &str) -> Json {
         ),
         ("rebuilt", run.rebuilt.into()),
         ("reused", run.reused.into()),
+        ("remade", run.remade.into()),
         ("features", Json::Arr(feats)),
         ("params", Json::Arr(params)),
         (
