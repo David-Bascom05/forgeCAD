@@ -226,6 +226,9 @@ impl Sheet {
                 joint: j.id,
             });
         }
+        // an edge running out of another bend's mold line (a flange's end edge) bends only from
+        // that bend's tangent line on: the stretch inside its band is the bend's
+        let (a, b) = self.stop_at_tangents(wall, segment, a, b)?;
         let joint = JointId(self.next_joint);
         if !(angle.abs() > tol::ANGULAR && angle.abs() < dmath::PI - tol::ANGULAR) {
             let limit = if angle.abs() <= tol::ANGULAR {
@@ -603,6 +606,78 @@ impl Sheet {
         let cut = self.cut(wall, ProfileLoop::new(vec![(hole, 0)]))?;
         self.mounts.push(crate::hardware::Mount { cut, wall, at, part });
         Ok(cut)
+    }
+}
+
+impl Sheet {
+    /// Splits straight segment `segment` of `wall` (a to b) where it leaves the band of the bend
+    /// the wall was turned by: at that bend's setback from an end it shares with its mold line. The stretch in
+    /// the band takes a derived id; the rest keeps `segment`. Returns the rest's ends.
+    fn stop_at_tangents(
+        &mut self,
+        wall: WallId,
+        segment: u64,
+        a: Point2,
+        b: Point2,
+    ) -> Result<(Point2, Point2), SheetError> {
+        let feature = self.feature;
+        let w = self.wall(wall).ok_or(SheetError::NoSuchWall { feature, wall })?;
+        let molds: Vec<(Point2, Point2, f64)> = self
+            .joints
+            .iter()
+            .filter_map(|j| {
+                // the wall's own mold line (it is the bend's second wall): its band runs along
+                // the end of every edge leaving it. Bends off neighbouring edges of the wall meet
+                // at a corner instead (corner reliefs).
+                if j.b != wall {
+                    return None;
+                }
+                let on = j.on_b;
+                let JointKind::Bend { angle, radius } = j.kind else {
+                    return None;
+                };
+                let (p, q) = straight(w, on).ok()?;
+                Some((p, q, crate::build::setback_of(&self.gauge, radius, angle)))
+            })
+            .collect();
+        let at = |x: Point2| {
+            molds
+                .iter()
+                .filter(|m| m.0.distance(x) <= tol::LINEAR || m.1.distance(x) <= tol::LINEAR)
+                .map(|m| m.2)
+                .fold(0.0, f64::max)
+        };
+        let (sa, sb) = (at(a), at(b));
+        if sa == 0.0 && sb == 0.0 {
+            return Ok((a, b));
+        }
+        let len = a.distance(b);
+        let d = (b - a) * (1.0 / len);
+        if sa + sb >= len - tol::LINEAR {
+            return Err(SheetError::NoSuchSegment {
+                feature,
+                wall,
+                segment,
+            });
+        }
+        let (a2, b2) = (a + d * sa, b - d * sb);
+        let wall_mut = self.walls.iter_mut().find(|w| w.id == wall).expect("found above");
+        for l in &mut wall_mut.outline {
+            let Some(k) = l.segments.iter().position(|g| g.1 == segment) else {
+                continue;
+            };
+            let mut pieces = Vec::new();
+            if sa > 0.0 {
+                pieces.push((Segment::Line { a, b: a2 }, segment ^ (1 << 46)));
+            }
+            pieces.push((Segment::Line { a: a2, b: b2 }, segment));
+            if sb > 0.0 {
+                pieces.push((Segment::Line { a: b2, b }, segment ^ (1 << 47)));
+            }
+            l.segments.splice(k..=k, pieces);
+            break;
+        }
+        Ok((a2, b2))
     }
 }
 
