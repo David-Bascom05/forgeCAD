@@ -707,19 +707,28 @@ fn distance(a: &PartMesh, b: &PartMesh, rel: &Frame, limit: f64) -> Option<(f64,
 
 // ---- exact confirmation ----
 
-/// The exact overlap volume of two parts, B placed by `b_in_a` in A's frame; None when unknown.
+/// Why an exact overlap volume could not be had.
+#[derive(Clone, Debug, PartialEq)]
+pub enum ExactFail {
+    /// No kernel solid for one of the parts.
+    NoSolid,
+    /// The kernel's intersection (or its mass properties) failed: its reason.
+    Boolean(String),
+}
+
+/// The exact overlap volume of two parts, B placed by `b_in_a` in A's frame.
 pub trait Exact: Sync {
-    fn overlap_volume(&self, a: &PartRef, b: &PartRef, b_in_a: &Frame) -> Option<f64>;
+    fn overlap_volume(&self, a: &PartRef, b: &PartRef, b_in_a: &Frame) -> Result<f64, ExactFail>;
 }
 
 impl<T: Exact + ?Sized> Exact for &T {
-    fn overlap_volume(&self, a: &PartRef, b: &PartRef, b_in_a: &Frame) -> Option<f64> {
+    fn overlap_volume(&self, a: &PartRef, b: &PartRef, b_in_a: &Frame) -> Result<f64, ExactFail> {
         (**self).overlap_volume(a, b, b_in_a)
     }
 }
 
 impl<T: Exact + ?Sized + Send> Exact for Arc<T> {
-    fn overlap_volume(&self, a: &PartRef, b: &PartRef, b_in_a: &Frame) -> Option<f64> {
+    fn overlap_volume(&self, a: &PartRef, b: &PartRef, b_in_a: &Frame) -> Result<f64, ExactFail> {
         (**self).overlap_volume(a, b, b_in_a)
     }
 }
@@ -728,8 +737,8 @@ impl<T: Exact + ?Sized + Send> Exact for Arc<T> {
 pub struct NoExact;
 
 impl Exact for NoExact {
-    fn overlap_volume(&self, _: &PartRef, _: &PartRef, _: &Frame) -> Option<f64> {
-        None
+    fn overlap_volume(&self, _: &PartRef, _: &PartRef, _: &Frame) -> Result<f64, ExactFail> {
+        Err(ExactFail::NoSolid)
     }
 }
 
@@ -740,14 +749,22 @@ pub struct BrepExact {
 }
 
 impl Exact for BrepExact {
-    fn overlap_volume(&self, a: &PartRef, b: &PartRef, b_in_a: &Frame) -> Option<f64> {
-        let ba = self.bodies.get(&(a.doc.clone(), a.body))?;
-        let bb = self.bodies.get(&(b.doc.clone(), b.body))?;
+    fn overlap_volume(&self, a: &PartRef, b: &PartRef, b_in_a: &Frame) -> Result<f64, ExactFail> {
+        let ba = self
+            .bodies
+            .get(&(a.doc.clone(), a.body))
+            .ok_or(ExactFail::NoSolid)?;
+        let bb = self
+            .bodies
+            .get(&(b.doc.clone(), b.body))
+            .ok_or(ExactFail::NoSolid)?;
         let moved = rigid_copy(bb, b_in_a);
         match forge_bool::boolean::boolean(ba, &moved, forge_bool::boolean::Op::Intersect, 0) {
-            Ok(c) if c.face_ids().next().is_none() => Some(0.0),
-            Ok(c) => forge_topo::mass::mass(&c).ok().map(|m| m.volume.abs()),
-            Err(_) => None,
+            Ok(c) if c.face_ids().next().is_none() => Ok(0.0),
+            Ok(c) => forge_topo::mass::mass(&c)
+                .map(|m| m.volume.abs())
+                .map_err(|e| ExactFail::Boolean(format!("mass of the intersection: {e:?}"))),
+            Err(e) => Err(ExactFail::Boolean(format!("{e:?}"))),
         }
     }
 }
@@ -809,6 +826,8 @@ pub struct Interference {
     pub confirmed: bool,
     /// The narrow phase's tolerance for this pair: overlaps shallower than this may be missed.
     pub tolerance: f64,
+    /// When unconfirmed because the kernel's intersection failed: its reason.
+    pub boolean_failed: Option<String>,
 }
 
 /// Contact that a declared fit or a fit rule says is meant.
@@ -869,6 +888,7 @@ impl InterferenceReport {
                 b: i.b.clone(),
                 volume: i.volume,
                 confirmed: i.confirmed,
+                boolean_failed: i.boolean_failed.clone(),
             })
             .collect();
         out.extend(self.shallow.iter().map(|x| Diagnostic::ShallowEngagement {
@@ -1032,7 +1052,7 @@ pub struct Checker<P: Parts, E: Exact> {
     parts: P,
     exact: E,
     pub threads: usize,
-    cache: BTreeMap<Key, (Narrow, Option<f64>)>,
+    cache: BTreeMap<Key, (Narrow, Result<f64, ExactFail>)>,
     last: Option<(Vec<Occ>, PairResults)>,
 }
 
@@ -1221,7 +1241,10 @@ impl<P: Parts, E: Exact> Checker<P, E> {
             self.exact.overlap_volume(&occ[x].part, &occ[y].part, &keyed[k].1)
         });
         for (k, r) in todo.iter().zip(&narrowed) {
-            let vol = confirm.iter().position(|c| c == k).and_then(|t| volumes[t]);
+            let vol = match confirm.iter().position(|c| c == k) {
+                Some(t) => volumes[t].clone(),
+                None => Err(ExactFail::NoSolid),
+            };
             self.cache.insert(keyed[*k].0.clone(), (*r, vol));
         }
 
@@ -1235,7 +1258,7 @@ impl<P: Parts, E: Exact> Checker<P, E> {
             }
         }
         for (k, &(i, j)) in pairs.iter().enumerate() {
-            let (r, vol) = self.cache[&keyed[k].0];
+            let (r, vol) = self.cache[&keyed[k].0].clone();
             let hit = if r == Narrow::Clear {
                 None
             } else {
@@ -1247,13 +1270,17 @@ impl<P: Parts, E: Exact> Checker<P, E> {
                 Some(match intent_of(i, j) {
                     Some((by, short)) => PairHit::Intended(IntendedContact { a, b, by }, short),
                     None => match vol {
-                        Some(v) if v <= TOUCH_VOLUME => PairHit::Touch(a, b),
+                        Ok(v) if v <= TOUCH_VOLUME => PairHit::Touch(a, b),
                         _ => PairHit::Interference(Interference {
                             a,
                             b,
-                            volume: vol,
-                            confirmed: vol.is_some(),
+                            volume: vol.as_ref().ok().copied(),
+                            confirmed: vol.is_ok(),
                             tolerance: ma.tolerance + mb.tolerance + tol::LINEAR,
+                            boolean_failed: match vol {
+                                Err(ExactFail::Boolean(why)) => Some(why),
+                                _ => None,
+                            },
                         }),
                     },
                 })

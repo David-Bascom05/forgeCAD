@@ -957,6 +957,8 @@ pub enum Issue {
         b: String,
         volume: Option<f64>,
         confirmed: bool,
+        /// When unconfirmed because the kernel's intersection failed: its reason.
+        boolean_failed: Option<String>,
     },
     IntendedContact {
         a: String,
@@ -1011,6 +1013,8 @@ pub enum Unevaluable {
     NoJointValue { joint: String },
     /// No solid to measure there (a reference to nothing built, a part with no body).
     NoGeometry { reference: String },
+    /// The kernel's exact intersection of two parts failed: the pair and its reason.
+    BooleanFailed { a: String, b: String, reason: String },
     /// The limit is not a number.
     NoLimit,
     /// The document could not be run again with its `at` params.
@@ -1032,6 +1036,9 @@ impl Unevaluable {
                 format!("{joint} has no value: it was left out of the solve")
             }
             Unevaluable::NoGeometry { reference } => format!("{reference} has no solid to measure"),
+            Unevaluable::BooleanFailed { a, b, reason } => {
+                format!("the exact intersection of {a} and {b} failed: {reason}")
+            }
             Unevaluable::NoLimit => "the limit is not a number".into(),
             Unevaluable::AtFailed => "the document does not run with its at params".into(),
         }
@@ -1277,9 +1284,18 @@ fn issue_text(i: &Issue) -> String {
         Issue::SelfLink { item } => format!("{item} joins a reference to itself"),
         Issue::CyclicAssembly { file } => format!("{file} contains itself"),
         Issue::PartChanged { file } => format!("{file} is not the version pinned"),
-        Issue::Interference { a, b, volume, .. } => match volume {
-            Some(v) => format!("{a} and {b} share {v:.4} mm3 (declare a fit if meant)"),
-            None => format!("{a} and {b} overlap (unconfirmed: no exact solids)"),
+        Issue::Interference {
+            a,
+            b,
+            volume,
+            boolean_failed,
+            ..
+        } => match (volume, boolean_failed) {
+            (Some(v), _) => format!("{a} and {b} share {v:.4} mm3 (declare a fit if meant)"),
+            (None, Some(why)) => format!(
+                "{a} and {b} overlap by their meshes; the exact intersection failed ({why}), so the volume is unconfirmed"
+            ),
+            (None, None) => format!("{a} and {b} overlap (unconfirmed: no exact solids)"),
         },
         Issue::IntendedContact { a, b, by } => format!("{a} and {b} touch as {by} says"),
         Issue::ShallowEngagement {
@@ -1390,12 +1406,19 @@ fn issue_data(i: &Issue) -> Vec<(&'static str, Json)> {
             b,
             volume,
             confirmed,
-        } => vec![
-            ("a", s(a)),
-            ("b", s(b)),
-            ("volume", volume.map_or(Json::Null, Json::Num)),
-            ("confirmed", (*confirmed).into()),
-        ],
+            boolean_failed,
+        } => {
+            let mut v = vec![
+                ("a", s(a)),
+                ("b", s(b)),
+                ("volume", volume.map_or(Json::Null, Json::Num)),
+                ("confirmed", (*confirmed).into()),
+            ];
+            if let Some(why) = boolean_failed {
+                v.push(("boolean_failed", s(why)));
+            }
+            v
+        }
         Issue::IntendedContact { a, b, by } => vec![("a", s(a)), ("b", s(b)), ("by", s(by))],
         Issue::ShallowEngagement {
             a,
@@ -2861,9 +2884,16 @@ impl Measure<'_> {
                             .checker
                             .exact()
                             .overlap_volume(&x.part, &y.part, &rel)
-                            .ok_or_else(|| {
-                                why(Unevaluable::NoGeometry {
-                                    reference: name(&x.path),
+                            .map_err(|e| {
+                                why(match e {
+                                    fa::check::ExactFail::NoSolid => Unevaluable::NoGeometry {
+                                        reference: name(&x.path),
+                                    },
+                                    fa::check::ExactFail::Boolean(reason) => Unevaluable::BooleanFailed {
+                                        a: name(&x.path),
+                                        b: name(&y.path),
+                                        reason,
+                                    },
                                 })
                             })?;
                     }
@@ -3146,6 +3176,7 @@ fn push_diag(ev: &mut Eval, names: &Names, dg: &fa::Diagnostic, d: &Doc) {
             b,
             volume,
             confirmed,
+            boolean_failed,
         } => (
             names.inst.get(&a[0].0).map_or(first, |x| x.1),
             Issue::Interference {
@@ -3153,6 +3184,7 @@ fn push_diag(ev: &mut Eval, names: &Names, dg: &fa::Diagnostic, d: &Doc) {
                 b: path_name(names, b),
                 volume: *volume,
                 confirmed: *confirmed,
+                boolean_failed: boolean_failed.clone(),
             },
         ),
         fa::Diagnostic::IntendedContact { a, b, by } => {
