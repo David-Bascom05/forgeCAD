@@ -253,12 +253,32 @@ fn positions_move_the_edge() {
         .map(|v| b.vertex(v).point.x)
         .fold(f64::NEG_INFINITY, f64::max);
     assert!((hi - L).abs() < 1e-12, "{hi}");
-    // an edge whose neighbour carries a bend does not move
+    // an edge whose neighbour carries a flange moves, and the flange follows: shortened by t
+    // at the corner
     let base = poly(&[(0.0, 0.0), (L, 0.0), (L, W), (0.0, W)]);
     let (mut s, w) = Sheet::face(FeatureId(5), gauge(K), Frame::WORLD, &[base]).unwrap();
-    s.flange(w, 2, th, H).unwrap();
+    let (back, _) = s.flange(w, 2, th, H).unwrap();
+    s.flange_at(w, 1, th, H, R, Position::Inside).unwrap();
+    let len = |s: &Sheet, wall: WallId| {
+        let o = &s.wall(wall).unwrap().outline[0];
+        o.segments
+            .iter()
+            .find_map(|g| match g {
+                (Segment::Line { a, b }, 3) => Some(a.distance(*b)),
+                _ => None,
+            })
+            .unwrap()
+    };
+    assert!((len(&s, back) - (L - T)).abs() < 1e-12);
+    let fold = build_with(&s, Map::Folded).unwrap();
+    checked(&fold.body);
+    assert_eq!(fold.corners.len(), 1);
+    // a flange whose own mold line is beside the edge is refused
+    let base = poly(&[(0.0, 0.0), (L, 0.0), (L, W), (0.0, W)]);
+    let (mut s, w) = Sheet::face(FeatureId(5), gauge(K), Frame::WORLD, &[base]).unwrap();
+    let (f, _) = s.flange(w, 1, th, H).unwrap();
     assert!(matches!(
-        s.flange_at(w, 1, th, H, R, Position::Inside),
+        s.flange_at(f, 0, th, H, R, Position::Inside),
         Err(SheetError::EdgeMoveBlocked { .. })
     ));
 }
