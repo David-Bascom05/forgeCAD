@@ -307,6 +307,8 @@ pub struct SheetState {
     fix: FixCtx,
     pub folded: Option<fs::Built>,
     pub unfolds: Vec<UnfoldState>,
+    /// The stock as the part names it (`sheet(.., material: "..")`), for the drawing's note.
+    pub material: Option<String>,
 }
 
 #[derive(Default, Debug)]
@@ -328,6 +330,7 @@ pub struct SheetOut {
     /// The reliefs and corner reliefs the builder cut, as typed data.
     pub reliefs: Vec<fs::ReliefMade>,
     pub corners: Vec<fs::build::CornerMade>,
+    pub material: Option<String>,
 }
 
 impl SheetState {
@@ -2306,13 +2309,19 @@ fn base(ev: &mut Eval, args: &[Arg], span: Span) -> R<Value> {
     let a = Args::bind(
         ev,
         "sheet",
-        &["profile", "t", "r", "bend", "shop", "corner"],
+        &["profile", "t", "r", "bend", "shop", "corner", "material"],
         args,
         span,
     )?;
     if a.poisoned() {
         return Ok(Value::Unresolved);
     }
+    // what the drawing's part note names the stock as
+    let material = match a.opt("material") {
+        None => None,
+        Some(Value::Str(m)) => Some(m.to_string()),
+        Some(o) => return Err(wrong(a.span("material"), "material", Ty::Str, &o)),
+    };
     // a sheet part holds sheets only
     let makes = |f: &crate::eval::FeatInfo| {
         !matches!(
@@ -2431,6 +2440,7 @@ fn base(ev: &mut Eval, args: &[Arg], span: Span) -> R<Value> {
         fix,
         folded: None,
         unfolds: vec![],
+        material,
     };
     ev.sheets.list.push(st);
     push_sheet_step(ev, si, &id, "sheet", span, dims)?;
@@ -3846,6 +3856,7 @@ pub fn outputs(ev: &Eval) -> Vec<SheetOut> {
             folded: st.folded.as_ref().map(|b| b.body.clone()),
             reliefs: st.folded.as_ref().map_or(vec![], |b| b.reliefs.clone()),
             corners: st.folded.as_ref().map_or(vec![], |b| b.corners.clone()),
+            material: st.material.clone(),
             unfolds: st
                 .unfolds
                 .iter()
@@ -3861,10 +3872,30 @@ pub fn outputs(ev: &Eval) -> Vec<SheetOut> {
 }
 
 impl SheetOut {
-    /// The flat pattern as DXF (contours on CUT, bend lines on BEND).
+    /// The flat pattern as DXF: contours on CUT, bend lines on BEND, and on BEND_NOTES each
+    /// bend's direction, angle and inside radius, and the part's note.
     pub fn dxf(&self) -> Result<String, SheetError> {
         let b = fs::build_with(&self.sheet, Map::Flat)?;
-        Ok(fs::dxf(b.pattern.as_ref().expect("a flat build's pattern")))
+        Ok(fs::dxf_noted(
+            b.pattern.as_ref().expect("a flat build's pattern"),
+            &self.note(),
+        ))
+    }
+
+    /// The drawing's part note: the part, its material, its thickness and its bend rule.
+    pub fn note(&self) -> String {
+        let g = &self.sheet.gauge;
+        let rule = match &g.rule {
+            fs::BendRule::K(k) => format!("K {k:.3}"),
+            fs::BendRule::KTable(_) => "K BY TABLE".into(),
+            fs::BendRule::Allowance(_) => "BEND ALLOWANCE BY TABLE".into(),
+        };
+        format!(
+            "{}  MATERIAL {}  T {:.2}  {rule}",
+            self.id.to_uppercase(),
+            self.material.as_deref().unwrap_or("UNSPECIFIED").to_uppercase(),
+            g.thickness
+        )
     }
 
     pub fn json(&self) -> Json {
