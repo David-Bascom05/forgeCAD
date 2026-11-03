@@ -533,6 +533,7 @@ pub fn export(body: &Body, opt: &Options) -> Result<Export, ExportError> {
         finite: true,
     };
     let (mut face_fits, mut edge_fits) = (Fit::default(), Fit::default());
+    let mut pcurve_error: f64 = 0.0;
 
     let verts: Vec<u64> = body
         .vertices
@@ -575,6 +576,7 @@ pub fn export(body: &Body, opt: &Options) -> Result<Export, ExportError> {
                         }
                         let fit =
                             fit::fit_pcurve(&ed.curve, &anchors[co.index()], &body.face(f).surface, opt.tol);
+                        pcurve_error = pcurve_error.max(fit.error);
                         let pts: Vec<u64> = fit
                             .ctrl
                             .iter()
@@ -813,11 +815,14 @@ pub fn export(body: &Body, opt: &Options) -> Result<Export, ExportError> {
     let stated = forge_math::tol::LINEAR.max(opt.tol);
     let mut uncertainty = stated;
     // (nor can it say less than a fit left: one short of `tol` on its cells)
+    // a reader checks the written curve against the written surface at the written pcurve, at
+    // one parameter: off by at most the curve's fit, the pcurve's and the surface's together
     let gap = if face_fits.count + edge_fits.count > 0 {
         crate::read::curve_off_surface(text.as_bytes(), &crate::part21::Limits::default())
             .unwrap_or(0.0)
             .max(face_fits.error)
             .max(edge_fits.error)
+            .max(edge_fits.error + pcurve_error + face_fits.error)
     } else {
         0.0
     };

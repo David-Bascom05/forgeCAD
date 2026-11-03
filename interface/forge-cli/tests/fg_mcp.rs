@@ -316,3 +316,41 @@ fn a_sheet_parts_flat_pattern_exports_as_dxf() {
     assert!(dxf.contains("BEND"));
     let _ = std::fs::remove_dir_all(&dir);
 }
+
+#[test]
+fn a_sheet_part_exports_its_fitted_edges_tight() {
+    // holes across a bend make fitted edges on fitted faces: written for sheet metal under 1e-7,
+    // so a reader that sets each edge's tolerance from a few samples finds none over it
+    let dir = scratch("sheet-step");
+    let file = dir.join("holes.fg");
+    std::fs::copy(
+        concat!(env!("CARGO_MANIFEST_DIR"), "/../forge-lang/parts/sheet/holes.fg"),
+        &file,
+    )
+    .unwrap();
+    let out = dir.join("holes.step");
+    let st = Command::new(env!("CARGO_BIN_EXE_forgecad"))
+        .args([
+            "export",
+            file.to_str().unwrap(),
+            "ap214",
+            "-o",
+            out.to_str().unwrap(),
+        ])
+        .status()
+        .unwrap();
+    assert!(st.success());
+    let text = std::fs::read(&out).unwrap();
+    let got = forge_step::import(&text, &Default::default()).unwrap();
+    assert!(
+        got.stats.curve_off_surface < 1e-6,
+        "{:?}",
+        got.stats.curve_off_surface
+    );
+    assert!(
+        got.stats.pairs.keys().any(|k| k.contains("Procedural")),
+        "{:?}",
+        got.stats.pairs
+    );
+    let _ = std::fs::remove_dir_all(&dir);
+}

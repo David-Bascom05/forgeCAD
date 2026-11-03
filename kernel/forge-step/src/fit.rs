@@ -10,6 +10,13 @@ use std::collections::HashMap;
 /// How far a fitted curve or surface may stray from the exact one, in mm.
 pub const DEFAULT_TOL: f64 = 1e-4;
 
+/// The fit for sheet metal (bend zones with cuts across them): under OpenCascade's confusion
+/// distance (1e-7). OpenCascade's reader sets each edge's tolerance from its own few samples of
+/// how far the curve lies off its faces, not from the file's stated uncertainty, and its checker
+/// then finds more between them (2 to 17% on fits of 1e-4 and 1e-6); fits this tight leave
+/// nothing to find. The rack's door: 2.3 MB at 1e-4, 3.5 MB at this.
+pub const SHEET_TOL: f64 = 1e-7;
+
 /// Most spans a curve grows to, and a surface's grid cells; past that the error is what it is,
 /// and stated.
 const MAX_SPANS: usize = 8192;
@@ -60,6 +67,9 @@ pub struct PcurveFit {
     pub ctrl: Vec<Point2>,
     pub knots: Vec<f64>,
     pub mults: Vec<u32>,
+    /// The most the surface at the pcurve misses the curve at the same parameter, densely
+    /// sampled on every span (what a reader's curve-on-surface check measures).
+    pub error: f64,
 }
 
 /// `c` on `s` through `anchors`, its parameter and where the face's loop drew it, in order (they
@@ -146,6 +156,15 @@ pub fn fit_pcurve(c: &Curve, anchors: &[(f64, Point2)], s: &Surface, tol: f64) -
             break;
         }
     }
+    // the written spline is the Hermite pieces: measured densely, not at the midpoints alone
+    let mut error: f64 = 0.0;
+    for k in 0..pts.len() - 1 {
+        let (a, b) = (pts[k], pts[k + 1]);
+        for j in 1..32 {
+            let x = j as f64 / 32.0;
+            error = error.max(s.eval(herm2(a, b, x)).distance(c.eval(a.0 + (b.0 - a.0) * x)));
+        }
+    }
     let mut ctrl = Vec::with_capacity(2 * pts.len());
     for (i, &(t, uv)) in pts.iter().enumerate() {
         let r = rate(t, uv);
@@ -161,6 +180,7 @@ pub fn fit_pcurve(c: &Curve, anchors: &[(f64, Point2)], s: &Surface, tol: f64) -
         ctrl,
         mults: mults(pts.len()),
         knots: pts.iter().map(|x| x.0).collect(),
+        error,
     }
 }
 
