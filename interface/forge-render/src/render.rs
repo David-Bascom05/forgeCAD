@@ -298,6 +298,9 @@ pub fn block_on<F: Future>(f: F) -> F::Output {
 /// The native GPU instance: Vulkan only.
 #[cfg(not(target_arch = "wasm32"))]
 pub fn native_instance() -> wgpu::Instance {
+    // the Vulkan loader with NVIDIA's driver crashes making two instances at once (tests do)
+    static ONE_AT_A_TIME: std::sync::Mutex<()> = std::sync::Mutex::new(());
+    let _held = ONE_AT_A_TIME.lock().unwrap_or_else(|e| e.into_inner());
     wgpu::Instance::new(wgpu::InstanceDescriptor {
         backends: wgpu::Backends::VULKAN,
         ..wgpu::InstanceDescriptor::new_without_display_handle()
