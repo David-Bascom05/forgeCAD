@@ -866,17 +866,17 @@ impl<'a> Built<'a> {
         })
     }
 
-    /// Refuses a folded part whose strips pass through each other. Each strip's boundary, stepped
-    /// ten tolerances into its own material, is walked at both skins and halfway from every vertex
-    /// in steps of a quarter thickness, and each point is tested against the material of the strips
-    /// it does not join directly (boxes first). A corner poking into another wall is a vertex, so it
-    /// is caught once deeper than the limit (1e-4); sheets crossing each other leave a point at
-    /// least 3t/8 deep. A curved edge skimming another wall by less than its sag between steps is
-    /// not seen.
+    /// Refuses a folded part whose strips pass through each other, deeper than the limit (ten
+    /// tolerances) through another strip's thickness. b's depth is affine along each ruling of
+    /// a's faces (planes, cylinders, ruled walls), so its greatest over a's boundary is on a's
+    /// edges: each edge at both skins, and each rail. Each is cut in halves while a rigorous box of
+    /// the half (the piece's own box, or the wrapped curve's) can still reach past the limit into
+    /// b's thickness and meet b's region; a box under half the limit across is decided at its
+    /// middle, stepped ten tolerances into a's own material (so walls ending flush along one line
+    /// still find each other). Depth is 1-Lipschitz, so no point deeper than 1.5 limits is missed.
     fn clash(&self) -> Result<(), SheetError> {
         let t = self.t;
         let limit = 10.0 * TOL;
-        let step = t / 4.0;
         let ns = self.strips.len();
         let mut joined = vec![false; ns * ns];
         for (&(l, _), &(m, _)) in &self.twin {
@@ -884,67 +884,174 @@ impl<'a> Built<'a> {
             joined[a * ns + b] = true;
             joined[b * ns + a] = true;
         }
-        let mut points: Vec<Vec<Point3>> = vec![Vec::new(); ns];
+        // every strip's box, and its region's box in its own coordinates
+        let mut boxes = vec![forge_math::Box3::EMPTY; ns];
+        let mut flat = vec![
+            (
+                Point2::new(f64::INFINITY, f64::INFINITY),
+                Point2::new(f64::NEG_INFINITY, f64::NEG_INFINITY)
+            );
+            ns
+        ];
         for ld in &self.loops {
-            let geo = self.strips[ld.strip].geo;
-            let stretch = match geo {
-                Geo::Round { rho0, rn, .. } => ((rho0 + t) / rn).max(1.0),
-                Geo::Plane(_) => 1.0,
-            };
+            let (si, geo) = (ld.strip, self.strips[ld.strip].geo);
             for b in &ld.bounds {
-                let len = match b.piece {
-                    Piece::Line { a, b: e } => a.distance(e),
-                    Piece::Arc { r, t0, t1, .. } => r * (t1 - t0).abs(),
-                    Piece::Spline { .. } => (0..16)
-                        .map(|k| {
-                            b.piece
-                                .at(k as f64 / 16.0)
-                                .distance(b.piece.at((k + 1) as f64 / 16.0))
-                        })
-                        .sum(),
-                } * stretch;
-                let n = ((len / step).ceil() as usize).clamp(1, 1 << 16);
-                for k in 0..n {
-                    // a step into the strip's own material, so walls ending flush along one line
-                    // (two flanges as long as each other, crossing) still find each other inside
-                    let u = k as f64 / n as f64;
-                    let d = b.piece.tangent(u);
-                    let q = b.piece.at(u) + Vec2::new(-d.y, d.x) * (10.0 * TOL / d.length().max(1e-300));
-                    for w in [0.0, 0.5 * t, t] {
-                        points[ld.strip].push(geo.point(q, w));
-                    }
+                let bx = b.piece.bbox();
+                let f = &mut flat[si];
+                *f = (
+                    Point2::new(f.0.x.min(bx.x0), f.0.y.min(bx.y0)),
+                    Point2::new(f.1.x.max(bx.x1), f.1.y.max(bx.y1)),
+                );
+                for w in [0.0, t] {
+                    boxes[si] = boxes[si].hull(&piece_box(geo, &b.piece, w, Interval::new(0.0, 1.0)));
                 }
             }
         }
-        let boxes: Vec<forge_math::Box3> = points
-            .iter()
-            .map(|ps| forge_math::Box3::from_points(ps.iter().copied()).grow(t))
-            .collect();
         for a in 0..ns {
+            let geo = self.strips[a].geo;
             for b in 0..ns {
                 if a == b || joined[a * ns + b] || !boxes[a].overlaps(&boxes[b]) {
                     continue;
                 }
-                for &p in &points[a] {
-                    if !boxes[b].contains(p) {
-                        continue;
-                    }
-                    if let Some(depth) = self.inside(b, p)
-                        && depth > limit
-                    {
-                        return Err(SheetError::FoldedClash {
-                            feature: self.cx.feature,
-                            a: self.strips[a].strip,
-                            b: self.strips[b].strip,
-                            at: p,
-                            depth,
-                            limit,
+                let reach = |bx: &forge_math::Box3| self.may_reach(b, bx, flat[b], limit);
+                for ld in self.loops.iter().filter(|l| l.strip == a) {
+                    for bd in &ld.bounds {
+                        let inset = |u: f64| {
+                            let d = bd.piece.tangent(u);
+                            bd.piece.at(u) + Vec2::new(-d.y, d.x) * (10.0 * TOL / d.length().max(1e-300))
+                        };
+                        let mut found = None;
+                        for w in [0.0, t] {
+                            found = found.or_else(|| {
+                                self.hunt(
+                                    b,
+                                    limit,
+                                    &|u| piece_box(geo, &bd.piece, w, u),
+                                    &|u| geo.point(inset(u), w),
+                                    &reach,
+                                )
+                            });
+                        }
+                        // the rail at the piece's start, straight through the sheet
+                        let q = inset(0.0);
+                        found = found.or_else(|| {
+                            self.hunt(
+                                b,
+                                limit,
+                                &|u| {
+                                    forge_math::Box3::from_points([
+                                        geo.point(q, t * u.lo),
+                                        geo.point(q, t * u.hi),
+                                    ])
+                                    .grow(TOL)
+                                },
+                                &|u| geo.point(q, t * u),
+                                &reach,
+                            )
                         });
+                        if let Some((at, depth)) = found {
+                            return Err(SheetError::FoldedClash {
+                                feature: self.cx.feature,
+                                a: self.strips[a].strip,
+                                b: self.strips[b].strip,
+                                at,
+                                depth,
+                                limit,
+                            });
+                        }
                     }
                 }
             }
         }
         Ok(())
+    }
+
+    /// The deepest point found in strip `b` along a curve over fractions 0..1, by halving while
+    /// `reach` says a half's box may get deeper than `limit`: a point and its depth, if one is.
+    fn hunt(
+        &self,
+        b: usize,
+        limit: f64,
+        box_of: &dyn Fn(Interval) -> forge_math::Box3,
+        point: &dyn Fn(f64) -> Point3,
+        reach: &dyn Fn(&forge_math::Box3) -> bool,
+    ) -> Option<(Point3, f64)> {
+        let mut stack = vec![(Interval::new(0.0, 1.0), 0u32)];
+        while let Some((u, level)) = stack.pop() {
+            let bx = box_of(u);
+            if !reach(&bx) {
+                continue;
+            }
+            let size = (bx.x.width().powi(2) + bx.y.width().powi(2) + bx.z.width().powi(2)).sqrt();
+            if size <= 0.5 * limit || level >= 48 {
+                let p = point(u.mid());
+                if let Some(d) = self.inside(b, p)
+                    && d > limit
+                {
+                    return Some((p, d));
+                }
+                continue;
+            }
+            let m = u.mid();
+            stack.push((Interval::new(u.lo, m), level + 1));
+            stack.push((Interval::new(m, u.hi), level + 1));
+        }
+        None
+    }
+
+    /// Whether a box may hold a point deeper than `limit` in strip `s`'s thickness, over its region's
+    /// box `flat`: rigorous, from the box's corners in the strip's own terms.
+    fn may_reach(&self, s: usize, bx: &forge_math::Box3, flat: (Point2, Point2), limit: f64) -> bool {
+        let t = self.t;
+        let corners = [0, 1, 2, 3, 4, 5, 6, 7].map(|k| {
+            Point3::new(
+                if k & 1 == 0 { bx.x.lo } else { bx.x.hi },
+                if k & 2 == 0 { bx.y.lo } else { bx.y.hi },
+                if k & 4 == 0 { bx.z.lo } else { bx.z.hi },
+            )
+        });
+        let local = |f: &Frame| {
+            let ps = corners.map(|c| f.point_to_local(c));
+            forge_math::Box3::from_points(ps)
+        };
+        let (w, y, x) = match self.strips[s].geo {
+            Geo::Plane(f) => {
+                let l = local(&f);
+                (Interval::new(-l.z.hi, -l.z.lo), l.y, Some(l.x))
+            }
+            Geo::Round {
+                axis, rho0, sigma, ..
+            } => {
+                let l = local(&axis);
+                // the radius over the box: its nearest and farthest points from the axis
+                let near = |i: Interval| {
+                    if i.lo > 0.0 {
+                        i.lo
+                    } else if i.hi < 0.0 {
+                        -i.hi
+                    } else {
+                        0.0
+                    }
+                };
+                let far = |i: Interval| i.lo.abs().max(i.hi.abs());
+                let len = |a: f64, b: f64| (a * a + b * b).sqrt();
+                let (rlo, rhi) = (len(near(l.x), near(l.y)), len(far(l.x), far(l.y)));
+                let (w0, w1) = (sigma * (rlo - rho0), sigma * (rhi - rho0));
+                (
+                    Interval::new(w0.min(w1), w0.max(w1)),
+                    Interval::new(-l.z.hi, -l.z.lo) * sigma,
+                    None,
+                )
+            }
+        };
+        if w.hi <= limit || w.lo >= t - limit {
+            return false;
+        }
+        let y = Interval::new(y.lo.min(y.hi), y.lo.max(y.hi));
+        if y.hi < flat.0.y || y.lo > flat.1.y {
+            return false;
+        }
+        x.is_none_or(|x| x.hi >= flat.0.x && x.lo <= flat.1.x)
     }
 
     /// How deep `p` lies in strip `s`'s material, through its thickness; None outside.
@@ -1458,6 +1565,42 @@ fn wrapped(
         Interval::new(0.0, 1.0),
         true,
     ))
+}
+
+/// A rigorous box of a strip piece's edge at depth w over fractions u: the piece's own 2D box laid
+/// out on a plane strip, the wrapped curve's box on a bend.
+fn piece_box(geo: Geo, p: &Piece, w: f64, u: Interval) -> forge_math::Box3 {
+    let sub = p.sub(u.lo, u.hi);
+    match geo {
+        Geo::Plane(f) => {
+            let b = sub.bbox();
+            forge_math::Box3::from_points(
+                [(b.x0, b.y0), (b.x1, b.y0), (b.x0, b.y1), (b.x1, b.y1)]
+                    .map(|(x, y)| f.point_to_world(Point3::new(x, y, -w))),
+            )
+            .grow(TOL)
+        }
+        Geo::Round {
+            axis,
+            rho0,
+            sigma,
+            rn,
+            ..
+        } => match flat_in_bend(&sub, sub.at(0.0), sub.at(1.0), sigma) {
+            Some(flat) => Wrap {
+                axis,
+                radius: rho0 + sigma * w,
+                unroll: rn,
+                flat,
+            }
+            .bbox(Interval::new(0.0, 1.0)),
+            // past cubic is refused before this; a box that holds everything never prunes
+            None => forge_math::Box3::from_points([
+                Point3::new(-1e300, -1e300, -1e300),
+                Point3::new(1e300, 1e300, 1e300),
+            ]),
+        },
+    }
 }
 
 /// Two side surfaces in one plane, facing one way.

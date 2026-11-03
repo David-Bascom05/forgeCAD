@@ -809,3 +809,146 @@ fn spline_cuts_across_a_bend() {
         );
     }
 }
+
+/// A wall's frame in the xz cross-section: origin on its mold line on the reference skin, x into
+/// the wall, z out of its reference skin (material towards -z).
+#[derive(Clone, Copy)]
+struct Frame2 {
+    o: (f64, f64),
+    x: (f64, f64),
+    z: (f64, f64),
+}
+
+/// The frame of a wall bent off `parent`'s mold line at x = len by `angle`, written apart from the
+/// builder: the turned axes about the mold line, as prior-art.md states the fold map.
+fn bend2(parent: &Frame2, len: f64, angle: f64) -> Frame2 {
+    let (sigma, theta) = (angle.signum(), angle.abs());
+    let (sn, cs) = dmath::sin_cos(theta);
+    let (px, pz) = (parent.x, parent.z);
+    Frame2 {
+        o: (parent.o.0 + len * px.0, parent.o.1 + len * px.1),
+        x: (cs * px.0 + sigma * sn * pz.0, cs * px.1 + sigma * sn * pz.1),
+        z: (-sigma * sn * px.0 + cs * pz.0, -sigma * sn * px.1 + cs * pz.1),
+    }
+}
+
+#[test]
+fn fuzz_curved_edges_skimming_a_wall() {
+    // base, a flange straight up, and off its top a flange folded in and down onto the base, its
+    // end cut to a convex arc: the arc's apex, inside the edge, is the lowest point and its depth
+    // in the base is exact in the flange's height. Set to skim from 1e-2 clear to 1e-2 deep.
+    let limit = 10.0 * forge_math::tol::LINEAR;
+    let mut rng = Rng::new(0x5c1a);
+    let (mut caught, mut clear, mut between) = (0, 0, 0);
+    for seed in 0..80u64 {
+        let (t, r) = (rng.range(0.8, 2.5), rng.range(0.5, 3.0));
+        let (len, w) = (rng.range(60.0, 90.0), rng.range(10.0, 30.0));
+        let h1 = rng.range(25.0, 40.0);
+        let ag = rng.range(100.0, 150.0).to_radians();
+        let base = Frame2 {
+            o: (0.0, 0.0),
+            x: (1.0, 0.0),
+            z: (0.0, 1.0),
+        };
+        let fr = bend2(&base, len, dmath::FRAC_PI_2);
+        let g = bend2(&fr, h1, ag);
+        // the end's arc: apex e short of the flange's end, radius 1.5 w
+        let (e, rho) = (0.5, 1.5 * w);
+        let chord = (rho * rho - 0.25 * w * w).sqrt();
+        // lowest world z at the apex, over both skins, as the flange's height h: z0 + (h - e) x.z
+        let skin = (-t * g.z.1).min(0.0);
+        let touching = e + (-g.o.1 - skin) / g.x.1;
+        for depth in [-1e-2, -1e-4, -1e-6, 1e-6, 1e-5, 1.5e-4, 2.1e-4, 1e-3, 1e-2] {
+            let hg = touching + depth / (-g.x.1);
+            let apex_x = g.o.0 + (hg - e) * g.x.0;
+            let (mut s, base_id) = Sheet::face(
+                FeatureId(5),
+                gauge(t, r, 0.4),
+                Frame::WORLD,
+                &[rect(0.0, 0.0, len, w, 0)],
+            )
+            .unwrap();
+            let (fid, _) = s.flange(base_id, 1, dmath::FRAC_PI_2, h1).unwrap();
+            let Ok((gid, _)) = s.flange(fid, 1, ag, hg) else {
+                continue;
+            };
+            let setback_g = forge_sheet::build::setback_of(&gauge(t, r, 0.4), r, ag);
+            let x1 = hg - e - rho + chord;
+            if x1 < setback_g + 1.0 || apex_x < 5.0 || apex_x > len - 10.0 {
+                continue;
+            }
+            // the cut: the end beyond an arc bulging into it, from (x1, w) round the apex to (x1, 0)
+            let p = Point2::new;
+            let (xc, a0) = (hg - e - rho, dmath::atan2(0.5 * w, chord));
+            let cut = ProfileLoop::new(vec![
+                (
+                    Segment::Line {
+                        a: p(x1, -1.0),
+                        b: p(hg + 1.0, -1.0),
+                    },
+                    0,
+                ),
+                (
+                    Segment::Line {
+                        a: p(hg + 1.0, -1.0),
+                        b: p(hg + 1.0, w + 1.0),
+                    },
+                    1,
+                ),
+                (
+                    Segment::Line {
+                        a: p(hg + 1.0, w + 1.0),
+                        b: p(x1, w + 1.0),
+                    },
+                    2,
+                ),
+                (
+                    Segment::Line {
+                        a: p(x1, w + 1.0),
+                        b: p(x1, w),
+                    },
+                    3,
+                ),
+                (
+                    Segment::Arc {
+                        center: p(xc, 0.5 * w),
+                        radius: rho,
+                        start: a0,
+                        sweep: -2.0 * a0,
+                    },
+                    4,
+                ),
+                (
+                    Segment::Line {
+                        a: p(x1, 0.0),
+                        b: p(x1, -1.0),
+                    },
+                    5,
+                ),
+            ]);
+            s.cut(gid, cut).unwrap();
+            match build(&s, Map::Folded) {
+                Ok(b) => {
+                    assert!(depth <= 2.0 * limit, "seed {seed}: {depth} deep, built");
+                    if depth < 0.0 {
+                        checked(&b);
+                        clear += 1;
+                    } else {
+                        between += 1;
+                    }
+                }
+                Err(SheetError::FoldedClash { at, .. }) => {
+                    assert!(depth > 0.0, "seed {seed}: refused {depth} clear, at {at:?}");
+                    if depth > 2.0 * limit {
+                        caught += 1;
+                    } else {
+                        between += 1;
+                    }
+                }
+                Err(e) => panic!("seed {seed} depth {depth}: {e:?}"),
+            }
+        }
+    }
+    println!("{caught} caught, {clear} clear, {between} within twice the limit");
+    assert!(caught > 60 && clear > 60, "{caught} {clear}");
+}
