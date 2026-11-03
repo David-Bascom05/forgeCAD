@@ -16,7 +16,7 @@ pub struct RelationId(pub u64);
 
 /// A part or assembly document, by its project path.
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
-pub struct DocId(pub String);
+pub struct DocId(pub std::sync::Arc<str>);
 
 /// A document's content hash as the op log records it.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
@@ -585,6 +585,10 @@ pub struct Assembly {
     pub relations: Vec<Relation>,
     pub fits: Vec<Fit>,
     pub fit_rules: Vec<FitRule>,
+    /// Blame order: a joint's, loose constraint's or relation's place in the document (by its
+    /// raw id). Of a conflicting set the last is left out, and of implied rows the later is the
+    /// redundant one; ids without a place come after, by id. Poses do not depend on it.
+    pub rank: BTreeMap<u64, u64>,
 }
 
 /// Why a part could not give an anchor it declares; decided when the part was built.

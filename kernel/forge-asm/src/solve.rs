@@ -1199,7 +1199,7 @@ fn solve_group(
         // diagnosis: add sources in item order; the first that cannot be met is a culprit, and a
         // deletion filter over what came before gives a minimal conflicting set
         let mut order: Vec<usize> = (0..srcs.len()).collect();
-        order.sort_by_key(|&i| srcs[i].item(plan));
+        order.sort_by_key(|&i| plan.blame(srcs[i].item(plan)));
         let mut on = vec![false; srcs.len()];
         let solves = |on: &[bool], poses: &mut Poses| {
             poses.at.clone_from(&begin);
@@ -1447,7 +1447,7 @@ fn projected_rank(g: &[f64], f: usize, n: usize, null: &[Vec<f64>]) -> usize {
 /// combination of.
 fn redundancy(plan: &Plan, srcs: &[Src], rows: &[GRow], jac: &[f64], n: usize, out: &mut Vec<Diagnostic>) {
     let mut order: Vec<usize> = (0..rows.len()).collect();
-    order.sort_by_key(|&i| (srcs[rows[i].src].item(plan), i));
+    order.sort_by_key(|&i| (plan.blame(srcs[rows[i].src].item(plan)), i));
     // modified Gram-Schmidt in item order, twice for safety
     let mut basis: Vec<Vec<f64>> = Vec::new();
     let mut kept: Vec<usize> = Vec::new();

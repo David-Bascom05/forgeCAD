@@ -201,7 +201,7 @@ pub fn export<P: Parts>(
                 .ok_or(StepError::NoAssembly { doc: d.clone() })?,
         ));
     }
-    levels.push((DocId(name.to_string()), asm));
+    levels.push((DocId(name.into()), asm));
     let mut assemblies: BTreeMap<DocId, Product> = BTreeMap::new();
     for (doc, a) in levels {
         let sol = crate::solve(a, parts, &crate::Options { threads: 1 });

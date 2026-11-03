@@ -132,6 +132,7 @@ pub(crate) struct Plan {
     pub subs: BTreeMap<DocId, Sub>,
     /// Size of the assembly, for scaling angles to lengths.
     pub size: f64,
+    pub rank: BTreeMap<u64, u64>,
 }
 
 pub(crate) struct Uf(Vec<usize>);
@@ -523,7 +524,23 @@ impl Plan {
             diagnostics: diags,
             subs: std::mem::take(subs),
             size,
+            rank: asm.rank.clone(),
         }
+    }
+}
+
+impl Plan {
+    /// Where an item comes in blame order: its document rank, then the item.
+    pub fn blame(&self, it: Item) -> (u64, Item) {
+        let raw = match it {
+            Item::Constraint { id, .. } => match id {
+                ConstraintId::Loose(c) => c,
+                ConstraintId::Joint { joint, .. } => joint.0,
+            },
+            Item::Relation(r) => r.0,
+            Item::Ground(_) => return (0, it),
+        };
+        (self.rank.get(&raw).map_or(u64::MAX, |r| *r), it)
     }
 }
 
