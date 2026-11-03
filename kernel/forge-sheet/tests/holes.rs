@@ -258,3 +258,141 @@ fn hardware_against_its_row() {
         "{v:?}"
     );
 }
+
+#[test]
+fn holes_drawn_in_the_base_outline_are_checked_like_cutouts() {
+    // the same holes as cutouts, drawn as holes of the base's own outline (clockwise): each
+    // checked the same, named by the outline's segment
+    let g = Gauge {
+        thickness: T,
+        radius: R,
+        rule: BendRule::K(0.4),
+    };
+    let hole = |x: f64, y: f64, r: f64, id: u64| {
+        ProfileLoop::new(vec![(
+            Segment::Circle {
+                center: Point2::new(x, y),
+                radius: r,
+                ccw: false,
+            },
+            id,
+        )])
+    };
+    let (mut s, base) = Sheet::face(
+        FeatureId(2),
+        g,
+        Frame::WORLD,
+        &[
+            poly(&[(0.0, 0.0), (60.0, 0.0), (60.0, 40.0), (0.0, 40.0)]),
+            hole(50.0, 20.0, 3.0, 10), // 5 from the tangent line (rule 7)
+            hole(20.0, 5.0, 2.0, 11),  // 3 from the edge (rule 4)
+            hole(20.0, 25.0, 0.8, 12), // 1.6 across (rule 2)
+        ],
+    )
+    .unwrap();
+    s.flange(base, 1, dmath::PI / 2.0, 30.0).unwrap();
+    let v = check(&s, &shop(Some(70.0)));
+    let on = |segment: u64| forge_sheet::TrimRef::Outline {
+        wall: WallId(0),
+        segment,
+    };
+    assert!(
+        v.iter().any(
+            |x| matches!(x, Violation::HoleNearBend { trim, distance, limit, .. }
+            if *trim == on(10) && (distance - 5.0).abs() < 1e-9 && *limit == 7.0)
+        ),
+        "{v:?}"
+    );
+    assert!(
+        v.iter().any(
+            |x| matches!(x, Violation::HoleNearEdge { trim, distance, limit, .. }
+            if *trim == on(11) && (distance - 3.0).abs() < 1e-9 && *limit == 4.0)
+        ),
+        "{v:?}"
+    );
+    assert!(
+        v.iter()
+            .any(|x| matches!(x, Violation::HoleTooSmall { trim, .. } if *trim == on(12))),
+        "{v:?}"
+    );
+    // the outline's own edges are not holes
+    assert_eq!(
+        v.iter()
+            .filter(|x| matches!(x, Violation::HoleNearBend { .. } | Violation::HoleNearEdge { .. }))
+            .count(),
+        2,
+        "{v:?}"
+    );
+}
+
+#[test]
+fn hardware_against_the_other_holes() {
+    let row = |kind, size: &str| {
+        placeholder_catalogue()
+            .into_iter()
+            .find(|h| h.kind == kind && h.size == size)
+            .unwrap()
+    };
+    let (stud, nut) = (
+        row(forge_sheet::HardwareKind::Stud, "M4"),
+        row(forge_sheet::HardwareKind::Nut, "M3"),
+    );
+    let stock = shop(Some(70.0));
+    let mounts = |s: &Sheet| checks::mounts(s, stock.stock.first());
+    // a stud whose 4 hole runs 0.5 into a slot: an overlap, its centre 1.5 from the slot
+    let mut s = l();
+    let slot = s
+        .cut(
+            WallId(0),
+            poly(&[(10.0, 21.5), (40.0, 21.5), (40.0, 28.5), (10.0, 28.5)]),
+        )
+        .unwrap();
+    let c = s.mount(WallId(0), Point2::new(25.0, 20.0), stud.clone()).unwrap();
+    let v = mounts(&s);
+    assert!(
+        matches!(v.as_slice(), [Violation::HardwareOverlapsHole { cut, other: forge_sheet::TrimRef::Cut { cut: o, .. }, distance, hole, limit, away, .. }]
+            if *cut == c && *o == slot && (distance - 1.5).abs() < 1e-12 && *hole == 4.0 && *limit == 6.0
+                && (*away - Vec2::new(0.0, -1.0)).length() < 1e-12),
+        "{v:?}"
+    );
+    // its centre inside the slot
+    let mut s = l();
+    s.cut(
+        WallId(0),
+        poly(&[(10.0, 15.0), (40.0, 15.0), (40.0, 25.0), (10.0, 25.0)]),
+    )
+    .unwrap();
+    s.mount(WallId(0), Point2::new(25.0, 20.0), stud.clone()).unwrap();
+    assert!(
+        matches!(mounts(&s).as_slice(), [Violation::HardwareOverlapsHole { distance, .. }] if *distance == 0.0)
+    );
+    // a nut 3.5 from a hole's edge (the row's edge distance 4.8), and a hole drawn in the outline
+    // the same: each too near, the way out away from the hole
+    let mut s = l();
+    let h = s.cut(WallId(0), circle(30.0, 20.0, 1.5)).unwrap();
+    let c = s.mount(WallId(0), Point2::new(25.0, 20.0), nut.clone()).unwrap();
+    let v = mounts(&s);
+    assert!(
+        matches!(v.as_slice(), [Violation::HardwareNearHole { cut, other: forge_sheet::TrimRef::Cut { cut: o, .. }, distance, limit, away, .. }]
+            if *cut == c && *o == h && (distance - 3.5).abs() < 1e-12 && *limit == 4.8
+                && (*away - Vec2::new(-1.0, 0.0)).length() < 1e-12),
+        "{v:?}"
+    );
+    // two pieces of hardware too near each other: each says so
+    let mut s = l();
+    s.mount(WallId(0), Point2::new(20.0, 20.0), nut.clone()).unwrap();
+    s.mount(WallId(0), Point2::new(26.0, 20.0), nut.clone()).unwrap();
+    let v = mounts(&s);
+    assert_eq!(
+        v.iter()
+            .filter(|x| matches!(x, Violation::HardwareNearHole { .. }))
+            .count(),
+        2,
+        "{v:?}"
+    );
+    // clear of everything: nothing
+    let mut s = l();
+    s.cut(WallId(0), circle(40.0, 20.0, 1.5)).unwrap();
+    s.mount(WallId(0), Point2::new(25.0, 20.0), nut).unwrap();
+    assert!(mounts(&s).is_empty(), "{:?}", mounts(&s));
+}

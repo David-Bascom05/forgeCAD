@@ -600,11 +600,13 @@ pem(KIND, SIZE, at: POINT|CIRCLE, wall: W)      a catalogue part pressed into W 
 
 A sheet given `shop:` is checked against it at the end of the run, on the flat in developed
 terms: thickness stocked, each bend's radius tooled, each wall reaching the die's minimum flange;
-each hole (a cut not meeting the edge) its distance to each bend's tangent line (HoleNearBend,
+each hole (a cut not meeting the edge, or a hole drawn in the sheet's own sketch) its distance to each bend's tangent line (HoleNearBend,
 hole_to_bend with R the bend's radius) and to the edge (HoleNearEdge), round holes their size
 (HoleTooSmall), other cuts the widest circle they hold (SlotTooNarrow). Hardware against its own
 row, shop or not: the sheet's thickness in range (HardwareThickness), the hole's centre to an edge
-or bend (HardwareNearEdge), the sheet no harder than the part takes (SheetTooHard;
+or bend (HardwareNearEdge), its hole running into another hole or the centre inside one
+(HardwareOverlapsHole), another hole's edge nearer the centre than the part's edge distance
+(HardwareNearHole; other hardware's holes too), the sheet no harder than the part takes (SheetTooHard;
 HardnessUnknown when the stock does not say). Each is a typed warning (severity `violation`)
 with fixes: SetParam on the param that placed a hole or part, moving it the way out by what is
 missing when that way is along a sketch axis, or shrinking its radius; a round hole's radius to
