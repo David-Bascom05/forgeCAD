@@ -1823,7 +1823,7 @@ pub fn member(ev: &mut Eval, v: Value, name: &str, span: Span) -> R<Value> {
                 "edges" => Ok(feature_edges(ev, &[f.idx])),
                 "rim" if f.axis.is_some() => {
                     let (o, d) = f.axis.expect("checked");
-                    Ok(rim(ev, f, o, d))
+                    rim(ev, f, o, d, span)
                 }
                 _ => Err(unknown(&v)),
             }
@@ -2054,30 +2054,52 @@ pub(crate) fn feature_edges(ev: &mut Eval, idx: &[usize]) -> Value {
     Value::Edges(Rc::new(out))
 }
 
-/// A hole's or bore's rim: its circular edges where it meets the face it was drilled into.
-fn rim(ev: &mut Eval, f: &Feat, o: Point3, d: UnitVec3) -> Value {
-    let Value::Edges(all) = feature_edges(ev, &[f.idx]) else {
-        return Value::Unresolved;
-    };
+/// A hole's or bore's rim: the loop of edges nearest its mouth where its faces meet faces it did
+/// not make (any curve: a hole drilled into a blend has a mouth that is no circle). A mouth a
+/// later fillet rounded has only smooth edges there: chamfering it is the typed `MouthRounded`.
+fn rim(ev: &mut Eval, f: &Feat, o: Point3, d: UnitVec3, span: Span) -> R<Value> {
+    if !ev.b.building || ev.b.built() <= f.idx {
+        return Ok(Value::Unresolved);
+    }
+    let n = ev.b.built();
+    let origin = ev.b.origin(n);
     let body = ev.b.body().expect("built");
-    let mut best: Vec<(f64, Name)> = vec![];
+    let made = |x: FaceId| origin.get(&body.face(x).name).is_some_and(|o| o.contains(&f.idx));
+    // the boundary: one face the feature's, the other not
+    let mut bound: Vec<(EdgeId, f64)> = vec![];
     for e in body.edge_ids() {
-        let edge = body.edge(e);
-        if !all.contains(&edge.name) {
-            continue;
-        }
-        if let Curve::Circle(c) = &edge.curve {
-            let along = (c.frame.origin - o).dot(d.get());
-            best.push((along, edge.name));
+        let fs = select::faces_of_edge(body, e);
+        if fs.iter().any(|&x| made(x)) && fs.iter().any(|&x| !made(x)) {
+            let edge = body.edge(e);
+            let mid = forge_geom::CurveGeom::eval(&edge.curve, edge.range.mid());
+            bound.push((e, (mid - o).dot(d.get())));
         }
     }
-    let lo = best.iter().map(|b| b.0).fold(f64::INFINITY, f64::min);
-    Value::Edges(Rc::new(
-        best.into_iter()
-            .filter(|b| (b.0 - lo).abs() < 1e-6)
-            .map(|b| b.1)
-            .collect(),
-    ))
+    let Some(&(first, _)) = bound.iter().min_by(|a, b| a.1.total_cmp(&b.1)) else {
+        return Ok(Value::Edges(Rc::new(vec![])));
+    };
+    // the loop through the nearest edge: boundary edges joined at their ends
+    let ends = |e: EdgeId| [body.edge(e).start, body.edge(e).end];
+    let mut mouth = vec![first];
+    let mut grew = true;
+    while grew {
+        grew = false;
+        for &(e, _) in &bound {
+            if !mouth.contains(&e) && mouth.iter().any(|&m| ends(m).iter().any(|v| ends(e).contains(v))) {
+                mouth.push(e);
+                grew = true;
+            }
+        }
+    }
+    if mouth.iter().all(|&e| select::crease(body, e) == Some("smooth")) {
+        return Err(Error::MouthRounded {
+            span,
+            id: f.id.clone(),
+        });
+    }
+    Ok(Value::Edges(Rc::new(
+        mouth.iter().map(|&e| body.edge(e).name).collect(),
+    )))
 }
 
 // ---- selections -------------------------------------------------------------------------

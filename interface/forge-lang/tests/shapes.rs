@@ -322,3 +322,87 @@ fn a_size_over_a_bare_number_is_a_size() {
     // a bare number over a count is a ratio
     assert!(errors("shared n = count(4)\nshared W = 40\nx = W * (1 / n)\n").is_empty());
 }
+
+#[test]
+fn a_loft_follows_rails_from_corners_and_a_centre_line() {
+    let base = "shared a = 20
+shared h = 40
+shared c = 40
+sketch bot(on: xy) {
+  sq = rect(center: (0, 0), size: (a, a))
+  x = line((0, 0), (a, 0), construction: true)
+}
+sketch top(on: offset(bot.plane, h)) {
+  sq = rect(center: (0, 0), size: (a, a))
+}
+sketch front(on: rotate(bot.plane, about: bot.sq[0], by: 90deg)) {
+  r = arc(center: (a - c, h / 2), from: (a, 0), to: (a, h))
+}
+";
+    // a rail through one corner, bowed out: more than the straight prism
+    let r = ok(&format!(
+        "{base}bulge = loft([bot.sq, top.sq], smooth: true, rails: [(bot.sq[1].a, front.r)])\n"
+    ));
+    assert!(volume(&r) > 16000.0);
+    // a rail's point must be a corner of the first profile
+    assert_eq!(
+        errors(&format!(
+            "{base}bulge = loft([bot.sq, top.sq], smooth: true, rails: [(top.sq[1].a, front.r)])\n"
+        )),
+        ["NotAVertex"]
+    );
+    // a centre line: up, then bent over
+    let r = ok(&format!(
+        "{base}sketch spine(on: rotate(bot.plane, about: bot.x, by: 90deg)) {{\n  path cl(start: (0, 0)) {{\n    line(to: (0, h / 2))\n    tarc(to: (a / 4, h))\n  }}\n}}\nbent = loft([bot.sq, top.sq], smooth: true, centre: spine.cl)\n"
+    ));
+    assert!(volume(&r) > 0.0);
+    assert_eq!(
+        errors(&format!(
+            "{base}bulge = loft([bot.sq, top.sq], smooth: true, rails: [(bot.sq[1].a, front.r)], centre: front.r)\n"
+        )),
+        ["NotWith"]
+    );
+}
+
+const BOSS: &str = "shared L = 60
+shared t = 8
+shared R = 10
+shared bh = 12
+shared fr = 4
+shared d = 2
+shared c = 0.5
+sketch plate(on: xy) {
+  o = rect(center: (0, 0), size: (L, L))
+}
+base = extrude(plate, t)
+sketch bk(on: base.end) {
+  b = circle((0, 0), R)
+}
+boss = extrude(bk.b, bh)
+blend = fillet(edges(between: (boss, base)), fr)
+";
+
+#[test]
+fn a_hole_rim_is_its_mouth_on_a_blend_too() {
+    // drilled into the boss's blend: the mouth is no circle, and still the rim
+    let hole =
+        "sketch hk(on: base.end) {\n  p = pt(R + fr / 2, 0)\n}\nbore = hole(at: hk.p, d: d, depth: t)\n";
+    let plain = volume(&ok(&format!("{BOSS}{hole}")));
+    let r = ok(&format!("{BOSS}{hole}brk = chamfer(bore.rim, c)\n"));
+    let taken = plain - volume(&r);
+    // a ring of chamfer round a 2 mm mouth: more than nothing, less than a 3 mm disc 0.5 deep
+    assert!(taken > 0.0 && taken < PI * 1.5 * 1.5 * 0.5, "{taken}");
+    // through the boss's top: its rim there
+    let r = ok(&format!(
+        "{BOSS}sketch hk(on: boss.end) {{\n  p = pt(0, 0)\n}}\nbore = hole(at: hk.p, d: d, depth: thru)\nbrk = chamfer(bore.rim, c)\n"
+    ));
+    assert!(volume(&r) > 0.0);
+}
+
+#[test]
+fn a_rim_a_later_fillet_rounded_is_a_typed_error() {
+    let src = format!(
+        "{BOSS}sketch hk(on: boss.end) {{\n  p = pt(0, 0)\n}}\nbore = hole(at: hk.p, d: d, depth: bh)\nround = fillet(edges(of: boss, crease: \"convex\"), c)\nbrk = chamfer(bore.rim, c)\n"
+    );
+    assert_eq!(errors(&src), ["MouthRounded"]);
+}
