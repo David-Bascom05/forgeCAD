@@ -270,7 +270,7 @@ fn slab(p: &Profile, d: f64, h: f64, angle: f64, root: Name) -> Result<Body, Tap
     b.add_shell();
     let base = p.plane;
     let lid = base.with_origin(base.origin + base.z() * h);
-    let (start, end) = (root.with_str("start"), root.with_str("end"));
+    let (start, end) = (crate::roles::start(root), crate::roles::end(root));
     let bottom = b.add_face(ShellId(0), Surface::Plane(Plane::new(base)), false, start);
     let moved: Vec<Vec<Moved>> = p
         .loops
@@ -287,7 +287,7 @@ fn slab(p: &Profile, d: f64, h: f64, angle: f64, root: Name) -> Result<Body, Tap
     for (l, m) in p.loops.iter().zip(&moved) {
         let segs = &l.segments;
         let n = segs.len();
-        let names: Vec<Name> = segs.iter().map(|s| root.with_str("side").with(s.1)).collect();
+        let names: Vec<Name> = segs.iter().map(|s| crate::roles::side(root, s.1)).collect();
         let joint = |i: usize, n0: Name| if n <= 2 { n0.with_name(names[i]) } else { n0 };
         let mut verts: Vec<[VertexId; 2]> = Vec::with_capacity(n);
         for i in 0..n {
@@ -402,7 +402,7 @@ pub fn tapered(profile: &Profile, distance: f64, angle: f64, feature: u64) -> Re
     crate::skin::curved(profile).map_err(|e| TaperError::Extrude(ExtrudeError::Profile(e)))?;
     let b = extrude(profile, distance, feature).map_err(TaperError::Extrude)?;
     let root = Name::feature(feature);
-    let caps = [root.with_str("start"), root.with_str("end")];
+    let caps = [crate::roles::start(root), crate::roles::end(root)];
     let sides: Vec<Name> = b
         .face_ids()
         .map(|k| b.face(k).name)
@@ -431,7 +431,7 @@ pub fn tapered(profile: &Profile, distance: f64, angle: f64, feature: u64) -> Re
         let Some(d) = next_event(&p, sign, left * lean) else {
             let e = extrude(&p, left, id).map_err(TaperError::Extrude)?;
             let r = Name::feature(id);
-            let caps = [r.with_str("start"), r.with_str("end")];
+            let caps = [crate::roles::start(r), crate::roles::end(r)];
             let s: Vec<Name> = e
                 .face_ids()
                 .map(|f| e.face(f).name)

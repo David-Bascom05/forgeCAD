@@ -12,6 +12,7 @@ pub mod loft;
 pub mod profile;
 pub mod rebuild;
 pub mod revolve;
+pub mod roles;
 mod selfx;
 pub mod shell;
 mod skin;
