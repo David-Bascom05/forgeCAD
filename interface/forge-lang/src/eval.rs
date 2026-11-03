@@ -280,6 +280,8 @@ pub struct Eval<'s> {
     /// Inside a path block: its last segment and current end point.
     path: Option<PathState>,
     pub expects: Vec<Stmt>,
+    /// Each expect's local names where it stood (loop variables, a function's arguments).
+    expect_scopes: Vec<Vec<HashMap<String, (Value, Span)>>>,
     ret: Option<Value>,
     /// Inside a sketch: the name (with loop indices) the entity a call makes takes, and the call.
     pub ent_name: Option<(String, Span)>,
@@ -340,6 +342,7 @@ impl<'s> Eval<'s> {
             sketch: None,
             path: None,
             expects: vec![],
+            expect_scopes: vec![],
             ret: None,
             ent_name: None,
             observed: BTreeSet::new(),
@@ -352,6 +355,19 @@ impl<'s> Eval<'s> {
             asm: None,
             root: None,
         }
+    }
+
+    /// Puts back expect `k`'s local names; `leave_expect` with the mark takes them away again.
+    pub(crate) fn enter_expect(&mut self, k: usize) -> usize {
+        let mark = self.scopes.len();
+        if let Some(sc) = self.expect_scopes.get(k) {
+            self.scopes.extend(sc.iter().cloned());
+        }
+        mark
+    }
+
+    pub(crate) fn leave_expect(&mut self, mark: usize) {
+        self.scopes.truncate(mark.max(1));
     }
 
     /// The top-level names and their values, by name.
@@ -966,6 +982,8 @@ impl<'s> Eval<'s> {
             }
             StmtKind::Expect { .. } => {
                 self.expects.push(s.clone());
+                // the names it sees here (a loop's variable), for reading it after the run
+                self.expect_scopes.push(self.scopes[1..].to_vec());
                 Ok(())
             }
             StmtKind::Block {

@@ -49,8 +49,8 @@ pub struct Options {
     pub render: bool,
     /// The session's root: an assembly reads no file outside it (`fg serve`, MCP).
     pub root: Option<std::path::PathBuf>,
-    /// An assembly: measure only this expect (by position), ignoring its `at` (`asm.rs`).
-    pub probe: Option<usize>,
+    /// An assembly: measure only these expects (by position), ignoring their `at` (`asm.rs`).
+    pub probe: Option<Vec<usize>>,
 }
 
 impl Default for Options {

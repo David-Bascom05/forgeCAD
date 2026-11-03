@@ -1059,3 +1059,97 @@ body = extrude(plan, w)
         );
     }
 }
+
+/// `expect .. at` lines that set the same params share one run: ten lines over two param sets
+/// make two runs, not ten, and each line still reads its own value.
+#[test]
+fn expects_at_one_param_set_share_one_run() {
+    let d = mech_dir("expectat-sets");
+    let mut src = four_bar_doc(30.0);
+    for t2 in [60.0f64, 90.0] {
+        let (_, t4) = open_four_bar(A, B, C, D, t2.to_radians());
+        for k in 0..5 {
+            // five checks per set, each with its own tolerance so the lines differ
+            src += &format!(
+                "expect value(j4.turn) = {}deg +- 0.00000{}deg at j1.turn = {t2}deg\n",
+                t4.to_degrees(),
+                k + 1
+            );
+        }
+    }
+    let r = run_in(&d, &src);
+    assert!(r.ok(), "{:?}", errors(&r));
+    let a = r.asm.as_ref().expect("an assembly");
+    assert_eq!(a.timings.at_runs, 2);
+    // a wrong value under a shared set still fails on its own line
+    let bad = format!("{src}expect value(j4.turn) = 0deg at j1.turn = 60deg\n");
+    let r = run_in(&d, &bad);
+    let failed: Vec<&Error> = r.errors.iter().filter(|e| e.kind() == "ExpectFailed").collect();
+    assert_eq!(failed.len(), 1, "{:?}", errors(&r));
+    assert_eq!(r.asm.as_ref().expect("an assembly").timings.at_runs, 2);
+}
+
+/// An `at` value (and the limit) may come from a loop's variable: each instance is its own
+/// param set.
+#[test]
+fn an_expect_at_reads_a_loop_variable() {
+    let d = mech_dir("expectat-loop");
+    let src = format!(
+        "{}for a in [45deg, 60deg, 90deg] {{\n  expect value(j1.turn) = a +- 0.000001deg at j1.turn = a\n}}\n",
+        four_bar_doc(30.0)
+    );
+    let r = run_in(&d, &src);
+    assert!(r.ok(), "{:?}", errors(&r));
+    let a = r.asm.as_ref().expect("an assembly");
+    assert_eq!(a.timings.at_runs, 3);
+    // the same value twice is one set
+    let src = format!(
+        "{}for a in [60deg, 60deg] {{\n  expect value(j1.turn) = a +- 0.000001deg at j1.turn = a\n}}\n",
+        four_bar_doc(30.0)
+    );
+    let r = run_in(&d, &src);
+    assert!(r.ok(), "{:?}", errors(&r));
+    assert_eq!(r.asm.as_ref().expect("an assembly").timings.at_runs, 1);
+}
+
+/// A sheet part with an unfold is placed folded; `body:` still picks the flat.
+#[test]
+fn an_assembly_places_a_sheet_part_folded() {
+    let d = dir("folded");
+    let part = "shared t = 2
+shared r = 2
+shared k = ratio(0.4)
+param plan.L = 40
+param plan.W = 30
+param up.h = 30
+param flat.gap = 80
+sketch plan(on: xy) {
+  outline = rect(corner: (0, 0), size: (L, W))
+}
+base = sheet(plan, t: t, r: r, bend: kfactor(k))
+up = flange(base.edge(plan.outline[1]), height: h, measure: \"inner\")
+flat = unfold(base, on: offset(base.bottom, gap))
+";
+    write(&d, "l.fg", part);
+    let alone = run_in(&d, part);
+    assert!(alone.ok(), "{:?}", errors(&alone));
+    let vol = |b: &forge_topo::Body| forge_topo::mass::mass(b).expect("mass").volume;
+    let folded = vol(alone.sheets[0].folded.as_ref().expect("folded"));
+    let flat = vol(alone.sheets[0].unfolds[0].1.as_ref().expect("flat"));
+    let placed = |doc: &str| -> f64 {
+        let opts = Options {
+            dir: Some(d.clone()),
+            render: true,
+            ..Options::default()
+        };
+        let r = forge_lang::run(doc, opts, Default::default()).0;
+        assert!(r.ok(), "{:?}", errors(&r));
+        let a = r.asm.expect("an assembly");
+        assert_eq!(a.draw.len(), 1);
+        vol(&a.draw[0].0)
+    };
+    let v = placed("assembly\n\nl = part(\"l.fg\", ground: true)\n");
+    assert!((v - folded).abs() < 1e-6 * folded, "{v} vs folded {folded}");
+    let v = placed("assembly\n\nl = part(\"l.fg\", body: \"flat\", ground: true)\n");
+    assert!((v - flat).abs() < 1e-6 * flat, "{v} vs flat {flat}");
+}
