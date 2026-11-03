@@ -19,6 +19,7 @@ pub struct PartMesh {
     pub triangles: Vec<[u32; 3]>,
     pub tolerance: f64,
     bvh: OnceLock<Bvh>,
+    boxes: OnceLock<Vec<Box3>>,
     sharp: OnceLock<Vec<[bool; 3]>>,
 }
 
@@ -29,6 +30,7 @@ impl PartMesh {
             triangles,
             tolerance,
             bvh: OnceLock::new(),
+            boxes: OnceLock::new(),
             sharp: OnceLock::new(),
         }
     }
@@ -67,11 +69,14 @@ impl PartMesh {
         })
     }
     fn bvh(&self) -> &Bvh {
-        self.bvh.get_or_init(|| {
-            let boxes: Vec<Box3> = (0..self.triangles.len())
+        self.bvh.get_or_init(|| Bvh::new(self.tri_boxes()))
+    }
+    /// Each triangle's box, built once: the narrow phase queries them per sample point.
+    fn tri_boxes(&self) -> &[Box3] {
+        self.boxes.get_or_init(|| {
+            (0..self.triangles.len())
                 .map(|t| Box3::from_points(self.tri(t)))
-                .collect();
-            Bvh::new(&boxes)
+                .collect()
         })
     }
 }
@@ -160,6 +165,57 @@ impl Bvh {
             stack.push(l);
         }
         b
+    }
+
+    /// Items whose boxes the segment `p` to `q` passes through (slab test per node, so a long ray
+    /// visits only the boxes on its way, not every box in its bounding box).
+    fn segment(&self, boxes: &[Box3], p: Point3, q: Point3, out: &mut Vec<usize>) {
+        if self.nodes.is_empty() {
+            return;
+        }
+        let d = q - p;
+        let hits = |b: &Box3| -> bool {
+            let (mut lo, mut hi) = (0.0f64, 1.0f64);
+            for (o, di, iv) in [(p.x, d.x, b.x), (p.y, d.y, b.y), (p.z, d.z, b.z)] {
+                if iv.lo > iv.hi {
+                    return false;
+                }
+                if di == 0.0 {
+                    if o < iv.lo || o > iv.hi {
+                        return false;
+                    }
+                    continue;
+                }
+                let (mut t0, mut t1) = ((iv.lo - o) / di, (iv.hi - o) / di);
+                if t0 > t1 {
+                    std::mem::swap(&mut t0, &mut t1);
+                }
+                lo = lo.max(t0);
+                hi = hi.min(t1);
+                if lo > hi {
+                    return false;
+                }
+            }
+            true
+        };
+        let mut stack = vec![0usize];
+        while let Some(n) = stack.pop() {
+            let node = &self.nodes[n];
+            if !hits(&node.bbox) {
+                continue;
+            }
+            if node.leaf {
+                out.extend(
+                    self.items[node.lo..node.hi]
+                        .iter()
+                        .copied()
+                        .filter(|&i| hits(&boxes[i])),
+                );
+            } else {
+                stack.push(node.hi);
+                stack.push(node.lo);
+            }
+        }
     }
 
     /// Items whose boxes overlap `q`.
@@ -448,13 +504,9 @@ fn inside(m: &PartMesh, p: Point3, depth: f64) -> Option<bool> {
     // a ray in a direction no model axis takes
     let d = Vec3::new(0.571_428_57, 0.618_034, 0.538_461_5);
     let far = p + d * (2.0 * (m.bounds().diagonal() + p.to_vec().length() + 1.0));
-    let ray = Box3::from_points([p, far]);
     let mut hits = 0usize;
     let mut out = Vec::new();
-    let boxes: Vec<Box3> = (0..m.triangles.len())
-        .map(|t| Box3::from_points(m.tri(t)))
-        .collect();
-    bvh.query(&boxes, &ray, &mut out);
+    bvh.segment(m.tri_boxes(), p, far, &mut out);
     for t in out {
         let tri = m.tri(t);
         let n = normal(&tri);
@@ -476,6 +528,10 @@ fn inside(m: &PartMesh, p: Point3, depth: f64) -> Option<bool> {
 }
 
 fn narrow(a: &PartMesh, b: &PartMesh, rel: &Frame, depth: f64) -> Narrow {
+    // the answer is symmetric; placing the smaller mesh in the larger one's frame moves fewer points
+    if b.positions.len() > a.positions.len() {
+        return narrow(b, a, &rel.inverse(), depth);
+    }
     let pl = Placed::new(a, b, rel);
     let mut hit = false;
     pl.walk(0.0, |ta, tb| {
@@ -486,8 +542,11 @@ fn narrow(a: &PartMesh, b: &PartMesh, rel: &Frame, depth: f64) -> Narrow {
         return Narrow::Cross;
     }
     // no clean crossing: a face of one may still lie inside the other (one inside the other, or
-    // surfaces that cross only along coincident feature edges). Test the centres of the
-    // triangles in the shared region.
+    // surfaces that cross only along coincident feature edges). In the shared region, the sampled
+    // mesh's triangles farther than `depth` from the tested mesh's surface fall into connected
+    // pieces (by shared vertices) that cannot pass through that surface, so each piece lies wholly
+    // on one side of it: one parity ray per piece decides it. Triangles that come within `depth`
+    // are tested one by one at their centres, as before.
     let inv = rel.inverse();
     let bb = moved_box(&b.bounds(), rel);
     let ab = a.bounds();
@@ -504,26 +563,99 @@ fn narrow(a: &PartMesh, b: &PartMesh, rel: &Frame, depth: f64) -> Narrow {
     let in_b = moved_box(&shared, &inv);
     for (m, other, map, region, back) in [(a, b, rel, shared, inv), (b, a, &inv, in_b, *rel)] {
         let ob = other.bvh();
-        let boxes: Vec<Box3> = (0..other.triangles.len())
-            .map(|t| Box3::from_points(other.tri(t)))
-            .collect();
         let mut found = Vec::new();
-        ob.query(&boxes, &moved_box(&region, &back), &mut found);
+        ob.query(other.tri_boxes(), &moved_box(&region, &back), &mut found);
         found.sort_unstable();
-        for t in found {
-            let tri = other.tri(t);
-            let c = Point3::new(
-                (tri[0].x + tri[1].x + tri[2].x) / 3.0,
-                (tri[0].y + tri[1].y + tri[2].y) / 3.0,
-                (tri[0].z + tri[1].z + tri[2].z) / 3.0,
-            );
-            let q = map.point_to_world(c);
-            if region.contains(q) && inside(m, q, depth) == Some(true) {
-                return Narrow::Inside;
+        let placed: Vec<[Point3; 3]> = found
+            .iter()
+            .map(|&t| other.tri(t).map(|p| map.point_to_world(p)))
+            .collect();
+        let far: Vec<bool> = placed.iter().map(|tri| !near_surface(m, tri, depth)).collect();
+        // a triangle that comes near the surface may still reach deep through it (a coarse face
+        // whose edge lies on the other's face): its own centre is a sample, as a piece of one
+        let near = (0..found.len()).filter(|&k| !far[k]).map(|k| vec![k]);
+        for piece in pieces(other, &found, &far).into_iter().chain(near) {
+            for k in piece {
+                let tri = &placed[k];
+                let c = Point3::new(
+                    (tri[0].x + tri[1].x + tri[2].x) / 3.0,
+                    (tri[0].y + tri[1].y + tri[2].y) / 3.0,
+                    (tri[0].z + tri[1].z + tri[2].z) / 3.0,
+                );
+                match inside(m, c, depth) {
+                    Some(true) => return Narrow::Inside,
+                    Some(false) => break,
+                    None => {}
+                }
             }
         }
     }
     Narrow::Clear
+}
+
+/// True when some triangle of `m` comes within `depth` of `t` (in `m`'s frame).
+fn near_surface(m: &PartMesh, t: &[Point3; 3], depth: f64) -> bool {
+    let bvh = m.bvh();
+    if bvh.nodes.is_empty() {
+        return false;
+    }
+    let tb = Box3::from_points(*t);
+    let mut stack = vec![0usize];
+    while let Some(n) = stack.pop() {
+        let node = &bvh.nodes[n];
+        if box_gap(&node.bbox, &tb) > depth {
+            continue;
+        }
+        if node.leaf {
+            for &i in &bvh.items[node.lo..node.hi] {
+                if box_gap(&m.tri_boxes()[i], &tb) <= depth && tri_distance(&m.tri(i), t).0 <= depth {
+                    return true;
+                }
+            }
+        } else {
+            stack.push(node.hi);
+            stack.push(node.lo);
+        }
+    }
+    false
+}
+
+/// The connected pieces (by shared vertices) of the triangles `found[k]` with `keep[k]`, each as
+/// indices into `found` in ascending order, pieces ordered by their first index.
+fn pieces(m: &PartMesh, found: &[usize], keep: &[bool]) -> Vec<Vec<usize>> {
+    let mut parent: Vec<usize> = (0..found.len()).collect();
+    fn root(parent: &mut [usize], mut i: usize) -> usize {
+        while parent[i] != i {
+            parent[i] = parent[parent[i]];
+            i = parent[i];
+        }
+        i
+    }
+    let mut first: BTreeMap<u32, usize> = BTreeMap::new();
+    for (k, &t) in found.iter().enumerate() {
+        if !keep[k] {
+            continue;
+        }
+        for v in m.triangles[t] {
+            match first.get(&v) {
+                Some(&j) => {
+                    let (x, y) = (root(&mut parent, j), root(&mut parent, k));
+                    if x != y {
+                        parent[x.max(y)] = x.min(y);
+                    }
+                }
+                None => {
+                    first.insert(v, k);
+                }
+            }
+        }
+    }
+    let mut by: BTreeMap<usize, Vec<usize>> = BTreeMap::new();
+    for k in (0..found.len()).filter(|&k| keep[k]) {
+        let r = root(&mut parent, k);
+        by.entry(r).or_default().push(k);
+    }
+    by.into_values().collect()
 }
 
 /// Least distance between two meshes, B placed by `rel` in A's frame; None past `limit`.
@@ -1281,4 +1413,227 @@ pub fn sweep<S: Parts, P: Parts, E: Exact>(
         solver.set_drive(joint, freedom, v);
     }
     out
+}
+
+#[cfg(test)]
+mod narrow_tests {
+    use super::*;
+
+    /// An axis-aligned box mesh from `lo` to `hi`, each face split n x n (2 n^2 triangles), outward.
+    fn box_mesh(lo: Point3, hi: Point3, n: usize) -> PartMesh {
+        let mut pos: Vec<Point3> = Vec::new();
+        let mut tris: Vec<[u32; 3]> = Vec::new();
+        let size = [hi.x - lo.x, hi.y - lo.y, hi.z - lo.z];
+        // (normal axis, side, u axis, v axis) with u x v along the outward normal
+        for (ax, side, u, w) in [
+            (0, 1.0, 1, 2),
+            (0, 0.0, 2, 1),
+            (1, 1.0, 2, 0),
+            (1, 0.0, 0, 2),
+            (2, 1.0, 0, 1),
+            (2, 0.0, 1, 0),
+        ] {
+            let base = pos.len() as u32;
+            for i in 0..=n {
+                for j in 0..=n {
+                    let mut c = [lo.x, lo.y, lo.z];
+                    c[ax] += side * size[ax];
+                    c[u] += size[u] * i as f64 / n as f64;
+                    c[w] += size[w] * j as f64 / n as f64;
+                    pos.push(Point3::new(c[0], c[1], c[2]));
+                }
+            }
+            let id = |i: usize, j: usize| base + (i * (n + 1) + j) as u32;
+            for i in 0..n {
+                for j in 0..n {
+                    tris.push([id(i, j), id(i + 1, j), id(i + 1, j + 1)]);
+                    tris.push([id(i, j), id(i + 1, j + 1), id(i, j + 1)]);
+                }
+            }
+        }
+        PartMesh::new(pos, tris, 1e-6)
+    }
+
+    fn p(x: f64, y: f64, z: f64) -> Point3 {
+        Point3::new(x, y, z)
+    }
+
+    fn turned(o: Point3, a: f64) -> Frame {
+        Frame::WORLD.rotated_about_z(a).with_origin(o)
+    }
+
+    /// The inside phase as it was: every centre in the shared region gets a parity ray.
+    fn narrow_every_centre(a: &PartMesh, b: &PartMesh, rel: &Frame, depth: f64) -> Narrow {
+        let pl = Placed::new(a, b, rel);
+        let mut hit = false;
+        pl.walk(0.0, |ta, tb| {
+            hit = crosses(&a.tri(ta), a.sharp()[ta], &pl.tri_b(tb), b.sharp()[tb], depth);
+            hit
+        });
+        if hit {
+            return Narrow::Cross;
+        }
+        let inv = rel.inverse();
+        for (m, other, map) in [(a, b, *rel), (b, a, inv)] {
+            for t in 0..other.triangles.len() {
+                let tri = other.tri(t);
+                let c = Point3::new(
+                    (tri[0].x + tri[1].x + tri[2].x) / 3.0,
+                    (tri[0].y + tri[1].y + tri[2].y) / 3.0,
+                    (tri[0].z + tri[1].z + tri[2].z) / 3.0,
+                );
+                if inside(m, map.point_to_world(c), depth) == Some(true) {
+                    return Narrow::Inside;
+                }
+            }
+        }
+        Narrow::Clear
+    }
+
+    #[test]
+    fn segment_visits_exactly_the_boxes_the_segment_meets() {
+        let mut s = 12345u64;
+        let mut r = || {
+            s = s
+                .wrapping_mul(6364136223846793005)
+                .wrapping_add(1442695040888963407);
+            (s >> 11) as f64 / (1u64 << 53) as f64
+        };
+        let boxes: Vec<Box3> = (0..500)
+            .map(|_| {
+                let c = p(r() * 100.0, r() * 100.0, r() * 100.0);
+                Box3::from_points([c, p(c.x + r() * 5.0, c.y + r() * 5.0, c.z + r() * 5.0)])
+            })
+            .collect();
+        let bvh = Bvh::new(&boxes);
+        for _ in 0..200 {
+            let (a, b) = (
+                p(r() * 120.0 - 10.0, r() * 120.0 - 10.0, r() * 120.0 - 10.0),
+                p(r() * 120.0 - 10.0, r() * 120.0 - 10.0, r() * 120.0 - 10.0),
+            );
+            let mut got = Vec::new();
+            bvh.segment(&boxes, a, b, &mut got);
+            got.sort_unstable();
+            // brute force: sample the segment densely against each box, and the slab test agrees
+            let want: Vec<usize> = (0..boxes.len())
+                .filter(|&i| {
+                    let bx = boxes[i];
+                    (0..=20000).any(|k| bx.contains(a + (b - a) * (k as f64 / 20000.0)))
+                })
+                .collect();
+            for i in &want {
+                assert!(got.contains(i), "segment missed box {i}");
+            }
+            // anything extra may only graze (no sample inside): at most a hair from the segment
+            for i in got.iter().filter(|i| !want.contains(i)) {
+                let bx = boxes[*i].grow(0.02 * (b - a).length() / 1000.0 + 1e-9);
+                assert!(
+                    (0..=20000).any(|k| bx.contains(a + (b - a) * (k as f64 / 20000.0))),
+                    "box {i} far from the segment"
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn pieces_join_by_shared_vertices_and_skip_dropped_triangles() {
+        // box_mesh gives each face its own vertices: six pieces
+        let m = box_mesh(p(0.0, 0.0, 0.0), p(1.0, 1.0, 1.0), 2);
+        let all: Vec<usize> = (0..m.triangles.len()).collect();
+        assert_eq!(pieces(&m, &all, &vec![true; all.len()]).len(), 6);
+        // a strip of two triangles sharing an edge, and one sharing only a vertex, is one piece
+        let strip = PartMesh::new(
+            vec![
+                p(0.0, 0.0, 0.0),
+                p(1.0, 0.0, 0.0),
+                p(1.0, 1.0, 0.0),
+                p(0.0, 1.0, 0.0),
+                p(2.0, 2.0, 0.0),
+                p(2.0, 1.0, 0.0),
+            ],
+            vec![[0, 1, 2], [0, 2, 3], [2, 5, 4]],
+            1e-6,
+        );
+        assert_eq!(pieces(&strip, &[0, 1, 2], &[true; 3]), vec![vec![0, 1, 2]]);
+        assert_eq!(pieces(&strip, &[0, 1, 2], &[true, false, true]), vec![vec![0, 2]]);
+        assert_eq!(pieces(&strip, &[0, 1, 2], &[false, true, true]), vec![vec![1, 2]]);
+        // keep only top and bottom
+        let n = m.triangles.len() / 6;
+        let keep: Vec<bool> = (0..all.len()).map(|t| t / n >= 4).collect();
+        let ps = pieces(&m, &all, &keep);
+        assert_eq!(ps.len(), 2);
+        assert!(ps.iter().all(|p| p.len() == n));
+    }
+
+    #[test]
+    fn inside_touching_and_crossing_boxes_classify_as_before() {
+        let coarse = box_mesh(p(0.0, 0.0, 0.0), p(40.0, 40.0, 40.0), 1);
+        let block = box_mesh(p(0.0, 0.0, 0.0), p(10.0, 10.0, 10.0), 1);
+        assert_eq!(
+            inside(&coarse, p(15.0, 15.0, 15.0), 1e-6),
+            Some(true),
+            "coarse parity"
+        );
+        assert_eq!(
+            narrow(&coarse, &block, &turned(p(10.0, 10.0, 10.0), 0.0), 3e-6),
+            Narrow::Inside,
+            "coarse"
+        );
+        // two coarse boxes 2 deep with four faces coplanar: no clean crossing, the end face is inside
+        assert_eq!(
+            narrow(&block, &block, &turned(p(8.0, 0.0, 0.0), 0.0), 3e-6),
+            Narrow::Inside,
+            "coplanar sides"
+        );
+        let big = box_mesh(p(0.0, 0.0, 0.0), p(10.0, 10.0, 10.0), 6);
+        let small = box_mesh(p(0.0, 0.0, 0.0), p(2.0, 2.0, 2.0), 3);
+        let d = 3e-6;
+        // wholly inside
+        let r = turned(p(4.0, 4.0, 4.0), 0.3);
+        assert_eq!(narrow(&big, &small, &r, d), Narrow::Inside);
+        assert_eq!(narrow(&small, &big, &r.inverse(), d), Narrow::Inside);
+        // inside, one face on the big box's floor (coincident faces: no crossing)
+        assert_eq!(
+            narrow(&big, &small, &turned(p(3.0, 3.0, 0.0), 0.0), d),
+            Narrow::Inside
+        );
+        // outside, flush on the big box's top
+        assert_eq!(
+            narrow(&big, &small, &turned(p(3.0, 3.0, 10.0), 0.0), d),
+            Narrow::Clear
+        );
+        // apart
+        assert_eq!(
+            narrow(&big, &small, &turned(p(20.0, 3.0, 3.0), 0.0), d),
+            Narrow::Clear
+        );
+        // half in
+        assert_eq!(
+            narrow(&big, &small, &turned(p(9.0, 3.0, 3.0), 0.2), d),
+            Narrow::Cross
+        );
+        // the same answers as testing every centre, over many poses
+        let mut s = 7u64;
+        let mut r = || {
+            s = s
+                .wrapping_mul(6364136223846793005)
+                .wrapping_add(1442695040888963407);
+            (s >> 11) as f64 / (1u64 << 53) as f64
+        };
+        for _ in 0..300 {
+            let mut c = [0.0f64; 3];
+            for x in c.iter_mut() {
+                let v = r() * 12.0 - 2.0;
+                *x = if r() < 0.3 { (v * 2.0).round() / 2.0 } else { v };
+            }
+            let o = p(c[0], c[1], c[2]);
+            let a = if r() < 0.5 { 0.0 } else { r() * 6.0 };
+            let f = turned(o, a);
+            assert_eq!(
+                narrow(&big, &small, &f, d),
+                narrow_every_centre(&big, &small, &f, d),
+                "at {o:?} turned {a}"
+            );
+        }
+    }
 }
