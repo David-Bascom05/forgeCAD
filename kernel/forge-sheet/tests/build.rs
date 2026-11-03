@@ -367,7 +367,10 @@ fn refusals_are_typed() {
         )],
     )
     .unwrap();
-    s.flange(base, 2, ang(90.0), 20.0).unwrap();
+    let (_, j) = s.flange(base, 2, ang(90.0), 20.0).unwrap();
+    // left to the builder, it gets the default relief; told none, it is refused
+    assert!(build(&s, Map::Folded).is_ok());
+    s.set_relief(j, End::Start, forge_sheet::Relief::None);
     assert!(matches!(
         build(&s, Map::Folded),
         Err(SheetError::NeedsRelief { end: End::Start, .. })
@@ -384,7 +387,7 @@ fn refusals_are_typed() {
         build(&s, Map::Folded),
         Err(SheetError::TrimTouchesBendLine { .. })
     ));
-    // a relief edge on the tangent line: designed (reliefs.md), refused until decided
+    // a cut's edge along the tangent line (reliefs are cut past it): refused
     let mut s = part(g.clone(), 40.0, 30.0, &[(1, ang(90.0), 30.0)]);
     s.cut(WallId(0), rect(30.0, 10.0, 8.0, 5.0, 0)).unwrap();
     assert!(matches!(

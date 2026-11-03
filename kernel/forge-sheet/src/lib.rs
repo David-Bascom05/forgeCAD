@@ -8,6 +8,7 @@ pub mod graph;
 pub mod hardware;
 pub mod pattern;
 pub mod region;
+pub mod relief;
 pub mod roles;
 pub mod shop;
 
@@ -17,8 +18,9 @@ pub use error::{
     CutId, End, FeatureId, JointId, JointKindName, Pinch, SheetError, SheetWarning, Side, Strip,
     TrimCurveKind, TrimRef, Violation, WallId,
 };
-pub use graph::{Corner, CornerKind, Cut, Gauge, Joint, JointKind, Sheet, Wall};
+pub use graph::{Corner, CornerKind, Cut, Gauge, Joint, JointKind, Position, Sheet, Wall};
 pub use hardware::{Hardware, HardwareKind, Mount, Source, placeholder_catalogue};
 pub use pattern::{BendLine, Curve2, Pattern, dxf};
+pub use relief::{Relief, ReliefDefault, ReliefKind, ReliefMade};
 pub use roles::{Roles, Skin};
 pub use shop::{AllowanceRow, BendRule, KRow, RuleError, Scaled, ShopProfile, Stock};

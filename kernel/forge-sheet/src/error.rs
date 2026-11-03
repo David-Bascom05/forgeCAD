@@ -47,6 +47,10 @@ pub enum TrimRef {
     BendEnd { joint: JointId, end: End },
     /// A joint's mold line, as the edge of the band a wall gives up to its bend.
     MoldLine { joint: JointId, side: Side },
+    /// Segment `segment` of the relief at one end of a joint.
+    Relief { joint: JointId, end: End, segment: u64 },
+    /// Segment `segment` of the corner relief where joints a and b meet.
+    Corner { a: JointId, b: JointId, segment: u64 },
 }
 
 /// A wall or a bend zone: a piece of the sheet with its own developed coordinates.
@@ -262,6 +266,41 @@ pub enum SheetError {
         feature: FeatureId,
         joint: JointId,
         trim: TrimRef,
+    },
+    /// A relief that does not reach past the bend's tangent line (`limit`, from the mold line).
+    ReliefTooShallow {
+        feature: FeatureId,
+        joint: JointId,
+        end: End,
+        depth: f64,
+        limit: f64,
+    },
+    /// A corner treatment typed but not built (closed, overlapping), or a size that is not
+    /// positive.
+    CornerUnbuilt {
+        feature: FeatureId,
+        joints: [JointId; 2],
+        size: f64,
+    },
+    /// A relief with no width.
+    ReliefWidth {
+        feature: FeatureId,
+        joint: JointId,
+        end: End,
+        width: f64,
+        limit: f64,
+    },
+    /// A flange's position would move an edge whose neighbour already carries a bend.
+    EdgeMoveBlocked {
+        feature: FeatureId,
+        trim: TrimRef,
+        joint: JointId,
+    },
+    /// A flange's position would move an edge whose neighbour is not a straight line.
+    EdgeMoveCurve {
+        feature: FeatureId,
+        trim: TrimRef,
+        curve: TrimCurveKind,
     },
     /// A trim edge too short to carry a curve.
     EdgeTooShort {

@@ -12,9 +12,10 @@
 //! split there (a plane and a cylinder). Names come from the feature, wall, joint and cut ids and
 //! the outline's segment ids (docs/naming.md), never from storage order.
 use crate::error::{End, FeatureId, JointKindName, SheetError, Side, Strip, TrimCurveKind, TrimRef, WallId};
-use crate::graph::{Gauge, JointKind, Sheet, straight};
+use crate::graph::{CornerKind, Gauge, JointKind, Sheet, straight};
 use crate::pattern::{BendLine, Curve2, Pattern};
 use crate::region::{Bound, Piece, Region, subtract};
+use crate::relief::{Relief, ReliefKind, ReliefMade};
 use crate::roles::{Roles, Skin};
 use crate::shop::setback;
 use forge_geom::ruled::{Rail, Ruled};
@@ -211,6 +212,16 @@ impl Ctx<'_> {
             }
             TrimRef::BendEnd { joint, end } => r.with_str("bend end").with(joint.0 as u64).with(end as u64),
             TrimRef::MoldLine { joint, side } => r.with_str("mold").with(joint.0 as u64).with(side as u64),
+            TrimRef::Corner { a, b, segment } => r
+                .with_str("corner")
+                .with(a.0 as u64)
+                .with(b.0 as u64)
+                .with(segment),
+            TrimRef::Relief { joint, end, segment } => r
+                .with_str("relief")
+                .with(joint.0 as u64)
+                .with(end as u64)
+                .with(segment),
         }
     }
     fn strip_name(&self, s: Strip) -> Name {
@@ -362,6 +373,254 @@ pub struct Built {
     pub roles: Roles,
     pub layout: Layout,
     pub pattern: Option<Pattern>,
+    /// The reliefs cut, asked for or added.
+    pub reliefs: Vec<ReliefMade>,
+    /// The corner reliefs cut.
+    pub corners: Vec<CornerMade>,
+}
+
+/// A corner relief the builder cut where two bends off one wall meet.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct CornerMade {
+    pub joints: [crate::error::JointId; 2],
+    pub wall: WallId,
+    pub kind: CornerKind,
+    /// Its radius, or half its side.
+    pub size: f64,
+    /// Sized to clear the bends (not asked for).
+    pub automatic: bool,
+}
+
+/// Where a cut comes from, for its trims' names.
+#[derive(Clone, Copy, Debug)]
+enum CutSrc {
+    Cut(crate::error::CutId),
+    Corner(crate::error::JointId, crate::error::JointId),
+}
+
+impl CutSrc {
+    fn trim(self, segment: u64) -> TrimRef {
+        match self {
+            CutSrc::Cut(cut) => TrimRef::Cut { cut, segment },
+            CutSrc::Corner(a, b) => TrimRef::Corner { a, b, segment },
+        }
+    }
+}
+
+struct CutRef<'a> {
+    wall: WallId,
+    lp: &'a ProfileLoop,
+    src: CutSrc,
+}
+
+/// Corner reliefs: wherever two bends leave one wall from outline segments meeting at a vertex.
+fn corners(
+    sheet: &Sheet,
+    bends: &[Bend],
+    t: f64,
+) -> Result<Vec<(CutSrc, WallId, ProfileLoop, CornerMade)>, SheetError> {
+    let mut out = Vec::new();
+    for (i, b1) in bends.iter().enumerate() {
+        for b2 in &bends[i + 1..] {
+            if b1.a != b2.a {
+                continue;
+            }
+            let w = &sheet.walls[b1.a];
+            let (j1, j2) = (&sheet.joints[b1.joint], &sheet.joints[b2.joint]);
+            let (Ok((p0, p1)), Ok((q0, q1))) = (straight(w, j1.on_a), straight(w, j2.on_a)) else {
+                continue;
+            };
+            let v = if p1.distance(q0) <= TOL {
+                p1
+            } else if q1.distance(p0) <= TOL {
+                q1
+            } else {
+                continue;
+            };
+            let kind = sheet.corner(j1.id, j2.id);
+            // just clear of both bends: past each tangent line and across each zone, with a
+            // thickness to spare, on the diagonal
+            let clear = [b1, b2]
+                .iter()
+                .map(|b| ((b.s + t) * std::f64::consts::SQRT_2).max(b.ba - b.s + t))
+                .fold(0.0, f64::max);
+            let joints = [j1.id, j2.id];
+            let (size, automatic, square) = match kind {
+                CornerKind::Circular { size } => (size.unwrap_or(clear), size.is_none(), false),
+                CornerKind::Square { size } => (size.unwrap_or(clear), size.is_none(), true),
+                CornerKind::Open { gap } => (clear + gap, false, true),
+                CornerKind::Closed | CornerKind::Overlap { .. } => {
+                    return Err(SheetError::CornerUnbuilt {
+                        feature: sheet.feature,
+                        joints,
+                        size: f64::NAN,
+                    });
+                }
+            };
+            if size.is_nan() || size <= RELIEF_MIN {
+                return Err(SheetError::CornerUnbuilt {
+                    feature: sheet.feature,
+                    joints,
+                    size,
+                });
+            }
+            let lp = if square {
+                let d = (p1 - p0) * (1.0 / p0.distance(p1));
+                let n = Vec2::new(-d.y, d.x);
+                let c = [(-1.0, -1.0), (1.0, -1.0), (1.0, 1.0), (-1.0, 1.0)]
+                    .map(|(a, b)| v + d * (a * size) + n * (b * size));
+                ProfileLoop::new(
+                    (0..4)
+                        .map(|k| {
+                            (
+                                Segment::Line {
+                                    a: c[k],
+                                    b: c[(k + 1) % 4],
+                                },
+                                k as u64,
+                            )
+                        })
+                        .collect(),
+                )
+            } else {
+                ProfileLoop::new(vec![(
+                    Segment::Circle {
+                        center: v,
+                        radius: size,
+                        ccw: true,
+                    },
+                    0,
+                )])
+            };
+            out.push((
+                CutSrc::Corner(j1.id, j2.id),
+                w.id,
+                lp,
+                CornerMade {
+                    joints,
+                    wall: w.id,
+                    kind,
+                    size,
+                    automatic,
+                },
+            ));
+        }
+    }
+    Ok(out)
+}
+
+/// A relief narrower than this is no cut.
+const RELIEF_MIN: f64 = 1e-3;
+
+fn joint_radius(sheet: &Sheet, b: &Bend) -> f64 {
+    match sheet.joints[b.joint].kind {
+        JointKind::Bend { radius, .. } => radius,
+        _ => sheet.gauge.radius,
+    }
+}
+
+/// A relief at one end of a bend, in the wall's coordinates: from past the edge (beyond the mold
+/// line) into the wall to `depth`, beside the zone's end, counter-clockwise.
+#[allow(clippy::too_many_arguments)]
+fn relief_loop(
+    kind: ReliefKind,
+    width: f64,
+    depth: f64,
+    b: &Bend,
+    side: Side,
+    end: End,
+    t: f64,
+    j: &Rigid,
+    ids: &[u64],
+) -> ProfileLoop {
+    // into the wall: -x for a's side, +x for b's (the joint frame's x runs from a into b)
+    let into = if side == Side::A { -1.0 } else { 1.0 };
+    let out = -into * (t + width + b.s);
+    let (y0, y1) = match end {
+        End::Start => (-width, 0.0),
+        End::End => (b.len, b.len + width),
+    };
+    let p = Point2::new;
+    let local = match kind {
+        ReliefKind::Rect | ReliefKind::Tear => {
+            let (x0, x1) = (out.min(into * depth), out.max(into * depth));
+            rect(x0, y0, x1, y1, [ids[0], ids[1], ids[2], ids[3]], &Rigid::ID)
+        }
+        ReliefKind::Obround => {
+            let r = 0.5 * width;
+            let xc = into * (depth - r);
+            let ym = 0.5 * (y0 + y1);
+            let segs = if side == Side::A {
+                vec![
+                    (
+                        Segment::Line {
+                            a: p(xc, y0),
+                            b: p(out, y0),
+                        },
+                        ids[0],
+                    ),
+                    (
+                        Segment::Line {
+                            a: p(out, y0),
+                            b: p(out, y1),
+                        },
+                        ids[1],
+                    ),
+                    (
+                        Segment::Line {
+                            a: p(out, y1),
+                            b: p(xc, y1),
+                        },
+                        ids[2],
+                    ),
+                    (
+                        Segment::Arc {
+                            center: p(xc, ym),
+                            radius: r,
+                            start: 0.5 * dmath::PI,
+                            sweep: dmath::PI,
+                        },
+                        ids[3],
+                    ),
+                ]
+            } else {
+                vec![
+                    (
+                        Segment::Line {
+                            a: p(out, y0),
+                            b: p(xc, y0),
+                        },
+                        ids[0],
+                    ),
+                    (
+                        Segment::Arc {
+                            center: p(xc, ym),
+                            radius: r,
+                            start: -0.5 * dmath::PI,
+                            sweep: dmath::PI,
+                        },
+                        ids[3],
+                    ),
+                    (
+                        Segment::Line {
+                            a: p(xc, y1),
+                            b: p(out, y1),
+                        },
+                        ids[2],
+                    ),
+                    (
+                        Segment::Line {
+                            a: p(out, y1),
+                            b: p(out, y0),
+                        },
+                        ids[1],
+                    ),
+                ]
+            };
+            ProfileLoop::new(segs)
+        }
+    };
+    carried(&local, Some(j), |s| s).expect("lines and arcs carry")
 }
 
 /// Builds the sheet's folded or flat solid.
@@ -369,9 +628,30 @@ pub fn build(sheet: &Sheet, map: Map) -> Result<Body, SheetError> {
     build_with(sheet, map).map(|b| b.body)
 }
 
-/// `build`, with the roles, the layout and (flat) the pattern.
+/// `build`, with the roles, the layout and (flat) the pattern. Where a wall needs a relief at a
+/// joint end left `Auto`, the sheet's default is cut there and the build tried again.
 pub fn build_with(sheet: &Sheet, map: Map) -> Result<Built, SheetError> {
+    let mut auto: Vec<(crate::error::JointId, End, WallId)> = Vec::new();
+    loop {
+        match build_once(sheet, map, &auto) {
+            Err(SheetError::NeedsRelief { joint, wall, end, .. })
+                if sheet.relief(joint, end) == Relief::Auto && !auto.contains(&(joint, end, wall)) =>
+            {
+                auto.push((joint, end, wall));
+            }
+            r => return r,
+        }
+    }
+}
+
+fn build_once(
+    sheet: &Sheet,
+    map: Map,
+    auto: &[(crate::error::JointId, End, WallId)],
+) -> Result<Built, SheetError> {
     let feature = sheet.feature;
+    let mut made: Vec<ReliefMade> = Vec::new();
+    let mut corners_made: Vec<CornerMade> = Vec::new();
     let t = sheet.gauge.thickness;
     let mut cx = Ctx {
         sheet,
@@ -514,7 +794,22 @@ pub fn build_with(sheet: &Sheet, map: Map) -> Result<Built, SheetError> {
     strip_dev.extend(bends.iter().map(|b| dev[b.a].then(&b.ja).then(&shift(-b.s))));
     // which strips each cut reaches: its wall, and on across bends while it overlaps the zone
     let mut cut_strips: Vec<Vec<ProfileLoop>> = vec![Vec::new(); nw + bends.len()];
-    for c in &sheet.cuts {
+    // the cuts asked for, and corner reliefs where two bends off one wall meet
+    let mut all: Vec<(CutSrc, WallId, ProfileLoop)> = sheet
+        .cuts
+        .iter()
+        .map(|c| (CutSrc::Cut(c.id), c.wall, c.lp.clone()))
+        .collect();
+    for (src, wall, lp, done) in corners(sheet, &bends, t)? {
+        corners_made.push(done);
+        all.push((src, wall, lp));
+    }
+    for (src, cwall, clp) in &all {
+        let c = CutRef {
+            wall: *cwall,
+            lp: clp,
+            src: *src,
+        };
         let anchor = wall_index(c.wall).ok_or(SheetError::NoSuchWall {
             feature,
             wall: c.wall,
@@ -522,12 +817,7 @@ pub fn build_with(sheet: &Sheet, map: Map) -> Result<Built, SheetError> {
         let ids: Vec<u64> =
             c.lp.segments
                 .iter()
-                .map(|(_, s)| {
-                    cx.source(TrimRef::Cut {
-                        cut: c.id,
-                        segment: *s,
-                    })
-                })
+                .map(|(_, s)| cx.source(c.src.trim(*s)))
                 .collect();
         let seg_ids: Vec<u64> = c.lp.segments.iter().map(|s| s.1).collect();
         let id_of = |s: u64| ids[seg_ids.iter().position(|q| *q == s).expect("its own segment")];
@@ -536,13 +826,10 @@ pub fn build_with(sheet: &Sheet, map: Map) -> Result<Built, SheetError> {
         seen[anchor] = true;
         while let Some(w) = todo.pop() {
             let by = (w != anchor).then(|| strip_dev[w].inverse().then(&strip_dev[anchor]));
-            let lp = carried(&c.lp, by.as_ref(), id_of).ok_or(SheetError::TrimCurveUnsupported {
+            let lp = carried(c.lp, by.as_ref(), id_of).ok_or(SheetError::TrimCurveUnsupported {
                 feature,
                 strip: Strip::Wall(sheet.walls[w].id),
-                trim: TrimRef::Cut {
-                    cut: c.id,
-                    segment: c.lp.segments[0].1,
-                },
+                trim: c.src.trim(c.lp.segments[0].1),
                 curve: TrimCurveKind::Spline,
             })?;
             cut_strips[w].push(lp);
@@ -556,13 +843,10 @@ pub fn build_with(sheet: &Sheet, map: Map) -> Result<Built, SheetError> {
                 };
                 let si = nw + bi;
                 let by = strip_dev[si].inverse().then(&strip_dev[anchor]);
-                let lp = carried(&c.lp, Some(&by), id_of).ok_or(SheetError::TrimCurveUnsupported {
+                let lp = carried(c.lp, Some(&by), id_of).ok_or(SheetError::TrimCurveUnsupported {
                     feature,
                     strip: Strip::Bend(jid(b)),
-                    trim: TrimRef::Cut {
-                        cut: c.id,
-                        segment: c.lp.segments[0].1,
-                    },
+                    trim: c.src.trim(c.lp.segments[0].1),
                     curve: TrimCurveKind::Spline,
                 })?;
                 let (lo, hi) = bbox(&lp);
@@ -627,6 +911,70 @@ pub fn build_with(sheet: &Sheet, map: Map) -> Result<Built, SheetError> {
                 Side::A => rect(-b.s, 0.0, past, b.len, [start, mold, end, tangent], j),
                 Side::B => rect(-past, 0.0, b.s, b.len, [start, tangent, end, mold], j),
             });
+            // reliefs: asked for (on the joint's first wall), or added where this wall needs one
+            for e in [End::Start, End::End] {
+                let asked = sheet.relief(joint, e);
+                let (kind, width, depth, automatic) = match asked {
+                    Relief::Cut { kind, width, depth } if side == Side::A => (kind, width, depth, false),
+                    Relief::Auto if auto.contains(&(joint, e, w.id)) => {
+                        let d = sheet.relief_default;
+                        let r = joint_radius(sheet, b);
+                        let width = d.width.at(t, r);
+                        (d.kind, width, d.depth.at(t, r), true)
+                    }
+                    _ => continue,
+                };
+                let width = if kind == ReliefKind::Tear {
+                    sheet.relief_default.kerf
+                } else {
+                    width
+                };
+                if width.is_nan() || width < RELIEF_MIN {
+                    return Err(SheetError::ReliefWidth {
+                        feature,
+                        joint,
+                        end: e,
+                        width,
+                        limit: RELIEF_MIN,
+                    });
+                }
+                // past the tangent line: a round bottom's straight sides too
+                let need = b.s
+                    + if kind == ReliefKind::Obround {
+                        0.5 * width
+                    } else {
+                        0.0
+                    };
+                let depth = if automatic { depth.max(need + t) } else { depth };
+                if depth.is_nan() || depth <= need + RELIEF_MIN {
+                    return Err(SheetError::ReliefTooShallow {
+                        feature,
+                        joint,
+                        end: e,
+                        depth,
+                        limit: need + RELIEF_MIN,
+                    });
+                }
+                let ids: Vec<u64> = (0..5)
+                    .map(|k| {
+                        cx.source(TrimRef::Relief {
+                            joint,
+                            end: e,
+                            segment: k,
+                        })
+                    })
+                    .collect();
+                cuts.push(relief_loop(kind, width, depth, b, side, e, t, j, &ids));
+                made.push(ReliefMade {
+                    joint,
+                    end: e,
+                    wall: w.id,
+                    kind,
+                    width,
+                    depth,
+                    automatic,
+                });
+            }
         }
         let region = subtract(&loops, &cuts).map_err(|e| {
             SheetError::from_region(feature, Strip::Wall(w.id), e, |i| cx.sources[i as usize])
@@ -717,6 +1065,8 @@ pub fn build_with(sheet: &Sheet, map: Map) -> Result<Built, SheetError> {
         roles,
         layout,
         pattern,
+        reliefs: made,
+        corners: corners_made,
     })
 }
 
