@@ -9,6 +9,7 @@ shared r2 = 38
 shared d = 240
 shared h = 50
 shared gap = 6
+shared t = 1.5
 param bend.r = 5
 
 sketch plan(on: xy) {
@@ -18,5 +19,5 @@ sketch plan(on: xy) {
 }
 env = extrude(plan, h)
 grown = offset_faces(env.faces, gap)
-bend = fillet(edges(of: faces(of: env, normal: Z), crease: "convex"), r)
-expect faces = 10
+bend = fillet(edges(of: env.end, crease: "convex"), r)
+guard = thicken(env.end + env.side(plan.outline) + bend.faces, t, new: true)

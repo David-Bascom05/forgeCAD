@@ -1,0 +1,222 @@
+# Two-stage gearbox housing, lower half: cast, split on the shaft plane z = h. Input,
+# intermediate and output shafts run along y in half bores on the split face. Hand port of
+# tools/bench-parts/gearbox.fc, its thread lines left out (lane fg-holes).
+
+shared L = 240
+shared W = 130
+shared h = 95
+shared t = 8
+shared fl = 14
+shared fw = 22
+shared x1 = -72
+shared x2 = -8
+shared x3 = 62
+shared b1 = 47
+shared b2 = 62
+shared b3 = 68
+
+sketch foot(on: xy) {
+  r = rect(center: (0, 0), size: (L, W))
+}
+box = extrude(foot, h)
+
+# planes from the foot: the split face, and vertical planes through the origin
+top = offset(foot.plane, h)
+down = plane(at: foot.origin, normal: box.start.normal, x: foot.r[0].dir)
+north = plane(at: foot.origin, normal: foot.r[3].dir, x: foot.r[0].dir)
+south = plane(at: foot.origin, normal: foot.r[1].dir, x: foot.r[0].dir)
+east = plane(at: foot.origin, normal: foot.r[0].dir, x: foot.r[1].dir)
+west = plane(at: foot.origin, normal: foot.r[2].dir, x: foot.r[1].dir)
+
+param dr.a = -2deg
+dr = draft(box.side(foot.r), angle: a, neutral: top)
+param round.r = 12
+param round.most = 100
+round = fillet(edges(of: box, shorter: most), r)
+cup = shell(t, open: box.end)
+
+param flange_sk.r = 14
+param flange_sk.ri = 4
+sketch flange_sk(on: offset(down, 0 - h)) {
+  outer = hull(disc((0 - L / 2 - fw + r, 0 - W / 2 - fw + r), r),
+               disc((L / 2 + fw - r, 0 - W / 2 - fw + r), r),
+               disc((L / 2 + fw - r, W / 2 + fw - r), r),
+               disc((0 - L / 2 - fw + r, W / 2 + fw - r), r))
+  inner = hull(disc((0 - L / 2 + t + ri, 0 - W / 2 + t + ri), ri),
+               disc((L / 2 - t - ri, 0 - W / 2 + t + ri), ri),
+               disc((L / 2 - t - ri, W / 2 - t - ri), ri),
+               disc((0 - L / 2 + t + ri, W / 2 - t - ri), ri))
+}
+flange = extrude(flange_sk, fl)
+
+# bearing bosses: half rounds under the split, as long as the flange is wide, both sides
+shared boss_d = fw + t + 6
+shared boss_m = 10
+shared boss_m3 = 8
+fn half(pl, up, x, rr) {
+  sketch sk(on: pl) {
+    a = pt(x - rr, up * h)
+    b = pt(x + rr, up * h)
+    c = pt(x, up * h)
+    m = pt(x, up * (h - rr))
+    l = line(a, b)
+    q1 = arc(center: c, from: b, to: m, cw: up > 0)
+    q2 = arc(center: c, from: m, to: a, cw: up > 0)
+  }
+  e = extrude(sk, boss_d)
+  return e
+}
+boss1 = half(offset(north, 0 - W / 2 - fw), 1, x1, b1 / 2 + boss_m)
+boss2 = half(offset(north, 0 - W / 2 - fw), 1, x2, b2 / 2 + boss_m)
+boss3 = half(offset(north, 0 - W / 2 - fw), 1, x3, b3 / 2 + boss_m3)
+boss1m = half(offset(south, 0 - W / 2 - fw), -1, x1, b1 / 2 + boss_m)
+boss2m = half(offset(south, 0 - W / 2 - fw), -1, x2, b2 / 2 + boss_m)
+boss3m = half(offset(south, 0 - W / 2 - fw), -1, x3, b3 / 2 + boss_m3)
+
+fn bore(x, d) {
+  sketch sk(on: north) {
+    c = circle((x, h), d / 2)
+  }
+  e = cut(sk.c, thru_all)
+  return e
+}
+bore1 = bore(x1, b1)
+bore2 = bore(x2, b2)
+bore3 = bore(x3, b3)
+
+# circlip grooves near the outer face of each bore, a bearing seat in the third, both sides
+shared gin = 8
+shared gw = 2.2
+shared gd = 3.4
+shared sin3 = 10
+shared sw = 12
+shared sd = 2.5
+fn groove(x, rb, inset, w, d, s) {
+  sketch sk(on: offset(east, x)) {
+    ax = line((0, h), (W, h), construction: true)
+    g = rect(center: (s * (W / 2 + fw - inset + w / 2), h + rb - 1 + d / 2), size: (w, d))
+  }
+  e = revolve(sk.g, axis: sk.ax, cut: true)
+  return e
+}
+groove1 = groove(x1, b1 / 2, gin, gw, gd, 1)
+groove2 = groove(x2, b2 / 2, gin, gw, gd, 1)
+seat3 = groove(x3, b3 / 2, sin3, sw, sd, 1)
+groove1m = groove(x1, b1 / 2, gin, gw, gd, -1)
+groove2m = groove(x2, b2 / 2, gin, gw, gd, -1)
+seat3m = groove(x3, b3 / 2, sin3, sw, sd, -1)
+
+# flange bolts: tapped M10 at the corners, clearance holes on the ends
+param hole1.d = 8.5
+param hole1.depth = 12
+sketch hole1_sk(on: top) {
+  a = pt(0 - L / 2 - fw / 2, 0 - W / 2 - fw / 2)
+  b = pt(L / 2 + fw / 2, 0 - W / 2 - fw / 2)
+  c = pt(0 - L / 2 - fw / 2, W / 2 + fw / 2)
+  e = pt(L / 2 + fw / 2, W / 2 + fw / 2)
+}
+hole1 = hole(at: hole1_sk.points, d: d, depth: depth)
+param hole2.d = 11
+sketch hole2_sk(on: top) {
+  a = pt(0 - L / 2 - fw / 2, 0)
+  b = pt(L / 2 + fw / 2, 0)
+}
+hole2 = hole(at: hole2_sk.points, d: d, depth: thru)
+
+# mounting feet, each filleted into the box before the next
+shared fa = 24 - L / 2
+shared fc = -28 - W / 2
+shared fr = 8
+shared fh = 16
+shared fx = 44
+shared fy = 10
+shared fpitch = L - 92
+shared fround = 5
+fn pad(s, dx) {
+  sketch sk(on: foot.plane) {
+    path o(start: (s * fa + dx, s * (fy - W / 2))) {
+      line(to: (s * fa + dx, s * (fc + fr)))
+      tarc(to: (s * (fa + fr) + dx, s * fc))
+      line(to: (s * (fa + fx - fr) + dx, s * fc))
+      tarc(to: (s * (fa + fx) + dx, s * (fc + fr)))
+      line(to: (s * (fa + fx) + dx, s * (fy - W / 2)))
+      close()
+    }
+  }
+  e = extrude(sk.o, fh)
+  f = fillet(edges(between: (e, box), crease: "concave"), fround)
+  return e
+}
+footA = pad(1, 0)
+footB = pad(1, fpitch)
+footC = pad(-1, 0)
+footD = pad(-1, 0 - fpitch)
+param hole3.d = 13
+param hole3.cb = 24
+param hole3.cbd = 1.5
+param hole3_sk.hx = 46 - L / 2
+param hole3_sk.hy = -15 - W / 2
+param hole3_sk.span = W + 30
+sketch hole3_sk(on: offset(foot.plane, fh)) {
+  a = pt(hx, hy)
+  b = pt(hx + fpitch, hy)
+  c = pt(hx, hy + span)
+  e = pt(hx + fpitch, hy + span)
+}
+hole3 = hole(at: hole3_sk.points, d: d, depth: thru, cbore: (cb, cbd))
+
+# gusset ribs under each bearing boss, both sides
+shared rt = 8
+shared ra = 1deg
+shared ry = 20
+shared rin = 2
+shared rout = 4
+shared rdrop = 14
+shared rdrop3 = 12
+fn gusset(x, b, drop, s, dg) {
+  sketch sk(on: offset(east, x)) {
+    l = line((s * (W / 2 - rin), ry), (s * (W / 2 + fw - rout), h - b / 2 - drop))
+  }
+  e = rib(sk.l, rt, draft: dg)
+  return e
+}
+fn gusset_m(x, b, drop, dg) {
+  sketch sk(on: offset(east, x)) {
+    l = line((rout - W / 2 - fw, h - b / 2 - drop), (rin - W / 2, ry))
+  }
+  e = rib(sk.l, rt, draft: dg)
+  return e
+}
+rib1 = gusset(x1, b1, rdrop, 1, ra)
+rib2 = gusset(x2, b2, rdrop, 1, ra)
+rib3 = gusset(x3, b3, rdrop3, 1, 0deg)
+rib1m = gusset_m(x1, b1, rdrop, ra)
+rib2m = gusset_m(x2, b2, rdrop, ra)
+rib3m = gusset_m(x3, b3, rdrop3, 0deg)
+
+# drain through the floor at the output end
+param drain.d = 14.4
+param drain_sk.x = L / 2 - 30
+sketch drain_sk(on: foot.plane) {
+  p = pt(x, 0)
+}
+drain = hole(at: drain_sk.p, d: d, depth: t, flip: true)
+
+# breather / filler boss high on the input end
+param breather_sk.r = 12
+param breather.blen = 10
+shared bz = h - 30
+shared bx = L / 2 - 6
+shared bhx = L / 2 + 4
+sketch breather_sk(on: offset(west, bx)) {
+  c = circle((0, 0 - bz), r)
+}
+breather = extrude(breather_sk, blen)
+param bhole.d = 10.2
+param bhole.depth = 20
+sketch bhole_sk(on: offset(west, bhx)) {
+  p = pt(0, 0 - bz)
+}
+bhole = hole(at: bhole_sk.p, d: d, depth: depth)
+param broot.r = 3
+broot = fillet(edges(between: (breather, box), crease: "concave"), r)
