@@ -580,6 +580,18 @@ pub trait Exact: Sync {
     fn overlap_volume(&self, a: &PartRef, b: &PartRef, b_in_a: &Frame) -> Option<f64>;
 }
 
+impl<T: Exact + ?Sized> Exact for &T {
+    fn overlap_volume(&self, a: &PartRef, b: &PartRef, b_in_a: &Frame) -> Option<f64> {
+        (**self).overlap_volume(a, b, b_in_a)
+    }
+}
+
+impl<T: Exact + ?Sized + Send> Exact for Arc<T> {
+    fn overlap_volume(&self, a: &PartRef, b: &PartRef, b_in_a: &Frame) -> Option<f64> {
+        (**self).overlap_volume(a, b, b_in_a)
+    }
+}
+
 /// No exact geometry: mesh hits are reported unconfirmed.
 pub struct NoExact;
 
@@ -847,9 +859,9 @@ struct Occ {
 }
 
 /// Interference and clearance over a live assembly, keeping its caches between calls.
-pub struct Checker<'p, P: Parts, E: Exact> {
-    parts: &'p P,
-    exact: &'p E,
+pub struct Checker<P: Parts, E: Exact> {
+    parts: P,
+    exact: E,
     pub threads: usize,
     cache: BTreeMap<Key, (Narrow, Option<f64>)>,
     last: Option<(Vec<Occ>, PairResults)>,
@@ -885,8 +897,15 @@ fn par<T: Send>(n: usize, threads: usize, f: impl Fn(usize) -> T + Sync) -> Vec<
 /// Below this exact volume (mm³) two solids only touch.
 pub const TOUCH_VOLUME: f64 = 1e-6;
 
-impl<'p, P: Parts, E: Exact> Checker<'p, P, E> {
-    pub fn new(parts: &'p P, exact: &'p E) -> Self {
+impl<P: Parts, E: Exact> Checker<P, E> {
+    pub fn parts(&self) -> &P {
+        &self.parts
+    }
+    pub fn exact(&self) -> &E {
+        &self.exact
+    }
+
+    pub fn new(parts: P, exact: E) -> Self {
         Checker {
             parts,
             exact,
@@ -1014,7 +1033,7 @@ impl<'p, P: Parts, E: Exact> Checker<'p, P, E> {
                 + occ[j].mesh.as_ref().map_or(0.0, |m| m.tolerance)
                 + tol::LINEAR;
             rules_sorted.iter().find_map(|r| {
-                rule_covers(self.parts, r, &occ[i], &occ[j], tol).map(|s| (Intent::Rule { rule: r.id }, s))
+                rule_covers(&self.parts, r, &occ[i], &occ[j], tol).map(|s| (Intent::Rule { rule: r.id }, s))
             })
         };
         let intent = |i: usize, j: usize| intent_of(i, j).map(|x| x.0);
@@ -1180,7 +1199,7 @@ pub struct SweepStep {
 #[allow(clippy::too_many_arguments)]
 pub fn sweep<S: Parts, P: Parts, E: Exact>(
     solver: &mut crate::Solver<S>,
-    checker: &mut Checker<'_, P, E>,
+    checker: &mut Checker<P, E>,
     joint: crate::JointId,
     freedom: crate::Freedom,
     range: (f64, f64),

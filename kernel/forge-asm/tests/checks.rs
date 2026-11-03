@@ -423,7 +423,7 @@ fn bom_rolls_up_through_subassemblies() {
     let qty = |lines: &[forge_asm::bom::BomLine], n: &str| {
         lines
             .iter()
-            .find(|l| matches!(&l.item, BomItem::Part { doc, .. } if doc.0 == n))
+            .find(|l| matches!(&l.item, BomItem::Part { doc, .. } if &*doc.0 == n))
             .map_or(0, |l| l.qty)
     };
     assert_eq!(qty(&b.flat, "bolt"), 8);
