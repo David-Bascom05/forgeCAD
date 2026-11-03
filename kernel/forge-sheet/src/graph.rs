@@ -390,6 +390,18 @@ impl Sheet {
                 joint: j.id,
             });
         }
+        if !(theta > tol::ANGULAR && theta < dmath::PI - tol::ANGULAR) {
+            return Err(SheetError::BendAngle {
+                feature: self.feature,
+                joint: JointId(self.next_joint),
+                angle,
+                limit: if theta <= tol::ANGULAR {
+                    tol::ANGULAR
+                } else {
+                    dmath::PI - tol::ANGULAR
+                },
+            });
+        }
         let mut next = self.clone();
         if d != 0.0 {
             next.move_edge(wall, segment, d)?;
