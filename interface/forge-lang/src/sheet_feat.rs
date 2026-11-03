@@ -63,6 +63,7 @@ pub(super) fn kernel_kind(e: &SheetError) -> Option<&'static str> {
             Coplanar { .. } => "ContourCoplanar",
             Width { .. } => "ContourWidth",
         },
+        SheetError::Hem { why, .. } => hem_kind(why),
         _ => return None,
     })
 }
@@ -110,6 +111,7 @@ pub(super) fn kernel_text(e: &SheetError) -> Option<String> {
             }
             Width { width, .. } => format!("width {} is not positive", fm(width)),
         },
+        SheetError::Hem { why, .. } => hem_text(why),
         _ => return None,
     })
 }
@@ -143,6 +145,7 @@ pub(super) fn kernel_data(e: &SheetError) -> Option<Vec<(&'static str, Json)>> {
             StartOffEdge { gap, limit } => vec![("gap", f(gap)), ("limit", f(limit))],
             Width { width, limit } => vec![("width", f(width)), ("limit", f(limit))],
         },
+        SheetError::Hem { why, .. } => hem_data(why),
         _ => return None,
     })
 }
@@ -500,4 +503,65 @@ pub(super) fn parts(st: &SheetState, op: &OpRef) -> (Vec<WallId>, Vec<JointId>) 
         st.walls.iter().filter(|w| w.1 == op.id).map(|w| w.0).collect(),
         st.joints.iter().filter(|j| j.1 == op.id).map(|j| j.0).collect(),
     )
+}
+
+fn hem_kind(e: &fs::HemError) -> &'static str {
+    use fs::HemError::*;
+    match e {
+        Gap { .. } => "HemGap",
+        Angle { .. } => "HemAngle",
+        Radius { .. } => "HemRadius",
+        Leg { .. } => "HemLeg",
+        NoRoom { .. } => "HemNoRoom",
+        NotTabled { .. } => "HemNotTabled",
+    }
+}
+
+fn hem_text(e: &fs::HemError) -> String {
+    use fs::HemError::*;
+    let fm = crate::values::fmt;
+    match *e {
+        Gap { gap, limit } => format!(
+            "a hem gap of {} is under the floor {} (a solid has no touching skins)",
+            fm(gap),
+            fm(limit)
+        ),
+        Angle { kind, angle, lo, hi } => format!(
+            "a {} hem turning {}deg: it turns between {}deg and {}deg",
+            kind.name(),
+            fm(angle.to_degrees()),
+            fm(lo.to_degrees()),
+            fm(hi.to_degrees())
+        ),
+        Radius { radius, .. } => format!("hem radius {} is not positive", fm(radius)),
+        Leg { kind, leg, .. } => format!("a {} hem's leg of {} is not positive", kind.name(), fm(leg)),
+        NoRoom { have, need, .. } => format!(
+            "the wall reaches {} from the edge; the hem's fold takes {}",
+            fm(have),
+            fm(need)
+        ),
+        NotTabled { kind, thickness } => format!(
+            "a {} hem in {} sheet has no allowance in the shop's hem table (no radius formula holds for it)",
+            kind.name(),
+            fm(thickness)
+        ),
+    }
+}
+
+fn hem_data(e: &fs::HemError) -> Vec<(&'static str, Json)> {
+    use fs::HemError::*;
+    let f = |x: f64| Json::Num(x);
+    match *e {
+        Gap { gap, limit } => vec![("gap", f(gap)), ("limit", f(limit))],
+        Angle { kind, angle, lo, hi } => vec![
+            ("hem", kind.name().into()),
+            ("angle", f(angle.to_degrees())),
+            ("lo", f(lo.to_degrees())),
+            ("hi", f(hi.to_degrees())),
+        ],
+        Radius { radius, limit } => vec![("radius", f(radius)), ("limit", f(limit))],
+        Leg { kind, leg, limit } => vec![("hem", kind.name().into()), ("leg", f(leg)), ("limit", f(limit))],
+        NoRoom { have, need, .. } => vec![("have", f(have)), ("need", f(need))],
+        NotTabled { kind, thickness } => vec![("hem", kind.name().into()), ("thickness", f(thickness))],
+    }
 }

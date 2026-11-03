@@ -7,6 +7,7 @@ pub mod contour;
 pub mod error;
 pub mod graph;
 pub mod hardware;
+pub mod hem;
 pub mod pattern;
 pub mod region;
 pub mod relief;
@@ -24,6 +25,7 @@ pub use error::{
 };
 pub use graph::{Corner, CornerKind, Cut, Gauge, Joint, JointKind, Position, Sheet, Wall};
 pub use hardware::{Hardware, HardwareKind, Mount, Source, placeholder_catalogue};
+pub use hem::{GAP_FLOOR, HemError, HemJoint, HemKind, HemName, HemRow, HemSpec, HemTable};
 pub use pattern::{BendLine, Curve2, NOTES_LAYER, Pattern, bend_note, dxf, dxf_noted};
 pub use relief::{
     BendReliefRule, Corner3Rule, Corner3Shape, CornerRule, CornerShape, DepthRef, Placement, Relief,

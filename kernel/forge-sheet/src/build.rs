@@ -125,6 +125,10 @@ struct Bend {
     ba: f64,
     /// The joint frame in the world, folded [0] and flat [1].
     frame: [Frame; 2],
+    /// A hem ending free at its far tangent line (no leg).
+    free: bool,
+    /// A closed hem: its layers lie the floor gap apart by construction.
+    closed: bool,
 }
 
 /// How a strip's 2D coordinates and depth below the reference skin go to the world.
@@ -968,8 +972,9 @@ fn build_once(
             if j.a != sheet.walls[wi].id {
                 continue;
             }
-            let (angle, radius) = match j.kind {
-                JointKind::Bend { angle, radius } => (angle, radius),
+            let (angle, radius, hem) = match j.kind {
+                JointKind::Bend { angle, radius } => (angle, radius, None),
+                JointKind::Hem(h) => (h.angle, h.radius, Some(h)),
                 JointKind::Rip { .. } => {
                     return Err(SheetError::JointKindUnbuilt {
                         feature,
@@ -1014,23 +1019,28 @@ fn build_once(
                 });
             }
             let theta = angle.abs();
-            if !(theta > tol::ANGULAR && theta < dmath::PI - tol::ANGULAR) {
+            // a hem folds up to a whole turn
+            let top = if hem.is_some() { dmath::TAU } else { dmath::PI };
+            if !(theta > tol::ANGULAR && theta < top - tol::ANGULAR) {
                 return Err(SheetError::BendAngle {
                     feature,
                     joint: j.id,
                     angle,
-                    limit: dmath::PI - tol::ANGULAR,
+                    limit: top - tol::ANGULAR,
                 });
             }
-            let ba = sheet
-                .gauge
-                .rule
-                .allowance(t, radius, theta)
-                .map_err(|why| SheetError::BendRule {
-                    feature,
-                    joint: j.id,
-                    why,
-                })?;
+            let ba = match hem.and_then(|h| h.allowance) {
+                Some(ba) => ba,
+                None => sheet
+                    .gauge
+                    .rule
+                    .allowance(t, radius, theta)
+                    .map_err(|why| SheetError::BendRule {
+                        feature,
+                        joint: j.id,
+                        why,
+                    })?,
+            };
             let right = |d: Vec2| Vec2::new(d.y, -d.x);
             let ja = Rigid {
                 o: p0,
@@ -1042,13 +1052,23 @@ fn build_once(
             };
             let sigma = angle.signum();
             let rho0 = reference_radius(&sheet.gauge, radius, angle);
-            let s = setback(rho0, theta);
+            // a hem's mold line is the fold's outside, not a virtual sharp
+            let s = match hem {
+                Some(h) => h.setback(t),
+                None => setback(rho0, theta),
+            };
             let fa = frames[wi].expect("placed before its joints");
             let jframe = fa.map(|f| f.compose(&ja.frame()));
             let (sn, cs) = dmath::sin_cos(theta);
+            // b's tangent line (x = s on b) where the fold ends; the origin for a bend, whose s is
+            // the true setback
+            let origin = match hem {
+                None => Point3::ORIGIN,
+                Some(_) => Point3::new(-s + rho0 * sn - s * cs, 0.0, sigma * (rho0 * (1.0 - cs) - s * sn)),
+            };
             let turned = [
                 Frame::from_axes(
-                    Point3::ORIGIN,
+                    origin,
                     Vec3::new(cs, 0.0, sigma * sn),
                     Vec3::new(0.0, 1.0, 0.0),
                     Vec3::new(-sigma * sn, 0.0, cs),
@@ -1071,6 +1091,8 @@ fn build_once(
                 s,
                 ba,
                 frame: jframe,
+                free: hem.is_some_and(|h| h.free),
+                closed: hem.is_some_and(|h| h.kind == crate::hem::HemName::Closed),
             });
             queue.push(bi);
         }
@@ -1296,9 +1318,14 @@ fn build_once(
                 });
             }
         }
-        let region = subtract(&loops, &cuts).map_err(|e| {
-            SheetError::from_region(feature, Strip::Wall(w.id), e, |i| cx.sources[i as usize])
-        })?;
+        // a rolled hem's leg is no wall at all: its fold ends free
+        let region = if bends.iter().any(|b| b.free && b.b == wi) {
+            Region { parts: Vec::new() }
+        } else {
+            subtract(&loops, &cuts).map_err(|e| {
+                SheetError::from_region(feature, Strip::Wall(w.id), e, |i| cx.sources[i as usize])
+            })?
+        };
         let f = frames[wi].expect("placed");
         strips.push(StripData {
             strip: Strip::Wall(w.id),
@@ -1367,6 +1394,7 @@ fn build_once(
                 angle: b.sigma * b.theta,
                 radius: match sheet.joints[b.joint].kind {
                     JointKind::Bend { radius, .. } => radius,
+                    JointKind::Hem(h) => h.radius,
                     _ => unreachable!("only bends are placed"),
                 },
                 allowance: b.ba,
@@ -1423,6 +1451,11 @@ struct Strips<'a> {
     slots: Vec<(usize, Point2)>,
     /// A tangent-line bound's twin in the other strip.
     twin: HashMap<(usize, usize), (usize, usize)>,
+    /// Strips whose meeting is designed (a closed hem's two layers): not a clash.
+    quiet: Vec<(usize, usize)>,
+    /// Strips joined at a tangent line that may still meet elsewhere: a hem's zone turning past
+    /// half a turn, against its walls.
+    loose: Vec<(usize, usize)>,
 }
 
 impl<'a> Strips<'a> {
@@ -1448,7 +1481,12 @@ impl<'a> Strips<'a> {
                                     .iter()
                                     .position(|q| cx.sheet.joints[q.joint].id == joint)
                                     .expect("a bend's own line");
-                                Kind::Tangent(bi, side)
+                                if bends[bi].free && side == Side::B {
+                                    // where a rolled hem ends: an edge of the sheet
+                                    Kind::Side
+                                } else {
+                                    Kind::Tangent(bi, side)
+                                }
                             }
                             (TrimRef::BendEnd { joint, end }, Strip::Wall(wall)) => {
                                 return Err(SheetError::NeedsRelief {
@@ -1689,6 +1727,13 @@ impl<'a> Strips<'a> {
                 });
             }
         }
+        let quiet = bends.iter().filter(|b| b.closed).map(|b| (b.a, b.b)).collect();
+        let loose = bends
+            .iter()
+            .enumerate()
+            .filter(|(_, b)| b.theta > dmath::PI)
+            .flat_map(|(bi, b)| [(b.a, nw + bi), (b.b, nw + bi)])
+            .collect();
         Ok(Strips {
             cx,
             strips,
@@ -1697,6 +1742,8 @@ impl<'a> Strips<'a> {
             slot,
             slots,
             twin,
+            quiet,
+            loose,
         })
     }
 
@@ -1717,6 +1764,14 @@ impl<'a> Strips<'a> {
             let (a, b) = (self.loops[l].strip, self.loops[m].strip);
             joined[a * ns + b] = true;
             joined[b * ns + a] = true;
+        }
+        for &(a, b) in &self.quiet {
+            joined[a * ns + b] = true;
+            joined[b * ns + a] = true;
+        }
+        for &(a, b) in &self.loose {
+            joined[a * ns + b] = false;
+            joined[b * ns + a] = false;
         }
         // every strip's box, and its region's box in its own coordinates
         let mut boxes = vec![forge_math::Box3::EMPTY; ns];
@@ -1748,6 +1803,14 @@ impl<'a> Strips<'a> {
                     continue;
                 }
                 let reach = |bx: &forge_math::Box3| self.may_reach(b, bx, flat[b], limit);
+                // a hem's zone and its own walls meet by design along its tangent lines: points
+                // there (within a margin along the zone) are not clashes
+                let loose = self.loose.contains(&(a, b)) || self.loose.contains(&(b, a));
+                let margin = if loose { 100.0 * TOL } else { 0.0 };
+                let by_line = |q: Point2| match geo {
+                    Geo::Round { ba, .. } => loose && (q.x < margin || q.x > ba - margin),
+                    Geo::Plane(_) => false,
+                };
                 for ld in self.loops.iter().filter(|l| l.strip == a) {
                     for bd in &ld.bounds {
                         let inset = |u: f64| {
@@ -1781,8 +1844,9 @@ impl<'a> Strips<'a> {
                                 self.hunt(
                                     b,
                                     limit,
+                                    margin,
                                     &|u| piece_box(geo, &bd.piece, w, u),
-                                    &|u| geo.point(inset(u), w),
+                                    &|u| (!by_line(inset(u))).then(|| geo.point(inset(u), w)),
                                     &reach,
                                     &may,
                                 )
@@ -1794,6 +1858,7 @@ impl<'a> Strips<'a> {
                             self.hunt(
                                 b,
                                 limit,
+                                margin,
                                 &|u| {
                                     forge_math::Box3::from_points([
                                         geo.point(q, t * u.lo),
@@ -1801,7 +1866,7 @@ impl<'a> Strips<'a> {
                                     ])
                                     .grow(TOL)
                                 },
-                                &|u| geo.point(q, t * u),
+                                &|u| (!by_line(q)).then(|| geo.point(q, t * u)),
                                 &reach,
                                 &|u| {
                                     self.may_enter(
@@ -2170,8 +2235,9 @@ impl<'a> Strips<'a> {
         &self,
         b: usize,
         limit: f64,
+        margin: f64,
         box_of: &dyn Fn(Interval) -> forge_math::Box3,
-        point: &dyn Fn(f64) -> Point3,
+        point: &dyn Fn(f64) -> Option<Point3>,
         reach: &dyn Fn(&forge_math::Box3) -> bool,
         may: &dyn Fn(Interval) -> bool,
     ) -> Option<(Point3, f64)> {
@@ -2188,8 +2254,8 @@ impl<'a> Strips<'a> {
                 continue;
             }
             if size <= 0.5 * limit || level >= 48 {
-                let p = point(u.mid());
-                if let Some(d) = self.inside(b, p)
+                let Some(p) = point(u.mid()) else { continue };
+                if let Some(d) = self.inside(b, p, margin)
                     && d > limit
                 {
                     return Some((p, d));
@@ -2484,8 +2550,9 @@ impl<'a> Strips<'a> {
         })
     }
 
-    /// How deep `p` lies in strip `s`'s material, through its thickness; None outside.
-    fn inside(&self, s: usize, p: Point3) -> Option<f64> {
+    /// How deep `p` lies in strip `s`'s material, through its thickness; None outside (or, in a
+    /// bend zone, within `margin` of its tangent lines along it).
+    fn inside(&self, s: usize, p: Point3, margin: f64) -> Option<f64> {
         let t = self.t;
         let (q, w) = match self.strips[s].folded {
             Geo::Plane(f) => {
@@ -2502,7 +2569,9 @@ impl<'a> Strips<'a> {
             } => {
                 let l = axis.point_to_local(p);
                 let phi = dmath::atan2(l.y, l.x);
-                if !(phi > 0.0 && phi < theta) {
+                // a hem's zone turns past half a turn: angles round from 0 to a whole turn
+                let phi = if phi < 0.0 { phi + dmath::TAU } else { phi };
+                if !(phi > 0.0 && phi < theta) || phi * rn < margin || (theta - phi) * rn < margin {
                     return None;
                 }
                 let rho = (l.x * l.x + l.y * l.y).sqrt();

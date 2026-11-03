@@ -32,6 +32,8 @@ pub enum JointKind {
     Rip { gap: f64 },
     /// The walls continue each other across the line.
     Tangent,
+    /// A hem: a fold of half a turn or more, the edge its outside (`crate::hem`).
+    Hem(crate::hem::HemJoint),
 }
 
 /// Two walls along one mold line: segment `on_a` of a's outline and `on_b` of b's, both straight,
@@ -112,9 +114,9 @@ pub struct Sheet {
     pub corner_default: Option<CornerKind>,
     /// Powder coated: the shop's coated size limit applies, not the raw one.
     pub coated: bool,
-    next_wall: u32,
-    next_joint: u32,
-    next_cut: u32,
+    pub(crate) next_wall: u32,
+    pub(crate) next_joint: u32,
+    pub(crate) next_cut: u32,
 }
 
 impl Sheet {

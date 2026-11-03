@@ -365,6 +365,12 @@ pub enum SheetError {
         feature: FeatureId,
         why: crate::contour::ContourError,
     },
+    /// A hem, refused (`crate::hem`); `joint` is the id it would have had.
+    Hem {
+        feature: FeatureId,
+        joint: JointId,
+        why: crate::hem::HemError,
+    },
     /// A trim edge too short to carry a curve.
     EdgeTooShort {
         feature: FeatureId,
