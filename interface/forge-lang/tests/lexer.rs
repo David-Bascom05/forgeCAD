@@ -2,7 +2,8 @@
 //! deterministic; its tokens and the trivia between them give back the source bytes exactly; and
 //! every literal a SetParam writes lexes back as one number token.
 
-use forge_lang::error::Literal;
+use forge_lang::edit::{apply, apply_ast};
+use forge_lang::error::{Error, Literal, Op, ParamKey, parse_path};
 use forge_lang::syntax::{self, Tok, TokKind, TriviaKind, Unit};
 use forge_lang::values::{self, Dim};
 
@@ -245,4 +246,39 @@ fn the_lexer_never_panics() {
         let _ = syntax::lex(&s);
         let _ = syntax::lex_lossless(&s);
     }
+}
+
+/// NaN and the infinities have no literal (`fmt` would write `NaN` or `inf`, which lex as names):
+/// SetParam and AddLocalParam refuse them with a typed error, and the text is left as it was.
+#[test]
+fn a_value_that_is_not_finite_is_refused() {
+    let src = "shared w = 5\nsketch k(on: xy) {\n  o = rect(corner: (0, 0), size: (w, w))\n}\nf = extrude(k, w)\n";
+    for value in [f64::NAN, f64::INFINITY, f64::NEG_INFINITY] {
+        let lit = Literal { value, dim: Dim::Length };
+        let ops = [
+            Op::SetParam {
+                param: ParamKey::parse("w").expect("a param"),
+                value: lit,
+            },
+            Op::AddLocalParam {
+                feature: parse_path("f").expect("a path"),
+                name: "d".into(),
+                value: lit,
+            },
+        ];
+        for op in ops {
+            for result in [apply(src, &op).map(|_| ()), apply_ast(src, &op).map(|_| ())] {
+                match result {
+                    Err(Error::NotFinite { value: v, .. }) => assert!(v.is_nan() == value.is_nan() && (v.is_nan() || v == value)),
+                    other => panic!("{op:?} gave {other:?}"),
+                }
+            }
+        }
+    }
+    // a finite value still applies
+    let op = Op::SetParam {
+        param: ParamKey::parse("w").expect("a param"),
+        value: Literal { value: 7.5, dim: Dim::Length },
+    };
+    assert!(apply(src, &op).expect("applies").contains("shared w = 7.5"));
 }
