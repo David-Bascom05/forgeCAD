@@ -484,3 +484,51 @@ fn an_elliptical_arc_holds_its_ends_and_a_line_touches_an_ellipse() {
     assert_eq!(t.solve().status, Status::Solved);
     assert!((t.point(a).y - 3.0).abs() < 1e-8, "{:?}", t.point(a));
 }
+
+/// Block-wise analysis is the dense one: on a sketch with a constrained rectangle, a slot, a
+/// conflict, free points and lines, and circles fixed or loose, before and after solving.
+#[test]
+fn block_analysis_is_the_dense_analysis() {
+    let mut rng = Rng::new(7);
+    for round in 0..6 {
+        let mut s = Sketch::new(Frame::WORLD);
+        rectangle(&mut s, 40.0, 25.0, round % 2 == 0);
+        slot(&mut s, 30.0, 6.0);
+        let l = s.add_line_points(p(0.0, 50.0), p(10.0, 50.0));
+        s.add_constraint(Constraint::Length(l, 10.0)).unwrap();
+        if round % 3 == 0 {
+            s.add_constraint(Constraint::Length(l, 12.0)).unwrap();
+        }
+        s.add_point(p(-5.0, -5.0));
+        for k in 0..8 {
+            let c = s.add_point(p(rng.range(-50.0, 50.0), rng.range(-50.0, 50.0)));
+            let circle = s.add_circle(c, rng.range(1.0, 5.0)).unwrap();
+            if (k + round) % 3 != 0 {
+                s.add_constraint(Constraint::Fixed(c)).unwrap();
+                s.add_constraint(Constraint::Radius(circle, 2.0)).unwrap();
+            }
+            if k % 4 == 1 {
+                s.add_constraint(Constraint::Radius(circle, 2.0)).unwrap();
+            }
+        }
+        assert_eq!(s.analyze(), s.analyze_dense(), "round {round}, before solving");
+        s.solve();
+        assert_eq!(s.analyze(), s.analyze_dense(), "round {round}, solved");
+    }
+}
+
+/// Independent entities are analysed block by block: 400 fixed circles, which the dense
+/// analysis took hours over, are one small block each.
+#[test]
+fn many_independent_circles_analyse_quickly() {
+    let mut s = Sketch::new(Frame::WORLD);
+    for i in 0..400 {
+        let c = s.add_point(p(10.0 * i as f64, 0.0));
+        let circle = s.add_circle(c, 2.0).unwrap();
+        s.add_constraint(Constraint::Fixed(c)).unwrap();
+        s.add_constraint(Constraint::Radius(circle, 2.0)).unwrap();
+    }
+    let a = s.analyze();
+    assert_eq!(a.dof, 0);
+    assert_eq!(a.fully_constrained.len(), 800);
+}

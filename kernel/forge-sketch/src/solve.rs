@@ -61,6 +61,7 @@ impl System {
     fn row(&self, i: usize) -> &[(usize, f64)] {
         &self.ent[self.at[i]..self.at[i + 1]]
     }
+    #[cfg(test)]
     fn dense(&self, n: usize) -> Vec<f64> {
         let mut j = vec![0.0; self.r.len() * n];
         for i in 0..self.r.len() {
@@ -616,12 +617,24 @@ impl Sketch {
 
     /// Degrees of freedom, fully constrained entities, redundant and
     /// conflicting constraints, all at the current parameters.
+    ///
+    /// The Jacobian is block diagonal over the groups of parameters that rows tie together, so
+    /// every rank is taken per block: independent entities cost a small block each, not a pass
+    /// over the whole sketch.
     pub fn analyze(&self) -> Analysis {
         let n = self.params.len();
         let sys = self.system(&self.params);
         let m = sys.r.len();
-        let dense = sys.dense(n);
-        let base = rank(&dense, m, n);
+        let blocks = Blocks::new(&sys, n);
+        // the tolerance is the one a dense rank of the whole matrix would use
+        let row_max: Vec<f64> = (0..m)
+            .map(|i| sys.row(i).iter().fold(0.0f64, |s, e| s.max(e.1.abs())))
+            .collect();
+        let scale = row_max.iter().fold(0.0f64, |s, v| s.max(*v));
+        let base_rank: Vec<usize> = (0..blocks.cols.len())
+            .map(|b| blocks.rank(&sys, b, &[], &[], scale))
+            .collect();
+        let base: usize = base_rank.iter().sum();
 
         let mut fully_constrained = Vec::new();
         for e in &self.entities {
@@ -629,28 +642,35 @@ impl Sketch {
             if ps.is_empty() {
                 continue;
             }
-            let mut a = dense.clone();
-            for &p in &ps {
-                let mut row = vec![0.0; n];
-                row[p] = 1.0;
-                a.extend(row);
-            }
-            if rank(&a, m + ps.len(), n) == base {
+            let mut touched: Vec<usize> = ps.iter().map(|&p| blocks.of_col[p]).collect();
+            touched.sort_unstable();
+            touched.dedup();
+            let scale = scale.max(1.0);
+            if touched.iter().all(|&b| blocks.rank(&sys, b, &[], &ps, scale) == base_rank[b]) {
                 fully_constrained.push(e.id);
             }
         }
 
+        let mut rows_of: std::collections::HashMap<ConstraintId, Vec<usize>> = std::collections::HashMap::new();
+        for (i, o) in sys.origin.iter().enumerate() {
+            if let Some(c) = o {
+                rows_of.entry(*c).or_default().push(i);
+            }
+        }
+        let mut by_max: Vec<usize> = (0..m).collect();
+        by_max.sort_by(|a, b| row_max[*b].total_cmp(&row_max[*a]));
         let mut redundant = Vec::new();
         for rec in &self.constraints {
-            let keep: Vec<usize> = (0..m).filter(|&i| sys.origin[i] != Some(rec.id)).collect();
-            if keep.len() == m {
+            let Some(drop) = rows_of.get(&rec.id) else {
                 continue;
-            }
-            let a: Vec<f64> = keep
-                .iter()
-                .flat_map(|&i| dense[i * n..(i + 1) * n].iter().copied())
-                .collect();
-            if rank(&a, keep.len(), n) == base {
+            };
+            let scale = by_max.iter().find(|i| !drop.contains(i)).map_or(0.0, |&i| row_max[i]);
+            let mut touched: Vec<usize> = drop.iter().filter_map(|&i| blocks.of_row[i]).collect();
+            touched.sort_unstable();
+            touched.dedup();
+            let same = touched.iter().all(|&b| blocks.rank(&sys, b, drop, &[], scale) == base_rank[b]);
+            // with every row gone the dense rank was 0 whatever the tolerance
+            if same && (scale > 0.0 || base == 0) {
                 redundant.push(rec.id);
             }
         }
@@ -713,10 +733,145 @@ fn cholesky_solve(a: &mut [f64], b: &mut [f64], n: usize) -> bool {
     b.iter().all(|v| v.is_finite())
 }
 
+/// The dense analysis `analyze` replaced, kept as the reference it is tested against.
+#[cfg(test)]
+impl Sketch {
+    pub(crate) fn analyze_dense(&self) -> Analysis {
+        let dense_rank = |a: &[f64], m: usize, n: usize| rank(a, m, n, a.iter().fold(0.0f64, |s, v| s.max(v.abs())));
+        let n = self.params.len();
+        let sys = self.system(&self.params);
+        let m = sys.r.len();
+        let dense = sys.dense(n);
+        let base = dense_rank(&dense, m, n);
+        let mut fully_constrained = Vec::new();
+        for e in &self.entities {
+            let ps = self.entity_params(e.id);
+            if ps.is_empty() {
+                continue;
+            }
+            let mut a = dense.clone();
+            for &p in &ps {
+                let mut row = vec![0.0; n];
+                row[p] = 1.0;
+                a.extend(row);
+            }
+            if dense_rank(&a, m + ps.len(), n) == base {
+                fully_constrained.push(e.id);
+            }
+        }
+        let mut redundant = Vec::new();
+        for rec in &self.constraints {
+            let keep: Vec<usize> = (0..m).filter(|&i| sys.origin[i] != Some(rec.id)).collect();
+            if keep.len() == m {
+                continue;
+            }
+            let a: Vec<f64> = keep.iter().flat_map(|&i| dense[i * n..(i + 1) * n].iter().copied()).collect();
+            if dense_rank(&a, keep.len(), n) == base {
+                redundant.push(rec.id);
+            }
+        }
+        let mut conflicting: Vec<ConstraintId> = (0..m)
+            .filter(|&i| sys.r[i].abs() > CONFLICT)
+            .filter_map(|i| sys.origin[i])
+            .collect();
+        conflicting.dedup();
+        Analysis {
+            dof: n - base,
+            fully_constrained,
+            redundant,
+            conflicting,
+        }
+    }
+}
+
+/// The connected blocks of a Jacobian: parameters tied by a row are in one block, with the
+/// rows over them.
+struct Blocks {
+    of_col: Vec<usize>,
+    /// None for a row with no entries.
+    of_row: Vec<Option<usize>>,
+    cols: Vec<Vec<usize>>,
+    rows: Vec<Vec<usize>>,
+}
+
+impl Blocks {
+    fn new(sys: &System, n: usize) -> Blocks {
+        let mut up: Vec<usize> = (0..n).collect();
+        fn find(up: &mut [usize], mut x: usize) -> usize {
+            while up[x] != x {
+                up[x] = up[up[x]];
+                x = up[x];
+            }
+            x
+        }
+        for i in 0..sys.r.len() {
+            let row = sys.row(i);
+            if let Some(&(first, _)) = row.first() {
+                for &(v, _) in &row[1..] {
+                    let (a, b) = (find(&mut up, first), find(&mut up, v));
+                    up[a] = b;
+                }
+            }
+        }
+        let mut id = vec![usize::MAX; n];
+        let mut cols: Vec<Vec<usize>> = Vec::new();
+        let mut of_col = vec![0; n];
+        for c in 0..n {
+            let root = find(&mut up, c);
+            if id[root] == usize::MAX {
+                id[root] = cols.len();
+                cols.push(Vec::new());
+            }
+            of_col[c] = id[root];
+            cols[id[root]].push(c);
+        }
+        let mut rows = vec![Vec::new(); cols.len()];
+        let of_row: Vec<Option<usize>> = (0..sys.r.len())
+            .map(|i| sys.row(i).first().map(|&(v, _)| of_col[v]))
+            .collect();
+        for (i, b) in of_row.iter().enumerate() {
+            if let Some(b) = b {
+                rows[*b].push(i);
+            }
+        }
+        Blocks {
+            of_col,
+            of_row,
+            cols,
+            rows,
+        }
+    }
+
+    /// Rank of block `b`'s rows, less the rows in `drop`, plus a unit row for each parameter
+    /// of `pin` in the block; `scale` sets the tolerance as for the whole matrix.
+    fn rank(&self, sys: &System, b: usize, drop: &[usize], pin: &[usize], scale: f64) -> usize {
+        let cols = &self.cols[b];
+        let n = cols.len();
+        let local = |c: usize| cols.binary_search(&c).ok();
+        let mut a = Vec::new();
+        let mut m = 0;
+        for &i in self.rows[b].iter().filter(|i| !drop.contains(i)) {
+            let at = a.len();
+            a.resize(at + n, 0.0);
+            for &(v, g) in sys.row(i) {
+                a[at + local(v).expect("a row stays in its block")] += g;
+            }
+            m += 1;
+        }
+        for c in pin.iter().filter_map(|&p| local(p)) {
+            let at = a.len();
+            a.resize(at + n, 0.0);
+            a[at + c] = 1.0;
+            m += 1;
+        }
+        rank(&a, m, n, scale)
+    }
+}
+
 /// Numerical rank by Gaussian elimination with complete pivoting.
-fn rank(a: &[f64], m: usize, n: usize) -> usize {
+/// `scale` is the largest entry of the matrix the tolerance is taken from.
+fn rank(a: &[f64], m: usize, n: usize, scale: f64) -> usize {
     let mut a = a.to_vec();
-    let scale = a.iter().fold(0.0f64, |s, v| s.max(v.abs()));
     if scale == 0.0 {
         return 0;
     }
@@ -762,9 +917,9 @@ mod tests {
 
     #[test]
     fn rank_basics() {
-        assert_eq!(rank(&[1.0, 2.0, 2.0, 4.0], 2, 2), 1);
-        assert_eq!(rank(&[1.0, 0.0, 0.0, 1.0], 2, 2), 2);
-        assert_eq!(rank(&[0.0; 6], 2, 3), 0);
-        assert_eq!(rank(&[1.0, 1.0, 0.0, 0.0, 1.0, 1.0, 1.0, 2.0, 1.0], 3, 3), 2);
+        assert_eq!(rank(&[1.0, 2.0, 2.0, 4.0], 2, 2, 4.0), 1);
+        assert_eq!(rank(&[1.0, 0.0, 0.0, 1.0], 2, 2, 1.0), 2);
+        assert_eq!(rank(&[0.0; 6], 2, 3, 0.0), 0);
+        assert_eq!(rank(&[1.0, 1.0, 0.0, 0.0, 1.0, 1.0, 1.0, 2.0, 1.0], 3, 3, 2.0), 2);
     }
 }
