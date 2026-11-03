@@ -2177,10 +2177,13 @@ pub fn finish(
     let mut want: BTreeMap<String, (BTreeSet<String>, BTreeSet<String>)> = BTreeMap::new();
     // the references expects measure, so the parts are asked for them
     let mut d = d;
-    for s in ev.expects.clone() {
+    for (k, s) in ev.expects.clone().iter().enumerate() {
         if let StmtKind::Expect { args, .. } = &s.kind {
-            for e in args {
-                if let Ok(Value::Asm(a)) = ev.expr(e)
+            let mark = ev.enter_expect(k);
+            let refs: Vec<Value> = args.iter().filter_map(|e| ev.expr(e).ok()).collect();
+            ev.leave_expect(mark);
+            for v in refs {
+                if let Value::Asm(a) = v
                     && let AsmVal::Ref(r) = &*a
                 {
                     d.probes.push(r.clone());
