@@ -1417,12 +1417,53 @@ fn content_hash(text: &str) -> fa::ContentHash {
     fa::ContentHash(out)
 }
 
-fn path_of(dir: &Option<std::path::PathBuf>, file: &str) -> std::path::PathBuf {
-    let p = std::path::Path::new(file);
-    match dir {
-        Some(d) if p.is_relative() => d.join(p),
-        _ => p.to_path_buf(),
+/// The most a document an assembly reads may be (as for any file a part reads).
+pub const LIMIT: u64 = 64 << 20;
+
+/// A part or subassembly file an assembly names, as media.rs resolves files: relative to the
+/// naming document's own directory, its real path a `.fg` file of at most `LIMIT` bytes under
+/// `fence` (the session's root) when there is one. Every refusal is the same None, so a client
+/// learns nothing of what exists outside.
+fn locate(
+    dir: &Option<std::path::PathBuf>,
+    fence: &Option<std::path::PathBuf>,
+    file: &str,
+) -> Option<std::path::PathBuf> {
+    let p = std::fs::canonicalize(dir.as_ref()?.join(file)).ok()?;
+    if p.extension().is_none_or(|x| x != "fg") {
+        return None;
     }
+    let meta = std::fs::metadata(&p).ok()?;
+    if !meta.is_file() || meta.len() > LIMIT {
+        return None;
+    }
+    if let Some(f) = fence
+        && !p.starts_with(f)
+    {
+        return None;
+    }
+    Some(p)
+}
+
+/// A located file's text, read no further than `LIMIT`.
+fn read_capped(p: &std::path::Path) -> Option<String> {
+    use std::io::Read;
+    let mut s = String::new();
+    std::fs::File::open(p)
+        .ok()?
+        .take(LIMIT)
+        .read_to_string(&mut s)
+        .ok()?;
+    Some(s)
+}
+
+/// The key of a file that could not be located: it reads as missing everywhere.
+fn unlocated(file: &str) -> String {
+    format!("?{file}")
+}
+
+fn located(dir: &Option<std::path::PathBuf>, fence: &Option<std::path::PathBuf>, file: &str) -> String {
+    locate(dir, fence, file).map_or_else(|| unlocated(file), |p| p.to_string_lossy().to_string())
 }
 
 /// The expression a reference path is in the part: `shank.axis`, `bolt[2].axis`, `vtap.lf`.
@@ -1690,16 +1731,18 @@ fn short(root: &Option<std::path::PathBuf>, path: &str) -> String {
 
 /// The document's assembly for forge-asm, and the references it asks of each part file.
 #[allow(clippy::type_complexity)]
+#[allow(clippy::too_many_arguments)]
 fn build_doc(
     d: &Doc,
     root: &Option<std::path::PathBuf>,
+    fence: &Option<std::path::PathBuf>,
     dir: &Option<std::path::PathBuf>,
     subs: &BTreeMap<String, Arc<SubLoad>>,
     want: &mut BTreeMap<String, (BTreeSet<String>, BTreeSet<String>)>,
     names: &mut Names,
 ) -> fa::Assembly {
     let mut out = fa::Assembly::default();
-    let key = |f: &str| path_of(dir, f).to_string_lossy().to_string();
+    let key = |f: &str| located(dir, fence, f);
     let doc_id = |f: &str| fa::DocId(short(root, &key(f)).into());
     for i in &d.insts {
         let file = key(&i.file);
@@ -1733,7 +1776,9 @@ fn build_doc(
         let mut cur_dir = dir.clone();
         let mut segs: &[Seg] = &r.segs;
         while let Some(c) = cur.filter(|c| c.sub) {
-            let file = path_of(&cur_dir, &c.file);
+            let Some(file) = locate(&cur_dir, fence, &c.file) else {
+                break;
+            };
             let Some(sub) = subs.get(&file.to_string_lossy().to_string()) else {
                 break;
             };
@@ -1754,7 +1799,7 @@ fn build_doc(
         } else {
             let text = path_text(segs);
             if let Some(c) = cur.filter(|c| !c.sub) {
-                want.entry(path_of(&cur_dir, &c.file).to_string_lossy().to_string())
+                want.entry(located(&cur_dir, fence, &c.file))
                     .or_default()
                     .0
                     .insert(text.clone());
@@ -1864,6 +1909,8 @@ pub fn finish(
     let mut t = AsmTimings::default();
     let t0 = Instant::now();
     let dir = opts.dir.clone();
+    // the session's root: nothing outside it is read
+    let fence = opts.root.as_ref().and_then(|r| std::fs::canonicalize(r).ok());
     let mut names = Names::default();
 
     // subassemblies, depth first, each document once; a cycle is refused
@@ -1872,7 +1919,16 @@ pub fn finish(
         vec![(d.clone(), dir.clone(), vec![])];
     while let Some((doc_, here, chain)) = stack.pop() {
         for i in doc_.insts.iter().filter(|i| i.sub) {
-            let p = path_of(&here, &i.file);
+            let Some(p) = locate(&here, &fence, &i.file) else {
+                ev.errors.push(note(
+                    i.span,
+                    Issue::PartFile {
+                        file: i.file.clone(),
+                        problem: FileProblem::Missing,
+                    },
+                ));
+                continue;
+            };
             let key = p.to_string_lossy().to_string();
             if chain.contains(&key) {
                 ev.errors.push(note(
@@ -1887,7 +1943,7 @@ pub fn finish(
             if subs.contains_key(&key) {
                 continue;
             }
-            let Ok(text) = std::fs::read_to_string(&p) else {
+            let Some(text) = read_capped(&p) else {
                 ev.errors.push(note(
                     i.span,
                     Issue::PartFile {
@@ -1939,12 +1995,12 @@ pub fn finish(
 
     // the documents for forge-asm, and what each part file is asked for
     let mut want: BTreeMap<String, (BTreeSet<String>, BTreeSet<String>)> = BTreeMap::new();
-    let top = build_doc(&d, &dir, &dir, &subs, &mut want, &mut names);
+    let top = build_doc(&d, &dir, &fence, &dir, &subs, &mut want, &mut names);
     let mut catalog = fa::Catalog::default();
     for (key, sub) in &subs {
         let sdir = std::path::Path::new(key).parent().map(|p| p.to_path_buf());
         let mut sn = Names::default();
-        let a = build_doc(&sub.0, &dir, &sdir, &subs, &mut want, &mut sn);
+        let a = build_doc(&sub.0, &dir, &fence, &sdir, &subs, &mut want, &mut sn);
         catalog.assemblies.insert(fa::DocId(short(&dir, key).into()), a);
     }
 
@@ -1953,16 +2009,30 @@ pub fn finish(
     let mut loads: Vec<usize> = vec![];
     let mut declared_kinds: BTreeSet<String> = BTreeSet::new();
     for (file, (refs, bodies)) in &want {
-        let span = d
+        // named as the document wrote it, never by its real path
+        let named = d
             .insts
             .iter()
-            .find(|i| path_of(&dir, &i.file).to_string_lossy() == file.as_str())
-            .map_or(Span { lo: 0, hi: 0 }, |i| i.span);
-        let Ok(text) = std::fs::read_to_string(file) else {
+            .find(|i| !i.sub && located(&dir, &fence, &i.file) == *file);
+        let span = named.map_or(Span { lo: 0, hi: 0 }, |i| i.span);
+        let shown = named.map_or_else(
+            || {
+                std::path::Path::new(file.trim_start_matches('?'))
+                    .file_name()
+                    .map_or_else(String::new, |n| n.to_string_lossy().to_string())
+            },
+            |i| i.file.clone(),
+        );
+        let text = if file.starts_with('?') {
+            None
+        } else {
+            read_capped(std::path::Path::new(file))
+        };
+        let Some(text) = text else {
             ev.errors.push(note(
                 span,
                 Issue::PartFile {
-                    file: file.clone(),
+                    file: shown,
                     problem: FileProblem::Missing,
                 },
             ));
@@ -1985,7 +2055,7 @@ pub fn finish(
             ev.errors.push(note(
                 span,
                 Issue::PartFile {
-                    file: file.clone(),
+                    file: shown.clone(),
                     problem: FileProblem::WrongKind { assembly: true },
                 },
             ));
@@ -1995,7 +2065,7 @@ pub fn finish(
             ev.errors.push(note(
                 span,
                 Issue::PartFile {
-                    file: file.clone(),
+                    file: shown.clone(),
                     problem: FileProblem::Errors {
                         count: load.errors.len(),
                         first: e.kind(),
@@ -2013,7 +2083,7 @@ pub fn finish(
             ev.errors.push(note(
                 span,
                 Issue::PartFile {
-                    file: file.clone(),
+                    file: shown.clone(),
                     problem: FileProblem::NoBody { body: b.clone() },
                 },
             ));

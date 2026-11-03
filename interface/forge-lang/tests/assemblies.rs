@@ -738,3 +738,47 @@ expect value(g.turn) = 45deg at at = 45deg
     let r = run_in(&d, &fixed);
     assert!(r.ok(), "{:?}", errors(&r));
 }
+
+/// Files an assembly names are found as media files are: from the document's directory, a real
+/// `.fg` file of at most 64 MB under the session's root. Every way out is refused alike.
+#[test]
+#[cfg(unix)]
+fn an_assembly_reads_nothing_outside_its_root() {
+    let top = dir("security");
+    let root = top.join("root");
+    let _ = std::fs::create_dir_all(&root);
+    write(&root, "base.fg", &base(D));
+    write(&root, "crank.fg", &link(A));
+    write(&top, "outside.fg", &link(A));
+    write(&root, "notes.txt", &link(A));
+    let _ = std::fs::remove_file(root.join("link.fg"));
+    std::os::unix::fs::symlink(top.join("outside.fg"), root.join("link.fg")).unwrap();
+    let big = std::fs::File::create(root.join("big.fg")).unwrap();
+    big.set_len((64 << 20) + 1).unwrap();
+    let opts = Options {
+        dir: Some(root.clone()),
+        root: Some(root.clone()),
+        ..Options::default()
+    };
+    let outside = top.join("outside.fg").to_string_lossy().to_string();
+    for file in [
+        outside.as_str(),
+        "../outside.fg",
+        "link.fg",
+        "notes.txt",
+        "big.fg",
+        "nowhere.fg",
+    ] {
+        for call in ["part", "subassembly"] {
+            let src = format!("assembly\n\nbase = part(\"base.fg\", ground: true)\nx = {call}(\"{file}\")\n");
+            let r = forge_lang::run(&src, opts.clone(), Default::default()).0;
+            let texts: Vec<String> = r.errors.iter().map(|e| e.text()).collect();
+            assert_eq!(texts, vec![format!("{file}: no such file")], "{call}({file})");
+            assert!(r.errors.iter().all(|e| e.kind() == "PartFile"));
+        }
+    }
+    // the same parts inside the root are read
+    let ok = "assembly\n\nbase = part(\"base.fg\", ground: true)\nx = part(\"crank.fg\")\n";
+    let r = forge_lang::run(ok, opts, Default::default()).0;
+    assert!(r.ok(), "{:?}", errors(&r));
+}

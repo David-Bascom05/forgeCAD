@@ -87,6 +87,8 @@ impl Session {
         let cache = self.caches.remove(path).unwrap_or_default();
         let opts = Options {
             build,
+            dir: path.parent().map(Path::to_path_buf),
+            root: self.root.clone(),
             ..Options::default()
         };
         let (run, cache) = forge_lang::run(src, opts, cache);

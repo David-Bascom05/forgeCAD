@@ -46,6 +46,8 @@ pub struct Options {
     pub dir: Option<std::path::PathBuf>,
     /// An assembly: keep each placed part for a picture (`asm::compound`).
     pub render: bool,
+    /// The session's root: an assembly reads no file outside it (`fg serve`, MCP).
+    pub root: Option<std::path::PathBuf>,
     /// An assembly: measure only this expect (by position), ignoring its `at` (`asm.rs`).
     pub probe: Option<usize>,
 }
@@ -58,6 +60,7 @@ impl Default for Options {
             volumes: false,
             dir: None,
             render: false,
+            root: None,
             probe: None,
         }
     }
