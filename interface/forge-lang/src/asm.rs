@@ -1811,6 +1811,8 @@ pub struct JointOut {
     pub kind: &'static str,
     pub values: Vec<(&'static str, f64, bool)>,
     pub free: usize,
+    /// Its limits as written (freedom, low, high; angles in radians): a drive's range.
+    pub limits: Vec<(&'static str, f64, f64)>,
 }
 
 /// What an assembly run gives besides its typed notes.
@@ -1833,6 +1835,10 @@ pub struct AsmOut {
     pub overlap: Option<OverlapStats>,
     /// The parts to draw: each occurrence's body and pose.
     pub draw: Vec<(Arc<forge_topo::Body>, Frame)>,
+    /// With `Options::render`: each part's body once, and each occurrence's (by `occurrences`'
+    /// order) index into it, so a picture meshes a part once and draws it at every occurrence.
+    pub parts: Vec<Arc<forge_topo::Body>>,
+    pub occ_part: Vec<Option<usize>>,
     /// The probed expects' values, by position (`Options::probe`).
     pub probes: Vec<(usize, Option<f64>)>,
     /// Every expect line: measured, against its limit, passed or not.
@@ -1879,6 +1885,8 @@ struct Names {
     fits: Vec<(String, Span)>,
     /// Each probed reference's path and anchor.
     probe: Vec<(RefDef, fa::End)>,
+    /// Instances inside subassemblies, by id hash: occurrence paths read as names.
+    sub_inst: BTreeMap<u64, String>,
 }
 
 fn hid(id: &str) -> u64 {
@@ -2160,6 +2168,11 @@ pub fn finish(
         }
     }
 
+    for (doc, _) in subs.values().map(|x| &**x) {
+        for i in &doc.insts {
+            names.sub_inst.insert(hid(&i.id), i.id.clone());
+        }
+    }
     // the documents for forge-asm, and what each part file is asked for
     let mut want: BTreeMap<String, (BTreeSet<String>, BTreeSet<String>)> = BTreeMap::new();
     // the references expects measure, so the parts are asked for them
@@ -2389,7 +2402,12 @@ pub fn finish(
     let sol = solver.solution();
     t.solve_ms = t2.elapsed().as_secs_f64() * 1e3;
     let t3 = Instant::now();
-    let rep = checker.interference(sol, &live_asm.fits, &live_asm.fit_rules);
+    // the overlap check can wait (`Options::overlap`): a UI shows the posed parts first
+    let rep = if opts.overlap {
+        checker.interference(sol, &live_asm.fits, &live_asm.fit_rules)
+    } else {
+        fa::check::InterferenceReport::default()
+    };
     t.overlap_ms = t3.elapsed().as_secs_f64() * 1e3;
 
     // typed results
@@ -2442,7 +2460,7 @@ pub fn finish(
             })
             .collect(),
         stats: sol.stats,
-        overlap: Some(OverlapStats {
+        overlap: opts.overlap.then(|| OverlapStats {
             candidates: rep.candidates,
             narrow_tests: rep.narrow_tests,
             cache_hits: rep.cache_hits,
@@ -2470,17 +2488,11 @@ pub fn finish(
     }
     out.poses.sort_by(|a, b| a.0.cmp(&b.0));
     let occ_name = |p: &fa::Path| -> String {
-        // the top-level instance by its name, the rest by their ids' hashes (inside subassemblies)
-        let mut s = names
-            .inst
-            .get(&p[0].0)
-            .map_or_else(|| p[0].0.to_string(), |x| x.0.clone());
-        for x in &p[1..] {
-            s.push_str(&format!(".#{:x}", x.0));
-        }
-        s
+        // the top-level instance, then the subassemblies' instances, by their names
+        path_name(&names, p)
     };
     let mut bom: BTreeMap<String, usize> = BTreeMap::new();
+    let mut unique = std::collections::HashMap::new();
     for o in &sol.occurrences {
         out.occurrences
             .push((occ_name(&o.path), o.part.doc.0.to_string(), o.pose));
@@ -2490,7 +2502,20 @@ pub fn finish(
         if opts.render
             && let Some(b) = checker.exact().bodies.get(&(o.part.doc.clone(), o.part.body))
         {
-            out.draw.push((Arc::new(b.clone()), o.pose));
+            // each part's body once, shared by its occurrences
+            let key = (o.part.doc.clone(), o.part.body);
+            let k = match unique.get(&key) {
+                Some(&k) => k,
+                None => {
+                    out.parts.push(Arc::new(b.clone()));
+                    unique.insert(key, out.parts.len() - 1);
+                    out.parts.len() - 1
+                }
+            };
+            out.draw.push((out.parts[k].clone(), o.pose));
+            out.occ_part.push(Some(k));
+        } else {
+            out.occ_part.push(None);
         }
     }
     out.bom = bom.into_iter().collect();
@@ -2508,7 +2533,14 @@ pub fn finish(
         let Some((n, _, Some(kind))) = names.link.get(&j.joint.0) else {
             continue;
         };
+        let limits = d
+            .links
+            .iter()
+            .find(|l| l.id == *n)
+            .map(|l| l.limits.iter().map(|(f, lo, hi)| (freedom_word(*kind, *f), *lo, *hi)).collect())
+            .unwrap_or_default();
         out.joints.push(JointOut {
+            limits,
             id: n.clone(),
             kind: kind.name(),
             values: j
@@ -3000,7 +3032,10 @@ fn path_name(names: &Names, p: &fa::Path) -> String {
         .get(&p[0].0)
         .map_or_else(|| p[0].0.to_string(), |x| x.0.clone());
     for x in &p[1..] {
-        s.push_str(&format!(".#{:x}", x.0));
+        match names.sub_inst.get(&x.0) {
+            Some(n) => s.push_str(&format!(".{n}")),
+            None => s.push_str(&format!(".#{:x}", x.0)),
+        }
     }
     s
 }

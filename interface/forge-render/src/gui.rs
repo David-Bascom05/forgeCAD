@@ -133,6 +133,12 @@ pub struct Gui {
     pub fg_sheets: Vec<crate::fg::SheetInfo>,
     /// What Forge names each face and edge of the part: what a pick becomes.
     pub fg_anchors: Option<Arc<crate::fg::AnchorView>>,
+    /// An assembly's occurrences and their placements' poses as solved.
+    pub fg_asm: Option<(Vec<crate::fg::Occ>, Vec<(usize, crate::scene::Rows)>)>,
+    /// A part's anchors being found, for the instance chosen.
+    fg_asm_anchors: Option<Receiver<(String, Result<Vec<String>, String>)>>,
+    /// The camera to keep when an assembly's view is made again.
+    fg_keep_camera: Option<Camera>,
     /// The GPU refused something: said once, and no more views are drawn.
     gpu_failed: Arc<std::sync::Mutex<Option<String>>>,
 }
@@ -237,6 +243,9 @@ impl Gui {
             fg_flat: None,
             fg_sheets: Vec::new(),
             fg_anchors: None,
+            fg_asm: None,
+            fg_asm_anchors: None,
+            fg_keep_camera: None,
             gpu_failed,
         }
     }
@@ -2637,6 +2646,8 @@ impl Gui {
                 self.fg_folded = None;
                 self.fg_flat = None;
                 self.fg_sheets.clear();
+                self.fg_asm = None;
+                self.fg_keep_camera = None;
                 self.loading = None;
                 self.view = None;
                 self.shell.view_tex = None;
@@ -2665,6 +2676,16 @@ impl Gui {
 
     /// What the Forge worker has built: the panel's rows, the part's mesh.
     fn take_fg(&mut self) {
+        // a part's anchors, found off the frame's thread
+        if let Some(r) = &self.fg_asm_anchors
+            && let Ok(got) = r.try_recv()
+        {
+            self.fg_asm_anchors = None;
+            if let Some(a) = self.shell.fg.as_mut().and_then(|p| p.asm.as_mut()) {
+                a.anchors = Some(got);
+            }
+        }
+        let mut asm_moved = false;
         let Some(s) = &mut self.fg else { return };
         let mut changed = false;
         let flat_shown = self.shell.fg.as_ref().is_some_and(|p| p.flat);
@@ -2710,7 +2731,92 @@ impl Gui {
                 }
                 self.shell.status = p.summary.clone();
             }
+            if let Some(a) = &b.asm
+                && let Some(p) = &mut self.shell.fg
+            {
+                let ap = p.asm.get_or_insert_with(Default::default);
+                ap.occ = a
+                    .occ
+                    .iter()
+                    .map(|o| crate::shell::fgasm::OccRow {
+                        path: o.path.clone(),
+                        file: o.file.clone(),
+                        drawn: o.placement.is_some(),
+                    })
+                    .collect();
+                ap.joints = a.joints.clone();
+                ap.mobility = a.mobility;
+                ap.bom = a.bom.clone();
+                ap.expects = a.expects.clone();
+                if a.overlap.is_some() {
+                    ap.overlap = a.overlap;
+                    ap.checking = false;
+                }
+                let tm = &a.timings;
+                ap.timings = format!(
+                    "load {:.0} ms, solve {:.0} ms{}, {} parts meshed ({} new) in {:.0} ms",
+                    tm.load_ms,
+                    tm.solve_ms,
+                    if a.overlap.is_some() {
+                        format!(", overlap {:.0} ms", tm.overlap_ms)
+                    } else {
+                        String::new()
+                    },
+                    a.parts,
+                    a.meshed,
+                    b.mesh_ms
+                );
+                p.summary = format!("{} · {}", p.summary, ap.timings);
+                self.shell.status = p.summary.clone();
+                self.fg_asm = Some((a.occ.clone(), a.placed.clone()));
+                asm_moved = true;
+                // which part is placed where changed: the view made again, the camera kept
+                if let Some(all) = &a.restage {
+                    let parts: Vec<crate::mesh::PartMesh> =
+                        if all.is_empty() { vec![crate::mesh::PartMesh::empty()] } else { all.clone() };
+                    let placements: Vec<Placement> = if a.placed.is_empty() {
+                        vec![Placement::at(0, [0.0; 3])]
+                    } else {
+                        a.placed
+                            .iter()
+                            .map(|(m, rows)| Placement {
+                                part: *m as u32,
+                                rows: *rows,
+                                tint: crate::fg::PART_TINT,
+                            })
+                            .collect()
+                    };
+                    let mut scene = Scene::new(&part_info(&parts), placements);
+                    scene.set_explode(0.0);
+                    let renderer = Renderer::new(
+                        self.device.clone(),
+                        self.queue.clone(),
+                        self.adapter.clone(),
+                        render::OFFSCREEN,
+                        (16, 16),
+                        &parts,
+                        &scene,
+                    );
+                    if let Some(v) = &self.view {
+                        self.fg_keep_camera = Some(v.nav.camera);
+                    }
+                    self.fg_view = Some(Loaded {
+                        file: s.path.clone(),
+                        name: name_of(s.path.as_deref().unwrap_or("part.fg")),
+                        part: None,
+                        empty: false,
+                        scene,
+                        renderer,
+                        unshown: None,
+                    });
+                }
+            }
             if let Some((renderer, scene)) = b.view {
+                if let Some(v) = &self.view
+                    && b.asm.is_some()
+                {
+                    self.fg_keep_camera = Some(v.nav.camera);
+                }
                 self.fg_view = Some(Loaded {
                     file: s.path.clone(),
                     name: name_of(s.path.as_deref().unwrap_or("part.fg")),
@@ -2769,6 +2875,13 @@ impl Gui {
             let status = std::mem::take(&mut self.shell.status);
             self.show_loaded(l);
             self.shell.status = status;
+            if let (Some(c), Some(v)) = (self.fg_keep_camera.take(), &mut self.view) {
+                v.nav.camera = c;
+            }
+            asm_moved = true;
+        }
+        if asm_moved {
+            self.asm_show();
         }
     }
 
@@ -2797,6 +2910,13 @@ impl Gui {
                     }
                 }
                 crate::shell::fg::FgAct::Refuse(e) => self.fg_refuse(e),
+                crate::shell::fg::FgAct::AsmShow => self.asm_show(),
+                crate::shell::fg::FgAct::AsmCheck => {
+                    if let Some(s) = &mut self.fg {
+                        s.check_overlap();
+                    }
+                }
+                crate::shell::fg::FgAct::AsmAnchors(file) => self.asm_anchors(file),
                 crate::shell::fg::FgAct::Flat(on) => {
                     if let Some(p) = &mut self.shell.fg {
                         p.flat = on && self.fg_flat.is_some();
@@ -2848,6 +2968,84 @@ impl Gui {
         }
     }
 
+    /// An assembly's placements as the panel wants them: hidden ones out of sight, the chosen
+    /// and the highlighted tinted.
+    pub fn asm_show(&mut self) {
+        let (Some((occ, placed)), Some(a)) = (&self.fg_asm, self.shell.fg.as_ref().and_then(|p| p.asm.as_ref()))
+        else {
+            return;
+        };
+        const NOWHERE: crate::scene::Rows = [[0.0; 4]; 3];
+        let target = match &mut self.view {
+            Some(v) => Some((&mut v.scene, &mut v.renderer, &mut v.dirty)),
+            None => None,
+        };
+        let Some((scene, renderer, dirty)) = target else { return };
+        if scene.placements.len() != placed.len() {
+            return;
+        }
+        for o in occ {
+            let Some(k) = o.placement else { continue };
+            let rows = if a.shown(&o.path) { placed[k].1 } else { NOWHERE };
+            if scene.rows_of(k) != rows {
+                scene.set_rows(k, &rows);
+            }
+            scene.placements[k].tint = if a.picked(&o.path) {
+                crate::fg::PICKED_TINT
+            } else if a.flagged(&o.path) {
+                crate::fg::CLASH_TINT
+            } else {
+                crate::fg::PART_TINT
+            };
+        }
+        renderer.set_tints(scene);
+        *dirty = true;
+    }
+
+    /// A part file's anchors, found on a thread: the instance chosen shows them.
+    fn asm_anchors(&mut self, file: String) {
+        let dir = self
+            .fg
+            .as_ref()
+            .and_then(|s| s.path.as_deref())
+            .and_then(|p| std::path::Path::new(p).parent().map(|d| d.to_path_buf()));
+        let (send, recv) = channel();
+        self.fg_asm_anchors = Some(recv);
+        let waker = self.waker.clone();
+        std::thread::spawn(move || {
+            let path = dir
+                .as_ref()
+                .map(|d| d.join(&file))
+                .filter(|p| p.exists())
+                .unwrap_or_else(|| std::path::PathBuf::from(&file));
+            let got = std::fs::read_to_string(&path)
+                .map_err(|e| format!("{}: {e}", path.display()))
+                .map(|text| {
+                    let opts = forge_lang::Options {
+                        anchors: true,
+                        dir: path.parent().map(|d| d.to_path_buf()),
+                        ..forge_lang::Options::default()
+                    };
+                    let (run, _) = forge_lang::run(&text, opts, Default::default());
+                    let mut out: Vec<String> = vec![];
+                    if let Some(a) = &run.anchors {
+                        let mut faces: Vec<String> = a.faces.values().cloned().collect();
+                        faces.sort();
+                        faces.dedup();
+                        out.extend(faces);
+                        for s in &a.sketches {
+                            out.extend(s.points.iter().cloned());
+                            out.extend(s.lines.iter().cloned());
+                            out.extend(s.closed.iter().cloned());
+                        }
+                    }
+                    out
+                });
+            let _ = send.send((file, got));
+            waker();
+        });
+    }
+
     /// A tool's form for a ribbon kind; one with no Forge form is refused, typed.
     pub fn fg_open_tool(&mut self, kind: &'static str) {
         let Some(p) = &mut self.shell.fg else { return };
@@ -2889,6 +3087,19 @@ impl Gui {
             return;
         }
         v.clicks = v.nav.clicks;
+        // an assembly: a click chooses the occurrence under it
+        if let Some((occ, _)) = &self.fg_asm {
+            let at = v.nav.selected.last().map(|x| x.0 as usize);
+            let path = at.and_then(|p| occ.iter().find(|o| o.placement == Some(p)).map(|o| o.path.clone()));
+            v.nav.selected.clear();
+            v.clicked.clear();
+            if let Some(a) = self.shell.fg.as_mut().and_then(|p| p.asm.as_mut()) {
+                a.selected = path;
+                a.anchors = None;
+            }
+            self.asm_show();
+            return;
+        }
         let ent = v.nav.selected.last().map(|x| x.1);
         let a = self.fg_anchors.clone();
         let named = |list: Option<&Vec<Option<String>>>, k: u32, what: &'static str| {

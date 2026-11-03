@@ -740,7 +740,8 @@ impl Renderer {
             &device,
             "tints",
             tint_bytes.len() as u64,
-            wgpu::BufferUsages::STORAGE,
+            // set_tints rewrites it: a chosen or flagged assembly part
+            wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_DST,
             vec![&tint_bytes],
         );
         let instances = device.create_buffer(&wgpu::BufferDescriptor {
@@ -1011,6 +1012,15 @@ impl Renderer {
     }
 
     /// Takes in a dragged part's changed faces, uploading those only: the bytes it wrote.
+    /// The placements' colours as the scene has them now.
+    pub fn set_tints(&mut self, scene: &Scene) {
+        let mut bytes = Vec::with_capacity(scene.placements.len() * 16);
+        for v in scene.placements.iter().flat_map(|p| &p.tint) {
+            bytes.extend_from_slice(&v.to_le_bytes());
+        }
+        self.queue.write_buffer(&self.tints, 0, &bytes);
+    }
+
     pub fn live_apply(&mut self, part: u32, delta: &crate::livegpu::Delta) -> u64 {
         let (globals, placements, tints) = (&self.globals, &self.placements, &self.tints);
         let (_, gpu) = self.live.get_or_insert_with(|| {

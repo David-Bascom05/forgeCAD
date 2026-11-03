@@ -6,6 +6,7 @@
 pub mod dialog;
 pub mod dim;
 pub mod fg;
+pub mod fgasm;
 pub mod fgsketch;
 pub mod fgtool;
 pub mod icons;
@@ -828,7 +829,9 @@ impl Shell {
             .to_string();
         self.head(&p, side.top(), "Model", &name);
         let tree = Rect::from_min_max(pos2(0.0, side.top() + HEAD_H), pos2(SIDE_W, side.bottom()));
-        if self.fg.is_some() {
+        if self.fg.as_ref().is_some_and(|f| f.asm.is_some()) {
+            self.asm_tree(ui, tree);
+        } else if self.fg.is_some() {
             self.fg_tree(ui, tree);
         } else {
             self.tree(ui, tree);
