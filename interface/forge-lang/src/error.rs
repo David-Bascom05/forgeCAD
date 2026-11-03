@@ -633,6 +633,11 @@ pub enum Error {
         want: Dim,
         found: Dim,
     },
+    /// An edit's value is NaN or infinite: no literal writes it.
+    NotFinite {
+        param: ParamKey,
+        value: f64,
+    },
     /// Sheet metal: the kernel's refusals and the language's own (`sheet.rs`).
     Sheet(Box<crate::sheet::SheetErr>),
     // ---- shapes (sweep, coil, loft, shell, draft, offset, rib, face fillets, balls) ----
@@ -757,7 +762,8 @@ impl Error {
             | UnknownFeature { .. }
             | NotAStatement { .. }
             | NameTaken { .. }
-            | EditDim { .. } => None,
+            | EditDim { .. }
+            | NotFinite { .. } => None,
             Sheet(e) => e.span(),
         }
     }
@@ -814,6 +820,7 @@ impl Error {
             StillRead { .. } => "StillRead",
             ShadowsTopLevel { .. } => "ShadowsTopLevel",
             EditDim { .. } => "EditDim",
+            NotFinite { .. } => "NotFinite",
             Sheet(e) => e.kind(),
             NotWith { .. } => "NotWith",
             TaperOnCurve { .. } => "TaperOnCurve",
@@ -1001,6 +1008,7 @@ impl Error {
             }
             ShadowsTopLevel { name, .. } => format!("{name} is a top-level name; a local may not hide it"),
             EditDim { param, want, found } => format!("{param} is a {want:?}; the value is a {found:?}"),
+            NotFinite { param, value } => format!("{param} cannot be set to {value}: only a finite number is written"),
             Sheet(e) => e.text(),
             NotWith { func, arg, with, .. } => format!("{func}: {arg} does not apply with {with}"),
             TaperOnCurve { sketch, .. } => format!(
@@ -1111,6 +1119,7 @@ impl Error {
                 ("rows", Json::Arr(rows.iter().map(|r| span_json(*r)).collect())),
             ],
             UnknownParam { param } | EditDim { param, .. } => vec![("param", s(&param.to_string()))],
+            NotFinite { param, value } => vec![("param", s(&param.to_string())), ("value", s(&value.to_string()))],
             UnknownFeature { id } | NotAStatement { id } => vec![("id", s(id))],
             StillRead { name, reader, .. } => vec![("name", s(name)), ("reader", s(reader))],
             ShadowsTopLevel { name, .. } => vec![("name", s(name))],

@@ -33,10 +33,29 @@ expect volume = 107177 +- 0.1%
 
 ## Design as built
 
-- **Grammar.** LL(1), written out in `grammar.ll1`; `tests/grammar.rs` computes FIRST and FOLLOW
-  and finds zero conflicts, so every text has one tree. The parser is the grammar by hand, every
-  choice on one token. A negative literal is one token; methods and members bind tightest; `:` is
-  only for keyword arguments and keyed maps, never a ternary; `in` is not a unit.
+- **Grammar.** LL(1), written out in `grammar.ll1`, the one source of the syntax.
+  `tests/grammar.rs` computes nullable, FIRST and FOLLOW, finds zero conflicts (so every text has
+  one tree), and generates `src/syntax/table.rs`: those sets and the LL(1) table. The parser in
+  `syntax.rs` is a stack driver over that table plus one tree-building action per rule. A syntax
+  change is: edit `grammar.ll1`, run `FG_REGEN=1 cargo test -p forge-lang --test grammar` to
+  rewrite the table, then write the actions for the changed rules (the match over rules is
+  exhaustive, so the compiler lists them). `the_table_is_current` fails when the table is stale.
+  Syntax errors carry the exact set of tokens that were expected. A negative literal is one token;
+  methods and members bind tightest; `:` is only for keyword arguments and keyed maps, never a
+  ternary; `in` is not a unit; a comprehension has one item.
+  - **Proven.** The same sets are the certificate of the Lean check on branch `forge-lang-proof`
+    (`research/forge-lang/lean`, P6 in `research/forge-lang/ASSUMPTIONS.md`):
+    `python3 gen_grammar.py <grammar.ll1> > ForgeLang/LL1/Forge.lean && lake build` re-checks
+    LL(1), hence unambiguity and the parser's round trip, in the kernel. The lexer assumptions
+    the proof needs are tested in `tests/lexer.rs`: lexing is deterministic, tokens and the kept
+    whitespace and comments (`lex_lossless`) rebuild the source bytes, and every literal SetParam
+    writes lexes back as one number (NaN and infinity are refused as `NotFinite`).
+  - **Same trees as the hand parser it replaced** (`tests/equiv.rs` against `tests/old_parser`):
+    identical trees, or the same error at the same span, on every `.fg`, string literal and doc
+    code block in the crate, the fair-test models, 50000 random sentences of the grammar, and
+    random mutations of all of them. The one difference found was a bug: `[a, b for x in y]`
+    parsed, dropping `a`; the grammar now rejects it. Parse time is the hand parser's or a few
+    percent less (bracket 105 us, crank 84 us, manifold 180 us, lexing included).
 - **Ids from syntax only.** The assigned name, the call path (`lug.hub`), range indices
   (`bolt[2]`) and labels of keyed loops (`vtap[lf]`). A loop over a plain list may compute but not
   make features (`PositionalId`). Ids hash to the kernel's history ids, so names in the B-rep
@@ -162,7 +181,10 @@ Tests (`cargo test -p forge-lang`):
 - `props`: 400 random documents, four random typed ops each: the edited text parses to the tree
   the op makes, SetParam changes only the param's right side, a document that checked still
   checks after any op that applied, and ids of features not added or deleted are unchanged.
-- `grammar`: zero LL(1) conflicts.
+- `grammar`: zero LL(1) conflicts; the generated table is current; every random sentence of the
+  grammar parses.
+- `lexer`: determinism, lossless tokens and trivia, SetParam literals as one number.
+- `equiv`: the table parser against the hand parser (see Grammar above).
 - forge-ops `roles`: the builders name caps and walls by role.
 
 ## Sheet metal (`src/sheet.rs`)

@@ -178,6 +178,12 @@ fn precheck(src: &str, prog: &[Stmt], op: &Op) -> R<()> {
     match op {
         Op::SetParam { param, value } => {
             known(param)?;
+            if !value.value.is_finite() {
+                return Err(Error::NotFinite {
+                    param: param.clone(),
+                    value: value.value,
+                });
+            }
             match param_dim(src, param) {
                 Some(d) if d != value.dim && d != Dim::Any => Err(Error::EditDim {
                     param: param.clone(),
@@ -187,7 +193,16 @@ fn precheck(src: &str, prog: &[Stmt], op: &Op) -> R<()> {
                 _ => Ok(()),
             }
         }
-        Op::AddLocalParam { feature, name, .. } => {
+        Op::AddLocalParam { feature, name, value } => {
+            if !value.value.is_finite() {
+                return Err(Error::NotFinite {
+                    param: ParamKey {
+                        owner: feature.clone(),
+                        name: name.clone(),
+                    },
+                    value: value.value,
+                });
+            }
             block(prog, &feature[0].name)?;
             taken(ParamKey {
                 owner: feature.clone(),
