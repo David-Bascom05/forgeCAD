@@ -40,8 +40,8 @@ sketch fl(on: xy) {
   c = circle((0, 0), rf)
   xl = line((0, 0), (rf, 0), construction: true)
 }
-flange = extrude(fl, tf)
-sketch hexsk(on: flange.end) {
+hflange = extrude(fl, tf)
+sketch hexsk(on: hflange.end) {
   h = poly([(hx, 0 - hy), (hx, hy), (0, hr), (0 - hx, hy), (0 - hx, 0 - hy), (0, 0 - hr)])
 }
 hex = extrude(hexsk, th)
