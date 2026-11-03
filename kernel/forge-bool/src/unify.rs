@@ -24,12 +24,30 @@ pub fn unify(body: &mut Body) {
             _ => (0, 0.0),
         })
         .collect();
-    let mut cands: Vec<EdgeId> = (0..body.edges.len() as u32)
+    let cands: Vec<EdgeId> = (0..body.edges.len() as u32)
         .map(EdgeId)
         .filter(|&e| between_same(body, &keys, e))
         .collect();
-    // by name, so the seam a wrapped face keeps does not depend on storage order
-    cands.sort_unstable_by_key(|&e| body.edge(e).name);
+    // the order edges go in decides which stays as the seam of a face that wraps round: the last
+    // one of its ring. Rulings (a line on a cylinder or cone) go last, so the seam kept is one
+    // where a seam belongs, never a slit across the face that later features would have to meet
+    // as an edge. Then by where the edge lies (its ends, then its middle, to a micron), never by
+    // name or storage order: names follow feature ids, and the topology must not. The name only
+    // orders edges that lie alike.
+    let at = |e: EdgeId| {
+        let x = body.edge(e);
+        let ruling = matches!(x.curve, Curve::Line(_))
+            && matches!(
+                body.face(body.coedge_face(x.coedges[0])).surface,
+                Surface::Cylinder(_) | Surface::Cone(_)
+            );
+        let q = |p: forge_math::Point3| [p.x, p.y, p.z].map(|v| (v * 1e6).round() as i64);
+        let (a, b) = (q(body.vertex(x.start).point), q(body.vertex(x.end).point));
+        (ruling, a.min(b), a.max(b), q(x.curve.eval(x.range.mid())), x.name)
+    };
+    let mut keyed: Vec<_> = cands.iter().map(|&e| (at(e), e)).collect();
+    keyed.sort_unstable_by_key(|k| k.0);
+    let cands: Vec<EdgeId> = keyed.into_iter().map(|k| k.1).collect();
     let mut faces: Vec<FaceId> = Vec::new();
     // (the face that went, the face it went into)
     let mut merged: Vec<(u32, u32)> = Vec::new();
