@@ -54,3 +54,17 @@ fn bracket_matches_its_fc_version() {
 fn manifold_matches_its_fc_version() {
     parity("manifold", 687248.8, 209, 484);
 }
+
+// Bench parts (tools/bench-parts), lane fg-shapes. Against the .fc built with the lines that wait
+// on other lanes taken out: jack without its modeled thread and text (fg-holes); quadarm whole
+// (its root hole's cosmetic thread changes nothing measured).
+
+#[test]
+fn bench_jack_matches_its_fc_version_less_thread_and_text() {
+    parity("bench_jack", 54989.1, 166, 478);
+}
+
+#[test]
+fn bench_quadarm_matches_its_fc_version() {
+    parity("bench_quadarm", 19376.0, 73, 167);
+}
