@@ -1221,9 +1221,13 @@ impl<P: Parts, E: Exact> Checker<P, E> {
             let tol = occ[i].mesh.as_ref().map_or(0.0, |m| m.tolerance)
                 + occ[j].mesh.as_ref().map_or(0.0, |m| m.tolerance)
                 + tol::LINEAR;
-            rules_sorted.iter().find_map(|r| {
-                rule_covers(&self.parts, r, &occ[i], &occ[j], tol).map(|s| (Intent::Rule { rule: r.id }, s))
-            })
+            rules_sorted
+                .iter()
+                .filter(|r| a.starts_with(&r.within) && b.starts_with(&r.within))
+                .find_map(|r| {
+                    rule_covers(&self.parts, r, &occ[i], &occ[j], tol)
+                        .map(|s| (Intent::Rule { rule: r.id }, s))
+                })
         };
         let intent = |i: usize, j: usize| intent_of(i, j).map(|x| x.0);
         // exact confirmation for hits that are not intended

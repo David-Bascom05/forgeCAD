@@ -748,6 +748,17 @@ fn place_bridge(plan: &Plan, poses: &Poses, u: &Unit, known: &Known) -> UnitOut 
                 0.0
             }
         };
+        // a value at a limit to within the solve's rounding is at the limit, not past it
+        let slack = if f.is_angle() {
+            1e-9
+        } else {
+            forge_math::tol::LINEAR
+        };
+        if let Some(&(_, lo, hi)) = j.limits.iter().find(|l| l.0 == f)
+            && (lo - slack..=hi + slack).contains(&v)
+        {
+            v = v.clamp(lo, hi);
+        }
         if let Some(&(_, lo, hi)) = j.limits.iter().find(|l| l.0 == f)
             && !(lo..=hi).contains(&v)
         {

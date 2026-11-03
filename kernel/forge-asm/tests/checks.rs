@@ -171,6 +171,7 @@ fn fit_rules_cover_bolts_in_matching_holes_and_say_which() {
         of(4, "rod", at(20.0, 20.0, -5.0)), // not in a hole: still interference
     ]);
     let rule = FitRule {
+        within: vec![],
         id: 7,
         min_engagement: None,
         a: FitMatch::Feature {
@@ -237,6 +238,7 @@ fn fit_rules_cover_bolts_in_matching_holes_and_say_which() {
     );
     // a size that does not match covers nothing
     let m5 = FitRule {
+        within: vec![],
         id: 8,
         min_engagement: None,
         a: FitMatch::Feature {
@@ -250,6 +252,7 @@ fn fit_rules_cover_bolts_in_matching_holes_and_say_which() {
     assert!(rep.rules.is_empty());
     // a part rule covers every rod against the plate, wherever it stands
     let parts = FitRule {
+        within: vec![],
         id: 9,
         min_engagement: None,
         a: FitMatch::Part {
