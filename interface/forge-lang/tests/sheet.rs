@@ -1296,3 +1296,124 @@ flat = unfold(base, on: offset(base.bottom, gap))
             .any(|w| matches!(w, Warning::Sheet(n) if n.kind().ends_with("Touch")))
     );
 }
+
+/// A 120 x 80 plate with a side flange, for the leftovers below.
+const PLATE: &str = "shared t = 1.5
+shared r = 1.5
+shared k = ratio(0.42)
+sketch plan(on: xy) {
+  outline = rect(corner: (0, 0), size: (120, 80))
+}
+base = sheet(plan, t: t, r: r, bend: kfactor(k))
+side = flange(base.edge(plan.outline[1]), height: 30)
+";
+
+#[test]
+fn an_ear_off_a_flanges_side() {
+    // a flange off a flange's end edge: built folded and flat, valid
+    let s = format!(
+        "{PLATE}ear = flange(side.end_side, height: 30)\nparam flat.gap = 60\nflat = unfold(base, on: offset(base.bottom, gap))\n"
+    );
+    let r = run(&s);
+    assert!(r.ok(), "{}", forge_lang::report::text(&r, &s));
+    assert_eq!(r.measure.as_ref().map(|m| m.problems), Some(0));
+    assert_eq!(r.sheets[0].sheet.joints.len(), 2);
+    // inside its edge too
+    let s = format!("{PLATE}ear = flange(side.start_side, height: 20, position: \"inside\")\n");
+    let r = run(&s);
+    assert!(r.ok(), "{}", forge_lang::report::text(&r, &s));
+}
+
+#[test]
+fn a_cut_across_a_bend_is_said_and_can_be_meant() {
+    // a slot from the floor across the bend: a violation, whose fix says it is meant (then only
+    // information)
+    let s = format!(
+        "{}sketch v(on: base.top) {{
+  s = slot((112, 40), (130, 40), 2)
+}}
+vent = cutout(v, wall: base)
+",
+        PLATE.replace(
+            "bend: kfactor(k))",
+            "bend: kfactor(k), shop: shop([stock(t: t, bend: kfactor(k), radii: [r])]))"
+        )
+    );
+    let r = run(&s);
+    assert!(r.ok(), "{:?}", r.errors);
+    let n = notes(&r, "CutCrossesBend");
+    assert_eq!(n.len(), 1, "{:?}", r.warnings);
+    assert_eq!(n[0].severity(), "violation");
+    let fixed = apply(&s, &n[0].fixes[0]).expect("applies");
+    assert!(fixed.contains("crosses_bend: true"), "{fixed}");
+    let r = run(&fixed);
+    let n = notes(&r, "CutCrossesBend");
+    assert_eq!(n.len(), 1);
+    assert_eq!(n[0].severity(), "info");
+}
+
+#[test]
+fn hardware_on_a_lip_too_narrow_for_it() {
+    // a nut on a 10 high lip: its edge distance both ways (2 x 8.6) does not fit; no move helps,
+    // the fix raises the lip
+    let s = format!(
+        "{}param lip.h = 10
+lip = flange(side.tip, height: h)
+sketch m(on: lip.top) {{
+  p = pt(6, 20)
+}}
+nut = pem(\"nut\", \"M6\", at: m.p, wall: lip)
+",
+        PLATE.replace(
+            "bend: kfactor(k))",
+            "bend: kfactor(k), shop: shop([stock(t: t, bend: kfactor(k), radii: [r], hardness: ratio(57))], hardware: [hardware(kind: \"nut\", size: \"M6\", sheet: (1.22, 12.7), hole: 8.75, edge: 8.6, max_hardness: ratio(80), code: \"S-M6-0\", source: \"PEM CL bulletin\")]))"
+        )
+    );
+    let r = run(&s);
+    assert!(r.ok(), "{:?}", r.errors);
+    let n = notes(&r, "LipTooShort");
+    assert_eq!(n.len(), 1, "{:?}", r.warnings);
+    let fixed = apply(&s, &n[0].fixes[0]).expect("applies");
+    assert!(notes(&run(&fixed), "LipTooShort").is_empty(), "{fixed}");
+    // off the lip altogether: refused, typed (it would cut nothing)
+    let off = s.replace("p = pt(6, 20)", "p = pt(40, 20)");
+    assert_eq!(first_error(&off).kind(), "HardwareOffWall");
+}
+
+#[test]
+fn a_bend_table_out_of_order_is_refused_at_the_table() {
+    let s = PLATE.replace(
+        "bend: kfactor(k))",
+        "bend: bend_table([(1.5, 90deg, 3.2), (1.5, 45deg, 1.6)]))",
+    );
+    let e = first_error(&s);
+    assert_eq!(e.kind(), "TableOrder", "{e:?}");
+    let s = PLATE.replace(
+        "bend: kfactor(k))",
+        "bend: bend_table([(1.5, 45deg, 1.6), (1.5, 90deg, 3.2)]))",
+    );
+    let r = run(&s);
+    assert!(r.ok(), "{:?}", r.errors);
+}
+
+#[test]
+fn a_pattern_of_a_cutout() {
+    // five vents as a pattern of one, along the wall: five holes; along its normal: refused
+    let one = "sketch hs(on: base.top) {
+  c = circle((10, 10), 2)
+  l = line((0, 0), (1, 0), construction: true)
+}
+v = cutout(hs, wall: base)
+";
+    let plain = run(&format!("{PLATE}{one}"));
+    let s = format!("{PLATE}{one}vs = pattern(of: v, layout: lin(along: hs.l.dir, n: count(5), step: 8))\n");
+    let r = run(&s);
+    assert!(r.ok(), "{}", forge_lang::report::text(&r, &s));
+    let (v0, v5) = (folded(&plain).0, folded(&r).0);
+    let hole = PI * 4.0 * 1.5;
+    assert!(((v0 - v5) - 4.0 * hole).abs() < 1e-6, "{v0} {v5}");
+    let s = format!(
+        "{PLATE}{one}vs = pattern(of: v, layout: lin(along: hs.plane.normal, n: count(5), step: 8))\n"
+    );
+    assert_eq!(first_error(&s).kind(), "PatternOffWall");
+}

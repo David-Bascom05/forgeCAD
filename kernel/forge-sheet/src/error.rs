@@ -265,6 +265,13 @@ pub enum SheetError {
         total: f64,
         limit: f64,
     },
+    /// Hardware placed off its wall (its centre outside the wall's outline or in one of its
+    /// holes): it would cut nothing and press into nothing.
+    HardwareOffWall {
+        feature: FeatureId,
+        wall: WallId,
+        at: Point2,
+    },
     /// Two strips touch in the flat pattern without overlapping (an edge on an edge, a corner on
     /// an edge): the blank has zero width there.
     FlatTouch {

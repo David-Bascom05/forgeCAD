@@ -1290,6 +1290,7 @@ fn kernel_kind(e: &SheetError) -> &'static str {
         FlatOverlapUndecided { .. } => "FlatOverlapUndecided",
         FlatTouch { .. } => "FlatTouch",
         FoldedTouch { .. } => "FoldedTouch",
+        HardwareOffWall { .. } => "HardwareOffWall",
         ReliefExtendUnbuilt { .. } => "ReliefExtendUnbuilt",
         SheetSplit { .. } => "SheetSplit",
     }
@@ -1360,6 +1361,7 @@ fn kernel_text(e: &SheetError) -> String {
             "two strips of the flat come within {}: overlap or touch cannot be told",
             fm(*gap)
         ),
+        HardwareOffWall { .. } => "the hardware's centre is off its wall (outside it, or in a hole)".into(),
         FlatTouch { .. } => "two strips of the flat pattern touch with no gap: the blank has no width there".into(),
         FoldedTouch { .. } => "folded, two walls touch with no gap (an edge on a face): no valid solid".into(),
         ReliefExtendUnbuilt { .. } => "the relief rule asks reliefs to extend for flat collisions: not built yet".into(),
@@ -1664,6 +1666,7 @@ fn kernel_data(e: &SheetError, n: &Names) -> Vec<(&'static str, Json)> {
             vec![("joint", n.joint(*joint).into()), ("end", end_name(*end).into())]
         }
         FlatTouch { a, b, at, .. } => vec![("a", n.strip(*a)), ("b", n.strip(*b)), ("at", p2(*at))],
+        HardwareOffWall { wall, at, .. } => vec![("wall", n.strip(Strip::Wall(*wall))), ("at", p2(*at))],
         FoldedTouch { a, b, at, .. } => vec![("a", n.strip(*a)), ("b", n.strip(*b)), ("at", p3(*at))],
         SheetSplit { a, b, .. } => vec![("a", n.strip(*a)), ("b", n.strip(*b))],
     }
@@ -4082,14 +4085,45 @@ fn cut_fixes(st: &SheetState, v: &fs::Violation) -> Vec<Op> {
             })
             .into_iter()
             .collect(),
+        // the lip raised till the kernel finds room (the width across is not the height's
+        // change one for one where the hardware sits near the bend), by halving
         fs::Violation::LipTooShort {
-            wall, width, need, ..
+            cut,
+            wall,
+            width,
+            need,
+            ..
         } => st
             .fix
             .flanges
             .iter()
             .find(|f| f.wall == wall)
-            .and_then(|f| set(&f.height, round_up(f.height.v + (need - width))))
+            .and_then(|f| {
+                let stock = st
+                    .shop
+                    .as_ref()
+                    .and_then(|s| s.shop.stock(st.sheet.gauge.thickness).cloned());
+                let room = |up: f64| {
+                    let mut s = st.sheet.clone();
+                    s.move_edge(f.wall, 1, up).is_ok()
+                        && !fs::checks::mounts(&s, stock.as_ref())
+                            .iter()
+                            .any(|v| matches!(v, fs::Violation::LipTooShort { cut: c, .. } if *c == cut))
+                };
+                let mut hi = (need - width).max(0.001);
+                while !room(hi) && hi < 4.0 * need {
+                    hi *= 2.0;
+                }
+                if !room(hi) {
+                    return None;
+                }
+                let mut lo = 0.0;
+                while hi - lo > 1e-5 {
+                    let mid = 0.5 * (lo + hi);
+                    if room(mid) { hi = mid } else { lo = mid }
+                }
+                set(&f.height, round_up(f.height.v + hi))
+            })
             .into_iter()
             .collect(),
         fs::Violation::HardwareThickness { min, max, .. } => {
