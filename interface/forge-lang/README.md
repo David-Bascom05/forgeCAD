@@ -132,11 +132,10 @@ the process, median of 5; warm is an unchanged rerun in `fg serve`.
 | manifold | nothing | 884334.5 | 884334.47 | 78 | 192 | 49 ms | 3.0 ms |
 | guard | cuts `in guard` | 2442097.7 | 2442097.69 | 29 | 60 | 9 ms | 0.1 ms |
 | gearbox | threads | 1000499.5 | 1000499.54 | 159 | 449 | 52 ms | 6.4 ms |
-| frame | threads | 423092.7 | 423092.68 | 129 | 367 (.fc 369) | 75 ms | 3.6 ms |
+| frame | threads | 423092.7 | 423092.68 | 129 | 366 | 75 ms | 3.6 ms |
 
-Frame's two edges: the kernel's finish at the axle slot joins edges according to what the face
-names hash to, so the count follows feature ids (the .fc itself gives 77 or 76 edges on a cut-down
-copy with only one feature's `id` changed); Forge's ids hash from names, the .fc's from lines.
+Frame matches exactly since forge-bool's unify keeps seams by where edges lie; it once kept them
+by name, and the edge count followed feature ids (two edges apart from the .fc).
 
 Timings (release, niced, the machine shared with other agents; median of 5 for cold):
 

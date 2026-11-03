@@ -100,11 +100,9 @@ fn bench_gearbox_matches_its_fc_version_less_threads() {
     parity("bench_gearbox", 1000499.5, 159, 449);
 }
 
-// frame less its BSA cups and hanger thread and the cosmetic threads (fg-holes): the same volume
-// and faces; 367 edges where the .fc has 369. Not Forge: the kernel's finish at the axle slot
-// joins edges by what the face names hash to, so the count follows the feature ids (the .fc cut
-// down to bb, cs, drop, csb, slot gives 77 edges, and 76 with only `csb`'s id changed to 777).
+// frame less its BSA cups and hanger thread and the cosmetic threads (fg-holes). (Two edges
+// short until the kernel's unify stopped keeping seams by name: then the count followed ids.)
 #[test]
-fn bench_frame_matches_its_fc_version_less_threads_but_two_edges() {
-    parity("bench_frame", 423092.7, 129, 367);
+fn bench_frame_matches_its_fc_version_less_threads() {
+    parity("bench_frame", 423092.7, 129, 366);
 }

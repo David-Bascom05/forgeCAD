@@ -70,8 +70,11 @@ fn lexing_is_deterministic() {
     for src in texts() {
         let a = syntax::lex(&src);
         assert_eq!(a, syntax::lex(&src), "{src:?}");
-        let b = std::thread::scope(|s| s.spawn(|| syntax::lex(&src)).join().expect("thread"));
-        assert_eq!(a, b, "{src:?}");
+        // and on another thread (wasi has none)
+        if !cfg!(target_os = "wasi") {
+            let b = std::thread::scope(|s| s.spawn(|| syntax::lex(&src)).join().expect("thread"));
+            assert_eq!(a, b, "{src:?}");
+        }
         // keeping the trivia does not change the tokens
         assert_eq!(a, syntax::lex_lossless(&src).map(|(t, _)| t), "{src:?}");
     }

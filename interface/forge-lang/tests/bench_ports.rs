@@ -31,7 +31,15 @@ fn fc_measure(src: &str) -> (f64, usize, usize, usize) {
 
 /// A directory holding the bench font, for the ports' text.
 fn font_dir() -> std::path::PathBuf {
-    let d = std::env::temp_dir().join(format!("forge-lang-bench-{}", std::process::id()));
+    // wasi has no temp_dir or pid; its runner opens the whole filesystem
+    let d = if cfg!(target_os = "wasi") {
+        let t = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .expect("clock");
+        std::path::PathBuf::from("/tmp").join(format!("forge-lang-bench-{}", t.as_nanos()))
+    } else {
+        std::env::temp_dir().join(format!("forge-lang-bench-{}", std::process::id()))
+    };
     std::fs::create_dir_all(&d).expect("temp dir");
     std::fs::write(d.join(forge_agent::bench::FONT), forge_agent::bench::font_bytes()).expect("font");
     d
