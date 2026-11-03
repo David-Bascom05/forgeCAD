@@ -11,10 +11,12 @@
 //! Side faces merge where they continue each other in one plane across a tangent line; skins stay
 //! split there (a plane and a cylinder). Names come from the feature, wall, joint and cut ids and
 //! the outline's segment ids (docs/naming.md), never from storage order.
-use crate::error::{End, FeatureId, JointKindName, SheetError, Side, Strip, TrimCurveKind, TrimRef, WallId};
+use crate::error::{
+    End, FeatureId, JointKindName, SheetError, SheetWarning, Side, Strip, TrimCurveKind, TrimRef, WallId,
+};
 use crate::graph::{CornerKind, Gauge, JointKind, Sheet, straight};
 use crate::pattern::{BendLine, Curve2, Pattern};
-use crate::region::{Bound, Piece, Region, subtract};
+use crate::region::{Bound, Piece, Region, RegionError, subtract};
 use crate::relief::{Relief, ReliefKind, ReliefMade};
 use crate::roles::{Roles, Skin};
 use crate::shop::setback;
@@ -121,8 +123,8 @@ struct Bend {
     rho0: f64,
     s: f64,
     ba: f64,
-    /// The joint frame in the world, under the map.
-    frame: Frame,
+    /// The joint frame in the world, folded [0] and flat [1].
+    frame: [Frame; 2],
 }
 
 /// How a strip's 2D coordinates and depth below the reference skin go to the world.
@@ -182,7 +184,10 @@ struct LoopData {
 
 struct StripData {
     strip: Strip,
+    /// Under the map built.
     geo: Geo,
+    /// Folded, whatever the map: the clash check reads it.
+    folded: Geo,
     region: Region,
 }
 
@@ -377,6 +382,9 @@ pub struct Built {
     pub reliefs: Vec<ReliefMade>,
     /// The corner reliefs cut.
     pub corners: Vec<CornerMade>,
+    /// The other map's refusal, as a warning on this one: a flat overlap on a folded build, a
+    /// folded clash on a flat one.
+    pub warnings: Vec<SheetWarning>,
 }
 
 /// A corner relief the builder cut where two bends off one wall meet.
@@ -507,6 +515,13 @@ fn corners(
         }
     }
     Ok(out)
+}
+
+fn map_index(map: Map) -> usize {
+    match map {
+        Map::Folded => 0,
+        Map::Flat => 1,
+    }
 }
 
 /// A relief narrower than this is no cut.
@@ -662,9 +677,11 @@ fn build_once(
     let nw = sheet.walls.len();
     let wall_index = |id: WallId| sheet.walls.iter().position(|w| w.id == id);
     // place the walls along the bends from the first, in 3D under the map and developed in 2D
-    let mut frames: Vec<Option<Frame>> = vec![None; nw];
+    // each wall's frame folded [0] and flat [1]: both are always laid out, for the checks
+    let mut frames: Vec<Option<[Frame; 2]>> = vec![None; nw];
     let mut dev: Vec<Rigid> = vec![Rigid::ID; nw];
-    frames[0] = Some(sheet.frame);
+    frames[0] = Some([sheet.frame; 2]);
+    let mi = map_index(map);
     let mut bends: Vec<Bend> = Vec::new();
     let mut queue = vec![0usize];
     while let Some(wi) = queue.pop() {
@@ -748,21 +765,19 @@ fn build_once(
             let rho0 = reference_radius(&sheet.gauge, radius, angle);
             let s = setback(rho0, theta);
             let fa = frames[wi].expect("placed before its joints");
-            let jframe = fa.compose(&ja.frame());
-            let turned = match map {
-                Map::Folded => {
-                    let (sn, cs) = dmath::sin_cos(theta);
-                    Frame::from_axes(
-                        Point3::ORIGIN,
-                        Vec3::new(cs, 0.0, sigma * sn),
-                        Vec3::new(0.0, 1.0, 0.0),
-                        Vec3::new(-sigma * sn, 0.0, cs),
-                    )
-                    .expect("square axes")
-                }
-                Map::Flat => Frame::WORLD.with_origin(Point3::new(ba - 2.0 * s, 0.0, 0.0)),
-            };
-            frames[bi] = Some(jframe.compose(&turned).compose(&jb.frame().inverse()));
+            let jframe = fa.map(|f| f.compose(&ja.frame()));
+            let (sn, cs) = dmath::sin_cos(theta);
+            let turned = [
+                Frame::from_axes(
+                    Point3::ORIGIN,
+                    Vec3::new(cs, 0.0, sigma * sn),
+                    Vec3::new(0.0, 1.0, 0.0),
+                    Vec3::new(-sigma * sn, 0.0, cs),
+                )
+                .expect("square axes"),
+                Frame::WORLD.with_origin(Point3::new(ba - 2.0 * s, 0.0, 0.0)),
+            ];
+            frames[bi] = Some([0, 1].map(|m| jframe[m].compose(&turned[m]).compose(&jb.frame().inverse())));
             dev[bi] = dev[wi].then(&ja).then(&shift(ba - 2.0 * s)).then(&jb.inverse());
             bends.push(Bend {
                 joint: ji,
@@ -979,9 +994,11 @@ fn build_once(
         let region = subtract(&loops, &cuts).map_err(|e| {
             SheetError::from_region(feature, Strip::Wall(w.id), e, |i| cx.sources[i as usize])
         })?;
+        let f = frames[wi].expect("placed");
         strips.push(StripData {
             strip: Strip::Wall(w.id),
-            geo: Geo::Plane(frames[wi].expect("placed")),
+            geo: Geo::Plane(f[mi]),
+            folded: Geo::Plane(f[0]),
             region,
         });
     }
@@ -1001,29 +1018,29 @@ fn build_once(
         let region = subtract(&wall, &cuts).map_err(|e| {
             SheetError::from_region(feature, Strip::Bend(joint), e, |i| cx.sources[i as usize])
         })?;
+        let axis = Frame::from_axes(
+            Point3::new(-b.s, 0.0, b.sigma * b.rho0),
+            Vec3::new(0.0, 0.0, -b.sigma),
+            Vec3::new(1.0, 0.0, 0.0),
+            Vec3::new(0.0, -b.sigma, 0.0),
+        )
+        .expect("square axes");
+        let folded = Geo::Round {
+            axis: b.frame[0].compose(&axis),
+            rho0: b.rho0,
+            sigma: b.sigma,
+            rn: b.ba / b.theta,
+            theta: b.theta,
+            ba: b.ba,
+        };
         let geo = match map {
-            Map::Folded => {
-                let axis = Frame::from_axes(
-                    Point3::new(-b.s, 0.0, b.sigma * b.rho0),
-                    Vec3::new(0.0, 0.0, -b.sigma),
-                    Vec3::new(1.0, 0.0, 0.0),
-                    Vec3::new(0.0, -b.sigma, 0.0),
-                )
-                .expect("square axes");
-                Geo::Round {
-                    axis: b.frame.compose(&axis),
-                    rho0: b.rho0,
-                    sigma: b.sigma,
-                    rn: b.ba / b.theta,
-                    theta: b.theta,
-                    ba: b.ba,
-                }
-            }
-            Map::Flat => Geo::Plane(b.frame.compose(&shift(-b.s).frame())),
+            Map::Folded => folded,
+            Map::Flat => Geo::Plane(b.frame[1].compose(&shift(-b.s).frame())),
         };
         strips.push(StripData {
             strip: Strip::Bend(joint),
             geo,
+            folded,
             region,
         });
     }
@@ -1031,7 +1048,7 @@ fn build_once(
         walls: (0..nw)
             .map(|wi| WallPlace {
                 wall: sheet.walls[wi].id,
-                frame: frames[wi].expect("placed"),
+                frame: frames[wi].expect("placed")[mi],
                 developed: dev[wi].into(),
             })
             .collect(),
@@ -1055,8 +1072,23 @@ fn build_once(
             .collect(),
     };
     let built = Strips::new(cx, strips, &bends, nw, t)?;
-    if map == Map::Folded {
-        built.clash()?;
+    // both checks, whatever the map: each refuses its own body and warns on the other
+    let clash = built.clash().err();
+    let overlap = built.flat_overlap(&strip_dev);
+    let mut warnings = Vec::new();
+    match map {
+        Map::Folded => {
+            if let Some(e) = clash {
+                return Err(e);
+            }
+            warnings.extend(overlap.and_then(|e| e.as_warning()));
+        }
+        Map::Flat => {
+            if let Some(e) = overlap {
+                return Err(e);
+            }
+            warnings.extend(clash.and_then(|e| e.as_warning()));
+        }
     }
     let pattern = (map == Map::Flat).then(|| built.pattern(&strip_dev, &layout));
     let (body, roles) = built.body()?;
@@ -1067,6 +1099,7 @@ fn build_once(
         pattern,
         reliefs: made,
         corners: corners_made,
+        warnings,
     })
 }
 
@@ -1351,7 +1384,7 @@ impl<'a> Strips<'a> {
             ns
         ];
         for ld in &self.loops {
-            let (si, geo) = (ld.strip, self.strips[ld.strip].geo);
+            let (si, geo) = (ld.strip, self.strips[ld.strip].folded);
             for b in &ld.bounds {
                 let bx = b.piece.bbox();
                 let f = &mut flat[si];
@@ -1365,7 +1398,7 @@ impl<'a> Strips<'a> {
             }
         }
         for a in 0..ns {
-            let geo = self.strips[a].geo;
+            let geo = self.strips[a].folded;
             for b in 0..ns {
                 if a == b || joined[a * ns + b] || !boxes[a].overlaps(&boxes[b]) {
                     continue;
@@ -1471,7 +1504,7 @@ impl<'a> Strips<'a> {
             let ps = corners.map(|c| f.point_to_local(c));
             forge_math::Box3::from_points(ps)
         };
-        let (w, y, x) = match self.strips[s].geo {
+        let (w, y, x) = match self.strips[s].folded {
             Geo::Plane(f) => {
                 let l = local(&f);
                 (Interval::new(-l.z.hi, -l.z.lo), l.y, Some(l.x))
@@ -1511,10 +1544,156 @@ impl<'a> Strips<'a> {
         x.is_none_or(|x| x.hi >= flat.0.x && x.lo <= flat.1.x)
     }
 
+    /// The pair of strips (not joined by a tangent line) whose developed regions overlap most,
+    /// with the total over all pairs, by area, exactly: area(A and B) = area(A) - area(A less B), B's holes given back. Region
+    /// refusals within a pair (a near-coincident touch) count as no overlap.
+    fn flat_overlap(&self, strip_dev: &[Rigid]) -> Option<SheetError> {
+        const LIMIT: f64 = 1e-6;
+        let ns = self.strips.len();
+        let joined: std::collections::HashSet<(usize, usize)> = self
+            .twin
+            .iter()
+            .map(|(&(l, _), &(m, _))| (self.loops[l].strip, self.loops[m].strip))
+            .collect();
+        // each strip's loops in the developed plane: per component, outer then holes
+        let comps: Vec<Vec<Vec<ProfileLoop>>> = (0..ns)
+            .map(|s| {
+                let by = &strip_dev[s];
+                self.strips[s]
+                    .region
+                    .parts
+                    .iter()
+                    .map(|c| {
+                        std::iter::once(&c.outer)
+                            .chain(&c.holes)
+                            .map(|l| {
+                                ProfileLoop::new(
+                                    l.iter()
+                                        .enumerate()
+                                        .filter_map(|(k, b)| {
+                                            moved(&b.piece, by).to_segment().map(|g| (g, k as u64))
+                                        })
+                                        .collect(),
+                                )
+                            })
+                            .collect()
+                    })
+                    .collect()
+            })
+            .collect();
+        let boxes: Vec<(Point2, Point2)> = comps
+            .iter()
+            .map(|cs| {
+                cs.iter().flatten().map(bbox).fold(
+                    (
+                        Point2::new(f64::INFINITY, f64::INFINITY),
+                        Point2::new(f64::NEG_INFINITY, f64::NEG_INFINITY),
+                    ),
+                    |(lo, hi), (a, b)| {
+                        (
+                            Point2::new(lo.x.min(a.x), lo.y.min(a.y)),
+                            Point2::new(hi.x.max(b.x), hi.y.max(b.y)),
+                        )
+                    },
+                )
+            })
+            .collect();
+        // area of A inside loop x (counter-clockwise), and a point where it enters
+        let inside = |a: &[ProfileLoop], x: &ProfileLoop| -> Result<(f64, Point2), RegionError> {
+            let whole = subtract(a, &[])?.area();
+            let off = 1u64 << 40;
+            let cut = ProfileLoop::new(x.segments.iter().map(|(g, k)| (g.clone(), k + off)).collect());
+            let rest = subtract(a, &[cut])?;
+            let at = rest
+                .parts
+                .iter()
+                .flat_map(|c| std::iter::once(&c.outer).chain(&c.holes))
+                .flatten()
+                .find(|b| b.id >= off)
+                .map(|b| b.piece.at(0.5))
+                .unwrap_or(Point2::ORIGIN);
+            Ok((whole - rest.area(), at))
+        };
+        let mut worst: Option<(usize, usize, Point2, f64)> = None;
+        let mut undecided: Option<(usize, usize, RegionError)> = None;
+        let mut total = 0.0;
+        for a in 0..ns {
+            for b in a + 1..ns {
+                let (la, ha) = boxes[a];
+                let (lb, hb) = boxes[b];
+                if joined.contains(&(a, b))
+                    || joined.contains(&(b, a))
+                    || ha.x <= lb.x + TOL
+                    || hb.x <= la.x + TOL
+                    || ha.y <= lb.y + TOL
+                    || hb.y <= la.y + TOL
+                {
+                    continue;
+                }
+                for ca in &comps[a] {
+                    for cb in &comps[b] {
+                        let (mut area, at) = match inside(ca, &cb[0]) {
+                            Ok(x) => x,
+                            Err(e) => {
+                                undecided.get_or_insert((a, b, e));
+                                continue;
+                            }
+                        };
+                        for h in &cb[1..] {
+                            match inside(ca, &reversed_loop(h)) {
+                                Ok((x, _)) => area -= x,
+                                Err(e) => {
+                                    undecided.get_or_insert((a, b, e));
+                                }
+                            }
+                        }
+                        if area > LIMIT {
+                            total += area;
+                            if worst.is_none_or(|w| area > w.3) {
+                                worst = Some((a, b, at, area));
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        if worst.is_none()
+            && let Some((a, b, e)) = undecided
+        {
+            // a pair the exact boolean cannot tell apart from touching: not taken as clear
+            let (at, gap, limit) = match e {
+                RegionError::NearCoincident { at, gap, limit, .. } => (at, gap, limit),
+                RegionError::Pinched { pinches } => pinches
+                    .first()
+                    .map_or((Point2::ORIGIN, 0.0, 0.0), |p| (p.at, p.width, p.limit)),
+                RegionError::Unchained { at, .. } | RegionError::HoleOutside { at, .. } => {
+                    (at, f64::NAN, f64::NAN)
+                }
+            };
+            return Some(SheetError::FlatOverlapUndecided {
+                feature: self.cx.feature,
+                a: self.strips[a].strip,
+                b: self.strips[b].strip,
+                at,
+                gap,
+                limit,
+            });
+        }
+        worst.map(|(a, b, at, area)| SheetError::FlatOverlap {
+            feature: self.cx.feature,
+            a: self.strips[a].strip,
+            b: self.strips[b].strip,
+            at,
+            area,
+            total,
+            limit: LIMIT,
+        })
+    }
+
     /// How deep `p` lies in strip `s`'s material, through its thickness; None outside.
     fn inside(&self, s: usize, p: Point3) -> Option<f64> {
         let t = self.t;
-        let (q, w) = match self.strips[s].geo {
+        let (q, w) = match self.strips[s].folded {
             Geo::Plane(f) => {
                 let l = f.point_to_local(p);
                 (Point2::new(l.x, l.y), -l.z)
@@ -2022,6 +2201,44 @@ impl<'a> Strips<'a> {
 /// when sigma is 1, so the arc's angles turn the other way.
 /// A piece's own stretch of its spline, in the spline's parameter: a wall built on the whole of a
 /// closed spline is carried past its ends onto itself at the seam, where points project to either.
+/// A piece carried by a rigid motion.
+fn moved(p: &Piece, by: &Rigid) -> Piece {
+    match p {
+        Piece::Line { a, b } => Piece::Line {
+            a: by.apply(*a),
+            b: by.apply(*b),
+        },
+        Piece::Arc { c, r, t0, t1 } => Piece::Arc {
+            c: by.apply(*c),
+            r: *r,
+            t0: t0 + by.angle(),
+            t1: t1 + by.angle(),
+        },
+        Piece::Spline { s, t0, t1 } => Piece::Spline {
+            s: std::sync::Arc::new(s.mapped(|q| {
+                let m = by.apply(Point2::new(q.x, q.y));
+                Point3::new(m.x, m.y, 0.0)
+            })),
+            t0: *t0,
+            t1: *t1,
+        },
+    }
+}
+
+/// A loop run the other way.
+fn reversed_loop(l: &ProfileLoop) -> ProfileLoop {
+    ProfileLoop::new(
+        l.segments
+            .iter()
+            .rev()
+            .map(|(g, k)| {
+                let p = &crate::region::pieces(&ProfileLoop::new(vec![(g.clone(), *k)]))[0].0;
+                (p.reversed().to_segment().unwrap_or_else(|| g.clone()), *k)
+            })
+            .collect(),
+    )
+}
+
 /// A boundary piece from a to b in a strip, carried into the developed plane.
 fn developed(p: &Piece, a: Point2, b: Point2, by: &Rigid) -> Option<Curve2> {
     Some(match *p {
