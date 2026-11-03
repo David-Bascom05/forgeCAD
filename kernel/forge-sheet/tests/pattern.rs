@@ -425,10 +425,12 @@ fn shop_checks() {
         relief_depth: scaled(1.0),
         min_hole: scaled(0.0),
         hardness: None,
+        relief: forge_sheet::ReliefKind::Rect,
     };
     let shop = ShopProfile {
         stock: vec![stock],
         hardware: vec![],
+        kerf: 0.2,
     };
     // flanges 25 and 20 long; the die needs 22
     let s = u_part(0.4);

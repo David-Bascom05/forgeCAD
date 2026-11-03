@@ -170,6 +170,8 @@ pub struct Stock {
     pub min_slot: Scaled,
     /// The smallest round hole across.
     pub min_hole: Scaled,
+    /// The relief the brake shop cuts where a bend needs one, sized by the two above.
+    pub relief: crate::relief::ReliefKind,
     pub relief_width: Scaled,
     pub relief_depth: Scaled,
     /// The sheet's hardness, Rockwell B, where the shop states it (hardware needs it).
@@ -181,6 +183,8 @@ pub struct ShopProfile {
     pub stock: Vec<Stock>,
     /// The hardware the shop fits.
     pub hardware: Vec<crate::hardware::Hardware>,
+    /// The cutting width: a tear relief's.
+    pub kerf: f64,
 }
 
 impl ShopProfile {
@@ -189,6 +193,16 @@ impl ShopProfile {
         self.stock
             .iter()
             .find(|s| (s.thickness - t).abs() <= 1e-9 * t.abs().max(1.0))
+    }
+
+    /// The relief a sheet of thickness `t` gets where a bend needs one, if the shop stocks it.
+    pub fn relief_default(&self, t: f64) -> Option<crate::relief::ReliefDefault> {
+        self.stock(t).map(|s| crate::relief::ReliefDefault {
+            kind: s.relief,
+            width: s.relief_width,
+            depth: s.relief_depth,
+            kerf: self.kerf,
+        })
     }
 
     /// The stocked thickness nearest `t`.

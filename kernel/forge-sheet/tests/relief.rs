@@ -262,3 +262,18 @@ fn positions_move_the_edge() {
         Err(SheetError::EdgeMoveBlocked { .. })
     ));
 }
+
+#[test]
+fn a_relief_asked_for_where_no_wall_is_cuts_nothing() {
+    let r = Relief::Cut {
+        kind: ReliefKind::Rect,
+        width: 3.0,
+        depth: 6.0,
+    };
+    let mut s = part(K, Some(r));
+    s.set_relief(JointId(0), End::Start, r);
+    let fold = build_with(&s, Map::Folded).unwrap();
+    checked(&fold.body);
+    let (vf, _) = closed(3.0 * 6.0, K);
+    near("start beside nothing", vol(&fold.body), vf);
+}
