@@ -646,12 +646,16 @@ impl Sketch {
             touched.sort_unstable();
             touched.dedup();
             let scale = scale.max(1.0);
-            if touched.iter().all(|&b| blocks.rank(&sys, b, &[], &ps, scale) == base_rank[b]) {
+            if touched
+                .iter()
+                .all(|&b| blocks.rank(&sys, b, &[], &ps, scale) == base_rank[b])
+            {
                 fully_constrained.push(e.id);
             }
         }
 
-        let mut rows_of: std::collections::HashMap<ConstraintId, Vec<usize>> = std::collections::HashMap::new();
+        let mut rows_of: std::collections::HashMap<ConstraintId, Vec<usize>> =
+            std::collections::HashMap::new();
         for (i, o) in sys.origin.iter().enumerate() {
             if let Some(c) = o {
                 rows_of.entry(*c).or_default().push(i);
@@ -664,11 +668,16 @@ impl Sketch {
             let Some(drop) = rows_of.get(&rec.id) else {
                 continue;
             };
-            let scale = by_max.iter().find(|i| !drop.contains(i)).map_or(0.0, |&i| row_max[i]);
+            let scale = by_max
+                .iter()
+                .find(|i| !drop.contains(i))
+                .map_or(0.0, |&i| row_max[i]);
             let mut touched: Vec<usize> = drop.iter().filter_map(|&i| blocks.of_row[i]).collect();
             touched.sort_unstable();
             touched.dedup();
-            let same = touched.iter().all(|&b| blocks.rank(&sys, b, drop, &[], scale) == base_rank[b]);
+            let same = touched
+                .iter()
+                .all(|&b| blocks.rank(&sys, b, drop, &[], scale) == base_rank[b]);
             // with every row gone the dense rank was 0 whatever the tolerance
             if same && (scale > 0.0 || base == 0) {
                 redundant.push(rec.id);
@@ -737,7 +746,8 @@ fn cholesky_solve(a: &mut [f64], b: &mut [f64], n: usize) -> bool {
 #[cfg(test)]
 impl Sketch {
     pub(crate) fn analyze_dense(&self) -> Analysis {
-        let dense_rank = |a: &[f64], m: usize, n: usize| rank(a, m, n, a.iter().fold(0.0f64, |s, v| s.max(v.abs())));
+        let dense_rank =
+            |a: &[f64], m: usize, n: usize| rank(a, m, n, a.iter().fold(0.0f64, |s, v| s.max(v.abs())));
         let n = self.params.len();
         let sys = self.system(&self.params);
         let m = sys.r.len();
@@ -765,7 +775,10 @@ impl Sketch {
             if keep.len() == m {
                 continue;
             }
-            let a: Vec<f64> = keep.iter().flat_map(|&i| dense[i * n..(i + 1) * n].iter().copied()).collect();
+            let a: Vec<f64> = keep
+                .iter()
+                .flat_map(|&i| dense[i * n..(i + 1) * n].iter().copied())
+                .collect();
             if dense_rank(&a, keep.len(), n) == base {
                 redundant.push(rec.id);
             }
@@ -815,16 +828,17 @@ impl Blocks {
         }
         let mut id = vec![usize::MAX; n];
         let mut cols: Vec<Vec<usize>> = Vec::new();
-        let mut of_col = vec![0; n];
-        for c in 0..n {
-            let root = find(&mut up, c);
-            if id[root] == usize::MAX {
-                id[root] = cols.len();
-                cols.push(Vec::new());
-            }
-            of_col[c] = id[root];
-            cols[id[root]].push(c);
-        }
+        let of_col: Vec<usize> = (0..n)
+            .map(|c| {
+                let root = find(&mut up, c);
+                if id[root] == usize::MAX {
+                    id[root] = cols.len();
+                    cols.push(Vec::new());
+                }
+                cols[id[root]].push(c);
+                id[root]
+            })
+            .collect();
         let mut rows = vec![Vec::new(); cols.len()];
         let of_row: Vec<Option<usize>> = (0..sys.r.len())
             .map(|i| sys.row(i).first().map(|&(v, _)| of_col[v]))
