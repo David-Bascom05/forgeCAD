@@ -2,7 +2,7 @@
 //! and carries the measured value and the limit it broke. No string reasons.
 use crate::region::RegionError;
 use crate::shop::RuleError;
-use forge_math::{Point2, Point3};
+use forge_math::{Point2, Point3, Vec2};
 use forge_ops::ProfileError;
 
 /// The sheet feature in the part's history; its names root here.
@@ -291,11 +291,15 @@ pub enum SheetWarning {
         remnant: f64,
         limit: f64,
     },
+    /// Hardware whose catalogue numbers are placeholders, not a maker's published table.
+    UnverifiedHardware { feature: FeatureId, cut: CutId },
 }
 
 /// A part against the shop's abilities (`ShopProfile`). Violations never change geometry.
 #[derive(Clone, Debug, PartialEq)]
 pub enum Violation {
+    /// A hole or slot `distance` from a bend zone (its tangent line), in developed terms;
+    /// `away` (unit, in the cut's wall coordinates) is the way it would have to move.
     HoleNearBend {
         feature: FeatureId,
         trim: TrimRef,
@@ -303,11 +307,52 @@ pub enum Violation {
         distance: f64,
         limit: f64,
         thickness: f64,
+        away: Vec2,
     },
+    /// A hole or slot `distance` from the part's outer edge.
     HoleNearEdge {
         feature: FeatureId,
         trim: TrimRef,
         distance: f64,
+        limit: f64,
+        away: Vec2,
+    },
+    /// A round hole smaller across than the shop can pierce in this thickness.
+    HoleTooSmall {
+        feature: FeatureId,
+        trim: TrimRef,
+        diameter: f64,
+        limit: f64,
+        thickness: f64,
+    },
+    /// Hardware in a sheet outside its thickness range.
+    HardwareThickness {
+        feature: FeatureId,
+        cut: CutId,
+        thickness: f64,
+        min: f64,
+        max: f64,
+    },
+    /// Hardware whose hole centre lies `distance` from an edge or a bend zone, under the
+    /// catalogue's minimum.
+    HardwareNearEdge {
+        feature: FeatureId,
+        cut: CutId,
+        distance: f64,
+        limit: f64,
+        away: Vec2,
+    },
+    /// The sheet is harder than the hardware can clinch into (Rockwell B).
+    SheetTooHard {
+        feature: FeatureId,
+        cut: CutId,
+        hardness: f64,
+        limit: f64,
+    },
+    /// Hardware needs the sheet's hardness, and the shop's stock does not state it.
+    HardnessUnknown {
+        feature: FeatureId,
+        cut: CutId,
         limit: f64,
     },
     FlangeTooShort {

@@ -79,6 +79,8 @@ pub struct Sheet {
     pub joints: Vec<Joint>,
     pub corners: Vec<Corner>,
     pub cuts: Vec<Cut>,
+    /// Hardware pressed in, each with its mounting hole among `cuts`.
+    pub mounts: Vec<crate::hardware::Mount>,
     next_wall: u32,
     next_joint: u32,
     next_cut: u32,
@@ -127,6 +129,7 @@ impl Sheet {
             joints: Vec::new(),
             corners: Vec::new(),
             cuts: Vec::new(),
+            mounts: Vec::new(),
             next_wall: 1,
             next_joint: 0,
             next_cut: 0,
@@ -278,6 +281,34 @@ impl Sheet {
         self.cuts.push(Cut { id, wall, lp });
         self.next_cut += 1;
         Ok(id)
+    }
+}
+
+impl Sheet {
+    /// Presses `part` into `wall` at `at` (the wall's coordinates): its mounting hole, cut like
+    /// any other, and the part recorded for the checks.
+    pub fn mount(
+        &mut self,
+        wall: WallId,
+        at: Point2,
+        part: crate::hardware::Hardware,
+    ) -> Result<CutId, SheetError> {
+        let feature = self.feature;
+        if part.hole.is_nan() || part.hole <= tol::LINEAR {
+            return Err(SheetError::Radius {
+                feature,
+                radius: 0.5 * part.hole,
+                limit: tol::LINEAR,
+            });
+        }
+        let hole = Segment::Circle {
+            center: at,
+            radius: 0.5 * part.hole,
+            ccw: true,
+        };
+        let cut = self.cut(wall, ProfileLoop::new(vec![(hole, 0)]))?;
+        self.mounts.push(crate::hardware::Mount { cut, wall, at, part });
+        Ok(cut)
     }
 }
 
