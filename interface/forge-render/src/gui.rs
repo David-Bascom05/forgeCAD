@@ -1296,7 +1296,9 @@ impl Gui {
                     Action::SetUnits(_) => {
                         self.fg_refuse(crate::shell::fgtool::ToolError::NoForgeForm {
                             tool: "units",
-                            why: "a Forge part reads in mm and degrees; give a value a unit (`2in` is not one)".into(),
+                            why:
+                                "a Forge part reads in mm and degrees; give a value a unit (`2in` is not one)"
+                                    .into(),
                         });
                         continue;
                     }
@@ -2727,6 +2729,8 @@ impl Gui {
                         id: s.id.clone(),
                         bends: s.bends,
                         refused: s.dxf.as_ref().err().cloned(),
+                        facts: s.facts.clone(),
+                        lists: s.lists.clone(),
                     })
                     .collect();
             }
@@ -2848,7 +2852,11 @@ impl Gui {
     pub fn fg_open_tool(&mut self, kind: &'static str) {
         let Some(p) = &mut self.shell.fg else { return };
         let mut taken = crate::shell::fg::statements(&p.feats);
-        taken.extend(p.params.iter().filter_map(|x| x.key.owner.first().map(|s| s.name.clone())));
+        taken.extend(
+            p.params
+                .iter()
+                .filter_map(|x| x.key.owner.first().map(|s| s.name.clone())),
+        );
         match crate::shell::fgtool::FgTool::new(kind, &taken) {
             Some(t) => {
                 p.tool = Some(t);
@@ -2911,7 +2919,8 @@ impl Gui {
                             _ => None,
                         }
                     } else {
-                        a.as_ref().and_then(|a| a.planes.get(&format!("{t}.plane")).copied())
+                        a.as_ref()
+                            .and_then(|a| a.planes.get(&format!("{t}.plane")).copied())
                     };
                     match frame {
                         Some(plane) => {
@@ -2929,7 +2938,10 @@ impl Gui {
                     }
                 }
                 (_, Err(e)) => self.shell.status = format!("{}: {}", e.kind(), e.text()),
-                _ => self.shell.status = format!("a sketch goes on a planar face or an origin plane, not a {what}"),
+                _ => {
+                    self.shell.status =
+                        format!("a sketch goes on a planar face or an origin plane, not a {what}")
+                }
             }
             return;
         }
@@ -2938,15 +2950,24 @@ impl Gui {
             p.picked = Some(text);
             return;
         };
-        let Some(slot) = tool.slots.get(tool.active) else { return };
+        let Some(slot) = tool.slots.get(tool.active) else {
+            return;
+        };
         let (label, kind) = (slot.label, slot.kind);
         let got = match (kind, what) {
-            (K::Edges | K::Edge, "edge") | (K::Faces | K::Face, "face") | (K::Plane, "face" | "origin plane") => text,
+            (K::Edges | K::Edge, "edge")
+            | (K::Faces | K::Face, "face")
+            | (K::Plane, "face" | "origin plane") => text,
             (K::Dir, "face") => text.map(|t| format!("{t}.normal")),
             (K::SheetEdge, "edge") => {
                 let k = edge.expect("an edge") as usize;
                 a.as_ref()
-                    .and_then(|a| a.sheet_edges.iter().find(|s| s.1.contains(&k)).map(|s| s.0.clone()))
+                    .and_then(|a| {
+                        a.sheet_edges
+                            .iter()
+                            .find(|s| s.1.contains(&k))
+                            .map(|s| s.0.clone())
+                    })
                     .ok_or(ToolError::NoStableName { what: "sheet edge" })
             }
             _ => Err(ToolError::WrongPick { slot: label, what }),

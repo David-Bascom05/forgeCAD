@@ -97,7 +97,10 @@ impl AnchorView {
         };
         let edge_names: Vec<forge_topo::Name> = b.edge_ids().map(|e| b.edge(e).name).collect();
         AnchorView {
-            faces: b.face_ids().map(|f| a.faces.get(&b.face(f).name).cloned()).collect(),
+            faces: b
+                .face_ids()
+                .map(|f| a.faces.get(&b.face(f).name).cloned())
+                .collect(),
             edges: edge_names.iter().map(|n| a.edges.get(n).cloned()).collect(),
             sizes: a.sizes.clone(),
             planes: a.planes.clone(),
@@ -124,6 +127,45 @@ pub struct SheetInfo {
     pub id: String,
     pub bends: usize,
     pub dxf: Result<String, String>,
+    /// What forge-lang reports of it (thickness, radius, rule, bends, reliefs, corners, and
+    /// whatever later lanes add), as scalar facts and lists of one-line records.
+    pub facts: Vec<(String, String)>,
+    pub lists: Vec<(String, Vec<String>)>,
+}
+
+/// A JSON value in a line: numbers rounded, records as `k v, ..`.
+pub fn json_line(j: &forge_agent::json::Json) -> String {
+    use forge_agent::json::Json;
+    match j {
+        Json::Null => "-".into(),
+        Json::Bool(b) => b.to_string(),
+        Json::Num(n) => crate::shell::fg::short(*n),
+        Json::Str(s) => s.clone(),
+        Json::Arr(xs) => xs.iter().map(json_line).collect::<Vec<_>>().join(" "),
+        Json::Obj(fs) => fs
+            .iter()
+            .map(|(k, v)| format!("{k} {}", json_line(v)))
+            .collect::<Vec<_>>()
+            .join(", "),
+    }
+}
+
+/// A sheet's report as facts and lists, by its shape alone: new fields show without code here.
+fn sheet_report(j: &forge_agent::json::Json) -> (Vec<(String, String)>, Vec<(String, Vec<String>)>) {
+    use forge_agent::json::Json;
+    let (mut facts, mut lists) = (vec![], vec![]);
+    if let Json::Obj(fs) = j {
+        for (k, v) in fs {
+            match v {
+                Json::Arr(xs) if xs.iter().any(|x| matches!(x, Json::Obj(_))) || xs.is_empty() => {
+                    lists.push((k.clone(), xs.iter().map(json_line).collect()))
+                }
+                _ if k != "id" => facts.push((k.clone(), json_line(v))),
+                _ => {}
+            }
+        }
+    }
+    (facts, lists)
 }
 
 /// The first sheet's flat solid (several sheets: each one's DXF, the first one shown).
@@ -232,7 +274,11 @@ pub fn rows(run: &Run, src: &str) -> (Vec<FeatRow>, Vec<ParamRow>, Vec<Issue>) {
             Warning::Sheet(n) => {
                 let (line, col, ..) = n.span.lines(src);
                 issues.push(Issue {
-                    severity: Severity::Warning,
+                    severity: if n.severity() == "violation" {
+                        Severity::Violation
+                    } else {
+                        Severity::Warning
+                    },
                     kind: n.kind().into(),
                     text: n.text(),
                     line,
@@ -354,7 +400,10 @@ fn work(
             ..Options::default()
         };
         let (run, c) = forge_lang::run(&job.1, opts, std::mem::take(&mut cache));
-        let anchors = run.anchors.as_ref().map(|a| Arc::new(AnchorView::of(a, run.body.as_ref())));
+        let anchors = run
+            .anchors
+            .as_ref()
+            .map(|a| Arc::new(AnchorView::of(a, run.body.as_ref())));
         if anchors.is_some() {
             anchored = Some(job.1.clone());
         }
@@ -381,10 +430,15 @@ fn work(
         let sheets = run
             .sheets
             .iter()
-            .map(|s| SheetInfo {
-                id: s.id.clone(),
-                bends: s.layout.as_ref().map_or(0, |l| l.bends.len()),
-                dxf: s.dxf().map_err(|e| format!("{e:?}")),
+            .map(|s| {
+                let (facts, lists) = sheet_report(&s.json());
+                SheetInfo {
+                    id: s.id.clone(),
+                    bends: s.layout.as_ref().map_or(0, |l| l.bends.len()),
+                    dxf: s.dxf().map_err(|e| format!("{e:?}")),
+                    facts,
+                    lists,
+                }
             })
             .collect();
         let mesh_ms = t.elapsed().as_secs_f64() * 1e3;

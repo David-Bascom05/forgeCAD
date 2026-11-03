@@ -74,6 +74,8 @@ pub enum Severity {
     Error,
     Lint,
     Warning,
+    /// A shop's rule broken (sheet metal): built, but not to be made as it is.
+    Violation,
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -109,6 +111,9 @@ pub struct SheetRow {
     pub id: String,
     pub bends: usize,
     pub refused: Option<String>,
+    /// Its report: thickness, radius, rule..., and lists (bends, reliefs, corners...).
+    pub facts: Vec<(String, String)>,
+    pub lists: Vec<(String, Vec<String>)>,
 }
 
 /// One row of the tree: a feature, or a loop's or a call's group of them.
@@ -140,6 +145,8 @@ pub struct FgPanel {
     pub edit_fresh: bool,
     /// A feature's statement being typed, to add above the selected one.
     pub add_text: String,
+    /// The selected statement's new name, being typed.
+    pub rename: String,
     /// The last op the host refused, and why.
     pub refused: Option<String>,
     pub collapsed: HashSet<String>,
@@ -457,7 +464,9 @@ impl Shell {
                     let flag = fg.flag(&row.key);
                     let tint = match flag {
                         Some(Severity::Error) => Some(t.error),
-                        Some(Severity::Lint | Severity::Warning) => Some(Color32::from_rgb(0xE0, 0xA0, 0x30)),
+                        Some(Severity::Lint | Severity::Warning | Severity::Violation) => {
+                            Some(Color32::from_rgb(0xE0, 0xA0, 0x30))
+                        }
                         None => None,
                     };
                     icons::draw(
@@ -607,7 +616,11 @@ impl Shell {
         Self::fg_heading(ui, t, &panel::kind_word(tool.kind));
         ui.horizontal(|ui| {
             ui.label(egui::RichText::new("Name").font(sans(12.0)).color(t.ink2));
-            let r = ui.add(egui::TextEdit::singleline(&mut tool.name).font(mono(12.0)).desired_width(140.0));
+            let r = ui.add(
+                egui::TextEdit::singleline(&mut tool.name)
+                    .font(mono(12.0))
+                    .desired_width(140.0),
+            );
             places.push(("fg:tool:name".into(), r.rect));
         });
         for k in 0..tool.slots.len() {
@@ -621,7 +634,9 @@ impl Shell {
                 }
                 let mut gone = None;
                 for (i, p) in tool.slots[k].picks.iter().enumerate() {
-                    let r = ui.add(egui::Button::new(egui::RichText::new(format!("{p} ×")).font(mono(11.0))));
+                    let r = ui.add(egui::Button::new(
+                        egui::RichText::new(format!("{p} ×")).font(mono(11.0)),
+                    ));
                     places.push((format!("fg:tool:pick:{label}:{i}"), r.rect));
                     if r.clicked() {
                         gone = Some(i);
@@ -675,7 +690,11 @@ impl Shell {
         for p in &mut tool.params {
             ui.horizontal(|ui| {
                 ui.label(egui::RichText::new(p.name).font(mono(12.0)).color(t.ink));
-                let r = ui.add(egui::TextEdit::singleline(&mut p.text).font(mono(12.0)).desired_width(70.0));
+                let r = ui.add(
+                    egui::TextEdit::singleline(&mut p.text)
+                        .font(mono(12.0))
+                        .desired_width(70.0),
+                );
                 places.push((format!("fg:tool:param:{}", p.name), r.rect));
                 ui.label(egui::RichText::new(unit(p.dim)).font(sans(11.0)).color(t.ink2));
             });
@@ -683,7 +702,11 @@ impl Shell {
         for (w, text) in &mut tool.words {
             ui.horizontal(|ui| {
                 ui.label(egui::RichText::new(*w).font(mono(12.0)).color(t.ink));
-                let r = ui.add(egui::TextEdit::singleline(text).font(mono(12.0)).desired_width(90.0));
+                let r = ui.add(
+                    egui::TextEdit::singleline(text)
+                        .font(mono(12.0))
+                        .desired_width(90.0),
+                );
                 places.push((format!("fg:tool:word:{w}"), r.rect));
             });
         }
@@ -797,6 +820,57 @@ impl Shell {
                     }
                 }
             });
+            // its report, by what it holds: a field or list a later lane adds shows here as is
+            for (k, v) in &s.facts {
+                ui.label(
+                    egui::RichText::new(format!("  {k}: {v}"))
+                        .font(mono(11.0))
+                        .color(t.ink2),
+                );
+            }
+            for (k, items) in &s.lists {
+                if items.is_empty() {
+                    continue;
+                }
+                let r = ui.label(
+                    egui::RichText::new(format!("  {k}"))
+                        .font(medium(11.0))
+                        .color(t.ink),
+                );
+                places.push((format!("fg:sheet:{}:{k}", s.id), r.rect));
+                for it in items {
+                    ui.label(
+                        egui::RichText::new(format!("    {it}"))
+                            .font(mono(10.0))
+                            .color(t.ink2),
+                    );
+                }
+            }
+        }
+        // the shop's rules broken, each with its typed fixes
+        let shop: Vec<(usize, &Issue)> = fg
+            .issues
+            .iter()
+            .enumerate()
+            .filter(|(_, i)| i.severity == Severity::Violation)
+            .collect();
+        if !shop.is_empty() {
+            ui.label(egui::RichText::new("Shop").font(semi(12.0)).color(t.ink));
+            for (i, is) in shop {
+                let r = ui.label(
+                    egui::RichText::new(format!("{}: {}", is.kind, is.text))
+                        .font(sans(11.0))
+                        .color(Color32::from_rgb(0xE0, 0xA0, 0x30)),
+                );
+                places.push((format!("fg:shop:{i}"), r.rect));
+                ui.horizontal_wrapped(|ui| {
+                    for (j, op) in is.fixes.iter().enumerate() {
+                        if Self::fg_button(ui, &op_label(op), format!("fg:shopfix:{i}:{j}"), places) {
+                            out.push(FgAct::Apply(op.clone()));
+                        }
+                    }
+                });
+            }
         }
     }
 
@@ -828,6 +902,22 @@ impl Shell {
                     }
                     if Self::fg_button(ui, &format!("Delete {top}"), "fg:delete".into(), places) {
                         out.push(FgAct::Apply(Op::DeleteFeature { id: top.clone() }));
+                    }
+                    let r = ui.add(
+                        egui::TextEdit::singleline(&mut fg.rename)
+                            .font(mono(12.0))
+                            .hint_text("new name")
+                            .desired_width(90.0),
+                    );
+                    places.push(("fg:renametext".into(), r.rect));
+                    if Self::fg_button(ui, "Rename", "fg:rename".into(), places)
+                        && !fg.rename.trim().is_empty()
+                    {
+                        out.push(FgAct::Apply(Op::Rename {
+                            from: top.clone(),
+                            to: fg.rename.trim().to_string(),
+                        }));
+                        fg.rename.clear();
                     }
                 }
             });
@@ -1004,6 +1094,7 @@ impl Shell {
                 Severity::Error => "error",
                 Severity::Lint => "lint",
                 Severity::Warning => "warning",
+                Severity::Violation => "violation",
             };
             let r = ui.label(
                 egui::RichText::new(format!("{word} {} · line {}:{}", is.kind, is.line, is.col))

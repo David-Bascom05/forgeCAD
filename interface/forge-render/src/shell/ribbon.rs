@@ -90,7 +90,17 @@ fn groups(s: &Shell) -> Vec<Group> {
                 vec![new("Linear", "rect", "pattern")],
                 vec![off("Circular", "circular"), off("Mirror", "mirror")],
             ),
-        ],
+        ]
+        .into_iter()
+        // a Forge part has sheet metal: a sheet from a sketch, flanges off its edges
+        .chain(s.fg.is_some().then(|| {
+            g(
+                "Sheet Metal",
+                vec![new("Sheet", "extrude", "sheet"), new("Flange", "plane", "flange")],
+                vec![new("Cutout", "hole", "cutout"), new("Unfold", "rect", "unfold")],
+            )
+        }))
+        .collect(),
         1 => {
             let on = s.sketch.as_ref().and_then(|m| m.tool);
             let t = |name, icon, tool: SkTool| Tool {
