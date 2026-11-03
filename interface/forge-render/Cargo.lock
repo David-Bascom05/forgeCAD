@@ -747,6 +747,8 @@ name = "forge-lang"
 version = "0.1.0"
 dependencies = [
  "forge-agent",
+ "forge-doc",
+ "forge-font",
  "forge-geom",
  "forge-math",
  "forge-mesh",
@@ -754,6 +756,7 @@ dependencies = [
  "forge-ops",
  "forge-sheet",
  "forge-sketch",
+ "forge-step",
  "forge-topo",
 ]
 
