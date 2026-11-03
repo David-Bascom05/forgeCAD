@@ -23,6 +23,7 @@ pub mod shapes;
 pub mod sheet;
 pub mod sketch;
 pub mod syntax;
+pub mod validity;
 pub mod values;
 pub mod wired;
 pub mod work;
@@ -87,6 +88,8 @@ pub struct Measure {
     pub edges: usize,
     pub bodies: usize,
     pub problems: usize,
+    /// The check problems, typed, each on its body and the faces and edges it names.
+    pub invalid: Vec<validity::Invalid>,
     pub bbox: [f64; 6],
 }
 
@@ -188,7 +191,7 @@ pub fn run(src: &str, opts: Options, cache: Cache) -> (Run, Cache) {
         (false, _) => None,
         (true, Some(m)) => Some(m),
         (true, None) => {
-            let m = measure(&ev);
+            let m = measure(&mut ev);
             if let Some(m) = &m {
                 ev.b.keep_measure(m.clone());
             }
@@ -227,19 +230,8 @@ pub fn run(src: &str, opts: Options, cache: Cache) -> (Run, Cache) {
     (run, ev.b.into_cache())
 }
 
-/// The validity problems of the part: of each body on its own (bodies may touch or overlap; the
-/// joined view's skins then overlap without anything being wrong).
-fn problems(ev: &Eval, joined: &forge_topo::Body) -> usize {
-    match ev.b.stages.last().map(|s| &s.solids[..]) {
-        Some(many) if many.len() > 1 => many
-            .iter()
-            .map(|s| forge_topo::check::check(&forge_model::finish(s.body.clone())).len())
-            .sum(),
-        _ => forge_topo::check::check(joined).len(),
-    }
-}
-
-fn measure(ev: &Eval) -> Option<Measure> {
+fn measure(ev: &mut Eval) -> Option<Measure> {
+    let invalid = validity::problems(ev);
     let body = ev.b.body()?;
     let solids = ev.b.stages.last().map_or(0, |s| s.solids.len());
     let m = forge_topo::mass::mass(body).ok()?;
@@ -253,7 +245,8 @@ fn measure(ev: &Eval) -> Option<Measure> {
         faces: body.face_ids().count(),
         edges: body.edge_ids().count(),
         bodies: solids,
-        problems: problems(ev, body),
+        problems: invalid.len(),
+        invalid,
         bbox: [bb.x.lo, bb.y.lo, bb.z.lo, bb.x.hi, bb.y.hi, bb.z.hi],
     })
 }

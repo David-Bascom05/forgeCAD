@@ -185,6 +185,22 @@ pub fn json(run: &Run, src: &str) -> Json {
                 ("edges", m.edges.into()),
                 ("bodies", m.bodies.into()),
                 ("valid", (m.problems == 0).into()),
+                (
+                    "problems",
+                    Json::Arr(
+                        m.invalid
+                            .iter()
+                            .map(|p| {
+                                Json::obj(vec![
+                                    ("kind", p.kind.into()),
+                                    ("body", p.body.as_str().into()),
+                                    ("reason", p.reason.as_str().into()),
+                                    ("at", Json::Arr(p.at.iter().map(|a| a.as_str().into()).collect())),
+                                ])
+                            })
+                            .collect(),
+                    ),
+                ),
                 ("bbox", Json::Arr(m.bbox.iter().map(|x| Json::Num(*x)).collect())),
             ]),
         ));
@@ -264,6 +280,13 @@ pub fn text(run: &Run, src: &str) -> String {
             m.edges,
             if m.problems == 0 { "valid" } else { "INVALID" }
         ));
+        for p in &m.invalid {
+            out.push_str(&format!("invalid {} {}: {}", p.body, p.kind, p.reason));
+            if !p.at.is_empty() {
+                out.push_str(&format!(" (at {})", p.at.join("; ")));
+            }
+            out.push('\n');
+        }
     }
     if let Some(a) = &run.asm {
         let t = &a.timings;
