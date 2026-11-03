@@ -2,6 +2,8 @@
 # carry a unit, mm or deg, and a leading minus where no value precedes it; NL is a line break
 # outside ( ) and [ ]). %empty is the empty string. tests/grammar.rs computes FIRST and FOLLOW
 # and checks every choice is made on one token: zero conflicts, so the grammar is unambiguous.
+# The parser runs the table generated from this file (src/syntax/table.rs); a syntax change is
+# this file, `FG_REGEN=1 cargo test -p forge-lang --test grammar`, and the actions in syntax.rs.
 
 program     := seps stmts EOF ;
 block       := '{' seps stmts '}' ;
@@ -78,7 +80,9 @@ atom        := NUM | STR | ID | 'true' | 'false'
 tuple       := expr tuplerest | %empty ;
 tuplerest   := ',' tuple | %empty ;
 listbody    := expr listtail | %empty ;
-listtail    := 'for' ID forvars 'in' or compif | ',' listbody | %empty ;
+listtail    := 'for' ID forvars 'in' or compif | ',' listmore | %empty ;
+listmore    := expr listrest | %empty ;
+listrest    := ',' listmore | %empty ;
 compif      := 'if' or | %empty ;
 mapbody     := ID ':' expr seps maprest | %empty ;
 maprest     := ',' seps mapbody | %empty ;

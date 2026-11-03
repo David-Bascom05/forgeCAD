@@ -276,7 +276,11 @@ pub enum SyntaxError {
     UnknownUnit { span: Span },
     OpenString { span: Span },
     BadChar { span: Span },
-    Expected { what: &'static str, span: Span },
+    Expected {
+        what: &'static str,
+        expected: crate::syntax::TermSet,
+        span: Span,
+    },
     ParamWithoutOwner { span: Span, name: String },
     AssignToNonName { span: Span },
     KeywordNotName { span: Span },
