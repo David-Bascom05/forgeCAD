@@ -18,3 +18,6 @@ import ForgeLang.Complete
 import ForgeLang.Ren
 import ForgeLang.Split
 import ForgeLang.Sites
+import ForgeLang.Subst
+import ForgeLang.Shared
+import ForgeLang.Scope

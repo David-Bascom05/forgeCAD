@@ -132,6 +132,20 @@ The handle is the site, and editing it changes every value it drives.
     the result is the typed error `range`.
   - `split_independent`: no feature of instance `k` carries another instance's literal.
   - `split_edit_one`: editing `q j` leaves every other instance's numbers unchanged.
+- InlineExpr and MakeShared, both halves (`Shared.lean`, on `Subst.lean`).
+  - InlineExpr freezes a driven param: `let x = e` becomes `let x = r`, with `r` a fresh literal
+    set to the value `e` had. `inlineExpr_complete`: if the original evaluates, the frozen one
+    does, and its model with `r` written as `e`'s trace is the original model.
+    `inlineExpr_sound`: if the frozen one evaluates, the original does, with the same relation.
+    `inlineExpr_nums`: no number moves. After the op, `x` has a handle.
+  - MakeShared links a param to another: `let b = p` becomes `let b = a`, where `a` holds a value
+    equal to `p`'s. `makeShared_complete` and `makeShared_sound`, in both directions: the linked
+    model is the original with `p` written as `a`'s trace. `makeShared_nums`: no number moves.
+    After the op, `b` and everything built from it are driven by what drives `a`.
+  - Hypotheses: the literal that disappears (`p`) or appears (`r`) is mentioned by no other code.
+    For MakeShared, the values are equal. For InlineExpr, `e` evaluates where it stands.
+  - Both rest on `substEq`: substituting traces for sites in the environment commutes with
+    evaluation, as an equation (same success or same typed error).
 - A structural edit, such as a loop count, is still one meaning: evaluation is a function. The
   model op is a re-run, and P5 says what stays stable.
 - If the edited document does not evaluate, the edit is refused with that run's typed error.
@@ -295,21 +309,22 @@ parses back to the edited document is a grammar property.
    - A lossless CST, so that SetParam replaces exactly the literal's span (sign and unit included).
    - Shortest round-trip float printing.
    - Check with an LR(1) generator (zero conflicts) and a property test `parse(print(t)) = t`.
-9. **Functions** stay FastCAD-like: pure, and they may read top-level names. The core proves this
-   with bodies that see the names bound where they are called. The Forge rule that makes this the
-   same as lexical scope:
-   - a function body mentions only its parameters and top-level names;
-   - no local name shadows a top-level name.
+9. **Functions** stay FastCAD-like: pure, and they may read top-level names. `Scope.lean` proves
+   `scope_equiv`: call-site scope and lexical scope (bodies see the top-level environment) give
+   the same result or the same typed error, under one rule. The rule: no local name (loop
+   variable, parameter, anything bound in a nested block or a procedure body) is a name any
+   function body reads. That also forces bodies to mention only parameters and top-level names.
+   Top-level rebinding does not matter to this theorem. `scope_differs`: without the rule, a loop
+   variable `w` captures a function's top-level `w` under call-site scope. Make the rule a
+   scope error.
 
 ## Open (not mechanised)
 
-- InlineExpr and MakeShared.
 - SplitInstance on other shapes (a literal deep inside an expression, splits across nested loops).
   The proven form is the canonical `let w = p` at the head of the loop body. Other shapes rewrite to
   it.
 - P6: no parser in Lean, so `parse ∘ print = id` is not proven for the core printer either.
-- Function scope: the core uses the names bound at the call. That this equals lexical scope under
-  the rule in recommendation 9 is argued, not proven.
+- AddLocalParam and other ops not yet named.
 - Features inside an `if` block are not referenceable after it (block scope in the core).
 - SetParam on a structural param is stable only at loop level (`count_prefix`), not as a statement
   about whole documents.
@@ -330,6 +345,9 @@ parses back to the edited document is a grammar property.
 | `Ren.lean` | `ren`: site renaming commutes with evaluation |
 | `Split.lean` | SplitInstance: `split_doc` |
 | `Sites.lean` | `sitesIn`; `split_independent`, `split_edit_one` |
+| `Subst.lean` | `substEq`: substitution commutes with evaluation (equation) |
+| `Shared.lean` | InlineExpr, MakeShared: `inlineExpr_complete`/`_sound`/`_nums`, `makeShared_complete`/`_sound`/`_nums` |
+| `Scope.lean` | lexical evaluator `runL`; `scope_equiv`, `scope_differs` |
 | `Loops.lean` | P5 `count_prefix`, `keyed_insert` |
 | `Print.lean` | P4 text: `setLit_text`, `body_text_insert`, `body_text_swap` |
 | `Counter/*.lean` | every counterexample named above, proven by evaluation (`rfl`/`decide`) or induction |
