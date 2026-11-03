@@ -65,10 +65,38 @@ pub struct Pattern {
 /// Layers the DXF puts things on.
 pub const CUT_LAYER: &str = "CUT";
 pub const BEND_LAYER: &str = "BEND";
+/// What a shop reads off the drawing: each bend's direction, angle and inside radius, and the
+/// part's material, thickness and bend rule.
+pub const NOTES_LAYER: &str = "BEND_NOTES";
 
 /// The pattern as an AutoCAD R2000 (AC1015) DXF in millimetres: contours on `CUT_LAYER`, bend
 /// lines on `BEND_LAYER`. Lines, arcs, circles (a whole-turn arc) and NURBS splines, exactly.
 pub fn dxf(p: &Pattern) -> String {
+    write_dxf(p, None)
+}
+
+/// `dxf`, with notes on `NOTES_LAYER`: at each bend line's middle, along it, `UP 90.0 DEG IR
+/// 2.00` (UP: the flange turns towards the drawing's viewer, the reference skin; DOWN: away), and
+/// `part` below the pattern.
+pub fn dxf_noted(p: &Pattern, part: &str) -> String {
+    write_dxf(p, Some(part))
+}
+
+/// A bend's note: its direction as the drawing is seen (from the reference skin), its angle and
+/// its inside radius.
+pub fn bend_note(b: &BendLine) -> String {
+    format!(
+        "{} {:.1} DEG IR {:.2}",
+        if b.angle >= 0.0 { "UP" } else { "DOWN" },
+        b.angle.abs().to_degrees(),
+        b.radius
+    )
+}
+
+/// The notes' text height (mm).
+const NOTE_H: f64 = 3.0;
+
+fn write_dxf(p: &Pattern, notes: Option<&str>) -> String {
     let mut w = Dxf::default();
     // handles: tables and blocks first, entities after
     let ms_rec = 0x1F;
@@ -155,7 +183,11 @@ pub fn dxf(p: &Pattern) -> String {
         }
     });
     w.table("LAYER", 0x2, |w| {
-        for (name, colour) in [("0", "7"), (CUT_LAYER, "7"), (BEND_LAYER, "1")] {
+        let mut layers = vec![("0", "7"), (CUT_LAYER, "7"), (BEND_LAYER, "1")];
+        if notes.is_some() {
+            layers.push((NOTES_LAYER, "3"));
+        }
+        for (name, colour) in layers {
             let h = w.handle();
             w.pair(0, "LAYER");
             w.hex(5, h);
@@ -262,6 +294,30 @@ pub fn dxf(p: &Pattern) -> String {
     for b in &p.bends {
         w.curve(&Curve2::Line { a: b.a, b: b.b }, BEND_LAYER, ms_rec);
     }
+    if let Some(part) = notes {
+        for b in &p.bends {
+            // along the line, read left to right, a little off it
+            let d = b.b - b.a;
+            let mut ang = dmath::atan2(d.y, d.x);
+            if ang > dmath::PI / 2.0 + 1e-9 {
+                ang -= dmath::PI;
+            } else if ang <= -dmath::PI / 2.0 + 1e-9 {
+                ang += dmath::PI;
+            }
+            let (s, c) = dmath::sin_cos(ang);
+            let mid = b.a + d * 0.5;
+            let at = Point2::new(mid.x - s * NOTE_H * 0.5, mid.y + c * NOTE_H * 0.5);
+            w.text(&bend_note(b), at, ang.to_degrees(), NOTES_LAYER, ms_rec);
+        }
+        let (lo, _) = bounds(p);
+        w.text(
+            part,
+            Point2::new(lo.x, lo.y - 2.0 * NOTE_H),
+            0.0,
+            NOTES_LAYER,
+            ms_rec,
+        );
+    }
     w.pair(0, "ENDSEC");
 
     w.pair(0, "SECTION");
@@ -346,6 +402,17 @@ impl Dxf {
         self.pair(100, "AcDbEntity");
         self.pair(8, layer);
     }
+    fn text(&mut self, text: &str, at: Point2, degrees: f64, layer: &str, owner: u32) {
+        self.head("TEXT", layer, owner);
+        self.pair(100, "AcDbText");
+        for (k, v) in [(10, at.x), (20, at.y), (30, 0.0), (40, NOTE_H)] {
+            self.num(k, v);
+        }
+        self.pair(1, text);
+        self.num(50, degrees);
+        self.pair(7, "Standard");
+        self.pair(100, "AcDbText");
+    }
     fn curve(&mut self, c: &Curve2, layer: &str, owner: u32) {
         match c {
             Curve2::Line { a, b } => {
@@ -408,4 +475,32 @@ impl Dxf {
             }
         }
     }
+}
+
+/// The corners of a box round the pattern's contours (arcs by their circles, splines by their
+/// control points: never inside the curves).
+fn bounds(p: &Pattern) -> (Point2, Point2) {
+    let mut lo = Point2::new(f64::INFINITY, f64::INFINITY);
+    let mut hi = Point2::new(f64::NEG_INFINITY, f64::NEG_INFINITY);
+    let mut add = |q: Point2| {
+        lo = Point2::new(lo.x.min(q.x), lo.y.min(q.y));
+        hi = Point2::new(hi.x.max(q.x), hi.y.max(q.y));
+    };
+    for c in p.contours.iter().flatten() {
+        match c {
+            Curve2::Line { a, b } => {
+                add(*a);
+                add(*b);
+            }
+            Curve2::Arc { c, r, .. } => {
+                add(Point2::new(c.x - r, c.y - r));
+                add(Point2::new(c.x + r, c.y + r));
+            }
+            Curve2::Spline { points, .. } => points.iter().for_each(|q| add(*q)),
+        }
+    }
+    if lo.x > hi.x {
+        return (Point2::new(0.0, 0.0), Point2::new(0.0, 0.0));
+    }
+    (lo, hi)
 }

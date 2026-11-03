@@ -22,7 +22,7 @@ pub use error::{
 };
 pub use graph::{Corner, CornerKind, Cut, Gauge, Joint, JointKind, Position, Sheet, Wall};
 pub use hardware::{Hardware, HardwareKind, Mount, Source, placeholder_catalogue};
-pub use pattern::{BendLine, Curve2, Pattern, dxf};
+pub use pattern::{BendLine, Curve2, NOTES_LAYER, Pattern, bend_note, dxf, dxf_noted};
 pub use relief::{
     BendReliefRule, Corner3Rule, Corner3Shape, CornerRule, CornerShape, DepthRef, Placement, Relief,
     ReliefKind, ReliefMade, ReliefRule,

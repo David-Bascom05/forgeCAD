@@ -149,3 +149,89 @@ fn fg_run_writes_the_step_files() {
         1
     );
 }
+
+/// The DXF's TEXT entities on a layer: (text, x, y, rotation).
+fn texts(dxf: &str, layer: &str) -> Vec<(String, f64, f64, f64)> {
+    let lines: Vec<&str> = dxf.lines().map(str::trim).collect();
+    let mut out = vec![];
+    let mut k = 0;
+    while k + 1 < lines.len() {
+        if lines[k] == "0" && lines[k + 1] == "TEXT" {
+            let (mut on, mut t, mut x, mut y, mut r) = (false, String::new(), 0.0, 0.0, 0.0);
+            let mut j = k + 2;
+            while j + 1 < lines.len() && lines[j] != "0" {
+                let v = lines[j + 1];
+                match lines[j] {
+                    "8" => on = v == layer,
+                    "1" => t = v.to_string(),
+                    "10" => x = v.parse().expect("x"),
+                    "20" => y = v.parse().expect("y"),
+                    "50" => r = v.parse().expect("rotation"),
+                    _ => {}
+                }
+                j += 2;
+            }
+            if on {
+                out.push((t, x, y, r));
+            }
+            k = j;
+        } else {
+            k += 2;
+        }
+    }
+    out
+}
+
+/// Each bend line has its note on BEND_NOTES, at its middle and along it: UP for a flange turned
+/// towards the drawing's viewer, DOWN for one turned away, the angle and the inside radius; and
+/// the part's note names the material, the thickness and the bend rule.
+#[test]
+fn the_flat_pattern_dxf_carries_bend_notes() {
+    let src = std::fs::read_to_string(concat!(env!("CARGO_MANIFEST_DIR"), "/parts/sheet/z.fg"))
+        .expect("part")
+        .replace(
+            "bend: kfactor(k))",
+            "bend: kfactor(k), material: \"1008 CR steel\")",
+        );
+    let r = forge_lang::run(&src, Options::default(), Default::default()).0;
+    assert!(r.ok(), "{}", forge_lang::report::text(&r, &src));
+    let dxf = r.sheets[0].dxf().expect("a flat pattern");
+    let notes = texts(&dxf, forge_sheet::NOTES_LAYER);
+    assert_eq!(notes.len(), 3, "{notes:?}");
+    // the web turns up, the lip (side: "down") turns down, both 90 degrees about a radius of 1
+    assert_eq!(notes[0].0, "UP 90.0 DEG IR 1.00");
+    assert_eq!(notes[1].0, "DOWN 90.0 DEG IR 1.00");
+    assert_eq!(notes[2].0, "BASE  MATERIAL 1008 CR STEEL  T 1.50  K 0.330");
+    // each bend note beside the middle of its bend line, written along it
+    let lines: Vec<(f64, f64)> = dxf
+        .split("  0\nLINE\n")
+        .skip(1)
+        .filter(|e| e.contains("\n  8\nBEND\n"))
+        .map(|e| {
+            let v: Vec<&str> = e.lines().collect();
+            let get = |code: &str| -> f64 {
+                let k = v.iter().position(|l| l.trim() == code).expect("code");
+                v[k + 1].trim().parse().expect("number")
+            };
+            ((get("10") + get("11")) / 2.0, (get("20") + get("21")) / 2.0)
+        })
+        .collect();
+    assert_eq!(lines.len(), 2);
+    for ((_, x, y, rot), (mx, my)) in notes.iter().zip(&lines) {
+        assert!(
+            ((x - mx).powi(2) + (y - my).powi(2)).sqrt() < 3.0,
+            "{x},{y} vs {mx},{my}"
+        );
+        assert!((rot - 90.0).abs() < 1e-9, "{rot}");
+    }
+    // the plain pattern writer is unchanged: no notes layer
+    assert!(!forge_sheet::dxf(&forge_sheet::Pattern::default()).contains("BEND_NOTES"));
+    // without a material the note says so
+    let r = forge_lang::run(
+        &std::fs::read_to_string(concat!(env!("CARGO_MANIFEST_DIR"), "/parts/sheet/z.fg")).expect("part"),
+        Options::default(),
+        Default::default(),
+    )
+    .0;
+    assert!(r.sheets[0].note().contains("MATERIAL UNSPECIFIED"));
+}

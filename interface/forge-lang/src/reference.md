@@ -500,10 +500,11 @@ blank = unfold(base, on: offset(base.bottom, gap))
 ```
 
 ```
-sheet(PROFILE, t: T, r: R, bend: RULE, shop: SHOP, corner: CORNER)
+sheet(PROFILE, t: T, r: R, bend: RULE, shop: SHOP, corner: CORNER, material: "NAME")
     the base wall: PROFILE's outline and holes. r and bend may come from the shop's stock of
     thickness t instead, and so does the default relief. corner: what corners get (default
-    circular_relief(), just clear of both bends). Its own dims: thickness, radius, k.
+    circular_relief(), just clear of both bends). material: the stock's name for the DXF's
+    part note. Its own dims: thickness, radius, k.
 flange(EDGE, height: H, angle: A = 90deg, side: "up"|"down" = "up",
        measure: "inner"|"outer" = "outer", r: R, relief: RELIEF,
        position: "inside"|"outside"|"bend_outside" = "inside")
@@ -634,8 +635,13 @@ it. Two strips whose flats come within the boolean's tolerance of touching are
 `FlatOverlapUndecided`, never taken as clear.
 
 `fg run F.fg --dxf OUT.dxf` writes each sheet's flat pattern (R2000 DXF, mm): cut contours on
-layer CUT (lines, arcs, circles, NURBS), bend lines down each zone's middle on layer BEND. `fg run
---json` lists each sheet: thickness, radius, rule, and each bend's flange, angle, radius,
+layer CUT (lines, arcs, circles, NURBS), bend lines down each zone's middle on layer BEND, and on
+layer BEND_NOTES a note along each bend line (`UP 90.0 DEG IR 2.00`: UP turns towards the
+drawing's viewer, DOWN away; the angle; the inside radius) and the part's note below the pattern
+(`BASE  MATERIAL 1008 CR STEEL  T 1.50  K 0.420`). `fg run F.fg --step OUT.step` writes a part's
+folded body as STEP AP214 in OUT (any flat pattern left out) and each unfold's flat beside it as
+OUT-<unfold>.step; for an assembly, its structure (one product per part, one use per instance,
+placed by the solve). `fg run --json` lists each sheet: thickness, radius, rule, and each bend's flange, angle, radius,
 allowance and setback.
 
 ## Functions and recursion
@@ -773,7 +779,7 @@ value's dimension is not the param's), or the edited document's own errors.
 
 ```
 fg run FILE [--json] [--render OUT.png] [--view iso|front|top|right|back|left|bottom] [--px N]
-           [--dxf OUT.dxf]
+           [--dxf OUT.dxf] [--step OUT.step]
 fg check FILE [--json]
 fg edit FILE 'OP' [--json]
 fg handles FILE
