@@ -8,7 +8,7 @@ use std::collections::HashMap;
 use std::io::{BufRead, Write};
 use std::process::ExitCode;
 
-const USAGE: &str = "fg run FILE [--json] [--render OUT.png] [--view iso|front|top|right|..] [--px N] [--dxf OUT.dxf]
+const USAGE: &str = "fg run FILE [--json] [--render OUT.png] [--view iso|front|top|right|..] [--px N] [--dxf OUT.dxf] [--step OUT.step]
 fg check FILE [--json]          parse, static rules, types and dimensions; no kernel
 fg edit FILE 'OP' [--json]      apply a typed op (JSON, as errors' fixes give them), then check
 fg handles FILE                 the editable handles: every param, its value and dimension
@@ -71,6 +71,39 @@ fn write_dxf(run: &forge_lang::Run, out: &str) {
     }
 }
 
+/// The file's name without its directory and extension: the product's name.
+fn stem(file: &str) -> String {
+    std::path::Path::new(file)
+        .file_stem()
+        .map_or_else(|| "part".into(), |n| n.to_string_lossy().into_owned())
+}
+
+/// The part's STEP (folded) in OUT and each flat pattern beside it (`OUT-<unfold>.step`); an
+/// assembly's structure in OUT. False when nothing could be written.
+fn write_step(run: &forge_lang::Run, out: &str, name: &str) -> bool {
+    match forge_lang::export::step(run, name) {
+        Ok(files) => {
+            for f in files {
+                let path = match (f.suffix.is_empty(), out.rsplit_once('.')) {
+                    (true, _) => out.to_string(),
+                    (false, Some((stem, ext))) => format!("{stem}{}.{ext}", f.suffix),
+                    (false, None) => format!("{out}{}", f.suffix),
+                };
+                if let Err(e) = std::fs::write(&path, f.text) {
+                    eprintln!("{path}: {e}");
+                    return false;
+                }
+                eprintln!("--step: {path}, {} solids", f.solids);
+            }
+            true
+        }
+        Err(e) => {
+            eprintln!("--step: {e}");
+            false
+        }
+    }
+}
+
 fn run_file(file: &str, args: &[String], build: bool) -> ExitCode {
     let src = match read(file) {
         Ok(s) => s,
@@ -83,6 +116,7 @@ fn run_file(file: &str, args: &[String], build: bool) -> ExitCode {
         build,
         dir: dir_of(file),
         render: opt(args, "--render").is_some(),
+        step: opt(args, "--step").map(|_| stem(file)),
         ..Options::default()
     };
     let (run, _) = forge_lang::run(&src, opts, Cache::default());
@@ -102,12 +136,16 @@ fn run_file(file: &str, args: &[String], build: bool) -> ExitCode {
     if let Some(out) = opt(args, "--dxf") {
         write_dxf(&run, out);
     }
+    let mut wrote = true;
+    if let Some(out) = opt(args, "--step") {
+        wrote = write_step(&run, out, &stem(file));
+    }
     if flag(args, "--json") {
         print_json(&report::json(&run, &src));
     } else {
         print!("{}", report::text(&run, &src));
     }
-    if run.ok() {
+    if run.ok() && wrote {
         ExitCode::SUCCESS
     } else {
         ExitCode::from(1)

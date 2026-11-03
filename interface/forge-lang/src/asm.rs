@@ -1841,6 +1841,8 @@ pub struct AsmOut {
     pub occ_part: Vec<Option<usize>>,
     /// The probed expects' values, by position (`Options::probe`).
     pub probes: Vec<(usize, Option<f64>)>,
+    /// The structure as STEP AP214, when asked for (`Options::step`).
+    pub step: Option<Result<String, String>>,
     /// Every expect line: measured, against its limit, passed or not.
     pub expects: Vec<ExpectOut>,
     /// Every rule-covered thread pair's engagement, short or not.
@@ -2364,6 +2366,11 @@ pub fn finish(
                     && a.drive.iter().zip(&b.drive).all(|(x, y)| x.0 == y.0)
             })
     };
+    // STEP of the structure, from the documents as built (forge-asm solves for the poses)
+    let step = opts
+        .step
+        .as_ref()
+        .map(|name| fa::step::export(&top, name, &catalog, &exact.bodies).map_err(|e| format!("{e:?}")));
     let live = cache
         .last
         .take()
@@ -2469,6 +2476,7 @@ pub fn finish(
             cache_hits: rep.cache_hits,
             exact_runs: rep.exact_runs,
         }),
+        step,
         ..AsmOut::default()
     };
     for e in &rep.engagements {
