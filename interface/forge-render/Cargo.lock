@@ -752,6 +752,7 @@ dependencies = [
  "forge-mesh",
  "forge-model",
  "forge-ops",
+ "forge-sheet",
  "forge-sketch",
  "forge-topo",
 ]
@@ -809,6 +810,7 @@ dependencies = [
  "forge-math",
  "forge-mesh",
  "forge-model",
+ "forge-sheet",
  "forge-sketch",
  "forge-topo",
  "js-sys",
@@ -817,6 +819,16 @@ dependencies = [
  "wasm-bindgen-futures",
  "wgpu",
  "winit",
+]
+
+[[package]]
+name = "forge-sheet"
+version = "0.1.0"
+dependencies = [
+ "forge-geom",
+ "forge-math",
+ "forge-ops",
+ "forge-topo",
 ]
 
 [[package]]
