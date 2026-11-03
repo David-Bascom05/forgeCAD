@@ -45,7 +45,7 @@ param screws.n = count(2)
 param screws.dx = 33
 param screws.dy = 32
 screws = pattern(of: screw, layout: lin(along: blk.outline[0].dir, n: n, step: dx, along2: blk.outline[1].dir, n2: n, step2: dy))
-screwthread = thread(hole: screw, length: full)
+screwthread = thread(hole: screw, length: "full")
 
 param ringsk.ro = 6.5
 param ringsk.ri = 5

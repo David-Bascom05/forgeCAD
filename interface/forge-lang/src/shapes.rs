@@ -1032,19 +1032,25 @@ fn direct(ev: &mut Eval, name: &'static str, args: &[Arg], span: Span) -> R<Valu
                     });
                 }
             };
-            let with = match faces_arg(&a, "with")? {
-                Some(f) => target(ev, &f),
-                None if !building => Target::Face {
-                    feature: 0,
-                    name: Name::NONE,
-                },
-                None => {
-                    return Err(Error::MissingArg {
-                        span,
-                        func: name,
-                        arg: "with",
-                    });
+            let with = match a.opt("with") {
+                // a work plane (fg-holes' work features)
+                Some(Value::Wired(w)) if w.plane().is_some() && w.work_ref().is_some() => {
+                    Target::Plane(w.work_ref().expect("checked").feature)
                 }
+                _ => match faces_arg(&a, "with")? {
+                    Some(f) => target(ev, &f),
+                    None if !building => Target::Face {
+                        feature: 0,
+                        name: Name::NONE,
+                    },
+                    None => {
+                        return Err(Error::MissingArg {
+                            span,
+                            func: name,
+                            arg: "with",
+                        });
+                    }
+                },
             };
             Edit::Replace { face, with }
         }

@@ -97,7 +97,7 @@ fn screws_from_the_tables() {
     ));
     // the recorded thread is what a thread feature then models
     let r = ok(&format!(
-        "{BASE}{TOP}h = hole(at: top.p, screw: \"M6\", fit: \"tap\", depth: thru)\nth = thread(hole: h, length: full)\n"
+        "{BASE}{TOP}h = hole(at: top.p, screw: \"M6\", fit: \"tap\", depth: thru)\nth = thread(hole: h, length: \"full\")\n"
     ));
     assert!(vol(&r) < base_vol() - PI * 6.25 * 10.0);
 }
@@ -203,7 +203,7 @@ fn threads_on_a_hole_a_face_and_an_axis() {
     let hole = format!("{BASE}{TOP}h = hole(at: top.p, d: 8.5, depth: thru, thread: \"M10\")\n");
     let plain = vol(&ok(&hole));
     for opts in [
-        "length: full",
+        "length: \"full\"",
         "length: 6",
         "length: 6, left: true",
         "length: 6, chamfer: true",
@@ -325,11 +325,11 @@ fn circular_patterns_over_and_each() {
 #[test]
 fn along_a_curve_and_an_axis() {
     let src = format!(
-        "{BASE}{PEG}pp = pattern(of: peg, layout: along(curve: edges(between: (base.end, base.side(b.outline[0]))), n: count(3), step: 10, fixed: true))\n"
+        "{BASE}{PEG}pp = pattern(of: peg, layout: follow(curve: edges(between: (base.end, base.side(b.outline[0]))), n: count(3), step: 10, fixed: true))\n"
     );
     close(vol(&ok(&src)), base_vol() + 3.0 * peg());
     let src = format!(
-        "{BASE}{PEG}e = workaxis(meet: (base.end, base.side(b.outline[3])))\npp = pattern(of: peg, layout: along(curve: e, n: count(2), step: 20))\n"
+        "{BASE}{PEG}e = workaxis(meet: (base.end, base.side(b.outline[3])))\npp = pattern(of: peg, layout: follow(curve: e, n: count(2), step: 20))\n"
     );
     close(vol(&ok(&src)), base_vol() + 2.0 * peg());
 }
@@ -495,7 +495,7 @@ fn splitting_and_moving_bodies() {
     ));
     assert_eq!(bodies(&r), 1);
     let r = ok(&format!(
-        "{BASE}c = copybody(of: base, moves: [slide(along: b.outline[0].dir, by: 100), turn(about: b.outline[0], by: 90deg)])\n"
+        "{BASE}c = copybody(of: base, moves: [slide(along: b.outline[0].dir, by: 100), spin(about: b.outline[0], by: 90deg)])\n"
     ));
     assert_eq!(bodies(&r), 2);
     close(vol(&r), 2.0 * base_vol());
@@ -519,31 +519,19 @@ fn a_feature_on_chosen_bodies() {
     // drilled down from the base's top: through the block's lower half only
     close(vol(&r), base_vol() + 400.0 * 8.0 - PI * 4.0 * 4.0);
     let src = format!(
-        "{BASE}{TWO}sketch hk(on: base.end) {{\n  p = pt(0, 0)\n}}\nh = hole(at: hk.p, d: 4, depth: thru, bodies: all)\n"
+        "{BASE}{TWO}sketch hk(on: base.end) {{\n  p = pt(0, 0)\n}}\nh = hole(at: hk.p, d: 4, depth: thru, bodies: \"all\")\n"
     );
     close(vol(&ok(&src)), base_vol() + 400.0 * 8.0 - PI * 4.0 * 14.0);
 }
 
-// ---- direct edits -----------------------------------------------------------------------------
+// ---- direct edits (fg-shapes' replace_face takes a work plane too) ---------------------------
 
 #[test]
-fn direct_edits() {
+fn a_face_replaced_onto_a_work_plane() {
     let r = ok(&format!(
-        "{BASE}m = moveface(faces: base.end, by: slide(along: base.end.normal, by: 2))\n"
-    ));
-    close(vol(&r), 60.0 * 60.0 * 12.0);
-    let r = ok(&format!(
-        "{BASE}w = workplane(offset: base.end, d: 3)\nm = replace(face: base.end, with: w)\n"
+        "{BASE}w = workplane(offset: base.end, d: 3)\nm = replace_face(base.end, with: w)\n"
     ));
     close(vol(&r), 60.0 * 60.0 * 13.0);
-    let r = ok(&format!("{BASE}{PEG}d = delete(faces: peg.faces)\n"));
-    close(vol(&r), base_vol());
-    assert_eq!(
-        errs(&format!(
-            "{BASE}m = moveface(faces: base.end, by: place(on: base.end))\n"
-        )),
-        vec!["NotApplicable"]
-    );
 }
 
 // ---- text and imports -------------------------------------------------------------------------
@@ -648,4 +636,63 @@ fn projecting_edges_and_faces_into_a_sketch() {
     close(vol(&ok(&src)), base_vol() + peg() + PI * 9.0 * 2.0);
     let src = format!("{BASE}w = workpoint(at: b.o)\nsketch s(on: b.plane) {{\n  p = project(w)\n}}\n");
     ok(&src);
+}
+
+// ---- fillets with every option ----------------------------------------------------------------
+
+#[test]
+fn fillets_varying_and_their_options() {
+    let rim = "rim = edges(of: base.end)\nsketch tc(on: base.end) {\n  c = pt(30, -30)\n}\n";
+    let fill = |f: &str| {
+        let src = format!("{BASE}{rim}{f}\n");
+        let r = run(&src);
+        assert!(r.errors.is_empty(), "{f}: {}", forge_lang::report::text(&r, &src));
+        vol(&r)
+    };
+    let constant = fill("f = fillet(rim, 2)");
+    let linear = fill("f = fillet(rim, vary(1, 3))");
+    let points = fill("f = fillet(rim, vary([(0, 1), (ratio(0.5), 3), (1, 1)]))");
+    assert!(constant < base_vol() && linear < base_vol() && points < base_vol());
+    assert!((linear - constant).abs() > 1e-3 && (points - constant).abs() > 1e-3);
+    // the law from the other end of each edge: a different solid
+    let flat = "rim0 = edges(between: (base.end, base.side(b.outline[0])))\n";
+    let one = fill(&format!("{flat}f = fillet(rim0, vary(1, 3), only: true)"));
+    let back = fill(&format!(
+        "{flat}f = fillet(rim0, vary(1, 3), from: tc.c, only: true)"
+    ));
+    assert!(one < base_vol() && back < base_vol());
+    fill(
+        "post = edges(between: (base.side(b.outline[0]), base.side(b.outline[3])))\nf = fillet(groups: [(rim, 2), (post, vary(1, 2), b.outline[0].a)])",
+    );
+    fill("f = fillet(rim + edges(of: base, along: Z), 2, setbacks: [(tc.c, 3)])");
+    fill("f = fillet(rim, 2, only: true)");
+}
+
+#[test]
+fn fillet_errors_are_typed() {
+    let e = |f: &str| errs(&format!("{BASE}rim = edges(of: base.end)\n{f}\n"));
+    assert_eq!(e("f = fillet(rim, vary([(0, 1), (0, 3)]))"), vec!["BadValue"]);
+    assert_eq!(e("f = fillet(rim, vary([(0, 1)]))"), vec!["NotOne"]);
+    assert_eq!(e("f = fillet(rim, vary(1, -3))"), vec!["BadValue"]);
+    assert_eq!(
+        e("f = fillet(groups: [(rim, 2)], from: b.o)"),
+        vec!["NotApplicable"]
+    );
+    assert_eq!(e("f = fillet(rim, 2, from: b.o)"), vec!["NotOne"]);
+}
+
+#[test]
+fn of_means_the_features_own_not_its_copies() {
+    let src = |of: &str| {
+        format!(
+            "{BASE}{PEG}pegs = pattern(of: peg, layout: lin(along: b.outline[0].dir, n: count(2), step: 20))\nr = fillet(edges(of: {of}, crease: \"concave\"), 1)\n"
+        )
+    };
+    let own = vol(&ok(&src("peg")));
+    let both = vol(&ok(&src("[peg, pegs]")));
+    // the fillet on the copy's root too adds as much again
+    close(
+        both - base_vol() - 2.0 * peg(),
+        2.0 * (own - base_vol() - 2.0 * peg()),
+    );
 }

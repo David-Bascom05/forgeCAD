@@ -99,7 +99,7 @@ fn document(rng: &mut Rng) -> String {
     }
     if rng.below(2) == 0 {
         s += &format!(
-            "sketch tk(on: f0.end) {{\n  p = pt(s0 / 2, s1 / 2)\n}}\nparam th.d = {}\nth = hole(at: tk.p, d: d, depth: s2, thread: \"M8\")\ntt = thread(hole: th, length: full)\n",
+            "sketch tk(on: f0.end) {{\n  p = pt(s0 / 2, s1 / 2)\n}}\nparam th.d = {}\nth = hole(at: tk.p, d: d, depth: s2, thread: \"M8\")\ntt = thread(hole: th, length: \"full\")\n",
             rng.len()
         );
     }

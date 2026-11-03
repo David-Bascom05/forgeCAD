@@ -23,7 +23,7 @@ param ends.r = 4
 ends = fillet(edges(of: lower, along: Z), r)
 param seatedge.size = 1
 seatedge = chamfer(edges(of: seat), size)
-upper = copybody(of: lower, moves: [turn(about: jaw.outline[2], by: 180deg), slide(along: jaw.outline[1].dir, by: gap)])
+upper = copybody(of: lower, moves: [spin(about: jaw.outline[2], by: 180deg), slide(along: jaw.outline[1].dir, by: gap)])
 
 param fsk.fl = 140
 param fsk.fw = 50

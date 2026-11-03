@@ -22,14 +22,13 @@ sketch pocket(on: blk.end) {
 param cav.depth = 14
 cav = cut(pocket, depth)
 part = workplane(on: offset(blk.end, pl - bh))
-top = replace(face: faces(of: blk, normal: Z), with: part)
+top = replace_face(faces(of: blk, normal: Z), with: part)
 param fl.r = 2
 fl = fillet(edges(of: cav.end), r)
 # the floor up 1 for a thicker lid, after the fillet, as the change came
 param lift.by = 1
-lift = moveface(faces: cav.end, by: slide(along: cav.end.normal, by: by))
-# waits for `offset` (the shapes lane): walls offset for shrink
-# walls = offset(faces(of: cav) + faces(of: fl), 0 - shrink)
+lift = move_faces(cav.end, along: cav.end.normal, d: by)
+walls = offset_faces(faces(of: [cav, fl]), 0 - shrink)
 param coresk.x = 20
 param coresk.r = 4
 sketch coresk(on: cav.end) {
@@ -38,7 +37,7 @@ sketch coresk(on: cav.end) {
 param core.h = 8
 core = extrude(coresk, h)
 # the cored hole in the lid dropped: its core pin goes, the floor healed
-nocore = delete(faces: core.faces)
+nocore = delete_faces(core.faces)
 param ventsk.x = 39
 param ventsk.w = 6
 sketch ventsk(on: part) {

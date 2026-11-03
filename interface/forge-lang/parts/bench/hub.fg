@@ -44,7 +44,7 @@ sketch scsk(on: hub.side(sec.outline[0]), at: back) {
 }
 param sc.depth = 12
 sc = cut(scsk, depth)
-scallops = pattern(of: sc, layout: along(curve: edges(between: (hub.side(sec.outline[0]), hub.side(sec.outline[1]))), n: ns))
+scallops = pattern(of: sc, layout: follow(curve: edges(between: (hub.side(sec.outline[0]), hub.side(sec.outline[1]))), n: ns))
 
 shared gw = 1.6                # the circlip groove: width, depth, off the back
 param grsk.gd = 1.2
@@ -56,6 +56,6 @@ sketch grsk(on: sec.plane) {
 }
 groove = revolve(grsk.g, axis: grsk.ax, cut: true)
 param grooves.step = 28
-grooves = pattern(of: groove, layout: along(curve: hax, n: count(2), step: step))
+grooves = pattern(of: groove, layout: follow(curve: hax, n: count(2), step: step))
 param bore.size = 1
 bore = chamfer(edges(between: (hub.side(sec.outline[5]), hub.side(sec.outline[4]))) + edges(between: (hub.side(sec.outline[5]), hub.side(sec.outline[0]))), size)

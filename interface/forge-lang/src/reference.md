@@ -172,7 +172,14 @@ cut(PROFILE, d | ...)               into the material: against the sketch normal
 intersect(PROFILE, extent)          keeps what lies inside
 revolve(PROFILE, axis: LINE, angle: A, cut: false, new: false)   LINE: a line of the same sketch
 hole(..), thread(..)                see Holes and threads
-fillet(EDGES, r) | fillet(groups: [(EDGES, r), ..])
+fillet(EDGES, R, from: POINT, setbacks: [(POINT, d) | (POINT, EDGES, d)], only: false)
+fillet(groups: [(EDGES, R) | (EDGES, R, POINT), ..], setbacks: .., only: false)
+                                    R: r | vary(a, b) (linear along each edge) |
+                                    vary([(t, r), ..]) (radii at fractions t of the way, 0 to 1,
+                                    increasing; a smooth law through them). from: the vertex at
+                                    POINT each edge's law starts from; setbacks: how far along
+                                    the edges from the corner at POINT (one edge, or all) the
+                                    blends stop; only: the edges named, not their tangent chains
 chamfer(EDGES, d)
 shell(t, open: FACES, out: false) hollow to walls t thick (out: outside the skin), FACES open
 ```
@@ -249,7 +256,7 @@ draft(FACES, angle: A, neutral: PLANE)    faces tilted A about where they cross 
 offset_faces(FACES, d)                    faces moved d along their outward normals
 move_faces(FACES, along: DIR, d: D | about: AXIS, by: A)   faces moved or turned, neighbours re-met
 delete_faces(FACES)                       a pocket, boss or blend taken away, the gap closed
-replace_face(FACE, with: FACES)           a face put on another face's surface
+replace_face(FACE, with: FACES | WORKPLANE)   a face put on another face's surface, or a work plane
 thicken(FACES, t, side: "out"|"in"|"both", cut|keep|new: true)   a slab on the faces
 rib(PATH, t, side: "both"|"pos"|"neg", web: false, flip: false, draft: A)
 facefillet(FACES, FACES, r)               round between two face sets
@@ -302,7 +309,7 @@ thread(hole: HOLE, length: L)                   the hole's recorded thread, at e
 thread(face: FACES, spec: SPEC, length: L, flip: false)   round a cylinder face (outside or in)
 thread(on: PLANE, at: POINT, spec: SPEC, internal: false, length: L, flip: false)   about an axis
        square to the plane through POINT (default its origin), into the material
-length: d | full | upto(FACES | WORKPLANE, offset);  left: false, chamfer: false, runout: false
+length: d | "full" | upto(FACES | WORKPLANE, offset);  left: false, chamfer: false, runout: false
 SPEC: "M6" | "M6x0.75" | "1/4-20" | (major, pitch)
 ```
 
@@ -314,21 +321,22 @@ groove drawn out over a turn.
 param tap.d = 5
 param tap.depth = 12
 tap = hole(at: top.s, screw: "M6", fit: "tap", depth: depth, point: 118deg)
-tapped = thread(hole: tap, length: full, chamfer: true)
+tapped = thread(hole: tap, length: "full", chamfer: true)
 ```
 
 ## Patterns
 
 A pattern is one feature: copies of earlier features (`of:`) or of the whole part
 (`whole: true`), laid out by a layout value. The copies are named from the pattern's id and each
-copy's index, so changing a count keeps every surviving copy's names.
+copy's index, so changing a count keeps every surviving copy's names. The copies are the pattern's,
+not the copied feature's: `edges(of: peg)` is the original's alone, `of: [peg, pegs]` both.
 
 ```
 pattern(of: F | [F..], layout: LAYOUT, bodies: BODIES) | pattern(whole: true, layout: LAYOUT)
 lin(along: DIR, n: N, step: d, along2: DIR, n2: N, step2: d)     one or two rows (N counts the original)
 circ(about: AXIS, n: N, over: A | each: A)      N over A (default a whole turn), or A apart
 mirror(on: PLANE)
-along(curve: EDGES | WORKAXIS, n: N, step: d, fixed: false, reverse: false)
+follow(curve: EDGES | WORKAXIS, n: N, step: d, fixed: false, reverse: false)
                                     N spaced d (no step: spread over the whole curve); turned
                                     with the curve unless fixed
 places(at: [POINTS] | MAP)         the original at the first point, a copy at each other
@@ -373,7 +381,7 @@ bp = workpoint(meet: (bax, l.side(lsk.outline[5])))
 ## Bodies
 
 `new: true` on an extrude or revolve makes a body; a body is named by the feature that made it.
-`bodies: F | [F..] | all` on a hole, thread, pattern, text, import, split or direct edit makes it
+`bodies: F | [F..] | "all"` on a hole, thread, pattern, text, import or split makes it
 act on those bodies, not the last made.
 
 ```
@@ -382,7 +390,7 @@ combine(TARGET, tools: BODIES, op: "add"|"cut"|"keep", keep: false)
 split(by: WORKPLANE | FACE | PLANE | LINE | ARC | CIRCLE, keep: "both"|"plus"|"minus")
 splitface(faces: FACES, by: ..)       faces split where the cutter crosses them
 copybody(of: BODY, moves: [MOTION..])    movebody(of: BODIES, moves: [MOTION..])
-MOTION: slide(along: DIR, by: d) | turn(about: AXIS, by: A) | place(on: PLANE)
+MOTION: slide(along: DIR, by: d) | spin(about: AXIS, by: A) | place(on: PLANE)
 ```
 
 `keep: true` leaves the tools. A split keeping both makes the cutter's normal side a new body; a
@@ -392,14 +400,6 @@ bodies; without, it is the extrude.
 ```
 bolt2 = copybody(of: bolt, moves: [slide(along: jaw.outline[0].dir, by: pitch)])
 seats = subtract(lower, tools: [bolt, bolt2], keep: true)
-```
-
-## Direct edits
-
-```
-delete(faces: FACES)                  a boss, pocket or blend removed, the gap closed
-replace(face: FACE, with: WORKPLANE | FACES)   the face put on that plane or surface
-moveface(faces: FACES, by: slide(..) | turn(..))   faces moved, neighbours re-met
 ```
 
 ## Text and imports
@@ -432,8 +432,9 @@ E.side(ENTITY)          the wall a profile entity made (a line: plane with origi
                         x along it); revolves too: R.side(ENTITY)
 E.axis                  a single-circle extrude's axis; a revolve's, coil's or hole's axis
 E.faces  E.edges        everything the feature made, as the part stands
-H.rim                   a hole's edges at its mouth (each place's); a bore's (an extrude's circle):
-                        the loop nearest its mouth; rounded by a later fillet, `MouthRounded`
+H.rim                   a hole's (or bore's) mouth: the loop nearest it where its faces meet
+                        the part's (any curve: on a blend too); rounded by a later fillet, it is
+                        `MouthRounded`
 H.wall H.floor H.bore H.seat H.sink     a hole's faces by role (forge_model::hole::roles), at
                         every place; a role it has no face for is `NoFace`
 T.flanks T.root T.chamfer   a thread's faces (forge_model::thread::roles)
@@ -458,8 +459,10 @@ FACES + FACES                       one face set (a slab, an offset over several
 An empty face set on a part built without an earlier failure is an empty selection
 (`EmptySelection` at a fillet or chamfer), never silently nothing. A cap (`E.start`, `E.end`) a
 later edit moved is still found by its name, its plane where it is now.
-`of` means made by (lineage through later booleans); `between: (A, B)` the edges where A's faces
-meet B's, A and B features or face sets. Directions may be world axes `X Y Z` here (orientation,
+`of` means made by that feature itself (lineage through later booleans); `between: (A, B)` the
+edges where A's faces meet B's, A and B features or face sets. A pattern's copies are the
+pattern's own, under its id, not the copied feature's: to take a feature and its copies, name
+both (`edges(of: [pocket, pockets], ..)`, `between: ([blade, fins], base)`). Directions may be world axes `X Y Z` here (orientation,
 not placement). Selecting by where things lie (`extreme:`) is the error `PositionalSelection`:
 an unrelated edit can retarget it. A selection that picks nothing at a fillet or chamfer is
 `EmptySelection`.

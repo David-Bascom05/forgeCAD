@@ -1,7 +1,7 @@
-# Cast pillow-block bracket: an L of base and upright in one casting, a bearing boss with a seat
-# bored from the back on its work axis, two gussets, mounting holes from a hole table.
-# Hand port of tools/bench-parts/bracket.fc. Waits for the shapes lane: the upright's top full
-# round (`fullround`) and the face fillet in the corner (`facefillet`).
+# Cast pillow-block bracket: an L of base and upright in one casting, the upright's top a
+# full round, a face fillet in the corner, a bearing boss with a seat bored from the back on its
+# work axis, two gussets, mounting holes from a hole table, a cored lightening pocket.
+# Hand port of tools/bench-parts/bracket.fc.
 
 shared w = 80
 shared t = 12                  # base thickness
@@ -16,7 +16,9 @@ sketch lsk(on: xz) {
   o = pt(0, 0)
 }
 l = extrude(lsk.outline, sym(w))
-# waits: fullround the upright's top; corner facefillet 8 between upright and base
+top = fullround(side: l.side(lsk.outline[5]), middle: l.side(lsk.outline[4]), other: l.side(lsk.outline[3]))
+param corner.r = 8
+corner = facefillet(l.side(lsk.outline[3]), l.side(lsk.outline[2]), r)
 
 sketch bsk(on: l.side(lsk.outline[5])) {
   c = circle((h - bz, 0), br)

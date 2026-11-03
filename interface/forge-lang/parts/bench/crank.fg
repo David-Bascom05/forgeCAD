@@ -1,8 +1,7 @@
 # Bicycle crank arm, left hand, 170 mm: a lofted arm that tapers from the spindle to the pedal,
 # a JIS square-taper bore with an M22x1 puller thread, a 9/16-20 pedal thread, and a five-arm
 # 110 BCD spider on the inboard side, the length cut into the arm's inboard face.
-# Hand port of tools/bench-parts/crank.fc (its text in the bench block font). Waits for the
-# variable-radius fillet round the spindle boss (`fillet 0:2,0.5:3.5,1:2`), not wired in Forge.
+# Hand port of tools/bench-parts/crank.fc (its text in the bench block font).
 
 shared al = 170
 shared rs = 21                 # spindle boss radius
@@ -105,6 +104,11 @@ param pedalbore.d = 12.913
 param pedalbore.size = 14.2875
 param pedalbore.pitch = 1.27
 pedalbore = hole(at: pend.c, d: d, depth: thru, thread: (size, pitch))
+# the spindle boss's outboard rim, rounded 2 at its seam swelling to 3.5 opposite
+param bossround.r0 = 2
+param bossround.r1 = 3.5
+param bossround.half = ratio(0.5)
+bossround = fillet(edges(of: spindle.end, shape: "circle", r: rs), vary([(0, r0), (half, r1), (1, r0)]))
 param pedalround.r = 1
 pedalround = fillet(edges(of: pedal, shape: "circle", r: rp), r)
 # the length, cut into the inboard face of the arm

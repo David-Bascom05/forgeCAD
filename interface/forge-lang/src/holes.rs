@@ -9,8 +9,7 @@ use crate::eval::{Eval, ExtentV, Faces, Feat, R, Value};
 use crate::feat_error::{Because, FeatError};
 use crate::syntax::{Arg, Span};
 use crate::values::{Dim, Num, Ty};
-use crate::wired::{W, conflict, feat, one_form, only_with, word};
-use forge_agent::select;
+use crate::wired::{conflict, feat, one_form, only_with, word};
 use forge_math::{Frame, Point3};
 use forge_model::pattern::instance_name;
 use forge_model::{End, Feature, Head, Target, ThreadLength, ThreadOn, ThreadSpec};
@@ -378,7 +377,7 @@ pub fn thread(ev: &mut Eval, args: &[Arg], span: Span) -> R<Value> {
         }
     };
     let length = match a.req("length")? {
-        Value::Wired(w) if matches!(*w, W::Word("full")) => ThreadLength::Full,
+        Value::Str(w) if &*w == "full" => ThreadLength::Full,
         Value::Extent(x @ (ExtentV::UpTo(..) | ExtentV::UpToPlane(..))) => {
             let (target, offset) = target_of(ev, &x, a.span("length"))?;
             ThreadLength::To { target, offset }
@@ -481,62 +480,10 @@ pub fn hole_member(ev: &mut Eval, f: &Rc<Feat>, name: &str, span: Span) -> Optio
         "bore" => (Role::Bore, roles::bore(root)),
         "seat" => (Role::Seat, roles::seat(root)),
         "sink" => (Role::Sink, roles::sink(root)),
-        "rim" => return Some(Ok(rim(ev, f))),
         _ => return None,
     };
     let names = at_places(ev, f.idx, f.hid, &own);
     Some(role_anchor(ev, f, role, &names, span))
-}
-
-/// A hole's rim: the edges where its mouth-most face (a counterbore's or countersink's, else
-/// its wall) meets faces it did not make, at its mouth.
-fn rim(ev: &mut Eval, f: &Feat) -> Value {
-    use forge_model::hole::roles;
-    let root = Name::feature(f.hid);
-    let head = match kernel_feature(ev, f.idx) {
-        Some(Feature::Hole(h)) => h.head,
-        _ => return Value::Unresolved,
-    };
-    let top = match head {
-        Head::Plain => roles::wall(root),
-        Head::Counterbore { .. } => roles::bore(root),
-        Head::Countersink { .. } => roles::sink(root),
-    };
-    let all: Vec<Name> = [
-        roles::wall(root),
-        roles::bore(root),
-        roles::sink(root),
-        roles::seat(root),
-        roles::bottom(root),
-    ]
-    .concat();
-    let (top, all) = (
-        at_places(ev, f.idx, f.hid, &top),
-        at_places(ev, f.idx, f.hid, &all),
-    );
-    let (Value::Faces(t), Value::Faces(mine)) = (
-        role_faces(ev, f, Role::Edges, &top),
-        role_faces(ev, f, Role::Edges, &all),
-    ) else {
-        return Value::Unresolved;
-    };
-    // at the mouth: on the plane the hole was drilled from (along its own axis)
-    let Some((o, z)) = f.axis else {
-        return Value::Unresolved;
-    };
-    let body = ev.b.body().expect("built");
-    let mut out = vec![];
-    for e in body.edge_ids() {
-        let fs = select::faces_of_edge(body, e);
-        let names: Vec<Name> = fs.iter().map(|&x| body.face(x).name).collect();
-        let at = select::centre(body, select::Ent::Edge(e));
-        let mouth = (at - o).dot(z.get()).abs() <= 1e-6 * (1.0 + (at - o).length());
-        if mouth && names.iter().any(|n| t.names.contains(n)) && names.iter().any(|n| !mine.names.contains(n))
-        {
-            out.push(body.edge(e).name);
-        }
-    }
-    Value::Edges(Rc::new(out))
 }
 
 pub fn thread_member(ev: &mut Eval, f: &Rc<Feat>, name: &str, span: Span) -> Option<R<Value>> {

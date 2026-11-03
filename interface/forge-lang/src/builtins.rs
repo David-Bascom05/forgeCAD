@@ -821,7 +821,8 @@ pub fn call(ev: &mut Eval, name: &'static str, args: &[Arg], span: Span) -> R<Va
         "extrude" | "cut" | "intersect" => extrude(ev, name, args, span),
         n if crate::sheet::BUILTINS.contains(&n) => crate::sheet::call(ev, name, args, span),
         "revolve" => revolve(ev, args, span),
-        "fillet" | "chamfer" => finish(ev, name, args, span),
+        "fillet" => crate::fillets::fillet(ev, args, span),
+        "chamfer" => finish(ev, name, args, span),
         "shell" => shell(ev, args, span),
         "loft" => crate::shapes::loft(ev, args, span),
         "offset" => {
@@ -1695,7 +1696,7 @@ pub fn member(ev: &mut Eval, v: Value, name: &str, span: Span) -> R<Value> {
                 }
                 "faces" => Ok(feature_faces(ev, f)),
                 "edges" => Ok(feature_edges(ev, &[f.idx])),
-                "rim" if f.axis.is_some() && f.kind != "hole" => {
+                "rim" if f.axis.is_some() => {
                     let (o, d) = f.axis.expect("checked");
                     rim(ev, f, o, d, span)
                 }
