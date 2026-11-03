@@ -1,0 +1,96 @@
+# Connecting rod, forged steel, 150 mm centres: an I-beam shank between a 52 mm big end split
+# on its centre line and a 24 mm small end, rod bolts tapped M9x1 into the bosses.
+# Hand port of tools/bench-parts/conrod.fc.
+
+shared c = 150                 # centres
+shared rb = 31                 # big end radius
+shared rs = 15                 # small end radius
+shared tb = 22                 # big end width
+shared ts = 20                 # small end and shank width
+
+# the shank's outline, symmetric about the rod's axis
+param side.wb = 14             # half widths at the big and small ends
+param side.wt = 8
+param side.below = 6           # the shank starts below the big end's top, ends past the small end's
+param side.past = 5
+param side.oil_above = 1
+sketch side(on: xz) {
+  outline = poly([(0 - wb, rb - below), (0 - wt, c - rs + past), (wt, c - rs + past), (wb, rb - below)])
+  ax = line((0, 0), (0, c), construction: true)
+  oilpt = pt(0, c + rs + oil_above)
+  top = line((0, c + rs), (rs, c + rs), construction: true)
+}
+shank = extrude(side.outline, sym(ts))
+sketch bigsk(on: side.plane) {
+  k = circle((0, 0), rb)
+}
+big = extrude(bigsk, sym(tb))
+sketch smallsk(on: side.plane) {
+  k = circle((0, c), rs)
+}
+small = extrude(smallsk, sym(ts))
+shared bkx = 26                # the bolt bosses: inner face, below the centre line, width, height
+shared bkz = 24
+shared bkw = 16
+param bk.h = 46
+sketch bk(on: side.plane) {
+  r = rect(corner: (bkx, 0 - bkz), size: (bkw, h))
+}
+bosses = extrude(bk, sym(tb))
+across = rotate(side.plane, about: side.ax, by: 90deg)
+bossmirror = pattern(of: bosses, layout: mirror(on: across))
+# I-beam: the flanges stay 3 thick, the web 5
+param web.wb = 9.5
+param web.wt = 4.5
+param web.over = 2
+param web.under = 4
+sketch web(on: shank.start) {
+  outline = poly([(0 - wb, 0 - rb - over), (0 - wt, rs - c + under), (wt, rs - c + under), (wb, 0 - rb - over)])
+}
+param pocket.depth = 7.5
+pocket = cut(web, depth)
+pockets = pattern(of: pocket, layout: mirror(on: side.plane))
+param blend.r = 6
+blend = fillet(edges(between: (shank, big), crease: "concave", shape: "line") + edges(between: (shank, small), crease: "concave"), r)
+param pocketround.r = 1.5
+pocketround = fillet(edges(of: [pocket, pockets], crease: "concave"), r)
+# bores: the big end for 48 mm shells, the small end for a bushed 19 mm pin
+param bigbore.d = 48
+sketch bigc(on: big.start) {
+  p = pt(0, 0)
+}
+bigbore = hole(at: bigc.p, d: d, depth: thru)
+param smallbore.d = 22
+sketch smallc(on: small.start) {
+  p = pt(0, 0 - c)
+}
+smallbore = hole(at: smallc.p, d: d, depth: thru)
+sketch oilsk(on: plane(at: side.oilpt, normal: side.ax.dir, x: side.top.dir)) {
+  p = pt(0, 0)
+}
+param oil.d = 4
+param oil.depth = 6
+oil = hole(at: oilsk.p, d: d, depth: depth)
+# rod bolts: clearance through the cap, spot faced, tapped M9x1 into the rod
+sketch bsk(on: bosses.side(bk.r[0])) {
+  p = pt(bkw / 2, 0)
+}
+param bolt.d = 9.2
+param bolt.cb = 15
+param bolt.spot = 1
+bolt = hole(at: bsk.p, d: d, cbore: (cb, spot), depth: bkz)
+sketch tsk(on: offset(bosses.side(bk.r[0]), 0 - bkz)) {
+  p = pt(bkw / 2, 0)
+}
+param tap.d = 8
+param tap.depth = 16
+param tap.tip = 118deg
+param tap.size = 9
+param tap.pitch = 1
+tap = hole(at: tsk.p, d: d, depth: depth, point: tip, thread: (size, pitch))
+# a translated copy, not a mirror: a mirrored thread would turn left-handed (pattern refuses it)
+boltpair = pattern(of: [bolt, tap], layout: lin(along: bk.r[2].dir, n: count(2), step: bkx + bkx + bkw))
+param tapthread.length = 14
+tapthread = thread(hole: tap, length: length)
+# the cap: a second body, split off on the big end's centre line
+cap = split(by: offset(bosses.side(bk.r[0]), 0 - bkz))

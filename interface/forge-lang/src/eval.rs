@@ -118,6 +118,8 @@ pub enum ExtentV {
     ThruAll,
     Next,
     UpTo(Rc<Faces>, f64),
+    /// Up to a work plane (its place in the history), then an offset.
+    UpToPlane(usize, f64),
 }
 
 #[derive(Clone, Debug)]
@@ -158,6 +160,8 @@ pub enum Value {
     Extent(ExtentV),
     /// Sheet metal: features, edges, unfolds, and shop data (`sheet.rs`).
     Sheet(Rc<crate::sheet::SheetVal>),
+    /// A work feature's datum, a pattern's layout, a body motion (wired.rs).
+    Wired(Rc<crate::wired::W>),
     /// What `check` cannot know without building (a selection, a face's plane).
     Unresolved,
 }
@@ -186,6 +190,7 @@ impl Value {
             Value::Edges(_) => Ty::Edges,
             Value::Extent(_) => Ty::Extent,
             Value::Sheet(s) => s.ty(),
+            Value::Wired(w) => w.ty(),
             Value::Unresolved => Ty::Unresolved,
         }
     }
@@ -288,6 +293,8 @@ pub struct Eval<'s> {
     pub poisoned: bool,
     /// The part's sheets (`sheet.rs`).
     pub sheets: crate::sheet::Sheets,
+    /// Where the files features read (fonts, imports) are found: the part file's directory.
+    pub dir: Option<std::path::PathBuf>,
 }
 
 #[derive(Clone)]
@@ -334,6 +341,7 @@ impl<'s> Eval<'s> {
             volumes: false,
             poisoned: false,
             sheets: Default::default(),
+            dir: None,
         }
     }
 
@@ -1643,7 +1651,8 @@ impl<'s> Eval<'s> {
 
     fn no_effect(&self, idx: usize) -> bool {
         let n = self.b.stages.len();
-        if n < 2 || n != idx + 1 || self.b.features[idx].is_param_like() {
+        if n < 2 || n != idx + 1 || self.b.features[idx].is_param_like() || moves_faces(&self.b.features[idx])
+        {
             return false;
         }
         let (a, b) = (&self.b.stages[n - 2], &self.b.stages[n - 1]);
@@ -2002,6 +2011,21 @@ impl ParamLike for forge_model::Feature {
                 | forge_model::Feature::Plane(_)
                 | forge_model::Feature::Work(_)
         )
+    }
+}
+
+/// A feature that moves faces it keeps the names of (a direct edit, a body moved): names alone
+/// cannot say it changed nothing.
+fn moves_faces(f: &forge_model::Feature) -> bool {
+    use forge_model::{BodyFeature, Feature};
+    match f {
+        Feature::Edit(_) => true,
+        Feature::Body(b) => match &**b {
+            BodyFeature::Move { .. } => true,
+            BodyFeature::In { feature, .. } => moves_faces(feature),
+            _ => false,
+        },
+        _ => false,
     }
 }
 

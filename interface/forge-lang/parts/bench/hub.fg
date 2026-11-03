@@ -1,0 +1,61 @@
+# Wheel hub: a turned flange and spigot, its work axis and the point where it meets the back
+# face, five stud holes on the bolt circle there, cooling scallops patterned round the rim edge,
+# two circlip grooves patterned along the axis, lightening holes between the studs.
+# Hand port of tools/bench-parts/hub.fc.
+
+shared pcd = 114.3
+shared n = count(5)
+shared rf = 70                 # flange radius
+shared rb = 20                 # bore radius
+shared ns = count(10)          # scallops
+shared clock = 18deg           # the first stud's angle
+shared rs = 36                 # spigot radius
+shared tf = 12                 # flange thickness
+shared hl = 42                 # overall length
+
+# flange, spigot and bore in one turned section
+sketch sec(on: xz) {
+  outline = poly([(rb, 0), (rf, 0), (rf, tf), (rs, tf), (rs, hl), (rb, hl)])
+  ax = line((0, 0), (0, rb), construction: true)
+}
+hub = revolve(sec.outline, axis: sec.ax)
+param round.r = 3
+round = fillet(edges(of: hub, shape: "circle", r: rs, crease: "concave"), r)
+hax = workaxis(along: hub.side(sec.outline[5]))
+back = workpoint(meet: (hax, hub.side(sec.outline[0])))
+
+param studs.lr = 45            # the lightening holes' circle
+sketch studs(on: plane(at: back, normal: sec.ax.dir, x: sec.outline[0].dir)) {
+  for k in 0..5 {
+    s = pt(pcd / 2 * cos(clock + k * 360deg / n), pcd / 2 * sin(clock + k * 360deg / n))
+    l = pt(lr * cos(clock + (k + k + 1) * 180deg / n), lr * sin(clock + (k + k + 1) * 180deg / n))
+  }
+}
+param stud.d = 14.2
+stud = hole(at: studs.s[0], d: d, depth: thru, flip: true)
+studset = pattern(of: stud, layout: places(at: studs.s))
+param lh.d = 10
+lh = hole(at: studs.l[0], d: d, depth: thru, flip: true)
+lhset = pattern(of: lh, layout: places(at: studs.l))
+
+param scsk.r = 6
+sketch scsk(on: hub.side(sec.outline[0]), at: back) {
+  c = circle((rf, 0), r)
+}
+param sc.depth = 12
+sc = cut(scsk, depth)
+scallops = pattern(of: sc, layout: along(curve: edges(between: (hub.side(sec.outline[0]), hub.side(sec.outline[1]))), n: ns))
+
+shared gw = 1.6                # the circlip groove: width, depth, off the back
+param grsk.gd = 1.2
+param grsk.gz = 6
+param grsk.inside = 1
+sketch grsk(on: sec.plane) {
+  g = rect(corner: (rb - inside, gz), size: (inside + gd, gw))
+  ax = line((0, 0), (0, rb), construction: true)
+}
+groove = revolve(grsk.g, axis: grsk.ax, cut: true)
+param grooves.step = 28
+grooves = pattern(of: groove, layout: along(curve: hax, n: count(2), step: step))
+param bore.size = 1
+bore = chamfer(edges(between: (hub.side(sec.outline[5]), hub.side(sec.outline[4]))) + edges(between: (hub.side(sec.outline[5]), hub.side(sec.outline[0]))), size)

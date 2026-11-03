@@ -1,0 +1,117 @@
+# Hydraulic valve body: a subplate for a 4/3 directional valve. The valve bolts to the top face
+# over four ports; drilled galleries take P to the front, T to the back and A, B to the sides.
+# Hand port of tools/bench-parts/valve.fc.
+
+shared bx = 90
+shared by = 70
+shared bz = 55
+shared pg = 25                 # P and T galleries' height
+shared ag = 33                 # A and B galleries' height
+shared py = 12                 # P and T ports off the centre line
+shared ax = 14                 # A and B ports off the centre line
+shared port = 8                # the ports' drill
+shared tip = 118deg            # drill point
+
+sketch blk(on: xy) {
+  outline = rect(center: (0, 0), size: (bx, by))
+}
+block = extrude(blk, bz)
+param edge.size = 1.5
+edge = chamfer(edges(of: block), size)
+
+# valve interface: P, T, A, B ports and four M5 screws
+param top.sx = 16.5
+param top.sy = 16
+shared mx = 35                 # mounting holes
+shared my = 25
+sketch top(on: block.end) {
+  p = pt(0, 0 - py)
+  t = pt(0, py)
+  a = pt(0 - ax, 0)
+  b = pt(ax, 0)
+  s = pt(0 - sx, 0 - sy)
+  m = pt(0 - mx, 0 - my)
+}
+param P.short = 8
+P = hole(at: top.p, d: port, depth: bz - short, point: tip)
+param T.over = 8
+T = hole(at: top.t, d: port, depth: bz - pg + over, point: tip)
+shared ab_over = 7             # A and B ports run past their galleries
+A = hole(at: top.a, d: port, depth: bz - ag + ab_over, point: tip)
+B = hole(at: top.b, d: port, depth: bz - ag + ab_over, point: tip)
+param screw.depth = 12
+screw = hole(at: top.s, screw: "M5", convention: "iso", fit: "tap", depth: depth, point: tip)
+param screws.n = count(2)
+param screws.dx = 33
+param screws.dy = 32
+screws = pattern(of: screw, layout: lin(along: blk.outline[0].dir, n: n, step: dx, along2: blk.outline[1].dir, n2: n, step2: dy))
+screwthread = thread(hole: screw, length: full)
+
+param ringsk.ro = 6.5
+param ringsk.ri = 5
+sketch ringsk(on: block.end) {
+  outer = circle((0, 0 - py), ro)
+  inner = circle((0, 0 - py), ri)
+}
+param ring.depth = 1.2
+ring = cut(ringsk.outer, depth)
+param rings.n = count(2)
+rings = pattern(of: ring, layout: lin(along: blk.outline[1].dir, n: n, step: py + py))
+
+# galleries drilled up to the port axes, tapped ports spot faced on the faces
+yP = workplane(offset: block.side(blk.outline[0]), d: py - by / 2)
+yT = workplane(offset: block.side(blk.outline[2]), d: py - by / 2)
+xA = workplane(offset: block.side(blk.outline[3]), d: ax - bx / 2)
+xB = workplane(offset: block.side(blk.outline[1]), d: ax - bx / 2)
+x0 = workplane(offset: block.side(blk.outline[1]), d: 0 - bx / 2)
+sketch front(on: block.side(blk.outline[0])) {
+  g = pt(bx / 2, pg)
+}
+sketch back(on: block.side(blk.outline[2])) {
+  g = pt(bx / 2, pg)
+}
+sketch left(on: block.side(blk.outline[3])) {
+  g = pt(by / 2, ag)
+}
+param right.gauge_z = 12
+sketch right(on: block.side(blk.outline[1])) {
+  g = pt(by / 2, ag)
+  gauge_at = pt(by / 2 - py, gauge_z)
+}
+shared spot = 1                # the spot faces' depth
+shared pt_d = 16.4             # P and T tapped ports: drill, spot face, depth, thread
+shared pt_cb = 30
+shared pt_depth = 18
+shared pt_size = 18
+shared pt_pitch = 1.5
+gP = hole(at: front.g, d: pt_d, cbore: (pt_cb, spot), depth: pt_depth, thread: (pt_size, pt_pitch))
+gT = hole(at: back.g, d: pt_d, cbore: (pt_cb, spot), depth: pt_depth, thread: (pt_size, pt_pitch))
+shared ab_d = 12.4             # A and B tapped ports
+shared ab_cb = 26
+shared ab_depth = 16
+shared ab_size = 14
+shared ab_pitch = 1.5
+gA = hole(at: left.g, d: ab_d, cbore: (ab_cb, spot), depth: ab_depth, thread: (ab_size, ab_pitch))
+gB = hole(at: right.g, d: ab_d, cbore: (ab_cb, spot), depth: ab_depth, thread: (ab_size, ab_pitch))
+shared gallery = 10            # the P and T galleries' drill
+dP = hole(at: front.g, d: gallery, depth: upto(yP), point: tip)
+dT = hole(at: back.g, d: gallery, depth: upto(yT), point: tip)
+dA = hole(at: left.g, d: port, depth: upto(xA), point: tip)
+dB = hole(at: right.g, d: port, depth: upto(xB), point: tip)
+shared pt_thread = 14
+tP = thread(hole: gP, length: pt_thread, chamfer: true)
+tT = thread(hole: gT, length: pt_thread, chamfer: true)
+shared ab_thread = 12
+tA = thread(hole: gA, length: ab_thread)
+tB = thread(hole: gB, length: ab_thread)
+# gauge port: a cross drilling from the right face into the foot of the P bore, M10x1
+param gauge.d = 5
+gauge = hole(at: right.gauge_at, d: d, depth: upto(x0), point: tip)
+param gp.cs = 11
+param gp.cone = 90deg
+param gp.depth = 12
+gp = hole(at: right.gauge_at, screw: "M10x1", convention: "iso", fit: "tap", csink: (cs, cone), depth: depth)
+# mounting: four M8 counterbored through
+mount = hole(at: top.m, screw: "M8", convention: "iso", seat: "cbore", depth: thru)
+param mounts.n = count(2)
+mounts = pattern(of: mount, layout: lin(along: blk.outline[0].dir, n: n, step: mx + mx, along2: blk.outline[1].dir, n2: n, step2: my + my))

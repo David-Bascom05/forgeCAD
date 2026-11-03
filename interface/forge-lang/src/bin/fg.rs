@@ -19,6 +19,14 @@ fn read(file: &str) -> Result<String, String> {
     std::fs::read_to_string(file).map_err(|e| format!("{file}: {e}"))
 }
 
+/// The directory a part file is in: where the files it reads are found.
+fn dir_of(file: &str) -> Option<std::path::PathBuf> {
+    std::fs::canonicalize(file)
+        .ok()?
+        .parent()
+        .map(|d| d.to_path_buf())
+}
+
 fn flag(args: &[String], f: &str) -> bool {
     args.iter().any(|a| a == f)
 }
@@ -73,6 +81,7 @@ fn run_file(file: &str, args: &[String], build: bool) -> ExitCode {
     };
     let opts = Options {
         build,
+        dir: dir_of(file),
         ..Options::default()
     };
     let (run, _) = forge_lang::run(&src, opts, Cache::default());
@@ -184,6 +193,7 @@ fn main() -> ExitCode {
                 let cache = caches.remove(&file).unwrap_or_default();
                 let opts = Options {
                     build: cmd != "check",
+                    dir: dir_of(&file),
                     ..Options::default()
                 };
                 let (run, cache) = forge_lang::run(&src, opts, cache);

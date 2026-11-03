@@ -1,0 +1,61 @@
+# Cast pillow-block bracket: an L of base and upright in one casting, a bearing boss with a seat
+# bored from the back on its work axis, two gussets, mounting holes from a hole table.
+# Hand port of tools/bench-parts/bracket.fc. Waits for the shapes lane: the upright's top full
+# round (`fullround`) and the face fillet in the corner (`facefillet`).
+
+shared w = 80
+shared t = 12                  # base thickness
+shared ut = 14                 # upright thickness
+shared h = 90
+shared bz = 60                 # the bearing's height
+shared br = 20
+shared bl = 60                 # the base's half length
+
+sketch lsk(on: xz) {
+  outline = poly([(0 - bl, 0), (bl, 0), (bl, t), (ut - bl, t), (ut - bl, h), (0 - bl, h)])
+  o = pt(0, 0)
+}
+l = extrude(lsk.outline, sym(w))
+# waits: fullround the upright's top; corner facefillet 8 between upright and base
+
+sketch bsk(on: l.side(lsk.outline[5])) {
+  c = circle((h - bz, 0), br)
+}
+param boss.reach = 30
+boss = extrude(bsk, 0 - reach)
+bax = workaxis(along: faces(of: boss, shape: "cyl"))
+bp = workpoint(meet: (bax, l.side(lsk.outline[5])))
+sketch borec(on: boss.end, at: bp) {
+  p = pt(0, 0)
+}
+param bore.d = 22
+bore = hole(at: borec.p, d: d, depth: thru)
+sketch seatc(on: l.side(lsk.outline[5]), at: bp) {
+  p = pt(0, 0)
+}
+param seat.d = 28
+param seat.depth = 8
+seat = hole(at: seatc.p, d: d, depth: depth)
+# two gussets
+param gsk.gy = 28
+param gsk.lip = 1
+param gsk.gx = 20
+sketch gsk(on: offset(lsk.plane, 0 - gy)) {
+  outline = poly([(ut - bl - lip, t - lip), (gx, t - lip), (ut - bl - lip, bz)])
+}
+param gus.thick = 10
+gus = extrude(gsk, sym(thick))
+guses = pattern(of: gus, layout: mirror(on: lsk.plane))
+param gusround.r = 2
+gusround = fillet(edges(of: [gus, guses], crease: "convex"), r)
+param hs.hx = 40
+param hs.hy = 25
+sketch hs(on: l.side(lsk.outline[2]), at: lsk.o) {
+  a = pt(0 - hx, 0 - hy)
+  b = pt(0 - hx, hy)
+  c = pt(0, 0)
+}
+mh = hole(at: hs.a, screw: "M10", seat: "cbore", depth: thru)
+mhs = pattern(of: mh, layout: places(at: [hs.a, hs.b, hs.c]))
+param rims.size = 1
+rims = chamfer(bore.rim + seat.rim, size)

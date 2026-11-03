@@ -1,0 +1,78 @@
+# Cavity insert for an injection mould: a block with a filleted pocket for a lid, its walls
+# offset for shrink, the floor moved up after a wall-thickness change, the top face put on the
+# parting plane, a core pin deleted with its faces, a vent, ejector pins, cooling channels
+# across, a pry slot and chamfered edges. Hand port of tools/bench-parts/insert.fc.
+
+shared bl = 120
+shared bw = 80
+shared bh = 40
+shared pl = 36                 # the parting plane's height
+shared shrink = 0.3
+
+sketch base(on: xy) {
+  outline = rect(center: (0, 0), size: (bl, bw))
+}
+blk = extrude(base, bh)
+param pocket.pl2 = 40          # the cavity's half length and half width, its corner radius
+param pocket.pw2 = 25
+param pocket.r = 8
+sketch pocket(on: blk.end) {
+  outline = hull(disc((pl2 - r, pw2 - r), r), disc((r - pl2, pw2 - r), r), disc((r - pl2, r - pw2), r), disc((pl2 - r, r - pw2), r))
+}
+param cav.depth = 14
+cav = cut(pocket, depth)
+part = workplane(on: offset(blk.end, pl - bh))
+top = replace(face: faces(of: blk, normal: Z), with: part)
+param fl.r = 2
+fl = fillet(edges(of: cav.end), r)
+# the floor up 1 for a thicker lid, after the fillet, as the change came
+param lift.by = 1
+lift = moveface(faces: cav.end, by: slide(along: cav.end.normal, by: by))
+# waits for `offset` (the shapes lane): walls offset for shrink
+# walls = offset(faces(of: cav) + faces(of: fl), 0 - shrink)
+param coresk.x = 20
+param coresk.r = 4
+sketch coresk(on: cav.end) {
+  c = circle((x, 0), r)
+}
+param core.h = 8
+core = extrude(coresk, h)
+# the cored hole in the lid dropped: its core pin goes, the floor healed
+nocore = delete(faces: core.faces)
+param ventsk.x = 39
+param ventsk.w = 6
+sketch ventsk(on: part) {
+  v = rect(corner: (x, 0 - w / 2), size: (bl / 2 - x, w))
+}
+param vent.depth = 0.05
+vent = cut(ventsk, depth)
+param pins.px = 28
+param pins.py = 14
+sketch pins(on: blk.start) {
+  for i in 0..3 {
+    for j in 0..2 {
+      p = pt(px * (i - 1), py * (j + j - 1))
+    }
+  }
+}
+param ej.d = 4
+ej = hole(at: pins.p[0][0], d: d, depth: thru)
+ejs = pattern(of: ej, layout: places(at: [pins.p[0][0], pins.p[0][1], pins.p[1][0], pins.p[1][1], pins.p[2][0], pins.p[2][1]]))
+shared cy = 30                 # the cooling channels off the centre line
+param coolsk.cz = 12
+sketch coolsk(on: blk.side(base.outline[3])) {
+  c = pt(bw / 2 + cy, cz)
+}
+param cool.d = 8
+cool = hole(at: coolsk.c, d: d, depth: thru)
+cools = pattern(of: cool, layout: lin(along: base.outline[1].dir, n: count(2), step: cy + cy))
+param prysk.w = 6
+param prysk.h = 16
+sketch prysk(on: part) {
+  s = rect(corner: (0 - bl / 2, 0 - h / 2), size: (w, h))
+}
+param pry.depth = 3
+pry = cut(prysk, depth)
+param edge.size = 2
+param edge.longer = 30
+edge = chamfer(edges(of: blk, along: Z, longer: longer), size)

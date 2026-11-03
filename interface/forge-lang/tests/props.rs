@@ -86,6 +86,26 @@ fn document(rng: &mut Rng) -> String {
             rng.len()
         );
     }
+    // the wired features: a pattern, a work plane, a threaded hole and its thread, a body of its
+    // own joined in
+    if rng.below(2) == 0 {
+        s += "param pat.n = count(2)\npat = pattern(of: f0, layout: lin(along: k0.o[0].dir, n: n, step: s0 + s0))\n";
+    }
+    if rng.below(2) == 0 {
+        s += &format!(
+            "param wp.d = {}\nwp = workplane(offset: f0.end, d: d)\n",
+            rng.len()
+        );
+    }
+    if rng.below(2) == 0 {
+        s += &format!(
+            "sketch tk(on: f0.end) {{\n  p = pt(s0 / 2, s1 / 2)\n}}\nparam th.d = {}\nth = hole(at: tk.p, d: d, depth: s2, thread: \"M8\")\ntt = thread(hole: th, length: full)\n",
+            rng.len()
+        );
+    }
+    if rng.below(2) == 0 {
+        s += "sketch nk(on: f0.start) {\n  o = rect(corner: (0, 0), size: (s1, s1))\n}\nnb = extrude(nk, s2, new: true)\nj = union(f0, tools: nb)\n";
+    }
     s
 }
 

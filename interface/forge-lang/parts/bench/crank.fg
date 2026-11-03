@@ -1,0 +1,115 @@
+# Bicycle crank arm, left hand, 170 mm: a lofted arm that tapers from the spindle to the pedal,
+# a JIS square-taper bore with an M22x1 puller thread, a 9/16-20 pedal thread, and a five-arm
+# 110 BCD spider on the inboard side, the length cut into the arm's inboard face.
+# Hand port of tools/bench-parts/crank.fc (its text in the bench block font). Waits for the
+# variable-radius fillet round the spindle boss (`fillet 0:2,0.5:3.5,1:2`), not wired in Forge.
+
+shared al = 170
+shared rs = 21                 # spindle boss radius
+shared rp = 12                 # pedal boss radius
+shared tz = 30                 # spindle boss width
+shared arms = count(5)
+shared bcd = 110
+
+# the crank's axes (x along the arm, z along the spindle) and its stations
+param datum.spoke = 36deg      # the first spider arm's angle
+param datum.x1 = 12            # the arm's sections
+param datum.x3 = 4
+param datum.mx = 40            # the mark's start
+param datum.my = 3
+sketch datum(on: xy) {
+  o = pt(0, 0)
+  ax = line((0, 0), (al, 0), construction: true)
+  ay = line((0, 0), (0, rs), construction: true)
+  arm1 = line((0, 0), (rs * cos(spoke), rs * sin(spoke)), construction: true)
+  p1 = pt(x1, 0)
+  p2 = pt(al / 2, 0)
+  p3 = pt(al - x3, 0)
+  mark_at = pt(mx, my)
+}
+
+fn rrect(a, b, r) {
+  return hull(disc((a - r, r - b), r), disc((a - r, b - r), r), disc((r - a, b - r), r), disc((r - a, r - b), r))
+}
+
+# the arm: rounded sections lofted from the spindle to the pedal
+param s1.a = 15
+param s1.b = 12
+param s1.r = 6
+sketch s1(on: plane(at: datum.p1, normal: datum.ax.dir, x: datum.ay.dir)) {
+  outline = rrect(a, b, r)
+  m = pt(0, 0 - b)
+}
+param s2.a = 11.5
+param s2.b = 9.5
+param s2.r = 5
+sketch s2(on: plane(at: datum.p2, normal: datum.ax.dir, x: datum.ay.dir)) {
+  outline = rrect(a, b, r)
+  m = pt(0, 0 - b)
+}
+param s3.a = 9
+param s3.b = 7.5
+param s3.r = 4
+sketch s3(on: plane(at: datum.p3, normal: datum.ax.dir, x: datum.ay.dir)) {
+  outline = rrect(a, b, r)
+}
+arm = loft([s1, s2, s3])
+sketch spsk(on: datum.plane) {
+  c = circle((0, 0), rs)
+}
+spindle = extrude(spsk, sym(tz))
+sketch pdsk(on: datum.plane) {
+  c = circle((al, 0), rp)
+}
+param pedal.w = 18
+pedal = extrude(pdsk, sym(w))
+param spk.l = 62
+param spk.hw = 7.5
+param spk.r = 6
+sketch spk(on: plane(at: spindle.start.plane.origin, normal: datum.plane.normal, x: datum.arm1.dir)) {
+  outline = hull(disc((r, r - hw), r), disc((l - r, r - hw), r), disc((l - r, hw - r), r), disc((r, hw - r), r))
+  bolt_at = pt(bcd / 2, 0)
+}
+param spider.t = 6
+spider = extrude(spk.outline, t)
+spiders = pattern(of: spider, layout: circ(about: spindle.axis, n: arms))
+# chainring bolts on the 110 BCD, countersunk on the outboard side of the spider
+param bolt.d = 10.2
+param bolt.cs = 12
+param bolt.cone = 90deg
+bolt = hole(at: spk.bolt_at, d: d, csink: (cs, cone), depth: thru, flip: true)
+bolts = pattern(of: bolt, layout: circ(about: spindle.axis, n: arms))
+# square taper: 12.65 across the flats at the inboard face, 2 degrees included, diagonal on the arm
+param t1.a = 8.945
+sketch t1(on: offset(datum.plane, 0 - tz / 2)) {
+  outline = poly([(a, 0), (0, a), (0 - a, 0), (0, 0 - a)])
+}
+param t2.a = 8.665
+param t2.z = 8
+sketch t2(on: offset(datum.plane, z)) {
+  outline = poly([(a, 0), (0, a), (0 - a, 0), (0, 0 - a)])
+}
+taper = loft([t1, t2], cut: true)
+sketch top(on: spindle.end) {
+  c = pt(0, 0)
+}
+param puller.d = 20.9
+param puller.short = 8
+puller = hole(at: top.c, d: d, depth: tz / 2 - short)
+param pullthread.length = 6
+pullthread = thread(spec: "M22x1", on: spindle.end, at: top.c, internal: true, length: length, chamfer: true)
+sketch pend(on: pedal.end) {
+  c = pt(al, 0)
+}
+param pedalbore.d = 12.913
+param pedalbore.size = 14.2875
+param pedalbore.pitch = 1.27
+pedalbore = hole(at: pend.c, d: d, depth: thru, thread: (size, pitch))
+param pedalround.r = 1
+pedalround = fillet(edges(of: pedal, shape: "circle", r: rp), r)
+# the length, cut into the inboard face of the arm
+slope = axis(s1.m, s2.m)
+inboard = rotate(plane(at: s1.m, normal: datum.ay.dir, x: slope), about: slope, by: -90deg)
+param mark.size = 8
+param mark.depth = 0.4
+mark = text("170", font: "block.ttf", size: size, depth: depth, on: inboard, at: datum.mark_at, cut: true)
