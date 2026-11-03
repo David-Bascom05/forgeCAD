@@ -20,7 +20,7 @@ pub enum Intent {
     /// The assembly's declared fit, by its index in `fits`.
     Fit { index: usize },
     /// A part-level fit rule, by id.
-    Rule { rule: u32 },
+    Rule { rule: u64 },
 }
 
 /// Why a joint end gives no frame.
@@ -143,7 +143,7 @@ pub enum Diagnostic {
         found: RefKind,
     },
     DuplicateConstraint {
-        id: u32,
+        id: u64,
     },
     /// Both ends on the same reference path.
     SelfJoint {
@@ -168,6 +168,14 @@ pub enum Diagnostic {
         /// Exact shared volume (mm³), where kernel solids confirmed it.
         volume: Option<f64>,
         confirmed: bool,
+    },
+    /// Threads a fit rule covers that engage less than its minimum (or the shop's).
+    ShallowEngagement {
+        a: Path,
+        b: Path,
+        rule: u64,
+        engaged: f64,
+        min: f64,
     },
     /// Contact a fit or fit rule says is meant.
     IntendedContact {
@@ -213,6 +221,7 @@ impl Diagnostic {
             Diagnostic::Inside { .. } => "Inside",
             Diagnostic::Interference { .. } => "Interference",
             Diagnostic::IntendedContact { .. } => "IntendedContact",
+            Diagnostic::ShallowEngagement { .. } => "ShallowEngagement",
         }
     }
 }

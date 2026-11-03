@@ -26,7 +26,7 @@ pub fn part(n: &str) -> PartRef {
     PartRef::new(n, 0)
 }
 
-pub fn inst(id: u32, pose: Frame) -> Instance {
+pub fn inst(id: u64, pose: Frame) -> Instance {
     Instance::part(id, part("p"), pose)
 }
 
@@ -37,7 +37,7 @@ pub fn catalog() -> Catalog {
     c
 }
 
-pub fn joint(id: u32, kind: JointKind, a: (u32, Frame), b: (u32, Frame)) -> Joint {
+pub fn joint(id: u64, kind: JointKind, a: (u64, Frame), b: (u64, Frame)) -> Joint {
     Joint::new(id, kind, End::local(&[a.0], a.1), End::local(&[b.0], b.1))
 }
 

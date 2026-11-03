@@ -46,10 +46,10 @@ const KINDS: [JointKind; 7] = [
 /// A joint between `child` and `parent` that holds at the poses `truth`, with values chosen.
 fn derive(
     r: &mut Rng,
-    id: u32,
+    id: u64,
     kind: JointKind,
-    child: u32,
-    parent: u32,
+    child: u64,
+    parent: u64,
     truth: &[Frame],
     drive: bool,
 ) -> Joint {
@@ -113,24 +113,24 @@ fn build(r: &mut Rng, n: usize, extra: usize, drive: bool, balls: bool) -> (Asse
             break k;
         }
     };
-    for c in 2..=n as u32 {
-        let parent = 1 + r.below(c as usize - 1) as u32;
+    for c in 2..=n as u64 {
+        let parent = 1 + r.below(c as usize - 1) as u64;
         let k = pick(r);
         joints.push(derive(r, c - 1, k, c, parent, &truth, drive));
     }
     for e in 0..extra {
-        let a = 2 + r.below(n - 1) as u32;
-        let mut b = 1 + r.below(n) as u32;
+        let a = 2 + r.below(n - 1) as u64;
+        let mut b = 1 + r.below(n) as u64;
         if b == a {
             b = 1;
         }
         let k = pick(r);
-        joints.push(derive(r, (n + e) as u32, k, a, b, &truth, drive));
+        joints.push(derive(r, (n + e) as u64, k, a, b, &truth, drive));
     }
     let asm = Assembly {
         instances: (0..n)
             .map(|i| {
-                let i0 = inst(i as u32 + 1, truth[i]);
+                let i0 = inst(i as u64 + 1, truth[i]);
                 if i == 0 { i0.grounded() } else { i0 }
             })
             .collect(),
@@ -153,7 +153,7 @@ fn driven_trees_come_back_to_their_chosen_poses() {
         assert_eq!(sol.errors().count(), 0, "case {case}: {:?}", sol.diagnostics);
         assert_eq!(sol.stats.blocks_solved, 0, "trees take no Newton");
         for (i, t) in truth.iter().enumerate() {
-            let got = sol.pose(InstanceId(i as u32 + 1)).unwrap();
+            let got = sol.pose(InstanceId(i as u64 + 1)).unwrap();
             assert!(
                 close(&got, t, 1e-9),
                 "case {case} instance {}: {got:?} vs {t:?}",
@@ -174,7 +174,7 @@ fn undriven_trees_with_balls_keep_true_written_poses() {
         assert_eq!(sol.errors().count(), 0, "case {case}");
         for (i, t) in truth.iter().enumerate() {
             assert!(
-                close(&sol.pose(InstanceId(i as u32 + 1)).unwrap(), t, 1e-9),
+                close(&sol.pose(InstanceId(i as u64 + 1)).unwrap(), t, 1e-9),
                 "case {case}"
             );
         }
@@ -202,7 +202,7 @@ fn loops_close_from_perturbed_starts() {
             if sol.mobility == 0 {
                 for (i, t) in truth.iter().enumerate() {
                     assert!(
-                        close(&sol.pose(InstanceId(i as u32 + 1)).unwrap(), t, 1e-7),
+                        close(&sol.pose(InstanceId(i as u64 + 1)).unwrap(), t, 1e-7),
                         "case {case}"
                     );
                 }
@@ -237,7 +237,7 @@ fn loosen(asm: &Assembly, r: &mut Rng, rotate_parallel: bool) -> Assembly {
                 };
                 a.anchor = AnchorRef::Local(Reference::frame(rf.frame.rotated_about_z(0.3)));
             }
-            let id = out.constraints.len() as u32 + 1;
+            let id = out.constraints.len() as u64 + 1;
             let mut c = Constraint::new(id, k, a, j.b.clone());
             c.flip = j.flip;
             out.constraints.push(c);

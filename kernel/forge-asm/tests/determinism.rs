@@ -22,10 +22,10 @@ fn corpus() -> Vec<Assembly> {
     // many small mechanisms in one document: many partitions for the threads
     let mut big = Assembly::default();
     big.instances.push(inst(1, Frame::WORLD).grounded());
-    for m in 0..40u32 {
+    for m in 0..40u64 {
         let fb = four_bar(40.0 + m as f64, 120.0, 80.0, 100.0, 0.6);
         let o = at(0.0, 300.0 * m as f64, 0.0);
-        let id = |i: u32| if i == 1 { 1 } else { 10 * m + i + 10 };
+        let id = |i: u64| if i == 1 { 1 } else { 10 * m + i + 10 };
         for x in &fb.instances[1..] {
             big.instances.push(inst(id(x.id.0), o.compose(&x.pose)));
         }

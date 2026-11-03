@@ -37,7 +37,7 @@ pub(crate) struct Cluster {
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
 pub(crate) enum LinkId {
     Joint(JointId),
-    Loose(u32),
+    Loose(u64),
 }
 
 /// One primitive constraint of a link, its ends in cluster frames.
@@ -673,7 +673,7 @@ pub(crate) fn resolve_links<P: Parts>(
     }
     let mut corder: Vec<usize> = (0..asm.constraints.len()).collect();
     corder.sort_by_key(|&i| (asm.constraints[i].id, i));
-    let mut last: Option<u32> = None;
+    let mut last: Option<u64> = None;
     for &ci in &corder {
         let c = &asm.constraints[ci];
         if last == Some(c.id) {
