@@ -621,6 +621,48 @@ pub enum Error {
     },
     /// Sheet metal: the kernel's refusals and the language's own (`sheet.rs`).
     Sheet(Box<crate::sheet::SheetErr>),
+    // ---- shapes (sweep, coil, loft, shell, draft, offset, rib, face fillets, balls) ----
+    /// An option that cannot apply with another the call was given (a taper with a through
+    /// extent, a sweep both extended and cut off at a face, three of a coil's sizes).
+    NotWith {
+        span: Span,
+        func: &'static str,
+        arg: &'static str,
+        with: &'static str,
+    },
+    /// A taper on an outline with a free curve (spline) side: the kernel's draft has no exact
+    /// leaning form for it.
+    TaperOnCurve {
+        span: Span,
+        sketch: String,
+    },
+    /// Path piece `index` does not start where the one before it ends.
+    PathGap {
+        span: Span,
+        index: usize,
+    },
+    /// Profile `profile` of a loft has `got` loops (outline and holes) where the first has `want`.
+    LoftLoops {
+        span: Span,
+        profile: usize,
+        want: usize,
+        got: usize,
+    },
+    /// A loft profile whose segment count cannot be matched by splitting (only free curves).
+    LoftCurves {
+        span: Span,
+        profile: usize,
+    },
+    /// A rail's point that is not a corner of the loft's first profile.
+    NotAVertex {
+        span: Span,
+    },
+    /// A face set that must be one face (a full round's sides and middle).
+    OneFace {
+        span: Span,
+        what: &'static str,
+        count: usize,
+    },
 }
 
 impl Error {
@@ -679,7 +721,14 @@ impl Error {
             | UnknownMetric { span, .. }
             | ExpectCopied { span, .. }
             | StillRead { span, .. }
-            | ShadowsTopLevel { span, .. } => Some(*span),
+            | ShadowsTopLevel { span, .. }
+            | NotWith { span, .. }
+            | TaperOnCurve { span, .. }
+            | PathGap { span, .. }
+            | LoftLoops { span, .. }
+            | LoftCurves { span, .. }
+            | NotAVertex { span }
+            | OneFace { span, .. } => Some(*span),
             UnknownParam { .. }
             | UnknownFeature { .. }
             | NotAStatement { .. }
@@ -742,6 +791,13 @@ impl Error {
             ShadowsTopLevel { .. } => "ShadowsTopLevel",
             EditDim { .. } => "EditDim",
             Sheet(e) => e.kind(),
+            NotWith { .. } => "NotWith",
+            TaperOnCurve { .. } => "TaperOnCurve",
+            PathGap { .. } => "PathGap",
+            LoftLoops { .. } => "LoftLoops",
+            LoftCurves { .. } => "LoftCurves",
+            NotAVertex { .. } => "NotAVertex",
+            OneFace { .. } => "OneFace",
         }
     }
 
@@ -919,6 +975,19 @@ impl Error {
             ShadowsTopLevel { name, .. } => format!("{name} is a top-level name; a local may not hide it"),
             EditDim { param, want, found } => format!("{param} is a {want:?}; the value is a {found:?}"),
             Sheet(e) => e.text(),
+            NotWith { func, arg, with, .. } => format!("{func}: {arg} does not apply with {with}"),
+            TaperOnCurve { sketch, .. } => format!(
+                "sketch {sketch}'s outline has a spline side: a taper has no exact form on it (draw it of lines and arcs, or loft to a smaller outline)"
+            ),
+            PathGap { index, .. } => format!("path piece {index} does not start where the one before ends"),
+            LoftLoops {
+                profile, want, got, ..
+            } => format!("loft profile {profile} has {got} loops, the first {want}"),
+            LoftCurves { profile, .. } => {
+                format!("loft profile {profile}: too few segments, and only splines to split")
+            }
+            NotAVertex { .. } => "a rail starts at a corner of the first profile".into(),
+            OneFace { what, count, .. } => format!("{what} must be one face, found {count}"),
         }
     }
 
@@ -1015,6 +1084,18 @@ impl Error {
             StillRead { name, reader, .. } => vec![("name", s(name)), ("reader", s(reader))],
             ShadowsTopLevel { name, .. } => vec![("name", s(name))],
             Sheet(e) => e.data(),
+            NotWith { func, arg, with, .. } => vec![("func", s(func)), ("arg", s(arg)), ("with", s(with))],
+            TaperOnCurve { sketch, .. } => vec![("sketch", s(sketch))],
+            PathGap { index, .. } => vec![("index", (*index as f64).into())],
+            LoftLoops {
+                profile, want, got, ..
+            } => vec![
+                ("profile", (*profile as f64).into()),
+                ("want", (*want as f64).into()),
+                ("got", (*got as f64).into()),
+            ],
+            LoftCurves { profile, .. } => vec![("profile", (*profile as f64).into())],
+            OneFace { what, count, .. } => vec![("what", s(what)), ("count", (*count as f64).into())],
             _ => vec![],
         }
     }

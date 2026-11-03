@@ -603,7 +603,7 @@ impl<'s> Eval<'s> {
 
     /// Binds a name once: rebinding, or shadowing a name, a param or a built-in, is an error.
     fn bind(&mut self, name: &str, v: Value, span: Span) -> R<()> {
-        if crate::builtins::BUILTINS.contains(&name) || crate::builtins::constant(name).is_some() {
+        if crate::builtins::builtin(name).is_some() || crate::builtins::constant(name).is_some() {
             return Err(Error::ShadowsBuiltin {
                 span,
                 name: name.into(),
@@ -702,8 +702,7 @@ impl<'s> Eval<'s> {
     pub fn stmt(&mut self, s: &Stmt) -> R<()> {
         match &s.kind {
             StmtKind::Shared { name, value } | StmtKind::Param { name, value, .. }
-                if crate::builtins::BUILTINS.contains(&name.as_str())
-                    || crate::builtins::constant(name).is_some() =>
+                if crate::builtins::builtin(name).is_some() || crate::builtins::constant(name).is_some() =>
             {
                 let _ = value;
                 Err(Error::ShadowsBuiltin {
@@ -1026,7 +1025,7 @@ impl<'s> Eval<'s> {
         if let Some(v) = crate::builtins::constant(name) {
             return Ok(v);
         }
-        if let Some(b) = crate::builtins::BUILTINS.iter().find(|b| **b == name) {
+        if let Some(b) = crate::builtins::builtin(name) {
             return Ok(Value::Builtin(b));
         }
         if let Some(k) = self.locals.iter().position(|p| p.key.name == name) {
@@ -1649,11 +1648,21 @@ impl<'s> Eval<'s> {
         }
         let (a, b) = (&self.b.stages[n - 2], &self.b.stages[n - 1]);
         // the same faces by name, and as many edges: the feature changed nothing
-        let names = |s: &crate::build::Stage| -> Option<(Vec<u64>, usize)> {
+        // (and the corners where they were: a draft or a face offset keeps every name)
+        let names = |s: &crate::build::Stage| -> Option<(Vec<u64>, usize, Vec<[i64; 3]>)> {
             let b = s.view()?;
             let mut v: Vec<u64> = b.face_ids().map(|f| b.face(f).name.0).collect();
             v.sort_unstable();
-            Some((v, b.edge_ids().count()))
+            let q = |x: f64| (x * 1e5).round() as i64;
+            let mut c: Vec<[i64; 3]> = b
+                .vertex_ids()
+                .map(|x| {
+                    let p = b.vertex(x).point;
+                    [q(p.x), q(p.y), q(p.z)]
+                })
+                .collect();
+            c.sort_unstable();
+            Some((v, b.edge_ids().count(), c))
         };
         matches!((names(a), names(b)), (Some(x), Some(y)) if x == y)
     }
@@ -1879,10 +1888,15 @@ fn expr_path(e: &Expr) -> Option<Vec<Seg>> {
 /// A param's value with every bare number in it made a Length.
 fn settle(v: Value) -> Value {
     match v {
-        Value::Num(n) if n.dim == Dim::Any => Value::Num(Num { dim: Dim::Length, ..n }),
+        Value::Num(n) if n.dim == Dim::Any => Value::Num(Num {
+            dim: Dim::Length,
+            ..n
+        }),
         Value::List(xs) => Value::List(Rc::new(xs.iter().cloned().map(settle).collect())),
         Value::Tuple(xs) => Value::Tuple(Rc::new(xs.iter().cloned().map(settle).collect())),
-        Value::Map(m) => Value::Map(Rc::new(m.iter().map(|(k, x)| (k.clone(), settle(x.clone()))).collect())),
+        Value::Map(m) => Value::Map(Rc::new(
+            m.iter().map(|(k, x)| (k.clone(), settle(x.clone()))).collect(),
+        )),
         o => o,
     }
 }
