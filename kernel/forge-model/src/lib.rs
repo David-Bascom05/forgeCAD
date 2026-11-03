@@ -1632,8 +1632,13 @@ fn apply_fillet(
     };
     let mut want: Vec<FilletEdge> = Vec::with_capacity(edges.len());
     for (name, radius) in edges {
+        let e = edge(*name)?;
+        // two names of one edge (pieces a seam once split, joined since) with one radius: one edge
+        if want.iter().any(|w| w.edge == e && w.radius == *radius) {
+            continue;
+        }
         want.push(FilletEdge {
-            edge: edge(*name)?,
+            edge: e,
             radius: radius.clone(),
         });
     }

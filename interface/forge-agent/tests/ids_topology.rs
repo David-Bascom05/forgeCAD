@@ -22,3 +22,35 @@ fn the_slot_cut_keeps_one_seam_whatever_the_ids() {
     assert!(all.iter().all(|c| *c == all[0]), "{all:?}");
     assert_eq!(all[0], (30, 76, 48));
 }
+
+/// Two names of one edge (pieces a seam split under other ids, one edge here) in one fillet with
+/// one radius: the edge is rounded once, not refused as listed twice.
+#[test]
+fn a_fillet_naming_one_edge_twice_rounds_it_once() {
+    use forge_model::Feature;
+    use forge_ops::Radius;
+    let mut part = text::parse("b: extrude 10 z 0 0 1 x 1 0 0 at 0 0 0 circle 0 0 5\n").expect("parses");
+    let body = part.regenerate_solids().expect("builds")[0].body.clone();
+    let rim = body
+        .edge_ids()
+        .find(|&e| matches!(body.edge(e).curve, forge_geom::Curve::Circle(_)))
+        .expect("a rim");
+    let n = body.edge(rim).name;
+    let r = Radius::Constant(1.0);
+    part.features.push(Feature::Fillet {
+        edges: vec![(n, r.clone()), (n, r)],
+        starts: vec![],
+        setbacks: vec![],
+        only: false,
+    });
+    let once = part.regenerate_solids().expect("rounds").remove(0).body;
+    part.features.pop();
+    part.features.push(Feature::Fillet {
+        edges: vec![(n, Radius::Constant(1.0))],
+        starts: vec![],
+        setbacks: vec![],
+        only: false,
+    });
+    let single = part.regenerate_solids().expect("rounds").remove(0).body;
+    assert_eq!(once.face_ids().count(), single.face_ids().count());
+}
