@@ -267,9 +267,11 @@ impl Plan {
 
         // pass 1: rigid clusters
         let n = bodies.len();
+        // a spanning forest in id order: a later fastening that closes a cycle is the one checked
         let mut uf = Uf::new(n);
-        for j in joints.iter().filter(|j| j.rigid()) {
-            uf.union(j.body[0], j.body[1]);
+        let mut tree_edge = vec![false; joints.len()];
+        for (k, j) in joints.iter().enumerate().filter(|(_, j)| j.rigid()) {
+            tree_edge[k] = uf.union(j.body[0], j.body[1]);
         }
         let mut cl_of = vec![usize::MAX; n];
         let mut clusters: Vec<Cluster> = Vec::new();
@@ -293,13 +295,12 @@ impl Plan {
         }
         // fastened adjacency by joint id
         let mut fadj: Vec<Vec<(usize, usize)>> = vec![Vec::new(); n];
-        for (k, j) in joints.iter().enumerate().filter(|(_, j)| j.rigid()) {
+        for (k, j) in joints.iter().enumerate().filter(|(k, _)| tree_edge[*k]) {
             fadj[j.body[0]].push((k, j.body[1]));
             fadj[j.body[1]].push((k, j.body[0]));
         }
         let mut parent: Vec<Option<(usize, Item)>> = vec![None; n];
         let mut placed = vec![false; n];
-        let mut tree_edge = vec![false; joints.len()];
         for cl in clusters.iter_mut() {
             let root = if cl.ground {
                 *cl.members
@@ -327,7 +328,6 @@ impl Plan {
                     };
                     bodies[v].offset = off;
                     placed[v] = true;
-                    tree_edge[k] = true;
                     parent[v] = Some((u, j.item(0)));
                     queue.push_back(v);
                 }
@@ -741,7 +741,11 @@ fn resolve<P: Parts>(
             };
             let rest: Path = end.path[1..].to_vec();
             if rest.is_empty() {
-                return Err(AnchorReason::BadPath { at: 1 });
+                // the rigid subassembly as a whole: a frame in its own coordinates
+                return match &end.anchor {
+                    AnchorRef::Local(r) => Ok((b, *r)),
+                    AnchorRef::Named(_) => Err(AnchorReason::BadPath { at: 1 }),
+                };
             }
             match s.occ.get(&rest) {
                 Some((p, f, _)) => (p.clone(), *f),
