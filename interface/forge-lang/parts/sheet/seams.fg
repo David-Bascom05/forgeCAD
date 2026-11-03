@@ -1,13 +1,13 @@
 # A tray with its four corners seamed: the right and left walls lap over the back's ends, the front
-# laps over the sides' (one written as an underlap), the base corners trimmed to the bends.
+# laps over the sides' (one written as an underlap), round corner reliefs at the bend lines' crossing.
 shared t = 1.5
 shared r = 2
 shared k = ratio(0.4)
 shared h = 25
-shared g = 2
+shared g = 1
 param plan.L = 60
 param plan.W = 40
-shared steel = stock(t: t, bend: kfactor(k), radii: [r], relief: relief_rule(corner: "trim_to_bend"))
+shared steel = stock(t: t, bend: kfactor(k), radii: [r], relief: relief_rule(corner: "round"))
 shared acme = shop([steel])
 
 sketch plan(on: xy) {

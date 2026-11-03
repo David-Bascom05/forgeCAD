@@ -76,6 +76,9 @@ struct Flange {
     far: bool,
     /// Setback on the flange.
     s: f64,
+    /// How far a cut on the flange reaches back across its bend zone (as the builder's corner
+    /// trims do): the zone's outer arc and a thickness.
+    reach: f64,
 }
 
 fn v3(p: Point2) -> Vec3 {
@@ -187,6 +190,7 @@ impl Sheet {
                     len,
                     far,
                     s: crate::build::setback_of(&self.gauge, radius, angle),
+                    reach: th * (radius + t) + t,
                 })
             };
         let fa = flange(&ja, p0, p1, a_far)?;
@@ -242,13 +246,19 @@ impl Sheet {
         };
         let mut work = self.clone();
         for (f, k) in [(&fa, ka), (&fb, kb)] {
-            let outline = trimmed(f, k, t, gap).map_err(fail)?;
-            let w = work
-                .walls
-                .iter_mut()
-                .find(|w| w.id == f.wall)
-                .expect("found above");
-            w.outline = vec![outline];
+            match trimmed(f, k, t, gap).map_err(fail)? {
+                Edit::Outline(outline) => {
+                    let w = work
+                        .walls
+                        .iter_mut()
+                        .find(|w| w.id == f.wall)
+                        .expect("found above");
+                    w.outline = vec![outline];
+                }
+                Edit::Trim(lp) => {
+                    work.cut(f.wall, lp)?;
+                }
+            }
         }
         work.set_corner(
             a,
@@ -265,7 +275,15 @@ impl Sheet {
 
 /// The flange's outline with its corner end cut along the half space `k`, from the gap above its
 /// tangent line to its tip.
-fn trimmed(f: &Flange, k: Half, t: f64, gap: f64) -> Result<ProfileLoop, SeamError> {
+/// What a seam does to a flange: extends (or reshapes) its outline above the bend, or trims it
+/// back its whole height, across its bend zone too, with a cut (so nothing of it is left to
+/// touch the other flange below the seam).
+enum Edit {
+    Outline(ProfileLoop),
+    Trim(ProfileLoop),
+}
+
+fn trimmed(f: &Flange, k: Half, t: f64, gap: f64) -> Result<Edit, SeamError> {
     // k on the wall: a x + b y + c0 + c1 z >= 0
     let (a, b) = (k.n.dot(f.f.x), k.n.dot(f.f.y));
     let toward = if f.far { 1.0 } else { -1.0 };
@@ -294,6 +312,38 @@ fn trimmed(f: &Flange, k: Half, t: f64, gap: f64) -> Result<ProfileLoop, SeamErr
     }
     let p = Point2::new;
     let (h, len) = (f.h, f.len);
+    // the seam only takes material off this flange: cut it whole height, across the bend
+    let trim = if f.far {
+        ys <= len - tol::LINEAR && yh <= len - tol::LINEAR
+    } else {
+        ys >= tol::LINEAR && yh >= tol::LINEAR
+    };
+    if trim {
+        let (x0, x1) = (-f.reach, h + t);
+        let (y0, y1) = (y_at(x0), y_at(x1));
+        // out past the end and past the seam line at both ends (a slanted line can pass the
+        // end across the zone), so the cut never folds over itself
+        let pts = if f.far {
+            let out = len.max(y0).max(y1) + t;
+            [p(x0, y0), p(x1, y1), p(x1, out), p(x0, out)]
+        } else {
+            let out = y0.min(y1).min(0.0) - t;
+            [p(x0, out), p(x1, out), p(x1, y1), p(x0, y0)]
+        };
+        return Ok(Edit::Trim(ProfileLoop::new(
+            (0..4)
+                .map(|i| {
+                    (
+                        Segment::Line {
+                            a: pts[i],
+                            b: pts[(i + 1) % 4],
+                        },
+                        i as u64,
+                    )
+                })
+                .collect(),
+        )));
+    }
     let near = &f.ring[..f.tip];
     let far = &f.ring[f.tip + 1..];
     let mut pts: Vec<(Point2, u64)> = Vec::new();
@@ -316,7 +366,7 @@ fn trimmed(f: &Flange, k: Half, t: f64, gap: f64) -> Result<ProfileLoop, SeamErr
         pts.extend_from_slice(far);
     }
     let n = pts.len();
-    Ok(ProfileLoop::new(
+    Ok(Edit::Outline(ProfileLoop::new(
         (0..n)
             .map(|i| {
                 (
@@ -328,13 +378,14 @@ fn trimmed(f: &Flange, k: Half, t: f64, gap: f64) -> Result<ProfileLoop, SeamErr
                 )
             })
             .collect(),
-    ))
+    )))
 }
 
-/// Whether a flange's outline carries a seam's cut at either end (its seam segments' ids).
-pub(crate) fn seamed(w: &crate::graph::Wall) -> bool {
-    w.outline
-        .iter()
-        .flat_map(|l| &l.segments)
-        .any(|s| matches!(s.1, 4 | 7))
+/// Whether corner (a, b) was cut by `Sheet::seam` (an explicit closed or overlap corner, not a
+/// sheet's default).
+pub(crate) fn seamed(sheet: &Sheet, a: JointId, b: JointId) -> bool {
+    sheet.corners.iter().any(|c| {
+        (c.joints == [a, b] || c.joints == [b, a])
+            && matches!(c.kind, CornerKind::Closed | CornerKind::Overlap { .. })
+    })
 }

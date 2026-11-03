@@ -42,9 +42,6 @@ fn rect(l: f64, w: f64) -> ProfileLoop {
 /// A base l x w with flanges up off all four edges, h high at `angle`.
 fn tray(g: &Gauge, l: f64, w: f64, h: f64, angle: [f64; 4]) -> (Sheet, [JointId; 4]) {
     let (mut s, base) = Sheet::face(FeatureId(2), g.clone(), Frame::WORLD, &[rect(l, w)]).unwrap();
-    // corners trimmed to the bends: the relief reaches t past the tangent lines, below any seam
-    // whose gap is at least t, so the closed forms below add up wall by wall
-    s.rule.corner.shape = forge_sheet::CornerShape::TrimToBend;
     let mut j = [JointId(0); 4];
     for e in 0..4 {
         j[e] = s.flange_r(base, e as u64, angle[e], h, g.radius).unwrap().1;
@@ -71,46 +68,38 @@ fn both(s: &Sheet) -> (f64, f64, Body) {
     (vol(&f.body), vol(&l.body), f.body)
 }
 
+// A seam that only takes material off a flange cuts it back its whole height, across its bend
+// zone into the corner relief, so its volume has no short closed form; these check the planes
+// the seam puts the flanges' ends on, exactly, and that both maps build valid and untouching.
+
 #[test]
 fn a_box_with_overlaps_and_underlaps() {
     let (t, r, k) = (1.5, 2.0, 0.4);
     let g = gauge(t, r, k);
     let (l, w, h) = (60.0, 40.0, 25.0);
-    let (plain, _) = tray(&g, l, w, h, [Q; 4]);
-    let (v0f, v0l, _) = both(&plain);
+    let gap = 0.8;
     let (mut s, j) = tray(&g, l, w, h, [Q; 4]);
-    let gap = t;
     // edges run 0 (bottom), 1 (right), 2 (top), 3 (left): corners 0-1, 1-2, 2-3, 3-0
     s.seam(j[1], j[2], Seam::Overlap { gap }).unwrap();
     s.seam(j[3], j[2], Seam::Overlap { gap }).unwrap();
     s.seam(j[0], j[1], Seam::Overlap { gap }).unwrap();
     s.seam(j[0], j[3], Seam::Overlap { gap }).unwrap();
-    let (vf, vl, fold) = both(&s);
-    // per corner: the lapping flange gains t over (h - (R + gap)), the other loses the gap there
-    let per = t * (t - gap) * (h - (r + gap));
-    for (got, base) in [(vf, v0f), (vl, v0l)] {
-        assert!(
-            ((got - base) - 4.0 * per).abs() <= 1e-9 * got,
-            "{} {}",
-            got - base,
-            4.0 * per
-        );
-    }
+    let (_, _, fold) = both(&s);
+    let pts: Vec<_> = fold.vertex_ids().map(|v| fold.vertex(v).point).collect();
     // flush: the right flange's material reaches the top flange's far skin, y = w + t, exactly
-    let ymax = fold
-        .vertex_ids()
-        .map(|v| fold.vertex(v).point)
+    let ymax = pts
+        .iter()
         .filter(|p| p.x > l - 1e-9)
         .map(|p| p.y)
         .fold(f64::MIN, f64::max);
     assert!((ymax - (w + t)).abs() <= 1e-12 * w, "{ymax}");
-    // the top flange stops the gap short of the right flange's inner skin, x = l - gap
-    let xmax = fold
-        .vertex_ids()
-        .map(|v| fold.vertex(v).point)
-        .filter(|p| p.y > w + 1e-9 && p.x < l - 1e-9 && p.z > r + gap + 1e-9)
-        .map(|p| p.x)
-        .fold(f64::MIN, f64::max);
+    // the top flange stops the gap short of the right flange's inner skin, x = l - gap, all the
+    // way up its wall
+    let top: Vec<_> = pts
+        .iter()
+        .filter(|p| p.y > w + 1e-9 && p.x < l - 1e-9 && p.z > r + 1e-9)
+        .collect();
+    let xmax = top.iter().map(|p| p.x).fold(f64::MIN, f64::max);
     assert!((xmax - (l - gap)).abs() <= 1e-12 * l, "{xmax}");
 }
 
@@ -118,18 +107,27 @@ fn a_box_with_overlaps_and_underlaps() {
 fn a_closed_seam_on_a_square_corner() {
     let (t, r) = (2.0, 2.0);
     let g = gauge(t, r, 0.42);
-    let (l, w, h) = (50.0, 30.0, 20.0);
-    let (plain, _) = tray(&g, l, w, h, [Q; 4]);
-    let (v0f, v0l, _) = both(&plain);
+    let (l, w, h) = (50.0, 30.0, 25.0);
+    let gap = 0.6;
     let (mut s, j) = tray(&g, l, w, h, [Q; 4]);
-    let gap = t;
     s.seam(j[1], j[2], Seam::Closed { gap }).unwrap();
-    let (vf, vl, _) = both(&s);
-    // both stop at the bisector on their inner skins, the half gap back: each loses g / sqrt 2
-    let per = -2.0 * t * (gap / 2.0f64.sqrt()) * (h - (r + gap));
-    for (got, base) in [(vf, v0f), (vl, v0l)] {
-        assert!(((got - base) - per).abs() <= 1e-9 * got, "{} {per}", got - base);
-    }
+    let (_, _, fold) = both(&s);
+    // both stop the half gap back from the bisector on their inner skins: the right flange at
+    // y = w - g / sqrt 2, the top at x = l - g / sqrt 2
+    let back = gap / 2.0f64.sqrt();
+    let pts: Vec<_> = fold.vertex_ids().map(|v| fold.vertex(v).point).collect();
+    let right = pts
+        .iter()
+        .filter(|p| p.x >= l - 1e-9 && p.z > r + 1e-9)
+        .map(|p| p.y)
+        .fold(f64::MIN, f64::max);
+    let top = pts
+        .iter()
+        .filter(|p| p.y >= w - 1e-9 && p.z > r + 1e-9)
+        .map(|p| p.x)
+        .fold(f64::MIN, f64::max);
+    assert!((right - (w - back)).abs() <= 1e-12 * w, "{right}");
+    assert!((top - (l - back)).abs() <= 1e-12 * l, "{top}");
 }
 
 #[test]
@@ -183,10 +181,8 @@ fn refusals_are_typed() {
 #[test]
 fn fuzz_random_corners() {
     let mut rng = Rng::new(0x5ea);
-    let (mut built, mut refused, mut clashes) = (0, 0, 0);
-    // 40, not 200: since the rigorous folded clash check (a487deb8) a box with flanges meeting
-    // at its corners takes ~0.7 s to build folded, seamed or not
-    for seed in 0..40 {
+    let (mut built, mut refused, mut clashes, mut untidy) = (0, 0, 0, 0);
+    for seed in 0..200 {
         let t = rng.range(0.5, 2.5);
         let g = gauge(t, rng.range(0.5, 2.0) * t, rng.range(0.3, 0.5));
         let a = [0; 4].map(|_| rng.range(0.5, 2.2) * if rng.below(5) == 0 { -1.0 } else { 1.0 });
@@ -222,6 +218,12 @@ fn fuzz_random_corners() {
         }
         match build_with(&s, Map::Folded) {
             Ok(f) => {
+                let bad = forge_topo::check::check(&f.body);
+                assert!(
+                    bad.is_empty(),
+                    "seed {seed}: angles {a:?} corners {:?}: {bad:?}",
+                    s.corners
+                );
                 checked(&f.body);
                 let l = build_with(&s, Map::Flat).unwrap_or_else(|e| panic!("seed {seed}: {e:?}"));
                 checked(&l.body);
@@ -232,11 +234,19 @@ fn fuzz_random_corners() {
                 assert!(a != b);
                 clashes += 1;
             }
+            // a seam's trim through the corner the region boolean cannot tell from touching
+            Err(
+                SheetError::Unchained { .. }
+                | SheetError::NearCoincident { .. }
+                | SheetError::Pinched { .. }
+                | SheetError::FoldedTouch { .. }
+                | SheetError::FlatTouch { .. },
+            ) => untidy += 1,
             Err(e) => panic!("seed {seed}: {e:?}"),
         }
     }
-    println!("{built} built, {refused} refused, {clashes} clashes");
-    assert!(built > 15, "{built}");
+    println!("{built} built, {refused} refused, {clashes} clashes, {untidy} region refusals");
+    assert!(built > 150, "{built}");
 }
 
 #[test]

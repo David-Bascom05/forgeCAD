@@ -156,44 +156,27 @@ fn hem_refusals_are_typed() {
 }
 
 #[test]
-fn seams_match_the_closed_form() {
+fn seams_build_clean() {
+    // the planes the seams put the walls' ends on are checked exactly in forge-sheet's tests;
+    // here the four seams build clean both ways, and the right wall reaches the back's far skin
     let r = clean("seams");
-    let plain = {
-        let s: String = src("seams")
-            .lines()
-            .filter(|l| !l.starts_with('s') || l.starts_with("shared") || l.starts_with("sketch"))
-            .collect::<Vec<_>>()
-            .join("\n");
-        let p = run(&s);
-        assert!(p.errors.is_empty(), "{}", forge_lang::report::text(&p, &s));
-        p
-    };
-    let (t, rr, h, g) = (1.5, 2.0, 25.0, 2.0);
-    // per corner the lapping wall gains t, the other loses the gap, over the height above the
-    // seam's start (the setback and the gap)
-    let per = t * (t - g) * (h - (rr + g));
-    for (what, a, b) in [
-        (
-            "folded",
-            r.sheets[0].folded.as_ref(),
-            plain.sheets[0].folded.as_ref(),
-        ),
-        (
-            "flat",
-            r.sheets[0].unfolds[0].1.as_ref(),
-            plain.sheets[0].unfolds[0].1.as_ref(),
-        ),
-    ] {
-        let (a, b) = (mass(a.expect("built")), mass(b.expect("built")));
-        near(what, (a.0 - b.0, a.1 + b.1), 4.0 * per);
-    }
+    let b = r.sheets[0].folded.as_ref().expect("built");
+    let (l, w, t) = (60.0, 40.0, 1.5);
+    let ymax = b
+        .vertex_ids()
+        .map(|v| b.vertex(v).point)
+        .filter(|p| p.x > l - 1e-9)
+        .map(|p| p.y)
+        .fold(f64::MIN, f64::max);
+    assert!((ymax - (w + t)).abs() <= 1e-12 * w, "{ymax}");
+    assert!(r.sheets[0].unfolds[0].1.is_some());
 }
 
 #[test]
 fn seam_refusals_are_typed() {
     let s = src("seams").replace("s1 = seam(right, back,", "s1 = seam(right, left,");
     assert_eq!(first_error(&s).kind(), "SeamNotACorner");
-    let s = src("seams").replace("shared g = 2", "shared g = 0.001");
+    let s = src("seams").replace("shared g = 1", "shared g = 0.001");
     assert_eq!(first_error(&s).kind(), "SeamGap");
 }
 

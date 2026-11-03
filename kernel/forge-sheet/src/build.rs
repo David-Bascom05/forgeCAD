@@ -600,7 +600,7 @@ fn corners(
                 // a seam (`crate::corner`) leaves the base corner to the rule's relief; asked for
                 // with no seam cut (the flanges' ends as they were), it is not built
                 CornerKind::Closed | CornerKind::Overlap { .. }
-                    if ![b1, b2].iter().all(|b| crate::corner::seamed(&sheet.walls[b.b])) =>
+                    if !crate::corner::seamed(sheet, j1.id, j2.id) =>
                 {
                     return Err(unbuilt(f64::NAN));
                 }
@@ -668,6 +668,8 @@ fn corners(
             // so does any corner whose walls would meet (the rule's gap), unless asked open
             let seam = match kind {
                 CornerKind::Open { gap } => Some((gap, false)),
+                // a seam has cut the walls' ends to meet already (`crate::corner`)
+                CornerKind::Closed | CornerKind::Overlap { .. } => None,
                 _ if walls_meet(v, (p0, p1), (q0, q1), (j1, j2)) => Some((rule.gap.at(t, rmax), true)),
                 _ => None,
             };
@@ -2294,6 +2296,7 @@ impl<'a> Strips<'a> {
 
     /// The deepest point found in strip `b` along a curve over fractions 0..1, by halving while
     /// `reach` says a half's box may get deeper than `limit`: a point and its depth, if one is.
+    #[allow(clippy::too_many_arguments)]
     fn hunt(
         &self,
         b: usize,
