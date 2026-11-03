@@ -198,7 +198,7 @@ pub fn call(ev: &mut Eval, args: &[crate::syntax::Arg], span: Span) -> R<Value> 
     });
     let fail = |e: Error| in_file(&lib, span, e);
     let prog = crate::syntax::parse(&text).map_err(fail)?;
-    let mut sub = Eval::new(&text, ev.rules.clone(), false, Default::default());
+    let mut sub = Eval::new(&text, ev.rules, false, Default::default());
     sub.dir = path.parent().map(|p| p.to_path_buf());
     sub.root = ev.root.clone();
     sub.use_chain = ev.use_chain.clone();

@@ -413,6 +413,9 @@ pub struct FitRule {
     pub id: u64,
     pub a: FitMatch,
     pub b: FitMatch,
+    /// The occurrence the rule was declared in: it covers only pairs under it (empty: anywhere).
+    /// A subassembly's rules, used from a parent, are under that use.
+    pub within: Path,
     /// Least thread engagement; None: the shop's (`SHOP_THREAD_ENGAGEMENT` sizes) for threads.
     pub min_engagement: Option<MinEngagement>,
 }

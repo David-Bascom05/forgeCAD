@@ -996,6 +996,12 @@ pub enum Issue {
         path: String,
         issue: Box<Issue>,
     },
+    /// An `expect .. at` whose params put a joint past its limit: the check is taken at a pose
+    /// the joint's range forbids (or, where the solve holds the joint at the limit, not at the
+    /// params at all). `limit` says which joint, the value and the range.
+    AtPastLimit {
+        limit: Box<Issue>,
+    },
 }
 
 /// Why an expect could not be measured.
@@ -1019,6 +1025,11 @@ pub enum Unevaluable {
     NoLimit,
     /// The document could not be run again with its `at` params.
     AtFailed,
+    /// An `at` param that is not this document's: a subassembly's drives are its own file's
+    /// params, which a parent cannot set.
+    AtUnknownParam { param: String },
+    /// An `at` value that is not a number.
+    AtNotANumber { param: String },
 }
 
 impl Unevaluable {
@@ -1041,6 +1052,10 @@ impl Unevaluable {
             }
             Unevaluable::NoLimit => "the limit is not a number".into(),
             Unevaluable::AtFailed => "the document does not run with its at params".into(),
+            Unevaluable::AtUnknownParam { param } => format!(
+                "at {param}: this document has no param {param} (a subassembly's drives are its own file's params, set in that file)"
+            ),
+            Unevaluable::AtNotANumber { param } => format!("at {param}: the value is not a number"),
         }
     }
 }
@@ -1072,6 +1087,7 @@ impl Issue {
             | Issue::PartChanged { .. } => Level::Warning,
             Issue::IntendedContact { .. } => Level::Info,
             Issue::Inside { issue, .. } => issue.level(),
+            Issue::AtPastLimit { .. } => Level::Warning,
             _ => Level::Error,
         }
     }
@@ -1100,6 +1116,7 @@ impl Issue {
             Issue::UnknownMetric { .. } => "UnknownMetric",
             Issue::ExpectUnevaluable { .. } => "ExpectUnevaluable",
             Issue::Inside { issue, .. } => issue.kind(),
+            Issue::AtPastLimit { .. } => "AtPastLimit",
         }
     }
 }
@@ -1322,6 +1339,10 @@ fn issue_text(i: &Issue) -> String {
             format!("{metric} is no assembly measure ({})", METRICS.join(", "))
         }
         Issue::Inside { path, issue } => format!("in {path}: {}", issue_text(issue)),
+        Issue::AtPastLimit { limit } => format!(
+            "at these params {}: the check is taken outside the joint's range",
+            issue_text(limit)
+        ),
     }
 }
 
@@ -1457,6 +1478,7 @@ fn issue_data(i: &Issue) -> Vec<(&'static str, Json)> {
             d.extend(issue_data(issue));
             d
         }
+        Issue::AtPastLimit { limit } => issue_data(limit),
     }
 }
 
@@ -2059,6 +2081,7 @@ fn build_doc(
         };
         out.fit_rules.push(fa::FitRule {
             id,
+            within: vec![],
             a: m(&r.a),
             b: m(&r.b),
             min_engagement: r.min_engagement,
@@ -2195,11 +2218,21 @@ pub fn finish(
     }
     let top = build_doc(&d, &dir, &fence, &dir, &subs, &mut want, &mut names);
     let mut catalog = fa::Catalog::default();
+    // each subassembly's fit and rule names, for what its fits say when used from here
+    let mut sub_fit_names: BTreeMap<fa::DocId, (Vec<String>, BTreeMap<u64, String>)> = BTreeMap::new();
     for (key, sub) in &subs {
         let sdir = std::path::Path::new(key).parent().map(|p| p.to_path_buf());
         let mut sn = Names::default();
         let a = build_doc(&sub.0, &dir, &fence, &sdir, &subs, &mut want, &mut sn);
-        catalog.assemblies.insert(fa::DocId(short(&dir, key).into()), a);
+        let doc = fa::DocId(short(&dir, key).into());
+        sub_fit_names.insert(
+            doc.clone(),
+            (
+                sn.fits.iter().map(|f| f.0.clone()).collect(),
+                sn.rule.iter().map(|(k, v)| (*k, v.0.clone())).collect(),
+            ),
+        );
+        catalog.assemblies.insert(doc, a);
     }
 
     // parts: built once per text and question, by file
@@ -2411,10 +2444,30 @@ pub fn finish(
     } = &mut live;
     let sol = solver.solution();
     t.solve_ms = t2.elapsed().as_secs_f64() * 1e3;
+    let every_fit = all_fits(live_asm, checker.parts());
+    // the subassemblies' fits and rules by their names under their use (`c.f_ub`), shown where
+    // the subassembly is used
+    for (p, doc, fit, rule) in &every_fit.2 {
+        let Some((fits, rules)) = sub_fit_names.get(doc) else {
+            continue;
+        };
+        let at = names.inst.get(&p[0].0).map_or(Span::default(), |x| x.1);
+        let under = |n: &str| format!("{}.{n}", path_name(&names, p));
+        match (fit, rule) {
+            (Some(k), _) => names
+                .fits
+                .push((under(fits.get(*k).map_or("?", |x| x.as_str())), at)),
+            (_, Some(id)) => {
+                let n = under(rules.get(id).map_or("?", |x| x.as_str()));
+                names.rule.entry(*id).or_insert((n, at));
+            }
+            _ => {}
+        }
+    }
     let t3 = Instant::now();
     // the overlap check can wait (`Options::overlap`): a UI shows the posed parts first
     let rep = if opts.overlap {
-        checker.interference(sol, &live_asm.fits, &live_asm.fit_rules)
+        checker.interference(sol, &every_fit.0, &every_fit.1)
     } else {
         fa::check::InterferenceReport::default()
     };
@@ -2595,7 +2648,7 @@ pub fn finish(
             sol,
             catalog: &catalog,
             checker,
-            asm: live_asm,
+            fits: &every_fit,
         };
         let mark = ev.enter_expect(k);
         let v = m.measure(ev, metric, args);
@@ -2613,6 +2666,7 @@ pub fn finish(
     // expects `at` the same params share one run: the document with those values, the parts
     // from this run's cache (only the drives differ), every expect of the set measured at once
     let mut at_values: BTreeMap<usize, Option<f64>> = BTreeMap::new();
+    let mut at_why: BTreeMap<usize, Unevaluable> = BTreeMap::new();
     if opts.probe.is_none() {
         let mut sets: BTreeMap<String, Vec<usize>> = BTreeMap::new();
         for (k, s) in expects.iter().enumerate() {
@@ -2626,9 +2680,40 @@ pub fn finish(
             let text = at_text(ev, at);
             ev.leave_expect(mark);
             match text {
-                Some(text) => sets.entry(text).or_default().push(k),
-                None => {
-                    at_values.insert(k, None);
+                Ok((text, set)) => {
+                    // a joint's drive set past its limit: the check would measure elsewhere
+                    for (key, v) in &set {
+                        for l in &d.links {
+                            let LinkKind::Joint(kind) = l.kind else { continue };
+                            for (f, n) in &l.drive {
+                                let driven = matches!(&n.src, Src::Driving(p) if p == key);
+                                let Some(&(_, lo, hi)) = l.limits.iter().find(|x| x.0 == *f) else {
+                                    continue;
+                                };
+                                // past the range by more than the value's own rounding
+                                let slack = 1e-9 * lo.abs().max(hi.abs()).max(1.0);
+                                if driven && !(lo - slack..=hi + slack).contains(v) {
+                                    ev.warnings.push(Warning::Asm(Box::new(AsmNote {
+                                        span: s.span,
+                                        issue: Issue::AtPastLimit {
+                                            limit: Box::new(Issue::LimitViolated {
+                                                joint: l.id.clone(),
+                                                freedom: freedom_word(kind, *f),
+                                                value: *v,
+                                                range: (lo, hi),
+                                                angle: f.is_angle(),
+                                                fix: None,
+                                            }),
+                                        },
+                                    })));
+                                }
+                            }
+                        }
+                    }
+                    sets.entry(text).or_default().push(k)
+                }
+                Err(why) => {
+                    at_why.insert(k, why);
                 }
             }
         }
@@ -2645,6 +2730,36 @@ pub fn finish(
             let (run, back) = crate::run(&text, o, kept);
             cache = back.asm.unwrap_or_default();
             t.at_runs += 1;
+            // a joint past its limit at these params: every check of the set measured at the limit
+            let past: Vec<Issue> = run
+                .errors
+                .iter()
+                .filter_map(|e| match e {
+                    Error::Asm(n) if matches!(n.issue, Issue::LimitViolated { .. }) => Some(n.issue.clone()),
+                    _ => None,
+                })
+                .collect();
+            for k in &ks {
+                for limit in &past {
+                    let w = Warning::Asm(Box::new(AsmNote {
+                        span: expects[*k].span,
+                        issue: Issue::AtPastLimit {
+                            limit: Box::new(limit.clone()),
+                        },
+                    }));
+                    let same = |x: &Warning| match (x, &w) {
+                        (Warning::Asm(a), Warning::Asm(b)) => {
+                            a.span == b.span
+                                && a.kind() == b.kind()
+                                && issue_text(&a.issue) == issue_text(&b.issue)
+                        }
+                        _ => false,
+                    };
+                    if !ev.warnings.iter().any(same) {
+                        ev.warnings.push(w);
+                    }
+                }
+            }
             let probed = run.asm.map(|a| a.probes).unwrap_or_default();
             for k in ks {
                 let v = probed.iter().find(|p| p.0 == k).and_then(|p| p.1);
@@ -2681,7 +2796,7 @@ pub fn finish(
                     .get(&k)
                     .copied()
                     .flatten()
-                    .ok_or_else(|| unevaluable(Unevaluable::AtFailed))
+                    .ok_or_else(|| unevaluable(at_why.get(&k).cloned().unwrap_or(Unevaluable::AtFailed)))
             };
             let measured = match measured {
                 Ok(v) => v,
@@ -2772,17 +2887,24 @@ pub fn finish(
 
 /// The document with an `expect`'s `at P = v` params set: what it is measured on. None when a
 /// value is not a number here, or a param is not the document's.
-fn at_text(ev: &mut Eval, at: &[(Vec<Seg>, Expr)]) -> Option<String> {
+fn at_text(ev: &mut Eval, at: &[(Vec<Seg>, Expr)]) -> Result<(String, Vec<(ParamKey, f64)>), Unevaluable> {
     let mut text = ev.src.to_string();
+    let mut set = vec![];
     for (path, e) in at {
-        let (last, owner) = path.split_last()?;
+        let Some((last, owner)) = path.split_last() else {
+            return Err(Unevaluable::AtFailed);
+        };
         let param = ParamKey {
             owner: owner.to_vec(),
             name: last.name.clone(),
         };
         let n = match ev.expr(e) {
             Ok(Value::Num(n)) => n,
-            _ => return None,
+            _ => {
+                return Err(Unevaluable::AtNotANumber {
+                    param: param.to_string(),
+                });
+            }
         };
         let value = Literal {
             value: if n.dim == Dim::Angle {
@@ -2792,9 +2914,74 @@ fn at_text(ev: &mut Eval, at: &[(Vec<Seg>, Expr)]) -> Option<String> {
             },
             dim: if n.dim == Dim::Any { Dim::Length } else { n.dim },
         };
-        text = crate::edit::apply(&text, &Op::SetParam { param, value }).ok()?;
+        set.push((param.clone(), n.v));
+        text = match crate::edit::apply(
+            &text,
+            &Op::SetParam {
+                param: param.clone(),
+                value,
+            },
+        ) {
+            Ok(t) => t,
+            Err(Error::UnknownParam { .. }) => {
+                return Err(Unevaluable::AtUnknownParam {
+                    param: param.to_string(),
+                });
+            }
+            Err(_) => return Err(Unevaluable::AtFailed),
+        };
     }
-    Some(text)
+    Ok((text, set))
+}
+
+/// The fits and fit rules of an assembly and of every subassembly used in it, each under its
+/// use: a subassembly's fits name its own occurrences, and its rules cover pairs inside it only.
+/// The third list says, for each fit and rule added, the use it is under, its document and its
+/// place there (a fit's index, a rule's id), in the order they were added.
+type FitSource = (fa::Path, fa::DocId, Option<usize>, Option<u64>);
+
+fn all_fits(asm: &fa::Assembly, catalog: &fa::Catalog) -> (Vec<fa::Fit>, Vec<fa::FitRule>, Vec<FitSource>) {
+    let mut fits = asm.fits.clone();
+    let mut rules = asm.fit_rules.clone();
+    let mut from = vec![];
+    let mut todo: Vec<(fa::Path, &fa::Assembly, usize)> = vec![(vec![], asm, 0)];
+    while let Some((at, a, depth)) = todo.pop() {
+        // a cycle cannot reach here (refused on loading), but stay finite anyway
+        if depth > 64 {
+            continue;
+        }
+        for i in a.instances.iter().filter(|i| !i.suppressed) {
+            let fa::Component::Assembly(d) = &i.of else {
+                continue;
+            };
+            let Some(sub) = catalog.assemblies.get(d) else {
+                continue;
+            };
+            let mut p = at.clone();
+            p.push(i.id);
+            let under = |q: &fa::Path| {
+                let mut x = p.clone();
+                x.extend(q.iter().copied());
+                x
+            };
+            for (k, f) in sub.fits.iter().enumerate() {
+                fits.push(fa::Fit {
+                    a: under(&f.a),
+                    b: under(&f.b),
+                });
+                from.push((p.clone(), d.clone(), Some(k), None));
+            }
+            for r in &sub.fit_rules {
+                rules.push(fa::FitRule {
+                    within: under(&r.within),
+                    ..r.clone()
+                });
+                from.push((p.clone(), d.clone(), None, Some(r.id)));
+            }
+            todo.push((p, sub, depth + 1));
+        }
+    }
+    (fits, rules, from)
 }
 
 /// What an expect measures with.
@@ -2803,7 +2990,8 @@ struct Measure<'a> {
     sol: &'a fa::Solution,
     catalog: &'a fa::Catalog,
     checker: &'a mut Checker<Arc<fa::Catalog>, Arc<BrepExact>>,
-    asm: &'a fa::Assembly,
+    /// The assembly's fits and fit rules with its subassemblies' (`all_fits`).
+    fits: &'a (Vec<fa::Fit>, Vec<fa::FitRule>, Vec<FitSource>),
 }
 
 impl Measure<'_> {
@@ -2892,9 +3080,7 @@ impl Measure<'_> {
         match metric {
             "mobility" => Ok(self.sol.mobility as f64),
             "interferences" => {
-                let rep = self
-                    .checker
-                    .interference(self.sol, &self.asm.fits, &self.asm.fit_rules);
+                let rep = self.checker.interference(self.sol, &self.fits.0, &self.fits.1);
                 Ok(rep.interferences.len() as f64)
             }
             "interference" | "clearance" | "distance" => {

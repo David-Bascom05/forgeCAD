@@ -1179,3 +1179,90 @@ fn params_of_expect_at_lines_are_used() {
         .collect();
     assert!(unused.is_empty(), "{unused:?}");
 }
+
+/// The assembly warnings of a kind, as text.
+fn asm_warnings(r: &Run, kind: &str) -> Vec<String> {
+    r.warnings
+        .iter()
+        .filter(|w| matches!(w, Warning::Asm(n) if n.kind() == kind))
+        .map(|w| format!("{w:?}"))
+        .collect()
+}
+
+/// A subassembly's fits and fit rules hold where it is used: its overlapping pair is an intended
+/// contact named under the use, and its rule covers only pairs inside it.
+#[test]
+fn a_subassemblys_fits_hold_where_it_is_used() {
+    let d = mech_dir("subfits");
+    for (file, decl, by) in [
+        (
+            "sub_rule.fg",
+            "press = fit_rule(\"block.fg\", \"rod.fg\")",
+            "s.press",
+        ),
+        ("sub_fit.fg", "f = fit(a, b)", "s.f"),
+    ] {
+        write(
+            &d,
+            file,
+            &format!(
+                "assembly\n\na = part(\"block.fg\", ground: true)\nb = part(\"rod.fg\", ground: true)\n{decl}\n"
+            ),
+        );
+        let parent = format!(
+            "assembly\n\ns = subassembly(\"{file}\", ground: true)\nc = part(\"block.fg\", at: pose(at: (0, 500, 0)), ground: true)\nd = part(\"rod.fg\", at: pose(at: (0, 500, 0)), ground: true)\n"
+        );
+        let r = run_in(&d, &parent);
+        let a = r.asm.as_ref().expect("an assembly");
+        // the parent's own block and rod still overlap; the subassembly's do not count
+        assert_eq!(
+            a.interferences,
+            1,
+            "{file}: {:?}",
+            asm_warnings(&r, "Interference")
+        );
+        let intended = asm_warnings(&r, "IntendedContact");
+        assert!(intended.iter().any(|w| w.contains(by)), "{file}: {intended:?}");
+    }
+}
+
+/// An `at` that drives a joint past its limit is a typed warning on the expect line: the solve
+/// held the joint at the limit, so the check measured there.
+#[test]
+fn an_expect_at_past_a_joint_limit_is_named() {
+    let d = mech_dir("at-limit");
+    let doc = four_bar_doc(30.0).replace(
+        "j1 = revolute(crank.a, base.o2, turn: turn)",
+        "j1 = revolute(crank.a, base.o2, turn: turn, limit: (0deg, 80deg))",
+    );
+    assert!(doc.contains("limit: (0deg, 80deg)"));
+    let src = format!("{doc}expect value(j1.turn) = 80deg +- 0.000001deg at j1.turn = 120deg\n");
+    let r = run_in(&d, &src);
+    let past = asm_warnings(&r, "AtPastLimit");
+    assert_eq!(past.len(), 1, "{:?} {:?}", errors(&r), r.warnings.len());
+    assert!(past[0].contains("j1"), "{}", past[0]);
+    // within the limit, nothing
+    let src = format!("{doc}expect value(j1.turn) = 60deg +- 0.000001deg at j1.turn = 60deg\n");
+    let r = run_in(&d, &src);
+    assert!(asm_warnings(&r, "AtPastLimit").is_empty());
+    assert!(r.ok(), "{:?}", errors(&r));
+}
+
+/// An `at` on a param the document does not have (a subassembly's drive is its own file's) is
+/// a typed error naming the param, not a silent "not measured".
+#[test]
+fn an_expect_at_on_an_unknown_param_is_named() {
+    let d = mech_dir("at-unknown");
+    let src = format!(
+        "{}expect value(j1.turn) = 30deg at swivel_turn = 90deg\n",
+        four_bar_doc(30.0)
+    );
+    let r = run_in(&d, &src);
+    let e: Vec<&Error> = r
+        .errors
+        .iter()
+        .filter(|e| e.kind() == "ExpectUnevaluable")
+        .collect();
+    assert_eq!(e.len(), 1, "{:?}", errors(&r));
+    assert!(e[0].text().contains("no param swivel_turn"), "{}", e[0].text());
+}

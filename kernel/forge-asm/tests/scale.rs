@@ -116,6 +116,7 @@ fn assembly() -> (Assembly, Vec<JointId>) {
     let mut asm = Assembly::default();
     // one rule instead of 4,600 fit declarations
     asm.fit_rules.push(FitRule {
+        within: vec![],
         id: 1,
         min_engagement: None,
         a: FitMatch::Feature {
