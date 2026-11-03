@@ -18,9 +18,9 @@ pub mod app;
 #[cfg(not(target_arch = "wasm32"))]
 pub mod cache;
 #[cfg(not(target_arch = "wasm32"))]
-pub mod fg;
-#[cfg(not(target_arch = "wasm32"))]
 pub mod dragbench;
+#[cfg(not(target_arch = "wasm32"))]
+pub mod fg;
 #[cfg(not(target_arch = "wasm32"))]
 pub mod gui;
 #[cfg(not(target_arch = "wasm32"))]

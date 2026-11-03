@@ -40,3 +40,13 @@ A reply is a diff: `ok v7; +4 faces, volume -120.4 mm3, valid; picked fillet1:4`
 An error gives the line, the reason and, where it can, `try:` a replacement that builds; nothing
 was applied. A `.fc` file is plain text: hand edits are fine, `act` picks them up. New file: `act`
 on an empty `.fc` file.
+
+## Forge (.fg) parts
+
+A `.fg` file is a Forge part (`help forge` has the language). The same tools take it, and reply
+with typed JSON: features by id, params (driving, driven, structural), errors and lints with spans
+and `fixes`, each fix an op. Change a .fg part with `edit F` and an op (or `ops`, all or none),
+sent back as a fix gives it: `{"op":"SetParam","param":"t","value":{"value":3,"dim":"Length"}}`,
+AddLocalParam, MakeShared, SplitInstance, AddFeature, DeleteFeature, MoveFeature, LiftLiteral.
+A refusal is a typed error, and nothing is written. `query F params|features|stat|check`;
+`export F dxf [SHEET]` is a sheet's flat pattern.

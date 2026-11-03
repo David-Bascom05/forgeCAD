@@ -265,7 +265,12 @@ fn mesh_whole(bodies: Receiver<Whole>, out: Sender<Msg>, waker: Arc<dyn Fn() + S
 /// The worker: owns the stage cache (it is not `Send`: it never leaves this thread) and builds
 /// the latest text it was given. A changed part goes to the screen first as the faces that changed
 /// (meshed once per face, as a drag's), then whole.
-fn work(jobs: Receiver<(u64, String)>, out: Sender<Msg>, mut gpu: Option<Gpu>, waker: Arc<dyn Fn() + Send + Sync>) {
+fn work(
+    jobs: Receiver<(u64, String)>,
+    out: Sender<Msg>,
+    mut gpu: Option<Gpu>,
+    waker: Arc<dyn Fn() + Send + Sync>,
+) {
     let mut cache = Cache::default();
     let mut mesher = Mesher::default();
     let mut shown_ids: Option<Vec<String>> = None;
@@ -324,7 +329,15 @@ fn work(jobs: Receiver<(u64, String)>, out: Sender<Msg>, mut gpu: Option<Gpu>, w
             let parts = [mesh.clone().unwrap_or_else(PartMesh::empty)];
             let mut scene = Scene::new(&part_info(&parts), vec![Placement::at(0, [0.0; 3])]);
             scene.set_explode(0.0);
-            let r = Renderer::new(device, queue, adapter, render::OFFSCREEN, (16, 16), &parts, &scene);
+            let r = Renderer::new(
+                device,
+                queue,
+                adapter,
+                render::OFFSCREEN,
+                (16, 16),
+                &parts,
+                &scene,
+            );
             (r, scene)
         });
         let (feats, params, issues) = rows(&run, &job.1);
@@ -394,7 +407,12 @@ pub struct Session {
 
 impl Session {
     /// A session on this text; the first build starts at once.
-    pub fn new(path: Option<String>, src: String, gpu: Option<Gpu>, waker: Arc<dyn Fn() + Send + Sync>) -> Session {
+    pub fn new(
+        path: Option<String>,
+        src: String,
+        gpu: Option<Gpu>,
+        waker: Arc<dyn Fn() + Send + Sync>,
+    ) -> Session {
         let (jobs, rx) = channel();
         let (tx, built) = channel();
         std::thread::Builder::new()

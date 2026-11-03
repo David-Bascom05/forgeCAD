@@ -66,7 +66,11 @@ fn app(file: &str) -> Option<Headless> {
     };
     h.step();
     h.gui.open(file);
-    assert!(h.until(|g| built(g) && g.view.is_some()), "never built: {}", h.gui.shell.status);
+    assert!(
+        h.until(|g| built(g) && g.view.is_some()),
+        "never built: {}",
+        h.gui.shell.status
+    );
     h.step();
     Some(h)
 }
@@ -84,7 +88,11 @@ fn settle(h: &mut Headless) {
 
 fn param(g: &Gui, key: &str) -> forge_render::shell::fg::ParamRow {
     let p = g.shell.fg.as_ref().unwrap();
-    p.params.iter().find(|p| p.key.to_string() == key).cloned().unwrap()
+    p.params
+        .iter()
+        .find(|p| p.key.to_string() == key)
+        .cloned()
+        .unwrap()
 }
 
 #[test]
@@ -92,7 +100,9 @@ fn open_edit_a_param_rebuild_fix_and_save() {
     let dir = scratch("edit");
     let file = dir.join("plate.fg");
     std::fs::write(&file, PLATE).unwrap();
-    let Some(mut h) = app(file.to_str().unwrap()) else { return };
+    let Some(mut h) = app(file.to_str().unwrap()) else {
+        return;
+    };
     let fg = h.gui.shell.fg.as_ref().unwrap();
     assert_eq!(h.gui.shell.name, "plate.fg");
     assert!(h.gui.shell.doc.is_none() && h.gui.shell.rows.is_empty());
@@ -110,7 +120,10 @@ fn open_edit_a_param_rebuild_fix_and_save() {
         ("lug.post", 1),
         ("dent", 0),
     ] {
-        assert!(tree.contains(&(want.0.to_string(), want.1)), "{want:?} not in {tree:?}");
+        assert!(
+            tree.contains(&(want.0.to_string(), want.1)),
+            "{want:?} not in {tree:?}"
+        );
     }
     assert!(h.gui.shell.place("fg:row:lug.post").is_some());
 
@@ -144,7 +157,12 @@ fn open_edit_a_param_rebuild_fix_and_save() {
             dim: Dim::Length,
         },
     };
-    assert_eq!(h.gui.fg.as_ref().unwrap().ops, [set.clone()], "{}", h.gui.shell.status);
+    assert_eq!(
+        h.gui.fg.as_ref().unwrap().ops,
+        std::slice::from_ref(&set),
+        "{}",
+        h.gui.shell.status
+    );
     assert!(h.gui.fg.as_ref().unwrap().seq > before);
     settle(&mut h);
     assert_eq!(param(&h.gui, "t").value.unwrap().0, 8.0);
@@ -169,7 +187,16 @@ fn open_edit_a_param_rebuild_fix_and_save() {
     h.step();
     assert_eq!(h.gui.fg.as_ref().unwrap().ops, [set.clone(), fix.clone()]);
     settle(&mut h);
-    assert!(h.gui.shell.fg.as_ref().unwrap().issues.iter().all(|i| i.kind != "LooseLiteral"));
+    assert!(
+        h.gui
+            .shell
+            .fg
+            .as_ref()
+            .unwrap()
+            .issues
+            .iter()
+            .all(|i| i.kind != "LooseLiteral")
+    );
 
     // saved: exactly the ops' text edits, applied to what was opened
     assert!(h.click("fg:save"));
@@ -189,7 +216,9 @@ fn tree_actions_are_typed_ops_and_a_refusal_is_typed() {
     let dir = scratch("tree");
     let file = dir.join("plate.fg");
     std::fs::write(&file, PLATE).unwrap();
-    let Some(mut h) = app(file.to_str().unwrap()) else { return };
+    let Some(mut h) = app(file.to_str().unwrap()) else {
+        return;
+    };
 
     // the base is read below it: deleting it is refused, nothing changes
     assert!(h.click("fg:row:base"));
@@ -210,7 +239,16 @@ fn tree_actions_are_typed_ops_and_a_refusal_is_typed() {
     let src = h.gui.fg.as_ref().unwrap().src.clone();
     assert!(src.contains("param psk[1].w = "), "{src}");
     settle(&mut h);
-    assert!(h.gui.shell.fg.as_ref().unwrap().params.iter().any(|p| p.key.to_string() == "psk[1].w"));
+    assert!(
+        h.gui
+            .shell
+            .fg
+            .as_ref()
+            .unwrap()
+            .params
+            .iter()
+            .any(|p| p.key.to_string() == "psk[1].w")
+    );
 
     // the mark moves up above the lug, and ids hold
     assert!(h.click("fg:row:mark"));
@@ -226,7 +264,16 @@ fn tree_actions_are_typed_ops_and_a_refusal_is_typed() {
         }
     );
     settle(&mut h);
-    let ids: Vec<String> = h.gui.shell.fg.as_ref().unwrap().feats.iter().map(|f| f.id.clone()).collect();
+    let ids: Vec<String> = h
+        .gui
+        .shell
+        .fg
+        .as_ref()
+        .unwrap()
+        .feats
+        .iter()
+        .map(|f| f.id.clone())
+        .collect();
     let mark = ids.iter().position(|i| i == "mark").unwrap();
     let lug = ids.iter().position(|i| i == "lug.post").unwrap();
     assert!(mark < lug, "{ids:?}");
@@ -240,7 +287,10 @@ fn tree_actions_are_typed_ops_and_a_refusal_is_typed() {
     h.step();
     assert!(h.click("fg:add"));
     h.step();
-    assert!(matches!(h.gui.fg.as_ref().unwrap().ops.last(), Some(Op::AddFeature { before: None, .. })));
+    assert!(matches!(
+        h.gui.fg.as_ref().unwrap().ops.last(),
+        Some(Op::AddFeature { before: None, .. })
+    ));
     settle(&mut h);
     assert_eq!(h.gui.shell.fg.as_ref().unwrap().feats.len(), n + 1);
     h.click("undo");
@@ -255,7 +305,9 @@ fn an_fc_part_still_opens_after_a_forge_part() {
     let dir = scratch("both");
     let file = dir.join("plate.fg");
     std::fs::write(&file, PLATE).unwrap();
-    let Some(mut h) = app(file.to_str().unwrap()) else { return };
+    let Some(mut h) = app(file.to_str().unwrap()) else {
+        return;
+    };
     h.gui.open("bracket");
     h.settle();
     assert!(h.until(|g| !g.shell.rows.is_empty() && g.view.as_ref().is_some_and(|v| v.live.is_some())));
@@ -271,7 +323,9 @@ fn a_warm_rebuild_in_the_app_is_milliseconds() {
     let dir = scratch("warm");
     let file = dir.join("bracket.fg");
     std::fs::copy(part, &file).unwrap();
-    let Some(mut h) = app(file.to_str().unwrap()) else { return };
+    let Some(mut h) = app(file.to_str().unwrap()) else {
+        return;
+    };
     let mut unchanged = vec![];
     for _ in 0..5 {
         let s = h.gui.fg.as_mut().unwrap();
@@ -323,7 +377,9 @@ fn a_sheet_part_shows_flat_and_exports_its_dxf() {
     let dir = scratch("sheet");
     let file = dir.join("l.fg");
     std::fs::copy(part, &file).unwrap();
-    let Some(mut h) = app(file.to_str().unwrap()) else { return };
+    let Some(mut h) = app(file.to_str().unwrap()) else {
+        return;
+    };
     let sheets = h.gui.shell.fg.as_ref().unwrap().sheets.clone();
     assert_eq!(sheets.len(), 1, "{sheets:?}");
     assert_eq!(sheets[0].bends, 1);
@@ -344,6 +400,9 @@ fn a_sheet_part_shows_flat_and_exports_its_dxf() {
     assert!(h.click(&format!("fg:dxf:{id}")));
     h.step();
     let dxf = std::fs::read_to_string(dir.join("l.dxf")).unwrap();
-    assert!(dxf.contains("SECTION") && dxf.contains("BEND") && dxf.contains("CUT"), "{dxf}");
+    assert!(
+        dxf.contains("SECTION") && dxf.contains("BEND") && dxf.contains("CUT"),
+        "{dxf}"
+    );
     let _ = std::fs::remove_dir_all(&dir);
 }
