@@ -41,7 +41,7 @@ pub type Sources<'a> = dyn Fn(&[String]) -> R<Vec<Refd>> + 'a;
 
 /// A source laid in the plane.
 #[derive(Clone, Debug, PartialEq)]
-enum Flat {
+pub enum Flat {
     Point(Point2),
     Line(Point2, Point2),
     Circle(Point2, f64),
@@ -235,7 +235,7 @@ fn fit(
 
 /// A source's exact image on the plane, or why it has none a sketch can hold. The tests of
 /// parallel and edge-on go by how far the true image strays from what's made: at most LINEAR.
-fn flat(plane: &Frame, s: &Source, approx: Option<f64>) -> R<Flat> {
+pub fn flat(plane: &Frame, s: &Source, approx: Option<f64>) -> R<Flat> {
     let z = plane.z().get();
     match s {
         Source::Point(p) => Ok(Flat::Point(in_plane(plane, *p))),
