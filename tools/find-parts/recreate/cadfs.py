@@ -56,11 +56,14 @@ def dot(a, b):
 CARRY_COS = 0.9999619230641713
 
 
-def carries_on(e, k, g, j):
-    """Whether edge g at its end j carries on from edge e at its end k (the same vertex) within half a degree.
+def carries_on(e, k, g, j, others=()):
+    """Whether edge g at its end j carries on from edge e at its end k (the same vertex) within half a degree,
+    every other edge there, (edge, its end) in `others`, having its faces meet within half a degree as well.
     An edge's tangents run along the edge; out of its end they are reversed."""
     a, b = e["t"][k], g["t"][j]
     if not a or not b:
+        return False
+    if any(o["h"] not in (e["h"], g["h"]) and (o.get("d") or [None, None])[i] is not None and o["d"][i] < CARRY_COS for o, i in others):
         return False
     s = (1.0 if k == 0 else -1.0) * (1.0 if j == 0 else -1.0)
     return -s * dot(a, b) >= CARRY_COS * math.sqrt(dot(a, a) * dot(b, b))
@@ -658,7 +661,7 @@ class Tr:
                     for g, j in at[v]:
                         if g["h"] in picked or g["c"] == "smooth" or not g["t"][j]:
                             continue
-                        if carries_on(e, k, g, j):
+                        if carries_on(e, k, g, j, at[v]):
                             picked[g["h"]] = g
                             todo.append(g)
         return sorted(picked)

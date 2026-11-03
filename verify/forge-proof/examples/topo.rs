@@ -3,7 +3,7 @@
 //! stdin: `N\n` then N bytes of source, repeatedly. stdout: one JSON line per source.
 use forge_agent::model::Model;
 use forge_agent::select::{self, Ent};
-use forge_geom::CurveGeom;
+use forge_geom::{CurveGeom, SurfaceGeom};
 use forge_math::Point3;
 use std::io::{BufRead, Read, Write};
 
@@ -50,8 +50,26 @@ fn dump(m: &Model) -> String {
                     .iter()
                     .map(|t| t.map_or("null".into(), |v| format!("[{},{},{}]", v.x, v.y, v.z)))
                     .collect();
+                // the cosine between the faces' normals at each end (1: they meet tangentially there)
+                let level = |t: f64| -> String {
+                    let p = edge.curve.eval(t);
+                    let n: Vec<_> = edge
+                        .coedges
+                        .iter()
+                        .filter_map(|&c| {
+                            let f = b.coedge_face(c);
+                            b.face_normal(f, b.face(f).surface.project(p))
+                        })
+                        .collect();
+                    if let [n0, n1] = n[..] {
+                        format!("{}", n0.dot(n1.get()))
+                    } else {
+                        "null".into()
+                    }
+                };
+                let dd = [level(edge.range.lo), level(edge.range.hi)];
                 edges.push(format!(
-                    "{{\"h\":\"{}\",\"f\":[{}],\"k\":\"{}\",\"c\":\"{}\",\"v\":[{},{}],\"t\":[{}],\"p\":{}}}",
+                    "{{\"h\":\"{}\",\"f\":[{}],\"k\":\"{}\",\"c\":\"{}\",\"v\":[{},{}],\"t\":[{}],\"d\":[{}],\"p\":{}}}",
                     h(e),
                     fs.join(","),
                     select::curve_kind(&edge.curve),
@@ -59,6 +77,7 @@ fn dump(m: &Model) -> String {
                     edge.start.0,
                     edge.end.0,
                     tt.join(","),
+                    dd.join(","),
                     pts(&b.edge_points(x, 16))
                 ));
             }

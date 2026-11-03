@@ -1167,7 +1167,12 @@ fn tangent_chains(
                 })
                 .filter(|&o| {
                     let t = tangents(body, o, v);
-                    continues(&mine, &t, radius) || (carry && carries_on(&mine, &t))
+                    continues(&mine, &t, radius)
+                        || (carry
+                            && carries_on(&mine, &t)
+                            && at[&v]
+                                .iter()
+                                .all(|&w| w == edge || w == o || level_at(body, w, v)))
                 })
                 .collect();
             if let [o] = next[..]
@@ -1253,6 +1258,25 @@ const CARRY_COS: f64 = 0.999_961_923_064_171_3;
 /// Whether two edges leave a vertex the opposite way, to within half a degree.
 fn carries_on(a: &[Vec3], b: &[Vec3]) -> bool {
     b.iter().any(|t| a.iter().any(|m| -m.dot(*t) >= CARRY_COS))
+}
+
+/// Whether the faces either side of `e` meet within half a degree of tangent at its end `v`: past a
+/// kink the faces beside the chain must carry on too, not fold back as a sliver does.
+fn level_at(body: &Body, e: EdgeId, v: VertexId) -> bool {
+    let x = body.edge(e);
+    let p = body.vertex(v).point;
+    let n: Vec<_> = x
+        .coedges
+        .iter()
+        .filter_map(|&c| {
+            let f = body.coedge_face(c);
+            body.face_normal(f, body.face(f).surface.project(p))
+        })
+        .collect();
+    match n[..] {
+        [a, b] => a.dot(b.get()) >= CARRY_COS,
+        _ => true,
+    }
 }
 
 /// The filleted edges as tangent chains: two edges are linked at a vertex where they are

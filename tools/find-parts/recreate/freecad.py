@@ -787,7 +787,7 @@ def along_tangents(edges, picked):
             for g, j in at[v] if t else []:
                 if g["h"] in picked or g["c"] == "smooth" or not g["t"][j]:
                     continue
-                if carries_on(e, k, g, j):
+                if carries_on(e, k, g, j, at[v]):
                     picked[g["h"]] = g
                     todo.append(g)
 
