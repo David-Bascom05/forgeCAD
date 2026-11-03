@@ -26,6 +26,7 @@ fn expr_of(text: &str) -> R<Expr> {
         _ => Err(Error::Syntax(crate::error::SyntaxError::Expected {
             span: Span::default(),
             what: "an expression",
+            expected: crate::syntax::TermSet::default(),
         })),
     }
 }
