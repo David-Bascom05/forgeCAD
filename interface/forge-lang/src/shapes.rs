@@ -27,6 +27,9 @@ pub const NAMES: &[&str] = &[
     "coil",
     "draft",
     "offset_faces",
+    "delete_faces",
+    "replace_face",
+    "move_faces",
     "thicken",
     "rib",
     "facefillet",
@@ -50,6 +53,7 @@ pub fn call(ev: &mut Eval, name: &'static str, args: &[Arg], span: Span) -> R<Va
         "coil" => coil(ev, args, span),
         "draft" => draft(ev, args, span),
         "offset_faces" => offset_faces(ev, args, span),
+        "delete_faces" | "replace_face" | "move_faces" => direct(ev, name, args, span),
         "thicken" => thicken(ev, args, span),
         "rib" => rib(ev, args, span),
         "facefillet" => facefillet(ev, args, span),
@@ -994,6 +998,100 @@ fn offset_faces(ev: &mut Eval, args: &[Arg], span: Span) -> R<Value> {
     let f = Feature::Edit(Edit::Offset { faces, distance: d.v });
     let (idx, hid) = ev.push_feature(&id, "offset_faces", f, span, vec![dim("distance", &d)])?;
     Ok(feat(id, "offset_faces", idx, hid, None))
+}
+
+/// Direct edits: faces taken away (the gap closed by their neighbours), one face put on another
+/// face's surface, faces moved along a direction or turned about an axis (neighbours re-met).
+fn direct(ev: &mut Eval, name: &'static str, args: &[Arg], span: Span) -> R<Value> {
+    not_in_sketch(ev, name, span)?;
+    let id = ev.take_id(name, span)?;
+    let keys: &[&'static str] = match name {
+        "delete_faces" => &["faces"],
+        "replace_face" => &["face", "with"],
+        _ => &["faces", "along", "d", "about", "by"],
+    };
+    let a = Args::bind(ev, name, keys, args, span)?;
+    let first = keys[0];
+    let faces = names_arg(&a, first)?;
+    let building = ev.b.building && !a.poisoned();
+    if faces.is_empty() && building {
+        return Err(Error::EmptySelection { span: a.span(first) });
+    }
+    let mut dims = vec![];
+    let edit = match name {
+        "delete_faces" => Edit::Delete { faces },
+        "replace_face" => {
+            let face = match faces[..] {
+                [n] => n,
+                _ if !building => Name::NONE,
+                _ => {
+                    return Err(Error::OneFace {
+                        span: a.span("face"),
+                        what: "face",
+                        count: faces.len(),
+                    });
+                }
+            };
+            let with = match faces_arg(&a, "with")? {
+                Some(f) => target(ev, &f),
+                None if !building => Target::Face {
+                    feature: 0,
+                    name: Name::NONE,
+                },
+                None => {
+                    return Err(Error::MissingArg {
+                        span,
+                        func: name,
+                        arg: "with",
+                    });
+                }
+            };
+            Edit::Replace { face, with }
+        }
+        _ => {
+            let motion = match (a.opt("along"), a.opt("about")) {
+                (Some(_), Some(_)) => {
+                    return Err(Error::NotWith {
+                        span: a.span("about"),
+                        func: name,
+                        arg: "about",
+                        with: "along",
+                    });
+                }
+                (Some(v), None) => {
+                    let d = a.req_num("d", LEN)?;
+                    dims.push(dim("distance", &d));
+                    let dir = dir_of(v, a.span("along"))?;
+                    let u = dir.normalize().ok_or(Error::BadValue {
+                        span: a.span("along"),
+                        what: "a zero direction",
+                        value: 0.0,
+                    })?;
+                    forge_model::Motion::Translate(u.get() * d.v)
+                }
+                (None, Some(v)) => {
+                    let (o, ax) = crate::builtins::axis_of(ev, v, a.span("about"))?;
+                    let by = a.req_num("by", ANG)?;
+                    dims.push(dim("angle", &by));
+                    forge_model::Motion::Rotate {
+                        origin: o,
+                        axis: ax.get(),
+                        angle: by.v,
+                    }
+                }
+                (None, None) => {
+                    return Err(Error::MissingArg {
+                        span,
+                        func: name,
+                        arg: "along: DIR, d: D, or about: AXIS, by: A",
+                    });
+                }
+            };
+            Edit::Move { faces, motion }
+        }
+    };
+    let (idx, hid) = ev.push_feature(&id, name, Feature::Edit(edit), span, dims)?;
+    Ok(feat(id, name, idx, hid, None))
 }
 
 fn side_word(a: &Args) -> R<Side> {

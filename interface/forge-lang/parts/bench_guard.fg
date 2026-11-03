@@ -18,5 +18,5 @@ sketch plan(on: xy) {
 }
 env = extrude(plan, h)
 grown = offset_faces(env.faces, gap)
-bend = fillet(edges(of: env.end, crease: "convex"), r)
+bend = fillet(edges(of: faces(of: env, normal: Z), crease: "convex"), r)
 expect faces = 10

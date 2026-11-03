@@ -1,0 +1,86 @@
+# Spring plunger knob (tools/bench-parts/jack.fc, hand port): a flanged screw whose shaft carries
+# a compression spring up to a knurled knob. The modeled M12 thread and the maker's mark (text)
+# wait on lane fg-holes; the knurl's circular pattern is a loop here.
+
+shared rf = 22
+shared d = 12
+shared rk = 20
+shared tf = 6
+# the hex: corners on a 11.333 circle, flats 19.63 across
+shared hx = 9.815
+shared hy = 5.667
+shared hr = 11.333
+shared th = 8
+# its top corners chamfered by a turned triangle
+shared ch_in = 9.4
+shared ch_out = 13
+shared ch_low = 10.6
+shared ls = 46
+shared rc = 11
+shared tc = 4
+shared zc = 58
+# the spring: wire r 1.2 on a 9 radius, pitch 6, five turns, from 62.6 up
+shared rsp = 9
+shared rw = 1.2
+shared zsp = 62.6
+shared pitch = 6
+shared turns = count(5)
+# the knob: a disc from 91 to 106, domed rk over it
+shared zk = 91
+shared hk = 15
+# the knurl: 36 grooves cut 9 up from 98, each a triangle across the knob's rim
+shared nk = count(36)
+shared zn = 98
+shared dn = -9            # up from zn: a negative depth runs a cut along the normal
+shared kout = 1
+shared kin = 0.7
+shared kw = 0.9
+
+sketch fl(on: xy) {
+  c = circle((0, 0), rf)
+  xl = line((0, 0), (rf, 0), construction: true)
+}
+flange = extrude(fl, tf)
+sketch hexsk(on: flange.end) {
+  h = poly([(hx, 0 - hy), (hx, hy), (0, hr), (0 - hx, hy), (0 - hx, 0 - hy), (0, 0 - hr)])
+}
+hex = extrude(hexsk, th)
+# the part's axial section: sketch x radial, y up the axis
+section = rotate(fl.plane, about: fl.xl, by: 90deg)
+sketch chsk(on: section) {
+  t = poly([(ch_in, tf + th), (ch_out, tf + th), (ch_out, ch_low)])
+  ax = line((0, 0), (0, tf), construction: true)
+}
+hexch = revolve(chsk.t, axis: chsk.ax, cut: true)
+sketch shsk(on: hex.end) {
+  c = circle((0, 0), d / 2)
+}
+shaft = extrude(shsk, ls)
+sketch colsk(on: offset(fl.plane, zc)) {
+  c = circle((0, 0), rc)
+}
+collar = extrude(colsk, tc)
+sketch spsk(on: section) {
+  c = circle((rsp, zsp), rw)
+  ax = line((0, 0), (0, tf), construction: true)
+}
+spring = coil(spsk.c, axis: spsk.ax, pitch: pitch, turns: turns)
+sketch knsk(on: section) {
+  path o(start: (0, zk)) {
+    line(to: (rk, zk))
+    line(to: (rk, zk + hk))
+    tarc(to: (0, zk + hk + rk))
+    close()
+  }
+  ax = line((0, 0), (0, tf), construction: true)
+}
+knob = revolve(knsk.o, axis: knsk.ax)
+kplane = offset(fl.plane, zn)
+for i in 0..nk {
+  sketch ksk(on: kplane) {
+    t = poly([(cos(i * (360deg / nk)) * (rk + kout) + sin(i * (360deg / nk)) * kw, sin(i * (360deg / nk)) * (rk + kout) - cos(i * (360deg / nk)) * kw),
+              (cos(i * (360deg / nk)) * (rk - kin), sin(i * (360deg / nk)) * (rk - kin)),
+              (cos(i * (360deg / nk)) * (rk + kout) - sin(i * (360deg / nk)) * kw, sin(i * (360deg / nk)) * (rk + kout) + cos(i * (360deg / nk)) * kw)])
+  }
+  knurl = cut(ksk, dn)
+}
