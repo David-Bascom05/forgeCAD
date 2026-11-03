@@ -42,6 +42,17 @@ pub enum Item {
     Ground(InstanceId),
 }
 
+/// A typed edit that removes a diagnostic.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub enum Fix {
+    /// Set the joint value's param (its drive) to this value.
+    SetDrive {
+        joint: JointId,
+        freedom: Freedom,
+        value: f64,
+    },
+}
+
 impl Item {
     pub fn of(id: ConstraintId) -> Item {
         Item::Constraint {
@@ -93,6 +104,8 @@ pub enum Diagnostic {
         freedom: Freedom,
         value: f64,
         range: (f64, f64),
+        /// The edit that removes it, where a drive caused it.
+        fix: Option<Fix>,
     },
     /// A drive or limit on a freedom the joint does not have, or a drive on a ball joint.
     BadFreedom {

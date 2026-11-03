@@ -283,3 +283,55 @@ fn loose_constraints_give_what_joints_give() {
         assert_eq!(removed, 18 - b.mobility);
     }
 }
+
+#[test]
+fn a_screw_in_a_loop_keeps_whole_turns() {
+    // a crank-rocker four-bar whose coupler turns twice against the crank as the crank turns
+    // twice; a screw relation from that joint drives a slider, which must count both turns
+    let (a, b, c, d) = (40.0, 120.0, 80.0, 100.0);
+    let mut asm = four_bar(a, b, c, d, 0.6);
+    asm.joints[0] = asm.joints[0].clone().driven(Freedom::Rz, 0.6);
+    let shaft = at(0.0, -200.0, 0.0);
+    asm.instances.push(inst(5, shaft));
+    asm.joints
+        .push(joint(5, JointKind::Slider, (5, Frame::WORLD), (1, shaft)));
+    let lead = 3.0;
+    asm.relations.push(Relation {
+        id: RelationId(1),
+        kind: RelationKind::Screw { lead },
+        leader: ValueRef {
+            joint: JointId(2),
+            freedom: Freedom::Rz,
+        },
+        follower: ValueRef {
+            joint: JointId(5),
+            freedom: Freedom::Tz,
+        },
+        offset: None,
+        suppressed: false,
+    });
+    let parts = catalog();
+    let mut s = Solver::new(asm, &parts, opts());
+    assert_eq!(s.solution().errors().count(), 0, "{:?}", s.solution().diagnostics);
+    let (t3_0, _) = four_bar_angles(a, b, c, d, 0.6).unwrap();
+    for (turns, extra) in [(0.0, 1.0), (1.0, 1.0), (2.0, 0.0), (-1.0, -2.0)] {
+        let t2 = 0.6 + dmath::TAU * turns + extra;
+        let sol = s.set_drive(JointId(1), Freedom::Rz, t2).clone();
+        assert_eq!(sol.errors().count(), 0, "{:?}", sol.diagnostics);
+        let (t3, _) = four_bar_angles(a, b, c, d, t2).unwrap();
+        // the coupler only rocks: its change is the principal one; the crank's counts every turn
+        let dt3 = joint_unwrap(t3 - t3_0);
+        let want = lead / dmath::TAU * (dt3 - (t2 - 0.6));
+        let got = sol.pose(InstanceId(5)).unwrap().origin.z;
+        assert!(
+            (got - want).abs() < 1e-9,
+            "{turns} turns + {extra}: slider {got}, want {want}"
+        );
+        let j2 = sol.joints.iter().find(|j| j.joint == JointId(2)).unwrap();
+        assert!(j2.in_loop);
+    }
+}
+
+fn joint_unwrap(a: f64) -> f64 {
+    a - dmath::TAU * (a / dmath::TAU).round()
+}

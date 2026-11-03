@@ -309,6 +309,11 @@ fn a_drive_past_its_limit_is_held_at_the_limit() {
             freedom: Freedom::Rz,
             value: 1.5,
             range: (-1.0, 1.0),
+            fix: Some(Fix::SetDrive {
+                joint: JointId(1),
+                freedom: Freedom::Rz,
+                value: 1.0,
+            }),
         }]
     );
     assert_eq!(sol.joints[0].values, vec![(Freedom::Rz, 1.0)]);

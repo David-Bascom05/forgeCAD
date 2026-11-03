@@ -657,11 +657,18 @@ fn place_bridge(plan: &Plan, local: &Local, poses: &Poses, u: &Unit, known: &Kno
         if let Some(&(_, lo, hi)) = j.limits.iter().find(|l| l.0 == f)
             && !(lo..=hi).contains(&v)
         {
+            let joint = j.joint_id().expect("a joint");
+            let driven = j.drive.iter().any(|d| d.0 == f);
             diagnostics.push(Diagnostic::LimitViolated {
-                joint: j.joint_id().expect("a joint"),
+                joint,
                 freedom: f,
                 value: v,
                 range: (lo, hi),
+                fix: driven.then_some(crate::diag::Fix::SetDrive {
+                    joint,
+                    freedom: f,
+                    value: v.clamp(lo, hi),
+                }),
             });
             v = v.clamp(lo, hi);
         }
@@ -775,8 +782,10 @@ struct Block<'a> {
     vars: Vec<usize>,
     slot: BTreeMap<usize, usize>,
     size: f64,
-    /// The value each angle is measured near (its written value).
-    near: BTreeMap<(usize, Freedom), f64>,
+    /// The value each joint freedom is measured near: its written value at the start, then
+    /// tracked through every accepted step, so angles keep their whole turns.
+    near: std::cell::RefCell<BTreeMap<(usize, Freedom), f64>>,
+    near0: BTreeMap<(usize, Freedom), f64>,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -824,7 +833,7 @@ impl Block<'_> {
                     let rel = &self.plan.relations[*r];
                     let (lk, lf) = rel.leader;
                     let (fk, ff) = rel.follower;
-                    let near = |k, f| self.near.get(&(k, f)).copied().unwrap_or(0.0);
+                    let near = |k, f| self.near.borrow().get(&(k, f)).copied().unwrap_or(0.0);
                     let lv = poses.ends(lk).value(lf, near(lk, lf));
                     let fv = poses.ends(fk).value(ff, near(fk, ff));
                     let slope = rel.kind.slope();
@@ -844,6 +853,20 @@ impl Block<'_> {
             }
         }
         out
+    }
+
+    /// Moves each tracked value to where it is now, continuously from where it was.
+    fn track(&self, poses: &Poses) {
+        let mut near = self.near.borrow_mut();
+        for (&(k, f), v) in near.iter_mut() {
+            *v = poses.ends(k).value(f, *v).r;
+        }
+    }
+    fn reset(&self) {
+        *self.near.borrow_mut() = self.near0.clone();
+    }
+    fn tracked(&self, k: usize, f: Freedom) -> f64 {
+        self.near.borrow().get(&(k, f)).copied().unwrap_or(0.0)
     }
 
     /// The signs the rows leave open: aligned (not opposed) axes, and angles on their own side
@@ -947,6 +970,7 @@ impl Block<'_> {
                     .all(|(now, was)| *was <= 0.0 || *now > 0.0);
                 if kept && ss(&trial) < f0 {
                     rows = trial;
+                    self.track(poses);
                     took = true;
                     break;
                 }
@@ -1035,7 +1059,8 @@ fn solve_group(
         vars: u.vars.clone(),
         slot,
         size,
-        near,
+        near: std::cell::RefCell::new(near.clone()),
+        near0: near,
     };
     let mut active = vec![true; srcs.len()];
     let mut diagnostics = Vec::new();
@@ -1045,7 +1070,7 @@ fn solve_group(
     let from: Vec<Option<f64>> = srcs
         .iter()
         .map(|x| match x {
-            Src::Value { k, f, target, .. } => Some(poses.ends(*k).value(*f, *target).r),
+            Src::Value { k, f, .. } => Some(poses.ends(*k).value(*f, blk.tracked(*k, *f)).r),
             _ => None,
         })
         .collect();
@@ -1056,7 +1081,7 @@ fn solve_group(
             steps = steps.max(((target - f0).abs() / unit).ceil() as usize);
         }
     }
-    let steps = steps.min(64);
+    let steps = steps.min(256);
     for i in 1..steps {
         let t = i as f64 / steps as f64;
         let ramp: Vec<Src> = srcs
@@ -1085,6 +1110,7 @@ fn solve_group(
         let mut on = vec![false; srcs.len()];
         let solves = |on: &[bool], poses: &mut Poses| {
             poses.at.clone_from(&begin);
+            blk.reset();
             blk.newton(poses, &srcs, on)
         };
         for &i in &order {
@@ -1134,6 +1160,7 @@ fn solve_group(
         iterations += r.2;
         if status != Status::Solved {
             poses.at.clone_from(&begin);
+            blk.reset();
             diagnostics.push(Diagnostic::NotConverged {
                 block: u.block,
                 items: srcs.iter().map(|x| x.item(plan)).collect(),
@@ -1160,7 +1187,7 @@ fn solve_group(
                 if held {
                     continue;
                 }
-                let v = poses.ends(k).value(f, 0.5 * (lo + hi)).r;
+                let v = poses.ends(k).value(f, blk.tracked(k, f)).r;
                 if v < lo - 1e-9 || v > hi + 1e-9 {
                     add.push((k, f, v, if v < lo { lo } else { hi }, (lo, hi)));
                 }
@@ -1169,7 +1196,7 @@ fn solve_group(
         if add.is_empty() {
             break;
         }
-        let saved = (srcs.len(), poses.at.clone());
+        let saved = (srcs.len(), poses.at.clone(), blk.near.borrow().clone());
         for &(k, f, _, b, _) in &add {
             let item = Item::of(ConstraintId::Joint {
                 joint: plan.links[k].joint_id().expect("a joint"),
@@ -1189,12 +1216,14 @@ fn solve_group(
             srcs.truncate(saved.0);
             active.truncate(saved.0);
             poses.at = saved.1;
+            *blk.near.borrow_mut() = saved.2;
             for &(k, f, v, _, range) in &add {
                 diagnostics.push(Diagnostic::LimitViolated {
                     joint: plan.links[k].joint_id().expect("a joint"),
                     freedom: f,
                     value: v,
                     range,
+                    fix: None,
                 });
             }
             break;
@@ -1230,8 +1259,7 @@ fn solve_group(
         let mut grads = Vec::new();
         let mut values = Vec::new();
         for &f in j.freedoms() {
-            let near = blk.near.get(&(*k, f)).copied().unwrap_or(0.0);
-            let row = e.value(f, near);
+            let row = e.value(f, blk.tracked(*k, f));
             let s = if row.angular { size } else { 1.0 };
             let gr = GRow {
                 src: si,
