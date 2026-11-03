@@ -1127,7 +1127,10 @@ fn tangent_chains(
                     let f = &body.edge(o).coedges;
                     body.coedge_face(f[0]) != body.coedge_face(f[1])
                 })
-                .filter(|&o| continues(&mine, &tangents(body, o, v), radius))
+                .filter(|&o| {
+                    let t = tangents(body, o, v);
+                    continues(&mine, &t, radius) || carries_on(&mine, &t)
+                })
                 .collect();
             if let [o] = next[..]
                 && !is_smooth(body, o, radius)
@@ -1203,6 +1206,15 @@ fn end_tangent(body: &Body, e: EdgeId, v: VertexId, end: bool) -> Option<Vec3> {
 fn continues(a: &[Vec3], b: &[Vec3], radius: f64) -> bool {
     b.iter()
         .any(|t| a.iter().any(|m| (*m + *t).length() * radius <= tol::LINEAR))
+}
+
+/// cos 0.5 degrees: a sharp edge turning less than this from straight on carries a fillet on, as
+/// CATIA's tangency angle does (research/blend-ends).
+const CARRY_COS: f64 = 0.999_961_923_064_171_3;
+
+/// Whether two edges leave a vertex the opposite way, to within half a degree.
+fn carries_on(a: &[Vec3], b: &[Vec3]) -> bool {
+    b.iter().any(|t| a.iter().any(|m| -m.dot(*t) >= CARRY_COS))
 }
 
 /// The filleted edges as tangent chains: two edges are linked at a vertex where they are

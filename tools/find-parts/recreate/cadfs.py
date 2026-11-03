@@ -52,6 +52,20 @@ def dot(a, b):
     return sum(x * y for x, y in zip(a, b))
 
 
+# cos 0.5 degrees: the kernel's own limit for carrying a fillet on (research/blend-ends)
+CARRY_COS = 0.9999619230641713
+
+
+def carries_on(e, k, g, j):
+    """Whether edge g at its end j carries on from edge e at its end k (the same vertex) within half a degree.
+    An edge's tangents run along the edge; out of its end they are reversed."""
+    a, b = e["t"][k], g["t"][j]
+    if not a or not b:
+        return False
+    s = (1.0 if k == 0 else -1.0) * (1.0 if j == 0 else -1.0)
+    return -s * dot(a, b) >= CARRY_COS * math.sqrt(dot(a, a) * dot(b, b))
+
+
 def cross(a, b):
     return (a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b[2], a[0] * b[1] - a[1] * b[0])
 
@@ -644,9 +658,7 @@ class Tr:
                     for g, j in at[v]:
                         if g["h"] in picked or g["c"] == "smooth" or not g["t"][j]:
                             continue
-                        a, b = t, g["t"][j]
-                        cr = (a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b[2], a[0] * b[1] - a[1] * b[0])
-                        if math.sqrt(dot(cr, cr)) < 1e-4:
+                        if carries_on(e, k, g, j):
                             picked[g["h"]] = g
                             todo.append(g)
         return sorted(picked)

@@ -19,7 +19,7 @@ import zipfile
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import sketch2d
-from cadfs import KernelStop, Unresolved, Unsupported, add, dot, num, unit, vfine, vtext
+from cadfs import KernelStop, Unresolved, Unsupported, add, carries_on, dot, num, unit, vfine, vtext
 from sketch2d import Arrangement
 
 TOL = 2e-3
@@ -787,9 +787,7 @@ def along_tangents(edges, picked):
             for g, j in at[v] if t else []:
                 if g["h"] in picked or g["c"] == "smooth" or not g["t"][j]:
                     continue
-                a, b = t, g["t"][j]
-                cr = (a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b[2], a[0] * b[1] - a[1] * b[0])
-                if math.sqrt(dot(cr, cr)) < 1e-4:
+                if carries_on(e, k, g, j):
                     picked[g["h"]] = g
                     todo.append(g)
 
