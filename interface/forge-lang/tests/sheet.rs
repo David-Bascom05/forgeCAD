@@ -615,9 +615,19 @@ back = flange(base.edge(plan.outline[2]), height: H, measure: \"inner\")
 west = flange(base.edge(plan.outline[3]), height: H, measure: \"inner\")
 ";
 
+/// The box with its walls leaning out 10 degrees: they meet only at the corners' reliefs.
+fn splayed() -> String {
+    BOX.replace("measure: \"inner\")", "measure: \"inner\", angle: 80deg)")
+}
+
 #[test]
 fn box_corners() {
-    let r = run(BOX);
+    // upright, each wall's end butts on its neighbour's inner face: a touch, no valid solid,
+    // until the corner is opened a gap
+    let e = first_error(BOX);
+    assert_eq!(e.kind(), "FoldedTouch", "{e:?}");
+    cured_by_fix(BOX, &e);
+    let r = run(&splayed());
     assert!(r.ok(), "{:?}", r.errors);
     let c = &r.sheets[0].corners;
     assert_eq!(c.len(), 4);
@@ -627,7 +637,10 @@ fn box_corners() {
     );
     assert_eq!(r.measure.as_ref().map(|m| m.problems), Some(0));
     // one corner made square, the sheet's default square, closed refused
-    let s = format!("{BOX}param fe.h = 4\nfe = corner_relief(front, east, square_relief(h))\n");
+    let s = format!(
+        "{}param fe.h = 4\nfe = corner_relief(front, east, square_relief(h))\n",
+        splayed()
+    );
     let r = run(&s);
     assert!(r.ok(), "{:?}", r.errors);
     let squares = r.sheets[0]
@@ -636,13 +649,16 @@ fn box_corners() {
         .filter(|x| matches!(x.kind, forge_sheet::CornerKind::Square { .. }))
         .count();
     assert_eq!(squares, 1);
-    let s = BOX.replace(
+    let s = splayed().replace(
         "bend: kfactor(ratio(0.4)))",
         "bend: kfactor(ratio(0.4)), corner: closed_corner)",
     );
     assert_eq!(first_error(&s).kind(), "CornerUnbuilt");
     // flanges that do not meet at a corner
-    let s = format!("{BOX}fb = corner_relief(front, back, circular_relief())\n");
+    let s = format!(
+        "{}fb = corner_relief(front, back, circular_relief())\n",
+        splayed()
+    );
     assert_eq!(first_error(&s).kind(), "NotACorner");
 }
 
@@ -891,7 +907,12 @@ fn a_flat_overlap_warns_on_the_part_and_refuses_the_blank() {
         assert!(matches!(f, Op::SetParam { .. }));
         let fixed = apply(&s, f).expect("applies");
         let r = run(&fixed);
-        assert!(r.ok(), "{fixed}\n{}", forge_lang::report::text(&r, &fixed));
+        // the overlap gone; the flats still sit on the notch's bottom edge, a touch of its own
+        assert!(
+            r.errors.iter().all(|e| e.kind() == "FlatTouch"),
+            "{fixed}\n{}",
+            forge_lang::report::text(&r, &fixed)
+        );
         assert!(
             !r.warnings
                 .iter()
@@ -904,11 +925,19 @@ fn a_flat_overlap_warns_on_the_part_and_refuses_the_blank() {
         .replace("param right.h = 15", &format!("param right.h = {h}"))
         .replace("param left.h = 15", &format!("param left.h = {h}"));
     let r = run(&near_miss);
-    assert!(
-        r.ok() && !r.warnings.iter().any(|w| matches!(w, Warning::Sheet(_))),
-        "{:?}",
-        r.warnings
-    );
+    let sheet: Vec<_> = r
+        .warnings
+        .iter()
+        .filter_map(|w| match w {
+            Warning::Sheet(n) => Some(n.kind()),
+            _ => None,
+        })
+        .collect();
+    // no overlap; both flats lie on the notch's bottom edge: a touch, warned on the part
+    assert!(r.ok() && sheet == ["FlatTouch"], "{:?}", r.warnings);
+    let blank =
+        format!("{near_miss}param blank.gap = 40\nblank = unfold(base, on: offset(base.bottom, gap))\n");
+    assert_eq!(first_error(&blank).kind(), "FlatTouch");
 }
 
 /// An L with a shop: holes 2.5 t + R from a bend, 2 t from the edge, t across.
@@ -1055,7 +1084,7 @@ fn the_shops_relief_rule() {
     // extend is held as data and refused typed
     assert_eq!(first_error(&shop("extend: true")).kind(), "ReliefExtendUnbuilt");
     // corners: the rule's trim to bend, an override tear
-    let b = BOX.replace(
+    let b = splayed().replace(
         "base = sheet(plan, t: t, r: r, bend: kfactor(ratio(0.4)))",
         "shared steel = stock(t: 1.5, bend: kfactor(ratio(0.4)), radii: [1], relief: relief_rule(corner: \"trim_to_bend\"))\nshared acme = shop([steel])\nbase = sheet(plan, t: t, r: r, bend: kfactor(ratio(0.4)), shop: acme)",
     );
