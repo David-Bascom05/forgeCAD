@@ -19,7 +19,7 @@ pub const NAMES: &[&str] = &[
     "lin",
     "circ",
     "mirror",
-    "along",
+    "follow",
     "places",
     "workplane",
     "workaxis",
@@ -33,34 +33,26 @@ pub const NAMES: &[&str] = &[
     "copybody",
     "movebody",
     "slide",
-    "turn",
+    "spin",
     "place",
     "text",
     "import",
     "project",
     "entity",
-    "delete",
-    "replace",
-    "moveface",
+    "vary",
 ];
-
-/// Words: `full` (a thread's whole length), `all` (every body).
-pub const WORDS: &[&str] = &["full", "all"];
 
 /// A wired value.
 #[derive(Clone, Debug)]
 pub enum W {
     /// A work feature: what it came to, and its place in the history.
-    Work {
-        id: String,
-        idx: usize,
-        datum: Datum,
-    },
+    Work { id: String, idx: usize, datum: Datum },
     /// A pattern's layout, its references resolved, and the dimensions it took.
     Layout(Layout, Vec<crate::eval::Dimension>),
     /// One motion of a body.
     Motion(Step),
-    Word(&'static str),
+    /// A fillet radius that varies along an edge, and the dimensions it took.
+    Radius(forge_ops::Radius, Vec<crate::eval::Dimension>),
 }
 
 impl W {
@@ -73,7 +65,7 @@ impl W {
             },
             W::Layout(..) => Ty::Layout,
             W::Motion(_) => Ty::Motion,
-            W::Word(_) => Ty::Word,
+            W::Radius(..) => Ty::Num,
         }
     }
 
@@ -128,10 +120,7 @@ pub fn wired(w: W) -> Value {
 }
 
 pub fn constant(name: &str) -> Option<Value> {
-    if let Some(n) = NAMES.iter().find(|n| **n == name) {
-        return Some(Value::Builtin(n));
-    }
-    WORDS.iter().find(|n| **n == name).map(|n| wired(W::Word(n)))
+    NAMES.iter().find(|n| **n == name).map(|n| Value::Builtin(n))
 }
 
 /// Calls that take a built-in's name with another meaning: `intersect(target, tools: [..])`
@@ -148,17 +137,17 @@ pub fn call(ev: &mut Eval, name: &'static str, args: &[Arg], span: Span) -> R<Va
         "hole" => crate::holes::hole(ev, args, span),
         "thread" => crate::holes::thread(ev, args, span),
         "pattern" => crate::patterns::pattern(ev, args, span),
-        "lin" | "circ" | "mirror" | "along" | "places" => crate::patterns::layout(ev, name, args, span),
+        "lin" | "circ" | "mirror" | "follow" | "places" => crate::patterns::layout(ev, name, args, span),
         "workplane" | "workaxis" | "workpoint" | "ucs" => crate::work::work(ev, name, args, span),
         "union" | "subtract" | "combine" => crate::bodies::combine(ev, name, args, span),
         "split" | "splitface" => crate::bodies::split(ev, name, args, span),
         "copybody" | "movebody" => crate::bodies::move_body(ev, name, args, span),
-        "slide" | "turn" | "place" => crate::bodies::motion(ev, name, args, span),
+        "slide" | "spin" | "place" => crate::bodies::motion(ev, name, args, span),
         "text" => crate::media::text(ev, args, span),
         "import" => crate::media::import(ev, args, span),
         "project" => crate::project::project(ev, args, span),
         "entity" => crate::media::entity(ev, args, span),
-        "delete" | "replace" | "moveface" => crate::direct::direct(ev, name, args, span),
+        "vary" => crate::fillets::vary(ev, args, span),
         _ => Err(crate::error::Error::UnknownName {
             span,
             name: name.into(),

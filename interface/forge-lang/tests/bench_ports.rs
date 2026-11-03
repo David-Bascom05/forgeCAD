@@ -91,8 +91,7 @@ fn hub() {
 
 #[test]
 fn insert() {
-    // waits for `offset` (shapes lane)
-    parity("insert", &["offset -shrink"]);
+    parity("insert", &[]);
 }
 
 #[test]
@@ -112,12 +111,10 @@ fn heatsink() {
 
 #[test]
 fn bracket() {
-    // waits for `fullround` and `facefillet` (shapes lane)
-    parity("bracket", &["fullround", "facefillet"]);
+    parity("bracket", &[]);
 }
 
 #[test]
 fn crank() {
-    // waits for a variable-radius fillet in Forge
-    parity("crank", &["fillet 0:2"]);
+    parity("crank", &[]);
 }

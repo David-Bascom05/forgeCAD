@@ -1,5 +1,5 @@
 //! Patterns as features: copies of earlier features (or the whole part) recorded and edited as
-//! one feature, laid out by a layout value (`lin`, `circ`, `mirror`, `along`, `places`). The
+//! one feature, laid out by a layout value (`lin`, `circ`, `mirror`, `follow`, `places`). The
 //! copies' faces are named from the pattern's id and each copy's index, so ids hold when the
 //! count changes (the surviving copies keep theirs).
 
@@ -38,7 +38,7 @@ pub fn pattern(ev: &mut Eval, args: &[Arg], span: Span) -> R<Value> {
             o => {
                 return Err(crate::error::Error::WrongType {
                     span: a.span("layout"),
-                    what: "a layout (lin, circ, mirror, along, places)",
+                    what: "a layout (lin, circ, mirror, follow, places)",
                     want: Ty::Layout,
                     found: o.ty(),
                 });
@@ -47,7 +47,7 @@ pub fn pattern(ev: &mut Eval, args: &[Arg], span: Span) -> R<Value> {
         o => {
             return Err(crate::error::Error::WrongType {
                 span: a.span("layout"),
-                what: "a layout (lin, circ, mirror, along, places)",
+                what: "a layout (lin, circ, mirror, follow, places)",
                 want: Ty::Layout,
                 found: o.ty(),
             });
@@ -63,7 +63,7 @@ pub fn layout(ev: &mut Eval, name: &'static str, args: &[Arg], span: Span) -> R<
         "lin" => &["along", "n", "step", "along2", "n2", "step2"],
         "circ" => &["about", "n", "over", "each"],
         "mirror" => &["on"],
-        "along" => &["curve", "n", "step", "fixed", "reverse"],
+        "follow" => &["curve", "n", "step", "fixed", "reverse"],
         _ => &["at"],
     };
     let a = Args::bind(ev, name, names, args, span)?;
@@ -141,7 +141,7 @@ pub fn layout(ev: &mut Eval, name: &'static str, args: &[Arg], span: Span) -> R<
         "mirror" => Layout::Mirror {
             plane: plane_of(ev, a.req("on")?, a.span("on"), "on")?,
         },
-        "along" => {
+        "follow" => {
             let along = match a.req("curve")? {
                 Value::Edges(es) => {
                     let mut out = vec![];

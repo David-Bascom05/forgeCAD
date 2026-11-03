@@ -43,7 +43,7 @@ fn body_ids(v: Value, span: Span) -> R<Vec<usize>> {
 pub fn wrap_in(_ev: &mut Eval, a: &Args, f: Feature) -> R<Feature> {
     let bodies = match a.opt("bodies") {
         None => return Ok(f),
-        Some(Value::Wired(w)) if matches!(*w, W::Word("all")) => Pick::All,
+        Some(Value::Str(w)) if &*w == "all" => Pick::All,
         Some(v) => Pick::Some(body_ids(v, a.span("bodies"))?),
     };
     Ok(Feature::Body(Box::new(BodyFeature::In { bodies, feature: f })))
@@ -234,7 +234,7 @@ pub fn move_body(ev: &mut Eval, name: &'static str, args: &[Arg], span: Span) ->
             .collect::<Result<Vec<Step>, Ty>>()
             .map_err(|found| crate::error::Error::WrongType {
                 span: a.span("moves"),
-                what: "motions (slide, turn, place)",
+                what: "motions (slide, spin, place)",
                 want: Ty::Motion,
                 found,
             })?,
@@ -245,7 +245,7 @@ pub fn move_body(ev: &mut Eval, name: &'static str, args: &[Arg], span: Span) ->
         o => {
             return Err(crate::error::Error::WrongType {
                 span: a.span("moves"),
-                what: "motions (slide, turn, place)",
+                what: "motions (slide, spin, place)",
                 want: Ty::Motion,
                 found: o.ty(),
             });
@@ -259,11 +259,11 @@ pub fn move_body(ev: &mut Eval, name: &'static str, args: &[Arg], span: Span) ->
     Ok(feat(id, name, idx, hid, None))
 }
 
-/// `slide(along: DIR, by: L)`, `turn(about: AXIS, by: A)`, `place(PLANE)` (world to its frame).
+/// `slide(along: DIR, by: L)`, `spin(about: AXIS, by: A)`, `place(PLANE)` (world to its frame).
 pub fn motion(ev: &mut Eval, name: &'static str, args: &[Arg], span: Span) -> R<Value> {
     let names: &[&'static str] = match name {
         "slide" => &["along", "by"],
-        "turn" => &["about", "by"],
+        "spin" => &["about", "by"],
         _ => &["on"],
     };
     let a = Args::bind(ev, name, names, args, span)?;
@@ -280,7 +280,7 @@ pub fn motion(ev: &mut Eval, name: &'static str, args: &[Arg], span: Span) -> R<
             let by = a.req_num("by", LEN)?;
             Step::Translate(d.get() * by.v)
         }
-        "turn" => {
+        "spin" => {
             let (o, d) = axis_of(ev, a.req("about")?, a.span("about"))?;
             let by = a.req_num("by", ANG)?;
             Step::Rotate {
