@@ -227,15 +227,22 @@ fn the_mesh_phase_never_misses_a_real_overlap() {
     let mut r = Rng::new(0x0e7);
     let names = ["block", "rod", "arm"];
     let (mut overlaps, mut hits) = (0, 0);
-    for case in 0..150 {
+    for case in 0..300 {
         let (na, nb) = (names[r.below(3)], names[r.below(3)]);
-        let z = v(r.range(-1.0, 1.0), r.range(-1.0, 1.0), r.range(-1.0, 1.0));
-        let pose = Frame::from_zx(
-            p(r.range(-12.0, 12.0), r.range(-12.0, 12.0), r.range(-12.0, 12.0)),
-            z.normalize().unwrap(),
-            v(r.range(-1.0, 1.0), r.range(-1.0, 1.0), r.range(-1.0, 1.0)),
-        )
-        .unwrap();
+        // half the cases square to the axes on a 1 mm grid: faces and edges that coincide
+        let pose = if case % 2 == 0 {
+            let g = |r: &mut Rng| (r.range(-12.0, 12.0)).round();
+            let turn = [0.0, dmath::FRAC_PI_2, dmath::PI][r.below(3)];
+            rz(p(g(&mut r), g(&mut r), g(&mut r)), turn)
+        } else {
+            let z = v(r.range(-1.0, 1.0), r.range(-1.0, 1.0), r.range(-1.0, 1.0));
+            Frame::from_zx(
+                p(r.range(-12.0, 12.0), r.range(-12.0, 12.0), r.range(-12.0, 12.0)),
+                z.normalize().unwrap(),
+                v(r.range(-1.0, 1.0), r.range(-1.0, 1.0), r.range(-1.0, 1.0)),
+            )
+            .unwrap()
+        };
         let asm = placed(vec![of(1, na, Frame::WORLD), of(2, nb, pose)]);
         let sol = solve(&asm, &c, &Options { threads: 1 });
         let mut ck = Checker::new(&c, &e);
@@ -257,7 +264,7 @@ fn the_mesh_phase_never_misses_a_real_overlap() {
             );
         }
     }
-    assert!(overlaps > 30, "{overlaps} overlaps of 150");
+    assert!(overlaps > 40, "{overlaps} overlaps of 300");
     assert!(hits >= overlaps);
 }
 
