@@ -16,6 +16,7 @@ use crate::graph::{Gauge, JointKind, Sheet, straight};
 use crate::region::{Bound, Piece, Region, subtract};
 use crate::shop::setback;
 use forge_geom::ruled::{Rail, Ruled};
+use forge_geom::spline::{Extruded, PlaneSpline, Spline, SplineCurve};
 use forge_geom::wrap::{Flat, Wrap};
 use forge_geom::{Circle, Curve, CurveGeom, Cylinder, Line, Plane, Surface, SurfaceGeom};
 use forge_math::{Frame, Interval, Point2, Point3, Vec2, Vec3, dmath, tol};
@@ -245,7 +246,20 @@ fn carried(l: &ProfileLoop, by: Option<&Rigid>, id: impl Fn(u64) -> u64) -> Opti
                     radius: *radius,
                     ccw: *ccw,
                 },
-                Segment::Spline(_) => return None,
+                Segment::Spline(ps) => {
+                    let c = ps.c.mapped(|q| {
+                        let r = m.apply(Point2::new(q.x, q.y));
+                        Point3::new(r.x, r.y, 0.0)
+                    });
+                    let (degree, knots, pts, weights) = c.control_form();
+                    let pts2 = pts.iter().map(|p| Point2::new(p.x, p.y)).collect();
+                    Segment::Spline(std::sync::Arc::new(PlaneSpline::control(
+                        degree,
+                        pts2,
+                        Some(knots),
+                        weights,
+                    )?))
+                }
             },
         };
         out.push((s, id(*sid)));
@@ -280,14 +294,6 @@ fn bbox(l: &ProfileLoop) -> (Point2, Point2) {
         }
     }
     (lo, hi)
-}
-
-fn kind_of(p: &Piece) -> TrimCurveKind {
-    match p {
-        Piece::Line { .. } => TrimCurveKind::Line,
-        Piece::Arc { .. } => TrimCurveKind::Arc,
-        Piece::Spline { .. } => TrimCurveKind::Spline,
-    }
 }
 
 /// Builds the sheet's folded or flat solid.
@@ -670,30 +676,44 @@ impl<'a> Built<'a> {
                             }
                             _ => Kind::Side,
                         };
-                        if k == Kind::Side {
-                            let curve = kind_of(&b.piece);
-                            if curve == TrimCurveKind::Spline {
-                                return Err(SheetError::TrimCurveUnsupported {
-                                    feature,
-                                    strip: s.strip,
-                                    trim: src,
-                                    curve,
-                                });
-                            }
+                        let round = matches!(s.geo, Geo::Round { .. });
+                        // a spline in a bend is wrapped piece by piece (Bezier, cubic at most)
+                        if let Piece::Spline { s: ref c, .. } = b.piece
+                            && k == Kind::Side
+                            && round
+                            && c.degree() > 3
+                        {
+                            return Err(SheetError::TrimCurveUnsupported {
+                                feature,
+                                strip: s.strip,
+                                trim: src,
+                                curve: TrimCurveKind::Spline,
+                            });
                         }
-                        // an arc in a bend turning past half way goes in pieces, so the ruled side wall
-                        // along each is regular to its ends
-                        let turn = match b.piece {
-                            Piece::Arc { t0, t1, .. } if matches!(s.geo, Geo::Round { .. }) => {
-                                (t1 - t0).abs()
+                        // cut points along the piece: an arc in a bend turning past half way goes
+                        // in pieces, so the ruled side wall along each is regular to its ends; a
+                        // spline in a bend goes at its knots
+                        let mut cuts: Vec<f64> = match b.piece {
+                            Piece::Arc { t0, t1, .. } if round => {
+                                let turn = (t1 - t0).abs();
+                                let parts = (turn / (0.99 * dmath::PI)).ceil().max(1.0) as usize;
+                                // sweeps are checked when cuts are made: at most a whole turn
+                                debug_assert!(parts <= 3, "an arc of {turn} rad in a bend");
+                                (1..parts).map(|q| q as f64 / parts as f64).collect()
                             }
-                            _ => 0.0,
+                            Piece::Spline { s: ref c, t0, t1 } if round => c
+                                .knots_in(Interval::new(t0.min(t1), t0.max(t1)))
+                                .into_iter()
+                                .map(|k| (k - t0) / (t1 - t0))
+                                .filter(|u| *u > 1e-12 && *u < 1.0 - 1e-12)
+                                .collect(),
+                            _ => Vec::new(),
                         };
-                        let parts = (turn / (0.99 * dmath::PI)).ceil().max(1.0) as usize;
-                        // sweeps are checked when cuts are made: at most a whole turn
-                        debug_assert!(parts <= 3, "an arc of {turn} rad in a bend");
+                        cuts.sort_by(f64::total_cmp);
+                        let parts = cuts.len() + 1;
                         for q in 0..parts {
-                            let (u0, u1) = (q as f64 / parts as f64, (q + 1) as f64 / parts as f64);
+                            let u0 = if q == 0 { 0.0 } else { cuts[q - 1] };
+                            let u1 = if q == parts - 1 { 1.0 } else { cuts[q] };
                             bounds.push(Bound {
                                 piece: if parts == 1 {
                                     b.piece.clone()
@@ -875,7 +895,13 @@ impl<'a> Built<'a> {
                 let len = match b.piece {
                     Piece::Line { a, b: e } => a.distance(e),
                     Piece::Arc { r, t0, t1, .. } => r * (t1 - t0).abs(),
-                    Piece::Spline { .. } => b.piece.at(0.0).distance(b.piece.at(1.0)),
+                    Piece::Spline { .. } => (0..16)
+                        .map(|k| {
+                            b.piece
+                                .at(k as f64 / 16.0)
+                                .distance(b.piece.at((k + 1) as f64 / 16.0))
+                        })
+                        .sum(),
                 } * stretch;
                 let n = ((len / step).ceil() as usize).clamp(1, 1 << 16);
                 for k in 0..n {
@@ -1266,9 +1292,17 @@ impl<'a> Built<'a> {
                     rn,
                     ..
                 },
-                Piece::Arc { .. },
+                Piece::Arc { .. } | Piece::Spline { .. },
             ) => wrapped(axis, rho0 + sigma * w, rn, &ld.bounds[i].piece, a, b, sigma),
-            _ => None,
+            (Geo::Plane(f), &Piece::Spline { ref s, t0, t1 }) => {
+                let range = Interval::new(t0.min(t1), t0.max(t1));
+                let world = own_stretch(s, range)?.mapped(|q| f.point_to_world(Point3::new(q.x, q.y, -w)));
+                Some((
+                    SplineCurve::curve(std::sync::Arc::new(world), range),
+                    range,
+                    t1 > t0,
+                ))
+            }
         }
     }
 
@@ -1296,6 +1330,12 @@ impl<'a> Built<'a> {
             Strip::Wall(_) => self.too_short(l, i),
         };
         let surface = match (geo, piece) {
+            (Geo::Plane(f), &Piece::Spline { s: ref c, t0, t1 }) => {
+                own_stretch(c, Interval::new(t0.min(t1), t0.max(t1))).and_then(|c| {
+                    Extruded::new(f, std::sync::Arc::new(c), Interval::new(-self.t, 0.0))
+                        .map(Extruded::surface)
+                })
+            }
             (Geo::Plane(f), &Piece::Arc { c, r, .. }) => Some(Surface::Cylinder(Cylinder {
                 frame: f.with_origin(f.point_to_world(Point3::new(c.x, c.y, 0.0))),
                 radius: r,
@@ -1312,9 +1352,9 @@ impl<'a> Built<'a> {
                     rn,
                     ..
                 },
-                Piece::Line { .. } | Piece::Arc { .. },
-            ) if a.x != b.x || matches!(piece, Piece::Arc { .. }) => {
-                let flat = flat_in_bend(piece, a, b, sigma);
+                Piece::Line { .. } | Piece::Arc { .. } | Piece::Spline { .. },
+            ) if a.x != b.x || !matches!(piece, Piece::Line { .. }) => {
+                let flat = flat_in_bend(piece, a, b, sigma).ok_or_else(fail)?;
                 let wrap = |w: f64| {
                     Rail::Wrap(Wrap {
                         axis,
@@ -1338,6 +1378,14 @@ impl<'a> Built<'a> {
 
     /// Whether the side surface's own normal looks out of the material, judged at the edge's middle.
     fn side_sense(&self, body: &Body, s: &Surface, e: (EdgeId, bool), l: usize, i: usize) -> bool {
+        // an extruded spline's normal is C' x z, right of the curve: out of the material (on the
+        // piece's left) when the piece runs with the curve
+        if let (Geo::Plane(_), Piece::Spline { t0, t1, .. }) = (
+            self.strips[self.loops[l].strip].geo,
+            &self.loops[l].bounds[i].piece,
+        ) {
+            return t1 > t0;
+        }
         let ed = body.edge(e.0);
         let mid = ed.curve.deriv(ed.range.mid());
         let along = if e.1 { mid.d1 } else { -mid.d1 };
@@ -1352,19 +1400,41 @@ impl<'a> Built<'a> {
 
 /// A bend's oblique line or arc as a flat curve in its wrap's (s, h) = (u, -sigma y): a reflection
 /// when sigma is 1, so the arc's angles turn the other way.
-fn flat_in_bend(p: &Piece, a: Point2, b: Point2, sigma: f64) -> Flat {
-    match *p {
+/// A piece's own stretch of its spline, in the spline's parameter: a wall built on the whole of a
+/// closed spline is carried past its ends onto itself at the seam, where points project to either.
+fn own_stretch(s: &Spline, range: Interval) -> Option<Spline> {
+    s.stretch(range)
+}
+
+/// A spline piece (one knot span, cut so) is its Bezier piece, run with the piece. None past cubic.
+fn flat_in_bend(p: &Piece, a: Point2, b: Point2, sigma: f64) -> Option<Flat> {
+    Some(match *p {
         Piece::Arc { c, r, t0, t1 } => Flat::Arc {
             center: Point2::new(c.x, -sigma * c.y),
             radius: r,
             start: -sigma * t0,
             sweep: -sigma * (t1 - t0),
         },
-        _ => Flat::Line {
+        Piece::Spline { ref s, t0, t1 } => {
+            // cut at a knot to rounding, so a sliver of the next span may come along: the span
+            // holding the middle is the piece
+            let range = Interval::new(t0.min(t1), t0.max(t1));
+            let mid = range.mid();
+            let k = s.knots_in(range).iter().filter(|&&k| k <= mid).count();
+            let mut h = s.bezier_pieces(range).into_iter().nth(k)?;
+            if t1 < t0 {
+                h.reverse();
+            }
+            for q in &mut h {
+                q[1] *= -sigma;
+            }
+            Flat::bezier(&h)?
+        }
+        Piece::Line { .. } => Flat::Line {
             a: Point2::new(a.x, -sigma * a.y),
             b: Point2::new(b.x, -sigma * b.y),
         },
-    }
+    })
 }
 
 fn wrapped(
@@ -1376,7 +1446,7 @@ fn wrapped(
     b: Point2,
     sigma: f64,
 ) -> Option<(Curve, Interval, bool)> {
-    let flat = flat_in_bend(p, a, b, sigma);
+    let flat = flat_in_bend(p, a, b, sigma)?;
     Some((
         Wrap {
             axis,

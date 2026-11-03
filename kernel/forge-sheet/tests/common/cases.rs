@@ -143,7 +143,7 @@ fn slot(c: Point2, len: f64, r: f64, a: f64) -> ProfileLoop {
 }
 
 /// A closed spline blob through a wobbling ring of points.
-fn blob(c: Point2, r: f64, rng: &mut Rng) -> ProfileLoop {
+pub fn blob(c: Point2, r: f64, rng: &mut Rng) -> ProfileLoop {
     let n = 6 + rng.below(4);
     let mut pts: Vec<Point2> = (0..n)
         .map(|i| {

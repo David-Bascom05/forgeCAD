@@ -74,11 +74,9 @@ fn wrong_points(case: &Case, r: &Region, seed: u64, of: usize) -> usize {
 }
 
 /// Each set: built cases must match the scanline (and forge-bool where it builds); refusals must
-/// be pinches or near-coincidence. The third count is cases with splines that did not chain:
-/// forge_geom::spline::meet::cross_sections drops crossings some 300 mm out (prototype.md, "The
-/// kernel bug"), fixed on its own branch; until then the callers bound how many there are.
-fn run(kind: Kind, n: usize, seeds: std::ops::Range<u64>) -> (usize, usize, usize) {
-    let (mut good, mut refused, mut spline_misses) = (0, 0, 0);
+/// be pinches or near-coincidence, nothing else.
+fn run(kind: Kind, n: usize, seeds: std::ops::Range<u64>) -> (usize, usize) {
+    let (mut good, mut refused) = (0, 0);
     for seed in seeds {
         let case = cases::case(kind, n, seed);
         match subtract(&case.wall, &case.cuts) {
@@ -105,33 +103,24 @@ fn run(kind: Kind, n: usize, seeds: std::ops::Range<u64>) -> (usize, usize, usiz
                 }
             }
             Err(RegionError::Pinched { .. } | RegionError::NearCoincident { .. }) => refused += 1,
-            Err(RegionError::Unchained { .. }) if has_spline(&case) => spline_misses += 1,
             Err(e) => panic!("{kind:?} n {n} seed {seed}: {e:?}"),
         }
     }
-    (good, refused, spline_misses)
-}
-
-fn has_spline(case: &Case) -> bool {
-    case.cuts
-        .iter()
-        .flat_map(|c| &c.segments)
-        .any(|s| matches!(s.0, Segment::Spline(_)))
+    (good, refused)
 }
 
 #[test]
 fn isolated_and_boundary_cuts() {
-    assert_eq!(run(Kind::Isolated, 2, 0..12), (12, 0, 0));
-    assert_eq!(run(Kind::Isolated, 20, 0..3), (3, 0, 0));
-    let (good, _, missed) = run(Kind::Boundary, 20, 0..4);
-    assert!(good > 0 && missed <= 1);
+    assert_eq!(run(Kind::Isolated, 2, 0..12), (12, 0));
+    assert_eq!(run(Kind::Isolated, 20, 0..3), (3, 0));
+    assert!(run(Kind::Boundary, 20, 0..4).0 > 0);
 }
 
 #[test]
 fn overlapping_cuts() {
-    assert!(run(Kind::Overlap, 20, 0..3).2 <= 1);
-    assert_eq!(run(Kind::OverlapLines, 20, 0..3).2, 0);
-    assert!(run(Kind::Mix, 20, 0..4).2 <= 1);
+    run(Kind::Overlap, 20, 0..3);
+    run(Kind::OverlapLines, 20, 0..3);
+    run(Kind::Mix, 20, 0..4);
 }
 
 #[test]
@@ -139,7 +128,7 @@ fn coincident_and_tangent_cuts() {
     run(Kind::Coincident, 2, 0..10);
     run(Kind::Coincident, 20, 0..3);
     // a cut tangent inside another cut leaves a valid region; every other tangency pinches
-    let (good, refused, _) = run(Kind::Tangent, 2, 0..10);
+    let (good, refused) = run(Kind::Tangent, 2, 0..10);
     assert_eq!(good + refused, 10);
     assert!(refused >= 5);
 }

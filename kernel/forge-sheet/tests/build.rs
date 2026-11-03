@@ -1,6 +1,9 @@
 //! Folded and flat solids against closed forms: flat length, bend allowance, the volume identity
 //! V_fold - V_flat = theta W t^2 (1/2 - K), the fold map's round trip; and check, closed meshes,
 //! names under edits, typed refusals, and a fuzz on random parts.
+mod common;
+use common::cases::blob;
+use common::reference;
 use forge_math::rng::Rng;
 use forge_math::{Frame, Point2, Point3, dmath};
 use forge_ops::{ProfileLoop, Segment};
@@ -461,6 +464,10 @@ fn fuzz_random_brackets() {
                 };
                 let c = Point2::new(x, 0.5 * (lo + hi));
                 let rad = 0.4 * (hi - lo).min(0.2 * len);
+                if rng.below(2) == 0 {
+                    s.cut(WallId(0), blob(c, rad, &mut rng)).unwrap();
+                    continue;
+                }
                 s.cut(
                     WallId(0),
                     ProfileLoop::new(vec![(
@@ -534,6 +541,9 @@ fn bits_are_the_same_everywhere() {
         ccw: true,
     };
     s.cut(WallId(0), ProfileLoop::new(vec![(hole, 0)])).unwrap();
+    let mut rng = Rng::new(0xb175);
+    s.cut(WallId(0), blob(Point2::new(39.0, 9.0), 3.0, &mut rng))
+        .unwrap();
     let mut h = Name::NONE;
     for map in [Map::Folded, Map::Flat] {
         let b = build(&s, map).unwrap();
@@ -544,7 +554,7 @@ fn bits_are_the_same_everywhere() {
         h = h.with(volume(&b).0.to_bits());
     }
     println!("digest {:#x}", h.0);
-    assert_eq!(h.0, 0xed65_7fc5_bc2e_5c0e);
+    assert_eq!(h.0, 0xfd30_10ad_e7ff_90a5);
 }
 
 /// The area of the band x0..x1 of the circle (cx, a), by the chord's antiderivative.
@@ -726,7 +736,6 @@ fn fuzz_u_clashes_against_the_cross_section() {
         match build(&s, Map::Folded) {
             Ok(b) => {
                 assert!(gap > 0.0, "seed {seed}: mid-surfaces cross, built anyway");
-                println!("seed {seed} gap {gap} t {t}");
                 checked(&b);
                 clear += 1;
             }
@@ -739,4 +748,64 @@ fn fuzz_u_clashes_against_the_cross_section() {
     }
     println!("{clash} clashes, {clear} clear");
     assert!(clash > 20 && clear > 20, "{clash} {clear}");
+}
+
+#[test]
+fn spline_cuts_across_a_bend() {
+    let (t, r, k, w) = (2.0, 2.0, 0.4, 30.0);
+    let ba = dmath::PI / 2.0 * (r + k * t);
+    let rn = ba / (dmath::PI / 2.0);
+    let rect = |x: f64, width: f64| {
+        let p = Point2::new;
+        let c = [p(x, 0.0), p(x + width, 0.0), p(x + width, w), p(x, w)];
+        ProfileLoop::new(
+            (0..4)
+                .map(|i| {
+                    (
+                        Segment::Line {
+                            a: c[i],
+                            b: c[(i + 1) % 4],
+                        },
+                        i as u64,
+                    )
+                })
+                .collect(),
+        )
+    };
+    let mut rng = Rng::new(0x5b1);
+    // across both tangent lines, across one, wholly in the zone, wholly in the base; both ways
+    for (cx, rad, angle) in [
+        (39.5, 4.0, 90.0),
+        (37.0, 2.5, 90.0),
+        (39.5, 1.2, 90.0),
+        (20.0, 5.0, 90.0),
+        (37.0, 3.0, -90.0),
+        (38.5, 4.5, -90.0),
+    ] {
+        let lp = blob(Point2::new(cx, 15.0), rad, &mut rng);
+        let mut s = part(gauge(t, r, k), 40.0, w, &[(1, ang(angle), 30.0)]);
+        s.cut(WallId(0), lp.clone()).unwrap();
+        let (fold, flat) = (build(&s, Map::Folded).unwrap(), build(&s, Map::Flat).unwrap());
+        checked(&fold);
+        checked(&flat);
+        // the flat in the base's coordinates: the zone from the reference skin's tangent line
+        let sb = if angle > 0.0 { r } else { r + t };
+        let z0 = 40.0 - sb;
+        let total = z0 + ba + 30.0 - sb;
+        let rows = 200_000;
+        let (a_flat, e_flat) = reference::area(&[rect(0.0, total)], std::slice::from_ref(&lp), rows);
+        let (a_zone, e_zone) = reference::area(&[rect(z0, ba)], std::slice::from_ref(&lp), rows);
+        let v_flat = t * a_flat;
+        let v_fold = t * (a_flat - a_zone) + t * a_zone * (r + 0.5 * t) / rn;
+        let ((vf, ef), (vl, el)) = (volume(&fold), volume(&flat));
+        let slack = 4.0 * t * (e_flat + e_zone) + 1e-6;
+        assert!(
+            (vl - v_flat).abs() <= el + slack,
+            "{cx} {rad} {angle}: {vl} against {v_flat}"
+        );
+        assert!(
+            (vf - v_fold).abs() <= ef + slack,
+            "{cx} {rad} {angle}: {vf} against {v_fold}"
+        );
+    }
 }

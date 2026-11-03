@@ -456,14 +456,23 @@ pub fn pieces(l: &ProfileLoop) -> Vec<(Piece, u64)> {
             }
             Segment::Spline(ps) => {
                 let d = ps.c.domain();
-                out.push((
-                    Piece::Spline {
-                        s: ps.c.clone(),
-                        t0: d.lo,
-                        t1: d.hi,
-                    },
-                    *id,
-                ));
+                // a closed spline is two pieces, as a circle is: no edge may end where it starts
+                let closed = ps.c.point(d.lo).distance(ps.c.point(d.hi)) <= TOL;
+                let cuts = if closed {
+                    vec![d.lo, d.mid(), d.hi]
+                } else {
+                    vec![d.lo, d.hi]
+                };
+                for w in cuts.windows(2) {
+                    out.push((
+                        Piece::Spline {
+                            s: ps.c.clone(),
+                            t0: w[0],
+                            t1: w[1],
+                        },
+                        *id,
+                    ));
+                }
             }
         }
     }
