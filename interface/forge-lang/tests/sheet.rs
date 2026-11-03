@@ -622,11 +622,34 @@ fn splayed() -> String {
 
 #[test]
 fn box_corners() {
-    // upright, each wall's end butts on its neighbour's inner face: a touch, no valid solid,
-    // until the corner is opened a gap
-    let e = first_error(BOX);
-    assert_eq!(e.kind(), "FoldedTouch", "{e:?}");
-    cured_by_fix(BOX, &e);
+    // upright, each wall's end would butt on its neighbour's inner face: the builder trims
+    // the later wall back t and the shop's corner gap, reported with the reliefs
+    let r = run(BOX);
+    assert!(r.ok(), "{:?}", r.errors);
+    let trims: Vec<_> = r.sheets[0]
+        .corners
+        .iter()
+        .filter(|c| matches!(c.kind, forge_sheet::CornerKind::Open { .. }))
+        .collect();
+    assert_eq!(trims.len(), 4, "{:?}", r.sheets[0].corners);
+    assert!(
+        trims
+            .iter()
+            .all(|c| c.automatic && (c.size - (1.5 + 0.4)).abs() < 1e-12)
+    );
+    assert_eq!(r.measure.as_ref().map(|m| m.problems), Some(0));
+    // a corner given its own gap keeps it
+    let r = run(&format!("{BOX}fe = corner_relief(front, east, open_corner(1))\n"));
+    assert!(r.ok(), "{:?}", r.errors);
+    assert!(
+        r.sheets[0]
+            .corners
+            .iter()
+            .any(|c| !c.automatic && (c.size - 2.5).abs() < 1e-12),
+        "{:?}",
+        r.sheets[0].corners
+    );
+    // splayed out, the walls never meet: the reliefs alone
     let r = run(&splayed());
     assert!(r.ok(), "{:?}", r.errors);
     let c = &r.sheets[0].corners;
