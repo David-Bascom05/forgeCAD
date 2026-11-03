@@ -825,3 +825,80 @@ fn the_reference_example_builds_clean() {
     );
     assert_eq!(run.measure.as_ref().map(|m| (m.bodies, m.problems)), Some((2, 0)));
 }
+
+/// A notch with a flange up off each side: folded they stand apart, flat they reach into each
+/// other.
+const NOTCH: &str = "shared t = 2
+shared r = 2
+shared k = ratio(0.4)
+param plan.L = 100
+param plan.W = 60
+param plan.a = 60
+param plan.b = 80
+param plan.d = 30
+param right.h = 15
+param left.h = 15
+sketch plan(on: xy) {
+  outline = poly([(0, 0), (L, 0), (L, W), (b, W), (b, W - d), (a, W - d), (a, W), (0, W)])
+}
+base = sheet(plan, t: t, r: r, bend: kfactor(k))
+right = flange(base.edge(plan.outline[3]), height: h, measure: \"inner\")
+left = flange(base.edge(plan.outline[5]), height: h, measure: \"inner\")
+";
+
+#[test]
+fn a_flat_overlap_warns_on_the_part_and_refuses_the_blank() {
+    let r = run(NOTCH);
+    assert!(r.ok(), "{:?}", r.errors);
+    let w: Vec<_> = r
+        .warnings
+        .iter()
+        .filter_map(|w| match w {
+            Warning::Sheet(n) if n.kind() == "FlatOverlap" => Some(n),
+            _ => None,
+        })
+        .collect();
+    assert_eq!(w.len(), 1, "{:?}", r.warnings);
+    // the exact overlap: each flat reaches -s + BA + (h - s) into the 20 wide notch, 30 deep
+    let (sb, ba) = (2.0, PI / 2.0 * (2.0 + 0.4 * 2.0));
+    let want = (2.0 * (-sb + ba + 15.0 - sb) - 20.0) * 30.0;
+    let total = w[0]
+        .data()
+        .iter()
+        .find(|x| x.0 == "total")
+        .and_then(|x| x.1.num())
+        .expect("a total");
+    assert!((total - want).abs() < 1e-9, "{total} against {want}");
+    // the blank and its DXF are refused, typed
+    assert!(matches!(
+        r.sheets[0].dxf(),
+        Err(forge_sheet::SheetError::FlatOverlap { .. })
+    ));
+    let s = format!("{NOTCH}param blank.gap = 40\nblank = unfold(base, on: offset(base.bottom, gap))\n");
+    let e = first_error(&s);
+    assert_eq!(e.kind(), "FlatOverlap");
+    // each fix, a shorter flange, clears it
+    assert_eq!(w[0].fixes.len(), 2, "{:?}", w[0].fixes);
+    for f in &w[0].fixes {
+        assert!(matches!(f, Op::SetParam { .. }));
+        let fixed = apply(&s, f).expect("applies");
+        let r = run(&fixed);
+        assert!(r.ok(), "{fixed}\n{}", forge_lang::report::text(&r, &fixed));
+        assert!(
+            !r.warnings
+                .iter()
+                .any(|w| matches!(w, Warning::Sheet(n) if n.kind() == "FlatOverlap"))
+        );
+    }
+    // the near miss: a little shorter than the reach that touches
+    let h = (20.0 / 2.0 + 2.0 * sb - ba) - 1e-3;
+    let near_miss = NOTCH
+        .replace("param right.h = 15", &format!("param right.h = {h}"))
+        .replace("param left.h = 15", &format!("param left.h = {h}"));
+    let r = run(&near_miss);
+    assert!(
+        r.ok() && !r.warnings.iter().any(|w| matches!(w, Warning::Sheet(_))),
+        "{:?}",
+        r.warnings
+    );
+}

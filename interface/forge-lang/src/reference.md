@@ -584,6 +584,14 @@ reliefs the builder cut (flange, end, kind, size, automatic): data, not warnings
 flat: the folded body is the same
 to the bit for any K.
 
+Every sheet build checks both the folded part (strips passing through each other) and the flat
+(strips overlapping once unfolded), whatever is asked for. A folded clash refuses the sheet
+feature (`FoldedClash`) and is a warning on an unfold; a flat overlap refuses `unfold` and the DXF
+(`FlatOverlap`: the pair overlapping most, a point, its area and the total, exact) and is a
+warning on the part, with a SetParam fix for each flange involved: the tallest height that clears
+it. Two strips whose flats come within the boolean's tolerance of touching are
+`FlatOverlapUndecided`, never taken as clear.
+
 `fg run F.fg --dxf OUT.dxf` writes each sheet's flat pattern (R2000 DXF, mm): cut contours on
 layer CUT (lines, arcs, circles, NURBS), bend lines down each zone's middle on layer BEND. `fg run
 --json` lists each sheet: thickness, radius, rule, and each bend's flange, angle, radius,

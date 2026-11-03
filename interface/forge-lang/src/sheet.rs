@@ -380,6 +380,12 @@ impl Names {
             .find(|x| x.0 == c)
             .map_or_else(|| format!("cut {}", c.0), |x| x.1.clone())
     }
+    fn strip_name(&self, s: Strip) -> String {
+        match s {
+            Strip::Wall(w) => self.wall(w),
+            Strip::Bend(j) => format!("the bend of {}", self.joint(j)),
+        }
+    }
     fn strip(&self, s: Strip) -> Json {
         match s {
             Strip::Wall(w) => Json::obj(vec![("wall", self.wall(w).into())]),
@@ -579,6 +585,8 @@ impl SheetNote {
                 W::FlatOverlap { .. } => "FlatOverlap",
                 W::ReliefRemnant { .. } => "ReliefRemnant",
                 W::UnverifiedHardware { .. } => "UnverifiedHardware",
+                W::FlatOverlapUndecided { .. } => "FlatOverlapUndecided",
+                W::FoldedClash { .. } => "FoldedClash",
             },
             Note::Violation(v) => match v {
                 V::HoleNearBend { .. } => "HoleNearBend",
@@ -613,18 +621,42 @@ impl SheetNote {
         match &self.note {
             Note::Warning(w) => match *w {
                 W::FlatOverlap {
-                    walls,
+                    a,
+                    b,
                     at,
                     area,
+                    total,
                     limit,
                     ..
                 } => v.extend([
-                    (
-                        "walls",
-                        Json::Arr(vec![n.wall(walls.0).into(), n.wall(walls.1).into()]),
-                    ),
+                    ("a", n.strip(a)),
+                    ("b", n.strip(b)),
                     ("at", p2(at)),
                     ("area", f(area)),
+                    ("total", f(total)),
+                    ("limit", f(limit)),
+                ]),
+                W::FlatOverlapUndecided {
+                    a, b, at, gap, limit, ..
+                } => v.extend([
+                    ("a", n.strip(a)),
+                    ("b", n.strip(b)),
+                    ("at", p2(at)),
+                    ("gap", f(gap)),
+                    ("limit", f(limit)),
+                ]),
+                W::FoldedClash {
+                    a,
+                    b,
+                    at,
+                    depth,
+                    limit,
+                    ..
+                } => v.extend([
+                    ("a", n.strip(a)),
+                    ("b", n.strip(b)),
+                    ("at", p3(at)),
+                    ("depth", f(depth)),
                     ("limit", f(limit)),
                 ]),
                 W::ReliefRemnant {
@@ -762,11 +794,23 @@ impl SheetNote {
         let fm = crate::values::fmt;
         let n = &self.names;
         match &self.note {
-            Note::Warning(W::FlatOverlap { walls, area, .. }) => format!(
-                "{} and {} overlap in the flat pattern ({} mm2)",
-                n.wall(walls.0),
-                n.wall(walls.1),
-                fm(*area)
+            Note::Warning(W::FlatOverlap { a, b, total, .. }) => format!(
+                "{} and {} overlap in the flat pattern ({} mm2 in all): the folded part builds, no blank can be cut",
+                n.strip_name(*a),
+                n.strip_name(*b),
+                fm(*total)
+            ),
+            Note::Warning(W::FlatOverlapUndecided { a, b, gap, .. }) => format!(
+                "{} and {} come within {} of each other in the flat pattern: overlap or touch cannot be told",
+                n.strip_name(*a),
+                n.strip_name(*b),
+                fm(*gap)
+            ),
+            Note::Warning(W::FoldedClash { a, b, depth, .. }) => format!(
+                "{} and {} pass through each other folded ({} deep); the flat builds",
+                n.strip_name(*a),
+                n.strip_name(*b),
+                fm(*depth)
             ),
             Note::Warning(W::ReliefRemnant { joint, remnant, .. }) => {
                 format!(
@@ -923,6 +967,8 @@ fn kernel_kind(e: &SheetError) -> &'static str {
         EdgeMoveBlocked { .. } => "EdgeMoveBlocked",
         EdgeMoveCurve { .. } => "EdgeMoveCurve",
         CornerUnbuilt { .. } => "CornerUnbuilt",
+        FlatOverlap { .. } => "FlatOverlap",
+        FlatOverlapUndecided { .. } => "FlatOverlapUndecided",
     }
 }
 
@@ -983,6 +1029,14 @@ fn kernel_text(e: &SheetError) -> String {
             "closed and overlapping corners are not built yet; give the corner a relief".into()
         }
         CornerUnbuilt { size, .. } => format!("a corner relief of size {}", fm(*size)),
+        FlatOverlap { total, .. } => format!(
+            "the flat pattern overlaps itself ({} mm2): a single blank cannot",
+            fm(*total)
+        ),
+        FlatOverlapUndecided { gap, .. } => format!(
+            "two strips of the flat come within {}: overlap or touch cannot be told",
+            fm(*gap)
+        ),
     }
 }
 
@@ -1254,6 +1308,31 @@ fn kernel_data(e: &SheetError, n: &Names) -> Vec<(&'static str, Json)> {
             ),
             ("size", f(*size)),
         ],
+        FlatOverlap {
+            a,
+            b,
+            at,
+            area,
+            total,
+            limit,
+            ..
+        } => vec![
+            ("a", n.strip(*a)),
+            ("b", n.strip(*b)),
+            ("at", p2(*at)),
+            ("area", f(*area)),
+            ("total", f(*total)),
+            ("limit", f(*limit)),
+        ],
+        FlatOverlapUndecided {
+            a, b, at, gap, limit, ..
+        } => vec![
+            ("a", n.strip(*a)),
+            ("b", n.strip(*b)),
+            ("at", p2(*at)),
+            ("gap", f(*gap)),
+            ("limit", f(*limit)),
+        ],
     }
 }
 
@@ -1369,7 +1448,72 @@ fn kernel_error(fix: &FixCtx, names: Names, span: Span, id: &str, error: SheetEr
 }
 
 fn kernel_err(st: &SheetState, span: Span, id: &str, error: SheetError) -> Error {
-    kernel_error(&st.fix, st.names(), span, id, error)
+    let extra = match error {
+        SheetError::FlatOverlap { a, b, .. } => overlap_fixes(st, a, b),
+        _ => vec![],
+    };
+    match kernel_error(&st.fix, st.names(), span, id, error) {
+        Error::Sheet(mut e) => {
+            if let SheetErr::Kernel { fixes, .. } = &mut *e {
+                fixes.extend(extra);
+            }
+            Error::Sheet(e)
+        }
+        o => o,
+    }
+}
+
+/// SetParam fixes that clear a flat overlap: for each flange owning strip a or b, the tallest
+/// height (to a thousandth, rounded down) at which the flat no longer overlaps, found by halving
+/// on the kernel's own check.
+fn overlap_fixes(st: &SheetState, a: Strip, b: Strip) -> Vec<Op> {
+    let owner = |s: Strip| {
+        st.fix.flanges.iter().find(|f| match s {
+            Strip::Wall(w) => f.wall == w,
+            Strip::Bend(j) => f.joint == j,
+        })
+    };
+    let mut out = vec![];
+    let mut seen = vec![];
+    for f in [owner(a), owner(b)].into_iter().flatten() {
+        if seen.contains(&f.wall) {
+            continue;
+        }
+        seen.push(f.wall);
+        // the tip (segment 1) at x = the kernel's height
+        let Some(tip) = st.sheet.wall(f.wall).and_then(|w| {
+            w.outline.iter().flat_map(|l| &l.segments).find_map(|g| match g {
+                (Segment::Line { a, .. }, 1) => Some(a.x),
+                _ => None,
+            })
+        }) else {
+            continue;
+        };
+        let clear = |delta: f64| {
+            let mut s = st.sheet.clone();
+            s.move_edge(f.wall, 1, -delta).is_ok() && fs::build_with(&s, Map::Flat).is_ok()
+        };
+        let most = tip - f.setback - 1e-3;
+        if most <= 0.0 || !clear(most) {
+            continue;
+        }
+        let (mut lo, mut hi) = (0.0, most);
+        while hi - lo > 1e-5 {
+            let mid = 0.5 * (lo + hi);
+            if clear(mid) {
+                hi = mid;
+            } else {
+                lo = mid;
+            }
+        }
+        let value = ((f.height.v - hi) * 1000.0).floor() / 1000.0;
+        if clear(f.height.v - value)
+            && let Some(op) = set(&f.height, value)
+        {
+            out.push(op);
+        }
+    }
+    out
 }
 
 // ---- refusing ordinary features ----------------------------------------------------------------
@@ -2677,6 +2821,45 @@ pub fn method(ev: &mut Eval, s: &SheetVal, m: &str, args: &[Arg], span: Span) ->
 /// The shop checks of every sheet, as typed notes on the features they name.
 pub fn finish(ev: &mut Eval) {
     let mut notes = vec![];
+    // each build's warning about the other map: a flat overlap on the folded part, a folded clash
+    // on an unfold
+    for st in &ev.sheets.list {
+        let owner = |s: Strip| -> (String, Span) {
+            let found = match s {
+                Strip::Wall(w) => st.walls.iter().find(|x| x.0 == w).map(|x| (x.1.clone(), x.2)),
+                Strip::Bend(j) => st.joints.iter().find(|x| x.0 == j).map(|x| (x.1.clone(), x.2)),
+            };
+            found.unwrap_or((st.id.clone(), st.walls[0].2))
+        };
+        let folded = st.folded.iter().map(|b| (&b.warnings, None));
+        let flat = st.unfolds.iter().filter_map(|u| {
+            u.built
+                .as_ref()
+                .map(|b| (&b.warnings, Some((u.id.clone(), u.span))))
+        });
+        for (warnings, on) in folded.chain(flat) {
+            for w in warnings {
+                let (a, b) = match *w {
+                    fs::SheetWarning::FlatOverlap { a, b, .. }
+                    | fs::SheetWarning::FlatOverlapUndecided { a, b, .. }
+                    | fs::SheetWarning::FoldedClash { a, b, .. } => (a, b),
+                    _ => continue,
+                };
+                let (id, span) = on.clone().unwrap_or_else(|| owner(a));
+                let fixes = match w {
+                    fs::SheetWarning::FlatOverlap { .. } => overlap_fixes(st, a, b),
+                    _ => vec![],
+                };
+                notes.push(Warning::Sheet(Box::new(SheetNote {
+                    span,
+                    id,
+                    note: Note::Warning(w.clone()),
+                    names: st.names(),
+                    fixes,
+                })));
+            }
+        }
+    }
     for st in &ev.sheets.list {
         let Some(shop) = &st.shop else { continue };
         for v in fs::check(&st.sheet, &shop.shop) {
