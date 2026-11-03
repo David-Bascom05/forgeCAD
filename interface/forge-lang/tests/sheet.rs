@@ -121,7 +121,10 @@ fn u_matches_the_closed_form() {
     let s1 = setback(rr, t, a1, true);
     // the left flange goes down, its height to the outer sharp: the kernel's reference skin
     let s2 = setback(rr, t, a2, false);
-    let walls = (40.0 - s1 - s2) * 30.0 + (30.0 - s1) * 30.0 + (25.0 - s2) * 30.0;
+    // the left flange stands outside its edge (the default): going down, the edge moves out
+    // t tan(angle / 2)
+    let base = 40.0 + sharp(t, a2);
+    let walls = (base - s1 - s2) * 30.0 + (30.0 - s1) * 30.0 + (25.0 - s2) * 30.0;
     let bends = [Bend { angle: a1, len: 30.0 }, Bend { angle: a2, len: 30.0 }];
     let (vf, vl) = closed(t, rr, k, walls, &bends);
     near("U folded", folded(&r), vf);
@@ -129,7 +132,7 @@ fn u_matches_the_closed_form() {
     identity(&r, t, k, &bends);
     // the flat pattern's length, along the base
     let l = &r.sheets[0].layout.as_ref().expect("laid out").bends;
-    let flat_len = 40.0 - s1 - s2 + (30.0 - s1) + (25.0 - s2) + l.iter().map(|b| b.allowance).sum::<f64>();
+    let flat_len = base - s1 - s2 + (30.0 - s1) + (25.0 - s2) + l.iter().map(|b| b.allowance).sum::<f64>();
     let (lo, hi) = x_extent(r.sheets[0].unfolds[0].1.as_ref().expect("unfolded"));
     assert!(
         ((hi - lo) - flat_len).abs() < 1e-9,
@@ -154,8 +157,9 @@ fn z_matches_the_closed_form() {
     let s1 = setback(rr, t, a, true);
     let s2 = setback(rr, t, a, false);
     // web up, its height to the outer sharp: the kernel's is the inner one, t tan(45) less;
-    // the lip down to its outer sharp: the kernel's own
-    let web = 25.0 - sharp(t, a);
+    // the lip down to its outer sharp: the kernel's own. The lip stands outside the web's tip
+    // (the default): going down, that edge moves out t tan(45), so the web is that much longer.
+    let web = 25.0 - sharp(t, a) + sharp(t, a);
     let lip = 15.0;
     let walls = (50.0 - s1) * w + (web - s1 - s2) * w + (lip - s2) * w;
     let bends = [Bend { angle: a, len: w }, Bend { angle: a, len: w }];
@@ -480,25 +484,200 @@ s = sheet(top, t: t, r: r, bend: kfactor(ratio(0.4)))
     assert_eq!(first_error(s).kind(), "SheetOnSolid");
 }
 
-#[test]
-fn reliefs_are_refused_until_decided() {
-    let s = L.replace("measure: \"inner\")", "measure: \"inner\", relief: \"rect\")");
-    assert_eq!(first_error(&s).kind(), "ReliefUndecided");
-    // a flange off part of a straight edge leaves wall beside the bend: a relief is needed
-    let s = "shared t = 2
+/// A base whose right edge is split at y = m, a flange off its lower part: the base keeps
+/// material beside the bend's far end.
+const SPLIT: &str = "shared t = 2
 shared r = 2
 param plan.L = 40
 param plan.W = 30
-param plan.m = 15
+param plan.m = 18
+param up.h = 25
 sketch plan(on: xy) {
   outline = poly([(0, 0), (L, 0), (L, m), (L, W), (0, W)])
 }
 base = sheet(plan, t: t, r: r, bend: kfactor(ratio(0.4)))
-up = flange(base.edge(plan.outline[1]), height: W)
+up = flange(base.edge(plan.outline[1]), height: h, measure: \"inner\")
 ";
-    let e = first_error(s);
-    assert_eq!(e.kind(), "NeedsRelief", "{e:?}");
-    assert!(e.fixes().is_empty(), "no fix until reliefs are decided");
+
+/// The split part's folded and flat volumes with `removed` taken out of the base.
+fn split_closed(removed: f64) -> (f64, f64) {
+    let (t, r, k, l, w, m, h) = (2.0, 2.0, 0.4, 40.0, 30.0, 18.0, 25.0);
+    let th = PI / 2.0;
+    let walls = l * w - r * m + (h - r) * m - removed;
+    (
+        t * walls + th * (r * t + 0.5 * t * t) * m,
+        t * (walls + th * (r + k * t) * m),
+    )
+}
+
+fn split_run(s: &str) -> Run {
+    let r = run(&format!(
+        "{s}param blank.gap = 30\nblank = unfold(base, on: offset(base.bottom, gap))\n"
+    ));
+    assert!(r.ok(), "{}", forge_lang::report::text(&r, s));
+    r
+}
+
+#[test]
+fn a_needed_relief_is_added_and_reported() {
+    let r = split_run(SPLIT);
+    let rel = &r.sheets[0].reliefs;
+    assert_eq!(rel.len(), 1);
+    assert!(rel[0].automatic && rel[0].kind == forge_sheet::ReliefKind::Rect);
+    // the stand-in default: width t, depth t + R + 0.5
+    assert_eq!((rel[0].width, rel[0].depth), (2.0, 4.5));
+    let (vf, vl) = split_closed(2.0 * 4.5);
+    near("folded", folded(&r), vf);
+    near("flat", flat(&r), vl);
+    // typed data in the report, not a warning
+    assert!(!r.warnings.iter().any(|w| matches!(w, Warning::Sheet(_))));
+    let j = forge_lang::report::json(&r, SPLIT);
+    let text = format!("{j:?}");
+    assert!(text.contains("reliefs") && text.contains("automatic"), "{text}");
+}
+
+#[test]
+fn reliefs_asked_for_and_refused() {
+    let (w, d) = (3.0, 6.0);
+    let kerf = 0.2;
+    for (text, removed) in [
+        ("rect(3, 6)", w * d),
+        (
+            "obround(3, 6)",
+            w * (d - 0.5 * w) + 0.5 * PI * (0.5 * w) * (0.5 * w),
+        ),
+        ("tear", kerf * (2.0 + 2.0 + 0.5)),
+    ] {
+        let s = SPLIT.replace(
+            "measure: \"inner\")",
+            &format!("measure: \"inner\", relief: {text})"),
+        );
+        let r = split_run(&s);
+        let (vf, vl) = split_closed(removed);
+        near(text, folded(&r), vf);
+        near(text, flat(&r), vl);
+        assert!(r.sheets[0].reliefs.iter().all(|x| !x.automatic));
+    }
+    // none where one is needed: NeedsRelief, with a fix of each kind that cures it
+    let s = SPLIT.replace("measure: \"inner\")", "measure: \"inner\", relief: no_relief)");
+    let e = first_error(&s);
+    assert_eq!(e.kind(), "NeedsRelief");
+    let fixes = e.fixes();
+    assert_eq!(fixes.len(), 3, "{fixes:?}");
+    for f in &fixes {
+        assert!(matches!(f, Op::SetArg { arg, .. } if arg == "relief"), "{f:?}");
+        let fixed = apply(&s, f).expect("applies");
+        let r = run(&fixed);
+        assert!(r.ok(), "{fixed}\n{}", forge_lang::report::text(&r, &fixed));
+    }
+    // too shallow to pass the tangent line
+    let s = SPLIT.replace("measure: \"inner\")", "measure: \"inner\", relief: rect(3, t))");
+    let e = first_error(&s);
+    assert_eq!(e.kind(), "ReliefTooShallow");
+    cured_by_fix(&s, &e);
+}
+
+#[test]
+fn flange_positions() {
+    for (pos, shift) in [("outside", 0.0), ("inside", -2.0), ("bend_outside", 2.0)] {
+        let s = L.replace(
+            "measure: \"inner\")",
+            &format!("measure: \"inner\", position: \"{pos}\")"),
+        );
+        let r = run(&s);
+        assert!(r.ok(), "{pos}: {:?}", r.errors);
+        let (t, rr, w) = (2.0, 2.0, 30.0);
+        let walls = (40.0 + shift - rr) * w + (30.0 - rr) * w;
+        near(pos, folded(&r), t * walls + PI / 2.0 * (rr * t + 0.5 * t * t) * w);
+    }
+}
+
+/// A plain box: four flanges off a rectangle, its corners left to the builder.
+const BOX: &str = "shared t = 1.5
+shared r = 1
+shared H = 20
+param plan.L = 60
+param plan.W = 40
+sketch plan(on: xy) {
+  outline = rect(corner: (0, 0), size: (L, W))
+}
+base = sheet(plan, t: t, r: r, bend: kfactor(ratio(0.4)))
+front = flange(base.edge(plan.outline[0]), height: H, measure: \"inner\")
+east = flange(base.edge(plan.outline[1]), height: H, measure: \"inner\")
+back = flange(base.edge(plan.outline[2]), height: H, measure: \"inner\")
+west = flange(base.edge(plan.outline[3]), height: H, measure: \"inner\")
+";
+
+#[test]
+fn box_corners() {
+    let r = run(BOX);
+    assert!(r.ok(), "{:?}", r.errors);
+    let c = &r.sheets[0].corners;
+    assert_eq!(c.len(), 4);
+    assert!(
+        c.iter()
+            .all(|x| x.automatic && matches!(x.kind, forge_sheet::CornerKind::Circular { .. }))
+    );
+    assert_eq!(r.measure.as_ref().map(|m| m.problems), Some(0));
+    // one corner made square, the sheet's default square, closed refused
+    let s = format!("{BOX}param fe.h = 4\nfe = corner_relief(front, east, square_relief(h))\n");
+    let r = run(&s);
+    assert!(r.ok(), "{:?}", r.errors);
+    let squares = r.sheets[0]
+        .corners
+        .iter()
+        .filter(|x| matches!(x.kind, forge_sheet::CornerKind::Square { .. }))
+        .count();
+    assert_eq!(squares, 1);
+    let s = BOX.replace(
+        "bend: kfactor(ratio(0.4)))",
+        "bend: kfactor(ratio(0.4)), corner: closed_corner)",
+    );
+    assert_eq!(first_error(&s).kind(), "CornerUnbuilt");
+    // flanges that do not meet at a corner
+    let s = format!("{BOX}fb = corner_relief(front, back, circular_relief())\n");
+    assert_eq!(first_error(&s).kind(), "NotACorner");
+}
+
+#[test]
+fn a_name_hiding_a_built_in_gets_a_rename_fix() {
+    let s = "shared flange = 3
+sketch plan(on: xy) {
+  outline = rect(corner: (0, 0), size: (flange, flange))
+}
+block = extrude(plan, flange)
+expect volume = 27 +- 0.1%
+";
+    let r = forge_lang::run(
+        s,
+        Options {
+            build: false,
+            ..Options::default()
+        },
+        Default::default(),
+    )
+    .0;
+    let e = r
+        .errors
+        .iter()
+        .find(|e| e.kind() == "ShadowsBuiltin")
+        .expect("refused");
+    let fixes = e.fixes();
+    assert_eq!(
+        fixes,
+        vec![Op::Rename {
+            from: "flange".into(),
+            to: "flange_1".into()
+        }]
+    );
+    let fixed = apply(s, &fixes[0]).expect("applies");
+    assert!(fixed.contains("shared flange_1 = 3") && fixed.contains("size: (flange_1, flange_1)"));
+    let r = run(&fixed);
+    assert!(
+        r.ok() && r.warnings.is_empty(),
+        "{fixed}\n{}",
+        forge_lang::report::text(&r, &fixed)
+    );
 }
 
 #[test]

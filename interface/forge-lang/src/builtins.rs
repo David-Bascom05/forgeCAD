@@ -118,7 +118,7 @@ pub fn constant(name: &str) -> Option<Value> {
             .iter()
             .find(|m| **m == n)
             .map(|m| Value::Builtin(m)),
-        n => crate::wired::constant(n),
+        n => crate::wired::constant(n).or_else(|| crate::sheet::constant(n)),
     }
 }
 
@@ -692,6 +692,8 @@ pub fn call(ev: &mut Eval, name: &'static str, args: &[Arg], span: Span) -> R<Va
             drop(s);
             Ok(mk_ent(&sk, id))
         }
+        // outside a sketch, rect is a bend relief
+        "rect" if ev.sketch_ref().is_none() => crate::sheet::call(ev, name, args, span),
         "rect" => {
             let sk = in_sketch(ev, name, span)?;
             let a = Args::bind(ev, name, &["center", "size", "corner"], args, span)?;

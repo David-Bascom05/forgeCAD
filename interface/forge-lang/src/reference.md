@@ -497,15 +497,24 @@ blank = unfold(base, on: offset(base.bottom, gap))
 ```
 
 ```
-sheet(PROFILE, t: T, r: R, bend: RULE, shop: SHOP)
+sheet(PROFILE, t: T, r: R, bend: RULE, shop: SHOP, corner: CORNER)
     the base wall: PROFILE's outline and holes. r and bend may come from the shop's stock of
-    thickness t instead. Its own dims: thickness, radius, k.
+    thickness t instead, and so does the default relief. corner: what corners get (default
+    circular_relief(), just clear of both bends). Its own dims: thickness, radius, k.
 flange(EDGE, height: H, angle: A = 90deg, side: "up"|"down" = "up",
-       measure: "inner"|"outer" = "outer", r: R, relief: ..)
+       measure: "inner"|"outer" = "outer", r: R, relief: RELIEF,
+       position: "outside"|"inside"|"bend_outside" = "outside")
     a wall turned A (0 < A < 180deg) off a straight wall edge, as long as the edge. up turns
     towards the wall's top. H runs along the flange from the virtual sharp of the inner or the
-    outer skins. r: this bend's own inside radius (default the sheet's). relief: refused,
-    ReliefUndecided (reliefs wait on a decision; cut one with cutout past the tangent line).
+    outer skins. r: this bend's own inside radius (default the sheet's). position: the flange's
+    material outside the edge (its inner virtual sharp on it), inside it (the outer sharp on it:
+    the edge moves in), or the bend starting at the edge (the edge moves out); the edges beside
+    move with it, and may not carry a bend (EdgeMoveBlocked, fix position "outside").
+    relief: at both ends of the bend; left out, the builder adds the default where the wall
+    keeps material beside the bend, and nothing elsewhere.
+corner_relief(F, G, CORNER)
+    the treatment where flanges F and G, off one wall at a corner of its outline, meet
+    (NotACorner if they do not).
 cutout(PROFILE, wall: W)
     PROFILE taken out of the sheet. Its sketch lies on W's top or bottom; the profile is placed
     in W's developed coordinates, so it cuts across bends into the walls beyond as they unfold.
@@ -514,6 +523,19 @@ unfold(S, on: PLANE)
     the flat body of S's sheet as a new body, its first wall on PLANE (default where it is
     folded). Sheet features after an unfold of their sheet are AfterUnfold.
 ```
+
+RELIEF: `rect(W, D)`, `obround(W, D)` (W wide, D deep from the mold line, past the tangent line:
+else ReliefTooShallow), `tear` (a slit the shop's kerf wide), `no_relief` (where one is needed,
+NeedsRelief, with a SetArg fix for each kind). Sizes left out (`rect()`) are the default's. The
+default: the shop stock's `relief`, `relief_width`, `relief_depth` and the shop's `kerf`; with no
+shop, a rect t wide and t + R + 0.5 deep, kerf 0.2. An automatic relief is deepened past the
+tangent line where the formula falls short. A relief is a notch beside the bend's end, open past
+the edge.
+
+CORNER: `circular_relief(R)`, `square_relief(H)` (a circle of radius R or a square of half side H
+centred on the corner, cut through base, bends and flanges; size left out: just clear of both
+bends), `open_corner(GAP)` (a square that much larger), `closed_corner`, `overlap_corner(GAP)`
+(refused: CornerUnbuilt).
 
 EDGE: `B.edge(ENTITY)` for the base B (a straight line of its profile), `F.tip`, `F.start_side`,
 `F.end_side` for a flange F (the far edge; the sides at the start and the end of the edge it
@@ -540,8 +562,9 @@ ktable([(R_OVER_T, K), ..])       K by r/t, linear between rows (Ratios, increas
 bend_table([(R, A, BA), ..])      measured allowances for each radius, linear in angle
 per_t(F, plus: L = 0)             a length F t + L (F a Ratio)
 stock(t: T, bend: RULE, radii: [R, ..], min_flange: S, hole_to_bend: S, hole_to_edge: S,
-      min_slot: S, relief_width: S, relief_depth: S)   S: per_t(..); left out: no limit
-shop([STOCK, ..])
+      min_slot: S, min_hole: S, relief: "rect"|"obround"|"tear", relief_width: S, relief_depth: S)
+      S: per_t(F, per_r: G, plus: L) = F t + G R + L; left out: no limit
+shop([STOCK, ..], kerf: K)
 ```
 
 A sheet given `shop:` is checked against it at the end of the run: thickness stocked, each
@@ -556,7 +579,9 @@ Every kernel refusal is a typed error named as the kernel names it (`WallTooShor
 `TrimTouchesBendLine`, `TrimAlongBendLine`, `TangentMismatch`, ...), its walls, joints, cuts and
 trims named by the Forge features that made them, with a SetParam fix where a param cures it
 (a flange's height, its angle, K, the radius). Others: `NotAnEdge`, `CutOffWall`, `OtherSheet`,
-`NoSuchRole`, `TableRow`, `ReliefUndecided`. K moves only the flat: the folded body is the same
+`NoSuchRole`, `TableRow`, `NotACorner`. `fg run --json` lists, per sheet, the reliefs and corner
+reliefs the builder cut (flange, end, kind, size, automatic): data, not warnings. K moves only the
+flat: the folded body is the same
 to the bit for any K.
 
 `fg run F.fg --dxf OUT.dxf` writes each sheet's flat pattern (R2000 DXF, mm): cut contours on
@@ -612,7 +637,11 @@ AddFeature {before, text}           statements put in above `before` (or at the 
 DeleteFeature {id}                  the statement making id taken out
 MoveFeature {id, before}            that statement moved above `before` (or to the end)
 LiftLiteral {span, name, scope}     a loose number replaced by a new param (shared or local)
+SetArg {id, arg, text}              keyword argument arg of the call making id becomes text
+Rename {from, to}                   a top-level name and every use of it renamed
 ```
+
+A name a built-in also has is `ShadowsBuiltin`, with the fix Rename to `NAME_1`.
 
 An op fails only with a typed error: `UnknownParam`, `UnknownFeature`, `NotAStatement` (an
 instance made in a loop or call: edit its params, or SplitInstance), `NameTaken`, `EditDim` (the
