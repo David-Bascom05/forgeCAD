@@ -238,6 +238,9 @@ pub struct FilletOptions {
     /// A joint whose blends rest on different things is walked between them. Asked only after a
     /// refusal, costing far more than a joint.
     pub walk: bool,
+    /// A tangent chain runs on only where the next edge is tangent to within LINEAR over the radius,
+    /// not past a kink under half a degree. Asked when the chain carried past one has refused.
+    pub straight: bool,
 }
 
 /// The vertex each varying law of `edges` runs from. A run is the edges one varying radius was
@@ -358,11 +361,44 @@ pub fn fillet(body: &Body, edges: &[FilletEdge], feature: u64) -> R<Body> {
     {
         return Ok(b);
     }
+    if carries(body, edges, &FilletOptions::default())
+        && let Ok(b) = fillet_with(body, edges, &straight_of(&FilletOptions::default()), feature)
+        && forge_topo::check_against(&b, body)
+            .iter()
+            .all(|p| matches!(p, forge_topo::Problem::DuplicateName { .. }))
+    {
+        return Ok(b);
+    }
     Err(FilletError::Invalid(problems))
+}
+
+fn straight_of(opts: &FilletOptions) -> FilletOptions {
+    FilletOptions {
+        straight: true,
+        ..opts.clone()
+    }
+}
+
+/// Whether a chain run on past kinks under half a degree takes more edges than one run on only
+/// where the next edge is tangent.
+fn carries(body: &Body, edges: &[FilletEdge], opts: &FilletOptions) -> bool {
+    !opts.straight
+        && !opts.only
+        && tangent_chains(body, edges, &[], &opts.stops, opts.walk, true).len()
+            != tangent_chains(body, edges, &[], &opts.stops, opts.walk, false).len()
 }
 
 /// `fillet` with laws started at given vertices and corners set back by given distances.
 pub fn fillet_with(body: &Body, edges: &[FilletEdge], opts: &FilletOptions, feature: u64) -> R<Body> {
+    let got = fillet_tried(body, edges, opts, feature);
+    // carried past a kink and refused: as if it were not carried, the round ending at the kink
+    if got.is_err() && carries(body, edges, opts) {
+        return fillet_tried(body, edges, &straight_of(opts), feature);
+    }
+    got
+}
+
+fn fillet_tried(body: &Body, edges: &[FilletEdge], opts: &FilletOptions, feature: u64) -> R<Body> {
     let got = fillet_picked(body, edges, opts, feature);
     if matches!(got, Err(FilletError::Overflow { .. })) && !opts.across {
         let across = FilletOptions {
@@ -466,6 +502,7 @@ fn fillet_picked(body: &Body, edges: &[FilletEdge], opts: &FilletOptions, featur
             seams: opts.seams,
             walk: opts.walk,
             rims: opts.rims,
+            straight: opts.straight,
             ..FilletOptions::default()
         };
         return fillet_with(&done, &then, &rest, feature);
@@ -857,7 +894,7 @@ fn fillet_on(body: &Body, edges: &[FilletEdge], opts: &FilletOptions, feature: u
     let all = if opts.only {
         edges.iter().map(|f| (f.edge, f.radius.max())).collect()
     } else {
-        tangent_chains(&body, edges, &unpicked, &opts.stops, opts.walk)
+        tangent_chains(&body, edges, &unpicked, &opts.stops, opts.walk, !opts.straight)
     };
     let seen: BTreeSet<EdgeId> = all.iter().map(|f| f.0).collect();
     merge_flush(&mut body, &seen);
@@ -1104,6 +1141,7 @@ fn tangent_chains(
     unpicked: &[(EdgeId, f64)],
     stops: &[EdgeId],
     exact: bool,
+    carry: bool,
 ) -> Vec<(EdgeId, f64)> {
     let tangents = if exact { out_of_exact } else { out_of };
     let at = edges_at(body);
@@ -1129,7 +1167,7 @@ fn tangent_chains(
                 })
                 .filter(|&o| {
                     let t = tangents(body, o, v);
-                    continues(&mine, &t, radius) || carries_on(&mine, &t)
+                    continues(&mine, &t, radius) || (carry && carries_on(&mine, &t))
                 })
                 .collect();
             if let [o] = next[..]
