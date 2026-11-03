@@ -154,6 +154,8 @@ pub struct FgPanel {
     pub edit_fresh: bool,
     /// A feature's statement being typed, to add above the selected one.
     pub add_text: String,
+    /// Every issue listed, not the first few.
+    pub all_issues: bool,
     /// The selected statement's new name, being typed.
     pub rename: String,
     /// The last op the host refused, and why.
@@ -590,6 +592,7 @@ impl Shell {
                             Self::fg_tool(ui, &t, &mut fg, &mut out, &mut places);
                             // an assembly's typed results first: they're what to look at
                             if fg.asm.is_some() {
+                                Self::asm_checks(ui, &t, &mut fg, &mut out, &mut places);
                                 Self::fg_issues(ui, &t, &mut fg, &mut out, &mut places);
                             }
                             Self::asm_panel(ui, &t, &mut fg, &mut out, &mut places);
@@ -1109,7 +1112,15 @@ impl Shell {
         }
         Self::fg_heading(ui, t, &format!("Issues ({})", fg.issues.len()));
         let issues = std::mem::take(&mut fg.issues);
-        for (i, is) in issues.iter().enumerate().take(300) {
+        // a long list shows its first few until asked
+        let cap = if fg.all_issues { 300 } else { 8 };
+        if issues.len() > 8 {
+            let label = if fg.all_issues { "Show fewer" } else { "Show all" };
+            if Self::fg_button(ui, label, "fg:issues:all".into(), places) {
+                fg.all_issues = !fg.all_issues;
+            }
+        }
+        for (i, is) in issues.iter().enumerate().take(cap) {
             let colour = match is.severity {
                 Severity::Error => t.error,
                 _ => Color32::from_rgb(0xE0, 0xA0, 0x30),

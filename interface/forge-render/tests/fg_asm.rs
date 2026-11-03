@@ -404,3 +404,41 @@ fn the_18u_rack_opens_and_orbits() {
     );
     assert!(times[15] < 50.0, "median frame {:.1} ms", times[15]);
 }
+
+/// The rack's checks, on request: every expect passes and nothing interferes.
+#[test]
+fn the_18u_racks_checks_all_pass() {
+    let rack = std::path::Path::new(env!("HOME")).join("projects/forgecad-gate/rack18u/asm/rack.fg");
+    if !rack.exists() {
+        eprintln!("skipped: no {}", rack.display());
+        return;
+    }
+    let Some(mut h) = open_within(&rack, 600.0) else {
+        return;
+    };
+    let t = std::time::Instant::now();
+    assert!(h.click("asm:check"));
+    h.step();
+    assert!(asm(&h).checking, "Run checks was not pressed");
+    let mut done = false;
+    while t.elapsed().as_secs() < 1800 {
+        if h.until(ready) {
+            done = true;
+            break;
+        }
+    }
+    assert!(done, "the checks never finished");
+    let a = asm(&h);
+    let failed: Vec<_> = a.expects.iter().filter(|e| !e.ok).collect();
+    eprintln!(
+        "rack.fg checks: {:.0} s, {} expects ({} failed), overlap {:?}; {}",
+        t.elapsed().as_secs_f64(),
+        a.expects.len(),
+        failed.len(),
+        a.overlap,
+        a.timings
+    );
+    assert!(failed.is_empty(), "{failed:?}");
+    assert_eq!(a.expects.len(), 537);
+    assert_eq!(a.overlap.map(|o| o.0), Some(0));
+}
