@@ -1,13 +1,13 @@
 //! One long-lived process on stdio: plain JSON-RPC (`serve`) or an MCP server (`mcp`), both
 //! over a session that keeps each file's build and rebuilds only from the first changed line.
 
-use crate::b64;
+use crate::{b64, fg};
 use forge_agent::cmd::{Args, Reply, Session};
 use forge_agent::json::Json;
 use std::io::{BufRead, Write};
 use std::process::ExitCode;
 
-/// Each tool: name, description, how many of its parameters are required, its parameters. Five,
+/// Each tool: name, description, how many of its parameters are required, its parameters. Six,
 /// and kept short: a client sends these with every request.
 type Tool = (
     &'static str,
@@ -16,10 +16,10 @@ type Tool = (
     &'static [(&'static str, &'static str)],
 );
 
-const TOOLS: [Tool; 5] = [
+const TOOLS: [Tool; 6] = [
     (
         "act",
-        "Change a .fc part: newline-separated lines, all applied or none.",
+        "Change a .fc part: newline-separated lines, all applied or none. A .fg part: edit.",
         2,
         &[
             ("file", "path"),
@@ -29,7 +29,7 @@ const TOOLS: [Tool; 5] = [
     ),
     (
         "query",
-        "selector -> @handles; or stat, file, check, dims, since N",
+        "selector -> @handles; or stat, file, check, dims, since N; .fg also params, features",
         2,
         &[
             ("file", "path"),
@@ -55,8 +55,21 @@ const TOOLS: [Tool; 5] = [
         ],
     ),
     (
+        "edit",
+        "Change a .fg part by typed ops (as errors' fixes give them), all applied or none; replies with the build's typed report",
+        2,
+        &[
+            ("file", "path to a .fg part"),
+            (
+                "op",
+                "one op: {\"op\":\"SetParam\",\"param\":\"t\",\"value\":{\"value\":3,\"dim\":\"Length\"}}",
+            ),
+            ("ops", "several ops, in order"),
+        ],
+    ),
+    (
         "help",
-        "The grammar of a feature or topic; none: the topics",
+        "The grammar of a feature or topic; none: the topics; forge: the .fg language",
         0,
         &[("topic", "a feature or topic")],
     ),
@@ -98,6 +111,7 @@ pub fn run(mcp: bool, root: &str, writable: bool) -> ExitCode {
         }
     };
     let mut session = Session::rooted(root.clone()).writable(writable);
+    let mut forge = fg::Session::new(Some(root.clone()), writable);
     let stdin = std::io::stdin();
     let mut out = std::io::stdout().lock();
     for line in stdin.lock().lines() {
@@ -107,18 +121,19 @@ pub fn run(mcp: bool, root: &str, writable: bool) -> ExitCode {
         }
         let reply = match Json::parse(&line) {
             // a request that panics answers with an error, and the session starts afresh
-            Ok(req) => {
-                std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| answer(&mut session, &req, mcp)))
-                    .unwrap_or_else(|_| {
-                        session = Session::rooted(root.clone());
-                        let id = req.get("id").cloned().unwrap_or(Json::Null);
-                        Some(error(
-                            id,
-                            -32603,
-                            "internal error: the request failed; the session was reset",
-                        ))
-                    })
-            }
+            Ok(req) => std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+                answer(&mut session, &mut forge, &req, mcp)
+            }))
+            .unwrap_or_else(|_| {
+                session = Session::rooted(root.clone()).writable(writable);
+                forge = fg::Session::new(Some(root.clone()), writable);
+                let id = req.get("id").cloned().unwrap_or(Json::Null);
+                Some(error(
+                    id,
+                    -32603,
+                    "internal error: the request failed; the session was reset",
+                ))
+            }),
             Err(e) => Some(error(Json::Null, -32700, &e)),
         };
         if let Some(r) = reply
@@ -145,12 +160,38 @@ fn result(id: Json, r: Json) -> Json {
     Json::obj(vec![("jsonrpc", "2.0".into()), ("id", id), ("result", r)])
 }
 
-fn answer(session: &mut Session, req: &Json, mcp: bool) -> Option<Json> {
+/// A tool call, to the .fc or the .fg session by the file's kind.
+fn call(session: &mut Session, forge: &mut fg::Session, name: &str, p: &Json) -> Reply {
+    let a = args(p);
+    if name == "help" && matches!(a.file.as_str(), "forge" | "fg" | ".fg") {
+        return Reply {
+            ok: true,
+            text: forge_lang::REFERENCE.to_string(),
+            json: Json::obj(vec![("ok", true.into()), ("text", forge_lang::REFERENCE.into())]),
+            png: None,
+        };
+    }
+    if name != "help" && fg::is_fg(&a.file) {
+        return forge.run(name, &a, p);
+    }
+    if name == "edit" {
+        let msg = format!("{}: edit takes .fg parts; a .fc part changes by act", a.file);
+        return Reply {
+            ok: false,
+            text: format!("error: {msg}"),
+            json: Json::obj(vec![("ok", false.into()), ("error", msg.into())]),
+            png: None,
+        };
+    }
+    session.run(name, &a)
+}
+
+fn answer(session: &mut Session, forge: &mut fg::Session, req: &Json, mcp: bool) -> Option<Json> {
     let method = req.get("method").and_then(Json::str).unwrap_or("");
     let params = req.get("params").cloned().unwrap_or(Json::Obj(vec![]));
     if !mcp {
         // every serve method answers, id or not
-        let r = session.run(method, &args(&params));
+        let r = call(session, forge, method, &params);
         return Some(result(req.get("id").cloned().unwrap_or(Json::Null), served(r)));
     }
     let id = req.get("id").cloned()?; // MCP notifications get no answer
@@ -183,7 +224,9 @@ fn answer(session: &mut Session, req: &Json, mcp: bool) -> Option<Json> {
         ),
         "tools/call" => {
             let name = params.get("name").and_then(Json::str).unwrap_or("");
-            let r = session.run(name, &args(params.get("arguments").unwrap_or(&Json::Null)));
+            let arguments = params.get("arguments").cloned().unwrap_or(Json::Null);
+            let fg_file = arguments.get("file").and_then(Json::str).is_some_and(fg::is_fg);
+            let r = call(session, forge, name, &arguments);
             let mut content = Vec::new();
             if let Some(png) = &r.png {
                 content.push(Json::obj(vec![
@@ -192,7 +235,9 @@ fn answer(session: &mut Session, req: &Json, mcp: bool) -> Option<Json> {
                     ("mimeType", "image/png".into()),
                 ]));
             }
-            content.push(Json::obj(vec![("type", "text".into()), ("text", r.text.into())]));
+            // a .fg reply is its typed record: errors, warnings and fixes as data
+            let text = if fg_file { r.json.to_string() } else { r.text };
+            content.push(Json::obj(vec![("type", "text".into()), ("text", text.into())]));
             result(
                 id,
                 Json::obj(vec![("content", Json::Arr(content)), ("isError", (!r.ok).into())]),
@@ -216,11 +261,14 @@ fn tool(t: &Tool) -> Json {
     let props = params
         .iter()
         .map(|(p, d)| {
-            let ty = if *p == "px" { "number" } else { "string" };
-            (
-                p.to_string(),
-                Json::obj(vec![("type", ty.into()), ("description", (*d).into())]),
-            )
+            // an op is an object (or its JSON as text), ops a list of them
+            let mut f = vec![("description", (*d).into())];
+            match *p {
+                "px" => f.insert(0, ("type", "number".into())),
+                "op" | "ops" => {}
+                _ => f.insert(0, ("type", "string".into())),
+            }
+            (p.to_string(), Json::obj(f))
         })
         .collect();
     let required: Vec<Json> = params.iter().take(required).map(|p| p.0.into()).collect();

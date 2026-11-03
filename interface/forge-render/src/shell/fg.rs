@@ -156,27 +156,28 @@ pub fn tree_rows(feats: &[FeatRow]) -> Vec<TreeRow> {
     }
     let mut nodes: Vec<Node> = Vec::new();
     let mut roots: Vec<usize> = Vec::new();
-    let find = |nodes: &mut Vec<Node>, roots: &mut Vec<usize>, parent: Option<usize>, key: String, label: String| {
-        let list = match parent {
-            Some(p) => nodes[p].kids.clone(),
-            None => roots.clone(),
+    let find =
+        |nodes: &mut Vec<Node>, roots: &mut Vec<usize>, parent: Option<usize>, key: String, label: String| {
+            let list = match parent {
+                Some(p) => nodes[p].kids.clone(),
+                None => roots.clone(),
+            };
+            if let Some(&i) = list.iter().find(|&&i| nodes[i].key == key) {
+                return i;
+            }
+            nodes.push(Node {
+                key,
+                label,
+                feat: None,
+                kids: Vec::new(),
+            });
+            let i = nodes.len() - 1;
+            match parent {
+                Some(p) => nodes[p].kids.push(i),
+                None => roots.push(i),
+            }
+            i
         };
-        if let Some(&i) = list.iter().find(|&&i| nodes[i].key == key) {
-            return i;
-        }
-        nodes.push(Node {
-            key,
-            label,
-            feat: None,
-            kids: Vec::new(),
-        });
-        let i = nodes.len() - 1;
-        match parent {
-            Some(p) => nodes[p].kids.push(i),
-            None => roots.push(i),
-        }
-        i
-    };
     for (fi, f) in feats.iter().enumerate() {
         let segs = parse_path(&f.id).unwrap_or_else(|| {
             vec![Seg {
@@ -317,7 +318,8 @@ impl FgPanel {
 
     /// The worst issue in a feature, or in any feature under a group's key.
     fn flag(&self, key: &str) -> Option<Severity> {
-        let under = |f: &str| f == key || f.starts_with(&format!("{key}.")) || f.starts_with(&format!("{key}["));
+        let under =
+            |f: &str| f == key || f.starts_with(&format!("{key}.")) || f.starts_with(&format!("{key}["));
         let mut worst = None;
         for i in &self.issues {
             if i.feature.as_deref().is_some_and(under) {
@@ -347,7 +349,9 @@ impl FgPanel {
         let reads: Vec<&ParamKey> = self
             .feats
             .iter()
-            .filter(|f| f.id == *sel || f.id.starts_with(&format!("{sel}.")) || f.id.starts_with(&format!("{sel}[")))
+            .filter(|f| {
+                f.id == *sel || f.id.starts_with(&format!("{sel}.")) || f.id.starts_with(&format!("{sel}["))
+            })
             .flat_map(|f| &f.reads)
             .collect();
         self.params
@@ -360,7 +364,9 @@ impl FgPanel {
     /// SplitInstance would give it alone.
     pub fn splittable(&self) -> Vec<(Vec<Seg>, ParamKey)> {
         let Some(sel) = &self.selected else { return vec![] };
-        let Some(segs) = parse_path(sel) else { return vec![] };
+        let Some(segs) = parse_path(sel) else {
+            return vec![];
+        };
         if segs.iter().all(|s| s.index.is_empty()) {
             return vec![];
         }
@@ -403,7 +409,9 @@ impl Shell {
                     }
                     let (r, resp) = ui.allocate_exact_size(vec2(area.width(), super::ROW_H), Sense::click());
                     let on = fg.selected.as_deref() == Some(row.key.as_str());
-                    resp.widget_info(|| egui::WidgetInfo::selected(egui::Role::TreeItem, true, on, &row.label));
+                    resp.widget_info(|| {
+                        egui::WidgetInfo::selected(egui::Role::TreeItem, true, on, &row.label)
+                    });
                     let p = ui.painter();
                     if on {
                         p.rect_filled(r, 0.0, t.on);
@@ -440,14 +448,27 @@ impl Shell {
                         Some(Severity::Lint | Severity::Warning) => Some(Color32::from_rgb(0xE0, 0xA0, 0x30)),
                         None => None,
                     };
-                    icons::draw(p, pos2(x + 12.0, r.top() + 5.0), 16.0, icon, 1.5, tint.unwrap_or(ink));
+                    icons::draw(
+                        p,
+                        pos2(x + 12.0, r.top() + 5.0),
+                        16.0,
+                        icon,
+                        1.5,
+                        tint.unwrap_or(ink),
+                    );
                     let font = if on { medium(13.0) } else { sans(13.0) };
                     let ink = if row.feat.is_some_and(|i| fg.feats[i].status == Status::NotBuilt) {
                         t.ink2
                     } else {
                         ink
                     };
-                    p.text(pos2(x + 34.0, r.center().y), Align2::LEFT_CENTER, &row.label, font, ink);
+                    p.text(
+                        pos2(x + 34.0, r.center().y),
+                        Align2::LEFT_CENTER,
+                        &row.label,
+                        font,
+                        ink,
+                    );
                     if let Some(k) = kind {
                         p.text(
                             pos2(r.right() - 10.0, r.center().y),
@@ -475,7 +496,11 @@ impl Shell {
             fg.collapsed.insert(k);
         }
         if let Some(k) = chosen {
-            fg.selected = if fg.selected.as_deref() == Some(k.as_str()) { None } else { Some(k) };
+            fg.selected = if fg.selected.as_deref() == Some(k.as_str()) {
+                None
+            } else {
+                Some(k)
+            };
             fg.editing = None;
         }
         self.places.extend(places);
@@ -498,7 +523,8 @@ impl Shell {
                 ui.set_min_size(rect.size());
                 ui.set_max_size(rect.size());
                 ui.painter().rect_filled(rect, 0.0, t.surface);
-                ui.painter().vline(rect.left(), rect.y_range(), Stroke::new(1.0, t.line));
+                ui.painter()
+                    .vline(rect.left(), rect.y_range(), Stroke::new(1.0, t.line));
                 egui::ScrollArea::vertical()
                     .id_salt("fg-panel-scroll")
                     .auto_shrink([false, false])
@@ -545,7 +571,11 @@ impl Shell {
         places: &mut Vec<(String, Rect)>,
     ) {
         ui.horizontal(|ui| {
-            let name = if fg.dirty { format!("{} ●", fg.file) } else { fg.file.clone() };
+            let name = if fg.dirty {
+                format!("{} ●", fg.file)
+            } else {
+                fg.file.clone()
+            };
             ui.label(egui::RichText::new(name).font(semi(14.0)).color(t.ink));
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                 if Self::fg_button(ui, "Save", "fg:save".into(), places) {
@@ -555,7 +585,11 @@ impl Shell {
         });
         ui.label(egui::RichText::new(&fg.summary).font(sans(11.0)).color(t.ink2));
         if let Some(why) = &fg.refused {
-            ui.label(egui::RichText::new(format!("Refused: {why}")).font(sans(12.0)).color(t.error));
+            ui.label(
+                egui::RichText::new(format!("Refused: {why}"))
+                    .font(sans(12.0))
+                    .color(t.error),
+            );
         }
     }
 
@@ -588,7 +622,11 @@ impl Shell {
                         }
                     }
                     Some(why) => {
-                        ui.label(egui::RichText::new(format!("no flat: {why}")).font(sans(11.0)).color(t.error));
+                        ui.label(
+                            egui::RichText::new(format!("no flat: {why}"))
+                                .font(sans(11.0))
+                                .color(t.error),
+                        );
                     }
                 }
             });
@@ -628,10 +666,13 @@ impl Shell {
             });
             for (id, param) in fg.splittable() {
                 let op = Op::SplitInstance { id, param };
-                let name = format!("fg:split:{}", match &op {
-                    Op::SplitInstance { param, .. } => param.to_string(),
-                    _ => unreachable!("just made"),
-                });
+                let name = format!(
+                    "fg:split:{}",
+                    match &op {
+                        Op::SplitInstance { param, .. } => param.to_string(),
+                        _ => unreachable!("just made"),
+                    }
+                );
                 if Self::fg_button(ui, &op_label(&op), name, places) {
                     out.push(FgAct::Apply(op));
                 }
@@ -816,9 +857,16 @@ impl Shell {
 
     fn fg_source(ui: &mut Ui, t: &super::theme::Theme, fg: &mut FgPanel) {
         ui.add_space(6.0);
-        let label = if fg.show_source { "▾ Source" } else { "▸ Source" };
+        let label = if fg.show_source {
+            "▾ Source"
+        } else {
+            "▸ Source"
+        };
         if ui
-            .add(egui::Label::new(egui::RichText::new(label).font(semi(12.0)).color(t.ink)).sense(Sense::click()))
+            .add(
+                egui::Label::new(egui::RichText::new(label).font(semi(12.0)).color(t.ink))
+                    .sense(Sense::click()),
+            )
             .clicked()
         {
             fg.show_source = !fg.show_source;
@@ -865,10 +913,17 @@ mod tests {
 
     #[test]
     fn loop_and_call_ids_nest_under_their_names() {
-        let feats: Vec<FeatRow> = ["base", "bpsk[0,0]", "bpocket[0,0]", "bpsk[0,1]", "lug.hub", "lug.bore"]
-            .into_iter()
-            .map(feat)
-            .collect();
+        let feats: Vec<FeatRow> = [
+            "base",
+            "bpsk[0,0]",
+            "bpocket[0,0]",
+            "bpsk[0,1]",
+            "lug.hub",
+            "lug.bore",
+        ]
+        .into_iter()
+        .map(feat)
+        .collect();
         let rows: Vec<(String, usize, bool)> = tree_rows(&feats)
             .into_iter()
             .map(|r| (r.key, r.depth, r.feat.is_some()))

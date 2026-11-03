@@ -60,10 +60,12 @@ dependencies = [
  "forge-agent",
  "forge-geom",
  "forge-import",
+ "forge-lang",
  "forge-math",
  "forge-mesh",
  "forge-model",
  "forge-ops",
+ "forge-step",
  "forge-topo",
 ]
 

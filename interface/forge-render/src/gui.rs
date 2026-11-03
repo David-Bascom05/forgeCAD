@@ -337,11 +337,7 @@ impl Gui {
             l.name, size.0, size.1
         );
         // an empty part's view holds its planes whole
-        let fit = if l.empty {
-            radius * 1.6
-        } else {
-            radius
-        };
+        let fit = if l.empty { radius * 1.6 } else { radius };
         let camera = view_camera(center, fit, self.shell.view.parallel, size);
         renderer.resize(size);
         self.theme_view(&mut renderer);
@@ -665,10 +661,10 @@ impl Gui {
                     .collect();
                 v.nav.selected.clear();
                 v.clicked.clear();
-                if !refs.is_empty() {
-                    if let Some(l) = &mut v.live {
-                        l.sketch_sources(at, refs, true);
-                    }
+                if !refs.is_empty()
+                    && let Some(l) = &mut v.live
+                {
+                    l.sketch_sources(at, refs, true);
                 }
                 v.dirty = true;
             }
@@ -1424,10 +1420,8 @@ impl Gui {
                 Action::Reorder(item, before) => self.tool(Call::Move { item, before }),
                 Action::EndAt(to) => {
                     self.shell.end_at = to;
-                    if let Some(v) = &mut self.view {
-                        if let Some(l) = &mut v.live {
-                            l.roll(to);
-                        }
+                    if let Some(l) = self.view.as_mut().and_then(|v| v.live.as_mut()) {
+                        l.roll(to);
                     }
                 }
                 Action::DimDrag(value) => self.dim_drag(value),
@@ -1488,10 +1482,10 @@ impl Gui {
         let refs: Vec<String> = rows.iter().filter_map(|r| project_refs(r)).collect();
         self.sketch_for = Some((head.clone(), edit, rows));
         if let Some(v) = &mut self.view {
-            if !refs.is_empty() {
-                if let Some(l) = &mut v.live {
-                    l.sketch_sources(at, refs, false);
-                }
+            if !refs.is_empty()
+                && let Some(l) = &mut v.live
+            {
+                l.sketch_sources(at, refs, false);
             }
             if let Some(l) = &mut v.live {
                 l.sketch_plane(head);
@@ -2655,7 +2649,12 @@ impl Gui {
                 crate::fg::Msg::Built(b) => *b,
                 crate::fg::Msg::Warm(d) => {
                     // the faces as they are: the live set's start, not shown
-                    if let Some(r) = self.view.as_mut().map(|v| &mut v.renderer).or(self.fg_view.as_mut().map(|l| &mut l.renderer)) {
+                    if let Some(r) = self
+                        .view
+                        .as_mut()
+                        .map(|v| &mut v.renderer)
+                        .or(self.fg_view.as_mut().map(|l| &mut l.renderer))
+                    {
                         r.live_apply(0, &d);
                         r.live_show(false);
                     }
@@ -2679,7 +2678,9 @@ impl Gui {
                 p.params = b.params;
                 p.issues = b.issues;
                 if p.selected.as_ref().is_some_and(|k| {
-                    !p.feats.iter().any(|f| f.id == *k || f.id.starts_with(&format!("{k}.")) || f.id.starts_with(&format!("{k}[")))
+                    !p.feats.iter().any(|f| {
+                        f.id == *k || f.id.starts_with(&format!("{k}.")) || f.id.starts_with(&format!("{k}["))
+                    })
                 }) {
                     p.selected = None;
                 }
@@ -2782,7 +2783,11 @@ impl Gui {
                         "{label}: {} values in {}{}",
                         r.values,
                         r.features.join(", "),
-                        if r.structural { " (structural: re-runs)" } else { "" }
+                        if r.structural {
+                            " (structural: re-runs)"
+                        } else {
+                            ""
+                        }
                     ),
                     None => label,
                 };
@@ -2825,9 +2830,20 @@ impl Gui {
     /// when the part has several sheets. Returns where it went.
     pub fn fg_export_dxf(&mut self, id: &str) -> Result<String, String> {
         let got = (|| -> Result<String, String> {
-            let path = self.fg.as_ref().and_then(|s| s.path.clone()).ok_or("no file beside which to write")?;
-            let s = self.fg_sheets.iter().find(|s| s.id == id).ok_or(format!("no sheet {id}"))?;
-            let text = s.dxf.clone().map_err(|e| format!("{id} has no flat pattern: {e}"))?;
+            let path = self
+                .fg
+                .as_ref()
+                .and_then(|s| s.path.clone())
+                .ok_or("no file beside which to write")?;
+            let s = self
+                .fg_sheets
+                .iter()
+                .find(|s| s.id == id)
+                .ok_or(format!("no sheet {id}"))?;
+            let text = s
+                .dxf
+                .clone()
+                .map_err(|e| format!("{id} has no flat pattern: {e}"))?;
             let stem = path.strip_suffix(".fg").unwrap_or(&path);
             let out = if self.fg_sheets.len() > 1 {
                 format!("{stem}-{id}.dxf")

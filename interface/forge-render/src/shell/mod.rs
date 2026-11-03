@@ -5,6 +5,7 @@
 
 pub mod dialog;
 pub mod dim;
+pub mod fg;
 pub mod icons;
 pub mod panel;
 mod ribbon;
@@ -12,7 +13,6 @@ mod sketch3d;
 pub mod sketching;
 pub mod theme;
 mod tree;
-pub mod fg;
 
 pub use crate::nav::NavTool;
 use crate::render::LineMode;
@@ -819,7 +819,11 @@ impl Shell {
         let p = ui.painter().clone();
         p.rect_filled(side, 0.0, t.surface);
         p.vline(side.right(), side.y_range(), Stroke::new(1.0, t.line));
-        let name = self.name.trim_end_matches(".fc").trim_end_matches(".fg").to_string();
+        let name = self
+            .name
+            .trim_end_matches(".fc")
+            .trim_end_matches(".fg")
+            .to_string();
         self.head(&p, side.top(), "Model", &name);
         let tree = Rect::from_min_max(pos2(0.0, side.top() + HEAD_H), pos2(SIDE_W, side.bottom()));
         if self.fg.is_some() {
