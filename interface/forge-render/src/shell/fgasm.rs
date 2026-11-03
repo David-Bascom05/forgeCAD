@@ -4,9 +4,9 @@
 //! conflicts, interferences, intended contacts) are the panel's issues, each with a Show that
 //! highlights what it names.
 
+use super::Shell;
 use super::fg::{FeatRow, FgAct, FgPanel, From, Status, TreeRow, short, tree_rows};
 use super::theme::{medium, mono, sans};
-use super::Shell;
 use egui::{Align2, Rect, Sense, Ui, pos2, vec2};
 use forge_lang::asm::{ExpectOut, Issue as AsmIssue, JointOut};
 use forge_lang::error::{Literal, Op};
@@ -107,13 +107,12 @@ pub fn named(issue: &AsmIssue) -> (Vec<String>, Vec<String>) {
         AsmIssue::BrokenAnchor { item, .. }
         | AsmIssue::WrongReference { item, .. }
         | AsmIssue::SelfLink { item } => (vec![], vec![item.clone()]),
-        AsmIssue::LimitViolated { joint, .. } | AsmIssue::BadFreedom { joint, .. } => (vec![], vec![joint.clone()]),
+        AsmIssue::LimitViolated { joint, .. } | AsmIssue::BadFreedom { joint, .. } => {
+            (vec![], vec![joint.clone()])
+        }
         AsmIssue::Inside { path, issue } => {
             let (occ, items) = named(issue);
-            (
-                occ.into_iter().map(|o| format!("{path}.{o}")).collect(),
-                items,
-            )
+            (occ.into_iter().map(|o| format!("{path}.{o}")).collect(), items)
         }
         _ => (vec![], vec![]),
     }
@@ -136,73 +135,87 @@ impl Shell {
         egui::ScrollArea::vertical()
             .id_salt("fg-asm-tree")
             .auto_shrink([false, false])
-            .show_rows(&mut child, super::ROW_H, visible(&rows, &a.collapsed).len(), |ui, range| {
-                let shown = visible(&rows, &a.collapsed);
-                for &k in &shown[range] {
-                    let row = &rows[k];
-                    let (r, resp) = ui.allocate_exact_size(vec2(area.width(), super::ROW_H), Sense::click());
-                    let on = a.selected.as_deref() == Some(row.key.as_str());
-                    let p = ui.painter();
-                    if on {
-                        p.rect_filled(r, 0.0, t.on);
-                    } else if resp.hovered() {
-                        p.rect_filled(r, 0.0, t.hover);
-                    }
-                    let x = r.left() + 8.0 + row.depth as f32 * 14.0;
-                    if row.group {
-                        let arrow = Rect::from_min_size(pos2(x - 2.0, r.top() + 5.0), vec2(14.0, 16.0));
-                        let ar = ui.interact(arrow, ui.scope_id().with(("asm-open", &row.key)), Sense::click());
-                        let open = !a.collapsed.contains(&row.key);
-                        ui.painter().text(
-                            arrow.center(),
-                            Align2::CENTER_CENTER,
-                            if open { "▾" } else { "▸" },
-                            sans(12.0),
-                            t.ink2,
-                        );
-                        if ar.clicked() {
-                            toggle = Some(row.key.clone());
+            .show_rows(
+                &mut child,
+                super::ROW_H,
+                visible(&rows, &a.collapsed).len(),
+                |ui, range| {
+                    let shown = visible(&rows, &a.collapsed);
+                    for &k in &shown[range] {
+                        let row = &rows[k];
+                        let (r, resp) =
+                            ui.allocate_exact_size(vec2(area.width(), super::ROW_H), Sense::click());
+                        let on = a.selected.as_deref() == Some(row.key.as_str());
+                        let p = ui.painter();
+                        if on {
+                            p.rect_filled(r, 0.0, t.on);
+                        } else if resp.hovered() {
+                            p.rect_filled(r, 0.0, t.hover);
                         }
-                    }
-                    let ink = if !a.shown(&row.key) {
-                        t.ink2.gamma_multiply(0.6)
-                    } else if on {
-                        t.on_ink
-                    } else if a.flagged(&row.key) {
-                        t.error
-                    } else {
-                        t.ink
-                    };
-                    let p = ui.painter();
-                    p.text(
-                        pos2(x + 16.0, r.center().y),
-                        Align2::LEFT_CENTER,
-                        &row.label,
-                        if on { medium(13.0) } else { sans(13.0) },
-                        ink,
-                    );
-                    if let Some(i) = row.feat {
+                        let x = r.left() + 8.0 + row.depth as f32 * 14.0;
+                        if row.group {
+                            let arrow = Rect::from_min_size(pos2(x - 2.0, r.top() + 5.0), vec2(14.0, 16.0));
+                            let ar = ui.interact(
+                                arrow,
+                                ui.scope_id().with(("asm-open", &row.key)),
+                                Sense::click(),
+                            );
+                            let open = !a.collapsed.contains(&row.key);
+                            ui.painter().text(
+                                arrow.center(),
+                                Align2::CENTER_CENTER,
+                                if open { "▾" } else { "▸" },
+                                sans(12.0),
+                                t.ink2,
+                            );
+                            if ar.clicked() {
+                                toggle = Some(row.key.clone());
+                            }
+                        }
+                        let ink = if !a.shown(&row.key) {
+                            t.ink2.gamma_multiply(0.6)
+                        } else if on {
+                            t.on_ink
+                        } else if a.flagged(&row.key) {
+                            t.error
+                        } else {
+                            t.ink
+                        };
+                        let p = ui.painter();
                         p.text(
-                            pos2(r.right() - 8.0, r.center().y),
-                            Align2::RIGHT_CENTER,
-                            part_word(&a.occ[i].file),
-                            sans(10.0),
-                            t.ink2,
+                            pos2(x + 16.0, r.center().y),
+                            Align2::LEFT_CENTER,
+                            &row.label,
+                            if on { medium(13.0) } else { sans(13.0) },
+                            ink,
                         );
+                        if let Some(i) = row.feat {
+                            p.text(
+                                pos2(r.right() - 8.0, r.center().y),
+                                Align2::RIGHT_CENTER,
+                                part_word(&a.occ[i].file),
+                                sans(10.0),
+                                t.ink2,
+                            );
+                        }
+                        if resp.clicked() {
+                            chosen = Some(row.key.clone());
+                        }
+                        places.push((format!("asm:row:{}", row.key), r));
                     }
-                    if resp.clicked() {
-                        chosen = Some(row.key.clone());
-                    }
-                    places.push((format!("asm:row:{}", row.key), r));
-                }
-            });
+                },
+            );
         if let Some(k) = toggle
             && !a.collapsed.remove(&k)
         {
             a.collapsed.insert(k);
         }
         if let Some(k) = chosen {
-            a.selected = if a.selected.as_deref() == Some(k.as_str()) { None } else { Some(k) };
+            a.selected = if a.selected.as_deref() == Some(k.as_str()) {
+                None
+            } else {
+                Some(k)
+            };
             a.anchors = None;
             fg.out.push(FgAct::AsmShow);
         }
@@ -238,11 +251,20 @@ impl Shell {
                 let r = ui.label(egui::RichText::new(&o.file).font(mono(11.0)).color(t.ink));
                 places.push(("asm:file".into(), r.rect));
             } else {
-                ui.label(egui::RichText::new(format!("{} occurrences", files.len())).font(sans(11.0)).color(t.ink2));
+                ui.label(
+                    egui::RichText::new(format!("{} occurrences", files.len()))
+                        .font(sans(11.0))
+                        .color(t.ink2),
+                );
             }
             ui.horizontal_wrapped(|ui| {
                 let hidden = a.hidden.contains(&sel);
-                if Self::fg_button(ui, if hidden { "Show" } else { "Hide" }, "asm:hide".into(), places) {
+                if Self::fg_button(
+                    ui,
+                    if hidden { "Show" } else { "Hide" },
+                    "asm:hide".into(),
+                    places,
+                ) {
                     if hidden {
                         a.hidden.remove(&sel);
                     } else {
@@ -251,7 +273,12 @@ impl Shell {
                     out.push(FgAct::AsmShow);
                 }
                 let iso = a.isolated.as_deref() == Some(sel.as_str());
-                if Self::fg_button(ui, if iso { "Show all" } else { "Isolate" }, "asm:isolate".into(), places) {
+                if Self::fg_button(
+                    ui,
+                    if iso { "Show all" } else { "Isolate" },
+                    "asm:isolate".into(),
+                    places,
+                ) {
                     a.isolated = if iso { None } else { Some(sel.clone()) };
                     out.push(FgAct::AsmShow);
                 }
@@ -277,15 +304,19 @@ impl Shell {
                     }
                 }
             }
-        } else if a.isolated.is_some() || !a.hidden.is_empty() {
-            if Self::fg_button(ui, "Show all", "asm:showall".into(), places) {
-                a.isolated = None;
-                a.hidden.clear();
-                out.push(FgAct::AsmShow);
-            }
+        } else if (a.isolated.is_some() || !a.hidden.is_empty())
+            && Self::fg_button(ui, "Show all", "asm:showall".into(), places)
+        {
+            a.isolated = None;
+            a.hidden.clear();
+            out.push(FgAct::AsmShow);
         }
         // joints, each drive a slider
-        Self::fg_heading(ui, t, &format!("Joints ({}), mobility {}", a.joints.len(), a.mobility));
+        Self::fg_heading(
+            ui,
+            t,
+            &format!("Joints ({}), mobility {}", a.joints.len(), a.mobility),
+        );
         for j in &a.joints {
             let flagged = a.highlight_items.contains(&j.id);
             let vals: Vec<String> = j
@@ -300,9 +331,15 @@ impl Shell {
                 })
                 .collect();
             let r = ui.label(
-                egui::RichText::new(format!("{} {} · {} · free {}", j.id, j.kind, vals.join(", "), j.free))
-                    .font(mono(11.0))
-                    .color(if flagged { t.error } else { t.ink }),
+                egui::RichText::new(format!(
+                    "{} {} · {} · free {}",
+                    j.id,
+                    j.kind,
+                    vals.join(", "),
+                    j.free
+                ))
+                .font(mono(11.0))
+                .color(if flagged { t.error } else { t.ink }),
             );
             places.push((format!("asm:joint:{}", j.id), r.rect));
             // a drive: the joint's dimension a param drives
@@ -321,11 +358,20 @@ impl Shell {
                     .limits
                     .iter()
                     .find(|l| l.0 == what)
-                    .map(|l| if angle { (l.1.to_degrees(), l.2.to_degrees()) } else { (l.1, l.2) })
+                    .map(|l| {
+                        if angle {
+                            (l.1.to_degrees(), l.2.to_degrees())
+                        } else {
+                            (l.1, l.2)
+                        }
+                    })
                     .unwrap_or(if angle {
                         (-180.0, 180.0)
                     } else {
-                        (value - 100.0f64.max(value.abs()), value + 100.0f64.max(value.abs()))
+                        (
+                            value - 100.0f64.max(value.abs()),
+                            value + 100.0f64.max(value.abs()),
+                        )
                     });
                 let name = format!("{}:{what}", j.id);
                 let mut v = match &a.dragging {
@@ -354,9 +400,21 @@ impl Shell {
             }
         }
         // expects
+        if a.expects.is_empty() && a.overlap.is_none() {
+            Self::fg_heading(ui, t, "Expects");
+            ui.label(
+                egui::RichText::new("measured with the checks (Run checks below)")
+                    .font(sans(11.0))
+                    .color(t.ink2),
+            );
+        }
         if !a.expects.is_empty() {
             let fails = a.expects.iter().filter(|e| !e.ok).count();
-            Self::fg_heading(ui, t, &format!("Expects: {} of {} pass", a.expects.len() - fails, a.expects.len()));
+            Self::fg_heading(
+                ui,
+                t,
+                &format!("Expects: {} of {} pass", a.expects.len() - fails, a.expects.len()),
+            );
             for (k, e) in a.expects.iter().enumerate() {
                 let m = e.measured.map_or("-".to_string(), short);
                 let l = e.limit.map_or("-".to_string(), short);
@@ -373,8 +431,8 @@ impl Shell {
                 places.push((format!("asm:expect:{k}"), r.rect));
             }
         }
-        // the overlap check, on request (it's slow on a big assembly)
-        Self::fg_heading(ui, t, "Interference");
+        // the overlap check and the expects, on request (slow on a big assembly)
+        Self::fg_heading(ui, t, "Interference and expects");
         match (a.overlap, a.checking) {
             (_, true) => {
                 ui.label(egui::RichText::new("checking…").font(sans(11.0)).color(t.ink2));
@@ -387,16 +445,24 @@ impl Shell {
                 );
             }
             (None, false) => {
-                if Self::fg_button(ui, "Check interference", "asm:check".into(), places) {
+                if Self::fg_button(ui, "Run checks", "asm:check".into(), places) {
                     a.checking = true;
                     out.push(FgAct::AsmCheck);
                 }
             }
         }
         // the BOM
-        Self::fg_heading(ui, t, &format!("BOM ({} parts)", a.bom.iter().map(|b| b.1).sum::<usize>()));
+        Self::fg_heading(
+            ui,
+            t,
+            &format!("BOM ({} parts)", a.bom.iter().map(|b| b.1).sum::<usize>()),
+        );
         for (file, n) in &a.bom {
-            let r = ui.label(egui::RichText::new(format!("{n:>4} × {}", part_word(file))).font(mono(11.0)).color(t.ink));
+            let r = ui.label(
+                egui::RichText::new(format!("{n:>4} × {}", part_word(file)))
+                    .font(mono(11.0))
+                    .color(t.ink),
+            );
             places.push((format!("asm:bom:{}", part_word(file)), r.rect));
         }
     }
@@ -416,7 +482,12 @@ impl Shell {
             return;
         }
         let on = a.highlight == occ && a.highlight_items == items;
-        if Self::fg_button(ui, if on { "Hide highlight" } else { "Show" }, format!("asm:show:{k}"), places) {
+        if Self::fg_button(
+            ui,
+            if on { "Hide highlight" } else { "Show" },
+            format!("asm:show:{k}"),
+            places,
+        ) {
             if on {
                 a.highlight.clear();
                 a.highlight_items.clear();

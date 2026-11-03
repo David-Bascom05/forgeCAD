@@ -304,6 +304,17 @@ Every tool and command the app has for `.fc` parts, and what it does on a `.fg` 
 | Section, lines, view cube, orbit/pan/zoom, fit, look at, origin planes | yes | yes | the view's own |
 | Export STEP / DXF | CLI | CLI; DXF also in the panel | `forgecad export F.fg [dxf]` |
 
+Assemblies (a document whose first line is `assembly`) open in the app too (`tests/fg_asm.rs`):
+the posed parts drawn, each distinct part meshed once (by content) and placed at every
+occurrence; the instance tree by occurrence path (subassemblies and loops nested); choosing an
+instance (tree or view) tints it, Hide and Isolate, its part file and anchors; the joints with
+a slider for each drive (a SetParam: the solve is incremental); mobility, the BOM; the typed
+results (Redundant, Conflict, Interference with its volume, IntendedContact, ShallowEngagement,
+...) each with a Show that tints what it names; the overlap check and the expects on request
+(`Options::overlap`, `Options::expects`: on the 18U rack the 329 `expect .. at` lines and the
+overlap pass take minutes, the solve milliseconds). The 18U rack: 860 occurrences of 68 meshes,
+open in about 2.3 s.
+
 ## Gaps, and kernel changes it would want
 
 - **Measuring is the warm path's cost** (220 ms of the crank's 224 ms after a late edit). Mass
