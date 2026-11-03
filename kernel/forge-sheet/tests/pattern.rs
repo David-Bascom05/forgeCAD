@@ -421,11 +421,9 @@ fn shop_checks() {
         hole_to_bend: scaled(2.0),
         hole_to_edge: scaled(1.0),
         min_slot: scaled(1.0),
-        relief_width: scaled(1.0),
-        relief_depth: scaled(1.0),
         min_hole: scaled(0.0),
         hardness: None,
-        relief: forge_sheet::ReliefKind::Rect,
+        relief: forge_sheet::ReliefRule::default(),
     };
     let shop = ShopProfile {
         stock: vec![stock],

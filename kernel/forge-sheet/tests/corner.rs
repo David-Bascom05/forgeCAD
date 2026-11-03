@@ -4,7 +4,9 @@
 use forge_math::rng::Rng;
 use forge_math::{Frame, Point2, dmath};
 use forge_ops::{ProfileLoop, Segment};
-use forge_sheet::{BendRule, CornerKind, FeatureId, Gauge, JointId, Map, Sheet, SheetError, build_with};
+use forge_sheet::{
+    BendRule, CornerKind, FeatureId, Gauge, JointId, Map, Placement, Sheet, SheetError, build_with,
+};
 use forge_topo::Body;
 
 fn rect_loop(l: f64, w: f64) -> ProfileLoop {
@@ -82,18 +84,25 @@ fn boxed(kind: Option<CornerKind>) -> Sheet {
         s.flange(base, e, dmath::PI / 2.0, H).unwrap();
     }
     if let Some(k) = kind {
-        s.corner_default = k;
+        s.corner_default = Some(k);
     }
     s
 }
 
 /// Folded and flat volumes of the box with corner shapes of size `h` taken out, on the flat.
-fn closed(h: f64, square: bool) -> (f64, f64) {
+fn closed(h: f64, square: bool, off: f64) -> (f64, f64) {
     let th = dmath::PI / 2.0;
     let s = R;
     let ba = th * (R + K * T);
     let rn = ba / th;
-    let corners = [(L, 0.0), (L, W), (0.0, W), (0.0, 0.0)].map(|(x, y)| Point2::new(x, y));
+    // centred `off` out of each corner along both edges' outward normals
+    let corners = [
+        (L, 0.0, 1.0, -1.0),
+        (L, W, 1.0, 1.0),
+        (0.0, W, -1.0, 1.0),
+        (0.0, 0.0, -1.0, -1.0),
+    ]
+    .map(|(x, y, sx, sy)| Point2::new(x + sx * off, y + sy * off));
     let after = |r: Rect| {
         (r.x1 - r.x0) * (r.y1 - r.y0) - corners.iter().map(|c| inside(r, *c, h, square)).sum::<f64>()
     };
@@ -165,10 +174,34 @@ fn closed(h: f64, square: bool) -> (f64, f64) {
 #[test]
 fn boxes_with_corner_reliefs_match_closed_forms() {
     for (kind, square) in [
-        (CornerKind::Square { size: Some(4.0) }, true),
-        (CornerKind::Circular { size: Some(4.5) }, false),
-        (CornerKind::Square { size: None }, true),
-        (CornerKind::Circular { size: None }, false),
+        (
+            CornerKind::Square {
+                size: Some(4.0),
+                placement: Placement::Tangent,
+            },
+            true,
+        ),
+        (
+            CornerKind::Circular {
+                size: Some(4.5),
+                placement: Placement::Intersection,
+            },
+            false,
+        ),
+        (
+            CornerKind::Square {
+                size: None,
+                placement: Placement::Intersection,
+            },
+            true,
+        ),
+        (
+            CornerKind::Circular {
+                size: None,
+                placement: Placement::Tangent,
+            },
+            false,
+        ),
     ] {
         let s = boxed(Some(kind));
         let fold = build_with(&s, Map::Folded).unwrap_or_else(|e| panic!("{kind:?}: {e:?}"));
@@ -180,7 +213,16 @@ fn boxes_with_corner_reliefs_match_closed_forms() {
         assert_eq!(fold.corners.len(), 4, "{kind:?}");
         let h = fold.corners[0].size;
         assert!(fold.corners.iter().all(|c| c.size == h));
-        let (vf, vl) = closed(h, square);
+        let off = match kind {
+            CornerKind::Square { placement, .. } | CornerKind::Circular { placement, .. } => {
+                match placement {
+                    Placement::Tangent => -R,
+                    Placement::Intersection => 0.5 * dmath::PI / 2.0 * (R + K * T) - R,
+                }
+            }
+            _ => 0.0,
+        };
+        let (vf, vl) = closed(h, square, off);
         let ((f, ef), (l, el)) = (vol(&fold.body), vol(&flat.body));
         let tol = if square { 1e-9 } else { 1e-6 };
         assert!((f - vf).abs() <= ef + tol, "{kind:?}: folded {f} against {vf}");
@@ -191,12 +233,20 @@ fn boxes_with_corner_reliefs_match_closed_forms() {
 #[test]
 fn closed_corners_are_typed_refusals() {
     let s = boxed(Some(CornerKind::Closed));
+    // (the rule's default for the rest)
     assert!(matches!(
         build_with(&s, Map::Folded),
         Err(SheetError::CornerUnbuilt { .. })
     ));
     let mut s = boxed(None);
-    s.set_corner(JointId(0), JointId(1), CornerKind::Circular { size: Some(0.0) });
+    s.set_corner(
+        JointId(0),
+        JointId(1),
+        CornerKind::Circular {
+            size: Some(0.0),
+            placement: Placement::Intersection,
+        },
+    );
     assert!(matches!(
         build_with(&s, Map::Folded),
         Err(SheetError::CornerUnbuilt { size, .. }) if size == 0.0
@@ -233,12 +283,16 @@ fn random_boxes_with_automatic_corners() {
                 built += 1;
             }
             Err(e) => {
-                // only a typed clash of tall flanges leaning in may refuse
-                assert!(matches!(e, SheetError::FoldedClash { .. }), "{e:?}");
+                // only typed refusals: a clash of tall flanges leaning in, or (1 in 200) corner
+                // reliefs parting a short flange from the sheet
+                assert!(
+                    matches!(e, SheetError::FoldedClash { .. } | SheetError::SheetSplit { .. }),
+                    "{e:?}"
+                );
                 refused += 1;
             }
         }
     }
-    println!("built {built}, refused {refused}");
+    println!("built {built}, refused {refused} (clashes and splits)");
     assert!(built > 150, "built {built}, refused {refused}");
 }

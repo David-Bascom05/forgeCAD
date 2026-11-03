@@ -46,17 +46,31 @@ pub struct Joint {
     pub kind: JointKind,
 }
 
-/// Where two bends off one wall meet at a corner of its outline. Circular and square reliefs are
-/// cuts centred on the corner, `size` its radius or half side (None: just clear of both bends);
-/// open is a square relief `gap` larger than that. Closed and overlapping corners (flanges
-/// extended to meet) are typed but not built.
+/// What one corner gets, where two bends off one wall meet at a vertex of its outline (an
+/// override of the rule's). Circular and square reliefs are centred by `placement`, `size` their
+/// radius or half side (None: just clear of both bends' zones); open is a square at the vertex a
+/// gap larger than that; a tear is a kerf-wide slit along the corner's diagonal; trim to bend cuts
+/// the corner back to both tangent lines across both zones. Closed and overlapping corners
+/// (flanges extended to meet) are typed but not built.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub enum CornerKind {
-    Open { gap: f64 },
+    Open {
+        gap: f64,
+    },
     Closed,
-    Overlap { gap: f64 },
-    Circular { size: Option<f64> },
-    Square { size: Option<f64> },
+    Overlap {
+        gap: f64,
+    },
+    Circular {
+        size: Option<f64>,
+        placement: crate::relief::Placement,
+    },
+    Square {
+        size: Option<f64>,
+        placement: crate::relief::Placement,
+    },
+    Tear,
+    TrimToBend,
 }
 
 /// Where two joints' ends meet.
@@ -89,10 +103,11 @@ pub struct Sheet {
     pub mounts: Vec<crate::hardware::Mount>,
     /// Reliefs asked for at joint ends; any end not listed is `Relief::Auto`.
     pub reliefs: Vec<(JointId, crate::error::End, crate::relief::Relief)>,
-    /// What `Auto` cuts where a relief is needed.
-    pub relief_default: crate::relief::ReliefDefault,
-    /// What a corner not listed in `corners` gets.
-    pub corner_default: CornerKind,
+    /// The shop's relief rule: what `Auto` cuts where a relief is needed, depth references,
+    /// corners.
+    pub rule: crate::relief::ReliefRule,
+    /// What a corner not listed in `corners` gets, overriding the rule's for this sheet.
+    pub corner_default: Option<CornerKind>,
     next_wall: u32,
     next_joint: u32,
     next_cut: u32,
@@ -143,8 +158,8 @@ impl Sheet {
             cuts: Vec::new(),
             mounts: Vec::new(),
             reliefs: Vec::new(),
-            relief_default: crate::relief::ReliefDefault::default(),
-            corner_default: CornerKind::Circular { size: None },
+            rule: crate::relief::ReliefRule::default(),
+            corner_default: None,
             next_wall: 1,
             next_joint: 0,
             next_cut: 0,
@@ -311,13 +326,14 @@ pub enum Position {
 }
 
 impl Sheet {
-    /// The corner treatment where joints a and b meet.
-    pub fn corner(&self, a: JointId, b: JointId) -> CornerKind {
+    /// The corner treatment asked for where joints a and b meet (None: the rule's).
+    pub fn corner(&self, a: JointId, b: JointId) -> Option<CornerKind> {
         self.corners
             .iter()
             .rev()
             .find(|c| c.joints == [a, b] || c.joints == [b, a])
-            .map_or(self.corner_default, |c| c.kind)
+            .map(|c| c.kind)
+            .or(self.corner_default)
     }
 
     pub fn set_corner(&mut self, a: JointId, b: JointId, kind: CornerKind) {

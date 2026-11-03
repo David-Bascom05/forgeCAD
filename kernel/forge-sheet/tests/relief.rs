@@ -111,7 +111,7 @@ fn a_needed_relief_is_added_from_the_default() {
 #[test]
 fn each_kind_asked_for() {
     let (w, d) = (3.0, 6.0);
-    let kerf = forge_sheet::ReliefDefault::default().kerf;
+    let kerf = forge_sheet::ReliefRule::default().kerf;
     for (kind, removed) in [
         (ReliefKind::Rect, w * d),
         (
@@ -276,4 +276,113 @@ fn a_relief_asked_for_where_no_wall_is_cuts_nothing() {
     checked(&fold.body);
     let (vf, _) = closed(3.0 * 6.0, K);
     near("start beside nothing", vol(&fold.body), vf);
+}
+
+#[test]
+fn reliefs_smaller_than_the_rule_are_violations() {
+    let stock = forge_sheet::Stock {
+        thickness: T,
+        rule: BendRule::K(K),
+        radii: vec![R],
+        min_flange: forge_sheet::Scaled::NONE,
+        hole_to_bend: forge_sheet::Scaled::NONE,
+        hole_to_edge: forge_sheet::Scaled::NONE,
+        min_slot: forge_sheet::Scaled::NONE,
+        min_hole: forge_sheet::Scaled::NONE,
+        relief: forge_sheet::ReliefRule::default(),
+        hardness: None,
+    };
+    let shop = forge_sheet::ShopProfile {
+        stock: vec![stock],
+        hardware: vec![],
+        kerf: 0.2,
+    };
+    // the rule: t wide, t + R + 0.5 deep; asked: 1.5 wide, 3 deep
+    let s = part(
+        K,
+        Some(Relief::Cut {
+            kind: ReliefKind::Rect,
+            width: 1.5,
+            depth: 3.0,
+        }),
+    );
+    let v = forge_sheet::checks::reliefs(&s, &shop.relief_rule(T).unwrap());
+    assert!(
+        matches!(v.as_slice(), [forge_sheet::Violation::ReliefUndersized { width, depth, min_width, min_depth, .. }]
+            if *width == 1.5 && *depth == 3.0 && *min_width == T && *min_depth == T + R + 0.5),
+        "{v:?}"
+    );
+    // the automatic one is the rule's own: nothing to say
+    assert!(forge_sheet::checks::reliefs(&part(K, None), &shop.relief_rule(T).unwrap()).is_empty());
+}
+
+#[test]
+fn reliefs_to_the_tangent_line_and_the_remnant() {
+    // up to the bend: a rect relief ending on the tangent line, beside the zone
+    for (reference, kind, removed) in [
+        (forge_sheet::DepthRef::UpToBend, ReliefKind::Rect, 3.0 * R),
+        (forge_sheet::DepthRef::TangentToBend, ReliefKind::Tear, 0.2 * R),
+        (
+            forge_sheet::DepthRef::UpToBend,
+            ReliefKind::Obround,
+            3.0 * R + 0.5 * dmath::PI * 1.5 * 1.5,
+        ),
+    ] {
+        let mut s = part(
+            K,
+            Some(Relief::Cut {
+                kind,
+                width: 3.0,
+                depth: 0.0,
+            }),
+        );
+        s.rule.bend.reference = reference;
+        let fold = build_with(&s, Map::Folded).unwrap();
+        let flat = build_with(&s, Map::Flat).unwrap();
+        checked(&fold.body);
+        checked(&flat.body);
+        let (vf, vl) = closed(removed, K);
+        near(&format!("{reference:?} {kind:?}"), vol(&fold.body), vf);
+        near(&format!("{reference:?} {kind:?}"), vol(&flat.body), vl);
+    }
+    // a round end tangent to the line: wall is left beside the zone, so a relief is still needed
+    let mut s = part(
+        K,
+        Some(Relief::Cut {
+            kind: ReliefKind::Obround,
+            width: 3.0,
+            depth: 0.0,
+        }),
+    );
+    s.rule.bend.reference = forge_sheet::DepthRef::TangentToBend;
+    // (its round end leaves wall beside the zone, between it and the tangent line)
+    assert!(matches!(
+        build_with(&s, Map::Folded),
+        Err(SheetError::NeedsRelief { .. })
+    ));
+    // a remnant under the minimum is taken: the relief widened past the wall's edge (here the
+    // edge at y = 30, 30 - (M + 3) = 9 from the relief; the rule's minimum 10)
+    let mut s = part(
+        K,
+        Some(Relief::Cut {
+            kind: ReliefKind::Rect,
+            width: 3.0,
+            depth: 6.0,
+        }),
+    );
+    s.rule.bend.min_remnant = forge_sheet::Scaled {
+        per_t: 0.0,
+        per_r: 0.0,
+        plus: 10.0,
+    };
+    let fold = build_with(&s, Map::Folded).unwrap();
+    checked(&fold.body);
+    assert!(fold.reliefs[0].remnant_taken);
+    near("remnant", vol(&fold.body), closed((W - M) * 6.0, K).0);
+    // the extend option is typed, not built
+    s.rule.bend.extend = true;
+    assert!(matches!(
+        build_with(&s, Map::Folded),
+        Err(SheetError::ReliefExtendUnbuilt { .. })
+    ));
 }
