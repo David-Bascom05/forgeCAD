@@ -503,13 +503,15 @@ sheet(PROFILE, t: T, r: R, bend: RULE, shop: SHOP, corner: CORNER)
     circular_relief(), just clear of both bends). Its own dims: thickness, radius, k.
 flange(EDGE, height: H, angle: A = 90deg, side: "up"|"down" = "up",
        measure: "inner"|"outer" = "outer", r: R, relief: RELIEF,
-       position: "outside"|"inside"|"bend_outside" = "outside")
+       position: "inside"|"outside"|"bend_outside" = "inside")
     a wall turned A (0 < A < 180deg) off a straight wall edge, as long as the edge. up turns
     towards the wall's top. H runs along the flange from the virtual sharp of the inner or the
     outer skins. r: this bend's own inside radius (default the sheet's). position: the flange's
     material outside the edge (its inner virtual sharp on it), inside it (the outer sharp on it:
     the edge moves in), or the bend starting at the edge (the edge moves out); the edges beside
-    move with it, and may not carry a bend (EdgeMoveBlocked, fix position "outside").
+    move with it (a flange on one follows; one in line gets a jog). The default is inside:
+    Autodesk Inventor's documented default ("Inside of base face extents"); Fusion's dialog
+    starts there by its tutorials; SolidWorks' and Onshape's help name no default.
     relief: at both ends of the bend; left out, the builder adds the default where the wall
     keeps material beside the bend, and nothing elsewhere.
 corner_relief(F, G, CORNER)

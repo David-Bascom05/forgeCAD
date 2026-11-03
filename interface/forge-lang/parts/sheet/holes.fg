@@ -12,8 +12,8 @@ param holes.dy = 20
 param holes.big = 3.5
 param holes.middle = 3
 param holes.small = 1
-param holes.across = 40.2
-param holes.inside = 37
+param holes.across = 38.2
+param holes.inside = 35
 
 sketch plan(on: xy) {
   outline = rect(corner: (0, 0), size: (L, W))

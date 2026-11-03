@@ -97,7 +97,8 @@ fn l_matches_the_closed_form() {
     let r = clean("l");
     let (t, rr, k) = (2.0, 2.0, 0.4);
     let s = setback(rr, t, PI / 2.0, true);
-    let walls = (40.0 - s) * 30.0 + (30.0 - s) * 30.0;
+    // the flange stands inside its edge (the default): the base is t tan(45) shorter
+    let walls = (40.0 - sharp(t, PI / 2.0) - s) * 30.0 + (30.0 - s) * 30.0;
     let (v, _) = closed(
         t,
         rr,
@@ -121,9 +122,9 @@ fn u_matches_the_closed_form() {
     let s1 = setback(rr, t, a1, true);
     // the left flange goes down, its height to the outer sharp: the kernel's reference skin
     let s2 = setback(rr, t, a2, false);
-    // the left flange stands outside its edge (the default): going down, the edge moves out
-    // t tan(angle / 2)
-    let base = 40.0 + sharp(t, a2);
+    // both stand inside their edges (the default): going up the right edge moves in
+    // t tan(45); going down the left one stays (its outer sharp is the kernel's own)
+    let base = 40.0 - sharp(t, a1);
     let walls = (base - s1 - s2) * 30.0 + (30.0 - s1) * 30.0 + (25.0 - s2) * 30.0;
     let bends = [Bend { angle: a1, len: 30.0 }, Bend { angle: a2, len: 30.0 }];
     let (vf, vl) = closed(t, rr, k, walls, &bends);
@@ -157,18 +158,18 @@ fn z_matches_the_closed_form() {
     let s1 = setback(rr, t, a, true);
     let s2 = setback(rr, t, a, false);
     // web up, its height to the outer sharp: the kernel's is the inner one, t tan(45) less;
-    // the lip down to its outer sharp: the kernel's own. The lip stands outside the web's tip
-    // (the default): going down, that edge moves out t tan(45), so the web is that much longer.
-    let web = 25.0 - sharp(t, a) + sharp(t, a);
+    // the lip down to its outer sharp: the kernel's own. Both stand inside their edges (the
+    // default): the base's edge moves in t tan(45); the web's tip, going down, stays.
+    let web = 25.0 - sharp(t, a);
     let lip = 15.0;
-    let walls = (50.0 - s1) * w + (web - s1 - s2) * w + (lip - s2) * w;
+    let walls = (50.0 - sharp(t, a) - s1) * w + (web - s1 - s2) * w + (lip - s2) * w;
     let bends = [Bend { angle: a, len: w }, Bend { angle: a, len: w }];
     let (vf, _) = closed(t, rr, k, walls, &bends);
     near("Z folded", folded(&r), vf);
-    // the lip runs away from the base: its far edge at x = 50 + lip, z = web height
+    // the lip runs away from the base: its far edge a lip past the web's inner face (50 - t)
     let b = r.sheets[0].folded.as_ref().expect("built");
     let (_, hi) = x_extent(b);
-    assert!((hi - (50.0 + 15.0)).abs() < 1e-9, "{hi}");
+    assert!((hi - (50.0 - t + 15.0)).abs() < 1e-9, "{hi}");
 }
 
 #[test]
@@ -180,7 +181,8 @@ fn box_matches_the_closed_form() {
     let s = setback(rr, t, a, true);
     let kh = h - sharp(t, a);
     let lens = [l - 2.0 * n, w - 2.0 * n, l - 2.0 * n, w - 2.0 * n];
-    let base = l * w - 4.0 * n * n - lens.iter().map(|x| s * x).sum::<f64>();
+    // each flange stands inside its edge (the default): every edge moves in t tan(45) = t
+    let base = l * w - 4.0 * n * n - lens.iter().map(|x| (s + sharp(t, a)) * x).sum::<f64>();
     let walls = base + lens.iter().map(|x| (kh - s) * x).sum::<f64>();
     let bends: Vec<Bend> = lens.iter().map(|&len| Bend { angle: a, len }).collect();
     let (vf, vl) = closed(t, rr, k, walls, &bends);
@@ -204,13 +206,14 @@ fn circle_band(cx: f64, a: f64, x0: f64, x1: f64) -> f64 {
 #[test]
 fn holes_across_the_bend_match_the_closed_form() {
     let r = clean("holes");
-    let (t, rr, k, w, l, h) = (2.0, 2.0, 0.4, 60.0, 40.0, 30.0);
+    // the base 40 long, its edge moved in t by the flange inside it
+    let (t, rr, k, w, l, h) = (2.0, 2.0, 0.4, 60.0, 38.0, 30.0);
     let a = PI / 2.0;
     let ba = a * (rr + k * t);
     let rn = ba / a;
     let s = setback(rr, t, a, true);
     let z0 = l - s;
-    let holes = [(40.2, 3.5), (37.0, 3.0), (40.2, 1.0)];
+    let holes = [(38.2, 3.5), (35.0, 3.0), (38.2, 1.0)];
     let total = (l - s + ba + h - s) * w - holes.iter().map(|(_, a)| PI * a * a).sum::<f64>();
     let zone = ba * w
         - holes
@@ -250,7 +253,8 @@ fn spline_window_matches_the_closed_form() {
     let r = clean("spline");
     let (t, rr, k) = (2.0, 2.0, 0.4);
     let s = setback(rr, t, PI / 2.0, true);
-    let walls = (40.0 - s) * 30.0 + (30.0 - s) * 30.0 - spline_area(&r);
+    // the flange inside its edge (the default): the base t shorter
+    let walls = (40.0 - sharp(t, PI / 2.0) - s) * 30.0 + (30.0 - s) * 30.0 - spline_area(&r);
     let bends = [Bend {
         angle: PI / 2.0,
         len: 30.0,
@@ -331,7 +335,7 @@ fn dxf_reads_back_as_the_flat() {
     // the bend line in the zone's middle, the joint's length long
     let b = ents.iter().find(|e| e.1 == "BEND").expect("a bend line");
     let ba = PI / 2.0 * (2.0 + 0.4 * 2.0);
-    assert!((num(&b.2, 10) - (38.0 + 0.5 * ba)).abs() < 1e-12);
+    assert!((num(&b.2, 10) - (36.0 + 0.5 * ba)).abs() < 1e-12);
     assert!(((num(&b.2, 21) - num(&b.2, 20)).abs() - 60.0).abs() < 1e-12);
     // the spline part writes its window as NURBS
     let r = clean("spline");
@@ -387,10 +391,10 @@ fn anchors_on_folded_and_flat() {
             .and_then(|f| f.frame)
             .expect("a plane")
     };
-    // folded: the flange stands at x = 40, its top (reference skin) facing the base, -x
+    // folded: the flange stands inside x = 40, its top (reference skin) at 38 facing the base
     let f = frame("on_fold");
     assert!(
-        (f.origin.x - 40.0).abs() < 1e-12 && (f.z().get().x + 1.0).abs() < 1e-12,
+        (f.origin.x - 38.0).abs() < 1e-12 && (f.z().get().x + 1.0).abs() < 1e-12,
         "{f:?}"
     );
     // flat: lying level, facing as the unfold's plane does
@@ -500,9 +504,12 @@ up = flange(base.edge(plan.outline[1]), height: h, measure: \"inner\")
 ";
 
 /// The split part's folded and flat volumes with `removed` taken out of the base.
-fn split_closed(removed: f64) -> (f64, f64) {
+fn split_closed(removed: f64, width: f64) -> (f64, f64) {
     let (t, r, k, l, w, m, h) = (2.0, 2.0, 0.4, 40.0, 30.0, 18.0, 25.0);
     let th = PI / 2.0;
+    // the flange stands inside its edge (the default): the base also loses t x m beside it, and
+    // the relief the t between its mold line and the old edge
+    let removed = removed + t * m + width * t;
     let walls = l * w - r * m + (h - r) * m - removed;
     (
         t * walls + th * (r * t + 0.5 * t * t) * m,
@@ -526,7 +533,7 @@ fn a_needed_relief_is_added_and_reported() {
     assert!(rel[0].automatic && rel[0].kind == forge_sheet::ReliefKind::Rect);
     // the stand-in default: width t, depth t + R + 0.5
     assert_eq!((rel[0].width, rel[0].depth), (2.0, 4.5));
-    let (vf, vl) = split_closed(2.0 * 4.5);
+    let (vf, vl) = split_closed(2.0 * 4.5, 2.0);
     near("folded", folded(&r), vf);
     near("flat", flat(&r), vl);
     // typed data in the report, not a warning
@@ -553,7 +560,7 @@ fn reliefs_asked_for_and_refused() {
             &format!("measure: \"inner\", relief: {text})"),
         );
         let r = split_run(&s);
-        let (vf, vl) = split_closed(removed);
+        let (vf, vl) = split_closed(removed, if text == "tear" { kerf } else { w });
         near(text, folded(&r), vf);
         near(text, flat(&r), vl);
         assert!(r.sheets[0].reliefs.iter().all(|x| !x.automatic));
@@ -861,7 +868,8 @@ fn a_flat_overlap_warns_on_the_part_and_refuses_the_blank() {
     assert_eq!(w.len(), 1, "{:?}", r.warnings);
     // the exact overlap: each flat reaches -s + BA + (h - s) into the 20 wide notch, 30 deep
     let (sb, ba) = (2.0, PI / 2.0 * (2.0 + 0.4 * 2.0));
-    let want = (2.0 * (-sb + ba + 15.0 - sb) - 20.0) * 30.0;
+    // the notch 20 wide, each side moved t out of it by its flange standing inside
+    let want = (2.0 * (-sb + ba + 15.0 - sb) - 24.0) * 30.0;
     let total = w[0]
         .data()
         .iter()
@@ -891,7 +899,7 @@ fn a_flat_overlap_warns_on_the_part_and_refuses_the_blank() {
         );
     }
     // the near miss: a little shorter than the reach that touches
-    let h = (20.0 / 2.0 + 2.0 * sb - ba) - 1e-3;
+    let h = (24.0 / 2.0 + 2.0 * sb - ba) - 1e-3;
     let near_miss = NOTCH
         .replace("param right.h = 15", &format!("param right.h = {h}"))
         .replace("param left.h = 15", &format!("param left.h = {h}"));
@@ -964,13 +972,14 @@ holes = cutout(hs, wall: base)
             assert!(left < want, "{kind}: {f:?} leaves {left}");
         }
     }
-    // the move along the way out: x 50 -> 48 (5 from the tangent line, 7 wanted)
+    // the move along the way out: x 50 -> 46 (the flange inside its edge puts the tangent line
+    // at 56: 3 from it, 7 wanted)
     let n = notes(&r, "HoleNearBend");
     assert!(
         n[0].fixes
             .iter()
             .any(|f| matches!(f, Op::SetParam { param, value }
-        if param.to_string() == "hs.x" && (value.value - 48.0).abs() < 1e-9)),
+        if param.to_string() == "hs.x" && (value.value - 46.0).abs() < 1e-9)),
         "{:?}",
         n[0].fixes
     );
@@ -1031,7 +1040,7 @@ fn the_shops_relief_rule() {
     assert!(rel[0].automatic && rel[0].kind == forge_sheet::ReliefKind::Obround);
     // its straight sides end on the tangent line: depth s + w/2 from the mold line
     assert!((rel[0].depth - (2.0 + 1.5)).abs() < 1e-12, "{}", rel[0].depth);
-    let (vf, _) = split_closed(3.0 * 2.0 + 0.5 * PI * 1.5 * 1.5);
+    let (vf, _) = split_closed(3.0 * 2.0 + 0.5 * PI * 1.5 * 1.5, 3.0);
     near("up to bend", folded(&r), vf);
     // an override smaller than the rule: a violation, its fixes the rule's sizes
     let s = shop("width: per_t(ratio(1.5))")
