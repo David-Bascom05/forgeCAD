@@ -1865,7 +1865,11 @@ impl<'a> Strips<'a> {
                     Geo::Plane(_) => false,
                 };
                 for ld in self.loops.iter().filter(|l| l.strip == a) {
-                    for bd in &ld.bounds {
+                    for (bi, bd) in ld.bounds.iter().enumerate() {
+                        // a stretch of the line a hem's zone and its wall share: met by design
+                        if loose && ld.kinds[bi] != Kind::Side {
+                            continue;
+                        }
                         let inset = |u: f64| {
                             let d = bd.piece.tangent(u);
                             bd.piece.at(u) + Vec2::new(-d.y, d.x) * (10.0 * TOL / d.length().max(1e-300))
