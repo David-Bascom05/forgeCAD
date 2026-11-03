@@ -19,6 +19,7 @@ pub mod model;
 mod plan;
 mod qr;
 mod solve;
+pub mod step;
 
 pub use diag::{AnchorReason, Diagnostic, Fix, Intent, Item, Severity};
 pub use model::*;
