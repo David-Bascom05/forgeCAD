@@ -9,6 +9,12 @@ const USAGE: &str = "forge-app [PART | file.fc] [--size WxH] [--times]
 PART: a bench part or a .fc file. --times: input-to-present on exit. --shot: one frame, no window.
 --bench: what clicks and frames cost, no window.";
 
+enum Step {
+    Click(String),
+    RightClick(String),
+    Wait,
+}
+
 struct Args {
     file: Option<String>,
     size: (f32, f32),
@@ -17,10 +23,8 @@ struct Args {
     shot: Option<String>,
     tab: usize,
     select: Option<String>,
-    /// Clicks by name, in order; true for a right click.
-    clicks: Vec<(bool, String)>,
-    /// After the clicks, wait for the Forge file's builds and checks to finish.
-    wait: bool,
+    /// Clicks by name and waits for the Forge file's builds and checks, in order.
+    steps: Vec<Step>,
     at: Option<(f32, f32)>,
     sketch: Option<String>,
     view: Option<(f32, f32)>,
@@ -44,8 +48,7 @@ fn args() -> Result<Args, String> {
         shot: None,
         tab: 0,
         select: None,
-        clicks: Vec::new(),
-        wait: false,
+        steps: Vec::new(),
         at: None,
         sketch: None,
         view: None,
@@ -72,9 +75,9 @@ fn args() -> Result<Args, String> {
             "--shot" => a.shot = Some(v()?),
             "--tab" => a.tab = v()?.parse().map_err(|_| USAGE)?,
             "--select" => a.select = Some(v()?),
-            "--click" => a.clicks.push((false, v()?)),
-            "--rclick" => a.clicks.push((true, v()?)),
-            "--wait" => a.wait = true,
+            "--click" => a.steps.push(Step::Click(v()?)),
+            "--rclick" => a.steps.push(Step::RightClick(v()?)),
+            "--wait" => a.steps.push(Step::Wait),
             "--at" => {
                 let x = v()?.parse().map_err(|_| USAGE)?;
                 let mut v = || it.next().ok_or(format!("{k} takes X Y\n{USAGE}"));
@@ -302,6 +305,28 @@ fn bench(h: &mut Headless) {
     );
 }
 
+/// Frames until the Forge file's builds and checks are done, or a long while.
+fn wait(h: &mut Headless) {
+    let t = std::time::Instant::now();
+    while t.elapsed().as_secs() < 900 {
+        h.step();
+        let busy = h.gui.fg.as_ref().is_some_and(|s| s.done != s.seq)
+            || h.gui
+                .shell
+                .fg
+                .as_ref()
+                .and_then(|p| p.asm.as_ref())
+                .is_some_and(|a| a.checking);
+        if !busy {
+            break;
+        }
+        std::thread::sleep(std::time::Duration::from_millis(20));
+    }
+    for _ in 0..5 {
+        h.step();
+    }
+}
+
 fn main() {
     if let Err(e) = run() {
         eprintln!("{e}");
@@ -332,7 +357,15 @@ fn run() -> Result<(), String> {
     for _ in 0..5 {
         h.step();
     }
-    for (right, c) in &a.clicks {
+    for step in &a.steps {
+        let (right, c) = match step {
+            Step::Click(c) => (false, c),
+            Step::RightClick(c) => (true, c),
+            Step::Wait => {
+                wait(&mut h);
+                continue;
+            }
+        };
         // by its name, or the first whose name starts so
         let found = h.gui.shell.place(c).or_else(|| {
             h.gui
@@ -347,7 +380,7 @@ fn run() -> Result<(), String> {
         };
         h.move_to(r.center().x, r.center().y);
         h.step();
-        if *right {
+        if right {
             h.right_click_here();
         } else {
             h.button(true);
@@ -356,26 +389,6 @@ fn run() -> Result<(), String> {
         }
         h.step();
         h.step();
-    }
-    if a.wait {
-        let t = std::time::Instant::now();
-        while t.elapsed().as_secs() < 900 {
-            h.step();
-            let busy = h.gui.fg.as_ref().is_some_and(|s| s.done != s.seq)
-                || h.gui
-                    .shell
-                    .fg
-                    .as_ref()
-                    .and_then(|p| p.asm.as_ref())
-                    .is_some_and(|a| a.checking);
-            if !busy {
-                break;
-            }
-            std::thread::sleep(std::time::Duration::from_millis(20));
-        }
-        for _ in 0..5 {
-            h.step();
-        }
     }
     if let Some(s) = &a.select
         && !h.click(&format!("tree:{s}"))
