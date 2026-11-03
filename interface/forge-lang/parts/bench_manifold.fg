@@ -58,8 +58,8 @@ sketch fsk(on: offset(datum.plane, 0 - fl_t)) {
   outline = hull(disc((fl_r - fl_hw, fl_r - fl_hh), fl_r), disc((fl_hw - fl_r, fl_r - fl_hh), fl_r),
                  disc((fl_hw - fl_r, fl_hh - fl_r), fl_r), disc((fl_r - fl_hw, fl_hh - fl_r), fl_r))
 }
-flange = extrude(fsk, fl_t)
-gasket_face = thicken(flange.start, gasket)
+hflange = extrude(fsk, fl_t)
+gasket_face = thicken(hflange.start, gasket)
 
 # each runner: out of the flange, bent down into the collector; its bore the same way, wall thinner
 sketch rprof(on: fsk.plane) {
@@ -103,7 +103,7 @@ sketch osk(on: plane(at: datum.of_at.a, normal: datum.along.dir, x: datum.plane.
 }
 oflange = extrude(osk, of_t)
 seal_land = thicken(oflange.end, land)
-flange_blend = fillet(edges(between: (runner, flange), crease: "concave"), r)
+flange_blend = fillet(edges(between: (runner, hflange), crease: "concave"), r)
 col_blend = fillet(edges(between: (runner, col), crease: "concave"), r)
 of_blend = fillet(edges(between: (col, oflange), crease: "concave"), r)
 
