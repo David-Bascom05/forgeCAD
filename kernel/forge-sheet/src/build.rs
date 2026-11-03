@@ -621,12 +621,11 @@ fn corners(
                 if (l.x - b1.s).abs() > TOL {
                     continue;
                 }
-                let (v0, v1) = if l.y >= b1.len - TOL {
-                    (b1.len - b2.s - t, b1.len + t)
-                } else if l.y <= TOL {
-                    (-t, b2.s + t)
+                // the new bend's mold line at that end (moved in, for a flange inside its edge)
+                let (v0, v1) = if l.y > 0.5 * b1.len {
+                    (l.y - b2.s - t, b1.len + t)
                 } else {
-                    continue;
+                    (-t, l.y + b2.s + t)
                 };
                 // across the zone (at its widest, K = 1, so K moves nothing folded) and a
                 // thickness past the far wall's tangent line

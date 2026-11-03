@@ -407,6 +407,15 @@ impl Sheet {
         }
         let mut next = self.clone();
         if d != 0.0 {
+            // an end edge first stops at its wall's own bend; then the rest moves, a jog joining
+            // it to the stretch in that bend's band (cut away by the corner's relief)
+            let w = next.wall(wall).ok_or(SheetError::NoSuchWall {
+                feature: self.feature,
+                wall,
+            })?;
+            if let Ok((a, b)) = straight(w, segment) {
+                next.stop_at_tangents(wall, segment, a, b)?;
+            }
             next.move_edge(wall, segment, d)?;
         }
         let made = next.flange_r(wall, segment, angle, height, radius)?;
