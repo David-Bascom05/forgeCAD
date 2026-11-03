@@ -87,6 +87,8 @@ pub struct Cut {
     pub id: CutId,
     pub wall: WallId,
     pub lp: ProfileLoop,
+    /// Meant to run across a bend (a slot across it): checked as such, not as a hole near it.
+    pub crosses_bend: bool,
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -311,7 +313,12 @@ impl Sheet {
         }
         let area: f64 = pieces(&lp).iter().map(|p| p.0.area_term()).sum();
         let lp = if area < 0.0 { reversed(&lp) } else { lp };
-        self.cuts.push(Cut { id, wall, lp });
+        self.cuts.push(Cut {
+            id,
+            wall,
+            lp,
+            crosses_bend: false,
+        });
         self.next_cut += 1;
         Ok(id)
     }
@@ -476,7 +483,8 @@ impl Sheet {
                 if Some(j.id) == allow {
                     continue;
                 }
-                if j.a == wall && allow.is_none() {
+                // a flange on the neighbour follows, and so do flanges on its own end (chains)
+                if j.a == wall {
                     carried.push((j.id, end, id));
                     continue;
                 }
