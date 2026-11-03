@@ -474,7 +474,10 @@ fn the_racks_browser_is_inventors_and_quick() {
     open_in(&mut h, &r, 600);
     let a = asm(&h);
     let t = &a.tree;
-    let roots: Vec<&str> = t.roots.iter().map(|&n| t.nodes[n].key.as_str()).collect();
+    // the assembly's own row on top, everything under it
+    assert_eq!(t.roots.len(), 1);
+    let top = t.nodes[t.roots[0]].kids.clone();
+    let roots: Vec<&str> = top.iter().map(|&n| t.nodes[n].key.as_str()).collect();
     eprintln!("rack roots: {} rows, first {:?}", roots.len(), &roots[..6]);
     // Origin, Relationships, then the components as the file makes them
     assert_eq!(&roots[..4], ["o:", "r:", "base_pan", "top_pan"]);
@@ -484,7 +487,7 @@ fn the_racks_browser_is_inventors_and_quick() {
         "an occurrence with no row"
     );
     // every relationship the file writes, by kind
-    let rel = &t.nodes[t.roots[1]];
+    let rel = &t.nodes[top[1]];
     let mine = a.links.iter().filter(|l| l.owner.is_empty()).count();
     let listed: usize = rel.kids.iter().map(|&k| t.nodes[k].kids.len()).sum();
     assert_eq!(listed, mine);
@@ -514,8 +517,8 @@ fn the_racks_browser_is_inventors_and_quick() {
     let base = &t.nodes[t.find("base_pan").unwrap()];
     assert!(base.ground && base.kids.len() > 10, "{}", base.kids.len());
     // all shut: the top rows only
-    let n_roots = t.roots.len();
-    assert_eq!(asm_mut(&mut h).rows().len(), n_roots);
+    let n_roots = top.len();
+    assert_eq!(asm_mut(&mut h).rows().len(), 1 + n_roots);
     // the filter: what matches, and the rows above it
     asm_mut(&mut h).filter = "7380".into();
     let rows = asm_mut(&mut h).rows();
@@ -565,7 +568,7 @@ fn the_racks_browser_is_inventors_and_quick() {
             open_ms.push(t.elapsed().as_secs_f64() * 1e3);
         }
     }
-    let rel = asm(&h).tree.roots[1];
+    let rel = asm(&h).tree.nodes[asm(&h).tree.roots[0]].kids[1];
     let big = asm(&h).tree.nodes[rel]
         .kids
         .iter()

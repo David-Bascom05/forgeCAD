@@ -39,6 +39,8 @@ pub struct Flags {
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum NodeKind {
+    /// The assembly itself, everything under it; open until shut.
+    Top,
     /// An Origin folder, the assembly's or a subassembly's.
     Origin,
     /// One of its planes, axes or the centre point, by its index in `origin::ITEMS`.
@@ -425,7 +427,17 @@ impl AsmTree {
             index: &index,
             flags,
         };
-        t.doc(&cx, None, "");
+        let top = t.push(
+            None,
+            TOP.into(),
+            "Assembly".into(),
+            String::new(),
+            NodeKind::Top,
+            "subasm",
+            "",
+        );
+        t.nodes[top].occ = (0..occ.len()).collect();
+        t.doc(&cx, Some(top), "");
         // a problem shows on everything above it, so a shut row still says it
         for k in (0..t.nodes.len()).rev() {
             if let (Some(f), Some(p)) = (t.nodes[k].flag, t.nodes[k].parent) {
@@ -536,6 +548,7 @@ impl AsmTree {
     /// One document's rows under `parent`: its Origin, its Relationships, what holds it in the
     /// document above, its components.
     fn doc(&mut self, cx: &Cx, parent: Option<usize>, owner: &str) {
+        // the top's own document is the top's: nothing holds it
         let o = self.push(
             parent,
             format!("o:{owner}"),
@@ -604,7 +617,7 @@ impl AsmTree {
                 }
             }
         }
-        if let Some(p) = parent {
+        if let Some(p) = parent.filter(|_| !owner.is_empty()) {
             self.held(cx, p, owner);
         }
         // components, in the order the file makes them; one statement's in a loop together
@@ -753,6 +766,9 @@ struct Cx<'a> {
     index: &'a HashMap<&'a str, usize>,
     flags: &'a Flags,
 }
+
+/// The top row's key.
+pub const TOP: &str = "a:";
 
 fn join(owner: &str, id: &str) -> String {
     if owner.is_empty() {
@@ -1004,7 +1020,11 @@ impl AsmPanel {
         while let Some(n) = at {
             at = self.tree.nodes[n].parent;
             if let Some(p) = at {
-                self.expanded.insert(self.tree.nodes[p].key.clone());
+                if self.tree.nodes[p].kind == NodeKind::Top {
+                    self.expanded.remove(TOP);
+                } else {
+                    self.expanded.insert(self.tree.nodes[p].key.clone());
+                }
             }
         }
         self.selected = Some(key.clone());
@@ -1051,7 +1071,9 @@ impl AsmPanel {
             let found_under = keep
                 .as_ref()
                 .is_some_and(|m| n.kids.iter().any(|&c| m[c]) && !n.label.to_lowercase().contains(&f));
-            let open = !n.kids.is_empty() && (found_under || self.expanded.contains(&n.key));
+            // the top starts open: its key in `expanded` shuts it
+            let open = !n.kids.is_empty()
+                && (found_under || self.expanded.contains(&n.key) != (n.kind == NodeKind::Top));
             out.push((k, open));
             if open {
                 stack.extend(n.kids.iter().rev());
@@ -1297,6 +1319,7 @@ impl Shell {
         }
         let shown_mask = a.isolated.as_ref().map(|_| a.shown_mask());
         let top_origin = self.origin_shown;
+        let top_name = self.name.clone();
         scroll.show_rows(&mut child, super::ROW_H, rows.len(), |ui, range| {
             for &(k, open) in &rows[range] {
                 let n = &a.tree.nodes[k];
@@ -1326,7 +1349,11 @@ impl Shell {
                     places.push((format!("asm:open:{}", n.key), arrow));
                 }
                 let origin = matches!(n.kind, NodeKind::Origin | NodeKind::OriginItem(_));
-                let has_eye = origin || matches!(n.kind, NodeKind::Occ | NodeKind::Pattern | NodeKind::Sub);
+                let has_eye = origin
+                    || matches!(
+                        n.kind,
+                        NodeKind::Top | NodeKind::Occ | NodeKind::Pattern | NodeKind::Sub
+                    );
                 let state = if origin {
                     a.origin_eye(k, &top_origin)
                 } else if has_eye {
@@ -1385,12 +1412,17 @@ impl Shell {
                     );
                 }
                 let font = match n.kind {
-                    NodeKind::Origin | NodeKind::Relationships => medium(13.0),
+                    NodeKind::Top | NodeKind::Origin | NodeKind::Relationships => medium(13.0),
                     _ if on => medium(13.0),
                     _ => sans(13.0),
                 };
                 let lx = ix + 22.0;
-                let g = ui.fonts_mut(|f| f.layout_no_wrap(n.label.clone(), font, ink));
+                let label = if n.kind == NodeKind::Top && !top_name.is_empty() {
+                    top_name.clone()
+                } else {
+                    n.label.clone()
+                };
+                let g = ui.fonts_mut(|f| f.layout_no_wrap(label, font, ink));
                 let gw = g.size().x;
                 ui.painter()
                     .galley(pos2(lx, r.center().y - g.size().y * 0.5), g, ink);
@@ -1521,12 +1553,11 @@ impl Shell {
                 places.push((format!("asm:row:{}", n.key), r));
             }
         });
-        if let Some((k, open)) = toggle {
-            if open {
-                a.expanded.remove(&k);
-            } else {
-                a.expanded.insert(k);
-            }
+        // opened or shut: the row's key in or out (the top's means shut)
+        if let Some((k, _)) = toggle
+            && !a.expanded.remove(&k)
+        {
+            a.expanded.insert(k);
         }
         if let Some(k) = eye {
             let n = &a.tree.nodes[k];
@@ -1802,14 +1833,37 @@ impl Shell {
                         Some((n, x)) if *n == name => *x,
                         _ => value,
                     };
-                    ui.add_space(4.0);
-                    ui.spacing_mut().slider_width = 190.0;
-                    let resp = ui.add(
-                        egui::Slider::new(&mut x, lo.min(value)..=hi.max(value))
-                            .trailing_fill(true)
-                            .text(format!("{key}"))
-                            .suffix(if angle { "°" } else { " mm" }),
+                    let unit = if angle { "°" } else { " mm" };
+                    let (lo, hi) = (lo.min(value), hi.max(value));
+                    // its param and what it drives, the slider across the dialog, its range under it
+                    ui.add_space(6.0);
+                    ui.label(
+                        egui::RichText::new(format!("{key} · {what}"))
+                            .font(medium(12.0))
+                            .color(t.ink),
                     );
+                    ui.spacing_mut().slider_width = (ui.available_width() - 90.0).max(120.0);
+                    ui.visuals_mut().widgets.inactive.bg_fill = t.ink2.gamma_multiply(0.35);
+                    let resp = ui.add(
+                        egui::Slider::new(&mut x, lo..=hi)
+                            .trailing_fill(true)
+                            .suffix(unit),
+                    );
+                    ui.horizontal(|ui| {
+                        ui.set_width(ui.spacing().slider_width);
+                        ui.label(
+                            egui::RichText::new(format!("{}{unit}", short(lo)))
+                                .font(sans(10.0))
+                                .color(t.ink2),
+                        );
+                        ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                            ui.label(
+                                egui::RichText::new(format!("{}{unit}", short(hi)))
+                                    .font(sans(10.0))
+                                    .color(t.ink2),
+                            );
+                        });
+                    });
                     places.push((format!("asm:drive:{name}"), resp.rect));
                     if resp.dragged() {
                         a.dragging = Some((name.clone(), x));
@@ -2118,6 +2172,7 @@ impl Shell {
                         a.explode = if apart { 0.0 } else { 1.0 };
                     }
                     ui.spacing_mut().slider_width = 150.0;
+                    ui.visuals_mut().widgets.inactive.bg_fill = t.ink2.gamma_multiply(0.35);
                     let r = ui.add(
                         egui::Slider::new(&mut a.explode, 0.0..=1.0)
                             .show_value(false)
@@ -2297,11 +2352,15 @@ mod tests {
         flags.links.insert(("kit".into(), "at_nut".into()), Flag::Error);
         let t = AsmTree::build_with(&rows, Some(Path::new("/a/asm")), &insts, &links, &flags);
         let label = |n: usize| t.nodes[n].label.as_str();
-        let roots: Vec<&str> = t.roots.iter().map(|&n| label(n)).collect();
+        // one top row, the assembly, and everything under it
+        assert_eq!(t.roots.len(), 1);
+        assert_eq!(t.nodes[t.roots[0]].kind, NodeKind::Top);
+        let top = t.nodes[t.roots[0]].kids.clone();
+        let roots: Vec<&str> = top.iter().map(|&n| label(n)).collect();
         assert_eq!(roots, ["Origin", "Relationships", "base", "bolt", "kit"]);
         // the origin's seven, the relationships by kind with the most first
-        assert_eq!(t.nodes[t.roots[0]].kids.len(), 7);
-        let rel = &t.nodes[t.roots[1]];
+        assert_eq!(t.nodes[top[0]].kids.len(), 7);
+        let rel = &t.nodes[top[1]];
         let kinds: Vec<(&str, usize)> = rel
             .kids
             .iter()
@@ -2309,18 +2368,18 @@ mod tests {
             .collect();
         assert_eq!(kinds, [("Fastened joints", 2), ("Revolute joints", 1)]);
         // a grounded part holds its relationships under it; one statement's loop is a pattern
-        let base = &t.nodes[t.roots[2]];
+        let base = &t.nodes[top[2]];
         assert!(base.ground && base.kind == NodeKind::Occ);
         let held: Vec<&str> = base.kids.iter().map(|&k| label(k)).collect();
         assert_eq!(held, ["j1", "j2", "j3"]);
-        let bolts = &t.nodes[t.roots[3]];
+        let bolts = &t.nodes[top[3]];
         assert_eq!(
             (bolts.kind, bolts.kids.len(), bolts.occ.len()),
             (NodeKind::Pattern, 2, 2)
         );
         // the subassembly: its own origin and relationships, what holds it, its parts; its sick
         // relationship flags it
-        let kit = &t.nodes[t.roots[4]];
+        let kit = &t.nodes[top[4]];
         let kids: Vec<&str> = kit.kids.iter().map(|&k| label(k)).collect();
         assert_eq!(kids, ["Origin", "Relationships", "j3", "post", "nut"]);
         assert_eq!(kit.flag, Some(Flag::Error));
@@ -2358,11 +2417,16 @@ mod tests {
         assert_eq!(a.shown_mask(), [true, false, false]);
         a.show_all();
         assert_eq!(a.shown_mask(), [true, true, true]);
-        // shut by default: Origin, base, the bolts; the filter opens what holds what it finds
-        assert_eq!(a.rows().len(), 3);
+        // the top open, the rest shut: it, Origin, base, the bolts; the filter opens what holds
+        // what it finds
+        assert_eq!(a.rows().len(), 4);
         a.filter = "BOLT[1".into();
         let rows: Vec<String> = a.rows().iter().map(|r| a.tree.nodes[r.0].key.clone()).collect();
-        assert_eq!(rows, ["p:bolt", "bolt[1]"]);
+        assert_eq!(rows, ["a:", "p:bolt", "bolt[1]"]);
+        // the top shuts like any row
+        a.filter.clear();
+        a.expanded.insert(TOP.into());
+        assert_eq!(a.rows().len(), 1);
     }
 
     #[test]

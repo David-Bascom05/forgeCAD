@@ -1015,6 +1015,8 @@ impl Shell {
             .trim_end_matches(".fc")
             .trim_end_matches(".fg")
             .to_string();
+        // an assembly's name is its browser's top row
+        let name = if self.is_asm() { String::new() } else { name };
         self.head(&p, side.top(), "Model", &name);
         let tree = Rect::from_min_max(pos2(0.0, side.top() + HEAD_H), pos2(side.right(), side.bottom()));
         if self.fg.as_ref().is_some_and(|f| f.asm.is_some()) {
