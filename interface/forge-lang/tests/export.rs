@@ -127,6 +127,8 @@ c = part(\"l.fg\", at: pose(at: (0, 50, 0)), ground: true)
     assert!(export::step(&r, "pair").is_err());
 }
 
+// (it runs the fg binary: native only, wasi has no processes)
+#[cfg(not(target_os = "wasi"))]
 #[test]
 fn fg_run_writes_the_step_files() {
     let d = dir("cli");
