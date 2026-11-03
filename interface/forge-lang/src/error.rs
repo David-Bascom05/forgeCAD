@@ -297,19 +297,36 @@ pub fn span_json(s: Span) -> Json {
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum SyntaxError {
-    BadNumber { span: Span },
-    UnknownUnit { span: Span },
-    OpenString { span: Span },
-    BadChar { span: Span },
+    BadNumber {
+        span: Span,
+    },
+    UnknownUnit {
+        span: Span,
+    },
+    OpenString {
+        span: Span,
+    },
+    BadChar {
+        span: Span,
+    },
     Expected {
         what: &'static str,
         expected: crate::syntax::TermSet,
         span: Span,
     },
-    ParamWithoutOwner { span: Span, name: String },
-    AssignToNonName { span: Span },
-    KeywordNotName { span: Span },
-    PositionalAfterKeyword { span: Span },
+    ParamWithoutOwner {
+        span: Span,
+        name: String,
+    },
+    AssignToNonName {
+        span: Span,
+    },
+    KeywordNotName {
+        span: Span,
+    },
+    PositionalAfterKeyword {
+        span: Span,
+    },
 }
 
 /// The static rules. Each can be switched off (`Rules`), so loosening one is a small change.
@@ -1037,7 +1054,9 @@ impl Error {
             }
             ShadowsTopLevel { name, .. } => format!("{name} is a top-level name; a local may not hide it"),
             EditDim { param, want, found } => format!("{param} is a {want:?}; the value is a {found:?}"),
-            NotFinite { param, value } => format!("{param} cannot be set to {value}: only a finite number is written"),
+            NotFinite { param, value } => {
+                format!("{param} cannot be set to {value}: only a finite number is written")
+            }
             Sheet(e) => e.text(),
             NotWith { func, arg, with, .. } => format!("{func}: {arg} does not apply with {with}"),
             TaperOnCurve { sketch, .. } => format!(
@@ -1148,7 +1167,9 @@ impl Error {
                 ("rows", Json::Arr(rows.iter().map(|r| span_json(*r)).collect())),
             ],
             UnknownParam { param } | EditDim { param, .. } => vec![("param", s(&param.to_string()))],
-            NotFinite { param, value } => vec![("param", s(&param.to_string())), ("value", s(&value.to_string()))],
+            NotFinite { param, value } => {
+                vec![("param", s(&param.to_string())), ("value", s(&value.to_string()))]
+            }
             UnknownFeature { id } | NotAStatement { id } => vec![("id", s(id))],
             StillRead { name, reader, .. } => vec![("name", s(name)), ("reader", s(reader))],
             ShadowsTopLevel { name, .. } => vec![("name", s(name))],

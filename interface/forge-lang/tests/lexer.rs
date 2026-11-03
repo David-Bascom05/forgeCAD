@@ -252,9 +252,13 @@ fn the_lexer_never_panics() {
 /// SetParam and AddLocalParam refuse them with a typed error, and the text is left as it was.
 #[test]
 fn a_value_that_is_not_finite_is_refused() {
-    let src = "shared w = 5\nsketch k(on: xy) {\n  o = rect(corner: (0, 0), size: (w, w))\n}\nf = extrude(k, w)\n";
+    let src =
+        "shared w = 5\nsketch k(on: xy) {\n  o = rect(corner: (0, 0), size: (w, w))\n}\nf = extrude(k, w)\n";
     for value in [f64::NAN, f64::INFINITY, f64::NEG_INFINITY] {
-        let lit = Literal { value, dim: Dim::Length };
+        let lit = Literal {
+            value,
+            dim: Dim::Length,
+        };
         let ops = [
             Op::SetParam {
                 param: ParamKey::parse("w").expect("a param"),
@@ -269,7 +273,9 @@ fn a_value_that_is_not_finite_is_refused() {
         for op in ops {
             for result in [apply(src, &op).map(|_| ()), apply_ast(src, &op).map(|_| ())] {
                 match result {
-                    Err(Error::NotFinite { value: v, .. }) => assert!(v.is_nan() == value.is_nan() && (v.is_nan() || v == value)),
+                    Err(Error::NotFinite { value: v, .. }) => {
+                        assert!(v.is_nan() == value.is_nan() && (v.is_nan() || v == value))
+                    }
                     other => panic!("{op:?} gave {other:?}"),
                 }
             }
@@ -278,7 +284,10 @@ fn a_value_that_is_not_finite_is_refused() {
     // a finite value still applies
     let op = Op::SetParam {
         param: ParamKey::parse("w").expect("a param"),
-        value: Literal { value: 7.5, dim: Dim::Length },
+        value: Literal {
+            value: 7.5,
+            dim: Dim::Length,
+        },
     };
     assert!(apply(src, &op).expect("applies").contains("shared w = 7.5"));
 }
