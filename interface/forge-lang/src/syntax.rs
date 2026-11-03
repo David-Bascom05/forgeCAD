@@ -1,7 +1,11 @@
 //! The lexer and the LL(1) parser: source text to an AST whose every node carries its byte span.
-//! The grammar is written out in the crate README; every choice here is made on one token.
+//! The parser runs the table generated from grammar.ll1 (table.rs); the actions here build the tree.
 
 use crate::error::{Error, SyntaxError};
+use table::{P, t};
+
+#[rustfmt::skip]
+pub mod table;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, Default)]
 pub struct Span {
@@ -66,36 +70,181 @@ pub const KEYWORDS: [&str; 16] = [
     "false", "sketch", "path",
 ];
 
-const OPS: [&str; 26] = [
+pub const OPS: [&str; 26] = [
     "..=", "+-", "..", "==", "!=", "<=", ">=", "+", "-", "*", "/", "^", "%", "(", ")", "[", "]", "{", "}",
     ",", ":", ".", "=", "<", ">", ";",
 ];
 
+/// For each ASCII byte: 1 + the index in OPS of the one-byte operator it is (0: none), and
+/// whether a longer operator starts with it.
+const OP_BYTES: ([u8; 128], [bool; 128]) = {
+    let (mut one, mut long) = ([0; 128], [false; 128]);
+    let mut k = 0;
+    while k < OPS.len() {
+        let o = OPS[k].as_bytes();
+        if o.len() == 1 {
+            one[o[0] as usize] = k as u8 + 1;
+        } else {
+            long[o[0] as usize] = true;
+        }
+        k += 1;
+    }
+    (one, long)
+};
+
+/// OPS starts with its operators of more than one byte.
+const LONG_OPS: usize = {
+    let mut k = 0;
+    while OPS[k].len() > 1 {
+        k += 1;
+    }
+    let mut j = k;
+    while j < OPS.len() {
+        assert!(OPS[j].len() == 1, "OPS lists its longer operators first");
+        j += 1;
+    }
+    k
+};
+
+/// The operator at `b[i..]`, longest first, as its index in OPS.
+fn op_at(b: &[u8], i: usize) -> Option<usize> {
+    let c = b[i] as usize;
+    if c >= 128 {
+        return None;
+    }
+    if OP_BYTES.1[c] {
+        let n = b.get(i + 1).copied().unwrap_or(0);
+        for (k, o) in OPS[..LONG_OPS].iter().enumerate() {
+            let o = o.as_bytes();
+            if o[0] as usize == c && o[1] == n && (o.len() == 2 || b.get(i + 2) == Some(&o[2])) {
+                return Some(k);
+            }
+        }
+    }
+    OP_BYTES.0[c].checked_sub(1).map(usize::from)
+}
+
+fn keyword(w: &str) -> Option<usize> {
+    if !(2..=6).contains(&w.len()) || !w.as_bytes()[0].is_ascii_lowercase() {
+        return None;
+    }
+    KEYWORDS.iter().position(|k| *k == w)
+}
+
+const fn word_term(w: &str) -> u8 {
+    let mut k = 0;
+    while k < table::NT {
+        let (a, b) = (table::TERMS[k].as_bytes(), w.as_bytes());
+        if a.len() == b.len() {
+            let mut i = 0;
+            while i < a.len() && a[i] == b[i] {
+                i += 1;
+            }
+            if i == a.len() {
+                return k as u8;
+            }
+        }
+        k += 1;
+    }
+    panic!("a keyword or operator that is not a terminal of grammar.ll1")
+}
+
+/// Each keyword's and operator's terminal, found when the crate compiles.
+const KW_TERM: [u8; KEYWORDS.len()] = {
+    let mut out = [0; KEYWORDS.len()];
+    let mut k = 0;
+    while k < out.len() {
+        out[k] = word_term(KEYWORDS[k]);
+        k += 1;
+    }
+    out
+};
+const OP_TERM: [u8; OPS.len()] = {
+    let mut out = [0; OPS.len()];
+    let mut k = 0;
+    while k < out.len() {
+        out[k] = word_term(OPS[k]);
+        k += 1;
+    }
+    out
+};
+
+/// What the lexer skips between tokens. With the tokens, trivia tile the source: every byte is in
+/// exactly one token or one trivia, so the text is rebuilt exactly from them.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum TriviaKind {
+    /// Spaces, tabs and carriage returns.
+    Space,
+    /// `#` to the end of the line, the line break not included.
+    Comment,
+    /// A line break inside `( )` or `[ ]`, which is not an NL token.
+    Newline,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct Trivia {
+    pub kind: TriviaKind,
+    pub span: Span,
+}
+
 pub fn lex(src: &str) -> Result<Vec<Tok>, Error> {
+    lex_into::<false>(src, &mut Vec::new(), &mut Vec::new())
+}
+
+/// The tokens and the trivia between them.
+pub fn lex_lossless(src: &str) -> Result<(Vec<Tok>, Vec<Trivia>), Error> {
+    let mut trivia = Vec::new();
+    let toks = lex_into::<true>(src, &mut trivia, &mut Vec::new())?;
+    Ok((toks, trivia))
+}
+
+/// Lexes, and writes each token's terminal of grammar.ll1 to `la`.
+fn lex_into<const KEEP: bool>(
+    src: &str,
+    trivia: &mut Vec<Trivia>,
+    la: &mut Vec<u8>,
+) -> Result<Vec<Tok>, Error> {
     let b = src.as_bytes();
     let mut out = Vec::new();
     let mut i = 0;
     let mut depth: i32 = 0;
+    let mut keep = |kind: TriviaKind, lo: usize, hi: usize| {
+        if KEEP {
+            trivia.push(Trivia {
+                kind,
+                span: Span::new(lo, hi),
+            });
+        }
+    };
     while i < b.len() {
         let c = b[i];
         if c == b'\n' {
             if depth == 0 {
+                la.push(t::NL);
                 out.push(Tok {
                     kind: TokKind::Nl,
                     span: Span::new(i, i + 1),
                 });
+            } else {
+                keep(TriviaKind::Newline, i, i + 1);
             }
             i += 1;
             continue;
         }
         if c == b' ' || c == b'\t' || c == b'\r' {
-            i += 1;
+            let s = i;
+            while i < b.len() && matches!(b[i], b' ' | b'\t' | b'\r') {
+                i += 1;
+            }
+            keep(TriviaKind::Space, s, i);
             continue;
         }
         if c == b'#' {
+            let s = i;
             while i < b.len() && b[i] != b'\n' {
                 i += 1;
             }
+            keep(TriviaKind::Comment, s, i);
             continue;
         }
         let neg = c == b'-'
@@ -143,6 +292,7 @@ pub fn lex(src: &str) -> Result<Vec<Tok>, Error> {
                     }));
                 }
             };
+            la.push(t::NUM);
             out.push(Tok {
                 kind: TokKind::Num(v, unit),
                 span: Span::new(s, i),
@@ -155,9 +305,15 @@ pub fn lex(src: &str) -> Result<Vec<Tok>, Error> {
                 i += 1;
             }
             let w = &src[s..i];
-            let kind = match KEYWORDS.iter().find(|k| **k == w) {
-                Some(k) => TokKind::Kw(k),
-                None => TokKind::Id(w.to_string()),
+            let kind = match keyword(w) {
+                Some(k) => {
+                    la.push(KW_TERM[k]);
+                    TokKind::Kw(KEYWORDS[k])
+                }
+                None => {
+                    la.push(t::ID);
+                    TokKind::Id(w.to_string())
+                }
             };
             out.push(Tok {
                 kind,
@@ -177,15 +333,18 @@ pub fn lex(src: &str) -> Result<Vec<Tok>, Error> {
                 }));
             }
             i += 1;
+            la.push(t::STR);
             out.push(Tok {
                 kind: TokKind::Str(src[s + 1..i - 1].to_string()),
                 span: Span::new(s, i),
             });
             continue;
         }
-        match OPS.iter().find(|o| src[i..].starts_with(**o)) {
-            Some(op) => {
-                match *op {
+        match op_at(b, i) {
+            Some(k) => {
+                let op = OPS[k];
+                la.push(OP_TERM[k]);
+                match op {
                     "(" | "[" => depth += 1,
                     ")" | "]" => depth = (depth - 1).max(0),
                     _ => {}
@@ -204,6 +363,7 @@ pub fn lex(src: &str) -> Result<Vec<Tok>, Error> {
             }
         }
     }
+    la.push(t::EOF);
     out.push(Tok {
         kind: TokKind::Eof,
         span: Span::new(b.len(), b.len()),
@@ -400,9 +560,60 @@ pub struct Stmt {
     pub full: Span,
 }
 
-pub struct Parser<'a> {
-    t: &'a [Tok],
-    k: usize,
+/// A set of terminals of grammar.ll1 (bit k: `table::TERMS[k]`): what a syntax error expected.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Default, Hash)]
+pub struct TermSet(pub u128);
+
+impl TermSet {
+    pub fn contains(self, t: u8) -> bool {
+        self.0 >> t & 1 == 1
+    }
+    /// The terminals as written: `)`, `in`, NUM, ID, NL, EOF.
+    pub fn names(self) -> Vec<&'static str> {
+        (0..table::NT as u8)
+            .filter(|t| self.contains(*t))
+            .map(|t| table::TERMS[t as usize])
+            .collect()
+    }
+}
+
+/// A value on the parser's stack: a token, or what a finished rule built. Lists made by
+/// right-recursive rules are built last item first and turned round by the rule that owns them.
+enum V {
+    None,
+    Tok(u32),
+    Expr(Expr),
+    Kind(ExprKind),
+    Exprs(Vec<Expr>),
+    /// A statement, put on `Parser::stmts`.
+    Stmt,
+    /// How many statements of a list are on `Parser::stmts`, the last ones.
+    Count(u32),
+    Stmts(Vec<Stmt>),
+    /// stmtsrest: the end of the separator, and the statements after it.
+    Rest(u32, u32),
+    Path(Vec<Seg>, String),
+    Segs(Vec<Seg>),
+    Keys(Vec<Key>),
+    Key(Key),
+    Param(Box<FnParam>),
+    Params(Vec<FnParam>),
+    Name(String),
+    Names(Vec<String>),
+    Arg(Arg),
+    Args(Vec<Arg>),
+    Cmp(Cmp),
+    ExpCmp(Box<ExpectCmp>),
+    Tol(Expr, bool),
+    Pct(bool),
+    IfPart(Box<(Expr, Expr)>),
+    Op(BinOp),
+    /// The operators or postfix ops after an operand, as the tree they make with a hole where
+    /// that operand goes: the hole is `depth` left children down.
+    Chain(Expr, u32),
+    RangeTail(bool, Expr),
+    Comp(Box<(Vec<String>, Expr, Option<Box<Expr>>)>),
+    Map(Vec<(String, Expr)>),
 }
 
 type R<T> = Result<T, Error>;
@@ -411,661 +622,1031 @@ fn err<T>(e: SyntaxError) -> R<T> {
     Err(Error::Syntax(e))
 }
 
-impl<'a> Parser<'a> {
-    fn peek(&self) -> &Tok {
-        &self.t[self.k.min(self.t.len() - 1)]
-    }
-    fn bump(&mut self) -> Tok {
-        let t = self.peek().clone();
-        if self.k < self.t.len() - 1 {
-            self.k += 1;
+/// Takes the value at a stack slot apart: `get!(self, i, V::Expr(e) => e)`.
+macro_rules! get {
+    ($p:expr, $i:expr, $pat:pat => $out:expr) => {
+        match $p.take($i) {
+            $pat => $out,
+            _ => unreachable!("rule action and grammar.ll1 disagree"),
         }
-        t
+    };
+}
+
+/// A list at a stack slot; an empty rule left `V::None` there.
+macro_rules! list {
+    ($p:expr, $i:expr, V::$v:ident) => {
+        match $p.take($i) {
+            V::$v(l) => l,
+            V::None => Vec::new(),
+            _ => unreachable!("rule action and grammar.ll1 disagree"),
+        }
+    };
+}
+
+/// A stack entry at or above this is "reduce by rule (entry - REDUCE)".
+const REDUCE: u16 = 0x100;
+
+struct Parser {
+    toks: Vec<Tok>,
+    /// Finished statements of the lists being parsed, innermost last.
+    stmts: Vec<Stmt>,
+    /// Each token's terminal.
+    la: Vec<u8>,
+    k: usize,
+    vals: Vec<V>,
+}
+
+fn nonterm(name: &str) -> usize {
+    table::NONTERMS
+        .iter()
+        .position(|n| *n == name)
+        .unwrap_or(usize::MAX)
+}
+
+/// How an error names what it wanted, from the symbol the parser stopped at.
+fn what(stop: u16) -> &'static str {
+    if (stop as u8) < table::NT_BASE {
+        return match stop as u8 {
+            t::ID => "a name",
+            t::NUM => "a number",
+            t::STR => "a string",
+            t::NL => "a line break",
+            t::EOF => "end of input",
+            x => table::TERMS[x as usize],
+        };
     }
-    fn is_op(&self, o: &str) -> bool {
-        matches!(self.peek().kind, TokKind::Op(x) if x == o)
+    match table::NONTERMS[stop as usize - table::NT_BASE as usize] {
+        "block" | "elsebody" => "{",
+        "path" => "a name",
+        "key" => "an instance index",
+        _ => "a value",
     }
-    fn is_kw(&self, w: &str) -> bool {
-        matches!(self.peek().kind, TokKind::Kw(x) if x == w)
+}
+
+impl Parser {
+    fn take(&mut self, i: usize) -> V {
+        std::mem::replace(&mut self.vals[i], V::None)
     }
-    fn eat_op(&mut self, o: &str) -> bool {
-        if self.is_op(o) {
-            self.bump();
-            true
-        } else {
-            false
+    fn expr(&mut self, i: usize) -> Expr {
+        get!(self, i, V::Expr(e) => e)
+    }
+    fn tok(&self, i: usize) -> &Tok {
+        match self.vals[i] {
+            V::Tok(k) => &self.toks[k as usize],
+            _ => unreachable!("rule action and grammar.ll1 disagree"),
         }
     }
-    fn want_op(&mut self, o: &'static str) -> R<Span> {
-        if self.is_op(o) {
-            Ok(self.bump().span)
-        } else {
-            err(SyntaxError::Expected {
-                what: o,
-                span: self.peek().span,
-            })
+    fn text(&mut self, i: usize) -> String {
+        let V::Tok(k) = self.vals[i] else {
+            unreachable!("rule action and grammar.ll1 disagree")
+        };
+        match &mut self.toks[k as usize].kind {
+            TokKind::Id(s) | TokKind::Str(s) => std::mem::take(s),
+            _ => unreachable!("a name or a string"),
         }
     }
-    fn want_kw(&mut self, w: &'static str) -> R<Span> {
-        if self.is_kw(w) {
-            Ok(self.bump().span)
-        } else {
-            err(SyntaxError::Expected {
-                what: w,
-                span: self.peek().span,
-            })
-        }
-    }
-    fn ident(&mut self) -> R<(String, Span)> {
-        match self.peek().kind.clone() {
-            TokKind::Id(s) => Ok((s, self.bump().span)),
-            _ => err(SyntaxError::Expected {
-                what: "a name",
-                span: self.peek().span,
-            }),
+    /// Pops to `n` values; what is left above is spent (empty, or a token).
+    #[inline]
+    fn drop_to(&mut self, n: usize) {
+        while self.vals.len() > n {
+            match self.vals.pop() {
+                Some(V::None | V::Tok(_)) => {}
+                other => drop(other),
+            }
         }
     }
     fn last_hi(&self) -> u32 {
-        self.t[self.k.saturating_sub(1)].span.hi
-    }
-    fn seps(&mut self) {
-        while matches!(self.peek().kind, TokKind::Nl) || self.is_op(";") {
-            self.bump();
-        }
+        self.toks[self.k.saturating_sub(1)].span.hi
     }
 
-    pub fn program(&mut self) -> R<Vec<Stmt>> {
-        self.seps();
-        let mut out = Vec::new();
-        while !matches!(self.peek().kind, TokKind::Eof) {
-            out.push(self.stmt()?);
-        }
-        Ok(out)
-    }
-
-    fn end_stmt(&mut self) -> R<u32> {
-        match self.peek().kind {
-            TokKind::Nl | TokKind::Op(";") => {
-                let hi = self.bump().span.hi;
-                self.seps();
-                Ok(hi)
+    fn run(&mut self) -> R<Vec<Stmt>> {
+        let expand = expansions();
+        let chains = chains();
+        let mut stack: Vec<u16> = Vec::with_capacity(128);
+        stack.push(table::NT_BASE as u16);
+        // After the first lookahead no rule takes: what was expected there, and whether a
+        // statement could have ended (stmtsrest) or begun (stmts) at it. Rules that can be empty
+        // are then taken empty until a terminal or a rule that cannot be, so the actions on the
+        // way see the same input the hand parser saw before its error.
+        let mut missed: Option<(TermSet, bool, bool)> = None;
+        while let Some(s) = stack.pop() {
+            if s >= REDUCE {
+                let p = (s - REDUCE) as usize;
+                let base = self.vals.len() - table::RHS[p].len();
+                if KEEPS[p] && self.vals[base + 1..].iter().all(|v| matches!(v, V::None)) {
+                    self.drop_to(base + 1);
+                    continue;
+                }
+                let v = self.reduce(table::RULES[p], base)?;
+                self.drop_to(base);
+                self.vals.push(v);
+                continue;
             }
-            TokKind::Eof | TokKind::Op("}") => Ok(self.last_hi()),
-            _ => err(SyntaxError::Expected {
-                what: "end of statement",
-                span: self.peek().span,
-            }),
-        }
-    }
-
-    fn block(&mut self) -> R<Vec<Stmt>> {
-        self.want_op("{")?;
-        self.seps();
-        let mut out = Vec::new();
-        while !self.is_op("}") {
-            if matches!(self.peek().kind, TokKind::Eof) {
-                return err(SyntaxError::Expected {
-                    what: "}",
-                    span: self.peek().span,
-                });
+            let la = self.la[self.k];
+            if (s as u8) < table::NT_BASE {
+                if s as u8 == la && missed.is_none() {
+                    self.vals.push(V::Tok(self.k as u32));
+                    self.k = (self.k + 1).min(self.toks.len() - 1);
+                    continue;
+                }
+                return Err(self.expected(s, &stack, missed));
             }
-            out.push(self.stmt()?);
+            let a = s as usize - table::NT_BASE as usize;
+            if missed.is_none() {
+                let c = &chains[a * table::NT + la as usize];
+                if c.empty {
+                    if let Some(r) = c.enter {
+                        self.enter(r)?;
+                    }
+                    if let Some(&m) = stack.last()
+                        && m >= REDUCE
+                        && KEEPS[(m - REDUCE) as usize]
+                    {
+                        stack.pop();
+                    } else {
+                        self.vals.push(V::None);
+                    }
+                    continue;
+                }
+                if c.valid {
+                    if let Some(r) = c.enter {
+                        self.enter(r)?;
+                    }
+                    stack.extend_from_slice(&c.push);
+                    if c.shift {
+                        self.vals.push(V::Tok(self.k as u32));
+                        self.k = (self.k + 1).min(self.toks.len() - 1);
+                    }
+                    if let Some(p) = c.leaf {
+                        let b = self.vals.len() - 1;
+                        let rule = table::RULES[p as usize];
+                        let v = match rule {
+                            P::AtomNum | P::AtomStr | P::AtomId | P::AtomTrue | P::AtomFalse => {
+                                self.atom(rule, b)
+                            }
+                            _ => self.reduce(rule, b)?,
+                        };
+                        self.vals[b] = v;
+                    }
+                    continue;
+                }
+            }
+            // expand, and go on down the leftmost symbol without a round trip through the stack
+            let mut s = s;
+            loop {
+                let a = s as usize - table::NT_BASE as usize;
+                let mut p = table::TABLE[a][la as usize];
+                if p == table::NONE {
+                    let m = missed.get_or_insert_with(|| (expected_set(s, &stack), false, false));
+                    m.1 |= a == nonterm("stmtsrest");
+                    m.2 |= a == nonterm("stmts");
+                    p = table::EMPTY[a];
+                    if p == table::NONE {
+                        return Err(self.expected(s, &stack, missed));
+                    }
+                }
+                let rhs = table::RHS[p as usize];
+                let rule = table::RULES[p as usize];
+                if rhs.is_empty() {
+                    if rule == P::ArgkwEmpty {
+                        self.enter(rule)?;
+                    }
+                    // an empty last symbol of a rule that keeps its first value: that rule is done
+                    if let Some(&m) = stack.last()
+                        && m >= REDUCE
+                        && KEEPS[(m - REDUCE) as usize]
+                    {
+                        stack.pop();
+                    } else {
+                        self.vals.push(V::None);
+                    }
+                    break;
+                }
+                if matches!(rule, P::AssigntailAssign | P::ArgkwColon) {
+                    self.enter(rule)?;
+                }
+                stack.extend_from_slice(&expand[p as usize]);
+                let first = rhs[0];
+                if first >= table::NT_BASE {
+                    s = first as u16;
+                    continue;
+                }
+                if first == la && missed.is_none() {
+                    self.vals.push(V::Tok(self.k as u32));
+                    self.k = (self.k + 1).min(self.toks.len() - 1);
+                } else {
+                    stack.push(first as u16);
+                }
+                break;
+            }
         }
-        self.want_op("}")?;
-        Ok(out)
+        Ok(get!(self, 0, V::Stmts(s) => s))
     }
 
-    fn stmt(&mut self) -> R<Stmt> {
-        let lo = self.peek().span.lo;
-        let kind = self.stmt_kind()?;
-        let hi = self.last_hi();
-        let full_hi = self.end_stmt()?;
-        Ok(Stmt {
-            kind,
-            span: Span { lo, hi },
-            full: Span { lo, hi: full_hi },
+    fn expected(&self, stop: u16, stack: &[u16], missed: Option<(TermSet, bool, bool)>) -> Error {
+        let (set, end, begin) = missed.unwrap_or_else(|| (expected_set(stop, stack), false, false));
+        Error::Syntax(SyntaxError::Expected {
+            what: if end {
+                "end of statement"
+            } else if begin {
+                "a value"
+            } else {
+                what(stop)
+            },
+            expected: set,
+            span: self.toks[self.k].span,
         })
     }
 
-    fn index_list(&mut self) -> R<Vec<Key>> {
-        let mut out = Vec::new();
-        if self.eat_op("[") {
-            loop {
-                match self.peek().kind.clone() {
-                    TokKind::Num(v, Unit::None) if v.fract() == 0.0 => {
-                        self.bump();
-                        out.push(Key::Ix(v as i64));
-                    }
-                    TokKind::Id(l) => {
-                        self.bump();
-                        out.push(Key::Label(l));
-                    }
-                    _ => {
-                        return err(SyntaxError::Expected {
-                            what: "an instance index",
-                            span: self.peek().span,
-                        });
-                    }
-                }
-                if !self.eat_op(",") {
-                    break;
+    /// Checks made as a rule is chosen, at the point the hand parser made them.
+    fn enter(&mut self, p: P) -> R<()> {
+        let top = self.vals.len().wrapping_sub(1);
+        match p {
+            P::AssigntailAssign | P::ArgkwColon => {
+                let V::Expr(e) = &self.vals[top] else {
+                    unreachable!("an expression before `=` or `:`")
+                };
+                if !matches!(e.kind, ExprKind::Name(_)) {
+                    let span = e.span;
+                    return err(if p == P::ArgkwColon {
+                        SyntaxError::KeywordNotName { span }
+                    } else {
+                        SyntaxError::AssignToNonName { span }
+                    });
                 }
             }
-            self.want_op("]")?;
+            // a positional argument: the one before it, if any, sits under its `,`
+            P::ArgkwEmpty => {
+                let V::Expr(e) = &self.vals[top] else {
+                    unreachable!("an argument")
+                };
+                if let (V::Tok(_), Some(V::Arg(prev))) =
+                    (&self.vals[top - 1], top.checked_sub(2).map(|i| &self.vals[i]))
+                    && self.la[match self.vals[top - 1] {
+                        V::Tok(k) => k as usize,
+                        _ => 0,
+                    }] == t::COMMA
+                    && prev.name.is_some()
+                {
+                    return err(SyntaxError::PositionalAfterKeyword { span: e.span });
+                }
+            }
+            _ => {}
         }
-        Ok(out)
+        Ok(())
     }
 
-    fn stmt_kind(&mut self) -> R<StmtKind> {
-        match self.peek().kind.clone() {
-            TokKind::Kw("shared") => {
-                self.bump();
-                let (name, _) = self.ident()?;
-                self.want_op("=")?;
-                Ok(StmtKind::Shared {
+    /// A one-token value.
+    #[inline]
+    fn atom(&mut self, p: P, b: usize) -> V {
+        let t = self.tok(b);
+        let span = t.span;
+        let kind = match &t.kind {
+            TokKind::Num(v, u) => ExprKind::Num(*v, *u),
+            TokKind::Str(_) => ExprKind::Str(self.text(b)),
+            TokKind::Id(_) => ExprKind::Name(self.text(b)),
+            _ => ExprKind::Bool(p == P::AtomTrue),
+        };
+        V::Expr(Expr { kind, span })
+    }
+
+    /// The tree-building action of each rule, run when its right side is done; the right side's
+    /// values are `self.vals[base..]`. `span` is right for a rule that starts with a token or an
+    /// expression.
+    fn reduce(&mut self, p: P, base: usize) -> R<V> {
+        let b = base;
+        let span = Span {
+            lo: match &self.vals[b] {
+                V::Tok(k) => self.toks[*k as usize].span.lo,
+                V::Expr(e) => e.span.lo,
+                _ => 0,
+            },
+            hi: self.last_hi(),
+        };
+        macro_rules! stmt {
+            ($kind:expr) => {{
+                let kind = $kind;
+                self.stmts.push(Stmt {
+                    kind,
+                    span,
+                    full: span,
+                });
+                V::Stmt
+            }};
+        }
+        Ok(match p {
+            P::ProgramSeps | P::BlockLbrace => {
+                let n = match self.take(b + if p == P::ProgramSeps { 1 } else { 2 }) {
+                    V::Count(n) => n as usize,
+                    V::None => 0,
+                    _ => unreachable!("rule action and grammar.ll1 disagree"),
+                };
+                V::Stmts(self.stmts.split_off(self.stmts.len() - n))
+            }
+            P::StmtsStmt => {
+                let (hi, n) = match self.take(b + 1) {
+                    V::Rest(hi, n) => (Some(hi), n),
+                    V::None => (None, 0),
+                    _ => unreachable!("rule action and grammar.ll1 disagree"),
+                };
+                let k = self.stmts.len() - 1 - n as usize;
+                let s = &mut self.stmts[k];
+                s.full.hi = hi.unwrap_or(s.span.hi);
+                V::Count(n + 1)
+            }
+            P::StmtsrestSep => V::Rest(
+                self.tok(b).span.hi,
+                match self.take(b + 2) {
+                    V::Count(n) => n,
+                    V::None => 0,
+                    _ => unreachable!("rule action and grammar.ll1 disagree"),
+                },
+            ),
+            P::SepsSep => V::None,
+            P::SepNl | P::SepSemi => self.take(b),
+            P::StmtShared => stmt!(StmtKind::Shared {
+                name: self.text(b + 1),
+                value: self.expr(b + 3),
+            }),
+            P::StmtParam => {
+                let (owner, name) = get!(self, b + 1, V::Path(o, n) => (o, n));
+                stmt!(StmtKind::Param {
+                    owner,
                     name,
-                    value: self.expr()?,
+                    value: self.expr(b + 3),
                 })
             }
-            TokKind::Kw("param") => {
-                let at = self.bump().span;
-                let mut segs = Vec::new();
-                loop {
-                    let (name, _) = self.ident()?;
-                    let index = self.index_list()?;
-                    segs.push(Seg { name, index });
-                    if !self.eat_op(".") {
-                        break;
-                    }
-                }
-                let last = segs.pop().expect("one segment");
-                if segs.is_empty() || !last.index.is_empty() {
-                    return err(SyntaxError::ParamWithoutOwner {
-                        span: Span::new(at.lo as usize, self.last_hi() as usize),
-                        name: last.name,
-                    });
-                }
-                self.want_op("=")?;
-                Ok(StmtKind::Param {
-                    owner: segs,
-                    name: last.name,
-                    value: self.expr()?,
+            P::StmtFn => {
+                let mut params = list!(self, b + 3, V::Params);
+                params.reverse();
+                stmt!(StmtKind::Fn {
+                    name: self.text(b + 1),
+                    params,
+                    body: list!(self, b + 5, V::Stmts),
                 })
             }
-            TokKind::Kw("fn") => {
-                self.bump();
-                let (name, _) = self.ident()?;
-                self.want_op("(")?;
-                let mut params = Vec::new();
-                while !self.is_op(")") {
-                    let (pn, _) = self.ident()?;
-                    let ty = if self.eat_op(":") {
-                        Some(self.ident()?.0)
-                    } else {
-                        None
-                    };
-                    let default = if self.eat_op("=") {
-                        Some(self.expr()?)
-                    } else {
-                        None
-                    };
-                    params.push(FnParam {
-                        name: pn,
-                        ty,
-                        default,
-                    });
-                    if !self.eat_op(",") {
-                        break;
-                    }
-                }
-                self.want_op(")")?;
-                let body = self.block()?;
-                Ok(StmtKind::Fn { name, params, body })
+            P::StmtFor => {
+                let mut vars = list!(self, b + 2, V::Names);
+                vars.push(self.text(b + 1));
+                vars.reverse();
+                stmt!(StmtKind::For {
+                    vars,
+                    iter: self.expr(b + 4),
+                    body: list!(self, b + 5, V::Stmts),
+                })
             }
-            TokKind::Kw("for") => {
-                self.bump();
-                let mut vars = vec![self.ident()?.0];
-                while self.eat_op(",") {
-                    vars.push(self.ident()?.0);
-                }
-                self.want_kw("in")?;
-                let iter = self.expr()?;
-                let body = self.block()?;
-                Ok(StmtKind::For { vars, iter, body })
-            }
-            TokKind::Kw("if") => self.if_stmt(),
-            TokKind::Kw("return") => {
-                self.bump();
-                Ok(StmtKind::Return(self.expr()?))
-            }
-            TokKind::Kw("expect") => {
-                self.bump();
-                let (metric, _) = self.ident()?;
-                let mut args = Vec::new();
-                if self.eat_op("(") {
-                    while !self.is_op(")") {
-                        args.push(self.expr()?);
-                        if !self.eat_op(",") {
-                            break;
-                        }
-                    }
-                    self.want_op(")")?;
-                }
-                let cmp = match self.peek().kind {
-                    TokKind::Op("=") => Some(Cmp::Eq),
-                    TokKind::Op("<") => Some(Cmp::Lt),
-                    TokKind::Op("<=") => Some(Cmp::Le),
-                    TokKind::Op(">") => Some(Cmp::Gt),
-                    TokKind::Op(">=") => Some(Cmp::Ge),
-                    _ => None,
+            P::StmtIf | P::ElsebodyIf => {
+                let kind = StmtKind::If {
+                    cond: self.expr(b + 1),
+                    then: list!(self, b + 2, V::Stmts),
+                    other: match self.take(b + 3) {
+                        V::Stmts(s) => Some(s),
+                        V::None => None,
+                        _ => unreachable!("rule action and grammar.ll1 disagree"),
+                    },
                 };
-                let cmp = match cmp {
-                    Some(c) => {
-                        self.bump();
-                        let v = self.expr()?;
-                        let tol = if self.eat_op("+-") {
-                            let t = self.unary()?;
-                            let pct = self.eat_op("%");
-                            Some((t, pct))
-                        } else {
-                            None
-                        };
-                        Some((c, v, tol))
-                    }
-                    None => None,
-                };
-                Ok(StmtKind::Expect { metric, args, cmp })
+                match p {
+                    P::StmtIf => stmt!(kind),
+                    _ => V::Stmts(vec![Stmt {
+                        kind,
+                        span,
+                        full: span,
+                    }]),
+                }
             }
-            TokKind::Kw(w @ ("sketch" | "path")) => {
-                self.bump();
-                let (name, _) = self.ident()?;
-                self.want_op("(")?;
-                let args = self.args()?;
-                let body = self.block()?;
-                Ok(StmtKind::Block {
-                    kind: if w == "sketch" {
+            P::StmtReturn => stmt!(StmtKind::Return(self.expr(b + 1))),
+            P::StmtExpect => stmt!(StmtKind::Expect {
+                metric: self.text(b + 1),
+                args: list!(self, b + 2, V::Exprs),
+                cmp: match self.take(b + 3) {
+                    V::ExpCmp(c) => Some(*c),
+                    V::None => None,
+                    _ => unreachable!("rule action and grammar.ll1 disagree"),
+                },
+            }),
+            P::StmtSketch | P::StmtPath => {
+                let mut args = list!(self, b + 3, V::Args);
+                args.reverse();
+                stmt!(StmtKind::Block {
+                    kind: if p == P::StmtSketch {
                         BlockKind::Sketch
                     } else {
                         BlockKind::Path
                     },
-                    name,
+                    name: self.text(b + 1),
                     args,
-                    body,
+                    body: list!(self, b + 5, V::Stmts),
                 })
             }
-            _ => {
-                let e = self.expr()?;
-                if self.eat_op("=") {
-                    let ExprKind::Name(name) = e.kind else {
-                        return err(SyntaxError::AssignToNonName { span: e.span });
-                    };
-                    Ok(StmtKind::Assign {
-                        name,
-                        value: self.expr()?,
-                    })
-                } else {
-                    Ok(StmtKind::Expr(e))
-                }
-            }
-        }
-    }
-
-    fn if_stmt(&mut self) -> R<StmtKind> {
-        self.want_kw("if")?;
-        let cond = self.expr()?;
-        let then = self.block()?;
-        let other = if self.is_kw("else") {
-            self.bump();
-            if self.is_kw("if") {
-                let lo = self.peek().span.lo;
-                let k = self.if_stmt()?;
-                let sp = Span {
-                    lo,
-                    hi: self.last_hi(),
-                };
-                Some(vec![Stmt {
-                    kind: k,
-                    span: sp,
-                    full: sp,
-                }])
-            } else {
-                Some(self.block()?)
-            }
-        } else {
-            None
-        };
-        Ok(StmtKind::If { cond, then, other })
-    }
-
-    /// Arguments up to and including `)`, the `(` already taken.
-    fn args(&mut self) -> R<Vec<Arg>> {
-        let mut out = Vec::new();
-        let mut kw = false;
-        while !self.is_op(")") {
-            let e = self.expr()?;
-            if self.eat_op(":") {
-                let ExprKind::Name(n) = e.kind else {
-                    return err(SyntaxError::KeywordNotName { span: e.span });
-                };
-                kw = true;
-                out.push(Arg {
-                    name: Some((n, e.span)),
-                    value: self.expr()?,
-                });
-            } else {
-                if kw {
-                    return err(SyntaxError::PositionalAfterKeyword { span: e.span });
-                }
-                out.push(Arg { name: None, value: e });
-            }
-            if !self.eat_op(",") {
-                break;
-            }
-        }
-        self.want_op(")")?;
-        Ok(out)
-    }
-
-    pub fn expr(&mut self) -> R<Expr> {
-        let a = self.or()?;
-        if self.is_kw("if") {
-            self.bump();
-            let c = self.or()?;
-            self.want_kw("else")?;
-            let b = self.expr()?;
-            let span = a.span.to(b.span);
-            return Ok(Expr {
-                kind: ExprKind::If {
-                    cond: Box::new(c),
-                    then: Box::new(a),
-                    other: Box::new(b),
-                },
-                span,
-            });
-        }
-        Ok(a)
-    }
-
-    fn bin(a: Expr, op: BinOp, b: Expr) -> Expr {
-        let span = a.span.to(b.span);
-        Expr {
-            kind: ExprKind::Bin(op, Box::new(a), Box::new(b)),
-            span,
-        }
-    }
-
-    fn or(&mut self) -> R<Expr> {
-        let mut a = self.and()?;
-        while self.is_kw("or") {
-            self.bump();
-            let b = self.and()?;
-            a = Self::bin(a, BinOp::Or, b);
-        }
-        Ok(a)
-    }
-
-    fn and(&mut self) -> R<Expr> {
-        let mut a = self.not()?;
-        while self.is_kw("and") {
-            self.bump();
-            let b = self.not()?;
-            a = Self::bin(a, BinOp::And, b);
-        }
-        Ok(a)
-    }
-
-    fn not(&mut self) -> R<Expr> {
-        if self.is_kw("not") {
-            let s = self.bump().span;
-            let e = self.not()?;
-            let span = s.to(e.span);
-            return Ok(Expr {
-                kind: ExprKind::Not(Box::new(e)),
-                span,
-            });
-        }
-        self.cmp()
-    }
-
-    fn cmp(&mut self) -> R<Expr> {
-        let mut a = self.range()?;
-        loop {
-            let op = match self.peek().kind {
-                TokKind::Op("==") => BinOp::Eq,
-                TokKind::Op("!=") => BinOp::Ne,
-                TokKind::Op("<") => BinOp::Lt,
-                TokKind::Op("<=") => BinOp::Le,
-                TokKind::Op(">") => BinOp::Gt,
-                TokKind::Op(">=") => BinOp::Ge,
-                _ => return Ok(a),
-            };
-            self.bump();
-            let b = self.range()?;
-            a = Self::bin(a, op, b);
-        }
-    }
-
-    fn range(&mut self) -> R<Expr> {
-        let a = self.add()?;
-        let inclusive = match self.peek().kind {
-            TokKind::Op("..") => false,
-            TokKind::Op("..=") => true,
-            _ => return Ok(a),
-        };
-        self.bump();
-        let b = self.add()?;
-        let span = a.span.to(b.span);
-        Ok(Expr {
-            kind: ExprKind::Range {
-                lo: Box::new(a),
-                hi: Box::new(b),
-                inclusive,
-            },
-            span,
-        })
-    }
-
-    fn add(&mut self) -> R<Expr> {
-        let mut a = self.mul()?;
-        loop {
-            let op = match self.peek().kind {
-                TokKind::Op("+") => BinOp::Add,
-                TokKind::Op("-") => BinOp::Sub,
-                _ => return Ok(a),
-            };
-            self.bump();
-            let b = self.mul()?;
-            a = Self::bin(a, op, b);
-        }
-    }
-
-    fn mul(&mut self) -> R<Expr> {
-        let mut a = self.unary()?;
-        loop {
-            let op = match self.peek().kind {
-                TokKind::Op("*") => BinOp::Mul,
-                TokKind::Op("/") => BinOp::Div,
-                _ => return Ok(a),
-            };
-            self.bump();
-            let b = self.unary()?;
-            a = Self::bin(a, op, b);
-        }
-    }
-
-    fn unary(&mut self) -> R<Expr> {
-        if self.is_op("-") {
-            let s = self.bump().span;
-            let e = self.unary()?;
-            let span = s.to(e.span);
-            return Ok(Expr {
-                kind: ExprKind::Neg(Box::new(e)),
-                span,
-            });
-        }
-        self.power()
-    }
-
-    fn power(&mut self) -> R<Expr> {
-        let a = self.postfix()?;
-        if self.eat_op("^") {
-            let b = self.unary()?;
-            return Ok(Self::bin(a, BinOp::Pow, b));
-        }
-        Ok(a)
-    }
-
-    fn postfix(&mut self) -> R<Expr> {
-        let mut e = self.atom()?;
-        loop {
-            if self.eat_op("(") {
-                let args = self.args()?;
-                let span = Span {
-                    lo: e.span.lo,
-                    hi: self.last_hi(),
-                };
-                e = Expr {
-                    kind: ExprKind::Call(Box::new(e), args),
-                    span,
-                };
-            } else if self.eat_op(".") {
-                let (n, s) = self.ident()?;
-                let span = e.span.to(s);
-                e = Expr {
-                    kind: ExprKind::Attr(Box::new(e), n),
-                    span,
-                };
-            } else if self.eat_op("[") {
-                let i = self.expr()?;
-                let hi = self.want_op("]")?;
-                let span = e.span.to(hi);
-                e = Expr {
-                    kind: ExprKind::Index(Box::new(e), Box::new(i)),
-                    span,
-                };
-            } else {
-                return Ok(e);
-            }
-        }
-    }
-
-    fn atom(&mut self) -> R<Expr> {
-        let t = self.peek().clone();
-        let kind = match t.kind {
-            TokKind::Num(v, u) => {
-                self.bump();
-                ExprKind::Num(v, u)
-            }
-            TokKind::Str(s) => {
-                self.bump();
-                ExprKind::Str(s)
-            }
-            TokKind::Kw("true") => {
-                self.bump();
-                ExprKind::Bool(true)
-            }
-            TokKind::Kw("false") => {
-                self.bump();
-                ExprKind::Bool(false)
-            }
-            TokKind::Id(n) => {
-                self.bump();
-                ExprKind::Name(n)
-            }
-            TokKind::Op("(") => {
-                self.bump();
-                let mut items = Vec::new();
-                while !self.is_op(")") {
-                    items.push(self.expr()?);
-                    if !self.eat_op(",") {
-                        break;
+            P::StmtExpr => {
+                let e = self.expr(b);
+                stmt!(match self.take(b + 1) {
+                    V::Expr(value) => {
+                        let ExprKind::Name(name) = e.kind else {
+                            unreachable!("checked as `=` was taken")
+                        };
+                        StmtKind::Assign { name, value }
                     }
+                    V::None => StmtKind::Expr(e),
+                    _ => unreachable!("rule action and grammar.ll1 disagree"),
+                })
+            }
+            P::AssigntailAssign
+            | P::FpdefaultAssign
+            | P::ArgkwColon
+            | P::PowtailCaret
+            | P::CompifIf
+            | P::ElsepartElse
+            | P::FparamrestComma
+            | P::ExprsrestComma
+            | P::ArgsrestComma
+            | P::TuplerestComma
+            | P::ListtailComma
+            | P::ListrestComma => self.take(b + 1),
+            P::PathId => {
+                let mut segs = list!(self, b + 2, V::Segs);
+                let index = list!(self, b + 1, V::Keys);
+                segs.push(Seg {
+                    name: self.text(b),
+                    index,
+                });
+                segs.reverse();
+                let last = segs.pop().expect("one segment");
+                if segs.is_empty() || !last.index.is_empty() {
+                    let at = self.tok(b - 1).span;
+                    return err(SyntaxError::ParamWithoutOwner {
+                        span: Span {
+                            lo: at.lo,
+                            hi: span.hi,
+                        },
+                        name: last.name,
+                    });
                 }
-                let hi = self.want_op(")")?;
+                V::Path(segs, last.name)
+            }
+            P::PathrestDot => {
+                let mut segs = list!(self, b + 3, V::Segs);
+                let index = list!(self, b + 2, V::Keys);
+                segs.push(Seg {
+                    name: self.text(b + 1),
+                    index,
+                });
+                V::Segs(segs)
+            }
+            P::KeysLbrack => {
+                let mut keys = list!(self, b + 2, V::Keys);
+                keys.push(get!(self, b + 1, V::Key(k) => k));
+                keys.reverse();
+                V::Keys(keys)
+            }
+            P::KeyNum => match self.tok(b).kind {
+                TokKind::Num(v, Unit::None) if v.fract() == 0.0 => V::Key(Key::Ix(v as i64)),
+                _ => {
+                    return err(SyntaxError::Expected {
+                        what: "an instance index",
+                        expected: TermSet(1 << t::NUM | 1 << t::ID),
+                        span: self.tok(b).span,
+                    });
+                }
+            },
+            P::KeyId => V::Key(Key::Label(self.text(b))),
+            P::KeyrestComma => {
+                let mut keys = list!(self, b + 2, V::Keys);
+                keys.push(get!(self, b + 1, V::Key(k) => k));
+                V::Keys(keys)
+            }
+            P::FparamsFparam => {
+                let mut ps = list!(self, b + 1, V::Params);
+                ps.push(*get!(self, b, V::Param(p) => p));
+                V::Params(ps)
+            }
+            P::FparamId => V::Param(Box::new(FnParam {
+                name: self.text(b),
+                ty: match self.take(b + 1) {
+                    V::Name(n) => Some(n),
+                    V::None => None,
+                    _ => unreachable!("rule action and grammar.ll1 disagree"),
+                },
+                default: match self.take(b + 2) {
+                    V::Expr(e) => Some(e),
+                    V::None => None,
+                    _ => unreachable!("rule action and grammar.ll1 disagree"),
+                },
+            })),
+            P::FptypeColon => V::Name(self.text(b + 1)),
+            P::ForvarsComma => {
+                let mut vars = list!(self, b + 2, V::Names);
+                vars.push(self.text(b + 1));
+                V::Names(vars)
+            }
+            P::ElsebodyBlock => self.take(b),
+            P::ExpargsLparen => {
+                let mut e = list!(self, b + 1, V::Exprs);
+                e.reverse();
+                V::Exprs(e)
+            }
+            P::ExprsExpr | P::TupleExpr | P::ListmoreExpr => {
+                let mut rest = list!(self, b + 1, V::Exprs);
+                rest.push(self.expr(b));
+                V::Exprs(rest)
+            }
+            P::ExpcmpCmpop => V::ExpCmp(Box::new((
+                get!(self, b, V::Cmp(c) => c),
+                self.expr(b + 1),
+                match self.take(b + 2) {
+                    V::Tol(t, pct) => Some((t, pct)),
+                    V::None => None,
+                    _ => unreachable!("rule action and grammar.ll1 disagree"),
+                },
+            ))),
+            P::CmpopAssign => V::Cmp(Cmp::Eq),
+            P::CmpopLt => V::Cmp(Cmp::Lt),
+            P::CmpopLe => V::Cmp(Cmp::Le),
+            P::CmpopGt => V::Cmp(Cmp::Gt),
+            P::CmpopGe => V::Cmp(Cmp::Ge),
+            P::ExptolPlusminus => V::Tol(self.expr(b + 1), matches!(self.take(b + 2), V::Pct(true))),
+            P::PctPercent => V::Pct(true),
+            P::ArgsArg => {
+                let mut rest = list!(self, b + 1, V::Args);
+                rest.push(get!(self, b, V::Arg(a) => a));
+                V::Args(rest)
+            }
+            P::ArgExpr => {
+                let e = self.expr(b);
+                V::Arg(match self.take(b + 1) {
+                    V::Expr(value) => {
+                        let ExprKind::Name(n) = e.kind else {
+                            unreachable!("checked as `:` was taken")
+                        };
+                        Arg {
+                            name: Some((n, e.span)),
+                            value,
+                        }
+                    }
+                    V::None => Arg { name: None, value: e },
+                    _ => unreachable!("rule action and grammar.ll1 disagree"),
+                })
+            }
+            P::ExprOr => {
+                let a = self.expr(b);
+                match self.take(b + 1) {
+                    V::IfPart(c) => {
+                        let (cond, other) = *c;
+                        let span = a.span.to(other.span);
+                        V::Expr(Expr {
+                            kind: ExprKind::If {
+                                cond: Box::new(cond),
+                                then: Box::new(a),
+                                other: Box::new(other),
+                            },
+                            span,
+                        })
+                    }
+                    V::None => V::Expr(a),
+                    _ => unreachable!("rule action and grammar.ll1 disagree"),
+                }
+            }
+            P::IfpartIf => V::IfPart(Box::new((self.expr(b + 1), self.expr(b + 3)))),
+            P::OrAnd | P::AndNot | P::CmpRange | P::AddMul | P::MulUnary => {
+                let a = self.expr(b);
+                V::Expr(fill(a, self.take(b + 1)))
+            }
+            P::OrrestOr
+            | P::AndrestAnd
+            | P::AddrestPlus
+            | P::AddrestMinus
+            | P::MulrestStar
+            | P::MulrestSlash => {
+                let op = match p {
+                    P::OrrestOr => BinOp::Or,
+                    P::AndrestAnd => BinOp::And,
+                    P::AddrestPlus => BinOp::Add,
+                    P::AddrestMinus => BinOp::Sub,
+                    P::MulrestStar => BinOp::Mul,
+                    _ => BinOp::Div,
+                };
+                let e = self.expr(b + 1);
+                push(self.take(b + 2), bin(hole(), op, e))
+            }
+            P::CmprestRelop => {
+                let op = get!(self, b, V::Op(o) => o);
+                let e = self.expr(b + 1);
+                push(self.take(b + 2), bin(hole(), op, e))
+            }
+            P::RelopEqeq => V::Op(BinOp::Eq),
+            P::RelopNe => V::Op(BinOp::Ne),
+            P::RelopLt => V::Op(BinOp::Lt),
+            P::RelopLe => V::Op(BinOp::Le),
+            P::RelopGt => V::Op(BinOp::Gt),
+            P::RelopGe => V::Op(BinOp::Ge),
+            P::NotNot | P::UnaryMinus => {
+                let s = self.tok(b).span;
+                let e = self.expr(b + 1);
+                let span = s.to(e.span);
+                let e = Box::new(e);
+                V::Expr(Expr {
+                    kind: if p == P::NotNot {
+                        ExprKind::Not(e)
+                    } else {
+                        ExprKind::Neg(e)
+                    },
+                    span,
+                })
+            }
+            P::NotCmp | P::UnaryPower => self.take(b),
+            P::RangeAdd => {
+                let a = self.expr(b);
+                match self.take(b + 1) {
+                    V::RangeTail(inclusive, hi) => {
+                        let span = a.span.to(hi.span);
+                        V::Expr(Expr {
+                            kind: ExprKind::Range {
+                                lo: Box::new(a),
+                                hi: Box::new(hi),
+                                inclusive,
+                            },
+                            span,
+                        })
+                    }
+                    V::None => V::Expr(a),
+                    _ => unreachable!("rule action and grammar.ll1 disagree"),
+                }
+            }
+            P::RangetailDotdot => V::RangeTail(false, self.expr(b + 1)),
+            P::RangetailDotdoteq => V::RangeTail(true, self.expr(b + 1)),
+            P::PowerPostfix => {
+                let a = self.expr(b);
+                match self.take(b + 1) {
+                    V::Expr(e) => V::Expr(bin(a, BinOp::Pow, e)),
+                    V::None => V::Expr(a),
+                    _ => unreachable!("rule action and grammar.ll1 disagree"),
+                }
+            }
+            P::PostfixAtom => {
+                let a = self.expr(b);
+                V::Expr(fill(a, self.take(b + 1)))
+            }
+            P::PostrestLparen => {
+                let mut args = list!(self, b + 1, V::Args);
+                args.reverse();
+                let hi = self.tok(b + 2).span;
+                let node = Expr {
+                    span: hi,
+                    kind: ExprKind::Call(Box::new(hole()), args),
+                };
+                push(self.take(b + 3), node)
+            }
+            P::PostrestDot => {
+                let s = self.tok(b + 1).span;
+                let n = self.text(b + 1);
+                let node = Expr {
+                    span: s,
+                    kind: ExprKind::Attr(Box::new(hole()), n),
+                };
+                push(self.take(b + 2), node)
+            }
+            P::PostrestLbrack => {
+                let hi = self.tok(b + 2).span;
+                let i = self.expr(b + 1);
+                let node = Expr {
+                    span: hi,
+                    kind: ExprKind::Index(Box::new(hole()), Box::new(i)),
+                };
+                push(self.take(b + 3), node)
+            }
+            P::AtomNum | P::AtomStr | P::AtomId | P::AtomTrue | P::AtomFalse => self.atom(p, b),
+            P::AtomLparen => {
+                let mut items = list!(self, b + 1, V::Exprs);
                 if items.len() == 1 {
                     let mut e = items.pop().expect("one");
-                    e.span = t.span.to(hi);
-                    return Ok(e);
+                    e.span = span;
+                    return Ok(V::Expr(e));
                 }
-                return Ok(Expr {
+                items.reverse();
+                V::Expr(Expr {
                     kind: ExprKind::Tuple(items),
-                    span: t.span.to(hi),
-                });
+                    span,
+                })
             }
-            TokKind::Op("{") => {
-                self.bump();
-                let mut entries = Vec::new();
-                self.seps();
-                while !self.is_op("}") {
-                    let (k, _) = self.ident()?;
-                    self.want_op(":")?;
-                    entries.push((k, self.expr()?));
-                    self.seps();
-                    if !self.eat_op(",") {
-                        break;
-                    }
-                    self.seps();
-                }
-                let hi = self.want_op("}")?;
-                return Ok(Expr {
+            P::AtomLbrack => V::Expr(Expr {
+                kind: match self.take(b + 1) {
+                    V::Kind(k) => k,
+                    V::None => ExprKind::List(Vec::new()),
+                    _ => unreachable!("rule action and grammar.ll1 disagree"),
+                },
+                span,
+            }),
+            P::AtomLbrace => {
+                let mut entries = list!(self, b + 2, V::Map);
+                entries.reverse();
+                V::Expr(Expr {
                     kind: ExprKind::Map(entries),
-                    span: t.span.to(hi),
-                });
+                    span,
+                })
             }
-            TokKind::Op("[") => {
-                self.bump();
-                let mut items = Vec::new();
-                while !self.is_op("]") {
-                    items.push(self.expr()?);
-                    if self.is_kw("for") {
-                        self.bump();
-                        let mut vars = vec![self.ident()?.0];
-                        while self.eat_op(",") {
-                            vars.push(self.ident()?.0);
+            P::ListbodyExpr => {
+                let item = self.expr(b);
+                V::Kind(match self.take(b + 1) {
+                    V::Comp(c) => {
+                        let (vars, iter, cond) = *c;
+                        ExprKind::Comp {
+                            item: Box::new(item),
+                            vars,
+                            iter: Box::new(iter),
+                            cond,
                         }
-                        self.want_kw("in")?;
-                        let iter = self.or()?;
-                        let cond = if self.is_kw("if") {
-                            self.bump();
-                            Some(Box::new(self.or()?))
-                        } else {
-                            None
-                        };
-                        let hi = self.want_op("]")?;
-                        return Ok(Expr {
-                            kind: ExprKind::Comp {
-                                item: Box::new(items.pop().expect("one")),
-                                vars,
-                                iter: Box::new(iter),
-                                cond,
-                            },
-                            span: t.span.to(hi),
-                        });
                     }
-                    if !self.eat_op(",") {
+                    rest => {
+                        let mut rest = match rest {
+                            V::Exprs(r) => r,
+                            _ => Vec::new(),
+                        };
+                        rest.push(item);
+                        rest.reverse();
+                        ExprKind::List(rest)
+                    }
+                })
+            }
+            P::ListtailFor => {
+                let mut vars = list!(self, b + 2, V::Names);
+                vars.push(self.text(b + 1));
+                vars.reverse();
+                let cond = match self.take(b + 5) {
+                    V::Expr(c) => Some(Box::new(c)),
+                    V::None => None,
+                    _ => unreachable!("rule action and grammar.ll1 disagree"),
+                };
+                V::Comp(Box::new((vars, self.expr(b + 4), cond)))
+            }
+            P::MapbodyId => {
+                let mut rest = list!(self, b + 4, V::Map);
+                rest.push((self.text(b), self.expr(b + 2)));
+                V::Map(rest)
+            }
+            P::MaprestComma => self.take(b + 2),
+            P::AddrestEmpty
+            | P::AndrestEmpty
+            | P::ArgkwEmpty
+            | P::ArgsEmpty
+            | P::ArgsrestEmpty
+            | P::AssigntailEmpty
+            | P::CmprestEmpty
+            | P::CompifEmpty
+            | P::ElsepartEmpty
+            | P::ExpargsEmpty
+            | P::ExpcmpEmpty
+            | P::ExprsEmpty
+            | P::ExprsrestEmpty
+            | P::ExptolEmpty
+            | P::ForvarsEmpty
+            | P::FparamrestEmpty
+            | P::FparamsEmpty
+            | P::FpdefaultEmpty
+            | P::FptypeEmpty
+            | P::IfpartEmpty
+            | P::KeyrestEmpty
+            | P::KeysEmpty
+            | P::ListbodyEmpty
+            | P::ListmoreEmpty
+            | P::ListrestEmpty
+            | P::ListtailEmpty
+            | P::MapbodyEmpty
+            | P::MaprestEmpty
+            | P::MulrestEmpty
+            | P::OrrestEmpty
+            | P::PathrestEmpty
+            | P::PctEmpty
+            | P::PostrestEmpty
+            | P::PowtailEmpty
+            | P::RangetailEmpty
+            | P::SepsEmpty
+            | P::StmtsEmpty
+            | P::StmtsrestEmpty
+            | P::TupleEmpty
+            | P::TuplerestEmpty => {
+                unreachable!("an empty rule leaves V::None, pushed by run")
+            }
+        })
+    }
+}
+
+/// `keeps_first` of each rule, by number.
+const KEEPS: [bool; table::NP] = {
+    let mut out = [false; table::NP];
+    let mut p = 0;
+    while p < table::NP {
+        out[p] = keeps_first(table::RULES[p]);
+        p += 1;
+    }
+    out
+};
+
+/// Rules whose value is their first symbol's when the rest of the right side came out empty.
+const fn keeps_first(p: P) -> bool {
+    matches!(
+        p,
+        P::OrAnd
+            | P::AndNot
+            | P::CmpRange
+            | P::AddMul
+            | P::MulUnary
+            | P::ExprOr
+            | P::RangeAdd
+            | P::PowerPostfix
+            | P::PostfixAtom
+            | P::NotCmp
+            | P::UnaryPower
+            | P::SepNl
+            | P::SepSemi
+            | P::ElsebodyBlock
+    )
+}
+
+/// What expanding each rule pushes after its first symbol: its reduce step (unless it passes its
+/// one symbol's value through) and the rest of its right side, last first.
+fn expansions() -> &'static [Vec<u16>] {
+    static E: std::sync::OnceLock<Vec<Vec<u16>>> = std::sync::OnceLock::new();
+    E.get_or_init(|| {
+        (0..table::NP)
+            .map(|p| {
+                let rhs = table::RHS[p];
+                let mut out = Vec::new();
+                if !(rhs.len() == 1 && keeps_first(table::RULES[p])) {
+                    out.push(REDUCE + p as u16);
+                }
+                out.extend(rhs.iter().skip(1).rev().map(|x| *x as u16));
+                out
+            })
+            .collect()
+    })
+}
+
+/// Expanding a nonterminal on one lookahead, then its leftmost nonterminal on the same lookahead,
+/// and so on: every rule on the way is fixed by the table, so the whole descent is one push.
+struct Chain {
+    /// The table has a rule here that is not the empty one.
+    valid: bool,
+    /// The table's rule here is the empty one, with no check.
+    empty: bool,
+    /// The one rule on the way with a check as it is chosen.
+    enter: Option<P>,
+    push: Vec<u16>,
+    /// The descent ends at the lookahead itself, which is taken.
+    shift: bool,
+    /// The last rule is that one token, reduced as it is taken.
+    leaf: Option<u8>,
+}
+
+/// `chains()[nonterminal * NT + lookahead]`.
+fn chains() -> &'static [Chain] {
+    static C: std::sync::OnceLock<Vec<Chain>> = std::sync::OnceLock::new();
+    C.get_or_init(|| {
+        let expand = expansions();
+        let mut out = Vec::with_capacity(table::NN * table::NT);
+        for a in 0..table::NN {
+            for la in 0..table::NT {
+                let p0 = table::TABLE[a][la];
+                let mut c = Chain {
+                    valid: false,
+                    empty: p0 != table::NONE && table::RHS[p0 as usize].is_empty(),
+                    enter: None,
+                    push: Vec::new(),
+                    shift: false,
+                    leaf: None,
+                };
+                if c.empty && table::RULES[p0 as usize] == P::ArgkwEmpty {
+                    c.enter = Some(P::ArgkwEmpty);
+                }
+                let mut x = a;
+                loop {
+                    let p = table::TABLE[x][la];
+                    if p == table::NONE || table::RHS[p as usize].is_empty() || c.enter.is_some() {
+                        if c.valid {
+                            c.push.push((table::NT_BASE as usize + x) as u16);
+                        }
                         break;
                     }
+                    let rule = table::RULES[p as usize];
+                    if matches!(rule, P::AssigntailAssign | P::ArgkwColon | P::ArgkwEmpty) {
+                        if c.valid {
+                            c.push.push((table::NT_BASE as usize + x) as u16);
+                            break;
+                        }
+                        c.enter = Some(rule);
+                    }
+                    c.valid = true;
+                    let first = table::RHS[p as usize][0];
+                    if first < table::NT_BASE
+                        && table::RHS[p as usize].len() == 1
+                        && expand[p as usize].len() == 1
+                    {
+                        c.leaf = Some(p);
+                        c.shift = true;
+                        break;
+                    }
+                    c.push.extend_from_slice(&expand[p as usize]);
+                    if first < table::NT_BASE {
+                        c.shift = true;
+                        break;
+                    }
+                    x = (first - table::NT_BASE) as usize;
                 }
-                let hi = self.want_op("]")?;
-                return Ok(Expr {
-                    kind: ExprKind::List(items),
-                    span: t.span.to(hi),
-                });
+                out.push(c);
             }
-            _ => {
-                return err(SyntaxError::Expected {
-                    what: "a value",
-                    span: t.span,
-                });
+        }
+        out
+    })
+}
+
+/// What the parser can take next with `stop` on top of the stack: FIRST of the symbols from
+/// the top down, to the first that cannot be empty.
+fn expected_set(stop: u16, stack: &[u16]) -> TermSet {
+    let mut set = 0u128;
+    for s in std::iter::once(stop).chain(stack.iter().rev().copied()) {
+        if s >= REDUCE {
+            continue;
+        }
+        if (s as u8) < table::NT_BASE {
+            set |= 1 << s;
+            break;
+        }
+        let a = s as usize - table::NT_BASE as usize;
+        set |= table::FIRST[a];
+        if !table::NULLABLE[a] {
+            break;
+        }
+    }
+    TermSet(set)
+}
+
+/// Where an operand goes in a chain; its span is empty so that the spans above it are those of
+/// the rest, until `fill` sets their start.
+fn hole() -> Expr {
+    Expr {
+        kind: ExprKind::Tuple(Vec::new()),
+        span: Span { lo: u32::MAX, hi: 0 },
+    }
+}
+
+fn left(e: &mut Expr) -> &mut Expr {
+    match &mut e.kind {
+        ExprKind::Bin(_, l, _) | ExprKind::Call(l, _) | ExprKind::Attr(l, _) | ExprKind::Index(l, _) => l,
+        _ => unreachable!("a chain is operators and postfix ops"),
+    }
+}
+
+/// `node` (an op with a hole on its left) in front of the chain after it.
+fn push(rest: V, node: Expr) -> V {
+    match rest {
+        V::None => V::Chain(node, 1),
+        V::Chain(mut t, depth) => {
+            let mut h = &mut t;
+            for _ in 0..depth {
+                h = left(h);
             }
-        };
-        Ok(Expr { kind, span: t.span })
+            *h = node;
+            V::Chain(t, depth + 1)
+        }
+        _ => unreachable!("rule action and grammar.ll1 disagree"),
+    }
+}
+
+/// The operand `a` put in its chain's hole: left-associated, spans from `a` on.
+fn fill(a: Expr, rest: V) -> Expr {
+    match rest {
+        V::None => a,
+        V::Chain(mut t, depth) => {
+            let mut h = &mut t;
+            for _ in 0..depth {
+                h.span.lo = a.span.lo;
+                h = left(h);
+            }
+            *h = a;
+            t
+        }
+        _ => unreachable!("rule action and grammar.ll1 disagree"),
+    }
+}
+
+fn bin(a: Expr, op: BinOp, b: Expr) -> Expr {
+    let span = a.span.to(b.span);
+    Expr {
+        kind: ExprKind::Bin(op, Box::new(a), Box::new(b)),
+        span,
     }
 }
 
 pub fn parse(src: &str) -> R<Vec<Stmt>> {
-    let toks = lex(src)?;
-    Parser { t: &toks, k: 0 }.program()
+    let mut la = Vec::new();
+    let toks = lex_into::<false>(src, &mut Vec::new(), &mut la)?;
+    let mut p = Parser {
+        stmts: Vec::with_capacity(64),
+        vals: Vec::with_capacity(64),
+        toks,
+        la,
+        k: 0,
+    };
+    p.run()
 }
 
 /// Every statement, nested ones too, in source order.
