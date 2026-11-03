@@ -20,6 +20,8 @@ use std::rc::Rc;
 
 pub const BUILTINS: &[&str] = &[
     "sqrt",
+    "div",
+    "mod",
     "sin",
     "cos",
     "tan",
@@ -552,6 +554,32 @@ pub fn call(ev: &mut Eval, name: &'static str, args: &[Arg], span: Span) -> R<Va
     match name {
         "sqrt" | "abs" | "sin" | "cos" | "tan" | "asin" | "acos" | "atan" | "count" | "ratio" => {
             math1(ev, name, args, span)
+        }
+        // index arithmetic: the whole quotient and the remainder of two counts (`div(k, 5)` is
+        // k's row of five, `mod(k, 5)` its column), whatever k is
+        "div" | "mod" => {
+            let a = Args::bind(ev, name, &["a", "b"], args, span)?;
+            let x = a.req_num("a", &[Dim::Count])?;
+            let y = a.req_num("b", &[Dim::Count])?;
+            let d = y.v.round() as i64;
+            if d <= 0 {
+                return Err(Error::BadValue {
+                    span: a.span("b"),
+                    what: "a divisor",
+                    value: y.v,
+                });
+            }
+            let n = x.v.round() as i64;
+            let v = if name == "div" {
+                n.div_euclid(d)
+            } else {
+                n.rem_euclid(d)
+            };
+            Ok(Value::Num(Num {
+                v: v as f64,
+                dim: Dim::Count,
+                src: values::join_src(&x.src, &y.src),
+            }))
         }
         "atan2" => {
             let a = Args::bind(ev, name, &["y", "x"], args, span)?;

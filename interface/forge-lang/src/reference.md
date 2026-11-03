@@ -162,7 +162,9 @@ counter-clockwise loop), `hline(y)`, `vline(x)` (in this sketch), `meet(LINE, LI
 cross, as `(x, y)` in this sketch). LINE: a sketch line of any sketch, or one of these.
 
 Helpers: `polar(n: count, r, start: A)` gives n points round the origin. Math: `sqrt sin cos tan
-asin acos atan atan2(y, x) abs min max len pi`.
+asin acos atan atan2(y, x) abs min max len pi`. Index arithmetic on counts: `div(k, n)` (the
+whole quotient) and `mod(k, n)` (the remainder), so `xs[mod(k, 3)], ys[div(k, 3)]` walks a grid.
+`k / n` of counts is a count only where it comes out whole (else a Ratio): use `div`.
 
 ## Features
 
@@ -703,9 +705,13 @@ expect clearance(arm, post) >= 2 at crank.turn = 90deg
 - **Expect:** `interferences`, `interference(a, b)` (volume), `clearance(a, b)`, `distance(a, b)`
   (origins), `x|y|z(a)`, `value(j.turn)`, `mobility`; `at P = V, ..` holds params for that line.
   Wherever an instance goes, a reference does too (`x(rail.eia[0])`, `z(crank.bar.end)`): its
-  frame in the world. An expect that cannot be measured is the error `ExpectUnevaluable` (why:
-  a missing argument, no such reference, not a place, no joint value), never skipped; `fg run
-  --json` lists every expect with its measured value, limit and verdict.
+  frame in the world. A subassembly is all of its parts: `clearance(s, a)` is the least over
+  them, `interference(s, a)` their summed volume. `interference(a, b)` is the solids' exact
+  shared volume whatever a fit or fit rule says (fits change only which overlaps warn;
+  `interferences` counts the unintended ones). An expect that cannot be measured is the error
+  `ExpectUnevaluable` (why: a missing argument, no such reference, not a place, no solid, no
+  joint value), never skipped; `fg run --json` lists every expect with its measured value, limit
+  and verdict.
 - **Results**, typed: errors `BrokenAnchor`, `WrongReference`, `Conflict` (the minimal set,
   per constraint with its joint; fix: delete the statement left out), `LimitViolated` (fix:
   SetParam the drive to the nearer limit), `NotConverged`, `NoGround`, `UnknownKind`,
