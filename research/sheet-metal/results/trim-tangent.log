@@ -1,0 +1,960 @@
+bseq tangent 2 0 REFUSED Bool { index: 0, why: ZeroThickness { at: Point3 { x: 84.36374040137999, y: 0.0, z: 0.11109333333333327 } } }
+bnary tangent 2 0 REFUSED Bool { index: 0, why: ZeroThickness { at: Point3 { x: 84.36374040137999, y: 0.0, z: 0.11109333333333327 } } }
+bseq tangent 2 1 Good area 43962.662693773 ref 43962.662662390 err 1.5e-5 comps 1
+bnary tangent 2 1 Good area 43962.662693773 ref 43962.662662390 err 1.5e-5 comps 1
+bseq tangent 2 2 REFUSED Bool { index: 0, why: ZeroThickness { at: Point3 { x: 95.80244408039553, y: 0.0, z: 0.11109333333333327 } } }
+bnary tangent 2 2 REFUSED Bool { index: 0, why: ZeroThickness { at: Point3 { x: 95.80244408039553, y: 0.0, z: 0.11109333333333327 } } }
+bseq tangent 2 3 REFUSED Bool { index: 0, why: ZeroThickness { at: Point3 { x: 179.4764797062796, y: 0.0, z: 0.11109333333333327 } } }
+bnary tangent 2 3 REFUSED Bool { index: 0, why: ZeroThickness { at: Point3 { x: 179.4764797062796, y: 0.0, z: 0.11109333333333327 } } }
+bseq tangent 2 4 Good area 44374.305258829 ref 44374.305271160 err 8.0e-6 comps 1
+bnary tangent 2 4 Good area 44374.305258829 ref 44374.305271160 err 8.0e-6 comps 1
+bseq tangent 2 5 REFUSED Bool { index: 0, why: ZeroThickness { at: Point3 { x: 119.12597546537442, y: 0.0, z: 0.11109333333333327 } } }
+bnary tangent 2 5 REFUSED Bool { index: 0, why: ZeroThickness { at: Point3 { x: 119.12597546537442, y: 0.0, z: 0.11109333333333327 } } }
+bseq tangent 2 6 REFUSED Bool { index: 1, why: ZeroThickness { at: Point3 { x: 154.15044534546888, y: 115.35997303199022, z: 0.11109333333333327 } } }
+bnary tangent 2 6 REFUSED Bool { index: 0, why: ZeroThickness { at: Point3 { x: 154.15044534546888, y: 115.35997303199022, z: 0.11110222222222221 } } }
+bseq tangent 2 7 REFUSED Bool { index: 1, why: ZeroThickness { at: Point3 { x: 129.58668848248027, y: 121.6259272679196, z: 0.11109333333333327 } } }
+bnary tangent 2 7 REFUSED Bool { index: 0, why: ZeroThickness { at: Point3 { x: 129.58668848248027, y: 121.6259272679196, z: 0.11110222222222221 } } }
+bseq tangent 2 8 REFUSED Bool { index: 0, why: ZeroThickness { at: Point3 { x: 275.7140028475874, y: 0.0, z: 0.11109333333333327 } } }
+bnary tangent 2 8 REFUSED Bool { index: 0, why: ZeroThickness { at: Point3 { x: 275.7140028475874, y: 0.0, z: 0.11109333333333327 } } }
+bseq tangent 2 9 Good area 44978.539816340 ref 44978.539834381 err 9.4e-6 comps 1
+bnary tangent 2 9 Good area 44978.539816340 ref 44978.539834381 err 9.4e-6 comps 1
+bseq tangent 2 10 Good area 44978.539816340 ref 44978.539834381 err 9.4e-6 comps 1
+bnary tangent 2 10 Good area 44978.539816340 ref 44978.539834381 err 9.4e-6 comps 1
+bseq tangent 2 11 REFUSED Bool { index: 1, why: ZeroThickness { at: Point3 { x: 142.9675442346707, y: 75.51117459311709, z: 0.11109333333333327 } } }
+bnary tangent 2 11 REFUSED Bool { index: 0, why: ZeroThickness { at: Point3 { x: 142.9675442346707, y: 75.51117459311709, z: 0.11110222222222221 } } }
+bseq tangent 2 12 REFUSED Bool { index: 1, why: ZeroThickness { at: Point3 { x: 64.91436253196936, y: 63.769441062727566, z: 0.11109333333333327 } } }
+bnary tangent 2 12 REFUSED Bool { index: 0, why: ZeroThickness { at: Point3 { x: 64.91436253196936, y: 63.769441062727566, z: 0.11110222222222221 } } }
+bseq tangent 2 13 Good area 44978.539816340 ref 44978.539834381 err 9.4e-6 comps 1
+bnary tangent 2 13 Good area 44978.539816340 ref 44978.539834381 err 9.4e-6 comps 1
+bseq tangent 2 14 Good area 43304.401017038 ref 43304.401032373 err 1.0e-5 comps 1
+bnary tangent 2 14 Good area 43304.401017038 ref 43304.401032373 err 1.0e-5 comps 1
+bseq tangent 2 15 REFUSED Bool { index: 1, why: ZeroThickness { at: Point3 { x: 212.09306570507005, y: 120.42672158111282, z: 0.11109333333333327 } } }
+bnary tangent 2 15 REFUSED Bool { index: 0, why: ZeroThickness { at: Point3 { x: 212.09306570507005, y: 120.42672158111282, z: 0.11110222222222221 } } }
+bseq tangent 2 16 REFUSED Bool { index: 1, why: ZeroThickness { at: Point3 { x: 168.8872801264285, y: 77.88913439030934, z: 0.11109333333333327 } } }
+bnary tangent 2 16 REFUSED Bool { index: 0, why: ZeroThickness { at: Point3 { x: 168.8872801264285, y: 77.88913439030934, z: 0.11110222222222221 } } }
+bseq tangent 2 17 Good area 43282.608657590 ref 43282.608704208 err 2.0e-5 comps 1
+bnary tangent 2 17 Good area 43282.608657590 ref 43282.608704208 err 2.0e-5 comps 1
+bseq tangent 2 18 REFUSED Bool { index: 1, why: ZeroThickness { at: Point3 { x: 257.6423465764233, y: 82.68160561663917, z: 0.11109333333333327 } } }
+bnary tangent 2 18 REFUSED Bool { index: 0, why: ZeroThickness { at: Point3 { x: 257.6423465764233, y: 82.68160561663917, z: 0.11110222222222221 } } }
+bseq tangent 2 19 Good area 42844.822046992 ref 42844.822073429 err 1.5e-5 comps 1
+bnary tangent 2 19 Good area 42844.822046992 ref 42844.822073429 err 1.5e-5 comps 1
+bseq tangent 2 20 REFUSED Bool { index: 0, why: ZeroThickness { at: Point3 { x: 59.81786483849301, y: 0.0, z: 0.11109333333333327 } } }
+bnary tangent 2 20 REFUSED Bool { index: 0, why: ZeroThickness { at: Point3 { x: 59.81786483849301, y: 0.0, z: 0.11109333333333327 } } }
+bseq tangent 2 21 REFUSED Bool { index: 0, why: ZeroThickness { at: Point3 { x: 134.56103249281085, y: 0.0, z: 0.11109333333333327 } } }
+bnary tangent 2 21 REFUSED Bool { index: 0, why: ZeroThickness { at: Point3 { x: 134.56103249281085, y: 0.0, z: 0.11109333333333327 } } }
+bseq tangent 2 22 REFUSED Bool { index: 1, why: ZeroThickness { at: Point3 { x: 146.28057903167814, y: 89.75411156469039, z: 0.11109333333333327 } } }
+bnary tangent 2 22 REFUSED Bool { index: 0, why: ZeroThickness { at: Point3 { x: 146.28057903167814, y: 89.75411156469039, z: 0.11110222222222221 } } }
+bseq tangent 2 23 Good area 42649.871213051 ref 42649.871277866 err 4.9e-6 comps 1
+bnary tangent 2 23 Good area 42649.871213051 ref 42649.871277866 err 4.9e-6 comps 1
+bseq tangent 2 24 Good area 44083.838032590 ref 44083.838062963 err 9.6e-6 comps 1
+bnary tangent 2 24 Good area 44083.838032590 ref 44083.838062963 err 9.6e-6 comps 1
+bseq tangent 2 25 REFUSED Bool { index: 1, why: ZeroThickness { at: Point3 { x: 198.12685865707147, y: 83.40321357293071, z: 0.11109333333333327 } } }
+bnary tangent 2 25 REFUSED Bool { index: 0, why: ZeroThickness { at: Point3 { x: 198.12685865707147, y: 83.40321357293071, z: 0.11110222222222221 } } }
+bseq tangent 2 26 REFUSED Bool { index: 1, why: ZeroThickness { at: Point3 { x: 231.12723571427108, y: 126.00047687032495, z: 0.11109333333333327 } } }
+bnary tangent 2 26 REFUSED Bool { index: 0, why: ZeroThickness { at: Point3 { x: 231.12723571427108, y: 126.00047687032495, z: 0.11110222222222221 } } }
+bseq tangent 2 27 REFUSED Bool { index: 1, why: ZeroThickness { at: Point3 { x: 184.58628932468415, y: 45.473582871171075, z: 0.11109333333333327 } } }
+bnary tangent 2 27 REFUSED Bool { index: 0, why: ZeroThickness { at: Point3 { x: 184.58628932468415, y: 45.473582871171075, z: 0.11110222222222221 } } }
+bseq tangent 2 28 Good area 43463.399630316 ref 43463.399685643 err 3.2e-5 comps 1
+bnary tangent 2 28 Good area 43463.399630316 ref 43463.399685643 err 3.2e-5 comps 1
+bseq tangent 2 29 Good area 44222.194662152 ref 44222.194712802 err 5.2e-5 comps 1
+bnary tangent 2 29 Good area 44222.194662152 ref 44222.194712802 err 5.2e-5 comps 1
+bseq tangent 2 30 REFUSED Bool { index: 1, why: ZeroThickness { at: Point3 { x: 228.5455695165417, y: 123.56983392065148, z: 0.11109333333333327 } } }
+bnary tangent 2 30 REFUSED Bool { index: 0, why: ZeroThickness { at: Point3 { x: 228.5455695165417, y: 123.56983392065148, z: 0.11110222222222221 } } }
+bseq tangent 2 31 REFUSED Bool { index: 0, why: ZeroThickness { at: Point3 { x: 202.90328394925507, y: 0.0, z: 0.11109333333333327 } } }
+bnary tangent 2 31 REFUSED Bool { index: 0, why: ZeroThickness { at: Point3 { x: 202.90328394925507, y: 0.0, z: 0.11109333333333327 } } }
+bseq tangent 2 32 REFUSED Bool { index: 0, why: ZeroThickness { at: Point3 { x: 153.52632663760568, y: 0.0, z: 0.11109333333333327 } } }
+bnary tangent 2 32 REFUSED Bool { index: 0, why: ZeroThickness { at: Point3 { x: 153.52632663760568, y: 0.0, z: 0.11109333333333327 } } }
+bseq tangent 2 33 REFUSED Bool { index: 1, why: ZeroThickness { at: Point3 { x: 248.05612500335326, y: 50.642701806024654, z: 0.11109333333333327 } } }
+bnary tangent 2 33 REFUSED Bool { index: 0, why: ZeroThickness { at: Point3 { x: 248.05612500335326, y: 50.642701806024654, z: 0.11110222222222221 } } }
+bseq tangent 2 34 Good area 44978.539816340 ref 44978.539834381 err 9.4e-6 comps 1
+bnary tangent 2 34 Good area 44978.539816340 ref 44978.539834381 err 9.4e-6 comps 1
+bseq tangent 2 35 REFUSED Bool { index: 0, why: ZeroThickness { at: Point3 { x: 125.26962107200933, y: 0.0, z: 0.11109333333333327 } } }
+bnary tangent 2 35 REFUSED Bool { index: 0, why: ZeroThickness { at: Point3 { x: 125.26962107200933, y: 0.0, z: 0.11109333333333327 } } }
+bseq tangent 2 36 REFUSED Bool { index: 1, why: ZeroThickness { at: Point3 { x: 199.19171852089474, y: 58.93333419132654, z: 0.11109333333333327 } } }
+bnary tangent 2 36 REFUSED Bool { index: 0, why: ZeroThickness { at: Point3 { x: 199.19171852089474, y: 58.93333419132654, z: 0.11110222222222221 } } }
+bseq tangent 2 37 Good area 44978.539816340 ref 44978.539834381 err 9.4e-6 comps 1
+bnary tangent 2 37 Good area 44978.539816340 ref 44978.539834381 err 9.4e-6 comps 1
+bseq tangent 2 38 REFUSED Bool { index: 1, why: ZeroThickness { at: Point3 { x: 130.96399098123283, y: 118.49770331262211, z: 0.11109333333333327 } } }
+bnary tangent 2 38 REFUSED Bool { index: 0, why: ZeroThickness { at: Point3 { x: 130.96399098123283, y: 118.49770331262211, z: 0.11110222222222221 } } }
+bseq tangent 2 39 REFUSED Bool { index: 1, why: ZeroThickness { at: Point3 { x: 122.01360112616081, y: 70.74903267817074, z: 0.11109333333333327 } } }
+bnary tangent 2 39 REFUSED Bool { index: 0, why: ZeroThickness { at: Point3 { x: 122.01360112616081, y: 70.74903267817074, z: 0.11110222222222221 } } }
+bseq tangent 2 40 REFUSED Bool { index: 1, why: ZeroThickness { at: Point3 { x: 71.27825227811874, y: 89.83980505917768, z: 0.11109333333333327 } } }
+bnary tangent 2 40 REFUSED Bool { index: 0, why: ZeroThickness { at: Point3 { x: 71.27825227811874, y: 89.83980505917768, z: 0.11110222222222221 } } }
+bseq tangent 2 41 REFUSED Bool { index: 1, why: ZeroThickness { at: Point3 { x: 133.67280153242623, y: 52.255982027850386, z: 0.11109333333333327 } } }
+bnary tangent 2 41 REFUSED Bool { index: 0, why: ZeroThickness { at: Point3 { x: 133.67280153242623, y: 52.255982027850386, z: 0.11110222222222221 } } }
+bseq tangent 2 42 Good area 44978.539816340 ref 44978.539834381 err 9.4e-6 comps 1
+bnary tangent 2 42 Good area 44978.539816340 ref 44978.539834381 err 9.4e-6 comps 1
+bseq tangent 2 43 REFUSED Bool { index: 0, why: ZeroThickness { at: Point3 { x: 119.63319617207374, y: 0.0, z: 0.11109333333333327 } } }
+bnary tangent 2 43 REFUSED Bool { index: 0, why: ZeroThickness { at: Point3 { x: 119.63319617207374, y: 0.0, z: 0.11109333333333327 } } }
+bseq tangent 2 44 REFUSED Bool { index: 1, why: ZeroThickness { at: Point3 { x: 30.23207274625817, y: 53.995526040503954, z: 0.11109333333333327 } } }
+bnary tangent 2 44 REFUSED Bool { index: 0, why: ZeroThickness { at: Point3 { x: 30.23207274625817, y: 53.995526040503954, z: 0.11110222222222221 } } }
+bseq tangent 2 45 Good area 44828.409151009 ref 44828.409146454 err 7.8e-7 comps 1
+bnary tangent 2 45 Good area 44828.409151009 ref 44828.409146454 err 7.8e-7 comps 1
+bseq tangent 2 46 REFUSED Bool { index: 0, why: ZeroThickness { at: Point3 { x: 277.88815794206255, y: 0.0, z: 0.11109333333333327 } } }
+bnary tangent 2 46 REFUSED Bool { index: 0, why: ZeroThickness { at: Point3 { x: 277.88815794206255, y: 0.0, z: 0.11109333333333327 } } }
+bseq tangent 2 47 Good area 43703.854391376 ref 43703.854419409 err 6.0e-6 comps 1
+bnary tangent 2 47 Good area 43703.854391376 ref 43703.854419409 err 6.0e-6 comps 1
+bseq tangent 2 48 Good area 44218.656158014 ref 44218.656140146 err 7.3e-6 comps 1
+bnary tangent 2 48 Good area 44218.656158014 ref 44218.656140146 err 7.3e-6 comps 1
+bseq tangent 2 49 REFUSED Bool { index: 0, why: ZeroThickness { at: Point3 { x: 252.47765004692133, y: 0.0, z: 0.11109333333333327 } } }
+bnary tangent 2 49 REFUSED Bool { index: 0, why: ZeroThickness { at: Point3 { x: 252.47765004692133, y: 0.0, z: 0.11109333333333327 } } }
+bseq tangent 2 50 REFUSED Bool { index: 1, why: ZeroThickness { at: Point3 { x: 178.1655629712515, y: 118.38350299373727, z: 0.11109333333333327 } } }
+bnary tangent 2 50 REFUSED Bool { index: 0, why: ZeroThickness { at: Point3 { x: 178.1655629712515, y: 118.38350299373727, z: 0.11110222222222221 } } }
+bseq tangent 2 51 REFUSED Bool { index: 0, why: ZeroThickness { at: Point3 { x: 152.9643113067219, y: 0.0, z: 0.11109333333333327 } } }
+bnary tangent 2 51 REFUSED Bool { index: 0, why: ZeroThickness { at: Point3 { x: 152.9643113067219, y: 0.0, z: 0.11109333333333327 } } }
+bseq tangent 2 52 REFUSED Bool { index: 1, why: ZeroThickness { at: Point3 { x: 68.53425236821218, y: 98.37191063266971, z: 0.11109333333333327 } } }
+bnary tangent 2 52 REFUSED Bool { index: 0, why: ZeroThickness { at: Point3 { x: 68.53425236821218, y: 98.37191063266971, z: 0.11110222222222221 } } }
+bseq tangent 2 53 REFUSED Bool { index: 1, why: ZeroThickness { at: Point3 { x: 70.72768325146964, y: 102.74719707014674, z: 0.11109333333333327 } } }
+bnary tangent 2 53 REFUSED Bool { index: 0, why: ZeroThickness { at: Point3 { x: 70.72768325146964, y: 102.74719707014674, z: 0.11110222222222221 } } }
+bseq tangent 2 54 REFUSED Bool { index: 0, why: ZeroThickness { at: Point3 { x: 121.26270102420682, y: 0.0, z: 0.11109333333333327 } } }
+bnary tangent 2 54 REFUSED Bool { index: 0, why: ZeroThickness { at: Point3 { x: 121.26270102420682, y: 0.0, z: 0.11109333333333327 } } }
+bseq tangent 2 55 REFUSED Bool { index: 1, why: ZeroThickness { at: Point3 { x: 147.9351282249902, y: 45.91535870665879, z: 0.11109333333333327 } } }
+bnary tangent 2 55 REFUSED Bool { index: 0, why: ZeroThickness { at: Point3 { x: 147.9351282249902, y: 45.91535870665879, z: 0.11110222222222221 } } }
+bseq tangent 2 56 REFUSED Bool { index: 1, why: ZeroThickness { at: Point3 { x: 193.88675854106089, y: 118.88729092214524, z: 0.11109333333333327 } } }
+bnary tangent 2 56 REFUSED Bool { index: 0, why: ZeroThickness { at: Point3 { x: 193.88675854106089, y: 118.88729092214524, z: 0.11110222222222221 } } }
+bseq tangent 2 57 Good area 43703.030481100 ref 43703.030566132 err 1.8e-5 comps 1
+bnary tangent 2 57 Good area 43703.030481100 ref 43703.030566132 err 1.8e-5 comps 1
+bseq tangent 2 58 REFUSED Bool { index: 0, why: ZeroThickness { at: Point3 { x: 63.01532671397503, y: 0.0, z: 0.11109333333333327 } } }
+bnary tangent 2 58 REFUSED Bool { index: 0, why: ZeroThickness { at: Point3 { x: 63.01532671397503, y: 0.0, z: 0.11109333333333327 } } }
+bseq tangent 2 59 Good area 44978.539816340 ref 44978.539834381 err 9.4e-6 comps 1
+bnary tangent 2 59 Good area 44978.539816340 ref 44978.539834381 err 9.4e-6 comps 1
+bseq tangent 2 60 REFUSED Bool { index: 1, why: ZeroThickness { at: Point3 { x: 95.76686550653542, y: 83.14527525038906, z: 0.11109333333333327 } } }
+bnary tangent 2 60 REFUSED Bool { index: 0, why: ZeroThickness { at: Point3 { x: 95.76686550653542, y: 83.14527525038906, z: 0.11110222222222221 } } }
+bseq tangent 2 61 REFUSED Bool { index: 1, why: ZeroThickness { at: Point3 { x: 202.4834942186431, y: 34.40727699995392, z: 0.11109333333333327 } } }
+bnary tangent 2 61 REFUSED Bool { index: 0, why: ZeroThickness { at: Point3 { x: 202.4834942186431, y: 34.40727699995392, z: 0.11110222222222221 } } }
+bseq tangent 2 62 REFUSED Bool { index: 1, why: ZeroThickness { at: Point3 { x: 103.71849466651352, y: 119.53776354632485, z: 0.11109333333333327 } } }
+bnary tangent 2 62 REFUSED Bool { index: 0, why: ZeroThickness { at: Point3 { x: 103.71849466651352, y: 119.53776354632485, z: 0.11110222222222221 } } }
+bseq tangent 2 63 REFUSED Bool { index: 1, why: ZeroThickness { at: Point3 { x: 135.86748869108226, y: 120.69407683639798, z: 0.11109333333333327 } } }
+bnary tangent 2 63 REFUSED Bool { index: 0, why: ZeroThickness { at: Point3 { x: 135.86748869108226, y: 120.69407683639798, z: 0.11110222222222221 } } }
+bseq tangent 2 64 REFUSED Bool { index: 1, why: ZeroThickness { at: Point3 { x: 53.228449426514274, y: 78.80038590729775, z: 0.11109333333333327 } } }
+bnary tangent 2 64 REFUSED Bool { index: 0, why: ZeroThickness { at: Point3 { x: 53.228449426514274, y: 78.80038590729775, z: 0.11110222222222221 } } }
+bseq tangent 2 65 REFUSED Bool { index: 1, why: ZeroThickness { at: Point3 { x: 135.04898189634088, y: 55.5849432581206, z: 0.11109333333333327 } } }
+bnary tangent 2 65 REFUSED Bool { index: 0, why: ZeroThickness { at: Point3 { x: 135.04898189634088, y: 55.5849432581206, z: 0.11110222222222221 } } }
+bseq tangent 2 66 Good area 43897.713158716 ref 43897.713200712 err 7.7e-6 comps 1
+bnary tangent 2 66 Good area 43897.713158716 ref 43897.713200712 err 7.7e-6 comps 1
+bseq tangent 2 67 REFUSED Bool { index: 1, why: ZeroThickness { at: Point3 { x: 70.96668673830159, y: 55.32657108745894, z: 0.11109333333333327 } } }
+bnary tangent 2 67 REFUSED Bool { index: 0, why: ZeroThickness { at: Point3 { x: 70.96668673830159, y: 55.32657108745894, z: 0.11110222222222221 } } }
+bseq tangent 2 68 Good area 42572.303922256 ref 42572.304000559 err 2.0e-5 comps 1
+bnary tangent 2 68 Good area 42572.303922256 ref 42572.304000559 err 2.0e-5 comps 1
+bseq tangent 2 69 REFUSED Bool { index: 0, why: ZeroThickness { at: Point3 { x: 55.62890419857194, y: 0.0, z: 0.11109333333333327 } } }
+bnary tangent 2 69 REFUSED Bool { index: 0, why: ZeroThickness { at: Point3 { x: 55.62890419857194, y: 0.0, z: 0.11109333333333327 } } }
+bseq tangent 2 70 REFUSED Bool { index: 1, why: ZeroThickness { at: Point3 { x: 60.07739363902539, y: 102.70484130239284, z: 0.11109333333333327 } } }
+bnary tangent 2 70 REFUSED Bool { index: 0, why: ZeroThickness { at: Point3 { x: 60.07739363902539, y: 102.70484130239284, z: 0.11110222222222221 } } }
+bseq tangent 2 71 Good area 44016.985632994 ref 44016.985651804 err 2.3e-5 comps 1
+bnary tangent 2 71 Good area 44016.985632994 ref 44016.985651804 err 2.3e-5 comps 1
+bseq tangent 2 72 REFUSED Bool { index: 0, why: ZeroThickness { at: Point3 { x: 150.34804291001123, y: 0.0, z: 0.11109333333333327 } } }
+bnary tangent 2 72 REFUSED Bool { index: 0, why: ZeroThickness { at: Point3 { x: 150.34804291001123, y: 0.0, z: 0.11109333333333327 } } }
+bseq tangent 2 73 Good area 42916.788239888 ref 42916.788281573 err 1.1e-6 comps 1
+bnary tangent 2 73 Good area 42916.788239888 ref 42916.788281573 err 1.1e-6 comps 1
+bseq tangent 2 74 REFUSED Bool { index: 1, why: ZeroThickness { at: Point3 { x: 61.514138299045335, y: 91.75865385158886, z: 0.11109333333333327 } } }
+bnary tangent 2 74 REFUSED Bool { index: 0, why: ZeroThickness { at: Point3 { x: 61.514138299045335, y: 91.75865385158886, z: 0.11110222222222221 } } }
+bseq tangent 2 75 REFUSED Bool { index: 1, why: ZeroThickness { at: Point3 { x: 212.63531309896194, y: 114.66557004738308, z: 0.11109333333333327 } } }
+bnary tangent 2 75 REFUSED Bool { index: 0, why: ZeroThickness { at: Point3 { x: 212.63531309896194, y: 114.66557004738308, z: 0.11110222222222221 } } }
+bseq tangent 2 76 REFUSED Bool { index: 0, why: ZeroThickness { at: Point3 { x: 60.85141197057575, y: 0.0, z: 0.11109333333333327 } } }
+bnary tangent 2 76 REFUSED Bool { index: 0, why: ZeroThickness { at: Point3 { x: 60.85141197057575, y: 0.0, z: 0.11109333333333327 } } }
+bseq tangent 2 77 REFUSED Bool { index: 1, why: ZeroThickness { at: Point3 { x: 261.13381562914765, y: 0.0, z: 0.11109333333333327 } } }
+bnary tangent 2 77 REFUSED Bool { index: 0, why: ZeroThickness { at: Point3 { x: 261.13381562914765, y: 0.0, z: 0.11109333333333327 } } }
+bseq tangent 2 78 Good area 42984.465932267 ref 42984.465917735 err 8.1e-6 comps 1
+bnary tangent 2 78 Good area 42984.465932267 ref 42984.465917735 err 8.1e-6 comps 1
+bseq tangent 2 79 REFUSED Bool { index: 1, why: ZeroThickness { at: Point3 { x: 165.38217364429968, y: 119.96710873123347, z: 0.11109333333333327 } } }
+bnary tangent 2 79 REFUSED Bool { index: 0, why: ZeroThickness { at: Point3 { x: 165.38217364429968, y: 119.96710873123347, z: 0.11110222222222221 } } }
+bseq tangent 2 80 Good area 44457.286764412 ref 44457.286753214 err 7.3e-6 comps 1
+bnary tangent 2 80 Good area 44457.286764412 ref 44457.286753214 err 7.3e-6 comps 1
+bseq tangent 2 81 REFUSED Bool { index: 1, why: ZeroThickness { at: Point3 { x: 218.71850585407856, y: 114.57755063650788, z: 0.11109333333333327 } } }
+bnary tangent 2 81 REFUSED Bool { index: 0, why: ZeroThickness { at: Point3 { x: 218.71850585407856, y: 114.57755063650788, z: 0.11110222222222221 } } }
+bseq tangent 2 82 REFUSED Bool { index: 1, why: ZeroThickness { at: Point3 { x: 150.08692666941397, y: 66.89300277991781, z: 0.11109333333333327 } } }
+bnary tangent 2 82 REFUSED Bool { index: 0, why: ZeroThickness { at: Point3 { x: 150.08692666941397, y: 66.89300277991781, z: 0.11110222222222221 } } }
+bseq tangent 2 83 REFUSED Bool { index: 1, why: ZeroThickness { at: Point3 { x: 126.70442944528936, y: 67.05906984655506, z: 0.11109333333333327 } } }
+bnary tangent 2 83 REFUSED Bool { index: 0, why: ZeroThickness { at: Point3 { x: 126.70442944528936, y: 67.05906984655506, z: 0.11110222222222221 } } }
+bseq tangent 2 84 REFUSED Bool { index: 1, why: ZeroThickness { at: Point3 { x: 244.43679062368443, y: 122.5540094087503, z: 0.11109333333333327 } } }
+bnary tangent 2 84 REFUSED Bool { index: 0, why: ZeroThickness { at: Point3 { x: 244.43679062368443, y: 122.5540094087503, z: 0.11110222222222221 } } }
+bseq tangent 2 85 Good area 44247.956225484 ref 44247.956222788 err 1.4e-5 comps 1
+bnary tangent 2 85 Good area 44247.956225484 ref 44247.956222788 err 1.4e-5 comps 1
+bseq tangent 2 86 REFUSED Bool { index: 1, why: ZeroThickness { at: Point3 { x: 76.53511357352761, y: 80.67453404454966, z: 0.11109333333333327 } } }
+bnary tangent 2 86 REFUSED Bool { index: 0, why: ZeroThickness { at: Point3 { x: 76.53511357352761, y: 80.67453404454966, z: 0.11110222222222221 } } }
+bseq tangent 2 87 REFUSED Bool { index: 1, why: ZeroThickness { at: Point3 { x: 103.28780238722153, y: 111.46167913808776, z: 0.11109333333333327 } } }
+bnary tangent 2 87 REFUSED Bool { index: 0, why: ZeroThickness { at: Point3 { x: 103.28780238722153, y: 111.46167913808776, z: 0.11110222222222221 } } }
+bseq tangent 2 88 REFUSED Bool { index: 1, why: ZeroThickness { at: Point3 { x: 248.22110487358717, y: 47.663404212780534, z: 0.11109333333333327 } } }
+bnary tangent 2 88 REFUSED Bool { index: 0, why: ZeroThickness { at: Point3 { x: 248.22110487358717, y: 47.663404212780534, z: 0.11110222222222221 } } }
+bseq tangent 2 89 Good area 44978.539816340 ref 44978.539834381 err 9.4e-6 comps 1
+bnary tangent 2 89 Good area 44978.539816340 ref 44978.539834381 err 9.4e-6 comps 1
+bseq tangent 2 90 REFUSED Bool { index: 1, why: ZeroThickness { at: Point3 { x: 155.8003265530615, y: 76.68036993234851, z: 0.11109333333333327 } } }
+bnary tangent 2 90 REFUSED Bool { index: 0, why: ZeroThickness { at: Point3 { x: 155.8003265530615, y: 76.68036993234851, z: 0.11110222222222221 } } }
+bseq tangent 2 91 REFUSED Bool { index: 0, why: ZeroThickness { at: Point3 { x: 107.56745973003099, y: 0.0, z: 0.11109333333333327 } } }
+bnary tangent 2 91 REFUSED Bool { index: 0, why: ZeroThickness { at: Point3 { x: 107.56745973003099, y: 0.0, z: 0.11109333333333327 } } }
+bseq tangent 2 92 REFUSED Bool { index: 0, why: ZeroThickness { at: Point3 { x: 39.59084868608582, y: 0.0, z: 0.11109333333333327 } } }
+bnary tangent 2 92 REFUSED Bool { index: 0, why: ZeroThickness { at: Point3 { x: 39.59084868608582, y: 0.0, z: 0.11109333333333327 } } }
+bseq tangent 2 93 REFUSED Bool { index: 1, why: ZeroThickness { at: Point3 { x: 175.51727895101135, y: 72.44977174348868, z: 0.11109333333333327 } } }
+bnary tangent 2 93 REFUSED Bool { index: 0, why: ZeroThickness { at: Point3 { x: 175.51727895101135, y: 72.44977174348868, z: 0.11110222222222221 } } }
+bseq tangent 2 94 Good area 44978.539816340 ref 44978.539834381 err 9.4e-6 comps 1
+bnary tangent 2 94 Good area 44978.539816340 ref 44978.539834381 err 9.4e-6 comps 1
+bseq tangent 2 95 REFUSED Bool { index: 1, why: ZeroThickness { at: Point3 { x: 166.0837853807849, y: 0.0, z: 0.11109333333333327 } } }
+bnary tangent 2 95 REFUSED Bool { index: 0, why: ZeroThickness { at: Point3 { x: 166.0837853807849, y: 0.0, z: 0.11109333333333327 } } }
+bseq tangent 2 96 REFUSED Bool { index: 1, why: ZeroThickness { at: Point3 { x: 91.09247753084024, y: 102.6939249467298, z: 0.11109333333333327 } } }
+bnary tangent 2 96 REFUSED Bool { index: 0, why: ZeroThickness { at: Point3 { x: 91.09247753084024, y: 102.6939249467298, z: 0.11110222222222221 } } }
+bseq tangent 2 97 Good area 44978.539816340 ref 44978.539834381 err 9.4e-6 comps 1
+bnary tangent 2 97 Good area 44978.539816340 ref 44978.539834381 err 9.4e-6 comps 1
+bseq tangent 2 98 REFUSED Bool { index: 1, why: ZeroThickness { at: Point3 { x: 66.3467697237528, y: 96.58809961993073, z: 0.11109333333333327 } } }
+bnary tangent 2 98 REFUSED Bool { index: 0, why: ZeroThickness { at: Point3 { x: 66.3467697237528, y: 96.58809961993073, z: 0.11110222222222221 } } }
+bseq tangent 2 99 Good area 43148.109558365 ref 43148.109613949 err 2.2e-5 comps 1
+bnary tangent 2 99 Good area 43148.109558365 ref 43148.109613949 err 2.2e-5 comps 1
+bseq tangent 2 100 Good area 44978.539816340 ref 44978.539834381 err 9.4e-6 comps 1
+bnary tangent 2 100 Good area 44978.539816340 ref 44978.539834381 err 9.4e-6 comps 1
+bseq tangent 2 101 REFUSED Bool { index: 1, why: ZeroThickness { at: Point3 { x: 82.1367777354184, y: 68.85332890432956, z: 0.11109333333333327 } } }
+bnary tangent 2 101 REFUSED Bool { index: 0, why: ZeroThickness { at: Point3 { x: 82.1367777354184, y: 68.85332890432956, z: 0.11110222222222221 } } }
+bseq tangent 2 102 REFUSED Bool { index: 1, why: ZeroThickness { at: Point3 { x: 43.09445763851579, y: 117.82308762487105, z: 0.11109333333333327 } } }
+bnary tangent 2 102 REFUSED Bool { index: 0, why: ZeroThickness { at: Point3 { x: 43.09445763851579, y: 117.82308762487105, z: 0.11110222222222221 } } }
+bseq tangent 2 103 Good area 43549.453960635 ref 43549.453995689 err 6.2e-5 comps 1
+bnary tangent 2 103 Good area 43549.453960635 ref 43549.453995689 err 6.2e-5 comps 1
+bseq tangent 2 104 REFUSED Bool { index: 1, why: ZeroThickness { at: Point3 { x: 110.23556851005924, y: 0.0, z: 0.11109333333333327 } } }
+bnary tangent 2 104 REFUSED Bool { index: 0, why: ZeroThickness { at: Point3 { x: 110.23556851005924, y: 0.0, z: 0.11109333333333327 } } }
+bseq tangent 2 105 REFUSED Bool { index: 1, why: ZeroThickness { at: Point3 { x: 211.8169628227116, y: 112.47472833465808, z: 0.11109333333333327 } } }
+bnary tangent 2 105 REFUSED Bool { index: 0, why: ZeroThickness { at: Point3 { x: 211.8169628227116, y: 112.47472833465808, z: 0.11110222222222221 } } }
+bseq tangent 2 106 REFUSED Bool { index: 1, why: ZeroThickness { at: Point3 { x: 166.26815955090262, y: 26.12385357703225, z: 0.11109333333333327 } } }
+bnary tangent 2 106 REFUSED Bool { index: 0, why: ZeroThickness { at: Point3 { x: 166.26815955090262, y: 26.12385357703225, z: 0.11110222222222221 } } }
+bseq tangent 2 107 Good area 44978.539816340 ref 44978.539834381 err 9.4e-6 comps 1
+bnary tangent 2 107 Good area 44978.539816340 ref 44978.539834381 err 9.4e-6 comps 1
+bseq tangent 2 108 REFUSED Bool { index: 1, why: ZeroThickness { at: Point3 { x: 120.32214955874174, y: 126.50939785728815, z: 0.11109333333333327 } } }
+bnary tangent 2 108 REFUSED Bool { index: 0, why: ZeroThickness { at: Point3 { x: 120.32214955874174, y: 126.50939785728815, z: 0.11110222222222221 } } }
+bseq tangent 2 109 REFUSED Bool { index: 0, why: ZeroThickness { at: Point3 { x: 110.53338217669847, y: 0.0, z: 0.11109333333333327 } } }
+bnary tangent 2 109 REFUSED Bool { index: 0, why: ZeroThickness { at: Point3 { x: 110.53338217669847, y: 0.0, z: 0.11109333333333327 } } }
+bseq tangent 2 110 REFUSED Bool { index: 1, why: ZeroThickness { at: Point3 { x: 50.704080810467175, y: 89.2050902912713, z: 0.11109333333333327 } } }
+bnary tangent 2 110 REFUSED Bool { index: 0, why: ZeroThickness { at: Point3 { x: 50.704080810467175, y: 89.2050902912713, z: 0.11110222222222221 } } }
+bseq tangent 2 111 REFUSED Bool { index: 1, why: ZeroThickness { at: Point3 { x: 255.05701855727528, y: 64.68988727928843, z: 0.11109333333333327 } } }
+bnary tangent 2 111 REFUSED Bool { index: 0, why: ZeroThickness { at: Point3 { x: 255.05701855727528, y: 64.68988727928843, z: 0.11110222222222221 } } }
+bseq tangent 2 112 REFUSED Bool { index: 1, why: ZeroThickness { at: Point3 { x: 189.4220420901289, y: 96.04248986006094, z: 0.11109333333333327 } } }
+bnary tangent 2 112 REFUSED Bool { index: 0, why: ZeroThickness { at: Point3 { x: 189.4220420901289, y: 96.04248986006094, z: 0.11110222222222221 } } }
+bseq tangent 2 113 REFUSED Bool { index: 0, why: ZeroThickness { at: Point3 { x: 64.7120062351101, y: 0.0, z: 0.11109333333333327 } } }
+bnary tangent 2 113 REFUSED Bool { index: 0, why: ZeroThickness { at: Point3 { x: 64.7120062351101, y: 0.0, z: 0.11109333333333327 } } }
+bseq tangent 2 114 REFUSED Bool { index: 1, why: ZeroThickness { at: Point3 { x: 109.09954307790667, y: 61.148270893456626, z: 0.11109333333333327 } } }
+bnary tangent 2 114 REFUSED Bool { index: 0, why: ZeroThickness { at: Point3 { x: 109.09954307790667, y: 61.148270893456626, z: 0.11110222222222221 } } }
+bseq tangent 2 115 REFUSED Bool { index: 1, why: ZeroThickness { at: Point3 { x: 145.23526218711174, y: 0.0, z: 0.11109333333333327 } } }
+bnary tangent 2 115 REFUSED Bool { index: 0, why: ZeroThickness { at: Point3 { x: 145.23526218711174, y: 0.0, z: 0.11109333333333327 } } }
+bseq tangent 2 116 REFUSED Bool { index: 1, why: ZeroThickness { at: Point3 { x: 162.19578521183988, y: 62.994181840189114, z: 0.11109333333333327 } } }
+bnary tangent 2 116 REFUSED Bool { index: 0, why: ZeroThickness { at: Point3 { x: 162.19578521183988, y: 62.994181840189114, z: 0.11110222222222221 } } }
+bseq tangent 2 117 REFUSED Bool { index: 1, why: ZeroThickness { at: Point3 { x: 59.037436902775234, y: 116.03016150990629, z: 0.11109333333333327 } } }
+bnary tangent 2 117 REFUSED Bool { index: 0, why: ZeroThickness { at: Point3 { x: 59.037436902775234, y: 116.03016150990629, z: 0.11110222222222221 } } }
+bseq tangent 2 118 Good area 44402.946318824 ref 44402.946369912 err 1.6e-5 comps 1
+bnary tangent 2 118 Good area 44402.946318824 ref 44402.946369912 err 1.6e-5 comps 1
+bseq tangent 2 119 REFUSED Bool { index: 0, why: ZeroThickness { at: Point3 { x: 69.4122079588046, y: 0.0, z: 0.11109333333333327 } } }
+bnary tangent 2 119 REFUSED Bool { index: 0, why: ZeroThickness { at: Point3 { x: 69.4122079588046, y: 0.0, z: 0.11109333333333327 } } }
+bseq tangent 2 120 REFUSED Bool { index: 0, why: ZeroThickness { at: Point3 { x: 145.51565164658155, y: 0.0, z: 0.11109333333333327 } } }
+bnary tangent 2 120 REFUSED Bool { index: 0, why: ZeroThickness { at: Point3 { x: 145.51565164658155, y: 0.0, z: 0.11109333333333327 } } }
+bseq tangent 2 121 REFUSED Bool { index: 1, why: ZeroThickness { at: Point3 { x: 202.87014067090067, y: 66.67944037650244, z: 0.11109333333333327 } } }
+bnary tangent 2 121 REFUSED Bool { index: 0, why: ZeroThickness { at: Point3 { x: 202.87014067090067, y: 66.67944037650244, z: 0.11110222222222221 } } }
+bseq tangent 2 122 REFUSED Bool { index: 1, why: ZeroThickness { at: Point3 { x: 189.55062973426598, y: 97.62161521107394, z: 0.11109333333333327 } } }
+bnary tangent 2 122 REFUSED Bool { index: 0, why: ZeroThickness { at: Point3 { x: 189.55062973426598, y: 97.62161521107394, z: 0.11110222222222221 } } }
+bseq tangent 2 123 REFUSED Bool { index: 1, why: ZeroThickness { at: Point3 { x: 250.59409584102644, y: 80.60967551653725, z: 0.11109333333333327 } } }
+bnary tangent 2 123 REFUSED Bool { index: 0, why: ZeroThickness { at: Point3 { x: 250.59409584102644, y: 80.60967551653725, z: 0.11110222222222221 } } }
+bseq tangent 2 124 Good area 44978.539816340 ref 44978.539834381 err 9.4e-6 comps 1
+bnary tangent 2 124 Good area 44978.539816340 ref 44978.539834381 err 9.4e-6 comps 1
+bseq tangent 2 125 REFUSED Bool { index: 1, why: ZeroThickness { at: Point3 { x: 47.644673056782224, y: 105.69214836589187, z: 0.11109333333333327 } } }
+bnary tangent 2 125 REFUSED Bool { index: 0, why: ZeroThickness { at: Point3 { x: 47.644673056782224, y: 105.69214836589187, z: 0.11110222222222221 } } }
+bseq tangent 2 126 REFUSED Bool { index: 1, why: ZeroThickness { at: Point3 { x: 253.1885228907866, y: 0.0, z: 0.11109333333333327 } } }
+bnary tangent 2 126 REFUSED Bool { index: 0, why: ZeroThickness { at: Point3 { x: 253.1885228907866, y: 0.0, z: 0.11109333333333327 } } }
+bseq tangent 2 127 REFUSED Bool { index: 0, why: ZeroThickness { at: Point3 { x: 185.6766621814712, y: 0.0, z: 0.11109333333333327 } } }
+bnary tangent 2 127 REFUSED Bool { index: 0, why: ZeroThickness { at: Point3 { x: 185.6766621814712, y: 0.0, z: 0.11109333333333327 } } }
+bseq tangent 2 128 Good area 44978.539816340 ref 44978.539834381 err 9.4e-6 comps 1
+bnary tangent 2 128 Good area 44978.539816340 ref 44978.539834381 err 9.4e-6 comps 1
+bseq tangent 2 129 REFUSED Bool { index: 1, why: ZeroThickness { at: Point3 { x: 180.8674713410971, y: 115.26425192623381, z: 0.11109333333333327 } } }
+bnary tangent 2 129 REFUSED Bool { index: 0, why: ZeroThickness { at: Point3 { x: 180.8674713410971, y: 115.26425192623381, z: 0.11110222222222221 } } }
+bseq tangent 2 130 REFUSED Bool { index: 1, why: ZeroThickness { at: Point3 { x: 226.05676618158995, y: 0.0, z: 0.11109333333333327 } } }
+bnary tangent 2 130 REFUSED Bool { index: 0, why: ZeroThickness { at: Point3 { x: 226.05676618158995, y: 0.0, z: 0.11109333333333327 } } }
+bseq tangent 2 131 REFUSED Bool { index: 0, why: ZeroThickness { at: Point3 { x: 179.45540938881174, y: 0.0, z: 0.11109333333333327 } } }
+bnary tangent 2 131 REFUSED Bool { index: 0, why: ZeroThickness { at: Point3 { x: 179.45540938881174, y: 0.0, z: 0.11109333333333327 } } }
+bseq tangent 2 132 Good area 43393.129873660 ref 43393.129867574 err 2.3e-6 comps 1
+bnary tangent 2 132 Good area 43393.129873660 ref 43393.129867574 err 2.3e-6 comps 1
+bseq tangent 2 133 REFUSED Bool { index: 1, why: ZeroThickness { at: Point3 { x: 62.08314422369974, y: 73.6665940868237, z: 0.11109333333333327 } } }
+bnary tangent 2 133 REFUSED Bool { index: 0, why: ZeroThickness { at: Point3 { x: 62.08314422369974, y: 73.6665940868237, z: 0.11110222222222221 } } }
+bseq tangent 2 134 REFUSED Bool { index: 1, why: ZeroThickness { at: Point3 { x: 217.63307418411836, y: 78.52084543664496, z: 0.11109333333333327 } } }
+bnary tangent 2 134 REFUSED Bool { index: 0, why: ZeroThickness { at: Point3 { x: 217.63307418411836, y: 78.52084543664496, z: 0.11110222222222221 } } }
+bseq tangent 2 135 Good area 44978.539816340 ref 44978.539834381 err 9.4e-6 comps 1
+bnary tangent 2 135 Good area 44978.539816340 ref 44978.539834381 err 9.4e-6 comps 1
+bseq tangent 2 136 REFUSED Bool { index: 1, why: ZeroThickness { at: Point3 { x: 69.37060585598968, y: 81.83848423365932, z: 0.11109333333333327 } } }
+bnary tangent 2 136 REFUSED Bool { index: 0, why: ZeroThickness { at: Point3 { x: 69.37060585598968, y: 81.83848423365932, z: 0.11110222222222221 } } }
+bseq tangent 2 137 REFUSED Bool { index: 1, why: ZeroThickness { at: Point3 { x: 30.662417796130846, y: 115.50216781632689, z: 0.11109333333333327 } } }
+bnary tangent 2 137 REFUSED Bool { index: 0, why: ZeroThickness { at: Point3 { x: 30.662417796130846, y: 115.50216781632689, z: 0.11110222222222221 } } }
+bseq tangent 2 138 Good area 44978.539816340 ref 44978.539834381 err 9.4e-6 comps 1
+bnary tangent 2 138 Good area 44978.539816340 ref 44978.539834381 err 9.4e-6 comps 1
+bseq tangent 2 139 REFUSED Bool { index: 1, why: ZeroThickness { at: Point3 { x: 130.81793832405145, y: 108.98524764320118, z: 0.11109333333333327 } } }
+bnary tangent 2 139 REFUSED Bool { index: 0, why: ZeroThickness { at: Point3 { x: 130.81793832405145, y: 108.98524764320118, z: 0.11110222222222221 } } }
+bseq tangent 2 140 REFUSED Bool { index: 1, why: ZeroThickness { at: Point3 { x: 101.57292841439022, y: 109.97831614841382, z: 0.11109333333333327 } } }
+bnary tangent 2 140 REFUSED Bool { index: 0, why: ZeroThickness { at: Point3 { x: 101.57292841439022, y: 109.97831614841382, z: 0.11110222222222221 } } }
+bseq tangent 2 141 Good area 44978.539816340 ref 44978.539834381 err 9.4e-6 comps 1
+bnary tangent 2 141 Good area 44978.539816340 ref 44978.539834381 err 9.4e-6 comps 1
+bseq tangent 2 142 REFUSED Bool { index: 1, why: ZeroThickness { at: Point3 { x: 200.80180314164593, y: 0.0, z: 0.11109333333333327 } } }
+bnary tangent 2 142 REFUSED Bool { index: 0, why: ZeroThickness { at: Point3 { x: 200.80180314164593, y: 0.0, z: 0.11109333333333327 } } }
+bseq tangent 2 143 REFUSED Bool { index: 1, why: ZeroThickness { at: Point3 { x: 209.5159607771842, y: 97.02658524055965, z: 0.11109333333333327 } } }
+bnary tangent 2 143 REFUSED Bool { index: 0, why: ZeroThickness { at: Point3 { x: 209.5159607771842, y: 97.02658524055965, z: 0.11110222222222221 } } }
+bseq tangent 2 144 Good area 44978.539816340 ref 44978.539834381 err 9.4e-6 comps 1
+bnary tangent 2 144 Good area 44978.539816340 ref 44978.539834381 err 9.4e-6 comps 1
+bseq tangent 2 145 Good area 44246.383888074 ref 44246.383922159 err 7.3e-6 comps 1
+bnary tangent 2 145 Good area 44246.383888074 ref 44246.383922159 err 7.3e-6 comps 1
+bseq tangent 2 146 REFUSED Bool { index: 0, why: ZeroThickness { at: Point3 { x: 278.21989053448476, y: 0.0, z: 0.11109333333333327 } } }
+bnary tangent 2 146 REFUSED Bool { index: 0, why: ZeroThickness { at: Point3 { x: 278.21989053448476, y: 0.0, z: 0.11109333333333327 } } }
+bseq tangent 2 147 REFUSED Bool { index: 1, why: ZeroThickness { at: Point3 { x: 65.53812833951582, y: 111.21724770692182, z: 0.11109333333333327 } } }
+bnary tangent 2 147 REFUSED Bool { index: 0, why: ZeroThickness { at: Point3 { x: 65.53812833951582, y: 111.21724770692182, z: 0.11110222222222221 } } }
+bseq tangent 2 148 Good area 44221.127054965 ref 44221.127034120 err 1.3e-5 comps 1
+bnary tangent 2 148 Good area 44221.127054965 ref 44221.127034120 err 1.3e-5 comps 1
+bseq tangent 2 149 REFUSED Bool { index: 1, why: ZeroThickness { at: Point3 { x: 241.0121422168108, y: 97.09791129825476, z: 0.11109333333333327 } } }
+bnary tangent 2 149 REFUSED Bool { index: 0, why: ZeroThickness { at: Point3 { x: 241.0121422168108, y: 97.09791129825476, z: 0.11110222222222221 } } }
+bseq tangent 2 150 REFUSED Bool { index: 0, why: ZeroThickness { at: Point3 { x: 195.5509551875833, y: 0.0, z: 0.11109333333333327 } } }
+bnary tangent 2 150 REFUSED Bool { index: 0, why: ZeroThickness { at: Point3 { x: 195.5509551875833, y: 0.0, z: 0.11109333333333327 } } }
+bseq tangent 2 151 REFUSED Bool { index: 0, why: ZeroThickness { at: Point3 { x: 224.99942080263037, y: 0.0, z: 0.11109333333333327 } } }
+bnary tangent 2 151 REFUSED Bool { index: 0, why: ZeroThickness { at: Point3 { x: 224.99942080263037, y: 0.0, z: 0.11109333333333327 } } }
+bseq tangent 2 152 REFUSED Bool { index: 1, why: ZeroThickness { at: Point3 { x: 103.16584401364089, y: 92.04607904340686, z: 0.11109333333333327 } } }
+bnary tangent 2 152 REFUSED Bool { index: 0, why: ZeroThickness { at: Point3 { x: 103.16584401364089, y: 92.04607904340686, z: 0.11110222222222221 } } }
+bseq tangent 2 153 REFUSED Bool { index: 0, why: ZeroThickness { at: Point3 { x: 106.1194749643528, y: 0.0, z: 0.11109333333333327 } } }
+bnary tangent 2 153 REFUSED Bool { index: 0, why: ZeroThickness { at: Point3 { x: 106.1194749643528, y: 0.0, z: 0.11109333333333327 } } }
+bseq tangent 2 154 Good area 43591.161291952 ref 43591.161261999 err 1.9e-5 comps 1
+bnary tangent 2 154 Good area 43591.161291952 ref 43591.161261999 err 1.9e-5 comps 1
+bseq tangent 2 155 REFUSED Bool { index: 1, why: ZeroThickness { at: Point3 { x: 223.70943767129862, y: 95.68045131725955, z: 0.11109333333333327 } } }
+bnary tangent 2 155 REFUSED Bool { index: 0, why: ZeroThickness { at: Point3 { x: 223.70943767129862, y: 95.68045131725955, z: 0.11110222222222221 } } }
+bseq tangent 2 156 REFUSED Bool { index: 1, why: ZeroThickness { at: Point3 { x: 219.98194393697239, y: 27.598513192860498, z: 0.11109333333333327 } } }
+bnary tangent 2 156 REFUSED Bool { index: 0, why: ZeroThickness { at: Point3 { x: 219.98194393697239, y: 27.598513192860498, z: 0.11110222222222221 } } }
+bseq tangent 2 157 Good area 44978.539816340 ref 44978.539834381 err 9.4e-6 comps 1
+bnary tangent 2 157 Good area 44978.539816340 ref 44978.539834381 err 9.4e-6 comps 1
+bseq tangent 2 158 Good area 44978.539816340 ref 44978.539834381 err 9.4e-6 comps 1
+bnary tangent 2 158 Good area 44978.539816340 ref 44978.539834381 err 9.4e-6 comps 1
+bseq tangent 2 159 REFUSED Bool { index: 1, why: ZeroThickness { at: Point3 { x: 204.97028471349674, y: 44.93131998901568, z: 0.11109333333333327 } } }
+bnary tangent 2 159 REFUSED Bool { index: 0, why: ZeroThickness { at: Point3 { x: 204.97028471349674, y: 44.93131998901568, z: 0.11110222222222221 } } }
+bseq tangent 2 160 REFUSED Bool { index: 1, why: ZeroThickness { at: Point3 { x: 129.3128102155245, y: 130.93328221376746, z: 0.11109333333333327 } } }
+bnary tangent 2 160 REFUSED Bool { index: 0, why: ZeroThickness { at: Point3 { x: 129.3128102155245, y: 130.93328221376746, z: 0.11110222222222221 } } }
+bseq tangent 2 161 Good area 43073.811664159 ref 43073.811699565 err 2.2e-5 comps 1
+bnary tangent 2 161 Good area 43073.811664159 ref 43073.811699565 err 2.2e-5 comps 1
+bseq tangent 2 162 Good area 44978.539816340 ref 44978.539834381 err 9.4e-6 comps 1
+bnary tangent 2 162 Good area 44978.539816340 ref 44978.539834381 err 9.4e-6 comps 1
+bseq tangent 2 163 Good area 44087.081112317 ref 44087.081135103 err 7.2e-6 comps 1
+bnary tangent 2 163 Good area 44087.081112317 ref 44087.081135103 err 7.2e-6 comps 1
+bseq tangent 2 164 REFUSED Bool { index: 1, why: ZeroThickness { at: Point3 { x: 75.0739889812172, y: 71.79384442525037, z: 0.11109333333333327 } } }
+bnary tangent 2 164 REFUSED Bool { index: 0, why: ZeroThickness { at: Point3 { x: 75.0739889812172, y: 71.79384442525037, z: 0.11110222222222221 } } }
+bseq tangent 2 165 Good area 42862.988338854 ref 42862.988355993 err 4.6e-5 comps 1
+bnary tangent 2 165 Good area 42862.988338854 ref 42862.988355993 err 4.6e-5 comps 1
+bseq tangent 2 166 Good area 44978.539816340 ref 44978.539834381 err 9.4e-6 comps 1
+bnary tangent 2 166 Good area 44978.539816340 ref 44978.539834381 err 9.4e-6 comps 1
+bseq tangent 2 167 Good area 44978.539816340 ref 44978.539834381 err 9.4e-6 comps 1
+bnary tangent 2 167 Good area 44978.539816340 ref 44978.539834381 err 9.4e-6 comps 1
+bseq tangent 2 168 REFUSED Bool { index: 1, why: ZeroThickness { at: Point3 { x: 193.04415355461117, y: 91.6105625937105, z: 0.11109333333333327 } } }
+bnary tangent 2 168 REFUSED Bool { index: 0, why: ZeroThickness { at: Point3 { x: 193.04415355461117, y: 91.6105625937105, z: 0.11110222222222221 } } }
+bseq tangent 2 169 Good area 43739.190252549 ref 43739.190235258 err 3.4e-5 comps 1
+bnary tangent 2 169 Good area 43739.190252549 ref 43739.190235258 err 3.4e-5 comps 1
+bseq tangent 2 170 REFUSED Bool { index: 0, why: ZeroThickness { at: Point3 { x: 180.43506319762275, y: 0.0, z: 0.11109333333333327 } } }
+bnary tangent 2 170 REFUSED Bool { index: 0, why: ZeroThickness { at: Point3 { x: 180.43506319762275, y: 0.0, z: 0.11109333333333327 } } }
+bseq tangent 2 171 Good area 44978.539816340 ref 44978.539834381 err 9.4e-6 comps 1
+bnary tangent 2 171 Good area 44978.539816340 ref 44978.539834381 err 9.4e-6 comps 1
+bseq tangent 2 172 REFUSED Bool { index: 1, why: ZeroThickness { at: Point3 { x: 60.159104965562975, y: 97.5076519047636, z: 0.11109333333333327 } } }
+bnary tangent 2 172 REFUSED Bool { index: 0, why: ZeroThickness { at: Point3 { x: 60.159104965562975, y: 97.5076519047636, z: 0.11110222222222221 } } }
+bseq tangent 2 173 REFUSED Bool { index: 1, why: ZeroThickness { at: Point3 { x: 210.93033854986678, y: 61.42572220078648, z: 0.11109333333333327 } } }
+bnary tangent 2 173 REFUSED Bool { index: 0, why: ZeroThickness { at: Point3 { x: 210.93033854986678, y: 61.42572220078648, z: 0.11110222222222221 } } }
+bseq tangent 2 174 Good area 43413.964404714 ref 43413.964414833 err 9.4e-6 comps 1
+bnary tangent 2 174 Good area 43413.964404714 ref 43413.964414833 err 9.4e-6 comps 1
+bseq tangent 2 175 Good area 44386.920977872 ref 44386.921001820 err 2.4e-5 comps 1
+bnary tangent 2 175 Good area 44386.920977872 ref 44386.921001820 err 2.4e-5 comps 1
+bseq tangent 2 176 Good area 44978.539816340 ref 44978.539834381 err 9.4e-6 comps 1
+bnary tangent 2 176 Good area 44978.539816340 ref 44978.539834381 err 9.4e-6 comps 1
+bseq tangent 2 177 REFUSED Bool { index: 0, why: ZeroThickness { at: Point3 { x: 277.7659930500714, y: 0.0, z: 0.11109333333333327 } } }
+bnary tangent 2 177 REFUSED Bool { index: 0, why: ZeroThickness { at: Point3 { x: 277.7659930500714, y: 0.0, z: 0.11109333333333327 } } }
+bseq tangent 2 178 Good area 44978.539816340 ref 44978.539834381 err 9.4e-6 comps 1
+bnary tangent 2 178 Good area 44978.539816340 ref 44978.539834381 err 9.4e-6 comps 1
+bseq tangent 2 179 Good area 44318.115573000 ref 44318.115548588 err 2.7e-5 comps 1
+bnary tangent 2 179 Good area 44318.115573000 ref 44318.115548588 err 2.7e-5 comps 1
+bseq tangent 2 180 REFUSED Bool { index: 0, why: ZeroThickness { at: Point3 { x: 185.17598826672238, y: 0.0, z: 0.11109333333333327 } } }
+bnary tangent 2 180 REFUSED Bool { index: 0, why: ZeroThickness { at: Point3 { x: 185.17598826672238, y: 0.0, z: 0.11109333333333327 } } }
+bseq tangent 2 181 Good area 44978.539816340 ref 44978.539834381 err 9.4e-6 comps 1
+bnary tangent 2 181 Good area 44978.539816340 ref 44978.539834381 err 9.4e-6 comps 1
+bseq tangent 2 182 REFUSED Bool { index: 1, why: ZeroThickness { at: Point3 { x: 107.69759123041912, y: 128.24801415999505, z: 0.11109333333333327 } } }
+bnary tangent 2 182 REFUSED Bool { index: 0, why: ZeroThickness { at: Point3 { x: 107.69759123041912, y: 128.24801415999505, z: 0.11110222222222221 } } }
+bseq tangent 2 183 REFUSED Bool { index: 1, why: ZeroThickness { at: Point3 { x: 134.40880750659784, y: 123.91524283646893, z: 0.11109333333333327 } } }
+bnary tangent 2 183 REFUSED Bool { index: 0, why: ZeroThickness { at: Point3 { x: 134.40880750659784, y: 123.91524283646893, z: 0.11110222222222221 } } }
+bseq tangent 2 184 REFUSED Bool { index: 1, why: ZeroThickness { at: Point3 { x: 177.3201803292655, y: 82.34963102266013, z: 0.11109333333333327 } } }
+bnary tangent 2 184 REFUSED Bool { index: 0, why: ZeroThickness { at: Point3 { x: 177.3201803292655, y: 82.34963102266013, z: 0.11110222222222221 } } }
+bseq tangent 2 185 REFUSED Bool { index: 1, why: ZeroThickness { at: Point3 { x: 274.5312786192423, y: 0.0, z: 0.11109333333333327 } } }
+bnary tangent 2 185 REFUSED Bool { index: 0, why: ZeroThickness { at: Point3 { x: 274.5312786192423, y: 0.0, z: 0.11109333333333327 } } }
+bseq tangent 2 186 REFUSED Bool { index: 0, why: ZeroThickness { at: Point3 { x: 111.497821286664, y: 0.0, z: 0.11109333333333327 } } }
+bnary tangent 2 186 REFUSED Bool { index: 0, why: ZeroThickness { at: Point3 { x: 111.497821286664, y: 0.0, z: 0.11109333333333327 } } }
+bseq tangent 2 187 Good area 43426.166469383 ref 43426.166487646 err 8.4e-6 comps 1
+bnary tangent 2 187 Good area 43426.166469383 ref 43426.166487646 err 8.4e-6 comps 1
+bseq tangent 2 188 REFUSED Bool { index: 1, why: ZeroThickness { at: Point3 { x: 175.7675649462398, y: 74.84814833938646, z: 0.11109333333333327 } } }
+bnary tangent 2 188 REFUSED Bool { index: 0, why: ZeroThickness { at: Point3 { x: 175.7675649462398, y: 74.84814833938646, z: 0.11110222222222221 } } }
+bseq tangent 2 189 REFUSED Bool { index: 0, why: ZeroThickness { at: Point3 { x: 38.28766192328142, y: 0.0, z: 0.11109333333333327 } } }
+bnary tangent 2 189 REFUSED Bool { index: 0, why: ZeroThickness { at: Point3 { x: 38.28766192328142, y: 0.0, z: 0.11109333333333327 } } }
+bseq tangent 2 190 Good area 43897.982458668 ref 43897.982536393 err 2.4e-5 comps 1
+bnary tangent 2 190 Good area 43897.982458668 ref 43897.982536393 err 2.4e-5 comps 1
+bseq tangent 2 191 REFUSED Bool { index: 1, why: ZeroThickness { at: Point3 { x: 202.88649914764542, y: 77.38195169684826, z: 0.11109333333333327 } } }
+bnary tangent 2 191 REFUSED Bool { index: 0, why: ZeroThickness { at: Point3 { x: 202.88649914764542, y: 77.38195169684826, z: 0.11110222222222221 } } }
+bseq tangent 2 192 REFUSED Bool { index: 0, why: ZeroThickness { at: Point3 { x: 224.1705607770155, y: 0.0, z: 0.11109333333333327 } } }
+bnary tangent 2 192 REFUSED Bool { index: 0, why: ZeroThickness { at: Point3 { x: 224.1705607770155, y: 0.0, z: 0.11109333333333327 } } }
+bseq tangent 2 193 Good area 43158.781064812 ref 43158.781077865 err 2.3e-5 comps 1
+bnary tangent 2 193 Good area 43158.781064812 ref 43158.781077865 err 2.3e-5 comps 1
+bseq tangent 2 194 Good area 44978.539816340 ref 44978.539834381 err 9.4e-6 comps 1
+bnary tangent 2 194 Good area 44978.539816340 ref 44978.539834381 err 9.4e-6 comps 1
+bseq tangent 2 195 Good area 44978.539816340 ref 44978.539834381 err 9.4e-6 comps 1
+bnary tangent 2 195 Good area 44978.539816340 ref 44978.539834381 err 9.4e-6 comps 1
+bseq tangent 2 196 REFUSED Bool { index: 1, why: ZeroThickness { at: Point3 { x: 79.77344396940349, y: 106.51508822663193, z: 0.11109333333333327 } } }
+bnary tangent 2 196 REFUSED Bool { index: 0, why: ZeroThickness { at: Point3 { x: 79.77344396940349, y: 106.51508822663193, z: 0.11110222222222221 } } }
+bseq tangent 2 197 REFUSED Bool { index: 1, why: ZeroThickness { at: Point3 { x: 64.77531384797604, y: 0.0, z: 0.11109333333333327 } } }
+bnary tangent 2 197 REFUSED Bool { index: 0, why: ZeroThickness { at: Point3 { x: 64.77531384797604, y: 0.0, z: 0.11109333333333327 } } }
+bseq tangent 2 198 Good area 44513.162334824 ref 44513.162314511 err 7.2e-6 comps 1
+bnary tangent 2 198 Good area 44513.162334824 ref 44513.162314511 err 7.2e-6 comps 1
+bseq tangent 2 199 REFUSED Bool { index: 1, why: ZeroThickness { at: Point3 { x: 81.9073351452991, y: 65.55084551074006, z: 0.11109333333333327 } } }
+bnary tangent 2 199 REFUSED Bool { index: 0, why: ZeroThickness { at: Point3 { x: 81.9073351452991, y: 65.55084551074006, z: 0.11110222222222221 } } }
+bseq tangent 20 0 REFUSED Bool { index: 2, why: ZeroThickness { at: Point3 { x: 160.14092886703824, y: 0.0, z: 0.11109333333333327 } } }
+bnary tangent 20 0 REFUSED Bool { index: 0, why: ZeroThickness { at: Point3 { x: 160.14092886703824, y: 0.0, z: 0.11109333333333327 } } }
+bseq tangent 20 1 REFUSED Bool { index: 2, why: ZeroThickness { at: Point3 { x: 262.14145455617245, y: 0.0, z: 0.11109333333333327 } } }
+bnary tangent 20 1 REFUSED Bool { index: 0, why: ZeroThickness { at: Point3 { x: 61.84369357504749, y: 0.0, z: 0.11109333333333327 } } }
+bseq tangent 20 2 REFUSED Bool { index: 1, why: ZeroThickness { at: Point3 { x: 44.65494473165519, y: 116.58785057027956, z: 0.11109333333333327 } } }
+bnary tangent 20 2 REFUSED Bool { index: 0, why: ZeroThickness { at: Point3 { x: 265.4078643943762, y: 0.0, z: 0.11109333333333327 } } }
+bseq tangent 20 3 REFUSED Bool { index: 2, why: ZeroThickness { at: Point3 { x: 108.71099857145988, y: 100.78778248647495, z: 0.11109333333333327 } } }
+bnary tangent 20 3 REFUSED Bool { index: 0, why: ZeroThickness { at: Point3 { x: 38.08434052861824, y: 0.0, z: 0.11109333333333327 } } }
+bseq tangent 20 4 REFUSED Bool { index: 2, why: ZeroThickness { at: Point3 { x: 205.8693902671901, y: 0.0, z: 0.11109333333333327 } } }
+bnary tangent 20 4 REFUSED Bool { index: 0, why: ZeroThickness { at: Point3 { x: 205.8693902671901, y: 0.0, z: 0.11109333333333327 } } }
+bseq tangent 20 5 REFUSED Bool { index: 4, why: ZeroThickness { at: Point3 { x: 148.72631663724465, y: 0.0, z: 0.11109333333333327 } } }
+bnary tangent 20 5 REFUSED Bool { index: 0, why: ZeroThickness { at: Point3 { x: 148.72631663724465, y: 0.0, z: 0.11109333333333327 } } }
+bseq tangent 20 6 REFUSED Bool { index: 1, why: ZeroThickness { at: Point3 { x: 96.01556266310274, y: 0.0, z: 0.11109333333333327 } } }
+bnary tangent 20 6 REFUSED Bool { index: 0, why: ZeroThickness { at: Point3 { x: 96.01556266310274, y: 0.0, z: 0.11109333333333327 } } }
+bseq tangent 20 7 REFUSED Bool { index: 1, why: ZeroThickness { at: Point3 { x: 177.2313748891663, y: 119.22236558314873, z: 0.11109333333333327 } } }
+bnary tangent 20 7 REFUSED Bool { index: 0, why: ZeroThickness { at: Point3 { x: 277.32993202626847, y: 0.0, z: 0.11109333333333327 } } }
+bseq tangent 20 8 REFUSED Bool { index: 2, why: ZeroThickness { at: Point3 { x: 77.40858091633297, y: 0.0, z: 0.11109333333333327 } } }
+bnary tangent 20 8 REFUSED Bool { index: 0, why: ZeroThickness { at: Point3 { x: 77.40858091633297, y: 0.0, z: 0.11109333333333327 } } }
+bseq tangent 20 9 REFUSED Bool { index: 0, why: ZeroThickness { at: Point3 { x: 268.3064345647208, y: 0.0, z: 0.11109333333333327 } } }
+bnary tangent 20 9 REFUSED Bool { index: 0, why: ZeroThickness { at: Point3 { x: 268.3064345647208, y: 0.0, z: 0.11109333333333327 } } }
+bseq tangent 20 10 REFUSED Bool { index: 2, why: ZeroThickness { at: Point3 { x: 108.81019836404214, y: 42.82417926219933, z: 0.11109333333333327 } } }
+bnary tangent 20 10 REFUSED Bool { index: 0, why: ZeroThickness { at: Point3 { x: 154.10412996652948, y: 0.0, z: 0.11109333333333327 } } }
+bseq tangent 20 11 REFUSED Bool { index: 0, why: ZeroThickness { at: Point3 { x: 69.90007100227811, y: 0.0, z: 0.11109333333333327 } } }
+bnary tangent 20 11 REFUSED Bool { index: 0, why: ZeroThickness { at: Point3 { x: 69.90007100227811, y: 0.0, z: 0.11109333333333327 } } }
+bseq tangent 20 12 REFUSED Bool { index: 1, why: ZeroThickness { at: Point3 { x: 94.54947660268093, y: 0.0, z: 0.11109333333333327 } } }
+bnary tangent 20 12 REFUSED Bool { index: 0, why: ZeroThickness { at: Point3 { x: 94.54947660268093, y: 0.0, z: 0.11109333333333327 } } }
+bseq tangent 20 13 REFUSED Bool { index: 14, why: ZeroThickness { at: Point3 { x: 127.55120541731881, y: 0.0, z: 0.11109333333333327 } } }
+bnary tangent 20 13 REFUSED Bool { index: 0, why: ZeroThickness { at: Point3 { x: 127.55120541731881, y: 0.0, z: 0.11109333333333327 } } }
+bseq tangent 20 14 REFUSED Bool { index: 2, why: ZeroThickness { at: Point3 { x: 56.02574151967227, y: 0.0, z: 0.11109333333333327 } } }
+bnary tangent 20 14 REFUSED Bool { index: 0, why: ZeroThickness { at: Point3 { x: 56.02574151967227, y: 0.0, z: 0.11109333333333327 } } }
+bseq tangent 20 15 REFUSED Bool { index: 3, why: ZeroThickness { at: Point3 { x: 106.03074859406544, y: 0.0, z: 0.11109333333333327 } } }
+bnary tangent 20 15 REFUSED Bool { index: 0, why: ZeroThickness { at: Point3 { x: 106.03074859406544, y: 0.0, z: 0.11109333333333327 } } }
+bseq tangent 20 16 REFUSED Bool { index: 1, why: ZeroThickness { at: Point3 { x: 133.0269786639665, y: 0.0, z: 0.11109333333333327 } } }
+bnary tangent 20 16 REFUSED Bool { index: 0, why: ZeroThickness { at: Point3 { x: 133.0269786639665, y: 0.0, z: 0.11109333333333327 } } }
+bseq tangent 20 17 REFUSED Bool { index: 1, why: ZeroThickness { at: Point3 { x: 263.3731160249514, y: 69.37716359812431, z: 0.11109333333333327 } } }
+bnary tangent 20 17 REFUSED Bool { index: 0, why: ZeroThickness { at: Point3 { x: 212.8395154156235, y: 0.0, z: 0.11109333333333327 } } }
+bseq tangent 20 18 REFUSED Bool { index: 1, why: ZeroThickness { at: Point3 { x: 48.86093570882343, y: 110.69299587611022, z: 0.11109333333333327 } } }
+bnary tangent 20 18 REFUSED Bool { index: 0, why: ZeroThickness { at: Point3 { x: 94.06836151463303, y: 0.0, z: 0.11109333333333327 } } }
+bseq tangent 20 19 Good area 44978.539816340 ref 44978.539834381 err 9.4e-6 comps 1
+bnary tangent 20 19 Good area 44978.539816340 ref 44978.539834381 err 9.4e-6 comps 1
+bseq tangent 20 20 REFUSED Bool { index: 6, why: ZeroThickness { at: Point3 { x: 132.17873591836775, y: 0.0, z: 0.11109333333333327 } } }
+bnary tangent 20 20 REFUSED Bool { index: 0, why: ZeroThickness { at: Point3 { x: 132.17873591836775, y: 0.0, z: 0.11109333333333327 } } }
+bseq tangent 20 21 REFUSED Bool { index: 0, why: ZeroThickness { at: Point3 { x: 130.48343722948943, y: 0.0, z: 0.11109333333333327 } } }
+bnary tangent 20 21 REFUSED Bool { index: 0, why: ZeroThickness { at: Point3 { x: 130.48343722948943, y: 0.0, z: 0.11109333333333327 } } }
+bseq tangent 20 22 REFUSED Bool { index: 1, why: ZeroThickness { at: Point3 { x: 168.94957392511537, y: 95.02927416059339, z: 0.11109333333333327 } } }
+bnary tangent 20 22 REFUSED Bool { index: 0, why: ZeroThickness { at: Point3 { x: 23.271894429375156, y: 0.0, z: 0.11109333333333327 } } }
+bseq tangent 20 23 REFUSED Bool { index: 1, why: ZeroThickness { at: Point3 { x: 276.7446756241526, y: 100.8114865044058, z: 0.11109333333333327 } } }
+bnary tangent 20 23 REFUSED Bool { index: 0, why: ZeroThickness { at: Point3 { x: 64.84596053752585, y: 0.0, z: 0.11109333333333327 } } }
+bseq tangent 20 24 REFUSED Bool { index: 8, why: ZeroThickness { at: Point3 { x: 185.76718023083865, y: 0.0, z: 0.11109333333333327 } } }
+bnary tangent 20 24 REFUSED Bool { index: 0, why: ZeroThickness { at: Point3 { x: 185.76718023083865, y: 0.0, z: 0.11109333333333327 } } }
+bseq tangent 20 25 REFUSED Bool { index: 3, why: ZeroThickness { at: Point3 { x: 239.79332354604878, y: 40.54093422210477, z: 0.11109333333333327 } } }
+bnary tangent 20 25 REFUSED Bool { index: 0, why: ZeroThickness { at: Point3 { x: 254.82864206186724, y: 0.0, z: 0.11109333333333327 } } }
+bseq tangent 20 26 REFUSED Bool { index: 1, why: ZeroThickness { at: Point3 { x: 117.52561204444213, y: 74.50298494753861, z: 0.11109333333333327 } } }
+bnary tangent 20 26 REFUSED Bool { index: 0, why: ZeroThickness { at: Point3 { x: 144.79720816649007, y: 0.0, z: 0.11109333333333327 } } }
+bseq tangent 20 27 REFUSED Bool { index: 5, why: ZeroThickness { at: Point3 { x: 83.95857053133588, y: 0.0, z: 0.11109333333333327 } } }
+bnary tangent 20 27 REFUSED Bool { index: 0, why: ZeroThickness { at: Point3 { x: 83.95857053133588, y: 0.0, z: 0.11109333333333327 } } }
+bseq tangent 20 28 REFUSED Bool { index: 9, why: ZeroThickness { at: Point3 { x: 116.20808332120026, y: 0.0, z: 0.11109333333333327 } } }
+bnary tangent 20 28 REFUSED Bool { index: 0, why: ZeroThickness { at: Point3 { x: 116.20808332120026, y: 0.0, z: 0.11109333333333327 } } }
+bseq tangent 20 29 REFUSED Bool { index: 0, why: ZeroThickness { at: Point3 { x: 223.300636247542, y: 0.0, z: 0.11109333333333327 } } }
+bnary tangent 20 29 REFUSED Bool { index: 0, why: ZeroThickness { at: Point3 { x: 223.300636247542, y: 0.0, z: 0.11109333333333327 } } }
+bseq tangent 20 30 REFUSED Bool { index: 2, why: ZeroThickness { at: Point3 { x: 103.70986343764238, y: 0.0, z: 0.11109333333333327 } } }
+bnary tangent 20 30 REFUSED Bool { index: 0, why: ZeroThickness { at: Point3 { x: 103.70986343764238, y: 0.0, z: 0.11109333333333327 } } }
+bseq tangent 20 31 REFUSED Bool { index: 3, why: ZeroThickness { at: Point3 { x: 178.9039266946532, y: 0.0, z: 0.11109333333333327 } } }
+bnary tangent 20 31 REFUSED Bool { index: 0, why: ZeroThickness { at: Point3 { x: 178.9039266946532, y: 0.0, z: 0.11109333333333327 } } }
+bseq tangent 20 32 REFUSED Bool { index: 3, why: ZeroThickness { at: Point3 { x: 31.962428232886197, y: 0.0, z: 0.11109333333333327 } } }
+bnary tangent 20 32 REFUSED Bool { index: 0, why: ZeroThickness { at: Point3 { x: 31.962428232886197, y: 0.0, z: 0.11109333333333327 } } }
+bseq tangent 20 33 REFUSED Bool { index: 1, why: ZeroThickness { at: Point3 { x: 211.59524230728664, y: 44.57893801027642, z: 0.11109333333333327 } } }
+bnary tangent 20 33 REFUSED Bool { index: 0, why: ZeroThickness { at: Point3 { x: 223.65871465838552, y: 0.0, z: 0.11109333333333327 } } }
+bseq tangent 20 34 REFUSED Bool { index: 1, why: ZeroThickness { at: Point3 { x: 217.70065991210734, y: 51.43280486989616, z: 0.11109333333333327 } } }
+bnary tangent 20 34 REFUSED Bool { index: 0, why: ZeroThickness { at: Point3 { x: 121.62577256607882, y: 0.0, z: 0.11109333333333327 } } }
+bseq tangent 20 35 REFUSED Bool { index: 1, why: ZeroThickness { at: Point3 { x: 62.97149157455978, y: 0.0, z: 0.11109333333333327 } } }
+bnary tangent 20 35 REFUSED Bool { index: 0, why: ZeroThickness { at: Point3 { x: 62.97149157455978, y: 0.0, z: 0.11109333333333327 } } }
+bseq tangent 20 36 REFUSED Bool { index: 1, why: ZeroThickness { at: Point3 { x: 190.2388732270112, y: 100.53597634587985, z: 0.11109333333333327 } } }
+bnary tangent 20 36 REFUSED Bool { index: 0, why: ZeroThickness { at: Point3 { x: 130.47388971744618, y: 0.0, z: 0.11109333333333327 } } }
+bseq tangent 20 37 REFUSED Bool { index: 1, why: ZeroThickness { at: Point3 { x: 137.6824028796432, y: 19.344532636683475, z: 0.11109333333333327 } } }
+bnary tangent 20 37 REFUSED Bool { index: 0, why: ZeroThickness { at: Point3 { x: 132.62761698027649, y: 0.0, z: 0.11109333333333327 } } }
+bseq tangent 20 38 REFUSED Bool { index: 3, why: ZeroThickness { at: Point3 { x: 52.31545304188693, y: 0.0, z: 0.11109333333333327 } } }
+bnary tangent 20 38 REFUSED Bool { index: 0, why: ZeroThickness { at: Point3 { x: 52.31545304188693, y: 0.0, z: 0.11109333333333327 } } }
+bseq tangent 20 39 REFUSED Bool { index: 1, why: ZeroThickness { at: Point3 { x: 112.04523373613543, y: 79.38905348654926, z: 0.11109333333333327 } } }
+bnary tangent 20 39 REFUSED Bool { index: 0, why: ZeroThickness { at: Point3 { x: 264.7799597873652, y: 0.0, z: 0.11109333333333327 } } }
+bseq tangent 20 40 REFUSED Bool { index: 1, why: ZeroThickness { at: Point3 { x: 203.647666701663, y: 59.945013110266984, z: 0.11109333333333327 } } }
+bnary tangent 20 40 REFUSED Bool { index: 0, why: ZeroThickness { at: Point3 { x: 133.28032044738796, y: 0.0, z: 0.11109333333333327 } } }
+bseq tangent 20 41 REFUSED Bool { index: 5, why: ZeroThickness { at: Point3 { x: 17.414076483293027, y: 72.87180875184909, z: 0.11109333333333327 } } }
+bnary tangent 20 41 REFUSED Bool { index: 0, why: ZeroThickness { at: Point3 { x: 157.84084955370523, y: 0.0, z: 0.11109333333333327 } } }
+bseq tangent 20 42 REFUSED Bool { index: 7, why: ZeroThickness { at: Point3 { x: 24.445015153506063, y: 0.0, z: 0.11109333333333327 } } }
+bnary tangent 20 42 REFUSED Bool { index: 0, why: ZeroThickness { at: Point3 { x: 24.445015153506063, y: 0.0, z: 0.11109333333333327 } } }
+bseq tangent 20 43 REFUSED Bool { index: 2, why: ZeroThickness { at: Point3 { x: 62.58133872589162, y: 0.0, z: 0.11109333333333327 } } }
+bnary tangent 20 43 REFUSED Bool { index: 0, why: ZeroThickness { at: Point3 { x: 62.58133872589162, y: 0.0, z: 0.11109333333333327 } } }
+bseq tangent 20 44 REFUSED Bool { index: 1, why: ZeroThickness { at: Point3 { x: 84.15449921896025, y: 86.34898759431034, z: 0.11109333333333327 } } }
+bnary tangent 20 44 REFUSED Bool { index: 0, why: ZeroThickness { at: Point3 { x: 71.18796405207569, y: 0.0, z: 0.11109333333333327 } } }
+bseq tangent 20 45 REFUSED Bool { index: 0, why: ZeroThickness { at: Point3 { x: 69.65688896344759, y: 0.0, z: 0.11109333333333327 } } }
+bnary tangent 20 45 REFUSED Bool { index: 0, why: ZeroThickness { at: Point3 { x: 221.83954389729024, y: 0.0, z: 0.11109333333333327 } } }
+bseq tangent 20 46 REFUSED Bool { index: 0, why: ZeroThickness { at: Point3 { x: 55.651135099704945, y: 0.0, z: 0.11109333333333327 } } }
+bnary tangent 20 46 REFUSED Bool { index: 0, why: ZeroThickness { at: Point3 { x: 55.651135099704945, y: 0.0, z: 0.11109333333333327 } } }
+bseq tangent 20 47 REFUSED Bool { index: 1, why: ZeroThickness { at: Point3 { x: 251.59022453707217, y: 63.224717498983416, z: 0.11109333333333327 } } }
+bnary tangent 20 47 REFUSED Bool { index: 0, why: ZeroThickness { at: Point3 { x: 174.95777916915932, y: 0.0, z: 0.11109333333333327 } } }
+bseq tangent 20 48 REFUSED Bool { index: 0, why: ZeroThickness { at: Point3 { x: 100.98801733201437, y: 0.0, z: 0.11109333333333327 } } }
+bnary tangent 20 48 REFUSED Bool { index: 0, why: ZeroThickness { at: Point3 { x: 164.02096171856317, y: 0.0, z: 0.11109333333333327 } } }
+bseq tangent 20 49 REFUSED Bool { index: 1, why: ZeroThickness { at: Point3 { x: 36.077376617366724, y: 34.14589279730854, z: 0.11109333333333327 } } }
+bnary tangent 20 49 REFUSED Bool { index: 0, why: ZeroThickness { at: Point3 { x: 86.87572835040434, y: 0.0, z: 0.11109333333333327 } } }
+bseq tangent 20 50 REFUSED Bool { index: 3, why: ZeroThickness { at: Point3 { x: 64.31890956016466, y: 0.0, z: 0.11109333333333327 } } }
+bnary tangent 20 50 REFUSED Bool { index: 0, why: ZeroThickness { at: Point3 { x: 64.31890956016466, y: 0.0, z: 0.11109333333333327 } } }
+bseq tangent 20 51 REFUSED Bool { index: 1, why: ZeroThickness { at: Point3 { x: 196.84776874871582, y: 133.09905536010956, z: 0.11109333333333327 } } }
+bnary tangent 20 51 REFUSED Bool { index: 0, why: ZeroThickness { at: Point3 { x: 225.70910699972168, y: 0.0, z: 0.11109333333333327 } } }
+bseq tangent 20 52 REFUSED Bool { index: 1, why: ZeroThickness { at: Point3 { x: 100.50152550957485, y: 93.37324666624079, z: 0.11109333333333327 } } }
+bnary tangent 20 52 REFUSED Bool { index: 0, why: ZeroThickness { at: Point3 { x: 210.43289783477024, y: 0.0, z: 0.11109333333333327 } } }
+bseq tangent 20 53 REFUSED Bool { index: 1, why: ZeroThickness { at: Point3 { x: 158.30157508757904, y: 38.47325034018228, z: 0.11109333333333327 } } }
+bnary tangent 20 53 REFUSED Bool { index: 0, why: ZeroThickness { at: Point3 { x: 277.61726118307416, y: 0.0, z: 0.11109333333333327 } } }
+bseq tangent 20 54 REFUSED Bool { index: 2, why: ZeroThickness { at: Point3 { x: 29.294468835176886, y: 0.0, z: 0.11109333333333327 } } }
+bnary tangent 20 54 REFUSED Bool { index: 0, why: ZeroThickness { at: Point3 { x: 29.294468835176886, y: 0.0, z: 0.11109333333333327 } } }
+bseq tangent 20 55 REFUSED Bool { index: 0, why: ZeroThickness { at: Point3 { x: 147.9243875539795, y: 0.0, z: 0.11109333333333327 } } }
+bnary tangent 20 55 REFUSED Bool { index: 0, why: ZeroThickness { at: Point3 { x: 147.9243875539795, y: 0.0, z: 0.11109333333333327 } } }
+bseq tangent 20 56 REFUSED Bool { index: 12, why: ZeroThickness { at: Point3 { x: 108.99457932006803, y: 140.6030467962452, z: 0.11109333333333327 } } }
+bnary tangent 20 56 REFUSED Bool { index: 0, why: ZeroThickness { at: Point3 { x: 168.47189331665425, y: 0.0, z: 0.11109333333333327 } } }
+bseq tangent 20 57 REFUSED Bool { index: 0, why: ZeroThickness { at: Point3 { x: 99.81671180629827, y: 0.0, z: 0.11109333333333327 } } }
+bnary tangent 20 57 REFUSED Bool { index: 0, why: ZeroThickness { at: Point3 { x: 99.81671180629827, y: 0.0, z: 0.11109333333333327 } } }
+bseq tangent 20 58 REFUSED Bool { index: 1, why: ZeroThickness { at: Point3 { x: 87.81797623539222, y: 120.66437603203862, z: 0.11109333333333327 } } }
+bnary tangent 20 58 REFUSED Bool { index: 0, why: ZeroThickness { at: Point3 { x: 144.35351985242812, y: 0.0, z: 0.11109333333333327 } } }
+bseq tangent 20 59 REFUSED Bool { index: 1, why: ZeroThickness { at: Point3 { x: 172.4706497133663, y: 93.29687545587532, z: 0.11109333333333327 } } }
+bnary tangent 20 59 REFUSED Bool { index: 0, why: ZeroThickness { at: Point3 { x: 164.6229377211516, y: 0.0, z: 0.11109333333333327 } } }
+bseq tangent 20 60 REFUSED Bool { index: 2, why: ZeroThickness { at: Point3 { x: 170.19740094267297, y: 0.0, z: 0.11109333333333327 } } }
+bnary tangent 20 60 REFUSED Bool { index: 0, why: ZeroThickness { at: Point3 { x: 170.19740094267297, y: 0.0, z: 0.11109333333333327 } } }
+bseq tangent 20 61 REFUSED Bool { index: 0, why: ZeroThickness { at: Point3 { x: 97.88901280172189, y: 0.0, z: 0.11109333333333327 } } }
+bnary tangent 20 61 REFUSED Bool { index: 0, why: ZeroThickness { at: Point3 { x: 97.88901280172189, y: 0.0, z: 0.11109333333333327 } } }
+bseq tangent 20 62 REFUSED Bool { index: 0, why: ZeroThickness { at: Point3 { x: 116.45900860500073, y: 0.0, z: 0.11109333333333327 } } }
+bnary tangent 20 62 REFUSED Bool { index: 0, why: ZeroThickness { at: Point3 { x: 116.45900860500073, y: 0.0, z: 0.11109333333333327 } } }
+bseq tangent 20 63 REFUSED Bool { index: 0, why: ZeroThickness { at: Point3 { x: 82.11468392832592, y: 0.0, z: 0.11109333333333327 } } }
+bnary tangent 20 63 REFUSED Bool { index: 0, why: ZeroThickness { at: Point3 { x: 82.11468392832592, y: 0.0, z: 0.11109333333333327 } } }
+bseq tangent 20 64 REFUSED Bool { index: 0, why: ZeroThickness { at: Point3 { x: 197.8212324456508, y: 0.0, z: 0.11109333333333327 } } }
+bnary tangent 20 64 REFUSED Bool { index: 0, why: ZeroThickness { at: Point3 { x: 197.8212324456508, y: 0.0, z: 0.11109333333333327 } } }
+bseq tangent 20 65 REFUSED Bool { index: 0, why: ZeroThickness { at: Point3 { x: 224.42640372555732, y: 0.0, z: 0.11109333333333327 } } }
+bnary tangent 20 65 REFUSED Bool { index: 0, why: ZeroThickness { at: Point3 { x: 224.42640372555732, y: 0.0, z: 0.11109333333333327 } } }
+bseq tangent 20 66 REFUSED Bool { index: 1, why: ZeroThickness { at: Point3 { x: 249.9136476880183, y: 82.90381079598646, z: 0.11109333333333327 } } }
+bnary tangent 20 66 REFUSED Bool { index: 0, why: ZeroThickness { at: Point3 { x: 97.13048729339782, y: 0.0, z: 0.11109333333333327 } } }
+bseq tangent 20 67 REFUSED Bool { index: 1, why: ZeroThickness { at: Point3 { x: 136.7899120853574, y: 118.63600944170443, z: 0.11109333333333327 } } }
+bnary tangent 20 67 REFUSED Bool { index: 0, why: ZeroThickness { at: Point3 { x: 185.96357747381117, y: 0.0, z: 0.11109333333333327 } } }
+bseq tangent 20 68 REFUSED Bool { index: 4, why: ZeroThickness { at: Point3 { x: 189.34136564214478, y: 0.0, z: 0.11109333333333327 } } }
+bnary tangent 20 68 REFUSED Bool { index: 0, why: ZeroThickness { at: Point3 { x: 189.34136564214478, y: 0.0, z: 0.11109333333333327 } } }
+bseq tangent 20 69 REFUSED Bool { index: 10, why: ZeroThickness { at: Point3 { x: 62.32796308893993, y: 0.0, z: 0.11109333333333327 } } }
+bnary tangent 20 69 REFUSED Bool { index: 0, why: ZeroThickness { at: Point3 { x: 62.32796308893993, y: 0.0, z: 0.11109333333333327 } } }
+bseq tangent 20 70 REFUSED Bool { index: 2, why: ZeroThickness { at: Point3 { x: 186.2597686593266, y: 0.0, z: 0.11109333333333327 } } }
+bnary tangent 20 70 REFUSED Bool { index: 0, why: ZeroThickness { at: Point3 { x: 186.2597686593266, y: 0.0, z: 0.11109333333333327 } } }
+bseq tangent 20 71 REFUSED Bool { index: 0, why: ZeroThickness { at: Point3 { x: 82.78759007799306, y: 0.0, z: 0.11109333333333327 } } }
+bnary tangent 20 71 REFUSED Bool { index: 0, why: ZeroThickness { at: Point3 { x: 147.53332806146966, y: 0.0, z: 0.11109333333333327 } } }
+bseq tangent 20 72 REFUSED Bool { index: 2, why: ZeroThickness { at: Point3 { x: 98.90842138088783, y: 0.0, z: 0.11109333333333327 } } }
+bnary tangent 20 72 REFUSED Bool { index: 0, why: ZeroThickness { at: Point3 { x: 98.90842138088783, y: 0.0, z: 0.11109333333333327 } } }
+bseq tangent 20 73 REFUSED Bool { index: 6, why: ZeroThickness { at: Point3 { x: 138.79109357994125, y: 0.0, z: 0.11109333333333327 } } }
+bnary tangent 20 73 REFUSED Bool { index: 0, why: ZeroThickness { at: Point3 { x: 138.79109357994125, y: 0.0, z: 0.11109333333333327 } } }
+bseq tangent 20 74 REFUSED Bool { index: 1, why: ZeroThickness { at: Point3 { x: 203.04259802681975, y: 93.15546739962073, z: 0.11109333333333327 } } }
+bnary tangent 20 74 REFUSED Bool { index: 0, why: ZeroThickness { at: Point3 { x: 105.06696920698613, y: 0.0, z: 0.11109333333333327 } } }
+bseq tangent 20 75 REFUSED Bool { index: 3, why: ZeroThickness { at: Point3 { x: 110.84920517304839, y: 0.0, z: 0.11109333333333327 } } }
+bnary tangent 20 75 REFUSED Bool { index: 0, why: ZeroThickness { at: Point3 { x: 110.84920517304839, y: 0.0, z: 0.11109333333333327 } } }
+bseq tangent 20 76 REFUSED Bool { index: 4, why: ZeroThickness { at: Point3 { x: 57.9219399004134, y: 0.0, z: 0.11109333333333327 } } }
+bnary tangent 20 76 REFUSED Bool { index: 0, why: ZeroThickness { at: Point3 { x: 57.9219399004134, y: 0.0, z: 0.11109333333333327 } } }
+bseq tangent 20 77 REFUSED Bool { index: 5, why: ZeroThickness { at: Point3 { x: 277.63419273493696, y: 0.0, z: 0.11109333333333327 } } }
+bnary tangent 20 77 REFUSED Bool { index: 0, why: ZeroThickness { at: Point3 { x: 277.63419273493696, y: 0.0, z: 0.11109333333333327 } } }
+bseq tangent 20 78 REFUSED Bool { index: 1, why: ZeroThickness { at: Point3 { x: 56.070249189906775, y: 127.85222513220901, z: 0.11109333333333327 } } }
+bnary tangent 20 78 REFUSED Bool { index: 0, why: ZeroThickness { at: Point3 { x: 218.76592791161178, y: 0.0, z: 0.11109333333333327 } } }
+bseq tangent 20 79 REFUSED Bool { index: 0, why: ZeroThickness { at: Point3 { x: 233.23202050316883, y: 0.0, z: 0.11109333333333327 } } }
+bnary tangent 20 79 REFUSED Bool { index: 0, why: ZeroThickness { at: Point3 { x: 233.23202050316883, y: 0.0, z: 0.11109333333333327 } } }
+bseq tangent 20 80 REFUSED Bool { index: 0, why: ZeroThickness { at: Point3 { x: 65.68327497487013, y: 0.0, z: 0.11109333333333327 } } }
+bnary tangent 20 80 REFUSED Bool { index: 0, why: ZeroThickness { at: Point3 { x: 65.68327497487013, y: 0.0, z: 0.11109333333333327 } } }
+bseq tangent 20 81 REFUSED Bool { index: 1, why: ZeroThickness { at: Point3 { x: 79.0922379927725, y: 80.26894176966442, z: 0.11109333333333327 } } }
+bnary tangent 20 81 REFUSED Bool { index: 0, why: ZeroThickness { at: Point3 { x: 75.37500307384931, y: 0.0, z: 0.11109333333333327 } } }
+bseq tangent 20 82 REFUSED Bool { index: 0, why: ZeroThickness { at: Point3 { x: 275.85913330059657, y: 0.0, z: 0.11109333333333327 } } }
+bnary tangent 20 82 REFUSED Bool { index: 0, why: ZeroThickness { at: Point3 { x: 275.85913330059657, y: 0.0, z: 0.11109333333333327 } } }
+bseq tangent 20 83 REFUSED Bool { index: 0, why: ZeroThickness { at: Point3 { x: 152.5266416256788, y: 0.0, z: 0.11109333333333327 } } }
+bnary tangent 20 83 REFUSED Bool { index: 0, why: ZeroThickness { at: Point3 { x: 152.5266416256788, y: 0.0, z: 0.11109333333333327 } } }
+bseq tangent 20 84 REFUSED Bool { index: 1, why: ZeroThickness { at: Point3 { x: 22.37693209364663, y: 0.0, z: 0.11109333333333327 } } }
+bnary tangent 20 84 REFUSED Bool { index: 0, why: ZeroThickness { at: Point3 { x: 22.37693209364663, y: 0.0, z: 0.11109333333333327 } } }
+bseq tangent 20 85 REFUSED Bool { index: 1, why: ZeroThickness { at: Point3 { x: 133.60698738647577, y: 59.49778734280256, z: 0.11109333333333327 } } }
+bnary tangent 20 85 REFUSED Bool { index: 0, why: ZeroThickness { at: Point3 { x: 170.4912376026496, y: 0.0, z: 0.11109333333333327 } } }
+bseq tangent 20 86 REFUSED Bool { index: 11, why: ZeroThickness { at: Point3 { x: 114.67929263157814, y: 0.0, z: 0.11109333333333327 } } }
+bnary tangent 20 86 REFUSED Bool { index: 0, why: ZeroThickness { at: Point3 { x: 114.67929263157814, y: 0.0, z: 0.11109333333333327 } } }
+bseq tangent 20 87 REFUSED Bool { index: 1, why: ZeroThickness { at: Point3 { x: 268.92454106199006, y: 119.81072738794725, z: 0.11109333333333327 } } }
+bnary tangent 20 87 REFUSED Bool { index: 0, why: ZeroThickness { at: Point3 { x: 233.23582488943154, y: 0.0, z: 0.11109333333333327 } } }
+bseq tangent 20 88 REFUSED Bool { index: 12, why: ZeroThickness { at: Point3 { x: 35.76268494845151, y: 0.0, z: 0.11109333333333327 } } }
+bnary tangent 20 88 REFUSED Bool { index: 0, why: ZeroThickness { at: Point3 { x: 35.76268494845151, y: 0.0, z: 0.11109333333333327 } } }
+bseq tangent 20 89 REFUSED Bool { index: 2, why: ZeroThickness { at: Point3 { x: 178.69605554292139, y: 0.0, z: 0.11109333333333327 } } }
+bnary tangent 20 89 REFUSED Bool { index: 0, why: ZeroThickness { at: Point3 { x: 178.69605554292139, y: 0.0, z: 0.11109333333333327 } } }
+bseq tangent 20 90 REFUSED Bool { index: 1, why: ZeroThickness { at: Point3 { x: 116.17979607166025, y: 0.0, z: 0.11109333333333327 } } }
+bnary tangent 20 90 REFUSED Bool { index: 0, why: ZeroThickness { at: Point3 { x: 116.17979607166025, y: 0.0, z: 0.11109333333333327 } } }
+bseq tangent 20 91 REFUSED Bool { index: 0, why: ZeroThickness { at: Point3 { x: 266.8437491214615, y: 0.0, z: 0.11109333333333327 } } }
+bnary tangent 20 91 REFUSED Bool { index: 0, why: ZeroThickness { at: Point3 { x: 266.8437491214615, y: 0.0, z: 0.11109333333333327 } } }
+bseq tangent 20 92 REFUSED Bool { index: 2, why: ZeroThickness { at: Point3 { x: 63.190091676961, y: 0.0, z: 0.11109333333333327 } } }
+bnary tangent 20 92 REFUSED Bool { index: 0, why: ZeroThickness { at: Point3 { x: 63.190091676961, y: 0.0, z: 0.11109333333333327 } } }
+bseq tangent 20 93 REFUSED Bool { index: 2, why: ZeroThickness { at: Point3 { x: 254.29083620019796, y: 0.0, z: 0.11109333333333327 } } }
+bnary tangent 20 93 REFUSED Bool { index: 0, why: ZeroThickness { at: Point3 { x: 254.29083620019796, y: 0.0, z: 0.11109333333333327 } } }
+bseq tangent 20 94 REFUSED Bool { index: 1, why: ZeroThickness { at: Point3 { x: 166.99793381064416, y: 111.92676158075795, z: 0.11109333333333327 } } }
+bnary tangent 20 94 REFUSED Bool { index: 0, why: ZeroThickness { at: Point3 { x: 124.51892485566613, y: 0.0, z: 0.11109333333333327 } } }
+bseq tangent 20 95 REFUSED Bool { index: 0, why: ZeroThickness { at: Point3 { x: 26.748811820823192, y: 0.0, z: 0.11109333333333327 } } }
+bnary tangent 20 95 REFUSED Bool { index: 0, why: ZeroThickness { at: Point3 { x: 26.748811820823192, y: 0.0, z: 0.11109333333333327 } } }
+bseq tangent 20 96 REFUSED Bool { index: 2, why: ZeroThickness { at: Point3 { x: 154.2810589055581, y: 49.779228645499686, z: 0.11109333333333327 } } }
+bnary tangent 20 96 REFUSED Bool { index: 0, why: ZeroThickness { at: Point3 { x: 48.04818877273857, y: 0.0, z: 0.11109333333333327 } } }
+bseq tangent 20 97 REFUSED Bool { index: 1, why: ZeroThickness { at: Point3 { x: 167.03452297606054, y: 49.77286385556157, z: 0.11109333333333327 } } }
+bnary tangent 20 97 REFUSED Bool { index: 0, why: ZeroThickness { at: Point3 { x: 208.15657317643198, y: 0.0, z: 0.11109333333333327 } } }
+bseq tangent 20 98 REFUSED Bool { index: 0, why: ZeroThickness { at: Point3 { x: 20.426890629704683, y: 0.0, z: 0.11109333333333327 } } }
+bnary tangent 20 98 REFUSED Bool { index: 0, why: ZeroThickness { at: Point3 { x: 202.24126869133633, y: 0.0, z: 0.11109333333333327 } } }
+bseq tangent 20 99 REFUSED Bool { index: 1, why: ZeroThickness { at: Point3 { x: 60.36216879695522, y: 78.87121295088826, z: 0.11109333333333327 } } }
+bnary tangent 20 99 REFUSED Bool { index: 0, why: ZeroThickness { at: Point3 { x: 74.96372598615498, y: 60.16533228081741, z: 0.11110222222222221 } } }
+bseq tangent 200 0 REFUSED Bool { index: 4, why: ZeroThickness { at: Point3 { x: 119.86954769449804, y: 0.0, z: 0.11109333333333327 } } }
+bnary tangent 200 0 REFUSED Bool { index: 0, why: ZeroThickness { at: Point3 { x: 189.86686147143462, y: 0.0, z: 0.11109333333333327 } } }
+bseq tangent 200 1 REFUSED Bool { index: 3, why: ZeroThickness { at: Point3 { x: 180.12172255958347, y: 0.0, z: 0.11109333333333327 } } }
+bnary tangent 200 1 REFUSED Bool { index: 0, why: ZeroThickness { at: Point3 { x: 180.12172255958347, y: 0.0, z: 0.11109333333333327 } } }
+bseq tangent 200 2 REFUSED Bool { index: 2, why: ZeroThickness { at: Point3 { x: 276.58325703562986, y: 0.0, z: 0.11109333333333327 } } }
+bnary tangent 200 2 REFUSED Bool { index: 0, why: ZeroThickness { at: Point3 { x: 142.84631014789704, y: 0.0, z: 0.11109333333333327 } } }
+bseq tangent 200 3 REFUSED Bool { index: 0, why: ZeroThickness { at: Point3 { x: 152.8450475310992, y: 0.0, z: 0.11109333333333327 } } }
+bnary tangent 200 3 REFUSED Bool { index: 0, why: ZeroThickness { at: Point3 { x: 152.8450475310992, y: 0.0, z: 0.11109333333333327 } } }
+bseq tangent 200 4 REFUSED Bool { index: 0, why: ZeroThickness { at: Point3 { x: 47.87821023868342, y: 0.0, z: 0.11109333333333327 } } }
+bnary tangent 200 4 REFUSED Bool { index: 0, why: ZeroThickness { at: Point3 { x: 53.91702413890188, y: 0.0, z: 0.11109333333333327 } } }
+bseq tangent 200 5 REFUSED Bool { index: 3, why: ZeroThickness { at: Point3 { x: 168.0049939553556, y: 116.890475155487, z: 0.11109333333333327 } } }
+bnary tangent 200 5 REFUSED Bool { index: 0, why: ZeroThickness { at: Point3 { x: 33.08749349989588, y: 0.0, z: 0.11109333333333327 } } }
+bseq tangent 200 6 REFUSED Bool { index: 0, why: ZeroThickness { at: Point3 { x: 149.91809961767086, y: 0.0, z: 0.11109333333333327 } } }
+bnary tangent 200 6 REFUSED Bool { index: 0, why: ZeroThickness { at: Point3 { x: 149.91809961767086, y: 0.0, z: 0.11109333333333327 } } }
+bseq tangent 200 7 REFUSED Bool { index: 1, why: ZeroThickness { at: Point3 { x: 90.91730978553754, y: 22.347436894916793, z: 0.11109333333333327 } } }
+bnary tangent 200 7 REFUSED Bool { index: 0, why: ZeroThickness { at: Point3 { x: 249.8809009540438, y: 0.0, z: 0.11109333333333327 } } }
+bseq tangent 200 8 REFUSED Bool { index: 7, why: ZeroThickness { at: Point3 { x: 27.049545786986748, y: 0.0, z: 0.11109333333333327 } } }
+bnary tangent 200 8 REFUSED Bool { index: 0, why: ZeroThickness { at: Point3 { x: 27.049545786986748, y: 0.0, z: 0.11109333333333327 } } }
+bseq tangent 200 9 REFUSED Bool { index: 0, why: ZeroThickness { at: Point3 { x: 139.9412265858941, y: 0.0, z: 0.11109333333333327 } } }
+bnary tangent 200 9 REFUSED Bool { index: 0, why: ZeroThickness { at: Point3 { x: 202.5904132799293, y: 0.0, z: 0.11109333333333327 } } }
+bseq tangent 200 10 REFUSED Bool { index: 1, why: ZeroThickness { at: Point3 { x: 32.79661728680941, y: 117.96583650451016, z: 0.11109333333333327 } } }
+bnary tangent 200 10 REFUSED Bool { index: 0, why: ZeroThickness { at: Point3 { x: 258.93416801787396, y: 0.0, z: 0.11109333333333327 } } }
+bseq tangent 200 11 REFUSED Bool { index: 1, why: ZeroThickness { at: Point3 { x: 192.74006793643593, y: 48.27474642406388, z: 0.11109333333333327 } } }
+bnary tangent 200 11 REFUSED Bool { index: 0, why: ZeroThickness { at: Point3 { x: 246.28606453783837, y: 0.0, z: 0.11109333333333327 } } }
+bseq tangent 200 12 REFUSED Bool { index: 1, why: ZeroThickness { at: Point3 { x: 198.07469676778305, y: 125.4000318103009, z: 0.11109333333333327 } } }
+bnary tangent 200 12 REFUSED Bool { index: 0, why: ZeroThickness { at: Point3 { x: 75.06588320851206, y: 0.0, z: 0.11109333333333327 } } }
+bseq tangent 200 13 REFUSED Bool { index: 2, why: ZeroThickness { at: Point3 { x: 183.779972772841, y: 0.0, z: 0.11109333333333327 } } }
+bnary tangent 200 13 REFUSED Bool { index: 0, why: ZeroThickness { at: Point3 { x: 183.779972772841, y: 0.0, z: 0.11109333333333327 } } }
+bseq tangent 200 14 REFUSED Bool { index: 1, why: ZeroThickness { at: Point3 { x: 171.8661946755812, y: 93.9809843396715, z: 0.11109333333333327 } } }
+bnary tangent 200 14 REFUSED Bool { index: 0, why: ZeroThickness { at: Point3 { x: 93.80732553630313, y: 0.0, z: 0.11109333333333327 } } }
+bseq tangent 200 15 REFUSED Bool { index: 5, why: ZeroThickness { at: Point3 { x: 216.11815217958562, y: 0.0, z: 0.11109333333333327 } } }
+bnary tangent 200 15 REFUSED Bool { index: 0, why: ZeroThickness { at: Point3 { x: 216.11815217958562, y: 0.0, z: 0.11109333333333327 } } }
+bseq tangent 200 16 REFUSED Bool { index: 0, why: ZeroThickness { at: Point3 { x: 162.01199568608504, y: 0.0, z: 0.11109333333333327 } } }
+bnary tangent 200 16 REFUSED Bool { index: 0, why: ZeroThickness { at: Point3 { x: 162.01199568608504, y: 0.0, z: 0.11109333333333327 } } }
+bseq tangent 200 17 REFUSED Bool { index: 1, why: ZeroThickness { at: Point3 { x: 246.31127519085885, y: 81.75403974713309, z: 0.11109333333333327 } } }
+bnary tangent 200 17 REFUSED Bool { index: 0, why: ZeroThickness { at: Point3 { x: 92.95050770815953, y: 0.0, z: 0.11109333333333327 } } }
+bseq tangent 200 18 REFUSED Bool { index: 1, why: ZeroThickness { at: Point3 { x: 51.450284372468225, y: 95.23020501535706, z: 0.11109333333333327 } } }
+bnary tangent 200 18 REFUSED Bool { index: 0, why: ZeroThickness { at: Point3 { x: 200.8091645250679, y: 0.0, z: 0.11109333333333327 } } }
+bseq tangent 200 19 REFUSED Bool { index: 1, why: ZeroThickness { at: Point3 { x: 54.75455670788754, y: 117.59683791905195, z: 0.11109333333333327 } } }
+bnary tangent 200 19 REFUSED Bool { index: 0, why: ZeroThickness { at: Point3 { x: 171.5813330796504, y: 0.0, z: 0.11109333333333327 } } }
+a tangent 2 0 Pinched { pinches: 2 } area 43727.655397968 ref 43727.655397575 err 1.2e-5 comps 1
+a tangent 2 1 Good area 43962.662680708 ref 43962.662662390 err 1.5e-5 comps 1
+a tangent 2 2 Pinched { pinches: 1 } area 44357.965613875 ref 44357.965661624 err 2.1e-5 comps 1
+a tangent 2 3 Pinched { pinches: 2 } area 43379.109866122 ref 43379.109856614 err 4.6e-6 comps 1
+a tangent 2 4 Good area 44374.305270174 ref 44374.305271160 err 8.0e-6 comps 1
+a tangent 2 5 Pinched { pinches: 1 } area 44495.136302336 ref 44495.136359737 err 5.4e-5 comps 1
+a tangent 2 6 Pinched { pinches: 1 } area 42910.342900213 ref 42910.342877615 err 3.2e-5 comps 1
+a tangent 2 7 Pinched { pinches: 1 } area 42779.363767720 ref 42779.363744549 err 2.2e-6 comps 1
+a tangent 2 8 Pinched { pinches: 2 } area 42193.044694225 ref 42193.044751738 err 3.4e-5 comps 3
+a tangent 2 9 Good area 44978.539816340 ref 44978.539834381 err 9.4e-6 comps 1
+a tangent 2 10 Good area 44978.539816340 ref 44978.539834381 err 9.4e-6 comps 1
+a tangent 2 11 Pinched { pinches: 1 } area 43494.588769988 ref 43494.588739970 err 1.0e-5 comps 1
+a tangent 2 12 Pinched { pinches: 1 } area 43159.682268392 ref 43159.682282795 err 1.4e-5 comps 1
+a tangent 2 13 Good area 44978.539816340 ref 44978.539834381 err 9.4e-6 comps 1
+a tangent 2 14 Good area 43304.401017038 ref 43304.401032373 err 1.0e-5 comps 1
+a tangent 2 15 Pinched { pinches: 1 } area 43366.740475435 ref 43366.740524929 err 5.7e-6 comps 1
+a tangent 2 16 Pinched { pinches: 1 } area 42615.668544171 ref 42615.668548765 err 1.1e-5 comps 1
+a tangent 2 17 Good area 43282.608657590 ref 43282.608704208 err 2.0e-5 comps 1
+a tangent 2 18 Pinched { pinches: 1 } area 43098.806928517 ref 43098.806969866 err 4.1e-6 comps 1
+a tangent 2 19 Good area 42844.822022647 ref 42844.822073429 err 1.5e-5 comps 1
+a tangent 2 20 Pinched { pinches: 2 } area 42868.329246215 ref 42868.329244188 err 5.7e-6 comps 1
+a tangent 2 21 Pinched { pinches: 1 } area 42907.942120804 ref 42907.942159877 err 3.3e-5 comps 1
+a tangent 2 22 Pinched { pinches: 1 } area 42666.290015901 ref 42666.290033135 err 3.3e-5 comps 1
+a tangent 2 23 Good area 42649.871213051 ref 42649.871277866 err 4.9e-6 comps 1
+a tangent 2 24 Good area 44083.838144121 ref 44083.838062963 err 9.6e-6 comps 1
+a tangent 2 25 Pinched { pinches: 1 } area 42595.128702814 ref 42595.128730662 err 6.3e-6 comps 1
+a tangent 2 26 Pinched { pinches: 1 } area 43220.587060928 ref 43220.586984333 err 2.4e-5 comps 1
+a tangent 2 27 Pinched { pinches: 1 } area 42258.724926321 ref 42258.724964582 err 3.8e-5 comps 1
+a tangent 2 28 Good area 43463.399630316 ref 43463.399685643 err 3.2e-5 comps 1
+a tangent 2 29 Good area 44222.194714218 ref 44222.194712802 err 5.2e-5 comps 1
+a tangent 2 30 Pinched { pinches: 1 } area 43277.878765892 ref 43277.878808526 err 4.3e-6 comps 1
+a tangent 2 31 Pinched { pinches: 1 } area 43118.538983812 ref 43118.538991207 err 2.7e-6 comps 1
+a tangent 2 32 Pinched { pinches: 2 } area 43857.771518250 ref 43857.771500583 err 1.2e-5 comps 2
+a tangent 2 33 Pinched { pinches: 1 } area 43842.773419200 ref 43842.773464415 err 1.6e-5 comps 1
+a tangent 2 34 Good area 44978.539816340 ref 44978.539834381 err 9.4e-6 comps 1
+a tangent 2 35 Pinched { pinches: 1 } area 44307.456275815 ref 44307.456322757 err 1.1e-5 comps 1
+a tangent 2 36 Pinched { pinches: 1 } area 43041.838128356 ref 43041.838156058 err 3.1e-5 comps 1
+a tangent 2 37 Good area 44978.539816340 ref 44978.539834381 err 9.4e-6 comps 1
+a tangent 2 38 Pinched { pinches: 1 } area 43832.648184234 ref 43832.648240369 err 7.1e-6 comps 1
+a tangent 2 39 Pinched { pinches: 1 } area 43363.133014567 ref 43363.133101977 err 2.7e-5 comps 1
+a tangent 2 40 Pinched { pinches: 1 } area 42967.155777614 ref 42967.155710380 err 5.3e-5 comps 1
+a tangent 2 41 Pinched { pinches: 1 } area 43447.932919471 ref 43447.933000323 err 3.3e-5 comps 1
+a tangent 2 42 Good area 44978.539816340 ref 44978.539834381 err 9.4e-6 comps 1
+a tangent 2 43 Pinched { pinches: 2 } area 43563.349992275 ref 43563.350032341 err 4.6e-5 comps 1
+a tangent 2 44 Pinched { pinches: 1 } area 43042.492090102 ref 43042.492086018 err 5.2e-6 comps 1
+a tangent 2 45 Good area 44828.409151009 ref 44828.409146454 err 7.8e-7 comps 1
+a tangent 2 46 Pinched { pinches: 2 } area 41983.466200148 ref 41983.466130034 err 2.4e-5 comps 1
+a tangent 2 47 Good area 43703.854462823 ref 43703.854419409 err 6.0e-6 comps 1
+a tangent 2 48 Good area 44218.656158014 ref 44218.656140146 err 7.3e-6 comps 1
+a tangent 2 49 Pinched { pinches: 1 } area 42703.521199840 ref 42703.521170777 err 1.7e-6 comps 1
+a tangent 2 50 Pinched { pinches: 1 } area 42835.938994041 ref 42835.938962808 err 1.3e-6 comps 1
+a tangent 2 51 Pinched { pinches: 1 } area 43622.460306534 ref 43622.460308973 err 1.2e-5 comps 1
+a tangent 2 52 Pinched { pinches: 1 } area 41725.297793221 ref 41725.297741526 err 4.0e-5 comps 1
+a tangent 2 53 Pinched { pinches: 1 } area 43723.264827446 ref 43723.264843433 err 1.1e-6 comps 1
+a tangent 2 54 Pinched { pinches: 1 } area 44171.994085347 ref 44171.994139991 err 5.9e-5 comps 1
+a tangent 2 55 Pinched { pinches: 1 } area 42105.211105043 ref 42105.211201478 err 1.2e-5 comps 1
+a tangent 2 56 Pinched { pinches: 1 } area 43632.620777192 ref 43632.620800063 err 1.8e-5 comps 1
+a tangent 2 57 Good area 43703.030481100 ref 43703.030566132 err 1.8e-5 comps 1
+a tangent 2 58 Pinched { pinches: 1 } area 44247.785680211 ref 44247.785691429 err 2.0e-5 comps 1
+a tangent 2 59 Good area 44978.539816340 ref 44978.539834381 err 9.4e-6 comps 1
+a tangent 2 60 Pinched { pinches: 1 } area 41572.830935241 ref 41572.830989053 err 3.1e-5 comps 1
+a tangent 2 61 Pinched { pinches: 1 } area 42276.869222222 ref 42276.869255564 err 5.5e-5 comps 1
+a tangent 2 62 Pinched { pinches: 1 } area 42333.791255175 ref 42333.791268884 err 6.6e-6 comps 1
+a tangent 2 63 Pinched { pinches: 1 } area 43917.518926611 ref 43917.519011354 err 2.9e-5 comps 1
+a tangent 2 64 Pinched { pinches: 1 } area 43203.220699426 ref 43203.220722172 err 1.1e-5 comps 1
+a tangent 2 65 Pinched { pinches: 1 } area 43543.285727473 ref 43543.285713711 err 3.7e-5 comps 1
+a tangent 2 66 Good area 43897.713010115 ref 43897.713200712 err 7.7e-6 comps 1
+a tangent 2 67 Pinched { pinches: 1 } area 42712.373654876 ref 42712.373660823 err 3.1e-5 comps 1
+a tangent 2 68 Good area 42572.303922256 ref 42572.304000559 err 2.0e-5 comps 1
+a tangent 2 69 Pinched { pinches: 1 } area 43364.148056888 ref 43364.148037599 err 8.6e-6 comps 1
+a tangent 2 70 Pinched { pinches: 1 } area 43241.890001011 ref 43241.889981649 err 9.1e-6 comps 1
+a tangent 2 71 Good area 44016.985495304 ref 44016.985651804 err 2.3e-5 comps 1
+a tangent 2 72 Pinched { pinches: 2 } area 43054.473789643 ref 43054.473823460 err 1.2e-5 comps 2
+a tangent 2 73 Good area 42916.788239888 ref 42916.788281573 err 1.1e-6 comps 1
+a tangent 2 74 Pinched { pinches: 1 } area 42189.341690858 ref 42189.341736418 err 1.2e-5 comps 1
+a tangent 2 75 Pinched { pinches: 1 } area 42832.982437936 ref 42832.982420939 err 4.1e-6 comps 1
+a tangent 2 76 Pinched { pinches: 1 } area 43661.487902238 ref 43661.487963421 err 3.0e-5 comps 1
+a tangent 2 77 Pinched { pinches: 1 } area 44319.158566079 ref 44319.158587593 err 1.9e-5 comps 1
+a tangent 2 78 Good area 42984.465932267 ref 42984.465917735 err 8.1e-6 comps 1
+a tangent 2 79 Pinched { pinches: 1 } area 43225.123643748 ref 43225.123666893 err 2.0e-5 comps 1
+a tangent 2 80 Good area 44457.286777496 ref 44457.286753214 err 7.3e-6 comps 1
+a tangent 2 81 Pinched { pinches: 1 } area 43038.946392072 ref 43038.946404660 err 1.3e-5 comps 1
+a tangent 2 82 Pinched { pinches: 1 } area 41392.831599430 ref 41392.831678872 err 1.5e-5 comps 1
+a tangent 2 83 Pinched { pinches: 1 } area 41872.546466462 ref 41872.546536239 err 2.8e-5 comps 1
+a tangent 2 84 Pinched { pinches: 1 } area 43129.789680744 ref 43129.789716548 err 1.7e-5 comps 1
+a tangent 2 85 Good area 44247.956225484 ref 44247.956222788 err 1.4e-5 comps 1
+a tangent 2 86 Pinched { pinches: 1 } area 43812.250533180 ref 43812.250531156 err 3.1e-5 comps 1
+a tangent 2 87 Pinched { pinches: 1 } area 41272.201873991 ref 41272.201847900 err 4.7e-6 comps 1
+a tangent 2 88 Pinched { pinches: 1 } area 42761.331863331 ref 42761.331908729 err 1.7e-5 comps 1
+a tangent 2 89 Good area 44978.539816340 ref 44978.539834381 err 9.4e-6 comps 1
+a tangent 2 90 Pinched { pinches: 1 } area 44062.320952829 ref 44062.320986996 err 1.0e-5 comps 1
+a tangent 2 91 Pinched { pinches: 1 } area 43698.449077064 ref 43698.449071532 err 5.4e-5 comps 1
+a tangent 2 92 Pinched { pinches: 2 } area 42296.836415945 ref 42296.836473259 err 5.3e-6 comps 1
+a tangent 2 93 Pinched { pinches: 1 } area 43690.946729983 ref 43690.946791827 err 2.8e-5 comps 1
+a tangent 2 94 Good area 44978.539816340 ref 44978.539834381 err 9.4e-6 comps 1
+a tangent 2 95 Pinched { pinches: 1 } area 43333.963199585 ref 43333.963209845 err 1.7e-5 comps 1
+a tangent 2 96 Pinched { pinches: 1 } area 43624.060003256 ref 43624.059995182 err 1.6e-5 comps 1
+a tangent 2 97 Good area 44978.539816340 ref 44978.539834381 err 9.4e-6 comps 1
+a tangent 2 98 Pinched { pinches: 1 } area 40911.625280227 ref 40911.625292501 err 8.3e-7 comps 1
+a tangent 2 99 Good area 43148.109558365 ref 43148.109613949 err 2.2e-5 comps 1
+a tangent 2 100 Good area 44978.539816340 ref 44978.539834381 err 9.4e-6 comps 1
+a tangent 2 101 Pinched { pinches: 1 } area 43345.154460899 ref 43345.154510816 err 8.2e-6 comps 1
+a tangent 2 102 Pinched { pinches: 1 } area 43562.997143327 ref 43562.997140204 err 3.5e-5 comps 1
+a tangent 2 103 Good area 43549.453960635 ref 43549.453995689 err 6.2e-5 comps 1
+a tangent 2 104 Pinched { pinches: 1 } area 43473.014401589 ref 43473.014441513 err 4.4e-5 comps 1
+a tangent 2 105 Pinched { pinches: 1 } area 43050.278150929 ref 43050.278161350 err 1.1e-5 comps 1
+a tangent 2 106 Pinched { pinches: 1 } area 42211.885295256 ref 42211.885334488 err 7.9e-5 comps 1
+a tangent 2 107 Good area 44978.539816340 ref 44978.539834381 err 9.4e-6 comps 1
+a tangent 2 108 Pinched { pinches: 1 } area 42027.990021290 ref 42027.989982947 err 4.4e-5 comps 1
+a tangent 2 109 Pinched { pinches: 2 } area 43352.867347879 ref 43352.867393471 err 2.4e-5 comps 1
+a tangent 2 110 Pinched { pinches: 1 } area 42193.983901111 ref 42193.983934072 err 3.4e-5 comps 1
+a tangent 2 111 Pinched { pinches: 1 } area 43241.276885940 ref 43241.276905210 err 2.4e-5 comps 1
+a tangent 2 112 Pinched { pinches: 1 } area 43640.926381017 ref 43640.926422557 err 4.9e-6 comps 1
+a tangent 2 113 Pinched { pinches: 2 } area 42734.348128334 ref 42734.348087730 err 1.2e-5 comps 1
+a tangent 2 114 Pinched { pinches: 1 } area 42403.333715011 ref 42403.333829591 err 9.5e-7 comps 1
+a tangent 2 115 Pinched { pinches: 1 } area 44334.580778749 ref 44334.580783563 err 1.7e-5 comps 1
+a tangent 2 116 Pinched { pinches: 1 } area 42698.936293081 ref 42698.936363546 err 1.7e-5 comps 1
+a tangent 2 117 Pinched { pinches: 1 } area 43225.497200216 ref 43225.497222135 err 2.0e-5 comps 1
+a tangent 2 118 Good area 44402.946299330 ref 44402.946369912 err 1.6e-5 comps 1
+a tangent 2 119 Pinched { pinches: 2 } area 43563.075879162 ref 43563.075852145 err 7.8e-5 comps 1
+a tangent 2 120 Pinched { pinches: 2 } area 42461.322816622 ref 42461.322738501 err 7.4e-5 comps 1
+a tangent 2 121 Pinched { pinches: 1 } area 41875.905962047 ref 41875.905951763 err 1.6e-6 comps 1
+a tangent 2 122 Pinched { pinches: 1 } area 42783.841019725 ref 42783.840980448 err 2.1e-5 comps 1
+a tangent 2 123 Pinched { pinches: 1 } area 42857.864066341 ref 42857.864062293 err 9.7e-6 comps 1
+a tangent 2 124 Good area 44978.539816340 ref 44978.539834381 err 9.4e-6 comps 1
+a tangent 2 125 Pinched { pinches: 1 } area 42873.452630832 ref 42873.452560847 err 4.4e-5 comps 1
+a tangent 2 126 Pinched { pinches: 1 } area 43043.719280556 ref 43043.719300150 err 7.0e-6 comps 1
+a tangent 2 127 Pinched { pinches: 2 } area 43246.611479427 ref 43246.611526271 err 2.9e-5 comps 1
+a tangent 2 128 Good area 44978.539816340 ref 44978.539834381 err 9.4e-6 comps 1
+a tangent 2 129 Pinched { pinches: 1 } area 43208.328428967 ref 43208.328456845 err 2.5e-5 comps 1
+a tangent 2 130 Pinched { pinches: 1 } area 43160.315631126 ref 43160.315667156 err 1.9e-5 comps 1
+a tangent 2 131 Pinched { pinches: 1 } area 43849.374720806 ref 43849.374758129 err 2.8e-5 comps 1
+a tangent 2 132 Good area 43393.129873660 ref 43393.129867574 err 2.3e-6 comps 1
+a tangent 2 133 Pinched { pinches: 1 } area 43359.761013599 ref 43359.760989179 err 4.4e-6 comps 1
+a tangent 2 134 Pinched { pinches: 1 } area 44009.989568026 ref 44009.989537424 err 2.0e-5 comps 1
+a tangent 2 135 Good area 44978.539816340 ref 44978.539834381 err 9.4e-6 comps 1
+a tangent 2 136 Pinched { pinches: 1 } area 42554.576740629 ref 42554.576744641 err 1.9e-5 comps 1
+a tangent 2 137 Pinched { pinches: 1 } area 43594.127786851 ref 43594.127830729 err 2.9e-5 comps 1
+a tangent 2 138 Good area 44978.539816340 ref 44978.539834381 err 9.4e-6 comps 1
+a tangent 2 139 Pinched { pinches: 1 } area 43443.238673729 ref 43443.238688367 err 1.9e-5 comps 1
+a tangent 2 140 Pinched { pinches: 1 } area 42403.611633676 ref 42403.611676444 err 2.7e-6 comps 1
+a tangent 2 141 Good area 44978.539816340 ref 44978.539834381 err 9.4e-6 comps 1
+a tangent 2 142 Pinched { pinches: 1 } area 44532.283768625 ref 44532.283774684 err 3.9e-5 comps 1
+a tangent 2 143 Pinched { pinches: 1 } area 42185.815405283 ref 42185.815471653 err 2.3e-5 comps 1
+a tangent 2 144 Good area 44978.539816340 ref 44978.539834381 err 9.4e-6 comps 1
+a tangent 2 145 Good area 44246.383888074 ref 44246.383922159 err 7.3e-6 comps 1
+a tangent 2 146 Pinched { pinches: 2 } area 43597.790422303 ref 43597.790410600 err 8.0e-6 comps 2
+a tangent 2 147 Pinched { pinches: 1 } area 42185.954893766 ref 42185.954889168 err 3.0e-5 comps 1
+a tangent 2 148 Good area 44221.126953121 ref 44221.127034120 err 1.3e-5 comps 1
+a tangent 2 149 Pinched { pinches: 1 } area 41661.815434802 ref 41661.815430677 err 2.4e-5 comps 1
+a tangent 2 150 Pinched { pinches: 2 } area 42010.881955930 ref 42010.881981111 err 1.0e-5 comps 1
+a tangent 2 151 Pinched { pinches: 1 } area 43412.257585118 ref 43412.257573653 err 2.8e-5 comps 1
+a tangent 2 152 Pinched { pinches: 1 } area 40727.225939240 ref 40727.225947643 err 3.2e-5 comps 1
+a tangent 2 153 Pinched { pinches: 1 } area 43791.973756831 ref 43791.973736055 err 2.0e-5 comps 1
+a tangent 2 154 Good area 43591.161291952 ref 43591.161261999 err 1.9e-5 comps 1
+a tangent 2 155 Pinched { pinches: 1 } area 42964.892019982 ref 42964.892009223 err 1.2e-5 comps 1
+a tangent 2 156 Pinched { pinches: 1 } area 42875.656761811 ref 42875.656721256 err 8.4e-6 comps 1
+a tangent 2 157 Good area 44978.539816340 ref 44978.539834381 err 9.4e-6 comps 1
+a tangent 2 158 Good area 44978.539816340 ref 44978.539834381 err 9.4e-6 comps 1
+a tangent 2 159 Pinched { pinches: 1 } area 42941.882220522 ref 42941.882184269 err 8.2e-7 comps 1
+a tangent 2 160 Pinched { pinches: 1 } area 41860.839870356 ref 41860.839763186 err 5.4e-5 comps 1
+a tangent 2 161 Good area 43073.811664159 ref 43073.811699565 err 2.2e-5 comps 1
+a tangent 2 162 Good area 44978.539816340 ref 44978.539834381 err 9.4e-6 comps 1
+a tangent 2 163 Good area 44087.081170859 ref 44087.081135103 err 7.2e-6 comps 1
+a tangent 2 164 Pinched { pinches: 1 } area 43392.041962666 ref 43392.041955501 err 2.0e-5 comps 1
+a tangent 2 165 Good area 42862.988338855 ref 42862.988355993 err 4.6e-5 comps 1
+a tangent 2 166 Good area 44978.539816340 ref 44978.539834381 err 9.4e-6 comps 1
+a tangent 2 167 Good area 44978.539816340 ref 44978.539834381 err 9.4e-6 comps 1
+a tangent 2 168 Pinched { pinches: 1 } area 43885.285942744 ref 43885.285981652 err 1.6e-5 comps 1
+a tangent 2 169 Good area 43739.190242234 ref 43739.190235258 err 3.4e-5 comps 1
+a tangent 2 170 Pinched { pinches: 2 } area 40557.207139757 ref 40557.207100959 err 3.0e-6 comps 1
+a tangent 2 171 Good area 44978.539816340 ref 44978.539834381 err 9.4e-6 comps 1
+a tangent 2 172 Pinched { pinches: 1 } area 43067.000439623 ref 43067.000516493 err 1.0e-6 comps 1
+a tangent 2 173 Pinched { pinches: 1 } area 43373.527795859 ref 43373.527813013 err 2.5e-5 comps 1
+a tangent 2 174 Good area 43413.964404714 ref 43413.964414833 err 9.4e-6 comps 1
+a tangent 2 175 Good area 44386.920986934 ref 44386.921001820 err 2.4e-5 comps 1
+a tangent 2 176 Good area 44978.539816340 ref 44978.539834381 err 9.4e-6 comps 1
+a tangent 2 177 Pinched { pinches: 2 } area 43073.580972224 ref 43073.580957564 err 4.1e-5 comps 3
+a tangent 2 178 Good area 44978.539816340 ref 44978.539834381 err 9.4e-6 comps 1
+a tangent 2 179 Good area 44318.115590107 ref 44318.115548588 err 2.7e-5 comps 1
+a tangent 2 180 Pinched { pinches: 2 } area 41879.709962185 ref 41879.709969090 err 1.4e-5 comps 1
+a tangent 2 181 Good area 44978.539816340 ref 44978.539834381 err 9.4e-6 comps 1
+a tangent 2 182 Pinched { pinches: 1 } area 42191.753866819 ref 42191.753912872 err 4.6e-5 comps 1
+a tangent 2 183 Pinched { pinches: 1 } area 41843.143023731 ref 41843.143034945 err 2.8e-5 comps 1
+a tangent 2 184 Pinched { pinches: 1 } area 42406.919163135 ref 42406.919214034 err 2.2e-5 comps 1
+a tangent 2 185 Pinched { pinches: 1 } area 42723.599170748 ref 42723.599138497 err 4.4e-5 comps 2
+a tangent 2 186 Pinched { pinches: 1 } area 42569.864716929 ref 42569.864730805 err 9.9e-6 comps 1
+a tangent 2 187 Good area 43426.166469383 ref 43426.166487646 err 8.4e-6 comps 1
+a tangent 2 188 Pinched { pinches: 1 } area 41245.564978216 ref 41245.565024335 err 2.1e-6 comps 1
+a tangent 2 189 Pinched { pinches: 2 } area 43415.514976195 ref 43415.515030453 err 2.7e-5 comps 1
+a tangent 2 190 Good area 43897.982458668 ref 43897.982536393 err 2.4e-5 comps 1
+a tangent 2 191 Pinched { pinches: 1 } area 42409.997542862 ref 42409.997582407 err 3.0e-5 comps 1
+a tangent 2 192 Pinched { pinches: 2 } area 42324.816759948 ref 42324.816835452 err 1.6e-6 comps 1
+a tangent 2 193 Good area 43158.780987021 ref 43158.781077865 err 2.3e-5 comps 1
+a tangent 2 194 Good area 44978.539816340 ref 44978.539834381 err 9.4e-6 comps 1
+a tangent 2 195 Good area 44978.539816340 ref 44978.539834381 err 9.4e-6 comps 1
+a tangent 2 196 Pinched { pinches: 1 } area 41761.150733754 ref 41761.150739809 err 4.4e-5 comps 1
+a tangent 2 197 Pinched { pinches: 1 } area 42601.780855441 ref 42601.780874327 err 7.9e-6 comps 1
+a tangent 2 198 Good area 44513.162331744 ref 44513.162314511 err 7.2e-6 comps 1
+a tangent 2 199 Pinched { pinches: 1 } area 42194.889138028 ref 42194.889110653 err 2.1e-5 comps 1
+a tangent 20 0 Pinched { pinches: 8 } area 40964.431341386 ref 40964.431304840 err 2.8e-5 comps 2
+a tangent 20 1 Pinched { pinches: 3 } area 43161.506071316 ref 43161.505873379 err 4.1e-5 comps 1
+a tangent 20 2 Pinched { pinches: 10 } area 40005.463494290 ref 40005.463337736 err 4.4e-5 comps 5
+a tangent 20 3 Pinched { pinches: 6 } area 40826.768629624 ref 40826.768737513 err 5.0e-5 comps 3
+a tangent 20 4 Pinched { pinches: 5 } area 40376.069444332 ref 40376.069448166 err 7.1e-5 comps 4
+a tangent 20 5 Pinched { pinches: 8 } area 40539.972448732 ref 40539.972479918 err 3.7e-6 comps 4
+a tangent 20 6 Pinched { pinches: 8 } area 41462.039189977 ref 41462.039200804 err 1.5e-5 comps 6
+a tangent 20 7 Pinched { pinches: 8 } area 40752.560413102 ref 40752.560313344 err 1.1e-5 comps 3
+a tangent 20 8 Pinched { pinches: 5 } area 42639.396667613 ref 42639.396707219 err 3.1e-5 comps 5
+a tangent 20 9 Pinched { pinches: 6 } area 42626.974158842 ref 42626.974173657 err 3.7e-5 comps 4
+a tangent 20 10 Pinched { pinches: 9 } area 41065.807080357 ref 41065.807168512 err 3.8e-5 comps 3
+a tangent 20 11 Pinched { pinches: 9 } area 41696.462175562 ref 41696.462175334 err 6.2e-5 comps 8
+a tangent 20 12 Pinched { pinches: 3 } area 43266.096211290 ref 43266.096241259 err 3.7e-5 comps 1
+a tangent 20 13 Pinched { pinches: 1 } area 44171.317134906 ref 44171.317127922 err 2.5e-5 comps 1
+a tangent 20 14 Pinched { pinches: 5 } area 41471.970436609 ref 41471.970458110 err 3.3e-5 comps 4
+a tangent 20 15 Pinched { pinches: 12 } area 40768.970840147 ref 40768.970947939 err 9.5e-6 comps 6
+a tangent 20 16 Pinched { pinches: 2 } area 43542.796301924 ref 43542.796366090 err 2.2e-5 comps 1
+a tangent 20 17 Pinched { pinches: 2 } area 41893.426520011 ref 41893.426474547 err 2.4e-5 comps 2
+a tangent 20 18 Pinched { pinches: 3 } area 42359.275440244 ref 42359.275426008 err 1.8e-5 comps 2
+a tangent 20 19 Good area 44978.539816340 ref 44978.539834381 err 9.4e-6 comps 1
+a tangent 20 20 Pinched { pinches: 5 } area 41849.764509309 ref 41849.764544866 err 3.2e-6 comps 2
+a tangent 20 21 Pinched { pinches: 6 } area 41334.376915463 ref 41334.376911519 err 4.5e-5 comps 5
+a tangent 20 22 Pinched { pinches: 8 } area 41814.466499298 ref 41814.466615813 err 9.5e-5 comps 2
+a tangent 20 23 Pinched { pinches: 10 } area 40391.053303501 ref 40391.053306149 err 2.2e-5 comps 5
+a tangent 20 24 Pinched { pinches: 6 } area 41418.816345364 ref 41418.816385894 err 4.2e-5 comps 2
+a tangent 20 25 Pinched { pinches: 7 } area 39995.587746345 ref 39995.587773861 err 6.0e-6 comps 2
+a tangent 20 26 Pinched { pinches: 9 } area 41200.060848015 ref 41200.060793879 err 3.2e-5 comps 5
+a tangent 20 27 Pinched { pinches: 7 } area 41297.003170042 ref 41297.003133989 err 7.5e-5 comps 4
+a tangent 20 28 Pinched { pinches: 5 } area 42618.467844472 ref 42618.467721274 err 3.3e-5 comps 1
+a tangent 20 29 Pinched { pinches: 2 } area 41684.723962557 ref 41684.723962759 err 1.7e-5 comps 4
+a tangent 20 30 Pinched { pinches: 11 } area 40217.273399741 ref 40217.273416128 err 3.5e-5 comps 8
+a tangent 20 31 Pinched { pinches: 5 } area 40426.003646992 ref 40426.003615300 err 2.9e-5 comps 4
+a tangent 20 32 Pinched { pinches: 6 } area 40940.592149392 ref 40940.592164630 err 7.4e-5 comps 3
+a tangent 20 33 Pinched { pinches: 5 } area 42558.353483294 ref 42558.353462095 err 1.8e-5 comps 1
+a tangent 20 34 Pinched { pinches: 5 } area 40448.695970752 ref 40448.695974303 err 6.5e-5 comps 3
+a tangent 20 35 Pinched { pinches: 4 } area 43314.541622630 ref 43314.541517314 err 2.8e-6 comps 2
+a tangent 20 36 Pinched { pinches: 8 } area 41477.348091364 ref 41477.348052751 err 3.9e-5 comps 4
+a tangent 20 37 Pinched { pinches: 10 } area 40936.377200565 ref 40936.377259634 err 9.6e-5 comps 5
+a tangent 20 38 Pinched { pinches: 10 } area 41503.475959429 ref 41503.476019773 err 2.7e-5 comps 4
+a tangent 20 39 Pinched { pinches: 11 } area 38910.932615644 ref 38910.932514862 err 1.9e-5 comps 5
+a tangent 20 40 Pinched { pinches: 7 } area 42272.772952377 ref 42272.772895160 err 4.3e-5 comps 3
+a tangent 20 41 Pinched { pinches: 5 } area 40938.466502008 ref 40938.466374568 err 1.1e-4 comps 1
+a tangent 20 42 Pinched { pinches: 2 } area 43467.020549545 ref 43467.020540367 err 1.1e-5 comps 1
+a tangent 20 43 Pinched { pinches: 4 } area 42726.061767006 ref 42726.061765060 err 1.5e-6 comps 1
+a tangent 20 44 Pinched { pinches: 6 } area 40796.162579240 ref 40796.162428230 err 8.2e-5 comps 2
+a tangent 20 45 Pinched { pinches: 5 } area 43199.900145697 ref 43199.900117642 err 1.2e-6 comps 4
+a tangent 20 46 Pinched { pinches: 8 } area 42353.381259188 ref 42353.381237047 err 1.5e-6 comps 5
+a tangent 20 47 Pinched { pinches: 15 } area 39312.680877553 ref 39312.680862296 err 1.0e-5 comps 6
+a tangent 20 48 Pinched { pinches: 5 } area 42038.608858198 ref 42038.608918123 err 1.9e-5 comps 7
+a tangent 20 49 Pinched { pinches: 7 } area 41058.130949710 ref 41058.130846090 err 5.0e-6 comps 5
+a tangent 20 50 Pinched { pinches: 6 } area 41318.794183933 ref 41318.794325148 err 1.5e-6 comps 3
+a tangent 20 51 Pinched { pinches: 8 } area 40097.118695791 ref 40097.118594815 err 4.0e-5 comps 3
+a tangent 20 52 Pinched { pinches: 6 } area 40992.648583770 ref 40992.648478228 err 5.6e-5 comps 3
+a tangent 20 53 Pinched { pinches: 9 } area 41877.045177847 ref 41877.045202592 err 1.0e-4 comps 6
+a tangent 20 54 Pinched { pinches: 4 } area 42688.894335760 ref 42688.894251716 err 3.5e-5 comps 2
+a tangent 20 55 Pinched { pinches: 5 } area 42258.474955780 ref 42258.475053380 err 2.7e-5 comps 5
+a tangent 20 56 Pinched { pinches: 2 } area 42455.152532062 ref 42455.152640132 err 4.3e-5 comps 1
+a tangent 20 57 Pinched { pinches: 5 } area 42742.122876498 ref 42742.122909653 err 3.0e-5 comps 3
+a tangent 20 58 Pinched { pinches: 6 } area 42613.425691862 ref 42613.425595195 err 4.2e-5 comps 3
+a tangent 20 59 Pinched { pinches: 9 } area 40445.896955591 ref 40445.897046140 err 3.3e-5 comps 3
+a tangent 20 60 Pinched { pinches: 8 } area 41696.752612291 ref 41696.752736603 err 6.3e-5 comps 5
+a tangent 20 61 Pinched { pinches: 6 } area 43673.812235061 ref 43673.812301240 err 2.6e-5 comps 3
+a tangent 20 62 Pinched { pinches: 7 } area 42196.034210612 ref 42196.034302450 err 3.7e-5 comps 3
+a tangent 20 63 Pinched { pinches: 11 } area 40534.309210921 ref 40534.309070547 err 4.1e-5 comps 5
+a tangent 20 64 Pinched { pinches: 4 } area 41528.329375966 ref 41528.329282579 err 2.5e-5 comps 3
+a tangent 20 65 Pinched { pinches: 8 } area 41171.216337405 ref 41171.216454839 err 2.6e-5 comps 5
+a tangent 20 66 Pinched { pinches: 8 } area 40554.521471441 ref 40554.521570433 err 3.5e-5 comps 2
+a tangent 20 67 Pinched { pinches: 8 } area 40375.359550225 ref 40375.359602461 err 8.0e-5 comps 6
+a tangent 20 68 Pinched { pinches: 6 } area 41037.842122580 ref 41037.842091681 err 3.7e-5 comps 3
+a tangent 20 69 Pinched { pinches: 2 } area 43559.521272437 ref 43559.521288420 err 2.5e-6 comps 1
+a tangent 20 70 Pinched { pinches: 5 } area 41269.697898968 ref 41269.698035649 err 5.1e-5 comps 2
+a tangent 20 71 Pinched { pinches: 3 } area 42946.859710041 ref 42946.859704379 err 1.8e-5 comps 3
+a tangent 20 72 Pinched { pinches: 7 } area 42127.321847829 ref 42127.321861987 err 7.3e-6 comps 4
+a tangent 20 73 Pinched { pinches: 6 } area 41656.929436741 ref 41656.929473478 err 4.0e-5 comps 2
+a tangent 20 74 Pinched { pinches: 9 } area 40882.544090809 ref 40882.544030945 err 1.7e-5 comps 6
+a tangent 20 75 Pinched { pinches: 8 } area 41196.285987193 ref 41196.285976121 err 7.9e-5 comps 3
+a tangent 20 76 Pinched { pinches: 5 } area 42817.819055648 ref 42817.819188569 err 4.5e-6 comps 1
+a tangent 20 77 Pinched { pinches: 7 } area 42402.292214627 ref 42402.292253177 err 2.7e-5 comps 2
+a tangent 20 78 Pinched { pinches: 6 } area 41902.156277218 ref 41902.156283588 err 4.4e-6 comps 4
+a tangent 20 79 Pinched { pinches: 9 } area 39603.054660537 ref 39603.054565062 err 2.9e-5 comps 7
+a tangent 20 80 Pinched { pinches: 11 } area 40855.153074005 ref 40855.152945718 err 2.1e-5 comps 9
+a tangent 20 81 Pinched { pinches: 11 } area 40706.125924651 ref 40706.125894357 err 6.1e-5 comps 3
+a tangent 20 82 Pinched { pinches: 8 } area 42269.743967094 ref 42269.743968471 err 7.0e-5 comps 4
+a tangent 20 83 Pinched { pinches: 8 } area 41127.211748016 ref 41127.211720185 err 3.4e-6 comps 3
+a tangent 20 84 Pinched { pinches: 3 } area 43255.680923308 ref 43255.680941097 err 2.0e-5 comps 2
+a tangent 20 85 Pinched { pinches: 9 } area 41072.297297877 ref 41072.297261848 err 1.1e-4 comps 4
+a tangent 20 86 Pinched { pinches: 2 } area 43155.870351759 ref 43155.870410249 err 2.2e-5 comps 1
+a tangent 20 87 Pinched { pinches: 7 } area 39728.095112787 ref 39728.095248876 err 1.5e-5 comps 7
+a tangent 20 88 Pinched { pinches: 1 } area 43699.931651163 ref 43699.931692841 err 2.6e-5 comps 1
+a tangent 20 89 Pinched { pinches: 7 } area 42647.131355273 ref 42647.131329670 err 1.6e-5 comps 6
+a tangent 20 90 Pinched { pinches: 10 } area 41307.754867296 ref 41307.755095079 err 3.9e-5 comps 4
+a tangent 20 91 Pinched { pinches: 11 } area 41563.408135672 ref 41563.408148755 err 1.6e-5 comps 8
+a tangent 20 92 Pinched { pinches: 2 } area 42477.072903403 ref 42477.072965958 err 8.7e-5 comps 1
+a tangent 20 93 Pinched { pinches: 4 } area 42585.517229311 ref 42585.517354849 err 5.2e-5 comps 4
+a tangent 20 94 Pinched { pinches: 6 } area 41754.546227593 ref 41754.546231704 err 9.0e-5 comps 3
+a tangent 20 95 Pinched { pinches: 5 } area 42851.808958732 ref 42851.808890934 err 3.1e-5 comps 2
+a tangent 20 96 Pinched { pinches: 6 } area 40790.104230036 ref 40790.104376727 err 2.3e-5 comps 4
+a tangent 20 97 Pinched { pinches: 6 } area 41590.586396615 ref 41590.586373638 err 1.3e-5 comps 4
+a tangent 20 98 Pinched { pinches: 2 } area 42252.529267719 ref 42252.529289534 err 1.6e-5 comps 1
+a tangent 20 99 Pinched { pinches: 3 } area 41702.560581237 ref 41702.560647464 err 6.5e-5 comps 2
+a tangent 200 0 Pinched { pinches: 48 } area 42455.434639307 ref 42455.434581701 err 9.6e-5 comps 41
+a tangent 200 1 Pinched { pinches: 35 } area 43278.279323621 ref 43278.279366552 err 1.0e-4 comps 30
+a tangent 200 2 Pinched { pinches: 38 } area 42701.854964249 ref 42701.854998673 err 1.2e-4 comps 35
+a tangent 200 3 Pinched { pinches: 36 } area 42904.534257906 ref 42904.534253071 err 3.5e-5 comps 28
+a tangent 200 4 Pinched { pinches: 33 } area 43205.673264298 ref 43205.673202213 err 7.6e-5 comps 18
+a tangent 200 5 Pinched { pinches: 41 } area 42986.001569541 ref 42986.001501435 err 1.5e-4 comps 36
+a tangent 200 6 Pinched { pinches: 49 } area 43118.029423217 ref 43118.029479141 err 5.4e-5 comps 40
+a tangent 200 7 Pinched { pinches: 50 } area 42477.435008113 ref 42477.434887942 err 2.8e-5 comps 40
+a tangent 200 8 Pinched { pinches: 46 } area 42757.394570858 ref 42757.394640301 err 8.3e-5 comps 26
+a tangent 200 9 Pinched { pinches: 50 } area 43074.988015608 ref 43074.987972710 err 9.4e-5 comps 42
+a tangent 200 10 Pinched { pinches: 54 } area 42402.619012567 ref 42402.619067185 err 9.6e-5 comps 41
+a tangent 200 11 Pinched { pinches: 44 } area 43076.301573738 ref 43076.301541071 err 4.3e-5 comps 30
+a tangent 200 12 Pinched { pinches: 51 } area 42690.697235574 ref 42690.697304523 err 4.3e-5 comps 36
+a tangent 200 13 Pinched { pinches: 40 } area 42659.039067352 ref 42659.039042066 err 1.3e-5 comps 34
+a tangent 200 14 Pinched { pinches: 49 } area 42970.691771237 ref 42970.691963190 err 9.9e-6 comps 40
+a tangent 200 15 Pinched { pinches: 45 } area 42858.499133919 ref 42858.499245237 err 9.3e-5 comps 42
+a tangent 200 16 Pinched { pinches: 51 } area 42450.143212419 ref 42450.143234123 err 4.8e-5 comps 42
+a tangent 200 17 Pinched { pinches: 63 } area 42406.402404235 ref 42406.402291972 err 3.4e-5 comps 52
+a tangent 200 18 Pinched { pinches: 51 } area 42628.515620021 ref 42628.515453548 err 7.7e-5 comps 38
+a tangent 200 19 Pinched { pinches: 44 } area 42878.833576545 ref 42878.833450254 err 2.4e-5 comps 39

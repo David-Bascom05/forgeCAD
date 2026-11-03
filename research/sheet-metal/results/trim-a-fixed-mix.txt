@@ -1,0 +1,320 @@
+a mix 2 0 Good area 43653.544294913 ref 43653.544315639 err 4.3e-6 comps 1
+a mix 2 1 Good area 43221.102171576 ref 43221.102201066 err 1.1e-5 comps 1
+a mix 2 2 Good area 44420.200767847 ref 44420.200851652 err 2.5e-5 comps 1
+a mix 2 3 Good area 43747.570999270 ref 43747.571071023 err 2.5e-5 comps 1
+a mix 2 4 Good area 42113.135498272 ref 42113.135470023 err 3.5e-5 comps 1
+a mix 2 5 Good area 41320.317045253 ref 41320.317074346 err 1.1e-5 comps 1
+a mix 2 6 Good area 43247.902575877 ref 43247.902577539 err 3.5e-5 comps 1
+a mix 2 7 Good area 43737.466535721 ref 43737.466544542 err 1.5e-6 comps 1
+a mix 2 8 Good area 42886.903110281 ref 42886.903113053 err 1.3e-5 comps 1
+a mix 2 9 Good area 43474.616437298 ref 43474.616455387 err 9.4e-6 comps 1
+a mix 2 10 Good area 44332.057380223 ref 44332.057418470 err 8.4e-6 comps 1
+a mix 2 11 Good area 42780.638341684 ref 42780.638411836 err 1.4e-5 comps 1
+a mix 2 12 Good area 43798.721205750 ref 43798.721217204 err 1.4e-5 comps 1
+a mix 2 13 Pinched { pinches: 1 } area 43396.581741773 ref 43396.581742392 err 2.5e-5 comps 1
+a mix 2 14 Good area 43746.828293864 ref 43746.828311562 err 3.2e-5 comps 1
+a mix 2 15 Good area 43598.941403264 ref 43598.941426147 err 8.9e-6 comps 1
+a mix 2 16 Good area 43792.428421606 ref 43792.428465995 err 2.9e-5 comps 1
+a mix 2 17 Good area 43337.891202389 ref 43337.891223027 err 1.6e-5 comps 1
+a mix 2 18 Good area 43981.370943959 ref 43981.370963836 err 2.3e-5 comps 1
+a mix 2 19 Good area 43818.844466120 ref 43818.844469748 err 9.0e-7 comps 1
+a mix 2 20 Good area 43714.277389284 ref 43714.277408203 err 8.9e-6 comps 1
+a mix 2 21 Good area 43818.388438346 ref 43818.388456636 err 6.8e-6 comps 1
+a mix 2 22 Pinched { pinches: 1 } area 42027.906022243 ref 42027.906056277 err 2.2e-5 comps 1
+a mix 2 23 Good area 42609.522959193 ref 42609.522941568 err 1.0e-5 comps 1
+a mix 2 24 Good area 44752.116093147 ref 44752.116071737 err 1.8e-5 comps 1
+a mix 2 25 Good area 44233.014811299 ref 44233.014829781 err 9.6e-6 comps 1
+a mix 2 26 Good area 44226.586510632 ref 44226.586520371 err 4.5e-6 comps 1
+a mix 2 27 Good area 43417.802703562 ref 43417.802740376 err 1.3e-5 comps 1
+a mix 2 28 Good area 43777.871667738 ref 43777.871674290 err 2.1e-5 comps 1
+a mix 2 29 Good area 43673.561570406 ref 43673.561545909 err 9.8e-6 comps 1
+a mix 2 30 Good area 44472.533425357 ref 44472.533429487 err 2.3e-5 comps 1
+a mix 2 31 Good area 43831.547533785 ref 43831.547527893 err 9.2e-6 comps 1
+a mix 2 32 Good area 43610.775087346 ref 43610.775058308 err 1.6e-6 comps 1
+a mix 2 33 Pinched { pinches: 1 } area 42003.324482404 ref 42003.324477725 err 3.1e-6 comps 1
+a mix 2 34 Good area 43967.171315976 ref 43967.171466326 err 1.9e-5 comps 1
+a mix 2 35 Good area 43799.189751996 ref 43799.189748350 err 1.5e-6 comps 1
+a mix 2 36 Good area 44089.774841539 ref 44089.774837321 err 1.6e-5 comps 1
+a mix 2 37 Good area 43218.935788651 ref 43218.935855554 err 4.3e-5 comps 1
+a mix 2 38 Good area 42491.890075425 ref 42491.890075147 err 5.7e-6 comps 1
+a mix 2 39 Good area 44637.281350647 ref 44637.281314890 err 1.5e-8 comps 1
+a mix 2 40 Good area 44051.828664969 ref 44051.828639095 err 2.6e-6 comps 1
+a mix 2 41 Pinched { pinches: 1 } area 42138.780333892 ref 42138.780389136 err 2.8e-5 comps 1
+a mix 2 42 Good area 43503.376631614 ref 43503.376674428 err 5.3e-5 comps 1
+a mix 2 43 Good area 44197.362756412 ref 44197.362774484 err 9.4e-6 comps 1
+a mix 2 44 Good area 44223.868431840 ref 44223.868415271 err 7.4e-6 comps 1
+a mix 2 45 Good area 43492.039264097 ref 43492.039387041 err 3.0e-5 comps 1
+a mix 2 46 Good area 43667.669200836 ref 43667.669216742 err 3.2e-6 comps 1
+a mix 2 47 Good area 44271.752727840 ref 44271.752801252 err 4.3e-6 comps 1
+a mix 2 48 Good area 42667.265175438 ref 42667.265241551 err 2.8e-5 comps 1
+a mix 2 49 Good area 42283.631355839 ref 42283.631514983 err 1.6e-5 comps 1
+a mix 2 50 Good area 42406.958994425 ref 42406.958939964 err 9.7e-6 comps 1
+a mix 2 51 Pinched { pinches: 1 } area 43892.967460308 ref 43892.967451387 err 7.3e-6 comps 1
+a mix 2 52 Good area 44088.167656967 ref 44088.167688906 err 9.5e-7 comps 1
+a mix 2 53 Good area 43293.887436088 ref 43293.887481058 err 4.2e-5 comps 1
+a mix 2 54 Good area 44004.634826258 ref 44004.634805831 err 7.8e-7 comps 1
+a mix 2 55 Good area 43808.399378892 ref 43808.399371777 err 9.8e-6 comps 1
+a mix 2 56 Good area 44399.407956310 ref 44399.407974312 err 9.1e-6 comps 1
+a mix 2 57 Good area 43816.027626368 ref 43816.027626873 err 2.2e-5 comps 1
+a mix 2 58 Good area 44670.241262792 ref 44670.241265231 err 1.5e-6 comps 1
+a mix 2 59 Good area 42509.172517142 ref 42509.172563928 err 3.5e-5 comps 1
+a mix 2 60 Pinched { pinches: 1 } area 42371.290080330 ref 42371.290082698 err 2.8e-5 comps 1
+a mix 2 61 Good area 44472.875233563 ref 44472.875273163 err 5.2e-6 comps 1
+a mix 2 62 Good area 44978.539816340 ref 44978.539834381 err 9.4e-6 comps 1
+a mix 2 63 Good area 43708.871670108 ref 43708.871682667 err 8.8e-6 comps 1
+a mix 2 64 Good area 43382.440139712 ref 43382.440138334 err 7.5e-7 comps 1
+a mix 2 65 Good area 44281.860062112 ref 44281.860080105 err 9.1e-6 comps 1
+a mix 2 66 Pinched { pinches: 1 } area 42451.308975753 ref 42451.308996833 err 3.0e-5 comps 1
+a mix 2 67 Good area 43607.922640321 ref 43607.922665542 err 1.6e-5 comps 1
+a mix 2 68 Good area 42773.641218690 ref 42773.641256953 err 2.8e-5 comps 1
+a mix 2 69 Good area 42757.352669829 ref 42757.352678210 err 2.3e-6 comps 1
+a mix 2 70 Good area 43525.675390883 ref 43525.675365722 err 2.7e-5 comps 1
+a mix 2 71 Good area 43591.205926796 ref 43591.205891923 err 3.3e-6 comps 1
+a mix 2 72 Good area 44787.389167211 ref 44787.389166634 err 2.4e-5 comps 1
+a mix 2 73 Good area 43396.994021980 ref 43396.994013974 err 8.8e-6 comps 1
+a mix 2 74 Good area 44259.313210289 ref 44259.313228485 err 9.5e-6 comps 1
+a mix 2 75 Good area 43879.538416987 ref 43879.538448723 err 1.7e-5 comps 1
+a mix 2 76 Good area 44449.124580461 ref 44449.124582059 err 6.8e-7 comps 1
+a mix 2 77 Good area 43526.445217530 ref 43526.445285779 err 9.0e-6 comps 1
+a mix 2 78 Good area 43284.043076884 ref 43284.043073685 err 1.3e-5 comps 1
+a mix 2 79 Good area 44525.450859818 ref 44525.450858470 err 2.3e-5 comps 1
+a mix 2 80 Good area 43486.254720596 ref 43486.254765475 err 3.9e-5 comps 1
+a mix 2 81 Good area 43328.626237943 ref 43328.626256471 err 1.6e-5 comps 1
+a mix 2 82 Good area 43296.339118207 ref 43296.339139244 err 1.4e-5 comps 1
+a mix 2 83 Good area 43697.283938711 ref 43697.283994376 err 1.4e-5 comps 1
+a mix 2 84 Good area 43900.796396848 ref 43900.796410484 err 1.2e-5 comps 2
+a mix 2 85 Good area 44417.294979027 ref 44417.294997125 err 9.4e-6 comps 1
+a mix 2 86 Good area 42041.225842679 ref 42041.225874866 err 7.9e-5 comps 1
+a mix 2 87 Good area 44403.011942696 ref 44403.011960638 err 9.4e-6 comps 1
+a mix 2 88 Good area 42993.472034086 ref 42993.472049295 err 3.5e-6 comps 1
+a mix 2 89 Good area 44895.681057863 ref 44895.681075933 err 9.4e-6 comps 1
+a mix 2 90 Good area 43467.065520044 ref 43467.065573901 err 1.8e-5 comps 1
+a mix 2 91 Good area 44567.462624561 ref 44567.462642927 err 9.5e-6 comps 1
+a mix 2 92 Good area 42246.093780242 ref 42246.093837253 err 3.5e-5 comps 1
+a mix 2 93 Good area 41491.906653347 ref 41491.906655578 err 1.2e-5 comps 1
+a mix 2 94 Good area 42773.744519640 ref 42773.744494530 err 1.9e-5 comps 1
+a mix 2 95 Good area 42599.966884679 ref 42599.966859777 err 1.1e-5 comps 1
+a mix 2 96 Good area 43638.936186153 ref 43638.936239261 err 1.5e-5 comps 1
+a mix 2 97 Good area 44284.264177833 ref 44284.264196140 err 9.1e-6 comps 1
+a mix 2 98 Good area 42738.114361310 ref 42738.114388166 err 1.6e-5 comps 1
+a mix 2 99 Good area 43577.858797717 ref 43577.858813160 err 5.7e-6 comps 1
+a mix 2 100 Good area 43437.784120501 ref 43437.784123150 err 2.7e-7 comps 1
+a mix 2 101 Good area 43147.816118270 ref 43147.816092234 err 1.0e-5 comps 1
+a mix 2 102 Good area 44114.883974569 ref 44114.883962928 err 2.5e-6 comps 1
+a mix 2 103 Good area 44265.619912948 ref 44265.619905289 err 3.3e-6 comps 1
+a mix 2 104 Good area 43937.421254433 ref 43937.421326014 err 5.9e-5 comps 1
+a mix 2 105 Good area 43639.215767841 ref 43639.215857392 err 6.6e-6 comps 1
+a mix 2 106 Good area 43594.192829858 ref 43594.192771678 err 1.5e-5 comps 1
+a mix 2 107 Good area 44580.259606627 ref 44580.259633715 err 5.5e-6 comps 1
+a mix 2 108 Good area 44226.440653741 ref 44226.440652704 err 1.6e-6 comps 1
+a mix 2 109 Good area 43263.128572254 ref 43263.128654716 err 5.5e-6 comps 1
+a mix 2 110 Good area 43210.783638534 ref 43210.783674766 err 2.0e-5 comps 1
+a mix 2 111 Good area 43651.761900525 ref 43651.761948426 err 2.9e-5 comps 1
+a mix 2 112 Good area 44134.393089932 ref 44134.393120295 err 7.6e-7 comps 1
+a mix 2 113 Good area 42609.024137783 ref 42609.024173222 err 2.6e-5 comps 1
+a mix 2 114 Good area 44017.768893845 ref 44017.768897246 err 2.5e-5 comps 1
+a mix 2 115 Good area 43523.228203020 ref 43523.228297022 err 2.1e-5 comps 1
+a mix 2 116 Good area 44827.251558823 ref 44827.251577732 err 9.5e-6 comps 1
+a mix 2 117 Good area 42522.645785757 ref 42522.645731516 err 1.7e-5 comps 1
+a mix 2 118 Good area 43700.167296483 ref 43700.167398269 err 2.2e-5 comps 1
+a mix 2 119 Good area 44012.388992905 ref 44012.389010845 err 9.3e-6 comps 1
+a mix 2 120 Good area 43954.167568939 ref 43954.167572463 err 6.1e-7 comps 1
+a mix 2 121 Good area 44881.563337111 ref 44881.563341615 err 3.5e-6 comps 1
+a mix 2 122 Good area 43552.946278744 ref 43552.946251243 err 7.8e-6 comps 1
+a mix 2 123 Good area 43330.900498429 ref 43330.900497984 err 9.7e-6 comps 1
+a mix 2 124 Pinched { pinches: 1 } area 41511.639336839 ref 41511.639391166 err 5.1e-5 comps 1
+a mix 2 125 Good area 43842.780710524 ref 43842.780709744 err 3.1e-5 comps 1
+a mix 2 126 Good area 41858.881015712 ref 41858.880984331 err 9.8e-6 comps 1
+a mix 2 127 Pinched { pinches: 1 } area 42529.611871143 ref 42529.611852620 err 3.1e-5 comps 1
+a mix 2 128 Good area 42362.462020088 ref 42362.462002874 err 4.1e-5 comps 1
+a mix 2 129 Good area 43824.678198822 ref 43824.678192958 err 1.5e-5 comps 1
+a mix 2 130 Good area 43794.681164918 ref 43794.681183546 err 9.5e-6 comps 1
+a mix 2 131 Good area 43388.235348356 ref 43388.235454308 err 2.5e-5 comps 1
+a mix 2 132 Good area 42191.539705100 ref 42191.539800300 err 3.2e-5 comps 1
+a mix 2 133 Good area 44204.041242000 ref 44204.041305244 err 1.1e-5 comps 1
+a mix 2 134 Good area 44196.219051482 ref 44196.219104858 err 3.7e-5 comps 1
+a mix 2 135 Good area 43228.922466692 ref 43228.922498099 err 6.5e-5 comps 1
+a mix 2 136 Good area 44392.327963787 ref 44392.327973295 err 9.7e-6 comps 1
+a mix 2 137 Good area 42116.565759384 ref 42116.565846431 err 3.8e-5 comps 1
+a mix 2 138 Pinched { pinches: 1 } area 42361.780002832 ref 42361.780014012 err 6.2e-5 comps 1
+a mix 2 139 Good area 43740.678492068 ref 43740.678529365 err 1.9e-5 comps 1
+a mix 2 140 Good area 42561.439735740 ref 42561.439698423 err 1.2e-5 comps 1
+a mix 2 141 Good area 43337.191681306 ref 43337.191788709 err 1.8e-5 comps 1
+a mix 2 142 Good area 43657.765188698 ref 43657.765207117 err 9.2e-6 comps 1
+a mix 2 143 Good area 43732.065260374 ref 43732.065241268 err 3.3e-6 comps 1
+a mix 2 144 Good area 42176.799603500 ref 42176.799662579 err 3.0e-5 comps 1
+a mix 2 145 Good area 43457.881794383 ref 43457.881828311 err 1.9e-5 comps 1
+a mix 2 146 Good area 41469.521903298 ref 41469.521902899 err 3.4e-5 comps 1
+a mix 2 147 Good area 43873.603777756 ref 43873.603807872 err 6.3e-6 comps 1
+a mix 2 148 Good area 44175.926957790 ref 44175.926975345 err 9.2e-6 comps 1
+a mix 2 149 Good area 43281.825451427 ref 43281.825442492 err 2.6e-5 comps 1
+a mix 2 150 Good area 42332.448011175 ref 42332.448043150 err 1.6e-5 comps 1
+a mix 2 151 Good area 42925.957664428 ref 42925.957657421 err 9.1e-6 comps 1
+a mix 2 152 Good area 42153.825986963 ref 42153.825964282 err 4.5e-5 comps 1
+a mix 2 153 Good area 43700.322314854 ref 43700.322365087 err 5.1e-5 comps 1
+a mix 2 154 Good area 42312.436935522 ref 42312.436979891 err 3.3e-5 comps 1
+a mix 2 155 Good area 43166.373963848 ref 43166.373982006 err 9.4e-6 comps 1
+a mix 2 156 Good area 42517.299143413 ref 42517.299186344 err 1.7e-5 comps 1
+a mix 2 157 Good area 43382.369641820 ref 43382.369693269 err 2.1e-5 comps 1
+a mix 2 158 Good area 43121.840363919 ref 43121.840413913 err 4.2e-5 comps 1
+a mix 2 159 Pinched { pinches: 1 } area 42759.570418918 ref 42759.570395721 err 1.3e-5 comps 1
+a mix 2 160 Good area 44292.672838671 ref 44292.672856675 err 9.5e-6 comps 1
+a mix 2 161 Good area 42556.906891114 ref 42556.906912892 err 2.3e-5 comps 1
+a mix 2 162 Good area 43564.290139206 ref 43564.290150761 err 9.9e-6 comps 1
+a mix 2 163 Pinched { pinches: 1 } area 42578.465726227 ref 42578.465892724 err 4.8e-5 comps 1
+a mix 2 164 Good area 44108.623435693 ref 44108.623425104 err 1.9e-6 comps 1
+a mix 2 165 Pinched { pinches: 1 } area 43681.483344767 ref 43681.483362561 err 8.6e-6 comps 1
+a mix 2 166 Good area 40721.210312838 ref 40721.210300181 err 1.3e-5 comps 1
+a mix 2 167 Good area 43763.074155976 ref 43763.074216589 err 1.2e-5 comps 1
+a mix 2 168 Good area 42167.067143420 ref 42167.067210137 err 2.0e-5 comps 1
+a mix 2 169 Good area 44160.285249483 ref 44160.285336368 err 1.5e-5 comps 1
+a mix 2 170 Good area 42843.311053737 ref 42843.311022802 err 7.4e-6 comps 1
+a mix 2 171 Good area 44239.992434504 ref 44239.992460698 err 1.0e-5 comps 1
+a mix 2 172 Good area 44646.030557277 ref 44646.030575351 err 9.5e-6 comps 1
+a mix 2 173 Good area 44053.409705738 ref 44053.409723755 err 8.9e-6 comps 1
+a mix 2 174 Good area 44126.580973391 ref 44126.580999800 err 4.7e-6 comps 1
+a mix 2 175 Good area 44328.083481822 ref 44328.083471757 err 2.0e-5 comps 1
+a mix 2 176 Pinched { pinches: 1 } area 42504.495466400 ref 42504.495506554 err 1.3e-6 comps 1
+a mix 2 177 Good area 44512.060742761 ref 44512.060741274 err 4.0e-6 comps 1
+a mix 2 178 Good area 42056.436686602 ref 42056.436781168 err 1.4e-5 comps 1
+a mix 2 179 Good area 43563.949900463 ref 43563.949883752 err 2.1e-5 comps 1
+a mix 2 180 Good area 44190.277007122 ref 44190.277025048 err 9.3e-6 comps 1
+a mix 2 181 Good area 42634.142974463 ref 42634.143011799 err 3.9e-5 comps 1
+a mix 2 182 Good area 44102.522637401 ref 44102.522643458 err 3.2e-6 comps 1
+a mix 2 183 Good area 44086.694651350 ref 44086.694647300 err 4.1e-6 comps 1
+a mix 2 184 Good area 44249.051351749 ref 44249.051369653 err 9.7e-6 comps 1
+a mix 2 185 Good area 44333.438682502 ref 44333.438701000 err 9.5e-6 comps 1
+a mix 2 186 Good area 42693.346922044 ref 42693.346874655 err 2.9e-6 comps 1
+a mix 2 187 Good area 44167.462281991 ref 44167.462299992 err 9.6e-6 comps 1
+a mix 2 188 Good area 43279.161415184 ref 43279.161367337 err 4.0e-5 comps 1
+a mix 2 189 Good area 41488.308141579 ref 41488.308039686 err 1.3e-6 comps 1
+a mix 2 190 Pinched { pinches: 1 } area 43820.088162698 ref 43820.088309484 err 2.8e-5 comps 1
+a mix 2 191 Good area 42793.822630483 ref 42793.822615643 err 1.6e-5 comps 1
+a mix 2 192 Good area 43323.574800637 ref 43323.574806059 err 4.6e-5 comps 1
+a mix 2 193 Good area 44477.798893121 ref 44477.798911560 err 8.9e-6 comps 1
+a mix 2 194 Good area 44069.900558127 ref 44069.900588364 err 7.7e-6 comps 1
+a mix 2 195 Pinched { pinches: 1 } area 43869.205137434 ref 43869.205243082 err 6.7e-7 comps 1
+a mix 2 196 Good area 43423.988571974 ref 43423.988559901 err 6.5e-6 comps 1
+a mix 2 197 Pinched { pinches: 1 } area 43271.496192494 ref 43271.496202740 err 1.6e-5 comps 1
+a mix 2 198 Good area 43980.982063699 ref 43980.982144256 err 1.1e-5 comps 1
+a mix 2 199 Good area 43644.621318681 ref 43644.621350462 err 1.6e-5 comps 1
+a mix 20 0 Good area 42117.705493009 ref 42117.705501609 err 4.2e-5 comps 1
+a mix 20 1 Pinched { pinches: 1 } area 39963.773117135 ref 39963.773166631 err 1.1e-4 comps 1
+a mix 20 2 Good area 41020.276029836 ref 41020.276104497 err 2.9e-5 comps 1
+a mix 20 3 Pinched { pinches: 1 } area 42112.729532011 ref 42112.729579424 err 3.6e-6 comps 1
+a mix 20 4 Good area 39451.055434134 ref 39451.055545089 err 3.5e-5 comps 1
+a mix 20 5 Pinched { pinches: 1 } area 39660.246093268 ref 39660.246175550 err 6.4e-5 comps 1
+a mix 20 6 Pinched { pinches: 1 } area 39929.365429861 ref 39929.365352603 err 7.7e-5 comps 1
+a mix 20 7 Good area 42806.232372948 ref 42806.232353080 err 1.7e-5 comps 1
+a mix 20 8 Pinched { pinches: 2 } area 39862.834574129 ref 39862.834512361 err 4.8e-5 comps 1
+a mix 20 9 Good area 41054.185022646 ref 41054.185036509 err 1.4e-5 comps 1
+a mix 20 10 Good area 39622.324339341 ref 39622.324625108 err 6.2e-5 comps 1
+a mix 20 11 Pinched { pinches: 1 } area 41956.181655445 ref 41956.181579713 err 4.5e-5 comps 1
+a mix 20 12 Pinched { pinches: 1 } area 39463.682293551 ref 39463.682320176 err 5.9e-5 comps 1
+a mix 20 13 Good area 39792.836779347 ref 39792.836691678 err 5.0e-5 comps 1
+a mix 20 14 Good area 40875.830493794 ref 40875.830479684 err 5.8e-5 comps 1
+a mix 20 15 Good area 41936.256630365 ref 41936.256708305 err 4.7e-5 comps 1
+a mix 20 16 Pinched { pinches: 1 } area 41211.008929274 ref 41211.008856175 err 4.0e-5 comps 1
+a mix 20 17 Pinched { pinches: 1 } area 40317.788153760 ref 40317.788226796 err 1.9e-5 comps 2
+a mix 20 18 Good area 40237.341155804 ref 40237.341325009 err 1.3e-4 comps 1
+a mix 20 19 Good area 39229.654674303 ref 39229.654646528 err 6.4e-5 comps 1
+a mix 20 20 Pinched { pinches: 1 } area 40167.215579842 ref 40167.215800350 err 2.1e-5 comps 2
+a mix 20 21 Good area 40703.278384253 ref 40703.278411298 err 2.2e-5 comps 2
+a mix 20 22 Good area 40083.630702368 ref 40083.630756475 err 4.1e-5 comps 1
+a mix 20 23 Pinched { pinches: 1 } area 41071.001866421 ref 41071.001943116 err 1.2e-4 comps 1
+a mix 20 24 Good area 41654.719722398 ref 41654.719730359 err 3.5e-6 comps 1
+a mix 20 25 Pinched { pinches: 1 } area 39498.704083067 ref 39498.703854837 err 6.6e-6 comps 2
+a mix 20 26 Good area 41109.504106959 ref 41109.504253882 err 4.8e-5 comps 1
+a mix 20 27 Pinched { pinches: 1 } area 39750.672011368 ref 39750.671980563 err 2.4e-5 comps 1
+a mix 20 28 Pinched { pinches: 1 } area 41136.518867731 ref 41136.518885190 err 6.6e-5 comps 1
+a mix 20 29 Good area 40126.191896783 ref 40126.191907827 err 5.1e-6 comps 1
+a mix 20 30 Good area 40454.063807734 ref 40454.063769145 err 8.0e-5 comps 1
+a mix 20 31 Pinched { pinches: 1 } area 40356.945000023 ref 40356.945046452 err 5.7e-5 comps 2
+a mix 20 32 Good area 41821.409199188 ref 41821.409294942 err 1.7e-5 comps 1
+a mix 20 33 Good area 41000.454639735 ref 41000.454667183 err 5.7e-5 comps 1
+a mix 20 34 Pinched { pinches: 1 } area 39494.364565235 ref 39494.364472982 err 1.1e-5 comps 1
+a mix 20 35 Good area 39774.029303039 ref 39774.029305102 err 5.0e-6 comps 2
+a mix 20 36 Pinched { pinches: 3 } area 39271.546811040 ref 39271.546873213 err 1.5e-5 comps 1
+a mix 20 37 Pinched { pinches: 1 } area 41122.858299104 ref 41122.858213923 err 4.1e-5 comps 1
+a mix 20 38 Pinched { pinches: 1 } area 40523.699103931 ref 40523.699120302 err 4.2e-5 comps 3
+a mix 20 39 Pinched { pinches: 1 } area 41096.808469600 ref 41096.808414789 err 4.7e-6 comps 1
+a mix 20 40 Pinched { pinches: 2 } area 39593.569704181 ref 39593.569691584 err 3.2e-5 comps 1
+a mix 20 41 Pinched { pinches: 1 } area 40104.244682170 ref 40104.244589470 err 1.5e-5 comps 1
+a mix 20 42 Pinched { pinches: 1 } area 40089.888124467 ref 40089.888198860 err 1.0e-4 comps 2
+a mix 20 43 Good area 40241.156944683 ref 40241.157143309 err 5.8e-6 comps 1
+a mix 20 44 Pinched { pinches: 1 } area 42076.847797402 ref 42076.847771437 err 7.5e-6 comps 2
+a mix 20 45 Pinched { pinches: 2 } area 41267.451991597 ref 41267.452042965 err 7.2e-5 comps 1
+a mix 20 46 Pinched { pinches: 1 } area 39141.005441570 ref 39141.005455206 err 6.2e-5 comps 1
+a mix 20 47 Pinched { pinches: 2 } area 40016.361318510 ref 40016.361391598 err 1.9e-5 comps 3
+a mix 20 48 Good area 41086.606392710 ref 41086.606334649 err 3.7e-5 comps 1
+a mix 20 49 Good area 39545.531135047 ref 39545.531296586 err 1.0e-4 comps 1
+a mix 20 50 Pinched { pinches: 3 } area 40125.999413521 ref 40125.999393725 err 5.1e-5 comps 2
+a mix 20 51 Pinched { pinches: 1 } area 40987.965965750 ref 40987.965985801 err 1.8e-5 comps 1
+a mix 20 52 Good area 40649.272201883 ref 40649.272223269 err 1.1e-4 comps 1
+a mix 20 53 Good area 41000.592826548 ref 41000.592806451 err 2.2e-5 comps 1
+a mix 20 54 Pinched { pinches: 1 } area 39340.620530321 ref 39340.620472609 err 6.6e-5 comps 1
+a mix 20 55 Good area 40578.249312583 ref 40578.249413298 err 1.6e-5 comps 1
+a mix 20 56 Good area 41798.730750197 ref 41798.730875985 err 6.9e-5 comps 1
+a mix 20 57 Pinched { pinches: 1 } area 40321.275598285 ref 40321.275614695 err 7.8e-6 comps 1
+a mix 20 58 Pinched { pinches: 3 } area 41648.697712415 ref 41648.697767992 err 7.7e-6 comps 1
+a mix 20 59 Good area 39810.132145892 ref 39810.132141330 err 1.2e-5 comps 1
+a mix 20 60 Pinched { pinches: 1 } area 39749.917641517 ref 39749.917569159 err 3.9e-5 comps 1
+a mix 20 61 Good area 39616.515909515 ref 39616.515986426 err 4.5e-5 comps 1
+a mix 20 62 Good area 39982.825921320 ref 39982.825885411 err 6.3e-5 comps 3
+a mix 20 63 Pinched { pinches: 1 } area 41150.075970134 ref 41150.075932215 err 5.9e-5 comps 1
+a mix 20 64 Pinched { pinches: 1 } area 38686.911250525 ref 38686.911140207 err 5.0e-5 comps 1
+a mix 20 65 Good area 39497.988165342 ref 39497.988181877 err 5.9e-5 comps 1
+a mix 20 66 Pinched { pinches: 2 } area 40285.671607339 ref 40285.671564465 err 8.8e-5 comps 1
+a mix 20 67 Good area 40577.293792166 ref 40577.293728458 err 6.7e-6 comps 2
+a mix 20 68 Good area 41213.555982035 ref 41213.555979316 err 2.0e-5 comps 1
+a mix 20 69 Good area 41879.106354070 ref 41879.106386822 err 7.2e-5 comps 1
+a mix 20 70 Pinched { pinches: 1 } area 42449.064683607 ref 42449.064760822 err 5.5e-6 comps 1
+a mix 20 71 Good area 42215.739642385 ref 42215.739662860 err 3.6e-5 comps 1
+a mix 20 72 Good area 38742.201585101 ref 38742.201689418 err 1.3e-5 comps 1
+a mix 20 73 Pinched { pinches: 2 } area 40969.159132249 ref 40969.159101541 err 7.3e-6 comps 1
+a mix 20 74 Pinched { pinches: 1 } area 39545.872560226 ref 39545.872466595 err 1.6e-5 comps 2
+a mix 20 75 Pinched { pinches: 1 } area 40303.602046817 ref 40303.602174104 err 2.1e-6 comps 1
+a mix 20 76 Pinched { pinches: 1 } area 40257.332031896 ref 40257.331918748 err 5.4e-5 comps 2
+a mix 20 77 Good area 40542.010147505 ref 40542.010147898 err 1.2e-4 comps 1
+a mix 20 78 Good area 40687.215030107 ref 40687.215006613 err 7.5e-5 comps 1
+a mix 20 79 Pinched { pinches: 2 } area 41670.112019766 ref 41670.112022557 err 3.0e-5 comps 2
+a mix 20 80 Pinched { pinches: 1 } area 39405.865206212 ref 39405.865040800 err 4.2e-5 comps 1
+a mix 20 81 Pinched { pinches: 2 } area 40368.808346282 ref 40368.808325709 err 6.5e-7 comps 1
+a mix 20 82 Good area 40145.857611014 ref 40145.857603647 err 9.1e-6 comps 1
+a mix 20 83 Pinched { pinches: 2 } area 40882.388102329 ref 40882.388053851 err 3.3e-5 comps 2
+a mix 20 84 Good area 41412.935200902 ref 41412.935237629 err 1.0e-5 comps 2
+a mix 20 85 Pinched { pinches: 1 } area 40281.697742325 ref 40281.697784779 err 1.2e-5 comps 1
+a mix 20 86 Good area 40682.840005643 ref 40682.840103188 err 2.3e-5 comps 2
+a mix 20 87 Pinched { pinches: 1 } area 40032.199014460 ref 40032.198961144 err 9.6e-6 comps 1
+a mix 20 88 Good area 41308.697098871 ref 41308.697097248 err 3.6e-5 comps 1
+a mix 20 89 Good area 39783.261229523 ref 39783.261318521 err 4.3e-5 comps 1
+a mix 20 90 Good area 41383.029842465 ref 41383.029792009 err 3.5e-5 comps 1
+a mix 20 91 Pinched { pinches: 2 } area 39834.105146537 ref 39834.105190440 err 5.5e-5 comps 1
+a mix 20 92 Pinched { pinches: 2 } area 40705.999418376 ref 40705.999448385 err 2.5e-6 comps 1
+a mix 20 93 Pinched { pinches: 1 } area 40603.393713286 ref 40603.393656151 err 6.4e-6 comps 1
+a mix 20 94 Good area 40735.204610028 ref 40735.204633657 err 8.3e-5 comps 1
+a mix 20 95 Pinched { pinches: 1 } area 40351.667812970 ref 40351.667845112 err 3.2e-5 comps 1
+a mix 20 96 Good area 39126.898608331 ref 39126.898762046 err 3.0e-5 comps 1
+a mix 20 97 Good area 41562.568215444 ref 41562.568129189 err 3.1e-5 comps 1
+a mix 20 98 Good area 40280.351365598 ref 40280.351358573 err 2.3e-6 comps 1
+a mix 20 99 Pinched { pinches: 1 } area 40012.925131610 ref 40012.925160458 err 5.1e-7 comps 2
+a mix 200 0 Pinched { pinches: 5 } area 40858.630702323 ref 40858.630807908 err 7.1e-5 comps 3
+a mix 200 1 Pinched { pinches: 3 } area 40537.569908381 ref 40537.570166557 err 4.6e-5 comps 4
+a mix 200 2 Pinched { pinches: 10 } area 40215.475589692 ref 40215.475575232 err 8.9e-5 comps 2
+a mix 200 3 Pinched { pinches: 6 } area 40313.732180381 ref 40313.732111670 err 9.5e-7 comps 6
+a mix 200 4 Pinched { pinches: 5 } area 40373.650016970 ref 40373.650240170 err 6.2e-5 comps 5
+a mix 200 5 Pinched { pinches: 5 } area 39984.823216755 ref 39984.823159979 err 1.2e-4 comps 3
+a mix 200 6 Pinched { pinches: 10 } area 40738.826728454 ref 40738.826837972 err 1.5e-4 comps 2
+a mix 200 7 Pinched { pinches: 5 } area 40965.829041105 ref 40965.828873080 err 2.5e-5 comps 3
+a mix 200 8 Pinched { pinches: 7 } area 40779.229577210 ref 40779.229581744 err 6.2e-6 comps 4
+a mix 200 9 Pinched { pinches: 9 } area 40653.913934943 ref 40653.913969930 err 1.8e-5 comps 7
+a mix 200 10 Pinched { pinches: 4 } area 40294.345135357 ref 40294.345440114 err 2.2e-5 comps 5
+a mix 200 11 Pinched { pinches: 7 } area 40224.080622534 ref 40224.080658823 err 7.0e-5 comps 2
+a mix 200 12 Pinched { pinches: 9 } area 40758.990752519 ref 40758.991026348 err 7.9e-6 comps 3
+a mix 200 13 Pinched { pinches: 3 } area 40920.915948742 ref 40920.916247185 err 5.0e-5 comps 4
+a mix 200 14 Pinched { pinches: 7 } area 40376.207484863 ref 40376.207692470 err 2.9e-5 comps 7
+a mix 200 15 Pinched { pinches: 5 } area 40479.711695763 ref 40479.711986354 err 8.6e-5 comps 3
+a mix 200 16 Pinched { pinches: 8 } area 40452.620342256 ref 40452.620164356 err 1.7e-4 comps 3
+a mix 200 17 Pinched { pinches: 9 } area 40116.356507941 ref 40116.356722509 err 1.5e-4 comps 5
+a mix 200 18 Pinched { pinches: 4 } area 40908.933111955 ref 40908.933250955 err 4.1e-5 comps 1
+a mix 200 19 Pinched { pinches: 3 } area 40207.235731540 ref 40207.236102000 err 4.6e-5 comps 2

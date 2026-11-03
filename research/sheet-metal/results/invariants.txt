@@ -1,0 +1,6 @@
+K 0.40 to 0.33: folded bodies' bits differ (vertex worst move 7.11e-15)
+  flat length 112.796479430 to 112.356656459: expected change 0.439822972 (2 bends x theta t dK)
+  V_fold - V_flat 37.699111843079 against theta L t^2 (1/2 - K) x 2 = 37.699111843078, miss 1.25e-12
+R 2 to 3.5: wall skin planes the same: true
+flat: built 6767.787565803085 extruded 6767.787565803085
+flat length L 66.398229715 = (40-4)+BA+(30-4) = 66.398229715; U 112.796459430 = 112.796459430

@@ -1,0 +1,23 @@
+# Prototype only. Its own workspace, so nothing here enters the kernel's build, lockfile or CI.
+[package]
+name = "sheet-proto"
+version = "0.0.0"
+edition = "2024"
+publish = false
+
+[workspace]
+
+[dependencies]
+forge-math = { path = "../../../kernel/forge-math" }
+forge-geom = { path = "../../../kernel/forge-geom" }
+forge-topo = { path = "../../../kernel/forge-topo" }
+forge-ops = { path = "../../../kernel/forge-ops" }
+forge-bool = { path = "../../../kernel/forge-bool" }
+forge-mesh = { path = "../../../kernel/forge-mesh" }
+forge-step = { path = "../../../kernel/forge-step" }
+
+[profile.test]
+opt-level = 1
+
+[profile.release]
+debug = 1

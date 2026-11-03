@@ -1,0 +1,24 @@
+startup_and_one_build 493985
+direct-fold L90 70938
+direct-flat L90 69175
+mass-with-build L90 540886
+direct-fold U90 108527
+direct-flat U90 105000
+mass-with-build U90 921347
+direct-fold oblique-edge 152043
+direct-flat oblique-edge 69174
+mass-with-build oblique-edge 1016916
+direct-fold oblique-window 285091
+direct-flat oblique-window 117622
+mass-with-build oblique-window 2076954
+direct-fold hole-in-bend 564340
+direct-flat hole-in-bend 101510
+mass-with-build hole-in-bend 5279082
+direct-fold hole-one-line 570603
+direct-flat hole-one-line 113319
+mass-with-build hole-one-line 4596533
+direct-fold hole-both-lines 586666
+direct-flat hole-both-lines 128782
+mass-with-build hole-both-lines 3936481
+features L 2460568
+features U 5389047

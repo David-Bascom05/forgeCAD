@@ -1,0 +1,4 @@
+seed 1186 rows 100000 scanline-miss 7.858e-5 green-miss 1.455e-11 fold-err-bound t=3.514
+seed 1186 rows 400000 scanline-miss 1.159e-4 green-miss 1.455e-11 fold-err-bound t=3.514
+seed 1186 rows 1600000 scanline-miss 6.045e-6 green-miss 1.455e-11 fold-err-bound t=3.514
+seed 1186 rows 6400000 scanline-miss 3.010e-7 green-miss 1.455e-11 fold-err-bound t=3.514

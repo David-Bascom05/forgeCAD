@@ -1,0 +1,4 @@
+relief edge along the tangent line: Err(AlongBendLine { line: 0, x: 36.0, y0: 10.0, y1: 14.0 })
+hole touching a tangent line: Err(TouchesBendLine { line: 0, at: Point2 { x: 36.0, y: 15.0 }, gap: 0.0, limit: 1e-5 })
+corner on a tangent line: Err(TouchesBendLine { line: 1, at: Point2 { x: 40.39822971502571, y: 10.0 }, gap: 0.0, limit: 1e-5 })
+a spline loop: Err(SplineTrim { loop_index: 0, piece: 0 })

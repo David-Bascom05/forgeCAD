@@ -1,0 +1,70 @@
+L90 fold outlineMiss 7.11e-15 certify 0
+L90 areaTrue 4389.59289474 miss 1.73e-11 errA 2.24e-11 roundtrip 7.11e-15
+L90 fold faces 14 edges 28 problems 0 open Some(0) V 4002.7433388231 true 4002.7433388231 miss 4.55e-13 err 1.04e-10 A 4389.59289474 errA 2.24e-11 meshV 4002.614915 meshA 4389.523426 bits a91709cbb68411bc
+  step .scratch/step/L90-fold.step faces 14 uncertainty 1.0e-4
+L90 flat outlineMiss 7.11e-15 certify 0
+L90 flat faces 14 edges 28 problems 0 open Some(0) V 3983.8937829015 true 3983.8937829015 miss 4.55e-13 err 3.98e-12 A 4369.48670176 errA 4.37e-12 meshV 3983.893783 meshA 4369.486702 bits d35baa87a88ce773
+  step .scratch/step/L90-flat.step faces 14 uncertainty 1.0e-4
+L45 fold outlineMiss 7.11e-15 certify 0
+L45 areaTrue 4538.71910344 miss 3.27e-11 errA 5.60e-12 roundtrip 1.42e-14
+L45 fold faces 14 edges 28 problems 0 open Some(0) V 4142.5491594725 true 4142.5491594725 miss 9.09e-13 err 2.01e-11 A 4538.71910344 errA 5.60e-12 meshV 4142.494301 meshA 4538.686162 bits 1cef3c5125a16158
+  step .scratch/step/L45-fold.step faces 14 uncertainty 1.0e-4
+L45 flat outlineMiss 7.11e-15 certify 0
+L45 flat faces 14 edges 28 problems 0 open Some(0) V 4133.1243815117 true 4133.1243815117 miss 9.09e-13 err 4.13e-12 A 4528.66600695 errA 4.53e-12 meshV 4133.124382 meshA 4528.666007 bits b29d6c660feb6c93
+  step .scratch/step/L45-flat.step faces 14 uncertainty 1.0e-4
+L135 fold outlineMiss 1.07e-14 certify 0
+L135 areaTrue 3816.31199818 miss 5.50e-11 errA 4.49e-12 roundtrip 7.11e-15
+L135 fold faces 14 edges 28 problems 0 open Some(0) V 3465.2924982955 true 3465.2924982955 miss 4.55e-13 err 1.41e-11 A 3816.31199818 errA 4.49e-12 meshV 3465.109586 meshA 3816.209658 bits 75daead932f831b6
+  step .scratch/step/L135-fold.step faces 14 uncertainty 1.0e-4
+L135 flat outlineMiss 1.07e-14 certify 0
+L135 flat faces 14 edges 28 problems 0 open Some(0) V 3437.0181644132 true 3437.0181644132 miss 0.00e0 err 3.44e-12 A 3786.15270871 errA 3.79e-12 meshV 3437.018164 meshA 3786.152709 bits 6cbca35529f76ceb
+  step .scratch/step/L135-flat.step faces 14 uncertainty 1.0e-4
+U90 fold outlineMiss 2.13e-14 certify 0
+U90 areaTrue 7379.18578949 miss 1.82e-12 errA 4.34e-11 roundtrip 7.11e-15
+U90 fold faces 22 edges 44 problems 0 open Some(0) V 6805.4866776462 true 6805.4866776462 miss 1.82e-12 err 2.28e-10 A 7379.18578949 errA 4.34e-11 meshV 6805.229830 meshA 7379.046851 bits be962350dc1aaa3d
+  step .scratch/step/U90-fold.step faces 22 uncertainty 1.0e-4
+U90 flat outlineMiss 1.42e-14 certify 0
+U90 flat faces 22 edges 44 problems 0 open Some(0) V 6767.7875658031 true 6767.7875658031 miss 9.09e-13 err 6.77e-12 A 7338.97340352 errA 7.34e-12 meshV 6767.787566 meshA 7338.973404 bits 1f6910516cd307e3
+  step .scratch/step/U90-flat.step faces 22 uncertainty 1.0e-4
+U60 fold outlineMiss 2.13e-14 certify 0
+U60 areaTrue 7610.91718401 miss 5.46e-12 errA 9.44e-12 roundtrip 1.42e-14
+U60 fold faces 22 edges 44 problems 0 open Some(0) V 7022.7348600087 true 7022.7348600087 miss 9.09e-13 err 6.56e-11 A 7610.91718401 errA 9.44e-12 meshV 7022.576466 meshA 7610.827019 bits e7ec03f8087b3288
+  step .scratch/step/U60-fold.step faces 22 uncertainty 1.0e-4
+U60 flat outlineMiss 2.13e-14 certify 0
+U60 flat faces 22 edges 44 problems 0 open Some(0) V 6997.6021187800 true 6997.6021187800 miss 9.09e-13 err 7.00e-12 A 7584.10892670 errA 7.58e-12 meshV 6997.602119 meshA 7584.108927 bits 3b7f384c15e914f3
+  step .scratch/step/U60-flat.step faces 22 uncertainty 1.0e-4
+oblique-edge fold outlineMiss 7.94e-15 certify 0
+oblique-edge areaTrue 3428.64095429 miss 6.32e-11 errA 1.05e-4 roundtrip 7.11e-15
+oblique-edge fold faces 14 edges 28 problems 0 open Some(0) V 3068.2967490595 true 3068.2967490595 miss 4.55e-13 err 4.75e-11 A 3428.64095429 errA 1.05e-4 meshV 3068.200797 meshA 3428.588373 bits 557c7c5595192178
+  step .scratch/step/oblique-edge-fold.step faces 14 uncertainty 1.0e-4
+oblique-edge flat outlineMiss 7.94e-15 certify 0
+oblique-edge flat faces 14 edges 28 problems 0 open Some(0) V 3054.3185668912 true 3054.3185668912 miss 4.55e-13 err 4.96e-12 A 3413.40910526 errA 3.61e-12 meshV 3054.318567 meshA 3413.409105 bits e73baedfafa4348b
+  step .scratch/step/oblique-edge-flat.step faces 14 uncertainty 1.0e-4
+oblique-window fold outlineMiss 7.11e-15 certify 0
+oblique-window areaTrue 4304.61181182 miss 1.62e-10 errA 1.03e-3 roundtrip 7.11e-15
+oblique-window fold faces 24 edges 56 problems 0 open Some(0) V 3838.7698930977 true 3838.7698930977 miss 4.55e-13 err 1.01e-10 A 4304.61181182 errA 1.03e-3 meshV 3838.673383 meshA 4304.552918 bits 65c0163f2b7918ad
+  step .scratch/step/oblique-window-fold.step faces 24 uncertainty 1.0e-4
+oblique-window flat outlineMiss 7.11e-15 certify 0
+oblique-window flat faces 24 edges 56 problems 0 open Some(0) V 3824.3185668912 true 3824.3185668912 miss 4.55e-13 err 4.18e-12 A 4287.69817323 errA 4.63e-12 meshV 3824.318567 meshA 4287.698173 bits cbe01f8315768ec9
+  step .scratch/step/oblique-window-flat.step faces 24 uncertainty 1.0e-4
+hole-in-bend fold outlineMiss 7.94e-15 certify 0
+hole-in-bend areaTrue 4394.02045024 miss 2.64e-11 errA 3.89e-4 roundtrip 7.11e-15
+hole-in-bend fold faces 18 edges 40 problems 0 open Some(0) V 3987.5963742433 true 3987.5963742433 miss 4.55e-13 err 1.01e-10 A 4394.02045024 errA 3.89e-4 meshV 3987.486196 meshA 4393.961344 bits 365e11b6a75189ba
+  step .scratch/step/hole-in-bend-fold.step faces 18 uncertainty 1.0e-4
+hole-in-bend flat outlineMiss 7.11e-15 certify 0
+hole-in-bend flat faces 18 edges 40 problems 0 open Some(0) V 3969.7566159604 true 3969.7566159604 miss 0.00e0 err 4.01e-12 A 4374.19909074 errA 4.43e-12 meshV 3969.779315 meshA 4374.214220 bits f9390413de9b0c47
+  step .scratch/step/hole-in-bend-flat.step faces 18 uncertainty 1.0e-4
+hole-one-line fold outlineMiss 7.11e-15 certify 0
+hole-one-line areaTrue 4369.16470585 miss 1.00e-11 errA 3.99e-4 roundtrip 7.11e-15
+hole-one-line fold faces 20 edges 48 problems 0 open Some(0) V 3943.7484968299 true 3943.7484968299 miss 4.55e-13 err 1.03e-10 A 4369.16470585 errA 3.99e-4 meshV 3943.667746 meshA 4369.127604 bits ba11940cb2bc0866
+  step .scratch/step/hole-one-line-fold.step faces 20 uncertainty 1.0e-4
+hole-one-line flat outlineMiss 7.11e-15 certify 0
+hole-one-line flat faces 20 edges 48 problems 0 open Some(0) V 3927.3451151369 true 3927.3451151369 miss 1.36e-12 err 4.22e-12 A 4350.63714584 errA 4.95e-12 meshV 3927.391420 meshA 4350.675732 bits f74ccf0eef794345
+  step .scratch/step/hole-one-line-flat.step faces 20 uncertainty 1.0e-4
+hole-both-lines fold outlineMiss 7.11e-15 certify 0
+hole-both-lines areaTrue 4290.50812607 miss 5.73e-11 errA 4.73e-4 roundtrip 7.11e-15
+hole-both-lines fold faces 24 edges 56 problems 0 open Some(0) V 3839.5894223172 true 3839.5894223172 miss 1.36e-12 err 1.01e-10 A 4290.50812607 errA 4.73e-4 meshV 3839.567076 meshA 4290.513365 bits 11676efeb8f54892
+  step .scratch/step/hole-both-lines-fold.step faces 24 uncertainty 1.0e-4
+hole-both-lines flat outlineMiss 7.11e-15 certify 0
+hole-both-lines flat faces 24 edges 56 problems 0 open Some(0) V 3826.8141502221 true 3826.8141502221 miss 4.55e-13 err 4.29e-12 A 4275.23892215 errA 4.76e-12 meshV 3826.891392 meshA 4275.308439 bits 65d866a5463847ad
+  step .scratch/step/hole-both-lines-flat.step faces 24 uncertainty 1.0e-4

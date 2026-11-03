@@ -1,0 +1,2 @@
+features [40.0, 30.0]: faces 10 problems 0 V 4002.7433388231 err 3.67e-11 A 4389.59289474 bits 9f29c8424621da0f
+features [40.0, 50.0, 30.0]: faces 14 problems 0 V 6805.4866776462 err 8.41e-11 A 7379.18578949 bits 2195a2efeae649cb

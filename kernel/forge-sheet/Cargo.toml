@@ -1,0 +1,21 @@
+[package]
+name = "forge-sheet"
+description = "Sheet metal for the ForgeCAD kernel: a wall-and-joint graph built directly as folded and flat solids"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[dependencies]
+forge-math = { path = "../forge-math" }
+forge-geom = { path = "../forge-geom" }
+forge-topo = { path = "../forge-topo" }
+forge-ops = { path = "../forge-ops" }
+
+# forge-bool only as the trims' test oracle (the flat prism, Option B)
+[dev-dependencies]
+forge-bool = { path = "../forge-bool" }
+forge-mesh = { path = "../forge-mesh" }
+
+[lints]
+workspace = true

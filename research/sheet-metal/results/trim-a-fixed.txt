@@ -1,0 +1,2240 @@
+a boundary 2 0 Good area 43981.027650706 ref 43981.027676284 err 3.8e-5 comps 1
+a boundary 2 1 Good area 44750.800742032 ref 44750.800771327 err 7.7e-6 comps 1
+a boundary 2 2 Good area 43511.156698315 ref 43511.156694213 err 8.3e-6 comps 1
+a boundary 2 3 Good area 44042.602330365 ref 44042.602338254 err 2.7e-5 comps 1
+a boundary 2 4 Good area 43801.213014427 ref 43801.213019451 err 3.5e-5 comps 1
+a boundary 2 5 Good area 44411.838065027 ref 44411.838074543 err 4.7e-6 comps 1
+a boundary 2 6 Good area 43978.622732851 ref 43978.622750584 err 2.6e-5 comps 1
+a boundary 2 7 Good area 44135.906888896 ref 44135.906895783 err 2.4e-6 comps 1
+a boundary 2 8 Good area 44382.122086476 ref 44382.122071934 err 1.0e-5 comps 1
+a boundary 2 9 Good area 44560.175097237 ref 44560.175122449 err 3.9e-6 comps 1
+a boundary 2 10 Good area 43803.046393610 ref 43803.046426331 err 5.8e-5 comps 1
+a boundary 2 11 Good area 44621.095108150 ref 44621.095131830 err 4.4e-6 comps 1
+a boundary 2 12 Good area 44276.443919581 ref 44276.443909511 err 1.8e-5 comps 1
+a boundary 2 13 Good area 44605.232979659 ref 44605.233020381 err 9.6e-6 comps 1
+a boundary 2 14 Good area 43604.147764595 ref 43604.147827511 err 9.4e-7 comps 1
+a boundary 2 15 Good area 44392.360034717 ref 44392.360007040 err 8.8e-6 comps 1
+a boundary 2 16 Good area 44627.560425972 ref 44627.560435104 err 4.9e-6 comps 1
+a boundary 2 17 Good area 44090.334987937 ref 44090.335032056 err 2.2e-6 comps 1
+a boundary 2 18 Good area 43955.137247137 ref 43955.137271884 err 1.6e-5 comps 1
+a boundary 2 19 Good area 44337.556475726 ref 44337.556504607 err 9.9e-6 comps 1
+a boundary 2 20 Good area 44521.783378615 ref 44521.783375605 err 1.8e-5 comps 1
+a boundary 2 21 Good area 44595.038528471 ref 44595.038546398 err 9.5e-6 comps 1
+a boundary 2 22 Good area 43801.285555715 ref 43801.285633854 err 2.6e-5 comps 1
+a boundary 2 23 Good area 44480.095837313 ref 44480.095842833 err 1.3e-5 comps 1
+a boundary 2 24 Good area 43967.351609934 ref 43967.351664950 err 4.2e-5 comps 1
+a boundary 2 25 Good area 44766.320150405 ref 44766.320146071 err 1.2e-5 comps 1
+a boundary 2 26 Good area 43958.389395338 ref 43958.389422248 err 2.8e-5 comps 1
+a boundary 2 27 Good area 44577.954993333 ref 44577.954988878 err 5.1e-7 comps 1
+a boundary 2 28 Good area 44732.951941435 ref 44732.951939310 err 1.3e-6 comps 1
+a boundary 2 29 Good area 44423.149832870 ref 44423.149841796 err 2.3e-6 comps 1
+a boundary 2 30 Good area 43681.824451845 ref 43681.824483003 err 1.1e-5 comps 1
+a boundary 2 31 Good area 44360.812363604 ref 44360.812383942 err 4.5e-6 comps 1
+a boundary 2 32 Good area 44422.540715882 ref 44422.540696864 err 1.1e-5 comps 1
+a boundary 2 33 Good area 44221.884016962 ref 44221.884027528 err 1.5e-5 comps 1
+a boundary 2 34 Good area 43917.787691427 ref 43917.787668396 err 5.3e-6 comps 1
+a boundary 2 35 Good area 44269.865018207 ref 44269.865041917 err 6.6e-6 comps 1
+a boundary 2 36 Good area 44145.881971348 ref 44145.881960804 err 1.3e-5 comps 1
+a boundary 2 37 Good area 43029.321482230 ref 43029.321498074 err 2.9e-5 comps 1
+a boundary 2 38 Good area 44494.045824469 ref 44494.045822540 err 4.0e-6 comps 1
+a boundary 2 39 Good area 44314.925241149 ref 44314.925294588 err 1.9e-5 comps 1
+a boundary 2 40 Good area 43694.050268822 ref 43694.050275891 err 1.8e-5 comps 1
+a boundary 2 41 Good area 44341.991874629 ref 44341.991889810 err 2.1e-5 comps 1
+a boundary 2 42 Good area 43909.745998614 ref 43909.746048479 err 1.1e-6 comps 1
+a boundary 2 43 Good area 44027.701759213 ref 44027.701748984 err 1.0e-5 comps 1
+a boundary 2 44 Good area 44134.080986079 ref 44134.081004531 err 9.6e-6 comps 1
+a boundary 2 45 Good area 44137.149861214 ref 44137.149933545 err 4.2e-6 comps 1
+a boundary 2 46 Good area 44684.352700166 ref 44684.352727523 err 4.6e-6 comps 1
+a boundary 2 47 Good area 43886.575356147 ref 43886.575393196 err 2.3e-5 comps 1
+a boundary 2 48 Good area 44201.132613719 ref 44201.132650437 err 1.7e-5 comps 1
+a boundary 2 49 Good area 43618.992869435 ref 43618.992858227 err 7.3e-6 comps 1
+a boundary 2 50 Good area 44494.228526380 ref 44494.228501042 err 1.6e-6 comps 1
+a boundary 2 51 Good area 43732.038552255 ref 43732.038610846 err 1.7e-5 comps 1
+a boundary 2 52 Good area 44719.164304284 ref 44719.164322311 err 2.1e-5 comps 1
+a boundary 2 53 Good area 44036.658270342 ref 44036.658352398 err 3.3e-5 comps 1
+a boundary 2 54 Good area 44491.593284624 ref 44491.593302807 err 9.6e-6 comps 1
+a boundary 2 55 Good area 43898.553898247 ref 43898.553921096 err 4.3e-5 comps 1
+a boundary 2 56 Good area 44252.444649151 ref 44252.444667323 err 9.7e-6 comps 1
+a boundary 2 57 Good area 43969.515680387 ref 43969.515716792 err 1.1e-5 comps 1
+a boundary 2 58 Good area 43327.163608498 ref 43327.163641517 err 1.6e-5 comps 1
+a boundary 2 59 Good area 44134.135671942 ref 44134.135669420 err 3.2e-5 comps 1
+a boundary 2 60 Good area 44219.298330678 ref 44219.298325615 err 5.7e-7 comps 1
+a boundary 2 61 Good area 44384.898899120 ref 44384.898917082 err 9.0e-6 comps 1
+a boundary 2 62 Good area 44185.475590636 ref 44185.475573757 err 6.3e-6 comps 1
+a boundary 2 63 Good area 44464.551232050 ref 44464.551234941 err 6.5e-6 comps 1
+a boundary 2 64 Good area 43735.729869411 ref 43735.729862167 err 4.6e-5 comps 1
+a boundary 2 65 Good area 43837.636391339 ref 43837.636380313 err 2.6e-5 comps 1
+a boundary 2 66 Good area 43929.425379390 ref 43929.425412823 err 2.2e-5 comps 1
+a boundary 2 67 Good area 44591.876210801 ref 44591.876253408 err 4.0e-6 comps 1
+a boundary 2 68 Good area 44188.672490567 ref 44188.672487417 err 3.1e-6 comps 1
+a boundary 2 69 Good area 43308.691692311 ref 43308.691697856 err 2.3e-5 comps 1
+a boundary 2 70 Good area 44339.058601607 ref 44339.058579767 err 3.5e-6 comps 1
+a boundary 2 71 Good area 43949.681041758 ref 43949.681007459 err 2.0e-5 comps 1
+a boundary 2 72 Good area 44395.371301162 ref 44395.371303538 err 1.1e-6 comps 1
+a boundary 2 73 Good area 44311.122542194 ref 44311.122606640 err 3.6e-6 comps 1
+a boundary 2 74 Good area 44273.782114071 ref 44273.782130215 err 1.6e-5 comps 1
+a boundary 2 75 Good area 44602.892418559 ref 44602.892481714 err 4.7e-5 comps 1
+a boundary 2 76 Good area 43481.160382455 ref 43481.160350595 err 3.5e-5 comps 1
+a boundary 2 77 Good area 44547.750216078 ref 44547.750232439 err 1.1e-5 comps 1
+a boundary 2 78 Good area 44034.232665742 ref 44034.232688241 err 1.6e-5 comps 1
+a boundary 2 79 Good area 44300.044882334 ref 44300.044891273 err 4.6e-6 comps 1
+a boundary 2 80 Good area 44119.045018500 ref 44119.045010126 err 5.1e-6 comps 1
+a boundary 2 81 Good area 43987.324397515 ref 43987.324362298 err 4.1e-6 comps 1
+a boundary 2 82 Good area 43818.524203498 ref 43818.524204427 err 4.7e-5 comps 1
+a boundary 2 83 Good area 44562.977150315 ref 44562.977183001 err 3.1e-5 comps 1
+a boundary 2 84 Good area 43840.497718071 ref 43840.497724828 err 1.5e-6 comps 1
+a boundary 2 85 Good area 44216.681298585 ref 44216.681327130 err 3.3e-6 comps 1
+a boundary 2 86 Good area 44068.432599331 ref 44068.432610842 err 3.4e-5 comps 1
+a boundary 2 87 Good area 44471.769467376 ref 44471.769540082 err 1.2e-5 comps 1
+a boundary 2 88 Good area 44088.286627626 ref 44088.286638263 err 3.4e-5 comps 1
+a boundary 2 89 Good area 44139.789852257 ref 44139.789864935 err 3.1e-6 comps 1
+a boundary 2 90 Good area 43781.948365815 ref 43781.948447493 err 3.7e-6 comps 1
+a boundary 2 91 Good area 44329.130439838 ref 44329.130419579 err 2.3e-5 comps 1
+a boundary 2 92 Good area 43984.173021805 ref 43984.173059049 err 1.7e-6 comps 1
+a boundary 2 93 Good area 44569.029603313 ref 44569.029599959 err 2.0e-5 comps 1
+a boundary 2 94 Good area 43787.567085819 ref 43787.567101031 err 4.6e-5 comps 1
+a boundary 2 95 Good area 44063.206383594 ref 44063.206446225 err 2.5e-5 comps 1
+a boundary 2 96 Good area 44177.841298959 ref 44177.841273921 err 3.1e-6 comps 1
+a boundary 2 97 Good area 44297.462714130 ref 44297.462733280 err 9.3e-6 comps 1
+a boundary 2 98 Good area 43607.383836641 ref 43607.383944978 err 7.0e-5 comps 1
+a boundary 2 99 Good area 44215.200685011 ref 44215.200703345 err 9.3e-6 comps 1
+a boundary 2 100 Good area 44193.319496443 ref 44193.319499011 err 3.1e-5 comps 1
+a boundary 2 101 Good area 44033.123426462 ref 44033.123461845 err 2.9e-5 comps 1
+a boundary 2 102 Good area 44240.405743567 ref 44240.405755062 err 4.5e-8 comps 1
+a boundary 2 103 Good area 44558.248769501 ref 44558.248777109 err 3.3e-6 comps 1
+a boundary 2 104 Good area 44707.286918088 ref 44707.286920467 err 2.7e-6 comps 1
+a boundary 2 105 Good area 44284.047800997 ref 44284.047817466 err 2.4e-5 comps 1
+a boundary 2 106 Good area 44122.884467933 ref 44122.884532909 err 1.4e-5 comps 1
+a boundary 2 107 Good area 44783.490954952 ref 44783.490964803 err 4.3e-6 comps 1
+a boundary 2 108 Good area 44538.672996458 ref 44538.672989257 err 4.0e-6 comps 1
+a boundary 2 109 Good area 44310.597004126 ref 44310.597015501 err 2.3e-6 comps 1
+a boundary 2 110 Good area 44034.360035031 ref 44034.360032637 err 2.3e-5 comps 1
+a boundary 2 111 Good area 43929.842290227 ref 43929.842297711 err 7.0e-6 comps 1
+a boundary 2 112 Good area 43516.788029268 ref 43516.788034380 err 5.8e-6 comps 1
+a boundary 2 113 Good area 43526.141839636 ref 43526.141842552 err 7.5e-6 comps 1
+a boundary 2 114 Good area 44185.770235788 ref 44185.770277791 err 1.3e-6 comps 1
+a boundary 2 115 Good area 44117.726534827 ref 44117.726555764 err 5.5e-5 comps 1
+a boundary 2 116 Good area 44485.200123945 ref 44485.200110069 err 1.8e-5 comps 1
+a boundary 2 117 Good area 44020.246688699 ref 44020.246676295 err 3.4e-5 comps 1
+a boundary 2 118 Good area 43710.568374568 ref 43710.568407845 err 3.4e-6 comps 1
+a boundary 2 119 Good area 44033.971971431 ref 44033.971964011 err 1.2e-6 comps 1
+a boundary 2 120 Good area 44483.937016882 ref 44483.937033196 err 1.2e-5 comps 1
+a boundary 2 121 Good area 44430.450338923 ref 44430.450364680 err 2.3e-5 comps 1
+a boundary 2 122 Good area 44088.102748422 ref 44088.102773691 err 6.3e-6 comps 1
+a boundary 2 123 Good area 44721.683602404 ref 44721.683611139 err 4.6e-6 comps 1
+a boundary 2 124 Good area 44398.641188241 ref 44398.641223698 err 5.4e-6 comps 1
+a boundary 2 125 Good area 44353.897250200 ref 44353.897297743 err 8.6e-6 comps 1
+a boundary 2 126 Good area 44198.940088649 ref 44198.940083616 err 5.6e-6 comps 1
+a boundary 2 127 Good area 44311.581860249 ref 44311.581881516 err 9.6e-6 comps 1
+a boundary 2 128 Good area 44111.687099110 ref 44111.687118976 err 9.8e-6 comps 1
+a boundary 2 129 Good area 44462.426833936 ref 44462.426865272 err 2.0e-6 comps 1
+a boundary 2 130 Good area 44416.317123444 ref 44416.317120155 err 1.9e-5 comps 1
+a boundary 2 131 Good area 44358.229478248 ref 44358.229485744 err 2.5e-5 comps 1
+a boundary 2 132 Good area 43451.666102799 ref 43451.666177973 err 1.8e-5 comps 1
+a boundary 2 133 Good area 44509.568448071 ref 44509.568512215 err 1.2e-5 comps 1
+a boundary 2 134 Good area 44705.167760379 ref 44705.167778437 err 9.0e-6 comps 1
+a boundary 2 135 Good area 44283.512967762 ref 44283.512969441 err 1.0e-5 comps 1
+a boundary 2 136 Good area 43922.077447360 ref 43922.077447489 err 3.8e-5 comps 1
+a boundary 2 137 Good area 44254.202609259 ref 44254.202651162 err 1.3e-5 comps 1
+a boundary 2 138 Good area 44253.207621721 ref 44253.207604370 err 1.6e-5 comps 1
+a boundary 2 139 Good area 44836.117492403 ref 44836.117524338 err 4.0e-7 comps 1
+a boundary 2 140 Good area 44428.657317170 ref 44428.657333714 err 1.3e-5 comps 1
+a boundary 2 141 Good area 44251.024197711 ref 44251.024240265 err 4.2e-6 comps 1
+a boundary 2 142 Good area 43261.342576008 ref 43261.342681221 err 6.1e-6 comps 1
+a boundary 2 143 Good area 44620.547658795 ref 44620.547711436 err 4.2e-5 comps 1
+a boundary 2 144 Good area 44570.481496463 ref 44570.481509596 err 5.5e-6 comps 1
+a boundary 2 145 Good area 44407.042286849 ref 44407.042296660 err 2.4e-6 comps 1
+a boundary 2 146 Good area 44087.368770451 ref 44087.368805178 err 5.6e-5 comps 1
+a boundary 2 147 Good area 44551.290904749 ref 44551.290918518 err 1.5e-5 comps 1
+a boundary 2 148 Good area 44384.444087658 ref 44384.444123884 err 5.3e-7 comps 1
+a boundary 2 149 Good area 43672.965871701 ref 43672.965855542 err 1.8e-5 comps 1
+a boundary 2 150 Good area 43433.535258923 ref 43433.535269247 err 1.3e-5 comps 1
+a boundary 2 151 Good area 44005.343414114 ref 44005.343479572 err 6.2e-8 comps 1
+a boundary 2 152 Good area 43681.869314381 ref 43681.869338066 err 2.9e-5 comps 1
+a boundary 2 153 Good area 44286.807557810 ref 44286.807554286 err 6.0e-6 comps 1
+a boundary 2 154 Good area 43493.660554749 ref 43493.660518106 err 2.4e-5 comps 1
+a boundary 2 155 Good area 44351.605310932 ref 44351.605310915 err 1.2e-5 comps 1
+a boundary 2 156 Good area 43630.174625215 ref 43630.174635621 err 1.0e-5 comps 1
+a boundary 2 157 Good area 43957.224241211 ref 43957.224221943 err 1.0e-5 comps 1
+a boundary 2 158 Good area 44638.786668343 ref 44638.786686343 err 9.2e-6 comps 1
+a boundary 2 159 Good area 44498.437729404 ref 44498.437788424 err 5.8e-6 comps 1
+a boundary 2 160 Good area 44475.728278934 ref 44475.728270527 err 1.5e-5 comps 1
+a boundary 2 161 Good area 44673.779975283 ref 44673.779959732 err 2.0e-6 comps 1
+a boundary 2 162 Good area 44290.443763632 ref 44290.443781853 err 9.0e-6 comps 1
+a boundary 2 163 Good area 44610.048796512 ref 44610.048825847 err 3.4e-6 comps 1
+a boundary 2 164 Good area 43651.915632612 ref 43651.915606178 err 9.1e-6 comps 1
+a boundary 2 165 Good area 44571.132594260 ref 44571.132600459 err 1.3e-5 comps 1
+a boundary 2 166 Good area 44078.498504155 ref 44078.498525813 err 3.5e-5 comps 1
+a boundary 2 167 Good area 44317.603737795 ref 44317.603753374 err 3.1e-5 comps 1
+a boundary 2 168 Good area 44425.391317386 ref 44425.391369920 err 1.3e-5 comps 1
+a boundary 2 169 Good area 43793.771797484 ref 43793.771800338 err 7.9e-6 comps 1
+a boundary 2 170 Good area 44022.693112707 ref 44022.693164025 err 8.8e-6 comps 1
+a boundary 2 171 Good area 44367.295600904 ref 44367.295612719 err 2.7e-6 comps 1
+a boundary 2 172 Good area 44106.879147119 ref 44106.879168881 err 3.3e-5 comps 1
+a boundary 2 173 Good area 44565.790543523 ref 44565.790590947 err 4.4e-6 comps 1
+a boundary 2 174 Good area 44345.733029634 ref 44345.733104041 err 2.7e-5 comps 1
+a boundary 2 175 Good area 44541.793374908 ref 44541.793427519 err 5.4e-6 comps 1
+a boundary 2 176 Good area 44465.305044418 ref 44465.305064654 err 8.5e-6 comps 1
+a boundary 2 177 Good area 44239.081591312 ref 44239.081637704 err 8.9e-6 comps 1
+a boundary 2 178 Good area 44341.075981210 ref 44341.075987217 err 6.1e-7 comps 1
+a boundary 2 179 Good area 44562.970029067 ref 44562.970029971 err 2.1e-5 comps 1
+a boundary 2 180 Good area 44457.780766232 ref 44457.780768661 err 1.8e-5 comps 1
+a boundary 2 181 Good area 44604.189141362 ref 44604.189135583 err 1.5e-5 comps 1
+a boundary 2 182 Good area 44362.371858679 ref 44362.371909146 err 4.4e-5 comps 1
+a boundary 2 183 Good area 44137.590126513 ref 44137.590120859 err 2.9e-5 comps 1
+a boundary 2 184 Good area 44598.454646210 ref 44598.454636437 err 1.4e-5 comps 1
+a boundary 2 185 Good area 44341.613809567 ref 44341.613805587 err 2.4e-5 comps 1
+a boundary 2 186 Good area 43674.100241124 ref 43674.100270155 err 2.6e-6 comps 1
+a boundary 2 187 Good area 44494.375459833 ref 44494.375449528 err 1.3e-5 comps 1
+a boundary 2 188 Good area 43694.652121983 ref 43694.652162464 err 3.5e-5 comps 1
+a boundary 2 189 Good area 44661.592921538 ref 44661.592943559 err 4.4e-7 comps 1
+a boundary 2 190 Good area 44150.203285352 ref 44150.203303245 err 9.5e-6 comps 1
+a boundary 2 191 Good area 44240.859509449 ref 44240.859577064 err 3.6e-5 comps 1
+a boundary 2 192 Good area 44278.995617701 ref 44278.995642672 err 4.8e-6 comps 1
+a boundary 2 193 Good area 44637.224402302 ref 44637.224409391 err 2.0e-5 comps 1
+a boundary 2 194 Good area 44558.177506874 ref 44558.177537453 err 2.4e-5 comps 1
+a boundary 2 195 Good area 44581.884223817 ref 44581.884214947 err 1.5e-5 comps 1
+a boundary 2 196 Good area 43926.925914327 ref 43926.925997721 err 1.3e-5 comps 1
+a boundary 2 197 Good area 44262.156954728 ref 44262.156963916 err 4.7e-6 comps 1
+a boundary 2 198 Good area 43581.962658048 ref 43581.962713299 err 2.2e-5 comps 1
+a boundary 2 199 Good area 43684.721204549 ref 43684.721182429 err 9.5e-6 comps 1
+a boundary 20 0 Good area 42803.862576988 ref 42803.862618002 err 1.3e-5 comps 1
+a boundary 20 1 Good area 42882.250384873 ref 42882.250326178 err 8.5e-6 comps 1
+a boundary 20 2 Good area 42824.708251880 ref 42824.708184121 err 2.4e-5 comps 1
+a boundary 20 3 Good area 42185.729190037 ref 42185.729074717 err 2.7e-5 comps 1
+a boundary 20 4 Good area 43005.543196897 ref 43005.543158842 err 5.9e-6 comps 1
+a boundary 20 5 Good area 42435.013373865 ref 42435.013417001 err 3.2e-5 comps 1
+a boundary 20 6 Good area 42381.909890703 ref 42381.909889013 err 8.7e-6 comps 1
+a boundary 20 7 Good area 41693.252938663 ref 41693.252912674 err 3.7e-5 comps 1
+a boundary 20 8 Good area 41614.689976375 ref 41614.689922361 err 4.5e-6 comps 1
+a boundary 20 9 Good area 42585.399638639 ref 42585.399683081 err 3.7e-5 comps 1
+a boundary 20 10 Good area 42197.674772320 ref 42197.674763468 err 7.0e-6 comps 1
+a boundary 20 11 Good area 41967.341420083 ref 41967.341328613 err 2.4e-5 comps 1
+a boundary 20 12 Good area 42760.465893539 ref 42760.465852077 err 4.0e-5 comps 2
+a boundary 20 13 Good area 42737.720594794 ref 42737.720566472 err 7.1e-5 comps 1
+a boundary 20 14 Good area 42166.256947507 ref 42166.256865458 err 1.1e-5 comps 1
+a boundary 20 15 Good area 42531.500444407 ref 42531.500421386 err 4.3e-5 comps 1
+a boundary 20 16 Good area 42202.648816535 ref 42202.648787591 err 4.4e-5 comps 1
+a boundary 20 17 Good area 42721.213782542 ref 42721.213861982 err 8.5e-5 comps 1
+a boundary 20 18 Good area 42058.699633912 ref 42058.699667765 err 4.3e-6 comps 1
+a boundary 20 19 Good area 42645.464491429 ref 42645.464510845 err 2.3e-5 comps 1
+a boundary 20 20 Good area 42441.564621217 ref 42441.564561832 err 2.6e-5 comps 1
+a boundary 20 21 Good area 43131.908722707 ref 43131.908642475 err 8.4e-6 comps 1
+a boundary 20 22 Good area 42098.251091189 ref 42098.251173358 err 5.0e-5 comps 1
+a boundary 20 23 Good area 42256.444302525 ref 42256.444305143 err 1.3e-5 comps 1
+a boundary 20 24 Good area 42415.424242787 ref 42415.424297132 err 6.2e-5 comps 1
+a boundary 20 25 Good area 42376.610284619 ref 42376.610347668 err 3.7e-5 comps 1
+a boundary 20 26 Good area 42023.455867758 ref 42023.455862597 err 8.5e-6 comps 1
+a boundary 20 27 Good area 42748.182469907 ref 42748.182502215 err 1.1e-5 comps 1
+a boundary 20 28 Good area 42840.025422187 ref 42840.025423658 err 7.6e-6 comps 2
+a boundary 20 29 Good area 42348.480158646 ref 42348.480155583 err 5.5e-5 comps 1
+a boundary 20 30 Good area 42175.002630989 ref 42175.002587162 err 5.5e-5 comps 1
+a boundary 20 31 Good area 42530.418519429 ref 42530.418522595 err 1.4e-6 comps 1
+a boundary 20 32 Good area 42944.995247495 ref 42944.995227700 err 2.0e-5 comps 1
+a boundary 20 33 Good area 42168.492584488 ref 42168.492713380 err 8.1e-6 comps 1
+a boundary 20 34 Good area 41886.274968291 ref 41886.274901806 err 3.1e-5 comps 1
+a boundary 20 35 Good area 42325.398443082 ref 42325.398415319 err 1.0e-5 comps 1
+a boundary 20 36 Good area 42198.996294992 ref 42198.996193582 err 5.5e-5 comps 1
+a boundary 20 37 Good area 42185.898556525 ref 42185.898602753 err 1.3e-5 comps 1
+a boundary 20 38 Good area 42253.641899713 ref 42253.641945792 err 2.6e-5 comps 1
+a boundary 20 39 Good area 42413.976654589 ref 42413.976735132 err 2.1e-5 comps 1
+a boundary 20 40 Good area 42366.846997046 ref 42366.846969930 err 1.6e-5 comps 1
+a boundary 20 41 Good area 42357.797061322 ref 42357.797167116 err 4.5e-6 comps 1
+a boundary 20 42 Good area 42287.446742094 ref 42287.446756171 err 2.8e-5 comps 1
+a boundary 20 43 Good area 42637.439746595 ref 42637.439975390 err 4.0e-5 comps 1
+a boundary 20 44 Good area 42513.326600752 ref 42513.326560423 err 1.8e-5 comps 1
+a boundary 20 45 Good area 42282.355648039 ref 42282.355625219 err 3.9e-5 comps 1
+a boundary 20 46 Good area 42984.114278211 ref 42984.114356082 err 1.8e-5 comps 1
+a boundary 20 47 Good area 42564.889328165 ref 42564.889260011 err 2.6e-5 comps 2
+a boundary 20 48 Good area 42596.370247727 ref 42596.370250131 err 3.2e-5 comps 1
+a boundary 20 49 Good area 42646.373633782 ref 42646.373615702 err 2.2e-5 comps 1
+a boundary 20 50 Good area 43074.294773034 ref 43074.294775968 err 6.0e-6 comps 1
+a boundary 20 51 Good area 42715.292418296 ref 42715.292407877 err 1.6e-5 comps 2
+a boundary 20 52 Good area 42583.224878690 ref 42583.224925034 err 4.8e-5 comps 2
+a boundary 20 53 Good area 42937.437775715 ref 42937.437784320 err 4.5e-5 comps 1
+a boundary 20 54 Good area 42743.919947486 ref 42743.919928674 err 5.9e-5 comps 1
+a boundary 20 55 Good area 43384.558731395 ref 43384.558648691 err 2.4e-5 comps 1
+a boundary 20 56 Good area 43157.280397571 ref 43157.280388800 err 6.1e-5 comps 1
+a boundary 20 57 Good area 42699.132448101 ref 42699.132435151 err 1.0e-5 comps 2
+a boundary 20 58 Good area 42777.172478703 ref 42777.172474050 err 4.0e-5 comps 1
+a boundary 20 59 Good area 41782.875242161 ref 41782.875256680 err 8.2e-5 comps 1
+a boundary 20 60 Good area 41900.976744169 ref 41900.976725620 err 8.0e-6 comps 1
+a boundary 20 61 Good area 42750.285619884 ref 42750.285592474 err 3.0e-5 comps 1
+a boundary 20 62 Good area 41553.738416344 ref 41553.738451177 err 2.0e-5 comps 1
+a boundary 20 63 Good area 42362.834382597 ref 42362.834501616 err 6.3e-5 comps 1
+a boundary 20 64 Good area 42619.554627806 ref 42619.554655190 err 2.5e-5 comps 1
+a boundary 20 65 Good area 42349.127694887 ref 42349.127550362 err 6.0e-5 comps 1
+a boundary 20 66 Good area 42302.224026181 ref 42302.223919554 err 1.6e-5 comps 1
+a boundary 20 67 Good area 41738.899802680 ref 41738.899858868 err 6.7e-5 comps 1
+a boundary 20 68 Good area 43038.960904955 ref 43038.960982791 err 2.8e-5 comps 1
+a boundary 20 69 Good area 42664.417751832 ref 42664.417719140 err 2.3e-5 comps 1
+a boundary 20 70 Good area 42845.858034822 ref 42845.858138449 err 2.7e-5 comps 1
+a boundary 20 71 Good area 42433.972019239 ref 42433.971996985 err 6.5e-5 comps 1
+a boundary 20 72 Good area 42117.601697883 ref 42117.601647123 err 1.8e-6 comps 1
+a boundary 20 73 Good area 42425.436421410 ref 42425.436382200 err 8.6e-6 comps 1
+a boundary 20 74 Good area 42788.890706170 ref 42788.890753122 err 7.4e-5 comps 1
+a boundary 20 75 Good area 42653.528040524 ref 42653.528014787 err 5.0e-5 comps 1
+a boundary 20 76 Good area 42672.997762330 ref 42672.997774998 err 2.9e-5 comps 1
+a boundary 20 77 Good area 42726.976913792 ref 42726.976891086 err 5.1e-5 comps 1
+a boundary 20 78 Good area 42085.981451287 ref 42085.981412317 err 5.8e-6 comps 1
+a boundary 20 79 Good area 42244.898498145 ref 42244.898615940 err 3.0e-5 comps 1
+a boundary 20 80 Good area 42015.181626654 ref 42015.181557002 err 9.0e-6 comps 1
+a boundary 20 81 Good area 42581.676837728 ref 42581.676829951 err 7.2e-6 comps 1
+a boundary 20 82 Good area 43190.536285468 ref 43190.536278877 err 5.7e-6 comps 1
+a boundary 20 83 Good area 42947.981906410 ref 42947.981945657 err 4.1e-7 comps 1
+a boundary 20 84 Good area 42537.576395472 ref 42537.576338861 err 3.4e-5 comps 1
+a boundary 20 85 Good area 42297.936782009 ref 42297.936705707 err 5.8e-5 comps 1
+a boundary 20 86 Good area 42228.533614362 ref 42228.533781945 err 4.6e-5 comps 1
+a boundary 20 87 Good area 42481.994837275 ref 42481.994858800 err 5.3e-6 comps 1
+a boundary 20 88 Good area 40886.429598689 ref 40886.429717320 err 1.4e-5 comps 1
+a boundary 20 89 Good area 42235.106456984 ref 42235.106448779 err 5.6e-5 comps 1
+a boundary 20 90 Good area 42141.182400392 ref 42141.182452131 err 1.1e-4 comps 1
+a boundary 20 91 Good area 42314.392783952 ref 42314.392873892 err 4.8e-5 comps 2
+a boundary 20 92 Good area 42535.545197099 ref 42535.545159879 err 5.5e-5 comps 3
+a boundary 20 93 Good area 41476.164183921 ref 41476.164264504 err 8.9e-6 comps 2
+a boundary 20 94 Good area 42079.019934510 ref 42079.019968551 err 6.5e-5 comps 1
+a boundary 20 95 Good area 42772.642309884 ref 42772.642282763 err 6.0e-5 comps 1
+a boundary 20 96 Good area 42165.336244280 ref 42165.336197977 err 4.6e-5 comps 1
+a boundary 20 97 Good area 42110.585725869 ref 42110.585620132 err 3.2e-5 comps 1
+a boundary 20 98 Good area 42245.706909458 ref 42245.706900822 err 4.0e-5 comps 1
+a boundary 20 99 Good area 42224.231227270 ref 42224.231318944 err 2.5e-6 comps 2
+a boundary 200 0 Good area 43392.675616413 ref 43392.675655275 err 1.7e-5 comps 2
+a boundary 200 1 Good area 43257.650445045 ref 43257.650555430 err 2.5e-5 comps 1
+a boundary 200 2 Good area 43262.285097489 ref 43262.285110820 err 3.6e-5 comps 2
+a boundary 200 3 Good area 43195.069823370 ref 43195.069702717 err 5.9e-5 comps 1
+a boundary 200 4 Good area 43213.774336851 ref 43213.774244369 err 3.5e-5 comps 2
+a boundary 200 5 Good area 43193.841882800 ref 43193.841831822 err 3.2e-5 comps 1
+a boundary 200 6 Good area 43342.149978894 ref 43342.150062191 err 7.8e-5 comps 2
+a boundary 200 7 Good area 43198.654265679 ref 43198.654243732 err 4.7e-5 comps 2
+a boundary 200 8 Good area 43282.918742723 ref 43282.918898380 err 6.4e-5 comps 1
+a boundary 200 9 Good area 43342.091474529 ref 43342.091501222 err 4.8e-5 comps 1
+a boundary 200 10 Good area 43357.570042041 ref 43357.570021448 err 3.0e-5 comps 1
+a boundary 200 11 Good area 43205.138366082 ref 43205.138373288 err 1.5e-5 comps 3
+a boundary 200 12 Good area 43114.738039683 ref 43114.738054358 err 9.5e-5 comps 1
+a boundary 200 13 Good area 43306.618266799 ref 43306.618270259 err 9.6e-5 comps 1
+a boundary 200 14 Good area 43182.123418890 ref 43182.123356434 err 8.7e-5 comps 1
+a boundary 200 15 Good area 43400.480434882 ref 43400.480500441 err 2.6e-5 comps 2
+a boundary 200 16 Good area 43235.524677826 ref 43235.524718347 err 3.4e-5 comps 2
+a boundary 200 17 Good area 43251.188415937 ref 43251.188332771 err 7.1e-5 comps 2
+a boundary 200 18 Good area 43225.077510260 ref 43225.077374162 err 8.8e-5 comps 1
+a boundary 200 19 Good area 43149.448869250 ref 43149.448817376 err 2.4e-5 comps 2
+a coincident 2 0 Good area 42005.124981032 ref 42005.124900602 err 5.5e-7 comps 1
+a coincident 2 1 Good area 42776.356232604 ref 42776.356290451 err 3.1e-5 comps 1
+a coincident 2 2 Good area 44302.828576806 ref 44302.828594789 err 9.7e-6 comps 1
+a coincident 2 3 Good area 44385.289163649 ref 44385.289181391 err 9.7e-6 comps 1
+a coincident 2 4 Good area 43211.470320933 ref 43211.470339213 err 9.3e-6 comps 1
+a coincident 2 5 Good area 44449.975852885 ref 44449.975871047 err 9.5e-6 comps 1
+a coincident 2 6 Good area 40676.646027550 ref 40676.645959582 err 2.6e-5 comps 1
+a coincident 2 7 Good area 44634.128495164 ref 44634.128513169 err 9.4e-6 comps 1
+a coincident 2 8 Good area 44462.647818326 ref 44462.647836099 err 9.0e-6 comps 1
+a coincident 2 9 Good area 44978.539816340 ref 44978.539834381 err 9.4e-6 comps 1
+a coincident 2 10 Good area 44978.539816340 ref 44978.539834381 err 9.4e-6 comps 1
+a coincident 2 11 Good area 44978.539816340 ref 44978.539834381 err 9.4e-6 comps 1
+a coincident 2 12 Good area 44228.882573881 ref 44228.882591657 err 9.4e-6 comps 1
+a coincident 2 13 Good area 43014.225661110 ref 43014.225716529 err 6.0e-5 comps 1
+a coincident 2 14 Good area 44447.389925703 ref 44447.389943639 err 9.5e-6 comps 1
+a coincident 2 15 Good area 43894.164801187 ref 43894.164819417 err 9.5e-6 comps 1
+a coincident 2 16 Good area 43583.374469655 ref 43583.374487583 err 9.3e-6 comps 1
+a coincident 2 17 Good area 44127.957875679 ref 44127.957893916 err 9.5e-6 comps 1
+a coincident 2 18 Good area 44978.539816340 ref 44978.539834381 err 9.4e-6 comps 1
+a coincident 2 19 Good area 44139.576807884 ref 44139.576826085 err 9.3e-6 comps 1
+a coincident 2 20 Good area 42345.667456176 ref 42345.667433745 err 1.8e-6 comps 1
+a coincident 2 21 Good area 43817.432299831 ref 43817.432317613 err 9.5e-6 comps 1
+a coincident 2 22 Good area 44528.369031226 ref 44528.369049033 err 9.8e-6 comps 1
+a coincident 2 23 Good area 43617.247455064 ref 43617.247473050 err 9.5e-6 comps 1
+a coincident 2 24 Good area 43898.272801233 ref 43898.272819678 err 9.5e-6 comps 1
+a coincident 2 25 Good area 44516.806035417 ref 44516.806053534 err 9.6e-6 comps 1
+a coincident 2 26 Good area 43869.674818291 ref 43869.674836124 err 9.7e-6 comps 1
+a coincident 2 27 Good area 44235.976798559 ref 44235.976816456 err 9.2e-6 comps 1
+a coincident 2 28 Good area 44174.133166477 ref 44174.133184492 err 9.5e-6 comps 1
+a coincident 2 29 Good area 44518.826650187 ref 44518.826668208 err 9.3e-6 comps 1
+a coincident 2 30 Good area 44261.207757147 ref 44261.207775224 err 9.0e-6 comps 1
+a coincident 2 31 Good area 44238.899210623 ref 44238.899228363 err 9.2e-6 comps 1
+a coincident 2 32 Good area 43523.612656207 ref 43523.612674164 err 9.8e-6 comps 1
+a coincident 2 33 Good area 43901.228439058 ref 43901.228457445 err 9.3e-6 comps 1
+a coincident 2 34 Good area 44557.621186620 ref 44557.621204483 err 9.3e-6 comps 1
+a coincident 2 35 Good area 44852.815550782 ref 44852.815568931 err 9.3e-6 comps 1
+a coincident 2 36 Good area 43995.208302561 ref 43995.208320573 err 9.2e-6 comps 1
+a coincident 2 37 Good area 44978.539816340 ref 44978.539834381 err 9.4e-6 comps 1
+a coincident 2 38 Good area 44978.539816340 ref 44978.539834381 err 9.4e-6 comps 1
+a coincident 2 39 Good area 43648.094427020 ref 43648.094444835 err 9.4e-6 comps 1
+a coincident 2 40 Good area 43967.541453766 ref 43967.541454762 err 1.7e-5 comps 1
+a coincident 2 41 Good area 44048.239290575 ref 44048.239308531 err 9.4e-6 comps 1
+a coincident 2 42 Good area 44423.570890476 ref 44423.570908324 err 9.5e-6 comps 1
+a coincident 2 43 Good area 44978.539816340 ref 44978.539834381 err 9.4e-6 comps 1
+a coincident 2 44 Good area 43720.085792878 ref 43720.085811015 err 9.5e-6 comps 1
+a coincident 2 45 Good area 43868.851684269 ref 43868.851702577 err 9.1e-6 comps 1
+a coincident 2 46 Good area 44639.559789137 ref 44639.559807225 err 9.6e-6 comps 1
+a coincident 2 47 Good area 44116.403781894 ref 44116.403800026 err 9.5e-6 comps 1
+a coincident 2 48 Good area 44443.450090257 ref 44443.450108381 err 9.4e-6 comps 1
+a coincident 2 49 Good area 40877.580218896 ref 40877.580290250 err 2.4e-5 comps 1
+a coincident 2 50 Good area 43906.371358619 ref 43906.371376532 err 9.5e-6 comps 1
+a coincident 2 51 Good area 39785.447207256 ref 39785.447173663 err 3.0e-6 comps 1
+a coincident 2 52 Good area 44476.498477490 ref 44476.498495657 err 9.3e-6 comps 1
+a coincident 2 53 Good area 44477.886245684 ref 44477.886264016 err 9.2e-6 comps 1
+a coincident 2 54 Good area 44978.539816340 ref 44978.539834381 err 9.4e-6 comps 1
+a coincident 2 55 Good area 43918.381597750 ref 43918.381634893 err 7.5e-6 comps 1
+a coincident 2 56 Good area 44978.539816340 ref 44978.539834381 err 9.4e-6 comps 1
+a coincident 2 57 Good area 44978.539816340 ref 44978.539834381 err 9.4e-6 comps 1
+a coincident 2 58 Good area 43533.996957988 ref 43533.996935863 err 9.0e-6 comps 1
+a coincident 2 59 Good area 43984.093347982 ref 43984.093365966 err 9.8e-6 comps 1
+a coincident 2 60 Good area 44366.340140006 ref 44366.340157965 err 9.6e-6 comps 1
+a coincident 2 61 Good area 40353.942399776 ref 40353.942307895 err 2.3e-5 comps 1
+a coincident 2 62 Good area 42805.979798382 ref 42805.979784894 err 2.0e-5 comps 1
+a coincident 2 63 Good area 44494.085045183 ref 44494.085063144 err 9.4e-6 comps 1
+a coincident 2 64 Good area 44215.847571333 ref 44215.847589340 err 9.4e-6 comps 1
+a coincident 2 65 Good area 44978.539816340 ref 44978.539834381 err 9.4e-6 comps 1
+a coincident 2 66 Good area 44017.884340905 ref 44017.884359291 err 9.5e-6 comps 1
+a coincident 2 67 Good area 44283.257367620 ref 44283.257386082 err 9.2e-6 comps 1
+a coincident 2 68 Good area 43881.407771936 ref 43881.407789902 err 9.1e-6 comps 1
+a coincident 2 69 Good area 41106.551100084 ref 41106.551058158 err 1.9e-5 comps 1
+a coincident 2 70 Good area 44019.248175682 ref 44019.248193914 err 9.5e-6 comps 1
+a coincident 2 71 Good area 43961.667556185 ref 43961.667574456 err 9.3e-6 comps 1
+a coincident 2 72 Good area 43999.351121230 ref 43999.351122546 err 1.3e-5 comps 1
+a coincident 2 73 Good area 43575.269173889 ref 43575.269192050 err 9.4e-6 comps 1
+a coincident 2 74 Good area 44370.320585288 ref 44370.320603449 err 9.5e-6 comps 1
+a coincident 2 75 Good area 43384.238234227 ref 43384.238252565 err 9.5e-6 comps 1
+a coincident 2 76 Good area 43719.319974383 ref 43719.319992352 err 9.4e-6 comps 1
+a coincident 2 77 Good area 43500.964245088 ref 43500.964335200 err 1.6e-5 comps 1
+a coincident 2 78 Good area 44425.248253778 ref 44425.248271887 err 9.4e-6 comps 1
+a coincident 2 79 Good area 44978.539816340 ref 44978.539834381 err 9.4e-6 comps 1
+a coincident 2 80 Good area 44345.994933818 ref 44345.994951817 err 9.4e-6 comps 1
+a coincident 2 81 Good area 43423.739844907 ref 43423.739934628 err 6.7e-5 comps 1
+a coincident 2 82 Good area 44149.132368238 ref 44149.132386076 err 8.8e-6 comps 1
+a coincident 2 83 Good area 44741.295351869 ref 44741.295369729 err 9.0e-6 comps 1
+a coincident 2 84 Good area 43902.647350465 ref 43902.647368438 err 9.1e-6 comps 1
+a coincident 2 85 Good area 44344.760350620 ref 44344.760368632 err 9.4e-6 comps 1
+a coincident 2 86 Good area 44374.506519050 ref 44374.506536930 err 9.1e-6 comps 1
+a coincident 2 87 Good area 44170.994202306 ref 44170.994220622 err 9.0e-6 comps 1
+a coincident 2 88 Good area 44531.605916455 ref 44531.605934459 err 9.1e-6 comps 1
+a coincident 2 89 Good area 42756.618209813 ref 42756.618266377 err 3.2e-5 comps 1
+a coincident 2 90 Good area 44264.401022995 ref 44264.401040638 err 9.7e-6 comps 1
+a coincident 2 91 Good area 44075.947699671 ref 44075.947689146 err 6.2e-6 comps 1
+a coincident 2 92 Good area 43516.168495621 ref 43516.168514036 err 9.2e-6 comps 1
+a coincident 2 93 Good area 44146.609100989 ref 44146.609119101 err 9.6e-6 comps 1
+a coincident 2 94 Good area 44697.266783923 ref 44697.266802036 err 9.8e-6 comps 1
+a coincident 2 95 Good area 43923.514054914 ref 43923.514072756 err 9.8e-6 comps 1
+a coincident 2 96 Good area 44472.547836282 ref 44472.547854133 err 9.7e-6 comps 1
+a coincident 2 97 Good area 43041.959455014 ref 43041.959473387 err 9.8e-6 comps 1
+a coincident 2 98 Good area 44622.294312806 ref 44622.294330905 err 9.4e-6 comps 1
+a coincident 2 99 Good area 43325.036490864 ref 43325.036518355 err 5.4e-6 comps 1
+a coincident 2 100 Good area 44459.936758536 ref 44459.936776514 err 9.4e-6 comps 1
+a coincident 2 101 Good area 44593.435257518 ref 44593.435275737 err 9.4e-6 comps 1
+a coincident 2 102 Good area 44235.675152702 ref 44235.675170751 err 9.3e-6 comps 1
+a coincident 2 103 Good area 44676.135591318 ref 44676.135609394 err 9.2e-6 comps 1
+a coincident 2 104 Good area 44144.852726936 ref 44144.852744956 err 9.5e-6 comps 1
+a coincident 2 105 Good area 44215.786809699 ref 44215.786827777 err 9.8e-6 comps 1
+a coincident 2 106 Good area 41820.258205589 ref 41820.258118034 err 1.6e-5 comps 1
+a coincident 2 107 Good area 43980.932835143 ref 43980.932853420 err 9.5e-6 comps 1
+a coincident 2 108 Good area 43242.906267073 ref 43242.906285224 err 9.6e-6 comps 1
+a coincident 2 109 Good area 44011.983765041 ref 44011.983783073 err 9.0e-6 comps 1
+a coincident 2 110 Good area 44473.096656384 ref 44473.096674327 err 9.8e-6 comps 1
+a coincident 2 111 Good area 44052.080168833 ref 44052.080186521 err 9.6e-6 comps 1
+a coincident 2 112 Good area 43431.493423271 ref 43431.493441297 err 9.3e-6 comps 1
+a coincident 2 113 Good area 44385.420856783 ref 44385.420916368 err 2.8e-5 comps 1
+a coincident 2 114 Good area 44126.195538462 ref 44126.195556536 err 9.5e-6 comps 1
+a coincident 2 115 Good area 44180.135550319 ref 44180.135568575 err 9.6e-6 comps 1
+a coincident 2 116 Good area 43537.169944057 ref 43537.169962321 err 9.2e-6 comps 1
+a coincident 2 117 Good area 44233.361409348 ref 44233.361427550 err 9.5e-6 comps 1
+a coincident 2 118 Good area 43556.065876849 ref 43556.065895401 err 9.3e-6 comps 1
+a coincident 2 119 Good area 44978.539816340 ref 44978.539834381 err 9.4e-6 comps 1
+a coincident 2 120 Good area 43527.272309877 ref 43527.272328050 err 9.6e-6 comps 1
+a coincident 2 121 Good area 43937.265388237 ref 43937.265405973 err 9.5e-6 comps 1
+a coincident 2 122 Good area 44289.543669167 ref 44289.543687225 err 9.4e-6 comps 1
+a coincident 2 123 Good area 41698.628349970 ref 41698.628345528 err 1.3e-6 comps 1
+a coincident 2 124 Good area 44041.970502362 ref 44041.970520411 err 9.6e-6 comps 1
+a coincident 2 125 Good area 44368.230990710 ref 44368.231008637 err 9.4e-6 comps 1
+a coincident 2 126 Good area 44036.082242612 ref 44036.082260396 err 9.6e-6 comps 1
+a coincident 2 127 Good area 43394.342284740 ref 43394.342302777 err 9.4e-6 comps 1
+a coincident 2 128 Good area 42588.558945609 ref 42588.558902774 err 3.9e-6 comps 1
+a coincident 2 129 Good area 43969.379012743 ref 43969.379031298 err 9.6e-6 comps 1
+a coincident 2 130 Good area 44166.342451269 ref 44166.342469262 err 9.5e-6 comps 1
+a coincident 2 131 Good area 44850.232492444 ref 44850.232510644 err 9.4e-6 comps 1
+a coincident 2 132 Good area 43088.475594330 ref 43088.475599205 err 1.4e-5 comps 1
+a coincident 2 133 Good area 44186.598446243 ref 44186.598464373 err 9.4e-6 comps 1
+a coincident 2 134 Good area 43722.417104844 ref 43722.417122751 err 9.4e-6 comps 1
+a coincident 2 135 Good area 44428.085594285 ref 44428.085612295 err 9.5e-6 comps 1
+a coincident 2 136 Good area 44163.132028197 ref 44163.132046064 err 9.3e-6 comps 1
+a coincident 2 137 Good area 44978.539816340 ref 44978.539834381 err 9.4e-6 comps 1
+a coincident 2 138 Good area 44461.108154706 ref 44461.108172862 err 9.5e-6 comps 1
+a coincident 2 139 Good area 43534.862413061 ref 43534.862431217 err 1.0e-5 comps 1
+a coincident 2 140 Good area 42372.331877881 ref 42372.331897019 err 4.3e-5 comps 1
+a coincident 2 141 Good area 43888.111264247 ref 43888.111282083 err 9.5e-6 comps 1
+a coincident 2 142 Good area 44140.676848767 ref 44140.676866514 err 9.7e-6 comps 1
+a coincident 2 143 Good area 43907.290807207 ref 43907.290873124 err 2.7e-6 comps 1
+a coincident 2 144 Good area 44146.872459523 ref 44146.872477585 err 9.8e-6 comps 1
+a coincident 2 145 Good area 44181.942708427 ref 44181.942726641 err 9.7e-6 comps 1
+a coincident 2 146 Good area 44419.115320379 ref 44419.115338346 err 9.8e-6 comps 1
+a coincident 2 147 Good area 44413.558399458 ref 44413.558417488 err 9.5e-6 comps 1
+a coincident 2 148 Good area 43487.927818852 ref 43487.927836741 err 9.0e-6 comps 1
+a coincident 2 149 Good area 43995.972602948 ref 43995.972620971 err 9.3e-6 comps 1
+a coincident 2 150 Good area 43668.085294751 ref 43668.085312793 err 9.3e-6 comps 1
+a coincident 2 151 Good area 43546.126595568 ref 43546.126613672 err 9.6e-6 comps 1
+a coincident 2 152 Good area 43393.268229073 ref 43393.268246828 err 9.6e-6 comps 1
+a coincident 2 153 Good area 41067.973491117 ref 41067.973502861 err 8.0e-6 comps 1
+a coincident 2 154 Good area 43878.913108592 ref 43878.913126573 err 9.6e-6 comps 1
+a coincident 2 155 Good area 44082.492871042 ref 44082.492889033 err 9.0e-6 comps 1
+a coincident 2 156 Good area 44390.640713299 ref 44390.640731418 err 9.5e-6 comps 1
+a coincident 2 157 Good area 44978.539816340 ref 44978.539834381 err 9.4e-6 comps 1
+a coincident 2 158 Good area 43274.036354218 ref 43274.036377093 err 9.8e-6 comps 1
+a coincident 2 159 Good area 44293.598456930 ref 44293.598475019 err 9.4e-6 comps 1
+a coincident 2 160 Good area 43345.390458265 ref 43345.390448877 err 2.5e-5 comps 1
+a coincident 2 161 Good area 42993.418293082 ref 42993.418316206 err 1.2e-5 comps 1
+a coincident 2 162 Good area 44255.592376692 ref 44255.592394412 err 9.6e-6 comps 1
+a coincident 2 163 Good area 44978.539816340 ref 44978.539834381 err 9.4e-6 comps 1
+a coincident 2 164 Good area 40623.601541668 ref 40623.601503394 err 4.1e-5 comps 1
+a coincident 2 165 Good area 44409.975042666 ref 44409.975060680 err 9.4e-6 comps 1
+a coincident 2 166 Good area 44055.075926679 ref 44055.075944640 err 9.4e-6 comps 1
+a coincident 2 167 Good area 44391.089009588 ref 44391.089027643 err 9.2e-6 comps 1
+a coincident 2 168 Good area 44516.661632992 ref 44516.661650645 err 9.2e-6 comps 1
+a coincident 2 169 Good area 44692.727504197 ref 44692.727522206 err 9.7e-6 comps 1
+a coincident 2 170 Good area 41949.897405168 ref 41949.897416739 err 1.5e-5 comps 1
+a coincident 2 171 Good area 44659.079860122 ref 44659.079878020 err 9.3e-6 comps 1
+a coincident 2 172 Good area 44283.002796032 ref 44283.002813989 err 9.8e-6 comps 1
+a coincident 2 173 Good area 43657.266267028 ref 43657.266285441 err 9.5e-6 comps 1
+a coincident 2 174 Good area 40866.725198655 ref 40866.725180021 err 3.4e-5 comps 1
+a coincident 2 175 Good area 44191.213701236 ref 44191.213719337 err 9.3e-6 comps 1
+a coincident 2 176 Good area 43818.720180779 ref 43818.720202790 err 9.6e-6 comps 1
+a coincident 2 177 Good area 43948.959381781 ref 43948.959431471 err 3.3e-5 comps 1
+a coincident 2 178 Good area 44334.322276578 ref 44334.322294400 err 9.3e-6 comps 1
+a coincident 2 179 Good area 42374.912753315 ref 42374.912766952 err 1.5e-5 comps 1
+a coincident 2 180 Good area 44252.832545266 ref 44252.832563485 err 9.3e-6 comps 1
+a coincident 2 181 Good area 39676.983250886 ref 39676.983303627 err 3.4e-5 comps 1
+a coincident 2 182 Good area 41980.768257669 ref 41980.768300781 err 7.7e-7 comps 1
+a coincident 2 183 Good area 44978.539816340 ref 44978.539834381 err 9.4e-6 comps 1
+a coincident 2 184 Good area 43989.775067591 ref 43989.775085833 err 9.6e-6 comps 1
+a coincident 2 185 Good area 41712.890320614 ref 41712.890305347 err 2.1e-6 comps 1
+a coincident 2 186 Good area 43651.162090913 ref 43651.162108815 err 9.1e-6 comps 1
+a coincident 2 187 Good area 43944.532943780 ref 43944.532961574 err 9.8e-6 comps 1
+a coincident 2 188 Good area 44093.082171554 ref 44093.082189628 err 9.6e-6 comps 1
+a coincident 2 189 Good area 43501.863277518 ref 43501.863295748 err 9.2e-6 comps 1
+a coincident 2 190 Good area 44329.239951601 ref 44329.239969725 err 9.5e-6 comps 1
+a coincident 2 191 Good area 44108.203218913 ref 44108.203236815 err 9.5e-6 comps 1
+a coincident 2 192 Good area 43589.122613502 ref 43589.122631109 err 9.4e-6 comps 1
+a coincident 2 193 Good area 44514.364861999 ref 44514.364880049 err 9.8e-6 comps 1
+a coincident 2 194 Good area 43337.007213665 ref 43337.007218206 err 1.9e-5 comps 1
+a coincident 2 195 Good area 44978.539816340 ref 44978.539834381 err 9.4e-6 comps 1
+a coincident 2 196 Good area 44516.774440357 ref 44516.774458224 err 9.3e-6 comps 1
+a coincident 2 197 Good area 44533.893109127 ref 44533.893127139 err 9.5e-6 comps 1
+a coincident 2 198 Good area 40261.897777324 ref 40261.897820484 err 3.2e-5 comps 1
+a coincident 2 199 Good area 39494.506430774 ref 39494.506384021 err 5.6e-5 comps 1
+a coincident 20 0 Good area 41043.352777801 ref 41043.352741398 err 2.4e-5 comps 1
+a coincident 20 1 Good area 41583.388985184 ref 41583.389003979 err 1.6e-5 comps 1
+a coincident 20 2 Good area 42589.234257216 ref 42589.234350936 err 8.4e-6 comps 1
+a coincident 20 3 Good area 42659.351146416 ref 42659.351160289 err 6.3e-5 comps 1
+a coincident 20 4 Good area 42029.304711824 ref 42029.304670329 err 1.7e-5 comps 1
+a coincident 20 5 Good area 39474.959852400 ref 39474.959880359 err 2.0e-5 comps 2
+a coincident 20 6 Good area 42039.240584821 ref 42039.240513680 err 2.0e-5 comps 1
+a coincident 20 7 Good area 40837.145459827 ref 40837.145423498 err 6.1e-6 comps 1
+a coincident 20 8 Good area 42023.863437672 ref 42023.863529442 err 1.9e-5 comps 1
+a coincident 20 9 Good area 42077.784120810 ref 42077.784100273 err 7.9e-6 comps 1
+a coincident 20 10 Good area 42499.369595904 ref 42499.369604639 err 9.9e-6 comps 1
+a coincident 20 11 Good area 42239.745216043 ref 42239.745308370 err 8.0e-6 comps 1
+a coincident 20 12 Good area 42800.952588632 ref 42800.952601241 err 1.5e-6 comps 1
+a coincident 20 13 Good area 40647.477856571 ref 40647.477824207 err 2.5e-5 comps 1
+a coincident 20 14 Good area 41410.113368832 ref 41410.113368128 err 1.8e-5 comps 1
+a coincident 20 15 Good area 42598.104777074 ref 42598.104783803 err 1.1e-5 comps 1
+a coincident 20 16 Good area 42573.939043808 ref 42573.939085406 err 2.5e-5 comps 1
+a coincident 20 17 Good area 41719.495672226 ref 41719.495857633 err 1.5e-5 comps 1
+a coincident 20 18 Good area 42732.002994790 ref 42732.002981517 err 2.4e-5 comps 1
+a coincident 20 19 Good area 41370.846602768 ref 41370.846591472 err 1.1e-6 comps 1
+a coincident 20 20 Good area 40455.376557097 ref 40455.376615819 err 2.9e-6 comps 1
+a coincident 20 21 Good area 42810.346988116 ref 42810.347021766 err 1.8e-5 comps 1
+a coincident 20 22 Good area 39955.728965553 ref 39955.728942065 err 1.8e-5 comps 1
+a coincident 20 23 Good area 43195.813761122 ref 43195.813754793 err 1.5e-5 comps 1
+a coincident 20 24 Good area 40846.400137691 ref 40846.400052463 err 1.6e-6 comps 1
+a coincident 20 25 Good area 43077.426313307 ref 43077.426343388 err 1.8e-5 comps 1
+a coincident 20 26 Good area 41179.109257992 ref 41179.109279193 err 1.0e-5 comps 1
+a coincident 20 27 Good area 42925.994263153 ref 42925.994285684 err 3.3e-5 comps 1
+a coincident 20 28 Good area 43010.541172269 ref 43010.541160877 err 1.3e-5 comps 1
+a coincident 20 29 Good area 39914.225394588 ref 39914.225451129 err 2.2e-5 comps 1
+a coincident 20 30 Good area 42526.217715087 ref 42526.217678155 err 1.3e-6 comps 1
+a coincident 20 31 Good area 42422.931622789 ref 42422.931700794 err 2.5e-5 comps 1
+a coincident 20 32 Good area 42490.699754958 ref 42490.699736837 err 4.1e-6 comps 1
+a coincident 20 33 Good area 43146.637751127 ref 43146.637768979 err 9.3e-6 comps 1
+a coincident 20 34 Good area 42498.315804869 ref 42498.315832764 err 2.4e-5 comps 1
+a coincident 20 35 Good area 41877.306899711 ref 41877.306901281 err 1.1e-6 comps 1
+a coincident 20 36 Good area 43652.381983026 ref 43652.382065153 err 6.4e-8 comps 1
+a coincident 20 37 Good area 41590.923500587 ref 41590.923506758 err 9.8e-6 comps 1
+a coincident 20 38 Good area 42161.917645416 ref 42161.917712845 err 1.3e-5 comps 1
+a coincident 20 39 Good area 43354.152194299 ref 43354.152212477 err 8.7e-6 comps 1
+a coincident 20 40 Good area 42646.719116897 ref 42646.719130385 err 1.8e-5 comps 1
+a coincident 20 41 Good area 40787.875845377 ref 40787.875820343 err 3.3e-6 comps 1
+a coincident 20 42 Good area 43463.602036110 ref 43463.602077567 err 1.7e-5 comps 1
+a coincident 20 43 Good area 42835.752299314 ref 42835.752388066 err 6.5e-7 comps 1
+a coincident 20 44 Good area 42394.714618515 ref 42394.714620097 err 2.9e-6 comps 1
+a coincident 20 45 Good area 42160.239720975 ref 42160.239705334 err 3.2e-5 comps 1
+a coincident 20 46 Good area 42044.580023823 ref 42044.580100906 err 4.3e-5 comps 2
+a coincident 20 47 Good area 43120.915991026 ref 43120.915960823 err 9.7e-6 comps 1
+a coincident 20 48 Good area 43626.135258890 ref 43626.135297355 err 3.1e-5 comps 1
+a coincident 20 49 Good area 42857.763376953 ref 42857.763423970 err 1.3e-5 comps 1
+a coincident 20 50 Good area 43128.051582221 ref 43128.051669168 err 2.6e-5 comps 2
+a coincident 20 51 Good area 43789.846516310 ref 43789.846555233 err 1.8e-5 comps 1
+a coincident 20 52 Good area 42731.817439596 ref 42731.817520482 err 3.7e-5 comps 1
+a coincident 20 53 Good area 42338.810975219 ref 42338.810954998 err 2.1e-5 comps 1
+a coincident 20 54 Good area 40929.716460557 ref 40929.716485829 err 1.8e-5 comps 1
+a coincident 20 55 Good area 42623.532319210 ref 42623.532351613 err 5.5e-5 comps 2
+a coincident 20 56 Good area 41742.761419580 ref 41742.761413184 err 1.1e-5 comps 1
+a coincident 20 57 Good area 42926.785034607 ref 42926.785049318 err 1.4e-5 comps 1
+a coincident 20 58 Good area 42762.991766952 ref 42762.991790092 err 8.2e-6 comps 1
+a coincident 20 59 Good area 41193.964904030 ref 41193.964911583 err 2.3e-5 comps 1
+a coincident 20 60 Good area 41072.502714296 ref 41072.502830403 err 2.3e-5 comps 1
+a coincident 20 61 Good area 42726.576901230 ref 42726.576893063 err 8.5e-6 comps 1
+a coincident 20 62 Good area 42161.042568564 ref 42161.042565621 err 2.4e-6 comps 1
+a coincident 20 63 Good area 42650.864935801 ref 42650.864958870 err 1.3e-5 comps 1
+a coincident 20 64 Good area 40486.151989192 ref 40486.151960479 err 1.2e-5 comps 1
+a coincident 20 65 Good area 43288.767987947 ref 43288.768041518 err 1.4e-7 comps 1
+a coincident 20 66 Good area 42552.428340958 ref 42552.428250208 err 2.3e-5 comps 1
+a coincident 20 67 Good area 42007.772628537 ref 42007.772588324 err 7.7e-6 comps 1
+a coincident 20 68 Good area 41701.156312067 ref 41701.156376748 err 2.1e-5 comps 1
+a coincident 20 69 Good area 43439.069357524 ref 43439.069373528 err 6.3e-6 comps 1
+a coincident 20 70 Good area 40425.480216533 ref 40425.480289538 err 4.7e-5 comps 1
+a coincident 20 71 Good area 42837.200461268 ref 42837.200597440 err 6.4e-6 comps 1
+a coincident 20 72 Good area 42976.086792425 ref 42976.086810741 err 1.5e-5 comps 1
+a coincident 20 73 Good area 43656.221742587 ref 43656.221761126 err 9.8e-6 comps 1
+a coincident 20 74 Good area 41545.402872736 ref 41545.402657278 err 1.6e-6 comps 1
+a coincident 20 75 Good area 42506.196870130 ref 42506.196954345 err 1.2e-5 comps 1
+a coincident 20 76 Good area 42433.003866630 ref 42433.003808818 err 1.8e-5 comps 1
+a coincident 20 77 Good area 40857.025421746 ref 40857.025463061 err 4.9e-6 comps 1
+a coincident 20 78 Good area 42684.027753964 ref 42684.027696470 err 3.0e-6 comps 1
+a coincident 20 79 Good area 40796.561843072 ref 40796.561790855 err 1.5e-5 comps 1
+a coincident 20 80 Good area 42589.768207181 ref 42589.768163826 err 1.3e-5 comps 1
+a coincident 20 81 Good area 43045.968832525 ref 43045.968847754 err 5.6e-6 comps 1
+a coincident 20 82 Good area 40913.889293669 ref 40913.889302596 err 1.9e-5 comps 1
+a coincident 20 83 Good area 42806.659339629 ref 42806.659367978 err 1.4e-4 comps 1
+a coincident 20 84 Good area 42050.914342061 ref 42050.914348018 err 6.7e-6 comps 1
+a coincident 20 85 Good area 43019.410187774 ref 43019.410208051 err 2.7e-5 comps 2
+a coincident 20 86 Good area 41283.429554129 ref 41283.429556441 err 1.3e-5 comps 1
+a coincident 20 87 Good area 41811.907000890 ref 41811.906976312 err 1.4e-5 comps 1
+a coincident 20 88 Good area 43206.369361178 ref 43206.369411094 err 1.2e-5 comps 1
+a coincident 20 89 Good area 43578.103634470 ref 43578.103665629 err 1.0e-5 comps 1
+a coincident 20 90 Good area 42915.702318938 ref 42915.702391669 err 2.3e-5 comps 1
+a coincident 20 91 Good area 41933.706971490 ref 41933.706964293 err 8.3e-6 comps 1
+a coincident 20 92 Good area 43422.788459423 ref 43422.788304768 err 4.7e-6 comps 1
+a coincident 20 93 Good area 40924.730940718 ref 40924.730792059 err 1.0e-5 comps 2
+a coincident 20 94 Good area 43078.465949141 ref 43078.465807224 err 2.5e-6 comps 1
+a coincident 20 95 Good area 41744.472471137 ref 41744.472614957 err 4.0e-6 comps 1
+a coincident 20 96 Good area 43677.992576195 ref 43677.992591697 err 1.2e-5 comps 1
+a coincident 20 97 Good area 43201.988971529 ref 43201.989007800 err 1.0e-5 comps 1
+a coincident 20 98 Good area 41833.516831674 ref 41833.516837825 err 1.5e-5 comps 1
+a coincident 20 99 Good area 42965.282510428 ref 42965.282594940 err 3.7e-5 comps 1
+a coincident 200 0 Good area 43787.929159687 ref 43787.929160265 err 3.1e-5 comps 1
+a coincident 200 1 Good area 43688.546270947 ref 43688.546298133 err 4.4e-5 comps 3
+a coincident 200 2 Good area 43598.822743200 ref 43598.822752157 err 2.0e-5 comps 1
+a coincident 200 3 Good area 43802.709600223 ref 43802.709646808 err 1.7e-5 comps 3
+a coincident 200 4 Good area 44056.739789645 ref 44056.739788896 err 1.1e-5 comps 3
+a coincident 200 5 Good area 43804.645864740 ref 43804.645932052 err 2.4e-5 comps 1
+a coincident 200 6 Good area 43528.410030646 ref 43528.410006684 err 3.6e-6 comps 1
+a coincident 200 7 Good area 44013.995121145 ref 44013.995148911 err 6.4e-6 comps 4
+a coincident 200 8 Good area 43714.163438121 ref 43714.163475396 err 3.0e-5 comps 4
+a coincident 200 9 Good area 43462.110226982 ref 43462.110272393 err 1.5e-5 comps 2
+a coincident 200 10 Good area 43921.224874268 ref 43921.224921077 err 1.8e-5 comps 2
+a coincident 200 11 Good area 43633.692506020 ref 43633.692533112 err 1.0e-5 comps 4
+a coincident 200 12 Good area 44045.432734097 ref 44045.432780265 err 2.1e-5 comps 3
+a coincident 200 13 Good area 43892.602244676 ref 43892.602258509 err 4.5e-6 comps 2
+a coincident 200 14 Good area 43913.701598045 ref 43913.701629072 err 1.4e-7 comps 1
+a coincident 200 15 Good area 43909.685411552 ref 43909.685376637 err 9.2e-6 comps 2
+a coincident 200 16 Good area 43563.124875230 ref 43563.124920835 err 9.2e-6 comps 3
+a coincident 200 17 Good area 43915.174192912 ref 43915.174192575 err 2.6e-6 comps 1
+a coincident 200 18 Good area 43562.144657841 ref 43562.144633381 err 1.2e-5 comps 2
+a coincident 200 19 Good area 44029.018121013 ref 44029.018145102 err 2.0e-5 comps 2
+a isolated 2 0 Good area 43064.385462994 ref 43064.385447427 err 2.9e-5 comps 1
+a isolated 2 1 Good area 43760.344514074 ref 43760.344483317 err 1.4e-5 comps 1
+a isolated 2 2 Good area 44542.398360756 ref 44542.398364208 err 1.6e-5 comps 1
+a isolated 2 3 Good area 43911.990481774 ref 43911.990468377 err 1.5e-5 comps 1
+a isolated 2 4 Good area 42424.542664476 ref 42424.542694315 err 1.5e-5 comps 1
+a isolated 2 5 Good area 42727.512578046 ref 42727.512642794 err 2.9e-5 comps 1
+a isolated 2 6 Good area 43064.450393924 ref 43064.450501028 err 2.9e-5 comps 1
+a isolated 2 7 Good area 42836.644294121 ref 42836.644279969 err 1.1e-5 comps 1
+a isolated 2 8 Good area 42751.221116650 ref 42751.221174571 err 2.7e-5 comps 1
+a isolated 2 9 Good area 42415.522372993 ref 42415.522377342 err 2.4e-5 comps 1
+a isolated 2 10 Good area 42042.645320810 ref 42042.645291218 err 2.6e-6 comps 1
+a isolated 2 11 Good area 43289.636329912 ref 43289.636386950 err 3.0e-5 comps 1
+a isolated 2 12 Good area 43944.570829916 ref 43944.570862862 err 3.5e-5 comps 1
+a isolated 2 13 Good area 43273.782021287 ref 43273.782076482 err 4.2e-5 comps 1
+a isolated 2 14 Good area 41884.615122348 ref 41884.615188388 err 3.6e-5 comps 1
+a isolated 2 15 Good area 41301.192170613 ref 41301.192254582 err 2.0e-5 comps 1
+a isolated 2 16 Good area 43249.826335485 ref 43249.826415690 err 1.1e-6 comps 1
+a isolated 2 17 Good area 43743.284951145 ref 43743.285043280 err 1.9e-5 comps 1
+a isolated 2 18 Good area 43009.193794093 ref 43009.193843634 err 8.4e-6 comps 1
+a isolated 2 19 Good area 41752.986030888 ref 41752.986101479 err 6.3e-5 comps 1
+a isolated 2 20 Good area 43237.178623212 ref 43237.178724967 err 6.1e-5 comps 1
+a isolated 2 21 Good area 43581.814760717 ref 43581.814758259 err 4.6e-5 comps 1
+a isolated 2 22 Good area 43058.147262267 ref 43058.147280543 err 1.9e-5 comps 1
+a isolated 2 23 Good area 43751.128182454 ref 43751.128200746 err 1.5e-5 comps 1
+a isolated 2 24 Good area 44028.826221050 ref 44028.826255071 err 6.9e-6 comps 1
+a isolated 2 25 Good area 43026.710087114 ref 43026.710073852 err 1.5e-5 comps 1
+a isolated 2 26 Good area 43470.039396312 ref 43470.039387435 err 2.2e-5 comps 1
+a isolated 2 27 Good area 44417.296175148 ref 44417.296198193 err 3.9e-5 comps 1
+a isolated 2 28 Good area 42006.111499455 ref 42006.111498234 err 4.4e-5 comps 1
+a isolated 2 29 Good area 42703.792960195 ref 42703.793010350 err 2.0e-5 comps 1
+a isolated 2 30 Good area 43178.435928097 ref 43178.435909984 err 1.2e-5 comps 1
+a isolated 2 31 Good area 42800.068422890 ref 42800.068409013 err 2.3e-5 comps 1
+a isolated 2 32 Good area 41895.640595937 ref 41895.640594250 err 4.1e-5 comps 1
+a isolated 2 33 Good area 44306.005723335 ref 44306.005746348 err 5.2e-5 comps 1
+a isolated 2 34 Good area 43900.502811442 ref 43900.502919081 err 1.8e-5 comps 1
+a isolated 2 35 Good area 43463.184893122 ref 43463.184851380 err 2.8e-5 comps 1
+a isolated 2 36 Good area 43275.702132209 ref 43275.702121862 err 7.8e-7 comps 1
+a isolated 2 37 Good area 42362.177815524 ref 42362.177770467 err 5.6e-5 comps 1
+a isolated 2 38 Good area 43042.784998210 ref 43042.784999803 err 1.3e-5 comps 1
+a isolated 2 39 Good area 43703.652821480 ref 43703.652820692 err 5.4e-6 comps 1
+a isolated 2 40 Good area 42785.518019626 ref 42785.518072905 err 1.7e-5 comps 1
+a isolated 2 41 Good area 43691.864555731 ref 43691.864612134 err 3.4e-5 comps 1
+a isolated 2 42 Good area 42157.230581493 ref 42157.230609302 err 1.9e-6 comps 1
+a isolated 2 43 Good area 42941.569529108 ref 42941.569526340 err 2.9e-5 comps 1
+a isolated 2 44 Good area 43951.311061518 ref 43951.311085709 err 4.8e-6 comps 1
+a isolated 2 45 Good area 43426.240534486 ref 43426.240518451 err 1.1e-5 comps 1
+a isolated 2 46 Good area 43983.334002705 ref 43983.334024649 err 1.9e-5 comps 1
+a isolated 2 47 Good area 43033.055521399 ref 43033.055614915 err 1.8e-5 comps 1
+a isolated 2 48 Good area 43758.970533142 ref 43758.970600483 err 1.8e-5 comps 1
+a isolated 2 49 Good area 42673.739670925 ref 42673.739618038 err 9.2e-6 comps 1
+a isolated 2 50 Good area 44005.981745336 ref 44005.981761604 err 2.9e-5 comps 1
+a isolated 2 51 Good area 43341.091856884 ref 43341.091900133 err 2.5e-5 comps 1
+a isolated 2 52 Good area 42321.872350449 ref 42321.872363298 err 3.9e-5 comps 1
+a isolated 2 53 Good area 43575.791277871 ref 43575.791331129 err 2.2e-5 comps 1
+a isolated 2 54 Good area 41959.131484704 ref 41959.131511483 err 7.2e-5 comps 1
+a isolated 2 55 Good area 43012.549238176 ref 43012.549250232 err 1.9e-6 comps 1
+a isolated 2 56 Good area 41594.626560772 ref 41594.626621736 err 3.1e-5 comps 1
+a isolated 2 57 Good area 42040.920884921 ref 42040.920904696 err 1.4e-5 comps 1
+a isolated 2 58 Good area 42947.763914222 ref 42947.763897204 err 3.0e-5 comps 1
+a isolated 2 59 Good area 42619.135967309 ref 42619.135918057 err 1.2e-6 comps 1
+a isolated 2 60 Good area 42978.503621418 ref 42978.503660160 err 1.4e-5 comps 1
+a isolated 2 61 Good area 41443.746139336 ref 41443.746214430 err 9.1e-5 comps 1
+a isolated 2 62 Good area 44398.149065523 ref 44398.149084140 err 1.6e-5 comps 1
+a isolated 2 63 Good area 42792.370258264 ref 42792.370323869 err 3.2e-5 comps 1
+a isolated 2 64 Good area 43884.896144591 ref 43884.896192386 err 4.8e-5 comps 1
+a isolated 2 65 Good area 41046.577427416 ref 41046.577487847 err 5.1e-5 comps 1
+a isolated 2 66 Good area 42688.671379231 ref 42688.671346978 err 9.7e-6 comps 1
+a isolated 2 67 Good area 42310.141806675 ref 42310.141907254 err 1.0e-5 comps 1
+a isolated 2 68 Good area 42542.144703114 ref 42542.144710636 err 4.2e-6 comps 1
+a isolated 2 69 Good area 43003.333119061 ref 43003.333130927 err 1.3e-5 comps 1
+a isolated 2 70 Good area 44080.901485301 ref 44080.901456581 err 1.2e-5 comps 1
+a isolated 2 71 Good area 42415.271106224 ref 42415.271117631 err 5.7e-5 comps 1
+a isolated 2 72 Good area 44124.118066236 ref 44124.118048816 err 1.6e-5 comps 1
+a isolated 2 73 Good area 43204.732533095 ref 43204.732500721 err 2.2e-5 comps 1
+a isolated 2 74 Good area 43698.655160159 ref 43698.655239577 err 3.4e-5 comps 1
+a isolated 2 75 Good area 43824.032423076 ref 43824.032528809 err 1.1e-5 comps 1
+a isolated 2 76 Good area 42850.928772927 ref 42850.928767310 err 1.2e-5 comps 1
+a isolated 2 77 Good area 43732.179256043 ref 43732.179305625 err 3.1e-5 comps 1
+a isolated 2 78 Good area 41980.636451638 ref 41980.636422890 err 2.8e-5 comps 1
+a isolated 2 79 Good area 43007.960636555 ref 43007.960683363 err 5.9e-6 comps 1
+a isolated 2 80 Good area 43700.735918841 ref 43700.735936908 err 9.7e-6 comps 1
+a isolated 2 81 Good area 44482.427796163 ref 44482.427798348 err 1.2e-5 comps 1
+a isolated 2 82 Good area 43866.001160379 ref 43866.001115598 err 2.2e-5 comps 1
+a isolated 2 83 Good area 43363.200806442 ref 43363.200790289 err 7.8e-6 comps 1
+a isolated 2 84 Good area 42581.474294644 ref 42581.474280460 err 3.5e-5 comps 1
+a isolated 2 85 Good area 43555.217507746 ref 43555.217535191 err 8.7e-6 comps 1
+a isolated 2 86 Good area 43364.275180849 ref 43364.275190398 err 2.6e-5 comps 1
+a isolated 2 87 Good area 43183.785937965 ref 43183.785981564 err 1.9e-5 comps 1
+a isolated 2 88 Good area 40999.882997236 ref 40999.883021781 err 9.3e-6 comps 1
+a isolated 2 89 Good area 43143.274647374 ref 43143.274642339 err 2.1e-5 comps 1
+a isolated 2 90 Good area 43211.638314743 ref 43211.638399298 err 1.6e-6 comps 1
+a isolated 2 91 Good area 43311.684720866 ref 43311.684847170 err 1.7e-5 comps 1
+a isolated 2 92 Good area 44186.483734191 ref 44186.483766969 err 6.2e-6 comps 1
+a isolated 2 93 Good area 42259.319611618 ref 42259.319671886 err 2.6e-5 comps 1
+a isolated 2 94 Good area 41456.596262654 ref 41456.596241609 err 3.8e-6 comps 1
+a isolated 2 95 Good area 43323.756265961 ref 43323.756254127 err 2.4e-5 comps 1
+a isolated 2 96 Good area 42877.358020261 ref 42877.358102028 err 5.2e-5 comps 1
+a isolated 2 97 Good area 44077.773824579 ref 44077.773818423 err 7.3e-6 comps 1
+a isolated 2 98 Good area 43439.517244356 ref 43439.517280341 err 4.7e-5 comps 1
+a isolated 2 99 Good area 43875.770883231 ref 43875.770886500 err 7.3e-6 comps 1
+a isolated 2 100 Good area 42579.080132505 ref 42579.080244076 err 2.1e-5 comps 1
+a isolated 2 101 Good area 43599.813462510 ref 43599.813494472 err 6.6e-6 comps 1
+a isolated 2 102 Good area 44398.462918116 ref 44398.462954446 err 5.1e-6 comps 1
+a isolated 2 103 Good area 43645.466621792 ref 43645.466609751 err 5.1e-5 comps 1
+a isolated 2 104 Good area 42561.782938343 ref 42561.782960014 err 1.4e-5 comps 1
+a isolated 2 105 Good area 42352.429198145 ref 42352.429172661 err 6.7e-6 comps 1
+a isolated 2 106 Good area 43421.122453566 ref 43421.122438127 err 5.0e-6 comps 1
+a isolated 2 107 Good area 43842.640115604 ref 43842.640151024 err 2.3e-5 comps 1
+a isolated 2 108 Good area 42196.588861152 ref 42196.588927614 err 2.3e-6 comps 1
+a isolated 2 109 Good area 42413.006986304 ref 42413.006985147 err 3.4e-5 comps 1
+a isolated 2 110 Good area 42589.070646474 ref 42589.070677390 err 2.1e-5 comps 1
+a isolated 2 111 Good area 44359.639181586 ref 44359.639229600 err 5.3e-6 comps 1
+a isolated 2 112 Good area 43497.774861389 ref 43497.774866374 err 3.9e-5 comps 1
+a isolated 2 113 Good area 43638.627970385 ref 43638.628020786 err 6.9e-7 comps 1
+a isolated 2 114 Good area 43904.124188998 ref 43904.124203066 err 1.4e-5 comps 1
+a isolated 2 115 Good area 43807.237177268 ref 43807.237243175 err 9.0e-6 comps 1
+a isolated 2 116 Good area 44260.949449845 ref 44260.949472496 err 3.9e-5 comps 1
+a isolated 2 117 Good area 43925.112105398 ref 43925.112103064 err 1.7e-5 comps 1
+a isolated 2 118 Good area 42604.007891949 ref 42604.007933435 err 1.1e-5 comps 1
+a isolated 2 119 Good area 44247.421237118 ref 44247.421264332 err 1.3e-5 comps 1
+a isolated 2 120 Good area 43516.572564523 ref 43516.572599164 err 5.1e-5 comps 1
+a isolated 2 121 Good area 43526.654614611 ref 43526.654606570 err 8.5e-6 comps 1
+a isolated 2 122 Good area 44072.326967647 ref 44072.326952409 err 7.7e-6 comps 1
+a isolated 2 123 Good area 41284.462500718 ref 41284.462466486 err 1.6e-5 comps 1
+a isolated 2 124 Good area 43793.848653837 ref 43793.848649000 err 3.1e-5 comps 1
+a isolated 2 125 Good area 44180.279303507 ref 44180.279321650 err 9.5e-6 comps 1
+a isolated 2 126 Good area 43317.032410920 ref 43317.032550682 err 5.0e-6 comps 1
+a isolated 2 127 Good area 42927.864427944 ref 42927.864470208 err 2.7e-5 comps 1
+a isolated 2 128 Good area 43966.864128381 ref 43966.864129131 err 1.3e-5 comps 1
+a isolated 2 129 Good area 43865.098778778 ref 43865.098796679 err 9.5e-6 comps 1
+a isolated 2 130 Good area 42292.763725289 ref 42292.763733139 err 2.3e-5 comps 1
+a isolated 2 131 Good area 44144.150357150 ref 44144.150394003 err 3.3e-5 comps 1
+a isolated 2 132 Good area 42919.784809429 ref 42919.784776273 err 4.4e-5 comps 1
+a isolated 2 133 Good area 43521.400824947 ref 43521.400847711 err 1.1e-5 comps 1
+a isolated 2 134 Good area 43351.191576873 ref 43351.191569012 err 6.6e-5 comps 1
+a isolated 2 135 Good area 43522.565199792 ref 43522.565207232 err 2.0e-5 comps 1
+a isolated 2 136 Good area 43530.749212633 ref 43530.749244513 err 1.5e-5 comps 1
+a isolated 2 137 Good area 42207.733034072 ref 42207.733029431 err 3.6e-5 comps 1
+a isolated 2 138 Good area 44229.901442542 ref 44229.901460577 err 9.4e-6 comps 1
+a isolated 2 139 Good area 43764.846480312 ref 43764.846473867 err 5.1e-7 comps 1
+a isolated 2 140 Good area 43583.086311114 ref 43583.086328047 err 1.0e-5 comps 1
+a isolated 2 141 Good area 44466.189374645 ref 44466.189365700 err 9.0e-6 comps 1
+a isolated 2 142 Good area 42718.828981564 ref 42718.829033878 err 1.7e-5 comps 1
+a isolated 2 143 Good area 43130.447338115 ref 43130.447315771 err 1.0e-5 comps 1
+a isolated 2 144 Good area 43707.346145907 ref 43707.346164154 err 2.6e-6 comps 1
+a isolated 2 145 Good area 43746.160910348 ref 43746.160933295 err 3.2e-5 comps 1
+a isolated 2 146 Good area 43921.472629686 ref 43921.472603621 err 1.8e-5 comps 1
+a isolated 2 147 Good area 43387.895449672 ref 43387.895483546 err 1.7e-5 comps 1
+a isolated 2 148 Good area 42826.920231205 ref 42826.920217216 err 1.0e-6 comps 1
+a isolated 2 149 Good area 42733.871397148 ref 42733.871411589 err 9.7e-6 comps 1
+a isolated 2 150 Good area 44078.959326546 ref 44078.959367582 err 5.0e-6 comps 1
+a isolated 2 151 Good area 43918.009804673 ref 43918.009826802 err 1.1e-5 comps 1
+a isolated 2 152 Good area 43387.588559357 ref 43387.588586065 err 5.5e-5 comps 1
+a isolated 2 153 Good area 44130.036072938 ref 44130.036116040 err 2.2e-5 comps 1
+a isolated 2 154 Good area 44015.144538050 ref 44015.144523207 err 3.5e-6 comps 1
+a isolated 2 155 Good area 43035.067244064 ref 43035.067318901 err 1.7e-6 comps 1
+a isolated 2 156 Good area 44298.182511175 ref 44298.182554388 err 1.9e-5 comps 1
+a isolated 2 157 Good area 43185.512726336 ref 43185.512774295 err 3.1e-5 comps 1
+a isolated 2 158 Good area 42471.248751841 ref 42471.248822137 err 1.6e-5 comps 1
+a isolated 2 159 Good area 42094.452212950 ref 42094.452185291 err 9.6e-6 comps 1
+a isolated 2 160 Good area 42409.889657775 ref 42409.889671701 err 1.8e-5 comps 1
+a isolated 2 161 Good area 42504.273591576 ref 42504.273569540 err 3.2e-5 comps 1
+a isolated 2 162 Good area 43879.270729621 ref 43879.270724151 err 6.4e-5 comps 1
+a isolated 2 163 Good area 42827.551573833 ref 42827.551640916 err 3.4e-5 comps 1
+a isolated 2 164 Good area 43729.794908610 ref 43729.794926082 err 1.9e-5 comps 1
+a isolated 2 165 Good area 41918.449210211 ref 41918.449263788 err 2.5e-5 comps 1
+a isolated 2 166 Good area 44004.721229578 ref 44004.721218216 err 6.1e-6 comps 1
+a isolated 2 167 Good area 44031.051080443 ref 44031.051098788 err 9.6e-6 comps 1
+a isolated 2 168 Good area 44224.521636935 ref 44224.521626480 err 2.9e-5 comps 1
+a isolated 2 169 Good area 43200.922754154 ref 43200.922777651 err 2.8e-6 comps 1
+a isolated 2 170 Good area 44212.817423378 ref 44212.817505264 err 2.0e-6 comps 1
+a isolated 2 171 Good area 42338.924461912 ref 42338.924426074 err 2.4e-5 comps 1
+a isolated 2 172 Good area 40879.503968862 ref 40879.503898656 err 4.1e-5 comps 1
+a isolated 2 173 Good area 42569.763348189 ref 42569.763322956 err 8.9e-6 comps 1
+a isolated 2 174 Good area 43940.775245729 ref 43940.775252667 err 3.0e-6 comps 1
+a isolated 2 175 Good area 42902.305133786 ref 42902.305212451 err 1.9e-5 comps 1
+a isolated 2 176 Good area 41958.098078764 ref 41958.098089270 err 3.7e-5 comps 1
+a isolated 2 177 Good area 42508.293314740 ref 42508.293372661 err 2.3e-5 comps 1
+a isolated 2 178 Good area 43186.019231391 ref 43186.019280582 err 3.0e-6 comps 1
+a isolated 2 179 Good area 43828.109798337 ref 43828.109809156 err 1.3e-5 comps 1
+a isolated 2 180 Good area 43856.932353580 ref 43856.932329091 err 5.2e-6 comps 1
+a isolated 2 181 Good area 42927.311574153 ref 42927.311633261 err 5.6e-6 comps 1
+a isolated 2 182 Good area 44334.189481653 ref 44334.189483386 err 1.3e-5 comps 1
+a isolated 2 183 Good area 43873.668132473 ref 43873.668141927 err 3.2e-5 comps 1
+a isolated 2 184 Good area 42992.296068367 ref 42992.296044908 err 2.5e-5 comps 1
+a isolated 2 185 Good area 43041.792774898 ref 43041.792818766 err 3.8e-5 comps 1
+a isolated 2 186 Good area 44316.003624170 ref 44316.003648657 err 3.3e-7 comps 1
+a isolated 2 187 Good area 42742.639262515 ref 42742.639383042 err 3.4e-5 comps 1
+a isolated 2 188 Good area 43310.462879869 ref 43310.462947619 err 6.3e-5 comps 1
+a isolated 2 189 Good area 42755.171368350 ref 42755.171336056 err 2.9e-5 comps 1
+a isolated 2 190 Good area 42932.489272625 ref 42932.489277272 err 2.0e-5 comps 1
+a isolated 2 191 Good area 43448.336667988 ref 43448.336615713 err 6.8e-5 comps 1
+a isolated 2 192 Good area 42751.416656888 ref 42751.416632259 err 1.2e-5 comps 1
+a isolated 2 193 Good area 43450.237357597 ref 43450.237372822 err 4.6e-6 comps 1
+a isolated 2 194 Good area 43439.235978808 ref 43439.236012175 err 6.1e-5 comps 1
+a isolated 2 195 Good area 43635.617802551 ref 43635.617793469 err 2.0e-5 comps 1
+a isolated 2 196 Good area 44189.139999176 ref 44189.139988796 err 2.8e-6 comps 1
+a isolated 2 197 Good area 42779.478823559 ref 42779.478852309 err 3.4e-5 comps 1
+a isolated 2 198 Good area 43384.945371453 ref 43384.945418382 err 4.9e-5 comps 1
+a isolated 2 199 Good area 44025.953670859 ref 44025.953720126 err 3.6e-6 comps 1
+a isolated 20 0 Good area 38897.325021051 ref 38897.325040115 err 2.4e-5 comps 1
+a isolated 20 1 Good area 37177.449568719 ref 37177.449521449 err 1.1e-5 comps 1
+a isolated 20 2 Good area 38318.865300007 ref 38318.865195089 err 9.1e-5 comps 1
+a isolated 20 3 Good area 37399.211085817 ref 37399.211140709 err 1.0e-4 comps 1
+a isolated 20 4 Good area 38937.675284183 ref 38937.675368345 err 1.4e-5 comps 1
+a isolated 20 5 Good area 40090.161731833 ref 40090.161707139 err 1.1e-4 comps 1
+a isolated 20 6 Good area 38481.196798639 ref 38481.196840977 err 3.6e-5 comps 1
+a isolated 20 7 Good area 41236.879703545 ref 41236.879681951 err 9.7e-5 comps 1
+a isolated 20 8 Good area 38791.059638584 ref 38791.059678987 err 1.0e-5 comps 1
+a isolated 20 9 Good area 39954.995994616 ref 39954.996045931 err 5.6e-5 comps 1
+a isolated 20 10 Good area 39527.157581358 ref 39527.157865684 err 1.4e-4 comps 1
+a isolated 20 11 Good area 37635.760537557 ref 37635.760527153 err 8.4e-5 comps 1
+a isolated 20 12 Good area 38405.279530990 ref 38405.279673931 err 8.5e-6 comps 1
+a isolated 20 13 Good area 38366.783906715 ref 38366.783875852 err 5.1e-5 comps 1
+a isolated 20 14 Good area 39101.484315267 ref 39101.484337023 err 1.4e-4 comps 1
+a isolated 20 15 Good area 38493.748938016 ref 38493.748804065 err 6.9e-5 comps 1
+a isolated 20 16 Good area 39396.633036524 ref 39396.633112977 err 2.6e-5 comps 1
+a isolated 20 17 Good area 38294.096587460 ref 38294.096394761 err 2.4e-5 comps 1
+a isolated 20 18 Good area 39234.154975822 ref 39234.154929430 err 1.2e-5 comps 1
+a isolated 20 19 Good area 39254.824162763 ref 39254.824410692 err 1.0e-4 comps 1
+a isolated 20 20 Good area 37827.889147631 ref 37827.889050126 err 1.3e-4 comps 1
+a isolated 20 21 Good area 38343.206174570 ref 38343.206223481 err 1.2e-5 comps 1
+a isolated 20 22 Good area 38850.996509424 ref 38850.996511582 err 5.2e-5 comps 1
+a isolated 20 23 Good area 39822.274862275 ref 39822.274894831 err 4.3e-5 comps 1
+a isolated 20 24 Good area 39538.454567802 ref 39538.454688606 err 1.0e-4 comps 1
+a isolated 20 25 Good area 40068.649978439 ref 40068.650261632 err 7.5e-5 comps 1
+a isolated 20 26 Good area 39069.606110405 ref 39069.606220279 err 2.3e-5 comps 1
+a isolated 20 27 Good area 39633.469546449 ref 39633.469618357 err 2.3e-5 comps 1
+a isolated 20 28 Good area 37485.537703705 ref 37485.537793443 err 4.6e-5 comps 1
+a isolated 20 29 Good area 37871.995458771 ref 37871.995335099 err 1.3e-5 comps 1
+a isolated 20 30 Good area 37595.404984613 ref 37595.405019007 err 1.5e-6 comps 1
+a isolated 20 31 Good area 36523.156281825 ref 36523.156088445 err 9.2e-5 comps 1
+a isolated 20 32 Good area 38672.376008950 ref 38672.376072619 err 1.0e-4 comps 1
+a isolated 20 33 Good area 38330.160996059 ref 38330.160954841 err 8.1e-5 comps 1
+a isolated 20 34 Good area 38379.496495400 ref 38379.496482544 err 6.5e-5 comps 1
+a isolated 20 35 Good area 39154.955146879 ref 39154.955230610 err 1.9e-5 comps 1
+a isolated 20 36 Good area 38656.372656311 ref 38656.372596715 err 1.3e-4 comps 1
+a isolated 20 37 Good area 39449.462069244 ref 39449.462322414 err 3.6e-5 comps 1
+a isolated 20 38 Good area 38203.281369141 ref 38203.281433393 err 9.1e-6 comps 1
+a isolated 20 39 Good area 38525.215554309 ref 38525.215781297 err 1.5e-4 comps 1
+a isolated 20 40 Good area 39283.678565266 ref 39283.678694855 err 7.8e-6 comps 1
+a isolated 20 41 Good area 40175.959706931 ref 40175.960063737 err 1.9e-4 comps 1
+a isolated 20 42 Good area 39506.883259124 ref 39506.883337555 err 3.0e-5 comps 1
+a isolated 20 43 Good area 39587.181757117 ref 39587.181583717 err 6.4e-5 comps 1
+a isolated 20 44 Good area 39249.584185953 ref 39249.584093773 err 3.6e-5 comps 1
+a isolated 20 45 Good area 38320.552713329 ref 38320.552691310 err 1.3e-5 comps 1
+a isolated 20 46 Good area 38835.078849441 ref 38835.078741702 err 8.1e-5 comps 1
+a isolated 20 47 Good area 37228.633880047 ref 37228.634045491 err 3.4e-5 comps 1
+a isolated 20 48 Good area 39545.341645125 ref 39545.341638535 err 2.3e-5 comps 1
+a isolated 20 49 Good area 39405.503862520 ref 39405.503904235 err 6.6e-6 comps 1
+a isolated 20 50 Good area 38528.492331387 ref 38528.492291021 err 8.1e-5 comps 1
+a isolated 20 51 Good area 38236.840128928 ref 38236.840208244 err 1.0e-5 comps 1
+a isolated 20 52 Good area 39113.243436492 ref 39113.243479757 err 6.6e-5 comps 1
+a isolated 20 53 Good area 38890.867965141 ref 38890.867999364 err 3.0e-5 comps 1
+a isolated 20 54 Good area 40251.912834991 ref 40251.912834937 err 4.3e-6 comps 1
+a isolated 20 55 Good area 39539.420632284 ref 39539.420748610 err 4.6e-5 comps 1
+a isolated 20 56 Good area 38397.701078303 ref 38397.701087511 err 1.1e-4 comps 1
+a isolated 20 57 Good area 38202.794249634 ref 38202.794385229 err 1.1e-4 comps 1
+a isolated 20 58 Good area 38865.168081554 ref 38865.168129140 err 1.2e-5 comps 1
+a isolated 20 59 Good area 39079.197753576 ref 39079.197918021 err 4.0e-5 comps 1
+a isolated 20 60 Good area 39848.573467785 ref 39848.573602721 err 1.5e-4 comps 1
+a isolated 20 61 Good area 39126.148852748 ref 39126.148805336 err 5.5e-5 comps 1
+a isolated 20 62 Good area 39586.123224735 ref 39586.123170947 err 6.4e-5 comps 1
+a isolated 20 63 Good area 38276.277093793 ref 38276.277077149 err 5.2e-5 comps 1
+a isolated 20 64 Good area 38787.692657880 ref 38787.692685712 err 8.2e-5 comps 1
+a isolated 20 65 Good area 38632.276643046 ref 38632.276711403 err 2.2e-5 comps 1
+a isolated 20 66 Good area 39539.742153217 ref 39539.742055230 err 2.1e-5 comps 1
+a isolated 20 67 Good area 38230.183073029 ref 38230.183308374 err 8.4e-5 comps 1
+a isolated 20 68 Good area 38164.344633928 ref 38164.344735475 err 8.9e-5 comps 1
+a isolated 20 69 Good area 39275.781230205 ref 39275.781237511 err 2.5e-5 comps 1
+a isolated 20 70 Good area 39356.942265587 ref 39356.942198756 err 4.4e-5 comps 1
+a isolated 20 71 Good area 38855.195814106 ref 38855.195838786 err 1.2e-4 comps 1
+a isolated 20 72 Good area 39700.595602855 ref 39700.595704467 err 4.4e-5 comps 1
+a isolated 20 73 Good area 39592.938999309 ref 39592.938992183 err 2.0e-6 comps 1
+a isolated 20 74 Good area 39404.505387868 ref 39404.505521819 err 7.7e-6 comps 1
+a isolated 20 75 Good area 38298.922792094 ref 38298.922964346 err 1.3e-4 comps 1
+a isolated 20 76 Good area 39481.038397242 ref 39481.038431177 err 3.5e-5 comps 1
+a isolated 20 77 Good area 38565.068701852 ref 38565.068586286 err 2.5e-5 comps 1
+a isolated 20 78 Good area 37807.345611810 ref 37807.345701056 err 2.2e-5 comps 1
+a isolated 20 79 Good area 38618.469595963 ref 38618.469472966 err 2.8e-6 comps 1
+a isolated 20 80 Good area 38989.589413663 ref 38989.589536732 err 8.9e-5 comps 1
+a isolated 20 81 Good area 40318.246237729 ref 40318.246246259 err 7.2e-5 comps 1
+a isolated 20 82 Good area 37520.723827002 ref 37520.723737448 err 4.5e-5 comps 1
+a isolated 20 83 Good area 38033.220002633 ref 38033.220016195 err 4.7e-5 comps 1
+a isolated 20 84 Good area 38379.459517384 ref 38379.459565215 err 6.4e-5 comps 1
+a isolated 20 85 Good area 39192.148399932 ref 39192.148503086 err 3.0e-5 comps 1
+a isolated 20 86 Good area 38606.043419236 ref 38606.043555199 err 5.8e-5 comps 1
+a isolated 20 87 Good area 38508.434678325 ref 38508.434562427 err 1.2e-5 comps 1
+a isolated 20 88 Good area 37782.949065390 ref 37782.949108534 err 1.9e-4 comps 1
+a isolated 20 89 Good area 38388.994208377 ref 38388.994249304 err 3.7e-5 comps 1
+a isolated 20 90 Good area 40102.251477572 ref 40102.251417412 err 1.3e-4 comps 1
+a isolated 20 91 Good area 39537.850624148 ref 39537.850568694 err 2.6e-6 comps 1
+a isolated 20 92 Good area 39242.852319873 ref 39242.852326922 err 2.3e-5 comps 1
+a isolated 20 93 Good area 39492.436614619 ref 39492.436545191 err 1.3e-4 comps 1
+a isolated 20 94 Good area 38063.883541459 ref 38063.883620731 err 2.4e-5 comps 1
+a isolated 20 95 Good area 38082.816038353 ref 38082.815869570 err 2.7e-5 comps 1
+a isolated 20 96 Good area 39431.423224169 ref 39431.423270099 err 1.4e-5 comps 1
+a isolated 20 97 Good area 38339.033556319 ref 38339.033638242 err 1.1e-4 comps 1
+a isolated 20 98 Good area 36977.721266369 ref 36977.721213422 err 1.2e-4 comps 1
+a isolated 20 99 Good area 39635.939215784 ref 39635.939298701 err 1.4e-5 comps 1
+a isolated 200 0 Good area 38749.132970407 ref 38749.132934893 err 1.2e-4 comps 1
+a isolated 200 1 Good area 38947.962583581 ref 38947.962305540 err 7.7e-5 comps 1
+a isolated 200 2 Good area 39278.253625830 ref 39278.253857588 err 6.3e-5 comps 1
+a isolated 200 3 Good area 38600.653867207 ref 38600.653611688 err 1.2e-4 comps 1
+a isolated 200 4 Good area 38876.849046728 ref 38876.849018534 err 6.8e-5 comps 1
+a isolated 200 5 Good area 38817.893429324 ref 38817.893207590 err 1.3e-5 comps 1
+a isolated 200 6 Good area 38921.070881419 ref 38921.070301474 err 1.3e-4 comps 1
+a isolated 200 7 Good area 39124.144040547 ref 39124.143928258 err 1.3e-4 comps 1
+a isolated 200 8 Good area 38708.250875642 ref 38708.250948454 err 1.7e-4 comps 1
+a isolated 200 9 Good area 38942.086794749 ref 38942.086599616 err 8.2e-5 comps 1
+a isolated 200 10 Good area 38926.288822075 ref 38926.288783990 err 5.4e-5 comps 1
+a isolated 200 11 Good area 39368.829246273 ref 39368.829411804 err 1.2e-4 comps 1
+a isolated 200 12 Good area 39348.501730619 ref 39348.501681273 err 1.4e-6 comps 1
+a isolated 200 13 Good area 39353.045035954 ref 39353.044958344 err 1.0e-4 comps 1
+a isolated 200 14 Good area 38871.144547110 ref 38871.144936867 err 4.6e-5 comps 1
+a isolated 200 15 Good area 38723.646327747 ref 38723.646089750 err 1.1e-4 comps 1
+a isolated 200 16 Good area 38901.708977322 ref 38901.709183661 err 1.8e-4 comps 1
+a isolated 200 17 Good area 38691.717074325 ref 38691.716870453 err 1.4e-4 comps 1
+a isolated 200 18 Good area 39046.790253573 ref 39046.790291196 err 1.2e-4 comps 1
+a isolated 200 19 Good area 38919.304268680 ref 38919.304552066 err 5.0e-5 comps 1
+a mix 2 0 Good area 43653.544294913 ref 43653.544315639 err 4.3e-6 comps 1
+a mix 2 1 Good area 43221.102171576 ref 43221.102201066 err 1.1e-5 comps 1
+a mix 2 2 Good area 44420.200767847 ref 44420.200851652 err 2.5e-5 comps 1
+a mix 2 3 Good area 43747.570999270 ref 43747.571071023 err 2.5e-5 comps 1
+a mix 2 4 Good area 42113.135498272 ref 42113.135470023 err 3.5e-5 comps 1
+a mix 2 5 Good area 41320.317045253 ref 41320.317074346 err 1.1e-5 comps 1
+a mix 2 6 Good area 43247.902575877 ref 43247.902577539 err 3.5e-5 comps 1
+a mix 2 7 Good area 43737.466535721 ref 43737.466544542 err 1.5e-6 comps 1
+a mix 2 8 Good area 42886.903110281 ref 42886.903113053 err 1.3e-5 comps 1
+a mix 2 9 Good area 43474.616437298 ref 43474.616455387 err 9.4e-6 comps 1
+a mix 2 10 Good area 44332.057380223 ref 44332.057418470 err 8.4e-6 comps 1
+a mix 2 11 Good area 42780.638341684 ref 42780.638411836 err 1.4e-5 comps 1
+a mix 2 12 Good area 43798.721205750 ref 43798.721217204 err 1.4e-5 comps 1
+a mix 2 13 Pinched { pinches: 1 } area 43396.581741773 ref 43396.581742392 err 2.5e-5 comps 1
+a mix 2 14 Good area 43746.828293864 ref 43746.828311562 err 3.2e-5 comps 1
+a mix 2 15 Good area 43598.941403264 ref 43598.941426147 err 8.9e-6 comps 1
+a mix 2 16 Good area 43792.428421606 ref 43792.428465995 err 2.9e-5 comps 1
+a mix 2 17 Good area 43337.891202389 ref 43337.891223027 err 1.6e-5 comps 1
+a mix 2 18 Good area 43981.370943959 ref 43981.370963836 err 2.3e-5 comps 1
+a mix 2 19 Good area 43818.844466120 ref 43818.844469748 err 9.0e-7 comps 1
+a mix 2 20 Good area 43714.277389284 ref 43714.277408203 err 8.9e-6 comps 1
+a mix 2 21 Good area 43818.388438346 ref 43818.388456636 err 6.8e-6 comps 1
+a mix 2 22 Pinched { pinches: 1 } area 42027.906022243 ref 42027.906056277 err 2.2e-5 comps 1
+a mix 2 23 Good area 42609.522959193 ref 42609.522941568 err 1.0e-5 comps 1
+a mix 2 24 Good area 44752.116093147 ref 44752.116071737 err 1.8e-5 comps 1
+a mix 2 25 Good area 44233.014811299 ref 44233.014829781 err 9.6e-6 comps 1
+a mix 2 26 Good area 44226.586510632 ref 44226.586520371 err 4.5e-6 comps 1
+a mix 2 27 Good area 43417.802703562 ref 43417.802740376 err 1.3e-5 comps 1
+a mix 2 28 Good area 43777.871667738 ref 43777.871674290 err 2.1e-5 comps 1
+a mix 2 29 Good area 43673.561570406 ref 43673.561545909 err 9.8e-6 comps 1
+a mix 2 30 Good area 44472.533425357 ref 44472.533429487 err 2.3e-5 comps 1
+a mix 2 31 Good area 43831.547533785 ref 43831.547527893 err 9.2e-6 comps 1
+a mix 2 32 Good area 43610.775087346 ref 43610.775058308 err 1.6e-6 comps 1
+a mix 2 33 Pinched { pinches: 1 } area 42003.324482404 ref 42003.324477725 err 3.1e-6 comps 1
+a mix 2 34 Good area 43967.171315976 ref 43967.171466326 err 1.9e-5 comps 1
+a mix 2 35 Good area 43799.189751996 ref 43799.189748350 err 1.5e-6 comps 1
+a mix 2 36 Good area 44089.774841539 ref 44089.774837321 err 1.6e-5 comps 1
+a mix 2 37 Good area 43218.935788651 ref 43218.935855554 err 4.3e-5 comps 1
+a mix 2 38 Good area 42491.890075425 ref 42491.890075147 err 5.7e-6 comps 1
+a mix 2 39 Good area 44637.281350647 ref 44637.281314890 err 1.5e-8 comps 1
+a mix 2 40 Good area 44051.828664969 ref 44051.828639095 err 2.6e-6 comps 1
+a mix 2 41 Pinched { pinches: 1 } area 42138.780333892 ref 42138.780389136 err 2.8e-5 comps 1
+a mix 2 42 Good area 43503.376631614 ref 43503.376674428 err 5.3e-5 comps 1
+a mix 2 43 Good area 44197.362756412 ref 44197.362774484 err 9.4e-6 comps 1
+a mix 2 44 Good area 44223.868431840 ref 44223.868415271 err 7.4e-6 comps 1
+a mix 2 45 Good area 43492.039264097 ref 43492.039387041 err 3.0e-5 comps 1
+a mix 2 46 Good area 43667.669200836 ref 43667.669216742 err 3.2e-6 comps 1
+a mix 2 47 Good area 44271.752727840 ref 44271.752801252 err 4.3e-6 comps 1
+a mix 2 48 Good area 42667.265175438 ref 42667.265241551 err 2.8e-5 comps 1
+a mix 2 49 Good area 42283.631355839 ref 42283.631514983 err 1.6e-5 comps 1
+a mix 2 50 Good area 42406.958994425 ref 42406.958939964 err 9.7e-6 comps 1
+a mix 2 51 Pinched { pinches: 1 } area 43892.967460308 ref 43892.967451387 err 7.3e-6 comps 1
+a mix 2 52 Good area 44088.167656967 ref 44088.167688906 err 9.5e-7 comps 1
+a mix 2 53 Good area 43293.887436088 ref 43293.887481058 err 4.2e-5 comps 1
+a mix 2 54 Good area 44004.634826258 ref 44004.634805831 err 7.8e-7 comps 1
+a mix 2 55 Good area 43808.399378892 ref 43808.399371777 err 9.8e-6 comps 1
+a mix 2 56 Good area 44399.407956310 ref 44399.407974312 err 9.1e-6 comps 1
+a mix 2 57 Good area 43816.027626368 ref 43816.027626873 err 2.2e-5 comps 1
+a mix 2 58 Good area 44670.241262792 ref 44670.241265231 err 1.5e-6 comps 1
+a mix 2 59 Good area 42509.172517142 ref 42509.172563928 err 3.5e-5 comps 1
+a mix 2 60 Pinched { pinches: 1 } area 42371.290080330 ref 42371.290082698 err 2.8e-5 comps 1
+a mix 2 61 Good area 44472.875233563 ref 44472.875273163 err 5.2e-6 comps 1
+a mix 2 62 Good area 44978.539816340 ref 44978.539834381 err 9.4e-6 comps 1
+a mix 2 63 Good area 43708.871670108 ref 43708.871682667 err 8.8e-6 comps 1
+a mix 2 64 Good area 43382.440139712 ref 43382.440138334 err 7.5e-7 comps 1
+a mix 2 65 Good area 44281.860062112 ref 44281.860080105 err 9.1e-6 comps 1
+a mix 2 66 Pinched { pinches: 1 } area 42451.308975753 ref 42451.308996833 err 3.0e-5 comps 1
+a mix 2 67 Good area 43607.922640321 ref 43607.922665542 err 1.6e-5 comps 1
+a mix 2 68 Good area 42773.641218690 ref 42773.641256953 err 2.8e-5 comps 1
+a mix 2 69 Good area 42757.352669829 ref 42757.352678210 err 2.3e-6 comps 1
+a mix 2 70 Good area 43525.675390883 ref 43525.675365722 err 2.7e-5 comps 1
+a mix 2 71 Good area 43591.205926796 ref 43591.205891923 err 3.3e-6 comps 1
+a mix 2 72 Good area 44787.389167211 ref 44787.389166634 err 2.4e-5 comps 1
+a mix 2 73 Good area 43396.994021980 ref 43396.994013974 err 8.8e-6 comps 1
+a mix 2 74 Good area 44259.313210289 ref 44259.313228485 err 9.5e-6 comps 1
+a mix 2 75 Good area 43879.538416987 ref 43879.538448723 err 1.7e-5 comps 1
+a mix 2 76 Good area 44449.124580461 ref 44449.124582059 err 6.8e-7 comps 1
+a mix 2 77 Good area 43526.445217530 ref 43526.445285779 err 9.0e-6 comps 1
+a mix 2 78 Good area 43284.043076884 ref 43284.043073685 err 1.3e-5 comps 1
+a mix 2 79 Good area 44525.450859818 ref 44525.450858470 err 2.3e-5 comps 1
+a mix 2 80 Good area 43486.254720596 ref 43486.254765475 err 3.9e-5 comps 1
+a mix 2 81 Good area 43328.626237943 ref 43328.626256471 err 1.6e-5 comps 1
+a mix 2 82 Good area 43296.339118207 ref 43296.339139244 err 1.4e-5 comps 1
+a mix 2 83 Good area 43697.283938711 ref 43697.283994376 err 1.4e-5 comps 1
+a mix 2 84 Good area 43900.796396848 ref 43900.796410484 err 1.2e-5 comps 2
+a mix 2 85 Good area 44417.294979027 ref 44417.294997125 err 9.4e-6 comps 1
+a mix 2 86 Good area 42041.225842679 ref 42041.225874866 err 7.9e-5 comps 1
+a mix 2 87 Good area 44403.011942696 ref 44403.011960638 err 9.4e-6 comps 1
+a mix 2 88 Good area 42993.472034086 ref 42993.472049295 err 3.5e-6 comps 1
+a mix 2 89 Good area 44895.681057863 ref 44895.681075933 err 9.4e-6 comps 1
+a mix 2 90 Good area 43467.065520044 ref 43467.065573901 err 1.8e-5 comps 1
+a mix 2 91 Good area 44567.462624561 ref 44567.462642927 err 9.5e-6 comps 1
+a mix 2 92 Good area 42246.093780242 ref 42246.093837253 err 3.5e-5 comps 1
+a mix 2 93 Good area 41491.906653347 ref 41491.906655578 err 1.2e-5 comps 1
+a mix 2 94 Good area 42773.744519640 ref 42773.744494530 err 1.9e-5 comps 1
+a mix 2 95 Good area 42599.966884679 ref 42599.966859777 err 1.1e-5 comps 1
+a mix 2 96 Good area 43638.936186153 ref 43638.936239261 err 1.5e-5 comps 1
+a mix 2 97 Good area 44284.264177833 ref 44284.264196140 err 9.1e-6 comps 1
+a mix 2 98 Good area 42738.114361310 ref 42738.114388166 err 1.6e-5 comps 1
+a mix 2 99 Good area 43577.858797717 ref 43577.858813160 err 5.7e-6 comps 1
+a mix 2 100 Good area 43437.784120501 ref 43437.784123150 err 2.7e-7 comps 1
+a mix 2 101 Good area 43147.816118270 ref 43147.816092234 err 1.0e-5 comps 1
+a mix 2 102 Good area 44114.883974569 ref 44114.883962928 err 2.5e-6 comps 1
+a mix 2 103 Good area 44265.619912948 ref 44265.619905289 err 3.3e-6 comps 1
+a mix 2 104 Good area 43937.421254433 ref 43937.421326014 err 5.9e-5 comps 1
+a mix 2 105 Good area 43639.215767841 ref 43639.215857392 err 6.6e-6 comps 1
+a mix 2 106 Good area 43594.192829858 ref 43594.192771678 err 1.5e-5 comps 1
+a mix 2 107 Good area 44580.259606627 ref 44580.259633715 err 5.5e-6 comps 1
+a mix 2 108 Good area 44226.440653741 ref 44226.440652704 err 1.6e-6 comps 1
+a mix 2 109 Good area 43263.128572254 ref 43263.128654716 err 5.5e-6 comps 1
+a mix 2 110 Good area 43210.783638534 ref 43210.783674766 err 2.0e-5 comps 1
+a mix 2 111 Good area 43651.761900525 ref 43651.761948426 err 2.9e-5 comps 1
+a mix 2 112 Good area 44134.393089932 ref 44134.393120295 err 7.6e-7 comps 1
+a mix 2 113 Good area 42609.024137783 ref 42609.024173222 err 2.6e-5 comps 1
+a mix 2 114 Good area 44017.768893845 ref 44017.768897246 err 2.5e-5 comps 1
+a mix 2 115 Good area 43523.228203020 ref 43523.228297022 err 2.1e-5 comps 1
+a mix 2 116 Good area 44827.251558823 ref 44827.251577732 err 9.5e-6 comps 1
+a mix 2 117 Good area 42522.645785757 ref 42522.645731516 err 1.7e-5 comps 1
+a mix 2 118 Good area 43700.167296483 ref 43700.167398269 err 2.2e-5 comps 1
+a mix 2 119 Good area 44012.388992905 ref 44012.389010845 err 9.3e-6 comps 1
+a mix 2 120 Good area 43954.167568939 ref 43954.167572463 err 6.1e-7 comps 1
+a mix 2 121 Good area 44881.563337111 ref 44881.563341615 err 3.5e-6 comps 1
+a mix 2 122 Good area 43552.946278744 ref 43552.946251243 err 7.8e-6 comps 1
+a mix 2 123 Good area 43330.900498429 ref 43330.900497984 err 9.7e-6 comps 1
+a mix 2 124 Pinched { pinches: 1 } area 41511.639336839 ref 41511.639391166 err 5.1e-5 comps 1
+a mix 2 125 Good area 43842.780710524 ref 43842.780709744 err 3.1e-5 comps 1
+a mix 2 126 Good area 41858.881015712 ref 41858.880984331 err 9.8e-6 comps 1
+a mix 2 127 Pinched { pinches: 1 } area 42529.611871143 ref 42529.611852620 err 3.1e-5 comps 1
+a mix 2 128 Good area 42362.462020088 ref 42362.462002874 err 4.1e-5 comps 1
+a mix 2 129 Good area 43824.678198822 ref 43824.678192958 err 1.5e-5 comps 1
+a mix 2 130 Good area 43794.681164918 ref 43794.681183546 err 9.5e-6 comps 1
+a mix 2 131 Good area 43388.235348356 ref 43388.235454308 err 2.5e-5 comps 1
+a mix 2 132 Good area 42191.539705100 ref 42191.539800300 err 3.2e-5 comps 1
+a mix 2 133 Good area 44204.041242000 ref 44204.041305244 err 1.1e-5 comps 1
+a mix 2 134 Good area 44196.219051482 ref 44196.219104858 err 3.7e-5 comps 1
+a mix 2 135 Good area 43228.922466692 ref 43228.922498099 err 6.5e-5 comps 1
+a mix 2 136 Good area 44392.327963787 ref 44392.327973295 err 9.7e-6 comps 1
+a mix 2 137 Good area 42116.565759384 ref 42116.565846431 err 3.8e-5 comps 1
+a mix 2 138 Pinched { pinches: 1 } area 42361.780002832 ref 42361.780014012 err 6.2e-5 comps 1
+a mix 2 139 Good area 43740.678492068 ref 43740.678529365 err 1.9e-5 comps 1
+a mix 2 140 Good area 42561.439735740 ref 42561.439698423 err 1.2e-5 comps 1
+a mix 2 141 Good area 43337.191681306 ref 43337.191788709 err 1.8e-5 comps 1
+a mix 2 142 Good area 43657.765188698 ref 43657.765207117 err 9.2e-6 comps 1
+a mix 2 143 Good area 43732.065260374 ref 43732.065241268 err 3.3e-6 comps 1
+a mix 2 144 Good area 42176.799603500 ref 42176.799662579 err 3.0e-5 comps 1
+a mix 2 145 Good area 43457.881794383 ref 43457.881828311 err 1.9e-5 comps 1
+a mix 2 146 Good area 41469.521903298 ref 41469.521902899 err 3.4e-5 comps 1
+a mix 2 147 Good area 43873.603777756 ref 43873.603807872 err 6.3e-6 comps 1
+a mix 2 148 Good area 44175.926957790 ref 44175.926975345 err 9.2e-6 comps 1
+a mix 2 149 Good area 43281.825451427 ref 43281.825442492 err 2.6e-5 comps 1
+a mix 2 150 Good area 42332.448011175 ref 42332.448043150 err 1.6e-5 comps 1
+a mix 2 151 Good area 42925.957664428 ref 42925.957657421 err 9.1e-6 comps 1
+a mix 2 152 Good area 42153.825986963 ref 42153.825964282 err 4.5e-5 comps 1
+a mix 2 153 Good area 43700.322314854 ref 43700.322365087 err 5.1e-5 comps 1
+a mix 2 154 Good area 42312.436935522 ref 42312.436979891 err 3.3e-5 comps 1
+a mix 2 155 Good area 43166.373963848 ref 43166.373982006 err 9.4e-6 comps 1
+a mix 2 156 Good area 42517.299143413 ref 42517.299186344 err 1.7e-5 comps 1
+a mix 2 157 Good area 43382.369641820 ref 43382.369693269 err 2.1e-5 comps 1
+a mix 2 158 Good area 43121.840363919 ref 43121.840413913 err 4.2e-5 comps 1
+a mix 2 159 Pinched { pinches: 1 } area 42759.570418918 ref 42759.570395721 err 1.3e-5 comps 1
+a mix 2 160 Good area 44292.672838671 ref 44292.672856675 err 9.5e-6 comps 1
+a mix 2 161 Good area 42556.906891114 ref 42556.906912892 err 2.3e-5 comps 1
+a mix 2 162 Good area 43564.290139206 ref 43564.290150761 err 9.9e-6 comps 1
+a mix 2 163 Pinched { pinches: 1 } area 42578.465726227 ref 42578.465892724 err 4.8e-5 comps 1
+a mix 2 164 Good area 44108.623435693 ref 44108.623425104 err 1.9e-6 comps 1
+a mix 2 165 Pinched { pinches: 1 } area 43681.483344767 ref 43681.483362561 err 8.6e-6 comps 1
+a mix 2 166 Good area 40721.210312838 ref 40721.210300181 err 1.3e-5 comps 1
+a mix 2 167 Good area 43763.074155976 ref 43763.074216589 err 1.2e-5 comps 1
+a mix 2 168 Good area 42167.067143420 ref 42167.067210137 err 2.0e-5 comps 1
+a mix 2 169 Good area 44160.285249483 ref 44160.285336368 err 1.5e-5 comps 1
+a mix 2 170 Good area 42843.311053737 ref 42843.311022802 err 7.4e-6 comps 1
+a mix 2 171 Good area 44239.992434504 ref 44239.992460698 err 1.0e-5 comps 1
+a mix 2 172 Good area 44646.030557277 ref 44646.030575351 err 9.5e-6 comps 1
+a mix 2 173 Good area 44053.409705738 ref 44053.409723755 err 8.9e-6 comps 1
+a mix 2 174 Good area 44126.580973391 ref 44126.580999800 err 4.7e-6 comps 1
+a mix 2 175 Good area 44328.083481822 ref 44328.083471757 err 2.0e-5 comps 1
+a mix 2 176 Pinched { pinches: 1 } area 42504.495466400 ref 42504.495506554 err 1.3e-6 comps 1
+a mix 2 177 Good area 44512.060742761 ref 44512.060741274 err 4.0e-6 comps 1
+a mix 2 178 Good area 42056.436686602 ref 42056.436781168 err 1.4e-5 comps 1
+a mix 2 179 Good area 43563.949900463 ref 43563.949883752 err 2.1e-5 comps 1
+a mix 2 180 Good area 44190.277007122 ref 44190.277025048 err 9.3e-6 comps 1
+a mix 2 181 Good area 42634.142974463 ref 42634.143011799 err 3.9e-5 comps 1
+a mix 2 182 Good area 44102.522637401 ref 44102.522643458 err 3.2e-6 comps 1
+a mix 2 183 Good area 44086.694651350 ref 44086.694647300 err 4.1e-6 comps 1
+a mix 2 184 Good area 44249.051351749 ref 44249.051369653 err 9.7e-6 comps 1
+a mix 2 185 Good area 44333.438682502 ref 44333.438701000 err 9.5e-6 comps 1
+a mix 2 186 Good area 42693.346922044 ref 42693.346874655 err 2.9e-6 comps 1
+a mix 2 187 Good area 44167.462281991 ref 44167.462299992 err 9.6e-6 comps 1
+a mix 2 188 Good area 43279.161415184 ref 43279.161367337 err 4.0e-5 comps 1
+a mix 2 189 Good area 41488.308141579 ref 41488.308039686 err 1.3e-6 comps 1
+a mix 2 190 Pinched { pinches: 1 } area 43820.088162698 ref 43820.088309484 err 2.8e-5 comps 1
+a mix 2 191 Good area 42793.822630483 ref 42793.822615643 err 1.6e-5 comps 1
+a mix 2 192 Good area 43323.574800637 ref 43323.574806059 err 4.6e-5 comps 1
+a mix 2 193 Good area 44477.798893121 ref 44477.798911560 err 8.9e-6 comps 1
+a mix 2 194 Good area 44069.900558127 ref 44069.900588364 err 7.7e-6 comps 1
+a mix 2 195 Pinched { pinches: 1 } area 43869.205137434 ref 43869.205243082 err 6.7e-7 comps 1
+a mix 2 196 Good area 43423.988571974 ref 43423.988559901 err 6.5e-6 comps 1
+a mix 2 197 Pinched { pinches: 1 } area 43271.496192494 ref 43271.496202740 err 1.6e-5 comps 1
+a mix 2 198 Good area 43980.982063699 ref 43980.982144256 err 1.1e-5 comps 1
+a mix 2 199 Good area 43644.621318681 ref 43644.621350462 err 1.6e-5 comps 1
+a mix 20 0 Good area 42117.705493009 ref 42117.705501609 err 4.2e-5 comps 1
+a mix 20 1 Pinched { pinches: 1 } area 39963.773117135 ref 39963.773166631 err 1.1e-4 comps 1
+a mix 20 2 Good area 41020.276029836 ref 41020.276104497 err 2.9e-5 comps 1
+a mix 20 3 Pinched { pinches: 1 } area 42112.729532011 ref 42112.729579424 err 3.6e-6 comps 1
+a mix 20 4 Good area 39451.055434134 ref 39451.055545089 err 3.5e-5 comps 1
+a mix 20 5 Pinched { pinches: 1 } area 39660.246093268 ref 39660.246175550 err 6.4e-5 comps 1
+a mix 20 6 Pinched { pinches: 1 } area 39929.365429861 ref 39929.365352603 err 7.7e-5 comps 1
+a mix 20 7 Good area 42806.232372948 ref 42806.232353080 err 1.7e-5 comps 1
+a mix 20 8 Pinched { pinches: 2 } area 39862.834574129 ref 39862.834512361 err 4.8e-5 comps 1
+a mix 20 9 Good area 41054.185022646 ref 41054.185036509 err 1.4e-5 comps 1
+a mix 20 10 Good area 39622.324339341 ref 39622.324625108 err 6.2e-5 comps 1
+a mix 20 11 Pinched { pinches: 1 } area 41956.181655445 ref 41956.181579713 err 4.5e-5 comps 1
+a mix 20 12 Pinched { pinches: 1 } area 39463.682293551 ref 39463.682320176 err 5.9e-5 comps 1
+a mix 20 13 Good area 39792.836779347 ref 39792.836691678 err 5.0e-5 comps 1
+a mix 20 14 Good area 40875.830493794 ref 40875.830479684 err 5.8e-5 comps 1
+a mix 20 15 Good area 41936.256630365 ref 41936.256708305 err 4.7e-5 comps 1
+a mix 20 16 Pinched { pinches: 1 } area 41211.008929274 ref 41211.008856175 err 4.0e-5 comps 1
+a mix 20 17 Pinched { pinches: 1 } area 40317.788153760 ref 40317.788226796 err 1.9e-5 comps 2
+a mix 20 18 Good area 40237.341155804 ref 40237.341325009 err 1.3e-4 comps 1
+a mix 20 19 Good area 39229.654674303 ref 39229.654646528 err 6.4e-5 comps 1
+a mix 20 20 Pinched { pinches: 1 } area 40167.215579842 ref 40167.215800350 err 2.1e-5 comps 2
+a mix 20 21 Good area 40703.278384253 ref 40703.278411298 err 2.2e-5 comps 2
+a mix 20 22 Good area 40083.630702368 ref 40083.630756475 err 4.1e-5 comps 1
+a mix 20 23 Pinched { pinches: 1 } area 41071.001866421 ref 41071.001943116 err 1.2e-4 comps 1
+a mix 20 24 Good area 41654.719722398 ref 41654.719730359 err 3.5e-6 comps 1
+a mix 20 25 Pinched { pinches: 1 } area 39498.704083067 ref 39498.703854837 err 6.6e-6 comps 2
+a mix 20 26 Good area 41109.504106959 ref 41109.504253882 err 4.8e-5 comps 1
+a mix 20 27 Pinched { pinches: 1 } area 39750.672011368 ref 39750.671980563 err 2.4e-5 comps 1
+a mix 20 28 Pinched { pinches: 1 } area 41136.518867731 ref 41136.518885190 err 6.6e-5 comps 1
+a mix 20 29 Good area 40126.191896783 ref 40126.191907827 err 5.1e-6 comps 1
+a mix 20 30 Good area 40454.063807734 ref 40454.063769145 err 8.0e-5 comps 1
+a mix 20 31 Pinched { pinches: 1 } area 40356.945000023 ref 40356.945046452 err 5.7e-5 comps 2
+a mix 20 32 Good area 41821.409199188 ref 41821.409294942 err 1.7e-5 comps 1
+a mix 20 33 Good area 41000.454639735 ref 41000.454667183 err 5.7e-5 comps 1
+a mix 20 34 Pinched { pinches: 1 } area 39494.364565235 ref 39494.364472982 err 1.1e-5 comps 1
+a mix 20 35 Good area 39774.029303039 ref 39774.029305102 err 5.0e-6 comps 2
+a mix 20 36 Pinched { pinches: 3 } area 39271.546811040 ref 39271.546873213 err 1.5e-5 comps 1
+a mix 20 37 Pinched { pinches: 1 } area 41122.858299104 ref 41122.858213923 err 4.1e-5 comps 1
+a mix 20 38 Pinched { pinches: 1 } area 40523.699103931 ref 40523.699120302 err 4.2e-5 comps 3
+a mix 20 39 Pinched { pinches: 1 } area 41096.808469600 ref 41096.808414789 err 4.7e-6 comps 1
+a mix 20 40 Pinched { pinches: 2 } area 39593.569704181 ref 39593.569691584 err 3.2e-5 comps 1
+a mix 20 41 Pinched { pinches: 1 } area 40104.244682170 ref 40104.244589470 err 1.5e-5 comps 1
+a mix 20 42 Pinched { pinches: 1 } area 40089.888124467 ref 40089.888198860 err 1.0e-4 comps 2
+a mix 20 43 Good area 40241.156944683 ref 40241.157143309 err 5.8e-6 comps 1
+a mix 20 44 Pinched { pinches: 1 } area 42076.847797402 ref 42076.847771437 err 7.5e-6 comps 2
+a mix 20 45 Pinched { pinches: 2 } area 41267.451991597 ref 41267.452042965 err 7.2e-5 comps 1
+a mix 20 46 Pinched { pinches: 1 } area 39141.005441570 ref 39141.005455206 err 6.2e-5 comps 1
+a mix 20 47 Pinched { pinches: 2 } area 40016.361318510 ref 40016.361391598 err 1.9e-5 comps 3
+a mix 20 48 Good area 41086.606392710 ref 41086.606334649 err 3.7e-5 comps 1
+a mix 20 49 Good area 39545.531135047 ref 39545.531296586 err 1.0e-4 comps 1
+a mix 20 50 Pinched { pinches: 3 } area 40125.999413521 ref 40125.999393725 err 5.1e-5 comps 2
+a mix 20 51 Pinched { pinches: 1 } area 40987.965965750 ref 40987.965985801 err 1.8e-5 comps 1
+a mix 20 52 Good area 40649.272201883 ref 40649.272223269 err 1.1e-4 comps 1
+a mix 20 53 Good area 41000.592826548 ref 41000.592806451 err 2.2e-5 comps 1
+a mix 20 54 Pinched { pinches: 1 } area 39340.620530321 ref 39340.620472609 err 6.6e-5 comps 1
+a mix 20 55 Good area 40578.249312583 ref 40578.249413298 err 1.6e-5 comps 1
+a mix 20 56 Good area 41798.730750197 ref 41798.730875985 err 6.9e-5 comps 1
+a mix 20 57 Pinched { pinches: 1 } area 40321.275598285 ref 40321.275614695 err 7.8e-6 comps 1
+a mix 20 58 Pinched { pinches: 3 } area 41648.697712415 ref 41648.697767992 err 7.7e-6 comps 1
+a mix 20 59 Good area 39810.132145892 ref 39810.132141330 err 1.2e-5 comps 1
+a mix 20 60 Pinched { pinches: 1 } area 39749.917641517 ref 39749.917569159 err 3.9e-5 comps 1
+a mix 20 61 Good area 39616.515909515 ref 39616.515986426 err 4.5e-5 comps 1
+a mix 20 62 Good area 39982.825921320 ref 39982.825885411 err 6.3e-5 comps 3
+a mix 20 63 Pinched { pinches: 1 } area 41150.075970134 ref 41150.075932215 err 5.9e-5 comps 1
+a mix 20 64 Pinched { pinches: 1 } area 38686.911250525 ref 38686.911140207 err 5.0e-5 comps 1
+a mix 20 65 Good area 39497.988165342 ref 39497.988181877 err 5.9e-5 comps 1
+a mix 20 66 Pinched { pinches: 2 } area 40285.671607339 ref 40285.671564465 err 8.8e-5 comps 1
+a mix 20 67 Good area 40577.293792166 ref 40577.293728458 err 6.7e-6 comps 2
+a mix 20 68 Good area 41213.555982035 ref 41213.555979316 err 2.0e-5 comps 1
+a mix 20 69 Good area 41879.106354070 ref 41879.106386822 err 7.2e-5 comps 1
+a mix 20 70 Pinched { pinches: 1 } area 42449.064683607 ref 42449.064760822 err 5.5e-6 comps 1
+a mix 20 71 Good area 42215.739642385 ref 42215.739662860 err 3.6e-5 comps 1
+a mix 20 72 Good area 38742.201585101 ref 38742.201689418 err 1.3e-5 comps 1
+a mix 20 73 Pinched { pinches: 2 } area 40969.159132249 ref 40969.159101541 err 7.3e-6 comps 1
+a mix 20 74 Pinched { pinches: 1 } area 39545.872560226 ref 39545.872466595 err 1.6e-5 comps 2
+a mix 20 75 Pinched { pinches: 1 } area 40303.602046817 ref 40303.602174104 err 2.1e-6 comps 1
+a mix 20 76 Pinched { pinches: 1 } area 40257.332031896 ref 40257.331918748 err 5.4e-5 comps 2
+a mix 20 77 Good area 40542.010147505 ref 40542.010147898 err 1.2e-4 comps 1
+a mix 20 78 Good area 40687.215030107 ref 40687.215006613 err 7.5e-5 comps 1
+a mix 20 79 Pinched { pinches: 2 } area 41670.112019766 ref 41670.112022557 err 3.0e-5 comps 2
+a mix 20 80 Pinched { pinches: 1 } area 39405.865206212 ref 39405.865040800 err 4.2e-5 comps 1
+a mix 20 81 Pinched { pinches: 2 } area 40368.808346282 ref 40368.808325709 err 6.5e-7 comps 1
+a mix 20 82 Good area 40145.857611014 ref 40145.857603647 err 9.1e-6 comps 1
+a mix 20 83 Pinched { pinches: 2 } area 40882.388102329 ref 40882.388053851 err 3.3e-5 comps 2
+a mix 20 84 Good area 41412.935200902 ref 41412.935237629 err 1.0e-5 comps 2
+a mix 20 85 Pinched { pinches: 1 } area 40281.697742325 ref 40281.697784779 err 1.2e-5 comps 1
+a mix 20 86 Good area 40682.840005643 ref 40682.840103188 err 2.3e-5 comps 2
+a mix 20 87 Pinched { pinches: 1 } area 40032.199014460 ref 40032.198961144 err 9.6e-6 comps 1
+a mix 20 88 Good area 41308.697098871 ref 41308.697097248 err 3.6e-5 comps 1
+a mix 20 89 Good area 39783.261229523 ref 39783.261318521 err 4.3e-5 comps 1
+a mix 20 90 Good area 41383.029842465 ref 41383.029792009 err 3.5e-5 comps 1
+a mix 20 91 Pinched { pinches: 2 } area 39834.105146537 ref 39834.105190440 err 5.5e-5 comps 1
+a mix 20 92 Pinched { pinches: 2 } area 40705.999418376 ref 40705.999448385 err 2.5e-6 comps 1
+a mix 20 93 Pinched { pinches: 1 } area 40603.393713286 ref 40603.393656151 err 6.4e-6 comps 1
+a mix 20 94 Good area 40735.204610028 ref 40735.204633657 err 8.3e-5 comps 1
+a mix 20 95 Pinched { pinches: 1 } area 40351.667812970 ref 40351.667845112 err 3.2e-5 comps 1
+a mix 20 96 Good area 39126.898608331 ref 39126.898762046 err 3.0e-5 comps 1
+a mix 20 97 Good area 41562.568215444 ref 41562.568129189 err 3.1e-5 comps 1
+a mix 20 98 Good area 40280.351365598 ref 40280.351358573 err 2.3e-6 comps 1
+a mix 20 99 Pinched { pinches: 1 } area 40012.925131610 ref 40012.925160458 err 5.1e-7 comps 2
+a mix 200 0 Pinched { pinches: 5 } area 40858.630702323 ref 40858.630807908 err 7.1e-5 comps 3
+a mix 200 1 Pinched { pinches: 3 } area 40537.569908381 ref 40537.570166557 err 4.6e-5 comps 4
+a mix 200 2 Pinched { pinches: 10 } area 40215.475589692 ref 40215.475575232 err 8.9e-5 comps 2
+a mix 200 3 Pinched { pinches: 6 } area 40313.732180381 ref 40313.732111670 err 9.5e-7 comps 6
+a mix 200 4 Pinched { pinches: 5 } area 40373.650016970 ref 40373.650240170 err 6.2e-5 comps 5
+a mix 200 5 Pinched { pinches: 5 } area 39984.823216755 ref 39984.823159979 err 1.2e-4 comps 3
+a mix 200 6 Pinched { pinches: 10 } area 40738.826728454 ref 40738.826837972 err 1.5e-4 comps 2
+a mix 200 7 Pinched { pinches: 5 } area 40965.829041105 ref 40965.828873080 err 2.5e-5 comps 3
+a mix 200 8 Pinched { pinches: 7 } area 40779.229577210 ref 40779.229581744 err 6.2e-6 comps 4
+a mix 200 9 Pinched { pinches: 9 } area 40653.913934943 ref 40653.913969930 err 1.8e-5 comps 7
+a mix 200 10 Pinched { pinches: 4 } area 40294.345135357 ref 40294.345440114 err 2.2e-5 comps 5
+a mix 200 11 Pinched { pinches: 7 } area 40224.080622534 ref 40224.080658823 err 7.0e-5 comps 2
+a mix 200 12 Pinched { pinches: 9 } area 40758.990752519 ref 40758.991026348 err 7.9e-6 comps 3
+a mix 200 13 Pinched { pinches: 3 } area 40920.915948742 ref 40920.916247185 err 5.0e-5 comps 4
+a mix 200 14 Pinched { pinches: 7 } area 40376.207484863 ref 40376.207692470 err 2.9e-5 comps 7
+a mix 200 15 Pinched { pinches: 5 } area 40479.711695763 ref 40479.711986354 err 8.6e-5 comps 3
+a mix 200 16 Pinched { pinches: 8 } area 40452.620342256 ref 40452.620164356 err 1.7e-4 comps 3
+a mix 200 17 Pinched { pinches: 9 } area 40116.356507941 ref 40116.356722509 err 1.5e-4 comps 5
+a mix 200 18 Pinched { pinches: 4 } area 40908.933111955 ref 40908.933250955 err 4.1e-5 comps 1
+a mix 200 19 Pinched { pinches: 3 } area 40207.235731540 ref 40207.236102000 err 4.6e-5 comps 2
+a overlap-lines 2 0 Good area 42349.871138618 ref 42349.871204188 err 3.5e-5 comps 1
+a overlap-lines 2 1 Good area 42499.623045761 ref 42499.623016887 err 1.3e-5 comps 1
+a overlap-lines 2 2 Good area 42840.130776955 ref 42840.130750854 err 2.2e-5 comps 1
+a overlap-lines 2 3 Good area 44146.097306939 ref 44146.097294524 err 6.4e-6 comps 1
+a overlap-lines 2 4 Good area 42641.789651216 ref 42641.789695104 err 1.6e-5 comps 1
+a overlap-lines 2 5 Good area 42427.101634516 ref 42427.101613481 err 2.0e-5 comps 1
+a overlap-lines 2 6 Good area 41925.645029098 ref 41925.645060850 err 2.2e-5 comps 1
+a overlap-lines 2 7 Good area 43952.073091076 ref 43952.073077190 err 1.9e-5 comps 1
+a overlap-lines 2 8 Good area 42693.083234050 ref 42693.083215753 err 5.6e-6 comps 1
+a overlap-lines 2 9 Good area 42635.649159431 ref 42635.649163494 err 1.0e-5 comps 1
+a overlap-lines 2 10 Good area 43654.864487202 ref 43654.864468396 err 1.3e-5 comps 1
+a overlap-lines 2 11 Good area 43892.511700573 ref 43892.511660797 err 2.1e-5 comps 1
+a overlap-lines 2 12 Good area 42621.095974898 ref 42621.096008867 err 2.7e-5 comps 1
+a overlap-lines 2 13 Good area 44081.042952569 ref 44081.042917690 err 1.4e-5 comps 1
+a overlap-lines 2 14 Good area 42646.709740228 ref 42646.709736267 err 6.6e-6 comps 1
+a overlap-lines 2 15 Good area 42898.187278440 ref 42898.187362715 err 2.5e-5 comps 1
+a overlap-lines 2 16 Good area 42384.608350651 ref 42384.608315886 err 1.6e-5 comps 1
+a overlap-lines 2 17 Good area 42302.599379720 ref 42302.599369787 err 3.2e-5 comps 1
+a overlap-lines 2 18 Good area 43900.962135829 ref 43900.962126187 err 1.1e-5 comps 1
+a overlap-lines 2 19 Good area 43303.729859512 ref 43303.729843900 err 4.3e-6 comps 1
+a overlap-lines 2 20 Good area 43337.371974168 ref 43337.371995522 err 3.5e-5 comps 1
+a overlap-lines 2 21 Good area 43292.976223352 ref 43292.976260190 err 5.4e-5 comps 1
+a overlap-lines 2 22 Good area 42673.657158504 ref 42673.657144728 err 2.2e-5 comps 1
+a overlap-lines 2 23 Good area 42837.949257292 ref 42837.949314829 err 5.0e-5 comps 1
+a overlap-lines 2 24 Good area 43156.705638686 ref 43156.705596232 err 1.2e-5 comps 1
+a overlap-lines 2 25 Good area 41887.754342995 ref 41887.754289956 err 1.6e-5 comps 1
+a overlap-lines 2 26 Good area 43555.588476397 ref 43555.588494904 err 9.1e-6 comps 1
+a overlap-lines 2 27 Good area 42718.449172597 ref 42718.449225112 err 1.1e-5 comps 1
+a overlap-lines 2 28 Good area 41732.512611505 ref 41732.512580414 err 3.4e-5 comps 1
+a overlap-lines 2 29 Good area 43060.932290616 ref 43060.932349637 err 1.7e-6 comps 1
+a overlap-lines 2 30 Good area 43588.857355001 ref 43588.857348212 err 1.9e-5 comps 1
+a overlap-lines 2 31 Good area 43540.168806848 ref 43540.168836602 err 1.0e-5 comps 1
+a overlap-lines 2 32 Good area 42123.981497354 ref 42123.981520142 err 2.8e-5 comps 1
+a overlap-lines 2 33 Good area 43401.865524110 ref 43401.865520408 err 4.0e-6 comps 1
+a overlap-lines 2 34 Good area 42013.474981522 ref 42013.475023233 err 2.5e-5 comps 1
+a overlap-lines 2 35 Good area 43577.301532134 ref 43577.301517946 err 4.1e-5 comps 1
+a overlap-lines 2 36 Good area 42629.544147347 ref 42629.544194641 err 2.2e-5 comps 1
+a overlap-lines 2 37 Good area 42779.090293713 ref 42779.090357242 err 9.0e-6 comps 1
+a overlap-lines 2 38 Good area 41963.068472560 ref 41963.068540495 err 3.0e-5 comps 1
+a overlap-lines 2 39 Good area 42865.807643015 ref 42865.807626168 err 2.4e-5 comps 1
+a overlap-lines 2 40 Good area 43721.600548219 ref 43721.600542202 err 5.4e-6 comps 1
+a overlap-lines 2 41 Good area 43387.251164833 ref 43387.251277331 err 7.4e-5 comps 1
+a overlap-lines 2 42 Good area 42974.116981089 ref 42974.116970539 err 1.0e-5 comps 1
+a overlap-lines 2 43 Good area 42145.549614132 ref 42145.549671781 err 2.8e-5 comps 1
+a overlap-lines 2 44 Good area 44392.869711158 ref 44392.869702558 err 5.3e-6 comps 1
+a overlap-lines 2 45 Good area 43982.266121057 ref 43982.266099659 err 1.3e-5 comps 1
+a overlap-lines 2 46 Good area 42409.144992718 ref 42409.145040828 err 7.7e-6 comps 1
+a overlap-lines 2 47 Good area 42649.459801378 ref 42649.459833618 err 2.3e-5 comps 1
+a overlap-lines 2 48 Good area 42878.913725275 ref 42878.913722282 err 2.0e-5 comps 1
+a overlap-lines 2 49 Good area 42846.592643722 ref 42846.592641787 err 6.5e-6 comps 1
+a overlap-lines 2 50 Good area 42471.363038910 ref 42471.363043994 err 6.6e-6 comps 1
+a overlap-lines 2 51 Good area 43100.862999911 ref 43100.862951610 err 1.4e-6 comps 1
+a overlap-lines 2 52 Good area 42639.597798932 ref 42639.597839830 err 1.9e-5 comps 1
+a overlap-lines 2 53 Good area 43481.537842203 ref 43481.537814788 err 1.6e-5 comps 1
+a overlap-lines 2 54 Good area 42980.761876464 ref 42980.761920425 err 2.2e-5 comps 1
+a overlap-lines 2 55 Good area 42364.265432793 ref 42364.265461490 err 9.9e-6 comps 1
+a overlap-lines 2 56 Good area 42685.397048476 ref 42685.397071370 err 3.1e-5 comps 1
+a overlap-lines 2 57 Good area 43178.001107112 ref 43178.001153338 err 2.3e-5 comps 1
+a overlap-lines 2 58 Good area 42213.595133551 ref 42213.595131670 err 1.6e-5 comps 1
+a overlap-lines 2 59 Good area 43161.978174496 ref 43161.978181215 err 7.0e-5 comps 1
+a overlap-lines 2 60 Good area 43324.341217528 ref 43324.341254511 err 1.7e-5 comps 1
+a overlap-lines 2 61 Good area 43008.780037359 ref 43008.780046159 err 6.1e-6 comps 1
+a overlap-lines 2 62 Good area 41203.640167808 ref 41203.640373411 err 2.3e-5 comps 1
+a overlap-lines 2 63 Good area 43555.709363172 ref 43555.709338185 err 6.5e-6 comps 1
+a overlap-lines 2 64 Good area 43269.129068961 ref 43269.129099544 err 8.6e-6 comps 1
+a overlap-lines 2 65 Good area 43159.617797775 ref 43159.617765475 err 1.4e-5 comps 1
+a overlap-lines 2 66 Good area 43532.753262457 ref 43532.753291867 err 1.9e-5 comps 1
+a overlap-lines 2 67 Good area 43650.295269783 ref 43650.295261339 err 7.3e-6 comps 1
+a overlap-lines 2 68 Good area 43108.064058487 ref 43108.064128899 err 2.3e-5 comps 1
+a overlap-lines 2 69 Good area 43118.520422470 ref 43118.520416891 err 2.4e-5 comps 1
+a overlap-lines 2 70 Good area 43527.055205528 ref 43527.055213270 err 4.1e-5 comps 1
+a overlap-lines 2 71 Good area 44072.542799520 ref 44072.542804030 err 3.0e-5 comps 1
+a overlap-lines 2 72 Good area 42515.688441585 ref 42515.688396990 err 1.1e-5 comps 1
+a overlap-lines 2 73 Good area 42346.445625436 ref 42346.445587796 err 8.9e-6 comps 1
+a overlap-lines 2 74 Good area 43130.901520743 ref 43130.901551479 err 5.9e-5 comps 1
+a overlap-lines 2 75 Good area 43694.042667714 ref 43694.042701537 err 8.8e-6 comps 1
+a overlap-lines 2 76 Good area 42656.475347398 ref 42656.475333293 err 8.1e-6 comps 1
+a overlap-lines 2 77 Good area 43189.912141035 ref 43189.912159529 err 7.9e-6 comps 1
+a overlap-lines 2 78 Good area 43815.507093299 ref 43815.507065324 err 1.0e-5 comps 1
+a overlap-lines 2 79 Good area 43771.665115405 ref 43771.665212591 err 1.2e-5 comps 1
+a overlap-lines 2 80 Good area 42376.140586266 ref 42376.140615301 err 2.9e-5 comps 1
+a overlap-lines 2 81 Good area 43978.264656262 ref 43978.264642906 err 3.0e-5 comps 1
+a overlap-lines 2 82 Good area 43693.825506823 ref 43693.825505632 err 8.3e-6 comps 1
+a overlap-lines 2 83 Good area 42584.636147768 ref 42584.636160544 err 1.6e-5 comps 1
+a overlap-lines 2 84 Good area 42427.167074007 ref 42427.167070433 err 3.0e-6 comps 1
+a overlap-lines 2 85 Good area 42098.967203365 ref 42098.967181060 err 1.4e-5 comps 1
+a overlap-lines 2 86 Good area 43126.242884598 ref 43126.242829797 err 2.0e-5 comps 1
+a overlap-lines 2 87 Good area 42772.700670552 ref 42772.700728733 err 2.2e-5 comps 1
+a overlap-lines 2 88 Good area 43594.256180461 ref 43594.256185315 err 1.7e-5 comps 1
+a overlap-lines 2 89 Good area 43237.534815093 ref 43237.534885787 err 3.4e-5 comps 1
+a overlap-lines 2 90 Good area 44271.243950218 ref 44271.243990955 err 3.1e-5 comps 1
+a overlap-lines 2 91 Good area 44085.244087149 ref 44085.244108842 err 1.6e-5 comps 1
+a overlap-lines 2 92 Good area 41513.854461647 ref 41513.854458276 err 3.8e-5 comps 1
+a overlap-lines 2 93 Good area 42873.300953228 ref 42873.300948495 err 1.3e-5 comps 1
+a overlap-lines 2 94 Good area 42886.754716230 ref 42886.754894099 err 4.1e-5 comps 1
+a overlap-lines 2 95 Good area 43159.114888852 ref 43159.114938033 err 4.0e-5 comps 1
+a overlap-lines 2 96 Good area 43803.588232695 ref 43803.588258961 err 2.4e-5 comps 1
+a overlap-lines 2 97 Good area 42978.007918344 ref 42978.007980588 err 5.1e-5 comps 1
+a overlap-lines 2 98 Good area 42318.708705026 ref 42318.708822163 err 7.2e-5 comps 1
+a overlap-lines 2 99 Good area 42784.763450770 ref 42784.763441638 err 8.7e-6 comps 1
+a overlap-lines 2 100 Good area 42552.257128939 ref 42552.257199802 err 4.4e-5 comps 1
+a overlap-lines 2 101 Good area 43174.410756985 ref 43174.410793548 err 4.9e-5 comps 1
+a overlap-lines 2 102 Good area 43923.904370227 ref 43923.904392988 err 4.5e-5 comps 1
+a overlap-lines 2 103 Good area 44219.158478347 ref 44219.158477090 err 1.5e-5 comps 1
+a overlap-lines 2 104 Good area 42671.435271951 ref 42671.435278020 err 1.9e-6 comps 1
+a overlap-lines 2 105 Good area 42390.118834402 ref 42390.118806933 err 1.2e-5 comps 1
+a overlap-lines 2 106 Good area 43407.169396620 ref 43407.169388922 err 2.4e-6 comps 1
+a overlap-lines 2 107 Good area 43026.936719382 ref 43026.936751894 err 8.9e-6 comps 1
+a overlap-lines 2 108 Good area 42888.115901976 ref 42888.115928984 err 2.8e-5 comps 1
+a overlap-lines 2 109 Good area 43256.477111413 ref 43256.477161522 err 6.5e-5 comps 1
+a overlap-lines 2 110 Good area 44078.339906124 ref 44078.340007603 err 7.8e-7 comps 1
+a overlap-lines 2 111 Good area 43237.788966425 ref 43237.788973997 err 1.3e-5 comps 1
+a overlap-lines 2 112 Good area 42779.849282385 ref 42779.849314123 err 3.3e-5 comps 1
+a overlap-lines 2 113 Good area 43679.087287032 ref 43679.087303378 err 4.0e-5 comps 1
+a overlap-lines 2 114 Good area 42516.306582645 ref 42516.306654816 err 4.9e-5 comps 1
+a overlap-lines 2 115 Good area 42344.914982972 ref 42344.915101747 err 4.5e-5 comps 1
+a overlap-lines 2 116 Good area 43932.021371640 ref 43932.021370824 err 7.7e-6 comps 1
+a overlap-lines 2 117 Good area 42205.587618286 ref 42205.587650596 err 2.4e-5 comps 1
+a overlap-lines 2 118 Good area 42698.390266148 ref 42698.390256395 err 1.8e-6 comps 1
+a overlap-lines 2 119 Good area 42636.689203090 ref 42636.689196985 err 1.1e-5 comps 1
+a overlap-lines 2 120 Good area 42540.597726319 ref 42540.597767706 err 2.0e-5 comps 1
+a overlap-lines 2 121 Good area 43117.380284763 ref 43117.380270728 err 1.5e-5 comps 1
+a overlap-lines 2 122 Good area 44339.824607438 ref 44339.824628877 err 3.0e-5 comps 1
+a overlap-lines 2 123 Good area 43074.502423505 ref 43074.502418895 err 5.3e-5 comps 1
+a overlap-lines 2 124 Good area 43577.122924615 ref 43577.122919078 err 1.4e-5 comps 1
+a overlap-lines 2 125 Good area 42973.653110424 ref 42973.653174672 err 7.4e-6 comps 1
+a overlap-lines 2 126 Good area 42892.015876441 ref 42892.015929664 err 3.4e-5 comps 1
+a overlap-lines 2 127 Good area 43362.785486082 ref 43362.785524744 err 2.6e-5 comps 1
+a overlap-lines 2 128 Good area 42518.415457455 ref 42518.415476082 err 1.0e-5 comps 1
+a overlap-lines 2 129 Good area 42202.732995517 ref 42202.732958027 err 3.9e-5 comps 1
+a overlap-lines 2 130 Good area 42561.881616197 ref 42561.881607423 err 3.4e-5 comps 1
+a overlap-lines 2 131 Good area 42170.559109444 ref 42170.559045960 err 2.8e-5 comps 1
+a overlap-lines 2 132 Good area 42595.859861963 ref 42595.859924365 err 1.4e-5 comps 1
+a overlap-lines 2 133 Good area 42593.315200020 ref 42593.315295546 err 4.6e-5 comps 1
+a overlap-lines 2 134 Good area 42950.763756581 ref 42950.763719090 err 1.1e-5 comps 1
+a overlap-lines 2 135 Good area 43043.215096604 ref 43043.215126861 err 1.5e-5 comps 1
+a overlap-lines 2 136 Good area 43440.525870538 ref 43440.525909367 err 4.4e-5 comps 1
+a overlap-lines 2 137 Good area 43214.098860361 ref 43214.098870469 err 2.0e-5 comps 1
+a overlap-lines 2 138 Good area 44133.447610062 ref 44133.447623065 err 2.0e-6 comps 1
+a overlap-lines 2 139 Good area 43256.813842704 ref 43256.813867218 err 5.3e-6 comps 1
+a overlap-lines 2 140 Good area 42540.703129442 ref 42540.703049200 err 2.6e-5 comps 1
+a overlap-lines 2 141 Good area 43779.690817151 ref 43779.690807612 err 1.7e-5 comps 1
+a overlap-lines 2 142 Good area 44209.067943216 ref 44209.067987027 err 1.6e-5 comps 1
+a overlap-lines 2 143 Good area 43457.176446226 ref 43457.176531418 err 6.1e-6 comps 1
+a overlap-lines 2 144 Good area 42575.984028700 ref 42575.983994642 err 1.2e-5 comps 1
+a overlap-lines 2 145 Good area 42885.453654213 ref 42885.453644875 err 5.6e-6 comps 1
+a overlap-lines 2 146 Good area 42621.769498971 ref 42621.769475603 err 2.0e-5 comps 1
+a overlap-lines 2 147 Good area 43121.915982683 ref 43121.916013140 err 2.4e-5 comps 1
+a overlap-lines 2 148 Good area 43253.447906946 ref 43253.447906258 err 1.3e-6 comps 1
+a overlap-lines 2 149 Good area 43961.474371349 ref 43961.474359854 err 3.3e-5 comps 1
+a overlap-lines 2 150 Good area 44173.097170971 ref 44173.097185401 err 5.6e-5 comps 1
+a overlap-lines 2 151 Good area 42873.025768012 ref 42873.025826806 err 4.2e-5 comps 1
+a overlap-lines 2 152 Good area 43384.979601944 ref 43384.979664188 err 1.2e-5 comps 1
+a overlap-lines 2 153 Good area 43874.413632532 ref 43874.413606613 err 5.0e-6 comps 1
+a overlap-lines 2 154 Good area 43399.835116404 ref 43399.835194832 err 1.7e-6 comps 1
+a overlap-lines 2 155 Good area 42250.004084309 ref 42250.004164778 err 3.9e-6 comps 1
+a overlap-lines 2 156 Good area 44073.838938706 ref 44073.838989418 err 1.5e-6 comps 1
+a overlap-lines 2 157 Good area 43511.740293610 ref 43511.740340611 err 3.2e-5 comps 1
+a overlap-lines 2 158 Good area 42782.340389580 ref 42782.340360444 err 1.4e-5 comps 1
+a overlap-lines 2 159 Good area 42715.009382890 ref 42715.009338225 err 1.9e-6 comps 1
+a overlap-lines 2 160 Good area 43442.471104237 ref 43442.471087200 err 1.5e-5 comps 1
+a overlap-lines 2 161 Good area 43074.142361493 ref 43074.142392945 err 6.0e-6 comps 1
+a overlap-lines 2 162 Good area 42777.404688930 ref 42777.404711695 err 9.0e-6 comps 1
+a overlap-lines 2 163 Good area 43225.204297155 ref 43225.204319086 err 2.6e-5 comps 1
+a overlap-lines 2 164 Good area 43796.717249061 ref 43796.717290831 err 2.6e-5 comps 1
+a overlap-lines 2 165 Good area 43650.043131254 ref 43650.043208836 err 7.3e-5 comps 1
+a overlap-lines 2 166 Good area 42876.249787297 ref 42876.249743910 err 1.5e-5 comps 1
+a overlap-lines 2 167 Good area 43077.268447668 ref 43077.268495953 err 1.7e-5 comps 1
+a overlap-lines 2 168 Good area 43741.020743943 ref 43741.020806185 err 1.4e-5 comps 1
+a overlap-lines 2 169 Good area 42153.569083438 ref 42153.569123995 err 3.3e-5 comps 1
+a overlap-lines 2 170 Good area 43735.593675926 ref 43735.593683303 err 1.2e-5 comps 1
+a overlap-lines 2 171 Good area 43366.714551877 ref 43366.714567855 err 2.0e-5 comps 1
+a overlap-lines 2 172 Good area 41921.069698316 ref 41921.069732101 err 6.6e-6 comps 1
+a overlap-lines 2 173 Good area 43466.031273737 ref 43466.031256644 err 7.1e-6 comps 1
+a overlap-lines 2 174 Good area 42726.140862318 ref 42726.140827840 err 8.9e-6 comps 1
+a overlap-lines 2 175 Good area 41444.460077139 ref 41444.460116224 err 5.3e-5 comps 1
+a overlap-lines 2 176 Good area 43565.828629764 ref 43565.828652148 err 1.5e-5 comps 1
+a overlap-lines 2 177 Good area 42302.717006416 ref 42302.717006393 err 1.4e-6 comps 1
+a overlap-lines 2 178 Good area 42546.141172486 ref 42546.141139404 err 1.1e-5 comps 1
+a overlap-lines 2 179 Good area 43416.751701542 ref 43416.751677249 err 1.9e-5 comps 1
+a overlap-lines 2 180 Good area 42344.134752046 ref 42344.134878527 err 2.6e-5 comps 1
+a overlap-lines 2 181 Good area 43458.270145724 ref 43458.270179618 err 3.0e-5 comps 1
+a overlap-lines 2 182 Good area 43966.604042256 ref 43966.604052589 err 9.0e-6 comps 1
+a overlap-lines 2 183 Good area 43446.413105690 ref 43446.413227369 err 5.8e-6 comps 1
+a overlap-lines 2 184 Good area 41914.474046035 ref 41914.474138612 err 9.4e-6 comps 1
+a overlap-lines 2 185 Good area 42282.588677227 ref 42282.588644621 err 1.4e-5 comps 1
+a overlap-lines 2 186 Good area 43591.776189929 ref 43591.776251115 err 1.3e-5 comps 1
+a overlap-lines 2 187 Good area 42608.161388365 ref 42608.161377467 err 3.8e-6 comps 1
+a overlap-lines 2 188 Good area 43665.602392569 ref 43665.602386266 err 8.4e-6 comps 1
+a overlap-lines 2 189 Good area 42991.465289043 ref 42991.465353137 err 5.6e-5 comps 1
+a overlap-lines 2 190 Good area 43442.225210175 ref 43442.225204974 err 6.5e-6 comps 1
+a overlap-lines 2 191 Good area 44173.806409199 ref 44173.806440455 err 3.1e-7 comps 1
+a overlap-lines 2 192 Good area 44024.306260552 ref 44024.306253927 err 1.8e-5 comps 1
+a overlap-lines 2 193 Good area 43227.245795304 ref 43227.245778897 err 1.9e-5 comps 1
+a overlap-lines 2 194 Good area 42783.693563396 ref 42783.693533430 err 7.9e-6 comps 1
+a overlap-lines 2 195 Good area 42293.798225023 ref 42293.798288547 err 1.1e-4 comps 1
+a overlap-lines 2 196 Good area 41822.318338313 ref 41822.318347919 err 2.5e-5 comps 1
+a overlap-lines 2 197 Good area 43382.142329807 ref 43382.142423179 err 6.2e-6 comps 1
+a overlap-lines 2 198 Good area 43356.822352966 ref 43356.822463398 err 2.8e-5 comps 1
+a overlap-lines 2 199 Good area 42531.356570715 ref 42531.356550924 err 5.1e-6 comps 1
+a overlap-lines 20 0 Good area 41263.817262848 ref 41263.817262144 err 1.3e-7 comps 1
+a overlap-lines 20 1 Good area 42476.888440603 ref 42476.888426725 err 1.5e-5 comps 2
+a overlap-lines 20 2 Good area 43052.448533268 ref 43052.448453580 err 3.4e-6 comps 1
+a overlap-lines 20 3 Good area 42228.563669339 ref 42228.563649221 err 2.3e-5 comps 3
+a overlap-lines 20 4 Good area 42924.612479551 ref 42924.612474789 err 4.0e-5 comps 1
+a overlap-lines 20 5 Good area 41713.442140156 ref 41713.442147938 err 6.5e-5 comps 1
+a overlap-lines 20 6 Good area 40787.458993435 ref 40787.458875804 err 5.2e-5 comps 1
+a overlap-lines 20 7 Good area 42425.966533085 ref 42425.966492913 err 4.4e-5 comps 1
+a overlap-lines 20 8 Good area 41593.126702948 ref 41593.126670550 err 5.4e-5 comps 1
+a overlap-lines 20 9 Good area 42410.198868475 ref 42410.198801781 err 1.3e-5 comps 1
+a overlap-lines 20 10 Good area 42322.510919747 ref 42322.510902896 err 3.3e-5 comps 1
+a overlap-lines 20 11 Good area 43077.107376282 ref 43077.107426101 err 1.9e-5 comps 1
+a overlap-lines 20 12 Good area 42746.182612825 ref 42746.182690302 err 3.3e-5 comps 1
+a overlap-lines 20 13 Good area 41935.503457880 ref 41935.503474288 err 2.7e-5 comps 1
+a overlap-lines 20 14 Good area 43130.880588526 ref 43130.880605923 err 2.4e-5 comps 1
+a overlap-lines 20 15 Good area 42253.350776354 ref 42253.350747952 err 2.0e-5 comps 1
+a overlap-lines 20 16 Good area 42737.472969361 ref 42737.473070438 err 2.5e-5 comps 1
+a overlap-lines 20 17 Good area 42905.539695491 ref 42905.539680753 err 1.4e-5 comps 1
+a overlap-lines 20 18 Good area 42782.615462665 ref 42782.615396728 err 1.4e-6 comps 2
+a overlap-lines 20 19 Good area 42267.895572550 ref 42267.895602728 err 2.2e-5 comps 1
+a overlap-lines 20 20 Good area 42615.100908282 ref 42615.100895923 err 2.4e-6 comps 1
+a overlap-lines 20 21 Good area 42772.925470794 ref 42772.925473685 err 3.9e-5 comps 1
+a overlap-lines 20 22 Good area 43418.663842737 ref 43418.663824841 err 5.5e-7 comps 1
+a overlap-lines 20 23 Good area 43040.704396583 ref 43040.704425867 err 3.7e-5 comps 1
+a overlap-lines 20 24 Good area 42489.335223738 ref 42489.335214202 err 5.4e-6 comps 1
+a overlap-lines 20 25 Good area 43159.518606573 ref 43159.518638130 err 1.9e-5 comps 1
+a overlap-lines 20 26 Good area 42813.628228254 ref 42813.628195627 err 7.7e-6 comps 1
+a overlap-lines 20 27 Good area 42877.899607772 ref 42877.899595558 err 2.2e-5 comps 1
+a overlap-lines 20 28 Good area 42995.509093183 ref 42995.509152241 err 3.5e-6 comps 1
+a overlap-lines 20 29 Good area 42589.598274029 ref 42589.598215816 err 1.1e-5 comps 1
+a overlap-lines 20 30 Good area 42474.143380651 ref 42474.143378456 err 3.6e-6 comps 1
+a overlap-lines 20 31 Good area 42511.676072491 ref 42511.676057401 err 3.5e-5 comps 1
+a overlap-lines 20 32 Good area 42839.444034756 ref 42839.444052660 err 4.3e-7 comps 2
+a overlap-lines 20 33 Good area 41895.624077688 ref 41895.624210415 err 2.3e-5 comps 1
+a overlap-lines 20 34 Good area 42425.749826892 ref 42425.749886231 err 3.8e-5 comps 1
+a overlap-lines 20 35 Good area 43319.007935966 ref 43319.007906054 err 4.3e-6 comps 1
+a overlap-lines 20 36 Good area 41830.335441411 ref 41830.335487697 err 3.3e-6 comps 1
+a overlap-lines 20 37 Good area 43254.105432500 ref 43254.105492529 err 2.1e-6 comps 1
+a overlap-lines 20 38 Good area 42454.896721663 ref 42454.896689685 err 6.2e-5 comps 1
+a overlap-lines 20 39 Good area 41922.086914366 ref 41922.086980418 err 2.3e-5 comps 1
+a overlap-lines 20 40 Good area 42773.402417109 ref 42773.402456537 err 1.1e-5 comps 1
+a overlap-lines 20 41 Good area 42590.965864736 ref 42590.965870585 err 1.4e-5 comps 1
+a overlap-lines 20 42 Good area 42525.947066003 ref 42525.947030064 err 4.0e-6 comps 1
+a overlap-lines 20 43 Good area 42362.210908246 ref 42362.210905282 err 7.1e-6 comps 1
+a overlap-lines 20 44 Good area 42846.297340316 ref 42846.297411694 err 8.8e-5 comps 1
+a overlap-lines 20 45 Good area 42477.686399113 ref 42477.686415045 err 4.5e-5 comps 1
+a overlap-lines 20 46 Good area 41916.821888842 ref 41916.821890524 err 2.9e-5 comps 1
+a overlap-lines 20 47 Good area 43211.785390569 ref 43211.785426212 err 2.0e-5 comps 1
+a overlap-lines 20 48 Good area 42346.828534794 ref 42346.828522140 err 1.3e-5 comps 1
+a overlap-lines 20 49 Good area 43067.359770066 ref 43067.359809526 err 3.2e-5 comps 1
+a overlap-lines 20 50 Good area 42542.798573047 ref 42542.798587351 err 2.1e-5 comps 1
+a overlap-lines 20 51 Good area 41436.276349726 ref 41436.276391164 err 4.8e-5 comps 1
+a overlap-lines 20 52 Good area 42411.491942125 ref 42411.491943725 err 1.8e-5 comps 1
+a overlap-lines 20 53 Good area 42871.128856682 ref 42871.128910348 err 2.4e-5 comps 1
+a overlap-lines 20 54 Good area 42488.149122291 ref 42488.149113967 err 1.1e-5 comps 1
+a overlap-lines 20 55 Good area 42626.386523698 ref 42626.386584403 err 4.9e-6 comps 2
+a overlap-lines 20 56 Good area 42187.116155807 ref 42187.116221310 err 3.2e-5 comps 1
+a overlap-lines 20 57 Good area 41514.536048785 ref 41514.536081955 err 2.8e-6 comps 1
+a overlap-lines 20 58 Good area 42655.971895466 ref 42655.971974368 err 4.2e-5 comps 1
+a overlap-lines 20 59 Good area 41947.848653731 ref 41947.848712038 err 4.5e-5 comps 1
+a overlap-lines 20 60 Good area 42800.652978704 ref 42800.653062704 err 7.5e-6 comps 1
+a overlap-lines 20 61 Good area 42956.271796226 ref 42956.271814929 err 1.5e-5 comps 1
+a overlap-lines 20 62 Good area 42424.120283193 ref 42424.120314139 err 1.9e-5 comps 1
+a overlap-lines 20 63 Good area 42140.825574410 ref 42140.825604703 err 3.2e-5 comps 1
+a overlap-lines 20 64 Good area 41915.562810442 ref 41915.562873092 err 1.5e-5 comps 1
+a overlap-lines 20 65 Good area 42727.335127003 ref 42727.335101413 err 2.0e-6 comps 1
+a overlap-lines 20 66 Good area 42181.857682506 ref 42181.857717390 err 3.2e-5 comps 2
+a overlap-lines 20 67 Good area 42533.719105926 ref 42533.719146006 err 1.5e-5 comps 1
+a overlap-lines 20 68 Good area 43040.878122125 ref 43040.878111964 err 4.2e-6 comps 1
+a overlap-lines 20 69 Good area 42135.787656981 ref 42135.787681362 err 1.8e-6 comps 1
+a overlap-lines 20 70 Good area 42092.689091443 ref 42092.689100939 err 1.5e-5 comps 1
+a overlap-lines 20 71 Good area 43083.337940185 ref 43083.337921932 err 1.2e-5 comps 1
+a overlap-lines 20 72 Good area 42887.994169176 ref 42887.994168323 err 2.3e-5 comps 1
+a overlap-lines 20 73 Good area 42094.100891294 ref 42094.101065009 err 1.4e-5 comps 1
+a overlap-lines 20 74 Good area 42126.207246019 ref 42126.207233889 err 1.1e-5 comps 1
+a overlap-lines 20 75 Good area 42075.909181284 ref 42075.909163403 err 1.8e-5 comps 1
+a overlap-lines 20 76 Good area 42796.960599503 ref 42796.960586571 err 5.9e-6 comps 2
+a overlap-lines 20 77 Good area 42404.300426931 ref 42404.300399934 err 1.9e-5 comps 1
+a overlap-lines 20 78 Good area 42110.613251711 ref 42110.613223964 err 1.8e-5 comps 1
+a overlap-lines 20 79 Good area 42830.091007832 ref 42830.090966118 err 1.1e-5 comps 1
+a overlap-lines 20 80 Good area 42932.018610575 ref 42932.018593338 err 8.3e-6 comps 1
+a overlap-lines 20 81 Good area 41805.187591540 ref 41805.187589142 err 3.8e-6 comps 1
+a overlap-lines 20 82 Good area 42447.290841115 ref 42447.290841782 err 5.0e-6 comps 1
+a overlap-lines 20 83 Good area 42033.389140290 ref 42033.389216659 err 3.2e-5 comps 1
+a overlap-lines 20 84 Good area 42510.904256284 ref 42510.904230161 err 1.1e-5 comps 1
+a overlap-lines 20 85 Good area 41896.076128007 ref 41896.076134187 err 5.3e-5 comps 1
+a overlap-lines 20 86 Good area 42520.373889653 ref 42520.373850095 err 2.2e-5 comps 1
+a overlap-lines 20 87 Good area 42636.416461881 ref 42636.416494480 err 3.2e-5 comps 1
+a overlap-lines 20 88 Good area 42422.555826608 ref 42422.555771807 err 6.0e-5 comps 1
+a overlap-lines 20 89 Good area 42432.431037906 ref 42432.431044639 err 3.8e-5 comps 1
+a overlap-lines 20 90 Good area 42580.252472636 ref 42580.252541175 err 3.7e-5 comps 1
+a overlap-lines 20 91 Good area 42946.641750610 ref 42946.641752050 err 1.2e-5 comps 1
+a overlap-lines 20 92 Good area 42343.848588439 ref 42343.848512819 err 1.7e-5 comps 1
+a overlap-lines 20 93 Good area 41408.926141649 ref 41408.926265718 err 1.2e-5 comps 2
+a overlap-lines 20 94 Good area 42933.506837679 ref 42933.506822356 err 5.8e-7 comps 1
+a overlap-lines 20 95 Good area 42015.499180347 ref 42015.499156534 err 9.5e-6 comps 1
+a overlap-lines 20 96 Good area 42817.511523472 ref 42817.511539872 err 2.0e-5 comps 1
+a overlap-lines 20 97 Good area 42731.411867296 ref 42731.411896081 err 3.4e-5 comps 1
+a overlap-lines 20 98 Good area 42259.857595926 ref 42259.857682707 err 9.6e-5 comps 2
+a overlap-lines 20 99 Good area 42208.051425834 ref 42208.051489065 err 4.3e-6 comps 1
+a overlap-lines 200 0 Good area 44270.773391562 ref 44270.773423646 err 8.2e-6 comps 1
+a overlap-lines 200 1 Good area 44225.571150792 ref 44225.571160856 err 3.8e-6 comps 1
+a overlap-lines 200 2 Good area 44237.397749763 ref 44237.397787883 err 2.7e-6 comps 1
+a overlap-lines 200 3 Good area 44377.142940235 ref 44377.142957330 err 2.4e-5 comps 1
+a overlap-lines 200 4 Good area 44327.597849756 ref 44327.597869571 err 6.6e-6 comps 1
+a overlap-lines 200 5 Good area 44285.290001628 ref 44285.290055544 err 1.1e-5 comps 2
+a overlap-lines 200 6 Good area 44313.068057525 ref 44313.068143634 err 2.2e-5 comps 1
+a overlap-lines 200 7 Good area 44269.188731859 ref 44269.188757736 err 8.6e-6 comps 1
+a overlap-lines 200 8 Good area 44165.303947138 ref 44165.303949164 err 8.0e-6 comps 1
+a overlap-lines 200 9 Good area 44308.089157340 ref 44308.089219454 err 7.1e-6 comps 1
+a overlap-lines 200 10 Good area 44454.572724712 ref 44454.572756192 err 7.1e-6 comps 1
+a overlap-lines 200 11 Good area 44279.900339996 ref 44279.900330791 err 2.8e-5 comps 2
+a overlap-lines 200 12 Good area 44387.996054227 ref 44387.996052998 err 2.9e-5 comps 1
+a overlap-lines 200 13 Good area 44063.929921983 ref 44063.929925254 err 1.0e-5 comps 1
+a overlap-lines 200 14 Good area 44247.554249778 ref 44247.554243896 err 7.4e-6 comps 2
+a overlap-lines 200 15 Good area 44366.255461248 ref 44366.255519701 err 1.3e-5 comps 1
+a overlap-lines 200 16 Good area 44311.399235115 ref 44311.399249636 err 3.1e-5 comps 1
+a overlap-lines 200 17 Good area 44317.561315748 ref 44317.561305033 err 4.7e-6 comps 1
+a overlap-lines 200 18 Good area 44242.572458101 ref 44242.572467303 err 5.1e-5 comps 1
+a overlap-lines 200 19 Good area 44404.602279724 ref 44404.602255610 err 1.6e-5 comps 1
+a overlap 2 0 Good area 43785.980754040 ref 43785.980748335 err 2.3e-5 comps 1
+a overlap 2 1 Good area 42631.749445932 ref 42631.749488470 err 1.7e-6 comps 1
+a overlap 2 2 Good area 42770.997137679 ref 42770.997124640 err 2.0e-5 comps 1
+a overlap 2 3 Good area 43992.254256015 ref 43992.254270917 err 1.6e-6 comps 1
+a overlap 2 4 Good area 42079.253456790 ref 42079.253436343 err 9.0e-6 comps 1
+a overlap 2 5 Good area 44172.041067227 ref 44172.041045055 err 2.0e-5 comps 1
+a overlap 2 6 Good area 41711.398726654 ref 41711.398692049 err 2.1e-5 comps 1
+a overlap 2 7 Good area 42539.570507742 ref 42539.570503097 err 3.3e-5 comps 1
+a overlap 2 8 Good area 43910.848239362 ref 43910.848210215 err 4.9e-6 comps 1
+a overlap 2 9 Good area 44320.438932899 ref 44320.438951749 err 5.3e-6 comps 1
+a overlap 2 10 Good area 43380.441498262 ref 43380.441554327 err 7.0e-6 comps 1
+a overlap 2 11 Good area 43697.831618244 ref 43697.831690703 err 3.3e-5 comps 1
+a overlap 2 12 Good area 43605.155928599 ref 43605.156010059 err 5.1e-6 comps 1
+a overlap 2 13 Good area 42472.808354481 ref 42472.808344874 err 1.6e-5 comps 1
+a overlap 2 14 Good area 43688.743849555 ref 43688.743922450 err 3.3e-5 comps 1
+a overlap 2 15 Good area 43732.794826687 ref 43732.794896308 err 5.9e-5 comps 1
+a overlap 2 16 Good area 43208.202958485 ref 43208.202998313 err 1.9e-5 comps 1
+a overlap 2 17 Good area 42605.041336375 ref 42605.041361502 err 2.3e-5 comps 1
+a overlap 2 18 Good area 43562.918316555 ref 43562.918310992 err 2.8e-5 comps 1
+a overlap 2 19 Good area 44185.422513421 ref 44185.422545304 err 1.1e-5 comps 1
+a overlap 2 20 Good area 42561.787793142 ref 42561.787824510 err 6.4e-5 comps 1
+a overlap 2 21 Good area 43078.783724502 ref 43078.783755462 err 8.6e-6 comps 1
+a overlap 2 22 Good area 43082.181857490 ref 43082.181848758 err 2.8e-5 comps 1
+a overlap 2 23 Good area 43230.910204063 ref 43230.910248552 err 1.2e-5 comps 1
+a overlap 2 24 Good area 42925.763590935 ref 42925.763603892 err 2.6e-5 comps 1
+a overlap 2 25 Good area 42793.169401518 ref 42793.169373421 err 1.4e-5 comps 1
+a overlap 2 26 Good area 42461.278176148 ref 42461.278224356 err 1.4e-5 comps 1
+a overlap 2 27 Good area 43818.019170720 ref 43818.019229658 err 6.8e-5 comps 1
+a overlap 2 28 Good area 43293.442261648 ref 43293.442279737 err 2.4e-5 comps 1
+a overlap 2 29 Good area 43020.593784535 ref 43020.593881283 err 1.2e-5 comps 1
+a overlap 2 30 Good area 42577.101597165 ref 42577.101585474 err 6.2e-7 comps 1
+a overlap 2 31 Good area 43594.231254047 ref 43594.231267085 err 5.7e-6 comps 1
+a overlap 2 32 Good area 44205.105958671 ref 44205.106015585 err 9.1e-6 comps 1
+a overlap 2 33 Good area 43765.303852146 ref 43765.303861178 err 9.5e-6 comps 1
+a overlap 2 34 Good area 41804.018886485 ref 41804.018940115 err 1.1e-5 comps 1
+a overlap 2 35 Good area 42291.813612777 ref 42291.813563824 err 5.1e-6 comps 1
+a overlap 2 36 Good area 42103.445395978 ref 42103.445440355 err 2.3e-5 comps 1
+a overlap 2 37 Good area 44029.740782189 ref 44029.740840274 err 2.7e-5 comps 1
+a overlap 2 38 Good area 41805.347445862 ref 41805.347421278 err 1.1e-5 comps 1
+a overlap 2 39 Good area 41864.491618175 ref 41864.491671929 err 1.3e-5 comps 1
+a overlap 2 40 Good area 42561.558284538 ref 42561.558334502 err 4.0e-5 comps 1
+a overlap 2 41 Good area 43664.637536933 ref 43664.637550070 err 3.7e-5 comps 1
+a overlap 2 42 Good area 42117.586071761 ref 42117.586054424 err 1.4e-5 comps 1
+a overlap 2 43 Good area 42998.324837611 ref 42998.324823412 err 3.8e-5 comps 1
+a overlap 2 44 Good area 43182.550339117 ref 43182.550369003 err 2.8e-6 comps 1
+a overlap 2 45 Good area 43436.271191356 ref 43436.271217973 err 3.5e-5 comps 1
+a overlap 2 46 Good area 43097.449104663 ref 43097.449099038 err 1.9e-5 comps 1
+a overlap 2 47 Good area 42632.609424809 ref 42632.609395968 err 6.0e-6 comps 1
+a overlap 2 48 Good area 42945.494280442 ref 42945.494282802 err 2.1e-5 comps 1
+a overlap 2 49 Good area 43828.456520247 ref 43828.456566497 err 3.1e-6 comps 1
+a overlap 2 50 Good area 42058.463496042 ref 42058.463560628 err 2.5e-5 comps 1
+a overlap 2 51 Good area 42852.318889483 ref 42852.318866795 err 5.9e-6 comps 1
+a overlap 2 52 Good area 42147.261219929 ref 42147.261210596 err 9.6e-6 comps 1
+a overlap 2 53 Good area 42513.191501101 ref 42513.191506996 err 2.5e-5 comps 1
+a overlap 2 54 Good area 42380.897416832 ref 42380.897437919 err 1.9e-5 comps 1
+a overlap 2 55 Good area 43219.699217867 ref 43219.699297532 err 3.4e-5 comps 1
+a overlap 2 56 Good area 43468.512772656 ref 43468.512827128 err 1.7e-5 comps 1
+a overlap 2 57 Good area 43057.745681054 ref 43057.745694473 err 1.9e-5 comps 1
+a overlap 2 58 Good area 42610.853991492 ref 42610.854002080 err 2.1e-5 comps 1
+a overlap 2 59 Good area 41535.033807120 ref 41535.033778561 err 2.0e-5 comps 1
+a overlap 2 60 Good area 43361.568114206 ref 43361.568109090 err 3.7e-6 comps 1
+a overlap 2 61 Good area 42783.002369348 ref 42783.002459356 err 9.2e-6 comps 1
+a overlap 2 62 Good area 44185.477134033 ref 44185.477144472 err 3.6e-5 comps 1
+a overlap 2 63 Good area 43051.444655090 ref 43051.444633715 err 6.1e-6 comps 1
+a overlap 2 64 Good area 43822.999357185 ref 43822.999372591 err 4.6e-5 comps 1
+a overlap 2 65 Good area 44087.260764467 ref 44087.260797581 err 6.6e-6 comps 1
+a overlap 2 66 Good area 42541.972806337 ref 42541.972826959 err 1.4e-5 comps 1
+a overlap 2 67 Good area 44240.447849402 ref 44240.447856494 err 2.7e-5 comps 1
+a overlap 2 68 Good area 43901.385261856 ref 43901.385323788 err 3.9e-6 comps 1
+a overlap 2 69 Good area 44149.639771229 ref 44149.639828047 err 1.6e-5 comps 1
+a overlap 2 70 Good area 42509.808050277 ref 42509.807995868 err 3.7e-5 comps 1
+a overlap 2 71 Good area 42298.486337724 ref 42298.486298189 err 3.7e-5 comps 1
+a overlap 2 72 Good area 43504.600230508 ref 43504.600307531 err 3.4e-5 comps 1
+a overlap 2 73 Good area 42959.155747871 ref 42959.155820790 err 2.3e-5 comps 1
+a overlap 2 74 Good area 43106.399078344 ref 43106.399088349 err 7.9e-6 comps 1
+a overlap 2 75 Good area 42551.679450335 ref 42551.679462273 err 8.5e-6 comps 1
+a overlap 2 76 Good area 43836.710345206 ref 43836.710326580 err 1.7e-6 comps 1
+a overlap 2 77 Good area 42456.534994454 ref 42456.535049509 err 2.5e-5 comps 1
+a overlap 2 78 Good area 42578.845102613 ref 42578.845233883 err 2.4e-5 comps 1
+a overlap 2 79 Good area 42897.377784694 ref 42897.377895589 err 2.1e-5 comps 1
+a overlap 2 80 Good area 42775.441113461 ref 42775.441185784 err 1.4e-5 comps 1
+a overlap 2 81 Good area 41574.995762071 ref 41574.995777546 err 2.2e-5 comps 1
+a overlap 2 82 Good area 43051.886422475 ref 43051.886380357 err 3.1e-6 comps 1
+a overlap 2 83 Good area 42020.914944345 ref 42020.914941262 err 3.3e-5 comps 1
+a overlap 2 84 Good area 43783.991117022 ref 43783.991095414 err 2.3e-5 comps 1
+a overlap 2 85 Good area 42423.103556915 ref 42423.103549264 err 4.9e-6 comps 1
+a overlap 2 86 Good area 44056.634056375 ref 44056.634078527 err 1.5e-5 comps 1
+a overlap 2 87 Good area 43138.786141367 ref 43138.786108971 err 1.3e-5 comps 1
+a overlap 2 88 Good area 43799.565913969 ref 43799.565924982 err 5.2e-6 comps 1
+a overlap 2 89 Good area 44023.869252543 ref 44023.869227612 err 1.7e-5 comps 1
+a overlap 2 90 Good area 43365.942053920 ref 43365.942105543 err 2.0e-5 comps 1
+a overlap 2 91 Good area 43805.583920519 ref 43805.583917485 err 1.9e-5 comps 1
+a overlap 2 92 Good area 41969.880099696 ref 41969.880108715 err 2.3e-5 comps 1
+a overlap 2 93 Good area 42871.767442675 ref 42871.767401917 err 2.8e-7 comps 1
+a overlap 2 94 Good area 44150.094080922 ref 44150.094077254 err 2.1e-6 comps 1
+a overlap 2 95 Good area 43343.089925954 ref 43343.089886492 err 2.8e-5 comps 1
+a overlap 2 96 Good area 42987.942409407 ref 42987.942484904 err 1.2e-5 comps 1
+a overlap 2 97 Good area 44019.471365430 ref 44019.471409401 err 2.0e-5 comps 1
+a overlap 2 98 Good area 43424.098720745 ref 43424.098794637 err 8.2e-6 comps 1
+a overlap 2 99 Good area 44170.766813663 ref 44170.766857337 err 8.9e-6 comps 1
+a overlap 2 100 Good area 41928.568924325 ref 41928.568888279 err 1.1e-5 comps 1
+a overlap 2 101 Good area 42498.282953458 ref 42498.283003634 err 3.5e-5 comps 1
+a overlap 2 102 Good area 42247.222871458 ref 42247.222892403 err 3.6e-5 comps 1
+a overlap 2 103 Good area 42400.992360924 ref 42400.992380981 err 8.7e-6 comps 1
+a overlap 2 104 Good area 43210.883741905 ref 43210.883727044 err 3.3e-6 comps 1
+a overlap 2 105 Good area 43309.174785738 ref 43309.174777801 err 2.2e-5 comps 1
+a overlap 2 106 Good area 42849.962696887 ref 42849.962738882 err 2.1e-5 comps 1
+a overlap 2 107 Good area 42697.522916684 ref 42697.522903647 err 4.9e-5 comps 1
+a overlap 2 108 Good area 44170.303174425 ref 44170.303160553 err 3.0e-5 comps 1
+a overlap 2 109 Good area 44024.114455615 ref 44024.114455318 err 1.7e-5 comps 1
+a overlap 2 110 Good area 43688.652971520 ref 43688.652994869 err 2.1e-5 comps 1
+a overlap 2 111 Good area 44038.670771041 ref 44038.670779886 err 3.5e-5 comps 1
+a overlap 2 112 Good area 42162.424501331 ref 42162.424475151 err 7.9e-7 comps 1
+a overlap 2 113 Good area 44172.131745655 ref 44172.131775613 err 1.5e-5 comps 1
+a overlap 2 114 Good area 43582.364776732 ref 43582.364830792 err 1.3e-5 comps 1
+a overlap 2 115 Good area 43242.819987420 ref 43242.820004695 err 2.8e-5 comps 1
+a overlap 2 116 Good area 42764.320039061 ref 42764.320012873 err 3.7e-5 comps 1
+a overlap 2 117 Good area 42629.934071901 ref 42629.934037223 err 2.7e-5 comps 1
+a overlap 2 118 Good area 42741.279054236 ref 42741.279076593 err 1.8e-5 comps 1
+a overlap 2 119 Good area 43288.162864895 ref 43288.162906322 err 4.2e-8 comps 1
+a overlap 2 120 Good area 44336.788564939 ref 44336.788581670 err 1.1e-5 comps 1
+a overlap 2 121 Good area 43415.433966896 ref 43415.433983522 err 1.3e-5 comps 1
+a overlap 2 122 Good area 43015.642081438 ref 43015.642060481 err 2.6e-6 comps 1
+a overlap 2 123 Good area 43561.468379017 ref 43561.468526439 err 3.8e-6 comps 1
+a overlap 2 124 Good area 43393.096858031 ref 43393.096848982 err 2.8e-5 comps 1
+a overlap 2 125 Good area 43934.772293598 ref 43934.772277780 err 6.1e-6 comps 1
+a overlap 2 126 Good area 42017.795555136 ref 42017.795525764 err 1.0e-5 comps 1
+a overlap 2 127 Good area 43400.772149467 ref 43400.772115545 err 1.1e-5 comps 1
+a overlap 2 128 Good area 44070.984761655 ref 44070.984793836 err 4.4e-6 comps 1
+a overlap 2 129 Good area 42225.555600737 ref 42225.555712603 err 2.7e-5 comps 1
+a overlap 2 130 Good area 43936.667544891 ref 43936.667586048 err 2.6e-5 comps 1
+a overlap 2 131 Good area 42196.165959934 ref 42196.165997078 err 1.3e-5 comps 1
+a overlap 2 132 Good area 43389.175140913 ref 43389.175142109 err 1.5e-5 comps 1
+a overlap 2 133 Good area 43560.024828186 ref 43560.024829686 err 1.9e-5 comps 1
+a overlap 2 134 Good area 44069.794908603 ref 44069.794942241 err 2.9e-5 comps 1
+a overlap 2 135 Good area 43733.187059168 ref 43733.187080255 err 1.3e-5 comps 1
+a overlap 2 136 Good area 44282.838092526 ref 44282.838134727 err 2.4e-5 comps 1
+a overlap 2 137 Good area 43126.969528673 ref 43126.969561605 err 1.7e-5 comps 1
+a overlap 2 138 Good area 44122.874668419 ref 44122.874746891 err 2.9e-5 comps 1
+a overlap 2 139 Good area 42927.383626044 ref 42927.383676156 err 7.7e-6 comps 1
+a overlap 2 140 Good area 43933.292439656 ref 43933.292519004 err 1.0e-6 comps 1
+a overlap 2 141 Good area 42724.651591316 ref 42724.651684750 err 2.4e-5 comps 1
+a overlap 2 142 Good area 44138.840094794 ref 44138.840088958 err 3.5e-6 comps 1
+a overlap 2 143 Good area 43066.299206562 ref 43066.299256018 err 2.8e-5 comps 1
+a overlap 2 144 Good area 42384.965513272 ref 42384.965537980 err 1.2e-6 comps 1
+a overlap 2 145 Good area 43321.477173738 ref 43321.477145523 err 6.7e-6 comps 1
+a overlap 2 146 Good area 42825.178446303 ref 42825.178482644 err 6.7e-6 comps 1
+a overlap 2 147 Good area 42208.709516855 ref 42208.709606181 err 3.9e-5 comps 1
+a overlap 2 148 Good area 42446.525205656 ref 42446.525164881 err 2.4e-5 comps 1
+a overlap 2 149 Good area 42518.786209098 ref 42518.786221682 err 9.3e-6 comps 1
+a overlap 2 150 Good area 42374.462837012 ref 42374.462903368 err 2.6e-5 comps 1
+a overlap 2 151 Good area 43974.955705370 ref 43974.955754240 err 1.4e-5 comps 1
+a overlap 2 152 Good area 43461.519129374 ref 43461.519200477 err 3.1e-6 comps 1
+a overlap 2 153 Good area 42807.881089119 ref 42807.881091568 err 7.0e-6 comps 1
+a overlap 2 154 Good area 43436.096042397 ref 43436.096082815 err 5.0e-6 comps 1
+a overlap 2 155 Good area 43123.532160456 ref 43123.532138496 err 2.1e-5 comps 1
+a overlap 2 156 Good area 42715.138978910 ref 42715.138951681 err 2.4e-7 comps 1
+a overlap 2 157 Good area 44215.344572617 ref 44215.344634929 err 2.5e-5 comps 1
+a overlap 2 158 Good area 43667.483126675 ref 43667.483149511 err 1.8e-5 comps 1
+a overlap 2 159 Good area 43553.392685701 ref 43553.392688789 err 5.9e-5 comps 1
+a overlap 2 160 Good area 43689.601729500 ref 43689.601834791 err 1.0e-5 comps 1
+a overlap 2 161 Good area 43389.696374475 ref 43389.696353698 err 4.7e-6 comps 1
+a overlap 2 162 Good area 42169.699424870 ref 42169.699446050 err 1.7e-6 comps 1
+a overlap 2 163 Good area 41700.227577163 ref 41700.227604254 err 4.9e-5 comps 1
+a overlap 2 164 Good area 42581.562626734 ref 42581.562719220 err 3.5e-5 comps 1
+a overlap 2 165 Good area 44291.423726844 ref 44291.423723898 err 2.0e-5 comps 1
+a overlap 2 166 Good area 43963.517049489 ref 43963.517041492 err 4.6e-5 comps 1
+a overlap 2 167 Good area 43834.762615836 ref 43834.762607699 err 9.2e-6 comps 1
+a overlap 2 168 Good area 42765.103907115 ref 42765.104004086 err 7.9e-5 comps 1
+a overlap 2 169 Good area 42797.467943173 ref 42797.467956472 err 2.3e-5 comps 1
+a overlap 2 170 Good area 44102.339275643 ref 44102.339302970 err 1.9e-5 comps 1
+a overlap 2 171 Good area 43361.216029658 ref 43361.216011616 err 1.8e-5 comps 1
+a overlap 2 172 Good area 43145.469026467 ref 43145.469001927 err 3.1e-5 comps 1
+a overlap 2 173 Good area 42502.725604272 ref 42502.725605092 err 1.2e-5 comps 1
+a overlap 2 174 Good area 43963.531011238 ref 43963.531031407 err 1.5e-5 comps 1
+a overlap 2 175 Good area 43569.423465017 ref 43569.423435230 err 2.8e-5 comps 1
+a overlap 2 176 Good area 43415.309557570 ref 43415.309631828 err 1.5e-5 comps 1
+a overlap 2 177 Good area 43724.748472268 ref 43724.748443495 err 4.7e-8 comps 1
+a overlap 2 178 Good area 42887.666125363 ref 42887.666231103 err 1.6e-5 comps 1
+a overlap 2 179 Good area 43115.985258218 ref 43115.985287526 err 5.2e-5 comps 1
+a overlap 2 180 Good area 44213.729899175 ref 44213.729903053 err 1.5e-5 comps 1
+a overlap 2 181 Good area 41931.206117785 ref 41931.206164814 err 1.0e-5 comps 1
+a overlap 2 182 Good area 42030.103150822 ref 42030.103159492 err 2.3e-5 comps 1
+a overlap 2 183 Good area 42900.640355479 ref 42900.640438496 err 2.4e-5 comps 1
+a overlap 2 184 Good area 43931.067633534 ref 43931.067706937 err 4.1e-5 comps 1
+a overlap 2 185 Good area 43142.033823782 ref 43142.033811682 err 1.9e-6 comps 1
+a overlap 2 186 Good area 43153.265549719 ref 43153.265543461 err 1.4e-6 comps 1
+a overlap 2 187 Good area 44109.992753862 ref 44109.992794746 err 4.2e-7 comps 1
+a overlap 2 188 Good area 42587.607070855 ref 42587.607156114 err 3.2e-5 comps 1
+a overlap 2 189 Good area 43538.286569892 ref 43538.286583339 err 1.5e-5 comps 1
+a overlap 2 190 Good area 42606.651778478 ref 42606.651833206 err 1.5e-5 comps 1
+a overlap 2 191 Good area 42727.390954018 ref 42727.390958934 err 1.8e-5 comps 1
+a overlap 2 192 Good area 43435.245952682 ref 43435.245966943 err 3.2e-5 comps 1
+a overlap 2 193 Good area 42281.945122856 ref 42281.945131147 err 2.2e-6 comps 1
+a overlap 2 194 Good area 42698.786045476 ref 42698.786130109 err 1.8e-5 comps 1
+a overlap 2 195 Good area 42560.043359581 ref 42560.043324644 err 4.9e-5 comps 1
+a overlap 2 196 Good area 43777.477938800 ref 43777.477905473 err 1.1e-5 comps 1
+a overlap 2 197 Good area 43753.328698129 ref 43753.328670930 err 2.8e-5 comps 1
+a overlap 2 198 Good area 42936.537739727 ref 42936.537764772 err 2.4e-5 comps 1
+a overlap 2 199 Good area 42419.123489337 ref 42419.123461780 err 1.2e-5 comps 1
+a overlap 20 0 Good area 43124.355020027 ref 43124.355027780 err 3.2e-6 comps 2
+a overlap 20 1 Good area 42340.871751993 ref 42340.871773445 err 2.7e-5 comps 1
+a overlap 20 2 Good area 42584.419951305 ref 42584.419976709 err 8.0e-6 comps 1
+a overlap 20 3 Good area 42857.852323318 ref 42857.852301195 err 1.3e-5 comps 1
+a overlap 20 4 Good area 43218.369110686 ref 43218.369077965 err 2.1e-5 comps 1
+a overlap 20 5 Good area 43149.736732159 ref 43149.736746004 err 5.4e-5 comps 1
+a overlap 20 6 Good area 42807.575190176 ref 42807.575226209 err 1.4e-5 comps 1
+a overlap 20 7 Good area 42857.567044735 ref 42857.567021340 err 3.5e-5 comps 1
+a overlap 20 8 Good area 42959.754665583 ref 42959.754718399 err 2.9e-5 comps 1
+a overlap 20 9 Good area 42682.562910753 ref 42682.562939418 err 1.4e-5 comps 1
+a overlap 20 10 Good area 42185.533816293 ref 42185.533813438 err 1.8e-6 comps 1
+a overlap 20 11 Good area 42071.928489183 ref 42071.928536272 err 1.8e-5 comps 1
+a overlap 20 12 Good area 42072.576890674 ref 42072.576902262 err 2.1e-6 comps 1
+a overlap 20 13 Good area 42926.737426164 ref 42926.737470391 err 1.6e-5 comps 1
+a overlap 20 14 Good area 42665.007708029 ref 42665.007782058 err 5.8e-5 comps 1
+a overlap 20 15 Good area 43261.888897636 ref 43261.888887205 err 4.5e-6 comps 1
+a overlap 20 16 Good area 43397.665028172 ref 43397.665066105 err 3.1e-6 comps 1
+a overlap 20 17 Good area 42460.276916507 ref 42460.276917955 err 1.9e-5 comps 1
+a overlap 20 18 Good area 42956.112389455 ref 42956.112354567 err 1.9e-5 comps 1
+a overlap 20 19 Good area 42971.387132221 ref 42971.387136440 err 3.9e-6 comps 1
+a overlap 20 20 Good area 42745.496119865 ref 42745.496154712 err 6.4e-5 comps 1
+a overlap 20 21 Good area 42749.624829123 ref 42749.624867866 err 5.9e-5 comps 1
+a overlap 20 22 Good area 42673.997980797 ref 42673.997956534 err 2.3e-5 comps 1
+a overlap 20 23 Good area 42071.835095426 ref 42071.835157410 err 2.7e-5 comps 1
+a overlap 20 24 Good area 42540.017884549 ref 42540.017878219 err 8.5e-6 comps 1
+a overlap 20 25 Good area 42110.710833265 ref 42110.710822741 err 1.3e-5 comps 1
+a overlap 20 26 Good area 43013.217158937 ref 43013.217175317 err 1.2e-5 comps 1
+a overlap 20 27 Good area 42227.155264817 ref 42227.155271973 err 1.8e-5 comps 1
+a overlap 20 28 Good area 43720.272213245 ref 43720.272203034 err 8.7e-6 comps 1
+a overlap 20 29 Good area 41577.169068977 ref 41577.169054755 err 3.0e-5 comps 1
+a overlap 20 30 Good area 41953.276187182 ref 41953.276226137 err 3.7e-5 comps 1
+a overlap 20 31 Good area 42775.914570834 ref 42775.914654931 err 1.7e-5 comps 1
+a overlap 20 32 Good area 42132.927871787 ref 42132.927836744 err 1.2e-5 comps 1
+a overlap 20 33 Good area 42717.771304618 ref 42717.771346208 err 4.7e-5 comps 1
+a overlap 20 34 Good area 42844.113532427 ref 42844.113452793 err 3.9e-5 comps 1
+a overlap 20 35 Good area 42517.549622005 ref 42517.549602506 err 3.3e-5 comps 1
+a overlap 20 36 Good area 42440.607875180 ref 42440.607826003 err 3.7e-5 comps 1
+a overlap 20 37 Good area 43003.110686897 ref 43003.110754428 err 4.1e-5 comps 1
+a overlap 20 38 Good area 43161.483396499 ref 43161.483402565 err 6.1e-6 comps 1
+a overlap 20 39 Good area 42428.040263654 ref 42428.040272298 err 5.2e-5 comps 1
+a overlap 20 40 Good area 43160.292452096 ref 43160.292521909 err 2.4e-5 comps 1
+a overlap 20 41 Good area 42957.887755351 ref 42957.887776198 err 4.0e-5 comps 1
+a overlap 20 42 Good area 42957.846319017 ref 42957.846363695 err 4.6e-5 comps 1
+a overlap 20 43 Good area 42604.657875694 ref 42604.657919407 err 1.3e-5 comps 1
+a overlap 20 44 Good area 42548.474154975 ref 42548.474195838 err 7.4e-6 comps 1
+a overlap 20 45 Good area 42127.964788192 ref 42127.964764868 err 4.7e-5 comps 1
+a overlap 20 46 Good area 42864.221629196 ref 42864.221636092 err 4.6e-6 comps 1
+a overlap 20 47 Good area 42933.105220409 ref 42933.105209877 err 1.9e-5 comps 2
+a overlap 20 48 Good area 42582.884698052 ref 42582.884659292 err 1.9e-5 comps 2
+a overlap 20 49 Good area 42701.172264246 ref 42701.172314338 err 7.6e-5 comps 1
+a overlap 20 50 Good area 43386.189095132 ref 43386.189142892 err 4.2e-5 comps 1
+a overlap 20 51 Good area 42600.414681490 ref 42600.414666965 err 7.6e-6 comps 1
+a overlap 20 52 Good area 43042.595348598 ref 43042.595392922 err 7.5e-5 comps 1
+a overlap 20 53 Good area 42920.829659855 ref 42920.829649858 err 1.7e-5 comps 1
+a overlap 20 54 Good area 42737.927180851 ref 42737.927244548 err 4.8e-6 comps 1
+a overlap 20 55 Good area 43428.478574609 ref 43428.478590415 err 3.2e-5 comps 1
+a overlap 20 56 Good area 42623.014949708 ref 42623.014982630 err 4.5e-6 comps 1
+a overlap 20 57 Good area 42799.131495290 ref 42799.131533377 err 2.8e-5 comps 1
+a overlap 20 58 Good area 42730.629164013 ref 42730.629237638 err 6.2e-7 comps 1
+a overlap 20 59 Good area 42415.739344512 ref 42415.739368314 err 1.9e-5 comps 1
+a overlap 20 60 Good area 43147.529916185 ref 43147.529981611 err 3.0e-5 comps 1
+a overlap 20 61 Good area 42520.128992892 ref 42520.128961283 err 2.9e-5 comps 2
+a overlap 20 62 Good area 42379.212000331 ref 42379.211997245 err 2.1e-5 comps 1
+a overlap 20 63 Good area 42408.623361039 ref 42408.623403379 err 1.9e-5 comps 1
+a overlap 20 64 Good area 42696.895170909 ref 42696.895175637 err 1.0e-5 comps 1
+a overlap 20 65 Good area 42885.897527628 ref 42885.897628907 err 1.9e-5 comps 1
+a overlap 20 66 Good area 43239.329340900 ref 43239.329391241 err 1.4e-5 comps 1
+a overlap 20 67 Good area 42580.745755155 ref 42580.745786056 err 1.9e-5 comps 1
+a overlap 20 68 Good area 42804.507826432 ref 42804.507855818 err 5.6e-5 comps 1
+a overlap 20 69 Good area 43274.853765144 ref 43274.853759109 err 6.1e-5 comps 2
+a overlap 20 70 Good area 43004.186839501 ref 43004.186824986 err 1.5e-5 comps 1
+a overlap 20 71 Good area 42676.768629770 ref 42676.768619959 err 8.6e-6 comps 1
+a overlap 20 72 Good area 42939.826180444 ref 42939.826189178 err 7.2e-6 comps 2
+a overlap 20 73 Good area 43521.566737113 ref 43521.566731020 err 2.2e-5 comps 1
+a overlap 20 74 Good area 42856.706875876 ref 42856.706931903 err 2.0e-5 comps 1
+a overlap 20 75 Good area 43006.944741525 ref 43006.944695674 err 5.2e-5 comps 1
+a overlap 20 76 Good area 43134.256326046 ref 43134.256396265 err 7.0e-6 comps 1
+a overlap 20 77 Good area 42983.254981023 ref 42983.254984248 err 6.2e-6 comps 1
+a overlap 20 78 Good area 43219.874652603 ref 43219.874647133 err 1.1e-5 comps 1
+a overlap 20 79 Good area 42948.388524743 ref 42948.388562062 err 7.4e-6 comps 1
+a overlap 20 80 Good area 42812.820520854 ref 42812.820586128 err 1.3e-5 comps 1
+a overlap 20 81 Good area 42445.436885170 ref 42445.436953172 err 3.5e-5 comps 1
+a overlap 20 82 Good area 43161.849009898 ref 43161.848996112 err 1.7e-5 comps 1
+a overlap 20 83 Good area 42585.865957495 ref 42585.866012270 err 5.3e-5 comps 1
+a overlap 20 84 Good area 43157.740628816 ref 43157.740624663 err 7.3e-6 comps 1
+a overlap 20 85 Good area 42263.082458750 ref 42263.082484568 err 3.1e-5 comps 1
+a overlap 20 86 Good area 42842.702819665 ref 42842.702780677 err 1.7e-5 comps 2
+a overlap 20 87 Good area 42682.858381992 ref 42682.858389920 err 3.1e-5 comps 1
+a overlap 20 88 Good area 43424.077526472 ref 43424.077608576 err 6.3e-6 comps 1
+a overlap 20 89 Good area 42308.297203278 ref 42308.297273029 err 2.3e-6 comps 1
+a overlap 20 90 Good area 42783.826691206 ref 42783.826748698 err 1.3e-5 comps 1
+a overlap 20 91 Good area 42755.977463870 ref 42755.977431677 err 7.9e-6 comps 1
+a overlap 20 92 Good area 42085.769520965 ref 42085.769561964 err 2.0e-5 comps 1
+a overlap 20 93 Good area 42795.418888531 ref 42795.418972256 err 3.1e-5 comps 1
+a overlap 20 94 Good area 42317.359015529 ref 42317.359030067 err 1.1e-5 comps 2
+a overlap 20 95 Good area 43171.497175300 ref 43171.497169888 err 8.1e-6 comps 1
+a overlap 20 96 Good area 42644.484896093 ref 42644.484952070 err 7.8e-5 comps 1
+a overlap 20 97 Good area 42049.235193393 ref 42049.235191786 err 8.2e-6 comps 3
+a overlap 20 98 Good area 43124.504557471 ref 43124.504514637 err 2.3e-6 comps 2
+a overlap 20 99 Good area 43037.621889560 ref 43037.621895511 err 1.5e-5 comps 1
+a overlap 200 0 Good area 44222.031265729 ref 44222.031303079 err 5.0e-6 comps 1
+a overlap 200 1 Good area 44353.052630911 ref 44353.052673322 err 2.0e-5 comps 1
+a overlap 200 2 Good area 44094.897751767 ref 44094.897781469 err 3.3e-5 comps 1
+a overlap 200 3 Good area 44238.794841098 ref 44238.794785161 err 3.8e-5 comps 1
+a overlap 200 4 Good area 44367.981169468 ref 44367.981234344 err 2.7e-5 comps 1
+a overlap 200 5 Good area 44366.771606816 ref 44366.771686970 err 1.5e-5 comps 1
+a overlap 200 6 Good area 44264.697051981 ref 44264.697154251 err 2.6e-5 comps 1
+a overlap 200 7 Good area 44113.604199937 ref 44113.604221396 err 4.6e-7 comps 1
+a overlap 200 8 Good area 44326.309204411 ref 44326.309203709 err 9.5e-7 comps 1
+a overlap 200 9 Good area 44321.416342330 ref 44321.416433128 err 1.4e-5 comps 1
+a overlap 200 10 Good area 44299.614867792 ref 44299.614867129 err 1.5e-5 comps 2
+a overlap 200 11 Good area 44406.769846397 ref 44406.769826805 err 2.2e-5 comps 1
+a overlap 200 12 Good area 44463.422521820 ref 44463.422540004 err 1.9e-5 comps 1
+a overlap 200 13 Good area 44193.232172490 ref 44193.232200760 err 1.9e-5 comps 1
+a overlap 200 14 Good area 44407.463452643 ref 44407.463498825 err 9.8e-6 comps 1
+a overlap 200 15 Good area 44157.410307463 ref 44157.410274169 err 8.6e-6 comps 1
+a overlap 200 16 Good area 44352.074138584 ref 44352.074173145 err 4.4e-6 comps 1
+a overlap 200 17 Good area 44276.549767515 ref 44276.549813059 err 2.2e-5 comps 1
+a overlap 200 18 Good area 44460.429000487 ref 44460.429023992 err 1.0e-5 comps 1
+a overlap 200 19 Good area 44342.370371484 ref 44342.370348494 err 2.7e-5 comps 2
+a tangent 2 0 Pinched { pinches: 2 } area 43727.655397968 ref 43727.655397575 err 1.2e-5 comps 1
+a tangent 2 1 Good area 43962.662680708 ref 43962.662662390 err 1.5e-5 comps 1
+a tangent 2 2 Pinched { pinches: 1 } area 44357.965613875 ref 44357.965661624 err 2.1e-5 comps 1
+a tangent 2 3 Pinched { pinches: 2 } area 43379.109861360 ref 43379.109856614 err 4.6e-6 comps 1
+a tangent 2 4 Good area 44374.305270174 ref 44374.305271160 err 8.0e-6 comps 1
+a tangent 2 5 Pinched { pinches: 1 } area 44495.136302336 ref 44495.136359737 err 5.4e-5 comps 1
+a tangent 2 6 Pinched { pinches: 1 } area 42910.342900213 ref 42910.342877615 err 3.2e-5 comps 1
+a tangent 2 7 Pinched { pinches: 1 } area 42779.363767720 ref 42779.363744549 err 2.2e-6 comps 1
+a tangent 2 8 Pinched { pinches: 2 } area 42193.044694225 ref 42193.044751738 err 3.4e-5 comps 3
+a tangent 2 9 Good area 44978.539754397 ref 44978.539834381 err 9.4e-6 comps 1
+a tangent 2 10 Good area 44978.539650195 ref 44978.539834381 err 9.4e-6 comps 1
+a tangent 2 11 Pinched { pinches: 1 } area 43494.588769988 ref 43494.588739970 err 1.0e-5 comps 1
+a tangent 2 12 Pinched { pinches: 1 } area 43159.682268392 ref 43159.682282795 err 1.4e-5 comps 1
+a tangent 2 13 Good area 44978.539721720 ref 44978.539834381 err 9.4e-6 comps 1
+a tangent 2 14 Good area 43304.401017038 ref 43304.401032373 err 1.0e-5 comps 1
+a tangent 2 15 Pinched { pinches: 1 } area 43366.740475435 ref 43366.740524929 err 5.7e-6 comps 1
+a tangent 2 16 Pinched { pinches: 1 } area 42615.668544171 ref 42615.668548765 err 1.1e-5 comps 1
+a tangent 2 17 Good area 43282.608657590 ref 43282.608704208 err 2.0e-5 comps 1
+a tangent 2 18 Pinched { pinches: 1 } area 43098.806928517 ref 43098.806969866 err 4.1e-6 comps 1
+a tangent 2 19 Good area 42844.822022647 ref 42844.822073429 err 1.5e-5 comps 1
+a tangent 2 20 Pinched { pinches: 2 } area 42868.329246215 ref 42868.329244188 err 5.7e-6 comps 1
+a tangent 2 21 Pinched { pinches: 1 } area 42907.942120804 ref 42907.942159877 err 3.3e-5 comps 1
+a tangent 2 22 Pinched { pinches: 1 } area 42666.290015901 ref 42666.290033135 err 3.3e-5 comps 1
+a tangent 2 23 Good area 42649.871213051 ref 42649.871277866 err 4.9e-6 comps 1
+a tangent 2 24 Good area 44083.838144121 ref 44083.838062963 err 9.6e-6 comps 1
+a tangent 2 25 Pinched { pinches: 1 } area 42595.128702814 ref 42595.128730662 err 6.3e-6 comps 1
+a tangent 2 26 Pinched { pinches: 1 } area 43220.586987343 ref 43220.586984333 err 2.4e-5 comps 1
+a tangent 2 27 Pinched { pinches: 1 } area 42258.724926321 ref 42258.724964582 err 3.8e-5 comps 1
+a tangent 2 28 Good area 43463.399630316 ref 43463.399685643 err 3.2e-5 comps 1
+a tangent 2 29 Good area 44222.194714218 ref 44222.194712802 err 5.2e-5 comps 1
+a tangent 2 30 Pinched { pinches: 1 } area 43277.878765892 ref 43277.878808526 err 4.3e-6 comps 1
+a tangent 2 31 Pinched { pinches: 1 } area 43118.538983812 ref 43118.538991207 err 2.7e-6 comps 1
+a tangent 2 32 Pinched { pinches: 2 } area 43857.771518250 ref 43857.771500583 err 1.2e-5 comps 2
+a tangent 2 33 Pinched { pinches: 1 } area 43842.773407126 ref 43842.773464415 err 1.6e-5 comps 1
+a tangent 2 34 Good area 44978.539816340 ref 44978.539834381 err 9.4e-6 comps 1
+a tangent 2 35 Pinched { pinches: 1 } area 44307.456275815 ref 44307.456322757 err 1.1e-5 comps 1
+a tangent 2 36 Pinched { pinches: 1 } area 43041.838128356 ref 43041.838156058 err 3.1e-5 comps 1
+a tangent 2 37 Good area 44978.539816340 ref 44978.539834381 err 9.4e-6 comps 1
+a tangent 2 38 Pinched { pinches: 1 } area 43832.648184234 ref 43832.648240369 err 7.1e-6 comps 1
+a tangent 2 39 Pinched { pinches: 1 } area 43363.133014567 ref 43363.133101977 err 2.7e-5 comps 1
+a tangent 2 40 Pinched { pinches: 1 } area 42967.155777614 ref 42967.155710380 err 5.3e-5 comps 1
+a tangent 2 41 Pinched { pinches: 1 } area 43447.932919471 ref 43447.933000323 err 3.3e-5 comps 1
+a tangent 2 42 Good area 44978.539749434 ref 44978.539834381 err 9.4e-6 comps 1
+a tangent 2 43 Pinched { pinches: 2 } area 43563.349992275 ref 43563.350032341 err 4.6e-5 comps 1
+a tangent 2 44 Pinched { pinches: 1 } area 43042.492090102 ref 43042.492086018 err 5.2e-6 comps 1
+a tangent 2 45 Good area 44828.409151009 ref 44828.409146454 err 7.8e-7 comps 1
+a tangent 2 46 Pinched { pinches: 2 } area 41983.466200148 ref 41983.466130034 err 2.4e-5 comps 1
+a tangent 2 47 Good area 43703.854462823 ref 43703.854419409 err 6.0e-6 comps 1
+a tangent 2 48 Good area 44218.656158014 ref 44218.656140146 err 7.3e-6 comps 1
+a tangent 2 49 Pinched { pinches: 1 } area 42703.521199840 ref 42703.521170777 err 1.7e-6 comps 1
+a tangent 2 50 Pinched { pinches: 1 } area 42835.938994041 ref 42835.938962808 err 1.3e-6 comps 1
+a tangent 2 51 Pinched { pinches: 1 } area 43622.460306534 ref 43622.460308973 err 1.2e-5 comps 1
+a tangent 2 52 Pinched { pinches: 1 } area 41725.297719054 ref 41725.297741526 err 4.0e-5 comps 1
+a tangent 2 53 Pinched { pinches: 1 } area 43723.264827446 ref 43723.264843433 err 1.1e-6 comps 1
+a tangent 2 54 Pinched { pinches: 1 } area 44171.994085347 ref 44171.994139991 err 5.9e-5 comps 1
+a tangent 2 55 Pinched { pinches: 1 } area 42105.211105043 ref 42105.211201478 err 1.2e-5 comps 1
+a tangent 2 56 Pinched { pinches: 1 } area 43632.620777192 ref 43632.620800063 err 1.8e-5 comps 1
+a tangent 2 57 Good area 43703.030481100 ref 43703.030566132 err 1.8e-5 comps 1
+a tangent 2 58 Pinched { pinches: 1 } area 44247.785680211 ref 44247.785691429 err 2.0e-5 comps 1
+a tangent 2 59 Good area 44978.539765764 ref 44978.539834381 err 9.4e-6 comps 1
+a tangent 2 60 Pinched { pinches: 1 } area 41572.830935241 ref 41572.830989053 err 3.1e-5 comps 1
+a tangent 2 61 Pinched { pinches: 1 } area 42276.869222222 ref 42276.869255564 err 5.5e-5 comps 1
+a tangent 2 62 Pinched { pinches: 1 } area 42333.791255175 ref 42333.791268884 err 6.6e-6 comps 1
+a tangent 2 63 Pinched { pinches: 1 } area 43917.518926611 ref 43917.519011354 err 2.9e-5 comps 1
+a tangent 2 64 Pinched { pinches: 1 } area 43203.220699426 ref 43203.220722172 err 1.1e-5 comps 1
+a tangent 2 65 Pinched { pinches: 1 } area 43543.285727473 ref 43543.285713711 err 3.7e-5 comps 1
+a tangent 2 66 Good area 43897.713010115 ref 43897.713200712 err 7.7e-6 comps 1
+a tangent 2 67 Pinched { pinches: 1 } area 42712.373654876 ref 42712.373660823 err 3.1e-5 comps 1
+a tangent 2 68 Good area 42572.303922256 ref 42572.304000559 err 2.0e-5 comps 1
+a tangent 2 69 Pinched { pinches: 1 } area 43364.148056888 ref 43364.148037599 err 8.6e-6 comps 1
+a tangent 2 70 Pinched { pinches: 1 } area 43241.889976525 ref 43241.889981649 err 9.1e-6 comps 1
+a tangent 2 71 Good area 44016.985495304 ref 44016.985651804 err 2.3e-5 comps 1
+a tangent 2 72 Pinched { pinches: 2 } area 43054.473789643 ref 43054.473823460 err 1.2e-5 comps 2
+a tangent 2 73 Good area 42916.788168363 ref 42916.788281573 err 1.1e-6 comps 1
+a tangent 2 74 Pinched { pinches: 1 } area 42189.341690858 ref 42189.341736418 err 1.2e-5 comps 1
+a tangent 2 75 Pinched { pinches: 1 } area 42832.982437936 ref 42832.982420939 err 4.1e-6 comps 1
+a tangent 2 76 Pinched { pinches: 1 } area 43661.487818366 ref 43661.487963421 err 3.0e-5 comps 1
+a tangent 2 77 Pinched { pinches: 1 } area 44319.158566079 ref 44319.158587593 err 1.9e-5 comps 1
+a tangent 2 78 Good area 42984.465860742 ref 42984.465917735 err 8.1e-6 comps 1
+a tangent 2 79 Pinched { pinches: 1 } area 43225.123643748 ref 43225.123666893 err 2.0e-5 comps 1
+a tangent 2 80 Good area 44457.286777496 ref 44457.286753214 err 7.3e-6 comps 1
+a tangent 2 81 Pinched { pinches: 1 } area 43038.946392072 ref 43038.946404660 err 1.3e-5 comps 1
+a tangent 2 82 Pinched { pinches: 1 } area 41392.831599430 ref 41392.831678872 err 1.5e-5 comps 1
+a tangent 2 83 Pinched { pinches: 1 } area 41872.546466462 ref 41872.546536239 err 2.8e-5 comps 1
+a tangent 2 84 Pinched { pinches: 1 } area 43129.789680744 ref 43129.789716548 err 1.7e-5 comps 1
+a tangent 2 85 Good area 44247.956225484 ref 44247.956222788 err 1.4e-5 comps 1
+a tangent 2 86 Pinched { pinches: 1 } area 43812.250502768 ref 43812.250531156 err 3.1e-5 comps 1
+a tangent 2 87 Pinched { pinches: 1 } area 41272.201836409 ref 41272.201847900 err 4.7e-6 comps 1
+a tangent 2 88 Pinched { pinches: 1 } area 42761.331863331 ref 42761.331908729 err 1.7e-5 comps 1
+a tangent 2 89 Good area 44978.539816340 ref 44978.539834381 err 9.4e-6 comps 1
+a tangent 2 90 Pinched { pinches: 1 } area 44062.320952829 ref 44062.320986996 err 1.0e-5 comps 1
+a tangent 2 91 Pinched { pinches: 1 } area 43698.449077064 ref 43698.449071532 err 5.4e-5 comps 1
+a tangent 2 92 Pinched { pinches: 2 } area 42296.836415945 ref 42296.836473259 err 5.3e-6 comps 1
+a tangent 2 93 Pinched { pinches: 1 } area 43690.946729983 ref 43690.946791827 err 2.8e-5 comps 1
+a tangent 2 94 Good area 44978.539754397 ref 44978.539834381 err 9.4e-6 comps 1
+a tangent 2 95 Pinched { pinches: 1 } area 43333.963086493 ref 43333.963209845 err 1.7e-5 comps 1
+a tangent 2 96 Pinched { pinches: 1 } area 43624.060003256 ref 43624.059995182 err 1.6e-5 comps 1
+a tangent 2 97 Good area 44978.539816340 ref 44978.539834381 err 9.4e-6 comps 1
+a tangent 2 98 Pinched { pinches: 1 } area 40911.625280227 ref 40911.625292501 err 8.3e-7 comps 1
+a tangent 2 99 Good area 43148.109558365 ref 43148.109613949 err 2.2e-5 comps 1
+a tangent 2 100 Good area 44978.539816340 ref 44978.539834381 err 9.4e-6 comps 1
+a tangent 2 101 Pinched { pinches: 1 } area 43345.154460899 ref 43345.154510816 err 8.2e-6 comps 1
+a tangent 2 102 Pinched { pinches: 1 } area 43562.997143327 ref 43562.997140204 err 3.5e-5 comps 1
+a tangent 2 103 Good area 43549.453960635 ref 43549.453995689 err 6.2e-5 comps 1
+a tangent 2 104 Pinched { pinches: 1 } area 43473.014401589 ref 43473.014441513 err 4.4e-5 comps 1
+a tangent 2 105 Pinched { pinches: 1 } area 43050.278150929 ref 43050.278161350 err 1.1e-5 comps 1
+a tangent 2 106 Pinched { pinches: 1 } area 42211.885295256 ref 42211.885334488 err 7.9e-5 comps 1
+a tangent 2 107 Good area 44978.539736372 ref 44978.539834381 err 9.4e-6 comps 1
+a tangent 2 108 Pinched { pinches: 1 } area 42027.989947408 ref 42027.989982947 err 4.4e-5 comps 1
+a tangent 2 109 Pinched { pinches: 2 } area 43352.867347879 ref 43352.867393471 err 2.4e-5 comps 1
+a tangent 2 110 Pinched { pinches: 1 } area 42193.983871034 ref 42193.983934072 err 3.4e-5 comps 1
+a tangent 2 111 Pinched { pinches: 1 } area 43241.276885940 ref 43241.276905210 err 2.4e-5 comps 1
+a tangent 2 112 Pinched { pinches: 1 } area 43640.926381017 ref 43640.926422557 err 4.9e-6 comps 1
+a tangent 2 113 Pinched { pinches: 2 } area 42734.348128334 ref 42734.348087730 err 1.2e-5 comps 1
+a tangent 2 114 Pinched { pinches: 1 } area 42403.333715011 ref 42403.333829591 err 9.5e-7 comps 1
+a tangent 2 115 Pinched { pinches: 1 } area 44334.580778749 ref 44334.580783563 err 1.7e-5 comps 1
+a tangent 2 116 Pinched { pinches: 1 } area 42698.936293081 ref 42698.936363546 err 1.7e-5 comps 1
+a tangent 2 117 Pinched { pinches: 1 } area 43225.497200216 ref 43225.497222135 err 2.0e-5 comps 1
+a tangent 2 118 Good area 44402.946299330 ref 44402.946369912 err 1.6e-5 comps 1
+a tangent 2 119 Pinched { pinches: 2 } area 43563.075879162 ref 43563.075852145 err 7.8e-5 comps 1
+a tangent 2 120 Pinched { pinches: 2 } area 42461.322816622 ref 42461.322738501 err 7.4e-5 comps 1
+a tangent 2 121 Pinched { pinches: 1 } area 41875.905962047 ref 41875.905951763 err 1.6e-6 comps 1
+a tangent 2 122 Pinched { pinches: 1 } area 42783.841019725 ref 42783.840980448 err 2.1e-5 comps 1
+a tangent 2 123 Pinched { pinches: 1 } area 42857.864066341 ref 42857.864062293 err 9.7e-6 comps 1
+a tangent 2 124 Good area 44978.539816340 ref 44978.539834381 err 9.4e-6 comps 1
+a tangent 2 125 Pinched { pinches: 1 } area 42873.452580434 ref 42873.452560847 err 4.4e-5 comps 1
+a tangent 2 126 Pinched { pinches: 1 } area 43043.719280556 ref 43043.719300150 err 7.0e-6 comps 1
+a tangent 2 127 Pinched { pinches: 2 } area 43246.611479427 ref 43246.611526271 err 2.9e-5 comps 1
+a tangent 2 128 Good area 44978.539816340 ref 44978.539834381 err 9.4e-6 comps 1
+a tangent 2 129 Pinched { pinches: 1 } area 43208.328428967 ref 43208.328456845 err 2.5e-5 comps 1
+a tangent 2 130 Pinched { pinches: 1 } area 43160.315631126 ref 43160.315667156 err 1.9e-5 comps 1
+a tangent 2 131 Pinched { pinches: 1 } area 43849.374720806 ref 43849.374758129 err 2.8e-5 comps 1
+a tangent 2 132 Good area 43393.129766372 ref 43393.129867574 err 2.3e-6 comps 1
+a tangent 2 133 Pinched { pinches: 1 } area 43359.761013599 ref 43359.760989179 err 4.4e-6 comps 1
+a tangent 2 134 Pinched { pinches: 1 } area 44009.989568026 ref 44009.989537424 err 2.0e-5 comps 1
+a tangent 2 135 Good area 44978.539754397 ref 44978.539834381 err 9.4e-6 comps 1
+a tangent 2 136 Pinched { pinches: 1 } area 42554.576740629 ref 42554.576744641 err 1.9e-5 comps 1
+a tangent 2 137 Pinched { pinches: 1 } area 43594.127786851 ref 43594.127830729 err 2.9e-5 comps 1
+a tangent 2 138 Good area 44978.539816340 ref 44978.539834381 err 9.4e-6 comps 1
+a tangent 2 139 Pinched { pinches: 1 } area 43443.238673729 ref 43443.238688367 err 1.9e-5 comps 1
+a tangent 2 140 Pinched { pinches: 1 } area 42403.611633676 ref 42403.611676444 err 2.7e-6 comps 1
+a tangent 2 141 Good area 44978.539816340 ref 44978.539834381 err 9.4e-6 comps 1
+a tangent 2 142 Pinched { pinches: 1 } area 44532.283667473 ref 44532.283774684 err 3.9e-5 comps 1
+a tangent 2 143 Pinched { pinches: 1 } area 42185.815405283 ref 42185.815471653 err 2.3e-5 comps 1
+a tangent 2 144 Good area 44978.539816340 ref 44978.539834381 err 9.4e-6 comps 1
+a tangent 2 145 Good area 44246.383888074 ref 44246.383922159 err 7.3e-6 comps 1
+a tangent 2 146 Pinched { pinches: 2 } area 43597.790422303 ref 43597.790410600 err 8.0e-6 comps 2
+a tangent 2 147 Pinched { pinches: 1 } area 42185.954828815 ref 42185.954889168 err 3.0e-5 comps 1
+a tangent 2 148 Good area 44221.126953121 ref 44221.127034120 err 1.3e-5 comps 1
+a tangent 2 149 Pinched { pinches: 1 } area 41661.815434802 ref 41661.815430677 err 2.4e-5 comps 1
+a tangent 2 150 Pinched { pinches: 2 } area 42010.881938552 ref 42010.881981111 err 1.0e-5 comps 1
+a tangent 2 151 Pinched { pinches: 1 } area 43412.257490498 ref 43412.257573653 err 2.8e-5 comps 1
+a tangent 2 152 Pinched { pinches: 1 } area 40727.225939240 ref 40727.225947643 err 3.2e-5 comps 1
+a tangent 2 153 Pinched { pinches: 1 } area 43791.973689925 ref 43791.973736055 err 2.0e-5 comps 1
+a tangent 2 154 Good area 43591.161291952 ref 43591.161261999 err 1.9e-5 comps 1
+a tangent 2 155 Pinched { pinches: 1 } area 42964.892019982 ref 42964.892009223 err 1.2e-5 comps 1
+a tangent 2 156 Pinched { pinches: 1 } area 42875.656761811 ref 42875.656721256 err 8.4e-6 comps 1
+a tangent 2 157 Good area 44978.539736372 ref 44978.539834381 err 9.4e-6 comps 1
+a tangent 2 158 Good area 44978.539816340 ref 44978.539834381 err 9.4e-6 comps 1
+a tangent 2 159 Pinched { pinches: 1 } area 42941.882220522 ref 42941.882184269 err 8.2e-7 comps 1
+a tangent 2 160 Pinched { pinches: 1 } area 41860.839793890 ref 41860.839763186 err 5.4e-5 comps 1
+a tangent 2 161 Good area 43073.811664159 ref 43073.811699565 err 2.2e-5 comps 1
+a tangent 2 162 Good area 44978.539703248 ref 44978.539834381 err 9.4e-6 comps 1
+a tangent 2 163 Good area 44087.081170859 ref 44087.081135103 err 7.2e-6 comps 1
+a tangent 2 164 Pinched { pinches: 1 } area 43392.041933019 ref 43392.041955501 err 2.0e-5 comps 1
+a tangent 2 165 Good area 42862.988338855 ref 42862.988355993 err 4.6e-5 comps 1
+a tangent 2 166 Good area 44978.539816340 ref 44978.539834381 err 9.4e-6 comps 1
+a tangent 2 167 Good area 44978.539816340 ref 44978.539834381 err 9.4e-6 comps 1
+a tangent 2 168 Pinched { pinches: 1 } area 43885.285942744 ref 43885.285981652 err 1.6e-5 comps 1
+a tangent 2 169 Good area 43739.190242234 ref 43739.190235258 err 3.4e-5 comps 1
+a tangent 2 170 Pinched { pinches: 2 } area 40557.207139757 ref 40557.207100959 err 3.0e-6 comps 1
+a tangent 2 171 Good area 44978.539744814 ref 44978.539834381 err 9.4e-6 comps 1
+a tangent 2 172 Pinched { pinches: 1 } area 43067.000439623 ref 43067.000516493 err 1.0e-6 comps 1
+a tangent 2 173 Pinched { pinches: 1 } area 43373.527785503 ref 43373.527813013 err 2.5e-5 comps 1
+a tangent 2 174 Good area 43413.964404714 ref 43413.964414833 err 9.4e-6 comps 1
+a tangent 2 175 Good area 44386.920986934 ref 44386.921001820 err 2.4e-5 comps 1
+a tangent 2 176 Good area 44978.539816340 ref 44978.539834381 err 9.4e-6 comps 1
+a tangent 2 177 Pinched { pinches: 2 } area 43073.580972224 ref 43073.580957564 err 4.1e-5 comps 3
+a tangent 2 178 Good area 44978.539816340 ref 44978.539834381 err 9.4e-6 comps 1
+a tangent 2 179 Good area 44318.115590107 ref 44318.115548588 err 2.7e-5 comps 1
+a tangent 2 180 Pinched { pinches: 2 } area 41879.709962185 ref 41879.709969090 err 1.4e-5 comps 1
+a tangent 2 181 Good area 44978.539816340 ref 44978.539834381 err 9.4e-6 comps 1
+a tangent 2 182 Pinched { pinches: 1 } area 42191.753866819 ref 42191.753912872 err 4.6e-5 comps 1
+a tangent 2 183 Pinched { pinches: 1 } area 41843.143023731 ref 41843.143034945 err 2.8e-5 comps 1
+a tangent 2 184 Pinched { pinches: 1 } area 42406.919163135 ref 42406.919214034 err 2.2e-5 comps 1
+a tangent 2 185 Pinched { pinches: 1 } area 42723.599170748 ref 42723.599138497 err 4.4e-5 comps 2
+a tangent 2 186 Pinched { pinches: 1 } area 42569.864716929 ref 42569.864730805 err 9.9e-6 comps 1
+a tangent 2 187 Good area 43426.166469383 ref 43426.166487646 err 8.4e-6 comps 1
+a tangent 2 188 Pinched { pinches: 1 } area 41245.564978216 ref 41245.565024335 err 2.1e-6 comps 1
+a tangent 2 189 Pinched { pinches: 2 } area 43415.514976195 ref 43415.515030453 err 2.7e-5 comps 1
+a tangent 2 190 Good area 43897.982458668 ref 43897.982536393 err 2.4e-5 comps 1
+a tangent 2 191 Pinched { pinches: 1 } area 42409.997516771 ref 42409.997582407 err 3.0e-5 comps 1
+a tangent 2 192 Pinched { pinches: 2 } area 42324.816759948 ref 42324.816835452 err 1.6e-6 comps 1
+a tangent 2 193 Good area 43158.780987021 ref 43158.781077865 err 2.3e-5 comps 1
+a tangent 2 194 Good area 44978.539736372 ref 44978.539834381 err 9.4e-6 comps 1
+a tangent 2 195 Good area 44978.539765764 ref 44978.539834381 err 9.4e-6 comps 1
+a tangent 2 196 Pinched { pinches: 1 } area 41761.150733754 ref 41761.150739809 err 4.4e-5 comps 1
+a tangent 2 197 Pinched { pinches: 1 } area 42601.780855441 ref 42601.780874327 err 7.9e-6 comps 1
+a tangent 2 198 Good area 44513.162331744 ref 44513.162314511 err 7.2e-6 comps 1
+a tangent 2 199 Pinched { pinches: 1 } area 42194.889138028 ref 42194.889110653 err 2.1e-5 comps 1
+a tangent 20 0 Pinched { pinches: 8 } area 40964.431090930 ref 40964.431304840 err 2.8e-5 comps 2
+a tangent 20 1 Pinched { pinches: 3 } area 43161.505857915 ref 43161.505873379 err 4.1e-5 comps 1
+a tangent 20 2 Pinched { pinches: 10 } area 40005.463434984 ref 40005.463337736 err 4.4e-5 comps 5
+a tangent 20 3 Pinched { pinches: 6 } area 40826.768567681 ref 40826.768737513 err 5.0e-5 comps 3
+a tangent 20 4 Pinched { pinches: 5 } area 40376.069315483 ref 40376.069448166 err 7.1e-5 comps 4
+a tangent 20 5 Pinched { pinches: 8 } area 40539.972398155 ref 40539.972479918 err 3.7e-6 comps 4
+a tangent 20 6 Pinched { pinches: 8 } area 41462.039046200 ref 41462.039200804 err 1.5e-5 comps 6
+a tangent 20 7 Pinched { pinches: 8 } area 40752.560301156 ref 40752.560313344 err 1.1e-5 comps 3
+a tangent 20 8 Pinched { pinches: 5 } area 42639.396586119 ref 42639.396707219 err 3.1e-5 comps 5
+a tangent 20 9 Pinched { pinches: 6 } area 42626.974067665 ref 42626.974173657 err 3.7e-5 comps 4
+a tangent 20 10 Pinched { pinches: 9 } area 41065.806961970 ref 41065.807168512 err 3.8e-5 comps 3
+a tangent 20 11 Pinched { pinches: 9 } area 41696.462104037 ref 41696.462175334 err 6.2e-5 comps 8
+a tangent 20 12 Pinched { pinches: 3 } area 43266.096154744 ref 43266.096241259 err 3.7e-5 comps 1
+a tangent 20 13 Pinched { pinches: 1 } area 44171.316855811 ref 44171.317127922 err 2.5e-5 comps 1
+a tangent 20 14 Pinched { pinches: 5 } area 41471.970436609 ref 41471.970458110 err 3.3e-5 comps 4
+a tangent 20 15 Pinched { pinches: 12 } area 40768.970699514 ref 40768.970947939 err 9.5e-6 comps 6
+a tangent 20 16 Pinched { pinches: 2 } area 43542.796230398 ref 43542.796366090 err 2.2e-5 comps 1
+a tangent 20 17 Pinched { pinches: 2 } area 41893.426425391 ref 41893.426474547 err 2.4e-5 comps 2
+a tangent 20 18 Pinched { pinches: 3 } area 42359.275440244 ref 42359.275426008 err 1.8e-5 comps 2
+a tangent 20 19 Good area 44978.539679114 ref 44978.539834381 err 9.4e-6 comps 1
+a tangent 20 20 Pinched { pinches: 5 } area 41849.764393578 ref 41849.764544866 err 3.2e-6 comps 2
+a tangent 20 21 Pinched { pinches: 6 } area 41334.376861819 ref 41334.376911519 err 4.5e-5 comps 5
+a tangent 20 22 Pinched { pinches: 8 } area 41814.466426571 ref 41814.466615813 err 9.5e-5 comps 2
+a tangent 20 23 Pinched { pinches: 10 } area 40391.053231976 ref 40391.053306149 err 2.2e-5 comps 5
+a tangent 20 24 Pinched { pinches: 6 } area 41418.816032843 ref 41418.816385894 err 4.2e-5 comps 2
+a tangent 20 25 Pinched { pinches: 7 } area 39995.587718808 ref 39995.587773861 err 6.0e-6 comps 2
+a tangent 20 26 Pinched { pinches: 9 } area 41200.060818559 ref 41200.060793879 err 3.2e-5 comps 5
+a tangent 20 27 Pinched { pinches: 7 } area 41297.003036573 ref 41297.003133989 err 7.5e-5 comps 4
+a tangent 20 28 Pinched { pinches: 5 } area 42618.467596779 ref 42618.467721274 err 3.3e-5 comps 1
+a tangent 20 29 Pinched { pinches: 2 } area 41684.723723228 ref 41684.723962759 err 1.7e-5 comps 4
+a tangent 20 30 Pinched { pinches: 11 } area 40217.273399741 ref 40217.273416128 err 3.5e-5 comps 8
+a tangent 20 31 Pinched { pinches: 5 } area 40426.003580086 ref 40426.003615300 err 2.9e-5 comps 4
+a tangent 20 32 Pinched { pinches: 6 } area 40940.592017268 ref 40940.592164630 err 7.4e-5 comps 3
+a tangent 20 33 Pinched { pinches: 5 } area 42558.353346780 ref 42558.353462095 err 1.8e-5 comps 1
+a tangent 20 34 Pinched { pinches: 5 } area 40448.695970752 ref 40448.695974303 err 6.5e-5 comps 3
+a tangent 20 35 Pinched { pinches: 4 } area 43314.541622630 ref 43314.541517314 err 2.8e-6 comps 2
+a tangent 20 36 Pinched { pinches: 8 } area 41477.348001527 ref 41477.348052751 err 3.9e-5 comps 4
+a tangent 20 37 Pinched { pinches: 10 } area 40936.377064851 ref 40936.377259634 err 9.6e-5 comps 5
+a tangent 20 38 Pinched { pinches: 10 } area 41503.475917302 ref 41503.476019773 err 2.7e-5 comps 4
+a tangent 20 39 Pinched { pinches: 11 } area 38910.932615644 ref 38910.932514862 err 1.9e-5 comps 5
+a tangent 20 40 Pinched { pinches: 7 } area 42272.772952377 ref 42272.772895160 err 4.3e-5 comps 3
+a tangent 20 41 Pinched { pinches: 5 } area 40938.466400761 ref 40938.466374568 err 1.1e-4 comps 1
+a tangent 20 42 Pinched { pinches: 2 } area 43467.020274298 ref 43467.020540367 err 1.1e-5 comps 1
+a tangent 20 43 Pinched { pinches: 4 } area 42726.061522638 ref 42726.061765060 err 1.5e-6 comps 1
+a tangent 20 44 Pinched { pinches: 6 } area 40796.162439856 ref 40796.162428230 err 8.2e-5 comps 2
+a tangent 20 45 Pinched { pinches: 5 } area 43199.900095120 ref 43199.900117642 err 1.2e-6 comps 4
+a tangent 20 46 Pinched { pinches: 8 } area 42353.381117447 ref 42353.381237047 err 1.5e-6 comps 5
+a tangent 20 47 Pinched { pinches: 15 } area 39312.680837569 ref 39312.680862296 err 1.0e-5 comps 6
+a tangent 20 48 Pinched { pinches: 5 } area 42038.608761384 ref 42038.608918123 err 1.9e-5 comps 7
+a tangent 20 49 Pinched { pinches: 7 } area 41058.130738702 ref 41058.130846090 err 5.0e-6 comps 5
+a tangent 20 50 Pinched { pinches: 6 } area 41318.794183933 ref 41318.794325148 err 1.5e-6 comps 3
+a tangent 20 51 Pinched { pinches: 8 } area 40097.118471287 ref 40097.118594815 err 4.0e-5 comps 3
+a tangent 20 52 Pinched { pinches: 6 } area 40992.648452702 ref 40992.648478228 err 5.6e-5 comps 3
+a tangent 20 53 Pinched { pinches: 9 } area 41877.044946333 ref 41877.045202592 err 1.0e-4 comps 6
+a tangent 20 54 Pinched { pinches: 4 } area 42688.894335760 ref 42688.894251716 err 3.5e-5 comps 2
+a tangent 20 55 Pinched { pinches: 5 } area 42258.474825758 ref 42258.475053380 err 2.7e-5 comps 5
+a tangent 20 56 Pinched { pinches: 2 } area 42455.152410318 ref 42455.152640132 err 4.3e-5 comps 1
+a tangent 20 57 Pinched { pinches: 5 } area 42742.122815859 ref 42742.122909653 err 3.0e-5 comps 3
+a tangent 20 58 Pinched { pinches: 6 } area 42613.425572228 ref 42613.425595195 err 4.2e-5 comps 3
+a tangent 20 59 Pinched { pinches: 9 } area 40445.896955591 ref 40445.897046140 err 3.3e-5 comps 3
+a tangent 20 60 Pinched { pinches: 8 } area 41696.752540766 ref 41696.752736603 err 6.3e-5 comps 5
+a tangent 20 61 Pinched { pinches: 6 } area 43673.812235061 ref 43673.812301240 err 2.6e-5 comps 3
+a tangent 20 62 Pinched { pinches: 7 } area 42196.034154066 ref 42196.034302450 err 3.7e-5 comps 3
+a tangent 20 63 Pinched { pinches: 11 } area 40534.309148978 ref 40534.309070547 err 4.1e-5 comps 5
+a tangent 20 64 Pinched { pinches: 4 } area 41528.329375966 ref 41528.329282579 err 2.5e-5 comps 3
+a tangent 20 65 Pinched { pinches: 8 } area 41171.216293605 ref 41171.216454839 err 2.6e-5 comps 5
+a tangent 20 66 Pinched { pinches: 8 } area 40554.521399916 ref 40554.521570433 err 3.5e-5 comps 2
+a tangent 20 67 Pinched { pinches: 8 } area 40375.359476498 ref 40375.359602461 err 8.0e-5 comps 6
+a tangent 20 68 Pinched { pinches: 6 } area 41037.842097291 ref 41037.842091681 err 3.7e-5 comps 3
+a tangent 20 69 Pinched { pinches: 2 } area 43559.521138969 ref 43559.521288420 err 2.5e-6 comps 1
+a tangent 20 70 Pinched { pinches: 5 } area 41269.697783095 ref 41269.698035649 err 5.1e-5 comps 2
+a tangent 20 71 Pinched { pinches: 3 } area 42946.859648098 ref 42946.859704379 err 1.8e-5 comps 3
+a tangent 20 72 Pinched { pinches: 7 } area 42127.321754915 ref 42127.321861987 err 7.3e-6 comps 4
+a tangent 20 73 Pinched { pinches: 6 } area 41656.929248358 ref 41656.929473478 err 4.0e-5 comps 2
+a tangent 20 74 Pinched { pinches: 9 } area 40882.543920872 ref 40882.544030945 err 1.7e-5 comps 6
+a tangent 20 75 Pinched { pinches: 8 } area 41196.285925623 ref 41196.285976121 err 7.9e-5 comps 3
+a tangent 20 76 Pinched { pinches: 5 } area 42817.819008338 ref 42817.819188569 err 4.5e-6 comps 1
+a tangent 20 77 Pinched { pinches: 7 } area 42402.292076030 ref 42402.292253177 err 2.7e-5 comps 2
+a tangent 20 78 Pinched { pinches: 6 } area 41902.156114715 ref 41902.156283588 err 4.4e-6 comps 4
+a tangent 20 79 Pinched { pinches: 9 } area 39603.054609521 ref 39603.054565062 err 2.9e-5 comps 7
+a tangent 20 80 Pinched { pinches: 11 } area 40855.153007099 ref 40855.152945718 err 2.1e-5 comps 9
+a tangent 20 81 Pinched { pinches: 11 } area 40706.125746978 ref 40706.125894357 err 6.1e-5 comps 3
+a tangent 20 82 Pinched { pinches: 8 } area 42269.743927110 ref 42269.743968471 err 7.0e-5 comps 4
+a tangent 20 83 Pinched { pinches: 8 } area 41127.211748016 ref 41127.211720185 err 3.4e-6 comps 3
+a tangent 20 84 Pinched { pinches: 3 } area 43255.680785501 ref 43255.680941097 err 2.0e-5 comps 2
+a tangent 20 85 Pinched { pinches: 9 } area 41072.297138120 ref 41072.297261848 err 1.1e-4 comps 4
+a tangent 20 86 Pinched { pinches: 2 } area 43155.870351759 ref 43155.870410249 err 2.2e-5 comps 1
+a tangent 20 87 Pinched { pinches: 7 } area 39728.095112787 ref 39728.095248876 err 1.5e-5 comps 7
+a tangent 20 88 Pinched { pinches: 1 } area 43699.931594617 ref 43699.931692841 err 2.6e-5 comps 1
+a tangent 20 89 Pinched { pinches: 7 } area 42647.131135523 ref 42647.131329670 err 1.6e-5 comps 6
+a tangent 20 90 Pinched { pinches: 10 } area 41307.754655505 ref 41307.755095079 err 3.9e-5 comps 4
+a tangent 20 91 Pinched { pinches: 11 } area 41563.408135672 ref 41563.408148755 err 1.6e-5 comps 8
+a tangent 20 92 Pinched { pinches: 2 } area 42477.072721508 ref 42477.072965958 err 8.7e-5 comps 1
+a tangent 20 93 Pinched { pinches: 4 } area 42585.517162405 ref 42585.517354849 err 5.2e-5 comps 4
+a tangent 20 94 Pinched { pinches: 6 } area 41754.546227593 ref 41754.546231704 err 9.0e-5 comps 3
+a tangent 20 95 Pinched { pinches: 5 } area 42851.808952401 ref 42851.808890934 err 3.1e-5 comps 2
+a tangent 20 96 Pinched { pinches: 6 } area 40790.104173490 ref 40790.104376727 err 2.3e-5 comps 4
+a tangent 20 97 Pinched { pinches: 6 } area 41590.586360852 ref 41590.586373638 err 1.3e-5 comps 4
+a tangent 20 98 Pinched { pinches: 2 } area 42252.529141050 ref 42252.529289534 err 1.6e-5 comps 1
+a tangent 20 99 Pinched { pinches: 3 } area 41702.560406883 ref 41702.560647464 err 6.5e-5 comps 2
+a tangent 200 0 Pinched { pinches: 48 } area 42455.434213901 ref 42455.434581701 err 9.6e-5 comps 41
+a tangent 200 1 Pinched { pinches: 35 } area 43278.278797205 ref 43278.279366552 err 1.0e-4 comps 30
+a tangent 200 2 Pinched { pinches: 38 } area 42701.854431160 ref 42701.854998673 err 1.2e-4 comps 35
+a tangent 200 3 Pinched { pinches: 36 } area 42904.533837832 ref 42904.534253071 err 3.5e-5 comps 28
+a tangent 200 4 Pinched { pinches: 33 } area 43205.672579646 ref 43205.673202213 err 7.6e-5 comps 18
+a tangent 200 5 Pinched { pinches: 41 } area 42986.001024269 ref 42986.001501435 err 1.5e-4 comps 36
+a tangent 200 6 Pinched { pinches: 49 } area 43118.029003097 ref 43118.029479141 err 5.4e-5 comps 40
+a tangent 200 7 Pinched { pinches: 50 } area 42477.434427080 ref 42477.434887942 err 2.8e-5 comps 40
+a tangent 200 8 Pinched { pinches: 46 } area 42757.393955435 ref 42757.394640301 err 8.3e-5 comps 26
+a tangent 200 9 Pinched { pinches: 50 } area 43074.987463712 ref 43074.987972710 err 9.4e-5 comps 42
+a tangent 200 10 Pinched { pinches: 54 } area 42402.618617656 ref 42402.619067185 err 9.6e-5 comps 41
+a tangent 200 11 Pinched { pinches: 44 } area 43076.300869921 ref 43076.301541071 err 4.3e-5 comps 30
+a tangent 200 12 Pinched { pinches: 51 } area 42690.696498629 ref 42690.697304523 err 4.3e-5 comps 36
+a tangent 200 13 Pinched { pinches: 40 } area 42659.038648567 ref 42659.039042066 err 1.3e-5 comps 34
+a tangent 200 14 Pinched { pinches: 49 } area 42970.691095664 ref 42970.691963190 err 9.9e-6 comps 40
+a tangent 200 15 Pinched { pinches: 45 } area 42858.498618733 ref 42858.499245237 err 9.3e-5 comps 42
+a tangent 200 16 Pinched { pinches: 51 } area 42450.142720724 ref 42450.143234123 err 4.8e-5 comps 42
+a tangent 200 17 Pinched { pinches: 63 } area 42406.401961847 ref 42406.402291972 err 3.4e-5 comps 52
+a tangent 200 18 Pinched { pinches: 51 } area 42628.515052365 ref 42628.515453548 err 7.7e-5 comps 38
+a tangent 200 19 Pinched { pinches: 44 } area 42878.833009224 ref 42878.833450254 err 2.4e-5 comps 39

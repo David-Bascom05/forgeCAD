@@ -1,0 +1,8 @@
+PASS circle in the flat is an ellipse in (phi, y): semi-axes a/Rn, a
+PASS wall area element: |S_phi x S_rho| = sqrt(rho^2 + y'(phi)^2)
+PASS rulings radial and square to the axis: a right conoid, whatever the flat curve
+PASS circle against a line: quadratic in tan(u/2)
+     circle against a circle: degree 4 in tan(u/2) (the z^4 term goes with the squares: at most 2 real)
+PASS circle against a parabola: degree 4 in tan(u/2): quartic at most
+     u = pi is z = infinity: test that point on its own, or start the arc's parameter elsewhere
+PASS volume in a bend zone: t A_zone (R + t/2) / Rn, any normal-cut region

@@ -1,0 +1,630 @@
+bseq nudged 2 0 Good area 44978.515595811 ref 44978.515613791 err 9.5e-6 comps 1
+bnary nudged 2 0 Good area 44978.515595811 ref 44978.515613791 err 9.5e-6 comps 1
+bseq nudged 2 1 Good area 42833.504939856 ref 42833.504997953 err 2.4e-5 comps 1
+bnary nudged 2 1 Good area 42833.504939856 ref 42833.504997953 err 2.4e-5 comps 1
+bseq nudged 2 2 Good area 41139.138126711 ref 41139.138139212 err 2.5e-5 comps 1
+bnary nudged 2 2 Good area 41139.138126711 ref 41139.138139212 err 2.5e-5 comps 1
+bseq nudged 2 3 Good area 43690.768059729 ref 43690.768044570 err 1.5e-5 comps 1
+bnary nudged 2 3 Good area 43690.768059729 ref 43690.768044570 err 1.5e-5 comps 1
+bseq nudged 2 4 Good area 43643.103031032 ref 43643.103074647 err 2.2e-6 comps 1
+bnary nudged 2 4 Good area 43643.103031032 ref 43643.103074647 err 2.2e-6 comps 1
+bseq nudged 2 5 Good area 44479.843511332 ref 44479.843529421 err 9.5e-6 comps 1
+bnary nudged 2 5 Good area 44479.843511332 ref 44479.843529421 err 9.5e-6 comps 1
+bseq nudged 2 6 Good area 40195.440790256 ref 40195.440817493 err 3.1e-5 comps 1
+bnary nudged 2 6 Good area 40195.440790256 ref 40195.440817493 err 3.1e-5 comps 1
+bseq nudged 2 7 Good area 44190.876346603 ref 44190.876364550 err 9.4e-6 comps 1
+bnary nudged 2 7 Good area 44190.876346603 ref 44190.876364550 err 9.4e-6 comps 1
+bseq nudged 2 8 Good area 44240.441221470 ref 44240.441239689 err 9.3e-6 comps 1
+bnary nudged 2 8 Good area 44240.441221470 ref 44240.441239689 err 9.3e-6 comps 1
+bseq nudged 2 9 Good area 43955.330151605 ref 43955.330170001 err 9.5e-6 comps 1
+bnary nudged 2 9 Good area 43955.330151605 ref 43955.330170001 err 9.5e-6 comps 1
+bseq nudged 2 10 Good area 44611.643876723 ref 44611.643894842 err 9.5e-6 comps 1
+bnary nudged 2 10 Good area 44611.643876723 ref 44611.643894842 err 9.5e-6 comps 1
+bseq nudged 2 11 Good area 44355.041086901 ref 44355.040953203 err 9.6e-6 comps 1
+bnary nudged 2 11 Good area 44355.041086901 ref 44355.040953203 err 9.6e-6 comps 1
+bseq nudged 2 12 Good area 44978.539816340 ref 44978.539585726 err 9.4e-6 comps 1
+bnary nudged 2 12 Good area 44978.539816340 ref 44978.539585726 err 9.4e-6 comps 1
+bseq nudged 2 13 Good area 44183.929333230 ref 44183.929351487 err 9.2e-6 comps 1
+bnary nudged 2 13 Good area 44183.929333230 ref 44183.929351487 err 9.2e-6 comps 1
+bseq nudged 2 14 Good area 43997.719617906 ref 43997.719609952 err 6.4e-6 comps 1
+bnary nudged 2 14 Good area 43997.719617906 ref 43997.719609952 err 6.4e-6 comps 1
+bseq nudged 2 15 REFUSED Bool { index: 1, why: Internal(InconsistentClassification { a: FaceRef { name: #235302a3236cabdc, surface: "plane", near: Point3 { x: 150.00000000000006, y: 75.00000000000003, z: 0.0 } }, b: FaceRef { name: #9b027902bc0de02e, surface: "cylinder", near: Point3 { x: 119.82336810294635, y: 74.18300208224233, z: 1.0000000000000004 } }, across: Point3 { x: 126.06181799647769, y: 83.66555772568954, z: 0.0 } }) }
+bnary nudged 2 15 REFUSED Bool { index: 0, why: ZeroThickness { at: Point3 { x: 104.90674491892383, y: 80.11327796737899, z: 2.0 } } }
+bseq nudged 2 16 Good area 44627.817362880 ref 44627.817380897 err 9.0e-6 comps 1
+bnary nudged 2 16 Good area 44627.817362880 ref 44627.817380897 err 9.0e-6 comps 1
+bseq nudged 2 17 Good area 44153.428355698 ref 44153.428388381 err 9.4e-6 comps 1
+bnary nudged 2 17 Good area 44153.428355698 ref 44153.428388381 err 9.4e-6 comps 1
+bseq nudged 2 18 Good area 43781.980807558 ref 43781.980825295 err 9.5e-6 comps 1
+bnary nudged 2 18 Good area 43781.980807558 ref 43781.980825295 err 9.5e-6 comps 1
+bseq nudged 2 19 Good area 44199.226693372 ref 44199.226718373 err 9.7e-6 comps 1
+bnary nudged 2 19 REFUSED Bool { index: 0, why: Unsupported(ProbeOnToolEdge { face: FaceRef { name: #556cbb460cd9cfc7, surface: "plane", near: Point3 { x: 217.87194723023444, y: 7.233176308084106, z: 1.0000000000000004 } } }) }
+bseq nudged 2 20 Good area 44978.539816340 ref 44978.539832578 err 9.4e-6 comps 1
+bnary nudged 2 20 Good area 44978.539816340 ref 44978.539832578 err 9.4e-6 comps 1
+bseq nudged 2 21 Good area 43986.780327431 ref 43986.780345077 err 9.3e-6 comps 1
+bnary nudged 2 21 Good area 43986.780327431 ref 43986.780345077 err 9.3e-6 comps 1
+bseq nudged 2 22 Good area 43319.869981492 ref 43319.870093594 err 1.9e-5 comps 1
+bnary nudged 2 22 Good area 43319.869981492 ref 43319.870093594 err 1.9e-5 comps 1
+bseq nudged 2 23 Good area 44314.075665498 ref 44314.075640008 err 9.4e-6 comps 1
+bnary nudged 2 23 Good area 44314.075665498 ref 44314.075640008 err 9.4e-6 comps 1
+bseq nudged 2 24 Good area 43732.974419225 ref 43732.974438182 err 2.3e-5 comps 1
+bnary nudged 2 24 Good area 43732.974419225 ref 43732.974438182 err 2.3e-5 comps 1
+bseq nudged 2 25 Good area 42619.874614182 ref 42619.874586636 err 1.1e-5 comps 1
+bnary nudged 2 25 REFUSED Bool { index: 0, why: Unsupported(ProbeOnToolEdge { face: FaceRef { name: #235302a3236cabdc, surface: "plane", near: Point3 { x: 150.00000000000006, y: 75.00000000000003, z: 0.0 } } }) }
+bseq nudged 2 26 Good area 40375.148358770 ref 40375.148427715 err 3.9e-5 comps 1
+bnary nudged 2 26 Good area 40375.148372429 ref 40375.148427715 err 3.9e-5 comps 1
+bseq nudged 2 27 Good area 44406.699423262 ref 44406.699593998 err 9.6e-6 comps 1
+bnary nudged 2 27 Good area 44406.699562009 ref 44406.699593998 err 9.6e-6 comps 1
+bseq nudged 2 28 Good area 44018.084796539 ref 44018.084874388 err 1.3e-5 comps 1
+bnary nudged 2 28 Good area 44018.084796539 ref 44018.084874388 err 1.3e-5 comps 1
+bseq nudged 2 29 Good area 43772.561582376 ref 43772.561682960 err 9.4e-6 comps 1
+bnary nudged 2 29 Good area 43772.561582376 ref 43772.561682960 err 9.4e-6 comps 1
+bseq nudged 2 30 Good area 44978.524007682 ref 44978.524025449 err 9.4e-6 comps 1
+bnary nudged 2 30 Good area 44978.524007682 ref 44978.524025449 err 9.4e-6 comps 1
+bseq nudged 2 31 Good area 43443.200399168 ref 43443.200467545 err 9.4e-6 comps 1
+bnary nudged 2 31 Good area 43443.200399168 ref 43443.200467545 err 9.4e-6 comps 1
+bseq nudged 2 32 Good area 43836.694605731 ref 43836.694575608 err 9.6e-6 comps 1
+bnary nudged 2 32 Good area 43836.694605731 ref 43836.694575608 err 9.6e-6 comps 1
+bseq nudged 2 33 Good area 44097.889412434 ref 44097.889383492 err 6.9e-6 comps 1
+bnary nudged 2 33 Good area 44097.889412434 ref 44097.889383492 err 6.9e-6 comps 1
+bseq nudged 2 34 Good area 44240.741089969 ref 44240.741080179 err 9.1e-6 comps 1
+bnary nudged 2 34 Good area 44240.741089969 ref 44240.741080179 err 9.1e-6 comps 1
+bseq nudged 2 35 Good area 43744.267104898 ref 43744.267167785 err 3.1e-5 comps 1
+bnary nudged 2 35 Good area 43744.267104898 ref 43744.267167785 err 3.1e-5 comps 1
+bseq nudged 2 36 Good area 44978.539816340 ref 44978.539734608 err 9.4e-6 comps 1
+bnary nudged 2 36 Good area 44978.539816340 ref 44978.539734608 err 9.4e-6 comps 1
+bseq nudged 2 37 Good area 44580.669478443 ref 44580.669414267 err 9.4e-6 comps 1
+bnary nudged 2 37 Good area 44580.669478443 ref 44580.669414267 err 9.4e-6 comps 1
+bseq nudged 2 38 Good area 44451.429783765 ref 44451.429493068 err 9.2e-6 comps 1
+bnary nudged 2 38 Good area 44451.429783765 ref 44451.429493068 err 9.2e-6 comps 1
+bseq nudged 2 39 Good area 43849.047341185 ref 43849.047358766 err 9.5e-6 comps 1
+bnary nudged 2 39 Good area 43849.047341185 ref 43849.047358766 err 9.5e-6 comps 1
+bseq nudged 2 40 Good area 44455.132142018 ref 44455.132151428 err 9.4e-6 comps 1
+bnary nudged 2 40 Good area 44455.132142018 ref 44455.132151428 err 9.4e-6 comps 1
+bseq nudged 2 41 Good area 44237.442780433 ref 44237.442798591 err 9.7e-6 comps 1
+bnary nudged 2 41 Good area 44237.442780433 ref 44237.442798591 err 9.7e-6 comps 1
+bseq nudged 2 42 Good area 43703.893392707 ref 43703.893400782 err 9.0e-6 comps 1
+bnary nudged 2 42 Good area 43703.893392707 ref 43703.893400782 err 9.0e-6 comps 1
+bseq nudged 2 43 Good area 43855.816934635 ref 43855.816952594 err 9.4e-6 comps 1
+bnary nudged 2 43 Good area 43855.816934635 ref 43855.816952594 err 9.4e-6 comps 1
+bseq nudged 2 44 Good area 44978.539816340 ref 44978.539822624 err 9.4e-6 comps 1
+bnary nudged 2 44 Good area 44978.539816340 ref 44978.539822624 err 9.4e-6 comps 1
+bseq nudged 2 45 Good area 44439.892394477 ref 44439.892405267 err 9.8e-6 comps 1
+bnary nudged 2 45 Good area 44439.892394477 ref 44439.892405267 err 9.8e-6 comps 1
+bseq nudged 2 46 Good area 42910.147327567 ref 42910.147349692 err 3.3e-6 comps 1
+bnary nudged 2 46 Good area 42910.147327567 ref 42910.147349692 err 3.3e-6 comps 1
+bseq nudged 2 47 Good area 43976.009026005 ref 43976.009037380 err 8.9e-6 comps 1
+bnary nudged 2 47 Good area 43976.009017064 ref 43976.009037380 err 8.9e-6 comps 1
+bseq nudged 2 48 Good area 44017.360463505 ref 44017.360511825 err 9.5e-6 comps 1
+bnary nudged 2 48 Good area 44017.360463505 ref 44017.360511825 err 9.5e-6 comps 1
+bseq nudged 2 49 Good area 44978.526399667 ref 44978.526416670 err 9.4e-6 comps 1
+bnary nudged 2 49 Good area 44978.526401386 ref 44978.526416670 err 9.4e-6 comps 1
+bseq nudged 2 50 Good area 44978.538202204 ref 44978.538220248 err 9.4e-6 comps 1
+bnary nudged 2 50 Good area 44978.538207579 ref 44978.538220248 err 9.4e-6 comps 1
+bseq nudged 2 51 Good area 44543.990724058 ref 44543.990738997 err 9.7e-6 comps 1
+bnary nudged 2 51 Good area 44543.990724058 ref 44543.990738997 err 9.7e-6 comps 1
+bseq nudged 2 52 Good area 43668.822206295 ref 43668.822274319 err 9.3e-6 comps 1
+bnary nudged 2 52 Good area 43668.822209629 ref 43668.822274319 err 9.3e-6 comps 1
+bseq nudged 2 53 Good area 44310.069122384 ref 44310.069140138 err 9.2e-6 comps 1
+bnary nudged 2 53 Good area 44310.069122384 ref 44310.069140138 err 9.2e-6 comps 1
+bseq nudged 2 54 Good area 44106.914989196 ref 44106.915007464 err 9.5e-6 comps 1
+bnary nudged 2 54 Good area 44106.914989196 ref 44106.915007464 err 9.5e-6 comps 1
+bseq nudged 2 55 Good area 43922.483510851 ref 43922.483513332 err 9.5e-6 comps 1
+bnary nudged 2 55 Good area 43922.483510851 ref 43922.483513332 err 9.5e-6 comps 1
+bseq nudged 2 56 Good area 43117.772730601 ref 43117.772773228 err 1.5e-5 comps 1
+bnary nudged 2 56 Good area 43117.772730601 ref 43117.772773228 err 1.5e-5 comps 1
+bseq nudged 2 57 Good area 44588.081262277 ref 44588.081284729 err 9.5e-6 comps 1
+bnary nudged 2 57 Good area 44588.081262277 ref 44588.081284729 err 9.5e-6 comps 1
+bseq nudged 2 58 Good area 42818.320395992 ref 42818.320385091 err 7.1e-6 comps 1
+bnary nudged 2 58 Good area 42818.320395992 ref 42818.320385091 err 7.1e-6 comps 1
+bseq nudged 2 59 Good area 44556.253841851 ref 44556.253859848 err 9.1e-6 comps 1
+bnary nudged 2 59 Good area 44556.253841851 ref 44556.253859848 err 9.1e-6 comps 1
+bseq nudged 2 60 Good area 44384.554747792 ref 44384.554726800 err 9.8e-6 comps 1
+bnary nudged 2 60 Good area 44384.554701988 ref 44384.554726800 err 9.8e-6 comps 1
+bseq nudged 2 61 Good area 43838.106059358 ref 43838.106077337 err 9.3e-6 comps 1
+bnary nudged 2 61 Good area 43838.106059358 ref 43838.106077337 err 9.3e-6 comps 1
+bseq nudged 2 62 Good area 43893.985447002 ref 43893.985465191 err 9.4e-6 comps 1
+bnary nudged 2 62 Good area 43893.985447002 ref 43893.985465191 err 9.4e-6 comps 1
+bseq nudged 2 63 Good area 43992.957500867 ref 43992.957519057 err 9.4e-6 comps 1
+bnary nudged 2 63 Good area 43992.957500867 ref 43992.957519057 err 9.4e-6 comps 1
+bseq nudged 2 64 Good area 44201.695380760 ref 44201.695399281 err 9.5e-6 comps 1
+bnary nudged 2 64 Good area 44201.695380760 ref 44201.695399281 err 9.5e-6 comps 1
+bseq nudged 2 65 Good area 43830.392107477 ref 43830.392195780 err 9.3e-6 comps 1
+bnary nudged 2 65 Good area 43830.392107832 ref 43830.392195780 err 9.3e-6 comps 1
+bseq nudged 2 66 Good area 44353.108295764 ref 44353.108364248 err 9.6e-6 comps 1
+bnary nudged 2 66 Good area 44353.108299078 ref 44353.108364248 err 9.6e-6 comps 1
+bseq nudged 2 67 Good area 43901.596627464 ref 43901.596552083 err 8.9e-6 comps 1
+bnary nudged 2 67 Good area 43901.596489395 ref 43901.596552083 err 8.9e-6 comps 1
+bseq nudged 2 68 Good area 44633.794144141 ref 44633.794161996 err 9.6e-6 comps 1
+bnary nudged 2 68 Good area 44633.794144141 ref 44633.794161996 err 9.6e-6 comps 1
+bseq nudged 2 69 Good area 43015.621837591 ref 43015.621920395 err 6.4e-6 comps 1
+bnary nudged 2 69 Good area 43015.621837591 ref 43015.621920395 err 6.4e-6 comps 1
+bseq nudged 2 70 Good area 40791.411329018 ref 40791.411332239 err 9.0e-6 comps 1
+bnary nudged 2 70 Good area 40791.411329018 ref 40791.411332239 err 9.0e-6 comps 1
+bseq nudged 2 71 Good area 43882.418621154 ref 43882.418639233 err 9.6e-6 comps 1
+bnary nudged 2 71 Good area 43882.418621154 ref 43882.418639233 err 9.6e-6 comps 1
+bseq nudged 2 72 Good area 44978.539816340 ref 44978.539644824 err 9.4e-6 comps 1
+bnary nudged 2 72 Good area 44978.539816340 ref 44978.539644824 err 9.4e-6 comps 1
+bseq nudged 2 73 Good area 44978.539816340 ref 44978.539834381 err 9.4e-6 comps 1
+bnary nudged 2 73 Good area 44978.539816340 ref 44978.539834381 err 9.4e-6 comps 1
+bseq nudged 2 74 Good area 44171.148618265 ref 44171.148787629 err 9.7e-6 comps 1
+bnary nudged 2 74 Good area 44171.148745461 ref 44171.148787629 err 9.7e-6 comps 1
+bseq nudged 2 75 Good area 44273.646391326 ref 44273.646413299 err 9.9e-6 comps 1
+bnary nudged 2 75 Good area 44273.646391326 ref 44273.646413299 err 9.9e-6 comps 1
+bseq nudged 2 76 Good area 41985.155668173 ref 41985.155661996 err 3.0e-5 comps 1
+bnary nudged 2 76 Good area 41985.155668173 ref 41985.155661996 err 3.0e-5 comps 1
+bseq nudged 2 77 Good area 43584.768160261 ref 43584.768178406 err 9.4e-6 comps 1
+bnary nudged 2 77 Good area 43584.768160261 ref 43584.768178406 err 9.4e-6 comps 1
+bseq nudged 2 78 REFUSED Bool { index: 1, why: Internal(HoleOutside { face: FaceRef { name: #b76aa06f726a5bed, surface: "plane", near: Point3 { x: 256.02605135376655, y: 8.904045794985274, z: 1.0000000000000004 } } }) }
+bnary nudged 2 78 Good area 44393.049826975 ref 44393.049844879 err 9.6e-6 comps 1
+bseq nudged 2 79 Good area 44978.539816340 ref 44978.539834381 err 9.4e-6 comps 1
+bnary nudged 2 79 Good area 44978.539816340 ref 44978.539834381 err 9.4e-6 comps 1
+bseq nudged 2 80 Good area 43846.131768564 ref 43846.131963514 err 9.4e-6 comps 1
+bnary nudged 2 80 Good area 43846.131751278 ref 43846.131963514 err 9.4e-6 comps 1
+bseq nudged 2 81 Good area 44978.539260391 ref 44978.539278165 err 9.4e-6 comps 1
+bnary nudged 2 81 REFUSED Bool { index: 0, why: Unsupported(ProbeOnToolEdge { face: FaceRef { name: #235302a3236cabdc, surface: "plane", near: Point3 { x: 150.00000000000006, y: 75.00000000000003, z: 0.0 } } }) }
+bseq nudged 2 82 Good area 44260.432590502 ref 44260.432608630 err 9.7e-6 comps 1
+bnary nudged 2 82 Good area 44260.432590502 ref 44260.432608630 err 9.7e-6 comps 1
+bseq nudged 2 83 Good area 44585.257999548 ref 44585.258014954 err 9.4e-6 comps 1
+bnary nudged 2 83 Good area 44585.257998785 ref 44585.258014954 err 9.4e-6 comps 1
+bseq nudged 2 84 Good area 42570.967966653 ref 42570.967887244 err 6.7e-5 comps 1
+bnary nudged 2 84 Good area 42570.967973622 ref 42570.967887244 err 6.7e-5 comps 1
+bseq nudged 2 85 Good area 42538.805736406 ref 42538.805718092 err 2.4e-5 comps 1
+bnary nudged 2 85 Good area 42538.805736406 ref 42538.805718092 err 2.4e-5 comps 1
+bseq nudged 2 86 Good area 44419.839704132 ref 44419.839722136 err 9.5e-6 comps 1
+bnary nudged 2 86 Good area 44419.839704132 ref 44419.839722136 err 9.5e-6 comps 1
+bseq nudged 2 87 Good area 44165.964415575 ref 44165.964439491 err 9.5e-6 comps 1
+bnary nudged 2 87 Good area 44165.964420400 ref 44165.964439491 err 9.5e-6 comps 1
+bseq nudged 2 88 Good area 43981.693105655 ref 43981.693152102 err 9.5e-6 comps 1
+bnary nudged 2 88 Good area 43981.693099961 ref 43981.693152102 err 9.5e-6 comps 1
+bseq nudged 2 89 Good area 44955.293058616 ref 44955.293076380 err 9.5e-6 comps 1
+bnary nudged 2 89 Good area 44955.293058616 ref 44955.293076380 err 9.5e-6 comps 1
+bseq nudged 2 90 Good area 43852.996908374 ref 43852.996926327 err 9.5e-6 comps 1
+bnary nudged 2 90 Good area 43852.996908374 ref 43852.996926327 err 9.5e-6 comps 1
+bseq nudged 2 91 Good area 43989.648570650 ref 43989.648588680 err 9.5e-6 comps 1
+bnary nudged 2 91 Good area 43989.648570650 ref 43989.648588680 err 9.5e-6 comps 1
+bseq nudged 2 92 Good area 44978.539816340 ref 44978.539566420 err 9.4e-6 comps 1
+bnary nudged 2 92 Good area 44978.539816340 ref 44978.539566420 err 9.4e-6 comps 1
+bseq nudged 2 93 Good area 44279.849339310 ref 44279.849399953 err 9.7e-6 comps 1
+bnary nudged 2 93 Good area 44279.849338901 ref 44279.849399953 err 9.7e-6 comps 1
+bseq nudged 2 94 Good area 44153.578669265 ref 44153.578687134 err 9.4e-6 comps 1
+bnary nudged 2 94 Good area 44153.578669265 ref 44153.578687134 err 9.4e-6 comps 1
+bseq nudged 2 95 Good area 44559.751564244 ref 44559.751570293 err 9.6e-6 comps 1
+bnary nudged 2 95 Good area 44559.751564244 ref 44559.751570293 err 9.6e-6 comps 1
+bseq nudged 2 96 Good area 42099.322393982 ref 42099.322395691 err 2.7e-5 comps 1
+bnary nudged 2 96 Good area 42099.322393982 ref 42099.322395691 err 2.7e-5 comps 1
+bseq nudged 2 97 Good area 43603.318544965 ref 43603.318562763 err 9.4e-6 comps 1
+bnary nudged 2 97 Good area 43603.318544965 ref 43603.318562763 err 9.4e-6 comps 1
+bseq nudged 2 98 Good area 44223.089996531 ref 44223.090059886 err 9.1e-6 comps 1
+bnary nudged 2 98 Good area 44223.089996531 ref 44223.090059886 err 9.1e-6 comps 1
+bseq nudged 2 99 Good area 43663.509246931 ref 43663.509265024 err 9.5e-6 comps 1
+bnary nudged 2 99 Good area 43663.509246931 ref 43663.509265024 err 9.5e-6 comps 1
+bseq nudged 20 0 REFUSED Bool { index: 17, why: Internal(InconsistentClassification { a: FaceRef { name: #64b8864bda5af2a5, surface: "plane", near: Point3 { x: 150.00000000000006, y: 74.99999999129776, z: 2.0 } }, b: FaceRef { name: #b76aa06f726a5bed, surface: "cylinder", near: Point3 { x: 74.2521565230231, y: 124.0668649341334, z: 1.0000000000000004 } }, across: Point3 { x: 75.34046778648052, y: 130.40012503083284, z: 2.0 } }) }
+bnary nudged 20 0 REFUSED Bool { index: 0, why: Internal(SplitCrossed { face: FaceRef { name: #235302a3236cabdc, surface: "plane", near: Point3 { x: 88.22658906614681, y: 122.57542825041497, z: -1.0000000000000002 } } }) }
+bseq nudged 20 1 REFUSED Bool { index: 9, why: Internal(HoleOutside { face: FaceRef { name: #b76aa06f726a5bed, surface: "plane", near: Point3 { x: 153.53972286320757, y: 5.214103957531363, z: 1.0000000000000004 } } }) }
+bnary nudged 20 1 REFUSED Bool { index: 0, why: Internal(SplitCrossed { face: FaceRef { name: #235302a3236cabdc, surface: "plane", near: Point3 { x: 51.08831034342035, y: 26.784757266031768, z: -1.0000000000000002 } } }) }
+bseq nudged 20 2 REFUSED Bool { index: 9, why: Internal(InconsistentClassification { a: FaceRef { name: #9b027902bc0de02e, surface: "cylinder", near: Point3 { x: 24.980878985170275, y: 32.45451704078063, z: 1.0000000000000004 } }, b: FaceRef { name: #235302a3236cabdc, surface: "plane", near: Point3 { x: 150.00000000000006, y: 75.00000000000003, z: 0.0 } }, across: Point3 { x: 27.719679050523276, y: 35.237930477986055, z: 0.0 } }) }
+bnary nudged 20 2 REFUSED Bool { index: 0, why: Internal(SplitCrossed { face: FaceRef { name: #235302a3236cabdc, surface: "plane", near: Point3 { x: 150.00000000000006, y: 75.00000000000003, z: 0.0 } } }) }
+bseq nudged 20 3 Good area 43249.769410169 ref 43249.769635572 err 9.7e-6 comps 1
+bnary nudged 20 3 REFUSED Bool { index: 0, why: Internal(SplitCrossed { face: FaceRef { name: #235302a3236cabdc, surface: "plane", near: Point3 { x: 175.59635088508526, y: 159.4050523272114, z: -1.0 } } }) }
+bseq nudged 20 4 REFUSED Bool { index: 6, why: Internal(InconsistentClassification { a: FaceRef { name: #9b027902bc0de02e, surface: "cylinder", near: Point3 { x: 60.07901997810439, y: 51.36171921683747, z: 1.0000000000000004 } }, b: FaceRef { name: #235302a3236cabdc, surface: "plane", near: Point3 { x: 150.00000000000006, y: 74.99999998744447, z: 0.0 } }, across: Point3 { x: 48.36961180850515, y: 49.65615227040325, z: 0.0 } }) }
+bnary nudged 20 4 REFUSED Bool { index: 0, why: Internal(SplitCrossed { face: FaceRef { name: #235302a3236cabdc, surface: "plane", near: Point3 { x: 150.00000000000006, y: 75.00000000000003, z: 0.0 } } }) }
+bseq nudged 20 5 REFUSED Bool { index: 1, why: ZeroThickness { at: Point3 { x: 104.39106097652372, y: 4.200263450307422e-6, z: 1.0 } } }
+bnary nudged 20 5 REFUSED Bool { index: 0, why: Internal(SplitCrossed { face: FaceRef { name: #235302a3236cabdc, surface: "plane", near: Point3 { x: 150.00000000000006, y: 75.00000000000003, z: 0.0 } } }) }
+bseq nudged 20 6 REFUSED Bool { index: 10, why: Internal(InconsistentClassification { a: FaceRef { name: #235302a3236cabdc, surface: "plane", near: Point3 { x: 150.00000000000006, y: 75.00000000000003, z: 0.0 } }, b: FaceRef { name: #9b027902bc0de02e, surface: "cylinder", near: Point3 { x: 236.60958979256296, y: 101.4286106311663, z: 1.0000000000000004 } }, across: Point3 { x: 245.59351359619225, y: 105.73007136721341, z: 0.0 } }) }
+bnary nudged 20 6 REFUSED Bool { index: 0, why: Unsupported(ProbeOnToolEdge { face: FaceRef { name: #16ef629f8a618654, surface: "plane", near: Point3 { x: 150.0, y: 150.0, z: 1.0000000000000004 } } }) }
+bseq nudged 20 7 Good area 42775.388153485 ref 42775.387940093 err 2.2e-5 comps 1
+bnary nudged 20 7 REFUSED Bool { index: 0, why: Unsupported(ProbeOnToolEdge { face: FaceRef { name: #235302a3236cabdc, surface: "plane", near: Point3 { x: 150.00000000000006, y: 75.00000000000003, z: 0.0 } } }) }
+bseq nudged 20 8 Good area 40927.649159198 ref 40927.649166658 err 2.9e-5 comps 2
+bnary nudged 20 8 REFUSED Bool { index: 0, why: Internal(SplitCrossed { face: FaceRef { name: #235302a3236cabdc, surface: "plane", near: Point3 { x: 44.49563499703406, y: 124.99546051187983, z: -1.0000000000000002 } } }) }
+bseq nudged 20 9 Good area 43134.143912443 ref 43134.144415698 err 9.7e-6 comps 1
+bnary nudged 20 9 REFUSED Bool { index: 0, why: Unsupported(ProbeOnToolEdge { face: FaceRef { name: #235302a3236cabdc, surface: "plane", near: Point3 { x: 150.00000000000006, y: 75.00000000000003, z: 0.0 } } }) }
+bseq nudged 20 10 Good area 41893.715612728 ref 41893.715683990 err 2.4e-5 comps 1
+bnary nudged 20 10 REFUSED Bool { index: 0, why: Unsupported(ProbeOnToolEdge { face: FaceRef { name: #235302a3236cabdc, surface: "plane", near: Point3 { x: 150.00000000000006, y: 75.00000000000003, z: 0.0 } } }) }
+bseq nudged 20 11 REFUSED Bool { index: 11, why: Internal(RetryInvalid) }
+bnary nudged 20 11 REFUSED Bool { index: 0, why: Internal(SplitCrossed { face: FaceRef { name: #235302a3236cabdc, surface: "plane", near: Point3 { x: 152.49708541530643, y: 112.12331950323602, z: -1.0000000000000002 } } }) }
+bseq nudged 20 12 REFUSED Bool { index: 6, why: Internal(InconsistentClassification { a: FaceRef { name: #235302a3236cabdc, surface: "plane", near: Point3 { x: 150.00000000000006, y: 74.99999927900971, z: 0.0 } }, b: FaceRef { name: #630215fbc2610b28, surface: "plane", near: Point3 { x: 53.09013835963455, y: 14.602691066831287, z: 1.0000000000000004 } }, across: Point3 { x: 55.0146006338852, y: 21.82569045531334, z: 0.0 } }) }
+bnary nudged 20 12 REFUSED Bool { index: 0, why: Internal(SplitCrossed { face: FaceRef { name: #235302a3236cabdc, surface: "plane", near: Point3 { x: 150.00000000000006, y: 75.00000000000003, z: 0.0 } } }) }
+bseq nudged 20 13 REFUSED Bool { index: 19, why: Internal(HoleOutside { face: FaceRef { name: #b76aa06f726a5bed, surface: "plane", near: Point3 { x: 106.54870664174243, y: 7.203239558637195, z: 1.0000000000000004 } } }) }
+bnary nudged 20 13 REFUSED Bool { index: 0, why: Internal(SplitCrossed { face: FaceRef { name: #235302a3236cabdc, surface: "plane", near: Point3 { x: 150.00000000000006, y: 75.00000000000003, z: 0.0 } } }) }
+bseq nudged 20 14 REFUSED Bool { index: 9, why: ZeroThickness { at: Point3 { x: 125.72134357228185, y: 33.16870818549468, z: 1.0 } } }
+bnary nudged 20 14 Good area 41429.415203418 ref 41429.415076373 err 5.2e-7 comps 1
+bseq nudged 20 15 REFUSED Bool { index: 5, why: Internal(SplitCrossed { face: FaceRef { name: #64b8864bda5af2a5, surface: "plane", near: Point3 { x: 150.00000000000006, y: 75.00000000000003, z: 2.0 } } }) }
+bnary nudged 20 15 REFUSED Bool { index: 0, why: Internal(SplitCrossed { face: FaceRef { name: #235302a3236cabdc, surface: "plane", near: Point3 { x: 150.00000000000006, y: 75.00000000000003, z: 0.0 } } }) }
+bseq nudged 20 16 REFUSED Bool { index: 8, why: Internal(InconsistentClassification { a: FaceRef { name: #b76aa06f726a5bed, surface: "cylinder", near: Point3 { x: 164.4877673491422, y: 87.25491308378722, z: 1.0000000000000004 } }, b: FaceRef { name: #64b8864bda5af2a5, surface: "plane", near: Point3 { x: 150.00000000000006, y: 75.00000000000003, z: 2.0 } }, across: Point3 { x: 167.24062375206844, y: 81.8443767451339, z: 2.0 } }) }
+bnary nudged 20 16 REFUSED Bool { index: 0, why: Internal(SplitCrossed { face: FaceRef { name: #235302a3236cabdc, surface: "plane", near: Point3 { x: 164.16188373410992, y: 83.59086528499887, z: -1.0000000000000002 } } }) }
+bseq nudged 20 17 REFUSED Bool { index: 17, why: Internal(SplitCrossed { face: FaceRef { name: #556cbb460cd9cfc7, surface: "plane", near: Point3 { x: 146.31147557132093, y: 8.238359885426515, z: 1.0000000000000004 } } }) }
+bnary nudged 20 17 REFUSED Bool { index: 0, why: Internal(SplitCrossed { face: FaceRef { name: #16ef629f8a618654, surface: "plane", near: Point3 { x: 150.0, y: 150.0, z: 1.0000000000000004 } } }) }
+bseq nudged 20 18 Good area 42843.725243293 ref 42843.725393852 err 5.9e-6 comps 1
+bnary nudged 20 18 REFUSED Bool { index: 0, why: Internal(SplitCrossed { face: FaceRef { name: #235302a3236cabdc, surface: "plane", near: Point3 { x: 150.00000000000006, y: 75.00000000000003, z: 0.0 } } }) }
+bseq nudged 20 19 REFUSED Bool { index: 16, why: Internal(InconsistentClassification { a: FaceRef { name: #64b8864bda5af2a5, surface: "plane", near: Point3 { x: 150.00000000000006, y: 75.00000000000003, z: 2.0 } }, b: FaceRef { name: #556cbb460cd9cfc7, surface: "cylinder", near: Point3 { x: 102.37524675605367, y: 72.4374841843689, z: 1.0000000000000004 } }, across: Point3 { x: 93.84224308130325, y: 66.76904618141774, z: 2.0 } }) }
+bnary nudged 20 19 REFUSED Bool { index: 0, why: Internal(SplitCrossed { face: FaceRef { name: #235302a3236cabdc, surface: "plane", near: Point3 { x: 89.27913645280276, y: 100.6317047497412, z: -1.0000000000000002 } } }) }
+bseq nudged 20 20 Good area 42503.294206210 ref 42503.294177720 err 1.7e-5 comps 1
+bnary nudged 20 20 REFUSED Bool { index: 0, why: Internal(SplitCrossed { face: FaceRef { name: #235302a3236cabdc, surface: "plane", near: Point3 { x: 150.00000000000006, y: 75.00000000000003, z: 0.0 } } }) }
+bseq nudged 20 21 REFUSED Bool { index: 16, why: Internal(InconsistentClassification { a: FaceRef { name: #64b8864b309510ff, surface: "plane", near: Point3 { x: 150.00000000000006, y: 75.00000000000003, z: 2.0 } }, b: FaceRef { name: #b76aa06f726a5bed, surface: "cylinder", near: Point3 { x: 85.12376136304329, y: 78.33496396089234, z: 1.0000000000000004 } }, across: Point3 { x: 87.05217845894876, y: 73.15792483151462, z: 2.0 } }) }
+bnary nudged 20 21 REFUSED Bool { index: 0, why: Internal(SplitCrossed { face: FaceRef { name: #235302a3236cabdc, surface: "plane", near: Point3 { x: 78.71209767397902, y: 75.81104553478323, z: -1.0000000000000002 } } }) }
+bseq nudged 20 22 Good area 42907.038808919 ref 42907.038664111 err 2.7e-6 comps 1
+bnary nudged 20 22 REFUSED Bool { index: 0, why: Internal(SplitCrossed { face: FaceRef { name: #235302a3236cabdc, surface: "plane", near: Point3 { x: 226.36402191386867, y: 70.67872127464857, z: -1.0000000000000002 } } }) }
+bseq nudged 20 23 Good area 41643.909868248 ref 41643.910084623 err 1.4e-5 comps 1
+bnary nudged 20 23 Good area 41643.909972805 ref 41643.910084623 err 1.4e-5 comps 1
+bseq nudged 20 24 WrongArea { got: 42959.11305016573, want: 42959.111886516, limit: 0.0010117571180453524 } area 42959.113050166 ref 42959.111886516 err 2.9e-6 comps 1
+bnary nudged 20 24 Good area 42959.112461107 ref 42959.111886516 err 2.9e-6 comps 1
+bseq nudged 20 25 REFUSED Bool { index: 10, why: Internal(SplitCrossed { face: FaceRef { name: #b76aa06fe5039415, surface: "plane", near: Point3 { x: 258.65599980870104, y: 3.624412435061552e-5, z: 1.0000000000000004 } } }) }
+bnary nudged 20 25 REFUSED Bool { index: 0, why: Internal(SplitCrossed { face: FaceRef { name: #235302a3236cabdc, surface: "plane", near: Point3 { x: 150.00000000000006, y: 75.00000000000003, z: 0.0 } } }) }
+bseq nudged 20 26 Good area 42206.705746285 ref 42206.705660044 err 4.4e-6 comps 1
+bnary nudged 20 26 REFUSED Bool { index: 0, why: Internal(SplitCrossed { face: FaceRef { name: #235302a3236cabdc, surface: "plane", near: Point3 { x: 243.91303492164982, y: 53.96696484711632, z: -1.0000000000000002 } } }) }
+bseq nudged 20 27 REFUSED Bool { index: 6, why: Internal(InconsistentClassification { a: FaceRef { name: #9b027902bc0de02e, surface: "plane", near: Point3 { x: 149.83671958335918, y: 52.835905591702456, z: 1.0000000000000004 } }, b: FaceRef { name: #235302a3236cabdc, surface: "plane", near: Point3 { x: 150.00000000000006, y: 75.00000000000003, z: 0.0 } }, across: Point3 { x: 136.3024514467745, y: 53.95813842283148, z: 0.0 } }) }
+bnary nudged 20 27 REFUSED Bool { index: 0, why: Internal(SplitCrossed { face: FaceRef { name: #235302a3236cabdc, surface: "plane", near: Point3 { x: 139.8586760124392, y: 80.89123092093325, z: -1.0000000000000002 } } }) }
+bseq nudged 20 28 Good area 42500.338338663 ref 42500.338291893 err 5.1e-5 comps 1
+bnary nudged 20 28 Good area 42500.338338663 ref 42500.338291893 err 5.1e-5 comps 1
+bseq nudged 20 29 Good area 43904.327854245 ref 43904.327849215 err 3.8e-5 comps 1
+bnary nudged 20 29 REFUSED Bool { index: 0, why: Internal(SplitCrossed { face: FaceRef { name: #235302a3236cabdc, surface: "plane", near: Point3 { x: 139.74022923288493, y: 90.8823628519714, z: -1.0000000000000002 } } }) }
+bseq nudged 20 30 Good area 42638.410023312 ref 42638.410070168 err 7.4e-6 comps 1
+bnary nudged 20 30 REFUSED Bool { index: 0, why: Internal(SplitCrossed { face: FaceRef { name: #235302a3236cabdc, surface: "plane", near: Point3 { x: 89.38703204267763, y: 43.21318947285518, z: -1.0000000000000002 } } }) }
+bseq nudged 20 31 REFUSED Bool { index: 19, why: ZeroThickness { at: Point3 { x: 258.60835739457264, y: 2.9808483700813676e-7, z: 1.0 } } }
+bnary nudged 20 31 Good area 42986.675662580 ref 42986.675646813 err 2.3e-6 comps 1
+bseq nudged 20 32 REFUSED Bool { index: 8, why: Internal(RetryInvalid) }
+bnary nudged 20 32 REFUSED Bool { index: 0, why: Internal(HoleOutside { face: FaceRef { name: #235302a3236cabdc, surface: "plane", near: Point3 { x: 181.89641510562566, y: 33.78770903434492, z: -1.0000000000000002 } } }) }
+bseq nudged 20 33 REFUSED Bool { index: 12, why: Internal(InconsistentClassification { a: FaceRef { name: #630215fbc2610b28, surface: "plane", near: Point3 { x: 205.75219279034587, y: 88.28338827594364, z: 1.0000000000000004 } }, b: FaceRef { name: #235302a3236cabdc, surface: "plane", near: Point3 { x: 150.00000000000006, y: 74.99999990482188, z: 0.0 } }, across: Point3 { x: 207.2624044425719, y: 100.30732204196028, z: 0.0 } }) }
+bnary nudged 20 33 REFUSED Bool { index: 0, why: Internal(SplitCrossed { face: FaceRef { name: #235302a3236cabdc, surface: "plane", near: Point3 { x: 188.5405745115405, y: 111.94224684037658, z: -1.0000000000000002 } } }) }
+bseq nudged 20 34 Good area 41658.145667346 ref 41658.145678778 err 7.2e-6 comps 1
+bnary nudged 20 34 REFUSED Bool { index: 0, why: Internal(SplitCrossed { face: FaceRef { name: #235302a3236cabdc, surface: "plane", near: Point3 { x: 181.38434408526012, y: 103.30567039250353, z: -1.0000000000000002 } } }) }
+bseq nudged 20 35 REFUSED Bool { index: 12, why: Internal(InconsistentClassification { a: FaceRef { name: #9b027902bc0de02e, surface: "cylinder", near: Point3 { x: 100.67987112881606, y: 90.86006229497265, z: 1.0000000000000004 } }, b: FaceRef { name: #235302a3236cabdc, surface: "plane", near: Point3 { x: 150.00000000000006, y: 75.00000000000003, z: 0.0 } }, across: Point3 { x: 101.39563496670552, y: 97.92416779541745, z: 0.0 } }) }
+bnary nudged 20 35 REFUSED Bool { index: 0, why: Unsupported(ProbeOnToolEdge { face: FaceRef { name: #556cbb460cd9cfc7, surface: "plane", near: Point3 { x: 207.27573601213274, y: 154.49387200046738, z: 1.0000000000000004 } } }) }
+bseq nudged 20 36 Good area 40311.384127524 ref 40311.384119464 err 3.3e-5 comps 2
+bnary nudged 20 36 REFUSED Bool { index: 0, why: Internal(SplitCrossed { face: FaceRef { name: #235302a3236cabdc, surface: "plane", near: Point3 { x: 150.00000000000006, y: 75.00000000000003, z: 0.0 } } }) }
+bseq nudged 20 37 Good area 43307.740541856 ref 43307.740401656 err 1.9e-5 comps 1
+bnary nudged 20 37 REFUSED Bool { index: 0, why: Unsupported(ProbeOnToolEdge { face: FaceRef { name: #235302a3236cabdc, surface: "plane", near: Point3 { x: 150.00000000000006, y: 75.00000000000003, z: 0.0 } } }) }
+bseq nudged 20 38 REFUSED Bool { index: 18, why: Internal(HoleOutside { face: FaceRef { name: #b76aa06f726a5bed, surface: "plane", near: Point3 { x: 178.53603325341004, y: 7.439342562102823, z: 1.0000000000000004 } } }) }
+bnary nudged 20 38 REFUSED Bool { index: 0, why: Internal(SplitCrossed { face: FaceRef { name: #235302a3236cabdc, surface: "plane", near: Point3 { x: 53.48754878410125, y: 130.8122372375147, z: -1.0000000000000002 } } }) }
+bseq nudged 20 39 REFUSED Bool { index: 13, why: Internal(InconsistentClassification { a: FaceRef { name: #64b8864bda5af2a5, surface: "plane", near: Point3 { x: 150.00000000000006, y: 74.9999995354381, z: 2.0 } }, b: FaceRef { name: #9b0279021774526e, surface: "cylinder", near: Point3 { x: 133.14429485993486, y: 64.5594799788555, z: 1.0000000000000004 } }, across: Point3 { x: 135.61216402713225, y: 66.43666542267366, z: 2.0 } }) }
+bnary nudged 20 39 REFUSED Bool { index: 0, why: Internal(SplitCrossed { face: FaceRef { name: #235302a3236cabdc, surface: "plane", near: Point3 { x: 150.00000000000006, y: 75.00000000000003, z: 0.0 } } }) }
+bseq nudged 20 40 Good area 42799.418518999 ref 42799.418579856 err 1.1e-5 comps 1
+bnary nudged 20 40 REFUSED Bool { index: 0, why: Internal(SplitCrossed { face: FaceRef { name: #235302a3236cabdc, surface: "plane", near: Point3 { x: 150.00000000000006, y: 75.00000000000003, z: 0.0 } } }) }
+bseq nudged 20 41 REFUSED Bool { index: 19, why: Internal(HoleOutside { face: FaceRef { name: #b76aa06f726a5bed, surface: "plane", near: Point3 { x: 99.18500903856214, y: 5.140515468769848, z: 1.0000000000000004 } } }) }
+bnary nudged 20 41 REFUSED Bool { index: 0, why: Internal(SplitCrossed { face: FaceRef { name: #235302a3236cabdc, surface: "plane", near: Point3 { x: 149.74421862349325, y: 51.26776211743743, z: -1.0000000000000002 } } }) }
+bseq nudged 20 42 Good area 42882.652447331 ref 42882.652444251 err 9.5e-6 comps 1
+bnary nudged 20 42 REFUSED Bool { index: 0, why: Internal(SplitCrossed { face: FaceRef { name: #235302a3236cabdc, surface: "plane", near: Point3 { x: 228.40259964834593, y: 29.9573360142029, z: -1.0000000000000002 } } }) }
+bseq nudged 20 43 REFUSED Bool { index: 17, why: Internal(HoleOutside { face: FaceRef { name: #b76aa06f726a5bed, surface: "plane", near: Point3 { x: 250.3659430622772, y: 8.113485487474637, z: 1.0000000000000004 } } }) }
+bnary nudged 20 43 REFUSED Bool { index: 0, why: Internal(SplitCrossed { face: FaceRef { name: #235302a3236cabdc, surface: "plane", near: Point3 { x: 52.102049226743674, y: 90.02787933379788, z: -1.0000000000000002 } } }) }
+bseq nudged 20 44 Good area 41423.162631646 ref 41423.162743564 err 1.1e-5 comps 1
+bnary nudged 20 44 REFUSED Bool { index: 0, why: Internal(SplitCrossed { face: FaceRef { name: #235302a3236cabdc, surface: "plane", near: Point3 { x: 101.36023455004297, y: 109.59240713132992, z: -1.0000000000000002 } } }) }
+bseq nudged 20 45 REFUSED Bool { index: 15, why: Internal(InconsistentClassification { a: FaceRef { name: #556cbb460cd9cfc7, surface: "cylinder", near: Point3 { x: 208.43847687459476, y: 79.20743456618668, z: 1.0000000000000004 } }, b: FaceRef { name: #235302a3236cabdc, surface: "plane", near: Point3 { x: 150.00000000000006, y: 75.00000000000003, z: 0.0 } }, across: Point3 { x: 203.71922805302887, y: 79.0651606137014, z: 0.0 } }) }
+bnary nudged 20 45 REFUSED Bool { index: 0, why: Internal(SplitCrossed { face: FaceRef { name: #235302a3236cabdc, surface: "plane", near: Point3 { x: 150.00000000000006, y: 75.00000000000003, z: 0.0 } } }) }
+bseq nudged 20 46 Good area 41862.296413463 ref 41862.296470850 err 1.1e-5 comps 1
+bnary nudged 20 46 REFUSED Bool { index: 0, why: Internal(SplitCrossed { face: FaceRef { name: #235302a3236cabdc, surface: "plane", near: Point3 { x: 113.046582758908, y: 72.49050283049449, z: -1.0000000000000002 } } }) }
+bseq nudged 20 47 REFUSED Bool { index: 2, why: Internal(SplitCrossed { face: FaceRef { name: #556cbb46de5aab11, surface: "plane", near: Point3 { x: 47.8235678760276, y: 8.275989298610387, z: 1.0000000000000004 } } }) }
+bnary nudged 20 47 REFUSED Bool { index: 0, why: Internal(SplitCrossed { face: FaceRef { name: #235302a3236cabdc, surface: "plane", near: Point3 { x: 150.00000000000006, y: 75.00000000000003, z: 0.0 } } }) }
+bseq nudged 20 48 REFUSED Bool { index: 10, why: Internal(SplitCrossed { face: FaceRef { name: #9b0279029a3adf1c, surface: "plane", near: Point3 { x: 234.05790464089813, y: 117.79772032143278, z: 1.0000000000000004 } } }) }
+bnary nudged 20 48 REFUSED Bool { index: 0, why: Internal(SplitCrossed { face: FaceRef { name: #235302a3236cabdc, surface: "plane", near: Point3 { x: 81.07770603564623, y: 123.86566083250949, z: -1.0000000000000002 } } }) }
+bseq nudged 20 49 REFUSED Bool { index: 7, why: Internal(InconsistentClassification { a: FaceRef { name: #235302a3236cabdc, surface: "plane", near: Point3 { x: 150.00000000000006, y: 74.99999886749468, z: 0.0 } }, b: FaceRef { name: #9b027902bc0de02e, surface: "cylinder", near: Point3 { x: 273.15419614529605, y: 100.97729746725342, z: 1.0000000000000004 } }, across: Point3 { x: 285.88332242135294, y: 98.11962740170776, z: 0.0 } }) }
+bnary nudged 20 49 REFUSED Bool { index: 0, why: Internal(SplitCrossed { face: FaceRef { name: #235302a3236cabdc, surface: "plane", near: Point3 { x: 278.7449860096157, y: 112.76449720040577, z: -1.0000000000000002 } } }) }
+bseq nudged 20 50 Good area 41573.670202891 ref 41573.670523116 err 1.2e-5 comps 2
+bnary nudged 20 50 REFUSED Bool { index: 0, why: Internal(SplitCrossed { face: FaceRef { name: #235302a3236cabdc, surface: "plane", near: Point3 { x: 150.00000000000006, y: 75.00000000000003, z: 0.0 } } }) }
+bseq nudged 20 51 Good area 40683.871241531 ref 40683.871492962 err 1.5e-5 comps 1
+bnary nudged 20 51 REFUSED Bool { index: 0, why: Internal(SplitCrossed { face: FaceRef { name: #235302a3236cabdc, surface: "plane", near: Point3 { x: 150.00000000000006, y: 75.00000000000003, z: 0.0 } } }) }
+bseq nudged 20 52 Good area 44322.568490480 ref 44322.568633468 err 9.3e-6 comps 1
+bnary nudged 20 52 REFUSED Bool { index: 0, why: Internal(SplitCrossed { face: FaceRef { name: #235302a3236cabdc, surface: "plane", near: Point3 { x: 77.16121615527696, y: 154.42087632405418, z: -1.0 } } }) }
+bseq nudged 20 53 REFUSED Bool { index: 1, why: ZeroThickness { at: Point3 { x: 198.95588335445467, y: 1.6379992594866952e-6, z: 1.0 } } }
+bnary nudged 20 53 REFUSED Bool { index: 0, why: Internal(SplitCrossed { face: FaceRef { name: #235302a3236cabdc, surface: "plane", near: Point3 { x: 150.00000000000006, y: 75.00000000000003, z: 0.0 } } }) }
+bseq nudged 20 54 Good area 39673.852091864 ref 39673.852219763 err 3.9e-7 comps 1
+bnary nudged 20 54 REFUSED Bool { index: 0, why: Internal(SplitCrossed { face: FaceRef { name: #235302a3236cabdc, surface: "plane", near: Point3 { x: 177.03549597944738, y: 106.84613287175908, z: -1.0000000000000002 } } }) }
+bseq nudged 20 55 REFUSED Bool { index: 10, why: Internal(InconsistentClassification { a: FaceRef { name: #235302a3236cabdc, surface: "plane", near: Point3 { x: 150.00000000000006, y: 74.99999979990514, z: 0.0 } }, b: FaceRef { name: #9b027902bc0de02e, surface: "cylinder", near: Point3 { x: 128.8988215865578, y: 124.8858514182045, z: 1.0000000000000004 } }, across: Point3 { x: 122.8388196999135, y: 135.46083044424523, z: 0.0 } }) }
+bnary nudged 20 55 REFUSED Bool { index: 0, why: Internal(SplitCrossed { face: FaceRef { name: #235302a3236cabdc, surface: "plane", near: Point3 { x: 128.8988215865578, y: 124.8858514182045, z: -1.0000000000000002 } } }) }
+bseq nudged 20 56 Good area 42266.552700670 ref 42266.552461846 err 9.8e-6 comps 1
+bnary nudged 20 56 REFUSED Bool { index: 0, why: Internal(SplitCrossed { face: FaceRef { name: #235302a3236cabdc, surface: "plane", near: Point3 { x: 224.26243145501448, y: 108.90878836018753, z: -1.0000000000000002 } } }) }
+bseq nudged 20 57 Good area 43139.910349313 ref 43139.910384644 err 7.6e-6 comps 1
+bnary nudged 20 57 REFUSED Bool { index: 0, why: Unsupported(ProbeOnToolEdge { face: FaceRef { name: #235302a3236cabdc, surface: "plane", near: Point3 { x: 150.00000000000006, y: 75.00000000000003, z: 0.0 } } }) }
+bseq nudged 20 58 Good area 43235.739151155 ref 43235.739178638 err 6.3e-6 comps 1
+bnary nudged 20 58 REFUSED Bool { index: 0, why: Internal(SplitCrossed { face: FaceRef { name: #235302a3236cabdc, surface: "plane", near: Point3 { x: 224.35532929435217, y: 31.725305719678314, z: -1.0000000000000002 } } }) }
+bseq nudged 20 59 REFUSED Bool { index: 2, why: ZeroThickness { at: Point3 { x: 45.69702446402748, y: 102.5603782925658, z: 1.0 } } }
+bnary nudged 20 59 REFUSED Bool { index: 0, why: Internal(SplitCrossed { face: FaceRef { name: #235302a3236cabdc, surface: "plane", near: Point3 { x: 150.00000000000006, y: 75.00000000000003, z: 0.0 } } }) }
+bseq nudged 20 60 Good area 42393.863921695 ref 42393.863071814 err 4.6e-5 comps 2
+bnary nudged 20 60 REFUSED Bool { index: 0, why: Internal(SplitCrossed { face: FaceRef { name: #9b027902bc0de02e, surface: "plane", near: Point3 { x: 273.1509472108917, y: 149.99999518768206, z: 1.0000000000000004 } } }) }
+bseq nudged 20 61 REFUSED Bool { index: 2, why: Internal(SplitCrossed { face: FaceRef { name: #9b027902bc0de02e, surface: "plane", near: Point3 { x: 157.63079478581557, y: 45.684957423213795, z: 1.0000000000000004 } } }) }
+bnary nudged 20 61 REFUSED Bool { index: 0, why: Internal(SplitCrossed { face: FaceRef { name: #235302a3236cabdc, surface: "plane", near: Point3 { x: 150.00000000000006, y: 75.00000000000003, z: 0.0 } } }) }
+bseq nudged 20 62 Good area 40267.068848802 ref 40267.069514868 err 3.1e-5 comps 1
+bnary nudged 20 62 WrongArea { got: 42558.204873313996, want: 40267.069514867864, limit: 0.0011231412497872953 } area 42558.204873314 ref 40267.069514868 err 3.1e-5 comps 1
+bseq nudged 20 63 REFUSED Bool { index: 11, why: Internal(RetryInvalid) }
+bnary nudged 20 63 REFUSED Bool { index: 0, why: Internal(SplitCrossed { face: FaceRef { name: #235302a3236cabdc, surface: "plane", near: Point3 { x: 40.057458444005135, y: 80.77575708917398, z: -1.0000000000000002 } } }) }
+bseq nudged 20 64 REFUSED Bool { index: 12, why: Internal(InconsistentClassification { a: FaceRef { name: #630215fbc2610b28, surface: "plane", near: Point3 { x: 30.692266429850413, y: 69.76601105872788, z: 1.0000000000000004 } }, b: FaceRef { name: #64b8864bda5af2a5, surface: "plane", near: Point3 { x: 150.00000000000003, y: 75.00000000000003, z: 2.0 } }, across: Point3 { x: 46.1578755179185, y: 74.97928873060515, z: 2.0 } }) }
+bnary nudged 20 64 REFUSED Bool { index: 0, why: Unsupported(ProbeOnToolEdge { face: FaceRef { name: #235302a3236cabdc, surface: "plane", near: Point3 { x: 150.00000000000006, y: 75.00000000000003, z: 0.0 } } }) }
+bseq nudged 20 65 Good area 42460.995327478 ref 42460.995554683 err 4.5e-5 comps 1
+bnary nudged 20 65 REFUSED Bool { index: 0, why: Internal(SplitCrossed { face: FaceRef { name: #235302a3236cabdc, surface: "plane", near: Point3 { x: 150.00000000000006, y: 75.00000000000003, z: 0.0 } } }) }
+bseq nudged 20 66 REFUSED Bool { index: 6, why: Internal(InconsistentClassification { a: FaceRef { name: #64b8864bda5af2a5, surface: "plane", near: Point3 { x: 150.00000000000006, y: 75.000000003759, z: 2.0 } }, b: FaceRef { name: #9b027902bc0de02e, surface: "cylinder", near: Point3 { x: 178.87917094046404, y: 40.083008119860864, z: 1.0000000000000004 } }, across: Point3 { x: 185.55040738292735, y: 43.82563438027825, z: 2.0 } }) }
+bnary nudged 20 66 REFUSED Bool { index: 0, why: Internal(SplitCrossed { face: FaceRef { name: #235302a3236cabdc, surface: "plane", near: Point3 { x: 178.87917094046404, y: 40.083008119860864, z: -1.0000000000000002 } } }) }
+bseq nudged 20 67 Good area 38431.698458047 ref 38431.698057505 err 7.7e-7 comps 1
+bnary nudged 20 67 REFUSED Bool { index: 0, why: Internal(SplitCrossed { face: FaceRef { name: #235302a3236cabdc, surface: "plane", near: Point3 { x: 150.00000000000006, y: 75.00000000000003, z: 0.0 } } }) }
+bseq nudged 20 68 REFUSED Bool { index: 12, why: Internal(InconsistentClassification { a: FaceRef { name: #9b027902bc0de02e, surface: "plane", near: Point3 { x: 112.8741356658891, y: 101.89389612360844, z: 1.0000000000000004 } }, b: FaceRef { name: #235302a3236cabdc, surface: "plane", near: Point3 { x: 150.00000000000006, y: 74.99999999544801, z: 0.0 } }, across: Point3 { x: 123.5132874472688, y: 97.55843643264434, z: 0.0 } }) }
+bnary nudged 20 68 REFUSED Bool { index: 0, why: Unsupported(ProbeOnToolEdge { face: FaceRef { name: #235302a3236cabdc, surface: "plane", near: Point3 { x: 150.00000000000006, y: 75.00000000000003, z: 0.0 } } }) }
+bseq nudged 20 69 Good area 42543.961913039 ref 42543.961607429 err 1.3e-5 comps 1
+bnary nudged 20 69 Good area 42543.961759926 ref 42543.961607429 err 1.3e-5 comps 1
+bseq nudged 20 70 REFUSED Bool { index: 4, why: Internal(SplitCrossed { face: FaceRef { name: #235302a3236cabdc, surface: "plane", near: Point3 { x: 150.00000000000006, y: 75.00000000000003, z: 0.0 } } }) }
+bnary nudged 20 70 REFUSED Bool { index: 0, why: Internal(SplitCrossed { face: FaceRef { name: #235302a3236cabdc, surface: "plane", near: Point3 { x: 150.00000000000006, y: 75.00000000000003, z: 0.0 } } }) }
+bseq nudged 20 71 REFUSED Bool { index: 1, why: Internal(SplitCrossed { face: FaceRef { name: #16ef629fa68e2353, surface: "plane", near: Point3 { x: 272.2054003700067, y: 149.99999615001394, z: 1.0000000000000004 } } }) }
+bnary nudged 20 71 REFUSED Bool { index: 0, why: Internal(SplitCrossed { face: FaceRef { name: #16ef629f8a618654, surface: "plane", near: Point3 { x: 150.0, y: 150.0, z: 1.0000000000000004 } } }) }
+bseq nudged 20 72 Good area 41186.971812869 ref 41186.971013754 err 2.3e-5 comps 1
+bnary nudged 20 72 REFUSED Bool { index: 0, why: Unsupported(ProbeOnToolEdge { face: FaceRef { name: #556cbb460cd9cfc7, surface: "plane", near: Point3 { x: 196.57016480978945, y: 7.939178705218352, z: 1.0000000000000004 } } }) }
+bseq nudged 20 73 REFUSED Bool { index: 5, why: Internal(InconsistentClassification { a: FaceRef { name: #235302a3236cabdc, surface: "plane", near: Point3 { x: 150.00000000000006, y: 75.00000000000003, z: 0.0 } }, b: FaceRef { name: #556cbb460cd9cfc7, surface: "cylinder", near: Point3 { x: 241.725846713627, y: 100.4041399883731, z: 1.0000000000000004 } }, across: Point3 { x: 230.39016869960196, y: 92.24109071238838, z: 0.0 } }) }
+bnary nudged 20 73 REFUSED Bool { index: 0, why: Internal(SplitCrossed { face: FaceRef { name: #235302a3236cabdc, surface: "plane", near: Point3 { x: 150.00000000000006, y: 75.00000000000003, z: 0.0 } } }) }
+bseq nudged 20 74 Good area 40170.582681408 ref 40170.582756064 err 2.5e-5 comps 2
+bnary nudged 20 74 Good area 40170.582821221 ref 40170.582756064 err 2.5e-5 comps 2
+bseq nudged 20 75 Good area 43170.977257805 ref 43170.977302590 err 1.6e-5 comps 1
+bnary nudged 20 75 REFUSED Bool { index: 0, why: Unsupported(ProbeOnToolEdge { face: FaceRef { name: #235302a3236cabdc, surface: "plane", near: Point3 { x: 150.00000000000006, y: 75.00000000000003, z: 0.0 } } }) }
+bseq nudged 20 76 Good area 41457.561300141 ref 41457.561169307 err 1.7e-5 comps 1
+bnary nudged 20 76 REFUSED Bool { index: 0, why: Unsupported(ProbeOnToolEdge { face: FaceRef { name: #235302a3236cabdc, surface: "plane", near: Point3 { x: 150.00000000000006, y: 75.00000000000003, z: 0.0 } } }) }
+bseq nudged 20 77 Good area 41571.426516389 ref 41571.426589629 err 3.6e-5 comps 1
+bnary nudged 20 77 REFUSED Bool { index: 0, why: Unsupported(ProbeOnToolEdge { face: FaceRef { name: #235302a3236cabdc, surface: "plane", near: Point3 { x: 150.00000000000006, y: 75.00000000000003, z: 0.0 } } }) }
+bseq nudged 20 78 Good area 43382.062253740 ref 43382.062245451 err 1.0e-5 comps 1
+bnary nudged 20 78 REFUSED Bool { index: 0, why: Internal(SplitCrossed { face: FaceRef { name: #235302a3236cabdc, surface: "plane", near: Point3 { x: 150.00000000000006, y: 75.00000000000003, z: 0.0 } } }) }
+bseq nudged 20 79 REFUSED Bool { index: 16, why: Internal(SplitCrossed { face: FaceRef { name: #556cbb46de5aab11, surface: "plane", near: Point3 { x: 67.67935323359035, y: 71.37349201394971, z: 1.0000000000000004 } } }) }
+bnary nudged 20 79 REFUSED Bool { index: 0, why: Internal(SplitCrossed { face: FaceRef { name: #235302a3236cabdc, surface: "plane", near: Point3 { x: 150.00000000000006, y: 75.00000000000003, z: 0.0 } } }) }
+bseq nudged 20 80 REFUSED Bool { index: 5, why: Internal(InconsistentClassification { a: FaceRef { name: #9b027902bc0de02e, surface: "plane", near: Point3 { x: 230.43692818739825, y: 135.2895125721884, z: 1.0000000000000004 } }, b: FaceRef { name: #235302a3236cabdc, surface: "plane", near: Point3 { x: 150.00000000000006, y: 75.00000000000003, z: 0.0 } }, across: Point3 { x: 230.23074742320867, y: 138.2092323787675, z: 0.0 } }) }
+bnary nudged 20 80 REFUSED Bool { index: 0, why: Internal(SplitCrossed { face: FaceRef { name: #235302a3236cabdc, surface: "plane", near: Point3 { x: 218.09085706135974, y: 121.06728082893798, z: -1.0000000000000002 } } }) }
+bseq nudged 20 81 Good area 42292.683334827 ref 42292.683338063 err 4.1e-5 comps 1
+bnary nudged 20 81 REFUSED Bool { index: 0, why: Internal(SplitCrossed { face: FaceRef { name: #235302a3236cabdc, surface: "plane", near: Point3 { x: 150.00000000000006, y: 75.00000000000003, z: 0.0 } } }) }
+bseq nudged 20 82 Good area 41123.459193183 ref 41123.459069469 err 1.6e-6 comps 1
+bnary nudged 20 82 REFUSED Bool { index: 0, why: Internal(SplitCrossed { face: FaceRef { name: #235302a3236cabdc, surface: "plane", near: Point3 { x: 258.3765565635133, y: 43.107846840702095, z: -1.0000000000000002 } } }) }
+bseq nudged 20 83 REFUSED Bool { index: 10, why: Internal(InconsistentClassification { a: FaceRef { name: #235302a325c2dfa3, surface: "plane", near: Point3 { x: 150.00000000000006, y: 75.00000000000003, z: 0.0 } }, b: FaceRef { name: #9b02790294c9f8f8, surface: "cylinder", near: Point3 { x: 161.9383619938977, y: 59.479992816612956, z: 1.0000000000000004 } }, across: Point3 { x: 161.9378597638643, y: 59.56360392124516, z: 0.0 } }) }
+bnary nudged 20 83 REFUSED Bool { index: 0, why: Internal(SplitCrossed { face: FaceRef { name: #235302a3236cabdc, surface: "plane", near: Point3 { x: 150.00000000000006, y: 75.00000000000003, z: 0.0 } } }) }
+bseq nudged 20 84 REFUSED Bool { index: 8, why: Internal(InconsistentClassification { a: FaceRef { name: #9b027902bc0de02e, surface: "cylinder", near: Point3 { x: 177.53348376855797, y: 23.829632560551318, z: 1.0000000000000004 } }, b: FaceRef { name: #235302a3236cabdc, surface: "plane", near: Point3 { x: 150.00000000000006, y: 75.00000000000003, z: 0.0 } }, across: Point3 { x: 174.6148800573224, y: 27.899626683041113, z: 0.0 } }) }
+bnary nudged 20 84 REFUSED Bool { index: 0, why: Internal(SplitCrossed { face: FaceRef { name: #235302a3236cabdc, surface: "plane", near: Point3 { x: 192.491530287072, y: 32.420395975833614, z: -1.0000000000000002 } } }) }
+bseq nudged 20 85 Good area 43153.651472427 ref 43153.651424172 err 4.1e-6 comps 1
+bnary nudged 20 85 REFUSED Bool { index: 0, why: Internal(SplitCrossed { face: FaceRef { name: #235302a3236cabdc, surface: "plane", near: Point3 { x: 85.36241549383249, y: 58.790580035108654, z: -1.0000000000000002 } } }) }
+bseq nudged 20 86 REFUSED Bool { index: 17, why: Internal(InconsistentClassification { a: FaceRef { name: #9b027902bc0de02e, surface: "cylinder", near: Point3 { x: 187.13421447019175, y: 127.78384912866878, z: 1.0000000000000004 } }, b: FaceRef { name: #235302a3236cabdc, surface: "plane", near: Point3 { x: 150.00000000000006, y: 74.999999883966, z: 0.0 } }, across: Point3 { x: 184.8068236838483, y: 127.38826573816424, z: 0.0 } }) }
+bnary nudged 20 86 REFUSED Bool { index: 0, why: Unsupported(ProbeOnToolEdge { face: FaceRef { name: #235302a3236cabdc, surface: "plane", near: Point3 { x: 150.00000000000006, y: 75.00000000000003, z: 0.0 } } }) }
+bseq nudged 20 87 REFUSED Bool { index: 1, why: Internal(InconsistentClassification { a: FaceRef { name: #235302a3236cabdc, surface: "plane", near: Point3 { x: 150.00000000000006, y: 75.00000000000003, z: 0.0 } }, b: FaceRef { name: #9b027902bc0de02e, surface: "cylinder", near: Point3 { x: 258.17654482678523, y: 63.65117979579212, z: 1.0000000000000004 } }, across: Point3 { x: 265.0267752624228, y: 67.25599188417699, z: 0.0 } }) }
+bnary nudged 20 87 REFUSED Bool { index: 0, why: Unsupported(ProbeOnToolEdge { face: FaceRef { name: #235302a3236cabdc, surface: "plane", near: Point3 { x: 150.00000000000006, y: 75.00000000000003, z: 0.0 } } }) }
+bseq nudged 20 88 Good area 43193.434235236 ref 43193.434096472 err 9.9e-6 comps 1
+bnary nudged 20 88 REFUSED Bool { index: 0, why: Unsupported(ProbeOnToolEdge { face: FaceRef { name: #b76aa06f726a5bed, surface: "plane", near: Point3 { x: 88.64094656750987, y: 154.61280004853467, z: 1.0000000000000004 } } }) }
+bseq nudged 20 89 REFUSED Bool { index: 5, why: Internal(InconsistentClassification { a: FaceRef { name: #b76aa06f726a5bed, surface: "plane", near: Point3 { x: 261.99350897832875, y: 29.900246050583824, z: 1.0000000000000004 } }, b: FaceRef { name: #64b8864bda5af2a5, surface: "plane", near: Point3 { x: 150.00000000000006, y: 75.00000000000003, z: 2.0 } }, across: Point3 { x: 261.99350897832875, y: 29.90024605058382, z: 2.0 } }) }
+bnary nudged 20 89 REFUSED Bool { index: 0, why: Internal(SplitCrossed { face: FaceRef { name: #235302a3236cabdc, surface: "plane", near: Point3 { x: 150.00000000000006, y: 75.00000000000003, z: 0.0 } } }) }
+bseq nudged 20 90 REFUSED Bool { index: 2, why: Internal(RetryInvalid) }
+bnary nudged 20 90 REFUSED Bool { index: 0, why: Unsupported(ProbeOnToolEdge { face: FaceRef { name: #235302a3236cabdc, surface: "plane", near: Point3 { x: 150.00000000000006, y: 75.00000000000003, z: 0.0 } } }) }
+bseq nudged 20 91 REFUSED Bool { index: 10, why: Internal(SplitCrossed { face: FaceRef { name: #64b8864bda5af2a5, surface: "plane", near: Point3 { x: 150.00000000000006, y: 74.99999780547583, z: 2.0 } } }) }
+bnary nudged 20 91 REFUSED Bool { index: 0, why: Internal(SplitCrossed { face: FaceRef { name: #556cbb460cd9cfc7, surface: "plane", near: Point3 { x: 239.45722826721152, y: 3.9240833009643326, z: 1.0000000000000004 } } }) }
+bseq nudged 20 92 REFUSED Bool { index: 8, why: Internal(InconsistentClassification { a: FaceRef { name: #235302a3236cabdc, surface: "plane", near: Point3 { x: 150.00000000000006, y: 75.00000001981657, z: 0.0 } }, b: FaceRef { name: #b76aa06f726a5bed, surface: "cylinder", near: Point3 { x: 265.1521803755597, y: 92.0137191940247, z: 1.0000000000000004 } }, across: Point3 { x: 266.1852544519886, y: 96.4519186951458, z: 0.0 } }) }
+bnary nudged 20 92 REFUSED Bool { index: 0, why: Internal(SplitCrossed { face: FaceRef { name: #235302a3236cabdc, surface: "plane", near: Point3 { x: 150.00000000000006, y: 75.00000000000003, z: 0.0 } } }) }
+bseq nudged 20 93 Good area 42140.913022307 ref 42140.913122463 err 6.8e-6 comps 1
+bnary nudged 20 93 REFUSED Bool { index: 0, why: Internal(SplitCrossed { face: FaceRef { name: #235302a3236cabdc, surface: "plane", near: Point3 { x: 192.28152464386125, y: 5.623137006705443, z: -1.0 } } }) }
+bseq nudged 20 94 Good area 40447.285339362 ref 40447.285392342 err 3.3e-5 comps 1
+bnary nudged 20 94 REFUSED Bool { index: 0, why: Internal(SplitCrossed { face: FaceRef { name: #235302a3236cabdc, surface: "plane", near: Point3 { x: 231.32267091997187, y: 4.276505352111075, z: -1.0 } } }) }
+bseq nudged 20 95 Good area 41355.547235011 ref 41355.547247546 err 1.3e-5 comps 2
+bnary nudged 20 95 REFUSED Bool { index: 0, why: Internal(SplitCrossed { face: FaceRef { name: #235302a3236cabdc, surface: "plane", near: Point3 { x: 251.68334133424722, y: 42.61210297137991, z: -1.0000000000000002 } } }) }
+bseq nudged 20 96 Good area 43225.784676850 ref 43225.784543861 err 1.4e-5 comps 1
+bnary nudged 20 96 REFUSED Bool { index: 0, why: Internal(SplitCrossed { face: FaceRef { name: #b76aa06f726a5bed, surface: "plane", near: Point3 { x: 210.97740236792075, y: 158.32781788223315, z: 1.0000000000000004 } } }) }
+bseq nudged 20 97 REFUSED Bool { index: 12, why: Internal(InconsistentClassification { a: FaceRef { name: #b76aa06f726a5bed, surface: "cylinder", near: Point3 { x: 214.2372280012562, y: 92.29077412306944, z: 1.0000000000000004 } }, b: FaceRef { name: #64b8864bda5af2a5, surface: "plane", near: Point3 { x: 150.00000000000006, y: 75.00000007903222, z: 2.0 } }, across: Point3 { x: 210.20858423723004, y: 101.21019859357693, z: 2.0 } }) }
+bnary nudged 20 97 REFUSED Bool { index: 0, why: Internal(SplitCrossed { face: FaceRef { name: #235302a3236cabdc, surface: "plane", near: Point3 { x: 200.19892780045797, y: 84.71612564990346, z: -1.0000000000000002 } } }) }
+bseq nudged 20 98 Good area 42704.779429575 ref 42704.779435672 err 2.7e-5 comps 2
+bnary nudged 20 98 REFUSED Bool { index: 0, why: Internal(SplitCrossed { face: FaceRef { name: #235302a3236cabdc, surface: "plane", near: Point3 { x: 281.67232894089085, y: 20.957146897982863, z: -1.0000000000000002 } } }) }
+bseq nudged 20 99 Good area 42754.743321247 ref 42754.743584064 err 2.1e-6 comps 1
+bnary nudged 20 99 REFUSED Bool { index: 0, why: Internal(SplitCrossed { face: FaceRef { name: #235302a3236cabdc, surface: "plane", near: Point3 { x: 150.00000000000006, y: 75.00000000000003, z: 0.0 } } }) }
+bseq nudged 200 0 REFUSED Bool { index: 116, why: Internal(InconsistentClassification { a: FaceRef { name: #64b8864bda5af2a5, surface: "plane", near: Point3 { x: 150.00000000000006, y: 74.99999994114741, z: 2.0 } }, b: FaceRef { name: #556cbb460cd9cfc7, surface: "cylinder", near: Point3 { x: 166.87853838182974, y: 93.20639278011308, z: 1.0000000000000004 } }, across: Point3 { x: 166.84079726334818, y: 93.22700536867174, z: 2.0 } }) }
+bnary nudged 200 0 REFUSED Bool { index: 0, why: Internal(SplitCrossed { face: FaceRef { name: #235302a3236cabdc, surface: "plane", near: Point3 { x: 150.00000000000006, y: 75.00000000000003, z: 0.0 } } }) }
+bseq nudged 200 1 REFUSED Bool { index: 9, why: Internal(RetryInvalid) }
+bnary nudged 200 1 REFUSED Bool { index: 0, why: Internal(SplitCrossed { face: FaceRef { name: #235302a3236cabdc, surface: "plane", near: Point3 { x: 150.00000000000006, y: 75.00000000000003, z: 0.0 } } }) }
+bseq nudged 200 2 REFUSED Bool { index: 15, why: Internal(RetryInvalid) }
+bnary nudged 200 2 REFUSED Bool { index: 0, why: Internal(SplitCrossed { face: FaceRef { name: #235302a3236cabdc, surface: "plane", near: Point3 { x: 150.00000000000006, y: 75.00000000000003, z: 0.0 } } }) }
+bseq nudged 200 3 REFUSED Bool { index: 5, why: Internal(InconsistentClassification { a: FaceRef { name: #235302a3236cabdc, surface: "plane", near: Point3 { x: 150.00000000000006, y: 75.00000000000003, z: 0.0 } }, b: FaceRef { name: #9b027902bc0de02e, surface: "cylinder", near: Point3 { x: 183.46437156511047, y: 15.961781545366113, z: 1.0000000000000004 } }, across: Point3 { x: 186.37705635991392, y: 18.62037753447842, z: 0.0 } }) }
+bnary nudged 200 3 REFUSED Bool { index: 0, why: Internal(SplitCrossed { face: FaceRef { name: #235302a3236cabdc, surface: "plane", near: Point3 { x: 150.00000000000006, y: 75.00000000000003, z: 0.0 } } }) }
+bseq nudged 200 4 REFUSED Bool { index: 172, why: Internal(InconsistentClassification { a: FaceRef { name: #235302a325c2dfa3, surface: "plane", near: Point3 { x: 150.00000000000006, y: 74.99999812445856, z: 0.0 } }, b: FaceRef { name: #556cbb460cd9cfc7, surface: "cylinder", near: Point3 { x: 207.54038849787815, y: 63.280664180247754, z: 1.0000000000000004 } }, across: Point3 { x: 209.55059437341646, y: 62.96039229628602, z: 0.0 } }) }
+bnary nudged 200 4 REFUSED Bool { index: 0, why: Internal(SplitCrossed { face: FaceRef { name: #235302a3236cabdc, surface: "plane", near: Point3 { x: 150.00000000000006, y: 75.00000000000003, z: 0.0 } } }) }
+bseq nudged 200 5 REFUSED Bool { index: 17, why: Internal(InconsistentClassification { a: FaceRef { name: #235302a3236cabdc, surface: "plane", near: Point3 { x: 150.00000000000006, y: 74.99999999149424, z: 0.0 } }, b: FaceRef { name: #9b027902bc0de02e, surface: "plane", near: Point3 { x: 204.4787018341142, y: 26.42527124676366, z: 1.0000000000000004 } }, across: Point3 { x: 200.95117335550003, y: 23.028888040807843, z: 0.0 } }) }
+bnary nudged 200 5 REFUSED Bool { index: 0, why: Internal(SplitCrossed { face: FaceRef { name: #235302a3236cabdc, surface: "plane", near: Point3 { x: 150.00000000000006, y: 75.00000000000003, z: 0.0 } } }) }
+bseq nudged 200 6 REFUSED Bool { index: 54, why: Internal(SplitCrossed { face: FaceRef { name: #630215fbc2610b28, surface: "plane", near: Point3 { x: 53.96522528651549, y: 4.222332482861931, z: 1.0000000000000004 } } }) }
+bnary nudged 200 6 REFUSED Bool { index: 0, why: Internal(SplitCrossed { face: FaceRef { name: #235302a3236cabdc, surface: "plane", near: Point3 { x: 150.00000000000006, y: 75.00000000000003, z: 0.0 } } }) }
+bseq nudged 200 7 REFUSED Bool { index: 2, why: Internal(InconsistentClassification { a: FaceRef { name: #9b027902bc0de02e, surface: "cylinder", near: Point3 { x: 274.06986124025036, y: 102.46500111568683, z: 1.0000000000000004 } }, b: FaceRef { name: #235302a3236cabdc, surface: "plane", near: Point3 { x: 150.00000000000006, y: 75.00000000000003, z: 0.0 } }, across: Point3 { x: 276.9638008274269, y: 100.41203582289943, z: 0.0 } }) }
+bnary nudged 200 7 REFUSED Bool { index: 0, why: Internal(SplitCrossed { face: FaceRef { name: #235302a3236cabdc, surface: "plane", near: Point3 { x: 150.00000000000006, y: 75.00000000000003, z: 0.0 } } }) }
+bseq nudged 200 8 REFUSED Bool { index: 22, why: Internal(InconsistentClassification { a: FaceRef { name: #b76aa06f726a5bed, surface: "cylinder", near: Point3 { x: 89.09270201171634, y: 19.97962444409172, z: 1.0000000000000004 } }, b: FaceRef { name: #235302a3236cabdc, surface: "plane", near: Point3 { x: 150.00000000000006, y: 74.9999999167311, z: 0.0 } }, across: Point3 { x: 90.44779638039014, y: 17.990532681703392, z: 0.0 } }) }
+bnary nudged 200 8 REFUSED Bool { index: 0, why: Internal(SplitCrossed { face: FaceRef { name: #235302a3236cabdc, surface: "plane", near: Point3 { x: 150.00000000000006, y: 75.00000000000003, z: 0.0 } } }) }
+bseq nudged 200 9 REFUSED Bool { index: 11, why: Internal(InconsistentClassification { a: FaceRef { name: #9b027902bc0de02e, surface: "cylinder", near: Point3 { x: 142.70702519770592, y: 49.518054190345744, z: 1.0000000000000004 } }, b: FaceRef { name: #235302a325c2dfa3, surface: "plane", near: Point3 { x: 150.00000000000006, y: 74.9999999942875, z: 0.0 } }, across: Point3 { x: 140.50859337160296, y: 46.64628859020036, z: 0.0 } }) }
+bnary nudged 200 9 REFUSED Bool { index: 0, why: Internal(SplitCrossed { face: FaceRef { name: #235302a3236cabdc, surface: "plane", near: Point3 { x: 150.00000000000006, y: 75.00000000000003, z: 0.0 } } }) }
+a nudged 2 0 REFUSED NearCoincident { a: 2, b: 0, at: Point2 { x: 160.26050966129898, y: 150.00001490348401 }, gap: 1.4903484014894275e-5, limit: 2e-5 }
+a nudged 2 1 Good area 42833.504939856 ref 42833.504997953 err 2.4e-5 comps 1
+a nudged 2 2 Good area 41139.138126711 ref 41139.138139212 err 2.5e-5 comps 1
+a nudged 2 3 Good area 43690.768059729 ref 43690.768044570 err 1.5e-5 comps 1
+a nudged 2 4 Good area 43643.103031032 ref 43643.103074647 err 2.2e-6 comps 1
+a nudged 2 5 Good area 44479.843511332 ref 44479.843529421 err 9.5e-6 comps 1
+a nudged 2 6 REFUSED NearCoincident { a: 2, b: 1, at: Point2 { x: 125.81314255366111, y: 90.9930221375069 }, gap: 1.3309132613023604e-5, limit: 2e-5 }
+a nudged 2 7 REFUSED NearCoincident { a: 2, b: 1, at: Point2 { x: 166.15638885381972, y: 66.94708308893566 }, gap: 1.633053403793383e-5, limit: 2e-5 }
+a nudged 2 8 Good area 44240.441221470 ref 44240.441239689 err 9.3e-6 comps 1
+a nudged 2 9 REFUSED NearCoincident { a: 1, b: 0, at: Point2 { x: 236.5190510354248, y: -5.638074824389809e-8 }, gap: 5.638074824389809e-8, limit: 2e-5 }
+a nudged 2 10 Good area 44611.643876723 ref 44611.643894842 err 9.5e-6 comps 1
+a nudged 2 11 REFUSED NearCoincident { a: 2, b: 1, at: Point2 { x: 165.48092943166705, y: 117.66355923293453 }, gap: 1.3383613293171948e-6, limit: 2e-5 }
+a nudged 2 12 REFUSED NearCoincident { a: 2, b: 0, at: Point2 { x: 170.96407300943275, y: 149.99999170768467 }, gap: 8.292315328617406e-6, limit: 2e-5 }
+a nudged 2 13 Good area 44183.929333230 ref 44183.929351487 err 9.2e-6 comps 1
+a nudged 2 14 Good area 43997.719617906 ref 43997.719609952 err 6.4e-6 comps 1
+a nudged 2 15 REFUSED NearCoincident { a: 2, b: 1, at: Point2 { x: 125.39596100410114, y: 64.29445976303957 }, gap: 2.544547951080019e-6, limit: 2e-5 }
+a nudged 2 16 Good area 44627.817362880 ref 44627.817380897 err 9.0e-6 comps 1
+a nudged 2 17 REFUSED NearCoincident { a: 2, b: 0, at: Point2 { x: 192.85038319356303, y: 149.999999931568 }, gap: 6.843200139883265e-8, limit: 2e-5 }
+a nudged 2 18 Good area 43781.980807558 ref 43781.980825295 err 9.5e-6 comps 1
+a nudged 2 19 REFUSED NearCoincident { a: 2, b: 0, at: Point2 { x: 227.70948721407703, y: 1.223415885371537e-5 }, gap: 1.223415885371537e-5, limit: 2e-5 }
+a nudged 2 20 REFUSED NearCoincident { a: 2, b: 0, at: Point2 { x: 110.12950556728846, y: 150.00000686436874 }, gap: 6.864368742753868e-6, limit: 2e-5 }
+a nudged 2 21 Good area 43986.780327431 ref 43986.780345077 err 9.3e-6 comps 1
+a nudged 2 22 Good area 43319.869981492 ref 43319.870093594 err 1.9e-5 comps 1
+a nudged 2 23 REFUSED NearCoincident { a: 2, b: 1, at: Point2 { x: 132.8354314986507, y: 42.26850518678289 }, gap: 6.281712217059976e-7, limit: 2e-5 }
+a nudged 2 24 REFUSED NearCoincident { a: 1, b: 0, at: Point2 { x: 251.23850424791507, y: -1.8479433230171706e-8 }, gap: 1.8479433230193563e-8, limit: 2e-5 }
+a nudged 2 25 REFUSED NearCoincident { a: 2, b: 1, at: Point2 { x: 215.46035054459986, y: 92.51990582149635 }, gap: 8.54861972875399e-6, limit: 2e-5 }
+a nudged 2 26 REFUSED NearCoincident { a: 2, b: 1, at: Point2 { x: 149.74825617107473, y: 90.06990255753415 }, gap: 6.879386041430625e-7, limit: 2e-5 }
+a nudged 2 27 REFUSED NearCoincident { a: 2, b: 1, at: Point2 { x: 161.48981364996266, y: 112.93058899313661 }, gap: 4.792370674522317e-6, limit: 2e-5 }
+a nudged 2 28 REFUSED NearCoincident { a: 2, b: 1, at: Point2 { x: 255.9232563876738, y: 59.20557991426631 }, gap: 1.7102728034757128e-6, limit: 2e-5 }
+a nudged 2 29 REFUSED NearCoincident { a: 2, b: 1, at: Point2 { x: 87.9305313270099, y: 112.8049811163089 }, gap: 2.837980900949333e-6, limit: 2e-5 }
+a nudged 2 30 Good area 44978.524007682 ref 44978.524025449 err 9.4e-6 comps 1
+a nudged 2 31 REFUSED NearCoincident { a: 1, b: 0, at: Point2 { x: 249.03877714850933, y: -8.419496208296888e-6 }, gap: 8.419496208296888e-6, limit: 2e-5 }
+a nudged 2 32 REFUSED NearCoincident { a: 2, b: 1, at: Point2 { x: 262.72645703681144, y: 63.036314046322126 }, gap: 3.594041118049063e-7, limit: 2e-5 }
+a nudged 2 33 REFUSED NearCoincident { a: 1, b: 0, at: Point2 { x: 222.883184419871, y: 150.00000952627929 }, gap: 9.526279285410055e-6, limit: 2e-5 }
+a nudged 2 34 REFUSED NearCoincident { a: 2, b: 1, at: Point2 { x: 257.1368291537852, y: 46.94359952805006 }, gap: 2.1201417865768235e-7, limit: 2e-5 }
+a nudged 2 35 Good area 43744.267104898 ref 43744.267167785 err 3.1e-5 comps 1
+a nudged 2 36 REFUSED NearCoincident { a: 2, b: 0, at: Point2 { x: 39.485375403684884, y: 150.00000009512667 }, gap: 9.512666565570241e-8, limit: 2e-5 }
+a nudged 2 37 REFUSED NearCoincident { a: 2, b: 1, at: Point2 { x: 271.19083127787417, y: 48.29588694705756 }, gap: 2.374487223733013e-6, limit: 2e-5 }
+a nudged 2 38 REFUSED NearCoincident { a: 2, b: 0, at: Point2 { x: 205.7354409636297, y: -6.388035565721037e-6 }, gap: 6.388035565721037e-6, limit: 2e-5 }
+a nudged 2 39 REFUSED NearCoincident { a: 2, b: 1, at: Point2 { x: 63.8176986919661, y: 110.77375570088265 }, gap: 3.770963985516573e-9, limit: 2e-5 }
+a nudged 2 40 REFUSED NearCoincident { a: 2, b: 1, at: Point2 { x: 262.8893388340455, y: 119.83978035286921 }, gap: 3.9100785897971946e-7, limit: 2e-5 }
+a nudged 2 41 Good area 44237.442780433 ref 44237.442798591 err 9.7e-6 comps 1
+a nudged 2 42 REFUSED NearCoincident { a: 2, b: 1, at: Point2 { x: 201.94451530967936, y: 80.69449232409771 }, gap: 9.050633309470868e-8, limit: 2e-5 }
+a nudged 2 43 Good area 43855.816934635 ref 43855.816952594 err 9.4e-6 comps 1
+a nudged 2 44 REFUSED NearCoincident { a: 2, b: 0, at: Point2 { x: 175.46599643082232, y: 149.9999997108503 }, gap: 2.891497103973961e-7, limit: 2e-5 }
+a nudged 2 45 REFUSED NearCoincident { a: 2, b: 0, at: Point2 { x: 46.971167660672975, y: 149.9999995053967 }, gap: 4.946033129726859e-7, limit: 2e-5 }
+a nudged 2 46 REFUSED NearCoincident { a: 2, b: 1, at: Point2 { x: 78.39248481775763, y: 38.6054709504905 }, gap: 1.0795427030839315e-8, limit: 2e-5 }
+a nudged 2 47 REFUSED NearCoincident { a: 2, b: 1, at: Point2 { x: 82.48111447430388, y: 98.13063348861155 }, gap: 3.53898727212254e-7, limit: 2e-5 }
+a nudged 2 48 REFUSED NearCoincident { a: 2, b: 1, at: Point2 { x: 202.55859142322083, y: 60.36237370242377 }, gap: 3.2590074994232054e-7, limit: 2e-5 }
+a nudged 2 49 REFUSED NearCoincident { a: 2, b: 0, at: Point2 { x: 103.444644605402, y: 149.99999991185067 }, gap: 8.814933494249999e-8, limit: 2e-5 }
+a nudged 2 50 REFUSED NearCoincident { a: 1, b: 0, at: Point2 { x: 141.4585749079329, y: 150.00000059814818 }, gap: 5.981481763228664e-7, limit: 2e-5 }
+a nudged 2 51 REFUSED NearCoincident { a: 2, b: 1, at: Point2 { x: 132.94936564519946, y: 43.215089013456264 }, gap: 3.433353867876576e-8, limit: 2e-5 }
+a nudged 2 52 REFUSED NearCoincident { a: 2, b: 1, at: Point2 { x: 133.54576552767998, y: 73.23697928810296 }, gap: 5.929717474373319e-6, limit: 2e-5 }
+a nudged 2 53 Good area 44310.069122384 ref 44310.069140138 err 9.2e-6 comps 1
+a nudged 2 54 Good area 44106.914989196 ref 44106.915007464 err 9.5e-6 comps 1
+a nudged 2 55 REFUSED NearCoincident { a: 2, b: 1, at: Point2 { x: 250.8367676539412, y: 80.31501438806289 }, gap: 1.1706380576015363e-7, limit: 2e-5 }
+a nudged 2 56 Good area 43117.772730601 ref 43117.772773228 err 1.5e-5 comps 1
+a nudged 2 57 REFUSED NearCoincident { a: 2, b: 1, at: Point2 { x: 121.42253845195305, y: 10.200621248893253 }, gap: 1.2320012686473092e-5, limit: 2e-5 }
+a nudged 2 58 Good area 42818.320395992 ref 42818.320385091 err 7.1e-6 comps 1
+a nudged 2 59 Good area 44556.253841851 ref 44556.253859848 err 9.1e-6 comps 1
+a nudged 2 60 REFUSED NearCoincident { a: 2, b: 1, at: Point2 { x: 203.5475356827314, y: 74.42212150818244 }, gap: 2.5491200688065874e-6, limit: 2e-5 }
+a nudged 2 61 Good area 43838.106059358 ref 43838.106077337 err 9.3e-6 comps 1
+a nudged 2 62 REFUSED NearCoincident { a: 1, b: 0, at: Point2 { x: 219.9657050544072, y: 8.91307790457918e-9 }, gap: 8.91307790457918e-9, limit: 2e-5 }
+a nudged 2 63 Good area 43992.957500867 ref 43992.957519057 err 9.4e-6 comps 1
+a nudged 2 64 REFUSED NearCoincident { a: 2, b: 0, at: Point2 { x: 75.08565927939506, y: -7.470625514569145e-8 }, gap: 7.470625514569145e-8, limit: 2e-5 }
+a nudged 2 65 REFUSED NearCoincident { a: 2, b: 1, at: Point2 { x: 140.50685931417607, y: 8.353382687460558 }, gap: 4.253210192928236e-7, limit: 2e-5 }
+a nudged 2 66 REFUSED NearCoincident { a: 2, b: 1, at: Point2 { x: 126.71331977730271, y: 7.230740418899714 }, gap: 5.827623752452382e-6, limit: 2e-5 }
+a nudged 2 67 REFUSED NearCoincident { a: 2, b: 1, at: Point2 { x: 230.50745488488533, y: 74.77458988752593 }, gap: 7.128121296773315e-6, limit: 2e-5 }
+a nudged 2 68 Good area 44633.794144141 ref 44633.794161996 err 9.6e-6 comps 1
+a nudged 2 69 REFUSED NearCoincident { a: 1, b: 0, at: Point2 { x: 211.50651042747188, y: -1.5913316827751637e-6 }, gap: 1.5913316827751637e-6, limit: 2e-5 }
+a nudged 2 70 Good area 40791.411329018 ref 40791.411332239 err 9.0e-6 comps 1
+a nudged 2 71 Good area 43882.418621154 ref 43882.418639233 err 9.6e-6 comps 1
+a nudged 2 72 REFUSED NearCoincident { a: 1, b: 0, at: Point2 { x: 173.46082833097216, y: 149.99999005577075 }, gap: 9.944229248048941e-6, limit: 2e-5 }
+a nudged 2 73 REFUSED NearCoincident { a: 2, b: 0, at: Point2 { x: 246.67998430318812, y: 150.00000009284847 }, gap: 9.284846669288527e-8, limit: 2e-5 }
+a nudged 2 74 REFUSED NearCoincident { a: 2, b: 1, at: Point2 { x: 159.9690652809828, y: 74.0934585230401 }, gap: 6.5489071801039245e-6, limit: 2e-5 }
+a nudged 2 75 REFUSED NearCoincident { a: 2, b: 1, at: Point2 { x: 205.65278384581654, y: 101.83236656315755 }, gap: 3.647699031716911e-8, limit: 2e-5 }
+a nudged 2 76 Good area 41985.155668173 ref 41985.155661996 err 3.0e-5 comps 1
+a nudged 2 77 Good area 43584.768160261 ref 43584.768178406 err 9.4e-6 comps 1
+a nudged 2 78 Good area 44393.049826975 ref 44393.049844879 err 9.6e-6 comps 1
+a nudged 2 79 REFUSED NearCoincident { a: 2, b: 0, at: Point2 { x: 221.63493923211274, y: 150.0000000158345 }, gap: 1.5834501709832693e-8, limit: 2e-5 }
+a nudged 2 80 REFUSED NearCoincident { a: 2, b: 1, at: Point2 { x: 143.32885872129165, y: 8.274323224747807 }, gap: 5.2227406399651954e-6, limit: 2e-5 }
+a nudged 2 81 REFUSED NearCoincident { a: 2, b: 1, at: Point2 { x: 64.76247254251561, y: 149.99998190496197 }, gap: 1.4937603367570773e-5, limit: 2e-5 }
+a nudged 2 82 REFUSED NearCoincident { a: 1, b: 0, at: Point2 { x: 112.52703741657695, y: 150.00000068064335 }, gap: 6.806433532347e-7, limit: 2e-5 }
+a nudged 2 83 REFUSED NearCoincident { a: 2, b: 1, at: Point2 { x: 96.22209828295202, y: 6.819668711227176 }, gap: 1.1525706611337228e-7, limit: 2e-5 }
+a nudged 2 84 REFUSED NearCoincident { a: 2, b: 1, at: Point2 { x: 116.82673133513795, y: 54.05215602294567 }, gap: 7.351358626014506e-7, limit: 2e-5 }
+a nudged 2 85 Good area 42538.805736406 ref 42538.805718092 err 2.4e-5 comps 1
+a nudged 2 86 Good area 44419.839704132 ref 44419.839722136 err 9.5e-6 comps 1
+a nudged 2 87 REFUSED NearCoincident { a: 2, b: 1, at: Point2 { x: 112.53323093209546, y: 62.030349410454065 }, gap: 2.937523788659746e-7, limit: 2e-5 }
+a nudged 2 88 REFUSED NearCoincident { a: 2, b: 1, at: Point2 { x: 55.19791848879988, y: 106.84377084487733 }, gap: 6.167903364939775e-6, limit: 2e-5 }
+a nudged 2 89 Good area 44955.293058616 ref 44955.293076380 err 9.5e-6 comps 1
+a nudged 2 90 Good area 43852.996908374 ref 43852.996926327 err 9.5e-6 comps 1
+a nudged 2 91 Good area 43989.648570649 ref 43989.648588680 err 9.5e-6 comps 1
+a nudged 2 92 REFUSED NearCoincident { a: 2, b: 0, at: Point2 { x: 235.79963810034013, y: 149.99999203035085 }, gap: 7.969649146843949e-6, limit: 2e-5 }
+a nudged 2 93 REFUSED NearCoincident { a: 2, b: 1, at: Point2 { x: 170.19731121957253, y: 5.355296784046579 }, gap: 7.64427312560656e-7, limit: 2e-5 }
+a nudged 2 94 Good area 44153.578669265 ref 44153.578687134 err 9.4e-6 comps 1
+a nudged 2 95 REFUSED NearCoincident { a: 2, b: 1, at: Point2 { x: 89.59909969031318, y: 101.48025888518134 }, gap: 7.177254275347877e-7, limit: 2e-5 }
+a nudged 2 96 Good area 42099.322393982 ref 42099.322395691 err 2.7e-5 comps 1
+a nudged 2 97 Good area 43603.318544965 ref 43603.318562763 err 9.4e-6 comps 1
+a nudged 2 98 REFUSED NearCoincident { a: 2, b: 1, at: Point2 { x: 74.7019901733279, y: 94.87877822073617 }, gap: 1.3898136614898249e-6, limit: 2e-5 }
+a nudged 2 99 Good area 43663.509246931 ref 43663.509265024 err 9.5e-6 comps 1
+a nudged 20 0 REFUSED NearCoincident { a: 19, b: 0, at: Point2 { x: 161.17078971086391, y: 149.9999999427166 }, gap: 5.728338692279067e-8, limit: 2e-5 }
+a nudged 20 1 REFUSED NearCoincident { a: 20, b: 5, at: Point2 { x: 40.56472988827023, y: 22.61533631911679 }, gap: 2.9190507414459727e-6, limit: 2e-5 }
+a nudged 20 2 REFUSED NearCoincident { a: 19, b: 2, at: Point2 { x: 170.22807640261883, y: 109.7593944260332 }, gap: 7.851376864209669e-7, limit: 2e-5 }
+a nudged 20 3 REFUSED NearCoincident { a: 16, b: 0, at: Point2 { x: 104.0804590613925, y: 149.99999984317185 }, gap: 1.5682815046602627e-7, limit: 2e-5 }
+a nudged 20 4 REFUSED NearCoincident { a: 18, b: 6, at: Point2 { x: 50.33376532014515, y: 44.64986298244122 }, gap: 8.274821168130922e-6, limit: 2e-5 }
+a nudged 20 5 REFUSED NearCoincident { a: 19, b: 18, at: Point2 { x: 177.2971984181589, y: 149.99999947656826 }, gap: 4.193521192519256e-7, limit: 2e-5 }
+a nudged 20 6 REFUSED NearCoincident { a: 20, b: 0, at: Point2 { x: 184.33457168565195, y: 150.00000039600735 }, gap: 3.9600735135536524e-7, limit: 2e-5 }
+a nudged 20 7 REFUSED NearCoincident { a: 20, b: 7, at: Point2 { x: 110.52028508697022, y: 1.5294639095803824 }, gap: 1.9124047838658953e-6, limit: 2e-5 }
+a nudged 20 8 REFUSED NearCoincident { a: 20, b: 0, at: Point2 { x: 233.43566265259506, y: 150.00000007745055 }, gap: 7.745055086161301e-8, limit: 2e-5 }
+a nudged 20 9 REFUSED NearCoincident { a: 19, b: 4, at: Point2 { x: 90.43292879117112, y: 25.248314238526724 }, gap: 1.586998337188561e-7, limit: 2e-5 }
+a nudged 20 10 REFUSED NearCoincident { a: 19, b: 7, at: Point2 { x: 271.53299962397534, y: 58.57627513681483 }, gap: 8.8274511711597e-6, limit: 2e-5 }
+a nudged 20 11 REFUSED NearCoincident { a: 20, b: 1, at: Point2 { x: 160.38893838236032, y: 117.73932278352308 }, gap: 5.8149313882669856e-6, limit: 2e-5 }
+a nudged 20 12 REFUSED NearCoincident { a: 20, b: 2, at: Point2 { x: 29.252812344940587, y: 13.833786152875499 }, gap: 7.247788896759222e-7, limit: 2e-5 }
+a nudged 20 13 REFUSED NearCoincident { a: 18, b: 0, at: Point2 { x: 59.676750463215384, y: -1.7258046748207376e-8 }, gap: 1.7258046748207376e-8, limit: 2e-5 }
+a nudged 20 14 REFUSED NearCoincident { a: 20, b: 12, at: Point2 { x: 161.32334192223615, y: 26.497735191975874 }, gap: 2.5792387958745167e-6, limit: 2e-5 }
+a nudged 20 15 REFUSED NearCoincident { a: 18, b: 5, at: Point2 { x: 214.83870947175816, y: 96.12799700896505 }, gap: 4.89334174798857e-6, limit: 2e-5 }
+a nudged 20 16 REFUSED NearCoincident { a: 20, b: 0, at: Point2 { x: 43.62356903887638, y: 150.00000566149498 }, gap: 5.6614949812683335e-6, limit: 2e-5 }
+a nudged 20 17 REFUSED NearCoincident { a: 19, b: 18, at: Point2 { x: 155.97847013819805, y: 14.593515055096523 }, gap: 9.259247043758023e-6, limit: 2e-5 }
+a nudged 20 18 REFUSED NearCoincident { a: 20, b: 0, at: Point2 { x: 49.81692576843149, y: -4.159139641892651e-6 }, gap: 4.159139641892651e-6, limit: 2e-5 }
+a nudged 20 19 REFUSED NearCoincident { a: 20, b: 0, at: Point2 { x: 178.91707583169173, y: 149.99999994619859 }, gap: 5.3801414878762444e-8, limit: 2e-5 }
+a nudged 20 20 REFUSED NearCoincident { a: 19, b: 6, at: Point2 { x: 124.89840697231482, y: 74.49767032116394 }, gap: 4.305974115936806e-6, limit: 2e-5 }
+a nudged 20 21 REFUSED NearCoincident { a: 20, b: 17, at: Point2 { x: 79.82304871970943, y: 67.12993146117977 }, gap: 1.0181979818678857e-6, limit: 2e-5 }
+a nudged 20 22 REFUSED NearCoincident { a: 19, b: 0, at: Point2 { x: 86.42867197545843, y: -1.851125482675442e-8 }, gap: 1.8511254826759876e-8, limit: 2e-5 }
+a nudged 20 23 REFUSED NearCoincident { a: 20, b: 0, at: Point2 { x: 260.9695724657536, y: 2.697115649992779e-8 }, gap: 2.697115649992779e-8, limit: 2e-5 }
+a nudged 20 24 REFUSED NearCoincident { a: 18, b: 11, at: Point2 { x: 299.3191506344213, y: 87.57706007087302 }, gap: 6.197663253715291e-6, limit: 2e-5 }
+a nudged 20 25 REFUSED NearCoincident { a: 20, b: 13, at: Point2 { x: 69.46585572882995, y: 149.99999631658596 }, gap: 5.460923034661391e-6, limit: 2e-5 }
+a nudged 20 26 REFUSED NearCoincident { a: 20, b: 0, at: Point2 { x: 33.4228982926559, y: 2.467974206349225e-8 }, gap: 2.467974206349225e-8, limit: 2e-5 }
+a nudged 20 27 REFUSED NearCoincident { a: 20, b: 0, at: Point2 { x: 183.85656692215156, y: 150.0000153617124 }, gap: 1.5361712399908356e-5, limit: 2e-5 }
+a nudged 20 28 REFUSED NearCoincident { a: 20, b: 0, at: Point2 { x: 72.34221859192479, y: 3.32919022065789e-8 }, gap: 3.32919022065789e-8, limit: 2e-5 }
+a nudged 20 29 REFUSED NearCoincident { a: 19, b: 0, at: Point2 { x: 182.11159578450534, y: 149.99999994255361 }, gap: 5.7446385426374036e-8, limit: 2e-5 }
+a nudged 20 30 REFUSED NearCoincident { a: 20, b: 3, at: Point2 { x: 82.13296868764564, y: 39.439085506671894 }, gap: 7.258526467634557e-6, limit: 2e-5 }
+a nudged 20 31 REFUSED NearCoincident { a: 20, b: 0, at: Point2 { x: 265.52097448680036, y: 2.9808483700813676e-7 }, gap: 2.9808483700813676e-7, limit: 2e-5 }
+a nudged 20 32 REFUSED NearCoincident { a: 20, b: 18, at: Point2 { x: 191.55589731458105, y: 149.9999990863536 }, gap: 3.2843551025507622e-6, limit: 2e-5 }
+a nudged 20 33 REFUSED NearCoincident { a: 20, b: 0, at: Point2 { x: 251.93024660242622, y: -9.021978987442743e-7 }, gap: 9.021978987442743e-7, limit: 2e-5 }
+a nudged 20 34 REFUSED NearCoincident { a: 20, b: 0, at: Point2 { x: 116.02224437061908, y: -9.70868511809737e-8 }, gap: 9.70868511809737e-8, limit: 2e-5 }
+a nudged 20 35 REFUSED NearCoincident { a: 17, b: 12, at: Point2 { x: 104.31495895303057, y: 96.95925031143784 }, gap: 3.771465662878301e-6, limit: 2e-5 }
+a nudged 20 36 REFUSED NearCoincident { a: 19, b: 18, at: Point2 { x: 130.80021608378672, y: 104.87862746841492 }, gap: 1.4734005944205819e-5, limit: 2e-5 }
+a nudged 20 37 REFUSED NearCoincident { a: 20, b: 0, at: Point2 { x: 254.4186106168221, y: 149.99999994092147 }, gap: 5.9078530512124416e-8, limit: 2e-5 }
+a nudged 20 38 REFUSED NearCoincident { a: 20, b: 2, at: Point2 { x: 172.2459854384286, y: 51.91404334771374 }, gap: 1.4138667836505192e-6, limit: 2e-5 }
+a nudged 20 39 REFUSED NearCoincident { a: 20, b: 3, at: Point2 { x: 267.7831688298718, y: 39.499218745868674 }, gap: 4.297686260201772e-7, limit: 2e-5 }
+a nudged 20 40 REFUSED NearCoincident { a: 18, b: 1, at: Point2 { x: 48.909796464821326, y: 98.09959493069636 }, gap: 1.2164303509897029e-5, limit: 2e-5 }
+a nudged 20 41 REFUSED NearCoincident { a: 18, b: 0, at: Point2 { x: 90.22966690841912, y: 149.99999990915128 }, gap: 9.084871521736204e-8, limit: 2e-5 }
+a nudged 20 42 REFUSED NearCoincident { a: 20, b: 5, at: Point2 { x: 224.7281745891211, y: 23.65875892068537 }, gap: 9.155731621297177e-6, limit: 2e-5 }
+a nudged 20 43 REFUSED NearCoincident { a: 20, b: 14, at: Point2 { x: 70.19998492688649, y: 3.698446939466261 }, gap: 3.2770962121730918e-6, limit: 2e-5 }
+a nudged 20 44 REFUSED NearCoincident { a: 19, b: 14, at: Point2 { x: 108.77183499261842, y: 130.53103539427093 }, gap: 6.386001456458869e-6, limit: 2e-5 }
+a nudged 20 45 REFUSED NearCoincident { a: 19, b: 0, at: Point2 { x: 41.4558137584653, y: 150.00000244936484 }, gap: 2.4493648425050196e-6, limit: 2e-5 }
+a nudged 20 46 REFUSED NearCoincident { a: 20, b: 0, at: Point2 { x: 233.54099061588488, y: -4.309846300988899e-6 }, gap: 4.309846300988899e-6, limit: 2e-5 }
+a nudged 20 47 REFUSED NearCoincident { a: 19, b: 0, at: Point2 { x: 36.70736798844613, y: 149.99999297306962 }, gap: 7.02693037624158e-6, limit: 2e-5 }
+a nudged 20 48 REFUSED NearCoincident { a: 20, b: 0, at: Point2 { x: 275.95109303652623, y: 150.00000030055688 }, gap: 3.005568771641265e-7, limit: 2e-5 }
+a nudged 20 49 REFUSED NearCoincident { a: 19, b: 8, at: Point2 { x: 261.3026760282606, y: 106.43059244426694 }, gap: 9.625719712885331e-6, limit: 2e-5 }
+a nudged 20 50 REFUSED NearCoincident { a: 19, b: 11, at: Point2 { x: 158.38649297896671, y: 130.02147244849272 }, gap: 1.0087727935957612e-7, limit: 2e-5 }
+a nudged 20 51 REFUSED NearCoincident { a: 20, b: 7, at: Point2 { x: 224.95025760698348, y: 83.05154565945863 }, gap: 1.1695554161221904e-5, limit: 2e-5 }
+a nudged 20 52 REFUSED NearCoincident { a: 19, b: 16, at: Point2 { x: 89.86921358035491, y: 149.99999296047997 }, gap: 7.015855771896895e-6, limit: 2e-5 }
+a nudged 20 53 REFUSED NearCoincident { a: 20, b: 0, at: Point2 { x: 212.22366674053575, y: 5.536156476681896e-7 }, gap: 5.536156476681896e-7, limit: 2e-5 }
+a nudged 20 54 REFUSED NearCoincident { a: 20, b: 5, at: Point2 { x: 204.25759029795185, y: 106.59013187922008 }, gap: 6.345544318246145e-7, limit: 2e-5 }
+a nudged 20 55 REFUSED NearCoincident { a: 20, b: 11, at: Point2 { x: 131.87399214072937, y: 113.06625142699703 }, gap: 8.60652149227874e-6, limit: 2e-5 }
+a nudged 20 56 REFUSED NearCoincident { a: 19, b: 0, at: Point2 { x: 162.40880897553768, y: 1.2708513417447746e-8 }, gap: 1.2708513417447746e-8, limit: 2e-5 }
+a nudged 20 57 REFUSED NearCoincident { a: 20, b: 0, at: Point2 { x: 48.37857074202974, y: -6.3275115645151045e-6 }, gap: 6.3275115645151045e-6, limit: 2e-5 }
+a nudged 20 58 REFUSED NearCoincident { a: 20, b: 1, at: Point2 { x: 100.21748058859482, y: 55.79043920531262 }, gap: 3.575729579097242e-8, limit: 2e-5 }
+a nudged 20 59 REFUSED NearCoincident { a: 20, b: 18, at: Point2 { x: 155.09904854953737, y: 58.32718649720511 }, gap: 4.114815900717923e-6, limit: 2e-5 }
+a nudged 20 60 REFUSED NearCoincident { a: 20, b: 0, at: Point2 { x: 181.5168278412528, y: 149.99999987630716 }, gap: 1.236928426351369e-7, limit: 2e-5 }
+a nudged 20 61 REFUSED NearCoincident { a: 20, b: 2, at: Point2 { x: 164.46343034230057, y: 45.684966014272526 }, gap: 8.591058730189616e-6, limit: 2e-5 }
+a nudged 20 62 REFUSED NearCoincident { a: 20, b: 0, at: Point2 { x: 132.31767231891354, y: 3.3336985890306124e-6 }, gap: 3.3336985890306124e-6, limit: 2e-5 }
+a nudged 20 63 REFUSED NearCoincident { a: 20, b: 0, at: Point2 { x: 165.7635020282809, y: 149.9999999265611 }, gap: 7.343891184063978e-8, limit: 2e-5 }
+a nudged 20 64 REFUSED NearCoincident { a: 20, b: 0, at: Point2 { x: 63.70287889393011, y: 1.43318117908257e-6 }, gap: 1.43318117908257e-6, limit: 2e-5 }
+a nudged 20 65 REFUSED NearCoincident { a: 20, b: 2, at: Point2 { x: 267.21715217845974, y: 71.70543725591773 }, gap: 2.1303673502921691e-7, limit: 2e-5 }
+a nudged 20 66 REFUSED NearCoincident { a: 20, b: 6, at: Point2 { x: 171.49746254736314, y: 42.08874601926098 }, gap: 2.854786621234865e-6, limit: 2e-5 }
+a nudged 20 67 REFUSED NearCoincident { a: 20, b: 1, at: Point2 { x: 125.17006078524385, y: 86.14594965763763 }, gap: 1.4172251770195047e-5, limit: 2e-5 }
+a nudged 20 68 REFUSED NearCoincident { a: 19, b: 0, at: Point2 { x: 196.7494868523382, y: 150.000000126695 }, gap: 1.2669499938056423e-7, limit: 2e-5 }
+a nudged 20 69 REFUSED NearCoincident { a: 20, b: 0, at: Point2 { x: 127.28490872652436, y: 149.9999997984529 }, gap: 2.0154709545749988e-7, limit: 2e-5 }
+a nudged 20 70 REFUSED NearCoincident { a: 20, b: 10, at: Point2 { x: 207.6221017078638, y: 13.10288810379726 }, gap: 1.1498314619082115e-6, limit: 2e-5 }
+a nudged 20 71 REFUSED NearCoincident { a: 20, b: 0, at: Point2 { x: 270.5586447326734, y: 150.0000001926609 }, gap: 1.9266090589553642e-7, limit: 2e-5 }
+a nudged 20 72 REFUSED NearCoincident { a: 19, b: 0, at: Point2 { x: 52.25005189019501, y: 150.0000000447532 }, gap: 4.475319315134577e-8, limit: 2e-5 }
+a nudged 20 73 REFUSED NearCoincident { a: 18, b: 14, at: Point2 { x: 107.13221086989859, y: 4.80534928987884 }, gap: 5.692807718560289e-7, limit: 2e-5 }
+a nudged 20 74 REFUSED NearCoincident { a: 17, b: 0, at: Point2 { x: 164.24845006259028, y: -2.458910759636416e-8 }, gap: 2.458910759636416e-8, limit: 2e-5 }
+a nudged 20 75 REFUSED NearCoincident { a: 20, b: 0, at: Point2 { x: 106.78104765723721, y: 1.78955287357678e-6 }, gap: 1.78955287357678e-6, limit: 2e-5 }
+a nudged 20 76 REFUSED NearCoincident { a: 20, b: 13, at: Point2 { x: 200.9330397954583, y: 146.48306324572036 }, gap: 2.8243732685950818e-8, limit: 2e-5 }
+a nudged 20 77 REFUSED NearCoincident { a: 20, b: 3, at: Point2 { x: 90.7266793846502, y: 102.9488522646108 }, gap: 3.061015566717386e-6, limit: 2e-5 }
+a nudged 20 78 REFUSED NearCoincident { a: 20, b: 2, at: Point2 { x: 116.06456237170602, y: 41.0808745817521 }, gap: 1.0277645870360175e-5, limit: 2e-5 }
+a nudged 20 79 REFUSED NearCoincident { a: 20, b: 0, at: Point2 { x: 68.21170998102141, y: -1.0103991301996555e-5 }, gap: 1.0103991301996555e-5, limit: 2e-5 }
+a nudged 20 80 REFUSED NearCoincident { a: 20, b: 4, at: Point2 { x: 205.9684653405335, y: 115.55398936142643 }, gap: 1.4295117754655008e-6, limit: 2e-5 }
+a nudged 20 81 REFUSED NearCoincident { a: 20, b: 1, at: Point2 { x: 164.18627460834298, y: 72.97856263811897 }, gap: 2.302003786838817e-6, limit: 2e-5 }
+a nudged 20 82 REFUSED NearCoincident { a: 20, b: 3, at: Point2 { x: 244.7248462887639, y: 40.4713814873578 }, gap: 5.095077864187912e-6, limit: 2e-5 }
+a nudged 20 83 REFUSED NearCoincident { a: 20, b: 11, at: Point2 { x: 163.36731605261855, y: 56.54851555286957 }, gap: 4.699782568223163e-6, limit: 2e-5 }
+a nudged 20 84 REFUSED NearCoincident { a: 18, b: 4, at: Point2 { x: 193.3763620564283, y: 28.286597648430053 }, gap: 3.856368104747722e-6, limit: 2e-5 }
+a nudged 20 85 REFUSED NearCoincident { a: 20, b: 10, at: Point2 { x: 59.54492479553372, y: 109.84873018271487 }, gap: 1.112389620061549e-5, limit: 2e-5 }
+a nudged 20 86 REFUSED NearCoincident { a: 19, b: 6, at: Point2 { x: 191.50664483229548, y: 8.773741272503917 }, gap: 1.1157557082697167e-6, limit: 2e-5 }
+a nudged 20 87 REFUSED NearCoincident { a: 20, b: 0, at: Point2 { x: 151.2118540922282, y: -5.864059700931544e-6 }, gap: 5.864059700931544e-6, limit: 2e-5 }
+a nudged 20 88 REFUSED NearCoincident { a: 20, b: 0, at: Point2 { x: 54.58954576087482, y: -7.747318227280806e-8 }, gap: 7.747318227280806e-8, limit: 2e-5 }
+a nudged 20 89 REFUSED NearCoincident { a: 20, b: 0, at: Point2 { x: 256.78918947592354, y: 149.99999998809508 }, gap: 1.1904916163985035e-8, limit: 2e-5 }
+a nudged 20 90 REFUSED NearCoincident { a: 20, b: 0, at: Point2 { x: 248.21568641661597, y: -4.538900170327786e-8 }, gap: 4.538900170328676e-8, limit: 2e-5 }
+a nudged 20 91 REFUSED NearCoincident { a: 17, b: 0, at: Point2 { x: 175.77084535543196, y: 149.9999999926369 }, gap: 7.363098575297045e-9, limit: 2e-5 }
+a nudged 20 92 REFUSED NearCoincident { a: 20, b: 0, at: Point2 { x: 197.25492798570235, y: 149.99999999560544 }, gap: 4.394564712129068e-9, limit: 2e-5 }
+a nudged 20 93 REFUSED NearCoincident { a: 20, b: 4, at: Point2 { x: 107.21358051839195, y: 146.3076726818858 }, gap: 3.48430404528699e-7, limit: 2e-5 }
+a nudged 20 94 REFUSED NearCoincident { a: 20, b: 0, at: Point2 { x: 231.32267091997187, y: -9.88027249402316e-6 }, gap: 9.88027249402316e-6, limit: 2e-5 }
+a nudged 20 95 REFUSED NearCoincident { a: 18, b: 1, at: Point2 { x: 242.03309058427308, y: 51.55763693172174 }, gap: 3.297789000068556e-6, limit: 2e-5 }
+a nudged 20 96 REFUSED NearCoincident { a: 20, b: 3, at: Point2 { x: 192.69513147544177, y: 104.23884174762553 }, gap: 1.991136017946823e-6, limit: 2e-5 }
+a nudged 20 97 REFUSED NearCoincident { a: 19, b: 0, at: Point2 { x: 119.55759409664657, y: 2.274109383399426e-8 }, gap: 2.274109383399426e-8, limit: 2e-5 }
+a nudged 20 98 REFUSED NearCoincident { a: 20, b: 15, at: Point2 { x: 86.22385396529289, y: 6.160061422964116 }, gap: 7.903554433141835e-8, limit: 2e-5 }
+a nudged 20 99 REFUSED NearCoincident { a: 20, b: 1, at: Point2 { x: 45.207742650785086, y: 132.09869504034626 }, gap: 1.7201194960398875e-6, limit: 2e-5 }
+a nudged 200 0 REFUSED NearCoincident { a: 199, b: 0, at: Point2 { x: 53.763331320632375, y: 150.0000005360204 }, gap: 5.360203942927918e-7, limit: 2e-5 }
+a nudged 200 1 REFUSED NearCoincident { a: 200, b: 0, at: Point2 { x: 103.96121947099593, y: 149.99999603343878 }, gap: 3.966561223478493e-6, limit: 2e-5 }
+a nudged 200 2 REFUSED NearCoincident { a: 199, b: 173, at: Point2 { x: 183.0329675483496, y: 8.671828612818545e-8 }, gap: 3.352583849471681e-8, limit: 2e-5 }
+a nudged 200 3 REFUSED NearCoincident { a: 198, b: 5, at: Point2 { x: 182.90247865245573, y: 19.865128777943678 }, gap: 2.7999709137614696e-6, limit: 2e-5 }
+a nudged 200 4 REFUSED NearCoincident { a: 200, b: 146, at: Point2 { x: 235.21587818076333, y: 148.90360816925704 }, gap: 1.240894675902382e-7, limit: 2e-5 }
+a nudged 200 5 REFUSED NearCoincident { a: 200, b: 173, at: Point2 { x: 134.53028377010864, y: 1.8018942559570965e-6 }, gap: 1.8109936486115052e-6, limit: 2e-5 }
+a nudged 200 6 REFUSED NearCoincident { a: 199, b: 175, at: Point2 { x: 53.65238310592199, y: 4.839023507333222 }, gap: 6.319060261716913e-7, limit: 2e-5 }
+a nudged 200 7 REFUSED NearCoincident { a: 199, b: 1, at: Point2 { x: 273.15563551117134, y: 107.72702585048768 }, gap: 4.29410607906398e-6, limit: 2e-5 }
+a nudged 200 8 REFUSED NearCoincident { a: 197, b: 0, at: Point2 { x: 144.69851174573483, y: -5.435219556813799e-7 }, gap: 5.435219556813799e-7, limit: 2e-5 }
+a nudged 200 9 REFUSED NearCoincident { a: 200, b: 4, at: Point2 { x: 147.14146374882273, y: 45.57063834389882 }, gap: 1.0123138452933801e-5, limit: 2e-5 }
