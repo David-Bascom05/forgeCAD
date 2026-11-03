@@ -10,14 +10,14 @@ fn opts() -> Options {
     Options { threads: 1 }
 }
 
-fn prim(j: u32, i: u8) -> Item {
+fn prim(j: u64, i: u8) -> Item {
     Item::of(ConstraintId::Joint {
         joint: JointId(j),
         part: JointPart::Prim(i),
     })
 }
 
-fn loose(i: u32) -> Item {
+fn loose(i: u64) -> Item {
     Item::of(ConstraintId::Loose(i))
 }
 
@@ -79,7 +79,7 @@ fn plate_on_ground(offsets: &[f64]) -> Assembly {
             .enumerate()
             .map(|(i, &o)| {
                 Constraint::new(
-                    i as u32 + 1,
+                    i as u64 + 1,
                     ConstraintKind::PlanePlane { offset: o },
                     End::reference(&[2], face),
                     End::reference(&[1], face),

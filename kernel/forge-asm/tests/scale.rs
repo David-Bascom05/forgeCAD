@@ -14,9 +14,9 @@ use forge_ops::{Profile, extrude};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
-const PLATES: u32 = 230;
-const BOLTS: u32 = 20;
-const MECHS: u32 = 50;
+const PLATES: u64 = 230;
+const BOLTS: u64 = 20;
+const MECHS: u64 = 50;
 
 fn body(lp: forge_ops::ProfileLoop, z: f64, h: f64) -> forge_topo::Body {
     extrude(
@@ -47,7 +47,7 @@ fn add(c: &mut Catalog, e: &mut BrepExact, name: &str, b: forge_topo::Body, refs
     e.bodies.insert((DocId(name.into()), 0), b);
 }
 
-fn seat(k: u32) -> Point2 {
+fn seat(k: u64) -> Point2 {
     Point2::new(10.0 + 20.0 * (k % 5) as f64, 10.0 + 25.0 * (k / 5) as f64)
 }
 
@@ -93,7 +93,7 @@ fn project() -> (Catalog, BrepExact) {
         body(Profile::circle(Point2::new(0.0, 0.0), 3.0, 1), -5.0, 17.0),
         vec![("base".into(), Reference::frame(Frame::WORLD))],
     );
-    let m6 = |kind| Feature { kind, size: 6.0 };
+    let m6 = |kind| Feature::new(kind, 6.0);
     c.parts.get_mut(&(DocId("bolt".into()), 0)).unwrap().features =
         vec![("base".into(), m6(FeatureKind::ExternalThread))];
     c.parts.get_mut(&(DocId("plate".into()), 0)).unwrap().features = (0..BOLTS)
@@ -117,6 +117,7 @@ fn assembly() -> (Assembly, Vec<JointId>) {
     // one rule instead of 4,600 fit declarations
     asm.fit_rules.push(FitRule {
         id: 1,
+        min_engagement: None,
         a: FitMatch::Feature {
             kind: FeatureKind::ExternalThread,
             size: Some(6.0),
@@ -128,8 +129,8 @@ fn assembly() -> (Assembly, Vec<JointId>) {
     });
     asm.instances
         .push(Instance::part(1, PartRef::new("base", 0), at(-50.0, -50.0, 0.0)).grounded());
-    let mut next = 2u32;
-    let mut jid = 1u32;
+    let mut next = 2u64;
+    let mut jid = 1u64;
     for pl in 0..PLATES {
         let corner = at(110.0 * (pl % 15) as f64, 110.0 * (pl / 15) as f64, 0.0);
         let plate = next;
@@ -180,10 +181,10 @@ fn assembly() -> (Assembly, Vec<JointId>) {
         let o = at(-400.0 - 300.0 * (m % 5) as f64, 300.0 * (m / 5) as f64, 0.0);
         // a four-bar: crank, coupler, rocker
         let fb = four_bar(40.0, 120.0, 80.0, 100.0, 0.6);
-        let map = |i: u32| if i == 1 { 1 } else { next + i - 2 };
+        let map = |i: u64| if i == 1 { 1 } else { next + i - 2 };
         for (i, inst) in fb.instances.iter().enumerate().skip(1) {
             asm.instances.push(Instance::part(
-                map(i as u32 + 1),
+                map(i as u64 + 1),
                 PartRef::new(&format!("link{}", i - 1), 0),
                 o.compose(&inst.pose),
             ));
@@ -215,10 +216,10 @@ fn assembly() -> (Assembly, Vec<JointId>) {
         // a slider-crank beside it
         let sc = slider_crank(30.0, 100.0, 0.4);
         let o2 = o.compose(&at(0.0, 150.0, 0.0));
-        let map = |i: u32| if i == 1 { 1 } else { next + i - 2 };
+        let map = |i: u64| if i == 1 { 1 } else { next + i - 2 };
         for (i, inst) in sc.instances.iter().enumerate().skip(1) {
             asm.instances.push(Instance::part(
-                map(i as u32 + 1),
+                map(i as u64 + 1),
                 PartRef::new(&format!("link{}", i - 1), 0),
                 o2.compose(&inst.pose),
             ));

@@ -6,13 +6,13 @@ use std::collections::BTreeMap;
 
 /// An instance's stable id within its assembly document. Never reused (the `next N` rule).
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
-pub struct InstanceId(pub u32);
+pub struct InstanceId(pub u64);
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
-pub struct JointId(pub u32);
+pub struct JointId(pub u64);
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
-pub struct RelationId(pub u32);
+pub struct RelationId(pub u64);
 
 /// A part or assembly document, by its project path.
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
@@ -55,7 +55,7 @@ pub struct Instance {
 }
 
 impl Instance {
-    pub fn part(id: u32, part: PartRef, pose: Frame) -> Instance {
+    pub fn part(id: u64, part: PartRef, pose: Frame) -> Instance {
         Instance {
             id: InstanceId(id),
             of: Component::Part(part),
@@ -246,7 +246,7 @@ pub struct Joint {
 }
 
 impl Joint {
-    pub fn new(id: u32, kind: JointKind, a: End, b: End) -> Joint {
+    pub fn new(id: u64, kind: JointKind, a: End, b: End) -> Joint {
         Joint {
             id: JointId(id),
             kind,
@@ -338,21 +338,54 @@ pub struct Relation {
     pub suppressed: bool,
 }
 
-/// What an anchor is for, so fit rules can match it by kind and size.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
+/// What an anchor is for, so fit rules can match it by kind and size: the four built-in kinds, or
+/// one a part file declares (an open set, each declared kind its own type).
+#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum FeatureKind {
     ExternalThread,
     InternalThread,
     Shaft,
     Bore,
+    Declared(String),
 }
 
-/// A feature on a part's anchor: kind and nominal size (mm; M5 is 5).
-#[derive(Clone, Copy, Debug, PartialEq)]
+impl FeatureKind {
+    pub fn is_thread(&self) -> bool {
+        matches!(self, FeatureKind::ExternalThread | FeatureKind::InternalThread)
+    }
+    pub fn name(&self) -> &str {
+        match self {
+            FeatureKind::ExternalThread => "external_thread",
+            FeatureKind::InternalThread => "internal_thread",
+            FeatureKind::Shaft => "shaft",
+            FeatureKind::Bore => "bore",
+            FeatureKind::Declared(n) => n,
+        }
+    }
+}
+
+/// A feature on a part's anchor: kind, nominal size (mm; M5 is 5) and, for a thread, its length
+/// from the anchor's origin along its z.
+#[derive(Clone, Debug, PartialEq)]
 pub struct Feature {
     pub kind: FeatureKind,
     pub size: f64,
+    pub depth: Option<f64>,
 }
+
+impl Feature {
+    pub fn new(kind: FeatureKind, size: f64) -> Feature {
+        Feature {
+            kind,
+            size,
+            depth: None,
+        }
+    }
+}
+
+/// A thread engaged less than this many times its size, where a rule gives no minimum, is too
+/// shallow (the shop's rule: one diameter).
+pub const SHOP_THREAD_ENGAGEMENT: f64 = 1.0;
 
 /// One side of a fit rule.
 #[derive(Clone, Debug, PartialEq)]
@@ -368,9 +401,11 @@ pub enum FitMatch {
 /// purpose (a bolt M5 in a tapped M5 hole), with no pair declarations.
 #[derive(Clone, Debug, PartialEq)]
 pub struct FitRule {
-    pub id: u32,
+    pub id: u64,
     pub a: FitMatch,
     pub b: FitMatch,
+    /// Least thread engagement; None: the shop's (`SHOP_THREAD_ENGAGEMENT` sizes) for threads.
+    pub min_engagement: Option<f64>,
 }
 
 /// Declared intended contact between two occurrences (FastCAD's `fit`): a press fit, a bolt in a
@@ -482,7 +517,7 @@ impl ConstraintKind {
 /// A loose constraint, written in the assembly beside the joints.
 #[derive(Clone, Debug, PartialEq)]
 pub struct Constraint {
-    pub id: u32,
+    pub id: u64,
     pub kind: ConstraintKind,
     pub a: End,
     pub b: End,
@@ -493,7 +528,7 @@ pub struct Constraint {
 }
 
 impl Constraint {
-    pub fn new(id: u32, kind: ConstraintKind, a: End, b: End) -> Constraint {
+    pub fn new(id: u64, kind: ConstraintKind, a: End, b: End) -> Constraint {
         Constraint {
             id,
             kind,
@@ -529,7 +564,7 @@ pub enum JointPart {
 /// A primitive constraint's id: a loose one's own, or its place in a joint.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum ConstraintId {
-    Loose(u32),
+    Loose(u64),
     Joint { joint: JointId, part: JointPart },
 }
 
@@ -585,6 +620,24 @@ pub struct Catalog {
     pub assemblies: BTreeMap<DocId, Assembly>,
 }
 
+impl<T: Parts + ?Sized> Parts for &T {
+    fn part(&self, r: &PartRef) -> Option<&PartInfo> {
+        (**self).part(r)
+    }
+    fn assembly(&self, doc: &DocId) -> Option<&Assembly> {
+        (**self).assembly(doc)
+    }
+}
+
+impl<T: Parts + ?Sized + Send> Parts for std::sync::Arc<T> {
+    fn part(&self, r: &PartRef) -> Option<&PartInfo> {
+        (**self).part(r)
+    }
+    fn assembly(&self, doc: &DocId) -> Option<&Assembly> {
+        (**self).assembly(doc)
+    }
+}
+
 impl Parts for Catalog {
     fn part(&self, r: &PartRef) -> Option<&PartInfo> {
         self.parts.get(&(r.doc.clone(), r.body))
@@ -605,16 +658,16 @@ impl PartRef {
 }
 
 impl End {
-    pub fn named(path: &[u32], anchor: &str) -> End {
+    pub fn named(path: &[u64], anchor: &str) -> End {
         End {
             path: path.iter().map(|&i| InstanceId(i)).collect(),
             anchor: AnchorRef::Named(anchor.into()),
         }
     }
-    pub fn local(path: &[u32], frame: Frame) -> End {
+    pub fn local(path: &[u64], frame: Frame) -> End {
         End::reference(path, Reference::frame(frame))
     }
-    pub fn reference(path: &[u32], r: Reference) -> End {
+    pub fn reference(path: &[u64], r: Reference) -> End {
         End {
             path: path.iter().map(|&i| InstanceId(i)).collect(),
             anchor: AnchorRef::Local(r),

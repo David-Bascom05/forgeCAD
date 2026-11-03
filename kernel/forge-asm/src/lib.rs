@@ -44,8 +44,8 @@ pub fn check_anchors<P: Parts>(asm: &Assembly, parts: &P) -> Vec<Diagnostic> {
 }
 
 /// A live assembly: solved once, then re-solved in part as joint values change.
-pub struct Solver<'p, P: Parts> {
-    parts: &'p P,
+pub struct Solver<P: Parts> {
+    parts: P,
     asm: Assembly,
     plan: plan::Plan,
     memo: solve::Memo,
@@ -53,9 +53,9 @@ pub struct Solver<'p, P: Parts> {
     solution: Solution,
 }
 
-impl<'p, P: Parts> Solver<'p, P> {
-    pub fn new(asm: Assembly, parts: &'p P, opts: Options) -> Self {
-        let plan = plan::Plan::new(&asm, parts, &mut BTreeMap::new(), &mut Vec::new());
+impl<P: Parts> Solver<P> {
+    pub fn new(asm: Assembly, parts: P, opts: Options) -> Self {
+        let plan = plan::Plan::new(&asm, &parts, &mut BTreeMap::new(), &mut Vec::new());
         let mut s = Solver {
             parts,
             asm,
@@ -76,6 +76,10 @@ impl<'p, P: Parts> Solver<'p, P> {
         &self.asm
     }
 
+    pub fn parts(&self) -> &P {
+        &self.parts
+    }
+
     fn run(&mut self, dirty: Option<&[bool]>) {
         let mut sol = match dirty {
             Some(d) => solve::run(&self.plan, &self.opts, Some((&mut self.memo, d))),
@@ -84,7 +88,7 @@ impl<'p, P: Parts> Solver<'p, P> {
                 solve::run(&self.plan, &self.opts, Some((&mut self.memo, &all)))
             }
         };
-        solve::hashes(&mut sol, self.parts);
+        solve::hashes(&mut sol, &self.parts);
         self.solution = sol;
     }
 
@@ -169,7 +173,7 @@ impl<'p, P: Parts> Solver<'p, P> {
 
     fn replan(&mut self) -> &Solution {
         let mut subs = std::mem::take(&mut self.plan.subs);
-        self.plan = plan::Plan::new(&self.asm, self.parts, &mut subs, &mut Vec::new());
+        self.plan = plan::Plan::new(&self.asm, &self.parts, &mut subs, &mut Vec::new());
         self.memo = solve::Memo::default();
         self.run(None);
         &self.solution

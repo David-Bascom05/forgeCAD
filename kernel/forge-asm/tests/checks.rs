@@ -58,7 +58,7 @@ fn shop() -> (Catalog, BrepExact) {
     (c, e)
 }
 
-fn of(id: u32, name: &str, pose: Frame) -> Instance {
+fn of(id: u64, name: &str, pose: Frame) -> Instance {
     Instance::part(id, PartRef::new(name, 0), pose)
 }
 
@@ -104,8 +104,8 @@ fn overlaps_touches_containment_and_fits() {
     let sol = solve(&asm, &c, &Options::default());
     let mut ck = Checker::new(&c, &e);
     let rep = ck.interference(&sol, &asm.fits, &[]);
-    let pair = |a: u32, b: u32| (vec![InstanceId(a)], vec![InstanceId(b)]);
-    let find = |a: u32, b: u32| {
+    let pair = |a: u64, b: u64| (vec![InstanceId(a)], vec![InstanceId(b)]);
+    let find = |a: u64, b: u64| {
         rep.interferences
             .iter()
             .find(|h| (h.a.clone(), h.b.clone()) == pair(a, b))
@@ -145,8 +145,9 @@ fn tapped() -> (Catalog, BrepExact) {
     let m4_hole = Feature {
         kind: FeatureKind::InternalThread,
         size: 4.0,
+        depth: Some(10.0),
     };
-    plate.features = vec![("tap1".into(), m4_hole), ("tap2".into(), m4_hole)];
+    plate.features = vec![("tap1".into(), m4_hole.clone()), ("tap2".into(), m4_hole)];
     let rod = c.parts.get_mut(&(DocId("rod".into()), 0)).unwrap();
     rod.refs.insert("shank".into(), axis(0.0, 0.0));
     rod.features = vec![(
@@ -154,6 +155,7 @@ fn tapped() -> (Catalog, BrepExact) {
         Feature {
             kind: FeatureKind::ExternalThread,
             size: 4.0,
+            depth: Some(8.0),
         },
     )];
     (c, e)
@@ -165,11 +167,12 @@ fn fit_rules_cover_bolts_in_matching_holes_and_say_which() {
     let mut asm = placed(vec![
         of(1, "big", Frame::WORLD),
         of(2, "rod", at(5.0, 5.0, -5.0)),   // in tap1
-        of(3, "rod", at(5.0, 15.0, -5.0)),  // in tap2
+        of(3, "rod", at(5.0, 15.0, 2.0)),   // in tap2, 8 engaged
         of(4, "rod", at(20.0, 20.0, -5.0)), // not in a hole: still interference
     ]);
     let rule = FitRule {
         id: 7,
+        min_engagement: None,
         a: FitMatch::Feature {
             kind: FeatureKind::ExternalThread,
             size: Some(4.0),
@@ -183,7 +186,7 @@ fn fit_rules_cover_bolts_in_matching_holes_and_say_which() {
     let sol = solve(&asm, &c, &Options::default());
     let mut ck = Checker::new(&c, &e);
     let rep = ck.interference(&sol, &[], &asm.fit_rules);
-    let p = |i: u32| vec![InstanceId(i)];
+    let p = |i: u64| vec![InstanceId(i)];
     assert_eq!(
         rep.rules,
         vec![RuleUse {
@@ -192,6 +195,19 @@ fn fit_rules_cover_bolts_in_matching_holes_and_say_which() {
         }]
     );
     assert_eq!(rep.interferences.len(), 1);
+    // the rod in tap1 starts 5 below the plate: 3 of its 8 thread engage, under the shop's one
+    // diameter (4); the one in tap2 engages all 8
+    assert_eq!(
+        rep.shallow,
+        vec![ShallowEngagement {
+            a: p(1),
+            b: p(2),
+            rule: 7,
+            engaged: 3.0,
+            min: 4.0,
+        }]
+    );
+    assert!(rep.diagnostics().iter().any(|d| d.name() == "ShallowEngagement"));
     assert_eq!(
         (rep.interferences[0].a.clone(), rep.interferences[0].b.clone()),
         (p(1), p(4))
@@ -199,6 +215,7 @@ fn fit_rules_cover_bolts_in_matching_holes_and_say_which() {
     // a size that does not match covers nothing
     let m5 = FitRule {
         id: 8,
+        min_engagement: None,
         a: FitMatch::Feature {
             kind: FeatureKind::ExternalThread,
             size: Some(5.0),
@@ -211,6 +228,7 @@ fn fit_rules_cover_bolts_in_matching_holes_and_say_which() {
     // a part rule covers every rod against the plate, wherever it stands
     let parts = FitRule {
         id: 9,
+        min_engagement: None,
         a: FitMatch::Part {
             doc: DocId("rod".into()),
             body: None,

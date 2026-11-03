@@ -5,7 +5,7 @@
 //! are tested again.
 
 use crate::diag::{Diagnostic, Intent};
-use crate::model::{DocId, Fit, FitMatch, FitRule, PartRef, Parts, Path};
+use crate::model::{DocId, Feature, Fit, FitMatch, FitRule, PartRef, Parts, Path};
 use crate::solve::Solution;
 use forge_math::{Box3, Frame, Point3, Vec3, tol};
 use std::collections::BTreeMap;
@@ -678,14 +678,15 @@ pub struct IntendedContact {
 /// The pairs one fit rule covered.
 #[derive(Clone, Debug, PartialEq)]
 pub struct RuleUse {
-    pub rule: u32,
+    pub rule: u64,
     pub pairs: Vec<(Path, Path)>,
 }
 
 #[derive(Clone, Debug, PartialEq)]
 enum PairHit {
     Interference(Interference),
-    Intended(IntendedContact),
+    /// With the engagement and its minimum where a rule's threads engage too little.
+    Intended(IntendedContact, Option<(f64, f64)>),
     /// The meshes crossed but the exact solids only touch.
     Touch(Path, Path),
 }
@@ -700,6 +701,8 @@ pub struct InterferenceReport {
     pub touching: Vec<(Path, Path)>,
     /// Each fit rule that covered something, and what.
     pub rules: Vec<RuleUse>,
+    /// Rule-covered threads that engage too little: warnings.
+    pub shallow: Vec<ShallowEngagement>,
     /// Occurrences with no mesh, not checked.
     pub unchecked: Vec<Path>,
     pub candidates: usize,
@@ -722,6 +725,13 @@ impl InterferenceReport {
                 confirmed: i.confirmed,
             })
             .collect();
+        out.extend(self.shallow.iter().map(|x| Diagnostic::ShallowEngagement {
+            a: x.a.clone(),
+            b: x.b.clone(),
+            rule: x.rule,
+            engaged: x.engaged,
+            min: x.min,
+        }));
         out.extend(self.intended.iter().map(|i| Diagnostic::IntendedContact {
             a: i.a.clone(),
             b: i.b.clone(),
@@ -732,19 +742,21 @@ impl InterferenceReport {
 }
 
 /// Whether an occurrence matches one side of a fit rule; for a feature, its anchors' world frames.
-fn feature_axes<P: Parts>(parts: &P, o: &Occ, m: &FitMatch) -> Option<Vec<Frame>> {
+fn feature_axes<P: Parts>(parts: &P, o: &Occ, m: &FitMatch) -> Option<Vec<(Frame, Feature)>> {
     match m {
         FitMatch::Part { doc, body } => {
             (o.part.doc == *doc && body.is_none_or(|b| b == o.part.body)).then(Vec::new)
         }
         FitMatch::Feature { kind, size } => {
             let info = parts.part(&o.part)?;
-            let axes: Vec<Frame> = info
+            let axes: Vec<(Frame, Feature)> = info
                 .features
                 .iter()
                 .filter(|(_, f)| f.kind == *kind && size.is_none_or(|s| (s - f.size).abs() <= 1e-9))
-                .filter_map(|(n, _)| info.refs.get(n).and_then(|r| r.as_ref().ok()))
-                .map(|r| o.pose.compose(&r.frame))
+                .filter_map(|(n, f)| {
+                    let r = info.refs.get(n)?.as_ref().ok()?;
+                    Some((o.pose.compose(&r.frame), f.clone()))
+                })
                 .collect();
             (!axes.is_empty()).then_some(axes)
         }
@@ -757,15 +769,63 @@ fn coaxial(p: &Frame, q: &Frame, tol: f64) -> bool {
     zp.cross(zq).length() <= 1e-9 && (p.origin - q.origin).cross(zq).length() <= tol
 }
 
-fn rule_covers<P: Parts>(parts: &P, r: &FitRule, x: &Occ, y: &Occ, tol: f64) -> bool {
-    let one = |x: &Occ, y: &Occ| {
-        let (Some(ax), Some(ay)) = (feature_axes(parts, x, &r.a), feature_axes(parts, y, &r.b)) else {
-            return false;
-        };
+/// How far two coaxial threads overlap along their axis: each runs `depth` from its anchor's
+/// origin along its z.
+pub fn engagement(p: &Frame, dp: f64, q: &Frame, dq: f64) -> f64 {
+    let zq = q.z().get();
+    let s0 = (p.origin - q.origin).dot(zq);
+    let s1 = (p.origin + p.z().get() * dp - q.origin).dot(zq);
+    let (lo, hi) = (s0.min(s1), s0.max(s1));
+    (hi.min(dq) - lo.max(0.0)).max(0.0)
+}
+
+/// None: the rule does not cover the pair. Some(None): covered. Some(Some((engaged, min))):
+/// covered, but its threads engage less than the rule's or the shop's minimum.
+type Covered = Option<Option<(f64, f64)>>;
+
+fn rule_covers<P: Parts>(parts: &P, r: &FitRule, x: &Occ, y: &Occ, tol: f64) -> Covered {
+    let one = |x: &Occ, y: &Occ| -> Covered {
+        let (ax, ay) = (feature_axes(parts, x, &r.a)?, feature_axes(parts, y, &r.b)?);
+        if ax.is_empty() || ay.is_empty() {
+            return Some(None);
+        }
         // features on both sides: they must meet on one axis
-        ax.is_empty() || ay.is_empty() || ax.iter().any(|p| ay.iter().any(|q| coaxial(p, q, tol)))
+        let mut covered = None;
+        for (p, fp) in &ax {
+            for (q, fq) in &ay {
+                if !coaxial(p, q, tol) {
+                    continue;
+                }
+                let threads = fp.kind.is_thread() && fq.kind.is_thread();
+                let min = r
+                    .min_engagement
+                    .or_else(|| threads.then(|| crate::model::SHOP_THREAD_ENGAGEMENT * fp.size.min(fq.size)));
+                let short = match (min, fp.depth, fq.depth) {
+                    (Some(m), Some(dp), Some(dq)) => {
+                        let e = engagement(p, dp, q, dq);
+                        (e < m - tol).then_some((e, m))
+                    }
+                    _ => None,
+                };
+                if short.is_none() {
+                    return Some(None);
+                }
+                covered = Some(short);
+            }
+        }
+        covered
     };
-    one(x, y) || one(y, x)
+    one(x, y).or_else(|| one(y, x))
+}
+
+/// A rule's threads that engage less than its minimum: a warning.
+#[derive(Clone, Debug, PartialEq)]
+pub struct ShallowEngagement {
+    pub a: Path,
+    pub b: Path,
+    pub rule: u64,
+    pub engaged: f64,
+    pub min: f64,
 }
 
 type Key = (PartKey, PartKey, [u64; 9]);
@@ -945,19 +1005,19 @@ impl<'p, P: Parts, E: Exact> Checker<'p, P, E> {
             .collect();
         let mut rules_sorted: Vec<&FitRule> = rules.iter().collect();
         rules_sorted.sort_by_key(|r| r.id);
-        let intent = |i: usize, j: usize| -> Option<Intent> {
+        let intent_of = |i: usize, j: usize| -> Option<(Intent, Option<(f64, f64)>)> {
             let (a, b) = (&occ[i].path, &occ[j].path);
             if let Some(&index) = fit_at.get(&if a <= b { (a, b) } else { (b, a) }) {
-                return Some(Intent::Fit { index });
+                return Some((Intent::Fit { index }, None));
             }
             let tol = occ[i].mesh.as_ref().map_or(0.0, |m| m.tolerance)
                 + occ[j].mesh.as_ref().map_or(0.0, |m| m.tolerance)
                 + tol::LINEAR;
-            rules_sorted
-                .iter()
-                .find(|r| rule_covers(self.parts, r, &occ[i], &occ[j], tol))
-                .map(|r| Intent::Rule { rule: r.id })
+            rules_sorted.iter().find_map(|r| {
+                rule_covers(self.parts, r, &occ[i], &occ[j], tol).map(|s| (Intent::Rule { rule: r.id }, s))
+            })
         };
+        let intent = |i: usize, j: usize| intent_of(i, j).map(|x| x.0);
         // exact confirmation for hits that are not intended
         let confirm: Vec<usize> = todo
             .iter()
@@ -996,8 +1056,8 @@ impl<'p, P: Parts, E: Exact> Checker<'p, P, E> {
                     occ[j].mesh.as_ref().expect("boxed"),
                 );
                 let (a, b) = (occ[i].path.clone(), occ[j].path.clone());
-                Some(match intent(i, j) {
-                    Some(by) => PairHit::Intended(IntendedContact { a, b, by }),
+                Some(match intent_of(i, j) {
+                    Some((by, short)) => PairHit::Intended(IntendedContact { a, b, by }, short),
                     None => match vol {
                         Some(v) if v <= TOUCH_VOLUME => PairHit::Touch(a, b),
                         _ => PairHit::Interference(Interference {
@@ -1012,13 +1072,22 @@ impl<'p, P: Parts, E: Exact> Checker<'p, P, E> {
             };
             results.insert((i, j), hit);
         }
-        let mut by_rule: BTreeMap<u32, Vec<(Path, Path)>> = BTreeMap::new();
+        let mut by_rule: BTreeMap<u64, Vec<(Path, Path)>> = BTreeMap::new();
         for h in results.values().flatten() {
             match h {
                 PairHit::Interference(x) => rep.interferences.push(x.clone()),
-                PairHit::Intended(x) => {
+                PairHit::Intended(x, short) => {
                     if let Intent::Rule { rule } = x.by {
                         by_rule.entry(rule).or_default().push((x.a.clone(), x.b.clone()));
+                        if let Some((engaged, min)) = *short {
+                            rep.shallow.push(ShallowEngagement {
+                                a: x.a.clone(),
+                                b: x.b.clone(),
+                                rule,
+                                engaged,
+                                min,
+                            });
+                        }
                     }
                     rep.intended.push(x.clone());
                 }
@@ -1109,8 +1178,8 @@ pub struct SweepStep {
 /// Drives one joint value over `range` in `steps` equal steps, re-solving and checking at each
 /// pose; the joint's value goes back to where it was after.
 #[allow(clippy::too_many_arguments)]
-pub fn sweep<P: Parts, E: Exact>(
-    solver: &mut crate::Solver<'_, P>,
+pub fn sweep<S: Parts, P: Parts, E: Exact>(
+    solver: &mut crate::Solver<S>,
     checker: &mut Checker<'_, P, E>,
     joint: crate::JointId,
     freedom: crate::Freedom,

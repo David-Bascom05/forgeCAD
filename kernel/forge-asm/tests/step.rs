@@ -21,18 +21,18 @@ fn solid(lp: forge_ops::ProfileLoop, h: f64) -> forge_topo::Body {
     .unwrap()
 }
 
-fn of(id: u32, name: &str, pose: Frame) -> Instance {
+fn of(id: u64, name: &str, pose: Frame) -> Instance {
     Instance::part(id, PartRef::new(name, 0), pose)
 }
 
-fn sub(id: u32, doc: &str, pose: Frame) -> Instance {
+fn sub(id: u64, doc: &str, pose: Frame) -> Instance {
     Instance {
         of: Component::Assembly(DocId(doc.into())),
         ..of(id, "x", pose)
     }
 }
 
-fn fasten(id: u32, child: u32, to: u32, at: Frame) -> Joint {
+fn fasten(id: u64, child: u64, to: u64, at: Frame) -> Joint {
     joint(id, JointKind::Fastened, (child, Frame::WORLD), (to, at))
 }
 
