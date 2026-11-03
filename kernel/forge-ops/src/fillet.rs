@@ -5048,7 +5048,11 @@ impl Builder {
                 crossing_edge(&self.rolled[rb].springs[sb], tb0, reach, &off_edge).unwrap_or((qb_t, qb)),
             );
             // and so may the springs: the mitre runs to the crossing the far point's curve reaches
-            let far = if a2.1.distance(vp) > b2.1.distance(vp) { a2.1 } else { b2.1 };
+            let far = if a2.1.distance(vp) > b2.1.distance(vp) {
+                a2.1
+            } else {
+                b2.1
+            };
             let (x, y) = (&self.rolled[ra].springs[sa], &self.rolled[rb].springs[1 - sb]);
             let (m, n) = (&self.rolled[ra].blend, &self.rolled[rb].blend);
             let (ta, tb, p) = std::iter::once((ta, tb, p))
