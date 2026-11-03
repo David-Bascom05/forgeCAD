@@ -39,6 +39,7 @@ egui-winit = { version = "=0.37.0", default-features = false, features = ["wayla
 forge-mesh = { path = "../../kernel/forge-mesh" }
 forge-geom = { path = "../../kernel/forge-geom" }
 forge-topo = { path = "../../kernel/forge-topo" }
+forge-sheet = { path = "../../kernel/forge-sheet" }
 
 # already in wgpu's tree on this target: only the entry point names them
 [target.'cfg(target_arch = "wasm32")'.dependencies]

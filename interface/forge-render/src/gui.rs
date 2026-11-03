@@ -127,6 +127,10 @@ pub struct Gui {
     /// A Forge (.fg) part, and its first view waiting for the layout.
     pub fg: Option<crate::fg::Session>,
     fg_view: Option<Loaded>,
+    /// The Forge part's last meshes, folded and (a sheet's) flat, and its sheets' DXF.
+    fg_folded: Option<crate::mesh::PartMesh>,
+    fg_flat: Option<crate::mesh::PartMesh>,
+    pub fg_sheets: Vec<crate::fg::SheetInfo>,
     /// The GPU refused something: said once, and no more views are drawn.
     gpu_failed: Arc<std::sync::Mutex<Option<String>>>,
 }
@@ -227,6 +231,9 @@ impl Gui {
             mark_held: None,
             fg: None,
             fg_view: None,
+            fg_folded: None,
+            fg_flat: None,
+            fg_sheets: Vec::new(),
             gpu_failed,
         }
     }
@@ -2609,6 +2616,9 @@ impl Gui {
                 });
                 self.fg = Some(s);
                 self.fg_view = None;
+                self.fg_folded = None;
+                self.fg_flat = None;
+                self.fg_sheets.clear();
                 self.loading = None;
                 self.view = None;
                 self.shell.view_tex = None;
@@ -2638,7 +2648,31 @@ impl Gui {
     /// What the Forge worker has built: the panel's rows, the part's mesh.
     fn take_fg(&mut self) {
         let Some(s) = &mut self.fg else { return };
-        for b in s.poll() {
+        let mut changed = false;
+        let flat_shown = self.shell.fg.as_ref().is_some_and(|p| p.flat);
+        for m in s.poll() {
+            let b = match m {
+                crate::fg::Msg::Built(b) => *b,
+                crate::fg::Msg::Warm(d) => {
+                    // the faces as they are: the live set's start, not shown
+                    if let Some(r) = self.view.as_mut().map(|v| &mut v.renderer).or(self.fg_view.as_mut().map(|l| &mut l.renderer)) {
+                        r.live_apply(0, &d);
+                        r.live_show(false);
+                    }
+                    continue;
+                }
+                // an older shape's, a newer one's faces already on screen
+                crate::fg::Msg::Final { seq, .. } if seq != s.changed => continue,
+                crate::fg::Msg::Final { mesh, flat, .. } => {
+                    self.fg_folded = Some(mesh);
+                    self.fg_flat = flat;
+                    if let Some(v) = &mut self.view {
+                        v.renderer.live_show(false);
+                    }
+                    changed = true;
+                    continue;
+                }
+            };
             if let Some(p) = &mut self.shell.fg {
                 p.summary = b.summary();
                 p.feats = b.feats;
@@ -2662,19 +2696,37 @@ impl Gui {
                     unshown: None,
                 });
             }
-            if let Some(m) = b.mesh {
-                if let Some(l) = &mut self.fg_view {
-                    l.renderer.set_parts(std::slice::from_ref(&m));
-                    let chords = m.lods.iter().map(|x| x.chord).collect();
-                    l.scene.set_part(0, m.center, m.radius, chords);
-                } else if let Some(v) = &mut self.view {
-                    let part = v.scene.placements[0].part;
-                    v.renderer.set_parts(std::slice::from_ref(&m));
-                    let chords = m.lods.iter().map(|x| x.chord).collect();
-                    v.scene.set_part(part, m.center, m.radius, chords);
+            if let Some(p) = &mut self.shell.fg {
+                p.sheets = b
+                    .sheets
+                    .iter()
+                    .map(|s| crate::shell::fg::SheetRow {
+                        id: s.id.clone(),
+                        bends: s.bends,
+                        refused: s.dxf.as_ref().err().cloned(),
+                    })
+                    .collect();
+            }
+            self.fg_sheets = b.sheets;
+            if let Some(d) = &b.delta
+                && let Some(v) = &mut self.view
+            {
+                let part = v.scene.placements[0].part;
+                v.renderer.live_apply(part, d);
+                if !flat_shown {
+                    v.renderer.live_show(true);
+                    v.scene.set_part(part, d.center, d.radius, vec![d.chord]);
                     v.dirty = true;
                 }
             }
+            if let Some(m) = b.mesh {
+                self.fg_folded = Some(m);
+                self.fg_flat = b.flat;
+                changed = true;
+            }
+        }
+        if changed {
+            self.fg_show();
         }
         self.fg_text();
         // the view takes its size from the layout
@@ -2701,6 +2753,15 @@ impl Gui {
                     let _ = self.fg_apply(op);
                 }
                 crate::shell::fg::FgAct::Save => self.fg_save(),
+                crate::shell::fg::FgAct::ExportDxf(id) => {
+                    let _ = self.fg_export_dxf(&id);
+                }
+                crate::shell::fg::FgAct::Flat(on) => {
+                    if let Some(p) = &mut self.shell.fg {
+                        p.flat = on && self.fg_flat.is_some();
+                    }
+                    self.fg_show();
+                }
             }
         }
     }
@@ -2740,6 +2801,47 @@ impl Gui {
                 Err(why)
             }
         }
+    }
+
+    /// The Forge part's folded mesh, or its sheet's flat one when that's asked for.
+    fn fg_show(&mut self) {
+        let flat = self.shell.fg.as_ref().is_some_and(|p| p.flat);
+        let Some(m) = (if flat { self.fg_flat.as_ref() } else { None }).or(self.fg_folded.as_ref()) else {
+            return;
+        };
+        let chords: Vec<f32> = m.lods.iter().map(|x| x.chord).collect();
+        if let Some(l) = &mut self.fg_view {
+            l.renderer.set_parts(std::slice::from_ref(m));
+            l.scene.set_part(0, m.center, m.radius, chords);
+        } else if let Some(v) = &mut self.view {
+            let part = v.scene.placements[0].part;
+            v.renderer.set_parts(std::slice::from_ref(m));
+            v.scene.set_part(part, m.center, m.radius, chords);
+            v.dirty = true;
+        }
+    }
+
+    /// A sheet's flat pattern as DXF beside the part's file: `<stem>.dxf`, or `<stem>-<id>.dxf`
+    /// when the part has several sheets. Returns where it went.
+    pub fn fg_export_dxf(&mut self, id: &str) -> Result<String, String> {
+        let got = (|| -> Result<String, String> {
+            let path = self.fg.as_ref().and_then(|s| s.path.clone()).ok_or("no file beside which to write")?;
+            let s = self.fg_sheets.iter().find(|s| s.id == id).ok_or(format!("no sheet {id}"))?;
+            let text = s.dxf.clone().map_err(|e| format!("{id} has no flat pattern: {e}"))?;
+            let stem = path.strip_suffix(".fg").unwrap_or(&path);
+            let out = if self.fg_sheets.len() > 1 {
+                format!("{stem}-{id}.dxf")
+            } else {
+                format!("{stem}.dxf")
+            };
+            std::fs::write(&out, text).map_err(|e| format!("{out}: {e}"))?;
+            Ok(out)
+        })();
+        self.shell.status = match &got {
+            Ok(out) => format!("Wrote {out}"),
+            Err(why) => why.clone(),
+        };
+        got
     }
 
     /// Writes the Forge part's text to its file.

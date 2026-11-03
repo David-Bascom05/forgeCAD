@@ -93,6 +93,18 @@ pub struct Issue {
 pub enum FgAct {
     Apply(Op),
     Save,
+    /// The sheet's flat pattern, as DXF beside the part's file.
+    ExportDxf(String),
+    /// Show the flat pattern, or the folded part.
+    Flat(bool),
+}
+
+/// A sheet metal part: its id, its bends, and why it has no flat pattern if it hasn't.
+#[derive(Clone, Debug, PartialEq)]
+pub struct SheetRow {
+    pub id: String,
+    pub bends: usize,
+    pub refused: Option<String>,
 }
 
 /// One row of the tree: a feature, or a loop's or a call's group of them.
@@ -128,6 +140,9 @@ pub struct FgPanel {
     pub refused: Option<String>,
     pub collapsed: HashSet<String>,
     pub show_source: bool,
+    pub sheets: Vec<SheetRow>,
+    /// The flat pattern is what's shown.
+    pub flat: bool,
     pub out: Vec<FgAct>,
 }
 
@@ -493,6 +508,7 @@ impl Shell {
                             ui.set_width(PANEL_W - 20.0);
                             ui.spacing_mut().item_spacing.y = 4.0;
                             Self::fg_head(ui, &t, &mut fg, &mut out, &mut places);
+                            Self::fg_sheets(ui, &t, &fg, &mut out, &mut places);
                             Self::fg_selection(ui, &t, &mut fg, &mut out, &mut places);
                             Self::fg_params(ui, &t, &mut fg, &mut out, &mut places);
                             Self::fg_issues(ui, &t, &fg, &mut out, &mut places);
@@ -540,6 +556,42 @@ impl Shell {
         ui.label(egui::RichText::new(&fg.summary).font(sans(11.0)).color(t.ink2));
         if let Some(why) = &fg.refused {
             ui.label(egui::RichText::new(format!("Refused: {why}")).font(sans(12.0)).color(t.error));
+        }
+    }
+
+    fn fg_sheets(
+        ui: &mut Ui,
+        t: &super::theme::Theme,
+        fg: &FgPanel,
+        out: &mut Vec<FgAct>,
+        places: &mut Vec<(String, Rect)>,
+    ) {
+        if fg.sheets.is_empty() {
+            return;
+        }
+        Self::fg_heading(ui, t, "Sheet metal");
+        let label = if fg.flat { "Show folded" } else { "Show flat" };
+        if Self::fg_button(ui, label, "fg:flat".into(), places) {
+            out.push(FgAct::Flat(!fg.flat));
+        }
+        for s in &fg.sheets {
+            ui.horizontal(|ui| {
+                ui.label(
+                    egui::RichText::new(format!("{} · {} bends", s.id, s.bends))
+                        .font(sans(12.0))
+                        .color(t.ink),
+                );
+                match &s.refused {
+                    None => {
+                        if Self::fg_button(ui, "Export DXF", format!("fg:dxf:{}", s.id), places) {
+                            out.push(FgAct::ExportDxf(s.id.clone()));
+                        }
+                    }
+                    Some(why) => {
+                        ui.label(egui::RichText::new(format!("no flat: {why}")).font(sans(11.0)).color(t.error));
+                    }
+                }
+            });
         }
     }
 

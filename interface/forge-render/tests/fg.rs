@@ -295,15 +295,55 @@ fn a_warm_rebuild_in_the_app_is_milliseconds() {
             })
             .unwrap();
         settle(&mut h);
-        late.push(h.gui.fg.as_ref().unwrap().round_ms);
+        let s = h.gui.fg.as_ref().unwrap();
+        eprintln!(
+            "  late edit: round {:.1} ms = build {:.1} (kernel {:.1}, measure {:.1}) + changed faces {:.1}",
+            s.round_ms, s.build_ms, s.timings.kernel_ms, s.timings.measure_ms, s.mesh_ms
+        );
+        late.push(s.round_ms);
     }
     late.sort_by(f64::total_cmp);
+    // the whole mesh follows the faces that changed
+    assert!(h.until(|g| g.fg.as_ref().is_some_and(|s| s.whole == s.seq)));
+    let whole_ms = h.gui.fg.as_ref().unwrap().whole_ms;
     let late_summary = h.gui.shell.fg.as_ref().unwrap().summary.clone();
     assert!(late_summary.contains("rebuilt 1,"), "{late_summary}");
     eprintln!(
-        "bracket.fg in the app: unchanged rebuild median {:.1} ms ({summary}); last param edited median {:.1} ms ({late_summary})",
+        "bracket.fg in the app: unchanged rebuild median {:.1} ms ({summary}); last param edited median {:.1} ms on screen ({late_summary}), whole mesh after it {whole_ms:.1} ms",
         unchanged[2], late[2]
     );
     assert!(unchanged[2] < 50.0, "unchanged rebuild {:.1} ms", unchanged[2]);
+    assert!(late[2] < 150.0, "late edit {:.1} ms", late[2]);
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn a_sheet_part_shows_flat_and_exports_its_dxf() {
+    let part = concat!(env!("CARGO_MANIFEST_DIR"), "/../forge-lang/parts/sheet/l.fg");
+    let dir = scratch("sheet");
+    let file = dir.join("l.fg");
+    std::fs::copy(part, &file).unwrap();
+    let Some(mut h) = app(file.to_str().unwrap()) else { return };
+    let sheets = h.gui.shell.fg.as_ref().unwrap().sheets.clone();
+    assert_eq!(sheets.len(), 1, "{sheets:?}");
+    assert_eq!(sheets[0].bends, 1);
+    assert!(sheets[0].refused.is_none());
+    let folded = h.gui.view.as_ref().unwrap().scene.bounds();
+    // flat: the base and the flange laid out in one plane, so longer than the folded L
+    assert!(h.click("fg:flat"));
+    h.step();
+    h.step();
+    assert!(h.gui.shell.fg.as_ref().unwrap().flat);
+    let flat = h.gui.view.as_ref().unwrap().scene.bounds();
+    assert!(flat.1 > folded.1, "flat radius {} vs folded {}", flat.1, folded.1);
+    assert!(h.click("fg:flat"));
+    h.step();
+    assert!(!h.gui.shell.fg.as_ref().unwrap().flat);
+    // the flat pattern as DXF beside the part
+    let id = sheets[0].id.clone();
+    assert!(h.click(&format!("fg:dxf:{id}")));
+    h.step();
+    let dxf = std::fs::read_to_string(dir.join("l.dxf")).unwrap();
+    assert!(dxf.contains("SECTION") && dxf.contains("BEND") && dxf.contains("CUT"), "{dxf}");
     let _ = std::fs::remove_dir_all(&dir);
 }
